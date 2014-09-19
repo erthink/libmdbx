@@ -2358,17 +2358,22 @@ static int
 mdb_env_sync0(MDB_env *env, unsigned int *flags)
 {
 	int rc = 0, force;
-	if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold) {
+	if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold)
 		*flags |= FORCE;
-		if (env->me_sync_size != env->me_size)
-			*flags |= FGREW;
-	}
 	force = *flags & FORCE;
 	if (force || !F_ISSET(env->me_flags, MDB_NOSYNC)) {
+		if (env->me_sync_size != env->me_size)
+			*flags |= FGREW;
 		if (env->me_flags & MDB_WRITEMAP) {
 			int mode = ((env->me_flags & MDB_MAPASYNC) && !force)
 				? MS_ASYNC : MS_SYNC;
-			if (MDB_MSYNC(env->me_map, env->me_mapsize, mode))
+
+			/* LY: skip meta-pages */
+			size_t data_offset = env->me_os_psize;
+			while (data_offset < env->me_psize + env->me_psize)
+				data_offset += env->me_os_psize;
+
+			if (MDB_MSYNC(env->me_map + data_offset, env->me_mapsize - data_offset, mode))
 				rc = ErrCode();
 #ifdef _WIN32
 			else if (mode == MS_SYNC && MDB_FDATASYNC(env->me_fd))
@@ -2397,7 +2402,43 @@ int
 mdb_env_sync(MDB_env *env, int force)
 {
 	unsigned int flags = force ? FORCE | FGREW : 0;
-	return mdb_env_sync0(env, &flags);
+	MDB_meta *meta;
+	txnid_t checkpoint;
+	int rc, lockfree_countdown = 3;
+	mdb_mutex_t *mutex = NULL;
+
+	if (env->me_flags & MDB_RDONLY)
+		return 0;
+
+	do {
+		if (!mutex && --lockfree_countdown == 0) {
+			mutex = MDB_MUTEX(env, w);
+			if (LOCK_MUTEX(rc, env, mutex))
+				return rc;
+		}
+
+		meta = env->me_metas[ mdb_env_pick_meta(env) ];
+		checkpoint = meta->mm_txnid;
+
+		/* first sync data. */
+		rc = mdb_env_sync0(env, &flags);
+
+		/* then sync meta-pages. */
+		if (rc == 0 && (env->me_flags & MDB_WRITEMAP)) {
+			int mode = (!force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
+			if (MDB_MSYNC(env->me_map, env->me_psize * 2, mode))
+				rc = ErrCode();
+#ifdef _WIN32
+			if (rc == 0 && mode == MS_SYNC && MDB_FDATASYNC(env->me_fd))
+				rc = ErrCode();
+#endif
+		}
+	} while (rc == 0 && checkpoint != meta->mm_txnid);
+
+	if (mutex)
+		UNLOCK_MUTEX(mutex);
+
+	return rc;
 }
 
 /** Back up parent txn's cursors, then grab the originals for tracking */
@@ -3707,7 +3748,7 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 		mp->mm_txnid = txn->mt_txnid;
 		if (force || !(env->me_flags & (MDB_NOMETASYNC|MDB_NOSYNC))) {
 			unsigned meta_size = env->me_psize;
-			rc = (!force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
+			int flags = (!force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
 			ptr = env->me_map;
 			if (toggle) {
 #ifndef _WIN32	/* POSIX msync() requires ptr = start of OS page */
@@ -3717,10 +3758,16 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 #endif
 					ptr += meta_size;
 			}
-			if (MDB_MSYNC(ptr, meta_size, rc)) {
+			if (MDB_MSYNC(ptr, meta_size, flags)) {
 				rc = ErrCode();
 				goto fail;
 			}
+#ifdef _WIN32
+			else if (flags == MS_SYNC && MDB_FDATASYNC(env->me_fd)) {
+				rc = ErrCode();
+				goto fail;
+			}
+#endif
 		}
 		goto done;
 	}
