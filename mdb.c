@@ -3882,6 +3882,16 @@ mdb_env_map(MDB_env *env, void *addr)
 	env->me_metas[0] = METADATA(p);
 	env->me_metas[1] = (MDB_meta *)((char *)env->me_metas[0] + env->me_psize);
 
+	/* Lock meta pages to avoid unexpected write,
+	 *  before the data pages would be synchronized. */
+#ifdef _WIN32
+	if ((flags & MDB_WRITEMAP) && !VirtualLock(env->me_map, env->me_psize * 2))
+		return ErrCode();
+#else
+	if ((flags & MDB_WRITEMAP) && mlock(env->me_map, env->me_psize * 2))
+		return ErrCode();
+#endif /* _WIN32 */
+
 	return MDB_SUCCESS;
 }
 
