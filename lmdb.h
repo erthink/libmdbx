@@ -1554,6 +1554,18 @@ int	mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx);
 	 * @return 0 on success, non-zero on failure.
 	 */
 int	mdb_reader_check(MDB_env *env, int *dead);
+
+	/** @brief Returns a lag of the reading.
+	 *
+	 * Returns an information for estimate how much given read-only
+	 * transaction is lagging relative the to actual head.
+	 *
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[out] percent Percentage of page allocation in the database.
+	 * @return Number of transactions committed after the given was started for read, or -1 on failure.
+	 */
+int  mdb_txn_straggler(MDB_txn *txnm, int *percent);
+
 /**	@} */
 
 #ifdef __cplusplus

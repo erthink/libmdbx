@@ -2838,6 +2838,26 @@ mdb_dbis_update(MDB_txn *txn, int keep)
 		env->me_numdbs = n;
 }
 
+int
+mdb_txn_straggler(MDB_txn *txn, int *percent)
+{
+	MDB_env	*env;
+	MDB_meta *meta;
+	txnid_t lag;
+
+	if (! txn || ! txn->mt_u.reader)
+		return -1;
+
+	env = txn->mt_env;
+	meta = env->me_metas[ mdb_env_pick_meta(env) ];
+	if (percent) {
+		long cent = env->me_maxpg / 100;
+		*percent = (meta->mm_last_pg + cent / 2 + 1) / (cent ? cent : 1);
+	}
+	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
+	return (0 > (int) lag) ? ~0u >> 1: lag;
+}
+
 /** Common code for #mdb_txn_reset() and #mdb_txn_abort().
  * May be called twice for readonly txns: First reset it, then abort.
  * @param[in] txn the transaction handle to reset
