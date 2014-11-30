@@ -909,6 +909,25 @@ typedef void MDB_assert_func(MDB_env *env, const char *msg);
 	 */
 int  mdb_env_set_assert(MDB_env *env, MDB_assert_func *func);
 
+	/** @brief Set threshold to force flush the data buffers to disk,
+	 * even of #MDB_NOSYNC, #MDB_NOMETASYNC and #MDB_MAPASYNC flags
+	 * in the environment.
+	 *
+	 * Data is always written to disk when #mdb_txn_commit() is called,
+	 * but the operating system may keep it buffered. LMDB always flushes
+	 * the OS buffers upon commit as well, unless the environment was
+	 * opened with #MDB_NOSYNC or in part #MDB_NOMETASYNC.
+	 *
+	 * The default is 0, than mean no any threshold checked,
+	 * and no additional flush will be made.
+	 *
+	 * @param[in] env An environment handle returned by #mdb_env_create()
+	 * @param[in] bytes The size in bytes of summary changes
+	 * when a synchronous flush would be made.
+	 * @return A non-zero error value on failure and 0 on success.
+	 */
+int  mdb_env_set_syncbytes(MDB_env *env, size_t bytes);
+
 	/** @brief Create a transaction for use with the environment.
 	 *
 	 * The transaction handle may be discarded using #mdb_txn_abort() or #mdb_txn_commit().

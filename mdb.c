@@ -1188,6 +1188,9 @@ struct MDB_env {
 #endif
 	void		*me_userctx;	 /**< User-settable context */
 	MDB_assert_func *me_assert_func; /**< Callback for assertion failures */
+	uint64_t	me_sync_pending;	/**< Total dirty/commited bytes since the last mdb_env_sync() */
+	uint64_t	me_sync_threshold;	/**< Treshold of above to force synchronous flush */
+	size_t	me_sync_size;	/**< Tracking me_size for FGREW/fsync() */
 };
 
 	/** Nested transaction */
@@ -1235,7 +1238,7 @@ static int	mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
 
 static int  mdb_env_read_header(MDB_env *env, MDB_meta *meta);
 static int  mdb_env_pick_meta(const MDB_env *env);
-static int  mdb_env_write_meta(MDB_txn *txn);
+static int  mdb_env_write_meta(MDB_txn *txn, int force);
 #if !(defined(_WIN32) || defined(MDB_USE_SYSV_SEM)) /* Drop unused excl arg */
 # define mdb_env_close0(env, excl) mdb_env_close1(env)
 #endif
@@ -2352,28 +2355,39 @@ fail:
 	   http://www.openldap.org/lists/openldap-devel/201411/msg00000.html */
 
 static int
-mdb_env_sync0(MDB_env *env, int flag)
+mdb_env_sync0(MDB_env *env, unsigned int *flags)
 {
-	int rc = 0, force = flag & FORCE;
+	int rc = 0, force;
+	if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold) {
+		*flags |= FORCE;
+		if (env->me_sync_size != env->me_size)
+			*flags |= FGREW;
+	}
+	force = *flags & FORCE;
 	if (force || !F_ISSET(env->me_flags, MDB_NOSYNC)) {
 		if (env->me_flags & MDB_WRITEMAP) {
-			int flags = ((env->me_flags & MDB_MAPASYNC) && !force)
+			int mode = ((env->me_flags & MDB_MAPASYNC) && !force)
 				? MS_ASYNC : MS_SYNC;
-			if (MDB_MSYNC(env->me_map, env->me_mapsize, flags))
+			if (MDB_MSYNC(env->me_map, env->me_mapsize, mode))
 				rc = ErrCode();
 #ifdef _WIN32
-			else if (flags == MS_SYNC && MDB_FDATASYNC(env->me_fd))
+			else if (mode == MS_SYNC && MDB_FDATASYNC(env->me_fd))
 				rc = ErrCode();
 #endif
 		} else {
 #ifdef HAVE_FDATASYNC
-			if (flag & FGREW) {
+			if (*flags & FGREW) {
 				if (fsync(env->me_fd))	/* Avoid ext-fs bugs, do full sync */
 					rc = ErrCode();
 			} else
 #endif
 			if (MDB_FDATASYNC(env->me_fd))
 				rc = ErrCode();
+		}
+		if (! rc) {
+			env->me_sync_pending = 0;
+			if (*flags & FGREW)
+				env->me_sync_size = env->me_size;
 		}
 	}
 	return rc;
@@ -2382,7 +2396,8 @@ mdb_env_sync0(MDB_env *env, int flag)
 int
 mdb_env_sync(MDB_env *env, int force)
 {
-	return mdb_env_sync0(env, force != 0);
+	unsigned int flags = force ? FORCE | FGREW : 0;
+	return mdb_env_sync0(env, &flags);
 }
 
 /** Back up parent txn's cursors, then grab the originals for tracking */
@@ -3174,6 +3189,7 @@ mdb_page_flush(MDB_txn *txn, int keep)
 				continue;
 			}
 			dp->mp_flags &= ~P_DIRTY;
+			env->me_sync_pending += IS_OVERFLOW(dp) ? psize * dp->mp_pages : psize;
 		}
 		goto done;
 	}
@@ -3194,6 +3210,7 @@ mdb_page_flush(MDB_txn *txn, int keep)
 			pos = pgno * psize;
 			size = psize;
 			if (IS_OVERFLOW(dp)) size *= dp->mp_pages;
+			env->me_sync_pending += size;
 		}
 #ifdef _WIN32
 		else break;
@@ -3487,8 +3504,8 @@ mdb_txn_commit(MDB_txn *txn)
 	}
 #endif
 	if ((rc = mdb_page_flush(txn, 0)) ||
-		(rc = mdb_env_sync0(env, i)) ||
-		(rc = mdb_env_write_meta(txn)))
+		(rc = mdb_env_sync0(env, &i)) ||
+		(rc = mdb_env_write_meta(txn, i != 0)))
 		goto fail;
 
 	/* Free P_LOOSE pages left behind in dirty_list */
@@ -3510,6 +3527,12 @@ done:
 fail:
 	mdb_txn_abort(txn);
 	return rc;
+}
+
+int
+mdb_env_set_syncbytes(MDB_env *env, size_t bytes) {
+	env->me_sync_threshold = bytes;
+	return env->me_map ? mdb_env_sync(env, 0) : 0;
 }
 
 /** Read the environment parameters of a DB environment before
@@ -3646,7 +3669,7 @@ mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
  * @return 0 on success, non-zero on failure.
  */
 static int
-mdb_env_write_meta(MDB_txn *txn)
+mdb_env_write_meta(MDB_txn *txn, int force)
 {
 	MDB_env *env;
 	MDB_meta	meta, metab, *mp;
@@ -3682,9 +3705,9 @@ mdb_env_write_meta(MDB_txn *txn)
 		__sync_synchronize();
 #endif
 		mp->mm_txnid = txn->mt_txnid;
-		if (!(env->me_flags & (MDB_NOMETASYNC|MDB_NOSYNC))) {
+		if (force || !(env->me_flags & (MDB_NOMETASYNC|MDB_NOSYNC))) {
 			unsigned meta_size = env->me_psize;
-			rc = (env->me_flags & MDB_MAPASYNC) ? MS_ASYNC : MS_SYNC;
+			rc = (!force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
 			ptr = env->me_map;
 			if (toggle) {
 #ifndef _WIN32	/* POSIX msync() requires ptr = start of OS page */
@@ -3718,7 +3741,7 @@ mdb_env_write_meta(MDB_txn *txn)
 	off += PAGEHDRSZ;
 
 	/* Write to the SYNC fd */
-	mfd = env->me_flags & (MDB_NOSYNC|MDB_NOMETASYNC) ?
+	mfd = (!force || (env->me_flags & (MDB_NOSYNC|MDB_NOMETASYNC))) ?
 		env->me_fd : env->me_mfd;
 #ifdef _WIN32
 	{
