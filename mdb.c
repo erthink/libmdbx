@@ -9057,6 +9057,21 @@ mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 
 	arg->me_last_pgno = env->me_metas[toggle]->mm_last_pg;
 	arg->me_last_txnid = env->me_metas[toggle]->mm_txnid;
+	arg->me_tail_txnid = 0;
+
+	if (env->me_txns) {
+		MDB_reader *r = env->me_txns->mti_readers;
+		int i;
+		arg->me_tail_txnid = arg->me_last_txnid;
+		for (i = arg->me_numreaders; --i >= 0; ) {
+			if (r[i].mr_pid) {
+				txnid_t mr = r[i].mr_txnid;
+				if (arg->me_tail_txnid > mr)
+					arg->me_tail_txnid = mr;
+			}
+		}
+	}
+
 	return MDB_SUCCESS;
 }
 

@@ -130,6 +130,8 @@ int main(int argc, char *argv[])
 		printf("  Max pages: %"Z"u\n", mei.me_mapsize / mst.ms_psize);
 		printf("  Number of pages used: %"Z"u\n", mei.me_last_pgno+1);
 		printf("  Last transaction ID: %"Z"u\n", mei.me_last_txnid);
+		printf("  Tail transaction ID: %"Z"u (%"Z"i)\n",
+			mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
 		printf("  Max readers: %u\n", mei.me_maxreaders);
 		printf("  Number of readers used: %u\n", mei.me_numreaders);
 	}
@@ -157,6 +159,7 @@ int main(int argc, char *argv[])
 		MDB_cursor *cursor;
 		MDB_val key, data;
 		size_t pages = 0, *iptr;
+		size_t reclaimable = 0;
 
 		printf("Freelist Status\n");
 		dbi = 0;
@@ -174,6 +177,8 @@ int main(int argc, char *argv[])
 		while ((rc = mdb_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
 			iptr = data.mv_data;
 			pages += *iptr;
+			if (envinfo && mei.me_tail_txnid > *(size_t *)key.mv_data)
+				reclaimable += *iptr;
 			if (freinfo > 1) {
 				char *bad = "";
 				size_t pg, prev;
@@ -200,7 +205,35 @@ int main(int argc, char *argv[])
 			}
 		}
 		mdb_cursor_close(cursor);
-		printf("  Free pages: %"Z"u\n", pages);
+		if (envinfo) {
+			size_t value = mei.me_mapsize / mst.ms_psize;
+			double percent = value / 100.0;
+			printf("Page Allocation Info\n");
+			printf("  Max pages: %9"Z"u 100%%\n", value);
+
+			value = mei.me_last_pgno+1;
+			printf("  Number of pages used: %"Z"u %.1f%%\n", value, value / percent);
+
+			value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno+1);
+			printf("  Remained: %"Z"u %.1f%%\n", value, value / percent);
+
+			value = mei.me_last_pgno+1 - pages;
+			printf("  Used now: %"Z"u %.1f%%\n", value, value / percent);
+
+			value = pages;
+			printf("  Free pages: %"Z"u %.1f%%\n", value, value / percent);
+
+			value = pages - reclaimable;
+			printf("  Reading: %"Z"u %.1f%%\n", value, value / percent);
+
+			value = reclaimable;
+			printf("  Reclaimable: %"Z"u %.1f%%\n", value, value / percent);
+
+			value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno+1) + reclaimable;
+			printf("  Available: %"Z"u %.1f%%\n", value, value / percent);
+		} else
+			printf("  Free pages: %"Z"u\n", pages);
+
 	}
 
 	rc = mdb_open(txn, subname, 0, &dbi);
