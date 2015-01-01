@@ -292,6 +292,10 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 #define MDB_NORDAHEAD	0x800000
 	/** don't initialize malloc'd memory before writing to datafile */
 #define MDB_NOMEMINIT	0x1000000
+	/** aim to coalesce FreeDB records */
+#define MDB_COALESCE	0x2000000
+	/** LIFO policy for reclaiming FreeDB records */
+#define MDB_LIFORECLAIM	0x4000000
 /** @} */
 
 /**	@defgroup	mdb_dbi_open	Database Flags
@@ -593,6 +597,12 @@ int  mdb_env_create(MDB_env **env);
 	 *		caller is expected to overwrite all of the memory that was
 	 *		reserved in that case.
 	 *		This flag may be changed at any time using #mdb_env_set_flags().
+	 *  <li>#MDB_COALESCE
+	 *		Aim to coalesce records while reclaiming FreeDB.
+	 *		This flag may be changed at any time using #mdb_env_set_flags().
+	 *  <li>#MDB_LIFORECLAIM
+	 *		LIFO policy for reclaiming FreeDB records. This significantly reduce
+	 *		write IPOS in case MDB_NOSYNC with periodically checkpoints.
 	 * </ul>
 	 * @param[in] mode The UNIX permissions to set on created files. This parameter
 	 * is ignored on Windows.
