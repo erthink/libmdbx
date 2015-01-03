@@ -8405,7 +8405,7 @@ mdb_env_copythr(void *arg)
 {
 	mdb_copy *my = arg;
 	char *ptr;
-	int toggle = 0, wsize, rc;
+	int toggle = 0, wsize, rc = 0;
 #ifdef _WIN32
 	DWORD len;
 #define DO_WRITE(rc, fd, ptr, w2, len)	rc = WriteFile(fd, ptr, w2, &len, NULL)
