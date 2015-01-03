@@ -2116,7 +2116,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp)
 	/* Use new pages from the map when nothing suitable in the freeDB */
 	i = 0;
 	pgno = txn->mt_next_pgno;
-	if (pgno + num >= env->me_maxpg) {
+	if (pgno + num > env->me_maxpg) {
 			DPUTS("DB size maxed out");
 			rc = MDB_MAP_FULL;
 			goto fail;
