@@ -194,7 +194,7 @@ typedef int mdb_filehandle_t;
 	MDB_VERINT(MDB_VERSION_MAJOR,MDB_VERSION_MINOR,MDB_VERSION_PATCH)
 
 /** The release date of this library version */
-#define MDB_VERSION_DATE	"September 15, 2014"
+#define MDB_VERSION_DATE	"September 20, 2014"
 
 /** A stringifier for the version info */
 #define MDB_VERSTR(a,b,c,d)	"LMDB " #a "." #b "." #c ": (" d ")"
@@ -1025,9 +1025,9 @@ int  mdb_txn_renew(MDB_txn *txn);
 	 * After a successful commit the
 	 * handle will reside in the shared environment, and may be used
 	 * by other transactions. This function must not be called from
-	 * multiple concurrent transactions. A transaction that uses this function
-	 * must finish (either commit or abort) before any other transaction may
-	 * use this function.
+	 * multiple concurrent transactions in the same process. A transaction
+	 * that uses this function must finish (either commit or abort) before
+	 * any other transaction in the process may use this function.
 	 *
 	 * To use named databases (with name != NULL), #mdb_env_set_maxdbs()
 	 * must be called before opening the environment.  Database names
@@ -1270,10 +1270,9 @@ int  mdb_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 	 *		LMDB does nothing else with this memory, the caller is expected
 	 *		to modify all of the space requested.
 	 *	<li>#MDB_APPEND - append the given key/data pair to the end of the
-	 *		database. No key comparisons are performed. This option allows
-	 *		fast bulk loading when keys are already known to be in the
-	 *		correct order. Loading unsorted keys with this flag will cause
-	 *		data corruption.
+	 *		database. This option allows fast bulk loading when keys are
+	 *		already known to be in the correct order. Loading unsorted keys
+	 *		with this flag will cause a #MDB_KEYEXIST error.
 	 *	<li>#MDB_APPENDDUP - as above, but for sorted dup data.
 	 * </ul>
 	 * @return A non-zero error value on failure and 0 on success. Some possible

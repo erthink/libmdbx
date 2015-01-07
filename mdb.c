@@ -90,7 +90,7 @@ extern int cacheflush(char *addr, int nbytes, int cache);
 #include <time.h>
 #include <unistd.h>
 
-#if defined(__sun)
+#if defined(__sun) || defined(ANDROID)
 /* Most platforms have posix_memalign, older may only have memalign */
 #define HAVE_MEMALIGN	1
 #include <malloc.h>
@@ -333,6 +333,7 @@ mdb_sem_wait(sem_t *sem)
  */
 #ifndef MDB_FDATASYNC
 # define MDB_FDATASYNC	fdatasync
+# define HAVE_FDATASYNC	1
 #endif
 
 #ifndef MDB_MSYNC
@@ -898,7 +899,7 @@ typedef struct MDB_meta {
 		/** Stamp identifying this as an LMDB file. It must be set
 		 *	to #MDB_MAGIC. */
 	uint32_t	mm_magic;
-		/** Version number of this lock file. Must be set to #MDB_DATA_VERSION. */
+		/** Version number of this file. Must be set to #MDB_DATA_VERSION. */
 	uint32_t	mm_version;
 	void		*mm_address;		/**< address for fixed mapping */
 	size_t		mm_mapsize;			/**< size of mmap region */
@@ -1112,7 +1113,7 @@ struct MDB_env {
 	MDB_txn		*me_txn;		/**< current write transaction */
 	MDB_txn		*me_txn0;		/**< prealloc'd write transaction */
 	size_t		me_mapsize;		/**< size of the data memory map */
-	off_t		me_size;		/**< current file size */
+	size_t		me_size;		/**< current file size */
 	pgno_t		me_maxpg;		/**< me_mapsize / me_psize */
 	MDB_dbx		*me_dbxs;		/**< array of static DB info */
 	uint16_t	*me_dbflags;	/**< array of flags from MDB_db.md_flags */
@@ -1316,7 +1317,7 @@ mdb_strerror(int err)
 	buf[0] = 0;
 	FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM |
 		FORMAT_MESSAGE_IGNORE_INSERTS,
-		NULL, err, 0, ptr, sizeof(buf), pad);
+		NULL, err, 0, ptr, sizeof(buf), (va_list *)pad);
 	return ptr;
 #else
 	return strerror(err);
@@ -2298,10 +2299,19 @@ fail:
 	return rc;
 }
 
-int
-mdb_env_sync(MDB_env *env, int force)
+/* internal env_sync flags: */
+#define FORCE	1		/* as before, force a flush */
+#define FGREW	0x8000	/* file has grown, do a full fsync instead of just
+	   fdatasync. We shouldn't have to do this, according to the POSIX spec.
+	   But common Linux FSs violate the spec and won't sync required metadata
+	   correctly when the file grows. This only makes a difference if the
+	   platform actually distinguishes fdatasync from fsync.
+	   http://www.openldap.org/lists/openldap-devel/201411/msg00000.html */
+
+static int
+mdb_env_sync0(MDB_env *env, int flag)
 {
-	int rc = 0;
+	int rc = 0, force = flag & FORCE;
 	if (force || !F_ISSET(env->me_flags, MDB_NOSYNC)) {
 		if (env->me_flags & MDB_WRITEMAP) {
 			int flags = ((env->me_flags & MDB_MAPASYNC) && !force)
@@ -2313,11 +2323,23 @@ mdb_env_sync(MDB_env *env, int force)
 				rc = ErrCode();
 #endif
 		} else {
+#ifdef HAVE_FDATASYNC
+			if (flag & FGREW) {
+				if (fsync(env->me_fd))	/* Avoid ext-fs bugs, do full sync */
+					rc = ErrCode();
+			} else
+#endif
 			if (MDB_FDATASYNC(env->me_fd))
 				rc = ErrCode();
 		}
 	}
 	return rc;
+}
+
+int
+mdb_env_sync(MDB_env *env, int force)
+{
+	return mdb_env_sync0(env, force != 0);
 }
 
 /** Back up parent txn's cursors, then grab the originals for tracking */
@@ -2472,11 +2494,10 @@ mdb_txn_renew0(MDB_txn *txn)
 	uint16_t x;
 	int rc, new_notls = 0;
 
-	/* Setup db info */
-	txn->mt_numdbs = env->me_numdbs;
-	txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
-
 	if (txn->mt_flags & MDB_TXN_RDONLY) {
+		/* Setup db info */
+		txn->mt_numdbs = env->me_numdbs;
+		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
 		if (!ti) {
 			meta = env->me_metas[ mdb_env_pick_meta(env) ];
 			txn->mt_txnid = meta->mm_txnid;
@@ -2536,11 +2557,17 @@ mdb_txn_renew0(MDB_txn *txn)
 			meta = env->me_metas[ mdb_env_pick_meta(env) ];
 			txn->mt_txnid = meta->mm_txnid;
 		}
+		/* Setup db info */
+		txn->mt_numdbs = env->me_numdbs;
 		txn->mt_txnid++;
 #if MDB_DEBUG
 		if (txn->mt_txnid == mdb_debug_start)
 			mdb_debug = 1;
 #endif
+		txn->mt_flags = 0;
+		txn->mt_child = NULL;
+		txn->mt_loose_pgs = NULL;
+		txn->mt_loose_count = 0;
 		txn->mt_dirty_room = MDB_IDL_UM_MAX;
 		txn->mt_u.dirty_list = env->me_dirty_list;
 		txn->mt_u.dirty_list[0].mid = 0;
@@ -2622,18 +2649,16 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned int flags, MDB_txn **ret)
 		}
 		tsize = sizeof(MDB_ntxn);
 	}
-	size = tsize + env->me_maxdbs * (sizeof(MDB_db)+1);
+	size = tsize;
 	if (!(flags & MDB_RDONLY)) {
 		if (!parent) {
-			txn = env->me_txn0;
-			txn->mt_flags = 0;
+			txn = env->me_txn0;	/* just reuse preallocated write txn */
 			goto ok;
 		}
+		/* child txns use own copy of cursors */
 		size += env->me_maxdbs * sizeof(MDB_cursor *);
-		/* child txns use parent's dbiseqs */
-		if (!parent)
-			size += env->me_maxdbs * sizeof(unsigned int);
 	}
+	size += env->me_maxdbs * (sizeof(MDB_db)+1);
 
 	if ((txn = calloc(1, size)) == NULL) {
 		DPRINTF(("calloc: %s", strerror(errno)));
@@ -2774,31 +2799,33 @@ mdb_txn_reset0(MDB_txn *txn, const char *act)
 		txn->mt_numdbs = 0;		/* close nothing if called again */
 		txn->mt_dbxs = NULL;	/* mark txn as reset */
 	} else {
-		mdb_cursors_close(txn, 0);
+		pgno_t *pghead = env->me_pghead;
 
+		mdb_cursors_close(txn, 0);
 		if (!(env->me_flags & MDB_WRITEMAP)) {
 			mdb_dlist_free(txn);
 		}
-		mdb_midl_free(env->me_pghead);
 
-		if (txn->mt_parent) {
+		if (!txn->mt_parent) {
+			if (mdb_midl_shrink(&txn->mt_free_pgs))
+				env->me_free_pgs = txn->mt_free_pgs;
+			/* me_pgstate: */
+			env->me_pghead = NULL;
+			env->me_pglast = 0;
+
+			env->me_txn = NULL;
+			/* The writer mutex was locked in mdb_txn_begin. */
+			if (env->me_txns)
+				UNLOCK_MUTEX_W(env);
+		} else {
 			txn->mt_parent->mt_child = NULL;
 			env->me_pgstate = ((MDB_ntxn *)txn)->mnt_pgstate;
 			mdb_midl_free(txn->mt_free_pgs);
 			mdb_midl_free(txn->mt_spill_pgs);
 			free(txn->mt_u.dirty_list);
-			return;
 		}
 
-		if (mdb_midl_shrink(&txn->mt_free_pgs))
-			env->me_free_pgs = txn->mt_free_pgs;
-		env->me_pghead = NULL;
-		env->me_pglast = 0;
-
-		env->me_txn = NULL;
-		/* The writer mutex was locked in mdb_txn_begin. */
-		if (env->me_txns)
-			UNLOCK_MUTEX_W(env);
+		mdb_midl_free(pghead);
 	}
 }
 
@@ -3367,8 +3394,15 @@ mdb_txn_commit(MDB_txn *txn)
 	mdb_audit(txn);
 #endif
 
+	i = 0;
+#ifdef HAVE_FDATASYNC
+	if (txn->mt_next_pgno * env->me_psize > env->me_size) {
+		i |= FGREW;
+		env->me_size = txn->mt_next_pgno * env->me_psize;
+	}
+#endif
 	if ((rc = mdb_page_flush(txn, 0)) ||
-		(rc = mdb_env_sync(env, 0)) ||
+		(rc = mdb_env_sync0(env, i)) ||
 		(rc = mdb_env_write_meta(txn)))
 		goto fail;
 
@@ -3824,6 +3858,27 @@ mdb_env_get_maxreaders(MDB_env *env, unsigned int *readers)
 	return MDB_SUCCESS;
 }
 
+static int ESECT
+mdb_fsize(HANDLE fd, size_t *size)
+{
+#ifdef _WIN32
+	LARGE_INTEGER fsize;
+
+	if (!GetFileSizeEx(fd, &fsize))
+		return ErrCode();
+
+	*size = fsize.QuadPart;
+#else
+	struct stat st;
+
+	if (fstat(fd, &st))
+		return ErrCode();
+
+	*size = st.st_size;
+#endif
+	return MDB_SUCCESS;
+}
+
 /** Further setup required for opening an LMDB environment
  */
 static int ESECT
@@ -3870,6 +3925,10 @@ mdb_env_open2(MDB_env *env)
 		if (env->me_mapsize < minsize)
 			env->me_mapsize = minsize;
 	}
+
+	rc = mdb_fsize(env->me_fd, &env->me_size);
+	if (rc)
+		return rc;
 
 	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta.mm_address : NULL);
 	if (rc)
@@ -3972,7 +4031,7 @@ PIMAGE_TLS_CALLBACK mdb_tls_cbp __attribute__((section (".CRT$XLB"))) = mdb_tls_
 extern const PIMAGE_TLS_CALLBACK mdb_tls_cbp;
 const PIMAGE_TLS_CALLBACK mdb_tls_cbp = mdb_tls_callback;
 #pragma const_seg()
-#else	/* WIN32 */
+#else	/* _WIN32 */
 #pragma comment(linker, "/INCLUDE:__tls_used")
 #pragma comment(linker, "/INCLUDE:_mdb_tls_cbp")
 #pragma data_seg(".CRT$XLB")
@@ -4022,7 +4081,7 @@ mdb_env_share_locks(MDB_env *env, int *excl)
 	return rc;
 }
 
-/** Try to get exlusive lock, otherwise shared.
+/** Try to get exclusive lock, otherwise shared.
  *	Maintain *excl = -1: no/unknown lock, 0: shared, 1: exclusive.
  */
 static int ESECT
@@ -4163,7 +4222,6 @@ mdb_hash_enc(MDB_val *val, char *encbuf)
  * @param[in] env The LMDB environment.
  * @param[in] lpath The pathname of the file used for the lock region.
  * @param[in] mode The Unix permissions for the file, if we create it.
- * @param[out] excl Resulting file lock type: -1 none, 0 shared, 1 exclusive
  * @param[in,out] excl In -1, out lock type: -1 none, 0 shared, 1 exclusive
  * @return 0 on success, non-zero on failure.
  */
@@ -4518,7 +4576,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 		if (!(flags & MDB_RDONLY)) {
 			MDB_txn *txn;
 			int tsize = sizeof(MDB_txn), size = tsize + env->me_maxdbs *
-				(sizeof(MDB_db)+sizeof(MDB_cursor)+sizeof(unsigned int)+1);
+				(sizeof(MDB_db)+sizeof(MDB_cursor *)+sizeof(unsigned int)+1);
 			txn = calloc(1, size);
 			if (txn) {
 				txn->mt_dbs = (MDB_db *)((char *)txn + tsize);
@@ -4526,6 +4584,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mdb_mode_t mode
 				txn->mt_dbiseqs = (unsigned int *)(txn->mt_cursors + env->me_maxdbs);
 				txn->mt_dbflags = (unsigned char *)(txn->mt_dbiseqs + env->me_maxdbs);
 				txn->mt_env = env;
+				txn->mt_dbxs = env->me_dbxs;
 				env->me_txn0 = txn;
 			} else {
 				rc = ENOMEM;
@@ -5424,11 +5483,11 @@ mdb_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 					}
 					return rc;
 				}
-			} else {
-				mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
-				if (op == MDB_PREV_DUP)
-					return MDB_NOTFOUND;
 			}
+		} else {
+			mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
+			if (op == MDB_PREV_DUP)
+				return MDB_NOTFOUND;
 		}
 	}
 
@@ -8585,8 +8644,12 @@ mdb_env_copyfd1(MDB_env *env, HANDLE fd)
 		/* Set metapage 1 */
 		mm->mm_last_pg = txn->mt_next_pgno - freecount - 1;
 		mm->mm_dbs[1] = txn->mt_dbs[1];
-		mm->mm_dbs[1].md_root = mm->mm_last_pg;
-		mm->mm_txnid = 1;
+		if (mm->mm_last_pg > 1) {
+			mm->mm_dbs[1].md_root = mm->mm_last_pg;
+			mm->mm_txnid = 1;
+		} else {
+			mm->mm_dbs[1].md_root = P_INVALID;
+		}
 	}
 	my.mc_wlen[0] = env->me_psize * 2;
 	my.mc_txn = txn;
@@ -8681,21 +8744,13 @@ mdb_env_copyfd0(MDB_env *env, HANDLE fd)
 		goto leave;
 
 	w2 = txn->mt_next_pgno * env->me_psize;
-#ifdef WIN32
 	{
-		LARGE_INTEGER fsize;
-		GetFileSizeEx(env->me_fd, &fsize);
-		if (w2 > fsize.QuadPart)
-			w2 = fsize.QuadPart;
+		size_t fsize = 0;
+		if ((rc = mdb_fsize(env->me_fd, &fsize)))
+			goto leave;
+		if (w2 > fsize)
+			w2 = fsize;
 	}
-#else
-	{
-		struct stat st;
-		fstat(env->me_fd, &st);
-		if (w2 > (size_t)st.st_size)
-			w2 = st.st_size;
-	}
-#endif
 	wsize = w2 - wsize;
 	while (wsize > 0) {
 		if (wsize > MAX_WRITE)
