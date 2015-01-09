@@ -2530,6 +2530,8 @@ static int
 mdb_env_sync0(MDB_env *env, int *force)
 {
 	int rc = 0;
+	if (env->me_flags & MDB_RDONLY)
+		return EACCES;
 	if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold)
 		*force = 1;
 	if (*force || !F_ISSET(env->me_flags, MDB_NOSYNC)) {
