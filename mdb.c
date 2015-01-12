@@ -3079,7 +3079,8 @@ mdb_txn_straggler(MDB_txn *txn, int *percent)
 	meta = env->me_metas[ mdb_env_pick_meta(env) ];
 	if (percent) {
 		long cent = env->me_maxpg / 100;
-		*percent = (meta->mm_last_pg + cent / 2 + 1) / (cent ? cent : 1);
+		long last = env->me_txn ? env->me_txn0->mt_next_pgno : meta->mm_last_pg;
+		*percent = (last + cent / 2) / (cent ? cent : 1);
 	}
 	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
 	return (0 > (long) lag) ? ~0u >> 1: lag;
