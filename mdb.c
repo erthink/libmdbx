@@ -70,14 +70,151 @@
 #include <fcntl.h>
 #endif
 
+/*****************************************************************************
+ * Properly compiler/memory/coherence barriers
+ * in the most portable way for ReOpenLDAP project.
+ *
+ * Feedback and comments are welcome.
+ * https://gist.github.com/leo-yuriev/ba186a6bf5cf3a27bae7                   */
+
 #if defined(__mips) && defined(__linux)
-/* MIPS has cache coherency issues, requires explicit cache control */
-#include <asm/cachectl.h>
-extern int cacheflush(char *addr, int nbytes, int cache);
-#define CACHEFLUSH(addr, bytes, cache)	cacheflush(addr, bytes, cache)
-#else
-#define CACHEFLUSH(addr, bytes, cache)
+	/* Only MIPS has explicit cache control */
+#	include <asm/cachectl.h>
 #endif
+
+#if defined(__GNUC__) || defined(__clang__)
+	/* LY: noting needed */
+#elif defined(_MSC_VER) || defined(_WIN32) || defined(_WIN64)
+#	include <winnt.h>
+#	include <intrin.h>
+#	pragma intrinsic(_ReadWriteBarrier)
+#elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
+#	include <intrin.h>
+#	if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
+#		pragma intrinsic(__mf)
+#	elif defined(__i386__) || defined(__x86_64__)
+#		pragma intrinsic(_mm_mfence)
+#	endif
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+#	include <mbarrier.h>
+#	define __inline inline
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) \
+	&& (defined(HP_IA64) || defined(__ia64))
+#	include <machine/sys/inline.h>
+#	define __inline
+#elif defined(__IBMC__) && defined(__powerpc)
+#	include <atomic.h>
+#	define __inline
+#elif defined(_AIX)
+#	include <builtins.h>
+#	include <sys/atomic_op.h>
+#	define __inline
+#elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
+#	include <machine/builtins.h>
+#	include <c_asm.h>
+#	define __inline
+#elif defined(__MWERKS__)
+	/* CodeWarrior - troubles ? */
+#	pragma gcc_extensions
+#	define __inline
+#elif defined(__SNC__)
+	/* Sony PS3 - troubles ? */
+#	define __inline
+#else
+#	define __inline
+#endif
+
+#if defined(__i386__) || defined(__x86_64__) \
+	|| defined(_M_AMD64) || defined(_M_IX86) \
+	|| defined(__i386) || defined(__amd64) \
+	|| defined(i386) || defined(__x86_64) \
+	|| defined(_AMD64_) || defined(_M_X64)
+#	define MDB_CACHE_IS_COHERENT 1
+#elif defined(__hppa) || defined(__hppa__)
+#	define MDB_CACHE_IS_COHERENT 1
+#endif
+
+#ifndef MDB_CACHE_IS_COHERENT
+#	define MDB_CACHE_IS_COHERENT 0
+#endif
+
+#define MDB_BARRIER_COMPILER 0
+#define MDB_BARRIER_MEMORY 1
+
+static __inline void mdb_barrier(int type) {
+#if defined(__clang__)
+	__asm__ __volatile__ ("" ::: "memory");
+	if (type > MDB_BARRIER_COMPILER)
+#	if __has_extension(c_atomic) || __has_extension(cxx_atomic)
+		__c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
+#	else
+		__sync_synchronize();
+#	endif
+#elif defined(__GNUC__)
+	__asm__ __volatile__ ("" ::: "memory");
+	if (type > MDB_BARRIER_COMPILER)
+#	if defined(__ATOMIC_SEQ_CST)
+		__atomic_thread_fence(__ATOMIC_SEQ_CST);
+#	else
+		__sync_synchronize();
+#	endif
+#elif defined(_MSC_VER) || defined(_WIN32) || defined(_WIN64)
+	_ReadWriteBarrier();
+	if (type > MDB_BARRIER_COMPILER)
+		MemoryBarrier();
+#elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
+	__memory_barrier();
+	if (type > MDB_BARRIER_COMPILER)
+#	if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
+		__mf();
+#	elif defined(__i386__) || defined(__x86_64__)
+		_mm_mfence();
+#	else
+#		error "Unknown target for Intel Compiler, please report to us."
+#	endif
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+	__compiler_barrier();
+	if (type > MDB_BARRIER_COMPILER)
+		__machine_rw_barrier();
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) \
+	&& (defined(HP_IA64) || defined(__ia64))
+	_Asm_sched_fence(/* LY: no-arg meaning 'all expect ALU', e.g. 0x3D3D */);
+	if (type > MDB_BARRIER_COMPILER)
+		_Asm_mf();
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) \
+	|| defined(__ppc64__) || defined(__powerpc64__)
+	__fence();
+	if (type > MDB_BARRIER_COMPILER)
+		__lwsync();
+#elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
+	__PAL_DRAINA(); /* LY: excessive ? */
+	__MB();
+#else
+#	error "Could not guess the kind of compiler, please report to us."
+#endif
+}
+
+#define mdb_compiler_barrier() \
+	mdb_barrier(MDB_BARRIER_COMPILER)
+#define mdb_memory_barrier() \
+	mdb_barrier(MDB_BARRIER_MEMORY)
+#define mdb_coherent_barrier() \
+	mdb_barrier(MDB_CACHE_IS_COHERENT ? MDB_BARRIER_COMPILER : MDB_BARRIER_MEMORY)
+
+static __inline void mdb_invalidate_cache(void *addr, int nbytes) {
+	mdb_coherent_barrier();
+#if defined(__mips) && defined(__linux)
+	/* MIPS has cache coherency issues.
+	 * Note: for any nbytes >= on-chip cache size, entire is flushed. */
+	cacheflush(addr, nbytes, DCACHE);
+#elif defined(_M_MRX000) || defined(_MIPS_)
+#	error "Sorry, cacheflush() for MIPS not implemented"
+#else
+	/* LY: assume no mmap/dcache issues. */
+#endif
+}
+
+/*****************************************************************************/
 
 #if defined(__linux) && !defined(MDB_FDATASYNC_WORKS)
 /** fdatasync is broken on ext3/ext4fs on older kernels, see
@@ -2834,6 +2971,7 @@ mdb_txn_renew0(MDB_txn *txn)
 				r->mr_txnid = (txnid_t)-1;
 				r->mr_tid = tid;
 				r->mr_pid = pid; /* should be written last, see ITS#7971. */
+				mdb_coherent_barrier();
 				if (i == nr)
 					ti->mti_numreaders = ++nr;
 				/* Save numreaders for un-mutexed mdb_env_close() */
@@ -2846,9 +2984,10 @@ mdb_txn_renew0(MDB_txn *txn)
 					return rc;
 				}
 			}
-			do /* LY: Retry on a race, ITS#7970. */
+			do { /* LY: Retry on a race, ITS#7970. */
 				r->mr_txnid = ti->mti_txnid;
-			while(r->mr_txnid != ti->mti_txnid);
+				mdb_coherent_barrier();
+			} while(r->mr_txnid != ti->mti_txnid);
 			txn->mt_txnid = r->mr_txnid;
 			txn->mt_u.reader = r;
 			meta = env->me_metas[txn->mt_txnid & 1];
@@ -3654,11 +3793,7 @@ mdb_page_flush(MDB_txn *txn, int keep)
 #endif	/* _WIN32 */
 	}
 
-	/* MIPS has cache coherency issues, this is a no-op everywhere else
-	 * Note: for any size >= on-chip cache size, entire on-chip cache is
-	 * flushed.
-	 */
-	CACHEFLUSH(env->me_map, txn->mt_next_pgno * env->me_psize, DCACHE);
+	mdb_invalidate_cache(env->me_map, txn->mt_next_pgno * env->me_psize);
 
 	for (i = keep; ++i <= pagecount; ) {
 		dp = dl[i].mptr;
@@ -4083,10 +4218,8 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 		mp->mm_dbs[0] = txn->mt_dbs[0];
 		mp->mm_dbs[1] = txn->mt_dbs[1];
 		mp->mm_last_pg = txn->mt_next_pgno - 1;
-#if !(defined(_MSC_VER) || defined(__i386__) || defined(__x86_64__))
-		/* LY: issue a memory barrier, if not x86. ITS#7969 */
-		__sync_synchronize();
-#endif
+		/* (LY) ITS#7969: issue a memory barrier, it is noop for x86. */
+		mdb_coherent_barrier();
 		mp->mm_txnid = txn->mt_txnid;
 		if (force || !(env->me_flags & (MDB_NOMETASYNC|MDB_NOSYNC))) {
 			unsigned meta_size = env->me_psize;
@@ -4163,8 +4296,7 @@ fail:
 		env->me_flags |= MDB_FATAL_ERROR;
 		return rc;
 	}
-	/* MIPS has cache coherency issues, this is a no-op everywhere else */
-	CACHEFLUSH(env->me_map + off, len, DCACHE);
+	mdb_invalidate_cache(env->me_map + off, len);
 done:
 	/* Memory ordering issues are irrelevant; since the entire writer
 	 * is wrapped by wmutex, all of these changes will become visible
