@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
 			dohdr = 1;
 		} else if (!(mode & NOHDR))
 			readhdr();
-		
+
 		rc = mdb_txn_begin(env, NULL, 0, &txn);
 		if (rc) {
 			fprintf(stderr, "mdb_txn_begin failed, error %d %s\n", rc, mdb_strerror(rc));
@@ -406,7 +406,7 @@ int main(int argc, char *argv[])
 			rc = readline(&data, &dbuf);
 			if (rc)
 				goto txn_abort;
-			
+
 			rc = mdb_cursor_put(mc, &key, &data, putflags);
 			if (rc == MDB_KEYEXIST && putflags)
 				continue;

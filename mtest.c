@@ -43,20 +43,20 @@ int main(int argc,char * argv[])
 	    for(i = 0;i<count;i++) {
 			values[i] = rand()%1024;
 	    }
-    
+
 		E(mdb_env_create(&env));
 		E(mdb_env_set_mapsize(env, 10485760));
 		E(mdb_env_open(env, "./testdb", MDB_FIXEDMAP /*|MDB_NOSYNC*/, 0664));
 		E(mdb_txn_begin(env, NULL, 0, &txn));
 		E(mdb_open(txn, NULL, 0, &dbi));
-   
+
 		key.mv_size = sizeof(int);
 		key.mv_data = sval;
 		data.mv_size = sizeof(sval);
 		data.mv_data = sval;
 
 		printf("Adding %d values\n", count);
-	    for (i=0;i<count;i++) {	
+	    for (i=0;i<count;i++) {
 			sprintf(sval, "%03x %d foo bar", values[i], values[i]);
 			if (RES(MDB_KEYEXIST, mdb_put(txn, dbi, &key, &data, MDB_NOOVERWRITE))) {
 				j++;
