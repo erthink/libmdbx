@@ -2200,6 +2200,7 @@ mdb_oomkick_laggard(MDB_env *env)
 			if (rc > 1) {
 				r->mr_tid = 0;
 				r->mr_pid = 0;
+				mdb_coherent_barrier();
 			}
 		}
 	}
@@ -2988,6 +2989,7 @@ mdb_txn_renew0(MDB_txn *txn)
 				new_notls = (env->me_flags & MDB_NOTLS);
 				if (!new_notls && (rc=pthread_setspecific(env->me_txkey, r))) {
 					r->mr_pid = 0;
+					mdb_coherent_barrier();
 					return rc;
 				}
 			}
@@ -2997,6 +2999,7 @@ mdb_txn_renew0(MDB_txn *txn)
 			} while(r->mr_txnid != ti->mti_txnid);
 			txn->mt_txnid = r->mr_txnid;
 			txn->mt_u.reader = r;
+			mdb_coherent_barrier();
 			meta = env->me_metas[txn->mt_txnid & 1];
 		}
 	} else {
@@ -3050,6 +3053,7 @@ mdb_txn_renew0(MDB_txn *txn)
 		if (new_notls) {
 			txn->mt_u.reader->mr_pid = 0;
 			txn->mt_u.reader = NULL;
+			mdb_coherent_barrier();
 		}
 		return MDB_MAP_RESIZED;
 	}
@@ -3344,8 +3348,10 @@ mdb_txn_abort(MDB_txn *txn)
 
 	mdb_txn_reset0(txn, "abort");
 	/* Free reader slot tied to this txn (if MDB_NOTLS && writable FS) */
-	if ((txn->mt_flags & MDB_TXN_RDONLY) && txn->mt_u.reader)
+	if ((txn->mt_flags & MDB_TXN_RDONLY) && txn->mt_u.reader) {
 		txn->mt_u.reader->mr_pid = 0;
+		mdb_coherent_barrier();
+	}
 
 	if (txn != txn->mt_env->me_txn0)
 		free(txn);
@@ -4697,6 +4703,7 @@ mdb_env_reader_dest(void *ptr)
 	MDB_reader *reader = ptr;
 
 	reader->mr_pid = 0;
+	mdb_coherent_barrier();
 }
 
 #ifdef _WIN32
@@ -5372,6 +5379,7 @@ mdb_env_close0(MDB_env *env, int excl)
 		for (i = env->me_close_readers; --i >= 0; )
 			if (env->me_txns->mti_readers[i].mr_pid == pid)
 				env->me_txns->mti_readers[i].mr_pid = 0;
+		mdb_coherent_barrier();
 #ifdef _WIN32
 		if (env->me_rmutex) {
 			CloseHandle(env->me_rmutex);
