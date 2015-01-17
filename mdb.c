@@ -1091,7 +1091,7 @@ typedef struct MDB_node {
 
 	/** Information about a single database in the environment. */
 typedef struct MDB_db {
-	uint32_t	md_pad;		/**< also ksize for LEAF2 pages */
+	uint32_t	md_psize;	/**< also ksize for LEAF2 pages */
 	uint16_t	md_flags;	/**< @ref mdb_dbi_open */
 	uint16_t	md_depth;	/**< depth of this tree */
 	pgno_t		md_branch_pages;	/**< number of internal pages */
@@ -1126,7 +1126,7 @@ typedef struct MDB_meta {
 	size_t		mm_mapsize;			/**< size of mmap region */
 	MDB_db		mm_dbs[2];			/**< first is free space, 2nd is main db */
 	/** The size of pages used in this DB */
-#define	mm_psize	mm_dbs[0].md_pad
+#define	mm_psize	mm_dbs[0].md_psize
 	/** Any persistent environment flags. @ref mdb_env */
 #define	mm_flags	mm_dbs[0].md_flags
 	pgno_t		mm_last_pg;			/**< last used page in file */
@@ -5575,7 +5575,7 @@ mdb_node_search(MDB_cursor *mc, MDB_val *key, int *exactp)
 	}
 
 	if (IS_LEAF2(mp)) {
-		nodekey.mv_size = mc->mc_db->md_pad;
+		nodekey.mv_size = mc->mc_db->md_psize;
 		node = NODEPTR(mp, 0);	/* fake */
 		while (low <= high) {
 			i = (low + high) >> 1;
@@ -6159,7 +6159,7 @@ skip:
 	    mdb_dbg_pgno(mp), NUMKEYS(mp), mc->mc_ki[mc->mc_top]));
 
 	if (IS_LEAF2(mp)) {
-		key->mv_size = mc->mc_db->md_pad;
+		key->mv_size = mc->mc_db->md_psize;
 		key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
 		return MDB_SUCCESS;
 	}
@@ -6237,7 +6237,7 @@ mdb_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 	    mdb_dbg_pgno(mp), NUMKEYS(mp), mc->mc_ki[mc->mc_top]));
 
 	if (IS_LEAF2(mp)) {
-		key->mv_size = mc->mc_db->md_pad;
+		key->mv_size = mc->mc_db->md_psize;
 		key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
 		return MDB_SUCCESS;
 	}
@@ -6289,7 +6289,7 @@ mdb_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			return MDB_NOTFOUND;
 		}
 		if (mp->mp_flags & P_LEAF2) {
-			nodekey.mv_size = mc->mc_db->md_pad;
+			nodekey.mv_size = mc->mc_db->md_psize;
 			nodekey.mv_data = LEAF2KEY(mp, 0, nodekey.mv_size);
 		} else {
 			leaf = NODEPTR(mp, 0);
@@ -6399,7 +6399,7 @@ set1:
 
 	if (IS_LEAF2(mp)) {
 		if (op == MDB_SET_RANGE || op == MDB_SET_KEY) {
-			key->mv_size = mc->mc_db->md_pad;
+			key->mv_size = mc->mc_db->md_psize;
 			key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
 		}
 		return MDB_SUCCESS;
@@ -6476,7 +6476,7 @@ mdb_cursor_first(MDB_cursor *mc, MDB_val *key, MDB_val *data)
 	mc->mc_ki[mc->mc_top] = 0;
 
 	if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-		key->mv_size = mc->mc_db->md_pad;
+		key->mv_size = mc->mc_db->md_psize;
 		key->mv_data = LEAF2KEY(mc->mc_pg[mc->mc_top], 0, key->mv_size);
 		return MDB_SUCCESS;
 	}
@@ -6521,7 +6521,7 @@ mdb_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data)
 	leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 
 	if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-		key->mv_size = mc->mc_db->md_pad;
+		key->mv_size = mc->mc_db->md_psize;
 		key->mv_data = LEAF2KEY(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top], key->mv_size);
 		return MDB_SUCCESS;
 	}
@@ -6570,7 +6570,7 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			}
 			rc = MDB_SUCCESS;
 			if (IS_LEAF2(mp)) {
-				key->mv_size = mc->mc_db->md_pad;
+				key->mv_size = mc->mc_db->md_psize;
 				key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
 			} else {
 				MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
@@ -6641,7 +6641,7 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 fetchm:
 				mx = &mc->mc_xcursor->mx_cursor;
 				data->mv_size = NUMKEYS(mx->mc_pg[mx->mc_top]) *
-					mx->mc_db->md_pad;
+					mx->mc_db->md_psize;
 				data->mv_data = METADATA(mx->mc_pg[mx->mc_top]);
 				mx->mc_ki[mx->mc_top] = NUMKEYS(mx->mc_pg[mx->mc_top])-1;
 			} else {
@@ -6898,7 +6898,7 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 		/* there's only a key anyway, so this is a no-op */
 		if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
 			char *ptr;
-			unsigned int ksize = mc->mc_db->md_pad;
+			unsigned int ksize = mc->mc_db->md_psize;
 			if (key->mv_size != ksize)
 				return MDB_BAD_VALSIZE;
 			ptr = LEAF2KEY(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top], ksize);
@@ -7013,12 +7013,12 @@ more:
 prep_subDB:
 					if (mc->mc_db->md_flags & MDB_DUPFIXED) {
 						fp_flags |= P_LEAF2;
-						dummy.md_pad = fp->mp_pad;
+						dummy.md_psize = fp->mp_pad;
 						dummy.md_flags = MDB_DUPFIXED;
 						if (mc->mc_db->md_flags & MDB_INTEGERDUP)
 							dummy.md_flags |= MDB_INTEGERKEY;
 					} else {
-						dummy.md_pad = 0;
+						dummy.md_psize = 0;
 						dummy.md_flags = 0;
 					}
 					dummy.md_depth = 1;
@@ -7470,7 +7470,7 @@ mdb_node_add(MDB_cursor *mc, indx_t indx,
 
 	if (IS_LEAF2(mp)) {
 		/* Move higher keys up one slot. */
-		int ksize = mc->mc_db->md_pad, dif;
+		int ksize = mc->mc_db->md_psize, dif;
 		char *ptr = LEAF2KEY(mp, indx, ksize);
 		dif = NUMKEYS(mp) - indx;
 		if (dif > 0)
@@ -7728,7 +7728,7 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 		mx->mx_cursor.mc_flags = C_SUB;
 	} else {
 		MDB_page *fp = NODEDATA(node);
-		mx->mx_db.md_pad = mc->mc_pg[mc->mc_top]->mp_pad;
+		mx->mx_db.md_psize = mc->mc_pg[mc->mc_top]->mp_pad;
 		mx->mx_db.md_flags = 0;
 		mx->mx_db.md_depth = 1;
 		mx->mx_db.md_branch_pages = 0;
@@ -7743,7 +7743,7 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 		mx->mx_cursor.mc_ki[0] = 0;
 		if (mc->mc_db->md_flags & MDB_DUPFIXED) {
 			mx->mx_db.md_flags = MDB_DUPFIXED;
-			mx->mx_db.md_pad = fp->mp_pad;
+			mx->mx_db.md_psize = fp->mp_pad;
 			if (mc->mc_db->md_flags & MDB_INTEGERDUP)
 				mx->mx_db.md_flags |= MDB_INTEGERKEY;
 		}
@@ -7752,7 +7752,7 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 		mx->mx_db.md_root));
 	mx->mx_dbflag = DB_VALID|DB_DIRTY; /* DB_DIRTY guides mdb_cursor_touch */
 #if UINT_MAX < SIZE_MAX
-	if (mx->mx_dbx.md_cmp == mdb_cmp_int && mx->mx_db.md_pad == sizeof(size_t))
+	if (mx->mx_dbx.md_cmp == mdb_cmp_int && mx->mx_db.md_psize == sizeof(size_t))
 		mx->mx_dbx.md_cmp = mdb_cmp_clong;
 #endif
 }
@@ -7994,7 +7994,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst)
 		return rc;
 
 	if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
-		key.mv_size = csrc->mc_db->md_pad;
+		key.mv_size = csrc->mc_db->md_psize;
 		key.mv_data = LEAF2KEY(csrc->mc_pg[csrc->mc_top], csrc->mc_ki[csrc->mc_top], key.mv_size);
 		data.mv_size = 0;
 		data.mv_data = NULL;
@@ -8013,7 +8013,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst)
 			if (rc)
 				return rc;
 			if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
-				key.mv_size = csrc->mc_db->md_pad;
+				key.mv_size = csrc->mc_db->md_psize;
 				key.mv_data = LEAF2KEY(csrc->mc_pg[csrc->mc_top], 0, key.mv_size);
 			} else {
 				s2 = NODEPTR(csrc->mc_pg[csrc->mc_top], 0);
@@ -8039,7 +8039,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst)
 		if (rc)
 			return rc;
 		if (IS_LEAF2(mn.mc_pg[mn.mc_top])) {
-			bkey.mv_size = mn.mc_db->md_pad;
+			bkey.mv_size = mn.mc_db->md_psize;
 			bkey.mv_data = LEAF2KEY(mn.mc_pg[mn.mc_top], 0, bkey.mv_size);
 		} else {
 			s2 = NODEPTR(mn.mc_pg[mn.mc_top], 0);
@@ -8186,7 +8186,7 @@ mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst)
 	 */
 	j = nkeys = NUMKEYS(pdst);
 	if (IS_LEAF2(psrc)) {
-		key.mv_size = csrc->mc_db->md_pad;
+		key.mv_size = csrc->mc_db->md_psize;
 		key.mv_data = METADATA(psrc);
 		for (i = 0; i < NUMKEYS(psrc); i++, j++) {
 			rc = mdb_node_add(cdst, j, &key, NULL, 0, 0);
@@ -8206,7 +8206,7 @@ mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst)
 				if (rc)
 					return rc;
 				if (IS_LEAF2(mn.mc_pg[mn.mc_top])) {
-					key.mv_size = mn.mc_db->md_pad;
+					key.mv_size = mn.mc_db->md_psize;
 					key.mv_data = LEAF2KEY(mn.mc_pg[mn.mc_top], 0, key.mv_size);
 				} else {
 					s2 = NODEPTR(mn.mc_pg[mn.mc_top], 0);
@@ -8495,7 +8495,7 @@ mdb_cursor_del0(MDB_cursor *mc)
 	unsigned int nkeys;
 
 	ki = mc->mc_ki[mc->mc_top];
-	mdb_node_del(mc, mc->mc_db->md_pad);
+	mdb_node_del(mc, mc->mc_db->md_psize);
 	mc->mc_db->md_entries--;
 	rc = mdb_rebalance(mc);
 
@@ -8699,7 +8699,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 			unsigned int lsize, rsize, ksize;
 			/* Move half of the keys to the right sibling */
 			x = mc->mc_ki[mc->mc_top] - split_indx;
-			ksize = mc->mc_db->md_pad;
+			ksize = mc->mc_db->md_psize;
 			split = LEAF2KEY(mp, split_indx, ksize);
 			rsize = (nkeys - split_indx) * ksize;
 			lsize = (nkeys - split_indx) * sizeof(indx_t);
