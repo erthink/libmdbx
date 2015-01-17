@@ -271,18 +271,19 @@ union semun {
 #endif /* !_WIN32 */
 
 #ifdef USE_VALGRIND
-#include <valgrind/memcheck.h>
-#define VGMEMP_CREATE(h,r,z)    VALGRIND_CREATE_MEMPOOL(h,r,z)
-#define VGMEMP_ALLOC(h,a,s) VALGRIND_MEMPOOL_ALLOC(h,a,s)
-#define VGMEMP_FREE(h,a) VALGRIND_MEMPOOL_FREE(h,a)
-#define VGMEMP_DESTROY(h)	VALGRIND_DESTROY_MEMPOOL(h)
-#define VGMEMP_DEFINED(a,s)	VALGRIND_MAKE_MEM_DEFINED(a,s)
+#	include <valgrind/memcheck.h>
 #else
-#define VGMEMP_CREATE(h,r,z)
-#define VGMEMP_ALLOC(h,a,s)
-#define VGMEMP_FREE(h,a)
-#define VGMEMP_DESTROY(h)
-#define VGMEMP_DEFINED(a,s)
+#	define VALGRIND_CREATE_MEMPOOL(h,r,z)
+#	define VALGRIND_DESTROY_MEMPOOL(h)
+#	define VALGRIND_MEMPOOL_TRIM(h,a,s)
+#	define VALGRIND_MEMPOOL_ALLOC(h,a,s)
+#	define VALGRIND_MEMPOOL_FREE(h,a)
+#	define VALGRIND_MEMPOOL_CHANGE(h,a,b,s)
+#	define VALGRIND_MAKE_MEM_NOACCESS(a,s)
+#	define VALGRIND_MAKE_MEM_DEFINED(a,s)
+#	define VALGRIND_MAKE_MEM_UNDEFINED(a,s)
+#	define VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
+#	define VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
 #endif
 
 #ifndef BYTE_ORDER
@@ -1380,6 +1381,9 @@ struct MDB_env {
 	size_t		me_sync_size;	/**< Tracking file size at last sync to decide when fsync() is needed */
 #endif /* FDATASYNC_MAYBE_BROKEN */
 	MDB_oom_func	*me_oom_func; /**< Callback for kicking laggard readers */
+#ifdef USE_VALGRIND
+	int me_valgrind_handle;
+#endif
 };
 
 	/** Nested transaction */
@@ -1794,36 +1798,40 @@ static MDB_page *
 mdb_page_malloc(MDB_txn *txn, unsigned num)
 {
 	MDB_env *env = txn->mt_env;
-	MDB_page *ret = env->me_dpages;
-	size_t psize = env->me_psize, sz = psize, off;
-	/* For ! #MDB_NOMEMINIT, psize counts how much to init.
-	 * For a single page alloc, we init everything after the page header.
-	 * For multi-page, we init the final page; if the caller needed that
-	 * many pages they will be filling in at least up to the last page.
-	 */
-	if (num == 1) {
-		if (ret) {
-			VGMEMP_ALLOC(env, ret, sz);
-			VGMEMP_DEFINED(ret, sizeof(ret->mp_next));
-			env->me_dpages = ret->mp_next;
-			return ret;
-		}
-		psize -= off = PAGEHDRSZ;
+	size_t size = env->me_psize;
+	MDB_page *np = env->me_dpages;
+	if (num == 1 && np) {
+		VALGRIND_MEMPOOL_ALLOC(env, np, size);
+		VALGRIND_MAKE_MEM_DEFINED(&np->mp_next, sizeof(np->mp_next));
+		env->me_dpages = np->mp_next;
 	} else {
-		sz *= num;
-		off = sz - psize;
-	}
-	if ((ret = malloc(sz)) != NULL) {
-		VGMEMP_ALLOC(env, ret, sz);
-		if (!(env->me_flags & MDB_NOMEMINIT)) {
-			memset((char *)ret + off, 0, psize);
-			ret->mp_pad = 0;
+		size *= num;
+		np = malloc(size);
+		if (! np) {
+			txn->mt_flags |= MDB_TXN_ERROR;
+			return np;
 		}
-	} else {
-		txn->mt_flags |= MDB_TXN_ERROR;
+		VALGRIND_MEMPOOL_ALLOC(env, np, size);
 	}
-	return ret;
+
+#ifdef LDAP_MEMORY_DEBUG
+	memset(np, 42, size);
+#else
+	if ((env->me_flags & MDB_NOMEMINIT) == 0) {
+		/* For a single page alloc, we init everything after the page header.
+		 * For multi-page, we init the final page; if the caller needed that
+		 * many pages they will be filling in at least up to the last page.
+		 */
+		size_t skip = PAGEHDRSZ;
+		if (num > 1)
+			skip += (num - 1) * env->me_psize;
+		memset((char *) np + skip, 0, size - skip);
+	}
+#endif
+	VALGRIND_MAKE_MEM_UNDEFINED(np, size);
+	return np;
 }
+
 /** Free a single page.
  * Saves single pages to a list, for future reuse.
  * (This is not used for multi-page overflow pages.)
@@ -1832,7 +1840,7 @@ static void
 mdb_page_free(MDB_env *env, MDB_page *mp)
 {
 	mp->mp_next = env->me_dpages;
-	VGMEMP_FREE(env, mp);
+	VALGRIND_MEMPOOL_FREE(env, mp);
 	env->me_dpages = mp;
 }
 
@@ -1844,7 +1852,7 @@ mdb_dpage_free(MDB_env *env, MDB_page *dp)
 		mdb_page_free(env, dp);
 	} else {
 		/* large pages just get freed directly */
-		VGMEMP_FREE(env, dp);
+		VALGRIND_MEMPOOL_FREE(env, dp);
 		free(dp);
 	}
 }
@@ -2497,7 +2505,14 @@ search_done:
 	} else {
 		txn->mt_next_pgno = pgno + num;
 	}
+
+#ifdef LDAP_MEMORY_DEBUG
+	memset(np, 111, env->me_psize * num);
+#endif
+	VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
+
 	np->mp_pgno = pgno;
+	np->mp_pad = 0;
 	mdb_page_dirty(txn, np);
 	*mp = np;
 
@@ -4355,7 +4370,7 @@ mdb_env_create(MDB_env **env)
 #endif
 	e->me_pid = getpid();
 	GET_PAGESIZE(e->me_os_psize);
-	VGMEMP_CREATE(e,0,0);
+	VALGRIND_CREATE_MEMPOOL(e,0,0);
 	*env = e;
 	return MDB_SUCCESS;
 }
@@ -4451,6 +4466,11 @@ mdb_env_map(MDB_env *env, void *addr)
 		return ErrCode();
 #endif /* _WIN32 */
 
+#ifdef USE_VALGRIND
+	env->me_valgrind_handle = VALGRIND_CREATE_BLOCK(
+				env->me_map, env->me_mapsize, "lmdb");
+#endif
+
 	return MDB_SUCCESS;
 }
 
@@ -4476,6 +4496,10 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 				size = minsize;
 		}
 		munmap(env->me_map, env->me_mapsize);
+#ifdef USE_VALGRIND
+		VALGRIND_DISCARD(env->me_valgrind_handle);
+		env->me_valgrind_handle = -1;
+#endif
 		env->me_mapsize = size;
 		old = (env->me_flags & MDB_FIXEDMAP) ? env->me_map : NULL;
 		rc = mdb_env_map(env, old);
@@ -5364,6 +5388,10 @@ mdb_env_close0(MDB_env *env, int excl)
 
 	if (env->me_map) {
 		munmap(env->me_map, env->me_mapsize);
+#ifdef USE_VALGRIND
+		VALGRIND_DISCARD(env->me_valgrind_handle);
+		env->me_valgrind_handle = -1;
+#endif
 	}
 	if (env->me_mfd != env->me_fd && env->me_mfd != INVALID_HANDLE_VALUE)
 		(void) close(env->me_mfd);
@@ -5426,9 +5454,9 @@ mdb_env_close(MDB_env *env)
 	if (env == NULL)
 		return;
 
-	VGMEMP_DESTROY(env);
+	VALGRIND_DESTROY_MEMPOOL(env);
 	while ((dp = env->me_dpages) != NULL) {
-		VGMEMP_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
+		VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
 		env->me_dpages = dp->mp_next;
 		free(dp);
 	}
