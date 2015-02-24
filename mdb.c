@@ -85,11 +85,12 @@
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-	/* LY: noting needed */
+#	define MDB_INLINE __inline
 #elif defined(_MSC_VER) || defined(_WIN32) || defined(_WIN64)
 #	include <winnt.h>
 #	include <intrin.h>
 #	pragma intrinsic(_ReadWriteBarrier)
+#	define MDB_INLINE __inline
 #elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
 #	include <intrin.h>
 #	if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
@@ -97,33 +98,34 @@
 #	elif defined(__i386__) || defined(__x86_64__)
 #		pragma intrinsic(_mm_mfence)
 #	endif
+#	define MDB_INLINE __inline
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #	include <mbarrier.h>
-#	define __inline inline
+#	define MDB_INLINE inline
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) \
 	&& (defined(HP_IA64) || defined(__ia64))
 #	include <machine/sys/inline.h>
-#	define __inline
+#	define MDB_INLINE
 #elif defined(__IBMC__) && defined(__powerpc)
 #	include <atomic.h>
-#	define __inline
+#	define MDB_INLINE
 #elif defined(_AIX)
 #	include <builtins.h>
 #	include <sys/atomic_op.h>
-#	define __inline
+#	define MDB_INLINE
 #elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
 #	include <machine/builtins.h>
 #	include <c_asm.h>
-#	define __inline
+#	define MDB_INLINE
 #elif defined(__MWERKS__)
 	/* CodeWarrior - troubles ? */
 #	pragma gcc_extensions
-#	define __inline
+#	define MDB_INLINE
 #elif defined(__SNC__)
 	/* Sony PS3 - troubles ? */
-#	define __inline
+#	define MDB_INLINE
 #else
-#	define __inline
+#	define MDB_INLINE
 #endif
 
 #if defined(__i386__) || defined(__x86_64__) \
@@ -143,7 +145,7 @@
 #define MDB_BARRIER_COMPILER 0
 #define MDB_BARRIER_MEMORY 1
 
-static __inline void mdb_barrier(int type) {
+static MDB_INLINE void mdb_barrier(int type) {
 #if defined(__clang__)
 	__asm__ __volatile__ ("" ::: "memory");
 	if (type > MDB_BARRIER_COMPILER)
@@ -203,7 +205,7 @@ static __inline void mdb_barrier(int type) {
 #define mdb_coherent_barrier() \
 	mdb_barrier(MDB_CACHE_IS_COHERENT ? MDB_BARRIER_COMPILER : MDB_BARRIER_MEMORY)
 
-static __inline void mdb_invalidate_cache(void *addr, int nbytes) {
+static MDB_INLINE void mdb_invalidate_cache(void *addr, int nbytes) {
 	mdb_coherent_barrier();
 #if defined(__mips) && defined(__linux)
 	/* MIPS has cache coherency issues.
