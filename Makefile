@@ -20,11 +20,12 @@
 CC	= gcc
 W	= -W -Wall -Wno-unused-parameter -Wbad-function-cast -Wuninitialized
 THREADS = -pthread
-OPT = -O2 -g
-CFLAGS	= $(THREADS) $(OPT) $(W) $(XCFLAGS)
+XCFLAGS ?= $(CFLAGS)
+OPT	= -O2 -g
+CFLAGS	:= $(THREADS) $(OPT) $(W) $(XCFLAGS)
 LDLIBS	=
 SOLIBS	=
-prefix	= /usr/local
+prefix	?= /usr/local
 
 ########################################################################
 
@@ -49,7 +50,7 @@ test:	all
 	./mtest && ./mdb_stat testdb
 
 liblmdb.a:	mdb.o midl.o
-	ar rs $@ mdb.o midl.o
+	$(AR) rs $@ mdb.o midl.o
 
 liblmdb.so:	mdb.lo midl.lo
 #	$(CC) $(LDFLAGS) -pthread -shared -Wl,-Bsymbolic -o $@ mdb.o midl.o $(SOLIBS)
