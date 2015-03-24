@@ -134,6 +134,10 @@ int main(int argc, char *argv[])
 			mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
 		printf("  Max readers: %u\n", mei.me_maxreaders);
 		printf("  Number of readers used: %u\n", mei.me_numreaders);
+	} else {
+		/* LY: zap warnings from gcc */
+		memset(&mst, 0, sizeof(mst));
+		memset(&mei, 0, sizeof(mei));
 	}
 
 	if (rdrinfo) {

@@ -30,7 +30,7 @@ sighandle(int sig)
 int main(int argc,char * argv[])
 {
 	int rc;
-	MDB_env *env;
+	MDB_env *env = NULL;
 	const char *progname = argv[0], *act;
 	unsigned flags = MDB_RDONLY;
 	unsigned cpflags = 0;
