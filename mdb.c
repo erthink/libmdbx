@@ -1816,7 +1816,7 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
 		VALGRIND_MEMPOOL_ALLOC(env, np, size);
 	}
 
-#ifdef LDAP_MEMORY_DEBUG
+#if LDAP_MEMORY_DEBUG > 0
 	memset(np, 42, size);
 #else
 	if ((env->me_flags & MDB_NOMEMINIT) == 0) {
@@ -2508,7 +2508,7 @@ search_done:
 		txn->mt_next_pgno = pgno + num;
 	}
 
-#ifdef LDAP_MEMORY_DEBUG
+#if LDAP_MEMORY_DEBUG > 0
 	memset(np, 111, env->me_psize * num);
 #endif
 	VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
