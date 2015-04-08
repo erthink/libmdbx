@@ -2958,8 +2958,9 @@ mdb_txn_renew0(MDB_txn *txn)
 	uint16_t x;
 	int rc, new_notls = 0;
 
+	txn->mt_flags &= MDB_TXN_BEGIN_FLAGS;
 	if (txn->mt_flags & MDB_TXN_RDONLY) {
-		txn->mt_flags &= MDB_TXN_BEGIN_FLAGS;
+		txn->mt_flags = MDB_TXN_RDONLY;
 		/* Setup db info */
 		txn->mt_numdbs = env->me_numdbs;
 		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
