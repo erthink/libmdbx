@@ -8442,12 +8442,12 @@ mdb_rebalance(MDB_cursor *mc)
 						m3 = m2;
 					if (m3 == mc || m3->mc_snum < mc->mc_snum) continue;
 					if (m3->mc_pg[0] == mp) {
-						m3->mc_snum--;
-						m3->mc_top--;
 						for (i=0; i<m3->mc_snum; i++) {
 							m3->mc_pg[i] = m3->mc_pg[i+1];
 							m3->mc_ki[i] = m3->mc_ki[i+1];
 						}
+						m3->mc_snum--;
+						m3->mc_top--;
 					}
 				}
 			}
@@ -8515,9 +8515,23 @@ mdb_rebalance(MDB_cursor *mc)
 		if (mc->mc_ki[ptop] == 0) {
 			rc = mdb_page_merge(&mn, mc);
 		} else {
+			MDB_cursor dummy;
 			oldki += NUMKEYS(mn.mc_pg[mn.mc_top]);
 			mn.mc_ki[mn.mc_top] += mc->mc_ki[mn.mc_top] + 1;
+			/* We want mdb_rebalance to find mn when doing fixups */
+			if (mc->mc_flags & C_SUB) {
+				dummy.mc_next = mc->mc_txn->mt_cursors[mc->mc_dbi];
+				mc->mc_txn->mt_cursors[mc->mc_dbi] = &dummy;
+				dummy.mc_xcursor = (MDB_xcursor *)&mn;
+			} else {
+				mn.mc_next = mc->mc_txn->mt_cursors[mc->mc_dbi];
+				mc->mc_txn->mt_cursors[mc->mc_dbi] = &mn;
+			}
 			rc = mdb_page_merge(mc, &mn);
+			if (mc->mc_flags & C_SUB)
+				mc->mc_txn->mt_cursors[mc->mc_dbi] = dummy.mc_next;
+			else
+				mc->mc_txn->mt_cursors[mc->mc_dbi] = mn.mc_next;
 			mdb_cursor_copy(&mn, mc);
 		}
 		mc->mc_flags &= ~C_EOF;
