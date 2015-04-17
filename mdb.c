@@ -3795,6 +3795,7 @@ mdb_page_flush(MDB_txn *txn, int keep)
 		/* Write up to MDB_COMMIT_PAGES dirty pages at a time. */
 		if (pos!=next_pos || n==MDB_COMMIT_PAGES || wsize+size>MAX_WRITE) {
 			if (n) {
+retry_write:
 				/* Write previous page(s) */
 #ifdef MDB_USE_PWRITEV
 				wres = pwritev(env->me_fd, iov, n, wpos);
@@ -3802,8 +3803,11 @@ mdb_page_flush(MDB_txn *txn, int keep)
 				if (n == 1) {
 					wres = pwrite(env->me_fd, iov[0].iov_base, wsize, wpos);
 				} else {
+retry_seek:
 					if (lseek(env->me_fd, wpos, SEEK_SET) == -1) {
 						rc = ErrCode();
+						if (rc == EINTR)
+							goto retry_seek;
 						DPRINTF(("lseek: %s", strerror(rc)));
 						return rc;
 					}
@@ -3813,6 +3817,8 @@ mdb_page_flush(MDB_txn *txn, int keep)
 				if (wres != wsize) {
 					if (wres < 0) {
 						rc = ErrCode();
+						if (rc == EINTR)
+							goto retry_write;
 						DPRINTF(("Write error: %s", strerror(rc)));
 					} else {
 						rc = EIO; /* TODO: Use which error code? */
@@ -4197,7 +4203,8 @@ mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
 	int len;
 #define DO_PWRITE(rc, fd, ptr, size, len, pos)	do { \
 	len = pwrite(fd, ptr, size, pos);	\
-	rc = (len >= 0); } while(0)
+	if (len == -1 && ErrCode() == EINTR) continue; \
+	rc = (len >= 0); break; } while(1)
 #endif
 
 	DPUTS("writing new meta page");
@@ -4310,6 +4317,7 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 	/* Write to the SYNC fd */
 	mfd = (force || !(flags & (MDB_NOSYNC|MDB_NOMETASYNC))) ?
 		env->me_mfd : env->me_fd;
+retry_write:
 #ifdef _WIN32
 	{
 		memset(&ov, 0, sizeof(ov));
@@ -4322,6 +4330,8 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 #endif
 	if (rc != len) {
 		rc = rc < 0 ? ErrCode() : EIO;
+		if (rc == EINTR)
+			goto retry_write;
 		DPUTS("write failed, disk error?");
 		/* On a failure, the pagecache still contains the new data.
 		 * Write some old data back, to prevent it from being used.
