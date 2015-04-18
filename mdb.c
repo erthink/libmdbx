@@ -2733,7 +2733,7 @@ mdb_env_sync0(MDB_env *env, int *force)
 		*force = 1;
 	if (*force || !F_ISSET(env->me_flags, MDB_NOSYNC)) {
 		if (env->me_flags & MDB_WRITEMAP) {
-			int mode = ((env->me_flags & MDB_MAPASYNC) && *force == 0) ? MS_ASYNC : MS_SYNC;
+			int mode = (!*force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
 
 			/* LY: skip meta-pages, sync ones explicit later */
 			size_t data_offset = (env->me_psize * 2 + env->me_os_psize - 1) & ~(env->me_os_psize - 1);
@@ -3475,19 +3475,19 @@ again:
 					if (mdb_page_alloc(&mc, 0, NULL)) {
 						rc = mdb_page_search(&mc, &key, MDB_PS_MODIFY);
 						if (rc && rc != MDB_NOTFOUND)
-							goto ballout;
+							goto bailout;
 						break;
 					}
 				}
 				rc = mdb_cursor_get(&mc, &key, NULL, MDB_SET);
 				if (rc != MDB_NOTFOUND) {
 					if (rc)
-						goto ballout;
+						goto bailout;
 					mc.mc_flags |= C_RECLAIMING;
 					rc = mdb_cursor_del(&mc, 0);
 					mc.mc_flags &= ~C_RECLAIMING;
 					if (rc)
-						goto ballout;
+						goto bailout;
 				}
 			}
 		}
@@ -3498,7 +3498,7 @@ again:
 				/* Make sure last page of freeDB is touched and on freelist */
 				rc = mdb_page_search(&mc, NULL, MDB_PS_LAST|MDB_PS_MODIFY);
 				if (rc && rc != MDB_NOTFOUND)
-					goto ballout;
+					goto bailout;
 			}
 			free_pgs = txn->mt_free_pgs;
 			/* Write to last page of freeDB */
@@ -3509,7 +3509,7 @@ again:
 				data.mv_size = MDB_IDL_SIZEOF(free_pgs);
 				rc = mdb_cursor_put(&mc, &key, &data, MDB_RESERVE);
 				if (rc)
-					goto ballout;
+					goto bailout;
 				/* Retry if mt_free_pgs[] grew during the Put() */
 				free_pgs = txn->mt_free_pgs;
 			} while (freecnt < free_pgs[0]);
@@ -3556,26 +3556,26 @@ again:
 					continue;
 				if (rc != MDB_NOTFOUND)
 					/* LY: other troubles... */
-					goto ballout;
+					goto bailout;
 
 				/* LY: freedb is empty, will look any free txn-id in high2low order. */
 				if (env->me_pglast < 1) {
 					/* LY: not any txn in the past of freedb. */
 					rc = MDB_MAP_FULL;
-					goto ballout;
+					goto bailout;
 				}
 
 				if (! txn->mt_lifo_reclaimed) {
 					txn->mt_lifo_reclaimed = mdb_midl_alloc(env->me_maxfree_1pg);
 					if (! txn->mt_lifo_reclaimed) {
 						rc = ENOMEM;
-						goto ballout;
+						goto bailout;
 					}
 				}
 				/* LY: append the list. */
 				rc = mdb_midl_append(&txn->mt_lifo_reclaimed, env->me_pglast - 1);
 				if (rc)
-					goto ballout;
+					goto bailout;
 				--env->me_pglast;
 				/* LY: note that freeDB cleanup is not needed. */
 				++cleanup_idx;
@@ -3600,7 +3600,7 @@ again:
 		data.mv_size = (head_room + 1) * sizeof(pgno_t);
 		rc = mdb_cursor_put(&mc, &key, &data, MDB_RESERVE);
 		if (rc)
-			goto ballout;
+			goto bailout;
 		/* IDL is initially empty, zero out at least the length */
 		pgs = (pgno_t *)data.mv_data;
 		j = head_room > clean_limit ? head_room : 0;
@@ -3621,7 +3621,7 @@ again:
 		MDB_IDL loose;
 		/* Room for loose pages + temp IDL with same */
 		if ((rc = mdb_midl_need(&env->me_pghead, 2*count+1)) != 0)
-			goto ballout;
+			goto bailout;
 		mop = env->me_pghead;
 		loose = mop + MDB_IDL_ALLOCLEN(mop) - count;
 		for (count = 0; mp; mp = NEXT_LOOSE_PAGE(mp))
@@ -3643,7 +3643,7 @@ again:
 		if (! lifo) {
 			rc = mdb_cursor_first(&mc, &key, &data);
 			if (rc)
-				goto ballout;
+				goto bailout;
 		}
 
 		for(;;) {
@@ -3661,7 +3661,7 @@ again:
 				key.mv_size = sizeof(id);
 				rc = mdb_cursor_get(&mc, &key, &data, MDB_SET);
 				if (rc)
-					goto ballout;
+					goto bailout;
 			}
 			mdb_tassert(txn, cleanup_idx == (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
@@ -3680,17 +3680,17 @@ again:
 			mdb_tassert(txn, cleanup_idx == (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 			mop[0] = save;
 			if (rc || (mop_len -= len) == 0)
-				goto ballout;
+				goto bailout;
 
 			if (! lifo) {
 				rc = mdb_cursor_next(&mc, &key, &data, MDB_NEXT);
 				if (rc)
-					goto ballout;
+					goto bailout;
 			}
 		}
 	}
 
-ballout:
+bailout:
 	if (txn->mt_lifo_reclaimed) {
 		mdb_tassert(txn, rc || cleanup_idx == txn->mt_lifo_reclaimed[0]);
 		if (rc == 0 && cleanup_idx != txn->mt_lifo_reclaimed[0]) {
@@ -4241,7 +4241,7 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 {
 	MDB_env *env;
 	MDB_meta meta, metab, *mp;
-	unsigned flags;
+	int syncflush;
 	size_t mapsize;
 	off_t off;
 	int rc, len, toggle;
@@ -4258,14 +4258,15 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 		toggle, txn->mt_dbs[MAIN_DBI].md_root));
 
 	env = txn->mt_env;
-	flags = txn->mt_flags & env->me_flags;
+	syncflush = force ||
+		! ((txn->mt_flags | env->me_flags) & (MDB_NOMETASYNC | MDB_NOSYNC));
 	mp = env->me_metas[toggle];
 	mapsize = env->me_metas[toggle ^ 1]->mm_mapsize;
 	/* Persist any increases of mapsize config */
 	if (mapsize < env->me_mapsize)
 		mapsize = env->me_mapsize;
 
-	if (flags & MDB_WRITEMAP) {
+	if (env->me_flags & MDB_WRITEMAP) {
 		mp->mm_mapsize = mapsize;
 		mp->mm_dbs[0] = txn->mt_dbs[0];
 		mp->mm_dbs[1] = txn->mt_dbs[1];
@@ -4273,9 +4274,9 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 		/* (LY) ITS#7969: issue a memory barrier, it is noop for x86. */
 		mdb_coherent_barrier();
 		mp->mm_txnid = txn->mt_txnid;
-		if (force || !(flags & (MDB_NOMETASYNC|MDB_NOSYNC))) {
+		if ( syncflush ) {
 			unsigned meta_size = env->me_psize;
-			int flags = (!force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
+			int mode = (!force && (env->me_flags & MDB_MAPASYNC)) ? MS_ASYNC : MS_SYNC;
 			ptr = env->me_map;
 			if (toggle) {
 #ifndef _WIN32	/* POSIX msync() requires ptr = start of OS page */
@@ -4285,12 +4286,12 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 #endif
 					ptr += meta_size;
 			}
-			if (MDB_MSYNC(ptr, meta_size, flags)) {
+			if (MDB_MSYNC(ptr, meta_size, mode)) {
 				rc = ErrCode();
 				goto fail;
 			}
 #ifdef _WIN32
-			else if (flags == MS_SYNC && MDB_FDATASYNC(env->me_fd)) {
+			else if (mode == MS_SYNC && MDB_FDATASYNC(env->me_fd)) {
 				rc = ErrCode();
 				goto fail;
 			}
@@ -4315,8 +4316,7 @@ mdb_env_write_meta(MDB_txn *txn, int force)
 	off += PAGEHDRSZ;
 
 	/* Write to the SYNC fd */
-	mfd = (force || !(flags & (MDB_NOSYNC|MDB_NOMETASYNC))) ?
-		env->me_mfd : env->me_fd;
+	mfd = syncflush ? env->me_mfd : env->me_fd;
 retry_write:
 #ifdef _WIN32
 	{
