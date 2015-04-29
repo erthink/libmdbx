@@ -237,7 +237,6 @@ int main(int argc, char *argv[])
 			printf("  Available: %"Z"u %.1f%%\n", value, value / percent);
 		} else
 			printf("  Free pages: %"Z"u\n", pages);
-
 	}
 
 	rc = mdb_open(txn, subname, 0, &dbi);

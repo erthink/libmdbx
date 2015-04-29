@@ -9480,8 +9480,7 @@ void mdb_dbi_close(MDB_env *env, MDB_dbi dbi)
 
 int mdb_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned int *flags)
 {
-	/* We could return the flags for the FREE_DBI too but what's the point? */
-	if (dbi == FREE_DBI || !TXN_DBI_EXIST(txn, dbi))
+	if (!TXN_DBI_EXIST(txn, dbi))
 		return EINVAL;
 	*flags = txn->mt_dbs[dbi].md_flags & PERSISTENT_FLAGS;
 	return MDB_SUCCESS;
