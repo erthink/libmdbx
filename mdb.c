@@ -1480,7 +1480,7 @@ static void mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi);
 static int mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
 
 /** @cond */
-static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int, mdb_cmp_cint, mdb_cmp_long;
+static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int_a, mdb_cmp_int_na;
 /** @endcond */
 
 #ifdef _WIN32
@@ -1589,7 +1589,7 @@ mdb_assert_fail(MDB_env *env, const char *expr_txt,
 	char buf[400];
 	sprintf(buf, "%.100s:%d: Assertion '%.200s' failed in %.40s()",
 		file, line, expr_txt, func);
-	if (env->me_assert_func)
+	if (env && env->me_assert_func)
 		env->me_assert_func(env, buf);
 	fprintf(stderr, "%s\n", buf);
 	abort();
@@ -5489,29 +5489,41 @@ mdb_env_close(MDB_env *env)
 	free(env);
 }
 
-/** Compare two items pointing at aligned size_t's */
+/** Compare two items pointing at aligned size_t's or unsigned int's */
 static int
-mdb_cmp_long(const MDB_val *a, const MDB_val *b)
+mdb_cmp_int_a(const MDB_val *a, const MDB_val *b)
 {
-	return (*(size_t *)a->mv_data < *(size_t *)b->mv_data) ? -1 :
-		*(size_t *)a->mv_data > *(size_t *)b->mv_data;
-}
+	mdb_eassert(NULL, a->mv_size == b->mv_size);
+	mdb_eassert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(int));
 
-/** Compare two items pointing at aligned unsigned int's */
-static int
-mdb_cmp_int(const MDB_val *a, const MDB_val *b)
-{
-	return (*(unsigned int *)a->mv_data < *(unsigned int *)b->mv_data) ? -1 :
-		*(unsigned int *)a->mv_data > *(unsigned int *)b->mv_data;
+	if (sizeof(int) != sizeof(size_t) && a->mv_size == sizeof(size_t))
+		return (*(size_t *)a->mv_data < *(size_t *)b->mv_data) ? -1 :
+			*(size_t *)a->mv_data > *(size_t *)b->mv_data;
+
+	mdb_eassert(NULL, a->mv_size == sizeof(int) );
+	return *(int *)a->mv_data - *(int *)b->mv_data;
 }
 
 /** Compare two items pointing at unsigned ints of unknown alignment.
  *	Nodes and keys are guaranteed to be 2-byte aligned.
  */
 static int
-mdb_cmp_cint(const MDB_val *a, const MDB_val *b)
+mdb_cmp_int_na(const MDB_val *a, const MDB_val *b)
 {
-#if BYTE_ORDER == LITTLE_ENDIAN
+	mdb_eassert(NULL, a->mv_size == b->mv_size);
+	mdb_eassert(NULL, 0 == a->mv_size % sizeof(short));
+	mdb_eassert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(short)
+				&& 0 == (uintptr_t) b->mv_data % sizeof(short));
+#ifdef MISALIGNED_OK
+	if (sizeof(int) != sizeof(size_t) && a->mv_size == sizeof(size_t)) {
+		return (*(size_t *)a->mv_data < *(size_t *)b->mv_data) ? -1 :
+			*(size_t *)a->mv_data > *(size_t *)b->mv_data;
+	}
+
+	mdb_eassert(NULL, a->mv_size == sizeof(int) );
+	return *(int *)a->mv_data - *(int *)b->mv_data;
+
+#elif BYTE_ORDER == LITTLE_ENDIAN
 	unsigned short *u, *c;
 	int x;
 
@@ -5532,15 +5544,8 @@ mdb_cmp_cint(const MDB_val *a, const MDB_val *b)
 		x = *u++ - *c++;
 	} while(!x && u < end);
 	return x;
-#endif
+#endif /* BYTE_ORDER & MISALIGNED_OK */
 }
-
-/** Compare two items pointing at size_t's of unknown alignment. */
-#ifdef MISALIGNED_OK
-# define mdb_cmp_clong mdb_cmp_long
-#else
-# define mdb_cmp_clong mdb_cmp_cint
-#endif
 
 /** Compare two items lexically */
 static int
@@ -5617,14 +5622,10 @@ mdb_node_search(MDB_cursor *mc, MDB_val *key, int *exactp)
 	cmp = mc->mc_dbx->md_cmp;
 
 	/* Branch pages have no data, so if using integer keys,
-	 * alignment is guaranteed. Use faster mdb_cmp_int.
+	 * alignment is guaranteed. Use faster mdb_cmp_int_a.
 	 */
-	if (cmp == mdb_cmp_cint && IS_BRANCH(mp)) {
-		if (NODEPTR(mp, 1)->mn_ksize == sizeof(size_t))
-			cmp = mdb_cmp_long;
-		else
-			cmp = mdb_cmp_int;
-	}
+	if (cmp == mdb_cmp_int_na && IS_BRANCH(mp))
+		cmp = mdb_cmp_int_a;
 
 	if (IS_LEAF2(mp)) {
 		nodekey.mv_size = mc->mc_db->md_psize;
@@ -6328,6 +6329,15 @@ mdb_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	if (key->mv_size == 0)
 		return MDB_BAD_VALSIZE;
 
+	if ( (mc->mc_db->md_flags & MDB_INTEGERKEY)
+		&& key->mv_size != sizeof(unsigned)
+		&& key->mv_size != sizeof(size_t) ) {
+#if MDB_DEBUG
+		mdb_cassert(mc, ! "key-size is invalid for MDB_INTEGERKEY");
+#endif
+		return MDB_BAD_VALSIZE;
+	}
+
 	if (mc->mc_xcursor)
 		mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
 
@@ -6849,6 +6859,24 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 		return MDB_BAD_VALSIZE;
 #endif
 
+	if ( (mc->mc_db->md_flags & MDB_INTEGERKEY)
+		&& key->mv_size != sizeof(unsigned)
+		&& key->mv_size != sizeof(size_t) ) {
+#if MDB_DEBUG
+		mdb_cassert(mc, ! "key-size is invalid for MDB_INTEGERKEY");
+#endif
+		return MDB_BAD_VALSIZE;
+	}
+
+	if ( (mc->mc_db->md_flags & MDB_INTEGERDUP)
+		&& data->mv_size != sizeof(unsigned)
+		&& data->mv_size != sizeof(size_t) ) {
+#if MDB_DEBUG
+		mdb_cassert(mc, ! "data-size is invalid MDB_INTEGERDUP");
+#endif
+		return MDB_BAD_VALSIZE;
+	}
+
 	DPRINTF(("==> put db %d key [%s], size %"Z"u, data size %"Z"u",
 		DDBI(mc), DKEY(key), key ? key->mv_size : 0, data->mv_size));
 
@@ -6998,10 +7026,6 @@ more:
 				if (flags == MDB_CURRENT)
 					goto current;
 
-#if UINT_MAX < SIZE_MAX
-				if (mc->mc_dbx->md_dcmp == mdb_cmp_int && olddata.mv_size == sizeof(size_t))
-					mc->mc_dbx->md_dcmp = mdb_cmp_clong;
-#endif
 				/* does data match? */
 				if (!mc->mc_dbx->md_dcmp(data, &olddata)) {
 					if (flags & MDB_NODUPDATA)
@@ -7803,10 +7827,6 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 	DPRINTF(("Sub-db -%u root page %"Z"u", mx->mx_cursor.mc_dbi,
 		mx->mx_db.md_root));
 	mx->mx_dbflag = DB_VALID|DB_DIRTY; /* DB_DIRTY guides mdb_cursor_touch */
-#if UINT_MAX < SIZE_MAX
-	if (mx->mx_dbx.md_cmp == mdb_cmp_int && mx->mx_db.md_psize == sizeof(size_t))
-		mx->mx_dbx.md_cmp = mdb_cmp_clong;
-#endif
 }
 
 /** Initialize a cursor for a given transaction and database. */
@@ -8646,7 +8666,7 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 	MDB_xcursor mx;
 	MDB_cursor_op op;
 	MDB_val rdata, *xdata;
-	int		 rc, exact = 0;
+	int	rc, exact = 0;
 	DKBUF;
 
 	DPRINTF(("====> delete db %u key [%s]", dbi, DKEY(key)));
@@ -9808,12 +9828,12 @@ mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi)
 
 	txn->mt_dbxs[dbi].md_cmp =
 		(f & MDB_REVERSEKEY) ? mdb_cmp_memnr :
-		(f & MDB_INTEGERKEY) ? mdb_cmp_cint  : mdb_cmp_memn;
+		(f & MDB_INTEGERKEY) ? mdb_cmp_int_na  : mdb_cmp_memn;
 
 	txn->mt_dbxs[dbi].md_dcmp =
 		!(f & MDB_DUPSORT) ? 0 :
 		((f & MDB_INTEGERDUP)
-		 ? ((f & MDB_DUPFIXED)   ? mdb_cmp_int   : mdb_cmp_cint)
+		 ? ((f & MDB_DUPFIXED)   ? mdb_cmp_int_a : mdb_cmp_int_na)
 		 : ((f & MDB_REVERSEDUP) ? mdb_cmp_memnr : mdb_cmp_memn));
 }
 
