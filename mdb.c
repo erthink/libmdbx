@@ -5922,15 +5922,15 @@ set1:
 					return rc;
 			}
 		} else if (op == MDB_GET_BOTH || op == MDB_GET_BOTH_RANGE) {
-			MDB_val d2;
-			if ((rc = mdb_node_read(mc->mc_txn, leaf, &d2)) != MDB_SUCCESS)
+			MDB_val olddata;
+			if ((rc = mdb_node_read(mc->mc_txn, leaf, &olddata)) != MDB_SUCCESS)
 				return rc;
-			rc = mc->mc_dbx->md_dcmp(data, &d2);
+			rc = mc->mc_dbx->md_dcmp(data, &olddata);
 			if (rc) {
 				if (op == MDB_GET_BOTH || rc > 0)
 					return MDB_NOTFOUND;
 				rc = 0;
-				*data = d2;
+				*data = olddata;
 			}
 
 		} else {
