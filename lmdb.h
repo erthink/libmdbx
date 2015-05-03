@@ -156,6 +156,8 @@
 #define _LMDB_H_
 
 #include <sys/types.h>
+#include <stdarg.h>
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -178,7 +180,7 @@ typedef int mdb_filehandle_t;
 /** Library minor version */
 #define MDB_VERSION_MINOR	9
 /** Library patch version */
-#define MDB_VERSION_PATCH	14
+#define MDB_VERSION_PATCH	15
 
 /** Combine args a,b,c into a single integer for easy version comparisons */
 #define MDB_VERINT(a,b,c)	(((a) << 24) | ((b) << 16) | (c))
@@ -188,7 +190,7 @@ typedef int mdb_filehandle_t;
 	MDB_VERINT(MDB_VERSION_MAJOR,MDB_VERSION_MINOR,MDB_VERSION_PATCH)
 
 /** The release date of this library version */
-#define MDB_VERSION_DATE	"September 20, 2014"
+#define MDB_VERSION_DATE	"https://github.com/ReOpen/ReOpenLDAP"
 
 /** A stringifier for the version info */
 #define MDB_VERSTR(a,b,c,d)	"LMDB " #a "." #b "." #c ": (" d ")"
@@ -894,10 +896,11 @@ void *mdb_env_get_userctx(MDB_env *env);
 	 * @param[in] env An environment handle returned by #mdb_env_create().
 	 * @param[in] msg The assertion message, not including newline.
 	 */
-typedef void MDB_assert_func(MDB_env *env, const char *msg);
+typedef void MDB_assert_func(MDB_env *env, const char *msg,
+							 const char *function, unsigned line);
 
 	/** Set or reset the assert() callback of the environment.
-	 * Disabled if liblmdb is buillt with NDEBUG.
+	 * Disabled if liblmdb is buillt with MDB_DEBUG=0.
 	 * @note This hack should become obsolete as lmdb's error handling matures.
 	 * @param[in] env An environment handle returned by #mdb_env_create().
 	 * @param[in] func An #MDB_assert_func function, or 0.
@@ -1617,6 +1620,21 @@ void mdb_env_set_oomfunc(MDB_env *env, MDB_oom_func *oom_func);
 	 */
 MDB_oom_func* mdb_env_get_oomfunc(MDB_env *env);
 /**	@} */
+
+#define MDB_DBG_ASSERT	1
+#define MDB_DBG_PRINT	2
+#define MDB_DBG_TRACE	4
+#define MDB_DBG_EXTRA	8
+#define MDB_DBG_AUDIT	16
+#define MDB_DBG_EDGE	32
+
+/* LY: a "don't touch" value */
+#define MDB_DBG_DNT		(-1L)
+
+typedef void MDB_debug_func(int type, const char *function, int line,
+								  const char *msg, va_list args);
+
+int mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn);
 
 #ifdef __cplusplus
 }
