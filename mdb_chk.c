@@ -279,7 +279,7 @@ static long handle_maindb(size_t record_number, MDB_val *key, MDB_val* data) {
 
 	rc = process_db(-1, name, handle_userdb, 0);
 	free(name);
-	if (rc != MDB_NOTFOUND)
+	if (rc != MDB_BAD_DBI)
 		return rc;
 
 	return handle_userdb(record_number, key, data);
@@ -302,7 +302,7 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	if (0 > (int) dbi) {
 		rc = mdb_dbi_open(txn, name, 0, &dbi);
 		if (rc) {
-			if (rc != MDB_NOTFOUND) /* LY: mainDB's record is not a user's DB. */ {
+			if (!name || rc != MDB_BAD_DBI) /* LY: mainDB's record is not a user's DB. */ {
 				error(" - mdb_open '%s' failed, error %d %s\n",
 					  name ? name : "main", rc, mdb_strerror(rc));
 			}

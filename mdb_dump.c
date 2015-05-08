@@ -298,7 +298,7 @@ int main(int argc, char *argv[])
 		if (!count) {
 			fprintf(stderr, "%s: %s does not contain multiple databases\n", prog, envname);
 			rc = MDB_NOTFOUND;
-		} else if (rc == MDB_NOTFOUND) {
+		} else if (rc == MDB_BAD_DBI) {
 			rc = MDB_SUCCESS;
 		}
 	} else {

@@ -9410,7 +9410,7 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned int flags, MDB_dbi *db
 		/* make sure this is actually a DB */
 		MDB_node *node = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
 		if (!(node->mn_flags & F_SUBDATA))
-			return MDB_INCOMPATIBLE;
+			return MDB_BAD_DBI;
 	} else if (rc == MDB_NOTFOUND && (flags & MDB_CREATE)) {
 		/* Create if requested */
 		data.mv_size = sizeof(MDB_db);
