@@ -43,11 +43,16 @@ install: $(ILIBS) $(IPROGS) $(IHDRS)
 	for f in $(IDOCS); do cp $$f $(DESTDIR)$(prefix)/man/man1; done
 
 clean:
-	rm -rf $(PROGS) *.[ao] *.[ls]o *~ testdb
+	rm -rf $(PROGS) *.[ao] *.[ls]o *~ testdb/*
 
 test:	all
-	rm -rf testdb && mkdir testdb \
-		&& ./mtest && ./mdb_stat testdb
+	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
+		&& echo "*** LMDB-TEST-1" && ./mtest && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdb_chk testdb \
+		&& echo "*** LMDB-TESTs - all done"
 
 liblmdb.a:	mdb.o midl.o
 	$(AR) rs $@ mdb.o midl.o
