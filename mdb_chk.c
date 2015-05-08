@@ -26,6 +26,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <stdarg.h>
+#include <malloc.h>
 
 #include "lmdb.h"
 #include "midl.h"
@@ -52,13 +53,20 @@ static void signal_hanlder( int sig )
 	gotsignal = 1;
 }
 
+#define MAX_DBI 32768
+
+const char* dbi_names[MAX_DBI] = { "@gc" };
+size_t dbi_pages[MAX_DBI];
+short *pagemap;
+
 MDB_env *env;
 MDB_txn *txn;
 MDB_envinfo info;
 MDB_stat stat;
-size_t maxkeysize, reclaimable_pages, freedb_pages;
+size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
 unsigned userdb_count;
 unsigned verbose = 1, quiet;
+size_t pgcount;
 
 static void print(const char* msg, ...) {
 	if (! quiet) {
@@ -90,6 +98,23 @@ struct problem {
 
 struct problem* problems_list;
 size_t total_problems;
+
+static int pagemap_lookup_dbi(const char* dbi) {
+	static int last;
+
+	if (last > 0 && strcmp(dbi_names[last], dbi) == 0)
+		return last;
+
+	for(last = 1; dbi_names[last] && last < MAX_DBI; ++last)
+		if (strcmp(dbi_names[last], dbi) == 0)
+			return last;
+
+	if (last == MAX_DBI)
+		return last = -1;
+
+	dbi_names[last] = strdup(dbi);
+	return last;
+}
 
 static void problem_add(size_t entry_number, const char* msg, const char *extra, ...) {
 	total_problems++;
@@ -147,6 +172,31 @@ static size_t problems_pop(struct problem* list) {
 
 	problems_list = list;
 	return total;
+}
+
+static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi, char type)
+{
+	if (pgnumber) {
+		pgcount += pgnumber;
+
+		int index = pagemap_lookup_dbi(dbi);
+		if (index < 0)
+			return ENOMEM;
+
+		do {
+			if (pgno >= lastpgno)
+				problem_add(pgno, "wrong page-no", "(> %zi)", lastpgno);
+			else if (pagemap[pgno])
+				problem_add(pgno, "page already used", "(in %s)", dbi_names[pagemap[pgno]]);
+			else {
+				pagemap[pgno] = index;
+				dbi_pages[index] += 1;
+			}
+			++pgno;
+		} while(--pgnumber);
+	}
+
+	return MDB_SUCCESS;
 }
 
 typedef long (visitor)(size_t record_number, MDB_val *key, MDB_val* data);
@@ -362,7 +412,6 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	if (record_count != ms.ms_entries )
 		problem_add(record_count, "differentent number of entries",
 				" (%zu != %zu)", record_count, ms.ms_entries);
-
 bailout:
 	problems_count = problems_pop(saved_list);
 	if (! silent && verbose) {
@@ -388,6 +437,7 @@ int main(int argc, char *argv[])
 	char *envname;
 	int envflags = 0;
 	long problems_maindb = 0, problems_freedb = 0, problems_deep = 0;
+	size_t n;
 
 	if (argc < 2) {
 		usage(prog);
@@ -463,7 +513,16 @@ int main(int argc, char *argv[])
 		goto bailout;
 	}
 
-	if (! quiet && verbose) {
+	lastpgno = info.me_last_pgno + 1;
+	errno = 0;
+	pagemap = calloc(lastpgno, sizeof(*pagemap));
+	if (! pagemap) {
+		rc = errno ? errno : ENOMEM;
+		error("calloc failed, error %d %s\n", rc, mdb_strerror(rc));
+		goto bailout;
+	}
+
+	if (verbose) {
 		print(" - map size %zu (%.1fMb, %.1fGb)\n", info.me_mapsize,
 			  (double) info.me_mapsize / (1024 * 1024),
 			  (double) info.me_mapsize / (1024 * 1024 * 1024));
@@ -473,31 +532,6 @@ int main(int argc, char *argv[])
 			  stat.ms_psize, maxkeysize, info.me_maxreaders);
 		print(" - last txn %zu, tail %zu (%zi)\n", info.me_last_txnid,
 			  info.me_tail_txnid, info.me_tail_txnid - info.me_last_txnid);
-
-		size_t value = info.me_mapsize / stat.ms_psize;
-		double percent = value / 100.0;
-		print(" - pages: %zu total", value);
-
-		value = info.me_last_pgno + 1;
-		print(", allocated %zu (%.1f%%)", value, value / percent);
-
-		value = info.me_mapsize / stat.ms_psize - (info.me_last_pgno+1);
-		print(", remained %zu (%.1f%%)", value, value / percent);
-
-		value = info.me_last_pgno + 1 - freedb_pages;
-		print(", used now %zu (%.1f%%)", value, value / percent);
-
-		value = freedb_pages;
-		print(", free %zu (%.1f%%)", value, value / percent);
-
-		value = freedb_pages - reclaimable_pages;
-		print(", reading %zu (%.1f%%)", value, value / percent);
-
-		value = reclaimable_pages;
-		print(", reclaimable %zu (%.1f%%)", value, value / percent);
-
-		value = info.me_mapsize / stat.ms_psize - (info.me_last_pgno + 1) + reclaimable_pages;
-		print(", available %zu (%.1f%%)\n", value, value / percent);
 	}
 
 	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
@@ -506,20 +540,74 @@ int main(int argc, char *argv[])
 		goto bailout;
 	}
 
-	problems_maindb = process_db(-1, /* MAINT_DBI */ NULL, NULL, 0);
+	print("Walking b-tree...\n");
+	rc = mdb_env_pgwalk(txn, pgvisitor, NULL);
+	if (rc) {
+		error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
+		goto bailout;
+	}
+	for( n = 0; n < lastpgno; ++n)
+		if (! pagemap[n])
+			dbi_pages[0] += 1;
+	if (verbose) {
+		print(" - dbi pages: %zu total", pgcount);
+		if (verbose > 1)
+			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i)
+				print(", %s %zu", dbi_names[i], dbi_pages[i]);
+		print(", %s %zu\n", dbi_names[0], dbi_pages[0]);
+	}
+
+	problems_maindb = process_db(-1, /* MAIN_DBI */ NULL, NULL, 0);
 	problems_freedb = process_db(0 /* FREE_DBI */, "free", handle_freedb, 0);
+
+	if (verbose) {
+		size_t value = info.me_mapsize / stat.ms_psize;
+		double percent = value / 100.0;
+		print(" - pages info: %zu total", value);
+		print(", allocated %zu (%.1f%%)", lastpgno, lastpgno / percent);
+
+		if (verbose > 1) {
+			value = info.me_mapsize / stat.ms_psize - lastpgno;
+			print(", remained %zu (%.1f%%)", value, value / percent);
+
+			value = lastpgno - freedb_pages;
+			print(", used %zu (%.1f%%)", value, value / percent);
+
+			print(", gc %zu (%.1f%%)", freedb_pages, freedb_pages / percent);
+
+			value = freedb_pages - reclaimable_pages;
+			print(", reading %zu (%.1f%%)", value, value / percent);
+
+			print(", reclaimable %zu (%.1f%%)", reclaimable_pages, reclaimable_pages / percent);
+		}
+
+		value = info.me_mapsize / stat.ms_psize - lastpgno + reclaimable_pages;
+		print(", available %zu (%.1f%%)\n", value, value / percent);
+	}
+
+	if (pgcount != lastpgno - freedb_pages) {
+		error("used pages mismatch (%zu != %zu)\n", pgcount, lastpgno - freedb_pages);
+		goto bailout;
+	}
+	if (dbi_pages[0] != freedb_pages) {
+		error("gc pages mismatch (%zu != %zu)\n", dbi_pages[0], freedb_pages);
+		goto bailout;
+	}
+
 	if (problems_maindb == 0 && problems_freedb == 0)
 		problems_deep = process_db(-1, NULL, handle_maindb, 1);
+
 	mdb_txn_abort(txn);
 
 	if (! userdb_count && verbose)
 		print("%s: %s does not contain multiple databases\n", prog, envname);
 
-	if (rc && ! quiet)
+	if (rc)
 		error("%s: %s: %s\n", prog, envname, mdb_strerror(rc));
 
 bailout:
 	mdb_env_close(env);
+	free(pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
 	if (problems_maindb || problems_freedb)

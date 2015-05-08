@@ -205,6 +205,7 @@ static MDB_INLINE void mdb_invalidate_cache(void *addr, int nbytes) {
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <alloca.h>
 
 #if defined(__sun) || defined(ANDROID)
 /* Most platforms have posix_memalign, older may only have memalign */
@@ -9863,6 +9864,168 @@ MDB_oom_func*
 mdb_env_get_oomfunc(MDB_env *env)
 {
 	return env ? env->me_oom_func : NULL;
+}
+
+struct mdb_walk_ctx {
+	MDB_txn *mw_txn;
+	void *mw_user;
+	MDB_pgwalk_func *mw_visitor;
+};
+
+typedef struct mdb_walk_ctx mdb_walk_ctx_t;
+
+/** Depth-first tree traversal. */
+static int ESECT
+mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int deep)
+{
+	MDB_cursor mc;
+	MDB_node *ni;
+	MDB_page *mp;
+	int rc;
+	unsigned int i;
+
+	if (deep < 2) {
+		rc = ctx->mw_visitor(pg, 0, ctx->mw_user, dbi, 'R');
+		if (rc)
+			return rc;
+	}
+
+	/* Empty DB, nothing to do */
+	if (pg == P_INVALID)
+		return MDB_SUCCESS;
+
+	mc.mc_snum = 1;
+	mc.mc_top = 0;
+	mc.mc_txn = ctx->mw_txn;
+
+	rc = mdb_page_get(ctx->mw_txn, pg, &mc.mc_pg[0], NULL);
+	if (rc)
+		return rc;
+
+	for (mp = mc.mc_pg[mc.mc_top]; IS_BRANCH(mp); ) {
+		MDB_node	*node;
+
+		rc = ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, 'B');
+		if (rc)
+			return rc;
+
+		if (NUMKEYS(mp) < 1)
+			return MDB_CORRUPTED;
+
+		mdb_debug("branch page %zu has %u keys", mp->mp_pgno, NUMKEYS(mp));
+		mdb_cassert(&mc, NUMKEYS(mp) > 1);
+		mdb_debug("found index 0 to page %zu", NODEPGNO(NODEPTR(mp, 0)));
+
+		node = NODEPTR(mp, 0);
+
+		if ((rc = mdb_page_get(mc.mc_txn, NODEPGNO(node), &mp, NULL)) != 0)
+			return rc;
+
+		mc.mc_ki[mc.mc_top] = 0;
+		if ((rc = mdb_cursor_push(&mc, mp)))
+			return rc;
+	}
+
+	if (!IS_LEAF(mp)) {
+		mdb_debug("internal error, index points to a %02X page!?",
+			mp->mp_flags);
+		mc.mc_txn->mt_flags |= MDB_TXN_ERROR;
+		return MDB_CORRUPTED;
+	}
+
+	mc.mc_flags |= C_INITIALIZED;
+	mc.mc_flags &= ~C_EOF;
+
+	rc = ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, 'L');
+	if (rc)
+		return rc;
+
+	while (mc.mc_snum > 0) {
+		unsigned n;
+		mp = mc.mc_pg[mc.mc_top];
+		n = NUMKEYS(mp);
+
+		if (IS_LEAF(mp)) {
+			if (!IS_LEAF2(mp) && !(flags & F_DUPDATA)) {
+				for (i = 0; i < n; i++) {
+					ni = NODEPTR(mp, i);
+					if (ni->mn_flags & F_BIGDATA) {
+						MDB_page *omp;
+						pgno_t *pg;
+
+						pg = NODEDATA(ni);
+						rc = mdb_page_get(ctx->mw_txn, *pg, &omp, NULL);
+						if (rc)
+							return rc;
+						rc = ctx->mw_visitor(*pg, omp->mp_pages, ctx->mw_user, dbi, 'L');
+						if (rc)
+							return rc;
+					} else if (ni->mn_flags & F_SUBDATA) {
+						MDB_db *db = NODEDATA(ni);
+						char* name = NULL;
+						if (! (ni->mn_flags & F_DUPDATA)) {
+							name = NODEKEY(ni);
+							int namelen = (char*) db - name;
+							name = memcpy(alloca(namelen + 1), name, namelen);
+							name[namelen] = 0;
+						}
+						rc = mdb_env_walk(ctx, (name && name[0]) ? name : dbi, db->md_root, ni->mn_flags & F_DUPDATA, deep + 1);
+						if (rc)
+							return rc;
+					}
+				}
+			}
+		} else {
+			mc.mc_ki[mc.mc_top]++;
+			if (mc.mc_ki[mc.mc_top] < n) {
+				pgno_t pg;
+				do {
+					ni = NODEPTR(mp, mc.mc_ki[mc.mc_top]);
+					pg = NODEPGNO(ni);
+					rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL);
+					if (rc)
+						return rc;
+					rc = ctx->mw_visitor(pg, 1, ctx->mw_user, dbi, IS_BRANCH(mp) ? 'B' : 'L');
+					if (rc)
+						return rc;
+					mc.mc_top++;
+					mc.mc_snum++;
+					mc.mc_ki[mc.mc_top] = 0;
+					mc.mc_pg[mc.mc_top] = mp;
+				}
+				/* Whenever we advance to a sibling branch page,
+				 * we must proceed all the way down to its first leaf.
+				 */
+				while (IS_BRANCH(mp));
+				continue;
+			}
+		}
+
+		if (! mc.mc_top)
+			break;
+
+		mdb_cursor_pop(&mc);
+	}
+	return rc;
+}
+
+int mdb_env_pgwalk(MDB_txn *txn, MDB_pgwalk_func* visitor, void* user)
+{
+	mdb_walk_ctx_t ctx;
+	int rc;
+
+	ctx.mw_txn = txn;
+	ctx.mw_user = user;
+	ctx.mw_visitor = visitor;
+
+	rc = visitor(0, 2, user, "meta", 'M');
+	if (! rc)
+		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0, 0);
+	if (! rc)
+		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0, 0);
+	if (! rc)
+		rc = visitor(P_INVALID, 0, user, NULL, 0);
+	return rc;
 }
 
 /** @} */
