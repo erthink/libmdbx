@@ -9039,21 +9039,32 @@ mdb_env_stat(MDB_env *env, MDB_stat *arg)
 int ESECT
 mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 {
-	MDB_meta *meta;
+	MDB_meta *meta, *m1, *m2;
 
 	if (env == NULL || arg == NULL)
 		return EINVAL;
 
-	meta = mdb_meta_head_r(env);
-	arg->me_mapaddr = meta->mm_address;
+	m1 = METAPAGE_1(env);
+	m2 = METAPAGE_2(env);
+
 	arg->me_mapsize = env->me_mapsize;
 	arg->me_maxreaders = env->me_maxreaders;
 	arg->me_numreaders = env->me_txns->mti_numreaders;
 
-	arg->me_last_pgno = meta->mm_last_pg;
-	arg->me_last_txnid = meta->mm_txnid;
-	arg->me_tail_txnid = 0;
+	do {
+		meta = mdb_meta_head_r(env);
+		arg->me_meta1_txnid = m1->mm_txnid;
+		arg->me_meta1_sign = m1->mm_datasync_sign;
+		arg->me_meta2_txnid = m2->mm_txnid;
+		arg->me_meta2_sign = m2->mm_datasync_sign;
+		arg->me_last_pgno = meta->mm_last_pg;
+		arg->me_last_txnid = meta->mm_txnid;
+	} while (unlikely( meta->mm_txnid != env->me_txns->mti_txnid
+			|| arg->me_meta1_sign != m1->mm_datasync_sign
+			|| arg->me_meta2_sign != m2->mm_datasync_sign ));
 
+	arg->me_mapaddr = meta->mm_address;
+	arg->me_tail_txnid = 0;
 	MDB_reader *r = env->me_txns->mti_readers;
 	int i;
 	arg->me_tail_txnid = arg->me_last_txnid;

@@ -244,10 +244,10 @@ static long handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 				pg += span;
 				for (; i >= span && iptr[i - span] == pg; span++, pg++) ;
 			}
-			if (verbose > 1)
+			if (verbose > 2)
 				print(" - transaction %zu, %zd pages, maxspan %zd%s\n",
 					*(size_t *)key->mv_data, number, span, bad);
-			if (verbose > 2) {
+			if (verbose > 3) {
 				int j = number - 1;
 				while (j >= 0) {
 					pg = iptr[j];
@@ -430,6 +430,21 @@ static void usage(char *prog)
 	exit(EXIT_FAILURE);
 }
 
+const char* meta_synctype(size_t sign) {
+	switch(sign) {
+	case 0:
+		return "legacy/unknown";
+	case 1:
+		return "weak";
+	default:
+		return "steady";
+	}
+}
+
+int meta_lt(size_t txn1, size_t sign1, size_t txn2, size_t sign2) {
+	return ((sign1 > 1) == (sign2 > 1)) ? txn1 < txn2 : sign2 > 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int i, rc;
@@ -437,6 +452,7 @@ int main(int argc, char *argv[])
 	char *envname;
 	int envflags = 0;
 	long problems_maindb = 0, problems_freedb = 0, problems_deep = 0;
+	int problems_meta = 0;
 	size_t n;
 
 	if (argc < 2) {
@@ -480,6 +496,8 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_hanlder);
 
 	envname = argv[optind];
+	print("Running mdb_chk for '%s'...\n", envname);
+
 	rc = mdb_env_create(&env);
 	if (rc) {
 		error("mdb_env_create failed, error %d %s\n", rc, mdb_strerror(rc));
@@ -523,15 +541,50 @@ int main(int argc, char *argv[])
 	}
 
 	if (verbose) {
-		print(" - map size %zu (%.1fMb, %.1fGb)\n", info.me_mapsize,
-			  (double) info.me_mapsize / (1024 * 1024),
-			  (double) info.me_mapsize / (1024 * 1024 * 1024));
+		double k = 1024.0;
+		const char sf[] = "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
+		for(i = 0; sf[i+1] && info.me_mapsize / k > 1000.0; ++i)
+			k *= 1024;
+		print(" - map size %zu (%.1f%cb)\n", info.me_mapsize,
+			  info.me_mapsize / k, sf[i]);
 		if (info.me_mapaddr)
 			print(" - mapaddr %p\n", info.me_mapaddr);
 		print(" - pagesize %u, max keysize %zu, max readers %u\n",
 			  stat.ms_psize, maxkeysize, info.me_maxreaders);
-		print(" - last txn %zu, tail %zu (%zi)\n", info.me_last_txnid,
-			  info.me_tail_txnid, info.me_tail_txnid - info.me_last_txnid);
+		print(" - transactions: last %zu, bottom %zu, lag reading %zi\n", info.me_last_txnid,
+			  info.me_tail_txnid, info.me_last_txnid - info.me_tail_txnid);
+
+		print(" - meta-1: %s %zu, %s",
+			   meta_synctype(info.me_meta1_sign), info.me_meta1_txnid,
+			   meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
+					   info.me_meta2_txnid, info.me_meta2_sign) ? "tail" : "head");
+		print(info.me_meta1_txnid > info.me_last_txnid
+			  ? ", rolled-back %zu (%zu >>> %zu)\n" : "\n",
+			  info.me_meta1_txnid - info.me_last_txnid,
+			  info.me_meta1_txnid, info.me_last_txnid);
+
+		print(" - meta-2: %s %zu, %s",
+			   meta_synctype(info.me_meta2_sign), info.me_meta2_txnid,
+			   meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
+					   info.me_meta1_txnid, info.me_meta1_sign) ? "tail" : "head");
+		print(info.me_meta2_txnid > info.me_last_txnid
+			  ? ", rolled-back %zu (%zu >>> %zu)\n" : "\n",
+			  info.me_meta2_txnid - info.me_last_txnid,
+			  info.me_meta2_txnid, info.me_last_txnid);
+	}
+
+	if (! meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
+			info.me_meta2_txnid, info.me_meta2_sign)
+		&& info.me_meta1_txnid != info.me_last_txnid) {
+		print(" - meta1 txn-id mismatch\n");
+		++problems_meta;
+	}
+
+	if (! meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
+			info.me_meta1_txnid, info.me_meta1_sign)
+		&& info.me_meta2_txnid != info.me_last_txnid) {
+		print(" - meta2 txn-id mismatch\n");
+		++problems_meta;
 	}
 
 	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
@@ -610,9 +663,10 @@ bailout:
 	free(pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
-	if (problems_maindb || problems_freedb)
+	if (problems_meta || problems_maindb || problems_freedb)
 		return EXIT_FAILURE + 1;
 	if (problems_deep)
 		return EXIT_FAILURE;
+	print("No error is detected.\n");
 	return EXIT_SUCCESS;
 }

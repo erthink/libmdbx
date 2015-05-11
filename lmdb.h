@@ -446,6 +446,8 @@ typedef struct MDB_envinfo {
 	size_t	me_tail_txnid;			/**< ID of the last reader transaction */
 	unsigned me_maxreaders;		/**< max reader slots in the environment */
 	unsigned me_numreaders;		/**< max reader slots used in the environment */
+	size_t me_meta1_txnid, me_meta1_sign;
+	size_t me_meta2_txnid, me_meta2_sign;
 } MDB_envinfo;
 
 	/** @brief Return the LMDB library version information.
@@ -695,7 +697,7 @@ int  mdb_env_stat(MDB_env *env, MDB_stat *stat);
 	 * @param[out] stat The address of an #MDB_envinfo structure
 	 * 	where the information will be copied
 	 */
-int  mdb_env_info(MDB_env *env, MDB_envinfo *stat);
+int  mdb_env_info(MDB_env *env, MDB_envinfo *info);
 
 	/** @brief Flush the data buffers to disk.
 	 *
