@@ -1070,13 +1070,13 @@ struct MDB_env {
 	unsigned	me_os_psize;	/**< OS page size, from #GET_PAGESIZE */
 	unsigned	me_maxreaders;	/**< size of the reader table */
 	/** Max #MDB_txninfo.%mti_numreaders of interest to #mdb_env_close() */
-	volatile int	me_close_readers;
+	int	me_close_readers;
 	MDB_dbi		me_numdbs;		/**< number of DBs opened */
 	MDB_dbi		me_maxdbs;		/**< size of the DB table */
 	pid_t	me_pid;		/**< process ID of this env */
 	char		*me_path;		/**< path to the DB files */
 	char		*me_map;		/**< the memory map of the data file */
-	MDB_txninfo	*me_txns;		/**< the memory map of the lock file or NULL */
+	MDB_txninfo	*me_txns;		/**< the memory map of the lock file */
 	MDB_meta	*me_metas[2];	/**< pointers to the two meta pages */
 	void		*me_pbuf;		/**< scratch area for DUPSORT put() */
 	MDB_txn		*me_txn;		/**< current write transaction */
@@ -1913,57 +1913,35 @@ done:
 	return rc;
 }
 
-/** Find oldest txnid still referenced. Expects txn->mt_txnid > 0. */
+/** Find oldest txnid still referenced. */
 static txnid_t
-mdb_find_oldest(MDB_txn *txn)
+mdb_find_oldest(MDB_env *env, int *laggard)
 {
-	int i;
-	txnid_t mr, oldest = txn->mt_txnid - 1;
-	if (txn->mt_env->me_txns) {
-		MDB_reader *r = txn->mt_env->me_txns->mti_readers;
-		for (i = txn->mt_env->me_txns->mti_numreaders; --i >= 0; ) {
-			if (r[i].mr_pid) {
-				mr = r[i].mr_txnid;
-				if (oldest > mr)
-					oldest = mr;
+	int i, reader;
+	MDB_reader *r = env->me_txns->mti_readers;
+	txnid_t oldest = env->me_txns->mti_txnid;
+
+	for (reader = -1, i = env->me_txns->mti_numreaders; --i >= 0; ) {
+		if (r[i].mr_pid) {
+			txnid_t snap = r[i].mr_txnid;
+			if (oldest > snap) {
+				oldest = snap;
+				reader = i;
 			}
 		}
 	}
-	return oldest;
-}
 
-static txnid_t
-mdb_laggard_reader(MDB_env *env, int *laggard)
-{
-	txnid_t tail = 0;
 	if (laggard)
-		*laggard = -1;
-	if (env->me_txns->mti_txnid > 1) {
-		int i;
-		MDB_reader *r = env->me_txns->mti_readers;
-
-		tail = env->me_txns->mti_txnid - 1;
-		for (i = env->me_txns->mti_numreaders; --i >= 0; ) {
-			if (r[i].mr_pid) {
-				txnid_t mr = r[i].mr_txnid;
-				if (tail > mr) {
-					tail = mr;
-					if (laggard)
-						*laggard = i;
-				}
-			}
-		}
-	}
-
-	return tail;
+		*laggard = reader;
+	return oldest;
 }
 
 static int
 mdb_oomkick_laggard(MDB_env *env)
 {
-	int idx, retry;
-	txnid_t snap, tail = mdb_laggard_reader(env, &idx);
-	if (idx < 0)
+	int reader, retry;
+	txnid_t snap, oldest = mdb_find_oldest(env, &reader);
+	if (reader < 0)
 		return 0;
 
 	for(retry = 0; ; ++retry) {
@@ -1975,21 +1953,21 @@ mdb_oomkick_laggard(MDB_env *env)
 		if (mdb_reader_check(env, NULL))
 			break;
 
-		snap = mdb_laggard_reader(env, NULL);
-		if (tail < snap)
+		snap = mdb_find_oldest(env, NULL);
+		if (oldest < snap)
 			return 1;
 
 		if (!env->me_oom_func)
 			break;
 
-		r = &env->me_txns->mti_readers[ idx ];
+		r = &env->me_txns->mti_readers[ reader ];
 		pid = r->mr_pid;
 		tid = r->mr_tid;
-		if (r->mr_txnid != tail || pid <= 0)
+		if (r->mr_txnid != oldest || pid <= 0)
 			continue;
 
-		rc = env->me_oom_func(env, pid, (void*) tid, tail,
-			env->me_metas[ mdb_env_pick_meta(env) ]->mm_txnid - tail, retry);
+		rc = env->me_oom_func(env, pid, (void*) tid, oldest,
+			env->me_metas[ mdb_env_pick_meta(env) ]->mm_txnid - oldest, retry);
 		if (rc < 0)
 			break;
 
@@ -2003,8 +1981,8 @@ mdb_oomkick_laggard(MDB_env *env)
 		}
 	}
 
-	snap = mdb_laggard_reader(env, NULL);
-	return tail < snap;
+	snap = mdb_find_oldest(env, NULL);
+	return oldest < snap;
 }
 
 /** Add a page to the txn's dirty list */
@@ -2121,7 +2099,7 @@ oomkick_retry:;
 					last = env->me_pglast - 1;
 					op = MDB_SET_RANGE;
 				} else {
-					oldest = mdb_find_oldest(txn);
+					oldest = mdb_find_oldest(env, NULL);
 					env->me_pgoldest = oldest;
 					found_old = 1;
 					/* Begin from oldest reader if any */
@@ -2144,7 +2122,7 @@ oomkick_retry:;
 			/* Do not fetch more if the record will be too recent */
 			if (op != MDB_FIRST && ++last >= oldest) {
 				if (!found_old) {
-					oldest = mdb_find_oldest(txn);
+					oldest = mdb_find_oldest(env, NULL);
 					env->me_pgoldest = oldest;
 					found_old = 1;
 				}
@@ -2157,7 +2135,7 @@ oomkick_retry:;
 		if (rc == MDB_NOTFOUND && lifo) {
 			if (op == MDB_SET_RANGE)
 				continue;
-			env->me_pgoldest = mdb_find_oldest(txn);
+			env->me_pgoldest = mdb_find_oldest(env, NULL);
 			found_old = 1;
 			if (oldest < env->me_pgoldest) {
 				oldest = env->me_pgoldest;
@@ -2177,7 +2155,7 @@ oomkick_retry:;
 		last = *(txnid_t*)key.mv_data;
 		if (oldest <= last) {
 			if (!found_old) {
-				oldest = mdb_find_oldest(txn);
+				oldest = mdb_find_oldest(env, NULL);
 				env->me_pgoldest = oldest;
 				found_old = 1;
 			}
@@ -2693,7 +2671,6 @@ static int
 mdb_txn_renew0(MDB_txn *txn)
 {
 	MDB_env *env = txn->mt_env;
-	MDB_txninfo *ti = env->me_txns;
 	MDB_meta *meta;
 	unsigned i, nr;
 	uint16_t x;
@@ -2705,84 +2682,78 @@ mdb_txn_renew0(MDB_txn *txn)
 		/* Setup db info */
 		txn->mt_numdbs = env->me_numdbs;
 		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
-		if (!ti) {
-			meta = env->me_metas[ mdb_env_pick_meta(env) ];
-			txn->mt_txnid = meta->mm_txnid;
-			txn->mt_u.reader = NULL;
+
+		MDB_reader *r = (env->me_flags & MDB_NOTLS)
+			? txn->mt_u.reader : pthread_getspecific(env->me_txkey);
+
+		if (likely(r)) {
+			if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != (txnid_t)-1))
+				return MDB_BAD_RSLOT;
 		} else {
-			MDB_reader *r = (env->me_flags & MDB_NOTLS) ? txn->mt_u.reader :
-				pthread_getspecific(env->me_txkey);
-			if (r) {
-				if (r->mr_pid != env->me_pid || r->mr_txnid != (txnid_t)-1)
-					return MDB_BAD_RSLOT;
-			} else {
-				pid_t pid = env->me_pid;
-				pthread_t tid = pthread_self();
-				pthread_mutex_t *rmutex = MDB_MUTEX(env, r);
+			pid_t pid = env->me_pid;
+			pthread_t tid = pthread_self();
+			pthread_mutex_t *rmutex = MDB_MUTEX(env, r);
 
-				if (!env->me_live_reader) {
-					rc = mdb_reader_pid(env, F_SETLK, pid);
-					if (rc)
-						return rc;
-					env->me_live_reader = 1;
-				}
-
-				rc = mdb_mutex_lock(env, rmutex);
-				if (unlikely(rc))
+			if (unlikely(!env->me_live_reader)) {
+				rc = mdb_reader_pid(env, F_SETLK, pid);
+				if (unlikely(rc != MDB_SUCCESS))
 					return rc;
-				nr = ti->mti_numreaders;
-				for (i=0; i<nr; i++)
-					if (ti->mti_readers[i].mr_pid == 0)
-						break;
-				if (i == env->me_maxreaders) {
-					mdb_mutex_unlock(env, rmutex);
-					return MDB_READERS_FULL;
-				}
-				r = &ti->mti_readers[i];
-				/* Claim the reader slot, carefully since other code
-				 * uses the reader table un-mutexed: First reset the
-				 * slot, next publish it in mti_numreaders.  After
-				 * that, it is safe for mdb_env_close() to touch it.
-				 * When it will be closed, we can finally claim it.
-				 */
-				r->mr_pid = 0;
-				r->mr_txnid = (txnid_t)-1;
-				r->mr_tid = tid;
-				mdb_coherent_barrier();
-				if (i == nr)
-					ti->mti_numreaders = ++nr;
-				env->me_close_readers = nr;
-				r->mr_pid = pid;
-				mdb_mutex_unlock(env, rmutex);
-
-				new_notls = (env->me_flags & MDB_NOTLS);
-				if (!new_notls && (rc=pthread_setspecific(env->me_txkey, r))) {
-					r->mr_pid = 0;
-					mdb_coherent_barrier();
-					return rc;
-				}
+				env->me_live_reader = 1;
 			}
-			do { /* LY: Retry on a race, ITS#7970. */
-				r->mr_txnid = ti->mti_txnid;
-				mdb_coherent_barrier();
-			} while(r->mr_txnid != ti->mti_txnid);
-			txn->mt_txnid = r->mr_txnid;
-			txn->mt_u.reader = r;
+
+			rc = mdb_mutex_lock(env, rmutex);
+			if (unlikely(rc != MDB_SUCCESS))
+				return rc;
+			nr = env->me_txns->mti_numreaders;
+			for (i=0; i<nr; i++)
+				if (env->me_txns->mti_readers[i].mr_pid == 0)
+					break;
+			if (unlikely(i == env->me_maxreaders)) {
+				mdb_mutex_unlock(env, rmutex);
+				return MDB_READERS_FULL;
+			}
+			r = &env->me_txns->mti_readers[i];
+			/* Claim the reader slot, carefully since other code
+			 * uses the reader table un-mutexed: First reset the
+			 * slot, next publish it in mti_numreaders.  After
+			 * that, it is safe for mdb_env_close() to touch it.
+			 * When it will be closed, we can finally claim it.
+			 */
+			r->mr_pid = 0;
+			r->mr_txnid = (txnid_t)-1;
+			r->mr_tid = tid;
 			mdb_coherent_barrier();
-			meta = env->me_metas[txn->mt_txnid & 1];
+			if (i == nr)
+				env->me_txns->mti_numreaders = ++nr;
+			if (env->me_close_readers < nr)
+				env->me_close_readers = nr;
+			r->mr_pid = pid;
+			mdb_mutex_unlock(env, rmutex);
+
+			new_notls = (env->me_flags & MDB_NOTLS);
+			if (!new_notls && (rc=pthread_setspecific(env->me_txkey, r))) {
+				r->mr_pid = 0;
+				mdb_coherent_barrier();
+				return rc;
+			}
 		}
+
+		do { /* LY: Retry on a race, ITS#7970. */
+			meta = env->me_metas[ mdb_env_pick_meta(env) ];
+			r->mr_txnid = meta->mm_txnid;
+			mdb_coherent_barrier();
+		} while(unlikely(r->mr_txnid != env->me_txns->mti_txnid));
+		txn->mt_txnid = r->mr_txnid;
+		txn->mt_u.reader = r;
 	} else {
 		/* Not yet touching txn == env->me_txn0, it may be active */
-		if (ti) {
-			rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
-			if (unlikely(rc))
-				return rc;
-			txn->mt_txnid = ti->mti_txnid;
-			meta = env->me_metas[txn->mt_txnid & 1];
-		} else {
-			meta = env->me_metas[ mdb_env_pick_meta(env) ];
-			txn->mt_txnid = meta->mm_txnid;
-		}
+		rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
+		if (unlikely(rc))
+			return rc;
+
+		meta = env->me_metas[ mdb_env_pick_meta(env) ];
+		txn->mt_txnid = meta->mm_txnid;
+
 		/* Setup db info */
 		txn->mt_numdbs = env->me_numdbs;
 		txn->mt_txnid++;
@@ -3089,8 +3060,7 @@ mdb_txn_reset0(MDB_txn *txn, const char *act_)
 
 			env->me_txn = NULL;
 			/* The writer mutex was locked in mdb_txn_begin. */
-			if (env->me_txns)
-				mdb_mutex_unlock(env, MDB_MUTEX(env, w));
+			mdb_mutex_unlock(env, MDB_MUTEX(env, w));
 		} else {
 			txn->mt_parent->mt_child = NULL;
 			env->me_pgstate = ((MDB_ntxn *)txn)->mnt_pgstate;
@@ -3790,8 +3760,7 @@ done:
 	env->me_txn = NULL;
 	mdb_dbis_update(txn, 1);
 
-	if (env->me_txns)
-		mdb_mutex_unlock(env, MDB_MUTEX(env, w));
+	mdb_mutex_unlock(env, MDB_MUTEX(env, w));
 	if (txn != env->me_txn0)
 		free(txn);
 
@@ -4019,9 +3988,7 @@ done:
 	 * readers will get consistent data regardless of how fresh or
 	 * how stale their view of these values is.
 	 */
-	if (env->me_txns)
-		env->me_txns->mti_txnid = txn->mt_txnid;
-
+	env->me_txns->mti_txnid = txn->mt_txnid;
 	return MDB_SUCCESS;
 }
 
@@ -4606,7 +4573,7 @@ fail:
 #define	CHANGEABLE	(MDB_NOSYNC|MDB_NOMETASYNC|MDB_MAPASYNC| \
     MDB_NOMEMINIT|MDB_COALESCE)
 #define	CHANGELESS	(MDB_FIXEDMAP|MDB_NOSUBDIR|MDB_RDONLY| \
-    MDB_WRITEMAP|MDB_NOTLS|MDB_NOLOCK|MDB_NORDAHEAD|MDB_LIFORECLAIM)
+	MDB_WRITEMAP|MDB_NOTLS|MDB_NORDAHEAD|MDB_LIFORECLAIM)
 
 #if VALID_FLAGS & PERSISTENT_FLAGS & (CHANGEABLE|CHANGELESS)
 # error "Persistent DB flags & env flags overlap, but both go in mm_flags"
@@ -4664,7 +4631,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
 	}
 
 	/* For RDONLY, get lockfile after we know datafile exists */
-	if (!(flags & (MDB_RDONLY|MDB_NOLOCK))) {
+	if (!(flags & MDB_RDONLY)) {
 		rc = mdb_env_setup_locks(env, lpath, mode, &excl);
 		if (rc)
 			goto leave;
@@ -4681,7 +4648,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
 		goto leave;
 	}
 
-	if ((flags & (MDB_RDONLY|MDB_NOLOCK)) == MDB_RDONLY) {
+	if (flags & MDB_RDONLY) {
 		rc = mdb_env_setup_locks(env, lpath, mode, &excl);
 		if (rc)
 			goto leave;
@@ -4775,21 +4742,21 @@ mdb_env_close0(MDB_env *env)
 		(void) close(env->me_mfd);
 	if (env->me_fd != INVALID_HANDLE_VALUE)
 		(void) close(env->me_fd);
-	if (env->me_txns) {
-		pid_t pid = env->me_pid;
-		/* Clearing readers is done in this function because
-		 * me_txkey with its destructor must be disabled first.
-		 *
-		 * We skip the the reader mutex, so we touch only
-		 * data owned by this process (me_close_readers and
-		 * our readers), and clear each reader atomically.
-		 */
-		for (i = env->me_close_readers; --i >= 0; )
-			if (env->me_txns->mti_readers[i].mr_pid == pid)
-				env->me_txns->mti_readers[i].mr_pid = 0;
-		mdb_coherent_barrier();
-		munmap((void *)env->me_txns, (env->me_maxreaders-1)*sizeof(MDB_reader)+sizeof(MDB_txninfo));
-	}
+
+	pid_t pid = env->me_pid;
+	/* Clearing readers is done in this function because
+	 * me_txkey with its destructor must be disabled first.
+	 *
+	 * We skip the the reader mutex, so we touch only
+	 * data owned by this process (me_close_readers and
+	 * our readers), and clear each reader atomically.
+	 */
+	for (i = env->me_close_readers; --i >= 0; )
+		if (env->me_txns->mti_readers[i].mr_pid == pid)
+			env->me_txns->mti_readers[i].mr_pid = 0;
+	mdb_coherent_barrier();
+	munmap((void *)env->me_txns, (env->me_maxreaders-1)*sizeof(MDB_reader)+sizeof(MDB_txninfo));
+
 	if (env->me_lfd != INVALID_HANDLE_VALUE) {
 		(void) close(env->me_lfd);
 	}
@@ -8808,21 +8775,19 @@ mdb_env_copyfd0(MDB_env *env, HANDLE fd)
 	if (rc)
 		return rc;
 
-	if (env->me_txns) {
-		/* We must start the actual read txn after blocking writers */
-		mdb_txn_reset0(txn, "reset-stage1");
+	/* We must start the actual read txn after blocking writers */
+	mdb_txn_reset0(txn, "reset-stage1");
 
-		/* Temporarily block writers until we snapshot the meta pages */
-		wmutex = MDB_MUTEX(env, w);
-		rc = mdb_mutex_lock(env, wmutex);
-		if (unlikely(rc))
-			goto leave;
+	/* Temporarily block writers until we snapshot the meta pages */
+	wmutex = MDB_MUTEX(env, w);
+	rc = mdb_mutex_lock(env, wmutex);
+	if (unlikely(rc))
+		goto leave;
 
-		rc = mdb_txn_renew0(txn);
-		if (rc) {
-			mdb_mutex_unlock(env, wmutex);
-			goto leave;
-		}
+	rc = mdb_txn_renew0(txn);
+	if (rc) {
+		mdb_mutex_unlock(env, wmutex);
+		goto leave;
 	}
 
 	wsize = env->me_psize * 2;
@@ -9071,22 +9036,20 @@ mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 	arg->me_mapaddr = env->me_metas[toggle]->mm_address;
 	arg->me_mapsize = env->me_mapsize;
 	arg->me_maxreaders = env->me_maxreaders;
-	arg->me_numreaders = env->me_txns ? env->me_txns->mti_numreaders : 0;
+	arg->me_numreaders = env->me_txns->mti_numreaders;
 
 	arg->me_last_pgno = env->me_metas[toggle]->mm_last_pg;
 	arg->me_last_txnid = env->me_metas[toggle]->mm_txnid;
 	arg->me_tail_txnid = 0;
 
-	if (env->me_txns) {
-		MDB_reader *r = env->me_txns->mti_readers;
-		int i;
-		arg->me_tail_txnid = arg->me_last_txnid;
-		for (i = arg->me_numreaders; --i >= 0; ) {
-			if (r[i].mr_pid) {
-				txnid_t mr = r[i].mr_txnid;
-				if (arg->me_tail_txnid > mr)
-					arg->me_tail_txnid = mr;
-			}
+	MDB_reader *r = env->me_txns->mti_readers;
+	int i;
+	arg->me_tail_txnid = arg->me_last_txnid;
+	for (i = arg->me_numreaders; --i >= 0; ) {
+		if (r[i].mr_pid) {
+			txnid_t mr = r[i].mr_txnid;
+			if (arg->me_tail_txnid > mr)
+				arg->me_tail_txnid = mr;
 		}
 	}
 
@@ -9455,9 +9418,7 @@ mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 
 	if (!env || !func)
 		return -1;
-	if (!env->me_txns) {
-		return func("(no reader locks)\n", ctx);
-	}
+
 	rdrs = env->me_txns->mti_numreaders;
 	mr = env->me_txns->mti_readers;
 	for (i=0; i<rdrs; i++) {
@@ -9530,7 +9491,7 @@ mdb_reader_check(MDB_env *env, int *dead)
 		return EINVAL;
 	if (dead)
 		*dead = 0;
-	return env->me_txns ? mdb_reader_check0(env, 0, dead) : MDB_SUCCESS;
+	return mdb_reader_check0(env, 0, dead);
 }
 
 /** As #mdb_reader_check(). rlocked = <caller locked the reader mutex>. */

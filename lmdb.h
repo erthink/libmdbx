@@ -277,8 +277,9 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 #define MDB_MAPASYNC		0x100000
 	/** tie reader locktable slots to #MDB_txn objects instead of to threads */
 #define MDB_NOTLS		0x200000
-	/** don't do any locking, caller must manage their own locks */
-#define MDB_NOLOCK		0x400000
+	/** don't do any locking, caller must manage their own locks
+	 * WARNING: ReOpenLDAP don't support this mode. */
+#define MDB_NOLOCK__UNSUPPORTED		0x400000
 	/** don't do readahead */
 #define MDB_NORDAHEAD	0x800000
 	/** don't initialize malloc'd memory before writing to datafile */
