@@ -826,6 +826,11 @@ typedef struct MDB_meta {
 #define	mm_flags	mm_dbs[0].md_flags
 	pgno_t		mm_last_pg;			/**< last used page in file */
 	volatile txnid_t	mm_txnid;	/**< txnid that committed this page */
+#define MDB_DATASIGN_NONE 0
+#define MDB_DATASIGN_WEAK 1
+	volatile uint64_t	mm_datasync_sign;
+#define META_IS_WEAK(meta) ((meta)->mm_datasync_sign == MDB_DATASIGN_WEAK)
+#define META_IS_STEADY(meta) ((meta)->mm_datasync_sign > MDB_DATASIGN_WEAK)
 } MDB_meta;
 
 	/** Buffer for a stack-allocated meta page.
@@ -1873,6 +1878,19 @@ bailout:
 	return rc;
 }
 
+static uint64_t mdb_meta_sign(MDB_meta *meta) {
+	uint64_t sign = MDB_DATASIGN_NONE;
+#if 0 /* TODO */
+	sign = hippeus_hash64(
+				&target->mm_mapsize,
+				sizeof(MDB_meta) - offsetof(MDB_meta, mm_mapsize),
+				meta->mm_version | (uint64_t) MDB_MAGIC << 32
+			);
+#endif
+	/* LY: newer returns MDB_DATASIGN_NONE or MDB_DATASIGN_WEAK */
+	return (sign > MDB_DATASIGN_WEAK) ? sign : ~sign;
+}
+
 /** Check both meta pages to see which one is newer.
  * @param[in] env the environment handle
  * @return pointer to last meta-page.
@@ -1895,6 +1913,13 @@ mdb_find_oldest(MDB_env *env, int *laggard)
 	int i, reader;
 	MDB_reader *r = env->me_txns->mti_readers;
 	txnid_t oldest = env->me_txns->mti_txnid;
+
+	MDB_meta* a = METAPAGE_1(env);
+	MDB_meta* b = METAPAGE_2(env);
+	if (META_IS_WEAK(a) && oldest > b->mm_txnid)
+		oldest = b->mm_txnid;
+	if (META_IS_WEAK(b) && oldest > a->mm_txnid)
+		oldest = a->mm_txnid;
 
 	for (reader = -1, i = env->me_txns->mti_numreaders; --i >= 0; ) {
 		if (r[i].mr_pid) {
@@ -2488,7 +2513,8 @@ mdb_env_sync(MDB_env *env, int force)
 		head = mdb_env_meta_head(env);
 	}
 
-	if (env->me_sync_pending == 0 && env->me_mapsize == head->mm_mapsize)
+	if (! META_IS_WEAK(head) && env->me_sync_pending == 0
+			&& env->me_mapsize == head->mm_mapsize)
 		/* LY: nothing to do */
 		return MDB_SUCCESS;
 
@@ -2500,7 +2526,8 @@ mdb_env_sync(MDB_env *env, int force)
 	/* LY: head may be changed while the mutex has been acquired. */
 	head = mdb_env_meta_head(env);
 	rc = MDB_SUCCESS;
-	if (env->me_sync_pending || env->me_mapsize != head->mm_mapsize) {
+	if (META_IS_WEAK(head) || env->me_sync_pending != 0
+			|| env->me_mapsize != head->mm_mapsize) {
 		MDB_meta meta = *head;
 		rc = mdb_env_sync0(env, flags, &meta);
 	}
@@ -2694,7 +2721,10 @@ mdb_txn_renew0(MDB_txn *txn)
 			meta = mdb_env_meta_head(env);
 			r->mr_txnid = meta->mm_txnid;
 			mdb_coherent_barrier();
+			memcpy(txn->mt_dbs, meta->mm_dbs, 2 * sizeof(MDB_db));
+			txn->mt_next_pgno = meta->mm_last_pg+1;
 		} while(unlikely(r->mr_txnid != env->me_txns->mti_txnid));
+
 		txn->mt_txnid = r->mr_txnid;
 		txn->mt_u.reader = r;
 	} else {
@@ -2732,13 +2762,9 @@ mdb_txn_renew0(MDB_txn *txn)
 			txn->mt_lifo_reclaimed[0] = 0;
 		env->me_txn = txn;
 		memcpy(txn->mt_dbiseqs, env->me_dbiseqs, env->me_maxdbs * sizeof(unsigned));
+		memcpy(txn->mt_dbs, meta->mm_dbs, 2 * sizeof(MDB_db));
+		txn->mt_next_pgno = meta->mm_last_pg+1;
 	}
-
-	/* Copy the DB info and flags */
-	memcpy(txn->mt_dbs, meta->mm_dbs, 2 * sizeof(MDB_db));
-
-	/* Moved to here to avoid a data race in read TXNs */
-	txn->mt_next_pgno = meta->mm_last_pg+1;
 
 	for (i=2; i<txn->mt_numdbs; i++) {
 		x = env->me_dbflags[i];
@@ -3803,6 +3829,7 @@ mdb_env_init_meta0(MDB_env *env, MDB_meta *meta)
 	meta->mm_flags |= MDB_INTEGERKEY;
 	meta->mm_dbs[0].md_root = P_INVALID;
 	meta->mm_dbs[1].md_root = P_INVALID;
+	meta->mm_datasync_sign = mdb_meta_sign(meta);
 }
 
 /** Write the environment parameters of a freshly created DB environment.
@@ -3851,17 +3878,23 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 {
 	int rc;
 	MDB_meta* head = mdb_env_meta_head(env);
-	MDB_meta* tail = mdb_env_meta_flipflop(env, head);
+	size_t prev_mapsize = head->mm_mapsize;
+	MDB_meta* tail = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
 	off_t offset = (char*) tail - env->me_map;
 
 	mdb_assert(env, (env->me_flags & (MDB_RDONLY | MDB_FATAL_ERROR)) == 0);
-	mdb_assert(env, env->me_sync_pending != 0 || env->me_mapsize != head->mm_mapsize);
-	mdb_assert(env, pending->mm_txnid > head->mm_txnid);
-	mdb_assert(env, pending->mm_txnid > tail->mm_txnid);
+	mdb_assert(env, META_IS_WEAK(head) || env->me_sync_pending != 0
+			   || env->me_mapsize != prev_mapsize);
+	mdb_assert(env, pending->mm_txnid > head->mm_txnid
+			   || (pending->mm_txnid == head->mm_txnid && META_IS_WEAK(head)));
+	mdb_assert(env, pending->mm_txnid > tail->mm_txnid || META_IS_WEAK(tail));
+
+	MDB_meta* stay = mdb_env_meta_flipflop(env, tail);
+	mdb_assert(env, pending->mm_txnid > stay->mm_txnid);
 
 	pending->mm_mapsize = env->me_mapsize;
-	if (unlikely(pending->mm_mapsize != head->mm_mapsize)) {
-		if (pending->mm_mapsize < head->mm_mapsize) {
+	if (unlikely(pending->mm_mapsize != prev_mapsize)) {
+		if (pending->mm_mapsize < prev_mapsize) {
 			/* LY: currently this can't happen, but force full-sync. */
 			flags &= MDB_WRITEMAP;
 		} else {
@@ -3884,7 +3917,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 				env->me_sync_pending = 0;
 		} else {
 			int (*sync_fd)(int fd) = fdatasync;
-			if (unlikely(head->mm_mapsize != pending->mm_mapsize)) {
+			if (unlikely(prev_mapsize != pending->mm_mapsize)) {
 				/* LY: It is no reason to use fdatasync() here, even in case
 				 * no such bug in a kernel. Because "no-bug" mean that a kernel
 				 * internally do nearly the same.
@@ -3906,9 +3939,14 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	}
 
 	/* LY: step#2 - update meta-page. */
+	pending->mm_datasync_sign = env->me_sync_pending
+			? MDB_DATASIGN_WEAK : mdb_meta_sign(pending);
 	mdb_debug("writing meta page %d for root page %zu",
 		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root);
 	if (env->me_flags & MDB_WRITEMAP) {
+		tail->mm_datasync_sign = MDB_DATASIGN_WEAK;
+		tail->mm_txnid = 0;
+		mdb_coherent_barrier();
 		tail->mm_mapsize = pending->mm_mapsize;
 		tail->mm_dbs[0] = pending->mm_dbs[0];
 		tail->mm_dbs[1] = pending->mm_dbs[1];
@@ -3916,6 +3954,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 		/* (LY) ITS#7969: issue a memory barrier, it is noop for x86. */
 		mdb_coherent_barrier();
 		tail->mm_txnid = pending->mm_txnid;
+		tail->mm_datasync_sign = pending->mm_datasync_sign;
 	} else {
 		pending->mm_magic = MDB_MAGIC;
 		pending->mm_version = MDB_DATA_VERSION;
@@ -3959,9 +3998,9 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	}
 
 	/* LY: currently this can't happen, but... */
-	if (unlikely(pending->mm_mapsize < head->mm_mapsize)) {
+	if (unlikely(pending->mm_mapsize < prev_mapsize)) {
 		mdb_assert(env, pending->mm_mapsize == env->me_mapsize);
-		if (unlikely(mremap(env->me_map, head->mm_mapsize, pending->mm_mapsize,
+		if (unlikely(mremap(env->me_map, prev_mapsize, pending->mm_mapsize,
 						MREMAP_FIXED, pending->mm_address) == MAP_FAILED)) {
 			rc = errno;
 			goto fail;
@@ -4673,12 +4712,15 @@ mdb_env_close0(MDB_env *env)
 }
 
 void ESECT
-mdb_env_close(MDB_env *env)
+mdb_env_close_ex(MDB_env *env, int dont_sync)
 {
 	MDB_page *dp;
 
 	if (env == NULL)
 		return;
+
+	if (! dont_sync)
+		mdb_env_sync(env, 1);
 
 	VALGRIND_DESTROY_MEMPOOL(env);
 	while ((dp = env->me_dpages) != NULL) {

@@ -725,8 +725,14 @@ int  mdb_env_sync(MDB_env *env, int force);
 	 * use any such handles after calling this function will cause a SIGSEGV.
 	 * The environment handle will be freed and must not be used again after this call.
 	 * @param[in] env An environment handle returned by #mdb_env_create()
+	 * @param[in] dont_sync A dont'sync flag, if non-zero the last checkpoint
+	 *  (meta-page update) will be kept "as is" and may be still "weak"
+	 *  in NOSYNC/MAPASYNC modes. Such "weak" checkpoint will be ignored
+	 *  on opening next time, and transactions since the last non-weak
+	 *  checkpoint (meta-page update) will rolledback for consistency guarantee.
 	 */
-void mdb_env_close(MDB_env *env);
+void mdb_env_close_ex(MDB_env *env, int dont_sync);
+#define mdb_env_close(env) mdb_env_close_ex(env, 0)
 
 	/** @brief Set environment flags.
 	 *
