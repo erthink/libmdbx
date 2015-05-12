@@ -218,7 +218,7 @@ typedef struct MDB_env MDB_env;
 typedef struct MDB_txn MDB_txn;
 
 /** @brief A handle for an individual database in the DB environment. */
-typedef unsigned int	MDB_dbi;
+typedef unsigned	MDB_dbi;
 
 /** @brief Opaque structure for navigating through a database */
 typedef struct MDB_cursor MDB_cursor;
@@ -427,9 +427,9 @@ typedef enum MDB_cursor_op {
 
 /** @brief Statistics for a database in the environment */
 typedef struct MDB_stat {
-	unsigned int	ms_psize;			/**< Size of a database page.
+	unsigned	ms_psize;			/**< Size of a database page.
 											This is currently the same for all databases. */
-	unsigned int	ms_depth;			/**< Depth (height) of the B-tree */
+	unsigned	ms_depth;			/**< Depth (height) of the B-tree */
 	size_t		ms_branch_pages;	/**< Number of internal (non-leaf) pages */
 	size_t		ms_leaf_pages;		/**< Number of leaf pages */
 	size_t		ms_overflow_pages;	/**< Number of overflow pages */
@@ -443,8 +443,8 @@ typedef struct MDB_envinfo {
 	size_t	me_last_pgno;			/**< ID of the last used page */
 	size_t	me_last_txnid;			/**< ID of the last committed transaction */
 	size_t	me_tail_txnid;			/**< ID of the last reader transaction */
-	unsigned int me_maxreaders;		/**< max reader slots in the environment */
-	unsigned int me_numreaders;		/**< max reader slots used in the environment */
+	unsigned me_maxreaders;		/**< max reader slots in the environment */
+	unsigned me_numreaders;		/**< max reader slots used in the environment */
 } MDB_envinfo;
 
 	/** @brief Return the LMDB library version information.
@@ -604,7 +604,7 @@ int  mdb_env_create(MDB_env **env);
 	 *	<li>EAGAIN - the environment was locked by another process.
 	 * </ul>
 	 */
-int  mdb_env_open(MDB_env *env, const char *path, unsigned int flags, mode_t mode);
+int  mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode);
 
 	/** @brief Copy an LMDB environment to the specified path.
 	 *
@@ -659,7 +659,7 @@ int  mdb_env_copyfd(MDB_env *env, mdb_filehandle_t fd);
 	 * </ul>
 	 * @return A non-zero error value on failure and 0 on success.
 	 */
-int  mdb_env_copy2(MDB_env *env, const char *path, unsigned int flags);
+int  mdb_env_copy2(MDB_env *env, const char *path, unsigned flags);
 
 	/** @brief Copy an LMDB environment to the specified file descriptor,
 	 *	with options.
@@ -678,7 +678,7 @@ int  mdb_env_copy2(MDB_env *env, const char *path, unsigned int flags);
 	 * See #mdb_env_copy2() for options.
 	 * @return A non-zero error value on failure and 0 on success.
 	 */
-int  mdb_env_copyfd2(MDB_env *env, mdb_filehandle_t fd, unsigned int flags);
+int  mdb_env_copyfd2(MDB_env *env, mdb_filehandle_t fd, unsigned flags);
 
 	/** @brief Return statistics about the LMDB environment.
 	 *
@@ -741,7 +741,7 @@ void mdb_env_close(MDB_env *env);
 	 *	<li>EINVAL - an invalid parameter was specified.
 	 * </ul>
 	 */
-int  mdb_env_set_flags(MDB_env *env, unsigned int flags, int onoff);
+int  mdb_env_set_flags(MDB_env *env, unsigned flags, int onoff);
 
 	/** @brief Get environment flags.
 	 *
@@ -753,7 +753,7 @@ int  mdb_env_set_flags(MDB_env *env, unsigned int flags, int onoff);
 	 *	<li>EINVAL - an invalid parameter was specified.
 	 * </ul>
 	 */
-int  mdb_env_get_flags(MDB_env *env, unsigned int *flags);
+int  mdb_env_get_flags(MDB_env *env, unsigned *flags);
 
 	/** @brief Return the path that was used in #mdb_env_open().
 	 *
@@ -832,7 +832,7 @@ int  mdb_env_set_mapsize(MDB_env *env, size_t size);
 	 *	<li>EINVAL - an invalid parameter was specified, or the environment is already open.
 	 * </ul>
 	 */
-int  mdb_env_set_maxreaders(MDB_env *env, unsigned int readers);
+int  mdb_env_set_maxreaders(MDB_env *env, unsigned readers);
 
 	/** @brief Get the maximum number of threads/reader slots for the environment.
 	 *
@@ -844,7 +844,7 @@ int  mdb_env_set_maxreaders(MDB_env *env, unsigned int readers);
 	 *	<li>EINVAL - an invalid parameter was specified.
 	 * </ul>
 	 */
-int  mdb_env_get_maxreaders(MDB_env *env, unsigned int *readers);
+int  mdb_env_get_maxreaders(MDB_env *env, unsigned *readers);
 
 	/** @brief Set the maximum number of named databases for the environment.
 	 *
@@ -961,7 +961,7 @@ int  mdb_env_set_syncbytes(MDB_env *env, size_t bytes);
 	 *	<li>ENOMEM - out of memory.
 	 * </ul>
 	 */
-int  mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned int flags, MDB_txn **txn);
+int  mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **txn);
 
 	/** @brief Returns the transaction's #MDB_env
 	 *
@@ -1114,7 +1114,7 @@ int  mdb_txn_renew(MDB_txn *txn);
 	 *	<li>#MDB_DBS_FULL - too many databases have been opened. See #mdb_env_set_maxdbs().
 	 * </ul>
 	 */
-int  mdb_dbi_open(MDB_txn *txn, const char *name, unsigned int flags, MDB_dbi *dbi);
+int  mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi);
 
 	/** @brief Retrieve statistics for a database.
 	 *
@@ -1137,7 +1137,7 @@ int  mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *stat);
 	 * @param[out] flags Address where the flags will be returned.
 	 * @return A non-zero error value on failure and 0 on success.
 	 */
-int mdb_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned int *flags);
+int mdb_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags);
 
 	/** @brief Close a database handle. Normally unnecessary. Use with care:
 	 *
@@ -1323,7 +1323,7 @@ int  mdb_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 	 * </ul>
 	 */
 int  mdb_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
-			    unsigned int flags);
+				unsigned flags);
 
 	/** @brief Delete items from a database.
 	 *
@@ -1491,7 +1491,7 @@ int  mdb_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
 	 * </ul>
 	 */
 int  mdb_cursor_put(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
-				unsigned int flags);
+				unsigned flags);
 
 	/** @brief Delete current key/data pair
 	 *
@@ -1510,7 +1510,7 @@ int  mdb_cursor_put(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
 	 *	<li>EINVAL - an invalid parameter was specified.
 	 * </ul>
 	 */
-int  mdb_cursor_del(MDB_cursor *cursor, unsigned int flags);
+int  mdb_cursor_del(MDB_cursor *cursor, unsigned flags);
 
 	/** @brief Return count of duplicates for current key.
 	 *
