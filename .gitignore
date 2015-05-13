@@ -1,5 +1,4 @@
-mtest
-mtest[23456]
+mtest[0123456]
 testdb
 mdb_copy
 mdb_stat

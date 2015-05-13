@@ -33,7 +33,7 @@ IHDRS	= lmdb.h
 ILIBS	= liblmdb.a liblmdb.so
 IPROGS	= mdb_stat mdb_copy mdb_dump mdb_load mdb_chk
 IDOCS	= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
-PROGS	= $(IPROGS) mtest mtest2 mtest3 mtest4 mtest5 mtest6
+PROGS	= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6
 all:	$(ILIBS) $(PROGS)
 
 install: $(ILIBS) $(IPROGS) $(IHDRS)
@@ -47,7 +47,8 @@ clean:
 
 test:	all
 	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
-		&& echo "*** LMDB-TEST-1" && ./mtest && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdb_chk testdb \
 		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdb_chk testdb \
 		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdb_chk testdb \
 		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdb_chk testdb \
@@ -67,7 +68,8 @@ mdb_copy: mdb_copy.o liblmdb.a
 mdb_dump: mdb_dump.o liblmdb.a
 mdb_load: mdb_load.o liblmdb.a
 mdb_chk: mdb_chk.o liblmdb.a
-mtest:    mtest.o    liblmdb.a
+mtest0: mtest0.o liblmdb.a
+mtest1: mtest1.o liblmdb.a
 mtest2:	mtest2.o liblmdb.a
 mtest3:	mtest3.o liblmdb.a
 mtest4:	mtest4.o liblmdb.a

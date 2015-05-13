@@ -46,6 +46,8 @@ int main(int argc,char * argv[])
 	E(mdb_env_open(env, "./testdb", MDB_FIXEDMAP|MDB_NOSYNC, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
+	if (mdb_dbi_open(txn, "id6", MDB_CREATE, &dbi) == MDB_SUCCESS)
+		E(mdb_drop(txn, dbi, 1));
 	E(mdb_dbi_open(txn, "id6", MDB_CREATE|MDB_INTEGERKEY, &dbi));
 	E(mdb_cursor_open(txn, dbi, &cursor));
 	E(mdb_stat(txn, dbi, &mst));
