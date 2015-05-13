@@ -1639,6 +1639,8 @@ int mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn);
 typedef int MDB_pgwalk_func(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi, char type);
 int mdb_env_pgwalk(MDB_txn *txn, MDB_pgwalk_func* visitor, void* ctx);
 
+char* mdb_dkey(MDB_val *key, char *buf);
+
 #ifdef __cplusplus
 }
 #endif

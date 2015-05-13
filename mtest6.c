@@ -28,15 +28,13 @@ char dkbuf[1024];
 
 int main(int argc,char * argv[])
 {
-	int i = 0, j = 0, rc;
+	int i = 0, rc;
 	MDB_env *env;
 	MDB_dbi dbi;
 	MDB_val key, data;
 	MDB_txn *txn;
 	MDB_stat mst;
 	MDB_cursor *cursor;
-	int count;
-	int *values;
 	long kval;
 	char *sval;
 
@@ -61,19 +59,19 @@ int main(int argc,char * argv[])
 	printf("Adding 12 values, should yield 3 splits\n");
 	for (i=0;i<12;i++) {
 		kval = i*5;
-		sprintf(sval, "%08x", kval);
+		sprintf(sval, "%08lx", kval);
 		(void)RES(MDB_KEYEXIST, mdb_cursor_put(cursor, &key, &data, MDB_NOOVERWRITE));
 	}
 	printf("Adding 12 more values, should yield 3 splits\n");
 	for (i=0;i<12;i++) {
 		kval = i*5+4;
-		sprintf(sval, "%08x", kval);
+		sprintf(sval, "%08lx", kval);
 		(void)RES(MDB_KEYEXIST, mdb_cursor_put(cursor, &key, &data, MDB_NOOVERWRITE));
 	}
 	printf("Adding 12 more values, should yield 3 splits\n");
 	for (i=0;i<12;i++) {
 		kval = i*5+1;
-		sprintf(sval, "%08x", kval);
+		sprintf(sval, "%08lx", kval);
 		(void)RES(MDB_KEYEXIST, mdb_cursor_put(cursor, &key, &data, MDB_NOOVERWRITE));
 	}
 	E(mdb_cursor_get(cursor, &key, &data, MDB_FIRST));
@@ -88,7 +86,9 @@ int main(int argc,char * argv[])
 	mdb_txn_commit(txn);
 
 #if 0
-	j=0;
+	int j=0;
+	int count = 333;
+	int *values = alloca(sizeof(int) * count);
 
 	for (i= count - 1; i > -1; i-= (rand()%5)) {
 		j++;
