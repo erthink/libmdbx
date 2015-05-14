@@ -2218,7 +2218,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp)
 	txnid_t oldest = 0, last = 0;
 	MDB_cursor_op op;
 	MDB_cursor m2;
-	int found_old = 0;
+	int found_old;
 	unsigned enought = env->me_maxfree_1pg / 2;
 
 	/* mp == NULL when mdb_freelist_save() force reclaim to
@@ -2249,6 +2249,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp)
 	const int lifo = (env->me_flags & MDB_LIFORECLAIM) != 0;
 
 oomkick_retry:;
+	found_old = 0;
 	for (op = MDB_FIRST;; op = lifo ? MDB_PREV : MDB_NEXT) {
 		MDB_val key, data;
 		MDB_node *leaf;
