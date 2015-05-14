@@ -1937,12 +1937,22 @@ mdb_find_oldest(MDB_env *env, int *laggard)
 }
 
 static int
-mdb_oomkick_laggard(MDB_env *env)
+mdb_oomkick(MDB_env *env)
 {
 	int reader, retry;
 	txnid_t snap, oldest = mdb_find_oldest(env, &reader);
-	if (reader < 0)
-		return 0;
+	MDB_meta* head = mdb_env_meta_head(env);
+	MDB_meta* tail = mdb_env_meta_flipflop(env, head);
+
+	if (META_IS_WEAK(head) && oldest == tail->mm_txnid) {
+		MDB_meta meta = *head;
+		mdb_assert(env, env->me_sync_pending > 0);
+		if (mdb_env_sync0(env, env->me_flags & MDB_WRITEMAP, &meta) == MDB_SUCCESS) {
+			snap = mdb_find_oldest(env, &reader);
+			if (oldest < snap)
+				return 1;
+		}
+	}
 
 	for(retry = 0; ; ++retry) {
 		MDB_reader *r;
@@ -1950,10 +1960,13 @@ mdb_oomkick_laggard(MDB_env *env)
 		pid_t pid;
 		int rc;
 
+		if (reader < 0)
+			return 0;
+
 		if (mdb_reader_check(env, NULL))
 			break;
 
-		snap = mdb_find_oldest(env, NULL);
+		snap = mdb_find_oldest(env, &reader);
 		if (oldest < snap)
 			return 1;
 
@@ -2249,7 +2262,7 @@ oomkick_retry:;
 	pgno = txn->mt_next_pgno;
 	if (pgno + num > env->me_maxpg) {
 		mdb_debug("DB size maxed out");
-		if ((mc->mc_flags & C_RECLAIMING) == 0 && mdb_oomkick_laggard(env))
+		if ((mc->mc_flags & C_RECLAIMING) == 0 && mdb_oomkick(env))
 			goto oomkick_retry;
 		rc = MDB_MAP_FULL;
 		goto fail;
