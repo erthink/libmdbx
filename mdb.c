@@ -4796,7 +4796,10 @@ mdb_env_close_ex(MDB_env *env, int dont_sync)
 	free(env);
 }
 
-/** Compare two items pointing at aligned size_t's or unsigned's */
+/** Compare two items pointing at aligned unsigned int's.
+ *
+ *	This is also set as #MDB_INTEGERDUP|#MDB_DUPFIXED's #MDB_dbx.%md_dcmp.
+ */
 static int
 mdb_cmp_int_a(const MDB_val *a, const MDB_val *b)
 {
