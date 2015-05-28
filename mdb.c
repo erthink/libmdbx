@@ -2705,16 +2705,11 @@ mdb_txn_renew0(MDB_txn *txn)
 {
 	MDB_env *env = txn->mt_env;
 	MDB_meta *meta;
-	unsigned i, nr;
+	unsigned i, nr, flags = txn->mt_flags;
 	uint16_t x;
 	int rc, new_notls = 0;
 
-	txn->mt_flags &= MDB_TXN_BEGIN_FLAGS;
-	if (txn->mt_flags & MDB_TXN_RDONLY) {
-		txn->mt_flags = MDB_TXN_RDONLY;
-		/* Setup db info */
-		txn->mt_numdbs = env->me_numdbs;
-		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
+	if ((flags &= MDB_TXN_RDONLY) != 0) {
 
 		MDB_reader *r = (env->me_flags & MDB_NOTLS)
 			? txn->mt_u.reader : pthread_getspecific(env->me_txkey);
@@ -2781,6 +2776,7 @@ mdb_txn_renew0(MDB_txn *txn)
 
 		txn->mt_txnid = r->mr_txnid;
 		txn->mt_u.reader = r;
+		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
 	} else {
 		/* Not yet touching txn == env->me_txn0, it may be active */
 		rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
@@ -2790,8 +2786,6 @@ mdb_txn_renew0(MDB_txn *txn)
 		meta = mdb_meta_head_w(env);
 		txn->mt_txnid = meta->mm_txnid;
 
-		/* Setup db info */
-		txn->mt_numdbs = env->me_numdbs;
 		txn->mt_txnid++;
 #if MDB_DEBUG
 		if (unlikely(txn->mt_txnid == mdb_debug_edge)) {
@@ -2802,7 +2796,6 @@ mdb_txn_renew0(MDB_txn *txn)
 							 "on/off edge (txn %zu)", txn->mt_txnid);
 		}
 #endif
-		txn->mt_flags = 0;
 		txn->mt_child = NULL;
 		txn->mt_loose_pgs = NULL;
 		txn->mt_loose_count = 0;
@@ -2820,6 +2813,10 @@ mdb_txn_renew0(MDB_txn *txn)
 		txn->mt_next_pgno = meta->mm_last_pg+1;
 	}
 
+	txn->mt_flags = flags;
+
+	/* Setup db info */
+	txn->mt_numdbs = env->me_numdbs;
 	for (i=2; i<txn->mt_numdbs; i++) {
 		x = env->me_dbflags[i];
 		txn->mt_dbs[i].md_flags = x & PERSISTENT_FLAGS;
