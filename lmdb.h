@@ -595,7 +595,8 @@ int  mdb_env_create(MDB_env **env);
 	 *		LIFO policy for reclaiming FreeDB records. This significantly reduce
 	 *		write IPOS in case MDB_NOSYNC with periodically checkpoints.
 	 * </ul>
-	 * @param[in] mode The UNIX permissions to set on created files.
+	 * @param[in] mode The UNIX permissions to set on created files and semaphores.
+	 * This parameter is ignored on Windows.
 	 * @return A non-zero error value on failure and 0 on success. Some possible
 	 * errors are:
 	 * <ul>
