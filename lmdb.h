@@ -734,8 +734,8 @@ int  mdb_env_sync(MDB_env *env, int force);
 	 *  on opening next time, and transactions since the last non-weak
 	 *  checkpoint (meta-page update) will rolledback for consistency guarantee.
 	 */
+void mdb_env_close(MDB_env *env);
 void mdb_env_close_ex(MDB_env *env, int dont_sync);
-#define mdb_env_close(env) mdb_env_close_ex(env, 0)
 
 	/** @brief Set environment flags.
 	 *

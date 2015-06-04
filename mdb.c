@@ -4777,6 +4777,12 @@ mdb_env_close0(MDB_env *env)
 }
 
 void ESECT
+mdb_env_close(MDB_env *env)
+{
+	mdb_env_close_ex(env, 0);
+}
+
+void ESECT
 mdb_env_close_ex(MDB_env *env, int dont_sync)
 {
 	MDB_page *dp;
