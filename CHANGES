@@ -35,6 +35,7 @@ LMDB 0.9.17 Release Engineering
 		Use ANSI apis on Windows (ITS#8069 - nothing for MDBX)
 		Use O_SYNC if O_DSYNC,MDB_DSYNC are not defined (ITS#7209 - nothing for MDBX)
 		Allow passing AR to make (ITS#8168 - already done for MDBX)
+		Allow passing mandir to make install (ITS#8169)
 
 LMDB 0.9.16 Release (2015/08/14)
 	Fix cursor EOF bug (ITS#8190)
