@@ -36,7 +36,7 @@
 #include "../../include/reopenldap.h"
 
 #ifndef MDB_DEBUG
-#	define MDB_DEBUG 1
+#	define MDB_DEBUG 0
 #endif
 
 #include <sys/types.h>

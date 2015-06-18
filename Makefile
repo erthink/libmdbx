@@ -23,7 +23,7 @@ THREADS = -pthread
 XCFLAGS ?= $(CFLAGS)
 OPT	= -O2 -g
 CFLAGS	:= $(THREADS) $(OPT) $(W) $(XCFLAGS)
-LDLIBS	=
+LDLIBS	= -lrt
 SOLIBS	=
 prefix	?= /usr/local
 
@@ -33,7 +33,7 @@ IHDRS	= lmdb.h
 ILIBS	= liblmdb.a liblmdb.so
 IPROGS	= mdb_stat mdb_copy mdb_dump mdb_load mdb_chk
 IDOCS	= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
-PROGS	= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6
+PROGS	= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
 all:	$(ILIBS) $(PROGS)
 
 install: $(ILIBS) $(IPROGS) $(IHDRS)
@@ -75,6 +75,7 @@ mtest3:	mtest3.o liblmdb.a
 mtest4:	mtest4.o liblmdb.a
 mtest5:	mtest5.o liblmdb.a
 mtest6:	mtest6.o liblmdb.a
+wbench:	wbench.o liblmdb.a
 
 mdb.o: mdb.c lmdb.h midl.h
 	$(CC) $(CFLAGS) $(CPPFLAGS) -c mdb.c
