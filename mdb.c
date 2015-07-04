@@ -2881,7 +2881,6 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 	if (env->me_flags & MDB_RDONLY & ~flags) /* write txn in RDONLY env */
 		return EACCES;
 
-	size = tsize = sizeof(MDB_txn);
 	if (parent) {
 		/* Nested transactions: Max 1 child, write txns only, no writemap */
 		flags |= parent->mt_flags;
@@ -2891,41 +2890,31 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 			return (parent->mt_flags & MDB_TXN_RDONLY) ? EINVAL : MDB_BAD_TXN;
 		}
 		/* Child txns save MDB_pgstate and use own copy of cursors */
-		size = tsize = sizeof(MDB_ntxn);
-		size += env->me_maxdbs * sizeof(MDB_cursor *);
-	} else if (!(flags & MDB_RDONLY)) {
+		size = env->me_maxdbs * (sizeof(MDB_db)+sizeof(MDB_cursor *)+1);
+		size += tsize = sizeof(MDB_ntxn);
+	} else if (flags & MDB_RDONLY) {
+		size = env->me_maxdbs * (sizeof(MDB_db)+1);
+		size += tsize = sizeof(MDB_txn);
+	} else {
 		/* Reuse preallocated write txn. However, do not touch it until
 		 * mdb_txn_renew0() succeeds, since it currently may be active.
 		 */
 		txn = env->me_txn0;
 		goto renew;
 	}
-	size += env->me_maxdbs * (sizeof(MDB_db)+1);
-
 	if ((txn = calloc(1, size)) == NULL) {
 		mdb_debug("calloc: %s", strerror(errno));
 		return ENOMEM;
 	}
 	txn->mt_dbs = (MDB_db *) ((char *)txn + tsize);
-	if (flags & MDB_RDONLY) {
-		txn->mt_dbflags = (unsigned char *)(txn->mt_dbs + env->me_maxdbs);
-		txn->mt_dbiseqs = env->me_dbiseqs;
-	} else {
-		txn->mt_cursors = (MDB_cursor **)(txn->mt_dbs + env->me_maxdbs);
-		if (parent) {
-			txn->mt_dbiseqs = parent->mt_dbiseqs;
-			txn->mt_dbflags = (unsigned char *)(txn->mt_cursors + env->me_maxdbs);
-		} else {
-			txn->mt_dbiseqs = (unsigned *)(txn->mt_cursors + env->me_maxdbs);
-			txn->mt_dbflags = (unsigned char *)(txn->mt_dbiseqs + env->me_maxdbs);
-		}
-		txn->mt_dbxs = env->me_dbxs;
-	}
+	txn->mt_dbflags = (unsigned char *)txn + size - env->me_maxdbs;
 	txn->mt_flags = flags;
 	txn->mt_env = env;
 
 	if (parent) {
 		unsigned i;
+		txn->mt_cursors = (MDB_cursor **)(txn->mt_dbs + env->me_maxdbs);
+		txn->mt_dbiseqs = parent->mt_dbiseqs;
 		txn->mt_u.dirty_list = malloc(sizeof(MDB_ID2)*MDB_IDL_UM_SIZE);
 		if (!txn->mt_u.dirty_list ||
 			!(txn->mt_free_pgs = mdb_midl_alloc(MDB_IDL_UM_MAX)))
@@ -2962,7 +2951,8 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 			rc = mdb_cursor_shadow(parent, txn);
 		if (rc)
 			mdb_txn_reset0(txn, "beginchild-fail");
-	} else {
+	} else { /* MDB_RDONLY */
+		txn->mt_dbiseqs = env->me_dbiseqs;
 renew:
 		rc = mdb_txn_renew0(txn);
 	}
@@ -2970,7 +2960,7 @@ renew:
 		if (txn != env->me_txn0)
 			free(txn);
 	} else {
-		txn->mt_flags |= flags;	/* for txn==me_txn0, no effect otherwise */
+		txn->mt_flags |= flags;	/* could not change txn=me_txn0 earlier */
 		*ret = txn;
 		mdb_debug("begin txn %zu%c %p on mdbenv %p, root page %zu",
 			txn->mt_txnid, (flags & MDB_RDONLY) ? 'r' : 'w',
