@@ -3570,7 +3570,7 @@ mdb_txn_commit(MDB_txn *txn)
 	unsigned i;
 	MDB_env	*env;
 
-	if (unlikely(txn == NULL || txn->mt_env == NULL))
+	if (unlikely(txn == NULL))
 		return EINVAL;
 
 	if (txn->mt_child) {
