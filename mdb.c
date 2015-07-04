@@ -1174,7 +1174,7 @@ static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int_a, mdb_cmp_int_na;
 /** @endcond */
 
 /** Return the library version info. */
-char *
+char * ESECT
 mdb_version(int *major, int *minor, int *patch)
 {
 	if (major) *major = MDB_VERSION_MAJOR;
@@ -1207,7 +1207,7 @@ static char *const mdb_errstr[] = {
 	"MDB_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
 };
 
-char *
+char * ESECT
 mdb_strerror(int err)
 {
 	int i;
@@ -1244,7 +1244,7 @@ static MDB_debug_func *mdb_debug_logger;
 
 	static void mdb_debug_log(int type, const char *function, int line,
 						  const char *fmt, ...);
-	static void
+	static void ESECT
 	mdb_assert_fail(MDB_env *env, const char *msg,
 		const char *func, int line)
 	{
@@ -1275,7 +1275,8 @@ static MDB_debug_func *mdb_debug_logger;
 		__assert_fail(msg, __FILE__, line, func)
 #endif /* MDB_DEBUG */
 
-int mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
+int ESECT
+mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
 	unsigned ret = mdb_runtime_flags;
 	if (flags != (int) MDB_DBG_DNT)
 		mdb_runtime_flags = flags;
@@ -1288,7 +1289,8 @@ int mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
 	return ret;
 }
 
-static void mdb_debug_log(int type, const char *function, int line,
+static void ESECT
+mdb_debug_log(int type, const char *function, int line,
 					  const char *fmt, ...)
 {
 	va_list args;
@@ -1983,7 +1985,7 @@ mdb_find_oldest(MDB_env *env, int *laggard)
 	return oldest;
 }
 
-static int
+static int ESECT
 mdb_oomkick(MDB_env *env)
 {
 	int reader, retry;
@@ -3804,7 +3806,7 @@ fail:
 	return rc;
 }
 
-int
+int ESECT
 mdb_env_set_syncbytes(MDB_env *env, size_t bytes) {
 	env->me_sync_threshold = bytes;
 	return env->me_map ? mdb_env_sync(env, 0) : 0;
@@ -4439,7 +4441,7 @@ mdb_hash_val(MDB_val *val, mdb_hash_t hval)
  */
 static const char mdb_a85[]= "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
 
-static void
+static void ESECT
 mdb_pack85(unsigned long l, char *out)
 {
 	int i;
@@ -4450,7 +4452,7 @@ mdb_pack85(unsigned long l, char *out)
 	}
 }
 
-static void
+static void ESECT
 mdb_hash_enc(MDB_val *val, char *encbuf)
 {
 	mdb_hash_t h = mdb_hash_val(val, MDB_HASH_INIT);
@@ -9207,7 +9209,8 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)
 	return rc;
 }
 
-int mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *arg)
+int ESECT
+mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *arg)
 {
 	if (!arg || !TXN_DBI_EXIST(txn, dbi, DB_VALID))
 		return EINVAL;
@@ -9517,7 +9520,8 @@ mdb_reader_check(MDB_env *env, int *dead)
 }
 
 /** As #mdb_reader_check(). rlocked = <caller locked the reader mutex>. */
-static int mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
+static int ESECT
+mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 {
 	pthread_mutex_t *rmutex = rlocked ? NULL : MDB_MUTEX(env, r);
 	unsigned i, j, rdrs;
@@ -9568,7 +9572,8 @@ static int mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 	return rc;
 }
 
-static int mdb_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc)
+static int ESECT
+mdb_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc)
 {
 #ifdef EOWNERDEAD
 	if (unlikely(rc == EOWNERDEAD)) {
@@ -9629,14 +9634,14 @@ static void mdb_mutex_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 	mdb_assert(env, rc == 0);
 }
 
-void
+void ESECT
 mdb_env_set_oomfunc(MDB_env *env, MDB_oom_func *oomfunc)
 {
 	if (env)
 		env->me_oom_func = oomfunc;
 }
 
-MDB_oom_func*
+MDB_oom_func* ESECT
 mdb_env_get_oomfunc(MDB_env *env)
 {
 	return env ? env->me_oom_func : NULL;
@@ -9785,7 +9790,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	return rc;
 }
 
-int mdb_env_pgwalk(MDB_txn *txn, MDB_pgwalk_func* visitor, void* user)
+int ESECT
+mdb_env_pgwalk(MDB_txn *txn, MDB_pgwalk_func* visitor, void* user)
 {
 	mdb_walk_ctx_t ctx;
 	int rc;
