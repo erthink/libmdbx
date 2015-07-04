@@ -4637,6 +4637,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
 		rc = ENOMEM;
 		goto leave;
 	}
+	env->me_dbxs[FREE_DBI].md_cmp = mdb_cmp_int_a; /* aligned MDB_INTEGERKEY */
 
 	/* For RDONLY, get lockfile after we know datafile exists */
 	if (!(flags & MDB_RDONLY)) {
@@ -4814,7 +4815,7 @@ mdb_cmp_int_a(const MDB_val *a, const MDB_val *b)
 	mdb_assert(NULL, a->mv_size == b->mv_size);
 	mdb_assert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(int));
 
-	if (sizeof(int) != sizeof(size_t) && a->mv_size == sizeof(size_t))
+	if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
 		return (*(size_t *)a->mv_data < *(size_t *)b->mv_data) ? -1 :
 			*(size_t *)a->mv_data > *(size_t *)b->mv_data;
 
@@ -4833,7 +4834,7 @@ mdb_cmp_int_na(const MDB_val *a, const MDB_val *b)
 	mdb_assert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(short)
 				&& 0 == (uintptr_t) b->mv_data % sizeof(short));
 #ifdef MISALIGNED_OK
-	if (sizeof(int) != sizeof(size_t) && a->mv_size == sizeof(size_t)) {
+	if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t))) {
 		return (*(size_t *)a->mv_data < *(size_t *)b->mv_data) ? -1 :
 			*(size_t *)a->mv_data > *(size_t *)b->mv_data;
 	}
@@ -9123,10 +9124,6 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)
 	int rc, dbflag, exact;
 	unsigned unused = 0, seq;
 	size_t len;
-
-	if (txn->mt_dbxs[FREE_DBI].md_cmp == NULL) {
-		mdb_default_cmp(txn, FREE_DBI);
-	}
 
 	if ((flags & VALID_FLAGS) != flags)
 		return EINVAL;
