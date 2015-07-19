@@ -2849,12 +2849,16 @@ mdb_txn_renew0(MDB_txn *txn)
 	txn->mt_dbflags[MAIN_DBI] = DB_VALID|DB_USRVALID;
 	txn->mt_dbflags[FREE_DBI] = DB_VALID;
 
-	if (unlikely(env->me_maxpg < txn->mt_next_pgno)) {
-		mdb_txn_end(txn, new_notls /*0 or MDB_END_SLOT*/ | MDB_END_FAIL_BEGIN);
-		return MDB_MAP_RESIZED;
+	if (unlikely(env->me_flags & MDB_FATAL_ERROR)) {
+		mdb_debug("environment had fatal error, must shutdown!");
+		rc = MDB_PANIC;
+	} else if (unlikely(env->me_maxpg < txn->mt_next_pgno)) {
+		rc = MDB_MAP_RESIZED;
+	} else {
+		return MDB_SUCCESS;
 	}
-
-	return MDB_SUCCESS;
+	mdb_txn_end(txn, new_notls /*0 or MDB_END_SLOT*/ | MDB_END_FAIL_BEGIN);
+	return rc;
 }
 
 int
@@ -2864,11 +2868,6 @@ mdb_txn_renew(MDB_txn *txn)
 
 	if (unlikely(!txn || !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY|MDB_TXN_FINISHED)))
 		return EINVAL;
-
-	if (unlikely(txn->mt_env->me_flags & MDB_FATAL_ERROR)) {
-		mdb_debug("environment had fatal error, must shutdown!");
-		return MDB_PANIC;
-	}
 
 	rc = mdb_txn_renew0(txn);
 	if (rc == MDB_SUCCESS) {
@@ -2889,11 +2888,7 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 	flags &= MDB_TXN_BEGIN_FLAGS;
 	flags |= env->me_flags & MDB_WRITEMAP;
 
-	if (env->me_flags & MDB_FATAL_ERROR) {
-		mdb_debug("environment had fatal error, must shutdown!");
-		return MDB_PANIC;
-	}
-	if (env->me_flags & MDB_RDONLY & ~flags) /* write txn in RDONLY env */
+	if (unlikely(env->me_flags & MDB_RDONLY & ~flags)) /* write txn in RDONLY env */
 		return EACCES;
 
 	if (parent) {
