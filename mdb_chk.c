@@ -68,7 +68,8 @@ unsigned userdb_count;
 unsigned verbose = 1, quiet;
 size_t pgcount;
 
-static void print(const char* msg, ...) {
+static void __attribute__ ((format (printf, 1, 2)))
+print(const char* msg, ...) {
 	if (! quiet) {
 		va_list args;
 
@@ -79,7 +80,8 @@ static void print(const char* msg, ...) {
 	}
 }
 
-static void error(const char* msg, ...) {
+static void __attribute__ ((format (printf, 1, 2)))
+error(const char* msg, ...) {
 	if (! quiet) {
 		va_list args;
 
@@ -339,7 +341,7 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 					print(" %s", dbflags[i].name);
 		}
 		print(" (0x%x)\n", flags);
-		print(" - entries %zu\n", ms.ms_psize, ms.ms_entries);
+		print(" - page size %u, entries %zu\n", ms.ms_psize, ms.ms_entries);
 		print(" - b-tree depth %u, pages: branch %zu, leaf %zu, overflow %zu\n",
 			  ms.ms_depth, ms.ms_branch_pages, ms.ms_leaf_pages, ms.ms_overflow_pages);
 	}
