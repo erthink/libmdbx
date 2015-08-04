@@ -334,8 +334,8 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		if (! flags)
 			print(" none");
 		else {
-			if (flags & MDB_DUPSORT)
-				print(" duplicates");
+			/* if (flags & MDB_DUPSORT)
+				print(" duplicates"); */
 			for (i=0; dbflags[i].bit; i++)
 				if (flags & dbflags[i].bit)
 					print(" %s", dbflags[i].name);
@@ -388,6 +388,11 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 				++dups;
 				if (! (flags & MDB_DUPSORT))
 					problem_add(record_count, "duplicated entries", NULL);
+				else if (flags & MDB_INTEGERDUP) {
+					cmp = mdb_dcmp(txn, dbi, &prev_data, &data);
+					if (cmp > 0)
+						problem_add(record_count, "broken ordering of multi-values", NULL);
+				}
 			}
 		} else {
 			if (flags & MDB_INTEGERKEY)
