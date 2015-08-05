@@ -9727,6 +9727,10 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	int rc;
 	unsigned i;
 
+	/* Empty DB, nothing to do */
+	if (pg == P_INVALID)
+		return MDB_SUCCESS;
+
 	if (deep < 2) {
 		if ((rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL)) != 0)
 			return rc;
@@ -9735,10 +9739,6 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		if (rc)
 			return rc;
 	}
-
-	/* Empty DB, nothing to do */
-	if (pg == P_INVALID)
-		return MDB_SUCCESS;
 
 	mc.mc_snum = 1;
 	mc.mc_top = 0;
