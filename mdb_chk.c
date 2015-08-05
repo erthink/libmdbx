@@ -57,7 +57,10 @@ static void signal_hanlder( int sig )
 
 const char* dbi_names[MAX_DBI] = { "@gc" };
 size_t dbi_pages[MAX_DBI];
+size_t dbi_payload_bytes[MAX_DBI];
 short *pagemap;
+size_t pgcount;
+size_t total_payload_bytes, total_unused_bytes;
 
 MDB_env *env;
 MDB_txn *txn;
@@ -65,8 +68,7 @@ MDB_envinfo info;
 MDB_stat stat;
 size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
 unsigned userdb_count;
-unsigned verbose = 1, quiet;
-size_t pgcount;
+unsigned verbose, quiet;
 
 static void __attribute__ ((format (printf, 1, 2)))
 print(const char* msg, ...) {
@@ -176,7 +178,8 @@ static size_t problems_pop(struct problem* list) {
 	return total;
 }
 
-static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi, char type)
+static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
+					 char type, int payload_bytes, int header_bytes)
 {
 	if (pgnumber) {
 		pgcount += pgnumber;
@@ -184,6 +187,19 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		int index = pagemap_lookup_dbi(dbi);
 		if (index < 0)
 			return ENOMEM;
+
+		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
+			problem_add(pgno, "wrong header-length", "(%zu < %i < %zu)",
+				sizeof(long), header_bytes, header_bytes >= stat.ms_psize - sizeof(long));
+		else if (payload_bytes < 1)
+			problem_add(pgno, "empty page",  "(payload %zu bytes)", payload_bytes);
+		else if (payload_bytes + header_bytes > pgnumber * stat.ms_psize)
+			problem_add(pgno, "overflowed page",  "(%zu + %zu > %zu)",
+						payload_bytes, header_bytes, pgnumber * stat.ms_psize);
+		else {
+			dbi_payload_bytes[index] += payload_bytes + header_bytes;
+			total_payload_bytes += payload_bytes + header_bytes;
+		}
 
 		do {
 			if (pgno >= lastpgno)
@@ -341,9 +357,11 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 					print(" %s", dbflags[i].name);
 		}
 		print(" (0x%x)\n", flags);
-		print(" - page size %u, entries %zu\n", ms.ms_psize, ms.ms_entries);
-		print(" - b-tree depth %u, pages: branch %zu, leaf %zu, overflow %zu\n",
-			  ms.ms_depth, ms.ms_branch_pages, ms.ms_leaf_pages, ms.ms_overflow_pages);
+		if (verbose > 1) {
+			print(" - page size %u, entries %zu\n", ms.ms_psize, ms.ms_entries);
+			print(" - b-tree depth %u, pages: branch %zu, leaf %zu, overflow %zu\n",
+				  ms.ms_depth, ms.ms_branch_pages, ms.ms_leaf_pages, ms.ms_overflow_pages);
+		}
 	}
 
 	rc = mdb_cursor_open(txn, dbi, &mc);
@@ -394,7 +412,7 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 						problem_add(record_count, "broken ordering of multi-values", NULL);
 				}
 			}
-		} else {
+		} else if (verbose) {
 			if (flags & MDB_INTEGERKEY)
 				print(" - fixed key-size %zu\n", key.mv_size );
 			if (flags & (MDB_INTEGERDUP | MDB_DUPFIXED))
@@ -416,19 +434,19 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	if (rc == MDB_NOTFOUND)
 		rc = MDB_SUCCESS;
 
-	if (record_count != ms.ms_entries )
+	if (record_count != ms.ms_entries)
 		problem_add(record_count, "differentent number of entries",
 				" (%zu != %zu)", record_count, ms.ms_entries);
 bailout:
 	problems_count = problems_pop(saved_list);
 	if (! silent && verbose) {
-		print(" - summary: %u entries, %u dups, %zu key's bytes, %zu data's bytes, %zu problems\n",
+		print(" - summary: %u records, %u dups, %zu key's bytes, %zu data's bytes, %zu problems\n",
 			  record_count, dups, key_bytes, data_bytes, problems_count);
 	}
 
 	mdb_cursor_close(mc);
 	mdb_dbi_close(env, dbi);
-	return rc;
+	return rc ? rc : problems_count;
 }
 
 static void usage(char *prog)
@@ -458,7 +476,7 @@ int main(int argc, char *argv[])
 	char *prog = argv[0];
 	char *envname;
 	int envflags = 0;
-	long problems_maindb = 0, problems_freedb = 0, problems_deep = 0;
+	long problems_maindb = 0, problems_freedb = 0;
 	int problems_meta = 0;
 	size_t n;
 
@@ -557,7 +575,7 @@ int main(int argc, char *argv[])
 		if (info.me_mapaddr)
 			print(" - mapaddr %p\n", info.me_mapaddr);
 		print(" - pagesize %u, max keysize %zu, max readers %u\n",
-			  stat.ms_psize, maxkeysize, info.me_maxreaders);
+				  stat.ms_psize, maxkeysize, info.me_maxreaders);
 		print(" - transactions: last %zu, bottom %zu, lag reading %zi\n", info.me_last_txnid,
 			  info.me_tail_txnid, info.me_last_txnid - info.me_tail_txnid);
 
@@ -609,14 +627,36 @@ int main(int argc, char *argv[])
 	for( n = 0; n < lastpgno; ++n)
 		if (! pagemap[n])
 			dbi_pages[0] += 1;
+
 	if (verbose) {
-		print(" - dbi pages: %zu total", pgcount);
+		size_t total_page_bytes = pgcount * stat.ms_psize;
+		print(" - dbi pages: %zu total",
+			  pgcount);
 		if (verbose > 1)
 			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i)
 				print(", %s %zu", dbi_names[i], dbi_pages[i]);
 		print(", %s %zu\n", dbi_names[0], dbi_pages[0]);
+		if (verbose > 1) {
+			print(" - space info: total %zu bytes, payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
+				total_page_bytes,
+				total_payload_bytes * 100.0 / total_page_bytes, total_payload_bytes,
+				(total_page_bytes - total_payload_bytes) * 100.0 / total_page_bytes,
+				total_page_bytes - total_payload_bytes);
+			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i) {
+				size_t dbi_bytes = dbi_pages[i] * stat.ms_psize;
+				print("     %s: %zu total, payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
+					dbi_names[i], dbi_bytes,
+					dbi_payload_bytes[i] * 100.0 / dbi_bytes, dbi_payload_bytes[i],
+					(dbi_bytes - dbi_payload_bytes[i]) * 100.0 / dbi_bytes,
+					dbi_bytes - dbi_payload_bytes[i]);
+			}
+		}
+		print(" - summary: average fill %.2f%%, %zu problems\n",
+			total_payload_bytes * 100.0 / total_page_bytes, total_problems);
 	}
 
+	if (! verbose)
+		print("Iterating DBIs...\n");
 	problems_maindb = process_db(-1, /* MAIN_DBI */ NULL, NULL, 0);
 	problems_freedb = process_db(0 /* FREE_DBI */, "free", handle_freedb, 0);
 
@@ -655,7 +695,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (problems_maindb == 0 && problems_freedb == 0)
-		problems_deep = process_db(-1, NULL, handle_maindb, 1);
+		process_db(-1, NULL, handle_maindb, 1);
 
 	mdb_txn_abort(txn);
 
@@ -670,10 +710,12 @@ bailout:
 	free(pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
-	if (problems_meta || problems_maindb || problems_freedb)
-		return EXIT_FAILURE + 1;
-	if (problems_deep)
+	if (total_problems) {
+		print("Total %zu error(s) is detected.\n", total_problems);
+		if (problems_meta || problems_maindb || problems_freedb)
+			return EXIT_FAILURE + 1;
 		return EXIT_FAILURE;
+	}
 	print("No error is detected.\n");
 	return EXIT_SUCCESS;
 }

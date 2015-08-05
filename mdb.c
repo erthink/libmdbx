@@ -9728,7 +9728,10 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	unsigned i;
 
 	if (deep < 2) {
-		rc = ctx->mw_visitor(pg, 0, ctx->mw_user, dbi, 'R');
+		if ((rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL)) != 0)
+			return rc;
+		rc = ctx->mw_visitor(pg, 0, ctx->mw_user, dbi, 'R',
+			ctx->mw_txn->mt_env->me_psize - PAGEHDRSZ - SIZELEFT(mp), PAGEHDRSZ);
 		if (rc)
 			return rc;
 	}
@@ -9748,7 +9751,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	for (mp = mc.mc_pg[mc.mc_top]; IS_BRANCH(mp); ) {
 		MDB_node	*node;
 
-		rc = ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, 'B');
+		rc = ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, 'B',
+			ctx->mw_txn->mt_env->me_psize - PAGEHDRSZ - SIZELEFT(mp), PAGEHDRSZ);
 		if (rc)
 			return rc;
 
@@ -9760,7 +9764,6 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		mdb_debug("found index 0 to page %zu", NODEPGNO(NODEPTR(mp, 0)));
 
 		node = NODEPTR(mp, 0);
-
 		if ((rc = mdb_page_get(mc.mc_txn, NODEPGNO(node), &mp, NULL)) != 0)
 			return rc;
 
@@ -9779,7 +9782,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	mc.mc_flags |= C_INITIALIZED;
 	mc.mc_flags &= ~C_EOF;
 
-	rc = ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, 'L');
+	rc = ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, 'L',
+		ctx->mw_txn->mt_env->me_psize - PAGEHDRSZ - SIZELEFT(mp), PAGEHDRSZ);
 	if (rc)
 		return rc;
 
@@ -9800,7 +9804,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 						rc = mdb_page_get(ctx->mw_txn, *pg, &omp, NULL);
 						if (rc)
 							return rc;
-						rc = ctx->mw_visitor(*pg, omp->mp_pages, ctx->mw_user, dbi, 'L');
+						rc = ctx->mw_visitor(*pg, omp->mp_pages, ctx->mw_user, dbi, 'L',
+							ctx->mw_txn->mt_env->me_psize - PAGEHDRSZ - SIZELEFT(mp), PAGEHDRSZ);
 						if (rc)
 							return rc;
 					} else if (ni->mn_flags & F_SUBDATA) {
@@ -9828,7 +9833,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 					rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL);
 					if (rc)
 						return rc;
-					rc = ctx->mw_visitor(pg, 1, ctx->mw_user, dbi, IS_BRANCH(mp) ? 'B' : 'L');
+					rc = ctx->mw_visitor(pg, 1, ctx->mw_user, dbi, IS_BRANCH(mp) ? 'B' : 'L',
+							ctx->mw_txn->mt_env->me_psize - PAGEHDRSZ - SIZELEFT(mp), PAGEHDRSZ);
 					if (rc)
 						return rc;
 					mc.mc_top++;
@@ -9862,13 +9868,13 @@ mdb_env_pgwalk(MDB_txn *txn, MDB_pgwalk_func* visitor, void* user)
 	ctx.mw_user = user;
 	ctx.mw_visitor = visitor;
 
-	rc = visitor(0, 2, user, "meta", 'M');
+	rc = visitor(0, 2, user, "meta", 'M', sizeof(MDB_meta), PAGEHDRSZ);
 	if (! rc)
 		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0, 0);
 	if (! rc)
 		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0, 0);
 	if (! rc)
-		rc = visitor(P_INVALID, 0, user, NULL, 0);
+		rc = visitor(P_INVALID, 0, user, NULL, 0, -1, 0);
 	return rc;
 }
 
