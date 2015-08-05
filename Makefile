@@ -47,13 +47,13 @@ clean:
 
 test:	all
 	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
-		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdb_chk testdb \
-		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdb_chk testdb \
-		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdb_chk testdb \
-		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdb_chk testdb \
-		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdb_chk testdb \
-		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdb_chk testdb \
-		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdb_chk testdb \
+		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdb_chk -v testdb \
 		&& echo "*** LMDB-TESTs - all done"
 
 liblmdb.a:	mdb.o midl.o
