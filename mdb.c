@@ -1935,6 +1935,7 @@ static MDB_meta* mdb_meta_head_w(MDB_env *env) {
 	if (likely(b->mm_txnid == head_txnid))
 		return b;
 
+	mdb_debug("me_txns->mti_txnid not match meta-pages");
 	mdb_assert(env, head_txnid == a->mm_txnid || head_txnid == b->mm_txnid);
 	env->me_flags |= MDB_FATAL_ERROR;
 	return a;
@@ -4705,7 +4706,7 @@ mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
 	}
 
 #if MDB_DEBUG
-	{
+	if (rc == MDB_SUCCESS) {
 		MDB_meta *meta = mdb_meta_head_r(env);
 		MDB_db *db = &meta->mm_dbs[MAIN_DBI];
 		int toggle = ((char*) meta == PAGEDATA(env->me_map)) ? 0 : 1;
