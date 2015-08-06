@@ -63,7 +63,7 @@ size_t pgcount;
 size_t total_payload_bytes, total_unused_bytes;
 
 MDB_env *env;
-MDB_txn *txn;
+MDB_txn *txn, *locktxn;
 MDB_envinfo info;
 MDB_stat stat;
 size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
@@ -453,7 +453,12 @@ bailout:
 
 static void usage(char *prog)
 {
-	fprintf(stderr, "usage: %s dbpath [-V] [-v] [-n] [-q]\n", prog);
+	fprintf(stderr, "usage: %s dbpath [-V] [-v] [-n] [-q] [-w]\n"
+			"  -V\tshow version\n"
+			"  -v\tmore verbose, could be used multiple times\n"
+			"  -n\tNOSUBDIR mode for open\n"
+			"  -q\tbe quiet\n"
+			"  -w\tstart write-txn to lock db\n", prog);
 	exit(EXIT_FAILURE);
 }
 
@@ -477,7 +482,7 @@ int main(int argc, char *argv[])
 	int i, rc;
 	char *prog = argv[0];
 	char *envname;
-	int envflags = 0;
+	int envflags = MDB_RDONLY;
 	long problems_maindb = 0, problems_freedb = 0;
 	int problems_meta = 0;
 	size_t n;
@@ -486,11 +491,7 @@ int main(int argc, char *argv[])
 		usage(prog);
 	}
 
-	/* -n: use NOSUBDIR flag on env_open
-	 * -V: print version and exit
-	 * (default) dump only the main DB
-	 */
-	while ((i = getopt(argc, argv, "Vvqn")) != EOF) {
+	while ((i = getopt(argc, argv, "Vvqnw")) != EOF) {
 		switch(i) {
 		case 'V':
 			printf("%s\n", MDB_VERSION_STRING);
@@ -504,6 +505,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'n':
 			envflags |= MDB_NOSUBDIR;
+			break;
+		case 'w':
+			envflags &= ~MDB_RDONLY;
 			break;
 		default:
 			usage(prog);
@@ -523,7 +527,8 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_hanlder);
 
 	envname = argv[optind];
-	print("Running mdb_chk for '%s'...\n", envname);
+	print("Running mdb_chk for '%s' in %s mode...\n",
+		  envname, (envflags & MDB_RDONLY) ? "read-only" : "write-lock");
 
 	rc = mdb_env_create(&env);
 	if (rc) {
@@ -540,10 +545,24 @@ int main(int argc, char *argv[])
 
 	mdb_env_set_maxdbs(env, 3);
 
-	rc = mdb_env_open(env, envname, envflags | MDB_RDONLY, 0664);
+	rc = mdb_env_open(env, envname, envflags, 0664);
 	if (rc) {
 		error("mdb_env_open failed, error %d %s\n", rc, mdb_strerror(rc));
 		goto bailout;
+	}
+
+	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
+	if (rc) {
+		error("mdb_txn_begin(read-only) failed, error %d %s\n", rc, mdb_strerror(rc));
+		goto bailout;
+	}
+
+	if (! (envflags & MDB_RDONLY)) {
+		rc = mdb_txn_begin(env, NULL, 0, &locktxn);
+		if (rc) {
+			error("mdb_txn_begin(lock-write) failed, error %d %s\n", rc, mdb_strerror(rc));
+			goto bailout;
+		}
 	}
 
 	rc = mdb_env_info(env, &info);
@@ -612,12 +631,6 @@ int main(int argc, char *argv[])
 		&& info.me_meta2_txnid != info.me_last_txnid) {
 		print(" - meta-2 txn-id mismatch\n");
 		++problems_meta;
-	}
-
-	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
-	if (rc) {
-		error("mdb_txn_begin failed, error %d %s\n", rc, mdb_strerror(rc));
-		goto bailout;
 	}
 
 	print("Walking b-tree...\n");
@@ -700,6 +713,8 @@ int main(int argc, char *argv[])
 		process_db(-1, NULL, handle_maindb, 1);
 
 	mdb_txn_abort(txn);
+	if (locktxn)
+		mdb_txn_abort(locktxn);
 
 	if (! userdb_count && verbose)
 		print("%s: %s does not contain multiple databases\n", prog, envname);
