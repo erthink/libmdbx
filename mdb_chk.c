@@ -70,6 +70,15 @@ size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
 unsigned userdb_count;
 unsigned verbose, quiet;
 
+struct problem {
+	struct problem* pr_next;
+	size_t count;
+	const char* caption;
+};
+
+struct problem* problems_list;
+size_t total_problems;
+
 static void __attribute__ ((format (printf, 1, 2)))
 print(const char* msg, ...) {
 	if (! quiet) {
@@ -84,6 +93,8 @@ print(const char* msg, ...) {
 
 static void __attribute__ ((format (printf, 1, 2)))
 error(const char* msg, ...) {
+	total_problems++;
+
 	if (! quiet) {
 		va_list args;
 
@@ -93,15 +104,6 @@ error(const char* msg, ...) {
 		va_end(args);
 	}
 }
-
-struct problem {
-	struct problem* pr_next;
-	size_t count;
-	const char* caption;
-};
-
-struct problem* problems_list;
-size_t total_problems;
 
 static int pagemap_lookup_dbi(const char* dbi) {
 	static int last;
@@ -570,7 +572,7 @@ int main(int argc, char *argv[])
 		const char sf[] = "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
 		for(i = 0; sf[i+1] && info.me_mapsize / k > 1000.0; ++i)
 			k *= 1024;
-		print(" - map size %zu (%.1f%cb)\n", info.me_mapsize,
+		print(" - map size %zu (%.2f %cb)\n", info.me_mapsize,
 			  info.me_mapsize / k, sf[i]);
 		if (info.me_mapaddr)
 			print(" - mapaddr %p\n", info.me_mapaddr);
@@ -601,14 +603,14 @@ int main(int argc, char *argv[])
 	if (! meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 			info.me_meta2_txnid, info.me_meta2_sign)
 		&& info.me_meta1_txnid != info.me_last_txnid) {
-		print(" - meta1 txn-id mismatch\n");
+		print(" - meta-1 txn-id mismatch\n");
 		++problems_meta;
 	}
 
 	if (! meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 			info.me_meta1_txnid, info.me_meta1_sign)
 		&& info.me_meta2_txnid != info.me_last_txnid) {
-		print(" - meta2 txn-id mismatch\n");
+		print(" - meta-2 txn-id mismatch\n");
 		++problems_meta;
 	}
 
@@ -710,6 +712,7 @@ bailout:
 	free(pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
+	total_problems += problems_meta;
 	if (total_problems) {
 		print("Total %zu error(s) is detected.\n", total_problems);
 		if (problems_meta || problems_maindb || problems_freedb)
