@@ -3062,9 +3062,7 @@ static void
 mdb_txn_end(MDB_txn *txn, unsigned mode)
 {
 	MDB_env	*env = txn->mt_env;
-#if MDB_DEBUG
 	static const char *const names[] = MDB_END_NAMES;
-#endif
 
 	/* Export or close DBI handles opened in this txn */
 	mdb_dbis_update(txn, mode & MDB_END_UPDATE);
