@@ -566,18 +566,18 @@ int main(int argc, char *argv[])
 	if (verbose)
 		print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
 
-	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
-	if (rc) {
-		error("mdb_txn_begin(read-only) failed, error %d %s\n", rc, mdb_strerror(rc));
-		goto bailout;
-	}
-
 	if (! (envflags & MDB_RDONLY)) {
 		rc = mdb_txn_begin(env, NULL, 0, &locktxn);
 		if (rc) {
 			error("mdb_txn_begin(lock-write) failed, error %d %s\n", rc, mdb_strerror(rc));
 			goto bailout;
 		}
+	}
+
+	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
+	if (rc) {
+		error("mdb_txn_begin(read-only) failed, error %d %s\n", rc, mdb_strerror(rc));
+		goto bailout;
 	}
 
 	rc = mdb_env_info(env, &info);
@@ -635,19 +635,35 @@ int main(int argc, char *argv[])
 	}
 
 	if (exclusive > 1) {
+		if (verbose)
+			print(" - perform full check last-txn-id with meta-pages\n");
+
 		if (! meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 				info.me_meta2_txnid, info.me_meta2_sign)
 			&& info.me_meta1_txnid != info.me_last_txnid) {
-			print(" - meta-1 txn-id mismatch\n");
+			print(" - meta-1 txn-id mismatch last-txn-id (%zi != %zi)\n",
+				  info.me_meta1_txnid, info.me_last_txnid);
 			++problems_meta;
 		}
 
 		if (! meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 				info.me_meta1_txnid, info.me_meta1_sign)
 			&& info.me_meta2_txnid != info.me_last_txnid) {
-			print(" - meta-2 txn-id mismatch\n");
+			print(" - meta-2 txn-id mismatch last-txn-id (%zi != %zi)\n",
+				  info.me_meta2_txnid, info.me_last_txnid);
 			++problems_meta;
 		}
+	} else if (locktxn) {
+		if (verbose)
+			print(" - perform lite check last-txn-id with meta-pages (not a monopolistic mode)\n");
+		size_t last = (info.me_meta2_txnid > info.me_meta1_txnid) ? info.me_meta2_txnid : info.me_meta1_txnid;
+		if (last != info.me_last_txnid) {
+			print(" - last-meta mismatch last-txn-id (%zi != %zi)\n",
+				  last, info.me_last_txnid);
+			++problems_meta;
+		}
+	} else if (verbose) {
+		print(" - skip check last-txn-id with meta-pages (monopolistic or write-lock mode only)\n");
 	}
 
 	print("Walking b-tree...\n");
@@ -662,8 +678,7 @@ int main(int argc, char *argv[])
 
 	if (verbose) {
 		size_t total_page_bytes = pgcount * stat.ms_psize;
-		print(" - dbi pages: %zu total",
-			  pgcount);
+		print(" - dbi pages: %zu total", pgcount);
 		if (verbose > 1)
 			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i)
 				print(", %s %zu", dbi_names[i], dbi_pages[i]);
@@ -718,12 +733,15 @@ int main(int argc, char *argv[])
 	}
 
 	if (problems_maindb == 0 && problems_freedb == 0) {
-		if (pgcount != lastpgno - freedb_pages) {
-			error("used pages mismatch (%zu != %zu)\n", pgcount, lastpgno - freedb_pages);
-		}
-
-		if (dbi_pages[0] != freedb_pages) {
-			error("gc pages mismatch (%zu != %zu)\n", dbi_pages[0], freedb_pages);
+		if (exclusive || locktxn) {
+			if (pgcount != lastpgno - freedb_pages) {
+				error("used pages mismatch (%zu != %zu)\n", pgcount, lastpgno - freedb_pages);
+			}
+			if (dbi_pages[0] != freedb_pages) {
+				error("gc pages mismatch (%zu != %zu)\n", dbi_pages[0], freedb_pages);
+			}
+		} else if (verbose) {
+			print(" - skip check used and gc pages (monopolistic or write-lock mode only)\n");
 		}
 
 		if (! process_db(-1, NULL, handle_maindb, 1)) {
@@ -733,10 +751,10 @@ int main(int argc, char *argv[])
 	}
 
 bailout:
-	if (locktxn)
-		mdb_txn_abort(locktxn);
 	if (txn)
 		mdb_txn_abort(txn);
+	if (locktxn)
+		mdb_txn_abort(locktxn);
 	mdb_env_close(env);
 	free(pagemap);
 	if (rc)
