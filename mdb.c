@@ -2575,8 +2575,12 @@ mdb_env_sync(MDB_env *env, int force)
 	int rc;
 	pthread_mutex_t *mutex;
 	MDB_meta *head;
-	unsigned flags = env->me_flags & ~MDB_NOMETASYNC;
+	unsigned flags;
 
+	if (unlikely(! env || ! env->me_txns))
+		return EINVAL;
+
+	flags = env->me_flags & ~MDB_NOMETASYNC;
 	if (unlikely(flags & (MDB_RDONLY | MDB_FATAL_ERROR)))
 		return EACCES;
 

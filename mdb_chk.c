@@ -755,7 +755,8 @@ bailout:
 		mdb_txn_abort(txn);
 	if (locktxn)
 		mdb_txn_abort(locktxn);
-	mdb_env_close(env);
+	if (env)
+		mdb_env_close(env);
 	free(pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
