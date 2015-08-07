@@ -61,6 +61,7 @@ size_t dbi_payload_bytes[MAX_DBI];
 short *pagemap;
 size_t pgcount;
 size_t total_payload_bytes, total_unused_bytes;
+int exclusive = 2;
 
 MDB_env *env;
 MDB_txn *txn, *locktxn;
@@ -458,7 +459,8 @@ static void usage(char *prog)
 			"  -v\tmore verbose, could be used multiple times\n"
 			"  -n\tNOSUBDIR mode for open\n"
 			"  -q\tbe quiet\n"
-			"  -w\tstart write-txn to lock db\n", prog);
+			"  -w\tstart write-txn to lock db\n"
+			"  -c\tforce cooperative mode (don't try exclusive)\n", prog);
 	exit(EXIT_FAILURE);
 }
 
@@ -474,7 +476,7 @@ const char* meta_synctype(size_t sign) {
 }
 
 int meta_lt(size_t txn1, size_t sign1, size_t txn2, size_t sign2) {
-	return ((sign1 > 1) == (sign2 > 1)) ? txn1 < txn2 : sign2 > 1;
+	return ((sign1 > 1) == (sign2 > 1)) ? txn1 < txn2 : txn2 && sign2 > 1;
 }
 
 int main(int argc, char *argv[])
@@ -491,7 +493,7 @@ int main(int argc, char *argv[])
 		usage(prog);
 	}
 
-	while ((i = getopt(argc, argv, "Vvqnw")) != EOF) {
+	while ((i = getopt(argc, argv, "Vvqnwc")) != EOF) {
 		switch(i) {
 		case 'V':
 			printf("%s\n", MDB_VERSION_STRING);
@@ -508,6 +510,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'w':
 			envflags &= ~MDB_RDONLY;
+			break;
+		case 'c':
+			exclusive = 0;
 			break;
 		default:
 			usage(prog);
@@ -545,11 +550,13 @@ int main(int argc, char *argv[])
 
 	mdb_env_set_maxdbs(env, 3);
 
-	rc = mdb_env_open(env, envname, envflags, 0664);
+	rc = mdb_env_open_ex(env, envname, envflags, 0664, &exclusive);
 	if (rc) {
 		error("mdb_env_open failed, error %d %s\n", rc, mdb_strerror(rc));
 		goto bailout;
 	}
+	if (verbose)
+		print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
 
 	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
 	if (rc) {
@@ -619,18 +626,20 @@ int main(int argc, char *argv[])
 			  info.me_meta2_txnid, info.me_last_txnid);
 	}
 
-	if (! meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
-			info.me_meta2_txnid, info.me_meta2_sign)
-		&& info.me_meta1_txnid != info.me_last_txnid) {
-		print(" - meta-1 txn-id mismatch\n");
-		++problems_meta;
-	}
+	if (exclusive > 1) {
+		if (! meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
+				info.me_meta2_txnid, info.me_meta2_sign)
+			&& info.me_meta1_txnid != info.me_last_txnid) {
+			print(" - meta-1 txn-id mismatch\n");
+			++problems_meta;
+		}
 
-	if (! meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
-			info.me_meta1_txnid, info.me_meta1_sign)
-		&& info.me_meta2_txnid != info.me_last_txnid) {
-		print(" - meta-2 txn-id mismatch\n");
-		++problems_meta;
+		if (! meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
+				info.me_meta1_txnid, info.me_meta1_sign)
+			&& info.me_meta2_txnid != info.me_last_txnid) {
+			print(" - meta-2 txn-id mismatch\n");
+			++problems_meta;
+		}
 	}
 
 	print("Walking b-tree...\n");

@@ -616,7 +616,7 @@ int  mdb_env_create(MDB_env **env);
 	 * </ul>
 	 */
 int  mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode);
-
+int  mdb_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive);
 	/** @brief Copy an LMDB environment to the specified path.
 	 *
 	 * This function may be used to make a backup of an existing environment.

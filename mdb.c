@@ -4345,8 +4345,6 @@ mdb_env_share_locks(MDB_env *env, int *excl, MDB_meta *meta)
 	struct flock lock_info;
 	int rc = 0;
 
-	env->me_txns->mti_txnid = meta->mm_txnid;
-
 	/* The shared lock replaces the existing lock */
 	memset((void *)&lock_info, 0, sizeof(lock_info));
 	lock_info.l_type = F_RDLCK;
@@ -4601,6 +4599,12 @@ fail:
 int ESECT
 mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
 {
+	return mdb_env_open_ex(env, path, flags, mode, NULL);
+}
+
+int ESECT
+mdb_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive)
+{
 	int		oflags, rc, len, excl = -1;
 	char *lpath, *dpath;
 
@@ -4678,9 +4682,17 @@ mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
 	if ((rc = mdb_env_open2(env, &meta)) == MDB_SUCCESS) {
 		mdb_debug("opened dbenv %p", (void *) env);
 		if (excl > 0) {
-			rc = mdb_env_share_locks(env, &excl, &meta);
-			if (rc)
-				goto leave;
+			env->me_txns->mti_txnid = meta.mm_txnid;
+			if (exclusive == NULL || *exclusive < 2) {
+				/* LY: downgrade lock only if exclusive access not requested.
+				 *     in case exclusive==1, just leave value as is. */
+				rc = mdb_env_share_locks(env, &excl, &meta);
+				if (rc)
+					goto leave;
+			}
+		} else if (exclusive) {
+			/* LY: just indicate that is not an exclusive access. */
+			*exclusive = 0;
 		}
 		if (!(flags & MDB_RDONLY)) {
 			MDB_txn *txn;
