@@ -68,7 +68,7 @@ MDB_txn *txn, *locktxn;
 MDB_envinfo info;
 MDB_stat stat;
 size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
-unsigned userdb_count;
+size_t userdb_count;
 unsigned verbose, quiet;
 
 struct problem {
@@ -161,7 +161,7 @@ static struct problem* problems_push() {
 }
 
 static size_t problems_pop(struct problem* list) {
-	size_t total = 0;
+	size_t count = 0;
 
 	if (problems_list) {
 		int i;
@@ -169,7 +169,7 @@ static size_t problems_pop(struct problem* list) {
 		print(" - problems: ");
 		for (i = 0; problems_list; ++i) {
 			struct problem* p = problems_list->pr_next;
-			total += problems_list->count;
+			count += problems_list->count;
 			print("%s%s (%zu)", i ? ", " : "", problems_list->caption, problems_list->count);
 			free(problems_list);
 			problems_list = p;
@@ -178,7 +178,7 @@ static size_t problems_pop(struct problem* list) {
 	}
 
 	problems_list = list;
-	return total;
+	return count;
 }
 
 static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
@@ -220,19 +220,18 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 	return MDB_SUCCESS;
 }
 
-typedef long (visitor)(size_t record_number, MDB_val *key, MDB_val* data);
-static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent);
+typedef int (visitor)(size_t record_number, MDB_val *key, MDB_val* data);
+static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent);
 
-static long handle_userdb(size_t record_number, MDB_val *key, MDB_val* data) {
+static int handle_userdb(size_t record_number, MDB_val *key, MDB_val* data) {
 	return MDB_SUCCESS;
 }
 
-static long handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
+static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 	char *bad = "";
 	size_t pg, prev;
 	ssize_t i, number, span = 0;
 	size_t *iptr = data->mv_data, txnid = *(size_t*)key->mv_data;
-	long problem_count = 0;
 
 	if (key->mv_size != sizeof(txnid))
 		problem_add(record_number, "wrong txn-id size", "(key-size %zi)", key->mv_size);
@@ -257,9 +256,10 @@ static long handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 				if (pg < 2 /* META_PAGE */ || pg > info.me_last_pgno)
 					problem_add(record_number, "wrong idl entry", "(2 < %zi < %zi)",
 								pg, info.me_last_pgno);
-				if (pg <= prev) {
+				else if (pg <= prev) {
 					bad = " [bad sequence]";
-					++problem_count;
+					problem_add(record_number, "bad sequence", "(%zi <= %zi)",
+								pg, prev);
 				}
 				prev = pg;
 				pg += span;
@@ -279,13 +279,12 @@ static long handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 		}
 	}
 
-	return problem_count;
+	return MDB_SUCCESS;
 }
 
-static long handle_maindb(size_t record_number, MDB_val *key, MDB_val* data) {
+static int handle_maindb(size_t record_number, MDB_val *key, MDB_val* data) {
 	char *name;
-	int i;
-	long rc;
+	int i, rc;
 
 	name = key->mv_data;
 	for(i = 0; i < key->mv_size; ++i) {
@@ -306,7 +305,7 @@ static long handle_maindb(size_t record_number, MDB_val *key, MDB_val* data) {
 	return handle_userdb(record_number, key, data);
 }
 
-static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
+static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 {
 	MDB_cursor *mc;
 	MDB_stat ms;
@@ -379,6 +378,12 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	prev_data.mv_size = 0;
 	rc = mdb_cursor_get(mc, &key, &data, MDB_FIRST);
 	while (rc == MDB_SUCCESS) {
+		if (gotsignal) {
+			print(" - interrupted by signal\n");
+			rc = EINTR;
+			goto bailout;
+		}
+
 		if (key.mv_size == 0) {
 			problem_add(record_count, "key with zero length", NULL);
 		} else if (key.mv_size > maxkeysize) {
@@ -422,9 +427,11 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 				print(" - fixed data-size %zu\n", data.mv_size );
 		}
 
-		rc = gotsignal ? EINTR : (handler ? handler(record_count, &key, &data) : 0);
-		if (rc)
-			goto bailout;
+		if (handler) {
+			rc = handler(record_count, &key, &data);
+			if (rc)
+				goto bailout;
+		}
 
 		record_count++;
 		key_bytes += key.mv_size;
@@ -434,8 +441,10 @@ static long process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		prev_data = data;
 		rc = mdb_cursor_get(mc, &key, &data, MDB_NEXT);
 	}
-	if (rc == MDB_NOTFOUND)
-		rc = MDB_SUCCESS;
+	if (rc != MDB_NOTFOUND)
+		error(" - mdb_cursor_get failed, error %d %s\n", rc, mdb_strerror(rc));
+	else
+		rc = 0;
 
 	if (record_count != ms.ms_entries)
 		problem_add(record_count, "differentent number of entries",
@@ -449,7 +458,7 @@ bailout:
 
 	mdb_cursor_close(mc);
 	mdb_dbi_close(env, dbi);
-	return rc ? rc : problems_count;
+	return rc || problems_count;
 }
 
 static void usage(char *prog)
@@ -485,8 +494,7 @@ int main(int argc, char *argv[])
 	char *prog = argv[0];
 	char *envname;
 	int envflags = MDB_RDONLY;
-	long problems_maindb = 0, problems_freedb = 0;
-	int problems_meta = 0;
+	int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
 	size_t n;
 
 	if (argc < 2) {
@@ -709,35 +717,32 @@ int main(int argc, char *argv[])
 		print(", available %zu (%.1f%%)\n", value, value / percent);
 	}
 
-	if (pgcount != lastpgno - freedb_pages) {
-		error("used pages mismatch (%zu != %zu)\n", pgcount, lastpgno - freedb_pages);
-		goto bailout;
+	if (problems_maindb == 0 && problems_freedb == 0) {
+		if (pgcount != lastpgno - freedb_pages) {
+			error("used pages mismatch (%zu != %zu)\n", pgcount, lastpgno - freedb_pages);
+		}
+
+		if (dbi_pages[0] != freedb_pages) {
+			error("gc pages mismatch (%zu != %zu)\n", dbi_pages[0], freedb_pages);
+		}
+
+		if (! process_db(-1, NULL, handle_maindb, 1)) {
+			if (! userdb_count && verbose)
+				print(" - does not contain multiple databases\n");
+		}
 	}
-	if (dbi_pages[0] != freedb_pages) {
-		error("gc pages mismatch (%zu != %zu)\n", dbi_pages[0], freedb_pages);
-		goto bailout;
-	}
-
-	if (problems_maindb == 0 && problems_freedb == 0)
-		process_db(-1, NULL, handle_maindb, 1);
-
-	mdb_txn_abort(txn);
-	if (locktxn)
-		mdb_txn_abort(locktxn);
-
-	if (! userdb_count && verbose)
-		print("%s: %s does not contain multiple databases\n", prog, envname);
-
-	if (rc)
-		error("%s: %s: %s\n", prog, envname, mdb_strerror(rc));
 
 bailout:
+	if (locktxn)
+		mdb_txn_abort(locktxn);
+	if (txn)
+		mdb_txn_abort(txn);
 	mdb_env_close(env);
 	free(pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
 	total_problems += problems_meta;
-	if (total_problems) {
+	if (total_problems || problems_maindb || problems_freedb) {
 		print("Total %zu error(s) is detected.\n", total_problems);
 		if (problems_meta || problems_maindb || problems_freedb)
 			return EXIT_FAILURE + 1;
