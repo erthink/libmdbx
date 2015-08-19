@@ -691,8 +691,9 @@ int main(int argc, char *argv[])
 				total_page_bytes - total_payload_bytes);
 			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i) {
 				size_t dbi_bytes = dbi_pages[i] * stat.ms_psize;
-				print("     %s: %zu total, payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
-					dbi_names[i], dbi_bytes,
+				print("     %s: subtotal %.2f%% (%zu), payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
+					dbi_names[i],
+					dbi_bytes * 100.0 / total_page_bytes, dbi_bytes,
 					dbi_payload_bytes[i] * 100.0 / dbi_bytes, dbi_payload_bytes[i],
 					(dbi_bytes - dbi_payload_bytes[i]) * 100.0 / dbi_bytes,
 					dbi_bytes - dbi_payload_bytes[i]);
