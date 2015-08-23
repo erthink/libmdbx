@@ -25,6 +25,7 @@
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
+#include <errno.h>
 
 #include "lmdb.h"
 
@@ -33,7 +34,9 @@
 #define CHECK(test, msg) ((test) ? (void)0 : ((void)fprintf(stderr, \
 	"%s:%d: %s: %s\n", __FILE__, __LINE__, msg, mdb_strerror(rc)), abort()))
 
-#define DBPATH "./testdb"
+#ifndef DBPATH
+#	define DBPATH "./testdb"
+#endif
 
 struct t0 {
 	struct rusage ru;
@@ -124,7 +127,7 @@ static void wbench(int flags, int mb, int count, int salt)
 
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, (1ull << 20) * mb));
-	E(mdb_env_open(env, "./testdb", flags, 0664));
+	E(mdb_env_open(env, DBPATH, flags, 0664));
 
 	key.mv_size = sizeof(key_value);
 	key.mv_data = &key_value;

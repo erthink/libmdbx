@@ -4184,8 +4184,8 @@ mdb_env_map(MDB_env *env, void *addr)
 		if (ftruncate(env->me_fd, env->me_mapsize) < 0)
 			return errno;
 	}
-	env->me_map = mmap(addr, env->me_mapsize, prot, MAP_SHARED,
-		env->me_fd, 0);
+
+	env->me_map = mmap(addr, env->me_mapsize, prot, MAP_SHARED, env->me_fd, 0);
 	if (env->me_map == MAP_FAILED) {
 		env->me_map = NULL;
 		return errno;
@@ -4195,11 +4195,9 @@ mdb_env_map(MDB_env *env, void *addr)
 		/* Turn off readahead. It's harmful when the DB is larger than RAM. */
 #ifdef MADV_RANDOM
 		madvise(env->me_map, env->me_mapsize, MADV_RANDOM);
-#else
-#ifdef POSIX_MADV_RANDOM
+#elif defined(POSIX_MADV_RANDOM)
 		posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_RANDOM);
-#endif /* POSIX_MADV_RANDOM */
-#endif /* MADV_RANDOM */
+#endif /* MADV_RANDOM & POSIX_MADV_RANDOM */
 	}
 
 	/* Can happen because the address argument to mmap() is just a
@@ -4207,8 +4205,10 @@ mdb_env_map(MDB_env *env, void *addr)
 	 * The MAP_FIXED flag would prevent that, but then mmap could
 	 * instead unmap existing pages to make room for the new map.
 	 */
-	if (addr && env->me_map != addr)
+	if (addr && env->me_map != addr) {
+		errno = 0;	/* LY: clean errno as a hit for this case */
 		return EBUSY;	/* TODO: Make a new MDB_* error code? */
+	}
 
 	/* Lock meta pages to avoid unexpected write,
 	 *  before the data pages would be synchronized. */

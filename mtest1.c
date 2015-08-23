@@ -23,12 +23,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#include <unistd.h>
+#include <errno.h>
+#include <sys/stat.h>
 #include "lmdb.h"
 
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
 #define RES(err, expr) ((rc = expr) == (err) || (CHECK(!rc, #expr), 0))
 #define CHECK(test, msg) ((test) ? (void)0 : ((void)fprintf(stderr, \
 	"%s:%d: %s: %s\n", __FILE__, __LINE__, msg, mdb_strerror(rc)), abort()))
+
+#ifndef DBPATH
+#	define DBPATH "./testdb"
+#endif
 
 int main(int argc,char * argv[])
 {
@@ -42,6 +49,8 @@ int main(int argc,char * argv[])
 	int count;
 	int *values;
 	char sval[32] = "";
+	int env_oflags;
+	struct stat db_stat, exe_stat;
 
 	srand(time(NULL));
 
@@ -53,11 +62,25 @@ int main(int argc,char * argv[])
 	}
 
 	E(mdb_env_create(&env));
-
 	E(mdb_env_set_maxreaders(env, 1));
 	E(mdb_env_set_mapsize(env, 10485760));
 	E(mdb_env_set_maxdbs(env, 4));
-	E(mdb_env_open(env, "./testdb", MDB_FIXEDMAP|MDB_NOSYNC, 0664));
+
+	E(stat("/proc/self/exe", &exe_stat)?errno:0);
+	E(stat(DBPATH "/.", &db_stat)?errno:0);
+	env_oflags = MDB_FIXEDMAP | MDB_NOSYNC;
+	if (major(db_stat.st_dev) != major(exe_stat.st_dev)) {
+		/* LY: Assume running inside a CI-environment:
+		 *  1) don't use FIXEDMAP to avoid EBUSY in case collision,
+		 *     which could be inspired by address space randomisation feature.
+		 *  2) drop MDB_NOSYNC expecting that DBPATH is at a tmpfs or some dedicated storage.
+		 */
+		env_oflags = 0;
+	}
+	/* LY: especially here we always needs MDB_NOSYNC
+	 * for testing mdb_env_close_ex() and "redo-to-steady" on open. */
+	env_oflags |= MDB_NOSYNC;
+	E(mdb_env_open(env, DBPATH, env_oflags, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
 	if (mdb_dbi_open(txn, "id1", MDB_CREATE, &dbi) == MDB_SUCCESS)
@@ -144,7 +167,7 @@ int main(int argc,char * argv[])
 	mdb_env_close_ex(env, 1);
 	E(mdb_env_create(&env));
 	E(mdb_env_set_maxdbs(env, 4));
-	E(mdb_env_open(env, "./testdb", MDB_FIXEDMAP|MDB_NOSYNC, 0664));
+	E(mdb_env_open(env, DBPATH, env_oflags, 0664));
 
 	printf("check-preset-c.cursor-next\n");
 	E(mdb_env_stat(env, &mst));
