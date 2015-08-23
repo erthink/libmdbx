@@ -3978,6 +3978,8 @@ mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
 	psize = env->me_psize;
 
 	p = calloc(NUM_METAS, psize);
+	if (!p)
+		return ENOMEM;
 	p->mp_pgno = 0;
 	p->mp_flags = P_META;
 	*(MDB_meta *)PAGEDATA(p) = *meta;
