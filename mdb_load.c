@@ -28,7 +28,7 @@ static char *subname = NULL;
 static size_t lineno;
 static int version;
 
-static int flags;
+static int dbi_flags;
 
 static char *prog;
 
@@ -68,6 +68,7 @@ static void readhdr(void)
 {
 	char *ptr;
 
+	dbi_flags = 0;
 	while (fgets(dbuf.mv_data, dbuf.mv_size, stdin) != NULL) {
 		lineno++;
 		if (!strncmp(dbuf.mv_data, "db_pagesize=", STRLENOF("db_pagesize="))
@@ -137,7 +138,8 @@ static void readhdr(void)
 			for (i=0; dbflags[i].bit; i++) {
 				if (!strncmp(dbuf.mv_data, dbflags[i].name, dbflags[i].len) &&
 					((char *)dbuf.mv_data)[dbflags[i].len] == '=') {
-					flags |= dbflags[i].bit;
+					if (((char *)dbuf.mv_data)[dbflags[i].len+1] == '1')
+						dbi_flags |= dbflags[i].bit;
 					break;
 				}
 			}
@@ -293,7 +295,6 @@ int main(int argc, char *argv[])
 	MDB_dbi dbi;
 	char *envname;
 	int envflags = 0, putflags = 0;
-	int dohdr = 0;
 
 	prog = argv[0];
 
@@ -377,12 +378,6 @@ int main(int argc, char *argv[])
 	while(!Eof) {
 		MDB_val key, data;
 		int batch = 0;
-		flags = 0;
-
-		if (!dohdr) {
-			dohdr = 1;
-		} else if (!(mode & NOHDR))
-			readhdr();
 
 		rc = mdb_txn_begin(env, NULL, 0, &txn);
 		if (rc) {
@@ -390,7 +385,7 @@ int main(int argc, char *argv[])
 			goto env_close;
 		}
 
-		rc = mdb_open(txn, subname, flags|MDB_CREATE, &dbi);
+		rc = mdb_open(txn, subname, dbi_flags|MDB_CREATE, &dbi);
 		if (rc) {
 			fprintf(stderr, "mdb_open failed, error %d %s\n", rc, mdb_strerror(rc));
 			goto txn_abort;
@@ -447,6 +442,8 @@ int main(int argc, char *argv[])
 			goto env_close;
 		}
 		mdb_dbi_close(env, dbi);
+		if(!(mode & NOHDR))
+			readhdr();
 	}
 
 txn_abort:
