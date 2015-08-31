@@ -298,7 +298,8 @@ int main(int argc, char *argv[])
 		if (!count) {
 			fprintf(stderr, "%s: %s does not contain multiple databases\n", prog, envname);
 			rc = MDB_NOTFOUND;
-		} else if (rc == MDB_BAD_DBI) {
+		} else if (rc == MDB_INCOMPATIBLE) {
+			/* LY: the record it not a named sub-db. */
 			rc = MDB_SUCCESS;
 		}
 	} else {
