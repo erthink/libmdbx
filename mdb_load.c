@@ -70,7 +70,11 @@ static void readhdr(void)
 
 	while (fgets(dbuf.mv_data, dbuf.mv_size, stdin) != NULL) {
 		lineno++;
-		if (!strncmp(dbuf.mv_data, "VERSION=", STRLENOF("VERSION="))) {
+		if (!strncmp(dbuf.mv_data, "db_pagesize=", STRLENOF("db_pagesize="))
+			|| !strncmp(dbuf.mv_data, "duplicates=", STRLENOF("duplicates="))) {
+			/* LY: silently ignore information fields. */
+			continue;
+		} else if (!strncmp(dbuf.mv_data, "VERSION=", STRLENOF("VERSION="))) {
 			version=atoi((char *)dbuf.mv_data+STRLENOF("VERSION="));
 			if (version > 3) {
 				fprintf(stderr, "%s: line %" Z "d: unsupported VERSION %d\n",

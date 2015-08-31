@@ -366,8 +366,6 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		if (! flags)
 			print(" none");
 		else {
-			/* if (flags & MDB_DUPSORT)
-				print(" duplicates"); */
 			for (i=0; dbflags[i].bit; i++)
 				if (flags & dbflags[i].bit)
 					print(" %s", dbflags[i].name);
