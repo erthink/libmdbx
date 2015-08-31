@@ -48,19 +48,24 @@ flagbit dbflags[] = {
 
 static volatile sig_atomic_t gotsignal;
 
-static void signal_hanlder( int sig )
-{
+static void signal_hanlder( int sig ) {
 	gotsignal = 1;
 }
 
 #define MAX_DBI 32768
 
-const char* dbi_names[MAX_DBI] = { "@gc" };
-size_t dbi_pages[MAX_DBI];
-size_t dbi_payload_bytes[MAX_DBI];
-short *pagemap;
-size_t pgcount;
-size_t total_payload_bytes, total_unused_bytes;
+struct {
+	const char* dbi_names[MAX_DBI];
+	size_t dbi_pages[MAX_DBI];
+	size_t dbi_payload_bytes[MAX_DBI];
+	short *pagemap;
+	size_t total_payload_bytes;
+	size_t pgcount;
+} walk = {
+	.dbi_names = { "@gc" }
+};
+
+size_t total_unused_bytes;
 int exclusive = 2;
 
 MDB_env *env;
@@ -109,17 +114,17 @@ error(const char* msg, ...) {
 static int pagemap_lookup_dbi(const char* dbi) {
 	static int last;
 
-	if (last > 0 && strcmp(dbi_names[last], dbi) == 0)
+	if (last > 0 && strcmp(walk.dbi_names[last], dbi) == 0)
 		return last;
 
-	for(last = 1; dbi_names[last] && last < MAX_DBI; ++last)
-		if (strcmp(dbi_names[last], dbi) == 0)
+	for(last = 1; walk.dbi_names[last] && last < MAX_DBI; ++last)
+		if (strcmp(walk.dbi_names[last], dbi) == 0)
 			return last;
 
 	if (last == MAX_DBI)
 		return last = -1;
 
-	dbi_names[last] = strdup(dbi);
+	walk.dbi_names[last] = strdup(dbi);
 	return last;
 }
 
@@ -185,11 +190,11 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 					 char type, int payload_bytes, int header_bytes)
 {
 	if (pgnumber) {
-		pgcount += pgnumber;
-
 		int index = pagemap_lookup_dbi(dbi);
 		if (index < 0)
 			return ENOMEM;
+
+		walk.pgcount += pgnumber;
 
 		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
 			problem_add(pgno, "wrong header-length", "(%zu < %i < %zu)",
@@ -200,18 +205,18 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 			problem_add(pgno, "overflowed page",  "(%zu + %zu > %zu)",
 						payload_bytes, header_bytes, pgnumber * stat.ms_psize);
 		else {
-			dbi_payload_bytes[index] += payload_bytes + header_bytes;
-			total_payload_bytes += payload_bytes + header_bytes;
+			walk.dbi_payload_bytes[index] += payload_bytes + header_bytes;
+			walk.total_payload_bytes += payload_bytes + header_bytes;
 		}
 
 		do {
 			if (pgno >= lastpgno)
 				problem_add(pgno, "wrong page-no", "(> %zi)", lastpgno);
-			else if (pagemap[pgno])
-				problem_add(pgno, "page already used", "(in %s)", dbi_names[pagemap[pgno]]);
+			else if (walk.pagemap[pgno])
+				problem_add(pgno, "page already used", "(in %s)", walk.dbi_names[walk.pagemap[pgno]]);
 			else {
-				pagemap[pgno] = index;
-				dbi_pages[index] += 1;
+				walk.pagemap[pgno] = index;
+				walk.dbi_pages[index] += 1;
 			}
 			++pgno;
 		} while(--pgnumber);
@@ -468,7 +473,8 @@ static void usage(char *prog)
 			"  -v\tmore verbose, could be used multiple times\n"
 			"  -n\tNOSUBDIR mode for open\n"
 			"  -q\tbe quiet\n"
-			"  -w\tstart write-txn to lock db\n"
+			"  -w\tlock DB for writing while checking\n"
+			"  -d\tdisable page-by-page traversal of b-tree\n"
 			"  -c\tforce cooperative mode (don't try exclusive)\n", prog);
 	exit(EXIT_FAILURE);
 }
@@ -495,13 +501,14 @@ int main(int argc, char *argv[])
 	char *envname;
 	int envflags = MDB_RDONLY;
 	int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
+	int dont_traversal = 0;
 	size_t n;
 
 	if (argc < 2) {
 		usage(prog);
 	}
 
-	while ((i = getopt(argc, argv, "Vvqnwc")) != EOF) {
+	while ((i = getopt(argc, argv, "Vvqnwcd")) != EOF) {
 		switch(i) {
 		case 'V':
 			printf("%s\n", MDB_VERSION_STRING);
@@ -521,6 +528,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'c':
 			exclusive = 0;
+			break;
+		case 'd':
+			dont_traversal = 1;
 			break;
 		default:
 			usage(prog);
@@ -594,12 +604,6 @@ int main(int argc, char *argv[])
 
 	lastpgno = info.me_last_pgno + 1;
 	errno = 0;
-	pagemap = calloc(lastpgno, sizeof(*pagemap));
-	if (! pagemap) {
-		rc = errno ? errno : ENOMEM;
-		error("calloc failed, error %d %s\n", rc, mdb_strerror(rc));
-		goto bailout;
-	}
 
 	if (verbose) {
 		double k = 1024.0;
@@ -666,41 +670,52 @@ int main(int argc, char *argv[])
 		print(" - skip check last-txn-id with meta-pages (monopolistic or write-lock mode only)\n");
 	}
 
-	print("Walking b-tree...\n");
-	rc = mdb_env_pgwalk(txn, pgvisitor, NULL);
-	if (rc) {
-		error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
-		goto bailout;
-	}
-	for( n = 0; n < lastpgno; ++n)
-		if (! pagemap[n])
-			dbi_pages[0] += 1;
-
-	if (verbose) {
-		size_t total_page_bytes = pgcount * stat.ms_psize;
-		print(" - dbi pages: %zu total", pgcount);
-		if (verbose > 1)
-			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i)
-				print(", %s %zu", dbi_names[i], dbi_pages[i]);
-		print(", %s %zu\n", dbi_names[0], dbi_pages[0]);
-		if (verbose > 1) {
-			print(" - space info: total %zu bytes, payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
-				total_page_bytes,
-				total_payload_bytes * 100.0 / total_page_bytes, total_payload_bytes,
-				(total_page_bytes - total_payload_bytes) * 100.0 / total_page_bytes,
-				total_page_bytes - total_payload_bytes);
-			for (i = 1; i < MAX_DBI && dbi_names[i]; ++i) {
-				size_t dbi_bytes = dbi_pages[i] * stat.ms_psize;
-				print("     %s: subtotal %.2f%% (%zu), payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
-					dbi_names[i],
-					dbi_bytes * 100.0 / total_page_bytes, dbi_bytes,
-					dbi_payload_bytes[i] * 100.0 / dbi_bytes, dbi_payload_bytes[i],
-					(dbi_bytes - dbi_payload_bytes[i]) * 100.0 / dbi_bytes,
-					dbi_bytes - dbi_payload_bytes[i]);
-			}
+	if (!dont_traversal) {
+		print("Traversal b-tree...\n");
+		walk.pagemap = calloc(lastpgno, sizeof(*walk.pagemap));
+		if (! walk.pagemap) {
+			rc = errno ? errno : ENOMEM;
+			error("calloc failed, error %d %s\n", rc, mdb_strerror(rc));
+			goto bailout;
 		}
-		print(" - summary: average fill %.2f%%, %zu problems\n",
-			total_payload_bytes * 100.0 / total_page_bytes, total_problems);
+
+		rc = mdb_env_pgwalk(txn, pgvisitor, NULL);
+		if (rc) {
+			error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
+			goto bailout;
+		}
+		for( n = 0; n < lastpgno; ++n)
+			if (! walk.pagemap[n])
+				walk.dbi_pages[0] += 1;
+
+		if (verbose) {
+			size_t total_page_bytes = walk.pgcount * stat.ms_psize;
+			print(" - dbi pages: %zu total", walk.pgcount);
+			if (verbose > 1)
+				for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i)
+					print(", %s %zu", walk.dbi_names[i], walk.dbi_pages[i]);
+			print(", %s %zu\n", walk.dbi_names[0], walk.dbi_pages[0]);
+			if (verbose > 1) {
+				print(" - space info: total %zu bytes, payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
+					total_page_bytes,
+					walk.total_payload_bytes * 100.0 / total_page_bytes, walk.total_payload_bytes,
+					(total_page_bytes - walk.total_payload_bytes) * 100.0 / total_page_bytes,
+					total_page_bytes - walk.total_payload_bytes);
+				for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
+					size_t dbi_bytes = walk.dbi_pages[i] * stat.ms_psize;
+					print("     %s: subtotal %.2f%% (%zu), payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
+						walk.dbi_names[i],
+						dbi_bytes * 100.0 / total_page_bytes, dbi_bytes,
+						walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes, walk.dbi_payload_bytes[i],
+						(dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes,
+						dbi_bytes - walk.dbi_payload_bytes[i]);
+				}
+			}
+			print(" - summary: average fill %.2f%%, %zu problems\n",
+				walk.total_payload_bytes * 100.0 / total_page_bytes, total_problems);
+		}
+	} else if (verbose) {
+		print("Skipping b-tree walk...\n");
 	}
 
 	if (! verbose)
@@ -734,15 +749,15 @@ int main(int argc, char *argv[])
 	}
 
 	if (problems_maindb == 0 && problems_freedb == 0) {
-		if (exclusive || locktxn) {
-			if (pgcount != lastpgno - freedb_pages) {
-				error("used pages mismatch (%zu != %zu)\n", pgcount, lastpgno - freedb_pages);
+		if (!dont_traversal && (exclusive || locktxn)) {
+			if (walk.pgcount != lastpgno - freedb_pages) {
+				error("used pages mismatch (%zu != %zu)\n", walk.pgcount, lastpgno - freedb_pages);
 			}
-			if (dbi_pages[0] != freedb_pages) {
-				error("gc pages mismatch (%zu != %zu)\n", dbi_pages[0], freedb_pages);
+			if (walk.dbi_pages[0] != freedb_pages) {
+				error("gc pages mismatch (%zu != %zu)\n", walk.dbi_pages[0], freedb_pages);
 			}
 		} else if (verbose) {
-			print(" - skip check used and gc pages (monopolistic or write-lock mode only)\n");
+			print(" - skip check used and gc pages (btree-traversal with monopolistic or write-lock mode only)\n");
 		}
 
 		if (! process_db(-1, NULL, handle_maindb, 1)) {
@@ -758,7 +773,7 @@ bailout:
 		mdb_txn_abort(locktxn);
 	if (env)
 		mdb_env_close(env);
-	free(pagemap);
+	free(walk.pagemap);
 	if (rc)
 		return EXIT_FAILURE + 2;
 	total_problems += problems_meta;
