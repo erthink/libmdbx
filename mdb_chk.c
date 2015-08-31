@@ -73,8 +73,9 @@ MDB_txn *txn, *locktxn;
 MDB_envinfo info;
 MDB_stat stat;
 size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
-size_t userdb_count;
+size_t userdb_count, skipped_subdb;
 unsigned verbose, quiet;
+const char* only_subdb;
 
 struct problem {
 	struct problem* pr_next;
@@ -335,6 +336,14 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		}
 	}
 
+	if (dbi >= 2 /* CORE_DBS */ && name && only_subdb && strcmp(only_subdb, name)) {
+		if (verbose)
+			print("Skip processing %s'db...\n", name);
+		skipped_subdb++;
+		mdb_dbi_close(env, dbi);
+		return MDB_SUCCESS;
+	}
+
 	if (! silent && verbose)
 		print("Processing %s'db...\n", name ? name : "main");
 
@@ -353,7 +362,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	}
 
 	if (! silent && verbose) {
-		print(" - flags:");
+		print(" - dbi-id %d, flags:", dbi);
 		if (! flags)
 			print(" none");
 		else {
@@ -468,14 +477,15 @@ bailout:
 
 static void usage(char *prog)
 {
-	fprintf(stderr, "usage: %s dbpath [-V] [-v] [-n] [-q] [-w]\n"
-			"  -V\tshow version\n"
-			"  -v\tmore verbose, could be used multiple times\n"
-			"  -n\tNOSUBDIR mode for open\n"
-			"  -q\tbe quiet\n"
-			"  -w\tlock DB for writing while checking\n"
-			"  -d\tdisable page-by-page traversal of b-tree\n"
-			"  -c\tforce cooperative mode (don't try exclusive)\n", prog);
+	fprintf(stderr, "usage: %s dbpath [-V] [-v] [-n] [-q] [-w] [-c] [-d] [-s subdb]\n"
+			"  -V\t\tshow version\n"
+			"  -v\t\tmore verbose, could be used multiple times\n"
+			"  -n\t\tNOSUBDIR mode for open\n"
+			"  -q\t\tbe quiet\n"
+			"  -w\t\tlock DB for writing while checking\n"
+			"  -d\t\tdisable page-by-page traversal of b-tree\n"
+			"  -s subdb\tprocess a specific subdatabase only\n"
+			"  -c\t\tforce cooperative mode (don't try exclusive)\n", prog);
 	exit(EXIT_FAILURE);
 }
 
@@ -508,7 +518,7 @@ int main(int argc, char *argv[])
 		usage(prog);
 	}
 
-	while ((i = getopt(argc, argv, "Vvqnwcd")) != EOF) {
+	while ((i = getopt(argc, argv, "Vvqnwcds:")) != EOF) {
 		switch(i) {
 		case 'V':
 			printf("%s\n", MDB_VERSION_STRING);
@@ -531,6 +541,11 @@ int main(int argc, char *argv[])
 			break;
 		case 'd':
 			dont_traversal = 1;
+			break;
+		case 's':
+			if (only_subdb && strcmp(only_subdb, optarg))
+				usage(prog);
+			only_subdb = optarg;
 			break;
 		default:
 			usage(prog);
