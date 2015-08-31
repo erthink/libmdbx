@@ -223,7 +223,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		} while(--pgnumber);
 	}
 
-	return MDB_SUCCESS;
+	return gotsignal ? EINTR : MDB_SUCCESS;
 }
 
 typedef int (visitor)(size_t record_number, MDB_val *key, MDB_val* data);
@@ -696,7 +696,11 @@ int main(int argc, char *argv[])
 
 		rc = mdb_env_pgwalk(txn, pgvisitor, NULL);
 		if (rc) {
-			error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
+			if (rc == EINTR && gotsignal) {
+				print(" - interrupted by signal\n");
+			} else {
+				error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
+			}
 			goto bailout;
 		}
 		for( n = 0; n < lastpgno; ++n)
