@@ -27,6 +27,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <malloc.h>
+#include <time.h>
 
 #include "lmdb.h"
 #include "midl.h"
@@ -517,6 +518,14 @@ int main(int argc, char *argv[])
 	int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
 	int dont_traversal = 0;
 	size_t n;
+	struct timespec timestamp_start, timestamp_finish;
+	double elapsed;
+
+	if (clock_gettime(CLOCK_MONOTONIC, &timestamp_start)) {
+		rc = errno;
+		error("clock_gettime failed, error %d %s\n", rc, mdb_strerror(rc));
+		return EXIT_FAILURE_SYS;
+	}
 
 	if (argc < 2) {
 		usage(prog);
@@ -803,13 +812,23 @@ bailout:
 		return EXIT_FAILURE_MDB;
 	}
 
+	if (clock_gettime(CLOCK_MONOTONIC, &timestamp_finish)) {
+		rc = errno;
+		error("clock_gettime failed, error %d %s\n", rc, mdb_strerror(rc));
+		return EXIT_FAILURE_SYS;
+	}
+
+	elapsed = timestamp_finish.tv_sec - timestamp_start.tv_sec
+			+ (timestamp_finish.tv_nsec - timestamp_start.tv_nsec) * 1e-9;
+
 	total_problems += problems_meta;
 	if (total_problems || problems_maindb || problems_freedb) {
-		print("Total %zu error(s) is detected.\n", total_problems);
+		print("Total %zu error(s) is detected, elapsed %.3f seconds.\n",
+			  total_problems, elapsed);
 		if (problems_meta || problems_maindb || problems_freedb)
 			return EXIT_FAILURE_CHECK_MAJOR;
 		return EXIT_FAILURE_CHECK_MINOR;
 	}
-	print("No error is detected.\n");
+	print("No error is detected, elapsed %.3f seconds\n", elapsed);
 	return EXIT_SUCCESS;
 }
