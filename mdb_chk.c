@@ -54,6 +54,12 @@ static void signal_hanlder( int sig ) {
 
 #define MAX_DBI 32768
 
+#define EXIT_INTERRUPTED			(EXIT_FAILURE+4)
+#define EXIT_FAILURE_SYS			(EXIT_FAILURE+3)
+#define EXIT_FAILURE_MDB			(EXIT_FAILURE+2)
+#define EXIT_FAILURE_CHECK_MAJOR	(EXIT_FAILURE+1)
+#define EXIT_FAILURE_CHECK_MINOR	EXIT_FAILURE
+
 struct {
 	const char* dbi_names[MAX_DBI];
 	size_t dbi_pages[MAX_DBI];
@@ -484,7 +490,7 @@ static void usage(char *prog)
 			"  -d\t\tdisable page-by-page traversal of b-tree\n"
 			"  -s subdb\tprocess a specific subdatabase only\n"
 			"  -c\t\tforce cooperative mode (don't try exclusive)\n", prog);
-	exit(EXIT_FAILURE);
+	exit(EXIT_INTERRUPTED);
 }
 
 const char* meta_synctype(size_t sign) {
@@ -520,7 +526,7 @@ int main(int argc, char *argv[])
 		switch(i) {
 		case 'V':
 			printf("%s\n", MDB_VERSION_STRING);
-			exit(0);
+			exit(EXIT_SUCCESS);
 			break;
 		case 'v':
 			verbose++;
@@ -569,7 +575,7 @@ int main(int argc, char *argv[])
 	rc = mdb_env_create(&env);
 	if (rc) {
 		error("mdb_env_create failed, error %d %s\n", rc, mdb_strerror(rc));
-		return EXIT_FAILURE;
+		return rc < 0 ? EXIT_FAILURE_MDB : EXIT_FAILURE_SYS;
 	}
 
 	rc = mdb_env_get_maxkeysize(env);
@@ -791,14 +797,18 @@ bailout:
 	if (env)
 		mdb_env_close(env);
 	free(walk.pagemap);
-	if (rc)
-		return EXIT_FAILURE + 2;
+	if (rc) {
+		if (rc < 0)
+			return gotsignal ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
+		return EXIT_FAILURE_MDB;
+	}
+
 	total_problems += problems_meta;
 	if (total_problems || problems_maindb || problems_freedb) {
 		print("Total %zu error(s) is detected.\n", total_problems);
 		if (problems_meta || problems_maindb || problems_freedb)
-			return EXIT_FAILURE + 1;
-		return EXIT_FAILURE;
+			return EXIT_FAILURE_CHECK_MAJOR;
+		return EXIT_FAILURE_CHECK_MINOR;
 	}
 	print("No error is detected.\n");
 	return EXIT_SUCCESS;
