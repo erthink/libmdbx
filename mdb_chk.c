@@ -490,7 +490,7 @@ static void usage(char *prog)
 const char* meta_synctype(size_t sign) {
 	switch(sign) {
 	case 0:
-		return "legacy/unknown";
+		return "no-sync/legacy";
 	case 1:
 		return "weak";
 	default:

@@ -2341,10 +2341,24 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			MDB_meta* head = mdb_meta_head_w(env);
 			MDB_meta* tail = mdb_env_meta_flipflop(env, head);
 
-			if (META_IS_WEAK(head) && oldest == tail->mm_txnid) {
+			if (oldest == tail->mm_txnid
+					&& META_IS_WEAK(head) && !META_IS_WEAK(tail)) {
 				MDB_meta meta = *head;
+				/* LY: Here an oom was happened:
+				 *  - all pages had allocated;
+				 *  - reclaiming was stopped at the last steady-sync;
+				 *  - the head-sync is weak.
+				 * Now we need make a sync to resume reclaiming. If both
+				 * MDB_NOSYNC and MDB_MAPASYNC flags are set, then assume that
+				 * utterly no-sync write mode was requested. In such case
+				 * don't make a steady-sync, but only a legacy-mode checkpoint,
+				 * just for resume reclaiming only, not for data consistency. */
+				int flags = env->me_flags & MDB_WRITEMAP;
+				if ((env->me_flags & MDB_UTTERLY_NOSYNC) == MDB_UTTERLY_NOSYNC)
+					flags |= MDB_UTTERLY_NOSYNC;
+
 				mdb_assert(env, env->me_sync_pending > 0);
-				if (mdb_env_sync0(env, env->me_flags & MDB_WRITEMAP, &meta) == MDB_SUCCESS) {
+				if (mdb_env_sync0(env, flags, &meta) == MDB_SUCCESS) {
 					txnid_t snap = mdb_find_oldest(env, NULL);
 					if (snap > oldest)
 						continue;
@@ -4068,8 +4082,13 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	}
 
 	/* LY: step#2 - update meta-page. */
-	pending->mm_datasync_sign = env->me_sync_pending
-			? MDB_DATASIGN_WEAK : mdb_meta_sign(pending);
+	if (env->me_sync_pending == 0) {
+		pending->mm_datasync_sign = mdb_meta_sign(pending);
+	} else {
+		pending->mm_datasync_sign =
+			(flags & MDB_UTTERLY_NOSYNC) == MDB_UTTERLY_NOSYNC
+				? MDB_DATASIGN_NONE : MDB_DATASIGN_WEAK;
+	}
 	mdb_debug("writing meta page %d for root page %zu",
 		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root);
 	if (env->me_flags & MDB_WRITEMAP) {

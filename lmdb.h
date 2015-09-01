@@ -288,6 +288,8 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 #define MDB_COALESCE	0x2000000
 	/** LIFO policy for reclaiming FreeDB records */
 #define MDB_LIFORECLAIM	0x4000000
+	/** make a steady-sync only on close and explicit env-sync */
+#define MDB_UTTERLY_NOSYNC (MDB_NOSYNC|MDB_MAPASYNC)
 /** @} */
 
 /**	@defgroup	mdb_dbi_open	Database Flags
