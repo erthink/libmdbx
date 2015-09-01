@@ -116,6 +116,7 @@ error(const char* msg, ...) {
 		va_start(args, msg);
 		vfprintf(stderr, msg, args);
 		va_end(args);
+		fflush(NULL);
 	}
 }
 
@@ -140,6 +141,7 @@ static void problem_add(size_t entry_number, const char* msg, const char *extra,
 	total_problems++;
 
 	if (! quiet) {
+		int need_fflush = 0;
 		struct problem* p;
 
 		for (p = problems_list; p; p = p->pr_next)
@@ -151,6 +153,7 @@ static void problem_add(size_t entry_number, const char* msg, const char *extra,
 			p->caption = msg;
 			p->pr_next = problems_list;
 			problems_list = p;
+			need_fflush = 1;
 		}
 
 		p->count++;
@@ -163,6 +166,8 @@ static void problem_add(size_t entry_number, const char* msg, const char *extra,
 				va_end(args);
 			}
 			printf("\n");
+			if (need_fflush)
+				fflush(NULL);
 		}
 	}
 }
@@ -188,6 +193,7 @@ static size_t problems_pop(struct problem* list) {
 			problems_list = p;
 		}
 		print("\n");
+		fflush(NULL);
 	}
 
 	problems_list = list;
@@ -344,15 +350,19 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	}
 
 	if (dbi >= 2 /* CORE_DBS */ && name && only_subdb && strcmp(only_subdb, name)) {
-		if (verbose)
+		if (verbose) {
 			print("Skip processing %s'db...\n", name);
+			fflush(NULL);
+		}
 		skipped_subdb++;
 		mdb_dbi_close(env, dbi);
 		return MDB_SUCCESS;
 	}
 
-	if (! silent && verbose)
+	if (! silent && verbose) {
 		print("Processing %s'db...\n", name ? name : "main");
+		fflush(NULL);
+	}
 
 	rc = mdb_dbi_flags(txn, dbi, &flags);
 	if (rc) {
@@ -377,7 +387,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 				if (flags & dbflags[i].bit)
 					print(" %s", dbflags[i].name);
 		}
-		print(" (0x%x)\n", flags);
+		print(" (0x%02X)\n", flags);
 		if (verbose > 1) {
 			print(" - page size %u, entries %zu\n", ms.ms_psize, ms.ms_entries);
 			print(" - b-tree depth %u, pages: branch %zu, leaf %zu, overflow %zu\n",
@@ -399,6 +409,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	while (rc == MDB_SUCCESS) {
 		if (gotsignal) {
 			print(" - interrupted by signal\n");
+			fflush(NULL);
 			rc = EINTR;
 			goto bailout;
 		}
@@ -473,6 +484,7 @@ bailout:
 	if (! silent && verbose) {
 		print(" - summary: %u records, %u dups, %zu key's bytes, %zu data's bytes, %zu problems\n",
 			  record_count, dups, key_bytes, data_bytes, problems_count);
+		fflush(NULL);
 	}
 
 	mdb_cursor_close(mc);
@@ -580,6 +592,7 @@ int main(int argc, char *argv[])
 	envname = argv[optind];
 	print("Running mdb_chk for '%s' in %s mode...\n",
 		  envname, (envflags & MDB_RDONLY) ? "read-only" : "write-lock");
+	fflush(NULL);
 
 	rc = mdb_env_create(&env);
 	if (rc) {
@@ -700,6 +713,7 @@ int main(int argc, char *argv[])
 
 	if (!dont_traversal) {
 		print("Traversal b-tree...\n");
+		fflush(NULL);
 		walk.pagemap = calloc(lastpgno, sizeof(*walk.pagemap));
 		if (! walk.pagemap) {
 			rc = errno ? errno : ENOMEM;
@@ -711,6 +725,7 @@ int main(int argc, char *argv[])
 		if (rc) {
 			if (rc == EINTR && gotsignal) {
 				print(" - interrupted by signal\n");
+				fflush(NULL);
 			} else {
 				error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
 			}
@@ -728,26 +743,27 @@ int main(int argc, char *argv[])
 					print(", %s %zu", walk.dbi_names[i], walk.dbi_pages[i]);
 			print(", %s %zu\n", walk.dbi_names[0], walk.dbi_pages[0]);
 			if (verbose > 1) {
-				print(" - space info: total %zu bytes, payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
-					total_page_bytes,
-					walk.total_payload_bytes * 100.0 / total_page_bytes, walk.total_payload_bytes,
-					(total_page_bytes - walk.total_payload_bytes) * 100.0 / total_page_bytes,
-					total_page_bytes - walk.total_payload_bytes);
+				print(" - space info: total %zu bytes, payload %zu (%.1f%%), unused %zu (%.1f%%)\n",
+					total_page_bytes, walk.total_payload_bytes,
+					walk.total_payload_bytes * 100.0 / total_page_bytes,
+					total_page_bytes - walk.total_payload_bytes,
+					(total_page_bytes - walk.total_payload_bytes) * 100.0 / total_page_bytes);
 				for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
 					size_t dbi_bytes = walk.dbi_pages[i] * stat.ms_psize;
-					print("     %s: subtotal %.2f%% (%zu), payload %.2f%% (%zu), unused %.2f%% (%zu)\n",
+					print("     %s: subtotal %zu bytes (%.1f%%), payload %zu (%.1f%%), unused %zu (%.1f%%)\n",
 						walk.dbi_names[i],
-						dbi_bytes * 100.0 / total_page_bytes, dbi_bytes,
-						walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes, walk.dbi_payload_bytes[i],
-						(dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes,
-						dbi_bytes - walk.dbi_payload_bytes[i]);
+						dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
+						walk.dbi_payload_bytes[i], walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes,
+						dbi_bytes - walk.dbi_payload_bytes[i],
+						(dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes);
 				}
 			}
-			print(" - summary: average fill %.2f%%, %zu problems\n",
+			print(" - summary: average fill %.1f%%, %zu problems\n",
 				walk.total_payload_bytes * 100.0 / total_page_bytes, total_problems);
 		}
 	} else if (verbose) {
 		print("Skipping b-tree walk...\n");
+		fflush(NULL);
 	}
 
 	if (! verbose)
@@ -806,6 +822,7 @@ bailout:
 	if (env)
 		mdb_env_close(env);
 	free(walk.pagemap);
+	fflush(NULL);
 	if (rc) {
 		if (rc < 0)
 			return gotsignal ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
