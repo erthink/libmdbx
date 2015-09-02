@@ -1659,7 +1659,7 @@ typedef void MDB_debug_func(int type, const char *function, int line,
 int mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn);
 
 typedef int MDB_pgvisitor_func(size_t pgno, unsigned pgnumber, void* ctx,
-					const char* dbi, const char *type,
+					const char* dbi, const char *type, int nentries,
 					int payload_bytes, int header_bytes, int unused_bytes);
 int mdb_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* ctx);
 

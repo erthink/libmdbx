@@ -9895,8 +9895,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 			over_unused = omp->mp_pages * ctx->mw_txn->mt_env->me_psize
 					- over_payload - over_header;
 
-			rc = ctx->mw_visitor(*opg, omp->mp_pages, ctx->mw_user, dbi, "overflow-data",
-					over_payload, over_header, over_unused);
+			rc = ctx->mw_visitor(*opg, omp->mp_pages, ctx->mw_user, dbi,
+					"overflow-data", 1, over_payload, over_header, over_unused);
 			if (rc)
 				return rc;
 			continue;
@@ -9922,8 +9922,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		}
 	}
 
-	return ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi,
-		type, payload_size, header_size, unused_size + align_bytes);
+	return ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, type,
+		nkeys, payload_size, header_size, unused_size + align_bytes);
 }
 
 int ESECT
@@ -9936,14 +9936,14 @@ mdb_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* user)
 	ctx.mw_user = user;
 	ctx.mw_visitor = visitor;
 
-	rc = visitor(0, 2, user, "lmdb", "meta", sizeof(MDB_meta)*2, PAGEHDRSZ*2,
+	rc = visitor(0, 2, user, "lmdb", "meta", 2, sizeof(MDB_meta)*2, PAGEHDRSZ*2,
 				 (txn->mt_env->me_psize - sizeof(MDB_meta) - PAGEHDRSZ) *2);
 	if (! rc && txn->mt_dbs[FREE_DBI].md_root != P_INVALID)
 		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0, 0);
 	if (! rc && txn->mt_dbs[MAIN_DBI].md_root != P_INVALID)
 		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0, 0);
 	if (! rc)
-		rc = visitor(P_INVALID, 0, user, NULL, NULL, -1, 0, 0);
+		rc = visitor(P_INVALID, 0, user, NULL, NULL, 0, 0, 0, 0);
 	return rc;
 }
 

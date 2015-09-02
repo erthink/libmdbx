@@ -211,7 +211,7 @@ static size_t problems_pop(struct problem* list) {
 }
 
 static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
-	const char* type, int payload_bytes, int header_bytes, int unused_bytes)
+	const char* type, int nentries, int payload_bytes, int header_bytes, int unused_bytes)
 {
 	if (type) {
 		size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
@@ -236,8 +236,9 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
 			problem_add(pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.ms_psize - sizeof(long));
-		else if (payload_bytes < 1) {
-			problem_add(pgno, "empty page", "payload %i bytes", payload_bytes);
+		if (payload_bytes < 1 || nentries < 1) {
+			problem_add(pgno, "empty page", "payload %i bytes, %i entries",
+						payload_bytes, nentries);
 			walk.dbi_empty_pages[index] += 1;
 		}
 
