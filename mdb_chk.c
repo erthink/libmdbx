@@ -64,7 +64,9 @@ static void signal_hanlder( int sig ) {
 struct {
 	const char* dbi_names[MAX_DBI];
 	size_t dbi_pages[MAX_DBI];
+	size_t dbi_empty_pages[MAX_DBI];
 	size_t dbi_payload_bytes[MAX_DBI];
+	size_t dbi_lost_bytes[MAX_DBI];
 	short *pagemap;
 	size_t total_payload_bytes;
 	size_t pgcount;
@@ -135,8 +137,10 @@ static int pagemap_lookup_dbi(const char* dbi) {
 
 	walk.dbi_names[last] = strdup(dbi);
 
-	if (verbose > 2)
+	if (verbose > 1) {
 		print(" - found '%s' area\n", dbi);
+		fflush(NULL);
+	}
 
 	return last;
 }
@@ -165,9 +169,11 @@ static void problem_add(size_t entry_number, const char* msg, const char *extra,
 			print(" - entry #%zu: %s", entry_number, msg);
 			if (extra) {
 				va_list args;
+				printf(" (");
 				va_start(args, extra);
 				vfprintf(stdout, extra, args);
 				va_end(args);
+				printf(")");
 			}
 			printf("\n");
 			if (need_fflush)
@@ -214,9 +220,9 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		if (index < 0)
 			return ENOMEM;
 
-		if (verbose > 3) {
-			print((pgnumber < 2) ? "     %s-page %zu" : "     %s-span %zu..%zu (%u pages)",
-				type, pgno, pgno + pgnumber - 1, pgnumber);
+		if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi) == 0)) {
+			print((pgnumber == 1) ? "     %s-page %zu" : "     %s-span %zu[%u]",
+				type, pgno, pgnumber);
 			print(" of %s: header %i, payload %i, unused %i\n",
 				dbi, header_bytes, payload_bytes, unused_bytes);
 		}
@@ -224,19 +230,23 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		walk.pgcount += pgnumber;
 
 		if (unused_bytes < 0 || (size_t) unused_bytes > page_size)
-			problem_add(pgno, "illegal unused-bytes", "(%zu < %i < %zu)",
+			problem_add(pgno, "illegal unused-bytes", "%zu < %i < %zu",
 				0, unused_bytes, stat.ms_psize);
 
 		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
-			problem_add(pgno, "illegal header-length", "(%zu < %i < %zu)",
+			problem_add(pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.ms_psize - sizeof(long));
-		else if (payload_bytes < 1)
-			problem_add(pgno, "empty page", "(payload %i bytes)", payload_bytes);
+		else if (payload_bytes < 1) {
+			problem_add(pgno, "empty page", "payload %i bytes", payload_bytes);
+			walk.dbi_empty_pages[index] += 1;
+		}
 
-		if (page_bytes != page_size)
-			problem_add(pgno, "misused page",  "(%zu != %zu (%ih + %ip + %iu))",
+		if (page_bytes != page_size) {
+			problem_add(pgno, "misused page",  "%zu != %zu (%ih + %ip + %iu)",
 				page_size, page_bytes, header_bytes, payload_bytes, unused_bytes);
-		else {
+			if (page_size > page_bytes)
+				walk.dbi_lost_bytes[index] += page_size - page_bytes;
+		} else {
 			walk.dbi_payload_bytes[index] += payload_bytes + header_bytes;
 			walk.total_payload_bytes += payload_bytes + header_bytes;
 		}
@@ -244,9 +254,11 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		if (pgnumber) {
 			do {
 				if (pgno >= lastpgno)
-					problem_add(pgno, "wrong page-no", "(> %zi)", lastpgno);
+					problem_add(pgno, "wrong page-no",
+						"%zu > %zi", pgno, lastpgno);
 				else if (walk.pagemap[pgno])
-					problem_add(pgno, "page already used", "(in %s)", walk.dbi_names[walk.pagemap[pgno]]);
+					problem_add(pgno, "page already used",
+						"in %s", walk.dbi_names[walk.pagemap[pgno]]);
 				else {
 					walk.pagemap[pgno] = index;
 					walk.dbi_pages[index] += 1;
@@ -273,18 +285,18 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 	size_t *iptr = data->mv_data, txnid = *(size_t*)key->mv_data;
 
 	if (key->mv_size != sizeof(txnid))
-		problem_add(record_number, "wrong txn-id size", "(key-size %zi)", key->mv_size);
+		problem_add(record_number, "wrong txn-id size", "key-size %zi", key->mv_size);
 	else if (txnid < 1 || txnid > info.me_last_txnid)
-		problem_add(record_number, "wrong txn-id", "(%zu)", txnid);
+		problem_add(record_number, "wrong txn-id", "%zu", txnid);
 
 	if (data->mv_size < sizeof(size_t) || data->mv_size % sizeof(size_t))
-		problem_add(record_number, "wrong idl size", "(%zu)", data->mv_size);
+		problem_add(record_number, "wrong idl size", "%zu", data->mv_size);
 	else {
 		number = *iptr++;
 		if (number <= 0 || number >= MDB_IDL_UM_MAX)
-			problem_add(record_number, "wrong idl length", "(%zi)", number);
+			problem_add(record_number, "wrong idl length", "%zi", number);
 		else if ((number + 1) * sizeof(size_t) != data->mv_size)
-			problem_add(record_number, "mismatch idl length", "(%zi != %zu)",
+			problem_add(record_number, "mismatch idl length", "%zi != %zu",
 						number * sizeof(size_t), data->mv_size);
 		else {
 			freedb_pages  += number;
@@ -293,26 +305,27 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 			for (i = number, prev = 1; --i >= 0; ) {
 				pg = iptr[i];
 				if (pg < 2 /* META_PAGE */ || pg > info.me_last_pgno)
-					problem_add(record_number, "wrong idl entry", "(2 < %zi < %zi)",
+					problem_add(record_number, "wrong idl entry", "2 < %zi < %zi",
 								pg, info.me_last_pgno);
 				else if (pg <= prev) {
 					bad = " [bad sequence]";
-					problem_add(record_number, "bad sequence", "(%zi <= %zi)",
+					problem_add(record_number, "bad sequence", "%zi <= %zi",
 								pg, prev);
 				}
 				prev = pg;
 				pg += span;
 				for (; i >= span && iptr[i - span] == pg; span++, pg++) ;
 			}
-			if (verbose > 2)
+			if (verbose > 2 && !only_subdb) {
 				print("     transaction %zu, %zd pages, maxspan %zd%s\n",
 					*(size_t *)key->mv_data, number, span, bad);
-			if (verbose > 3) {
-				int j = number - 1;
-				while (j >= 0) {
-					pg = iptr[j];
-					for (span = 1; --j >= 0 && iptr[j] == pg + span; span++) ;
-					print((span > 1) ? "    %9zu[%zd]\n" : "    %9zu\n", pg, span);
+				if (verbose > 3) {
+					int j = number - 1;
+					while (j >= 0) {
+						pg = iptr[j];
+						for (span = 1; --j >= 0 && iptr[j] == pg + span; span++) ;
+						print((span > 1) ? "    %9zu[%zd]\n" : "    %9zu\n", pg, span);
+					}
 				}
 			}
 		}
@@ -438,23 +451,23 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			problem_add(record_count, "key with zero length", NULL);
 		} else if (key.mv_size > maxkeysize) {
 			problem_add(record_count, "key length exceeds max-key-size",
-						" (%zu > %zu)", key.mv_size, maxkeysize);
+						"%zu > %zu", key.mv_size, maxkeysize);
 		} else if ((flags & MDB_INTEGERKEY)
 			&& key.mv_size != sizeof(size_t) && key.mv_size != sizeof(int)) {
 			problem_add(record_count, "wrong key length",
-						" (%zu != %zu)", key.mv_size, sizeof(size_t));
+						"%zu != %zu", key.mv_size, sizeof(size_t));
 		}
 
 		if ((flags & MDB_INTEGERDUP)
 			&& data.mv_size != sizeof(size_t) && data.mv_size != sizeof(int)) {
 			problem_add(record_count, "wrong data length",
-						" (%zu != %zu)", data.mv_size, sizeof(size_t));
+						"%zu != %zu", data.mv_size, sizeof(size_t));
 		}
 
 		if (prev_key.mv_data) {
 			if ((flags & MDB_DUPFIXED) && prev_data.mv_size != data.mv_size) {
 				problem_add(record_count, "different data length",
-						" (%zu != %zu)", prev_data.mv_size, data.mv_size);
+						"%zu != %zu", prev_data.mv_size, data.mv_size);
 			}
 
 			int cmp = mdb_cmp(txn, dbi, &prev_key, &key);
@@ -498,7 +511,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 
 	if (record_count != ms.ms_entries)
 		problem_add(record_count, "differentent number of entries",
-				" (%zu != %zu)", record_count, ms.ms_entries);
+				"%zu != %zu", record_count, ms.ms_entries);
 bailout:
 	problems_count = problems_pop(saved_list);
 	if (! silent && verbose) {
@@ -737,6 +750,7 @@ int main(int argc, char *argv[])
 	if (!dont_traversal) {
 		struct problem* saved_list;
 		size_t traversal_problems;
+		size_t empty_pages, lost_bytes;
 
 		print("Traversal b-tree...\n");
 		fflush(NULL);
@@ -760,9 +774,16 @@ int main(int argc, char *argv[])
 			}
 			goto bailout;
 		}
+
 		for( n = 0; n < lastpgno; ++n)
 			if (! walk.pagemap[n])
 				walk.dbi_pages[0] += 1;
+
+		empty_pages = lost_bytes = 0;
+		for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
+			empty_pages += walk.dbi_empty_pages[i];
+			lost_bytes += walk.dbi_lost_bytes[i];
+		}
 
 		if (verbose) {
 			size_t total_page_bytes = walk.pgcount * stat.ms_psize;
@@ -779,16 +800,25 @@ int main(int argc, char *argv[])
 					(total_page_bytes - walk.total_payload_bytes) * 100.0 / total_page_bytes);
 				for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
 					size_t dbi_bytes = walk.dbi_pages[i] * stat.ms_psize;
-					print("     %s: subtotal %zu bytes (%.1f%%), payload %zu (%.1f%%), unused %zu (%.1f%%)\n",
+					print("     %s: subtotal %zu bytes (%.1f%%), payload %zu (%.1f%%), unused %zu (%.1f%%)",
 						walk.dbi_names[i],
 						dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
 						walk.dbi_payload_bytes[i], walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes,
 						dbi_bytes - walk.dbi_payload_bytes[i],
 						(dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes);
+					if (walk.dbi_empty_pages[i])
+						print(", %zu empty pages", walk.dbi_empty_pages[i]);
+					if (walk.dbi_lost_bytes[i])
+						print(", %zu bytes lost", walk.dbi_lost_bytes[i]);
+					print("\n");
 				}
 			}
-			print(" - summary: average fill %.1f%%, %zu problems\n",
-				walk.total_payload_bytes * 100.0 / total_page_bytes, traversal_problems);
+			print(" - summary: average fill %.1f%%", walk.total_payload_bytes * 100.0 / total_page_bytes);
+			if (empty_pages)
+				print(", %zu empty pages", empty_pages);
+			if (lost_bytes)
+				print(", %zu bytes lost", lost_bytes);
+			print(", %zu problems\n", traversal_problems);
 		}
 	} else if (verbose) {
 		print("Skipping b-tree walk...\n");
