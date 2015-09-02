@@ -134,6 +134,10 @@ static int pagemap_lookup_dbi(const char* dbi) {
 		return last = -1;
 
 	walk.dbi_names[last] = strdup(dbi);
+
+	if (verbose > 2)
+		print(" - found '%s' area\n", dbi);
+
 	return last;
 }
 
@@ -201,39 +205,55 @@ static size_t problems_pop(struct problem* list) {
 }
 
 static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
-					 char type, int payload_bytes, int header_bytes)
+	const char* type, int payload_bytes, int header_bytes, int unused_bytes)
 {
-	if (pgnumber) {
+	if (type) {
+		size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
+		size_t page_size = pgnumber * stat.ms_psize;
 		int index = pagemap_lookup_dbi(dbi);
 		if (index < 0)
 			return ENOMEM;
 
+		if (verbose > 3) {
+			print((pgnumber < 2) ? "     %s-page %zu" : "     %s-span %zu..%zu (%u pages)",
+				type, pgno, pgno + pgnumber - 1, pgnumber);
+			print(" of %s: header %i, payload %i, unused %i\n",
+				dbi, header_bytes, payload_bytes, unused_bytes);
+		}
+
 		walk.pgcount += pgnumber;
 
+		if (unused_bytes < 0 || (size_t) unused_bytes > page_size)
+			problem_add(pgno, "illegal unused-bytes", "(%zu < %i < %zu)",
+				0, unused_bytes, stat.ms_psize);
+
 		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
-			problem_add(pgno, "wrong header-length", "(%zu < %i < %zu)",
-				sizeof(long), header_bytes, header_bytes >= stat.ms_psize - sizeof(long));
+			problem_add(pgno, "illegal header-length", "(%zu < %i < %zu)",
+				sizeof(long), header_bytes, stat.ms_psize - sizeof(long));
 		else if (payload_bytes < 1)
-			problem_add(pgno, "empty page",  "(payload %zu bytes)", payload_bytes);
-		else if (payload_bytes + header_bytes > pgnumber * stat.ms_psize)
-			problem_add(pgno, "overflowed page",  "(%zu + %zu > %zu)",
-						payload_bytes, header_bytes, pgnumber * stat.ms_psize);
+			problem_add(pgno, "empty page", "(payload %i bytes)", payload_bytes);
+
+		if (page_bytes != page_size)
+			problem_add(pgno, "misused page",  "(%zu != %zu (%ih + %ip + %iu))",
+				page_size, page_bytes, header_bytes, payload_bytes, unused_bytes);
 		else {
 			walk.dbi_payload_bytes[index] += payload_bytes + header_bytes;
 			walk.total_payload_bytes += payload_bytes + header_bytes;
 		}
 
-		do {
-			if (pgno >= lastpgno)
-				problem_add(pgno, "wrong page-no", "(> %zi)", lastpgno);
-			else if (walk.pagemap[pgno])
-				problem_add(pgno, "page already used", "(in %s)", walk.dbi_names[walk.pagemap[pgno]]);
-			else {
-				walk.pagemap[pgno] = index;
-				walk.dbi_pages[index] += 1;
-			}
-			++pgno;
-		} while(--pgnumber);
+		if (pgnumber) {
+			do {
+				if (pgno >= lastpgno)
+					problem_add(pgno, "wrong page-no", "(> %zi)", lastpgno);
+				else if (walk.pagemap[pgno])
+					problem_add(pgno, "page already used", "(in %s)", walk.dbi_names[walk.pagemap[pgno]]);
+				else {
+					walk.pagemap[pgno] = index;
+					walk.dbi_pages[index] += 1;
+				}
+				++pgno;
+			} while(--pgnumber);
+		}
 	}
 
 	return gotsignal ? EINTR : MDB_SUCCESS;
@@ -285,7 +305,7 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 				for (; i >= span && iptr[i - span] == pg; span++, pg++) ;
 			}
 			if (verbose > 2)
-				print(" - transaction %zu, %zd pages, maxspan %zd%s\n",
+				print("     transaction %zu, %zd pages, maxspan %zd%s\n",
 					*(size_t *)key->mv_data, number, span, bad);
 			if (verbose > 3) {
 				int j = number - 1;
@@ -655,8 +675,11 @@ int main(int argc, char *argv[])
 			  info.me_mapsize / k, sf[i]);
 		if (info.me_mapaddr)
 			print(" - mapaddr %p\n", info.me_mapaddr);
-		print(" - pagesize %u, max keysize %zu, max readers %u\n",
-				  stat.ms_psize, maxkeysize, info.me_maxreaders);
+		print(" - pagesize %u, max keysize %zu (%s), max readers %u\n",
+				stat.ms_psize, maxkeysize,
+				(maxkeysize == 511) ? "default" :
+				(maxkeysize == 0) ? "devel" : "custom",
+				info.me_maxreaders);
 		print(" - transactions: last %zu, bottom %zu, lag reading %zi\n", info.me_last_txnid,
 			  info.me_tail_txnid, info.me_last_txnid - info.me_tail_txnid);
 
@@ -712,6 +735,9 @@ int main(int argc, char *argv[])
 	}
 
 	if (!dont_traversal) {
+		struct problem* saved_list;
+		size_t traversal_problems;
+
 		print("Traversal b-tree...\n");
 		fflush(NULL);
 		walk.pagemap = calloc(lastpgno, sizeof(*walk.pagemap));
@@ -721,7 +747,10 @@ int main(int argc, char *argv[])
 			goto bailout;
 		}
 
+		saved_list = problems_push();
 		rc = mdb_env_pgwalk(txn, pgvisitor, NULL);
+		traversal_problems = problems_pop(saved_list);
+
 		if (rc) {
 			if (rc == EINTR && gotsignal) {
 				print(" - interrupted by signal\n");
@@ -759,7 +788,7 @@ int main(int argc, char *argv[])
 				}
 			}
 			print(" - summary: average fill %.1f%%, %zu problems\n",
-				walk.total_payload_bytes * 100.0 / total_page_bytes, total_problems);
+				walk.total_payload_bytes * 100.0 / total_page_bytes, traversal_problems);
 		}
 	} else if (verbose) {
 		print("Skipping b-tree walk...\n");
