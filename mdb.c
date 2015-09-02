@@ -402,7 +402,7 @@ typedef MDB_ID	txnid_t;
 #if MDB_MAXKEYSIZE
 #	define ENV_MAXKEY(env)	(MDB_MAXKEYSIZE)
 #else
-#	define ENV_MAXKEY(env)	((env)->me_maxkey)
+#	define ENV_MAXKEY(env)	((env)->me_maxkey_limit)
 #endif /* MDB_MAXKEYSIZE */
 
 	/**	@brief The maximum size of a data item.
@@ -1077,9 +1077,7 @@ struct MDB_env {
 	int			me_maxfree_1pg;
 	/** Max size of a node on a page */
 	unsigned	me_nodemax;
-#if !(MDB_MAXKEYSIZE)
-	unsigned	me_maxkey;	/**< max size of a key */
-#endif
+	unsigned	me_maxkey_limit;	/**< max size of a key */
 	int		me_live_reader;		/**< have liveness lock in reader table */
 	void		*me_userctx;	 /**< User-settable context */
 #if MDB_DEBUG
@@ -4387,10 +4385,11 @@ mdb_env_open2(MDB_env *env, MDB_meta *meta)
 	env->me_maxfree_1pg = (env->me_psize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
 	env->me_nodemax = (((env->me_psize - PAGEHDRSZ) / MDB_MINKEYS) & -2)
 		- sizeof(indx_t);
-#if !(MDB_MAXKEYSIZE)
-	env->me_maxkey = env->me_nodemax - (NODESIZE + sizeof(MDB_db));
-#endif
+	env->me_maxkey_limit = env->me_nodemax - (NODESIZE + sizeof(MDB_db));
 	env->me_maxpg = env->me_mapsize / env->me_psize;
+
+	if (MDB_MAXKEYSIZE > env->me_maxkey_limit)
+		return MDB_BAD_VALSIZE;
 
 	return MDB_SUCCESS;
 }
