@@ -9833,15 +9833,13 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		type = "leaf";
 		break;
 	case P_LEAF|P_SUBP:
-		type = "leaf-dupsort";
+		type = "dupsort-subleaf";
 		break;
 	case P_LEAF|P_LEAF2:
-		/* #MDB_DUPFIXED records */
-		type = "leaf-dupfixed";
+		type = "dupfixed-leaf";
 		break;
 	case P_LEAF|P_LEAF2|P_SUBP:
-		/* #MDB_DUPSORT sub-pages */
-		type = "leaf-dupfixed-dupsort";
+		type = "dupsort-dupfixed-subleaf";
 		break;
 	case P_META:
 	case P_OVERFLOW:

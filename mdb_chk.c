@@ -145,7 +145,7 @@ static int pagemap_lookup_dbi(const char* dbi) {
 	return last;
 }
 
-static void problem_add(size_t entry_number, const char* msg, const char *extra, ...) {
+static void problem_add(const char* object, size_t entry_number, const char* msg, const char *extra, ...) {
 	total_problems++;
 
 	if (! quiet) {
@@ -166,7 +166,7 @@ static void problem_add(size_t entry_number, const char* msg, const char *extra,
 
 		p->count++;
 		if (verbose > 1) {
-			print(" - entry #%zu: %s", entry_number, msg);
+			print("     %s #%zu: %s", object, entry_number, msg);
 			if (extra) {
 				va_list args;
 				printf(" (");
@@ -230,20 +230,29 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		walk.pgcount += pgnumber;
 
 		if (unused_bytes < 0 || (size_t) unused_bytes > page_size)
-			problem_add(pgno, "illegal unused-bytes", "%zu < %i < %zu",
+			problem_add("page", pgno, "illegal unused-bytes", "%zu < %i < %zu",
 				0, unused_bytes, stat.ms_psize);
 
 		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
-			problem_add(pgno, "illegal header-length", "%zu < %i < %zu",
+			problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.ms_psize - sizeof(long));
-		if (payload_bytes < 1 || nentries < 1) {
-			problem_add(pgno, "empty page", "payload %i bytes, %i entries",
-						payload_bytes, nentries);
-			walk.dbi_empty_pages[index] += 1;
+		if (payload_bytes < 1) {
+			if (nentries > 0) {
+				problem_add("page", pgno, "zero size-of-entry", "payload %i bytes, %i entries",
+							payload_bytes, nentries);
+				if (header_bytes + unused_bytes < page_size) {
+					/* LY: hush a misuse error */
+					page_bytes = page_size;
+				}
+			} else {
+				problem_add("page", pgno, "empty", "payload %i bytes, %i entries",
+							payload_bytes, nentries);
+				walk.dbi_empty_pages[index] += 1;
+			}
 		}
 
 		if (page_bytes != page_size) {
-			problem_add(pgno, "misused page",  "%zu != %zu (%ih + %ip + %iu)",
+			problem_add("page", pgno, "misused",  "%zu != %zu (%ih + %ip + %iu)",
 				page_size, page_bytes, header_bytes, payload_bytes, unused_bytes);
 			if (page_size > page_bytes)
 				walk.dbi_lost_bytes[index] += page_size - page_bytes;
@@ -255,10 +264,10 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 		if (pgnumber) {
 			do {
 				if (pgno >= lastpgno)
-					problem_add(pgno, "wrong page-no",
+					problem_add("page", pgno, "wrong page-no",
 						"%zu > %zi", pgno, lastpgno);
 				else if (walk.pagemap[pgno])
-					problem_add(pgno, "page already used",
+					problem_add("page", pgno, "already used",
 						"in %s", walk.dbi_names[walk.pagemap[pgno]]);
 				else {
 					walk.pagemap[pgno] = index;
@@ -286,18 +295,18 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 	size_t *iptr = data->mv_data, txnid = *(size_t*)key->mv_data;
 
 	if (key->mv_size != sizeof(txnid))
-		problem_add(record_number, "wrong txn-id size", "key-size %zi", key->mv_size);
+		problem_add("entry", record_number, "wrong txn-id size", "key-size %zi", key->mv_size);
 	else if (txnid < 1 || txnid > info.me_last_txnid)
-		problem_add(record_number, "wrong txn-id", "%zu", txnid);
+		problem_add("entry", record_number, "wrong txn-id", "%zu", txnid);
 
 	if (data->mv_size < sizeof(size_t) || data->mv_size % sizeof(size_t))
-		problem_add(record_number, "wrong idl size", "%zu", data->mv_size);
+		problem_add("entry", record_number, "wrong idl size", "%zu", data->mv_size);
 	else {
 		number = *iptr++;
 		if (number <= 0 || number >= MDB_IDL_UM_MAX)
-			problem_add(record_number, "wrong idl length", "%zi", number);
+			problem_add("entry", record_number, "wrong idl length", "%zi", number);
 		else if ((number + 1) * sizeof(size_t) != data->mv_size)
-			problem_add(record_number, "mismatch idl length", "%zi != %zu",
+			problem_add("entry", record_number, "mismatch idl length", "%zi != %zu",
 						number * sizeof(size_t), data->mv_size);
 		else {
 			freedb_pages  += number;
@@ -306,11 +315,11 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 			for (i = number, prev = 1; --i >= 0; ) {
 				pg = iptr[i];
 				if (pg < 2 /* META_PAGE */ || pg > info.me_last_pgno)
-					problem_add(record_number, "wrong idl entry", "2 < %zi < %zi",
+					problem_add("entry", record_number, "wrong idl entry", "2 < %zi < %zi",
 								pg, info.me_last_pgno);
 				else if (pg <= prev) {
 					bad = " [bad sequence]";
-					problem_add(record_number, "bad sequence", "%zi <= %zi",
+					problem_add("entry", record_number, "bad sequence", "%zi <= %zi",
 								pg, prev);
 				}
 				prev = pg;
@@ -385,7 +394,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 
 	if (dbi >= 2 /* CORE_DBS */ && name && only_subdb && strcmp(only_subdb, name)) {
 		if (verbose) {
-			print("Skip processing %s'db...\n", name);
+			print("Skip processing '%s'...\n", name);
 			fflush(NULL);
 		}
 		skipped_subdb++;
@@ -394,7 +403,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	}
 
 	if (! silent && verbose) {
-		print("Processing %s'db...\n", name ? name : "main");
+		print("Processing '%s'...\n", name ? name : "main");
 		fflush(NULL);
 	}
 
@@ -449,39 +458,39 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		}
 
 		if (key.mv_size == 0) {
-			problem_add(record_count, "key with zero length", NULL);
+			problem_add("entry", record_count, "key with zero length", NULL);
 		} else if (key.mv_size > maxkeysize) {
-			problem_add(record_count, "key length exceeds max-key-size",
+			problem_add("entry", record_count, "key length exceeds max-key-size",
 						"%zu > %zu", key.mv_size, maxkeysize);
 		} else if ((flags & MDB_INTEGERKEY)
 			&& key.mv_size != sizeof(size_t) && key.mv_size != sizeof(int)) {
-			problem_add(record_count, "wrong key length",
+			problem_add("entry", record_count, "wrong key length",
 						"%zu != %zu", key.mv_size, sizeof(size_t));
 		}
 
 		if ((flags & MDB_INTEGERDUP)
 			&& data.mv_size != sizeof(size_t) && data.mv_size != sizeof(int)) {
-			problem_add(record_count, "wrong data length",
+			problem_add("entry", record_count, "wrong data length",
 						"%zu != %zu", data.mv_size, sizeof(size_t));
 		}
 
 		if (prev_key.mv_data) {
 			if ((flags & MDB_DUPFIXED) && prev_data.mv_size != data.mv_size) {
-				problem_add(record_count, "different data length",
+				problem_add("entry", record_count, "different data length",
 						"%zu != %zu", prev_data.mv_size, data.mv_size);
 			}
 
 			int cmp = mdb_cmp(txn, dbi, &prev_key, &key);
 			if (cmp > 0) {
-				problem_add(record_count, "broken ordering of entries", NULL);
+				problem_add("entry", record_count, "broken ordering of entries", NULL);
 			} else if (cmp == 0) {
 				++dups;
 				if (! (flags & MDB_DUPSORT))
-					problem_add(record_count, "duplicated entries", NULL);
+					problem_add("entry", record_count, "duplicated entries", NULL);
 				else if (flags & MDB_INTEGERDUP) {
 					cmp = mdb_dcmp(txn, dbi, &prev_data, &data);
 					if (cmp > 0)
-						problem_add(record_count, "broken ordering of multi-values", NULL);
+						problem_add("entry", record_count, "broken ordering of multi-values", NULL);
 				}
 			}
 		} else if (verbose) {
@@ -511,7 +520,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		rc = 0;
 
 	if (record_count != ms.ms_entries)
-		problem_add(record_count, "differentent number of entries",
+		problem_add("entry", record_count, "differentent number of entries",
 				"%zu != %zu", record_count, ms.ms_entries);
 bailout:
 	problems_count = problems_pop(saved_list);
