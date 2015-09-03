@@ -9591,9 +9591,13 @@ mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 	for (i=0; i<rdrs; i++) {
 		if (mr[i].mr_pid) {
 			txnid_t	txnid = mr[i].mr_txnid;
-			sprintf(buf, txnid == (txnid_t)-1 ?
-				"%10d %zx -\n" : "%10d %zx %zu\n",
-				(int)mr[i].mr_pid, (size_t)mr[i].mr_tid, txnid);
+			if (txnid == (txnid_t)-1l)
+				sprintf(buf, "%10d %zx -\n",
+					(int) mr[i].mr_pid, (size_t) mr[i].mr_tid);
+			else
+				sprintf(buf, "%10d %zx %zu\n",
+					(int) mr[i].mr_pid, (size_t) mr[i].mr_tid, txnid);
+
 			if (first) {
 				first = 0;
 				rc = func("    pid     thread     txnid\n", ctx);
