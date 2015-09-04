@@ -17,14 +17,10 @@
 # There may be other macros in mdb.c of interest. You should
 # read mdb.c before changing any of them.
 #
-CC	= gcc
-W	= -Wall -Werror -Wno-unused-parameter
-THREADS = -pthread
-XCFLAGS ?= $(CFLAGS)
-OPT	= -O2 -g
-CFLAGS	:= $(THREADS) $(OPT) $(W) $(XCFLAGS)
+CC	?= gcc
+CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
+CFLAGS	+= -pthread
 LDLIBS	= -lrt
-SOLIBS	=
 prefix	?= /usr/local
 
 ########################################################################
