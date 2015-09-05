@@ -20,7 +20,7 @@
 CC	?= gcc
 CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
 CFLAGS	+= -pthread
-LDLIBS	= -lrt
+LDLIBS	= -Wl,--no-as-needed -lrt
 prefix	?= /usr/local
 
 ########################################################################
