@@ -221,8 +221,10 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 			return ENOMEM;
 
 		if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi) == 0)) {
-			print((pgnumber == 1) ? "     %s-page %zu" : "     %s-span %zu[%u]",
-				type, pgno, pgnumber);
+			if (pgnumber == 1)
+				print("     %s-page %zu", type, pgno);
+			else
+				print("     %s-span %zu[%u]", type, pgno, pgnumber);
 			print(" of %s: header %i, payload %i, unused %i\n",
 				dbi, header_bytes, payload_bytes, unused_bytes);
 		}
@@ -334,7 +336,10 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 					while (j >= 0) {
 						pg = iptr[j];
 						for (span = 1; --j >= 0 && iptr[j] == pg + span; span++) ;
-						print((span > 1) ? "    %9zu[%zd]\n" : "    %9zu\n", pg, span);
+						if (span > 1)
+							print("    %9zu[%zd]\n", pg, span);
+						else
+							print("    %9zu\n", pg);
 					}
 				}
 			}
@@ -710,19 +715,21 @@ int main(int argc, char *argv[])
 			   meta_synctype(info.me_meta1_sign), info.me_meta1_txnid,
 			   meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 					   info.me_meta2_txnid, info.me_meta2_sign) ? "tail" : "head");
-		print(info.me_meta1_txnid > info.me_last_txnid
-			  ? ", rolled-back %zu (%zu >>> %zu)\n" : "\n",
-			  info.me_meta1_txnid - info.me_last_txnid,
-			  info.me_meta1_txnid, info.me_last_txnid);
+		if (info.me_meta1_txnid > info.me_last_txnid)
+			print(", rolled-back %zu (%zu >>> %zu)\n",
+				info.me_meta1_txnid - info.me_last_txnid,
+				info.me_meta1_txnid, info.me_last_txnid);
+		print("\n");
 
 		print(" - meta-2: %s %zu, %s",
 			   meta_synctype(info.me_meta2_sign), info.me_meta2_txnid,
 			   meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 					   info.me_meta1_txnid, info.me_meta1_sign) ? "tail" : "head");
-		print(info.me_meta2_txnid > info.me_last_txnid
-			  ? ", rolled-back %zu (%zu >>> %zu)\n" : "\n",
-			  info.me_meta2_txnid - info.me_last_txnid,
-			  info.me_meta2_txnid, info.me_last_txnid);
+		if (info.me_meta2_txnid > info.me_last_txnid)
+			print(", rolled-back %zu (%zu >>> %zu)\n",
+				info.me_meta2_txnid - info.me_last_txnid,
+				info.me_meta2_txnid, info.me_last_txnid);
+		print("\n");
 	}
 
 	if (exclusive > 1) {

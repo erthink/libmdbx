@@ -17,22 +17,16 @@
 #include <unistd.h>
 #include "lmdb.h"
 
-#ifdef	_WIN32
-#define	Z	"I"
-#else
-#define	Z	"z"
-#endif
-
 static void prstat(MDB_stat *ms)
 {
 #if 0
 	printf("  Page size: %u\n", ms->ms_psize);
 #endif
 	printf("  Tree depth: %u\n", ms->ms_depth);
-	printf("  Branch pages: %"Z"u\n", ms->ms_branch_pages);
-	printf("  Leaf pages: %"Z"u\n", ms->ms_leaf_pages);
-	printf("  Overflow pages: %"Z"u\n", ms->ms_overflow_pages);
-	printf("  Entries: %"Z"u\n", ms->ms_entries);
+	printf("  Branch pages: %zu\n", ms->ms_branch_pages);
+	printf("  Leaf pages: %zu\n", ms->ms_leaf_pages);
+	printf("  Overflow pages: %zu\n", ms->ms_overflow_pages);
+	printf("  Entries: %zu\n", ms->ms_entries);
 }
 
 static void usage(char *prog)
@@ -125,12 +119,12 @@ int main(int argc, char *argv[])
 		(void)mdb_env_info(env, &mei);
 		printf("Environment Info\n");
 		printf("  Map address: %p\n", mei.me_mapaddr);
-		printf("  Map size: %"Z"u\n", mei.me_mapsize);
+		printf("  Map size: %zu\n", mei.me_mapsize);
 		printf("  Page size: %u\n", mst.ms_psize);
-		printf("  Max pages: %"Z"u\n", mei.me_mapsize / mst.ms_psize);
-		printf("  Number of pages used: %"Z"u\n", mei.me_last_pgno+1);
-		printf("  Last transaction ID: %"Z"u\n", mei.me_last_txnid);
-		printf("  Tail transaction ID: %"Z"u (%"Z"i)\n",
+		printf("  Max pages: %zu\n", mei.me_mapsize / mst.ms_psize);
+		printf("  Number of pages used: %zu\n", mei.me_last_pgno+1);
+		printf("  Last transaction ID: %zu\n", mei.me_last_txnid);
+		printf("  Tail transaction ID: %zu (%zi)\n",
 			mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
 		printf("  Max readers: %u\n", mei.me_maxreaders);
 		printf("  Number of readers used: %u\n", mei.me_numreaders);
@@ -196,14 +190,16 @@ int main(int argc, char *argv[])
 					pg += span;
 					for (; i >= span && iptr[i-span] == pg; span++, pg++) ;
 				}
-				printf("    Transaction %"Z"u, %"Z"d pages, maxspan %"Z"d%s\n",
+				printf("    Transaction %zu, %zd pages, maxspan %zd%s\n",
 					*(size_t *)key.mv_data, j, span, bad);
 				if (freinfo > 2) {
 					for (--j; j >= 0; ) {
 						pg = iptr[j];
 						for (span=1; --j >= 0 && iptr[j] == pg+span; span++) ;
-						printf(span>1 ? "     %9"Z"u[%"Z"d]\n" : "     %9"Z"u\n",
-							pg, span);
+						if (span>1)
+							printf("     %9zu[%zd]\n", pg, span);
+						else
+							printf("     %9zu\n", pg);
 					}
 				}
 			}
@@ -213,30 +209,30 @@ int main(int argc, char *argv[])
 			size_t value = mei.me_mapsize / mst.ms_psize;
 			double percent = value / 100.0;
 			printf("Page Allocation Info\n");
-			printf("  Max pages: %9"Z"u 100%%\n", value);
+			printf("  Max pages: %9zu 100%%\n", value);
 
 			value = mei.me_last_pgno+1;
-			printf("  Number of pages used: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Number of pages used: %zu %.1f%%\n", value, value / percent);
 
 			value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno+1);
-			printf("  Remained: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Remained: %zu %.1f%%\n", value, value / percent);
 
 			value = mei.me_last_pgno+1 - pages;
-			printf("  Used now: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Used now: %zu %.1f%%\n", value, value / percent);
 
 			value = pages;
-			printf("  Free pages: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Free pages: %zu %.1f%%\n", value, value / percent);
 
 			value = pages - reclaimable;
-			printf("  Reading: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Reading: %zu %.1f%%\n", value, value / percent);
 
 			value = reclaimable;
-			printf("  Reclaimable: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Reclaimable: %zu %.1f%%\n", value, value / percent);
 
 			value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno+1) + reclaimable;
-			printf("  Available: %"Z"u %.1f%%\n", value, value / percent);
+			printf("  Available: %zu %.1f%%\n", value, value / percent);
 		} else
-			printf("  Free pages: %"Z"u\n", pages);
+			printf("  Free pages: %zu\n", pages);
 	}
 
 	rc = mdb_open(txn, subname, 0, &dbi);
