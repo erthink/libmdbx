@@ -33,6 +33,10 @@ PROGS	= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
 all:	$(ILIBS) $(PROGS)
 
 install: $(ILIBS) $(IPROGS) $(IHDRS)
+	mkdir -p $(DESTDIR)$(prefix)/bin
+	mkdir -p $(DESTDIR)$(prefix)/lib
+	mkdir -p $(DESTDIR)$(prefix)/include
+	mkdir -p $(DESTDIR)$(prefix)/man/man1
 	for f in $(IPROGS); do cp $$f $(DESTDIR)$(prefix)/bin; done
 	for f in $(ILIBS); do cp $$f $(DESTDIR)$(prefix)/lib; done
 	for f in $(IHDRS); do cp $$f $(DESTDIR)$(prefix)/include; done
