@@ -1381,7 +1381,7 @@ mdb_debug_log(int type, const char *function, int line,
 	mdb_assert((mc)->mc_txn->mt_env, expr)
 
 /** assert(3) variant in transaction context */
-#define mdb_tassert(mc, expr) \
+#define mdb_tassert(txn, expr) \
 	mdb_assert((txn)->mt_env, expr)
 
 /** Return the page number of \b mp which may be sub-page, for debug output */
