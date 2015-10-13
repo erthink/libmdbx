@@ -1,11 +1,11 @@
 mtest[0123456]
 wbench
 testdb
-mdb_copy
-mdb_stat
-mdb_dump
-mdb_load
-mdb_chk
+mdbx_copy
+mdbx_stat
+mdbx_dump
+mdbx_load
+mdbx_chk
 *.lo
 *.[ao]
 *.so

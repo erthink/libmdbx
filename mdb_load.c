@@ -17,7 +17,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
-#include "lmdb.h"
+#include "mdbx.h"
 
 #define PRINT	1
 #define NOHDR	2

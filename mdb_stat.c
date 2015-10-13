@@ -15,18 +15,18 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "lmdb.h"
+#include "mdbx.h"
 
-static void prstat(MDB_stat *ms)
+static void prstat(MDBX_stat *ms)
 {
 #if 0
-	printf("  Page size: %u\n", ms->ms_psize);
+	printf("  Page size: %u\n", ms->base.ms_psize);
 #endif
-	printf("  Tree depth: %u\n", ms->ms_depth);
-	printf("  Branch pages: %zu\n", ms->ms_branch_pages);
-	printf("  Leaf pages: %zu\n", ms->ms_leaf_pages);
-	printf("  Overflow pages: %zu\n", ms->ms_overflow_pages);
-	printf("  Entries: %zu\n", ms->ms_entries);
+	printf("  Tree depth: %u\n", ms->base.ms_depth);
+	printf("  Branch pages: %zu\n", ms->base.ms_branch_pages);
+	printf("  Leaf pages: %zu\n", ms->base.ms_leaf_pages);
+	printf("  Overflow pages: %zu\n", ms->base.ms_overflow_pages);
+	printf("  Entries: %zu\n", ms->base.ms_entries);
 }
 
 static void usage(char *prog)
@@ -41,8 +41,8 @@ int main(int argc, char *argv[])
 	MDB_env *env;
 	MDB_txn *txn;
 	MDB_dbi dbi;
-	MDB_stat mst;
-	MDB_envinfo mei;
+	MDBX_stat mst;
+	MDBX_envinfo mei;
 	char *prog = argv[0];
 	char *envname;
 	char *subname = NULL;
@@ -115,19 +115,19 @@ int main(int argc, char *argv[])
 	}
 
 	if (envinfo) {
-		(void)mdb_env_stat(env, &mst);
-		(void)mdb_env_info(env, &mei);
+		(void)mdbx_env_stat(env, &mst, sizeof(mst));
+		(void)mdbx_env_info(env, &mei, sizeof(mei));
 		printf("Environment Info\n");
-		printf("  Map address: %p\n", mei.me_mapaddr);
-		printf("  Map size: %zu\n", mei.me_mapsize);
-		printf("  Page size: %u\n", mst.ms_psize);
-		printf("  Max pages: %zu\n", mei.me_mapsize / mst.ms_psize);
-		printf("  Number of pages used: %zu\n", mei.me_last_pgno+1);
-		printf("  Last transaction ID: %zu\n", mei.me_last_txnid);
+		printf("  Map address: %p\n", mei.base.me_mapaddr);
+		printf("  Map size: %zu\n", mei.base.me_mapsize);
+		printf("  Page size: %u\n", mst.base.ms_psize);
+		printf("  Max pages: %zu\n", mei.base.me_mapsize / mst.base.ms_psize);
+		printf("  Number of pages used: %zu\n", mei.base.me_last_pgno+1);
+		printf("  Last transaction ID: %zu\n", mei.base.me_last_txnid);
 		printf("  Tail transaction ID: %zu (%zi)\n",
-			mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
-		printf("  Max readers: %u\n", mei.me_maxreaders);
-		printf("  Number of readers used: %u\n", mei.me_numreaders);
+			mei.me_tail_txnid, mei.me_tail_txnid - mei.base.me_last_txnid);
+		printf("  Max readers: %u\n", mei.base.me_maxreaders);
+		printf("  Number of readers used: %u\n", mei.base.me_numreaders);
 	} else {
 		/* LY: zap warnings from gcc */
 		memset(&mst, 0, sizeof(mst));
@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "mdb_cursor_open failed, error %d %s\n", rc, mdb_strerror(rc));
 			goto txn_abort;
 		}
-		rc = mdb_stat(txn, dbi, &mst);
+		rc = mdbx_stat(txn, dbi, &mst, sizeof(mst));
 		if (rc) {
 			fprintf(stderr, "mdb_stat failed, error %d %s\n", rc, mdb_strerror(rc));
 			goto txn_abort;
@@ -206,18 +206,18 @@ int main(int argc, char *argv[])
 		}
 		mdb_cursor_close(cursor);
 		if (envinfo) {
-			size_t value = mei.me_mapsize / mst.ms_psize;
+			size_t value = mei.base.me_mapsize / mst.base.ms_psize;
 			double percent = value / 100.0;
 			printf("Page Allocation Info\n");
 			printf("  Max pages: %9zu 100%%\n", value);
 
-			value = mei.me_last_pgno+1;
+			value = mei.base.me_last_pgno+1;
 			printf("  Number of pages used: %zu %.1f%%\n", value, value / percent);
 
-			value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno+1);
+			value = mei.base.me_mapsize / mst.base.ms_psize - (mei.base.me_last_pgno+1);
 			printf("  Remained: %zu %.1f%%\n", value, value / percent);
 
-			value = mei.me_last_pgno+1 - pages;
+			value = mei.base.me_last_pgno+1 - pages;
 			printf("  Used now: %zu %.1f%%\n", value, value / percent);
 
 			value = pages;
@@ -229,7 +229,7 @@ int main(int argc, char *argv[])
 			value = reclaimable;
 			printf("  Reclaimable: %zu %.1f%%\n", value, value / percent);
 
-			value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno+1) + reclaimable;
+			value = mei.base.me_mapsize / mst.base.ms_psize - (mei.base.me_last_pgno+1) + reclaimable;
 			printf("  Available: %zu %.1f%%\n", value, value / percent);
 		} else
 			printf("  Free pages: %zu\n", pages);
@@ -241,7 +241,7 @@ int main(int argc, char *argv[])
 		goto txn_abort;
 	}
 
-	rc = mdb_stat(txn, dbi, &mst);
+	rc = mdbx_stat(txn, dbi, &mst, sizeof(mst));
 	if (rc) {
 		fprintf(stderr, "mdb_stat failed, error %d %s\n", rc, mdb_strerror(rc));
 		goto txn_abort;
@@ -271,7 +271,7 @@ int main(int argc, char *argv[])
 				printf("Status of %s\n", str);
 			free(str);
 			if (rc) continue;
-			rc = mdb_stat(txn, db2, &mst);
+			rc = mdbx_stat(txn, db2, &mst, sizeof(mst));
 			if (rc) {
 				fprintf(stderr, "mdb_stat failed, error %d %s\n", rc, mdb_strerror(rc));
 				goto txn_abort;

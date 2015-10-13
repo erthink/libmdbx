@@ -17,7 +17,7 @@
 	You should have received a copy of the GNU Affero General Public License
 	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
-/* mdb_chk.c - memory-mapped database check tool */
+/* mdbx_chk.c - memory-mapped database check tool */
 #include <stdio.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -29,8 +29,8 @@
 #include <malloc.h>
 #include <time.h>
 
-#include "lmdb.h"
 #include "midl.h"
+#include "mdbx.h"
 
 typedef struct flagbit {
 	int bit;
@@ -79,8 +79,8 @@ int exclusive = 2;
 
 MDB_env *env;
 MDB_txn *txn, *locktxn;
-MDB_envinfo info;
-MDB_stat stat;
+MDBX_envinfo info;
+MDBX_stat stat;
 size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
 size_t userdb_count, skipped_subdb;
 unsigned verbose, quiet;
@@ -215,7 +215,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 {
 	if (type) {
 		size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
-		size_t page_size = pgnumber * stat.ms_psize;
+		size_t page_size = pgnumber * stat.base.ms_psize;
 		int index = pagemap_lookup_dbi(dbi);
 		if (index < 0)
 			return ENOMEM;
@@ -233,11 +233,11 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 
 		if (unused_bytes < 0 || (size_t) unused_bytes > page_size)
 			problem_add("page", pgno, "illegal unused-bytes", "%zu < %i < %zu",
-				0, unused_bytes, stat.ms_psize);
+				0, unused_bytes, stat.base.ms_psize);
 
-		if (header_bytes < sizeof(long) || header_bytes >= stat.ms_psize - sizeof(long))
+		if (header_bytes < sizeof(long) || header_bytes >= stat.base.ms_psize - sizeof(long))
 			problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
-				sizeof(long), header_bytes, stat.ms_psize - sizeof(long));
+				sizeof(long), header_bytes, stat.base.ms_psize - sizeof(long));
 		if (payload_bytes < 1) {
 			if (nentries > 0) {
 				problem_add("page", pgno, "zero size-of-entry", "payload %i bytes, %i entries",
@@ -298,7 +298,7 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 
 	if (key->mv_size != sizeof(txnid))
 		problem_add("entry", record_number, "wrong txn-id size", "key-size %zi", key->mv_size);
-	else if (txnid < 1 || txnid > info.me_last_txnid)
+	else if (txnid < 1 || txnid > info.base.me_last_txnid)
 		problem_add("entry", record_number, "wrong txn-id", "%zu", txnid);
 
 	if (data->mv_size < sizeof(size_t) || data->mv_size % sizeof(size_t))
@@ -316,9 +316,9 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 				reclaimable_pages += number;
 			for (i = number, prev = 1; --i >= 0; ) {
 				pg = iptr[i];
-				if (pg < 2 /* META_PAGE */ || pg > info.me_last_pgno)
+				if (pg < 2 /* META_PAGE */ || pg > info.base.me_last_pgno)
 					problem_add("entry", record_number, "wrong idl entry", "2 < %zi < %zi",
-								pg, info.me_last_pgno);
+								pg, info.base.me_last_pgno);
 				else if (pg <= prev) {
 					bad = " [bad sequence]";
 					problem_add("entry", record_number, "bad sequence", "%zi <= %zi",
@@ -375,7 +375,7 @@ static int handle_maindb(size_t record_number, MDB_val *key, MDB_val* data) {
 static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 {
 	MDB_cursor *mc;
-	MDB_stat ms;
+	MDBX_stat ms;
 	MDB_val key, data;
 	MDB_val prev_key, prev_data;
 	unsigned flags;
@@ -387,11 +387,11 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	size_t key_bytes = 0, data_bytes = 0;
 
 	if (0 > (int) dbi) {
-		rc = mdb_dbi_open(txn, name, 0, &dbi);
+		rc = mdbx_dbi_open(txn, name, 0, &dbi);
 		if (rc) {
 			if (!name || rc != MDB_INCOMPATIBLE) /* LY: mainDB's record is not a user's DB. */ {
-				error(" - mdb_open '%s' failed, error %d %s\n",
-					  name ? name : "main", rc, mdb_strerror(rc));
+				error(" - mdbx_open '%s' failed, error %d %s\n",
+					  name ? name : "main", rc, mdbx_strerror(rc));
 			}
 			return rc;
 		}
@@ -403,7 +403,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			fflush(NULL);
 		}
 		skipped_subdb++;
-		mdb_dbi_close(env, dbi);
+		mdbx_dbi_close(env, dbi);
 		return MDB_SUCCESS;
 	}
 
@@ -412,17 +412,17 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		fflush(NULL);
 	}
 
-	rc = mdb_dbi_flags(txn, dbi, &flags);
+	rc = mdbx_dbi_flags(txn, dbi, &flags);
 	if (rc) {
-		error(" - mdb_dbi_flags failed, error %d %s\n", rc, mdb_strerror(rc));
-		mdb_dbi_close(env, dbi);
+		error(" - mdbx_dbi_flags failed, error %d %s\n", rc, mdbx_strerror(rc));
+		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
-	rc = mdb_stat(txn, dbi, &ms);
+	rc = mdbx_stat(txn, dbi, &ms, sizeof(ms));
 	if (rc) {
-		error(" - mdb_stat failed, error %d %s\n", rc, mdb_strerror(rc));
-		mdb_dbi_close(env, dbi);
+		error(" - mdbx_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
+		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
@@ -437,23 +437,23 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 		}
 		print(" (0x%02X)\n", flags);
 		if (verbose > 1) {
-			print(" - page size %u, entries %zu\n", ms.ms_psize, ms.ms_entries);
+			print(" - page size %u, entries %zu\n", ms.base.ms_psize, ms.base.ms_entries);
 			print(" - b-tree depth %u, pages: branch %zu, leaf %zu, overflow %zu\n",
-				  ms.ms_depth, ms.ms_branch_pages, ms.ms_leaf_pages, ms.ms_overflow_pages);
+				  ms.base.ms_depth, ms.base.ms_branch_pages, ms.base.ms_leaf_pages, ms.base.ms_overflow_pages);
 		}
 	}
 
-	rc = mdb_cursor_open(txn, dbi, &mc);
+	rc = mdbx_cursor_open(txn, dbi, &mc);
 	if (rc) {
-		error(" - mdb_cursor_open failed, error %d %s\n", rc, mdb_strerror(rc));
-		mdb_dbi_close(env, dbi);
+		error(" - mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
+		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
 	saved_list = problems_push();
 	prev_key.mv_data = NULL;
 	prev_data.mv_size = 0;
-	rc = mdb_cursor_get(mc, &key, &data, MDB_FIRST);
+	rc = mdbx_cursor_get(mc, &key, &data, MDB_FIRST);
 	while (rc == MDB_SUCCESS) {
 		if (gotsignal) {
 			print(" - interrupted by signal\n");
@@ -485,7 +485,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 						"%zu != %zu", prev_data.mv_size, data.mv_size);
 			}
 
-			int cmp = mdb_cmp(txn, dbi, &prev_key, &key);
+			int cmp = mdbx_cmp(txn, dbi, &prev_key, &key);
 			if (cmp > 0) {
 				problem_add("entry", record_count, "broken ordering of entries", NULL);
 			} else if (cmp == 0) {
@@ -493,7 +493,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 				if (! (flags & MDB_DUPSORT))
 					problem_add("entry", record_count, "duplicated entries", NULL);
 				else if (flags & MDB_INTEGERDUP) {
-					cmp = mdb_dcmp(txn, dbi, &prev_data, &data);
+					cmp = mdbx_dcmp(txn, dbi, &prev_data, &data);
 					if (cmp > 0)
 						problem_add("entry", record_count, "broken ordering of multi-values", NULL);
 				}
@@ -517,16 +517,16 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 
 		prev_key = key;
 		prev_data = data;
-		rc = mdb_cursor_get(mc, &key, &data, MDB_NEXT);
+		rc = mdbx_cursor_get(mc, &key, &data, MDB_NEXT);
 	}
 	if (rc != MDB_NOTFOUND)
-		error(" - mdb_cursor_get failed, error %d %s\n", rc, mdb_strerror(rc));
+		error(" - mdbx_cursor_get failed, error %d %s\n", rc, mdbx_strerror(rc));
 	else
 		rc = 0;
 
-	if (record_count != ms.ms_entries)
+	if (record_count != ms.base.ms_entries)
 		problem_add("entry", record_count, "differentent number of entries",
-				"%zu != %zu", record_count, ms.ms_entries);
+				"%zu != %zu", record_count, ms.base.ms_entries);
 bailout:
 	problems_count = problems_pop(saved_list);
 	if (! silent && verbose) {
@@ -535,8 +535,8 @@ bailout:
 		fflush(NULL);
 	}
 
-	mdb_cursor_close(mc);
-	mdb_dbi_close(env, dbi);
+	mdbx_cursor_close(mc);
+	mdbx_dbi_close(env, dbi);
 	return rc || problems_count;
 }
 
@@ -583,7 +583,7 @@ int main(int argc, char *argv[])
 
 	if (clock_gettime(CLOCK_MONOTONIC, &timestamp_start)) {
 		rc = errno;
-		error("clock_gettime failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
 		return EXIT_FAILURE_SYS;
 	}
 
@@ -638,97 +638,97 @@ int main(int argc, char *argv[])
 	signal(SIGTERM, signal_hanlder);
 
 	envname = argv[optind];
-	print("Running mdb_chk for '%s' in %s mode...\n",
+	print("Running mdbx_chk for '%s' in %s mode...\n",
 		  envname, (envflags & MDB_RDONLY) ? "read-only" : "write-lock");
 	fflush(NULL);
 
-	rc = mdb_env_create(&env);
+	rc = mdbx_env_create(&env);
 	if (rc) {
-		error("mdb_env_create failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("mdbx_env_create failed, error %d %s\n", rc, mdbx_strerror(rc));
 		return rc < 0 ? EXIT_FAILURE_MDB : EXIT_FAILURE_SYS;
 	}
 
-	rc = mdb_env_get_maxkeysize(env);
+	rc = mdbx_env_get_maxkeysize(env);
 	if (rc < 0) {
-		error("mdb_env_get_maxkeysize failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("mdbx_env_get_maxkeysize failed, error %d %s\n", rc, mdbx_strerror(rc));
 		goto bailout;
 	}
 	maxkeysize = rc;
 
-	mdb_env_set_maxdbs(env, 3);
+	mdbx_env_set_maxdbs(env, 3);
 
-	rc = mdb_env_open_ex(env, envname, envflags, 0664, &exclusive);
+	rc = mdbx_env_open_ex(env, envname, envflags, 0664, &exclusive);
 	if (rc) {
-		error("mdb_env_open failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("mdbx_env_open failed, error %d %s\n", rc, mdbx_strerror(rc));
 		goto bailout;
 	}
 	if (verbose)
 		print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
 
 	if (! (envflags & MDB_RDONLY)) {
-		rc = mdb_txn_begin(env, NULL, 0, &locktxn);
+		rc = mdbx_txn_begin(env, NULL, 0, &locktxn);
 		if (rc) {
-			error("mdb_txn_begin(lock-write) failed, error %d %s\n", rc, mdb_strerror(rc));
+			error("mdbx_txn_begin(lock-write) failed, error %d %s\n", rc, mdbx_strerror(rc));
 			goto bailout;
 		}
 	}
 
-	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
+	rc = mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn);
 	if (rc) {
-		error("mdb_txn_begin(read-only) failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("mdbx_txn_begin(read-only) failed, error %d %s\n", rc, mdbx_strerror(rc));
 		goto bailout;
 	}
 
-	rc = mdb_env_info(env, &info);
+	rc = mdbx_env_info(env, &info, sizeof(info));
 	if (rc) {
-		error("mdb_env_info failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("mdbx_env_info failed, error %d %s\n", rc, mdbx_strerror(rc));
 		goto bailout;
 	}
 
-	rc = mdb_env_stat(env, &stat);
+	rc = mdbx_env_stat(env, &stat, sizeof(stat));
 	if (rc) {
-		error("mdb_env_stat failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("mdbx_env_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
 		goto bailout;
 	}
 
-	lastpgno = info.me_last_pgno + 1;
+	lastpgno = info.base.me_last_pgno + 1;
 	errno = 0;
 
 	if (verbose) {
 		double k = 1024.0;
 		const char sf[] = "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
-		for(i = 0; sf[i+1] && info.me_mapsize / k > 1000.0; ++i)
+		for(i = 0; sf[i+1] && info.base.me_mapsize / k > 1000.0; ++i)
 			k *= 1024;
-		print(" - map size %zu (%.2f %cb)\n", info.me_mapsize,
-			  info.me_mapsize / k, sf[i]);
-		if (info.me_mapaddr)
-			print(" - mapaddr %p\n", info.me_mapaddr);
+		print(" - map size %zu (%.2f %cb)\n", info.base.me_mapsize,
+			  info.base.me_mapsize / k, sf[i]);
+		if (info.base.me_mapaddr)
+			print(" - mapaddr %p\n", info.base.me_mapaddr);
 		print(" - pagesize %u, max keysize %zu (%s), max readers %u\n",
-				stat.ms_psize, maxkeysize,
+				stat.base.ms_psize, maxkeysize,
 				(maxkeysize == 511) ? "default" :
 				(maxkeysize == 0) ? "devel" : "custom",
-				info.me_maxreaders);
-		print(" - transactions: last %zu, bottom %zu, lag reading %zi\n", info.me_last_txnid,
-			  info.me_tail_txnid, info.me_last_txnid - info.me_tail_txnid);
+				info.base.me_maxreaders);
+		print(" - transactions: last %zu, bottom %zu, lag reading %zi\n", info.base.me_last_txnid,
+			  info.me_tail_txnid, info.base.me_last_txnid - info.me_tail_txnid);
 
 		print(" - meta-1: %s %zu, %s",
 			   meta_synctype(info.me_meta1_sign), info.me_meta1_txnid,
 			   meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 					   info.me_meta2_txnid, info.me_meta2_sign) ? "tail" : "head");
-		if (info.me_meta1_txnid > info.me_last_txnid)
+		if (info.me_meta1_txnid > info.base.me_last_txnid)
 			print(", rolled-back %zu (%zu >>> %zu)\n",
-				info.me_meta1_txnid - info.me_last_txnid,
-				info.me_meta1_txnid, info.me_last_txnid);
+				info.me_meta1_txnid - info.base.me_last_txnid,
+				info.me_meta1_txnid, info.base.me_last_txnid);
 		print("\n");
 
 		print(" - meta-2: %s %zu, %s",
 			   meta_synctype(info.me_meta2_sign), info.me_meta2_txnid,
 			   meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 					   info.me_meta1_txnid, info.me_meta1_sign) ? "tail" : "head");
-		if (info.me_meta2_txnid > info.me_last_txnid)
+		if (info.me_meta2_txnid > info.base.me_last_txnid)
 			print(", rolled-back %zu (%zu >>> %zu)\n",
-				info.me_meta2_txnid - info.me_last_txnid,
-				info.me_meta2_txnid, info.me_last_txnid);
+				info.me_meta2_txnid - info.base.me_last_txnid,
+				info.me_meta2_txnid, info.base.me_last_txnid);
 		print("\n");
 	}
 
@@ -738,26 +738,26 @@ int main(int argc, char *argv[])
 
 		if (! meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 				info.me_meta2_txnid, info.me_meta2_sign)
-			&& info.me_meta1_txnid != info.me_last_txnid) {
+			&& info.me_meta1_txnid != info.base.me_last_txnid) {
 			print(" - meta-1 txn-id mismatch last-txn-id (%zi != %zi)\n",
-				  info.me_meta1_txnid, info.me_last_txnid);
+				  info.me_meta1_txnid, info.base.me_last_txnid);
 			++problems_meta;
 		}
 
 		if (! meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 				info.me_meta1_txnid, info.me_meta1_sign)
-			&& info.me_meta2_txnid != info.me_last_txnid) {
+			&& info.me_meta2_txnid != info.base.me_last_txnid) {
 			print(" - meta-2 txn-id mismatch last-txn-id (%zi != %zi)\n",
-				  info.me_meta2_txnid, info.me_last_txnid);
+				  info.me_meta2_txnid, info.base.me_last_txnid);
 			++problems_meta;
 		}
 	} else if (locktxn) {
 		if (verbose)
 			print(" - perform lite check last-txn-id with meta-pages (not a monopolistic mode)\n");
 		size_t last = (info.me_meta2_txnid > info.me_meta1_txnid) ? info.me_meta2_txnid : info.me_meta1_txnid;
-		if (last != info.me_last_txnid) {
+		if (last != info.base.me_last_txnid) {
 			print(" - last-meta mismatch last-txn-id (%zi != %zi)\n",
-				  last, info.me_last_txnid);
+				  last, info.base.me_last_txnid);
 			++problems_meta;
 		}
 	} else if (verbose) {
@@ -774,12 +774,12 @@ int main(int argc, char *argv[])
 		walk.pagemap = calloc(lastpgno, sizeof(*walk.pagemap));
 		if (! walk.pagemap) {
 			rc = errno ? errno : ENOMEM;
-			error("calloc failed, error %d %s\n", rc, mdb_strerror(rc));
+			error("calloc failed, error %d %s\n", rc, mdbx_strerror(rc));
 			goto bailout;
 		}
 
 		saved_list = problems_push();
-		rc = mdb_env_pgwalk(txn, pgvisitor, NULL);
+		rc = mdbx_env_pgwalk(txn, pgvisitor, NULL);
 		traversal_problems = problems_pop(saved_list);
 
 		if (rc) {
@@ -787,7 +787,7 @@ int main(int argc, char *argv[])
 				print(" - interrupted by signal\n");
 				fflush(NULL);
 			} else {
-				error("mdb_env_pgwalk failed, error %d %s\n", rc, mdb_strerror(rc));
+				error("mdbx_env_pgwalk failed, error %d %s\n", rc, mdbx_strerror(rc));
 			}
 			goto bailout;
 		}
@@ -803,7 +803,7 @@ int main(int argc, char *argv[])
 		}
 
 		if (verbose) {
-			size_t total_page_bytes = walk.pgcount * stat.ms_psize;
+			size_t total_page_bytes = walk.pgcount * stat.base.ms_psize;
 			print(" - dbi pages: %zu total", walk.pgcount);
 			if (verbose > 1)
 				for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i)
@@ -816,7 +816,7 @@ int main(int argc, char *argv[])
 					total_page_bytes - walk.total_payload_bytes,
 					(total_page_bytes - walk.total_payload_bytes) * 100.0 / total_page_bytes);
 				for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
-					size_t dbi_bytes = walk.dbi_pages[i] * stat.ms_psize;
+					size_t dbi_bytes = walk.dbi_pages[i] * stat.base.ms_psize;
 					print("     %s: subtotal %zu bytes (%.1f%%), payload %zu (%.1f%%), unused %zu (%.1f%%)",
 						walk.dbi_names[i],
 						dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
@@ -848,13 +848,13 @@ int main(int argc, char *argv[])
 	problems_freedb = process_db(0 /* FREE_DBI */, "free", handle_freedb, 0);
 
 	if (verbose) {
-		size_t value = info.me_mapsize / stat.ms_psize;
+		size_t value = info.base.me_mapsize / stat.base.ms_psize;
 		double percent = value / 100.0;
 		print(" - pages info: %zu total", value);
 		print(", allocated %zu (%.1f%%)", lastpgno, lastpgno / percent);
 
 		if (verbose > 1) {
-			value = info.me_mapsize / stat.ms_psize - lastpgno;
+			value = info.base.me_mapsize / stat.base.ms_psize - lastpgno;
 			print(", remained %zu (%.1f%%)", value, value / percent);
 
 			value = lastpgno - freedb_pages;
@@ -868,7 +868,7 @@ int main(int argc, char *argv[])
 			print(", reclaimable %zu (%.1f%%)", reclaimable_pages, reclaimable_pages / percent);
 		}
 
-		value = info.me_mapsize / stat.ms_psize - lastpgno + reclaimable_pages;
+		value = info.base.me_mapsize / stat.base.ms_psize - lastpgno + reclaimable_pages;
 		print(", available %zu (%.1f%%)\n", value, value / percent);
 	}
 
@@ -892,11 +892,11 @@ int main(int argc, char *argv[])
 
 bailout:
 	if (txn)
-		mdb_txn_abort(txn);
+		mdbx_txn_abort(txn);
 	if (locktxn)
-		mdb_txn_abort(locktxn);
+		mdbx_txn_abort(locktxn);
 	if (env)
-		mdb_env_close(env);
+		mdbx_env_close(env);
 	free(walk.pagemap);
 	fflush(NULL);
 	if (rc) {
@@ -907,7 +907,7 @@ bailout:
 
 	if (clock_gettime(CLOCK_MONOTONIC, &timestamp_finish)) {
 		rc = errno;
-		error("clock_gettime failed, error %d %s\n", rc, mdb_strerror(rc));
+		error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
 		return EXIT_FAILURE_SYS;
 	}
 

@@ -31,9 +31,7 @@
 #	define _GNU_SOURCE
 #endif
 
-#ifdef HAVE_ANSIDECL_H
-#	include <ansidecl.h>
-#endif
+#include <ansidecl.h>
 
 #ifndef __has_attribute
 #	define __has_attribute(x) (0)
@@ -88,6 +86,9 @@
 #ifndef __cold
 #	if defined(__GNUC__) && !defined(__clang__)
 #		define __cold __attribute__((cold, optimize("Os")))
+#	elif defined(__GNUC__)
+		/* cland case, just put infrequently used functions in separate section */
+#		define __cold __attribute__((section("text.cold")))
 #	else
 #		define __cold
 #	endif

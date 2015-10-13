@@ -155,6 +155,10 @@
 #ifndef _LMDB_H_
 #define _LMDB_H_
 
+#ifndef MDBX_MODE_ENABLED
+#	define MDBX_MODE_ENABLED 0
+#endif /* MDBX_MODE_ENABLED */
+
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -284,11 +288,15 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 #define MDB_NORDAHEAD	0x800000
 	/** don't initialize malloc'd memory before writing to datafile */
 #define MDB_NOMEMINIT	0x1000000
+
+#if MDBX_MODE_ENABLED
 	/** aim to coalesce FreeDB records */
 #define MDB_COALESCE	0x2000000
 	/** LIFO policy for reclaiming FreeDB records */
 #define MDB_LIFORECLAIM	0x4000000
-	/** make a steady-sync only on close and explicit env-sync */
+#endif /* MDBX_MODE_ENABLED */
+
+/** make a steady-sync only on close and explicit env-sync */
 #define MDB_UTTERLY_NOSYNC (MDB_NOSYNC|MDB_MAPASYNC)
 /** @} */
 
@@ -446,18 +454,31 @@ typedef struct MDB_stat {
 	size_t		ms_entries;			/**< Number of data items */
 } MDB_stat;
 
+typedef struct MDBX_stat {
+	MDB_stat base;
+#if MDBX_MODE_ENABLED
+	/* LY: TODO */
+#endif /* MDBX_MODE_ENABLED */
+} MDBX_stat;
+
 /** @brief Information about the environment */
 typedef struct MDB_envinfo {
 	void	*me_mapaddr;			/**< Address of map, if fixed */
 	size_t	me_mapsize;				/**< Size of the data memory map */
 	size_t	me_last_pgno;			/**< ID of the last used page */
 	size_t	me_last_txnid;			/**< ID of the last committed transaction */
-	size_t	me_tail_txnid;			/**< ID of the last reader transaction */
 	unsigned me_maxreaders;		/**< max reader slots in the environment */
 	unsigned me_numreaders;		/**< max reader slots used in the environment */
+} MDB_envinfo;
+
+typedef struct MDBX_envinfo {
+	MDB_envinfo base;
+#if MDBX_MODE_ENABLED
+	size_t me_tail_txnid;			/**< ID of the last reader transaction */
 	size_t me_meta1_txnid, me_meta1_sign;
 	size_t me_meta2_txnid, me_meta2_sign;
-} MDB_envinfo;
+#endif /* MDBX_MODE_ENABLED */
+} MDBX_envinfo;
 
 	/** @brief Return the LMDB library version information.
 	 *
@@ -618,7 +639,9 @@ int  mdb_env_create(MDB_env **env);
 	 * </ul>
 	 */
 int  mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode);
-int  mdb_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive);
+#if MDBX_MODE_ENABLED
+int  mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive);
+#endif /* MDBX_MODE_ENABLED */
 	/** @brief Copy an LMDB environment to the specified path.
 	 *
 	 * This function may be used to make a backup of an existing environment.
@@ -700,6 +723,9 @@ int  mdb_env_copyfd2(MDB_env *env, mdb_filehandle_t fd, unsigned flags);
 	 * 	where the statistics will be copied
 	 */
 int  mdb_env_stat(MDB_env *env, MDB_stat *stat);
+#if MDBX_MODE_ENABLED
+int  mdbx_env_stat(MDB_env *env, MDBX_stat *stat, size_t bytes);
+#endif /* MDBX_MODE_ENABLED */
 
 	/** @brief Return information about the LMDB environment.
 	 *
@@ -708,6 +734,9 @@ int  mdb_env_stat(MDB_env *env, MDB_stat *stat);
 	 * 	where the information will be copied
 	 */
 int  mdb_env_info(MDB_env *env, MDB_envinfo *info);
+#if MDBX_MODE_ENABLED
+int  mdbx_env_info(MDB_env *env, MDBX_envinfo *info, size_t bytes);
+#endif /* MDBX_MODE_ENABLED */
 
 	/** @brief Flush the data buffers to disk.
 	 *
@@ -744,7 +773,9 @@ int  mdb_env_sync(MDB_env *env, int force);
 	 *  checkpoint (meta-page update) will rolledback for consistency guarantee.
 	 */
 void mdb_env_close(MDB_env *env);
-void mdb_env_close_ex(MDB_env *env, int dont_sync);
+#if MDBX_MODE_ENABLED
+void mdbx_env_close_ex(MDB_env *env, int dont_sync);
+#endif /* MDBX_MODE_ENABLED */
 
 	/** @brief Set environment flags.
 	 *
@@ -927,6 +958,7 @@ typedef void MDB_assert_func(MDB_env *env, const char *msg,
 	 */
 int  mdb_env_set_assert(MDB_env *env, MDB_assert_func *func);
 
+#if MDBX_MODE_ENABLED
 	/** @brief Set threshold to force flush the data buffers to disk,
 	 * even of #MDB_NOSYNC, #MDB_NOMETASYNC and #MDB_MAPASYNC flags
 	 * in the environment.
@@ -944,7 +976,8 @@ int  mdb_env_set_assert(MDB_env *env, MDB_assert_func *func);
 	 * when a synchronous flush would be made.
 	 * @return A non-zero error value on failure and 0 on success.
 	 */
-int  mdb_env_set_syncbytes(MDB_env *env, size_t bytes);
+int  mdbx_env_set_syncbytes(MDB_env *env, size_t bytes);
+#endif /* MDBX_MODE_ENABLED */
 
 	/** @brief Create a transaction for use with the environment.
 	 *
@@ -1149,6 +1182,9 @@ int  mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi);
 	 * </ul>
 	 */
 int  mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *stat);
+#if MDBX_MODE_ENABLED
+int  mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *stat, size_t bytes);
+#endif /* MDBX_MODE_ENABLED */
 
 	/** @brief Retrieve the DB flags for a database handle.
 	 *
@@ -1597,6 +1633,7 @@ int	mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx);
 	 */
 int	mdb_reader_check(MDB_env *env, int *dead);
 
+#if MDBX_MODE_ENABLED
 	/** @brief Returns a lag of the reading.
 	 *
 	 * Returns an information for estimate how much given read-only
@@ -1606,7 +1643,7 @@ int	mdb_reader_check(MDB_env *env, int *dead);
 	 * @param[out] percent Percentage of page allocation in the database.
 	 * @return Number of transactions committed after the given was started for read, or -1 on failure.
 	 */
-int  mdb_txn_straggler(MDB_txn *txnm, int *percent);
+int  mdbx_txn_straggler(MDB_txn *txnm, int *percent);
 
 	/** @brief A callback function for killing a laggard readers,
 	 * called in case of MDB_MAP_FULL error.
@@ -1630,7 +1667,7 @@ typedef int (MDB_oom_func)(MDB_env *env, int pid, void* thread_id, size_t txn, u
 	 * @param[in] env An environment handle returned by #mdb_env_create().
 	 * @param[in] oomfunc A #MDB_oom_func function or NULL to disable.
 	 */
-void mdb_env_set_oomfunc(MDB_env *env, MDB_oom_func *oom_func);
+void mdbx_env_set_oomfunc(MDB_env *env, MDB_oom_func *oom_func);
 
 	/** @brief Get the current oom_func callback.
 	 *
@@ -1640,9 +1677,11 @@ void mdb_env_set_oomfunc(MDB_env *env, MDB_oom_func *oom_func);
 	 * @param[in] env An environment handle returned by #mdb_env_create().
 	 * @return A #MDB_oom_func function or NULL if disabled.
 	 */
-MDB_oom_func* mdb_env_get_oomfunc(MDB_env *env);
+MDB_oom_func* mdbx_env_get_oomfunc(MDB_env *env);
+#endif /* MDBX_MODE_ENABLED */
 /**	@} */
 
+#if MDBX_MODE_ENABLED
 #define MDB_DBG_ASSERT	1
 #define MDB_DBG_PRINT	2
 #define MDB_DBG_TRACE	4
@@ -1656,12 +1695,13 @@ MDB_oom_func* mdb_env_get_oomfunc(MDB_env *env);
 typedef void MDB_debug_func(int type, const char *function, int line,
 								  const char *msg, va_list args);
 
-int mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn);
+int mdbx_setup_debug(int flags, MDB_debug_func* logger, long edge_txn);
 
 typedef int MDB_pgvisitor_func(size_t pgno, unsigned pgnumber, void* ctx,
 					const char* dbi, const char *type, int nentries,
 					int payload_bytes, int header_bytes, int unused_bytes);
-int mdb_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* ctx);
+int mdbx_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* ctx);
+#endif /* MDBX_MODE_ENABLED */
 
 char* mdb_dkey(MDB_val *key, char *buf);
 
@@ -1669,7 +1709,8 @@ char* mdb_dkey(MDB_val *key, char *buf);
 }
 #endif
 /** @page tools LMDB Command Line Tools
-	The following describes the command line tools that are available for LMDB.
+	The following describes the command line tools that are available for LMDBX.
+	\li \ref mdb_chk_1
 	\li \ref mdb_copy_1
 	\li \ref mdb_dump_1
 	\li \ref mdb_load_1

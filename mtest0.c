@@ -17,7 +17,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <sys/stat.h>
-#include "lmdb.h"
+#include "mdbx.h"
 
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
 #define RES(err, expr) ((rc = expr) == (err) || (CHECK(!rc, #expr), 0))

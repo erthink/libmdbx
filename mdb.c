@@ -37,8 +37,8 @@
 #	define MDB_DEBUG 0
 #endif
 
-#include "reopen.h"
-#include "barriers.h"
+#include "./reopen.h"
+#include "./barriers.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -96,24 +96,24 @@
 #	define MISALIGNED_OK	1
 #endif
 
-#include "lmdb.h"
-#include "midl.h"
+#include "./lmdb.h"
+#include "./midl.h"
+
+#if ! MDBX_MODE_ENABLED
+#	define MDB_COALESCE		0
+#	define MDB_LIFORECLAIM	0
+#	define MDB_DBG_ASSERT	0
+#	define MDB_DBG_PRINT	0
+#	define MDB_DBG_TRACE	0
+#	define MDB_DBG_EXTRA	0
+#	define MDB_DBG_AUDIT	0
+#	define MDB_DBG_EDGE		0
+#endif
 
 #if (BYTE_ORDER == LITTLE_ENDIAN) == (BYTE_ORDER == BIG_ENDIAN)
 #	error "Unknown or unsupported endianness (BYTE_ORDER)"
 #elif (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
 #	error "Two's complement, reasonably sized integer types, please"
-#endif
-
-#ifdef __GNUC__
-/** Put infrequently used env functions in separate section */
-#	ifdef __APPLE__
-#		define	ESECT	__attribute__ ((section("__TEXT,text_env")))
-#	else
-#		define	ESECT	__attribute__ ((section("text_env")))
-#	endif
-#else
-#	define ESECT
 #endif
 
 /** @defgroup internal	LMDB Internals
@@ -955,7 +955,9 @@ struct MDB_env {
 #endif
 	uint64_t	me_sync_pending;	/**< Total dirty/commited bytes since the last mdb_env_sync() */
 	uint64_t	me_sync_threshold;	/**< Treshold of above to force synchronous flush */
+#if MDBX_MODE_ENABLED
 	MDB_oom_func	*me_oom_func; /**< Callback for kicking laggard readers */
+#endif
 #ifdef USE_VALGRIND
 	int me_valgrind_handle;
 #endif
@@ -1067,7 +1069,7 @@ static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int_ai, mdb_cmp_int_a2,
 /** @endcond */
 
 /** Return the library version info. */
-char * ESECT
+char * __cold
 mdb_version(int *major, int *minor, int *patch)
 {
 	if (major) *major = MDB_VERSION_MAJOR;
@@ -1100,7 +1102,7 @@ static char *const mdb_errstr[] = {
 	"MDB_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
 };
 
-char * ESECT
+char * __cold
 mdb_strerror(int err)
 {
 	int i;
@@ -1114,6 +1116,8 @@ mdb_strerror(int err)
 
 	return strerror(err);
 }
+
+#if MDBX_MODE_ENABLED
 
 int mdb_runtime_flags = MDB_DBG_PRINT
 #if MDB_DEBUG
@@ -1132,12 +1136,17 @@ int mdb_runtime_flags = MDB_DBG_PRINT
 
 static MDB_debug_func *mdb_debug_logger;
 
+#else /* MDBX_MODE_ENABLED */
+#	define mdb_runtime_flags 0
+#	define mdb_debug_logger ((void (*)(int, ...)) NULL)
+#endif /* ! MDBX_MODE_ENABLED */
+
 #if MDB_DEBUG
 	static txnid_t mdb_debug_edge;
 
 	static void mdb_debug_log(int type, const char *function, int line,
 						  const char *fmt, ...);
-	static void ESECT
+	static void __cold
 	mdb_assert_fail(MDB_env *env, const char *msg,
 		const char *func, int line)
 	{
@@ -1168,8 +1177,9 @@ static MDB_debug_func *mdb_debug_logger;
 		__assert_fail(msg, __FILE__, line, func)
 #endif /* MDB_DEBUG */
 
-int ESECT
-mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
+#if MDBX_MODE_ENABLED
+int __cold
+mdbx_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
 	unsigned ret = mdb_runtime_flags;
 	if (flags != (int) MDB_DBG_DNT)
 		mdb_runtime_flags = flags;
@@ -1181,8 +1191,9 @@ mdb_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
 #endif
 	return ret;
 }
+#endif /* MDBX_MODE_ENABLED */
 
-static void ESECT
+static void __cold
 mdb_debug_log(int type, const char *function, int line,
 					  const char *fmt, ...)
 {
@@ -1881,17 +1892,14 @@ mdb_find_oldest(MDB_env *env, int *laggard)
 	return oldest;
 }
 
-static int ESECT
+static int __cold
 mdb_oomkick(MDB_env *env, txnid_t oldest)
 {
 	int retry;
 	txnid_t snap;
 
 	for(retry = 0; ; ++retry) {
-		MDB_reader *r;
-		pthread_t tid;
-		pid_t pid;
-		int rc, reader;
+		int reader;
 
 		if (mdb_reader_check(env, NULL))
 			break;
@@ -1903,28 +1911,39 @@ mdb_oomkick(MDB_env *env, txnid_t oldest)
 		if (reader < 0)
 			return 0;
 
-		if (!env->me_oom_func)
-			break;
+#if MDBX_MODE_ENABLED
+		{
+			MDB_reader *r;
+			pthread_t tid;
+			pid_t pid;
+			int rc;
 
-		r = &env->me_txns->mti_readers[ reader ];
-		pid = r->mr_pid;
-		tid = r->mr_tid;
-		if (r->mr_txnid != oldest || pid <= 0)
-			continue;
+			if (!env->me_oom_func)
+				break;
 
-		rc = env->me_oom_func(env, pid, (void*) tid, oldest,
-			mdb_meta_head_w(env)->mm_txnid - oldest, retry);
-		if (rc < 0)
-			break;
+			r = &env->me_txns->mti_readers[ reader ];
+			pid = r->mr_pid;
+			tid = r->mr_tid;
+			if (r->mr_txnid != oldest || pid <= 0)
+				continue;
 
-		if (rc) {
-			r->mr_txnid = (txnid_t)-1L;
-			if (rc > 1) {
-				r->mr_tid = 0;
-				r->mr_pid = 0;
-				mdb_coherent_barrier();
+			rc = env->me_oom_func(env, pid, (void*) tid, oldest,
+				mdb_meta_head_w(env)->mm_txnid - oldest, retry);
+			if (rc < 0)
+				break;
+
+			if (rc) {
+				r->mr_txnid = (txnid_t)-1L;
+				if (rc > 1) {
+					r->mr_tid = 0;
+					r->mr_pid = 0;
+					mdb_coherent_barrier();
+				}
 			}
 		}
+#else
+		break;
+#endif /* MDBX_MODE_ENABLED */
 	}
 
 	snap = mdb_find_oldest(env, NULL);
@@ -2958,7 +2977,7 @@ mdb_dbis_update(MDB_txn *txn, int keep)
 }
 
 int
-mdb_txn_straggler(MDB_txn *txn, int *percent)
+mdbx_txn_straggler(MDB_txn *txn, int *percent)
 {
 	MDB_env	*env;
 	MDB_meta *meta;
@@ -3777,7 +3796,7 @@ fail:
 	return rc;
 }
 
-int ESECT
+int __cold
 mdb_env_set_syncbytes(MDB_env *env, size_t bytes) {
 	env->me_sync_threshold = bytes;
 	return env->me_map ? mdb_env_sync(env, 0) : 0;
@@ -3789,7 +3808,7 @@ mdb_env_set_syncbytes(MDB_env *env, size_t bytes) {
  * @param[out] meta address of where to store the meta information
  * @return 0 on success, non-zero on failure.
  */
-static int ESECT
+static int __cold
 mdb_env_read_header(MDB_env *env, MDB_meta *meta)
 {
 	MDB_metabuf	pbuf;
@@ -3848,7 +3867,7 @@ mdb_env_read_header(MDB_env *env, MDB_meta *meta)
 }
 
 /** Fill in most of the zeroed #MDB_meta for an empty database environment */
-static void ESECT
+static void __cold
 mdb_env_init_meta0(MDB_env *env, MDB_meta *meta)
 {
 	meta->mm_magic = MDB_MAGIC;
@@ -3868,7 +3887,7 @@ mdb_env_init_meta0(MDB_env *env, MDB_meta *meta)
  * @param[in] meta the #MDB_meta to write
  * @return 0 on success, non-zero on failure.
  */
-static int ESECT
+static int __cold
 mdb_env_init_meta(MDB_env *env, MDB_meta *meta)
 {
 	MDB_page *p, *q;
@@ -4063,7 +4082,7 @@ fail:
 	return rc;
 }
 
-int ESECT
+int __cold
 mdb_env_create(MDB_env **env)
 {
 	MDB_env *e;
@@ -4083,7 +4102,7 @@ mdb_env_create(MDB_env **env)
 	return MDB_SUCCESS;
 }
 
-static int ESECT
+static int __cold
 mdb_env_map(MDB_env *env, void *addr)
 {
 	unsigned flags = env->me_flags;
@@ -4133,7 +4152,7 @@ mdb_env_map(MDB_env *env, void *addr)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_set_mapsize(MDB_env *env, size_t size)
 {
 	/* If env is already open, caller is responsible for making
@@ -4171,7 +4190,7 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_set_maxdbs(MDB_env *env, MDB_dbi dbs)
 {
 	if (env->me_map)
@@ -4180,7 +4199,7 @@ mdb_env_set_maxdbs(MDB_env *env, MDB_dbi dbs)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_set_maxreaders(MDB_env *env, unsigned readers)
 {
 	if (env->me_map || readers < 1)
@@ -4189,7 +4208,7 @@ mdb_env_set_maxreaders(MDB_env *env, unsigned readers)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_get_maxreaders(MDB_env *env, unsigned *readers)
 {
 	if (!env || !readers)
@@ -4198,7 +4217,7 @@ mdb_env_get_maxreaders(MDB_env *env, unsigned *readers)
 	return MDB_SUCCESS;
 }
 
-static int ESECT
+static int __cold
 mdb_fsize(HANDLE fd, size_t *size)
 {
 	struct stat st;
@@ -4212,7 +4231,7 @@ mdb_fsize(HANDLE fd, size_t *size)
 
 /** Further setup required for opening an LMDB environment
  */
-static int ESECT
+static int __cold
 mdb_env_open2(MDB_env *env, MDB_meta *meta)
 {
 	unsigned flags = env->me_flags;
@@ -4319,7 +4338,7 @@ mdb_env_reader_dest(void *ptr)
 }
 
 /** Downgrade the exclusive lock on the region back to shared */
-static int ESECT
+static int __cold
 mdb_env_share_locks(MDB_env *env, int *excl, MDB_meta *meta)
 {
 	struct flock lock_info;
@@ -4341,7 +4360,7 @@ mdb_env_share_locks(MDB_env *env, int *excl, MDB_meta *meta)
 /** Try to get exclusive lock, otherwise shared.
  *	Maintain *excl = -1: no/unknown lock, 0: shared, 1: exclusive.
  */
-static int ESECT
+static int __cold
 mdb_env_excl_lock(MDB_env *env, int *excl)
 {
 	int rc = 0;
@@ -4436,7 +4455,7 @@ mdb_hash_val(MDB_val *val, mdb_hash_t hval)
  */
 static const char mdb_a85[]= "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!#$%&()*+-;<=>?@^_`{|}~";
 
-static void ESECT
+static void __cold
 mdb_pack85(unsigned long l, char *out)
 {
 	int i;
@@ -4447,7 +4466,7 @@ mdb_pack85(unsigned long l, char *out)
 	}
 }
 
-static void ESECT
+static void __cold
 mdb_hash_enc(MDB_val *val, char *encbuf)
 {
 	mdb_hash_t h = mdb_hash_val(val, MDB_HASH_INIT);
@@ -4465,7 +4484,7 @@ mdb_hash_enc(MDB_val *val, char *encbuf)
  * @param[in,out] excl In -1, out lock type: -1 none, 0 shared, 1 exclusive
  * @return 0 on success, non-zero on failure.
  */
-static int ESECT
+static int __cold
 mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 {
 	int fdflags;
@@ -4576,14 +4595,11 @@ fail:
 # error "Persistent DB flags & env flags overlap, but both go in mm_flags"
 #endif
 
-int ESECT
-mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
-{
-	return mdb_env_open_ex(env, path, flags, mode, NULL);
-}
-
-int ESECT
-mdb_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive)
+#if !MDBX_MODE_ENABLED
+static
+#endif /* !MDBX_MODE_ENABLED*/
+int __cold
+mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive)
 {
 	int		oflags, rc, len, excl = -1;
 	char *lpath, *dpath;
@@ -4720,8 +4736,14 @@ leave:
 	return rc;
 }
 
+int __cold
+mdb_env_open(MDB_env *env, const char *path, unsigned flags, mode_t mode)
+{
+	return mdbx_env_open_ex(env, path, flags, mode, NULL);
+}
+
 /** Destroy resources from mdb_env_open(), clear our readers & DBIs */
-static void ESECT
+static void __cold
 mdb_env_close0(MDB_env *env)
 {
 	int i;
@@ -4791,14 +4813,11 @@ mdb_env_close0(MDB_env *env)
 	env->me_flags &= ~(MDB_ENV_ACTIVE|MDB_ENV_TXKEY);
 }
 
-void ESECT
-mdb_env_close(MDB_env *env)
-{
-	mdb_env_close_ex(env, 0);
-}
-
-void ESECT
-mdb_env_close_ex(MDB_env *env, int dont_sync)
+#if !MDBX_MODE_ENABLED
+static
+#endif /* !MDBX_MODE_ENABLED*/
+void __cold
+mdbx_env_close_ex(MDB_env *env, int dont_sync)
 {
 	MDB_page *dp;
 
@@ -4817,6 +4836,12 @@ mdb_env_close_ex(MDB_env *env, int dont_sync)
 
 	mdb_env_close0(env);
 	free(env);
+}
+
+void __cold
+mdb_env_close(MDB_env *env)
+{
+	mdbx_env_close_ex(env, 0);
 }
 
 /** Compare two items pointing at aligned unsigned int's. */
@@ -8527,7 +8552,7 @@ typedef struct mdb_copy {
 } mdb_copy;
 
 	/** Dedicated writer thread for compacting copy. */
-static void* ESECT
+static void* __cold
 mdb_env_copythr(void *arg)
 {
 	mdb_copy *my = arg;
@@ -8585,7 +8610,7 @@ again:
 }
 
 	/** Tell the writer thread there's a buffer ready to write */
-static int ESECT
+static int __cold
 mdb_env_cthr_toggle(mdb_copy *my, int st)
 {
 	int toggle = my->mc_toggle ^ 1;
@@ -8604,7 +8629,7 @@ mdb_env_cthr_toggle(mdb_copy *my, int st)
 }
 
 	/** Depth-first tree traversal for compacting copy. */
-static int ESECT
+static int __cold
 mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 {
 	MDB_cursor mc;
@@ -8762,7 +8787,7 @@ done:
 }
 
 	/** Copy environment with compaction. */
-static int ESECT
+static int __cold
 mdb_env_copyfd1(MDB_env *env, HANDLE fd)
 {
 	MDB_meta *mm;
@@ -8858,7 +8883,7 @@ mdb_env_copyfd1(MDB_env *env, HANDLE fd)
 }
 
 	/** Copy environment as-is. */
-static int ESECT
+static int __cold
 mdb_env_copyfd0(MDB_env *env, HANDLE fd)
 {
 	MDB_txn *txn = NULL;
@@ -8949,7 +8974,7 @@ leave:
 	return rc;
 }
 
-int ESECT
+int __cold
 mdb_env_copyfd2(MDB_env *env, HANDLE fd, unsigned flags)
 {
 	if (flags & MDB_CP_COMPACT)
@@ -8958,13 +8983,13 @@ mdb_env_copyfd2(MDB_env *env, HANDLE fd, unsigned flags)
 		return mdb_env_copyfd0(env, fd);
 }
 
-int ESECT
+int __cold
 mdb_env_copyfd(MDB_env *env, HANDLE fd)
 {
 	return mdb_env_copyfd2(env, fd, 0);
 }
 
-int ESECT
+int __cold
 mdb_env_copy2(MDB_env *env, const char *path, unsigned flags)
 {
 	int rc, len;
@@ -9019,13 +9044,13 @@ leave:
 	return rc;
 }
 
-int ESECT
+int __cold
 mdb_env_copy(MDB_env *env, const char *path)
 {
 	return mdb_env_copy2(env, path, 0);
 }
 
-int ESECT
+int __cold
 mdb_env_set_flags(MDB_env *env, unsigned flag, int onoff)
 {
 	if (unlikely(flag & ~CHANGEABLE))
@@ -9037,7 +9062,7 @@ mdb_env_set_flags(MDB_env *env, unsigned flag, int onoff)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_get_flags(MDB_env *env, unsigned *arg)
 {
 	if (unlikely(!env || !arg))
@@ -9047,7 +9072,7 @@ mdb_env_get_flags(MDB_env *env, unsigned *arg)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_set_userctx(MDB_env *env, void *ctx)
 {
 	if (unlikely(!env))
@@ -9056,13 +9081,13 @@ mdb_env_set_userctx(MDB_env *env, void *ctx)
 	return MDB_SUCCESS;
 }
 
-void * ESECT
+void * __cold
 mdb_env_get_userctx(MDB_env *env)
 {
 	return env ? env->me_userctx : NULL;
 }
 
-int ESECT
+int __cold
 mdb_env_set_assert(MDB_env *env, MDB_assert_func *func)
 {
 	if (unlikely(!env))
@@ -9073,7 +9098,7 @@ mdb_env_set_assert(MDB_env *env, MDB_assert_func *func)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_get_path(MDB_env *env, const char **arg)
 {
 	if (unlikely(!env || !arg))
@@ -9083,7 +9108,7 @@ mdb_env_get_path(MDB_env *env, const char **arg)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_get_fd(MDB_env *env, mdb_filehandle_t *arg)
 {
 	if (unlikely(!env || !arg))
@@ -9099,7 +9124,7 @@ mdb_env_get_fd(MDB_env *env, mdb_filehandle_t *arg)
  * @param[out] arg the address of an #MDB_stat structure to receive the stats.
  * @return 0, this function always succeeds.
  */
-static int ESECT
+static int __cold
 mdb_stat0(MDB_env *env, MDB_db *db, MDB_stat *arg)
 {
 	arg->ms_psize = env->me_psize;
@@ -9112,59 +9137,97 @@ mdb_stat0(MDB_env *env, MDB_db *db, MDB_stat *arg)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+#if !MDBX_MODE_ENABLED
+static
+#endif /* !MDBX_MODE_ENABLED*/
+int __cold
+mdbx_env_stat(MDB_env *env, MDBX_stat *arg, size_t bytes)
+{
+	MDB_meta *meta;
+
+	if (unlikely(env == NULL || arg == NULL))
+		return EINVAL;
+	if (unlikely(bytes != sizeof(MDBX_stat)))
+		return EINVAL;
+
+	meta = mdb_meta_head_r(env);
+	return mdb_stat0(env, &meta->mm_dbs[MAIN_DBI], &arg->base);
+}
+
+int __cold
 mdb_env_stat(MDB_env *env, MDB_stat *arg)
+{
+	return mdbx_env_stat(env, (MDBX_stat *) arg, sizeof(MDB_stat));
+}
+
+#if !MDBX_MODE_ENABLED
+static
+#endif /* !MDBX_MODE_ENABLED*/
+int __cold mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes)
 {
 	MDB_meta *meta;
 
 	if (unlikely(env == NULL || arg == NULL))
 		return EINVAL;
 
-	meta = mdb_meta_head_r(env);
-	return mdb_stat0(env, &meta->mm_dbs[MAIN_DBI], arg);
-}
+	if (bytes == sizeof(MDB_envinfo)) {
+		do {
+			meta = mdb_meta_head_r(env);
+			arg->base.me_last_txnid = meta->mm_txnid;
+			arg->base.me_last_pgno = meta->mm_last_pg;
+			arg->base.me_mapaddr = meta->mm_address;
+			arg->base.me_mapsize = env->me_mapsize;
+			arg->base.me_maxreaders = env->me_maxreaders;
+			arg->base.me_numreaders = env->me_txns->mti_numreaders;
+		} while (unlikely( arg->base.me_last_txnid != env->me_txns->mti_txnid));
+#if MDBX_MODE_ENABLED
+	} else if (bytes == sizeof(MDBX_envinfo)) {
+		MDB_meta *m1, *m2;
+		MDB_reader *r;
+		int i;
 
-int ESECT
-mdb_env_info(MDB_env *env, MDB_envinfo *arg)
-{
-	MDB_meta *meta, *m1, *m2;
+		m1 = METAPAGE_1(env);
+		m2 = METAPAGE_2(env);
 
-	if (unlikely(env == NULL || arg == NULL))
-		return EINVAL;
+		do {
+			meta = mdb_meta_head_r(env);
+			arg->base.me_last_txnid = meta->mm_txnid;
+			arg->base.me_last_pgno = meta->mm_last_pg;
+			arg->me_meta1_txnid = m1->mm_txnid;
+			arg->me_meta1_sign = m1->mm_datasync_sign;
+			arg->me_meta2_txnid = m2->mm_txnid;
+			arg->me_meta2_sign = m2->mm_datasync_sign;
+		} while (unlikely( arg->base.me_last_txnid != env->me_txns->mti_txnid
+				|| arg->me_meta1_sign != m1->mm_datasync_sign
+				|| arg->me_meta2_sign != m2->mm_datasync_sign ));
 
-	m1 = METAPAGE_1(env);
-	m2 = METAPAGE_2(env);
+		arg->base.me_mapaddr = meta->mm_address;
+		arg->base.me_mapsize = env->me_mapsize;
+		arg->base.me_maxreaders = env->me_maxreaders;
+		arg->base.me_numreaders = env->me_txns->mti_numreaders;
+		arg->me_tail_txnid = 0;
 
-	arg->me_mapsize = env->me_mapsize;
-	arg->me_maxreaders = env->me_maxreaders;
-	arg->me_numreaders = env->me_txns->mti_numreaders;
-
-	do {
-		meta = mdb_meta_head_r(env);
-		arg->me_meta1_txnid = m1->mm_txnid;
-		arg->me_meta1_sign = m1->mm_datasync_sign;
-		arg->me_meta2_txnid = m2->mm_txnid;
-		arg->me_meta2_sign = m2->mm_datasync_sign;
-		arg->me_last_pgno = meta->mm_last_pg;
-		arg->me_last_txnid = meta->mm_txnid;
-	} while (unlikely( meta->mm_txnid != env->me_txns->mti_txnid
-			|| arg->me_meta1_sign != m1->mm_datasync_sign
-			|| arg->me_meta2_sign != m2->mm_datasync_sign ));
-
-	arg->me_mapaddr = meta->mm_address;
-	arg->me_tail_txnid = 0;
-	MDB_reader *r = env->me_txns->mti_readers;
-	int i;
-	arg->me_tail_txnid = arg->me_last_txnid;
-	for (i = arg->me_numreaders; --i >= 0; ) {
-		if (r[i].mr_pid) {
-			txnid_t mr = r[i].mr_txnid;
-			if (arg->me_tail_txnid > mr)
-				arg->me_tail_txnid = mr;
+		r = env->me_txns->mti_readers;
+		arg->me_tail_txnid = arg->base.me_last_txnid;
+		for (i = 0; i < arg->base.me_numreaders; ++i ) {
+			if (r[i].mr_pid) {
+				txnid_t mr = r[i].mr_txnid;
+				if (arg->me_tail_txnid > mr)
+					arg->me_tail_txnid = mr;
+			}
 		}
+#endif /* MDBX_MODE_ENABLED */
+	} else {
+		return EINVAL;
 	}
 
 	return MDB_SUCCESS;
+}
+
+int __cold
+mdb_env_info(MDB_env *env, MDB_envinfo *arg)
+{
+	return mdbx_env_info(env, (MDBX_envinfo*) arg, sizeof(MDB_envinfo));
 }
 
 /** Set the default comparison functions for a database.
@@ -9293,10 +9356,16 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)
 	return rc;
 }
 
-int ESECT
-mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *arg)
+#if ! MDBX_MODE_ENABLED
+static
+#endif
+int __cold
+mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg, size_t bytes)
 {
 	if (!arg || unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
+		return EINVAL;
+
+	if (unlikely(bytes != sizeof(MDBX_stat)))
 		return EINVAL;
 
 	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
@@ -9308,7 +9377,13 @@ mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *arg)
 		/* Stale, must read the DB's root. cursor_init does it for us. */
 		mdb_cursor_init(&mc, txn, dbi, &mx);
 	}
-	return mdb_stat0(txn->mt_env, &txn->mt_dbs[dbi], arg);
+	return mdb_stat0(txn->mt_env, &txn->mt_dbs[dbi], &arg->base);
+}
+
+int __cold
+mdb_stat(MDB_txn *txn, MDB_dbi dbi, MDB_stat *arg)
+{
+	return mdbx_stat(txn, dbi, (MDBX_stat*) arg, sizeof(MDB_stat));
 }
 
 void mdb_dbi_close(MDB_env *env, MDB_dbi dbi)
@@ -9511,13 +9586,13 @@ int mdb_set_relctx(MDB_txn *txn, MDB_dbi dbi, void *ctx)
 	return MDB_SUCCESS;
 }
 
-int ESECT
+int __cold
 mdb_env_get_maxkeysize(MDB_env *env)
 {
 	return ENV_MAXKEY(env);
 }
 
-int ESECT
+int __cold
 mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 {
 	unsigned i, rdrs;
@@ -9560,7 +9635,7 @@ mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 /** Insert pid into list if not already present.
  * return -1 if already present.
  */
-static int ESECT
+static int __cold
 mdb_pid_insert(pid_t *ids, pid_t pid)
 {
 	/* binary search of pid in list */
@@ -9597,7 +9672,7 @@ mdb_pid_insert(pid_t *ids, pid_t pid)
 	return 0;
 }
 
-int ESECT
+int __cold
 mdb_reader_check(MDB_env *env, int *dead)
 {
 	if (!env)
@@ -9608,7 +9683,7 @@ mdb_reader_check(MDB_env *env, int *dead)
 }
 
 /** As #mdb_reader_check(). rlocked = <caller locked the reader mutex>. */
-static int ESECT
+static int __cold
 mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 {
 	pthread_mutex_t *rmutex = rlocked ? NULL : MDB_MUTEX(env, r);
@@ -9662,7 +9737,7 @@ mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 	return rc;
 }
 
-static int ESECT
+static int __cold
 mdb_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc)
 {
 #ifdef EOWNERDEAD
@@ -9724,15 +9799,17 @@ static void mdb_mutex_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 	mdb_assert(env, rc == 0);
 }
 
-void ESECT
-mdb_env_set_oomfunc(MDB_env *env, MDB_oom_func *oomfunc)
+#if MDBX_MODE_ENABLED
+
+void __cold
+mdbx_env_set_oomfunc(MDB_env *env, MDB_oom_func *oomfunc)
 {
 	if (env)
 		env->me_oom_func = oomfunc;
 }
 
-MDB_oom_func* ESECT
-mdb_env_get_oomfunc(MDB_env *env)
+MDB_oom_func* __cold
+mdbx_env_get_oomfunc(MDB_env *env)
 {
 	return env ? env->me_oom_func : NULL;
 }
@@ -9747,7 +9824,7 @@ typedef struct mdb_walk_ctx mdb_walk_ctx_t;
 
 
 /** Depth-first tree traversal. */
-static int ESECT
+static int __cold
 mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int deep)
 {
 	MDB_page *mp;
@@ -9871,8 +9948,8 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		nkeys, payload_size, header_size, unused_size + align_bytes);
 }
 
-int ESECT
-mdb_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* user)
+int __cold
+mdbx_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* user)
 {
 	mdb_walk_ctx_t ctx;
 	int rc;
@@ -9892,4 +9969,8 @@ mdb_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* user)
 	return rc;
 }
 
+#endif /* MDBX_MODE_ENABLED */
+
 /** @} */
+
+#include "./midl.c"

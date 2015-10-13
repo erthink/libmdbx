@@ -20,17 +20,26 @@
 CC	?= gcc
 CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
 CFLAGS	+= -pthread
-LDLIBS	= -Wl,--no-as-needed -lrt
 prefix	?= /usr/local
 
 ########################################################################
 
-IHDRS	= lmdb.h
-ILIBS	= liblmdb.a liblmdb.so
-IPROGS	= mdb_stat mdb_copy mdb_dump mdb_load mdb_chk
-IDOCS	= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
-PROGS	= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
-all:	$(ILIBS) $(PROGS)
+IHDRS	:= lmdb.h mdbx.h
+ILIBS	:= libmdbx.a libmdbx.so
+IPROGS	:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
+IDOCS	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
+PROGS	:= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
+
+SRC_LMDB := mdb.c midl.c lmdb.h midl.h
+SRC_MDBX := $(SRC_LMDB) mdbx.h
+
+.PHONY: mdbx lmdb all install clean test coverage
+
+all: $(ILIBS) $(IPROGS)
+
+mdbx: libmdbx.a libmdbx.so
+
+lmdb: liblmdb.a liblmdb.so
 
 install: $(ILIBS) $(IPROGS) $(IHDRS)
 	mkdir -p $(DESTDIR)$(prefix)/bin
@@ -43,73 +52,95 @@ install: $(ILIBS) $(IPROGS) $(IHDRS)
 	for f in $(IDOCS); do cp $$f $(DESTDIR)$(prefix)/man/man1; done
 
 clean:
-	rm -rf $(PROGS) *.[ao] *.[ls]o *~ testdb/*
+	rm -rf $(PROGS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
 
-test:	all
+test:	mdbx $(PROGS)
 	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
-		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdb_chk -v testdb \
-		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdb_chk -v testdb \
-		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdb_chk -v testdb \
-		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdb_chk -v testdb \
-		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdb_chk -v testdb \
-		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdb_chk -v testdb \
-		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdb_chk -v testdb \
+		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdbx_chk -v testdb \
 		&& echo "*** LMDB-TESTs - all done"
 
-liblmdb.a:	mdb.o midl.o
-	$(AR) rs $@ mdb.o midl.o
+libmdbx.a:	mdbx.o
+	$(AR) rs $@ $^
 
-liblmdb.so:	mdb.lo midl.lo
-#	$(CC) $(LDFLAGS) -pthread -shared -Wl,-Bsymbolic -o $@ mdb.o midl.o $(SOLIBS)
-	$(CC) $(LDFLAGS) -pthread -shared -o $@ mdb.lo midl.lo $(SOLIBS)
+libmdbx.so:	mdbx.lo
+	$(CC) $(CFLAGS) $(LDFLAGS) -pthread -shared -o $@ $^
 
-mdb_stat: mdb_stat.o liblmdb.a
-mdb_copy: mdb_copy.o liblmdb.a
-mdb_dump: mdb_dump.o liblmdb.a
-mdb_load: mdb_load.o liblmdb.a
-mdb_chk: mdb_chk.o liblmdb.a
-mtest0: mtest0.o liblmdb.a
-mtest1: mtest1.o liblmdb.a
-mtest2:	mtest2.o liblmdb.a
-mtest3:	mtest3.o liblmdb.a
-mtest4:	mtest4.o liblmdb.a
-mtest5:	mtest5.o liblmdb.a
-mtest6:	mtest6.o liblmdb.a
-wbench:	wbench.o liblmdb.a
+liblmdb.a:	lmdb.o
+	$(AR) rs $@ $^
 
-mdb.o: mdb.c lmdb.h midl.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c mdb.c
+liblmdb.so:	lmdb.lo
+	$(CC) $(CFLAGS) $(LDFLAGS) -pthread -shared -o $@ $^
 
-midl.o: midl.c midl.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c midl.c
+mdbx_stat: mdb_stat.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
-mdb.lo: mdb.c lmdb.h midl.h
-	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -c mdb.c -o $@
+mdbx_copy: mdb_copy.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
-midl.lo: midl.c midl.h
-	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -c midl.c -o $@
+mdbx_dump: mdb_dump.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mdbx_load: mdb_load.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mdbx_chk: mdb_chk.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lrt
+
+mtest0: mtest0.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest1: mtest1.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest2:	mtest2.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest3:	mtest3.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest4:	mtest4.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest5:	mtest5.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest6:	mtest6.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+wbench:	wbench.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lrt
+
+mdbx.o: $(SRC_MDBX)
+	$(CC) $(CFLAGS) -include mdbx.h -c mdb.c -o $@
+
+mdbx.lo: $(SRC_MDBX)
+	$(CC) $(CFLAGS) -include mdbx.h -fPIC -c mdb.c -o $@
+
+lmdb.o: $(SRC_LMDB)
+	$(CC) $(CFLAGS) -c mdb.c -o $@
+
+lmdb.lo: $(SRC_LMDB)
+	$(CC) $(CFLAGS) -fPIC -c mdb.c -o $@
 
 %:	%.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ $(LDLIBS) -o $@
+	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
-%.o:	%.c lmdb.h
-	$(CC) $(CFLAGS) $(CPPFLAGS) -c $<
+%.o:	%.c lmdb.h mdbx.h
+	$(CC) $(CFLAGS) -c $<
 
 COV_FLAGS=-fprofile-arcs -ftest-coverage
-COV_OBJS=xmdb.o xmidl.o
 
-coverage: xmtest
-	for i in mtest*.c [0-9]*.c; do j=`basename \$$i .c`; $(MAKE) $$j.o; \
-		gcc -o x$$j $$j.o $(COV_OBJS) -pthread $(COV_FLAGS); \
-		rm -rf testdb; mkdir testdb; ./x$$j; done
-	gcov xmdb.c
-	gcov xmidl.c
+@gcov-mdb.o: $(SRC_MDBX)
+	$(CC) $(CFLAGS) $(COV_FLAGS) -O0 -include mdbx.h -c mdb.c -o $@
 
-xmtest:	mtest.o xmdb.o xmidl.o
-	gcc -o xmtest mtest.o xmdb.o xmidl.o -pthread $(COV_FLAGS)
-
-xmdb.o: mdb.c lmdb.h midl.h
-	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -O0 $(COV_FLAGS) -c mdb.c -o $@
-
-xmidl.o: midl.c midl.h
-	$(CC) $(CFLAGS) -fPIC $(CPPFLAGS) -O0 $(COV_FLAGS) -c midl.c -o $@
+coverage: @gcov-mdb.o
+	for t in mtest*.c; do x=`basename \$$t .c`; $(MAKE) $$x.o; \
+		gcc -o @gcov-$$x $$x.o $^ -pthread $(COV_FLAGS); \
+		rm -rf testdb; mkdir testdb; ./@gcov-$$x; done
+	gcov @gcov-mdb

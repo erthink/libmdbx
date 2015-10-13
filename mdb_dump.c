@@ -18,7 +18,7 @@
 #include <ctype.h>
 #include <unistd.h>
 #include <signal.h>
-#include "lmdb.h"
+#include "mdbx.h"
 
 #ifdef _WIN32
 #define Z	"I"

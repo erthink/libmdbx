@@ -20,7 +20,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
-#include "lmdb.h"
+#include "mdbx.h"
 
 static void
 sighandle(int sig)
