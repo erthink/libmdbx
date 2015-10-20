@@ -737,6 +737,8 @@ typedef struct MDB_dbx {
 	 *	Every operation requires a transaction handle.
 	 */
 struct MDB_txn {
+#define MDBX_MT_SIGNATURE 0x706C553B
+	unsigned	mt_signature;
 	MDB_txn		*mt_parent;		/**< parent of a nested txn */
 	/** Nested txn under this txn, set together with flag #MDB_TXN_HAS_CHILD */
 	MDB_txn		*mt_child;
@@ -840,6 +842,8 @@ struct MDB_xcursor;
 	 *	(A node with #F_DUPDATA but no #F_SUBDATA contains a subpage).
 	 */
 struct MDB_cursor {
+#define MDBX_MC_SIGNATURE 0xFE05D5B1
+	unsigned	mc_signature;
 	/** Next cursor on this DB in this txn */
 	MDB_cursor	*mc_next;
 	/** Backup of the original cursor if this cursor is a shadow */
@@ -905,6 +909,8 @@ struct MDB_rthc {
 };
 	/** The database environment. */
 struct MDB_env {
+#define MDBX_ME_SIGNATURE 0x9A899641
+	unsigned	me_signature;
 	HANDLE		me_fd;		/**< The main data file */
 	HANDLE		me_lfd;		/**< The lock file */
 	/** Failed to update the meta page. Probably an I/O error. */
@@ -981,7 +987,7 @@ typedef struct MDB_ntxn {
 
 	/** Check \b txn and \b dbi arguments to a function */
 #define TXN_DBI_EXIST(txn, dbi, validity) \
-	((txn) && (dbi)<(txn)->mt_numdbs && ((txn)->mt_dbflags[dbi] & (validity)))
+	((dbi)<(txn)->mt_numdbs && ((txn)->mt_dbflags[dbi] & (validity)))
 
 	/** Check for misused \b dbi handles */
 #define TXN_DBI_CHANGED(txn, dbi) \
@@ -1448,12 +1454,14 @@ static void mdb_audit(MDB_txn *txn)
 int
 mdb_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a, const MDB_val *b)
 {
+	mdb_ensure(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
 	return txn->mt_dbxs[dbi].md_cmp(a, b);
 }
 
 int
 mdb_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a, const MDB_val *b)
 {
+	mdb_ensure(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
 	return txn->mt_dbxs[dbi].md_dcmp(a, b);
 }
 
@@ -2496,8 +2504,14 @@ mdb_env_sync(MDB_env *env, int force)
 	MDB_meta *head;
 	unsigned flags;
 
-	if (unlikely(! env || ! env->me_txns))
+	if (unlikely(! env))
 		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(! env->me_txns))
+		return MDB_PANIC;
 
 	flags = env->me_flags & ~MDB_NOMETASYNC;
 	if (unlikely(flags & (MDB_RDONLY | MDB_FATAL_ERROR)))
@@ -2619,6 +2633,7 @@ mdb_cursors_close(MDB_txn *txn, unsigned merge)
 				mc = bk;
 			}
 			/* Only malloced cursors are permanently tracked. */
+			mc->mc_signature = 0;
 			free(mc);
 		}
 		cursors[i] = NULL;
@@ -2821,7 +2836,13 @@ mdb_txn_renew(MDB_txn *txn)
 {
 	int rc;
 
-	if (unlikely(!txn || !F_ISSET(txn->mt_flags, MDB_TXN_RDONLY|MDB_TXN_FINISHED)))
+	if (unlikely(!txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!F_ISSET(txn->mt_flags, MDB_TXN_RDONLY|MDB_TXN_FINISHED)))
 		return EINVAL;
 
 	rc = mdb_txn_renew0(txn);
@@ -2840,6 +2861,12 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 	MDB_ntxn *ntxn;
 	int rc, size, tsize;
 
+	if (unlikely(!env || !ret))
+		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	flags &= MDB_TXN_BEGIN_FLAGS;
 	flags |= env->me_flags & MDB_WRITEMAP;
 
@@ -2847,6 +2874,9 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 		return EACCES;
 
 	if (parent) {
+		if (unlikely(parent->mt_signature != MDBX_MT_SIGNATURE))
+			return EINVAL;
+
 		/* Nested transactions: Max 1 child, write txns only, no writemap */
 		flags |= parent->mt_flags;
 		if (unlikely(flags & (MDB_RDONLY|MDB_WRITEMAP|MDB_TXN_BLOCKED))) {
@@ -2925,6 +2955,7 @@ renew:
 			free(txn);
 	} else {
 		txn->mt_flags |= flags;	/* could not change txn=me_txn0 earlier */
+		txn->mt_signature = MDBX_MT_SIGNATURE;
 		*ret = txn;
 		mdb_debug("begin txn %zu%c %p on mdbenv %p, root page %zu",
 			txn->mt_txnid, (flags & MDB_RDONLY) ? 'r' : 'w',
@@ -2937,14 +2968,16 @@ renew:
 MDB_env *
 mdb_txn_env(MDB_txn *txn)
 {
-	if(unlikely(!txn)) return NULL;
+	if(unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+		return NULL;
 	return txn->mt_env;
 }
 
 size_t
 mdb_txn_id(MDB_txn *txn)
 {
-	if(unlikely(!txn)) return 0;
+	if(unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+		return 0;
 	return txn->mt_txnid;
 }
 
@@ -2984,7 +3017,13 @@ mdbx_txn_straggler(MDB_txn *txn, int *percent)
 	MDB_meta *meta;
 	txnid_t lag;
 
-	if (unlikely(! txn || ! txn->mt_u.reader))
+	if(unlikely(!txn))
+		return -EINVAL;
+
+	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(! txn->mt_u.reader))
 		return -1;
 
 	env = txn->mt_env;
@@ -3074,33 +3113,43 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 		mdb_midl_free(pghead);
 	}
 
-	if (mode & MDB_END_FREE)
+	if (mode & MDB_END_FREE) {
+		txn->mt_signature = 0;
 		free(txn);
+	}
 }
 
-void
+int
 mdb_txn_reset(MDB_txn *txn)
 {
-	if (unlikely(txn == NULL))
-		return;
+	if (unlikely(! txn))
+		return EINVAL;
+
+	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	/* This call is only valid for read-only txns */
 	if (unlikely(!(txn->mt_flags & MDB_TXN_RDONLY)))
-		return;
+		return EINVAL;
 
 	mdb_txn_end(txn, MDB_END_RESET);
+	return MDB_SUCCESS;
 }
 
-void
+int
 mdb_txn_abort(MDB_txn *txn)
 {
-	if (unlikely(txn == NULL))
-		return;
+	if (unlikely(! txn))
+		return EINVAL;
+
+	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	if (txn->mt_child)
 		mdb_txn_abort(txn->mt_child);
 
 	mdb_txn_end(txn, MDB_END_ABORT|MDB_END_SLOT|MDB_END_FREE);
+	return MDB_SUCCESS;
 }
 
 static int
@@ -3575,6 +3624,9 @@ mdb_txn_commit(MDB_txn *txn)
 	if (unlikely(txn == NULL))
 		return EINVAL;
 
+	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	/* mdb_txn_end() mode for a commit which writes nothing */
 	end_mode = MDB_END_EMPTY_COMMIT|MDB_END_UPDATE|MDB_END_SLOT|MDB_END_FREE;
 
@@ -3719,6 +3771,7 @@ mdb_txn_commit(MDB_txn *txn)
 
 		parent->mt_child = NULL;
 		mdb_midl_free(((MDB_ntxn *)txn)->mnt_pgstate.mf_pghead);
+		txn->mt_signature = 0;
 		free(txn);
 		return rc;
 	}
@@ -3798,7 +3851,14 @@ fail:
 }
 
 int __cold
-mdb_env_set_syncbytes(MDB_env *env, size_t bytes) {
+mdb_env_set_syncbytes(MDB_env *env, size_t bytes)
+{
+	if (unlikely(!env))
+		return EINVAL;
+
+	if(unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	env->me_sync_threshold = bytes;
 	return env->me_map ? mdb_env_sync(env, 0) : 0;
 }
@@ -4099,6 +4159,7 @@ mdb_env_create(MDB_env **env)
 	e->me_pid = getpid();
 	GET_PAGESIZE(e->me_os_psize);
 	VALGRIND_CREATE_MEMPOOL(e,0,0);
+	e->me_signature = MDBX_ME_SIGNATURE;
 	*env = e;
 	return MDB_SUCCESS;
 }
@@ -4156,6 +4217,15 @@ mdb_env_map(MDB_env *env, void *addr)
 int __cold
 mdb_env_set_mapsize(MDB_env *env, size_t size)
 {
+	if (unlikely(!env))
+		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(size < env->me_psize * 8))
+		return EINVAL;
+
 	/* If env is already open, caller is responsible for making
 	 * sure there are no active txns.
 	 */
@@ -4194,8 +4264,15 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 int __cold
 mdb_env_set_maxdbs(MDB_env *env, MDB_dbi dbs)
 {
-	if (env->me_map)
+	if (unlikely(!env))
 		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(env->me_map))
+		return EINVAL;
+
 	env->me_maxdbs = dbs + CORE_DBS;
 	return MDB_SUCCESS;
 }
@@ -4203,8 +4280,15 @@ mdb_env_set_maxdbs(MDB_env *env, MDB_dbi dbs)
 int __cold
 mdb_env_set_maxreaders(MDB_env *env, unsigned readers)
 {
-	if (env->me_map || readers < 1)
+	if (unlikely(!env || readers < 1))
 		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(env->me_map))
+		return EINVAL;
+
 	env->me_maxreaders = readers;
 	return MDB_SUCCESS;
 }
@@ -4214,6 +4298,10 @@ mdb_env_get_maxreaders(MDB_env *env, unsigned *readers)
 {
 	if (!env || !readers)
 		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	*readers = env->me_maxreaders;
 	return MDB_SUCCESS;
 }
@@ -4605,7 +4693,13 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	int		oflags, rc, len, excl = -1;
 	char *lpath, *dpath;
 
-	if (env->me_fd!=INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
+	if (unlikely(!env || !path))
+		return EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (env->me_fd != INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
 		return EINVAL;
 
 	len = strlen(path);
@@ -4817,16 +4911,19 @@ mdb_env_close0(MDB_env *env)
 #if !MDBX_MODE_ENABLED
 static
 #endif /* !MDBX_MODE_ENABLED*/
-void __cold
+int __cold
 mdbx_env_close_ex(MDB_env *env, int dont_sync)
 {
 	MDB_page *dp;
+	int rc = MDB_SUCCESS;
 
-	if (env == NULL)
-		return;
+	if (unlikely(!env))
+		return EINVAL;
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	if (! dont_sync)
-		mdb_env_sync(env, 1);
+		rc = mdb_env_sync(env, 1);
 
 	VALGRIND_DESTROY_MEMPOOL(env);
 	while ((dp = env->me_dpages) != NULL) {
@@ -4836,7 +4933,10 @@ mdbx_env_close_ex(MDB_env *env, int dont_sync)
 	}
 
 	mdb_env_close0(env);
+	env->me_signature = 0;
 	free(env);
+
+	return rc;
 }
 
 void __cold
@@ -5477,7 +5577,13 @@ mdb_get(MDB_txn *txn, MDB_dbi dbi,
 
 	mdb_debug("===> get db %u key [%s]", dbi, DKEY(key));
 
-	if (unlikely(!key || !data || !TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+	if (unlikely(!key || !data || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
 	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
@@ -6002,6 +6108,9 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	if (unlikely(mc == NULL))
 		return EINVAL;
 
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(mc->mc_txn->mt_flags & MDB_TXN_BLOCKED))
 		return MDB_BAD_TXN;
 
@@ -6216,6 +6325,9 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
 	if (unlikely(mc == NULL || key == NULL))
 		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	env = mc->mc_txn->mt_env;
 
@@ -6734,6 +6846,12 @@ mdb_cursor_del(MDB_cursor *mc, unsigned flags)
 	MDB_page	*mp;
 	int rc;
 
+	if (unlikely(!mc))
+		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(mc->mc_txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
 		return (mc->mc_txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
@@ -7232,6 +7350,7 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 	if (mx->mx_dbx.md_cmp == mdb_cmp_int && mx->mx_db.md_pad == sizeof(size_t))
 		mx->mx_dbx.md_cmp = mdb_cmp_clong;
 #endif */
+	mc->mc_signature = MDBX_MC_SIGNATURE;
 }
 
 
@@ -7284,6 +7403,7 @@ mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 	mc->mc_ki[0] = 0;
 	if (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT) {
 		mdb_tassert(txn, mx != NULL);
+		mx->mx_cursor.mc_signature = MDBX_MC_SIGNATURE;
 		mc->mc_xcursor = mx;
 		mdb_xcursor_init0(mc);
 	} else {
@@ -7292,6 +7412,7 @@ mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 	if (*mc->mc_dbflag & DB_STALE) {
 		mdb_page_search(mc, NULL, MDB_PS_ROOTONLY);
 	}
+	mc->mc_signature = MDBX_MC_SIGNATURE;
 }
 
 int
@@ -7300,7 +7421,13 @@ mdb_cursor_open(MDB_txn *txn, MDB_dbi dbi, MDB_cursor **ret)
 	MDB_cursor	*mc;
 	size_t size = sizeof(MDB_cursor);
 
-	if (unlikely(!ret || !TXN_DBI_EXIST(txn, dbi, DB_VALID)))
+	if (unlikely(!ret || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
 		return EINVAL;
 
 	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
@@ -7331,7 +7458,14 @@ mdb_cursor_open(MDB_txn *txn, MDB_dbi dbi, MDB_cursor **ret)
 int
 mdb_cursor_renew(MDB_txn *txn, MDB_cursor *mc)
 {
-	if (unlikely(!mc || !TXN_DBI_EXIST(txn, mc->mc_dbi, DB_VALID)))
+	if (unlikely(!mc || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE
+			|| mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, mc->mc_dbi, DB_VALID)))
 		return EINVAL;
 
 	if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors))
@@ -7352,6 +7486,9 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 
 	if (unlikely(mc == NULL || countp == NULL))
 		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	if (unlikely(mc->mc_xcursor == NULL))
 		return MDB_INCOMPATIBLE;
@@ -7380,28 +7517,35 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 void
 mdb_cursor_close(MDB_cursor *mc)
 {
-	if (mc && !mc->mc_backup) {
-		/* remove from txn, if tracked */
-		if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
-			MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
-			while (*prev && *prev != mc) prev = &(*prev)->mc_next;
-			if (*prev == mc)
-				*prev = mc->mc_next;
+	if (mc) {
+		mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE);
+		if (!mc->mc_backup) {
+			/* remove from txn, if tracked */
+			if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
+				MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
+				while (*prev && *prev != mc) prev = &(*prev)->mc_next;
+				if (*prev == mc)
+					*prev = mc->mc_next;
+			}
+			mc->mc_signature = 0;
+			free(mc);
 		}
-		free(mc);
 	}
 }
 
 MDB_txn *
 mdb_cursor_txn(MDB_cursor *mc)
 {
-	if (unlikely(!mc)) return NULL;
+	if (unlikely(!mc || mc->mc_signature != MDBX_MC_SIGNATURE))
+		return NULL;
 	return mc->mc_txn;
 }
 
 MDB_dbi
 mdb_cursor_dbi(MDB_cursor *mc)
 {
+	if (unlikely(!mc || mc->mc_signature != MDBX_MC_SIGNATURE))
+		return INT_MIN;
 	return mc->mc_dbi;
 }
 
@@ -8101,7 +8245,13 @@ int
 mdb_del(MDB_txn *txn, MDB_dbi dbi,
     MDB_val *key, MDB_val *data)
 {
-	if (unlikely(!key || !TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+	if (unlikely(!key || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
 	if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
@@ -8567,7 +8717,13 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 	MDB_cursor mc;
 	MDB_xcursor mx;
 
-	if (unlikely(!key || !data || !TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+	if (unlikely(!key || !data || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
 	if (unlikely(flags & ~(MDB_NOOVERWRITE|MDB_NODUPDATA|MDB_RESERVE|MDB_APPEND|MDB_APPENDDUP)))
@@ -9313,8 +9469,15 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)
 	unsigned unused = 0, seq;
 	size_t len;
 
+	if (unlikely(!txn || !dbi))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(flags & ~VALID_FLAGS))
 		return EINVAL;
+
 	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
 		return MDB_BAD_TXN;
 
@@ -9413,7 +9576,13 @@ static
 int __cold
 mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg, size_t bytes)
 {
-	if (!arg || unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
+	if (unlikely(!arg || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
 		return EINVAL;
 
 	if (unlikely(bytes != sizeof(MDBX_stat)))
@@ -9455,8 +9624,15 @@ void mdb_dbi_close(MDB_env *env, MDB_dbi dbi)
 
 int mdb_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags)
 {
+	if (unlikely(!txn || !flags))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
 		return EINVAL;
+
 	*flags = txn->mt_dbs[dbi].md_flags & PERSISTENT_FLAGS;
 	return MDB_SUCCESS;
 }
@@ -9555,14 +9731,20 @@ int mdb_drop(MDB_txn *txn, MDB_dbi dbi, int del)
 	MDB_cursor *mc, *m2;
 	int rc;
 
-	if ((unsigned)del > 1 || unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+	if (unlikely(1 < (unsigned) del || !txn))
 		return EINVAL;
 
-	if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
-		return EACCES;
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+		return EINVAL;
 
 	if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
 		return MDB_BAD_DBI;
+
+	if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
+		return EACCES;
 
 	rc = mdb_cursor_open(txn, dbi, &mc);
 	if (unlikely(rc))
@@ -9603,6 +9785,12 @@ leave:
 
 int mdb_set_compare(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp)
 {
+	if (unlikely(!txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
@@ -9612,6 +9800,12 @@ int mdb_set_compare(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp)
 
 int mdb_set_dupsort(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp)
 {
+	if (unlikely(!txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
@@ -9621,6 +9815,12 @@ int mdb_set_dupsort(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp)
 
 int mdb_set_relfunc(MDB_txn *txn, MDB_dbi dbi, MDB_rel_func *rel)
 {
+	if (unlikely(!txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
@@ -9630,6 +9830,12 @@ int mdb_set_relfunc(MDB_txn *txn, MDB_dbi dbi, MDB_rel_func *rel)
 
 int mdb_set_relctx(MDB_txn *txn, MDB_dbi dbi, void *ctx)
 {
+	if (unlikely(!txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
 	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
 		return EINVAL;
 
@@ -9640,6 +9846,8 @@ int mdb_set_relctx(MDB_txn *txn, MDB_dbi dbi, void *ctx)
 int __cold
 mdb_env_get_maxkeysize(MDB_env *env)
 {
+	if (!env || env->me_signature != MDBX_ME_SIGNATURE)
+		return EINVAL;
 	return ENV_MAXKEY(env);
 }
 
@@ -9651,8 +9859,11 @@ mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 	char buf[64];
 	int rc = 0, first = 1;
 
-	if (!env || !func)
-		return -1;
+	if (unlikely(!env || !func))
+		return -EINVAL;
+
+	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	rdrs = env->me_txns->mti_numreaders;
 	mr = env->me_txns->mti_readers;
@@ -9726,7 +9937,7 @@ mdb_pid_insert(pid_t *ids, pid_t pid)
 int __cold
 mdb_reader_check(MDB_env *env, int *dead)
 {
-	if (!env)
+	if (unlikely(!env || env->me_signature != MDBX_ME_SIGNATURE))
 		return EINVAL;
 	if (dead)
 		*dead = 0;
@@ -9855,14 +10066,15 @@ static void mdb_mutex_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 void __cold
 mdbx_env_set_oomfunc(MDB_env *env, MDB_oom_func *oomfunc)
 {
-	if (env)
+	if (likely(env && env->me_signature == MDBX_ME_SIGNATURE))
 		env->me_oom_func = oomfunc;
 }
 
 MDB_oom_func* __cold
 mdbx_env_get_oomfunc(MDB_env *env)
 {
-	return env ? env->me_oom_func : NULL;
+	return likely(env && env->me_signature == MDBX_ME_SIGNATURE)
+		? env->me_oom_func : NULL;
 }
 
 struct mdb_walk_ctx {
@@ -10004,6 +10216,11 @@ mdbx_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* user)
 {
 	mdb_walk_ctx_t ctx;
 	int rc;
+
+	if (unlikely(!txn))
+		return MDB_BAD_TXN;
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
 
 	ctx.mw_txn = txn;
 	ctx.mw_user = user;

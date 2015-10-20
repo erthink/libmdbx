@@ -774,7 +774,7 @@ int  mdb_env_sync(MDB_env *env, int force);
 	 */
 void mdb_env_close(MDB_env *env);
 #if MDBX_MODE_ENABLED
-void mdbx_env_close_ex(MDB_env *env, int dont_sync);
+int mdbx_env_close_ex(MDB_env *env, int dont_sync);
 #endif /* MDBX_MODE_ENABLED */
 
 	/** @brief Set environment flags.
@@ -1058,7 +1058,7 @@ int  mdb_txn_commit(MDB_txn *txn);
 	 * Only write-transactions free cursors.
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 */
-void mdb_txn_abort(MDB_txn *txn);
+int mdb_txn_abort(MDB_txn *txn);
 
 	/** @brief Reset a read-only transaction.
 	 *
@@ -1077,7 +1077,7 @@ void mdb_txn_abort(MDB_txn *txn);
 	 * the database size may grow much more rapidly than otherwise.
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 */
-void mdb_txn_reset(MDB_txn *txn);
+int mdb_txn_reset(MDB_txn *txn);
 
 	/** @brief Renew a read-only transaction.
 	 *
