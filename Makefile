@@ -33,7 +33,7 @@ PROGS	:= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
 SRC_LMDB := mdb.c midl.c lmdb.h midl.h
 SRC_MDBX := $(SRC_LMDB) mdbx.h
 
-.PHONY: mdbx lmdb all install clean test coverage
+.PHONY: mdbx lmdb all install clean check tests coverage
 
 all: $(ILIBS) $(IPROGS)
 
@@ -54,7 +54,9 @@ install: $(ILIBS) $(IPROGS) $(IHDRS)
 clean:
 	rm -rf $(PROGS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
 
-test:	mdbx $(PROGS)
+tests:	mdbx $(PROGS)
+
+check:	tests
 	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
 		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdbx_chk -v testdb \
 		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdbx_chk -v testdb \
