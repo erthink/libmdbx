@@ -1,25 +1,22 @@
-# Makefile for liblmdb (Lightning memory-mapped database library).
+# Makefile for libmdbx (lightning memory-mapped database library for Linux).
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.
 #
-# Preprocessor macros (for CPPFLAGS) of interest...
+# Preprocessor macros (for XCFLAGS) of interest...
 # Note that the defaults should already be correct for most
 # platforms; you should not need to change any of these.
 # Read their descriptions in mdb.c if you do:
 #
-# - MDB_USE_POSIX_SEM
-# - MDB_DSYNC
-# - MDB_FDATASYNC
-# - MDB_FDATASYNC_WORKS
-# - MDB_USE_PWRITEV
+# - MDB_USE_ROBUST
 #
 # There may be other macros in mdb.c of interest. You should
 # read mdb.c before changing any of them.
 #
 CC	?= gcc
+XCFLAGS ?=
 CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
-CFLAGS	+= -pthread
+CFLAGS	+= -pthread $(XCFLAGS)
 prefix	?= /usr/local
 
 ########################################################################
