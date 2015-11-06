@@ -142,6 +142,18 @@
 #	define mdb_func_	"<mdb_unknown>"
 #endif
 
+/** Some platforms define the EOWNERDEAD error code
+ * even though they don't support Robust Mutexes.
+ * Compile with -DMDB_USE_ROBUST=0.
+ */
+#ifndef MDB_USE_ROBUST
+#	if defined(EOWNERDEAD) && defined(PTHREAD_MUTEX_ROBUST) && !defined(ANDROID)
+#		define MDB_USE_ROBUST	1
+#	else
+#		define MDB_USE_ROBUST	0
+#	endif
+#endif /* MDB_USE_ROBUST */
+
 /* Internal error codes, not exposed outside liblmdb */
 #define	MDB_NO_ROOT		(MDB_LAST_ERRCODE + 10)
 
@@ -4627,9 +4639,9 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 
 		if ((rc = pthread_mutexattr_init(&mattr))
 			|| (rc = pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED))
-#ifdef EOWNERDEAD
+#if MDB_USE_ROBUST
 			|| (rc = pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST))
-#endif
+#endif /* MDB_USE_ROBUST */
 			|| (rc = pthread_mutex_init(&env->me_txns->mti_rmutex, &mattr))
 			|| (rc = pthread_mutex_init(&env->me_txns->mti_wmutex, &mattr)))
 			goto fail;
@@ -10003,7 +10015,7 @@ mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 static int __cold
 mdb_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc)
 {
-#ifdef EOWNERDEAD
+#if MDB_USE_ROBUST
 	if (unlikely(rc == EOWNERDEAD)) {
 		int rlocked, rc2;
 
@@ -10038,7 +10050,7 @@ mdb_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc)
 			pthread_mutex_unlock(mutex);
 		}
 	}
-#endif /* EOWNERDEAD */
+#endif /* MDB_USE_ROBUST */
 	if (unlikely(rc)) {
 		mdb_debug("lock mutex failed, %s", mdb_strerror(rc));
 		if (rc != EDEADLK) {
