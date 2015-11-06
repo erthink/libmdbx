@@ -4900,6 +4900,7 @@ mdb_env_close0(MDB_env *env)
 	mdb_coherent_barrier();
 	mdb_ensure(env, pthread_mutex_unlock(&mdb_rthc_lock) == 0);
 	munmap((void *)env->me_txns, (env->me_maxreaders-1)*sizeof(MDB_reader)+sizeof(MDB_txninfo));
+	env->me_txns = NULL;
 
 	if (env->me_lfd != INVALID_HANDLE_VALUE) {
 		(void) close(env->me_lfd);
@@ -4922,7 +4923,7 @@ mdbx_env_close_ex(MDB_env *env, int dont_sync)
 	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
-	if (! dont_sync)
+	if (! dont_sync && env->me_txns)
 		rc = mdb_env_sync(env, 1);
 
 	VALGRIND_DESTROY_MEMPOOL(env);
