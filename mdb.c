@@ -147,7 +147,13 @@
  * Compile with -DMDB_USE_ROBUST=0.
  */
 #ifndef MDB_USE_ROBUST
-#	if defined(EOWNERDEAD) && defined(PTHREAD_MUTEX_ROBUST) && !defined(ANDROID)
+	/* Howard Chu: Android currently lacks Robust Mutex support */
+#	if defined(EOWNERDEAD) && !defined(ANDROID) \
+	/* LY: glibc before 2.10 has a troubles with Robust Mutex too.
+	 * But more over:
+	 *  - we couldn't test code with glibc < 2.12;
+	 *  - we won't provide compatibility with old systems. */ \
+	&& !(defined(__GLIBC__) && ((__GLIBC__ << 16)|__GLIBC_MINOR__) < 0x02000c)
 #		define MDB_USE_ROBUST	1
 #	else
 #		define MDB_USE_ROBUST	0
