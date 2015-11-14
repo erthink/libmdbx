@@ -89,7 +89,7 @@ mdbx_load: mdb_load.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 mdbx_chk: mdb_chk.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lrt
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -Wl,--no-as-needed,-lrt
 
 mtest0: mtest0.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
@@ -113,7 +113,7 @@ mtest6:	mtest6.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 wbench:	wbench.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -lrt
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ -Wl,--no-as-needed,-lrt
 
 mdbx.o: $(SRC_MDBX)
 	$(CC) $(CFLAGS) -include mdbx.h -c mdb.c -o $@
