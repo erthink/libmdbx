@@ -2701,7 +2701,7 @@ mdb_txn_renew0(MDB_txn *txn)
 	int rc, new_notls = 0;
 
 	if ((flags &= MDB_TXN_RDONLY) != 0) {
-		struct MDB_rthc* rthc = NULL;
+		struct MDB_rthc *rthc = NULL;
 		MDB_reader *r = NULL;
 		if (likely(env->me_flags & MDB_ENV_TXKEY)) {
 			mdb_assert(env, !(env->me_flags & MDB_NOTLS));
@@ -4426,15 +4426,16 @@ static pthread_mutex_t mdb_rthc_lock = PTHREAD_MUTEX_INITIALIZER;
 /* LY: TODO: Yet another problem is here - segfault in case if a DSO will
  * be unloaded before a thread would been finished. */
 static void
-mdb_env_reader_dest(void *ptr)
+mdb_env_reader_destr(void *ptr)
 {
 	struct MDB_rthc* rthc = ptr;
 	MDB_reader *reader;
 
+	if (! rthc)
+		/* LY: paranoia */
+		return;
+
 	mdb_ensure(NULL, pthread_mutex_lock(&mdb_rthc_lock) == 0);
-	/* LY: Here may be a race with mdb_env_close(),
-	 * see https://github.com/ReOpen/ReOpenLDAP/issues/48
-	 */
 	reader = rthc->rc_reader;
 	if (reader) {
 		mdb_ensure(NULL, reader->mr_rthc == rthc);
@@ -4617,7 +4618,7 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 			fcntl(env->me_lfd, F_SETFD, fdflags);
 
 	if (!(env->me_flags & MDB_NOTLS)) {
-		rc = pthread_key_create(&env->me_txkey, mdb_env_reader_dest);
+		rc = pthread_key_create(&env->me_txkey, mdb_env_reader_destr);
 		if (rc)
 			goto fail;
 		env->me_flags |= MDB_ENV_TXKEY;
@@ -4910,12 +4911,14 @@ mdb_env_close0(MDB_env *env)
 	mdb_ensure(env, pthread_mutex_lock(&mdb_rthc_lock) == 0);
 	for (i = env->me_close_readers; --i >= 0; ) {
 		MDB_reader *reader = &env->me_txns->mti_readers[i];
-
 		if (reader->mr_pid == pid) {
-			mdb_ensure(env, reader->mr_rthc->rc_reader == reader);
-			reader->mr_rthc->rc_reader = NULL;
-			reader->mr_rthc = NULL;
-			mdb_compiler_barrier();
+			struct MDB_rthc *rthc = reader->mr_rthc;
+			if (rthc) {
+				mdb_ensure(env, rthc->rc_reader == reader);
+				rthc->rc_reader = NULL;
+				reader->mr_rthc = NULL;
+				free(rthc);
+			}
 			reader->mr_pid = 0;
 		}
 	}
