@@ -1521,6 +1521,8 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
 	}
 #endif
 	VALGRIND_MAKE_MEM_UNDEFINED(np, size);
+	np->mp_flags = 0;
+	np->mp_pages = num;
 	return np;
 }
 
@@ -2317,6 +2319,8 @@ done:
 
 	np->mp_pgno = pgno;
 	np->mp_ksize = 0;
+	np->mp_flags = 0;
+	np->mp_pages = num;
 	mdb_page_dirty(txn, np);
 	*mp = np;
 
