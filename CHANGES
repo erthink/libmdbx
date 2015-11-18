@@ -18,6 +18,7 @@ LMDB 0.9.17 Release Engineering
 	Fix ITS#7969 use __sync_synchronize on non-x86
 	Fix ITS#8311 page_split from update_key
 	Fix ITS#8312 loose pages in nested txn
+	Fix ITS#8313 mdb_rebalance dummy cursor
 	Added mdb_txn_id() (ITS#7994)
 	Added robust mutex support
 	Miscellaneous cleanup/simplification
