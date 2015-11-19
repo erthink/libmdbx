@@ -4054,7 +4054,8 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			if (unlikely(prev_mapsize != pending->mm_mapsize)) {
 				/* LY: It is no reason to use fdatasync() here, even in case
 				 * no such bug in a kernel. Because "no-bug" mean that a kernel
-				 * internally do nearly the same.
+				 * internally do nearly the same, e.g. fdatasync() == fsync()
+				 * when no-kernel-bug and file size was changed.
 				 *
 				 * So, this code is always safe and without appreciable
 				 * performance degradation.
