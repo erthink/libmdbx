@@ -1059,7 +1059,7 @@ static int  mdb_node_add(MDB_cursor *mc, indx_t indx,
 				MDB_val *key, MDB_val *data, pgno_t pgno, unsigned flags);
 static void mdb_node_del(MDB_cursor *mc, int ksize);
 static void mdb_node_shrink(MDB_page *mp, indx_t indx);
-static int	mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst);
+static int	mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft);
 static int  mdb_node_read(MDB_txn *txn, MDB_node *leaf, MDB_val *data);
 static size_t	mdb_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data);
 static size_t	mdb_branch_size(MDB_env *env, MDB_val *key);
@@ -7681,7 +7681,7 @@ mdb_cursor_copy(const MDB_cursor *csrc, MDB_cursor *cdst);
 /** Move a node from csrc to cdst.
  */
 static int
-mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst)
+mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 {
 	MDB_node		*srcnode;
 	MDB_val		 key, data;
@@ -7783,7 +7783,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst)
 
 		mps = csrc->mc_pg[csrc->mc_top];
 		/* If we're adding on the left, bump others up */
-		if (!cdst->mc_ki[csrc->mc_top]) {
+		if (fromleft) {
 			mpd = cdst->mc_pg[csrc->mc_top];
 			for (m2 = csrc->mc_txn->mt_cursors[dbi]; m2; m2=m2->mc_next) {
 				if (csrc->mc_flags & C_SUB)
@@ -8065,7 +8065,7 @@ static int
 mdb_rebalance(MDB_cursor *mc)
 {
 	MDB_node	*node;
-	int rc;
+	int rc, fromleft;
 	unsigned ptop, minkeys, thresh;
 	MDB_cursor	mn;
 	indx_t oldki;
@@ -8198,6 +8198,7 @@ mdb_rebalance(MDB_cursor *mc)
 			return rc;
 		mn.mc_ki[mn.mc_top] = 0;
 		mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]);
+		fromleft = 0;
 	} else {
 		/* There is at least one neighbor to the left.
 		 */
@@ -8209,6 +8210,7 @@ mdb_rebalance(MDB_cursor *mc)
 			return rc;
 		mn.mc_ki[mn.mc_top] = NUMKEYS(mn.mc_pg[mn.mc_top]) - 1;
 		mc->mc_ki[mc->mc_top] = 0;
+		fromleft = 1;
 	}
 
 	mdb_debug("found neighbor page %zu (%u keys, %.1f%% full)",
@@ -8220,13 +8222,13 @@ mdb_rebalance(MDB_cursor *mc)
 	 * (A branch page must never have less than 2 keys.)
 	 */
 	if (PAGEFILL(mc->mc_txn->mt_env, mn.mc_pg[mn.mc_top]) >= thresh && NUMKEYS(mn.mc_pg[mn.mc_top]) > minkeys) {
-		rc = mdb_node_move(&mn, mc);
-		if (!mc->mc_ki[mc->mc_top]) {
+		rc = mdb_node_move(&mn, mc, fromleft);
+		if (fromleft) {
 			/* if we inserted on left, bump position up */
 			oldki++;
 		}
 	} else {
-		if (mc->mc_ki[ptop] == 0) {
+		if (!fromleft) {
 			rc = mdb_page_merge(&mn, mc);
 		} else {
 			MDB_cursor dummy;
