@@ -159,6 +159,7 @@ int main(int argc,char * argv[])
 	mdb_dbi_close(env, dbi);
 #endif
 	mdb_env_close(env);
+	free(sval);
 
 	return 0;
 }

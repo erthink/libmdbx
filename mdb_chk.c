@@ -122,27 +122,42 @@ error(const char* msg, ...) {
 	}
 }
 
+static void pagemap_cleanup(void) {
+	int i;
+
+	for( i = 1; i < MAX_DBI; ++i ) {
+		if (walk.dbi_names[i]) {
+			free((void *) walk.dbi_names[i]);
+			walk.dbi_names[i] = NULL;
+		}
+	}
+
+	free(walk.pagemap);
+	walk.pagemap = NULL;
+}
+
 static int pagemap_lookup_dbi(const char* dbi) {
 	static int last;
+	int i;
 
 	if (last > 0 && strcmp(walk.dbi_names[last], dbi) == 0)
 		return last;
 
-	for(last = 1; walk.dbi_names[last] && last < MAX_DBI; ++last)
-		if (strcmp(walk.dbi_names[last], dbi) == 0)
-			return last;
+	for(i = 1; walk.dbi_names[i] && last < MAX_DBI; ++i)
+		if (strcmp(walk.dbi_names[i], dbi) == 0)
+			return last = i;
 
-	if (last == MAX_DBI)
-		return last = -1;
+	if (i == MAX_DBI)
+		return -1;
 
-	walk.dbi_names[last] = strdup(dbi);
+	walk.dbi_names[i] = strdup(dbi);
 
 	if (verbose > 1) {
 		print(" - found '%s' area\n", dbi);
 		fflush(NULL);
 	}
 
-	return last;
+	return last = i;
 }
 
 static void problem_add(const char* object, size_t entry_number, const char* msg, const char *extra, ...) {
@@ -581,6 +596,8 @@ int main(int argc, char *argv[])
 	struct timespec timestamp_start, timestamp_finish;
 	double elapsed;
 
+	atexit(pagemap_cleanup);
+
 	if (clock_gettime(CLOCK_MONOTONIC, &timestamp_start)) {
 		rc = errno;
 		error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
@@ -897,7 +914,6 @@ bailout:
 		mdbx_txn_abort(locktxn);
 	if (env)
 		mdbx_env_close(env);
-	free(walk.pagemap);
 	fflush(NULL);
 	if (rc) {
 		if (rc < 0)

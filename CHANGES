@@ -16,6 +16,14 @@ LMDB 0.9.17 Release Engineering
 	Fix ITS#7789 ensure mapsize >= pages in use
 	Fix ITS#7971 mdb_txn_renew0() new reader slots
 	Fix ITS#7969 use __sync_synchronize on non-x86
+	Fix ITS#8311 page_split from update_key
+	Fix ITS#8312 loose pages in nested txn
+	Fix ITS#8313 mdb_rebalance dummy cursor
+	Fix ITS#8315 dirty_room in nested txn
+	Fix ITS#8316 page_merge cursor tracking
+	Fix ITS#8319 mdb_load error messages
+	Fix ITS#8320 mdb_load plaintext input
+	Fix ITS#8321 cursor tracking
 	Added mdb_txn_id() (ITS#7994)
 	Added robust mutex support
 	Miscellaneous cleanup/simplification
