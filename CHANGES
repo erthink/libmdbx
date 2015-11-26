@@ -20,6 +20,7 @@ LMDB 0.9.17 Release Engineering
 	Fix ITS#8312 loose pages in nested txn
 	Fix ITS#8313 mdb_rebalance dummy cursor
 	Fix ITS#8315 dirty_room in nested txn
+	Fix ITS#8323 dirty_list in nested txn
 	Fix ITS#8316 page_merge cursor tracking
 	Fix ITS#8319 mdb_load error messages
 	Fix ITS#8320 mdb_load plaintext input
@@ -29,9 +30,12 @@ LMDB 0.9.17 Release Engineering
 	Miscellaneous cleanup/simplification
 	Build
 		Create install dirs if needed (ITS#8256)
-		Fix ThreadProc decl on Win32/MSVC (ITS#8270)
-		Added ssize_t typedef for MSVC (ITS#8067)
-		Use ANSI apis on Windows (ITS#8069)
+		Fix ThreadProc decl on Win32/MSVC (ITS#8270 - nothing for MDBX)
+		Added ssize_t typedef for MSVC (ITS#8067 - nothing for MDBX)
+		Use ANSI apis on Windows (ITS#8069 - nothing for MDBX)
+		Use O_SYNC if O_DSYNC,MDB_DSYNC are not defined (ITS#7209 - nothing for MDBX)
+		Allow passing AR to make (ITS#8168 - already done for MDBX)
+		Allow passing mandir to make install (ITS#8169)
 
 LMDB 0.9.16 Release (2015/08/14)
 	Fix cursor EOF bug (ITS#8190)

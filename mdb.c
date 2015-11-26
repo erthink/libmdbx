@@ -1409,6 +1409,13 @@ mdb_cursor_chk(MDB_cursor *mc)
 	}
 	if (unlikely(mc->mc_ki[i] >= NUMKEYS(mc->mc_pg[i])))
 		mdb_print("ack!\n");
+	if (mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)) {
+		node = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+		if (((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA) &&
+			mc->mc_xcursor->mx_cursor.mc_pg[0] != NODEDATA(node)) {
+			mdb_print("blah!\n");
+		}
+	}
 }
 #endif /* 0 */
 
@@ -2497,14 +2504,15 @@ done:
 	} else {
 		for (; m2; m2=m2->mc_next) {
 			if (m2->mc_snum < mc->mc_snum) continue;
+			if (m2 == mc) continue;
 			if (m2->mc_pg[mc->mc_top] == mp) {
 				m2->mc_pg[mc->mc_top] = np;
 				if ((mc->mc_db->md_flags & MDB_DUPSORT) &&
 					IS_LEAF(np) &&
-					m2->mc_ki[mc->mc_top] == mc->mc_ki[mc->mc_top])
+					(m2->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
 				{
-					MDB_node *leaf = NODEPTR(np, mc->mc_ki[mc->mc_top]);
-					if (!(leaf->mn_flags & F_SUBDATA))
+					MDB_node *leaf = NODEPTR(np, m2->mc_ki[mc->mc_top]);
+					if ((leaf->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
 						m2->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(leaf);
 				}
 			}
@@ -3759,6 +3767,25 @@ mdb_txn_commit(MDB_txn *txn)
 				if (!(pspill[x] & 1))
 					pspill[++y] = pspill[x];
 			pspill[0] = y;
+		}
+
+		/* Remove anything in our spill list from parent's dirty list */
+		if (txn->mt_spill_pgs && txn->mt_spill_pgs[0]) {
+			for (i=1; i<=txn->mt_spill_pgs[0]; i++) {
+				MDB_ID pn = txn->mt_spill_pgs[i];
+				if (pn & 1)
+					continue;	/* deleted spillpg */
+				pn >>= 1;
+				y = mdb_mid2l_search(dst, pn);
+				if (y <= dst[0].mid && dst[y].mid == pn) {
+					free(dst[y].mptr);
+					while (y < dst[0].mid) {
+						dst[y] = dst[y+1];
+						y++;
+					}
+					dst[0].mid--;
+				}
+			}
 		}
 
 		/* Find len = length of merging our dirty list with parent's */
@@ -5247,8 +5274,11 @@ mdb_cursor_pop(MDB_cursor *mc)
 			mc->mc_pg[mc->mc_top]->mp_pgno, DDBI(mc), (void *) mc);
 
 		mc->mc_snum--;
-		if (mc->mc_snum)
+		if (mc->mc_snum) {
 			mc->mc_top--;
+		} else {
+			mc->mc_flags &= ~C_INITIALIZED;
+		}
 	}
 }
 
@@ -5972,6 +6002,8 @@ mdb_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			} else
 				return MDB_NOTFOUND;
 		}
+	} else {
+		mc->mc_pg[0] = 0;
 	}
 
 	rc = mdb_page_search(mc, key, 0);
@@ -6186,8 +6218,6 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 				MDB_GET_KEY(leaf, key);
 				if (data) {
 					if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
-						if (mc->mc_flags & C_DEL)
-							mdb_xcursor_init1(mc, leaf);
 						rc = mdb_cursor_get(&mc->mc_xcursor->mx_cursor, data, NULL, MDB_GET_CURRENT);
 					} else {
 						rc = mdb_node_read(mc->mc_txn, leaf, data);
@@ -6778,7 +6808,7 @@ new_sub:
 	} else {
 		/* There is room already in this leaf page. */
 		rc = mdb_node_add(mc, mc->mc_ki[mc->mc_top], key, rdata, 0, nflags);
-		if (likely(rc == 0) && insert_key) {
+		if (likely(rc == 0)) {
 			/* Adjust other cursors pointing to mp */
 			MDB_cursor *m2, *m3;
 			MDB_dbi dbi = mc->mc_dbi;
@@ -6790,9 +6820,14 @@ new_sub:
 					m3 = &m2->mc_xcursor->mx_cursor;
 				else
 					m3 = m2;
-				if (m3 == mc || m3->mc_snum < mc->mc_snum) continue;
-				if (m3->mc_pg[i] == mp && m3->mc_ki[i] >= mc->mc_ki[i]) {
+				if (m3 == mc || m3->mc_snum < mc->mc_snum || m3->mc_pg[i] != mp) continue;
+				if (m3->mc_ki[i] >= mc->mc_ki[i] && insert_key) {
 					m3->mc_ki[i]++;
+				}
+				if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)) {
+					MDB_node *n2 = NODEPTR(mp, m3->mc_ki[i]);
+					if ((n2->mn_flags & (F_SUBDATA|F_DUPDATA)) == F_DUPDATA)
+						m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(n2);
 				}
 			}
 		}
@@ -6932,6 +6967,7 @@ mdb_cursor_del(MDB_cursor *mc, unsigned flags)
 		if (flags & MDB_NODUPDATA) {
 			/* mdb_cursor_del0() will subtract the final entry */
 			mc->mc_db->md_entries -= mc->mc_xcursor->mx_db.md_entries - 1;
+			mc->mc_xcursor->mx_cursor.mc_flags &= ~C_INITIALIZED;
 		} else {
 			if (!F_ISSET(leaf->mn_flags, F_SUBDATA)) {
 				mc->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(leaf);
@@ -6967,8 +7003,9 @@ mdb_cursor_del(MDB_cursor *mc, unsigned flags)
 					}
 				}
 				mc->mc_db->md_entries--;
-				mc->mc_flags |= C_DEL;
 				return rc;
+			} else {
+				mc->mc_xcursor->mx_cursor.mc_flags &= ~C_INITIALIZED;
 			}
 			/* otherwise fall thru and delete the sub-DB */
 		}
@@ -7679,21 +7716,21 @@ mdb_update_key(MDB_cursor *mc, MDB_val *key)
 static void
 mdb_cursor_copy(const MDB_cursor *csrc, MDB_cursor *cdst);
 
-/** Track a temporary cursor */
-#define CURSOR_TMP_TRACK(mc, mn, dummy, tracked) \
-	if (mc->mc_flags & C_SUB) { \
+/** Perform \b act while tracking temporary cursor \b mn */
+#define WITH_CURSOR_TRACKING(mn, act) do { \
+	MDB_cursor dummy, *tracked, **tp = &(mn).mc_txn->mt_cursors[mn.mc_dbi]; \
+	if ((mn).mc_flags & C_SUB) { \
 		dummy.mc_flags =  C_INITIALIZED; \
-		dummy.mc_xcursor = (MDB_xcursor *)&mn; \
+		dummy.mc_xcursor = (MDB_xcursor *)&(mn);	\
 		tracked = &dummy; \
 	} else { \
-		tracked = &mn; \
+		tracked = &(mn); \
 	} \
-	tracked->mc_next = mc->mc_txn->mt_cursors[mc->mc_dbi]; \
-	mc->mc_txn->mt_cursors[mc->mc_dbi] = tracked
-
-/** Stop tracking a temporary cursor */
-#define CURSOR_TMP_UNTRACK(mc, tracked) \
-	mc->mc_txn->mt_cursors[mc->mc_dbi] = tracked->mc_next
+	tracked->mc_next = *tp; \
+	*tp = tracked; \
+	{ act; } \
+	*tp = tracked->mc_next; \
+} while (0)
 
 /** Move a node from csrc to cdst.
  */
@@ -7750,6 +7787,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 		data.mv_size = NODEDSZ(srcnode);
 		data.mv_data = NODEDATA(srcnode);
 	}
+	mn.mc_xcursor = NULL;
 	if (IS_BRANCH(cdst->mc_pg[cdst->mc_top]) && cdst->mc_ki[cdst->mc_top] == 0) {
 		unsigned snum = cdst->mc_snum;
 		MDB_node *s2;
@@ -7821,6 +7859,12 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 					m3->mc_ki[csrc->mc_top] = cdst->mc_ki[cdst->mc_top];
 					m3->mc_ki[csrc->mc_top-1]++;
 				}
+				if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
+					IS_LEAF(mps)) {
+					MDB_node *node = NODEPTR(m3->mc_pg[csrc->mc_top], m3->mc_ki[csrc->mc_top]);
+					if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
+						m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
+				}
 			}
 		} else
 		/* Adding on the right, bump others down */
@@ -7841,6 +7885,12 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 					} else {
 						m3->mc_ki[csrc->mc_top]--;
 					}
+					if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
+						IS_LEAF(mps)) {
+						MDB_node *node = NODEPTR(m3->mc_pg[csrc->mc_top], m3->mc_ki[csrc->mc_top]);
+						if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
+							m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
+					}
 				}
 			}
 		}
@@ -7850,7 +7900,6 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 	 */
 	if (csrc->mc_ki[csrc->mc_top] == 0) {
 		if (csrc->mc_ki[csrc->mc_top-1] != 0) {
-			MDB_cursor dummy, *tracked;
 			if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
 				key.mv_data = LEAF2KEY(csrc->mc_pg[csrc->mc_top], 0, key.mv_size);
 			} else {
@@ -7864,9 +7913,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 			mn.mc_snum--;
 			mn.mc_top--;
 			/* We want mdb_rebalance to find mn when doing fixups */
-			CURSOR_TMP_TRACK(csrc, mn, dummy, tracked);
-			rc = mdb_update_key(&mn, &key);
-			CURSOR_TMP_UNTRACK(csrc, tracked);
+			WITH_CURSOR_TRACKING(mn, rc = mdb_update_key(&mn, &key));
 			if (unlikely(rc != MDB_SUCCESS))
 				return rc;
 		}
@@ -7883,7 +7930,6 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 
 	if (cdst->mc_ki[cdst->mc_top] == 0) {
 		if (cdst->mc_ki[cdst->mc_top-1] != 0) {
-			MDB_cursor dummy, *tracked;
 			if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
 				key.mv_data = LEAF2KEY(cdst->mc_pg[cdst->mc_top], 0, key.mv_size);
 			} else {
@@ -7897,9 +7943,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 			mn.mc_snum--;
 			mn.mc_top--;
 			/* We want mdb_rebalance to find mn when doing fixups */
-			CURSOR_TMP_TRACK(cdst, mn, dummy, tracked);
-			rc = mdb_update_key(&mn, &key);
-			CURSOR_TMP_UNTRACK(cdst, tracked);
+			WITH_CURSOR_TRACKING(mn, rc = mdb_update_key(&mn, &key));
 			if (unlikely(rc != MDB_SUCCESS))
 				return rc;
 		}
@@ -7969,6 +8013,7 @@ mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst)
 				MDB_cursor mn;
 				MDB_node *s2;
 				mdb_cursor_copy(csrc, &mn);
+				mn.mc_xcursor = NULL;
 				/* must find the lowest key below src */
 				rc = mdb_page_search_lowest(&mn);
 				if (unlikely(rc))
@@ -8043,6 +8088,12 @@ mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst)
 			} else if (m3->mc_pg[top-1] == csrc->mc_pg[top-1] &&
 				m3->mc_ki[top-1] > csrc->mc_ki[top-1]) {
 				m3->mc_ki[top-1]--;
+			}
+			if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
+				IS_LEAF(psrc)) {
+				MDB_node *node = NODEPTR(m3->mc_pg[top], m3->mc_ki[top]);
+				if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
+					m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
 			}
 		}
 	}
@@ -8258,13 +8309,11 @@ mdb_rebalance(MDB_cursor *mc)
 		if (!fromleft) {
 			rc = mdb_page_merge(&mn, mc);
 		} else {
-			MDB_cursor dummy, *tracked;
 			oldki += NUMKEYS(mn.mc_pg[mn.mc_top]);
 			mn.mc_ki[mn.mc_top] += mc->mc_ki[mn.mc_top] + 1;
 			/* We want mdb_rebalance to find mn when doing fixups */
-			CURSOR_TMP_TRACK(mc, mn, dummy, tracked);
-			rc = mdb_page_merge(mc, &mn);
-			CURSOR_TMP_UNTRACK(mc, tracked);
+			WITH_CURSOR_TRACKING(mn,
+				rc = mdb_page_merge(mc, &mn));
 			mdb_cursor_copy(&mn, mc);
 		}
 		mc->mc_flags &= ~C_EOF;
@@ -8297,12 +8346,17 @@ mdb_cursor_del0(MDB_cursor *mc)
 			if (m3 == mc || m3->mc_snum < mc->mc_snum)
 				continue;
 			if (m3->mc_pg[mc->mc_top] == mp) {
-				if (m3->mc_ki[mc->mc_top] >= ki) {
+				if (m3->mc_ki[mc->mc_top] == ki) {
 					m3->mc_flags |= C_DEL;
-					if (m3->mc_ki[mc->mc_top] > ki)
-						m3->mc_ki[mc->mc_top]--;
-					else if (mc->mc_db->md_flags & MDB_DUPSORT)
+					if (mc->mc_db->md_flags & MDB_DUPSORT)
 						m3->mc_xcursor->mx_cursor.mc_flags &= ~C_INITIALIZED;
+				} else if (m3->mc_ki[mc->mc_top] > ki) {
+					m3->mc_ki[mc->mc_top]--;
+				}
+				if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)) {
+					MDB_node *node = NODEPTR(m3->mc_pg[mc->mc_top], m3->mc_ki[mc->mc_top]);
+					if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
+						m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
 				}
 			}
 		}
@@ -8492,6 +8546,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 	}
 
 	mdb_cursor_copy(mc, &mn);
+	mn.mc_xcursor = NULL;
 	mn.mc_pg[mn.mc_top] = rp;
 	mn.mc_ki[ptop] = mc->mc_ki[ptop]+1;
 
@@ -8634,14 +8689,11 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 	 */
 	if (SIZELEFT(mn.mc_pg[ptop]) < mdb_branch_size(env, &sepkey)) {
 		int snum = mc->mc_snum;
-		MDB_cursor dummy, *tracked;
 		mn.mc_snum--;
 		mn.mc_top--;
 		did_split = 1;
 		/* We want other splits to find mn when doing fixups */
-		CURSOR_TMP_TRACK(mc, mn, dummy, tracked);
-		rc = mdb_page_split(&mn, &sepkey, NULL, rp->mp_pgno, 0);
-		CURSOR_TMP_UNTRACK(mc, tracked);
+		WITH_CURSOR_TRACKING(mn, rc = mdb_page_split(&mn, &sepkey, NULL, rp->mp_pgno, 0));
 		if (unlikely(rc != MDB_SUCCESS))
 			goto done;
 
@@ -8799,7 +8851,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 					m3->mc_ki[k+1] = m3->mc_ki[k];
 					m3->mc_pg[k+1] = m3->mc_pg[k];
 				}
-				if (m3->mc_ki[0] > nkeys) {
+				if (m3->mc_ki[0] >= nkeys) {
 					m3->mc_ki[0] = 1;
 				} else {
 					m3->mc_ki[0] = 0;
@@ -8823,6 +8875,12 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 				m3->mc_ki[ptop] >= mc->mc_ki[ptop]) {
 				m3->mc_ki[ptop]++;
 			}
+			if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
+				IS_LEAF(mp)) {
+				MDB_node *node = NODEPTR(m3->mc_pg[mc->mc_top], m3->mc_ki[mc->mc_top]);
+				if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
+					m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
+			}
 		}
 	}
 	mdb_debug("mp left: %d, rp left: %d", SIZELEFT(mp), SIZELEFT(rp));
@@ -8841,6 +8899,7 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 {
 	MDB_cursor mc;
 	MDB_xcursor mx;
+	int rc;
 
 	if (unlikely(!key || !data || !txn))
 		return EINVAL;
@@ -8858,7 +8917,11 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 		return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
 	mdb_cursor_init(&mc, txn, dbi, &mx);
-	return mdb_cursor_put(&mc, key, data, flags);
+	mc.mc_next = txn->mt_cursors[dbi];
+	txn->mt_cursors[dbi] = &mc;
+	rc = mdb_cursor_put(&mc, key, data, flags);
+	txn->mt_cursors[dbi] = mc.mc_next;
+	return rc;
 }
 
 #ifndef MDB_WBUF
@@ -9850,6 +9913,7 @@ done:
 	} else if (rc == MDB_NOTFOUND) {
 		rc = MDB_SUCCESS;
 	}
+	mc->mc_flags &= ~C_INITIALIZED;
 	return rc;
 }
 
