@@ -1,4 +1,4 @@
-# Makefile for libmdbx (lightning memory-mapped database library for Linux).
+# GNU Makefile for libmdbx (lightning memory-mapped database library for Linux).
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.
@@ -13,12 +13,14 @@
 # There may be other macros in mdb.c of interest. You should
 # read mdb.c before changing any of them.
 #
-CC	?= gcc
-XCFLAGS ?=
-CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
-CFLAGS	+= -pthread $(XCFLAGS)
+DESTDIR	?=
 prefix	?= /usr/local
 mandir	?= $(prefix)/man
+
+CC	?= gcc
+XCFLAGS	?=
+CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
+CFLAGS	+= -pthread $(XCFLAGS)
 
 ########################################################################
 
@@ -40,14 +42,14 @@ mdbx: libmdbx.a libmdbx.so
 lmdb: liblmdb.a liblmdb.so
 
 install: $(ILIBS) $(IPROGS) $(IHDRS)
-	mkdir -p $(DESTDIR)$(prefix)/bin
-	mkdir -p $(DESTDIR)$(prefix)/lib
-	mkdir -p $(DESTDIR)$(prefix)/include
-	mkdir -p $(DESTDIR)$(prefix)/man/man1
-	for f in $(IPROGS); do cp $$f $(DESTDIR)$(prefix)/bin; done
-	for f in $(ILIBS); do cp $$f $(DESTDIR)$(prefix)/lib; done
-	for f in $(IHDRS); do cp $$f $(DESTDIR)$(prefix)/include; done
-	for f in $(IDOCS); do cp $$f $(DESTDIR)$(mandir)/man1; done
+	mkdir -p $(DESTDIR)$(prefix)/bin \
+		&& cp -t $(DESTDIR)$(prefix)/bin $(IPROGS) && \
+	mkdir -p $(DESTDIR)$(prefix)/lib \
+		&& cp -t $(DESTDIR)$(prefix)/lib $(ILIBS) && \
+	mkdir -p $(DESTDIR)$(prefix)/include \
+		&& cp -t $(DESTDIR)$(prefix)/include $(IHDRS) && \
+	mkdir -p $(DESTDIR)$(mandir)/man1 \
+		&& cp -t $(DESTDIR)$(mandir)/man1 $(IDOCS)
 
 clean:
 	rm -rf $(PROGS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
