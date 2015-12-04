@@ -2700,11 +2700,11 @@ mdb_reader_pid(MDB_env *env, int op, pid_t pid)
  * @return 0 on success, non-zero on failure.
  */
 static int
-mdb_txn_renew0(MDB_txn *txn)
+mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 {
 	MDB_env *env = txn->mt_env;
 	MDB_meta *meta;
-	unsigned i, nr, flags = txn->mt_flags;
+	unsigned i, nr;
 	uint16_t x;
 	int rc, new_notls = 0;
 
@@ -2713,9 +2713,11 @@ mdb_txn_renew0(MDB_txn *txn)
 		return MDB_PANIC;
 	}
 
-	if ((flags &= MDB_TXN_RDONLY) != 0) {
+	if (flags & MDB_TXN_RDONLY) {
 		struct MDB_rthc *rthc = NULL;
 		MDB_reader *r = NULL;
+
+		txn->mt_flags = MDB_TXN_RDONLY;
 		if (likely(env->me_flags & MDB_ENV_TXKEY)) {
 			mdb_assert(env, !(env->me_flags & MDB_NOTLS));
 			rthc = pthread_getspecific(env->me_txkey);
@@ -2811,9 +2813,9 @@ mdb_txn_renew0(MDB_txn *txn)
 			return rc;
 
 		meta = mdb_meta_head_w(env);
-		txn->mt_txnid = meta->mm_txnid;
+		txn->mt_txnid = meta->mm_txnid + 1;
+		txn->mt_flags = flags;
 
-		txn->mt_txnid++;
 #if MDB_DEBUG
 		if (unlikely(txn->mt_txnid == mdb_debug_edge)) {
 			if (! mdb_debug_logger)
@@ -2841,8 +2843,6 @@ mdb_txn_renew0(MDB_txn *txn)
 		/* Moved to here to avoid a data race in read TXNs */
 		txn->mt_next_pgno = meta->mm_last_pg+1;
 	}
-
-	txn->mt_flags = flags;
 
 	/* Setup db info */
 	txn->mt_numdbs = env->me_numdbs;
@@ -2880,7 +2880,7 @@ mdb_txn_renew(MDB_txn *txn)
 	if (unlikely(!F_ISSET(txn->mt_flags, MDB_TXN_RDONLY|MDB_TXN_FINISHED)))
 		return EINVAL;
 
-	rc = mdb_txn_renew0(txn);
+	rc = mdb_txn_renew0(txn, MDB_TXN_RDONLY);
 	if (rc == MDB_SUCCESS) {
 		mdb_debug("renew txn %zu%c %p on mdbenv %p, root page %zu",
 			txn->mt_txnid, (txn->mt_flags & MDB_TXN_RDONLY) ? 'r' : 'w',
@@ -2988,13 +2988,12 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 	} else { /* MDB_RDONLY */
 		txn->mt_dbiseqs = env->me_dbiseqs;
 renew:
-		rc = mdb_txn_renew0(txn);
+		rc = mdb_txn_renew0(txn, flags);
 	}
 	if (unlikely(rc)) {
 		if (txn != env->me_txn0)
 			free(txn);
 	} else {
-		txn->mt_flags |= flags;	/* could not change txn=me_txn0 earlier */
 		txn->mt_signature = MDBX_MT_SIGNATURE;
 		*ret = txn;
 		mdb_debug("begin txn %zu%c %p on mdbenv %p, root page %zu",
@@ -9306,7 +9305,7 @@ mdb_env_copyfd0(MDB_env *env, HANDLE fd)
 	if (unlikely(rc))
 		goto leave;
 
-	rc = mdb_txn_renew0(txn);
+	rc = mdb_txn_renew0(txn, MDB_RDONLY);
 	if (rc) {
 		mdb_mutex_unlock(env, wmutex);
 		goto leave;
