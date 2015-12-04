@@ -1903,8 +1903,8 @@ static int mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
 }
 
 /** Find oldest txnid still referenced. */
-static txnid_t
-mdb_find_oldest(MDB_env *env, int *laggard)
+static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tran-trap by reader[].mr_txnid */
+txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 {
 	int i, reader;
 	MDB_reader *r = env->me_txns->mti_readers;
@@ -1973,7 +1973,7 @@ mdb_oomkick(MDB_env *env, txnid_t oldest)
 				break;
 
 			if (rc) {
-				r->mr_txnid = (txnid_t)-1L;
+				r->mr_txnid = ~(txnid_t)0;
 				if (rc > 1) {
 					r->mr_tid = 0;
 					r->mr_pid = 0;
@@ -2766,7 +2766,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 		}
 
 		if (likely(r)) {
-			if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != (txnid_t)-1))
+			if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != ~(txnid_t)0))
 				return MDB_BAD_RSLOT;
 		} else {
 			pid_t pid = env->me_pid;
@@ -2799,7 +2799,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			 * When it will be closed, we can finally claim it.
 			 */
 			r->mr_pid = 0;
-			r->mr_txnid = (txnid_t)-1;
+			r->mr_txnid = ~(txnid_t)0;
 			r->mr_tid = tid;
 			mdb_coherent_barrier();
 			if (i == nr)
@@ -3118,7 +3118,7 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 
 	if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)) {
 		if (txn->mt_u.reader) {
-			txn->mt_u.reader->mr_txnid = (txnid_t)-1;
+			txn->mt_u.reader->mr_txnid = ~(txnid_t)0;
 			if (!(env->me_flags & MDB_NOTLS)) {
 				txn->mt_u.reader = NULL; /* txn does not own reader */
 			} else if (mode & MDB_END_SLOT) {
@@ -10075,7 +10075,7 @@ mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 	for (i=0; i<rdrs; i++) {
 		if (mr[i].mr_pid) {
 			txnid_t	txnid = mr[i].mr_txnid;
-			if (txnid == (txnid_t)-1l)
+			if (txnid == ~(txnid_t)0)
 				sprintf(buf, "%10d %zx -\n",
 					(int) mr[i].mr_pid, (size_t) mr[i].mr_tid);
 			else
