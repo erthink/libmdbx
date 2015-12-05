@@ -2695,6 +2695,25 @@ mdb_reader_pid(MDB_env *env, int op, pid_t pid)
 	}
 }
 
+static ATTRIBUTE_NO_SANITIZE_THREAD
+txnid_t lead_txnid__tsan_workaround(MDB_txn *txn, MDB_reader *r)
+{
+	while(1) { /* LY: Retry on a race, ITS#7970. */
+		MDB_meta *meta = mdb_meta_head_r(txn->mt_env);
+		txnid_t lead = meta->mm_txnid;
+		r->mr_txnid = lead;
+		mdb_coherent_barrier();
+		/* Copy the DB info and flags */
+		memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
+		txn->mt_next_pgno = meta->mm_last_pg+1;
+		if (likely(lead == txn->mt_env->me_txns->mti_txnid))
+			return lead;
+#if defined(__i386__) || defined(__x86_64__)
+		__asm__ __volatile__("pause");
+#endif
+	}
+}
+
 /** Common code for #mdb_txn_begin() and #mdb_txn_renew().
  * @param[in] txn the transaction handle to initialize
  * @return 0 on success, non-zero on failure.
@@ -2703,7 +2722,6 @@ static int
 mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 {
 	MDB_env *env = txn->mt_env;
-	MDB_meta *meta;
 	unsigned i, nr;
 	uint16_t x;
 	int rc, new_notls = 0;
@@ -2794,16 +2812,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			}
 		}
 
-		do { /* LY: Retry on a race, ITS#7970. */
-			meta = mdb_meta_head_r(env);
-			r->mr_txnid = meta->mm_txnid;
-			mdb_coherent_barrier();
-			/* Copy the DB info and flags */
-			memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
-			txn->mt_next_pgno = meta->mm_last_pg+1;
-		} while(unlikely(r->mr_txnid != env->me_txns->mti_txnid));
-
-		txn->mt_txnid = r->mr_txnid;
+		txn->mt_txnid = lead_txnid__tsan_workaround(txn, r);
 		txn->mt_u.reader = r;
 		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
 	} else {
@@ -2812,7 +2821,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 		if (unlikely(rc))
 			return rc;
 
-		meta = mdb_meta_head_w(env);
+		MDB_meta *meta = mdb_meta_head_w(env);
 		txn->mt_txnid = meta->mm_txnid + 1;
 		txn->mt_flags = flags;
 
