@@ -1857,17 +1857,18 @@ static MDB_meta* mdb_meta_head_w(MDB_env *env) {
 	return a;
 }
 
-static MDB_meta* mdb_meta_head_r(MDB_env *env) {
+static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by meta->mm_txnid */
+MDB_meta* mdb_meta_head_r(MDB_env *env) {
 	MDB_meta* a = METAPAGE_1(env);
 	MDB_meta* b = METAPAGE_2(env), *h;
 	txnid_t head_txnid;
 	int loop = 0, rc;
 
-	do {
+	while(1) {
 		head_txnid = env->me_txns->mti_txnid;
 
 		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
-		if (a->mm_txnid == head_txnid)
+		if (likely(a->mm_txnid == head_txnid))
 			return a;
 		if (likely(b->mm_txnid == head_txnid))
 			return b;
@@ -1877,9 +1878,13 @@ static MDB_meta* mdb_meta_head_r(MDB_env *env) {
 		__asm__ __volatile__("pause");
 #endif
 		mdb_coherent_barrier();
-		if (loop > 2)
-			pthread_yield();
-	} while (++loop < 5);
+		loop += 1;
+		if(likely(loop < 3))
+			continue;
+		if(unlikely(loop > 5))
+			break;
+		pthread_yield();
+	}
 
 	rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
 	h = mdb_meta_head_w(env);
