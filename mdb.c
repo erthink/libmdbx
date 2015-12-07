@@ -2773,16 +2773,19 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			pthread_t tid = pthread_self();
 			pthread_mutex_t *rmutex = MDB_MUTEX(env, r);
 
-			if (unlikely(!env->me_live_reader)) {
-				rc = mdb_reader_pid(env, F_SETLK, pid);
-				if (unlikely(rc != MDB_SUCCESS))
-					return rc;
-				env->me_live_reader = 1;
-			}
-
 			rc = mdb_mutex_lock(env, rmutex);
 			if (unlikely(rc != MDB_SUCCESS))
 				return rc;
+
+			if (unlikely(!env->me_live_reader)) {
+				rc = mdb_reader_pid(env, F_SETLK, pid);
+				if (unlikely(rc != MDB_SUCCESS)) {
+					mdb_mutex_unlock(env, rmutex);
+					return rc;
+				}
+				env->me_live_reader = 1;
+			}
+
 			nr = env->me_txns->mti_numreaders;
 			for (i=0; i<nr; i++)
 				if (env->me_txns->mti_readers[i].mr_pid == 0)
