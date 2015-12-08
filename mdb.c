@@ -6640,7 +6640,7 @@ more:
 
 				/* does data match? */
 				if (!mc->mc_dbx->md_dcmp(data, &olddata)) {
-					if (unlikely(flags & MDB_NODUPDATA))
+					if (unlikely(flags & (MDB_NODUPDATA|MDB_APPENDDUP)))
 						return MDB_KEYEXIST;
 					/* overwrite it */
 					goto current;
