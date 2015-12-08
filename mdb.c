@@ -1092,6 +1092,10 @@ static int mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
 static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int_ai, mdb_cmp_int_a2, mdb_cmp_int_ua;
 /** @endcond */
 
+#ifdef __SANITIZE_THREAD__
+static pthread_mutex_t tsan_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 /** Return the library version info. */
 char * __cold
 mdb_version(int *major, int *minor, int *patch)
@@ -1865,6 +1869,10 @@ MDB_meta* mdb_meta_head_r(MDB_env *env) {
 	int loop = 0, rc;
 
 	while(1) {
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+		pthread_mutex_unlock(&tsan_mutex);
+#endif
 		head_txnid = env->me_txns->mti_txnid;
 
 		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
@@ -1903,7 +1911,7 @@ static int mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
 }
 
 /** Find oldest txnid still referenced. */
-static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tran-trap by reader[].mr_txnid */
+static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by reader[].mr_txnid */
 txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 {
 	int i, reader;
@@ -2711,8 +2719,13 @@ txnid_t lead_txnid__tsan_workaround(MDB_txn *txn, MDB_reader *r)
 		/* Copy the DB info and flags */
 		memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
 		txn->mt_next_pgno = meta->mm_last_pg+1;
-		if (likely(lead == txn->mt_env->me_txns->mti_txnid))
+		if (likely(lead == txn->mt_env->me_txns->mti_txnid)) {
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_lock(&tsan_mutex);
+			pthread_mutex_unlock(&tsan_mutex);
+#endif
 			return lead;
+		}
 #if defined(__i386__) || defined(__x86_64__)
 		__asm__ __volatile__("pause");
 #endif
@@ -2829,6 +2842,10 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 		if (unlikely(rc))
 			return rc;
 
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+		pthread_mutex_unlock(&tsan_mutex);
+#endif
 		MDB_meta *meta = mdb_meta_head_w(env);
 		txn->mt_txnid = meta->mm_txnid + 1;
 		txn->mt_flags = flags;
