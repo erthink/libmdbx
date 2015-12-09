@@ -4966,7 +4966,6 @@ mdb_env_close0(MDB_env *env)
 					mdb_ensure(env, rthc->rc_reader == reader);
 					rthc->rc_reader = NULL;
 					reader->mr_rthc = NULL;
-					free(rthc);
 				}
 				reader->mr_pid = 0;
 			}
