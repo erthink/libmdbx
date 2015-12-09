@@ -3063,8 +3063,8 @@ mdb_dbis_update(MDB_txn *txn, int keep)
 		env->me_numdbs = n;
 }
 
-int
-mdbx_txn_straggler(MDB_txn *txn, int *percent)
+ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by me_txn, mm_last_pg and mt_next_pgno */
+int mdbx_txn_straggler(MDB_txn *txn, int *percent)
 {
 	MDB_env	*env;
 	MDB_meta *meta;
@@ -3082,9 +3082,11 @@ mdbx_txn_straggler(MDB_txn *txn, int *percent)
 	env = txn->mt_env;
 	meta = mdb_meta_head_r(env);
 	if (percent) {
-		long cent = env->me_maxpg / 100;
-		long last = env->me_txn ? env->me_txn0->mt_next_pgno : meta->mm_last_pg;
-		*percent = (last + cent / 2) / (cent ? cent : 1);
+		size_t maxpg = env->me_maxpg;
+		size_t last = meta->mm_last_pg + 1;
+		if (env->me_txn)
+			last = env->me_txn0->mt_next_pgno;
+		*percent = (last + maxpg / 2) * 100u / maxpg;
 	}
 	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
 	return (0 > (long) lag) ? ~0u >> 1: lag;
