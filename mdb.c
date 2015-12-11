@@ -4830,8 +4830,9 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	rc = MDB_SUCCESS;
 	flags |= env->me_flags;
 	if (flags & MDB_RDONLY) {
-		/* silently ignore irrelevant flags when we're only getting read access */
-		flags &= ~(MDB_WRITEMAP | MDB_MAPASYNC | MDB_NOSYNC | MDB_NOMETASYNC);
+		/* LY: silently ignore irrelevant flags when we're only getting read access */
+		flags &= ~(MDB_WRITEMAP | MDB_MAPASYNC | MDB_NOSYNC | MDB_NOMETASYNC
+			| MDB_COALESCE | MDB_LIFORECLAIM | MDB_NOMEMINIT);
 	} else {
 		if (!((env->me_free_pgs = mdb_midl_alloc(MDB_IDL_UM_MAX)) &&
 			  (env->me_dirty_list = calloc(MDB_IDL_UM_SIZE, sizeof(MDB_ID2)))))
