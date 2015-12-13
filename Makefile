@@ -30,7 +30,7 @@ IPROGS	:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 IDOCS	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
 PROGS	:= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
 
-SRC_LMDB := mdb.c midl.c lmdb.h midl.h
+SRC_LMDB := mdb.c midl.c lmdb.h midl.h reopen.h barriers.h
 SRC_MDBX := $(SRC_LMDB) mdbx.h
 
 .PHONY: mdbx lmdb all install clean check tests coverage

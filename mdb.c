@@ -1092,6 +1092,10 @@ static int mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
 static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int_ai, mdb_cmp_int_a2, mdb_cmp_int_ua;
 /** @endcond */
 
+#ifdef __SANITIZE_THREAD__
+static pthread_mutex_t tsan_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
 /** Return the library version info. */
 char * __cold
 mdb_version(int *major, int *minor, int *patch)
@@ -1857,17 +1861,22 @@ static MDB_meta* mdb_meta_head_w(MDB_env *env) {
 	return a;
 }
 
-static MDB_meta* mdb_meta_head_r(MDB_env *env) {
+static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by meta->mm_txnid */
+MDB_meta* mdb_meta_head_r(MDB_env *env) {
 	MDB_meta* a = METAPAGE_1(env);
 	MDB_meta* b = METAPAGE_2(env), *h;
 	txnid_t head_txnid;
 	int loop = 0, rc;
 
-	do {
+	while(1) {
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+		pthread_mutex_unlock(&tsan_mutex);
+#endif
 		head_txnid = env->me_txns->mti_txnid;
 
 		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
-		if (a->mm_txnid == head_txnid)
+		if (likely(a->mm_txnid == head_txnid))
 			return a;
 		if (likely(b->mm_txnid == head_txnid))
 			return b;
@@ -1877,9 +1886,13 @@ static MDB_meta* mdb_meta_head_r(MDB_env *env) {
 		__asm__ __volatile__("pause");
 #endif
 		mdb_coherent_barrier();
-		if (loop > 2)
-			pthread_yield();
-	} while (++loop < 5);
+		loop += 1;
+		if(likely(loop < 3))
+			continue;
+		if(unlikely(loop > 5))
+			break;
+		pthread_yield();
+	}
 
 	rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
 	h = mdb_meta_head_w(env);
@@ -1898,8 +1911,8 @@ static int mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
 }
 
 /** Find oldest txnid still referenced. */
-static txnid_t
-mdb_find_oldest(MDB_env *env, int *laggard)
+static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by reader[].mr_txnid */
+txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 {
 	int i, reader;
 	MDB_reader *r = env->me_txns->mti_readers;
@@ -1968,7 +1981,7 @@ mdb_oomkick(MDB_env *env, txnid_t oldest)
 				break;
 
 			if (rc) {
-				r->mr_txnid = (txnid_t)-1L;
+				r->mr_txnid = ~(txnid_t)0;
 				if (rc > 1) {
 					r->mr_tid = 0;
 					r->mr_pid = 0;
@@ -2695,16 +2708,39 @@ mdb_reader_pid(MDB_env *env, int op, pid_t pid)
 	}
 }
 
+static ATTRIBUTE_NO_SANITIZE_THREAD
+txnid_t lead_txnid__tsan_workaround(MDB_txn *txn, MDB_reader *r)
+{
+	while(1) { /* LY: Retry on a race, ITS#7970. */
+		MDB_meta *meta = mdb_meta_head_r(txn->mt_env);
+		txnid_t lead = meta->mm_txnid;
+		r->mr_txnid = lead;
+		mdb_coherent_barrier();
+		/* Copy the DB info and flags */
+		memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
+		txn->mt_next_pgno = meta->mm_last_pg+1;
+		if (likely(lead == txn->mt_env->me_txns->mti_txnid)) {
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_lock(&tsan_mutex);
+			pthread_mutex_unlock(&tsan_mutex);
+#endif
+			return lead;
+		}
+#if defined(__i386__) || defined(__x86_64__)
+		__asm__ __volatile__("pause");
+#endif
+	}
+}
+
 /** Common code for #mdb_txn_begin() and #mdb_txn_renew().
  * @param[in] txn the transaction handle to initialize
  * @return 0 on success, non-zero on failure.
  */
 static int
-mdb_txn_renew0(MDB_txn *txn)
+mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 {
 	MDB_env *env = txn->mt_env;
-	MDB_meta *meta;
-	unsigned i, nr, flags = txn->mt_flags;
+	unsigned i, nr;
 	uint16_t x;
 	int rc, new_notls = 0;
 
@@ -2713,9 +2749,11 @@ mdb_txn_renew0(MDB_txn *txn)
 		return MDB_PANIC;
 	}
 
-	if ((flags &= MDB_TXN_RDONLY) != 0) {
+	if (flags & MDB_TXN_RDONLY) {
 		struct MDB_rthc *rthc = NULL;
 		MDB_reader *r = NULL;
+
+		txn->mt_flags = MDB_TXN_RDONLY;
 		if (likely(env->me_flags & MDB_ENV_TXKEY)) {
 			mdb_assert(env, !(env->me_flags & MDB_NOTLS));
 			rthc = pthread_getspecific(env->me_txkey);
@@ -2741,23 +2779,26 @@ mdb_txn_renew0(MDB_txn *txn)
 		}
 
 		if (likely(r)) {
-			if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != (txnid_t)-1))
+			if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != ~(txnid_t)0))
 				return MDB_BAD_RSLOT;
 		} else {
 			pid_t pid = env->me_pid;
 			pthread_t tid = pthread_self();
 			pthread_mutex_t *rmutex = MDB_MUTEX(env, r);
 
-			if (unlikely(!env->me_live_reader)) {
-				rc = mdb_reader_pid(env, F_SETLK, pid);
-				if (unlikely(rc != MDB_SUCCESS))
-					return rc;
-				env->me_live_reader = 1;
-			}
-
 			rc = mdb_mutex_lock(env, rmutex);
 			if (unlikely(rc != MDB_SUCCESS))
 				return rc;
+
+			if (unlikely(!env->me_live_reader)) {
+				rc = mdb_reader_pid(env, F_SETLK, pid);
+				if (unlikely(rc != MDB_SUCCESS)) {
+					mdb_mutex_unlock(env, rmutex);
+					return rc;
+				}
+				env->me_live_reader = 1;
+			}
+
 			nr = env->me_txns->mti_numreaders;
 			for (i=0; i<nr; i++)
 				if (env->me_txns->mti_readers[i].mr_pid == 0)
@@ -2774,7 +2815,7 @@ mdb_txn_renew0(MDB_txn *txn)
 			 * When it will be closed, we can finally claim it.
 			 */
 			r->mr_pid = 0;
-			r->mr_txnid = (txnid_t)-1;
+			r->mr_txnid = ~(txnid_t)0;
 			r->mr_tid = tid;
 			mdb_coherent_barrier();
 			if (i == nr)
@@ -2792,16 +2833,7 @@ mdb_txn_renew0(MDB_txn *txn)
 			}
 		}
 
-		do { /* LY: Retry on a race, ITS#7970. */
-			meta = mdb_meta_head_r(env);
-			r->mr_txnid = meta->mm_txnid;
-			mdb_coherent_barrier();
-			/* Copy the DB info and flags */
-			memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
-			txn->mt_next_pgno = meta->mm_last_pg+1;
-		} while(unlikely(r->mr_txnid != env->me_txns->mti_txnid));
-
-		txn->mt_txnid = r->mr_txnid;
+		txn->mt_txnid = lead_txnid__tsan_workaround(txn, r);
 		txn->mt_u.reader = r;
 		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
 	} else {
@@ -2810,10 +2842,14 @@ mdb_txn_renew0(MDB_txn *txn)
 		if (unlikely(rc))
 			return rc;
 
-		meta = mdb_meta_head_w(env);
-		txn->mt_txnid = meta->mm_txnid;
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+		pthread_mutex_unlock(&tsan_mutex);
+#endif
+		MDB_meta *meta = mdb_meta_head_w(env);
+		txn->mt_txnid = meta->mm_txnid + 1;
+		txn->mt_flags = flags;
 
-		txn->mt_txnid++;
 #if MDB_DEBUG
 		if (unlikely(txn->mt_txnid == mdb_debug_edge)) {
 			if (! mdb_debug_logger)
@@ -2841,8 +2877,6 @@ mdb_txn_renew0(MDB_txn *txn)
 		/* Moved to here to avoid a data race in read TXNs */
 		txn->mt_next_pgno = meta->mm_last_pg+1;
 	}
-
-	txn->mt_flags = flags;
 
 	/* Setup db info */
 	txn->mt_numdbs = env->me_numdbs;
@@ -2880,7 +2914,7 @@ mdb_txn_renew(MDB_txn *txn)
 	if (unlikely(!F_ISSET(txn->mt_flags, MDB_TXN_RDONLY|MDB_TXN_FINISHED)))
 		return EINVAL;
 
-	rc = mdb_txn_renew0(txn);
+	rc = mdb_txn_renew0(txn, MDB_TXN_RDONLY);
 	if (rc == MDB_SUCCESS) {
 		mdb_debug("renew txn %zu%c %p on mdbenv %p, root page %zu",
 			txn->mt_txnid, (txn->mt_flags & MDB_TXN_RDONLY) ? 'r' : 'w',
@@ -2988,13 +3022,12 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 	} else { /* MDB_RDONLY */
 		txn->mt_dbiseqs = env->me_dbiseqs;
 renew:
-		rc = mdb_txn_renew0(txn);
+		rc = mdb_txn_renew0(txn, flags);
 	}
 	if (unlikely(rc)) {
 		if (txn != env->me_txn0)
 			free(txn);
 	} else {
-		txn->mt_flags |= flags;	/* could not change txn=me_txn0 earlier */
 		txn->mt_signature = MDBX_MT_SIGNATURE;
 		*ret = txn;
 		mdb_debug("begin txn %zu%c %p on mdbenv %p, root page %zu",
@@ -3050,8 +3083,8 @@ mdb_dbis_update(MDB_txn *txn, int keep)
 		env->me_numdbs = n;
 }
 
-int
-mdbx_txn_straggler(MDB_txn *txn, int *percent)
+ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by me_txn, mm_last_pg and mt_next_pgno */
+int mdbx_txn_straggler(MDB_txn *txn, int *percent)
 {
 	MDB_env	*env;
 	MDB_meta *meta;
@@ -3069,9 +3102,11 @@ mdbx_txn_straggler(MDB_txn *txn, int *percent)
 	env = txn->mt_env;
 	meta = mdb_meta_head_r(env);
 	if (percent) {
-		long cent = env->me_maxpg / 100;
-		long last = env->me_txn ? env->me_txn0->mt_next_pgno : meta->mm_last_pg;
-		*percent = (last + cent / 2) / (cent ? cent : 1);
+		size_t maxpg = env->me_maxpg;
+		size_t last = meta->mm_last_pg + 1;
+		if (env->me_txn)
+			last = env->me_txn0->mt_next_pgno;
+		*percent = (last + maxpg / 2) * 100u / maxpg;
 	}
 	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
 	return (0 > (long) lag) ? ~0u >> 1: lag;
@@ -3103,7 +3138,7 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 
 	if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)) {
 		if (txn->mt_u.reader) {
-			txn->mt_u.reader->mr_txnid = (txnid_t)-1;
+			txn->mt_u.reader->mr_txnid = ~(txnid_t)0;
 			if (!(env->me_flags & MDB_NOTLS)) {
 				txn->mt_u.reader = NULL; /* txn does not own reader */
 			} else if (mode & MDB_END_SLOT) {
@@ -4795,8 +4830,9 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	rc = MDB_SUCCESS;
 	flags |= env->me_flags;
 	if (flags & MDB_RDONLY) {
-		/* silently ignore irrelevant flags when we're only getting read access */
-		flags &= ~(MDB_WRITEMAP | MDB_MAPASYNC | MDB_NOSYNC | MDB_NOMETASYNC);
+		/* LY: silently ignore irrelevant flags when we're only getting read access */
+		flags &= ~(MDB_WRITEMAP | MDB_MAPASYNC | MDB_NOSYNC | MDB_NOMETASYNC
+			| MDB_COALESCE | MDB_LIFORECLAIM | MDB_NOMEMINIT);
 	} else {
 		if (!((env->me_free_pgs = mdb_midl_alloc(MDB_IDL_UM_MAX)) &&
 			  (env->me_dirty_list = calloc(MDB_IDL_UM_SIZE, sizeof(MDB_ID2)))))
@@ -4966,7 +5002,6 @@ mdb_env_close0(MDB_env *env)
 					mdb_ensure(env, rthc->rc_reader == reader);
 					rthc->rc_reader = NULL;
 					reader->mr_rthc = NULL;
-					free(rthc);
 				}
 				reader->mr_pid = 0;
 			}
@@ -5376,7 +5411,11 @@ mdb_page_search_root(MDB_cursor *mc, MDB_val *key, int flags)
 		indx_t		i;
 
 		mdb_debug("branch page %zu has %u keys", mp->mp_pgno, NUMKEYS(mp));
-		mdb_cassert(mc, NUMKEYS(mp) > 1);
+		/* Don't assert on branch pages in the FreeDB. We can get here
+		 * while in the process of rebalancing a FreeDB branch page; we must
+		 * let that proceed. ITS#8336
+		 */
+		mdb_cassert(mc, !mc->mc_dbi || NUMKEYS(mp) > 1);
 		mdb_debug("found index 0 to page %zu", NODEPGNO(NODEPTR(mp, 0)));
 
 		if (flags & (MDB_PS_FIRST|MDB_PS_LAST)) {
@@ -6606,7 +6645,7 @@ more:
 
 				/* does data match? */
 				if (!mc->mc_dbx->md_dcmp(data, &olddata)) {
-					if (unlikely(flags & MDB_NODUPDATA))
+					if (unlikely(flags & (MDB_NODUPDATA|MDB_APPENDDUP)))
 						return MDB_KEYEXIST;
 					/* overwrite it */
 					goto current;
@@ -9307,7 +9346,7 @@ mdb_env_copyfd0(MDB_env *env, HANDLE fd)
 	if (unlikely(rc))
 		goto leave;
 
-	rc = mdb_txn_renew0(txn);
+	rc = mdb_txn_renew0(txn, MDB_RDONLY);
 	if (rc) {
 		mdb_mutex_unlock(env, wmutex);
 		goto leave;
@@ -10061,7 +10100,7 @@ mdb_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx)
 	for (i=0; i<rdrs; i++) {
 		if (mr[i].mr_pid) {
 			txnid_t	txnid = mr[i].mr_txnid;
-			if (txnid == (txnid_t)-1l)
+			if (txnid == ~(txnid_t)0)
 				sprintf(buf, "%10d %zx -\n",
 					(int) mr[i].mr_pid, (size_t) mr[i].mr_tid);
 			else
