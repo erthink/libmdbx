@@ -67,6 +67,14 @@
 #	endif
 #endif /* __forceinline */
 
+#ifndef __noinline
+#	if defined(__GNUC__) || defined(__clang__)
+#		define __noinline __attribute__((noinline))
+#	elif defined(_MSC_VER)
+#		define __noinline __declspec(noinline)
+#	endif
+#endif /* __noinline */
+
 #ifndef __must_check_result
 #	if defined(__GNUC__) || defined(__clang__)
 #		define __must_check_result __attribute__((warn_unused_result))
@@ -115,6 +123,8 @@
 #ifndef __noreturn
 #	if defined(__GNUC__) || defined(__clang__)
 #		define __noreturn __attribute__((noreturn))
+#	elif defined(__MSC_VER)
+#		define __noreturn __declspec(noreturn)
 #	else
 #		define __noreturn
 #	endif
@@ -123,6 +133,8 @@
 #ifndef __nothrow
 #	if defined(__GNUC__) || defined(__clang__)
 #		define __nothrow __attribute__((nothrow))
+#	elif defined(__MSC_VER)
+#		define __nothrow __declspec(nothrow)
 #	else
 #		define __nothrow
 #	endif
@@ -216,5 +228,34 @@ __extern_C void __assert_fail(
 #	define VALGRIND_CHECK_MEM_IS_ADDRESSABLE(a,s) (0)
 #	define VALGRIND_CHECK_MEM_IS_DEFINED(a,s) (0)
 #endif /* ! USE_VALGRIND */
+
+#if defined(__has_feature)
+#	if __has_feature(thread_sanitizer)
+#		define __SANITIZE_THREAD__ 1
+#	endif
+#endif
+
+#ifdef __SANITIZE_THREAD__
+#	define ATTRIBUTE_NO_SANITIZE_THREAD __attribute__((no_sanitize_thread, noinline))
+#else
+#	define ATTRIBUTE_NO_SANITIZE_THREAD
+#endif
+
+#if defined(__has_feature)
+#	if __has_feature(address_sanitizer)
+#		define __SANITIZE_ADDRESS__ 1
+#	endif
+#endif
+
+#ifdef __SANITIZE_ADDRESS__
+#	include <sanitizer/asan_interface.h>
+#	define ATTRIBUTE_NO_SANITIZE_ADDRESS __attribute__((no_sanitize_address, noinline))
+#else
+#	define ASAN_POISON_MEMORY_REGION(addr, size) \
+		((void)(addr), (void)(size))
+#	define ASAN_UNPOISON_MEMORY_REGION(addr, size) \
+		((void)(addr), (void)(size))
+#	define ATTRIBUTE_NO_SANITIZE_ADDRESS
+#endif /* __SANITIZE_ADDRESS__ */
 
 #endif /* _REOPEN_H */
