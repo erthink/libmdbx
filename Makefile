@@ -19,7 +19,7 @@ mandir	?= $(prefix)/man
 
 CC	?= gcc
 XCFLAGS	?=
-CFLAGS	?= -O2 -g -Wall -Werror -Wno-unused-parameter
+CFLAGS	?= -O2 -ggdb3 -Wall -Werror -Wno-unused-parameter
 CFLAGS	+= -pthread $(XCFLAGS)
 
 ########################################################################

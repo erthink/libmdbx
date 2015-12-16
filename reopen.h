@@ -31,8 +31,6 @@
 #	define _GNU_SOURCE
 #endif
 
-#include <ansidecl.h>
-
 #ifndef __has_attribute
 #	define __has_attribute(x) (0)
 #endif
