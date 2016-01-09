@@ -19,4 +19,9 @@
 	<title>mdb_stat - environment status tool</title>
 	<filename>mdb_stat.1</filename>
   </compound>
+  <compound kind="page">
+    <name>mdb_chk_1</name>
+	<title>mdb_chk - environment check tool</title>
+	<filename>mdb_chk.1</filename>
+  </compound>
 </tagfile>
