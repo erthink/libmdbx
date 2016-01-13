@@ -4731,12 +4731,22 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 		return errno;
 	env->me_txns = m;
 
-	if (madvise(env->me_txns, rsize, MADV_DONTFORK | MADV_WILLNEED))
-		return errno;
+#ifdef MADV_NOHUGEPAGE
+	(void) madvise(env->me_txns, rsize, MADV_NOHUGEPAGE);
+#endif
 
 #ifdef MADV_DODUMP
-	madvise(env->me_txns, rsize, MADV_DODUMP);
+	(void) madvise(env->me_txns, rsize, MADV_DODUMP);
 #endif
+
+	if (madvise(env->me_txns, rsize, MADV_DONTFORK) < 0)
+		return errno;
+
+	if (madvise(env->me_txns, rsize, MADV_WILLNEED) < 0)
+		return errno;
+
+	if (madvise(env->me_txns, rsize, MADV_RANDOM) < 0)
+		return errno;
 
 	if (*excl > 0) {
 		pthread_mutexattr_t mattr;
