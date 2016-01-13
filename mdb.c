@@ -4097,6 +4097,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	size_t prev_mapsize = head->mm_mapsize;
 	MDB_meta* tail = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
 	off_t offset = (char*) tail - env->me_map;
+	size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
 
 	mdb_assert(env, (env->me_flags & (MDB_RDONLY | MDB_FATAL_ERROR)) == 0);
 	mdb_assert(env, META_IS_WEAK(head) || env->me_sync_pending != 0
@@ -4108,6 +4109,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	mdb_assert(env, pending->mm_txnid > stay->mm_txnid);
 
 	pending->mm_mapsize = env->me_mapsize;
+	mdb_assert(env, pending->mm_mapsize >= used_size);
 	if (unlikely(pending->mm_mapsize != prev_mapsize)) {
 		if (pending->mm_mapsize < prev_mapsize) {
 			/* LY: currently this can't happen, but force full-sync. */
@@ -4124,7 +4126,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	if (env->me_sync_pending && (flags & MDB_NOSYNC) == 0) {
 		if (env->me_flags & MDB_WRITEMAP) {
 			int mode = (flags & MDB_MAPASYNC) ? MS_ASYNC : MS_SYNC;
-			if (unlikely(msync(env->me_map, pending->mm_mapsize, mode))) {
+			if (unlikely(msync(env->me_map, used_size, mode))) {
 				rc = errno;
 				goto fail;
 			}
@@ -4729,12 +4731,22 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 		return errno;
 	env->me_txns = m;
 
-	if (madvise(env->me_txns, rsize, MADV_DONTFORK | MADV_WILLNEED))
-		return errno;
+#ifdef MADV_NOHUGEPAGE
+	(void) madvise(env->me_txns, rsize, MADV_NOHUGEPAGE);
+#endif
 
 #ifdef MADV_DODUMP
-	madvise(env->me_txns, rsize, MADV_DODUMP);
+	(void) madvise(env->me_txns, rsize, MADV_DODUMP);
 #endif
+
+	if (madvise(env->me_txns, rsize, MADV_DONTFORK) < 0)
+		return errno;
+
+	if (madvise(env->me_txns, rsize, MADV_WILLNEED) < 0)
+		return errno;
+
+	if (madvise(env->me_txns, rsize, MADV_RANDOM) < 0)
+		return errno;
 
 	if (*excl > 0) {
 		pthread_mutexattr_t mattr;
@@ -6322,6 +6334,28 @@ fetchm:
 					mx->mc_db->md_xsize;
 				data->mv_data = PAGEDATA(mx->mc_pg[mx->mc_top]);
 				mx->mc_ki[mx->mc_top] = NUMKEYS(mx->mc_pg[mx->mc_top])-1;
+			} else {
+				rc = MDB_NOTFOUND;
+			}
+		}
+		break;
+	case MDB_PREV_MULTIPLE:
+		if (data == NULL) {
+			rc = EINVAL;
+			break;
+		}
+		if (!(mc->mc_db->md_flags & MDB_DUPFIXED)) {
+			rc = MDB_INCOMPATIBLE;
+			break;
+		}
+		if (!(mc->mc_flags & C_INITIALIZED))
+			rc = mdb_cursor_first(mc, key, data);
+		else {
+			MDB_cursor *mx = &mc->mc_xcursor->mx_cursor;
+			if (mx->mc_flags & C_INITIALIZED) {
+				rc = mdb_cursor_sibling(mx, 0);
+				if (rc == MDB_SUCCESS)
+					goto fetchm;
 			} else {
 				rc = MDB_NOTFOUND;
 			}
