@@ -10,6 +10,7 @@ LMDB 0.9.18 Release Engineering
 		already done for mdbx - Additional makefile var tweaks (ITS#8169)
 	Documentation
 		Add Getting Started page
+		Update WRITEMAP description
 
 
 LMDB 0.9.17 Release (2015/11/30)
