@@ -4511,15 +4511,11 @@ static pthread_mutex_t mdb_rthc_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /* LY: TODO: Yet another problem is here - segfault in case if a DSO will
  * be unloaded before a thread would been finished. */
-static void
-mdb_env_reader_destr(void *ptr)
+static ATTRIBUTE_NO_SANITIZE_THREAD
+void mdb_env_reader_destr(void *ptr)
 {
 	struct MDB_rthc* rthc = ptr;
 	MDB_reader *reader;
-
-	if (! rthc)
-		/* LY: paranoia */
-		return;
 
 	mdb_ensure(NULL, pthread_mutex_lock(&mdb_rthc_lock) == 0);
 	reader = rthc->rc_reader;
