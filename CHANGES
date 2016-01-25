@@ -4,12 +4,16 @@ LMDB 0.9.18 Release Engineering
 	Add MDB_PREV_MULTIPLE
 	already done for mdbx - Fix robust mutex detection on glibc 2.10-11 (ITS#8330)
 	Fix page_search_root assert on FreeDB (ITS#8336)
+	Fix MDB_APPENDDUP vs. rewrite(single item) (ITS#8334)
+	n/a for mdbx - Fix mdb_copy of large files on Windows
+	Fix subcursor move after delete (ITS#8355)
 	n/a for mdbx - Check for utf8_to_utf16 failures (ITS#7992)
 	Catch strdup failure in mdb_dbi_open
 	Build
 		already done for mdbx - Additional makefile var tweaks (ITS#8169)
 	Documentation
 		Add Getting Started page
+		Update WRITEMAP description
 
 
 LMDB 0.9.17 Release (2015/11/30)
