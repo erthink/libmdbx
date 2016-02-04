@@ -4780,9 +4780,6 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 				env->me_txns->mti_format, MDB_LOCK_FORMAT);
 			return MDB_VERSION_MISMATCH;
 		}
-		rc = errno;
-		if (rc && rc != EACCES && rc != EAGAIN)
-			return rc;
 	}
 
 	return MDB_SUCCESS;
