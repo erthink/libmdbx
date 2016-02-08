@@ -3106,7 +3106,7 @@ int mdbx_txn_straggler(MDB_txn *txn, int *percent)
 		size_t last = meta->mm_last_pg + 1;
 		if (env->me_txn)
 			last = env->me_txn0->mt_next_pgno;
-		*percent = (last + maxpg / 2) * 100u / maxpg;
+		*percent = (last * 100ull + maxpg / 2) / maxpg;
 	}
 	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
 	return (0 > (long) lag) ? ~0u >> 1: lag;
