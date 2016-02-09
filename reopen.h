@@ -82,7 +82,7 @@
 #endif /* __must_check_result */
 
 #ifndef __hot
-#	if defined(__GNUC__) && !defined(__clang__)
+#	if defined(NDEBUG) && (defined(__GNUC__) && !defined(__clang__))
 #		define __hot __attribute__((hot, optimize("O3")))
 #	else
 #		define __hot
@@ -90,7 +90,7 @@
 #endif /* __hot */
 
 #ifndef __cold
-#	if defined(__GNUC__) && !defined(__clang__)
+#	if defined(NDEBUG) && (defined(__GNUC__) && !defined(__clang__))
 #		define __cold __attribute__((cold, optimize("Os")))
 #	elif defined(__GNUC__)
 		/* cland case, just put infrequently used functions in separate section */
@@ -101,7 +101,7 @@
 #endif /* __cold */
 
 #ifndef __flatten
-#	if defined(__GNUC__) || defined(__clang__)
+#	if defined(NDEBUG) && (defined(__GNUC__) || defined(__clang__))
 #		define __flatten __attribute__((flatten))
 #	else
 #		define __flatten
