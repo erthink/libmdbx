@@ -320,7 +320,7 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 		problem_add("entry", record_number, "wrong idl size", "%zu", data->mv_size);
 	else {
 		number = *iptr++;
-		if (number <= 0 || number >= MDB_IDL_UM_MAX)
+		if (number >= MDB_IDL_UM_MAX)
 			problem_add("entry", record_number, "wrong idl length", "%zi", number);
 		else if ((number + 1) * sizeof(size_t) != data->mv_size)
 			problem_add("entry", record_number, "mismatch idl length", "%zi != %zu",
