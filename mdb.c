@@ -1575,6 +1575,28 @@ mdb_dlist_free(MDB_txn *txn)
 	dl[0].mid = 0;
 }
 
+__cold static void
+mdb_kill_page(MDB_env *env, MDB_page *mp)
+{
+	const unsigned off = offsetof(MDB_page, mp_pb);
+
+	if (env->me_flags & MDB_WRITEMAP) {
+		memset(&mp->mp_pb, 0x6F /* 'o', 111 */, env->me_psize - off);
+	} else {
+		if (unlikely(env->me_dpages == 0)) {
+			mdb_page_free(env, mdb_page_malloc(env->me_txn0, 1));
+			assert(env->me_dpages != 0);
+		}
+		struct iovec iov[1];
+		iov[0].iov_len = env->me_psize - off;
+		iov[0].iov_base = ((char*) env->me_dpages) + off;
+		memset(iov[0].iov_base, 0x6F /* 'o', 111 */, iov[0].iov_len);
+		int rc = pwritev(env->me_fd, iov, 1, env->me_psize * mp->mp_pgno + off);
+		assert(rc == iov[0].iov_len);
+		(void) rc;
+	}
+}
+
 /** Loosen or free a single page.
  * Saves single pages to a list for future reuse
  * in this same txn. It has been pulled from the freeDB
@@ -1591,6 +1613,10 @@ mdb_page_loose(MDB_cursor *mc, MDB_page *mp)
 	int loose = 0;
 	pgno_t pgno = mp->mp_pgno;
 	MDB_txn *txn = mc->mc_txn;
+
+	if (unlikely(txn->mt_env->me_flags & MDB_PAGEPERTURB)) {
+		mdb_kill_page(txn->mt_env, mp);
+	}
 
 	if ((mp->mp_flags & P_DIRTY) && mc->mc_dbi != FREE_DBI) {
 		if (txn->mt_parent) {
@@ -2332,7 +2358,7 @@ done:
 	}
 
 #if LDAP_MEMORY_DEBUG > 0
-	memset(np, 111, env->me_psize * num);
+	memset(np, 0x71 /* 'q', 113 */, env->me_psize * num);
 #endif
 	VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
 
@@ -4305,7 +4331,9 @@ mdb_env_map(MDB_env *env, void *addr)
 #endif
 
 #ifdef MADV_DONTDUMP
-	(void) madvise(env->me_map, env->me_mapsize, MADV_DONTDUMP);
+	if (! (flags & MDB_PAGEPERTURB)) {
+		(void) madvise(env->me_map, env->me_mapsize, MADV_DONTDUMP);
+	}
 #endif
 
 	/* Can happen because the address argument to mmap() is just a
@@ -4796,7 +4824,7 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 	 *	environment and re-opening it with the new flags.
 	 */
 #define	CHANGEABLE	(MDB_NOSYNC|MDB_NOMETASYNC|MDB_MAPASYNC| \
-    MDB_NOMEMINIT|MDB_COALESCE)
+	MDB_NOMEMINIT|MDB_COALESCE|MDB_PAGEPERTURB)
 #define	CHANGELESS	(MDB_FIXEDMAP|MDB_NOSUBDIR|MDB_RDONLY| \
 	MDB_WRITEMAP|MDB_NOTLS|MDB_NORDAHEAD|MDB_LIFORECLAIM)
 

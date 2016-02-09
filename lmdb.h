@@ -304,8 +304,10 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 #define MDB_LIFORECLAIM	0x4000000
 #endif /* MDBX_MODE_ENABLED */
 
-/** make a steady-sync only on close and explicit env-sync */
+	/** make a steady-sync only on close and explicit env-sync */
 #define MDB_UTTERLY_NOSYNC (MDB_NOSYNC|MDB_MAPASYNC)
+	/** debuging option, fill/perturb released pages */
+#define MDB_PAGEPERTURB        0x8000000
 /** @} */
 
 /**	@defgroup	mdb_dbi_open	Database Flags
