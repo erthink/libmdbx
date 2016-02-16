@@ -6420,8 +6420,10 @@ fetchm:
 			break;
 		}
 		if (!(mc->mc_flags & C_INITIALIZED))
-			rc = mdb_cursor_first(mc, key, data);
-		else {
+			rc = mdb_cursor_last(mc, key, data);
+		else
+			rc = MDB_SUCCESS;
+		if (rc == MDB_SUCCESS) {
 			MDB_cursor *mx = &mc->mc_xcursor->mx_cursor;
 			if (mx->mc_flags & C_INITIALIZED) {
 				rc = mdb_cursor_sibling(mx, 0);
