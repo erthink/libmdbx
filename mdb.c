@@ -1516,9 +1516,6 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
 		VALGRIND_MEMPOOL_ALLOC(env, np, size);
 	}
 
-#if LDAP_MEMORY_DEBUG > 0
-	memset(np, 42, size);
-#else
 	if ((env->me_flags & MDB_NOMEMINIT) == 0) {
 		/* For a single page alloc, we init everything after the page header.
 		 * For multi-page, we init the final page; if the caller needed that
@@ -1529,7 +1526,6 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
 			skip += (num - 1) * env->me_psize;
 		memset((char *) np + skip, 0, size - skip);
 	}
-#endif
 	VALGRIND_MAKE_MEM_UNDEFINED(np, size);
 	np->mp_flags = 0;
 	np->mp_pages = num;
@@ -2357,9 +2353,8 @@ done:
 		txn->mt_next_pgno = pgno + num;
 	}
 
-#if LDAP_MEMORY_DEBUG > 0
-	memset(np, 0x71 /* 'q', 113 */, env->me_psize * num);
-#endif
+	if (env->me_flags & MDB_PAGEPERTURB)
+		memset(np, 0x71 /* 'q', 113 */, env->me_psize * num);
 	VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
 
 	np->mp_pgno = pgno;
