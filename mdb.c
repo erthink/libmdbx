@@ -1883,7 +1883,7 @@ static MDB_meta* mdb_meta_head_w(MDB_env *env) {
 	return a;
 }
 
-static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by meta->mm_txnid */
+static
 MDB_meta* mdb_meta_head_r(MDB_env *env) {
 	MDB_meta* a = METAPAGE_1(env);
 	MDB_meta* b = METAPAGE_2(env), *h;
@@ -1893,15 +1893,26 @@ MDB_meta* mdb_meta_head_r(MDB_env *env) {
 	while(1) {
 #ifdef __SANITIZE_THREAD__
 		pthread_mutex_lock(&tsan_mutex);
-		pthread_mutex_unlock(&tsan_mutex);
 #endif
 		head_txnid = env->me_txns->mti_txnid;
 
 		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
-		if (likely(a->mm_txnid == head_txnid))
+		if (likely(a->mm_txnid == head_txnid)) {
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_unlock(&tsan_mutex);
+#endif
 			return a;
-		if (likely(b->mm_txnid == head_txnid))
+		}
+		if (likely(b->mm_txnid == head_txnid)) {
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_unlock(&tsan_mutex);
+#endif
 			return b;
+		}
+
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_unlock(&tsan_mutex);
+#endif
 
 		/* LY: got a race on env->me_txns->mti_txnid with mdb_env_sync0() */
 #if defined(__i386__) || defined(__x86_64__)
@@ -1933,9 +1944,12 @@ static int mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
 }
 
 /** Find oldest txnid still referenced. */
-static ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by reader[].mr_txnid */
+static
 txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 {
+#ifdef __SANITIZE_THREAD__
+	pthread_mutex_lock(&tsan_mutex);
+#endif
 	int i, reader;
 	MDB_reader *r = env->me_txns->mti_readers;
 	txnid_t oldest = env->me_txns->mti_txnid;
@@ -1956,6 +1970,9 @@ txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 			}
 		}
 	}
+#ifdef __SANITIZE_THREAD__
+	pthread_mutex_unlock(&tsan_mutex);
+#endif
 
 	if (laggard)
 		*laggard = reader;
@@ -2729,22 +2746,25 @@ mdb_reader_pid(MDB_env *env, int op, pid_t pid)
 	}
 }
 
-static ATTRIBUTE_NO_SANITIZE_THREAD
-txnid_t lead_txnid__tsan_workaround(MDB_txn *txn, MDB_reader *r)
+static
+txnid_t lead_txnid(MDB_txn *txn, MDB_reader *r)
 {
 	while(1) { /* LY: Retry on a race, ITS#7970. */
 		MDB_meta *meta = mdb_meta_head_r(txn->mt_env);
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+#endif
 		txnid_t lead = meta->mm_txnid;
 		r->mr_txnid = lead;
 		mdb_coherent_barrier();
 		/* Copy the DB info and flags */
 		memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
 		txn->mt_next_pgno = meta->mm_last_pg+1;
-		if (likely(lead == txn->mt_env->me_txns->mti_txnid)) {
+		txnid_t snap = txn->mt_env->me_txns->mti_txnid;
 #ifdef __SANITIZE_THREAD__
-			pthread_mutex_lock(&tsan_mutex);
-			pthread_mutex_unlock(&tsan_mutex);
+		pthread_mutex_unlock(&tsan_mutex);
 #endif
+		if (likely(lead == snap)) {
 			return lead;
 		}
 #if defined(__i386__) || defined(__x86_64__)
@@ -2839,11 +2859,18 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			r->mr_txnid = ~(txnid_t)0;
 			r->mr_tid = tid;
 			mdb_coherent_barrier();
-			if (i == nr)
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_lock(&tsan_mutex);
+#endif
+			if (i == nr) {
 				env->me_txns->mti_numreaders = ++nr;
+			}
 			if (env->me_close_readers < nr)
 				env->me_close_readers = nr;
 			r->mr_pid = pid;
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_unlock(&tsan_mutex);
+#endif
 			mdb_mutex_unlock(env, rmutex);
 
 			new_notls = MDB_END_SLOT;
@@ -2854,7 +2881,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			}
 		}
 
-		txn->mt_txnid = lead_txnid__tsan_workaround(txn, r);
+		txn->mt_txnid = lead_txnid(txn, r);
 		txn->mt_u.reader = r;
 		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
 	} else {
@@ -2865,11 +2892,13 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 
 #ifdef __SANITIZE_THREAD__
 		pthread_mutex_lock(&tsan_mutex);
-		pthread_mutex_unlock(&tsan_mutex);
 #endif
 		MDB_meta *meta = mdb_meta_head_w(env);
 		txn->mt_txnid = meta->mm_txnid + 1;
 		txn->mt_flags = flags;
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_unlock(&tsan_mutex);
+#endif
 
 #if MDB_DEBUG
 		if (unlikely(txn->mt_txnid == mdb_debug_edge)) {
@@ -3159,6 +3188,9 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 
 	if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)) {
 		if (txn->mt_u.reader) {
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_lock(&tsan_mutex);
+#endif
 			txn->mt_u.reader->mr_txnid = ~(txnid_t)0;
 			if (!(env->me_flags & MDB_NOTLS)) {
 				txn->mt_u.reader = NULL; /* txn does not own reader */
@@ -3166,6 +3198,9 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 				txn->mt_u.reader->mr_pid = 0;
 				txn->mt_u.reader = NULL;
 			} /* else txn owns the slot until it does MDB_END_SLOT */
+#ifdef __SANITIZE_THREAD__
+			pthread_mutex_unlock(&tsan_mutex);
+#endif
 		}
 		mdb_coherent_barrier();
 		txn->mt_numdbs = 0;		/* prevent further DBI activity */
@@ -4188,6 +4223,9 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	mdb_debug("writing meta page %d for root page %zu",
 		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root);
 	if (env->me_flags & MDB_WRITEMAP) {
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+#endif
 		tail->mm_datasync_sign = MDB_DATASIGN_WEAK;
 		tail->mm_txnid = 0;
 		mdb_coherent_barrier();
@@ -4221,8 +4259,21 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			goto fail;
 		}
 		mdb_invalidate_cache(env->me_map + offset, sizeof(MDB_meta));
+#ifdef __SANITIZE_THREAD__
+		pthread_mutex_lock(&tsan_mutex);
+#endif
 	}
+
+	/* Memory ordering issues are irrelevant; since the entire writer
+	 * is wrapped by wmutex, all of these changes will become visible
+	 * after the wmutex is unlocked. Since the DB is multi-version,
+	 * readers will get consistent data regardless of how fresh or
+	 * how stale their view of these values is.
+	 */
 	env->me_txns->mti_txnid = pending->mm_txnid;
+#ifdef __SANITIZE_THREAD__
+	pthread_mutex_unlock(&tsan_mutex);
+#endif
 
 	/* LY: step#3 - sync meta-pages. */
 	if ((flags & (MDB_NOSYNC | MDB_NOMETASYNC)) == 0) {
@@ -4256,13 +4307,6 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 		}
 	}
 
-	/* Memory ordering issues are irrelevant; since the entire writer
-	 * is wrapped by wmutex, all of these changes will become visible
-	 * after the wmutex is unlocked. Since the DB is multi-version,
-	 * readers will get consistent data regardless of how fresh or
-	 * how stale their view of these values is.
-	 */
-	env->me_txns->mti_txnid = pending->mm_txnid;
 	return MDB_SUCCESS;
 
 fail:
