@@ -1658,7 +1658,7 @@ int	mdb_reader_check(MDB_env *env, int *dead);
 	 * @param[out] percent Percentage of page allocation in the database.
 	 * @return Number of transactions committed after the given was started for read, or -1 on failure.
 	 */
-int  mdbx_txn_straggler(MDB_txn *txnm, int *percent);
+int  mdbx_txn_straggler(MDB_txn *txn, int *percent);
 
 	/** @brief A callback function for killing a laggard readers,
 	 * called in case of MDB_MAP_FULL error.

@@ -108,7 +108,7 @@
 #	define MDB_DBG_EXTRA	0
 #	define MDB_DBG_AUDIT	0
 #	define MDB_DBG_EDGE		0
-#endif
+#endif /* ! MDBX_MODE_ENABLED */
 
 #if (BYTE_ORDER == LITTLE_ENDIAN) == (BYTE_ORDER == BIG_ENDIAN)
 #	error "Unknown or unsupported endianness (BYTE_ORDER)"
@@ -2862,9 +2862,8 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 #ifdef __SANITIZE_THREAD__
 			pthread_mutex_lock(&tsan_mutex);
 #endif
-			if (i == nr) {
+			if (i == nr)
 				env->me_txns->mti_numreaders = ++nr;
-			}
 			if (env->me_close_readers < nr)
 				env->me_close_readers = nr;
 			r->mr_pid = pid;
@@ -4871,9 +4870,9 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 # error "Persistent DB flags & env flags overlap, but both go in mm_flags"
 #endif
 
-#if !MDBX_MODE_ENABLED
+#if ! MDBX_MODE_ENABLED
 static
-#endif /* !MDBX_MODE_ENABLED*/
+#endif /* ! MDBX_MODE_ENABLED */
 int __cold
 mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive)
 {
@@ -5101,9 +5100,9 @@ mdb_env_close0(MDB_env *env)
 	env->me_flags &= ~(MDB_ENV_ACTIVE|MDB_ENV_TXKEY);
 }
 
-#if !MDBX_MODE_ENABLED
+#if ! MDBX_MODE_ENABLED
 static
-#endif /* !MDBX_MODE_ENABLED*/
+#endif /* ! MDBX_MODE_ENABLED */
 int __cold
 mdbx_env_close_ex(MDB_env *env, int dont_sync)
 {
@@ -9680,9 +9679,9 @@ mdb_stat0(MDB_env *env, MDB_db *db, MDB_stat *arg)
 	return MDB_SUCCESS;
 }
 
-#if !MDBX_MODE_ENABLED
+#if ! MDBX_MODE_ENABLED
 static
-#endif /* !MDBX_MODE_ENABLED*/
+#endif /* ! MDBX_MODE_ENABLED */
 int __cold
 mdbx_env_stat(MDB_env *env, MDBX_stat *arg, size_t bytes)
 {
@@ -9703,9 +9702,9 @@ mdb_env_stat(MDB_env *env, MDB_stat *arg)
 	return mdbx_env_stat(env, (MDBX_stat *) arg, sizeof(MDB_stat));
 }
 
-#if !MDBX_MODE_ENABLED
+#if ! MDBX_MODE_ENABLED
 static
-#endif /* !MDBX_MODE_ENABLED*/
+#endif /* ! MDBX_MODE_ENABLED */
 int __cold mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes)
 {
 	MDB_meta *meta;
