@@ -4008,8 +4008,9 @@ fail:
 	return rc;
 }
 
+#if MDBX_MODE_ENABLED
 int __cold
-mdb_env_set_syncbytes(MDB_env *env, size_t bytes)
+mdbx_env_set_syncbytes(MDB_env *env, size_t bytes)
 {
 	if (unlikely(!env))
 		return EINVAL;
@@ -4020,6 +4021,7 @@ mdb_env_set_syncbytes(MDB_env *env, size_t bytes)
 	env->me_sync_threshold = bytes;
 	return env->me_map ? mdb_env_sync(env, 0) : 0;
 }
+#endif /* MDBX_MODE_ENABLED */
 
 /** Read the environment parameters of a DB environment before
  * mapping it into memory.

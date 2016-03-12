@@ -80,7 +80,6 @@
 #define mdb_env_set_userctx	mdbx_env_set_userctx
 #define mdb_env_get_userctx	mdbx_env_get_userctx
 #define mdb_env_set_assert	mdbx_env_set_assert
-#define mdb_env_set_syncbytes	mdbx_env_set_syncbytes
 #define mdb_txn_begin	mdbx_txn_begin
 #define mdb_txn_env	mdbx_txn_env
 #define mdb_txn_id	mdbx_txn_id
