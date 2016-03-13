@@ -2733,33 +2733,6 @@ mdb_reader_pid(MDB_env *env, int op, pid_t pid)
 	}
 }
 
-static
-txnid_t lead_txnid(MDB_txn *txn, MDB_reader *r)
-{
-	while(1) { /* LY: Retry on a race, ITS#7970. */
-		MDB_meta *meta = mdb_meta_head_r(txn->mt_env);
-#ifdef __SANITIZE_THREAD__
-		pthread_mutex_lock(&tsan_mutex);
-#endif
-		txnid_t lead = meta->mm_txnid;
-		r->mr_txnid = lead;
-		mdb_coherent_barrier();
-		/* Copy the DB info and flags */
-		memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
-		txn->mt_next_pgno = meta->mm_last_pg+1;
-		txnid_t snap = txn->mt_env->me_txns->mti_txnid;
-#ifdef __SANITIZE_THREAD__
-		pthread_mutex_unlock(&tsan_mutex);
-#endif
-		if (likely(lead == snap)) {
-			return lead;
-		}
-#if defined(__i386__) || defined(__x86_64__)
-		__asm__ __volatile__("pause");
-#endif
-	}
-}
-
 /** Common code for #mdb_txn_begin() and #mdb_txn_renew().
  * @param[in] txn the transaction handle to initialize
  * @return 0 on success, non-zero on failure.
@@ -2769,7 +2742,6 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 {
 	MDB_env *env = txn->mt_env;
 	unsigned i, nr;
-	uint16_t x;
 	int rc, new_notls = 0;
 
 	if (unlikely(env->me_pid != getpid())) {
@@ -2867,7 +2839,23 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			}
 		}
 
-		txn->mt_txnid = lead_txnid(txn, r);
+		while((env->me_flags & MDB_FATAL_ERROR) == 0) {
+			MDB_meta *meta = mdb_meta_head_r(txn->mt_env);
+			txnid_t lead = meta->mm_txnid;
+			r->mr_txnid = lead;
+			mdb_coherent_barrier();
+
+			txnid_t snap = txn->mt_env->me_txns->mti_txnid;
+			/* LY: Retry on a race, ITS#7970. */
+			if (likely(lead == snap)) {
+				txn->mt_txnid = lead;
+				txn->mt_next_pgno = meta->mm_last_pg+1;
+				/* Copy the DB info and flags */
+				memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
+				break;
+			}
+		}
+
 		txn->mt_u.reader = r;
 		txn->mt_dbxs = env->me_dbxs;	/* mostly static anyway */
 	} else {
@@ -2917,7 +2905,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 	/* Setup db info */
 	txn->mt_numdbs = env->me_numdbs;
 	for (i=CORE_DBS; i<txn->mt_numdbs; i++) {
-		x = env->me_dbflags[i];
+		unsigned x = env->me_dbflags[i];
 		txn->mt_dbs[i].md_flags = x & PERSISTENT_FLAGS;
 		txn->mt_dbflags[i] = (x & MDB_VALID) ? DB_VALID|DB_USRVALID|DB_STALE : 0;
 	}
