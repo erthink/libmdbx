@@ -30,7 +30,8 @@
  */
 #define CMP(x,y)	 ( (x) < (y) ? -1 : (x) > (y) )
 
-static unsigned mdb_midl_search( MDB_IDL ids, MDB_ID id )
+static unsigned __hot
+mdb_midl_search( MDB_IDL ids, MDB_ID id )
 {
 	/*
 	 * binary search of id in ids
@@ -197,7 +198,8 @@ static int mdb_midl_append_range( MDB_IDL *idp, MDB_ID id, unsigned n )
 	return 0;
 }
 
-static void mdb_midl_xmerge( MDB_IDL idl, MDB_IDL merge )
+static void  __hot
+mdb_midl_xmerge( MDB_IDL idl, MDB_IDL merge )
 {
 	MDB_ID old_id, merge_id, i = merge[0], j = idl[0], k = i+j, total = k;
 	idl[0] = (MDB_ID)-1;		/* delimiter for idl scan below */
@@ -216,7 +218,8 @@ static void mdb_midl_xmerge( MDB_IDL idl, MDB_IDL merge )
 #define SMALL	8
 #define	MIDL_SWAP(a,b)	{ itmp=(a); (a)=(b); (b)=itmp; }
 
-static void mdb_midl_sort( MDB_IDL ids )
+static void  __hot
+mdb_midl_sort( MDB_IDL ids )
 {
 	/* Max possible depth of int-indexed tree * 2 items/level */
 	int istack[sizeof(int)*CHAR_BIT * 2];
@@ -276,7 +279,8 @@ static void mdb_midl_sort( MDB_IDL ids )
 	}
 }
 
-static unsigned mdb_mid2l_search( MDB_ID2L ids, MDB_ID id )
+static unsigned  __hot
+mdb_mid2l_search( MDB_ID2L ids, MDB_ID id )
 {
 	/*
 	 * binary search of id in ids

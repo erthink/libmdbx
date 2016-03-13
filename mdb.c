@@ -1286,7 +1286,7 @@ mdb_debug_log(int type, const char *function, int line,
 	mdb_assert((txn)->mt_env, expr)
 
 /** Return the page number of \b mp which may be sub-page, for debug output */
-static pgno_t
+static __inline pgno_t
 mdb_dbg_pgno(MDB_page *mp)
 {
 	pgno_t ret;
@@ -1536,7 +1536,7 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
  * Saves single pages to a list, for future reuse.
  * (This is not used for multi-page overflow pages.)
  */
-static void
+static __inline void
 mdb_page_free(MDB_env *env, MDB_page *mp)
 {
 	mp->mp_next = env->me_dpages;
@@ -1571,7 +1571,7 @@ mdb_dlist_free(MDB_txn *txn)
 	dl[0].mid = 0;
 }
 
-__cold static void
+static void __cold
 mdb_kill_page(MDB_env *env, MDB_page *mp)
 {
 	const unsigned off = offsetof(MDB_page, mp_pb);
@@ -1853,7 +1853,8 @@ bailout:
 	return rc;
 }
 
-static uint64_t mdb_meta_sign(MDB_meta *meta) {
+static __inline uint64_t
+mdb_meta_sign(MDB_meta *meta) {
 	uint64_t sign = MDB_DATASIGN_NONE;
 #if 0 /* TODO */
 	sign = hippeus_hash64(
@@ -1866,7 +1867,8 @@ static uint64_t mdb_meta_sign(MDB_meta *meta) {
 	return (sign > MDB_DATASIGN_WEAK) ? sign : ~sign;
 }
 
-static MDB_meta* mdb_meta_head_w(MDB_env *env) {
+static __inline MDB_meta*
+mdb_meta_head_w(MDB_env *env) {
 	MDB_meta* a = METAPAGE_1(env);
 	MDB_meta* b = METAPAGE_2(env);
 	txnid_t head_txnid = env->me_txns->mti_txnid;
@@ -1924,11 +1926,13 @@ mdb_meta_head_r(MDB_env *env) {
 	return h;
 }
 
-static MDB_meta* mdb_env_meta_flipflop(const MDB_env *env, MDB_meta* meta) {
+static __inline MDB_meta*
+mdb_env_meta_flipflop(const MDB_env *env, MDB_meta* meta) {
 	return (meta == METAPAGE_1(env)) ? METAPAGE_2(env) : METAPAGE_1(env);
 }
 
-static int mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
+static  __inline int
+mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
 	return (META_IS_STEADY(a) == META_IS_STEADY(b))
 			? a->mm_txnid < b->mm_txnid : META_IS_STEADY(b);
 }
@@ -3262,7 +3266,7 @@ mdb_txn_abort(MDB_txn *txn)
 	return mdb_txn_end(txn, MDB_END_ABORT|MDB_END_SLOT|MDB_END_FREE);
 }
 
-static int
+static __inline int
 mdb_backlog_size(MDB_txn *txn)
 {
 	int reclaimed = txn->mt_env->me_pghead ? txn->mt_env->me_pghead[0] : 0;
@@ -5115,7 +5119,7 @@ mdb_env_close(MDB_env *env)
 }
 
 /** Compare two items pointing at aligned unsigned int's. */
-static long
+static long __hot
 mdb_cmp_int_ai(const MDB_val *a, const MDB_val *b)
 {
 	mdb_assert(NULL, a->mv_size == b->mv_size);
@@ -5130,7 +5134,7 @@ mdb_cmp_int_ai(const MDB_val *a, const MDB_val *b)
 }
 
 /** Compare two items pointing at 2-byte aligned unsigned int's. */
-static long
+static long __hot
 mdb_cmp_int_a2(const MDB_val *a, const MDB_val *b)
 {
 	mdb_assert(NULL, a->mv_size == b->mv_size);
@@ -5173,7 +5177,7 @@ mdb_cmp_int_a2(const MDB_val *a, const MDB_val *b)
  *
  *	This is also set as #MDB_INTEGERDUP|#MDB_DUPFIXED's #MDB_dbx.%md_dcmp.
  */
-static long
+static long __hot
 mdb_cmp_int_ua(const MDB_val *a, const MDB_val *b)
 {
 	mdb_assert(NULL, a->mv_size == b->mv_size);
@@ -5207,7 +5211,7 @@ mdb_cmp_int_ua(const MDB_val *a, const MDB_val *b)
 }
 
 /** Compare two items lexically */
-static long
+static long __hot
 mdb_cmp_memn(const MDB_val *a, const MDB_val *b)
 {
 	long diff;
@@ -5226,7 +5230,7 @@ mdb_cmp_memn(const MDB_val *a, const MDB_val *b)
 }
 
 /** Compare two items in reverse byte order */
-static long
+static long __hot
 mdb_cmp_memnr(const MDB_val *a, const MDB_val *b)
 {
 	const unsigned char	*p1, *p2, *p1_lim;
@@ -5258,7 +5262,7 @@ mdb_cmp_memnr(const MDB_val *a, const MDB_val *b)
  * Updates the cursor index with the index of the found entry.
  * If no entry larger or equal to the key is found, returns NULL.
  */
-static MDB_node *
+static MDB_node * __hot
 mdb_node_search(MDB_cursor *mc, MDB_val *key, int *exactp)
 {
 	unsigned	 i = 0, nkeys;
@@ -5717,7 +5721,7 @@ release:
  * @param[out] data Updated to point to the node's data.
  * @return 0 on success, non-zero on failure.
  */
-static int
+static __inline int
 mdb_node_read(MDB_txn *txn, MDB_node *leaf, MDB_val *data)
 {
 	MDB_page	*omp;		/* overflow page */
@@ -7210,7 +7214,7 @@ mdb_page_new(MDB_cursor *mc, uint32_t flags, int num, MDB_page **mp)
  * @param[in] data The data for the node.
  * @return The number of bytes needed to store the node.
  */
-static size_t
+static __inline size_t
 mdb_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data)
 {
 	size_t		 sz;
@@ -7234,7 +7238,7 @@ mdb_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data)
  * @param[in] key The key for the node.
  * @return The number of bytes needed to store the node.
  */
-static size_t
+static __inline size_t
 mdb_branch_size(MDB_env *env, MDB_val *key)
 {
 	size_t		 sz;
@@ -9682,7 +9686,8 @@ mdb_env_stat(MDB_env *env, MDB_stat *arg)
 #if ! MDBX_MODE_ENABLED
 static
 #endif /* ! MDBX_MODE_ENABLED */
-int __cold mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes)
+int __cold
+mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes)
 {
 	MDB_meta *meta;
 
