@@ -1883,54 +1883,44 @@ static MDB_meta* mdb_meta_head_w(MDB_env *env) {
 	return a;
 }
 
-static
-MDB_meta* mdb_meta_head_r(MDB_env *env) {
+static MDB_meta*
+mdb_meta_head_r(MDB_env *env) {
 	MDB_meta* a = METAPAGE_1(env);
 	MDB_meta* b = METAPAGE_2(env), *h;
-	txnid_t head_txnid;
-	int loop = 0, rc;
-
-	while(1) {
-#ifdef __SANITIZE_THREAD__
-		pthread_mutex_lock(&tsan_mutex);
-#endif
-		head_txnid = env->me_txns->mti_txnid;
-
-		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
-		if (likely(a->mm_txnid == head_txnid)) {
-#ifdef __SANITIZE_THREAD__
-			pthread_mutex_unlock(&tsan_mutex);
-#endif
-			return a;
-		}
-		if (likely(b->mm_txnid == head_txnid)) {
-#ifdef __SANITIZE_THREAD__
-			pthread_mutex_unlock(&tsan_mutex);
-#endif
-			return b;
-		}
 
 #ifdef __SANITIZE_THREAD__
-		pthread_mutex_unlock(&tsan_mutex);
+	pthread_mutex_lock(&tsan_mutex);
 #endif
 
-		/* LY: got a race on env->me_txns->mti_txnid with mdb_env_sync0() */
-#if defined(__i386__) || defined(__x86_64__)
-		__asm__ __volatile__("pause");
-#endif
+	txnid_t head_txnid = env->me_txns->mti_txnid;
+	mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
+	if (likely(a->mm_txnid == head_txnid)) {
+		h = a;
+	} else if (likely(b->mm_txnid == head_txnid)) {
+		h = b;
+	} else {
+		/* LY: seems got a race with mdb_env_sync0() */
 		mdb_coherent_barrier();
-		loop += 1;
-		if(likely(loop < 3))
-			continue;
-		if(unlikely(loop > 5))
-			break;
-		pthread_yield();
+		head_txnid = env->me_txns->mti_txnid;
+		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
+
+		if (likely(a->mm_txnid == head_txnid)) {
+			h = a;
+		} else if (likely(b->mm_txnid == head_txnid)) {
+			h = b;
+		} else {
+			/* LY: got a race again, or DB is corrupted */
+			int rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
+			h = mdb_meta_head_w(env);
+			if (rc == 0)
+				mdb_mutex_unlock(env, MDB_MUTEX(env, w));
+		}
 	}
 
-	rc = mdb_mutex_lock(env, MDB_MUTEX(env, w));
-	h = mdb_meta_head_w(env);
-	if (rc == 0)
-		mdb_mutex_unlock(env, MDB_MUTEX(env, w));
+#ifdef __SANITIZE_THREAD__
+	pthread_mutex_unlock(&tsan_mutex);
+#endif
+
 	return h;
 }
 
