@@ -2588,30 +2588,27 @@ mdb_env_sync(MDB_env *env, int force)
 		return EACCES;
 
 	head = mdb_meta_head_r(env);
-	if (force || head->mm_mapsize != env->me_mapsize)
-		flags &= MDB_WRITEMAP;
-
-	/* LY: just only for 'early sync' to reduce writer latency */
-	if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold)
-		flags &= MDB_WRITEMAP;
-
-	if ((flags & MDB_NOSYNC) == 0) {
-		/* LY: early sync before acquiring the mutex,
-		 *     this reduces latency for writer */
-		if (flags & MDB_WRITEMAP) {
-			if (msync(env->me_map, env->me_mapsize,
-					  (flags & MDB_MAPASYNC) ? MS_ASYNC : MS_SYNC))
-				return errno;
-		} else if (fdatasync(env->me_fd))
-			return errno;
-		/* LY: head may be changed during the sync. */
-		head = mdb_meta_head_r(env);
-	}
-
 	if (! META_IS_WEAK(head) && env->me_sync_pending == 0
 			&& env->me_mapsize == head->mm_mapsize)
 		/* LY: nothing to do */
 		return MDB_SUCCESS;
+
+	if (force || head->mm_mapsize != env->me_mapsize
+			|| (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold))
+		flags &= MDB_WRITEMAP;
+
+	/* LY: early sync before acquiring the mutex to reduce writer's latency */
+	if (env->me_sync_pending > env->me_psize * 16 && (flags & MDB_NOSYNC) == 0) {
+		if (flags & MDB_WRITEMAP) {
+			size_t used_size = env->me_psize * (head->mm_last_pg + 1);
+			rc = msync(env->me_map, used_size,
+					(flags & MDB_MAPASYNC) ? MS_ASYNC : MS_SYNC);
+		} else {
+			rc = fdatasync(env->me_fd);
+		}
+		if (unlikely(rc))
+			return errno;
+	}
 
 	mutex = MDB_MUTEX(env, w);
 	rc = mdb_mutex_lock(env, mutex);
