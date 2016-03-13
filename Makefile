@@ -29,6 +29,7 @@ ILIBS	:= libmdbx.a libmdbx.so
 IPROGS	:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 IDOCS	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
 PROGS	:= $(IPROGS) mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench
+PROGS   += yota_test1 yota_test2
 
 SRC_LMDB := mdb.c midl.c lmdb.h midl.h reopen.h barriers.h
 SRC_MDBX := $(SRC_LMDB) mdbx.h
@@ -113,6 +114,12 @@ mtest5:	mtest5.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 mtest6:	mtest6.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+yota_test1: yota_test1.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+yota_test2: yota_test2.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 wbench:	wbench.o mdbx.o
