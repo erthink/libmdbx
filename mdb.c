@@ -1572,22 +1572,21 @@ mdb_dlist_free(MDB_txn *txn)
 }
 
 static void __cold
-mdb_kill_page(MDB_env *env, MDB_page *mp)
+mdb_kill_page(MDB_env *env, pgno_t pgno)
 {
-	const unsigned off = offsetof(MDB_page, mp_pb);
+	const size_t offs = env->me_psize * pgno;
+	const size_t shift = offsetof(MDB_page, mp_pb);
 
 	if (env->me_flags & MDB_WRITEMAP) {
-		memset(&mp->mp_pb, 0x6F /* 'o', 111 */, env->me_psize - off);
+		MDB_page *mp = (MDB_page *)(env->me_map + offs);
+		memset(&mp->mp_pb, 0x6F /* 'o', 111 */, env->me_psize - shift);
+		VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_pb, env->me_psize - shift);
 	} else {
-		if (unlikely(env->me_dpages == 0)) {
-			mdb_page_free(env, mdb_page_malloc(env->me_txn0, 1));
-			assert(env->me_dpages != 0);
-		}
 		struct iovec iov[1];
-		iov[0].iov_len = env->me_psize - off;
-		iov[0].iov_base = ((char*) env->me_dpages) + off;
+		iov[0].iov_len = env->me_psize - shift;
+		iov[0].iov_base = alloca(iov[0].iov_len);
 		memset(iov[0].iov_base, 0x6F /* 'o', 111 */, iov[0].iov_len);
-		int rc = pwritev(env->me_fd, iov, 1, env->me_psize * mp->mp_pgno + off);
+		int rc = pwritev(env->me_fd, iov, 1, offs + shift);
 		assert(rc == iov[0].iov_len);
 		(void) rc;
 	}
@@ -1609,10 +1608,6 @@ mdb_page_loose(MDB_cursor *mc, MDB_page *mp)
 	int loose = 0;
 	pgno_t pgno = mp->mp_pgno;
 	MDB_txn *txn = mc->mc_txn;
-
-	if (unlikely(txn->mt_env->me_flags & MDB_PAGEPERTURB)) {
-		mdb_kill_page(txn->mt_env, mp);
-	}
 
 	if ((mp->mp_flags & P_DIRTY) && mc->mc_dbi != FREE_DBI) {
 		if (txn->mt_parent) {
@@ -1639,6 +1634,8 @@ mdb_page_loose(MDB_cursor *mc, MDB_page *mp)
 	}
 	if (loose) {
 		mdb_debug("loosen db %d page %zu", DDBI(mc), mp->mp_pgno);
+		if (unlikely(txn->mt_env->me_flags & MDB_PAGEPERTURB))
+			mdb_kill_page(txn->mt_env, pgno);
 		NEXT_LOOSE_PAGE(mp) = txn->mt_loose_pgs;
 		txn->mt_loose_pgs = mp;
 		txn->mt_loose_count++;
@@ -2349,6 +2346,8 @@ done:
 	assert(mp && num);
 	if (env->me_flags & MDB_WRITEMAP) {
 		np = (MDB_page *)(env->me_map + env->me_psize * pgno);
+		/* LY: reset no-access flag from mdb_kill_page() */
+		VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
 	} else {
 		if (unlikely(!(np = mdb_page_malloc(txn, num)))) {
 			rc = ENOMEM;
