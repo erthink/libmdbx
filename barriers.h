@@ -132,6 +132,8 @@ static MDB_INLINE void mdb_invalidate_cache(void *addr, int nbytes) {
 #	error "Sorry, cacheflush() for MIPS not implemented"
 #else
 	/* LY: assume no mmap/dcache issues. */
+	(void) addr;
+	(void) nbytes;
 #endif
 }
 

@@ -39,20 +39,6 @@
 #	define GCC_VERSION (__GNUC__ * 1000 + __GNUC_MINOR__)
 #endif /* GCC_VERSION */
 
-#ifndef ALLOW_UNUSED
-#	ifdef ATTRIBUTE_UNUSED
-#		define ALLOW_UNUSED ATTRIBUTE_UNUSED
-#	elif defined(GCC_VERSION) && (GCC_VERSION >= 3004)
-#		define ALLOW_UNUSED __attribute__((__unused__))
-#	elif __has_attribute(__unused__)
-#		define ALLOW_UNUSED __attribute__((__unused__))
-#	elif __has_attribute(unused)
-#		define ALLOW_UNUSED __attribute__((unused))
-#	else
-#		define ALLOW_UNUSED
-#	endif
-#endif /* ALLOW_UNUSED */
-
 #if !defined(__thread) && (defined(_MSC_VER) || defined(__DMC__))
 #	define __thread __declspec(thread)
 #endif

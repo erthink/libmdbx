@@ -941,7 +941,7 @@ struct MDB_env {
 	unsigned	me_os_psize;	/**< OS page size, from #GET_PAGESIZE */
 	unsigned	me_maxreaders;	/**< size of the reader table */
 	/** Max #MDB_txninfo.%mti_numreaders of interest to #mdb_env_close() */
-	int	me_close_readers;
+	unsigned	me_close_readers;
 	MDB_dbi		me_numdbs;		/**< number of DBs opened */
 	MDB_dbi		me_maxdbs;		/**< size of the DB table */
 	pid_t	me_pid;		/**< process ID of this env */
@@ -967,7 +967,7 @@ struct MDB_env {
 	/** ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
 	MDB_ID2L	me_dirty_list;
 	/** Max number of freelist items that can fit in a single overflow page */
-	int			me_maxfree_1pg;
+	unsigned	me_maxfree_1pg;
 	/** Max size of a node on a page */
 	unsigned	me_nodemax;
 	unsigned	me_maxkey_limit;	/**< max size of a key */
@@ -1216,6 +1216,8 @@ mdbx_setup_debug(int flags, MDB_debug_func* logger, long edge_txn) {
 #if MDB_DEBUG
 	if (edge_txn != (long) MDB_DBG_DNT)
 		mdb_debug_edge = edge_txn;
+#else
+	(void) edge_txn;
 #endif
 	return ret;
 }
@@ -1286,7 +1288,7 @@ mdb_debug_log(int type, const char *function, int line,
 	mdb_assert((txn)->mt_env, expr)
 
 /** Return the page number of \b mp which may be sub-page, for debug output */
-static __inline pgno_t
+static MDB_INLINE pgno_t
 mdb_dbg_pgno(MDB_page *mp)
 {
 	pgno_t ret;
@@ -1536,7 +1538,7 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
  * Saves single pages to a list, for future reuse.
  * (This is not used for multi-page overflow pages.)
  */
-static __inline void
+static MDB_INLINE void
 mdb_page_free(MDB_env *env, MDB_page *mp)
 {
 	mp->mp_next = env->me_dpages;
@@ -1586,7 +1588,7 @@ mdb_kill_page(MDB_env *env, pgno_t pgno)
 		iov[0].iov_len = env->me_psize - shift;
 		iov[0].iov_base = alloca(iov[0].iov_len);
 		memset(iov[0].iov_base, 0x6F /* 'o', 111 */, iov[0].iov_len);
-		int rc = pwritev(env->me_fd, iov, 1, offs + shift);
+		ssize_t rc = pwritev(env->me_fd, iov, 1, offs + shift);
 		assert(rc == iov[0].iov_len);
 		(void) rc;
 	}
@@ -1850,21 +1852,23 @@ bailout:
 	return rc;
 }
 
-static __inline uint64_t
+static MDB_INLINE uint64_t
 mdb_meta_sign(MDB_meta *meta) {
 	uint64_t sign = MDB_DATASIGN_NONE;
 #if 0 /* TODO */
 	sign = hippeus_hash64(
-				&target->mm_mapsize,
+				&meta->mm_mapsize,
 				sizeof(MDB_meta) - offsetof(MDB_meta, mm_mapsize),
 				meta->mm_version | (uint64_t) MDB_MAGIC << 32
 			);
+#else
+	(void) meta;
 #endif
 	/* LY: newer returns MDB_DATASIGN_NONE or MDB_DATASIGN_WEAK */
 	return (sign > MDB_DATASIGN_WEAK) ? sign : ~sign;
 }
 
-static __inline MDB_meta*
+static MDB_INLINE MDB_meta*
 mdb_meta_head_w(MDB_env *env) {
 	MDB_meta* a = METAPAGE_1(env);
 	MDB_meta* b = METAPAGE_2(env);
@@ -1923,12 +1927,12 @@ mdb_meta_head_r(MDB_env *env) {
 	return h;
 }
 
-static __inline MDB_meta*
+static MDB_INLINE MDB_meta*
 mdb_env_meta_flipflop(const MDB_env *env, MDB_meta* meta) {
 	return (meta == METAPAGE_1(env)) ? METAPAGE_2(env) : METAPAGE_1(env);
 }
 
-static  __inline int
+static MDB_INLINE int
 mdb_meta_lt(MDB_meta* a, MDB_meta* b) {
 	return (META_IS_STEADY(a) == META_IS_STEADY(b))
 			? a->mm_txnid < b->mm_txnid : META_IS_STEADY(b);
@@ -3265,7 +3269,7 @@ mdb_txn_abort(MDB_txn *txn)
 	return mdb_txn_end(txn, MDB_END_ABORT|MDB_END_SLOT|MDB_END_FREE);
 }
 
-static __inline int
+static MDB_INLINE int
 mdb_backlog_size(MDB_txn *txn)
 {
 	int reclaimed = txn->mt_env->me_pghead ? txn->mt_env->me_pghead[0] : 0;
@@ -4588,7 +4592,7 @@ void mdb_env_reader_destr(void *ptr)
 
 /** Downgrade the exclusive lock on the region back to shared */
 static int __cold
-mdb_env_share_locks(MDB_env *env, int *excl, MDB_meta *meta)
+mdb_env_share_locks(MDB_env *env, int *excl)
 {
 	struct flock lock_info;
 	int rc = 0;
@@ -4944,7 +4948,7 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 			if (exclusive == NULL || *exclusive < 2) {
 				/* LY: downgrade lock only if exclusive access not requested.
 				 *     in case exclusive==1, just leave value as is. */
-				rc = mdb_env_share_locks(env, &excl, &meta);
+				rc = mdb_env_share_locks(env, &excl);
 				if (rc)
 					goto leave;
 			}
@@ -5720,7 +5724,7 @@ release:
  * @param[out] data Updated to point to the node's data.
  * @return 0 on success, non-zero on failure.
  */
-static __inline int
+static MDB_INLINE int
 mdb_node_read(MDB_txn *txn, MDB_node *leaf, MDB_val *data)
 {
 	MDB_page	*omp;		/* overflow page */
@@ -7213,7 +7217,7 @@ mdb_page_new(MDB_cursor *mc, uint32_t flags, int num, MDB_page **mp)
  * @param[in] data The data for the node.
  * @return The number of bytes needed to store the node.
  */
-static __inline size_t
+static MDB_INLINE size_t
 mdb_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data)
 {
 	size_t		 sz;
@@ -7237,7 +7241,7 @@ mdb_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data)
  * @param[in] key The key for the node.
  * @return The number of bytes needed to store the node.
  */
-static __inline size_t
+static MDB_INLINE size_t
 mdb_branch_size(MDB_env *env, MDB_val *key)
 {
 	size_t		 sz;
@@ -9616,8 +9620,11 @@ mdb_env_set_assert(MDB_env *env, MDB_assert_func *func)
 		return EINVAL;
 #if MDB_DEBUG
 	env->me_assert_func = func;
-#endif
 	return MDB_SUCCESS;
+#else
+	(void) func;
+	return ENOSYS;
+#endif
 }
 
 int __cold
@@ -9707,7 +9714,7 @@ mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes)
 	} else if (bytes == sizeof(MDBX_envinfo)) {
 		MDB_meta *m1, *m2;
 		MDB_reader *r;
-		int i;
+		unsigned i;
 
 		m1 = METAPAGE_1(env);
 		m2 = METAPAGE_2(env);
@@ -10392,6 +10399,8 @@ static int mdb_mutex_lock(MDB_env *env, pthread_mutex_t *mutex) {
 static void mdb_mutex_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 	int rc = pthread_mutex_unlock(mutex);
 	mdb_assert(env, rc == 0);
+	(void) env;
+	(void) rc;
 }
 
 #if MDBX_MODE_ENABLED
