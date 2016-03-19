@@ -22,6 +22,8 @@ XCFLAGS	?=
 CFLAGS	?= -O2 -ggdb3 -Wall -Werror -DNDEBUG=1
 CFLAGS	+= -pthread $(XCFLAGS)
 
+IOARENA ?= ../ioarena.git/@BUILD/src/ioarena
+
 ########################################################################
 
 IHDRS	:= lmdb.h mdbx.h
@@ -153,3 +155,28 @@ coverage: @gcov-mdb.o
 		gcc -o @gcov-$$x $$x.o $^ -pthread $(COV_FLAGS); \
 		rm -rf testdb; mkdir testdb; ./@gcov-$$x; done
 	gcov @gcov-mdb
+
+ifneq ($(wildcard $(IOARENA)),)
+
+.PHONY: bench clean-bench re-bench
+
+bench: bench-lmdb.txt bench-mdbx.txt
+
+clean-bench:
+	rm -rf bench-*.txt _ioarena
+
+re-bench: clean-bench bench
+
+bench: bench-lmdb.txt bench-mdbx.txt
+
+bench-mdbx.txt: libmdbx.so $(IOARENA)
+	$(IOARENA) -D mdbx -B crud -m nosync -n 10000000 | tee $@ \
+	&& $(IOARENA) -D mdbx -B get,iterate -m sync -r 4 -n 10000000 | tee -a $@ \
+	|| rm -f $@
+
+bench-lmdb.txt: $(IOARENA)
+	$(IOARENA) -D lmdb -B crud -m nosync -n 10000000 | tee $@ \
+	&& $(IOARENA) -D lmdb -B get,iterate -m sync -r 4 -n 10000000 | tee -a $@ \
+	|| rm -f $@
+
+endif
