@@ -1589,7 +1589,7 @@ mdb_kill_page(MDB_env *env, pgno_t pgno)
 		iov[0].iov_base = alloca(iov[0].iov_len);
 		memset(iov[0].iov_base, 0x6F /* 'o', 111 */, iov[0].iov_len);
 		ssize_t rc = pwritev(env->me_fd, iov, 1, offs + shift);
-		assert(rc == iov[0].iov_len);
+		assert(rc == (ssize_t) iov[0].iov_len);
 		(void) rc;
 	}
 }
