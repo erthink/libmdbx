@@ -110,12 +110,12 @@ static void create_record(int64_t record_id) {
     event.obj_id = record_id;
     event.event_type = 1;
 
-    MDB_val _session_id1_rec = {strlen(data.session_id1), data.session_id1};
-    MDB_val _session_id2_rec = {strlen(data.session_id2), data.session_id2};
-    MDB_val _ip_rec = {strlen(data.ip), data.ip};
-    MDB_val _obj_id_rec = {sizeof (record_id), &record_id};
-    MDB_val _data_rec = {offsetof(session_data_t, fill) + (rand() % sizeof (data.fill)), &data};
-    MDB_val _event_rec = {sizeof (event), &event};
+	MDB_val _session_id1_rec = {data.session_id1, strlen(data.session_id1)};
+	MDB_val _session_id2_rec = {data.session_id2, strlen(data.session_id2)};
+	MDB_val _ip_rec = {data.ip, strlen(data.ip)};
+	MDB_val _obj_id_rec = {&record_id, sizeof(record_id)};
+	MDB_val _data_rec = {&data, offsetof(session_data_t, fill) + (rand() % sizeof (data.fill))};
+	MDB_val _event_rec = {&event, sizeof(event)};
 
     LMDB_CHECK(mdb_txn_begin(env, NULL, 0, &txn));
     LMDB_CHECK(mdb_dbi_open(txn, "session", MDB_CREATE, &dbi_session));
@@ -151,21 +151,21 @@ static void delete_record(int64_t record_id) {
     LMDB_CHECK(mdb_dbi_open(txn, "event", MDB_CREATE, &dbi_event));
     LMDB_CHECK(mdb_dbi_open(txn, "ip", MDB_CREATE, &dbi_ip));
     // put data
-    MDB_val _obj_id_rec = {sizeof (record_id), &record_id};
+	MDB_val _obj_id_rec = {&record_id, sizeof(record_id)};
     MDB_val _data_rec;
     // get data
     LMDB_CHECK(mdb_get(txn, dbi_session, &_obj_id_rec, &_data_rec));
     session_data_t* data = (session_data_t*) _data_rec.mv_data;
 
-    MDB_val _session_id1_rec = {strlen(data->session_id1), data->session_id1};
-    MDB_val _session_id2_rec = {strlen(data->session_id2), data->session_id2};
-    MDB_val _ip_rec = {strlen(data->ip), data->ip};
+	MDB_val _session_id1_rec = {data->session_id1, strlen(data->session_id1)};
+	MDB_val _session_id2_rec = {data->session_id2, strlen(data->session_id2)};
+	MDB_val _ip_rec = {data->ip, strlen(data->ip)};
     LMDB_CHECK(mdb_del(txn, dbi_session_id, &_session_id1_rec, NULL));
     LMDB_CHECK(mdb_del(txn, dbi_session_id, &_session_id2_rec, NULL));
     LMDB_CHECK(mdb_del(txn, dbi_ip, &_ip_rec, NULL));
     event.obj_id = record_id;
     event.event_type = 1;
-    MDB_val _event_rec = {sizeof (event), &event};
+	MDB_val _event_rec = {&event, sizeof(event)};
     LMDB_CHECK(mdb_del(txn, dbi_event, &_event_rec, NULL));
     LMDB_CHECK(mdb_del(txn, dbi_session, &_obj_id_rec, NULL));
 

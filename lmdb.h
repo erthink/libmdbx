@@ -170,6 +170,10 @@
 #include <sys/types.h>
 #include <stdarg.h>
 #include <stdint.h>
+#if MDBX_MODE_ENABLED
+#	include <sys/uio.h>
+#	include <unistd.h>
+#endif /* MDBX_MODE_ENABLED */
 
 #ifdef __cplusplus
 extern "C" {
@@ -246,10 +250,16 @@ typedef struct MDB_cursor MDB_cursor;
  * The same applies to data sizes in databases with the #MDB_DUPSORT flag.
  * Other data items can in theory be from 0 to 0xffffffff bytes long.
  */
+#if MDBX_MODE_ENABLED
+typedef struct iovec MDB_val;
+#	define mv_size iov_len
+#	define mv_data iov_base
+#else
 typedef struct MDB_val {
 	size_t		 mv_size;	/**< size of the data item */
 	void		*mv_data;	/**< address of the data item */
 } MDB_val;
+#endif /* MDBX_MODE_ENABLED */
 
 /** @brief A callback function used to compare two keys in a database */
 typedef long (MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
