@@ -1,5 +1,8 @@
 LMDB 0.9 Change Log
 
+MDBX
+	Fix ITS#8393 case MDB_GET_BOTH on non-dup record
+
 LMDB 0.9.18 Release (2016/02/05)
 	Add MDB_PREV_MULTIPLE
 	already done for mdbx - Fix robust mutex detection on glibc 2.10-11 (ITS#8330)
