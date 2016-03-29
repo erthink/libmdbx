@@ -27,12 +27,16 @@
 
 char dkbuf[1024];
 
+#ifndef DBPATH
+#	define DBPATH "./testdb/data.mdb"
+#endif
+
 int main(int argc,char * argv[])
 {
 	int i = 0, rc;
 	MDB_env *env;
 	MDB_dbi dbi;
-	MDB_val key, data, data1;
+	MDB_val key, data;
 	MDB_txn *txn;
 	MDB_stat mst;
 	int count;
@@ -61,10 +65,11 @@ int main(int argc,char * argv[])
 	for (i = 2; i < count; ++i)
 		values[i] = values[i - 1] + values[i - 2];
 
+	unlink(DBPATH);
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, 104857600));
 	E(mdb_env_set_maxdbs(env, 8));
-	E(mdb_env_open(env, "./mtest8.db", env_opt, 0664));
+	E(mdb_env_open(env, DBPATH, env_opt, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
 	E(mdb_dbi_open(txn, "id8", MDB_CREATE|MDB_INTEGERKEY, &dbi));
@@ -76,82 +81,65 @@ int main(int argc,char * argv[])
 		snprintf(sval, 4000, "Value %d\n", values[i]);
 		snprintf(sval + 4000, 4000, "Value %d\n", values[i]);
 		key.mv_data = values + i;
-		E(mdb_put_attr(txn, dbi, &key, &data, timestamps[i],
-			    MDB_NODUPDATA));
+		E(mdbx_put_attr(txn, dbi, &key, &data, timestamps[i], MDB_NOOVERWRITE));
 	}
 
 	E(mdb_txn_commit(txn));
 	E(mdb_env_stat(env, &mst));
-
-	mdb_dbi_close(env, dbi);
 	mdb_env_close(env);
 
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, 10485760));
 	E(mdb_env_set_maxdbs(env, 8));
-	E(mdb_env_open(env, "./mtest8.db", env_opt, 0664));
+	E(mdb_env_open(env, DBPATH, env_opt, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
-	E(mdb_dbi_open(txn, "id8", MDB_CREATE|MDB_INTEGERKEY, &dbi));
+	E(mdb_dbi_open(txn, "id8", MDB_INTEGERKEY, &dbi));
 	for (i = 0; i < count; ++i) {
 		key.mv_data = values + i;
-		E(mdb_get_attr(txn, dbi, &key, &data, &timestamp));
+		E(mdbx_get_attr(txn, dbi, &key, &data, &timestamp));
 		E(timestamps[i] != timestamp);
-
-		E(mdb_get(txn, dbi, &key, &data1));
-		E(data.mv_size != data1.mv_size);
-		E(memcmp(data.mv_data, data1.mv_data, data.mv_size));
 	}
 
 	E(mdb_txn_commit(txn));
 	E(mdb_env_stat(env, &mst));
-
-	mdb_dbi_close(env, dbi);
 	mdb_env_close(env);
 
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, 104857600));
 	E(mdb_env_set_maxdbs(env, 8));
-	E(mdb_env_open(env, "./mtest8.db", env_opt, 0664));
+	E(mdb_env_open(env, DBPATH, env_opt, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
-	E(mdb_dbi_open(txn, "id8", MDB_CREATE|MDB_INTEGERKEY, &dbi));
+	E(mdb_dbi_open(txn, "id8", MDB_INTEGERKEY, &dbi));
 
 	for (i = 0; i < count; ++i) {
 		(void)gettimeofday(&tv, NULL);
 		timestamps[i] = tv.tv_usec + 1000000UL * tv.tv_sec;
 
 		key.mv_data = values + i;
-		E(mdb_set_attr(txn, dbi, &key, NULL, timestamps[i]));
+		E(mdbx_set_attr(txn, dbi, &key, NULL, timestamps[i]));
 	}
 
 	E(mdb_txn_commit(txn));
 	E(mdb_env_stat(env, &mst));
-
-	mdb_dbi_close(env, dbi);
 	mdb_env_close(env);
 
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, 10485760));
 	E(mdb_env_set_maxdbs(env, 8));
-	E(mdb_env_open(env, "./mtest8.db", env_opt, 0664));
+	E(mdb_env_open(env, DBPATH, env_opt, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
-	E(mdb_dbi_open(txn, "id8", MDB_CREATE|MDB_INTEGERKEY, &dbi));
+	E(mdb_dbi_open(txn, "id8", MDB_INTEGERKEY, &dbi));
 	for (i = 0; i < count; ++i) {
 		key.mv_data = values + i;
-		E(mdb_get_attr(txn, dbi, &key, &data, &timestamp));
+		E(mdbx_get_attr(txn, dbi, &key, &data, &timestamp));
 		E(timestamps[i] != timestamp);
-
-		E(mdb_get(txn, dbi, &key, &data1));
-		E(data.mv_size != data1.mv_size);
-		E(memcmp(data.mv_data, data1.mv_data, data.mv_size));
 	}
 
 	E(mdb_txn_commit(txn));
 	E(mdb_env_stat(env, &mst));
-
-	mdb_dbi_close(env, dbi);
 	mdb_env_close(env);
 
 	return 0;

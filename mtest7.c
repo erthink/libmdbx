@@ -27,6 +27,10 @@
 
 char dkbuf[1024];
 
+#ifndef DBPATH
+#	define DBPATH "./testdb/data.mdb"
+#endif
+
 int main(int argc,char * argv[])
 {
 	int i = 0, j = 0, rc;
@@ -51,10 +55,11 @@ int main(int argc,char * argv[])
 	values = (int *)malloc(count*sizeof(int));
 	timestamps = (uint64_t *)calloc(count,sizeof(uint64_t));
 
+	unlink(DBPATH);
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, 104857600));
 	E(mdb_env_set_maxdbs(env, 8));
-	E(mdb_env_open(env, "./mtest7.db", env_opt, 0664));
+	E(mdb_env_open(env, DBPATH, env_opt, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
 	E(mdb_dbi_open(txn, "id7", MDB_CREATE|MDB_INTEGERKEY, &dbi));
@@ -70,33 +75,17 @@ int main(int argc,char * argv[])
 		values[i] = rand()%16383 ^ (timestamps[i] & 0xffff);
 		key.mv_data = values + i;
 		sprintf(sval, "%03x %d foo bar", values[i], values[i]);
-		rc = mdb_set_attr(txn, dbi, &key, &data, timestamps[i]);
-		if (rc && rc != MDB_NOTFOUND) {
-			printf("mdb_set_attr returned %d\n", rc);
-			break;
-		}
-		if (i % 2) {
-			if (RES(MDB_KEYEXIST, mdb_put(txn, dbi, &key, &data,
-						MDB_NODUPDATA))) {
-				j++;
-				continue;
-			}
-			E(mdb_set_attr(txn, dbi, &key, &data, timestamps[i]));
-		} else
-			E(mdb_put_attr(txn, dbi, &key, &data, timestamps[i],
-					MDB_NODUPDATA));
+		E(mdbx_put_attr(txn, dbi, &key, &data, timestamps[i], MDB_NODUPDATA));
 	}
 	if (j) printf("%d duplicates skipped\n", j);
 	E(mdb_txn_commit(txn));
 	E(mdb_env_stat(env, &mst));
-
-	mdb_dbi_close(env, dbi);
 	mdb_env_close(env);
 
 	E(mdb_env_create(&env));
 	E(mdb_env_set_mapsize(env, 10485760));
 	E(mdb_env_set_maxdbs(env, 8));
-	E(mdb_env_open(env, "./mtest7.db", env_opt, 0664));
+	E(mdb_env_open(env, DBPATH, env_opt, 0664));
 
 	E(mdb_txn_begin(env, NULL, 0, &txn));
 	E(mdb_dbi_open(txn, "id7", MDB_CREATE|MDB_INTEGERKEY, &dbi));
@@ -105,7 +94,7 @@ int main(int argc,char * argv[])
 			continue;
 		key.mv_data = values + i;
 		sprintf(sval, "%03x %d foo bar", values[i], values[i]);
-		E(mdb_get_attr(txn, dbi, &key, &data, &timestamp));
+		E(mdbx_get_attr(txn, dbi, &key, &data, &timestamp));
 		if (timestamps[i] != timestamp) {
 			for (j = 0; j < count; ++j) {
 				if (j != i && values[i] == values[j] &&
@@ -129,8 +118,6 @@ int main(int argc,char * argv[])
 
 	E(mdb_txn_commit(txn));
 	E(mdb_env_stat(env, &mst));
-
-	mdb_dbi_close(env, dbi);
 	mdb_env_close(env);
 
 	return 0;

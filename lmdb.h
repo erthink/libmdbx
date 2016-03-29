@@ -352,8 +352,6 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 #define MDB_NODUPDATA	0x20
 /** For mdb_cursor_put: overwrite the current key/data pair */
 #define MDB_CURRENT	0x40
-/** For mdb_cursor_put_attr: set attribute */
-#define MDB_SETATTR    0x80
 /** For put: Just reserve space for data, don't copy it. Return a
  * pointer to the reserved space.
  */
@@ -407,7 +405,6 @@ typedef enum MDB_cursor_op {
 	MDB_SET,				/**< Position at specified key */
 	MDB_SET_KEY,			/**< Position at specified key, return key + data */
 	MDB_SET_RANGE,			/**< Position at first key greater than or equal to specified key. */
-	MDB_GET_ATTR,                   /**< Get attribute of specified node */
 	MDB_PREV_MULTIPLE		/**< Position at previous page and return key and up to
 								a page of duplicate data items. Only for #MDB_DUPFIXED */
 } MDB_cursor_op;
@@ -1359,31 +1356,6 @@ int  mdb_set_relctx(MDB_txn *txn, MDB_dbi dbi, void *ctx);
 	 */
 int  mdb_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 
-	/** @brief Get items attribute from a database.
-	 *
-	 * This function retrieves key/data pairs attribute from the database.
-	 * The attribute of the specified key-value pair is returned in
-	 * uint64_t to which \b attrp refers.
-	 * If the database supports duplicate keys (#MDB_DUPSORT) then both
-	 * key and data parameters are required, otherwise data is ignored.
-	 *
-	 * @note Values returned from the database are valid only until a
-	 * subsequent update operation, or the end of the transaction.
-	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
-	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
-	 * @param[in] key The key to search for in the database
-	 * @param[in] data The data for #MDB_DUPSORT databases
-	 * @param[out] attrp The pointer to the result
-	 * @return A non-zero error value on failure and 0 on success. Some possible
-	 * errors are:
-	 * <ul>
-	 *	<li>#MDB_NOTFOUND - the key-value pair was not in the database.
-	 *	<li>EINVAL - an invalid parameter was specified.
-	 * </ul>
-	 */
-int  mdb_get_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
-				uint64_t *attrp);
-
 	/** @brief Store items into a database.
 	 *
 	 * This function stores key/data pairs in the database. The default behavior
@@ -1433,77 +1405,6 @@ int  mdb_get_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 	 */
 int  mdb_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 				unsigned flags);
-
-	/** @brief Store items and attributes into a database.
-	 *
-	 * This function stores key/data pairs in the database. The default behavior
-	 * is to enter the new key/data pair, replacing any previously existing key
-	 * if duplicates are disallowed, or adding a duplicate data item if
-	 * duplicates are allowed (#MDB_DUPSORT).
-	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
-	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
-	 * @param[in] key The key to store in the database
-	 * @param[in] attr The attribute to store in the database
-	 * @param[in,out] data The data to store
-	 * @param[in] flags Special options for this operation. This parameter
-	 * must be set to 0 or by bitwise OR'ing together one or more of the
-	 * values described here.
-	 * <ul>
-	 *	<li>#MDB_NODUPDATA - enter the new key/data pair only if it does not
-	 *		already appear in the database. This flag may only be specified
-	 *		if the database was opened with #MDB_DUPSORT. The function will
-	 *		return #MDB_KEYEXIST if the key/data pair already appears in the
-	 *		database.
-	 *	<li>#MDB_NOOVERWRITE - enter the new key/data pair only if the key
-	 *		does not already appear in the database. The function will return
-	 *		#MDB_KEYEXIST if the key already appears in the database, even if
-	 *		the database supports duplicates (#MDB_DUPSORT). The \b data
-	 *		parameter will be set to point to the existing item.
-	 *	<li>#MDB_RESERVE - reserve space for data of the given size, but
-	 *		don't copy the given data. Instead, return a pointer to the
-	 *		reserved space, which the caller can fill in later - before
-	 *		the next update operation or the transaction ends. This saves
-	 *		an extra memcpy if the data is being generated later.
-	 *		LMDB does nothing else with this memory, the caller is expected
-	 *		to modify all of the space requested.
-	 *	<li>#MDB_APPEND - append the given key/data pair to the end of the
-	 *		database. This option allows fast bulk loading when keys are
-	 *		already known to be in the correct order. Loading unsorted keys
-	 *		with this flag will cause a #MDB_KEYEXIST error.
-	 *	<li>#MDB_APPENDDUP - as above, but for sorted dup data.
-	 * </ul>
-	 * @return A non-zero error value on failure and 0 on success. Some possible
-	 * errors are:
-	 * <ul>
-	 *	<li>#MDB_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
-	 *	<li>#MDB_TXN_FULL - the transaction has too many dirty pages.
-	 *	<li>EACCES - an attempt was made to write in a read-only transaction.
-	 *	<li>EINVAL - an invalid parameter was specified.
-	 * </ul>
-	 */
-int  mdb_put_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
-			    uint64_t attr, unsigned int flags);
-
-	/** @brief Set items attribute from a database.
-	 *
-	 * This function stores key/data pairs attribute to the database.
-	 * If the database supports duplicate keys (#MDB_DUPSORT) then both
-	 * key and data parameters are required, otherwise data is ignored.
-	 *
-	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
-	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
-	 * @param[in] key The key to search for in the database
-	 * @param[in] data The data for #MDB_DUPSORT databases
-	 * @param[in] attr The attribute to be stored
-	 * @return A non-zero error value on failure and 0 on success. Some possible
-	 * errors are:
-	 * <ul>
-	 *	<li>#MDB_NOTFOUND - the key-value pair was not in the database.
-	 *	<li>EINVAL - an invalid parameter was specified.
-	 * </ul>
-	 */
-int  mdb_set_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
-				uint64_t attrp);
 
 	/** @brief Delete items from a database.
 	 *
@@ -1613,30 +1514,6 @@ MDB_dbi mdb_cursor_dbi(MDB_cursor *cursor);
 int  mdb_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
 			    MDB_cursor_op op);
 
-	/** @brief Get items attribute from a database cursor.
-	 *
-	 * This function retrieves key/data pairs attribute from the database.
-	 * The attribute of the specified key-value pair is returned in
-	 * uint64_t to which \b attrp refers.
-	 * If the database supports duplicate keys (#MDB_DUPSORT) then both
-	 * key and data parameters are required, otherwise data is ignored.
-	 *
-	 * @note Values returned from the database are valid only until a
-	 * subsequent update operation, or the end of the transaction.
-	 * @param[in] mc A database cursor pointing at the node
-	 * @param[in] key The key to search for in the database
-	 * @param[in] data The data for #MDB_DUPSORT databases
-	 * @param[out] attrp The pointer to the result
-	 * @return A non-zero error value on failure and 0 on success. Some possible
-	 * errors are:
-	 * <ul>
-	 *	<li>#MDB_NOTFOUND - the key-value pair was not in the database.
-	 *	<li>EINVAL - an invalid parameter was specified.
-	 * </ul>
-	 */
-int mdb_cursor_get_attr(MDB_cursor *mc, MDB_val *key, MDB_val *data,
-				uint64_t *attrp);
-
 	/** @brief Store by cursor.
 	 *
 	 * This function stores key/data pairs into the database.
@@ -1698,69 +1575,6 @@ int mdb_cursor_get_attr(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	 */
 int  mdb_cursor_put(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
 				unsigned flags);
-
-	/** @brief Store by cursor with attribute.
-	 *
-	 * This function stores key/data pairs into the database.
-	 * The cursor is positioned at the new item, or on failure usually near it.
-	 * @note Earlier documentation incorrectly said errors would leave the
-	 * state of the cursor unchanged.
-	 * @param[in] cursor A cursor handle returned by #mdb_cursor_open()
-	 * @param[in] key The key operated on.
-	 * @param[in] data The data operated on.
-	 * @param[in] attr The attribute.
-	 * @param[in] flags Options for this operation. This parameter
-	 * must be set to 0 or one of the values described here.
-	 * <ul>
-	 *	<li>#MDB_CURRENT - replace the item at the current cursor position.
-	 *		The \b key parameter must still be provided, and must match it.
-	 *		If using sorted duplicates (#MDB_DUPSORT) the data item must still
-	 *		sort into the same place. This is intended to be used when the
-	 *		new data is the same size as the old. Otherwise it will simply
-	 *		perform a delete of the old record followed by an insert.
-	 *	<li>#MDB_NODUPDATA - enter the new key/data pair only if it does not
-	 *		already appear in the database. This flag may only be specified
-	 *		if the database was opened with #MDB_DUPSORT. The function will
-	 *		return #MDB_KEYEXIST if the key/data pair already appears in the
-	 *		database.
-	 *	<li>#MDB_NOOVERWRITE - enter the new key/data pair only if the key
-	 *		does not already appear in the database. The function will return
-	 *		#MDB_KEYEXIST if the key already appears in the database, even if
-	 *		the database supports duplicates (#MDB_DUPSORT).
-	 *	<li>#MDB_RESERVE - reserve space for data of the given size, but
-	 *		don't copy the given data. Instead, return a pointer to the
-	 *		reserved space, which the caller can fill in later. This saves
-	 *		an extra memcpy if the data is being generated later.
-	 *	<li>#MDB_APPEND - append the given key/data pair to the end of the
-	 *		database. No key comparisons are performed. This option allows
-	 *		fast bulk loading when keys are already known to be in the
-	 *		correct order. Loading unsorted keys with this flag will cause
-	 *		data corruption.
-	 *	<li>#MDB_APPENDDUP - as above, but for sorted dup data.
-	 *	<li>#MDB_MULTIPLE - store multiple contiguous data elements in a
-	 *		single request. This flag may only be specified if the database
-	 *		was opened with #MDB_DUPFIXED. The \b data argument must be an
-	 *		array of two MDB_vals. The mv_size of the first MDB_val must be
-	 *		the size of a single data element. The mv_data of the first MDB_val
-	 *		must point to the beginning of the array of contiguous data elements.
-	 *		The mv_size of the second MDB_val must be the count of the number
-	 *		of data elements to store. On return this field will be set to
-	 *		the count of the number of elements actually written. The mv_data
-	 *		of the second MDB_val is unused.
-	 *	<li>#MDB_SETATTR - set the attribute of the key/data pair to
-	 *		specified value.
-	 * </ul>
-	 * @return A non-zero error value on failure and 0 on success. Some possible
-	 * errors are:
-	 * <ul>
-	 *	<li>#MDB_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
-	 *	<li>#MDB_TXN_FULL - the transaction has too many dirty pages.
-	 *	<li>EACCES - an attempt was made to write in a read-only transaction.
-	 *	<li>EINVAL - an invalid parameter was specified.
-	 * </ul>
-	 */
-int  mdb_cursor_put_attr(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
-				uint64_t attr, unsigned int flags);
 
 	/** @brief Delete current key/data pair
 	 *
@@ -1915,6 +1729,170 @@ int mdbx_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* ctx);
 #endif /* MDBX_MODE_ENABLED */
 
 char* mdb_dkey(MDB_val *key, char *buf);
+
+/* attribute support functions for Nexenta ***********************************/
+#if MDBX_MODE_ENABLED
+
+typedef uint64_t mdbx_attr_t;
+
+	/** @brief Store by cursor with attribute.
+	 *
+	 * This function stores key/data pairs into the database.
+	 * The cursor is positioned at the new item, or on failure usually near it.
+	 * @note Internally based on #MDB_RESERVE feature, therefore doesn't support #MDB_DUPSORT.
+	 * @note Earlier documentation incorrectly said errors would leave the
+	 * state of the cursor unchanged.
+	 * @param[in] cursor A cursor handle returned by #mdb_cursor_open()
+	 * @param[in] key The key operated on.
+	 * @param[in] data The data operated on.
+	 * @param[in] attr The attribute.
+	 * @param[in] flags Options for this operation. This parameter
+	 * must be set to 0 or one of the values described here.
+	 * <ul>
+	 *	<li>#MDB_CURRENT - replace the item at the current cursor position.
+	 *		The \b key parameter must still be provided, and must match it.
+	 *		This is intended to be used when the
+	 *		new data is the same size as the old. Otherwise it will simply
+	 *		perform a delete of the old record followed by an insert.
+	 *	<li>#MDB_NOOVERWRITE - enter the new key/data pair only if the key
+	 *		does not already appear in the database. The function will return
+	 *		#MDB_KEYEXIST if the key already appears in the database.
+	 *	<li>#MDB_RESERVE - reserve space for data of the given size, but
+	 *		don't copy the given data. Instead, return a pointer to the
+	 *		reserved space, which the caller can fill in later. This saves
+	 *		an extra memcpy if the data is being generated later.
+	 *	<li>#MDB_APPEND - append the given key/data pair to the end of the
+	 *		database. No key comparisons are performed. This option allows
+	 *		fast bulk loading when keys are already known to be in the
+	 *		correct order. Loading unsorted keys with this flag will cause
+	 *		data corruption.
+	 * </ul>
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDB_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
+	 *	<li>#MDB_TXN_FULL - the transaction has too many dirty pages.
+	 *	<li>EACCES - an attempt was made to write in a read-only transaction.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_cursor_put_attr(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
+				mdbx_attr_t attr, unsigned flags);
+
+	/** @brief Store items and attributes into a database.
+	 *
+	 * This function stores key/data pairs in the database. The default behavior
+	 * is to enter the new key/data pair, replacing any previously existing key
+	 * if duplicates are disallowed.
+	 * @note Internally based on #MDB_RESERVE feature, therefore doesn't support #MDB_DUPSORT.
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
+	 * @param[in] key The key to store in the database
+	 * @param[in] attr The attribute to store in the database
+	 * @param[in,out] data The data to store
+	 * @param[in] flags Special options for this operation. This parameter
+	 * must be set to 0 or by bitwise OR'ing together one or more of the
+	 * values described here.
+	 * <ul>
+	 *	<li>#MDB_NOOVERWRITE - enter the new key/data pair only if the key
+	 *		does not already appear in the database. The function will return
+	 *		#MDB_KEYEXIST if the key already appears in the database. The \b data
+	 *		parameter will be set to point to the existing item.
+	 *	<li>#MDB_RESERVE - reserve space for data of the given size, but
+	 *		don't copy the given data. Instead, return a pointer to the
+	 *		reserved space, which the caller can fill in later - before
+	 *		the next update operation or the transaction ends. This saves
+	 *		an extra memcpy if the data is being generated later.
+	 *		LMDB does nothing else with this memory, the caller is expected
+	 *		to modify all of the space requested.
+	 *	<li>#MDB_APPEND - append the given key/data pair to the end of the
+	 *		database. This option allows fast bulk loading when keys are
+	 *		already known to be in the correct order. Loading unsorted keys
+	 *		with this flag will cause a #MDB_KEYEXIST error.
+	 * </ul>
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDB_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
+	 *	<li>#MDB_TXN_FULL - the transaction has too many dirty pages.
+	 *	<li>EACCES - an attempt was made to write in a read-only transaction.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_put_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+				mdbx_attr_t attr, unsigned flags);
+
+	/** @brief Set items attribute from a database.
+	 *
+	 * This function stores key/data pairs attribute to the database.
+	 * @note Internally based on #MDB_RESERVE feature, therefore doesn't support #MDB_DUPSORT.
+	 *
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
+	 * @param[in] key The key to search for in the database
+	 * @param[in] data The data to be stored or NULL to save previous value.
+	 * @param[in] attr The attribute to be stored
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDB_NOTFOUND - the key-value pair was not in the database.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_set_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+				mdbx_attr_t attr);
+
+	/** @brief Get items attribute from a database cursor.
+	 *
+	 * This function retrieves key/data pairs attribute from the database.
+	 * The attribute of the specified key-value pair is returned in
+	 * uint64_t to which \b attrptr refers.
+	 * If the database supports duplicate keys (#MDB_DUPSORT) then both
+	 * key and data parameters are required, otherwise data could be NULL.
+	 *
+	 * @note Values returned from the database are valid only until a
+	 * subsequent update operation, or the end of the transaction.
+	 * @param[in] mc A database cursor pointing at the node
+	 * @param[in] key The key to search for in the database
+	 * @param[in,out] data The data for #MDB_DUPSORT databases
+	 * @param[out] attrptr The pointer to the result
+	 * @param[in] op A cursor operation #MDB_cursor_op
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDB_NOTFOUND - the key-value pair was not in the database.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_cursor_get_attr(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+				mdbx_attr_t *attrptr, MDB_cursor_op op);
+
+	/** @brief Get items attribute from a database.
+	 *
+	 * This function retrieves key/data pairs attribute from the database.
+	 * The attribute of the specified key-value pair is returned in
+	 * uint64_t to which \b attrptr refers.
+	 * If the database supports duplicate keys (#MDB_DUPSORT) then both
+	 * key and data parameters are required, otherwise data is ignored.
+	 *
+	 * @note Values returned from the database are valid only until a
+	 * subsequent update operation, or the end of the transaction.
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
+	 * @param[in] key The key to search for in the database
+	 * @param[in] data The data for #MDB_DUPSORT databases
+	 * @param[out] attrptr The pointer to the result
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDB_NOTFOUND - the key-value pair was not in the database.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_get_attr(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+				mdbx_attr_t *attrptr);
+
+#endif /* MDBX_MODE_ENABLED */
 
 #ifdef __cplusplus
 }
