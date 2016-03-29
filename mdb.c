@@ -6866,7 +6866,7 @@ current:
 					 * bother to try shrinking the page if the new data
 					 * is smaller than the overflow threshold.
 					 */
-					if (level > 1) {
+					if (unlikely(level > 1)) {
 						/* It is writable only in a parent txn */
 						size_t sz = (size_t) env->me_psize * ovpages, off;
 						MDB_page *np = mdb_page_malloc(mc->mc_txn, ovpages);
@@ -6878,7 +6878,8 @@ current:
 						/* Note - this page is already counted in parent's dirty_room */
 						rc2 = mdb_mid2l_insert(mc->mc_txn->mt_u.dirty_list, &id2);
 						mdb_cassert(mc, rc2 == 0);
-						if (!(flags & MDB_RESERVE)) {
+						if (1 || /* LY: Hm, why we should do this differently in dependence from MDB_RESERVE? */
+								!(flags & MDB_RESERVE)) {
 							/* Copy end of page, adjusting alignment so
 							 * compiler may copy words instead of bytes.
 							 */
