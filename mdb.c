@@ -6543,6 +6543,11 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			return MDB_INCOMPATIBLE;
 	}
 
+	if (flags & MDB_RESERVE) {
+		if (unlikely(mc->mc_db->md_flags & (MDB_DUPSORT | MDB_REVERSEDUP)))
+			return MDB_INCOMPATIBLE;
+	}
+
 	nospill = flags & MDB_NOSPILL;
 	flags &= ~MDB_NOSPILL;
 
