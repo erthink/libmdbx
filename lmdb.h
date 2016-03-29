@@ -262,7 +262,7 @@ typedef struct MDB_val {
 #endif /* MDBX_MODE_ENABLED */
 
 /** @brief A callback function used to compare two keys in a database */
-typedef long (MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
+typedef int (MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
 
 /** @brief A callback function used to relocate a position-dependent data item
  * in a fixed-address database.

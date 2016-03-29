@@ -5121,57 +5121,66 @@ mdb_env_close(MDB_env *env)
 	mdbx_env_close_ex(env, 0);
 }
 
+/* LY: fast enough on most arches
+ *
+ *                /
+ *                | -1, a < b
+ * cmp2int(a,b) = <  0, a == b
+ *                |  1, a > b
+ *                \
+ */
+#define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
+
 /** Compare two items pointing at aligned unsigned int's. */
-static long __hot
+static int __hot
 mdb_cmp_int_ai(const MDB_val *a, const MDB_val *b)
 {
 	mdb_assert(NULL, a->mv_size == b->mv_size);
 	mdb_assert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(int)
 				&& 0 == (uintptr_t) b->mv_data % sizeof(int));
 
-	if (sizeof(int) != sizeof(long) && likely(a->mv_size == sizeof(long)))
-		return *(long *)a->mv_data - *(long *)b->mv_data;
+	if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
+		return mdbx_cmp2int( *(size_t *)a->mv_data, *(size_t *)b->mv_data );
 
 	mdb_assert(NULL, a->mv_size == sizeof(int) );
-	return *(int *)a->mv_data - *(int *)b->mv_data;
+	return mdbx_cmp2int( *(unsigned *)a->mv_data, *(unsigned *)b->mv_data );
 }
 
 /** Compare two items pointing at 2-byte aligned unsigned int's. */
-static long __hot
+static int __hot
 mdb_cmp_int_a2(const MDB_val *a, const MDB_val *b)
 {
 	mdb_assert(NULL, a->mv_size == b->mv_size);
-	mdb_assert(NULL, 0 == a->mv_size % sizeof(short));
-	mdb_assert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(short)
-				&& 0 == (uintptr_t) b->mv_data % sizeof(short));
+	mdb_assert(NULL, 0 == (uintptr_t) a->mv_data % sizeof(uint16_t)
+				&& 0 == (uintptr_t) b->mv_data % sizeof(uint16_t));
 #ifdef MISALIGNED_OK
-	if (sizeof(int) != sizeof(long) && likely(a->mv_size == sizeof(long)))
-		return *(long *)a->mv_data - *(long *)b->mv_data;
+	if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
+		return mdbx_cmp2int( *(size_t *)a->mv_data, *(size_t *)b->mv_data );
 
 	mdb_assert(NULL, a->mv_size == sizeof(int) );
-	return *(int *)a->mv_data - *(int *)b->mv_data;
+	return mdbx_cmp2int( *(unsigned *)a->mv_data, *(unsigned *)b->mv_data );
 #else
+	mdb_assert(NULL, 0 == a->mv_size % sizeof(uint16_t));
 	{
-		long x;
-		unsigned short *u, *c;
+		int diff;
+		const uint16_t *pa, *pb, *end;
 
 #if BYTE_ORDER == LITTLE_ENDIAN
-		u = (unsigned short *) ((char *) a->mv_data + a->mv_size);
-		c = (unsigned short *) ((char *) b->mv_data + a->mv_size);
+		end = (const uint16_t *) a->mv_data;
+		pa = (const uint16_t *) ((char *) a->mv_data + a->mv_size);
+		pb = (const uint16_t *) ((char *) b->mv_data + a->mv_size);
 		do {
-			x = *--u - *--c;
-		} while(!x && u > (unsigned short *)a->mv_data);
+			diff = *--pa - *--pb;
 #else /* BYTE_ORDER */
-		unsigned short *end;
-
-		end = (unsigned short *) ((char *) a->mv_data + a->mv_size);
-		u = (unsigned short *)a->mv_data;
-		c = (unsigned short *)b->mv_data;
+		end = (const uint16_t *) ((char *) a->mv_data + a->mv_size);
+		pa = (const uint16_t *) a->mv_data;
+		pb = (const uint16_t *) b->mv_data;
 		do {
-			x = *u++ - *c++;
-		} while(!x && u < end);
+			diff = *pa++ - *pb++;
 #endif /* BYTE_ORDER */
-		return x;
+			if (likely(diff != 0)) break;
+		} while(pa != end);
+		return diff;
 	}
 #endif /* MISALIGNED_OK */
 }
@@ -5180,82 +5189,64 @@ mdb_cmp_int_a2(const MDB_val *a, const MDB_val *b)
  *
  *	This is also set as #MDB_INTEGERDUP|#MDB_DUPFIXED's #MDB_dbx.%md_dcmp.
  */
-static long __hot
+static int __hot
 mdb_cmp_int_ua(const MDB_val *a, const MDB_val *b)
 {
 	mdb_assert(NULL, a->mv_size == b->mv_size);
 #if MISALIGNED_OK
-	if (sizeof(int) != sizeof(long) && likely(a->mv_size == sizeof(long)))
-		return *(long *)a->mv_data - *(long *)b->mv_data;
+	if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
+		return mdbx_cmp2int( *(size_t *)a->mv_data, *(size_t *)b->mv_data );
 
 	mdb_assert(NULL, a->mv_size == sizeof(int) );
-	return *(int *)a->mv_data - *(int *)b->mv_data;
+	return mdbx_cmp2int( *(unsigned *)a->mv_data, *(unsigned *)b->mv_data );
 #else
 	mdb_assert(NULL, a->mv_size == sizeof(int) || a->mv_size == sizeof(size_t));
-	{
 #if BYTE_ORDER == LITTLE_ENDIAN
-		const unsigned char	*p1, *p2;
-		long diff;
+	{
+		int diff;
+		const uint8_t *pa, *pb;
 
-		p1 = (const unsigned char *)a->mv_data + a->mv_size;
-		p2 = (const unsigned char *)b->mv_data + a->mv_size;
+		pa = (const uint8_t *)a->mv_data + a->mv_size;
+		pb = (const uint8_t *)b->mv_data + a->mv_size;
 
 		do {
-			diff = *--p1 - *--p2;
-			if (diff)
-				return diff;
-		} while(p1 != a->mv_data);
-		return 0;
+			diff = *--pa - *--pb;
+			if (likely(diff)) break;
+		} while(pa != a->mv_data);
+		return diff;
 	}
 #else /* BYTE_ORDER */
-		return memcmp(a->mv_data, b->mv_data, a->mv_size);
+	return memcmp(a->mv_data, b->mv_data, a->mv_size);
 #endif /* BYTE_ORDER */
 #endif /* MISALIGNED_OK */
 }
 
 /** Compare two items lexically */
-static long __hot
+static int __hot
 mdb_cmp_memn(const MDB_val *a, const MDB_val *b)
 {
-	long diff;
-	ssize_t len_diff;
-	unsigned len;
-
-	len = a->mv_size;
-	len_diff = (ssize_t) a->mv_size - (ssize_t) b->mv_size;
-	if (len_diff > 0) {
-		len = b->mv_size;
-		len_diff = 1;
-	}
-
-	diff = memcmp(a->mv_data, b->mv_data, len);
-	return diff ? diff : len_diff<0 ? -1 : len_diff;
+	size_t minlen = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
+	int diff = memcmp(a->mv_data, b->mv_data, minlen);
+	return likely(diff) ? diff : mdbx_cmp2int(a->mv_size, b->mv_size);
 }
 
 /** Compare two items in reverse byte order */
-static long __hot
+static int __hot
 mdb_cmp_memnr(const MDB_val *a, const MDB_val *b)
 {
-	const unsigned char	*p1, *p2, *p1_lim;
-	ssize_t len_diff;
-	long diff;
+	const uint8_t *pa, *pb, *end;
 
-	p1_lim = (const unsigned char *)a->mv_data;
-	p1 = (const unsigned char *)a->mv_data + a->mv_size;
-	p2 = (const unsigned char *)b->mv_data + b->mv_size;
+	pa = (const uint8_t *)a->mv_data + a->mv_size;
+	pb = (const uint8_t *)b->mv_data + b->mv_size;
+	size_t minlen = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
+	end = pa - minlen;
 
-	len_diff = (ssize_t) a->mv_size - (ssize_t) b->mv_size;
-	if (len_diff > 0) {
-		p1_lim += len_diff;
-		len_diff = 1;
-	}
-
-	while (p1 > p1_lim) {
-		diff = *--p1 - *--p2;
-		if (unlikely(diff))
+	while (pa != end) {
+		int diff = *--pa - *--pb;
+		if (likely(diff))
 			return diff;
 	}
-	return len_diff<0 ? -1 : len_diff;
+	return mdbx_cmp2int(a->mv_size, b->mv_size);
 }
 
 /** Search for key within a page, using binary search.
