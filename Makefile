@@ -160,23 +160,28 @@ ifneq ($(wildcard $(IOARENA)),)
 
 .PHONY: bench clean-bench re-bench
 
-bench: bench-lmdb.txt bench-mdbx.txt
-
 clean-bench:
 	rm -rf bench-*.txt _ioarena
 
 re-bench: clean-bench bench
 
+NN := 1000000
+define bench-rule
+bench-$(1).txt: $(3) $(IOARENA) Makefile
+	$(IOARENA) -D $(1) -B crud -m nosync -n $(2) | tee $$@ | grep throughput \
+	&& $(IOARENA) -D $(1) -B get,iterate -m sync -r 4 -n $(2) | tee -a $$@ | grep throughput \
+	|| rm -f $$@
+
+endef
+
+$(eval $(call bench-rule,mdbx,$(NN),libmdbx.so))
+
+$(eval $(call bench-rule,lmdb,$(NN)))
+
+$(eval $(call bench-rule,dummy,$(NN)))
+
+$(eval $(call bench-rule,debug,10))
+
 bench: bench-lmdb.txt bench-mdbx.txt
-
-bench-mdbx.txt: libmdbx.so $(IOARENA)
-	$(IOARENA) -D mdbx -B crud -m nosync -n 10000000 | tee $@ \
-	&& $(IOARENA) -D mdbx -B get,iterate -m sync -r 4 -n 10000000 | tee -a $@ \
-	|| rm -f $@
-
-bench-lmdb.txt: $(IOARENA)
-	$(IOARENA) -D lmdb -B crud -m nosync -n 10000000 | tee $@ \
-	&& $(IOARENA) -D lmdb -B get,iterate -m sync -r 4 -n 10000000 | tee -a $@ \
-	|| rm -f $@
 
 endif
