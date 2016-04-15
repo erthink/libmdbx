@@ -217,6 +217,9 @@ static void periodic_add_rec() {
 }
 
 int main(int argc, char** argv) {
+	(void) argc;
+	(void) argv;
+
 	char filename[PATH_MAX];
 	mkdir(opt_db_path, 0775);
 

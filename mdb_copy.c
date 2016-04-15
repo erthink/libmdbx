@@ -25,6 +25,7 @@
 static void
 sighandle(int sig)
 {
+	(void) sig;
 }
 
 int main(int argc,char * argv[])

@@ -18,8 +18,8 @@ prefix	?= /usr/local
 mandir	?= $(prefix)/man
 
 CC	?= gcc
-XCFLAGS	?=
-CFLAGS	?= -O2 -ggdb3 -Wall -Werror -DNDEBUG=1
+XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
+CFLAGS	?= -O2 -g -Wall -Werror -Wextra
 CFLAGS	+= -pthread $(XCFLAGS)
 
 IOARENA ?= ../ioarena.git/@BUILD/src/ioarena

@@ -240,6 +240,9 @@ static void periodic_stat(void) {
 //}
 
 int main(int argc, char** argv) {
+	(void) argc;
+	(void) argv;
+
 	char filename[PATH_MAX];
 	int i;
 	int64_t t;

@@ -205,6 +205,9 @@ static void wbench(int flags, int mb, int count, int salt)
 
 int main(int argc,char * argv[])
 {
+	(void) argc;
+	(void) argv;
+
 #define SALT	1
 #define COUNT	10000
 #define SIZE	12

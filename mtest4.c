@@ -47,6 +47,8 @@ int main(int argc,char * argv[])
 	int env_oflags;
 	struct stat db_stat, exe_stat;
 
+	(void) argc;
+	(void) argv;
 	memset(sval, 0, sizeof(sval));
 
 	count = 510;
