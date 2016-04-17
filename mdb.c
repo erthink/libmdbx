@@ -4336,16 +4336,17 @@ mdb_env_map(MDB_env *env, void *addr)
 		return errno;
 	}
 
-	if (flags & MDB_NORDAHEAD) {
-		/* Turn off readahead. It's harmful when the DB is larger than RAM. */
-		if (madvise(env->me_map, env->me_mapsize, MADV_RANDOM) < 0)
-			return errno;
+	/* Can happen because the address argument to mmap() is just a
+	 * hint.  mmap() can pick another, e.g. if the range is in use.
+	 * The MAP_FIXED flag would prevent that, but then mmap could
+	 * instead unmap existing pages to make room for the new map.
+	 */
+	if (addr && env->me_map != addr) {
+		errno = 0;	/* LY: clean errno as a hit for this case */
+		return EBUSY;	/* TODO: Make a new MDB_* error code? */
 	}
 
 	if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK) < 0)
-		return errno;
-
-	if (madvise(env->me_map, env->me_mapsize, MADV_WILLNEED) < 0)
 		return errno;
 
 #ifdef MADV_NOHUGEPAGE
@@ -4358,14 +4359,13 @@ mdb_env_map(MDB_env *env, void *addr)
 	}
 #endif
 
-	/* Can happen because the address argument to mmap() is just a
-	 * hint.  mmap() can pick another, e.g. if the range is in use.
-	 * The MAP_FIXED flag would prevent that, but then mmap could
-	 * instead unmap existing pages to make room for the new map.
-	 */
-	if (addr && env->me_map != addr) {
-		errno = 0;	/* LY: clean errno as a hit for this case */
-		return EBUSY;	/* TODO: Make a new MDB_* error code? */
+	if (madvise(env->me_map, env->me_mapsize, MADV_WILLNEED) < 0)
+		return errno;
+
+	if (flags & MDB_NORDAHEAD) {
+		/* Turn off readahead. It's harmful when the DB is larger than RAM. */
+		if (madvise(env->me_map, env->me_mapsize, MADV_RANDOM) < 0)
+			return errno;
 	}
 
 	/* Lock meta pages to avoid unexpected write,
@@ -4374,8 +4374,8 @@ mdb_env_map(MDB_env *env, void *addr)
 		return errno;
 
 #ifdef USE_VALGRIND
-	env->me_valgrind_handle = VALGRIND_CREATE_BLOCK(
-				env->me_map, env->me_mapsize, "lmdb");
+	env->me_valgrind_handle =
+		VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "lmdb");
 #endif
 
 	return MDB_SUCCESS;
