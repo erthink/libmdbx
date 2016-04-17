@@ -2114,7 +2114,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 		goto fail;
 	}
 
-	for (;;) { /* oomkick retry loop */
+	for (;;) { /* oom-kick retry loop */
 		found_old = 0;
 		for (op = MDB_FIRST;; op = (flags & MDB_LIFORECLAIM) ? MDB_PREV : MDB_NEXT) {
 			MDB_val key, data;
@@ -3462,7 +3462,7 @@ again:
 				/* LY: need more just a txn-id for save page list. */
 				rc = mdb_page_alloc(&mc, 0, NULL, MDB_ALLOC_GC);
 				if (likely(rc == 0))
-					/* LY: ок, reclaimed from freedb. */
+					/* LY: ok, reclaimed from freedb. */
 					continue;
 				if (unlikely(rc != MDB_NOTFOUND))
 					/* LY: other troubles... */
