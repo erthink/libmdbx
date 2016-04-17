@@ -4869,6 +4869,13 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
+#if MDB_LIFORECLAIM
+	/* LY: don't allow LIFO with just NOMETASYNC */
+	if ((flags & (MDB_NOMETASYNC | MDB_LIFORECLAIM | MDB_NOSYNC))
+			== (MDB_NOMETASYNC | MDB_LIFORECLAIM))
+		return EINVAL;
+#endif /* MDB_LIFORECLAIM */
+
 	if (env->me_fd != INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
 		return EINVAL;
 
@@ -9573,14 +9580,30 @@ mdb_env_copy(MDB_env *env, const char *path)
 }
 
 int __cold
-mdb_env_set_flags(MDB_env *env, unsigned flag, int onoff)
+mdb_env_set_flags(MDB_env *env, unsigned flags, int onoff)
 {
-	if (unlikely(flag & ~CHANGEABLE))
+	if (unlikely(flags & ~CHANGEABLE))
 		return EINVAL;
+
+	pthread_mutex_t *mutex = MDB_MUTEX(env, w);
+	int rc = mdb_mutex_lock(env, mutex);
+	if (unlikely(rc))
+		return rc;
+
 	if (onoff)
-		env->me_flags |= flag;
+		flags = env->me_flags | flags;
 	else
-		env->me_flags &= ~flag;
+		flags = env->me_flags & ~flags;
+
+#if MDB_LIFORECLAIM
+	/* LY: don't allow LIFO with just NOMETASYNC */
+	if ((flags & (MDB_NOMETASYNC | MDB_LIFORECLAIM | MDB_NOSYNC))
+			== (MDB_NOMETASYNC | MDB_LIFORECLAIM))
+		return EINVAL;
+#endif /* MDB_LIFORECLAIM */
+	env->me_flags = flags;
+
+	mdb_mutex_unlock(env, mutex);
 	return MDB_SUCCESS;
 }
 
