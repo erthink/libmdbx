@@ -28,7 +28,6 @@
 /** @defgroup idls	ID List Management
  *	@{
  */
-#define CMP(x,y)	 ( (x) < (y) ? -1 : (x) > (y) )
 
 static unsigned __hot
 mdb_midl_search( MDB_IDL ids, MDB_ID id )
@@ -46,7 +45,7 @@ mdb_midl_search( MDB_IDL ids, MDB_ID id )
 	while( 0 < n ) {
 		unsigned pivot = n >> 1;
 		cursor = base + pivot + 1;
-		val = CMP( ids[cursor], id );
+		val = mdbx_cmp2int( ids[cursor], id );
 
 		if( val < 0 ) {
 			n = pivot;
@@ -295,7 +294,7 @@ mdb_mid2l_search( MDB_ID2L ids, MDB_ID id )
 	while( 0 < n ) {
 		unsigned pivot = n >> 1;
 		cursor = base + pivot + 1;
-		val = CMP( id, ids[cursor].mid );
+		val = mdbx_cmp2int( id, ids[cursor].mid );
 
 		if( val < 0 ) {
 			n = pivot;

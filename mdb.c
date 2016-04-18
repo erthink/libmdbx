@@ -5136,7 +5136,11 @@ mdb_env_close(MDB_env *env)
  *                |  1, a > b
  *                \
  */
-#define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
+#if 1
+#	define mdbx_cmp2int(a, b) (((b) > (a)) ? -1 : (a) > (b))
+#else
+#	define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
+#endif
 
 /** Compare two items pointing at aligned unsigned int's. */
 static int __hot
