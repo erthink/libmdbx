@@ -3282,31 +3282,16 @@ mdb_backlog_size(MDB_txn *txn)
 static int
 mdb_prep_backlog(MDB_txn *txn, MDB_cursor *mc)
 {
-	/* LY: Critical level (1) for copy a one leaf-page.
-	 * But also (+2) for split leaf-page into a couple with creation
-	 * one branch-page (for ability of insertion and my paranoia). */
-	int minimal_level = 3;
-
-	/* LY: Safe level for update branch-pages from root */
-	int safe_level = minimal_level + 8;
-
-	if (mdb_backlog_size(txn) < safe_level) {
-		/* Make sure "hot" pages of freeDB is touched and on freelist */
+	if (mdb_backlog_size(txn) <= mc->mc_db->md_depth) {
 		int rc = mdb_cursor_touch(mc);
 		if (unlikely(rc))
 			return rc;
 
-		while (mdb_backlog_size(txn) < minimal_level) {
-			MDB_page *mp = NULL;
-			rc = mdb_page_alloc(mc, 1, &mp, MDB_ALLOC_GC | MDB_ALLOC_NEW);
-			if (unlikely(rc))
+		/* LY: one more page is required if a b-tree needs rebalancing */
+		if (unlikely(mdb_backlog_size(txn) < 1)) {
+			rc = mdb_page_alloc(mc, 1, NULL, MDB_ALLOC_GC);
+			if (unlikely(rc && rc != MDB_NOTFOUND))
 				return rc;
-			if (mp) {
-				NEXT_LOOSE_PAGE(mp) = txn->mt_loose_pgs;
-				txn->mt_loose_pgs = mp;
-				txn->mt_loose_count++;
-				mp->mp_flags |= P_LOOSE;
-			}
 		}
 	}
 
