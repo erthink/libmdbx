@@ -1902,7 +1902,7 @@ mdb_meta_head_r(MDB_env *env) {
 	} else if (likely(b->mm_txnid == head_txnid)) {
 		h = b;
 	} else {
-		/* LY: seems got a race with mdb_env_sync0() */
+		/* LY: seems got a collision with mdb_env_sync0() */
 		mdb_coherent_barrier();
 		head_txnid = env->me_txns->mti_txnid;
 		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
@@ -2321,6 +2321,12 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 				 * utterly no-sync write mode was requested. In such case
 				 * don't make a steady-sync, but only a legacy-mode checkpoint,
 				 * just for resume reclaiming only, not for data consistency. */
+
+				mdb_debug("kick-gc: head %zu/%c, tail %zu/%c, oldest %zu, txnid %zu",
+					head->mm_txnid, META_IS_WEAK(head) ? 'W' : 'N',
+					tail->mm_txnid, META_IS_WEAK(tail) ? 'W' : 'N',
+					oldest, env->me_txns->mt1.mtb.mtb_txnid );
+
 				int flags = env->me_flags & MDB_WRITEMAP;
 				if ((env->me_flags & MDB_UTTERLY_NOSYNC) == MDB_UTTERLY_NOSYNC)
 					flags |= MDB_UTTERLY_NOSYNC;
@@ -4119,17 +4125,17 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	int rc;
 	MDB_meta* head = mdb_meta_head_w(env);
 	size_t prev_mapsize = head->mm_mapsize;
-	MDB_meta* tail = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
-	off_t offset = (char*) tail - env->me_map;
+	volatile MDB_meta* target = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
+	off_t offset = (char*) target - env->me_map;
 	size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
 
 	mdb_assert(env, (env->me_flags & (MDB_RDONLY | MDB_FATAL_ERROR)) == 0);
 	mdb_assert(env, META_IS_WEAK(head) || env->me_sync_pending != 0
 			   || env->me_mapsize != prev_mapsize);
 	mdb_assert(env, pending->mm_txnid > head->mm_txnid || META_IS_WEAK(head));
-	mdb_assert(env, pending->mm_txnid > tail->mm_txnid || META_IS_WEAK(tail));
+	mdb_assert(env, pending->mm_txnid > target->mm_txnid || META_IS_WEAK(target));
 
-	MDB_meta* stay = mdb_env_meta_flipflop(env, tail);
+	MDB_meta* stay = mdb_env_meta_flipflop(env, (MDB_meta*) target);
 	mdb_assert(env, pending->mm_txnid > stay->mm_txnid);
 
 	pending->mm_mapsize = env->me_mapsize;
@@ -4157,7 +4163,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			if ((flags & MDB_MAPASYNC) == 0)
 				env->me_sync_pending = 0;
 		} else {
-			int (*sync_fd)(int fd) = fdatasync;
+			int (*flush)(int fd) = fdatasync;
 			if (unlikely(prev_mapsize != pending->mm_mapsize)) {
 				/* LY: It is no reason to use fdatasync() here, even in case
 				 * no such bug in a kernel. Because "no-bug" mean that a kernel
@@ -4169,9 +4175,9 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 				 *
 				 * For more info about of a corresponding fdatasync() bug
 				 * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-				sync_fd = fsync;
+				flush = fsync;
 			}
-			while(unlikely(sync_fd(env->me_fd) < 0)) {
+			while(unlikely(flush(env->me_fd) < 0)) {
 				rc = errno;
 				if (rc != EINTR)
 					goto undo;
@@ -4188,23 +4194,27 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			(flags & MDB_UTTERLY_NOSYNC) == MDB_UTTERLY_NOSYNC
 				? MDB_DATASIGN_NONE : MDB_DATASIGN_WEAK;
 	}
-	mdb_debug("writing meta page %d for root page %zu",
-		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root);
+	mdb_debug("writing meta %d, root %zu, txn_id %zu, %s",
+		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root,
+		pending->mm_txnid,
+		META_IS_WEAK(pending) ? "Weak" : META_IS_STEADY(pending) ? "Steady" : "Legacy" );
+
 	if (env->me_flags & MDB_WRITEMAP) {
 #ifdef __SANITIZE_THREAD__
 		pthread_mutex_lock(&tsan_mutex);
 #endif
-		tail->mm_datasync_sign = MDB_DATASIGN_WEAK;
-		tail->mm_txnid = 0;
-		mdb_coherent_barrier();
-		tail->mm_mapsize = pending->mm_mapsize;
-		tail->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
-		tail->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
-		tail->mm_last_pg = pending->mm_last_pg;
-		/* (LY) ITS#7969: issue a memory barrier, it is noop for x86. */
-		mdb_coherent_barrier();
-		tail->mm_txnid = pending->mm_txnid;
-		tail->mm_datasync_sign = pending->mm_datasync_sign;
+		/* LY: 'invalidate' the meta,
+		 * but mdb_meta_head_r() will be confused/retired in collision case. */
+		target->mm_datasync_sign = MDB_DATASIGN_WEAK;
+		target->mm_txnid = 0;
+		/* LY: update info */
+		target->mm_mapsize = pending->mm_mapsize;
+		target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
+		target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
+		target->mm_last_pg = pending->mm_last_pg;
+		/* LY: 'commit' the meta */
+		target->mm_txnid = pending->mm_txnid;
+		target->mm_datasync_sign = pending->mm_datasync_sign;
 	} else {
 		pending->mm_magic = MDB_MAGIC;
 		pending->mm_version = MDB_DATA_VERSION;
@@ -4220,7 +4230,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			mdb_debug("write failed, disk error?");
 			/* On a failure, the pagecache still contains the new data.
 			 * Write some old data back, to prevent it from being used. */
-			if (pwrite(env->me_fd, tail, sizeof(MDB_meta), offset) == sizeof(MDB_meta)) {
+			if (pwrite(env->me_fd, (void*) target, sizeof(MDB_meta), offset) == sizeof(MDB_meta)) {
 				/* LY: take a chance, if write succeeds at a magic ;) */
 				goto retry;
 			}
