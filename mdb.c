@@ -3279,7 +3279,7 @@ static MDB_INLINE int
 mdb_backlog_size(MDB_txn *txn)
 {
 	int reclaimed = txn->mt_env->me_pghead ? txn->mt_env->me_pghead[0] : 0;
-	return reclaimed += txn->mt_loose_count;
+	return reclaimed + txn->mt_loose_count;
 }
 
 /* LY: Prepare a backlog of pages to modify FreeDB itself,
@@ -3288,16 +3288,21 @@ mdb_backlog_size(MDB_txn *txn)
 static int
 mdb_prep_backlog(MDB_txn *txn, MDB_cursor *mc)
 {
-	if (mdb_backlog_size(txn) <= mc->mc_db->md_depth) {
+	/* LY: extra page(s) for b-tree rebalancing */
+	const int extra = (txn->mt_env->me_flags & MDB_LIFORECLAIM) ? 2 : 1;
+
+	if (mdb_backlog_size(txn) < mc->mc_db->md_depth + extra) {
 		int rc = mdb_cursor_touch(mc);
 		if (unlikely(rc))
 			return rc;
 
-		/* LY: one more page is required if a b-tree needs rebalancing */
-		if (unlikely(mdb_backlog_size(txn) < 1)) {
+		while (unlikely(mdb_backlog_size(txn) < extra)) {
 			rc = mdb_page_alloc(mc, 1, NULL, MDB_ALLOC_GC);
-			if (unlikely(rc && rc != MDB_NOTFOUND))
-				return rc;
+			if (unlikely(rc)) {
+				if (unlikely(rc != MDB_NOTFOUND))
+					return rc;
+				break;
+			}
 		}
 	}
 
