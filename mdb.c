@@ -4319,7 +4319,7 @@ mdb_env_create(MDB_env **env)
 }
 
 static int __cold
-mdb_env_map(MDB_env *env, void *addr)
+mdb_env_map(MDB_env *env, void *addr, size_t usedsize)
 {
 	unsigned flags = env->me_flags;
 
@@ -4346,7 +4346,7 @@ mdb_env_map(MDB_env *env, void *addr)
 		return EBUSY;	/* TODO: Make a new MDB_* error code? */
 	}
 
-	if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK) < 0)
+	if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK))
 		return errno;
 
 #ifdef MADV_NOHUGEPAGE
@@ -4359,14 +4359,16 @@ mdb_env_map(MDB_env *env, void *addr)
 	}
 #endif
 
-	if (madvise(env->me_map, env->me_mapsize, MADV_WILLNEED) < 0)
-		return errno;
-
-	if (flags & MDB_NORDAHEAD) {
-		/* Turn off readahead. It's harmful when the DB is larger than RAM. */
-		if (madvise(env->me_map, env->me_mapsize, MADV_RANDOM) < 0)
-			return errno;
+#ifdef MADV_REMOVE
+	if (flags & MDB_WRITEMAP) {
+		assert(used_edge < env->me_mapsize);
+		(void) madvise(env->me_map + usedsize, env->me_mapsize - usedsize, MADV_REMOVE);
 	}
+#endif
+
+	/* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
+	if (madvise(env->me_map, env->me_mapsize, (flags & MDB_NORDAHEAD) ? MADV_RANDOM : MADV_WILLNEED))
+		return errno;
 
 	/* Lock meta pages to avoid unexpected write,
 	 *  before the data pages would be synchronized. */
@@ -4405,12 +4407,10 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 		meta = mdb_meta_head_w(env);
 		if (!size)
 			size = meta->mm_mapsize;
-		{
-			/* Silently round up to minimum if the size is too small */
-			size_t minsize = (meta->mm_last_pg + 1) * env->me_psize;
-			if (size < minsize)
-				size = minsize;
-		}
+		/* Silently round up to minimum if the size is too small */
+		const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
+		if (size < usedsize)
+			size = usedsize;
 		munmap(env->me_map, env->me_mapsize);
 #ifdef USE_VALGRIND
 		VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -4418,7 +4418,7 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 #endif
 		env->me_mapsize = size;
 		old = (env->me_flags & MDB_FIXEDMAP) ? env->me_map : NULL;
-		rc = mdb_env_map(env, old);
+		rc = mdb_env_map(env, old, usedsize);
 		if (rc)
 			return rc;
 	}
@@ -4536,7 +4536,8 @@ mdb_env_open2(MDB_env *env, MDB_meta *meta)
 		newenv = 0;
 	}
 
-	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta->mm_address : NULL);
+	const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
+	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta->mm_address : NULL, usedsize);
 	if (rc)
 		return rc;
 
