@@ -887,7 +887,7 @@ int main(int argc, char *argv[])
 			print(", gc %zu (%.1f%%)", freedb_pages, freedb_pages / percent);
 
 			value = freedb_pages - reclaimable_pages;
-			print(", reading %zu (%.1f%%)", value, value / percent);
+			print(", detained %zu (%.1f%%)", value, value / percent);
 
 			print(", reclaimable %zu (%.1f%%)", reclaimable_pages, reclaimable_pages / percent);
 		}
