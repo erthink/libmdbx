@@ -5237,9 +5237,22 @@ mdb_cmp_int_ua(const MDB_val *a, const MDB_val *b)
 static int __hot
 mdb_cmp_memn(const MDB_val *a, const MDB_val *b)
 {
-	size_t minlen = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
-	int diff = memcmp(a->mv_data, b->mv_data, minlen);
-	return likely(diff) ? diff : mdbx_cmp2int(a->mv_size, b->mv_size);
+	/* LY: assumes that length of keys are NOT equal for most cases,
+	 * if no then branch-prediction should mitigate the problem */
+#if 0
+	/* LY: without branch instructions on x86,
+	 * but isn't best for equal length of keys */
+	int diff_len = mdbx_cmp2int(a->mv_size, b->mv_size);
+#else
+	/* LY: best when length of keys are equal,
+	 * but got a branch-penalty otherwise */
+	if (unlikely(a->mv_size == b->mv_size))
+		return memcmp(a->mv_data, b->mv_data, a->mv_size);
+	int diff_len = (a->mv_size < b->mv_size) ? -1 : 1;
+#endif
+	size_t shortest = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
+	int diff_data = memcmp(a->mv_data, b->mv_data, shortest);
+	return likely(diff_data) ? diff_data : diff_len;
 }
 
 /** Compare two items in reverse byte order */
