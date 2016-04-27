@@ -19,7 +19,7 @@ mandir	?= $(prefix)/man
 
 CC	?= gcc
 XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
-CFLAGS	?= -O2 -g -Wall -Werror -Wextra
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra
 CFLAGS	+= -pthread $(XCFLAGS)
 
 IOARENA ?= ../ioarena.git/@BUILD/src/ioarena
@@ -74,7 +74,7 @@ libmdbx.a:	mdbx.o
 	$(AR) rs $@ $^
 
 libmdbx.so:	mdbx.lo
-	$(CC) $(CFLAGS) $(LDFLAGS) -pthread -shared -o $@ $^
+	$(CC) $(CFLAGS) $(LDFLAGS) -save-temps -pthread -shared -o $@ $^
 
 liblmdb.a:	lmdb.o
 	$(AR) rs $@ $^
@@ -161,11 +161,11 @@ ifneq ($(wildcard $(IOARENA)),)
 .PHONY: bench clean-bench re-bench
 
 clean-bench:
-	rm -rf bench-*.txt _ioarena
+	rm -rf bench-*.txt _ioarena/*
 
 re-bench: clean-bench bench
 
-NN := 1000000
+NN := 25000000
 define bench-rule
 bench-$(1).txt: $(3) $(IOARENA) Makefile
 	$(IOARENA) -D $(1) -B crud -m nosync -n $(2) | tee $$@ | grep throughput \
