@@ -48,7 +48,8 @@ static volatile sig_atomic_t gotsig;
 
 static void dumpsig( int sig )
 {
-	gotsig=1;
+	(void) sig;
+	gotsig = 1;
 }
 
 static const char hexc[] = "0123456789abcdef";

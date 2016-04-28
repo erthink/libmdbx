@@ -50,6 +50,7 @@ flagbit dbflags[] = {
 static volatile sig_atomic_t gotsignal;
 
 static void signal_hanlder( int sig ) {
+	(void) sig;
 	gotsignal = 1;
 }
 
@@ -228,6 +229,8 @@ static size_t problems_pop(struct problem* list) {
 static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 	const char* type, int nentries, int payload_bytes, int header_bytes, int unused_bytes)
 {
+	(void) ctx;
+
 	if (type) {
 		size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
 		size_t page_size = pgnumber * stat.base.ms_psize;
@@ -250,14 +253,14 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 			problem_add("page", pgno, "illegal unused-bytes", "%zu < %i < %zu",
 				0, unused_bytes, stat.base.ms_psize);
 
-		if (header_bytes < sizeof(long) || header_bytes >= stat.base.ms_psize - sizeof(long))
+		if (header_bytes < (int) sizeof(long) || (size_t) header_bytes >= stat.base.ms_psize - sizeof(long))
 			problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.base.ms_psize - sizeof(long));
 		if (payload_bytes < 1) {
 			if (nentries > 0) {
 				problem_add("page", pgno, "zero size-of-entry", "payload %i bytes, %i entries",
 							payload_bytes, nentries);
-				if (header_bytes + unused_bytes < page_size) {
+				if ((size_t) header_bytes + unused_bytes < page_size) {
 					/* LY: hush a misuse error */
 					page_bytes = page_size;
 				}
@@ -302,6 +305,9 @@ typedef int (visitor)(size_t record_number, MDB_val *key, MDB_val* data);
 static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent);
 
 static int handle_userdb(size_t record_number, MDB_val *key, MDB_val* data) {
+	(void) record_number;
+	(void) key;
+	(void) data;
 	return MDB_SUCCESS;
 }
 
@@ -366,7 +372,8 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val* data) {
 
 static int handle_maindb(size_t record_number, MDB_val *key, MDB_val* data) {
 	char *name;
-	int i, rc;
+	int rc;
+	size_t i;
 
 	name = key->mv_data;
 	for(i = 0; i < key->mv_size; ++i) {
@@ -880,7 +887,7 @@ int main(int argc, char *argv[])
 			print(", gc %zu (%.1f%%)", freedb_pages, freedb_pages / percent);
 
 			value = freedb_pages - reclaimable_pages;
-			print(", reading %zu (%.1f%%)", value, value / percent);
+			print(", detained %zu (%.1f%%)", value, value / percent);
 
 			print(", reclaimable %zu (%.1f%%)", reclaimable_pages, reclaimable_pages / percent);
 		}

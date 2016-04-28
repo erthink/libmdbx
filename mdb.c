@@ -1902,7 +1902,7 @@ mdb_meta_head_r(MDB_env *env) {
 	} else if (likely(b->mm_txnid == head_txnid)) {
 		h = b;
 	} else {
-		/* LY: seems got a race with mdb_env_sync0() */
+		/* LY: seems got a collision with mdb_env_sync0() */
 		mdb_coherent_barrier();
 		head_txnid = env->me_txns->mti_txnid;
 		mdb_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
@@ -2114,7 +2114,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 		goto fail;
 	}
 
-	for (;;) { /* oomkick retry loop */
+	for (;;) { /* oom-kick retry loop */
 		found_old = 0;
 		for (op = MDB_FIRST;; op = (flags & MDB_LIFORECLAIM) ? MDB_PREV : MDB_NEXT) {
 			MDB_val key, data;
@@ -2321,6 +2321,12 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 				 * utterly no-sync write mode was requested. In such case
 				 * don't make a steady-sync, but only a legacy-mode checkpoint,
 				 * just for resume reclaiming only, not for data consistency. */
+
+				mdb_debug("kick-gc: head %zu/%c, tail %zu/%c, oldest %zu, txnid %zu",
+					head->mm_txnid, META_IS_WEAK(head) ? 'W' : 'N',
+					tail->mm_txnid, META_IS_WEAK(tail) ? 'W' : 'N',
+					oldest, env->me_txns->mt1.mtb.mtb_txnid );
+
 				int flags = env->me_flags & MDB_WRITEMAP;
 				if ((env->me_flags & MDB_UTTERLY_NOSYNC) == MDB_UTTERLY_NOSYNC)
 					flags |= MDB_UTTERLY_NOSYNC;
@@ -3273,7 +3279,7 @@ static MDB_INLINE int
 mdb_backlog_size(MDB_txn *txn)
 {
 	int reclaimed = txn->mt_env->me_pghead ? txn->mt_env->me_pghead[0] : 0;
-	return reclaimed += txn->mt_loose_count;
+	return reclaimed + txn->mt_loose_count;
 }
 
 /* LY: Prepare a backlog of pages to modify FreeDB itself,
@@ -3282,30 +3288,20 @@ mdb_backlog_size(MDB_txn *txn)
 static int
 mdb_prep_backlog(MDB_txn *txn, MDB_cursor *mc)
 {
-	/* LY: Critical level (1) for copy a one leaf-page.
-	 * But also (+2) for split leaf-page into a couple with creation
-	 * one branch-page (for ability of insertion and my paranoia). */
-	int minimal_level = 3;
+	/* LY: extra page(s) for b-tree rebalancing */
+	const int extra = (txn->mt_env->me_flags & MDB_LIFORECLAIM) ? 2 : 1;
 
-	/* LY: Safe level for update branch-pages from root */
-	int safe_level = minimal_level + 8;
-
-	if (mdb_backlog_size(txn) < safe_level) {
-		/* Make sure "hot" pages of freeDB is touched and on freelist */
+	if (mdb_backlog_size(txn) < mc->mc_db->md_depth + extra) {
 		int rc = mdb_cursor_touch(mc);
 		if (unlikely(rc))
 			return rc;
 
-		while (mdb_backlog_size(txn) < minimal_level) {
-			MDB_page *mp = NULL;
-			rc = mdb_page_alloc(mc, 1, &mp, MDB_ALLOC_GC | MDB_ALLOC_NEW);
-			if (unlikely(rc))
-				return rc;
-			if (mp) {
-				NEXT_LOOSE_PAGE(mp) = txn->mt_loose_pgs;
-				txn->mt_loose_pgs = mp;
-				txn->mt_loose_count++;
-				mp->mp_flags |= P_LOOSE;
+		while (unlikely(mdb_backlog_size(txn) < extra)) {
+			rc = mdb_page_alloc(mc, 1, NULL, MDB_ALLOC_GC);
+			if (unlikely(rc)) {
+				if (unlikely(rc != MDB_NOTFOUND))
+					return rc;
+				break;
 			}
 		}
 	}
@@ -3462,7 +3458,7 @@ again:
 				/* LY: need more just a txn-id for save page list. */
 				rc = mdb_page_alloc(&mc, 0, NULL, MDB_ALLOC_GC);
 				if (likely(rc == 0))
-					/* LY: ок, reclaimed from freedb. */
+					/* LY: ok, reclaimed from freedb. */
 					continue;
 				if (unlikely(rc != MDB_NOTFOUND))
 					/* LY: other troubles... */
@@ -4134,17 +4130,17 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	int rc;
 	MDB_meta* head = mdb_meta_head_w(env);
 	size_t prev_mapsize = head->mm_mapsize;
-	MDB_meta* tail = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
-	off_t offset = (char*) tail - env->me_map;
+	volatile MDB_meta* target = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
+	off_t offset = (char*) target - env->me_map;
 	size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
 
 	mdb_assert(env, (env->me_flags & (MDB_RDONLY | MDB_FATAL_ERROR)) == 0);
 	mdb_assert(env, META_IS_WEAK(head) || env->me_sync_pending != 0
 			   || env->me_mapsize != prev_mapsize);
 	mdb_assert(env, pending->mm_txnid > head->mm_txnid || META_IS_WEAK(head));
-	mdb_assert(env, pending->mm_txnid > tail->mm_txnid || META_IS_WEAK(tail));
+	mdb_assert(env, pending->mm_txnid > target->mm_txnid || META_IS_WEAK(target));
 
-	MDB_meta* stay = mdb_env_meta_flipflop(env, tail);
+	MDB_meta* stay = mdb_env_meta_flipflop(env, (MDB_meta*) target);
 	mdb_assert(env, pending->mm_txnid > stay->mm_txnid);
 
 	pending->mm_mapsize = env->me_mapsize;
@@ -4172,7 +4168,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			if ((flags & MDB_MAPASYNC) == 0)
 				env->me_sync_pending = 0;
 		} else {
-			int (*sync_fd)(int fd) = fdatasync;
+			int (*flush)(int fd) = fdatasync;
 			if (unlikely(prev_mapsize != pending->mm_mapsize)) {
 				/* LY: It is no reason to use fdatasync() here, even in case
 				 * no such bug in a kernel. Because "no-bug" mean that a kernel
@@ -4184,9 +4180,9 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 				 *
 				 * For more info about of a corresponding fdatasync() bug
 				 * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-				sync_fd = fsync;
+				flush = fsync;
 			}
-			while(unlikely(sync_fd(env->me_fd) < 0)) {
+			while(unlikely(flush(env->me_fd) < 0)) {
 				rc = errno;
 				if (rc != EINTR)
 					goto undo;
@@ -4203,23 +4199,27 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			(flags & MDB_UTTERLY_NOSYNC) == MDB_UTTERLY_NOSYNC
 				? MDB_DATASIGN_NONE : MDB_DATASIGN_WEAK;
 	}
-	mdb_debug("writing meta page %d for root page %zu",
-		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root);
+	mdb_debug("writing meta %d, root %zu, txn_id %zu, %s",
+		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root,
+		pending->mm_txnid,
+		META_IS_WEAK(pending) ? "Weak" : META_IS_STEADY(pending) ? "Steady" : "Legacy" );
+
 	if (env->me_flags & MDB_WRITEMAP) {
 #ifdef __SANITIZE_THREAD__
 		pthread_mutex_lock(&tsan_mutex);
 #endif
-		tail->mm_datasync_sign = MDB_DATASIGN_WEAK;
-		tail->mm_txnid = 0;
-		mdb_coherent_barrier();
-		tail->mm_mapsize = pending->mm_mapsize;
-		tail->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
-		tail->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
-		tail->mm_last_pg = pending->mm_last_pg;
-		/* (LY) ITS#7969: issue a memory barrier, it is noop for x86. */
-		mdb_coherent_barrier();
-		tail->mm_txnid = pending->mm_txnid;
-		tail->mm_datasync_sign = pending->mm_datasync_sign;
+		/* LY: 'invalidate' the meta,
+		 * but mdb_meta_head_r() will be confused/retired in collision case. */
+		target->mm_datasync_sign = MDB_DATASIGN_WEAK;
+		target->mm_txnid = 0;
+		/* LY: update info */
+		target->mm_mapsize = pending->mm_mapsize;
+		target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
+		target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
+		target->mm_last_pg = pending->mm_last_pg;
+		/* LY: 'commit' the meta */
+		target->mm_txnid = pending->mm_txnid;
+		target->mm_datasync_sign = pending->mm_datasync_sign;
 	} else {
 		pending->mm_magic = MDB_MAGIC;
 		pending->mm_version = MDB_DATA_VERSION;
@@ -4235,7 +4235,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			mdb_debug("write failed, disk error?");
 			/* On a failure, the pagecache still contains the new data.
 			 * Write some old data back, to prevent it from being used. */
-			if (pwrite(env->me_fd, tail, sizeof(MDB_meta), offset) == sizeof(MDB_meta)) {
+			if (pwrite(env->me_fd, (void*) target, sizeof(MDB_meta), offset) == sizeof(MDB_meta)) {
 				/* LY: take a chance, if write succeeds at a magic ;) */
 				goto retry;
 			}
@@ -4319,7 +4319,7 @@ mdb_env_create(MDB_env **env)
 }
 
 static int __cold
-mdb_env_map(MDB_env *env, void *addr)
+mdb_env_map(MDB_env *env, void *addr, size_t usedsize)
 {
 	unsigned flags = env->me_flags;
 
@@ -4336,16 +4336,17 @@ mdb_env_map(MDB_env *env, void *addr)
 		return errno;
 	}
 
-	if (flags & MDB_NORDAHEAD) {
-		/* Turn off readahead. It's harmful when the DB is larger than RAM. */
-		if (madvise(env->me_map, env->me_mapsize, MADV_RANDOM) < 0)
-			return errno;
+	/* Can happen because the address argument to mmap() is just a
+	 * hint.  mmap() can pick another, e.g. if the range is in use.
+	 * The MAP_FIXED flag would prevent that, but then mmap could
+	 * instead unmap existing pages to make room for the new map.
+	 */
+	if (addr && env->me_map != addr) {
+		errno = 0;	/* LY: clean errno as a hit for this case */
+		return EBUSY;	/* TODO: Make a new MDB_* error code? */
 	}
 
-	if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK) < 0)
-		return errno;
-
-	if (madvise(env->me_map, env->me_mapsize, MADV_WILLNEED) < 0)
+	if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK))
 		return errno;
 
 #ifdef MADV_NOHUGEPAGE
@@ -4358,15 +4359,16 @@ mdb_env_map(MDB_env *env, void *addr)
 	}
 #endif
 
-	/* Can happen because the address argument to mmap() is just a
-	 * hint.  mmap() can pick another, e.g. if the range is in use.
-	 * The MAP_FIXED flag would prevent that, but then mmap could
-	 * instead unmap existing pages to make room for the new map.
-	 */
-	if (addr && env->me_map != addr) {
-		errno = 0;	/* LY: clean errno as a hit for this case */
-		return EBUSY;	/* TODO: Make a new MDB_* error code? */
+#ifdef MADV_REMOVE
+	if (flags & MDB_WRITEMAP) {
+		assert(used_edge < env->me_mapsize);
+		(void) madvise(env->me_map + usedsize, env->me_mapsize - usedsize, MADV_REMOVE);
 	}
+#endif
+
+	/* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
+	if (madvise(env->me_map, env->me_mapsize, (flags & MDB_NORDAHEAD) ? MADV_RANDOM : MADV_WILLNEED))
+		return errno;
 
 	/* Lock meta pages to avoid unexpected write,
 	 *  before the data pages would be synchronized. */
@@ -4374,8 +4376,8 @@ mdb_env_map(MDB_env *env, void *addr)
 		return errno;
 
 #ifdef USE_VALGRIND
-	env->me_valgrind_handle = VALGRIND_CREATE_BLOCK(
-				env->me_map, env->me_mapsize, "lmdb");
+	env->me_valgrind_handle =
+		VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "lmdb");
 #endif
 
 	return MDB_SUCCESS;
@@ -4405,12 +4407,10 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 		meta = mdb_meta_head_w(env);
 		if (!size)
 			size = meta->mm_mapsize;
-		{
-			/* Silently round up to minimum if the size is too small */
-			size_t minsize = (meta->mm_last_pg + 1) * env->me_psize;
-			if (size < minsize)
-				size = minsize;
-		}
+		/* Silently round up to minimum if the size is too small */
+		const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
+		if (size < usedsize)
+			size = usedsize;
 		munmap(env->me_map, env->me_mapsize);
 #ifdef USE_VALGRIND
 		VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -4418,7 +4418,7 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 #endif
 		env->me_mapsize = size;
 		old = (env->me_flags & MDB_FIXEDMAP) ? env->me_map : NULL;
-		rc = mdb_env_map(env, old);
+		rc = mdb_env_map(env, old, usedsize);
 		if (rc)
 			return rc;
 	}
@@ -4536,7 +4536,8 @@ mdb_env_open2(MDB_env *env, MDB_meta *meta)
 		newenv = 0;
 	}
 
-	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta->mm_address : NULL);
+	const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
+	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta->mm_address : NULL, usedsize);
 	if (rc)
 		return rc;
 
@@ -4869,6 +4870,13 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
+#if MDB_LIFORECLAIM
+	/* LY: don't allow LIFO with just NOMETASYNC */
+	if ((flags & (MDB_NOMETASYNC | MDB_LIFORECLAIM | MDB_NOSYNC))
+			== (MDB_NOMETASYNC | MDB_LIFORECLAIM))
+		return EINVAL;
+#endif /* MDB_LIFORECLAIM */
+
 	if (env->me_fd != INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
 		return EINVAL;
 
@@ -5129,7 +5137,11 @@ mdb_env_close(MDB_env *env)
  *                |  1, a > b
  *                \
  */
-#define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
+#if 1
+#	define mdbx_cmp2int(a, b) (((b) > (a)) ? -1 : (a) > (b))
+#else
+#	define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
+#endif
 
 /** Compare two items pointing at aligned unsigned int's. */
 static int __hot
@@ -5225,9 +5237,22 @@ mdb_cmp_int_ua(const MDB_val *a, const MDB_val *b)
 static int __hot
 mdb_cmp_memn(const MDB_val *a, const MDB_val *b)
 {
-	size_t minlen = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
-	int diff = memcmp(a->mv_data, b->mv_data, minlen);
-	return likely(diff) ? diff : mdbx_cmp2int(a->mv_size, b->mv_size);
+	/* LY: assumes that length of keys are NOT equal for most cases,
+	 * if no then branch-prediction should mitigate the problem */
+#if 0
+	/* LY: without branch instructions on x86,
+	 * but isn't best for equal length of keys */
+	int diff_len = mdbx_cmp2int(a->mv_size, b->mv_size);
+#else
+	/* LY: best when length of keys are equal,
+	 * but got a branch-penalty otherwise */
+	if (unlikely(a->mv_size == b->mv_size))
+		return memcmp(a->mv_data, b->mv_data, a->mv_size);
+	int diff_len = (a->mv_size < b->mv_size) ? -1 : 1;
+#endif
+	size_t shortest = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
+	int diff_data = memcmp(a->mv_data, b->mv_data, shortest);
+	return likely(diff_data) ? diff_data : diff_len;
 }
 
 /** Compare two items in reverse byte order */
@@ -5834,11 +5859,12 @@ mdb_cursor_next(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 	MDB_node	*leaf;
 	int rc;
 
-	if (unlikely(mc->mc_flags & C_EOF)) {
+	if ((mc->mc_flags & C_EOF) ||
+		((mc->mc_flags & C_DEL) && op == MDB_NEXT_DUP)) {
 		return MDB_NOTFOUND;
 	}
-
-	mdb_cassert(mc, mc->mc_flags & C_INITIALIZED);
+	if (!(mc->mc_flags & C_INITIALIZED))
+		return mdb_cursor_first(mc, key, data);
 
 	mp = mc->mc_pg[mc->mc_top];
 
@@ -5917,7 +5943,12 @@ mdb_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 	MDB_node	*leaf;
 	int rc;
 
-	mdb_cassert(mc, mc->mc_flags & C_INITIALIZED);
+	if (!(mc->mc_flags & C_INITIALIZED)) {
+		rc = mdb_cursor_last(mc, key, data);
+		if (unlikely(rc))
+			return rc;
+		mc->mc_ki[mc->mc_top]++;
+	}
 
 	mp = mc->mc_pg[mc->mc_top];
 
@@ -6367,10 +6398,7 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			rc = MDB_INCOMPATIBLE;
 			break;
 		}
-		if (!(mc->mc_flags & C_INITIALIZED))
-			rc = mdb_cursor_first(mc, key, data);
-		else
-			rc = mdb_cursor_next(mc, key, data, MDB_NEXT_DUP);
+		rc = mdb_cursor_next(mc, key, data, MDB_NEXT_DUP);
 		if (rc == MDB_SUCCESS) {
 			if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
 				MDB_cursor *mx;
@@ -6412,21 +6440,11 @@ fetchm:
 	case MDB_NEXT:
 	case MDB_NEXT_DUP:
 	case MDB_NEXT_NODUP:
-		if (!(mc->mc_flags & C_INITIALIZED))
-			rc = mdb_cursor_first(mc, key, data);
-		else
-			rc = mdb_cursor_next(mc, key, data, op);
+		rc = mdb_cursor_next(mc, key, data, op);
 		break;
 	case MDB_PREV:
 	case MDB_PREV_DUP:
 	case MDB_PREV_NODUP:
-		if (!(mc->mc_flags & C_INITIALIZED)) {
-			rc = mdb_cursor_last(mc, key, data);
-			if (unlikely(rc))
-				break;
-			mc->mc_flags |= C_INITIALIZED;
-			mc->mc_ki[mc->mc_top]++;
-		}
 		rc = mdb_cursor_prev(mc, key, data, op);
 		break;
 	case MDB_FIRST:
@@ -8473,8 +8491,6 @@ mdb_cursor_del0(MDB_cursor *mc)
 			if (m3->mc_pg[mc->mc_top] == mp) {
 				if (m3->mc_ki[mc->mc_top] == ki) {
 					m3->mc_flags |= C_DEL;
-					if (mc->mc_db->md_flags & MDB_DUPSORT)
-						m3->mc_xcursor->mx_cursor.mc_flags &= ~C_INITIALIZED;
 				} else if (m3->mc_ki[mc->mc_top] > ki) {
 					m3->mc_ki[mc->mc_top]--;
 				}
@@ -8508,11 +8524,21 @@ mdb_cursor_del0(MDB_cursor *mc)
 				continue;
 			if (m3->mc_pg[mc->mc_top] == mp) {
 				/* if m3 points past last node in page, find next sibling */
-				if (m3->mc_ki[mc->mc_top] >= nkeys) {
-					rc = mdb_cursor_sibling(m3, 1);
-					if (rc == MDB_NOTFOUND) {
-						m3->mc_flags |= C_EOF;
-						rc = MDB_SUCCESS;
+				if (m3->mc_ki[mc->mc_top] >= mc->mc_ki[mc->mc_top]) {
+					if (m3->mc_ki[mc->mc_top] >= nkeys) {
+						rc = mdb_cursor_sibling(m3, 1);
+						if (rc == MDB_NOTFOUND) {
+							m3->mc_flags |= C_EOF;
+							rc = MDB_SUCCESS;
+							continue;
+						}
+					}
+					if (mc->mc_db->md_flags & MDB_DUPSORT) {
+						MDB_node *node = NODEPTR(m3->mc_pg[m3->mc_top], m3->mc_ki[m3->mc_top]);
+						if (node->mn_flags & F_DUPDATA) {
+							mdb_xcursor_init1(m3, node);
+							m3->mc_xcursor->mx_cursor.mc_flags |= C_DEL;
+						}
 					}
 				}
 			}
@@ -9573,14 +9599,30 @@ mdb_env_copy(MDB_env *env, const char *path)
 }
 
 int __cold
-mdb_env_set_flags(MDB_env *env, unsigned flag, int onoff)
+mdb_env_set_flags(MDB_env *env, unsigned flags, int onoff)
 {
-	if (unlikely(flag & ~CHANGEABLE))
+	if (unlikely(flags & ~CHANGEABLE))
 		return EINVAL;
+
+	pthread_mutex_t *mutex = MDB_MUTEX(env, w);
+	int rc = mdb_mutex_lock(env, mutex);
+	if (unlikely(rc))
+		return rc;
+
 	if (onoff)
-		env->me_flags |= flag;
+		flags = env->me_flags | flags;
 	else
-		env->me_flags &= ~flag;
+		flags = env->me_flags & ~flags;
+
+#if MDB_LIFORECLAIM
+	/* LY: don't allow LIFO with just NOMETASYNC */
+	if ((flags & (MDB_NOMETASYNC | MDB_LIFORECLAIM | MDB_NOSYNC))
+			== (MDB_NOMETASYNC | MDB_LIFORECLAIM))
+		return EINVAL;
+#endif /* MDB_LIFORECLAIM */
+	env->me_flags = flags;
+
+	mdb_mutex_unlock(env, mutex);
 	return MDB_SUCCESS;
 }
 

@@ -52,6 +52,8 @@ int main(int argc,char * argv[])
 	int env_oflags;
 	struct stat db_stat, exe_stat;
 
+	(void) argc;
+	(void) argv;
 	srand(time(NULL));
 
 	count = (rand()%384) + 64;
@@ -118,22 +120,21 @@ int main(int argc,char * argv[])
 	mdb_txn_abort(txn);
 	mdb_env_sync(env, 1);
 
-	j=0;
+	int deleted = 0;
 	key.mv_data = sval;
-	for (i= count - 1; i > -1; i-= (rand()%5)) {
-		j++;
+	for (i = count - 1; i > -1; i -= (rand()%5)) {
 		txn=NULL;
 		E(mdb_txn_begin(env, NULL, 0, &txn));
 		sprintf(sval, "%03x ", values[i]);
 		if (RES(MDB_NOTFOUND, mdb_del(txn, dbi, &key, NULL))) {
-			j--;
 			mdb_txn_abort(txn);
 		} else {
 			E(mdb_txn_commit(txn));
+			deleted++;
 		}
 	}
 	free(values);
-	printf("Deleted %d values\n", j);
+	printf("Deleted %d values\n", deleted);
 
 	printf("check-preset-b.cursor-next\n");
 	E(mdb_env_stat(env, &mst));
@@ -147,7 +148,7 @@ int main(int argc,char * argv[])
 		++present_b;
 	}
 	CHECK(rc == MDB_NOTFOUND, "mdb_cursor_get");
-	CHECK(present_b == present_a - j, "mismatch");
+	CHECK(present_b == present_a - deleted, "mismatch");
 
 	printf("check-preset-b.cursor-prev\n");
 	j = 1;
@@ -182,7 +183,8 @@ int main(int argc,char * argv[])
 		++present_c;
 	}
 	CHECK(rc == MDB_NOTFOUND, "mdb_cursor_get");
-	CHECK(present_c == present_a, "mismatch");
+	printf("Rolled back %d deletion(s)\n", present_c - (present_a - deleted));
+	CHECK(present_c > present_a - deleted, "mismatch");
 
 	printf("check-preset-d.cursor-prev\n");
 	j = 1;
