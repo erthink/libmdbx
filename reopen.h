@@ -72,7 +72,7 @@
 #		define __hot __attribute__((hot, optimize("O3")))
 #	elif defined(__GNUC__)
 		/* cland case, just put frequently used functions in separate section */
-#		define __cold __attribute__((section("text.hot")))
+#		define __hot __attribute__((section("text.hot")))
 #	else
 #		define __hot
 #	endif
