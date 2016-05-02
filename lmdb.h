@@ -309,15 +309,15 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 
 #if MDBX_MODE_ENABLED
 	/** aim to coalesce FreeDB records */
-#define MDB_COALESCE	0x2000000
+#define MDBX_COALESCE	0x2000000
 	/** LIFO policy for reclaiming FreeDB records */
-#define MDB_LIFORECLAIM	0x4000000
+#define MDBX_LIFORECLAIM	0x4000000
 #endif /* MDBX_MODE_ENABLED */
 
 	/** make a steady-sync only on close and explicit env-sync */
-#define MDB_UTTERLY_NOSYNC (MDB_NOSYNC|MDB_MAPASYNC)
+#define MDBX_UTTERLY_NOSYNC (MDB_NOSYNC|MDB_MAPASYNC)
 	/** debuging option, fill/perturb released pages */
-#define MDB_PAGEPERTURB        0x8000000
+#define MDBX_PAGEPERTURB        0x8000000
 /** @} */
 
 /**	@defgroup	mdb_dbi_open	Database Flags
@@ -642,10 +642,10 @@ int  mdb_env_create(MDB_env **env);
 	 *		caller is expected to overwrite all of the memory that was
 	 *		reserved in that case.
 	 *		This flag may be changed at any time using #mdb_env_set_flags().
-	 *  <li>#MDB_COALESCE
+	 *  <li>#MDBX_COALESCE
 	 *		Aim to coalesce records while reclaiming FreeDB.
 	 *		This flag may be changed at any time using #mdb_env_set_flags().
-	 *  <li>#MDB_LIFORECLAIM
+	 *  <li>#MDBX_LIFORECLAIM
 	 *		LIFO policy for reclaiming FreeDB records. This significantly reduce
 	 *		write IPOS in case MDB_NOSYNC with periodically checkpoints.
 	 * </ul>
@@ -1682,7 +1682,7 @@ int  mdbx_txn_straggler(MDB_txn *txn, int *percent);
 	 * 	1 on success (reader was killed),
 	 * 	>1 on success (reader was SURE killed).
 	 */
-typedef int (MDB_oom_func)(MDB_env *env, int pid, void* thread_id, size_t txn, unsigned gap, int retry);
+typedef int (MDBX_oom_func)(MDB_env *env, int pid, void* thread_id, size_t txn, unsigned gap, int retry);
 
 	/** @brief Set the OOM callback.
 	 *
@@ -1690,9 +1690,9 @@ typedef int (MDB_oom_func)(MDB_env *env, int pid, void* thread_id, size_t txn, u
 	 * a laggard readers to allowing reclaiming of freeDB.
 	 *
 	 * @param[in] env An environment handle returned by #mdb_env_create().
-	 * @param[in] oomfunc A #MDB_oom_func function or NULL to disable.
+	 * @param[in] oomfunc A #MDBX_oom_func function or NULL to disable.
 	 */
-void mdbx_env_set_oomfunc(MDB_env *env, MDB_oom_func *oom_func);
+void mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
 
 	/** @brief Get the current oom_func callback.
 	 *
@@ -1700,32 +1700,32 @@ void mdbx_env_set_oomfunc(MDB_env *env, MDB_oom_func *oom_func);
 	 * a laggard readers to allowing reclaiming of freeDB.
 	 *
 	 * @param[in] env An environment handle returned by #mdb_env_create().
-	 * @return A #MDB_oom_func function or NULL if disabled.
+	 * @return A #MDBX_oom_func function or NULL if disabled.
 	 */
-MDB_oom_func* mdbx_env_get_oomfunc(MDB_env *env);
+MDBX_oom_func* mdbx_env_get_oomfunc(MDB_env *env);
 #endif /* MDBX_MODE_ENABLED */
 /**	@} */
 
 #if MDBX_MODE_ENABLED
-#define MDB_DBG_ASSERT	1
-#define MDB_DBG_PRINT	2
-#define MDB_DBG_TRACE	4
-#define MDB_DBG_EXTRA	8
-#define MDB_DBG_AUDIT	16
-#define MDB_DBG_EDGE	32
+#define MDBX_DBG_ASSERT	1
+#define MDBX_DBG_PRINT	2
+#define MDBX_DBG_TRACE	4
+#define MDBX_DBG_EXTRA	8
+#define MDBX_DBG_AUDIT	16
+#define MDBX_DBG_EDGE	32
 
 /* LY: a "don't touch" value */
-#define MDB_DBG_DNT		(-1L)
+#define MDBX_DBG_DNT	(-1L)
 
-typedef void MDB_debug_func(int type, const char *function, int line,
+typedef void MDBX_debug_func(int type, const char *function, int line,
 								  const char *msg, va_list args);
 
-int mdbx_setup_debug(int flags, MDB_debug_func* logger, long edge_txn);
+int mdbx_setup_debug(int flags, MDBX_debug_func* logger, long edge_txn);
 
-typedef int MDB_pgvisitor_func(size_t pgno, unsigned pgnumber, void* ctx,
+typedef int MDBX_pgvisitor_func(size_t pgno, unsigned pgnumber, void* ctx,
 					const char* dbi, const char *type, int nentries,
 					int payload_bytes, int header_bytes, int unused_bytes);
-int mdbx_env_pgwalk(MDB_txn *txn, MDB_pgvisitor_func* visitor, void* ctx);
+int mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* ctx);
 #endif /* MDBX_MODE_ENABLED */
 
 char* mdb_dkey(MDB_val *key, char *buf);

@@ -117,10 +117,10 @@ static void wbench(int flags, int mb, int count, int salt)
 		printf(" WRITEMAP");
 	if (flags & MDB_MAPASYNC)
 		printf(" MAPASYNC");
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-	if (flags & MDB_COALESCE)
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+	if (flags & MDBX_COALESCE)
 		printf(" COALESCE");
-	if (flags & MDB_LIFORECLAIM)
+	if (flags & MDBX_LIFORECLAIM)
 		printf(" LIFO");
 #endif
 	printf(" 0x%X\n", flags);
@@ -193,10 +193,10 @@ static void wbench(int flags, int mb, int count, int salt)
 		fprintf(stderr, " WRITEMAP");
 	if (flags & MDB_MAPASYNC)
 		fprintf(stderr, " MAPASYNC");
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-	if (flags & MDB_COALESCE)
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+	if (flags & MDBX_COALESCE)
 		fprintf(stderr, " COALESCE");
-	if (flags & MDB_LIFORECLAIM)
+	if (flags & MDBX_LIFORECLAIM)
 		fprintf(stderr, " LIFO");
 #endif
 	fprintf(stderr, "\t%.3f\t%.3f\t%.3f\t%.3f\n", rt.iops_w / 1000.0, rt.cpu_user_s, rt.cpu_sys_s, rt.wall_s);
@@ -214,50 +214,50 @@ int main(int argc,char * argv[])
 
 	printf("\nDefault 'sync' mode...");
 	wbench(0, SIZE, COUNT, SALT);
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-//	wbench(MDB_COALESCE, SIZE, COUNT, SALT);
-	wbench(MDB_COALESCE | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
-//	wbench(MDB_LIFORECLAIM, SIZE, COUNT, SALT);
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+//	wbench(MDBX_COALESCE, SIZE, COUNT, SALT);
+	wbench(MDBX_COALESCE | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
+//	wbench(MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
 #endif
 
 	printf("\nno-meta-sync hack...");
 	wbench(MDB_NOMETASYNC, SIZE, COUNT, SALT);
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-//	wbench(MDB_NOMETASYNC | MDB_COALESCE, SIZE, COUNT, SALT);
-	wbench(MDB_NOMETASYNC | MDB_COALESCE | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
-//	wbench(MDB_NOMETASYNC | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+//	wbench(MDB_NOMETASYNC | MDBX_COALESCE, SIZE, COUNT, SALT);
+	wbench(MDB_NOMETASYNC | MDBX_COALESCE | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
+//	wbench(MDB_NOMETASYNC | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
 #endif
 
 	printf("\nno-sync...");
 	wbench(MDB_NOSYNC, SIZE, COUNT, SALT);
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-//	wbench(MDB_NOSYNC | MDB_COALESCE, SIZE, COUNT, SALT);
-//	wbench(MDB_NOSYNC | MDB_COALESCE | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
-//	wbench(MDB_NOSYNC | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+//	wbench(MDB_NOSYNC | MDBX_COALESCE, SIZE, COUNT, SALT);
+//	wbench(MDB_NOSYNC | MDBX_COALESCE | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
+//	wbench(MDB_NOSYNC | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
 #endif
 
 	printf("\nr/w-map...");
 	wbench(MDB_WRITEMAP, SIZE, COUNT, SALT);
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-//	wbench(MDB_WRITEMAP | MDB_COALESCE, SIZE, COUNT, SALT);
-	wbench(MDB_WRITEMAP | MDB_COALESCE | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
-//	wbench(MDB_WRITEMAP | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+//	wbench(MDB_WRITEMAP | MDBX_COALESCE, SIZE, COUNT, SALT);
+	wbench(MDB_WRITEMAP | MDBX_COALESCE | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
+//	wbench(MDB_WRITEMAP | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
 #endif
 
 	printf("\nasync...");
 	wbench(MDB_WRITEMAP | MDB_MAPASYNC, SIZE, COUNT, SALT);
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-//	wbench(MDB_WRITEMAP | MDB_MAPASYNC | MDB_COALESCE, SIZE, COUNT, SALT);
-	wbench(MDB_WRITEMAP | MDB_MAPASYNC | MDB_COALESCE | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
-//	wbench(MDB_WRITEMAP | MDB_MAPASYNC | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+//	wbench(MDB_WRITEMAP | MDB_MAPASYNC | MDBX_COALESCE, SIZE, COUNT, SALT);
+	wbench(MDB_WRITEMAP | MDB_MAPASYNC | MDBX_COALESCE | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
+//	wbench(MDB_WRITEMAP | MDB_MAPASYNC | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
 #endif
 
 	printf("\nr/w-map + no-sync...");
 	wbench(MDB_NOSYNC | MDB_WRITEMAP, SIZE, COUNT, SALT);
-#if defined(MDB_COALESCE) && defined(MDB_LIFORECLAIM)
-//	wbench(MDB_NOSYNC | MDB_WRITEMAP | MDB_COALESCE, SIZE, COUNT, SALT);
-	wbench(MDB_NOSYNC | MDB_WRITEMAP | MDB_COALESCE | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
-//	wbench(MDB_NOSYNC | MDB_WRITEMAP | MDB_LIFORECLAIM, SIZE, COUNT, SALT);
+#if defined(MDBX_COALESCE) && defined(MDBX_LIFORECLAIM)
+//	wbench(MDB_NOSYNC | MDB_WRITEMAP | MDBX_COALESCE, SIZE, COUNT, SALT);
+	wbench(MDB_NOSYNC | MDB_WRITEMAP | MDBX_COALESCE | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
+//	wbench(MDB_NOSYNC | MDB_WRITEMAP | MDBX_LIFORECLAIM, SIZE, COUNT, SALT);
 #endif
 
 	return 0;
