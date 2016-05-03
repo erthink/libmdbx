@@ -1971,11 +1971,11 @@ txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 
 	if (laggard)
 		*laggard = reader;
-	return oldest;
+	return env->me_pgoldest = oldest;
 }
 
-static int __cold
-mdb_oomkick(MDB_env *env, txnid_t oldest)
+static txnid_t __cold
+mdbx_oomkick(MDB_env *env, txnid_t oldest)
 {
 	int retry;
 	txnid_t snap;
@@ -1988,7 +1988,7 @@ mdb_oomkick(MDB_env *env, txnid_t oldest)
 
 		snap = mdb_find_oldest(env, &reader);
 		if (oldest < snap)
-			return 1;
+			return snap;
 
 		if (reader < 0)
 			return 0;
@@ -2028,8 +2028,7 @@ mdb_oomkick(MDB_env *env, txnid_t oldest)
 #endif /* MDBX_MODE_ENABLED */
 	}
 
-	snap = mdb_find_oldest(env, NULL);
-	return oldest < snap;
+	return mdb_find_oldest(env, NULL);
 }
 
 /** Add a page to the txn's dirty list */
@@ -2084,7 +2083,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 	txnid_t oldest = 0, last = 0;
 	MDB_cursor_op op;
 	MDB_cursor m2;
-	int found_old;
+	int found_oldest = 0;
 
 	if (likely(flags & MDBX_ALLOC_GC)) {
 		flags |= env->me_flags & (MDBX_COALESCE | MDBX_LIFORECLAIM);
@@ -2115,7 +2114,6 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 	}
 
 	for (;;) { /* oom-kick retry loop */
-		found_old = 0;
 		for (op = MDB_FIRST;; op = (flags & MDBX_LIFORECLAIM) ? MDB_PREV : MDB_NEXT) {
 			MDB_val key, data;
 			MDB_node *leaf;
@@ -2149,8 +2147,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 						op = MDB_SET_RANGE;
 					} else {
 						oldest = mdb_find_oldest(env, NULL);
-						env->me_pgoldest = oldest;
-						found_old = 1;
+						found_oldest = 1;
 						/* Begin from oldest reader if any */
 						if (oldest > 2) {
 							last = oldest - 1;
@@ -2170,10 +2167,9 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			if (! (flags & MDBX_LIFORECLAIM) ) {
 				/* Do not fetch more if the record will be too recent */
 				if (op != MDB_FIRST && ++last >= oldest) {
-					if (!found_old) {
+					if (!found_oldest) {
 						oldest = mdb_find_oldest(env, NULL);
-						env->me_pgoldest = oldest;
-						found_old = 1;
+						found_oldest = 1;
 					}
 					if (oldest <= last)
 						break;
@@ -2184,9 +2180,8 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			if (rc == MDB_NOTFOUND && (flags & MDBX_LIFORECLAIM)) {
 				if (op == MDB_SET_RANGE)
 					continue;
-				env->me_pgoldest = mdb_find_oldest(env, NULL);
-				found_old = 1;
-				if (oldest < env->me_pgoldest) {
+				found_oldest = 1;
+				if (oldest < mdb_find_oldest(env, NULL)) {
 					oldest = env->me_pgoldest;
 					last = oldest - 1;
 					key.mv_data = &last;
@@ -2203,10 +2198,9 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 
 			last = *(txnid_t*)key.mv_data;
 			if (oldest <= last) {
-				if (!found_old) {
+				if (!found_oldest) {
 					oldest = mdb_find_oldest(env, NULL);
-					env->me_pgoldest = oldest;
-					found_old = 1;
+					found_oldest = 1;
 				}
 				if (oldest <= last) {
 					if (flags & MDBX_LIFORECLAIM)
@@ -2334,13 +2328,18 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 				mdb_assert(env, env->me_sync_pending > 0);
 				if (mdb_env_sync0(env, flags, &meta) == MDB_SUCCESS) {
 					txnid_t snap = mdb_find_oldest(env, NULL);
-					if (snap > oldest)
+					if (snap > oldest) {
 						continue;
+					}
 				}
 			}
 
-			if (rc == MDB_MAP_FULL && mdb_oomkick(env, oldest))
-				continue;
+			if (rc == MDB_MAP_FULL) {
+				txnid_t snap = mdbx_oomkick(env, oldest);
+				if (snap > oldest) {
+					continue;
+				}
+			}
 		}
 
 fail:
