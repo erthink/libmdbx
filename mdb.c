@@ -4360,7 +4360,6 @@ mdb_env_map(MDB_env *env, void *addr, size_t usedsize)
 
 #ifdef MADV_REMOVE
 	if (flags & MDB_WRITEMAP) {
-		assert(used_edge < env->me_mapsize);
 		(void) madvise(env->me_map + usedsize, env->me_mapsize - usedsize, MADV_REMOVE);
 	}
 #endif
