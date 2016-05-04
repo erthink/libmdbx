@@ -1,10 +1,15 @@
 LMDB 0.9 Change Log
 
 MDBX
-	Fix ITS#8393 case MDB_GET_BOTH on non-dup record
+	Add MDB_PREV_MULTIPLE
+
+LMDB 0.9.19 Release Engineering
+	Fix MDB_GET_BOTH on non-dup record (ITS#8393)
+	Optimize mdb_drop
+	Fix xcursors after mdb_cursor_del (ITS#8406)
+	Fix MDB_NEXT_DUP after mdb_cursor_del (ITS#8412)
 
 LMDB 0.9.18 Release (2016/02/05)
-	Add MDB_PREV_MULTIPLE
 	already done for mdbx - Fix robust mutex detection on glibc 2.10-11 (ITS#8330)
 	Fix page_search_root assert on FreeDB (ITS#8336)
 	Fix MDB_APPENDDUP vs. rewrite(single item) (ITS#8334)
