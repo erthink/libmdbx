@@ -11,7 +11,7 @@
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
-#	define MDB_INLINE __inline
+#	define MDBX_INLINE __inline
 #elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
 #	include <intrin.h>
 #	if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
@@ -19,34 +19,34 @@
 #	elif defined(__i386__) || defined(__x86_64__)
 #		pragma intrinsic(_mm_mfence)
 #	endif
-#	define MDB_INLINE __inline
+#	define MDBX_INLINE __inline
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #	include <mbarrier.h>
-#	define MDB_INLINE inline
+#	define MDBX_INLINE inline
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) \
 	&& (defined(HP_IA64) || defined(__ia64))
 #	include <machine/sys/inline.h>
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #elif defined(__IBMC__) && defined(__powerpc)
 #	include <atomic.h>
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #elif defined(_AIX)
 #	include <builtins.h>
 #	include <sys/atomic_op.h>
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
 #	include <machine/builtins.h>
 #	include <c_asm.h>
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #elif defined(__MWERKS__)
 	/* CodeWarrior - troubles ? */
 #	pragma gcc_extensions
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #elif defined(__SNC__)
 	/* Sony PS3 - troubles ? */
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #else
-#	define MDB_INLINE
+#	define MDBX_INLINE
 #endif
 
 #if defined(__i386__) || defined(__x86_64__) \
@@ -63,13 +63,13 @@
 #	define MDB_CACHE_IS_COHERENT 0
 #endif
 
-#define MDB_BARRIER_COMPILER 0
-#define MDB_BARRIER_MEMORY 1
+#define MDBX_BARRIER_COMPILER 0
+#define MDBX_BARRIER_MEMORY 1
 
-static MDB_INLINE void mdb_barrier(int type) {
+static MDBX_INLINE void mdbx_barrier(int type) {
 #if defined(__clang__)
 	__asm__ __volatile__ ("" ::: "memory");
-	if (type > MDB_BARRIER_COMPILER)
+	if (type > MDBX_BARRIER_COMPILER)
 #	if __has_extension(c_atomic) || __has_extension(cxx_atomic)
 		__c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
 #	else
@@ -77,7 +77,7 @@ static MDB_INLINE void mdb_barrier(int type) {
 #	endif
 #elif defined(__GNUC__)
 	__asm__ __volatile__ ("" ::: "memory");
-	if (type > MDB_BARRIER_COMPILER)
+	if (type > MDBX_BARRIER_COMPILER)
 #	if defined(__ATOMIC_SEQ_CST)
 		__atomic_thread_fence(__ATOMIC_SEQ_CST);
 #	else
@@ -85,7 +85,7 @@ static MDB_INLINE void mdb_barrier(int type) {
 #	endif
 #elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
 	__memory_barrier();
-	if (type > MDB_BARRIER_COMPILER)
+	if (type > MDBX_BARRIER_COMPILER)
 #	if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
 		__mf();
 #	elif defined(__i386__) || defined(__x86_64__)
@@ -95,17 +95,17 @@ static MDB_INLINE void mdb_barrier(int type) {
 #	endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 	__compiler_barrier();
-	if (type > MDB_BARRIER_COMPILER)
+	if (type > MDBX_BARRIER_COMPILER)
 		__machine_rw_barrier();
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) \
 	&& (defined(HP_IA64) || defined(__ia64))
 	_Asm_sched_fence(/* LY: no-arg meaning 'all expect ALU', e.g. 0x3D3D */);
-	if (type > MDB_BARRIER_COMPILER)
+	if (type > MDBX_BARRIER_COMPILER)
 		_Asm_mf();
 #elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) \
 	|| defined(__ppc64__) || defined(__powerpc64__)
 	__fence();
-	if (type > MDB_BARRIER_COMPILER)
+	if (type > MDBX_BARRIER_COMPILER)
 		__lwsync();
 #elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
 	__PAL_DRAINA(); /* LY: excessive ? */
@@ -115,15 +115,15 @@ static MDB_INLINE void mdb_barrier(int type) {
 #endif
 }
 
-#define mdb_compiler_barrier() \
-	mdb_barrier(MDB_BARRIER_COMPILER)
-#define mdb_memory_barrier() \
-	mdb_barrier(MDB_BARRIER_MEMORY)
-#define mdb_coherent_barrier() \
-	mdb_barrier(MDB_CACHE_IS_COHERENT ? MDB_BARRIER_COMPILER : MDB_BARRIER_MEMORY)
+#define mdbx_compiler_barrier() \
+	mdbx_barrier(MDBX_BARRIER_COMPILER)
+#define mdbx_memory_barrier() \
+	mdbx_barrier(MDBX_BARRIER_MEMORY)
+#define mdbx_coherent_barrier() \
+	mdbx_barrier(MDB_CACHE_IS_COHERENT ? MDBX_BARRIER_COMPILER : MDBX_BARRIER_MEMORY)
 
-static MDB_INLINE void mdb_invalidate_cache(void *addr, int nbytes) {
-	mdb_coherent_barrier();
+static MDBX_INLINE void mdb_invalidate_cache(void *addr, int nbytes) {
+	mdbx_coherent_barrier();
 #if defined(__mips) && defined(__linux)
 	/* MIPS has cache coherency issues.
 	 * Note: for any nbytes >= on-chip cache size, entire is flushed. */
