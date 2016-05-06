@@ -1977,8 +1977,11 @@ txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 static txnid_t __cold
 mdbx_oomkick(MDB_env *env, txnid_t oldest)
 {
+	mdb_debug("DB size maxed out");
+#if MDBX_MODE_ENABLED
 	int retry;
 	txnid_t snap;
+	mdb_debug("DB size maxed out");
 
 	for(retry = 0; ; ++retry) {
 		int reader;
@@ -1993,7 +1996,6 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 		if (reader < 0)
 			return 0;
 
-#if MDBX_MODE_ENABLED
 		{
 			MDB_reader *r;
 			pthread_t tid;
@@ -2023,11 +2025,10 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 				}
 			}
 		}
-#else
-		break;
-#endif /* MDBX_MODE_ENABLED */
 	}
-
+#else
+	(void) mdb_reader_check(env, NULL);
+#endif /* MDBX_MODE_ENABLED */
 	return mdb_find_oldest(env, NULL);
 }
 
@@ -2069,7 +2070,8 @@ mdb_page_dirty(MDB_txn *txn, MDB_page *mp)
 #define MDBX_ALLOC_CACHE	1
 #define MDBX_ALLOC_GC	2
 #define MDBX_ALLOC_NEW	4
-#define MDBX_ALLOC_ALL	(MDBX_ALLOC_CACHE|MDBX_ALLOC_GC|MDBX_ALLOC_NEW)
+#define MDBX_ALLOC_KICK	8
+#define MDBX_ALLOC_ALL	(MDBX_ALLOC_CACHE|MDBX_ALLOC_GC|MDBX_ALLOC_NEW|MDBX_ALLOC_KICK)
 
 static int
 mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
@@ -2090,7 +2092,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 		if (unlikely(mc->mc_flags & C_RECLAIMING)) {
 			/* If mc is updating the freeDB, then the freelist cannot play
 			 * catch-up with itself by growing while trying to save it. */
-			flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE | MDBX_LIFORECLAIM);
+			flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_KICK | MDBX_COALESCE | MDBX_LIFORECLAIM);
 		}
 	}
 
@@ -2141,18 +2143,14 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 				oldest = env->me_pgoldest;
 				mdb_cursor_init(&m2, txn, FREE_DBI, NULL);
 				if (flags & MDBX_LIFORECLAIM) {
-					if (env->me_pglast > 1) {
-						/* Continue lookup from env->me_pglast to lower/first */
-						last = env->me_pglast - 1;
-						op = MDB_SET_RANGE;
-					} else {
+					if (! found_oldest) {
 						oldest = mdb_find_oldest(env, NULL);
 						found_oldest = 1;
-						/* Begin from oldest reader if any */
-						if (oldest > 2) {
-							last = oldest - 1;
-							op = MDB_SET_RANGE;
-						}
+					}
+					/* Begin from oldest reader if any */
+					if (oldest > 2) {
+						last = oldest - 1;
+						op = MDB_SET_RANGE;
 					}
 				} else if (env->me_pglast) {
 					/* Continue lookup from env->me_pglast to higher/last */
@@ -2288,18 +2286,18 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			} while (--i > n2);
 		}
 
+		/* Use new pages from the map when nothing suitable in the freeDB */
 		i = 0;
-		rc = MDB_NOTFOUND;
-		if (likely(flags & MDBX_ALLOC_NEW)) {
-			/* Use new pages from the map when nothing suitable in the freeDB */
-			pgno = txn->mt_next_pgno;
-			if (likely(pgno + num <= env->me_maxpg))
+		pgno = txn->mt_next_pgno;
+		rc = MDB_MAP_FULL;
+		if (likely(pgno + num <= env->me_maxpg)) {
+			rc = MDB_NOTFOUND;
+			if (likely(flags & MDBX_ALLOC_NEW))
 				goto done;
-			mdb_debug("DB size maxed out");
-			rc = MDB_MAP_FULL;
 		}
 
-		if (flags & MDBX_ALLOC_GC) {
+		if ((flags & MDBX_ALLOC_GC)
+				&& ((flags & MDBX_ALLOC_KICK) || rc == MDB_MAP_FULL)) {
 			MDB_meta* head = mdb_meta_head_w(env);
 			MDB_meta* tail = mdb_env_meta_flipflop(env, head);
 
@@ -3454,8 +3452,8 @@ again:
 
 		if (lifo) {
 			if (refill_idx > (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0)) {
-				/* LY: need more just a txn-id for save page list. */
-				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC);
+				/* LY: need just a txn-id for save page list. */
+				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
 				if (likely(rc == 0))
 					/* LY: ok, reclaimed from freedb. */
 					continue;
@@ -4867,13 +4865,6 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 
 	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
-
-#if MDBX_LIFORECLAIM
-	/* LY: don't allow LIFO with just NOMETASYNC */
-	if ((flags & (MDB_NOMETASYNC | MDBX_LIFORECLAIM | MDB_NOSYNC))
-			== (MDB_NOMETASYNC | MDBX_LIFORECLAIM))
-		return EINVAL;
-#endif /* MDBX_LIFORECLAIM */
 
 	if (env->me_fd != INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
 		return EINVAL;
@@ -9608,17 +9599,9 @@ mdb_env_set_flags(MDB_env *env, unsigned flags, int onoff)
 		return rc;
 
 	if (onoff)
-		flags = env->me_flags | flags;
+		env->me_flags |= flags;
 	else
-		flags = env->me_flags & ~flags;
-
-#if MDBX_LIFORECLAIM
-	/* LY: don't allow LIFO with just NOMETASYNC */
-	if ((flags & (MDB_NOMETASYNC | MDBX_LIFORECLAIM | MDB_NOSYNC))
-			== (MDB_NOMETASYNC | MDBX_LIFORECLAIM))
-		return EINVAL;
-#endif /* MDBX_LIFORECLAIM */
-	env->me_flags = flags;
+		env->me_flags &= ~flags;
 
 	mdb_mutex_unlock(env, mutex);
 	return MDB_SUCCESS;
