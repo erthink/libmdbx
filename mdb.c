@@ -1981,6 +1981,7 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 #if MDBX_MODE_ENABLED
 	int retry;
 	txnid_t snap;
+	mdb_debug("DB size maxed out");
 
 	for(retry = 0; ; ++retry) {
 		int reader;
@@ -2069,7 +2070,8 @@ mdb_page_dirty(MDB_txn *txn, MDB_page *mp)
 #define MDBX_ALLOC_CACHE	1
 #define MDBX_ALLOC_GC	2
 #define MDBX_ALLOC_NEW	4
-#define MDBX_ALLOC_ALL	(MDBX_ALLOC_CACHE|MDBX_ALLOC_GC|MDBX_ALLOC_NEW)
+#define MDBX_ALLOC_KICK	8
+#define MDBX_ALLOC_ALL	(MDBX_ALLOC_CACHE|MDBX_ALLOC_GC|MDBX_ALLOC_NEW|MDBX_ALLOC_KICK)
 
 static int
 mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
@@ -2090,7 +2092,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 		if (unlikely(mc->mc_flags & C_RECLAIMING)) {
 			/* If mc is updating the freeDB, then the freelist cannot play
 			 * catch-up with itself by growing while trying to save it. */
-			flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE | MDBX_LIFORECLAIM);
+			flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_KICK | MDBX_COALESCE | MDBX_LIFORECLAIM);
 		}
 	}
 
@@ -2284,18 +2286,18 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			} while (--i > n2);
 		}
 
+		/* Use new pages from the map when nothing suitable in the freeDB */
 		i = 0;
-		rc = MDB_NOTFOUND;
-		if (likely(flags & MDBX_ALLOC_NEW)) {
-			/* Use new pages from the map when nothing suitable in the freeDB */
-			pgno = txn->mt_next_pgno;
-			if (likely(pgno + num <= env->me_maxpg))
+		pgno = txn->mt_next_pgno;
+		rc = MDB_MAP_FULL;
+		if (likely(pgno + num <= env->me_maxpg)) {
+			rc = MDB_NOTFOUND;
+			if (likely(flags & MDBX_ALLOC_NEW))
 				goto done;
-			mdb_debug("DB size maxed out");
-			rc = MDB_MAP_FULL;
 		}
 
-		if (flags & MDBX_ALLOC_GC) {
+		if ((flags & MDBX_ALLOC_GC)
+				&& ((flags & MDBX_ALLOC_KICK) || rc == MDB_MAP_FULL)) {
 			MDB_meta* head = mdb_meta_head_w(env);
 			MDB_meta* tail = mdb_env_meta_flipflop(env, head);
 
@@ -3450,8 +3452,8 @@ again:
 
 		if (lifo) {
 			if (refill_idx > (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0)) {
-				/* LY: need more just a txn-id for save page list. */
-				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC);
+				/* LY: need just a txn-id for save page list. */
+				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
 				if (likely(rc == 0))
 					/* LY: ok, reclaimed from freedb. */
 					continue;
