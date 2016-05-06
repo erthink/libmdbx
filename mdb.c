@@ -2141,18 +2141,14 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 				oldest = env->me_pgoldest;
 				mdb_cursor_init(&m2, txn, FREE_DBI, NULL);
 				if (flags & MDBX_LIFORECLAIM) {
-					if (env->me_pglast > 1) {
-						/* Continue lookup from env->me_pglast to lower/first */
-						last = env->me_pglast - 1;
-						op = MDB_SET_RANGE;
-					} else {
+					if (! found_oldest) {
 						oldest = mdb_find_oldest(env, NULL);
 						found_oldest = 1;
-						/* Begin from oldest reader if any */
-						if (oldest > 2) {
-							last = oldest - 1;
-							op = MDB_SET_RANGE;
-						}
+					}
+					/* Begin from oldest reader if any */
+					if (oldest > 2) {
+						last = oldest - 1;
+						op = MDB_SET_RANGE;
 					}
 				} else if (env->me_pglast) {
 					/* Continue lookup from env->me_pglast to higher/last */
@@ -4867,13 +4863,6 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 
 	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
-
-#if MDBX_LIFORECLAIM
-	/* LY: don't allow LIFO with just NOMETASYNC */
-	if ((flags & (MDB_NOMETASYNC | MDBX_LIFORECLAIM | MDB_NOSYNC))
-			== (MDB_NOMETASYNC | MDBX_LIFORECLAIM))
-		return EINVAL;
-#endif /* MDBX_LIFORECLAIM */
 
 	if (env->me_fd != INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
 		return EINVAL;
@@ -9608,17 +9597,9 @@ mdb_env_set_flags(MDB_env *env, unsigned flags, int onoff)
 		return rc;
 
 	if (onoff)
-		flags = env->me_flags | flags;
+		env->me_flags |= flags;
 	else
-		flags = env->me_flags & ~flags;
-
-#if MDBX_LIFORECLAIM
-	/* LY: don't allow LIFO with just NOMETASYNC */
-	if ((flags & (MDB_NOMETASYNC | MDBX_LIFORECLAIM | MDB_NOSYNC))
-			== (MDB_NOMETASYNC | MDBX_LIFORECLAIM))
-		return EINVAL;
-#endif /* MDBX_LIFORECLAIM */
-	env->me_flags = flags;
+		env->me_flags &= ~flags;
 
 	mdb_mutex_unlock(env, mutex);
 	return MDB_SUCCESS;
