@@ -1977,6 +1977,8 @@ txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 static txnid_t __cold
 mdbx_oomkick(MDB_env *env, txnid_t oldest)
 {
+	mdb_debug("DB size maxed out");
+#if MDBX_MODE_ENABLED
 	int retry;
 	txnid_t snap;
 
@@ -1993,7 +1995,6 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 		if (reader < 0)
 			return 0;
 
-#if MDBX_MODE_ENABLED
 		{
 			MDB_reader *r;
 			pthread_t tid;
@@ -2023,11 +2024,10 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 				}
 			}
 		}
-#else
-		break;
-#endif /* MDBX_MODE_ENABLED */
 	}
-
+#else
+	(void) mdb_reader_check(env, NULL);
+#endif /* MDBX_MODE_ENABLED */
 	return mdb_find_oldest(env, NULL);
 }
 
