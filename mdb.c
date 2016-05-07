@@ -7327,10 +7327,10 @@ mdb_node_add(MDB_cursor *mc, indx_t indx,
 		node_size += key->mv_size;
 	if (IS_LEAF(mp)) {
 		mdb_cassert(mc, key && data);
-		if (F_ISSET(flags, F_BIGDATA)) {
+		if (unlikely(F_ISSET(flags, F_BIGDATA))) {
 			/* Data already on overflow page. */
 			node_size += sizeof(pgno_t);
-		} else if (node_size + data->mv_size > mc->mc_txn->mt_env->me_nodemax) {
+		} else if (unlikely(node_size + data->mv_size > mc->mc_txn->mt_env->me_nodemax)) {
 			int ovpages = OVPAGES(data->mv_size, mc->mc_txn->mt_env->me_psize);
 			int rc;
 			/* Put data on overflow page. */
@@ -7378,19 +7378,19 @@ update:
 
 	if (IS_LEAF(mp)) {
 		ndata = NODEDATA(node);
-		if (ofp == NULL) {
-			if (F_ISSET(flags, F_BIGDATA))
+		if (unlikely(ofp == NULL)) {
+			if (unlikely(F_ISSET(flags, F_BIGDATA)))
 				memcpy(ndata, data->mv_data, sizeof(pgno_t));
 			else if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else if (ndata != data->mv_data)
+			else if (likely(ndata != data->mv_data))
 				memcpy(ndata, data->mv_data, data->mv_size);
 		} else {
 			memcpy(ndata, &ofp->mp_pgno, sizeof(pgno_t));
 			ndata = PAGEDATA(ofp);
 			if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else if (ndata != data->mv_data)
+			else if (likely(ndata != data->mv_data))
 				memcpy(ndata, data->mv_data, data->mv_size);
 		}
 	}
