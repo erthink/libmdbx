@@ -5019,6 +5019,7 @@ mdb_env_close0(MDB_env *env)
 
 	if (!(env->me_flags & MDB_ENV_ACTIVE))
 		return;
+	env->me_flags &= ~MDB_ENV_ACTIVE;
 
 	/* Doing this here since me_dbxs may not exist during mdb_env_close */
 	if (env->me_dbxs) {
@@ -5038,7 +5039,12 @@ mdb_env_close0(MDB_env *env)
 	mdb_midl_free(env->me_free_pgs);
 
 	if (env->me_flags & MDB_ENV_TXKEY) {
+		struct MDB_rthc *rthc = pthread_getspecific(env->me_txkey);
+		if (rthc && pthread_setspecific(env->me_txkey, NULL) == 0) {
+			mdb_env_reader_destr(rthc);
+		}
 		pthread_key_delete(env->me_txkey);
+		env->me_flags &= ~MDB_ENV_TXKEY;
 	}
 
 	if (env->me_map) {
@@ -5083,8 +5089,6 @@ mdb_env_close0(MDB_env *env)
 	if (env->me_lfd != INVALID_HANDLE_VALUE) {
 		(void) close(env->me_lfd);
 	}
-
-	env->me_flags &= ~(MDB_ENV_ACTIVE|MDB_ENV_TXKEY);
 }
 
 #if ! MDBX_MODE_ENABLED
