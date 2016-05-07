@@ -7383,14 +7383,14 @@ update:
 				memcpy(ndata, data->mv_data, sizeof(pgno_t));
 			else if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else
+			else if (ndata != data->mv_data)
 				memcpy(ndata, data->mv_data, data->mv_size);
 		} else {
 			memcpy(ndata, &ofp->mp_pgno, sizeof(pgno_t));
 			ndata = PAGEDATA(ofp);
 			if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else
+			else if (ndata != data->mv_data)
 				memcpy(ndata, data->mv_data, data->mv_size);
 		}
 	}
