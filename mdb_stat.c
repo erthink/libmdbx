@@ -221,7 +221,7 @@ int main(int argc, char *argv[])
 			printf("  Used now: %zu %.1f%%\n", value, value / percent);
 
 			value = pages;
-			printf("  Free pages: %zu %.1f%%\n", value, value / percent);
+			printf("  Unallocated: %zu %.1f%%\n", value, value / percent);
 
 			value = pages - reclaimable;
 			printf("  Detained: %zu %.1f%%\n", value, value / percent);
