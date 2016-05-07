@@ -1990,43 +1990,49 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 			break;
 
 		snap = mdb_find_oldest(env, &reader);
-		if (oldest < snap)
+		if (oldest < snap || reader < 0) {
+			if (retry && env->me_oom_func) {
+				/* LY: notify end of oom-loop */
+				env->me_oom_func(env, 0, 0, oldest, snap - oldest, -retry);
+			}
 			return snap;
+		}
 
-		if (reader < 0)
-			return 0;
+		MDB_reader *r;
+		pthread_t tid;
+		pid_t pid;
+		int rc;
 
-		{
-			MDB_reader *r;
-			pthread_t tid;
-			pid_t pid;
-			int rc;
+		if (!env->me_oom_func)
+			break;
 
-			if (!env->me_oom_func)
-				break;
+		r = &env->me_txns->mti_readers[ reader ];
+		pid = r->mr_pid;
+		tid = r->mr_tid;
+		if (r->mr_txnid != oldest || pid <= 0)
+			continue;
 
-			r = &env->me_txns->mti_readers[ reader ];
-			pid = r->mr_pid;
-			tid = r->mr_tid;
-			if (r->mr_txnid != oldest || pid <= 0)
-				continue;
+		rc = env->me_oom_func(env, pid, (void*) tid, oldest,
+			mdb_meta_head_w(env)->mm_txnid - oldest, retry);
+		if (rc < 0)
+			break;
 
-			rc = env->me_oom_func(env, pid, (void*) tid, oldest,
-				mdb_meta_head_w(env)->mm_txnid - oldest, retry);
-			if (rc < 0)
-				break;
-
-			if (rc) {
-				r->mr_txnid = ~(txnid_t)0;
-				if (rc > 1) {
-					r->mr_tid = 0;
-					r->mr_pid = 0;
-					mdbx_coherent_barrier();
-				}
+		if (rc) {
+			r->mr_txnid = ~(txnid_t)0;
+			if (rc > 1) {
+				r->mr_tid = 0;
+				r->mr_pid = 0;
+				mdbx_coherent_barrier();
 			}
 		}
 	}
+
+	if (retry && env->me_oom_func) {
+		/* LY: notify end of oom-loop */
+		env->me_oom_func(env, 0, 0, oldest, 0, -retry);
+	}
 #else
+	(void) oldest;
 	(void) mdb_reader_check(env, NULL);
 #endif /* MDBX_MODE_ENABLED */
 	return mdb_find_oldest(env, NULL);

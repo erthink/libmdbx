@@ -1671,12 +1671,14 @@ int	mdb_reader_check(MDB_env *env, int *dead);
 int  mdbx_txn_straggler(MDB_txn *txn, int *percent);
 
 	/** @brief A callback function for killing a laggard readers,
-	 * called in case of MDB_MAP_FULL error.
+	 * but also could waiting ones. Called in case of MDB_MAP_FULL error.
 	 *
 	 * @param[in] env An environment handle returned by #mdb_env_create().
 	 * @param[in] pid pid of the reader process.
 	 * @param[in] thread_id thread_id of the reader thread.
 	 * @param[in] txn Transaction number on which stalled.
+	 * @param[in] gap a lag from the last commited txn.
+	 * @param[in] retry a retry number, less that zero for notify end of OOM-loop.
 	 * @return -1 on failure (reader is not killed),
 	 * 	0 on a race condition (no such reader),
 	 * 	1 on success (reader was killed),
