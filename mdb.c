@@ -1990,43 +1990,49 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 			break;
 
 		snap = mdb_find_oldest(env, &reader);
-		if (oldest < snap)
+		if (oldest < snap || reader < 0) {
+			if (retry && env->me_oom_func) {
+				/* LY: notify end of oom-loop */
+				env->me_oom_func(env, 0, 0, oldest, snap - oldest, -retry);
+			}
 			return snap;
+		}
 
-		if (reader < 0)
-			return 0;
+		MDB_reader *r;
+		pthread_t tid;
+		pid_t pid;
+		int rc;
 
-		{
-			MDB_reader *r;
-			pthread_t tid;
-			pid_t pid;
-			int rc;
+		if (!env->me_oom_func)
+			break;
 
-			if (!env->me_oom_func)
-				break;
+		r = &env->me_txns->mti_readers[ reader ];
+		pid = r->mr_pid;
+		tid = r->mr_tid;
+		if (r->mr_txnid != oldest || pid <= 0)
+			continue;
 
-			r = &env->me_txns->mti_readers[ reader ];
-			pid = r->mr_pid;
-			tid = r->mr_tid;
-			if (r->mr_txnid != oldest || pid <= 0)
-				continue;
+		rc = env->me_oom_func(env, pid, (void*) tid, oldest,
+			mdb_meta_head_w(env)->mm_txnid - oldest, retry);
+		if (rc < 0)
+			break;
 
-			rc = env->me_oom_func(env, pid, (void*) tid, oldest,
-				mdb_meta_head_w(env)->mm_txnid - oldest, retry);
-			if (rc < 0)
-				break;
-
-			if (rc) {
-				r->mr_txnid = ~(txnid_t)0;
-				if (rc > 1) {
-					r->mr_tid = 0;
-					r->mr_pid = 0;
-					mdbx_coherent_barrier();
-				}
+		if (rc) {
+			r->mr_txnid = ~(txnid_t)0;
+			if (rc > 1) {
+				r->mr_tid = 0;
+				r->mr_pid = 0;
+				mdbx_coherent_barrier();
 			}
 		}
 	}
+
+	if (retry && env->me_oom_func) {
+		/* LY: notify end of oom-loop */
+		env->me_oom_func(env, 0, 0, oldest, 0, -retry);
+	}
 #else
+	(void) oldest;
 	(void) mdb_reader_check(env, NULL);
 #endif /* MDBX_MODE_ENABLED */
 	return mdb_find_oldest(env, NULL);
@@ -5013,6 +5019,7 @@ mdb_env_close0(MDB_env *env)
 
 	if (!(env->me_flags & MDB_ENV_ACTIVE))
 		return;
+	env->me_flags &= ~MDB_ENV_ACTIVE;
 
 	/* Doing this here since me_dbxs may not exist during mdb_env_close */
 	if (env->me_dbxs) {
@@ -5032,7 +5039,12 @@ mdb_env_close0(MDB_env *env)
 	mdb_midl_free(env->me_free_pgs);
 
 	if (env->me_flags & MDB_ENV_TXKEY) {
+		struct MDB_rthc *rthc = pthread_getspecific(env->me_txkey);
+		if (rthc && pthread_setspecific(env->me_txkey, NULL) == 0) {
+			mdb_env_reader_destr(rthc);
+		}
 		pthread_key_delete(env->me_txkey);
+		env->me_flags &= ~MDB_ENV_TXKEY;
 	}
 
 	if (env->me_map) {
@@ -5077,8 +5089,6 @@ mdb_env_close0(MDB_env *env)
 	if (env->me_lfd != INVALID_HANDLE_VALUE) {
 		(void) close(env->me_lfd);
 	}
-
-	env->me_flags &= ~(MDB_ENV_ACTIVE|MDB_ENV_TXKEY);
 }
 
 #if ! MDBX_MODE_ENABLED
@@ -7317,10 +7327,10 @@ mdb_node_add(MDB_cursor *mc, indx_t indx,
 		node_size += key->mv_size;
 	if (IS_LEAF(mp)) {
 		mdb_cassert(mc, key && data);
-		if (F_ISSET(flags, F_BIGDATA)) {
+		if (unlikely(F_ISSET(flags, F_BIGDATA))) {
 			/* Data already on overflow page. */
 			node_size += sizeof(pgno_t);
-		} else if (node_size + data->mv_size > mc->mc_txn->mt_env->me_nodemax) {
+		} else if (unlikely(node_size + data->mv_size > mc->mc_txn->mt_env->me_nodemax)) {
 			int ovpages = OVPAGES(data->mv_size, mc->mc_txn->mt_env->me_psize);
 			int rc;
 			/* Put data on overflow page. */
@@ -7368,19 +7378,19 @@ update:
 
 	if (IS_LEAF(mp)) {
 		ndata = NODEDATA(node);
-		if (ofp == NULL) {
-			if (F_ISSET(flags, F_BIGDATA))
+		if (unlikely(ofp == NULL)) {
+			if (unlikely(F_ISSET(flags, F_BIGDATA)))
 				memcpy(ndata, data->mv_data, sizeof(pgno_t));
 			else if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else
+			else if (likely(ndata != data->mv_data))
 				memcpy(ndata, data->mv_data, data->mv_size);
 		} else {
 			memcpy(ndata, &ofp->mp_pgno, sizeof(pgno_t));
 			ndata = PAGEDATA(ofp);
 			if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else
+			else if (likely(ndata != data->mv_data))
 				memcpy(ndata, data->mv_data, data->mv_size);
 		}
 	}
