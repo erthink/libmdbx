@@ -196,7 +196,7 @@ typedef int mdb_filehandle_t;
 /** Library minor version */
 #define MDB_VERSION_MINOR	9
 /** Library patch version */
-#define MDB_VERSION_PATCH	42
+#define MDB_VERSION_PATCH	19
 
 /** Combine args a,b,c into a single integer for easy version comparisons */
 #define MDB_VERINT(a,b,c)	(((a) << 24) | ((b) << 16) | (c))
@@ -206,10 +206,10 @@ typedef int mdb_filehandle_t;
 	MDB_VERINT(MDB_VERSION_MAJOR,MDB_VERSION_MINOR,MDB_VERSION_PATCH)
 
 /** The release date of this library version */
-#define MDB_VERSION_DATE	"February 5, 2016, https://github.com/ReOpen/libmdbx"
+#define MDB_VERSION_DATE	"2016-04-06"
 
 /** A stringifier for the version info */
-#define MDB_VERSTR(a,b,c,d)	"LMDB " #a "." #b "." #c ": (" d ")"
+#define MDB_VERSTR(a,b,c,d)	"MDBX " #a "." #b "." #c ": (" d ", https://github.com/ReOpen/libmdbx)"
 
 /** A helper for the stringifier macro */
 #define MDB_VERFOO(a,b,c,d)	MDB_VERSTR(a,b,c,d)
@@ -1671,12 +1671,14 @@ int	mdb_reader_check(MDB_env *env, int *dead);
 int  mdbx_txn_straggler(MDB_txn *txn, int *percent);
 
 	/** @brief A callback function for killing a laggard readers,
-	 * called in case of MDB_MAP_FULL error.
+	 * but also could waiting ones. Called in case of MDB_MAP_FULL error.
 	 *
 	 * @param[in] env An environment handle returned by #mdb_env_create().
 	 * @param[in] pid pid of the reader process.
 	 * @param[in] thread_id thread_id of the reader thread.
 	 * @param[in] txn Transaction number on which stalled.
+	 * @param[in] gap a lag from the last commited txn.
+	 * @param[in] retry a retry number, less that zero for notify end of OOM-loop.
 	 * @return -1 on failure (reader is not killed),
 	 * 	0 on a race condition (no such reader),
 	 * 	1 on success (reader was killed),

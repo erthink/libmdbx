@@ -57,8 +57,8 @@ static void db_connect() {
 	LMDB_CHECK(mdb_env_create(&env));
 	LMDB_CHECK(mdb_env_set_mapsize(env, 3L * 1024L * 1024L * 1024L));
 	LMDB_CHECK(mdb_env_set_maxdbs(env, 30));
-#if defined(MDB_LIFORECLAIM)
-	LMDB_CHECK(mdb_env_open(env, opt_db_path, MDB_CREATE | MDB_NOSYNC | MDB_WRITEMAP | MDB_LIFORECLAIM, 0664));
+#if defined(MDBX_LIFORECLAIM)
+	LMDB_CHECK(mdb_env_open(env, opt_db_path, MDB_CREATE | MDB_NOSYNC | MDB_WRITEMAP | MDBX_LIFORECLAIM, 0664));
 #else
 	LMDB_CHECK(mdb_env_open(env, opt_db_path, MDB_CREATE | MDB_NOSYNC | MDB_WRITEMAP, 0664));
 #endif

@@ -1977,8 +1977,11 @@ txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 static txnid_t __cold
 mdbx_oomkick(MDB_env *env, txnid_t oldest)
 {
+	mdb_debug("DB size maxed out");
+#if MDBX_MODE_ENABLED
 	int retry;
 	txnid_t snap;
+	mdb_debug("DB size maxed out");
 
 	for(retry = 0; ; ++retry) {
 		int reader;
@@ -1987,47 +1990,51 @@ mdbx_oomkick(MDB_env *env, txnid_t oldest)
 			break;
 
 		snap = mdb_find_oldest(env, &reader);
-		if (oldest < snap)
+		if (oldest < snap || reader < 0) {
+			if (retry && env->me_oom_func) {
+				/* LY: notify end of oom-loop */
+				env->me_oom_func(env, 0, 0, oldest, snap - oldest, -retry);
+			}
 			return snap;
+		}
 
-		if (reader < 0)
-			return 0;
+		MDB_reader *r;
+		pthread_t tid;
+		pid_t pid;
+		int rc;
 
-#if MDBX_MODE_ENABLED
-		{
-			MDB_reader *r;
-			pthread_t tid;
-			pid_t pid;
-			int rc;
+		if (!env->me_oom_func)
+			break;
 
-			if (!env->me_oom_func)
-				break;
+		r = &env->me_txns->mti_readers[ reader ];
+		pid = r->mr_pid;
+		tid = r->mr_tid;
+		if (r->mr_txnid != oldest || pid <= 0)
+			continue;
 
-			r = &env->me_txns->mti_readers[ reader ];
-			pid = r->mr_pid;
-			tid = r->mr_tid;
-			if (r->mr_txnid != oldest || pid <= 0)
-				continue;
+		rc = env->me_oom_func(env, pid, (void*) tid, oldest,
+			mdb_meta_head_w(env)->mm_txnid - oldest, retry);
+		if (rc < 0)
+			break;
 
-			rc = env->me_oom_func(env, pid, (void*) tid, oldest,
-				mdb_meta_head_w(env)->mm_txnid - oldest, retry);
-			if (rc < 0)
-				break;
-
-			if (rc) {
-				r->mr_txnid = ~(txnid_t)0;
-				if (rc > 1) {
-					r->mr_tid = 0;
-					r->mr_pid = 0;
-					mdbx_coherent_barrier();
-				}
+		if (rc) {
+			r->mr_txnid = ~(txnid_t)0;
+			if (rc > 1) {
+				r->mr_tid = 0;
+				r->mr_pid = 0;
+				mdbx_coherent_barrier();
 			}
 		}
-#else
-		break;
-#endif /* MDBX_MODE_ENABLED */
 	}
 
+	if (retry && env->me_oom_func) {
+		/* LY: notify end of oom-loop */
+		env->me_oom_func(env, 0, 0, oldest, 0, -retry);
+	}
+#else
+	(void) oldest;
+	(void) mdb_reader_check(env, NULL);
+#endif /* MDBX_MODE_ENABLED */
 	return mdb_find_oldest(env, NULL);
 }
 
@@ -2069,7 +2076,8 @@ mdb_page_dirty(MDB_txn *txn, MDB_page *mp)
 #define MDBX_ALLOC_CACHE	1
 #define MDBX_ALLOC_GC	2
 #define MDBX_ALLOC_NEW	4
-#define MDBX_ALLOC_ALL	(MDBX_ALLOC_CACHE|MDBX_ALLOC_GC|MDBX_ALLOC_NEW)
+#define MDBX_ALLOC_KICK	8
+#define MDBX_ALLOC_ALL	(MDBX_ALLOC_CACHE|MDBX_ALLOC_GC|MDBX_ALLOC_NEW|MDBX_ALLOC_KICK)
 
 static int
 mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
@@ -2090,7 +2098,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 		if (unlikely(mc->mc_flags & C_RECLAIMING)) {
 			/* If mc is updating the freeDB, then the freelist cannot play
 			 * catch-up with itself by growing while trying to save it. */
-			flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE | MDBX_LIFORECLAIM);
+			flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_KICK | MDBX_COALESCE | MDBX_LIFORECLAIM);
 		}
 	}
 
@@ -2141,18 +2149,14 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 				oldest = env->me_pgoldest;
 				mdb_cursor_init(&m2, txn, FREE_DBI, NULL);
 				if (flags & MDBX_LIFORECLAIM) {
-					if (env->me_pglast > 1) {
-						/* Continue lookup from env->me_pglast to lower/first */
-						last = env->me_pglast - 1;
-						op = MDB_SET_RANGE;
-					} else {
+					if (! found_oldest) {
 						oldest = mdb_find_oldest(env, NULL);
 						found_oldest = 1;
-						/* Begin from oldest reader if any */
-						if (oldest > 2) {
-							last = oldest - 1;
-							op = MDB_SET_RANGE;
-						}
+					}
+					/* Begin from oldest reader if any */
+					if (oldest > 2) {
+						last = oldest - 1;
+						op = MDB_SET_RANGE;
 					}
 				} else if (env->me_pglast) {
 					/* Continue lookup from env->me_pglast to higher/last */
@@ -2288,18 +2292,18 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			} while (--i > n2);
 		}
 
+		/* Use new pages from the map when nothing suitable in the freeDB */
 		i = 0;
-		rc = MDB_NOTFOUND;
-		if (likely(flags & MDBX_ALLOC_NEW)) {
-			/* Use new pages from the map when nothing suitable in the freeDB */
-			pgno = txn->mt_next_pgno;
-			if (likely(pgno + num <= env->me_maxpg))
+		pgno = txn->mt_next_pgno;
+		rc = MDB_MAP_FULL;
+		if (likely(pgno + num <= env->me_maxpg)) {
+			rc = MDB_NOTFOUND;
+			if (likely(flags & MDBX_ALLOC_NEW))
 				goto done;
-			mdb_debug("DB size maxed out");
-			rc = MDB_MAP_FULL;
 		}
 
-		if (flags & MDBX_ALLOC_GC) {
+		if ((flags & MDBX_ALLOC_GC)
+				&& ((flags & MDBX_ALLOC_KICK) || rc == MDB_MAP_FULL)) {
 			MDB_meta* head = mdb_meta_head_w(env);
 			MDB_meta* tail = mdb_env_meta_flipflop(env, head);
 
@@ -3454,8 +3458,8 @@ again:
 
 		if (lifo) {
 			if (refill_idx > (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0)) {
-				/* LY: need more just a txn-id for save page list. */
-				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC);
+				/* LY: need just a txn-id for save page list. */
+				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
 				if (likely(rc == 0))
 					/* LY: ok, reclaimed from freedb. */
 					continue;
@@ -4868,13 +4872,6 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
-#if MDBX_LIFORECLAIM
-	/* LY: don't allow LIFO with just NOMETASYNC */
-	if ((flags & (MDB_NOMETASYNC | MDBX_LIFORECLAIM | MDB_NOSYNC))
-			== (MDB_NOMETASYNC | MDBX_LIFORECLAIM))
-		return EINVAL;
-#endif /* MDBX_LIFORECLAIM */
-
 	if (env->me_fd != INVALID_HANDLE_VALUE || (flags & ~(CHANGEABLE|CHANGELESS)))
 		return EINVAL;
 
@@ -5022,6 +5019,7 @@ mdb_env_close0(MDB_env *env)
 
 	if (!(env->me_flags & MDB_ENV_ACTIVE))
 		return;
+	env->me_flags &= ~MDB_ENV_ACTIVE;
 
 	/* Doing this here since me_dbxs may not exist during mdb_env_close */
 	if (env->me_dbxs) {
@@ -5041,7 +5039,12 @@ mdb_env_close0(MDB_env *env)
 	mdb_midl_free(env->me_free_pgs);
 
 	if (env->me_flags & MDB_ENV_TXKEY) {
+		struct MDB_rthc *rthc = pthread_getspecific(env->me_txkey);
+		if (rthc && pthread_setspecific(env->me_txkey, NULL) == 0) {
+			mdb_env_reader_destr(rthc);
+		}
 		pthread_key_delete(env->me_txkey);
+		env->me_flags &= ~MDB_ENV_TXKEY;
 	}
 
 	if (env->me_map) {
@@ -5086,8 +5089,6 @@ mdb_env_close0(MDB_env *env)
 	if (env->me_lfd != INVALID_HANDLE_VALUE) {
 		(void) close(env->me_lfd);
 	}
-
-	env->me_flags &= ~(MDB_ENV_ACTIVE|MDB_ENV_TXKEY);
 }
 
 #if ! MDBX_MODE_ENABLED
@@ -7326,10 +7327,10 @@ mdb_node_add(MDB_cursor *mc, indx_t indx,
 		node_size += key->mv_size;
 	if (IS_LEAF(mp)) {
 		mdb_cassert(mc, key && data);
-		if (F_ISSET(flags, F_BIGDATA)) {
+		if (unlikely(F_ISSET(flags, F_BIGDATA))) {
 			/* Data already on overflow page. */
 			node_size += sizeof(pgno_t);
-		} else if (node_size + data->mv_size > mc->mc_txn->mt_env->me_nodemax) {
+		} else if (unlikely(node_size + data->mv_size > mc->mc_txn->mt_env->me_nodemax)) {
 			int ovpages = OVPAGES(data->mv_size, mc->mc_txn->mt_env->me_psize);
 			int rc;
 			/* Put data on overflow page. */
@@ -7377,19 +7378,19 @@ update:
 
 	if (IS_LEAF(mp)) {
 		ndata = NODEDATA(node);
-		if (ofp == NULL) {
-			if (F_ISSET(flags, F_BIGDATA))
+		if (unlikely(ofp == NULL)) {
+			if (unlikely(F_ISSET(flags, F_BIGDATA)))
 				memcpy(ndata, data->mv_data, sizeof(pgno_t));
 			else if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else
+			else if (likely(ndata != data->mv_data))
 				memcpy(ndata, data->mv_data, data->mv_size);
 		} else {
 			memcpy(ndata, &ofp->mp_pgno, sizeof(pgno_t));
 			ndata = PAGEDATA(ofp);
 			if (F_ISSET(flags, MDB_RESERVE))
 				data->mv_data = ndata;
-			else
+			else if (likely(ndata != data->mv_data))
 				memcpy(ndata, data->mv_data, data->mv_size);
 		}
 	}
@@ -9608,17 +9609,9 @@ mdb_env_set_flags(MDB_env *env, unsigned flags, int onoff)
 		return rc;
 
 	if (onoff)
-		flags = env->me_flags | flags;
+		env->me_flags |= flags;
 	else
-		flags = env->me_flags & ~flags;
-
-#if MDBX_LIFORECLAIM
-	/* LY: don't allow LIFO with just NOMETASYNC */
-	if ((flags & (MDB_NOMETASYNC | MDBX_LIFORECLAIM | MDB_NOSYNC))
-			== (MDB_NOMETASYNC | MDBX_LIFORECLAIM))
-		return EINVAL;
-#endif /* MDBX_LIFORECLAIM */
-	env->me_flags = flags;
+		env->me_flags &= ~flags;
 
 	mdb_mutex_unlock(env, mutex);
 	return MDB_SUCCESS;
