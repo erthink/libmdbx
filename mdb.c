@@ -6885,7 +6885,6 @@ current:
 					 */
 					if (unlikely(level > 1)) {
 						/* It is writable only in a parent txn */
-						size_t sz = (size_t) env->me_psize * ovpages, off;
 						MDB_page *np = mdb_page_malloc(mc->mc_txn, ovpages);
 						MDB_ID2 id2;
 						if (unlikely(!np))
@@ -6899,8 +6898,13 @@ current:
 						 * parent txn, in case the user peeks at MDB_RESERVEd
 						 * or unused parts. Some users treat ovpages specially.
 						 */
-						if (1 || /* LY: Hm, why we should do this differently in dependence from MDB_RESERVE? */
-								!(flags & MDB_RESERVE)) {
+#if MDBX_MODE_ENABLED
+						/* LY: New page will contain only header from origin,
+						 * but no any payload */
+						memcpy(np, omp, PAGEHDRSZ);
+#else
+						size_t sz = (size_t) env->me_psize * ovpages, off;
+						if (!(flags & MDB_RESERVE)) {
 							/* Skip the part where LMDB will put *data.
 							 * Copy end of page, adjusting alignment so
 							 * compiler may copy words instead of bytes.
@@ -6910,7 +6914,8 @@ current:
 								(size_t *)((char *)omp + off), sz - off);
 							sz = PAGEHDRSZ;
 						}
-						memcpy(np, omp, sz); /* Copy whole or beginning of page */
+						memcpy(np, omp, sz); /* Copy whole or header of page */
+#endif /* MDBX_MODE_ENABLED */
 						omp = np;
 					}
 					SETDSZ(leaf, data->mv_size);
