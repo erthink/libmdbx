@@ -1505,6 +1505,7 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
 	size_t size = env->me_psize;
 	MDB_page *np = env->me_dpages;
 	if (likely(num == 1 && np)) {
+		ASAN_UNPOISON_MEMORY_REGION(np, size);
 		VALGRIND_MEMPOOL_ALLOC(env, np, size);
 		VALGRIND_MAKE_MEM_DEFINED(&np->mp_next, sizeof(np->mp_next));
 		env->me_dpages = np->mp_next;
@@ -1583,6 +1584,7 @@ mdb_kill_page(MDB_env *env, pgno_t pgno)
 		MDB_page *mp = (MDB_page *)(env->me_map + offs);
 		memset(&mp->mp_pb, 0x6F /* 'o', 111 */, env->me_psize - shift);
 		VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_pb, env->me_psize - shift);
+		ASAN_POISON_MEMORY_REGION(&mp->mp_pb, env->me_psize - shift);
 	} else {
 		struct iovec iov[1];
 		iov[0].iov_len = env->me_psize - shift;
@@ -1636,9 +1638,13 @@ mdb_page_loose(MDB_cursor *mc, MDB_page *mp)
 	}
 	if (loose) {
 		mdb_debug("loosen db %d page %zu", DDBI(mc), mp->mp_pgno);
-		if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+		MDB_page **link = &NEXT_LOOSE_PAGE(mp);
+		if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB)) {
 			mdb_kill_page(txn->mt_env, pgno);
-		NEXT_LOOSE_PAGE(mp) = txn->mt_loose_pgs;
+			VALGRIND_MAKE_MEM_UNDEFINED(link, sizeof(MDB_page*));
+			ASAN_UNPOISON_MEMORY_REGION(link, sizeof(MDB_page*));
+		}
+		*link = txn->mt_loose_pgs;
 		txn->mt_loose_pgs = mp;
 		txn->mt_loose_count++;
 		mp->mp_flags |= P_LOOSE;
@@ -2110,6 +2116,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			txn->mt_loose_pgs = NEXT_LOOSE_PAGE(np);
 			txn->mt_loose_count--;
 			mdb_debug("db %d use loose page %zu", DDBI(mc), np->mp_pgno);
+			ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize);
 			*mp = np;
 			return MDB_SUCCESS;
 		}
@@ -2361,6 +2368,7 @@ done:
 		np = (MDB_page *)(env->me_map + env->me_psize * pgno);
 		/* LY: reset no-access flag from mdb_kill_page() */
 		VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
+		ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize * num);
 	} else {
 		if (unlikely(!(np = mdb_page_malloc(txn, num)))) {
 			rc = ENOMEM;
@@ -5110,6 +5118,7 @@ mdbx_env_close_ex(MDB_env *env, int dont_sync)
 
 	VALGRIND_DESTROY_MEMPOOL(env);
 	while ((dp = env->me_dpages) != NULL) {
+		ASAN_UNPOISON_MEMORY_REGION(&dp->mp_next, sizeof(dp->mp_next));
 		VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
 		env->me_dpages = dp->mp_next;
 		free(dp);
@@ -6885,7 +6894,6 @@ current:
 					 */
 					if (unlikely(level > 1)) {
 						/* It is writable only in a parent txn */
-						size_t sz = (size_t) env->me_psize * ovpages, off;
 						MDB_page *np = mdb_page_malloc(mc->mc_txn, ovpages);
 						MDB_ID2 id2;
 						if (unlikely(!np))
@@ -6895,9 +6903,19 @@ current:
 						/* Note - this page is already counted in parent's dirty_room */
 						rc2 = mdb_mid2l_insert(mc->mc_txn->mt_u.dirty_list, &id2);
 						mdb_cassert(mc, rc2 == 0);
-						if (1 || /* LY: Hm, why we should do this differently in dependence from MDB_RESERVE? */
-								!(flags & MDB_RESERVE)) {
-							/* Copy end of page, adjusting alignment so
+						/* Currently we make the page look as with put() in the
+						 * parent txn, in case the user peeks at MDB_RESERVEd
+						 * or unused parts. Some users treat ovpages specially.
+						 */
+#if MDBX_MODE_ENABLED
+						/* LY: New page will contain only header from origin,
+						 * but no any payload */
+						memcpy(np, omp, PAGEHDRSZ);
+#else
+						size_t sz = (size_t) env->me_psize * ovpages, off;
+						if (!(flags & MDB_RESERVE)) {
+							/* Skip the part where LMDB will put *data.
+							 * Copy end of page, adjusting alignment so
 							 * compiler may copy words instead of bytes.
 							 */
 							off = (PAGEHDRSZ + data->mv_size) & -sizeof(size_t);
@@ -6905,7 +6923,8 @@ current:
 								(size_t *)((char *)omp + off), sz - off);
 							sz = PAGEHDRSZ;
 						}
-						memcpy(np, omp, sz); /* Copy beginning of page */
+						memcpy(np, omp, sz); /* Copy whole or header of page */
+#endif /* MDBX_MODE_ENABLED */
 						omp = np;
 					}
 					SETDSZ(leaf, data->mv_size);
@@ -9177,7 +9196,7 @@ mdb_env_cthr_toggle(mdb_copy *my, int st)
 static int __cold
 mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 {
-	MDB_cursor mc;
+	MDB_cursor mc = {0};
 	MDB_txn *txn = my->mc_txn;
 	MDB_node *ni;
 	MDB_page *mo, *mp, *leaf;
@@ -9190,10 +9209,9 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 		return MDB_SUCCESS;
 
 	mc.mc_snum = 1;
-	mc.mc_top = 0;
 	mc.mc_txn = txn;
 
-	rc = mdb_page_get(my->mc_txn, *pg, &mc.mc_pg[0], NULL);
+	rc = mdb_page_get(txn, *pg, &mc.mc_pg[0], NULL);
 	if (rc)
 		return rc;
 	rc = mdb_page_search_root(&mc, NULL, MDB_PS_FIRST);
