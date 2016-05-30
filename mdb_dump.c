@@ -20,12 +20,6 @@
 #include <signal.h>
 #include "mdbx.h"
 
-#ifdef _WIN32
-#define Z	"I"
-#else
-#define Z	"z"
-#endif
-
 #define PRINT	1
 static int mode;
 
@@ -116,7 +110,7 @@ static int dumpit(MDB_txn *txn, MDB_dbi dbi, char *name)
 	if (name)
 		printf("database=%s\n", name);
 	printf("type=btree\n");
-	printf("mapsize=%" Z "u\n", info.me_mapsize);
+	printf("mapsize=%zu\n", info.me_mapsize);
 	if (info.me_mapaddr)
 		printf("mapaddr=%p\n", info.me_mapaddr);
 	printf("maxreaders=%u\n", info.me_maxreaders);
