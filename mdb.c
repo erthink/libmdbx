@@ -4815,8 +4815,14 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 		return errno;
 
 	if (*excl > 0) {
-		pthread_mutexattr_t mattr;
+		/* Solaris needs this before initing a robust mutex.  Otherwise
+		* it may skip the init and return EBUSY "seems someone already
+		* inited" or EINVAL "it was inited differently".
+		*/
+		memset(&env->me_txns->mti_rmutex, 0, sizeof(env->me_txns->mti_rmutex));
+		memset(&env->me_txns->mti_wmutex, 0, sizeof(env->me_txns->mti_wmutex));
 
+		pthread_mutexattr_t mattr;
 		if ((rc = pthread_mutexattr_init(&mattr))
 			|| (rc = pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED))
 #if MDB_USE_ROBUST
