@@ -4823,15 +4823,19 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 		memset(&env->me_txns->mti_wmutex, 0, sizeof(env->me_txns->mti_wmutex));
 
 		pthread_mutexattr_t mattr;
-		if ((rc = pthread_mutexattr_init(&mattr))
-			|| (rc = pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED))
+		rc = pthread_mutexattr_init(&mattr);
+		if (rc) return rc;
+
+		rc = pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+
 #if MDB_USE_ROBUST
-			|| (rc = pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST))
+		if(! rc) rc = pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
 #endif /* MDB_USE_ROBUST */
-			|| (rc = pthread_mutex_init(&env->me_txns->mti_rmutex, &mattr))
-			|| (rc = pthread_mutex_init(&env->me_txns->mti_wmutex, &mattr)))
-			return rc;
+		if (! rc) rc = pthread_mutex_init(&env->me_txns->mti_rmutex, &mattr);
+		if (! rc) rc = pthread_mutex_init(&env->me_txns->mti_wmutex, &mattr);
+
 		pthread_mutexattr_destroy(&mattr);
+		if (rc) return rc;
 
 		env->me_txns->mti_magic = MDB_MAGIC;
 		env->me_txns->mti_format = MDB_LOCK_FORMAT;
