@@ -9196,7 +9196,7 @@ mdb_env_cthr_toggle(mdb_copy *my, int st)
 static int __cold
 mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 {
-	MDB_cursor mc = {0};
+	MDB_cursor mc;
 	MDB_txn *txn = my->mc_txn;
 	MDB_node *ni;
 	MDB_page *mo, *mp, *leaf;
@@ -9208,6 +9208,7 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 	if (*pg == P_INVALID)
 		return MDB_SUCCESS;
 
+	memset(&mc, 0, sizeof(mc));
 	mc.mc_snum = 1;
 	mc.mc_txn = txn;
 
