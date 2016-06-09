@@ -31,7 +31,7 @@
 	When needed drop-in replacement for liblmdb you should:
 		- 'make lmdb' to build liblmdb.so and liblmdb.a;
 		- #include <lmdb.h> and use mdb_* functions;
-		- linking with liblmdb.so оr liblmdb.a;
+		- linking with liblmdb.so or liblmdb.a;
 
 		= This provides nearly full compatibility with
 		  original LMDB from Symas Corp.
@@ -41,7 +41,7 @@
 	When exactly the libmdbx is needed, you should:
 		- 'make mdbx' to build libmdbx.so and libmdbx.a;
 		- #include <mdbx.h> and use mdbx_* functions;
-		- linking with libmdbx.so оr libmdbx.a;
+		- linking with libmdbx.so or libmdbx.a;
 
 		= This allows using (linking) both MDBX and LMDB
 		  simultaneously in the one application, for instance

@@ -11,12 +11,6 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  */
-#ifdef _WIN32
-#include <windows.h>
-#define	MDB_STDOUT	GetStdHandle(STD_OUTPUT_HANDLE)
-#else
-#define	MDB_STDOUT	1
-#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -70,7 +64,7 @@ int main(int argc,char * argv[])
 	if (rc == MDB_SUCCESS) {
 		act = "copying";
 		if (argc == 2)
-			rc = mdb_env_copyfd2(env, MDB_STDOUT, cpflags);
+			rc = mdb_env_copyfd2(env, STDOUT_FILENO, cpflags);
 		else
 			rc = mdb_env_copy2(env, argv[2], cpflags);
 	}
