@@ -140,10 +140,10 @@ wbench:	wbench.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 mdbx.o: $(SRC_MDBX)
-	$(CC) $(CFLAGS) -include mdbx.h -c mdb.c -o $@
+	$(CC) $(CFLAGS) -c mdbx.c -o $@
 
 mdbx.lo: $(SRC_MDBX)
-	$(CC) $(CFLAGS) -include mdbx.h -fPIC -c mdb.c -o $@
+	$(CC) $(CFLAGS) -fPIC -c mdbx.c -o $@
 
 lmdb.o: $(SRC_LMDB)
 	$(CC) $(CFLAGS) -c mdb.c -o $@
@@ -160,7 +160,7 @@ lmdb.lo: $(SRC_LMDB)
 COFLAGS	= -fprofile-arcs -ftest-coverage
 
 @gcov-mdb.o: $(SRC_MDBX)
-	$(CC) $(CFLAGS) $(COFLAGS) -O0 -include mdbx.h -c mdb.c -o $@
+	$(CC) $(CFLAGS) $(COFLAGS) -O0 -c mdbx.c -o $@
 
 coverage: @gcov-mdb.o
 	for t in mtest*.c; do x=`basename \$$t .c`; $(MAKE) $$x.o; \
