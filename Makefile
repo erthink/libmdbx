@@ -197,3 +197,13 @@ $(eval $(call bench-rule,debug,10))
 bench: bench-lmdb.txt bench-mdbx.txt
 
 endif
+
+ci-rule = @( CC=$$(which $1); if [ -n "$$CC" ]; then \
+		CC=$$(readlink -f $$CC); echo -n "probe by $2 ($$CC): " && \
+		$(MAKE) clean >$1.log 2>&1 && $(MAKE) all check 1>$1.log 2>&1 && echo "Ok" || echo " Failed, see $1.log"; \
+	else echo "no $2 ($1) for probe"; fi; )
+ci:
+	$(call ci-rule,cc,default C compiler)
+	$(call ci-rule,gcc,GCC)
+	$(call ci-rule,clang,clang LLVM)
+	$(call ci-rule,icc,Intel C)
