@@ -19,31 +19,17 @@
  *
  */
 
-/* LY: Please do not ask us for Windows support, just never!
- * But you can make a fork for Windows, or become maintainer for FreeBSD... */
-#ifndef __gnu_linux__
-#	error "MDBX supports only GNU Linux"
-#endif
-
-#if !defined(__GNUC__) || __GNUC__ < 4 || (__GNUC__ == 4 && __GNUC_MINOR__ < 2)
-	/* LY: Actualy MDBX was not tested with compilers
-	 *     older than GCC 4.4 from RHEL6, and clang 3.6 from Ubuntu.
-	 * But you could remove this #error and try to continue at your own risk.
-	 * In such case please don't rise up an issues related ONLY to old compilers.
-	 */
-#	error "MDBX required at least GCC 4.2 compatible C/C++ compiler."
-#endif
-
 #ifndef _REOPEN_H
 #define _REOPEN_H
 
-#ifndef _GNU_SOURCE
-#	define _GNU_SOURCE
-#endif
-
-#if !defined(GCC_VERSION) && defined(__GNUC__)
-#	define GCC_VERSION (__GNUC__ * 10000 + __GNUC_MINOR__ * 100 + __GNUC_PATCHLEVEL__)
-#endif /* GCC_VERSION */
+#ifndef __CLANG_PREREQ
+#	ifdef __clang__
+#		define __CLANG_PREREQ(maj,min) \
+			((__clang_major__ << 16) + __clang_minor__ >= ((maj) << 16) + (min))
+#	else
+#		define __CLANG_PREREQ(maj,min) (0)
+#	endif
+#endif /* __CLANG_PREREQ */
 
 #ifndef __has_attribute
 #	define __has_attribute(x) (0)

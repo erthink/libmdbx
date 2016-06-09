@@ -58,6 +58,36 @@
 #	define MDB_DEBUG 0
 #endif
 
+#ifndef _GNU_SOURCE
+#	define _GNU_SOURCE
+#endif
+
+/* LY: Please do not ask us for Windows support, just never!
+ * But you can make a fork for Windows, or become maintainer for FreeBSD... */
+#ifndef __gnu_linux__
+#	warning "ReOpenMDBX supports only GNU Linux"
+#endif
+
+#include <features.h>
+
+#if !defined(__GNUC__) || !__GNUC_PREREQ(4,2)
+	/* LY: Actualy ReOpenMDBX was not tested with compilers
+	 *     older than GCC 4.4 (from RHEL6).
+	 * But you could remove this #error and try to continue at your own risk.
+	 * In such case please don't rise up an issues related ONLY to old compilers.
+	 */
+#	warning "ReOpenMDBX required at least GCC 4.2 compatible C/C++ compiler."
+#endif
+
+#if !defined(__GNU_LIBRARY__) || !__GLIBC_PREREQ(2,12)
+	/* LY: Actualy ReOpenMDBX was not tested with something
+	 *     older than glibc 2.12 (from RHEL6).
+	 * But you could remove this #error and try to continue at your own risk.
+	 * In such case please don't rise up an issues related ONLY to old systems.
+	 */
+#	warning "ReOpenMDBX required at least GLIBC 2.12."
+#endif
+
 #include "./reopen.h"
 #include "./barriers.h"
 
@@ -175,11 +205,8 @@
 #ifndef MDB_USE_ROBUST
 	/* Howard Chu: Android currently lacks Robust Mutex support */
 #	if defined(EOWNERDEAD) && !defined(ANDROID) \
-	/* LY: glibc before 2.10 has a troubles with Robust Mutex too.
-	 * But more over:
-	 *  - we couldn't test code with glibc < 2.12;
-	 *  - we won't provide compatibility with old systems. */ \
-	&& !(defined(__GLIBC__) && ((__GLIBC__ << 16)|__GLIBC_MINOR__) < 0x02000c)
+	/* LY: glibc before 2.10 has a troubles with Robust Mutex too. */ \
+	&& __GLIBC_PREREQ(2,10)
 #		define MDB_USE_ROBUST	1
 #	else
 #		define MDB_USE_ROBUST	0
