@@ -200,7 +200,8 @@ endif
 
 ci-rule = @( CC=$$(which $1); if [ -n "$$CC" ]; then \
 		CC=$$(readlink -f $$CC); echo -n "probe by $2 ($$CC): " && \
-		$(MAKE) clean >$1.log 2>&1 && $(MAKE) all check 1>$1.log 2>&1 && echo "Ok" || echo " Failed, see $1.log"; \
+		$(MAKE) clean >$1.log 2>$1.err && $(MAKE) all check 1>$1.log 2>$1.err && echo "OK" \
+			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:
 	$(call ci-rule,cc,default C compiler)
