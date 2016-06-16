@@ -4,8 +4,29 @@
  *	A Btree-based database management library modeled loosely on the
  *	BerkeleyDB API, but much simplified.
  */
+
 /*
- * Copyright 2011-2016 Howard Chu, Symas Corp.
+ * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ *
+ * This file is part of ReOpenMDBX.
+ *
+ * ReOpenMDBX is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * ReOpenMDBX is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * ---
+ *
+ * Copyright 2011-2014 Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -35,6 +56,36 @@
 
 #ifndef MDB_DEBUG
 #	define MDB_DEBUG 0
+#endif
+
+#ifndef _GNU_SOURCE
+#	define _GNU_SOURCE
+#endif
+
+/* LY: Please do not ask us for Windows support, just never!
+ * But you can make a fork for Windows, or become maintainer for FreeBSD... */
+#ifndef __gnu_linux__
+#	warning "ReOpenMDBX supports only GNU Linux"
+#endif
+
+#include <features.h>
+
+#if !defined(__GNUC__) || !__GNUC_PREREQ(4,2)
+	/* LY: Actualy ReOpenMDBX was not tested with compilers
+	 *     older than GCC 4.4 (from RHEL6).
+	 * But you could remove this #error and try to continue at your own risk.
+	 * In such case please don't rise up an issues related ONLY to old compilers.
+	 */
+#	warning "ReOpenMDBX required at least GCC 4.2 compatible C/C++ compiler."
+#endif
+
+#if !defined(__GNU_LIBRARY__) || !__GLIBC_PREREQ(2,12)
+	/* LY: Actualy ReOpenMDBX was not tested with something
+	 *     older than glibc 2.12 (from RHEL6).
+	 * But you could remove this #error and try to continue at your own risk.
+	 * In such case please don't rise up an issues related ONLY to old systems.
+	 */
+#	warning "ReOpenMDBX required at least GLIBC 2.12."
 #endif
 
 #include "./reopen.h"
@@ -108,6 +159,11 @@
 #	define MDBX_DBG_EXTRA	0
 #	define MDBX_DBG_AUDIT	0
 #	define MDBX_DBG_EDGE	0
+#	define mdb_runtime_flags 0
+#	define mdb_debug_logger ((void (*)(int, ...)) NULL)
+#	define MDBX_ONLY_FEATURE static
+#else
+#	define MDBX_ONLY_FEATURE
 #endif /* ! MDBX_MODE_ENABLED */
 
 #if (BYTE_ORDER == LITTLE_ENDIAN) == (BYTE_ORDER == BIG_ENDIAN)
@@ -149,11 +205,8 @@
 #ifndef MDB_USE_ROBUST
 	/* Howard Chu: Android currently lacks Robust Mutex support */
 #	if defined(EOWNERDEAD) && !defined(ANDROID) \
-	/* LY: glibc before 2.10 has a troubles with Robust Mutex too.
-	 * But more over:
-	 *  - we couldn't test code with glibc < 2.12;
-	 *  - we won't provide compatibility with old systems. */ \
-	&& !(defined(__GLIBC__) && ((__GLIBC__ << 16)|__GLIBC_MINOR__) < 0x02000c)
+	/* LY: glibc before 2.10 has a troubles with Robust Mutex too. */ \
+	&& __GLIBC_PREREQ(2,10)
 #		define MDB_USE_ROBUST	1
 #	else
 #		define MDB_USE_ROBUST	0
@@ -920,7 +973,7 @@ typedef struct MDB_pgstate {
 } MDB_pgstate;
 
 	/** Context for deferred cleanup of reader's threads.
-	*  to avoid https://github.com/ReOpen/ReOpenLDAP/issues/48 */
+	 *  to avoid https://github.com/ReOpen/ReOpenLDAP/issues/48 */
 struct MDB_rthc {
 	MDB_reader *rc_reader;
 };
@@ -1146,28 +1199,8 @@ mdb_strerror(int err)
 }
 
 #if MDBX_MODE_ENABLED
-
-int mdb_runtime_flags = MDBX_DBG_PRINT
-#if MDB_DEBUG
-		| MDBX_DBG_ASSERT
-#endif
-#if MDB_DEBUG > 1
-		| MDBX_DBG_TRACE
-#endif
-#if MDB_DEBUG > 2
-		| MDBX_DBG_AUDIT
-#endif
-#if MDB_DEBUG > 3
-		| MDBX_DBG_EXTRA
-#endif
-	;
-
-static MDBX_debug_func *mdb_debug_logger;
-
-#else /* MDBX_MODE_ENABLED */
-#	define mdb_runtime_flags 0
-#	define mdb_debug_logger ((void (*)(int, ...)) NULL)
-#endif /* ! MDBX_MODE_ENABLED */
+static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
+#endif /* MDBX_MODE_ENABLED */
 
 #if MDB_DEBUG
 	static txnid_t mdb_debug_edge;
@@ -1204,24 +1237,6 @@ static MDBX_debug_func *mdb_debug_logger;
 #	define mdb_assert_fail(env, msg, func, line) \
 		__assert_fail(msg, __FILE__, line, func)
 #endif /* MDB_DEBUG */
-
-#if MDBX_MODE_ENABLED
-int __cold
-mdbx_setup_debug(int flags, MDBX_debug_func* logger, long edge_txn) {
-	unsigned ret = mdb_runtime_flags;
-	if (flags != (int) MDBX_DBG_DNT)
-		mdb_runtime_flags = flags;
-	if (logger != (MDBX_debug_func*) MDBX_DBG_DNT)
-		mdb_debug_logger = logger;
-#if MDB_DEBUG
-	if (edge_txn != (long) MDBX_DBG_DNT)
-		mdb_debug_edge = edge_txn;
-#else
-	(void) edge_txn;
-#endif
-	return ret;
-}
-#endif /* MDBX_MODE_ENABLED */
 
 static void __cold
 mdb_debug_log(int type, const char *function, int line,
@@ -1980,70 +1995,6 @@ txnid_t mdb_find_oldest(MDB_env *env, int *laggard)
 	return env->me_pgoldest = oldest;
 }
 
-static txnid_t __cold
-mdbx_oomkick(MDB_env *env, txnid_t oldest)
-{
-	mdb_debug("DB size maxed out");
-#if MDBX_MODE_ENABLED
-	int retry;
-	txnid_t snap;
-	mdb_debug("DB size maxed out");
-
-	for(retry = 0; ; ++retry) {
-		int reader;
-
-		if (mdb_reader_check(env, NULL))
-			break;
-
-		snap = mdb_find_oldest(env, &reader);
-		if (oldest < snap || reader < 0) {
-			if (retry && env->me_oom_func) {
-				/* LY: notify end of oom-loop */
-				env->me_oom_func(env, 0, 0, oldest, snap - oldest, -retry);
-			}
-			return snap;
-		}
-
-		MDB_reader *r;
-		pthread_t tid;
-		pid_t pid;
-		int rc;
-
-		if (!env->me_oom_func)
-			break;
-
-		r = &env->me_txns->mti_readers[ reader ];
-		pid = r->mr_pid;
-		tid = r->mr_tid;
-		if (r->mr_txnid != oldest || pid <= 0)
-			continue;
-
-		rc = env->me_oom_func(env, pid, (void*) tid, oldest,
-			mdb_meta_head_w(env)->mm_txnid - oldest, retry);
-		if (rc < 0)
-			break;
-
-		if (rc) {
-			r->mr_txnid = ~(txnid_t)0;
-			if (rc > 1) {
-				r->mr_tid = 0;
-				r->mr_pid = 0;
-				mdbx_coherent_barrier();
-			}
-		}
-	}
-
-	if (retry && env->me_oom_func) {
-		/* LY: notify end of oom-loop */
-		env->me_oom_func(env, 0, 0, oldest, 0, -retry);
-	}
-#else
-	(void) oldest;
-	(void) mdb_reader_check(env, NULL);
-#endif /* MDBX_MODE_ENABLED */
-	return mdb_find_oldest(env, NULL);
-}
-
 /** Add a page to the txn's dirty list */
 static void
 mdb_page_dirty(MDB_txn *txn, MDB_page *mp)
@@ -2346,8 +2297,14 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			}
 
 			if (rc == MDB_MAP_FULL) {
+#if MDBX_MODE_ENABLED
 				txnid_t snap = mdbx_oomkick(env, oldest);
+#else
+				mdb_debug("DB size maxed out");
+				txnid_t snap = mdb_find_oldest(env, NULL);
+#endif /* MDBX_MODE_ENABLED */
 				if (snap > oldest) {
+					oldest = snap;
 					continue;
 				}
 			}
@@ -3997,21 +3954,6 @@ fail:
 	return rc;
 }
 
-#if MDBX_MODE_ENABLED
-int __cold
-mdbx_env_set_syncbytes(MDB_env *env, size_t bytes)
-{
-	if (unlikely(!env))
-		return EINVAL;
-
-	if(unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-		return MDB_VERSION_MISMATCH;
-
-	env->me_sync_threshold = bytes;
-	return env->me_map ? mdb_env_sync(env, 0) : 0;
-}
-#endif /* MDBX_MODE_ENABLED */
-
 /** Read the environment parameters of a DB environment before
  * mapping it into memory.
  * @param[in] env the environment handle
@@ -4815,17 +4757,27 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 		return errno;
 
 	if (*excl > 0) {
-		pthread_mutexattr_t mattr;
+		/* Solaris needs this before initing a robust mutex.  Otherwise
+		* it may skip the init and return EBUSY "seems someone already
+		* inited" or EINVAL "it was inited differently".
+		*/
+		memset(&env->me_txns->mti_rmutex, 0, sizeof(env->me_txns->mti_rmutex));
+		memset(&env->me_txns->mti_wmutex, 0, sizeof(env->me_txns->mti_wmutex));
 
-		if ((rc = pthread_mutexattr_init(&mattr))
-			|| (rc = pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED))
+		pthread_mutexattr_t mattr;
+		rc = pthread_mutexattr_init(&mattr);
+		if (rc) return rc;
+
+		rc = pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+
 #if MDB_USE_ROBUST
-			|| (rc = pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST))
+		if(! rc) rc = pthread_mutexattr_setrobust(&mattr, PTHREAD_MUTEX_ROBUST);
 #endif /* MDB_USE_ROBUST */
-			|| (rc = pthread_mutex_init(&env->me_txns->mti_rmutex, &mattr))
-			|| (rc = pthread_mutex_init(&env->me_txns->mti_wmutex, &mattr)))
-			return rc;
+		if (! rc) rc = pthread_mutex_init(&env->me_txns->mti_rmutex, &mattr);
+		if (! rc) rc = pthread_mutex_init(&env->me_txns->mti_wmutex, &mattr);
+
 		pthread_mutexattr_destroy(&mattr);
+		if (rc) return rc;
 
 		env->me_txns->mti_magic = MDB_MAGIC;
 		env->me_txns->mti_format = MDB_LOCK_FORMAT;
@@ -4865,10 +4817,7 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 # error "Persistent DB flags & env flags overlap, but both go in mm_flags"
 #endif
 
-#if ! MDBX_MODE_ENABLED
-static
-#endif /* ! MDBX_MODE_ENABLED */
-int __cold
+MDBX_ONLY_FEATURE int __cold
 mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, int *exclusive)
 {
 	int		oflags, rc, len, excl = -1;
@@ -5099,10 +5048,7 @@ mdb_env_close0(MDB_env *env)
 	}
 }
 
-#if ! MDBX_MODE_ENABLED
-static
-#endif /* ! MDBX_MODE_ENABLED */
-int __cold
+MDBX_ONLY_FEATURE int __cold
 mdbx_env_close_ex(MDB_env *env, int dont_sync)
 {
 	MDB_page *dp;
@@ -9196,7 +9142,7 @@ mdb_env_cthr_toggle(mdb_copy *my, int st)
 static int __cold
 mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 {
-	MDB_cursor mc = {0};
+	MDB_cursor mc;
 	MDB_txn *txn = my->mc_txn;
 	MDB_node *ni;
 	MDB_page *mo, *mp, *leaf;
@@ -9208,6 +9154,7 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 	if (*pg == P_INVALID)
 		return MDB_SUCCESS;
 
+	memset(&mc, 0, sizeof(mc));
 	mc.mc_snum = 1;
 	mc.mc_txn = txn;
 
@@ -9713,10 +9660,7 @@ mdb_stat0(MDB_env *env, MDB_db *db, MDB_stat *arg)
 	return MDB_SUCCESS;
 }
 
-#if ! MDBX_MODE_ENABLED
-static
-#endif /* ! MDBX_MODE_ENABLED */
-int __cold
+MDBX_ONLY_FEATURE int __cold
 mdbx_env_stat(MDB_env *env, MDBX_stat *arg, size_t bytes)
 {
 	MDB_meta *meta;
@@ -9736,10 +9680,7 @@ mdb_env_stat(MDB_env *env, MDB_stat *arg)
 	return mdbx_env_stat(env, (MDBX_stat *) arg, sizeof(MDB_stat));
 }
 
-#if ! MDBX_MODE_ENABLED
-static
-#endif /* ! MDBX_MODE_ENABLED */
-int __cold
+MDBX_ONLY_FEATURE int __cold
 mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes)
 {
 	MDB_meta *meta;
@@ -9951,10 +9892,7 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)
 	return rc;
 }
 
-#if ! MDBX_MODE_ENABLED
-static
-#endif
-int __cold
+MDBX_ONLY_FEATURE int __cold
 mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg, size_t bytes)
 {
 	if (unlikely(!arg || !txn))
@@ -10458,184 +10396,6 @@ static void mdb_mutex_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 	(void) env;
 	(void) rc;
 }
-
-#if MDBX_MODE_ENABLED
-
-void __cold
-mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oomfunc)
-{
-	if (likely(env && env->me_signature == MDBX_ME_SIGNATURE))
-		env->me_oom_func = oomfunc;
-}
-
-MDBX_oom_func* __cold
-mdbx_env_get_oomfunc(MDB_env *env)
-{
-	return likely(env && env->me_signature == MDBX_ME_SIGNATURE)
-		? env->me_oom_func : NULL;
-}
-
-struct mdb_walk_ctx {
-	MDB_txn *mw_txn;
-	void *mw_user;
-	MDBX_pgvisitor_func *mw_visitor;
-};
-
-typedef struct mdb_walk_ctx mdb_walk_ctx_t;
-
-
-/** Depth-first tree traversal. */
-static int __cold
-mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int deep)
-{
-	MDB_page *mp;
-	int rc, i, nkeys;
-	unsigned header_size, unused_size, payload_size, align_bytes;
-	const char* type;
-
-	if (pg == P_INVALID)
-		return MDB_CORRUPTED;
-
-	rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL);
-	if (rc)
-		return rc;
-	if (pg != mp->mp_p.p_pgno)
-		return MDB_CORRUPTED;
-
-	nkeys = NUMKEYS(mp);
-	header_size = IS_LEAF2(mp) ? PAGEHDRSZ : PAGEBASE + mp->mp_lower;
-	unused_size = SIZELEFT(mp);
-	payload_size = 0;
-
-	/* LY: Don't use mask here, e.g bitwise (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
-	 * Pages should not me marked dirty/loose or otherwise. */
-	switch (mp->mp_flags) {
-	case P_BRANCH:
-		type = "branch";
-		if (nkeys < 1)
-			return MDB_CORRUPTED;
-		break;
-	case P_LEAF:
-		type = "leaf";
-		break;
-	case P_LEAF|P_SUBP:
-		type = "dupsort-subleaf";
-		break;
-	case P_LEAF|P_LEAF2:
-		type = "dupfixed-leaf";
-		break;
-	case P_LEAF|P_LEAF2|P_SUBP:
-		type = "dupsort-dupfixed-subleaf";
-		break;
-	case P_META:
-	case P_OVERFLOW:
-	default:
-		return MDB_CORRUPTED;
-	}
-
-	for (align_bytes = i = 0; i < nkeys;
-		 align_bytes += ((payload_size + align_bytes) & 1), i++) {
-		MDB_node *node;
-
-		if (IS_LEAF2(mp)) {
-			/* LEAF2 pages have no mp_ptrs[] or node headers */
-			payload_size += mp->mp_ksize;
-			continue;
-		}
-
-		node = NODEPTR(mp, i);
-		payload_size += NODESIZE + node->mn_ksize;
-
-		if (IS_BRANCH(mp)) {
-			rc = mdb_env_walk(ctx, dbi, NODEPGNO(node), flags, deep);
-			if (rc)
-				return rc;
-			continue;
-		}
-
-		assert(IS_LEAF(mp));
-		if (node->mn_ksize < 1)
-			return MDB_CORRUPTED;
-		if (node->mn_flags & F_BIGDATA) {
-			MDB_page *omp;
-			pgno_t *opg;
-			size_t over_header, over_payload, over_unused;
-
-			payload_size += sizeof(pgno_t);
-			opg = NODEDATA(node);
-			rc = mdb_page_get(ctx->mw_txn, *opg, &omp, NULL);
-			if (rc)
-				return rc;
-			if (*opg != omp->mp_p.p_pgno)
-				return MDB_CORRUPTED;
-			/* LY: Don't use mask here, e.g bitwise (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
-			 * Pages should not me marked dirty/loose or otherwise. */
-			if (P_OVERFLOW != omp->mp_flags)
-				return MDB_CORRUPTED;
-
-			over_header = PAGEHDRSZ;
-			over_payload = NODEDSZ(node);
-			over_unused = omp->mp_pages * ctx->mw_txn->mt_env->me_psize
-					- over_payload - over_header;
-
-			rc = ctx->mw_visitor(*opg, omp->mp_pages, ctx->mw_user, dbi,
-					"overflow-data", 1, over_payload, over_header, over_unused);
-			if (rc)
-				return rc;
-			continue;
-		}
-
-		payload_size += NODEDSZ(node);
-		if (node->mn_flags & F_SUBDATA) {
-			MDB_db *db = NODEDATA(node);
-			char* name = NULL;
-
-			if (NODEDSZ(node) < 1)
-				return MDB_CORRUPTED;
-			if (! (node->mn_flags & F_DUPDATA)) {
-				name = NODEKEY(node);
-				int namelen = (char*) db - name;
-				name = memcpy(alloca(namelen + 1), name, namelen);
-				name[namelen] = 0;
-			}
-			rc = mdb_env_walk(ctx, (name && name[0]) ? name : dbi,
-					db->md_root, node->mn_flags & F_DUPDATA, deep + 1);
-			if (rc)
-				return rc;
-		}
-	}
-
-	return ctx->mw_visitor(mp->mp_p.p_pgno, 1, ctx->mw_user, dbi, type,
-		nkeys, payload_size, header_size, unused_size + align_bytes);
-}
-
-int __cold
-mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* user)
-{
-	mdb_walk_ctx_t ctx;
-	int rc;
-
-	if (unlikely(!txn))
-		return MDB_BAD_TXN;
-	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-		return MDB_VERSION_MISMATCH;
-
-	ctx.mw_txn = txn;
-	ctx.mw_user = user;
-	ctx.mw_visitor = visitor;
-
-	rc = visitor(0, 2, user, "lmdb", "meta", 2, sizeof(MDB_meta)*2, PAGEHDRSZ*2,
-				 (txn->mt_env->me_psize - sizeof(MDB_meta) - PAGEHDRSZ) *2);
-	if (! rc && txn->mt_dbs[FREE_DBI].md_root != P_INVALID)
-		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0, 0);
-	if (! rc && txn->mt_dbs[MAIN_DBI].md_root != P_INVALID)
-		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0, 0);
-	if (! rc)
-		rc = visitor(P_INVALID, 0, user, NULL, NULL, 0, 0, 0, 0);
-	return rc;
-}
-
-#endif /* MDBX_MODE_ENABLED */
 
 /** @} */
 
