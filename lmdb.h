@@ -1,10 +1,10 @@
 /** @file lmdb.h
- *	@brief Lightning memory-mapped database library
+ *	@brief Reliable Lightning memory-mapped database library
  *
- *	@mainpage	Lightning Memory-Mapped Database Manager (LMDB)
+ *	@mainpage	Reliable Lightning Memory-Mapped Database Manager (MDBX)
  *
  *	@section intro_sec Introduction
- *	LMDB is a Btree-based database management library modeled loosely on the
+ *	MDBX is a Btree-based database management library modeled loosely on the
  *	BerkeleyDB API, but much simplified. The entire database is exposed
  *	in a memory map, and all data fetches return data directly
  *	from the mapped memory, so no malloc's or memcpy's occur during
@@ -26,10 +26,10 @@
  *	readers, and readers don't block writers.
  *
  *	Unlike other well-known database mechanisms which use either write-ahead
- *	transaction logs or append-only data writes, LMDB requires no maintenance
+ *	transaction logs or append-only data writes, MDBX requires no maintenance
  *	during operation. Both write-ahead loggers and append-only databases
  *	require periodic checkpointing and/or compaction of their log or database
- *	files otherwise they grow without bound. LMDB tracks free pages within
+ *	files otherwise they grow without bound. MDBX tracks free pages within
  *	the database and re-uses them for new write operations, so the database
  *	size does not grow without bound in normal use.
  *
@@ -44,7 +44,7 @@
  *	store, you may find the \ref starting page to be helpful.
  *
  *	@section caveats_sec Caveats
- *	Troubleshooting the lock file, plus semaphores on BSD systems:
+ *	Troubleshooting the lock file:
  *
  *	- A broken lockfile can cause sync issues.
  *	  Stale reader transactions left behind by an aborted program
@@ -53,30 +53,15 @@
  *
  *	  Fix: Check for stale readers periodically, using the
  *	  #mdb_reader_check function or the \ref mdb_stat_1 "mdb_stat" tool.
- *	  Stale writers will be cleared automatically on most systems:
- *	  - BSD, systems using SysV semaphores - automatic
- *	  - Linux, systems using POSIX mutexes with Robust option - automatic
+ *	  Stale writers will be cleared automatically on Linux
+ *	  using POSIX mutexes with Robust option.
  *	  Otherwise just make all programs using the database close it;
  *	  the lockfile is always reset on first open of the environment.
  *
- *	- On BSD systems or others configured with MDB_USE_SYSV_SEM,
- *	  startup can fail due to semaphores owned by another userid.
- *
- *	  Fix: Open and close the database as the user which owns the
- *	  semaphores (likely last user) or as root, while no other
- *	  process is using the database.
  *
  *	Restrictions/caveats (in addition to those listed for some functions):
  *
- *	- Only the database owner should normally use the database on
- *	  BSD systems or when otherwise configured with MDB_USE_POSIX_SEM.
- *	  Multiple users can cause startup to fail later, as noted above.
- *
- *	- There is normally no pure read-only mode, since readers need write
- *	  access to locks and lock file. Exceptions: On read-only filesystems
- *	  or with the #MDB_NOLOCK flag described under #mdb_env_open().
- *
- *	- An LMDB configuration will often reserve considerable \b unused
+ *	- An MDBX configuration will often reserve considerable \b unused
  *	  memory address space and maybe file size for future growth.
  *	  This does not use actual memory or disk space, but users may need
  *	  to understand the difference so they won't be scared off.
@@ -97,7 +82,7 @@
  *
  *	- Use an MDB_env* in the process which opened it, without fork()ing.
  *
- *	- Do not have open an LMDB database twice in the same process at
+ *	- Do not have open an MDBX database twice in the same process at
  *	  the same time.  Not even from a plain open() call - close()ing it
  *	  breaks flock() advisory locking.
  *
@@ -123,7 +108,7 @@
  *	- If you do that anyway, do a periodic check for stale readers. Or
  *	  close the environment once in a while, so the lockfile can get reset.
  *
- *	- Do not use LMDB databases on remote filesystems, even between
+ *	- Do not use MDBX databases on remote filesystems, even between
  *	  processes on the same host.  This breaks flock() on some OSes,
  *	  possibly memory map sync, and certainly sync between programs
  *	  on different hosts.
@@ -131,9 +116,37 @@
  *	- Opening a database can fail if another process is opening or
  *	  closing it at exactly the same time.
  *
- *	@author	Howard Chu, Symas Corporation.
+ *	@author	Leonid Yuriev, 'ReOpen' initiative <https://github.com/ReOpen>.
+ *	Howard Chu, Symas Corp. All rights reserved.
  *
- *	@copyright Copyright 2011-2016 Howard Chu, Symas Corp. All rights reserved.
+ *	@copyright 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
+ *	2011-2014 Howard Chu, Symas Corp. All rights reserved.
+ *
+ * ---
+ *
+ * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ *
+ * This file is part of ReOpenMDBX.
+ *
+ * ReOpenMDBX is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * ReOpenMDBX is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * ---
+ *	@par Derived From:
+ * This code is derived from LMDB engine written by Howard Chu, Symas Corporation.
+ *
+ * Copyright 2011-2014 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP
@@ -160,6 +173,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+
 #ifndef _LMDB_H_
 #define _LMDB_H_
 
@@ -206,7 +220,7 @@ typedef int mdb_filehandle_t;
 	MDB_VERINT(MDB_VERSION_MAJOR,MDB_VERSION_MINOR,MDB_VERSION_PATCH)
 
 /** The release date of this library version */
-#define MDB_VERSION_DATE	"2016-04-06"
+#define MDB_VERSION_DATE	"2016-06-09"
 
 /** A stringifier for the version info */
 #define MDB_VERSTR(a,b,c,d)	"MDBX " #a "." #b "." #c ": (" d ", https://github.com/ReOpen/libmdbx)"
@@ -300,8 +314,8 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 	/** tie reader locktable slots to #MDB_txn objects instead of to threads */
 #define MDB_NOTLS		0x200000
 	/** don't do any locking, caller must manage their own locks
-	 * WARNING: MDBX and ReOpenLDAP don't support this mode. */
-#define MDB_NOLOCK__UNSUPPORTED		0x400000
+	 * WARNING: ReOpenMDBX don't support this mode. */
+#define MDB_NOLOCK__UNSUPPORTED	0x400000
 	/** don't do readahead */
 #define MDB_NORDAHEAD	0x800000
 	/** don't initialize malloc'd memory before writing to datafile */

@@ -1,43 +1,39 @@
 /*
-    Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
-    Copyright (c) 2015,2016 Peter-Service R&D LLC.
-
-    This file is part of ReOpenLDAP.
-
-    ReOpenLDAP is free software; you can redistribute it and/or modify it under
-    the terms of the GNU Affero General Public License as published by
-    the Free Software Foundation; either version 3 of the License, or
-    (at your option) any later version.
-
-    ReOpenLDAP is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU Affero General Public License for more details.
-
-    You should have received a copy of the GNU Affero General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-*/
-
-/* LY: Please do not ask us for Windows support, just never!
- * But you can make a fork for Windows, or become maintainer for FreeBSD... */
-#ifndef __gnu_linux__
-#	error "ReOpenLDAP branch supports only GNU Linux"
-#endif
+ * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ *
+ * This file is part of ReOpenMDBX.
+ *
+ * ReOpenMDBX is free software; you can redistribute it and/or modify it under
+ * the terms of the GNU Affero General Public License as published by
+ * the Free Software Foundation; either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * ReOpenMDBX is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU Affero General Public License for more details.
+ *
+ * You should have received a copy of the GNU Affero General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ */
 
 #ifndef _REOPEN_H
 #define _REOPEN_H
 
-#ifndef _GNU_SOURCE
-#	define _GNU_SOURCE
-#endif
+#ifndef __CLANG_PREREQ
+#	ifdef __clang__
+#		define __CLANG_PREREQ(maj,min) \
+			((__clang_major__ << 16) + __clang_minor__ >= ((maj) << 16) + (min))
+#	else
+#		define __CLANG_PREREQ(maj,min) (0)
+#	endif
+#endif /* __CLANG_PREREQ */
 
 #ifndef __has_attribute
 #	define __has_attribute(x) (0)
 #endif
-
-#if !defined(GCC_VERSION) && defined(__GNUC__)
-#	define GCC_VERSION (__GNUC__ * 1000 + __GNUC_MINOR__)
-#endif /* GCC_VERSION */
 
 #if !defined(__thread) && (defined(_MSC_VER) || defined(__DMC__))
 #	define __thread __declspec(thread)
