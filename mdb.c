@@ -9301,12 +9301,13 @@ mdb_env_copyfd1(MDB_env *env, HANDLE fd)
 {
 	MDB_meta *mm;
 	MDB_page *mp;
-	mdb_copy my = {0};
+	mdb_copy my;
 	MDB_txn *txn = NULL;
 	pthread_t thr;
 	pgno_t root, new_root;
 	int rc = MDB_SUCCESS;
 
+	memset(&my, 0, sizeof(my));
 	if ((rc = pthread_mutex_init(&my.mc_mutex, NULL)) != 0)
 		return rc;
 	if ((rc = pthread_cond_init(&my.mc_cond, NULL)) != 0)
