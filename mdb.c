@@ -109,7 +109,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
-#include <alloca.h>
+#include <malloc.h>
 #include <pthread.h>
 
 #if !(defined(BYTE_ORDER) || defined(__BYTE_ORDER))
@@ -1181,6 +1181,7 @@ static char *const mdb_errstr[] = {
 	"MDB_BAD_TXN: Transaction must abort, has a child, or is invalid",
 	"MDB_BAD_VALSIZE: Unsupported size of key/DB name/data, or wrong DUPFIXED size",
 	"MDB_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
+	"MDB_PROBLEM: Unexpected problem - txn should abort",
 };
 
 char * __cold
@@ -1640,7 +1641,7 @@ mdb_page_loose(MDB_cursor *mc, MDB_page *mp)
 					if (unlikely(mp != dl[x].mptr)) { /* bad cursor? */
 						mc->mc_flags &= ~(C_INITIALIZED|C_EOF);
 						txn->mt_flags |= MDB_TXN_ERROR;
-						return MDB_CORRUPTED;
+						return MDB_PROBLEM;
 					}
 					/* ok, it's ours */
 					loose = 1;
@@ -2490,7 +2491,7 @@ mdb_page_touch(MDB_cursor *mc)
 				if (unlikely(mp != dl[x].mptr)) { /* bad cursor? */
 					mc->mc_flags &= ~(C_INITIALIZED|C_EOF);
 					txn->mt_flags |= MDB_TXN_ERROR;
-					return MDB_CORRUPTED;
+					return MDB_PROBLEM;
 				}
 				return 0;
 			}
@@ -5664,7 +5665,7 @@ mdb_ovpage_free(MDB_cursor *mc, MDB_page *mp)
 				j = ++(dl[0].mid);
 				dl[j] = ix;		/* Unsorted. OK when MDB_TXN_ERROR. */
 				txn->mt_flags |= MDB_TXN_ERROR;
-				return MDB_CORRUPTED;
+				return MDB_PROBLEM;
 			}
 		}
 		txn->mt_dirty_room++;
@@ -7030,7 +7031,7 @@ put_sub:
 		return rc;
 bad_sub:
 		if (unlikely(rc == MDB_KEYEXIST))	/* should not happen, we deleted that item */
-			rc = MDB_CORRUPTED;
+			rc = MDB_PROBLEM;
 	}
 	mc->mc_txn->mt_flags |= MDB_TXN_ERROR;
 	return rc;
@@ -9040,13 +9041,14 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 }
 
 #ifndef MDB_WBUF
-#define MDB_WBUF	(1024*1024)
+#	define MDB_WBUF	(1024*1024)
 #endif
+#define MDB_EOF		0x10	/**< #mdb_env_copyfd1() is done reading */
 
-	/** State needed for a compacting copy. */
+	/** State needed for a double-buffering compacting copy. */
 typedef struct mdb_copy {
 	pthread_mutex_t mc_mutex;
-	pthread_cond_t mc_cond;
+	pthread_cond_t mc_cond;	/**< Condition variable for #mc_new */
 	char *mc_wbuf[2];
 	char *mc_over[2];
 	MDB_env *mc_env;
@@ -9055,10 +9057,9 @@ typedef struct mdb_copy {
 	int mc_olen[2];
 	pgno_t mc_next_pgno;
 	HANDLE mc_fd;
-	int mc_status;
-	volatile int mc_new;
-	int mc_toggle;
-
+	int mc_toggle;			/**< Buffer number in provider */
+	int mc_new;				/**< (0-2 buffers to write) | (#MDB_EOF at end) */
+	volatile int mc_error;	/**< Error code, never cleared if set */
 } mdb_copy;
 
 	/** Dedicated writer thread for compacting copy. */
@@ -9071,20 +9072,16 @@ mdb_env_copythr(void *arg)
 	int len;
 
 	pthread_mutex_lock(&my->mc_mutex);
-	my->mc_new = 0;
-	pthread_cond_signal(&my->mc_cond);
 	for(;;) {
 		while (!my->mc_new)
 			pthread_cond_wait(&my->mc_cond, &my->mc_mutex);
-		if (my->mc_new < 0) {
-			my->mc_new = 0;
+		if (my->mc_new == 0 + MDB_EOF) /* 0 buffers, just EOF */
 			break;
-		}
-		my->mc_new = 0;
 		wsize = my->mc_wlen[toggle];
 		ptr = my->mc_wbuf[toggle];
 again:
-		while (wsize > 0) {
+		rc = MDB_SUCCESS;
+		while (wsize > 0 && !my->mc_error) {
 			len = write(my->mc_fd, ptr, wsize);
 			if (len < 0) {
 				rc = errno;
@@ -9100,8 +9097,7 @@ again:
 			}
 		}
 		if (rc) {
-			my->mc_status = rc;
-			break;
+			my->mc_error = rc;
 		}
 		/* If there's an overflow page tail, write it too */
 		if (my->mc_olen[toggle]) {
@@ -9112,30 +9108,33 @@ again:
 		}
 		my->mc_wlen[toggle] = 0;
 		toggle ^= 1;
+		/* Return the empty buffer to provider */
+		my->mc_new--;
 		pthread_cond_signal(&my->mc_cond);
 	}
-	pthread_cond_signal(&my->mc_cond);
 	pthread_mutex_unlock(&my->mc_mutex);
-	return (void*)0;
+	return NULL;
 }
 
-	/** Tell the writer thread there's a buffer ready to write */
+	/** Give buffer and/or #MDB_EOF to writer thread, await unused buffer.
+	 *
+	 * @param[in] my control structure.
+	 * @param[in] adjust (1 to hand off 1 buffer) | (MDB_EOF when ending).
+	 */
 static int __cold
-mdb_env_cthr_toggle(mdb_copy *my, int st)
+mdb_env_cthr_toggle(mdb_copy *my, int adjust)
 {
-	int toggle = my->mc_toggle ^ 1;
 	pthread_mutex_lock(&my->mc_mutex);
-	if (my->mc_status) {
-		pthread_mutex_unlock(&my->mc_mutex);
-		return my->mc_status;
-	}
-	while (my->mc_new == 1)
-		pthread_cond_wait(&my->mc_cond, &my->mc_mutex);
-	my->mc_new = st;
-	my->mc_toggle = toggle;
+	my->mc_new += adjust;
 	pthread_cond_signal(&my->mc_cond);
+	while (my->mc_new & 2)		/* both buffers in use */
+		pthread_cond_wait(&my->mc_cond, &my->mc_mutex);
 	pthread_mutex_unlock(&my->mc_mutex);
-	return 0;
+
+	my->mc_toggle ^= (adjust & 1);
+	/* Both threads reset mc_wlen, to be safe from threading errors */
+	my->mc_wlen[my->mc_toggle] = 0;
+	return my->mc_error;
 }
 
 	/** Depth-first tree traversal for compacting copy. */
@@ -9202,6 +9201,7 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 						}
 
 						memcpy(&pg, NODEDATA(ni), sizeof(pg));
+						memcpy(NODEDATA(ni), &my->mc_next_pgno, sizeof(pgno_t));
 						rc = mdb_page_get(txn, pg, &omp, NULL);
 						if (rc)
 							goto done;
@@ -9224,7 +9224,6 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 								goto done;
 							toggle = my->mc_toggle;
 						}
-						memcpy(NODEDATA(ni), &mo->mp_pgno, sizeof(pgno_t));
 					} else if (ni->mn_flags & F_SUBDATA) {
 						MDB_db db;
 
@@ -9305,31 +9304,31 @@ mdb_env_copyfd1(MDB_env *env, HANDLE fd)
 	mdb_copy my;
 	MDB_txn *txn = NULL;
 	pthread_t thr;
-	int rc;
+	pgno_t root, new_root;
+	int rc = MDB_SUCCESS;
 
-	pthread_mutex_init(&my.mc_mutex, NULL);
-	pthread_cond_init(&my.mc_cond, NULL);
-	rc = posix_memalign((void **)&my.mc_wbuf[0], env->me_os_psize, MDB_WBUF*2);
-	if (rc)
+	memset(&my, 0, sizeof(my));
+	if ((rc = pthread_mutex_init(&my.mc_mutex, NULL)) != 0)
 		return rc;
+	if ((rc = pthread_cond_init(&my.mc_cond, NULL)) != 0)
+		goto done2;
+	my.mc_wbuf[0] = memalign(env->me_os_psize, MDB_WBUF*2);
+	if (my.mc_wbuf[0] == NULL) {
+		rc = errno;
+		goto done;
+	}
 	memset(my.mc_wbuf[0], 0, MDB_WBUF*2);
 	my.mc_wbuf[1] = my.mc_wbuf[0] + MDB_WBUF;
-	my.mc_wlen[0] = 0;
-	my.mc_wlen[1] = 0;
-	my.mc_olen[0] = 0;
-	my.mc_olen[1] = 0;
 	my.mc_next_pgno = NUM_METAS;
-	my.mc_status = 0;
-	my.mc_new = 1;
-	my.mc_toggle = 0;
 	my.mc_env = env;
 	my.mc_fd = fd;
 	rc = pthread_create(&thr, NULL, mdb_env_copythr, &my);
-	assert(rc == 0);
+	if (rc)
+		goto done;
 
 	rc = mdb_txn_begin(env, NULL, MDB_RDONLY, &txn);
 	if (rc)
-		return rc;
+		goto finish;
 
 	mp = (MDB_page *)my.mc_wbuf[0];
 	memset(mp, 0, NUM_METAS * env->me_psize);
@@ -9345,51 +9344,58 @@ mdb_env_copyfd1(MDB_env *env, HANDLE fd)
 	*(MDB_meta *)PAGEDATA(mp) = *mm;
 	mm = (MDB_meta *)PAGEDATA(mp);
 
-	/* Count the number of free pages, subtract from lastpg to find
-	 * number of active pages
-	 */
-	{
+	/* Set metapage 1 with current main DB */
+	root = new_root = txn->mt_dbs[MAIN_DBI].md_root;
+	if (root != P_INVALID) {
+		/* Count free pages + freeDB pages.  Subtract from last_pg
+		 * to find the new last_pg, which also becomes the new root.
+		 */
 		MDB_ID freecount = 0;
 		MDB_cursor mc;
 		MDB_val key, data;
 		mdb_cursor_init(&mc, txn, FREE_DBI, NULL);
 		while ((rc = mdb_cursor_get(&mc, &key, &data, MDB_NEXT)) == 0)
 			freecount += *(MDB_ID *)data.mv_data;
+		if (rc != MDB_NOTFOUND)
+			goto finish;
 		freecount += txn->mt_dbs[FREE_DBI].md_branch_pages +
 			txn->mt_dbs[FREE_DBI].md_leaf_pages +
 			txn->mt_dbs[FREE_DBI].md_overflow_pages;
 
-		/* Set metapage 1 */
-		mm->mm_last_pg = txn->mt_next_pgno - freecount - 1;
+		new_root = txn->mt_next_pgno - 1 - freecount;
+		mm->mm_last_pg = new_root;
 		mm->mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
-		if (mm->mm_last_pg > NUM_METAS-1) {
-			mm->mm_dbs[MAIN_DBI].md_root = mm->mm_last_pg;
-			mm->mm_txnid = 1;
-		} else {
-			mm->mm_dbs[MAIN_DBI].md_root = P_INVALID;
-		}
+		mm->mm_dbs[MAIN_DBI].md_root = new_root;
+	} else {
+		/* When the DB is empty, handle it specially to
+		 * fix any breakage like page leaks from ITS#8174.
+		 */
+		mm->mm_dbs[MAIN_DBI].md_flags = txn->mt_dbs[MAIN_DBI].md_flags;
 	}
+	if (root != P_INVALID || mm->mm_dbs[MAIN_DBI].md_flags) {
+		mm->mm_txnid = 1;		/* use metapage 1 */
+	}
+
 	my.mc_wlen[0] = env->me_psize * NUM_METAS;
 	my.mc_txn = txn;
-	pthread_mutex_lock(&my.mc_mutex);
-	while(my.mc_new)
-		pthread_cond_wait(&my.mc_cond, &my.mc_mutex);
-	pthread_mutex_unlock(&my.mc_mutex);
-	rc = mdb_env_cwalk(&my, &txn->mt_dbs[MAIN_DBI].md_root, 0);
-	if (rc == MDB_SUCCESS && my.mc_wlen[my.mc_toggle])
-		rc = mdb_env_cthr_toggle(&my, 1);
-	mdb_env_cthr_toggle(&my, -1);
-	pthread_mutex_lock(&my.mc_mutex);
-	while(my.mc_new)
-		pthread_cond_wait(&my.mc_cond, &my.mc_mutex);
-	pthread_mutex_unlock(&my.mc_mutex);
-	pthread_join(thr, NULL);
+	rc = mdb_env_cwalk(&my, &root, 0);
+	if (rc == MDB_SUCCESS && root != new_root) {
+		rc = MDB_INCOMPATIBLE;	/* page leak or corrupt DB */
+	}
 
+finish:
+	if (rc)
+		my.mc_error = rc;
+	mdb_env_cthr_toggle(&my, 1 | MDB_EOF);
+	rc = pthread_join(thr, NULL);
 	mdb_txn_abort(txn);
-	pthread_cond_destroy(&my.mc_cond);
-	pthread_mutex_destroy(&my.mc_mutex);
+
+done:
 	free(my.mc_wbuf[0]);
-	return rc;
+	pthread_cond_destroy(&my.mc_cond);
+done2:
+	pthread_mutex_destroy(&my.mc_mutex);
+	return rc ? rc : my.mc_error;
 }
 
 	/** Copy environment as-is. */

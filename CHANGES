@@ -1,9 +1,11 @@
-LMDB 0.9 Change Log
-
 MDBX
 	Add MDB_PREV_MULTIPLE
+	Fix MDB_CP_COMPACT (ITS#8209)
+	Add error MDB_PROBLEM, replace some MDB_CORRUPTED
 
 LMDB 0.9.19 Release Engineering
+	Fix mdb_env_cwalk cursor init (ITS#8424)
+	Fix robust mutexes on Solaris 10/11 (ITS#8339)
 	Fix MDB_GET_BOTH on non-dup record (ITS#8393)
 	Optimize mdb_drop
 	Fix xcursors after mdb_cursor_del (ITS#8406)
@@ -23,7 +25,6 @@ LMDB 0.9.18 Release (2016/02/05)
 	Documentation
 		Add Getting Started page
 		Update WRITEMAP description
-
 
 LMDB 0.9.17 Release (2015/11/30)
 	Fix ITS#7377 catch calloc failure
