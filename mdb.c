@@ -5399,10 +5399,8 @@ mdb_page_get(MDB_txn *txn, pgno_t pgno, MDB_page **ret, int *lvl)
 			if (tx2->mt_spill_pgs) {
 				MDB_ID pn = pgno << 1;
 				x = mdb_midl_search(tx2->mt_spill_pgs, pn);
-				if (x <= tx2->mt_spill_pgs[0] && tx2->mt_spill_pgs[x] == pn) {
-					p = (MDB_page *)(env->me_map + env->me_psize * pgno);
-					goto done;
-				}
+				if (x <= tx2->mt_spill_pgs[0] && tx2->mt_spill_pgs[x] == pn)
+					goto mapped;
 			}
 			if (dl[0].mid) {
 				unsigned x = mdb_mid2l_search(dl, pgno);
@@ -5415,14 +5413,15 @@ mdb_page_get(MDB_txn *txn, pgno_t pgno, MDB_page **ret, int *lvl)
 		} while ((tx2 = tx2->mt_parent) != NULL);
 	}
 
-	if (likely(pgno < txn->mt_next_pgno)) {
-		level = 0;
-		p = (MDB_page *)(env->me_map + env->me_psize * pgno);
-	} else {
+	if (unlikely(pgno >= txn->mt_next_pgno)) {
 		mdb_debug("page %zu not found", pgno);
 		txn->mt_flags |= MDB_TXN_ERROR;
 		return MDB_PAGE_NOTFOUND;
 	}
+	level = 0;
+
+mapped:
+	p = (MDB_page *)(env->me_map + env->me_psize * pgno);
 
 done:
 	*ret = p;
