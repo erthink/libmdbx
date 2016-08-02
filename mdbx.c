@@ -213,7 +213,7 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 
 		if (IS_LEAF2(mp)) {
 			/* LEAF2 pages have no mp_ptrs[] or node headers */
-			payload_size += mp->mp_ksize;
+			payload_size += mp->mp_leaf2_ksize;
 			continue;
 		}
 

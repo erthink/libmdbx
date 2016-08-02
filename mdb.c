@@ -532,9 +532,23 @@ typedef struct MDB_txninfo {
 	  + (1 /* MDB_PIDLOCK */ << 16)))
 /** @} */
 
-/** Common header for all page types.
- * Overflow records occupy a number of contiguous pages with no
- * headers on any page after the first.
+/** Common header for all page types. The page type depends on #mp_flags.
+ *
+ * #P_BRANCH and #P_LEAF pages have unsorted '#MDB_node's at the end, with
+ * sorted #mp_ptrs[] entries referring to them. Exception: #P_LEAF2 pages
+ * omit mp_ptrs and pack sorted #MDB_DUPFIXED values after the page header.
+ *
+ * #P_OVERFLOW records occupy one or more contiguous pages where only the
+ * first has a page header. They hold the real data of #F_BIGDATA nodes.
+ *
+ * #P_SUBP sub-pages are small leaf "pages" with duplicate data.
+ * A node with flag #F_DUPDATA but not #F_SUBDATA contains a sub-page.
+ * (Duplicate data can also go in sub-databases, which use normal pages.)
+ *
+ * #P_META pages contain #MDB_meta, the start point of an LMDB snapshot.
+ *
+ * Each non-metapage up to #MDB_meta.%mm_last_pg is reachable exactly once
+ * in the snapshot: Either used by a database or listed in a freeDB record.
  */
 typedef struct MDB_page {
 #define	mp_pgno	mp_p.p_pgno
@@ -543,7 +557,7 @@ typedef struct MDB_page {
 		pgno_t		p_pgno;	/**< page number */
 		struct MDB_page *p_next; /**< for in-memory list of freed pages */
 	} mp_p;
-	uint16_t	mp_ksize;
+	uint16_t	mp_leaf2_ksize;		/**< key size if this is a LEAF2 page */
 /**	@defgroup mdb_page	Page Flags
  *	@ingroup internal
  *	Flags for the page headers.
@@ -610,7 +624,9 @@ typedef struct MDB_page {
 	/** The number of overflow pages needed to store the given size. */
 #define OVPAGES(size, psize)	((PAGEHDRSZ-1 + (size)) / (psize) + 1)
 
-	/** Link in #MDB_txn.%mt_loose_pgs list */
+	/** Link in #MDB_txn.%mt_loose_pgs list.
+	 *  Kept outside the page header, which is needed when reusing the page.
+	 */
 #define NEXT_LOOSE_PAGE(p)		(*(MDB_page **)((p) + 2))
 
 	/** Header for a single key/data pair within a page.
@@ -1389,7 +1405,7 @@ mdb_page_list(MDB_page *mp)
 
 	for (i=0; i<nkeys; i++) {
 		if (IS_LEAF2(mp)) {	/* LEAF2 pages have no mp_ptrs[] or node headers */
-			key.mv_size = nsize = mp->mp_ksize;
+			key.mv_size = nsize = mp->mp_leaf2_ksize;
 			key.mv_data = LEAF2KEY(mp, i, nsize);
 			total += nsize;
 			mdb_print("key %d: nsize %d, %s\n", i, nsize, DKEY(&key));
@@ -2350,7 +2366,7 @@ done:
 	VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
 
 	np->mp_pgno = pgno;
-	np->mp_ksize = 0;
+	np->mp_leaf2_ksize = 0;
 	np->mp_flags = 0;
 	np->mp_pages = num;
 	mdb_page_dirty(txn, np);
@@ -6645,7 +6661,7 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			 */
 			fp_flags = P_LEAF|P_DIRTY;
 			fp = env->me_pbuf;
-			fp->mp_ksize = data->mv_size; /* used if MDB_DUPFIXED */
+			fp->mp_leaf2_ksize = data->mv_size; /* used if MDB_DUPFIXED */
 			fp->mp_lower = fp->mp_upper = (PAGEHDRSZ-PAGEBASE);
 			olddata.mv_size = PAGEHDRSZ;
 			goto prep_subDB;
@@ -6722,7 +6738,7 @@ more:
 				xdata.mv_size = PAGEHDRSZ + dkey.mv_size + data->mv_size;
 				if (mc->mc_db->md_flags & MDB_DUPFIXED) {
 					fp->mp_flags |= P_LEAF2;
-					fp->mp_ksize = data->mv_size;
+					fp->mp_leaf2_ksize = data->mv_size;
 					xdata.mv_size += 2 * data->mv_size;	/* leave space for 2 more */
 				} else {
 					xdata.mv_size += 2 * (sizeof(indx_t) + NODESIZE) +
@@ -6744,7 +6760,7 @@ more:
 							data->mv_size);
 						break;
 					}
-					offset = fp->mp_ksize;
+					offset = fp->mp_leaf2_ksize;
 					if (SIZELEFT(fp) < offset) {
 						offset *= 4; /* space for 4 more */
 						break;
@@ -6767,7 +6783,7 @@ more:
 prep_subDB:
 					if (mc->mc_db->md_flags & MDB_DUPFIXED) {
 						fp_flags |= P_LEAF2;
-						dummy.md_xsize = fp->mp_ksize;
+						dummy.md_xsize = fp->mp_leaf2_ksize;
 						dummy.md_flags = MDB_DUPFIXED;
 						if (mc->mc_db->md_flags & MDB_INTEGERDUP)
 							dummy.md_flags |= MDB_INTEGERKEY;
@@ -6791,11 +6807,11 @@ prep_subDB:
 			}
 			if (mp != fp) {
 				mp->mp_flags = fp_flags | P_DIRTY;
-				mp->mp_ksize = fp->mp_ksize;
+				mp->mp_leaf2_ksize = fp->mp_leaf2_ksize;
 				mp->mp_lower = fp->mp_lower;
 				mp->mp_upper = fp->mp_upper + offset;
 				if (fp_flags & P_LEAF2) {
-					memcpy(PAGEDATA(mp), PAGEDATA(fp), NUMKEYS(fp) * fp->mp_ksize);
+					memcpy(PAGEDATA(mp), PAGEDATA(fp), NUMKEYS(fp) * fp->mp_leaf2_ksize);
 				} else {
 					memcpy((char *)mp + mp->mp_upper + PAGEBASE, (char *)fp + fp->mp_upper + PAGEBASE,
 						olddata.mv_size - fp->mp_upper - PAGEBASE);
@@ -7540,7 +7556,7 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 		mx->mx_cursor.mc_ki[0] = 0;
 		if (mc->mc_db->md_flags & MDB_DUPFIXED) {
 			mx->mx_db.md_flags = MDB_DUPFIXED;
-			mx->mx_db.md_xsize = fp->mp_ksize;
+			mx->mx_db.md_xsize = fp->mp_leaf2_ksize;
 			if (mc->mc_db->md_flags & MDB_INTEGERDUP)
 				mx->mx_db.md_flags |= MDB_INTEGERKEY;
 		}
@@ -8624,7 +8640,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 	/* Create a right sibling. */
 	if ((rc = mdb_page_new(mc, mp->mp_flags, 1, &rp)))
 		return rc;
-	rp->mp_ksize = mp->mp_ksize;
+	rp->mp_leaf2_ksize = mp->mp_leaf2_ksize;
 	mdb_debug("new right sibling: page %zu", rp->mp_pgno);
 
 	/* Usually when splitting the root page, the cursor
