@@ -1251,7 +1251,11 @@ static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
 			(type & (MDBX_DBG_TRACE | MDBX_DBG_EXTRA)))
 
 #else
-#	define mdb_debug_enabled(type) (0)
+#	ifndef NDEBUG
+#		define mdb_debug_enabled(type) (1)
+#	else
+#		define mdb_debug_enabled(type) (0)
+#	endif
 #	define mdb_audit_enabled() (0)
 #	define mdb_assert_enabled() (0)
 #	define mdb_assert_fail(env, msg, func, line) \
