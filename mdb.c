@@ -4107,18 +4107,12 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 	int rc;
 	MDB_meta* head = mdb_meta_head_w(env);
 	size_t prev_mapsize = head->mm_mapsize;
-	volatile MDB_meta* target = META_IS_WEAK(head) ? head : mdb_env_meta_flipflop(env, head);
-	off_t offset = (char*) target - env->me_map;
 	size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
 
+	mdb_assert(env, pending != METAPAGE_1(env) && pending != METAPAGE_2(env));
 	mdb_assert(env, (env->me_flags & (MDB_RDONLY | MDB_FATAL_ERROR)) == 0);
 	mdb_assert(env, META_IS_WEAK(head) || env->me_sync_pending != 0
 			   || env->me_mapsize != prev_mapsize);
-	mdb_assert(env, pending->mm_txnid > head->mm_txnid || META_IS_WEAK(head));
-	mdb_assert(env, pending->mm_txnid > target->mm_txnid || META_IS_WEAK(target));
-
-	MDB_meta* stay = mdb_env_meta_flipflop(env, (MDB_meta*) target);
-	mdb_assert(env, pending->mm_txnid > stay->mm_txnid);
 
 	pending->mm_mapsize = env->me_mapsize;
 	mdb_assert(env, pending->mm_mapsize >= used_size);
@@ -4140,6 +4134,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			int mode = (flags & MDB_MAPASYNC) ? MS_ASYNC : MS_SYNC;
 			if (unlikely(msync(env->me_map, used_size, mode))) {
 				rc = errno;
+				/* LY: msync() should never return EINTR */
 				goto fail;
 			}
 			if ((flags & MDB_MAPASYNC) == 0)
@@ -4162,7 +4157,7 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 			while(unlikely(flush(env->me_fd) < 0)) {
 				rc = errno;
 				if (rc != EINTR)
-					goto undo;
+					goto fail;
 			}
 			env->me_sync_pending = 0;
 		}
@@ -4173,12 +4168,22 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 		pending->mm_datasync_sign = mdb_meta_sign(pending);
 	} else {
 		pending->mm_datasync_sign =
-			(flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC
-				? MDB_DATASIGN_NONE : MDB_DATASIGN_WEAK;
+		   (flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC
+				   ? MDB_DATASIGN_NONE : MDB_DATASIGN_WEAK;
 	}
-	mdb_debug("writing meta %d, root %zu, txn_id %zu, %s",
-		offset >= env->me_psize, pending->mm_dbs[MAIN_DBI].md_root,
-		pending->mm_txnid,
+
+	volatile MDB_meta* target = (pending->mm_txnid == head->mm_txnid || META_IS_WEAK(head))
+		? head : mdb_env_meta_flipflop(env, head);
+	off_t offset = (char*) target - env->me_map;
+
+	MDB_meta* stay = mdb_env_meta_flipflop(env, (MDB_meta*) target);
+	mdb_debug("writing meta %d (%s, was %zu/%s, stay %s %zu/%s), root %zu, txn_id %zu, %s",
+		offset >= env->me_psize,
+		target == head ? "head" : "tail", target->mm_txnid,
+		META_IS_WEAK(target) ? "Weak" : META_IS_STEADY(target) ? "Steady" : "Legacy",
+		stay == head ? "head" : "tail", stay->mm_txnid,
+		META_IS_WEAK(stay) ? "Weak" : META_IS_STEADY(stay) ? "Steady" : "Legacy",
+		pending->mm_dbs[MAIN_DBI].md_root, pending->mm_txnid,
 		META_IS_WEAK(pending) ? "Weak" : META_IS_STEADY(pending) ? "Steady" : "Legacy" );
 
 	if (env->me_flags & MDB_WRITEMAP) {
