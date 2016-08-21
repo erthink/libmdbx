@@ -1403,7 +1403,7 @@ mdb_page_list(MDB_page *mp)
 			pgno, ((MDB_meta *)PAGEDATA(mp))->mm_txnid);
 		return;
 	default:
-		mdb_print("Bad page %zu flags 0x%u\n", pgno, mp->mp_flags);
+		mdb_print("Bad page %zu flags 0x%X\n", pgno, mp->mp_flags);
 		return;
 	}
 
