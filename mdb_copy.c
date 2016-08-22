@@ -21,7 +21,7 @@
  *
  * ---
  *
- * Copyright 2012-2014 Howard Chu, Symas Corp.
+ * Copyright 2012-2016 Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
