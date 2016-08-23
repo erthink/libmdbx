@@ -49,12 +49,11 @@ mdbx_setup_debug(int flags, MDBX_debug_func* logger, long edge_txn) {
 		mdb_runtime_flags = flags;
 	if (logger != (MDBX_debug_func*) MDBX_DBG_DNT)
 		mdb_debug_logger = logger;
+	if (edge_txn != (long) MDBX_DBG_DNT) {
 #if MDB_DEBUG
-	if (edge_txn != (long) MDBX_DBG_DNT)
 		mdb_debug_edge = edge_txn;
-#else
-	(void) edge_txn;
 #endif
+	}
 	return ret;
 }
 
