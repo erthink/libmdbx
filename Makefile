@@ -44,7 +44,7 @@ TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
 		   yota_test1 yota_test2
 
 SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h reopen.h barriers.h
-SRC_MDBX	:= $(SRC_LMDB) mdbx.h
+SRC_MDBX	:= $(SRC_LMDB) mdbx.c mdbx.h
 
 .PHONY: mdbx lmdb all install clean check tests coverage
 

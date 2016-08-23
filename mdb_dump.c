@@ -21,7 +21,7 @@
  *
  * ---
  *
- * Copyright 2011-2014 Howard Chu, Symas Corp.
+ * Copyright 2011-2016 Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -147,7 +147,7 @@ static int dumpit(MDB_txn *txn, MDB_dbi dbi, char *name)
 	rc = mdb_cursor_open(txn, dbi, &mc);
 	if (rc) return rc;
 
-	while ((rc = mdb_cursor_get(mc, &key, &data, MDB_NEXT) == MDB_SUCCESS)) {
+	while ((rc = mdb_cursor_get(mc, &key, &data, MDB_NEXT)) == MDB_SUCCESS) {
 		if (gotsig) {
 			rc = EINTR;
 			break;

@@ -26,7 +26,7 @@
  *
  * ---
  *
- * Copyright 2011-2014 Howard Chu, Symas Corp.
+ * Copyright 2011-2016 Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -1222,11 +1222,12 @@ mdb_strerror(int err)
 static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
 #endif /* MDBX_MODE_ENABLED */
 
+static void mdb_debug_log(int type, const char *function, int line, const char *fmt, ...)
+	__attribute__((format(gnu_printf, 4, 5)));
+
 #if MDB_DEBUG
 	static txnid_t mdb_debug_edge;
 
-	static void mdb_debug_log(int type, const char *function, int line,
-						  const char *fmt, ...);
 	static void __cold
 	mdb_assert_fail(MDB_env *env, const char *msg,
 		const char *func, int line)
@@ -1263,8 +1264,7 @@ static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
 #endif /* MDB_DEBUG */
 
 static void __cold
-mdb_debug_log(int type, const char *function, int line,
-					  const char *fmt, ...)
+mdb_debug_log(int type, const char *function, int line, const char *fmt, ...)
 {
 	va_list args;
 
@@ -1272,8 +1272,12 @@ mdb_debug_log(int type, const char *function, int line,
 	if (mdb_debug_logger)
 		mdb_debug_logger(type, function, line, fmt, args);
 	else {
-		if (function && line)
-			fprintf(stderr, "%s:%u ", function, line);
+		if (function && line > 0)
+			fprintf(stderr, "%s:%d ", function, line);
+		else if (function)
+			fprintf(stderr, "%s: ", function);
+		else if (line > 0)
+			fprintf(stderr, "%d: ", line);
 		vfprintf(stderr, fmt, args);
 	}
 	va_end(args);
@@ -1344,7 +1348,6 @@ char *
 mdb_dkey(MDB_val *key, char *buf)
 {
 	char *ptr = buf;
-	unsigned char *c = key->mv_data;
 	unsigned i;
 
 	if (!key)
@@ -1358,7 +1361,7 @@ mdb_dkey(MDB_val *key, char *buf)
 #if 1
 	buf[0] = '\0';
 	for (i=0; i<key->mv_size; i++)
-		ptr += sprintf(ptr, "%02x", *c++);
+		ptr += sprintf(ptr, "%02x", ((unsigned char*) key->mv_data)[i]);
 #else
 	sprintf(buf, "%.*s", key->mv_size, key->mv_data);
 #endif
@@ -1405,14 +1408,14 @@ mdb_page_list(MDB_page *mp)
 	}
 
 	nkeys = NUMKEYS(mp);
-	mdb_print("%s %zu numkeys %d%s\n", type, pgno, nkeys, state);
+	mdb_print("%s %zu numkeys %u%s\n", type, pgno, nkeys, state);
 
 	for (i=0; i<nkeys; i++) {
 		if (IS_LEAF2(mp)) {	/* LEAF2 pages have no mp_ptrs[] or node headers */
 			key.mv_size = nsize = mp->mp_leaf2_ksize;
 			key.mv_data = LEAF2KEY(mp, i, nsize);
 			total += nsize;
-			mdb_print("key %d: nsize %d, %s\n", i, nsize, DKEY(&key));
+			mdb_print("key %u: nsize %u, %s\n", i, nsize, DKEY(&key));
 			continue;
 		}
 		node = NODEPTR(mp, i);
@@ -1420,7 +1423,7 @@ mdb_page_list(MDB_page *mp)
 		key.mv_data = node->mn_data;
 		nsize = NODESIZE + key.mv_size;
 		if (IS_BRANCH(mp)) {
-			mdb_print("key %d: page %zu, %s\n", i, NODEPGNO(node), DKEY(&key));
+			mdb_print("key %u: page %zu, %s\n", i, NODEPGNO(node), DKEY(&key));
 			total += nsize;
 		} else {
 			if (F_ISSET(node->mn_flags, F_BIGDATA))
@@ -1429,12 +1432,12 @@ mdb_page_list(MDB_page *mp)
 				nsize += NODEDSZ(node);
 			total += nsize;
 			nsize += sizeof(indx_t);
-			mdb_print("key %d: nsize %d, %s%s\n",
+			mdb_print("key %u: nsize %u, %s%s\n",
 				i, nsize, DKEY(&key), mdb_leafnode_type(node));
 		}
 		total = EVEN(total);
 	}
-	mdb_print("Total: header %d + contents %d + unused %d\n",
+	mdb_print("Total: header %u + contents %u + unused %u\n",
 		IS_LEAF2(mp) ? PAGEHDRSZ : PAGEBASE + mp->mp_lower, total, SIZELEFT(mp));
 }
 
@@ -5651,7 +5654,7 @@ mdb_ovpage_free(MDB_cursor *mc, MDB_page *mp)
 	MDB_ID pn = pg << 1;
 	int rc;
 
-	mdb_debug("free ov page %zu (%d)", pg, ovpages);
+	mdb_debug("free ov page %zu (%u)", pg, ovpages);
 	/* If the page is dirty or on the spill list we just acquired it,
 	 * so we should give it back to our current free list, if any.
 	 * Otherwise put it onto the list of pages we freed in this txn.
