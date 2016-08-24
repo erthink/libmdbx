@@ -7303,6 +7303,7 @@ mdb_node_add(MDB_cursor *mc, indx_t indx,
 		key ? key->mv_size : 0, key ? DKEY(key) : "null");
 
 	if (IS_LEAF2(mp)) {
+		mdb_cassert(mc, key);
 		/* Move higher keys up one slot. */
 		int ksize = mc->mc_db->md_xsize, dif;
 		char *ptr = LEAF2KEY(mp, indx, ksize);
