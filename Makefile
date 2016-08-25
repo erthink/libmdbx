@@ -44,7 +44,7 @@ TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
 		   yota_test1 yota_test2 mtest7 mtest8
 
 SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h reopen.h barriers.h
-SRC_MDBX	:= $(SRC_LMDB) mdbx.h
+SRC_MDBX	:= $(SRC_LMDB) mdbx.c mdbx.h
 
 .PHONY: mdbx lmdb all install clean check tests coverage
 
@@ -67,7 +67,7 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS )$(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
+	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
 
 tests:	$(TESTS)
 
@@ -206,13 +206,16 @@ bench: bench-lmdb.txt bench-mdbx.txt
 
 endif
 
-ci-rule = @( CC=$$(which $1); if [ -n "$$CC" ]; then \
-		CC=$$(readlink -f $$CC); echo -n "probe by $2 ($$CC): " && \
-		$(MAKE) clean >$1.log 2>$1.err && $(MAKE) all check 1>$1.log 2>$1.err && echo "OK" \
+ci-rule = ( CC=$$(which $1); if [ -n "$$CC" ]; then \
+		echo -n "probe by $2 ($$CC): " && \
+		$(MAKE) clean >$1.log 2>$1.err && \
+		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDB_DEBUG=2" all check 1>$1.log 2>$1.err && echo "OK" \
 			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:
-	$(call ci-rule,cc,default C compiler)
-	$(call ci-rule,gcc,GCC)
-	$(call ci-rule,clang,clang LLVM)
-	$(call ci-rule,icc,Intel C)
+	@if [ "$(CC)" != "gcc" ]; then \
+		$(call ci-rule,$(CC),default C compiler); \
+	fi
+	@$(call ci-rule,gcc,GCC)
+	@$(call ci-rule,clang,clang LLVM)
+	@$(call ci-rule,icc,Intel C)
