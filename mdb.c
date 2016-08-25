@@ -1223,7 +1223,7 @@ static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
 #endif /* MDBX_MODE_ENABLED */
 
 static void mdb_debug_log(int type, const char *function, int line, const char *fmt, ...)
-	__attribute__((format(gnu_printf, 4, 5)));
+	__attribute__((format(printf, 4, 5)));
 
 #if MDB_DEBUG
 	static txnid_t mdb_debug_edge;
@@ -1403,7 +1403,7 @@ mdb_page_list(MDB_page *mp)
 			pgno, ((MDB_meta *)PAGEDATA(mp))->mm_txnid);
 		return;
 	default:
-		mdb_print("Bad page %zu flags 0x%u\n", pgno, mp->mp_flags);
+		mdb_print("Bad page %zu flags 0x%X\n", pgno, mp->mp_flags);
 		return;
 	}
 
@@ -7303,6 +7303,7 @@ mdb_node_add(MDB_cursor *mc, indx_t indx,
 		key ? key->mv_size : 0, key ? DKEY(key) : "null");
 
 	if (IS_LEAF2(mp)) {
+		mdb_cassert(mc, key);
 		/* Move higher keys up one slot. */
 		int ksize = mc->mc_db->md_xsize, dif;
 		char *ptr = LEAF2KEY(mp, indx, ksize);

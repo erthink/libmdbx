@@ -67,7 +67,7 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS )$(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
+	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
 
 tests:	$(TESTS)
 
@@ -199,8 +199,9 @@ bench: bench-lmdb.txt bench-mdbx.txt
 endif
 
 ci-rule = ( CC=$$(which $1); if [ -n "$$CC" ]; then \
-		CC=$$(readlink -f $$CC); echo -n "probe by $2 ($$CC): " && \
-		$(MAKE) XCFLAGS="-UNDEBUG -DMDB_DEBUG=2" clean >$1.log 2>$1.err && $(MAKE) all check 1>$1.log 2>$1.err && echo "OK" \
+		echo -n "probe by $2 ($$CC): " && \
+		$(MAKE) clean >$1.log 2>$1.err && \
+		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDB_DEBUG=2" all check 1>$1.log 2>$1.err && echo "OK" \
 			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:
