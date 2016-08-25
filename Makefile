@@ -67,7 +67,7 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS )$(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
+	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
 
 tests:	$(TESTS)
 
