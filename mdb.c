@@ -1223,7 +1223,7 @@ static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
 #endif /* MDBX_MODE_ENABLED */
 
 static void mdb_debug_log(int type, const char *function, int line, const char *fmt, ...)
-	__attribute__((format(gnu_printf, 4, 5)));
+	__attribute__((format(printf, 4, 5)));
 
 #if MDB_DEBUG
 	static txnid_t mdb_debug_edge;
