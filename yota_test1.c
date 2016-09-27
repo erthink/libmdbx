@@ -2,7 +2,7 @@
  * Copyright (c) 2016 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright (c) 2015 Vladimir Romanov <https://www.linkedin.com/in/vladimirromanov>, Yota Lab.
  *
- * This file is part of ReOpenMDBX.
+ * This file is part of libmdbx.
  *
  * ReOpenMDBX is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License as published by
