@@ -4,7 +4,7 @@
  * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright (c) 2015,2016 Peter-Service R&D LLC.
  *
- * This file is part of ReOpenMDBX.
+ * This file is part of libmdbx.
  *
  * ReOpenMDBX is free software; you can redistribute it and/or modify it under
  * the terms of the GNU Affero General Public License as published by

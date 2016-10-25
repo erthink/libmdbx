@@ -8,24 +8,6 @@
 /*
  * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright (c) 2015,2016 Peter-Service R&D LLC.
- *
- * This file is part of ReOpenMDBX.
- *
- * ReOpenMDBX is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * ReOpenMDBX is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * ---
- *
  * Copyright 2011-2016 Howard Chu, Symas Corp.
  * All rights reserved.
  *
@@ -4741,7 +4723,7 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 
 	/* Lose record locks when exec*() */
 	if ((fdflags = fcntl(env->me_lfd, F_GETFD) | FD_CLOEXEC) >= 0)
-			fcntl(env->me_lfd, F_SETFD, fdflags);
+		fcntl(env->me_lfd, F_SETFD, fdflags);
 
 	if (!(env->me_flags & MDB_NOTLS)) {
 		rc = pthread_key_create(&env->me_txkey, mdb_env_reader_destr);
@@ -4920,11 +4902,15 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	else
 		oflags = O_RDWR | O_CREAT;
 
-	env->me_fd = open(dpath, oflags, mode);
+	env->me_fd = open(dpath, oflags|O_CLOEXEC, mode);
 	if (env->me_fd == INVALID_HANDLE_VALUE) {
 		rc = errno;
 		goto leave;
 	}
+
+	int fdflags;
+	if ((fdflags = fcntl(env->me_fd, F_GETFD) | FD_CLOEXEC) >= 0)
+		fcntl(env->me_fd, F_SETFD, fdflags);
 
 	if (flags & MDB_RDONLY) {
 		rc = mdb_env_setup_locks(env, lpath, mode, &excl);
@@ -9079,12 +9065,12 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 
 	/** State needed for a double-buffering compacting copy. */
 typedef struct mdb_copy {
+	MDB_env *mc_env;
+	MDB_txn *mc_txn;
 	pthread_mutex_t mc_mutex;
 	pthread_cond_t mc_cond;	/**< Condition variable for #mc_new */
 	char *mc_wbuf[2];
 	char *mc_over[2];
-	MDB_env *mc_env;
-	MDB_txn *mc_txn;
 	int mc_wlen[2];
 	int mc_olen[2];
 	pgno_t mc_next_pgno;
@@ -9561,24 +9547,23 @@ mdb_env_copy2(MDB_env *env, const char *path, unsigned flags)
 	 * We don't want the OS to cache the writes, since the source data is
 	 * already in the OS cache.
 	 */
-	newfd = open(lpath, O_WRONLY|O_CREAT|O_EXCL, 0666);
+	newfd = open(lpath, O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0666);
 	if (newfd == INVALID_HANDLE_VALUE) {
 		rc = errno;
 		goto leave;
 	}
 
+	int fdflags;
+	if ((fdflags = fcntl(newfd, F_GETFD) | FD_CLOEXEC) >= 0)
+		fcntl(newfd, F_SETFD, fdflags);
+
 	if (env->me_psize >= env->me_os_psize) {
-#ifdef O_DIRECT
+#ifdef F_NOCACHE	/* __APPLE__ */
+	(void) fcntl(newfd, F_NOCACHE, 1);
+#elif defined O_DIRECT
 	/* Set O_DIRECT if the file system supports it */
 	if ((rc = fcntl(newfd, F_GETFL)) != -1)
 		(void) fcntl(newfd, F_SETFL, rc | O_DIRECT);
-#endif
-#ifdef F_NOCACHE	/* __APPLE__ */
-	rc = fcntl(newfd, F_NOCACHE, 1);
-	if (rc) {
-		rc = errno;
-		goto leave;
-	}
 #endif
 	}
 

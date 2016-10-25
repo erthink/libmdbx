@@ -80,11 +80,12 @@
  *	  transactions.  Each transaction belongs to one thread.  See below.
  *	  The #MDB_NOTLS flag changes this for read-only transactions.
  *
- *	- Use an MDB_env* in the process which opened it, without fork()ing.
+ *	- Use an MDB_env* in the process which opened it, not after fork().
  *
  *	- Do not have open an MDBX database twice in the same process at
  *	  the same time.  Not even from a plain open() call - close()ing it
- *	  breaks flock() advisory locking.
+ *	  breaks fcntl() advisory locking.  (It is OK to reopen it after
+ *	  fork() - exec*(), since the lockfile has FD_CLOEXEC set.)
  *
  *	- Avoid long-lived transactions.  Read transactions prevent
  *	  reuse of pages freed by newer write transactions, thus the
@@ -126,23 +127,6 @@
  *
  * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright (c) 2015,2016 Peter-Service R&D LLC.
- *
- * This file is part of ReOpenMDBX.
- *
- * ReOpenMDBX is free software; you can redistribute it and/or modify it under
- * the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation; either version 3 of the License, or
- * (at your option) any later version.
- *
- * ReOpenMDBX is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
- * ---
  *	@par Derived From:
  * This code is derived from LMDB engine written by Howard Chu, Symas Corporation.
  *
@@ -862,6 +846,10 @@ int  mdb_env_get_flags(MDB_env *env, unsigned *flags);
 int  mdb_env_get_path(MDB_env *env, const char **path);
 
 	/** @brief Return the filedescriptor for the given environment.
+	 *
+	 * This function may be called after fork(), so the descriptor can be
+	 * closed before exec*().  Other LMDB file descriptors have FD_CLOEXEC.
+	 * (Until LMDB 0.9.18, only the lockfile had that.)
 	 *
 	 * @param[in] env An environment handle returned by #mdb_env_create()
 	 * @param[out] fd Address of a mdb_filehandle_t to contain the descriptor.
