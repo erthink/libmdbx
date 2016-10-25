@@ -4723,7 +4723,7 @@ mdb_env_setup_locks(MDB_env *env, char *lpath, int mode, int *excl)
 
 	/* Lose record locks when exec*() */
 	if ((fdflags = fcntl(env->me_lfd, F_GETFD) | FD_CLOEXEC) >= 0)
-			fcntl(env->me_lfd, F_SETFD, fdflags);
+		fcntl(env->me_lfd, F_SETFD, fdflags);
 
 	if (!(env->me_flags & MDB_NOTLS)) {
 		rc = pthread_key_create(&env->me_txkey, mdb_env_reader_destr);
@@ -4902,11 +4902,15 @@ mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags, mode_t mode, in
 	else
 		oflags = O_RDWR | O_CREAT;
 
-	env->me_fd = open(dpath, oflags, mode);
+	env->me_fd = open(dpath, oflags|O_CLOEXEC, mode);
 	if (env->me_fd == INVALID_HANDLE_VALUE) {
 		rc = errno;
 		goto leave;
 	}
+
+	int fdflags;
+	if ((fdflags = fcntl(env->me_fd, F_GETFD) | FD_CLOEXEC) >= 0)
+		fcntl(env->me_fd, F_SETFD, fdflags);
 
 	if (flags & MDB_RDONLY) {
 		rc = mdb_env_setup_locks(env, lpath, mode, &excl);
@@ -9543,11 +9547,15 @@ mdb_env_copy2(MDB_env *env, const char *path, unsigned flags)
 	 * We don't want the OS to cache the writes, since the source data is
 	 * already in the OS cache.
 	 */
-	newfd = open(lpath, O_WRONLY|O_CREAT|O_EXCL, 0666);
+	newfd = open(lpath, O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0666);
 	if (newfd == INVALID_HANDLE_VALUE) {
 		rc = errno;
 		goto leave;
 	}
+
+	int fdflags;
+	if ((fdflags = fcntl(newfd, F_GETFD) | FD_CLOEXEC) >= 0)
+		fcntl(newfd, F_SETFD, fdflags);
 
 	if (env->me_psize >= env->me_os_psize) {
 #ifdef F_NOCACHE	/* __APPLE__ */
