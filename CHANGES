@@ -2,6 +2,7 @@ MDBX
 	Add MDB_PREV_MULTIPLE
 	Fix MDB_CP_COMPACT (ITS#8209)
 	Add error MDB_PROBLEM, replace some MDB_CORRUPTED
+	Backport fixes for ITS#8406
 
 LMDB 0.9.19 Release Engineering
 	Fix mdb_env_cwalk cursor init (ITS#8424)
