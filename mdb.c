@@ -805,11 +805,17 @@ typedef struct MDB_dbx {
 	void		*md_relctx;		/**< user-provided context for md_rel */
 } MDB_dbx;
 
+#if MDBX_MODE_ENABLED
+#   define MDBX_MODE_SALT   0
+#else
+#   define MDBX_MODE_SALT   1115449266
+#endif
+
 	/** A database transaction.
 	 *	Every operation requires a transaction handle.
 	 */
 struct MDB_txn {
-#define MDBX_MT_SIGNATURE 0x706C553B
+#define MDBX_MT_SIGNATURE (0x706C553B^MDBX_MODE_SALT)
 	unsigned	mt_signature;
 	MDB_txn		*mt_parent;		/**< parent of a nested txn */
 	/** Nested txn under this txn, set together with flag #MDB_TXN_HAS_CHILD */
@@ -914,7 +920,7 @@ struct MDB_xcursor;
 	 *	(A node with #F_DUPDATA but no #F_SUBDATA contains a subpage).
 	 */
 struct MDB_cursor {
-#define MDBX_MC_SIGNATURE 0xFE05D5B1
+#define MDBX_MC_SIGNATURE (0xFE05D5B1^MDBX_MODE_SALT)
 	unsigned	mc_signature;
 	/** Next cursor on this DB in this txn */
 	MDB_cursor	*mc_next;
@@ -980,7 +986,7 @@ struct MDB_rthc {
 };
 	/** The database environment. */
 struct MDB_env {
-#define MDBX_ME_SIGNATURE 0x9A899641
+#define MDBX_ME_SIGNATURE (0x9A899641^MDBX_MODE_SALT)
 	unsigned	me_signature;
 	HANDLE		me_fd;		/**< The main data file */
 	HANDLE		me_lfd;		/**< The lock file */
