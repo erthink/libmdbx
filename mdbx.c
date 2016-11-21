@@ -320,3 +320,35 @@ mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* user)
 		rc = visitor(P_INVALID, 0, user, NULL, NULL, 0, 0, 0, 0);
 	return rc;
 }
+
+int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary)
+{
+	if (unlikely(!txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
+		return EACCES;
+
+	if (likely(canary)) {
+		txn->mt_canary.x = canary->x;
+		txn->mt_canary.y = canary->y;
+		txn->mt_canary.z = canary->z;
+	}
+	txn->mt_canary.v = txn->mt_txnid;
+
+	return MDB_SUCCESS;
+}
+
+size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary)
+{
+	if(unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+		return 0;
+
+	if (likely(canary))
+		*canary = txn->mt_canary;
+
+	return txn->mt_txnid;
+}

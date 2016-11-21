@@ -778,6 +778,10 @@ typedef struct MDB_meta {
 	volatile uint64_t	mm_datasync_sign;
 #define META_IS_WEAK(meta) ((meta)->mm_datasync_sign == MDB_DATASIGN_WEAK)
 #define META_IS_STEADY(meta) ((meta)->mm_datasync_sign > MDB_DATASIGN_WEAK)
+
+#if MDBX_MODE_ENABLED
+	volatile mdbx_canary mm_canary;
+#endif
 } MDB_meta;
 
 	/** Buffer for a stack-allocated meta page.
@@ -809,7 +813,7 @@ typedef struct MDB_dbx {
 	 *	Every operation requires a transaction handle.
 	 */
 struct MDB_txn {
-#define MDBX_MT_SIGNATURE 0x706C553B
+#define MDBX_MT_SIGNATURE 0x93D53A31
 	unsigned	mt_signature;
 	MDB_txn		*mt_parent;		/**< parent of a nested txn */
 	/** Nested txn under this txn, set together with flag #MDB_TXN_HAS_CHILD */
@@ -895,6 +899,10 @@ struct MDB_txn {
 	 *	dirty_list into mt_parent after freeing hidden mt_parent pages.
 	 */
 	unsigned	mt_dirty_room;
+
+#if MDBX_MODE_ENABLED
+	mdbx_canary	mt_canary;
+#endif
 };
 
 /** Enough space for 2^32 nodes with minimum of 2 keys per node. I.e., plenty.
@@ -2842,6 +2850,9 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 				txn->mt_next_pgno = meta->mm_last_pg+1;
 				/* Copy the DB info and flags */
 				memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
+#if MDBX_MODE_ENABLED
+				txn->mt_canary = meta->mm_canary;
+#endif
 				break;
 			}
 		}
@@ -2858,6 +2869,9 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 		pthread_mutex_lock(&tsan_mutex);
 #endif
 		MDB_meta *meta = mdb_meta_head_w(env);
+#if MDBX_MODE_ENABLED
+		txn->mt_canary = meta->mm_canary;
+#endif
 		txn->mt_txnid = meta->mm_txnid + 1;
 		txn->mt_flags = flags;
 #ifdef __SANITIZE_THREAD__
@@ -3919,6 +3933,9 @@ mdb_txn_commit(MDB_txn *txn)
 		meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
 		meta.mm_last_pg = txn->mt_next_pgno - 1;
 		meta.mm_txnid = txn->mt_txnid;
+#if MDBX_MODE_ENABLED
+		meta.mm_canary = txn->mt_canary;
+#endif
 
 		rc = mdb_env_sync0(env, env->me_flags | txn->mt_flags, &meta);
 	}
@@ -4155,6 +4172,9 @@ mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending)
 		target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
 		target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
 		target->mm_last_pg = pending->mm_last_pg;
+#if MDBX_MODE_ENABLED
+		target->mm_canary = pending->mm_canary;
+#endif
 		/* LY: 'commit' the meta */
 		target->mm_txnid = pending->mm_txnid;
 		target->mm_datasync_sign = pending->mm_datasync_sign;
