@@ -3097,35 +3097,6 @@ mdb_dbis_update(MDB_txn *txn, int keep)
 		env->me_numdbs = n;
 }
 
-ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by me_txn, mm_last_pg and mt_next_pgno */
-int mdbx_txn_straggler(MDB_txn *txn, int *percent)
-{
-	MDB_env	*env;
-	MDB_meta *meta;
-	txnid_t lag;
-
-	if(unlikely(!txn))
-		return -EINVAL;
-
-	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-		return MDB_VERSION_MISMATCH;
-
-	if (unlikely(! txn->mt_u.reader))
-		return -1;
-
-	env = txn->mt_env;
-	meta = mdb_meta_head_r(env);
-	if (percent) {
-		size_t maxpg = env->me_maxpg;
-		size_t last = meta->mm_last_pg + 1;
-		if (env->me_txn)
-			last = env->me_txn0->mt_next_pgno;
-		*percent = (last * 100ull + maxpg / 2) / maxpg;
-	}
-	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
-	return (0 > (long) lag) ? ~0u >> 1: lag;
-}
-
 /** End a transaction, except successful commit of a nested transaction.
  * May be called twice for readonly txns: First reset it, then abort.
  * @param[in] txn the transaction handle to end
