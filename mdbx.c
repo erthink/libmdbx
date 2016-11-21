@@ -160,7 +160,7 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	const char* type;
 
 	if (pg == P_INVALID)
-		return MDB_CORRUPTED;
+		return MDB_SUCCESS; /* empty db */
 
 	rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL);
 	if (rc)
@@ -292,9 +292,9 @@ mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* user)
 
 	rc = visitor(0, 2, user, "lmdb", "meta", 2, sizeof(MDB_meta)*2, PAGEHDRSZ*2,
 				 (txn->mt_env->me_psize - sizeof(MDB_meta) - PAGEHDRSZ) *2);
-	if (! rc && txn->mt_dbs[FREE_DBI].md_root != P_INVALID)
+	if (! rc)
 		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0, 0);
-	if (! rc && txn->mt_dbs[MAIN_DBI].md_root != P_INVALID)
+	if (! rc)
 		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0, 0);
 	if (! rc)
 		rc = visitor(P_INVALID, 0, user, NULL, NULL, 0, 0, 0, 0);
