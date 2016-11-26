@@ -74,9 +74,13 @@ struct {
 	short *pagemap;
 	size_t total_payload_bytes;
 	size_t pgcount;
-} walk = {
-	.dbi_names = { "@gc" }
-};
+} walk;
+
+static __attribute__((constructor))
+void init_walk(void)
+{
+	walk.dbi_names[0] = "@gc";
+}
 
 size_t total_unused_bytes;
 int exclusive = 2;
