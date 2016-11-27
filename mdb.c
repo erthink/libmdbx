@@ -805,11 +805,17 @@ typedef struct MDB_dbx {
 	void		*md_relctx;		/**< user-provided context for md_rel */
 } MDB_dbx;
 
+#if MDBX_MODE_ENABLED
+#   define MDBX_MODE_SALT   0
+#else
+#   define MDBX_MODE_SALT   1115449266
+#endif
+
 	/** A database transaction.
 	 *	Every operation requires a transaction handle.
 	 */
 struct MDB_txn {
-#define MDBX_MT_SIGNATURE 0x706C553B
+#define MDBX_MT_SIGNATURE (0x706C553B^MDBX_MODE_SALT)
 	unsigned	mt_signature;
 	MDB_txn		*mt_parent;		/**< parent of a nested txn */
 	/** Nested txn under this txn, set together with flag #MDB_TXN_HAS_CHILD */
@@ -914,7 +920,7 @@ struct MDB_xcursor;
 	 *	(A node with #F_DUPDATA but no #F_SUBDATA contains a subpage).
 	 */
 struct MDB_cursor {
-#define MDBX_MC_SIGNATURE 0xFE05D5B1
+#define MDBX_MC_SIGNATURE (0xFE05D5B1^MDBX_MODE_SALT)
 	unsigned	mc_signature;
 	/** Next cursor on this DB in this txn */
 	MDB_cursor	*mc_next;
@@ -980,7 +986,7 @@ struct MDB_rthc {
 };
 	/** The database environment. */
 struct MDB_env {
-#define MDBX_ME_SIGNATURE 0x9A899641
+#define MDBX_ME_SIGNATURE (0x9A899641^MDBX_MODE_SALT)
 	unsigned	me_signature;
 	HANDLE		me_fd;		/**< The main data file */
 	HANDLE		me_lfd;		/**< The lock file */
@@ -3095,35 +3101,6 @@ mdb_dbis_update(MDB_txn *txn, int keep)
 	}
 	if (keep && env->me_numdbs < n)
 		env->me_numdbs = n;
-}
-
-ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by me_txn, mm_last_pg and mt_next_pgno */
-int mdbx_txn_straggler(MDB_txn *txn, int *percent)
-{
-	MDB_env	*env;
-	MDB_meta *meta;
-	txnid_t lag;
-
-	if(unlikely(!txn))
-		return -EINVAL;
-
-	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-		return MDB_VERSION_MISMATCH;
-
-	if (unlikely(! txn->mt_u.reader))
-		return -1;
-
-	env = txn->mt_env;
-	meta = mdb_meta_head_r(env);
-	if (percent) {
-		size_t maxpg = env->me_maxpg;
-		size_t last = meta->mm_last_pg + 1;
-		if (env->me_txn)
-			last = env->me_txn0->mt_next_pgno;
-		*percent = (last * 100ull + maxpg / 2) / maxpg;
-	}
-	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
-	return (0 > (long) lag) ? ~0u >> 1: lag;
 }
 
 /** End a transaction, except successful commit of a nested transaction.
