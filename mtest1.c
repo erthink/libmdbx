@@ -74,7 +74,7 @@ int main(int argc,char * argv[])
 		env_oflags = 0;
 	}
 	/* LY: especially here we always needs MDB_NOSYNC
-	 * for testing mdb_env_close_ex() and "redo-to-steady" on open. */
+	 * for testing mdbx_env_close_ex() and "redo-to-steady" on open. */
 	env_oflags |= MDB_NOSYNC;
 	E(mdb_env_open(env, DBPATH, env_oflags, 0664));
 
@@ -159,7 +159,7 @@ int main(int argc,char * argv[])
 
 	mdb_dbi_close(env, dbi);
 	/********************* LY: kept DB dirty ****************/
-	mdb_env_close_ex(env, 1);
+	mdbx_env_close_ex(env, 1);
 	E(mdb_env_create(&env));
 	E(mdb_env_set_maxdbs(env, 4));
 	E(mdb_env_open(env, DBPATH, env_oflags, 0664));
@@ -194,7 +194,7 @@ int main(int argc,char * argv[])
 	mdb_txn_abort(txn);
 
 	mdb_dbi_close(env, dbi);
-	mdb_env_close_ex(env, 0);
+	mdbx_env_close_ex(env, 0);
 
 	return 0;
 }
