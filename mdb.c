@@ -7548,7 +7548,6 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 	if (mx->mx_dbx.md_cmp == mdb_cmp_int && mx->mx_db.md_pad == sizeof(size_t))
 		mx->mx_dbx.md_cmp = mdb_cmp_clong;
 #endif */
-	mc->mc_signature = MDBX_MC_SIGNATURE;
 }
 
 
@@ -7587,6 +7586,7 @@ mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int new_dupdata)
 static void
 mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 {
+	mc->mc_signature = MDBX_MC_SIGNATURE;
 	mc->mc_next = NULL;
 	mc->mc_backup = NULL;
 	mc->mc_dbi = dbi;
@@ -7610,7 +7610,6 @@ mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 	if (*mc->mc_dbflag & DB_STALE) {
 		mdb_page_search(mc, NULL, MDB_PS_ROOTONLY);
 	}
-	mc->mc_signature = MDBX_MC_SIGNATURE;
 }
 
 int
