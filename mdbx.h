@@ -219,6 +219,10 @@ typedef struct mdbx_canary {
 int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary);
 size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
 
+/** Returns 1 when no more data available or cursor not positioned,
+ * 0 otherwise or less that zero in error case. */
+int mdbx_cursor_eof(MDB_cursor *mc);
+
 /**	@} */
 
 #ifdef __cplusplus

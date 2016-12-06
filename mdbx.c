@@ -352,3 +352,14 @@ size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary)
 
 	return txn->mt_txnid;
 }
+
+int mdbx_cursor_eof(MDB_cursor *mc)
+{
+	if (unlikely(mc == NULL))
+		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	return (mc->mc_flags & (C_INITIALIZED | C_EOF)) != C_INITIALIZED ? 1 : 0;
+}
