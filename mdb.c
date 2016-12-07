@@ -10276,7 +10276,7 @@ mdb_reader_check(MDB_env *env, int *dead)
 	return mdb_reader_check0(env, 0, dead);
 }
 
-/** As #mdb_reader_check(). rlocked = <caller locked the reader mutex>. */
+/** As #mdb_reader_check(). \b rlocked is set if caller locked #me_rmutex. */
 static int __cold
 mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 {
