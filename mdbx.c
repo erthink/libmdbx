@@ -361,5 +361,5 @@ int mdbx_cursor_eof(MDB_cursor *mc)
 	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
-	return (mc->mc_flags & (C_INITIALIZED | C_EOF)) != C_INITIALIZED ? 1 : 0;
+	return (mc->mc_flags & C_INITIALIZED) ? 0 : 1;
 }
