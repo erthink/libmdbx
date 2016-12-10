@@ -8678,7 +8678,6 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 		split_indx = newindx;
 		nkeys = 0;
 	} else {
-
 		split_indx = (nkeys+1) / 2;
 
 		if (IS_LEAF2(rp)) {
@@ -8838,7 +8837,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 			} else {
 				/* find right page's left sibling */
 				mc->mc_ki[ptop] = mn.mc_ki[ptop];
-				mdb_cursor_sibling(mc, 0);
+				rc = mdb_cursor_sibling(mc, 0);
 			}
 		}
 	} else {
@@ -8846,8 +8845,11 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 		rc = mdb_node_add(&mn, mn.mc_ki[ptop], &sepkey, NULL, rp->mp_pgno, 0);
 		mn.mc_top++;
 	}
-	if (unlikely(rc != MDB_SUCCESS))
+	if (unlikely(rc != MDB_SUCCESS)) {
+		if (rc == MDB_NOTFOUND) /* improper mdb_cursor_sibling() result */
+			rc = MDB_PROBLEM;
 		goto done;
+	}
 	if (nflags & MDB_APPEND) {
 		mc->mc_pg[mc->mc_top] = rp;
 		mc->mc_ki[mc->mc_top] = 0;
