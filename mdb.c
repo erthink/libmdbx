@@ -6185,7 +6185,6 @@ set1:
 				rc = 0;
 			}
 			*data = olddata;
-
 		} else {
 			if (mc->mc_xcursor)
 				mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
@@ -6587,7 +6586,7 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
 	dkey.mv_size = 0;
 
-	if (flags == MDB_CURRENT) {
+	if (flags & MDB_CURRENT) {
 		if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
 			return EINVAL;
 		rc = MDB_SUCCESS;
@@ -6778,6 +6777,7 @@ more:
 						break;
 					}
 					/* FALLTHRU: Big enough MDB_DUPFIXED sub-page */
+				case MDB_CURRENT | MDB_NODUPDATA:
 				case MDB_CURRENT:
 					fp->mp_flags |= P_DIRTY;
 					COPY_PGNO(fp->mp_pgno, mp->mp_pgno);
@@ -6975,12 +6975,15 @@ put_sub:
 			xdata.mv_size = 0;
 			xdata.mv_data = "";
 			leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+			xflags = MDB_NOSPILL;
+			if (flags & MDB_NODUPDATA)
+				xflags |= MDB_NOOVERWRITE;
+			if (flags & MDB_APPENDDUP)
+				xflags |= MDB_APPEND;
 			if (flags & MDB_CURRENT) {
-				xflags = MDB_CURRENT|MDB_NOSPILL;
+				xflags |= MDB_CURRENT;
 			} else {
 				mdb_xcursor_init1(mc, leaf);
-				xflags = (flags & MDB_NODUPDATA) ?
-					MDB_NOOVERWRITE|MDB_NOSPILL : MDB_NOSPILL;
 			}
 			if (sub_root)
 				mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
@@ -7014,8 +7017,6 @@ put_sub:
 				}
 			}
 			ecount = mc->mc_xcursor->mx_db.md_entries;
-			if (flags & MDB_APPENDDUP)
-				xflags |= MDB_APPEND;
 			rc = mdb_cursor_put(&mc->mc_xcursor->mx_cursor, data, &xdata, xflags);
 			if (flags & F_SUBDATA) {
 				void *db = NODEDATA(leaf);
