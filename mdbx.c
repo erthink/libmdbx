@@ -182,7 +182,12 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	if (pg == P_INVALID)
 		return MDB_SUCCESS; /* empty db */
 
-	rc = mdb_page_get(ctx->mw_txn, pg, &mp, NULL);
+	MDB_cursor mc;
+	memset(&mc, 0, sizeof(mc));
+	mc.mc_snum = 1;
+	mc.mc_txn = ctx->mw_txn;
+
+	rc = mdb_page_get(&mc, pg, &mp, NULL);
 	if (rc)
 		return rc;
 	if (pg != mp->mp_p.p_pgno)
@@ -220,7 +225,7 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 	}
 
 	for (align_bytes = i = 0; i < nkeys;
-		 align_bytes += ((payload_size + align_bytes) & 1), i++) {
+		align_bytes += ((payload_size + align_bytes) & 1), i++) {
 		MDB_node *node;
 
 		if (IS_LEAF2(mp)) {
@@ -249,7 +254,7 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 
 			payload_size += sizeof(pgno_t);
 			opg = NODEDATA(node);
-			rc = mdb_page_get(ctx->mw_txn, *opg, &omp, NULL);
+			rc = mdb_page_get(&mc, *opg, &omp, NULL);
 			if (rc)
 				return rc;
 			if (*opg != omp->mp_p.p_pgno)
