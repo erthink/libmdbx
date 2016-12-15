@@ -9042,20 +9042,23 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 	if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
 		return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
-#if MDBX_MODE_ENABLED
-	/* LY: allows update (explicit overwrite) only for unique keys */
-	if ((flags & MDB_CURRENT) && (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT))
-		return EINVAL;
-#endif /* MDBX_MODE_ENABLED */
-
 	mdb_cursor_init(&mc, txn, dbi, &mx);
 	mc.mc_next = txn->mt_cursors[dbi];
 	txn->mt_cursors[dbi] = &mc;
 	int rc = MDB_SUCCESS;
 #if MDBX_MODE_ENABLED
 	/* LY: support for update (explicit overwrite) */
-	if (flags & MDB_CURRENT)
+	if (flags & MDB_CURRENT) {
 		rc = mdb_cursor_get(&mc, key, NULL, MDB_SET);
+		if (likely(rc == MDB_SUCCESS) && (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT)) {
+			/* LY: allows update (explicit overwrite) only for unique keys */
+			MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
+			if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+				mdb_tassert(txn, XCURSOR_INITED(&mc) && mc.mc_xcursor->mx_db.md_entries > 1);
+				rc = MDB_KEYEXIST;
+			}
+		}
+	}
 #endif /* MDBX_MODE_ENABLED */
 	if (likely(rc == MDB_SUCCESS))
 		rc = mdb_cursor_put(&mc, key, data, flags);
