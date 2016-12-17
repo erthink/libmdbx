@@ -6011,9 +6011,6 @@ mdb_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	MDB_node	*leaf = NULL;
 	DKBUF;
 
-	if (unlikely(key->mv_size == 0))
-		return MDB_BAD_VALSIZE;
-
 	if ( (mc->mc_db->md_flags & MDB_INTEGERKEY)
 		&& unlikely( key->mv_size != sizeof(unsigned)
 		&& key->mv_size != sizeof(size_t) )) {
@@ -6556,7 +6553,7 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	if (unlikely(mc->mc_txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
 		return (mc->mc_txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
-	if (unlikely(key->mv_size-1 >= ENV_MAXKEY(env)))
+	if (unlikely(key->mv_size > ENV_MAXKEY(env)))
 		return MDB_BAD_VALSIZE;
 
 #if SIZE_MAX > MAXDATASIZE
