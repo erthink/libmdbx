@@ -6326,6 +6326,12 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 				MDB_GET_KEY(leaf, key);
 				if (data) {
 					if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+						if (unlikely(!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))) {
+							mdb_xcursor_init1(mc, leaf);
+							rc = mdb_cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
+							if (unlikely(rc))
+								break;
+						}
 						rc = mdb_cursor_get(&mc->mc_xcursor->mx_cursor, data, NULL, MDB_GET_CURRENT);
 					} else {
 						rc = mdb_node_read(mc, leaf, data);
