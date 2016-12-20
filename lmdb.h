@@ -66,6 +66,11 @@
  *	  This does not use actual memory or disk space, but users may need
  *	  to understand the difference so they won't be scared off.
  *
+ *	- An LMDB configuration will often reserve considerable \b unused
+ *	  memory address space and maybe file size for future growth.
+ *	  This does not use actual memory or disk space, but users may need
+ *	  to understand the difference so they won't be scared off.
+ *
  *	- By default, in versions before 0.9.10, unused portions of the data
  *	  file might receive garbage data from memory freed by other code.
  *	  (This does not happen when using the #MDB_WRITEMAP flag.) As of
@@ -1144,8 +1149,9 @@ int  mdb_txn_renew(MDB_txn *txn);
 	 *		This flag may only be used in combination with #MDB_DUPSORT. This option
 	 *		tells the library that the data items for this database are all the same
 	 *		size, which allows further optimizations in storage and retrieval. When
-	 *		all data items are the same size, the #MDB_GET_MULTIPLE and #MDB_NEXT_MULTIPLE
-	 *		cursor operations may be used to retrieve multiple items at once.
+	 *		all data items are the same size, the #MDB_GET_MULTIPLE, #MDB_NEXT_MULTIPLE
+	 *		and #MDB_PREV_MULTIPLE cursor operations may be used to retrieve multiple
+	 *		items at once.
 	 *	<li>#MDB_INTEGERDUP
 	 *		This option specifies that duplicate data items are binary integers,
 	 *		similar to #MDB_INTEGERKEY keys.

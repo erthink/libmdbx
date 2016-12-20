@@ -859,11 +859,12 @@ struct MDB_txn {
  *	@ingroup internal
  * @{
  */
-#define DB_DIRTY	0x01		/**< DB was modified or is DUPSORT data */
+#define DB_DIRTY	0x01		/**< DB was written in this txn */
 #define DB_STALE	0x02		/**< Named-DB record is older than txnID */
 #define DB_NEW		0x04		/**< Named-DB handle opened in this txn */
 #define DB_VALID	0x08		/**< DB handle is valid, see also #MDB_VALID */
 #define DB_USRVALID	0x10		/**< As #DB_VALID, but not set for #FREE_DBI */
+#define DB_DUPDATA	0x20		/**< DB is #MDB_DUPSORT data */
 /** @} */
 	/** In write txns, array of cursors for each DB */
 	MDB_cursor	**mt_cursors;
@@ -973,6 +974,21 @@ typedef struct MDB_xcursor {
 	unsigned char mx_dbflag;
 } MDB_xcursor;
 
+	/** Check if there is an inited xcursor, so #XCURSOR_REFRESH() is proper */
+#define XCURSOR_INITED(mc) \
+	((mc)->mc_xcursor && ((mc)->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
+
+	/** Update sub-page pointer, if any, in \b mc->mc_xcursor.  Needed
+	 *	when the node which contains the sub-page may have moved.  Called
+	 *	with \b mp = mc->mc_pg[mc->mc_top], \b ki = mc->mc_ki[mc->mc_top].
+	 */
+#define XCURSOR_REFRESH(mc, mp, ki) do { \
+	MDB_page *xr_pg = (mp); \
+	MDB_node *xr_node = NODEPTR(xr_pg, ki); \
+	if ((xr_node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA) \
+		(mc)->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(xr_node); \
+} while (0)
+
 	/** State of FreeDB old pages, stored in the MDB_env */
 typedef struct MDB_pgstate {
 	pgno_t		*mf_pghead;	/**< Reclaimed freeDB pages, or NULL before use */
@@ -1076,10 +1092,10 @@ typedef struct MDB_ntxn {
 #define METAPAGE_2(env) \
 	(&((MDB_metabuf*) ((env)->me_map + env->me_psize))->mb_metabuf.mm_meta)
 
-static int  mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags);
-static int  mdb_page_new(MDB_cursor *mc, uint32_t flags, int num, MDB_page **mp);
-static int  mdb_page_touch(MDB_cursor *mc);
-static int  mdb_cursor_touch(MDB_cursor *mc);
+static int	mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags);
+static int	mdb_page_new(MDB_cursor *mc, uint32_t flags, int num, MDB_page **mp);
+static int	mdb_page_touch(MDB_cursor *mc);
+static int	mdb_cursor_touch(MDB_cursor *mc);
 
 #define MDB_END_NAMES {"committed", "empty-commit", "abort", "reset", \
 	"reset-tmp", "fail-begin", "fail-beginchild"}
@@ -1092,16 +1108,16 @@ enum {
 #define MDB_END_UPDATE	0x10	/**< update env state (DBIs) */
 #define MDB_END_FREE	0x20	/**< free txn unless it is #MDB_env.%me_txn0 */
 #define MDB_END_SLOT MDB_NOTLS	/**< release any reader slot if #MDB_NOTLS */
-static int mdb_txn_end(MDB_txn *txn, unsigned mode);
+static int	mdb_txn_end(MDB_txn *txn, unsigned mode);
 
-static int  mdb_page_get(MDB_txn *txn, pgno_t pgno, MDB_page **mp, int *lvl);
-static int  mdb_page_search_root(MDB_cursor *mc,
+static int	mdb_page_get(MDB_cursor *mc, pgno_t pgno, MDB_page **mp, int *lvl);
+static int	mdb_page_search_root(MDB_cursor *mc,
 				MDB_val *key, int modify);
 #define MDB_PS_MODIFY	1
 #define MDB_PS_ROOTONLY	2
 #define MDB_PS_FIRST	4
 #define MDB_PS_LAST		8
-static int  mdb_page_search(MDB_cursor *mc,
+static int	mdb_page_search(MDB_cursor *mc,
 				MDB_val *key, int flags);
 static int	mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst);
 
@@ -1109,17 +1125,17 @@ static int	mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst);
 static int	mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
 				pgno_t newpgno, unsigned nflags);
 
-static int  mdb_env_read_header(MDB_env *env, MDB_meta *meta);
-static int mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending);
-static void mdb_env_close0(MDB_env *env);
+static int	mdb_env_read_header(MDB_env *env, MDB_meta *meta);
+static int	mdb_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending);
+static void	mdb_env_close0(MDB_env *env);
 
-static MDB_node *mdb_node_search(MDB_cursor *mc, MDB_val *key, int *exactp);
-static int  mdb_node_add(MDB_cursor *mc, indx_t indx,
+static MDB_node	*mdb_node_search(MDB_cursor *mc, MDB_val *key, int *exactp);
+static int	mdb_node_add(MDB_cursor *mc, indx_t indx,
 				MDB_val *key, MDB_val *data, pgno_t pgno, unsigned flags);
-static void mdb_node_del(MDB_cursor *mc, int ksize);
-static void mdb_node_shrink(MDB_page *mp, indx_t indx);
+static void	mdb_node_del(MDB_cursor *mc, int ksize);
+static void	mdb_node_shrink(MDB_page *mp, indx_t indx);
 static int	mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft);
-static int  mdb_node_read(MDB_txn *txn, MDB_node *leaf, MDB_val *data);
+static int	mdb_node_read(MDB_cursor *mc, MDB_node *leaf, MDB_val *data);
 static size_t	mdb_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data);
 static size_t	mdb_branch_size(MDB_env *env, MDB_val *key);
 
@@ -1145,8 +1161,8 @@ static void	mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node);
 static void	mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int force);
 
 static int	mdb_drop0(MDB_cursor *mc, int subs);
-static void mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi);
-static int mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
+static void	mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi);
+static int	mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
 
 /** @cond */
 static MDB_cmp_func	mdb_cmp_memn, mdb_cmp_memnr, mdb_cmp_int_ai, mdb_cmp_int_a2, mdb_cmp_int_ua;
@@ -1445,7 +1461,7 @@ mdb_cursor_chk(MDB_cursor *mc)
 	}
 	if (unlikely(mc->mc_ki[i] >= NUMKEYS(mc->mc_pg[i])))
 		mdb_print("ack!\n");
-	if (mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)) {
+	if (XCURSOR_INITED(mc)) {
 		node = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 		if (((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA) &&
 			mc->mc_xcursor->mx_cursor.mc_pg[0] != NODEDATA(node)) {
@@ -1527,6 +1543,7 @@ mdb_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a, const MDB_val *b)
 
 /** Allocate memory for a page.
  * Re-use old malloc'd pages first for singletons, otherwise just malloc.
+ * Set #MDB_TXN_ERROR on failure.
  */
 static MDB_page *
 mdb_page_malloc(MDB_txn *txn, unsigned num)
@@ -1699,20 +1716,16 @@ mdb_pages_xkeep(MDB_cursor *mc, unsigned pflags, int all)
 {
 	enum { Mask = P_SUBP|P_DIRTY|P_LOOSE|P_KEEP };
 	MDB_txn *txn = mc->mc_txn;
-	MDB_cursor *m3;
+	MDB_cursor *m3, *m0 = mc;
 	MDB_xcursor *mx;
 	MDB_page *dp, *mp;
 	MDB_node *leaf;
 	unsigned i, j;
 	int rc = MDB_SUCCESS, level;
 
-	/* Mark pages seen by cursors */
-	if (mc->mc_flags & C_UNTRACK)
-		mc = NULL;				/* will find mc in mt_cursors */
-	for (i = txn->mt_numdbs;; mc = txn->mt_cursors[--i]) {
-		for (; mc; mc=mc->mc_next) {
-			if (!(mc->mc_flags & C_INITIALIZED))
-				continue;
+	/* Mark pages seen by cursors: First m0, then tracked cursors */
+	for (i = txn->mt_numdbs;; ) {
+		if (mc->mc_flags & C_INITIALIZED) {
 			for (m3 = mc;; m3 = &mx->mx_cursor) {
 				mp = NULL;
 				for (j=0; j<m3->mc_snum; j++) {
@@ -1731,10 +1744,13 @@ mdb_pages_xkeep(MDB_cursor *mc, unsigned pflags, int all)
 					break;
 			}
 		}
-		if (i == 0)
-			break;
+		mc = mc->mc_next;
+		for (; !mc || mc == m0; mc = txn->mt_cursors[--i])
+			if (i == 0)
+				goto mark_done;
 	}
 
+mark_done:
 	if (all) {
 		/* Mark dirty root pages */
 		for (i=0; i<txn->mt_numdbs; i++) {
@@ -1742,7 +1758,7 @@ mdb_pages_xkeep(MDB_cursor *mc, unsigned pflags, int all)
 				pgno_t pgno = txn->mt_dbs[i].md_root;
 				if (pgno == P_INVALID)
 					continue;
-				if ((rc = mdb_page_get(txn, pgno, &dp, &level)) != MDB_SUCCESS)
+				if (unlikely((rc = mdb_page_get(m0, pgno, &dp, &level)) != MDB_SUCCESS))
 					break;
 				if ((dp->mp_flags & Mask) == pflags && level <= 1)
 					dp->mp_flags ^= P_KEEP;
@@ -2030,7 +2046,7 @@ mdb_page_dirty(MDB_txn *txn, MDB_page *mp)
 }
 
 /** Allocate page numbers and memory for writing.  Maintain me_pglast,
- * me_pghead and mt_next_pgno.
+ * me_pghead and mt_next_pgno.  Set #MDB_TXN_ERROR on failure.
  *
  * If there are free pages available from older transactions, they
  * are re-used first. Otherwise allocate a new page at mt_next_pgno.
@@ -2198,7 +2214,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 
 			np = m2.mc_pg[m2.mc_top];
 			leaf = NODEPTR(np, m2.mc_ki[m2.mc_top]);
-			if (unlikely((rc = mdb_node_read(txn, leaf, &data)) != MDB_SUCCESS))
+			if (unlikely((rc = mdb_node_read(&m2, leaf, &data)) != MDB_SUCCESS))
 				goto fail;
 
 			if ((flags & MDBX_LIFORECLAIM) && !txn->mt_lifo_reclaimed) {
@@ -2457,6 +2473,7 @@ mdb_page_unspill(MDB_txn *txn, MDB_page *mp, MDB_page **ret)
 }
 
 /** Touch a page: make it dirty and re-insert into tree with updated pgno.
+ * Set #MDB_TXN_ERROR on failure.
  * @param[in] mc cursor pointing to the page to be touched
  * @return 0 on success, non-zero on failure.
  */
@@ -2544,14 +2561,8 @@ done:
 			if (m2 == mc) continue;
 			if (m2->mc_pg[mc->mc_top] == mp) {
 				m2->mc_pg[mc->mc_top] = np;
-				if ((mc->mc_db->md_flags & MDB_DUPSORT) &&
-					IS_LEAF(np) &&
-					(m2->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
-				{
-					MDB_node *leaf = NODEPTR(np, m2->mc_ki[mc->mc_top]);
-					if ((leaf->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
-						m2->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(leaf);
-				}
+				if (XCURSOR_INITED(m2) && IS_LEAF(np))
+					XCURSOR_REFRESH(m2, np, m2->mc_ki[mc->mc_top]);
 			}
 		}
 	}
@@ -5346,7 +5357,9 @@ mdb_cursor_pop(MDB_cursor *mc)
 	}
 }
 
-/** Push a page onto the top of the cursor's stack. */
+/** Push a page onto the top of the cursor's stack.
+ * Set #MDB_TXN_ERROR on failure.
+ */
 static int
 mdb_cursor_push(MDB_cursor *mc, MDB_page *mp)
 {
@@ -5366,15 +5379,17 @@ mdb_cursor_push(MDB_cursor *mc, MDB_page *mp)
 }
 
 /** Find the address of the page corresponding to a given page number.
- * @param[in] txn the transaction for this access.
+ * Set #MDB_TXN_ERROR on failure.
+ * @param[in] mc the cursor accessing the page.
  * @param[in] pgno the page number for the page to retrieve.
  * @param[out] ret address of a pointer where the page's address will be stored.
  * @param[out] lvl dirty_list inheritance level of found page. 1=current txn, 0=mapped page.
  * @return 0 on success, non-zero on failure.
  */
 static int
-mdb_page_get(MDB_txn *txn, pgno_t pgno, MDB_page **ret, int *lvl)
+mdb_page_get(MDB_cursor *mc, pgno_t pgno, MDB_page **ret, int *lvl)
 {
+	MDB_txn *txn = mc->mc_txn;
 	MDB_env *env = txn->mt_env;
 	MDB_page *p = NULL;
 	int level;
@@ -5468,7 +5483,7 @@ mdb_page_search_root(MDB_cursor *mc, MDB_val *key, int flags)
 		mdb_cassert(mc, i < NUMKEYS(mp));
 		node = NODEPTR(mp, i);
 
-		if (unlikely((rc = mdb_page_get(mc->mc_txn, NODEPGNO(node), &mp, NULL)) != 0))
+		if (unlikely((rc = mdb_page_get(mc, NODEPGNO(node), &mp, NULL)) != 0))
 			return rc;
 
 		mc->mc_ki[mc->mc_top] = i;
@@ -5510,7 +5525,7 @@ mdb_page_search_lowest(MDB_cursor *mc)
 	MDB_node	*node = NODEPTR(mp, 0);
 	int rc;
 
-	if (unlikely((rc = mdb_page_get(mc->mc_txn, NODEPGNO(node), &mp, NULL)) != 0))
+	if (unlikely((rc = mdb_page_get(mc, NODEPGNO(node), &mp, NULL)) != 0))
 		return rc;
 
 	mc->mc_ki[mc->mc_top] = 0;
@@ -5562,7 +5577,7 @@ mdb_page_search(MDB_cursor *mc, MDB_val *key, int flags)
 						return MDB_NOTFOUND;
 					if (unlikely((leaf->mn_flags & (F_DUPDATA|F_SUBDATA)) != F_SUBDATA))
 						return MDB_INCOMPATIBLE; /* not a named DB */
-					rc = mdb_node_read(mc->mc_txn, leaf, &data);
+					rc = mdb_node_read(&mc2, leaf, &data);
 					if (rc)
 						return rc;
 					memcpy(&flags, ((char *) data.mv_data + offsetof(MDB_db, md_flags)),
@@ -5586,7 +5601,7 @@ mdb_page_search(MDB_cursor *mc, MDB_val *key, int flags)
 
 	mdb_cassert(mc, root > 1);
 	if (!mc->mc_pg[0] || mc->mc_pg[0]->mp_pgno != root)
-		if (unlikely((rc = mdb_page_get(mc->mc_txn, root, &mc->mc_pg[0], NULL)) != 0))
+		if (unlikely((rc = mdb_page_get(mc, root, &mc->mc_pg[0], NULL)) != 0))
 			return rc;
 
 	mc->mc_snum = 1;
@@ -5683,13 +5698,13 @@ release:
 }
 
 /** Return the data associated with a given node.
- * @param[in] txn The transaction for this operation.
+ * @param[in] mc The cursor for this operation.
  * @param[in] leaf The node being read.
  * @param[out] data Updated to point to the node's data.
  * @return 0 on success, non-zero on failure.
  */
 static MDBX_INLINE int
-mdb_node_read(MDB_txn *txn, MDB_node *leaf, MDB_val *data)
+mdb_node_read(MDB_cursor *mc, MDB_node *leaf, MDB_val *data)
 {
 	MDB_page	*omp;		/* overflow page */
 	pgno_t		 pgno;
@@ -5705,7 +5720,7 @@ mdb_node_read(MDB_txn *txn, MDB_node *leaf, MDB_val *data)
 	 */
 	data->mv_size = NODEDSZ(leaf);
 	memcpy(&pgno, NODEDATA(leaf), sizeof(pgno));
-	if (unlikely((rc = mdb_page_get(txn, pgno, &omp, NULL)) != 0)) {
+	if (unlikely((rc = mdb_page_get(mc, pgno, &omp, NULL)) != 0)) {
 		mdb_debug("read overflow page %zu failed", pgno);
 		return rc;
 	}
@@ -5786,7 +5801,7 @@ mdb_cursor_sibling(MDB_cursor *mc, int move_right)
 	mdb_cassert(mc, IS_BRANCH(mc->mc_pg[mc->mc_top]));
 
 	indx = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
-	if (unlikely((rc = mdb_page_get(mc->mc_txn, NODEPGNO(indx), &mp, NULL)) != 0)) {
+	if (unlikely((rc = mdb_page_get(mc, NODEPGNO(indx), &mp, NULL)) != 0)) {
 		/* mc will be inconsistent if caller does mc_snum++ as above */
 		mc->mc_flags &= ~(C_INITIALIZED|C_EOF);
 		return rc;
@@ -5869,7 +5884,7 @@ skip:
 		mdb_xcursor_init1(mc, leaf);
 	}
 	if (data) {
-		if (unlikely((rc = mdb_node_read(mc->mc_txn, leaf, data)) != MDB_SUCCESS))
+		if (unlikely((rc = mdb_node_read(mc, leaf, data)) != MDB_SUCCESS))
 			return rc;
 
 		if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
@@ -5952,7 +5967,7 @@ mdb_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 		mdb_xcursor_init1(mc, leaf);
 	}
 	if (data) {
-		if (unlikely((rc = mdb_node_read(mc->mc_txn, leaf, data)) != MDB_SUCCESS))
+		if (unlikely((rc = mdb_node_read(mc, leaf, data)) != MDB_SUCCESS))
 			return rc;
 
 		if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
@@ -6141,7 +6156,7 @@ set1:
 			}
 		} else if (op == MDB_GET_BOTH || op == MDB_GET_BOTH_RANGE) {
 			MDB_val olddata;
-			if (unlikely((rc = mdb_node_read(mc->mc_txn, leaf, &olddata)) != MDB_SUCCESS))
+			if (unlikely((rc = mdb_node_read(mc, leaf, &olddata)) != MDB_SUCCESS))
 				return rc;
 			rc = mc->mc_dbx->md_dcmp(data, &olddata);
 			if (rc) {
@@ -6154,7 +6169,7 @@ set1:
 		} else {
 			if (mc->mc_xcursor)
 				mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
-			if (unlikely((rc = mdb_node_read(mc->mc_txn, leaf, data)) != MDB_SUCCESS))
+			if (unlikely((rc = mdb_node_read(mc, leaf, data)) != MDB_SUCCESS))
 				return rc;
 		}
 	}
@@ -6203,7 +6218,7 @@ mdb_cursor_first(MDB_cursor *mc, MDB_val *key, MDB_val *data)
 			if (unlikely(rc))
 				return rc;
 		} else {
-			if (unlikely((rc = mdb_node_read(mc->mc_txn, leaf, data)) != MDB_SUCCESS))
+			if (unlikely((rc = mdb_node_read(mc, leaf, data)) != MDB_SUCCESS))
 				return rc;
 		}
 	}
@@ -6248,7 +6263,7 @@ mdb_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data)
 			if (unlikely(rc))
 				return rc;
 		} else {
-			if (unlikely((rc = mdb_node_read(mc->mc_txn, leaf, data)) != MDB_SUCCESS))
+			if (unlikely((rc = mdb_node_read(mc, leaf, data)) != MDB_SUCCESS))
 				return rc;
 		}
 	}
@@ -6297,7 +6312,7 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 					if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 						rc = mdb_cursor_get(&mc->mc_xcursor->mx_cursor, data, NULL, MDB_GET_CURRENT);
 					} else {
-						rc = mdb_node_read(mc->mc_txn, leaf, data);
+						rc = mdb_node_read(mc, leaf, data);
 					}
 				}
 			}
@@ -6414,7 +6429,7 @@ fetchm:
 			MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 			if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 				MDB_GET_KEY(leaf, key);
-				rc = mdb_node_read(mc->mc_txn, leaf, data);
+				rc = mdb_node_read(mc, leaf, data);
 				break;
 			}
 		}
@@ -6451,7 +6466,8 @@ mdb_cursor_touch(MDB_cursor *mc)
 {
 	int rc = MDB_SUCCESS;
 
-	if (mc->mc_dbi >= CORE_DBS && !(*mc->mc_dbflag & DB_DIRTY)) {
+	if (mc->mc_dbi >= CORE_DBS && !(*mc->mc_dbflag & (DB_DIRTY|DB_DUPDATA))) {
+		/* Touch DB record of named DB */
 		MDB_cursor mc2;
 		MDB_xcursor mcx;
 		if (TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi))
@@ -6814,7 +6830,7 @@ current:
 			int level, ovpages, dpages = OVPAGES(data->mv_size, env->me_psize);
 
 			memcpy(&pg, olddata.mv_data, sizeof(pg));
-			if (unlikely((rc2 = mdb_page_get(mc->mc_txn, pg, &omp, &level)) != 0))
+			if (unlikely((rc2 = mdb_page_get(mc, pg, &omp, &level)) != 0))
 				return rc2;
 			ovpages = omp->mp_pages;
 
@@ -6848,13 +6864,8 @@ current:
 						 * parent txn, in case the user peeks at MDB_RESERVEd
 						 * or unused parts. Some users treat ovpages specially.
 						 */
-#if MDBX_MODE_ENABLED
-						/* LY: New page will contain only header from origin,
-						 * but no any payload */
-						memcpy(np, omp, PAGEHDRSZ);
-#else
 						size_t sz = (size_t) env->me_psize * ovpages, off;
-						if (!(flags & MDB_RESERVE)) {
+						if (MDBX_MODE_ENABLED || !(flags & MDB_RESERVE)) {
 							/* Skip the part where LMDB will put *data.
 							 * Copy end of page, adjusting alignment so
 							 * compiler may copy words instead of bytes.
@@ -6865,7 +6876,6 @@ current:
 							sz = PAGEHDRSZ;
 						}
 						memcpy(np, omp, sz); /* Copy whole or header of page */
-#endif /* MDBX_MODE_ENABLED */
 						omp = np;
 					}
 					SETDSZ(leaf, data->mv_size);
@@ -6926,11 +6936,8 @@ new_sub:
 				if (m3->mc_ki[i] >= mc->mc_ki[i] && insert_key) {
 					m3->mc_ki[i]++;
 				}
-				if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)) {
-					MDB_node *n2 = NODEPTR(mp, m3->mc_ki[i]);
-					if ((n2->mn_flags & (F_SUBDATA|F_DUPDATA)) == F_DUPDATA)
-						m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(n2);
-				}
+				if (XCURSOR_INITED(m3))
+					XCURSOR_REFRESH(m3, mp, m3->mc_ki[i]);
 			}
 		}
 	}
@@ -6981,9 +6988,7 @@ put_sub:
 						if (m2->mc_ki[i] == mc->mc_ki[i]) {
 							mdb_xcursor_init2(m2, mx, new_dupdata);
 						} else if (!insert_key && m2->mc_ki[i] < nkeys) {
-							MDB_node *n2 = NODEPTR(mp, m2->mc_ki[i]);
-							if ((n2->mn_flags & (F_SUBDATA|F_DUPDATA)) == F_DUPDATA)
-								m2->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(n2);
+							XCURSOR_REFRESH(m2, mp, m2->mc_ki[i]);
 						}
 					}
 				}
@@ -7094,13 +7099,12 @@ mdb_cursor_del(MDB_cursor *mc, unsigned flags)
 						if (m2 == mc || m2->mc_snum < mc->mc_snum) continue;
 						if (!(m2->mc_flags & C_INITIALIZED)) continue;
 						if (m2->mc_pg[mc->mc_top] == mp) {
-							if (m2->mc_ki[mc->mc_top] == mc->mc_ki[mc->mc_top]) {
-								m2->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(leaf);
-							} else {
-								MDB_node *n2 = NODEPTR(mp, m2->mc_ki[mc->mc_top]);
-								if (!(n2->mn_flags & F_SUBDATA))
-									m2->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(n2);
+							MDB_node *n2 = leaf;
+							if (m2->mc_ki[mc->mc_top] != mc->mc_ki[mc->mc_top]) {
+								n2 = NODEPTR(mp, m2->mc_ki[mc->mc_top]);
+								if (n2->mn_flags & F_SUBDATA) continue;
 							}
+							m2->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(n2);
 						}
 					}
 				}
@@ -7131,7 +7135,7 @@ mdb_cursor_del(MDB_cursor *mc, unsigned flags)
 		pgno_t pg;
 
 		memcpy(&pg, NODEDATA(leaf), sizeof(pg));
-		if (unlikely((rc = mdb_page_get(mc->mc_txn, pg, &omp, NULL)) ||
+		if (unlikely((rc = mdb_page_get(mc, pg, &omp, NULL)) ||
 			(rc = mdb_ovpage_free(mc, omp))))
 			goto fail;
 	}
@@ -7145,6 +7149,7 @@ fail:
 }
 
 /** Allocate and initialize new pages for a database.
+ * Set #MDB_TXN_ERROR on failure.
  * @param[in] mc a cursor on the database being added to.
  * @param[in] flags flags defining what type of page is being allocated.
  * @param[in] num the number of pages to allocate. This is usually 1,
@@ -7230,6 +7235,7 @@ mdb_branch_size(MDB_env *env, MDB_val *key)
 }
 
 /** Add a node to the page pointed to by the cursor.
+ * Set #MDB_TXN_ERROR on failure.
  * @param[in] mc The cursor for this operation.
  * @param[in] indx The index on the page where the new node should be added.
  * @param[in] key The key for the new node.
@@ -7540,12 +7546,11 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 	}
 	mdb_debug("Sub-db -%u root page %zu", mx->mx_cursor.mc_dbi,
 		mx->mx_db.md_root);
-	mx->mx_dbflag = DB_VALID|DB_USRVALID|DB_DIRTY; /* DB_DIRTY guides mdb_cursor_touch */
+	mx->mx_dbflag = DB_VALID|DB_USRVALID|DB_DUPDATA;
 /* #if UINT_MAX < SIZE_MAX
 	if (mx->mx_dbx.md_cmp == mdb_cmp_int && mx->mx_db.md_pad == sizeof(size_t))
 		mx->mx_dbx.md_cmp = mdb_cmp_clong;
 #endif */
-	mc->mc_signature = MDBX_MC_SIGNATURE;
 }
 
 
@@ -7567,7 +7572,7 @@ mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int new_dupdata)
 		mx->mx_cursor.mc_top = 0;
 		mx->mx_cursor.mc_flags |= C_INITIALIZED;
 		mx->mx_cursor.mc_ki[0] = 0;
-		mx->mx_dbflag = DB_VALID|DB_USRVALID|DB_DIRTY; /* DB_DIRTY guides mdb_cursor_touch */
+		mx->mx_dbflag = DB_VALID|DB_USRVALID|DB_DUPDATA;
 #if UINT_MAX < SIZE_MAX
 		mx->mx_dbx.md_cmp = src_mx->mx_dbx.md_cmp;
 #endif
@@ -7584,6 +7589,7 @@ mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int new_dupdata)
 static void
 mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 {
+	mc->mc_signature = MDBX_MC_SIGNATURE;
 	mc->mc_next = NULL;
 	mc->mc_backup = NULL;
 	mc->mc_dbi = dbi;
@@ -7607,7 +7613,6 @@ mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 	if (*mc->mc_dbflag & DB_STALE) {
 		mdb_page_search(mc, NULL, MDB_PS_ROOTONLY);
 	}
-	mc->mc_signature = MDBX_MC_SIGNATURE;
 }
 
 int
@@ -7715,7 +7720,10 @@ mdb_cursor_close(MDB_cursor *mc)
 	if (mc) {
 		mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE);
 		if (!mc->mc_backup) {
-			/* remove from txn, if tracked */
+			/* Remove from txn, if tracked.
+			 * A read-only txn (!C_UNTRACK) may have been freed already,
+			 * so do not peek inside it.  Only write txns track cursors.
+			 */
 			if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
 				MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
 				while (*prev && *prev != mc) prev = &(*prev)->mc_next;
@@ -7745,6 +7753,7 @@ mdb_cursor_dbi(MDB_cursor *mc)
 }
 
 /** Replace the key for a branch node with a new key.
+ * Set #MDB_TXN_ERROR on failure.
  * @param[in] mc Cursor pointing to the node to operate on.
  * @param[in] key The new key to use.
  * @return 0 on success, non-zero on failure.
@@ -7962,12 +7971,8 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 					m3->mc_ki[csrc->mc_top] = cdst->mc_ki[cdst->mc_top];
 					m3->mc_ki[csrc->mc_top-1]++;
 				}
-				if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
-					IS_LEAF(mps)) {
-					MDB_node *node = NODEPTR(m3->mc_pg[csrc->mc_top], m3->mc_ki[csrc->mc_top]);
-					if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
-						m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-				}
+				if (XCURSOR_INITED(m3) && IS_LEAF(mps))
+					XCURSOR_REFRESH(m3, m3->mc_pg[csrc->mc_top], m3->mc_ki[csrc->mc_top]);
 			}
 		} else
 		/* Adding on the right, bump others down */
@@ -7988,12 +7993,8 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 					} else {
 						m3->mc_ki[csrc->mc_top]--;
 					}
-					if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
-						IS_LEAF(mps)) {
-						MDB_node *node = NODEPTR(m3->mc_pg[csrc->mc_top], m3->mc_ki[csrc->mc_top]);
-						if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
-							m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-					}
+					if (XCURSOR_INITED(m3) && IS_LEAF(mps))
+						XCURSOR_REFRESH(m3, m3->mc_pg[csrc->mc_top], m3->mc_ki[csrc->mc_top]);
 				}
 			}
 		}
@@ -8192,12 +8193,8 @@ mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst)
 				m3->mc_ki[top-1] > csrc->mc_ki[top-1]) {
 				m3->mc_ki[top-1]--;
 			}
-			if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
-				IS_LEAF(psrc)) {
-				MDB_node *node = NODEPTR(m3->mc_pg[top], m3->mc_ki[top]);
-				if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
-					m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-			}
+			if (XCURSOR_INITED(m3) && IS_LEAF(psrc))
+				XCURSOR_REFRESH(m3, m3->mc_pg[top], m3->mc_ki[top]);
 		}
 	}
 	{
@@ -8313,7 +8310,7 @@ mdb_rebalance(MDB_cursor *mc)
 			if (unlikely(rc))
 				return rc;
 			mc->mc_db->md_root = NODEPGNO(NODEPTR(mp, 0));
-			rc = mdb_page_get(mc->mc_txn,mc->mc_db->md_root,&mc->mc_pg[0],NULL);
+			rc = mdb_page_get(mc, mc->mc_db->md_root, &mc->mc_pg[0], NULL);
 			if (unlikely(rc))
 				return rc;
 			mc->mc_db->md_depth--;
@@ -8374,7 +8371,7 @@ mdb_rebalance(MDB_cursor *mc)
 		mdb_debug("reading right neighbor");
 		mn.mc_ki[ptop]++;
 		node = NODEPTR(mc->mc_pg[ptop], mn.mc_ki[ptop]);
-		rc = mdb_page_get(mc->mc_txn,NODEPGNO(node),&mn.mc_pg[mn.mc_top],NULL);
+		rc = mdb_page_get(mc, NODEPGNO(node), &mn.mc_pg[mn.mc_top], NULL);
 		if (unlikely(rc))
 			return rc;
 		mn.mc_ki[mn.mc_top] = 0;
@@ -8386,7 +8383,7 @@ mdb_rebalance(MDB_cursor *mc)
 		mdb_debug("reading left neighbor");
 		mn.mc_ki[ptop]--;
 		node = NODEPTR(mc->mc_pg[ptop], mn.mc_ki[ptop]);
-		rc = mdb_page_get(mc->mc_txn,NODEPGNO(node),&mn.mc_pg[mn.mc_top],NULL);
+		rc = mdb_page_get(mc, NODEPGNO(node), &mn.mc_pg[mn.mc_top], NULL);
 		if (unlikely(rc))
 			return rc;
 		mn.mc_ki[mn.mc_top] = NUMKEYS(mn.mc_pg[mn.mc_top]) - 1;
@@ -8451,14 +8448,16 @@ mdb_cursor_del0(MDB_cursor *mc)
 			if (m3->mc_pg[mc->mc_top] == mp) {
 				if (m3->mc_ki[mc->mc_top] == ki) {
 					m3->mc_flags |= C_DEL;
+					if (mc->mc_db->md_flags & MDB_DUPSORT) {
+						/* Sub-cursor referred into dataset which is gone */
+						m3->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
+					}
+					continue;
 				} else if (m3->mc_ki[mc->mc_top] > ki) {
 					m3->mc_ki[mc->mc_top]--;
 				}
-				if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)) {
-					MDB_node *node = NODEPTR(m3->mc_pg[mc->mc_top], m3->mc_ki[mc->mc_top]);
-					if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
-						m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-				}
+				if (XCURSOR_INITED(m3))
+					XCURSOR_REFRESH(m3, m3->mc_pg[mc->mc_top], m3->mc_ki[mc->mc_top]);
 			}
 		}
 	}
@@ -8496,10 +8495,14 @@ mdb_cursor_del0(MDB_cursor *mc)
 					if (mc->mc_db->md_flags & MDB_DUPSORT) {
 						MDB_node *node = NODEPTR(m3->mc_pg[m3->mc_top], m3->mc_ki[m3->mc_top]);
 						/* If this node is a fake page, it needs to be reinited
-						 * because its data has moved.
+						 * because its data has moved. But just reset mc_pg[0]
+						 * if the xcursor is already live.
 						 */
 						if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA) {
-							mdb_xcursor_init1(m3, node);
+							if (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)
+								m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
+							else
+								mdb_xcursor_init1(m3, node);
 						}
 					}
 				}
@@ -8571,7 +8574,6 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 		 * run out of space, triggering a split. We need this
 		 * cursor to be consistent until the end of the rebalance.
 		 */
-		mc.mc_flags |= C_UNTRACK;
 		mc.mc_next = txn->mt_cursors[dbi];
 		txn->mt_cursors[dbi] = &mc;
 		rc = mdb_cursor_del(&mc, flags);
@@ -8581,6 +8583,7 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 }
 
 /** Split a page and insert a new node.
+ * Set #MDB_TXN_ERROR on failure.
  * @param[in,out] mc Cursor pointing to the page and desired insertion index.
  * The cursor will be updated to point to the actual page and index where
  * the node got inserted after the split.
@@ -8669,7 +8672,6 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 		split_indx = newindx;
 		nkeys = 0;
 	} else {
-
 		split_indx = (nkeys+1) / 2;
 
 		if (IS_LEAF2(rp)) {
@@ -8829,7 +8831,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 			} else {
 				/* find right page's left sibling */
 				mc->mc_ki[ptop] = mn.mc_ki[ptop];
-				mdb_cursor_sibling(mc, 0);
+				rc = mdb_cursor_sibling(mc, 0);
 			}
 		}
 	} else {
@@ -8837,8 +8839,11 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 		rc = mdb_node_add(&mn, mn.mc_ki[ptop], &sepkey, NULL, rp->mp_pgno, 0);
 		mn.mc_top++;
 	}
-	if (unlikely(rc != MDB_SUCCESS))
+	if (unlikely(rc != MDB_SUCCESS)) {
+		if (rc == MDB_NOTFOUND) /* improper mdb_cursor_sibling() result */
+			rc = MDB_PROBLEM;
 		goto done;
+	}
 	if (nflags & MDB_APPEND) {
 		mc->mc_pg[mc->mc_top] = rp;
 		mc->mc_ki[mc->mc_top] = 0;
@@ -8988,12 +8993,8 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 				m3->mc_ki[ptop] >= mc->mc_ki[ptop]) {
 				m3->mc_ki[ptop]++;
 			}
-			if (m3->mc_xcursor && (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) &&
-				IS_LEAF(mp)) {
-				MDB_node *node = NODEPTR(m3->mc_pg[mc->mc_top], m3->mc_ki[mc->mc_top]);
-				if ((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA)
-					m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-			}
+			if (XCURSOR_INITED(m3) && IS_LEAF(mp))
+				XCURSOR_REFRESH(m3, m3->mc_pg[mc->mc_top], m3->mc_ki[mc->mc_top]);
 		}
 	}
 	mdb_debug("mp left: %d, rp left: %d", SIZELEFT(mp), SIZELEFT(rp));
@@ -9056,7 +9057,10 @@ typedef struct mdb_copy {
 	HANDLE mc_fd;
 	int mc_toggle;			/**< Buffer number in provider */
 	int mc_new;				/**< (0-2 buffers to write) | (#MDB_EOF at end) */
-	volatile int mc_error;	/**< Error code, never cleared if set */
+	/** Error code.  Never cleared if set.  Both threads can set nonzero
+	 *	to fail the copy.  Not mutex-protected, LMDB expects atomic int.
+	 */
+	volatile int mc_error;
 } mdb_copy;
 
 	/** Dedicated writer thread for compacting copy. */
@@ -9067,6 +9071,14 @@ mdb_env_copythr(void *arg)
 	char *ptr;
 	int toggle = 0, wsize, rc = 0;
 	int len;
+
+#ifdef SIGPIPE
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGPIPE);
+	if ((rc = pthread_sigmask(SIG_BLOCK, &set, NULL)) != 0)
+		my->mc_error = rc;
+#endif
 
 	pthread_mutex_lock(&my->mc_mutex);
 	for(;;) {
@@ -9082,6 +9094,15 @@ again:
 			len = write(my->mc_fd, ptr, wsize);
 			if (len < 0) {
 				rc = errno;
+#ifdef SIGPIPE
+				if (rc == EPIPE) {
+					/* Collect the pending SIGPIPE, otherwise at least OS X
+					 * gives it to the process on thread-exit (ITS#8504).
+					 */
+					int tmp;
+					sigwait(&set, &tmp);
+				}
+#endif
 				break;
 			} else if (len > 0) {
 				rc = MDB_SUCCESS;
@@ -9134,12 +9155,15 @@ mdb_env_cthr_toggle(mdb_copy *my, int adjust)
 	return my->mc_error;
 }
 
-	/** Depth-first tree traversal for compacting copy. */
+	/** Depth-first tree traversal for compacting copy.
+	 * @param[in] my control structure.
+	 * @param[in,out] pg database root.
+	 * @param[in] flags includes #F_DUPDATA if it is a sorted-duplicate sub-DB.
+	 */
 static int __cold
 mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 {
 	MDB_cursor mc;
-	MDB_txn *txn = my->mc_txn;
 	MDB_node *ni;
 	MDB_page *mo, *mp, *leaf;
 	char *buf, *ptr;
@@ -9152,9 +9176,9 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 
 	memset(&mc, 0, sizeof(mc));
 	mc.mc_snum = 1;
-	mc.mc_txn = txn;
+	mc.mc_txn = my->mc_txn;
 
-	rc = mdb_page_get(txn, *pg, &mc.mc_pg[0], NULL);
+	rc = mdb_page_get(&mc, *pg, &mc.mc_pg[0], NULL);
 	if (rc)
 		return rc;
 	rc = mdb_page_search_root(&mc, NULL, MDB_PS_FIRST);
@@ -9199,7 +9223,7 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 
 						memcpy(&pg, NODEDATA(ni), sizeof(pg));
 						memcpy(NODEDATA(ni), &my->mc_next_pgno, sizeof(pgno_t));
-						rc = mdb_page_get(txn, pg, &omp, NULL);
+						rc = mdb_page_get(&mc, pg, &omp, NULL);
 						if (rc)
 							goto done;
 						if (my->mc_wlen[toggle] >= MDB_WBUF) {
@@ -9249,7 +9273,7 @@ mdb_env_cwalk(mdb_copy *my, pgno_t *pg, int flags)
 again:
 				ni = NODEPTR(mp, mc.mc_ki[mc.mc_top]);
 				pg = NODEPGNO(ni);
-				rc = mdb_page_get(txn, pg, &mp, NULL);
+				rc = mdb_page_get(&mc, pg, &mp, NULL);
 				if (rc)
 					goto done;
 				mc.mc_top++;
@@ -9864,7 +9888,8 @@ int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)
 		memset(&dummy, 0, sizeof(dummy));
 		dummy.md_root = P_INVALID;
 		dummy.md_flags = flags & PERSISTENT_FLAGS;
-		rc = mdb_cursor_put(&mc, &key, &data, F_SUBDATA);
+		WITH_CURSOR_TRACKING(mc,
+			rc = mdb_cursor_put(&mc, &key, &data, F_SUBDATA));
 		dbflag |= DB_DIRTY;
 	}
 
@@ -9995,7 +10020,7 @@ mdb_drop0(MDB_cursor *mc, int subs)
 						MDB_page *omp;
 						pgno_t pg;
 						memcpy(&pg, NODEDATA(ni), sizeof(pg));
-						rc = mdb_page_get(txn, pg, &omp, NULL);
+						rc = mdb_page_get(mc, pg, &omp, NULL);
 						if (unlikely(rc))
 							goto done;
 						mdb_cassert(mc, IS_OVERFLOW(omp));
@@ -10275,7 +10300,7 @@ mdb_reader_check(MDB_env *env, int *dead)
 	return mdb_reader_check0(env, 0, dead);
 }
 
-/** As #mdb_reader_check(). rlocked = <caller locked the reader mutex>. */
+/** As #mdb_reader_check(). \b rlocked is set if caller locked #me_rmutex. */
 static int __cold
 mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 {
