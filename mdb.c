@@ -9114,6 +9114,14 @@ mdb_env_copythr(void *arg)
 	int toggle = 0, wsize, rc = 0;
 	int len;
 
+#ifdef SIGPIPE
+	sigset_t set;
+	sigemptyset(&set);
+	sigaddset(&set, SIGPIPE);
+	if ((rc = pthread_sigmask(SIG_BLOCK, &set, NULL)) != 0)
+		my->mc_error = rc;
+#endif
+
 	pthread_mutex_lock(&my->mc_mutex);
 	for(;;) {
 		while (!my->mc_new)
@@ -9128,6 +9136,15 @@ again:
 			len = write(my->mc_fd, ptr, wsize);
 			if (len < 0) {
 				rc = errno;
+#ifdef SIGPIPE
+				if (rc == EPIPE) {
+					/* Collect the pending SIGPIPE, otherwise at least OS X
+					 * gives it to the process on thread-exit (ITS#8504).
+					 */
+					int tmp;
+					sigwait(&set, &tmp);
+				}
+#endif
 				break;
 			} else if (len > 0) {
 				rc = MDB_SUCCESS;
