@@ -432,7 +432,6 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			fflush(NULL);
 		}
 		skipped_subdb++;
-		mdbx_dbi_close(env, dbi);
 		return MDB_SUCCESS;
 	}
 
@@ -444,14 +443,12 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	rc = mdbx_dbi_flags(txn, dbi, &flags);
 	if (rc) {
 		error(" - mdbx_dbi_flags failed, error %d %s\n", rc, mdbx_strerror(rc));
-		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
 	rc = mdbx_stat(txn, dbi, &ms, sizeof(ms));
 	if (rc) {
 		error(" - mdbx_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
-		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
@@ -475,7 +472,6 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	rc = mdbx_cursor_open(txn, dbi, &mc);
 	if (rc) {
 		error(" - mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
-		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
@@ -565,7 +561,6 @@ bailout:
 	}
 
 	mdbx_cursor_close(mc);
-	mdbx_dbi_close(env, dbi);
 	return rc || problems_count;
 }
 
@@ -686,7 +681,11 @@ int main(int argc, char *argv[])
 	}
 	maxkeysize = rc;
 
-	mdbx_env_set_maxdbs(env, 3);
+	rc = mdbx_env_set_maxdbs(env, MAX_DBI);
+	if (rc < 0) {
+		error("mdbx_env_set_maxdbs failed, error %d %s\n", rc, mdbx_strerror(rc));
+		goto bailout;
+	}
 
 	rc = mdbx_env_open_ex(env, envname, envflags, 0664, &exclusive);
 	if (rc) {
