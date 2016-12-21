@@ -223,6 +223,9 @@ size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
  * 0 otherwise or less that zero in error case. */
 int mdbx_cursor_eof(MDB_cursor *mc);
 
+int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
+
 /**	@} */
 
 #ifdef __cplusplus

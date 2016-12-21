@@ -368,3 +368,132 @@ int mdbx_cursor_eof(MDB_cursor *mc)
 
 	return (mc->mc_flags & C_INITIALIZED) ? 0 : 1;
 }
+
+static int mdbx_is_samedata(MDB_val* a, MDB_val* b) {
+	return a->iov_len == b->iov_len
+		&& memcmp(a->iov_base, b->iov_base, a->iov_len) == 0;
+}
+
+/* Позволяет обновить или удалить существующую запись с получением
+ * в old_data предыдущего значения данных. При этом если new_data равен
+ * нулю, то выполняется удаление, иначе обновление/вставка.
+ *
+ * Текущее значение может находиться в уже измененной (грязной) странице.
+ * В этом случае страница будет перезаписана при обновлении, а само старое
+ * значение утрачено. Поэтому исходно в old_data должен быть передан
+ * дополнительный буфер для копирования старого значения.
+ * Если переданный буфер слишком мал, то функция вернет -1, установив
+ * old_data->iov_len в соответствующее значение.
+ *
+ * Для не-уникальных ключей также возможен второй сценарий использования,
+ * когда посредством old_data из записей с одинаковым ключом для
+ * удаления/обновления выбирается конкретная. Для выбора этого сценария
+ * во flags следует одновременно указать MDB_CURRENT и MDB_NOOVERWRITE.
+ *
+ * Функция может быть замещена соответствующими операциями с курсорами
+ * после двух доработок (TODO):
+ *  - внешняя аллокация курсоров, в том числе на стеке (без malloc).
+ *  - получения статуса страницы по адресу (знать о P_DIRTY).
+ */
+int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags)
+{
+	MDB_cursor mc;
+	MDB_xcursor mx;
+
+	if (unlikely(!key || !old_data || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(old_data->iov_base == NULL && old_data->iov_len))
+		return EINVAL;
+
+	if (unlikely(new_data == NULL && !(flags & MDB_CURRENT)))
+		return EINVAL;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+		return EINVAL;
+
+	if (unlikely(flags & ~(MDB_NOOVERWRITE|MDB_NODUPDATA|MDB_RESERVE|MDB_APPEND|MDB_APPENDDUP|MDB_CURRENT)))
+		return EINVAL;
+
+	if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
+		return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
+
+	mdb_cursor_init(&mc, txn, dbi, &mx);
+	mc.mc_next = txn->mt_cursors[dbi];
+	txn->mt_cursors[dbi] = &mc;
+
+	int rc;
+	MDB_val present_key = *key;
+	if (F_ISSET(flags, MDB_CURRENT | MDB_NOOVERWRITE)
+			&& (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT)) {
+		/* в old_data значение для выбора конкретного дубликата */
+		rc = mdbx_cursor_get(&mc, &present_key, old_data, MDB_GET_BOTH);
+		if (rc != MDB_SUCCESS)
+			goto bailout;
+		/* если данные совпадают, то ничего делать не надо */
+		if (new_data && mdbx_is_samedata(old_data, new_data))
+			goto bailout;
+	} else {
+		/* в old_data буфер получения предыдущего значения */
+		MDB_val present_data;
+		rc = mdbx_cursor_get(&mc, &present_key, &present_data, MDB_SET_KEY);
+		if (unlikely(rc != MDB_SUCCESS)) {
+			old_data->iov_base = NULL;
+			old_data->iov_len = rc;
+			if (rc != MDB_NOTFOUND || (flags & MDB_CURRENT))
+				goto bailout;
+		} else if (flags & MDB_NOOVERWRITE) {
+			rc = MDB_KEYEXIST;
+			*old_data = present_data;
+			goto bailout;
+		} else {
+			MDB_page *page = mc.mc_pg[mc.mc_top];
+			if (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT) {
+				if (flags & MDB_CURRENT) {
+					/* для не-уникальных ключей позволяем update/delete только если ключ один */
+					MDB_node *leaf = NODEPTR(page, mc.mc_ki[mc.mc_top]);
+					if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+						mdb_tassert(txn, XCURSOR_INITED(&mc) && mc.mc_xcursor->mx_db.md_entries > 1);
+						rc = MDB_KEYEXIST;
+						goto bailout;
+					}
+					/* если данные совпадают, то ничего делать не надо */
+					if (new_data && mdbx_is_samedata(&present_data, new_data))
+						goto bailout;
+				} else if ((flags & MDB_NODUPDATA) && mdbx_is_samedata(&present_data, new_data)) {
+					/* если данные совпадают и установлен MDB_NODUPDATA */
+					rc = MDB_KEYEXIST;
+					goto bailout;
+				}
+			} else {
+				flags |= MDB_CURRENT;
+			}
+
+			if (page->mp_flags & P_DIRTY) {
+				if (unlikely(old_data->iov_len < present_data.iov_len)) {
+					old_data->iov_base = NULL;
+					old_data->iov_len = present_data.iov_len;
+					rc = -1;
+					goto bailout;
+				}
+				memcpy(old_data->iov_base, present_data.iov_base, present_data.iov_len);
+				old_data->iov_len = present_data.iov_len;
+			} else {
+				*old_data = present_data;
+			}
+		}
+	}
+
+	if (likely(new_data))
+		rc = mdbx_cursor_put(&mc, key, new_data, flags);
+	else
+		rc = mdbx_cursor_del(&mc, 0);
+
+bailout:
+	txn->mt_cursors[dbi] = mc.mc_next;
+	return rc;
+}
