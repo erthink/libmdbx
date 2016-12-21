@@ -746,7 +746,7 @@ int main(int argc, char *argv[])
 			   meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 					   info.me_meta2_txnid, info.me_meta2_sign) ? "tail" : "head");
 		if (info.me_meta1_txnid > info.base.me_last_txnid)
-			print(", rolled-back %zu (%zu >>> %zu)\n",
+			print(", rolled-back %zu (%zu >>> %zu)",
 				info.me_meta1_txnid - info.base.me_last_txnid,
 				info.me_meta1_txnid, info.base.me_last_txnid);
 		print("\n");
@@ -756,7 +756,7 @@ int main(int argc, char *argv[])
 			   meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 					   info.me_meta1_txnid, info.me_meta1_sign) ? "tail" : "head");
 		if (info.me_meta2_txnid > info.base.me_last_txnid)
-			print(", rolled-back %zu (%zu >>> %zu)\n",
+			print(", rolled-back %zu (%zu >>> %zu)",
 				info.me_meta2_txnid - info.base.me_last_txnid,
 				info.me_meta2_txnid, info.base.me_last_txnid);
 		print("\n");
