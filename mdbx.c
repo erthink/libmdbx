@@ -369,7 +369,7 @@ int mdbx_cursor_eof(MDB_cursor *mc)
 	return (mc->mc_flags & C_INITIALIZED) ? 0 : 1;
 }
 
-static int mdbx_is_samedata(MDB_val* a, MDB_val* b) {
+static int mdbx_is_samedata(const MDB_val* a, const MDB_val* b) {
 	return a->iov_len == b->iov_len
 		&& memcmp(a->iov_base, b->iov_base, a->iov_len) == 0;
 }
@@ -462,14 +462,21 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 						goto bailout;
 					}
 					/* если данные совпадают, то ничего делать не надо */
-					if (new_data && mdbx_is_samedata(&present_data, new_data))
+					if (new_data && mdbx_is_samedata(&present_data, new_data)) {
+						*old_data = *new_data;
 						goto bailout;
+					}
 				} else if ((flags & MDB_NODUPDATA) && mdbx_is_samedata(&present_data, new_data)) {
 					/* если данные совпадают и установлен MDB_NODUPDATA */
 					rc = MDB_KEYEXIST;
 					goto bailout;
 				}
 			} else {
+				/* если данные совпадают, то ничего делать не надо */
+				if (new_data && mdbx_is_samedata(&present_data, new_data)) {
+					*old_data = *new_data;
+					goto bailout;
+				}
 				flags |= MDB_CURRENT;
 			}
 
