@@ -614,19 +614,26 @@ typedef struct MDB_page {
 	/** Header for a single key/data pair within a page.
 	 * Used in pages of type #P_BRANCH and #P_LEAF without #P_LEAF2.
 	 * We guarantee 2-byte alignment for 'MDB_node's.
+	 *
+	 * #mn_lo and #mn_hi are used for data size on leaf nodes, and for child
+	 * pgno on branch nodes.  On 64 bit platforms, #mn_flags is also used
+	 * for pgno.  (Branch nodes have no flags).  Lo and hi are in host byte
+	 * order in case some accesses can be optimized to 32-bit word access.
+	 *
+	 * Leaf node flags describe node contents.  #F_BIGDATA says the node's
+	 * data part is the page number of an overflow page with actual data.
+	 * #F_DUPDATA and #F_SUBDATA can be combined giving duplicate data in
+	 * a sub-page/sub-database, and named databases (just #F_SUBDATA).
 	 */
 typedef struct MDB_node {
-	/** lo and hi are used for data size on leaf nodes and for
-	 * child pgno on branch nodes. On 64 bit platforms, flags
-	 * is also used for pgno. (Branch nodes have no flags).
-	 * They are in host byte order in case that lets some
-	 * accesses be optimized into a 32-bit word access.
-	 */
+	/** part of data size or pgno
+	 *	@{ */
 #if BYTE_ORDER == LITTLE_ENDIAN
-	unsigned short	mn_lo, mn_hi;	/**< part of data size or pgno */
+	unsigned short	mn_lo, mn_hi;
 #else
 	unsigned short	mn_hi, mn_lo;
 #endif
+	/** @} */
 /** @defgroup mdb_node Node Flags
  *	@ingroup internal
  *	Flags for node headers.
