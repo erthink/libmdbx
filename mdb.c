@@ -7713,16 +7713,11 @@ mdb_cursor_renew(MDB_txn *txn, MDB_cursor *mc)
 int
 mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 {
-	MDB_node	*leaf;
-
 	if (unlikely(mc == NULL || countp == NULL))
 		return EINVAL;
 
 	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
-
-	if (unlikely(mc->mc_xcursor == NULL))
-		return MDB_INCOMPATIBLE;
 
 	if (unlikely(mc->mc_txn->mt_flags & MDB_TXN_BLOCKED))
 		return MDB_BAD_TXN;
@@ -7730,18 +7725,39 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 	if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
 		return EINVAL;
 
+#if MDBX_MODE_ENABLED
+	MDB_page *mp = mc->mc_pg[mc->mc_top];
+	int nkeys = NUMKEYS(mp);
+	if (!nkeys || mc->mc_ki[mc->mc_top] >= nkeys) {
+		*countp = 0;
+		return MDB_NOTFOUND;
+	} else if (mc->mc_xcursor == NULL || IS_LEAF2(mp)) {
+		*countp = 1;
+        } else {
+		MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
+		if (!F_ISSET(leaf->mn_flags, F_DUPDATA))
+			*countp = 1;
+		else if (unlikely(!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)))
+			return EINVAL;
+		else
+			*countp = mc->mc_xcursor->mx_db.md_entries;
+	}
+#else
+        if (unlikely(mc->mc_xcursor == NULL))
+		return MDB_INCOMPATIBLE;
+
 	if (unlikely(!mc->mc_snum || (mc->mc_flags & C_EOF)))
 		return MDB_NOTFOUND;
 
-	leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+	MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 	if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 		*countp = 1;
 	} else {
 		if (unlikely(!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)))
 			return EINVAL;
-
 		*countp = mc->mc_xcursor->mx_db.md_entries;
 	}
+#endif /* MDBX_MODE_ENABLED */
 	return MDB_SUCCESS;
 }
 
