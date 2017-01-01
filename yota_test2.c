@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015 Vladimir Romanov <https://www.linkedin.com/in/vladimirromanov>, Yota Lab.
+ * Copyright 2016-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015 Vladimir Romanov <https://www.linkedin.com/in/vladimirromanov>, Yota Lab.
  *
  * This file is part of libmdbx.
  *
@@ -16,7 +16,6 @@
  *
  * You should have received a copy of the GNU Affero General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- *
  */
 
 #include <sys/time.h>

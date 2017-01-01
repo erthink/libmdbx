@@ -6,9 +6,9 @@
  */
 
 /*
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
- * Copyright 2011-2016 Howard Chu, Symas Corp.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2011-2017 Howard Chu, Symas Corp.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
