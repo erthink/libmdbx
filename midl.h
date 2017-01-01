@@ -10,9 +10,9 @@
  */
 
 /*
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
- * Copyright 2000-2016 The OpenLDAP Foundation.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2000-2017 The OpenLDAP Foundation.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without

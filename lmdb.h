@@ -125,17 +125,17 @@
  *	@author	Leonid Yuriev, 'ReOpen' initiative <https://github.com/ReOpen>.
  *	Howard Chu, Symas Corp. All rights reserved.
  *
- *	@copyright 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- *	2011-2016 Howard Chu, Symas Corp. All rights reserved.
+ *	@copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ *	2011-2017 Howard Chu, Symas Corp. All rights reserved.
  *
  * ---
  *
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  *	@par Derived From:
  * This code is derived from LMDB engine written by Howard Chu, Symas Corporation.
  *
- * Copyright 2011-2016 Howard Chu, Symas Corp. All rights reserved.
+ * Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP

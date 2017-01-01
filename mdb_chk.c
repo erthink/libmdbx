@@ -1,8 +1,8 @@
 /* mdbx_chk.c - memory-mapped database check tool */
 
 /*
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  *
  * This file is part of libmdbx.
  *
