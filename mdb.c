@@ -1367,8 +1367,7 @@ mdb_dkey(MDB_val *key, char *buf)
 	if (key->mv_size > DKBUF_MAXKEYSIZE)
 		return "MDB_MAXKEYSIZE";
 	/* may want to make this a dynamic check: if the key is mostly
-	 * printable characters, print it as-is instead of converting to hex.
-	 */
+	 * printable characters, print it as-is instead of converting to hex. */
 #if 1
 	buf[0] = '\0';
 	for (i=0; i<key->mv_size; i++)
@@ -1576,8 +1575,7 @@ mdb_page_malloc(MDB_txn *txn, unsigned num)
 	if ((env->me_flags & MDB_NOMEMINIT) == 0) {
 		/* For a single page alloc, we init everything after the page header.
 		 * For multi-page, we init the final page; if the caller needed that
-		 * many pages they will be filling in at least up to the last page.
-		 */
+		 * many pages they will be filling in at least up to the last page. */
 		size_t skip = PAGEHDRSZ;
 		if (num > 1)
 			skip += (num - 1) * env->me_psize;
@@ -1671,8 +1669,7 @@ mdb_page_loose(MDB_cursor *mc, MDB_page *mp)
 		if (txn->mt_parent) {
 			MDB_ID2 *dl = txn->mt_u.dirty_list;
 			/* If txn has a parent, make sure the page is in our
-			 * dirty list.
-			 */
+			 * dirty list. */
 			if (dl[0].mid) {
 				unsigned x = mdb_mid2l_search(dl, pgno);
 				if (x <= dl[0].mid && dl[x].mid == pgno) {
@@ -1862,8 +1859,7 @@ mdb_page_spill(MDB_cursor *m0, MDB_val *key, MDB_val *data)
 	 * turns out to be a lot of wasted effort because in a large txn many
 	 * of those pages will need to be used again. So now we spill only 1/8th
 	 * of the dirty pages. Testing revealed this to be a good tradeoff,
-	 * better than 1/2, 1/4, or 1/10.
-	 */
+	 * better than 1/2, 1/4, or 1/10. */
 	if (need < MDB_IDL_UM_MAX / 8)
 		need = MDB_IDL_UM_MAX / 8;
 
@@ -1875,8 +1871,7 @@ mdb_page_spill(MDB_cursor *m0, MDB_val *key, MDB_val *data)
 		if (dp->mp_flags & (P_LOOSE|P_KEEP))
 			continue;
 		/* Can't spill twice, make sure it's not already in a parent's
-		 * spill list.
-		 */
+		 * spill list. */
 		if (txn->mt_parent) {
 			MDB_txn *tx2;
 			for (tx2 = txn->mt_parent; tx2; tx2 = tx2->mt_parent) {
@@ -2124,8 +2119,7 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			pgno_t *idl;
 
 			/* Seek a big enough contiguous page range. Prefer
-			 * pages at the tail, just truncating the list.
-			 */
+			 * pages at the tail, just truncating the list. */
 			if (likely(flags & MDBX_ALLOC_CACHE)
 					&& mop_len > n2
 					&& ( !(flags & MDBX_COALESCE) || op == MDB_FIRST)) {
@@ -2405,8 +2399,7 @@ mdb_page_copy(MDB_page *dst, MDB_page *src, unsigned psize)
 	indx_t upper = src->mp_upper, lower = src->mp_lower, unused = upper-lower;
 
 	/* If page isn't full, just copy the used portion. Adjust
-	 * alignment so memcpy may copy words instead of bytes.
-	 */
+	 * alignment so memcpy may copy words instead of bytes. */
 	if ((unused &= -Align) && !IS_LEAF2(src)) {
 		upper = (upper + PAGEBASE) & -Align;
 		memcpy(dst, src, (lower + PAGEBASE + (Align-1)) & -Align);
@@ -2460,8 +2453,7 @@ mdb_page_unspill(MDB_txn *txn, MDB_page *mp, MDB_page **ret)
 			if (tx2 == txn) {
 				/* If in current txn, this page is no longer spilled.
 				 * If it happens to be the last page, truncate the spill list.
-				 * Otherwise mark it as deleted by setting the LSB.
-				 */
+				 * Otherwise mark it as deleted by setting the LSB. */
 				if (x == txn->mt_spill_pgs[0])
 					txn->mt_spill_pgs[0]--;
 				else
@@ -2521,8 +2513,7 @@ mdb_page_touch(MDB_cursor *mc)
 		MDB_ID2 mid, *dl = txn->mt_u.dirty_list;
 		pgno = mp->mp_pgno;
 		/* If txn has a parent, make sure the page is in our
-		 * dirty list.
-		 */
+		 * dirty list. */
 		if (dl[0].mid) {
 			unsigned x = mdb_mid2l_search(dl, pgno);
 			if (x <= dl[0].mid && dl[x].mid == pgno) {
@@ -2665,8 +2656,7 @@ mdb_cursor_shadow(MDB_txn *src, MDB_txn *dst)
 				mc->mc_db = &dst->mt_dbs[i];
 				/* Kill pointers into src to reduce abuse: The
 				 * user may not use mc until dst ends. But we need a valid
-				 * txn pointer here for cursor fixups to keep working.
-				 */
+				 * txn pointer here for cursor fixups to keep working. */
 				mc->mc_txn    = dst;
 				mc->mc_dbflag = &dst->mt_dbflags[i];
 				if ((mx = mc->mc_xcursor) != NULL) {
@@ -2826,8 +2816,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			 * uses the reader table un-mutexed: First reset the
 			 * slot, next publish it in mti_numreaders.  After
 			 * that, it is safe for mdb_env_close() to touch it.
-			 * When it will be closed, we can finally claim it.
-			 */
+			 * When it will be closed, we can finally claim it. */
 			r->mr_pid = 0;
 			r->mr_txnid = ~(txnid_t)0;
 			r->mr_tid = tid;
@@ -3002,8 +2991,7 @@ mdb_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags, MDB_txn **ret)
 		size += tsize = sizeof(MDB_txn);
 	} else {
 		/* Reuse preallocated write txn. However, do not touch it until
-		 * mdb_txn_renew0() succeeds, since it currently may be active.
-		 */
+		 * mdb_txn_renew0() succeeds, since it currently may be active. */
 		txn = env->me_txn0;
 		goto renew;
 	}
@@ -3289,8 +3277,7 @@ mdb_freelist_save(MDB_txn *txn)
 {
 	/* env->me_pghead[] can grow and shrink during this call.
 	 * env->me_pglast and txn->mt_free_pgs[] can only grow.
-	 * Page numbers cannot disappear from txn->mt_free_pgs[].
-	 */
+	 * Page numbers cannot disappear from txn->mt_free_pgs[]. */
 	MDB_cursor mc;
 	MDB_env	*env = txn->mt_env;
 	int rc, maxfree_1pg = env->me_maxfree_1pg, more = 1;
@@ -3315,8 +3302,7 @@ again:
 
 		if (! lifo) {
 			/* If using records from freeDB which we have not yet
-			 * deleted, delete them and any we reserved for me_pghead.
-			 */
+			 * deleted, delete them and any we reserved for me_pghead. */
 			while (pglast < env->me_pglast) {
 				rc = mdb_cursor_first(&mc, &key, NULL);
 				if (unlikely(rc))
@@ -3358,8 +3344,7 @@ again:
 
 		if (unlikely(!env->me_pghead) && txn->mt_loose_pgs) {
 			/* Put loose page numbers in mt_free_pgs, since
-			 * we may be unable to return them to me_pghead.
-			 */
+			 * we may be unable to return them to me_pghead. */
 			MDB_page *mp = txn->mt_loose_pgs;
 			if (unlikely((rc = mdb_midl_need(&txn->mt_free_pgs, txn->mt_loose_count)) != 0))
 				return rc;
@@ -3413,8 +3398,7 @@ again:
 
 		/* Reserve records for me_pghead[]. Split it if multi-page,
 		 * to avoid searching freeDB for a page range. Use keys in
-		 * range [1,me_pglast]: Smaller than txnid of oldest reader.
-		 */
+		 * range [1,me_pglast]: Smaller than txnid of oldest reader. */
 		if (total_room >= mop_len) {
 			if (total_room == mop_len || --more < 0)
 				break;
@@ -3491,8 +3475,7 @@ again:
 	mdb_tassert(txn, cleanup_idx == (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
 	/* Return loose page numbers to me_pghead, though usually none are
-	 * left at this point.  The pages themselves remain in dirty_list.
-	 */
+	 * left at this point.  The pages themselves remain in dirty_list. */
 	if (txn->mt_loose_pgs) {
 		MDB_page *mp = txn->mt_loose_pgs;
 		unsigned count = txn->mt_loose_count;
@@ -3766,8 +3749,7 @@ mdb_txn_commit(MDB_txn *txn)
 			goto fail;
 		mdb_midl_free(txn->mt_free_pgs);
 		/* Failures after this must either undo the changes
-		 * to the parent or set MDB_TXN_ERROR in the parent.
-		 */
+		 * to the parent or set MDB_TXN_ERROR in the parent. */
 
 		parent->mt_next_pgno = txn->mt_next_pgno;
 		parent->mt_flags = txn->mt_flags;
@@ -5190,7 +5172,7 @@ mdb_cmp_int_ua(const MDB_val *a, const MDB_val *b)
 
 		do {
 			diff = *--pa - *--pb;
-			if (likely(diff)) break;
+			if (likely(diff != 0)) break;
 		} while(pa != a->mv_data);
 		return diff;
 	}
@@ -5410,8 +5392,7 @@ mdb_page_get(MDB_cursor *mc, pgno_t pgno, MDB_page **ret, int *lvl)
 			/* Spilled pages were dirtied in this txn and flushed
 			 * because the dirty list got full. Bring this page
 			 * back in from the map (but don't unspill it here,
-			 * leave that unless page_touch happens again).
-			 */
+			 * leave that unless page_touch happens again). */
 			if (tx2->mt_spill_pgs) {
 				MDB_ID pn = pgno << 1;
 				x = mdb_midl_search(tx2->mt_spill_pgs, pn);
@@ -6080,8 +6061,7 @@ mdb_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 				}
 			}
 			/* If any parents have right-sibs, search.
-			 * Otherwise, there's nothing further.
-			 */
+			 * Otherwise, there's nothing further. */
 			for (i=0; i<mc->mc_top; i++)
 				if (mc->mc_ki[i] <
 					NUMKEYS(mc->mc_pg[i])-1)
@@ -6953,8 +6933,7 @@ new_sub:
 		/* Now store the actual data in the child DB. Note that we're
 		 * storing the user data in the keys field, so there are strict
 		 * size limits on dupdata. The actual data fields of the child
-		 * DB are all zero size.
-		 */
+		 * DB are all zero size. */
 		if (do_sub) {
 			int xflags, new_dupdata;
 			size_t ecount;
@@ -7018,8 +6997,7 @@ put_sub:
 			if (unlikely(rc))
 				goto bad_sub;
 			/* If we succeeded and the key didn't exist before,
-			 * make sure the cursor is marked valid.
-			 */
+			 * make sure the cursor is marked valid. */
 			mc->mc_flags |= C_INITIALIZED;
 		}
 		if (flags & MDB_MULTIPLE) {
@@ -7561,7 +7539,6 @@ mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node)
 #endif */
 }
 
-
 /** Fixup a sorted-dups cursor due to underlying update.
  *	Sets up some fields that depend on the data from the main cursor.
  *	Almost the same as init1, but skips initialization steps if the
@@ -7940,14 +7917,12 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 		csrc->mc_pg[csrc->mc_top]->mp_pgno,
 		cdst->mc_ki[cdst->mc_top], cdst->mc_pg[cdst->mc_top]->mp_pgno);
 
-	/* Add the node to the destination page.
-	 */
+	/* Add the node to the destination page. */
 	rc = mdb_node_add(cdst, cdst->mc_ki[cdst->mc_top], &key, &data, srcpg, flags);
 	if (unlikely(rc != MDB_SUCCESS))
 		return rc;
 
-	/* Delete the node from the source page.
-	 */
+	/* Delete the node from the source page. */
 	mdb_node_del(csrc, key.mv_size);
 
 	{
@@ -8008,8 +7983,7 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 		}
 	}
 
-	/* Update the parent separators.
-	 */
+	/* Update the parent separators. */
 	if (csrc->mc_ki[csrc->mc_top] == 0) {
 		if (csrc->mc_ki[csrc->mc_top-1] != 0) {
 			if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
@@ -8808,8 +8782,7 @@ mdb_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata, pgno_t newpgno
 
 	mdb_debug("separator is %d [%s]", split_indx, DKEY(&sepkey));
 
-	/* Copy separator key to the parent.
-	 */
+	/* Copy separator key to the parent. */
 	if (SIZELEFT(mn.mc_pg[ptop]) < mdb_branch_size(env, &sepkey)) {
 		int snum = mc->mc_snum;
 		mn.mc_snum--;
@@ -10277,11 +10250,9 @@ mdb_pid_insert(pid_t *ids, pid_t pid)
 
 		if( val < 0 ) {
 			n = pivot;
-
 		} else if ( val > 0 ) {
 			base = cursor;
 			n -= pivot + 1;
-
 		} else {
 			/* found, so it's a duplicate */
 			return -1;
