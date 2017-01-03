@@ -431,8 +431,6 @@ typedef struct MDB_rxbody {
 	volatile pid_t	mrb_pid;
 	/** The thread ID of the thread owning this txn. */
 	volatile pthread_t	mrb_tid;
-	/** Pointer to the context for deferred cleanup reader thread. */
-	struct MDB_rthc *mrb_rthc;
 } MDB_rxbody;
 
 	/** The actual reader record, with cacheline padding. */
@@ -443,7 +441,6 @@ typedef struct MDB_reader {
 #define	mr_txnid	mru.mrx.mrb_txnid
 #define	mr_pid	mru.mrx.mrb_pid
 #define	mr_tid	mru.mrx.mrb_tid
-#define	mr_rthc	mru.mrx.mrb_rthc
 		/** cache line alignment */
 		char pad[(sizeof(MDB_rxbody)+CACHELINE_SIZE-1) & ~(CACHELINE_SIZE-1)];
 	} mru;
@@ -1004,9 +1001,14 @@ typedef struct MDB_pgstate {
 
 	/** Context for deferred cleanup of reader's threads.
 	 *  to avoid https://github.com/ReOpen/ReOpenLDAP/issues/48 */
-struct MDB_rthc {
+typedef struct MDBX_rthc {
 	MDB_reader *rc_reader;
-};
+} MDBX_rthc;
+
+static MDBX_rthc* mdbx_rthc_alloc(void);
+static void mdbx_rthc_cleanup(MDBX_rthc*);
+static int mdbx_rthc_assigned(MDBX_rthc* rthc);
+
 	/** The database environment. */
 struct MDB_env {
 #define MDBX_ME_SIGNATURE (0x9A899641^MDBX_MODE_SALT)
@@ -2754,7 +2756,7 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 	}
 
 	if (flags & MDB_TXN_RDONLY) {
-		struct MDB_rthc *rthc = NULL;
+		MDBX_rthc *rthc = NULL;
 		MDB_reader *r = NULL;
 
 		txn->mt_flags = MDB_TXN_RDONLY;
@@ -2762,20 +2764,19 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			mdb_assert(env, !(env->me_flags & MDB_NOTLS));
 			rthc = pthread_getspecific(env->me_txkey);
 			if (unlikely(! rthc)) {
-				rthc = calloc(1, sizeof(struct MDB_rthc));
+				rthc = mdbx_rthc_alloc();
 				if (unlikely(! rthc))
-					return ENOMEM;
+					return MDB_READERS_FULL;
 				rc = pthread_setspecific(env->me_txkey, rthc);
 				if (unlikely(rc)) {
 					free(rthc);
 					return rc;
 				}
 			}
-			r = rthc->rc_reader;
-			if (r) {
+			if (mdbx_rthc_assigned(rthc)) {
+				r = rthc->rc_reader;
 				mdb_assert(env, r->mr_pid == env->me_pid);
 				mdb_assert(env, r->mr_tid == pthread_self());
-				mdb_assert(env, r->mr_rthc == rthc);
 			}
 		} else {
 			mdb_assert(env, env->me_flags & MDB_NOTLS);
@@ -2837,7 +2838,6 @@ mdb_txn_renew0(MDB_txn *txn, unsigned flags)
 			new_notls = MDB_END_SLOT;
 			if (likely(rthc)) {
 				rthc->rc_reader = r;
-				r->mr_rthc = rthc;
 				new_notls = 0;
 			}
 		}
@@ -4505,38 +4505,111 @@ mdb_env_open2(MDB_env *env, MDB_meta *meta)
 	return MDB_SUCCESS;
 }
 
-static pthread_mutex_t mdb_rthc_lock = PTHREAD_MUTEX_INITIALIZER;
+/****************************************************************************/
 
 /** Release a reader thread's slot in the reader lock table.
  *	This function is called automatically when a thread exits.
  * @param[in] ptr This points to the MDB_rthc of a slot in the reader lock table.
  */
-
-/* LY: TODO: Yet another problem is here - segfault in case if a DSO will
- * be unloaded before a thread would been finished. */
-static ATTRIBUTE_NO_SANITIZE_THREAD
+static __cold
 void mdb_env_reader_destr(void *ptr)
 {
-	struct MDB_rthc* rthc = ptr;
-	MDB_reader *reader;
+	MDBX_rthc* rthc = ptr;
 
-	mdb_ensure(NULL, pthread_mutex_lock(&mdb_rthc_lock) == 0);
-	reader = rthc->rc_reader;
-	if (reader && reader->mr_pid == getpid()) {
-		mdb_ensure(NULL, reader->mr_rthc == rthc);
-		rthc->rc_reader = NULL;
-		reader->mr_rthc = NULL;
-		mdbx_compiler_barrier();
-		reader->mr_pid = 0;
-		mdbx_coherent_barrier();
-	}
-	mdb_ensure(NULL, pthread_mutex_unlock(&mdb_rthc_lock) == 0);
-	free(rthc);
+	/* LY: Основная задача этого деструктора была и есть в освобождении
+	 * слота таблицы читателей при завершении треда, но тут есть пара
+	 * не очевидных сложностей:
+	 *  - Таблица читателей располагается в разделяемой памяти, поэтому
+	 *    во избежание segfault деструктор не должен что-либо делать после
+	 *    или одновременно с mdb_env_close().
+	 *  - Действительно, mdb_env_close() вызовет pthread_key_delete() и
+	 *    после этого glibc не будет вызывать деструктор.
+	 *  - ОДНАКО, это никак не решает проблему гонок между mdb_env_close()
+	 *    и завершающимися тредами. Грубо говоря, при старте mdb_env_close()
+	 *    деструктор уже может выполняться в некоторых тредах, и завершиться
+	 *    эти выполнения могут во время или после окончания mdb_env_close().
+	 *  - БОЛЕЕ ТОГО, схожая проблема может возникнуть при выгрузке dso/dll,
+	 *    в случае если пользователь не вызвал mdb_env_close(), на что он
+	 *    имеет право.
+	 *  - Исходное проявление проблемы было зафиксировано
+	 *    в https://github.com/ReOpen/ReOpenLDAP/issues/48
+	 *
+	 * Решение посредством выделяемого динамически struct MDB_rthc было
+	 * не удачным, так как порождало либо утечку памяти, либо вероятностное
+	 * обращение к уже освобожденной памяти из этого деструктора.
+	 */
+
+	mdbx_rthc_cleanup(rthc);
 }
 
+static pthread_mutex_t mdbx_rthc_lock = PTHREAD_MUTEX_INITIALIZER;
+
+#define MDBX_RTHC_MAX 512
+static MDBX_rthc mdbx_rthc_tlb[MDBX_RTHC_MAX];
+
+static MDBX_INLINE
+int mdbx_rthc_assigned(MDBX_rthc* rthc)
+{
+	return rthc->rc_reader && rthc->rc_reader != (void*) rthc;
+}
+
+static __cold
+MDBX_rthc* mdbx_rthc_alloc(void)
+{
+	mdb_ensure(NULL, pthread_mutex_lock(&mdbx_rthc_lock) == 0);
+	for (size_t i = 0; i < MDBX_RTHC_MAX; ++i) {
+		if (mdbx_rthc_tlb[i].rc_reader == NULL) {
+			MDBX_rthc* rthc = mdbx_rthc_tlb + i;
+			rthc->rc_reader = (void *) rthc;
+			mdb_ensure(NULL, pthread_mutex_unlock(&mdbx_rthc_lock) == 0);
+			return rthc;
+		}
+	}
+	mdb_ensure(NULL, pthread_mutex_unlock(&mdbx_rthc_lock) == 0);
+	return NULL;
+}
+
+static __cold
+void mdbx_rthc_cleanup_locked(MDBX_rthc* rthc)
+{
+	if (mdbx_rthc_assigned(rthc)) {
+		if (rthc->rc_reader->mr_pid == getpid()) {
+			rthc->rc_reader->mr_pid = 0;
+			mdbx_coherent_barrier();
+		}
+		rthc->rc_reader = NULL;
+	}
+}
+
+static __cold
+void mdbx_rthc_cleanup_env(MDB_env *env)
+{
+	mdb_ensure(env, pthread_mutex_lock(&mdbx_rthc_lock) == 0);
+	MDB_reader* begin = env->me_txns->mti_readers;
+	MDB_reader* end = env->me_txns->mti_readers + env->me_close_readers;
+	for (size_t i = 0; i < MDBX_RTHC_MAX; ++i) {
+		MDBX_rthc* rthc = mdbx_rthc_tlb + i;
+		if (rthc->rc_reader >= begin && rthc->rc_reader < end)
+			mdbx_rthc_cleanup_locked(rthc);
+	}
+	mdb_ensure(env, pthread_mutex_unlock(&mdbx_rthc_lock) == 0);
+}
+
+static __cold
+void mdbx_rthc_cleanup(MDBX_rthc* rthc)
+{
+	if (rthc->rc_reader) {
+		mdb_ensure(NULL, pthread_mutex_lock(&mdbx_rthc_lock) == 0);
+		mdbx_rthc_cleanup_locked(rthc);
+		mdb_ensure(NULL, pthread_mutex_unlock(&mdbx_rthc_lock) == 0);
+	}
+}
+
+/****************************************************************************/
+
 /** Downgrade the exclusive lock on the region back to shared */
-static int __cold
-mdb_env_share_locks(MDB_env *env, int *excl)
+static  __cold
+int mdb_env_share_locks(MDB_env *env, int *excl)
 {
 	struct flock lock_info;
 	int rc = 0;
@@ -4991,11 +5064,7 @@ mdb_env_close0(MDB_env *env)
 	mdb_midl_free(env->me_free_pgs);
 
 	if (env->me_flags & MDB_ENV_TXKEY) {
-		struct MDB_rthc *rthc = pthread_getspecific(env->me_txkey);
-		if (rthc && pthread_setspecific(env->me_txkey, NULL) == 0) {
-			mdb_env_reader_destr(rthc);
-		}
-		pthread_key_delete(env->me_txkey);
+		mdb_ensure(env, pthread_key_delete(env->me_txkey) == 0);
 		env->me_flags &= ~MDB_ENV_TXKEY;
 	}
 
@@ -5009,7 +5078,6 @@ mdb_env_close0(MDB_env *env)
 	if (env->me_fd != INVALID_HANDLE_VALUE)
 		(void) close(env->me_fd);
 
-	pid_t pid = env->me_pid;
 	/* Clearing readers is done in this function because
 	 * me_txkey with its destructor must be disabled first.
 	 *
@@ -5017,26 +5085,12 @@ mdb_env_close0(MDB_env *env)
 	 * data owned by this process (me_close_readers and
 	 * our readers), and clear each reader atomically.
 	 */
-	if (pid == getpid()) {
-		mdb_ensure(env, pthread_mutex_lock(&mdb_rthc_lock) == 0);
-		for (i = env->me_close_readers; --i >= 0; ) {
-			MDB_reader *reader = &env->me_txns->mti_readers[i];
-			if (reader->mr_pid == pid) {
-				struct MDB_rthc *rthc = reader->mr_rthc;
-				if (rthc) {
-					mdb_ensure(env, rthc->rc_reader == reader);
-					rthc->rc_reader = NULL;
-					reader->mr_rthc = NULL;
-				}
-				reader->mr_pid = 0;
-			}
-		}
-		mdbx_coherent_barrier();
-		mdb_ensure(env, pthread_mutex_unlock(&mdb_rthc_lock) == 0);
-	}
+	if (env->me_pid == getpid())
+		mdbx_rthc_cleanup_env(env);
 
 	munmap((void *)env->me_txns, (env->me_maxreaders-1)*sizeof(MDB_reader)+sizeof(MDB_txninfo));
 	env->me_txns = NULL;
+	env->me_pid = 0;
 
 	if (env->me_lfd != INVALID_HANDLE_VALUE) {
 		(void) close(env->me_lfd);
@@ -10318,15 +10372,14 @@ mdb_reader_check0(MDB_env *env, int rlocked, int *dead)
 								j = rdrs;
 						}
 					}
-					for (; j<rdrs; j++)
-							if (mr[j].mr_pid == pid) {
-								mdb_debug("clear stale reader pid %u txn %zd",
-									(unsigned) pid, mr[j].mr_txnid);
-								mr[j].mr_rthc = NULL;
-								mdbx_compiler_barrier();
-								mr[j].mr_pid = 0;
-								count++;
-							}
+					for (; j < rdrs; j++) {
+						if (mr[j].mr_pid == pid) {
+							mdb_debug("clear stale reader pid %u txn %zd",
+								(unsigned) pid, mr[j].mr_txnid);
+							mr[j].mr_pid = 0;
+							count++;
+						}
+					}
 					if (rmutex)
 						mdb_mutex_unlock(env, rmutex);
 				}
