@@ -7232,10 +7232,11 @@ mdb_branch_size(MDB_env *env, MDB_val *key)
 	size_t		 sz;
 
 	sz = INDXSIZE(key);
-	if (sz > env->me_nodemax) {
+	if (unlikely(sz > env->me_nodemax)) {
 		/* put on overflow page */
 		/* not implemented */
-		/* sz -= key->size - sizeof(pgno_t); */
+		mdb_assert_fail(env, "INDXSIZE(key) <= env->me_nodemax", __FUNCTION__, __LINE__);
+		sz -= key->mv_size - sizeof(pgno_t);
 	}
 
 	return sz + sizeof(indx_t);
