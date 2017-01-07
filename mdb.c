@@ -1008,7 +1008,6 @@ typedef struct MDBX_rthc {
 } MDBX_rthc;
 
 static MDBX_rthc* mdbx_rthc_get(pthread_key_t key);
-static void mdbx_rthc_cleanup(MDB_env *env);
 
 	/** The database environment. */
 struct MDB_env {
@@ -4500,13 +4499,17 @@ mdb_env_open2(MDB_env *env, MDB_meta *meta)
 
 /****************************************************************************/
 
+#ifndef MDBX_USE_THREAD_ATEXIT
+#	if __GLIBC_PREREQ(2,18)
+#		define MDBX_USE_THREAD_ATEXIT 1
+#	else
+#		define MDBX_USE_THREAD_ATEXIT 0
+#	endif
+#endif
+
 static pthread_mutex_t mdbx_rthc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static MDBX_rthc *mdbx_rthc_list;
 static pthread_key_t mdbx_pthread_crutch_key;
-static pthread_cond_t mdbx_rthc_cond = PTHREAD_COND_INITIALIZER;
-
-extern void *__dso_handle __attribute__ ((__weak__));
-extern int __cxa_thread_atexit_impl(void (*dtor)(void*), void *obj, void *dso_symbol);
 
 static __inline
 void mdbx_rthc_lock(void) {
@@ -4518,29 +4521,12 @@ void mdbx_rthc_unlock(void) {
 	mdb_ensure(NULL, pthread_mutex_unlock(&mdbx_rthc_mutex) == 0);
 }
 
-static __attribute__((constructor)) __cold
-void mdbx_pthread_crutch_ctor(void) {
-	mdbx_pthread_crutch_key = -1;
-	mdb_ensure(NULL, pthread_key_create(&mdbx_pthread_crutch_key, NULL) == 0);
-}
-
-static __attribute__((destructor)) __cold
-void mdbx_pthread_crutch_dtor(void)
-{
-	mdbx_rthc_lock();
-	while (mdbx_rthc_list != NULL)
-		mdb_ensure(NULL, pthread_cond_wait(&mdbx_rthc_cond, &mdbx_rthc_mutex) == 0);
-
-	pthread_key_delete(mdbx_pthread_crutch_key);
-	mdbx_pthread_crutch_key = -1;
-}
-
 /** Release a reader thread's slot in the reader lock table.
  *	This function is called automatically when a thread exits.
  * @param[in] ptr This points to the MDB_rthc of a slot in the reader lock table.
  */
 static __cold
-void mdbx_rthc_dtor(void *ptr)
+void mdbx_rthc_dtor(void)
 {
 	/* LY: Основная задача этого деструктора была и есть в освобождении
 	 * слота таблицы читателей при завершении треда, но тут есть пара
@@ -4561,18 +4547,16 @@ void mdbx_rthc_dtor(void *ptr)
 	 *  - Исходное проявление проблемы было зафиксировано
 	 *    в https://github.com/ReOpen/ReOpenLDAP/issues/48
 	 *
-	 * Решение посредством выделяемого динамически struct MDB_rthc было
-	 * не удачным, так как порождало либо утечку памяти, либо вероятностное
-	 * обращение к уже освобожденной памяти из этого деструктора.
+	 * Предыдущее решение посредством выделяемого динамически MDB_rthc
+	 * было не удачным, так как порождало либо утечку памяти,
+	 * либо вероятностное обращение к уже освобожденной памяти
+	 * из этого деструктора.
 	 *
-	 * Текущее решение достаточно "развесисто" и решает все описанные выше
-	 * проблемы ценой переносимости, но без пенальти по производительности.
+	 * Текущее решение достаточно "развесисто", но решает все описанные выше
+	 * проблемы без пенальти по производительности.
 	 */
 
-	MDBX_rthc* head = ptr;
 	mdbx_rthc_lock();
-	mdb_ensure(NULL, head == pthread_getspecific(mdbx_pthread_crutch_key));
-	mdb_ensure(NULL, pthread_setspecific(mdbx_pthread_crutch_key, NULL) == 0);
 
 	pid_t pid = getpid();
 	pthread_t thread = pthread_self();
@@ -4590,10 +4574,78 @@ void mdbx_rthc_dtor(void *ptr)
 		}
 	}
 
-	if (mdbx_rthc_list == NULL)
-		pthread_cond_broadcast(&mdbx_rthc_cond);
 	mdbx_rthc_unlock();
 }
+
+#if MDBX_USE_THREAD_ATEXIT
+
+extern void *__dso_handle __attribute__ ((__weak__));
+extern int __cxa_thread_atexit_impl(void (*dtor)(void*), void *obj, void *dso_symbol);
+
+static __cold
+void mdbx_rthc__thread_atexit(void *ptr) {
+	mdb_ensure(NULL, ptr == pthread_getspecific(mdbx_pthread_crutch_key));
+	mdb_ensure(NULL, pthread_setspecific(mdbx_pthread_crutch_key, NULL) == 0);
+	mdbx_rthc_dtor();
+}
+
+static __attribute__((constructor)) __cold
+void mdbx_pthread_crutch_ctor(void) {
+	mdb_ensure(NULL, pthread_key_create(
+		&mdbx_pthread_crutch_key, NULL) == 0);
+}
+
+#else /* MDBX_USE_THREAD_ATEXIT */
+
+static __cold
+void mdbx_rthc__thread_key_dtor(void *ptr) {
+	(void) ptr;
+	if (mdbx_pthread_crutch_key != (pthread_key_t) -1)
+		mdbx_rthc_dtor();
+}
+
+static __attribute__((constructor)) __cold
+void mdbx_pthread_crutch_ctor(void) {
+	mdb_ensure(NULL, pthread_key_create(
+		&mdbx_pthread_crutch_key, mdbx_rthc__thread_key_dtor) == 0);
+}
+
+static __attribute__((destructor)) __cold
+void mdbx_pthread_crutch_dtor(void)
+{
+	pthread_key_delete(mdbx_pthread_crutch_key);
+	mdbx_pthread_crutch_key = -1;
+
+	/* LY: Из-за race condition в pthread_key_delete()
+	 * деструкторы уже могли начать выполняться.
+	 * Уступая квант времени сразу после удаления ключа
+	 * мы даем им шанс завершиться. */
+	pthread_yield();
+
+	mdbx_rthc_lock();
+	pid_t pid = getpid();
+	while (mdbx_rthc_list != NULL) {
+		MDBX_rthc* rthc = mdbx_rthc_list;
+		mdbx_rthc_list = mdbx_rthc_list->rc_next;
+		if (rthc->rc_reader && rthc->rc_reader->mr_pid == pid) {
+			rthc->rc_reader->mr_pid = 0;
+			mdbx_coherent_barrier();
+		}
+		free(rthc);
+
+		/* LY: Каждый неудаленный элемент списка - это один
+		 * не отработавший деструктор и потенциальный
+		 * шанс получить segfault после выгрузки lib.so
+		 * Поэтому на каждой итерации уступаем квант времени,
+		 * в надежде что деструкторы успеют отработать. */
+		mdbx_rthc_unlock();
+		pthread_yield();
+		mdbx_rthc_lock();
+	}
+	mdbx_rthc_unlock();
+	pthread_yield();
+}
+#endif /* MDBX_USE_THREAD_ATEXIT */
 
 static __cold
 MDBX_rthc* mdbx_rthc_add(pthread_key_t key)
@@ -4610,10 +4662,14 @@ MDBX_rthc* mdbx_rthc_add(pthread_key_t key)
 
 	mdbx_rthc_lock();
 	if (pthread_getspecific(mdbx_pthread_crutch_key) == NULL) {
+#if MDBX_USE_THREAD_ATEXIT
 		void *dso_anchor = (&__dso_handle && __dso_handle)
 			? __dso_handle : (void *)mdb_version;
-		if (unlikely(__cxa_thread_atexit_impl(mdbx_rthc_dtor, rthc, dso_anchor) != 0))
-			goto bailout_unlock;
+		if (unlikely(__cxa_thread_atexit_impl(mdbx_rthc__thread_atexit, rthc, dso_anchor) != 0)) {
+			mdbx_rthc_unlock();
+			goto bailout_free;
+		}
+#endif /* MDBX_USE_THREAD_ATEXIT */
 		mdb_ensure(NULL, pthread_setspecific(mdbx_pthread_crutch_key, rthc) == 0);
 	}
 	rthc->rc_next = mdbx_rthc_list;
@@ -4621,8 +4677,6 @@ MDBX_rthc* mdbx_rthc_add(pthread_key_t key)
 	mdbx_rthc_unlock();
 	return rthc;
 
-bailout_unlock:
-	mdbx_rthc_unlock();
 bailout_free:
 	free(rthc);
 bailout:
@@ -4642,9 +4696,9 @@ static __cold
 void mdbx_rthc_cleanup(MDB_env *env)
 {
 	mdbx_rthc_lock();
+
 	MDB_reader *begin = env->me_txns->mti_readers;
 	MDB_reader *end = begin + env->me_close_readers;
-
 	for (MDBX_rthc** ref = &mdbx_rthc_list; *ref; ) {
 		MDBX_rthc* rthc = *ref;
 		if (rthc->rc_reader >= begin && rthc->rc_reader < end) {
@@ -4659,8 +4713,6 @@ void mdbx_rthc_cleanup(MDB_env *env)
 		}
 	}
 
-	if (mdbx_rthc_list == NULL)
-		pthread_cond_broadcast(&mdbx_rthc_cond);
 	mdbx_rthc_unlock();
 }
 
