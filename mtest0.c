@@ -23,6 +23,8 @@
 #include <sys/stat.h>
 #include "mdbx.h"
 
+#include <pthread.h>
+
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
 #define RES(err, expr) ((rc = expr) == (err) || (CHECK(!rc, #expr), 0))
 #define CHECK(test, msg) ((test) ? (void)0 : ((void)fprintf(stderr, \
@@ -31,6 +33,18 @@
 #ifndef DBPATH
 #	define DBPATH "./testdb"
 #endif
+
+void* thread_entry(void *ctx)
+{
+	MDB_env *env = ctx;
+	MDB_txn *txn;
+	int rc;
+
+	E(mdb_txn_begin(env, NULL, MDB_RDONLY, &txn));
+	mdb_txn_abort(txn);
+
+	return NULL;
+}
 
 int main(int argc,char * argv[])
 {
@@ -60,7 +74,7 @@ int main(int argc,char * argv[])
 	}
 
 	E(mdb_env_create(&env));
-	E(mdb_env_set_maxreaders(env, 1));
+	E(mdb_env_set_maxreaders(env, 42));
 	E(mdb_env_set_mapsize(env, 10485760));
 
 	E(stat("/proc/self/exe", &exe_stat)?errno:0);
@@ -183,6 +197,11 @@ int main(int argc,char * argv[])
 	}
 	mdb_cursor_close(cur2);
 	E(mdb_txn_commit(txn));
+
+	for(i = 0; i < 41; ++i) {
+		pthread_t thread;
+		pthread_create(&thread, NULL, thread_entry, env);
+	}
 
 	printf("Restarting cursor outside txn\n");
 	E(mdb_txn_begin(env, NULL, 0, &txn));
