@@ -1,7 +1,7 @@
 /** @file lmdb.h
- *	@brief Reliable Lightning memory-mapped database library
+ *	@brief Extended Lightning memory-mapped database library
  *
- *	@mainpage	Reliable Lightning Memory-Mapped Database Manager (MDBX)
+ *	@mainpage	Extended Lightning Memory-Mapped Database Manager (MDBX)
  *
  *	@section intro_sec Introduction
  *	MDBX is a Btree-based database management library modeled loosely on the
