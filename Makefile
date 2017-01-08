@@ -24,7 +24,7 @@ suffix	?=
 
 CC	?= gcc
 XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
-CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections
 CFLAGS	+= -std=gnu99 -pthread $(XCFLAGS)
 
 # LY: for ability to built with modern glibc,
