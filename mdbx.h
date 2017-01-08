@@ -211,6 +211,21 @@ typedef int MDBX_pgvisitor_func(size_t pgno, unsigned pgnumber, void* ctx,
 					const char* dbi, const char *type, int nentries,
 					int payload_bytes, int header_bytes, int unused_bytes);
 int mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* ctx);
+
+typedef struct mdbx_canary {
+	size_t x, y, z, v;
+} mdbx_canary;
+
+int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary);
+size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
+
+/** Returns 1 when no more data available or cursor not positioned,
+ * 0 otherwise or less that zero in error case. */
+int mdbx_cursor_eof(MDB_cursor *mc);
+
+int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
+
 /**	@} */
 
 #ifdef __cplusplus

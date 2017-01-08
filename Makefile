@@ -24,8 +24,8 @@ suffix	?=
 
 CC	?= gcc
 XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
-CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra
-CFLAGS	+= -pthread $(XCFLAGS)
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections
+CFLAGS	+= -std=gnu99 -pthread $(XCFLAGS)
 
 # LY: for ability to built with modern glibc,
 #     but then run with the old
@@ -199,13 +199,15 @@ bench: bench-lmdb.txt bench-mdbx.txt
 endif
 
 ci-rule = ( CC=$$(which $1); if [ -n "$$CC" ]; then \
-		echo -n "probe by $2 ($$CC): " && \
+		echo -n "probe by $2 ($$(readlink -f $$(which $$CC))): " && \
 		$(MAKE) clean >$1.log 2>$1.err && \
 		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDB_DEBUG=2" all check 1>$1.log 2>$1.err && echo "OK" \
 			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:
-	@if [ "$(CC)" != "gcc" ]; then \
+	@if [ "$$(readlink -f $$(which $(CC)))" != "$$(readlink -f $$(which gcc || echo /bin/false))" -a \
+		"$$(readlink -f $$(which $(CC)))" != "$$(readlink -f $$(which clang || echo /bin/false))" -a \
+		"$$(readlink -f $$(which $(CC)))" != "$$(readlink -f $$(which icc || echo /bin/false))" ]; then \
 		$(call ci-rule,$(CC),default C compiler); \
 	fi
 	@$(call ci-rule,gcc,GCC)
