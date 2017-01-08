@@ -354,7 +354,8 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
  * For mdb_cursor_del: remove all duplicate data items.
  */
 #define MDB_NODUPDATA	0x20
-/** For mdb_cursor_put: overwrite the current key/data pair */
+/** For mdb_cursor_put: overwrite the current key/data pair
+ *  MDBX allows this flag for mdb_put() for explicit overwrite/update without insertion. */
 #define MDB_CURRENT	0x40
 /** For put: Just reserve space for data, don't copy it. Return a
  * pointer to the reserved space.
