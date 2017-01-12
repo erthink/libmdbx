@@ -5636,8 +5636,17 @@ mdb_page_search_root(MDB_cursor *mc, MDB_val *key, int flags)
 
 		if (flags & (MDB_PS_FIRST|MDB_PS_LAST)) {
 			i = 0;
-			if (flags & MDB_PS_LAST)
+			if (flags & MDB_PS_LAST) {
 				i = NUMKEYS(mp) - 1;
+				/* if already init'd, see if we're already in right place */
+				if (mc->mc_flags & C_INITIALIZED) {
+					if (mc->mc_ki[mc->mc_top] == i) {
+						mp = mc->mc_pg[mc->mc_top];
+						mc->mc_top = mc->mc_snum++;
+						goto ready;
+					}
+				}
+			}
 		} else {
 			int	 exact;
 			node = mdb_node_search(mc, key, &exact);
@@ -5663,6 +5672,7 @@ mdb_page_search_root(MDB_cursor *mc, MDB_val *key, int flags)
 		if (unlikely(rc = mdb_cursor_push(mc, mp)))
 			return rc;
 
+ready:
 		if (flags & MDB_PS_MODIFY) {
 			if (unlikely((rc = mdb_page_touch(mc)) != 0))
 				return rc;
@@ -6405,15 +6415,14 @@ mdb_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data)
 		mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
 
 	if (likely(!(mc->mc_flags & C_EOF))) {
-
 		if (!(mc->mc_flags & C_INITIALIZED) || mc->mc_top) {
 			rc = mdb_page_search(mc, NULL, MDB_PS_LAST);
 			if (unlikely(rc != MDB_SUCCESS))
 				return rc;
 		}
 		mdb_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
-
 	}
+
 	mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]) - 1;
 	mc->mc_flags |= C_INITIALIZED|C_EOF;
 	leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
