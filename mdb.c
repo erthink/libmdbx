@@ -7143,15 +7143,13 @@ put_sub:
 			xdata.mv_size = 0;
 			xdata.mv_data = "";
 			leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
-			xflags = MDB_NOSPILL;
-			if (flags & MDB_NODUPDATA)
-				xflags |= MDB_NOOVERWRITE;
-			if (flags & MDB_APPENDDUP)
-				xflags |= MDB_APPEND;
 			if (flags & MDB_CURRENT) {
-				xflags |= MDB_CURRENT;
+				xflags = (flags & MDB_NODUPDATA) ?
+					MDB_CURRENT|MDB_NOOVERWRITE|MDB_NOSPILL : MDB_CURRENT|MDB_NOSPILL;
 			} else {
 				mdb_xcursor_init1(mc, leaf);
+				xflags = (flags & MDB_NODUPDATA) ?
+					MDB_NOOVERWRITE|MDB_NOSPILL : MDB_NOSPILL;
 			}
 			if (sub_root)
 				mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
@@ -7185,6 +7183,8 @@ put_sub:
 				}
 			}
 			ecount = mc->mc_xcursor->mx_db.md_entries;
+			if (flags & MDB_APPENDDUP)
+				xflags |= MDB_APPEND;
 			rc = mdb_cursor_put(&mc->mc_xcursor->mx_cursor, data, &xdata, xflags);
 			if (flags & F_SUBDATA) {
 				void *db = NODEDATA(leaf);
