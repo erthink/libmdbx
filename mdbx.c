@@ -366,7 +366,17 @@ int mdbx_cursor_eof(MDB_cursor *mc)
 	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
-	return (mc->mc_flags & C_INITIALIZED) ? 0 : 1;
+	if ((mc->mc_flags & C_INITIALIZED) == 0)
+		return 1;
+
+	if (mc->mc_snum == 0)
+		return 1;
+
+	if ((mc->mc_flags & C_EOF)
+			&& mc->mc_ki[mc->mc_top] >= NUMKEYS(mc->mc_pg[mc->mc_top]))
+		return 1;
+
+	return 0;
 }
 
 static int mdbx_is_samedata(const MDB_val* a, const MDB_val* b) {

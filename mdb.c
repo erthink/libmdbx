@@ -5636,8 +5636,17 @@ mdb_page_search_root(MDB_cursor *mc, MDB_val *key, int flags)
 
 		if (flags & (MDB_PS_FIRST|MDB_PS_LAST)) {
 			i = 0;
-			if (flags & MDB_PS_LAST)
+			if (flags & MDB_PS_LAST) {
 				i = NUMKEYS(mp) - 1;
+				/* if already init'd, see if we're already in right place */
+				if (mc->mc_flags & C_INITIALIZED) {
+					if (mc->mc_ki[mc->mc_top] == i) {
+						mc->mc_top = mc->mc_snum++;
+						mp = mc->mc_pg[mc->mc_top];
+						goto ready;
+					}
+				}
+			}
 		} else {
 			int	 exact;
 			node = mdb_node_search(mc, key, &exact);
@@ -5663,6 +5672,7 @@ mdb_page_search_root(MDB_cursor *mc, MDB_val *key, int flags)
 		if (unlikely(rc = mdb_cursor_push(mc, mp)))
 			return rc;
 
+ready:
 		if (flags & MDB_PS_MODIFY) {
 			if (unlikely((rc = mdb_page_touch(mc)) != 0))
 				return rc;
@@ -5995,14 +6005,19 @@ mdb_cursor_next(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 	MDB_node	*leaf;
 	int rc;
 
-	if ((mc->mc_flags & C_EOF) ||
-		((mc->mc_flags & C_DEL) && op == MDB_NEXT_DUP)) {
+	if ((mc->mc_flags & C_DEL) && op == MDB_NEXT_DUP)
 		return MDB_NOTFOUND;
-	}
+
 	if (!(mc->mc_flags & C_INITIALIZED))
 		return mdb_cursor_first(mc, key, data);
 
 	mp = mc->mc_pg[mc->mc_top];
+
+	if (mc->mc_flags & C_EOF) {
+		if (mc->mc_ki[mc->mc_top] >= NUMKEYS(mp)-1)
+			return MDB_NOTFOUND;
+		mc->mc_flags ^= C_EOF;
+	}
 
 	if (mc->mc_db->md_flags & MDB_DUPSORT) {
 		leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
@@ -6405,15 +6420,14 @@ mdb_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data)
 		mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED|C_EOF);
 
 	if (likely(!(mc->mc_flags & C_EOF))) {
-
 		if (!(mc->mc_flags & C_INITIALIZED) || mc->mc_top) {
 			rc = mdb_page_search(mc, NULL, MDB_PS_LAST);
 			if (unlikely(rc != MDB_SUCCESS))
 				return rc;
 		}
 		mdb_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
-
 	}
+
 	mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]) - 1;
 	mc->mc_flags |= C_INITIALIZED|C_EOF;
 	leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
@@ -7129,15 +7143,13 @@ put_sub:
 			xdata.mv_size = 0;
 			xdata.mv_data = "";
 			leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
-			xflags = MDB_NOSPILL;
-			if (flags & MDB_NODUPDATA)
-				xflags |= MDB_NOOVERWRITE;
-			if (flags & MDB_APPENDDUP)
-				xflags |= MDB_APPEND;
 			if (flags & MDB_CURRENT) {
-				xflags |= MDB_CURRENT;
+				xflags = (flags & MDB_NODUPDATA) ?
+					MDB_CURRENT|MDB_NOOVERWRITE|MDB_NOSPILL : MDB_CURRENT|MDB_NOSPILL;
 			} else {
 				mdb_xcursor_init1(mc, leaf);
+				xflags = (flags & MDB_NODUPDATA) ?
+					MDB_NOOVERWRITE|MDB_NOSPILL : MDB_NOSPILL;
 			}
 			if (sub_root)
 				mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
@@ -7171,6 +7183,8 @@ put_sub:
 				}
 			}
 			ecount = mc->mc_xcursor->mx_db.md_entries;
+			if (flags & MDB_APPENDDUP)
+				xflags |= MDB_APPEND;
 			rc = mdb_cursor_put(&mc->mc_xcursor->mx_cursor, data, &xdata, xflags);
 			if (flags & F_SUBDATA) {
 				void *db = NODEDATA(leaf);
@@ -7869,14 +7883,20 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 		return EINVAL;
 
 #if MDBX_MODE_ENABLED
-	MDB_page *mp = mc->mc_pg[mc->mc_top];
-	int nkeys = NUMKEYS(mp);
-	if (!nkeys || mc->mc_ki[mc->mc_top] >= nkeys) {
+	if (!mc->mc_snum) {
 		*countp = 0;
 		return MDB_NOTFOUND;
-	} else if (mc->mc_xcursor == NULL || IS_LEAF2(mp)) {
+	}
+
+	MDB_page *mp = mc->mc_pg[mc->mc_top];
+	if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= NUMKEYS(mp)) {
+		*countp = 0;
+		return MDB_NOTFOUND;
+	}
+
+	if (mc->mc_xcursor == NULL || IS_LEAF2(mp)) {
 		*countp = 1;
-        } else {
+	} else {
 		MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
 		if (!F_ISSET(leaf->mn_flags, F_DUPDATA))
 			*countp = 1;
@@ -7886,13 +7906,17 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 			*countp = mc->mc_xcursor->mx_db.md_entries;
 	}
 #else
-        if (unlikely(mc->mc_xcursor == NULL))
+	if (unlikely(mc->mc_xcursor == NULL))
 		return MDB_INCOMPATIBLE;
 
-	if (unlikely(!mc->mc_snum || (mc->mc_flags & C_EOF)))
+	if (!mc->mc_snum)
 		return MDB_NOTFOUND;
 
-	MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+	MDB_page *mp = mc->mc_pg[mc->mc_top];
+	if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= NUMKEYS(mp))
+		return MDB_NOTFOUND;
+
+	MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
 	if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 		*countp = 1;
 	} else {

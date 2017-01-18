@@ -1,9 +1,11 @@
 MDBX
 	Add MDB_PREV_MULTIPLE
 	Add error MDB_PROBLEM, replace some MDB_CORRUPTED
+	Workarounds for glibc bugs: #21031 and 21032.
 
 LMDB 0.9.20 Release Engineering
 	Fix mdb_load with escaped plaintext (ITS#8558)
+	Fix mdb_cursor_last / mdb_put interaction (ITS#8557)
 
 LMDB 0.9.19 Release (2016/12/28)
 	Fix mdb_env_cwalk cursor init (ITS#8424)
