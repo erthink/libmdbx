@@ -6537,16 +6537,9 @@ mdb_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 			break;
 		}
 		rc = MDB_SUCCESS;
-		if (!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
+		if (!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) ||
+			(mc->mc_xcursor->mx_cursor.mc_flags & C_EOF))
 			break;
-		if (mc->mc_xcursor->mx_cursor.mc_flags & C_EOF) {
-			MDB_cursor *mx = &mc->mc_xcursor->mx_cursor;
-			if (mx->mc_ki[mx->mc_top] >= NUMKEYS(mx->mc_pg[mx->mc_top])-1) {
-				rc = MDB_NOTFOUND;
-				break;
-			}
-			mx->mc_flags ^= C_EOF;
-		}
 		goto fetchm;
 	case MDB_NEXT_MULTIPLE:
 		if (unlikely(data == NULL)) {
@@ -7896,12 +7889,9 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 	}
 
 	MDB_page *mp = mc->mc_pg[mc->mc_top];
-	if (mc->mc_flags & C_EOF) {
-		if (mc->mc_ki[mc->mc_top] >= NUMKEYS(mp)) {
-			*countp = 0;
-			return MDB_NOTFOUND;
-		}
-		mc->mc_flags ^= C_EOF;
+	if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= NUMKEYS(mp)) {
+		*countp = 0;
+		return MDB_NOTFOUND;
 	}
 
 	if (mc->mc_xcursor == NULL || IS_LEAF2(mp)) {
@@ -7922,13 +7912,11 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 	if (!mc->mc_snum)
 		return MDB_NOTFOUND;
 
-	if (mc->mc_flags & C_EOF) {
-		if (mc->mc_ki[mc->mc_top] >= NUMKEYS(mc->mc_pg[mc->mc_top]))
-			return MDB_NOTFOUND;
-		mc->mc_flags ^= C_EOF;
-	}
+	MDB_page *mp = mc->mc_pg[mc->mc_top];
+	if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= NUMKEYS(mp))
+		return MDB_NOTFOUND;
 
-	MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+	MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
 	if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 		*countp = 1;
 	} else {
