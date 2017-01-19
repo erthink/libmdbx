@@ -514,3 +514,56 @@ bailout:
 	txn->mt_cursors[dbi] = mc.mc_next;
 	return rc;
 }
+
+int
+mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *data, int* values_count)
+{
+	DKBUF;
+	mdb_debug("===> get db %u key [%s]", dbi, DKEY(key));
+
+	if (unlikely(!key || !data || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+		return EINVAL;
+
+	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
+		return MDB_BAD_TXN;
+
+	MDB_cursor mc;
+	MDB_xcursor mx;
+	mdb_cursor_init(&mc, txn, dbi, &mx);
+
+	int exact = 0;
+	int rc = mdb_cursor_set(&mc, key, data, MDB_SET, &exact);
+	if (unlikely(rc != MDB_SUCCESS)) {
+		if (rc == MDB_NOTFOUND && values_count)
+			*values_count = 0;
+		return rc;
+	}
+
+	if (values_count) {
+		if (mc.mc_xcursor == NULL)
+			*values_count = 1;
+		else {
+			MDB_page *mp = mc.mc_pg[mc.mc_top];
+			if (IS_LEAF2(mp))
+				*values_count = 1;
+			else {
+				MDB_node *leaf = NODEPTR(mp, mc.mc_ki[mc.mc_top]);
+				if (!F_ISSET(leaf->mn_flags, F_DUPDATA))
+					*values_count = 1;
+				else {
+					mdb_tassert(txn, mc.mc_xcursor == &mx);
+                                        mdb_tassert(txn, mx.mx_cursor.mc_flags & C_INITIALIZED);
+					*values_count = mx.mx_db.md_entries;
+				}
+			}
+		}
+        }
+        return MDB_SUCCESS;
+}

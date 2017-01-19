@@ -219,12 +219,15 @@ typedef struct mdbx_canary {
 int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary);
 size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
 
-/** Returns 1 when no more data available or cursor not positioned,
+/* Returns 1 when no more data available or cursor not positioned,
  * 0 otherwise or less that zero in error case. */
 int mdbx_cursor_eof(MDB_cursor *mc);
 
 int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
+/* Same as mdbx_get(), but also return the count
+ * of multi-values/duplicates for a given key. */
+int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data, int* values_count);
 
 /**	@} */
 
