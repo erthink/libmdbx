@@ -1414,6 +1414,13 @@ int  mdb_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 	 * A cursor cannot be used when its database handle is closed.  Nor
 	 * when its transaction has ended, except with #mdb_cursor_renew().
 	 * It can be discarded with #mdb_cursor_close().
+	 *
+	 * MDBX-mode:
+	 * A cursor must be closed explicitly always, before
+	 * or after its transaction ends. It can be reused with
+	 * #mdb_cursor_renew() before finally closing it.
+	 *
+	 * LMDB-compatible mode:
 	 * A cursor in a write-transaction can be closed before its transaction
 	 * ends, and will otherwise be closed when its transaction ends.
 	 * A cursor in a read-only transaction must be closed explicitly, before
@@ -1421,6 +1428,7 @@ int  mdb_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 	 * #mdb_cursor_renew() before finally closing it.
 	 * @note Earlier documentation said that cursors in every transaction
 	 * were closed when the transaction committed or aborted.
+	 *
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
 	 * @param[out] cursor Address where the new #MDB_cursor handle will be stored
