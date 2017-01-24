@@ -223,6 +223,8 @@ size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
  * 0 otherwise or less that zero in error case. */
 int mdbx_cursor_eof(MDB_cursor *mc);
 
+#define MDBX_EMULTIVAL (MDB_LAST_ERRCODE - 42)
+
 int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
 /* Same as mdbx_get(), but also return the count

@@ -9254,7 +9254,7 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 			MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
 			if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 				mdb_tassert(txn, XCURSOR_INITED(&mc) && mc.mc_xcursor->mx_db.md_entries > 1);
-				rc = MDB_KEYEXIST;
+				rc = MDBX_EMULTIVAL;
 			}
 		}
 	}
