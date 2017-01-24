@@ -6902,8 +6902,11 @@ more:
 			/* Was a single item before, must convert now */
 			if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 				/* Just overwrite the current item */
-				if (flags == MDB_CURRENT)
+				if (flags & MDB_CURRENT) {
+					if ((flags & MDB_NODUPDATA) && !mc->mc_dbx->md_dcmp(data, &olddata))
+						return MDB_KEYEXIST;
 					goto current;
+				}
 
 				/* does data match? */
 				if (!mc->mc_dbx->md_dcmp(data, &olddata)) {
