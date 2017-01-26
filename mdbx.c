@@ -411,7 +411,7 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 	MDB_cursor mc;
 	MDB_xcursor mx;
 
-	if (unlikely(!key || !old_data || !txn))
+	if (unlikely(!key || !old_data || !txn || old_data == new_data))
 		return EINVAL;
 
 	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
@@ -449,6 +449,8 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 			goto bailout;
 	} else {
 		/* в old_data буфер получения предыдущего значения */
+		if (unlikely(new_data && old_data->iov_base == new_data->iov_base))
+			return EINVAL;
 		MDB_val present_data;
 		rc = mdbx_cursor_get(&mc, &present_key, &present_data, MDB_SET_KEY);
 		if (unlikely(rc != MDB_SUCCESS)) {
