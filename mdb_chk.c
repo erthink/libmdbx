@@ -487,9 +487,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			goto bailout;
 		}
 
-		if (key.mv_size == 0) {
-			problem_add("entry", record_count, "key with zero length", NULL);
-		} else if (key.mv_size > maxkeysize) {
+		if (key.mv_size > maxkeysize) {
 			problem_add("entry", record_count, "key length exceeds max-key-size",
 						"%zu > %zu", key.mv_size, maxkeysize);
 		} else if ((flags & MDB_INTEGERKEY)

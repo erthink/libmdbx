@@ -245,8 +245,6 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		}
 
 		assert(IS_LEAF(mp));
-		if (node->mn_ksize < 1)
-			return MDB_CORRUPTED;
 		if (node->mn_flags & F_BIGDATA) {
 			MDB_page *omp;
 			pgno_t *opg;
