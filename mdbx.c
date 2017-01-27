@@ -448,7 +448,7 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 		if (new_data && mdbx_is_samedata(old_data, new_data))
 			goto bailout;
 	} else {
-		/* в old_data буфер получения предыдущего значения */
+		/* в old_data буфер для сохранения предыдущего значения */
 		if (unlikely(new_data && old_data->iov_base == new_data->iov_base))
 			return EINVAL;
 		MDB_val present_data;
@@ -541,7 +541,7 @@ mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi,
 	mdb_cursor_init(&mc, txn, dbi, &mx);
 
 	int exact = 0;
-	int rc = mdb_cursor_set(&mc, key, data, MDB_SET, &exact);
+	int rc = mdb_cursor_set(&mc, key, data, MDB_SET_KEY, &exact);
 	if (unlikely(rc != MDB_SUCCESS)) {
 		if (rc == MDB_NOTFOUND && values_count)
 			*values_count = 0;
@@ -561,11 +561,11 @@ mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi,
 					*values_count = 1;
 				else {
 					mdb_tassert(txn, mc.mc_xcursor == &mx);
-                                        mdb_tassert(txn, mx.mx_cursor.mc_flags & C_INITIALIZED);
+					mdb_tassert(txn, mx.mx_cursor.mc_flags & C_INITIALIZED);
 					*values_count = mx.mx_db.md_entries;
 				}
 			}
 		}
-        }
-        return MDB_SUCCESS;
+	}
+	return MDB_SUCCESS;
 }

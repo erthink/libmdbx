@@ -227,8 +227,10 @@ int mdbx_cursor_eof(MDB_cursor *mc);
 
 int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
-/* Same as mdbx_get(), but also return the count
- * of multi-values/duplicates for a given key. */
+/* Same as mdbx_get(), but:
+ * 1) if values_count is not NULL, then returns the count
+ *    of multi-values/duplicates for a given key.
+ * 2) updates the key for pointing to the actual key's data inside DB. */
 int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data, int* values_count);
 
 /**	@} */
