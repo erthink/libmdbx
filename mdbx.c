@@ -118,7 +118,7 @@ mdbx_env_set_syncbytes(MDB_env *env, size_t bytes)
 		return MDB_VERSION_MISMATCH;
 
 	env->me_sync_threshold = bytes;
-	return env->me_map ? mdb_env_sync(env, 0) : 0;
+	return env->me_map ? mdb_env_sync(env, 0) : MDB_SUCCESS;
 }
 
 void __cold
@@ -365,16 +365,16 @@ int mdbx_cursor_eof(MDB_cursor *mc)
 		return MDB_VERSION_MISMATCH;
 
 	if ((mc->mc_flags & C_INITIALIZED) == 0)
-		return 1;
+		return MDBX_RESULT_TRUE;
 
 	if (mc->mc_snum == 0)
-		return 1;
+		return MDBX_RESULT_TRUE;
 
 	if ((mc->mc_flags & C_EOF)
 			&& mc->mc_ki[mc->mc_top] >= NUMKEYS(mc->mc_pg[mc->mc_top]))
-		return 1;
+		return MDBX_RESULT_TRUE;
 
-	return 0;
+	return MDBX_RESULT_FALSE;
 }
 
 static int mdbx_is_samedata(const MDB_val* a, const MDB_val* b) {

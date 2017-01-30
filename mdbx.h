@@ -224,6 +224,8 @@ size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
 int mdbx_cursor_eof(MDB_cursor *mc);
 
 #define MDBX_EMULTIVAL (MDB_LAST_ERRCODE - 42)
+#define MDBX_RESULT_FALSE MDB_SUCCESS
+#define MDBX_RESULT_TRUE (-1)
 
 int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
