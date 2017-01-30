@@ -235,6 +235,8 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
  * 2) updates the key for pointing to the actual key's data inside DB. */
 int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data, int* values_count);
 
+int mdbx_is_dirty(const MDB_txn *txn, const void* ptr);
+
 /**	@} */
 
 #ifdef __cplusplus
