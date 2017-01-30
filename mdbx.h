@@ -237,6 +237,9 @@ int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data, int* val
 
 int mdbx_is_dirty(const MDB_txn *txn, const void* ptr);
 
+int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
+	MDB_dbi *dbi, MDB_cmp_func *keycmp, MDB_cmp_func *datacmp);
+
 /**	@} */
 
 #ifdef __cplusplus

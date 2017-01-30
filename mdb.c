@@ -1183,7 +1183,6 @@ static void	mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node);
 static void	mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int force);
 
 static int	mdb_drop0(MDB_cursor *mc, int subs);
-static void	mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi);
 static int	mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
 
 /** @cond */
@@ -10024,6 +10023,21 @@ mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 	return mdbx_env_info(env, (MDBX_envinfo*) arg, sizeof(MDB_envinfo));
 }
 
+static MDB_cmp_func*
+mdbx_default_keycmp(unsigned flags)
+{
+	return	(flags & MDB_REVERSEKEY) ? mdb_cmp_memnr :
+		(flags & MDB_INTEGERKEY) ? mdb_cmp_int_a2 : mdb_cmp_memn;
+}
+
+static MDB_cmp_func*
+mdbx_default_datacmp(unsigned flags)
+{
+	return	!(flags & MDB_DUPSORT) ? 0 :
+		((flags & MDB_INTEGERDUP) ? mdb_cmp_int_ua :
+		((flags & MDB_REVERSEDUP) ? mdb_cmp_memnr : mdb_cmp_memn));
+}
+
 /** Set the default comparison functions for a database.
  * Called immediately after a database is opened to set the defaults.
  * The user can then override them with #mdb_set_compare() or
@@ -10034,16 +10048,9 @@ mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 static void
 mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi)
 {
-	unsigned f = txn->mt_dbs[dbi].md_flags;
-
-	txn->mt_dbxs[dbi].md_cmp =
-		(f & MDB_REVERSEKEY) ? mdb_cmp_memnr :
-		(f & MDB_INTEGERKEY) ? mdb_cmp_int_a2 : mdb_cmp_memn;
-
-	txn->mt_dbxs[dbi].md_dcmp =
-		!(f & MDB_DUPSORT) ? 0 :
-		((f & MDB_INTEGERDUP) ? mdb_cmp_int_ua :
-		((f & MDB_REVERSEDUP) ? mdb_cmp_memnr : mdb_cmp_memn));
+	unsigned flags = txn->mt_dbs[dbi].md_flags;
+	txn->mt_dbxs[dbi].md_cmp = mdbx_default_keycmp(flags);
+	txn->mt_dbxs[dbi].md_dcmp = mdbx_default_datacmp(flags);
 }
 
 int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)

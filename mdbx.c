@@ -654,3 +654,16 @@ int mdbx_is_dirty(const MDB_txn *txn, const void* ptr)
 	 * проверяемый адрес "не грязный". */
 	return MDBX_RESULT_FALSE;
 }
+
+int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
+	MDB_dbi *pdbi, MDB_cmp_func *keycmp, MDB_cmp_func *datacmp)
+{
+	int rc = mdbx_dbi_open(txn, name, flags, pdbi);
+	if (likely(rc == MDB_SUCCESS)) {
+		MDB_dbi dbi = *pdbi;
+		unsigned flags = txn->mt_dbs[dbi].md_flags;
+		txn->mt_dbxs[dbi].md_cmp = keycmp ? keycmp : mdbx_default_keycmp(flags);
+		txn->mt_dbxs[dbi].md_dcmp = datacmp ? datacmp : mdbx_default_datacmp(flags);
+	}
+	return rc;
+}
