@@ -70,6 +70,10 @@
 #	warning "ReOpenMDBX required at least GLIBC 2.12."
 #endif
 
+#if MDB_DEBUG
+#	undef NDEBUG
+#endif
+
 #include "./reopen.h"
 #include "./barriers.h"
 
