@@ -8779,7 +8779,7 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 	MDB_cursor mc;
 	MDB_xcursor mx;
 	MDB_cursor_op op;
-	MDB_val rdata, *xdata;
+	MDB_val rdata;
 	int	rc, exact = 0;
 	DKBUF;
 
@@ -8790,13 +8790,12 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 	if (data) {
 		op = MDB_GET_BOTH;
 		rdata = *data;
-		xdata = &rdata;
+		data = &rdata;
 	} else {
 		op = MDB_SET;
-		xdata = NULL;
 		flags |= MDB_NODUPDATA;
 	}
-	rc = mdb_cursor_set(&mc, key, xdata, op, &exact);
+	rc = mdb_cursor_set(&mc, key, data, op, &exact);
 	if (likely(rc == 0)) {
 		/* let mdb_page_split know about this cursor if needed:
 		 * delete will trigger a rebalance; if it needs to move
