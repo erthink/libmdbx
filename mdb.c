@@ -6762,10 +6762,24 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 		DDBI(mc), DKEY(key), key ? key->mv_size : 0, data->mv_size);
 
 	dkey.mv_size = 0;
-
 	if (flags & MDB_CURRENT) {
 		if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
 			return EINVAL;
+#if MDBX_MODE_ENABLED
+		if (F_ISSET(mc->mc_db->md_flags, MDB_DUPSORT)) {
+			MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+			if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+				mdb_cassert(mc, mc->mc_xcursor != NULL
+					&& (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED));
+				if (mc->mc_xcursor->mx_db.md_entries > 1) {
+					rc = mdbx_cursor_del(mc, 0);
+					if (rc != MDB_SUCCESS)
+						return rc;
+					flags -= MDB_CURRENT;
+				}
+			}
+		}
+#endif /* MDBX_MODE_ENABLED */
 		rc = MDB_SUCCESS;
 	} else if (mc->mc_db->md_root == P_INVALID) {
 		/* new database, cursor has nothing to point to */
@@ -7772,9 +7786,7 @@ mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int new_dupdata)
 		mx->mx_cursor.mc_flags |= C_INITIALIZED;
 		mx->mx_cursor.mc_ki[0] = 0;
 		mx->mx_dbflag = DB_VALID|DB_USRVALID|DB_DUPDATA;
-#if UINT_MAX < SIZE_MAX
 		mx->mx_dbx.md_cmp = src_mx->mx_dbx.md_cmp;
-#endif
 	} else if (!(mx->mx_cursor.mc_flags & C_INITIALIZED)) {
 		return;
 	}
@@ -7867,7 +7879,7 @@ mdb_cursor_renew(MDB_txn *txn, MDB_cursor *mc)
 	if (unlikely(!TXN_DBI_EXIST(txn, mc->mc_dbi, DB_VALID)))
 		return EINVAL;
 
-        if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors)) {
+	if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors)) {
 #if MDBX_MODE_ENABLED
 		MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
 		while (*prev && *prev != mc) prev = &(*prev)->mc_next;
