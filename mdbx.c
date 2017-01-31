@@ -397,6 +397,8 @@ static int mdbx_is_samedata(const MDB_val* a, const MDB_val* b) {
  * когда посредством old_data из записей с одинаковым ключом для
  * удаления/обновления выбирается конкретная. Для выбора этого сценария
  * во flags следует одновременно указать MDB_CURRENT и MDB_NOOVERWRITE.
+ * Именно эта комбинация выбрана, так как она лишена смысла, и этим позволяет
+ * идентифицировать запрос такого сценария.
  *
  * Функция может быть замещена соответствующими операциями с курсорами
  * после двух доработок (TODO):
@@ -436,15 +438,46 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 
 	int rc;
 	MDB_val present_key = *key;
-	if (F_ISSET(flags, MDB_CURRENT | MDB_NOOVERWRITE)
-			&& (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT)) {
+	if (F_ISSET(flags, MDB_CURRENT | MDB_NOOVERWRITE)) {
 		/* в old_data значение для выбора конкретного дубликата */
+		if (unlikely(!(txn->mt_dbs[dbi].md_flags & MDB_DUPSORT))) {
+			rc = EINVAL;
+			goto bailout;
+		}
+
+		/* убираем лишний бит, он был признаком запрошенного режима */
+		flags -= MDB_NOOVERWRITE;
+
 		rc = mdbx_cursor_get(&mc, &present_key, old_data, MDB_GET_BOTH);
 		if (rc != MDB_SUCCESS)
 			goto bailout;
-		/* если данные совпадают, то ничего делать не надо */
-		if (new_data && mdbx_is_samedata(old_data, new_data))
-			goto bailout;
+
+		if (new_data) {
+			/* обновление конкретного дубликата */
+			if (mdbx_is_samedata(old_data, new_data))
+				/* если данные совпадают, то ничего делать не надо */
+				goto bailout;
+#if 0 /* LY: исправлено в mdbx_cursor_put(), здесь в качестве памятки */
+			MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
+			if (F_ISSET(leaf->mn_flags, F_DUPDATA)
+					&& mc.mc_xcursor->mx_db.md_entries > 1) {
+				/* Если у ключа больше одного значения, то
+				 * сначала удаляем найденое "старое" значение.
+				 *
+				 * Этого можно не делать, так как MDBX уже
+				 * обучен корректно обрабатывать такие ситуации.
+				 *
+				 * Однако, следует помнить, что в LMDB при
+				 * совпадении размера данных, значение будет
+				 * просто перезаписано с нарушением
+				 * упорядоченности, что сломает поиск. */
+				rc = mdbx_cursor_del(&mc, 0);
+				if (rc != MDB_SUCCESS)
+					goto bailout;
+				flags -= MDB_CURRENT;
+			}
+#endif
+		}
 	} else {
 		/* в old_data буфер для сохранения предыдущего значения */
 		if (unlikely(new_data && old_data->iov_base == new_data->iov_base))
@@ -468,14 +501,20 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 					MDB_node *leaf = NODEPTR(page, mc.mc_ki[mc.mc_top]);
 					if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 						mdb_tassert(txn, XCURSOR_INITED(&mc) && mc.mc_xcursor->mx_db.md_entries > 1);
-						rc = MDBX_EMULTIVAL;
-						goto bailout;
+						if (mc.mc_xcursor->mx_db.md_entries > 1) {
+							rc = MDBX_EMULTIVAL;
+							goto bailout;
+						}
 					}
 					/* если данные совпадают, то ничего делать не надо */
 					if (new_data && mdbx_is_samedata(&present_data, new_data)) {
 						*old_data = *new_data;
 						goto bailout;
 					}
+					/* В оригинальной LMDB фладок MDB_CURRENT здесь приведет
+					 * к замене данных без учета MDB_DUPSORT сортировки,
+					 * но здесь это в любом случае допустимо, так как мы
+					 * проверили что для ключа есть только одно значение. */
 				} else if ((flags & MDB_NODUPDATA) && mdbx_is_samedata(&present_data, new_data)) {
 					/* если данные совпадают и установлен MDB_NODUPDATA */
 					rc = MDB_KEYEXIST;
@@ -494,7 +533,7 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 				if (unlikely(old_data->iov_len < present_data.iov_len)) {
 					old_data->iov_base = NULL;
 					old_data->iov_len = present_data.iov_len;
-					rc = -1;
+					rc = MDBX_RESULT_TRUE;
 					goto bailout;
 				}
 				memcpy(old_data->iov_base, present_data.iov_base, present_data.iov_len);
