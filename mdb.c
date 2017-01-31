@@ -7914,16 +7914,13 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 		return MDB_NOTFOUND;
 	}
 
-	if (mc->mc_xcursor == NULL || IS_LEAF2(mp)) {
-		*countp = 1;
-	} else {
+	*countp = 1;
+	if (mc->mc_xcursor != NULL) {
 		MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
-		if (!F_ISSET(leaf->mn_flags, F_DUPDATA))
-			*countp = 1;
-		else if (unlikely(!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)))
-			return EINVAL;
-		else
+		if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+			mdb_cassert(mc, mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED));
 			*countp = mc->mc_xcursor->mx_db.md_entries;
+		}
 	}
 #else
 	if (unlikely(mc->mc_xcursor == NULL))

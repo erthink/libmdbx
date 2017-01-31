@@ -547,21 +547,13 @@ mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi,
 	}
 
 	if (values_count) {
-		if (mc.mc_xcursor == NULL)
-			*values_count = 1;
-		else {
-			MDB_page *mp = mc.mc_pg[mc.mc_top];
-			if (IS_LEAF2(mp))
-				*values_count = 1;
-			else {
-				MDB_node *leaf = NODEPTR(mp, mc.mc_ki[mc.mc_top]);
-				if (!F_ISSET(leaf->mn_flags, F_DUPDATA))
-					*values_count = 1;
-				else {
-					mdb_tassert(txn, mc.mc_xcursor == &mx);
-					mdb_tassert(txn, mx.mx_cursor.mc_flags & C_INITIALIZED);
-					*values_count = mx.mx_db.md_entries;
-				}
+		*values_count = 1;
+		if (mc.mc_xcursor != NULL) {
+			MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
+			if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+				mdb_tassert(txn, mc.mc_xcursor == &mx
+					&& (mx.mx_cursor.mc_flags & C_INITIALIZED));
+				*values_count = mx.mx_db.md_entries;
 			}
 		}
 	}
