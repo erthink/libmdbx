@@ -8773,10 +8773,12 @@ mdb_del(MDB_txn *txn, MDB_dbi dbi,
 	if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
 		return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
+#if ! MDBX_MODE_ENABLED
 	if (!F_ISSET(txn->mt_dbs[dbi].md_flags, MDB_DUPSORT)) {
 		/* must ignore any data */
 		data = NULL;
 	}
+#endif
 
 	return mdb_del0(txn, dbi, key, data, 0);
 }

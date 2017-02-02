@@ -1,7 +1,7 @@
 /** @file lmdb.h
  *	@brief Extended Lightning memory-mapped database library
  *
- *	@mainpage	Extended Lightning Memory-Mapped Database Manager (MDBX)
+ *	@mainpage	Extended Lightning Memory-Mapped Database (MDBX)
  *
  *	@section intro_sec Introduction
  *	MDBX is a Btree-based database management library modeled loosely on the
@@ -1387,12 +1387,20 @@ int  mdb_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 	/** @brief Delete items from a database.
 	 *
 	 * This function removes key/data pairs from the database.
+	 *
+	 * MDBX-mode:
+	 * The data parameter is NOT ignored regardless the database does
+	 * support sorted duplicate data items or not. If the data parameter
+	 * is non-NULL only the matching data item will be deleted.
+	 *
+	 * LMDB-compatible mode:
 	 * If the database does not support sorted duplicate data items
 	 * (#MDB_DUPSORT) the data parameter is ignored.
 	 * If the database supports sorted duplicates and the data parameter
 	 * is NULL, all of the duplicate data items for the key will be
 	 * deleted. Otherwise, if the data parameter is non-NULL
 	 * only the matching data item will be deleted.
+	 *
 	 * This function will return #MDB_NOTFOUND if the specified key/data
 	 * pair is not in the database.
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
