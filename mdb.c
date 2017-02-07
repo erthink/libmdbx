@@ -6761,7 +6761,7 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	mdb_debug("==> put db %d key [%s], size %zu, data size %zu",
 		DDBI(mc), DKEY(key), key ? key->mv_size : 0, data->mv_size);
 
-	dkey.mv_size = 0;
+	int dupdata_flag = 0;
 	if (flags & MDB_CURRENT) {
 		if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
 			return EINVAL;
@@ -6934,6 +6934,7 @@ more:
 				}
 
 				/* Back up original data item */
+				dupdata_flag = 1;
 				dkey.mv_size = olddata.mv_size;
 				dkey.mv_data = memcpy(fp+1, olddata.mv_data, olddata.mv_size);
 
@@ -7162,7 +7163,7 @@ new_sub:
 		 * size limits on dupdata. The actual data fields of the child
 		 * DB are all zero size. */
 		if (do_sub) {
-			int xflags, new_dupdata;
+			int xflags;
 			size_t ecount;
 put_sub:
 			xdata.mv_size = 0;
@@ -7178,9 +7179,8 @@ put_sub:
 			}
 			if (sub_root)
 				mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
-			new_dupdata = (int)dkey.mv_size;
 			/* converted, write the original data first */
-			if (dkey.mv_size) {
+			if (dupdata_flag) {
 				rc = mdb_cursor_put(&mc->mc_xcursor->mx_cursor, &dkey, &xdata, xflags);
 				if (unlikely(rc))
 					goto bad_sub;
@@ -7200,7 +7200,7 @@ put_sub:
 					if (!(m2->mc_flags & C_INITIALIZED)) continue;
 					if (m2->mc_pg[i] == mp) {
 						if (m2->mc_ki[i] == mc->mc_ki[i]) {
-							mdb_xcursor_init2(m2, mx, new_dupdata);
+							mdb_xcursor_init2(m2, mx, dupdata_flag);
 						} else if (!insert_key && m2->mc_ki[i] < nkeys) {
 							XCURSOR_REFRESH(m2, mp, m2->mc_ki[i]);
 						}
