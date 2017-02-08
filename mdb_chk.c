@@ -264,7 +264,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 			problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.base.ms_psize - sizeof(long));
 		if (payload_bytes < 1) {
-			if (nentries > 0) {
+			if (nentries > 1) {
 				problem_add("page", pgno, "zero size-of-entry", "payload %i bytes, %i entries",
 							payload_bytes, nentries);
 				if ((size_t) header_bytes + unused_bytes < page_size) {

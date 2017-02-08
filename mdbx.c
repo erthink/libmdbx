@@ -279,8 +279,6 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 			MDB_db *db = NODEDATA(node);
 			char* name = NULL;
 
-			if (NODEDSZ(node) < 1)
-				return MDB_CORRUPTED;
 			if (! (node->mn_flags & F_DUPDATA)) {
 				name = NODEKEY(node);
 				int namelen = (char*) db - name;
