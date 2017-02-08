@@ -359,7 +359,7 @@ int mdbx_cursor_eof(MDB_cursor *mc)
 	if (unlikely(mc == NULL))
 		return EINVAL;
 
-	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE_LIVE))
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
 	if ((mc->mc_flags & C_INITIALIZED) == 0)
