@@ -219,12 +219,26 @@ typedef struct mdbx_canary {
 int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary);
 size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
 
-/** Returns 1 when no more data available or cursor not positioned,
+/* Returns 1 when no more data available or cursor not positioned,
  * 0 otherwise or less that zero in error case. */
 int mdbx_cursor_eof(MDB_cursor *mc);
 
+#define MDBX_EMULTIVAL (MDB_LAST_ERRCODE - 42)
+#define MDBX_RESULT_FALSE MDB_SUCCESS
+#define MDBX_RESULT_TRUE (-1)
+
 int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
+/* Same as mdbx_get(), but:
+ * 1) if values_count is not NULL, then returns the count
+ *    of multi-values/duplicates for a given key.
+ * 2) updates the key for pointing to the actual key's data inside DB. */
+int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data, int* values_count);
+
+int mdbx_is_dirty(const MDB_txn *txn, const void* ptr);
+
+int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
+	MDB_dbi *dbi, MDB_cmp_func *keycmp, MDB_cmp_func *datacmp);
 
 /**	@} */
 

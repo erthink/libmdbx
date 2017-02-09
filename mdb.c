@@ -70,6 +70,10 @@
 #	warning "ReOpenMDBX required at least GLIBC 2.12."
 #endif
 
+#if MDB_DEBUG
+#	undef NDEBUG
+#endif
+
 #include "./reopen.h"
 #include "./barriers.h"
 
@@ -934,6 +938,8 @@ struct MDB_xcursor;
 	 */
 struct MDB_cursor {
 #define MDBX_MC_SIGNATURE (0xFE05D5B1^MDBX_MODE_SALT)
+#define MDBX_MC_READY4CLOSE (0x2817A047^MDBX_MODE_SALT)
+#define MDBX_MC_WAIT4EOT (0x90E297A7^MDBX_MODE_SALT)
 	unsigned	mc_signature;
 	/** Next cursor on this DB in this txn */
 	MDB_cursor	*mc_next;
@@ -1178,7 +1184,6 @@ static void	mdb_xcursor_init1(MDB_cursor *mc, MDB_node *node);
 static void	mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int force);
 
 static int	mdb_drop0(MDB_cursor *mc, int subs);
-static void	mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi);
 static int	mdb_reader_check0(MDB_env *env, int rlocked, int *dead);
 
 /** @cond */
@@ -2687,7 +2692,7 @@ mdb_cursor_shadow(MDB_txn *src, MDB_txn *dst)
  * @return 0 on success, non-zero on failure.
  */
 static void
-mdb_cursors_close(MDB_txn *txn, unsigned merge)
+mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 {
 	MDB_cursor **cursors = txn->mt_cursors, *mc, *next, *bk;
 	MDB_xcursor *mx;
@@ -2695,6 +2700,8 @@ mdb_cursors_close(MDB_txn *txn, unsigned merge)
 
 	for (i = txn->mt_numdbs; --i >= 0; ) {
 		for (mc = cursors[i]; mc; mc = next) {
+			mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE
+				|| mc->mc_signature == MDBX_MC_WAIT4EOT);
 			next = mc->mc_next;
 			if ((bk = mc->mc_backup) != NULL) {
 				if (merge) {
@@ -2707,16 +2714,30 @@ mdb_cursors_close(MDB_txn *txn, unsigned merge)
 					if ((mx = mc->mc_xcursor) != NULL)
 						mx->mx_cursor.mc_txn = bk->mc_txn;
 				} else {
-					/* Abort nested txn */
+					/* Abort nested txn, but save current cursor's stage */
+					unsigned stage = mc->mc_signature;
 					*mc = *bk;
+					mc->mc_signature = stage;
 					if ((mx = mc->mc_xcursor) != NULL)
 						*mx = *(MDB_xcursor *)(bk+1);
 				}
+#if MDBX_MODE_ENABLED
+				bk->mc_signature = 0;
+				free(bk);
+			}
+			if (mc->mc_signature == MDBX_MC_WAIT4EOT) {
+				mc->mc_signature = 0;
+				free(mc);
+			} else {
+				mc->mc_signature = MDBX_MC_READY4CLOSE;
+			}
+#else
 				mc = bk;
 			}
 			/* Only malloced cursors are permanently tracked. */
 			mc->mc_signature = 0;
 			free(mc);
+#endif
 		}
 		cursors[i] = NULL;
 	}
@@ -3163,7 +3184,7 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 		pgno_t *pghead = env->me_pghead;
 
 		if (!(mode & MDB_END_UPDATE)) /* !(already closed cursors) */
-			mdb_cursors_close(txn, 0);
+			mdb_cursors_eot(txn, 0);
 		if (!(env->me_flags & MDB_WRITEMAP)) {
 			mdb_dlist_free(txn);
 		}
@@ -3761,7 +3782,7 @@ mdb_txn_commit(MDB_txn *txn)
 		parent->mt_flags = txn->mt_flags;
 
 		/* Merge our cursors into parent's and close them */
-		mdb_cursors_close(txn, 1);
+		mdb_cursors_eot(txn, 1);
 
 		/* Update parent's DB table. */
 		memcpy(parent->mt_dbs, txn->mt_dbs, txn->mt_numdbs * sizeof(MDB_db));
@@ -3880,7 +3901,7 @@ mdb_txn_commit(MDB_txn *txn)
 		goto fail;
 	}
 
-	mdb_cursors_close(txn, 0);
+	mdb_cursors_eot(txn, 0);
 
 	if (!txn->mt_u.dirty_list[0].mid &&
 		!(txn->mt_flags & (MDB_TXN_DIRTY|MDB_TXN_SPILLS)))
@@ -6753,11 +6774,25 @@ mdb_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 	mdb_debug("==> put db %d key [%s], size %zu, data size %zu",
 		DDBI(mc), DKEY(key), key ? key->mv_size : 0, data->mv_size);
 
-	dkey.mv_size = 0;
-
+	int dupdata_flag = 0;
 	if (flags & MDB_CURRENT) {
 		if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
 			return EINVAL;
+#if MDBX_MODE_ENABLED
+		if (F_ISSET(mc->mc_db->md_flags, MDB_DUPSORT)) {
+			MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+			if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+				mdb_cassert(mc, mc->mc_xcursor != NULL
+					&& (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED));
+				if (mc->mc_xcursor->mx_db.md_entries > 1) {
+					rc = mdbx_cursor_del(mc, 0);
+					if (rc != MDB_SUCCESS)
+						return rc;
+					flags -= MDB_CURRENT;
+				}
+			}
+		}
+#endif /* MDBX_MODE_ENABLED */
 		rc = MDB_SUCCESS;
 	} else if (mc->mc_db->md_root == P_INVALID) {
 		/* new database, cursor has nothing to point to */
@@ -6897,8 +6932,11 @@ more:
 			/* Was a single item before, must convert now */
 			if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 				/* Just overwrite the current item */
-				if (flags == MDB_CURRENT)
+				if (flags & MDB_CURRENT) {
+					if ((flags & MDB_NODUPDATA) && !mc->mc_dbx->md_dcmp(data, &olddata))
+						return MDB_KEYEXIST;
 					goto current;
+				}
 
 				/* does data match? */
 				if (!mc->mc_dbx->md_dcmp(data, &olddata)) {
@@ -6909,6 +6947,7 @@ more:
 				}
 
 				/* Back up original data item */
+				dupdata_flag = 1;
 				dkey.mv_size = olddata.mv_size;
 				dkey.mv_data = memcpy(fp+1, olddata.mv_data, olddata.mv_size);
 
@@ -7137,7 +7176,7 @@ new_sub:
 		 * size limits on dupdata. The actual data fields of the child
 		 * DB are all zero size. */
 		if (do_sub) {
-			int xflags, new_dupdata;
+			int xflags;
 			size_t ecount;
 put_sub:
 			xdata.mv_size = 0;
@@ -7153,9 +7192,8 @@ put_sub:
 			}
 			if (sub_root)
 				mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
-			new_dupdata = (int)dkey.mv_size;
 			/* converted, write the original data first */
-			if (dkey.mv_size) {
+			if (dupdata_flag) {
 				rc = mdb_cursor_put(&mc->mc_xcursor->mx_cursor, &dkey, &xdata, xflags);
 				if (unlikely(rc))
 					goto bad_sub;
@@ -7175,7 +7213,7 @@ put_sub:
 					if (!(m2->mc_flags & C_INITIALIZED)) continue;
 					if (m2->mc_pg[i] == mp) {
 						if (m2->mc_ki[i] == mc->mc_ki[i]) {
-							mdb_xcursor_init2(m2, mx, new_dupdata);
+							mdb_xcursor_init2(m2, mx, dupdata_flag);
 						} else if (!insert_key && m2->mc_ki[i] < nkeys) {
 							XCURSOR_REFRESH(m2, mp, m2->mc_ki[i]);
 						}
@@ -7761,9 +7799,7 @@ mdb_xcursor_init2(MDB_cursor *mc, MDB_xcursor *src_mx, int new_dupdata)
 		mx->mx_cursor.mc_flags |= C_INITIALIZED;
 		mx->mx_cursor.mc_ki[0] = 0;
 		mx->mx_dbflag = DB_VALID|DB_USRVALID|DB_DUPDATA;
-#if UINT_MAX < SIZE_MAX
 		mx->mx_dbx.md_cmp = src_mx->mx_dbx.md_cmp;
-#endif
 	} else if (!(mx->mx_cursor.mc_flags & C_INITIALIZED)) {
 		return;
 	}
@@ -7849,15 +7885,30 @@ mdb_cursor_renew(MDB_txn *txn, MDB_cursor *mc)
 	if (unlikely(!mc || !txn))
 		return EINVAL;
 
-	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE
-			|| mc->mc_signature != MDBX_MC_SIGNATURE))
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE
+			&& mc->mc_signature != MDBX_MC_READY4CLOSE))
+		return EINVAL;
 
 	if (unlikely(!TXN_DBI_EXIST(txn, mc->mc_dbi, DB_VALID)))
 		return EINVAL;
 
-	if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors))
+	if (unlikely(mc->mc_backup))
 		return EINVAL;
+
+	if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors)) {
+#if MDBX_MODE_ENABLED
+		MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
+		while (*prev && *prev != mc) prev = &(*prev)->mc_next;
+		if (*prev == mc)
+			*prev = mc->mc_next;
+		mc->mc_signature = MDBX_MC_READY4CLOSE;
+#else
+		return EINVAL;
+#endif
+	}
 
 	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
 		return MDB_BAD_TXN;
@@ -7894,16 +7945,13 @@ mdb_cursor_count(MDB_cursor *mc, size_t *countp)
 		return MDB_NOTFOUND;
 	}
 
-	if (mc->mc_xcursor == NULL || IS_LEAF2(mp)) {
-		*countp = 1;
-	} else {
+	*countp = 1;
+	if (mc->mc_xcursor != NULL) {
 		MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
-		if (!F_ISSET(leaf->mn_flags, F_DUPDATA))
-			*countp = 1;
-		else if (unlikely(!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)))
-			return EINVAL;
-		else
+		if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+			mdb_cassert(mc, mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED));
 			*countp = mc->mc_xcursor->mx_db.md_entries;
+		}
 	}
 #else
 	if (unlikely(mc->mc_xcursor == NULL))
@@ -7932,12 +7980,12 @@ void
 mdb_cursor_close(MDB_cursor *mc)
 {
 	if (mc) {
-		mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE);
+		mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE
+			|| mc->mc_signature == MDBX_MC_READY4CLOSE);
 		if (!mc->mc_backup) {
 			/* Remove from txn, if tracked.
 			 * A read-only txn (!C_UNTRACK) may have been freed already,
-			 * so do not peek inside it.  Only write txns track cursors.
-			 */
+			 * so do not peek inside it.  Only write txns track cursors. */
 			if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
 				MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
 				while (*prev && *prev != mc) prev = &(*prev)->mc_next;
@@ -7946,6 +7994,10 @@ mdb_cursor_close(MDB_cursor *mc)
 			}
 			mc->mc_signature = 0;
 			free(mc);
+		} else {
+			/* cursor closed before nested txn ends */
+			mdb_cassert(mc, mc->mc_signature == MDBX_MC_SIGNATURE);
+			mc->mc_signature = MDBX_MC_WAIT4EOT;
 		}
 	}
 }
@@ -8743,10 +8795,12 @@ mdb_del(MDB_txn *txn, MDB_dbi dbi,
 	if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
 		return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
+#if ! MDBX_MODE_ENABLED
 	if (!F_ISSET(txn->mt_dbs[dbi].md_flags, MDB_DUPSORT)) {
 		/* must ignore any data */
 		data = NULL;
 	}
+#endif
 
 	return mdb_del0(txn, dbi, key, data, 0);
 }
@@ -8758,7 +8812,7 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 	MDB_cursor mc;
 	MDB_xcursor mx;
 	MDB_cursor_op op;
-	MDB_val rdata, *xdata;
+	MDB_val rdata;
 	int	rc, exact = 0;
 	DKBUF;
 
@@ -8769,13 +8823,12 @@ mdb_del0(MDB_txn *txn, MDB_dbi dbi,
 	if (data) {
 		op = MDB_GET_BOTH;
 		rdata = *data;
-		xdata = &rdata;
+		data = &rdata;
 	} else {
 		op = MDB_SET;
-		xdata = NULL;
 		flags |= MDB_NODUPDATA;
 	}
-	rc = mdb_cursor_set(&mc, key, xdata, op, &exact);
+	rc = mdb_cursor_set(&mc, key, data, op, &exact);
 	if (likely(rc == 0)) {
 		/* let mdb_page_split know about this cursor if needed:
 		 * delete will trigger a rebalance; if it needs to move
@@ -9254,7 +9307,7 @@ mdb_put(MDB_txn *txn, MDB_dbi dbi,
 			MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
 			if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 				mdb_tassert(txn, XCURSOR_INITED(&mc) && mc.mc_xcursor->mx_db.md_entries > 1);
-				rc = MDB_KEYEXIST;
+				rc = MDBX_EMULTIVAL;
 			}
 		}
 	}
@@ -10002,6 +10055,21 @@ mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 	return mdbx_env_info(env, (MDBX_envinfo*) arg, sizeof(MDB_envinfo));
 }
 
+static MDB_cmp_func*
+mdbx_default_keycmp(unsigned flags)
+{
+	return	(flags & MDB_REVERSEKEY) ? mdb_cmp_memnr :
+		(flags & MDB_INTEGERKEY) ? mdb_cmp_int_a2 : mdb_cmp_memn;
+}
+
+static MDB_cmp_func*
+mdbx_default_datacmp(unsigned flags)
+{
+	return	!(flags & MDB_DUPSORT) ? 0 :
+		((flags & MDB_INTEGERDUP) ? mdb_cmp_int_ua :
+		((flags & MDB_REVERSEDUP) ? mdb_cmp_memnr : mdb_cmp_memn));
+}
+
 /** Set the default comparison functions for a database.
  * Called immediately after a database is opened to set the defaults.
  * The user can then override them with #mdb_set_compare() or
@@ -10012,16 +10080,9 @@ mdb_env_info(MDB_env *env, MDB_envinfo *arg)
 static void
 mdb_default_cmp(MDB_txn *txn, MDB_dbi dbi)
 {
-	unsigned f = txn->mt_dbs[dbi].md_flags;
-
-	txn->mt_dbxs[dbi].md_cmp =
-		(f & MDB_REVERSEKEY) ? mdb_cmp_memnr :
-		(f & MDB_INTEGERKEY) ? mdb_cmp_int_a2 : mdb_cmp_memn;
-
-	txn->mt_dbxs[dbi].md_dcmp =
-		!(f & MDB_DUPSORT) ? 0 :
-		((f & MDB_INTEGERDUP) ? mdb_cmp_int_ua :
-		((f & MDB_REVERSEDUP) ? mdb_cmp_memnr : mdb_cmp_memn));
+	unsigned flags = txn->mt_dbs[dbi].md_flags;
+	txn->mt_dbxs[dbi].md_cmp = mdbx_default_keycmp(flags);
+	txn->mt_dbxs[dbi].md_dcmp = mdbx_default_datacmp(flags);
 }
 
 int mdb_dbi_open(MDB_txn *txn, const char *name, unsigned flags, MDB_dbi *dbi)

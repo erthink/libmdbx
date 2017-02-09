@@ -264,7 +264,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 			problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.base.ms_psize - sizeof(long));
 		if (payload_bytes < 1) {
-			if (nentries > 0) {
+			if (nentries > 1) {
 				problem_add("page", pgno, "zero size-of-entry", "payload %i bytes, %i entries",
 							payload_bytes, nentries);
 				if ((size_t) header_bytes + unused_bytes < page_size) {
@@ -487,9 +487,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			goto bailout;
 		}
 
-		if (key.mv_size == 0) {
-			problem_add("entry", record_count, "key with zero length", NULL);
-		} else if (key.mv_size > maxkeysize) {
+		if (key.mv_size > maxkeysize) {
 			problem_add("entry", record_count, "key length exceeds max-key-size",
 						"%zu > %zu", key.mv_size, maxkeysize);
 		} else if ((flags & MDB_INTEGERKEY)
