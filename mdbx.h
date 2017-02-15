@@ -219,9 +219,18 @@ typedef struct mdbx_canary {
 int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary);
 size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
 
-/* Returns 1 when no more data available or cursor not positioned,
- * 0 otherwise or less that zero in error case. */
+/* Returns:
+ *	- MDBX_RESULT_TRUE	when no more data available
+ *				or cursor not positioned;
+ *	- MDBX_RESULT_FALSE	when data available;
+ *	- Otherwise the error code. */
 int mdbx_cursor_eof(MDB_cursor *mc);
+
+/* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
+int mdbx_cursor_on_first(MDB_cursor *mc);
+
+/* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
+int mdbx_cursor_on_last(MDB_cursor *mc);
 
 #define MDBX_EMULTIVAL (MDB_LAST_ERRCODE - 42)
 #define MDBX_RESULT_FALSE MDB_SUCCESS

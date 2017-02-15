@@ -354,6 +354,47 @@ size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary)
 	return txn->mt_txnid;
 }
 
+int mdbx_cursor_on_first(MDB_cursor *mc)
+{
+	if (unlikely(mc == NULL))
+		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (!(mc->mc_flags & C_INITIALIZED))
+		return MDBX_RESULT_FALSE;
+
+	unsigned i;
+	for(i = 0; i < mc->mc_snum; ++i) {
+		if (mc->mc_ki[i])
+			return MDBX_RESULT_FALSE;
+		}
+
+	return MDBX_RESULT_TRUE;
+}
+
+int mdbx_cursor_on_last(MDB_cursor *mc)
+{
+	if (unlikely(mc == NULL))
+		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (!(mc->mc_flags & C_INITIALIZED))
+		return MDBX_RESULT_FALSE;
+
+	unsigned i;
+	for(i = 0; i < mc->mc_snum; ++i) {
+		unsigned nkeys = NUMKEYS(mc->mc_pg[i]);
+		if (mc->mc_ki[i] != nkeys - 1)
+			return MDBX_RESULT_FALSE;
+	}
+
+	return MDBX_RESULT_TRUE;
+}
+
 int mdbx_cursor_eof(MDB_cursor *mc)
 {
 	if (unlikely(mc == NULL))
