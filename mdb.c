@@ -3256,6 +3256,12 @@ mdb_txn_abort(MDB_txn *txn)
 	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
+#if MDBX_MODE_ENABLED
+	if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
+		/* LY: don't close DBI-handles in MDBX mode */
+		return mdb_txn_end(txn, MDB_END_UPDATE|MDB_END_SLOT|MDB_END_FREE);
+#endif /* MDBX_MODE_ENABLED */
+
 	if (txn->mt_child)
 		mdb_txn_abort(txn->mt_child);
 
