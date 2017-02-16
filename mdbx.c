@@ -172,7 +172,7 @@ typedef struct mdb_walk_ctx {
 
 /** Depth-first tree traversal. */
 static int __cold
-mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int deep)
+mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int deep)
 {
 	MDB_page *mp;
 	int rc, i, nkeys;
@@ -238,7 +238,7 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 		payload_size += NODESIZE + node->mn_ksize;
 
 		if (IS_BRANCH(mp)) {
-			rc = mdb_env_walk(ctx, dbi, NODEPGNO(node), flags, deep);
+			rc = mdb_env_walk(ctx, dbi, NODEPGNO(node), deep);
 			if (rc)
 				return rc;
 			continue;
@@ -286,7 +286,7 @@ mdb_env_walk(mdb_walk_ctx_t *ctx, const char* dbi, pgno_t pg, int flags, int dee
 				name[namelen] = 0;
 			}
 			rc = mdb_env_walk(ctx, (name && name[0]) ? name : dbi,
-					db->md_root, node->mn_flags & F_DUPDATA, deep + 1);
+					db->md_root, deep + 1);
 			if (rc)
 				return rc;
 		}
@@ -314,9 +314,9 @@ mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* user)
 	rc = visitor(0, 2, user, "lmdb", "meta", 2, sizeof(MDB_meta)*2, PAGEHDRSZ*2,
 				 (txn->mt_env->me_psize - sizeof(MDB_meta) - PAGEHDRSZ) *2);
 	if (! rc)
-		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0, 0);
+		rc = mdb_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0);
 	if (! rc)
-		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0, 0);
+		rc = mdb_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0);
 	if (! rc)
 		rc = visitor(P_INVALID, 0, user, NULL, NULL, 0, 0, 0, 0);
 	return rc;
@@ -352,6 +352,47 @@ size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary)
 		*canary = txn->mt_canary;
 
 	return txn->mt_txnid;
+}
+
+int mdbx_cursor_on_first(MDB_cursor *mc)
+{
+	if (unlikely(mc == NULL))
+		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (!(mc->mc_flags & C_INITIALIZED))
+		return MDBX_RESULT_FALSE;
+
+	unsigned i;
+	for(i = 0; i < mc->mc_snum; ++i) {
+		if (mc->mc_ki[i])
+			return MDBX_RESULT_FALSE;
+	}
+
+	return MDBX_RESULT_TRUE;
+}
+
+int mdbx_cursor_on_last(MDB_cursor *mc)
+{
+	if (unlikely(mc == NULL))
+		return EINVAL;
+
+	if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (!(mc->mc_flags & C_INITIALIZED))
+		return MDBX_RESULT_FALSE;
+
+	unsigned i;
+	for(i = 0; i < mc->mc_snum; ++i) {
+		unsigned nkeys = NUMKEYS(mc->mc_pg[i]);
+		if (mc->mc_ki[i] != nkeys - 1)
+			return MDBX_RESULT_FALSE;
+	}
+
+	return MDBX_RESULT_TRUE;
 }
 
 int mdbx_cursor_eof(MDB_cursor *mc)

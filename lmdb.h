@@ -1039,8 +1039,16 @@ size_t mdb_txn_id(MDB_txn *txn);
 	 *
 	 * The transaction handle is freed. It and its cursors must not be used
 	 * again after this call, except with #mdb_cursor_renew().
-	 * @note Earlier documentation incorrectly said all cursors would be freed.
+	 *
+	 * @note MDBX-mode:
+	 * A cursor must be closed explicitly always, before
+	 * or after its transaction ends. It can be reused with
+	 * #mdb_cursor_renew() before finally closing it.
+	 *
+	 * @note LMDB-compatible mode:
+	 * Earlier documentation incorrectly said all cursors would be freed.
 	 * Only write-transactions free cursors.
+	 *
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 * @return A non-zero error value on failure and 0 on success. Some possible
 	 * errors are:
@@ -1057,8 +1065,16 @@ int  mdb_txn_commit(MDB_txn *txn);
 	 *
 	 * The transaction handle is freed. It and its cursors must not be used
 	 * again after this call, except with #mdb_cursor_renew().
-	 * @note Earlier documentation incorrectly said all cursors would be freed.
+	 *
+	 * @note MDBX-mode:
+	 * A cursor must be closed explicitly always, before
+	 * or after its transaction ends. It can be reused with
+	 * #mdb_cursor_renew() before finally closing it.
+	 *
+	 * @note LMDB-compatible mode:
+	 * Earlier documentation incorrectly said all cursors would be freed.
 	 * Only write-transactions free cursors.
+	 *
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 */
 int mdb_txn_abort(MDB_txn *txn);

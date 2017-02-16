@@ -2700,8 +2700,9 @@ mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 
 	for (i = txn->mt_numdbs; --i >= 0; ) {
 		for (mc = cursors[i]; mc; mc = next) {
-			mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE
-				|| mc->mc_signature == MDBX_MC_WAIT4EOT);
+			unsigned stage = mc->mc_signature;
+			mdb_ensure(NULL, stage == MDBX_MC_SIGNATURE
+				|| stage == MDBX_MC_WAIT4EOT);
 			next = mc->mc_next;
 			if ((bk = mc->mc_backup) != NULL) {
 				if (merge) {
@@ -2714,10 +2715,8 @@ mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 					if ((mx = mc->mc_xcursor) != NULL)
 						mx->mx_cursor.mc_txn = bk->mc_txn;
 				} else {
-					/* Abort nested txn, but save current cursor's stage */
-					unsigned stage = mc->mc_signature;
+					/* Abort nested txn */
 					*mc = *bk;
-					mc->mc_signature = stage;
 					if ((mx = mc->mc_xcursor) != NULL)
 						*mx = *(MDB_xcursor *)(bk+1);
 				}
@@ -2725,11 +2724,12 @@ mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 				bk->mc_signature = 0;
 				free(bk);
 			}
-			if (mc->mc_signature == MDBX_MC_WAIT4EOT) {
+			if (stage == MDBX_MC_WAIT4EOT) {
 				mc->mc_signature = 0;
 				free(mc);
 			} else {
 				mc->mc_signature = MDBX_MC_READY4CLOSE;
+				mc->mc_flags = 0 /* reset C_UNTRACK */;
 			}
 #else
 				mc = bk;
@@ -3244,7 +3244,12 @@ mdb_txn_reset(MDB_txn *txn)
 	if (unlikely(!(txn->mt_flags & MDB_TXN_RDONLY)))
 		return EINVAL;
 
+#if MDBX_MODE_ENABLED
+	/* LY: don't close DBI-handles in MDBX mode */
+	return mdb_txn_end(txn, MDB_END_RESET|MDB_END_UPDATE);
+#else
 	return mdb_txn_end(txn, MDB_END_RESET);
+#endif /* MDBX_MODE_ENABLED */
 }
 
 int
@@ -3255,6 +3260,12 @@ mdb_txn_abort(MDB_txn *txn)
 
 	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
+
+#if MDBX_MODE_ENABLED
+	if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
+		/* LY: don't close DBI-handles in MDBX mode */
+		return mdb_txn_end(txn, MDB_END_ABORT|MDB_END_UPDATE|MDB_END_SLOT|MDB_END_FREE);
+#endif /* MDBX_MODE_ENABLED */
 
 	if (txn->mt_child)
 		mdb_txn_abort(txn->mt_child);
@@ -5763,7 +5774,7 @@ mdb_page_search(MDB_cursor *mc, MDB_val *key, int flags)
 		return MDB_BAD_TXN;
 	} else {
 		/* Make sure we're using an up-to-date root */
-		if (*mc->mc_dbflag & DB_STALE) {
+		if (unlikely(*mc->mc_dbflag & DB_STALE)) {
 				MDB_cursor mc2;
 				if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
 					return MDB_BAD_DBI;
@@ -7826,15 +7837,14 @@ mdb_cursor_init(MDB_cursor *mc, MDB_txn *txn, MDB_dbi dbi, MDB_xcursor *mx)
 	mc->mc_pg[0] = 0;
 	mc->mc_flags = 0;
 	mc->mc_ki[0] = 0;
+	mc->mc_xcursor = NULL;
 	if (txn->mt_dbs[dbi].md_flags & MDB_DUPSORT) {
 		mdb_tassert(txn, mx != NULL);
 		mx->mx_cursor.mc_signature = MDBX_MC_SIGNATURE;
 		mc->mc_xcursor = mx;
 		mdb_xcursor_init0(mc);
-	} else {
-		mc->mc_xcursor = NULL;
 	}
-	if (*mc->mc_dbflag & DB_STALE) {
+	if (unlikely(*mc->mc_dbflag & DB_STALE)) {
 		mdb_page_search(mc, NULL, MDB_PS_ROOTONLY);
 	}
 }
@@ -10226,7 +10236,7 @@ mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg, size_t bytes)
 	if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
 		return MDB_BAD_TXN;
 
-	if (txn->mt_dbflags[dbi] & DB_STALE) {
+	if (unlikely(txn->mt_dbflags[dbi] & DB_STALE)) {
 		MDB_cursor mc;
 		MDB_xcursor mx;
 		/* Stale, must read the DB's root. cursor_init does it for us. */
