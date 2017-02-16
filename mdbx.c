@@ -369,7 +369,7 @@ int mdbx_cursor_on_first(MDB_cursor *mc)
 	for(i = 0; i < mc->mc_snum; ++i) {
 		if (mc->mc_ki[i])
 			return MDBX_RESULT_FALSE;
-		}
+	}
 
 	return MDBX_RESULT_TRUE;
 }

@@ -3244,7 +3244,12 @@ mdb_txn_reset(MDB_txn *txn)
 	if (unlikely(!(txn->mt_flags & MDB_TXN_RDONLY)))
 		return EINVAL;
 
+#if MDBX_MODE_ENABLED
+	/* LY: don't close DBI-handles in MDBX mode */
+	return mdb_txn_end(txn, MDB_END_RESET|MDB_END_UPDATE);
+#else
 	return mdb_txn_end(txn, MDB_END_RESET);
+#endif /* MDBX_MODE_ENABLED */
 }
 
 int
@@ -3259,7 +3264,7 @@ mdb_txn_abort(MDB_txn *txn)
 #if MDBX_MODE_ENABLED
 	if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
 		/* LY: don't close DBI-handles in MDBX mode */
-		return mdb_txn_end(txn, MDB_END_UPDATE|MDB_END_SLOT|MDB_END_FREE);
+		return mdb_txn_end(txn, MDB_END_ABORT|MDB_END_UPDATE|MDB_END_SLOT|MDB_END_FREE);
 #endif /* MDBX_MODE_ENABLED */
 
 	if (txn->mt_child)
