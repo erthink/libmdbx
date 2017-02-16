@@ -2700,8 +2700,9 @@ mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 
 	for (i = txn->mt_numdbs; --i >= 0; ) {
 		for (mc = cursors[i]; mc; mc = next) {
-			mdb_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE
-				|| mc->mc_signature == MDBX_MC_WAIT4EOT);
+			unsigned stage = mc->mc_signature;
+			mdb_ensure(NULL, stage == MDBX_MC_SIGNATURE
+				|| stage == MDBX_MC_WAIT4EOT);
 			next = mc->mc_next;
 			if ((bk = mc->mc_backup) != NULL) {
 				if (merge) {
@@ -2714,10 +2715,8 @@ mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 					if ((mx = mc->mc_xcursor) != NULL)
 						mx->mx_cursor.mc_txn = bk->mc_txn;
 				} else {
-					/* Abort nested txn, but save current cursor's stage */
-					unsigned stage = mc->mc_signature;
+					/* Abort nested txn */
 					*mc = *bk;
-					mc->mc_signature = stage;
 					if ((mx = mc->mc_xcursor) != NULL)
 						*mx = *(MDB_xcursor *)(bk+1);
 				}
@@ -2725,11 +2724,12 @@ mdb_cursors_eot(MDB_txn *txn, unsigned merge)
 				bk->mc_signature = 0;
 				free(bk);
 			}
-			if (mc->mc_signature == MDBX_MC_WAIT4EOT) {
+			if (stage == MDBX_MC_WAIT4EOT) {
 				mc->mc_signature = 0;
 				free(mc);
 			} else {
 				mc->mc_signature = MDBX_MC_READY4CLOSE;
+				mc->mc_flags = 0 /* reset C_UNTRACK */;
 			}
 #else
 				mc = bk;
