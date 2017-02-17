@@ -3,9 +3,9 @@ libmdbx
 Extended LMDB, aka "Расширенная LMDB".
 
 *The Future will Positive. Всё будет хорошо.*
-[![Build Status](https://travis-ci.org/ReOpen/libmdbx.svg?branch=master)](https://travis-ci.org/ReOpen/libmdbx)
+[![Build Status](https://travis-ci.org/ReOpen/libmdbx.svg?branch=devel)](https://travis-ci.org/ReOpen/libmdbx)
 
-English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/ReOpen/libmdbx/tree/master).
+English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/ReOpen/libmdbx/tree/devel).
 
 
 ## Кратко
