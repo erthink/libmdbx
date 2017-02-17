@@ -388,7 +388,7 @@ int mdbx_cursor_on_last(MDB_cursor *mc)
 	unsigned i;
 	for(i = 0; i < mc->mc_snum; ++i) {
 		unsigned nkeys = NUMKEYS(mc->mc_pg[i]);
-		if (mc->mc_ki[i] != nkeys - 1)
+		if (mc->mc_ki[i] < nkeys - 1)
 			return MDBX_RESULT_FALSE;
 	}
 
