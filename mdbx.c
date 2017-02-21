@@ -763,7 +763,11 @@ typedef struct MDB_node {
 #define LEAFSIZE(k, d) (NODESIZE + (k)->mv_size + (d)->mv_size)
 
 /** Address of node \b i in page \b p */
-#define NODEPTR(p, i) ((MDB_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEBASE))
+#define NODEPTR(p, i)                                                          \
+  ({                                                                           \
+    assert(NUMKEYS(p) > (unsigned)(i));                                        \
+    (MDB_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEBASE);                    \
+  })
 
 /** Address of the key for the node */
 #define NODEKEY(node) (void *)((node)->mn_data)
