@@ -14,10 +14,14 @@
 
 /*****************************************************************************
  * Properly compiler/memory/coherence barriers
- * in the most portable way for ReOpenMDBX project.
+ * in the most portable way for libmdbx project.
  *
  * Feedback and comments are welcome.
  * https://gist.github.com/leo-yuriev/ba186a6bf5cf3a27bae7                   */
+
+#pragma once
+/* *INDENT-OFF* */
+/* clang-format off */
 
 #if defined(__mips) && defined(__linux)
 	/* Only MIPS has explicit cache control */

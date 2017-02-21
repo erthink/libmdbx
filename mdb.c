@@ -1,15 +1,13 @@
-/** @file mdb.c
- *	@brief Lightning memory-mapped database library
- *
- *	A Btree-based database management library modeled loosely on the
- *	BerkeleyDB API, but much simplified.
- */
-
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright 2011-2017 Howard Chu, Symas Corp.
- * Copyright 2015,2016 Peter-Service R&D LLC.
- * All rights reserved.
+ *
+ * This code is derived from "LMDB engine" written by
+ * Howard Chu (Symas Corporation), which itself derived from btree.c
+ * written by Martin Hedenfalk.
+ *
+ * ---
+ *
+ * Portions Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP
@@ -19,9 +17,9 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  *
- * This code is derived from btree.c written by Martin Hedenfalk.
+ * ---
  *
- * Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
+ * Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -47,27 +45,27 @@
 /* LY: Please do not ask us for Windows support, just never!
  * But you can make a fork for Windows, or become maintainer for FreeBSD... */
 #ifndef __gnu_linux__
-#	warning "ReOpenMDBX supports only GNU Linux"
+#	warning "libmdbx supports only GNU Linux"
 #endif
 
 #include <features.h>
 
 #if !defined(__GNUC__) || !__GNUC_PREREQ(4,2)
-	/* LY: Actualy ReOpenMDBX was not tested with compilers
+	/* LY: Actualy libmdbx was not tested with compilers
 	 *     older than GCC 4.4 (from RHEL6).
 	 * But you could remove this #error and try to continue at your own risk.
 	 * In such case please don't rise up an issues related ONLY to old compilers.
 	 */
-#	warning "ReOpenMDBX required at least GCC 4.2 compatible C/C++ compiler."
+#	warning "libmdbx required at least GCC 4.2 compatible C/C++ compiler."
 #endif
 
 #if !defined(__GNU_LIBRARY__) || !__GLIBC_PREREQ(2,12)
-	/* LY: Actualy ReOpenMDBX was not tested with something
+	/* LY: Actualy libmdbx was not tested with something
 	 *     older than glibc 2.12 (from RHEL6).
 	 * But you could remove this #error and try to continue at your own risk.
 	 * In such case please don't rise up an issues related ONLY to old systems.
 	 */
-#	warning "ReOpenMDBX required at least GLIBC 2.12."
+#	warning "libmdbx required at least GLIBC 2.12."
 #endif
 
 #if MDB_DEBUG

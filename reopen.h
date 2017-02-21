@@ -12,8 +12,9 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#ifndef _REOPEN_H
-#define _REOPEN_H
+#pragma once
+/* *INDENT-OFF* */
+/* clang-format off */
 
 #ifndef __CLANG_PREREQ
 #	ifdef __clang__
@@ -233,5 +234,3 @@ __extern_C void __assert_fail(
 		((void)(addr), (void)(size))
 #	define ATTRIBUTE_NO_SANITIZE_ADDRESS
 #endif /* __SANITIZE_ADDRESS__ */
-
-#endif /* _REOPEN_H */

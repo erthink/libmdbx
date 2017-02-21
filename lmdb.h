@@ -1,141 +1,13 @@
-/** @file lmdb.h
- *	@brief Extended Lightning memory-mapped database library
+/*
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
  *
- *	@mainpage	Extended Lightning Memory-Mapped Database (MDBX)
- *
- *	@section intro_sec Introduction
- *	MDBX is a Btree-based database management library modeled loosely on the
- *	BerkeleyDB API, but much simplified. The entire database is exposed
- *	in a memory map, and all data fetches return data directly
- *	from the mapped memory, so no malloc's or memcpy's occur during
- *	data fetches. As such, the library is extremely simple because it
- *	requires no page caching layer of its own, and it is extremely high
- *	performance and memory-efficient. It is also fully transactional with
- *	full ACID semantics, and when the memory map is read-only, the
- *	database integrity cannot be corrupted by stray pointer writes from
- *	application code.
- *
- *	The library is fully thread-aware and supports concurrent read/write
- *	access from multiple processes and threads. Data pages use a copy-on-
- *	write strategy so no active data pages are ever overwritten, which
- *	also provides resistance to corruption and eliminates the need of any
- *	special recovery procedures after a system crash. Writes are fully
- *	serialized; only one write transaction may be active at a time, which
- *	guarantees that writers can never deadlock. The database structure is
- *	multi-versioned so readers run with no locks; writers cannot block
- *	readers, and readers don't block writers.
- *
- *	Unlike other well-known database mechanisms which use either write-ahead
- *	transaction logs or append-only data writes, MDBX requires no maintenance
- *	during operation. Both write-ahead loggers and append-only databases
- *	require periodic checkpointing and/or compaction of their log or database
- *	files otherwise they grow without bound. MDBX tracks free pages within
- *	the database and re-uses them for new write operations, so the database
- *	size does not grow without bound in normal use.
- *
- *	The memory map can be used as a read-only or read-write map. It is
- *	read-only by default as this provides total immunity to corruption.
- *	Using read-write mode offers much higher write performance, but adds
- *	the possibility for stray application writes thru pointers to silently
- *	corrupt the database. Of course if your application code is known to
- *	be bug-free (...) then this is not an issue.
- *
- *	If this is your first time using a transactional embedded key/value
- *	store, you may find the \ref starting page to be helpful.
- *
- *	@section caveats_sec Caveats
- *	Troubleshooting the lock file:
- *
- *	- A broken lockfile can cause sync issues.
- *	  Stale reader transactions left behind by an aborted program
- *	  cause further writes to grow the database quickly, and
- *	  stale locks can block further operation.
- *
- *	  Fix: Check for stale readers periodically, using the
- *	  #mdb_reader_check function or the \ref mdb_stat_1 "mdb_stat" tool.
- *	  Stale writers will be cleared automatically on Linux
- *	  using POSIX mutexes with Robust option.
- *	  Otherwise just make all programs using the database close it;
- *	  the lockfile is always reset on first open of the environment.
- *
- *
- *	Restrictions/caveats (in addition to those listed for some functions):
- *
- *	- An MDBX configuration will often reserve considerable \b unused
- *	  memory address space and maybe file size for future growth.
- *	  This does not use actual memory or disk space, but users may need
- *	  to understand the difference so they won't be scared off.
- *
- *	- An LMDB configuration will often reserve considerable \b unused
- *	  memory address space and maybe file size for future growth.
- *	  This does not use actual memory or disk space, but users may need
- *	  to understand the difference so they won't be scared off.
- *
- *	- By default, in versions before 0.9.10, unused portions of the data
- *	  file might receive garbage data from memory freed by other code.
- *	  (This does not happen when using the #MDB_WRITEMAP flag.) As of
- *	  0.9.10 the default behavior is to initialize such memory before
- *	  writing to the data file. Since there may be a slight performance
- *	  cost due to this initialization, applications may disable it using
- *	  the #MDB_NOMEMINIT flag. Applications handling sensitive data
- *	  which must not be written should not use this flag. This flag is
- *	  irrelevant when using #MDB_WRITEMAP.
- *
- *	- A thread can only use one transaction at a time, plus any child
- *	  transactions.  Each transaction belongs to one thread.  See below.
- *	  The #MDB_NOTLS flag changes this for read-only transactions.
- *
- *	- Use an MDB_env* in the process which opened it, not after fork().
- *
- *	- Do not have open an MDBX database twice in the same process at
- *	  the same time.  Not even from a plain open() call - close()ing it
- *	  breaks fcntl() advisory locking.  (It is OK to reopen it after
- *	  fork() - exec*(), since the lockfile has FD_CLOEXEC set.)
- *
- *	- Avoid long-lived transactions.  Read transactions prevent
- *	  reuse of pages freed by newer write transactions, thus the
- *	  database can grow quickly.  Write transactions prevent
- *	  other write transactions, since writes are serialized.
- *
- *	- Avoid suspending a process with active transactions.  These
- *	  would then be "long-lived" as above.  Also read transactions
- *	  suspended when writers commit could sometimes see wrong data.
- *
- *	...when several processes can use a database concurrently:
- *
- *	- Avoid aborting a process with an active transaction.
- *	  The transaction becomes "long-lived" as above until a check
- *	  for stale readers is performed or the lockfile is reset,
- *	  since the process may not remove it from the lockfile.
- *
- *	  This does not apply to write transactions if the system clears
- *	  stale writers, see above.
- *
- *	- If you do that anyway, do a periodic check for stale readers. Or
- *	  close the environment once in a while, so the lockfile can get reset.
- *
- *	- Do not use MDBX databases on remote filesystems, even between
- *	  processes on the same host.  This breaks flock() on some OSes,
- *	  possibly memory map sync, and certainly sync between programs
- *	  on different hosts.
- *
- *	- Opening a database can fail if another process is opening or
- *	  closing it at exactly the same time.
- *
- *	@author	Leonid Yuriev, 'ReOpen' initiative <https://github.com/ReOpen>.
- *	Howard Chu, Symas Corp. All rights reserved.
- *
- *	@copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
- *	2011-2017 Howard Chu, Symas Corp. All rights reserved.
+ * This code is derived from "LMDB engine" written by
+ * Howard Chu (Symas Corporation), which itself derived from btree.c
+ * written by Martin Hedenfalk.
  *
  * ---
  *
- * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright 2015,2016 Peter-Service R&D LLC.
- *	@par Derived From:
- * This code is derived from LMDB engine written by Howard Chu, Symas Corporation.
- *
- * Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
+ * Portions Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP
@@ -145,10 +17,9 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>.
  *
- *	@par Derived From:
- * This code is derived from btree.c written by Martin Hedenfalk.
+ * ---
  *
- * Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
+ * Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -303,7 +174,7 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
 	/** tie reader locktable slots to #MDB_txn objects instead of to threads */
 #define MDB_NOTLS		0x200000
 	/** don't do any locking, caller must manage their own locks
-	 * WARNING: ReOpenMDBX don't support this mode. */
+	 * WARNING: libmdbx don't support this mode. */
 #define MDB_NOLOCK__UNSUPPORTED	0x400000
 	/** don't do readahead */
 #define MDB_NORDAHEAD	0x800000
