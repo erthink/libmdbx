@@ -5558,11 +5558,9 @@ static MDB_node *__hot mdbx_node_search(MDB_cursor *mc, MDB_val *key,
     }
   }
 
-  if (rc > 0) { /* Found entry is less than the key. */
-    i++;        /* Skip to get the smallest entry larger than key. */
-    if (!IS_LEAF2(mp))
-      node = NODEPTR(mp, i);
-  }
+  if (rc > 0) /* Found entry is less than the key. */
+    i++;      /* Skip to get the smallest entry larger than key. */
+
   if (exactp)
     *exactp = (rc == 0 && nkeys > 0);
   /* store the key index */
@@ -5572,7 +5570,7 @@ static MDB_node *__hot mdbx_node_search(MDB_cursor *mc, MDB_val *key,
     return NULL;
 
   /* nodeptr is fake for LEAF2 */
-  return node;
+  return IS_LEAF2(mp) ? node : NODEPTR(mp, i);
 }
 
 #if 0
