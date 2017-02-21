@@ -6060,9 +6060,8 @@ static int mdbx_cursor_next(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     return mdbx_cursor_first(mc, key, data);
 
   mp = mc->mc_pg[mc->mc_top];
-
   if (mc->mc_flags & C_EOF) {
-    if (mc->mc_ki[mc->mc_top] >= NUMKEYS(mp) - 1)
+    if (mc->mc_ki[mc->mc_top] + 1u >= NUMKEYS(mp))
       return MDB_NOTFOUND;
     mc->mc_flags ^= C_EOF;
   }
@@ -6142,6 +6141,9 @@ static int mdbx_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   MDB_node *leaf;
   int rc;
 
+  if ((mc->mc_flags & C_DEL) && op == MDB_PREV_DUP)
+    return MDB_NOTFOUND;
+
   if (!(mc->mc_flags & C_INITIALIZED)) {
     rc = mdbx_cursor_last(mc, key, data);
     if (unlikely(rc))
@@ -6150,8 +6152,8 @@ static int mdbx_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   }
 
   mp = mc->mc_pg[mc->mc_top];
-
-  if (mc->mc_db->md_flags & MDB_DUPSORT) {
+  if ((mc->mc_db->md_flags & MDB_DUPSORT) &&
+      mc->mc_ki[mc->mc_top] < NUMKEYS(mp)) {
     leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
       if (op == MDB_PREV || op == MDB_PREV_DUP) {
@@ -6461,7 +6463,7 @@ static int mdbx_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
   if (mc->mc_xcursor)
     mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED | C_EOF);
 
-  if (likely(!(mc->mc_flags & C_EOF))) {
+  if (likely((mc->mc_flags & (C_EOF | C_DEL)) != C_EOF)) {
     if (!(mc->mc_flags & C_INITIALIZED) || mc->mc_top) {
       rc = mdbx_page_search(mc, NULL, MDB_PS_LAST);
       if (unlikely(rc != MDB_SUCCESS))
@@ -6517,11 +6519,12 @@ int mdbx_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
       return EINVAL;
     MDB_page *mp = mc->mc_pg[mc->mc_top];
-    int nkeys = NUMKEYS(mp);
-    if (!nkeys || mc->mc_ki[mc->mc_top] >= nkeys) {
+    unsigned nkeys = NUMKEYS(mp);
+    if (mc->mc_ki[mc->mc_top] >= nkeys) {
       mc->mc_ki[mc->mc_top] = nkeys;
       return MDB_NOTFOUND;
     }
+    assert(nkeys > 0);
 
     rc = MDB_SUCCESS;
     if (IS_LEAF2(mp)) {
@@ -8502,11 +8505,12 @@ static int mdbx_rebalance(MDB_cursor *mc) {
 
   if (mc->mc_snum < 2) {
     MDB_page *mp = mc->mc_pg[0];
+    unsigned nkeys = NUMKEYS(mp);
     if (IS_SUBP(mp)) {
       mdbx_debug("Can't rebalance a subpage, ignoring");
       return MDB_SUCCESS;
     }
-    if (NUMKEYS(mp) == 0) {
+    if (nkeys == 0) {
       mdbx_debug("tree is completely empty");
       mc->mc_db->md_root = P_INVALID;
       mc->mc_db->md_depth = 0;
@@ -8700,8 +8704,10 @@ static int mdbx_cursor_del0(MDB_cursor *mc) {
      * Other cursors adjustments were already done
      * by mdbx_rebalance and aren't needed here.
      */
-    if (!mc->mc_snum)
+    if (!mc->mc_snum) {
+      mc->mc_flags |= C_DEL | C_EOF;
       return rc;
+    }
 
     mp = mc->mc_pg[mc->mc_top];
     nkeys = NUMKEYS(mp);
