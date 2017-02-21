@@ -36,23 +36,20 @@ IOARENA ?= ../ioarena.git/@BUILD/src/ioarena
 
 ########################################################################
 
-HEADERS		:= lmdb.h mdbx.h
+HEADERS		:= mdbx.h
 LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
-MANPAGES	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
+MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
 		   yota_test1 yota_test2
 
-SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h reopen.h barriers.h
-SRC_MDBX	:= $(SRC_LMDB) mdbx.c mdbx.h
+SRC_MDBX	:= mdbx.c mdbx.h reopen.h barriers.h
 
-.PHONY: mdbx lmdb all install clean check tests coverage
+.PHONY: mdbx all install clean check tests coverage
 
 all: $(LIBRARIES) $(TOOLS)
 
 mdbx: libmdbx.a libmdbx.so
-
-lmdb: liblmdb.a liblmdb.so
 
 tools: $(TOOLS)
 
@@ -88,25 +85,19 @@ libmdbx.a:	mdbx.o
 libmdbx.so:	mdbx.lo
 	$(CC) $(CFLAGS) $(LDFLAGS) -save-temps -pthread -shared $(LDOPS) -o $@ $^
 
-liblmdb.a:	lmdb.o
-	$(AR) rs $@ $^
-
-liblmdb.so:	lmdb.lo
-	$(CC) $(CFLAGS) $(LDFLAGS) -pthread -shared $(LDOPS) -o $@ $^
-
-mdbx_stat: mdb_stat.o mdbx.o
+mdbx_stat: mdbx_stat.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-mdbx_copy: mdb_copy.o mdbx.o
+mdbx_copy: mdbx_copy.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-mdbx_dump: mdb_dump.o mdbx.o
+mdbx_dump: mdbx_dump.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-mdbx_load: mdb_load.o mdbx.o
+mdbx_load: mdbx_load.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-mdbx_chk: mdb_chk.o mdbx.o
+mdbx_chk: mdbx_chk.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
 mtest0: mtest0.o mdbx.o
@@ -145,16 +136,10 @@ mdbx.o: $(SRC_MDBX)
 mdbx.lo: $(SRC_MDBX)
 	$(CC) $(CFLAGS) -fPIC -c mdbx.c -o $@
 
-lmdb.o: $(SRC_LMDB)
-	$(CC) $(CFLAGS) -c mdb.c -o $@
-
-lmdb.lo: $(SRC_LMDB)
-	$(CC) $(CFLAGS) -fPIC -c mdb.c -o $@
-
 %:	%.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
 
-%.o:	%.c lmdb.h mdbx.h
+%.o:	%.c mdbx.h
 	$(CC) $(CFLAGS) -c $<
 
 COFLAGS	= -fprofile-arcs -ftest-coverage
@@ -188,13 +173,11 @@ endef
 
 $(eval $(call bench-rule,mdbx,$(NN),libmdbx.so))
 
-$(eval $(call bench-rule,lmdb,$(NN)))
-
 $(eval $(call bench-rule,dummy,$(NN)))
 
 $(eval $(call bench-rule,debug,10))
 
-bench: bench-lmdb.txt bench-mdbx.txt
+bench: bench-mdbx.txt
 
 endif
 

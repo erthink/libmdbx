@@ -4,9 +4,9 @@
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
 .TH MDB_COPY 1 "2014/06/20" "LMDB 0.9.14"
 .SH NAME
-mdb_copy \- LMDB environment copy tool
+mdbx_copy \- LMDB environment copy tool
 .SH SYNOPSIS
-.B mdb_copy
+.B mdbx_copy
 [\c
 .BR \-V ]
 [\c
@@ -18,7 +18,7 @@ mdb_copy \- LMDB environment copy tool
 .BR dstpath ]
 .SH DESCRIPTION
 The
-.B mdb_copy
+.B mdbx_copy
 utility copies an LMDB environment. The environment can
 be copied regardless of whether it is currently in use.
 No lockfile is created, since it gets recreated at need.
@@ -52,6 +52,6 @@ This utility can trigger significant file size growth if run
 in parallel with write transactions, because pages which they
 free during copying cannot be reused until the copy is done.
 .SH "SEE ALSO"
-.BR mdb_stat (1)
+.BR mdbx_stat (1)
 .SH AUTHOR
 Howard Chu of Symas Corporation <http://www.symas.com>

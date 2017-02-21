@@ -4,9 +4,9 @@
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
 .TH MDB_LOAD 1 "2014/06/20" "LMDB 0.9.14"
 .SH NAME
-mdb_load \- LMDB environment import tool
+mdbx_load \- LMDB environment import tool
 .SH SYNOPSIS
-.B mdb_load
+.B mdbx_load
 [\c
 .BR \-V ]
 [\c
@@ -22,15 +22,15 @@ mdb_load \- LMDB environment import tool
 .BR \ envpath
 .SH DESCRIPTION
 The
-.B mdb_load
+.B mdbx_load
 utility reads from the standard input and loads it into the
 LMDB environment
 .BR envpath .
 
 The input to
-.B mdb_load
+.B mdbx_load
 must be in the output format specified by the
-.BR mdb_dump (1)
+.BR mdbx_dump (1)
 utility or as specified by the
 .B -T
 option below.
@@ -66,7 +66,7 @@ character; for example, \\0a is a newline character in the ASCII character set.
 
 For this reason, any backslash or newline characters that naturally occur in the text
 input must be escaped to avoid misinterpretation by
-.BR mdb_load .
+.BR mdbx_load .
 
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur.
@@ -74,6 +74,6 @@ Errors result in a non-zero exit status and
 a diagnostic message being written to standard error.
 
 .SH "SEE ALSO"
-.BR mdb_dump (1)
+.BR mdbx_dump (1)
 .SH AUTHOR
 Howard Chu of Symas Corporation <http://www.symas.com>

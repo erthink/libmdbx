@@ -12,4 +12,4 @@ compiler:
 os:
         - linux
 
-script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all lmdb check; fi
+script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all check; fi

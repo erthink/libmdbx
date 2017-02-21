@@ -17,7 +17,7 @@
  * in the most portable way for libmdbx project.
  *
  * Feedback and comments are welcome.
- * https://gist.github.com/leo-yuriev/ba186a6bf5cf3a27bae7                   */
+ * https://gist.github.com/leo-yuriev/ba186a6bf5cf3a27bae7 */
 
 #pragma once
 /* *INDENT-OFF* */
@@ -140,7 +140,7 @@ static MDBX_INLINE void mdbx_barrier(int type) {
 #define mdbx_coherent_barrier() \
 	mdbx_barrier(MDB_CACHE_IS_COHERENT ? MDBX_BARRIER_COMPILER : MDBX_BARRIER_MEMORY)
 
-static MDBX_INLINE void mdb_invalidate_cache(void *addr, int nbytes) {
+static MDBX_INLINE void mdbx_invalidate_cache(void *addr, int nbytes) {
 	mdbx_coherent_barrier();
 #if defined(__mips) && defined(__linux)
 	/* MIPS has cache coherency issues.
