@@ -1261,6 +1261,7 @@ enum {
 #define MDB_END_OPMASK 0x0F    /**< mask for #mdbx_txn_end() operation number */
 #define MDB_END_UPDATE 0x10    /**< update env state (DBIs) */
 #define MDB_END_FREE 0x20      /**< free txn unless it is #MDB_env.%me_txn0 */
+#define MDB_END_EOTDONE 0x40   /**< txn's cursors already closed */
 #define MDB_END_SLOT MDB_NOTLS /**< release any reader slot if #MDB_NOTLS */
 static int mdbx_txn_end(MDB_txn *txn, unsigned mode);
 
@@ -3266,7 +3267,7 @@ static int mdbx_txn_end(MDB_txn *txn, unsigned mode) {
   } else if (!F_ISSET(txn->mt_flags, MDB_TXN_FINISHED)) {
     pgno_t *pghead = env->me_pghead;
 
-    if (!(mode & MDB_END_UPDATE)) /* !(already closed cursors) */
+    if (!(mode & MDB_END_EOTDONE)) /* !(already closed cursors) */
       mdbx_cursors_eot(txn, 0);
     if (!(env->me_flags & MDB_WRITEMAP)) {
       mdbx_dlist_free(txn);
@@ -3806,8 +3807,7 @@ done:
 
 int mdbx_txn_commit(MDB_txn *txn) {
   int rc;
-  unsigned i, end_mode;
-  MDB_env *env;
+  unsigned i;
 
   if (unlikely(txn == NULL))
     return EINVAL;
@@ -3815,14 +3815,11 @@ int mdbx_txn_commit(MDB_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDB_VERSION_MISMATCH;
 
-  if (unlikely(txn->mt_env->me_pid != getpid())) {
-    txn->mt_env->me_flags |= MDB_FATAL_ERROR;
+  MDB_env *env = txn->mt_env;
+  if (unlikely(env->me_pid != getpid())) {
+    env->me_flags |= MDB_FATAL_ERROR;
     return MDB_PANIC;
   }
-
-  /* mdbx_txn_end() mode for a commit which writes nothing */
-  end_mode =
-      MDB_END_EMPTY_COMMIT | MDB_END_UPDATE | MDB_END_SLOT | MDB_END_FREE;
 
   if (txn->mt_child) {
     rc = mdbx_txn_commit(txn->mt_child);
@@ -3831,11 +3828,11 @@ int mdbx_txn_commit(MDB_txn *txn) {
       goto fail;
   }
 
-  env = txn->mt_env;
-
-  if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))) {
+  /* mdbx_txn_end() mode for a commit which writes nothing */
+  unsigned end_mode =
+      MDB_END_EMPTY_COMMIT | MDB_END_UPDATE | MDB_END_SLOT | MDB_END_FREE;
+  if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
     goto done;
-  }
 
   if (unlikely(txn->mt_flags & (MDB_TXN_FINISHED | MDB_TXN_ERROR))) {
     mdbx_debug("error flag is set, can't commit");
@@ -3989,7 +3986,6 @@ int mdbx_txn_commit(MDB_txn *txn) {
     return rc;
   }
 
-  env = txn->mt_env;
   if (unlikely(txn != env->me_txn)) {
     mdbx_debug("attempt to commit unknown transaction");
     rc = EINVAL;
@@ -3997,6 +3993,7 @@ int mdbx_txn_commit(MDB_txn *txn) {
   }
 
   mdbx_cursors_eot(txn, 0);
+  end_mode |= MDB_END_EOTDONE;
 
   if (!txn->mt_u.dirty_list[0].mid &&
       !(txn->mt_flags & (MDB_TXN_DIRTY | MDB_TXN_SPILLS)))
@@ -4054,7 +4051,7 @@ int mdbx_txn_commit(MDB_txn *txn) {
   }
   if (unlikely(rc != MDB_SUCCESS))
     goto fail;
-  end_mode = MDB_END_COMMITTED | MDB_END_UPDATE;
+  end_mode = MDB_END_COMMITTED | MDB_END_UPDATE | MDB_END_EOTDONE;
 
 done:
   return mdbx_txn_end(txn, end_mode);
