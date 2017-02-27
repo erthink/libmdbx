@@ -2697,7 +2697,7 @@ int mdbx_env_sync(MDB_env *env, int force) {
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!env->me_txns))
     return MDB_PANIC;
@@ -3054,7 +3054,7 @@ int mdbx_txn_renew(MDB_txn *txn) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!F_ISSET(txn->mt_flags, MDB_TXN_RDONLY | MDB_TXN_FINISHED)))
     return EINVAL;
@@ -3078,7 +3078,7 @@ int mdbx_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags,
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(env->me_pid != getpid())) {
     env->me_flags |= MDB_FATAL_ERROR;
@@ -3318,7 +3318,7 @@ int mdbx_txn_reset(MDB_txn *txn) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   /* This call is only valid for read-only txns */
   if (unlikely(!(txn->mt_flags & MDB_TXN_RDONLY)))
@@ -3337,7 +3337,7 @@ int mdbx_txn_abort(MDB_txn *txn) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
 #if MDBX_MODE_ENABLED
   if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
@@ -3811,7 +3811,7 @@ int mdbx_txn_commit(MDB_txn *txn) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   MDB_env *env = txn->mt_env;
   if (unlikely(env->me_pid != getpid())) {
@@ -4452,7 +4452,7 @@ int __cold mdbx_env_set_mapsize(MDB_env *env, size_t size) {
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(size < env->me_psize * 8))
     return EINVAL;
@@ -4495,7 +4495,7 @@ int __cold mdbx_env_set_maxdbs(MDB_env *env, MDB_dbi dbs) {
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(env->me_map))
     return EINVAL;
@@ -4509,7 +4509,7 @@ int __cold mdbx_env_set_maxreaders(MDB_env *env, unsigned readers) {
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(env->me_map))
     return EINVAL;
@@ -4523,7 +4523,7 @@ int __cold mdbx_env_get_maxreaders(MDB_env *env, unsigned *readers) {
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   *readers = env->me_maxreaders;
   return MDB_SUCCESS;
@@ -5108,7 +5108,7 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (env->me_fd != INVALID_HANDLE_VALUE ||
       (flags & ~(CHANGEABLE | CHANGELESS)))
@@ -5322,7 +5322,7 @@ int __cold mdbx_env_close_ex(MDB_env *env, int dont_sync) {
   if (unlikely(!env))
     return EINVAL;
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (!dont_sync && env->me_txns)
     rc = mdbx_env_sync(env, 1);
@@ -5976,7 +5976,7 @@ int mdbx_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -6507,7 +6507,7 @@ int mdbx_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(mc->mc_txn->mt_flags & MDB_TXN_BLOCKED))
     return MDB_BAD_TXN;
@@ -6712,7 +6712,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   env = mc->mc_txn->mt_env;
 
@@ -7270,7 +7270,7 @@ int mdbx_cursor_del(MDB_cursor *mc, unsigned flags) {
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(mc->mc_txn->mt_flags & (MDB_TXN_RDONLY | MDB_TXN_BLOCKED)))
     return (mc->mc_txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
@@ -7835,7 +7835,7 @@ int mdbx_cursor_open(MDB_txn *txn, MDB_dbi dbi, MDB_cursor **ret) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return EINVAL;
@@ -7870,7 +7870,7 @@ int mdbx_cursor_renew(MDB_txn *txn, MDB_cursor *mc) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE &&
                mc->mc_signature != MDBX_MC_READY4CLOSE))
@@ -7908,7 +7908,7 @@ int mdbx_cursor_count(MDB_cursor *mc, size_t *countp) {
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(mc->mc_txn->mt_flags & MDB_TXN_BLOCKED))
     return MDB_BAD_TXN;
@@ -8757,7 +8757,7 @@ int mdbx_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -9250,7 +9250,7 @@ int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -10009,7 +10009,7 @@ int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(flags & ~VALID_FLAGS))
     return EINVAL;
@@ -10122,7 +10122,7 @@ int __cold mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg, size_t bytes) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return EINVAL;
@@ -10162,7 +10162,7 @@ int mdbx_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return EINVAL;
@@ -10274,7 +10274,7 @@ int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -10327,7 +10327,7 @@ int mdbx_set_compare(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -10341,7 +10341,7 @@ int mdbx_set_dupsort(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -10366,7 +10366,7 @@ int __cold mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {
     return -EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   rdrs = env->me_txns->mti_numreaders;
   mr = env->me_txns->mti_readers;
@@ -10920,7 +10920,7 @@ int __cold mdbx_env_set_syncbytes(MDB_env *env, size_t bytes) {
     return EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   env->me_sync_threshold = bytes;
   return env->me_map ? mdbx_env_sync(env, 0) : MDB_SUCCESS;
@@ -10949,7 +10949,7 @@ ATTRIBUTE_NO_SANITIZE_THREAD /* LY: avoid tsan-trap by me_txn, mm_last_pg and
     return -EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!txn->mt_u.reader))
     return -1;
@@ -11109,7 +11109,7 @@ int __cold mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func *visitor,
   if (unlikely(!txn))
     return MDB_BAD_TXN;
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   ctx.mw_txn = txn;
   ctx.mw_user = user;
@@ -11132,7 +11132,7 @@ int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
     return EACCES;
@@ -11162,7 +11162,7 @@ int mdbx_cursor_on_first(MDB_cursor *mc) {
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
     return MDBX_RESULT_FALSE;
@@ -11181,7 +11181,7 @@ int mdbx_cursor_on_last(MDB_cursor *mc) {
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
     return MDBX_RESULT_FALSE;
@@ -11201,7 +11201,7 @@ int mdbx_cursor_eof(MDB_cursor *mc) {
     return EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if ((mc->mc_flags & C_INITIALIZED) == 0)
     return MDBX_RESULT_TRUE;
@@ -11253,7 +11253,7 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *new_data,
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(old_data->iov_base == NULL && old_data->iov_len))
     return EINVAL;
@@ -11406,7 +11406,7 @@ int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return EINVAL;
@@ -11467,7 +11467,7 @@ int mdbx_is_dirty(const MDB_txn *txn, const void *ptr) {
     return EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDB_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(txn->mt_flags & MDB_TXN_RDONLY))
     return MDB_BAD_TXN;

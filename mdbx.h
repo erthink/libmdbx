@@ -247,6 +247,9 @@ typedef enum MDB_cursor_op {
 
 /* Successful result */
 #define MDB_SUCCESS 0
+#define MDBX_RESULT_FALSE MDB_SUCCESS
+#define MDBX_RESULT_TRUE (-1)
+
 /* key/data pair already exists */
 #define MDB_KEYEXIST (-30799)
 /* key/data pair not found (EOF) */
@@ -257,7 +260,7 @@ typedef enum MDB_cursor_op {
 #define MDB_CORRUPTED (-30796)
 /* Update of meta page failed or environment had fatal error */
 #define MDB_PANIC (-30795)
-/* Environment version mismatch */
+/* DB file version mismatch with libmdbx */
 #define MDB_VERSION_MISMATCH (-30794)
 /* File is not a valid LMDB file */
 #define MDB_INVALID (-30793)
@@ -294,6 +297,16 @@ typedef enum MDB_cursor_op {
 #define MDB_PROBLEM (-30779)
 /* The last defined error code */
 #define MDB_LAST_ERRCODE MDB_PROBLEM
+
+/* The mdbx_put() or mdbx_replace() was called for key,
+    that has more that one associated value. */
+#define MDBX_EMULTIVAL (-30421)
+
+/* Bad signature of a runtime object(s), this can mean:
+ *  - memory corruption or double-free;
+ *  - ABI version mismatch (rare case); */
+#define MDBX_EBADSIGN (-30420)
+
 
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
@@ -1620,10 +1633,6 @@ int mdbx_cursor_on_first(MDB_cursor *mc);
 
 /* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
 int mdbx_cursor_on_last(MDB_cursor *mc);
-
-#define MDBX_EMULTIVAL (MDB_LAST_ERRCODE - 42)
-#define MDBX_RESULT_FALSE MDB_SUCCESS
-#define MDBX_RESULT_TRUE (-1)
 
 int mdbx_replace(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *new_data,
                  MDB_val *old_data, unsigned flags);
