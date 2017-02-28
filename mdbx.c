@@ -1328,7 +1328,7 @@ static pthread_mutex_t tsan_mutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
 /** Return the library version info. */
-char *__cold mdbx_version(int *major, int *minor, int *patch) {
+const char *mdbx_version(int *major, int *minor, int *patch) {
   if (major)
     *major = MDB_VERSION_MAJOR;
   if (minor)
@@ -1338,45 +1338,60 @@ char *__cold mdbx_version(int *major, int *minor, int *patch) {
   return MDB_VERSION_STRING;
 }
 
-/** Table of descriptions for LMDB @ref errors */
-static char *const mdbx_errstr[] = {
-    "MDB_KEYEXIST: Key/data pair already exists",
-    "MDB_NOTFOUND: No matching key/data pair found",
-    "MDB_PAGE_NOTFOUND: Requested page not found",
-    "MDB_CORRUPTED: Located page was wrong type",
-    "MDB_PANIC: Update of meta page failed or environment had fatal error",
-    "MDB_VERSION_MISMATCH: Database environment version mismatch",
-    "MDB_INVALID: File is not an LMDB file",
-    "MDB_MAP_FULL: Environment mapsize limit reached",
-    "MDB_DBS_FULL: Environment maxdbs limit reached",
-    "MDB_READERS_FULL: Environment maxreaders limit reached",
-    "MDB_TLS_FULL: Thread-local storage keys full - too many environments "
-    "open",
-    "MDB_TXN_FULL: Transaction has too many dirty pages - transaction too "
-    "big",
-    "MDB_CURSOR_FULL: Internal error - cursor stack limit reached",
-    "MDB_PAGE_FULL: Internal error - page has no more space",
-    "MDB_MAP_RESIZED: Database contents grew beyond environment mapsize",
-    "MDB_INCOMPATIBLE: Operation and DB incompatible, or DB flags changed",
-    "MDB_BAD_RSLOT: Invalid reuse of reader locktable slot",
-    "MDB_BAD_TXN: Transaction must abort, has a child, or is invalid",
-    "MDB_BAD_VALSIZE: Unsupported size of key/DB name/data, or wrong "
-    "DUPFIXED size",
-    "MDB_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
-    "MDB_PROBLEM: Unexpected problem - txn should abort",
-};
-
-char *__cold mdbx_strerror(int err) {
-  int i;
-  if (!err)
-    return ("Successful return: 0");
+static const char *__mdbx_strerr(int err) {
+  /* Table of descriptions for LMDB errors */
+  static const char *const tbl[] = {
+      "MDB_KEYEXIST: Key/data pair already exists",
+      "MDB_NOTFOUND: No matching key/data pair found",
+      "MDB_PAGE_NOTFOUND: Requested page not found",
+      "MDB_CORRUPTED: Located page was wrong type",
+      "MDB_PANIC: Update of meta page failed or environment had fatal error",
+      "MDB_VERSION_MISMATCH: Database environment version mismatch",
+      "MDB_INVALID: File is not an LMDB file",
+      "MDB_MAP_FULL: Environment mapsize limit reached",
+      "MDB_DBS_FULL: Environment maxdbs limit reached",
+      "MDB_READERS_FULL: Environment maxreaders limit reached",
+      "MDB_TLS_FULL: Thread-local storage keys full - too many environments "
+      "open",
+      "MDB_TXN_FULL: Transaction has too many dirty pages - transaction too "
+      "big",
+      "MDB_CURSOR_FULL: Internal error - cursor stack limit reached",
+      "MDB_PAGE_FULL: Internal error - page has no more space",
+      "MDB_MAP_RESIZED: Database contents grew beyond environment mapsize",
+      "MDB_INCOMPATIBLE: Operation and DB incompatible, or DB flags changed",
+      "MDB_BAD_RSLOT: Invalid reuse of reader locktable slot",
+      "MDB_BAD_TXN: Transaction must abort, has a child, or is invalid",
+      "MDB_BAD_VALSIZE: Unsupported size of key/DB name/data, or wrong "
+      "DUPFIXED size",
+      "MDB_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
+      "MDB_PROBLEM: Unexpected problem - txn should abort",
+  };
 
   if (err >= MDB_KEYEXIST && err <= MDB_LAST_ERRCODE) {
-    i = err - MDB_KEYEXIST;
-    return mdbx_errstr[i];
+    int i = err - MDB_KEYEXIST;
+    return tbl[i];
   }
 
-  return strerror(err);
+  switch (err) {
+  case MDB_SUCCESS:
+    return "Successful return: 0";
+  case MDBX_EMULTIVAL:
+    return "";
+  case MDBX_EBADSIGN:
+    return "";
+  default:
+    return NULL;
+  }
+}
+
+const char *mdbx_strerror_r(int err, char *buf, size_t buflen) {
+  const char *msg = __mdbx_strerr(err);
+  return msg ? msg : strerror_r(err, buf, buflen);
+}
+
+const char *__cold mdbx_strerror(int err) {
+  const char *msg = __mdbx_strerr(err);
+  return msg ? msg : strerror(err);
 }
 
 #if MDBX_MODE_ENABLED

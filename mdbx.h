@@ -343,7 +343,7 @@ typedef struct MDBX_envinfo {
  * here
  * Returns "version string" The library version as a string
  */
-char *mdbx_version(int *major, int *minor, int *patch);
+const char *mdbx_version(int *major, int *minor, int *patch);
 
 /* Return a string describing a given error code.
  *
@@ -355,7 +355,8 @@ char *mdbx_version(int *major, int *minor, int *patch);
  * [in] err The error code
  * Returns "error message" The description of the error
  */
-char *mdbx_strerror(int err);
+const char *mdbx_strerror(int err);
+const char *mdbx_strerror_r(int err, char *buf, size_t buflen);
 
 /* Create an LMDB environment handle.
  *
