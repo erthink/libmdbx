@@ -1338,21 +1338,20 @@ const char *mdbx_version(int *major, int *minor, int *patch) {
   return MDB_VERSION_STRING;
 }
 
-static const char *__mdbx_strerr(int err) {
+static const char *__mdbx_strerr(int errnum) {
   /* Table of descriptions for LMDB errors */
   static const char *const tbl[] = {
       "MDB_KEYEXIST: Key/data pair already exists",
       "MDB_NOTFOUND: No matching key/data pair found",
       "MDB_PAGE_NOTFOUND: Requested page not found",
-      "MDB_CORRUPTED: Located page was wrong type",
+      "MDB_CORRUPTED: Located page was wrong data",
       "MDB_PANIC: Update of meta page failed or environment had fatal error",
-      "MDB_VERSION_MISMATCH: Database environment version mismatch",
+      "MDB_VERSION_MISMATCH: DB version mismatch libmdbx",
       "MDB_INVALID: File is not an LMDB file",
       "MDB_MAP_FULL: Environment mapsize limit reached",
-      "MDB_DBS_FULL: Environment maxdbs limit reached",
-      "MDB_READERS_FULL: Environment maxreaders limit reached",
-      "MDB_TLS_FULL: Thread-local storage keys full - too many environments "
-      "open",
+      "MDB_DBS_FULL: Too may DBI (maxdbs reached)",
+      "MDB_READERS_FULL: Too many readers (maxreaders reached)",
+      NULL /* -30789 unused in MDBX */,
       "MDB_TXN_FULL: Transaction has too many dirty pages - transaction too "
       "big",
       "MDB_CURSOR_FULL: Internal error - cursor stack limit reached",
@@ -1367,31 +1366,31 @@ static const char *__mdbx_strerr(int err) {
       "MDB_PROBLEM: Unexpected problem - txn should abort",
   };
 
-  if (err >= MDB_KEYEXIST && err <= MDB_LAST_ERRCODE) {
-    int i = err - MDB_KEYEXIST;
+  if (errnum >= MDB_KEYEXIST && errnum <= MDB_LAST_ERRCODE) {
+    int i = errnum - MDB_KEYEXIST;
     return tbl[i];
   }
 
-  switch (err) {
+  switch (errnum) {
   case MDB_SUCCESS:
-    return "Successful return: 0";
+    return "MDB_SUCCESS: Successful";
   case MDBX_EMULTIVAL:
-    return "";
+    return "MDBX_EMULTIVAL: Unable to update multi-value for the given key";
   case MDBX_EBADSIGN:
-    return "";
+    return "MDBX_EBADSIGN: Wrong signature of a runtime object(s)";
   default:
     return NULL;
   }
 }
 
-const char *mdbx_strerror_r(int err, char *buf, size_t buflen) {
-  const char *msg = __mdbx_strerr(err);
-  return msg ? msg : strerror_r(err, buf, buflen);
+const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
+  const char *msg = __mdbx_strerr(errnum);
+  return msg ? msg : strerror_r(errnum, buf, buflen);
 }
 
-const char *__cold mdbx_strerror(int err) {
-  const char *msg = __mdbx_strerr(err);
-  return msg ? msg : strerror(err);
+const char *__cold mdbx_strerror(int errnum) {
+  const char *msg = __mdbx_strerr(errnum);
+  return msg ? msg : strerror(errnum);
 }
 
 #if MDBX_MODE_ENABLED

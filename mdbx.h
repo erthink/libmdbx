@@ -355,8 +355,8 @@ const char *mdbx_version(int *major, int *minor, int *patch);
  * [in] err The error code
  * Returns "error message" The description of the error
  */
-const char *mdbx_strerror(int err);
-const char *mdbx_strerror_r(int err, char *buf, size_t buflen);
+const char *mdbx_strerror(int errnum);
+const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
 
 /* Create an LMDB environment handle.
  *
