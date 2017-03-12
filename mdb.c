@@ -4672,7 +4672,7 @@ void mdbx_pthread_crutch_dtor(void)
 	 * деструкторы уже могли начать выполняться.
 	 * Уступая квант времени сразу после удаления ключа
 	 * мы даем им шанс завершиться. */
-	pthread_yield();
+	sched_yield(); sched_yield(); sched_yield();
 
 	mdbx_rthc_lock();
 	pid_t pid = getpid();
@@ -4691,11 +4691,12 @@ void mdbx_pthread_crutch_dtor(void)
 		 * Поэтому на каждой итерации уступаем квант времени,
 		 * в надежде что деструкторы успеют отработать. */
 		mdbx_rthc_unlock();
-		pthread_yield();
+		sched_yield(); sched_yield(); sched_yield();
 		mdbx_rthc_lock();
 	}
 	mdbx_rthc_unlock();
-	pthread_yield();
+
+	sched_yield(); sched_yield(); sched_yield();
 }
 #endif /* MDBX_USE_THREAD_ATEXIT */
 
