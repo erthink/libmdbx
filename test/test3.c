@@ -1,4 +1,4 @@
-/* mtest.c - memory-mapped database tester/toy */
+/* mtest3.c - memory-mapped database tester/toy */
 
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
@@ -15,15 +15,15 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
+/* Tests for sorted duplicate DBs */
 #include "mdbx.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
-
-#include <pthread.h>
 
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
 #define RES(err, expr) ((rc = expr) == (err) || (CHECK(!rc, #expr), 0))
@@ -33,19 +33,8 @@
                        abort()))
 
 #ifndef DBPATH
-#define DBPATH "./testdb"
+#define DBPATH "./tmp.db"
 #endif
-
-void *thread_entry(void *ctx) {
-  MDB_env *env = ctx;
-  MDB_txn *txn;
-  int rc;
-
-  E(mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn));
-  mdbx_txn_abort(txn);
-
-  return NULL;
-}
 
 int main(int argc, char *argv[]) {
   int i = 0, j = 0, rc;
@@ -54,17 +43,19 @@ int main(int argc, char *argv[]) {
   MDB_val key, data;
   MDB_txn *txn;
   MDBX_stat mst;
-  MDB_cursor *cursor, *cur2;
-  MDB_cursor_op op;
+  MDB_cursor *cursor;
   int count;
   int *values;
-  char sval[32] = "";
+  char sval[32];
+  char kval[sizeof(int)];
   int env_oflags;
   struct stat db_stat, exe_stat;
 
   (void)argc;
   (void)argv;
   srand(time(NULL));
+
+  memset(sval, 0, sizeof(sval));
 
   count = (rand() % 384) + 64;
   values = (int *)malloc(count * sizeof(int));
@@ -74,8 +65,8 @@ int main(int argc, char *argv[]) {
   }
 
   E(mdbx_env_create(&env));
-  E(mdbx_env_set_maxreaders(env, 42));
   E(mdbx_env_set_mapsize(env, 10485760));
+  E(mdbx_env_set_maxdbs(env, 4));
 
   E(stat("/proc/self/exe", &exe_stat) ? errno : 0);
   E(stat(DBPATH "/.", &db_stat) ? errno : 0);
@@ -92,22 +83,22 @@ int main(int argc, char *argv[]) {
   E(mdbx_env_open(env, DBPATH, env_oflags, 0664));
 
   E(mdbx_txn_begin(env, NULL, 0, &txn));
-  E(mdbx_dbi_open(txn, NULL, 0, &dbi));
+  if (mdbx_dbi_open(txn, "id3", MDB_CREATE, &dbi) == MDB_SUCCESS)
+    E(mdbx_drop(txn, dbi, 1));
+  E(mdbx_dbi_open(txn, "id3", MDB_CREATE | MDB_DUPSORT, &dbi));
 
   key.mv_size = sizeof(int);
-  key.mv_data = sval;
+  key.mv_data = kval;
+  data.mv_size = sizeof(sval);
+  data.mv_data = sval;
 
   printf("Adding %d values\n", count);
   for (i = 0; i < count; i++) {
+    if (!(i & 0x0f))
+      sprintf(kval, "%03x", values[i]);
     sprintf(sval, "%03x %d foo bar", values[i], values[i]);
-    /* Set <data> in each iteration, since MDB_NOOVERWRITE may modify it */
-    data.mv_size = sizeof(sval);
-    data.mv_data = sval;
-    if (RES(MDB_KEYEXIST, mdbx_put(txn, dbi, &key, &data, MDB_NOOVERWRITE))) {
+    if (RES(MDB_KEYEXIST, mdbx_put(txn, dbi, &key, &data, MDB_NODUPDATA)))
       j++;
-      data.mv_size = sizeof(sval);
-      data.mv_data = sval;
-    }
   }
   if (j)
     printf("%d duplicates skipped\n", j);
@@ -126,13 +117,18 @@ int main(int argc, char *argv[]) {
   mdbx_txn_abort(txn);
 
   j = 0;
-  key.mv_data = sval;
+
   for (i = count - 1; i > -1; i -= (rand() % 5)) {
     j++;
     txn = NULL;
     E(mdbx_txn_begin(env, NULL, 0, &txn));
-    sprintf(sval, "%03x ", values[i]);
-    if (RES(MDB_NOTFOUND, mdbx_del(txn, dbi, &key, NULL))) {
+    sprintf(kval, "%03x", values[i & ~0x0f]);
+    sprintf(sval, "%03x %d foo bar", values[i], values[i]);
+    key.mv_size = sizeof(int);
+    key.mv_data = kval;
+    data.mv_size = sizeof(sval);
+    data.mv_data = sval;
+    if (RES(MDB_NOTFOUND, mdbx_del(txn, dbi, &key, &data))) {
       j--;
       mdbx_txn_abort(txn);
     } else {
@@ -151,70 +147,16 @@ int main(int argc, char *argv[]) {
            (int)data.mv_size, (char *)data.mv_data);
   }
   CHECK(rc == MDB_NOTFOUND, "mdbx_cursor_get");
-  printf("Cursor last\n");
-  E(mdbx_cursor_get(cursor, &key, &data, MDB_LAST));
-  printf("key: %.*s, data: %.*s\n", (int)key.mv_size, (char *)key.mv_data,
-         (int)data.mv_size, (char *)data.mv_data);
   printf("Cursor prev\n");
   while ((rc = mdbx_cursor_get(cursor, &key, &data, MDB_PREV)) == 0) {
     printf("key: %.*s, data: %.*s\n", (int)key.mv_size, (char *)key.mv_data,
            (int)data.mv_size, (char *)data.mv_data);
   }
   CHECK(rc == MDB_NOTFOUND, "mdbx_cursor_get");
-  printf("Cursor last/prev\n");
-  E(mdbx_cursor_get(cursor, &key, &data, MDB_LAST));
-  printf("key: %.*s, data: %.*s\n", (int)key.mv_size, (char *)key.mv_data,
-         (int)data.mv_size, (char *)data.mv_data);
-  E(mdbx_cursor_get(cursor, &key, &data, MDB_PREV));
-  printf("key: %.*s, data: %.*s\n", (int)key.mv_size, (char *)key.mv_data,
-         (int)data.mv_size, (char *)data.mv_data);
-
-  mdbx_cursor_close(cursor);
-  mdbx_txn_abort(txn);
-
-  printf("Deleting with cursor\n");
-  E(mdbx_txn_begin(env, NULL, 0, &txn));
-  E(mdbx_cursor_open(txn, dbi, &cur2));
-  for (i = 0; i < 50; i++) {
-    if (RES(MDB_NOTFOUND, mdbx_cursor_get(cur2, &key, &data, MDB_NEXT)))
-      break;
-    printf("key: %p %.*s, data: %p %.*s\n", key.mv_data, (int)key.mv_size,
-           (char *)key.mv_data, data.mv_data, (int)data.mv_size,
-           (char *)data.mv_data);
-    E(mdbx_del(txn, dbi, &key, NULL));
-  }
-
-  printf("Restarting cursor in txn\n");
-  for (op = MDB_FIRST, i = 0; i <= 32; op = MDB_NEXT, i++) {
-    if (RES(MDB_NOTFOUND, mdbx_cursor_get(cur2, &key, &data, op)))
-      break;
-    printf("key: %p %.*s, data: %p %.*s\n", key.mv_data, (int)key.mv_size,
-           (char *)key.mv_data, data.mv_data, (int)data.mv_size,
-           (char *)data.mv_data);
-  }
-  mdbx_cursor_close(cur2);
-  E(mdbx_txn_commit(txn));
-
-  for (i = 0; i < 41; ++i) {
-    pthread_t thread;
-    pthread_create(&thread, NULL, thread_entry, env);
-  }
-
-  printf("Restarting cursor outside txn\n");
-  E(mdbx_txn_begin(env, NULL, 0, &txn));
-  E(mdbx_cursor_open(txn, dbi, &cursor));
-  for (op = MDB_FIRST, i = 0; i <= 32; op = MDB_NEXT, i++) {
-    if (RES(MDB_NOTFOUND, mdbx_cursor_get(cursor, &key, &data, op)))
-      break;
-    printf("key: %p %.*s, data: %p %.*s\n", key.mv_data, (int)key.mv_size,
-           (char *)key.mv_data, data.mv_data, (int)data.mv_size,
-           (char *)data.mv_data);
-  }
   mdbx_cursor_close(cursor);
   mdbx_txn_abort(txn);
 
   mdbx_dbi_close(env, dbi);
   mdbx_env_close(env);
-
   return 0;
 }

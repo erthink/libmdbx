@@ -24,8 +24,9 @@ suffix	?=
 
 CC	?= gcc
 XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
-CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC
 CFLAGS	+= -std=gnu99 -pthread $(XCFLAGS)
+COVER	?= -coverage -fprofile-arcs -ftest-coverage -O0
 
 # LY: for ability to built with modern glibc,
 #     but then run with the old
@@ -40,10 +41,10 @@ HEADERS		:= mdbx.h
 LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
-TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
-		   yota_test1 yota_test2
+TESTS		:= test0 test1 test2 test3 test4 test5 test6 test_bench \
+		   test_yota1 test_yota2
 
-SRC_MDBX	:= mdbx.c mdbx.h reopen.h barriers.h
+SRC_MDBX	:= $(add_prefix src/, mdbx.c mdbx.h reopen.h barriers.h midl.h)
 
 .PHONY: mdbx all install clean check tests coverage
 
@@ -64,94 +65,46 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
+	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
 
 tests:	$(TESTS)
 
 check:	tests
-	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
-		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdbx_chk -v testdb \
+	[ -d tmp.db ] || mkdir tmp.db && rm -f tmp.db/* \
+		&& echo "*** LMDB-TEST-0" && ./test0 && ./mdbx_chk -v tmp.db \
+		&& echo "*** LMDB-TEST-1" && ./test1 && ./mdbx_chk -v tmp.db \
+		&& echo "*** LMDB-TEST-2" && ./test2 && ./mdbx_chk -v tmp.db \
+		&& echo "*** LMDB-TEST-3" && ./test3 && ./mdbx_chk -v tmp.db \
+		&& echo "*** LMDB-TEST-4" && ./test4 && ./mdbx_chk -v tmp.db \
+		&& echo "*** LMDB-TEST-5" && ./test5 && ./mdbx_chk -v tmp.db \
+		&& echo "*** LMDB-TEST-6" && ./test6 && ./mdbx_chk -v tmp.db \
 		&& echo "*** LMDB-TESTs - all done"
+
+mdbx.o: $(SRC_MDBX) Makefile
+	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
 
 libmdbx.a:	mdbx.o
 	$(AR) rs $@ $^
 
-libmdbx.so:	mdbx.lo
+libmdbx.so:	mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -save-temps -pthread -shared $(LDOPS) -o $@ $^
 
-mdbx_stat: mdbx_stat.o mdbx.o
+mdbx_%:	src/mdbx_%.c mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-mdbx_copy: mdbx_copy.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
+test%: test/test%.c mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -Isrc -o $@ $^
 
-mdbx_dump: mdbx_dump.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
+gcov-mdbx.o: $(SRC_MDBX) Makefile
+	$(CC) $(CFLAGS) $(COVER) -c src/mdbx.c -o $@
 
-mdbx_load: mdbx_load.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
-
-mdbx_chk: mdbx_chk.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
-
-mtest0: mtest0.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest1: mtest1.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest2:	mtest2.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest3:	mtest3.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest4:	mtest4.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest5:	mtest5.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest6:	mtest6.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-yota_test1: yota_test1.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-yota_test2: yota_test2.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-wbench:	wbench.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mdbx.o: $(SRC_MDBX)
-	$(CC) $(CFLAGS) -c mdbx.c -o $@
-
-mdbx.lo: $(SRC_MDBX)
-	$(CC) $(CFLAGS) -fPIC -c mdbx.c -o $@
-
-%:	%.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
-
-%.o:	%.c mdbx.h
-	$(CC) $(CFLAGS) -c $<
-
-COFLAGS	= -fprofile-arcs -ftest-coverage
-
-@gcov-mdb.o: $(SRC_MDBX)
-	$(CC) $(CFLAGS) $(COFLAGS) -O0 -c mdbx.c -o $@
-
-coverage: @gcov-mdb.o
-	for t in mtest*.c; do x=`basename \$$t .c`; $(MAKE) $$x.o; \
-		gcc -o @gcov-$$x $$x.o $^ -pthread $(COFLAGS); \
-		rm -rf testdb; mkdir testdb; ./@gcov-$$x; done
-	gcov @gcov-mdb
+# Seem this useless :(
+coverage: gcov-mdbx.o
+	for t in test/test[0-9]*.c; do x=`basename \$$t .c`; \
+		$(CC) $(CFLAGS) $(COVER) -Isrc $$t -o gcov-$$x $^; \
+		rm -rf tmp.db; mkdir tmp.db; ./gcov-$$x; \
+	done
+	gcov *.gcno
 
 ifneq ($(wildcard $(IOARENA)),)
 

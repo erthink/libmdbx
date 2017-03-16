@@ -1,4 +1,4 @@
-/* mtest3.c - memory-mapped database tester/toy */
+/* mtest5.c - memory-mapped database tester/toy */
 
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
@@ -15,7 +15,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-/* Tests for sorted duplicate DBs */
+/* Tests for sorted duplicate DBs using cursor_put */
 #include "mdbx.h"
 #include <errno.h>
 #include <stdio.h>
@@ -33,7 +33,7 @@
                        abort()))
 
 #ifndef DBPATH
-#define DBPATH "./testdb"
+#define DBPATH "./tmp.db"
 #endif
 
 int main(int argc, char *argv[]) {
@@ -83,9 +83,10 @@ int main(int argc, char *argv[]) {
   E(mdbx_env_open(env, DBPATH, env_oflags, 0664));
 
   E(mdbx_txn_begin(env, NULL, 0, &txn));
-  if (mdbx_dbi_open(txn, "id3", MDB_CREATE, &dbi) == MDB_SUCCESS)
+  if (mdbx_dbi_open(txn, "id5", MDB_CREATE, &dbi) == MDB_SUCCESS)
     E(mdbx_drop(txn, dbi, 1));
-  E(mdbx_dbi_open(txn, "id3", MDB_CREATE | MDB_DUPSORT, &dbi));
+  E(mdbx_dbi_open(txn, "id5", MDB_CREATE | MDB_DUPSORT, &dbi));
+  E(mdbx_cursor_open(txn, dbi, &cursor));
 
   key.mv_size = sizeof(int);
   key.mv_data = kval;
@@ -97,11 +98,12 @@ int main(int argc, char *argv[]) {
     if (!(i & 0x0f))
       sprintf(kval, "%03x", values[i]);
     sprintf(sval, "%03x %d foo bar", values[i], values[i]);
-    if (RES(MDB_KEYEXIST, mdbx_put(txn, dbi, &key, &data, MDB_NODUPDATA)))
+    if (RES(MDB_KEYEXIST, mdbx_cursor_put(cursor, &key, &data, MDB_NODUPDATA)))
       j++;
   }
   if (j)
     printf("%d duplicates skipped\n", j);
+  mdbx_cursor_close(cursor);
   E(mdbx_txn_commit(txn));
   E(mdbx_env_stat(env, &mst, sizeof(mst)));
 

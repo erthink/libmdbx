@@ -33,7 +33,7 @@
                        abort()))
 
 #ifndef DBPATH
-#define DBPATH "./testdb"
+#define DBPATH "./tmp.db"
 #endif
 
 char dkbuf[1024];
