@@ -14,7 +14,7 @@
 
 /* Based on mtest2.c - memory-mapped database tester/toy */
 
-#include "mdbx.h"
+#include "../mdbx.h"
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,7 +65,7 @@ int main(int argc, char *argv[]) {
 
   E(stat("/proc/self/exe", &exe_stat) ? errno : 0);
   E(stat(DBPATH "/.", &db_stat) ? errno : 0);
-  env_oflags = MDB_FIXEDMAP | MDB_NOSYNC;
+  env_oflags = MDB_NOSYNC;
   if (major(db_stat.st_dev) != major(exe_stat.st_dev)) {
     /* LY: Assume running inside a CI-environment:
      *  1) don't use FIXEDMAP to avoid EBUSY in case collision,

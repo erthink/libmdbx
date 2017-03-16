@@ -1,9 +1,8 @@
 /* mdbx_dump.c - memory-mapped database dump tool */
 
 /*
- * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright 2011-2017 Howard Chu, Symas Corp.
- * Copyright 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
+ * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,7 +14,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "mdbx.h"
+#include "../../mdbx.h"
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
@@ -178,7 +177,7 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "af:lnps:V")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s\n", MDB_VERSION_STRING);
+      printf("%s\n", MDBX_VERSION_STRING);
       exit(0);
       break;
     case 'l':

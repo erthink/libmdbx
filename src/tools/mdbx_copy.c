@@ -1,9 +1,8 @@
 /* mdbx_copy.c - memory-mapped database backup tool */
 
 /*
- * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright 2012-2017 Howard Chu, Symas Corp.
- * Copyright 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
+ * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,10 +14,11 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "mdbx.h"
+#include "../../mdbx.h"
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 static void sighandle(int sig) { (void)sig; }
 
@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
     else if (argv[1][1] == 'c' && argv[1][2] == '\0')
       cpflags |= MDB_CP_COMPACT;
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
-      printf("%s\n", MDB_VERSION_STRING);
+      printf("%s\n", MDBX_VERSION_STRING);
       exit(0);
     } else
       argc = 0;

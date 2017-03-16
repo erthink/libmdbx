@@ -1,9 +1,8 @@
 /* mdbx_load.c - memory-mapped database load tool */
 
 /*
- * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright 2011-2017 Howard Chu, Symas Corp.
- * Copyright 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
+ * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -15,7 +14,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "mdbx.h"
+#include "../../mdbx.h"
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -314,7 +313,7 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "f:ns:NTV")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s\n", MDB_VERSION_STRING);
+      printf("%s\n", MDBX_VERSION_STRING);
       exit(0);
       break;
     case 'f':
@@ -365,8 +364,10 @@ int main(int argc, char *argv[]) {
   if (info.me_mapsize)
     mdbx_env_set_mapsize(env, info.me_mapsize);
 
+#ifdef MDB_FIXEDMAP
   if (info.me_mapaddr)
     envflags |= MDB_FIXEDMAP;
+#endif
 
   rc = mdbx_env_open(env, envname, envflags, 0664);
   if (rc) {

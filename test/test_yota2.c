@@ -22,7 +22,7 @@
 #include <sys/stat.h>
 #include <sys/time.h>
 
-#include "mdbx.h"
+#include "../mdbx.h"
 #include <assert.h>
 #include <limits.h>
 #include <stddef.h>

@@ -22,7 +22,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "mdbx.h"
+#include "../mdbx.h"
 
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
 #define RES(err, expr) ((rc = expr) == (err) || (CHECK(!rc, #expr), 0))

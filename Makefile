@@ -23,9 +23,9 @@ mandir	?= $(prefix)/man
 suffix	?=
 
 CC	?= gcc
-XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
-CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC
-CFLAGS	+= -std=gnu99 -pthread $(XCFLAGS)
+XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0 -DMDBX_EXPORTS=1
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
+CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu99 -pthread $(XCFLAGS)
 COVER	?= -coverage -fprofile-arcs -ftest-coverage -O0
 
 # LY: for ability to built with modern glibc,
@@ -44,7 +44,7 @@ MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 TESTS		:= test0 test1 test2 test3 test4 test5 test6 test_bench \
 		   test_yota1 test_yota2
 
-SRC_MDBX	:= $(add_prefix src/, mdbx.c mdbx.h reopen.h barriers.h midl.h)
+MDBX_SRC	:= mdbx.h $(addprefix src/, mdbx.c osal.c lck-posix.c defs.h bits.h osal.h midl.h)
 
 .PHONY: mdbx all install clean check tests coverage
 
@@ -80,22 +80,28 @@ check:	tests
 		&& echo "*** LMDB-TEST-6" && ./test6 && ./mdbx_chk -v tmp.db \
 		&& echo "*** LMDB-TESTs - all done"
 
-mdbx.o: $(SRC_MDBX) Makefile
+mdbx.o: $(MDBX_SRC) Makefile
 	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
 
-libmdbx.a:	mdbx.o
-	$(AR) rs $@ $^
+osal.o: $(MDBX_SRC) Makefile
+	$(CC) $(CFLAGS) -c src/osal.c -o $@
 
-libmdbx.so:	mdbx.o
+lck-posix.o: $(MDBX_SRC) Makefile
+	$(CC) $(CFLAGS) -c src/lck-posix.c -o $@
+
+libmdbx.a:	mdbx.o osal.o lck-posix.o
+	$(AR) rs $@ $?
+
+libmdbx.so:	mdbx.o osal.o lck-posix.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -save-temps -pthread -shared $(LDOPS) -o $@ $^
 
-mdbx_%:	src/mdbx_%.c mdbx.o
+mdbx_%:	src/tools/mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-test%: test/test%.c mdbx.o
+test%: test/test%.c libmdbx.a
 	$(CC) $(CFLAGS) $(LDFLAGS) -Isrc -o $@ $^
 
-gcov-mdbx.o: $(SRC_MDBX) Makefile
+gcov-mdbx.o: $(MDBX_SRC) Makefile
 	$(CC) $(CFLAGS) $(COVER) -c src/mdbx.c -o $@
 
 # Seem this useless :(
