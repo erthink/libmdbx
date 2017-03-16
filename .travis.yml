@@ -1,0 +1,15 @@
+language: c
+sudo: false
+dist: trusty
+cache: bundler
+notifications:
+        email: false
+
+compiler:
+        - gcc
+        - clang
+
+os:
+        - linux
+
+script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all lmdb check; fi

@@ -1,16 +1,29 @@
 MDBX
 	Add MDB_PREV_MULTIPLE
-	Fix MDB_CP_COMPACT (ITS#8209)
 	Add error MDB_PROBLEM, replace some MDB_CORRUPTED
-	Backport fixes for ITS#8406
+	Workarounds for glibc bugs: #21031 and 21032.
 
-LMDB 0.9.19 Release Engineering
+LMDB 0.9.20 Release Engineering
+	Fix mdb_load with escaped plaintext (ITS#8558)
+	Fix mdb_cursor_last / mdb_put interaction (ITS#8557)
+
+LMDB 0.9.19 Release (2016/12/28)
 	Fix mdb_env_cwalk cursor init (ITS#8424)
 	Fix robust mutexes on Solaris 10/11 (ITS#8339)
 	Fix MDB_GET_BOTH on non-dup record (ITS#8393)
 	Optimize mdb_drop
 	Fix xcursors after mdb_cursor_del (ITS#8406)
 	Fix MDB_NEXT_DUP after mdb_cursor_del (ITS#8412)
+	Fix mdb_cursor_put resetting C_EOF (ITS#8489)
+	Fix mdb_env_copyfd2 to return EPIPE on SIGPIPE (ITS#8504)
+	Fix mdb_env_copy with empty DB (ITS#8209)
+	Fix behaviors with fork (ITS#8505)
+	Fix mdb_dbi_open with mainDB cursors (ITS#8542)
+	Fix F_NOCACHE on MacOS, error is non-fatal (ITS#7682)
+	Documentation
+		Cleanup doxygen nits
+		Note reserved vs actual mem/disk usage
+
 
 LMDB 0.9.18 Release (2016/02/05)
 	already done for mdbx - Fix robust mutex detection on glibc 2.10-11 (ITS#8330)

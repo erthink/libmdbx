@@ -1,8 +1,8 @@
 /* mdbx_chk.c - memory-mapped database check tool */
 
 /*
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  *
  * This file is part of libmdbx.
  *
@@ -52,7 +52,7 @@ flagbit dbflags[] = {
 
 static volatile sig_atomic_t gotsignal;
 
-static void signal_hanlder( int sig ) {
+static void signal_handler( int sig ) {
 	(void) sig;
 	gotsignal = 1;
 }
@@ -264,7 +264,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void* ctx, const char* dbi,
 			problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
 				sizeof(long), header_bytes, stat.base.ms_psize - sizeof(long));
 		if (payload_bytes < 1) {
-			if (nentries > 0) {
+			if (nentries > 1) {
 				problem_add("page", pgno, "zero size-of-entry", "payload %i bytes, %i entries",
 							payload_bytes, nentries);
 				if ((size_t) header_bytes + unused_bytes < page_size) {
@@ -432,7 +432,6 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			fflush(NULL);
 		}
 		skipped_subdb++;
-		mdbx_dbi_close(env, dbi);
 		return MDB_SUCCESS;
 	}
 
@@ -444,14 +443,12 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	rc = mdbx_dbi_flags(txn, dbi, &flags);
 	if (rc) {
 		error(" - mdbx_dbi_flags failed, error %d %s\n", rc, mdbx_strerror(rc));
-		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
 	rc = mdbx_stat(txn, dbi, &ms, sizeof(ms));
 	if (rc) {
 		error(" - mdbx_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
-		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
@@ -475,7 +472,6 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 	rc = mdbx_cursor_open(txn, dbi, &mc);
 	if (rc) {
 		error(" - mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
-		mdbx_dbi_close(env, dbi);
 		return rc;
 	}
 
@@ -491,9 +487,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent)
 			goto bailout;
 		}
 
-		if (key.mv_size == 0) {
-			problem_add("entry", record_count, "key with zero length", NULL);
-		} else if (key.mv_size > maxkeysize) {
+		if (key.mv_size > maxkeysize) {
 			problem_add("entry", record_count, "key length exceeds max-key-size",
 						"%zu > %zu", key.mv_size, maxkeysize);
 		} else if ((flags & MDB_INTEGERKEY)
@@ -565,7 +559,6 @@ bailout:
 	}
 
 	mdbx_cursor_close(mc);
-	mdbx_dbi_close(env, dbi);
 	return rc || problems_count;
 }
 
@@ -660,13 +653,13 @@ int main(int argc, char *argv[])
 		usage(prog);
 
 #ifdef SIGPIPE
-	signal(SIGPIPE, signal_hanlder);
+	signal(SIGPIPE, signal_handler);
 #endif
 #ifdef SIGHUP
-	signal(SIGHUP, signal_hanlder);
+	signal(SIGHUP, signal_handler);
 #endif
-	signal(SIGINT, signal_hanlder);
-	signal(SIGTERM, signal_hanlder);
+	signal(SIGINT, signal_handler);
+	signal(SIGTERM, signal_handler);
 
 	envname = argv[optind];
 	print("Running mdbx_chk for '%s' in %s mode...\n",
@@ -686,7 +679,11 @@ int main(int argc, char *argv[])
 	}
 	maxkeysize = rc;
 
-	mdbx_env_set_maxdbs(env, 3);
+	rc = mdbx_env_set_maxdbs(env, MAX_DBI);
+	if (rc < 0) {
+		error("mdbx_env_set_maxdbs failed, error %d %s\n", rc, mdbx_strerror(rc));
+		goto bailout;
+	}
 
 	rc = mdbx_env_open_ex(env, envname, envflags, 0664, &exclusive);
 	if (rc) {
@@ -747,7 +744,7 @@ int main(int argc, char *argv[])
 			   meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
 					   info.me_meta2_txnid, info.me_meta2_sign) ? "tail" : "head");
 		if (info.me_meta1_txnid > info.base.me_last_txnid)
-			print(", rolled-back %zu (%zu >>> %zu)\n",
+			print(", rolled-back %zu (%zu >>> %zu)",
 				info.me_meta1_txnid - info.base.me_last_txnid,
 				info.me_meta1_txnid, info.base.me_last_txnid);
 		print("\n");
@@ -757,7 +754,7 @@ int main(int argc, char *argv[])
 			   meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
 					   info.me_meta1_txnid, info.me_meta1_sign) ? "tail" : "head");
 		if (info.me_meta2_txnid > info.base.me_last_txnid)
-			print(", rolled-back %zu (%zu >>> %zu)\n",
+			print(", rolled-back %zu (%zu >>> %zu)",
 				info.me_meta2_txnid - info.base.me_last_txnid,
 				info.me_meta2_txnid, info.base.me_last_txnid);
 		print("\n");

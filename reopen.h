@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,7 @@
 #endif /* __must_check_result */
 
 #ifndef __hot
-#	if defined(NDEBUG) && (defined(__GNUC__) && !defined(__clang__))
+#	if defined(__OPTIMIZE__) && (defined(__GNUC__) && !defined(__clang__))
 #		define __hot __attribute__((hot, optimize("O3")))
 #	elif defined(__GNUC__)
 		/* cland case, just put frequently used functions in separate section */
@@ -68,7 +68,7 @@
 #endif /* __hot */
 
 #ifndef __cold
-#	if defined(NDEBUG) && (defined(__GNUC__) && !defined(__clang__))
+#	if defined(__OPTIMIZE__) && (defined(__GNUC__) && !defined(__clang__))
 #		define __cold __attribute__((cold, optimize("Os")))
 #	elif defined(__GNUC__)
 		/* cland case, just put infrequently used functions in separate section */
@@ -79,7 +79,7 @@
 #endif /* __cold */
 
 #ifndef __flatten
-#	if defined(NDEBUG) && (defined(__GNUC__) || defined(__clang__))
+#	if defined(__OPTIMIZE__) && (defined(__GNUC__) || defined(__clang__))
 #		define __flatten __attribute__((flatten))
 #	else
 #		define __flatten

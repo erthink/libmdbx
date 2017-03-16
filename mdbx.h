@@ -1,6 +1,6 @@
 /*
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -211,6 +211,44 @@ typedef int MDBX_pgvisitor_func(size_t pgno, unsigned pgnumber, void* ctx,
 					const char* dbi, const char *type, int nentries,
 					int payload_bytes, int header_bytes, int unused_bytes);
 int mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func* visitor, void* ctx);
+
+typedef struct mdbx_canary {
+	size_t x, y, z, v;
+} mdbx_canary;
+
+int mdbx_canary_put(MDB_txn *txn, const mdbx_canary* canary);
+size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary* canary);
+
+/* Returns:
+ *	- MDBX_RESULT_TRUE	when no more data available
+ *				or cursor not positioned;
+ *	- MDBX_RESULT_FALSE	when data available;
+ *	- Otherwise the error code. */
+int mdbx_cursor_eof(MDB_cursor *mc);
+
+/* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
+int mdbx_cursor_on_first(MDB_cursor *mc);
+
+/* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
+int mdbx_cursor_on_last(MDB_cursor *mc);
+
+#define MDBX_EMULTIVAL (MDB_LAST_ERRCODE - 42)
+#define MDBX_RESULT_FALSE MDB_SUCCESS
+#define MDBX_RESULT_TRUE (-1)
+
+int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *new_data, MDB_val *old_data, unsigned flags);
+/* Same as mdbx_get(), but:
+ * 1) if values_count is not NULL, then returns the count
+ *    of multi-values/duplicates for a given key.
+ * 2) updates the key for pointing to the actual key's data inside DB. */
+int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data, int* values_count);
+
+int mdbx_is_dirty(const MDB_txn *txn, const void* ptr);
+
+int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
+	MDB_dbi *dbi, MDB_cmp_func *keycmp, MDB_cmp_func *datacmp);
+
 /**	@} */
 
 #ifdef __cplusplus

@@ -1,7 +1,7 @@
 /** @file lmdb.h
- *	@brief Reliable Lightning memory-mapped database library
+ *	@brief Extended Lightning memory-mapped database library
  *
- *	@mainpage	Reliable Lightning Memory-Mapped Database Manager (MDBX)
+ *	@mainpage	Extended Lightning Memory-Mapped Database (MDBX)
  *
  *	@section intro_sec Introduction
  *	MDBX is a Btree-based database management library modeled loosely on the
@@ -66,6 +66,11 @@
  *	  This does not use actual memory or disk space, but users may need
  *	  to understand the difference so they won't be scared off.
  *
+ *	- An LMDB configuration will often reserve considerable \b unused
+ *	  memory address space and maybe file size for future growth.
+ *	  This does not use actual memory or disk space, but users may need
+ *	  to understand the difference so they won't be scared off.
+ *
  *	- By default, in versions before 0.9.10, unused portions of the data
  *	  file might receive garbage data from memory freed by other code.
  *	  (This does not happen when using the #MDB_WRITEMAP flag.) As of
@@ -120,17 +125,17 @@
  *	@author	Leonid Yuriev, 'ReOpen' initiative <https://github.com/ReOpen>.
  *	Howard Chu, Symas Corp. All rights reserved.
  *
- *	@copyright 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- *	2011-2016 Howard Chu, Symas Corp. All rights reserved.
+ *	@copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ *	2011-2017 Howard Chu, Symas Corp. All rights reserved.
  *
  * ---
  *
- * Copyright (c) 2015,2016 Leonid Yuriev <leo@yuriev.ru>.
- * Copyright (c) 2015,2016 Peter-Service R&D LLC.
+ * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015,2016 Peter-Service R&D LLC.
  *	@par Derived From:
  * This code is derived from LMDB engine written by Howard Chu, Symas Corporation.
  *
- * Copyright 2011-2016 Howard Chu, Symas Corp. All rights reserved.
+ * Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP
@@ -204,7 +209,7 @@ typedef int mdb_filehandle_t;
 	MDB_VERINT(MDB_VERSION_MAJOR,MDB_VERSION_MINOR,MDB_VERSION_PATCH)
 
 /** The release date of this library version */
-#define MDB_VERSION_DATE	"2016-06-09"
+#define MDB_VERSION_DATE	"2017-02-17"
 
 /** A stringifier for the version info */
 #define MDB_VERSTR(a,b,c,d)	"MDBX " #a "." #b "." #c ": (" d ", https://github.com/ReOpen/libmdbx)"
@@ -349,7 +354,8 @@ typedef void (MDB_rel_func)(MDB_val *item, void *oldptr, void *newptr, void *rel
  * For mdb_cursor_del: remove all duplicate data items.
  */
 #define MDB_NODUPDATA	0x20
-/** For mdb_cursor_put: overwrite the current key/data pair */
+/** For mdb_cursor_put: overwrite the current key/data pair
+ *  MDBX allows this flag for mdb_put() for explicit overwrite/update without insertion. */
 #define MDB_CURRENT	0x40
 /** For put: Just reserve space for data, don't copy it. Return a
  * pointer to the reserved space.
@@ -1033,8 +1039,16 @@ size_t mdb_txn_id(MDB_txn *txn);
 	 *
 	 * The transaction handle is freed. It and its cursors must not be used
 	 * again after this call, except with #mdb_cursor_renew().
-	 * @note Earlier documentation incorrectly said all cursors would be freed.
+	 *
+	 * @note MDBX-mode:
+	 * A cursor must be closed explicitly always, before
+	 * or after its transaction ends. It can be reused with
+	 * #mdb_cursor_renew() before finally closing it.
+	 *
+	 * @note LMDB-compatible mode:
+	 * Earlier documentation incorrectly said all cursors would be freed.
 	 * Only write-transactions free cursors.
+	 *
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 * @return A non-zero error value on failure and 0 on success. Some possible
 	 * errors are:
@@ -1051,8 +1065,16 @@ int  mdb_txn_commit(MDB_txn *txn);
 	 *
 	 * The transaction handle is freed. It and its cursors must not be used
 	 * again after this call, except with #mdb_cursor_renew().
-	 * @note Earlier documentation incorrectly said all cursors would be freed.
+	 *
+	 * @note MDBX-mode:
+	 * A cursor must be closed explicitly always, before
+	 * or after its transaction ends. It can be reused with
+	 * #mdb_cursor_renew() before finally closing it.
+	 *
+	 * @note LMDB-compatible mode:
+	 * Earlier documentation incorrectly said all cursors would be freed.
 	 * Only write-transactions free cursors.
+	 *
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 */
 int mdb_txn_abort(MDB_txn *txn);
@@ -1144,8 +1166,9 @@ int  mdb_txn_renew(MDB_txn *txn);
 	 *		This flag may only be used in combination with #MDB_DUPSORT. This option
 	 *		tells the library that the data items for this database are all the same
 	 *		size, which allows further optimizations in storage and retrieval. When
-	 *		all data items are the same size, the #MDB_GET_MULTIPLE and #MDB_NEXT_MULTIPLE
-	 *		cursor operations may be used to retrieve multiple items at once.
+	 *		all data items are the same size, the #MDB_GET_MULTIPLE, #MDB_NEXT_MULTIPLE
+	 *		and #MDB_PREV_MULTIPLE cursor operations may be used to retrieve multiple
+	 *		items at once.
 	 *	<li>#MDB_INTEGERDUP
 	 *		This option specifies that duplicate data items are binary integers,
 	 *		similar to #MDB_INTEGERKEY keys.
@@ -1380,12 +1403,20 @@ int  mdb_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 	/** @brief Delete items from a database.
 	 *
 	 * This function removes key/data pairs from the database.
+	 *
+	 * MDBX-mode:
+	 * The data parameter is NOT ignored regardless the database does
+	 * support sorted duplicate data items or not. If the data parameter
+	 * is non-NULL only the matching data item will be deleted.
+	 *
+	 * LMDB-compatible mode:
 	 * If the database does not support sorted duplicate data items
 	 * (#MDB_DUPSORT) the data parameter is ignored.
 	 * If the database supports sorted duplicates and the data parameter
 	 * is NULL, all of the duplicate data items for the key will be
 	 * deleted. Otherwise, if the data parameter is non-NULL
 	 * only the matching data item will be deleted.
+	 *
 	 * This function will return #MDB_NOTFOUND if the specified key/data
 	 * pair is not in the database.
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
@@ -1407,6 +1438,13 @@ int  mdb_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 	 * A cursor cannot be used when its database handle is closed.  Nor
 	 * when its transaction has ended, except with #mdb_cursor_renew().
 	 * It can be discarded with #mdb_cursor_close().
+	 *
+	 * MDBX-mode:
+	 * A cursor must be closed explicitly always, before
+	 * or after its transaction ends. It can be reused with
+	 * #mdb_cursor_renew() before finally closing it.
+	 *
+	 * LMDB-compatible mode:
 	 * A cursor in a write-transaction can be closed before its transaction
 	 * ends, and will otherwise be closed when its transaction ends.
 	 * A cursor in a read-only transaction must be closed explicitly, before
@@ -1414,6 +1452,7 @@ int  mdb_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data);
 	 * #mdb_cursor_renew() before finally closing it.
 	 * @note Earlier documentation said that cursors in every transaction
 	 * were closed when the transaction committed or aborted.
+	 *
 	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
 	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
 	 * @param[out] cursor Address where the new #MDB_cursor handle will be stored
