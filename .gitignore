@@ -20,6 +20,7 @@ mdbx_chk
 core
 core.*
 valgrind.*
-man/
-html/
 yota_test*
+mdbx-dll.VC.db
+mdbx-dll.VC.VC.opendb
+mdbx-dll.vcxproj.filters
