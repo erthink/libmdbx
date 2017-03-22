@@ -1,4 +1,6 @@
 AUTHORS
+LICENSE
+Makefile
 README.md
 mdbx.h
 src/bits.h
@@ -25,6 +27,7 @@ test/test3.c
 test/test4.c
 test/test5.c
 test/test6.c
+test/test7.c
 test/test_bench.c
 test/test_yota1.c
 test/test_yota2.c

@@ -41,8 +41,8 @@ HEADERS		:= mdbx.h
 LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
-TESTS		:= test0 test1 test2 test3 test4 test5 test6 test_bench \
-		   test_yota1 test_yota2
+TESTS		:= test0 test1 test2 test3 test4 test5 test6 test7 \
+		   test_bench test_yota1 test_yota2
 
 MDBX_SRC	:= mdbx.h $(addprefix src/, mdbx.c osal.c lck-posix.c defs.h bits.h osal.h midl.h)
 
