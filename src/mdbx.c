@@ -7617,14 +7617,16 @@ static int mdbx_cursor_del0(MDB_cursor *mc) {
           if (mc->mc_db->md_flags & MDB_DUPSORT) {
             MDB_node *node =
                 NODEPTR(m3->mc_pg[m3->mc_top], m3->mc_ki[m3->mc_top]);
-            /* If this node is a fake page, it needs to be reinited
-             * because its data has moved. But just reset mc_pg[0]
-             * if the xcursor is already live.
+            /* If this node has dupdata, it may need to be reinited
+             * because its data has moved.
+             * If the xcursor was not initd it must be reinited.
+             * Else if node points to a subDB, nothing is needed.
              */
-            if ((node->mn_flags & (F_DUPDATA | F_SUBDATA)) == F_DUPDATA) {
-              if (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)
-                m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-              else
+            if (node->mn_flags & F_DUPDATA) {
+              if (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+                if (!(node->mn_flags & F_SUBDATA))
+                  m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
+              } else
                 mdbx_xcursor_init1(m3, node);
             }
           }
