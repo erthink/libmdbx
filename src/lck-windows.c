@@ -104,12 +104,38 @@ static BOOL flock(mdbx_filehandle_t fd, DWORD flags, off_t offset,
   ov.hEvent = 0;
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
+
+#ifdef MDBX_WINDOWS_UnlockFile_CRUTCH
+  if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov))
+    return true;
+
+  if ((flags & LOCKFILE_FAIL_IMMEDIATELY) == 0)
+    return false;
+
+  int rc = GetLastError();
+  if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION)
+    return false;
+
+  /* FIXME: Windows kernel is ugly and mad... */
+  SwitchToThread();
+  Sleep(42);
+  SwitchToThread();
+#endif /* MDBX_WINDOWS_UnlockFile_CRUTCH */
   return LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov);
 }
 
 static BOOL funlock(mdbx_filehandle_t fd, off_t offset, size_t bytes) {
-  return UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
-                    HIGH_DWORD(bytes));
+  if (!UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
+                  HIGH_DWORD(bytes)))
+    return false;
+
+#ifdef MDBX_WINDOWS_UnlockFile_CRUTCH
+  /* FIXME: Windows kernel is ugly and mad... */
+  SwitchToThread();
+  Sleep(42);
+  SwitchToThread();
+#endif /* MDBX_WINDOWS_UnlockFile_CRUTCH */
+  return true;
 }
 
 /*----------------------------------------------------------------------------*/
