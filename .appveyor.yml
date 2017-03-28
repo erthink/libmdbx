@@ -1,0 +1,18 @@
+version: '{build}'
+max_jobs: 1
+
+platform:
+ - x86
+ - x64
+
+configuration:
+  - Release
+  - Debug
+
+build:
+  verbosity: minimal
+  project: mdbx.sln
+
+# test_script:
+# - ps: |
+#     & "C:\projects\mdbx\$env:PLATFORM\$env:CONFIGURATION\test\test.exe"

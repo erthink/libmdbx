@@ -4,6 +4,7 @@ Extended LMDB, aka "Расширенная LMDB".
 
 *The Future will Positive. Всё будет хорошо.*
 [![Build Status](https://travis-ci.org/ReOpen/libmdbx.svg?branch=devel)](https://travis-ci.org/ReOpen/libmdbx)
+[![Build status](https://ci.appveyor.com/api/projects/status/v21jlh5kfmk85r7t/branch/devel?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/devel)
 
 English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/ReOpen/libmdbx/tree/devel).
 
