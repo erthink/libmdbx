@@ -4250,12 +4250,16 @@ static int __hot mdbx_cmp_int_ai(const MDB_val *a, const MDB_val *b) {
   mdbx_assert(NULL, a->mv_size == b->mv_size);
   mdbx_assert(NULL, 0 == (uintptr_t)a->mv_data % sizeof(int) &&
                         0 == (uintptr_t)b->mv_data % sizeof(int));
-
-  if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
-    return mdbx_cmp2int(*(size_t *)a->mv_data, *(size_t *)b->mv_data);
-
-  mdbx_assert(NULL, a->mv_size == sizeof(int));
-  return mdbx_cmp2int(*(unsigned *)a->mv_data, *(unsigned *)b->mv_data);
+  switch (a->mv_size) {
+  case 4:
+    return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
+  case 8:
+    return mdbx_cmp2int(*(uint64_t *)a->mv_data, *(uint64_t *)b->mv_data);
+  default:
+    mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", mdbx_func_,
+                     __LINE__);
+    return 0;
+  }
 }
 
 /** Compare two items pointing at 2-byte aligned unsigned int's. */
@@ -4264,11 +4268,16 @@ static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
   mdbx_assert(NULL, 0 == (uintptr_t)a->mv_data % sizeof(uint16_t) &&
                         0 == (uintptr_t)b->mv_data % sizeof(uint16_t));
 #if MISALIGNED_OK
-  if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
-    return mdbx_cmp2int(*(size_t *)a->mv_data, *(size_t *)b->mv_data);
-
-  mdbx_assert(NULL, a->mv_size == sizeof(int));
-  return mdbx_cmp2int(*(unsigned *)a->mv_data, *(unsigned *)b->mv_data);
+  switch (a->mv_size) {
+  case 4:
+    return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
+  case 8:
+    return mdbx_cmp2int(*(uint64_t *)a->mv_data, *(uint64_t *)b->mv_data);
+  default:
+    mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", mdbx_func_,
+                     __LINE__);
+    return 0;
+  }
 #else
   mdbx_assert(NULL, 0 == a->mv_size % sizeof(uint16_t));
   {
@@ -4303,11 +4312,16 @@ static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
 static int __hot mdbx_cmp_int_ua(const MDB_val *a, const MDB_val *b) {
   mdbx_assert(NULL, a->mv_size == b->mv_size);
 #if MISALIGNED_OK
-  if (sizeof(int) != sizeof(size_t) && likely(a->mv_size == sizeof(size_t)))
-    return mdbx_cmp2int(*(size_t *)a->mv_data, *(size_t *)b->mv_data);
-
-  mdbx_assert(NULL, a->mv_size == sizeof(int));
-  return mdbx_cmp2int(*(unsigned *)a->mv_data, *(unsigned *)b->mv_data);
+  switch (a->mv_size) {
+  case 4:
+    return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
+  case 8:
+    return mdbx_cmp2int(*(uint64_t *)a->mv_data, *(uint64_t *)b->mv_data);
+  default:
+    mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", mdbx_func_,
+                     __LINE__);
+    return 0;
+  }
 #else
   mdbx_assert(NULL, a->mv_size == sizeof(int) || a->mv_size == sizeof(size_t));
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
@@ -5115,8 +5129,8 @@ static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   DKBUF;
 
   if ((mc->mc_db->md_flags & MDB_INTEGERKEY) &&
-      unlikely(key->mv_size != sizeof(unsigned) &&
-               key->mv_size != sizeof(size_t))) {
+      unlikely(key->mv_size != sizeof(uint32_t) &&
+               key->mv_size != sizeof(uint64_t))) {
     mdbx_cassert(mc, !"key-size is invalid for MDB_INTEGERKEY");
     return MDB_BAD_VALSIZE;
   }
@@ -5639,15 +5653,15 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 #endif
 
   if ((mc->mc_db->md_flags & MDB_INTEGERKEY) &&
-      unlikely(key->mv_size != sizeof(unsigned) &&
-               key->mv_size != sizeof(size_t))) {
+      unlikely(key->mv_size != sizeof(uint32_t) &&
+               key->mv_size != sizeof(uint64_t))) {
     mdbx_cassert(mc, !"key-size is invalid for MDB_INTEGERKEY");
     return MDB_BAD_VALSIZE;
   }
 
   if ((mc->mc_db->md_flags & MDB_INTEGERDUP) &&
-      unlikely(data->mv_size != sizeof(unsigned) &&
-               data->mv_size != sizeof(size_t))) {
+      unlikely(data->mv_size != sizeof(uint32_t) &&
+               data->mv_size != sizeof(uint64_t))) {
     mdbx_cassert(mc, !"data-size is invalid MDB_INTEGERDUP");
     return MDB_BAD_VALSIZE;
   }
