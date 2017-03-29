@@ -43,7 +43,7 @@ MANPAGES	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
 TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
 		   yota_test1 yota_test2
 
-SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h reopen.h barriers.h
+SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h defs.h barriers.h
 SRC_MDBX	:= $(SRC_LMDB) mdbx.c mdbx.h
 
 .PHONY: mdbx lmdb all install clean check tests coverage

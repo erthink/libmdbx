@@ -47,12 +47,15 @@
 /* LY: Please do not ask us for Windows support, just never!
  * But you can make a fork for Windows, or become maintainer for FreeBSD... */
 #ifndef __gnu_linux__
-#	warning "ReOpenMDBX supports only GNU Linux"
+#	warning "This version of ReOpenMDBX supports only GNU Linux"
 #endif
 
-#include <features.h>
+#include <stddef.h>
+#include <limits.h>
+#include "./lmdb.h"
+#include "./defs.h"
 
-#if !defined(__GNUC__) || !__GNUC_PREREQ(4,2)
+#if !__GNUC_PREREQ(4,2)
 	/* LY: Actualy ReOpenMDBX was not tested with compilers
 	 *     older than GCC 4.4 (from RHEL6).
 	 * But you could remove this #error and try to continue at your own risk.
@@ -61,7 +64,7 @@
 #	warning "ReOpenMDBX required at least GCC 4.2 compatible C/C++ compiler."
 #endif
 
-#if !defined(__GNU_LIBRARY__) || !__GLIBC_PREREQ(2,12)
+#if !__GLIBC_PREREQ(2,12)
 	/* LY: Actualy ReOpenMDBX was not tested with something
 	 *     older than glibc 2.12 (from RHEL6).
 	 * But you could remove this #error and try to continue at your own risk.
@@ -74,7 +77,6 @@
 #	undef NDEBUG
 #endif
 
-#include "./reopen.h"
 #include "./barriers.h"
 
 #include <sys/types.h>
@@ -88,8 +90,6 @@
 #include <fcntl.h>
 
 #include <errno.h>
-#include <limits.h>
-#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,13 +98,38 @@
 #include <malloc.h>
 #include <pthread.h>
 
-#if !(defined(BYTE_ORDER) || defined(__BYTE_ORDER))
-#	include <netinet/in.h>
-#	include <resolv.h>	/* defines BYTE_ORDER on HPUX and Solaris */
-#endif
+/* -------------------------------------------------------------------------- */
+
+#ifdef __GLIBC__
+#	include <assert.h>
+#elif defined(NDEBUG)
+#	define assert(expr) ((void)0)
+#else
+#	define assert(expr)							\
+	do {									\
+		if (unlikely(!(expr)))						\
+			__assert_fail(#expr, __FILE__, __LINE__, mdbx_func_);	\
+	} while(0)
+#endif /* __GLIBC__ */
+
+/* Prototype should match libc runtime. ISO POSIX (2003) & LSB 3.1 */
+__extern_C void __assert_fail(
+		const char* assertion,
+		const char* file,
+		unsigned line,
+		const char* function) __nothrow __noreturn;
+
+/* -------------------------------------------------------------------------- */
 
 #ifndef _POSIX_SYNCHRONIZED_IO
 #	define fdatasync fsync
+#endif
+
+/* -------------------------------------------------------------------------- */
+
+#if !(defined(BYTE_ORDER) || defined(__BYTE_ORDER))
+#	include <netinet/in.h>
+#	include <resolv.h>	/* defines BYTE_ORDER on HPUX and Solaris */
 #endif
 
 #ifndef BYTE_ORDER
@@ -133,7 +158,16 @@
 #	define MISALIGNED_OK	1
 #endif
 
-#include "./lmdb.h"
+#ifndef CACHELINE_SIZE
+#	if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
+#		define CACHELINE_SIZE 128
+#	else
+#		define CACHELINE_SIZE 64
+#	endif
+#endif
+
+/* -------------------------------------------------------------------------- */
+
 #include "./midl.h"
 
 #if ! MDBX_MODE_ENABLED
@@ -190,9 +224,9 @@
  */
 #ifndef MDB_USE_ROBUST
 	/* Howard Chu: Android currently lacks Robust Mutex support */
-#	if defined(EOWNERDEAD) && !defined(ANDROID) \
+#	if defined(EOWNERDEAD) \
 	/* LY: glibc before 2.10 has a troubles with Robust Mutex too. */ \
-	&& __GLIBC_PREREQ(2,10)
+	&& ((__GLIBC_PREREQ(2,10) && !defined(ANDROID)) || defined(PTHREAD_MUTEX_ROBUST))
 #		define MDB_USE_ROBUST	1
 #	else
 #		define MDB_USE_ROBUST	0
@@ -10698,6 +10732,8 @@ mdb_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc)
 			pthread_mutex_unlock(mutex);
 		}
 	}
+#else
+	(void) mutex;
 #endif /* MDB_USE_ROBUST */
 	if (unlikely(rc)) {
 		mdb_debug("lock mutex failed, %s", mdb_strerror(rc));
