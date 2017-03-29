@@ -421,7 +421,7 @@ typedef enum MDB_cursor_op {
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
   unsigned ms_psize;        /* Size of a database page.
-                                                            This is currently the
+                               This is currently the
                                same for all databases. */
   unsigned ms_depth;        /* Depth (height) of the B-tree */
   size_t ms_branch_pages;   /* Number of internal (non-leaf) pages */
@@ -1184,8 +1184,8 @@ LIBMDBX_API int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
  * errors are:
  *	 - EINVAL - an invalid parameter was specified.
  */
-LIBMDBX_API int mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *stat,
-                          size_t bytes);
+LIBMDBX_API int mdbx_dbi_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *stat,
+                              size_t bytes);
 
 /* Retrieve the DB flags for a database handle.
  *

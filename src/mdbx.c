@@ -8700,7 +8700,7 @@ int __cold mdbx_env_get_fd(MDB_env *env, mdbx_filehandle_t *arg) {
   return MDB_SUCCESS;
 }
 
-/** Common code for #mdbx_stat() and #mdbx_env_stat().
+/** Common code for #mdbx_dbi_stat() and #mdbx_env_stat().
  * @param[in] env the environment to operate in.
  * @param[in] db the #MDB_db record containing the stats to return.
  * @param[out] arg the address of an #MDB_stat structure to receive the stats.
@@ -8925,7 +8925,8 @@ int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
   return rc;
 }
 
-int __cold mdbx_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg, size_t bytes) {
+int __cold mdbx_dbi_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg,
+                         size_t bytes) {
   if (unlikely(!arg || !txn))
     return EINVAL;
 

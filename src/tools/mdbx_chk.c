@@ -442,9 +442,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
     return rc;
   }
 
-  rc = mdbx_stat(txn, dbi, &ms, sizeof(ms));
+  rc = mdbx_dbi_stat(txn, dbi, &ms, sizeof(ms));
   if (rc) {
-    error(" - mdbx_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error(" - mdbx_dbi_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc;
   }
 

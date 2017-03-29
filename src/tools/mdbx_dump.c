@@ -96,7 +96,7 @@ static int dumpit(MDB_txn *txn, MDB_dbi dbi, char *name) {
   if (rc)
     return rc;
 
-  rc = mdbx_stat(txn, dbi, &ms, sizeof(ms));
+  rc = mdbx_dbi_stat(txn, dbi, &ms, sizeof(ms));
   if (rc)
     return rc;
 

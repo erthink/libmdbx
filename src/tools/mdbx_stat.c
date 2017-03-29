@@ -170,9 +170,10 @@ int main(int argc, char *argv[]) {
               mdbx_strerror(rc));
       goto txn_abort;
     }
-    rc = mdbx_stat(txn, dbi, &mst, sizeof(mst));
+    rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
     if (rc) {
-      fprintf(stderr, "mdbx_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
+      fprintf(stderr, "mdbx_dbi_stat failed, error %d %s\n", rc,
+              mdbx_strerror(rc));
       goto txn_abort;
     }
     prstat(&mst);
@@ -248,9 +249,10 @@ int main(int argc, char *argv[]) {
     goto txn_abort;
   }
 
-  rc = mdbx_stat(txn, dbi, &mst, sizeof(mst));
+  rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
   if (rc) {
-    fprintf(stderr, "mdbx_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
+    fprintf(stderr, "mdbx_dbi_stat failed, error %d %s\n", rc,
+            mdbx_strerror(rc));
     goto txn_abort;
   }
   printf("Status of %s\n", subname ? subname : "Main DB");
@@ -280,9 +282,9 @@ int main(int argc, char *argv[]) {
       free(str);
       if (rc)
         continue;
-      rc = mdbx_stat(txn, db2, &mst, sizeof(mst));
+      rc = mdbx_dbi_stat(txn, db2, &mst, sizeof(mst));
       if (rc) {
-        fprintf(stderr, "mdbx_stat failed, error %d %s\n", rc,
+        fprintf(stderr, "mdbx_dbi_stat failed, error %d %s\n", rc,
                 mdbx_strerror(rc));
         goto txn_abort;
       }

@@ -78,7 +78,7 @@ int main(int argc, char *argv[]) {
     E(mdbx_drop(txn, dbi, 1));
   E(mdbx_dbi_open(txn, "id6", MDB_CREATE | MDB_INTEGERKEY, &dbi));
   E(mdbx_cursor_open(txn, dbi, &cursor));
-  E(mdbx_stat(txn, dbi, &mst, sizeof(mst)));
+  E(mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst)));
 
   sval = calloc(1, mst.ms_psize / 4);
   key.mv_size = sizeof(long);

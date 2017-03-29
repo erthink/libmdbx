@@ -230,7 +230,7 @@ static void get_db_stat(const char *db, int64_t *ms_branch_pages,
 
   LMDB_CHECK(mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn));
   LMDB_CHECK(mdbx_dbi_open(txn, db, MDB_CREATE, &dbi));
-  LMDB_CHECK(mdbx_stat(txn, dbi, &stat, sizeof(stat)));
+  LMDB_CHECK(mdbx_dbi_stat(txn, dbi, &stat, sizeof(stat)));
   mdbx_txn_abort(txn);
   printf("%15s | %15ld | %5u | %10ld | %10ld | %11ld |\n", db,
          stat.ms_branch_pages, stat.ms_depth, stat.ms_entries,
