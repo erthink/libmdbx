@@ -90,7 +90,7 @@
 
 #if defined(LIBMDBX_EXPORTS)
 #	define LIBMDBX_API __dll_export
-#elif defined(MDBX_IMPORTS)
+#elif defined(LIBMDBX_IMPORTS)
 #	define LIBMDBX_API __dll_import
 #else
 #	define LIBMDBX_API

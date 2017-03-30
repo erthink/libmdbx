@@ -538,7 +538,7 @@ static __inline MDB_node *NODEPTR(MDB_page *p, unsigned i) {
 #define NODEKSZ(node) ((node)->mn_ksize)
 
 /** Copy a page number from src to dst */
-#if MISALIGNED_OK
+#if UNALIGNED_OK
 #define COPY_PGNO(dst, src) dst = src
 #elif SIZE_MAX > 4294967295UL
 #define COPY_PGNO(dst, src)                                                    \
@@ -560,7 +560,7 @@ static __inline MDB_node *NODEPTR(MDB_page *p, unsigned i) {
     *d++ = *s++;                                                               \
     *d = *s;                                                                   \
   } while (0)
-#endif /* MISALIGNED_OK */
+#endif /* UNALIGNED_OK */
 
 /** The address of a key in a LEAF2 page.
          *	LEAF2 pages are used for #MDB_DUPFIXED sorted-duplicate
@@ -754,16 +754,31 @@ static const char *__mdbx_strerr(int errnum) {
   }
 }
 
-const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
+const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-#if defined(_WIN32) || defined(_WIN64)
-    (void)errnum;
-    (void)buf;
-    (void)buflen;
-    msg = FIXME;
-#else
+    if (!buflen)
+      return NULL;
+#ifdef _MSC_VER
+    int rc = strerror_s(buf, buflen, errnum);
+    assert(rc == 0);
+    (void)rc;
+    return buf;
+#elif defined(_GNU_SOURCE)
+    /* GNU-specific */
     msg = strerror_r(errnum, buf, buflen);
+#elif (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
+    /* XSI-compliant */
+    int rc = strerror_r(errnum, buf, buflen);
+    if (rc) {
+      rc = snprintf(buf, buflen, "error %d", errnum);
+      assert(rc > 0);
+    }
+    return buf;
+#else
+    strncpy(buf, strerror(errnum), buflen);
+    buf[buflen - 1] = '\0';
+    return buf;
 #endif
   }
   return msg;
@@ -772,9 +787,12 @@ const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
 const char *__cold mdbx_strerror(int errnum) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-#if defined(_WIN32) || defined(_WIN64)
-    (void)errnum;
-    msg = FIXME;
+#ifdef _MSC_VER
+    static __thread char buffer[1024];
+    int rc = strerror_s(buffer, sizeof(buffer), errnum);
+    assert(rc == 0);
+    (void)rc;
+    msg = buffer;
 #else
     msg = strerror(errnum);
 #endif
@@ -3776,7 +3794,7 @@ int __cold mdbx_env_set_maxreaders(MDB_env *env, unsigned readers) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(env->me_map))
+  if (unlikely(env->me_map || readers > INT16_MAX))
     return EINVAL;
 
   env->me_maxreaders = readers;
@@ -4247,7 +4265,7 @@ static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
   mdbx_assert(NULL, a->mv_size == b->mv_size);
   mdbx_assert(NULL, 0 == (uintptr_t)a->mv_data % sizeof(uint16_t) &&
                         0 == (uintptr_t)b->mv_data % sizeof(uint16_t));
-#if MISALIGNED_OK
+#if UNALIGNED_OK
   switch (a->mv_size) {
   case 4:
     return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
@@ -4282,7 +4300,7 @@ static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
     } while (pa != end);
     return diff;
   }
-#endif /* MISALIGNED_OK */
+#endif /* UNALIGNED_OK */
 }
 
 /** Compare two items pointing at unsigneds of unknown alignment.
@@ -4291,7 +4309,7 @@ static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
  */
 static int __hot mdbx_cmp_int_ua(const MDB_val *a, const MDB_val *b) {
   mdbx_assert(NULL, a->mv_size == b->mv_size);
-#if MISALIGNED_OK
+#if UNALIGNED_OK
   switch (a->mv_size) {
   case 4:
     return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
@@ -4322,7 +4340,7 @@ static int __hot mdbx_cmp_int_ua(const MDB_val *a, const MDB_val *b) {
 #else  /* __BYTE_ORDER__ */
   return memcmp(a->mv_data, b->mv_data, a->mv_size);
 #endif /* __BYTE_ORDER__ */
-#endif /* MISALIGNED_OK */
+#endif /* UNALIGNED_OK */
 }
 
 /** Compare two items lexically */

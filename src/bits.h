@@ -96,11 +96,11 @@
 #endif
 
 #if defined(__i386) || defined(__x86_64) || defined(_M_IX86)
-#	define MISALIGNED_OK 1 /* TODO */
+#	define UNALIGNED_OK 1 /* TODO */
 #endif
-#ifndef MISALIGNED_OK
-#	define MISALIGNED_OK 0
-#endif /* MISALIGNED_OK */
+#ifndef UNALIGNED_OK
+#	define UNALIGNED_OK 0
+#endif /* UNALIGNED_OK */
 
 #if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
 #	error "Sanity checking failed: Two's complement, reasonably sized integer types"

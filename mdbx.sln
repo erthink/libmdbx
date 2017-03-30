@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 14
 VisualStudioVersion = 14.0.25420.1
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mdbx-dll", "mdbx-dll.vcxproj", "{6D19209B-ECE7-4B9C-941C-0AA2B484F199}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "test", "test\test.vcxproj", "{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "dll", "dll.vcxproj", "{6D19209B-ECE7-4B9C-941C-0AA2B484F199}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,14 @@ Global
 		{6D19209B-ECE7-4B9C-941C-0AA2B484F199}.Release|x64.Build.0 = Release|x64
 		{6D19209B-ECE7-4B9C-941C-0AA2B484F199}.Release|x86.ActiveCfg = Release|Win32
 		{6D19209B-ECE7-4B9C-941C-0AA2B484F199}.Release|x86.Build.0 = Release|Win32
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Debug|x64.ActiveCfg = Debug|x64
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Debug|x64.Build.0 = Debug|x64
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Debug|x86.ActiveCfg = Debug|Win32
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Debug|x86.Build.0 = Debug|Win32
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Release|x64.ActiveCfg = Release|x64
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Release|x64.Build.0 = Release|x64
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Release|x86.ActiveCfg = Release|Win32
+		{30E29CE6-E6FC-4D32-AA07-46A55FAF3A31}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

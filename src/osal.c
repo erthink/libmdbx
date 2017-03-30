@@ -17,7 +17,7 @@
 #include "./bits.h"
 
 #if defined(_WIN32) || defined(_WIN64)
-static int waitfor2errcode(DWORD result) {
+static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
     return MDB_SUCCESS;
@@ -183,7 +183,7 @@ int mdbx_mutex_destroy(mdbx_mutex_t *mutex) {
 int mdbx_mutex_lock(mdbx_mutex_t *mutex) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = WaitForSingleObject(*mutex, INFINITE);
-  return waitfor2errcode(code);
+  return waitstatus2errcode(code);
 #else
   return pthread_mutex_lock(mutex);
 #endif
@@ -231,7 +231,7 @@ int mdbx_cond_wait(mdbx_cond_t *cond, mdbx_mutex_t *mutex) {
   DWORD code = SignalObjectAndWait(*mutex, *cond, INFINITE, FALSE);
   if (code == WAIT_OBJECT_0)
     code = WaitForSingleObject(*mutex, INFINITE);
-  return waitfor2errcode(code);
+  return waitstatus2errcode(code);
 #else
   return pthread_cond_wait(cond, mutex);
 #endif
@@ -555,7 +555,7 @@ int mdbx_thread_create(mdbx_thread_t *thread,
 int mdbx_thread_join(mdbx_thread_t thread) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = WaitForSingleObject(thread, INFINITE);
-  return waitfor2errcode(code);
+  return waitstatus2errcode(code);
 #else
   void *unused_retval = &unused_retval;
   return pthread_join(thread, &unused_retval);

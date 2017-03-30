@@ -23,10 +23,13 @@ mandir	?= $(prefix)/man
 suffix	?=
 
 CC	?= gcc
+CXX	?= g++
 XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0 -DMDBX_EXPORTS=1
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu99 -pthread $(XCFLAGS)
-COVER	?= -coverage -fprofile-arcs -ftest-coverage -O0
+# COVER	?= -coverage -fprofile-arcs -ftest-coverage -Og
+
+CXXFLAGS = -std=c++11 $(filter-out -std=gnu99,$(CFLAGS))
 
 # LY: for ability to built with modern glibc,
 #     but then run with the old
@@ -41,14 +44,12 @@ HEADERS		:= mdbx.h
 LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
-TESTS		:= test0 test1 test2 test3 test4 test5 test6 test7 \
-		   test_bench test_yota1 test_yota2
 
 MDBX_SRC	:= mdbx.h $(addprefix src/, mdbx.c osal.c lck-posix.c defs.h bits.h osal.h midl.h)
 
-.PHONY: mdbx all install clean check tests coverage
+.PHONY: mdbx all install clean check coverage
 
-all: $(LIBRARIES) $(TOOLS)
+all: $(LIBRARIES) $(TOOLS) test/test
 
 mdbx: libmdbx.a libmdbx.so
 
@@ -65,20 +66,10 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
+	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
 
-tests:	$(TESTS)
-
-check:	tests
-	[ -d tmp.db ] || mkdir tmp.db && rm -f tmp.db/* \
-		&& echo "*** LMDB-TEST-0" && ./test0 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TEST-1" && ./test1 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TEST-2" && ./test2 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TEST-3" && ./test3 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TEST-4" && ./test4 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TEST-5" && ./test5 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TEST-6" && ./test6 && ./mdbx_chk -v tmp.db \
-		&& echo "*** LMDB-TESTs - all done"
+check:	test/test
+	test/test --pathname=tmp.db --basic --dont-cleanup-after && ./mdbx_chk -vn tmp.db
 
 mdbx.o: $(MDBX_SRC) Makefile
 	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
@@ -98,19 +89,8 @@ libmdbx.so:	mdbx.o osal.o lck-posix.o
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
 
-test%: test/test%.c libmdbx.a
-	$(CC) $(CFLAGS) $(LDFLAGS) -Isrc -o $@ $^
-
-gcov-mdbx.o: $(MDBX_SRC) Makefile
-	$(CC) $(CFLAGS) $(COVER) -c src/mdbx.c -o $@
-
-# Seem this useless :(
-coverage: gcov-mdbx.o
-	for t in test/test[0-9]*.c; do x=`basename \$$t .c`; \
-		$(CC) $(CFLAGS) $(COVER) -Isrc $$t -o gcov-$$x $^; \
-		rm -rf tmp.db; mkdir tmp.db; ./gcov-$$x; \
-	done
-	gcov *.gcno
+test/test: $(wildcard test/*.h) $(filter-out test/osal-windows.cc, $(wildcard test/*.cc)) libmdbx.a
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -Isrc -o $@ $(filter-out %.h, $^)
 
 ifneq ($(wildcard $(IOARENA)),)
 

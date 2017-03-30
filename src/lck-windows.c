@@ -287,12 +287,14 @@ void mdbx_lck_destroy(MDB_env *env) {
     /* double `unlock` for robustly remove overlapped shared/exclusive locks */
     while (funlock(env->me_lfd, LCK_LOWER))
       ;
+    rc = GetLastError();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_lfd, LCK_UPPER))
       ;
+    rc = GetLastError();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);

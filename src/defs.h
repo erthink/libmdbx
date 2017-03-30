@@ -283,6 +283,13 @@
 #	endif
 #endif /* unlikely */
 
+#if !defined(__noop) && !defined(_MSC_VER)
+	static __inline int __do_noop(void* crutch, ...) {
+		(void) crutch; return 0;
+	}
+#	define __noop(...) __do_noop(0, __VA_ARGS__)
+#endif /* __noop */
+
 /*----------------------------------------------------------------------------*/
 
 /* Wrapper around __func__, which is a C99 feature */

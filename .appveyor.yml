@@ -1,4 +1,3 @@
-version: '{build}'
 max_jobs: 1
 
 image: Visual Studio 2015
@@ -23,6 +22,6 @@ build:
   verbosity: minimal
   project: mdbx.sln
 
-# test_script:
-# - ps: |
-#     & "C:\projects\mdbx\$env:PLATFORM\$env:CONFIGURATION\test\test.exe"
+test_script:
+- ps: |
+    & "C:\projects\mdbx\$env:PLATFORM\$env:CONFIGURATION\test\test.exe" --pathname=tmp.db --basic --dont-cleanup-after

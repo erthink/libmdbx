@@ -172,11 +172,12 @@ typedef pthread_key_t mdbx_thread_key_t;
     defined(__MIPSEL__) || defined(_MIPSEL) || defined(__MIPSEL) ||            \
     defined(__i386) || defined(__x86_64__) || defined(_M_IX86) ||              \
     defined(_M_X64) || defined(i386) || defined(_X86_) || defined(__i386__) || \
-    defined(_X86_64_) || defined(_M_ARM) || defined(__e2k__)
+    defined(_X86_64_) || defined(_M_ARM) || defined(_M_ARM64) ||               \
+    defined(__e2k__)
 #define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__
 #elif defined(__BIG_ENDIAN__) || defined(_BIG_ENDIAN) || defined(__ARMEB__) || \
     defined(__THUMBEB__) || defined(__AARCH64EB__) || defined(__MIPSEB__) ||   \
-    defined(_MIPSEB) || defined(__MIPSEB)
+    defined(_MIPSEB) || defined(__MIPSEB) || defined(_M_IA64)
 #define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__
 #else
 #error __BYTE_ORDER__ should be defined.
