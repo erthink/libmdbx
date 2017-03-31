@@ -693,7 +693,7 @@ void mdbx_panic(const char *fmt, ...)
 #define mdbx_debug_enabled(type) (1)
 #else
 #define mdbx_debug_enabled(type) (0)
-#endif
+#endif /* NDEBUG */
 #define mdbx_audit_enabled() (0)
 #define mdbx_assert_enabled() (0)
 #endif /* MDB_DEBUG */

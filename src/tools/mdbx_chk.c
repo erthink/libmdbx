@@ -671,14 +671,6 @@ int main(int argc, char *argv[]) {
     return rc < 0 ? EXIT_FAILURE_MDB : EXIT_FAILURE_SYS;
   }
 
-  rc = mdbx_env_get_maxkeysize(env);
-  if (rc < 0) {
-    error("mdbx_env_get_maxkeysize failed, error %d %s\n", rc,
-          mdbx_strerror(rc));
-    goto bailout;
-  }
-  maxkeysize = rc;
-
   rc = mdbx_env_set_maxdbs(env, MAX_DBI);
   if (rc < 0) {
     error("mdbx_env_set_maxdbs failed, error %d %s\n", rc, mdbx_strerror(rc));
@@ -701,6 +693,14 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
   }
+
+  rc = mdbx_env_get_maxkeysize(env);
+  if (rc < 0) {
+    error("mdbx_env_get_maxkeysize failed, error %d %s\n", rc,
+          mdbx_strerror(rc));
+    goto bailout;
+  }
+  maxkeysize = rc;
 
   rc = mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn);
   if (rc) {
@@ -734,11 +734,8 @@ int main(int argc, char *argv[]) {
           sf[i]);
     if (info.me_mapaddr)
       print(" - mapaddr %p\n", info.me_mapaddr);
-    print(" - pagesize %u, max keysize %zu (%s), max readers %u\n",
-          stat.ms_psize, maxkeysize,
-          (maxkeysize == 511) ? "default" : (maxkeysize == 0) ? "devel"
-                                                              : "custom",
-          info.me_maxreaders);
+    print(" - pagesize %u, max keysize %zu, max readers %u\n", stat.ms_psize,
+          maxkeysize, info.me_maxreaders);
     print(" - transactions: last %zu, bottom %zu, lag reading %zi\n",
           info.me_last_txnid, info.me_tail_txnid,
           info.me_last_txnid - info.me_tail_txnid);

@@ -317,48 +317,17 @@ txnid_t mdbx_debug_edge;
 /**	The version number for a database's lockfile format. */
 #define MDB_LOCK_VERSION ((MDB_DEVEL) ? 999 : 1)
 
-/**	@brief The max size of a key we can write, or 0 for computed max.
- *
- *	This macro should normally be left alone or set to 0.
- *	Note that a database with big keys or dupsort data cannot be
- *	reliably modified by a liblmdb which uses a smaller max.
- *	The default is 511 for backwards compat, or 0 when #MDB_DEVEL.
- *
- *	Other values are allowed, for backwards compat.  However:
- *	A value bigger than the computed max can break if you do not
- *	know what you are doing, and liblmdb <= 0.9.10 can break when
- *	modifying a DB with keys/dupsort data bigger than its max.
- *
- *	Data items in an #MDB_DUPSORT database are also limited to
- *	this size, since they're actually keys of a sub-DB.  Keys and
- *	#MDB_DUPSORT data items must fit on a node in a regular page.
- */
-#ifndef MDB_MAXKEYSIZE
-#define MDB_MAXKEYSIZE ((MDB_DEVEL) ? 0 : 511)
-#endif
-
-/**	The maximum size of a key we can write to the environment. */
-#if MDB_MAXKEYSIZE
-#define ENV_MAXKEY(env) (MDB_MAXKEYSIZE)
-#else
-#define ENV_MAXKEY(env) ((env)->me_maxkey_limit)
-#endif /* MDB_MAXKEYSIZE */
-
 /**	@brief The maximum size of a data item.
  *
  *	We only store a 32 bit value for node sizes.
  */
 #define MAXDATASIZE 0xffffffffUL
 
-/**	Key size which fits in a #DKBUF.
- *	@ingroup debug
- */
-#define DKBUF_MAXKEYSIZE ((MDB_MAXKEYSIZE) > 0 ? (MDB_MAXKEYSIZE) : 511)
-/**	A key buffer.
- *	@ingroup debug
- *	This is used for printing a hex dump of a key's contents.
- */
-#define DKBUF char kbuf[DKBUF_MAXKEYSIZE * 2 + 1]
+#define DKBUF_MAXKEYSIZE 511 /* FIXME */
+                             /**	Key size which fits in a #DKBUF.
+                              *	@ingroup debug
+                              */
+#define DKBUF char kbuf[DKBUF_MAXKEYSIZE]
 /**	Display a key in hex.
  *	@ingroup debug
  *	Invoke a function to display a key in hex.
@@ -3610,6 +3579,16 @@ fail:
   return rc;
 }
 
+static void __cold mdbx_env_setup_limits(MDB_env *env, size_t pagesize) {
+  env->me_maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
+  env->me_nodemax =
+      (((pagesize - PAGEHDRSZ) / MDB_MINKEYS) & -2) - sizeof(indx_t);
+  env->me_maxkey_limit = env->me_nodemax - (NODESIZE + sizeof(MDB_db));
+  assert(env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
+
+  env->me_maxpg = env->me_mapsize / pagesize;
+}
+
 int __cold mdbx_env_create(MDB_env **env) {
   MDB_env *e;
 
@@ -3622,10 +3601,11 @@ int __cold mdbx_env_create(MDB_env **env) {
   e->me_fd = INVALID_HANDLE_VALUE;
   e->me_lfd = INVALID_HANDLE_VALUE;
   e->me_pid = mdbx_getpid();
-  e->me_os_psize = mdbx_syspagesize();
+  mdbx_env_setup_limits(e, e->me_os_psize = mdbx_syspagesize());
   VALGRIND_CREATE_MEMPOOL(e, 0, 0);
   e->me_signature = MDBX_ME_SIGNATURE;
   *env = e;
+
   return MDB_SUCCESS;
 }
 
@@ -3783,8 +3763,7 @@ int __cold mdbx_env_get_maxreaders(MDB_env *env, unsigned *readers) {
   return MDB_SUCCESS;
 }
 
-/** Further setup required for opening an LMDB environment
- */
+/* Further setup required for opening an LMDB environment */
 static int __cold mdbx_env_open2(MDB_env *env, MDB_meta *meta) {
   int newenv = 0;
   int rc = mdbx_env_read_header(env, meta);
@@ -3834,15 +3813,7 @@ static int __cold mdbx_env_open2(MDB_env *env, MDB_meta *meta) {
   if (rc)
     return rc;
 
-  env->me_maxfree_1pg = (env->me_psize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  env->me_nodemax =
-      (((env->me_psize - PAGEHDRSZ) / MDB_MINKEYS) & -2) - sizeof(indx_t);
-  env->me_maxkey_limit = env->me_nodemax - (NODESIZE + sizeof(MDB_db));
-  env->me_maxpg = env->me_mapsize / env->me_psize;
-
-  if (MDB_MAXKEYSIZE > env->me_maxkey_limit)
-    return MDB_BAD_VALSIZE;
-
+  mdbx_env_setup_limits(env, env->me_psize);
   return MDB_SUCCESS;
 }
 
@@ -5609,17 +5580,17 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (unlikely(mc->mc_txn->mt_flags & (MDB_TXN_RDONLY | MDB_TXN_BLOCKED)))
     return (mc->mc_txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
-  if (unlikely(key->mv_size > ENV_MAXKEY(env)))
+  if (unlikely(key->mv_size > env->me_maxkey_limit))
     return MDB_BAD_VALSIZE;
 
 #if SIZE_MAX > MAXDATASIZE
   if (unlikely(data->mv_size > ((mc->mc_db->md_flags & MDB_DUPSORT)
-                                    ? ENV_MAXKEY(env)
+                                    ? env->me_maxkey_limit
                                     : MAXDATASIZE)))
     return MDB_BAD_VALSIZE;
 #else
   if ((mc->mc_db->md_flags & MDB_DUPSORT) &&
-      unlikely(data->mv_size > ENV_MAXKEY(env)))
+      unlikely(data->mv_size > env->me_maxkey_limit))
     return MDB_BAD_VALSIZE;
 #endif
 
@@ -9089,9 +9060,9 @@ int mdbx_set_dupsort(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp) {
 }
 
 int __cold mdbx_env_get_maxkeysize(MDB_env *env) {
-  if (!env || env->me_signature != MDBX_ME_SIGNATURE)
+  if (!env || env->me_signature != MDBX_ME_SIGNATURE || !env->me_maxkey_limit)
     return EINVAL;
-  return ENV_MAXKEY(env);
+  return env->me_maxkey_limit;
 }
 
 int __cold mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {

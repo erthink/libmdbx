@@ -921,8 +921,6 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDB_env *env, MDB_dbi dbs);
 
 /* Get the maximum size of keys and MDB_DUPSORT data we can write.
  *
- * Depends on the compile-time constant MDB_MAXKEYSIZE. Default 511.
- * See MDB_val.
  * [in] env An environment handle returned by mdbx_env_create()
  * Returns The maximum size of a key we can write
  */
