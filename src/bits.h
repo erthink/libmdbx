@@ -279,10 +279,7 @@ typedef struct MDB_meta {
   volatile uint64_t mm_datasync_sign;
 #define META_IS_WEAK(meta) ((meta)->mm_datasync_sign == MDB_DATASIGN_WEAK)
 #define META_IS_STEADY(meta) ((meta)->mm_datasync_sign > MDB_DATASIGN_WEAK)
-
-#if MDBX_MODE_ENABLED
   volatile mdbx_canary mm_canary;
-#endif
 } MDB_meta;
 
 /** Common header for all page types. The page type depends on #mp_flags.
@@ -394,17 +391,11 @@ typedef struct MDB_dbx {
   MDB_cmp_func *md_dcmp; /**< function for comparing data items */
 } MDB_dbx;
 
-#if MDBX_MODE_ENABLED
-#define MDBX_MODE_SALT 0
-#else
-#error !?
-#endif
-
 /** A database transaction.
 *	Every operation requires a transaction handle.
 */
 struct MDB_txn {
-#define MDBX_MT_SIGNATURE (0x93D53A31 ^ MDBX_MODE_SALT)
+#define MDBX_MT_SIGNATURE (0x93D53A31)
   unsigned mt_signature;
   MDB_txn *mt_parent; /**< parent of a nested txn */
   /** Nested txn under this txn, set together with flag #MDB_TXN_HAS_CHILD */
@@ -494,10 +485,7 @@ struct MDB_txn {
   *	dirty_list into mt_parent after freeing hidden mt_parent pages.
   */
   unsigned mt_dirty_room;
-
-#if MDBX_MODE_ENABLED
   mdbx_canary mt_canary;
-#endif
 };
 
 /** Enough space for 2^32 nodes with minimum of 2 keys per node. I.e., plenty.
@@ -517,9 +505,9 @@ struct MDB_xcursor;
 *	(A node with #F_DUPDATA but no #F_SUBDATA contains a subpage).
 */
 struct MDB_cursor {
-#define MDBX_MC_SIGNATURE (0xFE05D5B1 ^ MDBX_MODE_SALT)
-#define MDBX_MC_READY4CLOSE (0x2817A047 ^ MDBX_MODE_SALT)
-#define MDBX_MC_WAIT4EOT (0x90E297A7 ^ MDBX_MODE_SALT)
+#define MDBX_MC_SIGNATURE (0xFE05D5B1)
+#define MDBX_MC_READY4CLOSE (0x2817A047)
+#define MDBX_MC_WAIT4EOT (0x90E297A7)
   unsigned mc_signature;
   /** Next cursor on this DB in this txn */
   MDB_cursor *mc_next;
@@ -606,7 +594,7 @@ typedef struct MDB_pgstate {
 
 /** The database environment. */
 struct MDB_env {
-#define MDBX_ME_SIGNATURE (0x9A899641 ^ MDBX_MODE_SALT)
+#define MDBX_ME_SIGNATURE (0x9A899641)
   unsigned me_signature;
   mdbx_filehandle_t me_fd;  /**< The main data file */
   mdbx_filehandle_t me_lfd; /**< The lock file */
@@ -660,9 +648,7 @@ struct MDB_env {
                                                     mdbx_env_sync() */
   uint64_t
       me_sync_threshold; /**< Treshold of above to force synchronous flush */
-#if MDBX_MODE_ENABLED
   MDBX_oom_func *me_oom_func; /**< Callback for kicking laggard readers */
-#endif
 #ifdef USE_VALGRIND
   int me_valgrind_handle;
 #endif

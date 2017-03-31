@@ -819,9 +819,7 @@ const char *__cold mdbx_strerror(int errnum) {
   return msg;
 }
 
-#if MDBX_MODE_ENABLED
 static txnid_t mdbx_oomkick(MDB_env *env, txnid_t oldest);
-#endif /* MDBX_MODE_ENABLED */
 
 void __cold mdbx_debug_log(int type, const char *function, int line,
                            const char *fmt, ...) {
@@ -1787,12 +1785,7 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags) {
       }
 
       if (rc == MDB_MAP_FULL) {
-#if MDBX_MODE_ENABLED
         txnid_t snap = mdbx_oomkick(env, oldest);
-#else
-        mdbx_debug("DB size maxed out");
-        txnid_t snap = mdbx_find_oldest(env, NULL);
-#endif /* MDBX_MODE_ENABLED */
         if (snap > oldest) {
           oldest = snap;
           continue;
@@ -2153,7 +2146,6 @@ static void mdbx_cursors_eot(MDB_txn *txn, unsigned merge) {
           if ((mx = mc->mc_xcursor) != NULL)
             *mx = *(MDB_xcursor *)(bk + 1);
         }
-#if MDBX_MODE_ENABLED
         bk->mc_signature = 0;
         free(bk);
       }
@@ -2164,13 +2156,6 @@ static void mdbx_cursors_eot(MDB_txn *txn, unsigned merge) {
         mc->mc_signature = MDBX_MC_READY4CLOSE;
         mc->mc_flags = 0 /* reset C_UNTRACK */;
       }
-#else
-        mc = bk;
-      }
-      /* Only malloced cursors are permanently tracked. */
-      mc->mc_signature = 0;
-      free(mc);
-#endif
     }
     cursors[i] = NULL;
   }
@@ -2275,9 +2260,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
         txn->mt_next_pgno = meta->mm_last_pg + 1;
         /* Copy the DB info and flags */
         memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
-#if MDBX_MODE_ENABLED
         txn->mt_canary = meta->mm_canary;
-#endif
         break;
       }
     }
@@ -2294,9 +2277,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
     mdbx_mutex_lock(&tsan_mutex);
 #endif
     MDB_meta *meta = mdbx_meta_head_w(env);
-#if MDBX_MODE_ENABLED
     txn->mt_canary = meta->mm_canary;
-#endif
     txn->mt_txnid = meta->mm_txnid + 1;
     txn->mt_flags = flags;
 #ifdef __SANITIZE_THREAD__
@@ -2631,12 +2612,8 @@ int mdbx_txn_reset(MDB_txn *txn) {
   if (unlikely(!(txn->mt_flags & MDB_TXN_RDONLY)))
     return EINVAL;
 
-#if MDBX_MODE_ENABLED
   /* LY: don't close DBI-handles in MDBX mode */
   return mdbx_txn_end(txn, MDB_END_RESET | MDB_END_UPDATE);
-#else
-  return mdbx_txn_end(txn, MDB_END_RESET);
-#endif /* MDBX_MODE_ENABLED */
 }
 
 int mdbx_txn_abort(MDB_txn *txn) {
@@ -2646,12 +2623,10 @@ int mdbx_txn_abort(MDB_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_MODE_ENABLED
   if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY))
     /* LY: don't close DBI-handles in MDBX mode */
     return mdbx_txn_end(txn, MDB_END_ABORT | MDB_END_UPDATE | MDB_END_SLOT |
                                  MDB_END_FREE);
-#endif /* MDBX_MODE_ENABLED */
 
   if (txn->mt_child)
     mdbx_txn_abort(txn->mt_child);
@@ -3343,9 +3318,7 @@ int mdbx_txn_commit(MDB_txn *txn) {
     meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
     meta.mm_last_pg = txn->mt_next_pgno - 1;
     meta.mm_txnid = txn->mt_txnid;
-#if MDBX_MODE_ENABLED
     meta.mm_canary = txn->mt_canary;
-#endif
 
     rc = mdbx_env_sync0(env, env->me_flags | txn->mt_flags, &meta);
   }
@@ -3569,9 +3542,7 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
     target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
     target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
     target->mm_last_pg = pending->mm_last_pg;
-#if MDBX_MODE_ENABLED
     target->mm_canary = pending->mm_canary;
-#endif
     /* LY: 'commit' the meta */
     target->mm_txnid = pending->mm_txnid;
     target->mm_datasync_sign = pending->mm_datasync_sign;
@@ -5673,7 +5644,6 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (flags & MDB_CURRENT) {
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
       return EINVAL;
-#if MDBX_MODE_ENABLED
     if (F_ISSET(mc->mc_db->md_flags, MDB_DUPSORT)) {
       MDB_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
@@ -5688,7 +5658,6 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
         }
       }
     }
-#endif /* MDBX_MODE_ENABLED */
     rc = MDB_SUCCESS;
   } else if (mc->mc_db->md_root == P_INVALID) {
     /* new database, cursor has nothing to point to */
@@ -5969,8 +5938,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
         if (omp->mp_flags & P_DIRTY) {
           /* yes, overwrite it. Note in this case we don't
            * bother to try shrinking the page if the new data
-           * is smaller than the overflow threshold.
-           */
+           * is smaller than the overflow threshold. */
           if (unlikely(level > 1)) {
             /* It is writable only in a parent txn */
             MDB_page *np = mdbx_page_malloc(mc->mc_txn, ovpages);
@@ -5982,22 +5950,18 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
             /* Note - this page is already counted in parent's dirty_room */
             rc2 = mdbx_mid2l_insert(mc->mc_txn->mt_u.dirty_list, &id2);
             mdbx_cassert(mc, rc2 == 0);
+
             /* Currently we make the page look as with put() in the
              * parent txn, in case the user peeks at MDB_RESERVEd
-             * or unused parts. Some users treat ovpages specially.
-             */
-            size_t sz = (size_t)env->me_psize * ovpages, off;
-            if (MDBX_MODE_ENABLED || !(flags & MDB_RESERVE)) {
-              /* Skip the part where LMDB will put *data.
-               * Copy end of page, adjusting alignment so
-               * compiler may copy words instead of bytes.
-               */
-              off = (PAGEHDRSZ + data->mv_size) & -(ssize_t)sizeof(size_t);
-              memcpy((size_t *)((char *)np + off),
-                     (size_t *)((char *)omp + off), sz - off);
-              sz = PAGEHDRSZ;
-            }
-            memcpy(np, omp, sz); /* Copy whole or header of page */
+             * or unused parts. Some users treat ovpages specially. */
+            size_t whole = (size_t)env->me_psize * ovpages;
+            /* Skip the part where LMDB will put *data.
+             * Copy end of page, adjusting alignment so
+             * compiler may copy words instead of bytes. */
+            size_t off = (PAGEHDRSZ + data->mv_size) & -(ssize_t)sizeof(size_t);
+            memcpy((size_t *)((char *)np + off), (size_t *)((char *)omp + off),
+                   whole - off);
+            memcpy(np, omp, PAGEHDRSZ); /* Copy header of page */
             omp = np;
           }
           SETDSZ(leaf, data->mv_size);
@@ -6784,16 +6748,12 @@ int mdbx_cursor_renew(MDB_txn *txn, MDB_cursor *mc) {
     return EINVAL;
 
   if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors)) {
-#if MDBX_MODE_ENABLED
     MDB_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
     while (*prev && *prev != mc)
       prev = &(*prev)->mc_next;
     if (*prev == mc)
       *prev = mc->mc_next;
     mc->mc_signature = MDBX_MC_READY4CLOSE;
-#else
-    return EINVAL;
-#endif
   }
 
   if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
@@ -6817,7 +6777,6 @@ int mdbx_cursor_count(MDB_cursor *mc, size_t *countp) {
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
     return EINVAL;
 
-#if MDBX_MODE_ENABLED
   if (!mc->mc_snum) {
     *countp = 0;
     return MDB_NOTFOUND;
@@ -6838,26 +6797,6 @@ int mdbx_cursor_count(MDB_cursor *mc, size_t *countp) {
       *countp = mc->mc_xcursor->mx_db.md_entries;
     }
   }
-#else
-  if (unlikely(mc->mc_xcursor == NULL))
-    return MDB_INCOMPATIBLE;
-
-  if (!mc->mc_snum)
-    return MDB_NOTFOUND;
-
-  MDB_page *mp = mc->mc_pg[mc->mc_top];
-  if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= NUMKEYS(mp))
-    return MDB_NOTFOUND;
-
-  MDB_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
-  if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
-    *countp = 1;
-  } else {
-    if (unlikely(!(mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED)))
-      return EINVAL;
-    *countp = mc->mc_xcursor->mx_db.md_entries;
-  }
-#endif /* MDBX_MODE_ENABLED */
   return MDB_SUCCESS;
 }
 
@@ -7668,13 +7607,6 @@ int mdbx_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data) {
   if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY | MDB_TXN_BLOCKED)))
     return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
 
-#if !MDBX_MODE_ENABLED
-  if (!F_ISSET(txn->mt_dbs[dbi].md_flags, MDB_DUPSORT)) {
-    /* must ignore any data */
-    data = NULL;
-  }
-#endif
-
   return mdbx_del0(txn, dbi, key, data, 0);
 }
 
@@ -8160,10 +8092,7 @@ int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 
   if (unlikely(flags &
                ~(MDB_NOOVERWRITE | MDB_NODUPDATA | MDB_RESERVE | MDB_APPEND |
-                 MDB_APPENDDUP
-                 /* LY: MDB_CURRENT indicates explicit overwrite (update)
-                    for MDBX */
-                 | (MDBX_MODE_ENABLED ? MDB_CURRENT : 0))))
+                 MDB_APPENDDUP | MDB_CURRENT)))
     return EINVAL;
 
   if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY | MDB_TXN_BLOCKED)))
@@ -8172,8 +8101,8 @@ int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
   mdbx_cursor_init(&mc, txn, dbi, &mx);
   mc.mc_next = txn->mt_cursors[dbi];
   txn->mt_cursors[dbi] = &mc;
+
   int rc = MDB_SUCCESS;
-#if MDBX_MODE_ENABLED
   /* LY: support for update (explicit overwrite) */
   if (flags & MDB_CURRENT) {
     rc = mdbx_cursor_get(&mc, key, NULL, MDB_SET);
@@ -8188,7 +8117,7 @@ int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
       }
     }
   }
-#endif /* MDBX_MODE_ENABLED */
+
   if (likely(rc == MDB_SUCCESS))
     rc = mdbx_cursor_put(&mc, key, data, flags);
   txn->mt_cursors[dbi] = mc.mc_next;

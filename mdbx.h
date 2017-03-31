@@ -250,14 +250,10 @@ typedef int(MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
 #define MDB_NORDAHEAD 0x800000u
 /* don't initialize malloc'd memory before writing to datafile */
 #define MDB_NOMEMINIT 0x1000000u
-
-#if MDBX_MODE_ENABLED
 /* aim to coalesce FreeDB records */
 #define MDBX_COALESCE 0x2000000u
 /* LIFO policy for reclaiming FreeDB records */
 #define MDBX_LIFORECLAIM 0x4000000u
-#endif /* MDBX_MODE_ENABLED */
-
 /* make a steady-sync only on close and explicit env-sync */
 #define MDBX_UTTERLY_NOSYNC (MDB_NOSYNC | MDB_MAPASYNC)
 /* debuging option, fill/perturb released pages */
