@@ -225,6 +225,10 @@ typedef struct iovec MDB_val;
 #define mv_size iov_len
 #define mv_data iov_base
 
+/* The maximum size of a data item.
+ * MDBX only store a 32 bit value for node sizes. */
+#define MDBX_MAXDATASIZE INT32_MAX
+
 /* A callback function used to compare two keys in a database */
 typedef int(MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
 

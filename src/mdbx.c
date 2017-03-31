@@ -317,12 +317,6 @@ txnid_t mdbx_debug_edge;
 /**	The version number for a database's lockfile format. */
 #define MDB_LOCK_VERSION ((MDB_DEVEL) ? 999 : 1)
 
-/**	@brief The maximum size of a data item.
- *
- *	We only store a 32 bit value for node sizes.
- */
-#define MAXDATASIZE 0xffffffffUL
-
 #define DKBUF_MAXKEYSIZE 511 /* FIXME */
                              /**	Key size which fits in a #DKBUF.
                               *	@ingroup debug
@@ -5618,16 +5612,10 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (unlikely(key->mv_size > env->me_maxkey_limit))
     return MDB_BAD_VALSIZE;
 
-#if SIZE_MAX > MAXDATASIZE
   if (unlikely(data->mv_size > ((mc->mc_db->md_flags & MDB_DUPSORT)
                                     ? env->me_maxkey_limit
-                                    : MAXDATASIZE)))
+                                    : MDBX_MAXDATASIZE)))
     return MDB_BAD_VALSIZE;
-#else
-  if ((mc->mc_db->md_flags & MDB_DUPSORT) &&
-      unlikely(data->mv_size > env->me_maxkey_limit))
-    return MDB_BAD_VALSIZE;
-#endif
 
   if ((mc->mc_db->md_flags & MDB_INTEGERKEY) &&
       unlikely(key->mv_size != sizeof(uint32_t) &&
