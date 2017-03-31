@@ -925,6 +925,7 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDB_env *env, MDB_dbi dbs);
  * Returns The maximum size of a key we can write
  */
 LIBMDBX_API int mdbx_env_get_maxkeysize(MDB_env *env);
+LIBMDBX_API int mdbx_get_maxkeysize(size_t pagesize);
 
 /* Set application information associated with the MDB_env.
  *

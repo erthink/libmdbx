@@ -3586,14 +3586,42 @@ fail:
   return rc;
 }
 
+int __cold mdbx_env_get_maxkeysize(MDB_env *env) {
+  if (!env || env->me_signature != MDBX_ME_SIGNATURE || !env->me_maxkey_limit)
+    return EINVAL;
+  return env->me_maxkey_limit;
+}
+
+static __inline ssize_t mdbx_calc_nodemax(ssize_t pagesize) {
+  assert(pagesize > 0);
+  return (((pagesize - PAGEHDRSZ) / MDB_MINKEYS) & -(ssize_t)2) -
+         sizeof(indx_t);
+}
+
+static __inline ssize_t mdbx_calc_maxkey(ssize_t nodemax) {
+  assert(nodemax > 0);
+  return nodemax - (NODESIZE + sizeof(MDB_db));
+}
+
+int mdbx_get_maxkeysize(size_t pagesize) {
+  if (pagesize == 0)
+    pagesize = mdbx_syspagesize();
+
+  ssize_t nodemax = mdbx_calc_nodemax(pagesize);
+  if (nodemax < 0)
+    return -EINVAL;
+
+  ssize_t maxkey = mdbx_calc_maxkey(nodemax);
+  return (maxkey > 0 && maxkey < INT_MAX) ? (int)maxkey : -EINVAL;
+}
+
 static void __cold mdbx_env_setup_limits(MDB_env *env, size_t pagesize) {
   env->me_maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  env->me_nodemax =
-      (((pagesize - PAGEHDRSZ) / MDB_MINKEYS) & -2) - sizeof(indx_t);
-  env->me_maxkey_limit = env->me_nodemax - (NODESIZE + sizeof(MDB_db));
-  assert(env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
-
   env->me_maxpg = env->me_mapsize / pagesize;
+
+  env->me_nodemax = mdbx_calc_nodemax(pagesize);
+  env->me_maxkey_limit = mdbx_calc_maxkey(env->me_nodemax);
+  assert(env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
 }
 
 int __cold mdbx_env_create(MDB_env **env) {
@@ -9064,12 +9092,6 @@ int mdbx_set_dupsort(MDB_txn *txn, MDB_dbi dbi, MDB_cmp_func *cmp) {
 
   txn->mt_dbxs[dbi].md_dcmp = cmp;
   return MDB_SUCCESS;
-}
-
-int __cold mdbx_env_get_maxkeysize(MDB_env *env) {
-  if (!env || env->me_signature != MDBX_ME_SIGNATURE || !env->me_maxkey_limit)
-    return EINVAL;
-  return env->me_maxkey_limit;
 }
 
 int __cold mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {
