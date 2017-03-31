@@ -113,8 +113,9 @@ int main(int argc, char *argv[]) {
   E(mdbx_cursor_get(cursor, &key, &data, MDB_FIRST));
 
   do {
-    printf("key: %p %s, data: %p %.*s\n", key.mv_data, mdbx_dkey(&key, dkbuf),
-           data.mv_data, (int)data.mv_size, (char *)data.mv_data);
+    printf("key: %p %s, data: %p %.*s\n", key.mv_data,
+           mdbx_dkey(&key, dkbuf, sizeof(dkbuf)), data.mv_data,
+           (int)data.mv_size, (char *)data.mv_data);
   } while ((rc = mdbx_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0);
   CHECK(rc == MDB_NOTFOUND, "mdbx_cursor_get");
   mdbx_cursor_close(cursor);

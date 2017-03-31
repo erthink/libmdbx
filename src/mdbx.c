@@ -332,7 +332,7 @@ txnid_t mdbx_debug_edge;
  *	@ingroup debug
  *	Invoke a function to display a key in hex.
  */
-#define DKEY(x) mdbx_dkey(x, kbuf)
+#define DKEY(x) mdbx_dkey(x, kbuf, sizeof(kbuf))
 
 /** An invalid page number.
  *	Mainly used to denote an empty tree.
@@ -821,7 +821,7 @@ static __inline pgno_t mdbx_dbg_pgno(MDB_page *mp) {
 * @param[in] buf the buffer to write into. Should always be #DKBUF.
 * @return The key in hexadecimal form.
 */
-char *mdbx_dkey(MDB_val *key, char *buf) {
+char *mdbx_dkey(MDB_val *key, char *buf, const size_t bufsize) {
 #ifdef _MSC_VER
   (void)key;
   (void)buf;
@@ -833,17 +833,24 @@ char *mdbx_dkey(MDB_val *key, char *buf) {
   if (!key)
     return "";
 
-  if (key->mv_size > DKBUF_MAXKEYSIZE)
-    return "MDB_MAXKEYSIZE";
-/* may want to make this a dynamic check: if the key is mostly
-* printable characters, print it as-is instead of converting to hex. */
-#if 1
-  buf[0] = '\0';
-  for (i = 0; i < key->mv_size; i++)
-    ptr += sprintf(ptr, "%02x", ((unsigned char *)key->mv_data)[i]);
-#else
-  sprintf(buf, "%.*s", key->mv_size, key->mv_data);
-#endif
+  const uint8_t *const data = key->mv_data;
+  bool is_ascii = true;
+  for (i = 0; is_ascii && i < key->mv_size; i++)
+    if (data[i] < ' ' || data[i] > 127)
+      is_ascii = false;
+
+  if (is_ascii)
+    snprintf(buf, bufsize, "%.*s",
+             (key->mv_size > INT_MAX) ? INT_MAX : (int)key->mv_size, data);
+  else {
+    buf[0] = '\0';
+    for (i = 0; i < key->mv_size; i++) {
+      int len = snprintf(ptr, bufsize - (ptr - buf), "%02x", data[i]);
+      if (len < 1)
+        break;
+      ptr += len;
+    }
+  }
   return buf;
 #endif /* _MSC_VER */
 }
@@ -6833,7 +6840,7 @@ static int mdbx_update_key(MDB_cursor *mc, MDB_val *key) {
     k2.mv_data = NODEKEY(node);
     k2.mv_size = node->mn_ksize;
     mdbx_debug("update key %u (ofs %u) [%s] to [%s] on page %zu", indx, ptr,
-               mdbx_dkey(&k2, kbuf2), DKEY(key), mp->mp_pgno);
+               mdbx_dkey(&k2, kbuf2, sizeof(kbuf2)), DKEY(key), mp->mp_pgno);
   }
 
   /* Sizes must be 2-byte aligned. */
