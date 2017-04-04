@@ -1,6 +1,16 @@
 version: '{build}'
 max_jobs: 1
 
+image: Visual Studio 2015
+
+environment:
+  matrix:
+#  - Toolset: v141
+  - Toolset: v140
+  - Toolset: v120
+  - Toolset: v110
+  - Toolset: v100
+
 platform:
  - x86
  - x64
