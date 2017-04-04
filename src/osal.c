@@ -97,7 +97,7 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
   va_copy(ones, ap);
 #ifdef _MSC_VER
   int needed = _vscprintf(fmt, ap);
-#elif defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||                          \
+#elif defined(vsnprintf) || defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||    \
     defined(_ISOC99_SOURCE) || _POSIX_C_SOURCE >= 200112L
   int needed = vsnprintf(nullptr, 0, fmt, ap);
 #else
@@ -117,9 +117,7 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
     return -ENOMEM;
   }
 
-#ifdef _MSC_VER
-  int actual = vsnprintf_s(*strp, needed + 1, _TRUNCATE, fmt, ones);
-#elif defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||                          \
+#if defined(vsnprintf) || defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||      \
     defined(_ISOC99_SOURCE) || _POSIX_C_SOURCE >= 200112L
   int actual = vsnprintf(*strp, needed + 1, fmt, ones);
 #else

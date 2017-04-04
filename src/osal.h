@@ -421,3 +421,17 @@ void mdbx_txn_unlock(MDB_env *env);
 int mdbx_rpid_set(MDB_env *env);
 int mdbx_rpid_clear(MDB_env *env);
 int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
+
+/*----------------------------------------------------------------------------*/
+
+#ifdef _MSC_VER
+#ifndef snprintf
+#define snprintf(buffer, buffer_size, format, ...)                             \
+  _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
+#endif /* snprintf */
+
+#ifndef vsnprintf
+#define vsnprintf(buffer, buffer_size, format, args)                           \
+  _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
+#endif /* vsnprintf */
+#endif /* _MSC_VER */
