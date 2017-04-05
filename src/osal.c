@@ -599,7 +599,7 @@ int mdbx_mmap(void **address, size_t length, int rw, mdbx_filehandle_t fd) {
   CloseHandle(h);
   return rc;
 #else
-  *address = mmap(address, length, rw ? PROT_READ | PROT_WRITE : PROT_READ,
+  *address = mmap(NULL, length, rw ? PROT_READ | PROT_WRITE : PROT_READ,
                   MAP_SHARED, fd, 0);
   return (*address != MAP_FAILED) ? MDB_SUCCESS : errno;
 #endif
