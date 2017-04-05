@@ -89,7 +89,7 @@ bailout:
 void mdbx_lck_destroy(MDB_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* try get exclusive access */
-    if (mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, 0) == 0) {
+    if (env->me_txns && mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, 0) == 0) {
       /* got exclusive, drown mutexes */
       int rc = pthread_mutex_destroy(&env->me_txns->mti_rmutex);
       if (rc == 0)

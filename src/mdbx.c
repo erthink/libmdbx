@@ -4160,8 +4160,10 @@ static void __cold mdbx_env_close0(MDB_env *env) {
     env->me_valgrind_handle = -1;
 #endif
   }
-  if (env->me_fd != INVALID_HANDLE_VALUE)
+  if (env->me_fd != INVALID_HANDLE_VALUE) {
     (void)mdbx_closefile(env->me_fd);
+    env->me_fd = INVALID_HANDLE_VALUE;
+  }
 
   mdbx_munmap((void *)env->me_txns,
               (env->me_maxreaders - 1) * sizeof(MDB_reader) +
@@ -4169,8 +4171,10 @@ static void __cold mdbx_env_close0(MDB_env *env) {
   env->me_txns = NULL;
   env->me_pid = 0;
 
-  if (env->me_lfd != INVALID_HANDLE_VALUE)
+  if (env->me_lfd != INVALID_HANDLE_VALUE) {
     (void)mdbx_closefile(env->me_lfd);
+    env->me_lfd = INVALID_HANDLE_VALUE;
+  }
 }
 
 int __cold mdbx_env_close_ex(MDB_env *env, int dont_sync) {
