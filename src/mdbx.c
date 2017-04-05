@@ -3848,10 +3848,17 @@ static int __cold mdbx_env_open2(MDB_env *env, MDB_meta *meta) {
 
 /****************************************************************************/
 
+static __inline bool is_powerof2(size_t x) { return (x & (x - 1)) == 0; }
+
+static __inline size_t roundup2(size_t value, size_t granularity) {
+  assert(is_powerof2(granularity));
+  return (value + granularity - 1) & ~(granularity - 1);
+}
+
 /* Open and/or initialize the lock region for the environment. */
 static int __cold mdbx_env_setup_locks(MDB_env *env, char *lpath, int mode,
                                        int *excl) {
-  off_t size, rsize;
+  off_t size;
 
   int rc = mdbx_openfile(lpath, O_RDWR | O_CREAT, mode, &env->me_lfd);
   if (rc != MDB_SUCCESS) {
@@ -3875,19 +3882,22 @@ static int __cold mdbx_env_setup_locks(MDB_env *env, char *lpath, int mode,
   rc = mdbx_filesize(env->me_lfd, &size);
   if (unlikely(rc != MDB_SUCCESS))
     return rc;
-  rsize = (env->me_maxreaders - 1) * sizeof(MDB_reader) + sizeof(MDBX_lockinfo);
-  if (size != rsize && *excl > 0) {
-    rc = mdbx_ftruncate(env->me_lfd, rsize);
-    if (unlikely(rc != MDB_SUCCESS))
-      return rc;
-  } else {
-    rsize = size;
-    size = rsize - sizeof(MDBX_lockinfo);
-    env->me_maxreaders = size / sizeof(MDB_reader) + 1;
+
+  if (*excl > 0) {
+    off_t wanna = roundup2((env->me_maxreaders - 1) * sizeof(MDB_reader) +
+                               sizeof(MDBX_lockinfo),
+                           env->me_os_psize);
+    if (size != wanna) {
+      rc = mdbx_ftruncate(env->me_lfd, wanna);
+      if (unlikely(rc != MDB_SUCCESS))
+        return rc;
+      size = wanna;
+    }
   }
+  env->me_maxreaders = (size - sizeof(MDBX_lockinfo)) / sizeof(MDB_reader) + 1;
 
   void *addr = NULL;
-  rc = mdbx_mmap(&addr, rsize, true, env->me_lfd);
+  rc = mdbx_mmap(&addr, size, true, env->me_lfd);
   if (unlikely(rc != MDB_SUCCESS))
     return rc;
   env->me_txns = addr;
@@ -3901,25 +3911,25 @@ static int __cold mdbx_env_setup_locks(MDB_env *env, char *lpath, int mode,
   }
 
 #ifdef MADV_NOHUGEPAGE
-  (void)madvise(env->me_txns, rsize, MADV_NOHUGEPAGE);
+  (void)madvise(env->me_txns, size, MADV_NOHUGEPAGE);
 #endif
 
 #ifdef MADV_DODUMP
-  (void)madvise(env->me_txns, rsize, MADV_DODUMP);
+  (void)madvise(env->me_txns, size, MADV_DODUMP);
 #endif
 
 #ifdef MADV_DONTFORK
-  if (madvise(env->me_txns, rsize, MADV_DONTFORK) < 0)
+  if (madvise(env->me_txns, size, MADV_DONTFORK) < 0)
     return errno;
 #endif
 
 #ifdef MADV_WILLNEED
-  if (madvise(env->me_txns, rsize, MADV_WILLNEED) < 0)
+  if (madvise(env->me_txns, size, MADV_WILLNEED) < 0)
     return errno;
 #endif
 
 #ifdef MADV_RANDOM
-  if (madvise(env->me_txns, rsize, MADV_RANDOM) < 0)
+  if (madvise(env->me_txns, size, MADV_RANDOM) < 0)
     return errno;
 #endif
 
@@ -4129,7 +4139,6 @@ static void __cold mdbx_env_close0(MDB_env *env) {
   if (!(env->me_flags & MDB_ENV_ACTIVE))
     return;
   env->me_flags &= ~MDB_ENV_ACTIVE;
-  mdbx_lck_destroy(env);
 
   /* Doing this here since me_dbxs may not exist during mdbx_env_close */
   if (env->me_dbxs) {
@@ -4171,6 +4180,7 @@ static void __cold mdbx_env_close0(MDB_env *env) {
   env->me_txns = NULL;
   env->me_pid = 0;
 
+  mdbx_lck_destroy(env);
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     (void)mdbx_closefile(env->me_lfd);
     env->me_lfd = INVALID_HANDLE_VALUE;
