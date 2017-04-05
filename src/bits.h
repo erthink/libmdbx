@@ -780,3 +780,10 @@ void mdbx_rthc_unlock(void);
 int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDB_reader *begin, MDB_reader *end);
 void mdbx_rthc_remove(mdbx_thread_key_t key);
 void mdbx_rthc_cleanup(void);
+
+static __inline bool is_power2(size_t x) { return (x & (x - 1)) == 0; }
+
+static __inline size_t roundup2(size_t value, size_t granularity) {
+  assert(is_power2(granularity));
+  return (value + granularity - 1) & ~(granularity - 1);
+}

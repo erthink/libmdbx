@@ -3631,6 +3631,8 @@ int __cold mdbx_env_create(MDB_env **env) {
   e->me_lfd = INVALID_HANDLE_VALUE;
   e->me_pid = mdbx_getpid();
   mdbx_env_setup_limits(e, e->me_os_psize = mdbx_syspagesize());
+  if (!is_power2(e->me_os_psize))
+    return MDB_INCOMPATIBLE;
   VALGRIND_CREATE_MEMPOOL(e, 0, 0);
   e->me_signature = MDBX_ME_SIGNATURE;
   *env = e;
@@ -3847,13 +3849,6 @@ static int __cold mdbx_env_open2(MDB_env *env, MDB_meta *meta) {
 }
 
 /****************************************************************************/
-
-static __inline bool is_powerof2(size_t x) { return (x & (x - 1)) == 0; }
-
-static __inline size_t roundup2(size_t value, size_t granularity) {
-  assert(is_powerof2(granularity));
-  return (value + granularity - 1) & ~(granularity - 1);
-}
 
 /* Open and/or initialize the lock region for the environment. */
 static int __cold mdbx_env_setup_locks(MDB_env *env, char *lpath, int mode,
