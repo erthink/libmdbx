@@ -91,9 +91,9 @@ std::string thunk_param(const actor_config &config) {
 }
 
 void cleanup() {
-  log_trace(">> osal_setup");
+  log_trace(">> cleanup");
   /* TODO: remove each database */
-  log_trace("<< osal_setup");
+  log_trace("<< cleanup");
 }
 
 int main(int argc, char *const argv[]) {
