@@ -11,8 +11,8 @@ environment:
   - Toolset: v100
 
 platform:
- - x86
- - x64
+  - Win32
+  - x64
 
 configuration:
   - Release
@@ -24,4 +24,8 @@ build:
 
 test_script:
 - ps: |
-    & "C:\projects\mdbx\$env:PLATFORM\$env:CONFIGURATION\test\test.exe" --pathname=tmp.db --basic --dont-cleanup-after
+    if (($env:PLATFORM -eq "x86") -and (Test-Path "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" -PathType Leaf)) {
+      & "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" --pathname=tmp.db --basic --dont-cleanup-after
+    } else {
+      & "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe" --pathname=tmp.db --basic --dont-cleanup-after
+    }
