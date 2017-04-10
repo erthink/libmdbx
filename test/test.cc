@@ -51,11 +51,30 @@ const char *status2str(actor_status status) {
 
 //-----------------------------------------------------------------------------
 
+static void mdbx_debug_logger(int type, const char *function, int line,
+                              const char *msg, va_list args) {
+  loggging::loglevel level = loggging::trace;
+  if (type & MDBX_DBG_PRINT)
+    level = loggging::info;
+  if (type & MDBX_DBG_ASSERT) {
+    log_error("libmdbx assertion failure: %s, %d",
+              function ? function : "unknown", line);
+    level = loggging::failure;
+  }
+
+  output(level, msg, args);
+  if (type & MDBX_DBG_ASSERT)
+    abort();
+}
+
 void testcase::mdbx_prepare() {
   log_trace(">> mdbx_prepare");
 
+  int rc = mdbx_setup_debug(MDBX_DBG_DNT, mdbx_debug_logger, MDBX_DBG_DNT);
+  log_info("libmdbx debug-flags: 0x%02x", rc);
+
   MDB_env *env = nullptr;
-  int rc = mdbx_env_create(&env);
+  rc = mdbx_env_create(&env);
   if (rc != MDB_SUCCESS)
     failure_perror("mdbx_env_create()", rc);
 
