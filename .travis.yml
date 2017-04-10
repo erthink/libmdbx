@@ -1,15 +1,12 @@
 language: c
 sudo: false
 dist: trusty
-cache: bundler
-notifications:
-        email: false
 
 compiler:
-        - gcc
-        - clang
+- gcc
+- clang
 
 os:
-        - linux
+- linux
 
 script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all check; fi
