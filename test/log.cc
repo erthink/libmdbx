@@ -68,12 +68,13 @@ const char *level2str(const loglevel level) {
 
 void output(loglevel priority, const char *format, va_list ap) {
   if (priority >= level) {
-    fprintf(stderr, "[ %u %-10s %6s ] " /* TODO */, osal_getpid(),
-            prefix.c_str(), level2str(priority));
-    vfprintf(stderr, format, ap);
+    FILE *out = (priority >= error) ? stderr : stdout;
+    fprintf(out, "[ %u %-10s %6s ] " /* TODO */, osal_getpid(), prefix.c_str(),
+            level2str(priority));
+    vfprintf(out, format, ap);
     size_t len = strlen(format);
     if (len && format[len - 1] != '\n')
-      putc('\n', stderr);
+      putc('\n', out);
   }
 }
 
