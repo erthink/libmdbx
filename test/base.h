@@ -34,6 +34,12 @@
 #include <string.h>
 #include <time.h>
 
+#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+#else
+#include <sys/param.h>
+#include <sys/time.h>
+#endif
+
 #ifdef _BSD_SOURCE
 #include <endian.h>
 #endif

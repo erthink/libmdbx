@@ -22,6 +22,8 @@ src/tools/mdbx_stat.1
 src/tools/mdbx_stat.c
 test/actor.cc
 test/base.h
+test/chrono.cc
+test/chrono.h
 test/config.h
 test/dead.cc
 test/hill.cc

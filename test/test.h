@@ -15,6 +15,7 @@
 #pragma once
 
 #include "base.h"
+#include "chrono.h"
 #include "config.h"
 #include "keygen.h"
 #include "log.h"
