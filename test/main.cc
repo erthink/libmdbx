@@ -26,9 +26,9 @@ void actor_params::set_defaults(void) {
   pathname_log = "";
   loglevel =
 #ifdef NDEBUG
-      loggging::notice;
+      logging::notice;
 #else
-      loggging::trace;
+      logging::trace;
 #endif
 
   pathname_db =
@@ -118,7 +118,7 @@ int main(int argc, char *const argv[]) {
   actor_params params;
   params.set_defaults();
   global::config::dump_config = true;
-  loggging::setup((loggging::loglevel)params.loglevel, "main");
+  logging::setup((logging::loglevel)params.loglevel, "main");
   unsigned lastid = 0;
 
   if (argc == 2 && strncmp(argv[1], "--case=", 7) == 0) {
@@ -228,11 +228,11 @@ int main(int argc, char *const argv[]) {
   }
 
   if (global::config::dump_config)
-    config::dump(stdout);
+    config::dump();
 
   bool failed = false;
   if (global::actors.size()) {
-    loggging::setup("overlord");
+    logging::setup("overlord");
 
     if (!global::config::dont_cleanup_before)
       cleanup();

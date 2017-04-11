@@ -108,7 +108,7 @@ struct actor_config_pod {
 
 extern const struct option_verb mode_bits[];
 extern const struct option_verb table_bits[];
-void dump(FILE *out);
+void dump(const char *title = "config-dump: ");
 
 } /* namespace config */
 

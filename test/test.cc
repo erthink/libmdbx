@@ -53,13 +53,13 @@ const char *status2str(actor_status status) {
 
 static void mdbx_debug_logger(int type, const char *function, int line,
                               const char *msg, va_list args) {
-  loggging::loglevel level = loggging::trace;
+  logging::loglevel level = logging::trace;
   if (type & MDBX_DBG_PRINT)
-    level = loggging::info;
+    level = logging::info;
   if (type & MDBX_DBG_ASSERT) {
     log_error("libmdbx assertion failure: %s, %d",
               function ? function : "unknown", line);
-    level = loggging::failure;
+    level = logging::failure;
   }
 
   output(level, msg, args);
@@ -122,7 +122,8 @@ bool testcase::wait4start() {
     log_trace(">> wait4start(%u)", config.wait4id);
     int rc = osal_waitfor(config.wait4id);
     if (rc) {
-      log_trace("<< wait4start(%u), failed %s", test_strerror(rc));
+      log_trace("<< wait4start(%u), failed %s", config.wait4id,
+                test_strerror(rc));
       return false;
     }
     return true;
@@ -167,8 +168,8 @@ bool testcase::teardown() {
 
 bool test_execute(const actor_config &config) {
   const mdbx_pid_t pid = osal_getpid();
-  loggging::setup((loggging::loglevel)config.params.loglevel,
-                  format("child_%u.%u", config.order, config.id));
+  logging::setup((logging::loglevel)config.params.loglevel,
+                 format("child_%u.%u", config.order, config.id));
 
   log_trace(">> wait4barrier");
   osal_wait4barrier();

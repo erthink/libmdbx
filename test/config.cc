@@ -231,94 +231,98 @@ const struct option_verb table_bits[] = {
     {"data.dups", MDB_DUPSORT},
     {nullptr, 0}};
 
-static void dump_verbs(FILE *out, const char *caption, size_t bits,
+static void dump_verbs(const char *caption, size_t bits,
                        const struct option_verb *verbs) {
-  fprintf(out, "%s: (%" PRIu64 ")", caption, (uint64_t)bits);
+  log_info("%s: 0x%" PRIx64 " = ", caption, (uint64_t)bits);
 
+  const char *comma = "";
   while (verbs->mask && bits) {
     if ((bits & verbs->mask) == verbs->mask) {
-      fprintf(out, ", %s", verbs->verb);
+      logging::feed("%s%s", comma, verbs->verb);
       bits -= verbs->mask;
+      comma = ", ";
     }
     ++verbs;
   }
 
-  fprintf(out, "\n");
+  logging::feed("\n");
 }
 
-static void dump_duration(FILE *out, const char *caption, unsigned duration) {
-  fprintf(out, "%s: ", caption);
+static void dump_duration(const char *caption, unsigned duration) {
+  log_info("%s: ", caption);
   if (duration) {
     if (duration > 24 * 3600)
-      fprintf(out, "%u_", duration / (24 * 3600));
+      logging::feed("%u_", duration / (24 * 3600));
     if (duration > 3600)
-      fprintf(out, "%02u:", (duration % (24 * 3600)) / 3600);
-    fprintf(out, "%02u:%02u", (duration % 3600) / 60, duration % 60);
-  } else
-    fprintf(out, "INFINITE");
-  fprintf(out, "\n");
+      logging::feed("%02u:", (duration % (24 * 3600)) / 3600);
+    logging::feed("%02u:%02u", (duration % 3600) / 60, duration % 60);
+  } else {
+    logging::feed("INFINITE");
+  }
+  logging::feed("\n");
 }
 
-void dump(FILE *out) {
+void dump(const char *title) {
+  logging::local_suffix indent(title);
+
   for (auto i = global::actors.begin(); i != global::actors.end(); ++i) {
-    fprintf(out, "testcase %s\n", testcase2str(i->testcase));
-    if (i->id)
-      fprintf(out, "\tid/table %u\n", i->id);
+    log_info("#%u, testcase %s, id/table %u\n", i->order,
+             testcase2str(i->testcase), i->id);
+    indent.push();
 
     if (i->params.loglevel) {
-      fprintf(out, "\tlog: level %u, %s\n", i->params.loglevel,
-              i->params.pathname_log.empty() ? "console"
-                                             : i->params.pathname_log.c_str());
+      log_info("log: level %u, %s\n", i->params.loglevel,
+               i->params.pathname_log.empty() ? "console"
+                                              : i->params.pathname_log.c_str());
     }
 
-    fprintf(out, "\tdatabase: %s, size %" PRIu64 "\n",
-            i->params.pathname_db.c_str(), i->params.size);
+    log_info("database: %s, size %" PRIu64 "\n", i->params.pathname_db.c_str(),
+             i->params.size);
 
-    dump_verbs(out, "\tmode", i->params.mode_flags, mode_bits);
-    dump_verbs(out, "\ttable", i->params.table_flags, table_bits);
+    dump_verbs("mode", i->params.mode_flags, mode_bits);
+    dump_verbs("table", i->params.table_flags, table_bits);
 
-    fprintf(out, "\tseed %u\n", i->params.seed);
+    log_info("seed %u\n", i->params.seed);
 
     if (i->params.test_nrecords)
-      fprintf(out, "\trecords %u\n", i->params.test_nrecords);
+      log_info("records %u\n", i->params.test_nrecords);
     else
-      dump_duration(out, "\tduration", i->params.test_duration);
+      dump_duration("duration", i->params.test_duration);
 
     if (i->params.nrepeat)
-      fprintf(out, "\trepeat %u\n", i->params.nrepeat);
+      log_info("repeat %u\n", i->params.nrepeat);
     else
-      fprintf(out, "\trepeat ETERNALLY\n");
+      log_info("repeat ETERNALLY\n");
 
-    fprintf(out, "\tthreads %u\n", i->params.nthreads);
+    log_info("threads %u\n", i->params.nthreads);
 
-    fprintf(out, "\tkey: minlen %u, maxlen %u\n", i->params.keylen_min,
-            i->params.keylen_max);
-    fprintf(out, "\tdata: minlen %u, maxlen %u\n", i->params.datalen_min,
-            i->params.datalen_max);
+    log_info("key: minlen %u, maxlen %u\n", i->params.keylen_min,
+             i->params.keylen_max);
+    log_info("data: minlen %u, maxlen %u\n", i->params.datalen_min,
+             i->params.datalen_max);
 
-    fprintf(out, "\tbatch: read %u, write %u\n", i->params.batch_read,
-            i->params.batch_write);
+    log_info("batch: read %u, write %u\n", i->params.batch_read,
+             i->params.batch_write);
 
     if (i->params.waitfor_nops)
-      fprintf(out, "\twait: actor %u for %u ops\n", i->wait4id,
-              i->params.waitfor_nops);
+      log_info("wait: actor %u for %u ops\n", i->wait4id,
+               i->params.waitfor_nops);
     else if (i->params.delaystart)
-      dump_duration(out, "\tdelay", i->params.delaystart);
+      dump_duration("delay", i->params.delaystart);
     else
-      fprintf(out, "\tno-delay\n");
+      log_info("no-delay\n");
 
-    fprintf(out, "\tlimits: readers %u, tables %u\n", i->params.max_readers,
-            i->params.max_tables);
+    log_info("limits: readers %u, tables %u\n", i->params.max_readers,
+             i->params.max_tables);
 
-    fprintf(out, "\tdrop table: %s\n", i->params.drop_table ? "Yes" : "No");
-
-    fprintf(out, "\t#---\n");
+    log_info("drop table: %s\n", i->params.drop_table ? "Yes" : "No");
+    indent.pop();
   }
 
-  dump_duration(out, "timeout", global::config::timeout);
-  fprintf(out, "cleanup: before %s, after %s\n",
-          global::config::dont_cleanup_before ? "No" : "Yes",
-          global::config::dont_cleanup_after ? "No" : "Yes");
+  dump_duration("timeout", global::config::timeout);
+  log_info("cleanup: before %s, after %s\n",
+           global::config::dont_cleanup_before ? "No" : "Yes",
+           global::config::dont_cleanup_after ? "No" : "Yes");
 }
 
 } /* namespace config */

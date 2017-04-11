@@ -90,8 +90,8 @@ protected:
 public:
   testcase(const actor_config &config, const mdbx_pid_t pid)
       : config(config), pid(pid) {
-    loggging::setup(format("%s_%u.%u", testcase2str(config.testcase),
-                           config.order, config.id));
+    logging::setup(format("%s_%u.%u", testcase2str(config.testcase),
+                          config.order, config.id));
   }
 
   virtual bool setup();

@@ -18,16 +18,19 @@
 
 void __noreturn usage(void);
 
-void __noreturn
 #ifdef __GNUC__
-    __attribute__((format(printf, 1, 2)))
+#define __printf_args(format_index, first_arg)                                 \
+  __attribute__((format(printf, format_index, first_arg)))
+#else
+#define __printf_args(format_index, first_arg)
 #endif
-    failure(const char *fmt, ...);
+
+void __noreturn __printf_args(1, 2) failure(const char *fmt, ...);
 
 void __noreturn failure_perror(const char *what, int errnum);
 const char *test_strerror(int errnum);
 
-namespace loggging {
+namespace logging {
 
 enum loglevel {
   trace,
@@ -43,14 +46,32 @@ void setup(loglevel level, const std::string &prefix);
 void setup(const std::string &prefix);
 
 void output(loglevel priority, const char *format, va_list ap);
+void __printf_args(1, 2) feed(const char *format, ...);
+
+class local_suffix {
+protected:
+  size_t trim_pos;
+  int indent;
+
+public:
+  local_suffix(const local_suffix &) = delete;
+  local_suffix(const local_suffix &&) = delete;
+  const local_suffix &operator=(const local_suffix &) = delete;
+
+  local_suffix(const char *c_str);
+  local_suffix(const std::string &str);
+  void push();
+  void pop();
+  ~local_suffix();
+};
 
 } /* namespace log */
 
-void log_trace(const char *msg, ...);
-void log_info(const char *msg, ...);
-void log_notice(const char *msg, ...);
-void log_warning(const char *msg, ...);
-void log_error(const char *msg, ...);
+void __printf_args(1, 2) log_trace(const char *msg, ...);
+void __printf_args(1, 2) log_info(const char *msg, ...);
+void __printf_args(1, 2) log_notice(const char *msg, ...);
+void __printf_args(1, 2) log_warning(const char *msg, ...);
+void __printf_args(1, 2) log_error(const char *msg, ...);
 
 void log_touble(const char *where, const char *what, int errnum);
 
