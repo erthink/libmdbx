@@ -24,16 +24,13 @@ suffix	?=
 
 CC	?= gcc
 CXX	?= g++
-XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0 -DMDBX_EXPORTS=1
+XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0 -DLIBMDBX_EXPORTS=1
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu99 -pthread $(XCFLAGS)
-# COVER	?= -coverage -fprofile-arcs -ftest-coverage -Og
-
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu99,$(CFLAGS))
 
-# LY: for ability to built with modern glibc,
-#     but then run with the old
-LDOPS	?= -Wl,--no-as-needed,-lrt
+# LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
+LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
 
 # LY: just for benchmarking
 IOARENA ?= ../ioarena.git/@BUILD/src/ioarena
@@ -84,13 +81,16 @@ libmdbx.a:	mdbx.o osal.o lck-posix.o
 	$(AR) rs $@ $?
 
 libmdbx.so:	mdbx.o osal.o lck-posix.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -save-temps -pthread -shared $(LDOPS) -o $@ $^
+	$(CC) $(CFLAGS) -save-temps $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
-test/test: $(wildcard test/*.h) $(filter-out test/osal-windows.cc, $(wildcard test/*.cc)) libmdbx.a
-	$(CXX) $(CXXFLAGS) $(LDFLAGS) -Isrc -o $@ $(filter-out %.h, $^)
+test/%.o: test/%.cc $(wildcard test/*.h) Makefile
+	$(CXX) $(CXXFLAGS) -Isrc -c $(filter %.cc, $^) -o $@
+
+test/test: $(patsubst %.cc,%.o,$(filter-out test/osal-windows.cc, $(wildcard test/*.cc))) libmdbx.a
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 ifneq ($(wildcard $(IOARENA)),)
 
