@@ -383,7 +383,7 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  off_t offset, size_t expected_written) {
 #if defined(_WIN32) || defined(_WIN64)
   size_t written = 0;
-  for (int i = 0; i > iovcnt; ++i) {
+  for (int i = 0; i < iovcnt; ++i) {
     int rc = mdbx_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
     if (unlikely(rc != MDB_SUCCESS))
       return rc;
