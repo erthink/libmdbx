@@ -1725,7 +1725,7 @@ typedef int MDBX_pgvisitor_func(size_t pgno, unsigned pgnumber, void *ctx,
 LIBMDBX_API int mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func *visitor,
                                 void *ctx);
 
-typedef struct mdbx_canary { size_t x, y, z, v; } mdbx_canary;
+typedef struct mdbx_canary { uint64_t x, y, z, v; } mdbx_canary;
 
 LIBMDBX_API int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary);
 LIBMDBX_API size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary);

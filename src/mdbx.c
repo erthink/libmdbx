@@ -9841,15 +9841,22 @@ int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
+    return MDB_BAD_TXN;
+
   if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
     return EACCES;
 
   if (likely(canary)) {
+    if (txn->mt_canary.x == canary->x && txn->mt_canary.y == canary->y &&
+        txn->mt_canary.z == canary->z && txn->mt_canary.v == canary->v)
+      return MDB_SUCCESS;
     txn->mt_canary.x = canary->x;
     txn->mt_canary.y = canary->y;
     txn->mt_canary.z = canary->z;
   }
   txn->mt_canary.v = txn->mt_txnid;
+  txn->mt_flags |= MDB_TXN_DIRTY;
 
   return MDB_SUCCESS;
 }
