@@ -9073,6 +9073,7 @@ int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del) {
     txn->mt_dbs[dbi].md_overflow_pages = 0;
     txn->mt_dbs[dbi].md_entries = 0;
     txn->mt_dbs[dbi].md_root = P_INVALID;
+    txn->mt_dbs[dbi].md_seq = 0;
 
     txn->mt_flags |= MDB_TXN_DIRTY;
   }
@@ -10240,4 +10241,42 @@ int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
         datacmp ? datacmp : mdbx_default_datacmp(md_flags);
   }
   return rc;
+}
+
+int mdbx_dbi_sequence(MDB_txn *txn, MDB_dbi dbi, uint64_t *result,
+                      uint64_t increment) {
+  if (unlikely(!txn))
+    return EINVAL;
+
+  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+    return EINVAL;
+
+  if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
+    return MDB_BAD_DBI;
+
+  MDB_db *dbs = &txn->mt_dbs[dbi];
+  if (likely(result))
+    *result = dbs->md_seq;
+
+  if (likely(increment > 0)) {
+    if (unlikely(txn->mt_flags & MDB_TXN_BLOCKED))
+      return MDB_BAD_TXN;
+
+    if (unlikely(F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)))
+      return EACCES;
+
+    uint64_t new = dbs->md_seq + increment;
+    if (unlikely(new < increment))
+      return MDBX_RESULT_TRUE;
+
+    assert(new > dbs->md_seq);
+    dbs->md_seq = new;
+    txn->mt_flags |= MDB_TXN_DIRTY;
+    txn->mt_dbflags[dbi] |= DB_DIRTY;
+  }
+
+  return MDB_SUCCESS;
 }

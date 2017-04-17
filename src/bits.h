@@ -246,6 +246,7 @@ typedef struct MDB_db {
   uint32_t md_xsize;        /**< also ksize for LEAF2 pages */
   uint16_t md_flags;        /**< @ref mdbx_dbi_open */
   uint16_t md_depth;        /**< depth of this tree */
+  uint64_t md_seq;          /* table sequence counter */
   pgno_t md_branch_pages;   /**< number of internal pages */
   pgno_t md_leaf_pages;     /**< number of leaf pages */
   pgno_t md_overflow_pages; /**< number of overflow pages */

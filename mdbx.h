@@ -1759,6 +1759,9 @@ LIBMDBX_API int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
                                  MDB_dbi *dbi, MDB_cmp_func *keycmp,
                                  MDB_cmp_func *datacmp);
 
+LIBMDBX_API int mdbx_dbi_sequence(MDB_txn *txn, MDB_dbi dbi, uint64_t *result,
+                                  uint64_t increment);
+
 #ifdef __cplusplus
 }
 #endif
