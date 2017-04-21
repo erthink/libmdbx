@@ -2156,7 +2156,7 @@ static void mdbx_cursors_eot(MDB_txn *txn, unsigned merge) {
 static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
   MDB_env *env = txn->mt_env;
   unsigned i, nr;
-  int rc, new_notls = 0;
+  int rc;
 
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDB_FATAL_ERROR;
@@ -2231,11 +2231,8 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
 #endif
       mdbx_rdt_unlock(env);
 
-      new_notls = MDB_END_SLOT /* == MDB_NOTLS */;
-      if (likely(env->me_flags & MDB_ENV_TXKEY)) {
+      if (likely(env->me_flags & MDB_ENV_TXKEY))
         mdbx_thread_rthc_set(env->me_txkey, r);
-        new_notls = 0;
-      }
     }
 
     while ((env->me_flags & MDB_FATAL_ERROR) == 0) {
@@ -2322,7 +2319,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
   } else {
     return MDB_SUCCESS;
   }
-  mdbx_txn_end(txn, new_notls /*0 or MDB_END_SLOT*/ | MDB_END_FAIL_BEGIN);
+  mdbx_txn_end(txn, MDB_END_SLOT | MDB_END_FAIL_BEGIN);
   return rc;
 }
 
@@ -2527,12 +2524,11 @@ static int mdbx_txn_end(MDB_txn *txn, unsigned mode) {
       mdbx_mutex_lock(&tsan_mutex);
 #endif
       txn->mt_u.reader->mr_txnid = ~(txnid_t)0;
-      if (!(env->me_flags & MDB_NOTLS)) {
-        txn->mt_u.reader = NULL; /* txn does not own reader */
-      } else if (mode & MDB_END_SLOT) {
-        txn->mt_u.reader->mr_pid = 0;
+      if (mode & MDB_END_SLOT) {
+        if ((env->me_flags & MDB_ENV_TXKEY) == 0)
+          txn->mt_u.reader->mr_pid = 0;
         txn->mt_u.reader = NULL;
-      } /* else txn owns the slot until it does MDB_END_SLOT */
+      }
 #ifdef __SANITIZE_THREAD__
       mdbx_mutex_unlock(&tsan_mutex);
 #endif
