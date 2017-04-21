@@ -26,7 +26,7 @@ bool testcase_hill::setup() {
 }
 
 bool testcase_hill::run() {
-  mdbx_open();
+  db_open();
   /* TODO */
   return true;
 }

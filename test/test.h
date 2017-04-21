@@ -24,7 +24,7 @@
 
 bool test_execute(const actor_config &config);
 std::string thunk_param(const actor_config &config);
-bool testcase_setup(const char *casename, const actor_params &params,
+void testcase_setup(const char *casename, actor_params &params,
                     unsigned &lastid);
 void configure_actor(unsigned &lastid, const actor_testcase testcase,
                      const char *id_cstr, const actor_params &params);
@@ -36,12 +36,16 @@ extern std::vector<actor_config> actors;
 extern std::unordered_map<unsigned, actor_config *> events;
 extern std::unordered_map<mdbx_pid_t, actor_config *> pid2actor;
 extern std::set<std::string> databases;
+extern unsigned nactors;
+extern chrono::time start_motonic;
+extern chrono::time deadline_motonic;
+extern bool singlemode;
 
 namespace config {
-extern unsigned timeout;
+extern unsigned timeout_duration_seconds;
 extern bool dump_config;
-extern bool dont_cleanup_before;
-extern bool dont_cleanup_after;
+extern bool cleanup_before;
+extern bool cleanup_after;
 } /* namespace config */
 
 } /* namespace global */
@@ -80,19 +84,28 @@ protected:
   scoped_cursor_guard cursor_guard;
   bool signalled;
 
-  void mdbx_prepare();
-  void mdbx_open();
-  void mdbx_close();
+  size_t nops_completed;
+  chrono::time start_timestamp;
+
+  void db_prepare();
+  void db_open();
+  void db_close();
+  void txn_begin(bool readonly);
+  void txn_end(bool abort);
 
   bool wait4start();
   void report(size_t nops_done);
   void signal();
+  bool should_continue() const;
+
+  bool mode_readonly() const {
+    return (config.params.mode_flags & MDB_RDONLY) ? true : false;
+  }
 
 public:
   testcase(const actor_config &config, const mdbx_pid_t pid)
-      : config(config), pid(pid) {
-    logging::setup(format("%s_%u.%u", testcase2str(config.testcase),
-                          config.order, config.id));
+      : config(config), pid(pid), nops_completed(0) {
+    start_timestamp.reset();
   }
 
   virtual bool setup();

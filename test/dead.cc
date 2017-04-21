@@ -24,7 +24,8 @@ bool testcase_deadread::setup() {
 }
 
 bool testcase_deadread::run() {
-  /* TODO */
+  db_open();
+  txn_begin(true);
   return true;
 }
 
@@ -33,7 +34,7 @@ bool testcase_deadread::teardown() {
   cursor_guard.release();
   txn_guard.release();
   db_guard.release();
-  return true;
+  return inherited::teardown();
 }
 
 //-----------------------------------------------------------------------------
@@ -48,7 +49,8 @@ bool testcase_deadwrite::setup() {
 }
 
 bool testcase_deadwrite::run() {
-  /* TODO */
+  db_open();
+  txn_begin(false);
   return true;
 }
 
@@ -57,5 +59,5 @@ bool testcase_deadwrite::teardown() {
   cursor_guard.release();
   txn_guard.release();
   db_guard.release();
-  return true;
+  return inherited::teardown();
 }

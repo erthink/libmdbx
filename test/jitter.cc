@@ -19,13 +19,47 @@ bool testcase_jitter::setup() {
   if (!inherited::setup())
     return false;
 
-  /* TODO */
-
   log_trace("<< setup");
   return true;
 }
 
-bool testcase_jitter::run() { return true; }
+bool testcase_jitter::run() {
+  while (should_continue()) {
+    jitter_delay();
+    db_open();
+
+    if (flipcoin()) {
+      jitter_delay();
+      txn_begin(true);
+      jitter_delay();
+      txn_end(false);
+    }
+
+    jitter_delay();
+    txn_begin(mode_readonly());
+    jitter_delay();
+    if (!mode_readonly()) {
+      /* TODO:
+       *  - db_sequence()
+       *  - db_setsize()
+       *  ...
+       */
+    }
+    txn_end(false);
+
+    if (flipcoin()) {
+      jitter_delay();
+      txn_begin(true);
+      jitter_delay();
+      txn_end(false);
+    }
+
+    jitter_delay();
+    db_close();
+    report(1);
+  }
+  return true;
+}
 
 bool testcase_jitter::teardown() {
   log_trace(">> teardown");

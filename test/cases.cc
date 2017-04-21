@@ -23,8 +23,8 @@ void configure_actor(unsigned &lastid, const actor_testcase testcase,
       if (i->is_waitable(params.waitfor_nops)) {
         if (i->signal_nops && i->signal_nops != params.waitfor_nops)
           failure("Previous waitable actor (id=%u) already linked on %u-ops\n",
-                  i->id, i->signal_nops);
-        wait4id = i->id;
+                  i->actor_id, i->signal_nops);
+        wait4id = i->actor_id;
         i->signal_nops = params.waitfor_nops;
         break;
       }
@@ -33,7 +33,7 @@ void configure_actor(unsigned &lastid, const actor_testcase testcase,
       failure("No previous waitable actor for %u-ops\n", params.waitfor_nops);
   }
 
-  unsigned long id = 0;
+  unsigned id = 0;
   if (!id_cstr || strcmp(id_cstr, "auto") == 0)
     id = lastid + 1;
   else {
@@ -47,23 +47,26 @@ void configure_actor(unsigned &lastid, const actor_testcase testcase,
   }
 
   if (id < 1 || id > ACTOR_ID_MAX)
-    failure("Invalid actor-id %lu\n", id);
+    failure("Invalid actor-id %u\n", id);
   lastid = id;
 
+  log_trace("configure_actor: %u for %s", id, testcase2str(testcase));
   global::actors.emplace_back(actor_config(testcase, params, id, wait4id));
   global::databases.insert(params.pathname_db);
 }
 
-bool testcase_setup(const char *casename, const actor_params &params,
+void testcase_setup(const char *casename, actor_params &params,
                     unsigned &lastid) {
-  log_notice("testcase_setup(%s): TODO", casename);
-
   if (strcmp(casename, "basic") == 0) {
+    log_notice(">>> testcase_setup(%s)", casename);
     configure_actor(lastid, ac_hill, nullptr, params);
-    return true;
+    configure_actor(lastid, ac_jitter, nullptr, params);
+    configure_actor(lastid, ac_jitter, nullptr, params);
+    configure_actor(lastid, ac_jitter, nullptr, params);
+    log_notice("<<< testcase_setup(%s): done", casename);
+  } else {
+    failure("unknown testcase `%s`", casename);
   }
-
-  return false;
 }
 
 /* TODO */

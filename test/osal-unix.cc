@@ -24,11 +24,11 @@
 struct shared_t {
   pthread_barrier_t barrier;
   pthread_mutex_t mutex;
-  pthread_cond_t conds[0];
+  size_t conds_size;
+  pthread_cond_t conds[1];
 };
 
 static shared_t *shared;
-static std::unordered_map<unsigned, pthread_cond_t *> events;
 
 void osal_wait4barrier(void) {
   assert(shared != nullptr && shared != MAP_FAILED);
@@ -65,13 +65,8 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (rc)
     failure_perror("pthread_condattr_setpshared()", rc);
 
-  size_t n = 0;
-  for (const auto &a : actors)
-    if (a.wanna_event4signalling())
-      ++n;
-
   shared = (shared_t *)mmap(
-      nullptr, sizeof(shared_t) + n * sizeof(pthread_cond_t),
+      nullptr, sizeof(shared_t) + actors.size() * sizeof(pthread_cond_t),
       PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
   if (MAP_FAILED == (void *)shared)
     failure_perror("mmap(shared_conds)", errno);
@@ -84,24 +79,15 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (rc)
     failure_perror("pthread_barrier_init(shared)", rc);
 
-  auto a = actors.begin();
+  const size_t n = actors.size() + 1;
   for (size_t i = 0; i < n; ++i) {
     pthread_cond_t *event = &shared->conds[i];
     rc = pthread_cond_init(event, &condattr);
     if (rc)
       failure_perror("pthread_cond_init(shared)", rc);
-
-    unsigned id = 0;
-    while (a != actors.end()) {
-      if (a->wanna_event4signalling()) {
-        id = a->id;
-        break;
-      }
-      ++a;
-    }
-    assert(id != 0);
-    events[id] = event;
+    log_trace("osal_setup: event(shared pthread_cond) %zu -> %p", i, event);
   }
+  shared->conds_size = actors.size() + 1;
 
   pthread_barrierattr_destroy(&barrierattr);
   pthread_condattr_destroy(&condattr);
@@ -110,7 +96,10 @@ void osal_setup(const std::vector<actor_config> &actors) {
 
 void osal_broadcast(unsigned id) {
   assert(shared != nullptr && shared != MAP_FAILED);
-  int rc = pthread_cond_broadcast(events.at(id));
+  log_trace("osal_broadcast: event %u", id);
+  if (id >= shared->conds_size)
+    failure("osal_broadcast: id > limit");
+  int rc = pthread_cond_broadcast(shared->conds + id);
   if (rc)
     failure_perror("sem_post(shared)", rc);
 }
@@ -118,11 +107,15 @@ void osal_broadcast(unsigned id) {
 int osal_waitfor(unsigned id) {
   assert(shared != nullptr && shared != MAP_FAILED);
 
+  log_trace("osal_waitfor: event %u", id);
+  if (id >= shared->conds_size)
+    failure("osal_waitfor: id > limit");
+
   int rc = pthread_mutex_lock(&shared->mutex);
   if (rc != 0)
     failure_perror("pthread_mutex_lock(shared)", rc);
 
-  rc = pthread_cond_wait(events.at(id), &shared->mutex);
+  rc = pthread_cond_wait(shared->conds + id, &shared->mutex);
   if (rc && rc != EINTR)
     failure_perror("pthread_cond_wait(shared)", rc);
 
@@ -173,6 +166,7 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (pid < 0)
     return errno;
 
+  log_trace("osal_actor_start: fork pid %i for %u", pid, config.actor_id);
   childs[pid] = as_running;
   return 0;
 }

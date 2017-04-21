@@ -78,7 +78,7 @@ struct actor_params_pod {
   unsigned seed;
 
   unsigned test_duration;
-  unsigned test_nrecords;
+  unsigned test_nops;
   unsigned nrepeat;
   unsigned nthreads;
 
@@ -98,7 +98,7 @@ struct actor_params_pod {
 };
 
 struct actor_config_pod {
-  unsigned id, order;
+  unsigned actor_id, space_id;
   actor_testcase testcase;
   unsigned wait4id;
   unsigned signal_nops;
@@ -123,8 +123,8 @@ struct actor_config : public config::actor_config_pod {
 
   bool wanna_event4signalling() const { return true /* TODO ? */; }
 
-  actor_config(actor_testcase testcase, const actor_params &params, unsigned id,
-               unsigned wait4id);
+  actor_config(actor_testcase testcase, const actor_params &params,
+               unsigned space_id, unsigned wait4id);
 
   actor_config(const char *str) {
     if (!deserialize(str, *this))
@@ -140,7 +140,7 @@ struct actor_config : public config::actor_config_pod {
   bool is_waitable(size_t nops) const {
     switch (testcase) {
     case ac_hill:
-      if (!params.test_nrecords || params.test_nrecords >= nops)
+      if (!params.test_nops || params.test_nops >= nops)
         return true;
     default:
       return false;

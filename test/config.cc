@@ -32,26 +32,23 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   if (!value) {
     if (current[optlen + 2] == '=')
       failure("Option '--%s' doen't accept any value\n", option);
-    narg += 1;
     return true;
   }
 
   *value = nullptr;
   if (current[optlen + 2] == '=') {
     *value = &current[optlen + 3];
-    narg += 1;
     return true;
   }
 
-  if (narg + 1 < argc && strncmp("--", argv[narg + 1], 2)) {
+  if (narg + 1 < argc && strncmp("--", argv[narg + 1], 2) != 0) {
     *value = argv[narg + 1];
-    narg += 2;
+    ++narg;
     return true;
   }
 
   if (default_value) {
     *value = default_value;
-    narg += 1;
     return true;
   }
 
@@ -184,11 +181,16 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   const char *value_cstr = NULL;
   if (!parse_option(argc, argv, narg, option, &value_cstr, "yes")) {
     const char *current = argv[narg];
-    if (strncmp(current, "--no-", 5) || strcmp(current + 5, option))
-      return false;
-    value = false;
-    narg += 1;
-    return true;
+    if (strncmp(current, "--no-", 5) == 0 && strcmp(current + 5, option) == 0) {
+      value = false;
+      return true;
+    }
+    if (strncmp(current, "--dont-", 7) == 0 &&
+        strcmp(current + 7, option) == 0) {
+      value = false;
+      return true;
+    }
+    return false;
   }
 
   if (!value_cstr) {
@@ -266,8 +268,8 @@ void dump(const char *title) {
   logging::local_suffix indent(title);
 
   for (auto i = global::actors.begin(); i != global::actors.end(); ++i) {
-    log_info("#%u, testcase %s, id/table %u\n", i->order,
-             testcase2str(i->testcase), i->id);
+    log_info("#%u, testcase %s, space_id/table %u\n", i->actor_id,
+             testcase2str(i->testcase), i->space_id);
     indent.push();
 
     if (i->params.loglevel) {
@@ -284,8 +286,8 @@ void dump(const char *title) {
 
     log_info("seed %u\n", i->params.seed);
 
-    if (i->params.test_nrecords)
-      log_info("records %u\n", i->params.test_nrecords);
+    if (i->params.test_nops)
+      log_info("iterations/records %u\n", i->params.test_nops);
     else
       dump_duration("duration", i->params.test_duration);
 
@@ -319,10 +321,10 @@ void dump(const char *title) {
     indent.pop();
   }
 
-  dump_duration("timeout", global::config::timeout);
+  dump_duration("timeout", global::config::timeout_duration_seconds);
   log_info("cleanup: before %s, after %s\n",
-           global::config::dont_cleanup_before ? "No" : "Yes",
-           global::config::dont_cleanup_after ? "No" : "Yes");
+           global::config::cleanup_before ? "Yes" : "No",
+           global::config::cleanup_after ? "Yes" : "No");
 }
 
 } /* namespace config */
@@ -332,10 +334,10 @@ void dump(const char *title) {
 using namespace config;
 
 actor_config::actor_config(actor_testcase testcase, const actor_params &params,
-                           unsigned id, unsigned wait4id)
+                           unsigned space_id, unsigned wait4id)
     : params(params) {
-  this->id = id;
-  this->order = (unsigned)global::actors.size();
+  this->space_id = space_id;
+  this->actor_id = 1 + (unsigned)global::actors.size();
   this->testcase = testcase;
   this->wait4id = wait4id;
   signal_nops = 0;

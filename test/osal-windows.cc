@@ -14,7 +14,7 @@
 
 #include "test.h"
 
-static std::unordered_map<unsigned, HANDLE> events;
+static std::vector<HANDLE> events;
 static HANDLE hBarrierSemaphore, hBarrierEvent;
 
 static int waitstatus2errcode(DWORD result) {
@@ -63,15 +63,17 @@ static HANDLE make_inharitable(HANDLE hHandle) {
 }
 
 void osal_setup(const std::vector<actor_config> &actors) {
-  size_t n = 0;
-  for (const auto &a : actors) {
-    if (a.wanna_event4signalling()) {
-      HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-      if (!hEvent)
-        failure_perror("CreateEvent()", GetLastError());
-      hEvent = make_inharitable(hEvent);
-      events[a.id] = hEvent;
-    }
+  assert(events.empty());
+  const size_t n = actors.size() + 1;
+  events.reserve(n);
+
+  for (size_t i = 0; i < n; ++i) {
+    HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    if (!hEvent)
+      failure_perror("CreateEvent()", GetLastError());
+    hEvent = make_inharitable(hEvent);
+    log_trace("osal_setup: event %zu -> %p", i, hEvent);
+    events.push_back(hEvent);
   }
 
   hBarrierSemaphore = CreateSemaphore(NULL, 0, (LONG)actors.size(), NULL);
@@ -86,11 +88,13 @@ void osal_setup(const std::vector<actor_config> &actors) {
 }
 
 void osal_broadcast(unsigned id) {
+  log_trace("osal_broadcast: event %u", id);
   if (!SetEvent(events.at(id)))
     failure_perror("SetEvent()", GetLastError());
 }
 
 int osal_waitfor(unsigned id) {
+  log_trace("osal_waitfor: event %u", id);
   DWORD rc = WaitForSingleObject(events.at(id), INFINITE);
   return waitstatus2errcode(rc);
 }

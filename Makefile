@@ -66,7 +66,7 @@ clean:
 	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
 
 check:	test/test
-	test/test --pathname=tmp.db --basic --dont-cleanup-after && ./mdbx_chk -vn tmp.db
+	test/test --pathname=tmp.db --dont-cleanup-after basic && ./mdbx_chk -vn tmp.db
 
 mdbx.o: $(MDBX_SRC) Makefile
 	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
