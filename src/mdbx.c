@@ -3994,6 +3994,7 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
   if (rc == MDB_SUCCESS) {
     mdbx_debug("opened dbenv %p", (void *)env);
     if (excl > 0) {
+      env->me_txns->mti_envmode = env->me_flags;
       if (exclusive == NULL || *exclusive < 2) {
         /* LY: downgrade lock only if exclusive access not requested.
          *     in case exclusive==1, just leave value as is. */
@@ -4002,9 +4003,17 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
           goto bailout;
         excl = 0;
       }
-    } else if (exclusive) {
-      /* LY: just indicate that is not an exclusive access. */
-      *exclusive = 0;
+    } else {
+      if (exclusive) {
+        /* LY: just indicate that is not an exclusive access. */
+        *exclusive = 0;
+      }
+      if ((env->me_txns->mti_envmode ^ env->me_flags) &
+          (MDB_WRITEMAP | MDB_NOSYNC | MDB_NOMETASYNC | MDB_MAPASYNC)) {
+        /* LY: Current mode/flags incompatible with requested. */
+        rc = MDB_INCOMPATIBLE;
+        goto bailout;
+      }
     }
     if (!(flags & MDB_RDONLY)) {
       MDB_txn *txn;
