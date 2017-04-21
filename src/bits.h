@@ -829,3 +829,6 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
   assert(is_power2(granularity));
   return (value + granularity - 1) & ~(granularity - 1);
 }
+
+#define MDBX_IS_ERROR(rc)                                                      \
+  ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)

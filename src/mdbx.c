@@ -2129,8 +2129,9 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
       mdbx_tid_t tid = mdbx_thread_self();
 
       rc = mdbx_rdt_lock(env);
-      if (unlikely(rc != MDB_SUCCESS))
+      if (unlikely(MDBX_IS_ERROR(rc)))
         return rc;
+      rc = MDB_SUCCESS;
 
       if (unlikely(env->me_live_reader != pid)) {
         rc = mdbx_rpid_set(env);
@@ -9129,11 +9130,10 @@ int __cold mdbx_reader_check0(MDB_env *env, int rdt_locked, int *dead) {
   mdbx_pid_t *pids = alloca((snap_nreaders + 1) * sizeof(mdbx_pid_t));
   pids[0] = 0;
 
-  unsigned i;
   int rc = MDBX_RESULT_FALSE, count = 0;
   MDB_reader *mr = env->me_txns->mti_readers;
 
-  for (i = 0; i < snap_nreaders; i++) {
+  for (unsigned i = 0; i < snap_nreaders; i++) {
     const mdbx_pid_t pid = mr[i].mr_pid;
     if (pid == 0)
       continue;
@@ -9151,33 +9151,32 @@ int __cold mdbx_reader_check0(MDB_env *env, int rdt_locked, int *dead) {
 
     /* stale reader found */
     if (!rdt_locked) {
-      rdt_locked = -1;
       rc = mdbx_rdt_lock(env);
-      if (rc != MDB_SUCCESS) {
-        if (rc != MDBX_RESULT_TRUE)
-          break; /* lock failed */
-        /* recovered after mutex owner died */
-        snap_nreaders = 0; /* the above checked all readers */
-      } else {
-        /* a other process may have clean and reused slot, recheck */
-        if (mr[i].mr_pid != pid)
-          continue;
-        rc = mdbx_rpid_check(env, pid);
-        if (rc != MDBX_RESULT_FALSE) {
-          if (rc != MDBX_RESULT_TRUE)
-            break; /* mdbx_rpid_check() failed */
-          /* the race with other process, slot reused */
-          rc = MDBX_RESULT_FALSE;
-          continue;
-        }
+      if (MDBX_IS_ERROR(rc))
+        break;
+
+      rdt_locked = -1;
+      if (rc == MDBX_RESULT_TRUE)
+        /* the above checked all readers */
+        break;
+
+      /* a other process may have clean and reused slot, recheck */
+      if (mr[i].mr_pid != pid)
+        continue;
+
+      rc = mdbx_rpid_check(env, pid);
+      if (MDBX_IS_ERROR(rc))
+        break;
+
+      if (rc != MDBX_RESULT_FALSE) {
+        /* the race with other process, slot reused */
+        rc = MDBX_RESULT_FALSE;
+        continue;
       }
     }
 
-    assert(mr[i].mr_pid == pid);
-
     /* clean it */
-    unsigned j;
-    for (j = i; j < snap_nreaders; j++) {
+    for (unsigned j = i; j < snap_nreaders; j++) {
       if (mr[j].mr_pid == pid) {
         mdbx_debug("clear stale reader pid %u txn %zd", (unsigned)pid,
                    mr[j].mr_txnid);

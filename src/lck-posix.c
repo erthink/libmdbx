@@ -121,17 +121,18 @@ int mdbx_rdt_lock(MDB_env *env) {
 
 void mdbx_rdt_unlock(MDB_env *env) {
   int rc = mdbx_robust_unlock(env, &env->me_txns->mti_rmutex);
-  if (unlikely(rc != 0))
+  if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
 
 int mdbx_txn_lock(MDB_env *env) {
-  return mdbx_robust_lock(env, &env->me_txns->mti_wmutex);
+  int rc = mdbx_robust_lock(env, &env->me_txns->mti_wmutex);
+  return MDBX_IS_ERROR(rc) ? rc : MDB_SUCCESS;
 }
 
 void mdbx_txn_unlock(MDB_env *env) {
   int rc = mdbx_robust_unlock(env, &env->me_txns->mti_wmutex);
-  if (unlikely(rc != 0))
+  if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
 
@@ -205,42 +206,46 @@ static int mdbx_lck_op(mdbx_filehandle_t fd, int op, int lck, off_t offset) {
   }
 }
 
+#if !__GLIBC_PREREQ(2, 12) && !defined(pthread_mutex_consistent)
+#define pthread_mutex_consistent(mutex) pthread_mutex_consistent_np(mutex)
+#endif
+
 static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
 #if MDB_USE_ROBUST
-  if (unlikely(rc == EOWNERDEAD)) {
+  if (rc == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
-    rc = MDB_SUCCESS;
+
     int rlocked = (mutex == &env->me_txns->mti_rmutex);
+    rc = MDB_SUCCESS;
     if (!rlocked) {
-      /* env is hosed if the dead thread was ours */
-      if (env->me_txn) {
+      if (unlikely(env->me_txn)) {
+        /* env is hosed if the dead thread was ours */
         env->me_flags |= MDB_FATAL_ERROR;
         env->me_txn = NULL;
         rc = MDB_PANIC;
       }
     }
-    mdbx_debug("%cmutex owner died, %s", (rlocked ? 'r' : 'w'),
-               (rc ? "this process' env is hosed" : "recovering"));
-    int rc2 = mdbx_reader_check0(env, rlocked, NULL);
-    if (rc2 == 0)
-#if __GLIBC_PREREQ(2, 12)
-      rc2 = pthread_mutex_consistent(mutex);
-#else
-      rc2 = pthread_mutex_consistent_np(mutex);
-#endif
-    if (rc || (rc = rc2)) {
-      mdbx_debug("mutex recovery failed, %s", mdbx_strerror(rc));
+    mdbx_notice("%cmutex owner died, %s", (rlocked ? 'r' : 'w'),
+                (rc ? "this process' env is hosed" : "recovering"));
+
+    int check_rc = mdbx_reader_check0(env, rlocked, NULL);
+    int mreco_rc = pthread_mutex_consistent(mutex);
+    check_rc = (mreco_rc == 0) ? check_rc : mreco_rc;
+
+    if (unlikely(mreco_rc))
+      mdbx_error("mutex recovery failed, %s", mdbx_strerror(mreco_rc));
+
+    rc = (rc == MDB_SUCCESS) ? check_rc : rc;
+    if (MDBX_IS_ERROR(rc))
       pthread_mutex_unlock(mutex);
-    }
+    return rc;
   }
 #endif /* MDB_USE_ROBUST */
 
-  if (unlikely(rc)) {
-    mdbx_debug("lock mutex failed, %s", mdbx_strerror(rc));
-    if (rc != EDEADLK) {
-      env->me_flags |= MDB_FATAL_ERROR;
-      rc = MDB_PANIC;
-    }
+  mdbx_error("lock mutex failed, %s", mdbx_strerror(rc));
+  if (rc != EDEADLK) {
+    env->me_flags |= MDB_FATAL_ERROR;
+    rc = MDB_PANIC;
   }
   return rc;
 }
