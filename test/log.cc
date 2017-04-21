@@ -55,8 +55,12 @@ const char *level2str(const loglevel level) {
   switch (level) {
   default:
     return "invalid/unknown";
+  case extra:
+    return "extra";
   case trace:
     return "trace";
+  case verbose:
+    return "verbose";
   case info:
     return "info";
   case notice:
@@ -70,48 +74,74 @@ const char *level2str(const loglevel level) {
   }
 }
 
-void output(loglevel priority, const char *format, va_list ap) {
-  if (priority >= level) {
-    last = (priority >= error) ? stderr : stdout;
-    fprintf(last, "[ %u %-10s %6s ] %s" /* TODO */, osal_getpid(),
-            prefix.c_str(), level2str(priority), suffix.c_str());
-    vfprintf(last, format, ap);
+bool output(loglevel priority, const char *format, ...) {
+  if (priority < level)
+    return false;
 
-    size_t len = strlen(format);
-    char end = len ? format[len - 1] : '\0';
-    switch (end) {
-    default:
-      putc('\n', last);
-    case '\n':
-      if (priority > info)
-        fflushall();
-      break;
-    case ' ':
-    case '_':
-    case ':':
-    case '|':
-    case ',':
-    case '\t':
-    case '\b':
-    case '\r':
-    case '\0':
-      return;
-    }
-  }
-  last = nullptr;
+  va_list ap;
+  va_start(ap, format);
+  output(priority, format, ap);
+  va_end(ap);
+  return true;
 }
 
-void feed(const char *format, ...) {
+bool output(loglevel priority, const char *format, va_list ap) {
   if (last) {
-    va_list ap;
-    va_start(ap, format);
-    vfprintf(last, format, ap);
-    va_end(ap);
-
-    size_t len = strlen(format);
-    if (len && format[len - 1] == '\n')
-      last = nullptr;
+    putc('\n', last);
+    last = nullptr;
   }
+
+  if (priority < level)
+    return false;
+
+  last = (priority >= error) ? stderr : stdout;
+  fprintf(last, "[ %u%10s %.4s ] %s" /* TODO */, osal_getpid(), prefix.c_str(),
+          level2str(priority), suffix.c_str());
+  vfprintf(last, format, ap);
+
+  size_t len = strlen(format);
+  char end = len ? format[len - 1] : '\0';
+  switch (end) {
+  default:
+    putc('\n', last);
+  case '\n':
+    if (priority > info)
+      fflushall();
+    last = nullptr;
+  case ' ':
+  case '_':
+  case ':':
+  case '|':
+  case ',':
+  case '\t':
+  case '\b':
+  case '\r':
+  case '\0':
+    break;
+  }
+  return true;
+}
+
+bool feed(const char *format, va_list ap) {
+  if (!last)
+    return false;
+
+  vfprintf(last, format, ap);
+  size_t len = strlen(format);
+  if (len && format[len - 1] == '\n')
+    last = nullptr;
+  return true;
+}
+
+bool feed(const char *format, ...) {
+  if (!last)
+    return false;
+
+  va_list ap;
+  va_start(ap, format);
+  feed(format, ap);
+  va_end(ap);
+  return true;
 }
 
 local_suffix::local_suffix(const char *c_str)
@@ -146,6 +176,16 @@ void log_trace(const char *msg, ...) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::trace, msg, ap);
+    va_end(ap);
+  } else
+    logging::last = nullptr;
+}
+
+void log_verbose(const char *msg, ...) {
+  if (logging::verbose >= logging::level) {
+    va_list ap;
+    va_start(ap, msg);
+    logging::output(logging::verbose, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;

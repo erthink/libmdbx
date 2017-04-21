@@ -33,7 +33,9 @@ const char *test_strerror(int errnum);
 namespace logging {
 
 enum loglevel {
+  extra,
   trace,
+  verbose,
   info,
   notice,
   warning,
@@ -45,8 +47,10 @@ const char *level2str(const loglevel level);
 void setup(loglevel level, const std::string &prefix);
 void setup(const std::string &prefix);
 
-void output(loglevel priority, const char *format, va_list ap);
-void __printf_args(1, 2) feed(const char *format, ...);
+bool output(loglevel priority, const char *format, va_list ap);
+bool __printf_args(2, 3) output(loglevel priority, const char *format, ...);
+bool feed(const char *format, va_list ap);
+bool __printf_args(1, 2) feed(const char *format, ...);
 
 class local_suffix {
 protected:
@@ -68,6 +72,7 @@ public:
 } /* namespace log */
 
 void __printf_args(1, 2) log_trace(const char *msg, ...);
+void __printf_args(1, 2) log_verbose(const char *msg, ...);
 void __printf_args(1, 2) log_info(const char *msg, ...);
 void __printf_args(1, 2) log_notice(const char *msg, ...);
 void __printf_args(1, 2) log_warning(const char *msg, ...);
