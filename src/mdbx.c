@@ -61,12 +61,12 @@ static rthc_entry_t *rthc_table = rthc_table_static;
 
 __cold void mdbx_rthc_dtor(void *ptr) {
   MDB_reader *rthc = (MDB_reader *)ptr;
-  unsigned i;
 
   mdbx_rthc_lock();
-  for (i = 0; i < rthc_count; ++i) {
+  const mdbx_pid_t self_pid = mdbx_getpid();
+  for (unsigned i = 0; i < rthc_count; ++i) {
     if (rthc >= rthc_table[i].begin && rthc < rthc_table[i].end) {
-      if (rthc->mr_pid && rthc->mr_pid == mdbx_getpid()) {
+      if (rthc->mr_pid == self_pid) {
         rthc->mr_pid = 0;
         mdbx_coherent_barrier();
       }
@@ -77,15 +77,14 @@ __cold void mdbx_rthc_dtor(void *ptr) {
 }
 
 __cold void mdbx_rthc_cleanup(void) {
-  unsigned i;
-
   mdbx_rthc_lock();
-  for (i = 0; i < rthc_count; ++i) {
+  const mdbx_pid_t self_pid = mdbx_getpid();
+  for (unsigned i = 0; i < rthc_count; ++i) {
     mdbx_thread_key_t key = rthc_table[i].key;
     MDB_reader *rthc = mdbx_thread_rthc_get(key);
     if (rthc) {
       mdbx_thread_rthc_set(key, NULL);
-      if (rthc->mr_pid && rthc->mr_pid == mdbx_getpid()) {
+      if (rthc->mr_pid == self_pid) {
         rthc->mr_pid = 0;
         mdbx_coherent_barrier();
       }
@@ -96,6 +95,9 @@ __cold void mdbx_rthc_cleanup(void) {
 
 __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDB_reader *begin,
                            MDB_reader *end) {
+#ifndef NDEBUG
+  *key = (mdbx_thread_key_t)0xBADBADBAD;
+#endif /* NDEBUG */
   int rc = mdbx_thread_key_create(key);
   if (rc != MDB_SUCCESS)
     return rc;
@@ -132,9 +134,14 @@ __cold void mdbx_rthc_remove(mdbx_thread_key_t key) {
   mdbx_rthc_lock();
   mdbx_thread_key_delete(key);
 
-  unsigned i;
-  for (i = 0; i < rthc_count; ++i) {
+  for (unsigned i = 0; i < rthc_count; ++i) {
     if (key == rthc_table[i].key) {
+      const mdbx_pid_t self_pid = mdbx_getpid();
+      for (MDB_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
+           ++rthc)
+        if (rthc->mr_pid == self_pid)
+          rthc->mr_pid = 0;
+      mdbx_coherent_barrier();
       if (--rthc_count > 0)
         rthc_table[i] = rthc_table[rthc_count];
       else if (rthc_table != rthc_table_static) {

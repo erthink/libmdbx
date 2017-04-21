@@ -42,6 +42,10 @@ void mdbx_rthc_unlock(void) {
   mdbx_ensure(NULL, pthread_mutex_unlock(&mdbx_rthc_mutex) == 0);
 }
 
+void __attribute__((destructor)) mdbx_global_destructor(void) {
+  mdbx_rthc_cleanup();
+}
+
 /*----------------------------------------------------------------------------*/
 /* lck */
 
