@@ -700,6 +700,59 @@ void mdbx_panic(const char *fmt, ...)
 #define mdbx_print(fmt, ...)                                                   \
   mdbx_debug_log(MDBX_DBG_PRINT, NULL, 0, fmt, ##__VA_ARGS__)
 
+/*****************************************/
+
+#define mdbx_trace(fmt, ...)                                                   \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE))                                    \
+      mdbx_debug_log(MDBX_DBG_TRACE, __FUNCTION__, __LINE__, fmt "\n",         \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_verbose(fmt, ...)                                                 \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
+      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
+                     fmt "\n", ##__VA_ARGS__);                                 \
+  } while (0)
+
+#define mdbx_info(fmt, ...)                                                    \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
+      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
+                     fmt "\n", ##__VA_ARGS__);                                 \
+  } while (0)
+
+#define mdbx_notice(fmt, ...)                                                  \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
+      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
+                     fmt "\n", ##__VA_ARGS__);                                 \
+  } while (0)
+
+#define mdbx_warning(fmt, ...)                                                 \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
+      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
+                     fmt "\n", ##__VA_ARGS__);                                 \
+  } while (0)
+
+#define mdbx_error(fmt, ...)                                                   \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
+      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
+                     fmt "\n", ##__VA_ARGS__);                                 \
+  } while (0)
+
+#define mdbx_fatal(fmt, ...)                                                   \
+  do {                                                                         \
+    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
+      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
+                     fmt "\n", ##__VA_ARGS__);                                 \
+  } while (0)
+
+/*****************************************/
+
 #define mdbx_debug(fmt, ...)                                                   \
   do {                                                                         \
     if (mdbx_debug_enabled(MDBX_DBG_TRACE))                                    \
