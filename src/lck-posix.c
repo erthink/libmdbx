@@ -208,11 +208,9 @@ static int mdbx_lck_op(mdbx_filehandle_t fd, int op, int lck, off_t offset) {
 static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
 #if MDB_USE_ROBUST
   if (unlikely(rc == EOWNERDEAD)) {
-    int rlocked, rc2;
-
     /* We own the mutex. Clean up after dead previous owner. */
-    rc = MDBX_RESULT_TRUE;
-    rlocked = (mutex == &env->me_txns->mti_rmutex);
+    rc = MDB_SUCCESS;
+    int rlocked = (mutex == &env->me_txns->mti_rmutex);
     if (!rlocked) {
       /* env is hosed if the dead thread was ours */
       if (env->me_txn) {
@@ -223,7 +221,7 @@ static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
     }
     mdbx_debug("%cmutex owner died, %s", (rlocked ? 'r' : 'w'),
                (rc ? "this process' env is hosed" : "recovering"));
-    rc2 = mdbx_reader_check0(env, rlocked, NULL);
+    int rc2 = mdbx_reader_check0(env, rlocked, NULL);
     if (rc2 == 0)
 #if __GLIBC_PREREQ(2, 12)
       rc2 = pthread_mutex_consistent(mutex);
