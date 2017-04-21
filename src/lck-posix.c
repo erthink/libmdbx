@@ -214,15 +214,6 @@ static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
     rc = MDBX_RESULT_TRUE;
     rlocked = (mutex == &env->me_txns->mti_rmutex);
     if (!rlocked) {
-      /* Keep mtb.mti_txnid updated, otherwise next writer can
-       * overwrite data which latest meta page refers to.
-       *
-       * LY: Hm, how this can happen, if the mtb.mti_txnid
-       * is updating only at the finish of a successful commit ?
-       */
-      MDB_meta *meta = mdbx_meta_head_w(env);
-      assert(env->me_txns->mti_txnid == meta->mm_txnid);
-      (void)meta;
       /* env is hosed if the dead thread was ours */
       if (env->me_txn) {
         env->me_flags |= MDB_FATAL_ERROR;

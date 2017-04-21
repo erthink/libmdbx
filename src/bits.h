@@ -361,10 +361,6 @@ typedef struct MDBX_lockinfo {
   /* Format of this lock file. Must be set to MDB_LOCK_FORMAT. */
   uint64_t mti_format;
 
-  /* The ID of the last transaction committed to the database.
-   * This is recorded here only for convenience; the value can always
-   * be determined by reading the main database meta pages. */
-  volatile txnid_t mti_txnid;
 #ifdef MDBX_OSAL_LOCK
   MDBX_OSAL_LOCK mti_wmutex;
 #endif
@@ -758,21 +754,11 @@ int mdbx_reader_check0(MDB_env *env, int rlocked, int *dead);
 #define METAPAGE_2(env)                                                        \
   (&((MDB_metabuf *)((env)->me_map + env->me_psize))->mb_metabuf.mm_meta)
 
-static __inline MDB_meta *mdbx_meta_head_w(MDB_env *env) {
+static __inline MDB_meta *mdbx_meta_head(MDB_env *env) {
   MDB_meta *a = METAPAGE_1(env);
   MDB_meta *b = METAPAGE_2(env);
-  txnid_t head_txnid = env->me_txns->mti_txnid;
 
-  mdbx_assert(env, a->mm_txnid != b->mm_txnid || head_txnid == 0);
-  if (a->mm_txnid == head_txnid)
-    return a;
-  if (likely(b->mm_txnid == head_txnid))
-    return b;
-
-  mdbx_debug("me_txns->mti_txnid not match meta-pages");
-  mdbx_assert(env, head_txnid == a->mm_txnid || head_txnid == b->mm_txnid);
-  env->me_flags |= MDB_FATAL_ERROR;
-  return a;
+  return (a->mm_txnid > b->mm_txnid) ? a : b;
 }
 
 void mdbx_rthc_dtor(void *rthc);
