@@ -71,7 +71,7 @@ time from_ms(uint64_t ms) {
   return result;
 }
 
-time now() {
+time now_realtime() {
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   FILETIME filetime;
   GetSystemTimeAsFileTime(&filetime);
@@ -82,6 +82,37 @@ time now() {
   struct timespec ts;
   if (unlikely(clock_gettime(CLOCK_REALTIME, &ts)))
     failure_perror("clock_gettime(CLOCK_REALTIME", errno);
+
+  return from_timespec(ts);
+#endif
+}
+
+time now_motonic() {
+#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+  static uint32_t reciprocal;
+  static LARGE_INTEGER Frequency;
+  if (reciprocal == 0) {
+    if (!QueryPerformanceFrequency(&Frequency))
+      failure_perror("QueryPerformanceFrequency()", GetLastError());
+    reciprocal = (UINT64_C(1) << 32) / Frequency.QuadPart;
+    assert(reciprocal);
+  }
+
+  LARGE_INTEGER Counter;
+  if (!QueryPerformanceCounter(&Counter))
+    failure_perror("QueryPerformanceCounter()", GetLastError());
+
+  time result;
+  result.integer = Counter.QuadPart / Frequency.QuadPart;
+  uint64_t mod = Counter.QuadPart % Frequency.QuadPart;
+  assert(mod < UINT32_MAX);
+  result.fractional = UInt32x32To64((uint32_t)mod, reciprocal);
+  assert(result.fractional == (mod << 32) / Frequency.QuadPart);
+  return result;
+#else
+  struct timespec ts;
+  if (unlikely(clock_gettime(CLOCK_MONOTONIC, &ts)))
+    failure_perror("clock_gettime(CLOCK_MONOTONIC)", errno);
 
   return from_timespec(ts);
 #endif

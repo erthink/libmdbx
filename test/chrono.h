@@ -25,12 +25,21 @@ typedef union time {
   struct __packed {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     uint32_t fractional;
-    uint32_t utc;
+    union {
+      uint32_t utc;
+      uint32_t integer;
+    };
 #else
-    uint32_t utc;
+    union {
+      uint32_t utc;
+      uint32_t integer;
+    };
     uint32_t fractional;
 #endif
   };
+
+  void reset() { fixedpoint = 0; }
+  uint32_t seconds() const { return utc; }
 } time;
 
 uint32_t ns2fractional(uint32_t);
@@ -44,10 +53,21 @@ time from_ns(uint64_t us);
 time from_us(uint64_t ns);
 time from_ms(uint64_t ms);
 
-inline time from_utc(time_t utc) {
-  assert(utc < UINT32_MAX);
+inline time from_seconds(uint64_t seconds) {
+  assert(seconds < UINT32_MAX);
   time result;
-  result.fixedpoint = ((uint64_t)utc) << 32;
+  result.fixedpoint = seconds << 32;
+  return result;
+}
+
+inline time from_utc(time_t utc) {
+  assert(utc >= 0);
+  return from_seconds(utc);
+}
+
+inline time infinite() {
+  time result;
+  result.fixedpoint = UINT64_MAX;
   return result;
 }
 
@@ -70,6 +90,7 @@ inline time from_timeval(const struct timeval &tv) {
 }
 #endif /* HAVE_TIMEVAL_TV_USEC */
 
-time now();
+time now_realtime();
+time now_motonic();
 
 } /* namespace chrono */

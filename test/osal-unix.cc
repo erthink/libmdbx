@@ -157,6 +157,8 @@ static void handler_SIGCHLD(int unused) { (void)unused; }
 
 mdbx_pid_t osal_getpid(void) { return getpid(); }
 
+int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
+
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (childs.empty())
     signal(SIGCHLD, handler_SIGCHLD);
@@ -227,4 +229,49 @@ retry:
     pid = 0;
     return errno;
   }
+}
+
+void osal_yield(void) {
+  if (sched_yield())
+    failure_perror("sched_yield()", errno);
+}
+
+void osal_udelay(unsigned us) {
+  chrono::time until, now = chrono::now_motonic();
+  until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
+  struct timespec ts;
+
+  static unsigned threshold_us;
+  if (threshold_us == 0) {
+    if (clock_getres(CLOCK_PROCESS_CPUTIME_ID, &ts)) {
+      int rc = errno;
+      failure_perror("clock_getres(CLOCK_PROCESS_CPUTIME_ID)", rc);
+    }
+    chrono::time threshold = chrono::from_timespec(ts);
+    assert(threshold.seconds() == 0);
+
+    threshold_us = chrono::fractional2us(threshold.fractional);
+    if (threshold_us < 1000)
+      threshold_us = 1000;
+  }
+
+  ts.tv_sec = ts.tv_nsec = 0;
+  if (us > threshold_us) {
+    ts.tv_sec = us / 1000000u;
+    ts.tv_nsec = (us % 1000000u) * 1000u;
+  }
+
+  do {
+    if (us > threshold_us) {
+      if (nanosleep(&ts, &ts)) {
+        int rc = errno;
+        /* if (rc == EINTR) { ... } ? */
+        failure_perror("usleep()", rc);
+      }
+      us = ts.tv_sec * 1000000u + ts.tv_nsec / 1000u;
+    }
+    cpu_relax();
+
+    now = chrono::now_motonic();
+  } while (until.fixedpoint > now.fixedpoint);
 }

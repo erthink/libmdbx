@@ -271,6 +271,50 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 
 //-----------------------------------------------------------------------------
 
+static __inline void memory_barrier(void) {
+#if __has_extension(c_atomic) || __has_extension(cxx_atomic)
+  __c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
+#elif defined(__ATOMIC_SEQ_CST)
+  __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#elif defined(__clang__) || defined(__GNUC__)
+  __sync_synchronize();
+#elif defined(_MSC_VER)
+  MemoryBarrier();
+#elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
+#if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
+  __mf();
+#elif defined(__i386__) || defined(__x86_64__)
+  _mm_mfence();
+#else
+#error "Unknown target for Intel Compiler, please report to us."
+#endif
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+  __machine_rw_barrier();
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
+    (defined(HP_IA64) || defined(__ia64))
+  _Asm_mf();
+#elif defined(_AIX) || defined(__ppc__) || defined(__powerpc__) ||             \
+    defined(__ppc64__) || defined(__powerpc64__)
+  __lwsync();
+#else
+#error "Could not guess the kind of compiler, please report to us."
+#endif
+}
+
+static __inline void cpu_relax() {
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) ||            \
+    defined(_M_X64)
+  _mm_pause();
+#elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS) ||               \
+    defined(YieldProcessor)
+  YieldProcessor();
+#else
+/* nope */
+#endif
+}
+
+//-----------------------------------------------------------------------------
+
 struct simple_checksum {
   uint64_t value;
 
@@ -310,3 +354,13 @@ bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
               size_t bytes, simple_checksum &checksum);
 
 std::string format(const char *fmt, ...);
+
+uint64_t entropy_ticks(void);
+uint64_t entropy_white(void);
+uint64_t prng64_careless(uint64_t &state);
+uint64_t prng64_white(uint64_t &state);
+uint32_t prng32(uint64_t &state);
+
+bool flipcoin();
+bool jitter(unsigned probability_percent);
+void jitter_delay(bool extra = false);

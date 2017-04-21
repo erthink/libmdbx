@@ -97,6 +97,11 @@ int osal_waitfor(unsigned id) {
 
 mdbx_pid_t osal_getpid(void) { return GetCurrentProcessId(); }
 
+int osal_delay(unsigned seconds) {
+  Sleep(seconds * 1000u);
+  return 0;
+}
+
 //-----------------------------------------------------------------------------
 
 const std::string
@@ -259,4 +264,31 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   }
 
   return waitstatus2errcode(rc);
+}
+
+void osal_yield(void) { SwitchToThread(); }
+
+void osal_udelay(unsigned us) {
+  chrono::time until, now = chrono::now_motonic();
+  until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
+
+  static unsigned threshold_us;
+  if (threshold_us == 0) {
+    ULONGLONG InterruptTimePrecise_100ns;
+    QueryInterruptTimePrecise(&InterruptTimePrecise_100ns);
+    threshold_us = InterruptTimePrecise_100ns / 5;
+    assert(threshold_us > 0);
+  }
+
+  do {
+    if (us > threshold_us && us > 1000) {
+      DWORD rc = SleepEx(us / 1000, TRUE);
+      if (rc)
+        failure_perror("SleepEx()", waitstatus2errcode(rc));
+      us = 0;
+    }
+
+    YieldProcessor();
+    now = chrono::now_motonic();
+  } while (now.fixedpoint < until.fixedpoint);
 }
