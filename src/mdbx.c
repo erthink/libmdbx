@@ -694,10 +694,6 @@ static MDB_cmp_func mdbx_cmp_memn, mdbx_cmp_memnr, mdbx_cmp_int_ai,
     mdbx_cmp_int_a2, mdbx_cmp_int_ua;
 /** @endcond */
 
-#ifdef __SANITIZE_THREAD__
-static mdbx_mutex_t tsan_mutex = mdbx_mutex_initIALIZER;
-#endif
-
 /** Return the library version info. */
 const char *mdbx_version(int *major, int *minor, int *patch) {
   if (major)
@@ -1399,9 +1395,6 @@ static __inline int mdbx_meta_lt(const MDB_meta *a, const MDB_meta *b) {
 
 /** Find oldest txnid still referenced. */
 static txnid_t mdbx_find_oldest(MDB_env *env, int *laggard) {
-#ifdef __SANITIZE_THREAD__
-  mdbx_mutex_lock(&tsan_mutex);
-#endif
   const MDB_meta *const a = METAPAGE_1(env);
   const MDB_meta *const b = METAPAGE_2(env);
   txnid_t oldest = mdbx_meta_lt(a, b) ? b->mm_txnid : a->mm_txnid;
@@ -1417,9 +1410,6 @@ static txnid_t mdbx_find_oldest(MDB_env *env, int *laggard) {
       }
     }
   }
-#ifdef __SANITIZE_THREAD__
-  mdbx_mutex_unlock(&tsan_mutex);
-#endif
 
   if (laggard)
     *laggard = reader;
@@ -2172,17 +2162,11 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
       r->mr_txnid = ~(txnid_t)0;
       r->mr_tid = tid;
       mdbx_coherent_barrier();
-#ifdef __SANITIZE_THREAD__
-      mdbx_mutex_lock(&tsan_mutex);
-#endif
       if (i == nr)
         env->me_txns->mti_numreaders = ++nr;
       if (env->me_close_readers < nr)
         env->me_close_readers = nr;
       r->mr_pid = pid;
-#ifdef __SANITIZE_THREAD__
-      mdbx_mutex_unlock(&tsan_mutex);
-#endif
       mdbx_rdt_unlock(env);
 
       if (likely(env->me_flags & MDB_ENV_TXKEY))
@@ -2215,16 +2199,10 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
     if (unlikely(rc))
       return rc;
 
-#ifdef __SANITIZE_THREAD__
-    mdbx_mutex_lock(&tsan_mutex);
-#endif
     MDB_meta *meta = mdbx_meta_head(env);
     txn->mt_canary = meta->mm_canary;
     txn->mt_txnid = meta->mm_txnid + 1;
     txn->mt_flags = flags;
-#ifdef __SANITIZE_THREAD__
-    mdbx_mutex_unlock(&tsan_mutex);
-#endif
 
 #if MDB_DEBUG
     if (unlikely(txn->mt_txnid == mdbx_debug_edge)) {
@@ -2474,18 +2452,12 @@ static int mdbx_txn_end(MDB_txn *txn, unsigned mode) {
 
   if (F_ISSET(txn->mt_flags, MDB_TXN_RDONLY)) {
     if (txn->mt_u.reader) {
-#ifdef __SANITIZE_THREAD__
-      mdbx_mutex_lock(&tsan_mutex);
-#endif
       txn->mt_u.reader->mr_txnid = ~(txnid_t)0;
       if (mode & MDB_END_SLOT) {
         if ((env->me_flags & MDB_ENV_TXKEY) == 0)
           txn->mt_u.reader->mr_pid = 0;
         txn->mt_u.reader = NULL;
       }
-#ifdef __SANITIZE_THREAD__
-      mdbx_mutex_unlock(&tsan_mutex);
-#endif
     }
     mdbx_coherent_barrier();
     txn->mt_numdbs = 0; /* prevent further DBI activity */
@@ -3471,9 +3443,6 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
                                                                : "Legacy");
 
   if (env->me_flags & MDB_WRITEMAP) {
-#ifdef __SANITIZE_THREAD__
-    mdbx_mutex_lock(&tsan_mutex);
-#endif
     /* LY: 'invalidate' the meta,
      * but mdbx_meta_head_r() will be confused/retired in collision case. */
     target->mm_datasync_sign = MDB_DATASIGN_WEAK;
@@ -3500,9 +3469,6 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
       goto fail;
     }
     mdbx_invalidate_cache(env->me_map + offset, sizeof(MDB_meta));
-#ifdef __SANITIZE_THREAD__
-    mdbx_mutex_lock(&tsan_mutex);
-#endif
   }
 
   /* Memory ordering issues are irrelevant; since the entire writer
@@ -3511,9 +3477,6 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
    * readers will get consistent data regardless of how fresh or
    * how stale their view of these values is.
    */
-#ifdef __SANITIZE_THREAD__
-  mdbx_mutex_unlock(&tsan_mutex);
-#endif
 
   /* LY: step#3 - sync meta-pages. */
   if ((flags & (MDB_NOSYNC | MDB_NOMETASYNC)) == 0) {
