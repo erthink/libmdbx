@@ -635,11 +635,11 @@ enum {
   MDB_END_FAIL_BEGIN,
   MDB_END_FAIL_BEGINCHILD
 };
-#define MDB_END_OPMASK 0x0F    /**< mask for #mdbx_txn_end() operation number */
-#define MDB_END_UPDATE 0x10    /**< update env state (DBIs) */
-#define MDB_END_FREE 0x20      /**< free txn unless it is #MDB_env.%me_txn0 */
-#define MDB_END_EOTDONE 0x40   /**< txn's cursors already closed */
-#define MDB_END_SLOT MDB_NOTLS /**< release any reader slot if #MDB_NOTLS */
+#define MDB_END_OPMASK 0x0F  /**< mask for #mdbx_txn_end() operation number */
+#define MDB_END_UPDATE 0x10  /**< update env state (DBIs) */
+#define MDB_END_FREE 0x20    /**< free txn unless it is #MDB_env.%me_txn0 */
+#define MDB_END_EOTDONE 0x40 /**< txn's cursors already closed */
+#define MDB_END_SLOT 0x80    /**< release any reader slot if #MDB_NOTLS */
 static int mdbx_txn_end(MDB_txn *txn, unsigned mode);
 
 static int mdbx_page_get(MDB_cursor *mc, pgno_t pgno, MDB_page **mp, int *lvl);
@@ -2100,10 +2100,7 @@ static void mdbx_cursors_eot(MDB_txn *txn, unsigned merge) {
   }
 }
 
-/** Common code for #mdbx_txn_begin() and #mdbx_txn_renew().
- * @param[in] txn the transaction handle to initialize
- * @return 0 on success, non-zero on failure.
- */
+/* Common code for #mdbx_txn_begin() and #mdbx_txn_renew(). */
 static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
   MDB_env *env = txn->mt_env;
   unsigned i, nr;
@@ -2149,17 +2146,22 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
         env->me_live_reader = pid;
       }
 
-    retry:
-      nr = env->me_txns->mti_numreaders;
-      for (i = 0; i < nr; i++)
-        if (env->me_txns->mti_readers[i].mr_pid == 0)
+      for (;;) {
+        nr = env->me_txns->mti_numreaders;
+        for (i = 0; i < nr; i++)
+          if (env->me_txns->mti_readers[i].mr_pid == 0)
+            break;
+
+        if (likely(i < env->me_maxreaders))
           break;
-      if (unlikely(i == env->me_maxreaders)) {
-        if (mdbx_reader_check0(env, 1, NULL))
-          goto retry;
-        mdbx_rdt_unlock(env);
-        return MDB_READERS_FULL;
+
+        rc = mdbx_reader_check0(env, 1, NULL);
+        if (rc != MDBX_RESULT_TRUE) {
+          mdbx_rdt_unlock(env);
+          return (rc == MDB_SUCCESS) ? MDB_READERS_FULL : rc;
+        }
       }
+
       r = &env->me_txns->mti_readers[i];
       /* Claim the reader slot, carefully since other code
        * uses the reader table un-mutexed: First reset the
@@ -2259,6 +2261,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
   } else {
     return MDB_SUCCESS;
   }
+  assert(rc != MDB_SUCCESS);
   mdbx_txn_end(txn, MDB_END_SLOT | MDB_END_FAIL_BEGIN);
   return rc;
 }
@@ -2383,6 +2386,7 @@ int mdbx_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags,
   renew:
     rc = mdbx_txn_renew0(txn, flags);
   }
+
   if (unlikely(rc)) {
     if (txn != env->me_txn0)
       free(txn);
@@ -4077,15 +4081,13 @@ int __cold mdbx_env_open(MDB_env *env, const char *path, unsigned flags,
 
 /** Destroy resources from mdbx_env_open(), clear our readers & DBIs */
 static void __cold mdbx_env_close0(MDB_env *env) {
-  int i;
-
   if (!(env->me_flags & MDB_ENV_ACTIVE))
     return;
   env->me_flags &= ~MDB_ENV_ACTIVE;
 
   /* Doing this here since me_dbxs may not exist during mdbx_env_close */
   if (env->me_dbxs) {
-    for (i = env->me_maxdbs; --i >= CORE_DBS;)
+    for (unsigned i = env->me_maxdbs; --i >= CORE_DBS;)
       free(env->me_dbxs[i].md_name.mv_data);
     free(env->me_dbxs);
   }
