@@ -171,6 +171,12 @@ int mdbx_rpid_clear(MDB_env *env) {
   return mdbx_lck_op(env->me_lfd, F_SETLKW, F_UNLCK, env->me_pid);
 }
 
+/* Checks reader by pid.
+ *
+ * Returns:
+ *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
+ *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
+ *   or otherwise the errcode. */
 int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid) {
   int rc = mdbx_lck_op(env->me_lfd, F_GETLK, F_WRLCK, pid);
   if (rc == 0)
@@ -205,7 +211,7 @@ static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
     int rlocked, rc2;
 
     /* We own the mutex. Clean up after dead previous owner. */
-    rc = MDB_SUCCESS;
+    rc = MDBX_RESULT_TRUE;
     rlocked = (mutex == &env->me_txns->mti_rmutex);
     if (!rlocked) {
       /* Keep mtb.mti_txnid updated, otherwise next writer can

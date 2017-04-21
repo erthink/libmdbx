@@ -2197,11 +2197,14 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
         env->me_live_reader = pid;
       }
 
+    retry:
       nr = env->me_txns->mti_numreaders;
       for (i = 0; i < nr; i++)
         if (env->me_txns->mti_readers[i].mr_pid == 0)
           break;
       if (unlikely(i == env->me_maxreaders)) {
+        if (mdbx_reader_check0(env, 1, NULL))
+          goto retry;
         mdbx_rdt_unlock(env);
         return MDB_READERS_FULL;
       }
@@ -9195,11 +9198,8 @@ int __cold mdbx_reader_check(MDB_env *env, int *dead) {
   return mdbx_reader_check0(env, 0, dead);
 }
 
-int __cold mdbx_reader_check0(MDB_env *env, int rlocked, int *dead) {
-  assert(rlocked >= 0);
-  unsigned i, j;
-  mdbx_pid_t *pids, pid;
-  int rc = MDB_SUCCESS, count = 0;
+int __cold mdbx_reader_check0(MDB_env *env, int rdt_locked, int *dead) {
+  assert(rdt_locked >= 0);
 
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDB_FATAL_ERROR;
@@ -9207,59 +9207,69 @@ int __cold mdbx_reader_check0(MDB_env *env, int rlocked, int *dead) {
   }
 
   unsigned snap_nreaders = env->me_txns->mti_numreaders;
-  pids = malloc((snap_nreaders + 1) * sizeof(mdbx_pid_t));
-  if (!pids)
-    return ENOMEM;
-
+  mdbx_pid_t *pids = alloca((snap_nreaders + 1) * sizeof(mdbx_pid_t));
   pids[0] = 0;
+
+  unsigned i;
+  int rc = MDBX_RESULT_FALSE, count = 0;
   MDB_reader *mr = env->me_txns->mti_readers;
+
   for (i = 0; i < snap_nreaders; i++) {
-    pid = mr[i].mr_pid;
-    if (pid && pid != env->me_pid) {
-      if (mdbx_pid_insert(pids, pid) == 0) {
+    const mdbx_pid_t pid = mr[i].mr_pid;
+    if (pid == 0)
+      continue;
+    if (pid != env->me_pid)
+      continue;
+    if (mdbx_pid_insert(pids, pid) != 0)
+      continue;
+
+    rc = mdbx_rpid_check(env, pid);
+    if (rc == MDBX_RESULT_TRUE)
+      continue; /* reader is live */
+
+    if (rc != MDBX_RESULT_FALSE)
+      break; /* mdbx_rpid_check() failed */
+
+    /* stale reader found */
+    if (!rdt_locked) {
+      rdt_locked = -1;
+      rc = mdbx_rdt_lock(env);
+      if (rc != MDB_SUCCESS) {
+        if (rc != MDBX_RESULT_TRUE)
+          break; /* lock failed */
+        /* recovered after mutex owner died */
+        snap_nreaders = 0; /* the above checked all readers */
+      } else {
+        /* a other process may have clean and reused slot, recheck */
+        if (mr[i].mr_pid != pid)
+          continue;
         rc = mdbx_rpid_check(env, pid);
-        if (rc == MDBX_RESULT_FALSE) {
-          /* stale reader found */
-          j = i;
-          if (!rlocked) {
-            rlocked = -1;
-            rc = mdbx_rdt_lock(env);
-            if (rc != MDB_SUCCESS) {
-              if (rc != MDBX_RESULT_TRUE) {
-                break; /* lock failed */
-              } else {
-                /* recovered after mutex owner died */
-                snap_nreaders = 0; /* the above checked all readers */
-              }
-            } else {
-              /* a other process may have clean and reused slot, recheck */
-              rc = mdbx_rpid_check(env, pid);
-              if (rc != MDBX_RESULT_FALSE) {
-                if (rc != MDBX_RESULT_TRUE)
-                  break; /* mdbx_rpid_check() failed */
-                /* the race with other process, slot reused */
-                rc = MDB_SUCCESS;
-                continue;
-              }
-            }
-          }
-          for (; j < snap_nreaders; j++) {
-            if (mr[j].mr_pid == pid) {
-              mdbx_debug("clear stale reader pid %u txn %zd", (unsigned)pid,
-                         mr[j].mr_txnid);
-              mr[j].mr_pid = 0;
-              count++;
-            }
-          }
-        } else if (rc != MDBX_RESULT_TRUE)
-          break; /* mdbx_rpid_check() failed */
+        if (rc != MDBX_RESULT_FALSE) {
+          if (rc != MDBX_RESULT_TRUE)
+            break; /* mdbx_rpid_check() failed */
+          /* the race with other process, slot reused */
+          rc = MDBX_RESULT_FALSE;
+          continue;
+        }
+      }
+    }
+
+    assert(mr[i].mr_pid == pid);
+
+    /* clean it */
+    unsigned j;
+    for (j = i; j < snap_nreaders; j++) {
+      if (mr[j].mr_pid == pid) {
+        mdbx_debug("clear stale reader pid %u txn %zd", (unsigned)pid,
+                   mr[j].mr_txnid);
+        mr[j].mr_pid = 0;
+        count++;
       }
     }
   }
 
-  if (rlocked < 0)
+  if (rdt_locked < 0)
     mdbx_rdt_unlock(env);
-  free(pids);
 
   if (dead)
     *dead = count;

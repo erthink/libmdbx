@@ -421,6 +421,13 @@ void mdbx_txn_unlock(MDB_env *env);
 
 int mdbx_rpid_set(MDB_env *env);
 int mdbx_rpid_clear(MDB_env *env);
+
+/* Checks reader by pid.
+ *
+ * Returns:
+ *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
+ *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
+ *   or otherwise the errcode. */
 int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
 
 /*----------------------------------------------------------------------------*/
