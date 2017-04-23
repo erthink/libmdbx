@@ -63,5 +63,9 @@
 #include <intrin.h>
 #endif
 
+#if defined(__i386__) || defined(__x86_64__)
+#include <x86intrin.h>
+#endif
+
 #include "../mdbx.h"
 #include "../src/defs.h"
