@@ -25,7 +25,7 @@ build:
 test_script:
 - ps: |
     if (($env:PLATFORM -eq "x86") -and (Test-Path "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" -PathType Leaf)) {
-      & "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" --pathname=tmp.db --basic --dont-cleanup-after
+      & "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" --pathname=tmp.db --dont-cleanup-after basic
     } else {
-      & "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe" --pathname=tmp.db --basic --dont-cleanup-after
+      & "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe" --pathname=tmp.db --dont-cleanup-after basic
     }
