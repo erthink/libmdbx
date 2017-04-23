@@ -325,6 +325,8 @@ void dump(const char *title) {
   log_info("cleanup: before %s, after %s\n",
            global::config::cleanup_before ? "Yes" : "No",
            global::config::cleanup_after ? "Yes" : "No");
+
+  log_info("failfast: %s\n", global::config::failfast ? "Yes" : "No");
 }
 
 } /* namespace config */

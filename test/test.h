@@ -46,6 +46,7 @@ extern unsigned timeout_duration_seconds;
 extern bool dump_config;
 extern bool cleanup_before;
 extern bool cleanup_after;
+extern bool failfast;
 } /* namespace config */
 
 } /* namespace global */

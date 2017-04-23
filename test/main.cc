@@ -68,6 +68,7 @@ void actor_params::set_defaults(void) {
   global::config::dump_config = true;
   global::config::cleanup_before = true;
   global::config::cleanup_after = true;
+  global::config::failfast = true;
 }
 
 namespace global {
@@ -86,6 +87,7 @@ unsigned timeout_duration_seconds;
 bool dump_config;
 bool cleanup_before;
 bool cleanup_after;
+bool failfast;
 } /* namespace config */
 
 } /* namespace global */
@@ -287,7 +289,7 @@ int main(int argc, char *const argv[]) {
       int rc = osal_actor_start(a, pid);
       log_trace("<< actor_start");
       if (rc) {
-        log_trace(">> killall_actors");
+        log_trace(">> killall_actors: (%s)", "start failed");
         osal_killall_actors();
         log_trace("<< killall_actors");
         failure("Failed to start actor #%u (%s)\n", a.actor_id,
@@ -331,8 +333,14 @@ int main(int argc, char *const argv[]) {
                  actor->space_id, pid, status2str(status));
         if (status > as_running) {
           left -= 1;
-          if (status != as_successful)
+          if (status != as_successful) {
+            if (global::config::failfast && !failed) {
+              log_trace(">> killall_actors: (%s)", "failfast");
+              osal_killall_actors();
+              log_trace("<< killall_actors");
+            }
             failed = true;
+          }
         }
       } else {
         if (timeout_seconds_left == 0)
