@@ -9787,7 +9787,12 @@ int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary) {
     txn->mt_canary.z = canary->z;
   }
   txn->mt_canary.v = txn->mt_txnid;
-  txn->mt_flags |= MDB_TXN_DIRTY;
+
+  if ((txn->mt_flags & MDB_TXN_DIRTY) == 0) {
+    MDB_env *env = txn->mt_env;
+    txn->mt_flags |= MDB_TXN_DIRTY;
+    env->me_sync_pending += env->me_psize;
+  }
 
   return MDB_SUCCESS;
 }
