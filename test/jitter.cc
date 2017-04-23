@@ -31,27 +31,29 @@ bool testcase_jitter::run() {
     if (flipcoin()) {
       jitter_delay();
       txn_begin(true);
+      fetch_canary();
       jitter_delay();
-      txn_end(false);
+      txn_end(flipcoin());
     }
 
     jitter_delay();
     txn_begin(mode_readonly());
     jitter_delay();
     if (!mode_readonly()) {
+      fetch_canary();
+      update_canary(1);
       /* TODO:
-       *  - db_sequence()
        *  - db_setsize()
        *  ...
        */
     }
-    txn_end(false);
+    txn_end(flipcoin());
 
     if (flipcoin()) {
       jitter_delay();
       txn_begin(true);
       jitter_delay();
-      txn_end(false);
+      txn_end(flipcoin());
     }
 
     jitter_delay();

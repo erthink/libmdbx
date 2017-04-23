@@ -88,11 +88,17 @@ protected:
   size_t nops_completed;
   chrono::time start_timestamp;
 
+  struct {
+    mdbx_canary canary;
+  } last;
+
   void db_prepare();
   void db_open();
   void db_close();
   void txn_begin(bool readonly);
   void txn_end(bool abort);
+  void fetch_canary();
+  void update_canary(uint64_t increment);
 
   bool wait4start();
   void report(size_t nops_done);
@@ -107,6 +113,7 @@ public:
   testcase(const actor_config &config, const mdbx_pid_t pid)
       : config(config), pid(pid), nops_completed(0) {
     start_timestamp.reset();
+    memset(&last, 0, sizeof(last));
   }
 
   virtual bool setup();

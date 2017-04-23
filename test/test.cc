@@ -252,6 +252,43 @@ bool testcase::should_continue() const {
   return result;
 }
 
+void testcase::fetch_canary() {
+  mdbx_canary canary_now;
+  log_trace(">> fetch_canary");
+
+  int rc = mdbx_canary_get(txn_guard.get(), &canary_now);
+  if (rc != MDB_SUCCESS)
+    failure_perror("mdbx_canary_get()", rc);
+
+  if (canary_now.v < last.canary.v)
+    failure("fetch_canary: %" PRIu64 " canary-now.v) < %" PRIu64
+            "(canary-last.v)",
+            canary_now.v, last.canary.v);
+  if (canary_now.y < last.canary.y)
+    failure("fetch_canary: %" PRIu64 "(canary-now.y) < %" PRIu64
+            "(canary-last.y)",
+            canary_now.y, last.canary.y);
+
+  last.canary = canary_now;
+  log_trace("<< fetch_canary: db-sequence %" PRIu64
+            ", db-sequence.txnid %" PRIu64,
+            last.canary.y, last.canary.v);
+}
+
+void testcase::update_canary(uint64_t increment) {
+  mdbx_canary canary_now = last.canary;
+
+  log_trace(">> update_canary: sequence %" PRIu64 " += %" PRIu64, canary_now.y,
+            increment);
+  canary_now.y += increment;
+
+  int rc = mdbx_canary_put(txn_guard.get(), &canary_now);
+  if (rc != MDB_SUCCESS)
+    failure_perror("mdbx_canary_put()", rc);
+
+  log_trace(">> update_canary: sequence = %" PRIu64, canary_now.y);
+}
+
 //-----------------------------------------------------------------------------
 
 bool test_execute(const actor_config &config) {
