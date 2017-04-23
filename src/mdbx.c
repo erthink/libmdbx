@@ -3263,8 +3263,7 @@ fail:
  * mapping it into memory.
  * @param[in] env the environment handle
  * @param[out] meta address of where to store the meta information
- * @return 0 on success, non-zero on failure.
- */
+ * @return 0 on success, non-zero on failure. */
 static int __cold mdbx_env_read_header(MDB_env *env, MDB_meta *meta) {
   MDB_metabuf pbuf;
   MDB_page *p;
@@ -3799,14 +3798,17 @@ static int __cold mdbx_env_open2(MDB_env *env, MDB_meta *meta) {
 static int __cold mdbx_env_setup_locks(MDB_env *env, char *lpath, int mode,
                                        int *excl) {
   off_t size;
+  assert(env->me_fd != INVALID_HANDLE_VALUE);
+  assert(env->me_lfd == INVALID_HANDLE_VALUE);
 
   int rc = mdbx_openfile(lpath, O_RDWR | O_CREAT, mode, &env->me_lfd);
   if (rc != MDB_SUCCESS) {
     if (rc == EROFS && (env->me_flags & MDB_RDONLY)) {
       env->me_lfd = INVALID_HANDLE_VALUE;
       rc = MDB_SUCCESS;
+    } else {
+      return rc;
     }
-    return rc;
   }
 
   /* Try to get exclusive lock. If we succeed, then
@@ -3979,13 +3981,6 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
   }
   env->me_dbxs[FREE_DBI].md_cmp = mdbx_cmp_int_ai; /* aligned MDB_INTEGERKEY */
 
-  /* For RDONLY, get lockfile after we know datafile exists */
-  if (!(flags & MDB_RDONLY)) {
-    rc = mdbx_env_setup_locks(env, lpath, mode, &excl);
-    if (rc)
-      goto bailout;
-  }
-
   if (F_ISSET(flags, MDB_RDONLY))
     oflags = O_RDONLY;
   else
@@ -3995,11 +3990,9 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
   if (rc != MDB_SUCCESS)
     goto bailout;
 
-  if (flags & MDB_RDONLY) {
-    rc = mdbx_env_setup_locks(env, lpath, mode, &excl);
-    if (rc)
-      goto bailout;
-  }
+  rc = mdbx_env_setup_locks(env, lpath, mode, &excl);
+  if (rc)
+    goto bailout;
 
   MDB_meta meta;
   rc = mdbx_env_open2(env, &meta);
