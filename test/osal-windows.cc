@@ -14,7 +14,7 @@
 
 #include "test.h"
 
-static std::vector<HANDLE> events;
+static std::unordered_map<unsigned, HANDLE> events;
 static HANDLE hBarrierSemaphore, hBarrierEvent;
 
 static int waitstatus2errcode(DWORD result) {
@@ -67,13 +67,13 @@ void osal_setup(const std::vector<actor_config> &actors) {
   const size_t n = actors.size() + 1;
   events.reserve(n);
 
-  for (size_t i = 0; i < n; ++i) {
+  for (unsigned i = 0; i < n; ++i) {
     HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!hEvent)
       failure_perror("CreateEvent()", GetLastError());
     hEvent = make_inharitable(hEvent);
     log_trace("osal_setup: event %zu -> %p", i, hEvent);
-    events.push_back(hEvent);
+    events[i] = hEvent;
   }
 
   hBarrierSemaphore = CreateSemaphore(NULL, 0, (LONG)actors.size(), NULL);
@@ -121,7 +121,7 @@ actor_config::osal_serialize(simple_checksum &checksum) const {
 
   HANDLE hSignal = INVALID_HANDLE_VALUE;
   if (wanna_event4signalling()) {
-    hSignal = events.at(id);
+    hSignal = events.at(actor_id);
     checksum.push(hSignal);
   }
 
@@ -156,7 +156,7 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 
   if (wanna_event4signalling()) {
     checksum.push(hSignal);
-    events[id] = hSignal;
+    events[actor_id] = hSignal;
   }
 
   TRACE("<< osal_deserialize: OK\n");
@@ -278,9 +278,16 @@ void osal_udelay(unsigned us) {
 
   static unsigned threshold_us;
   if (threshold_us == 0) {
+#if 1
+    unsigned timeslice_ms = 1;
+    while (timeBeginPeriod(timeslice_ms) == TIMERR_NOCANDO)
+      ++timeslice_ms;
+    threshold_us = timeslice_ms * 1500u;
+#else
     ULONGLONG InterruptTimePrecise_100ns;
     QueryInterruptTimePrecise(&InterruptTimePrecise_100ns);
     threshold_us = InterruptTimePrecise_100ns / 5;
+#endif
     assert(threshold_us > 0);
   }
 

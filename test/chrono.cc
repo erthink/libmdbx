@@ -94,7 +94,8 @@ time now_motonic() {
   if (reciprocal == 0) {
     if (!QueryPerformanceFrequency(&Frequency))
       failure_perror("QueryPerformanceFrequency()", GetLastError());
-    reciprocal = (UINT64_C(1) << 32) / Frequency.QuadPart;
+    reciprocal =
+        ((UINT64_C(1) << 32) + Frequency.QuadPart / 2) / Frequency.QuadPart;
     assert(reciprocal);
   }
 
@@ -107,7 +108,6 @@ time now_motonic() {
   uint64_t mod = Counter.QuadPart % Frequency.QuadPart;
   assert(mod < UINT32_MAX);
   result.fractional = UInt32x32To64((uint32_t)mod, reciprocal);
-  assert(result.fractional == (mod << 32) / Frequency.QuadPart);
   return result;
 #else
   struct timespec ts;

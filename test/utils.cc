@@ -14,7 +14,9 @@
 
 #include "test.h"
 #include <float.h>
+#ifndef _MSC_VER
 #include <ieee754.h>
+#endif
 
 std::string format(const char *fmt, ...) {
   va_list ap, ones;

@@ -1,3 +1,4 @@
+- [ ] разделение errno и GetLastError()
 - [x] CI посредством AppVeyor
 - [ ] uint32/uint64 в структурах
 - [ ] правки API (много...)
