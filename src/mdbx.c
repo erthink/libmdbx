@@ -9792,14 +9792,14 @@ int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary) {
   return MDB_SUCCESS;
 }
 
-size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary) {
-  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
-    return 0;
+int mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary) {
+  if (unlikely(txn == NULL || canary == NULL))
+    return EINVAL;
+  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_EBADSIGN;
 
-  if (likely(canary))
-    *canary = txn->mt_canary;
-
-  return txn->mt_txnid;
+  *canary = txn->mt_canary;
+  return MDB_SUCCESS;
 }
 
 int mdbx_cursor_on_first(MDB_cursor *mc) {

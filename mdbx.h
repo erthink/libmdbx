@@ -1728,7 +1728,7 @@ LIBMDBX_API int mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func *visitor,
 typedef struct mdbx_canary { uint64_t x, y, z, v; } mdbx_canary;
 
 LIBMDBX_API int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary);
-LIBMDBX_API size_t mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary);
+LIBMDBX_API int mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary);
 
 /* Returns:
  *	- MDBX_RESULT_TRUE	when no more data available
