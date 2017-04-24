@@ -3900,11 +3900,11 @@ static int __cold mdbx_env_setup_locks(MDB_env *env, char *lpath, int mode,
 }
 
 /** The name of the lock file in the DB environment */
-#define LOCKNAME "/lock.mdb"
+#define LOCKNAME "/mdbx.lck"
 /** The name of the data file in the DB environment */
-#define DATANAME "/data.mdb"
+#define DATANAME "/mdbx.dat"
 /** The suffix of the lock file when no subdir is used */
-#define LOCKSUFF "-lock"
+#define LOCKSUFF "-lck"
 /** Only a subset of the @ref mdbx_env flags can be changed
  *	at runtime. Changing other flags requires closing the
  *	environment and re-opening it with the new flags.
