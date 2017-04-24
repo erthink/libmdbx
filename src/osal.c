@@ -114,7 +114,8 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
   *strp = malloc(needed + 1);
   if (unlikely(*strp == NULL)) {
     va_end(ones);
-    return -ENOMEM;
+    SetLastError(MDBX_ENOMEM);
+    return -1;
   }
 
 #if defined(vsnprintf) || defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||      \
@@ -451,19 +452,26 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
   }
 }
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool syncmeta) {
+int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
 #if defined(_WIN32) || defined(_WIN64)
-  (void)syncmeta;
-  return FlushFileBuffers(fd) ? 0 : -1;
+  (void)fullsync;
+  return FlushFileBuffers(fd) ? MDB_SUCCESS : GetLastError();
 #elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
     (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
+  for (;;) {
 #if _POSIX_C_SOURCE >= 199309L || _XOPEN_SOURCE >= 500 ||                      \
     defined(_POSIX_SYNCHRONIZED_IO)
-  if (!syncmeta)
-    return (fdatasync(fd) == 0) ? MDB_SUCCESS : errno;
+    if (!fullsync && fdatasync(fd) == 0)
+      return MDB_SUCCESS;
+#else
+    (void)fullsync;
 #endif
-  (void)syncmeta;
-  return (fsync(fd) == 0) ? MDB_SUCCESS : errno;
+    if (fsync(fd) == 0)
+      return MDB_SUCCESS;
+    int rc = errno;
+    if (rc != EINTR)
+      return rc;
+  }
 #else
 #error FIXME
 #endif
@@ -568,7 +576,7 @@ int mdbx_msync(void *addr, size_t length, int async) {
 #if defined(_WIN32) || defined(_WIN64)
   if (async)
     return MDB_SUCCESS;
-  return FlushViewOfFile(addr, length) ? 0 : GetLastError();
+  return FlushViewOfFile(addr, length) ? MDB_SUCCESS : GetLastError();
 #else
   return (msync(addr, length, async ? MS_ASYNC : MS_SYNC) == 0) ? MDB_SUCCESS
                                                                 : errno;
@@ -580,7 +588,7 @@ int mdbx_mremap_size(void **address, size_t old_size, size_t new_size) {
   *address = MAP_FAILED;
   (void)old_size;
   (void)new_size;
-  return ERROR_NOT_SUPPORTED;
+  return ERROR_CALL_NOT_IMPLEMENTED;
 #else
   *address = mremap(*address, old_size, new_size, 0, address);
   return (*address != MAP_FAILED) ? MDB_SUCCESS : errno;

@@ -88,19 +88,22 @@
 #include <stdint.h>
 
 #if defined(_WIN32) || defined(_WIN64)
+
 #include <windows.h>
 #include <winnt.h>
 typedef unsigned mode_t;
 typedef HANDLE mdbx_filehandle_t;
 typedef DWORD mdbx_pid_t;
 typedef DWORD mdbx_tid_t;
-
 #define MDBX_ENODATA ERROR_HANDLE_EOF
 #define MDBX_EINVAL ERROR_INVALID_PARAMETER
 #define MDBX_EACCESS ERROR_ACCESS_DENIED
 #define MDBX_ENOMEM ERROR_OUTOFMEMORY
+#define MDBX_EROFS ERROR_FILE_READ_ONLY
+#define MDBX_ENOSYS ERROR_NOT_SUPPORTED
 
 #else
+
 #include <errno.h>     /* for error codes */
 #include <pthread.h>   /* for pthread_t */
 #include <sys/types.h> /* for pid_t */
@@ -109,11 +112,12 @@ typedef DWORD mdbx_tid_t;
 typedef int mdbx_filehandle_t;
 typedef pid_t mdbx_pid_t;
 typedef pthread_t mdbx_tid_t;
-
 #define MDBX_ENODATA ENODATA
 #define MDBX_EINVAL EINVAL
 #define MDBX_EACCESS EACCES
 #define MDBX_ENOMEM ENOMEM
+#define MDBX_EROFS EROFS
+#define MDBX_ENOSYS ENOSYS
 
 #endif
 

@@ -2962,12 +2962,9 @@ static int mdbx_page_flush(MDB_txn *txn, int keep) {
     /* Write up to MDB_COMMIT_PAGES dirty pages at a time. */
     if (pos != next_pos || n == MDB_COMMIT_PAGES || wsize + size > MAX_WRITE) {
       if (n) {
-      retry:
         /* Write previous page(s) */
         rc = mdbx_pwritev(env->me_fd, iov, n, wpos, wsize);
         if (unlikely(rc != MDB_SUCCESS)) {
-          if (rc == EINTR)
-            goto retry;
           mdbx_debug("Write error: %s", strerror(rc));
           return rc;
         }
@@ -3395,12 +3392,11 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
     if (flags & MDB_WRITEMAP) {
       rc = mdbx_msync(env->me_map, used_size, flags & MDB_MAPASYNC);
       if (unlikely(rc != MDB_SUCCESS))
-        /* LY: mdbx_msync() should never return EINTR */
         goto fail;
       if ((flags & MDB_MAPASYNC) == 0)
         env->me_sync_pending = 0;
     } else {
-      bool syncmeta = false;
+      bool fullsync = false;
       if (unlikely(prev_mapsize != pending->mm_mapsize)) {
         /* LY: It is no reason to use fdatasync() here, even in case
          * no such bug in a kernel. Because "no-bug" mean that a kernel
@@ -3412,13 +3408,11 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
          *
          * For more info about of a corresponding fdatasync() bug
          * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-        syncmeta = true;
+        fullsync = true;
       }
-      while (
-          unlikely((rc = mdbx_filesync(env->me_fd, syncmeta)) != MDB_SUCCESS)) {
-        if (rc != EINTR)
-          goto fail;
-      }
+      rc = mdbx_filesync(env->me_fd, fullsync);
+      if (unlikely(rc != MDB_SUCCESS))
+        goto fail;
       env->me_sync_pending = 0;
     }
   }
@@ -3498,10 +3492,9 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
       if (unlikely(rc != MDB_SUCCESS))
         goto fail;
     } else {
-      while (unlikely((rc = mdbx_filesync(env->me_fd, false)) != MDB_SUCCESS)) {
-        if (rc != EINTR)
-          goto undo;
-      }
+      rc = mdbx_filesync(env->me_fd, false);
+      if (rc != MDB_SUCCESS)
+        goto undo;
     }
   }
 
@@ -3803,7 +3796,7 @@ static int __cold mdbx_setup_locks(MDB_env *env, char *lck_pathname, int mode) {
 
   int err = mdbx_openfile(lck_pathname, O_RDWR | O_CREAT, mode, &env->me_lfd);
   if (err != MDB_SUCCESS) {
-    if (err != EROFS || (env->me_flags & MDB_RDONLY) == 0)
+    if (err != MDBX_EROFS || (env->me_flags & MDB_RDONLY) == 0)
       return err;
     /* LY: without-lck mode (e.g. on read-only filesystem) */
     env->me_lfd = INVALID_HANDLE_VALUE;
@@ -8547,7 +8540,7 @@ int __cold mdbx_env_set_assert(MDB_env *env, MDB_assert_func *func) {
   return MDB_SUCCESS;
 #else
   (void)func;
-  return ENOSYS;
+  return MDBX_ENOSYS;
 #endif
 }
 

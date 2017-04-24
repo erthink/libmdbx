@@ -363,7 +363,7 @@ void mdbx_thread_key_delete(mdbx_thread_key_t key);
 void *mdbx_thread_rthc_get(mdbx_thread_key_t key);
 void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value);
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool syncmeta);
+int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync);
 int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length);
 int mdbx_filesize(mdbx_filehandle_t fd, off_t *length);
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
