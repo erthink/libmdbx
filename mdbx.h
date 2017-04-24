@@ -95,6 +95,13 @@ extern "C" {
   MDBX_VERFOO(MDBX_VERSION_MAJOR, MDBX_VERSION_MINOR, MDBX_VERSION_PATCH,      \
               MDBX_VERSION_DATE)
 
+/* The name of the lock file in the DB environment */
+#define MDBX_LOCKNAME "/mdbx.lck"
+/* The name of the data file in the DB environment */
+#define MDBX_DATANAME "/mdbx.dat"
+/* The suffix of the lock file when no subdir is used */
+#define MDBX_LOCK_SUFFIX "-lck"
+
 /* Opaque structure for a database environment.
  *
  * A DB environment supports multiple databases, all residing in the same

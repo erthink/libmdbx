@@ -3894,12 +3894,6 @@ static int __cold mdbx_setup_locks(MDB_env *env, char *lck_pathname, int mode) {
   return rc;
 }
 
-/** The name of the lock file in the DB environment */
-#define LOCKNAME "/mdbx.lck"
-/** The name of the data file in the DB environment */
-#define DATANAME "/mdbx.dat"
-/** The suffix of the lock file when no subdir is used */
-#define LOCKSUFF "-lck"
 /** Only a subset of the @ref mdbx_env flags can be changed
  *	at runtime. Changing other flags requires closing the
  *	environment and re-opening it with the new flags.
@@ -3932,22 +3926,22 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
 
   len = strlen(path);
   if (flags & MDB_NOSUBDIR) {
-    rc = len + sizeof(LOCKSUFF) + len + 1;
+    rc = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
   } else {
-    rc = len + sizeof(LOCKNAME) + len + sizeof(DATANAME);
+    rc = len + sizeof(MDBX_LOCKNAME) + len + sizeof(MDBX_DATANAME);
   }
   lck_pathname = malloc(rc);
   if (!lck_pathname)
     return MDBX_ENOMEM;
 
   if (flags & MDB_NOSUBDIR) {
-    dxb_pathname = lck_pathname + len + sizeof(LOCKSUFF);
-    sprintf(lck_pathname, "%s" LOCKSUFF, path);
+    dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCK_SUFFIX);
+    sprintf(lck_pathname, "%s" MDBX_LOCK_SUFFIX, path);
     strcpy(dxb_pathname, path);
   } else {
-    dxb_pathname = lck_pathname + len + sizeof(LOCKNAME);
-    sprintf(lck_pathname, "%s" LOCKNAME, path);
-    sprintf(dxb_pathname, "%s" DATANAME, path);
+    dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCKNAME);
+    sprintf(lck_pathname, "%s" MDBX_LOCKNAME, path);
+    sprintf(dxb_pathname, "%s" MDBX_DATANAME, path);
   }
 
   rc = MDB_SUCCESS;
@@ -8469,11 +8463,11 @@ int __cold mdbx_env_copy2(MDB_env *env, const char *path, unsigned flags) {
     lck_pathname = (char *)path;
   } else {
     len = strlen(path);
-    len += sizeof(DATANAME);
+    len += sizeof(MDBX_DATANAME);
     lck_pathname = malloc(len);
     if (!lck_pathname)
       return MDBX_ENOMEM;
-    sprintf(lck_pathname, "%s" DATANAME, path);
+    sprintf(lck_pathname, "%s" MDBX_DATANAME, path);
   }
 
   /* The destination path must exist, but the destination file must not.
