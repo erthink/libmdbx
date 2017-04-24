@@ -11,4 +11,4 @@ compile:
 
 test:
   override:
-    - make check
+    - make check || mv test.log ${CIRCLE_ARTIFACTS}/

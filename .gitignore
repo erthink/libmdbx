@@ -23,11 +23,12 @@ mdbx_stat
 /test/test
 test/test.vcxproj.user
 test/tmp.db
-test/tmp.db-lock
+test/tmp.db-lck
 tmp.db
-tmp.db-lock
+tmp.db-lck
 valgrind.*
 .vs/
 Win32/
 x64/
 x86/
+test.log

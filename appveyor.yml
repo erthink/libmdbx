@@ -23,7 +23,11 @@ build:
 test_script:
 - ps: |
     if (($env:PLATFORM -eq "x86") -and (Test-Path "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" -PathType Leaf)) {
-      & "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" --pathname=tmp.db --dont-cleanup-after basic
+      $test = "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe"
     } else {
-      & "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe" --pathname=tmp.db --dont-cleanup-after basic
+      $test = "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe"
     }
+    & "$test" --pathname=tmp.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+
+artifacts:
+  - path: test.log
