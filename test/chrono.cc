@@ -89,13 +89,13 @@ time now_realtime() {
 
 time now_motonic() {
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
-  static uint32_t reciprocal;
+  static uint64_t reciprocal;
   static LARGE_INTEGER Frequency;
   if (reciprocal == 0) {
     if (!QueryPerformanceFrequency(&Frequency))
       failure_perror("QueryPerformanceFrequency()", GetLastError());
-    reciprocal = (uint32_t)(((UINT64_C(1) << 32) + Frequency.QuadPart / 2) /
-                            Frequency.QuadPart);
+    reciprocal = (((UINT64_C(1) << 48) + Frequency.QuadPart / 2 + 1) /
+                  Frequency.QuadPart);
     assert(reciprocal);
   }
 
@@ -104,10 +104,9 @@ time now_motonic() {
     failure_perror("QueryPerformanceCounter()", GetLastError());
 
   time result;
-  result.integer = (uint32_t)(Counter.QuadPart / Frequency.QuadPart);
+  result.fixedpoint = (Counter.QuadPart / Frequency.QuadPart) << 32;
   uint64_t mod = Counter.QuadPart % Frequency.QuadPart;
-  assert(mod < UINT32_MAX);
-  result.fractional = UInt32x32To64((uint32_t)mod, reciprocal);
+  result.fixedpoint += (mod * reciprocal) >> 16;
   return result;
 #else
   struct timespec ts;
