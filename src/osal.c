@@ -337,7 +337,7 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
     int rc = GetLastError();
     if (rc == ERROR_HANDLE_EOF && read == 0 && offset == 0)
-      return ENOENT;
+      return MDBX_ENODATA;
     return rc;
   }
   return (read == bytes) ? MDB_SUCCESS : ERROR_READ_FAULT;
@@ -347,7 +347,7 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
     return MDB_SUCCESS;
   if (read < 0)
     return errno;
-  return (read == 0 && offset == 0) ? ENOENT : EIO;
+  return (read == 0 && offset == 0) ? MDBX_ENODATA : EIO;
 #endif
 }
 

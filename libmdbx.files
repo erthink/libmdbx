@@ -3,6 +3,7 @@ LICENSE
 Makefile
 README.md
 mdbx.h
+mdbx_osal.h
 src/bits.h
 src/defs.h
 src/lck-posix.c
