@@ -2409,7 +2409,7 @@ MDB_env *mdbx_txn_env(MDB_txn *txn) {
 
 size_t mdbx_txn_id(MDB_txn *txn) {
   if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
-    return 0;
+    return ~(txnid_t)0;
   return txn->mt_txnid;
 }
 
