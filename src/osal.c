@@ -333,12 +333,12 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
 
-  DWORD read;
+  DWORD read = 0;
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
     int rc = GetLastError();
-    if (rc == ERROR_HANDLE_EOF && read == 0 && offset == 0)
-      return MDBX_ENODATA;
-    return rc;
+    if (rc == ERROR_HANDLE_EOF)
+      return (read == 0 && offset == 0) ? MDBX_ENODATA : ERROR_READ_FAULT;
+    return (rc == MDB_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
   return (read == bytes) ? MDB_SUCCESS : ERROR_READ_FAULT;
 #else
