@@ -88,15 +88,30 @@ bool output(loglevel priority, const char *format, ...) {
 bool output(loglevel priority, const char *format, va_list ap) {
   if (last) {
     putc('\n', last);
+    fflush(last);
     last = nullptr;
   }
 
   if (priority < level)
     return false;
 
+  chrono::time now = chrono::now_realtime();
+  struct tm tm;
+  time_t time = now.utc;
+#ifdef _MSC_VER
+  int rc = _localtime32_s(&tm, (const __time32_t *)&now.utc);
+#else
+  int rc = localtime_r(&time, &tm) ? MDB_SUCCESS : errno;
+#endif
+  if (rc != MDB_SUCCESS)
+    failure_perror("localtime_r()", rc);
+
   last = (priority >= error) ? stderr : stdout;
-  fprintf(last, "[ %u%10s %.4s ] %s" /* TODO */, osal_getpid(), prefix.c_str(),
-          level2str(priority), suffix.c_str());
+  fprintf(last,
+          "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05u %-10s %.4s ] %s" /* TODO */,
+          tm.tm_year - 100, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min,
+          tm.tm_sec, chrono::fractional2us(now.fractional), osal_getpid(),
+          prefix.c_str(), level2str(priority), suffix.c_str());
   vfprintf(last, format, ap);
 
   size_t len = strlen(format);
@@ -105,9 +120,10 @@ bool output(loglevel priority, const char *format, va_list ap) {
   default:
     putc('\n', last);
   case '\n':
+    fflush(last);
+    last = nullptr;
     if (priority > info)
       fflushall();
-    last = nullptr;
   case ' ':
   case '_':
   case ':':
@@ -128,8 +144,10 @@ bool feed(const char *format, va_list ap) {
 
   vfprintf(last, format, ap);
   size_t len = strlen(format);
-  if (len && format[len - 1] == '\n')
+  if (len && format[len - 1] == '\n') {
+    fflush(last);
     last = nullptr;
+  }
   return true;
 }
 
