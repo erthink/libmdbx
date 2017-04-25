@@ -763,10 +763,10 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
     if (!buflen)
       return NULL;
 #ifdef _MSC_VER
-    int rc = strerror_s(buf, buflen, errnum);
-    assert(rc == 0);
-    (void)rc;
-    return buf;
+    size_t size = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
+        errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, buflen, NULL);
+    return size ? buf : NULL;
 #elif defined(_GNU_SOURCE)
     /* GNU-specific */
     msg = strerror_r(errnum, buf, buflen);
@@ -792,10 +792,12 @@ const char *__cold mdbx_strerror(int errnum) {
   if (!msg) {
 #ifdef _MSC_VER
     static __thread char buffer[1024];
-    int rc = strerror_s(buffer, sizeof(buffer), errnum);
-    assert(rc == 0);
-    (void)rc;
-    msg = buffer;
+    size_t size = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
+        errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer,
+        sizeof(buffer), NULL);
+    if (size)
+      msg = buffer;
 #else
     msg = strerror(errnum);
 #endif
