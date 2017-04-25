@@ -73,11 +73,20 @@ time from_ms(uint64_t ms) {
 
 time now_realtime() {
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+  static void(WINAPI * query_time)(LPFILETIME);
+  if (!query_time) {
+    query_time = (void(WINAPI *)(LPFILETIME))GetProcAddress(
+        GetModuleHandle(TEXT("kernel32.dll")),
+        "GetSystemTimePreciseAsFileTime");
+    if (!query_time)
+      query_time = GetSystemTimeAsFileTime;
+  }
+
   FILETIME filetime;
-  GetSystemTimeAsFileTime(&filetime);
-  uint64_t ns =
+  query_time(&filetime);
+  uint64_t ns100 =
       (uint64_t)filetime.dwHighDateTime << 32 | filetime.dwLowDateTime;
-  return from_ns(ns);
+  return from_ns((ns100 - UINT64_C(116444736000000000)) * 100u);
 #else
   struct timespec ts;
   if (unlikely(clock_gettime(CLOCK_REALTIME, &ts)))
