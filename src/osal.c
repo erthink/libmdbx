@@ -337,19 +337,16 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
   DWORD read = 0;
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
     int rc = GetLastError();
-    if (rc == ERROR_HANDLE_EOF)
-      return (read == 0 && offset == 0) ? MDBX_ENODATA : ERROR_READ_FAULT;
     return (rc == MDB_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
-  return (read == bytes) ? MDB_SUCCESS : ERROR_READ_FAULT;
 #else
   ssize_t read = pread(fd, buf, bytes, offset);
-  if (likely(bytes == (size_t)read))
-    return MDB_SUCCESS;
-  if (read < 0)
-    return errno;
-  return (read == 0 && offset == 0) ? MDBX_ENODATA : EIO;
+  if (read < 0) {
+    int rc = errno;
+    return (rc == MDB_SUCCESS) ? /* paranoia */ EIO : rc;
+  }
 #endif
+  return (bytes == (size_t)read) ? MDB_SUCCESS : MDBX_ENODATA;
 }
 
 int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,

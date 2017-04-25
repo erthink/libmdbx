@@ -3737,7 +3737,7 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
   int err = mdbx_read_header(env, meta);
   if (unlikely(err != MDB_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
-        (env->me_flags & MDB_RDONLY))
+        (env->me_flags & MDB_RDONLY) != 0)
       return err;
 
     mdbx_debug("create new database");
