@@ -29,5 +29,5 @@ test_script:
     }
     & "$test" --pathname=tmp.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
 
-artifacts:
-  - path: test.log
+on_failure:
+  - ps: Push-AppveyorArtifact test.log
