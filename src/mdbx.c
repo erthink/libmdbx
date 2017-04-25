@@ -3732,7 +3732,7 @@ int __cold mdbx_env_get_maxreaders(MDB_env *env, unsigned *readers) {
 }
 
 /* Further setup required for opening an LMDB environment */
-static int __cold mdbx_setup_body(MDB_env *env, MDB_meta *meta, int lck_rc) {
+static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
   int rc = MDBX_RESULT_FALSE;
   int err = mdbx_read_header(env, meta);
   if (unlikely(err != MDB_SUCCESS)) {
@@ -3791,7 +3791,7 @@ static int __cold mdbx_setup_body(MDB_env *env, MDB_meta *meta, int lck_rc) {
 /****************************************************************************/
 
 /* Open and/or initialize the lock region for the environment. */
-static int __cold mdbx_setup_locks(MDB_env *env, char *lck_pathname, int mode) {
+static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
   off_t size;
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd == INVALID_HANDLE_VALUE);
@@ -3832,14 +3832,6 @@ static int __cold mdbx_setup_locks(MDB_env *env, char *lck_pathname, int mode) {
   if (unlikely(err != MDB_SUCCESS))
     return err;
   env->me_txns = addr;
-
-  if (!(env->me_flags & MDB_NOTLS)) {
-    err = mdbx_rthc_alloc(&env->me_txkey, &env->me_txns->mti_readers[0],
-                          &env->me_txns->mti_readers[env->me_maxreaders]);
-    if (unlikely(err != MDB_SUCCESS))
-      return err;
-    env->me_flags |= MDB_ENV_TXKEY;
-  }
 
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(env->me_txns, size, MADV_NOHUGEPAGE);
@@ -3974,22 +3966,24 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
   if (rc != MDB_SUCCESS)
     goto bailout;
 
-  const int lck_rc = mdbx_setup_locks(env, lck_pathname, mode);
+  const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
     rc = lck_rc;
     goto bailout;
   }
 
   MDB_meta meta;
-  const int dxb_rc = mdbx_setup_body(env, &meta, lck_rc);
+  const int dxb_rc = mdbx_setup_dxb(env, &meta, lck_rc);
   if (MDBX_IS_ERROR(dxb_rc)) {
     rc = dxb_rc;
     goto bailout;
   }
 
   mdbx_debug("opened dbenv %p", (void *)env);
+  const unsigned mode_flags =
+      MDB_WRITEMAP | MDB_NOSYNC | MDB_NOMETASYNC | MDB_MAPASYNC;
   if (lck_rc == MDBX_RESULT_TRUE) {
-    env->me_txns->mti_envmode = env->me_flags;
+    env->me_txns->mti_envmode = env->me_flags & mode_flags;
     if (exclusive == NULL || *exclusive < 2) {
       /* LY: downgrade lock only if exclusive access not requested.
        *     in case exclusive==1, just leave value as is. */
@@ -4002,14 +3996,22 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
       /* LY: just indicate that is not an exclusive access. */
       *exclusive = 0;
     }
-    if ((env->me_txns->mti_envmode ^ env->me_flags) &
-        (MDB_WRITEMAP | MDB_NOSYNC | MDB_NOMETASYNC | MDB_MAPASYNC)) {
+    if ((env->me_txns->mti_envmode ^ env->me_flags) & mode_flags) {
       /* LY: Current mode/flags incompatible with requested. */
       rc = MDB_INCOMPATIBLE;
       goto bailout;
     }
   }
-  if (!(flags & MDB_RDONLY)) {
+
+  if ((env->me_flags & MDB_NOTLS) == 0) {
+    rc = mdbx_rthc_alloc(&env->me_txkey, &env->me_txns->mti_readers[0],
+                         &env->me_txns->mti_readers[env->me_maxreaders]);
+    if (unlikely(rc != MDB_SUCCESS))
+      return rc;
+    env->me_flags |= MDB_ENV_TXKEY;
+  }
+
+  if ((flags & MDB_RDONLY) == 0) {
     MDB_txn *txn;
     int tsize = sizeof(MDB_txn),
         size = tsize +
