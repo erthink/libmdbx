@@ -241,6 +241,9 @@ int main(int argc, char *const argv[]) {
       configure_actor(lastid, ac_deadwrite, value, params);
       continue;
     }
+    if (config::parse_option(argc, argv, narg, "failfast",
+                             global::config::failfast))
+      continue;
 
     if (*argv[narg] != '-')
       testcase_setup(argv[narg], params, lastid);
