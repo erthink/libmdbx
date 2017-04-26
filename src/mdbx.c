@@ -2185,22 +2185,21 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
         mdbx_thread_rthc_set(env->me_txkey, r);
     }
 
-    while ((env->me_flags & MDB_FATAL_ERROR) == 0) {
+    while (1) {
       MDB_meta *const meta = mdbx_meta_head(txn->mt_env);
-      txnid_t lead = meta->mm_txnid;
-      r->mr_txnid = lead;
+      const txnid_t snap = meta->mm_txnid;
+      r->mr_txnid = snap;
       mdbx_coherent_barrier();
 
-      txnid_t snap = mdbx_meta_head(txn->mt_env)->mm_txnid;
+      /* Snap the state from current meta-head */
+      txn->mt_txnid = snap;
+      txn->mt_next_pgno = meta->mm_last_pg + 1;
+      memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
+      txn->mt_canary = meta->mm_canary;
+
       /* LY: Retry on a race, ITS#7970. */
-      if (likely(lead == snap)) {
-        txn->mt_txnid = lead;
-        txn->mt_next_pgno = meta->mm_last_pg + 1;
-        /* Copy the DB info and flags */
-        memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDB_db));
-        txn->mt_canary = meta->mm_canary;
+      if (likely(meta == mdbx_meta_head(txn->mt_env) && snap == meta->mm_txnid))
         break;
-      }
     }
 
     txn->mt_u.reader = r;
