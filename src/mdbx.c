@@ -1409,8 +1409,8 @@ static txnid_t mdbx_find_oldest(MDB_env *env, int *laggard) {
   txnid_t oldest = mdbx_meta_lt(a, b) ? b->mm_txnid : a->mm_txnid;
 
   int i, reader;
-  const MDB_reader *const r = env->me_txns->mti_readers;
-  for (reader = -1, i = env->me_txns->mti_numreaders; --i >= 0;) {
+  const MDB_reader *const r = env->me_lck->mti_readers;
+  for (reader = -1, i = env->me_lck->mti_numreaders; --i >= 0;) {
     if (r[i].mr_pid) {
       txnid_t snap = r[i].mr_txnid;
       if (oldest > snap) {
@@ -1971,7 +1971,7 @@ int mdbx_env_sync(MDB_env *env, int force) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(!env->me_txns))
+  if (unlikely(!env->me_lck))
     return MDB_PANIC;
 
   flags = env->me_flags & ~MDB_NOMETASYNC;
@@ -2149,9 +2149,9 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
       }
 
       for (;;) {
-        nr = env->me_txns->mti_numreaders;
+        nr = env->me_lck->mti_numreaders;
         for (i = 0; i < nr; i++)
-          if (env->me_txns->mti_readers[i].mr_pid == 0)
+          if (env->me_lck->mti_readers[i].mr_pid == 0)
             break;
 
         if (likely(i < env->me_maxreaders))
@@ -2164,7 +2164,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
         }
       }
 
-      r = &env->me_txns->mti_readers[i];
+      r = &env->me_lck->mti_readers[i];
       /* Claim the reader slot, carefully since other code
        * uses the reader table un-mutexed: First reset the
        * slot, next publish it in mtb.mti_numreaders.  After
@@ -2175,7 +2175,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
       r->mr_tid = tid;
       mdbx_coherent_barrier();
       if (i == nr)
-        env->me_txns->mti_numreaders = ++nr;
+        env->me_lck->mti_numreaders = ++nr;
       if (env->me_close_readers < nr)
         env->me_close_readers = nr;
       r->mr_pid = pid;
@@ -3831,49 +3831,49 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
   err = mdbx_mmap(&addr, size, true, env->me_lfd);
   if (unlikely(err != MDB_SUCCESS))
     return err;
-  env->me_txns = addr;
+  env->me_lck = addr;
 
 #ifdef MADV_NOHUGEPAGE
-  (void)madvise(env->me_txns, size, MADV_NOHUGEPAGE);
+  (void)madvise(env->me_lck, size, MADV_NOHUGEPAGE);
 #endif
 
 #ifdef MADV_DODUMP
-  (void)madvise(env->me_txns, size, MADV_DODUMP);
+  (void)madvise(env->me_lck, size, MADV_DODUMP);
 #endif
 
 #ifdef MADV_DONTFORK
-  if (madvise(env->me_txns, size, MADV_DONTFORK) < 0)
+  if (madvise(env->me_lck, size, MADV_DONTFORK) < 0)
     return errno;
 #endif
 
 #ifdef MADV_WILLNEED
-  if (madvise(env->me_txns, size, MADV_WILLNEED) < 0)
+  if (madvise(env->me_lck, size, MADV_WILLNEED) < 0)
     return errno;
 #endif
 
 #ifdef MADV_RANDOM
-  if (madvise(env->me_txns, size, MADV_RANDOM) < 0)
+  if (madvise(env->me_lck, size, MADV_RANDOM) < 0)
     return errno;
 #endif
 
   if (rc == MDBX_RESULT_TRUE) {
     /* LY: exlcusive mode, init lck */
-    memset(env->me_txns, 0, sizeof(MDBX_lockinfo));
+    memset(env->me_lck, 0, sizeof(MDBX_lockinfo));
     err = mdbx_lck_init(env);
     if (err)
       return err;
 
-    env->me_txns->mti_magic = MDB_MAGIC;
-    env->me_txns->mti_format = MDB_LOCK_FORMAT;
+    env->me_lck->mti_magic = MDB_MAGIC;
+    env->me_lck->mti_format = MDB_LOCK_FORMAT;
   } else {
-    if (env->me_txns->mti_magic != MDB_MAGIC) {
+    if (env->me_lck->mti_magic != MDB_MAGIC) {
       mdbx_debug("lock region has invalid magic");
       return MDB_INVALID;
     }
-    if (env->me_txns->mti_format != MDB_LOCK_FORMAT) {
+    if (env->me_lck->mti_format != MDB_LOCK_FORMAT) {
       mdbx_debug("lock region has format+version 0x%" PRIx64
                  ", expected 0x%" PRIx64,
-                 env->me_txns->mti_format, MDB_LOCK_FORMAT);
+                 env->me_lck->mti_format, MDB_LOCK_FORMAT);
       return MDB_VERSION_MISMATCH;
     }
   }
@@ -3983,7 +3983,7 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
   const unsigned mode_flags =
       MDB_WRITEMAP | MDB_NOSYNC | MDB_NOMETASYNC | MDB_MAPASYNC;
   if (lck_rc == MDBX_RESULT_TRUE) {
-    env->me_txns->mti_envmode = env->me_flags & mode_flags;
+    env->me_lck->mti_envmode = env->me_flags & mode_flags;
     if (exclusive == NULL || *exclusive < 2) {
       /* LY: downgrade lock only if exclusive access not requested.
        *     in case exclusive==1, just leave value as is. */
@@ -3996,7 +3996,7 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
       /* LY: just indicate that is not an exclusive access. */
       *exclusive = 0;
     }
-    if ((env->me_txns->mti_envmode ^ env->me_flags) & mode_flags) {
+    if ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) {
       /* LY: Current mode/flags incompatible with requested. */
       rc = MDB_INCOMPATIBLE;
       goto bailout;
@@ -4004,8 +4004,8 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
   }
 
   if ((env->me_flags & MDB_NOTLS) == 0) {
-    rc = mdbx_rthc_alloc(&env->me_txkey, &env->me_txns->mti_readers[0],
-                         &env->me_txns->mti_readers[env->me_maxreaders]);
+    rc = mdbx_rthc_alloc(&env->me_txkey, &env->me_lck->mti_readers[0],
+                         &env->me_lck->mti_readers[env->me_maxreaders]);
     if (unlikely(rc != MDB_SUCCESS))
       return rc;
     env->me_flags |= MDB_ENV_TXKEY;
@@ -4101,10 +4101,10 @@ static void __cold mdbx_env_close0(MDB_env *env) {
     env->me_fd = INVALID_HANDLE_VALUE;
   }
 
-  mdbx_munmap((void *)env->me_txns,
+  mdbx_munmap((void *)env->me_lck,
               (env->me_maxreaders - 1) * sizeof(MDB_reader) +
                   sizeof(MDBX_lockinfo));
-  env->me_txns = NULL;
+  env->me_lck = NULL;
   env->me_pid = 0;
 
   mdbx_lck_destroy(env);
@@ -4123,7 +4123,7 @@ int __cold mdbx_env_close_ex(MDB_env *env, int dont_sync) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (!dont_sync && env->me_txns)
+  if (!dont_sync && env->me_lck)
     rc = mdbx_env_sync(env, 1);
 
   VALGRIND_DESTROY_MEMPOOL(env);
@@ -8622,10 +8622,10 @@ int __cold mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes) {
 
   arg->me_mapsize = env->me_mapsize;
   arg->me_maxreaders = env->me_maxreaders;
-  arg->me_numreaders = env->me_txns->mti_numreaders;
+  arg->me_numreaders = env->me_lck->mti_numreaders;
   arg->me_tail_txnid = 0;
 
-  r = env->me_txns->mti_readers;
+  r = env->me_lck->mti_readers;
   arg->me_tail_txnid = arg->me_last_txnid;
   for (i = 0; i < arg->me_numreaders; ++i) {
     if (r[i].mr_pid) {
@@ -9036,8 +9036,8 @@ int __cold mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  snap_nreaders = env->me_txns->mti_numreaders;
-  mr = env->me_txns->mti_readers;
+  snap_nreaders = env->me_lck->mti_numreaders;
+  mr = env->me_lck->mti_readers;
   for (i = 0; i < snap_nreaders; i++) {
     if (mr[i].mr_pid) {
       txnid_t txnid = mr[i].mr_txnid;
@@ -9117,12 +9117,12 @@ int __cold mdbx_reader_check0(MDB_env *env, int rdt_locked, int *dead) {
     return MDB_PANIC;
   }
 
-  unsigned snap_nreaders = env->me_txns->mti_numreaders;
+  unsigned snap_nreaders = env->me_lck->mti_numreaders;
   mdbx_pid_t *pids = alloca((snap_nreaders + 1) * sizeof(mdbx_pid_t));
   pids[0] = 0;
 
   int rc = MDBX_RESULT_FALSE, count = 0;
-  MDB_reader *mr = env->me_txns->mti_readers;
+  MDB_reader *mr = env->me_lck->mti_readers;
 
   for (unsigned i = 0; i < snap_nreaders; i++) {
     const mdbx_pid_t pid = mr[i].mr_pid;
@@ -9512,7 +9512,7 @@ static txnid_t __cold mdbx_oomkick(MDB_env *env, txnid_t oldest) {
     if (!env->me_oom_func)
       break;
 
-    r = &env->me_txns->mti_readers[reader];
+    r = &env->me_lck->mti_readers[reader];
     pid = r->mr_pid;
     tid = r->mr_tid;
     if (r->mr_txnid != oldest || pid <= 0)
@@ -9769,7 +9769,7 @@ int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary) {
 
   if (likely(canary)) {
     if (txn->mt_canary.x == canary->x && txn->mt_canary.y == canary->y &&
-        txn->mt_canary.z == canary->z && txn->mt_canary.v == canary->v)
+        txn->mt_canary.z == canary->z)
       return MDB_SUCCESS;
     txn->mt_canary.x = canary->x;
     txn->mt_canary.y = canary->y;

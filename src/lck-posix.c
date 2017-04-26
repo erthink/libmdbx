@@ -104,10 +104,10 @@ int mdbx_lck_init(MDB_env *env) {
     goto bailout;
 #endif /* PTHREAD_PRIO_INHERIT */
 
-  rc = pthread_mutex_init(&env->me_txns->mti_rmutex, &ma);
+  rc = pthread_mutex_init(&env->me_lck->mti_rmutex, &ma);
   if (rc)
     goto bailout;
-  rc = pthread_mutex_init(&env->me_txns->mti_wmutex, &ma);
+  rc = pthread_mutex_init(&env->me_lck->mti_wmutex, &ma);
 
 bailout:
   pthread_mutexattr_destroy(&ma);
@@ -117,12 +117,12 @@ bailout:
 void mdbx_lck_destroy(MDB_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* try get exclusive access */
-    if (env->me_txns &&
+    if (env->me_lck &&
         mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, 0, LCK_WHOLE) == 0) {
       /* got exclusive, drown mutexes */
-      int rc = pthread_mutex_destroy(&env->me_txns->mti_rmutex);
+      int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
       if (rc == 0)
-        rc = pthread_mutex_destroy(&env->me_txns->mti_wmutex);
+        rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
       assert(rc == 0);
       (void)rc;
       /* lock would be released (by kernel) while the me_lfd will be closed */
@@ -145,22 +145,22 @@ static int mdbx_robust_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 }
 
 int mdbx_rdt_lock(MDB_env *env) {
-  return mdbx_robust_lock(env, &env->me_txns->mti_rmutex);
+  return mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
 }
 
 void mdbx_rdt_unlock(MDB_env *env) {
-  int rc = mdbx_robust_unlock(env, &env->me_txns->mti_rmutex);
+  int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rmutex);
   if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
 
 int mdbx_txn_lock(MDB_env *env) {
-  int rc = mdbx_robust_lock(env, &env->me_txns->mti_wmutex);
+  int rc = mdbx_robust_lock(env, &env->me_lck->mti_wmutex);
   return MDBX_IS_ERROR(rc) ? rc : MDB_SUCCESS;
 }
 
 void mdbx_txn_unlock(MDB_env *env) {
-  int rc = mdbx_robust_unlock(env, &env->me_txns->mti_wmutex);
+  int rc = mdbx_robust_unlock(env, &env->me_lck->mti_wmutex);
   if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
@@ -253,7 +253,7 @@ static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
   if (rc == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
 
-    int rlocked = (mutex == &env->me_txns->mti_rmutex);
+    int rlocked = (mutex == &env->me_lck->mti_rmutex);
     rc = MDB_SUCCESS;
     if (!rlocked) {
       if (unlikely(env->me_txn)) {
