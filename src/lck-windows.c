@@ -24,6 +24,19 @@
  * LY
  */
 
+static __inline void jitter4testing(void) {
+#ifndef NDEBUG
+  for (;;) {
+    unsigned coin = ((unsigned)__rdtsc() * 277u) % 43u;
+    if (coin < 43 / 3)
+      break;
+    SwitchToThread();
+    if (coin > 43 * 2 / 3)
+      Sleep(1);
+  }
+#endif
+}
+
 /*----------------------------------------------------------------------------*/
 /* rthc */
 
@@ -98,44 +111,18 @@ void mdbx_rthc_unlock(void) { LeaveCriticalSection(&rthc_critical_section); }
 #define LCK_WAITFOR 0
 #define LCK_DONTWAIT LOCKFILE_FAIL_IMMEDIATELY
 
-static BOOL flock(mdbx_filehandle_t fd, DWORD flags, off_t offset,
-                  size_t bytes) {
+static __inline BOOL flock(mdbx_filehandle_t fd, DWORD flags, off_t offset,
+                           size_t bytes) {
   OVERLAPPED ov;
   ov.hEvent = 0;
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
-
-#ifdef MDBX_WINDOWS_UnlockFile_CRUTCH
-  if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov))
-    return true;
-
-  if ((flags & LOCKFILE_FAIL_IMMEDIATELY) == 0)
-    return false;
-
-  int rc = GetLastError();
-  if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION)
-    return false;
-
-  /* FIXME: Windows kernel is ugly and mad... */
-  SwitchToThread();
-  Sleep(42);
-  SwitchToThread();
-#endif /* MDBX_WINDOWS_UnlockFile_CRUTCH */
   return LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov);
 }
 
-static BOOL funlock(mdbx_filehandle_t fd, off_t offset, size_t bytes) {
-  if (!UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
-                  HIGH_DWORD(bytes)))
-    return false;
-
-#ifdef MDBX_WINDOWS_UnlockFile_CRUTCH
-  /* FIXME: Windows kernel is ugly and mad... */
-  SwitchToThread();
-  Sleep(42);
-  SwitchToThread();
-#endif /* MDBX_WINDOWS_UnlockFile_CRUTCH */
-  return true;
+static __inline BOOL funlock(mdbx_filehandle_t fd, off_t offset, size_t bytes) {
+  return UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
+                    HIGH_DWORD(bytes));
 }
 
 /*----------------------------------------------------------------------------*/
@@ -219,18 +206,22 @@ static int internal_seize_lck(HANDLE lfd) {
   assert(lfd != INVALID_HANDLE_VALUE);
 
   /* 1) now on ?-? (free), get ?-E (middle) */
+  jitter4testing();
   if (!flock(lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER)) {
     rc = GetLastError() /* 2) something went wrong, give up */;
     mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
                "?-?(free) >> ?-E(middle)", rc);
     return rc;
   }
+
   /* 3) now on ?-E (middle), try E-E (exclusive) */
+  jitter4testing();
   if (flock(lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER))
     return MDBX_RESULT_TRUE; /* 4) got E-E (exclusive), done */
 
   /* 5) still on ?-E (middle) */
   rc = GetLastError();
+  jitter4testing();
   if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION) {
     /* 6) something went wrong, give up */
     if (!funlock(lfd, LCK_UPPER)) {
@@ -242,9 +233,11 @@ static int internal_seize_lck(HANDLE lfd) {
   }
 
   /* 7) still on ?-E (middle), try S-E (locked) */
+  jitter4testing();
   rc = flock(lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER) ? MDBX_RESULT_FALSE
                                                         : GetLastError();
 
+  jitter4testing();
   if (rc != MDBX_RESULT_FALSE)
     mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
                "?-E(middle) >> S-E(locked)", rc);
@@ -267,6 +260,7 @@ int mdbx_lck_seize(MDB_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. on read-only filesystem) */
+    jitter4testing();
     if (!flock(env->me_fd, LCK_SHARED | LCK_DONTWAIT, LCK_WHOLE)) {
       rc = GetLastError();
       mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "without-lck", rc);
@@ -276,6 +270,7 @@ int mdbx_lck_seize(MDB_env *env) {
   }
 
   rc = internal_seize_lck(env->me_lfd);
+  jitter4testing();
   if (rc == MDBX_RESULT_TRUE && (env->me_flags & MDB_RDONLY) == 0) {
     /* Check that another process don't operates in without-lck mode.
      * Doing such check by exclusive locking the body-part of db. Should be
@@ -287,11 +282,15 @@ int mdbx_lck_seize(MDB_env *env) {
       rc = GetLastError();
       mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
                  "lock-against-without-lck", rc);
+      jitter4testing();
       mdbx_lck_destroy(env);
-    } else if (!funlock(env->me_fd, LCK_BODY)) {
-      rc = GetLastError();
-      mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                 "unlock-against-without-lck", rc);
+    } else {
+      jitter4testing();
+      if (!funlock(env->me_fd, LCK_BODY)) {
+        rc = GetLastError();
+        mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
+                   "unlock-against-without-lck", rc);
+      }
     }
   }
 
