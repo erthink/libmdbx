@@ -1,0 +1,14 @@
+machine:
+  timezone:
+    Europe/Moscow
+
+database:
+  override:
+
+compile:
+  override:
+    - make all lmdb
+
+test:
+  override:
+    - make check
