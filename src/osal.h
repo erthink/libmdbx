@@ -442,3 +442,75 @@ int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
   _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
 #endif /* vsnprintf */
 #endif /* _MSC_VER */
+
+/*----------------------------------------------------------------------------*/
+
+#if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__)
+#include <stdatomic.h>
+#elif defined(__GNUC__) || defined(__clang__)
+/* LY: nothing required */
+#elif defined(_MSC_VER)
+#pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
+#pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
+#elif defined(__APPLE__)
+#include <libkern/OSAtomic.h>
+#else
+#error FIXME atomic-ops
+#endif
+
+static __inline size_t mdbx_atomic_add(volatile size_t *p, size_t v) {
+#ifdef ATOMIC_VAR_INIT
+  return atomic_fetch_add(p, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_fetch_and_add(p, v);
+#else
+  switch (sizeof(size_t)) {
+  case 4:
+#ifdef _MSC_VER
+    return _InterlockedExchangeAdd(p, v);
+#endif
+#ifdef __APPLE__
+    return OSAtomicAdd32(v, (volatile int32_t *)p);
+#endif
+  case 8:
+#ifdef _MSC_VER
+    return _InterlockedExchangeAdd64(p, v);
+#endif
+#ifdef __APPLE__
+    return OSAtomicAdd64(v, (volatile int64_t *)p);
+#endif
+  }
+  while (1)
+    ;
+#endif
+}
+
+#define mdbx_atomic_sub(p, v) mdbx_atomic_add(p, -(v))
+
+static __inline bool mdbx_atomic_compare_and_swap(volatile size_t *p, size_t c,
+                                                  size_t v) {
+#ifdef ATOMIC_VAR_INIT
+  return atomic_compare_exchange_strong(p, &c, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_bool_compare_and_swap(p, c, v);
+#else
+  switch (sizeof(size_t)) {
+  case 4:
+#ifdef _MSC_VER
+    return c == _InterlockedCompareExchange(p, v, c);
+#endif
+#ifdef __APPLE__
+    return c == OSAtomicCompareAndSwap32Barrier(c, v, (volatile int32_t *)p);
+#endif
+  case 8:
+#ifdef _MSC_VER
+    return c == _InterlockedCompareExchange64(p, v, c);
+#endif
+#ifdef __APPLE__
+    return c == OSAtomicCompareAndSwap64Barrier(c, v, (volatile int32_t *)p);
+#endif
+  }
+  while (1)
+    ;
+#endif
+}
