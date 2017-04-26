@@ -309,12 +309,10 @@ typedef enum MDB_cursor_op {
 /* Database contents grew beyond environment mapsize */
 #define MDB_MAP_RESIZED (-30785)
 /* Operation and DB incompatible, or DB type changed. This can mean:
- *	 - The operation expects an MDB_DUPSORT / MDB_DUPFIXED database.
- *	 - Opening a named DB when the unnamed DB has
- *MDB_DUPSORT/MDB_INTEGERKEY.
- *	 - Accessing a data record as a database, or vice versa.
- *	 - The database was dropped and recreated with different flags.
- */
+ *  - The operation expects an MDB_DUPSORT / MDB_DUPFIXED database.
+ *  - Opening a named DB when the unnamed DB has MDB_DUPSORT/MDB_INTEGERKEY.
+ *  - Accessing a data record as a database, or vice versa.
+ *  - The database was dropped and recreated with different flags. */
 #define MDB_INCOMPATIBLE (-30784)
 /* Invalid reuse of reader locktable slot */
 #define MDB_BAD_RSLOT (-30783)
@@ -365,12 +363,9 @@ typedef struct MDBX_envinfo {
 
 /* Return the LMDB library version information.
  *
- * [out] major if non-NULL, the library major version number is copied
- * here
- * [out] minor if non-NULL, the library minor version number is copied
- * here
- * [out] patch if non-NULL, the library patch version number is copied
- * here
+ * [out] major if non-NULL, the library major version number is copied here
+ * [out] minor if non-NULL, the library minor version number is copied here
+ * [out] patch if non-NULL, the library patch version number is copied here
  * Returns "version string" The library version as a string
  */
 LIBMDBX_API const char *mdbx_version(int *major, int *minor, int *patch);
@@ -381,8 +376,10 @@ LIBMDBX_API const char *mdbx_version(int *major, int *minor, int *patch);
  * function. If the error code is greater than or equal to 0, then the string
  * returned by the system function strerror(3) is returned. If the error code
  * is less than 0, an error string corresponding to the LMDB library error is
- * returned. See errors for a list of LMDB-specific error codes.
+ * returned. See errors for a list of MDBX-specific error codes.
+ *
  * [in] err The error code
+ *
  * Returns "error message" The description of the error
  */
 LIBMDBX_API const char *mdbx_strerror(int errnum);
@@ -395,54 +392,50 @@ LIBMDBX_API const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
  * Before the handle may be used, it must be opened using mdbx_env_open().
  * Various other options may also need to be set before opening the handle,
  * e.g. mdbx_env_set_mapsize(), mdbx_env_set_maxreaders(),
- * mdbx_env_set_maxdbs(),
- * depending on usage requirements.
+ * mdbx_env_set_maxdbs(), depending on usage requirements.
+ *
  * [out] env The address where the new handle will be stored
+ *
  * Returns A non-zero error value on failure and 0 on success.
  */
 LIBMDBX_API int mdbx_env_create(MDB_env **env);
 
 /* Open an environment handle.
  *
- * If this function fails, mdbx_env_close() must be called to discard the
- *MDB_env handle.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] path The directory in which the database files reside. This
- * directory must already exist and be writable.
+ * If this function fails, mdbx_env_close() must be called to discard
+ * the MDB_env handle.
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [in] path  The directory in which the database files reside.
+ *            This directory must already exist and be writable.
  * [in] flags Special options for this environment. This parameter
- * must be set to 0 or by bitwise OR'ing together one or more of the
- * values described here.
- * Flags set by mdbx_env_set_flags() are also used.
- *	 - MDB_NOSUBDIR
- *		By default, LMDB creates its environment in a directory whose
- *		pathname is given in \b path, and creates its data and lock
- *files
- *		under that directory. With this option, \b path is used as-is
- *for
- *		the database main data file. The database lock file is the \b
- *path
- *		with "-lock" appended.
- *	 - MDB_RDONLY
- *		Open the environment in read-only mode. No write operations will
- *be
- *		allowed. LMDB will still modify the lock file - except on
- *read-only
- *		filesystems, where LMDB does not use locks.
- *	 - MDB_WRITEMAP
- *		Use a writeable memory map unless MDB_RDONLY is set. This uses
- *		fewer mallocs but loses protection from application bugs
- *		like wild pointer writes and other bad updates into the
- *database.
- *		This may be slightly faster for DBs that fit entirely in RAM,
- *but
- *		is slower for DBs larger than RAM.
- *		Incompatible with nested transactions.
- *		Do not mix processes with and without MDB_WRITEMAP on the same
- *		environment.  This can defeat durability (mdbx_env_sync etc).
- *	 - MDB_NOMETASYNC
- *		Flush system buffers to disk only once per transaction, omit
- *the
- *		metadata flush. Defer that until the system flushes files to
+ *            must be set to 0 or by bitwise OR'ing together one
+ *            or more of the values described here.
+ *
+ * Flags set by mdbx_env_set_flags() are also used:
+ *  - MDB_NOSUBDIR
+ *      By default, LMDB creates its environment in a directory whose
+ *      pathname is given in path, and creates its data and lock files
+ *      under that directory. With this option, path is used as-is for
+ *      the database main data file. The database lock file is the path
+ *      with "-lock" appended.
+ *
+ *  - MDB_RDONLY
+ *      Open the environment in read-only mode. No write operations will
+ *      be allowed. LMDB will still modify the lock file - except on
+ *      read-only filesystems, where MDBX does not use locks.
+ *
+ *  - MDB_WRITEMAP
+ *      Use a writeable memory map unless MDB_RDONLY is set. This uses fewer
+ *      mallocs but loses protection from application bugs like wild pointer
+ *      writes and other bad updates into the database.
+ *      This may be slightly faster for DBs that fit entirely in RAM,
+ *      but is slower for DBs larger than RAM.
+ *      Incompatible with nested transactions.
+ *      Do not mix processes with and without MDB_WRITEMAP on the same
+ *      environment.  This can defeat durability (mdbx_env_sync etc).
+ *  - MDB_NOMETASYNC
+ *      Flush system buffers to disk only once per transaction, omit the
+ *      metadata flush. Defer that until the system flushes files to
  *disk,
  *		or next non-MDB_RDONLY commit or mdbx_env_sync(). This
  *optimization
@@ -1492,11 +1485,11 @@ LIBMDBX_API int mdbx_cursor_del(MDB_cursor *cursor, unsigned flags);
  * data items MDB_DUPSORT.
  * [in] cursor A cursor handle returned by mdbx_cursor_open()
  * [out] countp Address where the count will be stored
- * Returns A non-zero error value on failure and 0 on success. Some possible
- * errors are:
- *	 - EINVAL - cursor is not initialized, or an invalid parameter was
- *specified.
- */
+ *
+ * Returns A non-zero error value on failure and 0 on success.
+ * Some possible errors are:
+ *  - EINVAL - cursor is not initialized,
+ *             or an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, size_t *countp);
 
 /* Compare two data items according to a particular database.
@@ -1507,8 +1500,8 @@ LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, size_t *countp);
  * [in] dbi A database handle returned by mdbx_dbi_open()
  * [in] a The first item to compare
  * [in] b The second item to compare
- * Returns < 0 if a < b, 0 if a == b, > 0 if a > b
- */
+ *
+ * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
 LIBMDBX_API int mdbx_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
                          const MDB_val *b);
 
@@ -1520,8 +1513,8 @@ LIBMDBX_API int mdbx_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
  * [in] dbi A database handle returned by mdbx_dbi_open()
  * [in] a The first item to compare
  * [in] b The second item to compare
- * Returns < 0 if a < b, 0 if a == b, > 0 if a > b
- */
+ *
+ * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
 LIBMDBX_API int mdbx_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
                           const MDB_val *b);
 
@@ -1529,8 +1522,8 @@ LIBMDBX_API int mdbx_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
  *
  * [in] msg The string to be printed.
  * [in] ctx An arbitrary context pointer for the callback.
- * Returns < 0 on failure, >= 0 on success.
- */
+ *
+ * Returns < 0 on failure, >= 0 on success. */
 typedef int(MDB_msg_func)(const char *msg, void *ctx);
 
 /* Dump the entries in the reader lock table.
@@ -1538,16 +1531,16 @@ typedef int(MDB_msg_func)(const char *msg, void *ctx);
  * [in] env An environment handle returned by mdbx_env_create()
  * [in] func A MDB_msg_func function
  * [in] ctx Anything the message function needs
- * Returns < 0 on failure, >= 0 on success.
- */
+ *
+ * Returns < 0 on failure, >= 0 on success. */
 LIBMDBX_API int mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx);
 
 /* Check for stale entries in the reader lock table.
  *
  * [in] env An environment handle returned by mdbx_env_create()
  * [out] dead Number of stale slots that were cleared
- * Returns 0 on success, non-zero on failure.
- */
+ *
+ * Returns 0 on success, non-zero on failure. */
 LIBMDBX_API int mdbx_reader_check(MDB_env *env, int *dead);
 
 LIBMDBX_API char *mdbx_dkey(MDB_val *key, char *buf, const size_t bufsize);
@@ -1568,9 +1561,9 @@ LIBMDBX_API int mdbx_env_close_ex(MDB_env *env, int dont_sync);
  *
  * [in] env An environment handle returned by mdbx_env_create()
  * [in] bytes The size in bytes of summary changes
- * when a synchronous flush would be made.
- * Returns A non-zero error value on failure and 0 on success.
- */
+ *      when a synchronous flush would be made.
+ *
+ * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncbytes(MDB_env *env, size_t bytes);
 
 /* Returns a lag of the reading.
@@ -1580,9 +1573,9 @@ LIBMDBX_API int mdbx_env_set_syncbytes(MDB_env *env, size_t bytes);
  *
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  * [out] percent Percentage of page allocation in the database.
+ *
  * Returns Number of transactions committed after the given was started for
- * read, or -1 on failure.
- */
+ * read, or -1 on failure. */
 LIBMDBX_API int mdbx_txn_straggler(MDB_txn *txn, int *percent);
 
 /* A callback function for killing a laggard readers,
@@ -1594,11 +1587,11 @@ LIBMDBX_API int mdbx_txn_straggler(MDB_txn *txn, int *percent);
  * [in] txn Transaction number on which stalled.
  * [in] gap a lag from the last commited txn.
  * [in] retry a retry number, less that zero for notify end of OOM-loop.
+ *
  * Returns -1 on failure (reader is not killed),
- * 	0 on a race condition (no such reader),
- * 	1 on success (reader was killed),
- * 	>1 on success (reader was SURE killed).
- */
+ *  0 on a race condition (no such reader),
+ *  1 on success (reader was killed),
+ *  >1 on success (reader was SURE killed). */
 typedef int(MDBX_oom_func)(MDB_env *env, int pid, mdbx_tid_t thread_id,
                            size_t txn, unsigned gap, int retry);
 
@@ -1608,8 +1601,7 @@ typedef int(MDBX_oom_func)(MDB_env *env, int pid, mdbx_tid_t thread_id,
  * a laggard readers to allowing reclaiming of freeDB.
  *
  * [in] env An environment handle returned by mdbx_env_create().
- * [in] oomfunc A #MDBX_oom_func function or NULL to disable.
- */
+ * [in] oomfunc A #MDBX_oom_func function or NULL to disable. */
 LIBMDBX_API void mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
 
 /* Get the current oom_func callback.
@@ -1618,8 +1610,7 @@ LIBMDBX_API void mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
  * a laggard readers to allowing reclaiming of freeDB.
  *
  * [in] env An environment handle returned by mdbx_env_create().
- * Returns A #MDBX_oom_func function or NULL if disabled.
- */
+ * Returns A #MDBX_oom_func function or NULL if disabled. */
 LIBMDBX_API MDBX_oom_func *mdbx_env_get_oomfunc(MDB_env *env);
 
 #define MDBX_DBG_ASSERT 1
@@ -1651,10 +1642,11 @@ LIBMDBX_API int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary);
 LIBMDBX_API int mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary);
 
 /* Returns:
- *	- MDBX_RESULT_TRUE	when no more data available
- *				or cursor not positioned;
- *	- MDBX_RESULT_FALSE	when data available;
- *	- Otherwise the error code. */
+ *  - MDBX_RESULT_TRUE
+ *      when no more data available or cursor not positioned;
+ *  - MDBX_RESULT_FALSE
+ *      when data available;
+ *  - Otherwise the error code. */
 LIBMDBX_API int mdbx_cursor_eof(MDB_cursor *mc);
 
 /* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */

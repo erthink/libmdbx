@@ -368,8 +368,8 @@ typedef struct MDBX_lockinfo {
 #endif
 
   /* The number of slots that have been used in the reader table.
-  * This always records the maximum count, it is not decremented
-  * when readers release their slots. */
+   * This always records the maximum count, it is not decremented
+   * when readers release their slots. */
   __cache_aligned volatile unsigned mti_numreaders;
 #ifdef MDBX_OSAL_LOCK
   /* Mutex protecting access to this table. */
@@ -380,19 +380,17 @@ typedef struct MDBX_lockinfo {
 
 #pragma pack(pop)
 
-/** Auxiliary DB info.
-*	The information here is mostly static/read-only. There is
-*	only a single copy of this record in the environment.
-*/
+/* Auxiliary DB info.
+ * The information here is mostly static/read-only. There is
+ * only a single copy of this record in the environment. */
 typedef struct MDB_dbx {
   MDB_val md_name;       /**< name of the database */
   MDB_cmp_func *md_cmp;  /**< function for comparing keys */
   MDB_cmp_func *md_dcmp; /**< function for comparing data items */
 } MDB_dbx;
 
-/** A database transaction.
-*	Every operation requires a transaction handle.
-*/
+/* A database transaction.
+ * Every operation requires a transaction handle. */
 struct MDB_txn {
 #define MDBX_MT_SIGNATURE (0x93D53A31)
   unsigned mt_signature;
@@ -400,40 +398,37 @@ struct MDB_txn {
   /** Nested txn under this txn, set together with flag #MDB_TXN_HAS_CHILD */
   MDB_txn *mt_child;
   pgno_t mt_next_pgno; /**< next unallocated page */
-  /** The ID of this transaction. IDs are integers incrementing from 1.
-  *	Only committed write transactions increment the ID. If a transaction
-  *	aborts, the ID may be re-used by the next writer.
-  */
+  /* The ID of this transaction. IDs are integers incrementing from 1.
+   * Only committed write transactions increment the ID. If a transaction
+   * aborts, the ID may be re-used by the next writer. */
   txnid_t mt_txnid;
   MDB_env *mt_env; /**< the DB environment */
                    /** The list of reclaimed txns from freeDB */
   MDB_IDL mt_lifo_reclaimed;
-  /** The list of pages that became unused during this transaction.
-  */
+  /* The list of pages that became unused during this transaction. */
   MDB_IDL mt_free_pgs;
-  /** The list of loose pages that became unused and may be reused
-  *	in this transaction, linked through #NEXT_LOOSE_PAGE(page).
-  */
+  /* The list of loose pages that became unused and may be reused
+   * in this transaction, linked through #NEXT_LOOSE_PAGE(page). */
   MDB_page *mt_loose_pgs;
   /** Number of loose pages (#mt_loose_pgs) */
   int mt_loose_count;
-  /** The sorted list of dirty pages we temporarily wrote to disk
-  *	because the dirty list was full. page numbers in here are
-  *	shifted left by 1, deleted slots have the LSB set.
-  */
+  /* The sorted list of dirty pages we temporarily wrote to disk
+   * because the dirty list was full. page numbers in here are
+   * shifted left by 1, deleted slots have the LSB set. */
   MDB_IDL mt_spill_pgs;
   union {
-    /** For write txns: Modified pages. Sorted when not MDB_WRITEMAP. */
+    /* For write txns: Modified pages. Sorted when not MDB_WRITEMAP. */
     MDB_ID2L dirty_list;
-    /** For read txns: This thread/txn's reader table slot, or NULL. */
+    /* For read txns: This thread/txn's reader table slot, or NULL. */
     MDB_reader *reader;
   } mt_u;
-  /** Array of records for each DB known in the environment. */
+  /* Array of records for each DB known in the environment. */
   MDB_dbx *mt_dbxs;
-  /** Array of MDB_db records for each known DB */
+  /* Array of MDB_db records for each known DB */
   MDB_db *mt_dbs;
-  /** Array of sequence numbers for each DB handle */
+  /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
+
 /** @defgroup mt_dbflag	Transaction DB Flags
 *	@ingroup internal
 * @{
@@ -609,20 +604,20 @@ struct MDB_env {
   unsigned me_maxreaders; /**< size of the reader table */
   /** Max #MDBX_lockinfo.mti_numreaders of interest to #mdbx_env_close() */
   unsigned me_close_readers;
-  MDB_dbi me_numdbs;      /**< number of DBs opened */
-  MDB_dbi me_maxdbs;      /**< size of the DB table */
-  mdbx_pid_t me_pid;      /**< process ID of this env */
-  char *me_path;          /**< path to the DB files */
-  char *me_map;           /**< the memory map of the data file */
-  MDBX_lockinfo *me_txns; /**< the memory map of the lock file, never NULL */
-  void *me_pbuf;          /**< scratch area for DUPSORT put() */
-  MDB_txn *me_txn;        /**< current write transaction */
-  MDB_txn *me_txn0;       /**< prealloc'd write transaction */
-  size_t me_mapsize;      /**< size of the data memory map */
-  pgno_t me_maxpg;        /**< me_mapsize / me_psize */
-  MDB_dbx *me_dbxs;       /**< array of static DB info */
-  uint16_t *me_dbflags;   /**< array of flags from MDB_db.md_flags */
-  unsigned *me_dbiseqs;   /**< array of dbi sequence numbers */
+  MDB_dbi me_numdbs;     /**< number of DBs opened */
+  MDB_dbi me_maxdbs;     /**< size of the DB table */
+  mdbx_pid_t me_pid;     /**< process ID of this env */
+  char *me_path;         /**< path to the DB files */
+  char *me_map;          /**< the memory map of the data file */
+  MDBX_lockinfo *me_lck; /**< the memory map of the lock file, never NULL */
+  void *me_pbuf;         /**< scratch area for DUPSORT put() */
+  MDB_txn *me_txn;       /**< current write transaction */
+  MDB_txn *me_txn0;      /**< prealloc'd write transaction */
+  size_t me_mapsize;     /**< size of the data memory map */
+  pgno_t me_maxpg;       /**< me_mapsize / me_psize */
+  MDB_dbx *me_dbxs;      /**< array of static DB info */
+  uint16_t *me_dbflags;  /**< array of flags from MDB_db.md_flags */
+  unsigned *me_dbiseqs;  /**< array of dbi sequence numbers */
   mdbx_thread_key_t me_txkey; /**< thread-key for readers */
   txnid_t me_pgoldest;        /**< ID of oldest reader last time we looked */
   MDB_pgstate me_pgstate;     /**< state of old pages from freeDB */
