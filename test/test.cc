@@ -261,7 +261,7 @@ void testcase::fetch_canary() {
     failure_perror("mdbx_canary_get()", rc);
 
   if (canary_now.v < last.canary.v)
-    failure("fetch_canary: %" PRIu64 " canary-now.v) < %" PRIu64
+    failure("fetch_canary: %" PRIu64 "(canary-now.v) < %" PRIu64
             "(canary-last.v)",
             canary_now.v, last.canary.v);
   if (canary_now.y < last.canary.y)
