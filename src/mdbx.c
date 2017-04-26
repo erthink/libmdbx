@@ -2213,6 +2213,12 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
     MDB_meta *meta = mdbx_meta_head(env);
     txn->mt_canary = meta->mm_canary;
     txn->mt_txnid = meta->mm_txnid + 1;
+    if (unlikely(txn->mt_txnid < meta->mm_txnid)) {
+      mdbx_debug("txnid overflow!");
+      rc = MDB_TXN_FULL;
+      goto bailout;
+    }
+
     txn->mt_flags = flags;
 
 #if MDB_DEBUG
@@ -2262,6 +2268,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
   } else {
     return MDB_SUCCESS;
   }
+bailout:
   assert(rc != MDB_SUCCESS);
   mdbx_txn_end(txn, MDB_END_SLOT | MDB_END_FAIL_BEGIN);
   return rc;
