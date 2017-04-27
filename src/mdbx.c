@@ -5828,15 +5828,14 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
         /* Too big for a sub-page, convert to sub-DB */
         fp_flags &= ~P_SUBP;
       prep_subDB:
+        dummy.md_xsize = 0;
+        dummy.md_flags = 0;
         if (mc->mc_db->md_flags & MDB_DUPFIXED) {
           fp_flags |= P_LEAF2;
           dummy.md_xsize = fp->mp_leaf2_ksize;
           dummy.md_flags = MDB_DUPFIXED;
           if (mc->mc_db->md_flags & MDB_INTEGERDUP)
             dummy.md_flags |= MDB_INTEGERKEY;
-        } else {
-          dummy.md_xsize = 0;
-          dummy.md_flags = 0;
         }
         dummy.md_depth = 1;
         dummy.md_branch_pages = 0;
