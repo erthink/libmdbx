@@ -278,8 +278,10 @@ typedef struct MDB_meta {
 #define MDB_DATASIGN_NONE 0u
 #define MDB_DATASIGN_WEAK 1u
   volatile uint64_t mm_datasync_sign;
-#define META_IS_WEAK(meta) ((meta)->mm_datasync_sign == MDB_DATASIGN_WEAK)
-#define META_IS_STEADY(meta) ((meta)->mm_datasync_sign > MDB_DATASIGN_WEAK)
+#define SIGN_IS_WEAK(sign) ((sign) == MDB_DATASIGN_WEAK)
+#define SIGN_IS_STEADY(sign) ((sign) > MDB_DATASIGN_WEAK)
+#define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
+#define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
   volatile mdbx_canary mm_canary;
 } MDB_meta;
 

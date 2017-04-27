@@ -3264,38 +3264,32 @@ fail:
   return rc;
 }
 
-/** Read the environment parameters of a DB environment before
- * mapping it into memory.
- * @param[in] env the environment handle
- * @param[out] meta address of where to store the meta information
- * @return 0 on success, non-zero on failure. */
+/* Read the environment parameters of a DB environment
+ * before mapping it into memory. */
 static int __cold mdbx_read_header(MDB_env *env, MDB_meta *meta) {
-  MDB_metabuf pbuf;
-  MDB_page *p;
-  MDB_meta *m;
-  int i, rc, off;
   assert(offsetof(MDB_metabuf, mb_metabuf.mm_meta) == PAGEHDRSZ);
-
-  /* We don't know the page size yet, so use a minimum value.
-   * Read both meta pages so we can use the latest one. */
-
   meta->mm_datasync_sign = MDB_DATASIGN_WEAK;
   meta->mm_txnid = 0;
-  for (i = off = 0; i < NUM_METAS; i++, off += meta->mm_psize) {
-    rc = mdbx_pread(env->me_fd, &pbuf, sizeof(pbuf), off);
+  off_t offset = 0;
+
+  /* Read both meta pages so we can use the latest one. */
+  for (int loops_left = 2; --loops_left >= 0;) {
+    MDB_metabuf buf;
+
+    /* We don't know the page size on first time, so use a minimum value. */
+    int rc = mdbx_pread(env->me_fd, &buf, sizeof(buf), offset);
     if (rc != MDB_SUCCESS) {
       mdbx_debug("read: %s", mdbx_strerror(rc));
       return rc;
     }
 
-    p = (MDB_page *)&pbuf;
-
+    MDB_page *p = (MDB_page *)&buf;
     if (!F_ISSET(p->mp_flags, P_META)) {
       mdbx_debug("page %zu not a meta page", p->mp_pgno);
       return MDB_INVALID;
     }
 
-    m = PAGEDATA(p);
+    MDB_meta *m = PAGEDATA(p);
     if (m->mm_magic != MDB_MAGIC) {
       mdbx_debug("meta has invalid magic");
       return MDB_INVALID;
@@ -3307,22 +3301,38 @@ static int __cold mdbx_read_header(MDB_env *env, MDB_meta *meta) {
       return MDB_VERSION_MISMATCH;
     }
 
-    if (m->mm_datasync_sign > MDB_DATASIGN_WEAK &&
-        m->mm_datasync_sign != mdbx_meta_sign(m))
+    /* LY: check signature as a checksum */
+    if (META_IS_STEADY(m) && m->mm_datasync_sign != mdbx_meta_sign(m)) {
+      mdbx_debug("steady-meta has invalid checksum");
       continue;
+    }
 
-    if (mdbx_meta_lt(meta, m))
+    if (mdbx_meta_lt(meta, m)) {
       *meta = *m;
+      if (META_IS_WEAK(meta))
+        loops_left += 1; /* LY: should re-read to avoid race */
+    }
+
+    if (offset)
+      offset = 0;
+    else {
+      offset = meta->mm_psize;
+      if (!offset)
+        offset = m->mm_psize;
+      if (!offset)
+        offset = env->me_os_psize;
+    }
   }
 
-  if (meta->mm_datasync_sign == MDB_DATASIGN_WEAK)
-    /* LY: Both meta-pages are weak. */
+  if (META_IS_WEAK(meta)) {
+    mdbx_debug("both meta-pages are weak, database is corrupted");
     return MDB_CORRUPTED;
+  }
 
   return MDB_SUCCESS;
 }
 
-/** Fill in most of the zeroed #MDB_meta for an empty database environment */
+/* Fill in most of the zeroed MDB_meta for an empty database environment */
 static void __cold mdbx_env_init_meta0(MDB_env *env, MDB_meta *meta) {
   meta->mm_magic = MDB_MAGIC;
   meta->mm_version = MDB_DATA_VERSION;
