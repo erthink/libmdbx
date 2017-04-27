@@ -106,24 +106,23 @@ bool output(loglevel priority, const char *format, va_list ap) {
   if (rc != MDB_SUCCESS)
     failure_perror("localtime_r()", rc);
 
-  last = (priority >= error) ? stderr : stdout;
+  last = stdout;
   fprintf(last,
           "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05u %-10s %.4s ] %s" /* TODO */,
-          tm.tm_year - 100, tm.tm_mon, tm.tm_mday, tm.tm_hour, tm.tm_min,
+          tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, chrono::fractional2us(now.fractional), osal_getpid(),
           prefix.c_str(), level2str(priority), suffix.c_str());
   vfprintf(last, format, ap);
 
   size_t len = strlen(format);
   char end = len ? format[len - 1] : '\0';
+
   switch (end) {
   default:
     putc('\n', last);
   case '\n':
     fflush(last);
     last = nullptr;
-    if (priority > info)
-      fflushall();
   case ' ':
   case '_':
   case ':':
@@ -135,6 +134,16 @@ bool output(loglevel priority, const char *format, va_list ap) {
   case '\0':
     break;
   }
+
+  if (priority >= error && last != stderr) {
+    fprintf(stderr, "[ %05u %-10s %.4s ] %s", osal_getpid(), prefix.c_str(),
+            level2str(priority), suffix.c_str());
+    vfprintf(stderr, format, ap);
+    if (end != '\n')
+      putc('\n', stderr);
+    fflush(stderr);
+  }
+
   return true;
 }
 
