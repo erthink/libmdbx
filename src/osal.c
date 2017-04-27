@@ -626,3 +626,29 @@ int mdbx_mlock(const void *address, size_t length) {
   return (mlock(address, length) == 0) ? MDB_SUCCESS : errno;
 #endif
 }
+
+/*----------------------------------------------------------------------------*/
+
+__cold void mdbx_osal_jitter(bool tiny) {
+  for (;;) {
+#if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) ||                \
+    defined(__x86_64__)
+    const unsigned salt = 277u * (unsigned)__rdtsc();
+#else
+    const unsigned salt = rand();
+#endif
+
+    const unsigned coin = salt % (tiny ? 29u : 43u);
+    if (coin < 43 / 3)
+      break;
+#if defined(_WIN32) || defined(_WIN64)
+    SwitchToThread();
+    if (coin > 43 * 2 / 3)
+      Sleep(1);
+#else
+    sched_yield();
+    if (coin > 43 * 2 / 3)
+      usleep(coin);
+#endif
+  }
+}

@@ -24,19 +24,6 @@
  * LY
  */
 
-static __inline void jitter4testing(void) {
-#ifndef NDEBUG
-  for (;;) {
-    unsigned coin = ((unsigned)__rdtsc() * 277u) % 43u;
-    if (coin < 43 / 3)
-      break;
-    SwitchToThread();
-    if (coin > 43 * 2 / 3)
-      Sleep(1);
-  }
-#endif
-}
-
 /*----------------------------------------------------------------------------*/
 /* rthc */
 

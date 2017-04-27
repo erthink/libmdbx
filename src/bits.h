@@ -799,6 +799,14 @@ void mdbx_panic(const char *fmt, ...)
 
 /*----------------------------------------------------------------------------*/
 
+static __inline void mdbx_jitter4testing(bool tiny) {
+#ifndef NDEBUG
+  mdbx_osal_jitter(tiny);
+#else
+  (void)tiny;
+#endif
+}
+
 int mdbx_reader_check0(MDB_env *env, int rlocked, int *dead);
 
 #define METAPAGE_1(env) (&((MDB_metabuf *)(env)->me_map)->mb_metabuf.mm_meta)

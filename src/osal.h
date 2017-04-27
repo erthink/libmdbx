@@ -383,6 +383,8 @@ static __inline mdbx_pid_t mdbx_getpid(void) {
 #endif
 }
 
+void mdbx_osal_jitter(bool tiny);
+
 /*----------------------------------------------------------------------------*/
 
 #ifndef mdbx_assert_fail
