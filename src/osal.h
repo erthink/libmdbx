@@ -308,7 +308,7 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 /*----------------------------------------------------------------------------*/
 
 /* max bytes to write in one call */
-#define MAX_WRITE (0x80000000U >> (sizeof(ssize_t) == 4))
+#define MAX_WRITE UINT32_C(0x3fff0000)
 
 /* Get the size of a memory page for the system.
  * This is the basic size that the platform's memory manager uses, and is

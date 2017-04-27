@@ -3286,19 +3286,20 @@ static int __cold mdbx_read_header(MDB_env *env, MDB_meta *meta) {
     /* We don't know the page size on first time, so use a minimum value. */
     int rc = mdbx_pread(env->me_fd, &buf, sizeof(buf), offset);
     if (rc != MDB_SUCCESS) {
-      mdbx_debug("read: %s", mdbx_strerror(rc));
+      mdbx_debug("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(buf), rc,
+                 mdbx_strerror(rc));
       return rc;
     }
 
     MDB_page *p = (MDB_page *)&buf;
     if (!F_ISSET(p->mp_flags, P_META)) {
-      mdbx_debug("page %zu not a meta page", p->mp_pgno);
+      mdbx_debug("page %zu not a meta-page", p->mp_pgno);
       return MDB_INVALID;
     }
 
     MDB_meta *m = PAGEDATA(p);
     if (m->mm_magic != MDB_MAGIC) {
-      mdbx_debug("meta has invalid magic");
+      mdbx_debug("meta[%u] has invalid magic", offset);
       return MDB_INVALID;
     }
 
@@ -3310,7 +3311,7 @@ static int __cold mdbx_read_header(MDB_env *env, MDB_meta *meta) {
 
     /* LY: check signature as a checksum */
     if (META_IS_STEADY(m) && m->mm_datasync_sign != mdbx_meta_sign(m)) {
-      mdbx_debug("steady-meta has invalid checksum");
+      mdbx_debug("steady-meta[%u] has invalid checksum", offset);
       continue;
     }
 

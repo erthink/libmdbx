@@ -325,9 +325,9 @@ int mdbx_closefile(mdbx_filehandle_t fd) {
 }
 
 int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
-#if defined(_WIN32) || defined(_WIN64)
   if (bytes > MAX_WRITE)
-    return ERROR_INVALID_PARAMETER;
+    return MDBX_EINVAL;
+#if defined(_WIN32) || defined(_WIN64)
 
   OVERLAPPED ov;
   ov.hEvent = 0;
