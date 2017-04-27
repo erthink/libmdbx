@@ -815,8 +815,11 @@ int mdbx_reader_check0(MDB_env *env, int rlocked, int *dead);
   (&((MDB_metabuf *)((env)->me_map + env->me_psize))->mb_metabuf.mm_meta)
 
 static __inline MDB_meta *mdbx_meta_head(MDB_env *env) {
+  mdbx_jitter4testing(true);
   MDB_meta *a = METAPAGE_1(env);
+  mdbx_jitter4testing(true);
   MDB_meta *b = METAPAGE_2(env);
+  mdbx_jitter4testing(true);
 
   return (a->mm_txnid > b->mm_txnid) ? a : b;
 }

@@ -1412,6 +1412,7 @@ static txnid_t mdbx_find_oldest(MDB_env *env, int *laggard) {
   const MDB_reader *const r = env->me_lck->mti_readers;
   for (reader = -1, i = env->me_lck->mti_numreaders; --i >= 0;) {
     if (r[i].mr_pid) {
+      mdbx_jitter4testing(true);
       txnid_t snap = r[i].mr_txnid;
       if (oldest > snap) {
         oldest = snap;
@@ -2187,9 +2188,13 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
 
     while (1) {
       MDB_meta *const meta = mdbx_meta_head(txn->mt_env);
+      mdbx_jitter4testing(false);
       const txnid_t snap = meta->mm_txnid;
+      mdbx_jitter4testing(false);
       r->mr_txnid = snap;
+      mdbx_jitter4testing(false);
       mdbx_coherent_barrier();
+      mdbx_jitter4testing(true);
 
       /* Snap the state from current meta-head */
       txn->mt_txnid = snap;
@@ -2206,21 +2211,16 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
   } else {
     /* Not yet touching txn == env->me_txn0, it may be active */
+    mdbx_jitter4testing(false);
     rc = mdbx_txn_lock(env);
     if (unlikely(rc))
       return rc;
 
+    mdbx_jitter4testing(false);
     MDB_meta *meta = mdbx_meta_head(env);
+    mdbx_jitter4testing(false);
     txn->mt_canary = meta->mm_canary;
     txn->mt_txnid = meta->mm_txnid + 1;
-    if (unlikely(txn->mt_txnid < meta->mm_txnid)) {
-      mdbx_debug("txnid overflow!");
-      rc = MDB_TXN_FULL;
-      goto bailout;
-    }
-
-    txn->mt_flags = flags;
-
 #if MDB_DEBUG
     if (unlikely(txn->mt_txnid == mdbx_debug_edge)) {
       if (!mdbx_debug_logger)
@@ -2230,6 +2230,13 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
                      "on/off edge (txn %zu)", txn->mt_txnid);
     }
 #endif
+    if (unlikely(txn->mt_txnid < meta->mm_txnid)) {
+      mdbx_debug("txnid overflow!");
+      rc = MDB_TXN_FULL;
+      goto bailout;
+    }
+
+    txn->mt_flags = flags;
     txn->mt_child = NULL;
     txn->mt_loose_pgs = NULL;
     txn->mt_loose_count = 0;
@@ -3834,6 +3841,13 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
     off_t wanna = roundup2((env->me_maxreaders - 1) * sizeof(MDB_reader) +
                                sizeof(MDBX_lockinfo),
                            env->me_os_psize);
+#ifndef NDEBUG
+    err = mdbx_ftruncate(env->me_lfd, size = 0);
+    if (unlikely(err != MDB_SUCCESS))
+      return err;
+#endif
+    mdbx_jitter4testing(false);
+
     if (size != wanna) {
       err = mdbx_ftruncate(env->me_lfd, wanna);
       if (unlikely(err != MDB_SUCCESS))
