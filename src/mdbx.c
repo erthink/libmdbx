@@ -3275,9 +3275,9 @@ fail:
  * before mapping it into memory. */
 static int __cold mdbx_read_header(MDB_env *env, MDB_meta *meta) {
   assert(offsetof(MDB_metabuf, mb_metabuf.mm_meta) == PAGEHDRSZ);
+  memset(meta, 0, sizeof(MDB_meta));
   meta->mm_datasync_sign = MDB_DATASIGN_WEAK;
-  meta->mm_txnid = 0;
-  off_t offset = 0;
+  unsigned offset = 0;
 
   /* Read both meta pages so we can use the latest one. */
   for (int loops_left = 2; --loops_left >= 0;) {
