@@ -3834,6 +3834,9 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
   if (MDBX_IS_ERROR(rc))
     return rc;
 
+  mdbx_debug("lck-setup: %s ",
+             (rc == MDBX_RESULT_TRUE) ? "exclusive" : "shared");
+
   err = mdbx_filesize(env->me_lfd, &size);
   if (unlikely(err != MDB_SUCCESS))
     return err;
@@ -4019,6 +4022,7 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
       /* LY: downgrade lock only if exclusive access not requested.
        *     in case exclusive==1, just leave value as is. */
       rc = mdbx_lck_downgrade(env);
+      mdbx_debug("lck-downgrade: rc %i ", rc);
       if (rc != MDB_SUCCESS)
         goto bailout;
     }
