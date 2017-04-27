@@ -447,7 +447,9 @@ int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
 
 /*----------------------------------------------------------------------------*/
 
-#if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__)
+#if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__) &&          \
+    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
+     !(defined(__GNUC__) || defined(__clang__)))
 #include <stdatomic.h>
 #elif defined(__GNUC__) || defined(__clang__)
 /* LY: nothing required */
