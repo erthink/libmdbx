@@ -1124,7 +1124,7 @@ LIBMDBX_API int mdbx_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags);
  * [in] env An environment handle returned by mdbx_env_create()
  * [in] dbi A database handle returned by mdbx_dbi_open()
  */
-LIBMDBX_API void mdbx_dbi_close(MDB_env *env, MDB_dbi dbi);
+LIBMDBX_API int mdbx_dbi_close(MDB_env *env, MDB_dbi dbi);
 
 /* Empty or delete+close a database.
  *

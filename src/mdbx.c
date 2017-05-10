@@ -8801,6 +8801,8 @@ int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
     return rc;
   }
 
+  /* FIXME: locking to avoid races ? */
+
   /* Done here so we cannot fail after creating a new DB */
   if (unlikely((namedup = mdbx_strdup(name)) == NULL))
     return MDBX_ENOMEM;
@@ -8868,19 +8870,23 @@ int __cold mdbx_dbi_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *arg,
   return mdbx_stat0(txn->mt_env, &txn->mt_dbs[dbi], arg);
 }
 
-void mdbx_dbi_close(MDB_env *env, MDB_dbi dbi) {
+int mdbx_dbi_close(MDB_env *env, MDB_dbi dbi) {
   char *ptr;
-  if (dbi < CORE_DBS || dbi >= env->me_maxdbs)
-    return;
+  if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
+    return MDBX_EINVAL;
+
+  /* FIXME: locking to avoid races ? */
   ptr = env->me_dbxs[dbi].md_name.mv_data;
   /* If there was no name, this was already closed */
-  if (ptr) {
-    env->me_dbxs[dbi].md_name.mv_data = NULL;
-    env->me_dbxs[dbi].md_name.mv_size = 0;
-    env->me_dbflags[dbi] = 0;
-    env->me_dbiseqs[dbi]++;
-    free(ptr);
-  }
+  if (unlikely(!ptr))
+    return MDB_BAD_DBI;
+
+  env->me_dbxs[dbi].md_name.mv_data = NULL;
+  env->me_dbxs[dbi].md_name.mv_size = 0;
+  env->me_dbflags[dbi] = 0;
+  env->me_dbiseqs[dbi]++;
+  free(ptr);
+  return MDB_SUCCESS;
 }
 
 int mdbx_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags) {
@@ -9014,6 +9020,8 @@ int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del) {
   rc = mdbx_cursor_open(txn, dbi, &mc);
   if (unlikely(rc))
     return rc;
+
+  /* FIXME: locking to avoid races ? */
 
   rc = mdbx_drop0(mc, mc->mc_db->md_flags & MDB_DUPSORT);
   /* Invalidate the dropped DB's cursors */
