@@ -454,6 +454,12 @@ int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
 #elif defined(__GNUC__) || defined(__clang__)
 /* LY: nothing required */
 #elif defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
+#pragma warning(disable : 4133) /* 'function': incompatible types - from       \
+                                   'size_t' to 'LONGLONG' */
+#pragma warning(disable : 4244) /* 'return': conversion from 'LONGLONG' to     \
+                                   'std::size_t', possible loss of data */
 #pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
 #pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
 #elif defined(__APPLE__)
@@ -518,3 +524,7 @@ static __inline bool mdbx_atomic_compare_and_swap(volatile size_t *p, size_t c,
     ;
 #endif
 }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
