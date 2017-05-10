@@ -17,6 +17,7 @@
 #include "../../mdbx.h"
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -72,8 +73,8 @@ static void readhdr(void) {
     } else if (!strncmp(dbuf.mv_data, "VERSION=", STRLENOF("VERSION="))) {
       version = atoi((char *)dbuf.mv_data + STRLENOF("VERSION="));
       if (version > 3) {
-        fprintf(stderr, "%s: line %zd: unsupported VERSION %d\n", prog, lineno,
-                version);
+        fprintf(stderr, "%s: line %" PRIiPTR ": unsupported VERSION %d\n", prog,
+                lineno, version);
         exit(EXIT_FAILURE);
       }
     } else if (!strncmp(dbuf.mv_data, "HEADER=END", STRLENOF("HEADER=END"))) {
@@ -84,8 +85,8 @@ static void readhdr(void) {
         mode |= PRINT;
       else if (strncmp((char *)dbuf.mv_data + STRLENOF("FORMAT="), "bytevalue",
                        STRLENOF("bytevalue"))) {
-        fprintf(stderr, "%s: line %zd: unsupported FORMAT %s\n", prog, lineno,
-                (char *)dbuf.mv_data + STRLENOF("FORMAT="));
+        fprintf(stderr, "%s: line %" PRIiPTR ": unsupported FORMAT %s\n", prog,
+                lineno, (char *)dbuf.mv_data + STRLENOF("FORMAT="));
         exit(EXIT_FAILURE);
       }
     } else if (!strncmp(dbuf.mv_data, "database=", STRLENOF("database="))) {
@@ -98,8 +99,8 @@ static void readhdr(void) {
     } else if (!strncmp(dbuf.mv_data, "type=", STRLENOF("type="))) {
       if (strncmp((char *)dbuf.mv_data + STRLENOF("type="), "btree",
                   STRLENOF("btree"))) {
-        fprintf(stderr, "%s: line %zd: unsupported type %s\n", prog, lineno,
-                (char *)dbuf.mv_data + STRLENOF("type="));
+        fprintf(stderr, "%s: line %" PRIiPTR ": unsupported type %s\n", prog,
+                lineno, (char *)dbuf.mv_data + STRLENOF("type="));
         exit(EXIT_FAILURE);
       }
     } else if (!strncmp(dbuf.mv_data, "mapaddr=", STRLENOF("mapaddr="))) {
@@ -110,8 +111,8 @@ static void readhdr(void) {
       i = sscanf((char *)dbuf.mv_data + STRLENOF("mapaddr="), "%p",
                  &info.me_mapaddr);
       if (i != 1) {
-        fprintf(stderr, "%s: line %zd: invalid mapaddr %s\n", prog, lineno,
-                (char *)dbuf.mv_data + STRLENOF("mapaddr="));
+        fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapaddr %s\n", prog,
+                lineno, (char *)dbuf.mv_data + STRLENOF("mapaddr="));
         exit(EXIT_FAILURE);
       }
     } else if (!strncmp(dbuf.mv_data, "mapsize=", STRLENOF("mapsize="))) {
@@ -119,11 +120,11 @@ static void readhdr(void) {
       ptr = memchr(dbuf.mv_data, '\n', dbuf.mv_size);
       if (ptr)
         *ptr = '\0';
-      i = sscanf((char *)dbuf.mv_data + STRLENOF("mapsize="), "%zu",
+      i = sscanf((char *)dbuf.mv_data + STRLENOF("mapsize="), "%" PRIuPTR "",
                  &info.me_mapsize);
       if (i != 1) {
-        fprintf(stderr, "%s: line %zd: invalid mapsize %s\n", prog, lineno,
-                (char *)dbuf.mv_data + STRLENOF("mapsize="));
+        fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapsize %s\n", prog,
+                lineno, (char *)dbuf.mv_data + STRLENOF("mapsize="));
         exit(EXIT_FAILURE);
       }
     } else if (!strncmp(dbuf.mv_data, "maxreaders=", STRLENOF("maxreaders="))) {
@@ -134,8 +135,8 @@ static void readhdr(void) {
       i = sscanf((char *)dbuf.mv_data + STRLENOF("maxreaders="), "%u",
                  &info.me_maxreaders);
       if (i != 1) {
-        fprintf(stderr, "%s: line %zd: invalid maxreaders %s\n", prog, lineno,
-                (char *)dbuf.mv_data + STRLENOF("maxreaders="));
+        fprintf(stderr, "%s: line %" PRIiPTR ": invalid maxreaders %s\n", prog,
+                lineno, (char *)dbuf.mv_data + STRLENOF("maxreaders="));
         exit(EXIT_FAILURE);
       }
     } else {
@@ -151,11 +152,13 @@ static void readhdr(void) {
       if (!dbflags[i].bit) {
         ptr = memchr(dbuf.mv_data, '=', dbuf.mv_size);
         if (!ptr) {
-          fprintf(stderr, "%s: line %zd: unexpected format\n", prog, lineno);
+          fprintf(stderr, "%s: line %" PRIiPTR ": unexpected format\n", prog,
+                  lineno);
           exit(EXIT_FAILURE);
         } else {
           *ptr = '\0';
-          fprintf(stderr, "%s: line %zd: unrecognized keyword ignored: %s\n",
+          fprintf(stderr,
+                  "%s: line %" PRIiPTR ": unrecognized keyword ignored: %s\n",
                   prog, lineno, (char *)dbuf.mv_data);
         }
       }
@@ -164,7 +167,8 @@ static void readhdr(void) {
 }
 
 static void badend(void) {
-  fprintf(stderr, "%s: line %zd: unexpected end of input\n", prog, lineno);
+  fprintf(stderr, "%s: line %" PRIiPTR ": unexpected end of input\n", prog,
+          lineno);
 }
 
 static int unhex(unsigned char *c2) {
@@ -219,8 +223,8 @@ static int readline(MDB_val *out, MDB_val *buf) {
     buf->mv_data = realloc(buf->mv_data, buf->mv_size * 2);
     if (!buf->mv_data) {
       Eof = 1;
-      fprintf(stderr, "%s: line %zd: out of memory, line too long\n", prog,
-              lineno);
+      fprintf(stderr, "%s: line %" PRIiPTR ": out of memory, line too long\n",
+              prog, lineno);
       return EOF;
     }
     c1 = buf->mv_data;
@@ -410,8 +414,8 @@ int main(int argc, char *argv[]) {
 
       rc = readline(&data, &dbuf);
       if (rc) {
-        fprintf(stderr, "%s: line %zd: failed to read key value\n", prog,
-                lineno);
+        fprintf(stderr, "%s: line %" PRIiPTR ": failed to read key value\n",
+                prog, lineno);
         goto txn_abort;
       }
 
@@ -427,8 +431,8 @@ int main(int argc, char *argv[]) {
       if (batch == 100) {
         rc = mdbx_txn_commit(txn);
         if (rc) {
-          fprintf(stderr, "%s: line %zd: txn_commit: %s\n", prog, lineno,
-                  mdbx_strerror(rc));
+          fprintf(stderr, "%s: line %" PRIiPTR ": txn_commit: %s\n", prog,
+                  lineno, mdbx_strerror(rc));
           goto env_close;
         }
         rc = mdbx_txn_begin(env, NULL, 0, &txn);
@@ -449,7 +453,7 @@ int main(int argc, char *argv[]) {
     rc = mdbx_txn_commit(txn);
     txn = NULL;
     if (rc) {
-      fprintf(stderr, "%s: line %zd: txn_commit: %s\n", prog, lineno,
+      fprintf(stderr, "%s: line %" PRIiPTR ": txn_commit: %s\n", prog, lineno,
               mdbx_strerror(rc));
       goto env_close;
     }

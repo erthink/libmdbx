@@ -16,6 +16,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <inttypes.h>
 #include <malloc.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -177,7 +178,7 @@ static void problem_add(const char *object, size_t entry_number,
 
     p->count++;
     if (verbose > 1) {
-      print("     %s #%zu: %s", object, entry_number, msg);
+      print("     %s #%" PRIuPTR ": %s", object, entry_number, msg);
       if (extra) {
         va_list args;
         printf(" (");
@@ -209,7 +210,7 @@ static size_t problems_pop(struct problem *list) {
     for (i = 0; problems_list; ++i) {
       struct problem *p = problems_list->pr_next;
       count += problems_list->count;
-      print("%s%s (%zu)", i ? ", " : "", problems_list->caption,
+      print("%s%s (%" PRIuPTR ")", i ? ", " : "", problems_list->caption,
             problems_list->count);
       free(problems_list);
       problems_list = p;
@@ -236,9 +237,9 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
 
     if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi) == 0)) {
       if (pgnumber == 1)
-        print("     %s-page %zu", type, pgno);
+        print("     %s-page %" PRIuPTR "", type, pgno);
       else
-        print("     %s-span %zu[%u]", type, pgno, pgnumber);
+        print("     %s-span %" PRIuPTR "[%u]", type, pgno, pgnumber);
       print(" of %s: header %i, payload %i, unused %i\n", dbi, header_bytes,
             payload_bytes, unused_bytes);
     }
@@ -246,13 +247,15 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
     walk.pgcount += pgnumber;
 
     if (unused_bytes < 0 || (size_t)unused_bytes > page_size)
-      problem_add("page", pgno, "illegal unused-bytes", "%zu < %i < %zu", 0,
-                  unused_bytes, stat.ms_psize);
+      problem_add("page", pgno, "illegal unused-bytes",
+                  "%" PRIuPTR " < %i < %" PRIuPTR "", 0, unused_bytes,
+                  stat.ms_psize);
 
     if (header_bytes < (int)sizeof(long) ||
         (size_t)header_bytes >= stat.ms_psize - sizeof(long))
-      problem_add("page", pgno, "illegal header-length", "%zu < %i < %zu",
-                  sizeof(long), header_bytes, stat.ms_psize - sizeof(long));
+      problem_add("page", pgno, "illegal header-length",
+                  "%" PRIuPTR " < %i < %" PRIuPTR "", sizeof(long),
+                  header_bytes, stat.ms_psize - sizeof(long));
     if (payload_bytes < 1) {
       if (nentries > 1) {
         problem_add("page", pgno, "zero size-of-entry",
@@ -269,9 +272,9 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
     }
 
     if (page_bytes != page_size) {
-      problem_add("page", pgno, "misused", "%zu != %zu (%ih + %ip + %iu)",
-                  page_size, page_bytes, header_bytes, payload_bytes,
-                  unused_bytes);
+      problem_add("page", pgno, "misused",
+                  "%" PRIuPTR " != %" PRIuPTR " (%ih + %ip + %iu)", page_size,
+                  page_bytes, header_bytes, payload_bytes, unused_bytes);
       if (page_size > page_bytes)
         walk.dbi_lost_bytes[index] += page_size - page_bytes;
     } else {
@@ -282,8 +285,8 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
     if (pgnumber) {
       do {
         if (pgno >= lastpgno)
-          problem_add("page", pgno, "wrong page-no", "%zu > %zi", pgno,
-                      lastpgno);
+          problem_add("page", pgno, "wrong page-no",
+                      "%" PRIuPTR " > %" PRIiPTR "", pgno, lastpgno);
         else if (walk.pagemap[pgno])
           problem_add("page", pgno, "already used", "in %s",
                       walk.dbi_names[walk.pagemap[pgno]]);
@@ -316,20 +319,23 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val *data) {
   size_t *iptr = data->mv_data, txnid = *(size_t *)key->mv_data;
 
   if (key->mv_size != sizeof(txnid))
-    problem_add("entry", record_number, "wrong txn-id size", "key-size %zi",
-                key->mv_size);
+    problem_add("entry", record_number, "wrong txn-id size",
+                "key-size %" PRIiPTR "", key->mv_size);
   else if (txnid < 1 || txnid > info.me_last_txnid)
-    problem_add("entry", record_number, "wrong txn-id", "%zu", txnid);
+    problem_add("entry", record_number, "wrong txn-id", "%" PRIuPTR "", txnid);
 
   if (data->mv_size < sizeof(size_t) || data->mv_size % sizeof(size_t))
-    problem_add("entry", record_number, "wrong idl size", "%zu", data->mv_size);
+    problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR "",
+                data->mv_size);
   else {
     number = *iptr++;
     if (number >= MDB_IDL_UM_MAX)
-      problem_add("entry", record_number, "wrong idl length", "%zi", number);
+      problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
+                  number);
     else if ((number + 1) * sizeof(size_t) != data->mv_size)
-      problem_add("entry", record_number, "mismatch idl length", "%zi != %zu",
-                  number * sizeof(size_t), data->mv_size);
+      problem_add("entry", record_number, "mismatch idl length",
+                  "%" PRIiPTR " != %" PRIuPTR "", number * sizeof(size_t),
+                  data->mv_size);
     else {
       freedb_pages += number;
       if (info.me_tail_txnid > txnid)
@@ -338,11 +344,11 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val *data) {
         pg = iptr[i];
         if (pg < 2 /* META_PAGE */ || pg > info.me_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",
-                      "2 < %zi < %zi", pg, info.me_last_pgno);
+                      "2 < %" PRIiPTR " < %" PRIiPTR "", pg, info.me_last_pgno);
         else if (pg <= prev) {
           bad = " [bad sequence]";
-          problem_add("entry", record_number, "bad sequence", "%zi <= %zi", pg,
-                      prev);
+          problem_add("entry", record_number, "bad sequence",
+                      "%" PRIiPTR " <= %" PRIiPTR "", pg, prev);
         }
         prev = pg;
         pg += span;
@@ -350,7 +356,8 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val *data) {
           ;
       }
       if (verbose > 2 && !only_subdb) {
-        print("     transaction %zu, %zd pages, maxspan %zd%s\n",
+        print("     transaction %" PRIuPTR ", %" PRIiPTR
+              " pages, maxspan %" PRIiPTR "%s\n",
               *(size_t *)key->mv_data, number, span, bad);
         if (verbose > 3) {
           int j = number - 1;
@@ -359,7 +366,7 @@ static int handle_freedb(size_t record_number, MDB_val *key, MDB_val *data) {
             for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
               ;
             if (span > 1)
-              print("    %9zu[%zd]\n", pg, span);
+              print("    %9zu[%" PRIiPTR "]\n", pg, span);
             else
               print("    %9zu\n", pg);
           }
@@ -459,8 +466,10 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
     }
     print(" (0x%02X)\n", flags);
     if (verbose > 1) {
-      print(" - page size %u, entries %zu\n", ms.ms_psize, ms.ms_entries);
-      print(" - b-tree depth %u, pages: branch %zu, leaf %zu, overflow %zu\n",
+      print(" - page size %u, entries %" PRIuPTR "\n", ms.ms_psize,
+            ms.ms_entries);
+      print(" - b-tree depth %u, pages: branch %" PRIuPTR ", leaf %" PRIuPTR
+            ", overflow %" PRIuPTR "\n",
             ms.ms_depth, ms.ms_branch_pages, ms.ms_leaf_pages,
             ms.ms_overflow_pages);
     }
@@ -486,23 +495,24 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
 
     if (key.mv_size > maxkeysize) {
       problem_add("entry", record_count, "key length exceeds max-key-size",
-                  "%zu > %zu", key.mv_size, maxkeysize);
+                  "%" PRIuPTR " > %" PRIuPTR "", key.mv_size, maxkeysize);
     } else if ((flags & MDB_INTEGERKEY) && key.mv_size != sizeof(size_t) &&
                key.mv_size != sizeof(int)) {
-      problem_add("entry", record_count, "wrong key length", "%zu != %zu",
-                  key.mv_size, sizeof(size_t));
+      problem_add("entry", record_count, "wrong key length",
+                  "%" PRIuPTR " != %" PRIuPTR "", key.mv_size, sizeof(size_t));
     }
 
     if ((flags & MDB_INTEGERDUP) && data.mv_size != sizeof(size_t) &&
         data.mv_size != sizeof(int)) {
-      problem_add("entry", record_count, "wrong data length", "%zu != %zu",
-                  data.mv_size, sizeof(size_t));
+      problem_add("entry", record_count, "wrong data length",
+                  "%" PRIuPTR " != %" PRIuPTR "", data.mv_size, sizeof(size_t));
     }
 
     if (prev_key.mv_data) {
       if ((flags & MDB_DUPFIXED) && prev_data.mv_size != data.mv_size) {
         problem_add("entry", record_count, "different data length",
-                    "%zu != %zu", prev_data.mv_size, data.mv_size);
+                    "%" PRIuPTR " != %" PRIuPTR "", prev_data.mv_size,
+                    data.mv_size);
       }
 
       int cmp = mdbx_cmp(txn, dbi, &prev_key, &key);
@@ -521,9 +531,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
       }
     } else if (verbose) {
       if (flags & MDB_INTEGERKEY)
-        print(" - fixed key-size %zu\n", key.mv_size);
+        print(" - fixed key-size %" PRIuPTR "\n", key.mv_size);
       if (flags & (MDB_INTEGERDUP | MDB_DUPFIXED))
-        print(" - fixed data-size %zu\n", data.mv_size);
+        print(" - fixed data-size %" PRIuPTR "\n", data.mv_size);
     }
 
     if (handler) {
@@ -547,12 +557,13 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
 
   if (record_count != ms.ms_entries)
     problem_add("entry", record_count, "differentent number of entries",
-                "%zu != %zu", record_count, ms.ms_entries);
+                "%" PRIuPTR " != %" PRIuPTR "", record_count, ms.ms_entries);
 bailout:
   problems_count = problems_pop(saved_list);
   if (!silent && verbose) {
-    print(" - summary: %u records, %u dups, %zu key's bytes, %zu data's "
-          "bytes, %zu problems\n",
+    print(" - summary: %u records, %u dups, %" PRIuPTR " key's bytes, %" PRIuPTR
+          " data's "
+          "bytes, %" PRIuPTR " problems\n",
           record_count, dups, key_bytes, data_bytes, problems_count);
     fflush(NULL);
   }
@@ -730,34 +741,35 @@ int main(int argc, char *argv[]) {
         "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
     for (i = 0; sf[i + 1] && info.me_mapsize / k > 1000.0; ++i)
       k *= 1024;
-    print(" - map size %zu (%.2f %cb)\n", info.me_mapsize, info.me_mapsize / k,
-          sf[i]);
+    print(" - map size %" PRIuPTR " (%.2f %cb)\n", info.me_mapsize,
+          info.me_mapsize / k, sf[i]);
     if (info.me_mapaddr)
       print(" - mapaddr %p\n", info.me_mapaddr);
-    print(" - pagesize %u, max keysize %zu, max readers %u\n", stat.ms_psize,
-          maxkeysize, info.me_maxreaders);
-    print(" - transactions: last %zu, bottom %zu, lag reading %zi\n",
+    print(" - pagesize %u, max keysize %" PRIuPTR ", max readers %u\n",
+          stat.ms_psize, maxkeysize, info.me_maxreaders);
+    print(" - transactions: last %" PRIuPTR ", bottom %" PRIuPTR
+          ", lag reading %" PRIiPTR "\n",
           info.me_last_txnid, info.me_tail_txnid,
           info.me_last_txnid - info.me_tail_txnid);
 
-    print(" - meta-1: %s %zu, %s", meta_synctype(info.me_meta1_sign),
+    print(" - meta-1: %s %" PRIuPTR ", %s", meta_synctype(info.me_meta1_sign),
           info.me_meta1_txnid, meta_lt(info.me_meta1_txnid, info.me_meta1_sign,
                                        info.me_meta2_txnid, info.me_meta2_sign)
                                    ? "tail"
                                    : "head");
     if (info.me_meta1_txnid > info.me_last_txnid)
-      print(", rolled-back %zu (%zu >>> %zu)",
+      print(", rolled-back %" PRIuPTR " (%" PRIuPTR " >>> %" PRIuPTR ")",
             info.me_meta1_txnid - info.me_last_txnid, info.me_meta1_txnid,
             info.me_last_txnid);
     print("\n");
 
-    print(" - meta-2: %s %zu, %s", meta_synctype(info.me_meta2_sign),
+    print(" - meta-2: %s %" PRIuPTR ", %s", meta_synctype(info.me_meta2_sign),
           info.me_meta2_txnid, meta_lt(info.me_meta2_txnid, info.me_meta2_sign,
                                        info.me_meta1_txnid, info.me_meta1_sign)
                                    ? "tail"
                                    : "head");
     if (info.me_meta2_txnid > info.me_last_txnid)
-      print(", rolled-back %zu (%zu >>> %zu)",
+      print(", rolled-back %" PRIuPTR " (%" PRIuPTR " >>> %" PRIuPTR ")",
             info.me_meta2_txnid - info.me_last_txnid, info.me_meta2_txnid,
             info.me_last_txnid);
     print("\n");
@@ -770,7 +782,8 @@ int main(int argc, char *argv[]) {
     if (!meta_lt(info.me_meta1_txnid, info.me_meta1_sign, info.me_meta2_txnid,
                  info.me_meta2_sign) &&
         info.me_meta1_txnid != info.me_last_txnid) {
-      print(" - meta-1 txn-id mismatch last-txn-id (%zi != %zi)\n",
+      print(" - meta-1 txn-id mismatch last-txn-id (%" PRIiPTR " != %" PRIiPTR
+            ")\n",
             info.me_meta1_txnid, info.me_last_txnid);
       ++problems_meta;
     }
@@ -778,7 +791,8 @@ int main(int argc, char *argv[]) {
     if (!meta_lt(info.me_meta2_txnid, info.me_meta2_sign, info.me_meta1_txnid,
                  info.me_meta1_sign) &&
         info.me_meta2_txnid != info.me_last_txnid) {
-      print(" - meta-2 txn-id mismatch last-txn-id (%zi != %zi)\n",
+      print(" - meta-2 txn-id mismatch last-txn-id (%" PRIiPTR " != %" PRIiPTR
+            ")\n",
             info.me_meta2_txnid, info.me_last_txnid);
       ++problems_meta;
     }
@@ -790,8 +804,9 @@ int main(int argc, char *argv[]) {
                       ? info.me_meta2_txnid
                       : info.me_meta1_txnid;
     if (last != info.me_last_txnid) {
-      print(" - last-meta mismatch last-txn-id (%zi != %zi)\n", last,
-            info.me_last_txnid);
+      print(" - last-meta mismatch last-txn-id (%" PRIiPTR " != %" PRIiPTR
+            ")\n",
+            last, info.me_last_txnid);
       ++problems_meta;
     }
   } else if (verbose) {
@@ -839,14 +854,15 @@ int main(int argc, char *argv[]) {
 
     if (verbose) {
       size_t total_page_bytes = walk.pgcount * stat.ms_psize;
-      print(" - dbi pages: %zu total", walk.pgcount);
+      print(" - dbi pages: %" PRIuPTR " total", walk.pgcount);
       if (verbose > 1)
         for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i)
-          print(", %s %zu", walk.dbi_names[i], walk.dbi_pages[i]);
-      print(", %s %zu\n", walk.dbi_names[0], walk.dbi_pages[0]);
+          print(", %s %" PRIuPTR "", walk.dbi_names[i], walk.dbi_pages[i]);
+      print(", %s %" PRIuPTR "\n", walk.dbi_names[0], walk.dbi_pages[0]);
       if (verbose > 1) {
-        print(" - space info: total %zu bytes, payload %zu (%.1f%%), unused "
-              "%zu (%.1f%%)\n",
+        print(" - space info: total %" PRIuPTR " bytes, payload %" PRIuPTR
+              " (%.1f%%), unused "
+              "%" PRIuPTR " (%.1f%%)\n",
               total_page_bytes, walk.total_payload_bytes,
               walk.total_payload_bytes * 100.0 / total_page_bytes,
               total_page_bytes - walk.total_payload_bytes,
@@ -854,27 +870,28 @@ int main(int argc, char *argv[]) {
                   total_page_bytes);
         for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
           size_t dbi_bytes = walk.dbi_pages[i] * stat.ms_psize;
-          print("     %s: subtotal %zu bytes (%.1f%%), payload %zu (%.1f%%), "
-                "unused %zu (%.1f%%)",
+          print("     %s: subtotal %" PRIuPTR
+                " bytes (%.1f%%), payload %" PRIuPTR " (%.1f%%), "
+                "unused %" PRIuPTR " (%.1f%%)",
                 walk.dbi_names[i], dbi_bytes,
                 dbi_bytes * 100.0 / total_page_bytes, walk.dbi_payload_bytes[i],
                 walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes,
                 dbi_bytes - walk.dbi_payload_bytes[i],
                 (dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes);
           if (walk.dbi_empty_pages[i])
-            print(", %zu empty pages", walk.dbi_empty_pages[i]);
+            print(", %" PRIuPTR " empty pages", walk.dbi_empty_pages[i]);
           if (walk.dbi_lost_bytes[i])
-            print(", %zu bytes lost", walk.dbi_lost_bytes[i]);
+            print(", %" PRIuPTR " bytes lost", walk.dbi_lost_bytes[i]);
           print("\n");
         }
       }
       print(" - summary: average fill %.1f%%",
             walk.total_payload_bytes * 100.0 / total_page_bytes);
       if (empty_pages)
-        print(", %zu empty pages", empty_pages);
+        print(", %" PRIuPTR " empty pages", empty_pages);
       if (lost_bytes)
-        print(", %zu bytes lost", lost_bytes);
-      print(", %zu problems\n", traversal_problems);
+        print(", %" PRIuPTR " bytes lost", lost_bytes);
+      print(", %" PRIuPTR " problems\n", traversal_problems);
     }
   } else if (verbose) {
     print("Skipping b-tree walk...\n");
@@ -889,38 +906,38 @@ int main(int argc, char *argv[]) {
   if (verbose) {
     size_t value = info.me_mapsize / stat.ms_psize;
     double percent = value / 100.0;
-    print(" - pages info: %zu total", value);
-    print(", allocated %zu (%.1f%%)", lastpgno, lastpgno / percent);
+    print(" - pages info: %" PRIuPTR " total", value);
+    print(", allocated %" PRIuPTR " (%.1f%%)", lastpgno, lastpgno / percent);
 
     if (verbose > 1) {
       value = info.me_mapsize / stat.ms_psize - lastpgno;
-      print(", remained %zu (%.1f%%)", value, value / percent);
+      print(", remained %" PRIuPTR " (%.1f%%)", value, value / percent);
 
       value = lastpgno - freedb_pages;
-      print(", used %zu (%.1f%%)", value, value / percent);
+      print(", used %" PRIuPTR " (%.1f%%)", value, value / percent);
 
-      print(", gc %zu (%.1f%%)", freedb_pages, freedb_pages / percent);
+      print(", gc %" PRIuPTR " (%.1f%%)", freedb_pages, freedb_pages / percent);
 
       value = freedb_pages - reclaimable_pages;
-      print(", detained %zu (%.1f%%)", value, value / percent);
+      print(", detained %" PRIuPTR " (%.1f%%)", value, value / percent);
 
-      print(", reclaimable %zu (%.1f%%)", reclaimable_pages,
+      print(", reclaimable %" PRIuPTR " (%.1f%%)", reclaimable_pages,
             reclaimable_pages / percent);
     }
 
     value = info.me_mapsize / stat.ms_psize - lastpgno + reclaimable_pages;
-    print(", available %zu (%.1f%%)\n", value, value / percent);
+    print(", available %" PRIuPTR " (%.1f%%)\n", value, value / percent);
   }
 
   if (problems_maindb == 0 && problems_freedb == 0) {
     if (!dont_traversal && (exclusive || locktxn)) {
       if (walk.pgcount != lastpgno - freedb_pages) {
-        error("used pages mismatch (%zu != %zu)\n", walk.pgcount,
-              lastpgno - freedb_pages);
+        error("used pages mismatch (%" PRIuPTR " != %" PRIuPTR ")\n",
+              walk.pgcount, lastpgno - freedb_pages);
       }
       if (walk.dbi_pages[0] != freedb_pages) {
-        error("gc pages mismatch (%zu != %zu)\n", walk.dbi_pages[0],
-              freedb_pages);
+        error("gc pages mismatch (%" PRIuPTR " != %" PRIuPTR ")\n",
+              walk.dbi_pages[0], freedb_pages);
       }
     } else if (verbose) {
       print(" - skip check used and gc pages (btree-traversal with "
@@ -958,7 +975,7 @@ bailout:
 
   total_problems += problems_meta;
   if (total_problems || problems_maindb || problems_freedb) {
-    print("Total %zu error(s) is detected, elapsed %.3f seconds.\n",
+    print("Total %" PRIuPTR " error(s) is detected, elapsed %.3f seconds.\n",
           total_problems, elapsed);
     if (problems_meta || problems_maindb || problems_freedb)
       return EXIT_FAILURE_CHECK_MAJOR;

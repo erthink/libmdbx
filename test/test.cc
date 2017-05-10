@@ -195,16 +195,16 @@ bool testcase::wait4start() {
 
 void testcase::report(size_t nops_done) {
   nops_completed += nops_done;
-  log_verbose("== complete +%zu iteration, total %zu done", nops_done,
-              nops_completed);
+  log_verbose("== complete +%" PRIuPTR " iteration, total %" PRIuPTR " done",
+              nops_done, nops_completed);
 
   if (config.signal_nops && !signalled &&
       config.signal_nops <= nops_completed) {
-    log_trace(">> signal(n-ops %zu)", nops_completed);
+    log_trace(">> signal(n-ops %" PRIuPTR ")", nops_completed);
     if (!global::singlemode)
       osal_broadcast(config.actor_id);
     signalled = true;
-    log_trace("<< signal(n-ops %zu)", nops_completed);
+    log_trace("<< signal(n-ops %" PRIuPTR ")", nops_completed);
   }
 }
 

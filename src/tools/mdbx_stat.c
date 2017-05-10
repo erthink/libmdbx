@@ -15,6 +15,7 @@
  */
 
 #include "../../mdbx.h"
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,10 +24,10 @@
 static void prstat(MDBX_stat *ms) {
   printf("  Page size: %u\n", ms->ms_psize);
   printf("  Tree depth: %u\n", ms->ms_depth);
-  printf("  Branch pages: %zu\n", ms->ms_branch_pages);
-  printf("  Leaf pages: %zu\n", ms->ms_leaf_pages);
-  printf("  Overflow pages: %zu\n", ms->ms_overflow_pages);
-  printf("  Entries: %zu\n", ms->ms_entries);
+  printf("  Branch pages: %" PRIuPTR "\n", ms->ms_branch_pages);
+  printf("  Leaf pages: %" PRIuPTR "\n", ms->ms_leaf_pages);
+  printf("  Overflow pages: %" PRIuPTR "\n", ms->ms_overflow_pages);
+  printf("  Entries: %" PRIuPTR "\n", ms->ms_entries);
 }
 
 static void usage(char *prog) {
@@ -121,13 +122,13 @@ int main(int argc, char *argv[]) {
     (void)mdbx_env_info(env, &mei, sizeof(mei));
     printf("Environment Info\n");
     printf("  Map address: %p\n", mei.me_mapaddr);
-    printf("  Map size: %zu\n", mei.me_mapsize);
+    printf("  Map size: %" PRIuPTR "\n", mei.me_mapsize);
     printf("  Page size: %u\n", mst.ms_psize);
-    printf("  Max pages: %zu\n", mei.me_mapsize / mst.ms_psize);
-    printf("  Number of pages used: %zu\n", mei.me_last_pgno + 1);
-    printf("  Last transaction ID: %zu\n", mei.me_last_txnid);
-    printf("  Tail transaction ID: %zu (%zi)\n", mei.me_tail_txnid,
-           mei.me_tail_txnid - mei.me_last_txnid);
+    printf("  Max pages: %" PRIuPTR "\n", mei.me_mapsize / mst.ms_psize);
+    printf("  Number of pages used: %" PRIuPTR "\n", mei.me_last_pgno + 1);
+    printf("  Last transaction ID: %" PRIuPTR "\n", mei.me_last_txnid);
+    printf("  Tail transaction ID: %" PRIuPTR " (%" PRIiPTR ")\n",
+           mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
     printf("  Max readers: %u\n", mei.me_maxreaders);
     printf("  Number of readers used: %u\n", mei.me_numreaders);
   } else {
@@ -196,7 +197,8 @@ int main(int argc, char *argv[]) {
           for (; i >= span && iptr[i - span] == pg; span++, pg++)
             ;
         }
-        printf("    Transaction %zu, %zd pages, maxspan %zd%s\n",
+        printf("    Transaction %" PRIuPTR ", %" PRIiPTR
+               " pages, maxspan %" PRIiPTR "%s\n",
                *(size_t *)key.mv_data, j, span, bad);
         if (freinfo > 2) {
           for (--j; j >= 0;) {
@@ -204,7 +206,7 @@ int main(int argc, char *argv[]) {
             for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
               ;
             if (span > 1)
-              printf("     %9zu[%zd]\n", pg, span);
+              printf("     %9zu[%" PRIiPTR "]\n", pg, span);
             else
               printf("     %9zu\n", pg);
           }
@@ -219,28 +221,29 @@ int main(int argc, char *argv[]) {
       printf("  Max pages: %9zu 100%%\n", value);
 
       value = mei.me_last_pgno + 1;
-      printf("  Number of pages used: %zu %.1f%%\n", value, value / percent);
+      printf("  Number of pages used: %" PRIuPTR " %.1f%%\n", value,
+             value / percent);
 
       value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno + 1);
-      printf("  Remained: %zu %.1f%%\n", value, value / percent);
+      printf("  Remained: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
       value = mei.me_last_pgno + 1 - pages;
-      printf("  Used now: %zu %.1f%%\n", value, value / percent);
+      printf("  Used now: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
       value = pages;
-      printf("  Unallocated: %zu %.1f%%\n", value, value / percent);
+      printf("  Unallocated: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
       value = pages - reclaimable;
-      printf("  Detained: %zu %.1f%%\n", value, value / percent);
+      printf("  Detained: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
       value = reclaimable;
-      printf("  Reclaimable: %zu %.1f%%\n", value, value / percent);
+      printf("  Reclaimable: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
       value =
           mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno + 1) + reclaimable;
-      printf("  Available: %zu %.1f%%\n", value, value / percent);
+      printf("  Available: %" PRIuPTR " %.1f%%\n", value, value / percent);
     } else
-      printf("  Free pages: %zu\n", pages);
+      printf("  Free pages: %" PRIuPTR "\n", pages);
   }
 
   rc = mdbx_dbi_open(txn, subname, 0, &dbi);
