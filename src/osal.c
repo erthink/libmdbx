@@ -22,7 +22,7 @@ static int waitstatus2errcode(DWORD result) {
   case WAIT_OBJECT_0:
     return MDB_SUCCESS;
   case WAIT_FAILED:
-    return GetLastError();
+    return mdbx_get_errno_checked();
   case WAIT_ABANDONED:
     return ERROR_ABANDONED_WAIT_0;
   case WAIT_IO_COMPLETION:
@@ -167,7 +167,7 @@ void mdbx_memalign_free(void *ptr) {
 int mdbx_mutex_init(mdbx_mutex_t *mutex) {
 #if defined(_WIN32) || defined(_WIN64)
   *mutex = CreateMutex(NULL, FALSE, NULL);
-  return *mutex ? MDB_SUCCESS : GetLastError();
+  return *mutex ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_mutex_init(mutex, NULL);
 #endif
@@ -175,7 +175,7 @@ int mdbx_mutex_init(mdbx_mutex_t *mutex) {
 
 int mdbx_mutex_destroy(mdbx_mutex_t *mutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(*mutex) ? MDB_SUCCESS : GetLastError();
+  return CloseHandle(*mutex) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_mutex_destroy(mutex);
 #endif
@@ -192,7 +192,7 @@ int mdbx_mutex_lock(mdbx_mutex_t *mutex) {
 
 int mdbx_mutex_unlock(mdbx_mutex_t *mutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  return ReleaseMutex(*mutex) ? MDB_SUCCESS : GetLastError();
+  return ReleaseMutex(*mutex) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_mutex_unlock(mutex);
 #endif
@@ -203,7 +203,7 @@ int mdbx_mutex_unlock(mdbx_mutex_t *mutex) {
 int mdbx_cond_init(mdbx_cond_t *cond) {
 #if defined(_WIN32) || defined(_WIN64)
   *cond = CreateEvent(NULL, FALSE, FALSE, NULL);
-  return *cond ? MDB_SUCCESS : GetLastError();
+  return *cond ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_cond_init(cond, NULL);
 #endif
@@ -212,7 +212,7 @@ int mdbx_cond_init(mdbx_cond_t *cond) {
 #ifndef mdbx_cond_destroy
 int mdbx_cond_destroy(mdbx_cond_t *cond) {
 #if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(*cond) ? MDB_SUCCESS : GetLastError();
+  return CloseHandle(*cond) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_cond_destroy(cond);
 #endif
@@ -221,7 +221,7 @@ int mdbx_cond_destroy(mdbx_cond_t *cond) {
 
 int mdbx_cond_signal(mdbx_cond_t *cond) {
 #if defined(_WIN32) || defined(_WIN64)
-  return SetEvent(*cond) ? MDB_SUCCESS : GetLastError();
+  return SetEvent(*cond) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_cond_signal(cond);
 #endif
@@ -286,14 +286,14 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                     CreationDisposition, FlagsAndAttributes, NULL);
 
   if (*fd == INVALID_HANDLE_VALUE)
-    return GetLastError();
-  if ((flags & O_CREAT) && GetLastError() != ERROR_ALREADY_EXISTS) {
+    return mdbx_get_errno_checked();
+  if ((flags & O_CREAT) && mdbx_get_errno_checked() != ERROR_ALREADY_EXISTS) {
     /* set FILE_ATTRIBUTE_NOT_CONTENT_INDEXED for new file */
     DWORD FileAttributes = GetFileAttributesA(pathname);
     if (FileAttributes == INVALID_FILE_ATTRIBUTES ||
         !SetFileAttributesA(pathname, FileAttributes |
                                           FILE_ATTRIBUTE_NOT_CONTENT_INDEXED)) {
-      int rc = GetLastError();
+      int rc = mdbx_get_errno_checked();
       CloseHandle(*fd);
       *fd = INVALID_HANDLE_VALUE;
       return rc;
@@ -318,7 +318,7 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
 
 int mdbx_closefile(mdbx_filehandle_t fd) {
 #if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(fd) ? MDB_SUCCESS : GetLastError();
+  return CloseHandle(fd) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return (close(fd) == 0) ? MDB_SUCCESS : errno;
 #endif
@@ -336,7 +336,7 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
 
   DWORD read = 0;
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
-    int rc = GetLastError();
+    int rc = mdbx_get_errno_checked();
     return (rc == MDB_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
 #else
@@ -363,7 +363,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
   DWORD written;
   if (likely(WriteFile(fd, buf, (DWORD)bytes, &written, &ov)))
     return (bytes == written) ? MDB_SUCCESS : ERROR_WRITE_FAULT;
-  return GetLastError();
+  return mdbx_get_errno_checked();
 #else
   int rc;
   ssize_t written;
@@ -418,7 +418,7 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
 #if defined(_WIN32) || defined(_WIN64)
     DWORD written;
     if (unlikely(!WriteFile(fd, ptr, (DWORD)chunk, &written, NULL)))
-      return GetLastError();
+      return mdbx_get_errno_checked();
 #else
     ssize_t written = write(fd, ptr, chunk);
     if (written < 0) {
@@ -452,7 +452,7 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
 int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)fullsync;
-  return FlushFileBuffers(fd) ? MDB_SUCCESS : GetLastError();
+  return FlushFileBuffers(fd) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
     (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
   for (;;) {
@@ -478,7 +478,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, off_t *length) {
 #if defined(_WIN32) || defined(_WIN64)
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(fd, &info))
-    return GetLastError();
+    return mdbx_get_errno_checked();
   *length = info.nFileSizeLow | (uint64_t)info.nFileIndexHigh << 32;
 #else
   struct stat st;
@@ -497,7 +497,7 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
   li.QuadPart = length;
   return (SetFilePointerEx(fd, li, NULL, FILE_BEGIN) && SetEndOfFile(fd))
              ? MDB_SUCCESS
-             : GetLastError();
+             : mdbx_get_errno_checked();
 #else
   return ftruncate(fd, length) == 0 ? MDB_SUCCESS : errno;
 #endif
@@ -508,7 +508,7 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
 int mdbx_thread_key_create(mdbx_thread_key_t *key) {
 #if defined(_WIN32) || defined(_WIN64)
   *key = TlsAlloc();
-  return (*key != TLS_OUT_OF_INDEXES) ? MDB_SUCCESS : GetLastError();
+  return (*key != TLS_OUT_OF_INDEXES) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_key_create(key, mdbx_rthc_dtor);
 #endif
@@ -551,7 +551,7 @@ int mdbx_thread_create(mdbx_thread_t *thread,
                        void *arg) {
 #if defined(_WIN32) || defined(_WIN64)
   *thread = CreateThread(NULL, 0, start_routine, arg, 0, NULL);
-  return *thread ? MDB_SUCCESS : GetLastError();
+  return *thread ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_create(thread, NULL, start_routine, arg);
 #endif
@@ -573,7 +573,7 @@ int mdbx_msync(void *addr, size_t length, int async) {
 #if defined(_WIN32) || defined(_WIN64)
   if (async)
     return MDB_SUCCESS;
-  return FlushViewOfFile(addr, length) ? MDB_SUCCESS : GetLastError();
+  return FlushViewOfFile(addr, length) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return (msync(addr, length, async ? MS_ASYNC : MS_SYNC) == 0) ? MDB_SUCCESS
                                                                 : errno;
@@ -597,10 +597,10 @@ int mdbx_mmap(void **address, size_t length, int rw, mdbx_filehandle_t fd) {
   HANDLE h = CreateFileMapping(fd, NULL, rw ? PAGE_READWRITE : PAGE_READONLY,
                                HIGH_DWORD(length), (DWORD)length, NULL);
   if (!h)
-    return GetLastError();
+    return mdbx_get_errno_checked();
   *address = MapViewOfFileEx(h, rw ? FILE_MAP_WRITE : FILE_MAP_READ, 0, 0,
                              length, *address);
-  int rc = (*address != MAP_FAILED) ? MDB_SUCCESS : GetLastError();
+  int rc = (*address != MAP_FAILED) ? MDB_SUCCESS : mdbx_get_errno_checked();
   CloseHandle(h);
   return rc;
 #else
@@ -613,7 +613,7 @@ int mdbx_mmap(void **address, size_t length, int rw, mdbx_filehandle_t fd) {
 int mdbx_munmap(void *address, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)length;
-  return UnmapViewOfFile(address) ? MDB_SUCCESS : GetLastError();
+  return UnmapViewOfFile(address) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
   return (munmap(address, length) == 0) ? MDB_SUCCESS : errno;
 #endif
@@ -621,7 +621,8 @@ int mdbx_munmap(void *address, size_t length) {
 
 int mdbx_mlock(const void *address, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
-  return VirtualLock((void *)address, length) ? MDB_SUCCESS : GetLastError();
+  return VirtualLock((void *)address, length) ? MDB_SUCCESS
+                                              : mdbx_get_errno_checked();
 #else
   return (mlock(address, length) == 0) ? MDB_SUCCESS : errno;
 #endif

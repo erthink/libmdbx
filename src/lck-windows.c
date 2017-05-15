@@ -128,7 +128,7 @@ static __inline BOOL funlock(mdbx_filehandle_t fd, off_t offset, size_t bytes) {
 int mdbx_txn_lock(MDB_env *env) {
   if (flock(env->me_fd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_BODY))
     return MDB_SUCCESS;
-  return GetLastError();
+  return mdbx_get_errno_checked();
 }
 
 void mdbx_txn_unlock(MDB_env *env) {
@@ -154,7 +154,7 @@ int mdbx_rdt_lock(MDB_env *env) {
   /* transite from S-? (used) to S-E (locked), e.g. exlcusive lock upper-part */
   if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
     return MDB_SUCCESS;
-  return GetLastError();
+  return mdbx_get_errno_checked();
 }
 
 void mdbx_rdt_unlock(MDB_env *env) {
@@ -195,7 +195,7 @@ static int internal_seize_lck(HANDLE lfd) {
   /* 1) now on ?-? (free), get ?-E (middle) */
   mdbx_jitter4testing(false);
   if (!flock(lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER)) {
-    rc = GetLastError() /* 2) something went wrong, give up */;
+    rc = mdbx_get_errno_checked() /* 2) something went wrong, give up */;
     mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
                "?-?(free) >> ?-E(middle)", rc);
     return rc;
@@ -207,22 +207,21 @@ static int internal_seize_lck(HANDLE lfd) {
     return MDBX_RESULT_TRUE; /* 4) got E-E (exclusive), done */
 
   /* 5) still on ?-E (middle) */
-  rc = GetLastError();
+  rc = mdbx_get_errno_checked();
   mdbx_jitter4testing(false);
   if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION) {
     /* 6) something went wrong, give up */
-    if (!funlock(lfd, LCK_UPPER)) {
-      rc = GetLastError();
+    if (!funlock(lfd, LCK_UPPER))
       mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                 "?-E(middle) >> ?-?(free)", rc);
-    }
+                 "?-E(middle) >> ?-?(free)", GetLastError());
     return rc;
   }
 
   /* 7) still on ?-E (middle), try S-E (locked) */
   mdbx_jitter4testing(false);
-  rc = flock(lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER) ? MDBX_RESULT_FALSE
-                                                        : GetLastError();
+  rc = flock(lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)
+           ? MDBX_RESULT_FALSE
+           : mdbx_get_errno_checked();
 
   mdbx_jitter4testing(false);
   if (rc != MDBX_RESULT_FALSE)
@@ -231,11 +230,9 @@ static int internal_seize_lck(HANDLE lfd) {
 
   /* 8) now on S-E (locked) or still on ?-E (middle),
   *    transite to S-? (used) or ?-? (free) */
-  if (!funlock(lfd, LCK_UPPER)) {
-    rc = GetLastError();
+  if (!funlock(lfd, LCK_UPPER))
     mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-               "X-E(locked/middle) >> X-?(used/free)", rc);
-  }
+               "X-E(locked/middle) >> X-?(used/free)", GetLastError());
 
   /* 9) now on S-? (used, DONE) or ?-? (free, FAILURE) */
   return rc;
@@ -249,7 +246,7 @@ int mdbx_lck_seize(MDB_env *env) {
     /* LY: without-lck mode (e.g. on read-only filesystem) */
     mdbx_jitter4testing(false);
     if (!flock(env->me_fd, LCK_SHARED | LCK_DONTWAIT, LCK_WHOLE)) {
-      rc = GetLastError();
+      rc = mdbx_get_errno_checked();
       mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "without-lck", rc);
       return rc;
     }
@@ -266,18 +263,16 @@ int mdbx_lck_seize(MDB_env *env) {
      *  - we can't lock meta-pages, otherwise other process could get an error
      *    while opening db in valid (non-conflict) mode. */
     if (!flock(env->me_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY)) {
-      rc = GetLastError();
+      rc = mdbx_get_errno_checked();
       mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
                  "lock-against-without-lck", rc);
       mdbx_jitter4testing(false);
       mdbx_lck_destroy(env);
     } else {
       mdbx_jitter4testing(false);
-      if (!funlock(env->me_fd, LCK_BODY)) {
-        rc = GetLastError();
+      if (!funlock(env->me_fd, LCK_BODY))
         mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                   "unlock-against-without-lck", rc);
-      }
+                   "unlock-against-without-lck", GetLastError());
     }
   }
 
@@ -291,24 +286,20 @@ int mdbx_lck_downgrade(MDB_env *env) {
 
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* 1) must be at E-E (exclusive), transite to ?_E (middle) */
-    if (!funlock(env->me_lfd, LCK_LOWER)) {
-      rc = GetLastError();
+    if (!funlock(env->me_lfd, LCK_LOWER))
       mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                 "E-E(exclusive) >> ?-E(middle)", rc);
-    }
+                 "E-E(exclusive) >> ?-E(middle)", GetLastError());
 
     /* 2) now at ?-E (middle), transite to S-E (locked) */
     if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
-      rc = GetLastError() /* 3) something went wrong, give up */;
+      rc = mdbx_get_errno_checked() /* 3) something went wrong, give up */;
       return rc;
     }
 
     /* 4) got S-E (locked), continue transition to S-? (used) */
-    if (!funlock(env->me_lfd, LCK_UPPER)) {
-      rc = GetLastError();
+    if (!funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                 "S-E(locked) >> S-?(used)", rc);
-    }
+                 "S-E(locked) >> S-?(used)", GetLastError());
   }
   return MDB_SUCCESS /* 5) now at S-? (used), done */;
 }
@@ -320,14 +311,14 @@ void mdbx_lck_destroy(MDB_env *env) {
     /* double `unlock` for robustly remove overlapped shared/exclusive locks */
     while (funlock(env->me_lfd, LCK_LOWER))
       ;
-    rc = GetLastError();
+    rc = mdbx_get_errno_checked();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_lfd, LCK_UPPER))
       ;
-    rc = GetLastError();
+    rc = mdbx_get_errno_checked();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
@@ -338,21 +329,21 @@ void mdbx_lck_destroy(MDB_env *env) {
     * releases such locks via deferred queues) */
     while (funlock(env->me_fd, LCK_BODY))
       ;
-    rc = GetLastError();
+    rc = mdbx_get_errno_checked();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_fd, LCK_META))
       ;
-    rc = GetLastError();
+    rc = mdbx_get_errno_checked();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_fd, LCK_WHOLE))
       ;
-    rc = GetLastError();
+    rc = mdbx_get_errno_checked();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
@@ -386,7 +377,7 @@ int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid) {
     rc = WaitForSingleObject(hProcess, 0);
     CloseHandle(hProcess);
   } else {
-    rc = GetLastError();
+    rc = mdbx_get_errno_checked();
   }
 
   switch (rc) {

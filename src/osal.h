@@ -307,6 +307,31 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 
 /*----------------------------------------------------------------------------*/
 
+#ifndef mdbx_assert_fail
+void mdbx_assert_fail(MDB_env *env, const char *msg, const char *func,
+                      int line);
+#endif /* mdbx_assert_fail */
+
+#if __GLIBC_PREREQ(2, 1)
+#define mdbx_asprintf asprintf
+#else
+int mdbx_asprintf(char **strp, const char *fmt, ...);
+#endif
+
+#ifdef _MSC_VER
+#ifndef snprintf
+#define snprintf(buffer, buffer_size, format, ...)                             \
+  _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
+#endif /* snprintf */
+
+#ifndef vsnprintf
+#define vsnprintf(buffer, buffer_size, format, args)                           \
+  _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
+#endif /* vsnprintf */
+#endif /* _MSC_VER */
+
+/*----------------------------------------------------------------------------*/
+
 /* max bytes to write in one call */
 #define MAX_WRITE UINT32_C(0x3fff0000)
 
@@ -330,6 +355,30 @@ static __inline char *mdbx_strdup(const char *str) {
   return strdup(str);
 #endif
 }
+
+static __inline int mdbx_get_errno(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  DWORD rc = GetLastError();
+#else
+  int rc = errno;
+#endif
+  return rc;
+}
+
+static __inline int __mdbx_get_errno_checked(const char *file, unsigned line) {
+#if defined(_WIN32) || defined(_WIN64)
+  DWORD rc = GetLastError();
+  if (unlikely(rc == MDBX_EINVAL))
+    mdbx_assert_fail(nullptr, "unexpected ERROR_INVALID_PARAMETER", file, line);
+#else
+  int rc = errno;
+  if (unlikely(rc == MDBX_EINVAL))
+    mdbx_assert_fail(nullptr, "unexpected EINVAL", file, line);
+#endif
+  return rc;
+}
+
+#define mdbx_get_errno_checked() __mdbx_get_errno_checked(__FILE__, __LINE__)
 
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result);
 void mdbx_memalign_free(void *ptr);
@@ -387,19 +436,6 @@ void mdbx_osal_jitter(bool tiny);
 
 /*----------------------------------------------------------------------------*/
 
-#ifndef mdbx_assert_fail
-void mdbx_assert_fail(MDB_env *env, const char *msg, const char *func,
-                      int line);
-#endif /* mdbx_assert_fail */
-
-#if __GLIBC_PREREQ(2, 1)
-#define mdbx_asprintf asprintf
-#else
-int mdbx_asprintf(char **strp, const char *fmt, ...);
-#endif
-
-/*----------------------------------------------------------------------------*/
-
 #if defined(_WIN32) || defined(_WIN64)
 #undef MDBX_OSAL_LOCK
 #define MDBX_OSAL_LOCK_SIGN MDBX_TETRAD('f', 'l', 'c', 'k')
@@ -433,20 +469,6 @@ int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
 
 /*----------------------------------------------------------------------------*/
 
-#ifdef _MSC_VER
-#ifndef snprintf
-#define snprintf(buffer, buffer_size, format, ...)                             \
-  _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
-#endif /* snprintf */
-
-#ifndef vsnprintf
-#define vsnprintf(buffer, buffer_size, format, args)                           \
-  _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
-#endif /* vsnprintf */
-#endif /* _MSC_VER */
-
-/*----------------------------------------------------------------------------*/
-
 #if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__) &&          \
     (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
      !(defined(__GNUC__) || defined(__clang__)))
@@ -460,6 +482,8 @@ int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
                                    'size_t' to 'LONGLONG' */
 #pragma warning(disable : 4244) /* 'return': conversion from 'LONGLONG' to     \
                                    'std::size_t', possible loss of data */
+#pragma warning(disable : 4267) /* 'function': conversion from 'size_t' to     \
+                                   'long', possible loss of data */
 #pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
 #pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
 #elif defined(__APPLE__)
