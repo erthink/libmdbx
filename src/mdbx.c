@@ -656,7 +656,8 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
                            pgno_t newpgno, unsigned nflags);
 
 static int mdbx_read_header(MDB_env *env, MDB_meta *meta);
-static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending);
+static int mdbx_env_sync_locked(MDB_env *env, unsigned flags,
+                                MDB_meta *pending);
 static void mdbx_env_close0(MDB_env *env);
 
 static MDB_node *mdbx_node_search(MDB_cursor *mc, MDB_val *key, int *exactp);
@@ -1724,7 +1725,7 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags) {
           me_flags |= MDBX_UTTERLY_NOSYNC;
 
         mdbx_assert(env, env->me_sync_pending > 0);
-        if (mdbx_env_sync0(env, me_flags, &meta) == MDB_SUCCESS) {
+        if (mdbx_env_sync_locked(env, me_flags, &meta) == MDB_SUCCESS) {
           txnid_t snap = mdbx_find_oldest(env, NULL);
           if (snap > oldest) {
             continue;
@@ -1969,10 +1970,6 @@ fail:
 }
 
 int mdbx_env_sync(MDB_env *env, int force) {
-  int rc;
-  MDB_meta *head;
-  unsigned flags;
-
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -1982,49 +1979,60 @@ int mdbx_env_sync(MDB_env *env, int force) {
   if (unlikely(!env->me_lck))
     return MDB_PANIC;
 
-  flags = env->me_flags & ~MDB_NOMETASYNC;
+  unsigned flags = env->me_flags & ~MDB_NOMETASYNC;
   if (unlikely(flags & (MDB_RDONLY | MDB_FATAL_ERROR)))
     return MDBX_EACCESS;
 
-  head = mdbx_meta_head(env);
-  if (!META_IS_WEAK(head) && env->me_sync_pending == 0 &&
-      env->me_mapsize == head->mm_mapsize)
-    /* LY: nothing to do */
-    return MDB_SUCCESS;
-
-  if (force || head->mm_mapsize != env->me_mapsize ||
-      (env->me_sync_threshold &&
-       env->me_sync_pending >= env->me_sync_threshold))
-    flags &= MDB_WRITEMAP;
-
-  /* LY: early sync before acquiring the mutex to reduce writer's latency */
-  if (env->me_sync_pending > env->me_psize * 16 && (flags & MDB_NOSYNC) == 0) {
-    assert(((flags ^ env->me_flags) & MDB_WRITEMAP) == 0);
-    if (flags & MDB_WRITEMAP) {
-      size_t used_size = env->me_psize * (head->mm_last_pg + 1);
-      rc = mdbx_msync(env->me_map, used_size, flags & MDB_MAPASYNC);
-    } else {
-      rc = mdbx_filesync(env->me_fd, false);
-    }
-    if (unlikely(rc != MDB_SUCCESS))
-      return rc;
-  }
-
-  rc = mdbx_txn_lock(env);
+  int rc = mdbx_txn_lock(env);
   if (unlikely(rc != MDB_SUCCESS))
     return rc;
 
-  /* LY: head may be changed while the mutex has been acquired. */
-  head = mdbx_meta_head(env);
-  rc = MDB_SUCCESS;
-  if (META_IS_WEAK(head) || env->me_sync_pending != 0 ||
+  MDB_meta *head = mdbx_meta_head(env);
+  if (!META_IS_STEADY(head) || env->me_sync_pending ||
       env->me_mapsize != head->mm_mapsize) {
-    MDB_meta meta = *head;
-    rc = mdbx_env_sync0(env, flags, &meta);
+
+    if (force || head->mm_mapsize != env->me_mapsize ||
+        (env->me_sync_threshold &&
+         env->me_sync_pending >= env->me_sync_threshold))
+      flags &= MDB_WRITEMAP /* clear flags for full steady sync */;
+
+    if (env->me_sync_pending > env->me_psize * 16 &&
+        (flags & MDB_NOSYNC) == 0) {
+      assert(((flags ^ env->me_flags) & MDB_WRITEMAP) == 0);
+      size_t used_size = env->me_psize * (head->mm_last_pg + 1);
+      mdbx_txn_unlock(env);
+
+      /* LY: pre-sync without holding lock to reduce latency for writer(s) */
+      if (flags & MDB_WRITEMAP) {
+        rc = mdbx_msync(env->me_map, used_size, flags & MDB_MAPASYNC);
+      } else {
+        rc = mdbx_filesync(env->me_fd, false);
+      }
+      if (unlikely(rc != MDB_SUCCESS))
+        return rc;
+
+      rc = mdbx_txn_lock(env);
+      if (unlikely(rc != MDB_SUCCESS))
+        return rc;
+
+      /* LY: head may be changed. */
+      head = mdbx_meta_head(env);
+    }
+
+    if (!META_IS_STEADY(head) || env->me_sync_pending ||
+        env->me_mapsize != head->mm_mapsize) {
+      MDB_meta meta = *head;
+      rc = mdbx_env_sync_locked(env, flags, &meta);
+      if (unlikely(rc != MDB_SUCCESS)) {
+        mdbx_txn_unlock(env);
+        return rc;
+      }
+    }
   }
 
   mdbx_txn_unlock(env);
-  return rc;
+  assert(rc == MDB_SUCCESS);
+  return MDB_SUCCESS;
 }
 
 /** Back up parent txn's cursors, then grab the originals for tracking */
@@ -3266,7 +3274,7 @@ int mdbx_txn_commit(MDB_txn *txn) {
     meta.mm_txnid = txn->mt_txnid;
     meta.mm_canary = txn->mt_canary;
 
-    rc = mdbx_env_sync0(env, env->me_flags | txn->mt_flags, &meta);
+    rc = mdbx_env_sync_locked(env, env->me_flags | txn->mt_flags, &meta);
   }
   if (unlikely(rc != MDB_SUCCESS))
     goto fail;
@@ -3396,7 +3404,8 @@ static int __cold mdbx_env_init_meta(MDB_env *env, MDB_meta *meta) {
   return rc;
 }
 
-static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
+static int mdbx_env_sync_locked(MDB_env *env, unsigned flags,
+                                MDB_meta *pending) {
   int rc;
   MDB_meta *head = mdbx_meta_head(env);
   size_t prev_mapsize = head->mm_mapsize;
@@ -3484,10 +3493,15 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
                                                                : "Legacy");
 
   if (env->me_flags & MDB_WRITEMAP) {
-    /* LY: 'invalidate' the meta,
-     * but mdbx_meta_head_r() will be confused/retired in collision case. */
-    target->mm_datasync_sign = MDB_DATASIGN_WEAK;
-    target->mm_txnid = 0;
+    /* LY: 'invalidate' the meta. */
+    mdbx_jitter4testing(true);
+    if (target->mm_datasync_sign != MDB_DATASIGN_WEAK ||
+        target->mm_txnid != pending->mm_txnid) {
+      target->mm_datasync_sign = MDB_DATASIGN_WEAK;
+      mdbx_jitter4testing(true);
+      target->mm_txnid = 0;
+      mdbx_jitter4testing(true);
+    }
     /* LY: update info */
     target->mm_mapsize = pending->mm_mapsize;
     target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
@@ -3495,8 +3509,11 @@ static int mdbx_env_sync0(MDB_env *env, unsigned flags, MDB_meta *pending) {
     target->mm_last_pg = pending->mm_last_pg;
     target->mm_canary = pending->mm_canary;
     /* LY: 'commit' the meta */
+    mdbx_jitter4testing(true);
     target->mm_txnid = pending->mm_txnid;
+    mdbx_jitter4testing(true);
     target->mm_datasync_sign = pending->mm_datasync_sign;
+    mdbx_jitter4testing(true);
   } else {
     pending->mm_magic = MDB_MAGIC;
     pending->mm_version = MDB_DATA_VERSION;
