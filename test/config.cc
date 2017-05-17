@@ -177,6 +177,16 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 }
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  uint8_t &value, const uint8_t minval, const uint8_t maxval) {
+
+  uint64_t huge;
+  if (!parse_option(argc, argv, narg, option, huge, no_scale, minval, maxval))
+    return false;
+  value = (uint8_t)huge;
+  return true;
+}
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   bool &value) {
   const char *value_cstr = NULL;
   if (!parse_option(argc, argv, narg, option, &value_cstr, "yes")) {
@@ -268,6 +278,8 @@ void dump(const char *title) {
   logging::local_suffix indent(title);
 
   for (auto i = global::actors.begin(); i != global::actors.end(); ++i) {
+    const std::string tableid =
+        i->space_id ? "MAINDB" : ("SUB#" + std::to_string(i->space_id));
     log_info("#%u, testcase %s, space_id/table %u\n", i->actor_id,
              testcase2str(i->testcase), i->space_id);
     indent.push();
@@ -284,8 +296,6 @@ void dump(const char *title) {
     dump_verbs("mode", i->params.mode_flags, mode_bits);
     dump_verbs("table", i->params.table_flags, table_bits);
 
-    log_info("seed %u\n", i->params.seed);
-
     if (i->params.test_nops)
       log_info("iterations/records %u\n", i->params.test_nops);
     else
@@ -298,6 +308,8 @@ void dump(const char *title) {
 
     log_info("threads %u\n", i->params.nthreads);
 
+    log_info("keygen.case: %s\n", keygencase2str(i->params.keygen.keycase));
+    log_info("keygen.seed: %u\n", i->params.keygen.seed);
     log_info("key: minlen %u, maxlen %u\n", i->params.keylen_min,
              i->params.keylen_max);
     log_info("data: minlen %u, maxlen %u\n", i->params.datalen_min,

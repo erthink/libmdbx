@@ -15,6 +15,7 @@
 #pragma once
 
 #include "base.h"
+#include "config.h"
 #include "log.h"
 #include "utils.h"
 
@@ -42,25 +43,41 @@ namespace keygen {
  *  - частотное распределение по алфавиту;
  *  - абсолютное значение ключей или разность между отдельными значениями;
  *
- * Соответственно, схема генерации следующая:
- *  - для ключей вводится плоская одномерная "координата" uint64_t;
- *  - все преобразования (назначение диапазонов, переупорядочивание,
- *    коррекция распределения) выполняются только над "координатой";
+ * Соответственно, в общих чертах, схема генерации следующая:
+ *  - вводится плоская одномерная "координата" uint64_t;
+ *  - генерация специфических паттернов (последовательностей)
+ *    реализуется посредством соответствующих преобразований "координат", при
+ *    этом все подобные преобразования выполняются только над "координатой";
  *  - итоговая "координата" преобразуется в 8-байтное суррогатное значение
- *    ключа, при этом опционально суррогат может усекаться до ненулевых байт;
- *  - для получения ключей длиной более 8 байт суррогат дополняется
- *    фиксированной последовательностью;
+ *    ключа;
+ *  - для получения ключей длиной МЕНЕЕ 8 байт суррогат может усекаться
+ *    до ненулевых байт, в том числе до нулевой длины;
+ *  - для получения ключей длиной БОЛЕЕ 8 байт суррогат дополняется
+ *    нулями или псевдослучайной последовательностью;
+ *
+ * Механизм генерации паттернов:
+ *  - реализованный механизм является компромиссом между скоростью/простотой
+ *    и гибкостью, необходимой для получения последовательностей, которых
+ *    будет достаточно для проверки сценариев разделения и слияния страниц
+ *    с данными внутри mdbx;
+ *  - псевдо-случайные паттерны реализуются посредством набора инъективных
+ *    отображающих функций;
+ *  - не-псевдо-случайные паттерны реализуются посредством параметризируемого
+ *    трех-этапного преобразования:
+ *      1) смещение (сложение) по модулю;
+ *      2) циклический сдвиг;
+ *      3) добавление абсолютного смещения (базы);
  */
 
 typedef uint64_t serial_t;
 
-struct params_t {
-  uint8_t minlen;
-  uint8_t flags;
-  uint16_t maxlen;
+enum {
+  serial_minwith = 8,
+  serial_maxwith = sizeof(serial_t) * 8,
+  serial_allones = ~(serial_t)0
 };
 
-struct result_t {
+struct result {
   MDB_val value;
   size_t limit;
   union {
@@ -70,54 +87,39 @@ struct result_t {
   };
 };
 
-void make(const serial_t serial, const params_t &params, result_t &out);
+//-----------------------------------------------------------------------------
 
-static __inline void make(const serial_t serial, const params_t &params,
-                          result_t &out, size_t limit) {
-  out.limit = limit;
-  make(serial, params, out);
-}
+struct buffer_deleter : public std::unary_function<void, result *> {
+  void operator()(result *buffer) const { free(buffer); }
+};
 
-size_t ffs_fallback(serial_t serial);
+typedef std::unique_ptr<result, buffer_deleter> buffer;
 
-static __inline size_t ffs(serial_t serial) {
-  size_t rc;
-#ifdef __GNUC__
-  if (sizeof(serial) <= sizeof(int))
-    rc = __builtin_ffs((int)serial);
-  else if (sizeof(serial) == sizeof(long))
-    rc = __builtin_ffsl((long)serial);
-  else if (sizeof(serial) == sizeof(long long))
-    rc = __builtin_ffsll((long long)serial);
-  else
-    return ffs_fallback(serial);
-#elif defined(_MSC_VER)
-  unsigned long index;
-  if (sizeof(serial) <= sizeof(unsigned long))
-    rc = _BitScanReverse(&index, (unsigned long)serial) ? index : 0;
-  else if (sizeof(serial) <= sizeof(unsigned __int64)) {
-#if defined(_M_ARM64) || defined(_M_X64)
-    rc = _BitScanReverse64(&index, (unsigned __int64)serial) ? index : 0;
-#else
-    size_t base = 0;
-    unsigned long value = (unsigned long)serial;
-    if ((unsigned __int64)serial > ULONG_MAX) {
-      base = 32;
-      value = (unsigned long)(serial >> 32);
-    }
-    rc = (_BitScanReverse(&index, value) ? index : 0) + base;
-#endif /* _M_ARM64 || _M_X64 */
-  } else
-    return ffs_fallback(serial);
-#else
-  return ffs_fallback(serial);
-#endif
-  assert(rc == ffs_fallback(serial));
-  return rc;
-}
+buffer alloc(size_t limit);
 
-static __inline size_t length(const serial_t serial) {
-  return (ffs(serial) + 7) >> 3;
-}
+class maker {
+  config::keygen_params_pod mapping;
+  serial_t base;
+  serial_t salt;
+
+  struct essentials {
+    uint8_t minlen;
+    uint8_t flags;
+    uint16_t maxlen;
+  } key_essentials, value_essentials;
+
+  static void mk(const serial_t serial, const essentials &params, result &out);
+
+public:
+  maker() { memset(this, 0, sizeof(*this)); }
+
+  void pair(serial_t serial, const buffer &key, buffer &value,
+            serial_t value_age);
+  void setup(const config::actor_params_pod &actor, unsigned thread_number);
+
+  bool increment(serial_t &serial, int delta);
+};
+
+size_t length(serial_t serial);
 
 } /* namespace keygen */

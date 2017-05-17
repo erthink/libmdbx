@@ -101,12 +101,12 @@
 #define bswap64(v) __bswap_64(v)
 #else
 static __inline uint64_t bswap64(uint64_t v) {
-  return v << 56 | v >> 56 | ((v << 40) & 0x00ff000000000000ull) |
-         ((v << 24) & 0x0000ff0000000000ull) |
-         ((v << 8) & 0x000000ff00000000ull) |
-         ((v >> 8) & 0x00000000ff000000ull) |
-         ((v >> 24) & 0x0000000000ff0000ull) |
-         ((v >> 40) & 0x000000000000ff00ull);
+  return v << 56 | v >> 56 | ((v << 40) & UINT64_C(0x00ff000000000000)) |
+         ((v << 24) & UINT64_C(0x0000ff0000000000)) |
+         ((v << 8) & UINT64_C(0x000000ff00000000)) |
+         ((v >> 8) & UINT64_C(0x00000000ff0000000)) |
+         ((v >> 24) & UINT64_C(0x0000000000ff0000)) |
+         ((v >> 40) & UINT64_C(0x000000000000ff00));
 }
 #endif
 #endif /* bswap64 */
@@ -116,7 +116,8 @@ static __inline uint64_t bswap64(uint64_t v) {
 #define bswap32(v) __bswap_32(v)
 #else
 static __inline uint32_t bswap32(uint32_t v) {
-  return v << 24 | v >> 24 | ((v << 8) & 0x00ff0000) | ((v >> 8) & 0x0000ff00);
+  return v << 24 | v >> 24 | ((v << 8) & UINT32_C(0x00ff0000)) |
+         ((v >> 8) & UINT32_C(0x0000ff00));
 }
 #endif
 #endif /* bswap32 */
@@ -360,6 +361,12 @@ uint64_t entropy_white(void);
 uint64_t prng64_careless(uint64_t &state);
 uint64_t prng64_white(uint64_t &state);
 uint32_t prng32(uint64_t &state);
+void prng_fill(uint64_t &state, void *ptr, size_t bytes);
+
+void prng_seed(uint64_t seed);
+uint32_t prng32(void);
+uint64_t prng64(void);
+void prng_fill(void *ptr, size_t bytes);
 
 bool flipcoin();
 bool jitter(unsigned probability_percent);

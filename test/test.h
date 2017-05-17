@@ -25,9 +25,10 @@
 bool test_execute(const actor_config &config);
 std::string thunk_param(const actor_config &config);
 void testcase_setup(const char *casename, actor_params &params,
-                    unsigned &lastid);
-void configure_actor(unsigned &lastid, const actor_testcase testcase,
-                     const char *id_cstr, const actor_params &params);
+                    unsigned &last_space_id);
+void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
+                     const char *space_id_cstr, const actor_params &params);
+void keycase_setup(const char *casename, actor_params &params);
 
 namespace global {
 
@@ -87,6 +88,9 @@ protected:
 
   size_t nops_completed;
   chrono::time start_timestamp;
+  keygen::buffer key;
+  keygen::buffer data;
+  keygen::maker keyvalue_maker;
 
   struct {
     mdbx_canary canary;
@@ -97,13 +101,28 @@ protected:
   void db_close();
   void txn_begin(bool readonly);
   void txn_end(bool abort);
+  void txn_restart(bool abort, bool readonly);
   void fetch_canary();
   void update_canary(uint64_t increment);
+
+  MDB_dbi db_table_open(bool create);
+  void db_table_drop(MDB_dbi handle);
+  void db_table_close(MDB_dbi handle);
 
   bool wait4start();
   void report(size_t nops_done);
   void signal();
   bool should_continue() const;
+
+  void generate_pair(const keygen::serial_t serial, keygen::buffer &key,
+                     keygen::buffer &value, keygen::serial_t data_age = 0) {
+    keyvalue_maker.pair(serial, key, value, data_age);
+  }
+
+  void generate_pair(const keygen::serial_t serial,
+                     keygen::serial_t data_age = 0) {
+    generate_pair(serial, key, data, data_age);
+  }
 
   bool mode_readonly() const {
     return (config.params.mode_flags & MDB_RDONLY) ? true : false;

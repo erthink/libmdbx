@@ -17,6 +17,7 @@
 const char *testcase2str(const actor_testcase testcase) {
   switch (testcase) {
   default:
+    assert(false);
     return "?!";
   case ac_none:
     return "none";
@@ -49,6 +50,20 @@ const char *status2str(actor_status status) {
   }
 }
 
+const char *keygencase2str(const keygen_case keycase) {
+  switch (keycase) {
+  default:
+    assert(false);
+    return "?!";
+  case kc_random:
+    return "random";
+  case kc_dashes:
+    return "dashes";
+  case kc_custom:
+    return "custom";
+  }
+}
+
 //-----------------------------------------------------------------------------
 
 static void mdbx_debug_logger(int type, const char *function, int line,
@@ -67,7 +82,9 @@ static void mdbx_debug_logger(int type, const char *function, int line,
     level = logging::failure;
   }
 
-  if (logging::output(level, "mdbx: %s: ", function))
+  if (logging::output(level, strncmp(function, "mdbx_", 5) == 0 ? "%s: "
+                                                                : "mdbx: %s: ",
+                      function))
     logging::feed(msg, args);
   if (type & MDBX_DBG_ASSERT)
     abort();
@@ -87,26 +104,26 @@ void testcase::db_prepare() {
 
   MDB_env *env = nullptr;
   rc = mdbx_env_create(&env);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_create()", rc);
 
   assert(env != nullptr);
   db_guard.reset(env);
 
   rc = mdbx_env_set_userctx(env, this);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_set_userctx()", rc);
 
   rc = mdbx_env_set_maxreaders(env, config.params.max_readers);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_set_maxreaders()", rc);
 
   rc = mdbx_env_set_maxdbs(env, config.params.max_tables);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_set_maxdbs()", rc);
 
   rc = mdbx_env_set_mapsize(env, (size_t)config.params.size);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_set_mapsize()", rc);
 
   log_trace("<< db_prepare");
@@ -119,7 +136,7 @@ void testcase::db_open() {
     db_prepare();
   int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(),
                          (unsigned)config.params.mode_flags, 0640);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_open()", rc);
 
   log_trace("<< db_open");
@@ -140,7 +157,7 @@ void testcase::txn_begin(bool readonly) {
   MDB_txn *txn = nullptr;
   int rc =
       mdbx_txn_begin(db_guard.get(), nullptr, readonly ? MDB_RDONLY : 0, &txn);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_txn_begin()", rc);
   txn_guard.reset(txn);
 
@@ -154,15 +171,21 @@ void testcase::txn_end(bool abort) {
   MDB_txn *txn = txn_guard.release();
   if (abort) {
     int rc = mdbx_txn_abort(txn);
-    if (rc != MDB_SUCCESS)
+    if (unlikely(rc != MDB_SUCCESS))
       failure_perror("mdbx_txn_abort()", rc);
   } else {
     int rc = mdbx_txn_commit(txn);
-    if (rc != MDB_SUCCESS)
+    if (unlikely(rc != MDB_SUCCESS))
       failure_perror("mdbx_txn_commit()", rc);
   }
 
   log_trace("<< txn_end(%s)", abort ? "abort" : "commit");
+}
+
+void testcase::txn_restart(bool abort, bool readonly) {
+  if (txn_guard)
+    txn_end(abort);
+  txn_begin(readonly);
 }
 
 bool testcase::wait4start() {
@@ -257,7 +280,7 @@ void testcase::fetch_canary() {
   log_trace(">> fetch_canary");
 
   int rc = mdbx_canary_get(txn_guard.get(), &canary_now);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_canary_get()", rc);
 
   if (canary_now.v < last.canary.v)
@@ -283,10 +306,57 @@ void testcase::update_canary(uint64_t increment) {
   canary_now.y += increment;
 
   int rc = mdbx_canary_put(txn_guard.get(), &canary_now);
-  if (rc != MDB_SUCCESS)
+  if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_canary_put()", rc);
 
-  log_trace(">> update_canary: sequence = %" PRIu64, canary_now.y);
+  log_trace("<< update_canary: sequence = %" PRIu64, canary_now.y);
+}
+
+MDB_dbi testcase::db_table_open(bool create) {
+  log_trace(">> testcase::db_table_create");
+
+  char tablename_buf[16];
+  const char *tablename = nullptr;
+  if (config.space_id) {
+    int rc = snprintf(tablename_buf, sizeof(tablename_buf), "TBL%04u",
+                      config.space_id);
+    if (rc < 4 || rc >= (int)sizeof(tablename_buf) - 1)
+      failure("snprintf(tablename): %d", rc);
+    tablename = tablename_buf;
+  }
+  log_verbose("use %s table", tablename ? tablename : "MAINDB");
+
+  MDB_dbi handle = 0;
+  int rc = mdbx_dbi_open(txn_guard.get(), tablename,
+                         (create ? MDB_CREATE : 0) | config.params.table_flags,
+                         &handle);
+  if (unlikely(rc != MDB_SUCCESS))
+    failure_perror("mdbx_dbi_open()", rc);
+
+  log_trace("<< testcase::db_table_create, handle %u", handle);
+  return handle;
+}
+
+void testcase::db_table_drop(MDB_dbi handle) {
+  log_trace(">> testcase::db_table_drop, handle %u", handle);
+
+  if (config.params.drop_table) {
+    int rc = mdbx_drop(txn_guard.get(), handle, true);
+    if (unlikely(rc != MDB_SUCCESS))
+      failure_perror("mdbx_drop()", rc);
+    log_trace("<< testcase::db_table_drop");
+  } else {
+    log_trace("<< testcase::db_table_drop: not needed");
+  }
+}
+
+void testcase::db_table_close(MDB_dbi handle) {
+  log_trace(">> testcase::db_table_close, handle %u", handle);
+  assert(!txn_guard);
+  int rc = mdbx_dbi_close(db_guard.get(), handle);
+  if (unlikely(rc != MDB_SUCCESS))
+    failure_perror("mdbx_dbi_close()", rc);
+  log_trace("<< testcase::db_table_close");
 }
 
 //-----------------------------------------------------------------------------

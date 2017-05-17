@@ -41,7 +41,14 @@ void actor_params::set_defaults(void) {
                MDB_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM;
   table_flags = MDB_DUPSORT;
   size = 1024 * 1024;
-  seed = 1;
+
+  keygen.seed = 1;
+  keygen.keycase = kc_random;
+  keygen.width = 32;
+  keygen.mesh = 32;
+  keygen.split = keygen.width / 2;
+  keygen.rotate = 0;
+  keygen.offset = 0;
 
   test_duration = 0;
   test_nops = 1000;
@@ -129,13 +136,13 @@ int main(int argc, char *const argv[]) {
   params.set_defaults();
   global::config::dump_config = true;
   logging::setup((logging::loglevel)params.loglevel, "main");
-  unsigned lastid = 0;
+  unsigned last_space_id = 0;
 
   for (int narg = 1; narg < argc; ++narg) {
     const char *value = nullptr;
 
     if (config::parse_option(argc, argv, narg, "case", &value)) {
-      testcase_setup(value, params, lastid);
+      testcase_setup(value, params, last_space_id);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "pathname", params.pathname_db))
@@ -149,9 +156,30 @@ int main(int argc, char *const argv[]) {
     if (config::parse_option(argc, argv, narg, "size", params.size,
                              config::binary, 4096 * 4))
       continue;
-    if (config::parse_option(argc, argv, narg, "seed", params.seed,
-                             config::no_scale))
+
+    if (config::parse_option(argc, argv, narg, "keygen.width",
+                             params.keygen.width, 1, 64))
       continue;
+    if (config::parse_option(argc, argv, narg, "keygen.mesh",
+                             params.keygen.mesh, 1, 64))
+      continue;
+    if (config::parse_option(argc, argv, narg, "keygen.seed",
+                             params.keygen.seed, config::no_scale))
+      continue;
+    if (config::parse_option(argc, argv, narg, "keygen.split",
+                             params.keygen.split, 1, 64))
+      continue;
+    if (config::parse_option(argc, argv, narg, "keygen.rotate",
+                             params.keygen.rotate, 1, 64))
+      continue;
+    if (config::parse_option(argc, argv, narg, "keygen.offset",
+                             params.keygen.offset, config::binary))
+      continue;
+    if (config::parse_option(argc, argv, narg, "keygen.case", &value)) {
+      keycase_setup(value, params);
+      continue;
+    }
+
     if (config::parse_option(argc, argv, narg, "repeat", params.nrepeat,
                              config::no_scale))
       continue;
@@ -225,20 +253,20 @@ int main(int argc, char *const argv[]) {
       params.test_duration = 0;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "hill", &value)) {
-      configure_actor(lastid, ac_hill, value, params);
+    if (config::parse_option(argc, argv, narg, "hill", &value, "auto")) {
+      configure_actor(last_space_id, ac_hill, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "jitter", nullptr)) {
-      configure_actor(lastid, ac_jitter, value, params);
+      configure_actor(last_space_id, ac_jitter, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "dead.reader", nullptr)) {
-      configure_actor(lastid, ac_deadread, value, params);
+      configure_actor(last_space_id, ac_deadread, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "dead.writer", nullptr)) {
-      configure_actor(lastid, ac_deadwrite, value, params);
+      configure_actor(last_space_id, ac_deadwrite, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "failfast",
@@ -246,7 +274,7 @@ int main(int argc, char *const argv[]) {
       continue;
 
     if (*argv[narg] != '-')
-      testcase_setup(argv[narg], params, lastid);
+      testcase_setup(argv[narg], params, last_space_id);
     else
       failure("Unknown option '%s'\n", argv[narg]);
   }

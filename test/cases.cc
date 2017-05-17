@@ -14,8 +14,8 @@
 
 #include "test.h"
 
-void configure_actor(unsigned &lastid, const actor_testcase testcase,
-                     const char *id_cstr, const actor_params &params) {
+void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
+                     const char *space_id_cstr, const actor_params &params) {
   unsigned wait4id = 0;
 
   if (params.waitfor_nops) {
@@ -33,39 +33,63 @@ void configure_actor(unsigned &lastid, const actor_testcase testcase,
       failure("No previous waitable actor for %u-ops\n", params.waitfor_nops);
   }
 
-  unsigned id = 0;
-  if (!id_cstr || strcmp(id_cstr, "auto") == 0)
-    id = lastid + 1;
+  unsigned space_id = 0;
+  if (!space_id_cstr || strcmp(space_id_cstr, "auto") == 0)
+    space_id = last_space_id + 1;
   else {
     char *end = nullptr;
     errno = 0;
-    id = strtoul(id_cstr, &end, 0);
+    space_id = strtoul(space_id_cstr, &end, 0);
     if (errno)
-      failure_perror("Expects an integer value for actor-id\n", errno);
+      failure_perror("Expects an integer value for space-id\n", errno);
     if (end && *end)
-      failure("The '%s' is unexpected for actor-id\n", end);
+      failure("The '%s' is unexpected for space-id\n", end);
   }
 
-  if (id < 1 || id > ACTOR_ID_MAX)
-    failure("Invalid actor-id %u\n", id);
-  lastid = id;
+  if (space_id > ACTOR_ID_MAX)
+    failure("Invalid space-id %u\n", space_id);
+  last_space_id = space_id;
 
-  log_trace("configure_actor: %u for %s", id, testcase2str(testcase));
-  global::actors.emplace_back(actor_config(testcase, params, id, wait4id));
+  log_trace("configure_actor: space %u for %s", space_id,
+            testcase2str(testcase));
+  global::actors.emplace_back(
+      actor_config(testcase, params, space_id, wait4id));
   global::databases.insert(params.pathname_db);
 }
 
 void testcase_setup(const char *casename, actor_params &params,
-                    unsigned &lastid) {
+                    unsigned &last_space_id) {
   if (strcmp(casename, "basic") == 0) {
     log_notice(">>> testcase_setup(%s)", casename);
-    configure_actor(lastid, ac_hill, nullptr, params);
-    configure_actor(lastid, ac_jitter, nullptr, params);
-    configure_actor(lastid, ac_jitter, nullptr, params);
-    configure_actor(lastid, ac_jitter, nullptr, params);
+    configure_actor(last_space_id, ac_jitter, nullptr, params);
+    configure_actor(last_space_id, ac_hill, nullptr, params);
+    configure_actor(last_space_id, ac_jitter, nullptr, params);
+    configure_actor(last_space_id, ac_hill, nullptr, params);
+    configure_actor(last_space_id, ac_jitter, nullptr, params);
+    configure_actor(last_space_id, ac_hill, nullptr, params);
     log_notice("<<< testcase_setup(%s): done", casename);
   } else {
     failure("unknown testcase `%s`", casename);
+  }
+}
+
+void keycase_setup(const char *casename, actor_params &params) {
+  if (strcmp(casename, "random") == 0 || strcmp(casename, "prng") == 0) {
+    log_notice(">>> keycase_setup(%s)", casename);
+    params.keygen.keycase = kc_random;
+    // TODO
+    log_notice("<<< keycase_setup(%s): done", casename);
+  } else if (strcmp(casename, "dashes") == 0 ||
+             strcmp(casename, "aside") == 0) {
+    log_notice(">>> keycase_setup(%s)", casename);
+    params.keygen.keycase = kc_dashes;
+    // TODO
+    log_notice("<<< keycase_setup(%s): done", casename);
+  } else if (strcmp(casename, "custom") == 0) {
+    log_notice("=== keycase_setup(%s): skip", casename);
+    params.keygen.keycase = kc_custom;
+  } else {
+    failure("unknown keycase `%s`", casename);
   }
 }
 

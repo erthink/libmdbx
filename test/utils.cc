@@ -14,7 +14,7 @@
 
 #include "test.h"
 #include <float.h>
-#ifndef _MSC_VER
+#ifdef HAVE_IEEE754_H
 #include <ieee754.h>
 #endif
 
@@ -190,14 +190,11 @@ uint64_t entropy_ticks(void) {
 //-----------------------------------------------------------------------------
 
 static __inline uint64_t bleach64(uint64_t dirty) {
-  dirty = mul_64x64_high(bswap64(dirty), UINT64_C(17048867929148541611));
-  return dirty;
+  return mul_64x64_high(bswap64(dirty), UINT64_C(17048867929148541611));
 }
 
 static __inline uint32_t bleach32(uint32_t dirty) {
-  return (uint32_t)(
-      (bswap32(dirty) * UINT64_C(/*3080105489, 4267077937 */ 2175734609)) >>
-      32);
+  return (uint32_t)((bswap32(dirty) * UINT64_C(2175734609)) >> 32);
 }
 
 uint64_t prng64_careless(uint64_t &state) {
@@ -213,6 +210,39 @@ uint64_t prng64_white(uint64_t &state) {
 uint32_t prng32(uint64_t &state) {
   return (uint32_t)(prng64_careless(state) >> 32);
 }
+
+void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
+  while (bytes >= 4) {
+    *((uint32_t *)ptr) = prng32(state);
+    ptr = (uint32_t *)ptr + 1;
+    bytes -= 4;
+  }
+
+  switch (bytes & 3) {
+  case 3: {
+    uint32_t u32 = prng32(state);
+    memcpy(ptr, &u32, 3);
+  } break;
+  case 2:
+    *((uint16_t *)ptr) = (uint16_t)prng32(state);
+    break;
+  case 1:
+    *((uint8_t *)ptr) = (uint8_t)prng32(state);
+    break;
+  case 0:
+    break;
+  }
+}
+
+static __thread uint64_t prng_state;
+
+void prng_seed(uint64_t seed) { prng_state = bleach64(seed); }
+
+uint32_t prng32(void) { return prng32(prng_state); }
+
+uint64_t prng64(void) { return prng64_white(prng_state); }
+
+void prng_fill(void *ptr, size_t bytes) { prng_fill(prng_state, ptr, bytes); }
 
 uint64_t entropy_white() { return bleach64(entropy_ticks()); }
 
