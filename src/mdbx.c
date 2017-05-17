@@ -324,16 +324,19 @@ txnid_t mdbx_debug_edge;
 /**	The version number for a database's lockfile format. */
 #define MDB_LOCK_VERSION ((MDB_DEVEL) ? 999 : 1)
 
+/* Key size which fits in a #DKBUF. */
 #define DKBUF_MAXKEYSIZE 511 /* FIXME */
-                             /**	Key size which fits in a #DKBUF.
-                              *	@ingroup debug
-                              */
-#define DKBUF char kbuf[DKBUF_MAXKEYSIZE]
-/**	Display a key in hex.
- *	@ingroup debug
- *	Invoke a function to display a key in hex.
- */
-#define DKEY(x) mdbx_dkey(x, kbuf, sizeof(kbuf))
+
+#if MDB_DEBUG
+#define DKBUF char _kbuf[DKBUF_MAXKEYSIZE * 4 + 2]
+#define DKEY(x) mdbx_dkey(x, _kbuf, DKBUF_MAXKEYSIZE * 2 + 1)
+#define DVAL(x)                                                                \
+  mdbx_dkey(x, _kbuf + DKBUF_MAXKEYSIZE * 2 + 1, DKBUF_MAXKEYSIZE * 2 + 1)
+#else
+#define DKBUF ((void)(0))
+#define DKEY(x) ("-")
+#define DVAL(x) ("-")
+#endif
 
 /** An invalid page number.
  *	Mainly used to denote an empty tree.
@@ -837,43 +840,46 @@ static __inline pgno_t mdbx_dbg_pgno(MDB_page *mp) {
   return ret;
 }
 
-/** Display a key in hexadecimal and return the address of the result.
-* @param[in] key the key to display
-* @param[in] buf the buffer to write into. Should always be #DKBUF.
-* @return The key in hexadecimal form.
-*/
-char *mdbx_dkey(MDB_val *key, char *buf, const size_t bufsize) {
-#ifdef _MSC_VER
-  (void)key;
-  (void)buf;
-  return "FIXME: mdbx_dkey()";
-#else
-  char *ptr = buf;
-  unsigned i;
-
+/* Dump a key in ascii or hexadecimal. */
+char *mdbx_dkey(const MDB_val *key, char *const buf, const size_t bufsize) {
   if (!key)
-    return "";
+    return "<null>";
+  if (!buf || bufsize < 4)
+    return nullptr;
+  if (!key->iov_len)
+    return "<empty>";
 
   const uint8_t *const data = key->mv_data;
   bool is_ascii = true;
+  unsigned i;
   for (i = 0; is_ascii && i < key->mv_size; i++)
     if (data[i] < ' ' || data[i] > 127)
       is_ascii = false;
 
-  if (is_ascii)
-    snprintf(buf, bufsize, "%.*s",
-             (key->mv_size > INT_MAX) ? INT_MAX : (int)key->mv_size, data);
-  else {
-    buf[0] = '\0';
+  if (is_ascii) {
+    int len =
+        snprintf(buf, bufsize, "%.*s",
+                 (key->mv_size > INT_MAX) ? INT_MAX : (int)key->mv_size, data);
+    assert(len > 0 && (unsigned)len < bufsize);
+    (void)len;
+  } else {
+    char *const detent = buf + bufsize - 2;
+    char *ptr = buf;
+    *ptr++ = '<';
     for (i = 0; i < key->mv_size; i++) {
-      int len = snprintf(ptr, bufsize - (ptr - buf), "%02x", data[i]);
-      if (len < 1)
+      const ptrdiff_t left = detent - ptr;
+      assert(left > 0);
+      int len = snprintf(ptr, left, "%02x", data[i]);
+      if (len < 0 || len >= left)
         break;
       ptr += len;
     }
+    if (ptr < detent) {
+      ptr[0] = '>';
+      ptr[1] = '\0';
+    }
   }
   return buf;
-#endif /* _MSC_VER */
 }
 
 #if 0  /* LY: debug stuff */
@@ -4660,7 +4666,7 @@ static int mdbx_page_search_root(MDB_cursor *mc, MDB_val *key, int flags) {
   }
 
   mdbx_debug("found leaf page %" PRIuPTR " for key [%s]", mp->mp_pgno,
-             key ? DKEY(key) : "null");
+             DKEY(key));
   mc->mc_flags |= C_INITIALIZED;
   mc->mc_flags &= ~C_EOF;
 
@@ -5318,8 +5324,8 @@ set1:
   /* The key already matches in all other cases */
   if (op == MDB_SET_RANGE || op == MDB_SET_KEY)
     MDB_GET_KEY(leaf, key);
-  mdbx_debug("==> cursor placed on key [%s]", DKEY(key));
 
+  mdbx_debug("==> cursor placed on key [%s], data [%s]", DKEY(key), DVAL(data));
   return rc;
 }
 
@@ -5627,9 +5633,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
   env = mc->mc_txn->mt_env;
 
-  /* Check this first so counter will always be zero on any
-   * early failures.
-   */
+  /* Check this first so counter will always be zero on any early failures. */
   if (flags & MDB_MULTIPLE) {
     dcount = data[1].mv_size;
     data[1].mv_size = 0;
@@ -5640,6 +5644,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (flags & MDB_RESERVE) {
     if (unlikely(mc->mc_db->md_flags & (MDB_DUPSORT | MDB_REVERSEDUP)))
       return MDB_INCOMPATIBLE;
+    data->mv_data = nullptr;
   }
 
   nospill = flags & MDB_NOSPILL;
@@ -5670,9 +5675,10 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     return MDB_BAD_VALSIZE;
   }
 
-  mdbx_debug("==> put db %d key [%s], size %" PRIuPTR ", data size %" PRIuPTR
-             "",
-             DDBI(mc), DKEY(key), key ? key->mv_size : 0, data->mv_size);
+  mdbx_debug("==> put db %d key [%s], size %" PRIuPTR
+             ", data [%s] size %" PRIuPTR,
+             DDBI(mc), DKEY(key), key ? key->mv_size : 0,
+             DVAL((flags & MDB_RESERVE) ? nullptr : data), data->mv_size);
 
   int dupdata_flag = 0;
   if (flags & MDB_CURRENT) {
@@ -6151,8 +6157,8 @@ new_sub:
     }
     return rc;
   bad_sub:
-    if (unlikely(rc ==
-                 MDB_KEYEXIST)) /* should not happen, we deleted that item */
+    if (unlikely(rc == MDB_KEYEXIST))
+      /* should not happen, we deleted that item */
       rc = MDB_PROBLEM;
   }
   mc->mc_txn->mt_flags |= MDB_TXN_ERROR;
@@ -6391,7 +6397,7 @@ static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
              " key size %" PRIuPTR " [%s]",
              IS_LEAF(mp) ? "leaf" : "branch", IS_SUBP(mp) ? "sub-" : "",
              mdbx_dbg_pgno(mp), indx, data ? data->mv_size : 0,
-             key ? key->mv_size : 0, key ? DKEY(key) : "null");
+             key ? key->mv_size : 0, DKEY(key));
 
   if (IS_LEAF2(mp)) {
     mdbx_cassert(mc, key);
@@ -6891,7 +6897,7 @@ static int mdbx_update_key(MDB_cursor *mc, MDB_val *key) {
   mp = mc->mc_pg[mc->mc_top];
   node = NODEPTR(mp, indx);
   ptr = mp->mp_ptrs[indx];
-  {
+  if (MDB_DEBUG) {
     MDB_val k2;
     char kbuf2[DKBUF_MAXKEYSIZE * 2 + 1];
     k2.mv_data = NODEKEY(node);
@@ -7658,7 +7664,8 @@ static int mdbx_del0(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
   int rc, exact = 0;
   DKBUF;
 
-  mdbx_debug("====> delete db %u key [%s]", dbi, DKEY(key));
+  mdbx_debug("====> delete db %u key [%s], data [%s]", dbi, DKEY(key),
+             DVAL(data));
 
   mdbx_cursor_init(&mc, txn, dbi, &mx);
 

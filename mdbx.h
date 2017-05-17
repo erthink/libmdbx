@@ -1463,7 +1463,8 @@ LIBMDBX_API int mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx);
  * Returns 0 on success, non-zero on failure. */
 LIBMDBX_API int mdbx_reader_check(MDB_env *env, int *dead);
 
-LIBMDBX_API char *mdbx_dkey(MDB_val *key, char *buf, const size_t bufsize);
+LIBMDBX_API char *mdbx_dkey(const MDB_val *key, char *const buf,
+                            const size_t bufsize);
 
 LIBMDBX_API int mdbx_env_close_ex(MDB_env *env, int dont_sync);
 
