@@ -43,6 +43,7 @@ TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 
 MDBX_SRC	:= mdbx.h mdbx_osal.h $(addprefix src/, mdbx.c osal.c lck-posix.c defs.h bits.h osal.h midl.h)
+SHELL		:= /bin/bash
 
 .PHONY: mdbx all install clean check coverage
 
@@ -66,7 +67,7 @@ clean:
 	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
 
 check:	test/test
-	test/test --pathname=tmp.db --dont-cleanup-after basic | tee test.log | tail -n 42 && ./mdbx_chk -vn tmp.db
+	(set -o pipefail; test/test --pathname=tmp.db --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn tmp.db
 
 mdbx.o: $(MDBX_SRC) Makefile
 	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
