@@ -67,7 +67,7 @@ static void mdbx_debug_logger(int type, const char *function, int line,
     level = logging::failure;
   }
 
-  if (logging::output(level, "mdbx: "))
+  if (logging::output(level, "mdbx: %s: ", function))
     logging::feed(msg, args);
   if (type & MDBX_DBG_ASSERT)
     abort();

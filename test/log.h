@@ -72,6 +72,7 @@ public:
 
 } /* namespace log */
 
+void __printf_args(1, 2) log_extra(const char *msg, ...);
 void __printf_args(1, 2) log_trace(const char *msg, ...);
 void __printf_args(1, 2) log_verbose(const char *msg, ...);
 void __printf_args(1, 2) log_info(const char *msg, ...);

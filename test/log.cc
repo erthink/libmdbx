@@ -205,6 +205,16 @@ local_suffix::~local_suffix() { suffix.erase(trim_pos); }
 
 } /* namespace log */
 
+void log_extra(const char *msg, ...) {
+  if (logging::extra >= logging::level) {
+    va_list ap;
+    va_start(ap, msg);
+    logging::output(logging::extra, msg, ap);
+    va_end(ap);
+  } else
+    logging::last = nullptr;
+}
+
 void log_trace(const char *msg, ...) {
   if (logging::trace >= logging::level) {
     va_list ap;
