@@ -4636,7 +4636,8 @@ static int mdbx_page_search_root(MDB_cursor *mc, MDB_val *key, int flags) {
   }
 
   if (unlikely(!IS_LEAF(mp))) {
-    mdbx_debug("internal error, index points to a %02X page!?", mp->mp_flags);
+    mdbx_debug("internal error, index points to a page with 0x%02x flags!?",
+               mp->mp_flags);
     mc->mc_txn->mt_flags |= MDB_TXN_ERROR;
     return MDB_CORRUPTED;
   }
@@ -9187,9 +9188,9 @@ int __cold mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {
         break;
     }
   }
-  if (first) {
+  if (first)
     rc = func("(no active readers)\n", ctx);
-  }
+
   return rc;
 }
 
@@ -9453,7 +9454,7 @@ static void __hot mdbx_midl_xmerge(MDB_IDL idl, MDB_IDL merge) {
 #define SMALL 8
 #define MIDL_SWAP(a, b)                                                        \
   {                                                                            \
-    itmp = (a);                                                                \
+    MDB_ID itmp = (a);                                                         \
     (a) = (b);                                                                 \
     (b) = itmp;                                                                \
   }
@@ -9462,7 +9463,7 @@ static void __hot mdbx_midl_sort(MDB_IDL ids) {
   /* Max possible depth of int-indexed tree * 2 items/level */
   int istack[sizeof(int) * CHAR_BIT * 2];
   int i, j, k, l, ir, jstack;
-  MDB_ID a, itmp;
+  MDB_ID a;
 
   ir = (int)ids[0];
   l = 1;
@@ -9542,19 +9543,17 @@ static unsigned __hot mdbx_mid2l_search(MDB_ID2L ids, MDB_ID id) {
 
     if (val < 0) {
       n = pivot;
-
     } else if (val > 0) {
       base = cursor;
       n -= pivot + 1;
-
     } else {
       return cursor;
     }
   }
 
-  if (val > 0) {
+  if (val > 0)
     ++cursor;
-  }
+
   return cursor;
 }
 
@@ -9562,29 +9561,20 @@ static int mdbx_mid2l_insert(MDB_ID2L ids, MDB_ID2 *id) {
   unsigned x, i;
 
   x = mdbx_mid2l_search(ids, id->mid);
+  if (x < 1)
+    return /* internal error */ -2;
 
-  if (x < 1) {
-    /* internal error */
-    return -2;
-  }
+  if (x <= ids[0].mid && ids[x].mid == id->mid)
+    return /* duplicate */ -1;
 
-  if (x <= ids[0].mid && ids[x].mid == id->mid) {
-    /* duplicate */
-    return -1;
-  }
+  if (ids[0].mid >= MDB_IDL_UM_MAX)
+    return /* too big */ -2;
 
-  if (ids[0].mid >= MDB_IDL_UM_MAX) {
-    /* too big */
-    return -2;
-
-  } else {
-    /* insert id */
-    ids[0].mid++;
-    for (i = (unsigned)ids[0].mid; i > x; i--)
-      ids[i] = ids[i - 1];
-    ids[x] = *id;
-  }
-
+  /* insert id */
+  ids[0].mid++;
+  for (i = (unsigned)ids[0].mid; i > x; i--)
+    ids[i] = ids[i - 1];
+  ids[x] = *id;
   return 0;
 }
 
