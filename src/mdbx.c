@@ -2437,7 +2437,7 @@ size_t mdbx_txn_id(MDB_txn *txn) {
   return txn->mt_txnid;
 }
 
-/** Export or close DBI handles opened in this txn. */
+/* Export or close DBI handles opened in this txn. */
 static void mdbx_dbis_update(MDB_txn *txn, int keep) {
   MDB_dbi n = txn->mt_numdbs;
   MDB_env *env = txn->mt_env;
@@ -2463,11 +2463,10 @@ static void mdbx_dbis_update(MDB_txn *txn, int keep) {
     env->me_numdbs = n;
 }
 
-/** End a transaction, except successful commit of a nested transaction.
+/* End a transaction, except successful commit of a nested transaction.
  * May be called twice for readonly txns: First reset it, then abort.
  * @param[in] txn the transaction handle to end
- * @param[in] mode why and how to end the transaction
- */
+ * @param[in] mode why and how to end the transaction */
 static int mdbx_txn_end(MDB_txn *txn, unsigned mode) {
   MDB_env *env = txn->mt_env;
   static const char *const names[] = MDB_END_NAMES;
@@ -4717,8 +4716,7 @@ static int mdbx_page_search(MDB_cursor *mc, MDB_val *key, int flags) {
         memcpy(&md_flags, ((char *)data.mv_data + offsetof(MDB_db, md_flags)),
                sizeof(uint16_t));
         /* The txn may not know this DBI, or another process may
-         * have dropped and recreated the DB with other flags.
-         */
+         * have dropped and recreated the DB with other flags. */
         if (unlikely((mc->mc_db->md_flags & PERSISTENT_FLAGS) != md_flags))
           return MDB_INCOMPATIBLE;
         memcpy(mc->mc_db, data.mv_data, sizeof(MDB_db));
@@ -10067,24 +10065,24 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *new_data,
         /* если данные совпадают, то ничего делать не надо */
         goto bailout;
 #if 0 /* LY: исправлено в mdbx_cursor_put(), здесь в качестве памятки */
-			MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
-			if (F_ISSET(leaf->mn_flags, F_DUPDATA)
-					&& mc.mc_xcursor->mx_db.md_entries > 1) {
-				/* Если у ключа больше одного значения, то
-				 * сначала удаляем найденое "старое" значение.
-				 *
-				 * Этого можно не делать, так как MDBX уже
-				 * обучен корректно обрабатывать такие ситуации.
-				 *
-				 * Однако, следует помнить, что в LMDB при
-				 * совпадении размера данных, значение будет
-				 * просто перезаписано с нарушением
-				 * упорядоченности, что сломает поиск. */
-				rc = mdbx_cursor_del(&mc, 0);
-				if (rc != MDB_SUCCESS)
-					goto bailout;
-				flags -= MDB_CURRENT;
-			}
+      MDB_node *leaf = NODEPTR(mc.mc_pg[mc.mc_top], mc.mc_ki[mc.mc_top]);
+      if (F_ISSET(leaf->mn_flags, F_DUPDATA) &&
+          mc.mc_xcursor->mx_db.md_entries > 1) {
+        /* Если у ключа больше одного значения, то
+         * сначала удаляем найденое "старое" значение.
+         *
+         * Этого можно не делать, так как MDBX уже
+         * обучен корректно обрабатывать такие ситуации.
+         *
+         * Однако, следует помнить, что в LMDB при
+         * совпадении размера данных, значение будет
+         * просто перезаписано с нарушением
+         * упорядоченности, что сломает поиск. */
+        rc = mdbx_cursor_del(&mc, 0);
+        if (rc != MDB_SUCCESS)
+          goto bailout;
+        flags -= MDB_CURRENT;
+      }
 #endif
     }
   } else {

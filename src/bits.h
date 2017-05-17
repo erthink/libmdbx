@@ -431,25 +431,20 @@ struct MDB_txn {
   /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
 
-/** @defgroup mt_dbflag	Transaction DB Flags
-*	@ingroup internal
-* @{
-*/
-#define DB_DIRTY 0x01    /**< DB was written in this txn */
-#define DB_STALE 0x02    /**< Named-DB record is older than txnID */
-#define DB_NEW 0x04      /**< Named-DB handle opened in this txn */
-#define DB_VALID 0x08    /**< DB handle is valid, see also #MDB_VALID */
-#define DB_USRVALID 0x10 /**< As #DB_VALID, but not set for #FREE_DBI */
-#define DB_DUPDATA 0x20  /**< DB is #MDB_DUPSORT data */
-  /** @} */
-  /** In write txns, array of cursors for each DB */
+/* Transaction DB Flags */
+#define DB_DIRTY 0x01    /* DB was written in this txn */
+#define DB_STALE 0x02    /* Named-DB record is older than txnID */
+#define DB_NEW 0x04      /* Named-DB handle opened in this txn */
+#define DB_VALID 0x08    /* DB handle is valid, see also #MDB_VALID */
+#define DB_USRVALID 0x10 /* As #DB_VALID, but not set for #FREE_DBI */
+#define DB_DUPDATA 0x20  /* DB is #MDB_DUPSORT data */
+  /* In write txns, array of cursors for each DB */
   MDB_cursor **mt_cursors;
-  /** Array of flags for each DB */
-  unsigned char *mt_dbflags;
-  /**	Number of DB records in use, or 0 when the txn is finished.
-  *	This number only ever increments until the txn finishes; we
-  *	don't decrement it when individual DB handles are closed.
-  */
+  /* Array of flags for each DB */
+  uint8_t *mt_dbflags;
+  /* Number of DB records in use, or 0 when the txn is finished.
+  * This number only ever increments until the txn finishes; we
+  * don't decrement it when individual DB handles are closed. */
   MDB_dbi mt_numdbs;
 
 /** @defgroup mdbx_txn	Transaction Flags
