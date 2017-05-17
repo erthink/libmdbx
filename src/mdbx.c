@@ -1398,8 +1398,9 @@ static __inline MDB_meta *mdbx_env_meta_flipflop(const MDB_env *env,
 }
 
 static __inline int mdbx_meta_lt(const MDB_meta *a, const MDB_meta *b) {
-  return (META_IS_STEADY(a) == META_IS_STEADY(b)) ? a->mm_txnid < b->mm_txnid
-                                                  : META_IS_STEADY(b);
+  if (META_IS_STEADY(a) == META_IS_STEADY(b))
+    return a->mm_txnid < b->mm_txnid;
+  return META_IS_STEADY(b);
 }
 
 /** Find oldest txnid still referenced. */
@@ -3815,6 +3816,39 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
   if (err)
     return err;
 
+  MDB_meta *const head = mdbx_meta_head(env);
+  if (head->mm_txnid != meta->mm_txnid) {
+    mdbx_trace("head->mm_txnid (%" PRIuPTR ") !=  (%" PRIuPTR
+               ") meta->mm_txnid",
+               head->mm_txnid, meta->mm_txnid);
+    if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
+      assert(META_IS_STEADY(meta) && !META_IS_STEADY(head));
+      if (env->me_flags & MDB_RDONLY) {
+        mdbx_trace("exclusive, but read-only, unable recovery/rollback");
+        return MDB_CORRUPTED /* LY: could not recovery/rollback */;
+      }
+
+      /* LY: rollback weak checkpoint */
+      MDB_meta rollback = *head;
+      rollback.mm_txnid = 0;
+      if (rollback.mm_txnid == meta->mm_txnid)
+        rollback = *meta;
+      err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDB_meta),
+                        (uint8_t *)head - (uint8_t *)env->me_map);
+      if (err)
+        return err;
+    } else if (!env->me_lck) {
+      /* LY: without-lck (read-only) mode, so it is imposible that other
+       * process made weak checkpoint. */
+      mdbx_trace("without-lck, unable recovery/rollback");
+      return MDB_CORRUPTED;
+    } else {
+      /* LY: assume just have a collision with other running process,
+       *     or someone make a weak checkpoint */
+      mdbx_trace("assume collision or online weak checkpoint");
+    }
+  }
+
   mdbx_env_setup_limits(env, env->me_psize);
   return rc;
 }
@@ -3872,6 +3906,7 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
   err = mdbx_mmap(&addr, size, true, env->me_lfd);
   if (unlikely(err != MDB_SUCCESS))
     return err;
+  assert(addr != nullptr);
   env->me_lck = addr;
 
 #ifdef MADV_NOHUGEPAGE
