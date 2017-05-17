@@ -18,8 +18,8 @@ static void fflushall() { fflush(nullptr); }
 
 void failure(const char *fmt, ...) {
   va_list ap;
-  fflush(NULL);
   va_start(ap, fmt);
+  fflushall();
   logging::output(logging::failure, fmt, ap);
   va_end(ap);
   fflushall();
@@ -74,7 +74,7 @@ const char *level2str(const loglevel level) {
   }
 }
 
-bool output(loglevel priority, const char *format, ...) {
+bool output(const loglevel priority, const char *format, ...) {
   if (priority < level)
     return false;
 
@@ -85,7 +85,7 @@ bool output(loglevel priority, const char *format, ...) {
   return true;
 }
 
-bool output(loglevel priority, const char *format, va_list ap) {
+bool output(const logging::loglevel priority, const char *format, va_list ap) {
   if (last) {
     putc('\n', last);
     fflush(last);
@@ -112,6 +112,10 @@ bool output(loglevel priority, const char *format, va_list ap) {
           tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
           tm.tm_sec, chrono::fractional2us(now.fractional), osal_getpid(),
           prefix.c_str(), level2str(priority), suffix.c_str());
+
+  va_list ones;
+  if (priority >= error)
+    va_copy(ones, ap);
   vfprintf(last, format, ap);
 
   size_t len = strlen(format);
@@ -135,13 +139,16 @@ bool output(loglevel priority, const char *format, va_list ap) {
     break;
   }
 
-  if (priority >= error && last != stderr) {
-    fprintf(stderr, "[ %05u %-10s %.4s ] %s", osal_getpid(), prefix.c_str(),
-            level2str(priority), suffix.c_str());
-    vfprintf(stderr, format, ap);
-    if (end != '\n')
-      putc('\n', stderr);
-    fflush(stderr);
+  if (priority >= error) {
+    if (last != stderr) {
+      fprintf(stderr, "[ %05u %-10s %.4s ] %s", osal_getpid(), prefix.c_str(),
+              level2str(priority), suffix.c_str());
+      vfprintf(stderr, format, ones);
+      if (end != '\n')
+        putc('\n', stderr);
+      fflush(stderr);
+    }
+    va_end(ones);
   }
 
   return true;
@@ -258,6 +265,10 @@ void log_error(const char *msg, ...) {
     logging::last = nullptr;
 }
 
-void log_touble(const char *where, const char *what, int errnum) {
+void log_trouble(const char *where, const char *what, int errnum) {
   log_error("%s: %s %s", where, what, test_strerror(errnum));
+}
+
+bool log_enabled(const logging::loglevel priority) {
+  return (priority >= logging::level);
 }
