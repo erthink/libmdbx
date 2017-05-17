@@ -718,14 +718,14 @@ static const char *__mdbx_strerr(int errnum) {
       "MDB_KEYEXIST: Key/data pair already exists",
       "MDB_NOTFOUND: No matching key/data pair found",
       "MDB_PAGE_NOTFOUND: Requested page not found",
-      "MDB_CORRUPTED: Located page was wrong data",
+      "MDB_CORRUPTED: Database is corrupted",
       "MDB_PANIC: Update of meta page failed or environment had fatal error",
       "MDB_VERSION_MISMATCH: DB version mismatch libmdbx",
       "MDB_INVALID: File is not an LMDB file",
       "MDB_MAP_FULL: Environment mapsize limit reached",
       "MDB_DBS_FULL: Too may DBI (maxdbs reached)",
       "MDB_READERS_FULL: Too many readers (maxreaders reached)",
-      NULL /* -30789 unused in MDBX */,
+      NULL /* MDB_TLS_FULL (-30789): unused in MDBX */,
       "MDB_TXN_FULL: Transaction has too many dirty pages - transaction too "
       "big",
       "MDB_CURSOR_FULL: Internal error - cursor stack limit reached",
@@ -752,6 +752,9 @@ static const char *__mdbx_strerr(int errnum) {
     return "MDBX_EMULTIVAL: Unable to update multi-value for the given key";
   case MDBX_EBADSIGN:
     return "MDBX_EBADSIGN: Wrong signature of a runtime object(s)";
+  case MDBX_WANNA_RECOVERY:
+    return "MDBX_WANNA_RECOVERY: Database should be recovered, but this could "
+           "be done in a read-only mode";
   default:
     return NULL;
   }
@@ -3818,14 +3821,13 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
 
   MDB_meta *const head = mdbx_meta_head(env);
   if (head->mm_txnid != meta->mm_txnid) {
-    mdbx_trace("head->mm_txnid (%" PRIuPTR ") !=  (%" PRIuPTR
-               ") meta->mm_txnid",
+    mdbx_trace("head->mm_txnid (%" PRIuPTR ") != (%" PRIuPTR ") meta->mm_txnid",
                head->mm_txnid, meta->mm_txnid);
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
       assert(META_IS_STEADY(meta) && !META_IS_STEADY(head));
       if (env->me_flags & MDB_RDONLY) {
         mdbx_trace("exclusive, but read-only, unable recovery/rollback");
-        return MDB_CORRUPTED /* LY: could not recovery/rollback */;
+        return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
       /* LY: rollback weak checkpoint */
@@ -3841,7 +3843,7 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
       /* LY: without-lck (read-only) mode, so it is imposible that other
        * process made weak checkpoint. */
       mdbx_trace("without-lck, unable recovery/rollback");
-      return MDB_CORRUPTED;
+      return MDBX_WANNA_RECOVERY;
     } else {
       /* LY: assume just have a collision with other running process,
        *     or someone make a weak checkpoint */

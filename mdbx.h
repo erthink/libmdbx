@@ -336,6 +336,10 @@ typedef enum MDB_cursor_op {
  *  - ABI version mismatch (rare case); */
 #define MDBX_EBADSIGN (-30420)
 
+/* Database should be recovered, but this could be done automatically
+ * right now (e.g. in readonly mode and so forth). */
+#define MDBX_WANNA_RECOVERY (-30419)
+
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
   unsigned ms_psize;        /* Size of a database page.

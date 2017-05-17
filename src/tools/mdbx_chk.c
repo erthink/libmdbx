@@ -691,6 +691,8 @@ int main(int argc, char *argv[]) {
   rc = mdbx_env_open_ex(env, envname, envflags, 0664, &exclusive);
   if (rc) {
     error("mdbx_env_open failed, error %d %s\n", rc, mdbx_strerror(rc));
+    if (rc == MDBX_WANNA_RECOVERY && (envflags & MDB_RDONLY))
+      print("Please run %s in the read-write mode (with '-w' option).\n", prog);
     goto bailout;
   }
   if (verbose)
