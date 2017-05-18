@@ -3419,7 +3419,7 @@ static int mdbx_env_sync_locked(MDB_env *env, unsigned flags,
 
   mdbx_assert(env, pending != METAPAGE_1(env) && pending != METAPAGE_2(env));
   mdbx_assert(env, (env->me_flags & (MDB_RDONLY | MDB_FATAL_ERROR)) == 0);
-  mdbx_assert(env, META_IS_WEAK(head) || env->me_sync_pending != 0 ||
+  mdbx_assert(env, !META_IS_STEADY(head) || env->me_sync_pending != 0 ||
                        env->me_mapsize != prev_mapsize);
 
   pending->mm_mapsize = env->me_mapsize;
@@ -3812,11 +3812,10 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
     env->me_mapsize = meta->mm_mapsize;
   else {
     /* Make sure mapsize >= committed data size.  Even when using
-     * mm_mapsize, which could be broken in old files (ITS#7789).
-     */
-    size_t minsize = (meta->mm_last_pg + 1) * meta->mm_psize;
-    if (env->me_mapsize < minsize)
-      env->me_mapsize = minsize;
+     * mm_mapsize, which could be broken in old files (ITS#7789). */
+    size_t usedsize = (meta->mm_last_pg + 1) * meta->mm_psize;
+    if (env->me_mapsize < usedsize)
+      env->me_mapsize = usedsize;
 
     meta->mm_mapsize = env->me_mapsize;
   }
@@ -3831,10 +3830,25 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
     err = mdbx_ftruncate(env->me_fd, env->me_mapsize);
     if (unlikely(err != MDB_SUCCESS))
       return err;
+  } else {
+    off_t size;
+    err = mdbx_filesize(env->me_fd, &size);
+    if (unlikely(err != MDB_SUCCESS))
+      return err;
+
+    if (size != (off_t)env->me_mapsize) {
+      mdbx_trace("filesize mismatch");
+      if ((env->me_flags & MDB_RDONLY) ||
+          lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
+        return MDBX_WANNA_RECOVERY /* LY: could not mdbx_ftruncate */;
+
+      err = mdbx_ftruncate(env->me_fd, env->me_mapsize);
+      if (unlikely(err != MDB_SUCCESS))
+        return err;
+    }
   }
 
-  const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
-  err = mdbx_env_map(env, NULL, usedsize);
+  err = mdbx_env_map(env, NULL, env->me_mapsize);
   if (err)
     return err;
 
@@ -3878,7 +3892,6 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
 
 /* Open and/or initialize the lock region for the environment. */
 static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
-  off_t size;
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd == INVALID_HANDLE_VALUE);
 
@@ -3899,6 +3912,7 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
   mdbx_debug("lck-setup: %s ",
              (rc == MDBX_RESULT_TRUE) ? "exclusive" : "shared");
 
+  off_t size;
   err = mdbx_filesize(env->me_lfd, &size);
   if (unlikely(err != MDB_SUCCESS))
     return err;
@@ -5751,6 +5765,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     if (unlikely(rc2 = mdbx_page_new(mc, P_LEAF, 1, &np))) {
       return rc2;
     }
+    assert(np->mp_flags & P_LEAF);
     mdbx_cursor_push(mc, np);
     mc->mc_db->md_root = np->mp_pgno;
     mc->mc_db->md_depth++;
@@ -6292,7 +6307,7 @@ static int mdbx_page_new(MDB_cursor *mc, uint32_t flags, int num,
 
   if (unlikely((rc = mdbx_page_alloc(mc, num, &np, MDBX_ALLOC_ALL))))
     return rc;
-  mdbx_debug("allocated new mpage %" PRIuPTR ", page size %u", np->mp_pgno,
+  mdbx_debug("allocated new page #%" PRIuPTR ", size %u", np->mp_pgno,
              mc->mc_txn->mt_env->me_psize);
   np->mp_flags = flags | P_DIRTY;
   np->mp_lower = (PAGEHDRSZ - PAGEBASE);
@@ -6308,7 +6323,7 @@ static int mdbx_page_new(MDB_cursor *mc, uint32_t flags, int num,
   }
   *mp = np;
 
-  return 0;
+  return MDB_SUCCESS;
 }
 
 /** Calculate the size of a leaf node.
@@ -8908,7 +8923,7 @@ int mdbx_dbi_open_ex(MDB_txn *txn, const char *table_name, unsigned user_flags,
   txn->mt_dbflags[slot] = dbflag;
   txn->mt_dbiseqs[slot] = (txn->mt_env->me_dbiseqs[slot] += 1);
 
-  memcpy(&txn->mt_dbs[slot], data.mv_data, sizeof(MDB_db));
+  txn->mt_dbs[slot] = *(MDB_db *)data.mv_data;
   rc = mdbx_dbi_bind(txn, slot, user_flags, keycmp, datacmp);
   if (unlikely(rc != MDB_SUCCESS)) {
     assert((dbflag & DB_DIRTY) == 0);
