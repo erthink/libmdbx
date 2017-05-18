@@ -3364,49 +3364,45 @@ static int __cold mdbx_read_header(MDB_env *env, MDB_meta *meta) {
 }
 
 /* Fill in most of the zeroed MDB_meta for an empty database environment */
-static void __cold mdbx_env_init_meta0(MDB_env *env, MDB_meta *meta) {
-  meta->mm_magic = MDB_MAGIC;
-  meta->mm_version = MDB_DATA_VERSION;
-  meta->mm_mapsize = env->me_mapsize;
-  meta->mm_psize = env->me_psize;
-  meta->mm_last_pg = NUM_METAS - 1;
-  meta->mm_flags = env->me_flags & 0xffff;
-  meta->mm_flags |= MDB_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
-  meta->mm_dbs[FREE_DBI].md_root = P_INVALID;
-  meta->mm_dbs[MAIN_DBI].md_root = P_INVALID;
-  meta->mm_datasync_sign = mdbx_meta_sign(meta);
+static void __cold mdbx_meta_model(const MDB_env *env, MDB_meta *model) {
+  memset(model, 0, sizeof(*model));
+  model->mm_magic = MDB_MAGIC;
+  model->mm_version = MDB_DATA_VERSION;
+  model->mm_mapsize = env->me_mapsize;
+  model->mm_psize = env->me_psize;
+  model->mm_last_pg = NUM_METAS - 1;
+  model->mm_flags = (uint16_t)env->me_flags;
+  model->mm_flags |= MDB_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
+  model->mm_dbs[FREE_DBI].md_root = P_INVALID;
+  model->mm_dbs[MAIN_DBI].md_root = P_INVALID;
+  model->mm_datasync_sign = mdbx_meta_sign(model);
 }
 
-/** Write the environment parameters of a freshly created DB environment.
- * @param[in] env the environment handle
- * @param[in] meta the #MDB_meta to write
- * @return 0 on success, non-zero on failure.
- */
-static int __cold mdbx_env_init_meta(MDB_env *env, MDB_meta *meta) {
-  MDB_page *p, *q;
-  int rc;
-  unsigned psize;
-
-  mdbx_debug("writing new meta page");
+/* Write the environment parameters of a freshly created DB environment. */
+static int __cold mdbx_env_init_metas(const MDB_env *env, MDB_meta *model) {
+  mdbx_debug("writing new meta pages");
   assert(offsetof(MDB_metabuf, mb_metabuf.mm_meta) == PAGEHDRSZ);
 
-  psize = env->me_psize;
-
-  p = calloc(NUM_METAS, psize);
-  if (!p)
+  unsigned page_size = env->me_psize;
+  MDB_page *first = calloc(NUM_METAS, page_size);
+  if (!first)
     return MDBX_ENOMEM;
-  p->mp_pgno = 0;
-  p->mp_flags = P_META;
-  *(MDB_meta *)PAGEDATA(p) = *meta;
+  first->mp_pgno = 0;
+  first->mp_flags = P_META;
+  MDB_meta *first_meta = (MDB_meta *)PAGEDATA(first);
 
-  q = (MDB_page *)((char *)p + psize);
-  q->mp_pgno = 1;
-  q->mp_flags = P_META;
-  *(MDB_meta *)PAGEDATA(q) = *meta;
+  MDB_page *second = (MDB_page *)((char *)first + page_size);
+  second->mp_pgno = 1;
+  second->mp_flags = P_META;
+  MDB_meta *second_meta = (MDB_meta *)PAGEDATA(second);
 
-  rc = mdbx_pwrite(env->me_fd, p, psize * NUM_METAS, 0);
+  *first_meta = *model;
+  model->mm_txnid += 1;
+  *second_meta = *model;
 
-  free(p);
+  int rc = mdbx_pwrite(env->me_fd, first, page_size * NUM_METAS, 0);
+
+  free(first);
   return rc;
 }
 
@@ -3801,8 +3797,7 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
     env->me_psize = env->me_os_psize;
     if (env->me_psize > MAX_PAGESIZE)
       env->me_psize = MAX_PAGESIZE;
-    memset(meta, 0, sizeof(*meta));
-    mdbx_env_init_meta0(env, meta);
+    mdbx_meta_model(env, meta);
     meta->mm_mapsize = DEFAULT_MAPSIZE;
   } else {
     env->me_psize = meta->mm_psize;
@@ -3825,7 +3820,7 @@ static int __cold mdbx_setup_dxb(MDB_env *env, MDB_meta *meta, int lck_rc) {
   if (rc == MDBX_RESULT_TRUE) {
     /* mdbx_env_map() may grow the datafile.  Write the metapages
      * first, so the file will be valid if initialization fails. */
-    err = mdbx_env_init_meta(env, meta);
+    err = mdbx_env_init_metas(env, meta);
     if (unlikely(err != MDB_SUCCESS))
       return err;
 
@@ -8449,7 +8444,7 @@ static int __cold mdbx_env_copyfd1(MDB_env *env, mdbx_filehandle_t fd) {
   mp->mp_pgno = 0;
   mp->mp_flags = P_META;
   mm = (MDB_meta *)PAGEDATA(mp);
-  mdbx_env_init_meta0(env, mm);
+  mdbx_meta_model(env, mm);
 
   mp = (MDB_page *)(my.mc_wbuf[0] + env->me_psize);
   mp->mp_pgno = 1;
