@@ -3614,25 +3614,23 @@ static void __cold mdbx_env_setup_limits(MDB_env *env, size_t pagesize) {
   assert(env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
 }
 
-int __cold mdbx_env_create(MDB_env **env) {
-  MDB_env *e;
-
-  e = calloc(1, sizeof(MDB_env));
-  if (!e)
+int __cold mdbx_env_create(MDB_env **penv) {
+  MDB_env *env = calloc(1, sizeof(MDB_env));
+  if (!env)
     return MDBX_ENOMEM;
 
-  e->me_maxreaders = DEFAULT_READERS;
-  e->me_maxdbs = e->me_numdbs = CORE_DBS;
-  e->me_fd = INVALID_HANDLE_VALUE;
-  e->me_lfd = INVALID_HANDLE_VALUE;
-  e->me_pid = mdbx_getpid();
-  mdbx_env_setup_limits(e, e->me_os_psize = mdbx_syspagesize());
-  if (!is_power2(e->me_os_psize))
+  env->me_maxreaders = DEFAULT_READERS;
+  env->me_maxdbs = env->me_numdbs = CORE_DBS;
+  env->me_fd = INVALID_HANDLE_VALUE;
+  env->me_lfd = INVALID_HANDLE_VALUE;
+  env->me_pid = mdbx_getpid();
+  mdbx_env_setup_limits(env, env->me_os_psize = mdbx_syspagesize());
+  if (!is_power2(env->me_os_psize))
     return MDB_INCOMPATIBLE;
-  VALGRIND_CREATE_MEMPOOL(e, 0, 0);
-  e->me_signature = MDBX_ME_SIGNATURE;
-  *env = e;
+  VALGRIND_CREATE_MEMPOOL(env, 0, 0);
+  env->me_signature = MDBX_ME_SIGNATURE;
 
+  *penv = env;
   return MDB_SUCCESS;
 }
 

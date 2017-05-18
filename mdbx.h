@@ -386,7 +386,7 @@ LIBMDBX_API const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
  * [out] env The address where the new handle will be stored
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_create(MDB_env **env);
+LIBMDBX_API int mdbx_env_create(MDB_env **penv);
 
 /* Open an environment handle.
  *
