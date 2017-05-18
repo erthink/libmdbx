@@ -68,6 +68,7 @@ typedef SSIZE_T ssize_t;
 #define THREAD_RESULT DWORD
 #else
 #include <pthread.h>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>

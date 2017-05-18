@@ -74,6 +74,50 @@ static int mdbx_lck_op(mdbx_filehandle_t fd, int op, int lck, off_t offset,
   }
 }
 
+static __inline int mdbx_lck_exclusive(int lfd) {
+  assert(lfd != INVALID_HANDLE_VALUE);
+  if (flock(lfd, LOCK_EX | LOCK_NB))
+    return errno;
+  return mdbx_lck_op(lfd, F_SETLK, F_WRLCK, 0, 1);
+}
+
+static __inline int mdbx_lck_shared(int lfd) {
+  assert(lfd != INVALID_HANDLE_VALUE);
+  while (flock(lfd, LOCK_SH)) {
+    int rc = errno;
+    if (rc != EINTR)
+      return rc;
+  }
+  return mdbx_lck_op(lfd, F_SETLKW, F_RDLCK, 0, 1);
+}
+
+int mdbx_lck_downgrade(MDB_env *env) { return mdbx_lck_shared(env->me_lfd); }
+
+int mdbx_rpid_set(MDB_env *env) {
+  return mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, env->me_pid, 1);
+}
+
+int mdbx_rpid_clear(MDB_env *env) {
+  return mdbx_lck_op(env->me_lfd, F_SETLKW, F_UNLCK, env->me_pid, 1);
+}
+
+/* Checks reader by pid.
+ *
+ * Returns:
+ *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
+ *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
+ *   or otherwise the errcode. */
+int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid) {
+  int rc = mdbx_lck_op(env->me_lfd, F_GETLK, F_WRLCK, pid, 1);
+  if (rc == 0)
+    return MDBX_RESULT_FALSE;
+  if (rc < 0 && -rc == pid)
+    return MDBX_RESULT_TRUE;
+  return rc;
+}
+
+/*---------------------------------------------------------------------------*/
+
 static int mdbx_mutex_failed(MDB_env *env, pthread_mutex_t *mutex, int rc);
 
 int mdbx_lck_init(MDB_env *env) {
@@ -117,8 +161,7 @@ bailout:
 void mdbx_lck_destroy(MDB_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* try get exclusive access */
-    if (env->me_lck &&
-        mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, 0, LCK_WHOLE) == 0) {
+    if (env->me_lck && mdbx_lck_exclusive(env->me_lfd) == 0) {
       /* got exclusive, drown mutexes */
       int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
       if (rc == 0)
@@ -169,20 +212,20 @@ static int internal_seize_lck(int lfd) {
   assert(lfd != INVALID_HANDLE_VALUE);
 
   /* try exclusive access */
-  int rc = mdbx_lck_op(lfd, F_SETLK, F_WRLCK, 0, 1);
+  int rc = mdbx_lck_exclusive(lfd);
   if (rc == 0)
     /* got exclusive */
     return MDBX_RESULT_TRUE;
-  if (rc == EAGAIN || rc == EACCES || rc == EBUSY) {
+  if (rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK) {
     /* get shared access */
-    rc = mdbx_lck_op(lfd, F_SETLKW, F_RDLCK, 0, 1);
+    rc = mdbx_lck_shared(lfd);
     if (rc == 0) {
       /* got shared, try exclusive again */
-      rc = mdbx_lck_op(lfd, F_SETLK, F_WRLCK, 0, 1);
+      rc = mdbx_lck_exclusive(lfd);
       if (rc == 0)
         /* now got exclusive */
         return MDBX_RESULT_TRUE;
-      if (rc == EAGAIN || rc == EACCES || rc == EBUSY)
+      if (rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK)
         /* unable exclusive, but stay shared */
         return MDBX_RESULT_FALSE;
     }
@@ -215,33 +258,6 @@ int mdbx_lck_seize(MDB_env *env) {
   }
 
   return internal_seize_lck(env->me_lfd);
-}
-
-int mdbx_lck_downgrade(MDB_env *env) {
-  return mdbx_lck_op(env->me_lfd, F_SETLK, F_RDLCK, 0, 1);
-}
-
-int mdbx_rpid_set(MDB_env *env) {
-  return mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, env->me_pid, 1);
-}
-
-int mdbx_rpid_clear(MDB_env *env) {
-  return mdbx_lck_op(env->me_lfd, F_SETLKW, F_UNLCK, env->me_pid, 1);
-}
-
-/* Checks reader by pid.
- *
- * Returns:
- *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
- *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
- *   or otherwise the errcode. */
-int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid) {
-  int rc = mdbx_lck_op(env->me_lfd, F_GETLK, F_WRLCK, pid, 1);
-  if (rc == 0)
-    return MDBX_RESULT_FALSE;
-  if (rc < 0 && -rc == pid)
-    return MDBX_RESULT_TRUE;
-  return rc;
 }
 
 #if !__GLIBC_PREREQ(2, 12) && !defined(pthread_mutex_consistent)
