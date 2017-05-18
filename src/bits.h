@@ -680,13 +680,13 @@ void mdbx_panic(const char *fmt, ...)
   unlikely(mdbx_runtime_flags &(type & (MDBX_DBG_TRACE | MDBX_DBG_EXTRA)))
 
 #else
-#ifndef NDEBUG
-#define mdbx_debug_enabled(type) (1)
-#else
 #define mdbx_debug_enabled(type) (0)
-#endif /* NDEBUG */
 #define mdbx_audit_enabled() (0)
+#ifndef NDEBUG
+#define mdbx_assert_enabled() (1)
+#else
 #define mdbx_assert_enabled() (0)
+#endif /* NDEBUG */
 #endif /* MDB_DEBUG */
 
 #define mdbx_print(fmt, ...)                                                   \
