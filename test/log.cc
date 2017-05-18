@@ -114,6 +114,7 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
           prefix.c_str(), level2str(priority), suffix.c_str());
 
   va_list ones;
+  memset(&ones, 0, sizeof(ones)) /* zap MSVC and other stupid compilers */;
   if (priority >= error)
     va_copy(ones, ap);
   vfprintf(last, format, ap);
