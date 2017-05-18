@@ -162,7 +162,7 @@ void mdbx_lck_destroy(MDB_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* try get exclusive access */
     if (env->me_lck && mdbx_lck_exclusive(env->me_lfd) == 0) {
-      /* got exclusive, drown mutexes */
+      mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
       int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
       if (rc == 0)
         rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
@@ -188,22 +188,31 @@ static int mdbx_robust_unlock(MDB_env *env, pthread_mutex_t *mutex) {
 }
 
 int mdbx_rdt_lock(MDB_env *env) {
-  return mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
+  mdbx_trace(">>");
+  int rc = mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
+  mdbx_trace("<< rc %d", rc);
+  return rc;
 }
 
 void mdbx_rdt_unlock(MDB_env *env) {
+  mdbx_trace(">>");
   int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rmutex);
+  mdbx_trace("<< rc %d", rc);
   if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
 
 int mdbx_txn_lock(MDB_env *env) {
+  mdbx_trace(">>");
   int rc = mdbx_robust_lock(env, &env->me_lck->mti_wmutex);
+  mdbx_trace("<< rc %d", rc);
   return MDBX_IS_ERROR(rc) ? rc : MDB_SUCCESS;
 }
 
 void mdbx_txn_unlock(MDB_env *env) {
+  mdbx_trace(">>");
   int rc = mdbx_robust_unlock(env, &env->me_lck->mti_wmutex);
+  mdbx_trace("<< rc %d", rc);
   if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
@@ -296,7 +305,7 @@ static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
   }
 #endif /* MDB_USE_ROBUST */
 
-  mdbx_error("lock mutex failed, %s", mdbx_strerror(rc));
+  mdbx_error("mutex (un)lock failed, %s", mdbx_strerror(rc));
   if (rc != EDEADLK) {
     env->me_flags |= MDB_FATAL_ERROR;
     rc = MDB_PANIC;

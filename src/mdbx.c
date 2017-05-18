@@ -3955,7 +3955,7 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
 
   if (rc == MDBX_RESULT_TRUE) {
     /* LY: exlcusive mode, init lck */
-    memset(env->me_lck, 0, sizeof(MDBX_lockinfo));
+    memset(env->me_lck, 0, size);
     err = mdbx_lck_init(env);
     if (err)
       return err;
