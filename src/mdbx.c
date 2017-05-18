@@ -2146,15 +2146,17 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
         mdbx_assert(env, r->mr_tid == mdbx_thread_self());
       }
     } else {
-      mdbx_assert(env, env->me_flags & MDB_NOTLS);
+      mdbx_assert(env, !env->me_lck || (env->me_flags & MDB_NOTLS));
     }
 
     if (likely(r)) {
       if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != ~(txnid_t)0))
         return MDB_BAD_RSLOT;
-    } else {
+    } else if (env->me_lck) {
       mdbx_pid_t pid = env->me_pid;
       mdbx_tid_t tid = mdbx_thread_self();
+      mdbx_assert(env, env->me_lck->mti_magic == MDB_MAGIC);
+      mdbx_assert(env, env->me_lck->mti_format == MDB_LOCK_FORMAT);
 
       rc = mdbx_rdt_lock(env);
       if (unlikely(MDBX_IS_ERROR(rc)))
@@ -2212,8 +2214,10 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
       mdbx_jitter4testing(false);
       const txnid_t snap = meta->mm_txnid;
       mdbx_jitter4testing(false);
-      r->mr_txnid = snap;
-      mdbx_jitter4testing(false);
+      if (r) {
+        r->mr_txnid = snap;
+        mdbx_jitter4testing(false);
+      }
       mdbx_coherent_barrier();
       mdbx_jitter4testing(true);
 
@@ -4097,7 +4101,7 @@ int __cold mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
     }
   }
 
-  if ((env->me_flags & MDB_NOTLS) == 0) {
+  if (env->me_lck && (env->me_flags & MDB_NOTLS) == 0) {
     rc = mdbx_rthc_alloc(&env->me_txkey, &env->me_lck->mti_readers[0],
                          &env->me_lck->mti_readers[env->me_maxreaders]);
     if (unlikely(rc != MDB_SUCCESS))
