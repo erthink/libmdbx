@@ -1317,24 +1317,28 @@ LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
 /* Store by cursor.
  *
  * This function stores key/data pairs into the database.
+ *
  * The cursor is positioned at the new item, or on failure usually near it.
  * Note: Earlier documentation incorrectly said errors would leave the
  * state of the cursor unchanged.
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- * [in] key The key operated on.
- * [in] data The data operated on.
- * [in] flags Options for this operation. This parameter
- * must be set to 0 or one of the values described here.
- *  - MDB_CURRENT - replace the item at the current cursor position.
- *    The key parameter must still be provided, and must match
- *it.
- *    If using sorted duplicates (MDB_DUPSORT) the data item must
- *still
- *    sort into the same place. This is intended to be used when the
- *    new data is the same size as the old. Otherwise it will simply
- *    perform a delete of the old record followed by an insert.
- *  - MDB_NODUPDATA - enter the new key/data pair only if it does not
- *    already appear in the database. This flag may only be
+ *
+ * [in] cursor  A cursor handle returned by mdbx_cursor_open()
+ * [in] key     The key operated on.
+ * [in] data    The data operated on.
+ * [in] flags   Options for this operation. This parameter
+ *              must be set to 0 or one of the values described here.
+ *
+ *  - MDB_CURRENT   - replace the item at the current cursor position. The
+ *                    key parameter must still be provided, and must match it.
+ *
+ *                    If using sorted duplicates (MDB_DUPSORT) the data item
+ *                    must still sort into the same place. This is intended to
+ *                    be used when the new data is the same size as the old.
+ *                    Otherwise it will simply perform a delete of the old
+ *                    record followed by an insert.
+ *
+ *  - MDB_NODUPDATA - enter the new key/data pair only if it does not already
+ *                  appear in the database. This flag may only be
  *specified
  *    if the database was opened with MDB_DUPSORT. The function
  *will
@@ -1380,6 +1384,7 @@ LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
+ *  - MDBX_EKEYMISMATCH
  *  - MDB_MAP_FULL - the database is full, see mdbx_env_set_mapsize().
  *  - MDB_TXN_FULL - the transaction has too many dirty pages.
  *  - EACCES - an attempt was made to write in a read-only transaction.
