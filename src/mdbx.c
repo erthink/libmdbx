@@ -8448,7 +8448,7 @@ done:
 }
 
 /** Copy environment with compaction. */
-static int __cold mdbx_env_copyfd1(MDB_env *env, mdbx_filehandle_t fd) {
+static int __cold mdbx_env_compact(MDB_env *env, mdbx_filehandle_t fd) {
   MDB_meta *mm;
   MDB_page *mp;
   mdbx_copy my;
@@ -8548,7 +8548,7 @@ done2:
 }
 
 /** Copy environment as-is. */
-static int __cold mdbx_env_copyfd0(MDB_env *env, mdbx_filehandle_t fd) {
+static int __cold mdbx_env_copy_asis(MDB_env *env, mdbx_filehandle_t fd) {
   MDB_txn *txn = NULL;
   int rc;
 
@@ -8585,19 +8585,15 @@ bailout:
   return rc;
 }
 
-int __cold mdbx_env_copyfd2(MDB_env *env, mdbx_filehandle_t fd,
+int __cold mdbx_env_copy2fd(MDB_env *env, mdbx_filehandle_t fd,
                             unsigned flags) {
   if (flags & MDB_CP_COMPACT)
-    return mdbx_env_copyfd1(env, fd);
+    return mdbx_env_compact(env, fd);
   else
-    return mdbx_env_copyfd0(env, fd);
+    return mdbx_env_copy_asis(env, fd);
 }
 
-int __cold mdbx_env_copyfd(MDB_env *env, mdbx_filehandle_t fd) {
-  return mdbx_env_copyfd2(env, fd, 0);
-}
-
-int __cold mdbx_env_copy2(MDB_env *env, const char *path, unsigned flags) {
+int __cold mdbx_env_copy(MDB_env *env, const char *path, unsigned flags) {
   int rc, len;
   char *lck_pathname;
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
@@ -8627,7 +8623,7 @@ int __cold mdbx_env_copy2(MDB_env *env, const char *path, unsigned flags) {
         (void)fcntl(newfd, F_SETFL, rc | O_DIRECT);
 #endif
     }
-    rc = mdbx_env_copyfd2(env, newfd, flags);
+    rc = mdbx_env_copy2fd(env, newfd, flags);
   }
 
   if (!(env->me_flags & MDB_NOSUBDIR))
@@ -8640,10 +8636,6 @@ int __cold mdbx_env_copy2(MDB_env *env, const char *path, unsigned flags) {
   }
 
   return rc;
-}
-
-int __cold mdbx_env_copy(MDB_env *env, const char *path) {
-  return mdbx_env_copy2(env, path, 0);
 }
 
 int __cold mdbx_env_set_flags(MDB_env *env, unsigned flags, int onoff) {

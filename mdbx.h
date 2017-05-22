@@ -563,37 +563,6 @@ LIBMDBX_API int mdbx_env_open(MDB_env *env, const char *path, unsigned flags,
 LIBMDBX_API int mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
                                  mode_t mode, int *exclusive);
 
-/* Copy an LMDB environment to the specified path.
- *
- * This function may be used to make a backup of an existing environment.
- * No lockfile is created, since it gets recreated at need.
- * Note: This call can trigger significant file size growth if run in
- * parallel with write transactions, because it employs a read-only
- * transaction. See long-lived transactions under caveats_sec.
- * [in] env An environment handle returned by mdbx_env_create(). It
- * must have already been opened successfully.
- * [in] path The directory in which the copy will reside. This
- * directory must already exist and be writable but must otherwise be
- * empty.
- *
- * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copy(MDB_env *env, const char *path);
-
-/* Copy an LMDB environment to the specified file descriptor.
- *
- * This function may be used to make a backup of an existing environment.
- * No lockfile is created, since it gets recreated at need.
- * Note: This call can trigger significant file size growth if run in
- * parallel with write transactions, because it employs a read-only
- * transaction. See long-lived transactions under caveats_sec.
- * [in] env An environment handle returned by mdbx_env_create(). It
- * must have already been opened successfully.
- * [in] fd The filedescriptor to write the copy to. It must
- * have already been opened for Write access.
- *
- * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copyfd(MDB_env *env, mdbx_filehandle_t fd);
-
 /* Copy an LMDB environment to the specified path, with options.
  *
  * This function may be used to make a backup of an existing environment.
@@ -617,14 +586,14 @@ LIBMDBX_API int mdbx_env_copyfd(MDB_env *env, mdbx_filehandle_t fd);
  *leak.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copy2(MDB_env *env, const char *path, unsigned flags);
+LIBMDBX_API int mdbx_env_copy(MDB_env *env, const char *path, unsigned flags);
 
 /* Copy an LMDB environment to the specified file descriptor,
  * with options.
  *
  * This function may be used to make a backup of an existing environment.
  * No lockfile is created, since it gets recreated at need. See
- * mdbx_env_copy2() for further details.
+ * mdbx_env_copy() for further details.
  * Note: This call can trigger significant file size growth if run in
  * parallel with write transactions, because it employs a read-only
  * transaction. See long-lived transactions under caveats_sec.
@@ -633,10 +602,10 @@ LIBMDBX_API int mdbx_env_copy2(MDB_env *env, const char *path, unsigned flags);
  * [in] fd The filedescriptor to write the copy to. It must
  * have already been opened for Write access.
  * [in] flags Special options for this operation.
- * See mdbx_env_copy2() for options.
+ * See mdbx_env_copy() for options.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copyfd2(MDB_env *env, mdbx_filehandle_t fd,
+LIBMDBX_API int mdbx_env_copy2fd(MDB_env *env, mdbx_filehandle_t fd,
                                  unsigned flags);
 
 /* Return statistics about the LMDB environment.

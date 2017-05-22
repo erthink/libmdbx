@@ -63,9 +63,9 @@ int main(int argc, char *argv[]) {
   if (rc == MDB_SUCCESS) {
     act = "copying";
     if (argc == 2)
-      rc = mdbx_env_copyfd2(env, STDOUT_FILENO, cpflags);
+      rc = mdbx_env_copy2fd(env, STDOUT_FILENO, cpflags);
     else
-      rc = mdbx_env_copy2(env, argv[2], cpflags);
+      rc = mdbx_env_copy(env, argv[2], cpflags);
   }
   if (rc)
     fprintf(stderr, "%s: %s failed, error %d (%s)\n", progname, act, rc,
