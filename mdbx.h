@@ -43,8 +43,7 @@
  * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- */
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
 
 #pragma once
 /* *INDENT-OFF* */
@@ -66,17 +65,17 @@
 extern "C" {
 #endif
 
-/** Library major version */
+/* Library major version */
 #define MDBX_VERSION_MAJOR 0
-/** Library minor version */
+/* Library minor version */
 #define MDBX_VERSION_MINOR 2
-/** Library patch version */
+/* Library patch version */
 #define MDBX_VERSION_PATCH 0
 
-/** Combine args a,b,c into a single integer for easy version comparisons */
+/* Combine args a,b,c into a single integer for easy version comparisons */
 #define MDB_VERINT(a, b, c) (((a) << 24) | ((b) << 16) | (c))
 
-/** The full library version as a single integer */
+/* The full library version as a single integer */
 #define MDBX_VERSION_FULL                                                      \
   MDB_VERINT(MDBX_VERSION_MAJOR, MDBX_VERSION_MINOR, MDBX_VERSION_PATCH)
 
@@ -360,6 +359,7 @@ typedef struct MDBX_envinfo {
  * [out] major if non-NULL, the library major version number is copied here
  * [out] minor if non-NULL, the library minor version number is copied here
  * [out] patch if non-NULL, the library patch version number is copied here
+ *
  * Returns "version string" The library version as a string */
 LIBMDBX_API const char *mdbx_version(int *major, int *minor, int *patch);
 
@@ -395,6 +395,7 @@ LIBMDBX_API int mdbx_env_create(MDB_env **penv);
  *
  * If this function fails, mdbx_env_close() must be called to discard
  * the MDB_env handle.
+ *
  * [in] env   An environment handle returned by mdbx_env_create()
  * [in] path  The directory in which the database files reside.
  *            This directory must already exist and be writable.
@@ -424,140 +425,108 @@ LIBMDBX_API int mdbx_env_create(MDB_env **penv);
  *      Incompatible with nested transactions.
  *      Do not mix processes with and without MDB_WRITEMAP on the same
  *      environment.  This can defeat durability (mdbx_env_sync etc).
+ *
  *  - MDB_NOMETASYNC
  *      Flush system buffers to disk only once per transaction, omit the
- *      metadata flush. Defer that until the system flushes files to
- *disk,
- *    or next non-MDB_RDONLY commit or mdbx_env_sync(). This
- *optimization
- *    maintains database integrity, but a system crash may undo the
- *last
- *    committed transaction. I.e. it preserves the ACI (atomicity,
- *    consistency, isolation) but not D (durability) database
- *property.
- *    This flag may be changed at any time using
- *mdbx_env_set_flags().
+ *      metadata flush. Defer that until the system flushes files to disk,
+ *      or next non-MDB_RDONLY commit or mdbx_env_sync(). This optimization
+ *      maintains database integrity, but a system crash may undo the last
+ *      committed transaction. I.e. it preserves the ACI (atomicity,
+ *      consistency, isolation) but not D (durability) database property.
+ *      This flag may be changed at any time using mdbx_env_set_flags().
+ *
  *  - MDB_NOSYNC
- *    Don't flush system buffers to disk when committing a
- *transaction.
- *    This optimization means a system crash can corrupt the database
- *or
- *    lose the last transactions if buffers are not yet flushed to
- *disk.
- *    The risk is governed by how often the system flushes dirty
- *buffers
- *    to disk and how often mdbx_env_sync() is called.  However, if
- *the
- *    filesystem preserves write order and the MDB_WRITEMAP flag is
- *not
- *    used, transactions exhibit ACI (atomicity, consistency,
- *isolation)
- *    properties and only lose D (durability).  I.e. database
- *integrity
- *    is maintained, but a system crash may undo the final
- *transactions.
- *    Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with
- *no
- *    hint for when to write transactions to disk, unless
- *mdbx_env_sync()
- *    is called. (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable.
- *    This flag may be changed at any time using
- *mdbx_env_set_flags().
+ *      Don't flush system buffers to disk when committing a transaction.
+ *      This optimization means a system crash can corrupt the database or
+ *      lose the last transactions if buffers are not yet flushed to disk.
+ *      The risk is governed by how often the system flushes dirty buffers
+ *      to disk and how often mdbx_env_sync() is called.  However, if the
+ *      filesystem preserves write order and the MDB_WRITEMAP and/or
+ *      MDBX_LIFORECLAIM flags are not used, transactions exhibit ACI
+ *      (atomicity, consistency, isolation) properties and only lose D
+ *      (durability).  I.e. database integrity is maintained, but a system
+ *      crash may undo the final transactions.
+ *
+ *      Note that (MDB_NOSYNC | MDB_WRITEMAP) leaves the system with no
+ *      hint for when to write transactions to disk.
+ *      Therefore the (MDB_MAPASYNC | MDB_WRITEMAP) may be preferable.
+ *      This flag may be changed at any time using mdbx_env_set_flags().
+ *
+ *  - MDBX_UTTERLY_NOSYNC (internally MDB_NOSYNC | MDB_MAPASYNC)
+ *      FIXME: TODO
+ *
  *  - MDB_MAPASYNC
- *    When using MDB_WRITEMAP, use asynchronous flushes to disk.
- *    As with MDB_NOSYNC, a system crash can then corrupt the
- *    database or lose the last transactions. Calling
- *mdbx_env_sync()
- *    ensures on-disk database integrity until next commit.
- *    This flag may be changed at any time using
- *mdbx_env_set_flags().
+ *      When using MDB_WRITEMAP, use asynchronous flushes to disk. As with
+ *      MDB_NOSYNC, a system crash can then corrupt the database or lose
+ *      the last transactions. Calling mdbx_env_sync() ensures on-disk
+ *      database integrity until next commit. This flag may be changed at
+ *      any time using mdbx_env_set_flags().
+ *
  *  - MDB_NOTLS
- *    Don't use Thread-Local Storage. Tie reader locktable slots to
- *    MDB_txn objects instead of to threads. I.e. mdbx_txn_reset()
- *keeps
- *    the slot reseved for the MDB_txn object. A thread may use
- *parallel
- *    read-only transactions. A read-only transaction may span threads
- *if
- *    the user synchronizes its use. Applications that multiplex
- *many
- *    user threads over individual OS threads need this option. Such
- *an
- *    application must also serialize the write transactions in an
- *OS
- *    thread, since LMDB's write locking is unaware of the user
- *threads.
- *  - MDB_NOLOCK
- *    Don't do any locking. If concurrent access is anticipated, the
- *    caller must manage all concurrency itself. For proper
- *operation
- *    the caller must enforce single-writer semantics, and must
- *ensure
- *    that no readers are using old transactions while a writer is
- *    active. The simplest approach is to use an exclusive lock so
- *that
- *    no readers may be active at all when a writer begins.
+ *      Don't use Thread-Local Storage. Tie reader locktable slots to
+ *      MDB_txn objects instead of to threads. I.e. mdbx_txn_reset() keeps
+ *      the slot reseved for the MDB_txn object. A thread may use parallel
+ *      read-only transactions. A read-only transaction may span threads if
+ *      the user synchronizes its use. Applications that multiplex many
+ *      user threads over individual OS threads need this option. Such an
+ *      application must also serialize the write transactions in an OS
+ *      thread, since LMDB's write locking is unaware of the user threads.
+ *
+ *  - MDB_NOLOCK (don't supported by MDBX)
+ *      Don't do any locking. If concurrent access is anticipated, the
+ *      caller must manage all concurrency itself. For proper operation
+ *      the caller must enforce single-writer semantics, and must ensure
+ *      that no readers are using old transactions while a writer is
+ *      active. The simplest approach is to use an exclusive lock so that
+ *      no readers may be active at all when a writer begins.
+ *
  *  - MDB_NORDAHEAD
- *    Turn off readahead. Most operating systems perform readahead
- *on
- *    read requests by default. This option turns it off if the OS
- *    supports it. Turning it off may help random read performance
- *    when the DB is larger than RAM and system RAM is full.
+ *      Turn off readahead. Most operating systems perform readahead on
+ *      read requests by default. This option turns it off if the OS
+ *      supports it. Turning it off may help random read performance
+ *      when the DB is larger than RAM and system RAM is full.
+ *
  *  - MDB_NOMEMINIT
- *    Don't initialize malloc'd memory before writing to unused
- *spaces
- *    in the data file. By default, memory for pages written to the
- *data
- *    file is obtained using malloc. While these pages may be reused
- *in
- *    subsequent transactions, freshly malloc'd pages will be
- *initialized
- *    to zeroes before use. This avoids persisting leftover data from
- *other
- *    code (that used the heap and subsequently freed the memory) into
- *the
- *    data file. Note that many other system libraries may allocate
- *    and free memory from the heap for arbitrary uses. E.g., stdio
- *may
- *    use the heap for file I/O buffers. This initialization step has
- *a
- *    modest performance cost so some applications may want to
- *disable
- *    it using this flag. This option can be a problem for
- *applications
- *    which handle sensitive data like passwords, and it makes
- *memory
- *    checkers like Valgrind noisy. This flag is not needed with
- *MDB_WRITEMAP,
- *    which writes directly to the mmap instead of using malloc for
- *pages. The
- *    initialization is also skipped if MDB_RESERVE is used; the
- *    caller is expected to overwrite all of the memory that was
- *    reserved in that case.
- *    This flag may be changed at any time using
- *mdbx_env_set_flags().
- *   - #MDBX_COALESCE
- *    Aim to coalesce records while reclaiming FreeDB.
- *    This flag may be changed at any time using
- *mdbx_env_set_flags().
- *   - #MDBX_LIFORECLAIM
- *    LIFO policy for reclaiming FreeDB records. This significantly
- *reduce
- *    write IPOS in case MDB_NOSYNC with periodically checkpoints.
- * [in] mode The UNIX permissions to set on created files and
- *semaphores.
+ *      Don't initialize malloc'd memory before writing to unused spaces
+ *      in the data file. By default, memory for pages written to the data
+ *      file is obtained using malloc. While these pages may be reused in
+ *      subsequent transactions, freshly malloc'd pages will be initialized
+ *      to zeroes before use. This avoids persisting leftover data from other
+ *      code (that used the heap and subsequently freed the memory) into the
+ *      data file. Note that many other system libraries may allocate and free
+ *      memory from the heap for arbitrary uses. E.g., stdio may use the heap
+ *      for file I/O buffers. This initialization step has a modest performance
+ *      cost so some applications may want to disable it using this flag. This
+ *      option can be a problem for applications which handle sensitive data
+ *      like passwords, and it makes memory checkers like Valgrind noisy. This
+ *      flag is not needed with MDB_WRITEMAP, which writes directly to the
+ *      mmap instead of using malloc for pages. The initialization is also
+ *      skipped if MDB_RESERVE is used; the caller is expected to overwrite
+ *      all of the memory that was reserved in that case. This flag may be
+ *      changed at any time using mdbx_env_set_flags().
+ *
+ *  - MDBX_COALESCE
+ *      Aim to coalesce records while reclaiming FreeDB. This flag may be
+ *      changed at any time using mdbx_env_set_flags().
+ *      FIXME: TODO
+ *
+ *  - MDBX_LIFORECLAIM
+ *      LIFO policy for reclaiming FreeDB records. This significantly reduce
+ *      write IPOs in case MDB_NOSYNC with periodically checkpoints.
+ *      FIXME: TODO
+ *
+ * [in] mode The UNIX permissions to set on created files.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDB_VERSION_MISMATCH - the version of the LMDB library doesn't
- *match the
- * version that created the database environment.
- *  - MDB_INVALID - the environment file headers are corrupted.
- *  - ENOENT - the directory specified by the path parameter doesn't
- *exist.
- *  - EACCES - the user didn't have permission to access the environment
- *files.
- *  - EAGAIN - the environment was locked by another process. */
+ *   - MDB_VERSION_MISMATCH - the version of the LMDB library doesn't match the
+ *                            version that created the database environment.
+ *   - MDB_INVALID  - the environment file headers are corrupted.
+ *   - MDBX_ENOENT  - the directory specified by the path parameter
+ *                    doesn't exist.
+ *   - MDBX_EACCES  - the user didn't have permission to access
+ *                    the environment files.
+ *   - MDBX_EAGAIN  - the environment was locked by another process. */
 LIBMDBX_API int mdbx_env_open(MDB_env *env, const char *path, unsigned flags,
                               mode_t mode);
 LIBMDBX_API int mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
@@ -567,23 +536,25 @@ LIBMDBX_API int mdbx_env_open_ex(MDB_env *env, const char *path, unsigned flags,
  *
  * This function may be used to make a backup of an existing environment.
  * No lockfile is created, since it gets recreated at need.
- * Note: This call can trigger significant file size growth if run in
+ * NOTE: This call can trigger significant file size growth if run in
  * parallel with write transactions, because it employs a read-only
- * transaction. See long-lived transactions under caveats_sec.
- * [in] env An environment handle returned by mdbx_env_create(). It
- * must have already been opened successfully.
- * [in] path The directory in which the copy will reside. This
- * directory must already exist and be writable but must otherwise be
- * empty.
- * [in] flags Special options for this operation. This parameter
- * must be set to 0 or by bitwise OR'ing together one or more of the
- * values described here.
- *  - MDB_CP_COMPACT - Perform compaction while copying: omit free
- *    pages and sequentially renumber all pages in output. This
- *option
- *    consumes more CPU and runs more slowly than the default.
- *    Currently it fails if the environment has suffered a page
- *leak.
+ * transaction. See long-lived transactions under "Caveats" section.
+ *
+ * [in] env   An environment handle returned by mdbx_env_create(). It must
+ *            have already been opened successfully.
+ * [in] path  The directory in which the copy will reside. This directory must
+ *            already exist and be writable but must otherwise be empty.
+ * [in] flags Special options for this operation. This parameter must be set
+ *            to 0 or by bitwise OR'ing together one or more of the values
+ *            described here:
+ *
+ *  - MDB_CP_COMPACT
+ *      Perform compaction while copying: omit free pages and sequentially
+ *      renumber all pages in output. This option consumes little bit more
+ *      CPU for processing, but may running quickly than the default, on
+ *      account skipping free pages.
+ *
+ *      NOTE: Currently it fails if the environment has suffered a page leak.
  *
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy(MDB_env *env, const char *path, unsigned flags);
@@ -594,15 +565,17 @@ LIBMDBX_API int mdbx_env_copy(MDB_env *env, const char *path, unsigned flags);
  * This function may be used to make a backup of an existing environment.
  * No lockfile is created, since it gets recreated at need. See
  * mdbx_env_copy() for further details.
- * Note: This call can trigger significant file size growth if run in
+ *
+ * NOTE: This call can trigger significant file size growth if run in
  * parallel with write transactions, because it employs a read-only
- * transaction. See long-lived transactions under caveats_sec.
- * [in] env An environment handle returned by mdbx_env_create(). It
- * must have already been opened successfully.
- * [in] fd The filedescriptor to write the copy to. It must
- * have already been opened for Write access.
- * [in] flags Special options for this operation.
- * See mdbx_env_copy() for options.
+ * transaction. See long-lived transactions under "Caveats" section.
+ *
+ * [in] env     An environment handle returned by mdbx_env_create(). It must
+ *              have already been opened successfully.
+ * [in] fd      The filedescriptor to write the copy to. It must have already
+ *              been opened for Write access.
+ * [in] flags   Special options for this operation. See mdbx_env_copy() for
+ *              options.
  *
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy2fd(MDB_env *env, mdbx_filehandle_t fd,
@@ -610,18 +583,16 @@ LIBMDBX_API int mdbx_env_copy2fd(MDB_env *env, mdbx_filehandle_t fd,
 
 /* Return statistics about the LMDB environment.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [out] stat The address of an MDB_stat structure
- *    where the statistics will be copied
- */
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [out] stat   The address of an MDB_stat structure where the statistics
+ *              will be copied */
 LIBMDBX_API int mdbx_env_stat(MDB_env *env, MDBX_stat *stat, size_t bytes);
 
 /* Return information about the LMDB environment.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [out] stat The address of an MDB_envinfo structure
- *    where the information will be copied
- */
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [out] stat   The address of an MDB_envinfo structure
+ *              where the information will be copied */
 LIBMDBX_API int mdbx_env_info(MDB_env *env, MDBX_envinfo *info, size_t bytes);
 
 /* Flush the data buffers to disk.
@@ -631,33 +602,34 @@ LIBMDBX_API int mdbx_env_info(MDB_env *env, MDBX_envinfo *info, size_t bytes);
  * the OS buffers upon commit as well, unless the environment was
  * opened with MDB_NOSYNC or in part MDB_NOMETASYNC. This call is
  * not valid if the environment was opened with MDB_RDONLY.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] force If non-zero, force a synchronous flush.  Otherwise
- *  if the environment has the MDB_NOSYNC flag set the flushes
- * will be omitted, and with MDB_MAPASYNC they will be asynchronous.
+ *
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [in] force If non-zero, force a synchronous flush.  Otherwise if the
+ *            environment has the MDB_NOSYNC flag set the flushes will be
+ *            omitted, and with MDB_MAPASYNC they will be asynchronous.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EACCES - the environment is read-only.
- *  - EINVAL - an invalid parameter was specified.
- *  - EIO - an error occurred during synchronization. */
+ *  - MDBX_EACCES   - the environment is read-only.
+ *  - MDBX_EINVAL   - an invalid parameter was specified.
+ *  - MDBX_EIO      - an error occurred during synchronization. */
 LIBMDBX_API int mdbx_env_sync(MDB_env *env, int force);
 
 /* Close the environment and release the memory map.
  *
  * Only a single thread may call this function. All transactions, databases,
  * and cursors must already be closed before calling this function. Attempts
- * to
- * use any such handles after calling this function will cause a SIGSEGV.
+ * to use any such handles after calling this function will cause a SIGSEGV.
  * The environment handle will be freed and must not be used again after this
  * call.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] dont_sync A dont'sync flag, if non-zero the last checkpoint
- *  (meta-page update) will be kept "as is" and may be still "weak"
- *  in NOSYNC/MAPASYNC modes. Such "weak" checkpoint will be ignored
- *  on opening next time, and transactions since the last non-weak
- *  checkpoint (meta-page update) will rolledback for consistency guarantee.
- */
+ *
+ * [in] env       An environment handle returned by mdbx_env_create()
+ * [in] dont_sync A dont'sync flag, if non-zero the last checkpoint (meta-page
+ *                update) will be kept "as is" and may be still "weak" in the
+ *                NOSYNC/MAPASYNC modes. Such "weak" checkpoint will be ignored
+ *                on opening next time, and transactions since the last non-weak
+ *                checkpoint (meta-page update) will rolledback for consistency
+ *                guarantee. */
 LIBMDBX_API void mdbx_env_close(MDB_env *env);
 
 /* Set environment flags.
@@ -665,49 +637,49 @@ LIBMDBX_API void mdbx_env_close(MDB_env *env);
  * This may be used to set some flags in addition to those from
  * mdbx_env_open(), or to unset these flags.  If several threads
  * change the flags at the same time, the result is undefined.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] flags The flags to change, bitwise OR'ed together
- * [in] onoff A non-zero value sets the flags, zero clears them.
+ *
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [in] flags   The flags to change, bitwise OR'ed together
+ * [in] onoff   A non-zero value sets the flags, zero clears them.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_env_set_flags(MDB_env *env, unsigned flags, int onoff);
 
 /* Get environment flags.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [out] flags The address of an integer to store the flags
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [out] flags  The address of an integer to store the flags
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_env_get_flags(MDB_env *env, unsigned *flags);
 
 /* Return the path that was used in mdbx_env_open().
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [out] path Address of a string pointer to contain the path. This
- * is the actual string in the environment, not a copy. It should not be
- * altered in any way.
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [out] path   Address of a string pointer to contain the path.
+ *              This is the actual string in the environment, not a copy.
+ *              It should not be altered in any way.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_env_get_path(MDB_env *env, const char **path);
 
-/* Return the filedescriptor for the given environment.
+/* Return the file descriptor for the given environment.
  *
- * This function may be called after fork(), so the descriptor can be
- * closed before exec*().  Other LMDB file descriptors have FD_CLOEXEC.
- * (Until LMDB 0.9.18, only the lockfile had that.)
+ * NOTE: All MDBX file descriptors have FD_CLOEXEC and
+ * could't be used after exec() and or fork().
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [out] fd Address of a int to contain the descriptor.
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [out] fd   Address of a int to contain the descriptor.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_env_get_fd(MDB_env *env, mdbx_filehandle_t *fd);
 
 /* Set the size of the memory map to use for this environment.
@@ -717,10 +689,9 @@ LIBMDBX_API int mdbx_env_get_fd(MDB_env *env, mdbx_filehandle_t *fd);
  * of the database. The value should be chosen as large as possible,
  * to accommodate future growth of the database.
  * This function should be called after mdbx_env_create() and before
- *mdbx_env_open().
- * It may be called at later times if no transactions are active in
- * this process. Note that the library does not check for this condition,
- * the caller must ensure it explicitly.
+ * mdbx_env_open(). It may be called at later times if no transactions
+ * are active in this process. Note that the library does not check for
+ * this condition, the caller must ensure it explicitly.
  *
  * The new size takes effect immediately for the current process but
  * will not be persisted to any others until a write transaction has been
@@ -732,36 +703,36 @@ LIBMDBX_API int mdbx_env_get_fd(MDB_env *env, mdbx_filehandle_t *fd);
  * return MDB_MAP_RESIZED. This function may be called with a size
  * of zero to adopt the new size.
  *
- * Any attempt to set a size smaller than the space already consumed
- * by the environment will be silently changed to the current size of the used
- *space.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] size The size in bytes
+ * Any attempt to set a size smaller than the space already consumed by the
+ * environment will be silently changed to the current size of the used space.
+ *
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [in] size  The size in bytes
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified,
- *             or the environment has an active write transaction. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified,
+ *                    or the environment has an active write transaction. */
 LIBMDBX_API int mdbx_env_set_mapsize(MDB_env *env, size_t size);
 
 /* Set the maximum number of threads/reader slots for the environment.
  *
  * This defines the number of slots in the lock table that is used to track
- *readers in the
- * the environment. The default is 126.
+ * readers in the the environment. The default is 61.
  * Starting a read-only transaction normally ties a lock table slot to the
  * current thread until the environment closes or the thread exits. If
  * MDB_NOTLS is in use, mdbx_txn_begin() instead ties the slot to the
  * MDB_txn object until it or the MDB_env object is destroyed.
  * This function may only be called after mdbx_env_create() and before
- *mdbx_env_open().
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] readers The maximum number of reader lock table slots
+ * mdbx_env_open().
+ *
+ * [in] env       An environment handle returned by mdbx_env_create()
+ * [in] readers   The maximum number of reader lock table slots
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified,
- *             or the environment is already open. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified,
+ *                    or the environment is already open. */
 LIBMDBX_API int mdbx_env_set_maxreaders(MDB_env *env, unsigned readers);
 
 /* Get the maximum number of threads/reader slots for the environment.
@@ -771,7 +742,7 @@ LIBMDBX_API int mdbx_env_set_maxreaders(MDB_env *env, unsigned readers);
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_env_get_maxreaders(MDB_env *env, unsigned *readers);
 
 /* Set the maximum number of named databases for the environment.
@@ -780,25 +751,26 @@ LIBMDBX_API int mdbx_env_get_maxreaders(MDB_env *env, unsigned *readers);
  * environment. Simpler applications that use the environment as a single
  * unnamed database can ignore this option.
  * This function may only be called after mdbx_env_create() and before
- *mdbx_env_open().
+ * mdbx_env_open().
  *
  * Currently a moderate number of slots are cheap but a huge number gets
  * expensive: 7-120 words per transaction, and every mdbx_dbi_open()
  * does a linear search of the opened slots.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] dbs The maximum number of databases
+ *
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [in] dbs   The maximum number of databases
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified,
- *             or the environment is already open. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified,
+ *                    or the environment is already open. */
 LIBMDBX_API int mdbx_env_set_maxdbs(MDB_env *env, MDB_dbi dbs);
 
 /* Get the maximum size of keys and MDB_DUPSORT data we can write.
  *
  * [in] env An environment handle returned by mdbx_env_create()
- * Returns The maximum size of a key we can write
- */
+ *
+ * Returns The maximum size of a key we can write. */
 LIBMDBX_API int mdbx_env_get_maxkeysize(MDB_env *env);
 LIBMDBX_API int mdbx_get_maxkeysize(size_t pagesize);
 
@@ -813,22 +785,22 @@ LIBMDBX_API int mdbx_env_set_userctx(MDB_env *env, void *ctx);
 /* Get the application information associated with the MDB_env.
  *
  * [in] env An environment handle returned by mdbx_env_create()
- * Returns The pointer set by mdbx_env_set_userctx().
- */
+ * Returns The pointer set by mdbx_env_set_userctx(). */
 LIBMDBX_API void *mdbx_env_get_userctx(MDB_env *env);
 
 /* A callback function for most LMDB assert() failures,
  * called before printing the message and aborting.
  *
  * [in] env An environment handle returned by mdbx_env_create().
- * [in] msg The assertion message, not including newline.
- */
+ * [in] msg The assertion message, not including newline. */
 typedef void MDB_assert_func(MDB_env *env, const char *msg,
                              const char *function, unsigned line);
 
 /* Set or reset the assert() callback of the environment.
+ *
  * Disabled if liblmdb is buillt with MDB_DEBUG=0.
- * Note: This hack should become obsolete as lmdb's error handling matures.
+ * NOTE: This hack should become obsolete as lmdb's error handling matures.
+ *
  * [in] env An environment handle returned by mdbx_env_create().
  * [in] func An MDB_assert_func function, or 0.
  *
@@ -837,36 +809,39 @@ LIBMDBX_API int mdbx_env_set_assert(MDB_env *env, MDB_assert_func *func);
 
 /* Create a transaction for use with the environment.
  *
- * The transaction handle may be discarded using mdbx_txn_abort() or
- *mdbx_txn_commit().
- * Note: A transaction and its cursors must only be used by a single
+ * The transaction handle may be discarded using mdbx_txn_abort()
+ * or mdbx_txn_commit().
+ * NOTE: A transaction and its cursors must only be used by a single
  * thread, and a thread may only have a single transaction at a time.
  * If MDB_NOTLS is in use, this does not apply to read-only transactions.
- * Note: Cursors may not span transactions.
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] parent If this parameter is non-NULL, the new transaction
- * will be a nested transaction, with the transaction indicated by parent
- * as its parent. Transactions may be nested to any level. A parent
- * transaction and its cursors may not issue any other operations than
- * mdbx_txn_commit and mdbx_txn_abort while it has active child transactions.
- * [in] flags Special options for this transaction. This parameter
- * must be set to 0 or by bitwise OR'ing together one or more of the
- * values described here.
+ * NOTE: Cursors may not span transactions.
+ *
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [in] parent  If this parameter is non-NULL, the new transaction will be
+ *              a nested transaction, with the transaction indicated by parent
+ *              as its parent. Transactions may be nested to any level.
+ *              A parent transaction and its cursors may not issue any other
+ *              operations than mdbx_txn_commit and mdbx_txn_abort while it
+ *              has active child transactions.
+ * [in] flags   Special options for this transaction. This parameter
+ *              must be set to 0 or by bitwise OR'ing together one or more
+ *              of the values described here.
+ *
  *  - MDB_RDONLY
- *    This transaction will not perform any write operations.
+ *      This transaction will not perform any write operations.
+ *
  * [out] txn Address where the new MDB_txn handle will be stored
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDB_PANIC - a fatal error occurred earlier and the environment
- *    must be shut down.
- *  - MDB_MAP_RESIZED - another process wrote data beyond this
- *    MDB_env's
- *    mapsize and this environment's map must be resized as well.
- *    See mdbx_env_set_mapsize().
- *  - MDB_READERS_FULL - a read-only transaction was requested and
- *    the reader lock table is full. See mdbx_env_set_maxreaders().
- *  - ENOMEM - out of memory. */
+ *  - MDB_PANIC         - a fatal error occurred earlier and the environment
+  *                       must be shut down.
+ *  - MDB_MAP_RESIZED   - another process wrote data beyond this MDB_env's
+ *                        mapsize and this environment's map must be resized
+ *                        as well. See mdbx_env_set_mapsize().
+ *  - MDB_READERS_FULL  - a read-only transaction was requested and the reader
+ *                        lock table is full. See mdbx_env_set_maxreaders().
+ *  - MDBX_ENOMEM       - out of memory. */
 LIBMDBX_API int mdbx_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags,
                                MDB_txn **txn);
 
@@ -892,61 +867,50 @@ LIBMDBX_API uint64_t mdbx_txn_id(MDB_txn *txn);
  * The transaction handle is freed. It and its cursors must not be used
  * again after this call, except with mdbx_cursor_renew().
  *
- * Note: MDBX-mode:
  * A cursor must be closed explicitly always, before
  * or after its transaction ends. It can be reused with
  * mdbx_cursor_renew() before finally closing it.
- *
- * Note: LMDB-compatible mode:
- * Earlier documentation incorrectly said all cursors would be freed.
- * Only write-transactions free cursors.
  *
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified.
- *  - ENOSPC - no more disk space.
- *  - EIO - a low-level I/O error occurred while writing.
- *  - ENOMEM - out of memory. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified.
+ *  - MDBX_ENOSPC   - no more disk space.
+ *  - MDBX_EIO      - a low-level I/O error occurred while writing.
+ *  - MDBX_ENOMEM   - out of memory. */
 LIBMDBX_API int mdbx_txn_commit(MDB_txn *txn);
 
-/* Abandon all the operations of the transaction instead of saving
- * them.
+/* Abandon all the operations of the transaction instead of saving them.
  *
  * The transaction handle is freed. It and its cursors must not be used
  * again after this call, except with mdbx_cursor_renew().
  *
- * Note: MDBX-mode:
- * A cursor must be closed explicitly always, before
- * or after its transaction ends. It can be reused with
- * mdbx_cursor_renew() before finally closing it.
+ * A cursor must be closed explicitly always, before or after its transaction
+ * ends. It can be reused with mdbx_cursor_renew() before finally closing it.
  *
- * Note: LMDB-compatible mode:
- * Earlier documentation incorrectly said all cursors would be freed.
- * Only write-transactions free cursors.
- *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- */
+ * [in] txn   A transaction handle returned by mdbx_txn_begin(). */
 LIBMDBX_API int mdbx_txn_abort(MDB_txn *txn);
 
 /* Reset a read-only transaction.
  *
  * Abort the transaction like mdbx_txn_abort(), but keep the transaction
- * handle. mdbx_txn_renew() may reuse the handle. This saves allocation
- * overhead if the process will start a new read-only transaction soon,
- * and also locking overhead if MDB_NOTLS is in use. The reader table
+ * handle. Therefore mdbx_txn_renew() may reuse the handle. This saves
+ * allocation overhead if the process will start a new read-only transaction
+ * soon, and also locking overhead if MDB_NOTLS is in use. The reader table
  * lock is released, but the table slot stays tied to its thread or
  * MDB_txn. Use mdbx_txn_abort() to discard a reset handle, and to free
  * its lock table slot if MDB_NOTLS is in use.
+ *
  * Cursors opened within the transaction must not be used
  * again after this call, except with mdbx_cursor_renew().
+ *
  * Reader locks generally don't interfere with writers, but they keep old
  * versions of database pages allocated. Thus they prevent the old pages
  * from being reused when writers commit new data, and so under heavy load
  * the database size may grow much more rapidly than otherwise.
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- */
+ *
+ * [in] txn A transaction handle returned by mdbx_txn_begin() */
 LIBMDBX_API int mdbx_txn_reset(MDB_txn *txn);
 
 /* Renew a read-only transaction.
@@ -954,16 +918,18 @@ LIBMDBX_API int mdbx_txn_reset(MDB_txn *txn);
  * This acquires a new reader lock for a transaction handle that had been
  * released by mdbx_txn_reset(). It must be called before a reset transaction
  * may be used again.
+ *
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDB_PANIC - a fatal error occurred earlier and the environment
- *    must be shut down.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDB_PANIC     - a fatal error occurred earlier and the environment
+ *                    must be shut down.
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_txn_renew(MDB_txn *txn);
 
 /* Open a table in the environment.
+ *
  * A table handle denotes the name and parameters of a table, independently
  * of whether such a table exists. The table handle may be discarded by
  * calling mdbx_dbi_close(). The old table handle is returned if the table
@@ -1024,10 +990,10 @@ LIBMDBX_API int mdbx_txn_renew(MDB_txn *txn);
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDB_NOTFOUND - the specified database doesn't exist in the
- *    environment and MDB_CREATE was not specified.
- *  - MDB_DBS_FULL - too many databases have been opened.
- *    See mdbx_env_set_maxdbs(). */
+ *  - MDB_NOTFOUND  - the specified database doesn't exist in the
+ *                    environment and MDB_CREATE was not specified.
+ *  - MDB_DBS_FULL -  too many databases have been opened.
+ *                    See mdbx_env_set_maxdbs(). */
 LIBMDBX_API int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
                                  MDB_dbi *dbi, MDB_cmp_func *keycmp,
                                  MDB_cmp_func *datacmp);
@@ -1036,29 +1002,30 @@ LIBMDBX_API int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
 
 /* Retrieve statistics for a database.
  *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [out] stat The address of an MDB_stat structure
- *    where the statistics will be copied
+ * [in] txn     A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi     A database handle returned by mdbx_dbi_open()
+ * [out] stat   The address of an MDB_stat structure where the statistics
+ *              will be copied
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_dbi_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *stat,
                               size_t bytes);
 
 /* Retrieve the DB flags for a database handle.
  *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [out] flags Address where the flags will be returned.
+ * [in] txn     A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi     A database handle returned by mdbx_dbi_open()
+ * [out] flags  Address where the flags will be returned.
  *
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags);
 
-/* Close a database handle. Normally unnecessary. Use with care:
+/* Close a database handle. Normally unnecessary.
  *
- * This call is not mutex protected. Handles should only be closed by
+ * Use with care:
+ * FIXME: This call is not mutex protected. Handles should only be closed by
  * a single thread, and only if no other threads are going to reference
  * the database handle or one of its cursors any further. Do not close
  * a handle if an existing transaction has modified its database.
@@ -1069,18 +1036,19 @@ LIBMDBX_API int mdbx_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags);
  * reuse the handle value.  Usually it's better to set a bigger
  * mdbx_env_set_maxdbs(), unless that value would be large.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] dbi A database handle returned by mdbx_dbi_open()
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [in] dbi   A database handle returned by mdbx_dbi_open()
  */
 LIBMDBX_API int mdbx_dbi_close(MDB_env *env, MDB_dbi dbi);
 
 /* Empty or delete+close a database.
  *
  * See mdbx_dbi_close() for restrictions about closing the DB handle.
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [in] del 0 to empty the DB, 1 to delete it from the
- * environment and close the DB handle.
+ *
+ * [in] txn   A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi   A database handle returned by mdbx_dbi_open()
+ * [in] del   0 to empty the DB, 1 to delete it from the environment
+ *            and close the DB handle.
  *
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del);
@@ -1094,22 +1062,23 @@ LIBMDBX_API int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del);
  * first data item for the key will be returned. Retrieval of other
  * items requires the use of mdbx_cursor_get().
  *
- * Note: The memory pointed to by the returned values is owned by the
+ * NOTE: The memory pointed to by the returned values is owned by the
  * database. The caller need not dispose of the memory, and may not
  * modify it in any way. For values returned in a read-only transaction
  * any modification attempts will cause a SIGSEGV.
- * Note: Values returned from the database are valid only until a
+ *
+ * NOTE: Values returned from the database are valid only until a
  * subsequent update operation, or the end of the transaction.
  *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [in] key The key to search for in the database
- * [out] data The data corresponding to the key
+ * [in] txn     A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi     A database handle returned by mdbx_dbi_open()
+ * [in] key     The key to search for in the database
+ * [out] data   The data corresponding to the key
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDB_NOTFOUND - the key was not in the database.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDB_NOTFOUND  - the key was not in the database.
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
                          MDB_val *data);
 
@@ -1120,44 +1089,56 @@ LIBMDBX_API int mdbx_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
  * if duplicates are disallowed, or adding a duplicate data item if
  * duplicates are allowed (MDB_DUPSORT).
  *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [in] key The key to store in the database
- * [in,out] data The data to store
- * [in] flags Special options for this operation. This parameter must be
- *      set to 0 or by bitwise OR'ing together one or more of the values
- *      described here.
+ * [in] txn     A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi     A database handle returned by mdbx_dbi_open()
+ * [in] key     The key to store in the database
+ * [in,out]     data The data to store
+ * [in] flags   Special options for this operation. This parameter must be
+ *              set to 0 or by bitwise OR'ing together one or more of the
+ *              values described here.
  *
- *  - MDB_NODUPDATA - enter the new key/data pair only if it does not
- *    already appear in the database. This flag may only be specified
- *    if the database was opened with MDB_DUPSORT. The function will
- *    return MDB_KEYEXIST if the key/data pair already appears in the
- *    database.
- *  - MDB_NOOVERWRITE - enter the new key/data pair only if the key
- *    does not already appear in the database. The function will return
- *    MDB_KEYEXIST if the key already appears in the database, even if
- *    the database supports duplicates (MDB_DUPSORT). The data
- *    parameter will be set to point to the existing item.
- *  - MDB_RESERVE - reserve space for data of the given size, but
- *    don't copy the given data. Instead, return a pointer to the
- *    reserved space, which the caller can fill in later - before
- *    the next update operation or the transaction ends. This saves
- *    an extra memcpy if the data is being generated later.
- *    LMDB does nothing else with this memory, the caller is expected
- *    to modify all of the space requested. This flag must not be
- *    specified if the database was opened with MDB_DUPSORT.
- *  - MDB_APPEND - append the given key/data pair to the end of the
- *    database. This option allows fast bulk loading when keys are
- *    already known to be in the correct order. Loading unsorted keys
- *    with this flag will cause a MDB_KEYEXIST error.
- *  - MDB_APPENDDUP - as above, but for sorted dup data.
+ *  - MDB_NODUPDATA
+ *      Enter the new key/data pair only if it does not already appear
+ *      in the database. This flag may only be specified if the database
+ *      was opened with MDB_DUPSORT. The function will return MDB_KEYEXIST
+ *      if the key/data pair already appears in the database.
+ *
+ *  - MDB_NOOVERWRITE
+ *      Enter the new key/data pair only if the key does not already appear
+ *      in the database. The function will return MDB_KEYEXIST if the key
+ *      already appears in the database, even if the database supports
+ *      duplicates (MDB_DUPSORT). The data parameter will be set to point
+ *      to the existing item.
+ *
+ *  - MDB_CURRENT
+ *      Update an single existing entry, but not add new ones. The function
+ *      will return MDB_NOTFOUND if the given key not exist in the database.
+ *      Or the MDBX_EMULTIVAL in case duplicates for the given key.
+ *
+ *  - MDB_RESERVE
+ *      Reserve space for data of the given size, but don't copy the given
+ *      data. Instead, return a pointer to the reserved space, which the
+ *      caller can fill in later - before the next update operation or the
+ *      transaction ends. This saves an extra memcpy if the data is being
+ *      generated later. MDBX does nothing else with this memory, the caller
+ *      is expected to modify all of the space requested. This flag must not
+ *      be specified if the database was opened with MDB_DUPSORT.
+ *
+ *  - MDB_APPEND
+ *      Append the given key/data pair to the end of the database. This option
+ *      allows fast bulk loading when keys are already known to be in the
+ *      correct order. Loading unsorted keys with this flag will cause
+ *      a MDBX_EKEYMISMATCH error.
+ *
+ *  - MDB_APPENDDUP
+ *      As above, but for sorted dup data.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDB_MAP_FULL - the database is full, see mdbx_env_set_mapsize().
- *  - MDB_TXN_FULL - the transaction has too many dirty pages.
- *  - EACCES - an attempt was made to write in a read-only transaction.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDB_MAP_FULL  - the database is full, see mdbx_env_set_mapsize().
+ *  - MDB_TXN_FULL  - the transaction has too many dirty pages.
+ *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
                          unsigned flags);
 
@@ -1165,30 +1146,22 @@ LIBMDBX_API int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
  *
  * This function removes key/data pairs from the database.
  *
- * MDBX-mode:
  * The data parameter is NOT ignored regardless the database does
  * support sorted duplicate data items or not. If the data parameter
  * is non-NULL only the matching data item will be deleted.
  *
- * LMDB-compatible mode:
- * If the database does not support sorted duplicate data items
- * (MDB_DUPSORT) the data parameter is ignored.
- * If the database supports sorted duplicates and the data parameter
- * is NULL, all of the duplicate data items for the key will be
- * deleted. Otherwise, if the data parameter is non-NULL
- * only the matching data item will be deleted.
- *
  * This function will return MDB_NOTFOUND if the specified key/data
  * pair is not in the database.
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [in] key The key to delete from the database
- * [in] data The data to delete
+ *
+ * [in] txn   A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi   A database handle returned by mdbx_dbi_open()
+ * [in] key   The key to delete from the database
+ * [in] data  The data to delete
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EACCES - an attempt was made to write in a read-only transaction.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
                          MDB_val *data);
 
@@ -1199,27 +1172,17 @@ LIBMDBX_API int mdbx_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
  * when its transaction has ended, except with mdbx_cursor_renew().
  * It can be discarded with mdbx_cursor_close().
  *
- * MDBX-mode:
  * A cursor must be closed explicitly always, before
  * or after its transaction ends. It can be reused with
  * mdbx_cursor_renew() before finally closing it.
  *
- * LMDB-compatible mode:
- * A cursor in a write-transaction can be closed before its transaction
- * ends, and will otherwise be closed when its transaction ends.
- * A cursor in a read-only transaction must be closed explicitly, before
- * or after its transaction ends. It can be reused with
- * mdbx_cursor_renew() before finally closing it.
- * Note: Earlier documentation said that cursors in every transaction
- * were closed when the transaction committed or aborted.
- *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [out] cursor Address where the new MDB_cursor handle will be stored
+ * [in] txn       A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi       A database handle returned by mdbx_dbi_open()
+ * [out] cursor   Address where the new MDB_cursor handle will be stored
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_open(MDB_txn *txn, MDB_dbi dbi,
                                  MDB_cursor **cursor);
 
@@ -1227,68 +1190,61 @@ LIBMDBX_API int mdbx_cursor_open(MDB_txn *txn, MDB_dbi dbi,
  *
  * The cursor handle will be freed and must not be used again after this call.
  * Its transaction must still be live if it is a write-transaction.
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- */
+ *
+ * [in] cursor A cursor handle returned by mdbx_cursor_open() */
 LIBMDBX_API void mdbx_cursor_close(MDB_cursor *cursor);
 
 /* Renew a cursor handle.
  *
  * A cursor is associated with a specific transaction and database.
- * Cursors that are only used in read-only
- * transactions may be re-used, to avoid unnecessary malloc/free overhead.
- * The cursor may be associated with a new read-only transaction, and
- * referencing the same database handle as it was created with.
+ * Cursors that are only used in read-only transactions may be re-used,
+ * to avoid unnecessary malloc/free overhead. The cursor may be associated
+ * with a new read-only transaction, and referencing the same database handle
+ * as it was created with.
+ *
  * This may be done whether the previous transaction is live or dead.
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  * [in] cursor A cursor handle returned by mdbx_cursor_open()
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_renew(MDB_txn *txn, MDB_cursor *cursor);
 
 /* Return the cursor's transaction handle.
  *
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- */
+ * [in] cursor A cursor handle returned by mdbx_cursor_open() */
 LIBMDBX_API MDB_txn *mdbx_cursor_txn(MDB_cursor *cursor);
 
 /* Return the cursor's database handle.
  *
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- */
+ * [in] cursor A cursor handle returned by mdbx_cursor_open() */
 LIBMDBX_API MDB_dbi mdbx_cursor_dbi(MDB_cursor *cursor);
 
 /* Retrieve by cursor.
  *
  * This function retrieves key/data pairs from the database. The address and
- *length
- * of the key are returned in the object to which key refers (except for
- *the
- * case of the MDB_SET option, in which the key object is unchanged), and
- * the address and length of the data are returned in the object to which \b
- *data
- * refers.
- * See mdbx_get() for restrictions on using the output values.
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- * [in,out] key The key for a retrieved item
- * [in,out] data The data of a retrieved item
- * [in] op A cursor operation MDB_cursor_op
+ * length of the key are returned in the object to which key refers (except
+ * for the case of the MDB_SET option, in which the key object is unchanged),
+ * and the address and length of the data are returned in the object to which
+ * data refers. See mdbx_get() for restrictions on using the output values.
+ *
+ * [in] cursor    A cursor handle returned by mdbx_cursor_open()
+ * [in,out] key   The key for a retrieved item
+ * [in,out] data  The data of a retrieved item
+ * [in] op        A cursor operation MDB_cursor_op
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDB_NOTFOUND - no matching key found.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EINVAL - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
                                 MDB_cursor_op op);
 
 /* Store by cursor.
  *
- * This function stores key/data pairs into the database.
- *
- * The cursor is positioned at the new item, or on failure usually near it.
- * Note: Earlier documentation incorrectly said errors would leave the
- * state of the cursor unchanged.
+ * This function stores key/data pairs into the database. The cursor is
+ * positioned at the new item, or on failure usually near it.
  *
  * [in] cursor  A cursor handle returned by mdbx_cursor_open()
  * [in] key     The key operated on.
@@ -1296,107 +1252,105 @@ LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
  * [in] flags   Options for this operation. This parameter
  *              must be set to 0 or one of the values described here.
  *
- *  - MDB_CURRENT   - replace the item at the current cursor position. The
- *                    key parameter must still be provided, and must match it.
+ *  - MDB_CURRENT
+ *      Replace the item at the current cursor position. The key parameter
+ *      must still be provided, and must match it, otherwise the function
+ *      return MDBX_EKEYMISMATCH.
  *
- *                    If using sorted duplicates (MDB_DUPSORT) the data item
- *                    must still sort into the same place. This is intended to
- *                    be used when the new data is the same size as the old.
- *                    Otherwise it will simply perform a delete of the old
- *                    record followed by an insert.
+ *      NOTE: MDBX unlike LMDB allows you to change the size of the data and
+ *      automatically handles reordering for sorted duplicates (MDB_DUPSORT).
  *
- *  - MDB_NODUPDATA - enter the new key/data pair only if it does not already
- *                  appear in the database. This flag may only be
- *specified
- *    if the database was opened with MDB_DUPSORT. The function
- *will
- *    return MDB_KEYEXIST if the key/data pair already appears in
- *the
- *    database.
- *  - MDB_NOOVERWRITE - enter the new key/data pair only if the key
- *    does not already appear in the database. The function will
- *return
- *    MDB_KEYEXIST if the key already appears in the database, even
- *if
- *    the database supports duplicates (MDB_DUPSORT).
- *  - MDB_RESERVE - reserve space for data of the given size, but
- *    don't copy the given data. Instead, return a pointer to the
- *    reserved space, which the caller can fill in later - before
- *    the next update operation or the transaction ends. This saves
- *    an extra memcpy if the data is being generated later. This
- *flag
- *    must not be specified if the database was opened with
- *MDB_DUPSORT.
- *  - MDB_APPEND - append the given key/data pair to the end of the
- *    database. No key comparisons are performed. This option allows
- *    fast bulk loading when keys are already known to be in the
- *    correct order. Loading unsorted keys with this flag will cause
- *    a MDB_KEYEXIST error.
- *  - MDB_APPENDDUP - as above, but for sorted dup data.
- *  - MDB_MULTIPLE - store multiple contiguous data elements in a
- *    single request. This flag may only be specified if the
- *database
- *    was opened with MDB_DUPFIXED. The data argument must be an
- *    array of two MDB_vals. The mv_size of the first MDB_val must
- *be
- *    the size of a single data element. The mv_data of the first
- *MDB_val
- *    must point to the beginning of the array of contiguous data
- *elements.
- *    The mv_size of the second MDB_val must be the count of the
- *number
- *    of data elements to store. On return this field will be set to
- *    the count of the number of elements actually written. The
- *mv_data
- *    of the second MDB_val is unused.
+ *  - MDB_NODUPDATA
+ *      Enter the new key/data pair only if it does not already appear in the
+ *      database. This flag may only be specified if the database was opened
+ *      with MDB_DUPSORT. The function will return MDB_KEYEXIST if the
+ *      key/data pair already appears in the database.
+ *
+ *  - MDB_NOOVERWRITE
+ *      Enter the new key/data pair only if the key does not already appear
+ *      in the database. The function will return MDB_KEYEXIST if the key
+ *      already appears in the database, even if the database supports
+ *      duplicates (MDB_DUPSORT).
+ *
+ *  - MDB_RESERVE
+ *      Reserve space for data of the given size, but don't copy the given
+ *      data. Instead, return a pointer to the reserved space, which the
+ *      caller can fill in later - before the next update operation or the
+ *      transaction ends. This saves an extra memcpy if the data is being
+ *      generated later. This flag must not be specified if the database
+ *      was opened with MDB_DUPSORT.
+ *
+ *  - MDB_APPEND
+ *      Append the given key/data pair to the end of the database. No key
+ *      comparisons are performed. This option allows fast bulk loading when
+ *      keys are already known to be in the correct order. Loading unsorted
+ *      keys with this flag will cause a MDB_KEYEXIST error.
+ *
+ *  - MDB_APPENDDUP
+ *      As above, but for sorted dup data.
+ *
+ *  - MDB_MULTIPLE
+ *      Store multiple contiguous data elements in a single request. This flag
+ *      may only be specified if the database was opened with MDB_DUPFIXED.
+ *      The data argument must be an array of two MDB_vals. The mv_size of the
+ *      first MDB_val must be the size of a single data element. The mv_data
+ *      of the first MDB_val must point to the beginning of the array of
+ *      contiguous data elements. The mv_size of the second MDB_val must be
+ *      the count of the number of data elements to store. On return this
+ *      field will be set to the count of the number of elements actually
+ *      written. The mv_data of the second MDB_val is unused.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDBX_EKEYMISMATCH
- *  - MDB_MAP_FULL - the database is full, see mdbx_env_set_mapsize().
- *  - MDB_TXN_FULL - the transaction has too many dirty pages.
- *  - EACCES - an attempt was made to write in a read-only transaction.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDB_MAP_FULL  - the database is full, see mdbx_env_set_mapsize().
+ *  - MDB_TXN_FULL  - the transaction has too many dirty pages.
+ *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
+ *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_put(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
                                 unsigned flags);
 
 /* Delete current key/data pair
  *
  * This function deletes the key/data pair to which the cursor refers.
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- * [in] flags Options for this operation. This parameter
- * must be set to 0 or one of the values described here.
- *  - MDB_NODUPDATA - delete all of the data items for the current key.
- *    This flag may only be specified if the database was opened with
- *MDB_DUPSORT.
+ *
+ * [in] cursor  A cursor handle returned by mdbx_cursor_open()
+ * [in] flags   Options for this operation. This parameter must be set to 0
+ *              or one of the values described here.
+ *
+ *  - MDB_NODUPDATA
+ *      Delete all of the data items for the current key. This flag may only
+ *      be specified if the database was opened with MDB_DUPSORT.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EACCES - an attempt was made to write in a read-only transaction.
- *  - EINVAL - an invalid parameter was specified. */
+ *  - MDBX_EACCES - an attempt was made to write in a read-only transaction.
+ *  - MDBX_EINVAL - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_del(MDB_cursor *cursor, unsigned flags);
 
 /* Return count of duplicates for current key.
  *
- * This call is only valid on databases that support sorted duplicate
- * data items MDB_DUPSORT.
- * [in] cursor A cursor handle returned by mdbx_cursor_open()
- * [out] countp Address where the count will be stored
+ * This call is only valid on databases that support sorted duplicate data
+ * items MDB_DUPSORT.
+ *
+ * [in] cursor    A cursor handle returned by mdbx_cursor_open()
+ * [out] countp   Address where the count will be stored
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - EINVAL - cursor is not initialized,
- *             or an invalid parameter was specified. */
+ *  - MDBX_EINVAL   - cursor is not initialized, or an invalid parameter
+ *                    was specified. */
 LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, uint64_t *countp);
 
 /* Compare two data items according to a particular database.
  *
  * This returns a comparison as if the two data items were keys in the
  * specified database.
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [in] a The first item to compare
- * [in] b The second item to compare
+ *
+ * [in] txn   A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi   A database handle returned by mdbx_dbi_open()
+ * [in] a     The first item to compare
+ * [in] b     The second item to compare
  *
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
 LIBMDBX_API int mdbx_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
@@ -1406,10 +1360,11 @@ LIBMDBX_API int mdbx_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
  *
  * This returns a comparison as if the two items were data items of
  * the specified database. The database must have the MDB_DUPSORT flag.
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [in] dbi A database handle returned by mdbx_dbi_open()
- * [in] a The first item to compare
- * [in] b The second item to compare
+ *
+ * [in] txn   A transaction handle returned by mdbx_txn_begin()
+ * [in] dbi   A database handle returned by mdbx_dbi_open()
+ * [in] a     The first item to compare
+ * [in] b     The second item to compare
  *
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
 LIBMDBX_API int mdbx_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
@@ -1417,25 +1372,25 @@ LIBMDBX_API int mdbx_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
 
 /* A callback function used to print a message from the library.
  *
- * [in] msg The string to be printed.
- * [in] ctx An arbitrary context pointer for the callback.
+ * [in] msg   The string to be printed.
+ * [in] ctx   An arbitrary context pointer for the callback.
  *
  * Returns < 0 on failure, >= 0 on success. */
 typedef int(MDB_msg_func)(const char *msg, void *ctx);
 
 /* Dump the entries in the reader lock table.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] func A MDB_msg_func function
- * [in] ctx Anything the message function needs
+ * [in] env   An environment handle returned by mdbx_env_create()
+ * [in] func  A MDB_msg_func function
+ * [in] ctx   Anything the message function needs
  *
  * Returns < 0 on failure, >= 0 on success. */
 LIBMDBX_API int mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx);
 
 /* Check for stale entries in the reader lock table.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [out] dead Number of stale slots that were cleared
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [out] dead   Number of stale slots that were cleared
  *
  * Returns 0 on success, non-zero on failure. */
 LIBMDBX_API int mdbx_reader_check(MDB_env *env, int *dead);
@@ -1450,27 +1405,27 @@ LIBMDBX_API int mdbx_env_close_ex(MDB_env *env, int dont_sync);
  * in the environment.
  *
  * Data is always written to disk when mdbx_txn_commit() is called,
- * but the operating system may keep it buffered. LMDB always flushes
+ * but the operating system may keep it buffered. MDBX always flushes
  * the OS buffers upon commit as well, unless the environment was
  * opened with MDB_NOSYNC or in part MDB_NOMETASYNC.
  *
- * The default is 0, than mean no any threshold checked,
- * and no additional flush will be made.
+ * The default is 0, than mean no any threshold checked, and no additional
+ * flush will be made.
  *
- * [in] env An environment handle returned by mdbx_env_create()
- * [in] bytes The size in bytes of summary changes
- *      when a synchronous flush would be made.
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [in] bytes   The size in bytes of summary changes when a synchronous
+ *              flush would be made.
  *
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncbytes(MDB_env *env, size_t bytes);
 
-/* Returns a lag of the reading.
+/* Returns a lag of the reading for the given transaction.
  *
  * Returns an information for estimate how much given read-only
  * transaction is lagging relative the to actual head.
  *
- * [in] txn A transaction handle returned by mdbx_txn_begin()
- * [out] percent Percentage of page allocation in the database.
+ * [in] txn       A transaction handle returned by mdbx_txn_begin()
+ * [out] percent  Percentage of page allocation in the database.
  *
  * Returns Number of transactions committed after the given was started for
  * read, or -1 on failure. */
@@ -1479,27 +1434,27 @@ LIBMDBX_API int mdbx_txn_straggler(MDB_txn *txn, int *percent);
 /* A callback function for killing a laggard readers,
  * but also could waiting ones. Called in case of MDB_MAP_FULL error.
  *
- * [in] env An environment handle returned by mdbx_env_create().
- * [in] pid pid of the reader process.
- * [in] thread_id thread_id of the reader thread.
- * [in] txn Transaction number on which stalled.
- * [in] gap a lag from the last commited txn.
- * [in] retry a retry number, less that zero for notify end of OOM-loop.
+ * [in] env     An environment handle returned by mdbx_env_create().
+ * [in] pid     pid of the reader process.
+ * [in] tid     thread_id of the reader thread.
+ * [in] txn     Transaction number on which stalled.
+ * [in] gap     A lag from the last commited txn.
+ * [in] retry   A retry number, less that zero for notify end of OOM-loop.
  *
  * Returns -1 on failure (reader is not killed),
  *  0 on a race condition (no such reader),
  *  1 on success (reader was killed),
  *  >1 on success (reader was SURE killed). */
-typedef int(MDBX_oom_func)(MDB_env *env, int pid, mdbx_tid_t thread_id,
-                           uint64_t txn, unsigned gap, int retry);
+typedef int(MDBX_oom_func)(MDB_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
+                           unsigned gap, int retry);
 
 /* Set the OOM callback.
  *
  * Callback will be called only on out-of-pages case for killing
  * a laggard readers to allowing reclaiming of freeDB.
  *
- * [in] env An environment handle returned by mdbx_env_create().
- * [in] oomfunc A #MDBX_oom_func function or NULL to disable. */
+ * [in] env       An environment handle returned by mdbx_env_create().
+ * [in] oomfunc   A MDBX_oom_func function or NULL to disable. */
 LIBMDBX_API void mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
 
 /* Get the current oom_func callback.
@@ -1507,9 +1462,9 @@ LIBMDBX_API void mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
  * Callback will be called only on out-of-pages case for killing
  * a laggard readers to allowing reclaiming of freeDB.
  *
- * [in] env An environment handle returned by mdbx_env_create().
+ * [in] env   An environment handle returned by mdbx_env_create().
  *
- * Returns A #MDBX_oom_func function or NULL if disabled. */
+ * Returns A MDBX_oom_func function or NULL if disabled. */
 LIBMDBX_API MDBX_oom_func *mdbx_env_get_oomfunc(MDB_env *env);
 
 #define MDBX_DBG_ASSERT 1
