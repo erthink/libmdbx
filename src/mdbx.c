@@ -2452,7 +2452,7 @@ MDB_env *mdbx_txn_env(MDB_txn *txn) {
   return txn->mt_env;
 }
 
-size_t mdbx_txn_id(MDB_txn *txn) {
+uint64_t mdbx_txn_id(MDB_txn *txn) {
   if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
     return ~(txnid_t)0;
   return txn->mt_txnid;
@@ -6839,7 +6839,7 @@ int mdbx_cursor_renew(MDB_txn *txn, MDB_cursor *mc) {
 }
 
 /* Return the count of duplicate data items for the current key */
-int mdbx_cursor_count(MDB_cursor *mc, size_t *countp) {
+int mdbx_cursor_count(MDB_cursor *mc, uint64_t *countp) {
   if (unlikely(mc == NULL || countp == NULL))
     return MDBX_EINVAL;
 

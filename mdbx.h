@@ -115,7 +115,7 @@ typedef struct MDB_env MDB_env;
 typedef struct MDB_txn MDB_txn;
 
 /* A handle for an individual database in the DB environment. */
-typedef unsigned MDB_dbi;
+typedef uint32_t MDB_dbi;
 
 /* Opaque structure for navigating through a database */
 typedef struct MDB_cursor MDB_cursor;
@@ -185,9 +185,8 @@ typedef int(MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
 #define MDB_REVERSEKEY 0x02u
 /* use sorted duplicates */
 #define MDB_DUPSORT 0x04u
-/* numeric keys in native byte order, either unsigned int or mdbx_size_t.
- * (lmdb expects 32-bit int <= size_t <= 32/64-bit mdbx_size_t.)
- *  The keys must all be of the same size. */
+/* numeric keys in native byte order, either uint32_t or uint64_t.
+ * The keys must all be of the same size. */
 #define MDB_INTEGERKEY 0x08u
 /* with MDB_DUPSORT, sorted dup items have fixed size */
 #define MDB_DUPFIXED 0x10u
@@ -334,23 +333,23 @@ typedef enum MDB_cursor_op {
 
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
-  unsigned ms_psize;        /* Size of a database page.
-                             * This is currently the same for all databases. */
-  unsigned ms_depth;        /* Depth (height) of the B-tree */
-  size_t ms_branch_pages;   /* Number of internal (non-leaf) pages */
-  size_t ms_leaf_pages;     /* Number of leaf pages */
-  size_t ms_overflow_pages; /* Number of overflow pages */
-  size_t ms_entries;        /* Number of data items */
+  uint32_t ms_psize;          /* Size of a database page.
+                               * This is currently the same for all databases. */
+  uint32_t ms_depth;          /* Depth (height) of the B-tree */
+  uint64_t ms_branch_pages;   /* Number of internal (non-leaf) pages */
+  uint64_t ms_leaf_pages;     /* Number of leaf pages */
+  uint64_t ms_overflow_pages; /* Number of overflow pages */
+  uint64_t ms_entries;        /* Number of data items */
 } MDBX_stat;
 
 /* Information about the environment */
 typedef struct MDBX_envinfo {
   void *me_mapaddr;       /* Address of map, if fixed */
-  size_t me_mapsize;      /* Size of the data memory map */
-  size_t me_last_pgno;    /* ID of the last used page */
+  uint64_t me_mapsize;    /* Size of the data memory map */
+  uint64_t me_last_pgno;  /* ID of the last used page */
   uint64_t me_last_txnid; /* ID of the last committed transaction */
-  unsigned me_maxreaders; /* max reader slots in the environment */
-  unsigned me_numreaders; /* max reader slots used in the environment */
+  uint32_t me_maxreaders; /* max reader slots in the environment */
+  uint32_t me_numreaders; /* max reader slots used in the environment */
   uint64_t me_tail_txnid; /* ID of the last reader transaction */
   uint64_t me_meta1_txnid, me_meta1_sign;
   uint64_t me_meta2_txnid, me_meta2_sign;
@@ -917,7 +916,7 @@ LIBMDBX_API MDB_env *mdbx_txn_env(MDB_txn *txn);
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  *
  * Returns A transaction ID, valid if input is an active transaction. */
-LIBMDBX_API size_t mdbx_txn_id(MDB_txn *txn);
+LIBMDBX_API uint64_t mdbx_txn_id(MDB_txn *txn);
 
 /* Commit all the operations of a transaction into the database.
  *
@@ -1419,7 +1418,7 @@ LIBMDBX_API int mdbx_cursor_del(MDB_cursor *cursor, unsigned flags);
  * possible errors are:
  *  - EINVAL - cursor is not initialized,
  *             or an invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, size_t *countp);
+LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, uint64_t *countp);
 
 /* Compare two data items according to a particular database.
  *
@@ -1523,7 +1522,7 @@ LIBMDBX_API int mdbx_txn_straggler(MDB_txn *txn, int *percent);
  *  1 on success (reader was killed),
  *  >1 on success (reader was SURE killed). */
 typedef int(MDBX_oom_func)(MDB_env *env, int pid, mdbx_tid_t thread_id,
-                           size_t txn, unsigned gap, int retry);
+                           uint64_t txn, unsigned gap, int retry);
 
 /* Set the OOM callback.
  *
@@ -1560,7 +1559,7 @@ typedef void MDBX_debug_func(int type, const char *function, int line,
 LIBMDBX_API int mdbx_setup_debug(int flags, MDBX_debug_func *logger,
                                  long edge_txn);
 
-typedef int MDBX_pgvisitor_func(size_t pgno, unsigned pgnumber, void *ctx,
+typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned pgnumber, void *ctx,
                                 const char *dbi, const char *type, int nentries,
                                 int payload_bytes, int header_bytes,
                                 int unused_bytes);
