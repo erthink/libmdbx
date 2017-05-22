@@ -328,6 +328,10 @@ typedef enum MDB_cursor_op {
  * right now (e.g. in readonly mode and so forth). */
 #define MDBX_WANNA_RECOVERY (-30419)
 
+/* The given key value is mismatched to the current cursor position,
+ * when mdbx_cursor_put() called with MDB_CURRENT option. */
+#define MDBX_EKEYMISMATCH (-30418)
+
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
   unsigned ms_psize;        /* Size of a database page.

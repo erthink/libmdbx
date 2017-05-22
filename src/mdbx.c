@@ -759,6 +759,9 @@ static const char *__mdbx_strerr(int errnum) {
   case MDBX_WANNA_RECOVERY:
     return "MDBX_WANNA_RECOVERY: Database should be recovered, but this could "
            "be done in a read-only mode";
+  case MDBX_EKEYMISMATCH:
+    return "MDBX_EKEYMISMATCH: The given key value is mismatched to the "
+           "current cursor position";
   default:
     return NULL;
   }
@@ -5729,7 +5732,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
           mc->mc_ki[mc->mc_top]++;
         } else {
           /* new key is <= last key */
-          rc = MDB_KEYEXIST;
+          rc = MDBX_EKEYMISMATCH;
         }
       }
     } else {
