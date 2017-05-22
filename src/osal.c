@@ -139,7 +139,7 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
 #if _MSC_VER
   *result = _aligned_malloc(bytes, alignment);
-  return *result ? MDB_SUCCESS : ERROR_OUTOFMEMORY;
+  return *result ? MDB_SUCCESS : MDBX_ENOMEM /* ERROR_OUTOFMEMORY */;
 #elif __GLIBC_PREREQ(2, 16) || __STDC_VERSION__ >= 201112L
   *result = memalign(alignment, bytes);
   return *result ? MDB_SUCCESS : errno;
@@ -343,7 +343,7 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
   ssize_t read = pread(fd, buf, bytes, offset);
   if (read < 0) {
     int rc = errno;
-    return (rc == MDB_SUCCESS) ? /* paranoia */ EIO : rc;
+    return (rc == MDB_SUCCESS) ? /* paranoia */ MDBX_EIO : rc;
   }
 #endif
   return (bytes == (size_t)read) ? MDB_SUCCESS : MDBX_ENODATA;
@@ -362,7 +362,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
 
   DWORD written;
   if (likely(WriteFile(fd, buf, (DWORD)bytes, &written, &ov)))
-    return (bytes == written) ? MDB_SUCCESS : ERROR_WRITE_FAULT;
+    return (bytes == written) ? MDB_SUCCESS : MDBX_EIO /* ERROR_WRITE_FAULT */;
   return mdbx_get_errno_checked();
 #else
   int rc;
@@ -373,7 +373,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
       return MDB_SUCCESS;
     rc = errno;
   } while (rc == EINTR);
-  return (written < 0) ? rc : EIO /* Use which error code (ENOSPC)? */;
+  return (written < 0) ? rc : MDBX_EIO /* Use which error code (ENOSPC)? */;
 #endif
 }
 
@@ -388,7 +388,8 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
     written += iov[i].iov_len;
     offset += iov[i].iov_len;
   }
-  return (expected_written == written) ? MDB_SUCCESS : ERROR_WRITE_FAULT;
+  return (expected_written == written) ? MDB_SUCCESS
+                                       : MDBX_EIO /* ERROR_WRITE_FAULT */;
 #else
   int rc;
   ssize_t written;
@@ -398,7 +399,7 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
       return MDB_SUCCESS;
     rc = errno;
   } while (rc == EINTR);
-  return (written < 0) ? rc : EIO /* Use which error code? */;
+  return (written < 0) ? rc : MDBX_EIO /* Use which error code? */;
 #endif
 }
 

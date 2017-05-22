@@ -101,6 +101,7 @@ typedef DWORD mdbx_tid_t;
 #define MDBX_ENOMEM ERROR_OUTOFMEMORY
 #define MDBX_EROFS ERROR_FILE_READ_ONLY
 #define MDBX_ENOSYS ERROR_NOT_SUPPORTED
+#define MDBX_EIO ERROR_WRITE_FAULT
 
 #else
 
@@ -118,7 +119,7 @@ typedef pthread_t mdbx_tid_t;
 #define MDBX_ENOMEM ENOMEM
 #define MDBX_EROFS EROFS
 #define MDBX_ENOSYS ENOSYS
-
+#define MDBX_EIO EIO
 #endif
 
 /*--------------------------------------------------------------------------*/
