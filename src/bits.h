@@ -152,37 +152,27 @@
 /* Number of meta pages - also hardcoded elsewhere */
 #define NUM_METAS 2
 
-/* A generic unsigned ID number. These were entryIDs in back-bdb.
-* Preferably it should have the same size as a pointer.
-*/
-typedef size_t MDB_ID;
+/* A page number in the database.
+ *
+ * MDBX uses 32 bit for page numbers. This limits database
+ * size up to 2^44 bytes, in case of 4K pages. */
+typedef uint32_t pgno_t;
+#define PRIaPGNO PRIu32
 
-/** A page number in the database.
-*	Note that 64 bit page numbers are overkill, since pages themselves
-*	already represent 12-13 bits of addressable memory, and the OS will
-*	always limit applications to a maximum of 63 bits of address space.
-*
-*	@note In the #MDB_node structure, we only store 48 bits of this value,
-*	which thus limits us to only 60 bits of addressable data.
-*/
-typedef MDB_ID pgno_t;
-
-/** A transaction ID.
-*	See struct MDB_txn.mt_txnid for details.
-*/
-typedef MDB_ID txnid_t;
+/* A transaction ID. */
+typedef uint64_t txnid_t;
+#define PRIaTXN PRIi64
 
 /* An IDL is an ID List, a sorted array of IDs. The first
-* element of the array is a counter for how many actual
-* IDs are in the list. In the original back-bdb code, IDLs are
-* sorted in ascending order. For libmdb IDLs are sorted in
-* descending order.
-*/
-typedef MDB_ID *MDB_IDL;
+ * element of the array is a counter for how many actual
+ * IDs are in the list. In the original back-bdb code, IDLs are
+ * sorted in ascending order. For libmdb IDLs are sorted in
+ * descending order. */
+typedef pgno_t *MDB_IDL;
 
 /* An ID2 is an ID/pointer pair. */
 typedef struct MDB_ID2 {
-  MDB_ID mid; /* The ID */
+  pgno_t mid; /* The ID */
   void *mptr; /* The pointer */
 } MDB_ID2;
 

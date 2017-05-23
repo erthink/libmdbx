@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include "../../mdbx.h"
+#include "../bits.h"
 #include "../midl.h"
 
 typedef struct flagbit {
@@ -316,17 +317,18 @@ static int handle_userdb(const size_t record_number, const MDB_val *key,
 static int handle_freedb(const size_t record_number, const MDB_val *key,
                          const MDB_val *data) {
   char *bad = "";
-  size_t pg, prev;
+  pgno_t pg, prev;
   ssize_t i, number, span = 0;
-  size_t *iptr = data->mv_data, txnid = *(size_t *)key->mv_data;
+  pgno_t *iptr = data->mv_data;
+  txnid_t txnid = *(txnid_t *)key->mv_data;
 
-  if (key->mv_size != sizeof(txnid))
+  if (key->mv_size != sizeof(txnid_t))
     problem_add("entry", record_number, "wrong txn-id size",
                 "key-size %" PRIiPTR "", key->mv_size);
   else if (txnid < 1 || txnid > envinfo.me_last_txnid)
-    problem_add("entry", record_number, "wrong txn-id", "%" PRIuPTR "", txnid);
+    problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN "", txnid);
 
-  if (data->mv_size < sizeof(size_t) || data->mv_size % sizeof(size_t))
+  if (data->mv_size < sizeof(pgno_t) || data->mv_size % sizeof(pgno_t))
     problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR "",
                 data->mv_size);
   else {
@@ -334,9 +336,9 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
     if (number >= MDB_IDL_UM_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
-    else if ((number + 1) * sizeof(size_t) != data->mv_size)
+    else if ((number + 1) * sizeof(pgno_t) != data->mv_size)
       problem_add("entry", record_number, "mismatch idl length",
-                  "%" PRIiPTR " != %" PRIuPTR "", number * sizeof(size_t),
+                  "%" PRIiPTR " != %" PRIuPTR "", (number + 1) * sizeof(pgno_t),
                   data->mv_size);
     else {
       freedb_pages += number;
@@ -344,9 +346,9 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
         reclaimable_pages += number;
       for (i = number, prev = 1; --i >= 0;) {
         pg = iptr[i];
-        if (pg < 2 /* META_PAGE */ || pg > envinfo.me_last_pgno)
+        if (pg < NUM_METAS || pg > envinfo.me_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",
-                      "2 < %" PRIiPTR " < %" PRIiPTR "", pg,
+                      "%u < %" PRIiPTR " < %" PRIiPTR "", NUM_METAS, pg,
                       envinfo.me_last_pgno);
         else if (pg <= prev) {
           bad = " [bad sequence]";
@@ -359,7 +361,7 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
           ;
       }
       if (verbose > 2 && !only_subdb) {
-        print("     transaction %" PRIuPTR ", %" PRIiPTR
+        print("     transaction %" PRIaTXN ", %" PRIiPTR
               " pages, maxspan %" PRIiPTR "%s\n",
               txnid, number, span, bad);
         if (verbose > 3) {
@@ -369,9 +371,9 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
             for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
               ;
             if (span > 1)
-              print("    %9zu[%" PRIiPTR "]\n", pg, span);
+              print("    %9" PRIaPGNO "[%" PRIiPTR "]\n", pg, span);
             else
-              print("    %9zu\n", pg);
+              print("    %9" PRIaPGNO "\n", pg);
           }
         }
       }
