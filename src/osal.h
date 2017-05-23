@@ -68,6 +68,7 @@ typedef struct {
   HANDLE mutex;
   HANDLE event;
 } mdbx_condmutex_t;
+typedef CRITICAL_SECTION mdbx_fastmutex_t;
 #else
 #include <pthread.h>
 #include <sys/file.h>
@@ -85,6 +86,7 @@ typedef struct {
   pthread_mutex_t mutex;
   pthread_cond_t cond;
 } mdbx_condmutex_t;
+typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif /* Platform */
 
 #ifndef SSIZE_MAX
@@ -394,6 +396,11 @@ int mdbx_condmutex_unlock(mdbx_condmutex_t *condmutex);
 int mdbx_condmutex_signal(mdbx_condmutex_t *condmutex);
 int mdbx_condmutex_wait(mdbx_condmutex_t *condmutex);
 int mdbx_condmutex_destroy(mdbx_condmutex_t *condmutex);
+
+int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex);
+int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex);
+int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex);
+int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex);
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  off_t offset, size_t expected_written);

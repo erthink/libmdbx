@@ -267,6 +267,44 @@ int mdbx_condmutex_wait(mdbx_condmutex_t *condmutex) {
 
 /*----------------------------------------------------------------------------*/
 
+int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex) {
+#if defined(_WIN32) || defined(_WIN64)
+  InitializeCriticalSection(fastmutex);
+  return MDB_SUCCESS;
+#else
+  return pthread_mutex_init(fastmutex, NULL);
+#endif
+}
+
+int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
+#if defined(_WIN32) || defined(_WIN64)
+  DeleteCriticalSection(fastmutex);
+  return MDB_SUCCESS;
+#else
+  return pthread_mutex_destroy(fastmutex);
+#endif
+}
+
+int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
+#if defined(_WIN32) || defined(_WIN64)
+  EnterCriticalSection(fastmutex);
+  return MDB_SUCCESS;
+#else
+  return pthread_mutex_lock(fastmutex);
+#endif
+}
+
+int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
+#if defined(_WIN32) || defined(_WIN64)
+  LeaveCriticalSection(fastmutex);
+  return MDB_SUCCESS;
+#else
+  return pthread_mutex_unlock(fastmutex);
+#endif
+}
+
+/*----------------------------------------------------------------------------*/
+
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd) {
   *fd = INVALID_HANDLE_VALUE;
