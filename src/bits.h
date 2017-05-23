@@ -268,7 +268,7 @@ typedef struct MDB_meta {
 
 /* Common header for all page types. The page type depends on mp_flags.
  *
- * P_BRANCH and P_LEAF pages have unsorted 'MDB_node's at the end, with
+ * P_BRANCH and P_LEAF pages have unsorted 'MDBX_node's at the end, with
  * sorted mp_ptrs[] entries referring to them. Exception: P_LEAF2 pages
  * omit mp_ptrs and pack sorted MDB_DUPFIXED values after the page header.
  *
@@ -519,7 +519,7 @@ typedef struct MDB_xcursor {
 #define XCURSOR_REFRESH(mc, mp, ki)                                            \
   do {                                                                         \
     MDB_page *xr_pg = (mp);                                                    \
-    MDB_node *xr_node = NODEPTR(xr_pg, ki);                                    \
+    MDBX_node *xr_node = NODEPTR(xr_pg, ki);                                   \
     if ((xr_node->mn_flags & (F_DUPDATA | F_SUBDATA)) == F_DUPDATA)            \
       (mc)->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(xr_node);                \
   } while (0)
