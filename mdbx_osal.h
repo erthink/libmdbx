@@ -50,13 +50,7 @@
 #endif
 #endif /* __dll_import */
 
-#if defined(LIBMDBX_EXPORTS)
-#define LIBMDBX_API __dll_export
-#elif defined(LIBMDBX_IMPORTS)
-#define LIBMDBX_API __dll_import
-#else
-#define LIBMDBX_API
-#endif /* LIBMDBX_API */
+/*--------------------------------------------------------------------------*/
 
 #ifdef _MSC_VER
 #pragma warning(push)
@@ -122,4 +116,16 @@ typedef pthread_t mdbx_tid_t;
 #define MDBX_EIO EIO
 #endif
 
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 /*--------------------------------------------------------------------------*/
+
+#if defined(LIBMDBX_EXPORTS)
+#define LIBMDBX_API __dll_export
+#elif defined(LIBMDBX_IMPORTS)
+#define LIBMDBX_API __dll_import
+#else
+#define LIBMDBX_API
+#endif /* LIBMDBX_API */

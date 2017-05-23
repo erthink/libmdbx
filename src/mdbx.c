@@ -9,7 +9,7 @@
  *
  * ---
  *
- * Portions Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
+ * Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP
@@ -676,17 +676,6 @@ static int mdbx_drop0(MDB_cursor *mc, int subs);
 
 static MDB_cmp_func mdbx_cmp_memn, mdbx_cmp_memnr, mdbx_cmp_int_ai,
     mdbx_cmp_int_a2, mdbx_cmp_int_ua;
-
-/* Return the library version info. */
-const char *mdbx_version(int *major, int *minor, int *patch) {
-  if (major)
-    *major = MDBX_VERSION_MAJOR;
-  if (minor)
-    *minor = MDBX_VERSION_MINOR;
-  if (patch)
-    *patch = MDBX_VERSION_PATCH;
-  return MDBX_VERSION_STRING;
-}
 
 static const char *__mdbx_strerr(int errnum) {
   /* Table of descriptions for LMDB errors */

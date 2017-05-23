@@ -177,8 +177,9 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "af:lnps:V")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s\n", MDBX_VERSION_STRING);
-      exit(0);
+      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_build.datetime);
+      exit(EXIT_SUCCESS);
       break;
     case 'l':
       list = 1;

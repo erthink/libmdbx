@@ -34,8 +34,9 @@ int main(int argc, char *argv[]) {
     else if (argv[1][1] == 'c' && argv[1][2] == '\0')
       cpflags |= MDB_CP_COMPACT;
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
-      printf("%s\n", MDBX_VERSION_STRING);
-      exit(0);
+      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_build.datetime);
+      exit(EXIT_SUCCESS);
     } else
       argc = 0;
   }

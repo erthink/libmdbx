@@ -21,6 +21,7 @@ src/tools/mdbx_load.1
 src/tools/mdbx_load.c
 src/tools/mdbx_stat.1
 src/tools/mdbx_stat.c
+src/version.c
 test/actor.cc
 test/base.h
 test/chrono.cc

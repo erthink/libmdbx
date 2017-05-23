@@ -42,8 +42,6 @@ HEADERS		:= mdbx.h
 LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
-
-MDBX_SRC	:= mdbx.h mdbx_osal.h $(addprefix src/, mdbx.c osal.c lck-posix.c defs.h bits.h osal.h midl.h)
 SHELL		:= /bin/bash
 
 .PHONY: mdbx all install clean check coverage
@@ -70,19 +68,13 @@ clean:
 check:	test/test
 	rm -f $(TESTDB) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
 
-mdbx.o: $(MDBX_SRC) Makefile
-	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
+src/%.o: src/%.c mdbx.h mdbx_osal.h $(addprefix src/, defs.h bits.h osal.h midl.h) Makefile
+	$(CC) $(CFLAGS) -c $(filter %.c, $^) -o $@
 
-osal.o: $(MDBX_SRC) Makefile
-	$(CC) $(CFLAGS) -c src/osal.c -o $@
-
-lck-posix.o: $(MDBX_SRC) Makefile
-	$(CC) $(CFLAGS) -c src/lck-posix.c -o $@
-
-libmdbx.a:	mdbx.o osal.o lck-posix.o
+libmdbx.a:	$(addprefix src/, mdbx.o osal.o lck-posix.o version.o)
 	$(AR) rs $@ $?
 
-libmdbx.so:	mdbx.o osal.o lck-posix.o
+libmdbx.so:	libmdbx.a
 	$(CC) $(CFLAGS) -save-temps $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a

@@ -19,7 +19,7 @@
  *
  * ---
  *
- * Portions Copyright 2011-2017 Howard Chu, Symas Corp. All rights reserved.
+ * Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted only as authorized by the OpenLDAP
@@ -46,53 +46,45 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
 
 #pragma once
-/* *INDENT-OFF* */
-/* clang-format off */
+#ifndef LIBMDBX_H
+#define LIBMDBX_H
 
-#ifndef _MDBX_H_
-#define _MDBX_H_
-
-#include "mdbx_osal.h"
+#define MDBX_VERSION_MAJOR 0
+#define MDBX_VERSION_MINOR 0
 
 #ifdef _MSC_VER
-#pragma warning(pop)
+#pragma warning(push)
 #endif
 
-/* *INDENT-ON* */
-/* clang-format on */
+#include "mdbx_osal.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Library major version */
-#define MDBX_VERSION_MAJOR 0
-/* Library minor version */
-#define MDBX_VERSION_MINOR 2
-/* Library patch version */
-#define MDBX_VERSION_PATCH 0
+typedef struct mdbx_version_info {
+  uint8_t major;
+  uint8_t minor;
+  uint16_t release;
+  uint32_t revision;
+  struct {
+    const char *datetime;
+    const char *tree;
+    const char *commit;
+    const char *describe;
+  } git;
+} mdbx_version_info;
 
-/* Combine args a,b,c into a single integer for easy version comparisons */
-#define MDB_VERINT(a, b, c) (((a) << 24) | ((b) << 16) | (c))
+typedef struct mdbx_build_info {
+  const char *datetime;
+  const char *target;
+  const char *options;
+  const char *compiler;
+  const char *flags;
+} mdbx_build_info;
 
-/* The full library version as a single integer */
-#define MDBX_VERSION_FULL                                                      \
-  MDB_VERINT(MDBX_VERSION_MAJOR, MDBX_VERSION_MINOR, MDBX_VERSION_PATCH)
-
-/* The release date of this library version */
-#define MDBX_VERSION_DATE "DEVEL"
-
-/* A stringifier for the version info */
-#define MDBX_VERSTR(a, b, c, d)                                                \
-  "MDBX " #a "." #b "." #c ": (" d ", https://github.com/ReOpen/libmdbx)"
-
-/* A helper for the stringifier macro */
-#define MDBX_VERFOO(a, b, c, d) MDBX_VERSTR(a, b, c, d)
-
-/* The full library version as a C string */
-#define MDBX_VERSION_STRING                                                    \
-  MDBX_VERFOO(MDBX_VERSION_MAJOR, MDBX_VERSION_MINOR, MDBX_VERSION_PATCH,      \
-              MDBX_VERSION_DATE)
+extern LIBMDBX_API const struct mdbx_version_info mdbx_version;
+extern LIBMDBX_API const struct mdbx_build_info mdbx_build;
 
 /* The name of the lock file in the DB environment */
 #define MDBX_LOCKNAME "/mdbx.lck"
@@ -351,15 +343,6 @@ typedef struct MDBX_envinfo {
   uint64_t me_meta1_txnid, me_meta1_sign;
   uint64_t me_meta2_txnid, me_meta2_sign;
 } MDBX_envinfo;
-
-/* Return the LMDB library version information.
- *
- * [out] major if non-NULL, the library major version number is copied here
- * [out] minor if non-NULL, the library minor version number is copied here
- * [out] patch if non-NULL, the library patch version number is copied here
- *
- * Returns "version string" The library version as a string */
-LIBMDBX_API const char *mdbx_version(int *major, int *minor, int *patch);
 
 /* Return a string describing a given error code.
  *
@@ -1532,4 +1515,4 @@ LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDB_dbi dbi, uint64_t *result,
 #pragma warning(pop)
 #endif
 
-#endif /* _MDBX_H_ */
+#endif /* LIBMDBX_H */

@@ -317,8 +317,9 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "f:ns:NTV")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s\n", MDBX_VERSION_STRING);
-      exit(0);
+      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_build.datetime);
+      exit(EXIT_SUCCESS);
       break;
     case 'f':
       if (freopen(optarg, "r", stdin) == NULL) {

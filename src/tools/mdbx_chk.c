@@ -633,7 +633,8 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "Vvqnwcds:")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s\n", MDBX_VERSION_STRING);
+      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_build.datetime);
       exit(EXIT_SUCCESS);
       break;
     case 'v':
