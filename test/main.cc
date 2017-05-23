@@ -40,7 +40,7 @@ void actor_params::set_defaults(void) {
   mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NORDAHEAD |
                MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM;
   table_flags = MDBX_DUPSORT;
-  size = 1024 * 1024;
+  size = 1024 * 1024 * 4;
 
   keygen.seed = 1;
   keygen.keycase = kc_random;
