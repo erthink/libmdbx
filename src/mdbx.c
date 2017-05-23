@@ -9411,11 +9411,11 @@ static void __hot mdbx_midl_xmerge(MDB_IDL idl, MDB_IDL merge) {
 /* Quicksort + Insertion sort for small arrays */
 #define SMALL 8
 #define MIDL_SWAP(a, b)                                                        \
-  {                                                                            \
-    pgno_t itmp = (a);                                                         \
+  do {                                                                         \
+    pgno_t tmp_pgno = (a);                                                     \
     (a) = (b);                                                                 \
-    (b) = itmp;                                                                \
-  }
+    (b) = tmp_pgno;                                                            \
+  } while (0)
 
 static void __hot mdbx_midl_sort(MDB_IDL ids) {
   /* Max possible depth of int-indexed tree * 2 items/level */
@@ -9444,15 +9444,15 @@ static void __hot mdbx_midl_sort(MDB_IDL ids) {
     } else {
       k = (l + ir) >> 1; /* Choose median of left, center, right */
       MIDL_SWAP(ids[k], ids[l + 1]);
-      if (ids[l] < ids[ir]) {
+      if (ids[l] < ids[ir])
         MIDL_SWAP(ids[l], ids[ir]);
-      }
-      if (ids[l + 1] < ids[ir]) {
+
+      if (ids[l + 1] < ids[ir])
         MIDL_SWAP(ids[l + 1], ids[ir]);
-      }
-      if (ids[l] < ids[l + 1]) {
+
+      if (ids[l] < ids[l + 1])
         MIDL_SWAP(ids[l], ids[l + 1]);
-      }
+
       i = l + 1;
       j = ir;
       a = ids[l + 1];
