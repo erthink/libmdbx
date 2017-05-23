@@ -31,3 +31,15 @@ int osal_delay(unsigned seconds);
 void osal_udelay(unsigned us);
 void osal_yield(void);
 bool osal_istty(int fd);
+
+#ifdef _MSC_VER
+#ifndef STDIN_FILENO
+#define STDIN_FILENO _fileno(stdin)
+#endif
+#ifndef STDOUT_FILENO
+#define STDOUT_FILENO _fileno(stdout)
+#endif
+#ifndef STDERR_FILENO
+#define STDERR_FILENO _fileno(stderr)
+#endif
+#endif /* _MSC_VER */
