@@ -20,7 +20,7 @@
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
-    return MDB_SUCCESS;
+    return MDBX_SUCCESS;
   case WAIT_FAILED:
     return mdbx_get_errno_checked();
   case WAIT_ABANDONED:
@@ -48,16 +48,16 @@ __extern_C __declspec(dllimport) void __cdecl _assert(char const *message,
 #endif /* _MSC_VER */
 
 #ifndef mdbx_assert_fail
-void __cold mdbx_assert_fail(MDB_env *env, const char *msg, const char *func,
+void __cold mdbx_assert_fail(MDBX_env *env, const char *msg, const char *func,
                              int line) {
-#if MDB_DEBUG
+#if MDBX_DEBUG
   if (env && env->me_assert_func) {
     env->me_assert_func(env, msg, func, line);
     return;
   }
 #else
   (void)env;
-#endif /* MDB_DEBUG */
+#endif /* MDBX_DEBUG */
 
   if (mdbx_debug_logger)
     mdbx_debug_log(MDBX_DBG_ASSERT, func, line, "assert: %s\n", msg);
@@ -139,10 +139,10 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
 #if _MSC_VER
   *result = _aligned_malloc(bytes, alignment);
-  return *result ? MDB_SUCCESS : MDBX_ENOMEM /* ERROR_OUTOFMEMORY */;
+  return *result ? MDBX_SUCCESS : MDBX_ENOMEM /* ERROR_OUTOFMEMORY */;
 #elif __GLIBC_PREREQ(2, 16) || __STDC_VERSION__ >= 201112L
   *result = memalign(alignment, bytes);
-  return *result ? MDB_SUCCESS : errno;
+  return *result ? MDBX_SUCCESS : errno;
 #elif _POSIX_VERSION >= 200112L
   *result = NULL;
   return posix_memalign(result, alignment, bytes);
@@ -166,7 +166,7 @@ void mdbx_memalign_free(void *ptr) {
 
 int mdbx_condmutex_init(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  int rc = MDB_SUCCESS;
+  int rc = MDBX_SUCCESS;
   condmutex->event = NULL;
   condmutex->mutex = CreateMutex(NULL, FALSE, NULL);
   if (!condmutex->mutex)
@@ -203,13 +203,15 @@ int mdbx_condmutex_destroy(mdbx_condmutex_t *condmutex) {
   int rc = MDBX_EINVAL;
 #if defined(_WIN32) || defined(_WIN64)
   if (condmutex->event) {
-    rc = CloseHandle(condmutex->event) ? MDB_SUCCESS : mdbx_get_errno_checked();
-    if (rc == MDB_SUCCESS)
+    rc =
+        CloseHandle(condmutex->event) ? MDBX_SUCCESS : mdbx_get_errno_checked();
+    if (rc == MDBX_SUCCESS)
       condmutex->event = NULL;
   }
   if (condmutex->mutex) {
-    rc = CloseHandle(condmutex->mutex) ? MDB_SUCCESS : mdbx_get_errno_checked();
-    if (rc == MDB_SUCCESS)
+    rc =
+        CloseHandle(condmutex->mutex) ? MDBX_SUCCESS : mdbx_get_errno_checked();
+    if (rc == MDBX_SUCCESS)
       condmutex->mutex = NULL;
   }
 #else
@@ -238,7 +240,7 @@ int mdbx_condmutex_lock(mdbx_condmutex_t *condmutex) {
 
 int mdbx_condmutex_unlock(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  return ReleaseMutex(condmutex->mutex) ? MDB_SUCCESS
+  return ReleaseMutex(condmutex->mutex) ? MDBX_SUCCESS
                                         : mdbx_get_errno_checked();
 #else
   return pthread_mutex_unlock(&condmutex->mutex);
@@ -247,7 +249,7 @@ int mdbx_condmutex_unlock(mdbx_condmutex_t *condmutex) {
 
 int mdbx_condmutex_signal(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  return SetEvent(condmutex->event) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return SetEvent(condmutex->event) ? MDBX_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_cond_signal(&condmutex->cond);
 #endif
@@ -270,7 +272,7 @@ int mdbx_condmutex_wait(mdbx_condmutex_t *condmutex) {
 int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   InitializeCriticalSection(fastmutex);
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 #else
   return pthread_mutex_init(fastmutex, NULL);
 #endif
@@ -279,7 +281,7 @@ int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex) {
 int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   DeleteCriticalSection(fastmutex);
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 #else
   return pthread_mutex_destroy(fastmutex);
 #endif
@@ -288,7 +290,7 @@ int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
 int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   EnterCriticalSection(fastmutex);
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 #else
   return pthread_mutex_lock(fastmutex);
 #endif
@@ -297,7 +299,7 @@ int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
 int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   LeaveCriticalSection(fastmutex);
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 #else
   return pthread_mutex_unlock(fastmutex);
 #endif
@@ -320,7 +322,7 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
   case O_RDONLY:
     DesiredAccess = GENERIC_READ;
     break;
-  case O_WRONLY: /* assume for mdb_env_copy() and friends output */
+  case O_WRONLY: /* assume for MDBX_env_copy() and friends output */
     DesiredAccess = GENERIC_WRITE;
     ShareMode = 0;
     FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH;
@@ -378,14 +380,14 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
     (void)fcntl(*fd, F_SETFD, flags | FD_CLOEXEC);
 #endif
 #endif
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
 int mdbx_closefile(mdbx_filehandle_t fd) {
 #if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(fd) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return CloseHandle(fd) ? MDBX_SUCCESS : mdbx_get_errno_checked();
 #else
-  return (close(fd) == 0) ? MDB_SUCCESS : errno;
+  return (close(fd) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
 
@@ -402,16 +404,16 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
   DWORD read = 0;
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
     int rc = mdbx_get_errno_checked();
-    return (rc == MDB_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
+    return (rc == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
 #else
   ssize_t read = pread(fd, buf, bytes, offset);
   if (read < 0) {
     int rc = errno;
-    return (rc == MDB_SUCCESS) ? /* paranoia */ MDBX_EIO : rc;
+    return (rc == MDBX_SUCCESS) ? /* paranoia */ MDBX_EIO : rc;
   }
 #endif
-  return (bytes == (size_t)read) ? MDB_SUCCESS : MDBX_ENODATA;
+  return (bytes == (size_t)read) ? MDBX_SUCCESS : MDBX_ENODATA;
 }
 
 int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
@@ -427,7 +429,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
 
   DWORD written;
   if (likely(WriteFile(fd, buf, (DWORD)bytes, &written, &ov)))
-    return (bytes == written) ? MDB_SUCCESS : MDBX_EIO /* ERROR_WRITE_FAULT */;
+    return (bytes == written) ? MDBX_SUCCESS : MDBX_EIO /* ERROR_WRITE_FAULT */;
   return mdbx_get_errno_checked();
 #else
   int rc;
@@ -435,7 +437,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
   do {
     written = pwrite(fd, buf, bytes, offset);
     if (likely(bytes == (size_t)written))
-      return MDB_SUCCESS;
+      return MDBX_SUCCESS;
     rc = errno;
   } while (rc == EINTR);
   return (written < 0) ? rc : MDBX_EIO /* Use which error code (ENOSPC)? */;
@@ -448,12 +450,12 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
   size_t written = 0;
   for (int i = 0; i < iovcnt; ++i) {
     int rc = mdbx_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
-    if (unlikely(rc != MDB_SUCCESS))
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     written += iov[i].iov_len;
     offset += iov[i].iov_len;
   }
-  return (expected_written == written) ? MDB_SUCCESS
+  return (expected_written == written) ? MDBX_SUCCESS
                                        : MDBX_EIO /* ERROR_WRITE_FAULT */;
 #else
   int rc;
@@ -461,7 +463,7 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
   do {
     written = pwritev(fd, iov, iovcnt, offset);
     if (likely(expected_written == (size_t)written))
-      return MDB_SUCCESS;
+      return MDBX_SUCCESS;
     rc = errno;
   } while (rc == EINTR);
   return (written < 0) ? rc : MDBX_EIO /* Use which error code? */;
@@ -508,7 +510,7 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
 #ifdef SIGPIPE
       pthread_sigmask(SIG_SETMASK, &old, NULL);
 #endif
-      return MDB_SUCCESS;
+      return MDBX_SUCCESS;
     }
     ptr += written;
     bytes -= written;
@@ -518,19 +520,19 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
 int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)fullsync;
-  return FlushFileBuffers(fd) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return FlushFileBuffers(fd) ? MDBX_SUCCESS : mdbx_get_errno_checked();
 #elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
     (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
   for (;;) {
 #if _POSIX_C_SOURCE >= 199309L || _XOPEN_SOURCE >= 500 ||                      \
     defined(_POSIX_SYNCHRONIZED_IO)
     if (!fullsync && fdatasync(fd) == 0)
-      return MDB_SUCCESS;
+      return MDBX_SUCCESS;
 #else
     (void)fullsync;
 #endif
     if (fsync(fd) == 0)
-      return MDB_SUCCESS;
+      return MDBX_SUCCESS;
     int rc = errno;
     if (rc != EINTR)
       return rc;
@@ -554,7 +556,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, off_t *length) {
 
   *length = st.st_size;
 #endif
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
 int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
@@ -562,10 +564,10 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
   LARGE_INTEGER li;
   li.QuadPart = length;
   return (SetFilePointerEx(fd, li, NULL, FILE_BEGIN) && SetEndOfFile(fd))
-             ? MDB_SUCCESS
+             ? MDBX_SUCCESS
              : mdbx_get_errno_checked();
 #else
-  return ftruncate(fd, length) == 0 ? MDB_SUCCESS : errno;
+  return ftruncate(fd, length) == 0 ? MDBX_SUCCESS : errno;
 #endif
 }
 
@@ -574,7 +576,7 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
 int mdbx_thread_key_create(mdbx_thread_key_t *key) {
 #if defined(_WIN32) || defined(_WIN64)
   *key = TlsAlloc();
-  return (*key != TLS_OUT_OF_INDEXES) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return (*key != TLS_OUT_OF_INDEXES) ? MDBX_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_key_create(key, mdbx_rthc_dtor);
 #endif
@@ -617,7 +619,7 @@ int mdbx_thread_create(mdbx_thread_t *thread,
                        void *arg) {
 #if defined(_WIN32) || defined(_WIN64)
   *thread = CreateThread(NULL, 0, start_routine, arg, 0, NULL);
-  return *thread ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return *thread ? MDBX_SUCCESS : mdbx_get_errno_checked();
 #else
   return pthread_create(thread, NULL, start_routine, arg);
 #endif
@@ -638,10 +640,11 @@ int mdbx_thread_join(mdbx_thread_t thread) {
 int mdbx_msync(void *addr, size_t length, int async) {
 #if defined(_WIN32) || defined(_WIN64)
   if (async)
-    return MDB_SUCCESS;
-  return FlushViewOfFile(addr, length) ? MDB_SUCCESS : mdbx_get_errno_checked();
+    return MDBX_SUCCESS;
+  return FlushViewOfFile(addr, length) ? MDBX_SUCCESS
+                                       : mdbx_get_errno_checked();
 #else
-  return (msync(addr, length, async ? MS_ASYNC : MS_SYNC) == 0) ? MDB_SUCCESS
+  return (msync(addr, length, async ? MS_ASYNC : MS_SYNC) == 0) ? MDBX_SUCCESS
                                                                 : errno;
 #endif
 }
@@ -654,7 +657,7 @@ int mdbx_mremap_size(void **address, size_t old_size, size_t new_size) {
   return ERROR_CALL_NOT_IMPLEMENTED;
 #else
   *address = mremap(*address, old_size, new_size, 0, address);
-  return (*address != MAP_FAILED) ? MDB_SUCCESS : errno;
+  return (*address != MAP_FAILED) ? MDBX_SUCCESS : errno;
 #endif
 }
 
@@ -666,31 +669,31 @@ int mdbx_mmap(void **address, size_t length, int rw, mdbx_filehandle_t fd) {
     return mdbx_get_errno_checked();
   *address = MapViewOfFileEx(h, rw ? FILE_MAP_WRITE : FILE_MAP_READ, 0, 0,
                              length, *address);
-  int rc = (*address != MAP_FAILED) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  int rc = (*address != MAP_FAILED) ? MDBX_SUCCESS : mdbx_get_errno_checked();
   CloseHandle(h);
   return rc;
 #else
   *address = mmap(NULL, length, rw ? PROT_READ | PROT_WRITE : PROT_READ,
                   MAP_SHARED, fd, 0);
-  return (*address != MAP_FAILED) ? MDB_SUCCESS : errno;
+  return (*address != MAP_FAILED) ? MDBX_SUCCESS : errno;
 #endif
 }
 
 int mdbx_munmap(void *address, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)length;
-  return UnmapViewOfFile(address) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return UnmapViewOfFile(address) ? MDBX_SUCCESS : mdbx_get_errno_checked();
 #else
-  return (munmap(address, length) == 0) ? MDB_SUCCESS : errno;
+  return (munmap(address, length) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
 
 int mdbx_mlock(const void *address, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
-  return VirtualLock((void *)address, length) ? MDB_SUCCESS
+  return VirtualLock((void *)address, length) ? MDBX_SUCCESS
                                               : mdbx_get_errno_checked();
 #else
-  return (mlock(address, length) == 0) ? MDB_SUCCESS : errno;
+  return (mlock(address, length) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
 

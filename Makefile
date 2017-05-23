@@ -24,7 +24,7 @@ suffix	?=
 
 CC	?= gcc
 CXX	?= g++
-XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0 -DLIBMDBX_EXPORTS=1
+XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu99 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu99,$(CFLAGS))
@@ -117,7 +117,7 @@ endif
 ci-rule = ( CC=$$(which $1); if [ -n "$$CC" ]; then \
 		echo -n "probe by $2 ($$(readlink -f $$(which $$CC))): " && \
 		$(MAKE) clean >$1.log 2>$1.err && \
-		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDB_DEBUG=2" all check 1>$1.log 2>$1.err && echo "OK" \
+		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDBX_DEBUG=2" all check 1>$1.log 2>$1.err && echo "OK" \
 			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:

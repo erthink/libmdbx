@@ -19,16 +19,16 @@
  */
 
 #include <stdio.h>
-#include "lmdb.h"
+#include "mdbx.h"
 
 int main(int argc,char * argv[])
 {
 	int rc;
-	MDB_env *env;
-	MDB_dbi dbi;
+	MDBX_env *env;
+	MDBX_dbi dbi;
 	MDBX_val key, data;
 	MDBX_txn *txn;
-	MDB_cursor *cursor;
+	MDBX_cursor *cursor;
 	char sval[32];
 
 	/* Note: Most error checking omitted for simplicity */
@@ -50,9 +50,9 @@ int main(int argc,char * argv[])
 		fprintf(stderr, "mdbx_txn_commit: (%d) %s\n", rc, mdbx_strerror(rc));
 		goto leave;
 	}
-	rc = mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn);
+	rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
 	rc = mdbx_cursor_open(txn, dbi, &cursor);
-	while ((rc = mdbx_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
+	while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
 		printf("key: %p %.*s, data: %p %.*s\n",
 			key.iov_base,  (int) key.iov_len,  (char *) key.iov_base,
 			data.iov_base, (int) data.iov_len, (char *) data.iov_base);

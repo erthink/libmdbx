@@ -31,12 +31,12 @@ typedef struct flagbit {
   char *name;
 } flagbit;
 
-flagbit dbflags[] = {{MDB_REVERSEKEY, "reversekey"},
-                     {MDB_DUPSORT, "dupsort"},
-                     {MDB_INTEGERKEY, "integerkey"},
-                     {MDB_DUPFIXED, "dupfixed"},
-                     {MDB_INTEGERDUP, "integerdup"},
-                     {MDB_REVERSEDUP, "reversedup"},
+flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
+                     {MDBX_DUPSORT, "dupsort"},
+                     {MDBX_INTEGERKEY, "integerkey"},
+                     {MDBX_DUPFIXED, "dupfixed"},
+                     {MDBX_INTEGERDUP, "integerdup"},
+                     {MDBX_REVERSEDUP, "reversedup"},
                      {0, NULL}};
 
 static volatile sig_atomic_t gotsig;
@@ -84,8 +84,8 @@ static void byte(MDBX_val *v) {
 }
 
 /* Dump in BDB-compatible format */
-static int dumpit(MDBX_txn *txn, MDB_dbi dbi, char *name) {
-  MDB_cursor *mc;
+static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
+  MDBX_cursor *mc;
   MDBX_stat ms;
   MDBX_val key, data;
   MDBX_envinfo info;
@@ -125,7 +125,7 @@ static int dumpit(MDBX_txn *txn, MDB_dbi dbi, char *name) {
   if (rc)
     return rc;
 
-  while ((rc = mdbx_cursor_get(mc, &key, &data, MDB_NEXT)) == MDB_SUCCESS) {
+  while ((rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT)) == MDBX_SUCCESS) {
     if (gotsig) {
       rc = EINTR;
       break;
@@ -139,8 +139,8 @@ static int dumpit(MDBX_txn *txn, MDB_dbi dbi, char *name) {
     }
   }
   printf("DATA=END\n");
-  if (rc == MDB_NOTFOUND)
-    rc = MDB_SUCCESS;
+  if (rc == MDBX_NOTFOUND)
+    rc = MDBX_SUCCESS;
 
   return rc;
 }
@@ -154,9 +154,9 @@ static void usage(char *prog) {
 
 int main(int argc, char *argv[]) {
   int i, rc;
-  MDB_env *env;
+  MDBX_env *env;
   MDBX_txn *txn;
-  MDB_dbi dbi;
+  MDBX_dbi dbi;
   char *prog = argv[0];
   char *envname;
   char *subname = NULL;
@@ -196,7 +196,7 @@ int main(int argc, char *argv[]) {
       }
       break;
     case 'n':
-      envflags |= MDB_NOSUBDIR;
+      envflags |= MDBX_NOSUBDIR;
       break;
     case 'p':
       mode |= PRINT;
@@ -235,14 +235,14 @@ int main(int argc, char *argv[]) {
     mdbx_env_set_maxdbs(env, 2);
   }
 
-  rc = mdbx_env_open(env, envname, envflags | MDB_RDONLY, 0664);
+  rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0664);
   if (rc) {
     fprintf(stderr, "mdbx_env_open failed, error %d %s\n", rc,
             mdbx_strerror(rc));
     goto env_close;
   }
 
-  rc = mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
   if (rc) {
     fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
             mdbx_strerror(rc));
@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (alldbs) {
-    MDB_cursor *cursor;
+    MDBX_cursor *cursor;
     MDBX_val key;
     int count = 0;
 
@@ -266,9 +266,9 @@ int main(int argc, char *argv[]) {
               mdbx_strerror(rc));
       goto txn_abort;
     }
-    while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDB_NEXT_NODUP)) == 0) {
+    while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDBX_NEXT_NODUP)) == 0) {
       char *str;
-      MDB_dbi db2;
+      MDBX_dbi db2;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
       count++;
@@ -276,7 +276,7 @@ int main(int argc, char *argv[]) {
       memcpy(str, key.iov_base, key.iov_len);
       str[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, str, 0, &db2);
-      if (rc == MDB_SUCCESS) {
+      if (rc == MDBX_SUCCESS) {
         if (list) {
           printf("%s\n", str);
           list++;
@@ -295,15 +295,15 @@ int main(int argc, char *argv[]) {
     if (!count) {
       fprintf(stderr, "%s: %s does not contain multiple databases\n", prog,
               envname);
-      rc = MDB_NOTFOUND;
-    } else if (rc == MDB_INCOMPATIBLE) {
+      rc = MDBX_NOTFOUND;
+    } else if (rc == MDBX_INCOMPATIBLE) {
       /* LY: the record it not a named sub-db. */
-      rc = MDB_SUCCESS;
+      rc = MDBX_SUCCESS;
     }
   } else {
     rc = dumpit(txn, dbi, subname);
   }
-  if (rc && rc != MDB_NOTFOUND)
+  if (rc && rc != MDBX_NOTFOUND)
     fprintf(stderr, "%s: %s: %s\n", prog, envname, mdbx_strerror(rc));
 
   mdbx_dbi_close(env, dbi);

@@ -38,9 +38,9 @@ static void usage(char *prog) {
 
 int main(int argc, char *argv[]) {
   int i, rc;
-  MDB_env *env;
+  MDBX_env *env;
   MDBX_txn *txn;
-  MDB_dbi dbi;
+  MDBX_dbi dbi;
   MDBX_stat mst;
   MDBX_envinfo mei;
   char *prog = argv[0];
@@ -80,7 +80,7 @@ int main(int argc, char *argv[]) {
       freinfo++;
       break;
     case 'n':
-      envflags |= MDB_NOSUBDIR;
+      envflags |= MDBX_NOSUBDIR;
       break;
     case 'r':
       rdrinfo++;
@@ -110,7 +110,7 @@ int main(int argc, char *argv[]) {
     mdbx_env_set_maxdbs(env, 4);
   }
 
-  rc = mdbx_env_open(env, envname, envflags | MDB_RDONLY, 0664);
+  rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0664);
   if (rc) {
     fprintf(stderr, "mdbx_env_open failed, error %d %s\n", rc,
             mdbx_strerror(rc));
@@ -139,18 +139,18 @@ int main(int argc, char *argv[]) {
 
   if (rdrinfo) {
     printf("Reader Table Status\n");
-    rc = mdbx_reader_list(env, (MDB_msg_func *)fputs, stdout);
+    rc = mdbx_reader_list(env, (MDBX_msg_func *)fputs, stdout);
     if (rdrinfo > 1) {
       int dead;
       mdbx_reader_check(env, &dead);
       printf("  %d stale readers cleared.\n", dead);
-      rc = mdbx_reader_list(env, (MDB_msg_func *)fputs, stdout);
+      rc = mdbx_reader_list(env, (MDBX_msg_func *)fputs, stdout);
     }
     if (!(subname || alldbs || freinfo))
       goto env_close;
   }
 
-  rc = mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
   if (rc) {
     fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
             mdbx_strerror(rc));
@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (freinfo) {
-    MDB_cursor *cursor;
+    MDBX_cursor *cursor;
     MDBX_val key, data;
     size_t pages = 0, *iptr;
     size_t reclaimable = 0;
@@ -178,7 +178,7 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
     prstat(&mst);
-    while ((rc = mdbx_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
+    while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
       iptr = data.iov_base;
       pages += *iptr;
       if (envinfo && mei.me_tail_txnid > *(size_t *)key.iov_base)
@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
   prstat(&mst);
 
   if (alldbs) {
-    MDB_cursor *cursor;
+    MDBX_cursor *cursor;
     MDBX_val key;
 
     rc = mdbx_cursor_open(txn, dbi, &cursor);
@@ -271,16 +271,16 @@ int main(int argc, char *argv[]) {
               mdbx_strerror(rc));
       goto txn_abort;
     }
-    while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDB_NEXT_NODUP)) == 0) {
+    while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDBX_NEXT_NODUP)) == 0) {
       char *str;
-      MDB_dbi db2;
+      MDBX_dbi db2;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
       str = malloc(key.iov_len + 1);
       memcpy(str, key.iov_base, key.iov_len);
       str[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, str, 0, &db2);
-      if (rc == MDB_SUCCESS)
+      if (rc == MDBX_SUCCESS)
         printf("Status of %s\n", str);
       free(str);
       if (rc)
@@ -297,8 +297,8 @@ int main(int argc, char *argv[]) {
     mdbx_cursor_close(cursor);
   }
 
-  if (rc == MDB_NOTFOUND)
-    rc = MDB_SUCCESS;
+  if (rc == MDBX_NOTFOUND)
+    rc = MDBX_SUCCESS;
 
   mdbx_dbi_close(env, dbi);
 txn_abort:

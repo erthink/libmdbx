@@ -315,7 +315,7 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 /*----------------------------------------------------------------------------*/
 
 #ifndef mdbx_assert_fail
-void mdbx_assert_fail(MDB_env *env, const char *msg, const char *func,
+void mdbx_assert_fail(MDBX_env *env, const char *msg, const char *func,
                       int line);
 #endif /* mdbx_assert_fail */
 
@@ -453,20 +453,20 @@ void mdbx_osal_jitter(bool tiny);
 #define MDBX_OSAL_LOCK_SIGN MDBX_TETRAD('P', 'T', 'M', 'X')
 #endif
 
-int mdbx_lck_init(MDB_env *env);
+int mdbx_lck_init(MDBX_env *env);
 
-int mdbx_lck_seize(MDB_env *env);
-int mdbx_lck_downgrade(MDB_env *env);
-void mdbx_lck_destroy(MDB_env *env);
+int mdbx_lck_seize(MDBX_env *env);
+int mdbx_lck_downgrade(MDBX_env *env);
+void mdbx_lck_destroy(MDBX_env *env);
 
-int mdbx_rdt_lock(MDB_env *env);
-void mdbx_rdt_unlock(MDB_env *env);
+int mdbx_rdt_lock(MDBX_env *env);
+void mdbx_rdt_unlock(MDBX_env *env);
 
-int mdbx_txn_lock(MDB_env *env);
-void mdbx_txn_unlock(MDB_env *env);
+int mdbx_txn_lock(MDBX_env *env);
+void mdbx_txn_unlock(MDBX_env *env);
 
-int mdbx_rpid_set(MDB_env *env);
-int mdbx_rpid_clear(MDB_env *env);
+int mdbx_rpid_set(MDBX_env *env);
+int mdbx_rpid_clear(MDBX_env *env);
 
 /* Checks reader by pid.
  *
@@ -474,7 +474,7 @@ int mdbx_rpid_clear(MDB_env *env);
  *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
-int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid);
+int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 
 /*----------------------------------------------------------------------------*/
 

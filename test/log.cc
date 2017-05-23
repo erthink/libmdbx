@@ -101,9 +101,9 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
 #ifdef _MSC_VER
   int rc = _localtime32_s(&tm, (const __time32_t *)&now.utc);
 #else
-  int rc = localtime_r(&time, &tm) ? MDB_SUCCESS : errno;
+  int rc = localtime_r(&time, &tm) ? MDBX_SUCCESS : errno;
 #endif
-  if (rc != MDB_SUCCESS)
+  if (rc != MDBX_SUCCESS)
     failure_perror("localtime_r()", rc);
 
   last = stdout;

@@ -37,9 +37,9 @@ void actor_params::set_defaults(void) {
 #else
       "test_tmpdb.mdbx";
 #endif
-  mode_flags = MDB_NOSUBDIR | MDB_WRITEMAP | MDB_MAPASYNC | MDB_NORDAHEAD |
-               MDB_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM;
-  table_flags = MDB_DUPSORT;
+  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NORDAHEAD |
+               MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM;
+  table_flags = MDBX_DUPSORT;
   size = 1024 * 1024;
 
   keygen.seed = 1;

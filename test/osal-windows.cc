@@ -20,7 +20,7 @@ static HANDLE hBarrierSemaphore, hBarrierEvent;
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
-    return MDB_SUCCESS;
+    return MDBX_SUCCESS;
   case WAIT_FAILED:
     return GetLastError();
   case WAIT_ABANDONED:

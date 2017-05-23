@@ -73,8 +73,8 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   assert(mapping.mesh <= mapping.width);
   assert(mapping.rotate <= mapping.width);
   assert(mapping.offset <= mask(mapping.width));
-  assert(!(key_essentials.flags & (MDB_INTEGERDUP | MDB_REVERSEDUP)));
-  assert(!(value_essentials.flags & (MDB_INTEGERKEY | MDB_REVERSEKEY)));
+  assert(!(key_essentials.flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
+  assert(!(value_essentials.flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY)));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -120,12 +120,13 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
 void maker::setup(const config::actor_params_pod &actor,
                   unsigned thread_number) {
-  key_essentials.flags = actor.table_flags & (MDB_INTEGERKEY | MDB_REVERSEKEY);
+  key_essentials.flags =
+      actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY);
   key_essentials.minlen = actor.keylen_min;
   key_essentials.maxlen = actor.keylen_max;
 
   value_essentials.flags =
-      actor.table_flags & (MDB_INTEGERDUP | MDB_REVERSEDUP);
+      actor.table_flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP);
   value_essentials.minlen = actor.datalen_min;
   value_essentials.maxlen = actor.datalen_max;
 
@@ -196,14 +197,14 @@ void __hot maker::mk(const serial_t serial, const essentials &params,
   out.value.iov_base = out.bytes;
   out.value.iov_len = params.minlen;
 
-  if (params.flags & (MDB_INTEGERKEY | MDB_INTEGERDUP)) {
+  if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
     assert(params.minlen == 4 || params.minlen == 8);
     if (is_byteorder_le() || params.minlen == 8)
       out.u64 = serial;
     else
       out.u32 = (uint32_t)serial;
-  } else if (params.flags & (MDB_REVERSEKEY | MDB_REVERSEDUP)) {
+  } else if (params.flags & (MDBX_REVERSEKEY | MDBX_REVERSEDUP)) {
     if (out.value.iov_len > 8) {
       memset(out.bytes, '\0', out.value.iov_len - 8);
       unaligned::store(out.bytes + out.value.iov_len - 8, htobe64(serial));

@@ -23,16 +23,16 @@ static void sighandle(int sig) { (void)sig; }
 
 int main(int argc, char *argv[]) {
   int rc;
-  MDB_env *env = NULL;
+  MDBX_env *env = NULL;
   const char *progname = argv[0], *act;
-  unsigned flags = MDB_RDONLY;
+  unsigned flags = MDBX_RDONLY;
   unsigned cpflags = 0;
 
   for (; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
     if (argv[1][1] == 'n' && argv[1][2] == '\0')
-      flags |= MDB_NOSUBDIR;
+      flags |= MDBX_NOSUBDIR;
     else if (argv[1][1] == 'c' && argv[1][2] == '\0')
-      cpflags |= MDB_CP_COMPACT;
+      cpflags |= MDBX_CP_COMPACT;
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
       printf("%s (%s, build %s)\n", mdbx_version.git.describe,
              mdbx_version.git.datetime, mdbx_build.datetime);
@@ -57,10 +57,10 @@ int main(int argc, char *argv[]) {
 
   act = "opening environment";
   rc = mdbx_env_create(&env);
-  if (rc == MDB_SUCCESS) {
+  if (rc == MDBX_SUCCESS) {
     rc = mdbx_env_open(env, argv[1], flags, 0640);
   }
-  if (rc == MDB_SUCCESS) {
+  if (rc == MDBX_SUCCESS) {
     act = "copying";
     if (argc == 2)
       rc = mdbx_env_copy2fd(env, STDOUT_FILENO, cpflags);

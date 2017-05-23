@@ -2,9 +2,9 @@
 .\" Copyright 2014-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDB_LOAD 1 "2014/06/20" "LMDB 0.9.14"
+.TH MDBX_LOAD 1 "2014/06/20" "LMDB 0.9.14"
 .SH NAME
-mdbx_load \- LMDB environment import tool
+mdbx_load \- MDBX environment import tool
 .SH SYNOPSIS
 .B mdbx_load
 [\c
@@ -24,7 +24,7 @@ mdbx_load \- LMDB environment import tool
 The
 .B mdbx_load
 utility reads from the standard input and loads it into the
-LMDB environment
+MDBX environment
 .BR envpath .
 
 The input to
@@ -43,7 +43,7 @@ Write the library version number to the standard output, and exit.
 Read from the specified file instead of from the standard input.
 .TP
 .BR \-n
-Load an LMDB database which does not use subdirectories.
+Load an MDBX database which does not use subdirectories.
 .TP
 .BR \-s \ subdb
 Load a specific subdatabase. If no database is specified, data is loaded into the main database.

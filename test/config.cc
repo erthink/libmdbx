@@ -226,21 +226,21 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 //-----------------------------------------------------------------------------
 
 const struct option_verb mode_bits[] = {
-    {"rdonly", MDB_RDONLY},           {"mapasync", MDB_MAPASYNC},
-    {"utterly", MDBX_UTTERLY_NOSYNC}, {"nosubdir", MDB_NOSUBDIR},
-    {"nosync", MDB_NOSYNC},           {"nometasync", MDB_NOMETASYNC},
-    {"writemap", MDB_WRITEMAP},       {"notls", MDB_NOTLS},
-    {"nordahead", MDB_NORDAHEAD},     {"nomeminit", MDB_NOMEMINIT},
+    {"rdonly", MDBX_RDONLY},          {"mapasync", MDBX_MAPASYNC},
+    {"utterly", MDBX_UTTERLY_NOSYNC}, {"nosubdir", MDBX_NOSUBDIR},
+    {"nosync", MDBX_NOSYNC},          {"nometasync", MDBX_NOMETASYNC},
+    {"writemap", MDBX_WRITEMAP},      {"notls", MDBX_NOTLS},
+    {"nordahead", MDBX_NORDAHEAD},    {"nomeminit", MDBX_NOMEMINIT},
     {"coasesce", MDBX_COALESCE},      {"lifo", MDBX_LIFORECLAIM},
     {"parturb", MDBX_PAGEPERTURB},    {nullptr, 0}};
 
 const struct option_verb table_bits[] = {
-    {"key.reverse", MDB_REVERSEKEY},
-    {"key.integer", MDB_INTEGERKEY},
-    {"data.integer", MDB_INTEGERDUP | MDB_DUPFIXED | MDB_DUPSORT},
-    {"data.fixed", MDB_DUPFIXED | MDB_DUPSORT},
-    {"data.reverse", MDB_REVERSEDUP | MDB_DUPSORT},
-    {"data.dups", MDB_DUPSORT},
+    {"key.reverse", MDBX_REVERSEKEY},
+    {"key.integer", MDBX_INTEGERKEY},
+    {"data.integer", MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT},
+    {"data.fixed", MDBX_DUPFIXED | MDBX_DUPSORT},
+    {"data.reverse", MDBX_REVERSEDUP | MDBX_DUPSORT},
+    {"data.dups", MDBX_DUPSORT},
     {nullptr, 0}};
 
 static void dump_verbs(const char *caption, size_t bits,

@@ -125,13 +125,13 @@ static __inline BOOL funlock(mdbx_filehandle_t fd, off_t offset, size_t bytes) {
 #define LCK_BODY LCK_BODY_OFFSET, LCK_BODY_LEN
 #define LCK_WHOLE 0, LCK_MAXLEN
 
-int mdbx_txn_lock(MDB_env *env) {
+int mdbx_txn_lock(MDBX_env *env) {
   if (flock(env->me_fd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_BODY))
-    return MDB_SUCCESS;
+    return MDBX_SUCCESS;
   return mdbx_get_errno_checked();
 }
 
-void mdbx_txn_unlock(MDB_env *env) {
+void mdbx_txn_unlock(MDBX_env *env) {
   if (!funlock(env->me_fd, LCK_BODY))
     mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
 }
@@ -147,17 +147,17 @@ void mdbx_txn_unlock(MDB_env *env) {
 #define LCK_LOWER LCK_LO_OFFSET, LCK_LO_LEN
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
-int mdbx_rdt_lock(MDB_env *env) {
+int mdbx_rdt_lock(MDBX_env *env) {
   if (env->me_lfd == INVALID_HANDLE_VALUE)
-    return MDB_SUCCESS; /* readonly database in readonly filesystem */
+    return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
   /* transite from S-? (used) to S-E (locked), e.g. exlcusive lock upper-part */
   if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
-    return MDB_SUCCESS;
+    return MDBX_SUCCESS;
   return mdbx_get_errno_checked();
 }
 
-void mdbx_rdt_unlock(MDB_env *env) {
+void mdbx_rdt_unlock(MDBX_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* transite from S-E (locked) to S-? (used), e.g. unlock upper-part */
     if (!funlock(env->me_lfd, LCK_UPPER))
@@ -181,9 +181,9 @@ void mdbx_rdt_unlock(MDB_env *env) {
  E-E  = exclusive
 */
 
-int mdbx_lck_init(MDB_env *env) {
+int mdbx_lck_init(MDBX_env *env) {
   (void)env;
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
 /* Seize state as exclusive (E-E and returns MDBX_RESULT_TRUE)
@@ -238,7 +238,7 @@ static int internal_seize_lck(HANDLE lfd) {
   return rc;
 }
 
-int mdbx_lck_seize(MDB_env *env) {
+int mdbx_lck_seize(MDBX_env *env) {
   int rc;
 
   assert(env->me_fd != INVALID_HANDLE_VALUE);
@@ -255,7 +255,7 @@ int mdbx_lck_seize(MDB_env *env) {
 
   rc = internal_seize_lck(env->me_lfd);
   mdbx_jitter4testing(false);
-  if (rc == MDBX_RESULT_TRUE && (env->me_flags & MDB_RDONLY) == 0) {
+  if (rc == MDBX_RESULT_TRUE && (env->me_flags & MDBX_RDONLY) == 0) {
     /* Check that another process don't operates in without-lck mode.
      * Doing such check by exclusive locking the body-part of db. Should be
      * noted:
@@ -280,7 +280,7 @@ int mdbx_lck_seize(MDB_env *env) {
 }
 
 /* Transite from exclusive state (E-E) to used (S-?) */
-int mdbx_lck_downgrade(MDB_env *env) {
+int mdbx_lck_downgrade(MDBX_env *env) {
   int rc;
   assert(env->me_fd != INVALID_HANDLE_VALUE);
 
@@ -301,10 +301,10 @@ int mdbx_lck_downgrade(MDB_env *env) {
       mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
                  "S-E(locked) >> S-?(used)", GetLastError());
   }
-  return MDB_SUCCESS /* 5) now at S-? (used), done */;
+  return MDBX_SUCCESS /* 5) now at S-? (used), done */;
 }
 
-void mdbx_lck_destroy(MDB_env *env) {
+void mdbx_lck_destroy(MDBX_env *env) {
   int rc;
 
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
@@ -353,14 +353,14 @@ void mdbx_lck_destroy(MDB_env *env) {
 /*----------------------------------------------------------------------------*/
 /* reader checking (by pid) */
 
-int mdbx_rpid_set(MDB_env *env) {
+int mdbx_rpid_set(MDBX_env *env) {
   (void)env;
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
-int mdbx_rpid_clear(MDB_env *env) {
+int mdbx_rpid_clear(MDBX_env *env) {
   (void)env;
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
 /* Checks reader by pid.
@@ -369,7 +369,7 @@ int mdbx_rpid_clear(MDB_env *env) {
  *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
-int mdbx_rpid_check(MDB_env *env, mdbx_pid_t pid) {
+int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
   (void)env;
   HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
   int rc;

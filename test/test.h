@@ -54,8 +54,8 @@ extern bool failfast;
 
 //-----------------------------------------------------------------------------
 
-struct db_deleter : public std::unary_function<void, MDB_env *> {
-  void operator()(MDB_env *env) const { mdbx_env_close(env); }
+struct db_deleter : public std::unary_function<void, MDBX_env *> {
+  void operator()(MDBX_env *env) const { mdbx_env_close(env); }
 };
 
 struct txn_deleter : public std::unary_function<void, MDBX_txn *> {
@@ -66,13 +66,13 @@ struct txn_deleter : public std::unary_function<void, MDBX_txn *> {
   }
 };
 
-struct cursor_deleter : public std::unary_function<void, MDB_cursor *> {
-  void operator()(MDB_cursor *cursor) const { mdbx_cursor_close(cursor); }
+struct cursor_deleter : public std::unary_function<void, MDBX_cursor *> {
+  void operator()(MDBX_cursor *cursor) const { mdbx_cursor_close(cursor); }
 };
 
-typedef std::unique_ptr<MDB_env, db_deleter> scoped_db_guard;
+typedef std::unique_ptr<MDBX_env, db_deleter> scoped_db_guard;
 typedef std::unique_ptr<MDBX_txn, txn_deleter> scoped_txn_guard;
-typedef std::unique_ptr<MDB_cursor, cursor_deleter> scoped_cursor_guard;
+typedef std::unique_ptr<MDBX_cursor, cursor_deleter> scoped_cursor_guard;
 
 //-----------------------------------------------------------------------------
 
@@ -96,7 +96,7 @@ protected:
     mdbx_canary canary;
   } last;
 
-  static int oom_callback(MDB_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
+  static int oom_callback(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
                           unsigned gap, int retry);
 
   void db_prepare();
@@ -108,9 +108,9 @@ protected:
   void fetch_canary();
   void update_canary(uint64_t increment);
 
-  MDB_dbi db_table_open(bool create);
-  void db_table_drop(MDB_dbi handle);
-  void db_table_close(MDB_dbi handle);
+  MDBX_dbi db_table_open(bool create);
+  void db_table_drop(MDBX_dbi handle);
+  void db_table_close(MDBX_dbi handle);
 
   bool wait4start();
   void report(size_t nops_done);
@@ -128,7 +128,7 @@ protected:
   }
 
   bool mode_readonly() const {
-    return (config.params.mode_flags & MDB_RDONLY) ? true : false;
+    return (config.params.mode_flags & MDBX_RDONLY) ? true : false;
   }
 
 public:

@@ -51,12 +51,12 @@ typedef struct flagbit {
 
 #define S(s) s, STRLENOF(s)
 
-flagbit dbflags[] = {{MDB_REVERSEKEY, S("reversekey")},
-                     {MDB_DUPSORT, S("dupsort")},
-                     {MDB_INTEGERKEY, S("integerkey")},
-                     {MDB_DUPFIXED, S("dupfixed")},
-                     {MDB_INTEGERDUP, S("integerdup")},
-                     {MDB_REVERSEDUP, S("reversedup")},
+flagbit dbflags[] = {{MDBX_REVERSEKEY, S("reversekey")},
+                     {MDBX_DUPSORT, S("dupsort")},
+                     {MDBX_INTEGERKEY, S("integerkey")},
+                     {MDBX_DUPFIXED, S("dupfixed")},
+                     {MDBX_INTEGERDUP, S("integerdup")},
+                     {MDBX_REVERSEDUP, S("reversedup")},
                      {0, NULL, 0}};
 
 static void readhdr(void) {
@@ -294,10 +294,10 @@ static void usage(void) {
 
 int main(int argc, char *argv[]) {
   int i, rc;
-  MDB_env *env;
+  MDBX_env *env;
   MDBX_txn *txn;
-  MDB_cursor *mc;
-  MDB_dbi dbi;
+  MDBX_cursor *mc;
+  MDBX_dbi dbi;
   char *envname;
   int envflags = 0, putflags = 0;
 
@@ -328,13 +328,13 @@ int main(int argc, char *argv[]) {
       }
       break;
     case 'n':
-      envflags |= MDB_NOSUBDIR;
+      envflags |= MDBX_NOSUBDIR;
       break;
     case 's':
       subname = strdup(optarg);
       break;
     case 'N':
-      putflags = MDB_NOOVERWRITE | MDB_NODUPDATA;
+      putflags = MDBX_NOOVERWRITE | MDBX_NODUPDATA;
       break;
     case 'T':
       mode |= NOHDR | PRINT;
@@ -369,9 +369,9 @@ int main(int argc, char *argv[]) {
   if (envinfo.me_mapsize)
     mdbx_env_set_mapsize(env, envinfo.me_mapsize);
 
-#ifdef MDB_FIXEDMAP
+#ifdef MDBX_FIXEDMAP
   if (info.me_mapaddr)
-    envflags |= MDB_FIXEDMAP;
+    envflags |= MDBX_FIXEDMAP;
 #endif
 
   rc = mdbx_env_open(env, envname, envflags, 0664);
@@ -395,7 +395,7 @@ int main(int argc, char *argv[]) {
       goto env_close;
     }
 
-    rc = mdbx_dbi_open(txn, subname, dbi_flags | MDB_CREATE, &dbi);
+    rc = mdbx_dbi_open(txn, subname, dbi_flags | MDBX_CREATE, &dbi);
     if (rc) {
       fprintf(stderr, "mdbx_open failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto txn_abort;
@@ -421,7 +421,7 @@ int main(int argc, char *argv[]) {
       }
 
       rc = mdbx_cursor_put(mc, &key, &data, putflags);
-      if (rc == MDB_KEYEXIST && putflags)
+      if (rc == MDBX_KEYEXIST && putflags)
         continue;
       if (rc) {
         fprintf(stderr, "mdbx_cursor_put failed, error %d %s\n", rc,

@@ -34,12 +34,12 @@ typedef struct flagbit {
   char *name;
 } flagbit;
 
-flagbit dbflags[] = {{MDB_DUPSORT, "dupsort"},
-                     {MDB_INTEGERKEY, "integerkey"},
-                     {MDB_REVERSEKEY, "reversekey"},
-                     {MDB_DUPFIXED, "dupfixed"},
-                     {MDB_REVERSEDUP, "reversedup"},
-                     {MDB_INTEGERDUP, "integerdup"},
+flagbit dbflags[] = {{MDBX_DUPSORT, "dupsort"},
+                     {MDBX_INTEGERKEY, "integerkey"},
+                     {MDBX_REVERSEKEY, "reversekey"},
+                     {MDBX_DUPFIXED, "dupfixed"},
+                     {MDBX_REVERSEDUP, "reversedup"},
+                     {MDBX_INTEGERDUP, "integerdup"},
                      {0, NULL}};
 
 static volatile sig_atomic_t gotsignal;
@@ -75,7 +75,7 @@ static __attribute__((constructor)) void init_walk(void) {
 uint64_t total_unused_bytes;
 int exclusive = 2;
 
-MDB_env *env;
+MDBX_env *env;
 MDBX_txn *txn, *locktxn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
@@ -298,19 +298,19 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
     }
   }
 
-  return gotsignal ? EINTR : MDB_SUCCESS;
+  return gotsignal ? EINTR : MDBX_SUCCESS;
 }
 
 typedef int(visitor)(const uint64_t record_number, const MDBX_val *key,
                      const MDBX_val *data);
-static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent);
+static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent);
 
 static int handle_userdb(const uint64_t record_number, const MDBX_val *key,
                          const MDBX_val *data) {
   (void)record_number;
   (void)key;
   (void)data;
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
 static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
@@ -332,7 +332,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                 data->iov_len);
   else {
     number = *iptr++;
-    if (number >= MDB_IDL_UM_MAX)
+    if (number >= MDBX_IDL_UM_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
     else if ((number + 1) * sizeof(pgno_t) != data->iov_len)
@@ -378,7 +378,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     }
   }
 
-  return MDB_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
 static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
@@ -400,14 +400,14 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
 
   rc = process_db(-1, name, handle_userdb, 0);
   free(name);
-  if (rc != MDB_INCOMPATIBLE)
+  if (rc != MDBX_INCOMPATIBLE)
     return rc;
 
   return handle_userdb(record_number, key, data);
 }
 
-static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
-  MDB_cursor *mc;
+static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent) {
+  MDBX_cursor *mc;
   MDBX_stat ms;
   MDBX_val key, data;
   MDBX_val prev_key, prev_data;
@@ -424,7 +424,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
     if (rc) {
       if (!name ||
           rc !=
-              MDB_INCOMPATIBLE) /* LY: mainDB's record is not a user's DB. */ {
+              MDBX_INCOMPATIBLE) /* LY: mainDB's record is not a user's DB. */ {
         error(" - mdbx_open '%s' failed, error %d %s\n", name ? name : "main",
               rc, mdbx_strerror(rc));
       }
@@ -439,7 +439,7 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
       fflush(NULL);
     }
     skipped_subdb++;
-    return MDB_SUCCESS;
+    return MDBX_SUCCESS;
   }
 
   if (!silent && verbose) {
@@ -488,8 +488,8 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
   saved_list = problems_push();
   prev_key.iov_base = NULL;
   prev_data.iov_len = 0;
-  rc = mdbx_cursor_get(mc, &key, &data, MDB_FIRST);
-  while (rc == MDB_SUCCESS) {
+  rc = mdbx_cursor_get(mc, &key, &data, MDBX_FIRST);
+  while (rc == MDBX_SUCCESS) {
     if (gotsignal) {
       print(" - interrupted by signal\n");
       fflush(NULL);
@@ -500,20 +500,20 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
     if (key.iov_len > maxkeysize) {
       problem_add("entry", record_count, "key length exceeds max-key-size",
                   "%" PRIuPTR " > %u", key.iov_len, maxkeysize);
-    } else if ((flags & MDB_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
+    } else if ((flags & MDBX_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
                key.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong key length",
                   "%" PRIuPTR " != 4or8", key.iov_len);
     }
 
-    if ((flags & MDB_INTEGERDUP) && data.iov_len != sizeof(uint64_t) &&
+    if ((flags & MDBX_INTEGERDUP) && data.iov_len != sizeof(uint64_t) &&
         data.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong data length",
                   "%" PRIuPTR " != 4or8", data.iov_len);
     }
 
     if (prev_key.iov_base) {
-      if ((flags & MDB_DUPFIXED) && prev_data.iov_len != data.iov_len) {
+      if ((flags & MDBX_DUPFIXED) && prev_data.iov_len != data.iov_len) {
         problem_add("entry", record_count, "different data length",
                     "%" PRIuPTR " != %" PRIuPTR "", prev_data.iov_len,
                     data.iov_len);
@@ -524,9 +524,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
         problem_add("entry", record_count, "broken ordering of entries", NULL);
       } else if (cmp == 0) {
         ++dups;
-        if (!(flags & MDB_DUPSORT))
+        if (!(flags & MDBX_DUPSORT))
           problem_add("entry", record_count, "duplicated entries", NULL);
-        else if (flags & MDB_INTEGERDUP) {
+        else if (flags & MDBX_INTEGERDUP) {
           cmp = mdbx_dcmp(txn, dbi, &prev_data, &data);
           if (cmp > 0)
             problem_add("entry", record_count,
@@ -534,9 +534,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
         }
       }
     } else if (verbose) {
-      if (flags & MDB_INTEGERKEY)
+      if (flags & MDBX_INTEGERKEY)
         print(" - fixed key-size %" PRIuPTR "\n", key.iov_len);
-      if (flags & (MDB_INTEGERDUP | MDB_DUPFIXED))
+      if (flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED))
         print(" - fixed data-size %" PRIuPTR "\n", data.iov_len);
     }
 
@@ -552,9 +552,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
 
     prev_key = key;
     prev_data = data;
-    rc = mdbx_cursor_get(mc, &key, &data, MDB_NEXT);
+    rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT);
   }
-  if (rc != MDB_NOTFOUND)
+  if (rc != MDBX_NOTFOUND)
     error(" - mdbx_cursor_get failed, error %d %s\n", rc, mdbx_strerror(rc));
   else
     rc = 0;
@@ -612,7 +612,7 @@ int main(int argc, char *argv[]) {
   int i, rc;
   char *prog = argv[0];
   char *envname;
-  int envflags = MDB_RDONLY;
+  int envflags = MDBX_RDONLY;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
   int dont_traversal = 0;
   struct timespec timestamp_start, timestamp_finish;
@@ -644,10 +644,10 @@ int main(int argc, char *argv[]) {
       quiet = 1;
       break;
     case 'n':
-      envflags |= MDB_NOSUBDIR;
+      envflags |= MDBX_NOSUBDIR;
       break;
     case 'w':
-      envflags &= ~MDB_RDONLY;
+      envflags &= ~MDBX_RDONLY;
       break;
     case 'c':
       exclusive = 0;
@@ -679,7 +679,7 @@ int main(int argc, char *argv[]) {
 
   envname = argv[optind];
   print("Running mdbx_chk for '%s' in %s mode...\n", envname,
-        (envflags & MDB_RDONLY) ? "read-only" : "write-lock");
+        (envflags & MDBX_RDONLY) ? "read-only" : "write-lock");
   fflush(NULL);
 
   rc = mdbx_env_create(&env);
@@ -697,14 +697,14 @@ int main(int argc, char *argv[]) {
   rc = mdbx_env_open_ex(env, envname, envflags, 0664, &exclusive);
   if (rc) {
     error("mdbx_env_open failed, error %d %s\n", rc, mdbx_strerror(rc));
-    if (rc == MDBX_WANNA_RECOVERY && (envflags & MDB_RDONLY))
+    if (rc == MDBX_WANNA_RECOVERY && (envflags & MDBX_RDONLY))
       print("Please run %s in the read-write mode (with '-w' option).\n", prog);
     goto bailout;
   }
   if (verbose)
     print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
 
-  if (!(envflags & MDB_RDONLY)) {
+  if (!(envflags & MDBX_RDONLY)) {
     rc = mdbx_txn_begin(env, NULL, 0, &locktxn);
     if (rc) {
       error("mdbx_txn_begin(lock-write) failed, error %d %s\n", rc,
@@ -721,7 +721,7 @@ int main(int argc, char *argv[]) {
   }
   maxkeysize = rc;
 
-  rc = mdbx_txn_begin(env, NULL, MDB_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
   if (rc) {
     error("mdbx_txn_begin(read-only) failed, error %d %s\n", rc,
           mdbx_strerror(rc));
