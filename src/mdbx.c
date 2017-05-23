@@ -510,8 +510,7 @@ static __inline pgno_t NODEPGNO(const MDBX_node *node) {
 
 /* Set the page number in a branch node */
 static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
-  if (sizeof(pgno_t) > 4)
-    assert(pgno <= UINT64_C(0xffffFFFFffff));
+  assert(pgno <= (pgno_t)UINT64_C(0xffffFFFFffff));
 
   if (UNALIGNED_OK) {
     if (sizeof(pgno_t) > 4)
