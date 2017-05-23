@@ -37,7 +37,7 @@ static char *prog;
 
 static int Eof;
 
-static MDBX_envinfo info;
+static MDBX_envinfo envinfo;
 
 static MDB_val kbuf, dbuf;
 
@@ -108,7 +108,7 @@ static void readhdr(void) {
       if (ptr)
         *ptr = '\0';
       i = sscanf((char *)dbuf.mv_data + STRLENOF("mapaddr="), "%p",
-                 &info.me_mapaddr);
+                 &envinfo.me_mapaddr);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapaddr %s\n", prog,
                 lineno, (char *)dbuf.mv_data + STRLENOF("mapaddr="));
@@ -120,7 +120,7 @@ static void readhdr(void) {
       if (ptr)
         *ptr = '\0';
       i = sscanf((char *)dbuf.mv_data + STRLENOF("mapsize="), "%" PRIuPTR "",
-                 &info.me_mapsize);
+                 &envinfo.me_mapsize);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapsize %s\n", prog,
                 lineno, (char *)dbuf.mv_data + STRLENOF("mapsize="));
@@ -132,7 +132,7 @@ static void readhdr(void) {
       if (ptr)
         *ptr = '\0';
       i = sscanf((char *)dbuf.mv_data + STRLENOF("maxreaders="), "%u",
-                 &info.me_maxreaders);
+                 &envinfo.me_maxreaders);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid maxreaders %s\n", prog,
                 lineno, (char *)dbuf.mv_data + STRLENOF("maxreaders="));
@@ -361,11 +361,11 @@ int main(int argc, char *argv[]) {
 
   mdbx_env_set_maxdbs(env, 2);
 
-  if (info.me_maxreaders)
-    mdbx_env_set_maxreaders(env, info.me_maxreaders);
+  if (envinfo.me_maxreaders)
+    mdbx_env_set_maxreaders(env, envinfo.me_maxreaders);
 
-  if (info.me_mapsize)
-    mdbx_env_set_mapsize(env, info.me_mapsize);
+  if (envinfo.me_mapsize)
+    mdbx_env_set_mapsize(env, envinfo.me_mapsize);
 
 #ifdef MDB_FIXEDMAP
   if (info.me_mapaddr)
