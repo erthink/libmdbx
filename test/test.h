@@ -58,8 +58,8 @@ struct db_deleter : public std::unary_function<void, MDB_env *> {
   void operator()(MDB_env *env) const { mdbx_env_close(env); }
 };
 
-struct txn_deleter : public std::unary_function<void, MDB_txn *> {
-  void operator()(MDB_txn *txn) const {
+struct txn_deleter : public std::unary_function<void, MDBX_txn *> {
+  void operator()(MDBX_txn *txn) const {
     int rc = mdbx_txn_abort(txn);
     if (rc)
       log_trouble(__func__, "mdbx_txn_abort()", rc);
@@ -71,7 +71,7 @@ struct cursor_deleter : public std::unary_function<void, MDB_cursor *> {
 };
 
 typedef std::unique_ptr<MDB_env, db_deleter> scoped_db_guard;
-typedef std::unique_ptr<MDB_txn, txn_deleter> scoped_txn_guard;
+typedef std::unique_ptr<MDBX_txn, txn_deleter> scoped_txn_guard;
 typedef std::unique_ptr<MDB_cursor, cursor_deleter> scoped_cursor_guard;
 
 //-----------------------------------------------------------------------------

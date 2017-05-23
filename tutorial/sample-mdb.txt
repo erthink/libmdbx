@@ -27,7 +27,7 @@ int main(int argc,char * argv[])
 	MDB_env *env;
 	MDB_dbi dbi;
 	MDB_val key, data;
-	MDB_txn *txn;
+	MDBX_txn *txn;
 	MDB_cursor *cursor;
 	char sval[32];
 

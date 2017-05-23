@@ -294,7 +294,7 @@ static void usage(void) {
 int main(int argc, char *argv[]) {
   int i, rc;
   MDB_env *env;
-  MDB_txn *txn;
+  MDBX_txn *txn;
   MDB_cursor *mc;
   MDB_dbi dbi;
   char *envname;

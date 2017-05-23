@@ -111,7 +111,7 @@ typedef struct MDB_env MDB_env;
  *
  * All database operations require a transaction handle. Transactions may be
  * read-only or read-write. */
-typedef struct MDB_txn MDB_txn;
+typedef struct MDBX_txn MDBX_txn;
 
 /* A handle for an individual database in the DB environment. */
 typedef uint32_t MDB_dbi;
@@ -161,7 +161,7 @@ typedef int(MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
 #define MDB_WRITEMAP 0x80000u
 /* use asynchronous msync when MDB_WRITEMAP is used */
 #define MDB_MAPASYNC 0x100000u
-/* tie reader locktable slots to MDB_txn objects instead of to threads */
+/* tie reader locktable slots to MDBX_txn objects instead of to threads */
 #define MDB_NOTLS 0x200000u
 /* don't do any locking, caller must manage their own locks
  * WARNING: libmdbx don't support this mode. */
@@ -464,8 +464,8 @@ LIBMDBX_API int mdbx_env_create(MDB_env **penv);
  *
  *  - MDB_NOTLS
  *      Don't use Thread-Local Storage. Tie reader locktable slots to
- *      MDB_txn objects instead of to threads. I.e. mdbx_txn_reset() keeps
- *      the slot reseved for the MDB_txn object. A thread may use parallel
+ *      MDBX_txn objects instead of to threads. I.e. mdbx_txn_reset() keeps
+ *      the slot reseved for the MDBX_txn object. A thread may use parallel
  *      read-only transactions. A read-only transaction may span threads if
  *      the user synchronizes its use. Applications that multiplex many
  *      user threads over individual OS threads need this option. Such an
@@ -722,7 +722,7 @@ LIBMDBX_API int mdbx_env_set_mapsize(MDB_env *env, size_t size);
  * Starting a read-only transaction normally ties a lock table slot to the
  * current thread until the environment closes or the thread exits. If
  * MDB_NOTLS is in use, mdbx_txn_begin() instead ties the slot to the
- * MDB_txn object until it or the MDB_env object is destroyed.
+ * MDBX_txn object until it or the MDB_env object is destroyed.
  * This function may only be called after mdbx_env_create() and before
  * mdbx_env_open().
  *
@@ -830,7 +830,7 @@ LIBMDBX_API int mdbx_env_set_assert(MDB_env *env, MDB_assert_func *func);
  *  - MDB_RDONLY
  *      This transaction will not perform any write operations.
  *
- * [out] txn Address where the new MDB_txn handle will be stored
+ * [out] txn Address where the new MDBX_txn handle will be stored
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
@@ -842,14 +842,14 @@ LIBMDBX_API int mdbx_env_set_assert(MDB_env *env, MDB_assert_func *func);
  *  - MDB_READERS_FULL  - a read-only transaction was requested and the reader
  *                        lock table is full. See mdbx_env_set_maxreaders().
  *  - MDBX_ENOMEM       - out of memory. */
-LIBMDBX_API int mdbx_txn_begin(MDB_env *env, MDB_txn *parent, unsigned flags,
-                               MDB_txn **txn);
+LIBMDBX_API int mdbx_txn_begin(MDB_env *env, MDBX_txn *parent, unsigned flags,
+                               MDBX_txn **txn);
 
 /* Returns the transaction's MDB_env
  *
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  */
-LIBMDBX_API MDB_env *mdbx_txn_env(MDB_txn *txn);
+LIBMDBX_API MDB_env *mdbx_txn_env(MDBX_txn *txn);
 
 /* Return the transaction's ID.
  *
@@ -860,7 +860,7 @@ LIBMDBX_API MDB_env *mdbx_txn_env(MDB_txn *txn);
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  *
  * Returns A transaction ID, valid if input is an active transaction. */
-LIBMDBX_API uint64_t mdbx_txn_id(MDB_txn *txn);
+LIBMDBX_API uint64_t mdbx_txn_id(MDBX_txn *txn);
 
 /* Commit all the operations of a transaction into the database.
  *
@@ -879,7 +879,7 @@ LIBMDBX_API uint64_t mdbx_txn_id(MDB_txn *txn);
  *  - MDBX_ENOSPC   - no more disk space.
  *  - MDBX_EIO      - a low-level I/O error occurred while writing.
  *  - MDBX_ENOMEM   - out of memory. */
-LIBMDBX_API int mdbx_txn_commit(MDB_txn *txn);
+LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
 
 /* Abandon all the operations of the transaction instead of saving them.
  *
@@ -890,7 +890,7 @@ LIBMDBX_API int mdbx_txn_commit(MDB_txn *txn);
  * ends. It can be reused with mdbx_cursor_renew() before finally closing it.
  *
  * [in] txn   A transaction handle returned by mdbx_txn_begin(). */
-LIBMDBX_API int mdbx_txn_abort(MDB_txn *txn);
+LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
 
 /* Reset a read-only transaction.
  *
@@ -899,7 +899,7 @@ LIBMDBX_API int mdbx_txn_abort(MDB_txn *txn);
  * allocation overhead if the process will start a new read-only transaction
  * soon, and also locking overhead if MDB_NOTLS is in use. The reader table
  * lock is released, but the table slot stays tied to its thread or
- * MDB_txn. Use mdbx_txn_abort() to discard a reset handle, and to free
+ * MDBX_txn. Use mdbx_txn_abort() to discard a reset handle, and to free
  * its lock table slot if MDB_NOTLS is in use.
  *
  * Cursors opened within the transaction must not be used
@@ -911,7 +911,7 @@ LIBMDBX_API int mdbx_txn_abort(MDB_txn *txn);
  * the database size may grow much more rapidly than otherwise.
  *
  * [in] txn A transaction handle returned by mdbx_txn_begin() */
-LIBMDBX_API int mdbx_txn_reset(MDB_txn *txn);
+LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
 
 /* Renew a read-only transaction.
  *
@@ -926,7 +926,7 @@ LIBMDBX_API int mdbx_txn_reset(MDB_txn *txn);
  *  - MDB_PANIC     - a fatal error occurred earlier and the environment
  *                    must be shut down.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_txn_renew(MDB_txn *txn);
+LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
 
 /* Open a table in the environment.
  *
@@ -994,10 +994,10 @@ LIBMDBX_API int mdbx_txn_renew(MDB_txn *txn);
  *                    environment and MDB_CREATE was not specified.
  *  - MDB_DBS_FULL -  too many databases have been opened.
  *                    See mdbx_env_set_maxdbs(). */
-LIBMDBX_API int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
-                                 MDB_dbi *dbi, MDB_cmp_func *keycmp,
-                                 MDB_cmp_func *datacmp);
-LIBMDBX_API int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
+LIBMDBX_API int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name,
+                                 unsigned flags, MDB_dbi *dbi,
+                                 MDB_cmp_func *keycmp, MDB_cmp_func *datacmp);
+LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name, unsigned flags,
                               MDB_dbi *dbi);
 
 /* Retrieve statistics for a database.
@@ -1010,7 +1010,7 @@ LIBMDBX_API int mdbx_dbi_open(MDB_txn *txn, const char *name, unsigned flags,
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_dbi_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *stat,
+LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDB_dbi dbi, MDBX_stat *stat,
                               size_t bytes);
 
 /* Retrieve the DB flags for a database handle.
@@ -1020,7 +1020,7 @@ LIBMDBX_API int mdbx_dbi_stat(MDB_txn *txn, MDB_dbi dbi, MDBX_stat *stat,
  * [out] flags  Address where the flags will be returned.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_dbi_flags(MDB_txn *txn, MDB_dbi dbi, unsigned *flags);
+LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDB_dbi dbi, unsigned *flags);
 
 /* Close a database handle. Normally unnecessary.
  *
@@ -1051,7 +1051,7 @@ LIBMDBX_API int mdbx_dbi_close(MDB_env *env, MDB_dbi dbi);
  *            and close the DB handle.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del);
+LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDB_dbi dbi, int del);
 
 /* Get items from a database.
  *
@@ -1079,7 +1079,7 @@ LIBMDBX_API int mdbx_drop(MDB_txn *txn, MDB_dbi dbi, int del);
  * possible errors are:
  *  - MDB_NOTFOUND  - the key was not in the database.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
+LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
                          MDB_val *data);
 
 /* Store items into a database.
@@ -1139,8 +1139,8 @@ LIBMDBX_API int mdbx_get(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
  *  - MDB_TXN_FULL  - the transaction has too many dirty pages.
  *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
-                         unsigned flags);
+LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
+                         MDB_val *data, unsigned flags);
 
 /* Delete items from a database.
  *
@@ -1162,7 +1162,7 @@ LIBMDBX_API int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
  * possible errors are:
  *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
+LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
                          MDB_val *data);
 
 /* Create a cursor handle.
@@ -1183,7 +1183,7 @@ LIBMDBX_API int mdbx_del(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_open(MDB_txn *txn, MDB_dbi dbi,
+LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDB_dbi dbi,
                                  MDB_cursor **cursor);
 
 /* Close a cursor handle.
@@ -1209,12 +1209,12 @@ LIBMDBX_API void mdbx_cursor_close(MDB_cursor *cursor);
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_renew(MDB_txn *txn, MDB_cursor *cursor);
+LIBMDBX_API int mdbx_cursor_renew(MDBX_txn *txn, MDB_cursor *cursor);
 
 /* Return the cursor's transaction handle.
  *
  * [in] cursor A cursor handle returned by mdbx_cursor_open() */
-LIBMDBX_API MDB_txn *mdbx_cursor_txn(MDB_cursor *cursor);
+LIBMDBX_API MDBX_txn *mdbx_cursor_txn(MDB_cursor *cursor);
 
 /* Return the cursor's database handle.
  *
@@ -1353,7 +1353,7 @@ LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, uint64_t *countp);
  * [in] b     The second item to compare
  *
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
-LIBMDBX_API int mdbx_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
+LIBMDBX_API int mdbx_cmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a,
                          const MDB_val *b);
 
 /* Compare two data items according to a particular database.
@@ -1367,7 +1367,7 @@ LIBMDBX_API int mdbx_cmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
  * [in] b     The second item to compare
  *
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
-LIBMDBX_API int mdbx_dcmp(MDB_txn *txn, MDB_dbi dbi, const MDB_val *a,
+LIBMDBX_API int mdbx_dcmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a,
                           const MDB_val *b);
 
 /* A callback function used to print a message from the library.
@@ -1429,7 +1429,7 @@ LIBMDBX_API int mdbx_env_set_syncbytes(MDB_env *env, size_t bytes);
  *
  * Returns Number of transactions committed after the given was started for
  * read, or -1 on failure. */
-LIBMDBX_API int mdbx_txn_straggler(MDB_txn *txn, int *percent);
+LIBMDBX_API int mdbx_txn_straggler(MDBX_txn *txn, int *percent);
 
 /* A callback function for killing a laggard readers,
  * but also could waiting ones. Called in case of MDB_MAP_FULL error.
@@ -1487,13 +1487,13 @@ typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned pgnumber, void *ctx,
                                 const char *dbi, const char *type, int nentries,
                                 int payload_bytes, int header_bytes,
                                 int unused_bytes);
-LIBMDBX_API int mdbx_env_pgwalk(MDB_txn *txn, MDBX_pgvisitor_func *visitor,
+LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                                 void *ctx);
 
 typedef struct mdbx_canary { uint64_t x, y, z, v; } mdbx_canary;
 
-LIBMDBX_API int mdbx_canary_put(MDB_txn *txn, const mdbx_canary *canary);
-LIBMDBX_API int mdbx_canary_get(MDB_txn *txn, mdbx_canary *canary);
+LIBMDBX_API int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary);
+LIBMDBX_API int mdbx_canary_get(MDBX_txn *txn, mdbx_canary *canary);
 
 /* Returns:
  *  - MDBX_RESULT_TRUE
@@ -1509,19 +1509,19 @@ LIBMDBX_API int mdbx_cursor_on_first(MDB_cursor *mc);
 /* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
 LIBMDBX_API int mdbx_cursor_on_last(MDB_cursor *mc);
 
-LIBMDBX_API int mdbx_replace(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
+LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
                              MDB_val *new_data, MDB_val *old_data,
                              unsigned flags);
 /* Same as mdbx_get(), but:
  * 1) if values_count is not NULL, then returns the count
  *    of multi-values/duplicates for a given key.
  * 2) updates the key for pointing to the actual key's data inside DB. */
-LIBMDBX_API int mdbx_get_ex(MDB_txn *txn, MDB_dbi dbi, MDB_val *key,
+LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
                             MDB_val *data, int *values_count);
 
-LIBMDBX_API int mdbx_is_dirty(const MDB_txn *txn, const void *ptr);
+LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr);
 
-LIBMDBX_API int mdbx_dbi_sequence(MDB_txn *txn, MDB_dbi dbi, uint64_t *result,
+LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDB_dbi dbi, uint64_t *result,
                                   uint64_t increment);
 
 #ifdef __cplusplus

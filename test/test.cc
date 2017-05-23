@@ -154,7 +154,7 @@ void testcase::txn_begin(bool readonly) {
   log_trace(">> txn_begin(%s)", readonly ? "read-only" : "read-write");
   assert(!txn_guard);
 
-  MDB_txn *txn = nullptr;
+  MDBX_txn *txn = nullptr;
   int rc =
       mdbx_txn_begin(db_guard.get(), nullptr, readonly ? MDB_RDONLY : 0, &txn);
   if (unlikely(rc != MDB_SUCCESS))
@@ -168,7 +168,7 @@ void testcase::txn_end(bool abort) {
   log_trace(">> txn_end(%s)", abort ? "abort" : "commit");
   assert(txn_guard);
 
-  MDB_txn *txn = txn_guard.release();
+  MDBX_txn *txn = txn_guard.release();
   if (abort) {
     int rc = mdbx_txn_abort(txn);
     if (unlikely(rc != MDB_SUCCESS))

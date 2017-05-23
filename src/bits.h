@@ -356,12 +356,12 @@ typedef struct MDB_dbx {
 
 /* A database transaction.
  * Every operation requires a transaction handle. */
-struct MDB_txn {
+struct MDBX_txn {
 #define MDBX_MT_SIGNATURE (0x93D53A31)
   unsigned mt_signature;
-  MDB_txn *mt_parent; /* parent of a nested txn */
+  MDBX_txn *mt_parent; /* parent of a nested txn */
   /* Nested txn under this txn, set together with flag MDB_TXN_HAS_CHILD */
-  MDB_txn *mt_child;
+  MDBX_txn *mt_child;
   pgno_t mt_next_pgno; /* next unallocated page */
   /* The ID of this transaction. IDs are integers incrementing from 1.
    * Only committed write transactions increment the ID. If a transaction
@@ -371,22 +371,22 @@ struct MDB_txn {
                    /* The list of reclaimed txns from freeDB */
   MDB_IDL mt_lifo_reclaimed;
   /* The list of pages that became unused during this transaction. */
-  MDB_IDL mt_free_pgs;
+  MDB_IDL mt_free_pages;
   /* The list of loose pages that became unused and may be reused
    * in this transaction, linked through NEXT_LOOSE_PAGE(page). */
-  MDBX_page *mt_loose_pgs;
-  /* Number of loose pages (mt_loose_pgs) */
+  MDBX_page *mt_loose_pages;
+  /* Number of loose pages (mt_loose_pages) */
   unsigned mt_loose_count;
   /* The sorted list of dirty pages we temporarily wrote to disk
    * because the dirty list was full. page numbers in here are
    * shifted left by 1, deleted slots have the LSB set. */
-  MDB_IDL mt_spill_pgs;
+  MDB_IDL mt_spill_pages;
   union {
     /* For write txns: Modified pages. Sorted when not MDB_WRITEMAP. */
-    MDB_ID2L dirty_list;
+    MDB_ID2L mt_rw_dirtylist;
     /* For read txns: This thread/txn's reader table slot, or NULL. */
-    MDBX_reader *reader;
-  } mt_u;
+    MDBX_reader *mt_ro_reader;
+  };
   /* Array of records for each DB known in the environment. */
   MDB_dbx *mt_dbxs;
   /* Array of MDB_db records for each known DB */
@@ -423,15 +423,15 @@ struct MDB_txn {
 #define MDB_TXN_ERROR 0x02            /* txn is unusable after an error */
 #define MDB_TXN_DIRTY 0x04     /* must write, even if dirty list is empty */
 #define MDB_TXN_SPILLS 0x08    /* txn or a parent has spilled pages */
-#define MDB_TXN_HAS_CHILD 0x10 /* txn has an MDB_txn.mt_child */
+#define MDB_TXN_HAS_CHILD 0x10 /* txn has an MDBX_txn.mt_child */
 /* most operations on the txn are currently illegal */
 #define MDB_TXN_BLOCKED (MDB_TXN_FINISHED | MDB_TXN_ERROR | MDB_TXN_HAS_CHILD)
   unsigned mt_flags;
-  /* dirty_list room: Array size - dirty pages visible to this txn.
+  /* dirtylist room: Array size - dirty pages visible to this txn.
    * Includes ancestor txns' dirty pages not hidden by other txns'
    * dirty/spilled pages. Thus commit(nested txn) has room to merge
-   * dirty_list into mt_parent after freeing hidden mt_parent pages. */
-  unsigned mt_dirty_room;
+   * dirtylist into mt_parent after freeing hidden mt_parent pages. */
+  unsigned mt_dirtyroom;
   mdbx_canary mt_canary;
 };
 
@@ -461,7 +461,7 @@ struct MDB_cursor {
   /* Context used for databases with MDB_DUPSORT, otherwise NULL */
   struct MDB_xcursor *mc_xcursor;
   /* The transaction that owns this cursor */
-  MDB_txn *mc_txn;
+  MDBX_txn *mc_txn;
   /* The database handle this cursor operates on */
   MDB_dbi mc_dbi;
   /* The database record for this cursor */
@@ -555,8 +555,8 @@ struct MDB_env {
   char *me_map;               /* the memory map of the data file */
   MDBX_lockinfo *me_lck;      /* the memory map of the lock file, never NULL */
   void *me_pbuf;              /* scratch area for DUPSORT put() */
-  MDB_txn *me_txn;            /* current write transaction */
-  MDB_txn *me_txn0;           /* prealloc'd write transaction */
+  MDBX_txn *me_txn;           /* current write transaction */
+  MDBX_txn *me_txn0;          /* prealloc'd write transaction */
   size_t me_mapsize;          /* size of the data memory map */
   pgno_t me_maxpg;            /* me_mapsize / me_psize */
   MDB_dbx *me_dbxs;           /* array of static DB info */
@@ -571,7 +571,7 @@ struct MDB_env {
                         /* IDL of pages that became unused in a write txn */
   MDB_IDL me_free_pgs;
   /* ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
-  MDB_ID2L me_dirty_list;
+  MDB_ID2L me_dirtylist;
   /* Max number of freelist items that can fit in a single overflow page */
   unsigned me_maxfree_1pg;
   /* Max size of a node on a page */
@@ -593,7 +593,7 @@ struct MDB_env {
 
 /* Nested transaction */
 typedef struct MDB_ntxn {
-  MDB_txn mnt_txn;         /* the transaction */
+  MDBX_txn mnt_txn;        /* the transaction */
   MDB_pgstate mnt_pgstate; /* parent transaction's saved freestate */
 } MDB_ntxn;
 

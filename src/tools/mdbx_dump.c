@@ -84,7 +84,7 @@ static void byte(MDB_val *v) {
 }
 
 /* Dump in BDB-compatible format */
-static int dumpit(MDB_txn *txn, MDB_dbi dbi, char *name) {
+static int dumpit(MDBX_txn *txn, MDB_dbi dbi, char *name) {
   MDB_cursor *mc;
   MDBX_stat ms;
   MDB_val key, data;
@@ -155,7 +155,7 @@ static void usage(char *prog) {
 int main(int argc, char *argv[]) {
   int i, rc;
   MDB_env *env;
-  MDB_txn *txn;
+  MDBX_txn *txn;
   MDB_dbi dbi;
   char *prog = argv[0];
   char *envname;

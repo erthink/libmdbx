@@ -76,7 +76,7 @@ uint64_t total_unused_bytes;
 int exclusive = 2;
 
 MDB_env *env;
-MDB_txn *txn, *locktxn;
+MDBX_txn *txn, *locktxn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
 size_t maxkeysize, userdb_count, skipped_subdb;

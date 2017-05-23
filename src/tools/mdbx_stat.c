@@ -39,7 +39,7 @@ static void usage(char *prog) {
 int main(int argc, char *argv[]) {
   int i, rc;
   MDB_env *env;
-  MDB_txn *txn;
+  MDBX_txn *txn;
   MDB_dbi dbi;
   MDBX_stat mst;
   MDBX_envinfo mei;
