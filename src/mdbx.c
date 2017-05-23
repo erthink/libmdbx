@@ -42,8 +42,8 @@
 /* rthc (tls keys and destructors) */
 
 typedef struct rthc_entry_t {
-  MDB_reader *begin;
-  MDB_reader *end;
+  MDBX_reader *begin;
+  MDBX_reader *end;
   mdbx_thread_key_t key;
 } rthc_entry_t;
 
@@ -59,7 +59,7 @@ static rthc_entry_t rthc_table_static[RTHC_INITIAL_LIMIT];
 static rthc_entry_t *rthc_table = rthc_table_static;
 
 __cold void mdbx_rthc_dtor(void *ptr) {
-  MDB_reader *rthc = (MDB_reader *)ptr;
+  MDBX_reader *rthc = (MDBX_reader *)ptr;
 
   mdbx_rthc_lock();
   const mdbx_pid_t self_pid = mdbx_getpid();
@@ -80,7 +80,7 @@ __cold void mdbx_rthc_cleanup(void) {
   const mdbx_pid_t self_pid = mdbx_getpid();
   for (unsigned i = 0; i < rthc_count; ++i) {
     mdbx_thread_key_t key = rthc_table[i].key;
-    MDB_reader *rthc = mdbx_thread_rthc_get(key);
+    MDBX_reader *rthc = mdbx_thread_rthc_get(key);
     if (rthc) {
       mdbx_thread_rthc_set(key, NULL);
       if (rthc->mr_pid == self_pid) {
@@ -92,8 +92,8 @@ __cold void mdbx_rthc_cleanup(void) {
   mdbx_rthc_unlock();
 }
 
-__cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDB_reader *begin,
-                           MDB_reader *end) {
+__cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
+                           MDBX_reader *end) {
 #ifndef NDEBUG
   *key = (mdbx_thread_key_t)0xBADBADBAD;
 #endif /* NDEBUG */
@@ -136,7 +136,7 @@ __cold void mdbx_rthc_remove(mdbx_thread_key_t key) {
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (key == rthc_table[i].key) {
       const mdbx_pid_t self_pid = mdbx_getpid();
-      for (MDB_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
+      for (MDBX_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
            ++rthc)
         if (rthc->mr_pid == self_pid)
           rthc->mr_pid = 0;
@@ -1396,7 +1396,7 @@ static txnid_t mdbx_find_oldest(MDB_env *env, int *laggard) {
   txnid_t oldest = mdbx_meta_lt(a, b) ? b->mm_txnid : a->mm_txnid;
 
   int i, reader;
-  const MDB_reader *const r = env->me_lck->mti_readers;
+  const MDBX_reader *const r = env->me_lck->mti_readers;
   for (reader = -1, i = env->me_lck->mti_numreaders; --i >= 0;) {
     if (r[i].mr_pid) {
       mdbx_jitter4testing(true);
@@ -2115,7 +2115,7 @@ static int mdbx_txn_renew0(MDB_txn *txn, unsigned flags) {
 
   if (flags & MDB_TXN_RDONLY) {
     txn->mt_flags = MDB_TXN_RDONLY;
-    MDB_reader *r = txn->mt_u.reader;
+    MDBX_reader *r = txn->mt_u.reader;
     if (likely(env->me_flags & MDB_ENV_TXKEY)) {
       mdbx_assert(env, !(env->me_flags & MDB_NOTLS));
       r = mdbx_thread_rthc_get(env->me_txkey);
@@ -3890,7 +3890,7 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
     return err;
 
   if (rc == MDBX_RESULT_TRUE) {
-    off_t wanna = roundup2((env->me_maxreaders - 1) * sizeof(MDB_reader) +
+    off_t wanna = roundup2((env->me_maxreaders - 1) * sizeof(MDBX_reader) +
                                sizeof(MDBX_lockinfo),
                            env->me_os_psize);
 #ifndef NDEBUG
@@ -3907,7 +3907,7 @@ static int __cold mdbx_setup_lck(MDB_env *env, char *lck_pathname, int mode) {
       size = wanna;
     }
   }
-  env->me_maxreaders = (size - sizeof(MDBX_lockinfo)) / sizeof(MDB_reader) + 1;
+  env->me_maxreaders = (size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
 
   void *addr = NULL;
   err = mdbx_mmap(&addr, size, true, env->me_lfd);
@@ -4185,7 +4185,7 @@ static void __cold mdbx_env_close0(MDB_env *env) {
   }
 
   mdbx_munmap((void *)env->me_lck,
-              (env->me_maxreaders - 1) * sizeof(MDB_reader) +
+              (env->me_maxreaders - 1) * sizeof(MDBX_reader) +
                   sizeof(MDBX_lockinfo));
   env->me_lck = NULL;
   env->me_pid = 0;
@@ -8666,7 +8666,7 @@ int __cold mdbx_env_info(MDB_env *env, MDBX_envinfo *arg, size_t bytes) {
     return MDBX_EINVAL;
 
   MDB_meta *m1, *m2;
-  MDB_reader *r;
+  MDBX_reader *r;
   unsigned i;
 
   m1 = METAPAGE_1(env);
@@ -9137,7 +9137,7 @@ int __cold mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx) {
     return MDBX_EBADSIGN;
 
   unsigned snap_nreaders = env->me_lck->mti_numreaders;
-  MDB_reader *mr = env->me_lck->mti_readers;
+  MDBX_reader *mr = env->me_lck->mti_readers;
   for (unsigned i = 0; i < snap_nreaders; i++) {
     if (mr[i].mr_pid) {
       txnid_t txnid = mr[i].mr_txnid;
@@ -9221,7 +9221,7 @@ int __cold mdbx_reader_check0(MDB_env *env, int rdt_locked, int *dead) {
   pids[0] = 0;
 
   int rc = MDBX_RESULT_FALSE, count = 0;
-  MDB_reader *mr = env->me_lck->mti_readers;
+  MDBX_reader *mr = env->me_lck->mti_readers;
 
   for (unsigned i = 0; i < snap_nreaders; i++) {
     const mdbx_pid_t pid = mr[i].mr_pid;
@@ -9586,7 +9586,7 @@ static txnid_t __cold mdbx_oomkick(MDB_env *env, txnid_t oldest) {
       return snap;
     }
 
-    MDB_reader *r;
+    MDBX_reader *r;
     mdbx_tid_t tid;
     mdbx_pid_t pid;
     int rc;

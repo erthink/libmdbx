@@ -189,40 +189,35 @@ typedef uint16_t indx_t;
 
 #pragma pack(push, 1)
 
-/* The information we store in a single slot of the reader table.
- * In addition to a transaction ID, we also record the process and
- * thread ID that owns a slot, so that we can detect stale information,
- * e.g. threads or processes that went away without cleaning up.
- * NOTE: We currently don't check for stale records. We simply re-init
- * the table when we know that we're the only process opening the
- * lock file. */
-typedef struct MDB_rxbody {
+/* The actual reader record, with cacheline padding. */
+typedef struct MDBX_reader {
   /* Current Transaction ID when this transaction began, or (txnid_t)-1.
    * Multiple readers that start at the same time will probably have the
    * same ID here. Again, it's not important to exclude them from
    * anything; all we need to know is which version of the DB they
    * started from so we can avoid overwriting any data used in that
    * particular version. */
-  volatile txnid_t mrb_txnid;
-  /* The process ID of the process owning this reader txn. */
-  volatile mdbx_pid_t mrb_pid;
-  /* The thread ID of the thread owning this txn. */
-  volatile mdbx_tid_t mrb_tid;
-} MDB_rxbody;
+  volatile txnid_t mr_txnid;
 
-/* The actual reader record, with cacheline padding. */
-typedef struct MDB_reader {
-  union {
-    MDB_rxbody mrx;
-/* shorthand for mrb_txnid */
-#define mr_txnid mru.mrx.mrb_txnid
-#define mr_pid mru.mrx.mrb_pid
-#define mr_tid mru.mrx.mrb_tid
-    /* cache line alignment */
-    char pad[(sizeof(MDB_rxbody) + MDBX_CACHELINE_SIZE - 1) &
-             ~(MDBX_CACHELINE_SIZE - 1)];
-  } mru;
-} MDB_reader;
+  /* The information we store in a single slot of the reader table.
+   * In addition to a transaction ID, we also record the process and
+   * thread ID that owns a slot, so that we can detect stale information,
+   * e.g. threads or processes that went away without cleaning up.
+   *
+   * NOTE: We currently don't check for stale records.
+   * We simply re-init the table when we know that we're the only process
+   * opening the lock file. */
+
+  /* The process ID of the process owning this reader txn. */
+  volatile mdbx_pid_t mr_pid;
+  /* The thread ID of the thread owning this txn. */
+  volatile mdbx_tid_t mr_tid;
+
+  /* cache line alignment */
+  uint8_t pad[~(MDBX_CACHELINE_SIZE - 1) &
+              (sizeof(txnid_t) + sizeof(mdbx_pid_t) + sizeof(mdbx_tid_t) +
+               MDBX_CACHELINE_SIZE - 1)];
+} MDBX_reader;
 
 /* Information about a single database in the environment. */
 typedef struct MDB_db {
@@ -345,7 +340,7 @@ typedef struct MDBX_lockinfo {
   /* Mutex protecting access to this table. */
   MDBX_OSAL_LOCK mti_rmutex;
 #endif
-  MDB_reader mti_readers[1];
+  MDBX_reader mti_readers[1];
 } MDBX_lockinfo;
 
 #pragma pack(pop)
@@ -390,7 +385,7 @@ struct MDB_txn {
     /* For write txns: Modified pages. Sorted when not MDB_WRITEMAP. */
     MDB_ID2L dirty_list;
     /* For read txns: This thread/txn's reader table slot, or NULL. */
-    MDB_reader *reader;
+    MDBX_reader *reader;
   } mt_u;
   /* Array of records for each DB known in the environment. */
   MDB_dbx *mt_dbxs;
@@ -773,7 +768,8 @@ static __inline MDB_meta *mdbx_meta_head(MDB_env *env) {
 void mdbx_rthc_dtor(void *rthc);
 void mdbx_rthc_lock(void);
 void mdbx_rthc_unlock(void);
-int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDB_reader *begin, MDB_reader *end);
+int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
+                    MDBX_reader *end);
 void mdbx_rthc_remove(mdbx_thread_key_t key);
 void mdbx_rthc_cleanup(void);
 
