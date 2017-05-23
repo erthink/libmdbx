@@ -53,12 +53,12 @@ static void hex(unsigned char c) {
   putchar(hexc[c & 0xf]);
 }
 
-static void text(MDB_val *v) {
+static void text(MDBX_val *v) {
   unsigned char *c, *end;
 
   putchar(' ');
-  c = v->mv_data;
-  end = c + v->mv_size;
+  c = v->iov_base;
+  end = c + v->iov_len;
   while (c < end) {
     if (isprint(*c)) {
       putchar(*c);
@@ -71,12 +71,12 @@ static void text(MDB_val *v) {
   putchar('\n');
 }
 
-static void byte(MDB_val *v) {
+static void byte(MDBX_val *v) {
   unsigned char *c, *end;
 
   putchar(' ');
-  c = v->mv_data;
-  end = c + v->mv_size;
+  c = v->iov_base;
+  end = c + v->iov_len;
   while (c < end) {
     hex(*c++);
   }
@@ -87,7 +87,7 @@ static void byte(MDB_val *v) {
 static int dumpit(MDBX_txn *txn, MDB_dbi dbi, char *name) {
   MDB_cursor *mc;
   MDBX_stat ms;
-  MDB_val key, data;
+  MDBX_val key, data;
   MDBX_envinfo info;
   unsigned int flags;
   int rc, i;
@@ -256,7 +256,7 @@ int main(int argc, char *argv[]) {
 
   if (alldbs) {
     MDB_cursor *cursor;
-    MDB_val key;
+    MDBX_val key;
     int count = 0;
 
     rc = mdbx_cursor_open(txn, dbi, &cursor);
@@ -268,12 +268,12 @@ int main(int argc, char *argv[]) {
     while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDB_NEXT_NODUP)) == 0) {
       char *str;
       MDB_dbi db2;
-      if (memchr(key.mv_data, '\0', key.mv_size))
+      if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
       count++;
-      str = malloc(key.mv_size + 1);
-      memcpy(str, key.mv_data, key.mv_size);
-      str[key.mv_size] = '\0';
+      str = malloc(key.iov_len + 1);
+      memcpy(str, key.iov_base, key.iov_len);
+      str[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, str, 0, &db2);
       if (rc == MDB_SUCCESS) {
         if (list) {

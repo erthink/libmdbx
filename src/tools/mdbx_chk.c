@@ -301,44 +301,44 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
   return gotsignal ? EINTR : MDB_SUCCESS;
 }
 
-typedef int(visitor)(const uint64_t record_number, const MDB_val *key,
-                     const MDB_val *data);
+typedef int(visitor)(const uint64_t record_number, const MDBX_val *key,
+                     const MDBX_val *data);
 static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent);
 
-static int handle_userdb(const uint64_t record_number, const MDB_val *key,
-                         const MDB_val *data) {
+static int handle_userdb(const uint64_t record_number, const MDBX_val *key,
+                         const MDBX_val *data) {
   (void)record_number;
   (void)key;
   (void)data;
   return MDB_SUCCESS;
 }
 
-static int handle_freedb(const uint64_t record_number, const MDB_val *key,
-                         const MDB_val *data) {
+static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
+                         const MDBX_val *data) {
   char *bad = "";
   pgno_t pg, prev;
   int i, number, span = 0;
-  pgno_t *iptr = data->mv_data;
-  txnid_t txnid = *(txnid_t *)key->mv_data;
+  pgno_t *iptr = data->iov_base;
+  txnid_t txnid = *(txnid_t *)key->iov_base;
 
-  if (key->mv_size != sizeof(txnid_t))
+  if (key->iov_len != sizeof(txnid_t))
     problem_add("entry", record_number, "wrong txn-id size",
-                "key-size %" PRIiPTR "", key->mv_size);
+                "key-size %" PRIiPTR "", key->iov_len);
   else if (txnid < 1 || txnid > envinfo.me_last_txnid)
     problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN "", txnid);
 
-  if (data->mv_size < sizeof(pgno_t) || data->mv_size % sizeof(pgno_t))
+  if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
     problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR "",
-                data->mv_size);
+                data->iov_len);
   else {
     number = *iptr++;
     if (number >= MDB_IDL_UM_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
-    else if ((number + 1) * sizeof(pgno_t) != data->mv_size)
+    else if ((number + 1) * sizeof(pgno_t) != data->iov_len)
       problem_add("entry", record_number, "mismatch idl length",
                   "%" PRIiPTR " != %" PRIuPTR "", (number + 1) * sizeof(pgno_t),
-                  data->mv_size);
+                  data->iov_len);
     else {
       freedb_pages += number;
       if (envinfo.me_tail_txnid > txnid)
@@ -381,21 +381,21 @@ static int handle_freedb(const uint64_t record_number, const MDB_val *key,
   return MDB_SUCCESS;
 }
 
-static int handle_maindb(const uint64_t record_number, const MDB_val *key,
-                         const MDB_val *data) {
+static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
+                         const MDBX_val *data) {
   char *name;
   int rc;
   size_t i;
 
-  name = key->mv_data;
-  for (i = 0; i < key->mv_size; ++i) {
+  name = key->iov_base;
+  for (i = 0; i < key->iov_len; ++i) {
     if (name[i] < ' ')
       return handle_userdb(record_number, key, data);
   }
 
-  name = malloc(key->mv_size + 1);
-  memcpy(name, key->mv_data, key->mv_size);
-  name[key->mv_size] = '\0';
+  name = malloc(key->iov_len + 1);
+  memcpy(name, key->iov_base, key->iov_len);
+  name[key->iov_len] = '\0';
   userdb_count++;
 
   rc = process_db(-1, name, handle_userdb, 0);
@@ -409,8 +409,8 @@ static int handle_maindb(const uint64_t record_number, const MDB_val *key,
 static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
   MDB_cursor *mc;
   MDBX_stat ms;
-  MDB_val key, data;
-  MDB_val prev_key, prev_data;
+  MDBX_val key, data;
+  MDBX_val prev_key, prev_data;
   unsigned flags;
   int rc, i;
   struct problem *saved_list;
@@ -486,8 +486,8 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
   }
 
   saved_list = problems_push();
-  prev_key.mv_data = NULL;
-  prev_data.mv_size = 0;
+  prev_key.iov_base = NULL;
+  prev_data.iov_len = 0;
   rc = mdbx_cursor_get(mc, &key, &data, MDB_FIRST);
   while (rc == MDB_SUCCESS) {
     if (gotsignal) {
@@ -497,26 +497,26 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
       goto bailout;
     }
 
-    if (key.mv_size > maxkeysize) {
+    if (key.iov_len > maxkeysize) {
       problem_add("entry", record_count, "key length exceeds max-key-size",
-                  "%" PRIuPTR " > %u", key.mv_size, maxkeysize);
-    } else if ((flags & MDB_INTEGERKEY) && key.mv_size != sizeof(uint64_t) &&
-               key.mv_size != sizeof(uint32_t)) {
+                  "%" PRIuPTR " > %u", key.iov_len, maxkeysize);
+    } else if ((flags & MDB_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
+               key.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong key length",
-                  "%" PRIuPTR " != 4or8", key.mv_size);
+                  "%" PRIuPTR " != 4or8", key.iov_len);
     }
 
-    if ((flags & MDB_INTEGERDUP) && data.mv_size != sizeof(uint64_t) &&
-        data.mv_size != sizeof(uint32_t)) {
+    if ((flags & MDB_INTEGERDUP) && data.iov_len != sizeof(uint64_t) &&
+        data.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong data length",
-                  "%" PRIuPTR " != 4or8", data.mv_size);
+                  "%" PRIuPTR " != 4or8", data.iov_len);
     }
 
-    if (prev_key.mv_data) {
-      if ((flags & MDB_DUPFIXED) && prev_data.mv_size != data.mv_size) {
+    if (prev_key.iov_base) {
+      if ((flags & MDB_DUPFIXED) && prev_data.iov_len != data.iov_len) {
         problem_add("entry", record_count, "different data length",
-                    "%" PRIuPTR " != %" PRIuPTR "", prev_data.mv_size,
-                    data.mv_size);
+                    "%" PRIuPTR " != %" PRIuPTR "", prev_data.iov_len,
+                    data.iov_len);
       }
 
       int cmp = mdbx_cmp(txn, dbi, &prev_key, &key);
@@ -535,9 +535,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
       }
     } else if (verbose) {
       if (flags & MDB_INTEGERKEY)
-        print(" - fixed key-size %" PRIuPTR "\n", key.mv_size);
+        print(" - fixed key-size %" PRIuPTR "\n", key.iov_len);
       if (flags & (MDB_INTEGERDUP | MDB_DUPFIXED))
-        print(" - fixed data-size %" PRIuPTR "\n", data.mv_size);
+        print(" - fixed data-size %" PRIuPTR "\n", data.iov_len);
     }
 
     if (handler) {
@@ -547,8 +547,8 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
     }
 
     record_count++;
-    key_bytes += key.mv_size;
-    data_bytes += data.mv_size;
+    key_bytes += key.iov_len;
+    data_bytes += data.iov_len;
 
     prev_key = key;
     prev_data = data;

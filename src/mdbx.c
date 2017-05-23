@@ -475,11 +475,11 @@ typedef struct MDBX_node {
 
 /* Size of a node in a branch page with a given key.
  * This is just the node header plus the key, there is no data. */
-#define INDXSIZE(k) (NODESIZE + ((k) == NULL ? 0 : (k)->mv_size))
+#define INDXSIZE(k) (NODESIZE + ((k) == NULL ? 0 : (k)->iov_len))
 
 /* Size of a node in a leaf page with a given key and data.
  * This is node header plus key plus data size. */
-#define LEAFSIZE(k, d) (NODESIZE + (k)->mv_size + (d)->mv_size)
+#define LEAFSIZE(k, d) (NODESIZE + (k)->iov_len + (d)->iov_len)
 
 /* Address of node i in page p */
 static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
@@ -556,19 +556,19 @@ static __inline void SETDSZ(MDBX_node *node, unsigned size) {
 
 /* Set the node's key into keyptr, if requested. */
 #define MDB_GET_KEY(node, keyptr)                                              \
-  {                                                                            \
+  do {                                                                         \
     if ((keyptr) != NULL) {                                                    \
-      (keyptr)->mv_size = NODEKSZ(node);                                       \
-      (keyptr)->mv_data = NODEKEY(node);                                       \
+      (keyptr)->iov_len = NODEKSZ(node);                                       \
+      (keyptr)->iov_base = NODEKEY(node);                                      \
     }                                                                          \
-  }
+  } while (0)
 
 /* Set the node's key into key. */
 #define MDB_GET_KEY2(node, key)                                                \
-  {                                                                            \
-    key.mv_size = NODEKSZ(node);                                               \
-    key.mv_data = NODEKEY(node);                                               \
-  }
+  do {                                                                         \
+    key.iov_len = NODEKSZ(node);                                               \
+    key.iov_base = NODEKEY(node);                                              \
+  } while (0)
 
 #define MDB_VALID 0x8000 /* DB handle is valid, for me_dbflags */
 #define PERSISTENT_FLAGS (0xffff & ~(MDB_VALID))
@@ -621,16 +621,16 @@ enum {
 static int mdbx_txn_end(MDBX_txn *txn, unsigned mode);
 
 static int mdbx_page_get(MDB_cursor *mc, pgno_t pgno, MDBX_page **mp, int *lvl);
-static int mdbx_page_search_root(MDB_cursor *mc, MDB_val *key, int modify);
+static int mdbx_page_search_root(MDB_cursor *mc, MDBX_val *key, int modify);
 #define MDB_PS_MODIFY 1
 #define MDB_PS_ROOTONLY 2
 #define MDB_PS_FIRST 4
 #define MDB_PS_LAST 8
-static int mdbx_page_search(MDB_cursor *mc, MDB_val *key, int flags);
+static int mdbx_page_search(MDB_cursor *mc, MDBX_val *key, int flags);
 static int mdbx_page_merge(MDB_cursor *csrc, MDB_cursor *cdst);
 
 #define MDB_SPLIT_REPLACE MDB_APPENDDUP /* newkey is not new */
-static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
+static int mdbx_page_split(MDB_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
                            pgno_t newpgno, unsigned nflags);
 
 static int mdbx_read_header(MDB_env *env, MDB_meta *meta);
@@ -638,34 +638,34 @@ static int mdbx_env_sync_locked(MDB_env *env, unsigned flags,
                                 MDB_meta *pending);
 static void mdbx_env_close0(MDB_env *env);
 
-static MDBX_node *mdbx_node_search(MDB_cursor *mc, MDB_val *key, int *exactp);
-static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
-                         MDB_val *data, pgno_t pgno, unsigned flags);
+static MDBX_node *mdbx_node_search(MDB_cursor *mc, MDBX_val *key, int *exactp);
+static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDBX_val *key,
+                         MDBX_val *data, pgno_t pgno, unsigned flags);
 static void mdbx_node_del(MDB_cursor *mc, int ksize);
 static void mdbx_node_shrink(MDBX_page *mp, indx_t indx);
 static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft);
-static int mdbx_node_read(MDB_cursor *mc, MDBX_node *leaf, MDB_val *data);
-static size_t mdbx_leaf_size(MDB_env *env, MDB_val *key, MDB_val *data);
-static size_t mdbx_branch_size(MDB_env *env, MDB_val *key);
+static int mdbx_node_read(MDB_cursor *mc, MDBX_node *leaf, MDBX_val *data);
+static size_t mdbx_leaf_size(MDB_env *env, MDBX_val *key, MDBX_val *data);
+static size_t mdbx_branch_size(MDB_env *env, MDBX_val *key);
 
 static int mdbx_rebalance(MDB_cursor *mc);
-static int mdbx_update_key(MDB_cursor *mc, MDB_val *key);
+static int mdbx_update_key(MDB_cursor *mc, MDBX_val *key);
 
 static void mdbx_cursor_pop(MDB_cursor *mc);
 static int mdbx_cursor_push(MDB_cursor *mc, MDBX_page *mp);
 
 static int mdbx_cursor_del0(MDB_cursor *mc);
-static int mdbx_del0(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+static int mdbx_del0(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *data,
                      unsigned flags);
 static int mdbx_cursor_sibling(MDB_cursor *mc, int move_right);
-static int mdbx_cursor_next(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+static int mdbx_cursor_next(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                             MDB_cursor_op op);
-static int mdbx_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+static int mdbx_cursor_prev(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                             MDB_cursor_op op);
-static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+static int mdbx_cursor_set(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                            MDB_cursor_op op, int *exactp);
-static int mdbx_cursor_first(MDB_cursor *mc, MDB_val *key, MDB_val *data);
-static int mdbx_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data);
+static int mdbx_cursor_first(MDB_cursor *mc, MDBX_val *key, MDBX_val *data);
+static int mdbx_cursor_last(MDB_cursor *mc, MDBX_val *key, MDBX_val *data);
 
 static void mdbx_cursor_init(MDB_cursor *mc, MDBX_txn *txn, MDB_dbi dbi,
                              MDB_xcursor *mx);
@@ -810,7 +810,7 @@ void __cold mdbx_debug_log(int type, const char *function, int line,
 }
 
 /* Dump a key in ascii or hexadecimal. */
-char *mdbx_dkey(const MDB_val *key, char *const buf, const size_t bufsize) {
+char *mdbx_dkey(const MDBX_val *key, char *const buf, const size_t bufsize) {
   if (!key)
     return "<null>";
   if (!buf || bufsize < 4)
@@ -818,24 +818,24 @@ char *mdbx_dkey(const MDB_val *key, char *const buf, const size_t bufsize) {
   if (!key->iov_len)
     return "<empty>";
 
-  const uint8_t *const data = key->mv_data;
+  const uint8_t *const data = key->iov_base;
   bool is_ascii = true;
   unsigned i;
-  for (i = 0; is_ascii && i < key->mv_size; i++)
+  for (i = 0; is_ascii && i < key->iov_len; i++)
     if (data[i] < ' ' || data[i] > 127)
       is_ascii = false;
 
   if (is_ascii) {
     int len =
         snprintf(buf, bufsize, "%.*s",
-                 (key->mv_size > INT_MAX) ? INT_MAX : (int)key->mv_size, data);
+                 (key->iov_len > INT_MAX) ? INT_MAX : (int)key->iov_len, data);
     assert(len > 0 && (unsigned)len < bufsize);
     (void)len;
   } else {
     char *const detent = buf + bufsize - 2;
     char *ptr = buf;
     *ptr++ = '<';
-    for (i = 0; i < key->mv_size; i++) {
+    for (i = 0; i < key->iov_len; i++) {
       const ptrdiff_t left = detent - ptr;
       assert(left > 0);
       int len = snprintf(ptr, left, "%02x", data[i]);
@@ -865,7 +865,7 @@ static void mdbx_page_list(MDBX_page *mp) {
   const char *type, *state = (mp->mp_flags & P_DIRTY) ? ", dirty" : "";
   MDBX_node *node;
   unsigned i, nkeys, nsize, total = 0;
-  MDB_val key;
+  MDBX_val key;
   DKBUF;
 
   switch (mp->mp_flags &
@@ -903,16 +903,16 @@ static void mdbx_page_list(MDBX_page *mp) {
 
   for (i = 0; i < nkeys; i++) {
     if (IS_LEAF2(mp)) { /* LEAF2 pages have no mp_ptrs[] or node headers */
-      key.mv_size = nsize = mp->mp_leaf2_ksize;
-      key.mv_data = LEAF2KEY(mp, i, nsize);
+      key.iov_len = nsize = mp->mp_leaf2_ksize;
+      key.iov_base = LEAF2KEY(mp, i, nsize);
       total += nsize;
       mdbx_print("key %u: nsize %u, %s\n", i, nsize, DKEY(&key));
       continue;
     }
     node = NODEPTR(mp, i);
-    key.mv_size = node->mn_ksize;
-    key.mv_data = node->mn_data;
-    nsize = NODESIZE + key.mv_size;
+    key.iov_len = node->mn_ksize;
+    key.iov_base = node->mn_data;
+    nsize = NODESIZE + key.iov_len;
     if (IS_BRANCH(mp)) {
       mdbx_print("key %u: page %" PRIu64 ", %s\n", i, NODEPGNO(node),
                  DKEY(&key));
@@ -964,7 +964,7 @@ static void mdbx_cursor_chk(MDB_cursor *mc) {
  * All named DBs must be open for a correct count. */
 static void mdbx_audit(MDBX_txn *txn) {
   MDB_cursor mc;
-  MDB_val key, data;
+  MDBX_val key, data;
   pgno_t freecount, count;
   MDB_dbi i;
   int rc;
@@ -972,7 +972,7 @@ static void mdbx_audit(MDBX_txn *txn) {
   freecount = 0;
   mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
   while ((rc = mdbx_cursor_get(&mc, &key, &data, MDB_NEXT)) == 0)
-    freecount += *(pgno_t *)data.mv_data;
+    freecount += *(pgno_t *)data.iov_base;
   mdbx_tassert(txn, rc == MDB_NOTFOUND);
 
   count = 0;
@@ -1012,12 +1012,13 @@ static void mdbx_audit(MDBX_txn *txn) {
   }
 }
 
-int mdbx_cmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a, const MDB_val *b) {
+int mdbx_cmp(MDBX_txn *txn, MDB_dbi dbi, const MDBX_val *a, const MDBX_val *b) {
   mdbx_ensure(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
   return txn->mt_dbxs[dbi].md_cmp(a, b);
 }
 
-int mdbx_dcmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a, const MDB_val *b) {
+int mdbx_dcmp(MDBX_txn *txn, MDB_dbi dbi, const MDBX_val *a,
+              const MDBX_val *b) {
   mdbx_ensure(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
   return txn->mt_dbxs[dbi].md_dcmp(a, b);
 }
@@ -1268,7 +1269,7 @@ static int mdbx_page_flush(MDBX_txn *txn, int keep);
  * [in] data  For a put operation, the data being stored.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_spill(MDB_cursor *m0, MDB_val *key, MDB_val *data) {
+static int mdbx_page_spill(MDB_cursor *m0, MDBX_val *key, MDBX_val *data) {
   MDBX_txn *txn = m0->mc_txn;
   MDBX_page *dp;
   MDB_ID2L dl = txn->mt_rw_dirtylist;
@@ -1499,7 +1500,7 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDBX_page **mp, int flags) {
   for (;;) { /* oom-kick retry loop */
     for (op = MDB_FIRST;;
          op = (flags & MDBX_LIFORECLAIM) ? MDB_PREV : MDB_NEXT) {
-      MDB_val key, data;
+      MDBX_val key, data;
       MDBX_node *leaf;
       pgno_t *idl;
 
@@ -1538,8 +1539,8 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDBX_page **mp, int flags) {
           op = MDB_SET_RANGE;
         }
 
-        key.mv_data = &last;
-        key.mv_size = sizeof(last);
+        key.iov_base = &last;
+        key.iov_len = sizeof(last);
       }
 
       if (!(flags & MDBX_LIFORECLAIM)) {
@@ -1562,8 +1563,8 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDBX_page **mp, int flags) {
         if (oldest < mdbx_find_oldest(env, NULL)) {
           oldest = env->me_pgoldest;
           last = oldest - 1;
-          key.mv_data = &last;
-          key.mv_size = sizeof(last);
+          key.iov_base = &last;
+          key.iov_len = sizeof(last);
           op = MDB_SET_RANGE;
           rc = mdbx_cursor_get(&m2, &key, NULL, op);
         }
@@ -1574,7 +1575,7 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDBX_page **mp, int flags) {
         goto fail;
       }
 
-      last = *(txnid_t *)key.mv_data;
+      last = *(txnid_t *)key.iov_base;
       if (oldest <= last) {
         if (!found_oldest) {
           oldest = mdbx_find_oldest(env, NULL);
@@ -1610,9 +1611,9 @@ static int mdbx_page_alloc(MDB_cursor *mc, int num, MDBX_page **mp, int flags) {
         }
       }
 
-      idl = (pgno_t *)data.mv_data;
+      idl = (pgno_t *)data.iov_base;
       mdbx_tassert(txn, idl[0] == 0 ||
-                            data.mv_size == (idl[0] + 1) * sizeof(pgno_t));
+                            data.iov_len == (idl[0] + 1) * sizeof(pgno_t));
       i = idl[0];
       if (!mop) {
         if (unlikely(!(env->me_pghead = mop = mdbx_midl_alloc(i)))) {
@@ -2442,10 +2443,10 @@ static void mdbx_dbis_update(MDBX_txn *txn, int keep) {
       if (keep) {
         env->me_dbflags[i] = txn->mt_dbs[i].md_flags | MDB_VALID;
       } else {
-        char *ptr = env->me_dbxs[i].md_name.mv_data;
+        char *ptr = env->me_dbxs[i].md_name.iov_base;
         if (ptr) {
-          env->me_dbxs[i].md_name.mv_data = NULL;
-          env->me_dbxs[i].md_name.mv_size = 0;
+          env->me_dbxs[i].md_name.iov_base = NULL;
+          env->me_dbxs[i].md_name.iov_len = 0;
           env->me_dbflags[i] = 0;
           env->me_dbiseqs[i]++;
           free(ptr);
@@ -2630,7 +2631,7 @@ static int mdbx_freelist_save(MDBX_txn *txn) {
 again:
   for (;;) {
     /* Come back here after each Put() in case freelist changed */
-    MDB_val key, data;
+    MDBX_val key, data;
     pgno_t *pgs;
     ssize_t j;
 
@@ -2644,7 +2645,7 @@ again:
         rc = mdbx_prep_backlog(txn, &mc);
         if (unlikely(rc))
           goto bailout;
-        pglast = head_id = *(txnid_t *)key.mv_data;
+        pglast = head_id = *(txnid_t *)key.iov_base;
         total_room = head_room = 0;
         more = 1;
         mdbx_tassert(txn, pglast <= env->me_pglast);
@@ -2658,8 +2659,8 @@ again:
       /* LY: cleanup reclaimed records. */
       while (cleanup_idx < txn->mt_lifo_reclaimed[0]) {
         pglast = txn->mt_lifo_reclaimed[++cleanup_idx];
-        key.mv_data = &pglast;
-        key.mv_size = sizeof(pglast);
+        key.iov_base = &pglast;
+        key.iov_len = sizeof(pglast);
         rc = mdbx_cursor_get(&mc, &key, NULL, MDB_SET);
         if (likely(rc != MDB_NOTFOUND)) {
           if (unlikely(rc))
@@ -2699,11 +2700,11 @@ again:
       }
       free_pgs = txn->mt_free_pages;
       /* Write to last page of freeDB */
-      key.mv_size = sizeof(txn->mt_txnid);
-      key.mv_data = &txn->mt_txnid;
+      key.iov_len = sizeof(txn->mt_txnid);
+      key.iov_base = &txn->mt_txnid;
       do {
         freecnt = free_pgs[0];
-        data.mv_size = MDB_IDL_SIZEOF(free_pgs);
+        data.iov_len = MDB_IDL_SIZEOF(free_pgs);
         rc = mdbx_cursor_put(&mc, &key, &data, MDB_RESERVE);
         if (unlikely(rc))
           goto bailout;
@@ -2712,7 +2713,7 @@ again:
       } while (freecnt < free_pgs[0]);
 
       mdbx_midl_sort(free_pgs);
-      memcpy(data.mv_data, free_pgs, data.mv_size);
+      memcpy(data.iov_base, free_pgs, data.iov_len);
 
       if (mdbx_debug_enabled(MDBX_DBG_EXTRA)) {
         unsigned i = free_pgs[0];
@@ -2794,14 +2795,14 @@ again:
       head_room = 0;
       continue;
     }
-    key.mv_size = sizeof(head_id);
-    key.mv_data = &head_id;
-    data.mv_size = (head_room + 1) * sizeof(pgno_t);
+    key.iov_len = sizeof(head_id);
+    key.iov_base = &head_id;
+    data.iov_len = (head_room + 1) * sizeof(pgno_t);
     rc = mdbx_cursor_put(&mc, &key, &data, MDB_RESERVE);
     if (unlikely(rc))
       goto bailout;
     /* IDL is initially empty, zero out at least the length */
-    pgs = (pgno_t *)data.mv_data;
+    pgs = (pgno_t *)data.iov_base;
     j = head_room > clean_limit ? head_room : 0;
     do {
       pgs[j] = 0;
@@ -2837,9 +2838,9 @@ again:
   /* Fill in the reserved me_pghead records */
   rc = MDB_SUCCESS;
   if (mop_len) {
-    MDB_val key, data;
-    key.mv_size = data.mv_size = 0; /* avoid MSVC warning */
-    key.mv_data = data.mv_data = NULL;
+    MDBX_val key, data;
+    key.iov_len = data.iov_len = 0; /* avoid MSVC warning */
+    key.iov_base = data.iov_base = NULL;
 
     mop += mop_len;
     if (!lifo) {
@@ -2854,14 +2855,14 @@ again:
       pgno_t save;
 
       if (!lifo) {
-        id = *(txnid_t *)key.mv_data;
+        id = *(txnid_t *)key.iov_base;
         mdbx_tassert(txn, id <= env->me_pglast);
       } else {
         mdbx_tassert(txn,
                      refill_idx > 0 && refill_idx <= txn->mt_lifo_reclaimed[0]);
         id = txn->mt_lifo_reclaimed[refill_idx--];
-        key.mv_data = &id;
-        key.mv_size = sizeof(id);
+        key.iov_base = &id;
+        key.iov_len = sizeof(id);
         rc = mdbx_cursor_get(&mc, &key, &data, MDB_SET);
         if (unlikely(rc))
           goto bailout;
@@ -2870,14 +2871,14 @@ again:
           txn, cleanup_idx ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
-      len = (ssize_t)(data.mv_size / sizeof(pgno_t)) - 1;
+      len = (ssize_t)(data.iov_len / sizeof(pgno_t)) - 1;
       mdbx_tassert(txn, len >= 0);
       if (len > mop_len)
         len = mop_len;
-      data.mv_size = (len + 1) * sizeof(pgno_t);
-      key.mv_data = &id;
-      key.mv_size = sizeof(id);
-      data.mv_data = mop -= len;
+      data.iov_len = (len + 1) * sizeof(pgno_t);
+      key.iov_base = &id;
+      key.iov_len = sizeof(id);
+      data.iov_base = mop -= len;
 
       save = mop[0];
       mop[0] = len;
@@ -3220,8 +3221,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   if (txn->mt_numdbs > CORE_DBS) {
     MDB_cursor mc;
     MDB_dbi i;
-    MDB_val data;
-    data.mv_size = sizeof(MDB_db);
+    MDBX_val data;
+    data.iov_len = sizeof(MDB_db);
 
     mdbx_cursor_init(&mc, txn, MAIN_DBI, NULL);
     for (i = CORE_DBS; i < txn->mt_numdbs; i++) {
@@ -3230,7 +3231,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
           rc = MDB_BAD_DBI;
           goto fail;
         }
-        data.mv_data = &txn->mt_dbs[i];
+        data.iov_base = &txn->mt_dbs[i];
         rc = mdbx_cursor_put(&mc, &txn->mt_dbxs[i].md_name, &data, F_SUBDATA);
         if (unlikely(rc != MDB_SUCCESS))
           goto fail;
@@ -4154,7 +4155,7 @@ static void __cold mdbx_env_close0(MDB_env *env) {
   /* Doing this here since me_dbxs may not exist during mdbx_env_close */
   if (env->me_dbxs) {
     for (unsigned i = env->me_maxdbs; --i >= CORE_DBS;)
-      free(env->me_dbxs[i].md_name.mv_data);
+      free(env->me_dbxs[i].md_name.iov_base);
     free(env->me_dbxs);
   }
 
@@ -4242,15 +4243,15 @@ void __cold mdbx_env_close(MDB_env *env) { mdbx_env_close_ex(env, 0); }
 #endif
 
 /* Compare two items pointing at aligned unsigned int's. */
-static int __hot mdbx_cmp_int_ai(const MDB_val *a, const MDB_val *b) {
-  mdbx_assert(NULL, a->mv_size == b->mv_size);
-  mdbx_assert(NULL, 0 == (uintptr_t)a->mv_data % sizeof(int) &&
-                        0 == (uintptr_t)b->mv_data % sizeof(int));
-  switch (a->mv_size) {
+static int __hot mdbx_cmp_int_ai(const MDBX_val *a, const MDBX_val *b) {
+  mdbx_assert(NULL, a->iov_len == b->iov_len);
+  mdbx_assert(NULL, 0 == (uintptr_t)a->iov_base % sizeof(int) &&
+                        0 == (uintptr_t)b->iov_base % sizeof(int));
+  switch (a->iov_len) {
   case 4:
-    return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
+    return mdbx_cmp2int(*(uint32_t *)a->iov_base, *(uint32_t *)b->iov_base);
   case 8:
-    return mdbx_cmp2int(*(uint64_t *)a->mv_data, *(uint64_t *)b->mv_data);
+    return mdbx_cmp2int(*(uint64_t *)a->iov_base, *(uint64_t *)b->iov_base);
   default:
     mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", mdbx_func_,
                      __LINE__);
@@ -4259,37 +4260,37 @@ static int __hot mdbx_cmp_int_ai(const MDB_val *a, const MDB_val *b) {
 }
 
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
-static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
-  mdbx_assert(NULL, a->mv_size == b->mv_size);
-  mdbx_assert(NULL, 0 == (uintptr_t)a->mv_data % sizeof(uint16_t) &&
-                        0 == (uintptr_t)b->mv_data % sizeof(uint16_t));
+static int __hot mdbx_cmp_int_a2(const MDBX_val *a, const MDBX_val *b) {
+  mdbx_assert(NULL, a->iov_len == b->iov_len);
+  mdbx_assert(NULL, 0 == (uintptr_t)a->iov_base % sizeof(uint16_t) &&
+                        0 == (uintptr_t)b->iov_base % sizeof(uint16_t));
 #if UNALIGNED_OK
-  switch (a->mv_size) {
+  switch (a->iov_len) {
   case 4:
-    return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
+    return mdbx_cmp2int(*(uint32_t *)a->iov_base, *(uint32_t *)b->iov_base);
   case 8:
-    return mdbx_cmp2int(*(uint64_t *)a->mv_data, *(uint64_t *)b->mv_data);
+    return mdbx_cmp2int(*(uint64_t *)a->iov_base, *(uint64_t *)b->iov_base);
   default:
     mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", mdbx_func_,
                      __LINE__);
     return 0;
   }
 #else
-  mdbx_assert(NULL, 0 == a->mv_size % sizeof(uint16_t));
+  mdbx_assert(NULL, 0 == a->iov_len % sizeof(uint16_t));
   {
     int diff;
     const uint16_t *pa, *pb, *end;
 
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-    end = (const uint16_t *)a->mv_data;
-    pa = (const uint16_t *)((char *)a->mv_data + a->mv_size);
-    pb = (const uint16_t *)((char *)b->mv_data + a->mv_size);
+    end = (const uint16_t *)a->iov_base;
+    pa = (const uint16_t *)((char *)a->iov_base + a->iov_len);
+    pb = (const uint16_t *)((char *)b->iov_base + a->iov_len);
     do {
       diff = *--pa - *--pb;
 #else  /* __BYTE_ORDER__ */
-    end = (const uint16_t *)((char *)a->mv_data + a->mv_size);
-    pa = (const uint16_t *)a->mv_data;
-    pb = (const uint16_t *)b->mv_data;
+    end = (const uint16_t *)((char *)a->iov_base + a->iov_len);
+    pa = (const uint16_t *)a->iov_base;
+    pb = (const uint16_t *)b->iov_base;
     do {
       diff = *pa++ - *pb++;
 #endif /* __BYTE_ORDER__ */
@@ -4304,69 +4305,69 @@ static int __hot mdbx_cmp_int_a2(const MDB_val *a, const MDB_val *b) {
 /* Compare two items pointing at unsigneds of unknown alignment.
  *
  * This is also set as MDB_INTEGERDUP|MDB_DUPFIXED's MDB_dbx.md_dcmp. */
-static int __hot mdbx_cmp_int_ua(const MDB_val *a, const MDB_val *b) {
-  mdbx_assert(NULL, a->mv_size == b->mv_size);
+static int __hot mdbx_cmp_int_ua(const MDBX_val *a, const MDBX_val *b) {
+  mdbx_assert(NULL, a->iov_len == b->iov_len);
 #if UNALIGNED_OK
-  switch (a->mv_size) {
+  switch (a->iov_len) {
   case 4:
-    return mdbx_cmp2int(*(uint32_t *)a->mv_data, *(uint32_t *)b->mv_data);
+    return mdbx_cmp2int(*(uint32_t *)a->iov_base, *(uint32_t *)b->iov_base);
   case 8:
-    return mdbx_cmp2int(*(uint64_t *)a->mv_data, *(uint64_t *)b->mv_data);
+    return mdbx_cmp2int(*(uint64_t *)a->iov_base, *(uint64_t *)b->iov_base);
   default:
     mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", mdbx_func_,
                      __LINE__);
     return 0;
   }
 #else
-  mdbx_assert(NULL, a->mv_size == sizeof(int) || a->mv_size == sizeof(size_t));
+  mdbx_assert(NULL, a->iov_len == sizeof(int) || a->iov_len == sizeof(size_t));
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   {
     int diff;
     const uint8_t *pa, *pb;
 
-    pa = (const uint8_t *)a->mv_data + a->mv_size;
-    pb = (const uint8_t *)b->mv_data + a->mv_size;
+    pa = (const uint8_t *)a->iov_base + a->iov_len;
+    pb = (const uint8_t *)b->iov_base + a->iov_len;
 
     do {
       diff = *--pa - *--pb;
       if (likely(diff != 0))
         break;
-    } while (pa != a->mv_data);
+    } while (pa != a->iov_base);
     return diff;
   }
-#else  /* __BYTE_ORDER__ */
-  return memcmp(a->mv_data, b->mv_data, a->mv_size);
+#else /* __BYTE_ORDER__ */
+  return memcmp(a->iov_base, b->iov_base, a->iov_len);
 #endif /* __BYTE_ORDER__ */
 #endif /* UNALIGNED_OK */
 }
 
 /* Compare two items lexically */
-static int __hot mdbx_cmp_memn(const MDB_val *a, const MDB_val *b) {
+static int __hot mdbx_cmp_memn(const MDBX_val *a, const MDBX_val *b) {
 /* LY: assumes that length of keys are NOT equal for most cases,
  * if no then branch-prediction should mitigate the problem */
 #if 0
   /* LY: without branch instructions on x86,
    * but isn't best for equal length of keys */
-  int diff_len = mdbx_cmp2int(a->mv_size, b->mv_size);
+  int diff_len = mdbx_cmp2int(a->iov_len, b->iov_len);
 #else
   /* LY: best when length of keys are equal,
    * but got a branch-penalty otherwise */
-  if (likely(a->mv_size == b->mv_size))
-    return memcmp(a->mv_data, b->mv_data, a->mv_size);
-  int diff_len = (a->mv_size < b->mv_size) ? -1 : 1;
+  if (likely(a->iov_len == b->iov_len))
+    return memcmp(a->iov_base, b->iov_base, a->iov_len);
+  int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
 #endif
-  size_t shortest = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
-  int diff_data = memcmp(a->mv_data, b->mv_data, shortest);
+  size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
+  int diff_data = memcmp(a->iov_base, b->iov_base, shortest);
   return likely(diff_data) ? diff_data : diff_len;
 }
 
 /* Compare two items in reverse byte order */
-static int __hot mdbx_cmp_memnr(const MDB_val *a, const MDB_val *b) {
+static int __hot mdbx_cmp_memnr(const MDBX_val *a, const MDBX_val *b) {
   const uint8_t *pa, *pb, *end;
 
-  pa = (const uint8_t *)a->mv_data + a->mv_size;
-  pb = (const uint8_t *)b->mv_data + b->mv_size;
-  size_t minlen = (a->mv_size < b->mv_size) ? a->mv_size : b->mv_size;
+  pa = (const uint8_t *)a->iov_base + a->iov_len;
+  pb = (const uint8_t *)b->iov_base + b->iov_len;
+  size_t minlen = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
   end = pa - minlen;
 
   while (pa != end) {
@@ -4374,7 +4375,7 @@ static int __hot mdbx_cmp_memnr(const MDB_val *a, const MDB_val *b) {
     if (likely(diff))
       return diff;
   }
-  return mdbx_cmp2int(a->mv_size, b->mv_size);
+  return mdbx_cmp2int(a->iov_len, b->iov_len);
 }
 
 /* Search for key within a page, using binary search.
@@ -4383,14 +4384,14 @@ static int __hot mdbx_cmp_memnr(const MDB_val *a, const MDB_val *b) {
  * in *exactp (1 or 0).
  * Updates the cursor index with the index of the found entry.
  * If no entry larger or equal to the key is found, returns NULL. */
-static MDBX_node *__hot mdbx_node_search(MDB_cursor *mc, MDB_val *key,
+static MDBX_node *__hot mdbx_node_search(MDB_cursor *mc, MDBX_val *key,
                                          int *exactp) {
   unsigned i = 0, nkeys;
   int low, high;
   int rc = 0;
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   MDBX_node *node = NULL;
-  MDB_val nodekey;
+  MDBX_val nodekey;
   MDB_cmp_func *cmp;
   DKBUF;
 
@@ -4411,11 +4412,11 @@ static MDBX_node *__hot mdbx_node_search(MDB_cursor *mc, MDB_val *key,
     cmp = mdbx_cmp_int_ai;
 
   if (IS_LEAF2(mp)) {
-    nodekey.mv_size = mc->mc_db->md_xsize;
+    nodekey.iov_len = mc->mc_db->md_xsize;
     node = NODEPTR(mp, 0); /* fake */
     while (low <= high) {
       i = (low + high) >> 1;
-      nodekey.mv_data = LEAF2KEY(mp, i, nodekey.mv_size);
+      nodekey.iov_base = LEAF2KEY(mp, i, nodekey.iov_len);
       rc = cmp(key, &nodekey);
       mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY(&nodekey), rc);
       if (rc == 0)
@@ -4430,8 +4431,8 @@ static MDBX_node *__hot mdbx_node_search(MDB_cursor *mc, MDB_val *key,
       i = (low + high) >> 1;
 
       node = NODEPTR(mp, i);
-      nodekey.mv_size = NODEKSZ(node);
-      nodekey.mv_data = NODEKEY(node);
+      nodekey.iov_len = NODEKSZ(node);
+      nodekey.iov_base = NODEKEY(node);
 
       rc = cmp(key, &nodekey);
       if (IS_LEAF(mp))
@@ -4572,7 +4573,7 @@ done:
 
 /* Finish mdbx_page_search() / mdbx_page_search_lowest().
  * The cursor is at the root page, set up the rest of it. */
-static int mdbx_page_search_root(MDB_cursor *mc, MDB_val *key, int flags) {
+static int mdbx_page_search_root(MDB_cursor *mc, MDBX_val *key, int flags) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   int rc;
   DKBUF;
@@ -4682,7 +4683,7 @@ static int mdbx_page_search_lowest(MDB_cursor *mc) {
  *              lookups.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_search(MDB_cursor *mc, MDB_val *key, int flags) {
+static int mdbx_page_search(MDB_cursor *mc, MDBX_val *key, int flags) {
   int rc;
   pgno_t root;
 
@@ -4702,7 +4703,7 @@ static int mdbx_page_search(MDB_cursor *mc, MDB_val *key, int flags) {
       if (rc)
         return rc;
       {
-        MDB_val data;
+        MDBX_val data;
         int exact = 0;
         MDBX_node *leaf = mdbx_node_search(&mc2, &mc->mc_dbx->md_name, &exact);
         if (!exact)
@@ -4714,13 +4715,13 @@ static int mdbx_page_search(MDB_cursor *mc, MDB_val *key, int flags) {
           return rc;
 
         uint16_t md_flags;
-        memcpy(&md_flags, ((char *)data.mv_data + offsetof(MDB_db, md_flags)),
+        memcpy(&md_flags, ((char *)data.iov_base + offsetof(MDB_db, md_flags)),
                sizeof(uint16_t));
         /* The txn may not know this DBI, or another process may
          * have dropped and recreated the DB with other flags. */
         if (unlikely((mc->mc_db->md_flags & PERSISTENT_FLAGS) != md_flags))
           return MDB_INCOMPATIBLE;
-        memcpy(mc->mc_db, data.mv_data, sizeof(MDB_db));
+        memcpy(mc->mc_db, data.iov_base, sizeof(MDB_db));
       }
       *mc->mc_dbflag &= ~DB_STALE;
     }
@@ -4833,30 +4834,30 @@ static int mdbx_ovpage_free(MDB_cursor *mc, MDBX_page *mp) {
  *
  * Returns 0 on success, non-zero on failure. */
 static __inline int mdbx_node_read(MDB_cursor *mc, MDBX_node *leaf,
-                                   MDB_val *data) {
+                                   MDBX_val *data) {
   MDBX_page *omp; /* overflow page */
   pgno_t pgno;
   int rc;
 
   if (!F_ISSET(leaf->mn_flags, F_BIGDATA)) {
-    data->mv_size = NODEDSZ(leaf);
-    data->mv_data = NODEDATA(leaf);
+    data->iov_len = NODEDSZ(leaf);
+    data->iov_base = NODEDATA(leaf);
     return MDB_SUCCESS;
   }
 
   /* Read overflow data. */
-  data->mv_size = NODEDSZ(leaf);
+  data->iov_len = NODEDSZ(leaf);
   memcpy(&pgno, NODEDATA(leaf), sizeof(pgno));
   if (unlikely((rc = mdbx_page_get(mc, pgno, &omp, NULL)) != 0)) {
     mdbx_debug("read overflow page %" PRIaPGNO " failed", pgno);
     return rc;
   }
-  data->mv_data = PAGEDATA(omp);
+  data->iov_base = PAGEDATA(omp);
 
   return MDB_SUCCESS;
 }
 
-int mdbx_get(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data) {
+int mdbx_get(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *data) {
   MDB_cursor mc;
   MDB_xcursor mx;
   int exact = 0;
@@ -4938,7 +4939,7 @@ static int mdbx_cursor_sibling(MDB_cursor *mc, int move_right) {
 }
 
 /* Move the cursor to the next data item. */
-static int mdbx_cursor_next(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+static int mdbx_cursor_next(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                             MDB_cursor_op op) {
   MDBX_page *mp;
   MDBX_node *leaf;
@@ -5000,8 +5001,8 @@ skip:
              mp->mp_pgno, NUMKEYS(mp), mc->mc_ki[mc->mc_top]);
 
   if (IS_LEAF2(mp)) {
-    key->mv_size = mc->mc_db->md_xsize;
-    key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
+    key->iov_len = mc->mc_db->md_xsize;
+    key->iov_base = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     return MDB_SUCCESS;
   }
 
@@ -5027,7 +5028,7 @@ skip:
 }
 
 /* Move the cursor to the previous data item. */
-static int mdbx_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+static int mdbx_cursor_prev(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                             MDB_cursor_op op) {
   MDBX_page *mp;
   MDBX_node *leaf;
@@ -5087,8 +5088,8 @@ static int mdbx_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data,
              mp->mp_pgno, NUMKEYS(mp), mc->mc_ki[mc->mc_top]);
 
   if (IS_LEAF2(mp)) {
-    key->mv_size = mc->mc_db->md_xsize;
-    key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
+    key->iov_len = mc->mc_db->md_xsize;
+    key->iov_base = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     return MDB_SUCCESS;
   }
 
@@ -5114,7 +5115,7 @@ static int mdbx_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 }
 
 /* Set the cursor on a specific data item. */
-static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+static int mdbx_cursor_set(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                            MDB_cursor_op op, int *exactp) {
   int rc;
   MDBX_page *mp;
@@ -5122,8 +5123,8 @@ static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   DKBUF;
 
   if ((mc->mc_db->md_flags & MDB_INTEGERKEY) &&
-      unlikely(key->mv_size != sizeof(uint32_t) &&
-               key->mv_size != sizeof(uint64_t))) {
+      unlikely(key->iov_len != sizeof(uint32_t) &&
+               key->iov_len != sizeof(uint64_t))) {
     mdbx_cassert(mc, !"key-size is invalid for MDB_INTEGERKEY");
     return MDB_BAD_VALSIZE;
   }
@@ -5133,7 +5134,7 @@ static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
   /* See if we're already on the right page */
   if (mc->mc_flags & C_INITIALIZED) {
-    MDB_val nodekey;
+    MDBX_val nodekey;
 
     mp = mc->mc_pg[mc->mc_top];
     if (!NUMKEYS(mp)) {
@@ -5141,8 +5142,8 @@ static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
       return MDB_NOTFOUND;
     }
     if (mp->mp_flags & P_LEAF2) {
-      nodekey.mv_size = mc->mc_db->md_xsize;
-      nodekey.mv_data = LEAF2KEY(mp, 0, nodekey.mv_size);
+      nodekey.iov_len = mc->mc_db->md_xsize;
+      nodekey.iov_base = LEAF2KEY(mp, 0, nodekey.iov_len);
     } else {
       leaf = NODEPTR(mp, 0);
       MDB_GET_KEY2(leaf, nodekey);
@@ -5162,7 +5163,7 @@ static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
       unsigned nkeys = NUMKEYS(mp);
       if (nkeys > 1) {
         if (mp->mp_flags & P_LEAF2) {
-          nodekey.mv_data = LEAF2KEY(mp, nkeys - 1, nodekey.mv_size);
+          nodekey.iov_base = LEAF2KEY(mp, nkeys - 1, nodekey.iov_len);
         } else {
           leaf = NODEPTR(mp, nkeys - 1);
           MDB_GET_KEY2(leaf, nodekey);
@@ -5179,8 +5180,8 @@ static int mdbx_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
           if (mc->mc_ki[mc->mc_top] < NUMKEYS(mp)) {
             /* This is definitely the right page, skip search_page */
             if (mp->mp_flags & P_LEAF2) {
-              nodekey.mv_data =
-                  LEAF2KEY(mp, mc->mc_ki[mc->mc_top], nodekey.mv_size);
+              nodekey.iov_base =
+                  LEAF2KEY(mp, mc->mc_ki[mc->mc_top], nodekey.iov_len);
             } else {
               leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
               MDB_GET_KEY2(leaf, nodekey);
@@ -5253,8 +5254,8 @@ set1:
 
   if (IS_LEAF2(mp)) {
     if (op == MDB_SET_RANGE || op == MDB_SET_KEY) {
-      key->mv_size = mc->mc_db->md_xsize;
-      key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
+      key->iov_len = mc->mc_db->md_xsize;
+      key->iov_base = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     }
     return MDB_SUCCESS;
   }
@@ -5280,7 +5281,7 @@ set1:
           return rc;
       }
     } else if (op == MDB_GET_BOTH || op == MDB_GET_BOTH_RANGE) {
-      MDB_val olddata;
+      MDBX_val olddata;
       if (unlikely((rc = mdbx_node_read(mc, leaf, &olddata)) != MDB_SUCCESS))
         return rc;
       rc = mc->mc_dbx->md_dcmp(data, &olddata);
@@ -5307,7 +5308,7 @@ set1:
 }
 
 /* Move the cursor to the first item in the database. */
-static int mdbx_cursor_first(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
+static int mdbx_cursor_first(MDB_cursor *mc, MDBX_val *key, MDBX_val *data) {
   int rc;
   MDBX_node *leaf;
 
@@ -5328,8 +5329,8 @@ static int mdbx_cursor_first(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
   mc->mc_ki[mc->mc_top] = 0;
 
   if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-    key->mv_size = mc->mc_db->md_xsize;
-    key->mv_data = LEAF2KEY(mc->mc_pg[mc->mc_top], 0, key->mv_size);
+    key->iov_len = mc->mc_db->md_xsize;
+    key->iov_base = LEAF2KEY(mc->mc_pg[mc->mc_top], 0, key->iov_len);
     return MDB_SUCCESS;
   }
 
@@ -5349,7 +5350,7 @@ static int mdbx_cursor_first(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
 }
 
 /* Move the cursor to the last item in the database. */
-static int mdbx_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
+static int mdbx_cursor_last(MDB_cursor *mc, MDBX_val *key, MDBX_val *data) {
   int rc;
   MDBX_node *leaf;
 
@@ -5370,9 +5371,9 @@ static int mdbx_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
   leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 
   if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-    key->mv_size = mc->mc_db->md_xsize;
-    key->mv_data =
-        LEAF2KEY(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top], key->mv_size);
+    key->iov_len = mc->mc_db->md_xsize;
+    key->iov_base =
+        LEAF2KEY(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top], key->iov_len);
     return MDB_SUCCESS;
   }
 
@@ -5392,11 +5393,11 @@ static int mdbx_cursor_last(MDB_cursor *mc, MDB_val *key, MDB_val *data) {
   return MDB_SUCCESS;
 }
 
-int mdbx_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+int mdbx_cursor_get(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                     MDB_cursor_op op) {
   int rc;
   int exact = 0;
-  int (*mfunc)(MDB_cursor * mc, MDB_val * key, MDB_val * data);
+  int (*mfunc)(MDB_cursor * mc, MDBX_val * key, MDBX_val * data);
 
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
@@ -5421,8 +5422,8 @@ int mdbx_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
     rc = MDB_SUCCESS;
     if (IS_LEAF2(mp)) {
-      key->mv_size = mc->mc_db->md_xsize;
-      key->mv_data = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->mv_size);
+      key->iov_len = mc->mc_db->md_xsize;
+      key->iov_base = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     } else {
       MDBX_node *leaf = NODEPTR(mp, mc->mc_ki[mc->mc_top]);
       MDB_GET_KEY(leaf, key);
@@ -5481,8 +5482,8 @@ int mdbx_cursor_get(MDB_cursor *mc, MDB_val *key, MDB_val *data,
         MDB_cursor *mx;
       fetchm:
         mx = &mc->mc_xcursor->mx_cursor;
-        data->mv_size = NUMKEYS(mx->mc_pg[mx->mc_top]) * mx->mc_db->md_xsize;
-        data->mv_data = PAGEDATA(mx->mc_pg[mx->mc_top]);
+        data->iov_len = NUMKEYS(mx->mc_pg[mx->mc_top]) * mx->mc_db->md_xsize;
+        data->iov_base = PAGEDATA(mx->mc_pg[mx->mc_top]);
         mx->mc_ki[mx->mc_top] = NUMKEYS(mx->mc_pg[mx->mc_top]) - 1;
       } else {
         rc = MDB_NOTFOUND;
@@ -5586,12 +5587,12 @@ static int mdbx_cursor_touch(MDB_cursor *mc) {
 /* Do not spill pages to disk if txn is getting full, may fail instead */
 #define MDB_NOSPILL 0x8000
 
-int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+int mdbx_cursor_put(MDB_cursor *mc, MDBX_val *key, MDBX_val *data,
                     unsigned flags) {
   MDB_env *env;
   MDBX_page *fp, *sub_root = NULL;
   uint16_t fp_flags;
-  MDB_val xdata, *rdata, dkey, olddata;
+  MDBX_val xdata, *rdata, dkey, olddata;
   MDB_db dummy;
   int do_sub = 0, insert_key, insert_data;
   unsigned mcount = 0, dcount = 0, nospill;
@@ -5610,8 +5611,8 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
   /* Check this first so counter will always be zero on any early failures. */
   if (flags & MDB_MULTIPLE) {
-    dcount = data[1].mv_size;
-    data[1].mv_size = 0;
+    dcount = data[1].iov_len;
+    data[1].iov_len = 0;
     if (unlikely(!F_ISSET(mc->mc_db->md_flags, MDB_DUPFIXED)))
       return MDB_INCOMPATIBLE;
   }
@@ -5619,7 +5620,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (flags & MDB_RESERVE) {
     if (unlikely(mc->mc_db->md_flags & (MDB_DUPSORT | MDB_REVERSEDUP)))
       return MDB_INCOMPATIBLE;
-    data->mv_data = nullptr;
+    data->iov_base = nullptr;
   }
 
   nospill = flags & MDB_NOSPILL;
@@ -5628,32 +5629,32 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (unlikely(mc->mc_txn->mt_flags & (MDB_TXN_RDONLY | MDB_TXN_BLOCKED)))
     return (mc->mc_txn->mt_flags & MDB_TXN_RDONLY) ? MDBX_EACCESS : MDB_BAD_TXN;
 
-  if (unlikely(key->mv_size > env->me_maxkey_limit))
+  if (unlikely(key->iov_len > env->me_maxkey_limit))
     return MDB_BAD_VALSIZE;
 
-  if (unlikely(data->mv_size > ((mc->mc_db->md_flags & MDB_DUPSORT)
+  if (unlikely(data->iov_len > ((mc->mc_db->md_flags & MDB_DUPSORT)
                                     ? env->me_maxkey_limit
                                     : MDBX_MAXDATASIZE)))
     return MDB_BAD_VALSIZE;
 
   if ((mc->mc_db->md_flags & MDB_INTEGERKEY) &&
-      unlikely(key->mv_size != sizeof(uint32_t) &&
-               key->mv_size != sizeof(uint64_t))) {
+      unlikely(key->iov_len != sizeof(uint32_t) &&
+               key->iov_len != sizeof(uint64_t))) {
     mdbx_cassert(mc, !"key-size is invalid for MDB_INTEGERKEY");
     return MDB_BAD_VALSIZE;
   }
 
   if ((mc->mc_db->md_flags & MDB_INTEGERDUP) &&
-      unlikely(data->mv_size != sizeof(uint32_t) &&
-               data->mv_size != sizeof(uint64_t))) {
+      unlikely(data->iov_len != sizeof(uint32_t) &&
+               data->iov_len != sizeof(uint64_t))) {
     mdbx_cassert(mc, !"data-size is invalid MDB_INTEGERDUP");
     return MDB_BAD_VALSIZE;
   }
 
   mdbx_debug("==> put db %d key [%s], size %" PRIuPTR
              ", data [%s] size %" PRIuPTR,
-             DDBI(mc), DKEY(key), key ? key->mv_size : 0,
-             DVAL((flags & MDB_RESERVE) ? nullptr : data), data->mv_size);
+             DDBI(mc), DKEY(key), key ? key->iov_len : 0,
+             DVAL((flags & MDB_RESERVE) ? nullptr : data), data->iov_len);
 
   int dupdata_flag = 0;
   if (flags & MDB_CURRENT) {
@@ -5662,7 +5663,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
      * со значением в текущей позиции курсора.
      * Здесь проще вызвать mdbx_cursor_get(), так как для обслуживания таблиц
      * с MDB_DUPSORT также требуется текущий размер данных. */
-    MDB_val current_key, current_data;
+    MDBX_val current_key, current_data;
     rc = mdbx_cursor_get(mc, &current_key, &current_data, MDB_GET_CURRENT);
     if (unlikely(rc != MDB_SUCCESS))
       return rc;
@@ -5679,7 +5680,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
          * отличается, то вместо inplace обновления требуется удаление и
          * последующая вставка. */
         if (mc->mc_xcursor->mx_db.md_entries > 1 ||
-            current_data.mv_size != data->mv_size) {
+            current_data.iov_len != data->iov_len) {
           rc = mdbx_cursor_del(mc, 0);
           if (rc != MDB_SUCCESS)
             return rc;
@@ -5697,9 +5698,9 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     rc = MDB_NO_ROOT;
   } else if ((flags & MDB_CURRENT) == 0) {
     int exact = 0;
-    MDB_val d2;
+    MDBX_val d2;
     if (flags & MDB_APPEND) {
-      MDB_val k2;
+      MDBX_val k2;
       rc = mdbx_cursor_last(mc, &k2, &d2);
       if (rc == 0) {
         rc = mc->mc_dbx->md_cmp(key, &k2);
@@ -5729,7 +5730,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
   if (!nospill) {
     if (flags & MDB_MULTIPLE) {
       rdata = &xdata;
-      xdata.mv_size = data->mv_size * dcount;
+      xdata.iov_len = data->iov_len * dcount;
     } else {
       rdata = data;
     }
@@ -5769,9 +5770,9 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
        * "old sub-page" for prep_subDB to expand to a full page. */
       fp_flags = P_LEAF | P_DIRTY;
       fp = env->me_pbuf;
-      fp->mp_leaf2_ksize = (uint16_t)data->mv_size; /* used if MDB_DUPFIXED */
+      fp->mp_leaf2_ksize = (uint16_t)data->iov_len; /* used if MDB_DUPFIXED */
       fp->mp_lower = fp->mp_upper = (PAGEHDRSZ - PAGEBASE);
-      olddata.mv_size = PAGEHDRSZ;
+      olddata.iov_len = PAGEHDRSZ;
       goto prep_subDB;
     }
   } else {
@@ -5779,10 +5780,10 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
       char *ptr;
       unsigned ksize = mc->mc_db->md_xsize;
-      if (key->mv_size != ksize)
+      if (key->iov_len != ksize)
         return MDB_BAD_VALSIZE;
       ptr = LEAF2KEY(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top], ksize);
-      memcpy(ptr, key->mv_data, ksize);
+      memcpy(ptr, key->iov_base, ksize);
     fix_parent:
       /* if overwriting slot 0 of leaf, need to
        * update branch key if there is a parent page */
@@ -5807,8 +5808,8 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
   more:;
     MDBX_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
-    olddata.mv_size = NODEDSZ(leaf);
-    olddata.mv_data = NODEDATA(leaf);
+    olddata.iov_len = NODEDSZ(leaf);
+    olddata.iov_base = NODEDATA(leaf);
 
     /* DB has dups? */
     if (F_ISSET(mc->mc_db->md_flags, MDB_DUPSORT)) {
@@ -5817,7 +5818,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
        * mp: new (sub-)page.  offset: growth in page size.
        * xdata: node data with new page or DB. */
       unsigned i, offset = 0;
-      MDBX_page *mp = fp = xdata.mv_data = env->me_pbuf;
+      MDBX_page *mp = fp = xdata.iov_base = env->me_pbuf;
       mp->mp_pgno = mc->mc_pg[mc->mc_top]->mp_pgno;
 
       /* Was a single item before, must convert now */
@@ -5837,34 +5838,34 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
         /* Back up original data item */
         dupdata_flag = 1;
-        dkey.mv_size = olddata.mv_size;
-        dkey.mv_data = memcpy(fp + 1, olddata.mv_data, olddata.mv_size);
+        dkey.iov_len = olddata.iov_len;
+        dkey.iov_base = memcpy(fp + 1, olddata.iov_base, olddata.iov_len);
 
         /* Make sub-page header for the dup items, with dummy body */
         fp->mp_flags = P_LEAF | P_DIRTY | P_SUBP;
         fp->mp_lower = (PAGEHDRSZ - PAGEBASE);
-        xdata.mv_size = PAGEHDRSZ + dkey.mv_size + data->mv_size;
+        xdata.iov_len = PAGEHDRSZ + dkey.iov_len + data->iov_len;
         if (mc->mc_db->md_flags & MDB_DUPFIXED) {
           fp->mp_flags |= P_LEAF2;
-          fp->mp_leaf2_ksize = (uint16_t)data->mv_size;
-          xdata.mv_size += 2 * data->mv_size; /* leave space for 2 more */
+          fp->mp_leaf2_ksize = (uint16_t)data->iov_len;
+          xdata.iov_len += 2 * data->iov_len; /* leave space for 2 more */
         } else {
-          xdata.mv_size += 2 * (sizeof(indx_t) + NODESIZE) +
-                           (dkey.mv_size & 1) + (data->mv_size & 1);
+          xdata.iov_len += 2 * (sizeof(indx_t) + NODESIZE) +
+                           (dkey.iov_len & 1) + (data->iov_len & 1);
         }
-        fp->mp_upper = (uint16_t)(xdata.mv_size - PAGEBASE);
-        olddata.mv_size = xdata.mv_size; /* pretend olddata is fp */
+        fp->mp_upper = (uint16_t)(xdata.iov_len - PAGEBASE);
+        olddata.iov_len = xdata.iov_len; /* pretend olddata is fp */
       } else if (leaf->mn_flags & F_SUBDATA) {
         /* Data is on sub-DB, just store it */
         flags |= F_DUPDATA | F_SUBDATA;
         goto put_sub;
       } else {
         /* Data is on sub-page */
-        fp = olddata.mv_data;
+        fp = olddata.iov_base;
         switch (flags) {
         default:
           if (!(mc->mc_db->md_flags & MDB_DUPFIXED)) {
-            offset = EVEN(NODESIZE + sizeof(indx_t) + data->mv_size);
+            offset = EVEN(NODESIZE + sizeof(indx_t) + data->iov_len);
             break;
           }
           offset = fp->mp_leaf2_ksize;
@@ -5881,11 +5882,11 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
           flags |= F_DUPDATA;
           goto put_sub;
         }
-        xdata.mv_size = olddata.mv_size + offset;
+        xdata.iov_len = olddata.iov_len + offset;
       }
 
       fp_flags = fp->mp_flags;
-      if (NODESIZE + NODEKSZ(leaf) + xdata.mv_size > env->me_nodemax) {
+      if (NODESIZE + NODEKSZ(leaf) + xdata.iov_len > env->me_nodemax) {
         /* Too big for a sub-page, convert to sub-DB */
         fp_flags &= ~P_SUBP;
       prep_subDB:
@@ -5903,11 +5904,11 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
         dummy.md_leaf_pages = 1;
         dummy.md_overflow_pages = 0;
         dummy.md_entries = NUMKEYS(fp);
-        xdata.mv_size = sizeof(MDB_db);
-        xdata.mv_data = &dummy;
+        xdata.iov_len = sizeof(MDB_db);
+        xdata.iov_base = &dummy;
         if ((rc = mdbx_page_alloc(mc, 1, &mp, MDBX_ALLOC_ALL)))
           return rc;
-        offset = env->me_psize - olddata.mv_size;
+        offset = env->me_psize - olddata.iov_len;
         flags |= F_DUPDATA | F_SUBDATA;
         dummy.md_root = mp->mp_pgno;
         sub_root = mp;
@@ -5922,7 +5923,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
         } else {
           memcpy((char *)mp + mp->mp_upper + PAGEBASE,
                  (char *)fp + fp->mp_upper + PAGEBASE,
-                 olddata.mv_size - fp->mp_upper - PAGEBASE);
+                 olddata.iov_len - fp->mp_upper - PAGEBASE);
           for (i = 0; i < NUMKEYS(fp); i++)
             mp->mp_ptrs[i] = fp->mp_ptrs[i] + offset;
         }
@@ -5943,9 +5944,9 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
     if (F_ISSET(leaf->mn_flags, F_BIGDATA)) {
       MDBX_page *omp;
       pgno_t pg;
-      int level, ovpages, dpages = OVPAGES(data->mv_size, env->me_psize);
+      int level, ovpages, dpages = OVPAGES(data->iov_len, env->me_psize);
 
-      memcpy(&pg, olddata.mv_data, sizeof(pg));
+      memcpy(&pg, olddata.iov_base, sizeof(pg));
       if (unlikely((rc2 = mdbx_page_get(mc, pg, &omp, &level)) != 0))
         return rc2;
       ovpages = omp->mp_pages;
@@ -5983,31 +5984,31 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
             /* Skip the part where LMDB will put *data.
              * Copy end of page, adjusting alignment so
              * compiler may copy words instead of bytes. */
-            size_t off = (PAGEHDRSZ + data->mv_size) & -(ssize_t)sizeof(size_t);
+            size_t off = (PAGEHDRSZ + data->iov_len) & -(ssize_t)sizeof(size_t);
             memcpy((size_t *)((char *)np + off), (size_t *)((char *)omp + off),
                    whole - off);
             memcpy(np, omp, PAGEHDRSZ); /* Copy header of page */
             omp = np;
           }
-          SETDSZ(leaf, data->mv_size);
+          SETDSZ(leaf, data->iov_len);
           if (F_ISSET(flags, MDB_RESERVE))
-            data->mv_data = PAGEDATA(omp);
+            data->iov_base = PAGEDATA(omp);
           else
-            memcpy(PAGEDATA(omp), data->mv_data, data->mv_size);
+            memcpy(PAGEDATA(omp), data->iov_base, data->iov_len);
           return MDB_SUCCESS;
         }
       }
       if ((rc2 = mdbx_ovpage_free(mc, omp)) != MDB_SUCCESS)
         return rc2;
-    } else if (data->mv_size == olddata.mv_size) {
-      assert(EVEN(key->mv_size) == EVEN(leaf->mn_ksize));
+    } else if (data->iov_len == olddata.iov_len) {
+      assert(EVEN(key->iov_len) == EVEN(leaf->mn_ksize));
       /* same size, just replace it. Note that we could
        * also reuse this node if the new data is smaller,
        * but instead we opt to shrink the node in that case. */
       if (F_ISSET(flags, MDB_RESERVE))
-        data->mv_data = olddata.mv_data;
+        data->iov_base = olddata.iov_base;
       else if (!(mc->mc_flags & C_SUB))
-        memcpy(olddata.mv_data, data->mv_data, data->mv_size);
+        memcpy(olddata.iov_base, data->iov_base, data->iov_len);
       else {
         assert(NUMKEYS(mc->mc_pg[mc->mc_top]) == 1);
         assert(mc->mc_pg[mc->mc_top]->mp_upper ==
@@ -6016,7 +6017,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
                !IS_LEAF2(mc->mc_pg[mc->mc_top]));
         assert(NODEDSZ(leaf) == 0);
         assert(leaf->mn_flags == 0);
-        memcpy(NODEKEY(leaf), key->mv_data, leaf->mn_ksize = key->mv_size);
+        memcpy(NODEKEY(leaf), key->iov_base, leaf->mn_ksize = key->iov_len);
         assert((char *)NODEDATA(leaf) + NODEDSZ(leaf) <
                (char *)(mc->mc_pg[mc->mc_top]) + env->me_psize);
         goto fix_parent;
@@ -6030,7 +6031,7 @@ int mdbx_cursor_put(MDB_cursor *mc, MDB_val *key, MDB_val *data,
 
 new_sub:
   nflags = flags & NODE_ADD_FLAGS;
-  nsize = IS_LEAF2(mc->mc_pg[mc->mc_top]) ? key->mv_size
+  nsize = IS_LEAF2(mc->mc_pg[mc->mc_top]) ? key->iov_len
                                           : mdbx_leaf_size(env, key, rdata);
   if (SIZELEFT(mc->mc_pg[mc->mc_top]) < nsize) {
     if ((flags & (F_DUPDATA | F_SUBDATA)) == F_DUPDATA)
@@ -6073,8 +6074,8 @@ new_sub:
       int xflags;
       size_t ecount;
     put_sub:
-      xdata.mv_size = 0;
-      xdata.mv_data = "";
+      xdata.iov_len = 0;
+      xdata.iov_base = "";
       MDBX_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (flags & MDB_CURRENT) {
         xflags = (flags & MDB_NODUPDATA)
@@ -6093,7 +6094,7 @@ new_sub:
         if (unlikely(rc))
           goto bad_sub;
         /* we've done our job */
-        dkey.mv_size = 0;
+        dkey.iov_len = 0;
       }
       if (!(leaf->mn_flags & F_SUBDATA) || sub_root) {
         /* Adjust other cursors pointing to mp */
@@ -6142,9 +6143,9 @@ new_sub:
       if (!rc) {
         mcount++;
         /* let caller know how many succeeded, if any */
-        data[1].mv_size = mcount;
+        data[1].iov_len = mcount;
         if (mcount < dcount) {
-          data[0].mv_data = (char *)data[0].mv_data + data[0].mv_size;
+          data[0].iov_base = (char *)data[0].iov_base + data[0].iov_len;
           insert_key = insert_data = 0;
           goto more;
         }
@@ -6323,14 +6324,14 @@ static int mdbx_page_new(MDB_cursor *mc, uint32_t flags, int num,
  * [in] data  The data for the node.
  *
  * Returns The number of bytes needed to store the node. */
-static __inline size_t mdbx_leaf_size(MDB_env *env, MDB_val *key,
-                                      MDB_val *data) {
+static __inline size_t mdbx_leaf_size(MDB_env *env, MDBX_val *key,
+                                      MDBX_val *data) {
   size_t sz;
 
   sz = LEAFSIZE(key, data);
   if (sz > env->me_nodemax) {
     /* put on overflow page */
-    sz -= data->mv_size - sizeof(pgno_t);
+    sz -= data->iov_len - sizeof(pgno_t);
   }
 
   return EVEN(sz + sizeof(indx_t));
@@ -6348,7 +6349,7 @@ static __inline size_t mdbx_leaf_size(MDB_env *env, MDB_val *key,
  * [in] key The key for the node.
  *
  * Returns The number of bytes needed to store the node. */
-static __inline size_t mdbx_branch_size(MDB_env *env, MDB_val *key) {
+static __inline size_t mdbx_branch_size(MDB_env *env, MDBX_val *key) {
   size_t sz;
 
   sz = INDXSIZE(key);
@@ -6357,7 +6358,7 @@ static __inline size_t mdbx_branch_size(MDB_env *env, MDB_val *key) {
     /* not implemented */
     mdbx_assert_fail(env, "INDXSIZE(key) <= env->me_nodemax", __FUNCTION__,
                      __LINE__);
-    sz -= key->mv_size - sizeof(pgno_t);
+    sz -= key->iov_len - sizeof(pgno_t);
   }
 
   return sz + sizeof(indx_t);
@@ -6379,8 +6380,8 @@ static __inline size_t mdbx_branch_size(MDB_env *env, MDB_val *key) {
  * MDB_PAGE_FULL  - there is insufficient room in the page. This error
  *                  should never happen since all callers already calculate
  *                  the page's free space before calling this function. */
-static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
-                         MDB_val *data, pgno_t pgno, unsigned flags) {
+static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDBX_val *key,
+                         MDBX_val *data, pgno_t pgno, unsigned flags) {
   unsigned i;
   size_t node_size = NODESIZE;
   ssize_t room;
@@ -6396,8 +6397,8 @@ static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
   mdbx_debug("add to %s %spage %" PRIaPGNO " index %i, data size %" PRIuPTR
              " key size %" PRIuPTR " [%s]",
              IS_LEAF(mp) ? "leaf" : "branch", IS_SUBP(mp) ? "sub-" : "",
-             mp->mp_pgno, indx, data ? data->mv_size : 0,
-             key ? key->mv_size : 0, DKEY(key));
+             mp->mp_pgno, indx, data ? data->iov_len : 0,
+             key ? key->iov_len : 0, DKEY(key));
 
   if (IS_LEAF2(mp)) {
     mdbx_cassert(mc, key);
@@ -6408,7 +6409,7 @@ static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
     if (dif > 0)
       memmove(ptr + ksize, ptr, dif * ksize);
     /* insert new key */
-    memcpy(ptr, key->mv_data, ksize);
+    memcpy(ptr, key->iov_base, ksize);
 
     /* Just using these for counting */
     mp->mp_lower += sizeof(indx_t);
@@ -6418,20 +6419,20 @@ static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
 
   room = (ssize_t)SIZELEFT(mp) - (ssize_t)sizeof(indx_t);
   if (key != NULL)
-    node_size += key->mv_size;
+    node_size += key->iov_len;
   if (IS_LEAF(mp)) {
     mdbx_cassert(mc, key && data);
     if (unlikely(F_ISSET(flags, F_BIGDATA))) {
       /* Data already on overflow page. */
       node_size += sizeof(pgno_t);
-    } else if (unlikely(node_size + data->mv_size >
+    } else if (unlikely(node_size + data->iov_len >
                         mc->mc_txn->mt_env->me_nodemax)) {
-      int ovpages = OVPAGES(data->mv_size, mc->mc_txn->mt_env->me_psize);
+      int ovpages = OVPAGES(data->iov_len, mc->mc_txn->mt_env->me_psize);
       int rc;
       /* Put data on overflow page. */
       mdbx_debug("data size is %" PRIuPTR ", node would be %" PRIuPTR
                  ", put data on overflow page",
-                 data->mv_size, node_size + data->mv_size);
+                 data->iov_len, node_size + data->iov_len);
       node_size = EVEN(node_size + sizeof(pgno_t));
       if ((ssize_t)node_size > room)
         goto full;
@@ -6441,7 +6442,7 @@ static int mdbx_node_add(MDB_cursor *mc, indx_t indx, MDB_val *key,
       flags |= F_BIGDATA;
       goto update;
     } else {
-      node_size += data->mv_size;
+      node_size += data->iov_len;
     }
   }
   node_size = EVEN(node_size);
@@ -6462,32 +6463,32 @@ update:
 
   /* Write the node data. */
   node = NODEPTR(mp, indx);
-  node->mn_ksize = (key == NULL) ? 0 : (uint16_t)key->mv_size;
+  node->mn_ksize = (key == NULL) ? 0 : (uint16_t)key->iov_len;
   node->mn_flags = flags;
   if (IS_LEAF(mp))
-    SETDSZ(node, data->mv_size);
+    SETDSZ(node, data->iov_len);
   else
     SETPGNO(node, pgno);
 
   if (key)
-    memcpy(NODEKEY(node), key->mv_data, key->mv_size);
+    memcpy(NODEKEY(node), key->iov_base, key->iov_len);
 
   if (IS_LEAF(mp)) {
     ndata = NODEDATA(node);
     if (unlikely(ofp == NULL)) {
       if (unlikely(F_ISSET(flags, F_BIGDATA)))
-        memcpy(ndata, data->mv_data, sizeof(pgno_t));
+        memcpy(ndata, data->iov_base, sizeof(pgno_t));
       else if (F_ISSET(flags, MDB_RESERVE))
-        data->mv_data = ndata;
-      else if (likely(ndata != data->mv_data))
-        memcpy(ndata, data->mv_data, data->mv_size);
+        data->iov_base = ndata;
+      else if (likely(ndata != data->iov_base))
+        memcpy(ndata, data->iov_base, data->iov_len);
     } else {
       memcpy(ndata, &ofp->mp_pgno, sizeof(pgno_t));
       ndata = PAGEDATA(ofp);
       if (F_ISSET(flags, MDB_RESERVE))
-        data->mv_data = ndata;
-      else if (likely(ndata != data->mv_data))
-        memcpy(ndata, data->mv_data, data->mv_size);
+        data->iov_base = ndata;
+      else if (likely(ndata != data->iov_base))
+        memcpy(ndata, data->iov_base, data->iov_len);
     }
   }
 
@@ -6621,8 +6622,8 @@ static void mdbx_xcursor_init0(MDB_cursor *mc) {
   mx->mx_cursor.mc_snum = 0;
   mx->mx_cursor.mc_top = 0;
   mx->mx_cursor.mc_flags = C_SUB;
-  mx->mx_dbx.md_name.mv_size = 0;
-  mx->mx_dbx.md_name.mv_data = NULL;
+  mx->mx_dbx.md_name.iov_len = 0;
+  mx->mx_dbx.md_name.iov_base = NULL;
   mx->mx_dbx.md_cmp = mc->mc_dbx->md_dcmp;
   mx->mx_dbx.md_dcmp = NULL;
 }
@@ -6878,7 +6879,7 @@ MDB_dbi mdbx_cursor_dbi(MDB_cursor *mc) {
  * [in] mc Cursor pointing to the node to operate on.
  * [in] key The new key to use.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_update_key(MDB_cursor *mc, MDB_val *key) {
+static int mdbx_update_key(MDB_cursor *mc, MDBX_val *key) {
   MDBX_page *mp;
   MDBX_node *node;
   char *base;
@@ -6892,17 +6893,17 @@ static int mdbx_update_key(MDB_cursor *mc, MDB_val *key) {
   node = NODEPTR(mp, indx);
   ptr = mp->mp_ptrs[indx];
   if (MDB_DEBUG) {
-    MDB_val k2;
+    MDBX_val k2;
     char kbuf2[DKBUF_MAXKEYSIZE * 2 + 1];
-    k2.mv_data = NODEKEY(node);
-    k2.mv_size = node->mn_ksize;
+    k2.iov_base = NODEKEY(node);
+    k2.iov_len = node->mn_ksize;
     mdbx_debug("update key %u (ofs %u) [%s] to [%s] on page %" PRIaPGNO "",
                indx, ptr, mdbx_dkey(&k2, kbuf2, sizeof(kbuf2)), DKEY(key),
                mp->mp_pgno);
   }
 
   /* Sizes must be 2-byte aligned. */
-  ksize = EVEN(key->mv_size);
+  ksize = EVEN(key->iov_len);
   oksize = EVEN(node->mn_ksize);
   delta = ksize - oksize;
 
@@ -6932,11 +6933,11 @@ static int mdbx_update_key(MDB_cursor *mc, MDB_val *key) {
   }
 
   /* But even if no shift was needed, update ksize */
-  if (node->mn_ksize != key->mv_size)
-    node->mn_ksize = (uint16_t)key->mv_size;
+  if (node->mn_ksize != key->iov_len)
+    node->mn_ksize = (uint16_t)key->iov_len;
 
-  if (key->mv_size)
-    memcpy(NODEKEY(node), key->mv_data, key->mv_size);
+  if (key->iov_len)
+    memcpy(NODEKEY(node), key->iov_base, key->iov_len);
 
   return MDB_SUCCESS;
 }
@@ -6963,7 +6964,7 @@ static void mdbx_cursor_copy(const MDB_cursor *csrc, MDB_cursor *cdst);
 /* Move a node from csrc to cdst. */
 static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
   MDBX_node *srcnode;
-  MDB_val key, data;
+  MDBX_val key, data;
   pgno_t srcpg;
   MDB_cursor mn;
   int rc;
@@ -6976,11 +6977,11 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
     return rc;
 
   if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
-    key.mv_size = csrc->mc_db->md_xsize;
-    key.mv_data = LEAF2KEY(csrc->mc_pg[csrc->mc_top], csrc->mc_ki[csrc->mc_top],
-                           key.mv_size);
-    data.mv_size = 0;
-    data.mv_data = NULL;
+    key.iov_len = csrc->mc_db->md_xsize;
+    key.iov_base = LEAF2KEY(csrc->mc_pg[csrc->mc_top],
+                            csrc->mc_ki[csrc->mc_top], key.iov_len);
+    data.iov_len = 0;
+    data.iov_base = NULL;
     srcpg = 0;
     flags = 0;
   } else {
@@ -6997,39 +6998,39 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
       if (unlikely(rc))
         return rc;
       if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
-        key.mv_size = csrc->mc_db->md_xsize;
-        key.mv_data = LEAF2KEY(csrc->mc_pg[csrc->mc_top], 0, key.mv_size);
+        key.iov_len = csrc->mc_db->md_xsize;
+        key.iov_base = LEAF2KEY(csrc->mc_pg[csrc->mc_top], 0, key.iov_len);
       } else {
         s2 = NODEPTR(csrc->mc_pg[csrc->mc_top], 0);
-        key.mv_size = NODEKSZ(s2);
-        key.mv_data = NODEKEY(s2);
+        key.iov_len = NODEKSZ(s2);
+        key.iov_base = NODEKEY(s2);
       }
       csrc->mc_snum = snum--;
       csrc->mc_top = snum;
     } else {
-      key.mv_size = NODEKSZ(srcnode);
-      key.mv_data = NODEKEY(srcnode);
+      key.iov_len = NODEKSZ(srcnode);
+      key.iov_base = NODEKEY(srcnode);
     }
-    data.mv_size = NODEDSZ(srcnode);
-    data.mv_data = NODEDATA(srcnode);
+    data.iov_len = NODEDSZ(srcnode);
+    data.iov_base = NODEDATA(srcnode);
   }
   mn.mc_xcursor = NULL;
   if (IS_BRANCH(cdst->mc_pg[cdst->mc_top]) && cdst->mc_ki[cdst->mc_top] == 0) {
     unsigned snum = cdst->mc_snum;
     MDBX_node *s2;
-    MDB_val bkey;
+    MDBX_val bkey;
     /* must find the lowest key below dst */
     mdbx_cursor_copy(cdst, &mn);
     rc = mdbx_page_search_lowest(&mn);
     if (unlikely(rc))
       return rc;
     if (IS_LEAF2(mn.mc_pg[mn.mc_top])) {
-      bkey.mv_size = mn.mc_db->md_xsize;
-      bkey.mv_data = LEAF2KEY(mn.mc_pg[mn.mc_top], 0, bkey.mv_size);
+      bkey.iov_len = mn.mc_db->md_xsize;
+      bkey.iov_base = LEAF2KEY(mn.mc_pg[mn.mc_top], 0, bkey.iov_len);
     } else {
       s2 = NODEPTR(mn.mc_pg[mn.mc_top], 0);
-      bkey.mv_size = NODEKSZ(s2);
-      bkey.mv_data = NODEKEY(s2);
+      bkey.iov_len = NODEKSZ(s2);
+      bkey.iov_base = NODEKEY(s2);
     }
     mn.mc_snum = snum--;
     mn.mc_top = snum;
@@ -7053,7 +7054,7 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
     return rc;
 
   /* Delete the node from the source page. */
-  mdbx_node_del(csrc, key.mv_size);
+  mdbx_node_del(csrc, key.iov_len);
 
   {
     /* Adjust other cursors pointing to mp */
@@ -7117,11 +7118,11 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
   if (csrc->mc_ki[csrc->mc_top] == 0) {
     if (csrc->mc_ki[csrc->mc_top - 1] != 0) {
       if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
-        key.mv_data = LEAF2KEY(csrc->mc_pg[csrc->mc_top], 0, key.mv_size);
+        key.iov_base = LEAF2KEY(csrc->mc_pg[csrc->mc_top], 0, key.iov_len);
       } else {
         srcnode = NODEPTR(csrc->mc_pg[csrc->mc_top], 0);
-        key.mv_size = NODEKSZ(srcnode);
-        key.mv_data = NODEKEY(srcnode);
+        key.iov_len = NODEKSZ(srcnode);
+        key.iov_base = NODEKEY(srcnode);
       }
       mdbx_debug("update separator for source page %" PRIaPGNO " to [%s]",
                  csrc->mc_pg[csrc->mc_top]->mp_pgno, DKEY(&key));
@@ -7134,9 +7135,9 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
         return rc;
     }
     if (IS_BRANCH(csrc->mc_pg[csrc->mc_top])) {
-      MDB_val nullkey;
+      MDBX_val nullkey;
       indx_t ix = csrc->mc_ki[csrc->mc_top];
-      nullkey.mv_size = 0;
+      nullkey.iov_len = 0;
       csrc->mc_ki[csrc->mc_top] = 0;
       rc = mdbx_update_key(csrc, &nullkey);
       csrc->mc_ki[csrc->mc_top] = ix;
@@ -7147,11 +7148,11 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
   if (cdst->mc_ki[cdst->mc_top] == 0) {
     if (cdst->mc_ki[cdst->mc_top - 1] != 0) {
       if (IS_LEAF2(csrc->mc_pg[csrc->mc_top])) {
-        key.mv_data = LEAF2KEY(cdst->mc_pg[cdst->mc_top], 0, key.mv_size);
+        key.iov_base = LEAF2KEY(cdst->mc_pg[cdst->mc_top], 0, key.iov_len);
       } else {
         srcnode = NODEPTR(cdst->mc_pg[cdst->mc_top], 0);
-        key.mv_size = NODEKSZ(srcnode);
-        key.mv_data = NODEKEY(srcnode);
+        key.iov_len = NODEKSZ(srcnode);
+        key.iov_base = NODEKEY(srcnode);
       }
       mdbx_debug("update separator for destination page %" PRIaPGNO " to [%s]",
                  cdst->mc_pg[cdst->mc_top]->mp_pgno, DKEY(&key));
@@ -7164,9 +7165,9 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
         return rc;
     }
     if (IS_BRANCH(cdst->mc_pg[cdst->mc_top])) {
-      MDB_val nullkey;
+      MDBX_val nullkey;
       indx_t ix = cdst->mc_ki[cdst->mc_top];
-      nullkey.mv_size = 0;
+      nullkey.iov_len = 0;
       cdst->mc_ki[cdst->mc_top] = 0;
       rc = mdbx_update_key(cdst, &nullkey);
       cdst->mc_ki[cdst->mc_top] = ix;
@@ -7189,7 +7190,7 @@ static int mdbx_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft) {
 static int mdbx_page_merge(MDB_cursor *csrc, MDB_cursor *cdst) {
   MDBX_page *psrc, *pdst;
   MDBX_node *srcnode;
-  MDB_val key, data;
+  MDBX_val key, data;
   unsigned nkeys;
   int rc;
   indx_t i, j;
@@ -7213,13 +7214,13 @@ static int mdbx_page_merge(MDB_cursor *csrc, MDB_cursor *cdst) {
   /* Move all nodes from src to dst. */
   j = nkeys = NUMKEYS(pdst);
   if (IS_LEAF2(psrc)) {
-    key.mv_size = csrc->mc_db->md_xsize;
-    key.mv_data = PAGEDATA(psrc);
+    key.iov_len = csrc->mc_db->md_xsize;
+    key.iov_base = PAGEDATA(psrc);
     for (i = 0; i < NUMKEYS(psrc); i++, j++) {
       rc = mdbx_node_add(cdst, j, &key, NULL, 0, 0);
       if (unlikely(rc != MDB_SUCCESS))
         return rc;
-      key.mv_data = (char *)key.mv_data + key.mv_size;
+      key.iov_base = (char *)key.iov_base + key.iov_len;
     }
   } else {
     for (i = 0; i < NUMKEYS(psrc); i++, j++) {
@@ -7234,20 +7235,20 @@ static int mdbx_page_merge(MDB_cursor *csrc, MDB_cursor *cdst) {
         if (unlikely(rc))
           return rc;
         if (IS_LEAF2(mn.mc_pg[mn.mc_top])) {
-          key.mv_size = mn.mc_db->md_xsize;
-          key.mv_data = LEAF2KEY(mn.mc_pg[mn.mc_top], 0, key.mv_size);
+          key.iov_len = mn.mc_db->md_xsize;
+          key.iov_base = LEAF2KEY(mn.mc_pg[mn.mc_top], 0, key.iov_len);
         } else {
           s2 = NODEPTR(mn.mc_pg[mn.mc_top], 0);
-          key.mv_size = NODEKSZ(s2);
-          key.mv_data = NODEKEY(s2);
+          key.iov_len = NODEKSZ(s2);
+          key.iov_base = NODEKEY(s2);
         }
       } else {
-        key.mv_size = srcnode->mn_ksize;
-        key.mv_data = NODEKEY(srcnode);
+        key.iov_len = srcnode->mn_ksize;
+        key.iov_base = NODEKEY(srcnode);
       }
 
-      data.mv_size = NODEDSZ(srcnode);
-      data.mv_data = NODEDATA(srcnode);
+      data.iov_len = NODEDSZ(srcnode);
+      data.iov_base = NODEDATA(srcnode);
       rc = mdbx_node_add(cdst, j, &key, &data, NODEPGNO(srcnode),
                          srcnode->mn_flags);
       if (unlikely(rc != MDB_SUCCESS))
@@ -7263,7 +7264,7 @@ static int mdbx_page_merge(MDB_cursor *csrc, MDB_cursor *cdst) {
   csrc->mc_top--;
   mdbx_node_del(csrc, 0);
   if (csrc->mc_ki[csrc->mc_top] == 0) {
-    key.mv_size = 0;
+    key.iov_len = 0;
     rc = mdbx_update_key(csrc, &key);
     if (unlikely(rc)) {
       csrc->mc_top++;
@@ -7618,7 +7619,7 @@ static int mdbx_cursor_del0(MDB_cursor *mc) {
   return rc;
 }
 
-int mdbx_del(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data) {
+int mdbx_del(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(!key || !txn))
     return MDBX_EINVAL;
 
@@ -7634,12 +7635,12 @@ int mdbx_del(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data) {
   return mdbx_del0(txn, dbi, key, data, 0);
 }
 
-static int mdbx_del0(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+static int mdbx_del0(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *data,
                      unsigned flags) {
   MDB_cursor mc;
   MDB_xcursor mx;
   MDB_cursor_op op;
-  MDB_val rdata;
+  MDBX_val rdata;
   int rc, exact = 0;
   DKBUF;
 
@@ -7683,7 +7684,7 @@ static int mdbx_del0(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
  * [in] newpgno The page number, if the new node is a branch node.
  * [in] nflags The NODE_ADD_FLAGS for the new node.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
+static int mdbx_page_split(MDB_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
                            pgno_t newpgno, unsigned nflags) {
   unsigned flags;
   int rc = MDB_SUCCESS, new_root = 0, did_split = 0;
@@ -7692,7 +7693,7 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
   int i, j, split_indx, nkeys, pmax;
   MDB_env *env = mc->mc_txn->mt_env;
   MDBX_node *node;
-  MDB_val sepkey, rkey, xdata, *rdata = &xdata;
+  MDBX_val sepkey, rkey, xdata, *rdata = &xdata;
   MDBX_page *copy = NULL;
   MDBX_page *mp, *rp, *pp;
   int ptop;
@@ -7777,25 +7778,25 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
       rp->mp_lower += lsize;
       mp->mp_upper += rsize - lsize;
       rp->mp_upper -= rsize - lsize;
-      sepkey.mv_size = ksize;
+      sepkey.iov_len = ksize;
       if (newindx == split_indx) {
-        sepkey.mv_data = newkey->mv_data;
+        sepkey.iov_base = newkey->iov_base;
       } else {
-        sepkey.mv_data = split;
+        sepkey.iov_base = split;
       }
       if (x < 0) {
         ins = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], ksize);
         memcpy(rp->mp_ptrs, split, rsize);
-        sepkey.mv_data = rp->mp_ptrs;
+        sepkey.iov_base = rp->mp_ptrs;
         memmove(ins + ksize, ins, (split_indx - mc->mc_ki[mc->mc_top]) * ksize);
-        memcpy(ins, newkey->mv_data, ksize);
+        memcpy(ins, newkey->iov_base, ksize);
         mp->mp_lower += sizeof(indx_t);
         mp->mp_upper -= ksize - sizeof(indx_t);
       } else {
         if (x)
           memcpy(rp->mp_ptrs, split, x * ksize);
         ins = LEAF2KEY(rp, x, ksize);
-        memcpy(ins, newkey->mv_data, ksize);
+        memcpy(ins, newkey->iov_base, ksize);
         memcpy(ins + ksize, split + x * ksize, rsize - x * ksize);
         rp->mp_lower += sizeof(indx_t);
         rp->mp_upper -= ksize - sizeof(indx_t);
@@ -7879,12 +7880,12 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
         }
       }
       if (split_indx == newindx) {
-        sepkey.mv_size = newkey->mv_size;
-        sepkey.mv_data = newkey->mv_data;
+        sepkey.iov_len = newkey->iov_len;
+        sepkey.iov_base = newkey->iov_base;
       } else {
         node = (MDBX_node *)((char *)mp + copy->mp_ptrs[split_indx] + PAGEBASE);
-        sepkey.mv_size = node->mn_ksize;
-        sepkey.mv_data = NODEKEY(node);
+        sepkey.iov_len = node->mn_ksize;
+        sepkey.iov_base = NODEKEY(node);
       }
     }
   }
@@ -7949,8 +7950,8 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
     j = 0;
     do {
       if (i == newindx) {
-        rkey.mv_data = newkey->mv_data;
-        rkey.mv_size = newkey->mv_size;
+        rkey.iov_base = newkey->iov_base;
+        rkey.iov_len = newkey->iov_len;
         if (IS_LEAF(mp)) {
           rdata = newdata;
         } else
@@ -7960,11 +7961,11 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
         mc->mc_ki[mc->mc_top] = j;
       } else {
         node = (MDBX_node *)((char *)mp + copy->mp_ptrs[i] + PAGEBASE);
-        rkey.mv_data = NODEKEY(node);
-        rkey.mv_size = node->mn_ksize;
+        rkey.iov_base = NODEKEY(node);
+        rkey.iov_len = node->mn_ksize;
         if (IS_LEAF(mp)) {
-          xdata.mv_data = NODEDATA(node);
-          xdata.mv_size = NODEDSZ(node);
+          xdata.iov_base = NODEDATA(node);
+          xdata.iov_len = NODEDSZ(node);
           rdata = &xdata;
         } else
           pgno = NODEPGNO(node);
@@ -7973,7 +7974,7 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
 
       if (!IS_LEAF(mp) && j == 0) {
         /* First branch index doesn't need key data. */
-        rkey.mv_size = 0;
+        rkey.iov_len = 0;
       }
 
       rc = mdbx_node_add(mc, j, &rkey, rdata, pgno, flags);
@@ -8015,7 +8016,7 @@ static int mdbx_page_split(MDB_cursor *mc, MDB_val *newkey, MDB_val *newdata,
     if (nflags & MDB_RESERVE) {
       node = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (!(node->mn_flags & F_BIGDATA))
-        newdata->mv_data = NODEDATA(node);
+        newdata->iov_base = NODEDATA(node);
     }
   } else {
     if (newindx >= split_indx) {
@@ -8096,7 +8097,7 @@ done:
   return rc;
 }
 
-int mdbx_put(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+int mdbx_put(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *data,
              unsigned flags) {
   MDB_cursor mc;
   MDB_xcursor mx;
@@ -8432,10 +8433,10 @@ static int __cold mdbx_env_compact(MDB_env *env, mdbx_filehandle_t fd) {
      * to find the new last_pg, which also becomes the new root. */
     pgno_t freecount = 0;
     MDB_cursor mc;
-    MDB_val key, data;
+    MDBX_val key, data;
     mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
     while ((rc = mdbx_cursor_get(&mc, &key, &data, MDB_NEXT)) == 0)
-      freecount += *(pgno_t *)data.mv_data;
+      freecount += *(pgno_t *)data.iov_base;
     if (rc != MDB_NOTFOUND)
       goto finish;
     freecount += txn->mt_dbs[FREE_DBI].md_branch_pages +
@@ -8792,13 +8793,13 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   size_t len = strlen(table_name);
   MDB_dbi scan, slot = txn->mt_numdbs;
   for (scan = txn->mt_numdbs; --scan >= CORE_DBS;) {
-    if (!txn->mt_dbxs[scan].md_name.mv_size) {
+    if (!txn->mt_dbxs[scan].md_name.iov_len) {
       /* Remember this free slot */
       slot = scan;
       continue;
     }
-    if (len == txn->mt_dbxs[scan].md_name.mv_size &&
-        !strncmp(table_name, txn->mt_dbxs[scan].md_name.mv_data, len)) {
+    if (len == txn->mt_dbxs[scan].md_name.iov_len &&
+        !strncmp(table_name, txn->mt_dbxs[scan].md_name.iov_base, len)) {
       *dbi = scan;
       return mdbx_dbi_bind(txn, scan, user_flags, keycmp, datacmp);
     }
@@ -8814,9 +8815,9 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
 
   /* Find the DB info */
   int exact = 0;
-  MDB_val key, data;
-  key.mv_size = len;
-  key.mv_data = (void *)table_name;
+  MDBX_val key, data;
+  key.iov_len = len;
+  key.iov_base = (void *)table_name;
   MDB_cursor mc;
   mdbx_cursor_init(&mc, txn, MAIN_DBI, NULL);
   int rc = mdbx_cursor_set(&mc, &key, &data, MDB_SET, &exact);
@@ -8845,8 +8846,8 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     memset(&db_dummy, 0, sizeof(db_dummy));
     db_dummy.md_root = P_INVALID;
     db_dummy.md_flags = user_flags & PERSISTENT_FLAGS;
-    data.mv_size = sizeof(db_dummy);
-    data.mv_data = &db_dummy;
+    data.iov_len = sizeof(db_dummy);
+    data.iov_base = &db_dummy;
     WITH_CURSOR_TRACKING(mc, rc = mdbx_cursor_put(&mc, &key, &data,
                                                   F_SUBDATA | MDB_NOOVERWRITE));
 
@@ -8857,20 +8858,20 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   }
 
   /* Got info, register DBI in this txn */
-  txn->mt_dbxs[slot].md_name.mv_data = namedup;
-  txn->mt_dbxs[slot].md_name.mv_size = len;
+  txn->mt_dbxs[slot].md_name.iov_base = namedup;
+  txn->mt_dbxs[slot].md_name.iov_len = len;
   txn->mt_dbxs[slot].md_cmp = nullptr;
   txn->mt_dbxs[slot].md_dcmp = nullptr;
   txn->mt_dbflags[slot] = dbflag;
   txn->mt_dbiseqs[slot] = (txn->mt_env->me_dbiseqs[slot] += 1);
 
-  txn->mt_dbs[slot] = *(MDB_db *)data.mv_data;
+  txn->mt_dbs[slot] = *(MDB_db *)data.iov_base;
   rc = mdbx_dbi_bind(txn, slot, user_flags, keycmp, datacmp);
   if (unlikely(rc != MDB_SUCCESS)) {
     assert((dbflag & DB_DIRTY) == 0);
     /* cleanup slot */
-    txn->mt_dbxs[slot].md_name.mv_data = NULL;
-    txn->mt_dbxs[slot].md_name.mv_size = 0;
+    txn->mt_dbxs[slot].md_name.iov_base = NULL;
+    txn->mt_dbxs[slot].md_name.iov_len = 0;
     txn->mt_dbflags[slot] = 0;
   bailout:
     free(namedup);
@@ -8921,13 +8922,13 @@ int mdbx_dbi_close(MDB_env *env, MDB_dbi dbi) {
     return MDBX_EINVAL;
 
   /* FIXME: locking to avoid races ? */
-  ptr = env->me_dbxs[dbi].md_name.mv_data;
+  ptr = env->me_dbxs[dbi].md_name.iov_base;
   /* If there was no name, this was already closed */
   if (unlikely(!ptr))
     return MDB_BAD_DBI;
 
-  env->me_dbxs[dbi].md_name.mv_data = NULL;
-  env->me_dbxs[dbi].md_name.mv_size = 0;
+  env->me_dbxs[dbi].md_name.iov_base = NULL;
+  env->me_dbxs[dbi].md_name.iov_len = 0;
   env->me_dbflags[dbi] = 0;
   env->me_dbiseqs[dbi]++;
   free(ptr);
@@ -9930,7 +9931,7 @@ int mdbx_cursor_eof(MDB_cursor *mc) {
   return MDBX_RESULT_FALSE;
 }
 
-static int mdbx_is_samedata(const MDB_val *a, const MDB_val *b) {
+static int mdbx_is_samedata(const MDBX_val *a, const MDBX_val *b) {
   return a->iov_len == b->iov_len &&
          memcmp(a->iov_base, b->iov_base, a->iov_len) == 0;
 }
@@ -9958,8 +9959,8 @@ static int mdbx_is_samedata(const MDB_val *a, const MDB_val *b) {
  *  - внешняя аллокация курсоров, в том числе на стеке (без malloc).
  *  - получения статуса страницы по адресу (знать о P_DIRTY).
  */
-int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *new_data,
-                 MDB_val *old_data, unsigned flags) {
+int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *new_data,
+                 MDBX_val *old_data, unsigned flags) {
   if (unlikely(!key || !old_data || !txn || old_data == new_data))
     return MDBX_EINVAL;
 
@@ -9990,7 +9991,7 @@ int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *new_data,
   txn->mt_cursors[dbi] = &mc;
 
   int rc;
-  MDB_val present_key = *key;
+  MDBX_val present_key = *key;
   if (F_ISSET(flags, MDB_CURRENT | MDB_NOOVERWRITE)) {
     /* в old_data значение для выбора конкретного дубликата */
     if (unlikely(!(txn->mt_dbs[dbi].md_flags & MDB_DUPSORT))) {
@@ -10015,7 +10016,7 @@ int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *new_data,
     /* в old_data буфер для сохранения предыдущего значения */
     if (unlikely(new_data && old_data->iov_base == new_data->iov_base))
       return MDBX_EINVAL;
-    MDB_val present_data;
+    MDBX_val present_data;
     rc = mdbx_cursor_get(&mc, &present_key, &present_data, MDB_SET_KEY);
     if (unlikely(rc != MDB_SUCCESS)) {
       old_data->iov_base = NULL;
@@ -10090,7 +10091,7 @@ bailout:
   return rc;
 }
 
-int mdbx_get_ex(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
+int mdbx_get_ex(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key, MDBX_val *data,
                 int *values_count) {
   DKBUF;
   mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));

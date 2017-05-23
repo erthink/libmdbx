@@ -158,7 +158,7 @@ int main(int argc, char *argv[]) {
 
   if (freinfo) {
     MDB_cursor *cursor;
-    MDB_val key, data;
+    MDBX_val key, data;
     size_t pages = 0, *iptr;
     size_t reclaimable = 0;
 
@@ -178,9 +178,9 @@ int main(int argc, char *argv[]) {
     }
     prstat(&mst);
     while ((rc = mdbx_cursor_get(cursor, &key, &data, MDB_NEXT)) == 0) {
-      iptr = data.mv_data;
+      iptr = data.iov_base;
       pages += *iptr;
-      if (envinfo && mei.me_tail_txnid > *(size_t *)key.mv_data)
+      if (envinfo && mei.me_tail_txnid > *(size_t *)key.iov_base)
         reclaimable += *iptr;
       if (freinfo > 1) {
         char *bad = "";
@@ -198,7 +198,7 @@ int main(int argc, char *argv[]) {
         }
         printf("    Transaction %" PRIuPTR ", %" PRIiPTR
                " pages, maxspan %" PRIiPTR "%s\n",
-               *(size_t *)key.mv_data, j, span, bad);
+               *(size_t *)key.iov_base, j, span, bad);
         if (freinfo > 2) {
           for (--j; j >= 0;) {
             pg = iptr[j];
@@ -262,7 +262,7 @@ int main(int argc, char *argv[]) {
 
   if (alldbs) {
     MDB_cursor *cursor;
-    MDB_val key;
+    MDBX_val key;
 
     rc = mdbx_cursor_open(txn, dbi, &cursor);
     if (rc) {
@@ -273,11 +273,11 @@ int main(int argc, char *argv[]) {
     while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDB_NEXT_NODUP)) == 0) {
       char *str;
       MDB_dbi db2;
-      if (memchr(key.mv_data, '\0', key.mv_size))
+      if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      str = malloc(key.mv_size + 1);
-      memcpy(str, key.mv_data, key.mv_size);
-      str[key.mv_size] = '\0';
+      str = malloc(key.iov_len + 1);
+      memcpy(str, key.iov_base, key.iov_len);
+      str[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, str, 0, &db2);
       if (rc == MDB_SUCCESS)
         printf("Status of %s\n", str);

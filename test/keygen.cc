@@ -193,8 +193,8 @@ void __hot maker::mk(const serial_t serial, const essentials &params,
   assert(params.maxlen >= params.minlen);
   assert(params.maxlen >= length(serial));
 
-  out.value.mv_data = out.bytes;
-  out.value.mv_size = params.minlen;
+  out.value.iov_base = out.bytes;
+  out.value.iov_len = params.minlen;
 
   if (params.flags & (MDB_INTEGERKEY | MDB_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
@@ -204,29 +204,29 @@ void __hot maker::mk(const serial_t serial, const essentials &params,
     else
       out.u32 = (uint32_t)serial;
   } else if (params.flags & (MDB_REVERSEKEY | MDB_REVERSEDUP)) {
-    if (out.value.mv_size > 8) {
-      memset(out.bytes, '\0', out.value.mv_size - 8);
-      unaligned::store(out.bytes + out.value.mv_size - 8, htobe64(serial));
+    if (out.value.iov_len > 8) {
+      memset(out.bytes, '\0', out.value.iov_len - 8);
+      unaligned::store(out.bytes + out.value.iov_len - 8, htobe64(serial));
     } else {
       out.u64 = htobe64(serial);
-      if (out.value.mv_size < 8) {
-        out.value.mv_size = std::max(length(serial), out.value.mv_size);
-        out.value.mv_data = out.bytes + 8 - out.value.mv_size;
+      if (out.value.iov_len < 8) {
+        out.value.iov_len = std::max(length(serial), out.value.iov_len);
+        out.value.iov_base = out.bytes + 8 - out.value.iov_len;
       }
     }
   } else {
     out.u64 = htole64(serial);
-    if (out.value.mv_size > 8)
-      memset(out.bytes + 8, '\0', out.value.mv_size - 8);
+    if (out.value.iov_len > 8)
+      memset(out.bytes + 8, '\0', out.value.iov_len - 8);
     else
-      out.value.mv_size = std::max(length(serial), out.value.mv_size);
+      out.value.iov_len = std::max(length(serial), out.value.iov_len);
   }
 
-  assert(out.value.mv_size >= params.minlen);
-  assert(out.value.mv_size <= params.maxlen);
-  assert(out.value.mv_size >= length(serial));
-  assert(out.value.mv_data >= out.bytes);
-  assert((uint8_t *)out.value.mv_data + out.value.mv_size <=
+  assert(out.value.iov_len >= params.minlen);
+  assert(out.value.iov_len <= params.maxlen);
+  assert(out.value.iov_len >= length(serial));
+  assert(out.value.iov_base >= out.bytes);
+  assert((uint8_t *)out.value.iov_base + out.value.iov_len <=
          out.bytes + out.limit);
 }
 

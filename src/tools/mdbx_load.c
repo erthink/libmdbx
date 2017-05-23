@@ -39,7 +39,7 @@ static int Eof;
 
 static MDBX_envinfo envinfo;
 
-static MDB_val kbuf, dbuf;
+static MDBX_val kbuf, dbuf;
 
 #define STRLENOF(s) (sizeof(s) - 1)
 
@@ -63,93 +63,94 @@ static void readhdr(void) {
   char *ptr;
 
   dbi_flags = 0;
-  while (fgets(dbuf.mv_data, dbuf.mv_size, stdin) != NULL) {
+  while (fgets(dbuf.iov_base, dbuf.iov_len, stdin) != NULL) {
     lineno++;
-    if (!strncmp(dbuf.mv_data, "db_pagesize=", STRLENOF("db_pagesize=")) ||
-        !strncmp(dbuf.mv_data, "duplicates=", STRLENOF("duplicates="))) {
+    if (!strncmp(dbuf.iov_base, "db_pagesize=", STRLENOF("db_pagesize=")) ||
+        !strncmp(dbuf.iov_base, "duplicates=", STRLENOF("duplicates="))) {
       /* LY: silently ignore information fields. */
       continue;
-    } else if (!strncmp(dbuf.mv_data, "VERSION=", STRLENOF("VERSION="))) {
-      version = atoi((char *)dbuf.mv_data + STRLENOF("VERSION="));
+    } else if (!strncmp(dbuf.iov_base, "VERSION=", STRLENOF("VERSION="))) {
+      version = atoi((char *)dbuf.iov_base + STRLENOF("VERSION="));
       if (version > 3) {
         fprintf(stderr, "%s: line %" PRIiPTR ": unsupported VERSION %d\n", prog,
                 lineno, version);
         exit(EXIT_FAILURE);
       }
-    } else if (!strncmp(dbuf.mv_data, "HEADER=END", STRLENOF("HEADER=END"))) {
+    } else if (!strncmp(dbuf.iov_base, "HEADER=END", STRLENOF("HEADER=END"))) {
       break;
-    } else if (!strncmp(dbuf.mv_data, "format=", STRLENOF("format="))) {
-      if (!strncmp((char *)dbuf.mv_data + STRLENOF("FORMAT="), "print",
+    } else if (!strncmp(dbuf.iov_base, "format=", STRLENOF("format="))) {
+      if (!strncmp((char *)dbuf.iov_base + STRLENOF("FORMAT="), "print",
                    STRLENOF("print")))
         mode |= PRINT;
-      else if (strncmp((char *)dbuf.mv_data + STRLENOF("FORMAT="), "bytevalue",
+      else if (strncmp((char *)dbuf.iov_base + STRLENOF("FORMAT="), "bytevalue",
                        STRLENOF("bytevalue"))) {
         fprintf(stderr, "%s: line %" PRIiPTR ": unsupported FORMAT %s\n", prog,
-                lineno, (char *)dbuf.mv_data + STRLENOF("FORMAT="));
+                lineno, (char *)dbuf.iov_base + STRLENOF("FORMAT="));
         exit(EXIT_FAILURE);
       }
-    } else if (!strncmp(dbuf.mv_data, "database=", STRLENOF("database="))) {
-      ptr = memchr(dbuf.mv_data, '\n', dbuf.mv_size);
+    } else if (!strncmp(dbuf.iov_base, "database=", STRLENOF("database="))) {
+      ptr = memchr(dbuf.iov_base, '\n', dbuf.iov_len);
       if (ptr)
         *ptr = '\0';
       if (subname)
         free(subname);
-      subname = strdup((char *)dbuf.mv_data + STRLENOF("database="));
-    } else if (!strncmp(dbuf.mv_data, "type=", STRLENOF("type="))) {
-      if (strncmp((char *)dbuf.mv_data + STRLENOF("type="), "btree",
+      subname = strdup((char *)dbuf.iov_base + STRLENOF("database="));
+    } else if (!strncmp(dbuf.iov_base, "type=", STRLENOF("type="))) {
+      if (strncmp((char *)dbuf.iov_base + STRLENOF("type="), "btree",
                   STRLENOF("btree"))) {
         fprintf(stderr, "%s: line %" PRIiPTR ": unsupported type %s\n", prog,
-                lineno, (char *)dbuf.mv_data + STRLENOF("type="));
+                lineno, (char *)dbuf.iov_base + STRLENOF("type="));
         exit(EXIT_FAILURE);
       }
-    } else if (!strncmp(dbuf.mv_data, "mapaddr=", STRLENOF("mapaddr="))) {
+    } else if (!strncmp(dbuf.iov_base, "mapaddr=", STRLENOF("mapaddr="))) {
       int i;
-      ptr = memchr(dbuf.mv_data, '\n', dbuf.mv_size);
+      ptr = memchr(dbuf.iov_base, '\n', dbuf.iov_len);
       if (ptr)
         *ptr = '\0';
-      i = sscanf((char *)dbuf.mv_data + STRLENOF("mapaddr="), "%p",
+      i = sscanf((char *)dbuf.iov_base + STRLENOF("mapaddr="), "%p",
                  &envinfo.me_mapaddr);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapaddr %s\n", prog,
-                lineno, (char *)dbuf.mv_data + STRLENOF("mapaddr="));
+                lineno, (char *)dbuf.iov_base + STRLENOF("mapaddr="));
         exit(EXIT_FAILURE);
       }
-    } else if (!strncmp(dbuf.mv_data, "mapsize=", STRLENOF("mapsize="))) {
+    } else if (!strncmp(dbuf.iov_base, "mapsize=", STRLENOF("mapsize="))) {
       int i;
-      ptr = memchr(dbuf.mv_data, '\n', dbuf.mv_size);
+      ptr = memchr(dbuf.iov_base, '\n', dbuf.iov_len);
       if (ptr)
         *ptr = '\0';
-      i = sscanf((char *)dbuf.mv_data + STRLENOF("mapsize="), "%" PRIu64 "",
+      i = sscanf((char *)dbuf.iov_base + STRLENOF("mapsize="), "%" PRIu64 "",
                  &envinfo.me_mapsize);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapsize %s\n", prog,
-                lineno, (char *)dbuf.mv_data + STRLENOF("mapsize="));
+                lineno, (char *)dbuf.iov_base + STRLENOF("mapsize="));
         exit(EXIT_FAILURE);
       }
-    } else if (!strncmp(dbuf.mv_data, "maxreaders=", STRLENOF("maxreaders="))) {
+    } else if (!strncmp(dbuf.iov_base, "maxreaders=",
+                        STRLENOF("maxreaders="))) {
       int i;
-      ptr = memchr(dbuf.mv_data, '\n', dbuf.mv_size);
+      ptr = memchr(dbuf.iov_base, '\n', dbuf.iov_len);
       if (ptr)
         *ptr = '\0';
-      i = sscanf((char *)dbuf.mv_data + STRLENOF("maxreaders="), "%u",
+      i = sscanf((char *)dbuf.iov_base + STRLENOF("maxreaders="), "%u",
                  &envinfo.me_maxreaders);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid maxreaders %s\n", prog,
-                lineno, (char *)dbuf.mv_data + STRLENOF("maxreaders="));
+                lineno, (char *)dbuf.iov_base + STRLENOF("maxreaders="));
         exit(EXIT_FAILURE);
       }
     } else {
       int i;
       for (i = 0; dbflags[i].bit; i++) {
-        if (!strncmp(dbuf.mv_data, dbflags[i].name, dbflags[i].len) &&
-            ((char *)dbuf.mv_data)[dbflags[i].len] == '=') {
-          if (((char *)dbuf.mv_data)[dbflags[i].len + 1] == '1')
+        if (!strncmp(dbuf.iov_base, dbflags[i].name, dbflags[i].len) &&
+            ((char *)dbuf.iov_base)[dbflags[i].len] == '=') {
+          if (((char *)dbuf.iov_base)[dbflags[i].len + 1] == '1')
             dbi_flags |= dbflags[i].bit;
           break;
         }
       }
       if (!dbflags[i].bit) {
-        ptr = memchr(dbuf.mv_data, '=', dbuf.mv_size);
+        ptr = memchr(dbuf.iov_base, '=', dbuf.iov_len);
         if (!ptr) {
           fprintf(stderr, "%s: line %" PRIiPTR ": unexpected format\n", prog,
                   lineno);
@@ -158,7 +159,7 @@ static void readhdr(void) {
           *ptr = '\0';
           fprintf(stderr,
                   "%s: line %" PRIiPTR ": unrecognized keyword ignored: %s\n",
-                  prog, lineno, (char *)dbuf.mv_data);
+                  prog, lineno, (char *)dbuf.iov_base);
         }
       }
     }
@@ -183,7 +184,7 @@ static int unhex(unsigned char *c2) {
   return c;
 }
 
-static int readline(MDB_val *out, MDB_val *buf) {
+static int readline(MDBX_val *out, MDBX_val *buf) {
   unsigned char *c1, *c2, *end;
   size_t len, l2;
   int c;
@@ -196,48 +197,48 @@ static int readline(MDB_val *out, MDB_val *buf) {
     }
     if (c != ' ') {
       lineno++;
-      if (fgets(buf->mv_data, buf->mv_size, stdin) == NULL) {
+      if (fgets(buf->iov_base, buf->iov_len, stdin) == NULL) {
       badend:
         Eof = 1;
         badend();
         return EOF;
       }
-      if (c == 'D' && !strncmp(buf->mv_data, "ATA=END", STRLENOF("ATA=END")))
+      if (c == 'D' && !strncmp(buf->iov_base, "ATA=END", STRLENOF("ATA=END")))
         return EOF;
       goto badend;
     }
   }
-  if (fgets(buf->mv_data, buf->mv_size, stdin) == NULL) {
+  if (fgets(buf->iov_base, buf->iov_len, stdin) == NULL) {
     Eof = 1;
     return EOF;
   }
   lineno++;
 
-  c1 = buf->mv_data;
+  c1 = buf->iov_base;
   len = strlen((char *)c1);
   l2 = len;
 
   /* Is buffer too short? */
   while (c1[len - 1] != '\n') {
-    buf->mv_data = realloc(buf->mv_data, buf->mv_size * 2);
-    if (!buf->mv_data) {
+    buf->iov_base = realloc(buf->iov_base, buf->iov_len * 2);
+    if (!buf->iov_base) {
       Eof = 1;
       fprintf(stderr, "%s: line %" PRIiPTR ": out of memory, line too long\n",
               prog, lineno);
       return EOF;
     }
-    c1 = buf->mv_data;
+    c1 = buf->iov_base;
     c1 += l2;
-    if (fgets((char *)c1, buf->mv_size + 1, stdin) == NULL) {
+    if (fgets((char *)c1, buf->iov_len + 1, stdin) == NULL) {
       Eof = 1;
       badend();
       return EOF;
     }
-    buf->mv_size *= 2;
+    buf->iov_len *= 2;
     len = strlen((char *)c1);
     l2 += len;
   }
-  c1 = c2 = buf->mv_data;
+  c1 = c2 = buf->iov_base;
   len = l2;
   c1[--len] = '\0';
   end = c1 + len;
@@ -279,8 +280,8 @@ static int readline(MDB_val *out, MDB_val *buf) {
       c2 += 2;
     }
   }
-  c2 = out->mv_data = buf->mv_data;
-  out->mv_size = c1 - c2;
+  c2 = out->iov_base = buf->iov_base;
+  out->iov_len = c1 - c2;
 
   return 0;
 }
@@ -345,8 +346,8 @@ int main(int argc, char *argv[]) {
   if (optind != argc - 1)
     usage();
 
-  dbuf.mv_size = 4096;
-  dbuf.mv_data = malloc(dbuf.mv_size);
+  dbuf.iov_len = 4096;
+  dbuf.iov_base = malloc(dbuf.iov_len);
 
   if (!(mode & NOHDR))
     readhdr();
@@ -379,11 +380,11 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
-  kbuf.mv_size = mdbx_env_get_maxkeysize(env) * 2 + 2;
-  kbuf.mv_data = malloc(kbuf.mv_size);
+  kbuf.iov_len = mdbx_env_get_maxkeysize(env) * 2 + 2;
+  kbuf.iov_base = malloc(kbuf.iov_len);
 
   while (!Eof) {
-    MDB_val key, data;
+    MDBX_val key, data;
     int batch = 0;
 
     rc = mdbx_txn_begin(env, NULL, 0, &txn);

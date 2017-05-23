@@ -78,7 +78,7 @@ enum {
 };
 
 struct result {
-  MDB_val value;
+  MDBX_val value;
   size_t limit;
   union {
     uint8_t bytes[sizeof(uint64_t)];

@@ -349,7 +349,7 @@ typedef struct MDBX_lockinfo {
  * The information here is mostly static/read-only. There is
  * only a single copy of this record in the environment. */
 typedef struct MDB_dbx {
-  MDB_val md_name;       /* name of the database */
+  MDBX_val md_name;      /* name of the database */
   MDB_cmp_func *md_cmp;  /* function for comparing keys */
   MDB_cmp_func *md_dcmp; /* function for comparing data items */
 } MDB_dbx;

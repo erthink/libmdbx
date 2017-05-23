@@ -137,16 +137,14 @@ struct iovec {
 #define HAVE_STRUCT_IOVEC
 #endif /* HAVE_STRUCT_IOVEC */
 
-typedef struct iovec MDB_val;
-#define mv_size iov_len
-#define mv_data iov_base
+typedef struct iovec MDBX_val;
 
 /* The maximum size of a data item.
  * MDBX only store a 32 bit value for node sizes. */
 #define MDBX_MAXDATASIZE INT32_MAX
 
 /* A callback function used to compare two keys in a database */
-typedef int(MDB_cmp_func)(const MDB_val *a, const MDB_val *b);
+typedef int(MDB_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 
 /* Environment Flags */
 /* no environment directory */
@@ -1079,8 +1077,8 @@ LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDB_dbi dbi, int del);
  * possible errors are:
  *  - MDB_NOTFOUND  - the key was not in the database.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
-                         MDB_val *data);
+LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key,
+                         MDBX_val *data);
 
 /* Store items into a database.
  *
@@ -1139,8 +1137,8 @@ LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
  *  - MDB_TXN_FULL  - the transaction has too many dirty pages.
  *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
-                         MDB_val *data, unsigned flags);
+LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key,
+                         MDBX_val *data, unsigned flags);
 
 /* Delete items from a database.
  *
@@ -1162,8 +1160,8 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
  * possible errors are:
  *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
-                         MDB_val *data);
+LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key,
+                         MDBX_val *data);
 
 /* Create a cursor handle.
  *
@@ -1238,8 +1236,8 @@ LIBMDBX_API MDB_dbi mdbx_cursor_dbi(MDB_cursor *cursor);
  * possible errors are:
  *  - MDB_NOTFOUND - no matching key found.
  *  - MDBX_EINVAL - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
-                                MDB_cursor_op op);
+LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDBX_val *key,
+                                MDBX_val *data, MDB_cursor_op op);
 
 /* Store by cursor.
  *
@@ -1292,13 +1290,13 @@ LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
  *  - MDB_MULTIPLE
  *      Store multiple contiguous data elements in a single request. This flag
  *      may only be specified if the database was opened with MDB_DUPFIXED.
- *      The data argument must be an array of two MDB_vals. The mv_size of the
- *      first MDB_val must be the size of a single data element. The mv_data
- *      of the first MDB_val must point to the beginning of the array of
- *      contiguous data elements. The mv_size of the second MDB_val must be
+ *      The data argument must be an array of two MDBX_vals. The iov_len of the
+ *      first MDBX_val must be the size of a single data element. The iov_base
+ *      of the first MDBX_val must point to the beginning of the array of
+ *      contiguous data elements. The iov_len of the second MDBX_val must be
  *      the count of the number of data elements to store. On return this
  *      field will be set to the count of the number of elements actually
- *      written. The mv_data of the second MDB_val is unused.
+ *      written. The iov_base of the second MDBX_val is unused.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
@@ -1307,8 +1305,8 @@ LIBMDBX_API int mdbx_cursor_get(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
  *  - MDB_TXN_FULL  - the transaction has too many dirty pages.
  *  - MDBX_EACCES   - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_put(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
-                                unsigned flags);
+LIBMDBX_API int mdbx_cursor_put(MDB_cursor *cursor, MDBX_val *key,
+                                MDBX_val *data, unsigned flags);
 
 /* Delete current key/data pair
  *
@@ -1353,8 +1351,8 @@ LIBMDBX_API int mdbx_cursor_count(MDB_cursor *cursor, uint64_t *countp);
  * [in] b     The second item to compare
  *
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
-LIBMDBX_API int mdbx_cmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a,
-                         const MDB_val *b);
+LIBMDBX_API int mdbx_cmp(MDBX_txn *txn, MDB_dbi dbi, const MDBX_val *a,
+                         const MDBX_val *b);
 
 /* Compare two data items according to a particular database.
  *
@@ -1367,8 +1365,8 @@ LIBMDBX_API int mdbx_cmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a,
  * [in] b     The second item to compare
  *
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
-LIBMDBX_API int mdbx_dcmp(MDBX_txn *txn, MDB_dbi dbi, const MDB_val *a,
-                          const MDB_val *b);
+LIBMDBX_API int mdbx_dcmp(MDBX_txn *txn, MDB_dbi dbi, const MDBX_val *a,
+                          const MDBX_val *b);
 
 /* A callback function used to print a message from the library.
  *
@@ -1395,7 +1393,7 @@ LIBMDBX_API int mdbx_reader_list(MDB_env *env, MDB_msg_func *func, void *ctx);
  * Returns 0 on success, non-zero on failure. */
 LIBMDBX_API int mdbx_reader_check(MDB_env *env, int *dead);
 
-LIBMDBX_API char *mdbx_dkey(const MDB_val *key, char *const buf,
+LIBMDBX_API char *mdbx_dkey(const MDBX_val *key, char *const buf,
                             const size_t bufsize);
 
 LIBMDBX_API int mdbx_env_close_ex(MDB_env *env, int dont_sync);
@@ -1509,15 +1507,15 @@ LIBMDBX_API int mdbx_cursor_on_first(MDB_cursor *mc);
 /* Returns: MDBX_RESULT_TRUE, MDBX_RESULT_FALSE or Error code. */
 LIBMDBX_API int mdbx_cursor_on_last(MDB_cursor *mc);
 
-LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
-                             MDB_val *new_data, MDB_val *old_data,
+LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key,
+                             MDBX_val *new_data, MDBX_val *old_data,
                              unsigned flags);
 /* Same as mdbx_get(), but:
  * 1) if values_count is not NULL, then returns the count
  *    of multi-values/duplicates for a given key.
  * 2) updates the key for pointing to the actual key's data inside DB. */
-LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDB_dbi dbi, MDB_val *key,
-                            MDB_val *data, int *values_count);
+LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDB_dbi dbi, MDBX_val *key,
+                            MDBX_val *data, int *values_count);
 
 LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr);
 
