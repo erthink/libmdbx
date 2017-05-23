@@ -283,13 +283,11 @@ typedef struct MDB_meta {
  *
  * Each non-metapage up to MDB_meta.mm_last_pg is reachable exactly once
  * in the snapshot: Either used by a database or listed in a freeDB record. */
-typedef struct MDB_page {
-#define mp_pgno mp_p.p_pgno
-#define mp_next mp_p.p_next
+typedef struct MDBX_page {
   union {
-    pgno_t p_pgno;           /* page number */
-    struct MDB_page *p_next; /* for in-memory list of freed pages */
-  } mp_p;
+    pgno_t mp_pgno;            /* page number */
+    struct MDBX_page *mp_next; /* for in-memory list of freed pages */
+  };
   uint16_t mp_leaf2_ksize; /* key size if this is a LEAF2 page */
 #define P_BRANCH 0x01      /* branch page */
 #define P_LEAF 0x02        /* leaf page */
@@ -301,28 +299,25 @@ typedef struct MDB_page {
 #define P_LOOSE 0x4000     /* page was dirtied then freed, can be reused */
 #define P_KEEP 0x8000      /* leave this page alone during spill */
   uint16_t mp_flags;
-#define mp_lower mp_pb.pb.pb_lower
-#define mp_upper mp_pb.pb.pb_upper
-#define mp_pages mp_pb.pb_pages
   union {
     struct {
-      indx_t pb_lower; /* lower bound of free space */
-      indx_t pb_upper; /* upper bound of free space */
-    } pb;
-    uint32_t pb_pages; /* number of overflow pages */
-  } mp_pb;
+      indx_t mp_lower; /* lower bound of free space */
+      indx_t mp_upper; /* upper bound of free space */
+    };
+    uint32_t mp_pages; /* number of overflow pages */
+  };
   indx_t mp_ptrs[1]; /* dynamic size */
-} MDB_page;
+} MDBX_page;
 
 /* Size of the page header, excluding dynamic data at the end */
-#define PAGEHDRSZ ((unsigned)offsetof(MDB_page, mp_ptrs))
+#define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_ptrs))
 
 /* Buffer for a stack-allocated meta page.
  * The members define size and alignment, and silence type
  * aliasing warnings.  They are not used directly; that could
  * mean incorrectly using several union members in parallel. */
 typedef union MDB_metabuf {
-  MDB_page mb_page;
+  MDBX_page mb_page;
   struct {
     char mm_pad[PAGEHDRSZ];
     MDB_meta mm_meta;
@@ -384,7 +379,7 @@ struct MDB_txn {
   MDB_IDL mt_free_pgs;
   /* The list of loose pages that became unused and may be reused
    * in this transaction, linked through NEXT_LOOSE_PAGE(page). */
-  MDB_page *mt_loose_pgs;
+  MDBX_page *mt_loose_pgs;
   /* Number of loose pages (mt_loose_pgs) */
   unsigned mt_loose_count;
   /* The sorted list of dirty pages we temporarily wrote to disk
@@ -480,18 +475,18 @@ struct MDB_cursor {
   MDB_dbx *mc_dbx;
   /* The mt_dbflag for this database */
   uint8_t *mc_dbflag;
-  uint16_t mc_snum;              /* number of pushed pages */
-  uint16_t mc_top;               /* index of top page, normally mc_snum-1 */
-                                 /* Cursor state flags. */
-#define C_INITIALIZED 0x01       /* cursor has been initialized and is valid */
-#define C_EOF 0x02               /* No more data */
-#define C_SUB 0x04               /* Cursor is a sub-cursor */
-#define C_DEL 0x08               /* last op was a cursor_del */
-#define C_UNTRACK 0x40           /* Un-track cursor when closing */
-#define C_RECLAIMING 0x80        /* FreeDB lookup is prohibited */
-  unsigned mc_flags;             /* see mdbx_cursor */
-  MDB_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
-  indx_t mc_ki[CURSOR_STACK];    /* stack of page indices */
+  uint16_t mc_snum;               /* number of pushed pages */
+  uint16_t mc_top;                /* index of top page, normally mc_snum-1 */
+                                  /* Cursor state flags. */
+#define C_INITIALIZED 0x01        /* cursor has been initialized and is valid */
+#define C_EOF 0x02                /* No more data */
+#define C_SUB 0x04                /* Cursor is a sub-cursor */
+#define C_DEL 0x08                /* last op was a cursor_del */
+#define C_UNTRACK 0x40            /* Un-track cursor when closing */
+#define C_RECLAIMING 0x80         /* FreeDB lookup is prohibited */
+  unsigned mc_flags;              /* see mdbx_cursor */
+  MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
+  indx_t mc_ki[CURSOR_STACK];     /* stack of page indices */
 };
 
 /* Context for sorted-dup records.
@@ -518,7 +513,7 @@ typedef struct MDB_xcursor {
  * Called with mp = mc->mc_pg[mc->mc_top], ki = mc->mc_ki[mc->mc_top]. */
 #define XCURSOR_REFRESH(mc, mp, ki)                                            \
   do {                                                                         \
-    MDB_page *xr_pg = (mp);                                                    \
+    MDBX_page *xr_pg = (mp);                                                   \
     MDBX_node *xr_node = NODEPTR(xr_pg, ki);                                   \
     if ((xr_node->mn_flags & (F_DUPDATA | F_SUBDATA)) == F_DUPDATA)            \
       (mc)->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(xr_node);                \
@@ -577,8 +572,8 @@ struct MDB_env {
   MDB_pgstate me_pgstate;     /* state of old pages from freeDB */
 #define me_pglast me_pgstate.mf_pglast
 #define me_pghead me_pgstate.mf_pghead
-  MDB_page *me_dpages; /* list of malloc'd blocks for re-use */
-                       /* IDL of pages that became unused in a write txn */
+  MDBX_page *me_dpages; /* list of malloc'd blocks for re-use */
+                        /* IDL of pages that became unused in a write txn */
   MDB_IDL me_free_pgs;
   /* ID2L of pages written during a write txn. Length MDB_IDL_UM_SIZE. */
   MDB_ID2L me_dirty_list;
