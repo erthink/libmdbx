@@ -90,6 +90,25 @@ static void mdbx_debug_logger(int type, const char *function, int line,
     abort();
 }
 
+int testcase::oom_callback(MDB_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
+                           unsigned gap, int retry) {
+
+  testcase *self = (testcase *)mdbx_env_get_userctx(env);
+
+  if (retry == 0)
+    log_notice("oom_callback: waitfor pid %u, thread %" PRIuPTR
+               ", txn #%" PRIu64 ", gap %d",
+               pid, (size_t)tid, txn, gap);
+
+  if (self->should_continue()) {
+    osal_yield();
+    osal_udelay(retry * 100);
+    return 1 /* always retry */;
+  }
+
+  return -1;
+}
+
 void testcase::db_prepare() {
   log_trace(">> db_prepare");
   assert(!db_guard);
@@ -121,6 +140,10 @@ void testcase::db_prepare() {
   rc = mdbx_env_set_maxdbs(env, config.params.max_tables);
   if (unlikely(rc != MDB_SUCCESS))
     failure_perror("mdbx_env_set_maxdbs()", rc);
+
+  rc = mdbx_env_set_oomfunc(env, testcase::oom_callback);
+  if (unlikely(rc != MDB_SUCCESS))
+    failure_perror("mdbx_env_set_oomfunc()", rc);
 
   rc = mdbx_env_set_mapsize(env, (size_t)config.params.size);
   if (unlikely(rc != MDB_SUCCESS))

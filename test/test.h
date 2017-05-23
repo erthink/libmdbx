@@ -96,6 +96,9 @@ protected:
     mdbx_canary canary;
   } last;
 
+  static int oom_callback(MDB_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
+                          unsigned gap, int retry);
+
   void db_prepare();
   void db_open();
   void db_close();
