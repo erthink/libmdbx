@@ -8137,8 +8137,7 @@ int mdbx_put(MDB_txn *txn, MDB_dbi dbi, MDB_val *key, MDB_val *data,
 typedef struct mdbx_copy {
   MDB_env *mc_env;
   MDB_txn *mc_txn;
-  mdbx_mutex_t mc_mutex;
-  mdbx_cond_t mc_cond; /* Condition variable for mc_new */
+  mdbx_condmutex_t mc_condmutex;
   char *mc_wbuf[2];
   char *mc_over[2];
   int mc_wlen[2];
@@ -8158,10 +8157,10 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   char *ptr;
   int toggle = 0, wsize;
 
-  mdbx_mutex_lock(&my->mc_mutex);
+  mdbx_condmutex_lock(&my->mc_condmutex);
   while (!my->mc_error) {
     while (!my->mc_new)
-      mdbx_cond_wait(&my->mc_cond, &my->mc_mutex);
+      mdbx_condmutex_wait(&my->mc_condmutex);
     if (my->mc_new == 0 + MDB_EOF) /* 0 buffers, just EOF */
       break;
     wsize = my->mc_wlen[toggle];
@@ -8184,9 +8183,9 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     toggle ^= 1;
     /* Return the empty buffer to provider */
     my->mc_new--;
-    mdbx_cond_signal(&my->mc_cond);
+    mdbx_condmutex_signal(&my->mc_condmutex);
   }
-  mdbx_mutex_unlock(&my->mc_mutex);
+  mdbx_condmutex_unlock(&my->mc_condmutex);
   return (THREAD_RESULT)0;
 }
 
@@ -8195,12 +8194,12 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
  * [in] my control structure.
  * [in] adjust (1 to hand off 1 buffer) | (MDB_EOF when ending). */
 static int __cold mdbx_env_cthr_toggle(mdbx_copy *my, int adjust) {
-  mdbx_mutex_lock(&my->mc_mutex);
+  mdbx_condmutex_lock(&my->mc_condmutex);
   my->mc_new += adjust;
-  mdbx_cond_signal(&my->mc_cond);
+  mdbx_condmutex_signal(&my->mc_condmutex);
   while (my->mc_new & 2) /* both buffers in use */
-    mdbx_cond_wait(&my->mc_cond, &my->mc_mutex);
-  mdbx_mutex_unlock(&my->mc_mutex);
+    mdbx_condmutex_wait(&my->mc_condmutex);
+  mdbx_condmutex_unlock(&my->mc_condmutex);
 
   my->mc_toggle ^= (adjust & 1);
   /* Both threads reset mc_wlen, to be safe from threading errors */
@@ -8376,10 +8375,8 @@ static int __cold mdbx_env_compact(MDB_env *env, mdbx_filehandle_t fd) {
   int rc;
 
   memset(&my, 0, sizeof(my));
-  if ((rc = mdbx_mutex_init(&my.mc_mutex)) != 0)
+  if ((rc = mdbx_condmutex_init(&my.mc_condmutex)) != 0)
     return rc;
-  if ((rc = mdbx_cond_init(&my.mc_cond)) != 0)
-    goto done2;
   rc = mdbx_memalign_alloc(env->me_os_psize, MDB_WBUF * 2,
                            (void **)&my.mc_wbuf[0]);
   if (rc != MDB_SUCCESS)
@@ -8457,9 +8454,7 @@ finish:
 
 done:
   mdbx_memalign_free(my.mc_wbuf[0]);
-  mdbx_cond_destroy(&my.mc_cond);
-done2:
-  mdbx_mutex_destroy(&my.mc_mutex);
+  mdbx_condmutex_destroy(&my.mc_condmutex);
   return rc ? rc : my.mc_error;
 }
 

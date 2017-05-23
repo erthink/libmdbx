@@ -57,8 +57,6 @@
 #include <winnt.h>
 #define HAVE_SYS_STAT_H
 #define HAVE_SYS_TYPES_H
-typedef HANDLE mdbx_mutex_t;
-typedef HANDLE mdbx_cond_t;
 typedef HANDLE mdbx_thread_t;
 typedef unsigned mdbx_thread_key_t;
 typedef SSIZE_T ssize_t;
@@ -66,6 +64,10 @@ typedef SSIZE_T ssize_t;
 #define HIGH_DWORD(v) ((DWORD)((sizeof(v) > 4) ? ((uint64_t)(v) >> 32) : 0))
 #define THREAD_CALL WINAPI
 #define THREAD_RESULT DWORD
+typedef struct {
+  HANDLE mutex;
+  HANDLE event;
+} mdbx_condmutex_t;
 #else
 #include <pthread.h>
 #include <sys/file.h>
@@ -74,13 +76,15 @@ typedef SSIZE_T ssize_t;
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
-typedef pthread_mutex_t mdbx_mutex_t;
-typedef pthread_cond_t mdbx_cond_t;
 typedef pthread_t mdbx_thread_t;
 typedef pthread_key_t mdbx_thread_key_t;
 #define INVALID_HANDLE_VALUE (-1)
 #define THREAD_CALL
 #define THREAD_RESULT void *
+typedef struct {
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+} mdbx_condmutex_t;
 #endif /* Platform */
 
 #ifndef SSIZE_MAX
@@ -384,15 +388,12 @@ static __inline int __mdbx_get_errno_checked(const char *file, unsigned line) {
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result);
 void mdbx_memalign_free(void *ptr);
 
-int mdbx_mutex_init(mdbx_mutex_t *mutex);
-int mdbx_mutex_destroy(mdbx_mutex_t *mutex);
-int mdbx_mutex_lock(mdbx_mutex_t *mutex);
-int mdbx_mutex_unlock(mdbx_mutex_t *mutex);
-
-int mdbx_cond_init(mdbx_cond_t *cond);
-int mdbx_cond_destroy(mdbx_cond_t *cond);
-int mdbx_cond_signal(mdbx_cond_t *cond);
-int mdbx_cond_wait(mdbx_cond_t *cond, mdbx_mutex_t *mutex);
+int mdbx_condmutex_init(mdbx_condmutex_t *condmutex);
+int mdbx_condmutex_lock(mdbx_condmutex_t *condmutex);
+int mdbx_condmutex_unlock(mdbx_condmutex_t *condmutex);
+int mdbx_condmutex_signal(mdbx_condmutex_t *condmutex);
+int mdbx_condmutex_wait(mdbx_condmutex_t *condmutex);
+int mdbx_condmutex_destroy(mdbx_condmutex_t *condmutex);
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  off_t offset, size_t expected_written);

@@ -164,77 +164,104 @@ void mdbx_memalign_free(void *ptr) {
 
 /*----------------------------------------------------------------------------*/
 
-int mdbx_mutex_init(mdbx_mutex_t *mutex) {
+int mdbx_condmutex_init(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  *mutex = CreateMutex(NULL, FALSE, NULL);
-  return *mutex ? MDB_SUCCESS : mdbx_get_errno_checked();
+  int rc = MDB_SUCCESS;
+  condmutex->event = NULL;
+  condmutex->mutex = CreateMutex(NULL, FALSE, NULL);
+  if (!condmutex->mutex)
+    return mdbx_get_errno_checked();
+
+  condmutex->event = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (!condmutex->event) {
+    rc = mdbx_get_errno_checked();
+    (void)CloseHandle(condmutex->mutex);
+    condmutex->mutex = NULL;
+  }
+  return rc;
 #else
-  return pthread_mutex_init(mutex, NULL);
+  memset(condmutex, 0, sizeof(mdbx_condmutex_t));
+  int rc = pthread_mutex_init(&condmutex->mutex, NULL);
+  if (rc == 0) {
+    rc = pthread_cond_init(&condmutex->cond, NULL);
+    if (rc != 0)
+      (void)pthread_mutex_destroy(&condmutex->mutex);
+  }
+  return rc;
 #endif
 }
 
-int mdbx_mutex_destroy(mdbx_mutex_t *mutex) {
-#if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(*mutex) ? MDB_SUCCESS : mdbx_get_errno_checked();
-#else
-  return pthread_mutex_destroy(mutex);
-#endif
+static bool is_allzeros(const void *ptr, size_t bytes) {
+  const uint8_t *u8 = ptr;
+  for (size_t i = 0; i < bytes; ++i)
+    if (u8[i] != 0)
+      return false;
+  return true;
 }
 
-int mdbx_mutex_lock(mdbx_mutex_t *mutex) {
+int mdbx_condmutex_destroy(mdbx_condmutex_t *condmutex) {
+  int rc = MDBX_EINVAL;
 #if defined(_WIN32) || defined(_WIN64)
-  DWORD code = WaitForSingleObject(*mutex, INFINITE);
+  if (condmutex->event) {
+    rc = CloseHandle(condmutex->event) ? MDB_SUCCESS : mdbx_get_errno_checked();
+    if (rc == MDB_SUCCESS)
+      condmutex->event = NULL;
+  }
+  if (condmutex->mutex) {
+    rc = CloseHandle(condmutex->mutex) ? MDB_SUCCESS : mdbx_get_errno_checked();
+    if (rc == MDB_SUCCESS)
+      condmutex->mutex = NULL;
+  }
+#else
+  if (!is_allzeros(&condmutex->cond, sizeof(condmutex->cond))) {
+    rc = pthread_cond_destroy(&condmutex->cond);
+    if (rc == 0)
+      memset(&condmutex->cond, 0, sizeof(condmutex->cond));
+  }
+  if (!is_allzeros(&condmutex->mutex, sizeof(condmutex->mutex))) {
+    rc = pthread_mutex_destroy(&condmutex->mutex);
+    if (rc == 0)
+      memset(&condmutex->mutex, 0, sizeof(condmutex->mutex));
+  }
+#endif
+  return rc;
+}
+
+int mdbx_condmutex_lock(mdbx_condmutex_t *condmutex) {
+#if defined(_WIN32) || defined(_WIN64)
+  DWORD code = WaitForSingleObject(condmutex->mutex, INFINITE);
   return waitstatus2errcode(code);
 #else
-  return pthread_mutex_lock(mutex);
+  return pthread_mutex_lock(&condmutex->mutex);
 #endif
 }
 
-int mdbx_mutex_unlock(mdbx_mutex_t *mutex) {
+int mdbx_condmutex_unlock(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  return ReleaseMutex(*mutex) ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return ReleaseMutex(condmutex->mutex) ? MDB_SUCCESS
+                                        : mdbx_get_errno_checked();
 #else
-  return pthread_mutex_unlock(mutex);
+  return pthread_mutex_unlock(&condmutex->mutex);
 #endif
 }
 
-/*----------------------------------------------------------------------------*/
-
-int mdbx_cond_init(mdbx_cond_t *cond) {
+int mdbx_condmutex_signal(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  *cond = CreateEvent(NULL, FALSE, FALSE, NULL);
-  return *cond ? MDB_SUCCESS : mdbx_get_errno_checked();
+  return SetEvent(condmutex->event) ? MDB_SUCCESS : mdbx_get_errno_checked();
 #else
-  return pthread_cond_init(cond, NULL);
+  return pthread_cond_signal(&condmutex->cond);
 #endif
 }
 
-#ifndef mdbx_cond_destroy
-int mdbx_cond_destroy(mdbx_cond_t *cond) {
+int mdbx_condmutex_wait(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(*cond) ? MDB_SUCCESS : mdbx_get_errno_checked();
-#else
-  return pthread_cond_destroy(cond);
-#endif
-}
-#endif /* mdbx_cond_destroy */
-
-int mdbx_cond_signal(mdbx_cond_t *cond) {
-#if defined(_WIN32) || defined(_WIN64)
-  return SetEvent(*cond) ? MDB_SUCCESS : mdbx_get_errno_checked();
-#else
-  return pthread_cond_signal(cond);
-#endif
-}
-
-int mdbx_cond_wait(mdbx_cond_t *cond, mdbx_mutex_t *mutex) {
-#if defined(_WIN32) || defined(_WIN64)
-  DWORD code = SignalObjectAndWait(*mutex, *cond, INFINITE, FALSE);
+  DWORD code =
+      SignalObjectAndWait(condmutex->mutex, condmutex->event, INFINITE, FALSE);
   if (code == WAIT_OBJECT_0)
-    code = WaitForSingleObject(*mutex, INFINITE);
+    code = WaitForSingleObject(condmutex->mutex, INFINITE);
   return waitstatus2errcode(code);
 #else
-  return pthread_cond_wait(cond, mutex);
+  return pthread_cond_wait(&condmutex->cond, &condmutex->mutex);
 #endif
 }
 

@@ -32,7 +32,7 @@
 /*----------------------------------------------------------------------------*/
 /* rthc */
 
-static mdbx_mutex_t mdbx_rthc_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_mutex_t mdbx_rthc_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 void mdbx_rthc_lock(void) {
   mdbx_ensure(NULL, pthread_mutex_lock(&mdbx_rthc_mutex) == 0);
@@ -273,7 +273,8 @@ int mdbx_lck_seize(MDB_env *env) {
 #define pthread_mutex_consistent(mutex) pthread_mutex_consistent_np(mutex)
 #endif
 
-static int __cold mdbx_mutex_failed(MDB_env *env, mdbx_mutex_t *mutex, int rc) {
+static int __cold mdbx_mutex_failed(MDB_env *env, pthread_mutex_t *mutex,
+                                    int rc) {
 #if MDB_USE_ROBUST
   if (rc == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
