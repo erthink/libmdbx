@@ -28,6 +28,7 @@ XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0 -DLIBMDBX_EXPORTS=1
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu99 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu99,$(CFLAGS))
+TESTDB	?= /tmp/mdbx-check.db
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
 LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
@@ -67,7 +68,7 @@ clean:
 	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
 
 check:	test/test
-	(set -o pipefail; test/test --pathname=tmp.db --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn tmp.db
+	rm -f $(TESTDB) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
 
 mdbx.o: $(MDBX_SRC) Makefile
 	$(CC) $(CFLAGS) -c src/mdbx.c -o $@
