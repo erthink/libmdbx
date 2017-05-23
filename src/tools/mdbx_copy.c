@@ -11,8 +11,7 @@
  *
  * A copy of this license is available in the file LICENSE in the
  * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- */
+ * <http://www.OpenLDAP.org/license.html>. */
 
 #include "../../mdbx.h"
 #include <signal.h>
