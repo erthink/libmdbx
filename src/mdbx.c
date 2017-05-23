@@ -9635,9 +9635,15 @@ int __cold mdbx_env_set_syncbytes(MDB_env *env, size_t bytes) {
   return env->me_map ? mdbx_env_sync(env, 0) : MDB_SUCCESS;
 }
 
-void __cold mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oomfunc) {
-  if (likely(env && env->me_signature == MDBX_ME_SIGNATURE))
-    env->me_oom_func = oomfunc;
+int __cold mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oomfunc) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+
+  if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  env->me_oom_func = oomfunc;
+  return MDB_SUCCESS;
 }
 
 MDBX_oom_func *__cold mdbx_env_get_oomfunc(MDB_env *env) {

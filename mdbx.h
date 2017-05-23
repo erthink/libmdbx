@@ -1452,8 +1452,10 @@ typedef int(MDBX_oom_func)(MDB_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
  * a laggard readers to allowing reclaiming of freeDB.
  *
  * [in] env       An environment handle returned by mdbx_env_create().
- * [in] oomfunc   A MDBX_oom_func function or NULL to disable. */
-LIBMDBX_API void mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
+ * [in] oomfunc   A MDBX_oom_func function or NULL to disable.
+ *
+ * Returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_env_set_oomfunc(MDB_env *env, MDBX_oom_func *oom_func);
 
 /* Get the current oom_func callback.
  *
