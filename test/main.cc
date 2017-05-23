@@ -76,6 +76,7 @@ void actor_params::set_defaults(void) {
   global::config::cleanup_before = true;
   global::config::cleanup_after = true;
   global::config::failfast = true;
+  global::config::progress_indicator = osal_istty(STDERR_FILENO);
 }
 
 namespace global {
@@ -95,6 +96,7 @@ bool dump_config;
 bool cleanup_before;
 bool cleanup_after;
 bool failfast;
+bool progress_indicator;
 } /* namespace config */
 
 } /* namespace global */
@@ -271,6 +273,9 @@ int main(int argc, char *const argv[]) {
     }
     if (config::parse_option(argc, argv, narg, "failfast",
                              global::config::failfast))
+      continue;
+    if (config::parse_option(argc, argv, narg, "progress",
+                             global::config::progress_indicator))
       continue;
 
     if (*argv[narg] != '-')

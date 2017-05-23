@@ -303,3 +303,5 @@ void osal_udelay(unsigned us) {
     now = chrono::now_motonic();
   } while (now.fixedpoint < until.fixedpoint);
 }
+
+bool osal_istty(int fd) { return _isatty(fd) != 0; }

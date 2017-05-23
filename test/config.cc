@@ -339,6 +339,8 @@ void dump(const char *title) {
            global::config::cleanup_after ? "Yes" : "No");
 
   log_info("failfast: %s\n", global::config::failfast ? "Yes" : "No");
+  log_info("progress indicator: %s\n",
+           global::config::progress_indicator ? "Yes" : "No");
 }
 
 } /* namespace config */

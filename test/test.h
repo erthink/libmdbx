@@ -48,6 +48,7 @@ extern bool dump_config;
 extern bool cleanup_before;
 extern bool cleanup_after;
 extern bool failfast;
+extern bool progress_indicator;
 } /* namespace config */
 
 } /* namespace global */
@@ -107,6 +108,7 @@ protected:
   void txn_restart(bool abort, bool readonly);
   void fetch_canary();
   void update_canary(uint64_t increment);
+  void kick_progress(bool active) const;
 
   MDBX_dbi db_table_open(bool create);
   void db_table_drop(MDBX_dbi handle);

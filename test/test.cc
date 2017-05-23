@@ -101,7 +101,7 @@ int testcase::oom_callback(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
                pid, (size_t)tid, txn, gap);
 
   if (self->should_continue()) {
-    osal_yield();
+    /* osal_yield(); */
     osal_udelay(retry * 100);
     return 1 /* always retry */;
   }
@@ -239,10 +239,37 @@ bool testcase::wait4start() {
   return true;
 }
 
+void testcase::kick_progress(bool active) const {
+  static chrono::time last;
+  chrono::time now = chrono::now_motonic();
+
+  if (active) {
+    static int last_point = -1;
+    int point = (now.fixedpoint >> 29) & 3;
+    if (point != last_point) {
+      last = now;
+      fprintf(stderr, "%c\b", "-\\|/"[last_point = point]);
+      fflush(stderr);
+    }
+  } else if (now.fixedpoint - last.fixedpoint >
+             chrono::from_seconds(2).fixedpoint) {
+    last = now;
+    fprintf(stderr, "%c\b", "@*"[now.utc & 1]);
+    fflush(stderr);
+  }
+}
+
 void testcase::report(size_t nops_done) {
+  assert(nops_done > 0);
+  if (!nops_done)
+    return;
+
   nops_completed += nops_done;
   log_verbose("== complete +%" PRIuPTR " iteration, total %" PRIuPTR " done",
               nops_done, nops_completed);
+
+  if (global::config::progress_indicator)
+    kick_progress(true);
 
   if (config.signal_nops && !signalled &&
       config.signal_nops <= nops_completed) {
@@ -294,6 +321,9 @@ bool testcase::should_continue() const {
 
   if (config.params.test_nops && nops_completed >= config.params.test_nops)
     result = false;
+
+  if (result && global::config::progress_indicator)
+    kick_progress(false);
 
   return result;
 }

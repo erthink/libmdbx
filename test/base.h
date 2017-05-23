@@ -35,9 +35,11 @@
 #include <time.h>
 
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+#include <io.h>
 #else
 #include <sys/param.h>
 #include <sys/time.h>
+#include <unistd.h>
 #endif
 
 #ifdef _BSD_SOURCE
