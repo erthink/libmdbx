@@ -23,10 +23,10 @@
 static void prstat(MDBX_stat *ms) {
   printf("  Page size: %u\n", ms->ms_psize);
   printf("  Tree depth: %u\n", ms->ms_depth);
-  printf("  Branch pages: %" PRIuPTR "\n", ms->ms_branch_pages);
-  printf("  Leaf pages: %" PRIuPTR "\n", ms->ms_leaf_pages);
-  printf("  Overflow pages: %" PRIuPTR "\n", ms->ms_overflow_pages);
-  printf("  Entries: %" PRIuPTR "\n", ms->ms_entries);
+  printf("  Branch pages: %" PRIu64 "\n", ms->ms_branch_pages);
+  printf("  Leaf pages: %" PRIu64 "\n", ms->ms_leaf_pages);
+  printf("  Overflow pages: %" PRIu64 "\n", ms->ms_overflow_pages);
+  printf("  Entries: %" PRIu64 "\n", ms->ms_entries);
 }
 
 static void usage(char *prog) {
@@ -121,12 +121,12 @@ int main(int argc, char *argv[]) {
     (void)mdbx_env_info(env, &mei, sizeof(mei));
     printf("Environment Info\n");
     printf("  Map address: %p\n", mei.me_mapaddr);
-    printf("  Map size: %" PRIuPTR "\n", mei.me_mapsize);
+    printf("  Map size: %" PRIu64 "\n", mei.me_mapsize);
     printf("  Page size: %u\n", mst.ms_psize);
-    printf("  Max pages: %" PRIuPTR "\n", mei.me_mapsize / mst.ms_psize);
-    printf("  Number of pages used: %" PRIuPTR "\n", mei.me_last_pgno + 1);
-    printf("  Last transaction ID: %" PRIuPTR "\n", mei.me_last_txnid);
-    printf("  Tail transaction ID: %" PRIuPTR " (%" PRIiPTR ")\n",
+    printf("  Max pages: %" PRIu64 "\n", mei.me_mapsize / mst.ms_psize);
+    printf("  Number of pages used: %" PRIu64 "\n", mei.me_last_pgno + 1);
+    printf("  Last transaction ID: %" PRIu64 "\n", mei.me_last_txnid);
+    printf("  Tail transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
            mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
     printf("  Max readers: %u\n", mei.me_maxreaders);
     printf("  Number of readers used: %u\n", mei.me_numreaders);

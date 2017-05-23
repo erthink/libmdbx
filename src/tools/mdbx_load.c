@@ -119,7 +119,7 @@ static void readhdr(void) {
       ptr = memchr(dbuf.mv_data, '\n', dbuf.mv_size);
       if (ptr)
         *ptr = '\0';
-      i = sscanf((char *)dbuf.mv_data + STRLENOF("mapsize="), "%" PRIuPTR "",
+      i = sscanf((char *)dbuf.mv_data + STRLENOF("mapsize="), "%" PRIu64 "",
                  &envinfo.me_mapsize);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapsize %s\n", prog,

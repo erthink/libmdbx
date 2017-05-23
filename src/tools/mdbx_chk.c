@@ -59,39 +59,39 @@ static void signal_handler(int sig) {
 
 struct {
   const char *dbi_names[MAX_DBI];
-  size_t dbi_pages[MAX_DBI];
-  size_t dbi_empty_pages[MAX_DBI];
-  size_t dbi_payload_bytes[MAX_DBI];
-  size_t dbi_lost_bytes[MAX_DBI];
+  uint64_t dbi_pages[MAX_DBI];
+  uint64_t dbi_empty_pages[MAX_DBI];
+  uint64_t dbi_payload_bytes[MAX_DBI];
+  uint64_t dbi_lost_bytes[MAX_DBI];
   short *pagemap;
-  size_t total_payload_bytes;
-  size_t pgcount;
+  uint64_t total_payload_bytes;
+  uint64_t pgcount;
 } walk;
 
 static __attribute__((constructor)) void init_walk(void) {
   walk.dbi_names[0] = "@gc";
 }
 
-size_t total_unused_bytes;
+uint64_t total_unused_bytes;
 int exclusive = 2;
 
 MDB_env *env;
 MDB_txn *txn, *locktxn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
-size_t maxkeysize, reclaimable_pages, freedb_pages, lastpgno;
-size_t userdb_count, skipped_subdb;
+size_t maxkeysize, userdb_count, skipped_subdb;
+uint64_t reclaimable_pages, freedb_pages, lastpgno;
 unsigned verbose, quiet;
 const char *only_subdb;
 
 struct problem {
   struct problem *pr_next;
-  size_t count;
+  uint64_t count;
   const char *caption;
 };
 
 struct problem *problems_list;
-size_t total_problems;
+uint64_t total_problems;
 
 static void __attribute__((format(printf, 1, 2))) print(const char *msg, ...) {
   if (!quiet) {
@@ -156,7 +156,7 @@ static int pagemap_lookup_dbi(const char *dbi) {
   return last = i;
 }
 
-static void problem_add(const char *object, size_t entry_number,
+static void problem_add(const char *object, uint64_t entry_number,
                         const char *msg, const char *extra, ...) {
   total_problems++;
 
@@ -178,7 +178,7 @@ static void problem_add(const char *object, size_t entry_number,
 
     p->count++;
     if (verbose > 1) {
-      print("     %s #%" PRIuPTR ": %s", object, entry_number, msg);
+      print("     %s #%" PRIu64 ": %s", object, entry_number, msg);
       if (extra) {
         va_list args;
         printf(" (");
@@ -200,8 +200,8 @@ static struct problem *problems_push() {
   return p;
 }
 
-static size_t problems_pop(struct problem *list) {
-  size_t count = 0;
+static uint64_t problems_pop(struct problem *list) {
+  uint64_t count = 0;
 
   if (problems_list) {
     int i;
@@ -210,7 +210,7 @@ static size_t problems_pop(struct problem *list) {
     for (i = 0; problems_list; ++i) {
       struct problem *p = problems_list->pr_next;
       count += problems_list->count;
-      print("%s%s (%" PRIuPTR ")", i ? ", " : "", problems_list->caption,
+      print("%s%s (%" PRIu64 ")", i ? ", " : "", problems_list->caption,
             problems_list->count);
       free(problems_list);
       problems_list = p;
@@ -223,23 +223,23 @@ static size_t problems_pop(struct problem *list) {
   return count;
 }
 
-static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
-                     const char *type, int nentries, int payload_bytes,
-                     int header_bytes, int unused_bytes) {
+static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
+                     const char *dbi, const char *type, int nentries,
+                     int payload_bytes, int header_bytes, int unused_bytes) {
   (void)ctx;
 
   if (type) {
-    size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
-    size_t page_size = pgnumber * envstat.ms_psize;
+    uint64_t page_bytes = payload_bytes + header_bytes + unused_bytes;
+    uint64_t page_size = pgnumber * envstat.ms_psize;
     int index = pagemap_lookup_dbi(dbi);
     if (index < 0)
       return ENOMEM;
 
     if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi) == 0)) {
       if (pgnumber == 1)
-        print("     %s-page %" PRIuPTR "", type, pgno);
+        print("     %s-page %" PRIu64, type, pgno);
       else
-        print("     %s-span %" PRIuPTR "[%u]", type, pgno, pgnumber);
+        print("     %s-span %" PRIu64 "[%u]", type, pgno, pgnumber);
       print(" of %s: header %i, payload %i, unused %i\n", dbi, header_bytes,
             payload_bytes, unused_bytes);
     }
@@ -247,9 +247,8 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
     walk.pgcount += pgnumber;
 
     if (unused_bytes < 0 || (size_t)unused_bytes > page_size)
-      problem_add("page", pgno, "illegal unused-bytes",
-                  "%" PRIuPTR " < %i < %" PRIuPTR "", 0, unused_bytes,
-                  envstat.ms_psize);
+      problem_add("page", pgno, "illegal unused-bytes", "%u < %i < %u", 0,
+                  unused_bytes, envstat.ms_psize);
 
     if (header_bytes < (int)sizeof(long) ||
         (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
@@ -273,7 +272,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
 
     if (page_bytes != page_size) {
       problem_add("page", pgno, "misused",
-                  "%" PRIuPTR " != %" PRIuPTR " (%ih + %ip + %iu)", page_size,
+                  "%" PRIu64 " != %" PRIu64 " (%ih + %ip + %iu)", page_size,
                   page_bytes, header_bytes, payload_bytes, unused_bytes);
       if (page_size > page_bytes)
         walk.dbi_lost_bytes[index] += page_size - page_bytes;
@@ -286,7 +285,7 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
       do {
         if (pgno >= lastpgno)
           problem_add("page", pgno, "wrong page-no",
-                      "%" PRIuPTR " > %" PRIiPTR "", pgno, lastpgno);
+                      "%" PRIu64 " > %" PRIu64 "", pgno, lastpgno);
         else if (walk.pagemap[pgno])
           problem_add("page", pgno, "already used", "in %s",
                       walk.dbi_names[walk.pagemap[pgno]]);
@@ -302,11 +301,11 @@ static int pgvisitor(size_t pgno, unsigned pgnumber, void *ctx, const char *dbi,
   return gotsignal ? EINTR : MDB_SUCCESS;
 }
 
-typedef int(visitor)(const size_t record_number, const MDB_val *key,
+typedef int(visitor)(const uint64_t record_number, const MDB_val *key,
                      const MDB_val *data);
 static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent);
 
-static int handle_userdb(const size_t record_number, const MDB_val *key,
+static int handle_userdb(const uint64_t record_number, const MDB_val *key,
                          const MDB_val *data) {
   (void)record_number;
   (void)key;
@@ -314,11 +313,11 @@ static int handle_userdb(const size_t record_number, const MDB_val *key,
   return MDB_SUCCESS;
 }
 
-static int handle_freedb(const size_t record_number, const MDB_val *key,
+static int handle_freedb(const uint64_t record_number, const MDB_val *key,
                          const MDB_val *data) {
   char *bad = "";
   pgno_t pg, prev;
-  ssize_t i, number, span = 0;
+  int i, number, span = 0;
   pgno_t *iptr = data->mv_data;
   txnid_t txnid = *(txnid_t *)key->mv_data;
 
@@ -361,9 +360,8 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
           ;
       }
       if (verbose > 2 && !only_subdb) {
-        print("     transaction %" PRIaTXN ", %" PRIiPTR
-              " pages, maxspan %" PRIiPTR "%s\n",
-              txnid, number, span, bad);
+        print("     transaction %" PRIaTXN ", %u pages, maxspan %i%s\n", txnid,
+              number, span, bad);
         if (verbose > 3) {
           int j = number - 1;
           while (j >= 0) {
@@ -371,7 +369,7 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
             for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
               ;
             if (span > 1)
-              print("    %9" PRIaPGNO "[%" PRIiPTR "]\n", pg, span);
+              print("    %9" PRIaPGNO "[%i]\n", pg, span);
             else
               print("    %9" PRIaPGNO "\n", pg);
           }
@@ -383,7 +381,7 @@ static int handle_freedb(const size_t record_number, const MDB_val *key,
   return MDB_SUCCESS;
 }
 
-static int handle_maindb(const size_t record_number, const MDB_val *key,
+static int handle_maindb(const uint64_t record_number, const MDB_val *key,
                          const MDB_val *data) {
   char *name;
   int rc;
@@ -416,10 +414,10 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
   unsigned flags;
   int rc, i;
   struct problem *saved_list;
-  size_t problems_count;
+  uint64_t problems_count;
 
-  unsigned record_count = 0, dups = 0;
-  size_t key_bytes = 0, data_bytes = 0;
+  uint64_t record_count = 0, dups = 0;
+  uint64_t key_bytes = 0, data_bytes = 0;
 
   if (0 > (int)dbi) {
     rc = mdbx_dbi_open(txn, name, 0, &dbi);
@@ -472,10 +470,10 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
     }
     print(" (0x%02X)\n", flags);
     if (verbose > 1) {
-      print(" - page size %u, entries %" PRIuPTR "\n", ms.ms_psize,
+      print(" - page size %u, entries %" PRIu64 "\n", ms.ms_psize,
             ms.ms_entries);
-      print(" - b-tree depth %u, pages: branch %" PRIuPTR ", leaf %" PRIuPTR
-            ", overflow %" PRIuPTR "\n",
+      print(" - b-tree depth %u, pages: branch %" PRIu64 ", leaf %" PRIu64
+            ", overflow %" PRIu64 "\n",
             ms.ms_depth, ms.ms_branch_pages, ms.ms_leaf_pages,
             ms.ms_overflow_pages);
     }
@@ -501,17 +499,17 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
 
     if (key.mv_size > maxkeysize) {
       problem_add("entry", record_count, "key length exceeds max-key-size",
-                  "%" PRIuPTR " > %" PRIuPTR "", key.mv_size, maxkeysize);
-    } else if ((flags & MDB_INTEGERKEY) && key.mv_size != sizeof(size_t) &&
-               key.mv_size != sizeof(int)) {
+                  "%" PRIuPTR " > %u", key.mv_size, maxkeysize);
+    } else if ((flags & MDB_INTEGERKEY) && key.mv_size != sizeof(uint64_t) &&
+               key.mv_size != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong key length",
-                  "%" PRIuPTR " != %" PRIuPTR "", key.mv_size, sizeof(size_t));
+                  "%" PRIuPTR " != 4or8", key.mv_size);
     }
 
-    if ((flags & MDB_INTEGERDUP) && data.mv_size != sizeof(size_t) &&
-        data.mv_size != sizeof(int)) {
+    if ((flags & MDB_INTEGERDUP) && data.mv_size != sizeof(uint64_t) &&
+        data.mv_size != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong data length",
-                  "%" PRIuPTR " != %" PRIuPTR "", data.mv_size, sizeof(size_t));
+                  "%" PRIuPTR " != 4or8", data.mv_size);
     }
 
     if (prev_key.mv_data) {
@@ -567,9 +565,9 @@ static int process_db(MDB_dbi dbi, char *name, visitor *handler, int silent) {
 bailout:
   problems_count = problems_pop(saved_list);
   if (!silent && verbose) {
-    print(" - summary: %u records, %u dups, %" PRIuPTR " key's bytes, %" PRIuPTR
-          " data's "
-          "bytes, %" PRIuPTR " problems\n",
+    print(" - summary: %" PRIu64 " records, %" PRIu64 " dups, %" PRIu64
+          " key's bytes, %" PRIu64 " data's "
+          "bytes, %" PRIu64 " problems\n",
           record_count, dups, key_bytes, data_bytes, problems_count);
     fflush(NULL);
   }
@@ -593,7 +591,7 @@ static void usage(char *prog) {
   exit(EXIT_INTERRUPTED);
 }
 
-const char *meta_synctype(size_t sign) {
+const char *meta_synctype(uint64_t sign) {
   switch (sign) {
   case 0:
     return "no-sync/legacy";
@@ -604,8 +602,10 @@ const char *meta_synctype(size_t sign) {
   }
 }
 
-int meta_lt(size_t txn1, size_t sign1, size_t txn2, size_t sign2) {
-  return ((sign1 > 1) == (sign2 > 1)) ? txn1 < txn2 : txn2 && sign2 > 1;
+int meta_lt(txnid_t txn1, uint64_t sign1, txnid_t txn2, uint64_t sign2) {
+  return (SIGN_IS_STEADY(sign1) == SIGN_IS_STEADY(sign2))
+             ? txn1 < txn2
+             : txn2 && SIGN_IS_STEADY(sign2);
 }
 
 int main(int argc, char *argv[]) {
@@ -615,7 +615,6 @@ int main(int argc, char *argv[]) {
   int envflags = MDB_RDONLY;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
   int dont_traversal = 0;
-  size_t n;
   struct timespec timestamp_start, timestamp_finish;
   double elapsed;
 
@@ -749,37 +748,37 @@ int main(int argc, char *argv[]) {
         "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
     for (i = 0; sf[i + 1] && envinfo.me_mapsize / k > 1000.0; ++i)
       k *= 1024;
-    print(" - map size %" PRIuPTR " (%.2f %cb)\n", envinfo.me_mapsize,
+    print(" - map size %" PRIu64 " (%.2f %cb)\n", envinfo.me_mapsize,
           envinfo.me_mapsize / k, sf[i]);
     if (envinfo.me_mapaddr)
       print(" - mapaddr %p\n", envinfo.me_mapaddr);
     print(" - pagesize %u, max keysize %" PRIuPTR ", max readers %u\n",
           envstat.ms_psize, maxkeysize, envinfo.me_maxreaders);
-    print(" - transactions: last %" PRIuPTR ", bottom %" PRIuPTR
-          ", lag reading %" PRIiPTR "\n",
+    print(" - transactions: last %" PRIu64 ", bottom %" PRIu64
+          ", lag reading %" PRIi64 "\n",
           envinfo.me_last_txnid, envinfo.me_tail_txnid,
           envinfo.me_last_txnid - envinfo.me_tail_txnid);
 
-    print(" - meta-1: %s %" PRIuPTR ", %s",
-          meta_synctype(envinfo.me_meta1_sign), envinfo.me_meta1_txnid,
+    print(" - meta-1: %s %" PRIu64 ", %s", meta_synctype(envinfo.me_meta1_sign),
+          envinfo.me_meta1_txnid,
           meta_lt(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign)
               ? "tail"
               : "head");
     if (envinfo.me_meta1_txnid > envinfo.me_last_txnid)
-      print(", rolled-back %" PRIuPTR " (%" PRIuPTR " >>> %" PRIuPTR ")",
+      print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
             envinfo.me_meta1_txnid - envinfo.me_last_txnid,
             envinfo.me_meta1_txnid, envinfo.me_last_txnid);
     print("\n");
 
-    print(" - meta-2: %s %" PRIuPTR ", %s",
-          meta_synctype(envinfo.me_meta2_sign), envinfo.me_meta2_txnid,
+    print(" - meta-2: %s %" PRIu64 ", %s", meta_synctype(envinfo.me_meta2_sign),
+          envinfo.me_meta2_txnid,
           meta_lt(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
                   envinfo.me_meta1_txnid, envinfo.me_meta1_sign)
               ? "tail"
               : "head");
     if (envinfo.me_meta2_txnid > envinfo.me_last_txnid)
-      print(", rolled-back %" PRIuPTR " (%" PRIuPTR " >>> %" PRIuPTR ")",
+      print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
             envinfo.me_meta2_txnid - envinfo.me_last_txnid,
             envinfo.me_meta2_txnid, envinfo.me_last_txnid);
     print("\n");
@@ -792,7 +791,7 @@ int main(int argc, char *argv[]) {
     if (!meta_lt(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
                  envinfo.me_meta2_txnid, envinfo.me_meta2_sign) &&
         envinfo.me_meta1_txnid != envinfo.me_last_txnid) {
-      print(" - meta-1 txn-id mismatch last-txn-id (%" PRIiPTR " != %" PRIiPTR
+      print(" - meta-1 txn-id mismatch last-txn-id (%" PRIi64 " != %" PRIi64
             ")\n",
             envinfo.me_meta1_txnid, envinfo.me_last_txnid);
       ++problems_meta;
@@ -801,7 +800,7 @@ int main(int argc, char *argv[]) {
     if (!meta_lt(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
                  envinfo.me_meta1_txnid, envinfo.me_meta1_sign) &&
         envinfo.me_meta2_txnid != envinfo.me_last_txnid) {
-      print(" - meta-2 txn-id mismatch last-txn-id (%" PRIiPTR " != %" PRIiPTR
+      print(" - meta-2 txn-id mismatch last-txn-id (%" PRIi64 " != %" PRIi64
             ")\n",
             envinfo.me_meta2_txnid, envinfo.me_last_txnid);
       ++problems_meta;
@@ -810,12 +809,11 @@ int main(int argc, char *argv[]) {
     if (verbose)
       print(" - perform lite check last-txn-id with meta-pages (not a "
             "monopolistic mode)\n");
-    size_t last = (envinfo.me_meta2_txnid > envinfo.me_meta1_txnid)
-                      ? envinfo.me_meta2_txnid
-                      : envinfo.me_meta1_txnid;
+    uint64_t last = (envinfo.me_meta2_txnid > envinfo.me_meta1_txnid)
+                        ? envinfo.me_meta2_txnid
+                        : envinfo.me_meta1_txnid;
     if (last != envinfo.me_last_txnid) {
-      print(" - last-meta mismatch last-txn-id (%" PRIiPTR " != %" PRIiPTR
-            ")\n",
+      print(" - last-meta mismatch last-txn-id (%" PRIi64 " != %" PRIi64 ")\n",
             last, envinfo.me_last_txnid);
       ++problems_meta;
     }
@@ -852,6 +850,7 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
 
+    uint64_t n;
     for (n = 0; n < lastpgno; ++n)
       if (!walk.pagemap[n])
         walk.dbi_pages[0] += 1;
@@ -863,35 +862,34 @@ int main(int argc, char *argv[]) {
     }
 
     if (verbose) {
-      size_t total_page_bytes = walk.pgcount * envstat.ms_psize;
-      print(" - dbi pages: %" PRIuPTR " total", walk.pgcount);
+      uint64_t total_page_bytes = walk.pgcount * envstat.ms_psize;
+      print(" - dbi pages: %" PRIu64 " total", walk.pgcount);
       if (verbose > 1)
         for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i)
-          print(", %s %" PRIuPTR "", walk.dbi_names[i], walk.dbi_pages[i]);
-      print(", %s %" PRIuPTR "\n", walk.dbi_names[0], walk.dbi_pages[0]);
+          print(", %s %" PRIu64 "", walk.dbi_names[i], walk.dbi_pages[i]);
+      print(", %s %" PRIu64 "\n", walk.dbi_names[0], walk.dbi_pages[0]);
       if (verbose > 1) {
-        print(" - space info: total %" PRIuPTR " bytes, payload %" PRIuPTR
+        print(" - space info: total %" PRIu64 " bytes, payload %" PRIu64
               " (%.1f%%), unused "
-              "%" PRIuPTR " (%.1f%%)\n",
+              "%" PRIu64 " (%.1f%%)\n",
               total_page_bytes, walk.total_payload_bytes,
               walk.total_payload_bytes * 100.0 / total_page_bytes,
               total_page_bytes - walk.total_payload_bytes,
               (total_page_bytes - walk.total_payload_bytes) * 100.0 /
                   total_page_bytes);
         for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
-          size_t dbi_bytes = walk.dbi_pages[i] * envstat.ms_psize;
-          print("     %s: subtotal %" PRIuPTR
-                " bytes (%.1f%%), payload %" PRIuPTR " (%.1f%%), "
-                "unused %" PRIuPTR " (%.1f%%)",
+          uint64_t dbi_bytes = walk.dbi_pages[i] * envstat.ms_psize;
+          print("     %s: subtotal %" PRIu64 " bytes (%.1f%%),"
+                " payload %" PRIu64 " (%.1f%%), unused %" PRIu64 " (%.1f%%)",
                 walk.dbi_names[i], dbi_bytes,
                 dbi_bytes * 100.0 / total_page_bytes, walk.dbi_payload_bytes[i],
                 walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes,
                 dbi_bytes - walk.dbi_payload_bytes[i],
                 (dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes);
           if (walk.dbi_empty_pages[i])
-            print(", %" PRIuPTR " empty pages", walk.dbi_empty_pages[i]);
+            print(", %" PRIu64 " empty pages", walk.dbi_empty_pages[i]);
           if (walk.dbi_lost_bytes[i])
-            print(", %" PRIuPTR " bytes lost", walk.dbi_lost_bytes[i]);
+            print(", %" PRIu64 " bytes lost", walk.dbi_lost_bytes[i]);
           print("\n");
         }
       }
@@ -914,40 +912,40 @@ int main(int argc, char *argv[]) {
   problems_freedb = process_db(0 /* FREE_DBI */, "free", handle_freedb, 0);
 
   if (verbose) {
-    size_t value = envinfo.me_mapsize / envstat.ms_psize;
+    uint64_t value = envinfo.me_mapsize / envstat.ms_psize;
     double percent = value / 100.0;
-    print(" - pages info: %" PRIuPTR " total", value);
-    print(", allocated %" PRIuPTR " (%.1f%%)", lastpgno, lastpgno / percent);
+    print(" - pages info: %" PRIu64 " total", value);
+    print(", allocated %" PRIu64 " (%.1f%%)", lastpgno, lastpgno / percent);
 
     if (verbose > 1) {
       value = envinfo.me_mapsize / envstat.ms_psize - lastpgno;
-      print(", remained %" PRIuPTR " (%.1f%%)", value, value / percent);
+      print(", remained %" PRIu64 " (%.1f%%)", value, value / percent);
 
       value = lastpgno - freedb_pages;
-      print(", used %" PRIuPTR " (%.1f%%)", value, value / percent);
+      print(", used %" PRIu64 " (%.1f%%)", value, value / percent);
 
-      print(", gc %" PRIuPTR " (%.1f%%)", freedb_pages, freedb_pages / percent);
+      print(", gc %" PRIu64 " (%.1f%%)", freedb_pages, freedb_pages / percent);
 
       value = freedb_pages - reclaimable_pages;
-      print(", detained %" PRIuPTR " (%.1f%%)", value, value / percent);
+      print(", detained %" PRIu64 " (%.1f%%)", value, value / percent);
 
-      print(", reclaimable %" PRIuPTR " (%.1f%%)", reclaimable_pages,
+      print(", reclaimable %" PRIu64 " (%.1f%%)", reclaimable_pages,
             reclaimable_pages / percent);
     }
 
     value =
         envinfo.me_mapsize / envstat.ms_psize - lastpgno + reclaimable_pages;
-    print(", available %" PRIuPTR " (%.1f%%)\n", value, value / percent);
+    print(", available %" PRIu64 " (%.1f%%)\n", value, value / percent);
   }
 
   if (problems_maindb == 0 && problems_freedb == 0) {
     if (!dont_traversal && (exclusive || locktxn)) {
       if (walk.pgcount != lastpgno - freedb_pages) {
-        error("used pages mismatch (%" PRIuPTR " != %" PRIuPTR ")\n",
+        error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
               walk.pgcount, lastpgno - freedb_pages);
       }
       if (walk.dbi_pages[0] != freedb_pages) {
-        error("gc pages mismatch (%" PRIuPTR " != %" PRIuPTR ")\n",
+        error("gc pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
               walk.dbi_pages[0], freedb_pages);
       }
     } else if (verbose) {
@@ -986,7 +984,7 @@ bailout:
 
   total_problems += problems_meta;
   if (total_problems || problems_maindb || problems_freedb) {
-    print("Total %" PRIuPTR " error(s) is detected, elapsed %.3f seconds.\n",
+    print("Total %" PRIu64 " error(s) is detected, elapsed %.3f seconds.\n",
           total_problems, elapsed);
     if (problems_meta || problems_maindb || problems_freedb)
       return EXIT_FAILURE_CHECK_MAJOR;

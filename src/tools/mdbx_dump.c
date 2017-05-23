@@ -109,7 +109,7 @@ static int dumpit(MDB_txn *txn, MDB_dbi dbi, char *name) {
   if (name)
     printf("database=%s\n", name);
   printf("type=btree\n");
-  printf("mapsize=%" PRIuPTR "\n", info.me_mapsize);
+  printf("mapsize=%" PRIu64 "\n", info.me_mapsize);
   if (info.me_mapaddr)
     printf("mapaddr=%p\n", info.me_mapaddr);
   printf("maxreaders=%u\n", info.me_maxreaders);
