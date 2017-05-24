@@ -70,7 +70,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 }
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  size_t &mask, const option_verb *verbs) {
+                  unsigned &mask, const option_verb *verbs) {
   const char *list;
   if (!parse_option(argc, argv, narg, option, &list))
     return false;

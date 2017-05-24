@@ -28,6 +28,17 @@
 #   define MDBX_DEVEL 0
 #endif
 
+/*----------------------------------------------------------------------------*/
+
+/* Should be defined before any includes */
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+
+#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+
 #include "../mdbx.h"
 #include "./defs.h"
 

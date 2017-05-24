@@ -98,7 +98,7 @@ void mdbx_rthc_unlock(void) { LeaveCriticalSection(&rthc_critical_section); }
 #define LCK_WAITFOR 0
 #define LCK_DONTWAIT LOCKFILE_FAIL_IMMEDIATELY
 
-static __inline BOOL flock(mdbx_filehandle_t fd, DWORD flags, off_t offset,
+static __inline BOOL flock(mdbx_filehandle_t fd, DWORD flags, uint64_t offset,
                            size_t bytes) {
   OVERLAPPED ov;
   ov.hEvent = 0;
@@ -107,7 +107,8 @@ static __inline BOOL flock(mdbx_filehandle_t fd, DWORD flags, off_t offset,
   return LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov);
 }
 
-static __inline BOOL funlock(mdbx_filehandle_t fd, off_t offset, size_t bytes) {
+static __inline BOOL funlock(mdbx_filehandle_t fd, uint64_t offset,
+                             size_t bytes) {
   return UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
                     HIGH_DWORD(bytes));
 }

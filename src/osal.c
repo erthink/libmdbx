@@ -391,7 +391,7 @@ int mdbx_closefile(mdbx_filehandle_t fd) {
 #endif
 }
 
-int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
+int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
   if (bytes > MAX_WRITE)
     return MDBX_EINVAL;
 #if defined(_WIN32) || defined(_WIN64)
@@ -407,6 +407,8 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
     return (rc == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
 #else
+  STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
+                "libmdbx requires 64-bit file I/O on 64-bit systems");
   ssize_t read = pread(fd, buf, bytes, offset);
   if (read < 0) {
     int rc = errno;
@@ -417,7 +419,7 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, off_t offset) {
 }
 
 int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
-                off_t offset) {
+                uint64_t offset) {
 #if defined(_WIN32) || defined(_WIN64)
   if (bytes > MAX_WRITE)
     return ERROR_INVALID_PARAMETER;
@@ -435,6 +437,8 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
   int rc;
   ssize_t written;
   do {
+    STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
+                  "libmdbx requires 64-bit file I/O on 64-bit systems");
     written = pwrite(fd, buf, bytes, offset);
     if (likely(bytes == (size_t)written))
       return MDBX_SUCCESS;
@@ -445,7 +449,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
 }
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
-                 off_t offset, size_t expected_written) {
+                 uint64_t offset, size_t expected_written) {
 #if defined(_WIN32) || defined(_WIN64)
   size_t written = 0;
   for (int i = 0; i < iovcnt; ++i) {
@@ -461,6 +465,8 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
   int rc;
   ssize_t written;
   do {
+    STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
+                  "libmdbx requires 64-bit file I/O on 64-bit systems");
     written = pwritev(fd, iov, iovcnt, offset);
     if (likely(expected_written == (size_t)written))
       return MDBX_SUCCESS;
@@ -494,8 +500,7 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
 #ifdef SIGPIPE
       if (rc == EPIPE) {
         /* Collect the pending SIGPIPE, otherwise at least OS X
-         * gives it to the process on thread-exit (ITS#8504).
-         */
+         * gives it to the process on thread-exit (ITS#8504). */
         int tmp;
         sigwait(&set, &tmp);
         written = 0;
@@ -542,7 +547,7 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
 #endif
 }
 
-int mdbx_filesize(mdbx_filehandle_t fd, off_t *length) {
+int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 #if defined(_WIN32) || defined(_WIN64)
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(fd, &info))
@@ -551,6 +556,8 @@ int mdbx_filesize(mdbx_filehandle_t fd, off_t *length) {
 #else
   struct stat st;
 
+  STATIC_ASSERT(sizeof(off_t) <= sizeof(uint64_t),
+                "libmdbx requires 64-bit file I/O on 64-bit systems");
   if (fstat(fd, &st))
     return errno;
 
@@ -559,7 +566,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, off_t *length) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
+int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   LARGE_INTEGER li;
   li.QuadPart = length;
@@ -567,6 +574,8 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length) {
              ? MDBX_SUCCESS
              : mdbx_get_errno_checked();
 #else
+  STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
+                "libmdbx requires 64-bit file I/O on 64-bit systems");
   return ftruncate(fd, length) == 0 ? MDBX_SUCCESS : errno;
 #endif
 }

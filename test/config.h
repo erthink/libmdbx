@@ -64,7 +64,7 @@ struct option_verb {
 };
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  size_t &mask, const option_verb *verbs);
+                  unsigned &mask, const option_verb *verbs);
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   uint64_t &value, const scale_mode scale,
@@ -194,8 +194,8 @@ struct keygen_params_pod {
 struct actor_params_pod {
   unsigned loglevel;
 
-  size_t mode_flags;
-  size_t table_flags;
+  unsigned mode_flags;
+  unsigned table_flags;
   uint64_t size;
 
   unsigned test_duration;

@@ -3368,14 +3368,14 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
       (pending->mm_txnid == head->mm_txnid || META_IS_WEAK(head))
           ? head
           : mdbx_env_meta_flipflop(env, head);
-  off_t offset = (char *)target - env->me_map;
+  size_t offset = (char *)target - env->me_map;
 
   MDBX_meta *stay = mdbx_env_meta_flipflop(env, (MDBX_meta *)target);
   mdbx_debug(
       "writing meta %d (%s, was %" PRIaTXN "/%s, stay %s %" PRIaTXN
       "/%s), root %" PRIaPGNO ", "
       "txn_id %" PRIaTXN ", %s",
-      offset >= (off_t)env->me_psize, target == head ? "head" : "tail",
+      offset >= env->me_psize, target == head ? "head" : "tail",
       target->mm_txnid,
       META_IS_WEAK(target) ? "Weak" : META_IS_STEADY(target) ? "Steady"
                                                              : "Legacy",
@@ -3716,12 +3716,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   } else {
-    off_t size;
+    uint64_t size;
     err = mdbx_filesize(env->me_fd, &size);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-    if (size != (off_t)env->me_mapsize) {
+    if (size != env->me_mapsize) {
       mdbx_trace("filesize mismatch");
       if ((env->me_flags & MDBX_RDONLY) ||
           lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
@@ -3797,15 +3797,15 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
   mdbx_debug("lck-setup: %s ",
              (rc == MDBX_RESULT_TRUE) ? "exclusive" : "shared");
 
-  off_t size;
+  uint64_t size;
   err = mdbx_filesize(env->me_lfd, &size);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
   if (rc == MDBX_RESULT_TRUE) {
-    off_t wanna = roundup2((env->me_maxreaders - 1) * sizeof(MDBX_reader) +
-                               sizeof(MDBX_lockinfo),
-                           env->me_os_psize);
+    uint64_t wanna = roundup2((env->me_maxreaders - 1) * sizeof(MDBX_reader) +
+                                  sizeof(MDBX_lockinfo),
+                              env->me_os_psize);
 #ifndef NDEBUG
     err = mdbx_ftruncate(env->me_lfd, size = 0);
     if (unlikely(err != MDBX_SUCCESS))

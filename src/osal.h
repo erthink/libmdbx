@@ -34,10 +34,6 @@
 /*----------------------------------------------------------------------------*/
 /* C99 includes */
 
-#ifndef _FILE_OFFSET_BITS
-#define _FILE_OFFSET_BITS 64
-#endif
-
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -428,10 +424,10 @@ int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex);
 int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex);
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
-                 off_t offset, size_t expected_written);
-int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t count, off_t offset);
+                 uint64_t offset, size_t expected_written);
+int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t count, uint64_t offset);
 int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t count,
-                off_t offset);
+                uint64_t offset);
 int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t count);
 
 int mdbx_msync(void *addr, size_t length, int async);
@@ -447,8 +443,8 @@ void *mdbx_thread_rthc_get(mdbx_thread_key_t key);
 void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value);
 
 int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync);
-int mdbx_ftruncate(mdbx_filehandle_t fd, off_t length);
-int mdbx_filesize(mdbx_filehandle_t fd, off_t *length);
+int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length);
+int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length);
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd);
 int mdbx_closefile(mdbx_filehandle_t fd);
