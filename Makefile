@@ -28,7 +28,7 @@ XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu99 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu99,$(CFLAGS))
-TESTDB	?= /tmp/mdbx-check.db
+TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.db
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
 LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
@@ -43,6 +43,13 @@ LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 SHELL		:= /bin/bash
+
+CORE_SRC	:= $(filter-out src/lck-windows.c, $(wildcard src/*.c))
+CORE_INC	:= $(wildcard src/*.h)
+CORE_OBJ	:= $(patsubst %.c,%.o,$(CORE_SRC))
+TEST_SRC	:= $(filter-out test/osal-windows.cc, $(wildcard test/*.cc))
+TEST_INC	:= $(wildcard test/*.h)
+TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 
 .PHONY: mdbx all install clean check coverage
 
@@ -63,27 +70,35 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err
+	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
 check:	test/test
 	rm -f $(TESTDB) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
 
-src/%.o: src/%.c mdbx.h mdbx_osal.h $(addprefix src/, defs.h bits.h osal.h midl.h) Makefile
-	$(CC) $(CFLAGS) -c $(filter %.c, $^) -o $@
+define core-rule
+$(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile
+	$(CC) $(CFLAGS) -c $(1) -o $$@
 
-libmdbx.a:	$(addprefix src/, mdbx.o osal.o lck-posix.o version.o)
+endef
+$(foreach file,$(CORE_SRC),$(eval $(call core-rule,$(file))))
+
+define test-rule
+$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h Makefile
+	$(CXX) $(CXXFLAGS) -c $(1) -o $$@
+
+endef
+$(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
+
+libmdbx.a: $(CORE_OBJ)
 	$(AR) rs $@ $?
 
-libmdbx.so:	libmdbx.a
+libmdbx.so: $(CORE_OBJ)
 	$(CC) $(CFLAGS) -save-temps $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
-test/%.o: test/%.cc $(wildcard test/*.h) Makefile
-	$(CXX) $(CXXFLAGS) -Isrc -c $(filter %.cc, $^) -o $@
-
-test/test: $(patsubst %.cc,%.o,$(filter-out test/osal-windows.cc, $(wildcard test/*.cc))) libmdbx.a
+test/test: $(TEST_OBJ) libmdbx.a
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 ifneq ($(wildcard $(IOARENA)),)

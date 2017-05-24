@@ -15,60 +15,6 @@
 /* *INDENT-OFF* */
 /* clang-format off */
 
-#ifndef _FILE_OFFSET_BITS
-#   define _FILE_OFFSET_BITS 64
-#endif
-
-#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
-#   define _CRT_SECURE_NO_WARNINGS
-#endif
-
-#ifdef _MSC_VER
-#pragma warning(disable : 4464) /* C4464: relative include path contains '..' */
-#pragma warning(disable : 4710) /* C4710: 'xyz': function not inlined */
-#pragma warning(disable : 4711) /* C4711: function 'xyz' selected for automatic inline expansion */
-#pragma warning(disable : 4201) /* C4201: nonstandard extension used : nameless struct / union */
-#pragma warning(disable : 4706) /* C4706: assignment within conditional expression */
-#pragma warning(disable : 4127) /* C4127: conditional expression is constant */
-#endif                          /* _MSC_VER (warnings) */
-
-#include "../mdbx.h"
-#include "./defs.h"
-
-#if defined(USE_VALGRIND)
-#   include <valgrind/memcheck.h>
-#   ifndef VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE
-        /* LY: available since Valgrind 3.10 */
-#       define VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
-#       define VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
-#   endif
-#else
-#   define VALGRIND_CREATE_MEMPOOL(h,r,z)
-#   define VALGRIND_DESTROY_MEMPOOL(h)
-#   define VALGRIND_MEMPOOL_TRIM(h,a,s)
-#   define VALGRIND_MEMPOOL_ALLOC(h,a,s)
-#   define VALGRIND_MEMPOOL_FREE(h,a)
-#   define VALGRIND_MEMPOOL_CHANGE(h,a,b,s)
-#   define VALGRIND_MAKE_MEM_NOACCESS(a,s)
-#   define VALGRIND_MAKE_MEM_DEFINED(a,s)
-#   define VALGRIND_MAKE_MEM_UNDEFINED(a,s)
-#   define VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
-#   define VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
-#   define VALGRIND_CHECK_MEM_IS_ADDRESSABLE(a,s) (0)
-#   define VALGRIND_CHECK_MEM_IS_DEFINED(a,s) (0)
-#endif /* USE_VALGRIND */
-
-#ifdef __SANITIZE_ADDRESS__
-#   include <sanitizer/asan_interface.h>
-#else
-#   define ASAN_POISON_MEMORY_REGION(addr, size) \
-        ((void)(addr), (void)(size))
-#   define ASAN_UNPOISON_MEMORY_REGION(addr, size) \
-        ((void)(addr), (void)(size))
-#endif /* __SANITIZE_ADDRESS__ */
-
-#include "./osal.h"
-
 #ifndef MDBX_DEBUG
 #   define MDBX_DEBUG 0
 #endif
@@ -76,6 +22,14 @@
 #if MDBX_DEBUG
 #   undef NDEBUG
 #endif
+
+/* Features under development */
+#ifndef MDBX_DEVEL
+#   define MDBX_DEVEL 0
+#endif
+
+#include "../mdbx.h"
+#include "./defs.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4,2)
     /* Actualy libmdbx was not tested with compilers older than GCC from RHEL6.
@@ -93,53 +47,66 @@
 #   warning "libmdbx required at least GLIBC 2.12."
 #endif
 
-#if defined(__i386) || defined(__x86_64) || defined(_M_IX86)
-#   define UNALIGNED_OK 1 /* TODO */
-#endif
-#ifndef UNALIGNED_OK
-#   define UNALIGNED_OK 0
-#endif /* UNALIGNED_OK */
+#ifdef __SANITIZE_THREAD__
+#   warning "libmdbx don't compatible with ThreadSanitizer, you will get a lot of false-positive issues."
+#endif /* __SANITIZE_THREAD__ */
 
-#if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
-#   error "Sanity checking failed: Two's complement, reasonably sized integer types"
-#endif
+#ifdef _MSC_VER
+#pragma warning(disable : 4464) /* C4464: relative include path contains '..' */
+#pragma warning(disable : 4710) /* C4710: 'xyz': function not inlined */
+#pragma warning(disable : 4711) /* C4711: function 'xyz' selected for automatic inline expansion */
+#pragma warning(disable : 4201) /* C4201: nonstandard extension used : nameless struct / union */
+#pragma warning(disable : 4706) /* C4706: assignment within conditional expression */
+#pragma warning(disable : 4127) /* C4127: conditional expression is constant */
+#endif                          /* _MSC_VER (warnings) */
 
-/*----------------------------------------------------------------------------*/
-
-#ifndef ARRAY_LENGTH
-#   ifdef __cplusplus
-        template <typename T, size_t N>
-        char (&__ArraySizeHelper(T (&array)[N]))[N];
-#       define ARRAY_LENGTH(array) (sizeof(::__ArraySizeHelper(array)))
-#   else
-#       define ARRAY_LENGTH(array) (sizeof(array) / sizeof(array[0]))
-#   endif
-#endif /* ARRAY_LENGTH */
-
-#ifndef ARRAY_END
-#   define ARRAY_END(array) (&array[ARRAY_LENGTH(array)])
-#endif /* ARRAY_END */
-
-#ifndef STRINGIFY
-#   define STRINGIFY_HELPER(x) #x
-#   define STRINGIFY(x) STRINGIFY_HELPER(x)
-#endif /* STRINGIFY */
-
-#ifndef offsetof
-#   define offsetof(type, member)  __builtin_offsetof(type, member)
-#endif /* offsetof */
-
-#ifndef container_of
-#   define container_of(ptr, type, member) \
-        ((type *)((char *)(ptr) - offsetof(type, member)))
-#endif /* container_of */
+#include "./osal.h"
 
 /* *INDENT-ON* */
 /* clang-format on */
 
-#define FIXME "FIXME: " __FILE__ ", " STRINGIFY(__LINE__)
-
 /*----------------------------------------------------------------------------*/
+/* Basic constants and types */
+
+/* The maximum size of a database page.
+ *
+ * It is 32k or 64k, since value-PAGEBASE must fit in
+ * MDBX_page.mp_upper.
+ *
+ * MDBX will use database pages < OS pages if needed.
+ * That causes more I/O in write transactions: The OS must
+ * know (read) the whole page before writing a partial page.
+ *
+ * Note that we don't currently support Huge pages. On Linux,
+ * regular data files cannot use Huge pages, and in general
+ * Huge pages aren't actually pageable. We rely on the OS
+ * demand-pager to read our data and page it out when memory
+ * pressure from other processes is high. So until OSs have
+ * actual paging support for Huge pages, they're not viable. */
+#define MAX_PAGESIZE (PAGEBASE ? 0x10000 : 0x8000)
+
+/* The minimum number of keys required in a database page.
+ * Setting this to a larger value will place a smaller bound on the
+ * maximum size of a data item. Data items larger than this size will
+ * be pushed into overflow pages instead of being stored directly in
+ * the B-tree node. This value used to default to 4. With a page size
+ * of 4096 bytes that meant that any item larger than 1024 bytes would
+ * go into an overflow page. That also meant that on average 2-3KB of
+ * each overflow page was wasted space. The value cannot be lower than
+ * 2 because then there would no longer be a tree structure. With this
+ * value, items larger than 2KB will go into overflow pages, and on
+ * average only 1KB will be wasted. */
+#define MDBX_MINKEYS 2
+
+/* A stamp that identifies a file as an MDBX file.
+ * There's nothing special about this value other than that it is easily
+ * recognizable, and it will reflect any byte order mismatches. */
+#define MDBX_MAGIC 0xBEEFC0DE
+
+/* The version number for a database's datafile format. */
+#define MDBX_DATA_VERSION ((MDBX_DEVEL) ? 999 : 1)
+/* The version number for a database's lockfile format. */
+#define MDBX_LOCK_VERSION ((MDBX_DEVEL) ? 999 : 1)
 
 /* handle for the DB used to track free pages. */
 #define FREE_DBI 0
@@ -162,31 +129,52 @@ typedef uint32_t pgno_t;
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
 
-/* An IDL is an ID List, a sorted array of IDs. The first
- * element of the array is a counter for how many actual
- * IDs are in the list. In the original back-bdb code, IDLs are
- * sorted in ascending order. For libmdb IDLs are sorted in
- * descending order. */
-typedef pgno_t *MDBX_IDL;
-
-/* An ID2 is an ID/pointer pair. */
-typedef struct MDBX_ID2 {
-  pgno_t mid; /* The ID */
-  void *mptr; /* The pointer */
-} MDBX_ID2;
-
-/* An ID2L is an ID2 List, a sorted array of ID2s.
- * The first element's mid member is a count of how many actual
- * elements are in the array. The mptr member of the first element is
- * unused. The array is sorted in ascending order by mid. */
-typedef MDBX_ID2 *MDBX_ID2L;
-
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
  * this is plenty. */
 typedef uint16_t indx_t;
 
+/*----------------------------------------------------------------------------*/
+/* Core structures for database and shared memory (i.e. format definition) */
 #pragma pack(push, 1)
+
+/* Reader Lock Table
+ *
+ * Readers don't acquire any locks for their data access. Instead, they
+ * simply record their transaction ID in the reader table. The reader
+ * mutex is needed just to find an empty slot in the reader table. The
+ * slot's address is saved in thread-specific data so that subsequent
+ * read transactions started by the same thread need no further locking to
+ * proceed.
+ *
+ * If MDBX_NOTLS is set, the slot address is not saved in thread-specific data.
+ * No reader table is used if the database is on a read-only filesystem.
+ *
+ * Since the database uses multi-version concurrency control, readers don't
+ * actually need any locking. This table is used to keep track of which
+ * readers are using data from which old transactions, so that we'll know
+ * when a particular old transaction is no longer in use. Old transactions
+ * that have discarded any data pages can then have those pages reclaimed
+ * for use by a later write transaction.
+ *
+ * The lock table is constructed such that reader slots are aligned with the
+ * processor's cache line size. Any slot is only ever used by one thread.
+ * This alignment guarantees that there will be no contention or cache
+ * thrashing as threads update their own slot info, and also eliminates
+ * any need for locking when accessing a slot.
+ *
+ * A writer thread will scan every slot in the table to determine the oldest
+ * outstanding reader transaction. Any freed pages older than this will be
+ * reclaimed by the writer. The writer doesn't use any locks when scanning
+ * this table. This means that there's no guarantee that the writer will
+ * see the most up-to-date reader info, but that's not required for correct
+ * operation - all we need is to know the upper bound on the oldest reader,
+ * we don't care at all about the newest reader. So the only consequence of
+ * reading stale information here is that old pages might hang around a
+ * while longer before being reclaimed. That's actually good anyway, because
+ * the longer we delay reclaiming old pages, the more likely it is that a
+ * string of contiguous pages can be found after coalescing old pages from
+ * many old transactions together. */
 
 /* The actual reader record, with cacheline padding. */
 typedef struct MDBX_reader {
@@ -343,6 +331,54 @@ typedef struct MDBX_lockinfo {
 } MDBX_lockinfo;
 
 #pragma pack(pop)
+/*----------------------------------------------------------------------------*/
+/* Two kind lists of pages (aka IDL) */
+
+/* An IDL is an ID List, a sorted array of IDs. The first
+ * element of the array is a counter for how many actual
+ * IDs are in the list. In the libmdbx IDLs are sorted in
+ * descending order. */
+typedef pgno_t *MDBX_IDL;
+
+/* An ID2 is an ID/pointer pair. */
+typedef struct MDBX_ID2 {
+  pgno_t mid; /* The ID */
+  void *mptr; /* The pointer */
+} MDBX_ID2;
+
+/* An ID2L is an ID2 List, a sorted array of ID2s.
+ * The first element's mid member is a count of how many actual
+ * elements are in the array. The mptr member of the first element is
+ * unused. The array is sorted in ascending order by mid. */
+typedef MDBX_ID2 *MDBX_ID2L;
+
+/* IDL sizes - likely should be even bigger
+ * limiting factors: sizeof(pgno_t), thread stack size */
+#define MDBX_IDL_LOGN 16 /* DB_SIZE is 2^16, UM_SIZE is 2^17 */
+#define MDBX_IDL_DB_SIZE (1 << MDBX_IDL_LOGN)
+#define MDBX_IDL_UM_SIZE (1 << (MDBX_IDL_LOGN + 1))
+
+#define MDBX_IDL_DB_MAX (MDBX_IDL_DB_SIZE - 1)
+#define MDBX_IDL_UM_MAX (MDBX_IDL_UM_SIZE - 1)
+
+#define MDBX_IDL_SIZEOF(ids) (((ids)[0] + 1) * sizeof(pgno_t))
+#define MDBX_IDL_IS_ZERO(ids) ((ids)[0] == 0)
+#define MDBX_IDL_CPY(dst, src) (memcpy(dst, src, MDBX_IDL_SIZEOF(src)))
+#define MDBX_IDL_FIRST(ids) ((ids)[1])
+#define MDBX_IDL_LAST(ids) ((ids)[(ids)[0]])
+
+/* Current max length of an mdbx_midl_alloc()ed IDL */
+#define MDBX_IDL_ALLOCLEN(ids) ((ids)[-1])
+
+/* Append ID to IDL. The IDL must be big enough. */
+#define mdbx_midl_xappend(idl, id)                                             \
+  do {                                                                         \
+    pgno_t *xidl = (idl), xlen = ++(xidl[0]);                                  \
+    xidl[xlen] = (id);                                                         \
+  } while (0)
+
+/*----------------------------------------------------------------------------*/
+/* Internal structures */
 
 /* Auxiliary DB info.
  * The information here is mostly static/read-only. There is
@@ -598,6 +634,7 @@ typedef struct MDBX_ntxn {
 } MDBX_ntxn;
 
 /*----------------------------------------------------------------------------*/
+/* Debug and Logging stuff */
 
 extern int mdbx_runtime_flags;
 extern MDBX_debug_func *mdbx_debug_logger;
@@ -637,8 +674,6 @@ void mdbx_panic(const char *fmt, ...)
 
 #define mdbx_print(fmt, ...)                                                   \
   mdbx_debug_log(MDBX_DBG_PRINT, NULL, 0, fmt, ##__VA_ARGS__)
-
-/*----------------------------------------------------------------------------*/
 
 #define mdbx_trace(fmt, ...)                                                   \
   do {                                                                         \
@@ -689,8 +724,6 @@ void mdbx_panic(const char *fmt, ...)
                      fmt "\n", ##__VA_ARGS__);                                 \
   } while (0)
 
-/*----------------------------------------------------------------------------*/
-
 #define mdbx_debug(fmt, ...)                                                   \
   do {                                                                         \
     if (mdbx_debug_enabled(MDBX_DBG_TRACE))                                    \
@@ -738,8 +771,6 @@ void mdbx_panic(const char *fmt, ...)
 /* assert(3) variant in transaction context */
 #define mdbx_tassert(txn, expr) mdbx_assert((txn)->mt_env, expr)
 
-/*----------------------------------------------------------------------------*/
-
 static __inline void mdbx_jitter4testing(bool tiny) {
 #ifndef NDEBUG
   mdbx_osal_jitter(tiny);
@@ -747,6 +778,9 @@ static __inline void mdbx_jitter4testing(bool tiny) {
   (void)tiny;
 #endif
 }
+
+/*----------------------------------------------------------------------------*/
+/* Internal prototypes and inlines */
 
 int mdbx_reader_check0(MDBX_env *env, int rlocked, int *dead);
 
@@ -782,3 +816,256 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 
 #define MDBX_IS_ERROR(rc)                                                      \
   ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
+
+/* Internal error codes, not exposed outside libmdbx */
+#define MDBX_NO_ROOT (MDBX_LAST_ERRCODE + 10)
+
+/* Debuging output value of a cursor DBI: Negative in a sub-cursor. */
+#define DDBI(mc)                                                               \
+  (((mc)->mc_flags & C_SUB) ? -(int)(mc)->mc_dbi : (int)(mc)->mc_dbi)
+
+/* Key size which fits in a DKBUF. */
+#define DKBUF_MAXKEYSIZE 511 /* FIXME */
+
+#if MDBX_DEBUG
+#define DKBUF char _kbuf[DKBUF_MAXKEYSIZE * 4 + 2]
+#define DKEY(x) mdbx_dkey(x, _kbuf, DKBUF_MAXKEYSIZE * 2 + 1)
+#define DVAL(x)                                                                \
+  mdbx_dkey(x, _kbuf + DKBUF_MAXKEYSIZE * 2 + 1, DKBUF_MAXKEYSIZE * 2 + 1)
+#else
+#define DKBUF ((void)(0))
+#define DKEY(x) ("-")
+#define DVAL(x) ("-")
+#endif
+
+/* An invalid page number.
+ * Mainly used to denote an empty tree. */
+#define P_INVALID (~(pgno_t)0)
+
+/* Test if the flags f are set in a flag word w. */
+#define F_ISSET(w, f) (((w) & (f)) == (f))
+
+/* Round n up to an even number. */
+#define EVEN(n) (((n) + 1U) & -2) /* sign-extending -2 to match n+1U */
+
+/* Default size of memory map.
+ * This is certainly too small for any actual applications. Apps should
+ * always set  the size explicitly using mdbx_env_set_mapsize(). */
+#define DEFAULT_MAPSIZE 1048576
+
+/* Number of slots in the reader table.
+ * This value was chosen somewhat arbitrarily. The 61 is a prime number,
+ * and such readers plus a couple mutexes fit into single 4KB page.
+ * Applications should set the table size using mdbx_env_set_maxreaders(). */
+#define DEFAULT_READERS 61
+
+/* Address of first usable data byte in a page, after the header */
+#define PAGEDATA(p) ((void *)((char *)(p) + PAGEHDRSZ))
+
+/* ITS#7713, change PAGEBASE to handle 65536 byte pages */
+#define PAGEBASE ((MDBX_DEVEL) ? PAGEHDRSZ : 0)
+
+/* Number of nodes on a page */
+#define NUMKEYS(p) (((p)->mp_lower - (PAGEHDRSZ - PAGEBASE)) >> 1)
+
+/* The amount of space remaining in the page */
+#define SIZELEFT(p) (indx_t)((p)->mp_upper - (p)->mp_lower)
+
+/* The percentage of space used in the page, in tenths of a percent. */
+#define PAGEFILL(env, p)                                                       \
+  (1000L * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                       \
+   ((env)->me_psize - PAGEHDRSZ))
+/* The minimum page fill factor, in tenths of a percent.
+ * Pages emptier than this are candidates for merging. */
+#define FILL_THRESHOLD 250
+
+/* Test if a page is a leaf page */
+#define IS_LEAF(p) F_ISSET((p)->mp_flags, P_LEAF)
+/* Test if a page is a LEAF2 page */
+#define IS_LEAF2(p) F_ISSET((p)->mp_flags, P_LEAF2)
+/* Test if a page is a branch page */
+#define IS_BRANCH(p) F_ISSET((p)->mp_flags, P_BRANCH)
+/* Test if a page is an overflow page */
+#define IS_OVERFLOW(p) F_ISSET((p)->mp_flags, P_OVERFLOW)
+/* Test if a page is a sub page */
+#define IS_SUBP(p) F_ISSET((p)->mp_flags, P_SUBP)
+
+/* The number of overflow pages needed to store the given size. */
+#define OVPAGES(size, psize) ((PAGEHDRSZ - 1 + (size)) / (psize) + 1)
+
+/* Link in MDBX_txn.mt_loose_pages list.
+ * Kept outside the page header, which is needed when reusing the page. */
+#define NEXT_LOOSE_PAGE(p) (*(MDBX_page **)((p) + 2))
+
+/* Header for a single key/data pair within a page.
+ * Used in pages of type P_BRANCH and P_LEAF without P_LEAF2.
+ * We guarantee 2-byte alignment for 'MDBX_node's.
+ *
+ * mn_lo and mn_hi are used for data size on leaf nodes, and for child
+ * pgno on branch nodes.  On 64 bit platforms, mn_flags is also used
+ * for pgno.  (Branch nodes have no flags).  Lo and hi are in host byte
+ * order in case some accesses can be optimized to 32-bit word access.
+ *
+ * Leaf node flags describe node contents.  F_BIGDATA says the node's
+ * data part is the page number of an overflow page with actual data.
+ * F_DUPDATA and F_SUBDATA can be combined giving duplicate data in
+ * a sub-page/sub-database, and named databases (just F_SUBDATA). */
+typedef struct MDBX_node {
+  union {
+    struct {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+      union {
+        struct {
+          uint16_t mn_lo, mn_hi; /* part of data size or pgno */
+        };
+        uint32_t mn_dsize;
+      };
+      uint16_t mn_flags; /* see mdbx_node */
+      uint16_t mn_ksize; /* key size */
+#else
+      uint16_t mn_ksize; /* key size */
+      uint16_t mn_flags; /* see mdbx_node */
+      union {
+        struct {
+          uint16_t mn_hi, mn_lo; /* part of data size or pgno */
+        };
+        uint32_t mn_dsize;
+      };
+#endif
+    };
+    pgno_t mn_ksize_and_pgno;
+  };
+
+/* mdbx_node Flags */
+#define F_BIGDATA 0x01 /* data put on overflow page */
+#define F_SUBDATA 0x02 /* data is a sub-database */
+#define F_DUPDATA 0x04 /* data has duplicates */
+
+/* valid flags for mdbx_node_add() */
+#define NODE_ADD_FLAGS (F_DUPDATA | F_SUBDATA | MDBX_RESERVE | MDBX_APPEND)
+  uint8_t mn_data[1]; /* key and data are appended here */
+} MDBX_node;
+
+/* Size of the node header, excluding dynamic data at the end */
+#define NODESIZE offsetof(MDBX_node, mn_data)
+
+/* Bit position of top word in page number, for shifting mn_flags */
+#define PGNO_TOPWORD ((pgno_t)-1 > 0xffffffffu ? 32 : 0)
+
+/* Size of a node in a branch page with a given key.
+ * This is just the node header plus the key, there is no data. */
+#define INDXSIZE(k) (NODESIZE + ((k) == NULL ? 0 : (k)->iov_len))
+
+/* Size of a node in a leaf page with a given key and data.
+ * This is node header plus key plus data size. */
+#define LEAFSIZE(k, d) (NODESIZE + (k)->iov_len + (d)->iov_len)
+
+/* Address of node i in page p */
+static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
+  assert(NUMKEYS(p) > (unsigned)(i));
+  return (MDBX_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEBASE);
+}
+
+/* Address of the key for the node */
+#define NODEKEY(node) (void *)((node)->mn_data)
+
+/* Address of the data for a node */
+#define NODEDATA(node) (void *)((char *)(node)->mn_data + (node)->mn_ksize)
+
+/* Get the page number pointed to by a branch node */
+static __inline pgno_t NODEPGNO(const MDBX_node *node) {
+  pgno_t pgno;
+  if (UNALIGNED_OK) {
+    pgno = node->mn_ksize_and_pgno;
+    if (sizeof(pgno_t) > 4)
+      pgno &= UINT64_C(0xffffFFFFffff);
+  } else {
+    pgno = node->mn_lo | ((pgno_t)node->mn_lo << 16);
+    if (sizeof(pgno_t) > 4)
+      pgno |= ((uint64_t)node->mn_flags) << 32;
+  }
+  return pgno;
+}
+
+/* Set the page number in a branch node */
+static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
+  assert(pgno <= (pgno_t)UINT64_C(0xffffFFFFffff));
+
+  if (UNALIGNED_OK) {
+    if (sizeof(pgno_t) > 4)
+      pgno |= ((uint64_t)node->mn_ksize) << 48;
+    node->mn_ksize_and_pgno = pgno;
+  } else {
+    node->mn_lo = (uint16_t)pgno;
+    node->mn_hi = (uint16_t)(pgno >> 16);
+    if (sizeof(pgno_t) > 4)
+      node->mn_flags = (uint16_t)((uint64_t)pgno >> 32);
+  }
+}
+
+/* Get the size of the data in a leaf node */
+static __inline size_t NODEDSZ(const MDBX_node *node) {
+  size_t size;
+  if (UNALIGNED_OK) {
+    size = node->mn_dsize;
+  } else {
+    size = node->mn_lo | ((size_t)node->mn_hi << 16);
+  }
+  return size;
+}
+
+/* Set the size of the data for a leaf node */
+static __inline void SETDSZ(MDBX_node *node, unsigned size) {
+  if (UNALIGNED_OK) {
+    node->mn_dsize = size;
+  } else {
+    node->mn_lo = (uint16_t)size;
+    node->mn_hi = (uint16_t)(size >> 16);
+  }
+}
+
+/* The size of a key in a node */
+#define NODEKSZ(node) ((node)->mn_ksize)
+
+/* The address of a key in a LEAF2 page.
+ * LEAF2 pages are used for MDBX_DUPFIXED sorted-duplicate sub-DBs.
+ * There are no node headers, keys are stored contiguously. */
+#define LEAF2KEY(p, i, ks) ((char *)(p) + PAGEHDRSZ + ((i) * (ks)))
+
+/* Set the node's key into keyptr, if requested. */
+#define MDBX_GET_KEY(node, keyptr)                                             \
+  do {                                                                         \
+    if ((keyptr) != NULL) {                                                    \
+      (keyptr)->iov_len = NODEKSZ(node);                                       \
+      (keyptr)->iov_base = NODEKEY(node);                                      \
+    }                                                                          \
+  } while (0)
+
+/* Set the node's key into key. */
+#define MDBX_GET_KEY2(node, key)                                               \
+  do {                                                                         \
+    key.iov_len = NODEKSZ(node);                                               \
+    key.iov_base = NODEKEY(node);                                              \
+  } while (0)
+
+#define MDBX_VALID 0x8000 /* DB handle is valid, for me_dbflags */
+#define PERSISTENT_FLAGS (0xffff & ~(MDBX_VALID))
+/* mdbx_dbi_open() flags */
+#define VALID_FLAGS                                                            \
+  (MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED |          \
+   MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_CREATE)
+
+/* max number of pages to commit in one writev() call */
+#define MDBX_COMMIT_PAGES 64
+#if defined(IOV_MAX) && IOV_MAX < MDBX_COMMIT_PAGES /* sysconf(_SC_IOV_MAX) */
+#undef MDBX_COMMIT_PAGES
+#define MDBX_COMMIT_PAGES IOV_MAX
+#endif
+
+/* Check txn and dbi arguments to a function */
+#define TXN_DBI_EXIST(txn, dbi, validity)                                      \
+  ((dbi) < (txn)->mt_numdbs && ((txn)->mt_dbflags[dbi] & (validity)))
+
+/* Check for misused dbi handles */
+#define TXN_DBI_CHANGED(txn, dbi)                                              \
+  ((txn)->mt_dbiseqs[dbi] != (txn)->mt_env->me_dbiseqs[dbi])

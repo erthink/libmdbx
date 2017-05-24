@@ -290,8 +290,6 @@
 #   define __noop(...) __do_noop(0, __VA_ARGS__)
 #endif /* __noop */
 
-/*----------------------------------------------------------------------------*/
-
 /* Wrapper around __func__, which is a C99 feature */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
 #   define mdbx_func_ __func__
@@ -301,8 +299,74 @@
 #   define mdbx_func_ "<mdbx_unknown>"
 #endif
 
-/* *INDENT-ON* */
-/* clang-format on */
+/*----------------------------------------------------------------------------*/
+
+#if defined(USE_VALGRIND)
+#   include <valgrind/memcheck.h>
+#   ifndef VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE
+        /* LY: available since Valgrind 3.10 */
+#       define VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
+#       define VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
+#   endif
+#else
+#   define VALGRIND_CREATE_MEMPOOL(h,r,z)
+#   define VALGRIND_DESTROY_MEMPOOL(h)
+#   define VALGRIND_MEMPOOL_TRIM(h,a,s)
+#   define VALGRIND_MEMPOOL_ALLOC(h,a,s)
+#   define VALGRIND_MEMPOOL_FREE(h,a)
+#   define VALGRIND_MEMPOOL_CHANGE(h,a,b,s)
+#   define VALGRIND_MAKE_MEM_NOACCESS(a,s)
+#   define VALGRIND_MAKE_MEM_DEFINED(a,s)
+#   define VALGRIND_MAKE_MEM_UNDEFINED(a,s)
+#   define VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
+#   define VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
+#   define VALGRIND_CHECK_MEM_IS_ADDRESSABLE(a,s) (0)
+#   define VALGRIND_CHECK_MEM_IS_DEFINED(a,s) (0)
+#endif /* USE_VALGRIND */
+
+#ifdef __SANITIZE_ADDRESS__
+#   include <sanitizer/asan_interface.h>
+#else
+#   define ASAN_POISON_MEMORY_REGION(addr, size) \
+        ((void)(addr), (void)(size))
+#   define ASAN_UNPOISON_MEMORY_REGION(addr, size) \
+        ((void)(addr), (void)(size))
+#endif /* __SANITIZE_ADDRESS__ */
+
+/*----------------------------------------------------------------------------*/
+
+#ifndef ARRAY_LENGTH
+#   ifdef __cplusplus
+        template <typename T, size_t N>
+        char (&__ArraySizeHelper(T (&array)[N]))[N];
+#       define ARRAY_LENGTH(array) (sizeof(::__ArraySizeHelper(array)))
+#   else
+#       define ARRAY_LENGTH(array) (sizeof(array) / sizeof(array[0]))
+#   endif
+#endif /* ARRAY_LENGTH */
+
+#ifndef ARRAY_END
+#   define ARRAY_END(array) (&array[ARRAY_LENGTH(array)])
+#endif /* ARRAY_END */
+
+#ifndef STRINGIFY
+#   define STRINGIFY_HELPER(x) #x
+#   define STRINGIFY(x) STRINGIFY_HELPER(x)
+#endif /* STRINGIFY */
+
+#ifndef offsetof
+#   define offsetof(type, member)  __builtin_offsetof(type, member)
+#endif /* offsetof */
+
+#ifndef container_of
+#   define container_of(ptr, type, member) \
+        ((type *)((char *)(ptr) - offsetof(type, member)))
+#endif /* container_of */
 
 #define MDBX_TETRAD(a, b, c, d)                                                \
   ((uint32_t)(a) << 24 | (uint32_t)(b) << 16 | (uint32_t)(c) << 8 | (d))
+
+#define FIXME "FIXME: " __FILE__ ", " STRINGIFY(__LINE__)
+
+/* *INDENT-ON* */
+/* clang-format on */

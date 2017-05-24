@@ -16,16 +16,27 @@
 
 #pragma once
 
+/*----------------------------------------------------------------------------*/
+/* Microsoft compiler generates a lot of warning for self includes... */
+
 #ifdef _MSC_VER
 #pragma warning(push, 1)
-#pragma warning(disable : 4530) /* C++ exception handler used, but             \
-                                    unwind semantics are not enabled. Specify  \
-                                    /EHsc */
-#pragma warning(disable : 4577) /* 'noexcept' used with no exception           \
-                                    handling mode specified; termination on    \
-                                    exception is not guaranteed. Specify /EHsc \
-                                    */
-#endif                          /* _MSC_VER (warnings) */
+#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
+                                 * semantics are not enabled. Specify /EHsc */
+#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
+                                 * mode specified; termination on exception is \
+                                 * not guaranteed. Specify /EHsc */
+#if !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif /* _MSC_VER (warnings) */
+
+/*----------------------------------------------------------------------------*/
+/* C99 includes */
+
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
 
 #include <inttypes.h>
 #include <stddef.h>
@@ -51,6 +62,9 @@
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 0
 #endif
+
+/*----------------------------------------------------------------------------*/
+/* Systems includes */
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -103,7 +117,20 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #include <sys/file.h>
 #endif
 
+#if defined(__i386) || defined(__x86_64) || defined(_M_IX86)
+#define UNALIGNED_OK 1 /* TODO */
+#endif
+#ifndef UNALIGNED_OK
+#define UNALIGNED_OK 0
+#endif /* UNALIGNED_OK */
+
+#if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
+#error                                                                         \
+    "Sanity checking failed: Two's complement, reasonably sized integer types"
+#endif
+
 /*----------------------------------------------------------------------------*/
+/* Compiler's includes for builtins/intrinsics */
 
 #ifdef _MSC_VER
 
@@ -162,10 +189,6 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #include <resolv.h> /* defines BYTE_ORDER on HPUX and Solaris */
 #endif
 
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
-
 #if defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && defined(__BIG_ENDIAN)
 #define __ORDER_LITTLE_ENDIAN__ __LITTLE_ENDIAN
 #define __ORDER_BIG_ENDIAN__ __BIG_ENDIAN
@@ -197,36 +220,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif
 
 /*----------------------------------------------------------------------------*/
-/* Cache coherence */
-
-#if defined(__i386__) || defined(__x86_64__) || defined(_M_AMD64) ||           \
-    defined(_M_IX86) || defined(__i386) || defined(__amd64) ||                 \
-    defined(i386) || defined(__x86_64) || defined(_AMD64_) || defined(_M_X64)
-#define MDBX_CACHE_IS_COHERENT 1
-#elif defined(__hppa) || defined(__hppa__)
-#define MDBX_CACHE_IS_COHERENT 1
-#endif
-
-#ifndef MDBX_CACHE_IS_COHERENT
-#define MDBX_CACHE_IS_COHERENT 0
-#endif
-
-#ifndef MDBX_CACHELINE_SIZE
-#if defined(SYSTEM_CACHE_ALIGNMENT_SIZE)
-#define MDBX_CACHELINE_SIZE SYSTEM_CACHE_ALIGNMENT_SIZE
-#elif defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
-#define MDBX_CACHELINE_SIZE 128
-#else
-#define MDBX_CACHELINE_SIZE 64
-#endif
-#endif /* MDBX_CACHELINE_SIZE */
-
-#ifndef __cache_aligned
-#define __cache_aligned __aligned(MDBX_CACHELINE_SIZE)
-#endif
-
-/*----------------------------------------------------------------------------*/
-/* Memory/Compiler barriers */
+/* Memory/Compiler barriers, cache coherence */
 
 static __inline void mdbx_compiler_barrier(void) {
 #if defined(__clang__) || defined(__GNUC__)
@@ -286,6 +280,35 @@ static __inline void mdbx_memory_barrier(void) {
 #endif
 }
 
+/*----------------------------------------------------------------------------*/
+/* Cache coherence and invalidation */
+
+#if defined(__i386__) || defined(__x86_64__) || defined(_M_AMD64) ||           \
+    defined(_M_IX86) || defined(__i386) || defined(__amd64) ||                 \
+    defined(i386) || defined(__x86_64) || defined(_AMD64_) || defined(_M_X64)
+#define MDBX_CACHE_IS_COHERENT 1
+#elif defined(__hppa) || defined(__hppa__)
+#define MDBX_CACHE_IS_COHERENT 1
+#endif
+
+#ifndef MDBX_CACHE_IS_COHERENT
+#define MDBX_CACHE_IS_COHERENT 0
+#endif
+
+#ifndef MDBX_CACHELINE_SIZE
+#if defined(SYSTEM_CACHE_ALIGNMENT_SIZE)
+#define MDBX_CACHELINE_SIZE SYSTEM_CACHE_ALIGNMENT_SIZE
+#elif defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
+#define MDBX_CACHELINE_SIZE 128
+#else
+#define MDBX_CACHELINE_SIZE 64
+#endif
+#endif /* MDBX_CACHELINE_SIZE */
+
+#ifndef __cache_aligned
+#define __cache_aligned __aligned(MDBX_CACHELINE_SIZE)
+#endif
+
 #if MDBX_CACHE_IS_COHERENT
 #define mdbx_coherent_barrier() mdbx_compiler_barrier()
 #else
@@ -313,6 +336,7 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 }
 
 /*----------------------------------------------------------------------------*/
+/* libc compatibility stuff */
 
 #ifndef mdbx_assert_fail
 void mdbx_assert_fail(MDBX_env *env, const char *msg, const char *func,
@@ -338,6 +362,7 @@ int mdbx_asprintf(char **strp, const char *fmt, ...);
 #endif /* _MSC_VER */
 
 /*----------------------------------------------------------------------------*/
+/* OS abstraction layer stuff */
 
 /* max bytes to write in one call */
 #define MAX_WRITE UINT32_C(0x3fff0000)
@@ -444,6 +469,7 @@ static __inline mdbx_pid_t mdbx_getpid(void) {
 void mdbx_osal_jitter(bool tiny);
 
 /*----------------------------------------------------------------------------*/
+/* lck stuff */
 
 #if defined(_WIN32) || defined(_WIN64)
 #undef MDBX_OSAL_LOCK
@@ -477,6 +503,7 @@ int mdbx_rpid_clear(MDBX_env *env);
 int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 
 /*----------------------------------------------------------------------------*/
+/* Atomics */
 
 #if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__) &&          \
     (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
@@ -485,7 +512,6 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 #elif defined(__GNUC__) || defined(__clang__)
 /* LY: nothing required */
 #elif defined(_MSC_VER)
-#pragma warning(push)
 #pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
 #pragma warning(disable : 4133) /* 'function': incompatible types - from       \
                                    'size_t' to 'LONGLONG' */
@@ -557,6 +583,8 @@ static __inline bool mdbx_atomic_compare_and_swap(volatile size_t *p, size_t c,
     ;
 #endif
 }
+
+/*----------------------------------------------------------------------------*/
 
 #ifdef _MSC_VER
 #pragma warning(pop)

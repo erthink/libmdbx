@@ -146,14 +146,13 @@
     <ClCompile Include="src\lck-windows.c" />
     <ClCompile Include="src\mdbx.c" />
     <ClCompile Include="src\osal.c" />
+    <ClCompile Include="src\version.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="mdbx.h" />
     <ClInclude Include="src\bits.h" />
     <ClInclude Include="src\defs.h" />
-    <ClInclude Include="src\midl.h" />
     <ClInclude Include="src\osal.h" />
-    <ClInclude Include="src\reopen.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

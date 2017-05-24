@@ -164,6 +164,7 @@
     <ClInclude Include="config.h" />
     <ClInclude Include="keygen.h" />
     <ClInclude Include="log.h" />
+    <ClInclude Include="osal.h" />
     <ClInclude Include="test.h" />
     <ClInclude Include="utils.h" />
   </ItemGroup>

@@ -3,13 +3,11 @@ LICENSE
 Makefile
 README.md
 mdbx.h
-mdbx_osal.h
 src/bits.h
 src/defs.h
 src/lck-posix.c
 src/lck-windows.c
 src/mdbx.c
-src/midl.h
 src/osal.c
 src/osal.h
 src/tools/mdbx_chk.c
