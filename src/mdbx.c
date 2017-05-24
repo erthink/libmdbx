@@ -651,12 +651,13 @@ static const char *__mdbx_strerr(int errnum) {
 const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-    if (!buflen)
+    if (!buflen || buflen > INT_MAX)
       return NULL;
 #ifdef _MSC_VER
     size_t size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-        errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, buflen, NULL);
+        errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
+        NULL);
     return size ? buf : NULL;
 #elif defined(_GNU_SOURCE)
     /* GNU-specific */
@@ -1085,7 +1086,7 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
  * [in] all     No shortcuts. Needed except after a full mdbx_page_flush().
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, int all) {
+static int mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, bool all) {
   const unsigned Mask = P_SUBP | P_DIRTY | P_LOOSE | P_KEEP;
   MDBX_txn *txn = mc->mc_txn;
   MDBX_cursor *m3, *m0 = mc;
@@ -1142,7 +1143,7 @@ mark_done:
   return rc;
 }
 
-static int mdbx_page_flush(MDBX_txn *txn, int keep);
+static int mdbx_page_flush(MDBX_txn *txn, size_t keep);
 
 /* Spill pages from the dirty list back to disk.
  * This is intended to prevent running into MDBX_TXN_FULL situations,
@@ -1180,16 +1181,13 @@ static int mdbx_page_flush(MDBX_txn *txn, int keep);
  * Returns 0 on success, non-zero on failure. */
 static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   MDBX_txn *txn = m0->mc_txn;
-  MDBX_page *dp;
   MDBX_ID2L dl = txn->mt_rw_dirtylist;
-  unsigned i, j, need;
-  int rc;
 
   if (m0->mc_flags & C_SUB)
     return MDBX_SUCCESS;
 
   /* Estimate how much space this op will take */
-  i = m0->mc_db->md_depth;
+  size_t i = m0->mc_db->md_depth;
   /* Named DBs also dirty the main DB */
   if (m0->mc_dbi >= CORE_DBS)
     i += txn->mt_dbs[MAIN_DBI].md_depth;
@@ -1197,7 +1195,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   if (key)
     i += (LEAFSIZE(key, data) + txn->mt_env->me_psize) / txn->mt_env->me_psize;
   i += i; /* double it for good measure */
-  need = i;
+  size_t need = i;
 
   if (txn->mt_dirtyroom > i)
     return MDBX_SUCCESS;
@@ -1209,8 +1207,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   } else {
     /* purge deleted slots */
     MDBX_IDL sl = txn->mt_spill_pages;
-    unsigned num = sl[0];
-    j = 0;
+    unsigned num = sl[0], j = 0;
     for (i = 1; i <= num; i++) {
       if (!(sl[i] & 1))
         sl[++j] = sl[i];
@@ -1219,7 +1216,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   }
 
   /* Preserve pages which may soon be dirtied again */
-  rc = mdbx_pages_xkeep(m0, P_DIRTY, 1);
+  int rc = mdbx_pages_xkeep(m0, P_DIRTY, 1);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
@@ -1236,7 +1233,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   /* flush from the tail forward, this saves a lot of shifting later on. */
   for (i = dl[0].mid; i && need; i--) {
     pgno_t pn = dl[i].mid << 1;
-    dp = dl[i].mptr;
+    MDBX_page *dp = dl[i].mptr;
     if (dp->mp_flags & (P_LOOSE | P_KEEP))
       continue;
     /* Can't spill twice,
@@ -1245,7 +1242,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
       MDBX_txn *tx2;
       for (tx2 = txn->mt_parent; tx2; tx2 = tx2->mt_parent) {
         if (tx2->mt_spill_pages) {
-          j = mdbx_midl_search(tx2->mt_spill_pages, pn);
+          unsigned j = mdbx_midl_search(tx2->mt_spill_pages, pn);
           if (j <= tx2->mt_spill_pages[0] && tx2->mt_spill_pages[j] == pn) {
             dp->mp_flags |= P_KEEP;
             break;
@@ -1268,7 +1265,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
     goto bailout;
 
   /* Reset any dirty pages we kept that page_flush didn't see */
-  rc = mdbx_pages_xkeep(m0, P_DIRTY | P_KEEP, i);
+  rc = mdbx_pages_xkeep(m0, P_DIRTY | P_KEEP, i != 0);
 
 bailout:
   txn->mt_flags |= rc ? MDBX_TXN_ERROR : MDBX_TXN_SPILLS;
@@ -2839,7 +2836,7 @@ bailout:
  * [in] txn   the transaction that's being committed
  * [in] keep  number of initial pages in dirtylist to keep dirty.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_flush(MDBX_txn *txn, int keep) {
+static int mdbx_page_flush(MDBX_txn *txn, size_t keep) {
   MDBX_env *env = txn->mt_env;
   MDBX_ID2L dl = txn->mt_rw_dirtylist;
   unsigned psize = env->me_psize, j;
