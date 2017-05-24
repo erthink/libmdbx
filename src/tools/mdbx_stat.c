@@ -125,10 +125,11 @@ int main(int argc, char *argv[]) {
     printf("  Map size: %" PRIu64 "\n", mei.me_mapsize);
     printf("  Page size: %u\n", mst.ms_psize);
     printf("  Max pages: %" PRIu64 "\n", mei.me_mapsize / mst.ms_psize);
-    printf("  Number of pages used: %" PRIu64 "\n", mei.me_last_pgno + 1);
-    printf("  Last transaction ID: %" PRIu64 "\n", mei.me_last_txnid);
+    printf("  Number of pages used: %" PRIu64 "\n", mei.me_recent_pgno + 1);
+    printf("  Last transaction ID: %" PRIu64 "\n", mei.me_recent_txnid);
     printf("  Tail transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
-           mei.me_tail_txnid, mei.me_tail_txnid - mei.me_last_txnid);
+           mei.me_latter_reader_txnid,
+           mei.me_latter_reader_txnid - mei.me_recent_txnid);
     printf("  Max readers: %u\n", mei.me_maxreaders);
     printf("  Number of readers used: %u\n", mei.me_numreaders);
   } else {
@@ -181,7 +182,7 @@ int main(int argc, char *argv[]) {
     while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
       iptr = data.iov_base;
       pages += *iptr;
-      if (envinfo && mei.me_tail_txnid > *(size_t *)key.iov_base)
+      if (envinfo && mei.me_latter_reader_txnid > *(size_t *)key.iov_base)
         reclaimable += *iptr;
       if (freinfo > 1) {
         char *bad = "";
@@ -220,14 +221,14 @@ int main(int argc, char *argv[]) {
       printf("Page Allocation Info\n");
       printf("  Max pages: %9zu 100%%\n", value);
 
-      value = mei.me_last_pgno + 1;
+      value = mei.me_recent_pgno + 1;
       printf("  Number of pages used: %" PRIuPTR " %.1f%%\n", value,
              value / percent);
 
-      value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno + 1);
+      value = mei.me_mapsize / mst.ms_psize - (mei.me_recent_pgno + 1);
       printf("  Remained: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
-      value = mei.me_last_pgno + 1 - pages;
+      value = mei.me_recent_pgno + 1 - pages;
       printf("  Used now: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
       value = pages;
@@ -239,8 +240,8 @@ int main(int argc, char *argv[]) {
       value = reclaimable;
       printf("  Reclaimable: %" PRIuPTR " %.1f%%\n", value, value / percent);
 
-      value =
-          mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno + 1) + reclaimable;
+      value = mei.me_mapsize / mst.ms_psize - (mei.me_recent_pgno + 1) +
+              reclaimable;
       printf("  Available: %" PRIuPTR " %.1f%%\n", value, value / percent);
     } else
       printf("  Free pages: %" PRIuPTR "\n", pages);

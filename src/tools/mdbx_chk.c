@@ -323,7 +323,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
   if (key->iov_len != sizeof(txnid_t))
     problem_add("entry", record_number, "wrong txn-id size",
                 "key-size %" PRIiPTR "", key->iov_len);
-  else if (txnid < 1 || txnid > envinfo.me_last_txnid)
+  else if (txnid < 1 || txnid > envinfo.me_recent_txnid)
     problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN "", txnid);
 
   if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
@@ -340,14 +340,14 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                   data->iov_len);
     else {
       freedb_pages += number;
-      if (envinfo.me_tail_txnid > txnid)
+      if (envinfo.me_latter_reader_txnid > txnid)
         reclaimable_pages += number;
       for (i = number, prev = 1; --i >= 0;) {
         pg = iptr[i];
-        if (pg < NUM_METAS || pg > envinfo.me_last_pgno)
+        if (pg < NUM_METAS || pg > envinfo.me_recent_pgno)
           problem_add("entry", record_number, "wrong idl entry",
                       "%u < %" PRIiPTR " < %" PRIiPTR "", NUM_METAS, pg,
-                      envinfo.me_last_pgno);
+                      envinfo.me_recent_pgno);
         else if (pg <= prev) {
           bad = " [bad sequence]";
           problem_add("entry", record_number, "bad sequence",
@@ -431,8 +431,7 @@ static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent) {
     }
   }
 
-  if (dbi >= 2 /* CORE_DBS */ && name && only_subdb &&
-      strcmp(only_subdb, name)) {
+  if (dbi >= CORE_DBS && name && only_subdb && strcmp(only_subdb, name)) {
     if (verbose) {
       print("Skip processing '%s'...\n", name);
       fflush(NULL);
@@ -592,19 +591,132 @@ static void usage(char *prog) {
 
 const char *meta_synctype(uint64_t sign) {
   switch (sign) {
-  case 0:
+  case MDBX_DATASIGN_NONE:
     return "no-sync/legacy";
-  case 1:
+  case MDBX_DATASIGN_WEAK:
     return "weak";
   default:
     return "steady";
   }
 }
 
-int meta_lt(txnid_t txn1, uint64_t sign1, txnid_t txn2, uint64_t sign2) {
-  return (SIGN_IS_STEADY(sign1) == SIGN_IS_STEADY(sign2))
-             ? txn1 < txn2
-             : txn2 && SIGN_IS_STEADY(sign2);
+static __inline bool meta_ot(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
+                             uint64_t sign_b, const bool roolback2steady) {
+  if (txn_a == txn_b)
+    return SIGN_IS_STEADY(sign_b);
+
+  if (roolback2steady && SIGN_IS_STEADY(sign_a) != SIGN_IS_STEADY(sign_b))
+    return SIGN_IS_STEADY(sign_b);
+
+  return txn_a < txn_b;
+}
+
+static __inline bool meta_eq(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
+                             uint64_t sign_b) {
+  if (txn_a != txn_b)
+    return false;
+
+  if (SIGN_IS_STEADY(sign_a) != SIGN_IS_STEADY(sign_b))
+    return false;
+
+  return true;
+}
+
+static __inline int meta_recent(const bool roolback2steady) {
+
+  if (meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
+              envinfo.me_meta1_txnid, envinfo.me_meta1_sign, roolback2steady))
+    return meta_ot(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
+                   envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
+                   roolback2steady)
+               ? 1
+               : 2;
+
+  return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
+                 envinfo.me_meta2_txnid, envinfo.me_meta2_sign, roolback2steady)
+             ? 2
+             : 0;
+}
+
+static __inline int meta_ancient(const bool roolback2steady) {
+
+  if (meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
+              envinfo.me_meta1_txnid, envinfo.me_meta1_sign, roolback2steady))
+    return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
+                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
+                   roolback2steady)
+               ? 0
+               : 2;
+  return meta_ot(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
+                 envinfo.me_meta1_txnid, envinfo.me_meta1_sign, roolback2steady)
+             ? 2
+             : 1;
+}
+
+static int meta_steady_head(void) { return meta_recent(true); }
+
+static int meta_weak_head(void) { return meta_recent(false); }
+
+static int meta_tail(void) { return meta_ancient(true); }
+
+void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
+  print(" - meta-%d: %s %" PRIu64, num, meta_synctype(sign), txnid);
+  bool stay = true;
+
+  if (num == meta_steady_head() && num == meta_weak_head()) {
+    print(", head");
+    stay = false;
+  } else if (num == meta_steady_head()) {
+    print(", head-steady");
+    stay = false;
+  } else if (num == meta_weak_head()) {
+    print(", head-weak");
+    stay = false;
+  }
+  if (num == meta_tail()) {
+    print(", tail");
+    stay = false;
+  }
+  if (stay)
+    print(", stay");
+
+  if (txnid > envinfo.me_recent_txnid)
+    print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
+          txnid - envinfo.me_recent_txnid, txnid, envinfo.me_recent_txnid);
+  print("\n");
+}
+
+static int check_meta_head(bool steady) {
+  switch (meta_recent(steady)) {
+  default:
+    assert(false);
+    error(" - unexpected internal error (%s)\n",
+          steady ? "meta_steady_head" : "meta_weak_head");
+  case 0:
+    if (envinfo.me_meta0_txnid != envinfo.me_recent_txnid) {
+      print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
+            ")\n",
+            0, envinfo.me_meta0_txnid, envinfo.me_recent_txnid);
+      return 1;
+    }
+    break;
+  case 1:
+    if (envinfo.me_meta1_txnid != envinfo.me_recent_txnid) {
+      print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
+            ")\n",
+            1, envinfo.me_meta1_txnid, envinfo.me_recent_txnid);
+      return 1;
+    }
+    break;
+  case 2:
+    if (envinfo.me_meta2_txnid != envinfo.me_recent_txnid) {
+      print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
+            ")\n",
+            2, envinfo.me_meta2_txnid, envinfo.me_recent_txnid);
+      return 1;
+    }
+  }
+  return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -739,7 +851,7 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  lastpgno = envinfo.me_last_pgno + 1;
+  lastpgno = envinfo.me_recent_pgno + 1;
   errno = 0;
 
   if (verbose) {
@@ -754,71 +866,45 @@ int main(int argc, char *argv[]) {
       print(" - mapaddr %p\n", envinfo.me_mapaddr);
     print(" - pagesize %u, max keysize %" PRIuPTR ", max readers %u\n",
           envstat.ms_psize, maxkeysize, envinfo.me_maxreaders);
-    print(" - transactions: last %" PRIu64 ", bottom %" PRIu64
-          ", lag reading %" PRIi64 "\n",
-          envinfo.me_last_txnid, envinfo.me_tail_txnid,
-          envinfo.me_last_txnid - envinfo.me_tail_txnid);
+    print(" - transactions: recent %" PRIu64 ", latter reader %" PRIu64
+          ", lag %" PRIi64 "\n",
+          envinfo.me_recent_txnid, envinfo.me_latter_reader_txnid,
+          envinfo.me_recent_txnid - envinfo.me_latter_reader_txnid);
 
-    print(" - meta-1: %s %" PRIu64 ", %s", meta_synctype(envinfo.me_meta1_sign),
-          envinfo.me_meta1_txnid,
-          meta_lt(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
-                  envinfo.me_meta2_txnid, envinfo.me_meta2_sign)
-              ? "tail"
-              : "head");
-    if (envinfo.me_meta1_txnid > envinfo.me_last_txnid)
-      print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
-            envinfo.me_meta1_txnid - envinfo.me_last_txnid,
-            envinfo.me_meta1_txnid, envinfo.me_last_txnid);
-    print("\n");
+    verbose_meta(0, envinfo.me_meta0_txnid, envinfo.me_meta0_sign);
+    verbose_meta(1, envinfo.me_meta1_txnid, envinfo.me_meta1_sign);
+    verbose_meta(2, envinfo.me_meta2_txnid, envinfo.me_meta2_sign);
+  }
 
-    print(" - meta-2: %s %" PRIu64 ", %s", meta_synctype(envinfo.me_meta2_sign),
-          envinfo.me_meta2_txnid,
-          meta_lt(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
-                  envinfo.me_meta1_txnid, envinfo.me_meta1_sign)
-              ? "tail"
-              : "head");
-    if (envinfo.me_meta2_txnid > envinfo.me_last_txnid)
-      print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
-            envinfo.me_meta2_txnid - envinfo.me_last_txnid,
-            envinfo.me_meta2_txnid, envinfo.me_last_txnid);
-    print("\n");
+  if (verbose)
+    print(" - performs check for meta-pages overlap\n");
+  if (meta_eq(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
+              envinfo.me_meta1_txnid, envinfo.me_meta1_sign)) {
+    print(" - meta-%d and meta-%d are clashed\n", 0, 1);
+    ++problems_meta;
+  }
+  if (meta_eq(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
+              envinfo.me_meta2_txnid, envinfo.me_meta2_sign)) {
+    print(" - meta-%d and meta-%d are clashed\n", 1, 2);
+    ++problems_meta;
+  }
+  if (meta_eq(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
+              envinfo.me_meta0_txnid, envinfo.me_meta0_sign)) {
+    print(" - meta-%d and meta-%d are clashed\n", 2, 0);
+    ++problems_meta;
   }
 
   if (exclusive > 1) {
     if (verbose)
-      print(" - perform full check last-txn-id with meta-pages\n");
-
-    if (!meta_lt(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
-                 envinfo.me_meta2_txnid, envinfo.me_meta2_sign) &&
-        envinfo.me_meta1_txnid != envinfo.me_last_txnid) {
-      print(" - meta-1 txn-id mismatch last-txn-id (%" PRIi64 " != %" PRIi64
-            ")\n",
-            envinfo.me_meta1_txnid, envinfo.me_last_txnid);
-      ++problems_meta;
-    }
-
-    if (!meta_lt(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
-                 envinfo.me_meta1_txnid, envinfo.me_meta1_sign) &&
-        envinfo.me_meta2_txnid != envinfo.me_last_txnid) {
-      print(" - meta-2 txn-id mismatch last-txn-id (%" PRIi64 " != %" PRIi64
-            ")\n",
-            envinfo.me_meta2_txnid, envinfo.me_last_txnid);
-      ++problems_meta;
-    }
+      print(" - performs full check recent-txn-id with meta-pages\n");
+    problems_meta += check_meta_head(true);
   } else if (locktxn) {
     if (verbose)
-      print(" - perform lite check last-txn-id with meta-pages (not a "
+      print(" - performs lite check recent-txn-id with meta-pages (not a "
             "monopolistic mode)\n");
-    uint64_t last = (envinfo.me_meta2_txnid > envinfo.me_meta1_txnid)
-                        ? envinfo.me_meta2_txnid
-                        : envinfo.me_meta1_txnid;
-    if (last != envinfo.me_last_txnid) {
-      print(" - last-meta mismatch last-txn-id (%" PRIi64 " != %" PRIi64 ")\n",
-            last, envinfo.me_last_txnid);
-      ++problems_meta;
-    }
+    problems_meta += check_meta_head(false);
   } else if (verbose) {
-    print(" - skip check last-txn-id with meta-pages (monopolistic or "
+    print(" - skip check recent-txn-id with meta-pages (monopolistic or "
           "write-lock mode only)\n");
   }
 

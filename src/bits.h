@@ -95,6 +95,7 @@
  * pressure from other processes is high. So until OSs have
  * actual paging support for Huge pages, they're not viable. */
 #define MAX_PAGESIZE (PAGEBASE ? 0x10000 : 0x8000)
+#define MIN_PAGESIZE 1024
 
 /* The minimum number of keys required in a database page.
  * Setting this to a larger value will place a smaller bound on the
@@ -127,14 +128,14 @@
 #define CORE_DBS 2
 
 /* Number of meta pages - also hardcoded elsewhere */
-#define NUM_METAS 2
+#define NUM_METAS 3
 
 /* A page number in the database.
  *
  * MDBX uses 32 bit for page numbers. This limits database
  * size up to 2^44 bytes, in case of 4K pages. */
-typedef uint32_t pgno_t;
-#define PRIaPGNO PRIu32
+typedef uint64_t pgno_t;
+#define PRIaPGNO PRIu64 /* TODO */
 
 /* A transaction ID. */
 typedef uint64_t txnid_t;
@@ -253,18 +254,12 @@ typedef struct MDBX_meta {
 #define MDBX_DATASIGN_WEAK 1u
   volatile uint64_t mm_datasync_sign;
 
-#define MDBX_TEMPORARY_CRUTCH FIXME
-#ifndef MDBX_TEMPORARY_CRUTCH
 #define SIGN_IS_WEAK(sign) ((sign) == MDBX_DATASIGN_WEAK)
 #define SIGN_IS_STEADY(sign) ((sign) > MDBX_DATASIGN_WEAK)
-#else
-#define SIGN_IS_WEAK(sign) (false && (sign) == MDBX_DATASIGN_WEAK)
-#define SIGN_IS_STEADY(sign) (true || (sign) > MDBX_DATASIGN_WEAK)
-#endif /* FIXME: MDBX_TEMPORARY_CRUTCH */
 
 #define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
-  volatile mdbx_canary mm_canary;
+  mdbx_canary mm_canary;
 } MDBX_meta;
 
 /* Common header for all page types. The page type depends on mp_flags.
@@ -307,23 +302,17 @@ typedef struct MDBX_page {
     };
     uint32_t mp_pages; /* number of overflow pages */
   };
-  indx_t mp_ptrs[1]; /* dynamic size */
+
+  /* dynamic size */
+  union {
+    indx_t mp_ptrs[1];
+    MDBX_meta mp_meta;
+    uint8_t mp_data[1];
+  };
 } MDBX_page;
 
 /* Size of the page header, excluding dynamic data at the end */
-#define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_ptrs))
-
-/* Buffer for a stack-allocated meta page.
- * The members define size and alignment, and silence type
- * aliasing warnings.  They are not used directly; that could
- * mean incorrectly using several union members in parallel. */
-typedef union MDBX_metabuf {
-  MDBX_page mb_page;
-  struct {
-    char mm_pad[PAGEHDRSZ];
-    MDBX_meta mm_meta;
-  } mb_metabuf;
-} MDBX_metabuf;
+#define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_data))
 
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
@@ -795,22 +784,6 @@ static __inline void mdbx_jitter4testing(bool tiny) {
 /* Internal prototypes and inlines */
 
 int mdbx_reader_check0(MDBX_env *env, int rlocked, int *dead);
-
-#define METAPAGE_1(env) (&((MDBX_metabuf *)(env)->me_map)->mb_metabuf.mm_meta)
-
-#define METAPAGE_2(env)                                                        \
-  (&((MDBX_metabuf *)((env)->me_map + env->me_psize))->mb_metabuf.mm_meta)
-
-static __inline MDBX_meta *mdbx_meta_head(MDBX_env *env) {
-  mdbx_jitter4testing(true);
-  MDBX_meta *a = METAPAGE_1(env);
-  mdbx_jitter4testing(true);
-  MDBX_meta *b = METAPAGE_2(env);
-  mdbx_jitter4testing(true);
-
-  return (a->mm_txnid > b->mm_txnid) ? a : b;
-}
-
 void mdbx_rthc_dtor(void *rthc);
 void mdbx_rthc_lock(void);
 void mdbx_rthc_unlock(void);

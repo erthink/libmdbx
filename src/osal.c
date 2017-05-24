@@ -48,8 +48,8 @@ __extern_C __declspec(dllimport) void __cdecl _assert(char const *message,
 #endif /* _MSC_VER */
 
 #ifndef mdbx_assert_fail
-void __cold mdbx_assert_fail(MDBX_env *env, const char *msg, const char *func,
-                             int line) {
+void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
+                             const char *func, int line) {
 #if MDBX_DEBUG
   if (env && env->me_assert_func) {
     env->me_assert_func(env, msg, func, line);

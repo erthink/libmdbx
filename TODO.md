@@ -15,3 +15,4 @@
 - [ ] актуализация README.md
 - [ ] возможность хранения ключей внутри data (libfptu)
 - [ ] асинхронная фиксация (https://github.com/ReOpen/libmdbx/issues/5)
+- [ ] (пере)выделять память под IDL-списки с учетом реального кол-ва страниц, т.е. max(MDB_IDL_UM_MAX/MDB_IDL_UM_MAX, npages)

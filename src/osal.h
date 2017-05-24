@@ -338,7 +338,7 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 /* libc compatibility stuff */
 
 #ifndef mdbx_assert_fail
-void mdbx_assert_fail(MDBX_env *env, const char *msg, const char *func,
+void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
                       int line);
 #endif /* mdbx_assert_fail */
 

@@ -553,7 +553,7 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
 
 static int mdbx_read_header(MDBX_env *env, MDBX_meta *meta);
 static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
-                                MDBX_meta *pending);
+                                MDBX_meta *const pending);
 static void mdbx_env_close0(MDBX_env *env);
 
 static MDBX_node *mdbx_node_search(MDBX_cursor *mc, MDBX_val *key, int *exactp);
@@ -1272,7 +1272,7 @@ bailout:
   return rc;
 }
 
-static __inline uint64_t mdbx_meta_sign(MDBX_meta *meta) {
+static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
   uint64_t sign = MDBX_DATASIGN_NONE;
 #if 0 /* TODO */
   sign = hippeus_hash64(&meta->mm_mapsize,
@@ -1285,22 +1285,98 @@ static __inline uint64_t mdbx_meta_sign(MDBX_meta *meta) {
   return (sign > MDBX_DATASIGN_WEAK) ? sign : ~sign;
 }
 
-static __inline MDBX_meta *mdbx_env_meta_flipflop(const MDBX_env *env,
-                                                  MDBX_meta *meta) {
-  return (meta == METAPAGE_1(env)) ? METAPAGE_2(env) : METAPAGE_1(env);
+static __inline bool mdbx_meta_ot(const MDBX_meta *a, const MDBX_meta *b,
+                                  const bool roolback2steady) {
+  mdbx_jitter4testing(true);
+  if (a->mm_txnid == b->mm_txnid)
+    return META_IS_STEADY(b);
+
+  mdbx_jitter4testing(true);
+  if (roolback2steady && META_IS_STEADY(a) != META_IS_STEADY(b))
+    return META_IS_STEADY(b);
+
+  mdbx_jitter4testing(true);
+  return a->mm_txnid < b->mm_txnid;
 }
 
-static __inline int mdbx_meta_lt(const MDBX_meta *a, const MDBX_meta *b) {
-  if (META_IS_STEADY(a) == META_IS_STEADY(b))
-    return a->mm_txnid < b->mm_txnid;
-  return META_IS_STEADY(b);
+static __inline bool mdbx_meta_eq(const MDBX_meta *a, const MDBX_meta *b) {
+  mdbx_jitter4testing(true);
+  if (a->mm_txnid != b->mm_txnid)
+    return false;
+
+  mdbx_jitter4testing(true);
+  if (META_IS_STEADY(a) != META_IS_STEADY(b))
+    return false;
+
+  mdbx_jitter4testing(true);
+  return true;
+}
+
+#define METAPAGE(env, n)                                                       \
+  (&((MDBX_page *)((env)->me_map + env->me_psize * (n)))->mp_meta)
+
+static int mdbx_meta_eq_mask(const MDBX_env *env) {
+  MDBX_meta *m0 = METAPAGE(env, 0);
+  MDBX_meta *m1 = METAPAGE(env, 1);
+  MDBX_meta *m2 = METAPAGE(env, 2);
+
+  int rc = mdbx_meta_eq(m0, m1) ? 1 : 0;
+  if (mdbx_meta_eq(m1, m2))
+    rc += 2;
+  if (mdbx_meta_eq(m2, m0))
+    rc += 4;
+  return rc;
+}
+
+static __inline MDBX_meta *mdbx_meta_recent(const MDBX_env *env, MDBX_meta *a,
+                                            MDBX_meta *b,
+                                            const bool roolback2steady) {
+  const bool a_older_that_b = mdbx_meta_ot(a, b, roolback2steady);
+  mdbx_assert(env, !mdbx_meta_eq(a, b));
+  return a_older_that_b ? b : a;
+}
+
+static __inline MDBX_meta *mdbx_meta_ancient(const MDBX_env *env, MDBX_meta *a,
+                                             MDBX_meta *b,
+                                             const bool roolback2steady) {
+  const bool a_older_that_b = mdbx_meta_ot(a, b, roolback2steady);
+  mdbx_assert(env, !mdbx_meta_eq(a, b));
+  return a_older_that_b ? a : b;
+}
+
+static __inline MDBX_meta *mdbx_meta_head(const MDBX_env *env,
+                                          const bool roolback2steady) {
+  MDBX_meta *m0 = METAPAGE(env, 0);
+  MDBX_meta *m1 = METAPAGE(env, 1);
+  MDBX_meta *m2 = METAPAGE(env, 2);
+
+  MDBX_meta *head = mdbx_meta_recent(env, m0, m1, roolback2steady);
+  head = mdbx_meta_recent(env, head, m2, roolback2steady);
+  return head;
+}
+
+static __hot MDBX_meta *mdbx_meta_steady_head(const MDBX_env *env) {
+  return mdbx_meta_head(env, true);
+}
+
+static __hot MDBX_meta *mdbx_meta_fluid_head(const MDBX_env *env) {
+  return mdbx_meta_head(env, false);
+}
+
+static const char *mdbx_durable_str(const MDBX_meta *const meta) {
+  if (META_IS_WEAK(meta))
+    return "Weak";
+  if (META_IS_STEADY(meta))
+    return (meta->mm_datasync_sign == mdbx_meta_sign(meta)) ? "Steady"
+                                                            : "Tainted";
+  return "Legacy";
 }
 
 /* Find oldest txnid still referenced. */
 static txnid_t mdbx_find_oldest(MDBX_env *env, int *laggard) {
-  const MDBX_meta *const a = METAPAGE_1(env);
-  const MDBX_meta *const b = METAPAGE_2(env);
-  txnid_t oldest = mdbx_meta_lt(a, b) ? b->mm_txnid : a->mm_txnid;
+  const MDBX_meta *const head = mdbx_meta_head(
+      env, F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) ? false : true);
+  txnid_t oldest = head->mm_txnid;
 
   int i, reader;
   const MDBX_reader *const r = env->me_lck->mti_readers;
@@ -1589,12 +1665,11 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
 
     if ((flags & MDBX_ALLOC_GC) &&
         ((flags & MDBX_ALLOC_KICK) || rc == MDBX_MAP_FULL)) {
-      MDBX_meta *head = mdbx_meta_head(env);
-      MDBX_meta *tail = mdbx_env_meta_flipflop(env, head);
+      MDBX_meta *fluid = mdbx_meta_fluid_head(env);
+      MDBX_meta *steady = mdbx_meta_steady_head(env);
 
-      if (oldest == tail->mm_txnid && META_IS_WEAK(head) &&
-          !META_IS_WEAK(tail)) {
-        MDBX_meta meta = *head;
+      if (oldest == steady->mm_txnid && META_IS_WEAK(fluid) &&
+          !META_IS_WEAK(steady)) {
         /* LY: Here an oom was happened:
          *  - all pages had allocated;
          *  - reclaiming was stopped at the last steady-sync;
@@ -1605,16 +1680,17 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
          * don't make a steady-sync, but only a legacy-mode checkpoint,
          * just for resume reclaiming only, not for data consistency. */
 
-        mdbx_debug("kick-gc: head %" PRIaTXN "/%c, tail %" PRIaTXN
-                   "/%c, oldest %" PRIaTXN "",
-                   head->mm_txnid, META_IS_WEAK(head) ? 'W' : 'N',
-                   tail->mm_txnid, META_IS_WEAK(tail) ? 'W' : 'N', oldest);
+        mdbx_debug("kick-gc: head %" PRIaTXN "-%s, tail %" PRIaTXN
+                   "-%s, oldest %" PRIaTXN "",
+                   fluid->mm_txnid, mdbx_durable_str(fluid), steady->mm_txnid,
+                   mdbx_durable_str(steady), oldest);
 
-        int me_flags = env->me_flags & MDBX_WRITEMAP;
-        if ((env->me_flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC)
+        unsigned me_flags = env->me_flags & MDBX_WRITEMAP;
+        if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC))
           me_flags |= MDBX_UTTERLY_NOSYNC;
 
         mdbx_assert(env, env->me_sync_pending > 0);
+        MDBX_meta meta = *fluid;
         if (mdbx_env_sync_locked(env, me_flags, &meta) == MDBX_SUCCESS) {
           txnid_t snap = mdbx_find_oldest(env, NULL);
           if (snap > oldest) {
@@ -1878,7 +1954,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  MDBX_meta *head = mdbx_meta_head(env);
+  MDBX_meta *head = mdbx_meta_fluid_head(env);
   if (!META_IS_STEADY(head) || env->me_sync_pending ||
       env->me_mapsize != head->mm_mapsize) {
 
@@ -1907,11 +1983,16 @@ int mdbx_env_sync(MDBX_env *env, int force) {
         return rc;
 
       /* LY: head may be changed. */
-      head = mdbx_meta_head(env);
+      head = mdbx_meta_fluid_head(env);
     }
 
     if (!META_IS_STEADY(head) || env->me_sync_pending ||
         env->me_mapsize != head->mm_mapsize) {
+      mdbx_debug("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64
+                 ", mapsize env=%" PRIuPTR " meta=%" PRIuPTR,
+                 container_of(head, MDBX_page, mp_data)->mp_pgno,
+                 mdbx_durable_str(head), env->me_sync_pending, env->me_mapsize,
+                 head->mm_mapsize);
       MDBX_meta meta = *head;
       rc = mdbx_env_sync_locked(env, flags, &meta);
       if (unlikely(rc != MDBX_SUCCESS)) {
@@ -2058,7 +2139,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         env->me_live_reader = pid;
       }
 
-      for (;;) {
+      while (1) {
         nr = env->me_lck->mti_numreaders;
         for (i = 0; i < nr; i++)
           if (env->me_lck->mti_readers[i].mr_pid == 0)
@@ -2096,7 +2177,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     }
 
     while (1) {
-      MDBX_meta *const meta = mdbx_meta_head(txn->mt_env);
+      MDBX_meta *const meta = mdbx_meta_fluid_head(txn->mt_env);
       mdbx_jitter4testing(false);
       const txnid_t snap = meta->mm_txnid;
       mdbx_jitter4testing(false);
@@ -2114,8 +2195,11 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       txn->mt_canary = meta->mm_canary;
 
       /* LY: Retry on a race, ITS#7970. */
-      if (likely(meta == mdbx_meta_head(txn->mt_env) && snap == meta->mm_txnid))
+      if (likely(meta == mdbx_meta_fluid_head(txn->mt_env) &&
+                 snap == meta->mm_txnid)) {
+        mdbx_jitter4testing(false);
         break;
+      }
     }
 
     txn->mt_ro_reader = r;
@@ -2128,7 +2212,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       return rc;
 
     mdbx_jitter4testing(false);
-    MDBX_meta *meta = mdbx_meta_head(env);
+    MDBX_meta *meta = mdbx_meta_fluid_head(env);
     mdbx_jitter4testing(false);
     txn->mt_canary = meta->mm_canary;
     txn->mt_txnid = meta->mm_txnid + 1;
@@ -3188,63 +3272,64 @@ fail:
 /* Read the environment parameters of a DB environment
  * before mapping it into memory. */
 static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
-  assert(offsetof(MDBX_metabuf, mb_metabuf.mm_meta) == PAGEHDRSZ);
+  assert(offsetof(MDBX_page, mp_meta) == PAGEHDRSZ);
   memset(meta, 0, sizeof(MDBX_meta));
   meta->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-  unsigned offset = 0;
 
-  /* Read both meta pages so we can use the latest one. */
-  for (int loops_left = 2; --loops_left >= 0;) {
-    MDBX_metabuf buf;
+  /* Read twice all meta pages so we can find the latest one. */
+  unsigned loop_limit = NUM_METAS * 2;
+  for (unsigned loop_count = 0; loop_count < loop_limit; ++loop_count) {
+    MDBX_page page;
 
-    /* We don't know the page size on first time, so use a minimum value. */
-    int rc = mdbx_pread(env->me_fd, &buf, sizeof(buf), offset);
+    /* We don't know the page size on first time.
+     * So, just guess it. */
+    unsigned guess_pagesize = meta->mm_psize;
+    if (guess_pagesize == 0)
+      guess_pagesize =
+          (loop_count > NUM_METAS) ? env->me_psize : env->me_os_psize;
+
+    const unsigned meta_number = loop_count % NUM_METAS;
+    const unsigned offset = guess_pagesize * meta_number;
+    int rc = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
     if (rc != MDBX_SUCCESS) {
-      mdbx_debug("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(buf), rc,
+      mdbx_debug("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page), rc,
                  mdbx_strerror(rc));
       return rc;
     }
 
-    MDBX_page *p = (MDBX_page *)&buf;
-    if (!F_ISSET(p->mp_flags, P_META)) {
-      mdbx_debug("page %" PRIaPGNO " not a meta-page", p->mp_pgno);
+    if (page.mp_pgno != meta_number) {
+      mdbx_debug("meta[%u] has invalid pageno %" PRIaPGNO, meta_number,
+                 page.mp_pgno);
       return MDBX_INVALID;
     }
 
-    MDBX_meta *m = PAGEDATA(p);
-    if (m->mm_magic != MDBX_MAGIC) {
-      mdbx_debug("meta[%u] has invalid magic", offset);
+    if (!F_ISSET(page.mp_flags, P_META)) {
+      mdbx_debug("page #%u not a meta-page", meta_number);
       return MDBX_INVALID;
     }
 
-    if (m->mm_version != MDBX_DATA_VERSION) {
-      mdbx_debug("database is version %u, expected version %u", m->mm_version,
-                 MDBX_DATA_VERSION);
+    if (page.mp_meta.mm_magic != MDBX_MAGIC) {
+      mdbx_debug("meta[%u] has invalid magic", meta_number);
+      return MDBX_INVALID;
+    }
+
+    if (page.mp_meta.mm_version != MDBX_DATA_VERSION) {
+      mdbx_debug("database is version %u, expected version %u",
+                 page.mp_meta.mm_version, MDBX_DATA_VERSION);
       return MDBX_VERSION_MISMATCH;
     }
 
-#ifndef MDBX_TEMPORARY_CRUTCH
     /* LY: check signature as a checksum */
-    if (META_IS_STEADY(m) && m->mm_datasync_sign != mdbx_meta_sign(m)) {
-      mdbx_debug("steady-meta[%u] has invalid checksum", offset);
+    if (META_IS_STEADY(&page.mp_meta) &&
+        page.mp_meta.mm_datasync_sign != mdbx_meta_sign(&page.mp_meta)) {
+      mdbx_debug("steady-meta[%u] has invalid checksum", meta_number);
       continue;
     }
-#endif /* FIXME: MDBX_TEMPORARY_CRUTCH */
 
-    if (mdbx_meta_lt(meta, m)) {
-      *meta = *m;
+    if (mdbx_meta_ot(meta, &page.mp_meta, true)) {
+      *meta = page.mp_meta;
       if (META_IS_WEAK(meta))
-        loops_left += 1; /* LY: should re-read to avoid race */
-    }
-
-    if (offset)
-      offset = 0;
-    else {
-      offset = meta->mm_psize;
-      if (!offset)
-        offset = m->mm_psize;
-      if (!offset)
-        offset = env->me_os_psize;
+        loop_limit += 1; /* LY: should re-read to hush race with update */
     }
   }
 
@@ -3256,78 +3341,67 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
   return MDBX_SUCCESS;
 }
 
-/* Fill in most of the zeroed MDBX_meta for an empty database environment */
-static void __cold mdbx_meta_model(const MDBX_env *env, MDBX_meta *model) {
+static MDBX_page *__cold mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
+                                         unsigned num) {
   memset(model, 0, sizeof(*model));
-  model->mm_magic = MDBX_MAGIC;
-  model->mm_version = MDBX_DATA_VERSION;
-  model->mm_mapsize = env->me_mapsize;
-  model->mm_psize = env->me_psize;
-  model->mm_last_pg = NUM_METAS - 1;
-  model->mm_flags = (uint16_t)env->me_flags;
-  model->mm_flags |= MDBX_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
-  model->mm_dbs[FREE_DBI].md_root = P_INVALID;
-  model->mm_dbs[MAIN_DBI].md_root = P_INVALID;
-  model->mm_datasync_sign = mdbx_meta_sign(model);
+  model->mp_pgno = num;
+  model->mp_flags = P_META;
+  model->mp_meta.mm_magic = MDBX_MAGIC;
+  model->mp_meta.mm_version = MDBX_DATA_VERSION;
+  model->mp_meta.mm_mapsize = env->me_mapsize;
+  model->mp_meta.mm_psize = env->me_psize;
+  model->mp_meta.mm_last_pg = NUM_METAS - 1;
+  model->mp_meta.mm_flags = (uint16_t)env->me_flags;
+  model->mp_meta.mm_flags |=
+      MDBX_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
+  model->mp_meta.mm_dbs[FREE_DBI].md_root = P_INVALID;
+  model->mp_meta.mm_dbs[MAIN_DBI].md_root = P_INVALID;
+  model->mp_meta.mm_txnid = num;
+  model->mp_meta.mm_datasync_sign = mdbx_meta_sign(&model->mp_meta);
+  return (MDBX_page *)((uint8_t *)model + env->me_psize);
 }
 
-/* Write the environment parameters of a freshly created DB environment. */
-static int __cold mdbx_env_init_metas(const MDBX_env *env, MDBX_meta *model) {
-  mdbx_debug("writing new meta pages");
-  assert(offsetof(MDBX_metabuf, mb_metabuf.mm_meta) == PAGEHDRSZ);
-
-  unsigned page_size = env->me_psize;
-  MDBX_page *first = calloc(NUM_METAS, page_size);
-  if (!first)
-    return MDBX_ENOMEM;
-  first->mp_pgno = 0;
-  first->mp_flags = P_META;
-  MDBX_meta *first_meta = (MDBX_meta *)PAGEDATA(first);
-
-  MDBX_page *second = (MDBX_page *)((char *)first + page_size);
-  second->mp_pgno = 1;
-  second->mp_flags = P_META;
-  MDBX_meta *second_meta = (MDBX_meta *)PAGEDATA(second);
-
-  *first_meta = *model;
-  model->mm_txnid += 1;
-  *second_meta = *model;
-
-  int rc = mdbx_pwrite(env->me_fd, first, page_size * NUM_METAS, 0);
-
-  free(first);
-  return rc;
+/* Fill in most of the zeroed meta-pages for an empty database environment.
+ * Return pointer to recenly (head) meta-page. */
+static MDBX_page *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
+  MDBX_page *page0 = (MDBX_page *)buffer;
+  MDBX_page *page1 = mdbx_meta_model(env, page0, 0);
+  MDBX_page *page2 = mdbx_meta_model(env, page1, 1);
+  mdbx_meta_model(env, page2, 2);
+  page2->mp_meta.mm_datasync_sign = MDBX_DATASIGN_WEAK;
+  mdbx_assert(env, !mdbx_meta_eq(&page0->mp_meta, &page1->mp_meta));
+  mdbx_assert(env, !mdbx_meta_eq(&page1->mp_meta, &page2->mp_meta));
+  mdbx_assert(env, !mdbx_meta_eq(&page2->mp_meta, &page0->mp_meta));
+  return page1;
 }
 
 static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
-                                MDBX_meta *pending) {
-  int rc;
-  MDBX_meta *head = mdbx_meta_head(env);
-  size_t prev_mapsize = head->mm_mapsize;
-  size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
+                                MDBX_meta *const pending) {
+  MDBX_meta *const meta0 = METAPAGE(env, 0);
+  MDBX_meta *const meta1 = METAPAGE(env, 1);
+  MDBX_meta *const meta2 = METAPAGE(env, 2);
+  MDBX_meta *const head = mdbx_meta_fluid_head(env);
 
-  mdbx_assert(env, pending != METAPAGE_1(env) && pending != METAPAGE_2(env));
+  const size_t prev_mapsize = head->mm_mapsize;
+  const size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
+
+  mdbx_assert(env, mdbx_meta_eq_mask(env) == 0);
+  mdbx_assert(env,
+              pending < METAPAGE(env, 0) || pending > METAPAGE(env, NUM_METAS));
   mdbx_assert(env, (env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0);
   mdbx_assert(env, !META_IS_STEADY(head) || env->me_sync_pending != 0 ||
                        env->me_mapsize != prev_mapsize);
 
   pending->mm_mapsize = env->me_mapsize;
   mdbx_assert(env, pending->mm_mapsize >= used_size);
-  if (unlikely(pending->mm_mapsize != prev_mapsize)) {
-    if (pending->mm_mapsize < prev_mapsize) {
-      /* LY: currently this can't happen, but force full-sync. */
-      flags &= MDBX_WRITEMAP;
-    } else {
-      /* Persist any increases of mapsize config */
-    }
-  }
 
   if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold)
     flags &= MDBX_WRITEMAP;
 
   /* LY: step#1 - sync previously written/updated data-pages */
+  int rc = MDBX_RESULT_TRUE;
   if (env->me_sync_pending && (flags & MDBX_NOSYNC) == 0) {
-    assert(((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
+    mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     if (flags & MDBX_WRITEMAP) {
       rc = mdbx_msync(env->me_map, used_size, flags & MDBX_MAPASYNC);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -3356,7 +3430,7 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
     }
   }
 
-  /* LY: step#2 - update meta-page. */
+  /* Steady or Weak */
   if (env->me_sync_pending == 0) {
     pending->mm_datasync_sign = mdbx_meta_sign(pending);
   } else {
@@ -3366,27 +3440,60 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
             : MDBX_DATASIGN_WEAK;
   }
 
-  volatile MDBX_meta *target =
-      (pending->mm_txnid == head->mm_txnid || META_IS_WEAK(head))
-          ? head
-          : mdbx_env_meta_flipflop(env, head);
-  size_t offset = (char *)target - env->me_map;
+  volatile MDBX_meta *target = nullptr;
+  if (head->mm_txnid == pending->mm_txnid) {
+    mdbx_assert(env, memcmp(&head->mm_dbs, &pending->mm_dbs,
+                            sizeof(head->mm_dbs)) == 0);
+    mdbx_assert(env, memcmp(&head->mm_canary, &pending->mm_canary,
+                            sizeof(head->mm_canary)) == 0);
+    mdbx_assert(env, head->mm_last_pg == pending->mm_last_pg);
+    mdbx_assert(env, head->mm_mapsize == pending->mm_mapsize);
+    if (!META_IS_STEADY(head) && META_IS_STEADY(pending))
+      target = head;
+    else {
+      mdbx_assert(env, mdbx_meta_eq(head, pending));
+      mdbx_debug("skip update meta");
+      return MDBX_SUCCESS;
+    }
+  } else if (head == meta0)
+    target = mdbx_meta_ancient(env, meta1, meta2, true);
+  else if (head == meta1)
+    target = mdbx_meta_ancient(env, meta0, meta2, true);
+  else if (head == meta2)
+    target = mdbx_meta_ancient(env, meta0, meta1, true);
 
-  MDBX_meta *stay = mdbx_env_meta_flipflop(env, (MDBX_meta *)target);
-  mdbx_debug(
-      "writing meta %d (%s, was %" PRIaTXN "/%s, stay %s %" PRIaTXN
-      "/%s), root %" PRIaPGNO ", "
-      "txn_id %" PRIaTXN ", %s",
-      offset >= env->me_psize, target == head ? "head" : "tail",
-      target->mm_txnid,
-      META_IS_WEAK(target) ? "Weak" : META_IS_STEADY(target) ? "Steady"
-                                                             : "Legacy",
-      stay == head ? "head" : "tail", stay->mm_txnid,
-      META_IS_WEAK(stay) ? "Weak" : META_IS_STEADY(stay) ? "Steady" : "Legacy",
-      pending->mm_dbs[MAIN_DBI].md_root, pending->mm_txnid,
-      META_IS_WEAK(pending) ? "Weak" : META_IS_STEADY(pending) ? "Steady"
-                                                               : "Legacy");
+  /* LY: step#2 - update meta-page. */
+  mdbx_debug("writing meta%" PRIaPGNO " (%s, was %" PRIaTXN
+             ", %s), root %" PRIaPGNO "/%" PRIaPGNO ", "
+             "txn_id %" PRIaTXN ", %s",
+             container_of(target, MDBX_page, mp_data)->mp_pgno,
+             (target == head) ? "head" : "tail", target->mm_txnid,
+             mdbx_durable_str((const MDBX_meta *)target),
+             pending->mm_dbs[MAIN_DBI].md_root,
+             pending->mm_dbs[FREE_DBI].md_root, pending->mm_txnid,
+             mdbx_durable_str(pending));
 
+  mdbx_debug("meta0: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO
+             "/%" PRIaPGNO,
+             (meta0 == head) ? "head" : (meta0 == target) ? "tail" : "stay",
+             mdbx_durable_str(meta0), meta0->mm_txnid,
+             meta0->mm_dbs[MAIN_DBI].md_root, meta0->mm_dbs[FREE_DBI].md_root);
+  mdbx_debug("meta1: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO
+             "/%" PRIaPGNO,
+             (meta1 == head) ? "head" : (meta1 == target) ? "tail" : "stay",
+             mdbx_durable_str(meta1), meta1->mm_txnid,
+             meta1->mm_dbs[MAIN_DBI].md_root, meta1->mm_dbs[FREE_DBI].md_root);
+  mdbx_debug("meta2: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO
+             "/%" PRIaPGNO,
+             (meta2 == head) ? "head" : (meta2 == target) ? "tail" : "stay",
+             mdbx_durable_str(meta2), meta2->mm_txnid,
+             meta2->mm_dbs[MAIN_DBI].md_root, meta2->mm_dbs[FREE_DBI].md_root);
+
+  mdbx_assert(env, !mdbx_meta_eq(pending, meta0));
+  mdbx_assert(env, !mdbx_meta_eq(pending, meta1));
+  mdbx_assert(env, !mdbx_meta_eq(pending, meta2));
+
+  const size_t offset = (char *)target - env->me_map;
   if (env->me_flags & MDBX_WRITEMAP) {
     /* LY: 'invalidate' the meta. */
     mdbx_jitter4testing(true);
@@ -3432,7 +3539,7 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
 
   /* LY: step#3 - sync meta-pages. */
   if ((flags & (MDBX_NOSYNC | MDBX_NOMETASYNC)) == 0) {
-    assert(((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
+    mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     if (flags & MDBX_WRITEMAP) {
       char *ptr = env->me_map + (offset & ~(env->me_os_psize - 1));
       rc = mdbx_msync(ptr, env->me_os_psize, flags & MDBX_MAPASYNC);
@@ -3570,9 +3677,9 @@ static int __cold mdbx_env_map(MDBX_env *env, void *addr, size_t usedsize) {
 #endif
 
   /* Lock meta pages to avoid unexpected write,
-   *  before the data pages would be synchronized. */
+   * before the data pages would be synchronized. */
   if (flags & MDBX_WRITEMAP) {
-    rc = mdbx_mlock(env->me_map, env->me_psize * 2);
+    rc = mdbx_mlock(env->me_map, env->me_psize * NUM_METAS);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -3604,7 +3711,7 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
       return MDBX_EINVAL;
 
     /* FIXME: lock/unlock */
-    meta = mdbx_meta_head(env);
+    meta = mdbx_meta_fluid_head(env);
     if (!size)
       size = meta->mm_mapsize;
     /* Silently round up to minimum if the size is too small */
@@ -3674,9 +3781,10 @@ int __cold mdbx_env_get_maxreaders(MDBX_env *env, unsigned *readers) {
 }
 
 /* Further setup required for opening an MDBX environment */
-static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
+static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
+  MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
-  int err = mdbx_read_header(env, meta);
+  int err = mdbx_read_header(env, &meta);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
         (env->me_flags & MDBX_RDONLY) != 0)
@@ -3689,26 +3797,43 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
       env->me_psize = env->me_os_psize;
     if (env->me_psize > MAX_PAGESIZE)
       env->me_psize = MAX_PAGESIZE;
+
     env->me_mapsize = roundup2(
         env->me_mapsize ? env->me_mapsize : DEFAULT_MAPSIZE, env->me_os_psize);
-    mdbx_meta_model(env, meta);
-    err = mdbx_env_init_metas(env, meta);
+
+    void *buffer = calloc(NUM_METAS, env->me_psize);
+    if (!buffer)
+      return MDBX_ENOMEM;
+
+    meta = mdbx_init_metas(env, buffer)->mp_meta;
+    err = mdbx_pwrite(env->me_fd, buffer, env->me_psize * NUM_METAS, 0);
+    free(buffer);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
+#ifndef NDEBUG /* just for checking */
+    err = mdbx_read_header(env, &meta);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+#endif
+
+    err = mdbx_ftruncate(env->me_fd, env->me_mapsize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   } else {
-    env->me_psize = meta->mm_psize;
+    env->me_psize = meta.mm_psize;
 
     /* Make sure mapsize >= committed data size.  Even when using
      * mm_mapsize, which could be broken in old files (ITS#7789). */
     const size_t usedsize =
-        roundup2((meta->mm_last_pg + 1) * meta->mm_psize, env->me_os_psize);
-    if (meta->mm_mapsize < usedsize)
-      meta->mm_mapsize = usedsize;
+        roundup2((meta.mm_last_pg + 1) * env->me_psize, env->me_os_psize);
+    if (meta.mm_mapsize < usedsize)
+      meta.mm_mapsize = usedsize;
 
     /* Was a mapsize configured? */
     if (!env->me_mapsize || (env->me_flags & MDBX_RDONLY) ||
         lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
-      env->me_mapsize = meta->mm_mapsize;
+      env->me_mapsize = meta.mm_mapsize;
     else if (env->me_mapsize < usedsize)
       env->me_mapsize = usedsize;
   }
@@ -3717,9 +3842,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
   err = mdbx_filesize(env->me_fd, &size);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-
   if (size != env->me_mapsize) {
-    mdbx_trace("filesize mismatch");
+    mdbx_notice("filesize mismatch (wanna %" PRIu64 ", have %" PRIu64 ")",
+                env->me_mapsize, size);
     if ((env->me_flags & MDBX_RDONLY) ||
         lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
       return MDBX_WANNA_RECOVERY /* LY: could not mdbx_ftruncate */;
@@ -3733,20 +3858,28 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
   if (err)
     return err;
 
-  const MDBX_meta *head = mdbx_meta_head(env);
-  if (head->mm_txnid != meta->mm_txnid) {
-    mdbx_trace("head->mm_txnid (%" PRIaTXN ") != (%" PRIaTXN ") meta->mm_txnid",
-               head->mm_txnid, meta->mm_txnid);
+  const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
+  if (meta_clash_mask) {
+    mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
+    return MDBX_WANNA_RECOVERY;
+  }
+
+  const MDBX_meta *head = mdbx_meta_fluid_head(env);
+  if (head->mm_txnid != meta.mm_txnid) {
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
-      assert(META_IS_STEADY(meta) && !META_IS_STEADY(head));
+      assert(META_IS_STEADY(&meta) && !META_IS_STEADY(head));
       if (env->me_flags & MDBX_RDONLY) {
-        mdbx_trace("exclusive, but read-only, unable recovery/rollback");
+        mdbx_error("rollback needed: (from head %" PRIaTXN
+                   " to steady %" PRIaTXN "), but unable in read-only mode",
+                   head->mm_txnid, meta.mm_txnid);
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
       /* LY: rollback weak checkpoint */
       MDBX_meta rollback = *head;
       rollback.mm_txnid = 0;
+      mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN, head->mm_txnid,
+                 meta.mm_txnid);
       err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
                         (uint8_t *)head - (uint8_t *)env->me_map);
       if (err)
@@ -3763,18 +3896,19 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
     }
   }
 
-  head = mdbx_meta_head(env);
+  head = mdbx_meta_fluid_head(env);
   if (head->mm_mapsize != env->me_mapsize) {
-    mdbx_trace("head->mm_mapsize (%" PRIu64 ") != (%" PRIu64
-               ") env->mm_mapsize",
-               head->mm_mapsize, env->me_mapsize);
+    mdbx_info("mismatch meta.mapsize: present %" PRIu64 ", should %" PRIu64,
+              head->mm_mapsize, env->me_mapsize);
     if ((env->me_flags & MDBX_RDONLY) ||
         lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
       return MDBX_MAP_RESIZED;
 
-    *meta = *head;
-    meta->mm_mapsize = env->me_mapsize;
-    err = mdbx_env_sync_locked(env, env->me_flags & MDBX_WRITEMAP, meta);
+    mdbx_trace("updating meta.mapsize: from %" PRIu64 " to %" PRIu64,
+               head->mm_mapsize, env->me_mapsize);
+    meta = *head;
+    meta.mm_mapsize = env->me_mapsize;
+    err = mdbx_env_sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta);
     if (err)
       return err;
   }
@@ -3989,8 +4123,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     goto bailout;
   }
 
-  MDBX_meta meta;
-  const int dxb_rc = mdbx_setup_dxb(env, &meta, lck_rc);
+  const int dxb_rc = mdbx_setup_dxb(env, lck_rc);
   if (MDBX_IS_ERROR(dxb_rc)) {
     rc = dxb_rc;
     goto bailout;
@@ -4051,13 +4184,13 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
 
 #if MDBX_DEBUG
   if (rc == MDBX_SUCCESS) {
-    MDBX_meta *meta = mdbx_meta_head(env);
+    MDBX_meta *meta = mdbx_meta_fluid_head(env);
     MDBX_db *db = &meta->mm_dbs[MAIN_DBI];
-    int toggle = ((char *)meta == PAGEDATA(env->me_map)) ? 0 : 1;
 
     mdbx_debug("opened database version %u, pagesize %u", meta->mm_version,
                env->me_psize);
-    mdbx_debug("using meta page %d, txn %" PRIaTXN "", toggle, meta->mm_txnid);
+    mdbx_debug("using meta page %" PRIaPGNO ", txn %" PRIaTXN "",
+               container_of(meta, MDBX_page, mp_data)->mp_pgno, meta->mm_txnid);
     mdbx_debug("depth: %u", db->md_depth);
     mdbx_debug("entries: %" PRIu64 "", db->md_entries);
     mdbx_debug("branch pages: %" PRIaPGNO "", db->md_branch_pages);
@@ -4653,7 +4786,7 @@ static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
     }
   }
 
-  mdbx_cassert(mc, root > 1);
+  mdbx_cassert(mc, root >= NUM_METAS);
   if (!mc->mc_pg[0] || mc->mc_pg[0]->mp_pgno != root)
     if (unlikely((rc = mdbx_page_get(mc, root, &mc->mc_pg[0], NULL)) != 0))
       return rc;
@@ -8337,18 +8470,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   if (unlikely(rc != MDBX_SUCCESS))
     goto finish;
 
-  MDBX_page* mp = (MDBX_page *)my.mc_wbuf[0];
-  memset(mp, 0, NUM_METAS * env->me_psize);
-  mp->mp_pgno = 0;
-  mp->mp_flags = P_META;
-  MDBX_meta* mm = (MDBX_meta *)PAGEDATA(mp);
-  mdbx_meta_model(env, mm);
-
-  mp = (MDBX_page *)(my.mc_wbuf[0] + env->me_psize);
-  mp->mp_pgno = 1;
-  mp->mp_flags = P_META;
-  *(MDBX_meta *)PAGEDATA(mp) = *mm;
-  mm = (MDBX_meta *)PAGEDATA(mp);
+  MDBX_page *meta = mdbx_init_metas(env, my.mc_wbuf[0]);
 
   /* Set metapage 1 with current main DB */
   pgno_t new_root, root = txn->mt_dbs[MAIN_DBI].md_root;
@@ -8370,17 +8492,23 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
                  txn->mt_dbs[FREE_DBI].md_overflow_pages;
 
     new_root = txn->mt_next_pgno - 1 - freecount;
-    mm->mm_last_pg = new_root;
-    mm->mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
-    mm->mm_dbs[MAIN_DBI].md_root = new_root;
+    meta->mp_meta.mm_last_pg = new_root;
+    meta->mp_meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
+    meta->mp_meta.mm_dbs[MAIN_DBI].md_root = new_root;
   } else {
     /* When the DB is empty, handle it specially to
      * fix any breakage like page leaks from ITS#8174. */
-    mm->mm_dbs[MAIN_DBI].md_flags = txn->mt_dbs[MAIN_DBI].md_flags;
+    meta->mp_meta.mm_dbs[MAIN_DBI].md_flags = txn->mt_dbs[MAIN_DBI].md_flags;
   }
-  if (root != P_INVALID || mm->mm_dbs[MAIN_DBI].md_flags) {
-    mm->mm_txnid = 1; /* use metapage 1 */
+
+  /* copy canary sequenses if present */
+  if (txn->mt_canary.v) {
+    meta->mp_meta.mm_canary = txn->mt_canary;
+    meta->mp_meta.mm_canary.v = meta->mp_meta.mm_txnid;
   }
+
+  /* update signature */
+  meta->mp_meta.mm_datasync_sign = mdbx_meta_sign(&meta->mp_meta);
 
   my.mc_wlen[0] = env->me_psize * NUM_METAS;
   my.mc_txn = txn;
@@ -8582,12 +8710,11 @@ int __cold mdbx_env_stat(MDBX_env *env, MDBX_stat *arg, size_t bytes) {
   if (unlikely(bytes != sizeof(MDBX_stat)))
     return MDBX_EINVAL;
 
-  meta = mdbx_meta_head(env);
+  meta = mdbx_meta_fluid_head(env);
   return mdbx_stat0(env, &meta->mm_dbs[MAIN_DBI], arg);
 }
 
 int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
-  MDBX_meta *meta;
 
   if (unlikely(env == NULL || arg == NULL))
     return MDBX_EINVAL;
@@ -8595,37 +8722,38 @@ int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
   if (bytes != sizeof(MDBX_envinfo))
     return MDBX_EINVAL;
 
-  MDBX_meta *m1, *m2;
-  MDBX_reader *r;
-  unsigned i;
-
-  m1 = METAPAGE_1(env);
-  m2 = METAPAGE_2(env);
-
+  const MDBX_meta *const meta0 = METAPAGE(env, 0);
+  const MDBX_meta *const meta1 = METAPAGE(env, 1);
+  const MDBX_meta *const meta2 = METAPAGE(env, 2);
   do {
-    meta = mdbx_meta_head(env);
-    arg->me_last_txnid = meta->mm_txnid;
-    arg->me_last_pgno = meta->mm_last_pg;
-    arg->me_meta1_txnid = m1->mm_txnid;
-    arg->me_meta1_sign = m1->mm_datasync_sign;
-    arg->me_meta2_txnid = m2->mm_txnid;
-    arg->me_meta2_sign = m2->mm_datasync_sign;
-  } while (unlikely(arg->me_last_txnid != mdbx_meta_head(env)->mm_txnid ||
-                    arg->me_meta1_sign != m1->mm_datasync_sign ||
-                    arg->me_meta2_sign != m2->mm_datasync_sign));
+    const MDBX_meta *meta = mdbx_meta_fluid_head(env);
+    arg->me_meta0_txnid = meta0->mm_txnid;
+    arg->me_meta0_sign = meta0->mm_datasync_sign;
+    arg->me_meta1_txnid = meta1->mm_txnid;
+    arg->me_meta1_sign = meta1->mm_datasync_sign;
+    arg->me_meta2_txnid = meta2->mm_txnid;
+    arg->me_meta2_sign = meta2->mm_datasync_sign;
+    arg->me_recent_txnid = meta->mm_txnid;
+    arg->me_recent_pgno = meta->mm_last_pg;
+  } while (unlikely(arg->me_meta0_txnid != meta0->mm_txnid ||
+                    arg->me_meta0_sign != meta0->mm_datasync_sign ||
+                    arg->me_meta1_txnid != meta1->mm_txnid ||
+                    arg->me_meta1_sign != meta1->mm_datasync_sign ||
+                    arg->me_meta2_txnid != meta2->mm_txnid ||
+                    arg->me_meta2_sign != meta2->mm_datasync_sign));
 
   arg->me_mapsize = env->me_mapsize;
   arg->me_maxreaders = env->me_maxreaders;
   arg->me_numreaders = env->me_lck->mti_numreaders;
-  arg->me_tail_txnid = 0;
+  arg->me_latter_reader_txnid = 0;
 
-  r = env->me_lck->mti_readers;
-  arg->me_tail_txnid = arg->me_last_txnid;
-  for (i = 0; i < arg->me_numreaders; ++i) {
+  MDBX_reader *r = env->me_lck->mti_readers;
+  arg->me_latter_reader_txnid = arg->me_recent_txnid;
+  for (unsigned i = 0; i < arg->me_numreaders; ++i) {
     if (r[i].mr_pid) {
       txnid_t mr = r[i].mr_txnid;
-      if (arg->me_tail_txnid > mr)
-        arg->me_tail_txnid = mr;
+      if (arg->me_latter_reader_txnid > mr)
+        arg->me_latter_reader_txnid = mr;
     }
   }
 
@@ -9264,7 +9392,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
       continue;
 
     rc = env->me_oom_func(env, pid, tid, oldest,
-                          mdbx_meta_head(env)->mm_txnid - oldest, retry);
+                          mdbx_meta_fluid_head(env)->mm_txnid - oldest, retry);
     if (rc < 0)
       break;
 
@@ -9329,7 +9457,7 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
     return -1;
 
   MDBX_env *env = txn->mt_env;
-  MDBX_meta *meta = mdbx_meta_head(env);
+  MDBX_meta *meta = mdbx_meta_fluid_head(env);
   if (percent) {
     size_t maxpg = env->me_maxpg;
     size_t last = meta->mm_last_pg + 1;
@@ -9487,9 +9615,10 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_user = user;
   ctx.mw_visitor = visitor;
 
-  int rc = visitor(0, 2, user, "mdbx", "meta", 2, sizeof(MDBX_meta) * 2,
-                   PAGEHDRSZ * 2,
-                   (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) * 2);
+  int rc = visitor(0, NUM_METAS, user, "mdbx", "meta", NUM_METAS,
+                   sizeof(MDBX_meta) * NUM_METAS, PAGEHDRSZ * NUM_METAS,
+                   (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) *
+                       NUM_METAS);
   if (!rc)
     rc = mdbx_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0);
   if (!rc)

@@ -427,13 +427,14 @@ typedef struct MDBX_stat {
 
 /* Information about the environment */
 typedef struct MDBX_envinfo {
-  void *me_mapaddr;       /* Address of map, if fixed */
-  uint64_t me_mapsize;    /* Size of the data memory map */
-  uint64_t me_last_pgno;  /* ID of the last used page */
-  uint64_t me_last_txnid; /* ID of the last committed transaction */
-  uint32_t me_maxreaders; /* max reader slots in the environment */
-  uint32_t me_numreaders; /* max reader slots used in the environment */
-  uint64_t me_tail_txnid; /* ID of the last reader transaction */
+  void *me_mapaddr;         /* Address of map, if fixed */
+  uint64_t me_mapsize;      /* Size of the data memory map */
+  uint64_t me_recent_pgno;  /* ID of the last used page */
+  uint64_t me_recent_txnid; /* ID of the last committed transaction */
+  uint32_t me_maxreaders;   /* max reader slots in the environment */
+  uint32_t me_numreaders;   /* max reader slots used in the environment */
+  uint64_t me_latter_reader_txnid; /* ID of the last reader transaction */
+  uint64_t me_meta0_txnid, me_meta0_sign;
   uint64_t me_meta1_txnid, me_meta1_sign;
   uint64_t me_meta2_txnid, me_meta2_sign;
 } MDBX_envinfo;
@@ -868,7 +869,7 @@ LIBMDBX_API void *mdbx_env_get_userctx(MDBX_env *env);
  *
  * [in] env An environment handle returned by mdbx_env_create().
  * [in] msg The assertion message, not including newline. */
-typedef void MDBX_assert_func(MDBX_env *env, const char *msg,
+typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
                               const char *function, unsigned line);
 
 /* Set or reset the assert() callback of the environment.
