@@ -370,13 +370,6 @@ typedef MDBX_ID2 *MDBX_ID2L;
 /* Current max length of an mdbx_midl_alloc()ed IDL */
 #define MDBX_IDL_ALLOCLEN(ids) ((ids)[-1])
 
-/* Append ID to IDL. The IDL must be big enough. */
-#define mdbx_midl_xappend(idl, id)                                             \
-  do {                                                                         \
-    pgno_t *xidl = (idl), xlen = ++(xidl[0]);                                  \
-    xidl[xlen] = (id);                                                         \
-  } while (0)
-
 /*----------------------------------------------------------------------------*/
 /* Internal structures */
 
@@ -1069,3 +1062,17 @@ static __inline void SETDSZ(MDBX_node *node, unsigned size) {
 /* Check for misused dbi handles */
 #define TXN_DBI_CHANGED(txn, dbi)                                              \
   ((txn)->mt_dbiseqs[dbi] != (txn)->mt_env->me_dbiseqs[dbi])
+
+/* LY: fast enough on most systems
+ *
+ *                /
+ *                | -1, a < b
+ * cmp2int(a,b) = <  0, a == b
+ *                |  1, a > b
+ *                \
+ */
+#if 1
+#define mdbx_cmp2int(a, b) (((b) > (a)) ? -1 : (a) > (b))
+#else
+#define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
+#endif

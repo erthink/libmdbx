@@ -156,78 +156,332 @@ __cold void mdbx_rthc_remove(mdbx_thread_key_t key) {
 
 /*----------------------------------------------------------------------------*/
 
+/* Allocate an IDL.
+ * Allocates memory for an IDL of the given size.
+ * Returns IDL on success, NULL on failure. */
+static MDBX_IDL mdbx_midl_alloc(unsigned size) {
+  MDBX_IDL ids = malloc((size + 2) * sizeof(pgno_t));
+  if (likely(ids)) {
+    *ids++ = size;
+    *ids = 0;
+  }
+  return ids;
+}
+
+/* Free an IDL.
+ * [in] ids The IDL to free. */
+static void mdbx_midl_free(MDBX_IDL ids) {
+  if (ids)
+    free(ids - 1);
+}
+
+/* Append ID to IDL. The IDL must be big enough. */
+static __inline void mdbx_midl_xappend(MDBX_IDL idl, pgno_t id) {
+  assert(idl[0] + (size_t)1 < MDBX_IDL_ALLOCLEN(idl));
+  idl[idl[0] += 1] = id;
+}
+
 /* Search for an ID in an IDL.
  * [in] ids The IDL to search.
  * [in] id The ID to search for.
  * Returns The index of the first ID greater than or equal to id. */
-static unsigned mdbx_midl_search(MDBX_IDL ids, pgno_t id);
+static unsigned __hot mdbx_midl_search(MDBX_IDL ids, pgno_t id) {
+  /* binary search of id in ids
+   * if found, returns position of id
+   * if not found, returns first position greater than id */
+  unsigned base = 0;
+  unsigned cursor = 1;
+  int val = 0;
+  unsigned n = ids[0];
 
-/* Allocate an IDL.
- * Allocates memory for an IDL of the given size.
- * Returns IDL on success, NULL on failure. */
-static MDBX_IDL mdbx_midl_alloc(int num);
+  while (n > 0) {
+    unsigned pivot = n >> 1;
+    cursor = base + pivot + 1;
+    val = mdbx_cmp2int(ids[cursor], id);
 
-/* Free an IDL.
- * [in] ids The IDL to free. */
-static void mdbx_midl_free(MDBX_IDL ids);
+    if (val < 0) {
+      n = pivot;
+    } else if (val > 0) {
+      base = cursor;
+      n -= pivot + 1;
+    } else {
+      return cursor;
+    }
+  }
+
+  if (val > 0)
+    ++cursor;
+
+  return cursor;
+}
 
 /* Shrink an IDL.
  * Return the IDL to the default size if it has grown larger.
  * [in,out] idp Address of the IDL to shrink. */
-static void mdbx_midl_shrink(MDBX_IDL *idp);
+static void mdbx_midl_shrink(MDBX_IDL *idp) {
+  MDBX_IDL ids = *idp - 1;
+  if (unlikely(*ids > MDBX_IDL_UM_MAX)) {
+    /* shrink to MDBX_IDL_UM_MAX */
+    ids = realloc(ids, (MDBX_IDL_UM_MAX + 2) * sizeof(pgno_t));
+    if (likely(ids)) {
+      *ids++ = MDBX_IDL_UM_MAX;
+      *idp = ids;
+    }
+  }
+}
+
+/* Grow an IDL.
+ * Return the IDL to the size growed by given number.
+ * [in,out] idp Address of the IDL to grow. */
+static int mdbx_midl_grow(MDBX_IDL *idp, unsigned num) {
+  MDBX_IDL idn = *idp - 1;
+  /* grow it */
+  idn = realloc(idn, (*idn + num + 2) * sizeof(pgno_t));
+  if (unlikely(!idn))
+    return MDBX_ENOMEM;
+  *idn++ += num;
+  *idp = idn;
+  return 0;
+}
 
 /* Make room for num additional elements in an IDL.
  * [in,out] idp Address of the IDL.
  * [in] num Number of elements to make room for.
  * Returns 0 on success, MDBX_ENOMEM on failure. */
-static int mdbx_midl_need(MDBX_IDL *idp, unsigned num);
+static int mdbx_midl_need(MDBX_IDL *idp, unsigned num) {
+  MDBX_IDL ids = *idp;
+  num += ids[0];
+  if (num > ids[-1]) {
+    num = (num + num / 4 + (256 + 2)) & -256;
+    ids = realloc(ids - 1, num * sizeof(pgno_t));
+    if (unlikely(!ids))
+      return MDBX_ENOMEM;
+    *ids++ = num - 2;
+    *idp = ids;
+  }
+  return 0;
+}
 
 /* Append an ID onto an IDL.
  * [in,out] idp Address of the IDL to append to.
  * [in] id The ID to append.
  * Returns 0 on success, MDBX_ENOMEM if the IDL is too large. */
-static int mdbx_midl_append(MDBX_IDL *idp, pgno_t id);
+static int mdbx_midl_append(MDBX_IDL *idp, pgno_t id) {
+  MDBX_IDL ids = *idp;
+  /* Too big? */
+  if (ids[0] >= ids[-1]) {
+    if (mdbx_midl_grow(idp, MDBX_IDL_UM_MAX))
+      return MDBX_ENOMEM;
+    ids = *idp;
+  }
+  ids[0]++;
+  ids[ids[0]] = id;
+  return 0;
+}
 
 /* Append an IDL onto an IDL.
  * [in,out] idp Address of the IDL to append to.
  * [in] app The IDL to append.
  * Returns 0 on success, MDBX_ENOMEM if the IDL is too large. */
-static int mdbx_midl_append_list(MDBX_IDL *idp, MDBX_IDL app);
+static int mdbx_midl_append_list(MDBX_IDL *idp, MDBX_IDL app) {
+  MDBX_IDL ids = *idp;
+  /* Too big? */
+  if (ids[0] + app[0] >= ids[-1]) {
+    if (mdbx_midl_grow(idp, app[0]))
+      return MDBX_ENOMEM;
+    ids = *idp;
+  }
+  memcpy(&ids[ids[0] + 1], &app[1], app[0] * sizeof(pgno_t));
+  ids[0] += app[0];
+  return 0;
+}
 
 /* Append an ID range onto an IDL.
  * [in,out] idp Address of the IDL to append to.
  * [in] id The lowest ID to append.
  * [in] n Number of IDs to append.
  * Returns 0 on success, MDBX_ENOMEM if the IDL is too large. */
-static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, unsigned n);
+static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, unsigned n) {
+  pgno_t *ids = *idp, len = ids[0];
+  /* Too big? */
+  if (len + n > ids[-1]) {
+    if (mdbx_midl_grow(idp, n | MDBX_IDL_UM_MAX))
+      return MDBX_ENOMEM;
+    ids = *idp;
+  }
+  ids[0] = len + n;
+  ids += len;
+  while (n)
+    ids[n--] = id++;
+  return 0;
+}
 
 /* Merge an IDL onto an IDL. The destination IDL must be big enough.
  * [in] idl The IDL to merge into.
  * [in] merge The IDL to merge. */
-static void mdbx_midl_xmerge(MDBX_IDL idl, MDBX_IDL merge);
+static void __hot mdbx_midl_xmerge(MDBX_IDL idl, MDBX_IDL merge) {
+  pgno_t old_id, merge_id, i = merge[0], j = idl[0], k = i + j, total = k;
+  idl[0] = ~(pgno_t)0; /* delimiter for idl scan below */
+  old_id = idl[j];
+  while (i) {
+    merge_id = merge[i--];
+    for (; old_id < merge_id; old_id = idl[--j])
+      idl[k--] = old_id;
+    idl[k--] = merge_id;
+  }
+  idl[0] = total;
+}
 
 /* Sort an IDL.
  * [in,out] ids The IDL to sort. */
-static void mdbx_midl_sort(MDBX_IDL ids);
+static void __hot mdbx_midl_sort(MDBX_IDL ids) {
+  /* Max possible depth of int-indexed tree * 2 items/level */
+  int istack[sizeof(int) * CHAR_BIT * 2];
+  int i, j, k, l, ir, jstack;
+  pgno_t a;
+
+/* Quicksort + Insertion sort for small arrays */
+#define MIDL_SMALL 8
+#define MIDL_SWAP(a, b)                                                        \
+  do {                                                                         \
+    pgno_t tmp_pgno = (a);                                                     \
+    (a) = (b);                                                                 \
+    (b) = tmp_pgno;                                                            \
+  } while (0)
+
+  ir = (int)ids[0];
+  l = 1;
+  jstack = 0;
+  for (;;) {
+    if (ir - l < MIDL_SMALL) { /* Insertion sort */
+      for (j = l + 1; j <= ir; j++) {
+        a = ids[j];
+        for (i = j - 1; i >= 1; i--) {
+          if (ids[i] >= a)
+            break;
+          ids[i + 1] = ids[i];
+        }
+        ids[i + 1] = a;
+      }
+      if (jstack == 0)
+        break;
+      ir = istack[jstack--];
+      l = istack[jstack--];
+    } else {
+      k = (l + ir) >> 1; /* Choose median of left, center, right */
+      MIDL_SWAP(ids[k], ids[l + 1]);
+      if (ids[l] < ids[ir])
+        MIDL_SWAP(ids[l], ids[ir]);
+
+      if (ids[l + 1] < ids[ir])
+        MIDL_SWAP(ids[l + 1], ids[ir]);
+
+      if (ids[l] < ids[l + 1])
+        MIDL_SWAP(ids[l], ids[l + 1]);
+
+      i = l + 1;
+      j = ir;
+      a = ids[l + 1];
+      for (;;) {
+        do
+          i++;
+        while (ids[i] > a);
+        do
+          j--;
+        while (ids[j] < a);
+        if (j < i)
+          break;
+        MIDL_SWAP(ids[i], ids[j]);
+      }
+      ids[l + 1] = ids[j];
+      ids[j] = a;
+      jstack += 2;
+      if (ir - i + 1 >= j - l) {
+        istack[jstack] = ir;
+        istack[jstack - 1] = i;
+        ir = j - 1;
+      } else {
+        istack[jstack] = j - 1;
+        istack[jstack - 1] = l;
+        l = i;
+      }
+    }
+  }
+#undef MIDL_SMALL
+#undef MIDL_SWAP
+}
 
 /* Search for an ID in an ID2L.
  * [in] ids The ID2L to search.
  * [in] id The ID to search for.
  * Returns The index of the first ID2 whose mid member is greater than
  * or equal to id. */
-static unsigned mdbx_mid2l_search(MDBX_ID2L ids, pgno_t id);
+static unsigned __hot mdbx_mid2l_search(MDBX_ID2L ids, pgno_t id) {
+  /* binary search of id in ids
+   * if found, returns position of id
+   * if not found, returns first position greater than id */
+  unsigned base = 0;
+  unsigned cursor = 1;
+  int val = 0;
+  unsigned n = (unsigned)ids[0].mid;
+
+  while (n > 0) {
+    unsigned pivot = n >> 1;
+    cursor = base + pivot + 1;
+    val = mdbx_cmp2int(id, ids[cursor].mid);
+
+    if (val < 0) {
+      n = pivot;
+    } else if (val > 0) {
+      base = cursor;
+      n -= pivot + 1;
+    } else {
+      return cursor;
+    }
+  }
+
+  if (val > 0)
+    ++cursor;
+
+  return cursor;
+}
 
 /* Insert an ID2 into a ID2L.
  * [in,out] ids The ID2L to insert into.
  * [in] id The ID2 to insert.
  * Returns 0 on success, -1 if the ID was already present in the ID2L. */
-static int mdbx_mid2l_insert(MDBX_ID2L ids, MDBX_ID2 *id);
+static int mdbx_mid2l_insert(MDBX_ID2L ids, MDBX_ID2 *id) {
+  unsigned x = mdbx_mid2l_search(ids, id->mid);
+  if (unlikely(x < 1))
+    return /* internal error */ -2;
+
+  if (x <= ids[0].mid && ids[x].mid == id->mid)
+    return /* duplicate */ -1;
+
+  if (unlikely(ids[0].mid >= MDBX_IDL_UM_MAX))
+    return /* too big */ -2;
+
+  /* insert id */
+  ids[0].mid++;
+  for (unsigned i = (unsigned)ids[0].mid; i > x; i--)
+    ids[i] = ids[i - 1];
+  ids[x] = *id;
+  return 0;
+}
 
 /* Append an ID2 into a ID2L.
  * [in,out] ids The ID2L to append into.
  * [in] id The ID2 to append.
  * Returns 0 on success, -2 if the ID2L is too big. */
-static int mdbx_mid2l_append(MDBX_ID2L ids, MDBX_ID2 *id);
+static int mdbx_mid2l_append(MDBX_ID2L ids, MDBX_ID2 *id) {
+  /* Too big? */
+  if (unlikely(ids[0].mid >= MDBX_IDL_UM_MAX))
+    return -2;
+
+  ids[0].mid++;
+  ids[ids[0].mid] = *id;
+  return 0;
+}
 
 /*----------------------------------------------------------------------------*/
 
@@ -3884,20 +4138,6 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
 }
 
 void __cold mdbx_env_close(MDBX_env *env) { mdbx_env_close_ex(env, 0); }
-
-/* LY: fast enough on most arches
- *
- *                /
- *                | -1, a < b
- * cmp2int(a,b) = <  0, a == b
- *                |  1, a > b
- *                \
- */
-#if 1
-#define mdbx_cmp2int(a, b) (((b) > (a)) ? -1 : (a) > (b))
-#else
-#define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
-#endif
 
 /* Compare two items pointing at aligned unsigned int's. */
 static int __hot mdbx_cmp_int_ai(const MDBX_val *a, const MDBX_val *b) {
@@ -8949,275 +9189,6 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   if (dead)
     *dead = count;
   return rc;
-}
-
-static unsigned __hot mdbx_midl_search(MDBX_IDL ids, pgno_t id) {
-  /* binary search of id in ids
-   * if found, returns position of id
-   * if not found, returns first position greater than id */
-  unsigned base = 0;
-  unsigned cursor = 1;
-  int val = 0;
-  unsigned n = ids[0];
-
-  while (n > 0) {
-    unsigned pivot = n >> 1;
-    cursor = base + pivot + 1;
-    val = mdbx_cmp2int(ids[cursor], id);
-
-    if (val < 0) {
-      n = pivot;
-    } else if (val > 0) {
-      base = cursor;
-      n -= pivot + 1;
-    } else {
-      return cursor;
-    }
-  }
-
-  if (val > 0)
-    ++cursor;
-
-  return cursor;
-}
-
-static MDBX_IDL mdbx_midl_alloc(int num) {
-  MDBX_IDL ids = malloc((num + 2) * sizeof(pgno_t));
-  if (likely(ids)) {
-    *ids++ = num;
-    *ids = 0;
-  }
-  return ids;
-}
-
-static void mdbx_midl_free(MDBX_IDL ids) {
-  if (ids)
-    free(ids - 1);
-}
-
-static void mdbx_midl_shrink(MDBX_IDL *idp) {
-  MDBX_IDL ids = *idp - 1;
-  if (unlikely(*ids > MDBX_IDL_UM_MAX)) {
-    /* shrink to MDBX_IDL_UM_MAX */
-    ids = realloc(ids, (MDBX_IDL_UM_MAX + 2) * sizeof(pgno_t));
-    if (likely(ids)) {
-      *ids++ = MDBX_IDL_UM_MAX;
-      *idp = ids;
-    }
-  }
-}
-
-static int mdbx_midl_grow(MDBX_IDL *idp, int num) {
-  MDBX_IDL idn = *idp - 1;
-  /* grow it */
-  idn = realloc(idn, (*idn + num + 2) * sizeof(pgno_t));
-  if (unlikely(!idn))
-    return MDBX_ENOMEM;
-  *idn++ += num;
-  *idp = idn;
-  return 0;
-}
-
-static int mdbx_midl_need(MDBX_IDL *idp, unsigned num) {
-  MDBX_IDL ids = *idp;
-  num += ids[0];
-  if (num > ids[-1]) {
-    num = (num + num / 4 + (256 + 2)) & -256;
-    ids = realloc(ids - 1, num * sizeof(pgno_t));
-    if (unlikely(!ids))
-      return MDBX_ENOMEM;
-    *ids++ = num - 2;
-    *idp = ids;
-  }
-  return 0;
-}
-
-static int mdbx_midl_append(MDBX_IDL *idp, pgno_t id) {
-  MDBX_IDL ids = *idp;
-  /* Too big? */
-  if (ids[0] >= ids[-1]) {
-    if (mdbx_midl_grow(idp, MDBX_IDL_UM_MAX))
-      return MDBX_ENOMEM;
-    ids = *idp;
-  }
-  ids[0]++;
-  ids[ids[0]] = id;
-  return 0;
-}
-
-static int mdbx_midl_append_list(MDBX_IDL *idp, MDBX_IDL app) {
-  MDBX_IDL ids = *idp;
-  /* Too big? */
-  if (ids[0] + app[0] >= ids[-1]) {
-    if (mdbx_midl_grow(idp, app[0]))
-      return MDBX_ENOMEM;
-    ids = *idp;
-  }
-  memcpy(&ids[ids[0] + 1], &app[1], app[0] * sizeof(pgno_t));
-  ids[0] += app[0];
-  return 0;
-}
-
-static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, unsigned n) {
-  pgno_t *ids = *idp, len = ids[0];
-  /* Too big? */
-  if (len + n > ids[-1]) {
-    if (mdbx_midl_grow(idp, n | MDBX_IDL_UM_MAX))
-      return MDBX_ENOMEM;
-    ids = *idp;
-  }
-  ids[0] = len + n;
-  ids += len;
-  while (n)
-    ids[n--] = id++;
-  return 0;
-}
-
-static void __hot mdbx_midl_xmerge(MDBX_IDL idl, MDBX_IDL merge) {
-  pgno_t old_id, merge_id, i = merge[0], j = idl[0], k = i + j, total = k;
-  idl[0] = ~(pgno_t)0; /* delimiter for idl scan below */
-  old_id = idl[j];
-  while (i) {
-    merge_id = merge[i--];
-    for (; old_id < merge_id; old_id = idl[--j])
-      idl[k--] = old_id;
-    idl[k--] = merge_id;
-  }
-  idl[0] = total;
-}
-
-/* Quicksort + Insertion sort for small arrays */
-#define SMALL 8
-#define MIDL_SWAP(a, b)                                                        \
-  do {                                                                         \
-    pgno_t tmp_pgno = (a);                                                     \
-    (a) = (b);                                                                 \
-    (b) = tmp_pgno;                                                            \
-  } while (0)
-
-static void __hot mdbx_midl_sort(MDBX_IDL ids) {
-  /* Max possible depth of int-indexed tree * 2 items/level */
-  int istack[sizeof(int) * CHAR_BIT * 2];
-  int i, j, k, l, ir, jstack;
-  pgno_t a;
-
-  ir = (int)ids[0];
-  l = 1;
-  jstack = 0;
-  for (;;) {
-    if (ir - l < SMALL) { /* Insertion sort */
-      for (j = l + 1; j <= ir; j++) {
-        a = ids[j];
-        for (i = j - 1; i >= 1; i--) {
-          if (ids[i] >= a)
-            break;
-          ids[i + 1] = ids[i];
-        }
-        ids[i + 1] = a;
-      }
-      if (jstack == 0)
-        break;
-      ir = istack[jstack--];
-      l = istack[jstack--];
-    } else {
-      k = (l + ir) >> 1; /* Choose median of left, center, right */
-      MIDL_SWAP(ids[k], ids[l + 1]);
-      if (ids[l] < ids[ir])
-        MIDL_SWAP(ids[l], ids[ir]);
-
-      if (ids[l + 1] < ids[ir])
-        MIDL_SWAP(ids[l + 1], ids[ir]);
-
-      if (ids[l] < ids[l + 1])
-        MIDL_SWAP(ids[l], ids[l + 1]);
-
-      i = l + 1;
-      j = ir;
-      a = ids[l + 1];
-      for (;;) {
-        do
-          i++;
-        while (ids[i] > a);
-        do
-          j--;
-        while (ids[j] < a);
-        if (j < i)
-          break;
-        MIDL_SWAP(ids[i], ids[j]);
-      }
-      ids[l + 1] = ids[j];
-      ids[j] = a;
-      jstack += 2;
-      if (ir - i + 1 >= j - l) {
-        istack[jstack] = ir;
-        istack[jstack - 1] = i;
-        ir = j - 1;
-      } else {
-        istack[jstack] = j - 1;
-        istack[jstack - 1] = l;
-        l = i;
-      }
-    }
-  }
-}
-
-static unsigned __hot mdbx_mid2l_search(MDBX_ID2L ids, pgno_t id) {
-  /* binary search of id in ids
-   * if found, returns position of id
-   * if not found, returns first position greater than id */
-  unsigned base = 0;
-  unsigned cursor = 1;
-  int val = 0;
-  unsigned n = (unsigned)ids[0].mid;
-
-  while (n > 0) {
-    unsigned pivot = n >> 1;
-    cursor = base + pivot + 1;
-    val = mdbx_cmp2int(id, ids[cursor].mid);
-
-    if (val < 0) {
-      n = pivot;
-    } else if (val > 0) {
-      base = cursor;
-      n -= pivot + 1;
-    } else {
-      return cursor;
-    }
-  }
-
-  if (val > 0)
-    ++cursor;
-
-  return cursor;
-}
-
-static int mdbx_mid2l_insert(MDBX_ID2L ids, MDBX_ID2 *id) {
-  unsigned x = mdbx_mid2l_search(ids, id->mid);
-  if (unlikely(x < 1))
-    return /* internal error */ -2;
-
-  if (x <= ids[0].mid && ids[x].mid == id->mid)
-    return /* duplicate */ -1;
-
-  if (unlikely(ids[0].mid >= MDBX_IDL_UM_MAX))
-    return /* too big */ -2;
-
-  /* insert id */
-  ids[0].mid++;
-  for (unsigned i = (unsigned)ids[0].mid; i > x; i--)
-    ids[i] = ids[i - 1];
-  ids[x] = *id;
-  return 0;
-}
-
-static int mdbx_mid2l_append(MDBX_ID2L ids, MDBX_ID2 *id) {
-  /* Too big? */
-  if (unlikely(ids[0].mid >= MDBX_IDL_UM_MAX))
-    return -2;
-
-  ids[0].mid++;
-  ids[ids[0].mid] = *id;
-  return 0;
 }
 
 int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger, long edge_txn) {
