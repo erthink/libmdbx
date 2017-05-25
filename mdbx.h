@@ -1415,7 +1415,7 @@ LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, unsigned flags);
  * possible errors are:
  *  - MDBX_EINVAL   - cursor is not initialized, or an invalid parameter
  *                    was specified. */
-LIBMDBX_API int mdbx_cursor_count(MDBX_cursor *cursor, uint64_t *countp);
+LIBMDBX_API int mdbx_cursor_count(MDBX_cursor *cursor, size_t *countp);
 
 /* Compare two data items according to a particular database.
  *

@@ -6725,7 +6725,7 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
 }
 
 /* Return the count of duplicate data items for the current key */
-int mdbx_cursor_count(MDBX_cursor *mc, uint64_t *countp) {
+int mdbx_cursor_count(MDBX_cursor *mc, size_t *countp) {
   if (unlikely(mc == NULL || countp == NULL))
     return MDBX_EINVAL;
 
@@ -6755,7 +6755,9 @@ int mdbx_cursor_count(MDBX_cursor *mc, uint64_t *countp) {
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
       mdbx_cassert(mc, mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags &
                                           C_INITIALIZED));
-      *countp = mc->mc_xcursor->mx_db.md_entries;
+      *countp = unlikely(mc->mc_xcursor->mx_db.md_entries > INT_MAX)
+                    ? INT_MAX
+                    : mc->mc_xcursor->mx_db.md_entries;
     }
   }
   return MDBX_SUCCESS;
