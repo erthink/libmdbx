@@ -3223,11 +3223,13 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       return MDBX_VERSION_MISMATCH;
     }
 
+#ifndef MDBX_TEMPORARY_CRUTCH
     /* LY: check signature as a checksum */
     if (META_IS_STEADY(m) && m->mm_datasync_sign != mdbx_meta_sign(m)) {
       mdbx_debug("steady-meta[%u] has invalid checksum", offset);
       continue;
     }
+#endif /* FIXME: MDBX_TEMPORARY_CRUTCH */
 
     if (mdbx_meta_lt(meta, m)) {
       *meta = *m;

@@ -252,8 +252,16 @@ typedef struct MDBX_meta {
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u
   volatile uint64_t mm_datasync_sign;
+
+#define MDBX_TEMPORARY_CRUTCH FIXME
+#ifndef MDBX_TEMPORARY_CRUTCH
 #define SIGN_IS_WEAK(sign) ((sign) == MDBX_DATASIGN_WEAK)
 #define SIGN_IS_STEADY(sign) ((sign) > MDBX_DATASIGN_WEAK)
+#else
+#define SIGN_IS_WEAK(sign) (false && (sign) == MDBX_DATASIGN_WEAK)
+#define SIGN_IS_STEADY(sign) (true || (sign) > MDBX_DATASIGN_WEAK)
+#endif /* FIXME: MDBX_TEMPORARY_CRUTCH */
+
 #define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
   volatile mdbx_canary mm_canary;
