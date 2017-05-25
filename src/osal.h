@@ -113,11 +113,14 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #include <sys/file.h>
 #endif
 
-#if defined(__i386) || defined(__x86_64) || defined(_M_IX86)
-#define UNALIGNED_OK 1 /* TODO */
-#endif
-#ifndef UNALIGNED_OK
+#if !defined(UNALIGNED_OK)
+#if defined(__i386) || defined(__x86_64__) || defined(_M_IX86) ||              \
+    defined(_M_X64) || defined(i386) || defined(_X86_) || defined(__i386__) || \
+    defined(_X86_64_)
+#define UNALIGNED_OK 1
+#else
 #define UNALIGNED_OK 0
+#endif
 #endif /* UNALIGNED_OK */
 
 #if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF

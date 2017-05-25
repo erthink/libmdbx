@@ -984,7 +984,7 @@ static __inline pgno_t NODEPGNO(const MDBX_node *node) {
     if (sizeof(pgno_t) > 4)
       pgno &= UINT64_C(0xffffFFFFffff);
   } else {
-    pgno = node->mn_lo | ((pgno_t)node->mn_lo << 16);
+    pgno = node->mn_lo | ((pgno_t)node->mn_hi << 16);
     if (sizeof(pgno_t) > 4)
       pgno |= ((uint64_t)node->mn_flags) << 32;
   }
