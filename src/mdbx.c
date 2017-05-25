@@ -3828,7 +3828,19 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
       size = wanna;
     }
   }
-  env->me_maxreaders = (size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
+
+  if (size & (env->me_os_psize - 1) || size < env->me_os_psize) {
+    mdbx_notice("lck-file has invalid size %" PRIu64 " bytes", size);
+    return MDBX_PROBLEM;
+  }
+
+  const uint64_t maxreaders =
+      (size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
+  if (maxreaders > UINT16_MAX) {
+    mdbx_notice("lck-size too big (up to %" PRIu64 " readers)", maxreaders);
+    return MDBX_PROBLEM;
+  }
+  env->me_maxreaders = (unsigned)maxreaders;
 
   void *addr = NULL;
   err = mdbx_mmap(&addr, size, true, env->me_lfd);
