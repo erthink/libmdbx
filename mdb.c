@@ -3258,7 +3258,8 @@ mdb_txn_end(MDB_txn *txn, unsigned mode)
 
 	if (mode & MDB_END_FREE) {
 		txn->mt_signature = 0;
-		free(txn);
+		if (txn != env->me_txn0)
+			free(txn);
 	}
 
 	return MDB_SUCCESS;
