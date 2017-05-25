@@ -2345,27 +2345,29 @@ uint64_t mdbx_txn_id(MDBX_txn *txn) {
 /* Export or close DBI handles opened in this txn. */
 static void mdbx_dbis_update(MDBX_txn *txn, int keep) {
   MDBX_dbi n = txn->mt_numdbs;
-  MDBX_env *env = txn->mt_env;
-  uint8_t *tdbflags = txn->mt_dbflags;
+  if (n) {
+    MDBX_env *env = txn->mt_env;
+    uint8_t *tdbflags = txn->mt_dbflags;
 
-  for (unsigned i = n; --i >= CORE_DBS;) {
-    if (tdbflags[i] & DB_NEW) {
-      if (keep) {
-        env->me_dbflags[i] = txn->mt_dbs[i].md_flags | MDBX_VALID;
-      } else {
-        char *ptr = env->me_dbxs[i].md_name.iov_base;
-        if (ptr) {
-          env->me_dbxs[i].md_name.iov_base = NULL;
-          env->me_dbxs[i].md_name.iov_len = 0;
-          env->me_dbflags[i] = 0;
-          env->me_dbiseqs[i]++;
-          free(ptr);
+    for (unsigned i = n; --i >= CORE_DBS;) {
+      if (tdbflags[i] & DB_NEW) {
+        if (keep) {
+          env->me_dbflags[i] = txn->mt_dbs[i].md_flags | MDBX_VALID;
+        } else {
+          char *ptr = env->me_dbxs[i].md_name.iov_base;
+          if (ptr) {
+            env->me_dbxs[i].md_name.iov_base = NULL;
+            env->me_dbxs[i].md_name.iov_len = 0;
+            env->me_dbflags[i] = 0;
+            env->me_dbiseqs[i]++;
+            free(ptr);
+          }
         }
       }
     }
+    if (keep && env->me_numdbs < n)
+      env->me_numdbs = n;
   }
-  if (keep && env->me_numdbs < n)
-    env->me_numdbs = n;
 }
 
 /* End a transaction, except successful commit of a nested transaction.
@@ -2447,7 +2449,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
 
   if (mode & MDBX_END_FREE) {
     txn->mt_signature = 0;
-    free(txn);
+    if (txn != env->me_txn0)
+      free(txn);
   }
 
   return MDBX_SUCCESS;
