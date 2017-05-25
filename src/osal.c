@@ -552,7 +552,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(fd, &info))
     return mdbx_get_errno_checked();
-  *length = info.nFileSizeLow | (uint64_t)info.nFileIndexHigh << 32;
+  *length = info.nFileSizeLow | (uint64_t)info.nFileSizeHigh << 32;
 #else
   struct stat st;
 
