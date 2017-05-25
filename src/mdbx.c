@@ -3798,6 +3798,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     if (env->me_psize > MAX_PAGESIZE)
       env->me_psize = MAX_PAGESIZE;
 
+    assert(is_power2(env->me_psize));
+    assert(env->me_psize >= MIN_PAGESIZE);
     env->me_mapsize = roundup2(
         env->me_mapsize ? env->me_mapsize : DEFAULT_MAPSIZE, env->me_os_psize);
 
@@ -3822,6 +3824,11 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       return err;
   } else {
     env->me_psize = meta.mm_psize;
+    if (!is_power2(env->me_psize) || env->me_psize < MIN_PAGESIZE) {
+      mdbx_error("wrong pagesize %u (system %u)", env->me_psize,
+                 env->me_os_psize);
+      return MDBX_WANNA_RECOVERY;
+    }
 
     /* Make sure mapsize >= committed data size.  Even when using
      * mm_mapsize, which could be broken in old files (ITS#7789). */
@@ -3846,8 +3853,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     mdbx_notice("filesize mismatch (wanna %" PRIu64 ", have %" PRIu64 ")",
                 env->me_mapsize, size);
     if ((env->me_flags & MDBX_RDONLY) ||
-        lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
+        lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
+      mdbx_error("exclusive, but read-only, unable ftruncate/set-size");
       return MDBX_WANNA_RECOVERY /* LY: could not mdbx_ftruncate */;
+    }
 
     err = mdbx_ftruncate(env->me_fd, env->me_mapsize);
     if (unlikely(err != MDBX_SUCCESS))
@@ -3887,12 +3896,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     } else if (!env->me_lck) {
       /* LY: without-lck (read-only) mode, so it is imposible that other
        * process made weak checkpoint. */
-      mdbx_trace("without-lck, unable recovery/rollback");
+      mdbx_error("without-lck, unable recovery/rollback");
       return MDBX_WANNA_RECOVERY;
     } else {
       /* LY: assume just have a collision with other running process,
        *     or someone make a weak checkpoint */
-      mdbx_trace("assume collision or online weak checkpoint");
+      mdbx_info("assume collision or online weak checkpoint");
     }
   }
 
@@ -3973,7 +3982,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
   const uint64_t maxreaders =
       (size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
   if (maxreaders > UINT16_MAX) {
-    mdbx_notice("lck-size too big (up to %" PRIu64 " readers)", maxreaders);
+    mdbx_error("lck-size too big (up to %" PRIu64 " readers)", maxreaders);
     return MDBX_PROBLEM;
   }
   env->me_maxreaders = (unsigned)maxreaders;
@@ -4019,11 +4028,11 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
     env->me_lck->mti_format = MDBX_LOCK_FORMAT;
   } else {
     if (env->me_lck->mti_magic != MDBX_MAGIC) {
-      mdbx_debug("lock region has invalid magic");
+      mdbx_error("lock region has invalid magic");
       return MDBX_INVALID;
     }
     if (env->me_lck->mti_format != MDBX_LOCK_FORMAT) {
-      mdbx_debug("lock region has format+version 0x%" PRIx64
+      mdbx_error("lock region has format+version 0x%" PRIx64
                  ", expected 0x%" PRIx64,
                  env->me_lck->mti_format, MDBX_LOCK_FORMAT);
       return MDBX_VERSION_MISMATCH;
@@ -4148,7 +4157,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
       *exclusive = 0;
     }
     if ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) {
-      /* LY: Current mode/flags incompatible with requested. */
+      mdbx_error("current mode/flags incompatible with requested");
       rc = MDBX_INCOMPATIBLE;
       goto bailout;
     }
