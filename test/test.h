@@ -117,7 +117,7 @@ protected:
   bool wait4start();
   void report(size_t nops_done);
   void signal();
-  bool should_continue() const;
+  bool should_continue(bool check_timeout_only = false) const;
 
   void generate_pair(const keygen::serial_t serial, keygen::buffer &key,
                      keygen::buffer &value, keygen::serial_t data_age = 0) {

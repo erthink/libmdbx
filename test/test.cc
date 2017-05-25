@@ -100,9 +100,10 @@ int testcase::oom_callback(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
                ", txn #%" PRIu64 ", gap %d",
                pid, (size_t)tid, txn, gap);
 
-  if (retry > 0 && self->should_continue()) {
+  if (self->should_continue(true)) {
     osal_yield();
-    osal_udelay(retry * 100);
+    if (retry > 0)
+      osal_udelay(retry * 100);
     return 1 /* always retry */;
   }
 
@@ -308,7 +309,7 @@ bool testcase::teardown() {
   return true;
 }
 
-bool testcase::should_continue() const {
+bool testcase::should_continue(bool check_timeout_only) const {
   bool result = true;
 
   if (config.params.test_duration) {
@@ -319,7 +320,8 @@ bool testcase::should_continue() const {
       result = false;
   }
 
-  if (config.params.test_nops && nops_completed >= config.params.test_nops)
+  if (!check_timeout_only && config.params.test_nops &&
+      nops_completed >= config.params.test_nops)
     result = false;
 
   if (result && global::config::progress_indicator)
