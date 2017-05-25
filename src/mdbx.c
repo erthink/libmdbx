@@ -3683,61 +3683,55 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
     mdbx_debug("create new database");
     rc = /* new database */ MDBX_RESULT_TRUE;
 
-    env->me_psize = env->me_os_psize;
+    if (!env->me_psize)
+      env->me_psize = env->me_os_psize;
     if (env->me_psize > MAX_PAGESIZE)
       env->me_psize = MAX_PAGESIZE;
+    env->me_mapsize = roundup2(
+        env->me_mapsize ? env->me_mapsize : DEFAULT_MAPSIZE, env->me_os_psize);
     mdbx_meta_model(env, meta);
-    meta->mm_mapsize = DEFAULT_MAPSIZE;
-  } else {
-    env->me_psize = meta->mm_psize;
-  }
-
-  /* Was a mapsize configured? */
-  if (!env->me_mapsize)
-    env->me_mapsize = meta->mm_mapsize;
-  else {
-    /* Make sure mapsize >= committed data size.  Even when using
-     * mm_mapsize, which could be broken in old files (ITS#7789). */
-    size_t usedsize = (meta->mm_last_pg + 1) * meta->mm_psize;
-    if (env->me_mapsize < usedsize)
-      env->me_mapsize = usedsize;
-
-    meta->mm_mapsize = env->me_mapsize;
-  }
-
-  if (rc == MDBX_RESULT_TRUE) {
-    /* mdbx_env_map() may grow the datafile.  Write the metapages
-     * first, so the file will be valid if initialization fails. */
     err = mdbx_env_init_metas(env, meta);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
+  } else {
+    env->me_psize = meta->mm_psize;
+
+    /* Make sure mapsize >= committed data size.  Even when using
+     * mm_mapsize, which could be broken in old files (ITS#7789). */
+    const size_t usedsize =
+        roundup2((meta->mm_last_pg + 1) * meta->mm_psize, env->me_os_psize);
+    if (meta->mm_mapsize < usedsize)
+      meta->mm_mapsize = usedsize;
+
+    /* Was a mapsize configured? */
+    if (!env->me_mapsize || (env->me_flags & MDBX_RDONLY) ||
+        lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
+      env->me_mapsize = meta->mm_mapsize;
+    else if (env->me_mapsize < usedsize)
+      env->me_mapsize = usedsize;
+  }
+
+  uint64_t size;
+  err = mdbx_filesize(env->me_fd, &size);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  if (size != env->me_mapsize) {
+    mdbx_trace("filesize mismatch");
+    if ((env->me_flags & MDBX_RDONLY) ||
+        lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
+      return MDBX_WANNA_RECOVERY /* LY: could not mdbx_ftruncate */;
 
     err = mdbx_ftruncate(env->me_fd, env->me_mapsize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-  } else {
-    uint64_t size;
-    err = mdbx_filesize(env->me_fd, &size);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-
-    if (size != env->me_mapsize) {
-      mdbx_trace("filesize mismatch");
-      if ((env->me_flags & MDBX_RDONLY) ||
-          lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
-        return MDBX_WANNA_RECOVERY /* LY: could not mdbx_ftruncate */;
-
-      err = mdbx_ftruncate(env->me_fd, env->me_mapsize);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-    }
   }
 
   err = mdbx_env_map(env, NULL, env->me_mapsize);
   if (err)
     return err;
 
-  MDBX_meta *const head = mdbx_meta_head(env);
+  const MDBX_meta *head = mdbx_meta_head(env);
   if (head->mm_txnid != meta->mm_txnid) {
     mdbx_trace("head->mm_txnid (%" PRIaTXN ") != (%" PRIaTXN ") meta->mm_txnid",
                head->mm_txnid, meta->mm_txnid);
@@ -3751,8 +3745,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
       /* LY: rollback weak checkpoint */
       MDBX_meta rollback = *head;
       rollback.mm_txnid = 0;
-      if (rollback.mm_txnid == meta->mm_txnid)
-        rollback = *meta;
       err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
                         (uint8_t *)head - (uint8_t *)env->me_map);
       if (err)
@@ -3767,6 +3759,22 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, MDBX_meta *meta, int lck_rc) {
        *     or someone make a weak checkpoint */
       mdbx_trace("assume collision or online weak checkpoint");
     }
+  }
+
+  head = mdbx_meta_head(env);
+  if (head->mm_mapsize != env->me_mapsize) {
+    mdbx_trace("head->mm_mapsize (%" PRIu64 ") != (%" PRIu64
+               ") env->mm_mapsize",
+               head->mm_mapsize, env->me_mapsize);
+    if ((env->me_flags & MDBX_RDONLY) ||
+        lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
+      return MDBX_MAP_RESIZED;
+
+    *meta = *head;
+    meta->mm_mapsize = env->me_mapsize;
+    err = mdbx_env_sync_locked(env, env->me_flags & MDBX_WRITEMAP, meta);
+    if (err)
+      return err;
   }
 
   mdbx_env_setup_limits(env, env->me_psize);
