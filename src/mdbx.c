@@ -8173,10 +8173,10 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
   mc.mc_txn = my->mc_txn;
 
   rc = mdbx_page_get(&mc, *pg, &mc.mc_pg[0], NULL);
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   rc = mdbx_page_search_root(&mc, NULL, MDBX_PS_FIRST);
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   /* Make cursor pages writable */
@@ -8218,11 +8218,11 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             memcpy(&pgno, NODEDATA(ni), sizeof(pgno));
             memcpy(NODEDATA(ni), &my->mc_next_pgno, sizeof(pgno_t));
             rc = mdbx_page_get(&mc, pgno, &omp, NULL);
-            if (rc)
+            if (unlikely(rc != MDBX_SUCCESS))
               goto done;
             if (my->mc_wlen[toggle] >= MDBX_WBUF) {
               rc = mdbx_env_cthr_toggle(my, 1);
-              if (rc)
+              if (unlikely(rc != MDBX_SUCCESS))
                 goto done;
               toggle = my->mc_toggle;
             }
@@ -8235,7 +8235,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
               my->mc_olen[toggle] = my->mc_env->me_psize * (omp->mp_pages - 1);
               my->mc_over[toggle] = (char *)omp + my->mc_env->me_psize;
               rc = mdbx_env_cthr_toggle(my, 1);
-              if (rc)
+              if (unlikely(rc != MDBX_SUCCESS))
                 goto done;
               toggle = my->mc_toggle;
             }
@@ -8268,7 +8268,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
         ni = NODEPTR(mp, mc.mc_ki[mc.mc_top]);
         pgno = NODEPGNO(ni);
         rc = mdbx_page_get(&mc, pgno, &mp, NULL);
-        if (rc)
+        if (unlikely(rc != MDBX_SUCCESS))
           goto done;
         mc.mc_top++;
         mc.mc_snum++;
@@ -8285,7 +8285,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
     }
     if (my->mc_wlen[toggle] >= MDBX_WBUF) {
       rc = mdbx_env_cthr_toggle(my, 1);
-      if (rc)
+      if (unlikely(rc != MDBX_SUCCESS))
         goto done;
       toggle = my->mc_toggle;
     }
@@ -8311,20 +8311,17 @@ done:
 
 /* Copy environment with compaction. */
 static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
-  MDBX_meta *mm;
-  MDBX_page *mp;
-  mdbx_copy my;
   MDBX_txn *txn = NULL;
   mdbx_thread_t thr;
-  pgno_t root, new_root;
-  int rc;
-
+  mdbx_copy my;
   memset(&my, 0, sizeof(my));
-  if ((rc = mdbx_condmutex_init(&my.mc_condmutex)) != 0)
+
+  int rc = mdbx_condmutex_init(&my.mc_condmutex);
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   rc = mdbx_memalign_alloc(env->me_os_psize, MDBX_WBUF * 2,
                            (void **)&my.mc_wbuf[0]);
-  if (rc != MDBX_SUCCESS)
+  if (unlikely(rc != MDBX_SUCCESS))
     goto done;
 
   memset(my.mc_wbuf[0], 0, MDBX_WBUF * 2);
@@ -8333,18 +8330,18 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   my.mc_env = env;
   my.mc_fd = fd;
   rc = mdbx_thread_create(&thr, mdbx_env_copythr, &my);
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS))
     goto done;
 
   rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS))
     goto finish;
 
-  mp = (MDBX_page *)my.mc_wbuf[0];
+  MDBX_page* mp = (MDBX_page *)my.mc_wbuf[0];
   memset(mp, 0, NUM_METAS * env->me_psize);
   mp->mp_pgno = 0;
   mp->mp_flags = P_META;
-  mm = (MDBX_meta *)PAGEDATA(mp);
+  MDBX_meta* mm = (MDBX_meta *)PAGEDATA(mp);
   mdbx_meta_model(env, mm);
 
   mp = (MDBX_page *)(my.mc_wbuf[0] + env->me_psize);
@@ -8354,18 +8351,20 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   mm = (MDBX_meta *)PAGEDATA(mp);
 
   /* Set metapage 1 with current main DB */
-  root = new_root = txn->mt_dbs[MAIN_DBI].md_root;
-  if (root != P_INVALID) {
+  pgno_t new_root, root = txn->mt_dbs[MAIN_DBI].md_root;
+  if ((new_root = root) != P_INVALID) {
     /* Count free pages + freeDB pages.  Subtract from last_pg
      * to find the new last_pg, which also becomes the new root. */
     pgno_t freecount = 0;
     MDBX_cursor mc;
     MDBX_val key, data;
+
     mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
     while ((rc = mdbx_cursor_get(&mc, &key, &data, MDBX_NEXT)) == 0)
       freecount += *(pgno_t *)data.iov_base;
-    if (rc != MDBX_NOTFOUND)
+    if (unlikely(rc != MDBX_NOTFOUND))
       goto finish;
+
     freecount += txn->mt_dbs[FREE_DBI].md_branch_pages +
                  txn->mt_dbs[FREE_DBI].md_leaf_pages +
                  txn->mt_dbs[FREE_DBI].md_overflow_pages;
@@ -8386,12 +8385,11 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   my.mc_wlen[0] = env->me_psize * NUM_METAS;
   my.mc_txn = txn;
   rc = mdbx_env_cwalk(&my, &root, 0);
-  if (rc == MDBX_SUCCESS && root != new_root) {
-    rc = MDBX_INCOMPATIBLE; /* page leak or corrupt DB */
-  }
+  if (rc == MDBX_SUCCESS && root != new_root)
+    rc = MDBX_PROBLEM; /* page leak or corrupt DB */
 
 finish:
-  if (rc)
+  if (rc != MDBX_SUCCESS)
     my.mc_error = rc;
   mdbx_env_cthr_toggle(&my, 1 | MDBX_EOF);
   rc = mdbx_thread_join(thr);
@@ -8406,26 +8404,25 @@ done:
 /* Copy environment as-is. */
 static int __cold mdbx_env_copy_asis(MDBX_env *env, mdbx_filehandle_t fd) {
   MDBX_txn *txn = NULL;
-  int rc;
 
   /* Do the lock/unlock of the reader mutex before starting the
    * write txn.  Otherwise other read txns could block writers. */
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
-  if (unlikely(rc))
+  int rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   /* We must start the actual read txn after blocking writers */
   rc = mdbx_txn_end(txn, MDBX_END_RESET_TMP);
-  if (unlikely(rc))
+  if (unlikely(rc != MDBX_SUCCESS))
     goto bailout; /* FIXME: or just return? */
 
   /* Temporarily block writers until we snapshot the meta pages */
   rc = mdbx_txn_lock(env);
-  if (unlikely(rc))
+  if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
   rc = mdbx_txn_renew0(txn, MDBX_RDONLY);
-  if (rc) {
+  if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_txn_unlock(env);
     goto bailout;
   }
@@ -8433,8 +8430,12 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, mdbx_filehandle_t fd) {
   rc = mdbx_write(fd, env->me_map, env->me_psize * NUM_METAS);
   mdbx_txn_unlock(env);
 
-  if (rc == MDBX_SUCCESS)
-    rc = mdbx_ftruncate(fd, txn->mt_next_pgno * env->me_psize);
+  if (likely(rc == MDBX_SUCCESS))
+    rc = mdbx_write(fd, env->me_map + env->me_psize * NUM_METAS,
+                    (txn->mt_next_pgno - NUM_METAS) * env->me_psize);
+
+  if (likely(rc == MDBX_SUCCESS))
+    rc = mdbx_ftruncate(fd, env->me_mapsize);
 
 bailout:
   mdbx_txn_abort(txn);
@@ -8445,8 +8446,8 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
                             unsigned flags) {
   if (flags & MDBX_CP_COMPACT)
     return mdbx_env_compact(env, fd);
-  else
-    return mdbx_env_copy_asis(env, fd);
+
+  return mdbx_env_copy_asis(env, fd);
 }
 
 int __cold mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags) {
