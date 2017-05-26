@@ -246,10 +246,10 @@ typedef struct MDBX_meta {
 #define mm_psize mm_dbs[FREE_DBI].md_xsize
 /* Any persistent environment flags, see mdbx_env */
 #define mm_flags mm_dbs[FREE_DBI].md_flags
+  mdbx_canary mm_canary;
   /* Last used page in the datafile.
-  * Actually the file may be shorter if the freeDB lists the final pages. */
+   * Actually the file may be shorter if the freeDB lists the final pages. */
   pgno_t mm_last_pg;
-  volatile txnid_t mm_txnid; /* txnid that committed this page */
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u
   volatile uint64_t mm_datasync_sign;
@@ -259,7 +259,7 @@ typedef struct MDBX_meta {
 
 #define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
-  mdbx_canary mm_canary;
+  volatile txnid_t mm_txnid; /* txnid that committed this page */
 } MDBX_meta;
 
 /* Common header for all page types. The page type depends on mp_flags.
