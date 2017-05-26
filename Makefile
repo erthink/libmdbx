@@ -72,7 +72,7 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 clean:
 	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
-check:	test/test
+check:	test/test mdbx_chk
 	rm -f $(TESTDB) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
 
 define core-rule
