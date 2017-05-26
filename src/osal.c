@@ -653,8 +653,8 @@ int mdbx_msync(void *addr, size_t length, int async) {
   return FlushViewOfFile(addr, length) ? MDBX_SUCCESS
                                        : mdbx_get_errno_checked();
 #else
-  return (msync(addr, length, async ? MS_ASYNC : MS_SYNC) == 0) ? MDBX_SUCCESS
-                                                                : errno;
+  const int mode = async ? MS_ASYNC : MS_SYNC;
+  return (msync(addr, length, mode) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
 

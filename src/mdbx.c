@@ -552,8 +552,8 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
                            pgno_t newpgno, unsigned nflags);
 
 static int mdbx_read_header(MDBX_env *env, MDBX_meta *meta);
-static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
-                                MDBX_meta *const pending);
+static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
+                            MDBX_meta *const pending);
 static void mdbx_env_close0(MDBX_env *env);
 
 static MDBX_node *mdbx_node_search(MDBX_cursor *mc, MDBX_val *key, int *exactp);
@@ -1691,7 +1691,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
 
         mdbx_assert(env, env->me_sync_pending > 0);
         MDBX_meta meta = *head;
-        if (mdbx_env_sync_locked(env, me_flags, &meta) == MDBX_SUCCESS) {
+        if (mdbx_sync_locked(env, me_flags, &meta) == MDBX_SUCCESS) {
           txnid_t snap = mdbx_find_oldest(env, NULL);
           if (snap > oldest) {
             continue;
@@ -1994,7 +1994,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
                  mdbx_durable_str(head), env->me_sync_pending, env->me_mapsize,
                  head->mm_mapsize);
       MDBX_meta meta = *head;
-      rc = mdbx_env_sync_locked(env, flags, &meta);
+      rc = mdbx_sync_locked(env, flags, &meta);
       if (unlikely(rc != MDBX_SUCCESS)) {
         mdbx_txn_unlock(env);
         return rc;
@@ -3255,7 +3255,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     meta.mm_txnid = txn->mt_txnid;
     meta.mm_canary = txn->mt_canary;
 
-    rc = mdbx_env_sync_locked(env, env->me_flags | txn->mt_flags, &meta);
+    rc = mdbx_sync_locked(env, env->me_flags | txn->mt_flags, &meta);
   }
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
@@ -3387,8 +3387,9 @@ static MDBX_page *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   return page1;
 }
 
-static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
-                                MDBX_meta *const pending) {
+static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
+                            MDBX_meta *const pending) {
+  mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   MDBX_meta *const meta0 = METAPAGE(env, 0);
   MDBX_meta *const meta1 = METAPAGE(env, 1);
   MDBX_meta *const meta2 = METAPAGE(env, 2);
@@ -3452,7 +3453,7 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
             : MDBX_DATASIGN_WEAK;
   }
 
-  volatile MDBX_meta *target = nullptr;
+  MDBX_meta *target = nullptr;
   if (head->mm_txnid == pending->mm_txnid) {
     mdbx_assert(env, memcmp(&head->mm_dbs, &pending->mm_dbs,
                             sizeof(head->mm_dbs)) == 0);
@@ -3506,6 +3507,7 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, !mdbx_meta_eq(pending, meta2));
 
   const size_t offset = (char *)target - env->me_map;
+  mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   if (env->me_flags & MDBX_WRITEMAP) {
     /* LY: 'invalidate' the meta. */
     mdbx_jitter4testing(true);
@@ -3550,6 +3552,7 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
    * how stale their view of these values is. */
 
   /* LY: step#3 - sync meta-pages. */
+  mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   if ((flags & (MDBX_NOSYNC | MDBX_NOMETASYNC)) == 0) {
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     if (flags & MDBX_WRITEMAP) {
@@ -3565,6 +3568,7 @@ static int mdbx_env_sync_locked(MDBX_env *env, unsigned flags,
   }
 
   /* LY: currently this can't happen, but... */
+  mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   if (unlikely(pending->mm_mapsize < prev_mapsize)) {
     mdbx_assert(env, pending->mm_mapsize == env->me_mapsize);
     rc = mdbx_ftruncate(env->me_fd, pending->mm_mapsize);
@@ -3932,7 +3936,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     meta.mm_txnid += 1;
     if (META_IS_STEADY(head))
       meta.mm_datasync_sign = mdbx_meta_sign(&meta);
-    err = mdbx_env_sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta);
+    err = mdbx_sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta);
     if (err)
       return err;
   }
