@@ -3917,6 +3917,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
                head->mm_mapsize, env->me_mapsize);
     meta = *head;
     meta.mm_mapsize = env->me_mapsize;
+    meta.mm_txnid += 1;
+    if (META_IS_STEADY(head))
+      meta.mm_datasync_sign = mdbx_meta_sign(&meta);
     err = mdbx_env_sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta);
     if (err)
       return err;
