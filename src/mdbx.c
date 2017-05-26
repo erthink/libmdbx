@@ -3319,10 +3319,22 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       return MDBX_VERSION_MISMATCH;
     }
 
+    /* LY: check pagesize */
+    if (!is_power2(page.mp_meta.mm_psize) ||
+        page.mp_meta.mm_psize < MIN_PAGESIZE ||
+        page.mp_meta.mm_psize > MAX_PAGESIZE) {
+      mdbx_debug("meta[%u] has invalid pagesize %u", meta_number,
+                 page.mp_meta.mm_psize);
+      continue;
+    }
+
     /* LY: check signature as a checksum */
     if (META_IS_STEADY(&page.mp_meta) &&
         page.mp_meta.mm_datasync_sign != mdbx_meta_sign(&page.mp_meta)) {
-      mdbx_debug("steady-meta[%u] has invalid checksum", meta_number);
+      mdbx_debug("meta[%u] has invalid steady-checksum (0x%" PRIx64
+                 " != 0x%" PRIx64 ")",
+                 meta_number, page.mp_meta.mm_datasync_sign,
+                 mdbx_meta_sign(&page.mp_meta));
       continue;
     }
 
