@@ -3292,49 +3292,115 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
     const unsigned offset = guess_pagesize * meta_number;
     int rc = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
     if (rc != MDBX_SUCCESS) {
-      mdbx_debug("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page), rc,
+      mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page), rc,
                  mdbx_strerror(rc));
       return rc;
     }
 
     if (page.mp_pgno != meta_number) {
-      mdbx_debug("meta[%u] has invalid pageno %" PRIaPGNO, meta_number,
+      mdbx_error("meta[%u] has invalid pageno %" PRIaPGNO, meta_number,
                  page.mp_pgno);
       return MDBX_INVALID;
     }
 
     if (!F_ISSET(page.mp_flags, P_META)) {
-      mdbx_debug("page #%u not a meta-page", meta_number);
+      mdbx_error("page #%u not a meta-page", meta_number);
       return MDBX_INVALID;
     }
 
     if (page.mp_meta.mm_magic != MDBX_MAGIC) {
-      mdbx_debug("meta[%u] has invalid magic", meta_number);
+      mdbx_error("meta[%u] has invalid magic", meta_number);
       return MDBX_INVALID;
     }
 
     if (page.mp_meta.mm_version != MDBX_DATA_VERSION) {
-      mdbx_debug("database is version %u, expected version %u",
+      mdbx_error("database is version %u, expected version %u",
                  page.mp_meta.mm_version, MDBX_DATA_VERSION);
       return MDBX_VERSION_MISMATCH;
     }
 
     /* LY: check pagesize */
+    STATIC_ASSERT(MIN_PAGESIZE < MAX_PAGESIZE);
     if (!is_power2(page.mp_meta.mm_psize) ||
         page.mp_meta.mm_psize < MIN_PAGESIZE ||
         page.mp_meta.mm_psize > MAX_PAGESIZE) {
-      mdbx_debug("meta[%u] has invalid pagesize %u", meta_number,
-                 page.mp_meta.mm_psize);
+      mdbx_notice("meta[%u] has invalid pagesize %u, skip it", meta_number,
+                  page.mp_meta.mm_psize);
+      continue;
+    }
+
+    /* LY: check mapsize limits */
+    STATIC_ASSERT(MAX_MAPSIZE < SSIZE_MAX - MAX_PAGESIZE);
+    STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
+    if (page.mp_meta.mm_mapsize < MIN_MAPSIZE ||
+        page.mp_meta.mm_mapsize > MAX_MAPSIZE) {
+      mdbx_notice("meta[%u] has invalid mapsize %" PRIu64 ", skip it",
+                  meta_number, page.mp_meta.mm_mapsize);
       continue;
     }
 
     /* LY: check signature as a checksum */
     if (META_IS_STEADY(&page.mp_meta) &&
         page.mp_meta.mm_datasync_sign != mdbx_meta_sign(&page.mp_meta)) {
-      mdbx_debug("meta[%u] has invalid steady-checksum (0x%" PRIx64
-                 " != 0x%" PRIx64 ")",
-                 meta_number, page.mp_meta.mm_datasync_sign,
-                 mdbx_meta_sign(&page.mp_meta));
+      mdbx_notice("meta[%u] has invalid steady-checksum (0x%" PRIx64
+                  " != 0x%" PRIx64 "), skip it",
+                  meta_number, page.mp_meta.mm_datasync_sign,
+                  mdbx_meta_sign(&page.mp_meta));
+      continue;
+    }
+
+    /* LY: check mapsize with given given pagesize */
+    if (page.mp_meta.mm_mapsize <
+            MIN_PAGENO * (uint64_t)page.mp_meta.mm_psize ||
+        page.mp_meta.mm_mapsize >
+            MAX_PAGENO * (uint64_t)page.mp_meta.mm_psize) {
+      mdbx_notice("meta[%u] has invalid mapsize %" PRIu64
+                  ", with given pagesize %u, skip it",
+                  meta_number, page.mp_meta.mm_mapsize, page.mp_meta.mm_psize);
+      continue;
+    }
+
+    /* LY: check last_pgno */
+    if (page.mp_meta.mm_last_pg < MIN_PAGENO ||
+        page.mp_meta.mm_last_pg > MAX_PAGENO ||
+        page.mp_meta.mm_last_pg >
+            page.mp_meta.mm_mapsize / page.mp_meta.mm_psize) {
+      mdbx_notice("meta[%u] has invalid last-pageno %" PRIaPGNO ", skip it",
+                  meta_number, page.mp_meta.mm_last_pg);
+      continue;
+    }
+
+    /* LY: FreeDB root */
+    if (page.mp_meta.mm_dbs[FREE_DBI].md_root == P_INVALID) {
+      if (page.mp_meta.mm_dbs[FREE_DBI].md_branch_pages ||
+          page.mp_meta.mm_dbs[FREE_DBI].md_depth ||
+          page.mp_meta.mm_dbs[FREE_DBI].md_entries ||
+          page.mp_meta.mm_dbs[FREE_DBI].md_leaf_pages ||
+          page.mp_meta.mm_dbs[FREE_DBI].md_overflow_pages) {
+        mdbx_notice("meta[%u] has false-empty freedb, skip it", meta_number);
+        continue;
+      }
+    } else if (page.mp_meta.mm_dbs[FREE_DBI].md_root >
+               page.mp_meta.mm_last_pg) {
+      mdbx_notice("meta[%u] has invalid freedb-root %" PRIaPGNO ", skip it",
+                  meta_number, page.mp_meta.mm_dbs[FREE_DBI].md_root);
+      continue;
+    }
+
+    /* LY: MainDB root */
+    if (page.mp_meta.mm_dbs[MAIN_DBI].md_root == P_INVALID) {
+      if (page.mp_meta.mm_dbs[MAIN_DBI].md_branch_pages ||
+          page.mp_meta.mm_dbs[MAIN_DBI].md_depth ||
+          page.mp_meta.mm_dbs[MAIN_DBI].md_entries ||
+          page.mp_meta.mm_dbs[MAIN_DBI].md_leaf_pages ||
+          page.mp_meta.mm_dbs[MAIN_DBI].md_overflow_pages) {
+        mdbx_notice("meta[%u] has false-empty maindb", meta_number);
+        continue;
+      }
+    } else if (page.mp_meta.mm_dbs[MAIN_DBI].md_root >
+               page.mp_meta.mm_last_pg) {
+      mdbx_notice("meta[%u] has invalid maindb-root %" PRIaPGNO ", skip it",
+                  meta_number, page.mp_meta.mm_dbs[MAIN_DBI].md_root);
       continue;
     }
 
@@ -3346,7 +3412,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
   }
 
   if (META_IS_WEAK(meta)) {
-    mdbx_debug("both meta-pages are weak, database is corrupted");
+    mdbx_error("no usable meta-pages, database is corrupted");
     return MDBX_CORRUPTED;
   }
 
