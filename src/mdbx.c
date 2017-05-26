@@ -3290,11 +3290,33 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
 
     const unsigned meta_number = loop_count % NUM_METAS;
     const unsigned offset = guess_pagesize * meta_number;
-    int rc = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
-    if (rc != MDBX_SUCCESS) {
-      mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page), rc,
-                 mdbx_strerror(rc));
-      return rc;
+
+    unsigned retryleft = 42;
+    while (1) {
+      int rc = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
+      if (rc != MDBX_SUCCESS) {
+        mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page),
+                   rc, mdbx_strerror(rc));
+        return rc;
+      }
+
+      MDBX_page again;
+      rc = mdbx_pread(env->me_fd, &again, sizeof(again), offset);
+      if (rc != MDBX_SUCCESS) {
+        mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(again),
+                   rc, mdbx_strerror(rc));
+        return rc;
+      }
+
+      if (memcmp(&page, &again, sizeof(page)) == 0 || --retryleft == 0)
+        break;
+
+      mdbx_info("meta[%u] was updated, re-read it", meta_number);
+    }
+
+    if (!retryleft) {
+      mdbx_error("meta[%u] is too volatile, skip it", meta_number);
+      continue;
     }
 
     if (page.mp_pgno != meta_number) {
