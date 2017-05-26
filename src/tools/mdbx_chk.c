@@ -913,7 +913,7 @@ int main(int argc, char *argv[]) {
     size_t traversal_problems;
     size_t empty_pages, lost_bytes;
 
-    print("Traversal b-tree...\n");
+    print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
     fflush(NULL);
     walk.pagemap = calloc(lastpgno, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
