@@ -73,6 +73,7 @@ static __attribute__((constructor)) void init_walk(void) {
 
 uint64_t total_unused_bytes;
 int exclusive = 2;
+int envflags = MDBX_RDONLY;
 
 MDBX_env *env;
 MDBX_txn *txn, *locktxn;
@@ -686,7 +687,8 @@ void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
   if (stay)
     print(", stay");
 
-  if (txnid > envinfo.me_recent_txnid)
+  if (txnid > envinfo.me_recent_txnid &&
+      (exclusive || (envflags & MDBX_RDONLY) == 0))
     print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
           txnid - envinfo.me_recent_txnid, txnid, envinfo.me_recent_txnid);
   print("\n");
@@ -729,7 +731,6 @@ int main(int argc, char *argv[]) {
   int i, rc;
   char *prog = argv[0];
   char *envname;
-  int envflags = MDBX_RDONLY;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
   int dont_traversal = 0;
   struct timespec timestamp_start, timestamp_finish;
