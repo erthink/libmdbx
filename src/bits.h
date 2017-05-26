@@ -337,7 +337,8 @@ typedef struct MDBX_lockinfo {
   /* Format of this lock file. Must be set to MDBX_LOCK_FORMAT. */
   uint64_t mti_format;
   /* Flags which environment was opened. */
-  uint64_t mti_envmode;
+  uint32_t mti_envmode;
+  uint32_t mti_reserved;
 
 #ifdef MDBX_OSAL_LOCK
   MDBX_OSAL_LOCK mti_wmutex;

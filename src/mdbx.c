@@ -4342,7 +4342,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
   const unsigned mode_flags =
       MDBX_WRITEMAP | MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC;
   if (lck_rc == MDBX_RESULT_TRUE) {
-    env->me_lck->mti_envmode = env->me_flags & mode_flags;
+    env->me_lck->mti_envmode = env->me_flags & (mode_flags | MDBX_RDONLY);
     if (exclusive == NULL || *exclusive < 2) {
       /* LY: downgrade lock only if exclusive access not requested.
        *     in case exclusive==1, just leave value as is. */
@@ -4356,11 +4356,19 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
       /* LY: just indicate that is not an exclusive access. */
       *exclusive = 0;
     }
-    if ((env->me_flags & MDBX_RDONLY) == 0 &&
-        ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) != 0) {
-      mdbx_error("current mode/flags incompatible with requested");
-      rc = MDBX_INCOMPATIBLE;
-      goto bailout;
+    if ((env->me_flags & MDBX_RDONLY) == 0) {
+      while (env->me_lck->mti_envmode == MDBX_RDONLY) {
+        if (mdbx_atomic_compare_and_swap32(&env->me_lck->mti_envmode,
+                                           MDBX_RDONLY,
+                                           env->me_flags & mode_flags))
+          break;
+        /* TODO: yield/relax cpu */
+      }
+      if ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) {
+        mdbx_error("current mode/flags incompatible with requested");
+        rc = MDBX_INCOMPATIBLE;
+        goto bailout;
+      }
     }
   }
 
