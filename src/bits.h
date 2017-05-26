@@ -139,6 +139,8 @@
  * size up to 2^44 bytes, in case of 4K pages. */
 typedef uint64_t pgno_t;
 #define PRIaPGNO PRIu64 /* TODO */
+#define MAX_PAGENO ((pgno_t)UINT64_C(0xffffFFFFffff))
+#define MIN_PAGENO (NUM_METAS - 1)
 
 /* A transaction ID. */
 typedef uint64_t txnid_t;
@@ -148,6 +150,13 @@ typedef uint64_t txnid_t;
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
  * this is plenty. */
 typedef uint16_t indx_t;
+
+#define MIN_MAPSIZE (MIN_PAGESIZE * MIN_PAGENO)
+#define MAX_MAPSIZE                                                            \
+  ((sizeof(size_t) < 8)                                                        \
+       ? UINT32_C(0x7ff80000)                                                  \
+       : ((sizeof(pgno_t) > 4) ? UINT64_C(0x7fffFFFFfff80000)                  \
+                               : MAX_PAGENO * (uint64_t)MAX_PAGESIZE))
 
 /*----------------------------------------------------------------------------*/
 /* Core structures for database and shared memory (i.e. format definition) */
@@ -966,7 +975,7 @@ static __inline pgno_t NODEPGNO(const MDBX_node *node) {
   if (UNALIGNED_OK) {
     pgno = node->mn_ksize_and_pgno;
     if (sizeof(pgno_t) > 4)
-      pgno &= UINT64_C(0xffffFFFFffff);
+      pgno &= MAX_PAGENO;
   } else {
     pgno = node->mn_lo | ((pgno_t)node->mn_hi << 16);
     if (sizeof(pgno_t) > 4)
@@ -977,7 +986,7 @@ static __inline pgno_t NODEPGNO(const MDBX_node *node) {
 
 /* Set the page number in a branch node */
 static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
-  assert(pgno <= (pgno_t)UINT64_C(0xffffFFFFffff));
+  assert(pgno <= MAX_PAGENO);
 
   if (UNALIGNED_OK) {
     if (sizeof(pgno_t) > 4)
