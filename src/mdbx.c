@@ -4156,7 +4156,8 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
       /* LY: just indicate that is not an exclusive access. */
       *exclusive = 0;
     }
-    if ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) {
+    if ((env->me_flags & MDBX_RDONLY) == 0 &&
+        ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) != 0) {
       mdbx_error("current mode/flags incompatible with requested");
       rc = MDBX_INCOMPATIBLE;
       goto bailout;
