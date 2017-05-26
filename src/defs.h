@@ -368,15 +368,20 @@
 
 #define FIXME "FIXME: " __FILE__ ", " STRINGIFY(__LINE__)
 
-#ifndef STATIC_ASSERT
-#   if __STDC_VERSION__ >= 201112L
-#       define STATIC_ASSERT(expr, msg) _Static_assert(expr, msg)
+#ifndef STATIC_ASSERT_MSG
+#   if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L) \
+          || __has_feature(c_static_assert)
+#       define STATIC_ASSERT_MSG(expr, msg) _Static_assert(expr, msg)
 #   elif defined(static_assert)
-#       define STATIC_ASSERT(expr, msg) static_assert(expr, msg)
+#       define STATIC_ASSERT_MSG(expr, msg) static_assert(expr, msg)
 #   else
-#       define STATIC_ASSERT(expr, msg) switch (0) {case 0:case (expr):;}
+#       define STATIC_ASSERT_MSG(expr, msg) switch (0) {case 0:case (expr):;}
 #   endif
 #endif /* STATIC_ASSERT */
+
+#ifndef STATIC_ASSERT
+#   define STATIC_ASSERT(expr) STATIC_ASSERT_MSG(expr, #expr)
+#endif
 
 /* *INDENT-ON* */
 /* clang-format on */

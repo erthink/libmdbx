@@ -31,6 +31,9 @@
 /*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
 #ifndef _FILE_OFFSET_BITS
 #define _FILE_OFFSET_BITS 64
 #endif

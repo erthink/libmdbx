@@ -407,8 +407,8 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
     return (rc == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
 #else
-  STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
-                "libmdbx requires 64-bit file I/O on 64-bit systems");
+  STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                    "libmdbx requires 64-bit file I/O on 64-bit systems");
   ssize_t read = pread(fd, buf, bytes, offset);
   if (read < 0) {
     int rc = errno;
@@ -437,8 +437,8 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
   int rc;
   ssize_t written;
   do {
-    STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
-                  "libmdbx requires 64-bit file I/O on 64-bit systems");
+    STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                      "libmdbx requires 64-bit file I/O on 64-bit systems");
     written = pwrite(fd, buf, bytes, offset);
     if (likely(bytes == (size_t)written))
       return MDBX_SUCCESS;
@@ -465,8 +465,8 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
   int rc;
   ssize_t written;
   do {
-    STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
-                  "libmdbx requires 64-bit file I/O on 64-bit systems");
+    STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                      "libmdbx requires 64-bit file I/O on 64-bit systems");
     written = pwritev(fd, iov, iovcnt, offset);
     if (likely(expected_written == (size_t)written))
       return MDBX_SUCCESS;
@@ -556,8 +556,8 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 #else
   struct stat st;
 
-  STATIC_ASSERT(sizeof(off_t) <= sizeof(uint64_t),
-                "libmdbx requires 64-bit file I/O on 64-bit systems");
+  STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(uint64_t),
+                    "libmdbx requires 64-bit file I/O on 64-bit systems");
   if (fstat(fd, &st))
     return errno;
 
@@ -574,8 +574,8 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
              ? MDBX_SUCCESS
              : mdbx_get_errno_checked();
 #else
-  STATIC_ASSERT(sizeof(off_t) >= sizeof(size_t),
-                "libmdbx requires 64-bit file I/O on 64-bit systems");
+  STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                    "libmdbx requires 64-bit file I/O on 64-bit systems");
   return ftruncate(fd, length) == 0 ? MDBX_SUCCESS : errno;
 #endif
 }
