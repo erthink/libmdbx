@@ -526,60 +526,68 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 #error FIXME atomic-ops
 #endif
 
-static __inline size_t mdbx_atomic_add(volatile size_t *p, size_t v) {
+static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
 #ifdef ATOMIC_VAR_INIT
   return atomic_fetch_add(p, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(p, v);
 #else
-  switch (sizeof(size_t)) {
-  case 4:
 #ifdef _MSC_VER
-    return _InterlockedExchangeAdd(p, v);
+  return _InterlockedExchangeAdd(p, v);
 #endif
 #ifdef __APPLE__
-    return OSAtomicAdd32(v, (volatile int32_t *)p);
+  return OSAtomicAdd32(v, (volatile int32_t *)p);
 #endif
-  case 8:
-#ifdef _MSC_VER
-    return _InterlockedExchangeAdd64(p, v);
-#endif
-#ifdef __APPLE__
-    return OSAtomicAdd64(v, (volatile int64_t *)p);
-#endif
-  }
-  while (1)
-    ;
 #endif
 }
 
-#define mdbx_atomic_sub(p, v) mdbx_atomic_add(p, -(v))
+static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
+#ifdef ATOMIC_VAR_INIT
+  return atomic_fetch_add(p, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_fetch_and_add(p, v);
+#else
+#ifdef _MSC_VER
+  return _InterlockedExchangeAdd64(p, v);
+#endif
+#ifdef __APPLE__
+  return OSAtomicAdd64(v, (volatile int64_t *)p);
+#endif
+#endif
+}
 
-static __inline bool mdbx_atomic_compare_and_swap(volatile size_t *p, size_t c,
-                                                  size_t v) {
+#define mdbx_atomic_sub32(p, v) mdbx_atomic_add32(p, -(v))
+#define mdbx_atomic_sub64(p, v) mdbx_atomic_add64(p, -(v))
+
+static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
+                                                    uint32_t c, uint32_t v) {
 #ifdef ATOMIC_VAR_INIT
   return atomic_compare_exchange_strong(p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(p, c, v);
 #else
-  switch (sizeof(size_t)) {
-  case 4:
 #ifdef _MSC_VER
-    return c == _InterlockedCompareExchange(p, v, c);
+  return c == _InterlockedCompareExchange(p, v, c);
 #endif
 #ifdef __APPLE__
-    return c == OSAtomicCompareAndSwap32Barrier(c, v, (volatile int32_t *)p);
+  return c == OSAtomicCompareAndSwap32Barrier(c, v, (volatile int32_t *)p);
 #endif
-  case 8:
+#endif
+}
+
+static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
+                                                    uint64_t c, uint64_t v) {
+#ifdef ATOMIC_VAR_INIT
+  return atomic_compare_exchange_strong(p, &c, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_bool_compare_and_swap(p, c, v);
+#else
 #ifdef _MSC_VER
-    return c == _InterlockedCompareExchange64(p, v, c);
+  return c == _InterlockedCompareExchange64(p, v, c);
 #endif
 #ifdef __APPLE__
-    return c == OSAtomicCompareAndSwap64Barrier(c, v, (volatile int32_t *)p);
+  return c == OSAtomicCompareAndSwap64Barrier(c, v, (volatile uint64_t *)p);
 #endif
-  }
-  while (1)
-    ;
 #endif
 }
 
