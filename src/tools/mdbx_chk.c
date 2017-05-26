@@ -638,42 +638,48 @@ static __inline int meta_recent(const bool roolback2steady) {
              : 0;
 }
 
-static __inline int meta_ancient(const bool roolback2steady) {
+static __inline int meta_tail(int head) {
 
-  if (meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-              envinfo.me_meta1_txnid, envinfo.me_meta1_sign, roolback2steady))
+  if (head == 0)
+    return meta_ot(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
+                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign, true)
+               ? 1
+               : 2;
+  if (head == 1)
     return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
-                   roolback2steady)
+                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign, true)
                ? 0
                : 2;
-  return meta_ot(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
-                 envinfo.me_meta1_txnid, envinfo.me_meta1_sign, roolback2steady)
-             ? 2
-             : 1;
+  if (head == 2)
+    return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
+                   envinfo.me_meta1_txnid, envinfo.me_meta1_sign, true)
+               ? 0
+               : 1;
+  assert(false);
+  return -1;
 }
 
-static int meta_steady_head(void) { return meta_recent(true); }
+static int meta_steady(void) { return meta_recent(true); }
 
-static int meta_weak_head(void) { return meta_recent(false); }
-
-static int meta_tail(void) { return meta_ancient(true); }
+static int meta_head(void) { return meta_recent(false); }
 
 void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
   print(" - meta-%d: %s %" PRIu64, num, meta_synctype(sign), txnid);
   bool stay = true;
 
-  if (num == meta_steady_head() && num == meta_weak_head()) {
+  const int steady = meta_steady();
+  const int head = meta_head();
+  if (num == steady && num == head) {
     print(", head");
     stay = false;
-  } else if (num == meta_steady_head()) {
+  } else if (num == steady) {
     print(", head-steady");
     stay = false;
-  } else if (num == meta_weak_head()) {
+  } else if (num == head) {
     print(", head-weak");
     stay = false;
   }
-  if (num == meta_tail()) {
+  if (num == meta_tail(head)) {
     print(", tail");
     stay = false;
   }
