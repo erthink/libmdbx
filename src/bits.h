@@ -252,6 +252,9 @@ typedef struct MDBX_meta {
   uint32_t mm_magic;
   /* Version number of this file. Must be set to MDBX_DATA_VERSION. */
   uint32_t mm_version;
+  /* txnid that committed this page, */
+  volatile txnid_t mm_txnid_top;
+
   size_t mm_mapsize;        /* size of mmap region */
   MDBX_db mm_dbs[CORE_DBS]; /* first is free space, 2nd is main db */
                             /* The size of pages used in this DB */
@@ -271,7 +274,8 @@ typedef struct MDBX_meta {
 
 #define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
-  volatile txnid_t mm_txnid; /* txnid that committed this page */
+  /* txnid that committed this page */
+  volatile txnid_t mm_txnid_bottom;
 } MDBX_meta;
 
 /* Common header for all page types. The page type depends on mp_flags.
