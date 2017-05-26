@@ -3508,27 +3508,49 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 
   const size_t offset = (char *)target - env->me_map;
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
+  mdbx_ensure(env, target == head || target->mm_txnid < pending->mm_txnid);
   if (env->me_flags & MDBX_WRITEMAP) {
-    /* LY: 'invalidate' the meta. */
     mdbx_jitter4testing(true);
-    if (target->mm_datasync_sign != MDBX_DATASIGN_WEAK ||
-        target->mm_txnid != pending->mm_txnid) {
+    if (likely(target != head)) {
+#ifdef NDEBUG
+      /* nodebug: 'invalidate' the meta to avoid false-reading
+       * from violators (make safer) */
       target->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-      mdbx_jitter4testing(true);
       target->mm_txnid = 0;
+      mdbx_coherent_barrier();
+#else
+      /* debug: provoke failure to catch a violators */
+      memset(target->mm_dbs, 0xCC,
+             sizeof(target->mm_dbs) + sizeof(target->mm_canary));
+      mdbx_jitter4testing(false);
+#endif
+
+      /* LY: update info */
+      target->mm_mapsize = pending->mm_mapsize;
+      target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
+      target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
+      target->mm_canary = pending->mm_canary;
+      target->mm_last_pg = pending->mm_last_pg;
       mdbx_jitter4testing(true);
+      mdbx_coherent_barrier();
+
+      /* LY: 'commit' the meta */
+      target->mm_txnid = pending->mm_txnid;
+      mdbx_jitter4testing(true);
+    } else {
+      /* dangerous case (target == head), only mm_datasync_sign could
+       * me updated, check assertions once again */
+      mdbx_ensure(env, head->mm_txnid == pending->mm_txnid &&
+                           !META_IS_STEADY(head) && META_IS_STEADY(pending));
+      mdbx_ensure(env, head->mm_last_pg == pending->mm_last_pg);
+      mdbx_ensure(env, head->mm_mapsize == pending->mm_mapsize);
+      mdbx_ensure(env, memcmp(&head->mm_dbs, &pending->mm_dbs,
+                              sizeof(head->mm_dbs)) == 0);
+      mdbx_ensure(env, memcmp(&head->mm_canary, &pending->mm_canary,
+                              sizeof(head->mm_canary)) == 0);
     }
-    /* LY: update info */
-    target->mm_mapsize = pending->mm_mapsize;
-    target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
-    target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
-    target->mm_last_pg = pending->mm_last_pg;
-    target->mm_canary = pending->mm_canary;
-    /* LY: 'commit' the meta */
-    mdbx_jitter4testing(true);
-    target->mm_txnid = pending->mm_txnid;
-    mdbx_jitter4testing(true);
     target->mm_datasync_sign = pending->mm_datasync_sign;
+    mdbx_coherent_barrier();
     mdbx_jitter4testing(true);
   } else {
     pending->mm_magic = MDBX_MAGIC;
