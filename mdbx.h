@@ -1550,16 +1550,11 @@ LIBMDBX_API MDBX_oom_func *mdbx_env_get_oomfunc(MDBX_env *env);
 #define MDBX_DBG_TRACE 4
 #define MDBX_DBG_EXTRA 8
 #define MDBX_DBG_AUDIT 16
-#define MDBX_DBG_EDGE 32
-
-/* LY: a "don't touch" value */
-#define MDBX_DBG_DNT (-1L)
 
 typedef void MDBX_debug_func(int type, const char *function, int line,
                              const char *msg, va_list args);
 
-LIBMDBX_API int mdbx_setup_debug(int flags, MDBX_debug_func *logger,
-                                 long edge_txn);
+LIBMDBX_API int mdbx_setup_debug(int flags, MDBX_debug_func *logger);
 
 typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned pgnumber, void *ctx,
                                 const char *dbi, const char *type, int nentries,

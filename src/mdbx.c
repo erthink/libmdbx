@@ -502,12 +502,6 @@ int mdbx_runtime_flags = MDBX_DBG_PRINT
 
 MDBX_debug_func *mdbx_debug_logger;
 
-int mdbx_setup_debug(int flags, MDBX_debug_func *logger, long edge_txn);
-
-#if MDBX_DEBUG
-txnid_t mdbx_debug_edge;
-#endif
-
 static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp, int flags);
 static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, int num,
                          MDBX_page **mp);
@@ -2276,15 +2270,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     txn->mt_canary = meta->mm_canary;
     const txnid_t snap = mdbx_meta_txnid_stable(env, meta);
     txn->mt_txnid = snap + 1;
-#if MDBX_DEBUG
-    if (unlikely(txn->mt_txnid == mdbx_debug_edge)) {
-      if (!mdbx_debug_logger)
-        mdbx_runtime_flags |=
-            MDBX_DBG_TRACE | MDBX_DBG_EXTRA | MDBX_DBG_AUDIT | MDBX_DBG_ASSERT;
-      mdbx_debug_log(MDBX_DBG_EDGE, __FUNCTION__, __LINE__,
-                     "on/off edge (txn %" PRIaTXN ")", txn->mt_txnid);
-    }
-#endif
     if (unlikely(txn->mt_txnid < snap)) {
       mdbx_debug("txnid overflow!");
       rc = MDBX_TXN_FULL;
@@ -9566,17 +9551,10 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   return rc;
 }
 
-int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger, long edge_txn) {
+int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
   unsigned ret = mdbx_runtime_flags;
-  if (flags != (int)MDBX_DBG_DNT)
-    mdbx_runtime_flags = flags;
-  if (logger != (MDBX_debug_func *)MDBX_DBG_DNT)
-    mdbx_debug_logger = logger;
-  if (edge_txn != (long)MDBX_DBG_DNT) {
-#if MDBX_DEBUG
-    mdbx_debug_edge = edge_txn;
-#endif
-  }
+  mdbx_runtime_flags = flags;
+  mdbx_debug_logger = logger;
   return ret;
 }
 
