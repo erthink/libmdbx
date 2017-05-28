@@ -1273,25 +1273,29 @@ bailout:
 
 #define METAPAGE_END(env) METAPAGE(env, NUM_METAS)
 
-static __inline txnid_t mdbx_meta_txnid(const MDBX_env *env,
-                                        const MDBX_meta *meta,
-                                        bool allow_volatile) {
+static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
+                                   bool allow_volatile) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
   txnid_t top = meta->mm_txnid_top;
   txnid_t bottom = meta->mm_txnid_bottom;
-  if (!allow_volatile)
+  if (allow_volatile)
+    return (top < bottom) ? top : bottom;
+  if (unlikely(top != bottom)) {
+    mdbx_error("top %" PRIaTXN " != bottom %" PRIaTXN, top, bottom);
+    *(char *)0 = 0;
     mdbx_assert(env, top == bottom);
-  return (top < bottom) ? top : bottom;
+  }
+  return top;
 }
 
 static __inline txnid_t mdbx_meta_txnid_stable(const MDBX_env *env,
                                                const MDBX_meta *meta) {
-  return mdbx_meta_txnid(env, meta, false);
+  return meta_txnid(env, meta, false);
 }
 
 static __inline txnid_t mdbx_meta_txnid_fluid(const MDBX_env *env,
                                               const MDBX_meta *meta) {
-  return mdbx_meta_txnid(env, meta, true);
+  return meta_txnid(env, meta, true);
 }
 
 static __inline void mdbx_meta_update_begin(const MDBX_env *env,
@@ -1425,10 +1429,11 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 /*----------------------------------------------------------------------------*/
 
 /* Find oldest txnid still referenced. */
-static txnid_t mdbx_find_oldest(MDBX_env *env, int *laggard) {
+static txnid_t mdbx_find_oldest(MDBX_txn *txn, int *laggard) {
+  MDBX_env *env = txn->mt_env;
   const MDBX_meta *const head = mdbx_meta_mostrecent(
       env, F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) ? false : true);
-  txnid_t oldest = mdbx_meta_txnid_stable(env, head);
+  txnid_t oldest = meta_txnid(env, head, (txn->mt_flags & MDBX_RDONLY) ? true : false);
 
   int i, reader;
   const MDBX_reader *const r = env->me_lck->mti_readers;
@@ -1560,7 +1565,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
         mdbx_cursor_init(&m2, txn, FREE_DBI, NULL);
         if (flags & MDBX_LIFORECLAIM) {
           if (!found_oldest) {
-            oldest = mdbx_find_oldest(env, NULL);
+            oldest = mdbx_find_oldest(txn, NULL);
             found_oldest = 1;
           }
           /* Begin from oldest reader if any */
@@ -1582,7 +1587,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
         /* Do not fetch more if the record will be too recent */
         if (op != MDBX_FIRST && ++last >= oldest) {
           if (!found_oldest) {
-            oldest = mdbx_find_oldest(env, NULL);
+            oldest = mdbx_find_oldest(txn, NULL);
             found_oldest = 1;
           }
           if (oldest <= last)
@@ -1595,7 +1600,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
         if (op == MDBX_SET_RANGE)
           continue;
         found_oldest = 1;
-        if (oldest < mdbx_find_oldest(env, NULL)) {
+        if (oldest < mdbx_find_oldest(txn, NULL)) {
           oldest = env->me_pgoldest;
           last = oldest - 1;
           key.iov_base = &last;
@@ -1613,7 +1618,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
       last = *(txnid_t *)key.iov_base;
       if (oldest <= last) {
         if (!found_oldest) {
-          oldest = mdbx_find_oldest(env, NULL);
+          oldest = mdbx_find_oldest(txn, NULL);
           found_oldest = 1;
         }
         if (oldest <= last) {
@@ -1745,7 +1750,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
         mdbx_assert(env, env->me_sync_pending > 0);
         MDBX_meta meta = *head;
         if (mdbx_sync_locked(env, me_flags, &meta) == MDBX_SUCCESS) {
-          txnid_t snap = mdbx_find_oldest(env, NULL);
+          txnid_t snap = mdbx_find_oldest(txn, NULL);
           if (snap > oldest) {
             continue;
           }
@@ -9571,7 +9576,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
     if (mdbx_reader_check(env, NULL))
       break;
 
-    txnid_t snap = mdbx_find_oldest(env, &reader);
+    txnid_t snap = mdbx_find_oldest(env->me_txn, &reader);
     if (oldest < snap || reader < 0) {
       if (retry && env->me_oom_func) {
         /* LY: notify end of oom-loop */
@@ -9614,7 +9619,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
     /* LY: notify end of oom-loop */
     env->me_oom_func(env, 0, 0, oldest, 0, -retry);
   }
-  return mdbx_find_oldest(env, NULL);
+  return mdbx_find_oldest(env->me_txn, NULL);
 }
 
 int __cold mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes) {
