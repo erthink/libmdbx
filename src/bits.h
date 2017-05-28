@@ -232,15 +232,15 @@ typedef struct MDBX_reader {
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {
-  uint32_t md_xsize;        /* also ksize for LEAF2 pages */
-  uint16_t md_flags;        /* see mdbx_dbi_open */
-  uint16_t md_depth;        /* depth of this tree */
-  uint64_t md_seq;          /* table sequence counter */
-  pgno_t md_branch_pages;   /* number of internal pages */
-  pgno_t md_leaf_pages;     /* number of leaf pages */
-  pgno_t md_overflow_pages; /* number of overflow pages */
-  pgno_t md_root;           /* the root page of this tree */
-  uint64_t md_entries;      /* number of data items */
+  uint32_t md_xsize;          /* also ksize for LEAF2 pages */
+  uint16_t md_flags;          /* see mdbx_dbi_open */
+  uint16_t md_depth;          /* depth of this tree */
+  uint64_t md_root;           /* the root page of this tree */
+  uint64_t md_seq;            /* table sequence counter */
+  uint64_t md_branch_pages;   /* number of internal pages */
+  uint64_t md_leaf_pages;     /* number of leaf pages */
+  uint64_t md_overflow_pages; /* number of overflow pages */
+  uint64_t md_entries;        /* number of data items */
 } MDBX_db;
 
 /* Meta page content.
@@ -255,7 +255,7 @@ typedef struct MDBX_meta {
   /* txnid that committed this page, */
   volatile txnid_t mm_txnid_top;
 
-  size_t mm_mapsize;        /* size of mmap region */
+  uint64_t mm_mapsize;      /* size of mmap region */
   MDBX_db mm_dbs[CORE_DBS]; /* first is free space, 2nd is main db */
                             /* The size of pages used in this DB */
 #define mm_psize mm_dbs[FREE_DBI].md_xsize
@@ -264,7 +264,8 @@ typedef struct MDBX_meta {
   mdbx_canary mm_canary;
   /* Last used page in the datafile.
    * Actually the file may be shorter if the freeDB lists the final pages. */
-  pgno_t mm_last_pg;
+  uint64_t mm_last_pg;
+  volatile txnid_t mm_txnid; /* txnid that committed this page */
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u
   volatile uint64_t mm_datasync_sign;
