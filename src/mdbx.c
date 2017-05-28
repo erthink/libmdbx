@@ -2263,6 +2263,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       }
     }
 
+    mdbx_assert(env, txn->mt_txnid >= mdbx_find_oldest(txn, nullptr));
     txn->mt_ro_reader = r;
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
   } else {
@@ -4959,6 +4960,8 @@ static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
     return MDBX_BAD_TXN;
   }
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   /* Make sure we're using an up-to-date root */
   if (unlikely(*mc->mc_dbflag & DB_STALE)) {
     MDBX_cursor mc2;
@@ -4998,6 +5001,8 @@ static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
     return MDBX_NOTFOUND;
   }
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   mdbx_cassert(mc, root >= NUM_METAS);
   if (!mc->mc_pg[0] || mc->mc_pg[0]->mp_pgno != root)
     if (unlikely((rc = mdbx_page_get(mc, root, &mc->mc_pg[0], NULL)) != 0))
@@ -5104,6 +5109,8 @@ static __inline int mdbx_node_read(MDBX_cursor *mc, MDBX_node *leaf,
   pgno_t pgno;
   int rc;
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   if (!F_ISSET(leaf->mn_flags, F_BIGDATA)) {
     data->iov_len = NODEDSZ(leaf);
     data->iov_base = NODEDATA(leaf);
@@ -5160,6 +5167,8 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int move_right) {
   MDBX_node *indx;
   MDBX_page *mp;
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   if (unlikely(mc->mc_snum < 2)) {
     return MDBX_NOTFOUND; /* root has no siblings */
   }
@@ -5389,6 +5398,8 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   MDBX_node *leaf = NULL;
   DKBUF;
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   if ((mc->mc_db->md_flags & MDBX_INTEGERKEY) &&
       unlikely(key->iov_len != sizeof(uint32_t) &&
                key->iov_len != sizeof(uint64_t))) {
@@ -5675,6 +5686,8 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   if (unlikely(mc->mc_txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   switch (op) {
   case MDBX_GET_CURRENT: {
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
@@ -6905,6 +6918,8 @@ static void mdbx_xcursor_init0(MDBX_cursor *mc) {
 static void mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
   MDBX_xcursor *mx = mc->mc_xcursor;
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   if (node->mn_flags & F_SUBDATA) {
     memcpy(&mx->mx_db, NODEDATA(node), sizeof(MDBX_db));
     mx->mx_cursor.mc_pg[0] = 0;
@@ -6954,6 +6969,8 @@ static void mdbx_xcursor_init2(MDBX_cursor *mc, MDBX_xcursor *src_mx,
                                int new_dupdata) {
   MDBX_xcursor *mx = mc->mc_xcursor;
 
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   if (new_dupdata) {
     mx->mx_cursor.mc_snum = 1;
     mx->mx_cursor.mc_top = 0;
@@ -6993,6 +7010,8 @@ static void mdbx_cursor_init(MDBX_cursor *mc, MDBX_txn *txn, MDBX_dbi dbi,
     mc->mc_xcursor = mx;
     mdbx_xcursor_init0(mc);
   }
+  mdbx_cassert(mc,
+               mc->mc_txn->mt_txnid >= mdbx_find_oldest(mc->mc_txn, nullptr));
   if (unlikely(*mc->mc_dbflag & DB_STALE)) {
     mdbx_page_search(mc, NULL, MDBX_PS_ROOTONLY);
   }
@@ -7602,6 +7621,8 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   unsigned i;
 
+  mdbx_cassert(csrc, csrc->mc_txn->mt_txnid >=
+                         mdbx_find_oldest(csrc->mc_txn, nullptr));
   cdst->mc_txn = csrc->mc_txn;
   cdst->mc_dbi = csrc->mc_dbi;
   cdst->mc_db = csrc->mc_db;
