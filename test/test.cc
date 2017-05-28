@@ -104,7 +104,7 @@ int testcase::oom_callback(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
     osal_yield();
     if (retry > 0)
       osal_udelay(retry * 100);
-    return 1 /* always retry */;
+    return 0 /* always retry */;
   }
 
   return -1;
