@@ -603,6 +603,7 @@ struct MDBX_env {
   unsigned me_maxreaders; /* size of the reader table */
   /* Max MDBX_lockinfo.mti_numreaders of interest to mdbx_env_close() */
   unsigned me_close_readers;
+  mdbx_fastmutex_t me_dbi_lock;
   MDBX_dbi me_numdbs;         /* number of DBs opened */
   MDBX_dbi me_maxdbs;         /* size of the DB table */
   mdbx_pid_t me_pid;          /* process ID of this env */

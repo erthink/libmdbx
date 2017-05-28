@@ -3814,6 +3814,10 @@ int __cold mdbx_env_create(MDBX_env **penv) {
   }
   mdbx_env_setup_limits(env, env->me_os_psize);
 
+  rc = mdbx_fastmutex_init(&env->me_dbi_lock);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
   VALGRIND_CREATE_MEMPOOL(env, 0, 0);
   env->me_signature = MDBX_ME_SIGNATURE;
   *penv = env;
@@ -4507,6 +4511,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   }
 
   mdbx_env_close0(env);
+  mdbx_ensure(env, mdbx_fastmutex_destroy(&env->me_dbi_lock) == MDBX_SUCCESS);
   env->me_signature = 0;
   free(env);
 
@@ -9106,7 +9111,8 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   }
 
   /* Fail, if no free slot and max hit */
-  if (unlikely(slot >= txn->mt_env->me_maxdbs))
+  MDBX_env *env = txn->mt_env;
+  if (unlikely(slot >= env->me_maxdbs))
     return MDBX_DBS_FULL;
 
   /* Cannot mix named table with some main-table flags */
@@ -9137,7 +9143,11 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   if (unlikely(!namedup))
     return MDBX_ENOMEM;
 
-  /* FIXME: lock here (to avoid races !!!) */
+  int err = mdbx_fastmutex_acquire(&env->me_dbi_lock);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    free(namedup);
+    return err;
+  }
 
   unsigned dbflag = DB_NEW | DB_VALID | DB_USRVALID;
   if (unlikely(rc)) {
@@ -9165,7 +9175,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   txn->mt_dbxs[slot].md_cmp = nullptr;
   txn->mt_dbxs[slot].md_dcmp = nullptr;
   txn->mt_dbflags[slot] = dbflag;
-  txn->mt_dbiseqs[slot] = (txn->mt_env->me_dbiseqs[slot] += 1);
+  txn->mt_dbiseqs[slot] = (env->me_dbiseqs[slot] += 1);
 
   txn->mt_dbs[slot] = *(MDBX_db *)data.iov_base;
   rc = mdbx_dbi_bind(txn, slot, user_flags, keycmp, datacmp);
@@ -9183,7 +9193,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
       txn->mt_numdbs++;
   }
 
-  /* FIXME: unlock here (to avoid races !!!) */
+  mdbx_ensure(env, mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
   return rc;
 }
 
@@ -9218,13 +9228,11 @@ int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *arg,
   return mdbx_stat0(txn->mt_env, &txn->mt_dbs[dbi], arg);
 }
 
-int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
-  char *ptr;
+static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
     return MDBX_EINVAL;
 
-  /* FIXME: locking to avoid races ? */
-  ptr = env->me_dbxs[dbi].md_name.iov_base;
+  char *ptr = env->me_dbxs[dbi].md_name.iov_base;
   /* If there was no name, this was already closed */
   if (unlikely(!ptr))
     return MDBX_BAD_DBI;
@@ -9235,6 +9243,18 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   env->me_dbiseqs[dbi]++;
   free(ptr);
   return MDBX_SUCCESS;
+}
+
+int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
+  if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
+    return MDBX_EINVAL;
+
+  int rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
+  if (likely(rc == MDBX_SUCCESS)) {
+    rc = mdbx_dbi_close_locked(env, dbi);
+    mdbx_ensure(env, mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
+  }
+  return rc;
 }
 
 int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
@@ -9344,9 +9364,6 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
 }
 
 int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
-  MDBX_cursor *mc, *m2;
-  int rc;
-
   if (unlikely(1 < (unsigned)del || !txn))
     return MDBX_EINVAL;
 
@@ -9362,25 +9379,41 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
 
-  rc = mdbx_cursor_open(txn, dbi, &mc);
-  if (unlikely(rc))
+  MDBX_cursor *mc;
+  int rc = mdbx_cursor_open(txn, dbi, &mc);
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  /* FIXME: locking to avoid races ? */
+  MDBX_env *env = txn->mt_env;
+  rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    mdbx_cursor_close(mc);
+    return rc;
+  }
+
+  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID))) {
+    rc = MDBX_EINVAL;
+    goto bailout;
+  }
+
+  if (unlikely(TXN_DBI_CHANGED(txn, dbi))) {
+    rc = MDBX_BAD_DBI;
+    goto bailout;
+  }
 
   rc = mdbx_drop0(mc, mc->mc_db->md_flags & MDBX_DUPSORT);
   /* Invalidate the dropped DB's cursors */
-  for (m2 = txn->mt_cursors[dbi]; m2; m2 = m2->mc_next)
+  for (MDBX_cursor *m2 = txn->mt_cursors[dbi]; m2; m2 = m2->mc_next)
     m2->mc_flags &= ~(C_INITIALIZED | C_EOF);
   if (unlikely(rc))
-    goto leave;
+    goto bailout;
 
   /* Can't delete the main DB */
   if (del && dbi >= CORE_DBS) {
     rc = mdbx_del0(txn, MAIN_DBI, &mc->mc_dbx->md_name, NULL, F_SUBDATA);
     if (likely(!rc)) {
       txn->mt_dbflags[dbi] = DB_STALE;
-      mdbx_dbi_close(txn->mt_env, dbi);
+      mdbx_dbi_close_locked(env, dbi);
     } else {
       txn->mt_flags |= MDBX_TXN_ERROR;
     }
@@ -9397,8 +9430,10 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
 
     txn->mt_flags |= MDBX_TXN_DIRTY;
   }
-leave:
+
+bailout:
   mdbx_cursor_close(mc);
+  mdbx_ensure(env, mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
   return rc;
 }
 
