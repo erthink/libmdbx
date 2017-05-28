@@ -5856,7 +5856,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   int do_sub = 0, insert_key, insert_data;
   unsigned mcount = 0, dcount = 0, nospill;
   size_t nsize;
-  int rc, rc2;
+  int rc = MDBX_SUCCESS, rc2;
   unsigned nflags;
   DKBUF;
 
