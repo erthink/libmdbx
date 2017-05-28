@@ -4952,45 +4952,45 @@ static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
   if (unlikely(mc->mc_txn->mt_flags & MDBX_TXN_BLOCKED)) {
     mdbx_debug("transaction has failed, must abort");
     return MDBX_BAD_TXN;
-  } else {
-    /* Make sure we're using an up-to-date root */
-    if (unlikely(*mc->mc_dbflag & DB_STALE)) {
-      MDBX_cursor mc2;
-      if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
-        return MDBX_BAD_DBI;
-      mdbx_cursor_init(&mc2, mc->mc_txn, MAIN_DBI, NULL);
-      rc = mdbx_page_search(&mc2, &mc->mc_dbx->md_name, 0);
+  }
+
+  /* Make sure we're using an up-to-date root */
+  if (unlikely(*mc->mc_dbflag & DB_STALE)) {
+    MDBX_cursor mc2;
+    if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+      return MDBX_BAD_DBI;
+    mdbx_cursor_init(&mc2, mc->mc_txn, MAIN_DBI, NULL);
+    rc = mdbx_page_search(&mc2, &mc->mc_dbx->md_name, 0);
+    if (rc)
+      return rc;
+    {
+      MDBX_val data;
+      int exact = 0;
+      MDBX_node *leaf = mdbx_node_search(&mc2, &mc->mc_dbx->md_name, &exact);
+      if (!exact)
+        return MDBX_NOTFOUND;
+      if (unlikely((leaf->mn_flags & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
+        return MDBX_INCOMPATIBLE; /* not a named DB */
+      rc = mdbx_node_read(&mc2, leaf, &data);
       if (rc)
         return rc;
-      {
-        MDBX_val data;
-        int exact = 0;
-        MDBX_node *leaf = mdbx_node_search(&mc2, &mc->mc_dbx->md_name, &exact);
-        if (!exact)
-          return MDBX_NOTFOUND;
-        if (unlikely((leaf->mn_flags & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
-          return MDBX_INCOMPATIBLE; /* not a named DB */
-        rc = mdbx_node_read(&mc2, leaf, &data);
-        if (rc)
-          return rc;
 
-        uint16_t md_flags;
-        memcpy(&md_flags, ((char *)data.iov_base + offsetof(MDBX_db, md_flags)),
-               sizeof(uint16_t));
-        /* The txn may not know this DBI, or another process may
-         * have dropped and recreated the DB with other flags. */
-        if (unlikely((mc->mc_db->md_flags & PERSISTENT_FLAGS) != md_flags))
-          return MDBX_INCOMPATIBLE;
-        memcpy(mc->mc_db, data.iov_base, sizeof(MDBX_db));
-      }
-      *mc->mc_dbflag &= ~DB_STALE;
+      uint16_t md_flags;
+      memcpy(&md_flags, ((char *)data.iov_base + offsetof(MDBX_db, md_flags)),
+             sizeof(uint16_t));
+      /* The txn may not know this DBI, or another process may
+       * have dropped and recreated the DB with other flags. */
+      if (unlikely((mc->mc_db->md_flags & PERSISTENT_FLAGS) != md_flags))
+        return MDBX_INCOMPATIBLE;
+      memcpy(mc->mc_db, data.iov_base, sizeof(MDBX_db));
     }
-    root = mc->mc_db->md_root;
+    *mc->mc_dbflag &= ~DB_STALE;
+  }
+  root = mc->mc_db->md_root;
 
-    if (unlikely(root == P_INVALID)) { /* Tree is empty. */
-      mdbx_debug("tree is empty");
-      return MDBX_NOTFOUND;
-    }
+  if (unlikely(root == P_INVALID)) { /* Tree is empty. */
+    mdbx_debug("tree is empty");
+    return MDBX_NOTFOUND;
   }
 
   mdbx_cassert(mc, root >= NUM_METAS);
