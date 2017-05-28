@@ -10187,7 +10187,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
      * в пределах mmap, но за границей распределенных страниц. Это тяжелая
      * ошибка, к которой не возможно прийти без каких-то больших нарушений.
      * Поэтому не проверяем этот случай кроме как assert-ом, ибо бестолку. */
-    mdbx_tassert(txn, env->me_map + env->me_mapsize > (char *)page);
+    mdbx_tassert(txn, env->me_map + env->me_mapsize >= (char *)page);
   }
 
   /* Страница вне используемого mmap-диапазона, т.е. либо в функцию был
