@@ -225,10 +225,10 @@ typedef struct MDBX_reader {
   volatile mdbx_tid_t mr_tid;
 
   /* cache line alignment */
-  uint8_t pad[~(MDBX_CACHELINE_SIZE - 1) &
-              (sizeof(txnid_t) + sizeof(mdbx_pid_t) + sizeof(mdbx_tid_t) +
-               MDBX_CACHELINE_SIZE - 1)];
-} MDBX_reader;
+  uint8_t pad[MDBX_CACHELINE_SIZE -
+              (sizeof(txnid_t) + sizeof(mdbx_pid_t) + sizeof(mdbx_tid_t)) %
+                  MDBX_CACHELINE_SIZE];
+} __cache_aligned MDBX_reader;
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {
@@ -347,12 +347,12 @@ typedef struct MDBX_lockinfo {
   /* The number of slots that have been used in the reader table.
    * This always records the maximum count, it is not decremented
    * when readers release their slots. */
-  __cache_aligned volatile unsigned mti_numreaders;
+  volatile unsigned __cache_aligned mti_numreaders;
 #ifdef MDBX_OSAL_LOCK
   /* Mutex protecting access to this table. */
   MDBX_OSAL_LOCK mti_rmutex;
 #endif
-  MDBX_reader mti_readers[1];
+  MDBX_reader __cache_aligned mti_readers[1];
 } MDBX_lockinfo;
 
 #pragma pack(pop)
