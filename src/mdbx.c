@@ -1280,11 +1280,7 @@ static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
   txnid_t bottom = meta->mm_txnid_bottom;
   if (allow_volatile)
     return (top < bottom) ? top : bottom;
-  if (unlikely(top != bottom)) {
-    mdbx_error("top %" PRIaTXN " != bottom %" PRIaTXN, top, bottom);
-    *(char *)0 = 0;
-    mdbx_assert(env, top == bottom);
-  }
+  mdbx_assert(env, top == bottom);
   return top;
 }
 
@@ -1433,7 +1429,8 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn, int *laggard) {
   MDBX_env *env = txn->mt_env;
   const MDBX_meta *const head = mdbx_meta_mostrecent(
       env, F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) ? false : true);
-  txnid_t oldest = meta_txnid(env, head, (txn->mt_flags & MDBX_RDONLY) ? true : false);
+  txnid_t oldest =
+      meta_txnid(env, head, (txn->mt_flags & MDBX_RDONLY) ? true : false);
 
   int i, reader;
   const MDBX_reader *const r = env->me_lck->mti_readers;
@@ -2178,8 +2175,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid != ~(txnid_t)0))
         return MDBX_BAD_RSLOT;
     } else if (env->me_lck) {
-      mdbx_pid_t pid = env->me_pid;
-      mdbx_tid_t tid = mdbx_thread_self();
+      const mdbx_pid_t pid = env->me_pid;
+      const mdbx_tid_t tid = mdbx_thread_self();
       mdbx_assert(env, env->me_lck->mti_magic == MDBX_MAGIC);
       mdbx_assert(env, env->me_lck->mti_format == MDBX_LOCK_FORMAT);
 
@@ -2245,6 +2242,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       if (r) {
         r->mr_txnid = snap;
         mdbx_jitter4testing(false);
+        mdbx_assert(env, r->mr_pid == mdbx_getpid());
+        mdbx_assert(env, r->mr_tid == mdbx_thread_self());
+        mdbx_assert(env, r->mr_txnid == snap);
       }
       mdbx_coherent_barrier();
       mdbx_jitter4testing(true);
