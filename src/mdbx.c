@@ -3661,13 +3661,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
     if (likely(target != head)) {
-      mdbx_meta_update_begin(env, target, pending->mm_txnid_top);
-#ifdef NDEBUG
-      /* nodebug: 'invalidate' the meta to avoid false-reading
-       * from violators (make safer) */
+      /* LY: 'invalidate' the meta. */
       target->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-      mdbx_coherent_barrier();
-#else
+      mdbx_meta_update_begin(env, target, pending->mm_txnid_top);
+#ifndef NDEBUG
       /* debug: provoke failure to catch a violators */
       memset(target->mm_dbs, 0xCC,
              sizeof(target->mm_dbs) + sizeof(target->mm_canary));
