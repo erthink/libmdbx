@@ -3804,14 +3804,25 @@ int __cold mdbx_env_create(MDBX_env **penv) {
   env->me_fd = INVALID_HANDLE_VALUE;
   env->me_lfd = INVALID_HANDLE_VALUE;
   env->me_pid = mdbx_getpid();
-  mdbx_env_setup_limits(env, env->me_os_psize = mdbx_syspagesize());
-  if (!is_power2(env->me_os_psize))
-    return MDBX_INCOMPATIBLE;
+
+  int rc;
+  env->me_os_psize = mdbx_syspagesize();
+  if (!is_power2(env->me_os_psize) || env->me_os_psize < MIN_PAGESIZE) {
+    mdbx_error("unsuitable system pageize %u", env->me_os_psize);
+    rc = MDBX_INCOMPATIBLE;
+    goto bailout;
+  }
+  mdbx_env_setup_limits(env, env->me_os_psize);
+
   VALGRIND_CREATE_MEMPOOL(env, 0, 0);
   env->me_signature = MDBX_ME_SIGNATURE;
-
   *penv = env;
   return MDBX_SUCCESS;
+
+bailout:
+  free(env);
+  *penv = nullptr;
+  return rc;
 }
 
 static int __cold mdbx_env_map(MDBX_env *env, void *addr, size_t usedsize) {
