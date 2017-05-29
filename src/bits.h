@@ -265,7 +265,6 @@ typedef struct MDBX_meta {
   /* Last used page in the datafile.
    * Actually the file may be shorter if the freeDB lists the final pages. */
   uint64_t mm_last_pg;
-  volatile txnid_t mm_txnid; /* txnid that committed this page */
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u
   volatile uint64_t mm_datasync_sign;
