@@ -633,7 +633,7 @@ static const char *__mdbx_strerr(int errnum) {
     return "MDBX_EBADSIGN: Wrong signature of a runtime object(s)";
   case MDBX_WANNA_RECOVERY:
     return "MDBX_WANNA_RECOVERY: Database should be recovered, but this could "
-           "be done in a read-only mode";
+           "NOT be done in a read-only mode";
   case MDBX_EKEYMISMATCH:
     return "MDBX_EKEYMISMATCH: The given key value is mismatched to the "
            "current cursor position";

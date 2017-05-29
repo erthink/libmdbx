@@ -406,7 +406,7 @@ typedef enum MDBX_cursor_op {
  *  - ABI version mismatch (rare case); */
 #define MDBX_EBADSIGN (-30420)
 
-/* Database should be recovered, but this could be done automatically
+/* Database should be recovered, but this could NOT be done automatically
  * right now (e.g. in readonly mode and so forth). */
 #define MDBX_WANNA_RECOVERY (-30419)
 
