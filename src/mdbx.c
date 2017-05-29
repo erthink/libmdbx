@@ -1037,6 +1037,9 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
         unsigned x = mdbx_mid2l_search(dl, pgno);
         if (x <= dl[0].mid && dl[x].mid == pgno) {
           if (unlikely(mp != dl[x].mptr)) { /* bad cursor? */
+            mdbx_error("wrong page 0x%p #%" PRIaPGNO
+                       " in the dirtylist[%d], expecting %p",
+                       dl[x].mptr, pgno, x, mp);
             mc->mc_flags &= ~(C_INITIALIZED | C_EOF);
             txn->mt_flags |= MDBX_TXN_ERROR;
             return MDBX_PROBLEM;
@@ -1935,6 +1938,9 @@ static int mdbx_page_touch(MDBX_cursor *mc) {
       unsigned x = mdbx_mid2l_search(dl, pgno);
       if (x <= dl[0].mid && dl[x].mid == pgno) {
         if (unlikely(mp != dl[x].mptr)) { /* bad cursor? */
+          mdbx_error("wrong page 0x%p #%" PRIaPGNO
+                     " in the dirtylist[%d], expecting %p",
+                     dl[x].mptr, pgno, x, mp);
           mc->mc_flags &= ~(C_INITIALIZED | C_EOF);
           txn->mt_flags |= MDBX_TXN_ERROR;
           return MDBX_PROBLEM;
@@ -5082,6 +5088,8 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
         dl[x] = ix;
       } else {
         mdbx_cassert(mc, x > 1);
+        mdbx_error("not found page 0x%p #%" PRIaPGNO " in the dirtylist", mp,
+                   mp->mp_pgno);
         j = ++(dl[0].mid);
         dl[j] = ix; /* Unsorted. OK when MDBX_TXN_ERROR. */
         txn->mt_flags |= MDBX_TXN_ERROR;
@@ -6448,8 +6456,9 @@ new_sub:
     return rc;
   bad_sub:
     if (unlikely(rc == MDBX_KEYEXIST))
-      /* should not happen, we deleted that item */
-      rc = MDBX_PROBLEM;
+      mdbx_error("unexpected %s", "MDBX_KEYEXIST");
+    /* should not happen, we deleted that item */
+    rc = MDBX_PROBLEM;
   }
   mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
   return rc;
@@ -8237,8 +8246,10 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
     mn.mc_top++;
   }
   if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc == MDBX_NOTFOUND) /* improper mdbx_cursor_sibling() result */
+    if (rc == MDBX_NOTFOUND) /* improper mdbx_cursor_sibling() result */ {
+      mdbx_error("unexpected %s", "MDBX_NOTFOUND");
       rc = MDBX_PROBLEM;
+    }
     goto done;
   }
   if (nflags & MDBX_APPEND) {
@@ -8759,8 +8770,10 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   my.mc_wlen[0] = env->me_psize * NUM_METAS;
   my.mc_txn = txn;
   rc = mdbx_env_cwalk(&my, &root, 0);
-  if (rc == MDBX_SUCCESS && root != new_root)
+  if (rc == MDBX_SUCCESS && root != new_root) {
+    mdbx_error("unexpected root %" PRIaPGNO " (%" PRIaPGNO ")", root, new_root);
     rc = MDBX_PROBLEM; /* page leak or corrupt DB */
+  }
 
 finish:
   if (rc != MDBX_SUCCESS)
