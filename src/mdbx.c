@@ -4180,7 +4180,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
     }
   }
 
-  if (size & (env->me_os_psize - 1) || size < env->me_os_psize) {
+  if ((size & (env->me_os_psize - 1)) || size < env->me_os_psize) {
     mdbx_notice("lck-file has invalid size %" PRIu64 " bytes", size);
     return MDBX_PROBLEM;
   }
