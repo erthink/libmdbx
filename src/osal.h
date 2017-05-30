@@ -472,10 +472,10 @@ void mdbx_osal_jitter(bool tiny);
 
 #if defined(_WIN32) || defined(_WIN64)
 #undef MDBX_OSAL_LOCK
-#define MDBX_OSAL_LOCK_SIGN MDBX_TETRAD('f', 'l', 'c', 'k')
+#define MDBX_OSAL_LOCK_SIGN UINT32_C(0xF10C)
 #else
 #define MDBX_OSAL_LOCK pthread_mutex_t
-#define MDBX_OSAL_LOCK_SIGN MDBX_TETRAD('P', 'T', 'M', 'X')
+#define MDBX_OSAL_LOCK_SIGN UINT32_C(0x8017)
 #endif
 
 int mdbx_lck_init(MDBX_env *env);

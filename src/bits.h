@@ -25,7 +25,7 @@
 
 /* Features under development */
 #ifndef MDBX_DEVEL
-#   define MDBX_DEVEL 0
+#   define MDBX_DEVEL 1
 #endif
 
 /*----------------------------------------------------------------------------*/
@@ -116,12 +116,12 @@
 /* A stamp that identifies a file as an MDBX file.
  * There's nothing special about this value other than that it is easily
  * recognizable, and it will reflect any byte order mismatches. */
-#define MDBX_MAGIC 0xBEEFC0DE
+#define MDBX_MAGIC UINT64_C(/* 56-bit prime */ 0x59659DBDEF4C11)
 
 /* The version number for a database's datafile format. */
-#define MDBX_DATA_VERSION ((MDBX_DEVEL) ? 999 : 1)
+#define MDBX_DATA_VERSION ((MDBX_DEVEL) ? 255 : 2)
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION ((MDBX_DEVEL) ? 999 : 1)
+#define MDBX_LOCK_VERSION ((MDBX_DEVEL) ? 255 : 2)
 
 /* handle for the DB used to track free pages. */
 #define FREE_DBI 0
@@ -241,21 +241,29 @@ typedef struct MDBX_db {
   uint64_t md_leaf_pages;     /* number of leaf pages */
   uint64_t md_overflow_pages; /* number of overflow pages */
   uint64_t md_entries;        /* number of data items */
+  uint64_t md_merkle;         /* Merkle tree checksum */
 } MDBX_db;
 
 /* Meta page content.
  * A meta page is the start point for accessing a database snapshot.
  * Pages 0-1 are meta pages. Transaction N writes meta page (N % 2). */
 typedef struct MDBX_meta {
-  /* Stamp identifying this as an MDBX file. It must be set
-   * to MDBX_MAGIC. */
-  uint32_t mm_magic;
-  /* Version number of this file. Must be set to MDBX_DATA_VERSION. */
-  uint32_t mm_version;
-  /* txnid that committed this page, */
-  volatile txnid_t mm_txnid_top;
+  /* Stamp identifying this as an MDBX file.
+   * It must be set to MDBX_MAGIC with MDBX_DATA_VERSION. */
+  uint64_t mm_magic_and_version;
 
-  uint64_t mm_mapsize;      /* size of mmap region */
+  /* txnid that committed this page, the first of a two-phase-update pair */
+  volatile txnid_t mm_txnid_a;
+
+  uint16_t mm_extra_flags;  /* extra DB flags, zero (nothing) for now */
+  uint8_t mm_validator_id;  /* ID of checksum and page validation method,
+                             * zero (nothing) for now */
+  uint8_t mm_extra_pagehdr; /* extra bytes in the page header,
+                             * zero (nothing) for now */
+  uint32_t mm_reserved_pad; /* padding for aligment, unused for now */
+
+  uint64_t mm_dbsize_min;   /* minimal size of db */
+  uint64_t mm_dbsize_max;   /* maximal size of db */
   MDBX_db mm_dbs[CORE_DBS]; /* first is free space, 2nd is main db */
                             /* The size of pages used in this DB */
 #define mm_psize mm_dbs[FREE_DBI].md_xsize
@@ -265,17 +273,20 @@ typedef struct MDBX_meta {
   /* Last used page in the datafile.
    * Actually the file may be shorter if the freeDB lists the final pages. */
   uint64_t mm_last_pg;
+
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u
-  volatile uint64_t mm_datasync_sign;
-
 #define SIGN_IS_WEAK(sign) ((sign) == MDBX_DATASIGN_WEAK)
 #define SIGN_IS_STEADY(sign) ((sign) > MDBX_DATASIGN_WEAK)
-
 #define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
-  /* txnid that committed this page */
-  volatile txnid_t mm_txnid_bottom;
+  volatile uint64_t mm_datasync_sign;
+
+  /* to be removed */
+  uint64_t mm_mapsize; /* current size of mmap region */
+
+  /* txnid that committed this page, the second of a two-phase-update pair */
+  volatile txnid_t mm_txnid_b;
 } MDBX_meta;
 
 /* Common header for all page types. The page type depends on mp_flags.
@@ -297,7 +308,8 @@ typedef struct MDBX_meta {
  * in the snapshot: Either used by a database or listed in a freeDB record. */
 typedef struct MDBX_page {
   union {
-    pgno_t mp_pgno;            /* page number */
+    uint64_t mp_validator;     /* checksum of page content or a txnid during
+                                * which the page has been updated */
     struct MDBX_page *mp_next; /* for in-memory list of freed pages */
   };
   uint16_t mp_leaf2_ksize; /* key size if this is a LEAF2 page */
@@ -318,6 +330,7 @@ typedef struct MDBX_page {
     };
     uint32_t mp_pages; /* number of overflow pages */
   };
+  pgno_t mp_pgno; /* page number */
 
   /* dynamic size */
   union {
@@ -330,15 +343,19 @@ typedef struct MDBX_page {
 /* Size of the page header, excluding dynamic data at the end */
 #define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_data))
 
+#pragma pack(pop)
+
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
-  /* Stamp identifying this as an MDBX file. It must be set to MDBX_MAGIC. */
-  uint64_t mti_magic;
+  /* Stamp identifying this as an MDBX file.
+   * It must be set to MDBX_MAGIC with with MDBX_LOCK_VERSION. */
+  uint64_t mti_magic_and_version;
+
   /* Format of this lock file. Must be set to MDBX_LOCK_FORMAT. */
-  uint64_t mti_format;
+  uint32_t mti_os_and_format;
+
   /* Flags which environment was opened. */
-  uint32_t mti_envmode;
-  uint32_t mti_reserved;
+  volatile uint32_t mti_envmode;
 
 #ifdef MDBX_OSAL_LOCK
   MDBX_OSAL_LOCK mti_wmutex;
@@ -355,7 +372,19 @@ typedef struct MDBX_lockinfo {
   MDBX_reader __cache_aligned mti_readers[1];
 } MDBX_lockinfo;
 
-#pragma pack(pop)
+#define MDBX_LOCKINFO_WHOLE_SIZE                                               \
+  ((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &                         \
+   ~((size_t)MDBX_CACHELINE_SIZE - 1))
+
+/* Lockfile format signature: version, features and field layout */
+#define MDBX_LOCK_FORMAT                                                       \
+  ((MDBX_OSAL_LOCK_SIGN << 16) +                                               \
+   (uint16_t)(MDBX_LOCKINFO_WHOLE_SIZE + MDBX_CACHELINE_SIZE - 1))
+
+#define MDBX_DATA_MAGIC ((MDBX_MAGIC << 8) + MDBX_DATA_VERSION)
+
+#define MDBX_LOCK_MAGIC ((MDBX_MAGIC << 8) + MDBX_LOCK_VERSION)
+
 /*----------------------------------------------------------------------------*/
 /* Two kind lists of pages (aka IDL) */
 
@@ -573,16 +602,6 @@ typedef struct MDBX_pgstate {
   pgno_t *mf_pghead; /* Reclaimed freeDB pages, or NULL before use */
   txnid_t mf_pglast; /* ID of last used record, or 0 if !mf_pghead */
 } MDBX_pgstate;
-
-#define MDBX_LOCKINFO_WHOLE_SIZE                                               \
-  ((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &                         \
-   ~((size_t)MDBX_CACHELINE_SIZE - 1))
-
-/* Lockfile format signature: version, features and field layout */
-#define MDBX_LOCK_FORMAT                                                       \
-  (((uint64_t)(MDBX_OSAL_LOCK_SIGN) << 32) +                                   \
-   ((MDBX_LOCKINFO_WHOLE_SIZE + MDBX_CACHELINE_SIZE - 1) << 16) +              \
-   (MDBX_LOCK_VERSION) /* Flags which describe functionality */)
 
 /* The database environment. */
 struct MDBX_env {

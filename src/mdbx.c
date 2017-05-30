@@ -1279,12 +1279,12 @@ bailout:
 static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
                                    bool allow_volatile) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
-  txnid_t top = meta->mm_txnid_top;
-  txnid_t bottom = meta->mm_txnid_bottom;
+  txnid_t a = meta->mm_txnid_a;
+  txnid_t b = meta->mm_txnid_b;
   if (allow_volatile)
-    return (top < bottom) ? top : bottom;
-  mdbx_assert(env, top == bottom);
-  return top;
+    return (a < b) ? a : b;
+  mdbx_assert(env, a == b);
+  return a;
 }
 
 static __inline txnid_t mdbx_meta_txnid_stable(const MDBX_env *env,
@@ -1300,8 +1300,8 @@ static __inline txnid_t mdbx_meta_txnid_fluid(const MDBX_env *env,
 static __inline void mdbx_meta_update_begin(const MDBX_env *env,
                                             MDBX_meta *meta, txnid_t txnid) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
-  mdbx_assert(env, meta->mm_txnid_top < txnid && meta->mm_txnid_bottom < txnid);
-  meta->mm_txnid_top = txnid;
+  mdbx_assert(env, meta->mm_txnid_a < txnid && meta->mm_txnid_b < txnid);
+  meta->mm_txnid_a = txnid;
   (void)env;
   mdbx_coherent_barrier();
 }
@@ -1309,19 +1309,19 @@ static __inline void mdbx_meta_update_begin(const MDBX_env *env,
 static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
                                           txnid_t txnid) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
-  mdbx_assert(env, meta->mm_txnid_top == txnid);
-  mdbx_assert(env, meta->mm_txnid_bottom < txnid);
+  mdbx_assert(env, meta->mm_txnid_a == txnid);
+  mdbx_assert(env, meta->mm_txnid_b < txnid);
 
   mdbx_jitter4testing(true);
-  meta->mm_txnid_bottom = txnid;
+  meta->mm_txnid_b = txnid;
   mdbx_coherent_barrier();
 }
 
 static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
                                          txnid_t txnid) {
   mdbx_assert(env, meta < METAPAGE(env, 0) || meta > METAPAGE_END(env));
-  meta->mm_txnid_top = txnid;
-  meta->mm_txnid_bottom = txnid;
+  meta->mm_txnid_a = txnid;
+  meta->mm_txnid_b = txnid;
 }
 
 static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
@@ -1329,7 +1329,7 @@ static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
 #if 0 /* TODO */
   sign = hippeus_hash64(&meta->mm_mapsize,
                         sizeof(MDBX_meta) - offsetof(MDBX_meta, mm_mapsize),
-                        meta->mm_version | (uint64_t)MDBX_MAGIC << 32);
+                        meta->mm_version | (uint64_t)MDBX_DXD_MAGIC << 32);
 #else
   (void)meta;
 #endif
@@ -2183,8 +2183,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     } else if (env->me_lck) {
       const mdbx_pid_t pid = env->me_pid;
       const mdbx_tid_t tid = mdbx_thread_self();
-      mdbx_assert(env, env->me_lck->mti_magic == MDBX_MAGIC);
-      mdbx_assert(env, env->me_lck->mti_format == MDBX_LOCK_FORMAT);
+      mdbx_assert(env, env->me_lck->mti_magic_and_version == MDBX_LOCK_MAGIC);
+      mdbx_assert(env, env->me_lck->mti_os_and_format == MDBX_LOCK_FORMAT);
 
       rc = mdbx_rdt_lock(env);
       if (unlikely(MDBX_IS_ERROR(rc)))
@@ -3390,18 +3390,14 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       return MDBX_INVALID;
     }
 
-    if (page.mp_meta.mm_magic != MDBX_MAGIC) {
-      mdbx_error("meta[%u] has invalid magic", meta_number);
-      return MDBX_INVALID;
+    if (page.mp_meta.mm_magic_and_version != MDBX_DATA_MAGIC) {
+      mdbx_error("meta[%u] has invalid magic/version", meta_number);
+      return ((page.mp_meta.mm_magic_and_version >> 8) != MDBX_MAGIC)
+                 ? MDBX_INVALID
+                 : MDBX_VERSION_MISMATCH;
     }
 
-    if (page.mp_meta.mm_version != MDBX_DATA_VERSION) {
-      mdbx_error("database is version %u, expected version %u",
-                 page.mp_meta.mm_version, MDBX_DATA_VERSION);
-      return MDBX_VERSION_MISMATCH;
-    }
-
-    if (page.mp_meta.mm_txnid_top != page.mp_meta.mm_txnid_bottom) {
+    if (page.mp_meta.mm_txnid_a != page.mp_meta.mm_txnid_b) {
       mdbx_warning("meta[%u] not completely updated, skip it", meta_number);
       continue;
     }
@@ -3511,8 +3507,7 @@ static MDBX_page *__cold mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
   memset(model, 0, sizeof(*model));
   model->mp_pgno = num;
   model->mp_flags = P_META;
-  model->mp_meta.mm_magic = MDBX_MAGIC;
-  model->mp_meta.mm_version = MDBX_DATA_VERSION;
+  model->mp_meta.mm_magic_and_version = MDBX_DATA_MAGIC;
   model->mp_meta.mm_mapsize = env->me_mapsize;
   model->mp_meta.mm_psize = env->me_psize;
   model->mp_meta.mm_last_pg = NUM_METAS - 1;
@@ -3607,7 +3602,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   }
 
   MDBX_meta *target = nullptr;
-  if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_top) {
+  if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a) {
     mdbx_assert(env, memcmp(&head->mm_dbs, &pending->mm_dbs,
                             sizeof(head->mm_dbs)) == 0);
     mdbx_assert(env, memcmp(&head->mm_canary, &pending->mm_canary,
@@ -3637,7 +3632,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       (target == head) ? "head" : "tail", mdbx_meta_txnid_stable(env, target),
       mdbx_durable_str((const MDBX_meta *)target),
       pending->mm_dbs[MAIN_DBI].md_root, pending->mm_dbs[FREE_DBI].md_root,
-      pending->mm_txnid_top, mdbx_durable_str(pending));
+      pending->mm_txnid_a, mdbx_durable_str(pending));
 
   mdbx_debug("meta0: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO
              "/%" PRIaPGNO,
@@ -3663,13 +3658,13 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   mdbx_ensure(env,
               target == head ||
-                  mdbx_meta_txnid_stable(env, target) < pending->mm_txnid_top);
+                  mdbx_meta_txnid_stable(env, target) < pending->mm_txnid_a);
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
     if (likely(target != head)) {
       /* LY: 'invalidate' the meta. */
       target->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-      mdbx_meta_update_begin(env, target, pending->mm_txnid_top);
+      mdbx_meta_update_begin(env, target, pending->mm_txnid_a);
 #ifndef NDEBUG
       /* debug: provoke failure to catch a violators */
       memset(target->mm_dbs, 0xCC,
@@ -3687,13 +3682,13 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       mdbx_coherent_barrier();
 
       /* LY: 'commit' the meta */
-      mdbx_meta_update_end(env, target, pending->mm_txnid_bottom);
+      mdbx_meta_update_end(env, target, pending->mm_txnid_b);
       mdbx_jitter4testing(true);
     } else {
       /* dangerous case (target == head), only mm_datasync_sign could
        * me updated, check assertions once again */
       mdbx_ensure(env,
-                  mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_top &&
+                  mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a &&
                       !META_IS_STEADY(head) && META_IS_STEADY(pending));
       mdbx_ensure(env, head->mm_last_pg == pending->mm_last_pg);
       mdbx_ensure(env, head->mm_mapsize == pending->mm_mapsize);
@@ -3706,8 +3701,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     mdbx_coherent_barrier();
     mdbx_jitter4testing(true);
   } else {
-    pending->mm_magic = MDBX_MAGIC;
-    pending->mm_version = MDBX_DATA_VERSION;
+    pending->mm_magic_and_version = MDBX_DATA_MAGIC;
     rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta), offset);
     if (unlikely(rc != MDBX_SUCCESS)) {
     undo:
@@ -4081,13 +4075,13 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
 
   const MDBX_meta *head = mdbx_meta_head(env);
   const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
-  if (head_txnid != meta.mm_txnid_top) {
+  if (head_txnid != meta.mm_txnid_a) {
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
       assert(META_IS_STEADY(&meta) && !META_IS_STEADY(head));
       if (env->me_flags & MDBX_RDONLY) {
         mdbx_error("rollback needed: (from head %" PRIaTXN
                    " to steady %" PRIaTXN "), but unable in read-only mode",
-                   head_txnid, meta.mm_txnid_top);
+                   head_txnid, meta.mm_txnid_a);
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
@@ -4095,7 +4089,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       MDBX_meta rollback = *head;
       mdbx_meta_set_txnid(env, &rollback, 0);
       mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN, head_txnid,
-                 meta.mm_txnid_top);
+                 meta.mm_txnid_a);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
       err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
                         (uint8_t *)head - (uint8_t *)env->me_map);
@@ -4126,7 +4120,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
                head->mm_mapsize, env->me_mapsize);
     meta = *head;
     meta.mm_mapsize = env->me_mapsize;
-    mdbx_meta_set_txnid(env, &meta, meta.mm_txnid_top + 1);
+    mdbx_meta_set_txnid(env, &meta, meta.mm_txnid_a + 1);
     if (META_IS_STEADY(head))
       meta.mm_datasync_sign = mdbx_meta_sign(&meta);
     err = mdbx_sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta);
@@ -4236,17 +4230,18 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
     if (err)
       return err;
 
-    env->me_lck->mti_magic = MDBX_MAGIC;
-    env->me_lck->mti_format = MDBX_LOCK_FORMAT;
+    env->me_lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
+    env->me_lck->mti_os_and_format = MDBX_LOCK_FORMAT;
   } else {
-    if (env->me_lck->mti_magic != MDBX_MAGIC) {
-      mdbx_error("lock region has invalid magic");
-      return MDBX_INVALID;
+    if (env->me_lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
+      mdbx_error("lock region has invalid magic/version");
+      return ((env->me_lck->mti_magic_and_version >> 8) != MDBX_MAGIC)
+                 ? MDBX_INVALID
+                 : MDBX_VERSION_MISMATCH;
     }
-    if (env->me_lck->mti_format != MDBX_LOCK_FORMAT) {
-      mdbx_error("lock region has format+version 0x%" PRIx64
-                 ", expected 0x%" PRIx64,
-                 env->me_lck->mti_format, MDBX_LOCK_FORMAT);
+    if (env->me_lck->mti_os_and_format != MDBX_LOCK_FORMAT) {
+      mdbx_error("lock region has os/format 0x%" PRIx32 ", expected 0x%" PRIx32,
+                 env->me_lck->mti_os_and_format, MDBX_LOCK_FORMAT);
       return MDBX_VERSION_MISMATCH;
     }
   }
@@ -4417,8 +4412,8 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     MDBX_meta *meta = mdbx_meta_head(env);
     MDBX_db *db = &meta->mm_dbs[MAIN_DBI];
 
-    mdbx_debug("opened database version %u, pagesize %u", meta->mm_version,
-               env->me_psize);
+    mdbx_debug("opened database version %u, pagesize %u",
+               (uint8_t)meta->mm_magic_and_version, env->me_psize);
     mdbx_debug("using meta page %" PRIaPGNO ", txn %" PRIaTXN "",
                container_of(meta, MDBX_page, mp_data)->mp_pgno,
                mdbx_meta_txnid_fluid(env, meta));
