@@ -375,6 +375,9 @@
 #       define STATIC_ASSERT_MSG(expr, msg) _Static_assert(expr, msg)
 #   elif defined(static_assert)
 #       define STATIC_ASSERT_MSG(expr, msg) static_assert(expr, msg)
+#   elif defined(_MSC_VER)
+#       include <crtdbg.h>
+#       define STATIC_ASSERT_MSG(expr, msg) _STATIC_ASSERT(expr)
 #   else
 #       define STATIC_ASSERT_MSG(expr, msg) switch (0) {case 0:case (expr):;}
 #   endif
