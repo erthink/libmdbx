@@ -82,24 +82,6 @@
 /*----------------------------------------------------------------------------*/
 /* Basic constants and types */
 
-/* The maximum size of a database page.
- *
- * It is 32k or 64k, since value-PAGEBASE must fit in
- * MDBX_page.mp_upper.
- *
- * MDBX will use database pages < OS pages if needed.
- * That causes more I/O in write transactions: The OS must
- * know (read) the whole page before writing a partial page.
- *
- * Note that we don't currently support Huge pages. On Linux,
- * regular data files cannot use Huge pages, and in general
- * Huge pages aren't actually pageable. We rely on the OS
- * demand-pager to read our data and page it out when memory
- * pressure from other processes is high. So until OSs have
- * actual paging support for Huge pages, they're not viable. */
-#define MAX_PAGESIZE (PAGEBASE ? 0x10000 : 0x8000)
-#define MIN_PAGESIZE 1024
-
 /* The minimum number of keys required in a database page.
  * Setting this to a larger value will place a smaller bound on the
  * maximum size of a data item. Data items larger than this size will
@@ -150,13 +132,6 @@ typedef uint64_t txnid_t;
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
  * this is plenty. */
 typedef uint16_t indx_t;
-
-#define MIN_MAPSIZE (MIN_PAGESIZE * MIN_PAGENO)
-#define MAX_MAPSIZE                                                            \
-  ((sizeof(size_t) < 8)                                                        \
-       ? UINT32_C(0x7ff80000)                                                  \
-       : ((sizeof(pgno_t) > 4) ? UINT64_C(0x7fffFFFFfff80000)                  \
-                               : MAX_PAGENO * (uint64_t)MAX_PAGESIZE))
 
 /*----------------------------------------------------------------------------*/
 /* Core structures for database and shared memory (i.e. format definition) */
@@ -308,9 +283,10 @@ typedef struct MDBX_meta {
  * in the snapshot: Either used by a database or listed in a freeDB record. */
 typedef struct MDBX_page {
   union {
+    struct MDBX_page *mp_next; /* for in-memory list of freed pages,
+                                * must be first field, see NEXT_LOOSE_PAGE */
     uint64_t mp_validator;     /* checksum of page content or a txnid during
                                 * which the page has been updated */
-    struct MDBX_page *mp_next; /* for in-memory list of freed pages */
   };
   uint16_t mp_leaf2_ksize; /* key size if this is a LEAF2 page */
 #define P_BRANCH 0x01      /* branch page */
@@ -342,6 +318,30 @@ typedef struct MDBX_page {
 
 /* Size of the page header, excluding dynamic data at the end */
 #define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_data))
+
+/* The maximum size of a database page.
+*
+* It is 64K, but value-PAGEHDRSZ must fit in MDBX_page.mp_upper.
+*
+* MDBX will use database pages < OS pages if needed.
+* That causes more I/O in write transactions: The OS must
+* know (read) the whole page before writing a partial page.
+*
+* Note that we don't currently support Huge pages. On Linux,
+* regular data files cannot use Huge pages, and in general
+* Huge pages aren't actually pageable. We rely on the OS
+* demand-pager to read our data and page it out when memory
+* pressure from other processes is high. So until OSs have
+* actual paging support for Huge pages, they're not viable. */
+#define MAX_PAGESIZE 0x10000u
+#define MIN_PAGESIZE 512u
+
+#define MIN_MAPSIZE (MIN_PAGESIZE * MIN_PAGENO)
+#define MAX_MAPSIZE                                                            \
+  ((sizeof(size_t) < 8)                                                        \
+       ? UINT32_C(0x7ff80000)                                                  \
+       : ((sizeof(pgno_t) > 4) ? UINT64_C(0x7fffFFFFfff80000)                  \
+                               : MAX_PAGENO * (uint64_t)MAX_PAGESIZE))
 
 #pragma pack(pop)
 
@@ -885,11 +885,8 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 /* Address of first usable data byte in a page, after the header */
 #define PAGEDATA(p) ((void *)((char *)(p) + PAGEHDRSZ))
 
-/* ITS#7713, change PAGEBASE to handle 65536 byte pages */
-#define PAGEBASE ((MDBX_DEVEL) ? PAGEHDRSZ : 0)
-
 /* Number of nodes on a page */
-#define NUMKEYS(p) (((p)->mp_lower - (PAGEHDRSZ - PAGEBASE)) >> 1)
+#define NUMKEYS(p) ((p)->mp_lower >> 1)
 
 /* The amount of space remaining in the page */
 #define SIZELEFT(p) (indx_t)((p)->mp_upper - (p)->mp_lower)
@@ -986,7 +983,7 @@ typedef struct MDBX_node {
 /* Address of node i in page p */
 static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
   assert(NUMKEYS(p) > (unsigned)(i));
-  return (MDBX_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEBASE);
+  return (MDBX_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEHDRSZ);
 }
 
 /* Address of the key for the node */
