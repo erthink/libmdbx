@@ -8493,6 +8493,14 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   int toggle = 0, wsize;
   int rc;
 
+#if defined(F_SETNOSIGPIPE)
+  /* OS X delivers SIGPIPE to the whole process, not the thread that caused it.
+   * Disable SIGPIPE using platform specific fcntl. */
+  int enabled = 1;
+  if (fcntl(my->mc_fd, F_SETNOSIGPIPE, &enabled))
+    my->mc_error = errno;
+#endif
+
 #if defined(SIGPIPE) && !defined(_WIN32) && !defined(_WIN64)
   sigset_t set;
   sigemptyset(&set);
