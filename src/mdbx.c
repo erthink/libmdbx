@@ -3858,9 +3858,12 @@ static int __cold mdbx_env_map(MDBX_env *env, void *addr, size_t usedsize) {
   (void)madvise(env->me_map, env->me_mapsize, MADV_NOHUGEPAGE);
 #endif
 
-#ifdef MADV_DONTDUMP
+#if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
+  const size_t meta_length = env->me_psize * NUM_METAS;
+  (void)madvise(env->me_map, env->me_psize * NUM_METAS, MADV_DODUMP);
   if (!(flags & MDBX_PAGEPERTURB))
-    (void)madvise(env->me_map, env->me_mapsize, MADV_DONTDUMP);
+    (void)madvise(env->me_map + meta_length, env->me_mapsize - meta_length,
+                  MADV_DONTDUMP);
 #endif
 
 #ifdef MADV_REMOVE
@@ -4201,10 +4204,6 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
     return err;
   assert(addr != nullptr);
   env->me_lck = addr;
-
-#ifdef MADV_NOHUGEPAGE
-  (void)madvise(env->me_lck, size, MADV_NOHUGEPAGE);
-#endif
 
 #ifdef MADV_DODUMP
   (void)madvise(env->me_lck, size, MADV_DODUMP);
