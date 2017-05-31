@@ -8491,6 +8491,16 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   mdbx_copy *my = arg;
   char *ptr;
   int toggle = 0, wsize;
+  int rc;
+
+#if defined(SIGPIPE) && !defined(_WIN32) && !defined(_WIN64)
+  sigset_t set;
+  sigemptyset(&set);
+  sigaddset(&set, SIGPIPE);
+  rc = pthread_sigmask(SIG_BLOCK, &set, NULL);
+  if (rc != 0)
+    my->mc_error = rc;
+#endif
 
   mdbx_condmutex_lock(&my->mc_condmutex);
   while (!my->mc_error) {
@@ -8502,9 +8512,18 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     ptr = my->mc_wbuf[toggle];
   again:
     if (wsize > 0 && !my->mc_error) {
-      int rc = mdbx_write(my->mc_fd, ptr, wsize);
-      if (rc != MDBX_SUCCESS)
+      rc = mdbx_write(my->mc_fd, ptr, wsize);
+      if (rc != MDBX_SUCCESS) {
+#if defined(SIGPIPE) && !defined(_WIN32) && !defined(_WIN64)
+        if (rc == EPIPE) {
+          /* Collect the pending SIGPIPE, otherwise (at least OS X)
+           * gives it to the process on thread-exit (ITS#8504). */
+          int tmp;
+          sigwait(&set, &tmp);
+        }
+#endif
         my->mc_error = rc;
+      }
     }
 
     /* If there's an overflow page tail, write it too */
