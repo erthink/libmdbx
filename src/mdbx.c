@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -1396,21 +1396,34 @@ static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
   return (sign > MDBX_DATASIGN_WEAK) ? sign : ~sign;
 }
 
+enum meta_choise_mode { prefer_last, prefer_noweak, prefer_steady };
+
 static __inline bool mdbx_meta_ot(const MDBX_env *env, const MDBX_meta *a,
                                   const MDBX_meta *b,
-                                  const bool roolback2steady) {
+                                  const enum meta_choise_mode mode) {
   mdbx_jitter4testing(true);
   txnid_t txnid_a = mdbx_meta_txnid_fluid(env, a);
   txnid_t txnid_b = mdbx_meta_txnid_fluid(env, b);
   if (txnid_a == txnid_b)
-    return META_IS_STEADY(b);
+    return META_IS_STEADY(b) || (META_IS_WEAK(a) && !META_IS_WEAK(a));
 
   mdbx_jitter4testing(true);
-  if (roolback2steady && META_IS_STEADY(a) != META_IS_STEADY(b))
-    return META_IS_STEADY(b);
-
-  mdbx_jitter4testing(true);
-  return txnid_a < txnid_b;
+  switch (mode) {
+  default:
+    assert(false);
+  /* fall through */
+  case prefer_steady:
+    if (META_IS_STEADY(a) != META_IS_STEADY(b))
+      return META_IS_STEADY(b);
+  /* fall through */
+  case prefer_noweak:
+    if (META_IS_WEAK(a) != META_IS_WEAK(b))
+      return !META_IS_WEAK(b);
+  /* fall through */
+  case prefer_last:
+    mdbx_jitter4testing(true);
+    return txnid_a < txnid_b;
+  }
 }
 
 static __inline bool mdbx_meta_eq(const MDBX_env *env, const MDBX_meta *a,
@@ -1443,37 +1456,42 @@ static int mdbx_meta_eq_mask(const MDBX_env *env) {
 
 static __inline MDBX_meta *mdbx_meta_recent(const MDBX_env *env, MDBX_meta *a,
                                             MDBX_meta *b,
-                                            const bool roolback2steady) {
-  const bool a_older_that_b = mdbx_meta_ot(env, a, b, roolback2steady);
+                                            const enum meta_choise_mode mode) {
+  const bool a_older_that_b = mdbx_meta_ot(env, a, b, mode);
   mdbx_assert(env, !mdbx_meta_eq(env, a, b));
   return a_older_that_b ? b : a;
 }
 
 static __inline MDBX_meta *mdbx_meta_ancient(const MDBX_env *env, MDBX_meta *a,
                                              MDBX_meta *b,
-                                             const bool roolback2steady) {
-  const bool a_older_that_b = mdbx_meta_ot(env, a, b, roolback2steady);
+                                             const enum meta_choise_mode mode) {
+  const bool a_older_that_b = mdbx_meta_ot(env, a, b, mode);
   mdbx_assert(env, !mdbx_meta_eq(env, a, b));
   return a_older_that_b ? a : b;
 }
 
-static __inline MDBX_meta *mdbx_meta_mostrecent(const MDBX_env *env,
-                                                const bool roolback2steady) {
+static __inline MDBX_meta *
+mdbx_meta_mostrecent(const MDBX_env *env, const enum meta_choise_mode mode) {
   MDBX_meta *m0 = METAPAGE(env, 0);
   MDBX_meta *m1 = METAPAGE(env, 1);
   MDBX_meta *m2 = METAPAGE(env, 2);
 
-  MDBX_meta *head = mdbx_meta_recent(env, m0, m1, roolback2steady);
-  head = mdbx_meta_recent(env, head, m2, roolback2steady);
+  MDBX_meta *head = mdbx_meta_recent(env, m0, m1, mode);
+  head = mdbx_meta_recent(env, head, m2, mode);
   return head;
 }
 
 static __hot MDBX_meta *mdbx_meta_steady(const MDBX_env *env) {
-  return mdbx_meta_mostrecent(env, true);
+  return mdbx_meta_mostrecent(env, prefer_steady);
 }
 
 static __hot MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
-  return mdbx_meta_mostrecent(env, false);
+  return mdbx_meta_mostrecent(env, prefer_last);
+}
+
+static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
+  MDBX_meta *meta = mdbx_meta_mostrecent(env, prefer_noweak);
+  return mdbx_meta_txnid_stable(env, meta);
 }
 
 static const char *mdbx_durable_str(const MDBX_meta *const meta) {
@@ -1490,10 +1508,12 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 /* Find oldest txnid still referenced. */
 static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   mdbx_tassert(txn, (txn->mt_flags & MDBX_RDONLY) == 0);
-  MDBX_lockinfo *const lck = txn->mt_env->me_lck;
+  const MDBX_env *env = txn->mt_env;
+  MDBX_lockinfo *const lck = env->me_lck;
 
+  txnid_t oldest = mdbx_reclaiming_detent(env);
+  mdbx_tassert(txn, oldest <= txn->mt_txnid - 1);
   const txnid_t last_oldest = lck->mti_oldest;
-  txnid_t oldest = txn->mt_txnid - 1;
   mdbx_tassert(txn, oldest >= last_oldest);
   if (last_oldest == oldest ||
       lck->mti_reader_finished_flag == MDBX_STRING_TETRAD("None"))
@@ -1849,8 +1869,8 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         ((flags & MDBX_ALLOC_KICK) || rc == MDBX_MAP_FULL)) {
       MDBX_meta *steady = mdbx_meta_steady(env);
 
-      if (oldest == mdbx_meta_txnid_stable(env, steady) && META_IS_WEAK(head) &&
-          !META_IS_WEAK(steady)) {
+      if (oldest == mdbx_meta_txnid_stable(env, steady) &&
+          !META_IS_STEADY(head) && META_IS_STEADY(steady)) {
         /* LY: Here an oom was happened:
          *  - all pages had allocated;
          *  - reclaiming was stopped at the last steady-sync;
@@ -10398,10 +10418,16 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
 
   int retry;
   for (retry = 0; retry < INT_MAX; ++retry) {
+    txnid_t oldest = mdbx_reclaiming_detent(env);
+    mdbx_assert(env, oldest < env->me_txn0->mt_txnid);
+    mdbx_assert(env, oldest >= laggard);
+    mdbx_assert(env, oldest >= env->me_oldest[0]);
+    if (oldest == laggard)
+      return oldest;
+
     if (MDBX_IS_ERROR(mdbx_reader_check0(env, false, NULL)))
       break;
 
-    txnid_t oldest = env->me_txn0->mt_txnid - 1;
     MDBX_reader *const rtbl = env->me_lck->mti_readers;
     MDBX_reader *asleep = nullptr;
     for (int i = env->me_lck->mti_numreaders; --i >= 0;) {
