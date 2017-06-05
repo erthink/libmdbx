@@ -1562,9 +1562,9 @@ typedef void MDBX_debug_func(int type, const char *function, int line,
 LIBMDBX_API int mdbx_setup_debug(int flags, MDBX_debug_func *logger);
 
 typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned pgnumber, void *ctx,
-                                const char *dbi, const char *type, int nentries,
-                                int payload_bytes, int header_bytes,
-                                int unused_bytes);
+                                const char *dbi, const char *type,
+                                size_t nentries, size_t payload_bytes,
+                                size_t header_bytes, size_t unused_bytes);
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                                 void *ctx);
 
@@ -1595,7 +1595,7 @@ LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
  *    of multi-values/duplicates for a given key.
  * 2) updates the key for pointing to the actual key's data inside DB. */
 LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
-                            MDBX_val *data, int *values_count);
+                            MDBX_val *data, size_t *values_count);
 
 LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr);
 

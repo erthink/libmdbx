@@ -660,9 +660,9 @@ struct MDBX_env {
   unsigned me_maxfree_1pg;
   /* Max size of a node on a page */
   unsigned me_nodemax;
-  unsigned me_maxkey_limit; /* max size of a key */
-  int me_live_reader;       /* have liveness lock in reader table */
-  void *me_userctx;         /* User-settable context */
+  unsigned me_maxkey_limit;  /* max size of a key */
+  mdbx_pid_t me_live_reader; /* have liveness lock in reader table */
+  void *me_userctx;          /* User-settable context */
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
@@ -896,7 +896,7 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 #define PAGEDATA(p) ((void *)((char *)(p) + PAGEHDRSZ))
 
 /* Number of nodes on a page */
-#define NUMKEYS(p) ((p)->mp_lower >> 1)
+#define NUMKEYS(p) ((unsigned)(p)->mp_lower >> 1)
 
 /* The amount of space remaining in the page */
 #define SIZELEFT(p) (indx_t)((p)->mp_upper - (p)->mp_lower)
@@ -1045,9 +1045,10 @@ static __inline size_t NODEDSZ(const MDBX_node *node) {
 }
 
 /* Set the size of the data for a leaf node */
-static __inline void SETDSZ(MDBX_node *node, unsigned size) {
+static __inline void SETDSZ(MDBX_node *node, size_t size) {
+  assert(size < INT_MAX);
   if (UNALIGNED_OK) {
-    node->mn_dsize = size;
+    node->mn_dsize = (uint32_t)size;
   } else {
     node->mn_lo = (uint16_t)size;
     node->mn_hi = (uint16_t)(size >> 16);

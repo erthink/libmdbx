@@ -224,8 +224,9 @@ static uint64_t problems_pop(struct problem *list) {
 }
 
 static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
-                     const char *dbi, const char *type, int nentries,
-                     int payload_bytes, int header_bytes, int unused_bytes) {
+                     const char *dbi, const char *type, size_t nentries,
+                     size_t payload_bytes, size_t header_bytes,
+                     size_t unused_bytes) {
   (void)ctx;
 
   if (type) {
@@ -240,13 +241,14 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
         print("     %s-page %" PRIu64, type, pgno);
       else
         print("     %s-span %" PRIu64 "[%u]", type, pgno, pgnumber);
-      print(" of %s: header %i, payload %i, unused %i\n", dbi, header_bytes,
-            payload_bytes, unused_bytes);
+      print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR
+            ", unused %" PRIiPTR "\n",
+            dbi, header_bytes, payload_bytes, unused_bytes);
     }
 
     walk.pgcount += pgnumber;
 
-    if (unused_bytes < 0 || (size_t)unused_bytes > page_size)
+    if (unused_bytes > page_size)
       problem_add("page", pgno, "illegal unused-bytes", "%u < %i < %u", 0,
                   unused_bytes, envstat.ms_psize);
 

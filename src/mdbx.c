@@ -159,16 +159,16 @@ __cold void mdbx_rthc_remove(mdbx_thread_key_t key) {
 /* Allocate an IDL.
  * Allocates memory for an IDL of the given size.
  * Returns IDL on success, NULL on failure. */
-static MDBX_IDL mdbx_midl_alloc(unsigned size) {
+static MDBX_IDL mdbx_midl_alloc(size_t size) {
   MDBX_IDL ids = malloc((size + 2) * sizeof(pgno_t));
   if (likely(ids)) {
-    *ids++ = size;
+    *ids++ = (pgno_t)size;
     *ids = 0;
   }
   return ids;
 }
 
-static MDBX_TXL mdbx_txl_alloc(unsigned size) {
+static MDBX_TXL mdbx_txl_alloc(size_t size) {
   MDBX_TXL ptr = malloc((size + 2) * sizeof(txnid_t));
   if (likely(ptr)) {
     *ptr++ = size;
@@ -247,21 +247,21 @@ static void mdbx_midl_shrink(MDBX_IDL *idp) {
 /* Grow an IDL.
  * Return the IDL to the size growed by given number.
  * [in,out] idp Address of the IDL to grow. */
-static int mdbx_midl_grow(MDBX_IDL *idp, unsigned num) {
+static int mdbx_midl_grow(MDBX_IDL *idp, size_t num) {
   MDBX_IDL idn = *idp - 1;
   /* grow it */
   idn = realloc(idn, (*idn + num + 2) * sizeof(pgno_t));
   if (unlikely(!idn))
     return MDBX_ENOMEM;
-  *idn++ += num;
+  *idn++ += (pgno_t)num;
   *idp = idn;
   return 0;
 }
 
-static int mdbx_txl_grow(MDBX_TXL *ptr, unsigned num) {
+static int mdbx_txl_grow(MDBX_TXL *ptr, size_t num) {
   MDBX_TXL list = *ptr - 1;
   /* grow it */
-  list = realloc(list, (*list + num + 2) * sizeof(txnid_t));
+  list = realloc(list, ((size_t)*list + num + 2) * sizeof(txnid_t));
   if (unlikely(!list))
     return MDBX_ENOMEM;
   *list++ += num;
@@ -273,7 +273,7 @@ static int mdbx_txl_grow(MDBX_TXL *ptr, unsigned num) {
  * [in,out] idp Address of the IDL.
  * [in] num Number of elements to make room for.
  * Returns 0 on success, MDBX_ENOMEM on failure. */
-static int mdbx_midl_need(MDBX_IDL *idp, unsigned num) {
+static int mdbx_midl_need(MDBX_IDL *idp, size_t num) {
   MDBX_IDL ids = *idp;
   num += ids[0];
   if (unlikely(num > ids[-1])) {
@@ -281,7 +281,7 @@ static int mdbx_midl_need(MDBX_IDL *idp, unsigned num) {
     ids = realloc(ids - 1, num * sizeof(pgno_t));
     if (unlikely(!ids))
       return MDBX_ENOMEM;
-    *ids++ = num - 2;
+    *ids++ = (pgno_t)num - 2;
     *idp = ids;
   }
   return 0;
@@ -308,7 +308,7 @@ static int mdbx_txl_append(MDBX_TXL *ptr, txnid_t id) {
   MDBX_TXL list = *ptr;
   /* Too big? */
   if (unlikely(list[0] >= list[-1])) {
-    if (mdbx_txl_grow(ptr, list[0]))
+    if (mdbx_txl_grow(ptr, (size_t)list[0]))
       return MDBX_ENOMEM;
     list = *ptr;
   }
@@ -338,11 +338,11 @@ static int mdbx_txl_append_list(MDBX_TXL *ptr, MDBX_TXL append) {
   MDBX_TXL list = *ptr;
   /* Too big? */
   if (unlikely(list[0] + append[0] >= list[-1])) {
-    if (mdbx_txl_grow(ptr, append[0]))
+    if (mdbx_txl_grow(ptr, (size_t)append[0]))
       return MDBX_ENOMEM;
     list = *ptr;
   }
-  memcpy(&list[list[0] + 1], &append[1], append[0] * sizeof(txnid_t));
+  memcpy(&list[list[0] + 1], &append[1], (size_t)append[0] * sizeof(txnid_t));
   list[0] += append[0];
   return 0;
 }
@@ -352,7 +352,7 @@ static int mdbx_txl_append_list(MDBX_TXL *ptr, MDBX_TXL append) {
  * [in] id The lowest ID to append.
  * [in] n Number of IDs to append.
  * Returns 0 on success, MDBX_ENOMEM if the IDL is too large. */
-static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, unsigned n) {
+static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, size_t n) {
   pgno_t *ids = *idp, len = ids[0];
   /* Too big? */
   if (unlikely(len + n > ids[-1])) {
@@ -360,7 +360,7 @@ static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, unsigned n) {
       return MDBX_ENOMEM;
     ids = *idp;
   }
-  ids[0] = len + n;
+  ids[0] = len + (pgno_t)n;
   ids += len;
   while (n)
     ids[n--] = id++;
@@ -605,7 +605,7 @@ static void mdbx_env_close0(MDBX_env *env);
 static MDBX_node *mdbx_node_search(MDBX_cursor *mc, MDBX_val *key, int *exactp);
 static int mdbx_node_add(MDBX_cursor *mc, indx_t indx, MDBX_val *key,
                          MDBX_val *data, pgno_t pgno, unsigned flags);
-static void mdbx_node_del(MDBX_cursor *mc, int ksize);
+static void mdbx_node_del(MDBX_cursor *mc, size_t ksize);
 static void mdbx_node_shrink(MDBX_page *mp, indx_t indx);
 static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft);
 static int mdbx_node_read(MDBX_cursor *mc, MDBX_node *leaf, MDBX_val *data);
@@ -923,18 +923,16 @@ static void mdbx_cursor_chk(MDBX_cursor *mc) {
 static void mdbx_audit(MDBX_txn *txn) {
   MDBX_cursor mc;
   MDBX_val key, data;
-  pgno_t freecount, count;
-  MDBX_dbi i;
   int rc;
 
-  freecount = 0;
+  pgno_t freecount = 0;
   mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
   while ((rc = mdbx_cursor_get(&mc, &key, &data, MDBX_NEXT)) == 0)
     freecount += *(pgno_t *)data.iov_base;
   mdbx_tassert(txn, rc == MDBX_NOTFOUND);
 
-  count = 0;
-  for (i = 0; i < txn->mt_numdbs; i++) {
+  pgno_t count = 0;
+  for (MDBX_dbi i = 0; i < txn->mt_numdbs; i++) {
     MDBX_xcursor mx;
     if (!(txn->mt_dbflags[i] & DB_VALID))
       continue;
@@ -946,10 +944,8 @@ static void mdbx_audit(MDBX_txn *txn) {
     if (txn->mt_dbs[i].md_flags & MDBX_DUPSORT) {
       rc = mdbx_page_search(&mc, NULL, MDBX_PS_FIRST);
       for (; rc == MDBX_SUCCESS; rc = mdbx_cursor_sibling(&mc, 1)) {
-        unsigned j;
-        MDBX_page *mp;
-        mp = mc.mc_pg[mc.mc_top];
-        for (j = 0; j < NUMKEYS(mp); j++) {
+        MDBX_page *mp = mc.mc_pg[mc.mc_top];
+        for (unsigned j = 0; j < NUMKEYS(mp); j++) {
           MDBX_node *leaf = NODEPTR(mp, j);
           if (leaf->mn_flags & F_SUBDATA) {
             MDBX_db db;
@@ -1195,7 +1191,7 @@ mark_done:
   return rc;
 }
 
-static int mdbx_page_flush(MDBX_txn *txn, size_t keep);
+static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep);
 
 /* Spill pages from the dirty list back to disk.
  * This is intended to prevent running into MDBX_TXN_FULL situations,
@@ -1239,7 +1235,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
     return MDBX_SUCCESS;
 
   /* Estimate how much space this op will take */
-  size_t i = m0->mc_db->md_depth;
+  pgno_t i = m0->mc_db->md_depth;
   /* Named DBs also dirty the main DB */
   if (m0->mc_dbi >= CORE_DBS)
     i += txn->mt_dbs[MAIN_DBI].md_depth;
@@ -1247,7 +1243,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   if (key)
     i += bytes2pgno(txn->mt_env, LEAFSIZE(key, data) + txn->mt_env->me_psize);
   i += i; /* double it for good measure */
-  size_t need = i;
+  pgno_t need = i;
 
   if (txn->mt_dirtyroom > i)
     return MDBX_SUCCESS;
@@ -1259,7 +1255,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   } else {
     /* purge deleted slots */
     MDBX_IDL sl = txn->mt_spill_pages;
-    unsigned num = sl[0], j = 0;
+    pgno_t num = sl[0], j = 0;
     for (i = 1; i <= num; i++) {
       if (!(sl[i] & 1))
         sl[++j] = sl[i];
@@ -1268,7 +1264,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
   }
 
   /* Preserve pages which may soon be dirtied again */
-  int rc = mdbx_pages_xkeep(m0, P_DIRTY, 1);
+  int rc = mdbx_pages_xkeep(m0, P_DIRTY, true);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
@@ -1684,7 +1680,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 
       if (flags & MDBX_LIFORECLAIM) {
         if (txn->mt_lifo_reclaimed) {
-          for (j = txn->mt_lifo_reclaimed[0]; j > 0; --j)
+          for (j = (unsigned)txn->mt_lifo_reclaimed[0]; j > 0; --j)
             if (txn->mt_lifo_reclaimed[j] == last)
               break;
           if (j)
@@ -2896,7 +2892,8 @@ again:
     head_room = mop_len - total_room;
     if (head_room > maxfree_1pg && head_id > 1) {
       /* Overflow multi-page for part of me_pghead */
-      head_room /= head_id; /* amortize page sizes */
+      head_room /= (head_id < INT16_MAX) ? (pgno_t)head_id
+                                         : INT16_MAX; /* amortize page sizes */
       head_room += maxfree_1pg - head_room % (maxfree_1pg + 1);
     } else if (head_room < 0) {
       /* Rare case, not bothering to delete this record */
@@ -2989,7 +2986,7 @@ again:
       data.iov_base = mop -= len;
 
       save = mop[0];
-      mop[0] = len;
+      mop[0] = (pgno_t)len;
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
       mdbx_tassert(
           txn, cleanup_idx ==
@@ -3015,7 +3012,7 @@ bailout:
        * records. */
       cleanup_idx = 0;
       /* LY: restart filling */
-      refill_idx = total_room = head_room = 0;
+      total_room = head_room = refill_idx = 0;
       more = 1;
       goto again;
     }
@@ -3033,11 +3030,11 @@ bailout:
  * [in] txn   the transaction that's being committed
  * [in] keep  number of initial pages in dirtylist to keep dirty.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_flush(MDBX_txn *txn, size_t keep) {
+static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
   MDBX_env *env = txn->mt_env;
   MDBX_ID2L dl = txn->mt_rw_dirtylist;
-  unsigned j;
-  int i, pagecount = dl[0].mid, rc;
+  unsigned i, j, pagecount = dl[0].mid;
+  int rc;
   size_t size = 0, pos = 0;
   pgno_t pgno = 0;
   MDBX_page *dp = NULL;
@@ -3609,7 +3606,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   MDBX_meta *const meta2 = METAPAGE(env, 2);
   MDBX_meta *const head = mdbx_meta_head(env);
 
-  const size_t prev_mapsize = head->mm_mapsize;
+  mdbx_assert(env, head->mm_mapsize < MAX_MAPSIZE);
+  STATIC_ASSERT(SSIZE_MAX > MAX_MAPSIZE);
+  const size_t prev_mapsize = (size_t)head->mm_mapsize;
+
   const size_t used_size = pgno2bytes(env, pending->mm_last_pg + 1);
 
   mdbx_assert(env, mdbx_meta_eq_mask(env) == 0);
@@ -3806,11 +3806,17 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   if (unlikely(pending->mm_mapsize < prev_mapsize)) {
     mdbx_assert(env, pending->mm_mapsize == env->me_mapsize);
-    rc = mdbx_ftruncate(env->me_fd, pending->mm_mapsize);
+    if (pending->mm_mapsize > MAX_MAPSIZE) {
+      rc = MDBX_PROBLEM;
+      goto fail;
+    }
+    const size_t mapsize = (size_t)pending->mm_mapsize;
+    mdbx_assert(env, pending->mm_mapsize == mapsize);
+
+    rc = mdbx_ftruncate(env->me_fd, mapsize);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
-    rc = mdbx_mremap_size((void **)&env->me_map, prev_mapsize,
-                          pending->mm_mapsize);
+    rc = mdbx_mremap_size((void **)&env->me_map, prev_mapsize, mapsize);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }
@@ -3828,26 +3834,22 @@ int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
   return env->me_maxkey_limit;
 }
 
-static __inline ssize_t mdbx_calc_nodemax(ssize_t pagesize) {
-  assert(pagesize > 0);
-  return (((pagesize - PAGEHDRSZ) / MDBX_MINKEYS) & -(ssize_t)2) -
-         sizeof(indx_t);
-}
+#define mdbx_nodemax(pagesize)                                                 \
+  (((((pagesize)-PAGEHDRSZ) / MDBX_MINKEYS) & -(ssize_t)2) - sizeof(indx_t))
 
-static __inline ssize_t mdbx_calc_maxkey(ssize_t nodemax) {
-  assert(nodemax > 0);
-  return nodemax - (NODESIZE + sizeof(MDBX_db));
-}
+#define mdbx_maxkey(nodemax) ((nodemax) - (NODESIZE + sizeof(MDBX_db)))
+
+#define mdbx_maxfree1pg(pagesize) (((pagesize)-PAGEHDRSZ) / sizeof(pgno_t) - 1)
 
 int mdbx_get_maxkeysize(size_t pagesize) {
   if (pagesize == 0)
     pagesize = mdbx_syspagesize();
 
-  ssize_t nodemax = mdbx_calc_nodemax(pagesize);
+  ssize_t nodemax = mdbx_nodemax(pagesize);
   if (nodemax < 0)
     return -MDBX_EINVAL;
 
-  ssize_t maxkey = mdbx_calc_maxkey(nodemax);
+  ssize_t maxkey = mdbx_maxkey(nodemax);
   return (maxkey > 0 && maxkey < INT_MAX) ? (int)maxkey : -MDBX_EINVAL;
 }
 
@@ -3856,12 +3858,27 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, size_t pagesize) {
   mdbx_ensure(env, pagesize >= MIN_PAGESIZE);
   mdbx_ensure(env, pagesize <= MAX_PAGESIZE);
 
-  env->me_psize = pagesize;
-  env->me_maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  env->me_nodemax = mdbx_calc_nodemax(pagesize);
-  env->me_maxkey_limit = mdbx_calc_maxkey(env->me_nodemax);
-  mdbx_assert(env,
-              env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
+  env->me_psize = (unsigned)pagesize;
+
+  STATIC_ASSERT(mdbx_maxfree1pg(MIN_PAGESIZE) > 42);
+  STATIC_ASSERT(mdbx_maxfree1pg(MAX_PAGESIZE) < MDBX_IDL_DB_MAX);
+  const ssize_t maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
+  mdbx_ensure(env, maxfree_1pg > 42 && maxfree_1pg < MDBX_IDL_DB_MAX);
+  env->me_maxfree_1pg = (unsigned)maxfree_1pg;
+
+  STATIC_ASSERT(mdbx_nodemax(MIN_PAGESIZE) > 42);
+  STATIC_ASSERT(mdbx_nodemax(MAX_PAGESIZE) < UINT16_MAX);
+  const ssize_t nodemax = mdbx_nodemax(pagesize);
+  mdbx_ensure(env, nodemax > 42 && nodemax < UINT16_MAX);
+  env->me_nodemax = (unsigned)nodemax;
+
+  STATIC_ASSERT(mdbx_maxkey(MIN_PAGESIZE) > 42);
+  STATIC_ASSERT(mdbx_maxkey(MIN_PAGESIZE) < MIN_PAGESIZE);
+  STATIC_ASSERT(mdbx_maxkey(MAX_PAGESIZE) > 42);
+  STATIC_ASSERT(mdbx_maxkey(MAX_PAGESIZE) < MAX_PAGESIZE);
+  const ssize_t maxkey_limit = mdbx_maxkey(env->me_nodemax);
+  mdbx_ensure(env, maxkey_limit > 42 && (size_t)maxkey_limit < pagesize);
+  env->me_maxkey_limit = (unsigned)maxkey_limit;
 
   env->me_psize2log = 0;
   while (pagesize > 1) {
@@ -3884,12 +3901,13 @@ int __cold mdbx_env_create(MDBX_env **penv) {
   env->me_pid = mdbx_getpid();
 
   int rc;
-  env->me_os_psize = mdbx_syspagesize();
-  if (!is_power2(env->me_os_psize) || env->me_os_psize < MIN_PAGESIZE) {
-    mdbx_error("unsuitable system pageize %u", env->me_os_psize);
+  const size_t os_psize = mdbx_syspagesize();
+  if (!is_power2(os_psize) || os_psize < MIN_PAGESIZE) {
+    mdbx_error("unsuitable system pageize %" PRIuPTR, os_psize);
     rc = MDBX_INCOMPATIBLE;
     goto bailout;
   }
+  env->me_os_psize = (unsigned)os_psize;
   mdbx_setup_pagesize(env, env->me_os_psize);
 
   rc = mdbx_fastmutex_init(&env->me_dbi_lock);
@@ -4261,23 +4279,22 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
         return err;
       size = wanna;
     }
-  }
-
-  if ((size & (env->me_os_psize - 1)) || size < env->me_os_psize) {
+  } else if (size > SSIZE_MAX || (size & (env->me_os_psize - 1)) ||
+             size < env->me_os_psize) {
     mdbx_notice("lck-file has invalid size %" PRIu64 " bytes", size);
     return MDBX_PROBLEM;
   }
 
-  const uint64_t maxreaders =
-      (size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
+  const size_t maxreaders =
+      ((size_t)size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
   if (maxreaders > UINT16_MAX) {
-    mdbx_error("lck-size too big (up to %" PRIu64 " readers)", maxreaders);
+    mdbx_error("lck-size too big (up to %" PRIuPTR " readers)", maxreaders);
     return MDBX_PROBLEM;
   }
   env->me_maxreaders = (unsigned)maxreaders;
 
   void *addr = NULL;
-  err = mdbx_mmap(&addr, size, true, env->me_lfd);
+  err = mdbx_mmap(&addr, (size_t)size, true, env->me_lfd);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
   assert(addr != nullptr);
@@ -4304,7 +4321,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
 
   if (rc == MDBX_RESULT_TRUE) {
     /* LY: exlcusive mode, init lck */
-    memset(env->me_lck, 0, size);
+    memset(env->me_lck, 0, (size_t)size);
     err = mdbx_lck_init(env);
     if (err)
       return err;
@@ -4344,9 +4361,6 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
 
 int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
                             mode_t mode, int *exclusive) {
-  int oflags, rc, len;
-  char *lck_pathname, *dxb_pathname;
-
   if (unlikely(!env || !path))
     return MDBX_EINVAL;
 
@@ -4357,16 +4371,17 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
       (flags & ~(CHANGEABLE | CHANGELESS)))
     return MDBX_EINVAL;
 
-  len = strlen(path);
+  size_t len_full, len = strlen(path);
   if (flags & MDBX_NOSUBDIR) {
-    rc = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
+    len_full = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
   } else {
-    rc = len + sizeof(MDBX_LOCKNAME) + len + sizeof(MDBX_DATANAME);
+    len_full = len + sizeof(MDBX_LOCKNAME) + len + sizeof(MDBX_DATANAME);
   }
-  lck_pathname = malloc(rc);
+  char *lck_pathname = malloc(len_full);
   if (!lck_pathname)
     return MDBX_ENOMEM;
 
+  char *dxb_pathname;
   if (flags & MDBX_NOSUBDIR) {
     dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCK_SUFFIX);
     sprintf(lck_pathname, "%s" MDBX_LOCK_SUFFIX, path);
@@ -4377,7 +4392,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     sprintf(dxb_pathname, "%s" MDBX_DATANAME, path);
   }
 
-  rc = MDBX_SUCCESS;
+  int rc = MDBX_SUCCESS;
   flags |= env->me_flags;
   if (flags & MDBX_RDONLY) {
     /* LY: silently ignore irrelevant flags when
@@ -4403,6 +4418,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
   }
   env->me_dbxs[FREE_DBI].md_cmp = mdbx_cmp_int_ai; /* aligned MDBX_INTEGERKEY */
 
+  int oflags;
   if (F_ISSET(flags, MDBX_RDONLY))
     oflags = O_RDONLY;
   else
@@ -5970,7 +5986,6 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   uint16_t fp_flags;
   MDBX_val xdata, *rdata, dkey, olddata;
   MDBX_db dummy;
-  int do_sub = 0, insert_key, insert_data;
   unsigned mcount = 0, dcount = 0, nospill;
   size_t nsize;
   int rc = MDBX_SUCCESS, rc2;
@@ -5987,10 +6002,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   /* Check this first so counter will always be zero on any early failures. */
   if (flags & MDBX_MULTIPLE) {
-    dcount = data[1].iov_len;
-    data[1].iov_len = 0;
     if (unlikely(!F_ISSET(mc->mc_db->md_flags, MDBX_DUPFIXED)))
       return MDBX_INCOMPATIBLE;
+    if (unlikely(data[1].iov_len >= INT_MAX))
+      return MDBX_EINVAL;
+    dcount = (unsigned)data[1].iov_len;
+    data[1].iov_len = 0;
   }
 
   if (flags & MDBX_RESERVE) {
@@ -6137,7 +6154,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return rc2;
   }
 
-  insert_key = insert_data = rc;
+  bool insert_key, insert_data, do_sub = false;
+  insert_key = insert_data = (rc != MDBX_SUCCESS);
   if (insert_key) {
     /* The key does not exist */
     mdbx_debug("inserting key at index %i", mc->mc_ki[mc->mc_top]);
@@ -6285,7 +6303,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         xdata.iov_base = &dummy;
         if ((rc = mdbx_page_alloc(mc, 1, &mp, MDBX_ALLOC_ALL)))
           return rc;
-        offset = env->me_psize - olddata.iov_len;
+        mdbx_cassert(mc, env->me_psize > olddata.iov_len);
+        offset = env->me_psize - (unsigned)olddata.iov_len;
         flags |= F_DUPDATA | F_SUBDATA;
         dummy.md_root = mp->mp_pgno;
         sub_root = mp;
@@ -6308,7 +6327,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
       rdata = &xdata;
       flags |= F_DUPDATA;
-      do_sub = 1;
+      do_sub = true;
       if (!insert_key)
         mdbx_node_del(mc, 0);
       goto new_sub;
@@ -6388,14 +6407,16 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       else if (!(mc->mc_flags & C_SUB))
         memcpy(olddata.iov_base, data->iov_base, data->iov_len);
       else {
-        assert(NUMKEYS(mc->mc_pg[mc->mc_top]) == 1);
-        assert(mc->mc_pg[mc->mc_top]->mp_upper ==
-               mc->mc_pg[mc->mc_top]->mp_lower);
-        assert(IS_LEAF(mc->mc_pg[mc->mc_top]) &&
-               !IS_LEAF2(mc->mc_pg[mc->mc_top]));
-        assert(NODEDSZ(leaf) == 0);
-        assert(leaf->mn_flags == 0);
-        memcpy(NODEKEY(leaf), key->iov_base, leaf->mn_ksize = key->iov_len);
+        mdbx_cassert(mc, NUMKEYS(mc->mc_pg[mc->mc_top]) == 1);
+        mdbx_cassert(mc, mc->mc_pg[mc->mc_top]->mp_upper ==
+                             mc->mc_pg[mc->mc_top]->mp_lower);
+        mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) &&
+                             !IS_LEAF2(mc->mc_pg[mc->mc_top]));
+        mdbx_cassert(mc, NODEDSZ(leaf) == 0);
+        mdbx_cassert(mc, leaf->mn_flags == 0);
+        mdbx_cassert(mc, key->iov_len < UINT16_MAX);
+        leaf->mn_ksize = (uint16_t)key->iov_len;
+        memcpy(NODEKEY(leaf), key->iov_base, key->iov_len);
         assert((char *)NODEDATA(leaf) + NODEDSZ(leaf) <
                (char *)(mc->mc_pg[mc->mc_top]) + env->me_psize);
         goto fix_parent;
@@ -6496,7 +6517,8 @@ new_sub:
           }
         }
       }
-      ecount = mc->mc_xcursor->mx_db.md_entries;
+      mdbx_cassert(mc, mc->mc_xcursor->mx_db.md_entries < SIZE_MAX);
+      ecount = (size_t)mc->mc_xcursor->mx_db.md_entries;
       if (flags & MDBX_APPENDDUP)
         xflags |= MDBX_APPEND;
       rc = mdbx_cursor_put(&mc->mc_xcursor->mx_cursor, data, &xdata, xflags);
@@ -6504,7 +6526,7 @@ new_sub:
         void *db = NODEDATA(leaf);
         memcpy(db, &mc->mc_xcursor->mx_db, sizeof(MDBX_db));
       }
-      insert_data = mc->mc_xcursor->mx_db.md_entries - ecount;
+      insert_data = (ecount != (size_t)mc->mc_xcursor->mx_db.md_entries);
     }
     /* Increment count unless we just replaced an existing item. */
     if (insert_data)
@@ -6524,7 +6546,7 @@ new_sub:
         data[1].iov_len = mcount;
         if (mcount < dcount) {
           data[0].iov_base = (char *)data[0].iov_base + data[0].iov_len;
-          insert_key = insert_data = 0;
+          insert_key = insert_data = false;
           goto more;
         }
       }
@@ -6765,7 +6787,6 @@ static int mdbx_node_add(MDBX_cursor *mc, indx_t indx, MDBX_val *key,
   unsigned i;
   size_t node_size = NODESIZE;
   ssize_t room;
-  unsigned ofs;
   MDBX_node *node;
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   MDBX_page *ofp = NULL; /* overflow page */
@@ -6783,17 +6804,19 @@ static int mdbx_node_add(MDBX_cursor *mc, indx_t indx, MDBX_val *key,
   if (IS_LEAF2(mp)) {
     mdbx_cassert(mc, key);
     /* Move higher keys up one slot. */
-    int ksize = mc->mc_db->md_xsize, dif;
-    char *ptr = LEAF2KEY(mp, indx, ksize);
-    dif = NUMKEYS(mp) - indx;
-    if (dif > 0)
-      memmove(ptr + ksize, ptr, dif * ksize);
+    const int ksize = mc->mc_db->md_xsize;
+    char *const ptr = LEAF2KEY(mp, indx, ksize);
+    const int diff = NUMKEYS(mp) - indx;
+    if (diff > 0)
+      memmove(ptr + ksize, ptr, diff * ksize);
     /* insert new key */
     memcpy(ptr, key->iov_base, ksize);
 
     /* Just using these for counting */
+    mdbx_cassert(mc, UINT16_MAX - mp->mp_lower >= (int)sizeof(indx_t));
     mp->mp_lower += sizeof(indx_t);
-    mp->mp_upper -= ksize - sizeof(indx_t);
+    mdbx_cassert(mc, mp->mp_upper >= ksize - sizeof(indx_t));
+    mp->mp_upper -= (indx_t)(ksize - sizeof(indx_t));
     return MDBX_SUCCESS;
   }
 
@@ -6807,7 +6830,7 @@ static int mdbx_node_add(MDBX_cursor *mc, indx_t indx, MDBX_val *key,
       node_size += sizeof(pgno_t);
     } else if (unlikely(node_size + data->iov_len >
                         mc->mc_txn->mt_env->me_nodemax)) {
-      unsigned ovpages = OVPAGES(mc->mc_txn->mt_env, data->iov_len);
+      pgno_t ovpages = OVPAGES(mc->mc_txn->mt_env, data->iov_len);
       int rc;
       /* Put data on overflow page. */
       mdbx_debug("data size is %" PRIuPTR ", node would be %" PRIuPTR
@@ -6835,8 +6858,9 @@ update:
     mp->mp_ptrs[i] = mp->mp_ptrs[i - 1];
 
   /* Adjust free space offsets. */
-  ofs = mp->mp_upper - node_size;
+  size_t ofs = mp->mp_upper - node_size;
   mdbx_cassert(mc, ofs >= mp->mp_lower + sizeof(indx_t));
+  mdbx_cassert(mc, ofs <= UINT16_MAX);
   mp->mp_ptrs[indx] = (uint16_t)ofs;
   mp->mp_upper = (uint16_t)ofs;
   mp->mp_lower += sizeof(indx_t);
@@ -6888,10 +6912,9 @@ full:
  * [in] mc Cursor pointing to the node to delete.
  * [in] ksize The size of a node. Only used if the page is
  * part of a MDBX_DUPFIXED database. */
-static void mdbx_node_del(MDBX_cursor *mc, int ksize) {
+static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   indx_t indx = mc->mc_ki[mc->mc_top];
-  unsigned sz;
   indx_t i, j, numkeys, ptr;
   MDBX_node *node;
   char *base;
@@ -6902,17 +6925,21 @@ static void mdbx_node_del(MDBX_cursor *mc, int ksize) {
   mdbx_cassert(mc, indx < numkeys);
 
   if (IS_LEAF2(mp)) {
-    int x = numkeys - 1 - indx;
+    mdbx_cassert(mc, ksize >= sizeof(indx_t));
+    unsigned diff = numkeys - 1 - indx;
     base = LEAF2KEY(mp, indx, ksize);
-    if (x)
-      memmove(base, base + ksize, x * ksize);
+    if (diff)
+      memmove(base, base + ksize, diff * ksize);
+    mdbx_cassert(mc, mp->mp_lower >= sizeof(indx_t));
     mp->mp_lower -= sizeof(indx_t);
-    mp->mp_upper += ksize - sizeof(indx_t);
+    mdbx_cassert(mc,
+                 (size_t)UINT16_MAX - mp->mp_upper >= ksize - sizeof(indx_t));
+    mp->mp_upper += (indx_t)(ksize - sizeof(indx_t));
     return;
   }
 
   node = NODEPTR(mp, indx);
-  sz = NODESIZE + node->mn_ksize;
+  size_t sz = NODESIZE + node->mn_ksize;
   if (IS_LEAF(mp)) {
     if (F_ISSET(node->mn_flags, F_BIGDATA))
       sz += sizeof(pgno_t);
@@ -6925,8 +6952,10 @@ static void mdbx_node_del(MDBX_cursor *mc, int ksize) {
   for (i = j = 0; i < numkeys; i++) {
     if (i != indx) {
       mp->mp_ptrs[j] = mp->mp_ptrs[i];
-      if (mp->mp_ptrs[i] < ptr)
-        mp->mp_ptrs[j] += sz;
+      if (mp->mp_ptrs[i] < ptr) {
+        mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_ptrs[j] >= sz);
+        mp->mp_ptrs[j] += (indx_t)sz;
+      }
       j++;
     }
   }
@@ -6934,8 +6963,10 @@ static void mdbx_node_del(MDBX_cursor *mc, int ksize) {
   base = (char *)mp + mp->mp_upper + PAGEHDRSZ;
   memmove(base + sz, base, ptr - mp->mp_upper);
 
+  mdbx_cassert(mc, mp->mp_lower >= sizeof(indx_t));
   mp->mp_lower -= sizeof(indx_t);
-  mp->mp_upper += sz;
+  mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_upper >= sz);
+  mp->mp_upper += (indx_t)sz;
 }
 
 /* Compact the main page after deleting a node on a subpage.
@@ -6945,7 +6976,7 @@ static void mdbx_node_shrink(MDBX_page *mp, indx_t indx) {
   MDBX_node *node;
   MDBX_page *sp, *xp;
   char *base;
-  unsigned nsize, delta, len, ptr;
+  size_t nsize, delta, len, ptr;
   int i;
 
   node = NODEPTR(mp, indx);
@@ -6960,8 +6991,10 @@ static void mdbx_node_shrink(MDBX_page *mp, indx_t indx) {
       return; /* do not make the node uneven-sized */
   } else {
     xp = (MDBX_page *)((char *)sp + delta); /* destination subpage */
-    for (i = NUMKEYS(sp); --i >= 0;)
-      xp->mp_ptrs[i] = sp->mp_ptrs[i] - delta;
+    for (i = NUMKEYS(sp); --i >= 0;) {
+      assert(sp->mp_ptrs[i] >= delta);
+      xp->mp_ptrs[i] = (indx_t)(sp->mp_ptrs[i] - delta);
+    }
     len = PAGEHDRSZ;
   }
   sp->mp_upper = sp->mp_lower;
@@ -6974,10 +7007,13 @@ static void mdbx_node_shrink(MDBX_page *mp, indx_t indx) {
 
   ptr = mp->mp_ptrs[indx];
   for (i = NUMKEYS(mp); --i >= 0;) {
-    if (mp->mp_ptrs[i] <= ptr)
-      mp->mp_ptrs[i] += delta;
+    if (mp->mp_ptrs[i] <= ptr) {
+      assert((size_t)UINT16_MAX - mp->mp_ptrs[i] >= delta);
+      mp->mp_ptrs[i] += (indx_t)delta;
+    }
   }
-  mp->mp_upper += delta;
+  assert((size_t)UINT16_MAX - mp->mp_upper >= delta);
+  mp->mp_upper += (indx_t)delta;
 }
 
 /* Initial setup of a sorted-dups cursor.
@@ -7049,7 +7085,7 @@ static void mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
   mdbx_debug("Sub-db -%u root page %" PRIaPGNO "", mx->mx_cursor.mc_dbi,
              mx->mx_db.md_root);
   mx->mx_dbflag = DB_VALID | DB_USRVALID | DB_DUPDATA;
-  /* #if UINT_MAX < SIZE_MAX
+  /* FIXME: #if UINT_MAX < SIZE_MAX
           if (mx->mx_dbx.md_cmp == mdbx_cmp_int && mx->mx_db.md_pad ==
   sizeof(size_t))
                   mx->mx_dbx.md_cmp = mdbx_cmp_clong;
@@ -7217,9 +7253,9 @@ int mdbx_cursor_count(MDBX_cursor *mc, size_t *countp) {
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
       mdbx_cassert(mc, mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags &
                                           C_INITIALIZED));
-      *countp = unlikely(mc->mc_xcursor->mx_db.md_entries > INT_MAX)
-                    ? INT_MAX
-                    : mc->mc_xcursor->mx_db.md_entries;
+      *countp = unlikely(mc->mc_xcursor->mx_db.md_entries > SIZE_MAX)
+                    ? SIZE_MAX
+                    : (size_t)mc->mc_xcursor->mx_db.md_entries;
     }
   }
   return MDBX_SUCCESS;
@@ -8079,21 +8115,19 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
                            pgno_t newpgno, unsigned nflags) {
   unsigned flags;
   int rc = MDBX_SUCCESS, new_root = 0, did_split = 0;
-  indx_t newindx;
   pgno_t pgno = 0;
-  int i, j, split_indx, nkeys, pmax;
+  unsigned i, ptop;
   MDBX_env *env = mc->mc_txn->mt_env;
   MDBX_node *node;
   MDBX_val sepkey, rkey, xdata, *rdata = &xdata;
   MDBX_page *copy = NULL;
-  MDBX_page *mp, *rp, *pp;
-  int ptop;
+  MDBX_page *rp, *pp;
   MDBX_cursor mn;
   DKBUF;
 
-  mp = mc->mc_pg[mc->mc_top];
-  newindx = mc->mc_ki[mc->mc_top];
-  nkeys = NUMKEYS(mp);
+  MDBX_page *mp = mc->mc_pg[mc->mc_top];
+  unsigned newindx = mc->mc_ki[mc->mc_top];
+  unsigned nkeys = NUMKEYS(mp);
 
   mdbx_debug("-----> splitting %s page %" PRIaPGNO
              " and adding [%s] at index %i/%i",
@@ -8147,6 +8181,7 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
   mn.mc_pg[mn.mc_top] = rp;
   mn.mc_ki[ptop] = mc->mc_ki[ptop] + 1;
 
+  unsigned split_indx;
   if (nflags & MDBX_APPEND) {
     mn.mc_ki[mn.mc_top] = 0;
     sepkey = *newkey;
@@ -8176,27 +8211,32 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
         sepkey.iov_base = split;
       }
       if (x < 0) {
+        mdbx_cassert(mc, ksize >= sizeof(indx_t));
         ins = LEAF2KEY(mp, mc->mc_ki[mc->mc_top], ksize);
         memcpy(rp->mp_ptrs, split, rsize);
         sepkey.iov_base = rp->mp_ptrs;
         memmove(ins + ksize, ins, (split_indx - mc->mc_ki[mc->mc_top]) * ksize);
         memcpy(ins, newkey->iov_base, ksize);
+        mdbx_cassert(mc, UINT16_MAX - mp->mp_lower >= (int)sizeof(indx_t));
         mp->mp_lower += sizeof(indx_t);
-        mp->mp_upper -= ksize - sizeof(indx_t);
+        mdbx_cassert(mc, mp->mp_upper >= ksize - sizeof(indx_t));
+        mp->mp_upper -= (indx_t)(ksize - sizeof(indx_t));
       } else {
         if (x)
           memcpy(rp->mp_ptrs, split, x * ksize);
         ins = LEAF2KEY(rp, x, ksize);
         memcpy(ins, newkey->iov_base, ksize);
         memcpy(ins + ksize, split + x * ksize, rsize - x * ksize);
+        mdbx_cassert(mc, UINT16_MAX - rp->mp_lower >= (int)sizeof(indx_t));
         rp->mp_lower += sizeof(indx_t);
-        rp->mp_upper -= ksize - sizeof(indx_t);
+        mdbx_cassert(mc, rp->mp_upper >= ksize - sizeof(indx_t));
+        rp->mp_upper -= (indx_t)(ksize - sizeof(indx_t));
         mc->mc_ki[mc->mc_top] = x;
       }
     } else {
-      int psize, nsize, k;
+      size_t psize, nsize, k;
       /* Maximum free space in an empty page */
-      pmax = env->me_psize - PAGEHDRSZ;
+      unsigned pmax = env->me_psize - PAGEHDRSZ;
       if (IS_LEAF(mp))
         nsize = mdbx_leaf_size(env, newkey, newdata);
       else
@@ -8215,10 +8255,9 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
       copy->mp_upper = env->me_psize - PAGEHDRSZ;
 
       /* prepare to insert */
-      for (i = 0, j = 0; i < nkeys; i++) {
-        if (i == newindx) {
+      for (unsigned j = i = 0; i < nkeys; i++) {
+        if (i == newindx)
           copy->mp_ptrs[j++] = 0;
-        }
         copy->mp_ptrs[j++] = mp->mp_ptrs[i];
       }
 
@@ -8237,19 +8276,20 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
        * the split so the new page is emptier than the old page.
        * This yields better packing during sequential inserts.
        */
+      int dir;
       if (nkeys < 20 || nsize > pmax / 16 || newindx >= nkeys) {
         /* Find split point */
         psize = 0;
         if (newindx <= split_indx || newindx >= nkeys) {
           i = 0;
-          j = 1;
-          k = newindx >= nkeys ? nkeys : split_indx + 1 + IS_LEAF(mp);
+          dir = 1;
+          k = (newindx >= nkeys) ? nkeys : split_indx + 1 + IS_LEAF(mp);
         } else {
           i = nkeys;
-          j = -1;
+          dir = -1;
           k = split_indx - 1;
         }
-        for (; i != k; i += j) {
+        for (; i != k; i += dir) {
           if (i == newindx) {
             psize += nsize;
             node = NULL;
@@ -8264,8 +8304,8 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
             }
             psize = EVEN(psize);
           }
-          if (psize > pmax || i == k - j) {
-            split_indx = i + (j < 0);
+          if (psize > pmax || i == k - dir) {
+            split_indx = i + (dir < 0);
             break;
           }
         }
@@ -8297,9 +8337,9 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
       goto done;
 
     /* root split? */
-    if (mc->mc_snum > snum) {
+    if (mc->mc_snum > snum)
       ptop++;
-    }
+
     /* Right page might now have changed parent.
      * Check if left page also changed parent. */
     if (mn.mc_pg[ptop] != mc->mc_pg[ptop] &&
@@ -8341,7 +8381,7 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
     /* Move nodes */
     mc->mc_pg[mc->mc_top] = rp;
     i = split_indx;
-    j = 0;
+    indx_t n = 0;
     do {
       if (i == newindx) {
         rkey.iov_base = newkey->iov_base;
@@ -8352,7 +8392,7 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
           pgno = newpgno;
         flags = nflags;
         /* Update index for the new key. */
-        mc->mc_ki[mc->mc_top] = j;
+        mc->mc_ki[mc->mc_top] = n;
       } else {
         node = (MDBX_node *)((char *)mp + copy->mp_ptrs[i] + PAGEHDRSZ);
         rkey.iov_base = NODEKEY(node);
@@ -8366,21 +8406,21 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
         flags = node->mn_flags;
       }
 
-      if (!IS_LEAF(mp) && j == 0) {
+      if (!IS_LEAF(mp) && n == 0) {
         /* First branch index doesn't need key data. */
         rkey.iov_len = 0;
       }
 
-      rc = mdbx_node_add(mc, j, &rkey, rdata, pgno, flags);
+      rc = mdbx_node_add(mc, n, &rkey, rdata, pgno, flags);
       if (rc)
         goto done;
       if (i == nkeys) {
         i = 0;
-        j = 0;
+        n = 0;
         mc->mc_pg[mc->mc_top] = copy;
       } else {
         i++;
-        j++;
+        n++;
       }
     } while (i != split_indx);
 
@@ -8552,8 +8592,8 @@ typedef struct mdbx_copy {
   mdbx_condmutex_t mc_condmutex;
   char *mc_wbuf[2];
   char *mc_over[2];
-  int mc_wlen[2];
-  int mc_olen[2];
+  size_t mc_wlen[2];
+  size_t mc_olen[2];
   pgno_t mc_next_pgno;
   mdbx_filehandle_t mc_fd;
   int mc_toggle; /* Buffer number in provider */
@@ -8567,7 +8607,7 @@ typedef struct mdbx_copy {
 static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   mdbx_copy *my = arg;
   char *ptr;
-  int toggle = 0, wsize;
+  int toggle = 0;
   int rc;
 
 #if defined(F_SETNOSIGPIPE)
@@ -8593,7 +8633,7 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
       mdbx_condmutex_wait(&my->mc_condmutex);
     if (my->mc_new == 0 + MDBX_EOF) /* 0 buffers, just EOF */
       break;
-    wsize = my->mc_wlen[toggle];
+    size_t wsize = my->mc_wlen[toggle];
     ptr = my->mc_wbuf[toggle];
   again:
     if (wsize > 0 && !my->mc_error) {
@@ -8942,14 +8982,13 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 }
 
 int __cold mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags) {
-  int rc, len;
   char *lck_pathname;
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
 
   if (env->me_flags & MDBX_NOSUBDIR) {
     lck_pathname = (char *)path;
   } else {
-    len = strlen(path);
+    size_t len = strlen(path);
     len += sizeof(MDBX_DATANAME);
     lck_pathname = malloc(len);
     if (!lck_pathname)
@@ -8960,7 +8999,8 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags) {
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  rc = mdbx_openfile(lck_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666, &newfd);
+  int rc =
+      mdbx_openfile(lck_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666, &newfd);
   if (rc == MDBX_SUCCESS) {
     if (env->me_psize >= env->me_os_psize) {
 #ifdef F_NOCACHE /* __APPLE__ */
@@ -9761,7 +9801,9 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
     if (oldest < snap || reader < 0) {
       if (retry && env->me_oom_func) {
         /* LY: notify end of oom-loop */
-        env->me_oom_func(env, 0, 0, oldest, snap - oldest, -retry);
+        const txnid_t gap = snap - oldest;
+        env->me_oom_func(env, 0, 0, oldest,
+                         (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, -retry);
       }
       return snap;
     }
@@ -9780,9 +9822,10 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
     if (r->mr_txnid != oldest || pid <= 0)
       continue;
 
-    rc = env->me_oom_func(
-        env, pid, tid, oldest,
-        mdbx_meta_txnid_stable(env, mdbx_meta_head(env)) - oldest, retry);
+    const txnid_t gap =
+        mdbx_meta_txnid_stable(env, mdbx_meta_head(env)) - oldest;
+    rc = env->me_oom_func(env, pid, tid, oldest,
+                          (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, retry);
     if (rc < 0)
       break;
 
@@ -9849,11 +9892,11 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
   MDBX_env *env = txn->mt_env;
   MDBX_meta *meta = mdbx_meta_head(env);
   if (percent) {
-    size_t maxpg = env->me_maxpg;
-    size_t last = meta->mm_last_pg + 1;
+    pgno_t maxpg = env->me_maxpg;
+    pgno_t last = meta->mm_last_pg + 1;
     if (env->me_txn)
       last = env->me_txn0->mt_next_pgno;
-    *percent = (last * 100ull + maxpg / 2) / maxpg;
+    *percent = (int)((last * UINT64_C(100) + maxpg / 2) / maxpg);
   }
   txnid_t lag = mdbx_meta_txnid_fluid(env, meta) - txn->mt_ro_reader->mr_txnid;
   return (lag > INT_MAX) ? INT_MAX : (int)lag;
@@ -9870,7 +9913,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
                                 pgno_t pg, int deep) {
   MDBX_page *mp;
   int rc, i, nkeys;
-  unsigned header_size, unused_size, payload_size, align_bytes;
+  size_t header_size, unused_size, payload_size, align_bytes;
   const char *type;
 
   if (pg == P_INVALID)
@@ -10278,7 +10321,7 @@ bailout:
 }
 
 int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
-                int *values_count) {
+                size_t *values_count) {
   DKBUF;
   mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
 
@@ -10313,7 +10356,10 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
       if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
         mdbx_tassert(txn, mc.mc_xcursor == &mx &&
                               (mx.mx_cursor.mc_flags & C_INITIALIZED));
-        *values_count = mx.mx_db.md_entries;
+        *values_count = (sizeof(*values_count) >= sizeof(mx.mx_db.md_entries) ||
+                         mx.mx_db.md_entries <= SIZE_MAX)
+                            ? (size_t)mx.mx_db.md_entries
+                            : SIZE_MAX;
       }
     }
   }

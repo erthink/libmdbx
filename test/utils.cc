@@ -163,9 +163,7 @@ uint64_t entropy_ticks(void) {
 
 #elif defined(_M_IX86) || defined(_M_X64)
   return __rdtsc();
-#endif /* __GNUC__ || __clang__ */
-
-#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+#elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   LARGE_INTEGER PerformanceCount;
   if (QueryPerformanceCounter(&PerformanceCount))
     return PerformanceCount.QuadPart;
