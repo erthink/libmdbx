@@ -3200,8 +3200,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     parent->mt_dbflags[MAIN_DBI] = txn->mt_dbflags[MAIN_DBI];
     for (i = CORE_DBS; i < txn->mt_numdbs; i++) {
       /* preserve parent's DB_NEW status */
-      x = parent->mt_dbflags[i] & DB_NEW;
-      parent->mt_dbflags[i] = txn->mt_dbflags[i] | x;
+      parent->mt_dbflags[i] =
+          txn->mt_dbflags[i] | (parent->mt_dbflags[i] & DB_NEW);
     }
 
     dst = parent->mt_rw_dirtylist;
@@ -7294,7 +7294,7 @@ MDBX_txn *mdbx_cursor_txn(MDBX_cursor *mc) {
 
 MDBX_dbi mdbx_cursor_dbi(MDBX_cursor *mc) {
   if (unlikely(!mc || mc->mc_signature != MDBX_MC_SIGNATURE))
-    return INT_MIN;
+    return UINT_MAX;
   return mc->mc_dbi;
 }
 

@@ -97,10 +97,10 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
 
   chrono::time now = chrono::now_realtime();
   struct tm tm;
-  time_t time = now.utc;
 #ifdef _MSC_VER
   int rc = _localtime32_s(&tm, (const __time32_t *)&now.utc);
 #else
+  time_t time = now.utc;
   int rc = localtime_r(&time, &tm) ? MDBX_SUCCESS : errno;
 #endif
   if (rc != MDBX_SUCCESS)

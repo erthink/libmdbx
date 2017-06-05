@@ -66,12 +66,14 @@
 #endif /* __SANITIZE_THREAD__ */
 
 #ifdef _MSC_VER
-#pragma warning(disable : 4464) /* C4464: relative include path contains '..' */
-#pragma warning(disable : 4710) /* C4710: 'xyz': function not inlined */
-#pragma warning(disable : 4711) /* C4711: function 'xyz' selected for automatic inline expansion */
-#pragma warning(disable : 4201) /* C4201: nonstandard extension used : nameless struct / union */
-#pragma warning(disable : 4706) /* C4706: assignment within conditional expression */
-#pragma warning(disable : 4127) /* C4127: conditional expression is constant */
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#pragma warning(disable : 4710) /* 'xyz': function not inlined */
+#pragma warning(disable : 4711) /* function 'xyz' selected for automatic inline expansion */
+#pragma warning(disable : 4201) /* nonstandard extension used : nameless struct / union */
+#pragma warning(disable : 4706) /* assignment within conditional expression */
+#pragma warning(disable : 4127) /* conditional expression is constant */
+#pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
+#pragma warning(disable : 4310) /* cast truncates constant value */
 #endif                          /* _MSC_VER (warnings) */
 
 #include "./osal.h"
