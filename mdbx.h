@@ -414,6 +414,10 @@ typedef enum MDBX_cursor_op {
  * when mdbx_cursor_put() called with MDBX_CURRENT option. */
 #define MDBX_EKEYMISMATCH (-30418)
 
+/* Database is too large for current system, i.e. could NOT be mapped into RAM.
+ */
+#define MDBX_TOO_LARGE (-30417)
+
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
   uint32_t ms_psize;          /* Size of a database page.

@@ -689,6 +689,9 @@ static const char *__mdbx_strerr(int errnum) {
   case MDBX_EKEYMISMATCH:
     return "MDBX_EKEYMISMATCH: The given key value is mismatched to the "
            "current cursor position";
+  case MDBX_TOO_LARGE:
+    return "Database is too large for current system, i.e.could NOT be mapped "
+           "into RAM.";
   default:
     return NULL;
   }
@@ -3384,6 +3387,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
   assert(offsetof(MDBX_page, mp_meta) == PAGEHDRSZ);
   memset(meta, 0, sizeof(MDBX_meta));
   meta->mm_datasync_sign = MDBX_DATASIGN_WEAK;
+  int rc = MDBX_CORRUPTED;
 
   /* Read twice all meta pages so we can find the latest one. */
   unsigned loop_limit = NUM_METAS * 2;
@@ -3402,19 +3406,19 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
 
     unsigned retryleft = 42;
     while (1) {
-      int rc = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
-      if (rc != MDBX_SUCCESS) {
+      int err = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
+      if (err != MDBX_SUCCESS) {
         mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page),
-                   rc, mdbx_strerror(rc));
-        return rc;
+                   err, mdbx_strerror(err));
+        return err;
       }
 
       MDBX_page again;
-      rc = mdbx_pread(env->me_fd, &again, sizeof(again), offset);
-      if (rc != MDBX_SUCCESS) {
+      err = mdbx_pread(env->me_fd, &again, sizeof(again), offset);
+      if (err != MDBX_SUCCESS) {
         mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(again),
-                   rc, mdbx_strerror(rc));
-        return rc;
+                   err, mdbx_strerror(err));
+        return err;
       }
 
       if (memcmp(&page, &again, sizeof(page)) == 0 || --retryleft == 0)
@@ -3451,26 +3455,6 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       continue;
     }
 
-    /* LY: check pagesize */
-    STATIC_ASSERT(MIN_PAGESIZE < MAX_PAGESIZE);
-    if (!is_power2(page.mp_meta.mm_psize) ||
-        page.mp_meta.mm_psize < MIN_PAGESIZE ||
-        page.mp_meta.mm_psize > MAX_PAGESIZE) {
-      mdbx_notice("meta[%u] has invalid pagesize %u, skip it", meta_number,
-                  page.mp_meta.mm_psize);
-      continue;
-    }
-
-    /* LY: check mapsize limits */
-    STATIC_ASSERT(MAX_MAPSIZE < SSIZE_MAX - MAX_PAGESIZE);
-    STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
-    if (page.mp_meta.mm_mapsize < MIN_MAPSIZE ||
-        page.mp_meta.mm_mapsize > MAX_MAPSIZE) {
-      mdbx_notice("meta[%u] has invalid mapsize %" PRIu64 ", skip it",
-                  meta_number, page.mp_meta.mm_mapsize);
-      continue;
-    }
-
     /* LY: check signature as a checksum */
     if (META_IS_STEADY(&page.mp_meta) &&
         page.mp_meta.mm_datasync_sign != mdbx_meta_sign(&page.mp_meta)) {
@@ -3478,6 +3462,33 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
                   " != 0x%" PRIx64 "), skip it",
                   meta_number, page.mp_meta.mm_datasync_sign,
                   mdbx_meta_sign(&page.mp_meta));
+      continue;
+    }
+
+    /* LY: check pagesize */
+    if (!is_power2(page.mp_meta.mm_psize) ||
+        page.mp_meta.mm_psize < MIN_PAGESIZE ||
+        page.mp_meta.mm_psize > MAX_PAGESIZE) {
+      mdbx_notice("meta[%u] has invalid pagesize %u, skip it", meta_number,
+                  page.mp_meta.mm_psize);
+      rc = MDBX_VERSION_MISMATCH;
+      continue;
+    }
+
+    /* LY: check mapsize limits */
+    STATIC_ASSERT(MAX_MAPSIZE < SSIZE_MAX - MAX_PAGESIZE);
+    if (page.mp_meta.mm_mapsize < MIN_MAPSIZE) {
+      mdbx_notice("meta[%u] has invalid mapsize %" PRIu64 ", skip it",
+                  meta_number, page.mp_meta.mm_mapsize);
+      rc = MDBX_VERSION_MISMATCH;
+      continue;
+    }
+
+    STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
+    if (page.mp_meta.mm_mapsize > MAX_MAPSIZE) {
+      mdbx_notice("meta[%u] has too large mapsize %" PRIu64 ", skip it",
+                  meta_number, page.mp_meta.mm_mapsize);
+      rc = MDBX_TOO_LARGE;
       continue;
     }
 
@@ -3489,6 +3500,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       mdbx_notice("meta[%u] has invalid mapsize %" PRIu64
                   ", with given pagesize %u, skip it",
                   meta_number, page.mp_meta.mm_mapsize, page.mp_meta.mm_psize);
+      rc = MDBX_CORRUPTED;
       continue;
     }
 
@@ -3499,6 +3511,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
             page.mp_meta.mm_mapsize / page.mp_meta.mm_psize) {
       mdbx_notice("meta[%u] has invalid last-pageno %" PRIaPGNO ", skip it",
                   meta_number, page.mp_meta.mm_last_pg);
+      rc = MDBX_CORRUPTED;
       continue;
     }
 
@@ -3510,12 +3523,14 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
           page.mp_meta.mm_dbs[FREE_DBI].md_leaf_pages ||
           page.mp_meta.mm_dbs[FREE_DBI].md_overflow_pages) {
         mdbx_notice("meta[%u] has false-empty freedb, skip it", meta_number);
+        rc = MDBX_CORRUPTED;
         continue;
       }
     } else if (page.mp_meta.mm_dbs[FREE_DBI].md_root >
                page.mp_meta.mm_last_pg) {
       mdbx_notice("meta[%u] has invalid freedb-root %" PRIaPGNO ", skip it",
                   meta_number, page.mp_meta.mm_dbs[FREE_DBI].md_root);
+      rc = MDBX_CORRUPTED;
       continue;
     }
 
@@ -3527,12 +3542,14 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
           page.mp_meta.mm_dbs[MAIN_DBI].md_leaf_pages ||
           page.mp_meta.mm_dbs[MAIN_DBI].md_overflow_pages) {
         mdbx_notice("meta[%u] has false-empty maindb", meta_number);
+        rc = MDBX_CORRUPTED;
         continue;
       }
     } else if (page.mp_meta.mm_dbs[MAIN_DBI].md_root >
                page.mp_meta.mm_last_pg) {
       mdbx_notice("meta[%u] has invalid maindb-root %" PRIaPGNO ", skip it",
                   meta_number, page.mp_meta.mm_dbs[MAIN_DBI].md_root);
+      rc = MDBX_CORRUPTED;
       continue;
     }
 
@@ -3545,7 +3562,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
 
   if (META_IS_WEAK(meta)) {
     mdbx_error("no usable meta-pages, database is corrupted");
-    return MDBX_CORRUPTED;
+    return rc;
   }
 
   return MDBX_SUCCESS;
@@ -3963,6 +3980,9 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(size < MIN_MAPSIZE || size > MAX_MAPSIZE))
+    return MDBX_EINVAL;
+
   if (unlikely(size < pgno2bytes(env, MIN_PAGENO)))
     return MDBX_EINVAL;
 
@@ -3976,8 +3996,6 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
 
     /* FIXME: lock/unlock */
     meta = mdbx_meta_head(env);
-    if (!size)
-      size = meta->mm_mapsize;
     /* Silently round up to minimum if the size is too small */
     const size_t usedsize = pgno2bytes(env, meta->mm_last_pg + 1);
     if (size < usedsize)
@@ -4104,7 +4122,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     /* Was a mapsize configured? */
     if (!env->me_mapsize || (env->me_flags & MDBX_RDONLY) ||
         lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
-      env->me_mapsize = meta.mm_mapsize;
+      env->me_mapsize = (size_t)meta.mm_mapsize;
     else if (env->me_mapsize < usedsize)
       env->me_mapsize = usedsize;
   }
