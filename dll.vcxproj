@@ -79,7 +79,7 @@
     <ClCompile>
       <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBMDBX_EXPORTS;%(PreprocessorDefinitions);MDBX_DEBUG=1</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <Optimization>Disabled</Optimization>
       <StringPooling>true</StringPooling>
@@ -120,7 +120,7 @@
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
-      <WarningLevel>Level3</WarningLevel>
+      <WarningLevel>Level4</WarningLevel>
       <PreprocessorDefinitions>WIN64;_DEBUG;_WINDOWS;_USRDLL;LIBMDBX_EXPORTS;%(PreprocessorDefinitions);MDBX_DEBUG=1</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StringPooling>true</StringPooling>
