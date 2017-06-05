@@ -119,14 +119,21 @@
  *
  * MDBX uses 32 bit for page numbers. This limits database
  * size up to 2^44 bytes, in case of 4K pages. */
-typedef uint64_t pgno_t;
-#define PRIaPGNO PRIu64 /* TODO */
+typedef uint32_t pgno_t;
+#define PRIaPGNO PRIu32
 #define MAX_PAGENO ((pgno_t)UINT64_C(0xffffFFFFffff))
 #define MIN_PAGENO (NUM_METAS - 1)
 
 /* A transaction ID. */
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
+#if MDBX_DEVEL
+#define MIN_TXNID (UINT64_MAX - UINT32_MAX)
+#elif MDBX_DEBUG
+#define MIN_TXNID UINT64_C(0x100000000)
+#else
+#define MIN_TXNID UINT64_C(0)
+#endif /* MIN_TXNID */
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
@@ -207,16 +214,16 @@ typedef struct MDBX_reader {
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {
-  uint32_t md_xsize;          /* also ksize for LEAF2 pages */
-  uint16_t md_flags;          /* see mdbx_dbi_open */
-  uint16_t md_depth;          /* depth of this tree */
-  uint64_t md_root;           /* the root page of this tree */
-  uint64_t md_seq;            /* table sequence counter */
-  uint64_t md_branch_pages;   /* number of internal pages */
-  uint64_t md_leaf_pages;     /* number of leaf pages */
-  uint64_t md_overflow_pages; /* number of overflow pages */
-  uint64_t md_entries;        /* number of data items */
-  uint64_t md_merkle;         /* Merkle tree checksum */
+  uint16_t md_flags;        /* see mdbx_dbi_open */
+  uint16_t md_depth;        /* depth of this tree */
+  uint32_t md_xsize;        /* also ksize for LEAF2 pages */
+  pgno_t md_root;           /* the root page of this tree */
+  pgno_t md_branch_pages;   /* number of internal pages */
+  pgno_t md_leaf_pages;     /* number of leaf pages */
+  pgno_t md_overflow_pages; /* number of overflow pages */
+  uint64_t md_seq;          /* table sequence counter */
+  uint64_t md_entries;      /* number of data items */
+  uint64_t md_merkle;       /* Merkle tree checksum */
 } MDBX_db;
 
 /* Meta page content.
@@ -235,7 +242,9 @@ typedef struct MDBX_meta {
                              * zero (nothing) for now */
   uint8_t mm_extra_pagehdr; /* extra bytes in the page header,
                              * zero (nothing) for now */
-  uint32_t mm_reserved_pad; /* padding for aligment, unused for now */
+  /* Last used page in the datafile.
+   * Actually the file may be shorter if the freeDB lists the final pages. */
+  pgno_t mm_last_pg;
 
   uint64_t mm_dbsize_min;   /* minimal size of db */
   uint64_t mm_dbsize_max;   /* maximal size of db */
@@ -245,9 +254,6 @@ typedef struct MDBX_meta {
 /* Any persistent environment flags, see mdbx_env */
 #define mm_flags mm_dbs[FREE_DBI].md_flags
   mdbx_canary mm_canary;
-  /* Last used page in the datafile.
-   * Actually the file may be shorter if the freeDB lists the final pages. */
-  uint64_t mm_last_pg;
 
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u

@@ -3569,7 +3569,7 @@ static MDBX_page *__cold mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
       MDBX_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
   model->mp_meta.mm_dbs[FREE_DBI].md_root = P_INVALID;
   model->mp_meta.mm_dbs[MAIN_DBI].md_root = P_INVALID;
-  mdbx_meta_set_txnid(env, &model->mp_meta, num);
+  mdbx_meta_set_txnid(env, &model->mp_meta, MIN_TXNID + num);
   model->mp_meta.mm_datasync_sign = mdbx_meta_sign(&model->mp_meta);
   return (MDBX_page *)((uint8_t *)model + env->me_psize);
 }
