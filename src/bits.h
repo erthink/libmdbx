@@ -626,6 +626,7 @@ struct MDBX_env {
 #define MDBX_ENV_TXKEY 0x10000000U
   uint32_t me_flags;      /* see mdbx_env */
   unsigned me_psize;      /* DB page size, inited from me_os_psize */
+  unsigned me_psize2log;  /* log2 of DB page size */
   unsigned me_os_psize;   /* OS page size, from mdbx_syspagesize() */
   unsigned me_maxreaders; /* size of the reader table */
   /* Max MDBX_lockinfo.mti_numreaders of interest to mdbx_env_close() */
@@ -920,7 +921,7 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 #define IS_SUBP(p) F_ISSET((p)->mp_flags, P_SUBP)
 
 /* The number of overflow pages needed to store the given size. */
-#define OVPAGES(size, psize) ((PAGEHDRSZ - 1 + (size)) / (psize) + 1)
+#define OVPAGES(env, size) (bytes2pgno(env, PAGEHDRSZ - 1 + (size)) + 1)
 
 /* Link in MDBX_txn.mt_loose_pages list.
  * Kept outside the page header, which is needed when reusing the page. */
@@ -1112,3 +1113,17 @@ static __inline void SETDSZ(MDBX_node *node, unsigned size) {
 #else
 #define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
 #endif
+
+static __inline size_t pgno2bytes(const MDBX_env *env, pgno_t pgno) {
+  mdbx_assert(env, (1u << env->me_psize2log) == env->me_psize);
+  return ((size_t)pgno) << env->me_psize2log;
+}
+
+static __inline MDBX_page *pgno2page(const MDBX_env *env, pgno_t pgno) {
+  return (MDBX_page *)(env->me_map + pgno2bytes(env, pgno));
+}
+
+static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
+  mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
+  return (pgno_t)(bytes >> env->me_psize2log);
+}

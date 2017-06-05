@@ -553,8 +553,9 @@ int mdbx_runtime_flags = MDBX_DBG_PRINT
 
 MDBX_debug_func *mdbx_debug_logger;
 
-static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp, int flags);
-static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, int num,
+static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
+                           int flags);
+static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, unsigned num,
                          MDBX_page **mp);
 static int mdbx_page_touch(MDBX_cursor *mc);
 static int mdbx_cursor_touch(MDBX_cursor *mc);
@@ -983,15 +984,15 @@ int mdbx_dcmp(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
  * Set MDBX_TXN_ERROR on failure. */
 static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
   MDBX_env *env = txn->mt_env;
-  size_t size = env->me_psize;
   MDBX_page *np = env->me_dpages;
+  size_t size = env->me_psize;
   if (likely(num == 1 && np)) {
     ASAN_UNPOISON_MEMORY_REGION(np, size);
     VALGRIND_MEMPOOL_ALLOC(env, np, size);
     VALGRIND_MAKE_MEM_DEFINED(&np->mp_next, sizeof(np->mp_next));
     env->me_dpages = np->mp_next;
   } else {
-    size *= num;
+    size = pgno2bytes(env, num);
     np = malloc(size);
     if (unlikely(!np)) {
       txn->mt_flags |= MDBX_TXN_ERROR;
@@ -1006,7 +1007,7 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
      * many pages they will be filling in at least up to the last page. */
     size_t skip = PAGEHDRSZ;
     if (num > 1)
-      skip += (num - 1) * env->me_psize;
+      skip += pgno2bytes(env, num - 1);
     memset((char *)np + skip, 0, size - skip);
   }
   VALGRIND_MAKE_MEM_UNDEFINED(np, size);
@@ -1048,7 +1049,7 @@ static void mdbx_dlist_free(MDBX_txn *txn) {
 }
 
 static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
-  const size_t offs = env->me_psize * pgno;
+  const size_t offs = pgno2bytes(env, pgno);
   const size_t shift = offsetof(MDBX_page, mp_pages);
 
   if (env->me_flags & MDBX_WRITEMAP) {
@@ -1241,7 +1242,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
     i += txn->mt_dbs[MAIN_DBI].md_depth;
   /* For puts, roughly factor in the key+data size */
   if (key)
-    i += (LEAFSIZE(key, data) + txn->mt_env->me_psize) / txn->mt_env->me_psize;
+    i += bytes2pgno(txn->mt_env, LEAFSIZE(key, data) + txn->mt_env->me_psize);
   i += i; /* double it for good measure */
   size_t need = i;
 
@@ -1322,8 +1323,7 @@ bailout:
 
 /*----------------------------------------------------------------------------*/
 
-#define METAPAGE(env, n)                                                       \
-  (&((MDBX_page *)((env)->me_map + env->me_psize * (n)))->mp_meta)
+#define METAPAGE(env, n) (&pgno2page(env, n)->mp_meta)
 
 #define METAPAGE_END(env) METAPAGE(env, NUM_METAS)
 
@@ -1545,7 +1545,7 @@ static void mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
 #define MDBX_ALLOC_ALL                                                         \
   (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW | MDBX_ALLOC_KICK)
 
-static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
+static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
                            int flags) {
   int rc;
   MDBX_txn *txn = mc->mc_txn;
@@ -1829,10 +1829,10 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
 done:
   assert(mp && num);
   if (env->me_flags & MDBX_WRITEMAP) {
-    np = (MDBX_page *)(env->me_map + env->me_psize * pgno);
+    np = pgno2page(env, pgno);
     /* LY: reset no-access flag from mdbx_kill_page() */
-    VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
-    ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize * num);
+    VALGRIND_MAKE_MEM_UNDEFINED(np, pgno2bytes(env, num));
+    ASAN_UNPOISON_MEMORY_REGION(np, pgno2bytes(env, num));
   } else {
     if (unlikely(!(np = mdbx_page_malloc(txn, num)))) {
       rc = MDBX_ENOMEM;
@@ -1849,8 +1849,8 @@ done:
   }
 
   if (env->me_flags & MDBX_PAGEPERTURB)
-    memset(np, 0x71 /* 'q', 113 */, env->me_psize * num);
-  VALGRIND_MAKE_MEM_UNDEFINED(np, env->me_psize * num);
+    memset(np, 0x71 /* 'q', 113 */, pgno2bytes(env, num));
+  VALGRIND_MAKE_MEM_UNDEFINED(np, pgno2bytes(env, num));
 
   np->mp_pgno = pgno;
   np->mp_leaf2_ksize = 0;
@@ -1908,18 +1908,15 @@ static int mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp, MDBX_page **ret) {
       int num;
       if (txn->mt_dirtyroom == 0)
         return MDBX_TXN_FULL;
-      if (IS_OVERFLOW(mp))
-        num = mp->mp_pages;
-      else
-        num = 1;
+      num = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
       if (env->me_flags & MDBX_WRITEMAP) {
         np = mp;
       } else {
         np = mdbx_page_malloc(txn, num);
         if (unlikely(!np))
           return MDBX_ENOMEM;
-        if (num > 1)
-          memcpy(np, mp, num * env->me_psize);
+        if (unlikely(num > 1))
+          memcpy(np, mp, pgno2bytes(env, num));
         else
           mdbx_page_copy(np, mp, env->me_psize);
       }
@@ -1932,8 +1929,7 @@ static int mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp, MDBX_page **ret) {
         else
           txn->mt_spill_pages[x] |= 1;
       } /* otherwise, if belonging to a parent txn, the
-         * page remains spilled until child commits
-         */
+         * page remains spilled until child commits */
 
       mdbx_page_dirty(txn, np);
       np->mp_flags |= P_DIRTY;
@@ -2077,10 +2073,11 @@ int mdbx_env_sync(MDBX_env *env, int force) {
          env->me_sync_pending >= env->me_sync_threshold))
       flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
-    if (env->me_sync_pending > env->me_psize * 16 &&
+    if (env->me_sync_pending >
+            pgno2bytes(env, 16 /* FIXME: define threshold */) &&
         (flags & MDBX_NOSYNC) == 0) {
       assert(((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
-      size_t used_size = env->me_psize * (head->mm_last_pg + 1);
+      size_t used_size = pgno2bytes(env, head->mm_last_pg + 1);
       mdbx_txn_unlock(env);
 
       /* LY: pre-sync without holding lock to reduce latency for writer(s) */
@@ -3036,7 +3033,7 @@ bailout:
 static int mdbx_page_flush(MDBX_txn *txn, size_t keep) {
   MDBX_env *env = txn->mt_env;
   MDBX_ID2L dl = txn->mt_rw_dirtylist;
-  unsigned psize = env->me_psize, j;
+  unsigned j;
   int i, pagecount = dl[0].mid, rc;
   size_t size = 0, pos = 0;
   pgno_t pgno = 0;
@@ -3059,7 +3056,8 @@ static int mdbx_page_flush(MDBX_txn *txn, size_t keep) {
         continue;
       }
       dp->mp_flags &= ~P_DIRTY;
-      env->me_sync_pending += IS_OVERFLOW(dp) ? psize * dp->mp_pages : psize;
+      env->me_sync_pending +=
+          IS_OVERFLOW(dp) ? pgno2bytes(env, dp->mp_pages) : env->me_psize;
     }
     goto done;
   }
@@ -3077,10 +3075,8 @@ static int mdbx_page_flush(MDBX_txn *txn, size_t keep) {
       pgno = dl[i].mid;
       /* clear dirty flag */
       dp->mp_flags &= ~P_DIRTY;
-      pos = pgno * psize;
-      size = psize;
-      if (IS_OVERFLOW(dp))
-        size *= dp->mp_pages;
+      pos = pgno2bytes(env, pgno);
+      size = IS_OVERFLOW(dp) ? pgno2bytes(env, dp->mp_pages) : env->me_psize;
       env->me_sync_pending += size;
     }
     /* Write up to MDBX_COMMIT_PAGES dirty pages at a time. */
@@ -3107,7 +3103,7 @@ static int mdbx_page_flush(MDBX_txn *txn, size_t keep) {
     n++;
   }
 
-  mdbx_invalidate_cache(env->me_map, txn->mt_next_pgno * env->me_psize);
+  mdbx_invalidate_cache(env->me_map, pgno2bytes(env, txn->mt_next_pgno));
 
   for (i = keep; ++i <= pagecount;) {
     dp = dl[i].mptr;
@@ -3597,7 +3593,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   MDBX_meta *const head = mdbx_meta_head(env);
 
   const size_t prev_mapsize = head->mm_mapsize;
-  const size_t used_size = env->me_psize * (pending->mm_last_pg + 1);
+  const size_t used_size = pgno2bytes(env, pending->mm_last_pg + 1);
 
   mdbx_assert(env, mdbx_meta_eq_mask(env) == 0);
   mdbx_assert(env,
@@ -3838,13 +3834,25 @@ int mdbx_get_maxkeysize(size_t pagesize) {
   return (maxkey > 0 && maxkey < INT_MAX) ? (int)maxkey : -MDBX_EINVAL;
 }
 
-static void __cold mdbx_env_setup_limits(MDBX_env *env, size_t pagesize) {
-  env->me_maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  env->me_maxpg = env->me_mapsize / pagesize;
+static void __cold mdbx_setup_pagesize(MDBX_env *env, size_t pagesize) {
+  mdbx_ensure(env, is_power2(pagesize));
+  mdbx_ensure(env, pagesize >= MIN_PAGESIZE);
+  mdbx_ensure(env, pagesize <= MAX_PAGESIZE);
 
+  env->me_psize = pagesize;
+  env->me_maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
   env->me_nodemax = mdbx_calc_nodemax(pagesize);
   env->me_maxkey_limit = mdbx_calc_maxkey(env->me_nodemax);
-  assert(env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
+  mdbx_assert(env,
+              env->me_maxkey_limit > 42 && env->me_maxkey_limit < pagesize);
+
+  env->me_psize2log = 0;
+  while (pagesize > 1) {
+    env->me_psize2log += 1;
+    pagesize >>= 1;
+  }
+
+  env->me_maxpg = bytes2pgno(env, env->me_mapsize);
 }
 
 int __cold mdbx_env_create(MDBX_env **penv) {
@@ -3865,7 +3873,7 @@ int __cold mdbx_env_create(MDBX_env **penv) {
     rc = MDBX_INCOMPATIBLE;
     goto bailout;
   }
-  mdbx_env_setup_limits(env, env->me_os_psize);
+  mdbx_setup_pagesize(env, env->me_os_psize);
 
   rc = mdbx_fastmutex_init(&env->me_dbi_lock);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -3910,8 +3918,8 @@ static int __cold mdbx_env_map(MDBX_env *env, void *addr, size_t usedsize) {
 #endif
 
 #if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
-  const size_t meta_length = env->me_psize * NUM_METAS;
-  (void)madvise(env->me_map, env->me_psize * NUM_METAS, MADV_DODUMP);
+  const size_t meta_length = pgno2bytes(env, NUM_METAS);
+  (void)madvise(env->me_map, meta_length, MADV_DODUMP);
   if (!(flags & MDBX_PAGEPERTURB))
     (void)madvise(env->me_map + meta_length, env->me_mapsize - meta_length,
                   MADV_DONTDUMP);
@@ -3935,7 +3943,7 @@ static int __cold mdbx_env_map(MDBX_env *env, void *addr, size_t usedsize) {
   /* Lock meta pages to avoid unexpected write,
    * before the data pages would be synchronized. */
   if (flags & MDBX_WRITEMAP) {
-    rc = mdbx_mlock(env->me_map, env->me_psize * NUM_METAS);
+    rc = mdbx_mlock(env->me_map, pgno2bytes(env, NUM_METAS));
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -3955,7 +3963,7 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(size < env->me_psize * 8))
+  if (unlikely(size < pgno2bytes(env, MIN_PAGENO)))
     return MDBX_EINVAL;
 
   /* If env is already open, caller is responsible for making
@@ -3971,7 +3979,7 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
     if (!size)
       size = meta->mm_mapsize;
     /* Silently round up to minimum if the size is too small */
-    const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
+    const size_t usedsize = pgno2bytes(env, meta->mm_last_pg + 1);
     if (size < usedsize)
       size = usedsize;
 
@@ -3992,8 +4000,7 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
   }
 
   env->me_mapsize = size;
-  if (env->me_psize)
-    env->me_maxpg = env->me_mapsize / env->me_psize;
+  env->me_maxpg = bytes2pgno(env, env->me_mapsize);
   return MDBX_SUCCESS;
 }
 
@@ -4053,9 +4060,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       env->me_psize = env->me_os_psize;
     if (env->me_psize > MAX_PAGESIZE)
       env->me_psize = MAX_PAGESIZE;
+    mdbx_ensure(env, is_power2(env->me_psize));
+    mdbx_ensure(env, env->me_psize >= MIN_PAGESIZE);
 
-    assert(is_power2(env->me_psize));
-    assert(env->me_psize >= MIN_PAGESIZE);
     env->me_mapsize = roundup2(
         env->me_mapsize ? env->me_mapsize : DEFAULT_MAPSIZE, env->me_os_psize);
 
@@ -4080,7 +4087,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       return err;
   } else {
     env->me_psize = meta.mm_psize;
-    if (!is_power2(env->me_psize) || env->me_psize < MIN_PAGESIZE) {
+    if (!is_power2(env->me_psize) || env->me_psize < MIN_PAGESIZE ||
+        env->me_psize > MAX_PAGESIZE) {
       mdbx_error("wrong pagesize %u (system %u)", env->me_psize,
                  env->me_os_psize);
       return MDBX_WANNA_RECOVERY;
@@ -4088,8 +4096,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
 
     /* Make sure mapsize >= committed data size.  Even when using
      * mm_mapsize, which could be broken in old files (ITS#7789). */
-    const size_t usedsize =
-        roundup2((meta.mm_last_pg + 1) * env->me_psize, env->me_os_psize);
+    const size_t usedsize = roundup2(
+        (meta.mm_last_pg + 1) * (size_t)env->me_psize, env->me_os_psize);
     if (meta.mm_mapsize < usedsize)
       meta.mm_mapsize = usedsize;
 
@@ -4100,6 +4108,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     else if (env->me_mapsize < usedsize)
       env->me_mapsize = usedsize;
   }
+
+  mdbx_setup_pagesize(env, env->me_psize);
 
   uint64_t size;
   err = mdbx_filesize(env->me_fd, &size);
@@ -4184,7 +4194,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       return err;
   }
 
-  mdbx_env_setup_limits(env, env->me_psize);
   return rc;
 }
 
@@ -4894,7 +4903,7 @@ static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
   level = 0;
 
 mapped:
-  p = (MDBX_page *)(env->me_map + env->me_psize * pgno);
+  p = pgno2page(env, pgno);
 
 done:
   *ret = p;
@@ -6294,7 +6303,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (F_ISSET(leaf->mn_flags, F_BIGDATA)) {
       MDBX_page *omp;
       pgno_t pg;
-      int level, ovpages, dpages = OVPAGES(data->iov_len, env->me_psize);
+      int level, ovpages, dpages = OVPAGES(env, data->iov_len);
 
       memcpy(&pg, olddata.iov_base, sizeof(pg));
       if (unlikely((rc2 = mdbx_page_get(mc, pg, &omp, &level)) != 0))
@@ -6330,11 +6339,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             /* Currently we make the page look as with put() in the
              * parent txn, in case the user peeks at MDBX_RESERVEd
              * or unused parts. Some users treat ovpages specially. */
-            size_t whole = (size_t)env->me_psize * ovpages;
+            const size_t whole = pgno2bytes(env, ovpages);
             /* Skip the part where MDBX will put *data.
              * Copy end of page, adjusting alignment so
              * compiler may copy words instead of bytes. */
-            size_t off = (PAGEHDRSZ + data->iov_len) & -(ssize_t)sizeof(size_t);
+            const size_t off =
+                (PAGEHDRSZ + data->iov_len) & -(ssize_t)sizeof(size_t);
             memcpy((size_t *)((char *)np + off), (size_t *)((char *)omp + off),
                    whole - off);
             memcpy(np, omp, PAGEHDRSZ); /* Copy header of page */
@@ -6637,7 +6647,7 @@ fail:
  * [out] mp   Address of a page, or NULL on failure.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, int num,
+static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, unsigned num,
                          MDBX_page **mp) {
   MDBX_page *np;
   int rc;
@@ -6779,7 +6789,7 @@ static int mdbx_node_add(MDBX_cursor *mc, indx_t indx, MDBX_val *key,
       node_size += sizeof(pgno_t);
     } else if (unlikely(node_size + data->iov_len >
                         mc->mc_txn->mt_env->me_nodemax)) {
-      int ovpages = OVPAGES(data->iov_len, mc->mc_txn->mt_env->me_psize);
+      unsigned ovpages = OVPAGES(mc->mc_txn->mt_env, data->iov_len);
       int rc;
       /* Put data on overflow page. */
       mdbx_debug("data size is %" PRIuPTR ", node would be %" PRIuPTR
@@ -8646,7 +8656,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
     return rc;
 
   /* Make cursor pages writable */
-  buf = ptr = malloc(my->mc_env->me_psize * mc.mc_snum);
+  buf = ptr = malloc(pgno2bytes(my->mc_env, mc.mc_snum));
   if (buf == NULL)
     return MDBX_ENOMEM;
 
@@ -8698,7 +8708,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             my->mc_next_pgno += omp->mp_pages;
             my->mc_wlen[toggle] += my->mc_env->me_psize;
             if (omp->mp_pages > 1) {
-              my->mc_olen[toggle] = my->mc_env->me_psize * (omp->mp_pages - 1);
+              my->mc_olen[toggle] = pgno2bytes(my->mc_env, omp->mp_pages - 1);
               my->mc_over[toggle] = (char *)omp + my->mc_env->me_psize;
               rc = mdbx_env_cthr_toggle(my, 1);
               if (unlikely(rc != MDBX_SUCCESS))
@@ -8843,7 +8853,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   /* update signature */
   meta->mp_meta.mm_datasync_sign = mdbx_meta_sign(&meta->mp_meta);
 
-  my.mc_wlen[0] = env->me_psize * NUM_METAS;
+  my.mc_wlen[0] = pgno2bytes(env, NUM_METAS);
   my.mc_txn = txn;
   rc = mdbx_env_cwalk(&my, &root, 0);
   if (rc == MDBX_SUCCESS && root != new_root) {
@@ -8890,12 +8900,12 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, mdbx_filehandle_t fd) {
     goto bailout;
   }
 
-  rc = mdbx_write(fd, env->me_map, env->me_psize * NUM_METAS);
+  rc = mdbx_write(fd, env->me_map, pgno2bytes(env, NUM_METAS));
   mdbx_txn_unlock(env);
 
   if (likely(rc == MDBX_SUCCESS))
-    rc = mdbx_write(fd, env->me_map + env->me_psize * NUM_METAS,
-                    (txn->mt_next_pgno - NUM_METAS) * env->me_psize);
+    rc = mdbx_write(fd, env->me_map + pgno2bytes(env, NUM_METAS),
+                    pgno2bytes(env, txn->mt_next_pgno - NUM_METAS));
 
   if (likely(rc == MDBX_SUCCESS))
     rc = mdbx_ftruncate(fd, env->me_mapsize);
@@ -9932,7 +9942,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
       over_header = PAGEHDRSZ;
       over_payload = NODEDSZ(node);
-      over_unused = omp->mp_pages * ctx->mw_txn->mt_env->me_psize -
+      over_unused = pgno2bytes(ctx->mw_txn->mt_env, omp->mp_pages) -
                     over_payload - over_header;
 
       rc = ctx->mw_visitor(*opg, omp->mp_pages, ctx->mw_user, dbi,
@@ -10341,7 +10351,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
    * во время транзакции) если адрес находится внутри mmap-диапазона
    * и в заголовке страницы нет флажка P_DIRTY. */
   if (env->me_map < (char *)page) {
-    const size_t used_size = env->me_psize * txn->mt_next_pgno;
+    const size_t used_size = pgno2bytes(env, txn->mt_next_pgno);
     if ((char *)page < env->me_map + used_size) {
       /* страница внутри диапазона, смотрим на флажки */
       return (page->mp_flags & (P_DIRTY | P_LOOSE | P_KEEP))
