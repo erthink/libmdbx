@@ -902,11 +902,11 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 
 /* The percentage of space used in the page, in tenths of a percent. */
 #define PAGEFILL(env, p)                                                       \
-  (1000L * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                       \
+  (1024L * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                       \
    ((env)->me_psize - PAGEHDRSZ))
 /* The minimum page fill factor, in tenths of a percent.
  * Pages emptier than this are candidates for merging. */
-#define FILL_THRESHOLD 250
+#define FILL_THRESHOLD 256
 
 /* Test if a page is a leaf page */
 #define IS_LEAF(p) F_ISSET((p)->mp_flags, P_LEAF)
