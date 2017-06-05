@@ -2099,8 +2099,8 @@ int mdbx_env_sync(MDBX_env *env, int force) {
 
     if (!META_IS_STEADY(head) || env->me_sync_pending ||
         env->me_mapsize != head->mm_mapsize) {
-      mdbx_debug("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64
-                 ", mapsize env=%" PRIuPTR " meta=%" PRIuPTR,
+      mdbx_debug("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIuPTR
+                 ", mapsize env=%" PRIuPTR " meta=%" PRIu64,
                  container_of(head, MDBX_page, mp_data)->mp_pgno,
                  mdbx_durable_str(head), env->me_sync_pending, env->me_mapsize,
                  head->mm_mapsize);
@@ -4116,7 +4116,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
   if (unlikely(err != MDBX_SUCCESS))
     return err;
   if (size != env->me_mapsize) {
-    mdbx_notice("filesize mismatch (wanna %" PRIu64 ", have %" PRIu64 ")",
+    mdbx_notice("filesize mismatch (wanna %" PRIuPTR ", have %" PRIu64 ")",
                 env->me_mapsize, size);
     if ((env->me_flags & MDBX_RDONLY) ||
         lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
@@ -4176,13 +4176,13 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
 
   head = mdbx_meta_head(env);
   if (head->mm_mapsize != env->me_mapsize) {
-    mdbx_info("mismatch meta.mapsize: present %" PRIu64 ", should %" PRIu64,
+    mdbx_info("mismatch meta.mapsize: present %" PRIu64 ", should %" PRIuPTR,
               head->mm_mapsize, env->me_mapsize);
     if ((env->me_flags & MDBX_RDONLY) ||
         lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
       return MDBX_MAP_RESIZED;
 
-    mdbx_trace("updating meta.mapsize: from %" PRIu64 " to %" PRIu64,
+    mdbx_trace("updating meta.mapsize: from %" PRIu64 " to %" PRIuPTR,
                head->mm_mapsize, env->me_mapsize);
     meta = *head;
     meta.mm_mapsize = env->me_mapsize;

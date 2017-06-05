@@ -666,9 +666,9 @@ struct MDBX_env {
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
-  uint64_t me_sync_pending;   /* Total dirty/non-sync'ed bytes
-                               * since the last mdbx_env_sync() */
-  uint64_t me_sync_threshold; /* Treshold of above to force synchronous flush */
+  size_t me_sync_pending;     /* Total dirty/non-sync'ed bytes
+                                 * since the last mdbx_env_sync() */
+  size_t me_sync_threshold;   /* Treshold of above to force synchronous flush */
   MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
 #ifdef USE_VALGRIND
   int me_valgrind_handle;
