@@ -915,7 +915,7 @@ static __inline size_t roundup2(size_t value, size_t granularity) {
 /* Test if a page is a branch page */
 #define IS_BRANCH(p) F_ISSET((p)->mp_flags, P_BRANCH)
 /* Test if a page is an overflow page */
-#define IS_OVERFLOW(p) F_ISSET((p)->mp_flags, P_OVERFLOW)
+#define IS_OVERFLOW(p) unlikely(F_ISSET((p)->mp_flags, P_OVERFLOW))
 /* Test if a page is a sub page */
 #define IS_SUBP(p) F_ISSET((p)->mp_flags, P_SUBP)
 
