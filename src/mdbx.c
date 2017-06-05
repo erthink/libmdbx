@@ -168,11 +168,25 @@ static MDBX_IDL mdbx_midl_alloc(unsigned size) {
   return ids;
 }
 
+static MDBX_TXL mdbx_txl_alloc(unsigned size) {
+  MDBX_TXL ptr = malloc((size + 2) * sizeof(txnid_t));
+  if (likely(ptr)) {
+    *ptr++ = size;
+    *ptr = 0;
+  }
+  return ptr;
+}
+
 /* Free an IDL.
  * [in] ids The IDL to free. */
 static void mdbx_midl_free(MDBX_IDL ids) {
-  if (ids)
+  if (likely(ids))
     free(ids - 1);
+}
+
+static void mdbx_txl_free(MDBX_TXL list) {
+  if (likely(list))
+    free(list - 1);
 }
 
 /* Append ID to IDL. The IDL must be big enough. */
@@ -244,6 +258,17 @@ static int mdbx_midl_grow(MDBX_IDL *idp, unsigned num) {
   return 0;
 }
 
+static int mdbx_txl_grow(MDBX_TXL *ptr, unsigned num) {
+  MDBX_TXL list = *ptr - 1;
+  /* grow it */
+  list = realloc(list, (*list + num + 2) * sizeof(txnid_t));
+  if (unlikely(!list))
+    return MDBX_ENOMEM;
+  *list++ += num;
+  *ptr = list;
+  return 0;
+}
+
 /* Make room for num additional elements in an IDL.
  * [in,out] idp Address of the IDL.
  * [in] num Number of elements to make room for.
@@ -251,7 +276,7 @@ static int mdbx_midl_grow(MDBX_IDL *idp, unsigned num) {
 static int mdbx_midl_need(MDBX_IDL *idp, unsigned num) {
   MDBX_IDL ids = *idp;
   num += ids[0];
-  if (num > ids[-1]) {
+  if (unlikely(num > ids[-1])) {
     num = (num + num / 4 + (256 + 2)) & -256;
     ids = realloc(ids - 1, num * sizeof(pgno_t));
     if (unlikely(!ids))
@@ -269,13 +294,26 @@ static int mdbx_midl_need(MDBX_IDL *idp, unsigned num) {
 static int mdbx_midl_append(MDBX_IDL *idp, pgno_t id) {
   MDBX_IDL ids = *idp;
   /* Too big? */
-  if (ids[0] >= ids[-1]) {
+  if (unlikely(ids[0] >= ids[-1])) {
     if (mdbx_midl_grow(idp, MDBX_IDL_UM_MAX))
       return MDBX_ENOMEM;
     ids = *idp;
   }
   ids[0]++;
   ids[ids[0]] = id;
+  return 0;
+}
+
+static int mdbx_txl_append(MDBX_TXL *ptr, txnid_t id) {
+  MDBX_TXL list = *ptr;
+  /* Too big? */
+  if (unlikely(list[0] >= list[-1])) {
+    if (mdbx_txl_grow(ptr, list[0]))
+      return MDBX_ENOMEM;
+    list = *ptr;
+  }
+  list[0]++;
+  list[list[0]] = id;
   return 0;
 }
 
@@ -286,13 +324,26 @@ static int mdbx_midl_append(MDBX_IDL *idp, pgno_t id) {
 static int mdbx_midl_append_list(MDBX_IDL *idp, MDBX_IDL app) {
   MDBX_IDL ids = *idp;
   /* Too big? */
-  if (ids[0] + app[0] >= ids[-1]) {
+  if (unlikely(ids[0] + app[0] >= ids[-1])) {
     if (mdbx_midl_grow(idp, app[0]))
       return MDBX_ENOMEM;
     ids = *idp;
   }
   memcpy(&ids[ids[0] + 1], &app[1], app[0] * sizeof(pgno_t));
   ids[0] += app[0];
+  return 0;
+}
+
+static int mdbx_txl_append_list(MDBX_TXL *ptr, MDBX_TXL append) {
+  MDBX_TXL list = *ptr;
+  /* Too big? */
+  if (unlikely(list[0] + append[0] >= list[-1])) {
+    if (mdbx_txl_grow(ptr, append[0]))
+      return MDBX_ENOMEM;
+    list = *ptr;
+  }
+  memcpy(&list[list[0] + 1], &append[1], append[0] * sizeof(txnid_t));
+  list[0] += append[0];
   return 0;
 }
 
@@ -304,7 +355,7 @@ static int mdbx_midl_append_list(MDBX_IDL *idp, MDBX_IDL app) {
 static int mdbx_midl_append_range(MDBX_IDL *idp, pgno_t id, unsigned n) {
   pgno_t *ids = *idp, len = ids[0];
   /* Too big? */
-  if (len + n > ids[-1]) {
+  if (unlikely(len + n > ids[-1])) {
     if (mdbx_midl_grow(idp, n | MDBX_IDL_UM_MAX))
       return MDBX_ENOMEM;
     ids = *idp;
@@ -1644,7 +1695,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
         goto fail;
 
       if ((flags & MDBX_LIFORECLAIM) && !txn->mt_lifo_reclaimed) {
-        txn->mt_lifo_reclaimed = mdbx_midl_alloc(env->me_maxfree_1pg);
+        txn->mt_lifo_reclaimed = mdbx_txl_alloc(env->me_maxfree_1pg);
         if (unlikely(!txn->mt_lifo_reclaimed)) {
           rc = MDBX_ENOMEM;
           goto fail;
@@ -1666,7 +1717,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, int num, MDBX_page **mp,
         mop = env->me_pghead;
       }
       if (flags & MDBX_LIFORECLAIM) {
-        if ((rc = mdbx_midl_append(&txn->mt_lifo_reclaimed, last)) != 0)
+        if ((rc = mdbx_txl_append(&txn->mt_lifo_reclaimed, last)) != 0)
           goto fail;
       }
       env->me_pglast = last;
@@ -2559,7 +2610,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     if (txn->mt_lifo_reclaimed) {
       txn->mt_lifo_reclaimed[0] = 0;
       if (txn != env->me_txn0) {
-        mdbx_midl_free(txn->mt_lifo_reclaimed);
+        mdbx_txl_free(txn->mt_lifo_reclaimed);
         txn->mt_lifo_reclaimed = NULL;
       }
     }
@@ -2823,14 +2874,14 @@ again:
         }
 
         if (unlikely(!txn->mt_lifo_reclaimed)) {
-          txn->mt_lifo_reclaimed = mdbx_midl_alloc(env->me_maxfree_1pg);
+          txn->mt_lifo_reclaimed = mdbx_txl_alloc(env->me_maxfree_1pg);
           if (unlikely(!txn->mt_lifo_reclaimed)) {
             rc = MDBX_ENOMEM;
             goto bailout;
           }
         }
         /* LY: append the list. */
-        rc = mdbx_midl_append(&txn->mt_lifo_reclaimed, env->me_pglast - 1);
+        rc = mdbx_txl_append(&txn->mt_lifo_reclaimed, env->me_pglast - 1);
         if (unlikely(rc))
           goto bailout;
         --env->me_pglast;
@@ -2970,7 +3021,7 @@ bailout:
     }
     txn->mt_lifo_reclaimed[0] = 0;
     if (txn != env->me_txn0) {
-      mdbx_midl_free(txn->mt_lifo_reclaimed);
+      mdbx_txl_free(txn->mt_lifo_reclaimed);
       txn->mt_lifo_reclaimed = NULL;
     }
   }
@@ -3122,11 +3173,11 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     /* Append our reclaim list to parent's */
     if (txn->mt_lifo_reclaimed) {
       if (parent->mt_lifo_reclaimed) {
-        rc = mdbx_midl_append_list(&parent->mt_lifo_reclaimed,
-                                   txn->mt_lifo_reclaimed);
+        rc = mdbx_txl_append_list(&parent->mt_lifo_reclaimed,
+                                  txn->mt_lifo_reclaimed);
         if (unlikely(rc != MDBX_SUCCESS))
           goto fail;
-        mdbx_midl_free(txn->mt_lifo_reclaimed);
+        mdbx_txl_free(txn->mt_lifo_reclaimed);
       } else
         parent->mt_lifo_reclaimed = txn->mt_lifo_reclaimed;
       txn->mt_lifo_reclaimed = NULL;
@@ -4457,9 +4508,10 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
   free(env->me_dbflags);
   free(env->me_path);
   free(env->me_dirtylist);
-  if (env->me_txn0)
-    mdbx_midl_free(env->me_txn0->mt_lifo_reclaimed);
-  free(env->me_txn0);
+  if (env->me_txn0) {
+    mdbx_txl_free(env->me_txn0->mt_lifo_reclaimed);
+    free(env->me_txn0);
+  }
   mdbx_midl_free(env->me_free_pgs);
 
   if (env->me_flags & MDBX_ENV_TXKEY) {

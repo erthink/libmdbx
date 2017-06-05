@@ -394,6 +394,9 @@ typedef struct MDBX_lockinfo {
  * descending order. */
 typedef pgno_t *MDBX_IDL;
 
+/* List of txnid, only for MDBX_env.mt_lifo_reclaimed */
+typedef txnid_t *MDBX_TXL;
+
 /* An ID2 is an ID/pointer pair. */
 typedef struct MDBX_ID2 {
   pgno_t mid; /* The ID */
@@ -451,7 +454,7 @@ struct MDBX_txn {
   txnid_t mt_txnid;
   MDBX_env *mt_env; /* the DB environment */
                     /* The list of reclaimed txns from freeDB */
-  MDBX_IDL mt_lifo_reclaimed;
+  MDBX_TXL mt_lifo_reclaimed;
   /* The list of pages that became unused during this transaction. */
   MDBX_IDL mt_free_pages;
   /* The list of loose pages that became unused and may be reused
