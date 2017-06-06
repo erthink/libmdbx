@@ -439,7 +439,6 @@ int mdbx_thread_create(mdbx_thread_t *thread,
                        THREAD_RESULT(THREAD_CALL *start_routine)(void *),
                        void *arg);
 int mdbx_thread_join(mdbx_thread_t thread);
-mdbx_tid_t mdbx_thread_self(void);
 int mdbx_thread_key_create(mdbx_thread_key_t *key);
 void mdbx_thread_key_delete(mdbx_thread_key_t key);
 void *mdbx_thread_rthc_get(mdbx_thread_key_t key);
@@ -462,6 +461,14 @@ static __inline mdbx_pid_t mdbx_getpid(void) {
   return GetCurrentProcessId();
 #else
   return getpid();
+#endif
+}
+
+static __inline mdbx_tid_t mdbx_thread_self(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  return GetCurrentThreadId();
+#else
+  return pthread_self();
 #endif
 }
 

@@ -615,14 +615,6 @@ void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value) {
 #endif
 }
 
-mdbx_tid_t mdbx_thread_self(void) {
-#if defined(_WIN32) || defined(_WIN64)
-  return GetCurrentThreadId();
-#else
-  return pthread_self();
-#endif
-}
-
 int mdbx_thread_create(mdbx_thread_t *thread,
                        THREAD_RESULT(THREAD_CALL *start_routine)(void *),
                        void *arg) {

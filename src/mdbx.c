@@ -690,8 +690,11 @@ static const char *__mdbx_strerr(int errnum) {
     return "MDBX_EKEYMISMATCH: The given key value is mismatched to the "
            "current cursor position";
   case MDBX_TOO_LARGE:
-    return "Database is too large for current system, i.e.could NOT be mapped "
-           "into RAM.";
+    return "MDBX_TOO_LARGE: Database is too large for current system, "
+           "e.g. could NOT be mapped into RAM";
+  case MDBX_THREAD_MISMATCH:
+    return "MDBX_THREAD_MISMATCH: A thread has attempted to use a not "
+           "owned object, e.g. a transaction that started by another thread";
   default:
     return NULL;
   }
@@ -968,13 +971,13 @@ static void mdbx_audit(MDBX_txn *txn) {
 
 int mdbx_cmp(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
              const MDBX_val *b) {
-  mdbx_ensure(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
+  mdbx_assert(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
   return txn->mt_dbxs[dbi].md_cmp(a, b);
 }
 
 int mdbx_dcmp(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
               const MDBX_val *b) {
-  mdbx_ensure(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
+  mdbx_assert(NULL, txn->mt_signature == MDBX_MT_SIGNATURE);
   return txn->mt_dbxs[dbi].md_dcmp(a, b);
 }
 
@@ -2394,6 +2397,9 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)))
     return MDBX_EINVAL;
 
@@ -2433,6 +2439,9 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   if (parent) {
     if (unlikely(parent->mt_signature != MDBX_MT_SIGNATURE))
       return MDBX_EINVAL;
+
+    if (unlikely(parent->mt_owner != mdbx_thread_self()))
+      return MDBX_THREAD_MISMATCH;
 
     /* Nested transactions: Max 1 child, write txns only, no writemap */
     flags |= parent->mt_flags;
@@ -2510,6 +2519,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       free(txn);
   } else {
+    txn->mt_owner = mdbx_thread_self();
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "",
@@ -2593,7 +2603,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     mdbx_coherent_barrier();
     txn->mt_numdbs = 0; /* prevent further DBI activity */
     txn->mt_flags |= MDBX_TXN_FINISHED;
-
+    txn->mt_owner = 0;
   } else if (!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED)) {
     pgno_t *pghead = env->me_pghead;
 
@@ -2621,6 +2631,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       env->me_pglast = 0;
 
       env->me_txn = NULL;
+      txn->mt_owner = 0;
       txn->mt_signature = 0;
       mode = 0; /* txn == env->me_txn0, do not free() it */
 
@@ -2640,6 +2651,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
 
   if (mode & MDBX_END_FREE) {
     mdbx_ensure(env, txn != env->me_txn0);
+    txn->mt_owner = 0;
     txn->mt_signature = 0;
     free(txn);
   }
@@ -2653,6 +2665,9 @@ int mdbx_txn_reset(MDBX_txn *txn) {
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   /* This call is only valid for read-only txns */
   if (unlikely(!(txn->mt_flags & MDBX_TXN_RDONLY)))
@@ -2668,6 +2683,9 @@ int mdbx_txn_abort(MDBX_txn *txn) {
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY))
     /* LY: don't close DBI-handles in MDBX mode */
@@ -3132,6 +3150,9 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   MDBX_env *env = txn->mt_env;
   if (unlikely(env->me_pid != mdbx_getpid())) {
@@ -5256,6 +5277,9 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
@@ -7162,6 +7186,9 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
 
@@ -7197,6 +7224,9 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE &&
                mc->mc_signature != MDBX_MC_READY4CLOSE))
     return MDBX_EINVAL;
@@ -7230,6 +7260,9 @@ int mdbx_cursor_count(MDBX_cursor *mc, size_t *countp) {
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(mc->mc_txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(mc->mc_txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
@@ -8054,6 +8087,9 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
@@ -8542,6 +8578,9 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -9236,6 +9275,9 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
 
@@ -9368,6 +9410,9 @@ int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *arg,
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
 
@@ -9421,6 +9466,9 @@ int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
@@ -9528,6 +9576,9 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
@@ -9602,6 +9653,9 @@ int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
@@ -9615,6 +9669,9 @@ int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -9887,6 +9944,9 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!txn->mt_ro_reader))
     return -1;
 
@@ -10041,8 +10101,12 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                            void *user) {
   if (unlikely(!txn))
     return MDBX_BAD_TXN;
+
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   mdbx_walk_ctx_t ctx;
   ctx.mw_txn = txn;
@@ -10068,6 +10132,9 @@ int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
@@ -10097,8 +10164,12 @@ int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
 int mdbx_canary_get(MDBX_txn *txn, mdbx_canary *canary) {
   if (unlikely(txn == NULL || canary == NULL))
     return MDBX_EINVAL;
+
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   *canary = txn->mt_canary;
   return MDBX_SUCCESS;
@@ -10196,6 +10267,9 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(old_data->iov_base == NULL && old_data->iov_len))
     return MDBX_EINVAL;
@@ -10332,6 +10406,9 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
@@ -10396,6 +10473,9 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
   if (unlikely(txn->mt_flags & MDBX_TXN_RDONLY))
     return MDBX_RESULT_FALSE;
 
@@ -10456,6 +10536,9 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;

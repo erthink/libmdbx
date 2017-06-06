@@ -2,6 +2,7 @@ AUTHORS
 LICENSE
 Makefile
 README.md
+TODO.md
 mdbx.h
 src/bits.h
 src/defs.h

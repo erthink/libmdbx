@@ -527,6 +527,7 @@ struct MDBX_txn {
    * dirtylist into mt_parent after freeing hidden mt_parent pages. */
   unsigned mt_dirtyroom;
   mdbx_canary mt_canary;
+  mdbx_tid_t mt_owner; /* thread ID that owns this transaction */
 };
 
 /* Enough space for 2^32 nodes with minimum of 2 keys per node. I.e., plenty.
