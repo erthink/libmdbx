@@ -33,6 +33,38 @@ static int waitstatus2errcode(DWORD result) {
     return ERROR_UNHANDLED_ERROR;
   }
 }
+
+/* Map a result from an NTAPI call to WIN32 error code. */
+static int ntstatus2errcode(NTSTATUS status) {
+  DWORD dummy;
+  OVERLAPPED ov = {status};
+  return GetOverlappedResult(NULL, &ov, &dummy, FALSE) ? MDBX_SUCCESS
+                                                       : GetLastError();
+}
+
+/* We use native NT APIs to setup the memory map, so that we can
+ * let the DB file grow incrementally instead of always preallocating
+ * the full size. These APIs are defined in <wdm.h> and <ntifs.h>
+ * but those headers are meant for driver-level development and
+ * conflict with the regular user-level headers, so we explicitly
+ * declare them here. Using these APIs also means we must link to
+ * ntdll.dll, which is not linked by default in user code. */
+NTSTATUS WINAPI NtCreateSection(OUT PHANDLE sh, IN ACCESS_MASK acc,
+                                IN void *oa OPTIONAL,
+                                IN PLARGE_INTEGER ms OPTIONAL, IN ULONG pp,
+                                IN ULONG aa, IN HANDLE fh OPTIONAL);
+
+typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
+
+NTSTATUS WINAPI NtMapViewOfSection(IN PHANDLE sh, IN HANDLE ph,
+                                   IN OUT PVOID *addr, IN ULONG_PTR zbits,
+                                   IN SIZE_T cs,
+                                   IN OUT PLARGE_INTEGER off OPTIONAL,
+                                   IN OUT PSIZE_T vs, IN SECTION_INHERIT ih,
+                                   IN ULONG at, IN ULONG pp);
+
+NTSTATUS WINAPI NtClose(HANDLE h);
+
 #endif /* _WIN32 || _WIN64 */
 
 /*----------------------------------------------------------------------------*/
