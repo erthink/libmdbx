@@ -2621,6 +2621,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       env->me_pglast = 0;
 
       env->me_txn = NULL;
+      txn->mt_signature = 0;
       mode = 0; /* txn == env->me_txn0, do not free() it */
 
       /* The writer mutex was locked in mdbx_txn_begin. */
@@ -2638,9 +2639,9 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   }
 
   if (mode & MDBX_END_FREE) {
+    mdbx_ensure(env, txn != env->me_txn0);
     txn->mt_signature = 0;
-    if (txn != env->me_txn0)
-      free(txn);
+    free(txn);
   }
 
   return MDBX_SUCCESS;
