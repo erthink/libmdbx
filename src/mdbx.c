@@ -2434,6 +2434,9 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     return MDBX_PANIC;
   }
 
+  if (unlikely(!env->me_map))
+    return MDBX_EPERM;
+
   flags &= MDBX_TXN_BEGIN_FLAGS;
   flags |= env->me_flags & MDBX_WRITEMAP;
 

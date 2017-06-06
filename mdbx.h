@@ -79,6 +79,7 @@ typedef DWORD mdbx_tid_t;
 #define MDBX_EROFS ERROR_FILE_READ_ONLY
 #define MDBX_ENOSYS ERROR_NOT_SUPPORTED
 #define MDBX_EIO ERROR_WRITE_FAULT
+#define MDBX_EPERM ERROR_INVALID_FUNCTION
 
 #else
 
@@ -97,6 +98,7 @@ typedef pthread_t mdbx_tid_t;
 #define MDBX_EROFS EROFS
 #define MDBX_ENOSYS ENOSYS
 #define MDBX_EIO EIO
+#define MDBX_EPERM EPERM
 #endif
 
 #ifdef _MSC_VER
