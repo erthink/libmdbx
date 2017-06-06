@@ -2062,9 +2062,13 @@ int mdbx_env_sync(MDBX_env *env, int force) {
   if (unlikely(flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)))
     return MDBX_EACCESS;
 
-  int rc = mdbx_txn_lock(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+  const bool outside_txn = (env->me_txn0->mt_owner != mdbx_thread_self());
+
+  if (outside_txn) {
+    int rc = mdbx_txn_lock(env);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
 
   MDBX_meta *head = mdbx_meta_head(env);
   if (!META_IS_STEADY(head) || env->me_sync_pending ||
@@ -2075,19 +2079,19 @@ int mdbx_env_sync(MDBX_env *env, int force) {
          env->me_sync_pending >= env->me_sync_threshold))
       flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
-    if (env->me_sync_pending >
+    if (outside_txn &&
+        env->me_sync_pending >
             pgno2bytes(env, 16 /* FIXME: define threshold */) &&
         (flags & MDBX_NOSYNC) == 0) {
       assert(((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
       size_t used_size = pgno2bytes(env, head->mm_last_pg + 1);
+
       mdbx_txn_unlock(env);
 
       /* LY: pre-sync without holding lock to reduce latency for writer(s) */
-      if (flags & MDBX_WRITEMAP) {
-        rc = mdbx_msync(env->me_map, used_size, flags & MDBX_MAPASYNC);
-      } else {
-        rc = mdbx_filesync(env->me_fd, false);
-      }
+      int rc = (flags & MDBX_WRITEMAP)
+                   ? mdbx_msync(env->me_map, used_size, flags & MDBX_MAPASYNC)
+                   : mdbx_filesync(env->me_fd, false);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
@@ -2107,16 +2111,17 @@ int mdbx_env_sync(MDBX_env *env, int force) {
                  mdbx_durable_str(head), env->me_sync_pending, env->me_mapsize,
                  head->mm_mapsize);
       MDBX_meta meta = *head;
-      rc = mdbx_sync_locked(env, flags, &meta);
+      int rc = mdbx_sync_locked(env, flags, &meta);
       if (unlikely(rc != MDBX_SUCCESS)) {
-        mdbx_txn_unlock(env);
+        if (outside_txn)
+          mdbx_txn_unlock(env);
         return rc;
       }
     }
   }
 
-  mdbx_txn_unlock(env);
-  assert(rc == MDBX_SUCCESS);
+  if (outside_txn)
+    mdbx_txn_unlock(env);
   return MDBX_SUCCESS;
 }
 
