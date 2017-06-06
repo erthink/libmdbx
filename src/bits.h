@@ -792,7 +792,8 @@ void mdbx_panic(const char *fmt, ...)
 
 static __inline void mdbx_jitter4testing(bool tiny) {
 #ifndef NDEBUG
-  mdbx_osal_jitter(tiny);
+  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
+    mdbx_osal_jitter(tiny);
 #else
   (void)tiny;
 #endif
