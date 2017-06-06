@@ -3075,6 +3075,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
         continue;
       }
       dp->mp_flags &= ~P_DIRTY;
+      dp->mp_validator = 0 /* TODO */;
       env->me_sync_pending +=
           IS_OVERFLOW(dp) ? pgno2bytes(env, dp->mp_pages) : env->me_psize;
     }
@@ -3094,6 +3095,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
       pgno = dl[i].mid;
       /* clear dirty flag */
       dp->mp_flags &= ~P_DIRTY;
+      dp->mp_validator = 0 /* TODO */;
       pos = pgno2bytes(env, pgno);
       size = IS_OVERFLOW(dp) ? pgno2bytes(env, dp->mp_pages) : env->me_psize;
       env->me_sync_pending += size;
