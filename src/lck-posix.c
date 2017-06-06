@@ -93,6 +93,8 @@ static __inline int mdbx_lck_shared(int lfd) {
 
 int mdbx_lck_downgrade(MDBX_env *env) { return mdbx_lck_shared(env->me_lfd); }
 
+int mdbx_lck_upgrade(MDBX_env *env) { return mdbx_lck_exclusive(env->me_lfd); }
+
 int mdbx_rpid_set(MDBX_env *env) {
   return mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, env->me_pid, 1);
 }

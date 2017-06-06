@@ -280,29 +280,69 @@ int mdbx_lck_seize(MDBX_env *env) {
   return rc;
 }
 
-/* Transite from exclusive state (E-E) to used (S-?) */
 int mdbx_lck_downgrade(MDBX_env *env) {
-  int rc;
+  /* Transite from exclusive state (E-E) to used (S-?) */
   assert(env->me_fd != INVALID_HANDLE_VALUE);
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
-  if (env->me_lfd != INVALID_HANDLE_VALUE) {
-    /* 1) must be at E-E (exclusive), transite to ?_E (middle) */
-    if (!funlock(env->me_lfd, LCK_LOWER))
-      mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                 "E-E(exclusive) >> ?-E(middle)", GetLastError());
+  /* 1) must be at E-E (exclusive), transite to ?_E (middle) */
+  if (!funlock(env->me_lfd, LCK_LOWER))
+    mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
+               "E-E(exclusive) >> ?-E(middle)", GetLastError());
 
-    /* 2) now at ?-E (middle), transite to S-E (locked) */
-    if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
-      rc = mdbx_get_errno_checked() /* 3) something went wrong, give up */;
-      return rc;
-    }
-
-    /* 4) got S-E (locked), continue transition to S-? (used) */
-    if (!funlock(env->me_lfd, LCK_UPPER))
-      mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-                 "S-E(locked) >> S-?(used)", GetLastError());
+  /* 2) now at ?-E (middle), transite to S-E (locked) */
+  if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
+    int rc = mdbx_get_errno_checked() /* 3) something went wrong, give up */;
+    return rc;
   }
+
+  /* 4) got S-E (locked), continue transition to S-? (used) */
+  if (!funlock(env->me_lfd, LCK_UPPER))
+    mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
+               "S-E(locked) >> S-?(used)", GetLastError());
+
   return MDBX_SUCCESS /* 5) now at S-? (used), done */;
+}
+
+int mdbx_lck_upgrade(MDBX_env *env) {
+  /* Transite from locked state (S-E) to exclusive (E-E) */
+  assert(env->me_fd != INVALID_HANDLE_VALUE);
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
+
+  /* 1) must be at S-E (locked), transite to ?_E (middle) */
+  if (!funlock(env->me_lfd, LCK_LOWER))
+    mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
+               "S-E(locked) >> ?-E(middle)", GetLastError());
+
+  /* 3) now on ?-E (middle), try E-E (exclusive) */
+  mdbx_jitter4testing(false);
+  if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER))
+    return MDBX_RESULT_TRUE; /* 4) got E-E (exclusive), done */
+
+  /* 5) still on ?-E (middle) */
+  int rc = mdbx_get_errno_checked();
+  mdbx_jitter4testing(false);
+  if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION) {
+    /* 6) something went wrong, report but continue */
+    mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
+               "?-E(middle) >> E-E(exclusive)", rc);
+  }
+
+  /* 7) still on ?-E (middle), try restore S-E (locked) */
+  mdbx_jitter4testing(false);
+  rc = flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)
+           ? MDBX_RESULT_FALSE
+           : mdbx_get_errno_checked();
+
+  mdbx_jitter4testing(false);
+  if (rc != MDBX_RESULT_FALSE) {
+    mdbx_fatal("%s(%s) failed: errcode %u", mdbx_func_,
+               "?-E(middle) >> S-E(locked)", rc);
+    return rc;
+  }
+
+  /* 8) now on S-E (locked) */
+  return MDBX_RESULT_FALSE;
 }
 
 void mdbx_lck_destroy(MDBX_env *env) {
@@ -327,7 +367,7 @@ void mdbx_lck_destroy(MDBX_env *env) {
 
   if (env->me_fd != INVALID_HANDLE_VALUE) {
     /* explicitly unlock to avoid latency for other processes (windows kernel
-    * releases such locks via deferred queues) */
+     * releases such locks via deferred queues) */
     while (funlock(env->me_fd, LCK_BODY))
       ;
     rc = mdbx_get_errno_checked();
