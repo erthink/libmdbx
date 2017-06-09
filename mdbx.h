@@ -1104,8 +1104,14 @@ LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *stat,
  * [in] txn     A transaction handle returned by mdbx_txn_begin()
  * [in] dbi     A database handle returned by mdbx_dbi_open()
  * [out] flags  Address where the flags will be returned.
+ * [out] state  Address where the state will be returned.
  *
  * Returns A non-zero error value on failure and 0 on success. */
+#define MDBX_TBL_DIRTY 0x01 /* DB was written in this txn */
+#define MDBX_TBL_STALE 0x02 /* Named-DB record is older than txnID */
+#define MDBX_TBL_NEW 0x04   /* Named-DB handle opened in this txn */
+LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
+                                  unsigned *state);
 LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
 
 /* Close a database handle. Normally unnecessary.

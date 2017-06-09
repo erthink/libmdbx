@@ -9470,8 +9470,9 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   return rc;
 }
 
-int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
-  if (unlikely(!txn || !flags))
+int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
+                      unsigned *state) {
+  if (unlikely(!txn || !flags || !state))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
@@ -9484,7 +9485,14 @@ int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
     return MDBX_EINVAL;
 
   *flags = txn->mt_dbs[dbi].md_flags & PERSISTENT_FLAGS;
+  *state = txn->mt_dbflags[dbi] & (DB_NEW | DB_DIRTY | DB_STALE);
+
   return MDBX_SUCCESS;
+}
+
+int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
+  unsigned state;
+  return mdbx_dbi_flags_ex(txn, dbi, flags, &state);
 }
 
 /* Add all the DB's pages to the free list.

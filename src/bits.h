@@ -488,12 +488,12 @@ struct MDBX_txn {
   unsigned *mt_dbiseqs;
 
 /* Transaction DB Flags */
-#define DB_DIRTY 0x01    /* DB was written in this txn */
-#define DB_STALE 0x02    /* Named-DB record is older than txnID */
-#define DB_NEW 0x04      /* Named-DB handle opened in this txn */
-#define DB_VALID 0x08    /* DB handle is valid, see also MDBX_VALID */
-#define DB_USRVALID 0x10 /* As DB_VALID, but not set for FREE_DBI */
-#define DB_DUPDATA 0x20  /* DB is MDBX_DUPSORT data */
+#define DB_DIRTY MDBX_TBL_DIRTY /* DB was written in this txn */
+#define DB_STALE MDBX_TBL_STALE /* Named-DB record is older than txnID */
+#define DB_NEW MDBX_TBL_NEW     /* Named-DB handle opened in this txn */
+#define DB_VALID 0x08           /* DB handle is valid, see also MDBX_VALID */
+#define DB_USRVALID 0x10        /* As DB_VALID, but not set for FREE_DBI */
+#define DB_DUPDATA 0x20         /* DB is MDBX_DUPSORT data */
   /* In write txns, array of cursors for each DB */
   MDBX_cursor **mt_cursors;
   /* Array of flags for each DB */
