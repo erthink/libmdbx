@@ -9965,19 +9965,25 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
   if (unlikely(txn->mt_owner != mdbx_thread_self()))
     return MDBX_THREAD_MISMATCH;
 
-  if (unlikely(!txn->mt_ro_reader))
-    return -1;
-
   MDBX_env *env = txn->mt_env;
-  MDBX_meta *meta = mdbx_meta_head(env);
-  if (percent) {
-    pgno_t maxpg = env->me_maxpg;
-    pgno_t last = meta->mm_last_pg + 1;
-    if (env->me_txn)
-      last = env->me_txn0->mt_next_pgno;
-    *percent = (int)((last * UINT64_C(100) + maxpg / 2) / maxpg);
+  pgno_t maxpg = env->me_maxpg;
+  if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0)) {
+    *percent = (int)((txn->mt_next_pgno * UINT64_C(100) + maxpg / 2) / maxpg);
+    return -1;
   }
-  txnid_t lag = mdbx_meta_txnid_fluid(env, meta) - txn->mt_ro_reader->mr_txnid;
+
+  txnid_t recent;
+  MDBX_meta *meta;
+  do {
+    meta = mdbx_meta_head(env);
+    recent = mdbx_meta_txnid_fluid(env, meta);
+    if (percent) {
+      pgno_t last = meta->mm_last_pg + 1;
+      *percent = (int)((last * UINT64_C(100) + maxpg / 2) / maxpg);
+    }
+  } while (unlikely(recent != mdbx_meta_txnid_fluid(env, meta)));
+
+  txnid_t lag = recent - txn->mt_ro_reader->mr_txnid;
   return (lag > INT_MAX) ? INT_MAX : (int)lag;
 }
 
