@@ -140,7 +140,8 @@ int mdbx_txn_straggler(MDB_txn *txn, int *percent)
 {
 	MDB_env	*env;
 	MDB_meta *meta;
-	txnid_t lag;
+	txnid_t recent, lag;
+	size_t maxpg;
 
 	if(unlikely(!txn))
 		return -EINVAL;
@@ -148,19 +149,23 @@ int mdbx_txn_straggler(MDB_txn *txn, int *percent)
 	if(unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
 		return MDB_VERSION_MISMATCH;
 
-	if (unlikely(! txn->mt_u.reader))
-		return -1;
-
 	env = txn->mt_env;
-	meta = mdb_meta_head_r(env);
-	if (percent) {
-		size_t maxpg = env->me_maxpg;
-		size_t last = meta->mm_last_pg + 1;
-		if (env->me_txn)
-			last = env->me_txn0->mt_next_pgno;
-		*percent = (last * 100ull + maxpg / 2) / maxpg;
+	maxpg = env->me_maxpg;
+	if (unlikely((txn->mt_flags & MDB_RDONLY) == 0)) {
+		*percent = (int)((txn->mt_next_pgno * 100ull + maxpg / 2) / maxpg);
+		return -1;
 	}
-	lag = meta->mm_txnid - txn->mt_u.reader->mr_txnid;
+
+	do {
+		meta = mdb_meta_head_r(env);
+		recent = meta->mm_txnid;
+		if (percent) {
+			pgno_t last = meta->mm_last_pg + 1;
+			*percent = (int)((last * 100ull + maxpg / 2) / maxpg);
+		}
+	} while (unlikely(recent != meta->mm_txnid));
+
+	lag = recent - txn->mt_u.reader->mr_txnid;
 	return (0 > (long) lag) ? ~0u >> 1: lag;
 }
 
