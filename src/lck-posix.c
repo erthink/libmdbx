@@ -295,6 +295,8 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                 (rc ? "this process' env is hosed" : "recovering"));
 
     int check_rc = mdbx_reader_check0(env, rlocked, NULL);
+    check_rc = (check_rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : check_rc;
+
     int mreco_rc = pthread_mutex_consistent(mutex);
     check_rc = (mreco_rc == 0) ? check_rc : mreco_rc;
 

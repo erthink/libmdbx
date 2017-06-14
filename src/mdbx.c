@@ -9780,6 +9780,10 @@ int __cold mdbx_reader_check(MDBX_env *env, int *dead) {
   return mdbx_reader_check0(env, 0, dead);
 }
 
+/* Return:
+ *  MDBX_RESULT_TRUE - done and mutex recovered
+ *  MDBX_SUCCESS     - done
+ *  Otherwise errcode. */
 int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   assert(rdt_locked >= 0);
 
@@ -9792,7 +9796,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   mdbx_pid_t *pids = alloca((snap_nreaders + 1) * sizeof(mdbx_pid_t));
   pids[0] = 0;
 
-  int rc = MDBX_RESULT_FALSE, count = 0;
+  int rc = MDBX_SUCCESS, count = 0;
   MDBX_reader *mr = env->me_lck->mti_readers;
 
   for (unsigned i = 0; i < snap_nreaders; i++) {
@@ -9802,39 +9806,44 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
     if (pid != env->me_pid)
       continue;
     if (mdbx_pid_insert(pids, pid) != 0)
-      continue;
+      continue /* such pid already processed */;
 
-    rc = mdbx_rpid_check(env, pid);
-    if (rc == MDBX_RESULT_TRUE)
-      continue; /* reader is live */
+    int err = mdbx_rpid_check(env, pid);
+    if (err == MDBX_RESULT_TRUE)
+      continue /* reader is live */;
 
-    if (rc != MDBX_RESULT_FALSE)
-      break; /* mdbx_rpid_check() failed */
+    if (err != MDBX_SUCCESS) {
+      rc = err;
+      break /* mdbx_rpid_check() failed */;
+    }
 
     /* stale reader found */
     if (!rdt_locked) {
-      rc = mdbx_rdt_lock(env);
-      if (MDBX_IS_ERROR(rc))
+      err = mdbx_rdt_lock(env);
+      if (MDBX_IS_ERROR(rc)) {
+        rc = err;
         break;
+      }
 
       rdt_locked = -1;
-      if (rc == MDBX_RESULT_TRUE)
-        /* the above checked all readers */
+      if (err == MDBX_RESULT_TRUE) {
+        /* mutex recovered, the mdbx_mutex_failed() checked all readers */
+        rc = MDBX_RESULT_TRUE;
         break;
+      }
 
       /* a other process may have clean and reused slot, recheck */
       if (mr[i].mr_pid != pid)
         continue;
 
-      rc = mdbx_rpid_check(env, pid);
-      if (MDBX_IS_ERROR(rc))
+      err = mdbx_rpid_check(env, pid);
+      if (MDBX_IS_ERROR(rc)) {
+        rc = err;
         break;
-
-      if (rc != MDBX_RESULT_FALSE) {
-        /* the race with other process, slot reused */
-        rc = MDBX_RESULT_FALSE;
-        continue;
       }
+
+      if (err != MDBX_SUCCESS)
+        continue /* the race with other process, slot reused */;
     }
 
     /* clean it */
@@ -9896,7 +9905,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
   for (retry = 0; retry < INT_MAX; ++retry) {
     int reader;
 
-    if (mdbx_reader_check(env, NULL))
+    if (MDBX_IS_ERROR(mdbx_reader_check0(env, false, NULL)))
       break;
 
     txnid_t snap = mdbx_find_oldest(env->me_txn, &reader);
