@@ -9802,9 +9802,9 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   for (unsigned i = 0; i < snap_nreaders; i++) {
     const mdbx_pid_t pid = mr[i].mr_pid;
     if (pid == 0)
-      continue;
-    if (pid != env->me_pid)
-      continue;
+      continue /* skip empty */;
+    if (pid == env->me_pid)
+      continue /* skip self */;
     if (mdbx_pid_insert(pids, pid) != 0)
       continue /* such pid already processed */;
 
