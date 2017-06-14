@@ -1558,7 +1558,6 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
   txnid_t oldest = 0, last = 0;
   MDBX_cursor_op op;
   MDBX_cursor m2;
-  int found_oldest = 0;
 
   if (likely(flags & MDBX_ALLOC_GC)) {
     flags |= env->me_flags & (MDBX_COALESCE | MDBX_LIFORECLAIM);
@@ -1614,13 +1613,10 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         if (unlikely(!(flags & MDBX_ALLOC_GC)))
           break;
 
-        oldest = env->me_pgoldest;
+        oldest = (flags & MDBX_LIFORECLAIM) ? mdbx_find_oldest(txn, NULL)
+                                            : env->me_pgoldest;
         mdbx_cursor_init(&m2, txn, FREE_DBI, NULL);
         if (flags & MDBX_LIFORECLAIM) {
-          if (!found_oldest) {
-            oldest = mdbx_find_oldest(txn, NULL);
-            found_oldest = 1;
-          }
           /* Begin from oldest reader if any */
           if (oldest > 2) {
             last = oldest - 1;
@@ -1639,10 +1635,6 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       if (!(flags & MDBX_LIFORECLAIM)) {
         /* Do not fetch more if the record will be too recent */
         if (op != MDBX_FIRST && ++last >= oldest) {
-          if (!found_oldest) {
-            oldest = mdbx_find_oldest(txn, NULL);
-            found_oldest = 1;
-          }
           if (oldest <= last)
             break;
         }
@@ -1652,7 +1644,6 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       if (rc == MDBX_NOTFOUND && (flags & MDBX_LIFORECLAIM)) {
         if (op == MDBX_SET_RANGE)
           continue;
-        found_oldest = 1;
         if (oldest < mdbx_find_oldest(txn, NULL)) {
           oldest = env->me_pgoldest;
           last = oldest - 1;
@@ -1670,10 +1661,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 
       last = *(txnid_t *)key.iov_base;
       if (oldest <= last) {
-        if (!found_oldest) {
-          oldest = mdbx_find_oldest(txn, NULL);
-          found_oldest = 1;
-        }
+        oldest = mdbx_find_oldest(txn, NULL);
         if (oldest <= last) {
           if (flags & MDBX_LIFORECLAIM)
             continue;
@@ -1804,18 +1792,15 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         MDBX_meta meta = *head;
         if (mdbx_sync_locked(env, me_flags, &meta) == MDBX_SUCCESS) {
           txnid_t snap = mdbx_find_oldest(txn, NULL);
-          if (snap > oldest) {
+          if (snap > oldest)
             continue;
-          }
         }
       }
 
       if (rc == MDBX_MAP_FULL) {
         txnid_t snap = mdbx_oomkick(env, oldest);
-        if (snap > oldest) {
-          oldest = snap;
+        if (snap > oldest)
           continue;
-        }
       }
     }
 
