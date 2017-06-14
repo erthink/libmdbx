@@ -365,18 +365,35 @@ typedef struct MDBX_lockinfo {
   /* Flags which environment was opened. */
   volatile uint32_t mti_envmode;
 
+  union {
 #ifdef MDBX_OSAL_LOCK
-  MDBX_OSAL_LOCK mti_wmutex;
+    MDBX_OSAL_LOCK mti_wmutex;
 #endif
+    uint64_t align_wmutex;
+  };
 
-  /* The number of slots that have been used in the reader table.
-   * This always records the maximum count, it is not decremented
-   * when readers release their slots. */
-  volatile unsigned __cache_aligned mti_numreaders;
+  union {
+    /* The number of slots that have been used in the reader table.
+     * This always records the maximum count, it is not decremented
+     * when readers release their slots. */
+    volatile unsigned __cache_aligned mti_numreaders;
+    uint64_t align_numreaders;
+  };
+
+  union {
 #ifdef MDBX_OSAL_LOCK
-  /* Mutex protecting access to this table. */
-  MDBX_OSAL_LOCK mti_rmutex;
+    /* Mutex protecting access to this table. */
+    MDBX_OSAL_LOCK mti_rmutex;
 #endif
+    uint64_t align_rmutex;
+  };
+
+  union {
+    volatile txnid_t mti_oldest;
+    uint64_t align_oldest;
+  };
+  uint8_t pad_align[MDBX_CACHELINE_SIZE - sizeof(uint64_t) * 6];
+
   MDBX_reader __cache_aligned mti_readers[1];
 } MDBX_lockinfo;
 
@@ -635,23 +652,23 @@ struct MDBX_env {
   /* Max MDBX_lockinfo.mti_numreaders of interest to mdbx_env_close() */
   unsigned me_close_readers;
   mdbx_fastmutex_t me_dbi_lock;
-  MDBX_dbi me_numdbs;         /* number of DBs opened */
-  MDBX_dbi me_maxdbs;         /* size of the DB table */
-  mdbx_pid_t me_pid;          /* process ID of this env */
-  char *me_path;              /* path to the DB files */
-  char *me_map;               /* the memory map of the data file */
-  MDBX_lockinfo *me_lck;      /* the memory map of the lock file, never NULL */
-  void *me_pbuf;              /* scratch area for DUPSORT put() */
-  MDBX_txn *me_txn;           /* current write transaction */
-  MDBX_txn *me_txn0;          /* prealloc'd write transaction */
-  size_t me_mapsize;          /* size of the data memory map */
-  pgno_t me_maxpg;            /* me_mapsize / me_psize */
-  MDBX_dbx *me_dbxs;          /* array of static DB info */
-  uint16_t *me_dbflags;       /* array of flags from MDBX_db.md_flags */
-  unsigned *me_dbiseqs;       /* array of dbi sequence numbers */
-  mdbx_thread_key_t me_txkey; /* thread-key for readers */
-  txnid_t me_pgoldest;        /* ID of oldest reader last time we looked */
-  MDBX_pgstate me_pgstate;    /* state of old pages from freeDB */
+  MDBX_dbi me_numdbs;          /* number of DBs opened */
+  MDBX_dbi me_maxdbs;          /* size of the DB table */
+  mdbx_pid_t me_pid;           /* process ID of this env */
+  char *me_path;               /* path to the DB files */
+  char *me_map;                /* the memory map of the data file */
+  MDBX_lockinfo *me_lck;       /* the memory map of the lock file, never NULL */
+  void *me_pbuf;               /* scratch area for DUPSORT put() */
+  MDBX_txn *me_txn;            /* current write transaction */
+  MDBX_txn *me_txn0;           /* prealloc'd write transaction */
+  size_t me_mapsize;           /* size of the data memory map */
+  pgno_t me_maxpg;             /* me_mapsize / me_psize */
+  MDBX_dbx *me_dbxs;           /* array of static DB info */
+  uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
+  unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
+  mdbx_thread_key_t me_txkey;  /* thread-key for readers */
+  volatile txnid_t *me_oldest; /* ID of oldest reader last time we looked */
+  MDBX_pgstate me_pgstate;     /* state of old pages from freeDB */
 #define me_pglast me_pgstate.mf_pglast
 #define me_pghead me_pgstate.mf_pghead
   MDBX_page *me_dpages; /* list of malloc'd blocks for re-use */
@@ -663,16 +680,17 @@ struct MDBX_env {
   unsigned me_maxfree_1pg;
   /* Max size of a node on a page */
   unsigned me_nodemax;
-  unsigned me_maxkey_limit;  /* max size of a key */
-  mdbx_pid_t me_live_reader; /* have liveness lock in reader table */
-  void *me_userctx;          /* User-settable context */
+  unsigned me_maxkey_limit;   /* max size of a key */
+  mdbx_pid_t me_live_reader;  /* have liveness lock in reader table */
+  void *me_userctx;           /* User-settable context */
+  size_t me_sync_pending;     /* Total dirty/non-sync'ed bytes
+                               * since the last mdbx_env_sync() */
+  size_t me_sync_threshold;   /* Treshold of above to force synchronous flush */
+  MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
+  txnid_t me_oldest_stub;
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
-  size_t me_sync_pending;     /* Total dirty/non-sync'ed bytes
-                                 * since the last mdbx_env_sync() */
-  size_t me_sync_threshold;   /* Treshold of above to force synchronous flush */
-  MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
 #ifdef USE_VALGRIND
   int me_valgrind_handle;
 #endif
