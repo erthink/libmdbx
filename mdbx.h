@@ -1534,9 +1534,9 @@ LIBMDBX_API int mdbx_txn_straggler(MDBX_txn *txn, int *percent);
  * [in] retry   A retry number, less that zero for notify end of OOM-loop.
  *
  * Returns -1 on failure (reader is not killed),
- *  0 on a race condition (no such reader),
- *  1 on success (reader was killed),
- *  >1 on success (reader was SURE killed). */
+ *  0 should wait or retry,
+ *  1 drop reader txn-lock (reading-txn was aborted),
+ *  >1 drop reader registration (reader process was killed). */
 typedef int(MDBX_oom_func)(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
                            unsigned gap, int retry);
 
