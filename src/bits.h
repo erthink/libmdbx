@@ -134,7 +134,7 @@ typedef uint64_t txnid_t;
 #elif MDBX_DEBUG
 #define MIN_TXNID UINT64_C(0x100000000)
 #else
-#define MIN_TXNID UINT64_C(0)
+#define MIN_TXNID UINT64_C(1)
 #endif /* MIN_TXNID */
 
 /* Used for offsets within a single page.
