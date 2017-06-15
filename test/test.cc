@@ -114,7 +114,7 @@ void testcase::db_prepare() {
   log_trace(">> db_prepare");
   assert(!db_guard);
 
-  int mdbx_dbg_opts = MDBX_DBG_ASSERT | MDBX_DBG_JITTER;
+  int mdbx_dbg_opts = MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP;
   if (config.params.loglevel <= logging::trace)
     mdbx_dbg_opts |= MDBX_DBG_TRACE;
   if (config.params.loglevel <= logging::verbose)

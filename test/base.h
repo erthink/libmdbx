@@ -37,8 +37,11 @@
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
 #include <io.h>
 #else
+#include <fcntl.h>
 #include <sys/param.h>
+#include <sys/stat.h>
 #include <sys/time.h>
+#include <sys/types.h>
 #include <unistd.h>
 #endif
 

@@ -9859,6 +9859,32 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
   unsigned ret = mdbx_runtime_flags;
   mdbx_runtime_flags = flags;
+
+#ifdef __linux__
+  if (flags & MDBX_DBG_DUMP) {
+    int core_filter_fd = open("/proc/self/coredump_filter", O_TRUNC | O_RDWR);
+    if (core_filter_fd >= 0) {
+      char buf[32];
+      const unsigned r = pread(core_filter_fd, buf, sizeof(buf), 0);
+      if (r > 0 && r < sizeof(buf)) {
+        buf[r] = 0;
+        unsigned long mask = strtoul(buf, NULL, 16);
+        if (mask != ULONG_MAX) {
+          mask |= 1 << 3 /* Dump file-backed shared mappings */;
+          mask |= 1 << 6 /* Dump shared huge pages */;
+          mask |= 1 << 8 /* Dump shared DAX pages */;
+          unsigned w = snprintf(buf, sizeof(buf), "0x%lx\n", mask);
+          if (w > 0 && w < sizeof(buf)) {
+            w = pwrite(core_filter_fd, buf, w, 0);
+            (void)w;
+          }
+        }
+      }
+      close(core_filter_fd);
+    }
+  }
+#endif /* __linux__ */
+
   mdbx_debug_logger = logger;
   return ret;
 }
