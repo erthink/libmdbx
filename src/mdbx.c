@@ -749,7 +749,7 @@ const char *__cold mdbx_strerror(int errnum) {
   return msg;
 }
 
-static txnid_t mdbx_oomkick(MDBX_env *env, txnid_t oldest);
+static txnid_t mdbx_oomkick(MDBX_env *env, const txnid_t laggard);
 
 void __cold mdbx_debug_log(int type, const char *function, int line,
                            const char *fmt, ...) {
@@ -1481,28 +1481,29 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 /*----------------------------------------------------------------------------*/
 
 /* Find oldest txnid still referenced. */
-static txnid_t mdbx_find_oldest(MDBX_txn *txn, int *laggard) {
+static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   MDBX_env *env = txn->mt_env;
   mdbx_assert(env, (txn->mt_flags & MDBX_RDONLY) == 0);
 
-  int i, reader;
+  const txnid_t last_oldest = env->me_oldest[0];
   txnid_t oldest = txn->mt_txnid - 1;
-  const MDBX_reader *const r = env->me_lck->mti_readers;
-  for (reader = -1, i = env->me_lck->mti_numreaders; --i >= 0;) {
-    if (r[i].mr_pid) {
+  mdbx_assert(env, oldest >= last_oldest);
+
+  const MDBX_reader *const rtbl = env->me_lck->mti_readers;
+  for (int i = env->me_lck->mti_numreaders;
+       oldest != last_oldest && --i >= 0;) {
+    if (rtbl[i].mr_pid) {
       mdbx_jitter4testing(true);
-      txnid_t snap = r[i].mr_txnid;
-      if (oldest > snap) {
+      const txnid_t snap = rtbl[i].mr_txnid;
+      if (oldest > snap && last_oldest <= /* ignore pending updates */ snap)
         oldest = snap;
-        reader = i;
-      }
     }
   }
 
-  if (laggard)
-    *laggard = reader;
-
-  *env->me_oldest = oldest;
+  if (oldest != last_oldest) {
+    mdbx_assert(env, oldest >= env->me_oldest[0]);
+    env->me_oldest[0] = oldest;
+  }
   return oldest;
 }
 
@@ -1613,7 +1614,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         if (unlikely(!(flags & MDBX_ALLOC_GC)))
           break;
 
-        oldest = (flags & MDBX_LIFORECLAIM) ? mdbx_find_oldest(txn, NULL)
+        oldest = (flags & MDBX_LIFORECLAIM) ? mdbx_find_oldest(txn)
                                             : env->me_oldest[0];
         mdbx_cursor_init(&m2, txn, FREE_DBI, NULL);
         if (flags & MDBX_LIFORECLAIM) {
@@ -1644,7 +1645,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       if (rc == MDBX_NOTFOUND && (flags & MDBX_LIFORECLAIM)) {
         if (op == MDBX_SET_RANGE)
           continue;
-        if (oldest < mdbx_find_oldest(txn, NULL)) {
+        if (oldest < mdbx_find_oldest(txn)) {
           oldest = *env->me_oldest;
           last = oldest - 1;
           key.iov_base = &last;
@@ -1661,7 +1662,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 
       last = *(txnid_t *)key.iov_base;
       if (oldest <= last) {
-        oldest = mdbx_find_oldest(txn, NULL);
+        oldest = mdbx_find_oldest(txn);
         if (oldest <= last) {
           if (flags & MDBX_LIFORECLAIM)
             continue;
@@ -1791,7 +1792,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         mdbx_assert(env, env->me_sync_pending > 0);
         MDBX_meta meta = *head;
         if (mdbx_sync_locked(env, me_flags, &meta) == MDBX_SUCCESS) {
-          txnid_t snap = mdbx_find_oldest(txn, NULL);
+          txnid_t snap = mdbx_find_oldest(txn);
           if (snap > oldest)
             continue;
         }
@@ -9879,28 +9880,39 @@ int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
   return ret;
 }
 
-static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
+static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
   mdbx_debug("DB size maxed out");
 
   int retry;
   for (retry = 0; retry < INT_MAX; ++retry) {
-    int reader;
-
     if (MDBX_IS_ERROR(mdbx_reader_check0(env, false, NULL)))
       break;
 
-    txnid_t snap = mdbx_find_oldest(env->me_txn, &reader);
-    if (oldest < snap || reader < 0) {
-      if (retry && env->me_oom_func) {
-        /* LY: notify end of oom-loop */
-        const txnid_t gap = snap - oldest;
-        env->me_oom_func(env, 0, 0, oldest,
-                         (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, -retry);
+    txnid_t oldest = env->me_txn0->mt_txnid - 1;
+    MDBX_reader *const rtbl = env->me_lck->mti_readers;
+    MDBX_reader *asleep = nullptr;
+    for (int i = env->me_lck->mti_numreaders; --i >= 0;) {
+      if (rtbl[i].mr_pid) {
+        mdbx_jitter4testing(true);
+        const txnid_t snap = rtbl[i].mr_txnid;
+        if (oldest > snap && laggard <= /* ignore pending updates */ snap) {
+          oldest = snap;
+          asleep = &rtbl[i];
+        }
       }
-      return snap;
     }
 
-    MDBX_reader *r;
+    if (laggard < oldest || !asleep) {
+      if (retry && env->me_oom_func) {
+        /* LY: notify end of oom-loop */
+        const txnid_t gap = oldest - laggard;
+        env->me_oom_func(env, 0, 0, laggard,
+                         (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, -retry);
+      }
+      mdbx_assert(env, env->me_oldest[0] <= oldest);
+      return env->me_oldest[0] = oldest;
+    }
+
     mdbx_tid_t tid;
     mdbx_pid_t pid;
     int rc;
@@ -9908,24 +9920,23 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
     if (!env->me_oom_func)
       break;
 
-    r = &env->me_lck->mti_readers[reader];
-    pid = r->mr_pid;
-    tid = r->mr_tid;
-    if (r->mr_txnid != oldest || pid <= 0)
+    pid = asleep->mr_pid;
+    tid = asleep->mr_tid;
+    if (asleep->mr_txnid != laggard || pid <= 0)
       continue;
 
     const txnid_t gap =
-        mdbx_meta_txnid_stable(env, mdbx_meta_head(env)) - oldest;
-    rc = env->me_oom_func(env, pid, tid, oldest,
+        mdbx_meta_txnid_stable(env, mdbx_meta_head(env)) - laggard;
+    rc = env->me_oom_func(env, pid, tid, laggard,
                           (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, retry);
     if (rc < 0)
       break;
 
     if (rc) {
-      r->mr_txnid = ~(txnid_t)0;
+      asleep->mr_txnid = ~(txnid_t)0;
       if (rc > 1) {
-        r->mr_tid = 0;
-        r->mr_pid = 0;
+        asleep->mr_tid = 0;
+        asleep->mr_pid = 0;
         mdbx_coherent_barrier();
       }
     }
@@ -9933,9 +9944,9 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, txnid_t oldest) {
 
   if (retry && env->me_oom_func) {
     /* LY: notify end of oom-loop */
-    env->me_oom_func(env, 0, 0, oldest, 0, -retry);
+    env->me_oom_func(env, 0, 0, laggard, 0, -retry);
   }
-  return mdbx_find_oldest(env->me_txn, NULL);
+  return mdbx_find_oldest(env->me_txn);
 }
 
 int __cold mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes) {
