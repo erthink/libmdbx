@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -503,7 +503,7 @@ struct MDBX_txn {
                     /* The list of reclaimed txns from freeDB */
   MDBX_TXL mt_lifo_reclaimed;
   /* The list of pages that became unused during this transaction. */
-  MDBX_IDL mt_free_pages;
+  MDBX_IDL mt_befree_pages;
   /* The list of loose pages that became unused and may be reused
    * in this transaction, linked through NEXT_LOOSE_PAGE(page). */
   MDBX_page *mt_loose_pages;

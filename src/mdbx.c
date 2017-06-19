@@ -1091,7 +1091,7 @@ static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
  * to this txn's free list. */
 static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
   int loose = 0;
-  pgno_t pgno = mp->mp_pgno;
+  const pgno_t pgno = mp->mp_pgno;
   MDBX_txn *txn = mc->mc_txn;
 
   if ((mp->mp_flags & P_DIRTY) && mc->mc_dbi != FREE_DBI) {
@@ -1132,7 +1132,7 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
     txn->mt_loose_count++;
     mp->mp_flags |= P_LOOSE;
   } else {
-    int rc = mdbx_midl_append(&txn->mt_free_pages, pgno);
+    int rc = mdbx_midl_append(&txn->mt_befree_pages, pgno);
     if (unlikely(rc))
       return rc;
   }
@@ -2083,14 +2083,14 @@ static int mdbx_page_touch(MDBX_cursor *mc) {
       if (likely(np))
         goto done;
     }
-    if (unlikely((rc = mdbx_midl_need(&txn->mt_free_pages, 1)) ||
+    if (unlikely((rc = mdbx_midl_need(&txn->mt_befree_pages, 1)) ||
                  (rc = mdbx_page_alloc(mc, 1, &np, MDBX_ALLOC_ALL))))
       goto fail;
     pgno = np->mp_pgno;
     mdbx_debug("touched db %d page %" PRIaPGNO " -> %" PRIaPGNO, DDBI(mc),
                mp->mp_pgno, pgno);
     mdbx_cassert(mc, mp->mp_pgno != pgno);
-    mdbx_midl_xappend(txn->mt_free_pages, mp->mp_pgno);
+    mdbx_midl_xappend(txn->mt_befree_pages, mp->mp_pgno);
     /* Update the parent page, if any, to point to the new page */
     if (mc->mc_top) {
       MDBX_page *parent = mc->mc_pg[mc->mc_top - 1];
@@ -2484,8 +2484,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     txn->mt_dirtyroom = MDBX_IDL_UM_MAX;
     txn->mt_rw_dirtylist = env->me_dirtylist;
     txn->mt_rw_dirtylist[0].mid = 0;
-    txn->mt_free_pages = env->me_free_pgs;
-    txn->mt_free_pages[0] = 0;
+    txn->mt_befree_pages = env->me_free_pgs;
+    txn->mt_befree_pages[0] = 0;
     txn->mt_spill_pages = NULL;
     if (txn->mt_lifo_reclaimed)
       txn->mt_lifo_reclaimed[0] = 0;
@@ -2626,7 +2626,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     txn->mt_dbiseqs = parent->mt_dbiseqs;
     txn->mt_rw_dirtylist = malloc(sizeof(MDBX_ID2) * MDBX_IDL_UM_SIZE);
     if (!txn->mt_rw_dirtylist ||
-        !(txn->mt_free_pages = mdbx_midl_alloc(MDBX_IDL_UM_MAX))) {
+        !(txn->mt_befree_pages = mdbx_midl_alloc(MDBX_IDL_UM_MAX))) {
       free(txn->mt_rw_dirtylist);
       free(txn);
       return MDBX_ENOMEM;
@@ -2782,8 +2782,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     txn->mt_flags = MDBX_TXN_FINISHED;
 
     if (!txn->mt_parent) {
-      mdbx_midl_shrink(&txn->mt_free_pages);
-      env->me_free_pgs = txn->mt_free_pages;
+      mdbx_midl_shrink(&txn->mt_befree_pages);
+      env->me_free_pgs = txn->mt_befree_pages;
       /* me_pgstate: */
       env->me_reclaimed_pglist = NULL;
       env->me_last_reclaimed = 0;
@@ -2799,7 +2799,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       txn->mt_parent->mt_child = NULL;
       txn->mt_parent->mt_flags &= ~MDBX_TXN_HAS_CHILD;
       env->me_pgstate = ((MDBX_ntxn *)txn)->mnt_pgstate;
-      mdbx_midl_free(txn->mt_free_pages);
+      mdbx_midl_free(txn->mt_befree_pages);
       mdbx_midl_free(txn->mt_spill_pages);
       free(txn->mt_rw_dirtylist);
     }
@@ -2889,8 +2889,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
 }
 
 /* Save the freelist as of this transaction to the freeDB.
- * This changes the freelist. Keep trying until it stabilizes.
- */
+ * This changes the freelist. Keep trying until it stabilizes. */
 static int mdbx_freelist_save(MDBX_txn *txn) {
   /* env->me_reclaimed_pglist[] can grow and shrink during this call.
    * env->me_last_reclaimed and txn->mt_free_pages[] can only grow.
@@ -2898,11 +2897,11 @@ static int mdbx_freelist_save(MDBX_txn *txn) {
   MDBX_cursor mc;
   MDBX_env *env = txn->mt_env;
   int rc, maxfree_1pg = env->me_maxfree_1pg, more = 1;
-  txnid_t pglast = 0, head_id = 0;
-  pgno_t freecnt = 0, *free_pgs, *mop;
+  txnid_t cleanup_reclaimed_id = 0, head_id = 0;
+  pgno_t befree_count = 0, *mop;
   ssize_t head_room = 0, total_room = 0, mop_len, clean_limit;
-  unsigned cleanup_idx = 0, refill_idx = 0;
-  const int lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
+  unsigned cleanup_reclaimed_pos = 0, refill_reclaimed_pos = 0;
+  const bool lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
 
   mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
 
@@ -2911,39 +2910,38 @@ static int mdbx_freelist_save(MDBX_txn *txn) {
                     ? SSIZE_MAX
                     : maxfree_1pg;
 
-again:
+again_on_freelist_change:
   for (;;) {
     /* Come back here after each Put() in case freelist changed */
     MDBX_val key, data;
-    pgno_t *pgs;
     ssize_t j;
 
     if (!lifo) {
-      /* If using records from freeDB which we have not yet
-       * deleted, delete them and any we reserved for me_reclaimed_pglist. */
-      while (pglast < env->me_last_reclaimed) {
+      /* If using records from freeDB which we have not yet deleted,
+       * now delete them and any we reserved for me_reclaimed_pglist. */
+      while (cleanup_reclaimed_id < env->me_last_reclaimed) {
         rc = mdbx_cursor_first(&mc, &key, NULL);
         if (unlikely(rc))
           goto bailout;
         rc = mdbx_prep_backlog(txn, &mc);
         if (unlikely(rc))
           goto bailout;
-        pglast = head_id = *(txnid_t *)key.iov_base;
+        cleanup_reclaimed_id = head_id = *(txnid_t *)key.iov_base;
         total_room = head_room = 0;
         more = 1;
-        mdbx_tassert(txn, pglast <= env->me_last_reclaimed);
+        mdbx_tassert(txn, cleanup_reclaimed_id <= env->me_last_reclaimed);
         mc.mc_flags |= C_RECLAIMING;
         rc = mdbx_cursor_del(&mc, 0);
-        mc.mc_flags &= ~C_RECLAIMING;
+        mc.mc_flags ^= C_RECLAIMING;
         if (unlikely(rc))
           goto bailout;
       }
     } else if (txn->mt_lifo_reclaimed) {
       /* LY: cleanup reclaimed records. */
-      while (cleanup_idx < txn->mt_lifo_reclaimed[0]) {
-        pglast = txn->mt_lifo_reclaimed[++cleanup_idx];
-        key.iov_base = &pglast;
-        key.iov_len = sizeof(pglast);
+      while (cleanup_reclaimed_pos < txn->mt_lifo_reclaimed[0]) {
+        cleanup_reclaimed_id = txn->mt_lifo_reclaimed[++cleanup_reclaimed_pos];
+        key.iov_base = &cleanup_reclaimed_id;
+        key.iov_len = sizeof(cleanup_reclaimed_id);
         rc = mdbx_cursor_get(&mc, &key, NULL, MDBX_SET);
         if (likely(rc != MDBX_NOTFOUND)) {
           if (unlikely(rc))
@@ -2953,7 +2951,7 @@ again:
             goto bailout;
           mc.mc_flags |= C_RECLAIMING;
           rc = mdbx_cursor_del(&mc, 0);
-          mc.mc_flags &= ~C_RECLAIMING;
+          mc.mc_flags ^= C_RECLAIMING;
           if (unlikely(rc))
             goto bailout;
         }
@@ -2964,47 +2962,47 @@ again:
       /* Put loose page numbers in mt_free_pages, since
        * we may be unable to return them to me_reclaimed_pglist. */
       MDBX_page *mp = txn->mt_loose_pages;
-      if (unlikely((rc = mdbx_midl_need(&txn->mt_free_pages,
+      if (unlikely((rc = mdbx_midl_need(&txn->mt_befree_pages,
                                         txn->mt_loose_count)) != 0))
         return rc;
       for (; mp; mp = NEXT_LOOSE_PAGE(mp))
-        mdbx_midl_xappend(txn->mt_free_pages, mp->mp_pgno);
+        mdbx_midl_xappend(txn->mt_befree_pages, mp->mp_pgno);
       txn->mt_loose_pages = NULL;
       txn->mt_loose_count = 0;
     }
 
     /* Save the IDL of pages freed by this txn, to a single record */
-    if (freecnt < txn->mt_free_pages[0]) {
-      if (unlikely(!freecnt)) {
+    if (befree_count < txn->mt_befree_pages[0]) {
+      if (unlikely(!befree_count)) {
         /* Make sure last page of freeDB is touched and on freelist */
         rc = mdbx_page_search(&mc, NULL, MDBX_PS_LAST | MDBX_PS_MODIFY);
         if (unlikely(rc && rc != MDBX_NOTFOUND))
           goto bailout;
       }
-      free_pgs = txn->mt_free_pages;
+      pgno_t *befree_pages = txn->mt_befree_pages;
       /* Write to last page of freeDB */
       key.iov_len = sizeof(txn->mt_txnid);
       key.iov_base = &txn->mt_txnid;
       do {
-        freecnt = free_pgs[0];
-        data.iov_len = MDBX_IDL_SIZEOF(free_pgs);
+        befree_count = befree_pages[0];
+        data.iov_len = MDBX_IDL_SIZEOF(befree_pages);
         rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
         if (unlikely(rc))
           goto bailout;
         /* Retry if mt_free_pages[] grew during the Put() */
-        free_pgs = txn->mt_free_pages;
-      } while (freecnt < free_pgs[0]);
+        befree_pages = txn->mt_befree_pages;
+      } while (befree_count < befree_pages[0]);
 
-      mdbx_midl_sort(free_pgs);
-      memcpy(data.iov_base, free_pgs, data.iov_len);
+      mdbx_midl_sort(befree_pages);
+      memcpy(data.iov_base, befree_pages, data.iov_len);
 
       if (mdbx_debug_enabled(MDBX_DBG_EXTRA)) {
-        unsigned i = free_pgs[0];
+        unsigned i = (unsigned)befree_pages[0];
         mdbx_debug_extra("IDL write txn %" PRIaTXN " root %" PRIaPGNO
                          " num %u, IDL",
                          txn->mt_txnid, txn->mt_dbs[FREE_DBI].md_root, i);
         for (; i; i--)
-          mdbx_debug_extra_print(" %" PRIaPGNO "", free_pgs[i]);
+          mdbx_debug_extra_print(" %" PRIaPGNO "", befree_pages[i]);
         mdbx_debug_extra_print("\n");
       }
       continue;
@@ -3013,8 +3011,8 @@ again:
     mop = env->me_reclaimed_pglist;
     mop_len = (mop ? mop[0] : 0) + txn->mt_loose_count;
 
-    if (mop_len && refill_idx == 0)
-      refill_idx = 1;
+    if (mop_len && refill_reclaimed_pos == 0)
+      refill_reclaimed_pos = 1;
 
     /* Reserve records for me_reclaimed_pglist[]. Split it if multi-page,
      * to avoid searching freeDB for a page range. Use keys in
@@ -3025,12 +3023,12 @@ again:
     } else if (head_room >= maxfree_1pg && head_id > 1) {
       /* Keep current record (overflow page), add a new one */
       head_id--;
-      refill_idx++;
+      refill_reclaimed_pos++;
       head_room = 0;
     }
 
     if (lifo) {
-      if (refill_idx >
+      if (refill_reclaimed_pos >
           (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0)) {
         /* LY: need just a txn-id for save page list. */
         rc = mdbx_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
@@ -3062,9 +3060,9 @@ again:
           goto bailout;
         --env->me_last_reclaimed;
         /* LY: note that freeDB cleanup is not needed. */
-        ++cleanup_idx;
+        ++cleanup_reclaimed_pos;
       }
-      head_id = txn->mt_lifo_reclaimed[refill_idx];
+      head_id = txn->mt_lifo_reclaimed[refill_reclaimed_pos];
     }
 
     /* (Re)write {key = head_id, IDL length = head_room} */
@@ -3086,17 +3084,19 @@ again:
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
     if (unlikely(rc))
       goto bailout;
+
     /* IDL is initially empty, zero out at least the length */
-    pgs = (pgno_t *)data.iov_base;
+    pgno_t *pgs = (pgno_t *)data.iov_base;
     j = head_room > clean_limit ? head_room : 0;
     do {
       pgs[j] = 0;
     } while (--j >= 0);
     total_room += head_room;
+    continue;
   }
 
   mdbx_tassert(txn,
-               cleanup_idx ==
+               cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
   /* Return loose page numbers to me_reclaimed_pglist, though usually none are
@@ -3144,8 +3144,9 @@ again:
         mdbx_tassert(txn, id <= env->me_last_reclaimed);
       } else {
         mdbx_tassert(txn,
-                     refill_idx > 0 && refill_idx <= txn->mt_lifo_reclaimed[0]);
-        id = txn->mt_lifo_reclaimed[refill_idx--];
+                     refill_reclaimed_pos > 0 &&
+                         refill_reclaimed_pos <= txn->mt_lifo_reclaimed[0]);
+        id = txn->mt_lifo_reclaimed[refill_reclaimed_pos--];
         key.iov_base = &id;
         key.iov_len = sizeof(id);
         rc = mdbx_cursor_get(&mc, &key, &data, MDBX_SET);
@@ -3153,7 +3154,7 @@ again:
           goto bailout;
       }
       mdbx_tassert(
-          txn, cleanup_idx ==
+          txn, cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
       len = (ssize_t)(data.iov_len / sizeof(pgno_t)) - 1;
@@ -3169,7 +3170,7 @@ again:
       mop[0] = (pgno_t)len;
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
       mdbx_tassert(
-          txn, cleanup_idx ==
+          txn, cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
       mop[0] = save;
       if (unlikely(rc || (mop_len -= len) == 0))
@@ -3185,16 +3186,17 @@ again:
 
 bailout:
   if (txn->mt_lifo_reclaimed) {
-    mdbx_tassert(txn, rc || cleanup_idx == txn->mt_lifo_reclaimed[0]);
-    if (rc == 0 && cleanup_idx != txn->mt_lifo_reclaimed[0]) {
-      mdbx_tassert(txn, cleanup_idx < txn->mt_lifo_reclaimed[0]);
-      /* LY: zeroed cleanup_idx to force cleanup & refill created freeDB
-       * records. */
-      cleanup_idx = 0;
+    mdbx_tassert(txn, rc || cleanup_reclaimed_pos == txn->mt_lifo_reclaimed[0]);
+    if (rc == MDBX_SUCCESS &&
+        cleanup_reclaimed_pos != txn->mt_lifo_reclaimed[0]) {
+      mdbx_tassert(txn, cleanup_reclaimed_pos < txn->mt_lifo_reclaimed[0]);
+      /* LY: zeroed cleanup_idx to force cleanup
+       * and refill created freeDB records. */
+      cleanup_reclaimed_pos = 0;
       /* LY: restart filling */
-      total_room = head_room = refill_idx = 0;
+      total_room = head_room = refill_reclaimed_pos = 0;
       more = 1;
-      goto again;
+      goto again_on_freelist_change;
     }
     txn->mt_lifo_reclaimed[0] = 0;
     if (txn != env->me_txn0) {
@@ -3365,10 +3367,10 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     }
 
     /* Append our free list to parent's */
-    rc = mdbx_midl_append_list(&parent->mt_free_pages, txn->mt_free_pages);
+    rc = mdbx_midl_append_list(&parent->mt_befree_pages, txn->mt_befree_pages);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
-    mdbx_midl_free(txn->mt_free_pages);
+    mdbx_midl_free(txn->mt_befree_pages);
     /* Failures after this must either undo the changes
      * to the parent or set MDBX_TXN_ERROR in the parent. */
 
@@ -3536,7 +3538,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
   mdbx_midl_free(env->me_reclaimed_pglist);
   env->me_reclaimed_pglist = NULL;
-  mdbx_midl_shrink(&txn->mt_free_pages);
+  mdbx_midl_shrink(&txn->mt_befree_pages);
 
   if (mdbx_audit_enabled())
     mdbx_audit(txn);
@@ -5730,7 +5732,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
       mop[j--] = pg++;
     mop[0] += ovpages;
   } else {
-    rc = mdbx_midl_append_range(&txn->mt_free_pages, pg, ovpages);
+    rc = mdbx_midl_append_range(&txn->mt_befree_pages, pg, ovpages);
     if (unlikely(rc))
       return rc;
   }
@@ -8363,7 +8365,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       mc->mc_db->md_root = P_INVALID;
       mc->mc_db->md_depth = 0;
       mc->mc_db->md_leaf_pages = 0;
-      rc = mdbx_midl_append(&mc->mc_txn->mt_free_pages, mp->mp_pgno);
+      rc = mdbx_midl_append(&mc->mc_txn->mt_befree_pages, mp->mp_pgno);
       if (unlikely(rc))
         return rc;
       /* Adjust cursors pointing to mp */
@@ -8391,7 +8393,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     } else if (IS_BRANCH(mp) && NUMKEYS(mp) == 1) {
       int i;
       mdbx_debug("collapsing root page!");
-      rc = mdbx_midl_append(&mc->mc_txn->mt_free_pages, mp->mp_pgno);
+      rc = mdbx_midl_append(&mc->mc_txn->mt_befree_pages, mp->mp_pgno);
       if (unlikely(rc))
         return rc;
       mc->mc_db->md_root = NODEPGNO(NODEPTR(mp, 0));
@@ -10060,7 +10062,8 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
             if (unlikely(rc))
               goto done;
             mdbx_cassert(mc, IS_OVERFLOW(omp));
-            rc = mdbx_midl_append_range(&txn->mt_free_pages, pg, omp->mp_pages);
+            rc = mdbx_midl_append_range(&txn->mt_befree_pages, pg,
+                                        omp->mp_pages);
             if (unlikely(rc))
               goto done;
             mc->mc_db->md_overflow_pages -= omp->mp_pages;
@@ -10076,14 +10079,14 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
         if (!subs && !mc->mc_db->md_overflow_pages)
           goto pop;
       } else {
-        if (unlikely((rc = mdbx_midl_need(&txn->mt_free_pages, n)) != 0))
+        if (unlikely((rc = mdbx_midl_need(&txn->mt_befree_pages, n)) != 0))
           goto done;
         for (i = 0; i < n; i++) {
           pgno_t pg;
           ni = NODEPTR(mp, i);
           pg = NODEPGNO(ni);
           /* free it */
-          mdbx_midl_xappend(txn->mt_free_pages, pg);
+          mdbx_midl_xappend(txn->mt_befree_pages, pg);
         }
       }
       if (!mc->mc_top)
@@ -10106,7 +10109,7 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
       }
     }
     /* free it */
-    rc = mdbx_midl_append(&txn->mt_free_pages, mc->mc_db->md_root);
+    rc = mdbx_midl_append(&txn->mt_befree_pages, mc->mc_db->md_root);
   done:
     if (unlikely(rc))
       txn->mt_flags |= MDBX_TXN_ERROR;
