@@ -107,8 +107,8 @@ static void readhdr(void) {
       ptr = memchr(dbuf.iov_base, '\n', dbuf.iov_len);
       if (ptr)
         *ptr = '\0';
-      i = sscanf((char *)dbuf.iov_base + STRLENOF("mapaddr="), "%p",
-                 &envinfo.me_mapaddr);
+      void *unused;
+      i = sscanf((char *)dbuf.iov_base + STRLENOF("mapaddr="), "%p", &unused);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapaddr %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("mapaddr="));

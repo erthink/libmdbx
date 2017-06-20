@@ -69,7 +69,7 @@
 #define HAVE_SYS_TYPES_H
 typedef HANDLE mdbx_thread_t;
 typedef unsigned mdbx_thread_key_t;
-typedef SSIZE_T ssize_t;
+#define MDBX_OSAL_SECTION HANDLE
 #define MAP_FAILED NULL
 #define HIGH_DWORD(v) ((DWORD)((sizeof(v) > 4) ? ((uint64_t)(v) >> 32) : 0))
 #define THREAD_CALL WINAPI
@@ -430,16 +430,27 @@ void *mdbx_thread_rthc_get(mdbx_thread_key_t key);
 void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value);
 
 int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync);
+int mdbx_filesize_sync(mdbx_filehandle_t fd);
 int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length);
 int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length);
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd);
 int mdbx_closefile(mdbx_filehandle_t fd);
 
-int mdbx_mremap_size(void **address, size_t old_size, size_t new_size);
-int mdbx_mmap(void **address, size_t length, int rw, mdbx_filehandle_t fd);
-int mdbx_munmap(void *address, size_t length);
-int mdbx_mlock(const void *address, size_t length);
+typedef struct mdbx_mmap_param {
+  void *address;
+#ifdef MDBX_OSAL_SECTION
+  MDBX_OSAL_SECTION section;
+#endif
+  mdbx_filehandle_t fd;
+} mdbx_mmap_param_t;
+int mdbx_mmap(int flags, mdbx_mmap_param_t *map, size_t length, size_t limit);
+int mdbx_munmap(mdbx_mmap_param_t *map, size_t length);
+int mdbx_mlock(mdbx_mmap_param_t *map, size_t length);
+int mdbx_mresize(int flags, mdbx_mmap_param_t *map, size_t current,
+                 size_t wanna);
+int mdbx_mremap(int flags, mdbx_mmap_param_t *map, size_t old_limit,
+                size_t new_limit);
 
 static __inline mdbx_pid_t mdbx_getpid(void) {
 #if defined(_WIN32) || defined(_WIN64)

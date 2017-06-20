@@ -13,15 +13,17 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#include "../../mdbx.h"
 #include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
+#include "../../mdbx.h"
+#include "../bits.h"
+
 static void prstat(MDBX_stat *ms) {
-  printf("  Page size: %u\n", ms->ms_psize);
+  printf("  Pagesize: %u\n", ms->ms_psize);
   printf("  Tree depth: %u\n", ms->ms_depth);
   printf("  Branch pages: %" PRIu64 "\n", ms->ms_branch_pages);
   printf("  Leaf pages: %" PRIu64 "\n", ms->ms_leaf_pages);
@@ -121,11 +123,24 @@ int main(int argc, char *argv[]) {
     (void)mdbx_env_stat(env, &mst, sizeof(mst));
     (void)mdbx_env_info(env, &mei, sizeof(mei));
     printf("Environment Info\n");
-    printf("  Map address: %p\n", mei.me_mapaddr);
-    printf("  Map size: %" PRIu64 "\n", mei.me_mapsize);
-    printf("  Page size: %u\n", mst.ms_psize);
-    printf("  Max pages: %" PRIu64 "\n", mei.me_mapsize / mst.ms_psize);
-    printf("  Number of pages used: %" PRIu64 "\n", mei.me_recent_pgno + 1);
+    printf("  Pagesize: %u\n", mst.ms_psize);
+    if (mei.me_geo.lower != mei.me_geo.upper) {
+      printf("  Dynamic datafile: %" PRIu64 "..%" PRIu64 " bytes (+%" PRIu64
+             "/-%" PRIu64 "), %" PRIu64 "..%" PRIu64 " pages (+%" PRIu64
+             "/-%" PRIu64 ")\n",
+             mei.me_geo.lower, mei.me_geo.upper, mei.me_geo.grow,
+             mei.me_geo.shrink, mei.me_geo.lower / mst.ms_psize,
+             mei.me_geo.upper / mst.ms_psize, mei.me_geo.grow / mst.ms_psize,
+             mei.me_geo.shrink / mst.ms_psize);
+      printf("  Current datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
+             mei.me_geo.current, mei.me_geo.current / mst.ms_psize);
+    } else {
+      printf("  Fixed datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
+             mei.me_geo.current, mei.me_geo.current / mst.ms_psize);
+    }
+    printf("  Current mapsize: %" PRIu64 " bytes, %" PRIu64 " pages \n",
+           mei.me_mapsize, mei.me_mapsize / mst.ms_psize);
+    printf("  Number of pages used: %" PRIu64 "\n", mei.me_last_pgno + 1);
     printf("  Last transaction ID: %" PRIu64 "\n", mei.me_recent_txnid);
     printf("  Tail transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
            mei.me_latter_reader_txnid,
@@ -161,8 +176,8 @@ int main(int argc, char *argv[]) {
   if (freinfo) {
     MDBX_cursor *cursor;
     MDBX_val key, data;
-    size_t pages = 0, *iptr;
-    size_t reclaimable = 0;
+    pgno_t pages = 0, *iptr;
+    pgno_t reclaimable = 0;
 
     printf("Freelist Status\n");
     dbi = 0;
@@ -186,7 +201,7 @@ int main(int argc, char *argv[]) {
         reclaimable += *iptr;
       if (freinfo > 1) {
         char *bad = "";
-        size_t pg, prev;
+        pgno_t pg, prev;
         ssize_t i, j, span = 0;
         j = *iptr++;
         for (i = j, prev = 1; --i >= 0;) {
@@ -198,53 +213,52 @@ int main(int argc, char *argv[]) {
           for (; i >= span && iptr[i - span] == pg; span++, pg++)
             ;
         }
-        printf("    Transaction %" PRIuPTR ", %" PRIiPTR
+        printf("    Transaction %" PRIaTXN ", %" PRIiPTR
                " pages, maxspan %" PRIiPTR "%s\n",
-               *(size_t *)key.iov_base, j, span, bad);
+               *(txnid_t *)key.iov_base, j, span, bad);
         if (freinfo > 2) {
           for (--j; j >= 0;) {
             pg = iptr[j];
             for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
               ;
             if (span > 1)
-              printf("     %9zu[%" PRIiPTR "]\n", pg, span);
+              printf("     %9" PRIaPGNO "[%" PRIiPTR "]\n", pg, span);
             else
-              printf("     %9zu\n", pg);
+              printf("     %9" PRIaPGNO "\n", pg);
           }
         }
       }
     }
     mdbx_cursor_close(cursor);
     if (envinfo) {
-      size_t value = mei.me_mapsize / mst.ms_psize;
+      uint64_t value = mei.me_mapsize / mst.ms_psize;
       double percent = value / 100.0;
       printf("Page Allocation Info\n");
-      printf("  Max pages: %9zu 100%%\n", value);
+      printf("  Max pages: %" PRIu64 " 100%%\n", value);
 
-      value = mei.me_recent_pgno + 1;
-      printf("  Number of pages used: %" PRIuPTR " %.1f%%\n", value,
-             value / percent);
+      value = mei.me_last_pgno + 1;
+      printf("  Pages used: %" PRIu64 " %.1f%%\n", value, value / percent);
 
-      value = mei.me_mapsize / mst.ms_psize - (mei.me_recent_pgno + 1);
-      printf("  Remained: %" PRIuPTR " %.1f%%\n", value, value / percent);
+      value = mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno + 1);
+      printf("  Remained: %" PRIu64 " %.1f%%\n", value, value / percent);
 
-      value = mei.me_recent_pgno + 1 - pages;
-      printf("  Used now: %" PRIuPTR " %.1f%%\n", value, value / percent);
+      value = mei.me_last_pgno + 1 - pages;
+      printf("  Used now: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = pages;
-      printf("  Unallocated: %" PRIuPTR " %.1f%%\n", value, value / percent);
+      printf("  Unallocated: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = pages - reclaimable;
-      printf("  Detained: %" PRIuPTR " %.1f%%\n", value, value / percent);
+      printf("  Detained: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = reclaimable;
-      printf("  Reclaimable: %" PRIuPTR " %.1f%%\n", value, value / percent);
+      printf("  Reclaimable: %" PRIu64 " %.1f%%\n", value, value / percent);
 
-      value = mei.me_mapsize / mst.ms_psize - (mei.me_recent_pgno + 1) +
-              reclaimable;
-      printf("  Available: %" PRIuPTR " %.1f%%\n", value, value / percent);
+      value =
+          mei.me_mapsize / mst.ms_psize - (mei.me_last_pgno + 1) + reclaimable;
+      printf("  Available: %" PRIu64 " %.1f%%\n", value, value / percent);
     } else
-      printf("  Free pages: %" PRIuPTR "\n", pages);
+      printf("  Free pages: %" PRIaPGNO "\n", pages);
   }
 
   rc = mdbx_dbi_open(txn, subname, 0, &dbi);

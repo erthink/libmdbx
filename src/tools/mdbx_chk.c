@@ -345,10 +345,10 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
         reclaimable_pages += number;
       for (i = number, prev = 1; --i >= 0;) {
         pg = iptr[i];
-        if (pg < NUM_METAS || pg > envinfo.me_recent_pgno)
+        if (pg < NUM_METAS || pg > envinfo.me_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",
                       "%u < %" PRIiPTR " < %" PRIiPTR "", NUM_METAS, pg,
-                      envinfo.me_recent_pgno);
+                      envinfo.me_last_pgno);
         else if (pg <= prev) {
           bad = " [bad sequence]";
           problem_add("entry", record_number, "bad sequence",
@@ -727,6 +727,17 @@ static int check_meta_head(bool steady) {
   return 0;
 }
 
+static void print_size(const char *prefix, const uint64_t value,
+                       const char *suffix) {
+  const char sf[] =
+      "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
+  double k = 1024.0;
+  size_t i;
+  for (i = 0; sf[i + 1] && value / k > 1000.0; ++i)
+    k *= 1024;
+  print("%s%" PRIu64 " (%.2f %cb)%s", prefix, value, value / k, sf[i], suffix);
+}
+
 int main(int argc, char *argv[]) {
   int i, rc;
   char *prog = argv[0];
@@ -858,21 +869,26 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  lastpgno = envinfo.me_recent_pgno + 1;
+  lastpgno = envinfo.me_last_pgno + 1;
   errno = 0;
 
   if (verbose) {
-    double k = 1024.0;
-    const char sf[] =
-        "KMGTPEZY"; /* LY: Kilo, Mega, Giga, Tera, Peta, Exa, Zetta, Yotta! */
-    for (i = 0; sf[i + 1] && envinfo.me_mapsize / k > 1000.0; ++i)
-      k *= 1024;
-    print(" - map size %" PRIu64 " (%.2f %cb)\n", envinfo.me_mapsize,
-          envinfo.me_mapsize / k, sf[i]);
-    if (envinfo.me_mapaddr)
-      print(" - mapaddr %p\n", envinfo.me_mapaddr);
-    print(" - pagesize %u, max keysize %" PRIuPTR ", max readers %u\n",
-          envstat.ms_psize, maxkeysize, envinfo.me_maxreaders);
+    print(" - pagesize %u (%u system), max keysize %" PRIuPTR
+          ", max readers %u\n",
+          envinfo.me_dxb_pagesize, envinfo.me_sys_pagesize, maxkeysize,
+          envinfo.me_maxreaders);
+    print_size(" - mapsize ", envinfo.me_mapsize, "\n");
+    if (envinfo.me_geo.lower == envinfo.me_geo.upper)
+      print_size(" - fixed datafile: ", envinfo.me_geo.current, "");
+    else {
+      print_size(" - dynamic datafile: ", envinfo.me_geo.lower, "");
+      print_size(" .. ", envinfo.me_geo.upper, ", ");
+      print_size("+", envinfo.me_geo.grow, ", ");
+      print_size("-", envinfo.me_geo.shrink, "\n");
+      print_size(" - current datafile: ", envinfo.me_geo.current, "");
+    }
+    printf(", %" PRIu64 " pages\n",
+           envinfo.me_geo.current / envinfo.me_dxb_pagesize);
     print(" - transactions: recent %" PRIu64 ", latter reader %" PRIu64
           ", lag %" PRIi64 "\n",
           envinfo.me_recent_txnid, envinfo.me_latter_reader_txnid,
@@ -884,7 +900,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (verbose)
-    print(" - performs check for meta-pages overlap\n");
+    print(" - performs check for meta-pages clashes\n");
   if (meta_eq(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
               envinfo.me_meta1_txnid, envinfo.me_meta1_sign)) {
     print(" - meta-%d and meta-%d are clashed\n", 0, 1);
@@ -1008,6 +1024,8 @@ int main(int argc, char *argv[]) {
     uint64_t value = envinfo.me_mapsize / envstat.ms_psize;
     double percent = value / 100.0;
     print(" - pages info: %" PRIu64 " total", value);
+    value = envinfo.me_geo.current / envinfo.me_dxb_pagesize;
+    print(", backed %" PRIu64 " (%.1f%%)", value, value / percent);
     print(", allocated %" PRIu64 " (%.1f%%)", lastpgno, lastpgno / percent);
 
     if (verbose > 1) {

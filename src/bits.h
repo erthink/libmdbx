@@ -125,7 +125,7 @@
 typedef uint32_t pgno_t;
 #define PRIaPGNO PRIu32
 #define MAX_PAGENO ((pgno_t)UINT64_C(0xffffFFFFffff))
-#define MIN_PAGENO (NUM_METAS - 1)
+#define MIN_PAGENO NUM_METAS
 
 /* A transaction ID. */
 typedef uint64_t txnid_t;
@@ -247,12 +247,17 @@ typedef struct MDBX_meta {
                              * zero (nothing) for now */
   uint8_t mm_extra_pagehdr; /* extra bytes in the page header,
                              * zero (nothing) for now */
-  /* Last used page in the datafile.
-   * Actually the file may be shorter if the freeDB lists the final pages. */
-  pgno_t mm_last_pg;
 
-  uint64_t mm_dbsize_min;   /* minimal size of db */
-  uint64_t mm_dbsize_max;   /* maximal size of db */
+  struct {
+    uint16_t grow;   /* datafile growth step in pages */
+    uint16_t shrink; /* datafile shrink threshold in pages */
+    pgno_t lower;    /* minimal size of datafile in pages */
+    pgno_t upper;    /* maximal size of datafile in pages */
+    pgno_t now;      /* current size of datafile in pages */
+    pgno_t next;     /* first unused page in the datafile,
+                      * but actually the file may be shorter. */
+  } mm_geo;
+
   MDBX_db mm_dbs[CORE_DBS]; /* first is free space, 2nd is main db */
                             /* The size of pages used in this DB */
 #define mm_psize mm_dbs[FREE_DBI].md_xsize
@@ -267,9 +272,6 @@ typedef struct MDBX_meta {
 #define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
   volatile uint64_t mm_datasync_sign;
-
-  /* to be removed */
-  uint64_t mm_mapsize; /* current size of mmap region */
 
   /* txnid that committed this page, the second of a two-phase-update pair */
   volatile txnid_t mm_txnid_b;
@@ -481,6 +483,7 @@ struct MDBX_txn {
   /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
   MDBX_txn *mt_child;
   pgno_t mt_next_pgno; /* next unallocated page */
+  pgno_t mt_end_pgno;  /* corresponding to the current size of datafile */
   /* The ID of this transaction. IDs are integers incrementing from 1.
    * Only committed write transactions increment the ID. If a transaction
    * aborts, the ID may be re-used by the next writer. */
@@ -636,8 +639,9 @@ typedef struct MDBX_xcursor {
 
 /* State of FreeDB old pages, stored in the MDBX_env */
 typedef struct MDBX_pgstate {
-  pgno_t *mf_pghead; /* Reclaimed freeDB pages, or NULL before use */
-  txnid_t mf_pglast; /* ID of last used record, or 0 if !mf_pghead */
+  pgno_t *mf_reclaimed_pglist; /* Reclaimed freeDB pages, or NULL before use */
+  txnid_t mf_last_reclaimed;   /* ID of last used record, or 0 if
+                                  !mf_reclaimed_pglist */
 } MDBX_pgstate;
 
 /* The database environment. */
@@ -646,6 +650,10 @@ struct MDBX_env {
   uint32_t me_signature;
   mdbx_filehandle_t me_fd;  /*  The main data file */
   mdbx_filehandle_t me_lfd; /*  The lock file */
+#ifdef MDBX_OSAL_SECTION
+  MDBX_OSAL_SECTION me_dxb_section;
+  MDBX_OSAL_SECTION me_lck_section;
+#endif
 /* Failed to update the meta page. Probably an I/O error. */
 #define MDBX_FATAL_ERROR UINT32_C(0x80000000)
 /* Some fields are initialized. */
@@ -670,15 +678,14 @@ struct MDBX_env {
   MDBX_txn *me_txn;            /* current write transaction */
   MDBX_txn *me_txn0;           /* prealloc'd write transaction */
   size_t me_mapsize;           /* size of the data memory map */
-  pgno_t me_maxpg;             /* me_mapsize / me_psize */
   MDBX_dbx *me_dbxs;           /* array of static DB info */
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
   mdbx_thread_key_t me_txkey;  /* thread-key for readers */
   volatile txnid_t *me_oldest; /* ID of oldest reader last time we looked */
   MDBX_pgstate me_pgstate;     /* state of old pages from freeDB */
-#define me_pglast me_pgstate.mf_pglast
-#define me_pghead me_pgstate.mf_pghead
+#define me_last_reclaimed me_pgstate.mf_last_reclaimed
+#define me_reclaimed_pglist me_pgstate.mf_reclaimed_pglist
   MDBX_page *me_dpages; /* list of malloc'd blocks for re-use */
                         /* IDL of pages that became unused in a write txn */
   MDBX_IDL me_free_pgs;
@@ -702,6 +709,13 @@ struct MDBX_env {
 #ifdef USE_VALGRIND
   int me_valgrind_handle;
 #endif
+  struct {
+    size_t lower;  /* minimal size of datafile */
+    size_t upper;  /* maximal size of datafile */
+    size_t now;    /* current size of datafile */
+    size_t grow;   /* step to grow datafile */
+    size_t shrink; /* threshold to shrink datafile */
+  } me_dbgeo;      /* */
 };
 
 /* Nested transaction */
@@ -869,11 +883,22 @@ int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
 void mdbx_rthc_remove(mdbx_thread_key_t key);
 void mdbx_rthc_cleanup(void);
 
-static __inline bool is_power2(size_t x) { return (x & (x - 1)) == 0; }
+static __inline bool mdbx_is_power2(size_t x) { return (x & (x - 1)) == 0; }
 
-static __inline size_t roundup2(size_t value, size_t granularity) {
-  assert(is_power2(granularity));
+static __inline size_t mdbx_roundup2(size_t value, size_t granularity) {
+  assert(mdbx_is_power2(granularity));
   return (value + granularity - 1) & ~(granularity - 1);
+}
+
+static __inline unsigned mdbx_log2(size_t value) {
+  assert(mdbx_is_power2(value));
+
+  unsigned log = 0;
+  while (value > 1) {
+    log += 1;
+    value >>= 1;
+  }
+  return log;
 }
 
 #define MDBX_IS_ERROR(rc)                                                      \

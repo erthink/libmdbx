@@ -72,6 +72,7 @@ typedef unsigned mode_t;
 typedef HANDLE mdbx_filehandle_t;
 typedef DWORD mdbx_pid_t;
 typedef DWORD mdbx_tid_t;
+typedef SSIZE_T ssize_t;
 #define MDBX_ENODATA ERROR_HANDLE_EOF
 #define MDBX_EINVAL ERROR_INVALID_PARAMETER
 #define MDBX_EACCESS ERROR_ACCESS_DENIED
@@ -437,16 +438,24 @@ typedef struct MDBX_stat {
 
 /* Information about the environment */
 typedef struct MDBX_envinfo {
-  void *me_mapaddr;         /* Address of map, if fixed */
-  uint64_t me_mapsize;      /* Size of the data memory map */
-  uint64_t me_recent_pgno;  /* ID of the last used page */
-  uint64_t me_recent_txnid; /* ID of the last committed transaction */
-  uint32_t me_maxreaders;   /* max reader slots in the environment */
-  uint32_t me_numreaders;   /* max reader slots used in the environment */
+  struct {
+    uint64_t lower;   /* lower limit for datafile size */
+    uint64_t upper;   /* upper limit for datafile size */
+    uint64_t current; /* current datafile size */
+    uint64_t shrink;  /* shrink theshold for datafile */
+    uint64_t grow;    /* growth step for datafile */
+  } me_geo;
+  uint64_t me_mapsize;             /* Size of the data memory map */
+  uint64_t me_last_pgno;           /* ID of the last used page */
+  uint64_t me_recent_txnid;        /* ID of the last committed transaction */
   uint64_t me_latter_reader_txnid; /* ID of the last reader transaction */
   uint64_t me_meta0_txnid, me_meta0_sign;
   uint64_t me_meta1_txnid, me_meta1_sign;
   uint64_t me_meta2_txnid, me_meta2_sign;
+  uint32_t me_maxreaders;   /* max reader slots in the environment */
+  uint32_t me_numreaders;   /* max reader slots used in the environment */
+  uint32_t me_dxb_pagesize; /* database pagesize */
+  uint32_t me_sys_pagesize; /* system pagesize */
 } MDBX_envinfo;
 
 /* Return a string describing a given error code.
@@ -800,6 +809,11 @@ LIBMDBX_API int mdbx_env_get_fd(MDBX_env *env, mdbx_filehandle_t *fd);
  *  - MDBX_EINVAL   - an invalid parameter was specified,
  *                    or the environment has an active write transaction. */
 LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env, size_t size);
+LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
+                                      ssize_t size_now, ssize_t size_upper,
+                                      ssize_t growth_step,
+                                      ssize_t shrink_threshold,
+                                      ssize_t pagesize);
 
 /* Set the maximum number of threads/reader slots for the environment.
  *

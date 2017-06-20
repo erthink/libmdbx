@@ -49,21 +49,57 @@ static int ntstatus2errcode(NTSTATUS status) {
  * conflict with the regular user-level headers, so we explicitly
  * declare them here. Using these APIs also means we must link to
  * ntdll.dll, which is not linked by default in user code. */
-NTSTATUS WINAPI NtCreateSection(OUT PHANDLE sh, IN ACCESS_MASK acc,
-                                IN void *oa OPTIONAL,
-                                IN PLARGE_INTEGER ms OPTIONAL, IN ULONG pp,
-                                IN ULONG aa, IN HANDLE fh OPTIONAL);
+
+#ifndef NT_SUCCESS
+#define NT_SUCCESS(x) ((x) >= 0)
+#define STATUS_SUCCESS ((NTSTATUS)0)
+#endif
+typedef struct _UNICODE_STRING {
+  USHORT Length;
+  USHORT MaximumLength;
+  PWSTR Buffer;
+} UNICODE_STRING, *PUNICODE_STRING;
+
+typedef struct _OBJECT_ATTRIBUTES {
+  ULONG Length;
+  HANDLE RootDirectory;
+  PUNICODE_STRING ObjectName;
+  ULONG Attributes;
+  PVOID SecurityDescriptor;
+  PVOID SecurityQualityOfService;
+} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
+
+extern NTSTATUS NTAPI NtCreateSection(
+    OUT PHANDLE SectionHandle, IN ACCESS_MASK DesiredAccess,
+    IN OPTIONAL POBJECT_ATTRIBUTES ObjectAttributes,
+    IN OPTIONAL PLARGE_INTEGER MaximumSize, IN ULONG SectionPageProtection,
+    IN ULONG AllocationAttributes, IN OPTIONAL HANDLE FileHandle);
+
+extern NTSTATUS NTAPI NtExtendSection(IN HANDLE SectionHandle,
+                                      IN PLARGE_INTEGER NewSectionSize);
 
 typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
 
-NTSTATUS WINAPI NtMapViewOfSection(IN PHANDLE sh, IN HANDLE ph,
-                                   IN OUT PVOID *addr, IN ULONG_PTR zbits,
-                                   IN SIZE_T cs,
-                                   IN OUT PLARGE_INTEGER off OPTIONAL,
-                                   IN OUT PSIZE_T vs, IN SECTION_INHERIT ih,
-                                   IN ULONG at, IN ULONG pp);
+extern NTSTATUS NTAPI NtMapViewOfSection(
+    IN HANDLE SectionHandle, IN HANDLE ProcessHandle, IN OUT PVOID *BaseAddress,
+    IN ULONG_PTR ZeroBits, IN SIZE_T CommitSize,
+    IN OUT OPTIONAL PLARGE_INTEGER SectionOffset, IN OUT PSIZE_T ViewSize,
+    IN SECTION_INHERIT InheritDisposition, IN ULONG AllocationType,
+    IN ULONG Win32Protect);
 
-NTSTATUS WINAPI NtClose(HANDLE h);
+extern NTSTATUS NTAPI NtUnmapViewOfSection(IN HANDLE ProcessHandle,
+                                           IN OPTIONAL PVOID BaseAddress);
+
+extern NTSTATUS NTAPI NtClose(HANDLE Handle);
+
+extern NTSTATUS NTAPI NtAllocateVirtualMemory(
+    IN HANDLE ProcessHandle, IN OUT PVOID *BaseAddress, IN ULONG ZeroBits,
+    IN OUT PULONG RegionSize, IN ULONG AllocationType, IN ULONG Protect);
+
+extern NTSTATUS NTAPI NtFreeVirtualMemory(IN HANDLE ProcessHandle,
+                                          IN PVOID *BaseAddress,
+                                          IN OUT PULONG RegionSize,
+                                          IN ULONG FreeType);
 
 #endif /* _WIN32 || _WIN64 */
 
@@ -558,6 +594,16 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
 #elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
     (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
   for (;;) {
+/* LY: It is no reason to use fdatasync() here, even in case
+ * no such bug in a kernel. Because "no-bug" mean that a kernel
+ * internally do nearly the same, e.g. fdatasync() == fsync()
+ * when no-kernel-bug and file size was changed.
+ *
+ * So, this code is always safe and without appreciable
+ * performance degradation.
+ *
+ * For more info about of a corresponding fdatasync() bug
+ * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
 #if _POSIX_C_SOURCE >= 199309L || _XOPEN_SOURCE >= 500 ||                      \
     defined(_POSIX_SYNCHRONIZED_IO)
     if (!fullsync && fdatasync(fd) == 0)
@@ -573,6 +619,22 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
   }
 #else
 #error FIXME
+#endif
+}
+
+int mdbx_filesize_sync(mdbx_filehandle_t fd) {
+#if defined(_WIN32) || defined(_WIN64)
+  (void)fd;
+  /* Nothing on Windows (i.e. newer 100% steady) */
+  return MDBX_SUCCESS;
+#else
+  for (;;) {
+    if (fsync(fd) == 0)
+      return MDBX_SUCCESS;
+    int rc = errno;
+    if (rc != EINTR)
+      return rc;
+  }
 #endif
 }
 
@@ -678,51 +740,113 @@ int mdbx_msync(void *addr, size_t length, int async) {
 #endif
 }
 
-int mdbx_mremap_size(void **address, size_t old_size, size_t new_size) {
+int mdbx_mmap(int flags, mdbx_mmap_param_t *map, size_t length, size_t limit) {
 #if defined(_WIN32) || defined(_WIN64)
-  *address = MAP_FAILED;
-  (void)old_size;
-  (void)new_size;
-  return ERROR_CALL_NOT_IMPLEMENTED;
+  NTSTATUS rc = NtCreateSection(
+      &map->section,
+      /* DesiredAccess */ SECTION_MAP_READ | SECTION_EXTEND_SIZE |
+          ((flags & MDBX_WRITEMAP) ? SECTION_MAP_WRITE : 0),
+      /* ObjectAttributes */ NULL, /* MaximumSize */ NULL,
+      /* SectionPageProtection */ (flags & MDBX_RDONLY) ? PAGE_READONLY
+                                                        : PAGE_READWRITE,
+      /* AllocationAttributes */ SEC_RESERVE, map->fd);
+
+  if (!NT_SUCCESS(rc)) {
+    map->section = 0;
+    map->address = MAP_FAILED;
+    return ntstatus2errcode(rc);
+  }
+
+  map->address = NULL;
+  size_t ViewSize = limit;
+  rc = NtMapViewOfSection(
+      map->section, GetCurrentProcess(), &map->address,
+      /* ZeroBits */ 0,
+      /* CommitSize */ length,
+      /* SectionOffset */ NULL, &ViewSize,
+      /* InheritDisposition */ ViewUnmap,
+      /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
+      /* Win32Protect */ (flags & MDBX_WRITEMAP) ? PAGE_READWRITE
+                                                 : PAGE_READONLY);
+
+  if (!NT_SUCCESS(rc)) {
+    NtClose(map->section);
+    map->section = 0;
+    map->address = MAP_FAILED;
+    return ntstatus2errcode(rc);
+  }
+
+  assert(map->address != MAP_FAILED);
+  return MDBX_SUCCESS;
 #else
-  *address = mremap(*address, old_size, new_size, 0, address);
-  return (*address != MAP_FAILED) ? MDBX_SUCCESS : errno;
+  (void)length;
+  map->address = mmap(
+      NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
+      MAP_SHARED, map->fd, 0);
+  return (map->address != MAP_FAILED) ? MDBX_SUCCESS : errno;
 #endif
 }
 
-int mdbx_mmap(void **address, size_t length, int rw, mdbx_filehandle_t fd) {
-#if defined(_WIN32) || defined(_WIN64)
-  HANDLE h = CreateFileMapping(fd, NULL, rw ? PAGE_READWRITE : PAGE_READONLY,
-                               HIGH_DWORD(length), (DWORD)length, NULL);
-  if (!h)
-    return mdbx_get_errno_checked();
-  *address = MapViewOfFileEx(h, rw ? FILE_MAP_WRITE : FILE_MAP_READ, 0, 0,
-                             length, *address);
-  int rc = (*address != MAP_FAILED) ? MDBX_SUCCESS : mdbx_get_errno_checked();
-  CloseHandle(h);
-  return rc;
-#else
-  *address = mmap(NULL, length, rw ? PROT_READ | PROT_WRITE : PROT_READ,
-                  MAP_SHARED, fd, 0);
-  return (*address != MAP_FAILED) ? MDBX_SUCCESS : errno;
-#endif
-}
-
-int mdbx_munmap(void *address, size_t length) {
+int mdbx_munmap(mdbx_mmap_param_t *map, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)length;
-  return UnmapViewOfFile(address) ? MDBX_SUCCESS : mdbx_get_errno_checked();
+  if (map->section)
+    NtClose(map->section);
+  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
+  return NT_SUCCESS(rc) ? MDBX_SUCCESS : ntstatus2errcode(rc);
 #else
-  return (munmap(address, length) == 0) ? MDBX_SUCCESS : errno;
+  return (munmap(map->address, length) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
 
-int mdbx_mlock(const void *address, size_t length) {
+int mdbx_mlock(mdbx_mmap_param_t *map, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
-  return VirtualLock((void *)address, length) ? MDBX_SUCCESS
-                                              : mdbx_get_errno_checked();
+  return VirtualLock(map->address, length) ? MDBX_SUCCESS : GetLastError();
 #else
-  return (mlock(address, length) == 0) ? MDBX_SUCCESS : errno;
+  return (mlock(map->address, length) == 0) ? MDBX_SUCCESS : errno;
+#endif
+}
+
+int mdbx_mresize(int flags, mdbx_mmap_param_t *map, size_t current,
+                 size_t wanna) {
+#if defined(_WIN32) || defined(_WIN64)
+  if (wanna > current) {
+    /* growth */
+    uint8_t *ptr = (uint8_t *)map->address + current;
+    return (ptr == VirtualAlloc(ptr, wanna - current, MEM_COMMIT,
+                                (flags & MDBX_WRITEMAP) ? PAGE_READWRITE
+                                                        : PAGE_READONLY))
+               ? MDBX_SUCCESS
+               : GetLastError();
+  }
+  /* Windows is unable shrinking a mapped file */
+  return MDBX_RESULT_TRUE;
+#else
+  (void)flags;
+  (void)current;
+  return mdbx_ftruncate(map->fd, wanna);
+#endif
+}
+
+int mdbx_mremap(int flags, mdbx_mmap_param_t *map, size_t old_limit,
+                size_t new_limit) {
+#if defined(_WIN32) || defined(_WIN64)
+  (void)flags;
+  if (old_limit > new_limit) {
+    /* Windows is unable shrinking a mapped section */
+    return ERROR_USER_MAPPED_FILE;
+  }
+  LARGE_INTEGER new_size;
+  new_size.QuadPart = new_limit;
+  NTSTATUS rc = NtExtendSection(map->section, &new_size);
+  return NT_SUCCESS(rc) ? MDBX_SUCCESS : ntstatus2errcode(rc);
+#else
+  (void)flags;
+  void *ptr = mremap(map->address, old_limit, new_limit, 0);
+  if (ptr == MAP_FAILED)
+    return errno;
+  map->address = ptr;
+  return MDBX_SUCCESS;
 #endif
 }
 
