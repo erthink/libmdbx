@@ -1380,9 +1380,7 @@ static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
 static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
   uint64_t sign = MDBX_DATASIGN_NONE;
 #if 0 /* TODO */
-  sign = hippeus_hash64(&meta->mm_mapsize,
-                        sizeof(MDBX_meta) - offsetof(MDBX_meta, mm_mapsize),
-                        meta->mm_version | (uint64_t)MDBX_DXD_MAGIC << 32);
+  sign = hippeus_hash64(...);
 #else
   (void)meta;
 #endif
@@ -4060,6 +4058,9 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
 }
 
 int __cold mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
+  if (unlikely(dbs > MAX_DBI))
+    return MDBX_EINVAL;
+
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -4961,6 +4962,7 @@ static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
 
 mapped:
   p = pgno2page(env, pgno);
+/* TODO: check p->mp_validator here */
 
 done:
   *ret = p;
@@ -9759,7 +9761,7 @@ int __cold mdbx_reader_check(MDBX_env *env, int *dead) {
     return MDBX_EINVAL;
   if (dead)
     *dead = 0;
-  return mdbx_reader_check0(env, 0, dead);
+  return mdbx_reader_check0(env, false, dead);
 }
 
 /* Return:
@@ -10164,7 +10166,7 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_user = user;
   ctx.mw_visitor = visitor;
 
-  int rc = visitor(0, NUM_METAS, user, "mdbx", "meta", NUM_METAS,
+  int rc = visitor(0, NUM_METAS, user, "meta", "meta", NUM_METAS,
                    sizeof(MDBX_meta) * NUM_METAS, PAGEHDRSZ * NUM_METAS,
                    (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) *
                        NUM_METAS);

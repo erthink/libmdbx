@@ -48,8 +48,6 @@ static void signal_handler(int sig) {
   gotsignal = 1;
 }
 
-#define MAX_DBI 32768
-
 #define EXIT_INTERRUPTED (EXIT_FAILURE + 4)
 #define EXIT_FAILURE_SYS (EXIT_FAILURE + 3)
 #define EXIT_FAILURE_MDB (EXIT_FAILURE + 2)
@@ -809,7 +807,7 @@ int main(int argc, char *argv[]) {
   }
 
   rc = mdbx_env_set_maxdbs(env, MAX_DBI);
-  if (rc < 0) {
+  if (rc) {
     error("mdbx_env_set_maxdbs failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }

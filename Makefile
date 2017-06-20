@@ -73,7 +73,7 @@ clean:
 	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
 check:	test/test mdbx_chk
-	rm -f $(TESTDB) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
+	rm -f $(TESTDB) test.log && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
 
 define core-rule
 $(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile

@@ -113,6 +113,7 @@
 #define MAIN_DBI 1
 /* Number of DBs in metapage (free and main) - also hardcoded elsewhere */
 #define CORE_DBS 2
+#define MAX_DBI (INT16_MAX - CORE_DBS)
 
 /* Number of meta pages - also hardcoded elsewhere */
 #define NUM_METAS 3
@@ -141,6 +142,8 @@ typedef uint64_t txnid_t;
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
  * this is plenty. */
 typedef uint16_t indx_t;
+
+#define MEGABYTE ((size_t)1 << 20)
 
 /*----------------------------------------------------------------------------*/
 /* Core structures for database and shared memory (i.e. format definition) */
@@ -472,8 +475,8 @@ typedef struct MDBX_dbx {
 /* A database transaction.
  * Every operation requires a transaction handle. */
 struct MDBX_txn {
-#define MDBX_MT_SIGNATURE (0x93D53A31)
-  unsigned mt_signature;
+#define MDBX_MT_SIGNATURE UINT32_C(0x93D53A31)
+  uint32_t mt_signature;
   MDBX_txn *mt_parent; /* parent of a nested txn */
   /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
   MDBX_txn *mt_child;
@@ -567,10 +570,10 @@ struct MDBX_xcursor;
  * Exception: An xcursor's pointer to a P_SUBP page can be stale.
  * (A node with F_DUPDATA but no F_SUBDATA contains a subpage). */
 struct MDBX_cursor {
-#define MDBX_MC_SIGNATURE (0xFE05D5B1)
-#define MDBX_MC_READY4CLOSE (0x2817A047)
-#define MDBX_MC_WAIT4EOT (0x90E297A7)
-  unsigned mc_signature;
+#define MDBX_MC_SIGNATURE UINT32_C(0xFE05D5B1)
+#define MDBX_MC_READY4CLOSE UINT32_C(0x2817A047)
+#define MDBX_MC_WAIT4EOT UINT32_C(0x90E297A7)
+  uint32_t mc_signature;
   /* Next cursor on this DB in this txn */
   MDBX_cursor *mc_next;
   /* Backup of the original cursor if this cursor is a shadow */
@@ -639,16 +642,16 @@ typedef struct MDBX_pgstate {
 
 /* The database environment. */
 struct MDBX_env {
-#define MDBX_ME_SIGNATURE (0x9A899641)
-  unsigned me_signature;
+#define MDBX_ME_SIGNATURE UINT32_C(0x9A899641)
+  uint32_t me_signature;
   mdbx_filehandle_t me_fd;  /*  The main data file */
   mdbx_filehandle_t me_lfd; /*  The lock file */
 /* Failed to update the meta page. Probably an I/O error. */
-#define MDBX_FATAL_ERROR 0x80000000U
+#define MDBX_FATAL_ERROR UINT32_C(0x80000000)
 /* Some fields are initialized. */
-#define MDBX_ENV_ACTIVE 0x20000000U
+#define MDBX_ENV_ACTIVE UINT32_C(0x20000000)
 /* me_txkey is set */
-#define MDBX_ENV_TXKEY 0x10000000U
+#define MDBX_ENV_TXKEY UINT32_C(0x10000000)
   uint32_t me_flags;      /* see mdbx_env */
   unsigned me_psize;      /* DB page size, inited from me_os_psize */
   unsigned me_psize2log;  /* log2 of DB page size */
