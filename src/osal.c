@@ -49,6 +49,7 @@ static int ntstatus2errcode(NTSTATUS status) {
  * conflict with the regular user-level headers, so we explicitly
  * declare them here. Using these APIs also means we must link to
  * ntdll.dll, which is not linked by default in user code. */
+#pragma comment(lib, "ntdll.lib")
 
 #ifndef NT_SUCCESS
 #define NT_SUCCESS(x) ((x) >= 0)
