@@ -3847,7 +3847,7 @@ fail:
 
 int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
   if (!env || env->me_signature != MDBX_ME_SIGNATURE || !env->me_maxkey_limit)
-    return MDBX_EINVAL;
+    return -MDBX_EINVAL;
   return env->me_maxkey_limit;
 }
 
@@ -4068,21 +4068,24 @@ int __cold mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
     return MDBX_EBADSIGN;
 
   if (unlikely(env->me_map))
-    return MDBX_EINVAL;
+    return MDBX_EPERM;
 
   env->me_maxdbs = dbs + CORE_DBS;
   return MDBX_SUCCESS;
 }
 
 int __cold mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers) {
-  if (unlikely(!env || readers < 1))
+  if (unlikely(readers < 1 || readers > INT16_MAX))
+    return MDBX_EINVAL;
+
+  if (unlikely(!env))
     return MDBX_EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(env->me_map || readers > INT16_MAX))
-    return MDBX_EINVAL;
+  if (unlikely(env->me_map))
+    return MDBX_EPERM;
 
   env->me_maxreaders = readers;
   return MDBX_SUCCESS;
