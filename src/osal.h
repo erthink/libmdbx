@@ -396,21 +396,6 @@ static __inline int mdbx_get_errno(void) {
   return rc;
 }
 
-static __inline int __mdbx_get_errno_checked(const char *file, unsigned line) {
-#if defined(_WIN32) || defined(_WIN64)
-  DWORD rc = GetLastError();
-  if (unlikely(rc == MDBX_EINVAL))
-    mdbx_assert_fail(nullptr, "unexpected ERROR_INVALID_PARAMETER", file, line);
-#else
-  int rc = errno;
-  if (unlikely(rc == MDBX_EINVAL))
-    mdbx_assert_fail(nullptr, "unexpected EINVAL", file, line);
-#endif
-  return rc;
-}
-
-#define mdbx_get_errno_checked() __mdbx_get_errno_checked(__FILE__, __LINE__)
-
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result);
 void mdbx_memalign_free(void *ptr);
 
