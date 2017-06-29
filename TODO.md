@@ -28,10 +28,11 @@
 - [x] Сделать список для txnid_t, кода sizeof(txnid_t) > sizeof(pgno_t) и вернуть размер pgno_t
 - [x] Избавиться от умножения на размер страницы (заменить на сдвиг).
 - [x] Устранение всех предупреждений (в том числе под Windows).
-- [ ] добавить 'mti_reader_finished_flag'
-- [ ] отрефакторить mdbx_freelist_save()
-- [ ] Перевод mdbx-tools на С++ и сборка для Windows
-- [ ] Заменить заглушки mdbx_version и mdbx_build
+- [x] Добавить 'mti_reader_finished_flag'.
+- [ ] Отрефакторить mdbx_freelist_save().
+- [ ] Хранить "свободный хвост" не связанный с freeDB в META.
+- [ ] Перевод mdbx-tools на С++ и сборка для Windows.
+- [ ] Заменить заглушки mdbx_version и mdbx_build.
 - [ ] Актуализация README.md
 
 CI
@@ -50,6 +51,7 @@ CI
 - [ ] Переименовать в API: env->db, db->tbl
 
 Тест
+- [ ] Тестирование поддержки lockless-режима.
 - [ ] Додумать имя и размещение тестовой БД по-умолчанию.
 - [ ] Реализовать cleanup в тесте
 - [ ] usage для теста
