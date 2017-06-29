@@ -402,7 +402,13 @@ typedef struct MDBX_lockinfo {
     volatile txnid_t mti_oldest;
     uint64_t align_oldest;
   };
-  uint8_t pad_align[MDBX_CACHELINE_SIZE - sizeof(uint64_t) * 6];
+
+  union {
+    volatile uint32_t mti_reader_finished_flag;
+    uint64_t align_reader_finished_flag;
+  };
+
+  uint8_t pad_align[MDBX_CACHELINE_SIZE - sizeof(uint64_t) * 7];
 
   MDBX_reader __cache_aligned mti_readers[1];
 } MDBX_lockinfo;
