@@ -2097,12 +2097,12 @@ int mdbx_env_sync(MDBX_env *env, int force) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(!env->me_lck))
-    return MDBX_PANIC;
-
   unsigned flags = env->me_flags & ~MDBX_NOMETASYNC;
   if (unlikely(flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)))
     return MDBX_EACCESS;
+
+  if (unlikely(!env->me_lck))
+    return MDBX_PANIC;
 
   const bool outside_txn =
       (!env->me_txn0 || env->me_txn0->mt_owner != mdbx_thread_self());
@@ -4668,6 +4668,10 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
       return err;
     /* LY: without-lck mode (e.g. on read-only filesystem) */
     env->me_lfd = INVALID_HANDLE_VALUE;
+    env->me_oldest = &env->me_oldest_stub;
+    env->me_maxreaders = UINT_MAX;
+    mdbx_debug("lck-setup: %s ", "lockless mode (readonly)");
+    return MDBX_SUCCESS;
   }
 
   /* Try to get exclusive lock. If we succeed, then
@@ -4861,7 +4865,6 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     goto bailout;
   }
 
-  env->me_oldest = &env->me_oldest_stub;
   const int dxb_rc = mdbx_setup_dxb(env, lck_rc);
   if (MDBX_IS_ERROR(dxb_rc)) {
     rc = dxb_rc;
@@ -9622,9 +9625,9 @@ int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
     arg->me_latter_reader_txnid = arg->me_recent_txnid;
     for (unsigned i = 0; i < arg->me_numreaders; ++i) {
       if (r[i].mr_pid) {
-        txnid_t mr = r[i].mr_txnid;
-        if (arg->me_latter_reader_txnid > mr)
-          arg->me_latter_reader_txnid = mr;
+        const txnid_t txnid = r[i].mr_txnid;
+        if (arg->me_latter_reader_txnid > txnid)
+          arg->me_latter_reader_txnid = txnid;
       }
     }
   }
