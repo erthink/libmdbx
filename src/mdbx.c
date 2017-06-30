@@ -4535,7 +4535,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       if (filesize < used_bytes) {
         mdbx_error("last-page beyond end-of-file (last %" PRIaPGNO
                    ", have %" PRIaPGNO ")",
-                   meta.mm_geo.next, bytes2pgno(env, filesize));
+                   meta.mm_geo.next, bytes2pgno(env, (size_t)filesize));
         return MDBX_CORRUPTED;
       }
 
@@ -4622,7 +4622,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
         mdbx_info("unacceptable/unexpected  datafile size %" PRIu64, filesize);
         return MDBX_PROBLEM;
       }
-      meta.mm_geo.now = bytes2pgno(env, env->me_dbgeo.now = filesize);
+      meta.mm_geo.now = bytes2pgno(env, env->me_dbgeo.now = (size_t)filesize);
       mdbx_info("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
                 " pages",
                 env->me_dbgeo.now, meta.mm_geo.now);
