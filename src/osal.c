@@ -37,7 +37,9 @@ static int waitstatus2errcode(DWORD result) {
 /* Map a result from an NTAPI call to WIN32 error code. */
 static int ntstatus2errcode(NTSTATUS status) {
   DWORD dummy;
-  OVERLAPPED ov = {status};
+  OVERLAPPED ov;
+  memset(&ov, 0, sizeof(ov));
+  ov.Internal = status;
   return GetOverlappedResult(NULL, &ov, &dummy, FALSE) ? MDBX_SUCCESS
                                                        : GetLastError();
 }
@@ -759,7 +761,7 @@ int mdbx_mmap(int flags, mdbx_mmap_param_t *map, size_t length, size_t limit) {
   }
 
   map->address = NULL;
-  size_t ViewSize = limit;
+  SIZE_T ViewSize = limit;
   rc = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,

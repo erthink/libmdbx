@@ -241,20 +241,18 @@ bool testcase::wait4start() {
 }
 
 void testcase::kick_progress(bool active) const {
-  static chrono::time last;
   chrono::time now = chrono::now_motonic();
-
   if (active) {
     static int last_point = -1;
     int point = (now.fixedpoint >> 29) & 3;
     if (point != last_point) {
-      last = now;
+      last.progress_timestamp = now;
       fprintf(stderr, "%c\b", "-\\|/"[last_point = point]);
       fflush(stderr);
     }
-  } else if (now.fixedpoint - last.fixedpoint >
+  } else if (now.fixedpoint - last.progress_timestamp.fixedpoint >
              chrono::from_seconds(2).fixedpoint) {
-    last = now;
+    last.progress_timestamp = now;
     fprintf(stderr, "%c\b", "@*"[now.utc & 1]);
     fflush(stderr);
   }

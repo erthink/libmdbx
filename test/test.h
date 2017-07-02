@@ -95,6 +95,7 @@ protected:
 
   struct {
     mdbx_canary canary;
+    mutable chrono::time progress_timestamp;
   } last;
 
   static int oom_callback(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
@@ -119,9 +120,9 @@ protected:
   void signal();
   bool should_continue(bool check_timeout_only = false) const;
 
-  void generate_pair(const keygen::serial_t serial, keygen::buffer &key,
-                     keygen::buffer &value, keygen::serial_t data_age = 0) {
-    keyvalue_maker.pair(serial, key, value, data_age);
+  void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key,
+                     keygen::buffer &out_value, keygen::serial_t data_age = 0) {
+    keyvalue_maker.pair(serial, out_key, out_value, data_age);
   }
 
   void generate_pair(const keygen::serial_t serial,

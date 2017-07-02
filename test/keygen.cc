@@ -122,13 +122,17 @@ void maker::setup(const config::actor_params_pod &actor,
                   unsigned thread_number) {
   key_essentials.flags =
       actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY);
-  key_essentials.minlen = actor.keylen_min;
-  key_essentials.maxlen = actor.keylen_max;
+  assert(actor.keylen_min < UINT8_MAX);
+  key_essentials.minlen = (uint8_t)actor.keylen_min;
+  assert(actor.keylen_max < UINT16_MAX);
+  key_essentials.maxlen = (uint16_t)actor.keylen_max;
 
   value_essentials.flags =
       actor.table_flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP);
-  value_essentials.minlen = actor.datalen_min;
-  value_essentials.maxlen = actor.datalen_max;
+  assert(actor.datalen_min < UINT8_MAX);
+  value_essentials.minlen = (uint8_t)actor.datalen_min;
+  assert(actor.datalen_max < UINT16_MAX);
+  value_essentials.maxlen = (uint16_t)actor.datalen_max;
 
   assert(thread_number < 2);
   (void)thread_number;

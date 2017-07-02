@@ -51,8 +51,8 @@ void setup(loglevel _level, const std::string &_prefix) {
 
 void setup(const std::string &_prefix) { prefix = _prefix; }
 
-const char *level2str(const loglevel level) {
-  switch (level) {
+const char *level2str(const loglevel alevel) {
+  switch (alevel) {
   default:
     return "invalid/unknown";
   case extra:

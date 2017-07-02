@@ -32,15 +32,25 @@
 
 /* Should be defined before any includes */
 #ifndef _GNU_SOURCE
-#define _GNU_SOURCE 1
+#   define _GNU_SOURCE 1
 #endif
 #ifndef _FILE_OFFSET_BITS
-#define _FILE_OFFSET_BITS 64
+#   define _FILE_OFFSET_BITS 64
 #endif
 
-#if defined(_MSC_VER) && !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS
-#endif
+#ifdef _MSC_VER
+#   ifndef _CRT_SECURE_NO_WARNINGS
+#       define _CRT_SECURE_NO_WARNINGS
+#   endif
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#pragma warning(disable : 4710) /* 'xyz': function not inlined */
+#pragma warning(disable : 4711) /* function 'xyz' selected for automatic inline expansion */
+#pragma warning(disable : 4201) /* nonstandard extension used : nameless struct / union */
+#pragma warning(disable : 4706) /* assignment within conditional expression */
+#pragma warning(disable : 4127) /* conditional expression is constant */
+#pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
+#pragma warning(disable : 4310) /* cast truncates constant value */
+#endif                          /* _MSC_VER (warnings) */
 
 #include "../mdbx.h"
 #include "./defs.h"
@@ -64,17 +74,6 @@
 #ifdef __SANITIZE_THREAD__
 #   warning "libmdbx don't compatible with ThreadSanitizer, you will get a lot of false-positive issues."
 #endif /* __SANITIZE_THREAD__ */
-
-#ifdef _MSC_VER
-#pragma warning(disable : 4464) /* relative include path contains '..' */
-#pragma warning(disable : 4710) /* 'xyz': function not inlined */
-#pragma warning(disable : 4711) /* function 'xyz' selected for automatic inline expansion */
-#pragma warning(disable : 4201) /* nonstandard extension used : nameless struct / union */
-#pragma warning(disable : 4706) /* assignment within conditional expression */
-#pragma warning(disable : 4127) /* conditional expression is constant */
-#pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
-#pragma warning(disable : 4310) /* cast truncates constant value */
-#endif                          /* _MSC_VER (warnings) */
 
 #include "./osal.h"
 
@@ -361,7 +360,10 @@ typedef struct MDBX_page {
 
 #define MAX_MAPSIZE ((sizeof(size_t) < 8) ? MAX_MAPSIZE32 : MAX_MAPSIZE64)
 
-#pragma pack(pop)
+#ifdef _MSC_VER
+#pragma warning(disable : 4820) /* bytes padding added after data member       \
+                                   for aligment */
+#endif
 
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
@@ -412,6 +414,10 @@ typedef struct MDBX_lockinfo {
 
   MDBX_reader __cache_aligned mti_readers[1];
 } MDBX_lockinfo;
+
+#ifdef _MSC_VER
+#pragma pack(pop)
+#endif
 
 #define MDBX_LOCKINFO_WHOLE_SIZE                                               \
   ((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &                         \

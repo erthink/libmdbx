@@ -86,7 +86,7 @@ bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
 
     uint32_t c = l + (h << 4);
     checksum.push(c);
-    *data = c;
+    *data = (uint8_t)c;
   }
   return true;
 }

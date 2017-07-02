@@ -19,11 +19,22 @@
 #endif
 
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+#ifdef _MSC_VER
+#pragma warning(push, 1)
+#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+                                   expected expression with side - effect */
+#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
+                                   semantics are not enabled. Specify /EHsc */
+#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
+                                   mode specified; termination on exception    \
+                                   is not guaranteed. Specify /EHsc */
+#endif                          /* _MSC_VER (warnings) */
+
 /* If you wish to build your application for a previous Windows platform,
- * include WinSDKVer.h and set the _WIN32_WINNT macro to the platform you
- * wish to support before including SDKDDKVer.h.
- *
- * TODO: #define _WIN32_WINNT WIN32_MUSTDIE */
+* include WinSDKVer.h and set the _WIN32_WINNT macro to the platform you
+* wish to support before including SDKDDKVer.h.
+*
+* TODO: #define _WIN32_WINNT WIN32_MUSTDIE */
 #include <SDKDDKVer.h>
 #endif /* WINDOWS */
 
@@ -74,3 +85,10 @@
 
 #include "../mdbx.h"
 #include "../src/defs.h"
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#pragma warning(disable : 4201) /* nonstandard extension used :                \
+                                   nameless struct / union */
+#pragma warning(disable : 4127) /* conditional expression is constant */
+#endif
