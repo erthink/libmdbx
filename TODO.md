@@ -29,11 +29,13 @@
 - [x] Избавиться от умножения на размер страницы (заменить на сдвиг).
 - [x] Устранение всех предупреждений (в том числе под Windows).
 - [x] Добавить 'mti_reader_finished_flag'.
+- [x] Погасить все level4-warnings от MSVC, включить /WX.
 - [ ] Отрефакторить mdbx_freelist_save().
 - [ ] Хранить "свободный хвост" не связанный с freeDB в META.
 - [ ] Перевод mdbx-tools на С++ и сборка для Windows.
 - [ ] Заменить заглушки mdbx_version и mdbx_build.
 - [ ] Актуализация README.md
+- [ ] Переход на C++11, добавление #pramga detect_mismatch().
 
 CI
 - [ ] Прикрутить проверку coverity
