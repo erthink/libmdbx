@@ -37,14 +37,12 @@
 
 #include "./bits.h"
 
-#ifdef _MSC_VER
-#if _MSC_VER < 1910
-/* LY: MSVC has buggy/inconsistent PRIuPTR/PRIxPTR macros and format-arg
+#if defined(_MSC_VER) && _MSC_VER == 1900
+/* LY: MSVC 2015 has buggy/inconsistent PRIuPTR/PRIxPTR macros and format-arg
        checker for size_t typedef. */
 #pragma warning(disable : 4777) /* format string '%10u' requires an argument   \
                                    of type 'unsigned int', but variadic        \
                                    argument 1 has type 'std::size_t' */
-#endif
 #endif /* _MSC_VER (warnings) */
 
 /*----------------------------------------------------------------------------*/

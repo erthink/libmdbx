@@ -42,7 +42,9 @@
 #   ifndef _CRT_SECURE_NO_WARNINGS
 #       define _CRT_SECURE_NO_WARNINGS
 #   endif
-#pragma warning(disable : 4464) /* relative include path contains '..' */
+#if _MSC_VER > 1800
+#   pragma warning(disable : 4464) /* relative include path contains '..' */
+#endif
 #pragma warning(disable : 4710) /* 'xyz': function not inlined */
 #pragma warning(disable : 4711) /* function 'xyz' selected for automatic inline expansion */
 #pragma warning(disable : 4201) /* nonstandard extension used : nameless struct / union */
