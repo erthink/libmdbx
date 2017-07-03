@@ -43,7 +43,7 @@
 #pragma warning(disable : 4777) /* format string '%10u' requires an argument   \
                                    of type 'unsigned int', but variadic        \
                                    argument 1 has type 'std::size_t' */
-#endif /* _MSC_VER (warnings) */
+#endif                          /* _MSC_VER (warnings) */
 
 /*----------------------------------------------------------------------------*/
 /* rthc (tls keys and destructors) */
@@ -9088,13 +9088,13 @@ typedef struct mdbx_copy {
   char *mc_over[2];
   size_t mc_wlen[2];
   size_t mc_olen[2];
-  pgno_t mc_next_pgno;
   mdbx_filehandle_t mc_fd;
-  int mc_toggle; /* Buffer number in provider */
-  int mc_new;    /* (0-2 buffers to write) | (MDBX_EOF at end) */
+  volatile int mc_error;
+  pgno_t mc_next_pgno;
+  short mc_toggle; /* Buffer number in provider */
+  short mc_new;    /* (0-2 buffers to write) | (MDBX_EOF at end) */
   /* Error code.  Never cleared if set.  Both threads can set nonzero
    * to fail the copy.  Not mutex-protected, MDBX expects atomic int. */
-  volatile int mc_error;
 } mdbx_copy;
 
 /* Dedicated writer thread for compacting copy. */
@@ -9168,7 +9168,7 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
  * [in] adjust (1 to hand off 1 buffer) | (MDBX_EOF when ending). */
 static int __cold mdbx_env_cthr_toggle(mdbx_copy *my, int adjust) {
   mdbx_condmutex_lock(&my->mc_condmutex);
-  my->mc_new += adjust;
+  my->mc_new += (short)adjust;
   mdbx_condmutex_signal(&my->mc_condmutex);
   while (my->mc_new & 2) /* both buffers in use */
     mdbx_condmutex_wait(&my->mc_condmutex);
@@ -9279,7 +9279,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             }
 
             memcpy(&db, NODEDATA(ni), sizeof(db));
-            my->mc_toggle = toggle;
+            my->mc_toggle = (short)toggle;
             rc = mdbx_env_cwalk(my, &db.md_root, ni->mn_flags & F_DUPDATA);
             if (rc)
               goto done;

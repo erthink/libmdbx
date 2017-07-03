@@ -52,6 +52,7 @@
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
 #pragma warning(disable : 4310) /* cast truncates constant value */
+#pragma warning(disable : 4820) /* bytes padding added after data member for aligment */
 #endif                          /* _MSC_VER (warnings) */
 
 #include "../mdbx.h"
@@ -362,11 +363,6 @@ typedef struct MDBX_page {
 
 #define MAX_MAPSIZE ((sizeof(size_t) < 8) ? MAX_MAPSIZE32 : MAX_MAPSIZE64)
 
-#ifdef _MSC_VER
-#pragma warning(disable : 4820) /* bytes padding added after data member       \
-                                   for aligment */
-#endif
-
 /* The header for the reader table (a memory-mapped lock file). */
 typedef struct MDBX_lockinfo {
   /* Stamp identifying this as an MDBX file.
@@ -419,7 +415,7 @@ typedef struct MDBX_lockinfo {
 
 #ifdef _MSC_VER
 #pragma pack(pop)
-#endif
+#endif /* MSVC: Enable aligment */
 
 #define MDBX_LOCKINFO_WHOLE_SIZE                                               \
   ((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &                         \
@@ -492,7 +488,7 @@ typedef struct MDBX_dbx {
  * Every operation requires a transaction handle. */
 struct MDBX_txn {
 #define MDBX_MT_SIGNATURE UINT32_C(0x93D53A31)
-  uint32_t mt_signature;
+  size_t mt_signature;
   MDBX_txn *mt_parent; /* parent of a nested txn */
   /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
   MDBX_txn *mt_child;
@@ -568,8 +564,8 @@ struct MDBX_txn {
    * dirty/spilled pages. Thus commit(nested txn) has room to merge
    * dirtylist into mt_parent after freeing hidden mt_parent pages. */
   unsigned mt_dirtyroom;
-  mdbx_canary mt_canary;
   mdbx_tid_t mt_owner; /* thread ID that owns this transaction */
+  mdbx_canary mt_canary;
 };
 
 /* Enough space for 2^32 nodes with minimum of 2 keys per node. I.e., plenty.
@@ -591,6 +587,8 @@ struct MDBX_cursor {
 #define MDBX_MC_READY4CLOSE UINT32_C(0x2817A047)
 #define MDBX_MC_WAIT4EOT UINT32_C(0x90E297A7)
   uint32_t mc_signature;
+  /* The database handle this cursor operates on */
+  MDBX_dbi mc_dbi;
   /* Next cursor on this DB in this txn */
   MDBX_cursor *mc_next;
   /* Backup of the original cursor if this cursor is a shadow */
@@ -599,8 +597,6 @@ struct MDBX_cursor {
   struct MDBX_xcursor *mc_xcursor;
   /* The transaction that owns this cursor */
   MDBX_txn *mc_txn;
-  /* The database handle this cursor operates on */
-  MDBX_dbi mc_dbi;
   /* The database record for this cursor */
   MDBX_db *mc_db;
   /* The database auxiliary record for this cursor */
@@ -661,7 +657,7 @@ typedef struct MDBX_pgstate {
 /* The database environment. */
 struct MDBX_env {
 #define MDBX_ME_SIGNATURE UINT32_C(0x9A899641)
-  uint32_t me_signature;
+  size_t me_signature;
   mdbx_filehandle_t me_fd;  /*  The main data file */
   mdbx_filehandle_t me_lfd; /*  The lock file */
 #ifdef MDBX_OSAL_SECTION
@@ -685,6 +681,7 @@ struct MDBX_env {
   MDBX_dbi me_numdbs;          /* number of DBs opened */
   MDBX_dbi me_maxdbs;          /* size of the DB table */
   mdbx_pid_t me_pid;           /* process ID of this env */
+  mdbx_thread_key_t me_txkey;  /* thread-key for readers */
   char *me_path;               /* path to the DB files */
   char *me_map;                /* the memory map of the data file */
   MDBX_lockinfo *me_lck;       /* the memory map of the lock file, never NULL */
@@ -695,7 +692,6 @@ struct MDBX_env {
   MDBX_dbx *me_dbxs;           /* array of static DB info */
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
-  mdbx_thread_key_t me_txkey;  /* thread-key for readers */
   volatile txnid_t *me_oldest; /* ID of oldest reader last time we looked */
   MDBX_pgstate me_pgstate;     /* state of old pages from freeDB */
 #define me_last_reclaimed me_pgstate.mf_last_reclaimed
