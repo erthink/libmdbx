@@ -53,6 +53,7 @@
 #pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
 #pragma warning(disable : 4310) /* cast truncates constant value */
 #pragma warning(disable : 4820) /* bytes padding added after data member for aligment */
+#pragma warning(disable : 4548) /* expression before comma has no effect; expected expression with side - effect */
 #endif                          /* _MSC_VER (warnings) */
 
 #include "../mdbx.h"

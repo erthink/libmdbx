@@ -53,6 +53,8 @@
 
 #ifdef _MSC_VER
 #pragma warning(push, 1)
+#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+                                   expected expression with side - effect */
 #pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
                                  * semantics are not enabled. Specify /EHsc */
 #pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
