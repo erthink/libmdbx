@@ -110,35 +110,35 @@ uint64_t entropy_ticks(void) {
 #if defined(__GNUC__) || defined(__clang__)
 #if defined(__ia64__)
   uint64_t ticks;
-  __asm("mov %0=ar.itc" : "=r"(ticks));
+  __asm __volatile("mov %0=ar.itc" : "=r"(ticks));
   return ticks;
 #elif defined(__hppa__)
   uint64_t ticks;
-  __asm("mfctl 16, %0" : "=r"(ticks));
+  __asm __volatile("mfctl 16, %0" : "=r"(ticks));
   return ticks;
 #elif defined(__s390__)
   uint64_t ticks;
-  __asm("stck 0(%0)" : : "a"(&(ticks)) : "memory", "cc");
+  __asm __volatile("stck 0(%0)" : : "a"(&(ticks)) : "memory", "cc");
   return ticks;
 #elif defined(__alpha__)
   uint64_t ticks;
-  __asm("rpcc %0" : "=r"(ticks));
+  __asm __volatile("rpcc %0" : "=r"(ticks));
   return ticks;
 #elif defined(__sparc_v9__)
   uint64_t ticks;
-  __asm("rd %%tick, %0" : "=r"(ticks));
+  __asm __volatile("rd %%tick, %0" : "=r"(ticks));
   return ticks;
 #elif defined(__powerpc64__) || defined(__ppc64__)
   uint64_t ticks;
-  __asm("mfspr %0, 268" : "=r"(ticks));
+  __asm __volatile("mfspr %0, 268" : "=r"(ticks));
   return ticks;
 #elif defined(__ppc__) || defined(__powerpc__)
   unsigned tbl, tbu;
 
   /* LY: Here not a problem if a high-part (tbu)
    * would been updated during reading. */
-  __asm("mftb %0" : "=r"(tbl));
-  __asm("mftbu %0" : "=r"(tbu));
+  __asm __volatile("mftb %0" : "=r"(tbl));
+  __asm __volatile("mftbu %0" : "=r"(tbu));
 
   return (((uin64_t)tbu0) << 32) | tbl;
 #elif defined(__mips__)
@@ -153,12 +153,16 @@ uint64_t entropy_ticks(void) {
       return *mips_tsc_addr;
   }
 #elif defined(__x86_64__) || defined(__i386__)
+#if __GNUC_PREREQ(4, 7) || __has_builtin(__builtin_ia32_rdtsc)
+  return __builtin_ia32_rdtsc();
+#else
   unsigned lo, hi;
 
   /* LY: Using the "a" and "d" constraints is important for correct code. */
-  __asm("rdtsc" : "=a"(lo), "=d"(hi));
+  __asm __volatile("rdtsc" : "=a"(lo), "=d"(hi));
 
   return (((uint64_t)hi) << 32) + lo;
+#endif
 #endif /* arch selector */
 
 #elif defined(_M_IX86) || defined(_M_X64)
