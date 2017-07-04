@@ -10279,7 +10279,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
     /* stale reader found */
     if (!rdt_locked) {
       err = mdbx_rdt_lock(env);
-      if (MDBX_IS_ERROR(rc)) {
+      if (MDBX_IS_ERROR(err)) {
         rc = err;
         break;
       }
@@ -10296,7 +10296,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
         continue;
 
       err = mdbx_rpid_check(env, pid);
-      if (MDBX_IS_ERROR(rc)) {
+      if (MDBX_IS_ERROR(err)) {
         rc = err;
         break;
       }
