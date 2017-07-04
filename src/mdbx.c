@@ -11151,9 +11151,9 @@ int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 
 int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
                   mdbx_attr_t attr, unsigned flags) {
-  MDBX_val reserve = {.iov_base = NULL,
-                      .iov_len =
-                          (data ? data->iov_len : 0) + sizeof(mdbx_attr_t)};
+  MDBX_val reserve;
+  reserve.iov_base = NULL;
+  reserve.iov_len = (data ? data->iov_len : 0) + sizeof(mdbx_attr_t);
 
   int rc = mdbx_put(txn, dbi, key, &reserve, flags | MDBX_RESERVE);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -11164,9 +11164,9 @@ int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 
 int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
                          mdbx_attr_t attr, unsigned flags) {
-  MDBX_val reserve = {.iov_base = NULL,
-                      .iov_len =
-                          (data ? data->iov_len : 0) + sizeof(mdbx_attr_t)};
+  MDBX_val reserve;
+  reserve.iov_base = NULL;
+  reserve.iov_len = (data ? data->iov_len : 0) + sizeof(mdbx_attr_t);
 
   int rc = mdbx_cursor_put(cursor, key, &reserve, flags | MDBX_RESERVE);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -11177,12 +11177,6 @@ int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
 
 int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
                   mdbx_attr_t attr) {
-  MDBX_cursor mc;
-  MDBX_xcursor mx;
-  MDBX_val old_data;
-  mdbx_attr_t old_attr;
-  int rc;
-
   if (unlikely(!key || !txn))
     return EINVAL;
 
@@ -11195,8 +11189,11 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
     return (txn->mt_flags & MDBX_TXN_RDONLY) ? EACCES : MDBX_BAD_TXN;
 
+  MDBX_cursor mc;
+  MDBX_xcursor mx;
+  MDBX_val old_data;
   mdbx_cursor_init(&mc, txn, dbi, &mx);
-  rc = mdbx_cursor_set(&mc, key, &old_data, MDBX_SET, NULL);
+  int rc = mdbx_cursor_set(&mc, key, &old_data, MDBX_SET, NULL);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc == MDBX_NOTFOUND && data) {
       mc.mc_next = txn->mt_cursors[dbi];
@@ -11207,6 +11204,7 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return rc;
   }
 
+  mdbx_attr_t old_attr;
   rc = mdbx_attr_peek(&old_data, &old_attr);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;

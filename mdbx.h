@@ -1633,7 +1633,7 @@ LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 
 /*----------------------------------------------------------------------------*/
 /* attribute support functions for Nexenta */
-typedef uint64_t mdbx_attr_t;
+typedef uint_fast64_t mdbx_attr_t;
 
 /* Store by cursor with attribute.
  *
@@ -1668,8 +1668,9 @@ typedef uint64_t mdbx_attr_t;
  *  - MDBX_TXN_FULL  - the transaction has too many dirty pages.
  *  - MDBX_EACCES    - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL    - an invalid parameter was specified. */
-int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
-                         mdbx_attr_t attr, unsigned flags);
+LIBMDBX_API int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key,
+                                     MDBX_val *data, mdbx_attr_t attr,
+                                     unsigned flags);
 
 /* Store items and attributes into a database.
  *
@@ -1713,8 +1714,8 @@ int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
  *  - MDBX_TXN_FULL  - the transaction has too many dirty pages.
  *  - MDBX_EACCES    - an attempt was made to write in a read-only transaction.
  *  - MDBX_EINVAL    - an invalid parameter was specified. */
-int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
-                  mdbx_attr_t attr, unsigned flags);
+LIBMDBX_API int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                              MDBX_val *data, mdbx_attr_t attr, unsigned flags);
 
 /* Set items attribute from a database.
  *
@@ -1733,8 +1734,8 @@ int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
  * possible errors are:
  *	 - MDBX_NOTFOUND   - the key-value pair was not in the database.
  *	 - MDBX_EINVAL     - an invalid parameter was specified. */
-int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
-                  mdbx_attr_t attr);
+LIBMDBX_API int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                              MDBX_val *data, mdbx_attr_t attr);
 
 /* Get items attribute from a database cursor.
  *
@@ -1753,8 +1754,9 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
  * possible errors are:
  *  - MDBX_NOTFOUND  - no matching key found.
  *  - MDBX_EINVAL    - an invalid parameter was specified. */
-int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                         mdbx_attr_t *attrptr, MDBX_cursor_op op);
+LIBMDBX_API int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key,
+                                     MDBX_val *data, mdbx_attr_t *attrptr,
+                                     MDBX_cursor_op op);
 
 /* Get items attribute from a database.
  *
@@ -1782,8 +1784,8 @@ int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
  * possible errors are:
  *  - MDBX_NOTFOUND  - the key was not in the database.
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
-int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
-                  mdbx_attr_t *attrptr);
+LIBMDBX_API int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                              MDBX_val *data, mdbx_attr_t *attrptr);
 
 #ifdef __cplusplus
 }
