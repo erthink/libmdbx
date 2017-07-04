@@ -3849,8 +3849,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     target = mdbx_meta_ancient(env, meta1, meta2, true);
   else if (head == meta1)
     target = mdbx_meta_ancient(env, meta0, meta2, true);
-  else if (head == meta2)
+  else {
+    mdbx_assert(env, head == meta2);
     target = mdbx_meta_ancient(env, meta0, meta1, true);
+  }
 
   /* LY: step#2 - update meta-page. */
   mdbx_debug(
@@ -6190,6 +6192,7 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
   if (likely(data)) {
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+      mdbx_cassert(mc, mc->mc_xcursor != nullptr);
       mdbx_xcursor_init1(mc, leaf);
       rc = mdbx_cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
       if (unlikely(rc))
@@ -6233,6 +6236,7 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
   if (likely(data)) {
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+      mdbx_cassert(mc, mc->mc_xcursor != nullptr);
       mdbx_xcursor_init1(mc, leaf);
       rc = mdbx_cursor_last(&mc->mc_xcursor->mx_cursor, data, NULL);
       if (unlikely(rc))
