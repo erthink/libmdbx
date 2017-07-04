@@ -76,9 +76,10 @@ static void mdbx_debug_logger(int type, const char *function, int line,
   if (type & MDBX_DBG_PRINT)
     level = logging::verbose;
 
+  if (!function)
+    function = "unknown";
   if (type & MDBX_DBG_ASSERT) {
-    log_error("mdbx: assertion failure: %s, %d",
-              function ? function : "unknown", line);
+    log_error("mdbx: assertion failure: %s, %d", function, line);
     level = logging::failure;
   }
 
