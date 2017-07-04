@@ -9653,7 +9653,7 @@ int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
                     arg->me_recent_txnid != mdbx_meta_txnid_fluid(env, meta)));
 
   arg->me_maxreaders = env->me_maxreaders;
-  arg->me_numreaders = env->me_lck->mti_numreaders;
+  arg->me_numreaders = env->me_lck ? env->me_lck->mti_numreaders : INT32_MAX;
   arg->me_dxb_pagesize = env->me_psize;
   arg->me_sys_pagesize = env->me_os_psize;
 
