@@ -4924,7 +4924,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     rc = mdbx_rthc_alloc(&env->me_txkey, &env->me_lck->mti_readers[0],
                          &env->me_lck->mti_readers[env->me_maxreaders]);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      goto bailout;
     env->me_flags |= MDBX_ENV_TXKEY;
   }
 
