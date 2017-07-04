@@ -11101,137 +11101,125 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 /*----------------------------------------------------------------------------*/
 /* attribute support functions for Nexenta */
 
-static __inline int
-mdbx_attr_peek(MDBX_val *data, mdbx_attr_t *attrptr)
-{
-	if (unlikely(data->iov_len < sizeof(mdbx_attr_t)))
-		return MDBX_INCOMPATIBLE;
+static __inline int mdbx_attr_peek(MDBX_val *data, mdbx_attr_t *attrptr) {
+  if (unlikely(data->iov_len < sizeof(mdbx_attr_t)))
+    return MDBX_INCOMPATIBLE;
 
-	if (likely(attrptr != NULL))
-		*attrptr = *(mdbx_attr_t*) data->iov_base;
-	data->iov_len -= sizeof(mdbx_attr_t);
-	data->iov_base = likely(data->iov_len > 0)
-		? ((mdbx_attr_t*) data->iov_base) + 1 : NULL;
+  if (likely(attrptr != NULL))
+    *attrptr = *(mdbx_attr_t *)data->iov_base;
+  data->iov_len -= sizeof(mdbx_attr_t);
+  data->iov_base =
+      likely(data->iov_len > 0) ? ((mdbx_attr_t *)data->iov_base) + 1 : NULL;
 
-	return MDBX_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
-static __inline int
-mdbx_attr_poke(MDBX_val *reserved, MDBX_val *data, mdbx_attr_t attr, unsigned flags)
-{
-	mdbx_attr_t *space = reserved->iov_base;
-	if (flags & MDBX_RESERVE) {
-		if (likely(data != NULL)) {
-			data->iov_base = data->iov_len ? space + 1 : NULL;
-		}
-	} else {
-		*space = attr;
-		if (likely(data != NULL)) {
-			memcpy(space + 1, data->iov_base, data->iov_len );
-		}
-	}
+static __inline int mdbx_attr_poke(MDBX_val *reserved, MDBX_val *data,
+                                   mdbx_attr_t attr, unsigned flags) {
+  mdbx_attr_t *space = reserved->iov_base;
+  if (flags & MDBX_RESERVE) {
+    if (likely(data != NULL)) {
+      data->iov_base = data->iov_len ? space + 1 : NULL;
+    }
+  } else {
+    *space = attr;
+    if (likely(data != NULL)) {
+      memcpy(space + 1, data->iov_base, data->iov_len);
+    }
+  }
 
-	return MDBX_SUCCESS;
+  return MDBX_SUCCESS;
 }
 
-int
-mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-	mdbx_attr_t *attrptr, MDBX_cursor_op op)
-{
-	int rc = mdbx_cursor_get(mc, key, data, op);
-	if (unlikely(rc != MDBX_SUCCESS))
-		return rc;
+int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                         mdbx_attr_t *attrptr, MDBX_cursor_op op) {
+  int rc = mdbx_cursor_get(mc, key, data, op);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-	return mdbx_attr_peek(data, attrptr);
+  return mdbx_attr_peek(data, attrptr);
 }
 
-int
-mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi,
-	MDBX_val *key, MDBX_val *data, uint64_t *attrptr)
-{
-	int rc = mdbx_get(txn, dbi, key, data);
-	if (unlikely(rc != MDBX_SUCCESS))
-		return rc;
+int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+                  uint64_t *attrptr) {
+  int rc = mdbx_get(txn, dbi, key, data);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-	return mdbx_attr_peek(data, attrptr);
+  return mdbx_attr_peek(data, attrptr);
 }
 
-int
-mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi,
-	MDBX_val *key, MDBX_val *data, mdbx_attr_t attr, unsigned flags)
-{
-	MDBX_val reserve = {
-		.iov_base = NULL,
-		.iov_len = (data ? data->iov_len : 0) + sizeof(mdbx_attr_t)
-	};
+int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+                  mdbx_attr_t attr, unsigned flags) {
+  MDBX_val reserve = {.iov_base = NULL,
+                      .iov_len =
+                          (data ? data->iov_len : 0) + sizeof(mdbx_attr_t)};
 
-	int rc = mdbx_put(txn, dbi, key, &reserve, flags | MDBX_RESERVE);
-	if (unlikely(rc != MDBX_SUCCESS))
-		return rc;
+  int rc = mdbx_put(txn, dbi, key, &reserve, flags | MDBX_RESERVE);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-	return mdbx_attr_poke(&reserve, data, attr, flags);
+  return mdbx_attr_poke(&reserve, data, attr, flags);
 }
 
 int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
-	mdbx_attr_t attr, unsigned flags)
-{
-	MDBX_val reserve = {
-		.iov_base = NULL,
-		.iov_len = (data ? data->iov_len : 0) + sizeof(mdbx_attr_t)
-	};
+                         mdbx_attr_t attr, unsigned flags) {
+  MDBX_val reserve = {.iov_base = NULL,
+                      .iov_len =
+                          (data ? data->iov_len : 0) + sizeof(mdbx_attr_t)};
 
-	int rc = mdbx_cursor_put(cursor, key, &reserve, flags | MDBX_RESERVE);
-	if (unlikely(rc != MDBX_SUCCESS))
-		return rc;
+  int rc = mdbx_cursor_put(cursor, key, &reserve, flags | MDBX_RESERVE);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-	return mdbx_attr_poke(&reserve, data, attr, flags);
+  return mdbx_attr_poke(&reserve, data, attr, flags);
 }
 
-int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi,
-	MDBX_val *key, MDBX_val *data, mdbx_attr_t attr)
-{
-	MDBX_cursor      mc;
-	MDBX_xcursor     mx;
-	MDBX_val         old_data;
-	mdbx_attr_t		old_attr;
-	int             rc;
+int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+                  mdbx_attr_t attr) {
+  MDBX_cursor mc;
+  MDBX_xcursor mx;
+  MDBX_val old_data;
+  mdbx_attr_t old_attr;
+  int rc;
 
-	if (unlikely(!key || !txn))
-		return EINVAL;
+  if (unlikely(!key || !txn))
+    return EINVAL;
 
-	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-		return MDBX_VERSION_MISMATCH;
+  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_VERSION_MISMATCH;
 
-	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
-		return EINVAL;
+  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+    return EINVAL;
 
-	if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY|MDBX_TXN_BLOCKED)))
-		return (txn->mt_flags & MDBX_TXN_RDONLY) ? EACCES : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_TXN_RDONLY) ? EACCES : MDBX_BAD_TXN;
 
-	mdbx_cursor_init(&mc, txn, dbi, &mx);
-	rc = mdbx_cursor_set(&mc, key, &old_data, MDBX_SET, NULL);
-	if (unlikely(rc != MDBX_SUCCESS)) {
-		if (rc == MDBX_NOTFOUND && data) {
-			mc.mc_next = txn->mt_cursors[dbi];
-			txn->mt_cursors[dbi] = &mc;
-			rc = mdbx_cursor_put_attr(&mc, key, data, attr, 0);
-			txn->mt_cursors[dbi] = mc.mc_next;
-		}
-		return rc;
-	}
+  mdbx_cursor_init(&mc, txn, dbi, &mx);
+  rc = mdbx_cursor_set(&mc, key, &old_data, MDBX_SET, NULL);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    if (rc == MDBX_NOTFOUND && data) {
+      mc.mc_next = txn->mt_cursors[dbi];
+      txn->mt_cursors[dbi] = &mc;
+      rc = mdbx_cursor_put_attr(&mc, key, data, attr, 0);
+      txn->mt_cursors[dbi] = mc.mc_next;
+    }
+    return rc;
+  }
 
-	rc = mdbx_attr_peek(&old_data, &old_attr);
-	if (unlikely(rc != MDBX_SUCCESS))
-		return rc;
+  rc = mdbx_attr_peek(&old_data, &old_attr);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-	if (old_attr == attr && (!data ||
-			(data->iov_len == old_data.iov_len
-				&& memcpy(data->iov_base, old_data.iov_base, old_data.iov_len) == 0)))
-		return MDBX_SUCCESS;
+  if (old_attr == attr && (!data || (data->iov_len == old_data.iov_len &&
+                                     memcpy(data->iov_base, old_data.iov_base,
+                                            old_data.iov_len) == 0)))
+    return MDBX_SUCCESS;
 
-	mc.mc_next = txn->mt_cursors[dbi];
-	txn->mt_cursors[dbi] = &mc;
-	rc = mdbx_cursor_put_attr(&mc, key, data ? data : &old_data, attr, MDBX_CURRENT);
-	txn->mt_cursors[dbi] = mc.mc_next;
-	return rc;
+  mc.mc_next = txn->mt_cursors[dbi];
+  txn->mt_cursors[dbi] = &mc;
+  rc = mdbx_cursor_put_attr(&mc, key, data ? data : &old_data, attr,
+                            MDBX_CURRENT);
+  txn->mt_cursors[dbi] = mc.mc_next;
+  return rc;
 }
