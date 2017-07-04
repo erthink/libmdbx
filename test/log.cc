@@ -125,9 +125,11 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
   switch (end) {
   default:
     putc('\n', last);
+  // fall through
   case '\n':
     fflush(last);
     last = nullptr;
+  // fall through
   case ' ':
   case '_':
   case ':':
