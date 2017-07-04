@@ -229,7 +229,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
 
   if (type) {
     uint64_t page_bytes = payload_bytes + header_bytes + unused_bytes;
-    uint64_t page_size = pgnumber * envstat.ms_psize;
+    size_t page_size = (size_t)pgnumber * envstat.ms_psize;
     int index = pagemap_lookup_dbi(dbi);
     if (index < 0)
       return ENOMEM;

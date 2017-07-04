@@ -549,7 +549,7 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
   sigset_t set, old;
   sigemptyset(&set);
   sigaddset(&set, SIGPIPE);
-  int rc = rc = pthread_sigmask(SIG_BLOCK, &set, &old);
+  int rc = pthread_sigmask(SIG_BLOCK, &set, &old);
   if (rc != 0)
     return rc;
 #endif

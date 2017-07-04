@@ -3849,8 +3849,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     target = mdbx_meta_ancient(env, meta1, meta2, true);
   else if (head == meta1)
     target = mdbx_meta_ancient(env, meta0, meta2, true);
-  else if (head == meta2)
+  else {
+    mdbx_assert(env, head == meta2);
     target = mdbx_meta_ancient(env, meta0, meta1, true);
+  }
 
   /* LY: step#2 - update meta-page. */
   mdbx_debug(
@@ -4924,7 +4926,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     rc = mdbx_rthc_alloc(&env->me_txkey, &env->me_lck->mti_readers[0],
                          &env->me_lck->mti_readers[env->me_maxreaders]);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      goto bailout;
     env->me_flags |= MDBX_ENV_TXKEY;
   }
 
@@ -6190,6 +6192,7 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
   if (likely(data)) {
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+      mdbx_cassert(mc, mc->mc_xcursor != nullptr);
       mdbx_xcursor_init1(mc, leaf);
       rc = mdbx_cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
       if (unlikely(rc))
@@ -6233,6 +6236,7 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
   if (likely(data)) {
     if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+      mdbx_cassert(mc, mc->mc_xcursor != nullptr);
       mdbx_xcursor_init1(mc, leaf);
       rc = mdbx_cursor_last(&mc->mc_xcursor->mx_cursor, data, NULL);
       if (unlikely(rc))
@@ -9653,7 +9657,7 @@ int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
                     arg->me_recent_txnid != mdbx_meta_txnid_fluid(env, meta)));
 
   arg->me_maxreaders = env->me_maxreaders;
-  arg->me_numreaders = env->me_lck->mti_numreaders;
+  arg->me_numreaders = env->me_lck ? env->me_lck->mti_numreaders : INT32_MAX;
   arg->me_dxb_pagesize = env->me_psize;
   arg->me_sys_pagesize = env->me_os_psize;
 
@@ -10279,7 +10283,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
     /* stale reader found */
     if (!rdt_locked) {
       err = mdbx_rdt_lock(env);
-      if (MDBX_IS_ERROR(rc)) {
+      if (MDBX_IS_ERROR(err)) {
         rc = err;
         break;
       }
@@ -10296,7 +10300,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
         continue;
 
       err = mdbx_rpid_check(env, pid);
-      if (MDBX_IS_ERROR(rc)) {
+      if (MDBX_IS_ERROR(err)) {
         rc = err;
         break;
       }

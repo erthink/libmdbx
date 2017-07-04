@@ -136,7 +136,7 @@ protected:
 
 public:
   testcase(const actor_config &config, const mdbx_pid_t pid)
-      : config(config), pid(pid), nops_completed(0) {
+      : config(config), pid(pid), signalled(false), nops_completed(0) {
     start_timestamp.reset();
     memset(&last, 0, sizeof(last));
   }
