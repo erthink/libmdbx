@@ -41,7 +41,7 @@ LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
 TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
-		   yota_test1 yota_test2
+		   yota_test1 yota_test2 mtest7 mtest8
 
 SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h defs.h barriers.h
 SRC_MDBX	:= $(SRC_LMDB) mdbx.c mdbx.h
@@ -80,6 +80,8 @@ check:	tests
 		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdbx_chk -v testdb \
 		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdbx_chk -v testdb \
 		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-7" && ./mtest7 && ./mdbx_chk -v testdb \
+		&& echo "*** LMDB-TEST-8" && ./mtest8 && ./mdbx_chk -v testdb \
 		&& echo "*** LMDB-TESTs - all done"
 
 libmdbx.a:	mdbx.o
@@ -128,6 +130,12 @@ mtest5:	mtest5.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 mtest6:	mtest6.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest7:	mtest7.o mdbx.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+mtest8:	mtest8.o mdbx.o
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 yota_test1: yota_test1.o mdbx.o

@@ -742,3 +742,140 @@ int mdbx_dbi_open_ex(MDB_txn *txn, const char *name, unsigned flags,
 	}
 	return rc;
 }
+
+/* attribute support functions for Nexenta ***********************************/
+
+static __inline int
+mdbx_attr_peek(MDB_val *data, mdbx_attr_t *attrptr)
+{
+	if (unlikely(data->mv_size < sizeof(mdbx_attr_t)))
+		return MDB_INCOMPATIBLE;
+
+	if (likely(attrptr != NULL))
+		*attrptr = *(mdbx_attr_t*) data->mv_data;
+	data->mv_size -= sizeof(mdbx_attr_t);
+	data->mv_data = likely(data->mv_size > 0)
+		? ((mdbx_attr_t*) data->mv_data) + 1 : NULL;
+
+	return MDB_SUCCESS;
+}
+
+static __inline int
+mdbx_attr_poke(MDB_val *reserved, MDB_val *data, mdbx_attr_t attr, unsigned flags)
+{
+	mdbx_attr_t *space = reserved->mv_data;
+	if (flags & MDB_RESERVE) {
+		if (likely(data != NULL)) {
+			data->mv_data = data->mv_size ? space + 1 : NULL;
+		}
+	} else {
+		*space = attr;
+		if (likely(data != NULL)) {
+			memcpy(space + 1, data->mv_data, data->mv_size );
+		}
+	}
+
+	return MDB_SUCCESS;
+}
+
+int
+mdbx_cursor_get_attr(MDB_cursor *mc, MDB_val *key, MDB_val *data,
+	mdbx_attr_t *attrptr, MDB_cursor_op op)
+{
+	int rc = mdbx_cursor_get(mc, key, data, op);
+	if (unlikely(rc != MDB_SUCCESS))
+		return rc;
+
+	return mdbx_attr_peek(data, attrptr);
+}
+
+int
+mdbx_get_attr(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *data, uint64_t *attrptr)
+{
+	int rc = mdbx_get(txn, dbi, key, data);
+	if (unlikely(rc != MDB_SUCCESS))
+		return rc;
+
+	return mdbx_attr_peek(data, attrptr);
+}
+
+int
+mdbx_put_attr(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *data, mdbx_attr_t attr, unsigned flags)
+{
+	MDB_val reserve = {
+		.mv_data = NULL,
+		.mv_size = (data ? data->mv_size : 0) + sizeof(mdbx_attr_t)
+	};
+
+	int rc = mdbx_put(txn, dbi, key, &reserve, flags | MDB_RESERVE);
+	if (unlikely(rc != MDB_SUCCESS))
+		return rc;
+
+	return mdbx_attr_poke(&reserve, data, attr, flags);
+}
+
+int mdbx_cursor_put_attr(MDB_cursor *cursor, MDB_val *key, MDB_val *data,
+	mdbx_attr_t attr, unsigned flags)
+{
+	MDB_val reserve = {
+		.mv_data = NULL,
+		.mv_size = (data ? data->mv_size : 0) + sizeof(mdbx_attr_t)
+	};
+
+	int rc = mdbx_cursor_put(cursor, key, &reserve, flags | MDB_RESERVE);
+	if (unlikely(rc != MDB_SUCCESS))
+		return rc;
+
+	return mdbx_attr_poke(&reserve, data, attr, flags);
+}
+
+int mdbx_set_attr(MDB_txn *txn, MDB_dbi dbi,
+	MDB_val *key, MDB_val *data, mdbx_attr_t attr)
+{
+	MDB_cursor      mc;
+	MDB_xcursor     mx;
+	MDB_val         old_data;
+	mdbx_attr_t		old_attr;
+	int             rc;
+
+	if (unlikely(!key || !txn))
+		return EINVAL;
+
+	if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+		return MDB_VERSION_MISMATCH;
+
+	if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+		return EINVAL;
+
+	if (unlikely(txn->mt_flags & (MDB_TXN_RDONLY|MDB_TXN_BLOCKED)))
+		return (txn->mt_flags & MDB_TXN_RDONLY) ? EACCES : MDB_BAD_TXN;
+
+	mdb_cursor_init(&mc, txn, dbi, &mx);
+	rc = mdb_cursor_set(&mc, key, &old_data, MDB_SET, NULL);
+	if (unlikely(rc != MDB_SUCCESS)) {
+		if (rc == MDB_NOTFOUND && data) {
+			mc.mc_next = txn->mt_cursors[dbi];
+			txn->mt_cursors[dbi] = &mc;
+			rc = mdbx_cursor_put_attr(&mc, key, data, attr, 0);
+			txn->mt_cursors[dbi] = mc.mc_next;
+		}
+		return rc;
+	}
+
+	rc = mdbx_attr_peek(&old_data, &old_attr);
+	if (unlikely(rc != MDB_SUCCESS))
+		return rc;
+
+	if (old_attr == attr && (!data ||
+			(data->mv_size == old_data.mv_size
+				&& memcpy(data->mv_data, old_data.mv_data, old_data.mv_size) == 0)))
+		return MDB_SUCCESS;
+
+	mc.mc_next = txn->mt_cursors[dbi];
+	txn->mt_cursors[dbi] = &mc;
+	rc = mdbx_cursor_put_attr(&mc, key, data ? data : &old_data, attr, MDB_CURRENT);
+	txn->mt_cursors[dbi] = mc.mc_next;
+	return rc;
+}

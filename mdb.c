@@ -6239,7 +6239,7 @@ mdb_cursor_prev(MDB_cursor *mc, MDB_val *key, MDB_val *data, MDB_cursor_op op)
 /** Set the cursor on a specific data item. */
 static int
 mdb_cursor_set(MDB_cursor *mc, MDB_val *key, MDB_val *data,
-	MDB_cursor_op op, int *exactp)
+    MDB_cursor_op op, int *exactp)
 {
 	int		 rc;
 	MDB_page	*mp;
