@@ -1631,6 +1631,167 @@ LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr);
 LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                                   uint64_t increment);
 
+/*----------------------------------------------------------------------------*/
+/* attribute support functions for Nexenta */
+typedef uint64_t mdbx_attr_t;
+
+	/** @brief Store by cursor with attribute.
+	 *
+	 * This function stores key/data pairs into the database.
+	 * The cursor is positioned at the new item, or on failure usually near it.
+	 * @note Internally based on #MDBX_RESERVE feature, therefore doesn't support #MDBX_DUPSORT.
+	 * @note Earlier documentation incorrectly said errors would leave the
+	 * state of the cursor unchanged.
+	 * @param[in] cursor A cursor handle returned by #mdb_cursor_open()
+	 * @param[in] key The key operated on.
+	 * @param[in] data The data operated on.
+	 * @param[in] attr The attribute.
+	 * @param[in] flags Options for this operation. This parameter
+	 * must be set to 0 or one of the values described here.
+	 * <ul>
+	 *	<li>#MDBX_CURRENT - replace the item at the current cursor position.
+	 *		The \b key parameter must still be provided, and must match it.
+	 *		This is intended to be used when the
+	 *		new data is the same size as the old. Otherwise it will simply
+	 *		perform a delete of the old record followed by an insert.
+	 *	<li>#MDBX_NOOVERWRITE - enter the new key/data pair only if the key
+	 *		does not already appear in the database. The function will return
+	 *		#MDBX_KEYEXIST if the key already appears in the database.
+	 *	<li>#MDBX_RESERVE - reserve space for data of the given size, but
+	 *		don't copy the given data. Instead, return a pointer to the
+	 *		reserved space, which the caller can fill in later. This saves
+	 *		an extra memcpy if the data is being generated later.
+	 *	<li>#MDBX_APPEND - append the given key/data pair to the end of the
+	 *		database. No key comparisons are performed. This option allows
+	 *		fast bulk loading when keys are already known to be in the
+	 *		correct order. Loading unsorted keys with this flag will cause
+	 *		data corruption.
+	 * </ul>
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDBX_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
+	 *	<li>#MDBX_TXN_FULL - the transaction has too many dirty pages.
+	 *	<li>EACCES - an attempt was made to write in a read-only transaction.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
+				mdbx_attr_t attr, unsigned flags);
+
+	/** @brief Store items and attributes into a database.
+	 *
+	 * This function stores key/data pairs in the database. The default behavior
+	 * is to enter the new key/data pair, replacing any previously existing key
+	 * if duplicates are disallowed.
+	 * @note Internally based on #MDBX_RESERVE feature, therefore doesn't support #MDBX_DUPSORT.
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
+	 * @param[in] key The key to store in the database
+	 * @param[in] attr The attribute to store in the database
+	 * @param[in,out] data The data to store
+	 * @param[in] flags Special options for this operation. This parameter
+	 * must be set to 0 or by bitwise OR'ing together one or more of the
+	 * values described here.
+	 * <ul>
+	 *	<li>#MDBX_NOOVERWRITE - enter the new key/data pair only if the key
+	 *		does not already appear in the database. The function will return
+	 *		#MDBX_KEYEXIST if the key already appears in the database. The \b data
+	 *		parameter will be set to point to the existing item.
+	 *	<li>#MDBX_RESERVE - reserve space for data of the given size, but
+	 *		don't copy the given data. Instead, return a pointer to the
+	 *		reserved space, which the caller can fill in later - before
+	 *		the next update operation or the transaction ends. This saves
+	 *		an extra memcpy if the data is being generated later.
+	 *		LMDB does nothing else with this memory, the caller is expected
+	 *		to modify all of the space requested.
+	 *	<li>#MDBX_APPEND - append the given key/data pair to the end of the
+	 *		database. This option allows fast bulk loading when keys are
+	 *		already known to be in the correct order. Loading unsorted keys
+	 *		with this flag will cause a #MDBX_KEYEXIST error.
+	 * </ul>
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDBX_MAP_FULL - the database is full, see #mdb_env_set_mapsize().
+	 *	<li>#MDBX_TXN_FULL - the transaction has too many dirty pages.
+	 *	<li>EACCES - an attempt was made to write in a read-only transaction.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+				mdbx_attr_t attr, unsigned flags);
+
+	/** @brief Set items attribute from a database.
+	 *
+	 * This function stores key/data pairs attribute to the database.
+	 * @note Internally based on #MDBX_RESERVE feature, therefore doesn't support #MDBX_DUPSORT.
+	 *
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
+	 * @param[in] key The key to search for in the database
+	 * @param[in] data The data to be stored or NULL to save previous value.
+	 * @param[in] attr The attribute to be stored
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDBX_NOTFOUND - the key-value pair was not in the database.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+				mdbx_attr_t attr);
+
+	/** @brief Get items attribute from a database cursor.
+	 *
+	 * This function retrieves key/data pairs attribute from the database.
+	 * The attribute of the specified key-value pair is returned in
+	 * uint64_t to which \b attrptr refers.
+	 * If the database supports duplicate keys (#MDBX_DUPSORT) then both
+	 * key and data parameters are required, otherwise data could be NULL.
+	 *
+	 * @note Values returned from the database are valid only until a
+	 * subsequent update operation, or the end of the transaction.
+	 * @param[in] mc A database cursor pointing at the node
+	 * @param[in] key The key to search for in the database
+	 * @param[in,out] data The data for #MDBX_DUPSORT databases
+	 * @param[out] attrptr The pointer to the result
+	 * @param[in] op A cursor operation #MDBX_cursor_op
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDBX_NOTFOUND - the key-value pair was not in the database.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+				mdbx_attr_t *attrptr, MDBX_cursor_op op);
+
+	/** @brief Get items attribute from a database.
+	 *
+	 * This function retrieves key/data pairs attribute from the database.
+	 * The attribute of the specified key-value pair is returned in
+	 * uint64_t to which \b attrptr refers.
+	 * If the database supports duplicate keys (#MDBX_DUPSORT) then both
+	 * key and data parameters are required, otherwise data is ignored.
+	 *
+	 * @note Values returned from the database are valid only until a
+	 * subsequent update operation, or the end of the transaction.
+	 * @param[in] txn A transaction handle returned by #mdb_txn_begin()
+	 * @param[in] dbi A database handle returned by #mdb_dbi_open()
+	 * @param[in] key The key to search for in the database
+	 * @param[in] data The data for #MDBX_DUPSORT databases
+	 * @param[out] attrptr The pointer to the result
+	 * @return A non-zero error value on failure and 0 on success. Some possible
+	 * errors are:
+	 * <ul>
+	 *	<li>#MDBX_NOTFOUND - the key-value pair was not in the database.
+	 *	<li>EINVAL - an invalid parameter was specified.
+	 * </ul>
+	 */
+int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+				mdbx_attr_t *attrptr);
+
 #ifdef __cplusplus
 }
 #endif
