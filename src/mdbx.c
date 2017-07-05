@@ -11182,16 +11182,16 @@ int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
 int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
                   mdbx_attr_t attr) {
   if (unlikely(!key || !txn))
-    return EINVAL;
+    return MDBX_EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_VERSION_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
-    return EINVAL;
+    return MDBX_EINVAL;
 
   if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_TXN_RDONLY) ? EACCES : MDBX_BAD_TXN;
+    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor mc;
   MDBX_xcursor mx;
