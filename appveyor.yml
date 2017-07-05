@@ -1,33 +1,44 @@
-image: Visual Studio 2015
+version: 0.1.2.{build}
 
 environment:
   matrix:
-#  - Toolset: v141
-  - Toolset: v140
-  - Toolset: v120
-  - Toolset: v110
-  - Toolset: v100
-
-platform:
-  - x86
-  - x64
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
+      TOOLSET: v141
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      TOOLSET: v140
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
+      TOOLSET: v120
 
 configuration:
-  - Release
-  - Debug
+- Debug
+- Release
 
-build:
-  verbosity: minimal
-  project: mdbx.sln
+platform:
+- x86
+- x64
+#- ARM
+
+build_script:
+- ps: >
+    msbuild "C:\projects\libmdbx\mdbx.sln" /verbosity:minimal
+    /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
+    /property:PlatformToolset=$env:TOOLSET
+    /property:Configuration=$env:CONFIGURATION
+    /property:Platform=$env:PLATFORM
 
 test_script:
 - ps: |
     if (($env:PLATFORM -eq "x86") -and (Test-Path "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" -PathType Leaf)) {
       $test = "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe"
-    } else {
+    } elseif (($env:PLATFORM -ne "ARM") -and ($env:PLATFORM -ne "ARM64")) {
       $test = "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe"
+    } else {
+      $test = ""
     }
-    & "$test" --pathname=tmp.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+
+    if ($test -ne "") {
+        & "$test" --pathname=tmp.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+    }
 
 on_failure:
-  - ps: Push-AppveyorArtifact test.log
+- ps: Push-AppveyorArtifact test.log
