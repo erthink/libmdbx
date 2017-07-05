@@ -63,7 +63,7 @@ struct txn_deleter : public std::unary_function<void, MDBX_txn *> {
   void operator()(MDBX_txn *txn) const {
     int rc = mdbx_txn_abort(txn);
     if (rc)
-      log_trouble(__func__, "mdbx_txn_abort()", rc);
+      log_trouble(mdbx_func_, "mdbx_txn_abort()", rc);
   }
 };
 

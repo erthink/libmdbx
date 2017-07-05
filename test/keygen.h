@@ -71,7 +71,7 @@ namespace keygen {
 
 typedef uint64_t serial_t;
 
-enum {
+enum : serial_t {
   serial_minwith = 8,
   serial_maxwith = sizeof(serial_t) * 8,
   serial_allones = ~(serial_t)0
