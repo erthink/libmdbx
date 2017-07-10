@@ -13,15 +13,15 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#include "../../mdbx.h"
+#ifdef _MSC_VER
+#if _MSC_VER > 1800
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#endif
+#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
+#endif                          /* _MSC_VER */
+
+#include "../bits.h"
 #include <ctype.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 #define PRINT 1
 static int mode;
@@ -39,16 +39,29 @@ flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
                      {MDBX_REVERSEDUP, "reversedup"},
                      {0, NULL}};
 
-static volatile sig_atomic_t gotsig;
+#if defined(_WIN32) || defined(_WIN64)
+#include "wingetopt.h"
 
-static void dumpsig(int sig) {
-  (void)sig;
-  gotsig = 1;
+static volatile BOOL user_break;
+static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
+  (void)dwCtrlType;
+  user_break = true;
+  return true;
 }
+
+#else /* WINDOWS */
+
+static volatile sig_atomic_t user_break;
+static void signal_handler(int sig) {
+  (void)sig;
+  user_break = 1;
+}
+
+#endif /* !WINDOWS */
 
 static const char hexc[] = "0123456789abcdef";
 
-static void hex(unsigned char c) {
+static void dumpbyte(unsigned char c) {
   putchar(hexc[c >> 4]);
   putchar(hexc[c & 0xf]);
 }
@@ -60,25 +73,25 @@ static void text(MDBX_val *v) {
   c = v->iov_base;
   end = c + v->iov_len;
   while (c < end) {
-    if (isprint(*c)) {
+    if (isprint(*c) && *c != '\\') {
       putchar(*c);
     } else {
       putchar('\\');
-      hex(*c);
+      dumpbyte(*c);
     }
     c++;
   }
   putchar('\n');
 }
 
-static void byte(MDBX_val *v) {
+static void dumpval(MDBX_val *v) {
   unsigned char *c, *end;
 
   putchar(' ');
   c = v->iov_base;
   end = c + v->iov_len;
   while (c < end) {
-    hex(*c++);
+    dumpbyte(*c++);
   }
   putchar('\n');
 }
@@ -124,16 +137,16 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
     return rc;
 
   while ((rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT)) == MDBX_SUCCESS) {
-    if (gotsig) {
-      rc = EINTR;
+    if (user_break) {
+      rc = MDBX_EINTR;
       break;
     }
     if (mode & PRINT) {
       text(&key);
       text(&data);
     } else {
-      byte(&key);
-      byte(&data);
+      dumpval(&key);
+      dumpval(&data);
     }
   }
   printf("DATA=END\n");
@@ -212,14 +225,18 @@ int main(int argc, char *argv[]) {
   if (optind != argc - 1)
     usage(prog);
 
+#if defined(_WIN32) || defined(_WIN64)
+  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
+#else
 #ifdef SIGPIPE
-  signal(SIGPIPE, dumpsig);
+  signal(SIGPIPE, signal_handler);
 #endif
 #ifdef SIGHUP
-  signal(SIGHUP, dumpsig);
+  signal(SIGHUP, signal_handler);
 #endif
-  signal(SIGINT, dumpsig);
-  signal(SIGTERM, dumpsig);
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
+#endif /* !WINDOWS */
 
   envname = argv[optind];
   rc = mdbx_env_create(&env);
@@ -265,6 +282,10 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
     while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDBX_NEXT_NODUP)) == 0) {
+      if (user_break) {
+        rc = MDBX_EINTR;
+        break;
+      }
       char *str;
       MDBX_dbi db2;
       if (memchr(key.iov_base, '\0', key.iov_len))

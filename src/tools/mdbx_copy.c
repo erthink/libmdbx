@@ -13,13 +13,34 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#include "../../mdbx.h"
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+#if _MSC_VER > 1800
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#endif
+#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
+#endif                          /* _MSC_VER */
 
-static void sighandle(int sig) { (void)sig; }
+#include "../bits.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+#include "wingetopt.h"
+
+static volatile BOOL user_break;
+static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
+  (void)dwCtrlType;
+  user_break = true;
+  return true;
+}
+
+#else /* WINDOWS */
+
+static volatile sig_atomic_t user_break;
+static void signal_handler(int sig) {
+  (void)sig;
+  user_break = 1;
+}
+
+#endif /* !WINDOWS */
 
 int main(int argc, char *argv[]) {
   int rc;
@@ -46,14 +67,18 @@ int main(int argc, char *argv[]) {
     exit(EXIT_FAILURE);
   }
 
+#if defined(_WIN32) || defined(_WIN64)
+  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
+#else
 #ifdef SIGPIPE
-  signal(SIGPIPE, sighandle);
+  signal(SIGPIPE, signal_handler);
 #endif
 #ifdef SIGHUP
-  signal(SIGHUP, sighandle);
+  signal(SIGHUP, signal_handler);
 #endif
-  signal(SIGINT, sighandle);
-  signal(SIGTERM, sighandle);
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
+#endif /* !WINDOWS */
 
   act = "opening environment";
   rc = mdbx_env_create(&env);
@@ -62,9 +87,15 @@ int main(int argc, char *argv[]) {
   }
   if (rc == MDBX_SUCCESS) {
     act = "copying";
-    if (argc == 2)
-      rc = mdbx_env_copy2fd(env, STDOUT_FILENO, cpflags);
-    else
+    if (argc == 2) {
+      mdbx_filehandle_t fd;
+#if defined(_WIN32) || defined(_WIN64)
+      fd = GetStdHandle(STD_OUTPUT_HANDLE);
+#else
+      fd = fileno(stdout);
+#endif
+      rc = mdbx_env_copy2fd(env, fd, cpflags);
+    } else
       rc = mdbx_env_copy(env, argv[2], cpflags);
   }
   if (rc)

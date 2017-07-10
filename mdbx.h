@@ -83,6 +83,7 @@ typedef SSIZE_T ssize_t;
 #define MDBX_ENOSYS ERROR_NOT_SUPPORTED
 #define MDBX_EIO ERROR_WRITE_FAULT
 #define MDBX_EPERM ERROR_INVALID_FUNCTION
+#define MDBX_EINTR ERROR_CANCELLED
 
 #else
 
@@ -102,6 +103,7 @@ typedef pthread_t mdbx_tid_t;
 #define MDBX_ENOSYS ENOSYS
 #define MDBX_EIO EIO
 #define MDBX_EPERM EPERM
+#define MDBX_EINTR EINTR
 #endif
 
 #ifdef _MSC_VER

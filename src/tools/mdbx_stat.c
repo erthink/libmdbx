@@ -13,14 +13,34 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#include <inttypes.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+#if _MSC_VER > 1800
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#endif
+#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
+#endif                          /* _MSC_VER */
 
-#include "../../mdbx.h"
 #include "../bits.h"
+
+#if defined(_WIN32) || defined(_WIN64)
+#include "wingetopt.h"
+
+static volatile BOOL user_break;
+static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
+  (void)dwCtrlType;
+  user_break = true;
+  return true;
+}
+
+#else /* WINDOWS */
+
+static volatile sig_atomic_t user_break;
+static void signal_handler(int sig) {
+  (void)sig;
+  user_break = 1;
+}
+
+#endif /* !WINDOWS */
 
 static void prstat(MDBX_stat *ms) {
   printf("  Pagesize: %u\n", ms->ms_psize);
@@ -39,7 +59,7 @@ static void usage(char *prog) {
 }
 
 int main(int argc, char *argv[]) {
-  int i, rc;
+  int o, rc;
   MDBX_env *env;
   MDBX_txn *txn;
   MDBX_dbi dbi;
@@ -63,8 +83,8 @@ int main(int argc, char *argv[]) {
    * -V: print version and exit
    * (default) print stat of only the main DB
    */
-  while ((i = getopt(argc, argv, "Vaefnrs:")) != EOF) {
-    switch (i) {
+  while ((o = getopt(argc, argv, "Vaefnrs:")) != EOF) {
+    switch (o) {
     case 'V':
       printf("%s (%s, build %s)\n", mdbx_version.git.describe,
              mdbx_version.git.datetime, mdbx_build.datetime);
@@ -99,6 +119,19 @@ int main(int argc, char *argv[]) {
 
   if (optind != argc - 1)
     usage(prog);
+
+#if defined(_WIN32) || defined(_WIN64)
+  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
+#else
+#ifdef SIGPIPE
+  signal(SIGPIPE, signal_handler);
+#endif
+#ifdef SIGHUP
+  signal(SIGHUP, signal_handler);
+#endif
+  signal(SIGINT, signal_handler);
+  signal(SIGTERM, signal_handler);
+#endif /* !WINDOWS */
 
   envname = argv[optind];
   rc = mdbx_env_create(&env);
@@ -195,6 +228,10 @@ int main(int argc, char *argv[]) {
     }
     prstat(&mst);
     while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
+      if (user_break) {
+        rc = MDBX_EINTR;
+        break;
+      }
       iptr = data.iov_base;
       pages += *iptr;
       if (envinfo && mei.me_latter_reader_txnid > *(size_t *)key.iov_base)
@@ -209,7 +246,7 @@ int main(int argc, char *argv[]) {
           if (pg <= prev)
             bad = " [bad sequence]";
           prev = pg;
-          pg += span;
+          pg += (unsigned)span;
           for (; i >= span && iptr[i - span] == pg; span++, pg++)
             ;
         }

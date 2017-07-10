@@ -13,19 +13,13 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#include <ctype.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <malloc.h>
-#include <signal.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <time.h>
-#include <unistd.h>
+#ifdef _MSC_VER
+#if _MSC_VER > 1800
+#pragma warning(disable : 4464) /* relative include path contains '..' */
+#endif
+#pragma warning(disable : 4996) /* The POSIX name is deprecated... */
+#endif                          /* _MSC_VER */
 
-#include "../../mdbx.h"
 #include "../bits.h"
 
 typedef struct flagbit {
@@ -41,12 +35,25 @@ flagbit dbflags[] = {{MDBX_DUPSORT, "dupsort"},
                      {MDBX_INTEGERDUP, "integerdup"},
                      {0, NULL}};
 
-static volatile sig_atomic_t gotsignal;
+#if defined(_WIN32) || defined(_WIN64)
+#include "wingetopt.h"
 
+static volatile BOOL user_break;
+static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
+  (void)dwCtrlType;
+  user_break = true;
+  return true;
+}
+
+#else /* WINDOWS */
+
+static volatile sig_atomic_t user_break;
 static void signal_handler(int sig) {
   (void)sig;
-  gotsignal = 1;
+  user_break = 1;
 }
+
+#endif /* !WINDOWS */
 
 #define EXIT_INTERRUPTED (EXIT_FAILURE + 4)
 #define EXIT_FAILURE_SYS (EXIT_FAILURE + 3)
@@ -64,10 +71,6 @@ struct {
   uint64_t total_payload_bytes;
   uint64_t pgcount;
 } walk;
-
-static __attribute__((constructor)) void init_walk(void) {
-  walk.dbi_names[0] = "@gc";
-}
 
 uint64_t total_unused_bytes;
 int exclusive = 2;
@@ -91,7 +94,11 @@ struct problem {
 struct problem *problems_list;
 uint64_t total_problems;
 
-static void __attribute__((format(printf, 1, 2))) print(const char *msg, ...) {
+static void
+#ifdef __GNU__
+    __attribute__((format(printf, 1, 2)))
+#endif
+    print(const char *msg, ...) {
   if (!quiet) {
     va_list args;
 
@@ -102,7 +109,11 @@ static void __attribute__((format(printf, 1, 2))) print(const char *msg, ...) {
   }
 }
 
-static void __attribute__((format(printf, 1, 2))) error(const char *msg, ...) {
+static void
+#ifdef __GNU__
+    __attribute__((format(printf, 1, 2)))
+#endif
+    error(const char *msg, ...) {
   total_problems++;
 
   if (!quiet) {
@@ -232,7 +243,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
     size_t page_size = (size_t)pgnumber * envstat.ms_psize;
     int index = pagemap_lookup_dbi(dbi);
     if (index < 0)
-      return ENOMEM;
+      return MDBX_ENOMEM;
 
     if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi) == 0)) {
       if (pgnumber == 1)
@@ -290,7 +301,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
           problem_add("page", pgno, "already used", "in %s",
                       walk.dbi_names[walk.pagemap[pgno]]);
         else {
-          walk.pagemap[pgno] = index;
+          walk.pagemap[pgno] = (short)index;
           walk.dbi_pages[index] += 1;
         }
         ++pgno;
@@ -298,12 +309,12 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
     }
   }
 
-  return gotsignal ? EINTR : MDBX_SUCCESS;
+  return user_break ? MDBX_EINTR : MDBX_SUCCESS;
 }
 
 typedef int(visitor)(const uint64_t record_number, const MDBX_val *key,
                      const MDBX_val *data);
-static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent);
+static int process_db(MDBX_dbi dbi, char *name, visitor *handler, bool silent);
 
 static int handle_userdb(const uint64_t record_number, const MDBX_val *key,
                          const MDBX_val *data) {
@@ -398,7 +409,7 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   name[key->iov_len] = '\0';
   userdb_count++;
 
-  rc = process_db(-1, name, handle_userdb, 0);
+  rc = process_db(~0u, name, handle_userdb, false);
   free(name);
   if (rc != MDBX_INCOMPATIBLE)
     return rc;
@@ -406,7 +417,7 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   return handle_userdb(record_number, key, data);
 }
 
-static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent) {
+static int process_db(MDBX_dbi dbi, char *name, visitor *handler, bool silent) {
   MDBX_cursor *mc;
   MDBX_stat ms;
   MDBX_val key, data;
@@ -419,7 +430,7 @@ static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent) {
   uint64_t record_count = 0, dups = 0;
   uint64_t key_bytes = 0, data_bytes = 0;
 
-  if (0 > (int)dbi) {
+  if (dbi == ~0u) {
     rc = mdbx_dbi_open(txn, name, 0, &dbi);
     if (rc) {
       if (!name ||
@@ -489,10 +500,10 @@ static int process_db(MDBX_dbi dbi, char *name, visitor *handler, int silent) {
   prev_data.iov_len = 0;
   rc = mdbx_cursor_get(mc, &key, &data, MDBX_FIRST);
   while (rc == MDBX_SUCCESS) {
-    if (gotsignal) {
+    if (user_break) {
       print(" - interrupted by signal\n");
       fflush(NULL);
-      rc = EINTR;
+      rc = MDBX_EINTR;
       goto bailout;
     }
 
@@ -744,16 +755,22 @@ int main(int argc, char *argv[]) {
   char *envname;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
   int dont_traversal = 0;
-  struct timespec timestamp_start, timestamp_finish;
+
   double elapsed;
-
-  atexit(pagemap_cleanup);
-
+#if defined(_WIN32) || defined(_WIN64)
+  uint64_t timestamp_start, timestamp_finish;
+  timestamp_start = GetTickCount64();
+#else
+  struct timespec timestamp_start, timestamp_finish;
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_start)) {
     rc = errno;
     error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
     return EXIT_FAILURE_SYS;
   }
+#endif
+
+  walk.dbi_names[0] = "@gc";
+  atexit(pagemap_cleanup);
 
   if (argc < 2) {
     usage(prog);
@@ -797,6 +814,9 @@ int main(int argc, char *argv[]) {
   if (optind != argc - 1)
     usage(prog);
 
+#if defined(_WIN32) || defined(_WIN64)
+  SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
+#else
 #ifdef SIGPIPE
   signal(SIGPIPE, signal_handler);
 #endif
@@ -805,6 +825,7 @@ int main(int argc, char *argv[]) {
 #endif
   signal(SIGINT, signal_handler);
   signal(SIGTERM, signal_handler);
+#endif /* !WINDOWS */
 
   envname = argv[optind];
   print("Running mdbx_chk for '%s' in %s mode...\n", envname,
@@ -933,14 +954,14 @@ int main(int argc, char *argv[]) {
 
   if (!dont_traversal) {
     struct problem *saved_list;
-    size_t traversal_problems;
-    size_t empty_pages, lost_bytes;
+    uint64_t traversal_problems;
+    uint64_t empty_pages, lost_bytes;
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
     fflush(NULL);
-    walk.pagemap = calloc(lastpgno, sizeof(*walk.pagemap));
+    walk.pagemap = calloc((size_t)lastpgno, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
-      rc = errno ? errno : ENOMEM;
+      rc = errno ? errno : MDBX_ENOMEM;
       error("calloc failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto bailout;
     }
@@ -950,7 +971,7 @@ int main(int argc, char *argv[]) {
     traversal_problems = problems_pop(saved_list);
 
     if (rc) {
-      if (rc == EINTR && gotsignal) {
+      if (rc == MDBX_EINTR && user_break) {
         print(" - interrupted by signal\n");
         fflush(NULL);
       } else {
@@ -1017,8 +1038,8 @@ int main(int argc, char *argv[]) {
 
   if (!verbose)
     print("Iterating DBIs...\n");
-  problems_maindb = process_db(-1, /* MAIN_DBI */ NULL, NULL, 0);
-  problems_freedb = process_db(0 /* FREE_DBI */, "free", handle_freedb, 0);
+  problems_maindb = process_db(~0u, /* MAIN_DBI */ NULL, NULL, false);
+  problems_freedb = process_db(FREE_DBI, "free", handle_freedb, false);
 
   if (verbose) {
     uint64_t value = envinfo.me_mapsize / envstat.ms_psize;
@@ -1064,7 +1085,7 @@ int main(int argc, char *argv[]) {
             "monopolistic or write-lock mode only)\n");
     }
 
-    if (!process_db(-1, NULL, handle_maindb, 1)) {
+    if (!process_db(MAIN_DBI, NULL, handle_maindb, true)) {
       if (!userdb_count && verbose)
         print(" - does not contain multiple databases\n");
     }
@@ -1080,18 +1101,22 @@ bailout:
   fflush(NULL);
   if (rc) {
     if (rc < 0)
-      return gotsignal ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
+      return (user_break) ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
     return EXIT_FAILURE_MDB;
   }
 
+#if defined(_WIN32) || defined(_WIN64)
+  timestamp_finish = GetTickCount64();
+  elapsed = (timestamp_finish - timestamp_start) * 1e-3;
+#else
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_finish)) {
     rc = errno;
     error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
     return EXIT_FAILURE_SYS;
   }
-
   elapsed = timestamp_finish.tv_sec - timestamp_start.tv_sec +
             (timestamp_finish.tv_nsec - timestamp_start.tv_nsec) * 1e-9;
+#endif /* !WINDOWS */
 
   total_problems += problems_meta;
   if (total_problems || problems_maindb || problems_freedb) {
