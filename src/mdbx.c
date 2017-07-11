@@ -4552,7 +4552,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
   }
 
   while (1) {
-    const MDBX_meta *head = mdbx_meta_head(env);
+    MDBX_meta *head = mdbx_meta_head(env);
     const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
     if (head_txnid == meta.mm_txnid_a)
       break;
@@ -4567,14 +4567,28 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       }
 
       /* LY: rollback weak checkpoint */
-      MDBX_meta rollback = *head;
-      mdbx_meta_set_txnid(env, &rollback, 0);
-      rollback.mm_datasync_sign = MDBX_DATASIGN_WEAK;
       mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN, head_txnid,
                  meta.mm_txnid_a);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
-      err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
-                        (uint8_t *)head - (uint8_t *)env->me_map);
+
+      if (env->me_flags & MDBX_WRITEMAP) {
+        head->mm_txnid_a = 0;
+        head->mm_datasync_sign = MDBX_DATASIGN_WEAK;
+        head->mm_txnid_b = 0;
+        const size_t offset =
+            (uint8_t *)container_of(head, MDBX_page, mp_meta) -
+            env->me_dxb_mmap.dxb;
+        const size_t paged_offset = offset & ~(env->me_os_psize - 1);
+        const size_t paged_length = mdbx_roundup2(
+            env->me_psize + offset - paged_offset, env->me_os_psize);
+        err = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length, false);
+      } else {
+        MDBX_meta rollback = *head;
+        mdbx_meta_set_txnid(env, &rollback, 0);
+        rollback.mm_datasync_sign = MDBX_DATASIGN_WEAK;
+        err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
+                          (uint8_t *)head - (uint8_t *)env->me_map);
+      }
       if (err)
         return err;
 
