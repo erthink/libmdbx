@@ -1852,14 +1852,8 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
                   "), %" PRIuPTR " bytes",
                   growth_pgno, growth_pgno - txn->mt_end_pgno, growth_bytes);
 
-        mdbx_mmap_param_t mmap;
-        mmap.address = env->me_map;
-#ifdef MDBX_OSAL_SECTION
-        mmap.section = env->me_dxb_section;
-#endif
-        mmap.fd = env->me_fd;
-        rc =
-            mdbx_mresize(env->me_flags, &mmap, env->me_dbgeo.now, growth_bytes);
+        rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
+                          growth_bytes);
         if (rc == MDBX_SUCCESS) {
           txn->mt_end_pgno = growth_pgno;
           env->me_dbgeo.now = growth_bytes;
@@ -2146,7 +2140,8 @@ int mdbx_env_sync(MDBX_env *env, int force) {
 
       /* LY: pre-sync without holding lock to reduce latency for writer(s) */
       int rc = (flags & MDBX_WRITEMAP)
-                   ? mdbx_msync(env->me_map, used_size, flags & MDBX_MAPASYNC)
+                   ? mdbx_msync(&env->me_dxb_mmap, 0, used_size,
+                                flags & MDBX_MAPASYNC)
                    : mdbx_filesync(env->me_fd, false);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -3783,7 +3778,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     MDBX_meta *const steady = mdbx_meta_steady(env);
     if (flags & MDBX_WRITEMAP) {
-      rc = mdbx_msync(env->me_map, usedbytes, flags & MDBX_MAPASYNC);
+      rc = mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, flags & MDBX_MAPASYNC);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
       if ((flags & MDBX_MAPASYNC) == 0) {
@@ -3885,7 +3880,6 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, !mdbx_meta_eq(env, pending, meta1));
   mdbx_assert(env, !mdbx_meta_eq(env, pending, meta2));
 
-  const size_t offset = (char *)target - env->me_map;
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   mdbx_ensure(env,
               target == head ||
@@ -3932,16 +3926,18 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     mdbx_jitter4testing(true);
   } else {
     pending->mm_magic_and_version = MDBX_DATA_MAGIC;
-    rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta), offset);
+    rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta),
+                     (uint8_t *)target - env->me_map);
     if (unlikely(rc != MDBX_SUCCESS)) {
     undo:
       mdbx_debug("write failed, disk error?");
       /* On a failure, the pagecache still contains the new data.
        * Try write some old data back, to prevent it from being used. */
-      mdbx_pwrite(env->me_fd, (void *)target, sizeof(MDBX_meta), offset);
+      mdbx_pwrite(env->me_fd, (void *)target, sizeof(MDBX_meta),
+                  (uint8_t *)target - env->me_map);
       goto fail;
     }
-    mdbx_invalidate_cache(env->me_map + offset, sizeof(MDBX_meta));
+    mdbx_invalidate_cache(target, sizeof(MDBX_meta));
   }
 
   /* LY: step#3 - sync meta-pages. */
@@ -3949,8 +3945,13 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if ((flags & (MDBX_NOSYNC | MDBX_NOMETASYNC)) == 0) {
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     if (flags & MDBX_WRITEMAP) {
-      char *ptr = env->me_map + (offset & ~(env->me_os_psize - 1));
-      rc = mdbx_msync(ptr, env->me_os_psize, flags & MDBX_MAPASYNC);
+      const size_t offset = (uint8_t *)container_of(head, MDBX_page, mp_meta) -
+                            env->me_dxb_mmap.dxb;
+      const size_t paged_offset = offset & ~(env->me_os_psize - 1);
+      const size_t paged_length = mdbx_roundup2(
+          env->me_psize + offset - paged_offset, env->me_os_psize);
+      rc = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length,
+                      flags & MDBX_MAPASYNC);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     } else {
@@ -3965,13 +3966,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #else
   /* LY: shrink datafile if needed */
   if (shrink_pgno_delta) {
-    mdbx_mmap_param_t mmap;
-    mmap.address = env->me_map;
-#ifdef MDBX_OSAL_SECTION
-    mmap.section = env->me_dxb_section;
-#endif
-    mmap.fd = env->me_fd;
-    rc = mdbx_mresize(env->me_flags, &mmap, env->me_dbgeo.now, shrink_bytes);
+    rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
+                      shrink_bytes);
     if (rc == MDBX_SUCCESS)
       env->me_dbgeo.now = shrink_bytes;
     else if (rc != MDBX_RESULT_TRUE)
@@ -4082,18 +4078,12 @@ bailout:
 }
 
 static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
-  mdbx_mmap_param_t mmap;
-  mmap.fd = env->me_fd;
-  int rc = mdbx_mmap(env->me_flags, &mmap, env->me_dbgeo.now, env->me_mapsize);
+  int rc = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
+                     env->me_mapsize);
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->me_map = NULL;
     return rc;
   }
-
-  env->me_map = mmap.address;
-#ifdef MDBX_OSAL_SECTION
-  env->me_dxb_section = mmap.section;
-#endif
 
 #ifdef MADV_DONTFORK
   if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK))
@@ -4130,7 +4120,7 @@ static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
   /* Lock meta pages to avoid unexpected write,
    * before the data pages would be synchronized. */
   if (env->me_flags & MDBX_WRITEMAP) {
-    rc = mdbx_mlock(&mmap, pgno2bytes(env, NUM_METAS));
+    rc = mdbx_mlock(&env->me_dxb_mmap, pgno2bytes(env, NUM_METAS));
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -4351,17 +4341,11 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
         const size_t size =
             mdbx_roundup2(pgno2bytes(env, meta.mm_geo.upper), env->me_os_psize);
 
-        mdbx_mmap_param_t mmap;
-        mmap.address = env->me_map;
-#ifdef MDBX_OSAL_SECTION
-        mmap.section = env->me_dxb_section;
-#endif
-        mmap.fd = env->me_fd;
-        rc = mdbx_mremap(env->me_flags, &mmap, env->me_mapsize, size);
+        rc = mdbx_mremap(env->me_flags, &env->me_dxb_mmap, env->me_mapsize,
+                         size);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         env->me_mapsize = size;
-        env->me_map = mmap.address;
 #ifdef USE_VALGRIND
         VALGRIND_DISCARD(env->me_valgrind_handle);
         env->me_valgrind_handle =
@@ -4372,13 +4356,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
         const size_t size =
             mdbx_roundup2(pgno2bytes(env, meta.mm_geo.now), env->me_os_psize);
 
-        mdbx_mmap_param_t mmap;
-        mmap.address = env->me_map;
-#ifdef MDBX_OSAL_SECTION
-        mmap.section = env->me_dxb_section;
-#endif
-        mmap.fd = env->me_fd;
-        rc = mdbx_mresize(env->me_flags, &mmap,
+        rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap,
                           pgno2bytes(env, head->mm_geo.now), size);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -4736,15 +4714,9 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
   }
   env->me_maxreaders = (unsigned)maxreaders;
 
-  mdbx_mmap_param_t mmap;
-  mmap.fd = env->me_lfd;
-  err = mdbx_mmap(MDBX_WRITEMAP, &mmap, (size_t)size, (size_t)size);
+  err = mdbx_mmap(MDBX_WRITEMAP, &env->me_lck_mmap, (size_t)size, (size_t)size);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  env->me_lck = mmap.address;
-#ifdef MDBX_OSAL_SECTION
-  env->me_lck_section = mmap.section;
-#endif
 
 #ifdef MADV_DODUMP
   (void)madvise(env->me_lck, size, MADV_DODUMP);
@@ -5011,13 +4983,7 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
   }
 
   if (env->me_map) {
-    mdbx_mmap_param_t mmap;
-    mmap.address = env->me_map;
-#ifdef MDBX_OSAL_SECTION
-    mmap.section = env->me_dxb_section;
-#endif
-    mmap.fd = env->me_fd;
-    mdbx_munmap(&mmap, env->me_mapsize);
+    mdbx_munmap(&env->me_dxb_mmap, env->me_mapsize);
 #ifdef USE_VALGRIND
     VALGRIND_DISCARD(env->me_valgrind_handle);
     env->me_valgrind_handle = -1;
@@ -5029,14 +4995,9 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
   }
 
   if (env->me_lck) {
-    mdbx_mmap_param_t mmap;
-    mmap.address = env->me_lck;
-#ifdef MDBX_OSAL_SECTION
-    mmap.section = env->me_lck_section;
-#endif
-    mmap.fd = env->me_lfd;
-    mdbx_munmap(&mmap, (env->me_maxreaders - 1) * sizeof(MDBX_reader) +
-                           sizeof(MDBX_lockinfo));
+    mdbx_munmap(&env->me_lck_mmap,
+                (env->me_maxreaders - 1) * sizeof(MDBX_reader) +
+                    sizeof(MDBX_lockinfo));
     env->me_lck = nullptr;
   }
   env->me_pid = 0;
@@ -11027,9 +10988,9 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
    * Тем не менее, однозначно страница "не грязная" (не будет переписана
    * во время транзакции) если адрес находится внутри mmap-диапазона
    * и в заголовке страницы нет флажка P_DIRTY. */
-  if (env->me_map < (char *)page) {
+  if (env->me_map < (uint8_t *)page) {
     const size_t used_size = pgno2bytes(env, txn->mt_next_pgno);
-    if ((char *)page < env->me_map + used_size) {
+    if ((uint8_t *)page < env->me_map + used_size) {
       /* страница внутри диапазона, смотрим на флажки */
       return (page->mp_flags & (P_DIRTY | P_LOOSE | P_KEEP))
                  ? MDBX_RESULT_TRUE
@@ -11040,7 +11001,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
      * ошибка, к которой не возможно прийти без каких-то больших нарушений.
      * Поэтому не проверяем этот случай кроме как assert-ом, на то что
      * страница вне mmap-диаппазона. */
-    mdbx_tassert(txn, (char *)page >= env->me_map + env->me_mapsize);
+    mdbx_tassert(txn, (uint8_t *)page >= env->me_map + env->me_mapsize);
   }
 
   /* Страница вне используемого mmap-диапазона, т.е. либо в функцию был

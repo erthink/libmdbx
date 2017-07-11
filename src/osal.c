@@ -732,18 +732,19 @@ int mdbx_thread_join(mdbx_thread_t thread) {
 
 /*----------------------------------------------------------------------------*/
 
-int mdbx_msync(void *addr, size_t length, int async) {
+int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
+  uint8_t *ptr = (uint8_t *)map->address + offset;
 #if defined(_WIN32) || defined(_WIN64)
-  if (async)
+  if (FlushViewOfFile(ptr, length) && (async || FlushFileBuffers(map->fd)))
     return MDBX_SUCCESS;
-  return FlushViewOfFile(addr, length) ? MDBX_SUCCESS : GetLastError();
+  return GetLastError();
 #else
   const int mode = async ? MS_ASYNC : MS_SYNC;
-  return (msync(addr, length, mode) == 0) ? MDBX_SUCCESS : errno;
+  return (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
 
-int mdbx_mmap(int flags, mdbx_mmap_param_t *map, size_t length, size_t limit) {
+int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t length, size_t limit) {
 #if defined(_WIN32) || defined(_WIN64)
   NTSTATUS rc = NtCreateSection(
       &map->section,
@@ -790,7 +791,7 @@ int mdbx_mmap(int flags, mdbx_mmap_param_t *map, size_t length, size_t limit) {
 #endif
 }
 
-int mdbx_munmap(mdbx_mmap_param_t *map, size_t length) {
+int mdbx_munmap(mdbx_mmap_t *map, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)length;
   if (map->section)
@@ -802,7 +803,7 @@ int mdbx_munmap(mdbx_mmap_param_t *map, size_t length) {
 #endif
 }
 
-int mdbx_mlock(mdbx_mmap_param_t *map, size_t length) {
+int mdbx_mlock(mdbx_mmap_t *map, size_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   return VirtualLock(map->address, length) ? MDBX_SUCCESS : GetLastError();
 #else
@@ -810,8 +811,7 @@ int mdbx_mlock(mdbx_mmap_param_t *map, size_t length) {
 #endif
 }
 
-int mdbx_mresize(int flags, mdbx_mmap_param_t *map, size_t current,
-                 size_t wanna) {
+int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current, size_t wanna) {
 #if defined(_WIN32) || defined(_WIN64)
   if (wanna > current) {
     /* growth */
@@ -831,7 +831,7 @@ int mdbx_mresize(int flags, mdbx_mmap_param_t *map, size_t current,
 #endif
 }
 
-int mdbx_mremap(int flags, mdbx_mmap_param_t *map, size_t old_limit,
+int mdbx_mremap(int flags, mdbx_mmap_t *map, size_t old_limit,
                 size_t new_limit) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)flags;
