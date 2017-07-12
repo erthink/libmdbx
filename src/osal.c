@@ -773,9 +773,12 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
 #endif
 }
 
-int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t length, size_t limit) {
+int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
+  assert(must <= limit);
 #if defined(_WIN32) || defined(_WIN64)
-  map->section = 0;
+  map->length = 0;
+  map->current = 0;
+  map->section = NULL;
   map->address = MAP_FAILED;
 
   if (GetFileType(map->fd) != FILE_TYPE_DISK)
@@ -870,11 +873,11 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t length, size_t limit) {
     return ntstatus2errcode(rc);
 
   map->address = NULL;
-  SIZE_T ViewSize = limit;
+  SIZE_T ViewSize = (flags & MDBX_RDONLY) ? must : limit;
   rc = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,
-      /* CommitSize */ length,
+      /* CommitSize */ must,
       /* SectionOffset */ NULL, &ViewSize,
       /* InheritDisposition */ ViewUnmap,
       /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
@@ -889,26 +892,40 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t length, size_t limit) {
   }
 
   assert(map->address != MAP_FAILED);
+  map->current = must;
+  map->length = ViewSize;
   return MDBX_SUCCESS;
 #else
-  (void)length;
+  (void)must;
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
       MAP_SHARED, map->fd, 0);
-  return (map->address != MAP_FAILED) ? MDBX_SUCCESS : errno;
+  if (likely(map->address != MAP_FAILED)) {
+    map->length = limit;
+    return MDBX_SUCCESS;
+  }
+  map->length = 0;
+  return errno;
 #endif
 }
 
-int mdbx_munmap(mdbx_mmap_t *map, size_t length) {
+int mdbx_munmap(mdbx_mmap_t *map) {
 #if defined(_WIN32) || defined(_WIN64)
-  (void)length;
   if (map->section)
     NtClose(map->section);
   NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
-  return NT_SUCCESS(rc) ? MDBX_SUCCESS : ntstatus2errcode(rc);
+  if (!NT_SUCCESS(rc))
+    ntstatus2errcode(rc);
+  map->length = 0;
+  map->current = 0;
+  map->address = nullptr;
 #else
-  return (munmap(map->address, length) == 0) ? MDBX_SUCCESS : errno;
+  if (unlikely(munmap(map->address, map->length)))
+    return errno;
+  map->length = 0;
+  map->address = nullptr;
 #endif
+  return MDBX_SUCCESS;
 }
 
 int mdbx_mlock(mdbx_mmap_t *map, size_t length) {
@@ -919,45 +936,46 @@ int mdbx_mlock(mdbx_mmap_t *map, size_t length) {
 #endif
 }
 
-int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current, size_t wanna) {
+int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
+  assert(must <= limit);
 #if defined(_WIN32) || defined(_WIN64)
-  if (wanna > current) {
-    /* growth */
-    uint8_t *ptr = (uint8_t *)map->address + current;
-    return (ptr == VirtualAlloc(ptr, wanna - current, MEM_COMMIT,
-                                (flags & MDBX_WRITEMAP) ? PAGE_READWRITE
-                                                        : PAGE_READONLY))
-               ? MDBX_SUCCESS
-               : GetLastError();
-  }
-  /* Windows is unable shrinking a mapped file */
-  return MDBX_RESULT_TRUE;
-#else
-  (void)flags;
-  (void)current;
-  return mdbx_ftruncate(map->fd, wanna);
-#endif
-}
-
-int mdbx_mremap(int flags, mdbx_mmap_t *map, size_t old_limit,
-                size_t new_limit) {
-#if defined(_WIN32) || defined(_WIN64)
-  (void)flags;
-  if (old_limit > new_limit) {
+  if (limit < map->length) {
     /* Windows is unable shrinking a mapped section */
     return ERROR_USER_MAPPED_FILE;
   }
-  LARGE_INTEGER new_size;
-  new_size.QuadPart = new_limit;
-  NTSTATUS rc = NtExtendSection(map->section, &new_size);
-  return NT_SUCCESS(rc) ? MDBX_SUCCESS : ntstatus2errcode(rc);
+  if (limit > map->length) {
+    /* extend */
+    LARGE_INTEGER new_size;
+    new_size.QuadPart = limit;
+    NTSTATUS rc = NtExtendSection(map->section, &new_size);
+    if (!NT_SUCCESS(rc))
+      return ntstatus2errcode(rc);
+    map->length = limit;
+  }
+  if (must < map->current) {
+    /* Windows is unable shrinking a mapped file */
+    return MDBX_RESULT_TRUE;
+  }
+  if (must > map->current) {
+    /* growth */
+    uint8_t *ptr = (uint8_t *)map->address + map->current;
+    if (ptr !=
+        VirtualAlloc(ptr, must - map->current, MEM_COMMIT,
+                     (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY))
+      return GetLastError();
+    map->current = must;
+  }
+  return MDBX_SUCCESS;
 #else
   (void)flags;
-  void *ptr = mremap(map->address, old_limit, new_limit, 0);
-  if (ptr == MAP_FAILED)
-    return errno;
-  map->address = ptr;
-  return MDBX_SUCCESS;
+  if (limit != map->length) {
+    void *ptr = mremap(map->address, map->length, limit, MREMAP_MAYMOVE);
+    if (ptr == MAP_FAILED)
+      return errno;
+    map->address = ptr;
+    map->length = limit;
+  }
+  return mdbx_ftruncate(map->fd, must);
 #endif
 }
 

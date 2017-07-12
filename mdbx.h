@@ -448,18 +448,18 @@ typedef struct MDBX_envinfo {
     uint64_t current; /* current datafile size */
     uint64_t shrink;  /* shrink theshold for datafile */
     uint64_t grow;    /* growth step for datafile */
-  } me_geo;
-  uint64_t me_mapsize;             /* Size of the data memory map */
-  uint64_t me_last_pgno;           /* ID of the last used page */
-  uint64_t me_recent_txnid;        /* ID of the last committed transaction */
-  uint64_t me_latter_reader_txnid; /* ID of the last reader transaction */
-  uint64_t me_meta0_txnid, me_meta0_sign;
-  uint64_t me_meta1_txnid, me_meta1_sign;
-  uint64_t me_meta2_txnid, me_meta2_sign;
-  uint32_t me_maxreaders;   /* max reader slots in the environment */
-  uint32_t me_numreaders;   /* max reader slots used in the environment */
-  uint32_t me_dxb_pagesize; /* database pagesize */
-  uint32_t me_sys_pagesize; /* system pagesize */
+  } mi_geo;
+  uint64_t mi_mapsize;             /* Size of the data memory map */
+  uint64_t mi_last_pgno;           /* ID of the last used page */
+  uint64_t mi_recent_txnid;        /* ID of the last committed transaction */
+  uint64_t mi_latter_reader_txnid; /* ID of the last reader transaction */
+  uint64_t mi_meta0_txnid, mi_meta0_sign;
+  uint64_t mi_meta1_txnid, mi_meta1_sign;
+  uint64_t mi_meta2_txnid, mi_meta2_sign;
+  uint32_t mi_maxreaders;   /* max reader slots in the environment */
+  uint32_t mi_numreaders;   /* max reader slots used in the environment */
+  uint32_t mi_dxb_pagesize; /* database pagesize */
+  uint32_t mi_sys_pagesize; /* system pagesize */
 } MDBX_envinfo;
 
 /* Return a string describing a given error code.

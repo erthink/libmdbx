@@ -137,7 +137,7 @@ static void readhdr(void) {
       if (ptr)
         *ptr = '\0';
       i = sscanf((char *)dbuf.iov_base + STRLENOF("mapsize="), "%" PRIu64 "",
-                 &envinfo.me_mapsize);
+                 &envinfo.mi_mapsize);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapsize %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("mapsize="));
@@ -150,7 +150,7 @@ static void readhdr(void) {
       if (ptr)
         *ptr = '\0';
       i = sscanf((char *)dbuf.iov_base + STRLENOF("maxreaders="), "%u",
-                 &envinfo.me_maxreaders);
+                 &envinfo.mi_maxreaders);
       if (i != 1) {
         fprintf(stderr, "%s: line %" PRIiPTR ": invalid maxreaders %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("maxreaders="));
@@ -393,20 +393,20 @@ int main(int argc, char *argv[]) {
 
   mdbx_env_set_maxdbs(env, 2);
 
-  if (envinfo.me_maxreaders)
-    mdbx_env_set_maxreaders(env, envinfo.me_maxreaders);
+  if (envinfo.mi_maxreaders)
+    mdbx_env_set_maxreaders(env, envinfo.mi_maxreaders);
 
-  if (envinfo.me_mapsize) {
-    if (envinfo.me_mapsize > SIZE_MAX) {
+  if (envinfo.mi_mapsize) {
+    if (envinfo.mi_mapsize > SIZE_MAX) {
       fprintf(stderr, "mdbx_env_set_mapsize failed, error %d %s\n", rc,
               mdbx_strerror(MDBX_TOO_LARGE));
       return EXIT_FAILURE;
     }
-    mdbx_env_set_mapsize(env, (size_t)envinfo.me_mapsize);
+    mdbx_env_set_mapsize(env, (size_t)envinfo.mi_mapsize);
   }
 
 #ifdef MDBX_FIXEDMAP
-  if (info.me_mapaddr)
+  if (info.mi_mapaddr)
     envflags |= MDBX_FIXEDMAP;
 #endif
 

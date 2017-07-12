@@ -444,17 +444,19 @@ typedef struct mdbx_mmap_param {
     struct MDBX_lockinfo *lck;
   };
   mdbx_filehandle_t fd;
+  size_t length; /* mapping length, but NOT a size of file or DB */
+#if defined(_WIN32) || defined(_WIN64)
+  size_t current; /* mapped region size, e.g. file and DB */
+#endif
 #ifdef MDBX_OSAL_SECTION
   MDBX_OSAL_SECTION section;
 #endif
 } mdbx_mmap_t;
 
-int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t length, size_t limit);
-int mdbx_munmap(mdbx_mmap_t *map, size_t length);
+int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit);
+int mdbx_munmap(mdbx_mmap_t *map);
 int mdbx_mlock(mdbx_mmap_t *map, size_t length);
 int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current, size_t wanna);
-int mdbx_mremap(int flags, mdbx_mmap_t *map, size_t old_limit,
-                size_t new_limit);
 int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async);
 
 static __inline mdbx_pid_t mdbx_getpid(void) {

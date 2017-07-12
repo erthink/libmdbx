@@ -660,11 +660,12 @@ struct MDBX_env {
 #define MDBX_ME_SIGNATURE UINT32_C(0x9A899641)
   size_t me_signature;
   mdbx_mmap_t me_dxb_mmap; /*  The main data file */
-  mdbx_mmap_t me_lck_mmap; /*  The lock file */
 #define me_map me_dxb_mmap.dxb
-#define me_lck me_lck_mmap.lck
 #define me_fd me_dxb_mmap.fd
+#define me_mapsize me_dxb_mmap.length
+  mdbx_mmap_t me_lck_mmap; /*  The lock file */
 #define me_lfd me_lck_mmap.fd
+#define me_lck me_lck_mmap.lck
 
 /* Failed to update the meta page. Probably an I/O error. */
 #define MDBX_FATAL_ERROR UINT32_C(0x80000000)
@@ -688,7 +689,6 @@ struct MDBX_env {
   void *me_pbuf;               /* scratch area for DUPSORT put() */
   MDBX_txn *me_txn;            /* current write transaction */
   MDBX_txn *me_txn0;           /* prealloc'd write transaction */
-  size_t me_mapsize;           /* size of the data memory map */
   MDBX_dbx *me_dbxs;           /* array of static DB info */
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
@@ -719,6 +719,7 @@ struct MDBX_env {
 #ifdef USE_VALGRIND
   int me_valgrind_handle;
 #endif
+
   struct {
     size_t lower;  /* minimal size of datafile */
     size_t upper;  /* maximal size of datafile */

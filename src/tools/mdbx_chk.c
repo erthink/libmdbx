@@ -335,7 +335,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
   if (key->iov_len != sizeof(txnid_t))
     problem_add("entry", record_number, "wrong txn-id size",
                 "key-size %" PRIiPTR "", key->iov_len);
-  else if (txnid < 1 || txnid > envinfo.me_recent_txnid)
+  else if (txnid < 1 || txnid > envinfo.mi_recent_txnid)
     problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN "", txnid);
 
   if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
@@ -352,14 +352,14 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                   data->iov_len);
     else {
       freedb_pages += number;
-      if (envinfo.me_latter_reader_txnid > txnid)
+      if (envinfo.mi_latter_reader_txnid > txnid)
         reclaimable_pages += number;
       for (i = number, prev = 1; --i >= 0;) {
         pg = iptr[i];
-        if (pg < NUM_METAS || pg > envinfo.me_last_pgno)
+        if (pg < NUM_METAS || pg > envinfo.mi_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",
                       "%u < %" PRIiPTR " < %" PRIiPTR "", NUM_METAS, pg,
-                      envinfo.me_last_pgno);
+                      envinfo.mi_last_pgno);
         else if (pg <= prev) {
           bad = " [bad sequence]";
           problem_add("entry", record_number, "bad sequence",
@@ -636,16 +636,16 @@ static __inline bool meta_eq(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
 
 static __inline int meta_recent(const bool roolback2steady) {
 
-  if (meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-              envinfo.me_meta1_txnid, envinfo.me_meta1_sign, roolback2steady))
-    return meta_ot(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
-                   envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
+  if (meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+              envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign, roolback2steady))
+    return meta_ot(envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign,
+                   envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
                    roolback2steady)
                ? 1
                : 2;
 
-  return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-                 envinfo.me_meta2_txnid, envinfo.me_meta2_sign, roolback2steady)
+  return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+                 envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, roolback2steady)
              ? 2
              : 0;
 }
@@ -653,18 +653,18 @@ static __inline int meta_recent(const bool roolback2steady) {
 static __inline int meta_tail(int head) {
 
   if (head == 0)
-    return meta_ot(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
-                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign, true)
+    return meta_ot(envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
+                   envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, true)
                ? 1
                : 2;
   if (head == 1)
-    return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-                   envinfo.me_meta2_txnid, envinfo.me_meta2_sign, true)
+    return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+                   envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, true)
                ? 0
                : 2;
   if (head == 2)
-    return meta_ot(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-                   envinfo.me_meta1_txnid, envinfo.me_meta1_sign, true)
+    return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+                   envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign, true)
                ? 0
                : 1;
   assert(false);
@@ -698,10 +698,10 @@ void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
   if (stay)
     print(", stay");
 
-  if (txnid > envinfo.me_recent_txnid &&
+  if (txnid > envinfo.mi_recent_txnid &&
       (exclusive || (envflags & MDBX_RDONLY) == 0))
     print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
-          txnid - envinfo.me_recent_txnid, txnid, envinfo.me_recent_txnid);
+          txnid - envinfo.mi_recent_txnid, txnid, envinfo.mi_recent_txnid);
   print("\n");
 }
 
@@ -712,26 +712,26 @@ static int check_meta_head(bool steady) {
     error(" - unexpected internal error (%s)\n",
           steady ? "meta_steady_head" : "meta_weak_head");
   case 0:
-    if (envinfo.me_meta0_txnid != envinfo.me_recent_txnid) {
+    if (envinfo.mi_meta0_txnid != envinfo.mi_recent_txnid) {
       print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
             ")\n",
-            0, envinfo.me_meta0_txnid, envinfo.me_recent_txnid);
+            0, envinfo.mi_meta0_txnid, envinfo.mi_recent_txnid);
       return 1;
     }
     break;
   case 1:
-    if (envinfo.me_meta1_txnid != envinfo.me_recent_txnid) {
+    if (envinfo.mi_meta1_txnid != envinfo.mi_recent_txnid) {
       print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
             ")\n",
-            1, envinfo.me_meta1_txnid, envinfo.me_recent_txnid);
+            1, envinfo.mi_meta1_txnid, envinfo.mi_recent_txnid);
       return 1;
     }
     break;
   case 2:
-    if (envinfo.me_meta2_txnid != envinfo.me_recent_txnid) {
+    if (envinfo.mi_meta2_txnid != envinfo.mi_recent_txnid) {
       print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
             ")\n",
-            2, envinfo.me_meta2_txnid, envinfo.me_recent_txnid);
+            2, envinfo.mi_meta2_txnid, envinfo.mi_recent_txnid);
       return 1;
     }
   }
@@ -890,50 +890,50 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  lastpgno = envinfo.me_last_pgno + 1;
+  lastpgno = envinfo.mi_last_pgno + 1;
   errno = 0;
 
   if (verbose) {
     print(" - pagesize %u (%u system), max keysize %" PRIuPTR
           ", max readers %u\n",
-          envinfo.me_dxb_pagesize, envinfo.me_sys_pagesize, maxkeysize,
-          envinfo.me_maxreaders);
-    print_size(" - mapsize ", envinfo.me_mapsize, "\n");
-    if (envinfo.me_geo.lower == envinfo.me_geo.upper)
-      print_size(" - fixed datafile: ", envinfo.me_geo.current, "");
+          envinfo.mi_dxb_pagesize, envinfo.mi_sys_pagesize, maxkeysize,
+          envinfo.mi_maxreaders);
+    print_size(" - mapsize ", envinfo.mi_mapsize, "\n");
+    if (envinfo.mi_geo.lower == envinfo.mi_geo.upper)
+      print_size(" - fixed datafile: ", envinfo.mi_geo.current, "");
     else {
-      print_size(" - dynamic datafile: ", envinfo.me_geo.lower, "");
-      print_size(" .. ", envinfo.me_geo.upper, ", ");
-      print_size("+", envinfo.me_geo.grow, ", ");
-      print_size("-", envinfo.me_geo.shrink, "\n");
-      print_size(" - current datafile: ", envinfo.me_geo.current, "");
+      print_size(" - dynamic datafile: ", envinfo.mi_geo.lower, "");
+      print_size(" .. ", envinfo.mi_geo.upper, ", ");
+      print_size("+", envinfo.mi_geo.grow, ", ");
+      print_size("-", envinfo.mi_geo.shrink, "\n");
+      print_size(" - current datafile: ", envinfo.mi_geo.current, "");
     }
     printf(", %" PRIu64 " pages\n",
-           envinfo.me_geo.current / envinfo.me_dxb_pagesize);
+           envinfo.mi_geo.current / envinfo.mi_dxb_pagesize);
     print(" - transactions: recent %" PRIu64 ", latter reader %" PRIu64
           ", lag %" PRIi64 "\n",
-          envinfo.me_recent_txnid, envinfo.me_latter_reader_txnid,
-          envinfo.me_recent_txnid - envinfo.me_latter_reader_txnid);
+          envinfo.mi_recent_txnid, envinfo.mi_latter_reader_txnid,
+          envinfo.mi_recent_txnid - envinfo.mi_latter_reader_txnid);
 
-    verbose_meta(0, envinfo.me_meta0_txnid, envinfo.me_meta0_sign);
-    verbose_meta(1, envinfo.me_meta1_txnid, envinfo.me_meta1_sign);
-    verbose_meta(2, envinfo.me_meta2_txnid, envinfo.me_meta2_sign);
+    verbose_meta(0, envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign);
+    verbose_meta(1, envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign);
+    verbose_meta(2, envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign);
   }
 
   if (verbose)
     print(" - performs check for meta-pages clashes\n");
-  if (meta_eq(envinfo.me_meta0_txnid, envinfo.me_meta0_sign,
-              envinfo.me_meta1_txnid, envinfo.me_meta1_sign)) {
+  if (meta_eq(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+              envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign)) {
     print(" - meta-%d and meta-%d are clashed\n", 0, 1);
     ++problems_meta;
   }
-  if (meta_eq(envinfo.me_meta1_txnid, envinfo.me_meta1_sign,
-              envinfo.me_meta2_txnid, envinfo.me_meta2_sign)) {
+  if (meta_eq(envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
+              envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign)) {
     print(" - meta-%d and meta-%d are clashed\n", 1, 2);
     ++problems_meta;
   }
-  if (meta_eq(envinfo.me_meta2_txnid, envinfo.me_meta2_sign,
-              envinfo.me_meta0_txnid, envinfo.me_meta0_sign)) {
+  if (meta_eq(envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign,
+              envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign)) {
     print(" - meta-%d and meta-%d are clashed\n", 2, 0);
     ++problems_meta;
   }
@@ -1042,15 +1042,15 @@ int main(int argc, char *argv[]) {
   problems_freedb = process_db(FREE_DBI, "free", handle_freedb, false);
 
   if (verbose) {
-    uint64_t value = envinfo.me_mapsize / envstat.ms_psize;
+    uint64_t value = envinfo.mi_mapsize / envstat.ms_psize;
     double percent = value / 100.0;
     print(" - pages info: %" PRIu64 " total", value);
-    value = envinfo.me_geo.current / envinfo.me_dxb_pagesize;
+    value = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
     print(", backed %" PRIu64 " (%.1f%%)", value, value / percent);
     print(", allocated %" PRIu64 " (%.1f%%)", lastpgno, lastpgno / percent);
 
     if (verbose > 1) {
-      value = envinfo.me_mapsize / envstat.ms_psize - lastpgno;
+      value = envinfo.mi_mapsize / envstat.ms_psize - lastpgno;
       print(", remained %" PRIu64 " (%.1f%%)", value, value / percent);
 
       value = lastpgno - freedb_pages;
@@ -1066,7 +1066,7 @@ int main(int argc, char *argv[]) {
     }
 
     value =
-        envinfo.me_mapsize / envstat.ms_psize - lastpgno + reclaimable_pages;
+        envinfo.mi_mapsize / envstat.ms_psize - lastpgno + reclaimable_pages;
     print(", available %" PRIu64 " (%.1f%%)\n", value, value / percent);
   }
 
