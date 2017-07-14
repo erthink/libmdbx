@@ -1523,7 +1523,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   lck->mti_reader_finished_flag = MDBX_STRING_TETRAD("None");
   for (unsigned i = 0; i < snap_nreaders; ++i) {
     if (lck->mti_readers[i].mr_pid) {
-      mdbx_jitter4testing(true);
+      /* mdbx_jitter4testing(true); */
       const txnid_t snap = lck->mti_readers[i].mr_txnid;
       if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
         oldest = snap;
@@ -1534,6 +1534,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   }
 
   if (oldest != last_oldest) {
+    mdbx_notice("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest, oldest);
     mdbx_tassert(txn, oldest >= lck->mti_oldest);
     lck->mti_oldest = oldest;
   }
@@ -1663,7 +1664,6 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     }
   }
 
-  const MDBX_meta *head = mdbx_meta_head(env);
   pgno_t pgno, *repg_list = env->me_reclaimed_pglist;
   unsigned repg_pos = 0, repg_len = repg_list ? repg_list[0] : 0;
   txnid_t oldest = 0, last = 0;
@@ -1865,6 +1865,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         goto done;
     }
 
+    const MDBX_meta *head = mdbx_meta_head(env);
     if ((flags & MDBX_ALLOC_GC) &&
         ((flags & MDBX_ALLOC_KICK) || rc == MDBX_MAP_FULL)) {
       MDBX_meta *steady = mdbx_meta_steady(env);
@@ -2436,12 +2437,20 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       /* LY: Retry on a race, ITS#7970. */
       mdbx_compiler_barrier();
       if (likely(meta == mdbx_meta_head(env) &&
-                 snap == mdbx_meta_txnid_fluid(env, meta))) {
+                 snap == mdbx_meta_txnid_fluid(env, meta) &&
+                 snap >= env->me_oldest[0])) {
         mdbx_jitter4testing(false);
         break;
       }
+      if (env->me_lck)
+        env->me_lck->mti_reader_finished_flag = true;
     }
 
+    if (unlikely(txn->mt_txnid == 0)) {
+      mdbx_error("environment corrupted by died writer, must shutdown!");
+      rc = MDBX_WANNA_RECOVERY;
+      goto bailout;
+    }
     mdbx_assert(env, txn->mt_txnid >= *env->me_oldest);
     txn->mt_ro_reader = r;
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
@@ -2498,7 +2507,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   txn->mt_dbflags[FREE_DBI] = DB_VALID;
 
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
-    mdbx_debug("environment had fatal error, must shutdown!");
+    mdbx_warning("environment had fatal error, must shutdown!");
     rc = MDBX_PANIC;
   } else {
     const size_t size = pgno2bytes(env, txn->mt_end_pgno);
@@ -10448,6 +10457,8 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
         env->me_oom_func(env, 0, 0, laggard,
                          (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, -retry);
       }
+      mdbx_notice("oom-kick: update oldest %" PRIaTXN " -> %" PRIaTXN,
+                  env->me_oldest[0], oldest);
       mdbx_assert(env, env->me_oldest[0] <= oldest);
       return env->me_oldest[0] = oldest;
     }
