@@ -30,15 +30,19 @@ test_script:
 - ps: |
     if (($env:PLATFORM -eq "x86") -and (Test-Path "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe" -PathType Leaf)) {
       $test = "C:\projects\libmdbx\Win32\$env:CONFIGURATION\test.exe"
+      $mdbx_chk = "C:\projects\libmdbx\Win32\$env:CONFIGURATION\mdbx_chk.exe"
     } elseif (($env:PLATFORM -ne "ARM") -and ($env:PLATFORM -ne "ARM64")) {
       $test = "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\test.exe"
+      $mdbx_chk = "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\mdbx_chk.exe"
     } else {
       $test = ""
+      $mdbx_chk = ""
     }
 
     if ($test -ne "") {
         & "$test" --pathname=tmp.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+        & "$mdbx_chk" -nvv tmp.db | Tee-Object -file chk.log | Select-Object -last 42
     }
 
 on_failure:
-- ps: Push-AppveyorArtifact test.log
+- ps: Push-AppveyorArtifact test.log chk.log
