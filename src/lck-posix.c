@@ -91,7 +91,9 @@ static __inline int mdbx_lck_shared(int lfd) {
   return mdbx_lck_op(lfd, F_SETLKW, F_RDLCK, 0, 1);
 }
 
-int mdbx_lck_downgrade(MDBX_env *env) { return mdbx_lck_shared(env->me_lfd); }
+int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
+  return complete ? mdbx_lck_shared(env->me_lfd) : MDBX_SUCCESS;
+}
 
 int mdbx_lck_upgrade(MDBX_env *env) { return mdbx_lck_exclusive(env->me_lfd); }
 

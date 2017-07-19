@@ -152,7 +152,7 @@ int mdbx_rdt_lock(MDBX_env *env) {
   if (env->me_lfd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
-  /* transite from S-? (used) to S-E (locked), e.g. exlcusive lock upper-part */
+  /* transite from S-? (used) to S-E (locked), e.g. exclusive lock upper-part */
   if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
     return MDBX_SUCCESS;
   return GetLastError();
@@ -168,18 +168,18 @@ void mdbx_rdt_unlock(MDBX_env *env) {
 
 /*----------------------------------------------------------------------------*/
 /* global `initial` lock for lockfile initialization,
-*  exclusive/shared locking first cacheline */
+ * exclusive/shared locking first cacheline */
 
 /* FIXME: locking schema/algo descritpion.
  ?-?  = free
  S-?  = used
- E-?
+ E-?  = exclusive-read
  ?-S
  ?-E  = middle
  S-S
  S-E  = locked
  E-S
- E-E  = exclusive
+ E-E  = exclusive-write
 */
 
 int mdbx_lck_init(MDBX_env *env) {
@@ -187,8 +187,9 @@ int mdbx_lck_init(MDBX_env *env) {
   return MDBX_SUCCESS;
 }
 
-/* Seize state as exclusive (E-E and returns MDBX_RESULT_TRUE)
-* or used (S-? and returns MDBX_RESULT_FALSE), otherwise returns an error */
+/* Seize state as 'exclusive-write' (E-E and returns MDBX_RESULT_TRUE)
+ * or as 'used' (S-? and returns MDBX_RESULT_FALSE), otherwise returns an error
+ */
 static int internal_seize_lck(HANDLE lfd) {
   int rc;
   assert(lfd != INVALID_HANDLE_VALUE);
@@ -202,10 +203,10 @@ static int internal_seize_lck(HANDLE lfd) {
     return rc;
   }
 
-  /* 3) now on ?-E (middle), try E-E (exclusive) */
+  /* 3) now on ?-E (middle), try E-E (exclusive-write) */
   mdbx_jitter4testing(false);
   if (flock(lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER))
-    return MDBX_RESULT_TRUE; /* 4) got E-E (exclusive), done */
+    return MDBX_RESULT_TRUE /* 4) got E-E (exclusive-write), done */;
 
   /* 5) still on ?-E (middle) */
   rc = GetLastError();
@@ -279,32 +280,43 @@ int mdbx_lck_seize(MDBX_env *env) {
   return rc;
 }
 
-int mdbx_lck_downgrade(MDBX_env *env) {
-  /* Transite from exclusive state (E-E) to used (S-?) */
+int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
+  /* Transite from exclusive state (E-?) to used (S-?) */
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
-  /* 1) must be at E-E (exclusive), transite to ?_E (middle) */
+  /* 1) must be at E-E (exclusive-write) */
+  if (!complete) {
+    /* transite from E-E to E_? (exclusive-read) */
+    if (!funlock(env->me_lfd, LCK_UPPER))
+      mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
+                 "E-E(exclusive-write) >> E-?(exclusive-read)", GetLastError());
+    return MDBX_SUCCESS /* 2) now at E-? (exclusive-read), done */;
+  }
+
+  /* 3) now at E-E (exclusive-write), transite to ?_E (middle) */
   if (!funlock(env->me_lfd, LCK_LOWER))
     mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
-               "E-E(exclusive) >> ?-E(middle)", GetLastError());
+               "E-E(exclusive-write) >> ?-E(middle)", GetLastError());
 
-  /* 2) now at ?-E (middle), transite to S-E (locked) */
+  /* 4) now at ?-E (middle), transite to S-E (locked) */
   if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
-    int rc = GetLastError() /* 3) something went wrong, give up */;
+    int rc = GetLastError() /* 5) something went wrong, give up */;
+    mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
+               "?-E(middle) >> S-E(locked)", rc);
     return rc;
   }
 
-  /* 4) got S-E (locked), continue transition to S-? (used) */
+  /* 6) got S-E (locked), continue transition to S-? (used) */
   if (!funlock(env->me_lfd, LCK_UPPER))
     mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
                "S-E(locked) >> S-?(used)", GetLastError());
 
-  return MDBX_SUCCESS /* 5) now at S-? (used), done */;
+  return MDBX_SUCCESS /* 7) now at S-? (used), done */;
 }
 
 int mdbx_lck_upgrade(MDBX_env *env) {
-  /* Transite from locked state (S-E) to exclusive (E-E) */
+  /* Transite from locked state (S-E) to exclusive-write (E-E) */
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
@@ -313,10 +325,10 @@ int mdbx_lck_upgrade(MDBX_env *env) {
     mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
                "S-E(locked) >> ?-E(middle)", GetLastError());
 
-  /* 3) now on ?-E (middle), try E-E (exclusive) */
+  /* 3) now on ?-E (middle), try E-E (exclusive-write) */
   mdbx_jitter4testing(false);
   if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER))
-    return MDBX_RESULT_TRUE; /* 4) got E-E (exclusive), done */
+    return MDBX_RESULT_TRUE; /* 4) got E-E (exclusive-write), done */
 
   /* 5) still on ?-E (middle) */
   int rc = GetLastError();
@@ -324,7 +336,7 @@ int mdbx_lck_upgrade(MDBX_env *env) {
   if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION) {
     /* 6) something went wrong, report but continue */
     mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
-               "?-E(middle) >> E-E(exclusive)", rc);
+               "?-E(middle) >> E-E(exclusive-write)", rc);
   }
 
   /* 7) still on ?-E (middle), try restore S-E (locked) */

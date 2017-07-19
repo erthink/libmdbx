@@ -4906,11 +4906,14 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     if (exclusive == NULL || *exclusive < 2) {
       /* LY: downgrade lock only if exclusive access not requested.
        *     in case exclusive==1, just leave value as is. */
-      rc = mdbx_lck_downgrade(env);
-      mdbx_debug("lck-downgrade: rc %i ", rc);
-      if (rc != MDBX_SUCCESS)
-        goto bailout;
+      rc = mdbx_lck_downgrade(env, true);
+      mdbx_debug("lck-downgrade-full: rc %i ", rc);
+    } else {
+      rc = mdbx_lck_downgrade(env, false);
+      mdbx_debug("lck-downgrade-partial: rc %i ", rc);
     }
+    if (rc != MDBX_SUCCESS)
+      goto bailout;
   } else {
     if (exclusive) {
       /* LY: just indicate that is not an exclusive access. */
