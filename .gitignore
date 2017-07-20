@@ -1,6 +1,7 @@
 *[~#]
 *.[ao]
 *.bak
+.le.ini
 core
 core.*
 *.exe
