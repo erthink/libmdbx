@@ -1561,8 +1561,10 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
       mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
 
   if (rc == MDBX_SUCCESS) {
-    if (env->me_txn0)
-      env->me_txn0->mt_end_pgno = size_pgno;
+    if (env->me_txn) {
+      mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
+      env->me_txn->mt_end_pgno = size_pgno;
+    }
     env->me_dbgeo.now = size_bytes;
     env->me_dbgeo.upper = limit_bytes;
   } else {
@@ -1889,14 +1891,20 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
           env,
           mdbx_roundup2(pgno2bytes(env, txn->mt_next_pgno + head->mm_geo.grow),
                         env->me_os_psize));
+      while (next >= growth_pgno)
+        growth_pgno = bytes2pgno(
+            env, mdbx_roundup2(pgno2bytes(env, growth_pgno + head->mm_geo.grow),
+                               env->me_os_psize));
       if (growth_pgno > head->mm_geo.upper)
         growth_pgno = head->mm_geo.upper;
 
       mdbx_info("try growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO ")",
                 growth_pgno, growth_pgno - txn->mt_end_pgno);
       rc = mdbx_mapresize(env, growth_pgno, head->mm_geo.upper);
-      if (rc == MDBX_SUCCESS)
+      if (rc == MDBX_SUCCESS) {
+        mdbx_tassert(env->me_txn, txn->mt_end_pgno >= next);
         continue;
+      }
 
       mdbx_warning("unable growth datafile to %" PRIaPGNO "pages (+%" PRIaPGNO
                    "), errcode %d",
@@ -2195,7 +2203,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
                  container_of(head, MDBX_page, mp_data)->mp_pgno,
                  mdbx_durable_str(head), env->me_sync_pending);
       MDBX_meta meta = *head;
-      int rc = mdbx_sync_locked(env, flags, &meta);
+      int rc = mdbx_sync_locked(env, flags | MDBX_SHRINK_ALLOWED, &meta);
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (outside_txn)
           mdbx_txn_unlock(env);
@@ -2509,9 +2517,11 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 
   rc = mdbx_txn_renew0(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
-    mdbx_debug("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "",
+    mdbx_debug("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
+               "/%" PRIaPGNO,
                txn->mt_txnid, (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w',
-               (void *)txn, (void *)txn->mt_env, txn->mt_dbs[MAIN_DBI].md_root);
+               (void *)txn, (void *)txn->mt_env, txn->mt_dbs[MAIN_DBI].md_root,
+               txn->mt_dbs[FREE_DBI].md_root);
   }
   return rc;
 }
@@ -2632,9 +2642,11 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     txn->mt_owner = mdbx_thread_self();
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
-    mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO "",
+    mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
+               "/%" PRIaPGNO,
                txn->mt_txnid, (flags & MDBX_RDONLY) ? 'r' : 'w', (void *)txn,
-               (void *)env, txn->mt_dbs[MAIN_DBI].md_root);
+               (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
+               txn->mt_dbs[FREE_DBI].md_root);
   }
 
   return rc;
@@ -2696,10 +2708,12 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   /* Export or close DBI handles opened in this txn */
   mdbx_dbis_update(txn, mode & MDBX_END_UPDATE);
 
-  mdbx_debug("%s txn %" PRIaTXN "%c %p on mdbenv %p, root page %" PRIaPGNO "",
+  mdbx_debug("%s txn %" PRIaTXN "%c %p on mdbenv %p, root page %" PRIaPGNO
+             "/%" PRIaPGNO,
              names[mode & MDBX_END_OPMASK], txn->mt_txnid,
              (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn,
-             (void *)env, txn->mt_dbs[MAIN_DBI].md_root);
+             (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
+             txn->mt_dbs[FREE_DBI].md_root);
 
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)) {
     if (txn->mt_ro_reader) {
@@ -3456,9 +3470,10 @@ int mdbx_txn_commit(MDBX_txn *txn) {
       !(txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)))
     goto done;
 
-  mdbx_debug(
-      "committing txn %" PRIaTXN " %p on mdbenv %p, root page %" PRIaPGNO "",
-      txn->mt_txnid, (void *)txn, (void *)env, txn->mt_dbs[MAIN_DBI].md_root);
+  mdbx_debug("committing txn %" PRIaTXN " %p on mdbenv %p, root page %" PRIaPGNO
+             "/%" PRIaPGNO,
+             txn->mt_txnid, (void *)txn, (void *)env,
+             txn->mt_dbs[MAIN_DBI].md_root, txn->mt_dbs[FREE_DBI].md_root);
 
   /* Update DB root pointers */
   if (txn->mt_numdbs > CORE_DBS) {
@@ -3505,7 +3520,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     meta.mm_canary = txn->mt_canary;
     mdbx_meta_set_txnid(env, &meta, txn->mt_txnid);
 
-    rc = mdbx_sync_locked(env, env->me_flags | txn->mt_flags, &meta);
+    rc = mdbx_sync_locked(
+        env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED, &meta);
   }
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
@@ -3814,11 +3830,12 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
               pending < METAPAGE(env, 0) || pending > METAPAGE(env, NUM_METAS));
   mdbx_assert(env, (env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0);
   mdbx_assert(env, !META_IS_STEADY(head) || env->me_sync_pending != 0);
+  mdbx_assert(env, pending->mm_geo.next <= pending->mm_geo.now);
 
   const size_t usedbytes =
       mdbx_roundup2(pgno2bytes(env, pending->mm_geo.next), env->me_os_psize);
   if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold)
-    flags &= MDBX_WRITEMAP;
+    flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED;
 
   /* LY: step#1 - sync previously written/updated data-pages */
   int rc = MDBX_RESULT_TRUE;
@@ -3850,11 +3867,12 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #else
   /* LY: check conditions to shrink datafile */
   pgno_t shrink_pgno_delta = 0;
-  const pgno_t shrink_pgno = pending->mm_geo.next /* + pending->mm_geo.grow */;
-  if (pending->mm_geo.now > shrink_pgno && pending->mm_geo.shrink &&
-      unlikely(pending->mm_geo.now - pending->mm_geo.shrink >= shrink_pgno)) {
-    if (pending->mm_geo.now > shrink_pgno &&
-        pending->mm_geo.now - pending->mm_geo.shrink >= shrink_pgno) {
+  if ((flags & MDBX_SHRINK_ALLOWED) &&
+      pending->mm_geo.next < head->mm_geo.next) {
+    const pgno_t shrink_pgno =
+        pending->mm_geo.next /* + pending->mm_geo.grow */;
+    if (pending->mm_geo.now > shrink_pgno && pending->mm_geo.shrink &&
+        unlikely(pending->mm_geo.now - pending->mm_geo.shrink >= shrink_pgno)) {
       shrink_pgno_delta = pending->mm_geo.now - shrink_pgno;
       pending->mm_geo.now = shrink_pgno;
     }
@@ -3896,15 +3914,15 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   }
 
   /* LY: step#2 - update meta-page. */
-  mdbx_debug(
-      "writing meta%" PRIaPGNO " (%s, was %" PRIaTXN ", %s), root %" PRIaPGNO
-      "/%" PRIaPGNO ", "
-      "txn_id %" PRIaTXN ", %s",
-      container_of(target, MDBX_page, mp_data)->mp_pgno,
-      (target == head) ? "head" : "tail", mdbx_meta_txnid_stable(env, target),
-      mdbx_durable_str((const MDBX_meta *)target),
-      pending->mm_dbs[MAIN_DBI].md_root, pending->mm_dbs[FREE_DBI].md_root,
-      pending->mm_txnid_a, mdbx_durable_str(pending));
+  mdbx_debug("writing meta%" PRIaPGNO " = root %" PRIaPGNO "/%" PRIaPGNO
+             ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
+             " +%u -%u, txn_id %" PRIaTXN ", %s",
+             container_of(target, MDBX_page, mp_data)->mp_pgno,
+             pending->mm_dbs[MAIN_DBI].md_root,
+             pending->mm_dbs[FREE_DBI].md_root, pending->mm_geo.lower,
+             pending->mm_geo.next, pending->mm_geo.now, pending->mm_geo.upper,
+             pending->mm_geo.grow, pending->mm_geo.shrink, pending->mm_txnid_a,
+             mdbx_durable_str(pending));
 
   mdbx_debug("meta0: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO
              "/%" PRIaPGNO,
@@ -4680,7 +4698,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       mdbx_ensure(env, mdbx_meta_eq(env, &meta, head));
       mdbx_meta_set_txnid(env, &meta, txnid + 1);
       env->me_sync_pending += env->me_psize;
-      err = mdbx_sync_locked(env, env->me_flags, &meta);
+      err = mdbx_sync_locked(env, env->me_flags | MDBX_SHRINK_ALLOWED, &meta);
       if (err) {
         mdbx_info("error %d, while updating meta.geo: "
                   "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
@@ -8374,8 +8392,10 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
           }
         }
       }
-    } else
-      mdbx_debug("root page doesn't need rebalancing");
+    } else {
+      mdbx_debug("root page %" PRIaPGNO " doesn't need rebalancing",
+                 mp->mp_pgno);
+    }
     return MDBX_SUCCESS;
   }
 
