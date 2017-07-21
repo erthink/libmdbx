@@ -9,6 +9,10 @@ environment:
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
       TOOLSET: v120
 
+branches:
+  except:
+    - coverity_scan
+
 configuration:
 - Debug
 - Release
