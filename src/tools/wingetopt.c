@@ -20,9 +20,6 @@
 
 #define ERR(s, c)                                                              \
   if (opterr) {                                                                \
-    char errbuf[2];                                                            \
-    errbuf[0] = (char)c;                                                       \
-    errbuf[1] = '\n';                                                          \
     fputs(argv[0], stderr);                                                    \
     fputs(s, stderr);                                                          \
     fputc(c, stderr);                                                          \
@@ -38,13 +35,14 @@ int getopt(int argc, char *const argv[], const char *opts) {
   int c;
   char *cp;
 
-  if (sp == 1)
+  if (sp == 1) {
     if (optind >= argc || argv[optind][0] != '-' || argv[optind][1] == '\0')
       return EOF;
     else if (strcmp(argv[optind], "--") == 0) {
       optind++;
       return EOF;
     }
+  }
   optopt = c = argv[optind][sp];
   if (c == ':' || (cp = strchr(opts, c)) == NULL) {
     ERR(": illegal option -- ", c);
