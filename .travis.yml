@@ -1,15 +1,30 @@
 language: c
-sudo: false
+sudo: required
 dist: trusty
-cache: bundler
-notifications:
-        email: false
 
 compiler:
-        - gcc
-        - clang
+- gcc
+- clang
 
 os:
-        - linux
+- linux
 
-script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all lmdb check; fi
+script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all check; fi
+
+env:
+  global:
+   - secure: "M+W+heGGyRQJoBq2W0uqWVrpL4KBXmL0MFL7FSs7f9vmAaDyEgziUXeZRj3GOKzW4kTef3LpIeiu9SmvqSMoQivGGiomZShqPVl045o/OUgRCAT7Al1RLzEZ0efSHpIPf0PZ6byEf6GR2ML76OfuL6JxTVdnz8iVyO2sgLE1HbX1VeB+wgd/jfMeOBhCCXskfK6MLyZihfMYsiYZYSaV98ZDhDLSlzuuRIgzb0bMi8aL6AErs0WLW0NelRBeHkKPYfAUc85pdQHscgrJw6Rh/zT6+8BQ/q5f4IgWhiu4xoRg3Ngl7SNoedRQh93ADM3UG2iGl6HDFpVORaXcFWKAtuYY+kHQ0HB84BRYpQmeBuXNpltsfxQ3d1Q3u0RlE45zRvmr2+X1mFnkcNUAWISLPbsOUlriDQM8irGwRpho77/uYnRC00bJsHW//s6+uPf9zrAw1nI4f0y3PAWukGF/xs6HAI3FZPsuSSnx18Tj3Opgbc9Spop+V3hkhdiJoPGpNKTkFX4ZRXfkPgoRVJmtp4PpbpH0Ps/mCriKjMEfGGi0HcVCi0pEGLXiecdqJ5KPg5+22zNycEujQBJcNTKd9shN+R3glrbmhAxTEzGdGwxXXJ2ybwJ2PWJLMYZ7g98nLyX+uQPaA3BlsbYJHNeS5283/9pJsd9DzfHKsN2nFSc="
+
+before_install:
+  - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+
+addons:
+  coverity_scan:
+    project:
+      name: "ReOpen/libmdbx"
+      version: 0.1
+      description: "Build submitted via Travis CI"
+    notification_email: leo@yuriev.ru
+    build_command_prepend: "make clean"
+    build_command:   "make all -j 4"
+    branch_pattern: coverity_scan

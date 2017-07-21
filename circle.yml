@@ -7,8 +7,8 @@ database:
 
 compile:
   override:
-    - make all lmdb
+    - make all
 
 test:
   override:
-    - make check
+    - make check || mv test.log ${CIRCLE_ARTIFACTS}/

@@ -1,5 +1,4 @@
-# GNU Makefile for libmdbx (reliable lightning memory-mapped DB library for Linux).
-# https://github.com/ReOpen/libmdbx
+# GNU Makefile for libmdbx, https://github.com/ReOpen/libmdbx
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.
@@ -23,36 +22,39 @@ mandir	?= $(prefix)/man
 suffix	?=
 
 CC	?= gcc
-XCFLAGS	?= -DNDEBUG=1 -DMDB_DEBUG=0
-CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections
-CFLAGS	+= -std=gnu99 -pthread $(XCFLAGS)
+CXX	?= g++
+XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
+CFLAGS	?= -O2 -g3 -Wall -Wno-constant-logical-operand -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
+CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu11 -pthread $(XCFLAGS)
+CXXFLAGS = -std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
+TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.db
 
-# LY: for ability to built with modern glibc,
-#     but then run with the old
-LDOPS	?= -Wl,--no-as-needed,-lrt
+# LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
+LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
 
 # LY: just for benchmarking
 IOARENA ?= ../ioarena.git/@BUILD/src/ioarena
 
 ########################################################################
 
-HEADERS		:= lmdb.h mdbx.h
+HEADERS		:= mdbx.h
 LIBRARIES	:= libmdbx.a libmdbx.so
 TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
-MANPAGES	:= mdb_stat.1 mdb_copy.1 mdb_dump.1 mdb_load.1
-TESTS		:= mtest0 mtest1 mtest2 mtest3 mtest4 mtest5 mtest6 wbench \
-		   yota_test1 yota_test2 mtest7 mtest8
+MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
+SHELL		:= /bin/bash
 
-SRC_LMDB	:= mdb.c midl.c lmdb.h midl.h defs.h barriers.h
-SRC_MDBX	:= $(SRC_LMDB) mdbx.c mdbx.h
+CORE_SRC	:= $(filter-out src/lck-windows.c, $(wildcard src/*.c))
+CORE_INC	:= $(wildcard src/*.h)
+CORE_OBJ	:= $(patsubst %.c,%.o,$(CORE_SRC))
+TEST_SRC	:= $(filter-out test/osal-windows.cc, $(wildcard test/*.cc))
+TEST_INC	:= $(wildcard test/*.h)
+TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 
-.PHONY: mdbx lmdb all install clean check tests coverage
+.PHONY: mdbx all install clean check coverage
 
-all: $(LIBRARIES) $(TOOLS)
+all: $(LIBRARIES) $(TOOLS) test/test
 
 mdbx: libmdbx.a libmdbx.so
-
-lmdb: liblmdb.a liblmdb.so
 
 tools: $(TOOLS)
 
@@ -67,114 +69,36 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS) $(TESTS) @* *.[ao] *.[ls]o *~ testdb/* *.gcov
+	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
-tests:	$(TESTS)
+check:	all
+	rm -f $(TESTDB) test.log && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
 
-check:	tests
-	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
-		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-2" && ./mtest2 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-3" && ./mtest3 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-4" && ./mtest4 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-5" && ./mtest5 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-6" && ./mtest6 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-7" && ./mtest7 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TEST-8" && ./mtest8 && ./mdbx_chk -v testdb \
-		&& echo "*** LMDB-TESTs - all done"
+define core-rule
+$(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile
+	$(CC) $(CFLAGS) -c $(1) -o $$@
 
-libmdbx.a:	mdbx.o
-	$(AR) rs $@ $^
+endef
+$(foreach file,$(CORE_SRC),$(eval $(call core-rule,$(file))))
 
-libmdbx.so:	mdbx.lo
-	$(CC) $(CFLAGS) $(LDFLAGS) -save-temps -pthread -shared $(LDOPS) -o $@ $^
+define test-rule
+$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h Makefile
+	$(CXX) $(CXXFLAGS) -c $(1) -o $$@
 
-liblmdb.a:	lmdb.o
-	$(AR) rs $@ $^
+endef
+$(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
-liblmdb.so:	lmdb.lo
-	$(CC) $(CFLAGS) $(LDFLAGS) -pthread -shared $(LDOPS) -o $@ $^
+libmdbx.a: $(CORE_OBJ)
+	$(AR) rs $@ $?
 
-mdbx_stat: mdb_stat.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
+libmdbx.so: $(CORE_OBJ)
+	$(CC) $(CFLAGS) -save-temps $^ -pthread -shared $(LDFLAGS) -o $@
 
-mdbx_copy: mdb_copy.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
+mdbx_%:	src/tools/mdbx_%.c libmdbx.a
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
 
-mdbx_dump: mdb_dump.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
-
-mdbx_load: mdb_load.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
-
-mdbx_chk: mdb_chk.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $(LDOPS) -o $@ $^
-
-mtest0: mtest0.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest1: mtest1.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest2:	mtest2.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest3:	mtest3.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest4:	mtest4.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest5:	mtest5.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest6:	mtest6.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest7:	mtest7.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mtest8:	mtest8.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-yota_test1: yota_test1.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-yota_test2: yota_test2.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-wbench:	wbench.o mdbx.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^
-
-mdbx.o: $(SRC_MDBX)
-	$(CC) $(CFLAGS) -c mdbx.c -o $@
-
-mdbx.lo: $(SRC_MDBX)
-	$(CC) $(CFLAGS) -fPIC -c mdbx.c -o $@
-
-lmdb.o: $(SRC_LMDB)
-	$(CC) $(CFLAGS) -c mdb.c -o $@
-
-lmdb.lo: $(SRC_LMDB)
-	$(CC) $(CFLAGS) -fPIC -c mdb.c -o $@
-
-%:	%.o
-	$(CC) $(CFLAGS) $(LDFLAGS) $^ -o $@
-
-%.o:	%.c lmdb.h mdbx.h
-	$(CC) $(CFLAGS) -c $<
-
-COFLAGS	= -fprofile-arcs -ftest-coverage
-
-@gcov-mdb.o: $(SRC_MDBX)
-	$(CC) $(CFLAGS) $(COFLAGS) -O0 -c mdbx.c -o $@
-
-coverage: @gcov-mdb.o
-	for t in mtest*.c; do x=`basename \$$t .c`; $(MAKE) $$x.o; \
-		gcc -o @gcov-$$x $$x.o $^ -pthread $(COFLAGS); \
-		rm -rf testdb; mkdir testdb; ./@gcov-$$x; done
-	gcov @gcov-mdb
+test/test: $(TEST_OBJ) libmdbx.a
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 ifneq ($(wildcard $(IOARENA)),)
 
@@ -196,20 +120,18 @@ endef
 
 $(eval $(call bench-rule,mdbx,$(NN),libmdbx.so))
 
-$(eval $(call bench-rule,lmdb,$(NN)))
-
 $(eval $(call bench-rule,dummy,$(NN)))
 
 $(eval $(call bench-rule,debug,10))
 
-bench: bench-lmdb.txt bench-mdbx.txt
+bench: bench-mdbx.txt
 
 endif
 
 ci-rule = ( CC=$$(which $1); if [ -n "$$CC" ]; then \
 		echo -n "probe by $2 ($$(readlink -f $$(which $$CC))): " && \
 		$(MAKE) clean >$1.log 2>$1.err && \
-		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDB_DEBUG=2" all check 1>$1.log 2>$1.err && echo "OK" \
+		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDBX_DEBUG=2" check 1>$1.log 2>$1.err && echo "OK" \
 			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:
