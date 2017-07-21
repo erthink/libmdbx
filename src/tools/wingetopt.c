@@ -6,9 +6,31 @@
  * Code given out at the 1985 UNIFORUM conference in Dallas.
  */
 
+/*----------------------------------------------------------------------------*/
+/* Microsoft compiler generates a lot of warning for self includes... */
+
+#ifdef _MSC_VER
+#pragma warning(push, 1)
+#pragma warning(disable : 4548) /* expression before comma has no effect;      \
+                                   expected expression with side - effect */
+#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
+                                 * semantics are not enabled. Specify /EHsc */
+#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
+                                 * mode specified; termination on exception is \
+                                 * not guaranteed. Specify /EHsc */
+#if !defined(_CRT_SECURE_NO_WARNINGS)
+#define _CRT_SECURE_NO_WARNINGS
+#endif
+#endif /* _MSC_VER (warnings) */
+
 #include "wingetopt.h"
 #include <stdio.h>
 #include <string.h>
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+/*----------------------------------------------------------------------------*/
 
 #ifndef NULL
 #define NULL 0
