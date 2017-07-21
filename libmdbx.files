@@ -20,6 +20,8 @@ src/tools/mdbx_load.1
 src/tools/mdbx_load.c
 src/tools/mdbx_stat.1
 src/tools/mdbx_stat.c
+src/tools/wingetopt.c
+src/tools/wingetopt.h
 src/version.c
 test/actor.cc
 test/base.h
