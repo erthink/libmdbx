@@ -234,7 +234,8 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
     prstat(&mst);
-    while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
+    while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) ==
+           MDBX_SUCCESS) {
       if (user_break) {
         rc = MDBX_EINTR;
         break;
@@ -274,6 +275,20 @@ int main(int argc, char *argv[]) {
       }
     }
     mdbx_cursor_close(cursor);
+
+    switch (rc) {
+    case MDBX_SUCCESS:
+    case MDBX_NOTFOUND:
+      break;
+    case MDBX_EINTR:
+      fprintf(stderr, "Interrupted by signal/user\n");
+      goto txn_abort;
+    default:
+      fprintf(stderr, "mdbx_cursor_get failed, error %d %s\n", rc,
+              mdbx_strerror(rc));
+      goto txn_abort;
+    }
+
     if (envinfo) {
       uint64_t value = mei.mi_mapsize / mst.ms_psize;
       double percent = value / 100.0;
