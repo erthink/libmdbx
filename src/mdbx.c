@@ -4529,25 +4529,27 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
   }
 
-  uint64_t filesize;
-  err = mdbx_filesize(env->me_fd, &filesize);
+  uint64_t filesize_before_mmap;
+  err = mdbx_filesize(env->me_fd, &filesize_before_mmap);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
   const size_t expected_bytes = pgno2bytes(env, meta.mm_geo.now);
   const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
-  if (filesize != expected_bytes) {
+  mdbx_ensure(env, expected_bytes >= used_bytes);
+  if (filesize_before_mmap != expected_bytes) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
       mdbx_info("filesize mismatch (expect %" PRIuPTR ", have %" PRIu64 "), "
                 "assume collision in non-exclusive mode",
-                expected_bytes, filesize);
+                expected_bytes, filesize_before_mmap);
     } else {
       mdbx_notice("filesize mismatch (expect %" PRIuPTR ", have %" PRIu64 ")",
-                  expected_bytes, filesize);
-      if (filesize < used_bytes) {
+                  expected_bytes, filesize_before_mmap);
+      if (filesize_before_mmap < used_bytes) {
         mdbx_error("last-page beyond end-of-file (last %" PRIaPGNO
                    ", have %" PRIaPGNO ")",
-                   meta.mm_geo.next, bytes2pgno(env, (size_t)filesize));
+                   meta.mm_geo.next,
+                   bytes2pgno(env, (size_t)filesize_before_mmap));
         return MDBX_CORRUPTED;
       }
 
@@ -4561,6 +4563,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
                      expected_bytes);
           return err;
         }
+        filesize_before_mmap = expected_bytes;
       }
     }
   }
@@ -4638,20 +4641,28 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
   const MDBX_meta *head = mdbx_meta_head(env);
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
     /* re-check file size after mmap */
-    err = mdbx_filesize(env->me_fd, &filesize);
+    uint64_t filesize_after_mmap;
+    err = mdbx_filesize(env->me_fd, &filesize_after_mmap);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if (filesize != expected_bytes) {
-      mdbx_info("datafile resized by system to %" PRIu64 " bytes", filesize);
-      if (filesize % env->me_os_psize || filesize > env->me_dbgeo.upper ||
-          filesize < used_bytes) {
-        mdbx_info("unacceptable/unexpected  datafile size %" PRIu64, filesize);
+    if (filesize_after_mmap != expected_bytes) {
+      if (filesize_after_mmap != filesize_before_mmap)
+        mdbx_info("datafile resized by system to %" PRIu64 " bytes",
+                  filesize_after_mmap);
+      if (filesize_after_mmap % env->me_os_psize ||
+          filesize_after_mmap > env->me_dbgeo.upper ||
+          filesize_after_mmap < used_bytes) {
+        mdbx_info("unacceptable/unexpected  datafile size %" PRIu64,
+                  filesize_after_mmap);
         return MDBX_PROBLEM;
       }
-      meta.mm_geo.now = bytes2pgno(env, env->me_dbgeo.now = (size_t)filesize);
-      mdbx_info("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
-                " pages",
-                env->me_dbgeo.now, meta.mm_geo.now);
+      if ((env->me_flags & MDBX_RDONLY) == 0) {
+        meta.mm_geo.now =
+            bytes2pgno(env, env->me_dbgeo.now = (size_t)filesize_after_mmap);
+        mdbx_info("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
+                  " pages",
+                  env->me_dbgeo.now, meta.mm_geo.now);
+      }
     }
 
     if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
