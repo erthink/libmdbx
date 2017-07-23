@@ -2953,16 +2953,36 @@ again_on_freelist_change:
       }
     }
 
-    if (unlikely(!env->me_reclaimed_pglist) && txn->mt_loose_pages &&
-        !(lifo && env->me_last_reclaimed > 1)) {
-      /* Put loose page numbers in mt_free_pages, since
-       * we may be unable to return them to me_reclaimed_pglist. */
-      MDBX_page *mp = txn->mt_loose_pages;
-      if (unlikely((rc = mdbx_midl_need(&txn->mt_befree_pages,
-                                        txn->mt_loose_count)) != 0))
-        return rc;
-      for (; mp; mp = NEXT_LOOSE_PAGE(mp))
-        mdbx_midl_xappend(txn->mt_befree_pages, mp->mp_pgno);
+    if (txn->mt_loose_pages) {
+      /* Return loose page numbers to me_reclaimed_pglist,
+       * though usually none are left at this point.
+       * The pages themselves remain in dirtylist. */
+      if (unlikely(!env->me_reclaimed_pglist) &&
+          !(lifo && env->me_last_reclaimed > 1)) {
+        /* Put loose page numbers in mt_free_pages,
+         * since unable to return them to me_reclaimed_pglist. */
+        MDBX_page *mp = txn->mt_loose_pages;
+        if (unlikely((rc = mdbx_midl_need(&txn->mt_befree_pages,
+                                          txn->mt_loose_count)) != 0))
+          return rc;
+        for (; mp; mp = NEXT_LOOSE_PAGE(mp))
+          mdbx_midl_xappend(txn->mt_befree_pages, mp->mp_pgno);
+      } else {
+        /* Room for loose pages + temp IDL with same */
+        if ((rc = mdbx_midl_need(&env->me_reclaimed_pglist,
+                                 2 * txn->mt_loose_count + 1)) != 0)
+          goto bailout;
+        MDBX_IDL loose = env->me_reclaimed_pglist +
+                         MDBX_IDL_ALLOCLEN(env->me_reclaimed_pglist) -
+                         txn->mt_loose_count;
+        unsigned count = 0;
+        for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
+          loose[++count] = mp->mp_pgno;
+        loose[0] = count;
+        mdbx_midl_sort(loose);
+        mdbx_midl_xmerge(env->me_reclaimed_pglist, loose);
+      }
+
       txn->mt_loose_pages = NULL;
       txn->mt_loose_count = 0;
     }
@@ -3097,26 +3117,6 @@ again_on_freelist_change:
   mdbx_tassert(txn,
                cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
-
-  /* Return loose page numbers to me_reclaimed_pglist, though usually none are
-   * left at this point.  The pages themselves remain in dirtylist. */
-  if (txn->mt_loose_pages) {
-    /* Room for loose pages + temp IDL with same */
-    if ((rc = mdbx_midl_need(&env->me_reclaimed_pglist,
-                             2 * txn->mt_loose_count + 1)) != 0)
-      goto bailout;
-    MDBX_IDL loose = env->me_reclaimed_pglist +
-                     MDBX_IDL_ALLOCLEN(env->me_reclaimed_pglist) -
-                     txn->mt_loose_count;
-    unsigned count = 0;
-    for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
-      loose[++count] = mp->mp_pgno;
-    loose[0] = count;
-    mdbx_midl_sort(loose);
-    mdbx_midl_xmerge(env->me_reclaimed_pglist, loose);
-    txn->mt_loose_pages = NULL;
-    txn->mt_loose_count = 0;
-  }
 
   /* Fill in the reserved me_reclaimed_pglist records */
   rc = MDBX_SUCCESS;
