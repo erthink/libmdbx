@@ -327,8 +327,6 @@ static int handle_userdb(const uint64_t record_number, const MDBX_val *key,
 static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                          const MDBX_val *data) {
   char *bad = "";
-  pgno_t pg, prev;
-  int i, number, span = 0;
   pgno_t *iptr = data->iov_base;
   txnid_t txnid = *(txnid_t *)key->iov_base;
 
@@ -342,7 +340,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR "",
                 data->iov_len);
   else {
-    number = *iptr++;
+    const intptr_t number = *iptr++;
     if (number >= MDBX_PNL_UM_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
@@ -354,34 +352,42 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
       freedb_pages += number;
       if (envinfo.mi_latter_reader_txnid > txnid)
         reclaimable_pages += number;
-      for (i = number, prev = NUM_METAS - 1; --i >= 0;) {
-        pg = iptr[i];
+
+      pgno_t prev =
+          MDBX_PNL_ASCENDING ? NUM_METAS - 1 : envinfo.mi_last_pgno + 1;
+      intptr_t span = 1;
+      for (intptr_t i = 0; i < number; ++i) {
+        const pgno_t pg = iptr[i];
         if (pg < NUM_METAS || pg > envinfo.mi_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",
                       "%u < %" PRIiPTR " < %" PRIiPTR "", NUM_METAS, pg,
                       envinfo.mi_last_pgno);
-        else if (pg <= prev) {
+        else if (MDBX_PNL_DISORDERED(prev, pg)) {
           bad = " [bad sequence]";
           problem_add("entry", record_number, "bad sequence",
-                      "%" PRIiPTR " <= %" PRIiPTR "", pg, prev);
+                      "%" PRIiPTR " <> %" PRIiPTR "", prev, pg);
         }
         prev = pg;
-        pg += span;
-        for (; i >= span && iptr[i - span] == pg; span++, pg++)
-          ;
+        while (i + span < number &&
+               iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span)
+                                                     : pgno_sub(pg, span)))
+          ++span;
       }
       if (verbose > 2 && !only_subdb) {
         print("     transaction %" PRIaTXN ", %u pages, maxspan %i%s\n", txnid,
               number, span, bad);
         if (verbose > 3) {
-          int j = number - 1;
-          while (j >= 0) {
-            pg = iptr[j];
-            for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
+          for (intptr_t i = 0; i < number; i += span) {
+            const pgno_t pg = iptr[i];
+            for (span = 1;
+                 i + span < number &&
+                 iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span)
+                                                       : pgno_sub(pg, span));
+                 ++span)
               ;
-            if (span > 1)
-              print("    %9" PRIaPGNO "[%i]\n", pg, span);
-            else
+            if (span > 1) {
+              print("    %9" PRIaPGNO "[%" PRIiPTR "]\n", pg, span);
+            } else
               print("    %9" PRIaPGNO "\n", pg);
           }
         }

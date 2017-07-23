@@ -202,8 +202,8 @@ static __inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t id) {
 static bool mdbx_pnl_check(MDBX_PNL pl) {
   if (pl) {
     for (const pgno_t *ptr = pl + pl[0]; --ptr > pl;) {
-      assert(ptr[0] > ptr[1]);
-      if (unlikely(ptr[0] <= ptr[1]))
+      assert(MDBX_PNL_ORDERED(ptr[0], ptr[1]));
+      if (unlikely(MDBX_PNL_DISORDERED(ptr[0], ptr[1])))
         return false;
     }
   }
@@ -235,7 +235,7 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
       for (j = l + 1; j <= ir; j++) {
         a = pnl[j];
         for (i = j - 1; i >= 1; i--) {
-          if (pnl[i] >= a)
+          if (MDBX_PNL_ORDERED(pnl[i], a))
             break;
           pnl[i + 1] = pnl[i];
         }
@@ -248,13 +248,13 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
     } else {
       k = (l + ir) >> 1; /* Choose median of left, center, right */
       PNL_SWAP(pnl[k], pnl[l + 1]);
-      if (pnl[l] < pnl[ir])
+      if (MDBX_PNL_DISORDERED(pnl[l], pnl[ir]))
         PNL_SWAP(pnl[l], pnl[ir]);
 
-      if (pnl[l + 1] < pnl[ir])
+      if (MDBX_PNL_DISORDERED(pnl[l + 1], pnl[ir]))
         PNL_SWAP(pnl[l + 1], pnl[ir]);
 
-      if (pnl[l] < pnl[l + 1])
+      if (MDBX_PNL_DISORDERED(pnl[l], pnl[l + 1]))
         PNL_SWAP(pnl[l], pnl[l + 1]);
 
       i = l + 1;
@@ -263,10 +263,10 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
       while (1) {
         do
           i++;
-        while (pnl[i] > a);
+        while (MDBX_PNL_ORDERED(pnl[i], a));
         do
           j--;
-        while (pnl[j] < a);
+        while (MDBX_PNL_DISORDERED(pnl[j], a));
         if (j < i)
           break;
         PNL_SWAP(pnl[i], pnl[j]);
@@ -308,7 +308,8 @@ static unsigned __hot mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
   while (n > 0) {
     unsigned pivot = n >> 1;
     cursor = base + pivot + 1;
-    val = mdbx_cmp2int(pnl[cursor], id);
+    val = MDBX_PNL_ASCENDING ? mdbx_cmp2int(pnl[cursor], id)
+                             : mdbx_cmp2int(id, pnl[cursor]);
 
     if (val < 0) {
       n = pivot;
@@ -471,11 +472,12 @@ static void __hot mdbx_pnl_xmerge(MDBX_PNL pnl, MDBX_PNL merge) {
   assert(mdbx_pnl_check(pnl));
   assert(mdbx_pnl_check(merge));
   pgno_t old_id, merge_id, i = merge[0], j = pnl[0], k = i + j, total = k;
-  pnl[0] = ~(pgno_t)0; /* delimiter for pl scan below */
+  pnl[0] =
+      MDBX_PNL_ASCENDING ? 0 : ~(pgno_t)0; /* delimiter for pl scan below */
   old_id = pnl[j];
   while (i) {
     merge_id = merge[i--];
-    for (; old_id < merge_id; old_id = pnl[--j])
+    for (; MDBX_PNL_ORDERED(merge_id, old_id); old_id = pnl[--j])
       pnl[k--] = old_id;
     pnl[k--] = merge_id;
   }
@@ -1698,16 +1700,26 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
          op = (flags & MDBX_LIFORECLAIM) ? MDBX_PREV : MDBX_NEXT) {
       MDBX_val key, data;
 
-      /* Seek a big enough contiguous page range. Prefer
-       * pages at the tail, just truncating the list. */
+      /* Seek a big enough contiguous page range.
+       * Prefer pages with lower pgno. */
+      mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
       if (likely(flags & MDBX_ALLOC_CACHE) && repg_len > wanna_range &&
           (!(flags & MDBX_COALESCE) || op == MDBX_FIRST)) {
+#if MDBX_PNL_ASCENDING
+        for (repg_pos = 1; repg_pos <= repg_len - wanna_range; ++repg_pos) {
+          pgno = repg_list[repg_pos];
+          if (likely(repg_list[repg_pos + wanna_range - 1] ==
+                     pgno + wanna_range - 1))
+            goto done;
+        }
+#else
         repg_pos = repg_len;
         do {
           pgno = repg_list[repg_pos];
           if (likely(repg_list[repg_pos - wanna_range] == pgno + wanna_range))
             goto done;
         } while (--repg_pos > wanna_range);
+#endif /* MDBX_PNL sort-order */
       }
 
       if (op == MDBX_FIRST) { /* 1st iteration, setup cursor, etc */
@@ -1864,12 +1876,21 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) ==
             (MDBX_COALESCE | MDBX_ALLOC_CACHE) &&
         repg_len > wanna_range) {
+#if MDBX_PNL_ASCENDING
+      for (repg_pos = 1; repg_pos <= repg_len - wanna_range; ++repg_pos) {
+        pgno = repg_list[repg_pos];
+        if (likely(repg_list[repg_pos + wanna_range - 1] ==
+                   pgno + wanna_range - 1))
+          goto done;
+      }
+#else
       repg_pos = repg_len;
       do {
         pgno = repg_list[repg_pos];
-        if (repg_list[repg_pos - wanna_range] == pgno + wanna_range)
+        if (likely(repg_list[repg_pos - wanna_range] == pgno + wanna_range))
           goto done;
       } while (--repg_pos > wanna_range);
+#endif /* MDBX_PNL sort-order */
     }
 
     /* Use new pages from the map when nothing suitable in the freeDB */

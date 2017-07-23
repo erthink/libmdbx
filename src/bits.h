@@ -432,13 +432,22 @@ typedef struct MDBX_lockinfo {
 #define MDBX_LOCK_MAGIC ((MDBX_MAGIC << 8) + MDBX_LOCK_VERSION)
 
 /*----------------------------------------------------------------------------*/
-/* Two kind lists of pages (aka IDL) */
+/* Two kind lists of pages (aka PNL) */
 
-/* An PNL is an Page Number List, a sorted array of IDs. The first
- * element of the array is a counter for how many actual
- * IDs are in the list. In the libmdbx PNLs are sorted in
- * descending order. */
+/* An PNL is an Page Number List, a sorted array of IDs. The first element of
+ * the array is a counter for how many actual page-numbers are in the list.
+ * PNLs are sorted in descending order, this allow cut off a page with lowest
+ * pgno (at the tail) just truncating the list */
+#define MDBX_PNL_ASCENDING 0
 typedef pgno_t *MDBX_PNL;
+
+#if MDBX_PNL_ASCENDING
+#define MDBX_PNL_ORDERED(first, last) ((first) < (last))
+#define MDBX_PNL_DISORDERED(first, last) ((first) >= (last))
+#else
+#define MDBX_PNL_ORDERED(first, last) ((first) > (last))
+#define MDBX_PNL_DISORDERED(first, last) ((first) <= (last))
+#endif
 
 /* List of txnid, only for MDBX_env.mt_lifo_reclaimed */
 typedef txnid_t *MDBX_TXL;
@@ -1199,6 +1208,11 @@ static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
 static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
   assert(base <= MAX_PAGENO);
   return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
+}
+
+static __inline pgno_t pgno_sub(pgno_t base, pgno_t subtrahend) {
+  assert(base >= MIN_PAGENO);
+  return (subtrahend < base - MIN_PAGENO) ? base - subtrahend : MIN_PAGENO;
 }
 
 static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {
