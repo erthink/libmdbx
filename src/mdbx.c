@@ -2958,7 +2958,8 @@ again_on_freelist_change:
       }
     }
 
-    if (unlikely(!env->me_reclaimed_pglist) && txn->mt_loose_pages) {
+    if (unlikely(!env->me_reclaimed_pglist) && txn->mt_loose_pages &&
+        !(lifo && env->me_last_reclaimed > 1)) {
       /* Put loose page numbers in mt_free_pages, since
        * we may be unable to return them to me_reclaimed_pglist. */
       MDBX_page *mp = txn->mt_loose_pages;
