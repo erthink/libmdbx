@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -1396,21 +1396,34 @@ static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
   return (sign > MDBX_DATASIGN_WEAK) ? sign : ~sign;
 }
 
+enum meta_choise_mode { prefer_last, prefer_noweak, prefer_steady };
+
 static __inline bool mdbx_meta_ot(const MDBX_env *env, const MDBX_meta *a,
                                   const MDBX_meta *b,
-                                  const bool roolback2steady) {
+                                  const enum meta_choise_mode mode) {
   mdbx_jitter4testing(true);
   txnid_t txnid_a = mdbx_meta_txnid_fluid(env, a);
   txnid_t txnid_b = mdbx_meta_txnid_fluid(env, b);
   if (txnid_a == txnid_b)
-    return META_IS_STEADY(b);
+    return META_IS_STEADY(b) || (META_IS_WEAK(a) && !META_IS_WEAK(a));
 
   mdbx_jitter4testing(true);
-  if (roolback2steady && META_IS_STEADY(a) != META_IS_STEADY(b))
-    return META_IS_STEADY(b);
-
-  mdbx_jitter4testing(true);
-  return txnid_a < txnid_b;
+  switch (mode) {
+  default:
+    assert(false);
+  /* fall through */
+  case prefer_steady:
+    if (META_IS_STEADY(a) != META_IS_STEADY(b))
+      return META_IS_STEADY(b);
+  /* fall through */
+  case prefer_noweak:
+    if (META_IS_WEAK(a) != META_IS_WEAK(b))
+      return !META_IS_WEAK(b);
+  /* fall through */
+  case prefer_last:
+    mdbx_jitter4testing(true);
+    return txnid_a < txnid_b;
+  }
 }
 
 static __inline bool mdbx_meta_eq(const MDBX_env *env, const MDBX_meta *a,
@@ -1443,37 +1456,42 @@ static int mdbx_meta_eq_mask(const MDBX_env *env) {
 
 static __inline MDBX_meta *mdbx_meta_recent(const MDBX_env *env, MDBX_meta *a,
                                             MDBX_meta *b,
-                                            const bool roolback2steady) {
-  const bool a_older_that_b = mdbx_meta_ot(env, a, b, roolback2steady);
+                                            const enum meta_choise_mode mode) {
+  const bool a_older_that_b = mdbx_meta_ot(env, a, b, mode);
   mdbx_assert(env, !mdbx_meta_eq(env, a, b));
   return a_older_that_b ? b : a;
 }
 
 static __inline MDBX_meta *mdbx_meta_ancient(const MDBX_env *env, MDBX_meta *a,
                                              MDBX_meta *b,
-                                             const bool roolback2steady) {
-  const bool a_older_that_b = mdbx_meta_ot(env, a, b, roolback2steady);
+                                             const enum meta_choise_mode mode) {
+  const bool a_older_that_b = mdbx_meta_ot(env, a, b, mode);
   mdbx_assert(env, !mdbx_meta_eq(env, a, b));
   return a_older_that_b ? a : b;
 }
 
-static __inline MDBX_meta *mdbx_meta_mostrecent(const MDBX_env *env,
-                                                const bool roolback2steady) {
+static __inline MDBX_meta *
+mdbx_meta_mostrecent(const MDBX_env *env, const enum meta_choise_mode mode) {
   MDBX_meta *m0 = METAPAGE(env, 0);
   MDBX_meta *m1 = METAPAGE(env, 1);
   MDBX_meta *m2 = METAPAGE(env, 2);
 
-  MDBX_meta *head = mdbx_meta_recent(env, m0, m1, roolback2steady);
-  head = mdbx_meta_recent(env, head, m2, roolback2steady);
+  MDBX_meta *head = mdbx_meta_recent(env, m0, m1, mode);
+  head = mdbx_meta_recent(env, head, m2, mode);
   return head;
 }
 
 static __hot MDBX_meta *mdbx_meta_steady(const MDBX_env *env) {
-  return mdbx_meta_mostrecent(env, true);
+  return mdbx_meta_mostrecent(env, prefer_steady);
 }
 
 static __hot MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
-  return mdbx_meta_mostrecent(env, false);
+  return mdbx_meta_mostrecent(env, prefer_last);
+}
+
+static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
+  MDBX_meta *meta = mdbx_meta_mostrecent(env, prefer_noweak);
+  return mdbx_meta_txnid_stable(env, meta);
 }
 
 static const char *mdbx_durable_str(const MDBX_meta *const meta) {
@@ -1490,10 +1508,12 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 /* Find oldest txnid still referenced. */
 static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   mdbx_tassert(txn, (txn->mt_flags & MDBX_RDONLY) == 0);
-  MDBX_lockinfo *const lck = txn->mt_env->me_lck;
+  const MDBX_env *env = txn->mt_env;
+  MDBX_lockinfo *const lck = env->me_lck;
 
+  txnid_t oldest = mdbx_reclaiming_detent(env);
+  mdbx_tassert(txn, oldest <= txn->mt_txnid - 1);
   const txnid_t last_oldest = lck->mti_oldest;
-  txnid_t oldest = txn->mt_txnid - 1;
   mdbx_tassert(txn, oldest >= last_oldest);
   if (last_oldest == oldest ||
       lck->mti_reader_finished_flag == MDBX_STRING_TETRAD("None"))
@@ -1503,7 +1523,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   lck->mti_reader_finished_flag = MDBX_STRING_TETRAD("None");
   for (unsigned i = 0; i < snap_nreaders; ++i) {
     if (lck->mti_readers[i].mr_pid) {
-      mdbx_jitter4testing(true);
+      /* mdbx_jitter4testing(true); */
       const txnid_t snap = lck->mti_readers[i].mr_txnid;
       if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
         oldest = snap;
@@ -1514,6 +1534,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   }
 
   if (oldest != last_oldest) {
+    mdbx_notice("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest, oldest);
     mdbx_tassert(txn, oldest >= lck->mti_oldest);
     lck->mti_oldest = oldest;
   }
@@ -1643,7 +1664,6 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     }
   }
 
-  const MDBX_meta *head = mdbx_meta_head(env);
   pgno_t pgno, *repg_list = env->me_reclaimed_pglist;
   unsigned repg_pos = 0, repg_len = repg_list ? repg_list[0] : 0;
   txnid_t oldest = 0, last = 0;
@@ -1845,12 +1865,13 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         goto done;
     }
 
+    const MDBX_meta *head = mdbx_meta_head(env);
     if ((flags & MDBX_ALLOC_GC) &&
         ((flags & MDBX_ALLOC_KICK) || rc == MDBX_MAP_FULL)) {
       MDBX_meta *steady = mdbx_meta_steady(env);
 
-      if (oldest == mdbx_meta_txnid_stable(env, steady) && META_IS_WEAK(head) &&
-          !META_IS_WEAK(steady)) {
+      if (oldest == mdbx_meta_txnid_stable(env, steady) &&
+          !META_IS_STEADY(head) && META_IS_STEADY(steady)) {
         /* LY: Here an oom was happened:
          *  - all pages had allocated;
          *  - reclaiming was stopped at the last steady-sync;
@@ -2416,12 +2437,20 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       /* LY: Retry on a race, ITS#7970. */
       mdbx_compiler_barrier();
       if (likely(meta == mdbx_meta_head(env) &&
-                 snap == mdbx_meta_txnid_fluid(env, meta))) {
+                 snap == mdbx_meta_txnid_fluid(env, meta) &&
+                 snap >= env->me_oldest[0])) {
         mdbx_jitter4testing(false);
         break;
       }
+      if (env->me_lck)
+        env->me_lck->mti_reader_finished_flag = true;
     }
 
+    if (unlikely(txn->mt_txnid == 0)) {
+      mdbx_error("environment corrupted by died writer, must shutdown!");
+      rc = MDBX_WANNA_RECOVERY;
+      goto bailout;
+    }
     mdbx_assert(env, txn->mt_txnid >= *env->me_oldest);
     txn->mt_ro_reader = r;
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
@@ -2478,7 +2507,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   txn->mt_dbflags[FREE_DBI] = DB_VALID;
 
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
-    mdbx_debug("environment had fatal error, must shutdown!");
+    mdbx_warning("environment had fatal error, must shutdown!");
     rc = MDBX_PANIC;
   } else {
     const size_t size = pgno2bytes(env, txn->mt_end_pgno);
@@ -3512,6 +3541,11 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   if (likely(rc == MDBX_SUCCESS)) {
     MDBX_meta meta, *head = mdbx_meta_head(env);
 
+    meta.mm_magic_and_version = head->mm_magic_and_version;
+    meta.mm_extra_flags = head->mm_extra_flags;
+    meta.mm_validator_id = head->mm_validator_id;
+    meta.mm_extra_pagehdr = head->mm_extra_pagehdr;
+
     meta.mm_geo = head->mm_geo;
     meta.mm_geo.next = txn->mt_next_pgno;
     meta.mm_geo.now = txn->mt_end_pgno;
@@ -3989,7 +4023,6 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     mdbx_coherent_barrier();
     mdbx_jitter4testing(true);
   } else {
-    pending->mm_magic_and_version = MDBX_DATA_MAGIC;
     rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta),
                      (uint8_t *)target - env->me_map);
     if (unlikely(rc != MDBX_SUCCESS)) {
@@ -10398,10 +10431,16 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
 
   int retry;
   for (retry = 0; retry < INT_MAX; ++retry) {
+    txnid_t oldest = mdbx_reclaiming_detent(env);
+    mdbx_assert(env, oldest < env->me_txn0->mt_txnid);
+    mdbx_assert(env, oldest >= laggard);
+    mdbx_assert(env, oldest >= env->me_oldest[0]);
+    if (oldest == laggard)
+      return oldest;
+
     if (MDBX_IS_ERROR(mdbx_reader_check0(env, false, NULL)))
       break;
 
-    txnid_t oldest = env->me_txn0->mt_txnid - 1;
     MDBX_reader *const rtbl = env->me_lck->mti_readers;
     MDBX_reader *asleep = nullptr;
     for (int i = env->me_lck->mti_numreaders; --i >= 0;) {
@@ -10422,6 +10461,8 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
         env->me_oom_func(env, 0, 0, laggard,
                          (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, -retry);
       }
+      mdbx_notice("oom-kick: update oldest %" PRIaTXN " -> %" PRIaTXN,
+                  env->me_oldest[0], oldest);
       mdbx_assert(env, env->me_oldest[0] <= oldest);
       return env->me_oldest[0] = oldest;
     }
@@ -11242,13 +11283,13 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return rc;
   }
 
-  mdbx_attr_t old_attr;
+  mdbx_attr_t old_attr = 0;
   rc = mdbx_attr_peek(&old_data, &old_attr);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   if (old_attr == attr && (!data || (data->iov_len == old_data.iov_len &&
-                                     memcpy(data->iov_base, old_data.iov_base,
+                                     memcmp(data->iov_base, old_data.iov_base,
                                             old_data.iov_len) == 0)))
     return MDBX_SUCCESS;
 
