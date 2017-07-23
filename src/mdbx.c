@@ -2896,25 +2896,24 @@ static int mdbx_freelist_save(MDBX_txn *txn) {
    * Page numbers cannot disappear from txn->mt_free_pages[]. */
   MDBX_cursor mc;
   MDBX_env *env = txn->mt_env;
-  int rc, maxfree_1pg = env->me_maxfree_1pg, more = 1;
+  int rc, more = 1;
   txnid_t cleanup_reclaimed_id = 0, head_id = 0;
-  pgno_t befree_count = 0, *mop;
-  ssize_t head_room = 0, total_room = 0, mop_len, clean_limit;
+  pgno_t befree_count = 0;
+  ssize_t head_room = 0, total_room = 0;
   unsigned cleanup_reclaimed_pos = 0, refill_reclaimed_pos = 0;
   const bool lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
 
   mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
 
   /* MDBX_RESERVE cancels meminit in ovpage malloc (when no WRITEMAP) */
-  clean_limit = (env->me_flags & (MDBX_NOMEMINIT | MDBX_WRITEMAP))
-                    ? SSIZE_MAX
-                    : maxfree_1pg;
+  const ssize_t clean_limit = (env->me_flags & (MDBX_NOMEMINIT | MDBX_WRITEMAP))
+                                  ? SSIZE_MAX
+                                  : env->me_maxfree_1pg;
 
 again_on_freelist_change:
-  for (;;) {
+  while (1) {
     /* Come back here after each Put() in case freelist changed */
     MDBX_val key, data;
-    ssize_t j;
 
     if (!lifo) {
       /* If using records from freeDB which we have not yet deleted,
@@ -3009,19 +3008,19 @@ again_on_freelist_change:
       continue;
     }
 
-    mop = env->me_reclaimed_pglist;
-    mop_len = (mop ? mop[0] : 0) + txn->mt_loose_count;
-
-    if (mop_len && refill_reclaimed_pos == 0)
+    const ssize_t rpl_len =
+        (env->me_reclaimed_pglist ? env->me_reclaimed_pglist[0] : 0) +
+        txn->mt_loose_count;
+    if (rpl_len && refill_reclaimed_pos == 0)
       refill_reclaimed_pos = 1;
 
     /* Reserve records for me_reclaimed_pglist[]. Split it if multi-page,
      * to avoid searching freeDB for a page range. Use keys in
      * range [1,me_last_reclaimed]: Smaller than txnid of oldest reader. */
-    if (total_room >= mop_len) {
-      if (total_room == mop_len || --more < 0)
+    if (total_room >= rpl_len) {
+      if (total_room == rpl_len || --more < 0)
         break;
-    } else if (head_room >= maxfree_1pg && head_id > 1) {
+    } else if (head_room >= env->me_maxfree_1pg && head_id > 1) {
       /* Keep current record (overflow page), add a new one */
       head_id--;
       refill_reclaimed_pos++;
@@ -3068,12 +3067,12 @@ again_on_freelist_change:
 
     /* (Re)write {key = head_id, IDL length = head_room} */
     total_room -= head_room;
-    head_room = mop_len - total_room;
-    if (head_room > maxfree_1pg && head_id > 1) {
+    head_room = rpl_len - total_room;
+    if (head_room > env->me_maxfree_1pg && head_id > 1) {
       /* Overflow multi-page for part of me_reclaimed_pglist */
       head_room /= (head_id < INT16_MAX) ? (pgno_t)head_id
                                          : INT16_MAX; /* amortize page sizes */
-      head_room += maxfree_1pg - head_room % (maxfree_1pg + 1);
+      head_room += env->me_maxfree_1pg - head_room % (env->me_maxfree_1pg + 1);
     } else if (head_room < 0) {
       /* Rare case, not bothering to delete this record */
       head_room = 0;
@@ -3088,10 +3087,10 @@ again_on_freelist_change:
 
     /* IDL is initially empty, zero out at least the length */
     pgno_t *pgs = (pgno_t *)data.iov_base;
-    j = head_room > clean_limit ? head_room : 0;
+    ssize_t i = head_room > clean_limit ? head_room : 0;
     do {
-      pgs[j] = 0;
-    } while (--j >= 0);
+      pgs[i] = 0;
+    } while (--i >= 0);
     total_room += head_room;
     continue;
   }
@@ -3103,43 +3102,40 @@ again_on_freelist_change:
   /* Return loose page numbers to me_reclaimed_pglist, though usually none are
    * left at this point.  The pages themselves remain in dirtylist. */
   if (txn->mt_loose_pages) {
-    MDBX_page *mp = txn->mt_loose_pages;
-    unsigned count = txn->mt_loose_count;
-    MDBX_IDL loose;
     /* Room for loose pages + temp IDL with same */
-    if ((rc = mdbx_midl_need(&env->me_reclaimed_pglist, 2 * count + 1)) != 0)
+    if ((rc = mdbx_midl_need(&env->me_reclaimed_pglist,
+                             2 * txn->mt_loose_count + 1)) != 0)
       goto bailout;
-    mop = env->me_reclaimed_pglist;
-    loose = mop + MDBX_IDL_ALLOCLEN(mop) - count;
-    for (count = 0; mp; mp = NEXT_LOOSE_PAGE(mp))
+    MDBX_IDL loose = env->me_reclaimed_pglist +
+                     MDBX_IDL_ALLOCLEN(env->me_reclaimed_pglist) -
+                     txn->mt_loose_count;
+    unsigned count = 0;
+    for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
       loose[++count] = mp->mp_pgno;
     loose[0] = count;
     mdbx_midl_sort(loose);
-    mdbx_midl_xmerge(mop, loose);
+    mdbx_midl_xmerge(env->me_reclaimed_pglist, loose);
     txn->mt_loose_pages = NULL;
     txn->mt_loose_count = 0;
-    mop_len = mop[0];
   }
 
   /* Fill in the reserved me_reclaimed_pglist records */
   rc = MDBX_SUCCESS;
-  if (mop_len) {
+  if (env->me_reclaimed_pglist && env->me_reclaimed_pglist[0]) {
     MDBX_val key, data;
     key.iov_len = data.iov_len = 0; /* avoid MSVC warning */
     key.iov_base = data.iov_base = NULL;
 
-    mop += mop_len;
+    size_t rpl_left = env->me_reclaimed_pglist[0];
+    pgno_t *rpl_end = env->me_reclaimed_pglist + rpl_left;
     if (!lifo) {
       rc = mdbx_cursor_first(&mc, &key, &data);
       if (unlikely(rc))
         goto bailout;
     }
 
-    for (;;) {
+    while (1) {
       txnid_t id;
-      ssize_t len;
-      pgno_t save;
-
       if (!lifo) {
         id = *(txnid_t *)key.iov_base;
         mdbx_tassert(txn, id <= env->me_last_reclaimed);
@@ -3158,24 +3154,29 @@ again_on_freelist_change:
           txn, cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
-      len = (ssize_t)(data.iov_len / sizeof(pgno_t)) - 1;
-      mdbx_tassert(txn, len >= 0);
-      if (len > mop_len)
-        len = mop_len;
-      data.iov_len = (len + 1) * sizeof(pgno_t);
+      mdbx_tassert(txn, data.iov_len >= sizeof(pgno_t) * 2);
+      size_t chunk_len = (data.iov_len / sizeof(pgno_t)) - 1;
+      if (chunk_len > rpl_left)
+        chunk_len = rpl_left;
+      data.iov_len = (chunk_len + 1) * sizeof(pgno_t);
       key.iov_base = &id;
       key.iov_len = sizeof(id);
-      data.iov_base = mop -= len;
 
-      save = mop[0];
-      mop[0] = (pgno_t)len;
+      rpl_end -= chunk_len;
+      data.iov_base = rpl_end;
+      pgno_t save = rpl_end[0];
+      rpl_end[0] = (pgno_t)chunk_len;
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
       mdbx_tassert(
           txn, cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
-      mop[0] = save;
-      if (unlikely(rc || (mop_len -= len) == 0))
+      rpl_end[0] = save;
+      if (unlikely(rc))
         goto bailout;
+
+      rpl_left -= chunk_len;
+      if (rpl_left == 0)
+        break;
 
       if (!lifo) {
         rc = mdbx_cursor_next(&mc, &key, &data, MDBX_NEXT);
