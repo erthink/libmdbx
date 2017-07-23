@@ -176,10 +176,14 @@ static MDBX_IDL mdbx_midl_alloc(size_t size) {
   return ids;
 }
 
-static MDBX_TXL mdbx_txl_alloc(size_t size) {
-  MDBX_TXL ptr = malloc((size + 2) * sizeof(txnid_t));
+static MDBX_TXL mdbx_txl_alloc(void) {
+  const size_t malloc_overhead = sizeof(void *) * 2;
+  const size_t bytes = mdbx_roundup2(malloc_overhead + sizeof(txnid_t) * 61,
+                                     MDBX_CACHELINE_SIZE) -
+                       malloc_overhead;
+  MDBX_TXL ptr = malloc(bytes);
   if (likely(ptr)) {
-    *ptr++ = size;
+    *ptr++ = bytes / sizeof(txnid_t) - 2;
     *ptr = 0;
   }
   return ptr;
@@ -1774,7 +1778,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         goto fail;
 
       if ((flags & MDBX_LIFORECLAIM) && !txn->mt_lifo_reclaimed) {
-        txn->mt_lifo_reclaimed = mdbx_txl_alloc(env->me_maxfree_1pg);
+        txn->mt_lifo_reclaimed = mdbx_txl_alloc();
         if (unlikely(!txn->mt_lifo_reclaimed)) {
           rc = MDBX_ENOMEM;
           goto fail;
@@ -3045,7 +3049,7 @@ again:
         }
 
         if (unlikely(!txn->mt_lifo_reclaimed)) {
-          txn->mt_lifo_reclaimed = mdbx_txl_alloc(env->me_maxfree_1pg);
+          txn->mt_lifo_reclaimed = mdbx_txl_alloc();
           if (unlikely(!txn->mt_lifo_reclaimed)) {
             rc = MDBX_ENOMEM;
             goto bailout;
