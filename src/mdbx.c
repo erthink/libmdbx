@@ -11279,13 +11279,13 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return rc;
   }
 
-  mdbx_attr_t old_attr;
+  mdbx_attr_t old_attr = 0;
   rc = mdbx_attr_peek(&old_data, &old_attr);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   if (old_attr == attr && (!data || (data->iov_len == old_data.iov_len &&
-                                     memcpy(data->iov_base, old_data.iov_base,
+                                     memcmp(data->iov_base, old_data.iov_base,
                                             old_data.iov_len) == 0)))
     return MDBX_SUCCESS;
 
