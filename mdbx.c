@@ -864,13 +864,14 @@ int mdbx_set_attr(MDB_txn *txn, MDB_dbi dbi,
 		return rc;
 	}
 
+	old_attr = 0;
 	rc = mdbx_attr_peek(&old_data, &old_attr);
 	if (unlikely(rc != MDB_SUCCESS))
 		return rc;
 
 	if (old_attr == attr && (!data ||
 			(data->mv_size == old_data.mv_size
-				&& memcpy(data->mv_data, old_data.mv_data, old_data.mv_size) == 0)))
+				&& memcmp(data->mv_data, old_data.mv_data, old_data.mv_size) == 0)))
 		return MDB_SUCCESS;
 
 	mc.mc_next = txn->mt_cursors[dbi];
