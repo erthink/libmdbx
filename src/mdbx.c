@@ -3541,6 +3541,11 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   if (likely(rc == MDBX_SUCCESS)) {
     MDBX_meta meta, *head = mdbx_meta_head(env);
 
+    meta.mm_magic_and_version = head->mm_magic_and_version;
+    meta.mm_extra_flags = head->mm_extra_flags;
+    meta.mm_validator_id = head->mm_validator_id;
+    meta.mm_extra_pagehdr = head->mm_extra_pagehdr;
+
     meta.mm_geo = head->mm_geo;
     meta.mm_geo.next = txn->mt_next_pgno;
     meta.mm_geo.now = txn->mt_end_pgno;
@@ -4018,7 +4023,6 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     mdbx_coherent_barrier();
     mdbx_jitter4testing(true);
   } else {
-    pending->mm_magic_and_version = MDBX_DATA_MAGIC;
     rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta),
                      (uint8_t *)target - env->me_map);
     if (unlikely(rc != MDBX_SUCCESS)) {
