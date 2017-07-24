@@ -1,4 +1,4 @@
-/* mdbx_stat.c - memory-mapped database status tool */
+﻿/* mdbx_stat.c - memory-mapped database status tool */
 
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
@@ -249,7 +249,7 @@ int main(int argc, char *argv[]) {
         pgno_t pg, prev;
         ssize_t i, j, span = 0;
         j = *iptr++;
-        for (i = j, prev = 1; --i >= 0;) {
+        for (i = j, prev = NUM_METAS - 1; --i >= 0;) {
           pg = iptr[i];
           if (pg <= prev)
             bad = " [bad sequence]";
