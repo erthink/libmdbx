@@ -1494,8 +1494,10 @@ static __hot MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
 }
 
 static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
-  MDBX_meta *meta = mdbx_meta_mostrecent(prefer_noweak, env);
-  return mdbx_meta_txnid_stable(env, meta);
+  if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC))
+    return env->me_txn->mt_txnid - 1;
+
+  return mdbx_meta_txnid_stable(env, mdbx_meta_steady(env));
 }
 
 static const char *mdbx_durable_str(const MDBX_meta *const meta) {
