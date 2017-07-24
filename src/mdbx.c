@@ -5123,8 +5123,8 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (!dont_sync && env->me_lck)
-    rc = mdbx_env_sync(env, 1);
+  if (!dont_sync && !(env->me_flags & MDBX_RDONLY))
+    rc = mdbx_env_sync(env, true);
 
   VALGRIND_DESTROY_MEMPOOL(env);
   while ((dp = env->me_dpages) != NULL) {
