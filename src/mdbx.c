@@ -4371,6 +4371,13 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   const bool outside_txn =
       (!env->me_txn0 || env->me_txn0->mt_owner != mdbx_thread_self());
 
+#if MDBX_DEBUG
+  if (growth_step < 0)
+    growth_step = 1;
+  if (shrink_threshold < 0)
+    shrink_threshold = 1;
+#endif
+
   int rc = MDBX_PROBLEM;
   if (env->me_map) {
     /* env already mapped */
