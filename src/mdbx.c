@@ -1402,9 +1402,9 @@ static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
 
 enum meta_choise_mode { prefer_last, prefer_noweak, prefer_steady };
 
-static __inline bool mdbx_meta_ot(const MDBX_env *env, const MDBX_meta *a,
-                                  const MDBX_meta *b,
-                                  const enum meta_choise_mode mode) {
+static __inline bool mdbx_meta_ot(const enum meta_choise_mode mode,
+                                  const MDBX_env *env, const MDBX_meta *a,
+                                  const MDBX_meta *b) {
   mdbx_jitter4testing(true);
   txnid_t txnid_a = mdbx_meta_txnid_fluid(env, a);
   txnid_t txnid_b = mdbx_meta_txnid_fluid(env, b);
@@ -1458,43 +1458,43 @@ static int mdbx_meta_eq_mask(const MDBX_env *env) {
   return rc;
 }
 
-static __inline MDBX_meta *mdbx_meta_recent(const MDBX_env *env, MDBX_meta *a,
-                                            MDBX_meta *b,
-                                            const enum meta_choise_mode mode) {
-  const bool a_older_that_b = mdbx_meta_ot(env, a, b, mode);
+static __inline MDBX_meta *mdbx_meta_recent(const enum meta_choise_mode mode,
+                                            const MDBX_env *env, MDBX_meta *a,
+                                            MDBX_meta *b) {
+  const bool a_older_that_b = mdbx_meta_ot(mode, env, a, b);
   mdbx_assert(env, !mdbx_meta_eq(env, a, b));
   return a_older_that_b ? b : a;
 }
 
-static __inline MDBX_meta *mdbx_meta_ancient(const MDBX_env *env, MDBX_meta *a,
-                                             MDBX_meta *b,
-                                             const enum meta_choise_mode mode) {
-  const bool a_older_that_b = mdbx_meta_ot(env, a, b, mode);
+static __inline MDBX_meta *mdbx_meta_ancient(const enum meta_choise_mode mode,
+                                             const MDBX_env *env, MDBX_meta *a,
+                                             MDBX_meta *b) {
+  const bool a_older_that_b = mdbx_meta_ot(mode, env, a, b);
   mdbx_assert(env, !mdbx_meta_eq(env, a, b));
   return a_older_that_b ? a : b;
 }
 
 static __inline MDBX_meta *
-mdbx_meta_mostrecent(const MDBX_env *env, const enum meta_choise_mode mode) {
+mdbx_meta_mostrecent(const enum meta_choise_mode mode, const MDBX_env *env) {
   MDBX_meta *m0 = METAPAGE(env, 0);
   MDBX_meta *m1 = METAPAGE(env, 1);
   MDBX_meta *m2 = METAPAGE(env, 2);
 
-  MDBX_meta *head = mdbx_meta_recent(env, m0, m1, mode);
-  head = mdbx_meta_recent(env, head, m2, mode);
+  MDBX_meta *head = mdbx_meta_recent(mode, env, m0, m1);
+  head = mdbx_meta_recent(mode, env, head, m2);
   return head;
 }
 
 static __hot MDBX_meta *mdbx_meta_steady(const MDBX_env *env) {
-  return mdbx_meta_mostrecent(env, prefer_steady);
+  return mdbx_meta_mostrecent(prefer_steady, env);
 }
 
 static __hot MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
-  return mdbx_meta_mostrecent(env, prefer_last);
+  return mdbx_meta_mostrecent(prefer_last, env);
 }
 
 static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
-  MDBX_meta *meta = mdbx_meta_mostrecent(env, prefer_noweak);
+  MDBX_meta *meta = mdbx_meta_mostrecent(prefer_noweak, env);
   return mdbx_meta_txnid_stable(env, meta);
 }
 
@@ -3784,7 +3784,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       continue;
     }
 
-    if (mdbx_meta_ot(env, meta, &page.mp_meta, true)) {
+    if (mdbx_meta_ot(prefer_steady, env, meta, &page.mp_meta)) {
       *meta = page.mp_meta;
       if (META_IS_WEAK(meta))
         loop_limit += 1; /* LY: should re-read to hush race with update */
@@ -3947,12 +3947,12 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       return MDBX_SUCCESS;
     }
   } else if (head == meta0)
-    target = mdbx_meta_ancient(env, meta1, meta2, true);
+    target = mdbx_meta_ancient(prefer_steady, env, meta1, meta2);
   else if (head == meta1)
-    target = mdbx_meta_ancient(env, meta0, meta2, true);
+    target = mdbx_meta_ancient(prefer_steady, env, meta0, meta2);
   else {
     mdbx_assert(env, head == meta2);
-    target = mdbx_meta_ancient(env, meta0, meta1, true);
+    target = mdbx_meta_ancient(prefer_steady, env, meta0, meta1);
   }
 
   /* LY: step#2 - update meta-page. */
