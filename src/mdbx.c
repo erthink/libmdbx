@@ -1062,6 +1062,10 @@ static void mdbx_dlist_free(MDBX_txn *txn) {
   dl[0].mid = 0;
 }
 
+static size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
+  return mdbx_roundup2(mdbx_roundup2(bytes, env->me_psize), env->me_os_psize);
+}
+
 static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
   const size_t offs = pgno2bytes(env, pgno);
   const size_t shift = offsetof(MDBX_page, mp_pages);
@@ -4444,7 +4448,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
       mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
       rc = mdbx_sync_locked(env, env->me_flags, &meta);
     }
-  } else {
+  } else if (pagesize != (ssize_t)env->me_psize) {
     mdbx_setup_pagesize(env, pagesize);
   }
 
@@ -4558,8 +4562,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     }
   } else if (env->me_dbgeo.now) {
     /* silently growth to last used page */
-    /* TODO: compactification */
-    size_t used_bytes = meta.mm_psize * (size_t)meta.mm_geo.next;
+    const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
     if (env->me_dbgeo.lower < used_bytes)
       env->me_dbgeo.lower = used_bytes;
     if (env->me_dbgeo.now < used_bytes)
@@ -4567,21 +4570,40 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     if (env->me_dbgeo.upper < used_bytes)
       env->me_dbgeo.upper = used_bytes;
 
-    /* apply preconfigured params */
-    err = mdbx_env_set_geometry(env, env->me_dbgeo.lower, env->me_dbgeo.now,
-                                env->me_dbgeo.upper, env->me_dbgeo.grow,
-                                env->me_dbgeo.shrink, meta.mm_psize);
-    if (unlikely(err != MDBX_SUCCESS)) {
-      mdbx_error("could not apply preconfigured dbsize-params to db");
-      return MDBX_INCOMPATIBLE;
+    /* apply preconfigured params, but only if substantial changes:
+     *  - upper or lower limit changes
+     *  - shrink theshold or growth step
+     * But ignore just chagne just a 'now/current' size. */
+    if (bytes_align2os_bytes(env, env->me_dbgeo.upper) !=
+            pgno_align2os_bytes(env, meta.mm_geo.upper) ||
+        bytes_align2os_bytes(env, env->me_dbgeo.lower) !=
+            pgno_align2os_bytes(env, meta.mm_geo.lower) ||
+        bytes_align2os_bytes(env, env->me_dbgeo.shrink) !=
+            pgno_align2os_bytes(env, meta.mm_geo.shrink) ||
+        bytes_align2os_bytes(env, env->me_dbgeo.grow) !=
+            pgno_align2os_bytes(env, meta.mm_geo.grow)) {
+
+      if (env->me_dbgeo.shrink && env->me_dbgeo.now > used_bytes)
+        /* pre-shrink if enabled */
+        env->me_dbgeo.now = used_bytes + env->me_dbgeo.shrink -
+                            used_bytes % env->me_dbgeo.shrink;
+
+      err = mdbx_env_set_geometry(env, env->me_dbgeo.lower, env->me_dbgeo.now,
+                                  env->me_dbgeo.upper, env->me_dbgeo.grow,
+                                  env->me_dbgeo.shrink, meta.mm_psize);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        mdbx_error("could not apply preconfigured dbsize-params to db");
+        return MDBX_INCOMPATIBLE;
+      }
+
+      /* update meta fields */
+      meta.mm_geo.now = bytes2pgno(env, env->me_dbgeo.now);
+      meta.mm_geo.lower = bytes2pgno(env, env->me_dbgeo.lower);
+      meta.mm_geo.upper = bytes2pgno(env, env->me_dbgeo.upper);
+      meta.mm_geo.grow = (uint16_t)bytes2pgno(env, env->me_dbgeo.grow);
+      meta.mm_geo.shrink = (uint16_t)bytes2pgno(env, env->me_dbgeo.shrink);
+      mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
     }
-    /* update meta fields */
-    meta.mm_geo.now = bytes2pgno(env, env->me_dbgeo.now);
-    meta.mm_geo.lower = bytes2pgno(env, env->me_dbgeo.lower);
-    meta.mm_geo.upper = bytes2pgno(env, env->me_dbgeo.upper);
-    meta.mm_geo.grow = (uint16_t)bytes2pgno(env, env->me_dbgeo.grow);
-    meta.mm_geo.shrink = (uint16_t)bytes2pgno(env, env->me_dbgeo.shrink);
-    mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
   }
 
   uint64_t filesize_before_mmap;
