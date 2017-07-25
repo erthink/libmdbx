@@ -2928,7 +2928,7 @@ static __inline int mdbx_backlog_size(MDBX_txn *txn) {
   int reclaimed = txn->mt_env->me_reclaimed_pglist
                       ? txn->mt_env->me_reclaimed_pglist[0]
                       : 0;
-  return reclaimed + txn->mt_loose_count;
+  return reclaimed + txn->mt_loose_count + txn->mt_end_pgno - txn->mt_next_pgno;
 }
 
 /* LY: Prepare a backlog of pages to modify FreeDB itself,
@@ -2943,7 +2943,8 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
     if (unlikely(rc))
       return rc;
 
-    while (unlikely(mdbx_backlog_size(txn) < extra)) {
+    int backlog;
+    while (unlikely((backlog = mdbx_backlog_size(txn)) < extra)) {
       rc = mdbx_page_alloc(mc, 1, NULL, MDBX_ALLOC_GC);
       if (unlikely(rc)) {
         if (unlikely(rc != MDBX_NOTFOUND))
