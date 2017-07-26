@@ -781,7 +781,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   map->length = 0;
   map->current = 0;
   map->section = NULL;
-  map->address = MAP_FAILED;
+  map->address = nullptr;
 
   if (GetFileType(map->fd) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
@@ -874,7 +874,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   if (!NT_SUCCESS(rc))
     return ntstatus2errcode(rc);
 
-  map->address = NULL;
+  map->address = nullptr;
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? must : limit;
   rc = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
@@ -889,7 +889,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   if (!NT_SUCCESS(rc)) {
     NtClose(map->section);
     map->section = 0;
-    map->address = MAP_FAILED;
+    map->address = nullptr;
     return ntstatus2errcode(rc);
   }
 
@@ -907,6 +907,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
     return MDBX_SUCCESS;
   }
   map->length = 0;
+  map->address = nullptr;
   return errno;
 #endif
 }

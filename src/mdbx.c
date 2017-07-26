@@ -4189,10 +4189,8 @@ bailout:
 static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
   int rc = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
                      env->me_dbgeo.upper);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    env->me_map = NULL;
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  }
 
 #ifdef MADV_DONTFORK
   if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK))
@@ -5125,10 +5123,8 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
     env->me_fd = INVALID_HANDLE_VALUE;
   }
 
-  if (env->me_lck) {
+  if (env->me_lck)
     mdbx_munmap(&env->me_lck_mmap);
-    env->me_lck = nullptr;
-  }
   env->me_pid = 0;
   env->me_oldest = nullptr;
 
