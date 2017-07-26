@@ -1571,10 +1571,8 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
   void *const prev_mapaddr = env->me_map;
 #endif
 
-  const size_t limit_bytes =
-      mdbx_roundup2(pgno2bytes(env, limit_pgno), env->me_os_psize);
-  const size_t size_bytes =
-      mdbx_roundup2(pgno2bytes(env, size_pgno), env->me_os_psize);
+  const size_t limit_bytes = pgno_align2os_bytes(env, limit_pgno);
+  const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
 
   mdbx_info("resize datafile/mapping: "
             "present %" PRIuPTR " -> %" PRIuPTR ", "
@@ -1914,21 +1912,16 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 
     if (rc == MDBX_MAP_FULL && next < head->mm_geo.upper) {
       mdbx_assert(env, next > txn->mt_end_pgno);
-      pgno_t growth_pgno = bytes2pgno(
-          env, mdbx_roundup2(pgno2bytes(env, pgno_add(txn->mt_next_pgno,
-                                                      head->mm_geo.grow)),
-                             env->me_os_psize));
-      while (next >= growth_pgno)
-        growth_pgno = bytes2pgno(
-            env, mdbx_roundup2(
-                     pgno2bytes(env, pgno_add(growth_pgno, head->mm_geo.grow)),
-                     env->me_os_psize));
-      if (growth_pgno > head->mm_geo.upper)
-        growth_pgno = head->mm_geo.upper;
+      pgno_t aligned = pgno_align2os_pgno(
+          env, pgno_add(next, head->mm_geo.grow - next % head->mm_geo.grow));
+
+      if (aligned > head->mm_geo.upper)
+        aligned = head->mm_geo.upper;
+      mdbx_assert(env, aligned > txn->mt_end_pgno);
 
       mdbx_info("try growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO ")",
-                growth_pgno, growth_pgno - txn->mt_end_pgno);
-      rc = mdbx_mapresize(env, growth_pgno, head->mm_geo.upper);
+                aligned, aligned - txn->mt_end_pgno);
+      rc = mdbx_mapresize(env, aligned, head->mm_geo.upper);
       if (rc == MDBX_SUCCESS) {
         mdbx_tassert(env->me_txn, txn->mt_end_pgno >= next);
         if (!mp)
@@ -1938,7 +1931,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 
       mdbx_warning("unable growth datafile to %" PRIaPGNO "pages (+%" PRIaPGNO
                    "), errcode %d",
-                   growth_pgno, growth_pgno - txn->mt_end_pgno, rc);
+                   aligned, aligned - txn->mt_end_pgno, rc);
     }
 
   fail:
@@ -3913,15 +3906,18 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 /* Windows is unable shrinking a mapped file */
 #else
   /* LY: check conditions to shrink datafile */
-  pgno_t shrink_pgno_delta = 0;
-  if ((flags & MDBX_SHRINK_ALLOWED) &&
-      pending->mm_geo.next < head->mm_geo.next) {
-    const pgno_t shrink_pgno =
-        pending->mm_geo.next /* + pending->mm_geo.grow */;
-    if (pending->mm_geo.now > shrink_pgno && pending->mm_geo.shrink &&
-        unlikely(pending->mm_geo.now - pending->mm_geo.shrink >= shrink_pgno)) {
-      shrink_pgno_delta = pending->mm_geo.now - shrink_pgno;
-      pending->mm_geo.now = shrink_pgno;
+  pgno_t shrink = 0;
+  if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
+      pending->mm_geo.now - pending->mm_geo.next > pending->mm_geo.shrink) {
+    const pgno_t aligner =
+        pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
+    const pgno_t aligned = pgno_align2os_pgno(
+        env, pending->mm_geo.next + aligner - pending->mm_geo.next % aligner);
+    if (pending->mm_geo.now > aligned) {
+      shrink = pending->mm_geo.now - aligned;
+      pending->mm_geo.now = aligned;
+      if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
+        mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
     }
   }
 #endif /* not a Windows */
@@ -4075,7 +4071,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 /* Windows is unable shrinking a mapped file */
 #else
   /* LY: shrink datafile if needed */
-  if (unlikely(shrink_pgno_delta)) {
+  if (unlikely(shrink)) {
+    mdbx_info("shrink to %" PRIaPGNO " pages (-%" PRIaPGNO ")",
+              pending->mm_geo.now, shrink);
     rc = mdbx_mapresize(env, pending->mm_geo.now, pending->mm_geo.upper);
     if (MDBX_IS_ERROR(rc))
       goto fail;

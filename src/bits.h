@@ -1200,3 +1200,11 @@ static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
   assert(base <= MAX_PAGENO);
   return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
 }
+
+static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {
+  return mdbx_roundup2(pgno2bytes(env, pgno), env->me_os_psize);
+}
+
+static __inline pgno_t pgno_align2os_pgno(const MDBX_env *env, pgno_t pgno) {
+  return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
+}
