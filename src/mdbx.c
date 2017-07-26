@@ -3170,7 +3170,9 @@ again_on_freelist_change:
       data.iov_base = rpl_end;
       pgno_t save = rpl_end[0];
       rpl_end[0] = (pgno_t)chunk_len;
+      mc.mc_flags |= C_RECLAIMING;
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
+      mc.mc_flags ^= C_RECLAIMING;
       mdbx_tassert(
           txn, cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
