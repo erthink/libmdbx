@@ -8642,8 +8642,10 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
               if (m3->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
                 if (!(node->mn_flags & F_SUBDATA))
                   m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
-              } else
+              } else {
                 mdbx_xcursor_init1(m3, node);
+                m3->mc_xcursor->mx_cursor.mc_flags |= C_DEL;
+              }
             }
           }
         }
