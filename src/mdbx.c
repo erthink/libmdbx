@@ -4219,14 +4219,6 @@ static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
     return errno;
 #endif
 
-  /* Lock meta pages to avoid unexpected write,
-   * before the data pages would be synchronized. */
-  if (env->me_flags & MDBX_WRITEMAP) {
-    rc = mdbx_mlock(&env->me_dxb_mmap, pgno2bytes(env, NUM_METAS));
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
-  }
-
 #ifdef USE_VALGRIND
   env->me_valgrind_handle =
       VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");

@@ -930,14 +930,6 @@ int mdbx_munmap(mdbx_mmap_t *map) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_mlock(mdbx_mmap_t *map, size_t length) {
-#if defined(_WIN32) || defined(_WIN64)
-  return VirtualLock(map->address, length) ? MDBX_SUCCESS : GetLastError();
-#else
-  return (mlock(map->address, length) == 0) ? MDBX_SUCCESS : errno;
-#endif
-}
-
 int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   assert(must <= limit);
 #if defined(_WIN32) || defined(_WIN64)
