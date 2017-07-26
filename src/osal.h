@@ -1,4 +1,4 @@
-/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
+﻿/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
 
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
@@ -89,6 +89,7 @@ typedef CRITICAL_SECTION mdbx_fastmutex_t;
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <signal.h>
 typedef pthread_t mdbx_thread_t;
 typedef pthread_key_t mdbx_thread_key_t;
 #define INVALID_HANDLE_VALUE (-1)
@@ -455,7 +456,6 @@ typedef struct mdbx_mmap_param {
 
 int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit);
 int mdbx_munmap(mdbx_mmap_t *map);
-int mdbx_mlock(mdbx_mmap_t *map, size_t length);
 int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current, size_t wanna);
 int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async);
 

@@ -361,7 +361,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
       freedb_pages += number;
       if (envinfo.mi_latter_reader_txnid > txnid)
         reclaimable_pages += number;
-      for (i = number, prev = 1; --i >= 0;) {
+      for (i = number, prev = NUM_METAS - 1; --i >= 0;) {
         pg = iptr[i];
         if (pg < NUM_METAS || pg > envinfo.mi_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",

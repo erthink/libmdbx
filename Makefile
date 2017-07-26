@@ -28,6 +28,7 @@ CFLAGS	?= -O2 -g3 -Wall -Wno-constant-logical-operand -Werror -Wextra -ffunction
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu11 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
 TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.db
+TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.log
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
 LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
@@ -72,7 +73,7 @@ clean:
 	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
 check:	all
-	rm -f $(TESTDB) test.log && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a test.log | tail -n 42) && ./mdbx_chk -vn $(TESTDB)
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
 
 define core-rule
 $(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile

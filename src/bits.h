@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -503,7 +503,7 @@ struct MDBX_txn {
                     /* The list of reclaimed txns from freeDB */
   MDBX_TXL mt_lifo_reclaimed;
   /* The list of pages that became unused during this transaction. */
-  MDBX_IDL mt_free_pages;
+  MDBX_IDL mt_befree_pages;
   /* The list of loose pages that became unused and may be reused
    * in this transaction, linked through NEXT_LOOSE_PAGE(page). */
   MDBX_page *mt_loose_pages;
@@ -970,7 +970,7 @@ static __inline unsigned mdbx_log2(size_t value) {
 
 /* The percentage of space used in the page, in tenths of a percent. */
 #define PAGEFILL(env, p)                                                       \
-  (1024L * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                       \
+  (1024UL * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                      \
    ((env)->me_psize - PAGEHDRSZ))
 /* The minimum page fill factor, in tenths of a percent.
  * Pages emptier than this are candidates for merging. */
@@ -1194,4 +1194,17 @@ static __inline MDBX_page *pgno2page(const MDBX_env *env, pgno_t pgno) {
 static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
   mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
   return (pgno_t)(bytes >> env->me_psize2log);
+}
+
+static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
+  assert(base <= MAX_PAGENO);
+  return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
+}
+
+static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {
+  return mdbx_roundup2(pgno2bytes(env, pgno), env->me_os_psize);
+}
+
+static __inline pgno_t pgno_align2os_pgno(const MDBX_env *env, pgno_t pgno) {
+  return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
 }

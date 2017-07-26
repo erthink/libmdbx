@@ -208,13 +208,13 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
   va_end(ap);
 
   if (unlikely(needed < 0 || needed >= INT_MAX)) {
-    *strp = NULL;
+    *strp = nullptr;
     va_end(ones);
     return needed;
   }
 
   *strp = malloc(needed + 1);
-  if (unlikely(*strp == NULL)) {
+  if (unlikely(*strp == nullptr)) {
     va_end(ones);
     SetLastError(MDBX_ENOMEM);
     return -1;
@@ -231,7 +231,7 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
   assert(actual == needed);
   if (unlikely(actual < 0)) {
     free(*strp);
-    *strp = NULL;
+    *strp = nullptr;
   }
   return actual;
 }
@@ -246,7 +246,7 @@ int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
   *result = memalign(alignment, bytes);
   return *result ? MDBX_SUCCESS : errno;
 #elif _POSIX_VERSION >= 200112L
-  *result = NULL;
+  *result = nullptr;
   return posix_memalign(result, alignment, bytes);
 #else
 #error FIXME
@@ -621,9 +621,9 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
   }
 }
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
+int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
 #if defined(_WIN32) || defined(_WIN64)
-  (void)fullsync;
+  (void)filesize_changed;
   return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
 #elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
     (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
@@ -640,10 +640,10 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
  * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
 #if _POSIX_C_SOURCE >= 199309L || _XOPEN_SOURCE >= 500 ||                      \
     defined(_POSIX_SYNCHRONIZED_IO)
-    if (!fullsync && fdatasync(fd) == 0)
+    if (!filesize_changed && fdatasync(fd) == 0)
       return MDBX_SUCCESS;
 #else
-    (void)fullsync;
+    (void)filesize_changed;
 #endif
     if (fsync(fd) == 0)
       return MDBX_SUCCESS;
@@ -781,7 +781,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   map->length = 0;
   map->current = 0;
   map->section = NULL;
-  map->address = MAP_FAILED;
+  map->address = nullptr;
 
   if (GetFileType(map->fd) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
@@ -874,7 +874,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   if (!NT_SUCCESS(rc))
     return ntstatus2errcode(rc);
 
-  map->address = NULL;
+  map->address = nullptr;
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? must : limit;
   rc = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
@@ -889,7 +889,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   if (!NT_SUCCESS(rc)) {
     NtClose(map->section);
     map->section = 0;
-    map->address = MAP_FAILED;
+    map->address = nullptr;
     return ntstatus2errcode(rc);
   }
 
@@ -907,6 +907,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
     return MDBX_SUCCESS;
   }
   map->length = 0;
+  map->address = nullptr;
   return errno;
 #endif
 }
@@ -928,14 +929,6 @@ int mdbx_munmap(mdbx_mmap_t *map) {
   map->address = nullptr;
 #endif
   return MDBX_SUCCESS;
-}
-
-int mdbx_mlock(mdbx_mmap_t *map, size_t length) {
-#if defined(_WIN32) || defined(_WIN64)
-  return VirtualLock(map->address, length) ? MDBX_SUCCESS : GetLastError();
-#else
-  return (mlock(map->address, length) == 0) ? MDBX_SUCCESS : errno;
-#endif
 }
 
 int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
