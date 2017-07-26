@@ -4341,7 +4341,7 @@ mdb_env_create(MDB_env **env)
 }
 
 static int __cold
-mdb_env_map(MDB_env *env, void *addr, size_t usedsize)
+mdb_env_map(MDB_env *env, void *addr)
 {
 	unsigned flags = env->me_flags;
 
@@ -4378,12 +4378,6 @@ mdb_env_map(MDB_env *env, void *addr, size_t usedsize)
 #ifdef MADV_DONTDUMP
 	if (! (flags & MDBX_PAGEPERTURB)) {
 		(void) madvise(env->me_map, env->me_mapsize, MADV_DONTDUMP);
-	}
-#endif
-
-#ifdef MADV_REMOVE
-	if (flags & MDB_WRITEMAP) {
-		(void) madvise(env->me_map + usedsize, env->me_mapsize - usedsize, MADV_REMOVE);
 	}
 #endif
 
@@ -4439,7 +4433,7 @@ mdb_env_set_mapsize(MDB_env *env, size_t size)
 #endif
 		env->me_mapsize = size;
 		old = (env->me_flags & MDB_FIXEDMAP) ? env->me_map : NULL;
-		rc = mdb_env_map(env, old, usedsize);
+		rc = mdb_env_map(env, old);
 		if (rc)
 			return rc;
 	}
@@ -4557,8 +4551,7 @@ mdb_env_open2(MDB_env *env, MDB_meta *meta)
 		newenv = 0;
 	}
 
-	const size_t usedsize = (meta->mm_last_pg + 1) * env->me_psize;
-	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta->mm_address : NULL, usedsize);
+	rc = mdb_env_map(env, (flags & MDB_FIXEDMAP) ? meta->mm_address : NULL);
 	if (rc)
 		return rc;
 
