@@ -609,6 +609,30 @@ static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
 
 /*----------------------------------------------------------------------------*/
 
+#if defined(_MSC_VER) && _MSC_VER >= 1900 && _MSC_VER < 1920
+/* LY: MSVC 2015/2017 has buggy/inconsistent PRIuPTR/PRIxPTR macros
+ * for internal format-args checker. */
+#undef PRIuPTR
+#undef PRIiPTR
+#undef PRIdPTR
+#undef PRIxPTR
+#define PRIuPTR "Iu"
+#define PRIiPTR "Ii"
+#define PRIdPTR "Id"
+#define PRIxPTR "Ix"
+#define PRIuSIZE "zu"
+#define PRIiSIZE "zi"
+#define PRIdSIZE "zd"
+#define PRIxSIZE "zx"
+#endif /* fix PRI*PTR for _MSC_VER */
+
+#ifndef PRIuSIZE
+#define PRIuSIZE PRIuPTR
+#define PRIiSIZE PRIiPTR
+#define PRIdSIZE PRIdPTR
+#define PRIxSIZE PRIxPTR
+#endif /* PRI*SIZE macros for MSVC */
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif

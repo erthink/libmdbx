@@ -74,7 +74,6 @@ typedef unsigned mode_t;
 typedef HANDLE mdbx_filehandle_t;
 typedef DWORD mdbx_pid_t;
 typedef DWORD mdbx_tid_t;
-typedef SSIZE_T ssize_t;
 #define MDBX_ENODATA ERROR_HANDLE_EOF
 #define MDBX_EINVAL ERROR_INVALID_PARAMETER
 #define MDBX_EACCESS ERROR_ACCESS_DENIED
@@ -813,11 +812,11 @@ LIBMDBX_API int mdbx_env_get_fd(MDBX_env *env, mdbx_filehandle_t *fd);
  *  - MDBX_EINVAL   - an invalid parameter was specified,
  *                    or the environment has an active write transaction. */
 LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env, size_t size);
-LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
-                                      ssize_t size_now, ssize_t size_upper,
-                                      ssize_t growth_step,
-                                      ssize_t shrink_threshold,
-                                      ssize_t pagesize);
+LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
+                                      intptr_t size_now, intptr_t size_upper,
+                                      intptr_t growth_step,
+                                      intptr_t shrink_threshold,
+                                      intptr_t pagesize);
 
 /* Set the maximum number of threads/reader slots for the environment.
  *
