@@ -621,9 +621,9 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
   }
 }
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
+int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
 #if defined(_WIN32) || defined(_WIN64)
-  (void)fullsync;
+  (void)filesize_changed;
   return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
 #elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
     (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
@@ -640,10 +640,10 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync) {
  * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
 #if _POSIX_C_SOURCE >= 199309L || _XOPEN_SOURCE >= 500 ||                      \
     defined(_POSIX_SYNCHRONIZED_IO)
-    if (!fullsync && fdatasync(fd) == 0)
+    if (!filesize_changed && fdatasync(fd) == 0)
       return MDBX_SUCCESS;
 #else
-    (void)fullsync;
+    (void)filesize_changed;
 #endif
     if (fsync(fd) == 0)
       return MDBX_SUCCESS;
