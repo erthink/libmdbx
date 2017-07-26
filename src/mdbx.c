@@ -1864,7 +1864,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     repg_pos = 0;
     pgno = txn->mt_next_pgno;
     rc = MDBX_MAP_FULL;
-    const pgno_t next = pgno + num;
+    const pgno_t next = pgno_add(pgno, num);
     if (likely(next <= txn->mt_end_pgno)) {
       rc = MDBX_NOTFOUND;
       if (likely(flags & MDBX_ALLOC_NEW))
@@ -1915,13 +1915,14 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     if (rc == MDBX_MAP_FULL && next < head->mm_geo.upper) {
       mdbx_assert(env, next > txn->mt_end_pgno);
       pgno_t growth_pgno = bytes2pgno(
-          env,
-          mdbx_roundup2(pgno2bytes(env, txn->mt_next_pgno + head->mm_geo.grow),
-                        env->me_os_psize));
+          env, mdbx_roundup2(pgno2bytes(env, pgno_add(txn->mt_next_pgno,
+                                                      head->mm_geo.grow)),
+                             env->me_os_psize));
       while (next >= growth_pgno)
         growth_pgno = bytes2pgno(
-            env, mdbx_roundup2(pgno2bytes(env, growth_pgno + head->mm_geo.grow),
-                               env->me_os_psize));
+            env, mdbx_roundup2(
+                     pgno2bytes(env, pgno_add(growth_pgno, head->mm_geo.grow)),
+                     env->me_os_psize));
       if (growth_pgno > head->mm_geo.upper)
         growth_pgno = head->mm_geo.upper;
 

@@ -1195,3 +1195,8 @@ static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
   mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
   return (pgno_t)(bytes >> env->me_psize2log);
 }
+
+static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
+  assert(base <= MAX_PAGENO);
+  return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
+}
