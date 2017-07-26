@@ -4205,9 +4205,10 @@ static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
 #endif
 
 #ifdef MADV_REMOVE
-  if (env->me_flags & MDBX_WRITEMAP)
+  if (usedsize && (env->me_flags & MDBX_WRITEMAP)) {
     (void)madvise(env->me_map + usedsize, env->me_mapsize - usedsize,
                   MADV_REMOVE);
+  }
 #else
   (void)usedsize;
 #endif
@@ -4619,8 +4620,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     }
   }
 
-  err = mdbx_env_map(env, expected_bytes);
-  if (err)
+  err = mdbx_env_map(env, (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
+                              ? 0
+                              : expected_bytes);
+  if (err != MDBX_SUCCESS)
     return err;
 
   const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
