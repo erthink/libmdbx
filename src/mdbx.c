@@ -1678,6 +1678,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       txn->mt_loose_count--;
       mdbx_debug("db %d use loose page %" PRIaPGNO, DDBI(mc), np->mp_pgno);
       ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize);
+      mdbx_tassert(txn, np->mp_pgno < txn->mt_next_pgno);
       *mp = np;
       return MDBX_SUCCESS;
     }
@@ -1850,18 +1851,44 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       /* Merge in descending sorted order */
       mdbx_pnl_xmerge(repg_list, re_pnl);
       repg_len = repg_list[0];
-
       if (unlikely((flags & MDBX_ALLOC_CACHE) == 0)) {
         /* Done for a kick-reclaim mode, actually no page needed */
         return MDBX_SUCCESS;
       }
 
-      /* Return suitable pages into "unallocated" pull */
-      while (repg_len > wanna_range &&
-             repg_list[repg_len] == txn->mt_next_pgno - 1) {
-        txn->mt_next_pgno -= 1;
-        repg_len -= 1;
-        repg_list[0] = repg_len;
+      /* Refund suitable pages into "unallocated" pull */
+      mdbx_tassert(txn,
+                   repg_len == 0 || repg_list[repg_len] < txn->mt_next_pgno);
+      if (repg_len) {
+        /* Refund suitable pages into "unallocated" pull */
+        pgno_t tail = txn->mt_next_pgno;
+        pgno_t *const begin = repg_list + 1;
+        pgno_t *const end = begin + repg_len;
+        pgno_t *higest;
+#if MDBX_PNL_ASCENDING
+        for (higest = end; --higest >= begin;) {
+#else
+        for (higest = begin; higest < end; ++higest) {
+#endif /* MDBX_PNL sort-order */
+          mdbx_tassert(txn, *higest >= NUM_METAS && *higest < tail);
+          if (*higest != tail - 1)
+            break;
+          tail -= 1;
+        }
+        if (tail != txn->mt_next_pgno) {
+#if MDBX_PNL_ASCENDING
+          repg_len = higest + 1 - begin;
+#else
+          repg_len -= higest - begin;
+          for (pgno_t *move = begin; higest < end; ++move, ++higest)
+            *move = *higest;
+#endif /* MDBX_PNL sort-order */
+          repg_list[0] = repg_len;
+          mdbx_info("refunded %" PRIaPGNO " pages: %" PRIaPGNO " -> %" PRIaPGNO,
+                    tail - txn->mt_next_pgno, tail, txn->mt_next_pgno);
+          txn->mt_next_pgno = tail;
+          mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
+        }
       }
 
       /* Don't try to coalesce too much. */
@@ -1994,6 +2021,8 @@ done:
   }
 
   if (repg_pos) {
+    mdbx_tassert(txn, pgno < txn->mt_next_pgno);
+    mdbx_tassert(txn, pgno == repg_list[repg_pos]);
     /* Cutoff allocated pages from me_reclaimed_pglist */
     repg_list[0] = repg_len -= num;
     for (unsigned i = repg_pos - num; i < repg_len;)
@@ -3032,6 +3061,38 @@ again_on_freelist_change:
 
       txn->mt_loose_pages = NULL;
       txn->mt_loose_count = 0;
+    }
+
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
+    if (env->me_reclaimed_pglist) {
+      /* Refund suitable pages into "unallocated" pull */
+      pgno_t tail = txn->mt_next_pgno;
+      pgno_t *const begin = env->me_reclaimed_pglist + 1;
+      pgno_t *const end = begin + env->me_reclaimed_pglist[0];
+      pgno_t *higest;
+#if MDBX_PNL_ASCENDING
+      for (higest = end; --higest >= begin;) {
+#else
+      for (higest = begin; higest < end; ++higest) {
+#endif /* MDBX_PNL sort-order */
+        mdbx_tassert(txn, *higest >= NUM_METAS && *higest < tail);
+        if (*higest != tail - 1)
+          break;
+        tail -= 1;
+      }
+      if (tail != txn->mt_next_pgno) {
+#if MDBX_PNL_ASCENDING
+        env->me_reclaimed_pglist[0] = higest + 1 - begin;
+#else
+        env->me_reclaimed_pglist[0] -= higest - begin;
+        for (pgno_t *move = begin; higest < end; ++move, ++higest)
+          *move = *higest;
+#endif /* MDBX_PNL sort-order */
+        mdbx_info("refunded %" PRIaPGNO " pages: %" PRIaPGNO " -> %" PRIaPGNO,
+                  tail - txn->mt_next_pgno, tail, txn->mt_next_pgno);
+        txn->mt_next_pgno = tail;
+        mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
+      }
     }
 
     /* Save the PNL of pages freed by this txn, to a single record */
