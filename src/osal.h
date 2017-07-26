@@ -83,13 +83,13 @@ typedef struct {
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
 #else
 #include <pthread.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include <signal.h>
 typedef pthread_t mdbx_thread_t;
 typedef pthread_key_t mdbx_thread_key_t;
 #define INVALID_HANDLE_VALUE (-1)
@@ -561,7 +561,7 @@ static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
   return __sync_fetch_and_add(p, v);
 #else
 #ifdef _MSC_VER
-  return _InterlockedExchangeAdd64(p, v);
+  return _InterlockedExchangeAdd64((volatile int64_t *)p, v);
 #endif
 #ifdef __APPLE__
   return OSAtomicAdd64(v, (volatile int64_t *)p);
@@ -598,7 +598,7 @@ static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
   return __sync_bool_compare_and_swap(p, c, v);
 #else
 #ifdef _MSC_VER
-  return c == _InterlockedCompareExchange64(p, v, c);
+  return c == _InterlockedCompareExchange64((volatile int64_t *)p, v, c);
 #endif
 #ifdef __APPLE__
   return c == OSAtomicCompareAndSwap64Barrier(c, v, (volatile uint64_t *)p);

@@ -62,7 +62,7 @@ inline time from_seconds(uint64_t seconds) {
 
 inline time from_utc(time_t utc) {
   assert(utc >= 0);
-  return from_seconds(utc);
+  return from_seconds((uint64_t)utc);
 }
 
 inline time infinite() {

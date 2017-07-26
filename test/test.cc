@@ -66,8 +66,8 @@ const char *keygencase2str(const keygen_case keycase) {
 
 //-----------------------------------------------------------------------------
 
-static void mdbx_debug_logger(int type, const char *function, int line,
-                              const char *msg, va_list args) {
+static void mdbx_logger(int type, const char *function, int line,
+                        const char *msg, va_list args) {
   logging::loglevel level = logging::info;
   if (type & MDBX_DBG_EXTRA)
     level = logging::extra;
@@ -120,7 +120,7 @@ void testcase::db_prepare() {
     mdbx_dbg_opts |= MDBX_DBG_TRACE;
   if (config.params.loglevel <= logging::verbose)
     mdbx_dbg_opts |= MDBX_DBG_PRINT;
-  int rc = mdbx_setup_debug(mdbx_dbg_opts, mdbx_debug_logger);
+  int rc = mdbx_setup_debug(mdbx_dbg_opts, mdbx_logger);
   log_info("set mdbx debug-opts: 0x%02x", rc);
 
   MDBX_env *env = nullptr;

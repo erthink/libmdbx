@@ -3024,7 +3024,7 @@ again_on_freelist_change:
     if (total_room >= rpl_len) {
       if (total_room == rpl_len || --more < 0)
         break;
-    } else if (head_room >= env->me_maxfree_1pg && head_id > 1) {
+    } else if (head_room >= (ssize_t)env->me_maxfree_1pg && head_id > 1) {
       /* Keep current record (overflow page), add a new one */
       head_id--;
       refill_reclaimed_pos++;
@@ -3072,7 +3072,7 @@ again_on_freelist_change:
     /* (Re)write {key = head_id, IDL length = head_room} */
     total_room -= head_room;
     head_room = rpl_len - total_room;
-    if (head_room > env->me_maxfree_1pg && head_id > 1) {
+    if (head_room > (ssize_t)env->me_maxfree_1pg && head_id > 1) {
       /* Overflow multi-page for part of me_reclaimed_pglist */
       head_room /= (head_id < INT16_MAX) ? (pgno_t)head_id
                                          : INT16_MAX; /* amortize page sizes */
@@ -4647,12 +4647,14 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
                 ", have %" PRIu64 "/%" PRIaPGNO "), "
                 "assume collision in non-exclusive mode",
                 expected_bytes, bytes2pgno(env, expected_bytes),
-                filesize_before_mmap, bytes2pgno(env, filesize_before_mmap));
+                filesize_before_mmap,
+                bytes2pgno(env, (size_t)filesize_before_mmap));
     } else {
       mdbx_notice("filesize mismatch (expect %" PRIuPTR "/%" PRIaPGNO
                   ", have %" PRIu64 "/%" PRIaPGNO ")",
                   expected_bytes, bytes2pgno(env, expected_bytes),
-                  filesize_before_mmap, bytes2pgno(env, filesize_before_mmap));
+                  filesize_before_mmap,
+                  bytes2pgno(env, (size_t)filesize_before_mmap));
       if (filesize_before_mmap < used_bytes) {
         mdbx_error("last-page beyond end-of-file (last %" PRIaPGNO
                    ", have %" PRIaPGNO ")",

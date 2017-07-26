@@ -86,6 +86,7 @@
 
 #include "../mdbx.h"
 #include "../src/defs.h"
+#include "../src/osal.h"
 
 #ifdef _MSC_VER
 #pragma warning(pop)
