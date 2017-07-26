@@ -3066,7 +3066,10 @@ again_on_freelist_change:
         /* LY: note that freeDB cleanup is not needed. */
         ++cleanup_reclaimed_pos;
       }
+      mdbx_tassert(txn, txn->mt_lifo_reclaimed != NULL);
       head_id = txn->mt_lifo_reclaimed[refill_reclaimed_pos];
+    } else {
+      mdbx_tassert(txn, txn->mt_lifo_reclaimed == NULL);
     }
 
     /* (Re)write {key = head_id, IDL length = head_room} */
@@ -3132,18 +3135,23 @@ again_on_freelist_change:
 
     size_t rpl_left = env->me_reclaimed_pglist[0];
     pgno_t *rpl_end = env->me_reclaimed_pglist + rpl_left;
-    if (!lifo) {
+    if (txn->mt_lifo_reclaimed == 0) {
+      mdbx_tassert(txn, lifo == 0);
       rc = mdbx_cursor_first(&mc, &key, &data);
       if (unlikely(rc))
         goto bailout;
+    } else {
+      mdbx_tassert(txn, lifo != 0);
     }
 
     while (1) {
       txnid_t id;
-      if (!lifo) {
+      if (txn->mt_lifo_reclaimed == 0) {
+        mdbx_tassert(txn, lifo == 0);
         id = *(txnid_t *)key.iov_base;
         mdbx_tassert(txn, id <= env->me_last_reclaimed);
       } else {
+        mdbx_tassert(txn, lifo != 0);
         mdbx_tassert(txn,
                      refill_reclaimed_pos > 0 &&
                          refill_reclaimed_pos <= txn->mt_lifo_reclaimed[0]);
