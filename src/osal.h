@@ -89,6 +89,7 @@ typedef CRITICAL_SECTION mdbx_fastmutex_t;
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
+#include <signal.h>
 typedef pthread_t mdbx_thread_t;
 typedef pthread_key_t mdbx_thread_key_t;
 #define INVALID_HANDLE_VALUE (-1)
