@@ -208,13 +208,13 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
   va_end(ap);
 
   if (unlikely(needed < 0 || needed >= INT_MAX)) {
-    *strp = NULL;
+    *strp = nullptr;
     va_end(ones);
     return needed;
   }
 
   *strp = malloc(needed + 1);
-  if (unlikely(*strp == NULL)) {
+  if (unlikely(*strp == nullptr)) {
     va_end(ones);
     SetLastError(MDBX_ENOMEM);
     return -1;
@@ -231,7 +231,7 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
   assert(actual == needed);
   if (unlikely(actual < 0)) {
     free(*strp);
-    *strp = NULL;
+    *strp = nullptr;
   }
   return actual;
 }
@@ -246,7 +246,7 @@ int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
   *result = memalign(alignment, bytes);
   return *result ? MDBX_SUCCESS : errno;
 #elif _POSIX_VERSION >= 200112L
-  *result = NULL;
+  *result = nullptr;
   return posix_memalign(result, alignment, bytes);
 #else
 #error FIXME

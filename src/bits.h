@@ -970,7 +970,7 @@ static __inline unsigned mdbx_log2(size_t value) {
 
 /* The percentage of space used in the page, in tenths of a percent. */
 #define PAGEFILL(env, p)                                                       \
-  (1024L * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                       \
+  (1024UL * ((env)->me_psize - PAGEHDRSZ - SIZELEFT(p)) /                      \
    ((env)->me_psize - PAGEHDRSZ))
 /* The minimum page fill factor, in tenths of a percent.
  * Pages emptier than this are candidates for merging. */
