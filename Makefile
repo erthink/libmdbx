@@ -1,4 +1,4 @@
-﻿# GNU Makefile for libmdbx, https://github.com/ReOpen/libmdbx
+# GNU Makefile for libmdbx, https://github.com/ReOpen/libmdbx
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.
