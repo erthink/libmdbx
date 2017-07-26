@@ -515,7 +515,8 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 /*----------------------------------------------------------------------------*/
 /* Atomics */
 
-#if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__) &&          \
+#if !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L) &&                  \
+    !defined(__STDC_NO_ATOMICS__) &&                                           \
     (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
      !(defined(__GNUC__) || defined(__clang__)))
 #include <stdatomic.h>
@@ -538,7 +539,7 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 #endif
 
 static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
-#if defined(ATOMIC_VAR_INIT)
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint32_t *)p, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -554,7 +555,7 @@ static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
 }
 
 static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
-#ifdef ATOMIC_VAR_INIT
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint64_t *)p, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -569,12 +570,12 @@ static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
 #endif
 }
 
-#define mdbx_atomic_sub32(p, v) mdbx_atomic_add32(p, -(v))
-#define mdbx_atomic_sub64(p, v) mdbx_atomic_add64(p, -(v))
+#define mdbx_atomic_sub32(p, v) mdbx_atomic_add32(p, 0 - (v))
+#define mdbx_atomic_sub64(p, v) mdbx_atomic_add64(p, 0 - (v))
 
 static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
                                                     uint32_t c, uint32_t v) {
-#ifdef ATOMIC_VAR_INIT
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint32_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -591,7 +592,7 @@ static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
 
 static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
                                                     uint64_t c, uint64_t v) {
-#ifdef ATOMIC_VAR_INIT
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint64_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
