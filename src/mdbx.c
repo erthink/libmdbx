@@ -1675,13 +1675,13 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
   txnid_t oldest = 0, last = 0;
   const unsigned wanna_range = num - 1;
 
-  /* If our dirty list is already full, we can't do anything */
-  if (unlikely(txn->mt_dirtyroom == 0)) {
-    rc = MDBX_TXN_FULL;
-    goto fail;
-  }
+  while (1) { /* oom-kick retry loop */
+    /* If our dirty list is already full, we can't do anything */
+    if (unlikely(txn->mt_dirtyroom == 0)) {
+      rc = MDBX_TXN_FULL;
+      goto fail;
+    }
 
-  for (;;) { /* oom-kick retry loop */
     MDBX_cursor recur;
     for (MDBX_cursor_op op = MDBX_FIRST;;
          op = (flags & MDBX_LIFORECLAIM) ? MDBX_PREV : MDBX_NEXT) {
@@ -1905,7 +1905,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         }
       }
 
-      if (rc == MDBX_MAP_FULL) {
+      if (rc == MDBX_MAP_FULL && oldest < txn->mt_txnid - 1) {
         txnid_t snap = mdbx_oomkick(env, oldest);
         if (snap > oldest)
           continue;
@@ -1930,7 +1930,9 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       rc = mdbx_mapresize(env, growth_pgno, head->mm_geo.upper);
       if (rc == MDBX_SUCCESS) {
         mdbx_tassert(env->me_txn, txn->mt_end_pgno >= next);
-        continue;
+        if (!mp)
+          return rc;
+        goto done;
       }
 
       mdbx_warning("unable growth datafile to %" PRIaPGNO "pages (+%" PRIaPGNO
@@ -1948,7 +1950,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
   }
 
 done:
-  assert(mp && num);
+  mdbx_tassert(txn, mp && num);
   if (env->me_flags & MDBX_WRITEMAP) {
     np = pgno2page(env, pgno);
     /* LY: reset no-access flag from mdbx_kill_page() */
