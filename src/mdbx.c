@@ -1683,6 +1683,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     }
   }
 
+  mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
   pgno_t pgno, *repg_list = env->me_reclaimed_pglist;
   unsigned repg_pos = 0, repg_len = repg_list ? repg_list[0] : 0;
   txnid_t oldest = 0, last = 0;
@@ -1969,6 +1970,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     }
 
   fail:
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (mp) {
       *mp = NULL;
       txn->mt_flags |= MDBX_TXN_ERROR;
@@ -1996,6 +1998,7 @@ done:
     repg_list[0] = repg_len -= num;
     for (unsigned i = repg_pos - num; i < repg_len;)
       repg_list[++i] = repg_list[++repg_pos];
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
   } else {
     txn->mt_next_pgno = pgno + num;
     mdbx_assert(env, txn->mt_next_pgno <= txn->mt_end_pgno);
@@ -2012,6 +2015,7 @@ done:
   mdbx_page_dirty(txn, np);
   *mp = np;
 
+  mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
   return MDBX_SUCCESS;
 }
 
@@ -2945,11 +2949,14 @@ static int mdbx_freelist_save(MDBX_txn *txn) {
       (env->me_flags & (MDBX_NOMEMINIT | MDBX_WRITEMAP)) ? SSIZE_MAX
                                                          : env->me_maxfree_1pg;
 
+  mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
 again_on_freelist_change:
+  mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
   while (1) {
     /* Come back here after each Put() in case freelist changed */
     MDBX_val key, data;
 
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (!lifo) {
       /* If using records from freeDB which we have not yet deleted,
        * now delete them and any we reserved for me_reclaimed_pglist. */
@@ -2992,6 +2999,7 @@ again_on_freelist_change:
       }
     }
 
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (txn->mt_loose_pages) {
       /* Return loose page numbers to me_reclaimed_pglist,
        * though usually none are left at this point.
@@ -3063,6 +3071,7 @@ again_on_freelist_change:
       continue;
     }
 
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     const intptr_t rpl_len =
         (env->me_reclaimed_pglist ? env->me_reclaimed_pglist[0] : 0) +
         txn->mt_loose_count;
@@ -3140,6 +3149,7 @@ again_on_freelist_change:
     key.iov_base = &head_id;
     data.iov_len = (head_room + 1) * sizeof(pgno_t);
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (unlikely(rc))
       goto bailout;
 
@@ -3159,6 +3169,7 @@ again_on_freelist_change:
 
   /* Fill in the reserved me_reclaimed_pglist records */
   rc = MDBX_SUCCESS;
+  mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
   if (env->me_reclaimed_pglist && env->me_reclaimed_pglist[0]) {
     MDBX_val key, data;
     key.iov_len = data.iov_len = 0; /* avoid MSVC warning */
