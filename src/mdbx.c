@@ -37,14 +37,6 @@
 
 #include "./bits.h"
 
-#if defined(_MSC_VER) && _MSC_VER == 1900
-/* LY: MSVC 2015 has buggy/inconsistent PRIuPTR/PRIxPTR macros and format-arg
-       checker for size_t typedef. */
-#pragma warning(disable : 4777) /* format string '%10u' requires an argument   \
-                                   of type 'unsigned int', but variadic        \
-                                   argument 1 has type 'std::size_t' */
-#endif                          /* _MSC_VER (warnings) */
-
 /*----------------------------------------------------------------------------*/
 /* rthc (tls keys and destructors) */
 
@@ -1076,7 +1068,7 @@ static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
     VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_pages, env->me_psize - shift);
     ASAN_POISON_MEMORY_REGION(&mp->mp_pages, env->me_psize - shift);
   } else {
-    ssize_t len = env->me_psize - shift;
+    intptr_t len = env->me_psize - shift;
     void *buf = alloca(len);
     memset(buf, 0x6F /* 'o', 111 */, len);
     (void)mdbx_pwrite(env->me_fd, buf, len, offs + shift);
@@ -2903,16 +2895,16 @@ static int mdbx_freelist_save(MDBX_txn *txn) {
   int rc, more = 1;
   txnid_t cleanup_reclaimed_id = 0, head_id = 0;
   pgno_t befree_count = 0;
-  ssize_t head_room = 0, total_room = 0;
+  intptr_t head_room = 0, total_room = 0;
   unsigned cleanup_reclaimed_pos = 0, refill_reclaimed_pos = 0;
   const bool lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
 
   mdbx_cursor_init(&mc, txn, FREE_DBI, NULL);
 
   /* MDBX_RESERVE cancels meminit in ovpage malloc (when no WRITEMAP) */
-  const ssize_t clean_limit = (env->me_flags & (MDBX_NOMEMINIT | MDBX_WRITEMAP))
-                                  ? SSIZE_MAX
-                                  : env->me_maxfree_1pg;
+  const intptr_t clean_limit =
+      (env->me_flags & (MDBX_NOMEMINIT | MDBX_WRITEMAP)) ? SSIZE_MAX
+                                                         : env->me_maxfree_1pg;
 
 again_on_freelist_change:
   while (1) {
@@ -3012,7 +3004,7 @@ again_on_freelist_change:
       continue;
     }
 
-    const ssize_t rpl_len =
+    const intptr_t rpl_len =
         (env->me_reclaimed_pglist ? env->me_reclaimed_pglist[0] : 0) +
         txn->mt_loose_count;
     if (rpl_len && refill_reclaimed_pos == 0)
@@ -3024,7 +3016,7 @@ again_on_freelist_change:
     if (total_room >= rpl_len) {
       if (total_room == rpl_len || --more < 0)
         break;
-    } else if (head_room >= env->me_maxfree_1pg && head_id > 1) {
+    } else if (head_room >= (intptr_t)env->me_maxfree_1pg && head_id > 1) {
       /* Keep current record (overflow page), add a new one */
       head_id--;
       refill_reclaimed_pos++;
@@ -3066,13 +3058,16 @@ again_on_freelist_change:
         /* LY: note that freeDB cleanup is not needed. */
         ++cleanup_reclaimed_pos;
       }
+      mdbx_tassert(txn, txn->mt_lifo_reclaimed != NULL);
       head_id = txn->mt_lifo_reclaimed[refill_reclaimed_pos];
+    } else {
+      mdbx_tassert(txn, txn->mt_lifo_reclaimed == NULL);
     }
 
     /* (Re)write {key = head_id, IDL length = head_room} */
     total_room -= head_room;
     head_room = rpl_len - total_room;
-    if (head_room > env->me_maxfree_1pg && head_id > 1) {
+    if (head_room > (intptr_t)env->me_maxfree_1pg && head_id > 1) {
       /* Overflow multi-page for part of me_reclaimed_pglist */
       head_room /= (head_id < INT16_MAX) ? (pgno_t)head_id
                                          : INT16_MAX; /* amortize page sizes */
@@ -3091,7 +3086,7 @@ again_on_freelist_change:
 
     /* IDL is initially empty, zero out at least the length */
     pgno_t *pgs = (pgno_t *)data.iov_base;
-    ssize_t i = head_room > clean_limit ? head_room : 0;
+    intptr_t i = head_room > clean_limit ? head_room : 0;
     do {
       pgs[i] = 0;
     } while (--i >= 0);
@@ -3132,18 +3127,23 @@ again_on_freelist_change:
 
     size_t rpl_left = env->me_reclaimed_pglist[0];
     pgno_t *rpl_end = env->me_reclaimed_pglist + rpl_left;
-    if (!lifo) {
+    if (txn->mt_lifo_reclaimed == 0) {
+      mdbx_tassert(txn, lifo == 0);
       rc = mdbx_cursor_first(&mc, &key, &data);
       if (unlikely(rc))
         goto bailout;
+    } else {
+      mdbx_tassert(txn, lifo != 0);
     }
 
     while (1) {
       txnid_t id;
-      if (!lifo) {
+      if (txn->mt_lifo_reclaimed == 0) {
+        mdbx_tassert(txn, lifo == 0);
         id = *(txnid_t *)key.iov_base;
         mdbx_tassert(txn, id <= env->me_last_reclaimed);
       } else {
+        mdbx_tassert(txn, lifo != 0);
         mdbx_tassert(txn,
                      refill_reclaimed_pos > 0 &&
                          refill_reclaimed_pos <= txn->mt_lifo_reclaimed[0]);
@@ -3227,7 +3227,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
   pgno_t pgno = 0;
   MDBX_page *dp = NULL;
   struct iovec iov[MDBX_COMMIT_PAGES];
-  ssize_t wpos = 0, wsize = 0;
+  intptr_t wpos = 0, wsize = 0;
   size_t next_pos = 1; /* impossible pos, so pos != next_pos */
   int n = 0;
 
@@ -4110,7 +4110,7 @@ int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
 }
 
 #define mdbx_nodemax(pagesize)                                                 \
-  (((((pagesize)-PAGEHDRSZ) / MDBX_MINKEYS) & -(ssize_t)2) - sizeof(indx_t))
+  (((((pagesize)-PAGEHDRSZ) / MDBX_MINKEYS) & -(intptr_t)2) - sizeof(indx_t))
 
 #define mdbx_maxkey(nodemax) ((nodemax) - (NODESIZE + sizeof(MDBX_db)))
 
@@ -4120,11 +4120,11 @@ int mdbx_get_maxkeysize(size_t pagesize) {
   if (pagesize == 0)
     pagesize = mdbx_syspagesize();
 
-  ssize_t nodemax = mdbx_nodemax(pagesize);
+  intptr_t nodemax = mdbx_nodemax(pagesize);
   if (nodemax < 0)
     return -MDBX_EINVAL;
 
-  ssize_t maxkey = mdbx_maxkey(nodemax);
+  intptr_t maxkey = mdbx_maxkey(nodemax);
   return (maxkey > 0 && maxkey < INT_MAX) ? (int)maxkey : -MDBX_EINVAL;
 }
 
@@ -4139,13 +4139,13 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
 
   STATIC_ASSERT(mdbx_maxfree1pg(MIN_PAGESIZE) > 42);
   STATIC_ASSERT(mdbx_maxfree1pg(MAX_PAGESIZE) < MDBX_IDL_DB_MAX);
-  const ssize_t maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
+  const intptr_t maxfree_1pg = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
   mdbx_ensure(env, maxfree_1pg > 42 && maxfree_1pg < MDBX_IDL_DB_MAX);
   env->me_maxfree_1pg = (unsigned)maxfree_1pg;
 
   STATIC_ASSERT(mdbx_nodemax(MIN_PAGESIZE) > 42);
   STATIC_ASSERT(mdbx_nodemax(MAX_PAGESIZE) < UINT16_MAX);
-  const ssize_t nodemax = mdbx_nodemax(pagesize);
+  const intptr_t nodemax = mdbx_nodemax(pagesize);
   mdbx_ensure(env, nodemax > 42 && nodemax < UINT16_MAX);
   env->me_nodemax = (unsigned)nodemax;
 
@@ -4153,7 +4153,7 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(mdbx_maxkey(MIN_PAGESIZE) < MIN_PAGESIZE);
   STATIC_ASSERT(mdbx_maxkey(MAX_PAGESIZE) > 42);
   STATIC_ASSERT(mdbx_maxkey(MAX_PAGESIZE) < MAX_PAGESIZE);
-  const ssize_t maxkey_limit = mdbx_maxkey(env->me_nodemax);
+  const intptr_t maxkey_limit = mdbx_maxkey(env->me_nodemax);
   mdbx_ensure(env, maxkey_limit > 42 && (size_t)maxkey_limit < pagesize);
   env->me_maxkey_limit = (unsigned)maxkey_limit;
 
@@ -4245,11 +4245,11 @@ static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
   return MDBX_SUCCESS;
 }
 
-LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
-                                      ssize_t size_now, ssize_t size_upper,
-                                      ssize_t growth_step,
-                                      ssize_t shrink_threshold,
-                                      ssize_t pagesize) {
+LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
+                                      intptr_t size_now, intptr_t size_upper,
+                                      intptr_t growth_step,
+                                      intptr_t shrink_threshold,
+                                      intptr_t pagesize) {
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -4274,7 +4274,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
 
     if (pagesize < 0)
       pagesize = env->me_psize;
-    if (pagesize != (ssize_t)env->me_psize) {
+    if (pagesize != (intptr_t)env->me_psize) {
       rc = MDBX_EINVAL;
       goto bailout;
     }
@@ -4426,7 +4426,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
 
   if (env->me_map) {
     /* apply new params */
-    mdbx_assert(env, pagesize == (ssize_t)env->me_psize);
+    mdbx_assert(env, pagesize == (intptr_t)env->me_psize);
 
     MDBX_meta *head = mdbx_meta_head(env);
     MDBX_meta meta = *head;
@@ -4458,7 +4458,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, ssize_t size_lower,
       mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
       rc = mdbx_sync_locked(env, env->me_flags, &meta);
     }
-  } else if (pagesize != (ssize_t)env->me_psize) {
+  } else if (pagesize != (intptr_t)env->me_psize) {
     mdbx_setup_pagesize(env, pagesize);
   }
 
@@ -4647,12 +4647,14 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
                 ", have %" PRIu64 "/%" PRIaPGNO "), "
                 "assume collision in non-exclusive mode",
                 expected_bytes, bytes2pgno(env, expected_bytes),
-                filesize_before_mmap, bytes2pgno(env, filesize_before_mmap));
+                filesize_before_mmap,
+                bytes2pgno(env, (size_t)filesize_before_mmap));
     } else {
       mdbx_notice("filesize mismatch (expect %" PRIuPTR "/%" PRIaPGNO
                   ", have %" PRIu64 "/%" PRIaPGNO ")",
                   expected_bytes, bytes2pgno(env, expected_bytes),
-                  filesize_before_mmap, bytes2pgno(env, filesize_before_mmap));
+                  filesize_before_mmap,
+                  bytes2pgno(env, (size_t)filesize_before_mmap));
       if (filesize_before_mmap < used_bytes) {
         mdbx_error("last-page beyond end-of-file (last %" PRIaPGNO
                    ", have %" PRIaPGNO ")",
@@ -6974,7 +6976,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
              * Copy end of page, adjusting alignment so
              * compiler may copy words instead of bytes. */
             const size_t off =
-                (PAGEHDRSZ + data->iov_len) & -(ssize_t)sizeof(size_t);
+                (PAGEHDRSZ + data->iov_len) & -(intptr_t)sizeof(size_t);
             memcpy((size_t *)((char *)np + off), (size_t *)((char *)omp + off),
                    whole - off);
             memcpy(np, omp, PAGEHDRSZ); /* Copy header of page */
@@ -7379,7 +7381,7 @@ static int mdbx_node_add(MDBX_cursor *mc, unsigned indx, MDBX_val *key,
                          MDBX_val *data, pgno_t pgno, unsigned flags) {
   unsigned i;
   size_t node_size = NODESIZE;
-  ssize_t room;
+  intptr_t room;
   MDBX_node *node;
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   MDBX_page *ofp = NULL; /* overflow page */
@@ -7413,7 +7415,7 @@ static int mdbx_node_add(MDBX_cursor *mc, unsigned indx, MDBX_val *key,
     return MDBX_SUCCESS;
   }
 
-  room = (ssize_t)SIZELEFT(mp) - (ssize_t)sizeof(indx_t);
+  room = (intptr_t)SIZELEFT(mp) - (intptr_t)sizeof(indx_t);
   if (key != NULL)
     node_size += key->iov_len;
   if (IS_LEAF(mp)) {
@@ -7430,7 +7432,7 @@ static int mdbx_node_add(MDBX_cursor *mc, unsigned indx, MDBX_val *key,
                  ", put data on overflow page",
                  data->iov_len, node_size + data->iov_len);
       node_size = EVEN(node_size + sizeof(pgno_t));
-      if ((ssize_t)node_size > room)
+      if ((intptr_t)node_size > room)
         goto full;
       if ((rc = mdbx_page_new(mc, P_OVERFLOW, ovpages, &ofp)))
         return rc;
@@ -7442,7 +7444,7 @@ static int mdbx_node_add(MDBX_cursor *mc, unsigned indx, MDBX_val *key,
     }
   }
   node_size = EVEN(node_size);
-  if (unlikely((ssize_t)node_size > room))
+  if (unlikely((intptr_t)node_size > room))
     goto full;
 
 update:
@@ -10302,12 +10304,12 @@ int __cold mdbx_reader_list(MDBX_env *env, MDBX_msg_func *func, void *ctx) {
       const txnid_t txnid = lck->mti_readers[i].mr_txnid;
       if (txnid == ~(txnid_t)0)
         snprintf(buf, sizeof(buf), "%10" PRIuPTR " %" PRIxPTR " -\n",
-                 (size_t)lck->mti_readers[i].mr_pid,
-                 (size_t)lck->mti_readers[i].mr_tid);
+                 (uintptr_t)lck->mti_readers[i].mr_pid,
+                 (uintptr_t)lck->mti_readers[i].mr_tid);
       else
         snprintf(buf, sizeof(buf), "%10" PRIuPTR " %" PRIxPTR " %" PRIaTXN "\n",
-                 (size_t)lck->mti_readers[i].mr_pid,
-                 (size_t)lck->mti_readers[i].mr_tid, txnid);
+                 (uintptr_t)lck->mti_readers[i].mr_pid,
+                 (uintptr_t)lck->mti_readers[i].mr_tid, txnid);
 
       if (first) {
         first = 0;

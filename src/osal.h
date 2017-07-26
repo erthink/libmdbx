@@ -83,13 +83,13 @@ typedef struct {
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
 #else
 #include <pthread.h>
+#include <signal.h>
 #include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/uio.h>
 #include <unistd.h>
-#include <signal.h>
 typedef pthread_t mdbx_thread_t;
 typedef pthread_key_t mdbx_thread_key_t;
 #define INVALID_HANDLE_VALUE (-1)
@@ -515,7 +515,8 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 /*----------------------------------------------------------------------------*/
 /* Atomics */
 
-#if (__STDC_VERSION__ >= 201112L) && !defined(__STDC_NO_ATOMICS__) &&          \
+#if !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L) &&                  \
+    !defined(__STDC_NO_ATOMICS__) &&                                           \
     (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
      !(defined(__GNUC__) || defined(__clang__)))
 #include <stdatomic.h>
@@ -538,7 +539,7 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
 #endif
 
 static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
-#if defined(ATOMIC_VAR_INIT)
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint32_t *)p, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -554,14 +555,14 @@ static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
 }
 
 static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
-#ifdef ATOMIC_VAR_INIT
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint64_t *)p, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(p, v);
 #else
 #ifdef _MSC_VER
-  return _InterlockedExchangeAdd64(p, v);
+  return _InterlockedExchangeAdd64((volatile int64_t *)p, v);
 #endif
 #ifdef __APPLE__
   return OSAtomicAdd64(v, (volatile int64_t *)p);
@@ -569,12 +570,12 @@ static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
 #endif
 }
 
-#define mdbx_atomic_sub32(p, v) mdbx_atomic_add32(p, -(v))
-#define mdbx_atomic_sub64(p, v) mdbx_atomic_add64(p, -(v))
+#define mdbx_atomic_sub32(p, v) mdbx_atomic_add32(p, 0 - (v))
+#define mdbx_atomic_sub64(p, v) mdbx_atomic_add64(p, 0 - (v))
 
 static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
                                                     uint32_t c, uint32_t v) {
-#ifdef ATOMIC_VAR_INIT
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint32_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -591,14 +592,14 @@ static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
 
 static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
                                                     uint64_t c, uint64_t v) {
-#ifdef ATOMIC_VAR_INIT
+#if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint64_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(p, c, v);
 #else
 #ifdef _MSC_VER
-  return c == _InterlockedCompareExchange64(p, v, c);
+  return c == _InterlockedCompareExchange64((volatile int64_t *)p, v, c);
 #endif
 #ifdef __APPLE__
   return c == OSAtomicCompareAndSwap64Barrier(c, v, (volatile uint64_t *)p);
@@ -607,6 +608,30 @@ static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
 }
 
 /*----------------------------------------------------------------------------*/
+
+#if defined(_MSC_VER) && _MSC_VER >= 1900 && _MSC_VER < 1920
+/* LY: MSVC 2015/2017 has buggy/inconsistent PRIuPTR/PRIxPTR macros
+ * for internal format-args checker. */
+#undef PRIuPTR
+#undef PRIiPTR
+#undef PRIdPTR
+#undef PRIxPTR
+#define PRIuPTR "Iu"
+#define PRIiPTR "Ii"
+#define PRIdPTR "Id"
+#define PRIxPTR "Ix"
+#define PRIuSIZE "zu"
+#define PRIiSIZE "zi"
+#define PRIdSIZE "zd"
+#define PRIxSIZE "zx"
+#endif /* fix PRI*PTR for _MSC_VER */
+
+#ifndef PRIuSIZE
+#define PRIuSIZE PRIuPTR
+#define PRIiSIZE PRIiPTR
+#define PRIdSIZE PRIdPTR
+#define PRIxSIZE PRIxPTR
+#endif /* PRI*SIZE macros for MSVC */
 
 #ifdef _MSC_VER
 #pragma warning(pop)

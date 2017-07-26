@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -86,6 +86,7 @@
 
 #include "../mdbx.h"
 #include "../src/defs.h"
+#include "../src/osal.h"
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -98,7 +99,14 @@
 #pragma warning(disable : 4512) /* assignment operator could                   \
                                    not be generated  */
 #pragma warning(disable : 4610) /* user-defined constructor required */
-#define snprintf _snprintf
+#ifndef snprintf
+#define snprintf(buffer, buffer_size, format, ...)                             \
+  _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
+#endif
+#ifndef vsnprintf
+#define vsnprintf(buffer, buffer_size, format, args)                           \
+  _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
+#endif
 #pragma warning(disable : 4996) /* 'vsnprintf': This function or variable      \
                                    may be unsafe */
 #endif

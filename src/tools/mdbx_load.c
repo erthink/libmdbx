@@ -18,14 +18,7 @@
 #pragma warning(disable : 4464) /* relative include path contains '..' */
 #endif
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
-#if _MSC_VER == 1900
-/* LY: MSVC 2015 has buggy/inconsistent PRIuPTR/PRIxPTR macros and format-arg
-       checker for size_t typedef. */
-#pragma warning(disable : 4777) /* format string '%10u' requires an argument   \
-                                   of type 'unsigned int', but variadic        \
-                                   argument 1 has type 'std::size_t' */
-#endif
-#endif /* _MSC_VER (warnings) */
+#endif                          /* _MSC_VER (warnings) */
 
 #include "../bits.h"
 #include <ctype.h>
@@ -96,8 +89,8 @@ static void readhdr(void) {
     } else if (!strncmp(dbuf.iov_base, "VERSION=", STRLENOF("VERSION="))) {
       version = atoi((char *)dbuf.iov_base + STRLENOF("VERSION="));
       if (version > 3) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": unsupported VERSION %d\n", prog,
-                lineno, version);
+        fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported VERSION %d\n",
+                prog, lineno, version);
         exit(EXIT_FAILURE);
       }
     } else if (!strncmp(dbuf.iov_base, "HEADER=END", STRLENOF("HEADER=END"))) {
@@ -108,7 +101,7 @@ static void readhdr(void) {
         mode |= PRINT;
       else if (strncmp((char *)dbuf.iov_base + STRLENOF("FORMAT="), "bytevalue",
                        STRLENOF("bytevalue"))) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": unsupported FORMAT %s\n", prog,
+        fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported FORMAT %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("FORMAT="));
         exit(EXIT_FAILURE);
       }
@@ -122,7 +115,7 @@ static void readhdr(void) {
     } else if (!strncmp(dbuf.iov_base, "type=", STRLENOF("type="))) {
       if (strncmp((char *)dbuf.iov_base + STRLENOF("type="), "btree",
                   STRLENOF("btree"))) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": unsupported type %s\n", prog,
+        fprintf(stderr, "%s: line %" PRIiSIZE ": unsupported type %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("type="));
         exit(EXIT_FAILURE);
       }
@@ -134,7 +127,7 @@ static void readhdr(void) {
       void *unused;
       i = sscanf((char *)dbuf.iov_base + STRLENOF("mapaddr="), "%p", &unused);
       if (i != 1) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapaddr %s\n", prog,
+        fprintf(stderr, "%s: line %" PRIiSIZE ": invalid mapaddr %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("mapaddr="));
         exit(EXIT_FAILURE);
       }
@@ -146,7 +139,7 @@ static void readhdr(void) {
       i = sscanf((char *)dbuf.iov_base + STRLENOF("mapsize="), "%" PRIu64 "",
                  &envinfo.mi_mapsize);
       if (i != 1) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": invalid mapsize %s\n", prog,
+        fprintf(stderr, "%s: line %" PRIiSIZE ": invalid mapsize %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("mapsize="));
         exit(EXIT_FAILURE);
       }
@@ -159,7 +152,7 @@ static void readhdr(void) {
       i = sscanf((char *)dbuf.iov_base + STRLENOF("maxreaders="), "%u",
                  &envinfo.mi_maxreaders);
       if (i != 1) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": invalid maxreaders %s\n", prog,
+        fprintf(stderr, "%s: line %" PRIiSIZE ": invalid maxreaders %s\n", prog,
                 lineno, (char *)dbuf.iov_base + STRLENOF("maxreaders="));
         exit(EXIT_FAILURE);
       }
@@ -176,13 +169,13 @@ static void readhdr(void) {
       if (!dbflags[i].bit) {
         ptr = memchr(dbuf.iov_base, '=', dbuf.iov_len);
         if (!ptr) {
-          fprintf(stderr, "%s: line %" PRIiPTR ": unexpected format\n", prog,
+          fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected format\n", prog,
                   lineno);
           exit(EXIT_FAILURE);
         } else {
           *ptr = '\0';
           fprintf(stderr,
-                  "%s: line %" PRIiPTR ": unrecognized keyword ignored: %s\n",
+                  "%s: line %" PRIiSIZE ": unrecognized keyword ignored: %s\n",
                   prog, lineno, (char *)dbuf.iov_base);
         }
       }
@@ -191,7 +184,7 @@ static void readhdr(void) {
 }
 
 static void badend(void) {
-  fprintf(stderr, "%s: line %" PRIiPTR ": unexpected end of input\n", prog,
+  fprintf(stderr, "%s: line %" PRIiSIZE ": unexpected end of input\n", prog,
           lineno);
 }
 
@@ -247,7 +240,7 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
     buf->iov_base = realloc(buf->iov_base, buf->iov_len * 2);
     if (!buf->iov_base) {
       Eof = 1;
-      fprintf(stderr, "%s: line %" PRIiPTR ": out of memory, line too long\n",
+      fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n",
               prog, lineno);
       return EOF;
     }
@@ -463,7 +456,7 @@ int main(int argc, char *argv[]) {
 
       rc = readline(&data, &dbuf);
       if (rc) {
-        fprintf(stderr, "%s: line %" PRIiPTR ": failed to read key value\n",
+        fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n",
                 prog, lineno);
         goto txn_abort;
       }
@@ -480,7 +473,7 @@ int main(int argc, char *argv[]) {
       if (batch == 100) {
         rc = mdbx_txn_commit(txn);
         if (rc) {
-          fprintf(stderr, "%s: line %" PRIiPTR ": txn_commit: %s\n", prog,
+          fprintf(stderr, "%s: line %" PRIiSIZE ": txn_commit: %s\n", prog,
                   lineno, mdbx_strerror(rc));
           goto env_close;
         }
@@ -502,7 +495,7 @@ int main(int argc, char *argv[]) {
     rc = mdbx_txn_commit(txn);
     txn = NULL;
     if (rc) {
-      fprintf(stderr, "%s: line %" PRIiPTR ": txn_commit: %s\n", prog, lineno,
+      fprintf(stderr, "%s: line %" PRIiSIZE ": txn_commit: %s\n", prog, lineno,
               mdbx_strerror(rc));
       goto env_close;
     }

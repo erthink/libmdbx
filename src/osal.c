@@ -508,7 +508,7 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
 #else
   STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                     "libmdbx requires 64-bit file I/O on 64-bit systems");
-  ssize_t read = pread(fd, buf, bytes, offset);
+  intptr_t read = pread(fd, buf, bytes, offset);
   if (read < 0) {
     int rc = errno;
     return (rc == MDBX_SUCCESS) ? /* paranoia */ MDBX_EIO : rc;
@@ -534,7 +534,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
   return GetLastError();
 #else
   int rc;
-  ssize_t written;
+  intptr_t written;
   do {
     STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                       "libmdbx requires 64-bit file I/O on 64-bit systems");
@@ -562,7 +562,7 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                                        : MDBX_EIO /* ERROR_WRITE_FAULT */;
 #else
   int rc;
-  ssize_t written;
+  intptr_t written;
   do {
     STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                       "libmdbx requires 64-bit file I/O on 64-bit systems");
@@ -593,7 +593,7 @@ int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
     if (unlikely(!WriteFile(fd, ptr, (DWORD)chunk, &written, NULL)))
       return GetLastError();
 #else
-    ssize_t written = write(fd, ptr, chunk);
+    intptr_t written = write(fd, ptr, chunk);
     if (written < 0) {
       int rc = errno;
 #ifdef SIGPIPE

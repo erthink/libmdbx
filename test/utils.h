@@ -229,7 +229,7 @@ static __inline uint64_t mul_32x32_64(uint32_t a, uint32_t b) {
 
 static __inline unsigned add_with_carry(uint64_t *sum, uint64_t addend) {
   *sum += addend;
-  return *sum < addend;
+  return (*sum < addend) ? 1u : 0u;
 }
 
 static __inline uint64_t mul_64x64_128(uint64_t a, uint64_t b, uint64_t *h) {
