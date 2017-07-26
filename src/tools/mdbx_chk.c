@@ -1,4 +1,4 @@
-/* mdbx_chk.c - memory-mapped database check tool */
+﻿/* mdbx_chk.c - memory-mapped database check tool */
 
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
@@ -343,7 +343,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                 data->iov_len);
   else {
     number = *iptr++;
-    if (number >= MDBX_IDL_UM_MAX)
+    if (number >= MDBX_PNL_UM_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
     else if ((number + 1) * sizeof(pgno_t) != data->iov_len)
