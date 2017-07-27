@@ -432,13 +432,22 @@ typedef struct MDBX_lockinfo {
 #define MDBX_LOCK_MAGIC ((MDBX_MAGIC << 8) + MDBX_LOCK_VERSION)
 
 /*----------------------------------------------------------------------------*/
-/* Two kind lists of pages (aka IDL) */
+/* Two kind lists of pages (aka PNL) */
 
-/* An IDL is an ID List, a sorted array of IDs. The first
- * element of the array is a counter for how many actual
- * IDs are in the list. In the libmdbx IDLs are sorted in
- * descending order. */
-typedef pgno_t *MDBX_IDL;
+/* An PNL is an Page Number List, a sorted array of IDs. The first element of
+ * the array is a counter for how many actual page-numbers are in the list.
+ * PNLs are sorted in descending order, this allow cut off a page with lowest
+ * pgno (at the tail) just truncating the list */
+#define MDBX_PNL_ASCENDING 0
+typedef pgno_t *MDBX_PNL;
+
+#if MDBX_PNL_ASCENDING
+#define MDBX_PNL_ORDERED(first, last) ((first) < (last))
+#define MDBX_PNL_DISORDERED(first, last) ((first) >= (last))
+#else
+#define MDBX_PNL_ORDERED(first, last) ((first) > (last))
+#define MDBX_PNL_DISORDERED(first, last) ((first) <= (last))
+#endif
 
 /* List of txnid, only for MDBX_env.mt_lifo_reclaimed */
 typedef txnid_t *MDBX_TXL;
@@ -455,23 +464,23 @@ typedef struct MDBX_ID2 {
  * unused. The array is sorted in ascending order by mid. */
 typedef MDBX_ID2 *MDBX_ID2L;
 
-/* IDL sizes - likely should be even bigger
+/* PNL sizes - likely should be even bigger
  * limiting factors: sizeof(pgno_t), thread stack size */
-#define MDBX_IDL_LOGN 16 /* DB_SIZE is 2^16, UM_SIZE is 2^17 */
-#define MDBX_IDL_DB_SIZE (1 << MDBX_IDL_LOGN)
-#define MDBX_IDL_UM_SIZE (1 << (MDBX_IDL_LOGN + 1))
+#define MDBX_PNL_LOGN 16 /* DB_SIZE is 2^16, UM_SIZE is 2^17 */
+#define MDBX_PNL_DB_SIZE (1 << MDBX_PNL_LOGN)
+#define MDBX_PNL_UM_SIZE (1 << (MDBX_PNL_LOGN + 1))
 
-#define MDBX_IDL_DB_MAX (MDBX_IDL_DB_SIZE - 1)
-#define MDBX_IDL_UM_MAX (MDBX_IDL_UM_SIZE - 1)
+#define MDBX_PNL_DB_MAX (MDBX_PNL_DB_SIZE - 1)
+#define MDBX_PNL_UM_MAX (MDBX_PNL_UM_SIZE - 1)
 
-#define MDBX_IDL_SIZEOF(ids) (((ids)[0] + 1) * sizeof(pgno_t))
-#define MDBX_IDL_IS_ZERO(ids) ((ids)[0] == 0)
-#define MDBX_IDL_CPY(dst, src) (memcpy(dst, src, MDBX_IDL_SIZEOF(src)))
-#define MDBX_IDL_FIRST(ids) ((ids)[1])
-#define MDBX_IDL_LAST(ids) ((ids)[(ids)[0]])
+#define MDBX_PNL_SIZEOF(pl) (((pl)[0] + 1) * sizeof(pgno_t))
+#define MDBX_PNL_IS_ZERO(pl) ((pl)[0] == 0)
+#define MDBX_PNL_CPY(dst, src) (memcpy(dst, src, MDBX_PNL_SIZEOF(src)))
+#define MDBX_PNL_FIRST(pl) ((pl)[1])
+#define MDBX_PNL_LAST(pl) ((pl)[(pl)[0]])
 
-/* Current max length of an mdbx_midl_alloc()ed IDL */
-#define MDBX_IDL_ALLOCLEN(ids) ((ids)[-1])
+/* Current max length of an mdbx_pnl_alloc()ed PNL */
+#define MDBX_PNL_ALLOCLEN(pl) ((pl)[-1])
 
 /*----------------------------------------------------------------------------*/
 /* Internal structures */
@@ -503,7 +512,7 @@ struct MDBX_txn {
                     /* The list of reclaimed txns from freeDB */
   MDBX_TXL mt_lifo_reclaimed;
   /* The list of pages that became unused during this transaction. */
-  MDBX_IDL mt_befree_pages;
+  MDBX_PNL mt_befree_pages;
   /* The list of loose pages that became unused and may be reused
    * in this transaction, linked through NEXT_LOOSE_PAGE(page). */
   MDBX_page *mt_loose_pages;
@@ -512,7 +521,7 @@ struct MDBX_txn {
   /* The sorted list of dirty pages we temporarily wrote to disk
    * because the dirty list was full. page numbers in here are
    * shifted left by 1, deleted slots have the LSB set. */
-  MDBX_IDL mt_spill_pages;
+  MDBX_PNL mt_spill_pages;
   union {
     /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
     MDBX_ID2L mt_rw_dirtylist;
@@ -699,9 +708,9 @@ struct MDBX_env {
 #define me_last_reclaimed me_pgstate.mf_last_reclaimed
 #define me_reclaimed_pglist me_pgstate.mf_reclaimed_pglist
   MDBX_page *me_dpages; /* list of malloc'd blocks for re-use */
-                        /* IDL of pages that became unused in a write txn */
-  MDBX_IDL me_free_pgs;
-  /* ID2L of pages written during a write txn. Length MDBX_IDL_UM_SIZE. */
+                        /* PNL of pages that became unused in a write txn */
+  MDBX_PNL me_free_pgs;
+  /* ID2L of pages written during a write txn. Length MDBX_PNL_UM_SIZE. */
   MDBX_ID2L me_dirtylist;
   /* Max number of freelist items that can fit in a single overflow page */
   unsigned me_maxfree_1pg;
@@ -1199,6 +1208,11 @@ static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
 static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
   assert(base <= MAX_PAGENO);
   return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
+}
+
+static __inline pgno_t pgno_sub(pgno_t base, pgno_t subtrahend) {
+  assert(base >= MIN_PAGENO);
+  return (subtrahend < base - MIN_PAGENO) ? base - subtrahend : MIN_PAGENO;
 }
 
 static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {

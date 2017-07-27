@@ -1,4 +1,4 @@
-libmdbx
+﻿libmdbx
 ======================================
 Extended LMDB, aka "Расширенная LMDB".
 
@@ -595,3 +595,111 @@ mdbx_txn_abort() или mdbx_txn_reset(). Что позволяет избави
 28. Три мета-страницы вместо двух, что позволяет гарантированно
 консистентно обновлять слабые контрольные точки фиксации без риска
 повредить крайнюю сильную точку фиксации.
+
+29. В _libmdbx_ реализован автоматический возврат освобождающихся
+страниц в область нераспределенного резерва в конце файла данных. При
+этом уменьшается количество страниц загруженных в память и участвующих в
+цикле обновления данных и записи на диск. Фактически _libmdbx_ выполняет
+постоянную компактификацию данных, но не затрачивая на это
+дополнительных ресурсов, а только освобождая их. При освобождении места
+в БД, в случае наличия поддержки со стороны операционной системы и
+установки соответствующих параметров геометрии базы данных, также будет
+уменьшаться размер файла на диске.
+
+--------------------------------------------------------------------------------
+
+```
+$ objdump -f -h -j .text libmdbx.so
+
+libmdbx.so:     file format elf64-x86-64
+architecture: i386:x86-64, flags 0x00000150:
+HAS_SYMS, DYNAMIC, D_PAGED
+start address 0x000030e0
+
+Sections:
+Idx Name          Size      VMA       LMA       File off  Algn
+ 11 .text         00014661  000030e0  000030e0  000030e0  2**4
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+```
+
+```
+$ objdump -C -T libmdbx.so | grep mdbx | sort
+
+00004057 g    DF .text	0000003f  Base        mdbx_strerror_r
+00004096 g    DF .text	00000031  Base        mdbx_strerror
+00004207 g    DF .text	00000025  Base        mdbx_env_get_maxkeysize
+0000422c g    DF .text	000000b8  Base        mdbx_env_create
+000042e4 g    DF .text	0000001f  Base        mdbx_env_set_mapsize
+00004f9f g    DF .text	00000037  Base        mdbx_env_set_maxdbs
+00004fd6 g    DF .text	00000036  Base        mdbx_env_set_maxreaders
+0000500c g    DF .text	00000027  Base        mdbx_env_get_maxreaders
+00005033 g    DF .text	0000066a  Base        mdbx_env_open_ex
+0000569d g    DF .text	00000008  Base        mdbx_env_open
+000056a5 g    DF .text	00000096  Base        mdbx_env_close_ex
+0000573b g    DF .text	00000007  Base        mdbx_env_close
+00005742 g    DF .text	00000047  Base        mdbx_env_set_flags
+00005789 g    DF .text	0000001d  Base        mdbx_env_get_flags
+000057a6 g    DF .text	00000014  Base        mdbx_env_set_userctx
+000057ba g    DF .text	0000000f  Base        mdbx_env_get_userctx
+000057c9 g    DF .text	0000000d  Base        mdbx_env_set_assert
+000057d6 g    DF .text	0000001d  Base        mdbx_env_get_path
+000057f3 g    DF .text	00000018  Base        mdbx_env_get_fd
+0000580b g    DF .text	00000056  Base        mdbx_env_stat
+00005861 g    DF .text	00000276  Base        mdbx_env_info
+00005ad7 g    DF .text	00000148  Base        mdbx_reader_list
+0000656a g    DF .text	0000012a  Base        mdbx_dbi_stat
+0000693a g    DF .text	00000146  Base        mdbx_env_copy2fd
+00006a80 g    DF .text	0000012e  Base        mdbx_env_copy
+00006bae g    DF .text	0000002a  Base        mdbx_reader_check
+00006bd8 g    DF .text	000000f9  Base        mdbx_setup_debug
+00006cd1 g    DF .text	00000033  Base        mdbx_env_set_syncbytes
+00006d04 g    DF .text	00000023  Base        mdbx_env_set_oomfunc
+00006d27 g    DF .text	00000019  Base        mdbx_env_get_oomfunc
+00006d40 g    DF .text	00000121  Base        mdbx_env_pgwalk
+0000ac60 g    DF .text	00000163  Base        mdbx_dkey
+0000add0 g    DF .text	00000016  Base        mdbx_cmp
+0000adf0 g    DF .text	00000016  Base        mdbx_dcmp
+0000ae10 g    DF .text	00000271  Base        mdbx_env_sync
+0000b090 g    DF .text	0000001b  Base        mdbx_txn_env
+0000b0b0 g    DF .text	0000001c  Base        mdbx_txn_id
+0000b0d0 g    DF .text	00000077  Base        mdbx_txn_reset
+0000b150 g    DF .text	00000077  Base        mdbx_txn_abort
+0000b1d0 g    DF .text	00000057  Base        mdbx_get_maxkeysize
+0000b230 g    DF .text	000006b7  Base        mdbx_env_set_geometry
+0000b8f0 g    DF .text	000000ef  Base        mdbx_cursor_count
+0000b9e0 g    DF .text	000000ad  Base        mdbx_cursor_close
+0000ba90 g    DF .text	0000001b  Base        mdbx_cursor_txn
+0000bab0 g    DF .text	00000017  Base        mdbx_cursor_dbi
+0000bad0 g    DF .text	0000007d  Base        mdbx_dbi_close
+0000bb50 g    DF .text	000000cc  Base        mdbx_dbi_flags_ex
+0000bc20 g    DF .text	00000038  Base        mdbx_dbi_flags
+0000c250 g    DF .text	00000077  Base        mdbx_txn_renew
+0000c2d0 g    DF .text	000004e5  Base        mdbx_txn_begin
+0000dcb0 g    DF .text	00000128  Base        mdbx_cursor_open
+0000dde0 g    DF .text	0000011d  Base        mdbx_cursor_renew
+0000e970 g    DF .text	000000fc  Base        mdbx_get
+0000ef00 g    DF .text	00000489  Base        mdbx_cursor_get
+000125e0 g    DF .text	00000719  Base        mdbx_cursor_del
+00012e00 g    DF .text	000000e4  Base        mdbx_del
+00012ef0 g    DF .text	000002c3  Base        mdbx_drop
+000131c0 g    DF .text	0000129e  Base        mdbx_cursor_put
+000145d0 g    DF .text	000000a7  Base        mdbx_put
+00014b60 g    DF .text	000000bf  Base        mdbx_dbi_open_ex
+00014c20 g    DF .text	0000000b  Base        mdbx_dbi_open
+00014c30 g    DF .text	00001347  Base        mdbx_txn_commit
+00015f80 g    DF .text	00000105  Base        mdbx_txn_straggler
+00016090 g    DF .text	000000e7  Base        mdbx_canary_put
+00016180 g    DF .text	00000078  Base        mdbx_canary_get
+00016200 g    DF .text	0000006e  Base        mdbx_cursor_on_first
+00016270 g    DF .text	00000096  Base        mdbx_cursor_on_last
+00016310 g    DF .text	00000066  Base        mdbx_cursor_eof
+00016380 g    DF .text	00000504  Base        mdbx_replace
+00016890 g    DF .text	0000017d  Base        mdbx_get_ex
+00016a10 g    DF .text	000000a4  Base        mdbx_is_dirty
+00016ac0 g    DF .text	00000120  Base        mdbx_dbi_sequence
+00016be0 g    DF .text	00000064  Base        mdbx_cursor_get_attr
+00016c50 g    DF .text	00000064  Base        mdbx_get_attr
+00016cc0 g    DF .text	000000c7  Base        mdbx_put_attr
+00016d90 g    DF .text	000000c7  Base        mdbx_cursor_put_attr
+00016e60 g    DF .text	00000244  Base        mdbx_set_attr
+```

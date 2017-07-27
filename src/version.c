@@ -21,7 +21,7 @@
 #define MDBX_VERSION_RELEASE 0
 #define MDBX_VERSION_REVISION 0
 
-const struct mdbx_version_info mdbx_version = {
+/*LIBMDBX_EXPORTS*/ const mdbx_version_info mdbx_version = {
     MDBX_VERSION_MAJOR,
     MDBX_VERSION_MINOR,
     MDBX_VERSION_RELEASE,
@@ -29,6 +29,6 @@ const struct mdbx_version_info mdbx_version = {
     {"@MDBX_GIT_TIMESTAMP@", "@MDBX_GIT_TREE@", "@MDBX_GIT_COMMIT@",
      "@MDBX_GIT_DESCRIBE@"}};
 
-const struct mdbx_build_info mdbx_build = {
+/*LIBMDBX_EXPORTS*/ const mdbx_build_info mdbx_build = {
     "@MDBX_BUILD_TIMESTAMP@", "@MDBX_BUILD_TAGRET@", "@MDBX_BUILD_OPTIONS@",
     "@MDBX_BUILD_COMPILER@", "@MDBX_BUILD_FLAGS@"};

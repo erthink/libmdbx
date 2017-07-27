@@ -234,33 +234,41 @@ int main(int argc, char *argv[]) {
         break;
       }
       iptr = data.iov_base;
-      pages += *iptr;
+      const pgno_t number = *iptr++;
+
+      pages += number;
       if (envinfo && mei.mi_latter_reader_txnid > *(size_t *)key.iov_base)
-        reclaimable += *iptr;
+        reclaimable += number;
+
       if (freinfo > 1) {
         char *bad = "";
-        pgno_t pg, prev;
-        intptr_t i, j, span = 0;
-        j = *iptr++;
-        for (i = j, prev = NUM_METAS - 1; --i >= 0;) {
-          pg = iptr[i];
-          if (pg <= prev)
+        pgno_t prev =
+            MDBX_PNL_ASCENDING ? NUM_METAS - 1 : (pgno_t)mei.mi_last_pgno + 1;
+        pgno_t span = 1;
+        for (unsigned i = 0; i < number; ++i) {
+          pgno_t pg = iptr[i];
+          if (MDBX_PNL_DISORDERED(prev, pg))
             bad = " [bad sequence]";
           prev = pg;
-          pg += (unsigned)span;
-          for (; i >= span && iptr[i - span] == pg; span++, pg++)
-            ;
+          while (i + span < number &&
+                 iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span)
+                                                       : pgno_sub(pg, span)))
+            ++span;
         }
-        printf("    Transaction %" PRIaTXN ", %" PRIiPTR
-               " pages, maxspan %" PRIiPTR "%s\n",
-               *(txnid_t *)key.iov_base, j, span, bad);
+        printf("    Transaction %" PRIaTXN ", %" PRIaPGNO
+               " pages, maxspan %" PRIaPGNO "%s\n",
+               *(txnid_t *)key.iov_base, number, span, bad);
         if (freinfo > 2) {
-          for (--j; j >= 0;) {
-            pg = iptr[j];
-            for (span = 1; --j >= 0 && iptr[j] == pg + span; span++)
+          for (unsigned i = 0; i < number; i += span) {
+            const pgno_t pg = iptr[i];
+            for (span = 1;
+                 i + span < number &&
+                 iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pg, span)
+                                                       : pgno_sub(pg, span));
+                 ++span)
               ;
             if (span > 1)
-              printf("     %9" PRIaPGNO "[%" PRIiPTR "]\n", pg, span);
+              printf("     %9" PRIaPGNO "[%" PRIaPGNO "]\n", pg, span);
             else
               printf("     %9" PRIaPGNO "\n", pg);
           }

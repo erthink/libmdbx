@@ -183,8 +183,8 @@ typedef struct mdbx_build_info {
   const char *flags;
 } mdbx_build_info;
 
-extern LIBMDBX_API const struct mdbx_version_info mdbx_version;
-extern LIBMDBX_API const struct mdbx_build_info mdbx_build;
+extern LIBMDBX_API const mdbx_version_info mdbx_version;
+extern LIBMDBX_API const mdbx_build_info mdbx_build;
 
 /* The name of the lock file in the DB environment */
 #define MDBX_LOCKNAME "/mdbx.lck"
