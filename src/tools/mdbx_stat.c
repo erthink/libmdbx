@@ -234,7 +234,7 @@ int main(int argc, char *argv[]) {
         break;
       }
       iptr = data.iov_base;
-      const intptr_t number = *iptr++;
+      const pgno_t number = *iptr++;
 
       pages += number;
       if (envinfo && mei.mi_latter_reader_txnid > *(size_t *)key.iov_base)
@@ -242,9 +242,10 @@ int main(int argc, char *argv[]) {
 
       if (freinfo > 1) {
         char *bad = "";
-        pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : mei.mi_last_pgno + 1;
-        intptr_t i, span = 1;
-        for (i = 0; i < number; ++i) {
+        pgno_t prev =
+            MDBX_PNL_ASCENDING ? NUM_METAS - 1 : (pgno_t)mei.mi_last_pgno + 1;
+        pgno_t span = 1;
+        for (unsigned i = 0; i < number; ++i) {
           pgno_t pg = iptr[i];
           if (MDBX_PNL_DISORDERED(prev, pg))
             bad = " [bad sequence]";
@@ -254,11 +255,11 @@ int main(int argc, char *argv[]) {
                                                        : pgno_sub(pg, span)))
             ++span;
         }
-        printf("    Transaction %" PRIaTXN ", %" PRIiPTR
-               " pages, maxspan %" PRIiPTR "%s\n",
+        printf("    Transaction %" PRIaTXN ", %" PRIaPGNO
+               " pages, maxspan %" PRIaPGNO "%s\n",
                *(txnid_t *)key.iov_base, number, span, bad);
         if (freinfo > 2) {
-          for (intptr_t i = 0; i < number; i += span) {
+          for (unsigned i = 0; i < number; i += span) {
             const pgno_t pg = iptr[i];
             for (span = 1;
                  i + span < number &&
@@ -267,7 +268,7 @@ int main(int argc, char *argv[]) {
                  ++span)
               ;
             if (span > 1)
-              printf("     %9" PRIaPGNO "[%" PRIiPTR "]\n", pg, span);
+              printf("     %9" PRIaPGNO "[%" PRIaPGNO "]\n", pg, span);
             else
               printf("     %9" PRIaPGNO "\n", pg);
           }

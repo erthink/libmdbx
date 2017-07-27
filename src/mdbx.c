@@ -1877,9 +1877,9 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         }
         if (tail != txn->mt_next_pgno) {
 #if MDBX_PNL_ASCENDING
-          repg_len = higest + 1 - begin;
+          repg_len = (unsigned)(higest + 1 - begin);
 #else
-          repg_len -= higest - begin;
+          repg_len -= (unsigned)(higest - begin);
           for (pgno_t *move = begin; higest < end; ++move, ++higest)
             *move = *higest;
 #endif /* MDBX_PNL sort-order */
@@ -3083,9 +3083,9 @@ again_on_freelist_change:
       }
       if (tail != txn->mt_next_pgno) {
 #if MDBX_PNL_ASCENDING
-        env->me_reclaimed_pglist[0] = higest + 1 - begin;
+        env->me_reclaimed_pglist[0] = (unsigned)(higest + 1 - begin);
 #else
-        env->me_reclaimed_pglist[0] -= higest - begin;
+        env->me_reclaimed_pglist[0] -= (unsigned)(higest - begin);
         for (pgno_t *move = begin; higest < end; ++move, ++higest)
           *move = *higest;
 #endif /* MDBX_PNL sort-order */
