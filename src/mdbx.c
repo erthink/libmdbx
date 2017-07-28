@@ -1864,11 +1864,10 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         return MDBX_SUCCESS;
       }
 
-      /* Refund suitable pages into "unallocated" pull */
       mdbx_tassert(txn,
                    repg_len == 0 || repg_list[repg_len] < txn->mt_next_pgno);
       if (repg_len) {
-        /* Refund suitable pages into "unallocated" pull */
+        /* Refund suitable pages into "unallocated" space */
         pgno_t tail = txn->mt_next_pgno;
         pgno_t *const begin = repg_list + 1;
         pgno_t *const end = begin + repg_len;
@@ -3074,7 +3073,7 @@ again_on_freelist_change:
 
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (env->me_reclaimed_pglist) {
-      /* Refund suitable pages into "unallocated" pull */
+      /* Refund suitable pages into "unallocated" space */
       pgno_t tail = txn->mt_next_pgno;
       pgno_t *const begin = env->me_reclaimed_pglist + 1;
       pgno_t *const end = begin + env->me_reclaimed_pglist[0];
