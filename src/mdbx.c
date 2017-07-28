@@ -235,7 +235,7 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
       for (j = l + 1; j <= ir; j++) {
         a = pnl[j];
         for (i = j - 1; i >= 1; i--) {
-          if (MDBX_PNL_ORDERED(pnl[i], a))
+          if (MDBX_PNL_DISORDERED(a, pnl[i]))
             break;
           pnl[i + 1] = pnl[i];
         }
@@ -248,13 +248,13 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
     } else {
       k = (l + ir) >> 1; /* Choose median of left, center, right */
       PNL_SWAP(pnl[k], pnl[l + 1]);
-      if (MDBX_PNL_DISORDERED(pnl[l], pnl[ir]))
+      if (MDBX_PNL_ORDERED(pnl[ir], pnl[l]))
         PNL_SWAP(pnl[l], pnl[ir]);
 
-      if (MDBX_PNL_DISORDERED(pnl[l + 1], pnl[ir]))
+      if (MDBX_PNL_ORDERED(pnl[ir], pnl[l + 1]))
         PNL_SWAP(pnl[l + 1], pnl[ir]);
 
-      if (MDBX_PNL_DISORDERED(pnl[l], pnl[l + 1]))
+      if (MDBX_PNL_ORDERED(pnl[l + 1], pnl[l]))
         PNL_SWAP(pnl[l], pnl[l + 1]);
 
       i = l + 1;
@@ -266,7 +266,7 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
         while (MDBX_PNL_ORDERED(pnl[i], a));
         do
           j--;
-        while (MDBX_PNL_DISORDERED(pnl[j], a));
+        while (MDBX_PNL_ORDERED(a, pnl[j]));
         if (j < i)
           break;
         PNL_SWAP(pnl[i], pnl[j]);
