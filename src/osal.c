@@ -892,9 +892,19 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
     map->address = nullptr;
     return ntstatus2errcode(rc);
   }
-
   assert(map->address != MAP_FAILED);
-  map->current = must;
+
+  uint64_t filesize;
+  rc = mdbx_filesize(map->fd, &filesize);
+  if (rc != MDBX_SUCCESS) {
+    NtClose(map->section);
+    NtUnmapViewOfSection(GetCurrentProcess(), map->address);
+    map->section = 0;
+    map->address = nullptr;
+    return rc;
+  }
+
+  map->current = (must < filesize) ? must : (size_t)filesize;
   map->length = ViewSize;
   return MDBX_SUCCESS;
 #else
@@ -931,8 +941,8 @@ int mdbx_munmap(mdbx_mmap_t *map) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
-  assert(must <= limit);
+int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t atleast, size_t limit) {
+  assert(atleast <= limit);
 #if defined(_WIN32) || defined(_WIN64)
   if (limit < map->length) {
     /* Windows is unable shrinking a mapped section */
@@ -947,18 +957,34 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
       return ntstatus2errcode(rc);
     map->length = limit;
   }
-  if (must < map->current) {
+  if (atleast < map->current) {
     /* Windows is unable shrinking a mapped file */
-    return MDBX_RESULT_TRUE;
+    uint8_t *ptr = (uint8_t *)map->address + atleast;
+    if (!VirtualFree(ptr, map->current - atleast, MEM_DECOMMIT))
+      return MDBX_RESULT_TRUE;
+
+    map->current = atleast;
+    int rc = mdbx_ftruncate(map->fd, atleast);
+    return (rc != MDBX_SUCCESS) ? MDBX_RESULT_TRUE : rc;
   }
-  if (must > map->current) {
+  if (atleast > map->current) {
     /* growth */
     uint8_t *ptr = (uint8_t *)map->address + map->current;
     if (ptr !=
-        VirtualAlloc(ptr, must - map->current, MEM_COMMIT,
+        VirtualAlloc(ptr, atleast - map->current, MEM_COMMIT,
                      (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY))
       return GetLastError();
-    map->current = must;
+    map->current = atleast;
+  }
+
+  uint64_t filesize;
+  int rc = mdbx_filesize(map->fd, &filesize);
+  if (rc != MDBX_SUCCESS)
+    return rc;
+  if (filesize < atleast) {
+    rc = mdbx_ftruncate(map->fd, atleast);
+    if (rc != MDBX_SUCCESS)
+      return rc;
   }
   return MDBX_SUCCESS;
 #else
@@ -970,7 +996,7 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
     map->address = ptr;
     map->length = limit;
   }
-  return mdbx_ftruncate(map->fd, must);
+  return mdbx_ftruncate(map->fd, atleast);
 #endif
 }
 

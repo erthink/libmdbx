@@ -1601,18 +1601,21 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
       mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
 
   if (rc == MDBX_SUCCESS) {
-    if (env->me_txn) {
-      mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
-      env->me_txn->mt_end_pgno = size_pgno;
-    }
     env->me_dbgeo.now = size_bytes;
     env->me_dbgeo.upper = limit_bytes;
-  } else {
+  } else if (rc != MDBX_RESULT_TRUE) {
     mdbx_error("failed resize datafile/mapping: "
                "present %" PRIuPTR " -> %" PRIuPTR ", "
                "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
                env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
                rc);
+    return rc;
+  } else {
+    mdbx_notice("unable resize datafile/mapping: "
+                "present %" PRIuPTR " -> %" PRIuPTR ", "
+                "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
+                env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
+                rc);
   }
 
 #ifdef USE_VALGRIND
@@ -1624,7 +1627,12 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
           VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");
   }
 #endif
-  return rc;
+
+  if (env->me_txn) {
+    mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
+    env->me_txn->mt_end_pgno = size_pgno;
+  }
+  return MDBX_SUCCESS;
 }
 
 /* Allocate page numbers and memory for writing.  Maintain me_last_reclaimed,
