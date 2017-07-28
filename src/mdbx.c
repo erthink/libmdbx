@@ -235,7 +235,7 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
       for (j = l + 1; j <= ir; j++) {
         a = pnl[j];
         for (i = j - 1; i >= 1; i--) {
-          if (MDBX_PNL_ORDERED(pnl[i], a))
+          if (MDBX_PNL_DISORDERED(a, pnl[i]))
             break;
           pnl[i + 1] = pnl[i];
         }
@@ -248,13 +248,13 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
     } else {
       k = (l + ir) >> 1; /* Choose median of left, center, right */
       PNL_SWAP(pnl[k], pnl[l + 1]);
-      if (MDBX_PNL_DISORDERED(pnl[l], pnl[ir]))
+      if (MDBX_PNL_ORDERED(pnl[ir], pnl[l]))
         PNL_SWAP(pnl[l], pnl[ir]);
 
-      if (MDBX_PNL_DISORDERED(pnl[l + 1], pnl[ir]))
+      if (MDBX_PNL_ORDERED(pnl[ir], pnl[l + 1]))
         PNL_SWAP(pnl[l + 1], pnl[ir]);
 
-      if (MDBX_PNL_DISORDERED(pnl[l], pnl[l + 1]))
+      if (MDBX_PNL_ORDERED(pnl[l + 1], pnl[l]))
         PNL_SWAP(pnl[l], pnl[l + 1]);
 
       i = l + 1;
@@ -266,7 +266,7 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
         while (MDBX_PNL_ORDERED(pnl[i], a));
         do
           j--;
-        while (MDBX_PNL_DISORDERED(pnl[j], a));
+        while (MDBX_PNL_ORDERED(a, pnl[j]));
         if (j < i)
           break;
         PNL_SWAP(pnl[i], pnl[j]);
@@ -1601,18 +1601,21 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
       mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
 
   if (rc == MDBX_SUCCESS) {
-    if (env->me_txn) {
-      mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
-      env->me_txn->mt_end_pgno = size_pgno;
-    }
     env->me_dbgeo.now = size_bytes;
     env->me_dbgeo.upper = limit_bytes;
-  } else {
+  } else if (rc != MDBX_RESULT_TRUE) {
     mdbx_error("failed resize datafile/mapping: "
                "present %" PRIuPTR " -> %" PRIuPTR ", "
                "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
                env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
                rc);
+    return rc;
+  } else {
+    mdbx_notice("unable resize datafile/mapping: "
+                "present %" PRIuPTR " -> %" PRIuPTR ", "
+                "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
+                env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
+                rc);
   }
 
 #ifdef USE_VALGRIND
@@ -1624,7 +1627,12 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
           VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");
   }
 #endif
-  return rc;
+
+  if (env->me_txn) {
+    mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
+    env->me_txn->mt_end_pgno = size_pgno;
+  }
+  return MDBX_SUCCESS;
 }
 
 /* Allocate page numbers and memory for writing.  Maintain me_last_reclaimed,
