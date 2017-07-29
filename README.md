@@ -3,11 +3,11 @@
 Extended LMDB, aka "Расширенная LMDB".
 
 *The Future will Positive. Всё будет хорошо.*
-[![Build Status](https://travis-ci.org/ReOpen/libmdbx.svg?branch=devel)](https://travis-ci.org/ReOpen/libmdbx)
-[![Build status](https://ci.appveyor.com/api/projects/status/v21jlh5kfmk85r7t/branch/devel?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/devel)
+[![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=devel)](https://travis-ci.org/leo-yuriev/libmdbx)
+[![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/devel?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/devel)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
-English version [by Google](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/ReOpen/libmdbx/tree/devel)
+English version [by Google](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/devel)
 and [by Yandex](https://translate.yandex.ru/translate?url=https%3A%2F%2Fgithub.com%2FReOpen%2Flibmdbx%2Ftree%2Fdevel&lang=ru-en).
 
 
@@ -116,7 +116,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Интегральная производительность
-![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-1.png)
+![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-1.png)
 
 Показана соотнесенная сумма ключевых показателей производительности в трёх
 бенчмарках:
@@ -142,7 +142,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Масштабируемость чтения
-![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-2.png)
+![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-2.png)
 
 Для каждого движка показана суммарная производительность при
 одновременном выполнении запросов чтения/поиска в 1-2-4-8 потоков на
@@ -151,7 +151,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Синхронная фиксация
-![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-3.png)
+![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-3.png)
 
  - Линейная шкала слева и темные прямоугольники соответствуют количеству
    транзакций в секунду, усредненному за всё время теста.
@@ -176,7 +176,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Отложенная фиксация
-![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-4.png)
+![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-4.png)
 
  - Линейная шкала слева и темные прямоугольники соответствуют количеству
    транзакций в секунду, усредненному за всё время теста.
@@ -206,7 +206,7 @@ _libmdbx_ при этом не ведет WAL, а передает весь ко
 --------------------------------------------------------------------------------
 
 ### Асинхронная фиксация
-![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-5.png)
+![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-5.png)
 
  - Линейная шкала слева и темные прямоугольники соответствуют количеству
    транзакций в секунду, усредненному за всё время теста.
@@ -235,7 +235,7 @@ _libmdbx_ при этом не ведет WAL, а передает весь ко
 --------------------------------------------------------------------------------
 
 ### Стоимость как потребление ресурсов
-![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-6.png)
+![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-6.png)
 
 Показана соотнесенная сумма использованных ресурсов в ходе бенчмарка в
 режиме отложенной фиксации:
