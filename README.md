@@ -3,11 +3,11 @@
 Extended LMDB, aka "Расширенная LMDB".
 
 *The Future will Positive. Всё будет хорошо.*
-[![Build Status](https://travis-ci.org/ReOpen/libmdbx.svg?branch=master)](https://travis-ci.org/ReOpen/libmdbx)
-[![Build status](https://ci.appveyor.com/api/projects/status/v21jlh5kfmk85r7t/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
+[![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=master)](https://travis-ci.org/leo-yuriev/libmdbx)
+[![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
-English version [by Google](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/ReOpen/libmdbx/tree/master)
+English version [by Google](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/master)
 and [by Yandex](https://translate.yandex.ru/translate?url=https%3A%2F%2Fgithub.com%2FReOpen%2Flibmdbx%2Ftree%2Fmaster&lang=ru-en).
 
 
@@ -116,7 +116,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Интегральная производительность
-![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-1.png)
+![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-1.png)
 
 Показана соотнесенная сумма ключевых показателей производительности в трёх
 бенчмарках:
@@ -142,7 +142,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Масштабируемость чтения
-![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-2.png)
+![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-2.png)
 
 Для каждого движка показана суммарная производительность при
 одновременном выполнении запросов чтения/поиска в 1-2-4-8 потоков на
@@ -151,7 +151,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Синхронная фиксация
-![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-3.png)
+![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-3.png)
 
  - Линейная шкала слева и темные прямоугольники соответствуют количеству
    транзакций в секунду, усредненному за всё время теста.
@@ -176,7 +176,7 @@ github](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015).
 --------------------------------------------------------------------------------
 
 ### Отложенная фиксация
-![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-4.png)
+![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-4.png)
 
  - Линейная шкала слева и темные прямоугольники соответствуют количеству
    транзакций в секунду, усредненному за всё время теста.
@@ -206,7 +206,7 @@ _libmdbx_ при этом не ведет WAL, а передает весь ко
 --------------------------------------------------------------------------------
 
 ### Асинхронная фиксация
-![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-5.png)
+![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-5.png)
 
  - Линейная шкала слева и темные прямоугольники соответствуют количеству
    транзакций в секунду, усредненному за всё время теста.
@@ -235,7 +235,7 @@ _libmdbx_ при этом не ведет WAL, а передает весь ко
 --------------------------------------------------------------------------------
 
 ### Стоимость как потребление ресурсов
-![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/ReOpen/libmdbx/img/perf-slide-6.png)
+![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-6.png)
 
 Показана соотнесенная сумма использованных ресурсов в ходе бенчмарка в
 режиме отложенной фиксации:
@@ -437,7 +437,7 @@ _libmdbx_ при этом не ведет WAL, а передает весь ко
 	* подождать некоторое время, в расчете что проблемная операция
 	  чтения будет штатно завершена;
 
-	* перервать текущую операцию изменения данных с возвратом кода
+	* прервать текущую операцию изменения данных с возвратом кода
 	  ошибки.
 
 3. Гарантия сохранности БД в режиме `WRITEMAP+MAPSYNC`.
@@ -570,21 +570,19 @@ _libmdbx_ при этом не ведет WAL, а передает весь ко
   >  - memory corruption and segfaults.
 
 22. Дополнительный код ошибки `MDBX_EMULTIVAL`, который возвращается из
-`mdbx_put()` и `mdbx_replace()` при попытке выполнять неоднозначное
-обновление или удаления одного из нескольких значений с одним ключом,
-т.е. когда невозможно однозначно идентифицировать одно целевое значение
-из нескольких.
+`mdbx_put()` и `mdbx_replace()` при попытке выполнить неоднозначное
+обновление или удаления одного из нескольких значений с одним ключом.
 
 23. Возможность посредством `mdbx_get_ex()` получить значение по
 заданному ключу, одновременно с количеством дубликатов.
 
-24. Наличие функций mdbx_cursor_on_first() и mdbx_cursor_on_last(),
+24. Наличие функций `mdbx_cursor_on_first()` и `mdbx_cursor_on_last()`,
 которые позволяют быстро выяснить стоит ли курсор на первой/последней
 позиции.
 
 25. При завершении читающих транзакций, открытые в них DBI-хендлы не
 закрываются и не теряются при завершении таких транзакций посредством
-mdbx_txn_abort() или mdbx_txn_reset(). Что позволяет избавится от ряда
+`mdbx_txn_abort()` или `mdbx_txn_reset()`. Что позволяет избавится от ряда
 сложно обнаруживаемых ошибок.
 
 26. Генерация последовательностей посредством `mdbx_dbi_sequence()`.
