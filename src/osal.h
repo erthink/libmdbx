@@ -214,7 +214,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #error __BYTE_ORDER__ should be defined.
 #endif
 #endif
-#endif
+#endif /* __BYTE_ORDER__ || __ORDER_LITTLE_ENDIAN__ || __ORDER_BIG_ENDIAN__ */
 
 #if __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__ &&                               \
     __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__
