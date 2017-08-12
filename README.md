@@ -3,9 +3,9 @@ libmdbx
 Extended LMDB, aka "Расширенная LMDB".
 
 *The Future will Positive. Всё будет хорошо.*
-[![Build Status](https://travis-ci.org/ReOpen/libmdbx.svg?branch=stable%2F0.0)](https://travis-ci.org/ReOpen/libmdbx)
+[![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=stable%2F0.0)](https://travis-ci.org/leo-yuriev/libmdbx)
 
-English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/ReOpen/libmdbx/tree/stable%2F0.0).
+English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/stable%2F0.0).
 
 
 ## Кратко
@@ -28,7 +28,7 @@ _libmdbx_ является потомком "Lightning Memory-Mapped Database",
 известной под аббревиатурой
 [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 Изначально доработка производилась в составе проекта
-[ReOpenLDAP](https://github.com/ReOpen/ReOpenLDAP). Примерно за год
+[ReOpenLDAP](https://github.com/leo-yuriev/ReOpenLDAP). Примерно за год
 работы внесенные изменения приобрели самостоятельную ценность. Осенью
 2015 доработанный движок был выделен в отдельный проект, который был
 [представлен на конференции Highload++

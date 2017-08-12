@@ -1,5 +1,5 @@
 # GNU Makefile for libmdbx (reliable lightning memory-mapped DB library for Linux).
-# https://github.com/ReOpen/libmdbx
+# https://github.com/leo-yuriev/libmdbx
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.

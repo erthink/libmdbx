@@ -212,7 +212,7 @@ typedef int mdb_filehandle_t;
 #define MDB_VERSION_DATE	"2017-02-17"
 
 /** A stringifier for the version info */
-#define MDB_VERSTR(a,b,c,d)	"MDBX " #a "." #b "." #c ": (" d ", https://github.com/ReOpen/libmdbx)"
+#define MDB_VERSTR(a,b,c,d)	"MDBX " #a "." #b "." #c ": (" d ", https://github.com/leo-yuriev/libmdbx)"
 
 /** A helper for the stringifier macro */
 #define MDB_VERFOO(a,b,c,d)	MDB_VERSTR(a,b,c,d)

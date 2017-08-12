@@ -1048,7 +1048,7 @@ typedef struct MDB_pgstate {
 } MDB_pgstate;
 
 	/** Context for deferred cleanup of reader's threads.
-	 *  to avoid https://github.com/ReOpen/ReOpenLDAP/issues/48 */
+	 *  to avoid https://github.com/leo-yuriev/ReOpenLDAP/issues/48 */
 typedef struct MDBX_rthc {
 	struct MDBX_rthc *rc_next;
 	pthread_t rc_thread;
@@ -4624,7 +4624,7 @@ void mdbx_rthc_dtor(void)
 	 *    TSD-деструкторах и поэтому может выгрузить lib.so до того как
 	 *    отработали все деструкторы.
 	 *  - Исходное проявление проблемы было зафиксировано
-	 *    в https://github.com/ReOpen/ReOpenLDAP/issues/48
+	 *    в https://github.com/leo-yuriev/ReOpenLDAP/issues/48
 	 *
 	 * Предыдущее решение посредством выделяемого динамически MDB_rthc
 	 * было не удачным, так как порождало либо утечку памяти,
