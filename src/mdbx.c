@@ -4758,7 +4758,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     }
     mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
   } else {
-    /* geo-params not pre-configured by used, fetch present from meta. */
+    /* geo-params not pre-configured by user,
+     * get current values from a meta. */
     env->me_dbgeo.now = pgno2bytes(env, meta.mm_geo.now);
     env->me_dbgeo.lower = pgno2bytes(env, meta.mm_geo.lower);
     env->me_dbgeo.upper = pgno2bytes(env, meta.mm_geo.upper);
