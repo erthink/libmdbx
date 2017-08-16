@@ -53,9 +53,12 @@ TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 
 .PHONY: mdbx all install clean check coverage
 
-all: $(LIBRARIES) $(TOOLS) test/test
+all: $(LIBRARIES) $(TOOLS) test/test example
 
 mdbx: libmdbx.a libmdbx.so
+
+example: mdbx.h tutorial/sample-mdbx.c libmdbx.so
+	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.so -o example
 
 tools: $(TOOLS)
 
