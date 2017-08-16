@@ -20,17 +20,18 @@
 
 #include "mdbx.h"
 #include <stdio.h>
+#include <stdlib.h>
 
 int main(int argc, char *argv[]) {
   (void)argc;
   (void)argv;
 
   int rc;
-  MDBX_env *env;
-  MDBX_dbi dbi;
+  MDBX_env *env = NULL;
+  MDBX_dbi dbi = 0;
   MDBX_val key, data;
-  MDBX_txn *txn;
-  MDBX_cursor *cursor;
+  MDBX_txn *txn = NULL;
+  MDBX_cursor *cursor = NULL;
   char sval[32];
 
   rc = mdbx_env_create(&env);
@@ -41,20 +42,19 @@ int main(int argc, char *argv[]) {
   rc = mdbx_env_open(env, "./example-db",
                      MDBX_NOSUBDIR | MDBX_COALESCE | MDBX_LIFORECLAIM, 0664);
   if (rc != MDBX_SUCCESS) {
-    mdbx_env_close(env);
     fprintf(stderr, "mdbx_env_open: (%d) %s\n", rc, mdbx_strerror(rc));
-    return 0;
+    goto bailout;
   }
 
   rc = mdbx_txn_begin(env, NULL, 0, &txn);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_txn_begin: (%d) %s\n", rc, mdbx_strerror(rc));
-    goto leave;
+    goto bailout;
   }
   rc = mdbx_dbi_open(txn, NULL, 0, &dbi);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_dbi_open: (%d) %s\n", rc, mdbx_strerror(rc));
-    goto leave;
+    goto bailout;
   }
 
   key.iov_len = sizeof(int);
@@ -66,24 +66,47 @@ int main(int argc, char *argv[]) {
   rc = mdbx_put(txn, dbi, &key, &data, 0);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_put: (%d) %s\n", rc, mdbx_strerror(rc));
-    goto leave;
+    goto bailout;
   }
   rc = mdbx_txn_commit(txn);
   if (rc) {
     fprintf(stderr, "mdbx_txn_commit: (%d) %s\n", rc, mdbx_strerror(rc));
-    goto leave;
+    goto bailout;
   }
+  txn = NULL;
+
   rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
+  if (rc != MDBX_SUCCESS) {
+    fprintf(stderr, "mdbx_txn_begin: (%d) %s\n", rc, mdbx_strerror(rc));
+    goto bailout;
+  }
   rc = mdbx_cursor_open(txn, dbi, &cursor);
+  if (rc != MDBX_SUCCESS) {
+    fprintf(stderr, "mdbx_cursor_open: (%d) %s\n", rc, mdbx_strerror(rc));
+    goto bailout;
+  }
+
+  int found = 0;
   while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) == 0) {
     printf("key: %p %.*s, data: %p %.*s\n", key.iov_base, (int)key.iov_len,
            (char *)key.iov_base, data.iov_base, (int)data.iov_len,
            (char *)data.iov_base);
+    found += 1;
   }
-  mdbx_cursor_close(cursor);
-  mdbx_txn_abort(txn);
-leave:
-  mdbx_dbi_close(env, dbi);
-  mdbx_env_close(env);
-  return 0;
+  if (rc != MDBX_NOTFOUND || found == 0) {
+    fprintf(stderr, "mdbx_cursor_get: (%d) %s\n", rc, mdbx_strerror(rc));
+    goto bailout;
+  } else {
+    rc = MDBX_SUCCESS;
+  }
+bailout:
+  if (cursor)
+    mdbx_cursor_close(cursor);
+  if (txn)
+    mdbx_txn_abort(txn);
+  if (dbi)
+    mdbx_dbi_close(env, dbi);
+  if (env)
+    mdbx_env_close(env);
+  return (rc != MDBX_SUCCESS) ? EXIT_FAILURE : EXIT_SUCCESS;
 }
