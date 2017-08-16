@@ -4951,7 +4951,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
 /****************************************************************************/
 
 /* Open and/or initialize the lock region for the environment. */
-static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname, int mode) {
+static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
+                                 mode_t mode) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd == INVALID_HANDLE_VALUE);
 
