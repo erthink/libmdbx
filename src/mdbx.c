@@ -4757,6 +4757,13 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
                 meta.mm_txnid_a, mdbx_durable_str(&meta));
     }
     mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
+  } else {
+    /* geo-params not pre-configured by used, fetch present from meta. */
+    env->me_dbgeo.now = pgno2bytes(env, meta.mm_geo.now);
+    env->me_dbgeo.lower = pgno2bytes(env, meta.mm_geo.lower);
+    env->me_dbgeo.upper = pgno2bytes(env, meta.mm_geo.upper);
+    env->me_dbgeo.grow = pgno2bytes(env, meta.mm_geo.grow);
+    env->me_dbgeo.shrink = pgno2bytes(env, meta.mm_geo.shrink);
   }
 
   uint64_t filesize_before_mmap;
