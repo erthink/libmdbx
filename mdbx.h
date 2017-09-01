@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -70,7 +70,9 @@
 
 #include <windows.h>
 #include <winnt.h>
-typedef unsigned mode_t;
+#ifndef __mode_t_defined
+typedef unsigned short mode_t;
+#endif
 typedef HANDLE mdbx_filehandle_t;
 typedef DWORD mdbx_pid_t;
 typedef DWORD mdbx_tid_t;

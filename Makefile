@@ -1,4 +1,4 @@
-# GNU Makefile for libmdbx, https://github.com/ReOpen/libmdbx
+# GNU Makefile for libmdbx, https://github.com/leo-yuriev/libmdbx
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.
@@ -53,9 +53,12 @@ TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 
 .PHONY: mdbx all install clean check coverage
 
-all: $(LIBRARIES) $(TOOLS) test/test
+all: $(LIBRARIES) $(TOOLS) test/test example
 
 mdbx: libmdbx.a libmdbx.so
+
+example: mdbx.h tutorial/sample-mdbx.c libmdbx.so
+	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.so -o example
 
 tools: $(TOOLS)
 
@@ -132,7 +135,7 @@ endif
 ci-rule = ( CC=$$(which $1); if [ -n "$$CC" ]; then \
 		echo -n "probe by $2 ($$(readlink -f $$(which $$CC))): " && \
 		$(MAKE) clean >$1.log 2>$1.err && \
-		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDBX_DEBUG=2" check 1>$1.log 2>$1.err && echo "OK" \
+		$(MAKE) CC=$$(readlink -f $$CC) XCFLAGS="-UNDEBUG -DMDBX_DEBUG=2 -DLIBMDBX_EXPORTS=1" check 1>$1.log 2>$1.err && echo "OK" \
 			|| ( echo "FAILED"; cat $1.err >&2; exit 1 ); \
 	else echo "no $2 ($1) for probe"; fi; )
 ci:
