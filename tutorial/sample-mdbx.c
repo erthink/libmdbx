@@ -37,7 +37,7 @@ int main(int argc, char *argv[]) {
   rc = mdbx_env_create(&env);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_env_create: (%d) %s\n", rc, mdbx_strerror(rc));
-    return 0;
+    goto bailout;
   }
   rc = mdbx_env_open(env, "./example-db",
                      MDBX_NOSUBDIR | MDBX_COALESCE | MDBX_LIFORECLAIM, 0664);
