@@ -17,6 +17,8 @@
 #include "./bits.h"
 
 #if defined(_WIN32) || defined(_WIN64)
+#include <winternl.h>
+
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
@@ -53,25 +55,6 @@ static int ntstatus2errcode(NTSTATUS status) {
  * ntdll.dll, which is not linked by default in user code. */
 #pragma comment(lib, "ntdll.lib")
 
-#ifndef NT_SUCCESS
-#define NT_SUCCESS(x) ((x) >= 0)
-#define STATUS_SUCCESS ((NTSTATUS)0)
-#endif
-typedef struct _UNICODE_STRING {
-  USHORT Length;
-  USHORT MaximumLength;
-  PWSTR Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
-
-typedef struct _OBJECT_ATTRIBUTES {
-  ULONG Length;
-  HANDLE RootDirectory;
-  PUNICODE_STRING ObjectName;
-  ULONG Attributes;
-  PVOID SecurityDescriptor;
-  PVOID SecurityQualityOfService;
-} OBJECT_ATTRIBUTES, *POBJECT_ATTRIBUTES;
-
 extern NTSTATUS NTAPI NtCreateSection(
     OUT PHANDLE SectionHandle, IN ACCESS_MASK DesiredAccess,
     IN OPTIONAL POBJECT_ATTRIBUTES ObjectAttributes,
@@ -103,14 +86,6 @@ extern NTSTATUS NTAPI NtFreeVirtualMemory(IN HANDLE ProcessHandle,
                                           IN PVOID *BaseAddress,
                                           IN OUT PULONG RegionSize,
                                           IN ULONG FreeType);
-
-typedef struct _IO_STATUS_BLOCK {
-  union {
-    NTSTATUS Status;
-    PVOID Pointer;
-  };
-  ULONG_PTR Information;
-} IO_STATUS_BLOCK, *PIO_STATUS_BLOCK;
 
 #ifndef FILE_PROVIDER_CURRENT_VERSION
 typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
