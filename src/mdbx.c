@@ -4188,8 +4188,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if ((flags & (MDBX_NOSYNC | MDBX_NOMETASYNC)) == 0) {
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     if (flags & MDBX_WRITEMAP) {
-      const size_t offset = (uint8_t *)container_of(head, MDBX_page, mp_meta) -
-                            env->me_dxb_mmap.dxb;
+      const size_t offset =
+          ((uint8_t *)container_of(head, MDBX_page, mp_meta)) -
+          env->me_dxb_mmap.dxb;
       const size_t paged_offset = offset & ~(env->me_os_psize - 1);
       const size_t paged_length = mdbx_roundup2(
           env->me_psize + offset - paged_offset, env->me_os_psize);
@@ -4852,7 +4853,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
         head->mm_datasync_sign = MDBX_DATASIGN_WEAK;
         head->mm_txnid_b = 0;
         const size_t offset =
-            (uint8_t *)container_of(head, MDBX_page, mp_meta) -
+            ((uint8_t *)container_of(head, MDBX_page, mp_meta)) -
             env->me_dxb_mmap.dxb;
         const size_t paged_offset = offset & ~(env->me_os_psize - 1);
         const size_t paged_length = mdbx_roundup2(
@@ -10750,9 +10751,10 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
 
   MDBX_env *env = txn->mt_env;
   if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0)) {
-    *percent =
-        (int)((txn->mt_next_pgno * UINT64_C(100) + txn->mt_end_pgno / 2) /
-              txn->mt_end_pgno);
+    if (percent)
+      *percent =
+          (int)((txn->mt_next_pgno * UINT64_C(100) + txn->mt_end_pgno / 2) /
+                txn->mt_end_pgno);
     return -1;
   }
 
