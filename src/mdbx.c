@@ -10082,9 +10082,8 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
       return MDBX_INCOMPATIBLE;
   }
 
-  if (rc != MDBX_SUCCESS &&
-      unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_TXN_RDONLY))
+    return MDBX_EACCESS;
 
   /* Done here so we cannot fail after creating a new DB */
   char *namedup = mdbx_strdup(table_name);
