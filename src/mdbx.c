@@ -8118,6 +8118,8 @@ static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 /* Perform act while tracking temporary cursor mn */
 #define WITH_CURSOR_TRACKING(mn, act)                                          \
   do {                                                                         \
+    mdbx_cassert(&(mn),                                                        \
+                 mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
     MDBX_cursor mc_dummy, *tracked,                                            \
         **tp = &(mn).mc_txn->mt_cursors[mn.mc_dbi];                            \
     if ((mn).mc_flags & C_SUB) {                                               \
@@ -10079,6 +10081,10 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     if (unlikely((node->mn_flags & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
       return MDBX_INCOMPATIBLE;
   }
+
+  if (rc != MDBX_SUCCESS &&
+      unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   /* Done here so we cannot fail after creating a new DB */
   char *namedup = mdbx_strdup(table_name);
