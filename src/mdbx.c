@@ -6649,6 +6649,10 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return MDBX_EINVAL;
     if (unlikely(mc->mc_xcursor == NULL))
       return MDBX_INCOMPATIBLE;
+    if (mc->mc_ki[mc->mc_top] >= NUMKEYS(mc->mc_pg[mc->mc_top])) {
+      mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]);
+      return MDBX_NOTFOUND;
+    }
     {
       MDBX_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
@@ -7360,6 +7364,8 @@ int mdbx_cursor_del(MDBX_cursor *mc, unsigned flags) {
               continue;
             if (m2->mc_pg[mc->mc_top] == mp) {
               MDBX_node *n2 = leaf;
+              if (m2->mc_ki[mc->mc_top] >= NUMKEYS(mp))
+                continue;
               if (m2->mc_ki[mc->mc_top] != mc->mc_ki[mc->mc_top]) {
                 n2 = NODEPTR(mp, m2->mc_ki[mc->mc_top]);
                 if (n2->mn_flags & F_SUBDATA)
