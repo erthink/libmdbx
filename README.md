@@ -1,4 +1,14 @@
-﻿libmdbx
+﻿### IMPENDING CHANGES WARNING
+================================================================================
+
+**Now MDBX is under active development and until November 2017 is expected a big
+change both of API and database format.  Unfortunately those update will lead to
+loss of compatibility with previous versions.**
+
+The aim of this revolution in providing a clearer robust API and adding new
+features, including the database properties.
+
+libmdbx
 ======================================
 Extended LMDB, aka "Расширенная LMDB".
 
