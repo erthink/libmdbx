@@ -53,6 +53,15 @@ Tables](https://github.com/leo-yuriev/libfpta), aka ["Позитивные
 Technologies](https://www.ptsecurity.ru).
 
 
+## Acknowledgements
+
+Howard Chu (Symas Corporation) - the author of LMDB,
+from which originated the MDBX in 2015.
+
+Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code,
+which was used for begin development of LMDB.
+
+
 Характеристики и ключевые особенности
 =====================================
 

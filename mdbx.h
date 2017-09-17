@@ -1,4 +1,5 @@
-﻿/*
+﻿/* LICENSE AND COPYRUSTING *****************************************************
+ *
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -44,6 +45,14 @@
  * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
+
+/* ACKNOWLEDGEMENTS ************************************************************
+ *
+ * Howard Chu (Symas Corporation) - the author of LMDB,
+ * from which originated the MDBX in 2015.
+ *
+ * Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code,
+ * which was used for begin development of LMDB. */
 
 #pragma once
 #ifndef LIBMDBX_H
