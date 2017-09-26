@@ -1687,6 +1687,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       mdbx_debug("db %d use loose page %" PRIaPGNO, DDBI(mc), np->mp_pgno);
       ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize);
       mdbx_tassert(txn, np->mp_pgno < txn->mt_next_pgno);
+      mdbx_ensure(env, np->mp_pgno >= NUM_METAS);
       *mp = np;
       return MDBX_SUCCESS;
     }
@@ -2015,6 +2016,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 
 done:
   mdbx_tassert(txn, mp && num);
+  mdbx_ensure(env, pgno >= NUM_METAS);
   if (env->me_flags & MDBX_WRITEMAP) {
     np = pgno2page(env, pgno);
     /* LY: reset no-access flag from mdbx_kill_page() */
