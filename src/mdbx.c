@@ -4050,9 +4050,11 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
     const pgno_t aligned = pgno_align2os_pgno(
         env, pending->mm_geo.next + aligner - pending->mm_geo.next % aligner);
-    if (pending->mm_geo.now > aligned) {
-      shrink = pending->mm_geo.now - aligned;
-      pending->mm_geo.now = aligned;
+    const pgno_t bottom =
+        (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
+    if (pending->mm_geo.now > bottom) {
+      shrink = pending->mm_geo.now - bottom;
+      pending->mm_geo.now = bottom;
       if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
         mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
     }
