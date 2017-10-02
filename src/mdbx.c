@@ -4473,7 +4473,8 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     if ((size_t)size_now >= MAX_MAPSIZE / 2)
       size_upper = MAX_MAPSIZE;
     else if (MAX_MAPSIZE != MAX_MAPSIZE32 &&
-             (size_t)size_now >= MAX_MAPSIZE32 / 2)
+             (size_t)size_now >= MAX_MAPSIZE32 / 2 &&
+             (size_t)size_now <= MAX_MAPSIZE32 / 4 * 3)
       size_upper = MAX_MAPSIZE32;
     else {
       size_upper = size_now + size_now;
