@@ -203,7 +203,8 @@ static bool mdbx_pnl_check(MDBX_PNL pl) {
   if (pl) {
     for (const pgno_t *ptr = pl + pl[0]; --ptr > pl;) {
       assert(MDBX_PNL_ORDERED(ptr[0], ptr[1]));
-      if (unlikely(MDBX_PNL_DISORDERED(ptr[0], ptr[1])))
+      assert(ptr[0] >= NUM_METAS);
+      if (unlikely(MDBX_PNL_DISORDERED(ptr[0], ptr[1]) || ptr[0] < NUM_METAS))
         return false;
     }
   }
@@ -499,6 +500,13 @@ static unsigned __hot mdbx_mid2l_search(MDBX_ID2L pnl, pgno_t id) {
   int val = 0;
   unsigned n = (unsigned)pnl[0].mid;
 
+#if MDBX_DEBUG
+  for (const MDBX_ID2 *ptr = pnl + pnl[0].mid; --ptr > pnl;) {
+    assert(ptr[0].mid < ptr[1].mid);
+    assert(ptr[0].mid >= NUM_METAS);
+  }
+#endif
+
   while (n > 0) {
     unsigned pivot = n >> 1;
     cursor = base + pivot + 1;
@@ -548,6 +556,14 @@ static int mdbx_mid2l_insert(MDBX_ID2L pnl, MDBX_ID2 *id) {
  * [in] id The ID2 to append.
  * Returns 0 on success, -2 if the ID2L is too big. */
 static int mdbx_mid2l_append(MDBX_ID2L pnl, MDBX_ID2 *id) {
+#if MDBX_DEBUG
+  for (unsigned i = pnl[0].mid; i > 0; --i) {
+    assert(pnl[i].mid != id->mid);
+    if (unlikely(pnl[i].mid == id->mid))
+      return -1;
+  }
+#endif
+
   /* Too big? */
   if (unlikely(pnl[0].mid >= MDBX_PNL_UM_MAX))
     return -2;
@@ -1035,6 +1051,9 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
       skip += pgno2bytes(env, num - 1);
     memset((char *)np + skip, 0, size - skip);
   }
+#if MDBX_DEBUG
+  np->mp_pgno = 0;
+#endif
   VALGRIND_MAKE_MEM_UNDEFINED(np, size);
   np->mp_flags = 0;
   np->mp_pages = num;
@@ -1045,6 +1064,9 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
  * Saves single pages to a list, for future reuse.
  * (This is not used for multi-page overflow pages.) */
 static __inline void mdbx_page_free(MDBX_env *env, MDBX_page *mp) {
+#if MDBX_DEBUG
+  mp->mp_pgno = MAX_PAGENO;
+#endif
   mp->mp_next = env->me_dpages;
   VALGRIND_MEMPOOL_FREE(env, mp);
   env->me_dpages = mp;
@@ -1067,9 +1089,9 @@ static void mdbx_dlist_free(MDBX_txn *txn) {
   MDBX_ID2L dl = txn->mt_rw_dirtylist;
   size_t i, n = dl[0].mid;
 
-  for (i = 1; i <= n; i++) {
+  for (i = 1; i <= n; i++)
     mdbx_dpage_free(env, dl[i].mptr);
-  }
+
   dl[0].mid = 0;
 }
 
@@ -1111,6 +1133,7 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
 
   if ((mp->mp_flags & P_DIRTY) && mc->mc_dbi != FREE_DBI) {
     if (txn->mt_parent) {
+      mdbx_cassert(mc, (txn->mt_env->me_flags & MDBX_WRITEMAP) == 0);
       MDBX_ID2 *dl = txn->mt_rw_dirtylist;
       /* If txn has a parent,
        * make sure the page is in our dirty list. */
@@ -2177,6 +2200,7 @@ static int mdbx_page_touch(MDBX_cursor *mc) {
       mc->mc_db->md_root = pgno;
     }
   } else if (txn->mt_parent && !IS_SUBP(mp)) {
+    mdbx_tassert(txn, (txn->mt_env->me_flags & MDBX_WRITEMAP) == 0);
     MDBX_ID2 mid, *dl = txn->mt_rw_dirtylist;
     pgno = mp->mp_pgno;
     /* If txn has a parent, make sure the page is in our dirty list. */
@@ -3047,11 +3071,10 @@ again_on_freelist_change:
           !(lifo && env->me_last_reclaimed > 1)) {
         /* Put loose page numbers in mt_free_pages,
          * since unable to return them to me_reclaimed_pglist. */
-        MDBX_page *mp = txn->mt_loose_pages;
         if (unlikely((rc = mdbx_pnl_need(&txn->mt_befree_pages,
                                          txn->mt_loose_count)) != 0))
           return rc;
-        for (; mp; mp = NEXT_LOOSE_PAGE(mp))
+        for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
           mdbx_pnl_xappend(txn->mt_befree_pages, mp->mp_pgno);
       } else {
         /* Room for loose pages + temp PNL with same */
@@ -3067,6 +3090,25 @@ again_on_freelist_change:
         loose[0] = count;
         mdbx_pnl_sort(loose);
         mdbx_pnl_xmerge(env->me_reclaimed_pglist, loose);
+      }
+
+      MDBX_ID2L dl = txn->mt_rw_dirtylist;
+      for (MDBX_page *mp = txn->mt_loose_pages; mp;) {
+        mdbx_tassert(txn, mp->mp_pgno < txn->mt_next_pgno);
+        mdbx_ensure(env, mp->mp_pgno >= NUM_METAS);
+
+        unsigned s, d;
+        for (s = d = 0; ++s <= dl[0].mid;)
+          if (dl[s].mid != mp->mp_pgno)
+            dl[++d] = dl[s];
+
+        dl[0].mid -= 1;
+        mdbx_tassert(txn, dl[0].mid == d);
+
+        MDBX_page *dp = mp;
+        mp = NEXT_LOOSE_PAGE(mp);
+        if ((env->me_flags & MDBX_WRITEMAP) == 0)
+          mdbx_dpage_free(env, dp);
       }
 
       txn->mt_loose_pages = NULL;
@@ -3295,6 +3337,7 @@ again_on_freelist_change:
       mc.mc_flags |= C_RECLAIMING;
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
       mc.mc_flags ^= C_RECLAIMING;
+      mdbx_tassert(txn, mdbx_pnl_check(rpl_end));
       mdbx_tassert(
           txn, cleanup_reclaimed_pos ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
