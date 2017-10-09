@@ -4747,9 +4747,11 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */) {
     /* use present params from db */
     err = mdbx_env_set_geometry(
-        env, meta.mm_geo.lower * meta.mm_psize, meta.mm_geo.now * meta.mm_psize,
-        meta.mm_geo.upper * meta.mm_psize, meta.mm_geo.grow * meta.mm_psize,
-        meta.mm_geo.shrink * meta.mm_psize, meta.mm_psize);
+        env, meta.mm_geo.lower * (uint64_t)meta.mm_psize,
+        meta.mm_geo.now * (uint64_t)meta.mm_psize,
+        meta.mm_geo.upper * (uint64_t)meta.mm_psize,
+        meta.mm_geo.grow * (uint64_t)meta.mm_psize,
+        meta.mm_geo.shrink * (uint64_t)meta.mm_psize, meta.mm_psize);
     if (unlikely(err != MDBX_SUCCESS)) {
       mdbx_error("could not use present dbsize-params from db");
       return MDBX_INCOMPATIBLE;
