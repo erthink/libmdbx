@@ -1446,8 +1446,6 @@ static __inline bool mdbx_meta_ot(const enum meta_choise_mode mode,
   mdbx_jitter4testing(true);
   txnid_t txnid_a = mdbx_meta_txnid_fluid(env, a);
   txnid_t txnid_b = mdbx_meta_txnid_fluid(env, b);
-  if (txnid_a == txnid_b)
-    return META_IS_STEADY(b) || (META_IS_WEAK(a) && !META_IS_WEAK(a));
 
   mdbx_jitter4testing(true);
   switch (mode) {
@@ -1464,6 +1462,8 @@ static __inline bool mdbx_meta_ot(const enum meta_choise_mode mode,
   /* fall through */
   case prefer_last:
     mdbx_jitter4testing(true);
+    if (txnid_a == txnid_b)
+      return META_IS_STEADY(b) || (META_IS_WEAK(a) && !META_IS_WEAK(b));
     return txnid_a < txnid_b;
   }
 }
@@ -3810,7 +3810,8 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
     }
 
     if (page.mp_meta.mm_magic_and_version != MDBX_DATA_MAGIC) {
-      mdbx_error("meta[%u] has invalid magic/version", meta_number);
+      mdbx_error("meta[%u] has invalid magic/version MDBX_DEVEL=%d",
+                 meta_number, MDBX_DEVEL);
       return ((page.mp_meta.mm_magic_and_version >> 8) != MDBX_MAGIC)
                  ? MDBX_INVALID
                  : MDBX_VERSION_MISMATCH;
@@ -3964,7 +3965,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       continue;
     }
 
-    if (mdbx_meta_ot(prefer_steady, env, meta, &page.mp_meta)) {
+    if (mdbx_meta_ot(prefer_noweak, env, meta, &page.mp_meta)) {
       *meta = page.mp_meta;
       if (META_IS_WEAK(meta))
         loop_limit += 1; /* LY: should re-read to hush race with update */
