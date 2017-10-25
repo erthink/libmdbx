@@ -327,6 +327,10 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 /* Store multiple data items in one call. Only for MDBX_DUPFIXED. */
 #define MDBX_MULTIPLE 0x80000u
 
+/* Transaction Flags*/
+/* Do not block when starting a write transaction */
+#define MDBX_TRYTXN 0x10000000u
+
 /* Copy Flags */
 /* Compacting copy: Omit free space from copy, and renumber all
  * pages sequentially. */
@@ -420,8 +424,10 @@ typedef enum MDBX_cursor_op {
 #define MDBX_BAD_DBI (-30780)
 /* Unexpected problem - txn should abort */
 #define MDBX_PROBLEM (-30779)
+/* Unexpected problem - txn should abort */
+#define MDBX_BUSY (-30778)
 /* The last defined error code */
-#define MDBX_LAST_ERRCODE MDBX_PROBLEM
+#define MDBX_LAST_ERRCODE MDBX_BUSY
 
 /* The mdbx_put() or mdbx_replace() was called for key,
     that has more that one associated value. */
@@ -953,6 +959,9 @@ LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
  *  - MDBX_RDONLY
  *      This transaction will not perform any write operations.
  *
+ *  - MDBX_TRYTXN
+ *      Do not block when starting a write transaction
+ *
  * [out] txn Address where the new MDBX_txn handle will be stored
  *
  * Returns A non-zero error value on failure and 0 on success, some
@@ -964,7 +973,8 @@ LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
  *                         as well. See mdbx_env_set_mapsize().
  *  - MDBX_READERS_FULL  - a read-only transaction was requested and the reader
  *                         lock table is full. See mdbx_env_set_maxreaders().
- *  - MDBX_ENOMEM        - out of memory. */
+ *  - MDBX_ENOMEM        - out of memory.
+ *  - MDBX_BUSY          - a write transaction is already started. */
 LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
                                MDBX_txn **txn);
 

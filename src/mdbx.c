@@ -708,6 +708,7 @@ static const char *__mdbx_strerr(int errnum) {
       "DUPFIXED size",
       "MDBX_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
       "MDBX_PROBLEM: Unexpected problem - txn should abort",
+      "MDBX_BUSY: Another write transation is started",
   };
 
   if (errnum >= MDBX_KEYEXIST && errnum <= MDBX_LAST_ERRCODE) {
@@ -2562,7 +2563,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   } else {
     /* Not yet touching txn == env->me_txn0, it may be active */
     mdbx_jitter4testing(false);
-    rc = mdbx_txn_lock(env);
+    rc = F_ISSET(flags, MDBX_TRYTXN) ? mdbx_txn_trylock(env) : mdbx_txn_lock(env);
     if (unlikely(rc))
       return rc;
 
@@ -2664,6 +2665,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
                    MDBX_txn **ret) {
   MDBX_txn *txn;
   MDBX_ntxn *ntxn;
+  //unsigned pflags;
   int rc, size, tsize;
 
   if (unlikely(!env || !ret))
@@ -2718,7 +2720,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   txn->mt_dbxs = env->me_dbxs; /* static */
   txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
   txn->mt_dbflags = (uint8_t *)txn + size - env->me_maxdbs;
-  txn->mt_flags = flags;
+  txn->mt_flags = flags & MDBX_TXN_BEGIN_FLAGS_PERSISTENT;
   txn->mt_env = env;
 
   if (parent) {

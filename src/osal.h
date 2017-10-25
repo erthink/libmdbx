@@ -506,6 +506,7 @@ int mdbx_rdt_lock(MDBX_env *env);
 void mdbx_rdt_unlock(MDBX_env *env);
 
 int mdbx_txn_lock(MDBX_env *env);
+int mdbx_txn_trylock(MDBX_env *env);
 void mdbx_txn_unlock(MDBX_env *env);
 
 int mdbx_rpid_set(MDBX_env *env);
