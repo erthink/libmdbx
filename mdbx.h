@@ -327,7 +327,7 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 /* Store multiple data items in one call. Only for MDBX_DUPFIXED. */
 #define MDBX_MULTIPLE 0x80000u
 
-/* Transaction Flags*/
+/* Transaction Flags */
 /* Do not block when starting a write transaction */
 #define MDBX_TRYTXN 0x10000000u
 

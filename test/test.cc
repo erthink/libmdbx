@@ -178,17 +178,18 @@ void testcase::db_close() {
 }
 
 void testcase::txn_begin(unsigned flags) {
-  log_trace(">> txn_begin(%s)", flags & MDBX_RDONLY ? "read-only" : "read-write");
+  log_trace(">> txn_begin(%s)",
+            flags & MDBX_RDONLY ? "read-only" : "read-write");
   assert(!txn_guard);
 
   MDBX_txn *txn = nullptr;
-  int rc =
-      mdbx_txn_begin(db_guard.get(), nullptr, flags, &txn);
+  int rc = mdbx_txn_begin(db_guard.get(), nullptr, flags, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin()", rc);
   txn_guard.reset(txn);
 
-  log_trace("<< txn_begin(%s)", flags & MDBX_RDONLY ? "read-only" : "read-write");
+  log_trace("<< txn_begin(%s)",
+            flags & MDBX_RDONLY ? "read-only" : "read-write");
 }
 
 void testcase::txn_end(bool abort) {

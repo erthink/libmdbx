@@ -20,7 +20,14 @@
 
 #define ACTOR_ID_MAX INT16_MAX
 
-enum actor_testcase { ac_none, ac_hill, ac_deadread, ac_deadwrite, ac_jitter, ac_try };
+enum actor_testcase {
+  ac_none,
+  ac_hill,
+  ac_deadread,
+  ac_deadwrite,
+  ac_jitter,
+  ac_try
+};
 
 enum actor_status {
   as_unknown,
