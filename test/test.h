@@ -190,3 +190,14 @@ public:
   bool run();
   bool teardown();
 };
+
+class testcase_try : public testcase {
+  typedef testcase inherited;
+
+public:
+  testcase_try(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool setup();
+  bool run();
+  bool teardown();
+};

@@ -29,6 +29,8 @@ const char *testcase2str(const actor_testcase testcase) {
     return "deadwrite";
   case ac_jitter:
     return "jitter";
+  case ac_try:
+    return "try";
   }
 }
 
@@ -442,6 +444,9 @@ bool test_execute(const actor_config &config) {
       break;
     case ac_jitter:
       test.reset(new testcase_jitter(config, pid));
+      break;
+    case ac_try:
+      test.reset(new testcase_try(config, pid));
       break;
     default:
       test.reset(new testcase(config, pid));
