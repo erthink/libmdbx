@@ -553,7 +553,8 @@ struct MDBX_txn {
 
 /* Transaction Flags */
 /* mdbx_txn_begin() flags */
-#define MDBX_TXN_BEGIN_FLAGS (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_RDONLY)
+#define MDBX_TXN_BEGIN_FLAGS_PERSISTENT (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_RDONLY)
+#define MDBX_TXN_BEGIN_FLAGS (MDBX_TXN_BEGIN_FLAGS_PERSISTENT | MDBX_TRYTXN)
 #define MDBX_TXN_NOMETASYNC                                                    \
   MDBX_NOMETASYNC                   /* don't sync meta for this txn on commit */
 #define MDBX_TXN_NOSYNC MDBX_NOSYNC /* don't sync this txn on commit */

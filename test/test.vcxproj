@@ -182,6 +182,7 @@
     <ClCompile Include="config.cc" />
     <ClCompile Include="dead.cc" />
     <ClCompile Include="hill.cc" />
+    <ClCompile Include="try.cc" />
     <ClCompile Include="jitter.cc" />
     <ClCompile Include="keygen.cc" />
     <ClCompile Include="log.cc" />

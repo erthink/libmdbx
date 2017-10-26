@@ -25,7 +25,7 @@ bool testcase_deadread::setup() {
 
 bool testcase_deadread::run() {
   db_open();
-  txn_begin(true);
+  txn_begin(MDBX_RDONLY);
   return true;
 }
 
@@ -50,7 +50,7 @@ bool testcase_deadwrite::setup() {
 
 bool testcase_deadwrite::run() {
   db_open();
-  txn_begin(false);
+  txn_begin(0);
   return true;
 }
 

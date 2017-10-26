@@ -104,9 +104,9 @@ protected:
   void db_prepare();
   void db_open();
   void db_close();
-  void txn_begin(bool readonly);
+  void txn_begin(unsigned flags);
   void txn_end(bool abort);
-  void txn_restart(bool abort, bool readonly);
+  void txn_restart(bool abort, unsigned flags);
   void fetch_canary();
   void update_canary(uint64_t increment);
   void kick_progress(bool active) const;
@@ -130,8 +130,8 @@ protected:
     generate_pair(serial, key, data, data_age);
   }
 
-  bool mode_readonly() const {
-    return (config.params.mode_flags & MDBX_RDONLY) ? true : false;
+  unsigned mode_readonly() const {
+    return (config.params.mode_flags & MDBX_RDONLY) ? MDBX_RDONLY : 0;
   }
 
 public:
@@ -185,6 +185,17 @@ class testcase_jitter : public testcase {
 
 public:
   testcase_jitter(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool setup();
+  bool run();
+  bool teardown();
+};
+
+class testcase_try : public testcase {
+  typedef testcase inherited;
+
+public:
+  testcase_try(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
   bool setup();
   bool run();

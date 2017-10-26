@@ -67,6 +67,7 @@ void testcase_setup(const char *casename, actor_params &params,
     configure_actor(last_space_id, ac_hill, nullptr, params);
     configure_actor(last_space_id, ac_jitter, nullptr, params);
     configure_actor(last_space_id, ac_hill, nullptr, params);
+    configure_actor(last_space_id, ac_try, nullptr, params);
     log_notice("<<< testcase_setup(%s): done", casename);
   } else {
     failure("unknown testcase `%s`", casename);

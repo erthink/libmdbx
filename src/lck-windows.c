@@ -132,6 +132,16 @@ int mdbx_txn_lock(MDBX_env *env) {
   return GetLastError();
 }
 
+int mdbx_txn_trylock(MDBX_env *env) {
+  if (flock(env->me_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY))
+    return MDBX_SUCCESS;
+  int rc = GetLastError();
+  if (rc == ERROR_LOCK_VIOLATION) {
+    rc = MDBX_BUSY;
+  }
+  return rc;
+}
+
 void mdbx_txn_unlock(MDBX_env *env) {
   if (!funlock(env->me_fd, LCK_BODY))
     mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());

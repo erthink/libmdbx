@@ -29,6 +29,8 @@ const char *testcase2str(const actor_testcase testcase) {
     return "deadwrite";
   case ac_jitter:
     return "jitter";
+  case ac_try:
+    return "try";
   }
 }
 
@@ -175,18 +177,18 @@ void testcase::db_close() {
   log_trace("<< db_close");
 }
 
-void testcase::txn_begin(bool readonly) {
-  log_trace(">> txn_begin(%s)", readonly ? "read-only" : "read-write");
+void testcase::txn_begin(unsigned flags) {
+  log_trace(">> txn_begin(%s)", flags & MDBX_RDONLY ? "read-only" : "read-write");
   assert(!txn_guard);
 
   MDBX_txn *txn = nullptr;
   int rc =
-      mdbx_txn_begin(db_guard.get(), nullptr, readonly ? MDBX_RDONLY : 0, &txn);
+      mdbx_txn_begin(db_guard.get(), nullptr, flags, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin()", rc);
   txn_guard.reset(txn);
 
-  log_trace("<< txn_begin(%s)", readonly ? "read-only" : "read-write");
+  log_trace("<< txn_begin(%s)", flags & MDBX_RDONLY ? "read-only" : "read-write");
 }
 
 void testcase::txn_end(bool abort) {
@@ -207,10 +209,10 @@ void testcase::txn_end(bool abort) {
   log_trace("<< txn_end(%s)", abort ? "abort" : "commit");
 }
 
-void testcase::txn_restart(bool abort, bool readonly) {
+void testcase::txn_restart(bool abort, unsigned flags) {
   if (txn_guard)
     txn_end(abort);
-  txn_begin(readonly);
+  txn_begin(flags);
 }
 
 bool testcase::wait4start() {
@@ -442,6 +444,9 @@ bool test_execute(const actor_config &config) {
       break;
     case ac_jitter:
       test.reset(new testcase_jitter(config, pid));
+      break;
+    case ac_try:
+      test.reset(new testcase_try(config, pid));
       break;
     default:
       test.reset(new testcase(config, pid));
