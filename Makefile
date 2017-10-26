@@ -34,7 +34,10 @@ TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.log
 LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
 
 # LY: just for benchmarking
-IOARENA ?= ../ioarena.git/@BUILD/src/ioarena
+IOARENA ?= $(shell \
+  (test -x ../ioarena/@RelWithDebInfo/src/ioarena && echo ../ioarena/@RelWithDebInfo/src/ioarena) || \
+  (test -x ../../@RelWithDebInfo/src/ioarena && echo ../../@RelWithDebInfo/src/ioarena) || \
+  (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena)
 
 ########################################################################
 
@@ -116,13 +119,21 @@ re-bench: clean-bench bench
 NN := 25000000
 define bench-rule
 bench-$(1).txt: $(3) $(IOARENA) Makefile
-	$(IOARENA) -D $(1) -B crud -m nosync -n $(2) | tee $$@ | grep throughput \
-	&& $(IOARENA) -D $(1) -B get,iterate -m sync -r 4 -n $(2) | tee -a $$@ | grep throughput \
+	LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
+		$(IOARENA) -D $(1) -B crud -m nosync -n $(2) \
+		| tee $$@ | grep throughput && \
+	LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
+		$(IOARENA) -D $(1) -B get,iterate -m sync -r 4 -n $(2) \
+		| tee -a $$@ | grep throughput \
 	|| rm -f $$@
 
 endef
 
 $(eval $(call bench-rule,mdbx,$(NN),libmdbx.so))
+
+$(eval $(call bench-rule,lmdb,$(NN)))
+
+$(eval $(call bench-rule,sqlite3,$(NN)))
 
 $(eval $(call bench-rule,dummy,$(NN)))
 
