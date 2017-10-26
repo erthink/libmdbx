@@ -44,6 +44,7 @@ test/osal-windows.cc
 test/osal.h
 test/test.cc
 test/test.h
+test/try.cc
 test/utils.cc
 test/utils.h
 tutorial/README.md
