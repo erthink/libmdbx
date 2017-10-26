@@ -1556,26 +1556,51 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   const MDBX_env *env = txn->mt_env;
   MDBX_lockinfo *const lck = env->me_lck;
 
-  txnid_t oldest = mdbx_reclaiming_detent(env);
-  mdbx_tassert(txn, oldest <= txn->mt_txnid - 1);
+  const txnid_t edge = mdbx_reclaiming_detent(env);
+  mdbx_tassert(txn, edge <= txn->mt_txnid - 1);
   const txnid_t last_oldest = lck->mti_oldest;
-  mdbx_tassert(txn, oldest >= last_oldest);
-  if (last_oldest == oldest ||
-      lck->mti_reader_finished_flag == MDBX_STRING_TETRAD("None"))
-    return last_oldest;
+  mdbx_tassert(txn, edge >= last_oldest);
+  if (last_oldest == edge)
+    return edge;
 
-  const unsigned snap_nreaders = lck->mti_numreaders;
-  lck->mti_reader_finished_flag = MDBX_STRING_TETRAD("None");
-  for (unsigned i = 0; i < snap_nreaders; ++i) {
-    if (lck->mti_readers[i].mr_pid) {
-      /* mdbx_jitter4testing(true); */
-      const txnid_t snap = lck->mti_readers[i].mr_txnid;
-      if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
-        oldest = snap;
-        if (oldest == last_oldest)
-          break;
+  const uint32_t nothing_changed = MDBX_STRING_TETRAD("None");
+  const uint32_t no_readers = MDBX_STRING_TETRAD("Void");
+  const uint32_t snap_readers_refresh_flag = lck->mti_readers_refresh_flag;
+  mdbx_jitter4testing(false);
+  if (snap_readers_refresh_flag == nothing_changed)
+    return last_oldest;
+  if (snap_readers_refresh_flag == no_readers) {
+    mdbx_notice("no-reareds, update oldest %" PRIaTXN " -> %" PRIaTXN,
+                last_oldest, edge);
+    mdbx_tassert(txn, edge >= lck->mti_oldest);
+    return lck->mti_oldest = edge;
+  }
+
+  unsigned pending = 0;
+  txnid_t oldest = edge;
+  while (true) {
+    lck->mti_readers_refresh_flag = nothing_changed;
+    mdbx_coherent_barrier();
+    const unsigned snap_nreaders = lck->mti_numreaders;
+    for (unsigned i = 0; i < snap_nreaders; ++i) {
+      if (lck->mti_readers[i].mr_pid) {
+        /* mdbx_jitter4testing(true); */
+        const txnid_t snap = lck->mti_readers[i].mr_txnid;
+        pending += (snap < ~(txnid_t)0);
+        if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
+          oldest = snap;
+          if (oldest == last_oldest)
+            return oldest;
+        }
       }
     }
+
+    if (unlikely(lck->mti_readers_refresh_flag != nothing_changed))
+      continue;
+    if (pending > 0 ||
+        mdbx_atomic_compare_and_swap32(&lck->mti_readers_refresh_flag,
+                                       nothing_changed, no_readers))
+      break;
   }
 
   if (oldest != last_oldest) {
@@ -2529,6 +2554,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         mdbx_assert(env, r->mr_tid == mdbx_thread_self());
         mdbx_assert(env, r->mr_txnid == snap);
         mdbx_coherent_barrier();
+        env->me_lck->mti_readers_refresh_flag = true;
       }
       mdbx_jitter4testing(true);
 
@@ -2544,12 +2570,10 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       mdbx_compiler_barrier();
       if (likely(meta == mdbx_meta_head(env) &&
                  snap == mdbx_meta_txnid_fluid(env, meta) &&
-                 snap >= env->me_oldest[0])) {
+                 snap >= *env->me_oldest)) {
         mdbx_jitter4testing(false);
         break;
       }
-      if (env->me_lck)
-        env->me_lck->mti_reader_finished_flag = true;
     }
 
     if (unlikely(txn->mt_txnid == 0)) {
@@ -2854,7 +2878,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)) {
     if (txn->mt_ro_reader) {
       txn->mt_ro_reader->mr_txnid = ~(txnid_t)0;
-      env->me_lck->mti_reader_finished_flag = true;
+      env->me_lck->mti_readers_refresh_flag = true;
       if (mode & MDBX_END_SLOT) {
         if ((env->me_flags & MDBX_ENV_TXKEY) == 0)
           txn->mt_ro_reader->mr_pid = 0;
@@ -10645,7 +10669,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
         mdbx_debug("clear stale reader pid %" PRIuPTR " txn %" PRIaTXN "",
                    (size_t)pid, lck->mti_readers[j].mr_txnid);
         lck->mti_readers[j].mr_pid = 0;
-        lck->mti_reader_finished_flag = true;
+        lck->mti_readers_refresh_flag = true;
         count++;
       }
     }
@@ -10754,7 +10778,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
 
     if (rc) {
       asleep->mr_txnid = ~(txnid_t)0;
-      env->me_lck->mti_reader_finished_flag = true;
+      env->me_lck->mti_readers_refresh_flag = true;
       if (rc > 1) {
         asleep->mr_tid = 0;
         asleep->mr_pid = 0;

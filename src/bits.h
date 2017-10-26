@@ -405,7 +405,7 @@ typedef struct MDBX_lockinfo {
   };
 
   union {
-    volatile uint32_t mti_reader_finished_flag;
+    volatile uint32_t mti_readers_refresh_flag;
     uint64_t align_reader_finished_flag;
   };
 
