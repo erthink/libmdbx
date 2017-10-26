@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -104,9 +104,9 @@ protected:
   void db_prepare();
   void db_open();
   void db_close();
-  void txn_begin(unsigned flags);
+  void txn_begin(bool readonly, unsigned flags = 0);
   void txn_end(bool abort);
-  void txn_restart(bool abort, unsigned flags);
+  void txn_restart(bool abort, bool readonly, unsigned flags = 0);
   void fetch_canary();
   void update_canary(uint64_t increment);
   void kick_progress(bool active) const;
@@ -130,8 +130,8 @@ protected:
     generate_pair(serial, key, data, data_age);
   }
 
-  unsigned mode_readonly() const {
-    return (config.params.mode_flags & MDBX_RDONLY) ? MDBX_RDONLY : 0;
+  bool mode_readonly() const {
+    return (config.params.mode_flags & MDBX_RDONLY) ? true : false;
   }
 
 public:

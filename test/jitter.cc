@@ -30,7 +30,7 @@ bool testcase_jitter::run() {
 
     if (flipcoin()) {
       jitter_delay();
-      txn_begin(MDBX_RDONLY);
+      txn_begin(true);
       fetch_canary();
       jitter_delay();
       txn_end(flipcoin());
@@ -51,7 +51,7 @@ bool testcase_jitter::run() {
 
     if (flipcoin()) {
       jitter_delay();
-      txn_begin(MDBX_RDONLY);
+      txn_begin(true);
       jitter_delay();
       txn_end(flipcoin());
     }

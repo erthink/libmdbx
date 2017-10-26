@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -28,7 +28,7 @@ bool testcase_hill::setup() {
 bool testcase_hill::run() {
   db_open();
 
-  txn_begin(0);
+  txn_begin(false);
   MDBX_dbi dbi = db_table_open(true);
   txn_end(false);
 
@@ -70,7 +70,7 @@ bool testcase_hill::run() {
   uint64_t serial_count = 0;
   unsigned txn_nops = 0;
   if (!txn_guard)
-    txn_begin(0);
+    txn_begin(false);
 
   while (should_continue()) {
     const keygen::serial_t a_serial = serial_count;
@@ -91,7 +91,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_put(insert-a.1)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -104,7 +104,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_put(insert-b)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -118,7 +118,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_put(update-a: 1->0)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -129,7 +129,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_del(b)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -164,7 +164,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_put(update-a: 0->1)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -177,7 +177,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_put(insert-b)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -189,7 +189,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_del(a)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -200,7 +200,7 @@ bool testcase_hill::run() {
       failure_perror("mdbx_del(b)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, 0);
+      txn_restart(false, false);
       txn_nops = 0;
     }
 
@@ -212,7 +212,7 @@ bool testcase_hill::run() {
 
   if (dbi) {
     if (config.params.drop_table && !mode_readonly()) {
-      txn_begin(0);
+      txn_begin(false);
       db_table_drop(dbi);
       txn_end(false);
     } else
