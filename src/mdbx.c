@@ -2633,6 +2633,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       if (rc != MDBX_SUCCESS)
         goto bailout;
     }
+    txn->mt_owner = mdbx_thread_self();
     return MDBX_SUCCESS;
   }
 bailout:
@@ -2650,14 +2651,15 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
-
   if (unlikely(!F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)))
     return MDBX_EINVAL;
 
+  if (unlikely(txn->mt_owner != 0))
+    return MDBX_THREAD_MISMATCH;
+
   rc = mdbx_txn_renew0(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
+    txn->mt_owner = mdbx_thread_self();
     mdbx_debug("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
                "/%" PRIaPGNO,
                txn->mt_txnid, (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w',
@@ -2780,7 +2782,6 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       free(txn);
   } else {
-    txn->mt_owner = mdbx_thread_self();
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
@@ -2940,7 +2941,12 @@ int mdbx_txn_reset(MDBX_txn *txn) {
     return MDBX_EINVAL;
 
   /* LY: don't close DBI-handles in MDBX mode */
-  return mdbx_txn_end(txn, MDBX_END_RESET | MDBX_END_UPDATE);
+  int rc = mdbx_txn_end(txn, MDBX_END_RESET | MDBX_END_UPDATE);
+  if (rc == MDBX_SUCCESS) {
+    assert(txn->mt_signature == MDBX_MT_SIGNATURE);
+    assert(txn->mt_owner == 0);
+  }
+  return rc;
 }
 
 int mdbx_txn_abort(MDBX_txn *txn) {
@@ -2950,7 +2956,8 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+  if (unlikely(txn->mt_owner !=
+               ((txn->mt_flags & MDBX_TXN_FINISHED) ? 0 : mdbx_thread_self())))
     return MDBX_THREAD_MISMATCH;
 
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY))
