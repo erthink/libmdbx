@@ -125,7 +125,7 @@ bench-$(1).txt: $(3) $(IOARENA) Makefile
 	LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
 		$(IOARENA) -D $(1) -B get,iterate -m sync -r 4 -n $(2) \
 		| tee -a $$@ | grep throughput \
-	|| rm -f $$@
+	|| mv -f $$@ $$@.error
 
 endef
 
