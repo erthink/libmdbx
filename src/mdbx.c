@@ -1564,43 +1564,25 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
     return edge;
 
   const uint32_t nothing_changed = MDBX_STRING_TETRAD("None");
-  const uint32_t no_readers = MDBX_STRING_TETRAD("Void");
   const uint32_t snap_readers_refresh_flag = lck->mti_readers_refresh_flag;
   mdbx_jitter4testing(false);
   if (snap_readers_refresh_flag == nothing_changed)
     return last_oldest;
-  if (snap_readers_refresh_flag == no_readers) {
-    mdbx_notice("no-reareds, update oldest %" PRIaTXN " -> %" PRIaTXN,
-                last_oldest, edge);
-    mdbx_tassert(txn, edge >= lck->mti_oldest);
-    return lck->mti_oldest = edge;
-  }
 
-  unsigned pending = 0;
   txnid_t oldest = edge;
-  while (true) {
-    lck->mti_readers_refresh_flag = nothing_changed;
-    mdbx_coherent_barrier();
-    const unsigned snap_nreaders = lck->mti_numreaders;
-    for (unsigned i = 0; i < snap_nreaders; ++i) {
-      if (lck->mti_readers[i].mr_pid) {
-        /* mdbx_jitter4testing(true); */
-        const txnid_t snap = lck->mti_readers[i].mr_txnid;
-        pending += (snap < ~(txnid_t)0);
-        if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
-          oldest = snap;
-          if (oldest == last_oldest)
-            return oldest;
-        }
+  lck->mti_readers_refresh_flag = nothing_changed;
+  mdbx_coherent_barrier();
+  const unsigned snap_nreaders = lck->mti_numreaders;
+  for (unsigned i = 0; i < snap_nreaders; ++i) {
+    if (lck->mti_readers[i].mr_pid) {
+      /* mdbx_jitter4testing(true); */
+      const txnid_t snap = lck->mti_readers[i].mr_txnid;
+      if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
+        oldest = snap;
+        if (oldest == last_oldest)
+          return oldest;
       }
     }
-
-    if (unlikely(lck->mti_readers_refresh_flag != nothing_changed))
-      continue;
-    if (pending > 0 ||
-        mdbx_atomic_compare_and_swap32(&lck->mti_readers_refresh_flag,
-                                       nothing_changed, no_readers))
-      break;
   }
 
   if (oldest != last_oldest) {
@@ -3762,6 +3744,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   }
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
+  env->me_lck->mti_readers_refresh_flag = false;
   end_mode = MDBX_END_COMMITTED | MDBX_END_UPDATE | MDBX_END_EOTDONE;
 
 done:
