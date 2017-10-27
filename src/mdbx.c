@@ -2313,7 +2313,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
       (!env->me_txn0 || env->me_txn0->mt_owner != mdbx_thread_self());
 
   if (outside_txn) {
-    int rc = mdbx_txn_lock(env);
+    int rc = mdbx_txn_lock(env, false);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -2342,7 +2342,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
-      rc = mdbx_txn_lock(env);
+      rc = mdbx_txn_lock(env, false);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
@@ -2587,7 +2587,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   } else {
     /* Not yet touching txn == env->me_txn0, it may be active */
     mdbx_jitter4testing(false);
-    rc = F_ISSET(flags, MDBX_TRYTXN) ? mdbx_txn_trylock(env) : mdbx_txn_lock(env);
+    rc = mdbx_txn_lock(env, F_ISSET(flags, MDBX_TRYTXN));
     if (unlikely(rc))
       return rc;
 
@@ -2689,7 +2689,6 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
                    MDBX_txn **ret) {
   MDBX_txn *txn;
   MDBX_ntxn *ntxn;
-  //unsigned pflags;
   int rc, size, tsize;
 
   if (unlikely(!env || !ret))
@@ -2744,7 +2743,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   txn->mt_dbxs = env->me_dbxs; /* static */
   txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
   txn->mt_dbflags = (uint8_t *)txn + size - env->me_maxdbs;
-  txn->mt_flags = flags & MDBX_TXN_BEGIN_FLAGS_PERSISTENT;
+  txn->mt_flags = flags;
   txn->mt_env = env;
 
   if (parent) {
@@ -4468,7 +4467,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       return MDBX_EACCESS;
 
     if (outside_txn) {
-      int err = mdbx_txn_lock(env);
+      int err = mdbx_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }
@@ -9796,7 +9795,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, mdbx_filehandle_t fd) {
     goto bailout; /* FIXME: or just return? */
 
   /* Temporarily block writers until we snapshot the meta pages */
-  rc = mdbx_txn_lock(env);
+  rc = mdbx_txn_lock(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
@@ -9881,7 +9880,7 @@ int __cold mdbx_env_set_flags(MDBX_env *env, unsigned flags, int onoff) {
   if (unlikely(flags & ~CHANGEABLE))
     return MDBX_EINVAL;
 
-  int rc = mdbx_txn_lock(env);
+  int rc = mdbx_txn_lock(env, false);
   if (unlikely(rc))
     return rc;
 

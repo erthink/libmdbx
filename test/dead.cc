@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -25,7 +25,7 @@ bool testcase_deadread::setup() {
 
 bool testcase_deadread::run() {
   db_open();
-  txn_begin(MDBX_RDONLY);
+  txn_begin(true);
   return true;
 }
 
@@ -50,7 +50,7 @@ bool testcase_deadwrite::setup() {
 
 bool testcase_deadwrite::run() {
   db_open();
-  txn_begin(0);
+  txn_begin(false);
   return true;
 }
 

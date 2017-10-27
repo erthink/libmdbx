@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -186,9 +186,9 @@ static int mdbx_robust_lock(MDBX_env *env, pthread_mutex_t *mutex) {
 
 static int mdbx_robust_trylock(MDBX_env *env, pthread_mutex_t *mutex) {
   int rc = pthread_mutex_trylock(mutex);
-  if (unlikely(rc != 0))
+  if (unlikely(rc != 0 && rc != EBUSY))
     rc = mdbx_mutex_failed(env, mutex, rc);
-  return rc;
+  return (rc != EBUSY) ? rc : MDBX_BUSY;
 }
 
 static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
@@ -213,16 +213,10 @@ void mdbx_rdt_unlock(MDBX_env *env) {
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
 
-int mdbx_txn_lock(MDBX_env *env) {
+int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
   mdbx_trace(">>");
-  int rc = mdbx_robust_lock(env, &env->me_lck->mti_wmutex);
-  mdbx_trace("<< rc %d", rc);
-  return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
-}
-
-int mdbx_txn_trylock(MDBX_env *env) {
-  mdbx_trace(">>");
-  int rc = mdbx_robust_trylock(env, &env->me_lck->mti_wmutex);
+  int rc = dontwait ? mdbx_robust_trylock(env, &env->me_lck->mti_wmutex)
+                    : mdbx_robust_lock(env, &env->me_lck->mti_wmutex);
   mdbx_trace("<< rc %d", rc);
   return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
 }
@@ -327,9 +321,7 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
 #endif /* MDBX_USE_ROBUST */
 
   mdbx_error("mutex (un)lock failed, %s", mdbx_strerror(rc));
-  if (rc == EBUSY) {
-    rc = MDBX_BUSY;
-  } else if (rc != EDEADLK && rc != EBUSY) {
+  if (rc != EDEADLK) {
     env->me_flags |= MDBX_FATAL_ERROR;
     rc = MDBX_PANIC;
   }
