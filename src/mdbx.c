@@ -1452,15 +1452,19 @@ static __inline bool mdbx_meta_ot(const enum meta_choise_mode mode,
   switch (mode) {
   default:
     assert(false);
-  /* fall through */
+    __unreachable();
+    /* fall through */
+    __fallthrough;
   case prefer_steady:
     if (META_IS_STEADY(a) != META_IS_STEADY(b))
       return META_IS_STEADY(b);
-  /* fall through */
+    /* fall through */
+    __fallthrough;
   case prefer_noweak:
     if (META_IS_WEAK(a) != META_IS_WEAK(b))
       return !META_IS_WEAK(b);
-  /* fall through */
+    /* fall through */
+    __fallthrough;
   case prefer_last:
     mdbx_jitter4testing(true);
     if (txnid_a == txnid_b)
@@ -10907,6 +10911,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     break;
   case P_META:
   case P_OVERFLOW:
+    __fallthrough;
   default:
     return MDBX_CORRUPTED;
   }
