@@ -718,6 +718,7 @@ static int check_meta_head(bool steady) {
     assert(false);
     error(" - unexpected internal error (%s)\n",
           steady ? "meta_steady_head" : "meta_weak_head");
+    __fallthrough;
   case 0:
     if (envinfo.mi_meta0_txnid != envinfo.mi_recent_txnid) {
       print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64

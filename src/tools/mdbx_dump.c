@@ -195,6 +195,7 @@ int main(int argc, char *argv[]) {
     case 'l':
       list = 1;
       /*FALLTHROUGH*/;
+      __fallthrough;
     case 'a':
       if (subname)
         usage(prog);

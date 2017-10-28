@@ -139,6 +139,14 @@
 #   endif
 #endif /* __deprecated */
 
+#ifndef __fallthrough
+#   if __GNUC_PREREQ(7, 0) || __has_attribute(fallthrough)
+#       define __fallthrough __attribute__((fallthrough))
+#   else
+#       define __fallthrough do {} while(0)
+#   endif
+#endif /* __fallthrough */
+
 #ifndef __packed
 #   if defined(__GNUC__) || __has_attribute(packed)
 #       define __packed __attribute__((packed))

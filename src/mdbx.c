@@ -7067,7 +7067,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             offset *= 4; /* space for 4 more */
             break;
           }
-        /* FALLTHRU: Big enough MDBX_DUPFIXED sub-page */
+          /* FALLTHRU: Big enough MDBX_DUPFIXaED sub-page */
+          __fallthrough;
         case MDBX_CURRENT | MDBX_NODUPDATA:
         case MDBX_CURRENT:
           fp->mp_flags |= P_DIRTY;

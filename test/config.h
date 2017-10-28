@@ -271,6 +271,7 @@ struct actor_config : public config::actor_config_pod {
     case ac_hill:
       if (!params.test_nops || params.test_nops >= nops)
         return true;
+      __fallthrough;
     default:
       return false;
     }
