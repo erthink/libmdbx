@@ -51,9 +51,6 @@
 #endif
 
 #if __GNUC_PREREQ(4, 4) || defined(__clang__)
-#if __GNUC_PREREQ(4, 5) || defined(__clang__)
-#define unreachable() __builtin_unreachable()
-#endif
 #define bswap64(v) __builtin_bswap64(v)
 #define bswap32(v) __builtin_bswap32(v)
 #if __GNUC_PREREQ(4, 8) || __has_builtin(__builtin_bswap16)
@@ -67,7 +64,6 @@
     "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
 #endif
 
-#define unreachable() __assume(0)
 #define bswap64(v) _byteswap_uint64(v)
 #define bswap32(v) _byteswap_ulong(v)
 #define bswap16(v) _byteswap_ushort(v)
@@ -89,12 +85,6 @@
 #endif
 
 #endif /* compiler */
-
-#ifndef unreachable
-#define unreachable()                                                          \
-  do {                                                                         \
-  } while (1)
-#endif
 
 #ifndef bswap64
 #ifdef __bswap_64

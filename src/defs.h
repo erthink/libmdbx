@@ -139,13 +139,50 @@
 #   endif
 #endif /* __deprecated */
 
+#if !defined(__noop) && !defined(_MSC_VER)
+#	ifdef __cplusplus
+		static inline void __noop_consume_args() {}
+		template <typename First, typename... Rest>
+		static inline void
+		__noop_consume_args(const First &first, const Rest &... rest) {
+			(void) first; __noop_consume_args(rest...);
+		}
+#		define __noop(...) __noop_consume_args(__VA_ARGS__)
+#	elif defined(__GNUC__) && (!defined(__STRICT_ANSI__) || !__STRICT_ANSI__)
+		static __inline void __noop_consume_args(void* anchor, ...) {
+			(void) anchor;
+		}
+#		define __noop(...) __noop_consume_args(0, ##__VA_ARGS__)
+#	else
+#		define __noop(...) do {} while(0)
+#	endif
+#endif /* __noop */
+
 #ifndef __fallthrough
-#   if __GNUC_PREREQ(7, 0) || __has_attribute(fallthrough)
-#       define __fallthrough __attribute__((fallthrough))
-#   else
-#       define __fallthrough do {} while(0)
-#   endif
+#	if __GNUC_PREREQ(7, 0) || __has_attribute(fallthrough)
+#		define __fallthrough __attribute__((fallthrough))
+#	else
+#		define __fallthrough __noop()
+#	endif
 #endif /* __fallthrough */
+
+#ifndef __unreachable
+#	if __GNUC_PREREQ(4,5)
+#		define __unreachable() __builtin_unreachable()
+#	elif defined(_MSC_VER)
+#		define __unreachable() __assume(0)
+#	else
+#		define __unreachable() __noop()
+#	endif
+#endif /* __unreachable */
+
+#ifndef __prefetch
+#	if defined(__GNUC__) || defined(__clang__)
+#		define __prefetch(ptr) __builtin_prefetch(ptr)
+#	else
+#		define __prefetch(ptr) __noop(ptr)
+#	endif
+#endif /* __prefetch */
 
 #ifndef __aligned
 #   if defined(__GNUC__) || __has_attribute(aligned)
@@ -282,13 +319,6 @@
 #       define unlikely(x) (x)
 #   endif
 #endif /* unlikely */
-
-#if !defined(__noop) && !defined(_MSC_VER)
-    static __inline int __do_noop(void* crutch, ...) {
-      (void) crutch; return 0;
-    }
-#   define __noop(...) __do_noop(0, __VA_ARGS__)
-#endif /* __noop */
 
 /* Wrapper around __func__, which is a C99 feature */
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
