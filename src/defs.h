@@ -147,14 +147,6 @@
 #   endif
 #endif /* __fallthrough */
 
-#ifndef __packed
-#   if defined(__GNUC__) || __has_attribute(packed)
-#       define __packed __attribute__((packed))
-#   else
-#       define __packed
-#   endif
-#endif /* __packed */
-
 #ifndef __aligned
 #   if defined(__GNUC__) || __has_attribute(aligned)
 #       define __aligned(N) __attribute__((aligned(N)))

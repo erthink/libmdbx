@@ -20,9 +20,11 @@
 
 namespace chrono {
 
+#pragma pack(push, 1)
+
 typedef union time {
   uint64_t fixedpoint;
-  struct __packed {
+  struct {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     uint32_t fractional;
     union {
@@ -41,6 +43,8 @@ typedef union time {
   void reset() { fixedpoint = 0; }
   uint32_t seconds() const { return utc; }
 } time;
+
+#pragma pack(pop)
 
 uint32_t ns2fractional(uint32_t);
 uint32_t fractional2ns(uint32_t);
