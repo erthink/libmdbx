@@ -35,8 +35,8 @@ LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
 
 # LY: just for benchmarking
 IOARENA ?= $(shell \
-  (test -x ../ioarena/@RelWithDebInfo/src/ioarena && echo ../ioarena/@RelWithDebInfo/src/ioarena) || \
-  (test -x ../../@RelWithDebInfo/src/ioarena && echo ../../@RelWithDebInfo/src/ioarena) || \
+  (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
+  (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
   (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena)
 
 ########################################################################
@@ -131,10 +131,16 @@ endef
 
 $(eval $(call bench-rule,mdbx,$(NN),libmdbx.so))
 
+$(eval $(call bench-rule,sophia,$(NN)))
+$(eval $(call bench-rule,leveldb,$(NN)))
+$(eval $(call bench-rule,rocksdb,$(NN)))
+$(eval $(call bench-rule,wiredtiger,$(NN)))
+$(eval $(call bench-rule,forestdb,$(NN)))
 $(eval $(call bench-rule,lmdb,$(NN)))
-
+$(eval $(call bench-rule,nessdb,$(NN)))
 $(eval $(call bench-rule,sqlite3,$(NN)))
-
+$(eval $(call bench-rule,ejdb,$(NN)))
+$(eval $(call bench-rule,vedisdb,$(NN)))
 $(eval $(call bench-rule,dummy,$(NN)))
 
 $(eval $(call bench-rule,debug,10))
