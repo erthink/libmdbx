@@ -48,6 +48,7 @@
 #pragma warning(disable : 4710) /* 'xyz': function not inlined */
 #pragma warning(disable : 4711) /* function 'xyz' selected for automatic inline expansion */
 #pragma warning(disable : 4201) /* nonstandard extension used : nameless struct / union */
+#pragma warning(disable : 4702) /* unreachable code */
 #pragma warning(disable : 4706) /* assignment within conditional expression */
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
