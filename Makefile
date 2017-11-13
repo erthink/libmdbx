@@ -38,6 +38,7 @@ IOARENA ?= $(shell \
   (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
   (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
   (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena)
+NN	?= 25000000
 
 ########################################################################
 
@@ -116,9 +117,8 @@ clean-bench:
 
 re-bench: clean-bench bench
 
-NN := 25000000
 define bench-rule
-bench-$(1).txt: $(3) $(IOARENA) Makefile
+bench-$(1)_$(2).txt: $(3) $(IOARENA) Makefile
 	LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
 		$(IOARENA) -D $(1) -B crud -m nosync -n $(2) \
 		| tee $$@ | grep throughput && \
@@ -145,7 +145,13 @@ $(eval $(call bench-rule,dummy,$(NN)))
 
 $(eval $(call bench-rule,debug,10))
 
-bench: bench-mdbx.txt
+bench: bench-mdbx_$(NN).txt
+
+.PHONY: bench-debug
+
+bench-debug: bench-debug_10.txt
+
+bench-quartet: bench-mdbx_$(NN).txt bench-lmdb_$(NN).txt bench-rocksdb_$(NN).txt bench-wiredtiger_$(NN).txt
 
 endif
 
