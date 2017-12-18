@@ -4651,6 +4651,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
+      env->me_sync_pending += env->me_psize;
       mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
       rc = mdbx_sync_locked(env, env->me_flags, &meta);
     }
