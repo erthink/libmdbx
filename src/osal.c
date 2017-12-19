@@ -946,7 +946,7 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t atleast, size_t limit) {
     /* growth */
     uint8_t *ptr = (uint8_t *)map->address + map->current;
     if (ptr !=
-        VirtualAlloc(ptr, atleast - map->current, MEM_COMMIT,
+        VirtualAlloc(ptr, atleast - map->current, MEM_COMMIT | MEM_RESERVE,
                      (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY))
       return GetLastError();
     map->current = atleast;
