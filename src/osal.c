@@ -151,7 +151,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
   va_start(ap, fmt);
 #ifdef _MSC_VER
   if (IsDebuggerPresent()) {
-    OutputDebugString("\r\n" FIXME "\r\n");
+    OutputDebugStringA("\r\n" FIXME "\r\n");
     FatalExit(ERROR_UNHANDLED_ERROR);
   }
 #elif _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L ||                    \
@@ -772,7 +772,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   }
 
   NTSTATUS rc;
-#ifdef _WIN64
+#if defined(_WIN64) && defined(WOF_CURRENT_VERSION)
   struct {
     WOF_EXTERNAL_INFO wof_info;
     union {
