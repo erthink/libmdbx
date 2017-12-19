@@ -5387,8 +5387,12 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (!dont_sync && !(env->me_flags & MDBX_RDONLY))
-    rc = mdbx_env_sync(env, true);
+  if ((env->me_flags & MDBX_RDONLY) == 0) {
+    if (env->me_txn0->mt_owner && env->me_txn0->mt_owner != mdbx_thread_self())
+      return MDBX_BUSY;
+    if (!dont_sync)
+      rc = mdbx_env_sync(env, true);
+  }
 
   VALGRIND_DESTROY_MEMPOOL(env);
   while ((dp = env->me_dpages) != NULL) {
@@ -5406,7 +5410,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   return rc;
 }
 
-void __cold mdbx_env_close(MDBX_env *env) { mdbx_env_close_ex(env, 0); }
+int mdbx_env_close(MDBX_env *env) { return mdbx_env_close_ex(env, 0); }
 
 /* Compare two items pointing at aligned unsigned int's. */
 static int __hot mdbx_cmp_int_ai(const MDBX_val *a, const MDBX_val *b) {

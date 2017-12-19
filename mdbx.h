@@ -754,7 +754,7 @@ LIBMDBX_API int mdbx_env_sync(MDBX_env *env, int force);
  *                 ignored on opening next time, and transactions since the
  *                 last non-weak checkpoint (meta-page update) will rolledback
  *                 for consistency guarantee. */
-LIBMDBX_API void mdbx_env_close(MDBX_env *env);
+LIBMDBX_API int mdbx_env_close(MDBX_env *env);
 
 /* Set environment flags.
  *
