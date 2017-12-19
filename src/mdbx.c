@@ -708,7 +708,7 @@ static const char *__mdbx_strerr(int errnum) {
       "DUPFIXED size",
       "MDBX_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
       "MDBX_PROBLEM: Unexpected problem - txn should abort",
-      "MDBX_BUSY: Another write transation is started",
+      "MDBX_BUSY: Another write transaction is started",
   };
 
   if (errnum >= MDBX_KEYEXIST && errnum <= MDBX_LAST_ERRCODE) {
