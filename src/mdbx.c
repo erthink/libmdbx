@@ -4444,8 +4444,8 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  const bool outside_txn =
-      (!env->me_txn0 || env->me_txn0->mt_owner != mdbx_thread_self());
+  const bool inside_txn =
+      (env->me_txn0 && env->me_txn0->mt_owner == mdbx_thread_self());
 
 #if MDBX_DEBUG
   if (growth_step < 0)
@@ -4460,7 +4460,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     if (!env->me_lck || (env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
 
-    if (outside_txn) {
+    if (!inside_txn) {
       int err = mdbx_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
@@ -4501,10 +4501,8 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
 #endif /* Windows */
   } else {
     /* env NOT yet mapped */
-    if (!outside_txn) {
-      rc = MDBX_PANIC;
-      goto bailout;
-    }
+    if (unlikely(inside_txn))
+      return MDBX_PANIC;
 
     if (pagesize < 0) {
       pagesize = env->me_os_psize;
@@ -4660,7 +4658,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   }
 
 bailout:
-  if (env->me_map && outside_txn)
+  if (env->me_map && !inside_txn)
     mdbx_txn_unlock(env);
   return rc;
 }
