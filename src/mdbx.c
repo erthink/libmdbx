@@ -5387,8 +5387,9 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if ((env->me_flags & MDBX_RDONLY) == 0) {
-    if (env->me_txn0->mt_owner && env->me_txn0->mt_owner != mdbx_thread_self())
+  if (env->me_lck && (env->me_flags & MDBX_RDONLY) == 0) {
+    if (env->me_txn0 && env->me_txn0->mt_owner &&
+        env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
     if (!dont_sync)
       rc = mdbx_env_sync(env, true);
