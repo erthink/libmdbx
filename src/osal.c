@@ -1,4 +1,4 @@
-/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
+﻿/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
 
 /*
  * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>
@@ -60,6 +60,24 @@ extern NTSTATUS NTAPI NtCreateSection(
     IN OPTIONAL POBJECT_ATTRIBUTES ObjectAttributes,
     IN OPTIONAL PLARGE_INTEGER MaximumSize, IN ULONG SectionPageProtection,
     IN ULONG AllocationAttributes, IN OPTIONAL HANDLE FileHandle);
+
+typedef struct _SECTION_BASIC_INFORMATION {
+  ULONG Unknown;
+  ULONG SectionAttributes;
+  LARGE_INTEGER SectionSize;
+} SECTION_BASIC_INFORMATION, *PSECTION_BASIC_INFORMATION;
+
+typedef enum _SECTION_INFORMATION_CLASS {
+  SectionBasicInformation,
+  SectionImageInformation,
+  SectionRelocationInformation, // name:wow64:whNtQuerySection_SectionRelocationInformation
+  MaxSectionInfoClass
+} SECTION_INFORMATION_CLASS;
+
+extern NTSTATUS NTAPI NtQuerySection(
+    IN HANDLE SectionHandle, IN SECTION_INFORMATION_CLASS InformationClass,
+    OUT PVOID InformationBuffer, IN ULONG InformationBufferSize,
+    OUT PULONG ResultLength OPTIONAL);
 
 extern NTSTATUS NTAPI NtExtendSection(IN HANDLE SectionHandle,
                                       IN PLARGE_INTEGER NewSectionSize);
@@ -839,8 +857,10 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
 
   rc = NtCreateSection(
       &map->section,
-      /* DesiredAccess */ SECTION_MAP_READ | SECTION_EXTEND_SIZE |
-          ((flags & MDBX_WRITEMAP) ? SECTION_MAP_WRITE : 0),
+      /* DesiredAccess */ (flags & MDBX_WRITEMAP)
+          ? SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE |
+                SECTION_MAP_WRITE
+          : SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE,
       /* ObjectAttributes */ NULL, /* MaximumSize */ NULL,
       /* SectionPageProtection */ (flags & MDBX_RDONLY) ? PAGE_READONLY
                                                         : PAGE_READWRITE,
