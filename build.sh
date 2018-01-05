@@ -9,8 +9,8 @@ if [[ -r /opt/rh/devtoolset-6/enable ]]; then
     source /opt/rh/devtoolset-6/enable
 fi
 #rm -f -r build || true
-mkdir -p build-${CONFIG}
-pushd  build-${CONFIG} &> /dev/null
+mkdir -p cmake-build-${CONFIG}
+pushd  cmake-build-${CONFIG} &> /dev/null
 if [[ ! -r Makefile ]]; then
     cmake .. -DCMAKE_BUILD_TYPE=${CONFIG}
 fi

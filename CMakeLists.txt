@@ -94,3 +94,4 @@ target_include_directories(${TARGET} PUBLIC
 add_subdirectory(tutorial)
 add_subdirectory(test)
 add_subdirectory(src/tools)
+add_subdirectory(pcrf_test)
