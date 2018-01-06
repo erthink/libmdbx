@@ -569,8 +569,12 @@ static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
   return __sync_fetch_and_add(p, v);
 #else
 #ifdef _MSC_VER
+#ifdef _WIN64
   return _InterlockedExchangeAdd64((volatile int64_t *)p, v);
+#else
+  return InterlockedExchangeAdd64((volatile int64_t *)p, v);
 #endif
+#endif /* _MSC_VER */
 #ifdef __APPLE__
   return OSAtomicAdd64(v, (volatile int64_t *)p);
 #endif
