@@ -65,6 +65,7 @@
 /* Systems includes */
 
 #if defined(_WIN32) || defined(_WIN64)
+#include <tlhelp32.h>
 #include <windows.h>
 #include <winnt.h>
 #define HAVE_SYS_STAT_H
@@ -455,6 +456,7 @@ typedef struct mdbx_mmap_param {
   size_t length; /* mapping length, but NOT a size of file or DB */
 #if defined(_WIN32) || defined(_WIN64)
   size_t current; /* mapped region size, e.g. file and DB */
+  uint64_t filesize;
 #endif
 #ifdef MDBX_OSAL_SECTION
   MDBX_OSAL_SECTION section;
@@ -464,6 +466,15 @@ typedef struct mdbx_mmap_param {
 int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit);
 int mdbx_munmap(mdbx_mmap_t *map);
 int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current, size_t wanna);
+#if defined(_WIN32) || defined(_WIN64)
+typedef struct {
+  unsigned limit, count;
+  HANDLE handles[31];
+} mdbx_handle_array_t;
+int mdbx_suspend_threads_before_remap(MDBX_env *env,
+                                      mdbx_handle_array_t **array);
+int mdbx_resume_threads_after_remap(mdbx_handle_array_t *array);
+#endif /* Windows */
 int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async);
 
 static __inline mdbx_pid_t mdbx_getpid(void) {

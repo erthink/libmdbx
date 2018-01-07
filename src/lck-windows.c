@@ -152,6 +152,7 @@ void mdbx_txn_unlock(MDBX_env *env) {
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
 int mdbx_rdt_lock(MDBX_env *env) {
+  AcquireSRWLockShared(&env->me_remap_guard);
   if (env->me_lfd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
@@ -167,6 +168,118 @@ void mdbx_rdt_unlock(MDBX_env *env) {
     if (!funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
   }
+  ReleaseSRWLockShared(&env->me_remap_guard);
+}
+
+static int suspend_and_append(mdbx_handle_array_t **array,
+                              const DWORD ThreadId) {
+  const unsigned limit = (*array)->limit;
+  if ((*array)->count == limit) {
+    void *ptr = realloc((limit > ARRAY_LENGTH((*array)->handles))
+                            ? *array
+                            : /* don't free initial array on the stack */ NULL,
+                        sizeof(mdbx_handle_array_t) +
+                            sizeof(HANDLE) *
+                                (limit * 2 - ARRAY_LENGTH((*array)->handles)));
+    if (!ptr)
+      return MDBX_ENOMEM;
+    (*array) = (mdbx_handle_array_t *)ptr;
+    (*array)->limit = limit * 2;
+  }
+
+  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, ThreadId);
+  if (hThread == NULL)
+    return GetLastError();
+  if (SuspendThread(hThread) == -1) {
+    CloseHandle(hThread);
+    return GetLastError();
+  }
+
+  (*array)->handles[(*array)->count++] = hThread;
+  return MDBX_SUCCESS;
+}
+
+int mdbx_suspend_threads_before_remap(MDBX_env *env,
+                                      mdbx_handle_array_t **array) {
+  const mdbx_pid_t CurrentTid = GetCurrentThreadId();
+  int rc;
+  if (env->me_lck) {
+    /* Scan LCK for threads of the current process */
+    const MDBX_reader *const begin = env->me_lck->mti_readers;
+    const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
+    const mdbx_tid_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
+    for (const MDBX_reader *reader = begin; reader < end; ++reader) {
+      if (reader->mr_pid != env->me_pid || reader->mr_tid == CurrentTid ||
+          reader->mr_tid == WriteTxnOwner)
+        continue;
+
+      if (env->me_flags & MDBX_NOTLS) {
+        /* Skip duplicates in no-tls mode */
+        const MDBX_reader *scan = reader;
+        while (--scan >= begin)
+          if (scan->mr_tid == reader->mr_tid)
+            break;
+        if (scan >= reader)
+          continue;
+      }
+
+      rc = suspend_and_append(array, reader->mr_tid);
+      if (rc != MDBX_SUCCESS) {
+      bailout_lck:
+        (void)mdbx_resume_threads_after_remap(*array);
+        return rc;
+      }
+    }
+    if (WriteTxnOwner && WriteTxnOwner != CurrentTid) {
+      rc = suspend_and_append(array, WriteTxnOwner);
+      if (rc != MDBX_SUCCESS)
+        goto bailout_lck;
+    }
+  } else {
+    /* Without LCK (i.e. read-only mode).
+     * Walk thougth a snapshot of all running threads */
+    const HANDLE hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hThreadSnap == INVALID_HANDLE_VALUE)
+      return GetLastError();
+
+    THREADENTRY32 entry;
+    entry.dwSize = sizeof(THREADENTRY32);
+
+    if (!Thread32First(hThreadSnap, &entry)) {
+      rc = GetLastError();
+    bailout_toolhelp:
+      CloseHandle(hThreadSnap);
+      (void)mdbx_resume_threads_after_remap(*array);
+      return rc;
+    }
+
+    do {
+      if (entry.th32OwnerProcessID != env->me_pid ||
+          entry.th32ThreadID == CurrentTid)
+        continue;
+
+      rc = suspend_and_append(array, entry.th32ThreadID);
+      if (rc != MDBX_SUCCESS)
+        goto bailout_toolhelp;
+
+    } while (Thread32Next(hThreadSnap, &entry));
+
+    rc = GetLastError();
+    if (rc != ERROR_NO_MORE_FILES)
+      goto bailout_toolhelp;
+  }
+
+  return MDBX_SUCCESS;
+}
+
+int mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
+  int rc = MDBX_SUCCESS;
+  for (unsigned i = 0; i < array->count; ++i) {
+    if (ResumeThread(array->handles[i]) == -1)
+      rc = GetLastError();
+    CloseHandle(array->handles[i]);
+  }
+  return rc;
 }
 
 /*----------------------------------------------------------------------------*/

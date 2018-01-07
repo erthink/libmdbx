@@ -740,6 +740,12 @@ struct MDBX_env {
     size_t grow;   /* step to grow datafile */
     size_t shrink; /* threshold to shrink datafile */
   } me_dbgeo;      /* */
+
+#if defined(_WIN32) || defined(_WIN64)
+  SRWLOCK me_remap_guard;
+#else
+  mdbx_fastmutex_t me_remap_guard;
+#endif
 };
 
 /* Nested transaction */

@@ -768,20 +768,14 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
 #endif
 }
 
-int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
-  assert(must <= limit);
+int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
+  assert(size <= limit);
 #if defined(_WIN32) || defined(_WIN64)
   NTSTATUS rc;
-
   map->length = 0;
   map->current = 0;
   map->section = NULL;
   map->address = nullptr;
-
-  uint64_t filesize;
-  rc = mdbx_filesize(map->fd, &filesize);
-  if (rc != MDBX_SUCCESS)
-    return rc;
 
   if (GetFileType(map->fd) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
@@ -861,13 +855,19 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
     }
   }
 
-  if (filesize > must) {
-    rc = mdbx_ftruncate(map->fd, must);
-    (void)rc /* ignore error, because Windows unable shrink mapped file */;
+  rc = mdbx_filesize(map->fd, &map->filesize);
+  if (rc != MDBX_SUCCESS)
+    return rc;
+  if ((flags & MDBX_RDONLY) == 0 && map->filesize != size) {
+    rc = mdbx_ftruncate(map->fd, size);
+    if (rc == MDBX_SUCCESS)
+      map->filesize = size;
+    /* ignore error, because Windows unable shrink file
+     * that already mapped (by another process) */;
   }
 
   LARGE_INTEGER SectionSize;
-  SectionSize.QuadPart = must;
+  SectionSize.QuadPart = size;
   rc = NtCreateSection(
       &map->section,
       /* DesiredAccess */ (flags & MDBX_WRITEMAP)
@@ -878,7 +878,6 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
       /* SectionPageProtection */ (flags & MDBX_RDONLY) ? PAGE_READONLY
                                                         : PAGE_READWRITE,
       /* AllocationAttributes */ SEC_RESERVE, map->fd);
-
   if (!NT_SUCCESS(rc))
     return ntstatus2errcode(rc);
 
@@ -892,7 +891,6 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
       /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
       /* Win32Protect */ (flags & MDBX_WRITEMAP) ? PAGE_READWRITE
                                                  : PAGE_READONLY);
-
   if (!NT_SUCCESS(rc)) {
     NtClose(map->section);
     map->section = 0;
@@ -905,7 +903,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   map->length = ViewSize;
   return MDBX_SUCCESS;
 #else
-  (void)must;
+  (void)size;
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
       MAP_SHARED, map->fd, 0);
@@ -938,31 +936,88 @@ int mdbx_munmap(mdbx_mmap_t *map) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t atleast, size_t limit) {
-  assert(atleast <= limit);
+int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
+  assert(size <= limit);
+  assert(size != map->current || limit != map->length || size < map->filesize);
 #if defined(_WIN32) || defined(_WIN64)
-  if (limit != map->length) {
-    int rc = mdbx_munmap(map);
-    if (rc == MDBX_SUCCESS)
-      rc = mdbx_mmap(flags, map, atleast, limit);
+  if (!(flags & MDBX_RDONLY) && limit == map->length && size > map->current) {
+    /* growth rw-section */
+    LARGE_INTEGER growth;
+    growth.QuadPart = size;
+    NTSTATUS rc = NtExtendSection(map->section, &growth);
+    if (NT_SUCCESS(rc))
+      map->filesize = map->current = size;
+    return ntstatus2errcode(rc);
+  }
+
+  /* Windows unable:
+    *  - shrinking a mapped file;
+    *  - change size of mapped view;
+    *  - extend read-only mapping;
+    * Therefore we should unmap/map entire section. */
+  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
+  if (!NT_SUCCESS(rc))
+    return ntstatus2errcode(rc);
+  rc = NtClose(map->section);
+  map->current = map->length = 0;
+  map->section = NULL;
+  if (!NT_SUCCESS(rc))
+    return ntstatus2errcode(rc);
+
+  rc = mdbx_filesize(map->fd, &map->filesize);
+  if (rc != MDBX_SUCCESS)
     return rc;
+  if ((flags & MDBX_RDONLY) == 0 && map->filesize != size) {
+    rc = mdbx_ftruncate(map->fd, size);
+    if (rc == MDBX_SUCCESS)
+      map->filesize = size;
+    /* ignore error, because Windows unable shrink file
+     * that already mapped (by another process) */;
   }
-  if (atleast > map->current) {
-    /* growth */
-    LARGE_INTEGER new_size;
-    new_size.QuadPart = atleast;
-    NTSTATUS rc = NtExtendSection(map->section, &new_size);
-    map->current = atleast;
-    if (!NT_SUCCESS(rc))
-      return ntstatus2errcode(rc);
+
+  LARGE_INTEGER SectionSize;
+  SectionSize.QuadPart = size;
+  rc = NtCreateSection(
+      &map->section,
+      /* DesiredAccess */ (flags & MDBX_WRITEMAP)
+          ? SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE |
+                SECTION_MAP_WRITE
+          : SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE,
+      /* ObjectAttributes */ NULL,
+      /* MaximumSize (InitialSize) */ &SectionSize,
+      /* SectionPageProtection */ (flags & MDBX_RDONLY) ? PAGE_READONLY
+                                                        : PAGE_READWRITE,
+      /* AllocationAttributes */ SEC_RESERVE, map->fd);
+
+  if (!NT_SUCCESS(rc))
+    return ntstatus2errcode(rc);
+
+retry:;
+  SIZE_T ViewSize = (flags & MDBX_RDONLY) ? size : limit;
+  rc = NtMapViewOfSection(
+      map->section, GetCurrentProcess(), &map->address,
+      /* ZeroBits */ 0,
+      /* CommitSize */ 0,
+      /* SectionOffset */ NULL, &ViewSize,
+      /* InheritDisposition */ ViewUnmap,
+      /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
+      /* Win32Protect */ (flags & MDBX_WRITEMAP) ? PAGE_READWRITE
+                                                 : PAGE_READONLY);
+
+  if (!NT_SUCCESS(rc)) {
+    if (map->address) {
+      map->address = NULL;
+      goto retry;
+    }
+    NtClose(map->section);
+    map->section = 0;
+    return ntstatus2errcode(rc);
   }
-  if (atleast < map->current) {
-    /* Windows unable shrinking a mapped file */
-    return MDBX_RESULT_TRUE;
-  }
-  return MDBX_SUCCESS;
+  assert(map->address != MAP_FAILED);
+
+  map->current = (size_t)SectionSize.QuadPart;
+  map->length = ViewSize;
 #else
-  (void)flags;
   if (limit != map->length) {
     void *ptr = mremap(map->address, map->length, limit, MREMAP_MAYMOVE);
     if (ptr == MAP_FAILED)
@@ -970,8 +1025,10 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t atleast, size_t limit) {
     map->address = ptr;
     map->length = limit;
   }
-  return mdbx_ftruncate(map->fd, atleast);
+  if ((flags & MDBX_RDONLY) == 0)
+    return mdbx_ftruncate(map->fd, size);
 #endif
+  return MDBX_SUCCESS;
 }
 
 /*----------------------------------------------------------------------------*/
