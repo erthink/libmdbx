@@ -882,7 +882,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must, size_t limit) {
   if (!NT_SUCCESS(rc))
     return ntstatus2errcode(rc);
 
-  SIZE_T ViewSize = limit;
+  SIZE_T ViewSize = (flags & MDBX_RDONLY) ? 0 : limit;
   rc = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,
