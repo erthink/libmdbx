@@ -1,7 +1,16 @@
 cmake_minimum_required(VERSION 2.8.7)
 
-set(TARGET libmdbx)
+set(TARGET mdbx)
 project(${TARGET})
+
+set(MDBX_VERSION_MAJOR 0)
+set(MDBX_VERSION_MINOR 0)
+set(MDBX_VERSION_PATCH 0)
+set(MDBX_VERSION_STRING ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_PATCH})
+
+add_definitions(-DMDBX_VERSION_MAJOR=${MDBX_VERSION_MAJOR})
+add_definitions(-DMDBX_VERSION_MINOR=${MDBX_VERSION_MINOR})
+add_definitions(-DMDBX_VERSION_PATCH=${MDBX_VERSION_PATCH})
 
 enable_language(C)
 enable_language(CXX)
@@ -76,7 +85,7 @@ else ()
     endif ()
 endif ()
 
-add_library(${TARGET} STATIC
+set(${TARGET}_SRC
         mdbx.h
         src/bits.h
         src/defs.h
@@ -87,11 +96,90 @@ add_library(${TARGET} STATIC
         src/version.c
         )
 
-target_include_directories(${TARGET} PUBLIC
+add_library(${TARGET}_STATIC STATIC
+        ${${TARGET}_SRC}
+        )
+
+add_library(${TARGET} ALIAS ${TARGET}_STATIC)
+
+add_library(${TARGET}_SHARED SHARED
+        ${${TARGET}_SRC}
+        )
+
+set_target_properties(${TARGET}_SHARED PROPERTIES
+        VERSION ${MDBX_VERSION_STRING}
+        SOVERSION ${MDBX_VERSION_MAJOR}
+        OUTPUT_NAME ${TARGET}
+        CLEAN_DIRECT_OUTPUT 1
+        )
+
+set_target_properties(${TARGET}_STATIC PROPERTIES
+        VERSION ${MDBX_VERSION_STRING}
+        SOVERSION ${MDBX_VERSION_MAJOR}
+        OUTPUT_NAME ${TARGET}
+        CLEAN_DIRECT_OUTPUT 1
+        )
+
+target_include_directories(${TARGET}_STATIC PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
         )
+
+target_include_directories(${TARGET}_SHARED PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        )
+
+install(TARGETS ${TARGET}_STATIC DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
+install(TARGETS ${TARGET}_SHARED DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
+install(FILES mdbx.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include COMPONENT mdbx-devel)
 
 add_subdirectory(tutorial)
 add_subdirectory(test)
 add_subdirectory(src/tools)
 add_subdirectory(pcrf_test)
+
+
+set(CPACK_GENERATOR "RPM")
+set(CPACK_RPM_COMPONENT_INSTALL ON)
+
+#Version
+if (NOT "$ENV{BUILD_NUMBER}" STREQUAL "")
+    set(CPACK_PACKAGE_RELEASE $ENV{BUILD_NUMBER})
+else ()
+    if (NOT "$ENV{CI_PIPELINE_ID}" STREQUAL "")
+        set(CPACK_PACKAGE_RELEASE $ENV{CI_PIPELINE_ID})
+    else ()
+        set(CPACK_PACKAGE_RELEASE 1)
+    endif ()
+endif ()
+set(CPACK_RPM_PACKAGE_RELEASE ${CPACK_PACKAGE_RELEASE})
+
+set(CPACK_PACKAGE_VERSION ${MDBX_VERSION_STRING})
+set(CPACK_PACKAGE_VERSION_FULL ${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE})
+
+set(CPACK_RPM_mdbx-devel_PACKAGE_REQUIRES "mdbx = ${CPACK_PACKAGE_VERSION}")
+
+set(CPACK_RPM_SPEC_INSTALL_POST "/bin/true")
+set(CPACK_RPM_mdbx_PACKAGE_NAME mdbx)
+set(CPACK_RPM_mdbx-devel_PACKAGE_NAME mdbx-devel)
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "The revised and extended descendant of Symas LMDB")
+
+set(CPACK_PACKAGE_VENDOR "???")
+set(CPACK_PACKAGE_CONTACT "Vladimir Romanov")
+set(CPACK_PACKAGE_RELOCATABLE false)
+set(CPACK_RPM_PACKAGE_ARCHITECTURE "x86_64")
+set(CPACK_RPM_PACKAGE_REQUIRES "")
+set(CPACK_RPM_PACKAGE_GROUP "Applications/Database")
+
+set(CPACK_RPM_mdbx_FILE_NAME "${CPACK_RPM_mdbx_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION_FULL}.${CPACK_RPM_PACKAGE_ARCHITECTURE}.rpm")
+set(CPACK_RPM_mdbx-devel_FILE_NAME "${CPACK_RPM_mdbx-devel_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION_FULL}.${CPACK_RPM_PACKAGE_ARCHITECTURE}.rpm")
+
+set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
+        /usr/local
+        /usr/local/bin
+        /usr/local/lib64
+        /usr/local/include
+        /usr/local/man
+        /usr/local/man/man1
+        )
+
+include(CPack)

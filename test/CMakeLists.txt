@@ -29,6 +29,6 @@ add_executable(${TARGET}
 )
 
 target_link_libraries(${TARGET}
-        libmdbx
+        mdbx
         )
 
