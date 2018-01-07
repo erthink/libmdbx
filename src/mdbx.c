@@ -2982,12 +2982,17 @@ static __inline int mdbx_backlog_size(MDBX_txn *txn) {
   return reclaimed + txn->mt_loose_count + txn->mt_end_pgno - txn->mt_next_pgno;
 }
 
+static __inline int mdbx_backlog_extragap(MDBX_env *env) {
+  /* LY: extra page(s) for b-tree rebalancing */
+  return (env->me_flags & MDBX_LIFORECLAIM) ? 2 : 1;
+}
+
 /* LY: Prepare a backlog of pages to modify FreeDB itself,
  * while reclaiming is prohibited. It should be enough to prevent search
  * in mdbx_page_alloc() during a deleting, when freeDB tree is unbalanced. */
 static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
   /* LY: extra page(s) for b-tree rebalancing */
-  const int extra = (txn->mt_env->me_flags & MDBX_LIFORECLAIM) ? 2 : 1;
+  const int extra = mdbx_backlog_extragap(txn->mt_env);
 
   if (mdbx_backlog_size(txn) < mc->mc_db->md_depth + extra) {
     int rc = mdbx_cursor_touch(mc);
@@ -4108,13 +4113,17 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 /* Windows is unable shrinking a mapped file */
 #else
   /* LY: check conditions to shrink datafile */
+  const pgno_t backlog_gap =
+      pending->mm_dbs[FREE_DBI].md_depth + mdbx_backlog_extragap(env);
   pgno_t shrink = 0;
   if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
-      pending->mm_geo.now - pending->mm_geo.next > pending->mm_geo.shrink) {
+      pending->mm_geo.now - pending->mm_geo.next >
+          pending->mm_geo.shrink + backlog_gap) {
     const pgno_t aligner =
         pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
+    const pgno_t with_backlog_gap = pending->mm_geo.next + backlog_gap;
     const pgno_t aligned = pgno_align2os_pgno(
-        env, pending->mm_geo.next + aligner - pending->mm_geo.next % aligner);
+        env, with_backlog_gap + aligner - with_backlog_gap % aligner);
     const pgno_t bottom =
         (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
     if (pending->mm_geo.now > bottom) {
