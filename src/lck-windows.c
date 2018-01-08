@@ -209,18 +209,17 @@ int mdbx_suspend_threads_before_remap(MDBX_env *env,
     const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
     const mdbx_tid_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
     for (const MDBX_reader *reader = begin; reader < end; ++reader) {
-      if (reader->mr_pid != env->me_pid || reader->mr_tid == CurrentTid ||
-          reader->mr_tid == WriteTxnOwner)
+      if (reader->mr_pid != env->me_pid || !reader->mr_tid) {
+      skip_lck:
         continue;
-
+      }
+      if (reader->mr_tid == CurrentTid || reader->mr_tid == WriteTxnOwner)
+        goto skip_lck;
       if (env->me_flags & MDBX_NOTLS) {
         /* Skip duplicates in no-tls mode */
-        const MDBX_reader *scan = reader;
-        while (--scan >= begin)
+        for (const MDBX_reader *scan = reader; --scan >= begin;)
           if (scan->mr_tid == reader->mr_tid)
-            break;
-        if (scan >= reader)
-          continue;
+            goto skip_lck;
       }
 
       rc = suspend_and_append(array, reader->mr_tid);
@@ -238,17 +237,18 @@ int mdbx_suspend_threads_before_remap(MDBX_env *env,
   } else {
     /* Without LCK (i.e. read-only mode).
      * Walk thougth a snapshot of all running threads */
-    const HANDLE hThreadSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
-    if (hThreadSnap == INVALID_HANDLE_VALUE)
+    mdbx_assert(env, env->me_txn0 == NULL);
+    const HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+    if (hSnapshot == INVALID_HANDLE_VALUE)
       return GetLastError();
 
     THREADENTRY32 entry;
     entry.dwSize = sizeof(THREADENTRY32);
 
-    if (!Thread32First(hThreadSnap, &entry)) {
+    if (!Thread32First(hSnapshot, &entry)) {
       rc = GetLastError();
     bailout_toolhelp:
-      CloseHandle(hThreadSnap);
+      CloseHandle(hSnapshot);
       (void)mdbx_resume_threads_after_remap(*array);
       return rc;
     }
@@ -262,11 +262,12 @@ int mdbx_suspend_threads_before_remap(MDBX_env *env,
       if (rc != MDBX_SUCCESS)
         goto bailout_toolhelp;
 
-    } while (Thread32Next(hThreadSnap, &entry));
+    } while (Thread32Next(hSnapshot, &entry));
 
     rc = GetLastError();
     if (rc != ERROR_NO_MORE_FILES)
       goto bailout_toolhelp;
+    CloseHandle(hSnapshot);
   }
 
   return MDBX_SUCCESS;
