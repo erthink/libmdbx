@@ -12,7 +12,7 @@ and [by Yandex](https://translate.yandex.ru/translate?url=https%3A%2F%2Fgithub.c
 
 ### Project Status
 
-**Now MDBX is under _active development_** and until 2018 is expected a big
+**Now MDBX is under _active development_** and until 2018Q2 is expected a big
 change both of API and database format.  Unfortunately those update will lead to
 loss of compatibility with previous versions.
 
