@@ -940,14 +940,17 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   assert(size <= limit);
   assert(size != map->current || limit != map->length || size < map->filesize);
 #if defined(_WIN32) || defined(_WIN64)
+  NTSTATUS status;
+  LARGE_INTEGER SectionSize;
+  int err, rc = MDBX_SUCCESS;
+
   if (!(flags & MDBX_RDONLY) && limit == map->length && size > map->current) {
     /* growth rw-section */
-    LARGE_INTEGER growth;
-    growth.QuadPart = size;
-    NTSTATUS rc = NtExtendSection(map->section, &growth);
-    if (NT_SUCCESS(rc))
+    SectionSize.QuadPart = size;
+    status = NtExtendSection(map->section, &SectionSize);
+    if (NT_SUCCESS(status))
       map->filesize = map->current = size;
-    return ntstatus2errcode(rc);
+    return ntstatus2errcode(status);
   }
 
   /* Windows unable:
@@ -955,29 +958,36 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
     *  - change size of mapped view;
     *  - extend read-only mapping;
     * Therefore we should unmap/map entire section. */
-  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
-  if (!NT_SUCCESS(rc))
-    return ntstatus2errcode(rc);
-  rc = NtClose(map->section);
-  map->current = map->length = 0;
+  status = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
+  if (!NT_SUCCESS(status))
+    return ntstatus2errcode(status);
+  status = NtClose(map->section);
   map->section = NULL;
-  if (!NT_SUCCESS(rc))
-    return ntstatus2errcode(rc);
 
-  rc = mdbx_filesize(map->fd, &map->filesize);
-  if (rc != MDBX_SUCCESS)
-    return rc;
+  if (!NT_SUCCESS(status)) {
+  bailout_ntstatus:
+    err = ntstatus2errcode(status);
+  bailout:
+    map->address = NULL;
+    map->current = map->length = 0;
+    return err;
+  }
+
+retry_file_and_section:
+  err = mdbx_filesize(map->fd, &map->filesize);
+  if (err != MDBX_SUCCESS)
+    goto bailout;
+
   if ((flags & MDBX_RDONLY) == 0 && map->filesize != size) {
-    rc = mdbx_ftruncate(map->fd, size);
-    if (rc == MDBX_SUCCESS)
+    err = mdbx_ftruncate(map->fd, size);
+    if (err == MDBX_SUCCESS)
       map->filesize = size;
     /* ignore error, because Windows unable shrink file
      * that already mapped (by another process) */;
   }
 
-  LARGE_INTEGER SectionSize;
   SectionSize.QuadPart = size;
-  rc = NtCreateSection(
+  status = NtCreateSection(
       &map->section,
       /* DesiredAccess */ (flags & MDBX_WRITEMAP)
           ? SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE |
@@ -989,12 +999,12 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
                                                         : PAGE_READWRITE,
       /* AllocationAttributes */ SEC_RESERVE, map->fd);
 
-  if (!NT_SUCCESS(rc))
-    return ntstatus2errcode(rc);
+  if (!NT_SUCCESS(status))
+    goto bailout_ntstatus;
 
-retry:;
+retry_mapview:;
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? size : limit;
-  rc = NtMapViewOfSection(
+  status = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,
       /* CommitSize */ 0,
@@ -1004,19 +1014,33 @@ retry:;
       /* Win32Protect */ (flags & MDBX_WRITEMAP) ? PAGE_READWRITE
                                                  : PAGE_READONLY);
 
-  if (!NT_SUCCESS(rc)) {
-    if (map->address) {
+  if (!NT_SUCCESS(status)) {
+    if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
+        map->address && limit != map->length) {
+      /* try remap at another base address, but only if the limit is changing */
       map->address = NULL;
-      goto retry;
+      goto retry_mapview;
     }
     NtClose(map->section);
-    map->section = 0;
-    return ntstatus2errcode(rc);
+    map->section = NULL;
+
+    if (map->address && (size != map->current || limit != map->length)) {
+      /* try remap with previously size and limit,
+       * but will return MDBX_RESULT_TRUE on success */
+      rc = MDBX_RESULT_TRUE;
+      size = map->current;
+      limit = map->length;
+      goto retry_file_and_section;
+    }
+
+    /* no way to recovery */
+    goto bailout_ntstatus;
   }
   assert(map->address != MAP_FAILED);
 
   map->current = (size_t)SectionSize.QuadPart;
   map->length = ViewSize;
+  return rc;
 #else
   if (limit != map->length) {
     void *ptr = mremap(map->address, map->length, limit, MREMAP_MAYMOVE);
@@ -1025,10 +1049,8 @@ retry:;
     map->address = ptr;
     map->length = limit;
   }
-  if ((flags & MDBX_RDONLY) == 0)
-    return mdbx_ftruncate(map->fd, size);
+  return (flags & MDBX_RDONLY) ? MDBX_SUCCESS : mdbx_ftruncate(map->fd, size);
 #endif
-  return MDBX_SUCCESS;
 }
 
 /*----------------------------------------------------------------------------*/
