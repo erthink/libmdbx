@@ -4523,6 +4523,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     shrink_threshold = 1;
 #endif
 
+  bool need_unlock = false;
   int rc = MDBX_PROBLEM;
   if (env->me_map) {
     /* env already mapped */
@@ -4533,6 +4534,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       int err = mdbx_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
+      need_unlock = true;
     }
     MDBX_meta *head = mdbx_meta_head(env);
 
@@ -4721,7 +4723,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   }
 
 bailout:
-  if (env->me_map && !inside_txn)
+  if (need_unlock)
     mdbx_txn_unlock(env);
   return rc;
 }
