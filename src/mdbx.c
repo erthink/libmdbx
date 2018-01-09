@@ -4704,6 +4704,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
         rc = mdbx_mapresize(env, meta.mm_geo.now, meta.mm_geo.upper);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
+        head = /* base address could be changed */ mdbx_meta_head(env);
       }
       env->me_sync_pending += env->me_psize;
       mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
