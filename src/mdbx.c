@@ -2743,10 +2743,11 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(env->me_pid != mdbx_getpid())) {
+  if (unlikely(env->me_pid != mdbx_getpid()))
     env->me_flags |= MDBX_FATAL_ERROR;
+
+  if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
-  }
 
   if (unlikely(!env->me_map))
     return MDBX_EPERM;
@@ -4513,6 +4514,12 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  if (unlikely(env->me_pid != mdbx_getpid()))
+    env->me_flags |= MDBX_FATAL_ERROR;
+
+  if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
+    return MDBX_PANIC;
+
   const bool inside_txn =
       (env->me_txn0 && env->me_txn0->mt_owner == mdbx_thread_self());
 
@@ -5452,7 +5459,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (env->me_lck && (env->me_flags & MDBX_RDONLY) == 0) {
+  if (env->me_lck && (env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0) {
     if (env->me_txn0 && env->me_txn0->mt_owner &&
         env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
