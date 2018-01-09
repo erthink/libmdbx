@@ -938,8 +938,9 @@ int mdbx_munmap(mdbx_mmap_t *map) {
 
 int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   assert(size <= limit);
-  assert(size != map->current || limit != map->length || size < map->filesize);
 #if defined(_WIN32) || defined(_WIN64)
+  assert(size != map->current || limit != map->length || size < map->filesize);
+
   NTSTATUS status;
   LARGE_INTEGER SectionSize;
   int err, rc = MDBX_SUCCESS;
