@@ -1702,6 +1702,12 @@ bailout:
                 "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
                 env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
                 rc);
+    if (!env->me_dxb_mmap.address) {
+      env->me_flags |= MDBX_FATAL_ERROR;
+      if (env->me_txn)
+        env->me_txn->mt_flags |= MDBX_TXN_ERROR;
+      rc = MDBX_PANIC;
+    }
   }
 
 #if defined(_WIN32) || defined(_WIN64)
