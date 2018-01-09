@@ -121,7 +121,7 @@ static __inline BOOL funlock(mdbx_filehandle_t fd, uint64_t offset,
 #define LCK_META_OFFSET 0
 #define LCK_META_LEN 0x10000u
 #define LCK_BODY_OFFSET LCK_META_LEN
-#define LCK_BODY_LEN (LCK_MAXLEN - LCK_BODY_OFFSET + 1u)
+#define LCK_BODY_LEN (LCK_MAXLEN - LCK_BODY_OFFSET)
 #define LCK_META LCK_META_OFFSET, LCK_META_LEN
 #define LCK_BODY LCK_BODY_OFFSET, LCK_BODY_LEN
 #define LCK_WHOLE 0, LCK_MAXLEN
