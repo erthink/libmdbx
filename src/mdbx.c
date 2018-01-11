@@ -2775,12 +2775,16 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_ntxn);
   } else if (flags & MDBX_RDONLY) {
+    if (env->me_txn0 && unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
+      return MDBX_BUSY;
     size = env->me_maxdbs * (sizeof(MDBX_db) + 1);
     size += tsize = sizeof(MDBX_txn);
   } else {
     /* Reuse preallocated write txn. However, do not touch it until
      * mdbx_txn_renew0() succeeds, since it currently may be active. */
     txn = env->me_txn0;
+    if (unlikely(txn->mt_owner == mdbx_thread_self()))
+      return MDBX_BUSY;
     goto renew;
   }
   if (unlikely((txn = calloc(1, size)) == NULL)) {
