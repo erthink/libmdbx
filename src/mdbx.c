@@ -8086,7 +8086,10 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
     return MDBX_EBADSIGN;
 
   if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+    return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
+
+  if (unlikely(txn->mt_flags & (MDBX_TXN_FINISHED | MDBX_TXN_ERROR)))
+    return MDBX_BAD_TXN;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE &&
                mc->mc_signature != MDBX_MC_READY4CLOSE))
