@@ -8184,7 +8184,12 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
 MDBX_txn *mdbx_cursor_txn(MDBX_cursor *mc) {
   if (unlikely(!mc || mc->mc_signature != MDBX_MC_SIGNATURE))
     return NULL;
-  return mc->mc_txn;
+  MDBX_txn *txn = mc->mc_txn;
+  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+    return NULL;
+  if (unlikely(txn->mt_flags & MDBX_TXN_FINISHED))
+    return NULL;
+  return txn;
 }
 
 MDBX_dbi mdbx_cursor_dbi(MDBX_cursor *mc) {
