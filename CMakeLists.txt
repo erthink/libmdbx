@@ -135,10 +135,10 @@ install(TARGETS ${TARGET}_STATIC DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPO
 install(TARGETS ${TARGET}_SHARED DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
 install(FILES mdbx.h DESTINATION ${CMAKE_INSTALL_PREFIX}/include COMPONENT mdbx-devel)
 
-add_subdirectory(tutorial)
-add_subdirectory(test)
 add_subdirectory(src/tools)
-add_subdirectory(pcrf_test)
+add_subdirectory(test)
+add_subdirectory(test/pcrf)
+add_subdirectory(tutorial)
 
 ##############################################################################
 
