@@ -4838,6 +4838,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
             meta.mm_txnid_a, mdbx_durable_str(&meta));
 
   mdbx_setup_pagesize(env, meta.mm_psize);
+  const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
   if ((env->me_flags & MDBX_RDONLY) /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */) {
     /* use present params from db */
@@ -4853,7 +4854,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     }
   } else if (env->me_dbgeo.now) {
     /* silently growth to last used page */
-    const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
     if (env->me_dbgeo.lower < used_bytes)
       env->me_dbgeo.lower = used_bytes;
     if (env->me_dbgeo.now < used_bytes)
@@ -4911,6 +4911,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     env->me_dbgeo.upper = pgno2bytes(env, meta.mm_geo.upper);
     env->me_dbgeo.grow = pgno2bytes(env, meta.mm_geo.grow);
     env->me_dbgeo.shrink = pgno2bytes(env, meta.mm_geo.shrink);
+
+    /* allowing open large DB from a 32-bit environment */
+    if (env->me_dbgeo.upper > MAX_MAPSIZE && used_bytes < MAX_MAPSIZE)
+      env->me_dbgeo.upper = MAX_MAPSIZE;
   }
 
   uint64_t filesize_before_mmap;
@@ -4920,7 +4924,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
 
   const size_t expected_bytes =
       mdbx_roundup2(pgno2bytes(env, meta.mm_geo.now), env->me_os_psize);
-  const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
   mdbx_ensure(env, expected_bytes >= used_bytes);
   if (filesize_before_mmap != expected_bytes) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
