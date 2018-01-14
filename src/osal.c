@@ -863,7 +863,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
     if (rc == MDBX_SUCCESS)
       map->filesize = size;
     /* ignore error, because Windows unable shrink file
-     * that already mapped (by another process) */;
+     * that already mapped (by another process) */
   }
 
   LARGE_INTEGER SectionSize;
@@ -924,6 +924,12 @@ int mdbx_munmap(mdbx_mmap_t *map) {
   NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
   if (!NT_SUCCESS(rc))
     ntstatus2errcode(rc);
+
+  if (map->filesize != map->current &&
+      mdbx_filesize(map->fd, &map->filesize) == MDBX_SUCCESS &&
+      map->filesize != map->current)
+    (void)mdbx_ftruncate(map->fd, map->current);
+
   map->length = 0;
   map->current = 0;
   map->address = nullptr;
@@ -1019,7 +1025,7 @@ retry_file_and_section:
     if (err == MDBX_SUCCESS)
       map->filesize = size;
     /* ignore error, because Windows unable shrink file
-     * that already mapped (by another process) */;
+     * that already mapped (by another process) */
   }
 
   SectionSize.QuadPart = size;
