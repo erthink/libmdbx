@@ -4666,7 +4666,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       goto bailout;
     }
     size_upper -= env->me_os_psize;
-    if ((size_t)size_upper > (size_t)size_lower)
+    if ((size_t)size_upper < (size_t)size_lower)
       size_lower = size_upper;
   }
   mdbx_assert(env, (size_upper - size_lower) % env->me_os_psize == 0);
@@ -4867,8 +4867,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     }
   } else if (env->me_dbgeo.now) {
     /* silently growth to last used page */
-    if (env->me_dbgeo.lower < used_bytes)
-      env->me_dbgeo.lower = used_bytes;
     if (env->me_dbgeo.now < used_bytes)
       env->me_dbgeo.now = used_bytes;
     if (env->me_dbgeo.upper < used_bytes)
