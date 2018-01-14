@@ -97,12 +97,12 @@ extern NTSTATUS NTAPI NtUnmapViewOfSection(IN HANDLE ProcessHandle,
 extern NTSTATUS NTAPI NtClose(HANDLE Handle);
 
 extern NTSTATUS NTAPI NtAllocateVirtualMemory(
-    IN HANDLE ProcessHandle, IN OUT PVOID *BaseAddress, IN ULONG ZeroBits,
-    IN OUT PULONG RegionSize, IN ULONG AllocationType, IN ULONG Protect);
+    IN HANDLE ProcessHandle, IN OUT PVOID *BaseAddress, IN ULONG_PTR ZeroBits,
+    IN OUT PSIZE_T RegionSize, IN ULONG AllocationType, IN ULONG Protect);
 
 extern NTSTATUS NTAPI NtFreeVirtualMemory(IN HANDLE ProcessHandle,
                                           IN PVOID *BaseAddress,
-                                          IN OUT PULONG RegionSize,
+                                          IN OUT PSIZE_T RegionSize,
                                           IN ULONG FreeType);
 
 #ifndef FILE_PROVIDER_CURRENT_VERSION
@@ -952,6 +952,21 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
     if (NT_SUCCESS(status))
       map->filesize = map->current = size;
     return ntstatus2errcode(status);
+  }
+
+  if (limit > map->length) {
+    /* check ability of address space for growth before umnap */
+    PVOID BaseAddress = (PBYTE)map->address + map->length;
+    SIZE_T RegionSize = limit - map->length;
+    status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
+                                     &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
+    if (!NT_SUCCESS(status))
+      return ntstatus2errcode(status);
+
+    status = NtFreeVirtualMemory(GetCurrentProcess(), &BaseAddress, &RegionSize,
+                                 MEM_RELEASE);
+    if (!NT_SUCCESS(status))
+      return ntstatus2errcode(status);
   }
 
   /* Windows unable:
