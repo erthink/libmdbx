@@ -1,3 +1,8 @@
+CMakeLists.txt
+pcrf_test/CMakeLists.txt
+src/tools/CMakeLists.txt
+test/CMakeLists.txt
+tutorial/CMakeLists.txt
 tutorial/sample-mdbx.c
 AUTHORS
 LICENSE

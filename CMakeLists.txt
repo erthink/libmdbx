@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 2.8.7)
 set(TARGET mdbx)
 project(${TARGET})
 
+# FIXME/TODO: Same as https://github.com/leo-yuriev/libfpta
 set(MDBX_VERSION_MAJOR 0)
 set(MDBX_VERSION_MINOR 0)
 set(MDBX_VERSION_PATCH 0)
@@ -21,112 +22,108 @@ set(CMAKE_CXX_STANDARD_REQUIRED on)
 add_definitions(-DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1 -D_GNU_SOURCE=1)
 
 get_directory_property(hasParent PARENT_DIRECTORY)
-if (hasParent)
-    set(STANDALONE_BUILD 0)
-else ()
-    set(STANDALONE_BUILD 1)
-    enable_testing()
+if(hasParent)
+  set(STANDALONE_BUILD 0)
+else()
+  set(STANDALONE_BUILD 1)
+  enable_testing()
 
-    if (CMAKE_C_COMPILER_ID MATCHES GNU)
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-constant-logical-operand")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
-    endif ()
+  if (CMAKE_C_COMPILER_ID MATCHES GNU)
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-constant-logical-operand")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fPIC")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fvisibility=hidden")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu11")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -pthread")
+  endif()
 
-    if (CMAKE_CXX_COMPILER_ID MATCHES GNU)
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpointer-arith")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-sign-compare")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat-security")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Woverloaded-virtual")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wwrite-strings")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fmax-errors=20")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wunused-function -Wunused-variable -Wunused-value -Wmissing-declarations")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wcast-qual")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-strict-aliasing")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finline-functions-called-once")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-packed-bitfield-compat")
+  if (CMAKE_CXX_COMPILER_ID MATCHES GNU)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -W")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Werror")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpointer-arith")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-sign-compare")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wformat-security")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Woverloaded-virtual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wwrite-strings")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fmax-errors=20")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter -Wunused-function -Wunused-variable -Wunused-value -Wmissing-declarations")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-field-initializers")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wcast-qual")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ggdb")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-strict-aliasing")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -finline-functions-called-once")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-packed-bitfield-compat")
 
-        set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3")
-        set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3")
-    endif ()
+    set(CMAKE_CXX_FLAGS_DEBUG "-O0 -g3")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g3")
+  endif()
 
-    if (COVERAGE)
-        if (NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
-            message(FATAL_ERROR "Coverage requires -DCMAKE_BUILD_TYPE=Debug Current value=${CMAKE_BUILD_TYPE}")
-        endif ()
+  if (COVERAGE)
+    if (NOT "${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
+      message(FATAL_ERROR "Coverage requires -DCMAKE_BUILD_TYPE=Debug Current value=${CMAKE_BUILD_TYPE}")
+    endif()
 
-        message(STATUS "Setting coverage compiler flags")
+    message(STATUS "Setting coverage compiler flags")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb3 -O0 --coverage -fprofile-arcs -ftest-coverage")
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}     -g -ggdb3 -O0 --coverage -fprofile-arcs -ftest-coverage")
+    add_definitions(-DCOVERAGE_TEST)
+  endif()
 
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g -ggdb3 -O0 --coverage -fprofile-arcs -ftest-coverage")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}     -g -ggdb3 -O0 --coverage -fprofile-arcs -ftest-coverage")
-
-        add_definitions(-DCOVERAGE_TEST)
-    endif ()
-
-    if (TRAVIS)
-        add_definitions(-DNO_MLOCK)
-    else ()
-        set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fsanitize=leak -fstack-protector-strong -static-libasan")
-    endif ()
-endif ()
+  if (NOT TRAVIS)
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -fsanitize=address -fsanitize=leak -fstack-protector-strong -static-libasan")
+  endif()
+endif()
 
 set(${TARGET}_SRC
-        mdbx.h
-        src/bits.h
-        src/defs.h
-        src/lck-posix.c
-        src/mdbx.c
-        src/osal.c
-        src/osal.h
-        src/version.c
-        )
+  mdbx.h
+  src/bits.h
+  src/defs.h
+  src/lck-posix.c
+  src/mdbx.c
+  src/osal.c
+  src/osal.h
+  src/version.c
+  )
 
 add_library(${TARGET}_STATIC STATIC
-        ${${TARGET}_SRC}
-        )
+  ${${TARGET}_SRC}
+  )
 
 add_library(${TARGET} ALIAS ${TARGET}_STATIC)
 
 add_library(${TARGET}_SHARED SHARED
-        ${${TARGET}_SRC}
-        )
+  ${${TARGET}_SRC}
+  )
 
 set_target_properties(${TARGET}_SHARED PROPERTIES
-        VERSION ${MDBX_VERSION_STRING}
-        SOVERSION ${MDBX_VERSION_MAJOR}
-        OUTPUT_NAME ${TARGET}
-        CLEAN_DIRECT_OUTPUT 1
-        )
+  VERSION ${MDBX_VERSION_STRING}
+  SOVERSION ${MDBX_VERSION_MAJOR}
+  OUTPUT_NAME ${TARGET}
+  CLEAN_DIRECT_OUTPUT 1
+  )
 
 set_target_properties(${TARGET}_STATIC PROPERTIES
-        VERSION ${MDBX_VERSION_STRING}
-        SOVERSION ${MDBX_VERSION_MAJOR}
-        OUTPUT_NAME ${TARGET}
-        CLEAN_DIRECT_OUTPUT 1
-        )
+  VERSION ${MDBX_VERSION_STRING}
+  SOVERSION ${MDBX_VERSION_MAJOR}
+  OUTPUT_NAME ${TARGET}
+  CLEAN_DIRECT_OUTPUT 1
+  )
 
 target_include_directories(${TARGET}_STATIC PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        )
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  )
 
 target_include_directories(${TARGET}_SHARED PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}
-        )
+  ${CMAKE_CURRENT_SOURCE_DIR}
+  )
 
 install(TARGETS ${TARGET}_STATIC DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
 install(TARGETS ${TARGET}_SHARED DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
@@ -137,20 +134,21 @@ add_subdirectory(test)
 add_subdirectory(src/tools)
 add_subdirectory(pcrf_test)
 
+##############################################################################
 
 set(CPACK_GENERATOR "RPM")
 set(CPACK_RPM_COMPONENT_INSTALL ON)
 
-#Version
+# Version
 if (NOT "$ENV{BUILD_NUMBER}" STREQUAL "")
-    set(CPACK_PACKAGE_RELEASE $ENV{BUILD_NUMBER})
-else ()
-    if (NOT "$ENV{CI_PIPELINE_ID}" STREQUAL "")
-        set(CPACK_PACKAGE_RELEASE $ENV{CI_PIPELINE_ID})
-    else ()
-        set(CPACK_PACKAGE_RELEASE 1)
-    endif ()
-endif ()
+  set(CPACK_PACKAGE_RELEASE $ENV{BUILD_NUMBER})
+else()
+  if (NOT "$ENV{CI_PIPELINE_ID}" STREQUAL "")
+    set(CPACK_PACKAGE_RELEASE $ENV{CI_PIPELINE_ID})
+  else()
+    set(CPACK_PACKAGE_RELEASE 1)
+  endif()
+endif()
 set(CPACK_RPM_PACKAGE_RELEASE ${CPACK_PACKAGE_RELEASE})
 
 set(CPACK_PACKAGE_VERSION ${MDBX_VERSION_STRING})
@@ -174,12 +172,12 @@ set(CPACK_RPM_mdbx_FILE_NAME "${CPACK_RPM_mdbx_PACKAGE_NAME}-${CPACK_PACKAGE_VER
 set(CPACK_RPM_mdbx-devel_FILE_NAME "${CPACK_RPM_mdbx-devel_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION_FULL}.${CPACK_RPM_PACKAGE_ARCHITECTURE}.rpm")
 
 set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
-        /usr/local
-        /usr/local/bin
-        /usr/local/lib64
-        /usr/local/include
-        /usr/local/man
-        /usr/local/man/man1
-        )
+  /usr/local
+  /usr/local/bin
+  /usr/local/lib64
+  /usr/local/include
+  /usr/local/man
+  /usr/local/man/man1
+  )
 
 include(CPack)
