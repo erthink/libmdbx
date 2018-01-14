@@ -3961,17 +3961,17 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
     /* LY: check mapsize limits */
     const uint64_t mapsize_min =
         page.mp_meta.mm_geo.lower * (uint64_t)page.mp_meta.mm_psize;
-    const uint64_t mapsize_max =
-        page.mp_meta.mm_geo.upper * (uint64_t)page.mp_meta.mm_psize;
     STATIC_ASSERT(MAX_MAPSIZE < SSIZE_MAX - MAX_PAGESIZE);
     STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
-    if (mapsize_min < MIN_MAPSIZE || mapsize_max > MAX_MAPSIZE) {
+    if (mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE) {
       mdbx_notice("meta[%u] has invalid min-mapsize (%" PRIu64 "), skip it",
                   meta_number, mapsize_min);
       rc = MDBX_VERSION_MISMATCH;
       continue;
     }
 
+    const uint64_t mapsize_max =
+        page.mp_meta.mm_geo.upper * (uint64_t)page.mp_meta.mm_psize;
     STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
     if (mapsize_max > MAX_MAPSIZE ||
         MAX_PAGENO < mdbx_roundup2((size_t)mapsize_max, env->me_os_psize) /
