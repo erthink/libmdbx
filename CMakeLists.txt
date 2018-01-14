@@ -21,6 +21,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED on)
 
 add_definitions(-DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1 -D_GNU_SOURCE=1)
 
+find_package(Threads REQUIRED)
+
 get_directory_property(hasParent PARENT_DIRECTORY)
 if(hasParent)
   set(STANDALONE_BUILD 0)
@@ -118,12 +120,16 @@ set_target_properties(${TARGET}_STATIC PROPERTIES
   )
 
 target_include_directories(${TARGET}_STATIC PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  )
-
+  ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(${TARGET}_SHARED PUBLIC
-  ${CMAKE_CURRENT_SOURCE_DIR}
-  )
+  ${CMAKE_CURRENT_SOURCE_DIR})
+
+target_link_libraries(${TARGET}_STATIC ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(${TARGET}_SHARED ${CMAKE_THREAD_LIBS_INIT})
+if(UNIX AND NOT APPLE)
+  target_link_libraries(${TARGET}_STATIC rt)
+  target_link_libraries(${TARGET}_SHARED rt)
+endif()
 
 install(TARGETS ${TARGET}_STATIC DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
 install(TARGETS ${TARGET}_SHARED DESTINATION ${CMAKE_INSTALL_PREFIX}/lib64 COMPONENT mdbx)
