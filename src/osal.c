@@ -970,7 +970,7 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   }
 
   /* Windows unable:
-    *  - shrinking a mapped file;
+    *  - shrink a mapped file;
     *  - change size of mapped view;
     *  - extend read-only mapping;
     * Therefore we should unmap/map entire section. */
@@ -979,6 +979,8 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
     return ntstatus2errcode(status);
   status = NtClose(map->section);
   map->section = NULL;
+  PVOID ReservedAddress = NULL;
+  SIZE_T ReservedSize = limit;
 
   if (!NT_SUCCESS(status)) {
   bailout_ntstatus:
@@ -986,7 +988,25 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   bailout:
     map->address = NULL;
     map->current = map->length = 0;
+    if (ReservedAddress)
+      (void)NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress,
+                                &ReservedSize, MEM_RELEASE);
     return err;
+  }
+
+  /* resizing of the file may take a while,
+   * therefore we reserve address space to avoid occupy it by other threads */
+  ReservedAddress = map->address;
+  status = NtAllocateVirtualMemory(GetCurrentProcess(), &ReservedAddress, 0,
+                                   &ReservedSize, MEM_RESERVE, PAGE_NOACCESS);
+  if (!NT_SUCCESS(status)) {
+    ReservedAddress = NULL;
+    if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 ||
+        limit == map->length)
+      goto bailout_ntstatus /* no way to recovery */;
+
+    /* assume we can change base address if mapping size changed */
+    map->address = NULL;
   }
 
 retry_file_and_section:
@@ -1017,6 +1037,15 @@ retry_file_and_section:
 
   if (!NT_SUCCESS(status))
     goto bailout_ntstatus;
+
+  if (ReservedAddress) {
+    /* release reserved address space */
+    status = NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress,
+                                 &ReservedSize, MEM_RELEASE);
+    ReservedAddress = NULL;
+    if (!NT_SUCCESS(status))
+      goto bailout_ntstatus;
+  }
 
 retry_mapview:;
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? size : limit;
