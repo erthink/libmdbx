@@ -3958,6 +3958,24 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       continue;
     }
 
+    /* LY: check end_pgno */
+    if (page.mp_meta.mm_geo.now < page.mp_meta.mm_geo.lower ||
+        page.mp_meta.mm_geo.now > page.mp_meta.mm_geo.upper) {
+      mdbx_notice("meta[%u] has invalid end-pageno (%" PRIaPGNO "), skip it",
+                  meta_number, page.mp_meta.mm_geo.now);
+      rc = MDBX_CORRUPTED;
+      continue;
+    }
+
+    /* LY: check last_pgno */
+    if (page.mp_meta.mm_geo.next < MIN_PAGENO ||
+        page.mp_meta.mm_geo.next - 1 > MAX_PAGENO) {
+      mdbx_notice("meta[%u] has invalid next-pageno (%" PRIaPGNO "), skip it",
+                  meta_number, page.mp_meta.mm_geo.next);
+      rc = MDBX_CORRUPTED;
+      continue;
+    }
+
     /* LY: check mapsize limits */
     const uint64_t mapsize_min =
         page.mp_meta.mm_geo.lower * (uint64_t)page.mp_meta.mm_psize;
@@ -3976,28 +3994,23 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
     if (mapsize_max > MAX_MAPSIZE ||
         MAX_PAGENO < mdbx_roundup2((size_t)mapsize_max, env->me_os_psize) /
                          (uint64_t)page.mp_meta.mm_psize) {
-      mdbx_notice("meta[%u] has too large max-mapsize (%" PRIu64 "), skip it",
-                  meta_number, mapsize_max);
-      rc = MDBX_TOO_LARGE;
-      continue;
-    }
+      const uint64_t used_bytes =
+          page.mp_meta.mm_geo.next * (uint64_t)page.mp_meta.mm_psize;
+      if (page.mp_meta.mm_geo.next - 1 > MAX_PAGENO ||
+          used_bytes > MAX_MAPSIZE) {
+        mdbx_notice("meta[%u] has too large max-mapsize (%" PRIu64 "), skip it",
+                    meta_number, mapsize_max);
+        rc = MDBX_TOO_LARGE;
+        continue;
+      }
 
-    /* LY: check end_pgno */
-    if (page.mp_meta.mm_geo.now < page.mp_meta.mm_geo.lower ||
-        page.mp_meta.mm_geo.now > page.mp_meta.mm_geo.upper) {
-      mdbx_notice("meta[%u] has invalid end-pageno (%" PRIaPGNO "), skip it",
-                  meta_number, page.mp_meta.mm_geo.now);
-      rc = MDBX_CORRUPTED;
-      continue;
-    }
-
-    /* LY: check last_pgno */
-    if (page.mp_meta.mm_geo.next < MIN_PAGENO ||
-        page.mp_meta.mm_geo.next - 1 > MAX_PAGENO) {
-      mdbx_notice("meta[%u] has invalid next-pageno (%" PRIaPGNO "), skip it",
-                  meta_number, page.mp_meta.mm_geo.next);
-      rc = MDBX_CORRUPTED;
-      continue;
+      /* allow to open large DB from a 32-bit environment */
+      mdbx_notice("meta[%u] has too large max-mapsize (%" PRIu64 "), "
+                  "but size of used space still acceptable (%" PRIu64 ")",
+                  meta_number, mapsize_max, used_bytes);
+      page.mp_meta.mm_geo.upper = (pgno_t)(MAX_MAPSIZE / page.mp_meta.mm_psize);
+      if (page.mp_meta.mm_geo.now > page.mp_meta.mm_geo.upper)
+        page.mp_meta.mm_geo.now = page.mp_meta.mm_geo.upper;
     }
 
     if (page.mp_meta.mm_geo.next > page.mp_meta.mm_geo.now) {
@@ -4911,10 +4924,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     env->me_dbgeo.upper = pgno2bytes(env, meta.mm_geo.upper);
     env->me_dbgeo.grow = pgno2bytes(env, meta.mm_geo.grow);
     env->me_dbgeo.shrink = pgno2bytes(env, meta.mm_geo.shrink);
-
-    /* allowing open large DB from a 32-bit environment */
-    if (env->me_dbgeo.upper > MAX_MAPSIZE && used_bytes < MAX_MAPSIZE)
-      env->me_dbgeo.upper = MAX_MAPSIZE;
   }
 
   uint64_t filesize_before_mmap;
