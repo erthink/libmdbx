@@ -2713,7 +2713,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(!F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY | MDBX_TXN_FINISHED)))
+  if (unlikely((txn->mt_flags & MDBX_TXN_RDONLY) == 0))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_owner != 0))
@@ -2936,7 +2936,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     }
     mdbx_coherent_barrier();
     txn->mt_numdbs = 0; /* prevent further DBI activity */
-    txn->mt_flags |= MDBX_TXN_FINISHED;
+    txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
   } else if (!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED)) {
     pgno_t *pghead = env->me_reclaimed_pglist;
@@ -2956,6 +2956,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     }
     txn->mt_numdbs = 0;
     txn->mt_flags = MDBX_TXN_FINISHED;
+    txn->mt_owner = 0;
 
     if (!txn->mt_parent) {
       mdbx_pnl_shrink(&txn->mt_befree_pages);
@@ -2965,8 +2966,6 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       env->me_last_reclaimed = 0;
 
       env->me_txn = NULL;
-      txn->mt_owner = 0;
-      txn->mt_signature = 0;
       mode = 0; /* txn == env->me_txn0, do not free() it */
 
       /* The writer mutex was locked in mdbx_txn_begin. */
@@ -2983,9 +2982,9 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     mdbx_pnl_free(pghead);
   }
 
+  mdbx_assert(env, txn->mt_owner == 0);
   if (mode & MDBX_END_FREE) {
     mdbx_ensure(env, txn != env->me_txn0);
-    txn->mt_owner = 0;
     txn->mt_signature = 0;
     free(txn);
   }
@@ -3023,8 +3022,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(txn->mt_owner !=
-               ((txn->mt_flags & MDBX_TXN_FINISHED) ? 0 : mdbx_thread_self())))
+  if (unlikely(txn->mt_owner && txn->mt_owner != mdbx_thread_self()))
     return MDBX_THREAD_MISMATCH;
 
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY))
