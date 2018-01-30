@@ -2981,7 +2981,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     mdbx_pnl_free(pghead);
   }
 
-  mdbx_assert(env, txn->mt_owner == 0);
+  mdbx_assert(env, txn == env->me_txn0 || txn->mt_owner == 0);
   if ((mode & MDBX_END_FREE) != 0 && txn != env->me_txn0) {
     txn->mt_signature = 0;
     free(txn);
