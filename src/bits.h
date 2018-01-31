@@ -743,6 +743,8 @@ struct MDBX_env {
 
 #if defined(_WIN32) || defined(_WIN64)
   SRWLOCK me_remap_guard;
+  /* Workaround for LockFileEx and WriteFile multithread bug */
+  CRITICAL_SECTION me_windowsbug_lock;
 #else
   mdbx_fastmutex_t me_remap_guard;
 #endif

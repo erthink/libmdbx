@@ -127,16 +127,26 @@ static __inline BOOL funlock(mdbx_filehandle_t fd, uint64_t offset,
 #define LCK_WHOLE 0, LCK_MAXLEN
 
 int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
+  if (dontwait) {
+    if (!TryEnterCriticalSection(&env->me_windowsbug_lock))
+      return MDBX_BUSY;
+  } else {
+    EnterCriticalSection(&env->me_windowsbug_lock);
+  }
+
   if (flock(env->me_fd, dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT)
                                  : (LCK_EXCLUSIVE | LCK_WAITFOR),
             LCK_BODY))
     return MDBX_SUCCESS;
   int rc = GetLastError();
+  LeaveCriticalSection(&env->me_windowsbug_lock);
   return (!dontwait || rc != ERROR_LOCK_VIOLATION) ? rc : MDBX_BUSY;
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
-  if (!funlock(env->me_fd, LCK_BODY))
+  int rc = funlock(env->me_fd, LCK_BODY);
+  LeaveCriticalSection(&env->me_windowsbug_lock);
+  if (!rc)
     mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
 }
 

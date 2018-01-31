@@ -4450,6 +4450,7 @@ int __cold mdbx_env_create(MDBX_env **penv) {
 
 #if defined(_WIN32) || defined(_WIN64)
   InitializeSRWLock(&env->me_remap_guard);
+  InitializeCriticalSection(&env->me_windowsbug_lock);
 #else
   rc = mdbx_fastmutex_init(&env->me_remap_guard);
   if (unlikely(rc != MDBX_SUCCESS)) {
@@ -5487,6 +5488,14 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
 
   mdbx_env_close0(env);
   mdbx_ensure(env, mdbx_fastmutex_destroy(&env->me_dbi_lock) == MDBX_SUCCESS);
+#if defined(_WIN32) || defined(_WIN64)
+  /* me_remap_guard don't have destructor (Slim Reader/Writer Lock) */
+  DeleteCriticalSection(&env->me_windowsbug_lock);
+#else
+  mdbx_ensure(env,
+              mdbx_fastmutex_destroy(&env->me_remap_guard) == MDBX_SUCCESS);
+#endif /* Windows */
+
   env->me_signature = 0;
   free(env);
 
