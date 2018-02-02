@@ -2735,7 +2735,8 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
                    MDBX_txn **ret) {
   MDBX_txn *txn;
   MDBX_ntxn *ntxn;
-  int rc, size, tsize;
+  int rc;
+  unsigned size, tsize;
 
   if (unlikely(!env || !ret))
     return MDBX_EINVAL;
@@ -2787,10 +2788,11 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
       return MDBX_BUSY;
     goto renew;
   }
-  if (unlikely((txn = calloc(1, size)) == NULL)) {
+  if (unlikely((txn = malloc(size)) == NULL)) {
     mdbx_debug("calloc: %s", "failed");
     return MDBX_ENOMEM;
   }
+  memset(txn, 0, tsize);
   txn->mt_dbxs = env->me_dbxs; /* static */
   txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
   txn->mt_dbflags = (uint8_t *)txn + size - env->me_maxdbs;
