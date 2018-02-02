@@ -5284,8 +5284,8 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
 
   env->me_path = mdbx_strdup(path);
   env->me_dbxs = calloc(env->me_maxdbs, sizeof(MDBX_dbx));
-  env->me_dbflags = calloc(env->me_maxdbs, sizeof(uint16_t));
-  env->me_dbiseqs = calloc(env->me_maxdbs, sizeof(unsigned));
+  env->me_dbflags = calloc(env->me_maxdbs, sizeof(env->me_dbflags[0]));
+  env->me_dbiseqs = calloc(env->me_maxdbs, sizeof(env->me_dbiseqs[0]));
   if (!(env->me_dbxs && env->me_path && env->me_dbflags && env->me_dbiseqs)) {
     rc = MDBX_ENOMEM;
     goto bailout;
@@ -10365,8 +10365,8 @@ static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
 
   env->me_dbxs[dbi].md_name.iov_base = NULL;
   env->me_dbxs[dbi].md_name.iov_len = 0;
-  env->me_dbflags[dbi] = 0;
   env->me_dbiseqs[dbi]++;
+  env->me_dbflags[dbi] = 0;
   free(ptr);
   return MDBX_SUCCESS;
 }
