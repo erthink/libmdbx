@@ -338,7 +338,7 @@
 #       define VALGRIND_DISABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
 #       define VALGRIND_ENABLE_ADDR_ERROR_REPORTING_IN_RANGE(a,s)
 #   endif
-#else
+#elif !defined(RUNNING_ON_VALGRIND)
 #   define VALGRIND_CREATE_MEMPOOL(h,r,z)
 #   define VALGRIND_DESTROY_MEMPOOL(h)
 #   define VALGRIND_MEMPOOL_TRIM(h,a,s)
@@ -357,7 +357,7 @@
 
 #ifdef __SANITIZE_ADDRESS__
 #   include <sanitizer/asan_interface.h>
-#else
+#elif !defined(ASAN_POISON_MEMORY_REGION)
 #   define ASAN_POISON_MEMORY_REGION(addr, size) \
         ((void)(addr), (void)(size))
 #   define ASAN_UNPOISON_MEMORY_REGION(addr, size) \
