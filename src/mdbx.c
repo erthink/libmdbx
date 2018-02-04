@@ -10161,15 +10161,19 @@ int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
   arg->mi_dxb_pagesize = env->me_psize;
   arg->mi_sys_pagesize = env->me_os_psize;
 
-  arg->mi_latter_reader_txnid = 0;
+  arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid = 0;
   if (env->me_lck) {
     MDBX_reader *r = env->me_lck->mti_readers;
-    arg->mi_latter_reader_txnid = arg->mi_recent_txnid;
+    arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
+        arg->mi_recent_txnid;
     for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
-      if (r[i].mr_pid) {
+      const mdbx_pid_t pid = r[i].mr_pid;
+      if (pid) {
         const txnid_t txnid = r[i].mr_txnid;
         if (arg->mi_latter_reader_txnid > txnid)
           arg->mi_latter_reader_txnid = txnid;
+        if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
+          arg->mi_self_latter_reader_txnid = txnid;
       }
     }
   }

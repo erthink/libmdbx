@@ -475,6 +475,8 @@ typedef struct MDBX_envinfo {
   uint64_t mi_last_pgno;           /* ID of the last used page */
   uint64_t mi_recent_txnid;        /* ID of the last committed transaction */
   uint64_t mi_latter_reader_txnid; /* ID of the last reader transaction */
+  uint64_t mi_self_latter_reader_txnid; /* ID of the last reader transaction of
+                                           caller process */
   uint64_t mi_meta0_txnid, mi_meta0_sign;
   uint64_t mi_meta1_txnid, mi_meta1_sign;
   uint64_t mi_meta2_txnid, mi_meta2_sign;
