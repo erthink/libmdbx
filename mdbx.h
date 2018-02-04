@@ -1155,7 +1155,8 @@ LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *stat,
  * Returns A non-zero error value on failure and 0 on success. */
 #define MDBX_TBL_DIRTY 0x01 /* DB was written in this txn */
 #define MDBX_TBL_STALE 0x02 /* Named-DB record is older than txnID */
-#define MDBX_TBL_NEW 0x04   /* Named-DB handle opened in this txn */
+#define MDBX_TBL_FRESH 0x04 /* Named-DB handle opened in this txn */
+#define MDBX_TBL_CREAT 0x08 /* Named-DB handle created in this txn */
 LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                                   unsigned *state);
 LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);

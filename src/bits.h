@@ -539,10 +539,11 @@ struct MDBX_txn {
 /* Transaction DB Flags */
 #define DB_DIRTY MDBX_TBL_DIRTY /* DB was written in this txn */
 #define DB_STALE MDBX_TBL_STALE /* Named-DB record is older than txnID */
-#define DB_NEW MDBX_TBL_NEW     /* Named-DB handle opened in this txn */
-#define DB_VALID 0x08           /* DB handle is valid, see also MDBX_VALID */
-#define DB_USRVALID 0x10        /* As DB_VALID, but not set for FREE_DBI */
-#define DB_DUPDATA 0x20         /* DB is MDBX_DUPSORT data */
+#define DB_FRESH MDBX_TBL_FRESH /* Named-DB handle opened in this txn */
+#define DB_CREAT MDBX_TBL_CREAT /* Named-DB handle created in this txn */
+#define DB_VALID 0x10           /* DB handle is valid, see also MDBX_VALID */
+#define DB_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
+#define DB_DUPDATA 0x40         /* DB is MDBX_DUPSORT data */
   /* In write txns, array of cursors for each DB */
   MDBX_cursor **mt_cursors;
   /* Array of flags for each DB */
@@ -1178,14 +1179,6 @@ static __inline void SETDSZ(MDBX_node *node, size_t size) {
 #undef MDBX_COMMIT_PAGES
 #define MDBX_COMMIT_PAGES IOV_MAX
 #endif
-
-/* Check txn and dbi arguments to a function */
-#define TXN_DBI_EXIST(txn, dbi, validity)                                      \
-  ((dbi) < (txn)->mt_numdbs && ((txn)->mt_dbflags[dbi] & (validity)))
-
-/* Check for misused dbi handles */
-#define TXN_DBI_CHANGED(txn, dbi)                                              \
-  ((txn)->mt_dbiseqs[dbi] != (txn)->mt_env->me_dbiseqs[dbi])
 
 /* LY: fast enough on most systems
  *
