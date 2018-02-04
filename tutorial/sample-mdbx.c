@@ -5,7 +5,7 @@
 
 /*
  * Copyright 2017 Ilya Shipitsin <chipitsine@gmail.com>.
- * Copyright 2015-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright 2012-2015 Howard Chu, Symas Corp.
  * All rights reserved.
  *

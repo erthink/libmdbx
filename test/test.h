@@ -1,5 +1,5 @@
 ﻿/*
- * Copyright 2017 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
