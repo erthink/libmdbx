@@ -162,7 +162,7 @@ void mdbx_txn_unlock(MDBX_env *env) {
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
 int mdbx_rdt_lock(MDBX_env *env) {
-  AcquireSRWLockShared(&env->me_remap_guard);
+  mdbx_shlock_acquireShared(&env->me_remap_guard);
   if (env->me_lfd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
@@ -178,7 +178,7 @@ void mdbx_rdt_unlock(MDBX_env *env) {
     if (!funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
   }
-  ReleaseSRWLockShared(&env->me_remap_guard);
+  mdbx_shlock_releaseShared(&env->me_remap_guard);
 }
 
 static int suspend_and_append(mdbx_handle_array_t **array,
@@ -573,4 +573,70 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
     /* failure */
     return rc;
   }
+}
+
+/*----------------------------------------------------------------------------*/
+/* shared lock
+   Copyright (C) 1995-2002 Brad Wilson
+*/
+
+void mdbx_shlock_init(MDBX_shlock *lck)
+{
+	lck->readerCount = lck->writerCount = 0;
+}
+
+void mdbx_shlock_acquireShared(MDBX_shlock *lck)
+{
+	while (1) {
+		//  If there's a writer already, spin without unnecessarily
+		//  interlocking the CPUs
+
+		if (lck->writerCount != 0) {
+			YieldProcessor();
+			continue;
+		}
+
+		//  Add to the readers list
+
+		_InterlockedIncrement((long*)&lck->readerCount);
+
+		//  Check for writers again (we may have been pre-empted). If
+		//  there are no writers writing or waiting, then we're done.
+
+		if (lck->writerCount == 0)
+			break;
+
+		//  Remove from the readers list, spin, try again
+
+		_InterlockedDecrement((long*)&lck->readerCount);
+		YieldProcessor();
+	}
+}
+
+void mdbx_shlock_releaseShared(MDBX_shlock *lck)
+{
+	_InterlockedDecrement((long*)&lck->readerCount);
+}
+
+void mdbx_shlock_acquireExclusive(MDBX_shlock *lck)
+{
+	//  See if we can become the writer (expensive, because it inter-
+	//  locks the CPUs, so writing should be an infrequent process)
+
+	while (_InterlockedExchange((long*)&lck->writerCount, 1) == 1) {
+		YieldProcessor();
+	}
+
+	//  Now we're the writer, but there may be outstanding readers.
+	//  Spin until there aren't any more; new readers will wait now
+	//  that we're the writer.
+
+	while (lck->readerCount != 0) {
+		YieldProcessor();
+	}
+}
+
+void mdbx_shlock_releaseExclusive(MDBX_shlock *lck)
+{
+	lck->writerCount = 0;
 }

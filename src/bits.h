@@ -743,7 +743,7 @@ struct MDBX_env {
   } me_dbgeo;      /* */
 
 #if defined(_WIN32) || defined(_WIN64)
-  SRWLOCK me_remap_guard;
+  MDBX_shlock me_remap_guard;
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION me_windowsbug_lock;
 #else

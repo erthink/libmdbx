@@ -522,6 +522,18 @@ void mdbx_txn_unlock(MDBX_env *env);
 int mdbx_rpid_set(MDBX_env *env);
 int mdbx_rpid_clear(MDBX_env *env);
 
+typedef struct MDBX_shlock
+{
+	__declspec(align(64)) long volatile readerCount;
+	__declspec(align(64)) long volatile writerCount;
+} MDBX_shlock;
+
+void mdbx_shlock_init(MDBX_shlock *lck);
+void mdbx_shlock_acquireShared(MDBX_shlock *lck);
+void mdbx_shlock_releaseShared(MDBX_shlock *lck);
+void mdbx_shlock_acquireExclusive(MDBX_shlock *lck);
+void mdbx_shlock_releaseExclusive(MDBX_shlock *lck);
+
 /* Checks reader by pid.
  *
  * Returns:

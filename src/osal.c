@@ -19,6 +19,8 @@
 #if defined(_WIN32) || defined(_WIN64)
 #include <winternl.h>
 
+typedef BOOL (WINAPI *pfnGetFileInformationByHandleEx)(HANDLE, FILE_INFO_BY_HANDLE_CLASS, LPVOID, DWORD);
+
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
@@ -780,14 +782,15 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   if (GetFileType(map->fd) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
 
-  FILE_REMOTE_PROTOCOL_INFO RemoteProtocolInfo;
-  if (GetFileInformationByHandleEx(map->fd, FileRemoteProtocolInfo,
-                                   &RemoteProtocolInfo,
-                                   sizeof(RemoteProtocolInfo))) {
-    if ((RemoteProtocolInfo.Flags & (REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK |
-                                     REMOTE_PROTOCOL_INFO_FLAG_OFFLINE)) !=
-        REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK)
-      return ERROR_FILE_OFFLINE;
+  pfnGetFileInformationByHandleEx pfunc = (pfnGetFileInformationByHandleEx)GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetFileInformationByHandleEx");
+  if (pfunc) {
+	  FILE_REMOTE_PROTOCOL_INFO RemoteProtocolInfo;
+	  if (pfunc(map->fd, FileRemoteProtocolInfo,
+		  &RemoteProtocolInfo,
+		  sizeof(RemoteProtocolInfo))) {
+		  if ((RemoteProtocolInfo.Flags & (REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK | REMOTE_PROTOCOL_INFO_FLAG_OFFLINE)) != REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK)
+			  return ERROR_FILE_OFFLINE;
+	  }
   }
 
 #if defined(_WIN64) && defined(WOF_CURRENT_VERSION)
@@ -810,49 +813,53 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
 #endif
 
   WCHAR PathBuffer[INT16_MAX];
-  DWORD VolumeSerialNumber, FileSystemFlags;
-  if (!GetVolumeInformationByHandleW(map->fd, PathBuffer, INT16_MAX,
-                                     &VolumeSerialNumber, NULL,
-                                     &FileSystemFlags, NULL, 0))
-    return GetLastError();
-
-  if ((flags & MDBX_RDONLY) == 0) {
-    if (FileSystemFlags & (FILE_SEQUENTIAL_WRITE_ONCE | FILE_READ_ONLY_VOLUME |
-                           FILE_VOLUME_IS_COMPRESSED))
-      return ERROR_FILE_OFFLINE;
+  typedef BOOL (WINAPI *pfnGetVolumeInformationByHandle)(HANDLE, LPWSTR, DWORD, LPDWORD, LPDWORD, LPDWORD, LPWSTR, DWORD);
+  pfnGetVolumeInformationByHandle pvol = (pfnGetVolumeInformationByHandle)GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetVolumeInformationByHandleW");
+  if (pvol) {
+    DWORD VolumeSerialNumber, FileSystemFlags;
+    if (!pvol(map->fd, PathBuffer, INT16_MAX, &VolumeSerialNumber, NULL, &FileSystemFlags, NULL, 0))
+      return GetLastError();
+    
+    if ((flags & MDBX_RDONLY) == 0) {
+      if (FileSystemFlags & (FILE_SEQUENTIAL_WRITE_ONCE | FILE_READ_ONLY_VOLUME |
+                             FILE_VOLUME_IS_COMPRESSED))
+        return ERROR_FILE_OFFLINE;
+    }
   }
 
-  if (!GetFinalPathNameByHandleW(map->fd, PathBuffer, INT16_MAX,
-                                 FILE_NAME_NORMALIZED | VOLUME_NAME_NT))
-    return GetLastError();
+  typedef DWORD (WINAPI *pfnGetFinalPathNameByHandle)(HANDLE, LPWSTR, DWORD, DWORD);
+  pfnGetFinalPathNameByHandle pfname = (pfnGetFinalPathNameByHandle)GetProcAddress(GetModuleHandleA("kernel32.dll"), "GetFinalPathNameByHandleW");
+  if (pfname) {
+	 if (!pfname(map->fd, PathBuffer, INT16_MAX, FILE_NAME_NORMALIZED | VOLUME_NAME_NT))
+      return GetLastError();
 
-  if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0)
-    return ERROR_FILE_OFFLINE;
-
-  if (GetFinalPathNameByHandleW(map->fd, PathBuffer, INT16_MAX,
-                                FILE_NAME_NORMALIZED | VOLUME_NAME_DOS)) {
-    UINT DriveType = GetDriveTypeW(PathBuffer);
-    if (DriveType == DRIVE_NO_ROOT_DIR &&
-        wcsncmp(PathBuffer, L"\\\\?\\", 4) == 0 &&
-        wcsncmp(PathBuffer + 5, L":\\", 2) == 0) {
-      PathBuffer[7] = 0;
-      DriveType = GetDriveTypeW(PathBuffer + 4);
-    }
-    switch (DriveType) {
-    case DRIVE_CDROM:
-      if (flags & MDBX_RDONLY)
-        break;
-    // fall through
-    case DRIVE_UNKNOWN:
-    case DRIVE_NO_ROOT_DIR:
-    case DRIVE_REMOTE:
-    default:
+    if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0)
       return ERROR_FILE_OFFLINE;
-    case DRIVE_REMOVABLE:
-    case DRIVE_FIXED:
-    case DRIVE_RAMDISK:
-      break;
-    }
+
+    if (pfname(map->fd, PathBuffer, INT16_MAX, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS)) {
+      UINT DriveType = GetDriveTypeW(PathBuffer);
+      if (DriveType == DRIVE_NO_ROOT_DIR &&
+          wcsncmp(PathBuffer, L"\\\\?\\", 4) == 0 &&
+          wcsncmp(PathBuffer + 5, L":\\", 2) == 0) {
+        PathBuffer[7] = 0;
+        DriveType = GetDriveTypeW(PathBuffer + 4);
+      }
+      switch (DriveType) {
+      case DRIVE_CDROM:
+        if (flags & MDBX_RDONLY)
+          break;
+      // fall through
+      case DRIVE_UNKNOWN:
+      case DRIVE_NO_ROOT_DIR:
+      case DRIVE_REMOTE:
+      default:
+        return ERROR_FILE_OFFLINE;
+      case DRIVE_REMOVABLE:
+      case DRIVE_FIXED:
+      case DRIVE_RAMDISK:
+        break;
+      }
+	 }
   }
 
   rc = mdbx_filesize(map->fd, &map->filesize);
