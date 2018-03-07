@@ -14,7 +14,7 @@
 
 #include "./bits.h"
 
-#if MDBX_VERSION_MAJOR != 0 || MDBX_VERSION_MINOR != 0
+#if MDBX_VERSION_MAJOR != 0 || MDBX_VERSION_MINOR != 1
 #error "API version mismatch!"
 #endif
 
