@@ -18,6 +18,40 @@
 #include <ieee754.h>
 #endif
 
+/* Compiler's includes for builtins/intrinsics */
+#if defined(_MSC_VER) || defined(__INTEL_COMPILER)
+#include <intrin.h>
+#elif __GNUC_PREREQ(4, 4) || defined(__clang__)
+#if defined(__ia32__) || defined(__e2k__)
+#include <x86intrin.h>
+#endif /* __ia32__ */
+#if defined(__ia32__)
+#include <cpuid.h>
+#endif /* __ia32__ */
+#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
+#include <mbarrier.h>
+#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
+    (defined(HP_IA64) || defined(__ia64))
+#include <machine/sys/inline.h>
+#elif defined(__IBMC__) && defined(__powerpc)
+#include <atomic.h>
+#elif defined(_AIX)
+#include <builtins.h>
+#include <sys/atomic_op.h>
+#elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
+#include <c_asm.h>
+#include <machine/builtins.h>
+#elif defined(__MWERKS__)
+/* CodeWarrior - troubles ? */
+#pragma gcc_extensions
+#elif defined(__SNC__)
+/* Sony PS3 - troubles ? */
+#elif defined(__hppa__) || defined(__hppa)
+#include <machine/inline.h>
+#else
+#error Unsupported C compiler, please use GNU C 4.4 or newer
+#endif /* Compiler */
+
 std::string format(const char *fmt, ...) {
   va_list ap, ones;
   va_start(ap, fmt);
@@ -93,19 +127,6 @@ bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
 
 //-----------------------------------------------------------------------------
 
-#ifdef __mips__
-static uint64_t *mips_tsc_addr;
-
-__cold static void mips_rdtsc_init() {
-  int mem_fd = open("/dev/mem", O_RDONLY | O_SYNC, 0);
-  HIPPEUS_ENSURE(mem_fd >= 0);
-
-  mips_tsc_addr = mmap(nullptr, pagesize, PROT_READ, MAP_SHARED, mem_fd,
-                       0x10030000 /* MIPS_ZBUS_TIMER */);
-  close(mem_fd);
-}
-#endif /* __mips__ */
-
 uint64_t entropy_ticks(void) {
 #if defined(__GNUC__) || defined(__clang__)
 #if defined(__ia64__)
@@ -141,31 +162,11 @@ uint64_t entropy_ticks(void) {
   __asm __volatile("mftbu %0" : "=r"(tbu));
 
   return (((uin64_t)tbu0) << 32) | tbl;
-#elif defined(__mips__)
-  if (mips_tsc_addr != MAP_FAILED) {
-    if (unlikely(!mips_tsc_addr)) {
-      static pthread_once_t is_initialized = PTHREAD_ONCE_INIT;
-      int rc = pthread_once(&is_initialized, mips_rdtsc_init);
-      if (unlikely(rc))
-        failure_perror("pthread_once()", rc);
-    }
-    if (mips_tsc_addr != MAP_FAILED)
-      return *mips_tsc_addr;
-  }
-#elif defined(__x86_64__) || defined(__i386__)
-#if __GNUC_PREREQ(4, 7) || __has_builtin(__builtin_ia32_rdtsc)
-  return __builtin_ia32_rdtsc();
-#else
-  unsigned lo, hi;
-
-  /* LY: Using the "a" and "d" constraints is important for correct code. */
-  __asm __volatile("rdtsc" : "=a"(lo), "=d"(hi));
-
-  return (((uint64_t)hi) << 32) + lo;
-#endif
 #endif /* arch selector */
+#endif /* __GNUC__ || __clang__ */
 
-#elif defined(_M_IX86) || defined(_M_X64)
+#if defined(__e2k__) || defined(__elbrus__) || defined(_M_IX86) ||             \
+    defined(_M_X64) || defined(__x86_64__) || defined(__i386__)
   return __rdtsc();
 #elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   LARGE_INTEGER PerformanceCount;
