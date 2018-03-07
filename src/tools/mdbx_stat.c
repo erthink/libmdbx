@@ -1,4 +1,4 @@
-﻿/* mdbx_stat.c - memory-mapped database status tool */
+/* mdbx_stat.c - memory-mapped database status tool */
 
 /*
  * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>

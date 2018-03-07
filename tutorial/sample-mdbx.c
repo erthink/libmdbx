@@ -1,4 +1,4 @@
-﻿/* sample-mdb.txt - MDB toy/sample
+/* sample-mdb.txt - MDB toy/sample
  *
  * Do a line-by-line comparison of this and sample-bdb.txt
  */

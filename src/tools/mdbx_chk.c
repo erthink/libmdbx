@@ -1,4 +1,4 @@
-﻿/* mdbx_chk.c - memory-mapped database check tool */
+/* mdbx_chk.c - memory-mapped database check tool */
 
 /*
  * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>
