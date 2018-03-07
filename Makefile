@@ -24,7 +24,7 @@ suffix	?=
 CC	?= gcc
 CXX	?= g++
 XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
-CFLAGS	?= -O2 -g3 -Wall -Wno-constant-logical-operand -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu11 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
 TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.db

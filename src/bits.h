@@ -88,6 +88,16 @@
 #   warning "libmdbx don't compatible with ThreadSanitizer, you will get a lot of false-positive issues."
 #endif /* __SANITIZE_THREAD__ */
 
+#if __has_warning("-Wconstant-logical-operand")
+#if defined(__clang__)
+#pragma clang diagnostic ignored "-Wconstant-logical-operand"
+#elif defined(__GNUC__)
+#pragma GCC diagnostic ignored "-Wconstant-logical-operand"
+#else
+#pragma warning disable "constant-logical-operand"
+#endif
+#endif /* -Wconstant-logical-operand */
+
 #include "./osal.h"
 
 /* *INDENT-ON* */
