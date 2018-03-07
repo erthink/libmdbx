@@ -65,7 +65,15 @@
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old compilers.
      */
-#   warning "libmdbx required at least GCC 4.2 compatible C/C++ compiler."
+#   warning "libmdbx required GCC >= 4.2"
+#endif
+
+#if defined(__clang__) && !__CLANG_PREREQ(3,8)
+    /* Actualy libmdbx was not tested with CLANG older than 3.8.
+     * But you could remove this #error and try to continue at your own risk.
+     * In such case please don't rise up an issues related ONLY to old compilers.
+     */
+#   warning "libmdbx required CLANG >= 3.8"
 #endif
 
 #if defined(__GLIBC__) && !__GLIBC_PREREQ(2,12)
