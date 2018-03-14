@@ -23,8 +23,13 @@ suffix	?=
 
 CC	?= gcc
 CXX	?= g++
-XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
+ifeq ($(shell (export LC_ALL=C; ($(CC) --version 2>&1; $(CC) -v 2>&1) | grep -q -i 'e2k' && echo yes)),yes)
+CFLAGS	?= -O3 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
+else
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
+endif
+
+XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
 CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu11 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
 TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-check.db
