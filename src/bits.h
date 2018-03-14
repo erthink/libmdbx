@@ -111,7 +111,7 @@
 #   else
 #       pragma warning disable "alignment-reduction-ignored"
 #   endif
-#endif /* -Wno-constant-logical-operand */
+#endif /* -Walignment-reduction-ignored */
 
 #include "./osal.h"
 
