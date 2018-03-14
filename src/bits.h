@@ -25,7 +25,7 @@
 
 /* Features under development */
 #ifndef MDBX_DEVEL
-#   define MDBX_DEVEL 1
+#   define MDBX_DEVEL 0
 #endif
 
 /*----------------------------------------------------------------------------*/
