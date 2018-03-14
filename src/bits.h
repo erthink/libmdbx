@@ -99,7 +99,9 @@
 #endif /* -Wconstant-logical-operand */
 
 #if __has_warning("-Walignment-reduction-ignored") || defined(__e2k__) || defined(__ICC)
-#if defined(__ICC)
+#if defined(__LCC__)
+#pragma diag_suppress alignment_reduction_ignored
+#elif defined(__ICC)
 #pragma warning(disable: 3453 1366)
 #elif defined(__clang__)
 #pragma clang diagnostic ignored "-Walignment-reduction-ignored"
