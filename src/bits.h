@@ -89,27 +89,28 @@
 #endif /* __SANITIZE_THREAD__ */
 
 #if __has_warning("-Wconstant-logical-operand")
-#if defined(__clang__)
-#pragma clang diagnostic ignored "-Wconstant-logical-operand"
-#elif defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Wconstant-logical-operand"
-#else
-#pragma warning disable "constant-logical-operand"
-#endif
+#   if defined(__clang__)
+#       pragma clang diagnostic ignored "-Wconstant-logical-operand"
+#   elif defined(__GNUC__)
+#       pragma GCC diagnostic ignored "-Wconstant-logical-operand"
+#   else
+#      pragma warning disable "constant-logical-operand"
+#   endif
 #endif /* -Wconstant-logical-operand */
 
-#if __has_warning("-Walignment-reduction-ignored") || defined(__e2k__) || defined(__ICC)
-#if defined(__LCC__)
-#pragma diag_suppress alignment_reduction_ignored
+#if defined(__LCC__) && (__LCC__ <= 121)
+    /* bug #2798 */
+#   pragma diag_suppress alignment_reduction_ignored
 #elif defined(__ICC)
-#pragma warning(disable: 3453 1366)
-#elif defined(__clang__)
-#pragma clang diagnostic ignored "-Walignment-reduction-ignored"
-#elif defined(__GNUC__)
-#pragma GCC diagnostic ignored "-Walignment-reduction-ignored"
-#else
-#pragma warning disable "alignment-reduction-ignored"
-#endif
+#   pragma warning(disable: 3453 1366)
+#elif __has_warning("-Walignment-reduction-ignored")
+#   if defined(__clang__)
+#       pragma clang diagnostic ignored "-Walignment-reduction-ignored"
+#   elif defined(__GNUC__)
+#       pragma GCC diagnostic ignored "-Walignment-reduction-ignored"
+#   else
+#       pragma warning disable "alignment-reduction-ignored"
+#   endif
 #endif /* -Wno-constant-logical-operand */
 
 #include "./osal.h"
