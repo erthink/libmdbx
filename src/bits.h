@@ -448,9 +448,7 @@ typedef struct MDBX_lockinfo {
   MDBX_reader __cache_aligned mti_readers[1];
 } MDBX_lockinfo;
 
-#ifdef _MSC_VER
 #pragma pack(pop)
-#endif /* MSVC: Enable aligment */
 
 #define MDBX_LOCKINFO_WHOLE_SIZE                                               \
   ((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &                         \
