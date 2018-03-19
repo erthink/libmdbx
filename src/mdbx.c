@@ -2987,6 +2987,13 @@ uint64_t mdbx_txn_id(MDBX_txn *txn) {
   return txn->mt_txnid;
 }
 
+int mdbx_txn_flags(MDBX_txn *txn) {
+  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+    return -1;
+
+  return txn->mt_flags;
+}
+
 /* Export or close DBI handles opened in this txn. */
 static void mdbx_dbis_update(MDBX_txn *txn, int keep) {
   MDBX_dbi n = txn->mt_numdbs;

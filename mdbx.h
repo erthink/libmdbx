@@ -982,6 +982,15 @@ LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
  * [in] txn  A transaction handle returned by mdbx_txn_begin() */
 LIBMDBX_API MDBX_env *mdbx_txn_env(MDBX_txn *txn);
 
+/* Return the transaction's flags.
+ *
+ * This returns the flags associated with this transaction.
+ *
+ * [in] txn A transaction handle returned by mdbx_txn_begin()
+ *
+ * Returns A transaction flags, valid if input is an active transaction. */
+LIBMDBX_API int mdbx_txn_flags(MDBX_txn *txn);
+
 /* Return the transaction's ID.
  *
  * This returns the identifier associated with this transaction. For a
