@@ -218,6 +218,7 @@ struct actor_params_pod {
 
   unsigned delaystart;
   unsigned waitfor_nops;
+  unsigned inject_writefaultn;
 
   unsigned max_readers;
   unsigned max_tables;

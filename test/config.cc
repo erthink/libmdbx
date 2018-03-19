@@ -326,6 +326,11 @@ void dump(const char *title) {
     else
       log_info("no-delay\n");
 
+    if (i->params.inject_writefaultn)
+      log_info("inject-writefault on %u ops\n", i->params.inject_writefaultn);
+    else
+      log_info("no-inject-writefault\n");
+
     log_info("limits: readers %u, tables %u\n", i->params.max_readers,
              i->params.max_tables);
 

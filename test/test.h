@@ -107,6 +107,8 @@ protected:
   void txn_begin(bool readonly, unsigned flags = 0);
   void txn_end(bool abort);
   void txn_restart(bool abort, bool readonly, unsigned flags = 0);
+  void txn_inject_writefault(void);
+  void txn_inject_writefault(MDBX_txn *txn);
   void fetch_canary();
   void update_canary(uint64_t increment);
   void kick_progress(bool active) const;

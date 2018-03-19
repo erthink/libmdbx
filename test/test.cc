@@ -204,6 +204,7 @@ void testcase::txn_end(bool abort) {
     if (unlikely(rc != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", rc);
   } else {
+    txn_inject_writefault(txn);
     int rc = mdbx_txn_commit(txn);
     if (unlikely(rc != MDBX_SUCCESS))
       failure_perror("mdbx_txn_commit()", rc);
@@ -216,6 +217,27 @@ void testcase::txn_restart(bool abort, bool readonly, unsigned flags) {
   if (txn_guard)
     txn_end(abort);
   txn_begin(readonly, flags);
+}
+
+void testcase::txn_inject_writefault(void) {
+  if (txn_guard)
+    txn_inject_writefault(txn_guard.get());
+}
+
+void testcase::txn_inject_writefault(MDBX_txn *txn) {
+  if (config.params.inject_writefaultn && txn) {
+    if (config.params.inject_writefaultn <= nops_completed &&
+        (mdbx_txn_flags(txn) & MDBX_RDONLY) == 0) {
+      log_info("== txn_inject_writefault(): got %u nops or more, inject FAULT",
+               config.params.inject_writefaultn);
+      log_flush();
+#if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+      TerminateProcess(GetCurrentProcess(), 42);
+#else
+      raise(SIGKILL);
+#endif
+    }
+  }
 }
 
 bool testcase::wait4start() {

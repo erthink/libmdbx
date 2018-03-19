@@ -219,6 +219,9 @@ int main(int argc, char *const argv[]) {
     if (config::parse_option(argc, argv, narg, "wait4ops", params.waitfor_nops,
                              config::decimal))
       continue;
+    if (config::parse_option(argc, argv, narg, "inject-writefault",
+                             params.inject_writefaultn, config::decimal))
+      continue;
     if (config::parse_option(argc, argv, narg, "drop", params.drop_table))
       continue;
     if (config::parse_option(argc, argv, narg, "dump-config",
