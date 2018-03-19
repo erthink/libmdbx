@@ -245,7 +245,7 @@ void dump(const char *title = "config-dump: ");
 struct actor_params : public config::actor_params_pod {
   std::string pathname_log;
   std::string pathname_db;
-  void set_defaults(void);
+  void set_defaults(const std::string &tmpdir);
 };
 
 struct actor_config : public config::actor_config_pod {

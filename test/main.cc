@@ -22,7 +22,7 @@ void __noreturn usage(void) {
 
 //-----------------------------------------------------------------------------
 
-void actor_params::set_defaults(void) {
+void actor_params::set_defaults(const std::string &tmpdir) {
   pathname_log = "";
   loglevel =
 #ifdef NDEBUG
@@ -31,12 +31,7 @@ void actor_params::set_defaults(void) {
       logging::trace;
 #endif
 
-  pathname_db =
-#ifdef __linux__
-      "/dev/shm/test_tmpdb.mdbx";
-#else
-      "test_tmpdb.mdbx";
-#endif
+  pathname_db = tmpdir + "mdbx-test.db";
   mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NORDAHEAD |
                MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM;
   table_flags = MDBX_DUPSORT;
@@ -135,7 +130,7 @@ int main(int argc, char *const argv[]) {
                : EXIT_FAILURE;
 
   actor_params params;
-  params.set_defaults();
+  params.set_defaults(osal_tempdir());
   global::config::dump_config = true;
   logging::setup((logging::loglevel)params.loglevel, "main");
   unsigned last_space_id = 0;
