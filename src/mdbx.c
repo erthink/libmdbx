@@ -10460,13 +10460,13 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
         !strncmp(table_name, txn->mt_dbxs[scan].md_name.iov_base, len)) {
       *dbi = scan;
       rc = mdbx_dbi_bind(txn, scan, user_flags, keycmp, datacmp);
-      goto unlock_return_rc;
+      goto bailout;
     }
   }
 
   if (unlikely(slot >= env->me_maxdbs)) {
     rc = MDBX_DBS_FULL;
-    goto unlock_return_rc;
+    goto bailout;
   }
 
   unsigned dbflag = DB_FRESH | DB_VALID | DB_USRVALID;
@@ -10516,7 +10516,6 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     *dbi = slot;
   }
 
-unlock_return_rc:
   mdbx_ensure(env, mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
   return rc;
 }
