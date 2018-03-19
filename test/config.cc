@@ -278,8 +278,6 @@ void dump(const char *title) {
   logging::local_suffix indent(title);
 
   for (auto i = global::actors.begin(); i != global::actors.end(); ++i) {
-    const std::string tableid =
-        i->space_id ? "MAINDB" : ("SUB#" + std::to_string(i->space_id));
     log_info("#%u, testcase %s, space_id/table %u\n", i->actor_id,
              testcase2str(i->testcase), i->space_id);
     indent.push();
