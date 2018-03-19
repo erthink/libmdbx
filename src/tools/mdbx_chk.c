@@ -77,7 +77,7 @@ int exclusive = 2;
 int envflags = MDBX_RDONLY;
 
 MDBX_env *env;
-MDBX_txn *txn, *locktxn;
+MDBX_txn *txn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
 size_t maxkeysize, userdb_count, skipped_subdb;
@@ -836,8 +836,8 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  print("Running mdbx_chk for '%s' in %s mode...\n", envname,
-        (envflags & MDBX_RDONLY) ? "read-only" : "write-lock");
+  print("Running mdbx_chk for 'read-%s' in %s mode...\n", envname,
+        (envflags & MDBX_RDONLY) ? "read" : "write");
   fflush(NULL);
 
   rc = mdbx_env_create(&env);
@@ -862,13 +862,11 @@ int main(int argc, char *argv[]) {
   if (verbose)
     print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
 
-  if (!(envflags & MDBX_RDONLY)) {
-    rc = mdbx_txn_begin(env, NULL, 0, &locktxn);
-    if (rc) {
-      error("mdbx_txn_begin(lock-write) failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
-      goto bailout;
-    }
+  rc = mdbx_txn_begin(env, NULL, envflags & MDBX_RDONLY, &txn);
+  if (rc) {
+    error("mdbx_txn_begin(read-%s) failed, error %d %s\n",
+          (envflags & MDBX_RDONLY) ? "only" : "write", rc, mdbx_strerror(rc));
+    goto bailout;
   }
 
   rc = mdbx_env_get_maxkeysize(env);
@@ -878,13 +876,6 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
   maxkeysize = rc;
-
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
-  if (rc) {
-    error("mdbx_txn_begin(read-only) failed, error %d %s\n", rc,
-          mdbx_strerror(rc));
-    goto bailout;
-  }
 
   rc = mdbx_env_info(env, &envinfo, sizeof(envinfo));
   if (rc) {
@@ -950,14 +941,14 @@ int main(int argc, char *argv[]) {
     if (verbose)
       print(" - performs full check recent-txn-id with meta-pages\n");
     problems_meta += check_meta_head(true);
-  } else if (locktxn) {
+  } else if (mdbx_txn_flags(txn) & MDBX_RDONLY) {
+    print(" - skip check recent-txn-id with meta-pages (monopolistic or "
+          "read-write mode only)\n");
+  } else if (verbose) {
     if (verbose)
       print(" - performs lite check recent-txn-id with meta-pages (not a "
             "monopolistic mode)\n");
     problems_meta += check_meta_head(false);
-  } else if (verbose) {
-    print(" - skip check recent-txn-id with meta-pages (monopolistic or "
-          "write-lock mode only)\n");
   }
 
   if (!dont_traversal) {
@@ -1079,7 +1070,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (problems_maindb == 0 && problems_freedb == 0) {
-    if (!dont_traversal && (exclusive || locktxn)) {
+    if (!dont_traversal && (exclusive || (envflags & MDBX_RDONLY) == 0)) {
       if (walk.pgcount != lastpgno - freedb_pages) {
         error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
               walk.pgcount, lastpgno - freedb_pages);
@@ -1090,7 +1081,7 @@ int main(int argc, char *argv[]) {
       }
     } else if (verbose) {
       print(" - skip check used and gc pages (btree-traversal with "
-            "monopolistic or write-lock mode only)\n");
+            "monopolistic or read-write mode only)\n");
     }
 
     if (!process_db(MAIN_DBI, NULL, handle_maindb, true)) {
@@ -1102,8 +1093,6 @@ int main(int argc, char *argv[]) {
 bailout:
   if (txn)
     mdbx_txn_abort(txn);
-  if (locktxn)
-    mdbx_txn_abort(locktxn);
   if (env)
     mdbx_env_close(env);
   fflush(NULL);
