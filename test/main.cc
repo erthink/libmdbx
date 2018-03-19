@@ -60,6 +60,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 
   delaystart = 0;
   waitfor_nops = 0;
+  inject_writefaultn = 0;
 
   drop_table = false;
 
