@@ -1818,6 +1818,42 @@ LIBMDBX_API int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key,
 LIBMDBX_API int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                               MDBX_val *data, mdbx_attr_t *attrptr);
 
+/*----------------------------------------------------------------------------*/
+/* LY: temporary workaround for Elbrus's memcmp() bug. */
+#ifndef __GLIBC_PREREQ
+#if defined(__GLIBC__) && defined(__GLIBC_MINOR__)
+#define __GLIBC_PREREQ(maj, min)                                               \
+  ((__GLIBC__ << 16) + __GLIBC_MINOR__ >= ((maj) << 16) + (min))
+#else
+#define __GLIBC_PREREQ(maj, min) (0)
+#endif
+#endif /* __GLIBC_PREREQ */
+#if defined(__e2k__) && !__GLIBC_PREREQ(2, 24)
+LIBMDBX_API int mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
+                                               size_t n);
+LIBMDBX_API int mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2);
+LIBMDBX_API int mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
+                                                size_t n);
+LIBMDBX_API size_t mdbx_e2k_strlen_bug_workaround(const char *s);
+LIBMDBX_API size_t mdbx_e2k_strnlen_bug_workaround(const char *s,
+                                                   size_t maxlen);
+#include <string.h>
+#include <strings.h>
+#undef memcmp
+#define memcmp mdbx_e2k_memcmp_bug_workaround
+#undef bcmp
+#define bcmp mdbx_e2k_memcmp_bug_workaround
+#undef strcmp
+#define strcmp mdbx_e2k_strcmp_bug_workaround
+#undef strncmp
+#define strncmp mdbx_e2k_strncmp_bug_workaround
+#undef strlen
+#define strlen mdbx_e2k_strlen_bug_workaround
+#undef strnlen
+#define strnlen mdbx_e2k_strnlen_bug_workaround
+
+#endif /* Elbrus's memcmp() bug. */
+
 #ifdef __cplusplus
 }
 #endif
