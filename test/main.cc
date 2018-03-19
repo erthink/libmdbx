@@ -26,7 +26,7 @@ void actor_params::set_defaults(void) {
   pathname_log = "";
   loglevel =
 #ifdef NDEBUG
-      logging::notice;
+      logging::info;
 #else
       logging::trace;
 #endif

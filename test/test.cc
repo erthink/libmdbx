@@ -123,7 +123,7 @@ void testcase::db_prepare() {
   if (config.params.loglevel <= logging::verbose)
     mdbx_dbg_opts |= MDBX_DBG_PRINT;
   int rc = mdbx_setup_debug(mdbx_dbg_opts, mdbx_logger);
-  log_info("set mdbx debug-opts: 0x%02x", rc);
+  log_trace("set mdbx debug-opts: 0x%02x", rc);
 
   MDBX_env *env = nullptr;
   rc = mdbx_env_create(&env);
