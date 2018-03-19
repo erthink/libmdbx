@@ -31,6 +31,7 @@ int osal_delay(unsigned seconds);
 void osal_udelay(unsigned us);
 void osal_yield(void);
 bool osal_istty(int fd);
+std::string osal_tempdir(void);
 
 #ifdef _MSC_VER
 #ifndef STDIN_FILENO

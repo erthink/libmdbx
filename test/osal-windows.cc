@@ -305,3 +305,9 @@ void osal_udelay(unsigned us) {
 }
 
 bool osal_istty(int fd) { return _isatty(fd) != 0; }
+
+std::string osal_tempdir(void) {
+  char buf[MAX_PATH + 1];
+  DWORD len = GetTempPathA(sizeof(buf), buf);
+  return std::string(buf, len);
+}

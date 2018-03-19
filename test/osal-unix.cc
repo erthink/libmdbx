@@ -272,3 +272,14 @@ void osal_udelay(unsigned us) {
 }
 
 bool osal_istty(int fd) { return isatty(fd) == 1; }
+
+std::string osal_tempdir(void) {
+  const char *tempdir = getenv("TEMPDIR");
+  if (!tempdir || *tempdir == '\0')
+    return (access("/dev/shm/", R_OK | W_OK | X_OK) == 0) ? "/dev/shm/" : "";
+
+  std::string dir(tempdir);
+  if (dir.at(dir.length() - 1) != '/')
+    dir.append("/");
+  return dir;
+}
