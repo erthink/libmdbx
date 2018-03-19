@@ -285,3 +285,5 @@ void log_trouble(const char *where, const char *what, int errnum) {
 bool log_enabled(const logging::loglevel priority) {
   return (priority >= logging::level);
 }
+
+void log_flush(void) { fflushall(); }
