@@ -763,6 +763,7 @@ int main(int argc, char *argv[]) {
   char *envname;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
   int dont_traversal = 0;
+  bool locked = false;
 
   double elapsed;
 #if defined(_WIN32) || defined(_WIN64)
@@ -862,10 +863,18 @@ int main(int argc, char *argv[]) {
   if (verbose)
     print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
 
-  rc = mdbx_txn_begin(env, NULL, envflags & MDBX_RDONLY, &txn);
+  if ((envflags & MDBX_RDONLY) == 0) {
+    rc = mdbx_txn_lock(env, false);
+    if (rc != MDBX_SUCCESS) {
+      error("mdbx_txn_lock failed, error %d %s\n", rc, mdbx_strerror(rc));
+      goto bailout;
+    }
+    locked = true;
+  }
+
+  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
   if (rc) {
-    error("mdbx_txn_begin(read-%s) failed, error %d %s\n",
-          (envflags & MDBX_RDONLY) ? "only" : "write", rc, mdbx_strerror(rc));
+    error("mdbx_txn_begin() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
@@ -941,14 +950,14 @@ int main(int argc, char *argv[]) {
     if (verbose)
       print(" - performs full check recent-txn-id with meta-pages\n");
     problems_meta += check_meta_head(true);
-  } else if (mdbx_txn_flags(txn) & MDBX_RDONLY) {
-    print(" - skip check recent-txn-id with meta-pages (monopolistic or "
-          "read-write mode only)\n");
-  } else if (verbose) {
+  } else if (locked) {
     if (verbose)
       print(" - performs lite check recent-txn-id with meta-pages (not a "
             "monopolistic mode)\n");
     problems_meta += check_meta_head(false);
+  } else if (verbose) {
+    print(" - skip check recent-txn-id with meta-pages (monopolistic or "
+          "read-write mode only)\n");
   }
 
   if (!dont_traversal) {
@@ -1093,6 +1102,8 @@ int main(int argc, char *argv[]) {
 bailout:
   if (txn)
     mdbx_txn_abort(txn);
+  if (locked)
+    mdbx_txn_unlock(env);
   if (env)
     mdbx_env_close(env);
   fflush(NULL);
