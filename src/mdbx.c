@@ -5166,15 +5166,30 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
+      const MDBX_meta *const meta0 = METAPAGE(env, 0);
+      const MDBX_meta *const meta1 = METAPAGE(env, 1);
+      const MDBX_meta *const meta2 = METAPAGE(env, 2);
+      txnid_t undo_txnid = 0;
+      while (
+          (head != meta0 && mdbx_meta_txnid_fluid(env, meta0) == undo_txnid) ||
+          (head != meta1 && mdbx_meta_txnid_fluid(env, meta1) == undo_txnid) ||
+          (head != meta2 && mdbx_meta_txnid_fluid(env, meta2) == undo_txnid))
+        undo_txnid += 1;
+      if (unlikely(undo_txnid >= meta.mm_txnid_a)) {
+        mdbx_fatal("rollback failed: no suitable txnid (0,1,2) < %" PRIaTXN,
+                   meta.mm_txnid_a);
+        return MDBX_PANIC /* LY: could not recovery/rollback */;
+      }
+
       /* LY: rollback weak checkpoint */
-      mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN, head_txnid,
-                 meta.mm_txnid_a);
+      mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN " as %" PRIaTXN,
+                 head_txnid, meta.mm_txnid_a, undo_txnid);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
 
       if (env->me_flags & MDBX_WRITEMAP) {
-        head->mm_txnid_a = 0;
+        head->mm_txnid_a = undo_txnid;
         head->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-        head->mm_txnid_b = 0;
+        head->mm_txnid_b = undo_txnid;
         const size_t offset =
             ((uint8_t *)container_of(head, MDBX_page, mp_meta)) -
             env->me_dxb_mmap.dxb;
@@ -5184,7 +5199,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
         err = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length, false);
       } else {
         MDBX_meta rollback = *head;
-        mdbx_meta_set_txnid(env, &rollback, 0);
+        mdbx_meta_set_txnid(env, &rollback, undo_txnid);
         rollback.mm_datasync_sign = MDBX_DATASIGN_WEAK;
         err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
                           (uint8_t *)head - (uint8_t *)env->me_map);
@@ -5193,7 +5208,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
         return err;
 
       mdbx_invalidate_cache(env->me_map, pgno2bytes(env, NUM_METAS));
-      mdbx_ensure(env, 0 == mdbx_meta_txnid_fluid(env, head));
+      mdbx_ensure(env, undo_txnid == mdbx_meta_txnid_fluid(env, head));
       mdbx_ensure(env, 0 == mdbx_meta_eq_mask(env));
       continue;
     }
