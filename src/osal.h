@@ -117,11 +117,28 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #include <sys/file.h>
 #endif
 
+#if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
+    defined(i486) || defined(__i486) || defined(__i486__) ||                   \
+    defined(i586) | defined(__i586) || defined(__i586__) || defined(i686) ||   \
+    defined(__i686) || defined(__i686__) || defined(_M_IX86) ||                \
+    defined(_X86_) || defined(__THW_INTEL__) || defined(__I86__) ||            \
+    defined(__INTEL__) || defined(__x86_64) || defined(__x86_64__) ||          \
+    defined(__amd64__) || defined(__amd64) || defined(_M_X64) ||               \
+    defined(_M_AMD64) || defined(__IA32__) || defined(__INTEL__)
+#ifndef __ia32__
+/* LY: define neutral __ia32__ for x86 and x86-64 archs */
+#define __ia32__ 1
+#endif /* __ia32__ */
+#if !defined(__amd64__) && (defined(__x86_64) || defined(__x86_64__) ||        \
+                            defined(__amd64) || defined(_M_X64))
+/* LY: define trusty __amd64__ for all AMD64/x86-64 arch */
+#define __amd64__ 1
+#endif /* __amd64__ */
+#endif /* all x86 */
+
 #if !defined(UNALIGNED_OK)
-#if (defined(__i386) || defined(__x86_64__) || defined(_M_IX86) ||             \
-     defined(_M_X64) || defined(i386) || defined(_X86_) ||                     \
-     defined(__i386__) || defined(_X86_64_) ||                                 \
-     defined(__ARM_FEATURE_UNALIGNED) || defined(__e2k__)) &&                  \
+#if (defined(__ia32__) || defined(__e2k__) ||                                  \
+     defined(__ARM_FEATURE_UNALIGNED)) &&                                      \
     !defined(__ALIGNED__)
 #define UNALIGNED_OK 1
 #else

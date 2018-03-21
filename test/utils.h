@@ -274,7 +274,7 @@ static __inline void memory_barrier(void) {
 #elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
 #if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
   __mf();
-#elif defined(__i386__) || defined(__x86_64__)
+#elif defined(__ia32__)
   _mm_mfence();
 #else
 #error "Unknown target for Intel Compiler, please report to us."
@@ -293,8 +293,7 @@ static __inline void memory_barrier(void) {
 }
 
 static __inline void cpu_relax() {
-#if defined(__i386__) || defined(__x86_64__) || defined(_M_IX86) ||            \
-    defined(_M_X64)
+#if defined(__ia32__)
   _mm_pause();
 #elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS) ||               \
     defined(YieldProcessor)

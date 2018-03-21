@@ -127,6 +127,7 @@ bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
 
 //-----------------------------------------------------------------------------
 
+/* TODO: replace my 'libmera' fomr t1ha. */
 uint64_t entropy_ticks(void) {
 #if defined(__GNUC__) || defined(__clang__)
 #if defined(__ia64__)
@@ -165,8 +166,7 @@ uint64_t entropy_ticks(void) {
 #endif /* arch selector */
 #endif /* __GNUC__ || __clang__ */
 
-#if defined(__e2k__) || defined(__elbrus__) || defined(_M_IX86) ||             \
-    defined(_M_X64) || defined(__x86_64__) || defined(__i386__)
+#if defined(__e2k__) || defined(__ia32__)
   return __rdtsc();
 #elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   LARGE_INTEGER PerformanceCount;
