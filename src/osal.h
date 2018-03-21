@@ -103,18 +103,22 @@ typedef struct {
 typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif /* Platform */
 
-#ifndef SSIZE_MAX
-#define SSIZE_MAX INTPTR_MAX
-#endif
-
-#ifdef HAVE_SYS_STAT_H
+/* *INDENT-OFF* */
+/* clang-format off */
+#if defined(HAVE_SYS_STAT_H) || __has_include(<sys/stat.h>)
 #include <sys/stat.h>
 #endif
-#ifdef HAVE_SYS_TYPES_H
+#if defined(HAVE_SYS_TYPES_H) || __has_include(<sys/types.h>)
 #include <sys/types.h>
 #endif
-#ifdef HAVE_SYS_FILE_H
+#if defined(HAVE_SYS_FILE_H) || __has_include(<sys/file.h>)
 #include <sys/file.h>
+#endif
+/* *INDENT-ON* */
+/* clang-format on */
+
+#ifndef SSIZE_MAX
+#define SSIZE_MAX INTPTR_MAX
 #endif
 
 #if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \

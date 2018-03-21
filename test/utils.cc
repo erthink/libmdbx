@@ -14,7 +14,7 @@
 
 #include "test.h"
 #include <float.h>
-#ifdef HAVE_IEEE754_H
+#if defined(HAVE_IEEE754_H) || __has_include(<ieee754.h>)
 #include <ieee754.h>
 #endif
 
