@@ -76,14 +76,6 @@
 #include <unordered_set>
 #include <vector>
 
-#ifdef _MSC_VER
-#include <intrin.h>
-#endif
-
-#if defined(__i386__) || defined(__x86_64__)
-#include <x86intrin.h>
-#endif
-
 #include "../mdbx.h"
 #include "../src/defs.h"
 #include "../src/osal.h"

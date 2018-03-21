@@ -18,40 +18,6 @@
 #include <ieee754.h>
 #endif
 
-/* Compiler's includes for builtins/intrinsics */
-#if defined(_MSC_VER) || defined(__INTEL_COMPILER)
-#include <intrin.h>
-#elif __GNUC_PREREQ(4, 4) || defined(__clang__)
-#if defined(__ia32__) || defined(__e2k__)
-#include <x86intrin.h>
-#endif /* __ia32__ */
-#if defined(__ia32__)
-#include <cpuid.h>
-#endif /* __ia32__ */
-#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
-#include <mbarrier.h>
-#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
-    (defined(HP_IA64) || defined(__ia64))
-#include <machine/sys/inline.h>
-#elif defined(__IBMC__) && defined(__powerpc)
-#include <atomic.h>
-#elif defined(_AIX)
-#include <builtins.h>
-#include <sys/atomic_op.h>
-#elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
-#include <c_asm.h>
-#include <machine/builtins.h>
-#elif defined(__MWERKS__)
-/* CodeWarrior - troubles ? */
-#pragma gcc_extensions
-#elif defined(__SNC__)
-/* Sony PS3 - troubles ? */
-#elif defined(__hppa__) || defined(__hppa)
-#include <machine/inline.h>
-#else
-#error Unsupported C compiler, please use GNU C 4.4 or newer
-#endif /* Compiler */
-
 std::string format(const char *fmt, ...) {
   va_list ap, ones;
   va_start(ap, fmt);
