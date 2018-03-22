@@ -366,19 +366,23 @@ static __inline void mdbx_memory_barrier(void) {
 #define mdbx_coherent_barrier() mdbx_memory_barrier()
 #endif
 
-#if defined(__mips) && defined(__linux)
+#if defined(__mips) || defined(__mips__) || defined(__mips64) ||               \
+    defined(__mips64) || defined(_M_MRX000) || defined(_MIPS_)
 /* Only MIPS has explicit cache control */
-#include <asm/cachectl.h>
+#include <sys/cachectl.h>
 #endif
 
 static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
   mdbx_coherent_barrier();
-#if defined(__mips) && defined(__linux)
+#if defined(__mips) || defined(__mips__) || defined(__mips64) ||               \
+    defined(__mips64) || defined(_M_MRX000) || defined(_MIPS_)
+#if defined(DCACHE)
   /* MIPS has cache coherency issues.
    * Note: for any nbytes >= on-chip cache size, entire is flushed. */
   cacheflush(addr, nbytes, DCACHE);
-#elif defined(_M_MRX000) || defined(_MIPS_)
+#else
 #error "Sorry, cacheflush() for MIPS not implemented"
+#endif /* __mips__ */
 #else
   /* LY: assume no relevant mmap/dcache issues. */
   (void)addr;
