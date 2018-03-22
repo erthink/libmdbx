@@ -334,17 +334,14 @@ static __inline void mdbx_memory_barrier(void) {
 /*----------------------------------------------------------------------------*/
 /* Cache coherence and invalidation */
 
-#if defined(__i386__) || defined(__x86_64__) || defined(_M_AMD64) ||           \
-    defined(_M_IX86) || defined(__i386) || defined(__amd64) ||                 \
-    defined(i386) || defined(__x86_64) || defined(_AMD64_) || defined(_M_X64)
-#define MDBX_CACHE_IS_COHERENT 1
-#elif defined(__hppa) || defined(__hppa__)
-#define MDBX_CACHE_IS_COHERENT 1
-#endif
-
 #ifndef MDBX_CACHE_IS_COHERENT
+#if defined(__ia32__) || defined(__e2k__) || defined(__hppa) ||                \
+    defined(__hppa__)
+#define MDBX_CACHE_IS_COHERENT 1
+#else
 #define MDBX_CACHE_IS_COHERENT 0
 #endif
+#endif /* MDBX_CACHE_IS_COHERENT */
 
 #ifndef MDBX_CACHELINE_SIZE
 #if defined(SYSTEM_CACHE_ALIGNMENT_SIZE)
