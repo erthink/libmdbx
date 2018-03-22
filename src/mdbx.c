@@ -7406,9 +7406,11 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           memcpy((char *)mp + mp->mp_upper + PAGEHDRSZ,
                  (char *)fp + fp->mp_upper + PAGEHDRSZ,
                  olddata.iov_len - fp->mp_upper - PAGEHDRSZ);
+          memcpy((char *)(&mp->mp_ptrs), (char *)(&fp->mp_ptrs),
+                 NUMKEYS(fp) * sizeof(mp->mp_ptrs[0]));
           for (i = 0; i < NUMKEYS(fp); i++) {
-            mdbx_cassert(mc, fp->mp_ptrs[i] + offset <= UINT16_MAX);
-            mp->mp_ptrs[i] = (indx_t)(fp->mp_ptrs[i] + offset);
+            mdbx_cassert(mc, mp->mp_ptrs[i] + offset <= UINT16_MAX);
+            mp->mp_ptrs[i] += (indx_t)offset;
           }
         }
       }
