@@ -55,6 +55,7 @@
 #pragma warning(disable : 4310) /* cast truncates constant value */
 #pragma warning(disable : 4820) /* bytes padding added after data member for aligment */
 #pragma warning(disable : 4548) /* expression before comma has no effect; expected expression with side - effect */
+#pragma warning(disable : 4366) /* the result of the unary '&' operator may be unaligned */
 #endif                          /* _MSC_VER (warnings) */
 
 #include "../mdbx.h"
@@ -252,7 +253,7 @@ typedef struct MDBX_reader {
   uint8_t pad[MDBX_CACHELINE_SIZE -
               (sizeof(txnid_t) + sizeof(mdbx_pid_t) + sizeof(mdbx_tid_t)) %
                   MDBX_CACHELINE_SIZE];
-} __cache_aligned MDBX_reader;
+} MDBX_reader;
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {
@@ -410,42 +411,50 @@ typedef struct MDBX_lockinfo {
   /* Flags which environment was opened. */
   volatile uint32_t mti_envmode;
 
-  union {
 #ifdef MDBX_OSAL_LOCK
+  /* Mutex protecting write access to this table. */
+  union {
     MDBX_OSAL_LOCK mti_wmutex;
+    uint8_t pad_mti_wmutex[MDBX_OSAL_LOCK_SIZE % sizeof(size_t)];
+  };
 #endif
-    uint64_t align_wmutex;
-  };
+#define MDBX_lockinfo_SIZE_A                                                   \
+  (8 /* mti_magic_and_version */ + 4 /* mti_os_and_format */ +                 \
+   4 /* mti_envmode */ + MDBX_OSAL_LOCK_SIZE /* mti_wmutex */ +                \
+   MDBX_OSAL_LOCK_SIZE % sizeof(size_t) /* pad_mti_wmutex */)
 
-  union {
-    /* The number of slots that have been used in the reader table.
-     * This always records the maximum count, it is not decremented
-     * when readers release their slots. */
-    volatile unsigned __cache_aligned mti_numreaders;
-    uint64_t align_numreaders;
-  };
+  /* cache-line alignment */
+  uint8_t
+      pad_a[MDBX_CACHELINE_SIZE - MDBX_lockinfo_SIZE_A % MDBX_CACHELINE_SIZE];
 
-  union {
+  /* The number of slots that have been used in the reader table.
+   * This always records the maximum count, it is not decremented
+   * when readers release their slots. */
+  volatile unsigned mti_numreaders;
+
 #ifdef MDBX_OSAL_LOCK
-    /* Mutex protecting access to this table. */
+  /* Mutex protecting readers registration access to this table. */
+  union {
     MDBX_OSAL_LOCK mti_rmutex;
+    uint8_t pad_mti_rmutex[MDBX_OSAL_LOCK_SIZE % sizeof(size_t)];
+  };
 #endif
-    uint64_t align_rmutex;
-  };
 
-  union {
-    volatile txnid_t mti_oldest;
-    uint64_t align_oldest;
-  };
+  volatile txnid_t mti_oldest;
+  volatile uint32_t mti_readers_refresh_flag;
 
-  union {
-    volatile uint32_t mti_readers_refresh_flag;
-    uint64_t align_reader_finished_flag;
-  };
+#define MDBX_lockinfo_SIZE_B                                                   \
+  (sizeof(unsigned) /* mti_numreaders */ +                                     \
+   MDBX_OSAL_LOCK_SIZE /* mti_rmutex */ + sizeof(txnid_t) /* mti_oldest */ +   \
+   sizeof(uint32_t) /* mti_readers_refresh_flag */ +                           \
+   MDBX_OSAL_LOCK_SIZE % sizeof(size_t) /* pad_mti_rmutex */)
 
-  uint8_t pad_align[MDBX_CACHELINE_SIZE - sizeof(uint64_t) * 7];
+  /* cache-line alignment */
+  uint8_t
+      pad_b[MDBX_CACHELINE_SIZE - MDBX_lockinfo_SIZE_B % MDBX_CACHELINE_SIZE];
 
-  MDBX_reader __cache_aligned mti_readers[1];
+  MDBX_reader mti_readers[1];
+
 } MDBX_lockinfo;
 
 #pragma pack(pop)

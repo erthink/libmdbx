@@ -192,16 +192,6 @@
 #	endif
 #endif /* __prefetch */
 
-#ifndef __aligned
-#   if defined(__GNUC__) || __has_attribute(aligned)
-#       define __aligned(N) __attribute__((aligned(N)))
-#   elif defined(_MSC_VER)
-#       define __aligned(N) __declspec(align(N))
-#   else
-#       define __aligned(N)
-#   endif
-#endif /* __aligned */
-
 #ifndef __noreturn
 #   if defined(__GNUC__) || __has_attribute(noreturn)
 #       define __noreturn __attribute__((noreturn))

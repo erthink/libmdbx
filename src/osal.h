@@ -353,10 +353,6 @@ static __inline void mdbx_memory_barrier(void) {
 #endif
 #endif /* MDBX_CACHELINE_SIZE */
 
-#ifndef __cache_aligned
-#define __cache_aligned __aligned(MDBX_CACHELINE_SIZE)
-#endif
-
 #if MDBX_CACHE_IS_COHERENT
 #define mdbx_coherent_barrier() mdbx_compiler_barrier()
 #else
@@ -553,7 +549,13 @@ void mdbx_osal_jitter(bool tiny);
 #else
 #define MDBX_OSAL_LOCK pthread_mutex_t
 #define MDBX_OSAL_LOCK_SIGN UINT32_C(0x8017)
-#endif
+#endif /* MDBX_OSAL_LOCK */
+
+#ifdef MDBX_OSAL_LOCK
+#define MDBX_OSAL_LOCK_SIZE sizeof(MDBX_OSAL_LOCK)
+#else
+#define MDBX_OSAL_LOCK_SIZE 0
+#endif /* MDBX_OSAL_LOCK_SIZE */
 
 int mdbx_lck_init(MDBX_env *env);
 
