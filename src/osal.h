@@ -158,26 +158,15 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 /*----------------------------------------------------------------------------*/
 /* Compiler's includes for builtins/intrinsics */
 
-#ifdef _MSC_VER
-
-#if _MSC_FULL_VER < 190024215
-#if _MSC_FULL_VER < 180040629 && defined(_M_IX86)
-#error Please use Visual Studio 2015 (MSC 19.0) or newer for 32-bit target.
-#else
-#pragma message(                                                               \
-    "It is recommended to use Visual Studio 2015 (MSC 19.0) or newer.")
-#endif
-#endif
-
+#if defined(_MSC_VER) || defined(__INTEL_COMPILER)
 #include <intrin.h>
-
 #elif __GNUC_PREREQ(4, 4) || defined(__clang__)
-#if defined(__i386__) || defined(__x86_64__)
-#include <cpuid.h>
+#if defined(__ia32__) || defined(__e2k__)
 #include <x86intrin.h>
-#endif
-#elif defined(__INTEL_COMPILER)
-#include <intrin.h>
+#endif /* __ia32__ */
+#if defined(__ia32__)
+#include <cpuid.h>
+#endif /* __ia32__ */
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #include <mbarrier.h>
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
@@ -196,8 +185,10 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #pragma gcc_extensions
 #elif defined(__SNC__)
 /* Sony PS3 - troubles ? */
+#elif defined(__hppa__) || defined(__hppa)
+#include <machine/inline.h>
 #else
-#error Unknown C compiler, please use GNU C 5.x or newer
+#error Unsupported C compiler, please use GNU C 4.4 or newer
 #endif /* Compiler */
 
 /*----------------------------------------------------------------------------*/
