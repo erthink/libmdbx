@@ -7195,7 +7195,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     } else {
       rc = mdbx_cursor_set(mc, key, &d2, MDBX_SET, &exact);
     }
-    if ((flags & MDBX_NOOVERWRITE) && rc == 0) {
+    if ((flags & MDBX_NOOVERWRITE) &&
+        (rc == MDBX_SUCCESS || rc == MDBX_EKEYMISMATCH)) {
       mdbx_debug("duplicate key [%s]", DKEY(key));
       *data = d2;
       return MDBX_KEYEXIST;
