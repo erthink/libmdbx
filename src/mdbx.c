@@ -1748,7 +1748,7 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
   /* Acquire guard in exclusive mode for:
    *   - to avoid collision between read and write txns around env->me_dbgeo;
    *   - to avoid attachment of new reading threads (see mdbx_rdt_lock); */
-  AcquireSRWLockExclusive(&env->me_remap_guard);
+  mdbx_shlock_acquireExclusive(&env->me_remap_guard);
   mdbx_handle_array_t *suspended = NULL;
   mdbx_handle_array_t array_onstack;
   int rc = MDBX_SUCCESS;
@@ -1823,7 +1823,7 @@ bailout:
 
 #if defined(_WIN32) || defined(_WIN64)
   int err = MDBX_SUCCESS;
-  ReleaseSRWLockExclusive(&env->me_remap_guard);
+  mdbx_shlock_releaseExclusive(&env->me_remap_guard);
   if (suspended) {
     err = mdbx_resume_threads_after_remap(suspended);
     if (suspended != &array_onstack)
@@ -4623,7 +4623,7 @@ int __cold mdbx_env_create(MDBX_env **penv) {
     goto bailout;
 
 #if defined(_WIN32) || defined(_WIN64)
-  InitializeSRWLock(&env->me_remap_guard);
+  mdbx_shlock_init(&env->me_remap_guard);
   InitializeCriticalSection(&env->me_windowsbug_lock);
 #else
   rc = mdbx_fastmutex_init(&env->me_remap_guard);
