@@ -12,13 +12,24 @@ and [by Yandex](https://translate.yandex.ru/translate?url=https%3A%2F%2Fgithub.c
 
 ### Project Status
 
-**Now MDBX is under _active development_** and until 2018Q2 is expected a big
-change both of API and database format.  Unfortunately those update will lead to
-loss of compatibility with previous versions.
 
-The aim of this revolution in providing a clearer robust API and adding new
-features, including the database properties.
+**Сейчас MDBX _активно перерабатывается_** и к середине 2018
+ожидается большое измените как API, так и формата базы данных.
+К сожалению, обновление приведет к потере совместимости с
+предыдущими версиями.
 
+Цель этой революции в обеспечении более четкого надежного
+API и добавлении новых функции, а также в наделении базы данных
+новыми свойствами.
+
+В настоящее время MDBX предназначена для Linux, а также
+поддерживает Windows (начиная с Windows Server 2008) в качестве
+дополнительно платформы. Поддержка других ОС может быть
+обеспечена на коммерческой основе. Однако такие
+усовершенствования (т. е. pull-requests) могут быть приняты в
+мейнстрим только в том случае, если будет доступен
+соответствующий публичный и бесплатный сервис непрерывной
+интеграции (aka Countinious Integration).
 
 ## Содержание
 
@@ -43,7 +54,7 @@ features, including the database properties.
 
 _libmdbx_ - это встраиваемый key-value движок хранения со специфическим
 набором свойств и возможностей, ориентированный на создание уникальных
-легковесных решений с предельной производительностью.
+легковесных решений с предельной производительностью под Linux и Windows.
 
 _libmdbx_ позволяет множеству процессов совместно читать и обновлять
 несколько key-value таблиц с соблюдением [ACID](https://ru.wikipedia.org/wiki/ACID),

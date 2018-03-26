@@ -9,9 +9,17 @@ libmdbx
 
 ### Project Status
 
-**MDBX is under _active development_**, database format and API aren't stable
-at least until 2018Q2. New version won't be backwards compatible.
-Main focus of the rework is to provide clear and robust API and new features.
+**MDBX is under _active development_**, database format and
+API aren't stable at least until 2018Q3. New version won't be
+backwards compatible. Main focus of the rework is to provide
+clear and robust API and new features.
+
+Nowadays MDBX intended for Linux and support Windows (since
+Windows Server 2008) as complementary platform. Support for
+other OS could be implemented on commercial basis. However such
+enhancements (i.e. pull requests) could be accepted in
+mainstream only when corresponding public and free Countinious
+Integration service will be available.
 
 ## Contents
 
@@ -34,7 +42,7 @@ Main focus of the rework is to provide clear and robust API and new features.
 
 ## Overview
 
-_libmdbx_ is an embedded lightweight key-value database engine oriented for performance.
+_libmdbx_ is an embedded lightweight key-value database engine oriented for performance under Linux and Windows.
 
 _libmdbx_ allows multiple processes to read and update several key-value tables concurrently,
 while being [ACID](https://en.wikipedia.org/wiki/ACID)-compliant, with minimal overhead and operation cost of Olog(N).
