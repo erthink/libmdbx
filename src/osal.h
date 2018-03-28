@@ -469,10 +469,6 @@ int mdbx_thread_create(mdbx_thread_t *thread,
                        THREAD_RESULT(THREAD_CALL *start_routine)(void *),
                        void *arg);
 int mdbx_thread_join(mdbx_thread_t thread);
-int mdbx_thread_key_create(mdbx_thread_key_t *key);
-void mdbx_thread_key_delete(mdbx_thread_key_t key);
-void *mdbx_thread_rthc_get(mdbx_thread_key_t key);
-void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value);
 
 int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync);
 int mdbx_filesize_sync(mdbx_filehandle_t fd);

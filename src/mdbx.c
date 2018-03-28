@@ -163,43 +163,241 @@ typedef struct rthc_entry_t {
 #define RTHC_INITIAL_LIMIT 16
 #endif
 
-static unsigned rthc_count;
-static unsigned rthc_limit = RTHC_INITIAL_LIMIT;
+#if defined(_WIN32) || defined(_WIN64)
+static CRITICAL_SECTION rthc_critical_section;
+#else
+int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj, void *dso_symbol)
+    __attribute__((weak));
+static pthread_mutex_t mdbx_rthc_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t mdbx_rthc_cond = PTHREAD_COND_INITIALIZER;
+static mdbx_thread_key_t mdbx_rthc_key;
+static volatile uint32_t mdbx_rthc_pending;
+
+static void __cold mdbx_workaround_glibc_bug21031(void) {
+  /* Workaround for https://sourceware.org/bugzilla/show_bug.cgi?id=21031
+   *
+   * Due race between pthread_key_delete() and __nptl_deallocate_tsd()
+   * The destructor(s) of thread-local-storate object(s) may be running
+   * in another thread(s) and be blocked or not finished yet.
+   * In such case we get a SEGFAULT after unload this library DSO.
+   *
+   * So just by yielding a few timeslices we give a chance
+   * to such destructor(s) for completion and avoids segfault. */
+  sched_yield();
+  sched_yield();
+  sched_yield();
+}
+#endif
+
+static unsigned rthc_count, rthc_limit;
+static rthc_entry_t *rthc_table;
 static rthc_entry_t rthc_table_static[RTHC_INITIAL_LIMIT];
-static rthc_entry_t *rthc_table = rthc_table_static;
 
-__cold void mdbx_rthc_dtor(void *ptr) {
-  MDBX_reader *rthc = (MDBX_reader *)ptr;
+static __cold void mdbx_rthc_lock(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  EnterCriticalSection(&rthc_critical_section);
+#else
+  mdbx_ensure(nullptr, pthread_mutex_lock(&mdbx_rthc_mutex) == 0);
+#endif
+}
 
+static __cold void mdbx_rthc_unlock(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  LeaveCriticalSection(&rthc_critical_section);
+#else
+  mdbx_ensure(nullptr, pthread_mutex_unlock(&mdbx_rthc_mutex) == 0);
+#endif
+}
+
+static __inline int mdbx_thread_key_create(mdbx_thread_key_t *key) {
+#if defined(_WIN32) || defined(_WIN64)
+  *key = TlsAlloc();
+  return (*key != TLS_OUT_OF_INDEXES) ? MDBX_SUCCESS : GetLastError();
+#else
+  return pthread_key_create(key, nullptr);
+#endif
+  mdbx_trace("&key = %p, value 0x%x", key, (unsigned)*key);
+}
+
+static __inline void mdbx_thread_key_delete(mdbx_thread_key_t key) {
+  mdbx_trace("key = 0x%x", (unsigned)key);
+#if defined(_WIN32) || defined(_WIN64)
+  mdbx_ensure(nullptr, TlsFree(key));
+#else
+  mdbx_ensure(nullptr, pthread_key_delete(key) == 0);
+  mdbx_workaround_glibc_bug21031();
+#endif
+}
+
+static __inline void *mdbx_thread_rthc_get(mdbx_thread_key_t key) {
+#if defined(_WIN32) || defined(_WIN64)
+  return TlsGetValue(key);
+#else
+  return pthread_getspecific(key);
+#endif
+}
+
+static void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value) {
+#if defined(_WIN32) || defined(_WIN64)
+  mdbx_ensure(nullptr, TlsSetValue(key, (void *)value));
+#else
+  static __thread bool thread_registered;
+  if (value && unlikely(!thread_registered)) {
+    thread_registered = true;
+    if (&__cxa_thread_atexit_impl == nullptr ||
+        __cxa_thread_atexit_impl(mdbx_rthc_thread_dtor, &thread_registered,
+                                 (void *)&mdbx_version /* dso_anchor */)) {
+      mdbx_ensure(nullptr,
+                  pthread_setspecific(mdbx_rthc_key, &thread_registered) == 0);
+      const unsigned count_before = mdbx_atomic_add32(&mdbx_rthc_pending, 1);
+      mdbx_ensure(nullptr, count_before < INT_MAX);
+      mdbx_trace("fallback to pthreads' tsd, key 0x%x, count %u",
+                 (unsigned)mdbx_rthc_key, count_before);
+      (void)count_before;
+    }
+    mdbx_trace("thread registered 0x%" PRIxPTR, (uintptr_t)mdbx_thread_self());
+  }
+  mdbx_ensure(nullptr, pthread_setspecific(key, value) == 0);
+#endif
+}
+
+__cold void mdbx_rthc_global_init(void) {
+  rthc_limit = RTHC_INITIAL_LIMIT;
+  rthc_table = rthc_table_static;
+#if defined(_WIN32) || defined(_WIN64)
+  InitializeCriticalSection(&rthc_critical_section);
+#else
+  mdbx_ensure(nullptr,
+              pthread_key_create(&mdbx_rthc_key, mdbx_rthc_thread_dtor) == 0);
+  mdbx_trace("pid %d, &mdbx_rthc_key = %p, value 0x%x", mdbx_getpid(),
+             &mdbx_rthc_key, (unsigned)mdbx_rthc_key);
+#endif
+}
+
+/* dtor called for thread, i.e. for all mdbx's environment objects */
+void mdbx_rthc_thread_dtor(void *ptr) {
   mdbx_rthc_lock();
+  mdbx_trace(">> pid %d, thread 0x%" PRIxPTR ", rthc %p", mdbx_getpid(),
+             (uintptr_t)mdbx_thread_self(), ptr);
+
   const mdbx_pid_t self_pid = mdbx_getpid();
   for (unsigned i = 0; i < rthc_count; ++i) {
-    if (rthc >= rthc_table[i].begin && rthc < rthc_table[i].end) {
-      if (rthc->mr_pid == self_pid) {
-        rthc->mr_pid = 0;
-        mdbx_coherent_barrier();
-      }
+    const mdbx_thread_key_t key = rthc_table[i].key;
+    MDBX_reader *const rthc = mdbx_thread_rthc_get(key);
+    if (rthc < rthc_table[i].begin || rthc >= rthc_table[i].end)
+      continue;
+#if !defined(_WIN32) && !defined(_WIN64)
+    if (pthread_setspecific(key, nullptr) != 0) {
+      mdbx_trace("== thread 0x%" PRIxPTR
+                 ", rthc %p: ignore race with tsd-key deletion",
+                 (uintptr_t)mdbx_thread_self(), ptr);
+      continue /* ignore race with tsd-key deletion by mdbx_env_close() */;
+    }
+#endif
+
+    mdbx_trace("== thread 0x%" PRIxPTR
+               ", rthc %p, [%i], %p ... %p (%+i), rtch-pid %i, "
+               "current-pid %i",
+               (uintptr_t)mdbx_thread_self(), rthc, i, rthc_table[i].begin,
+               rthc_table[i].end, (int)(rthc - rthc_table[i].begin),
+               rthc->mr_pid, self_pid);
+    if (rthc->mr_pid == self_pid) {
+      mdbx_trace("==== thread 0x%" PRIxPTR ", rthc %p, cleanup",
+                 (uintptr_t)mdbx_thread_self(), rthc);
+      rthc->mr_pid = 0;
+    }
+  }
+
+#if defined(_WIN32) || defined(_WIN64)
+  mdbx_trace("<< thread 0x%" PRIxPTR ", rthc %p", (uintptr_t)mdbx_thread_self(),
+             ptr);
+  mdbx_rthc_unlock();
+#else
+  mdbx_ensure(nullptr, mdbx_atomic_sub32(&mdbx_rthc_pending, 1) > 0);
+  if (mdbx_rthc_pending == 0) {
+    mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, wake",
+               (uintptr_t)mdbx_thread_self(), ptr, mdbx_getpid());
+    mdbx_ensure(nullptr, pthread_cond_broadcast(&mdbx_rthc_cond) == 0);
+  }
+
+  mdbx_trace("<< thread 0x%" PRIxPTR ", rthc %p", (uintptr_t)mdbx_thread_self(),
+             ptr);
+  /* Allow tail call optimization, i.e. gcc should generate the jmp instruction
+   * instead of a call for pthread_mutex_unlock() and therefore CPU could not
+   * return to current DSO's code section, which may be unloaded immediately
+   * after the mutex got released. */
+  pthread_mutex_unlock(&mdbx_rthc_mutex);
+#endif
+}
+
+__cold void mdbx_rthc_global_dtor(void) {
+  mdbx_trace(
+      ">> pid %d, &mdbx_rthc_global_dtor %p, &mdbx_rthc_thread_dtor = %p, "
+      "&mdbx_rthc_remove = %p",
+      mdbx_getpid(), &mdbx_rthc_global_dtor, &mdbx_rthc_thread_dtor,
+      &mdbx_rthc_remove);
+
+#if defined(_WIN32) || defined(_WIN64)
+  mdbx_rthc_lock();
+#else
+  if (pthread_getspecific(mdbx_rthc_key) != nullptr)
+    mdbx_ensure(nullptr, mdbx_atomic_sub32(&mdbx_rthc_pending, 1) > 0);
+  mdbx_thread_key_delete(mdbx_rthc_key);
+  mdbx_rthc_lock();
+
+  struct timespec abstime;
+  mdbx_ensure(nullptr, clock_gettime(CLOCK_REALTIME, &abstime) == 0);
+  abstime.tv_nsec += 1000000000l / 10;
+  if (abstime.tv_nsec >= 1000000000l) {
+    abstime.tv_nsec -= 1000000000l;
+    abstime.tv_sec += 1;
+  }
+
+  for (unsigned left; (left = mdbx_rthc_pending) > 0;) {
+    mdbx_trace("pid %d, pending %u, wait for...", mdbx_getpid(), left);
+    const int rc =
+        pthread_cond_timedwait(&mdbx_rthc_cond, &mdbx_rthc_mutex, &abstime);
+    if (rc && rc != EINTR) {
+      /* LY: yielding a few timeslices to give a more chance
+       * to racing destructor(s) for completion. */
+      mdbx_workaround_glibc_bug21031();
       break;
     }
   }
-  mdbx_rthc_unlock();
-}
+#endif
 
-__cold void mdbx_rthc_cleanup(void) {
-  mdbx_rthc_lock();
   const mdbx_pid_t self_pid = mdbx_getpid();
   for (unsigned i = 0; i < rthc_count; ++i) {
-    mdbx_thread_key_t key = rthc_table[i].key;
-    MDBX_reader *rthc = mdbx_thread_rthc_get(key);
-    if (rthc) {
-      mdbx_thread_rthc_set(key, NULL);
+    const mdbx_thread_key_t key = rthc_table[i].key;
+    mdbx_thread_key_delete(key);
+    for (MDBX_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
+         ++rthc) {
+      mdbx_trace("== [%i] = key %u, %p ... %p, rthc %p (%+i), "
+                 "rthc-pid %i, current-pid %i",
+                 i, key, rthc_table[i].begin, rthc_table[i].end, rthc,
+                 (int)(rthc - rthc_table[i].begin), rthc->mr_pid, self_pid);
       if (rthc->mr_pid == self_pid) {
         rthc->mr_pid = 0;
-        mdbx_coherent_barrier();
+        mdbx_trace("== cleanup %p", rthc);
       }
     }
   }
+
+  rthc_limit = rthc_count = 0;
+  if (rthc_table != rthc_table_static)
+    free(rthc_table);
+  rthc_table = nullptr;
   mdbx_rthc_unlock();
+
+#if defined(_WIN32) || defined(_WIN64)
+  DeleteCriticalSection(&rthc_critical_section);
+#else
+  /* LY: yielding a few timeslices to give a more chance
+   * to racing destructor(s) for completion. */
+  mdbx_workaround_glibc_bug21031();
+#endif
+
+  mdbx_trace("<< pid %d\n", mdbx_getpid());
 }
 
 __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
@@ -212,11 +410,13 @@ __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
     return rc;
 
   mdbx_rthc_lock();
+  mdbx_trace(">> key 0x%x, rthc_count %u, rthc_limit %u", *key, rthc_count,
+             rthc_limit);
   if (rthc_count == rthc_limit) {
     rthc_entry_t *new_table =
-        realloc((rthc_table == rthc_table_static) ? NULL : rthc_table,
+        realloc((rthc_table == rthc_table_static) ? nullptr : rthc_table,
                 sizeof(rthc_entry_t) * rthc_limit * 2);
-    if (new_table == NULL) {
+    if (new_table == nullptr) {
       rc = MDBX_ENOMEM;
       goto bailout;
     }
@@ -225,11 +425,13 @@ __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
     rthc_table = new_table;
     rthc_limit *= 2;
   }
-
+  mdbx_trace("== [%i] = key %u, %p ... %p", rthc_count, *key, begin, end);
   rthc_table[rthc_count].key = *key;
   rthc_table[rthc_count].begin = begin;
   rthc_table[rthc_count].end = end;
   ++rthc_count;
+  mdbx_trace("<< key 0x%x, rthc_count %u, rthc_limit %u", *key, rthc_count,
+             rthc_limit);
   mdbx_rthc_unlock();
   return MDBX_SUCCESS;
 
@@ -239,18 +441,25 @@ bailout:
   return rc;
 }
 
-__cold void mdbx_rthc_remove(mdbx_thread_key_t key) {
-  mdbx_rthc_lock();
+__cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
   mdbx_thread_key_delete(key);
+  mdbx_rthc_lock();
+  mdbx_trace(">> key 0x%x, rthc_count %u, rthc_limit %u", key, rthc_count,
+             rthc_limit);
 
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (key == rthc_table[i].key) {
       const mdbx_pid_t self_pid = mdbx_getpid();
+      mdbx_trace("== [%i], %p ...%p, current-pid %d", i, rthc_table[i].begin,
+                 rthc_table[i].end, self_pid);
+
       for (MDBX_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
-           ++rthc)
-        if (rthc->mr_pid == self_pid)
+           ++rthc) {
+        if (rthc->mr_pid == self_pid) {
           rthc->mr_pid = 0;
-      mdbx_coherent_barrier();
+          mdbx_trace("== cleanup %p", rthc);
+        }
+      }
       if (--rthc_count > 0)
         rthc_table[i] = rthc_table[rthc_count];
       else if (rthc_table != rthc_table_static) {
@@ -262,6 +471,8 @@ __cold void mdbx_rthc_remove(mdbx_thread_key_t key) {
     }
   }
 
+  mdbx_trace("<< key 0x%x, rthc_count %u, rthc_limit %u", key, rthc_count,
+             rthc_limit);
   mdbx_rthc_unlock();
 }
 
@@ -917,6 +1128,7 @@ void __cold mdbx_debug_log(int type, const char *function, int line,
     else if (line > 0)
       fprintf(stderr, "%d: ", line);
     vfprintf(stderr, fmt, args);
+    fflush(stderr);
   }
   va_end(args);
 }

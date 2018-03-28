@@ -27,30 +27,23 @@
 /*----------------------------------------------------------------------------*/
 /* rthc */
 
-static CRITICAL_SECTION rthc_critical_section;
-
 static void NTAPI tls_callback(PVOID module, DWORD reason, PVOID reserved) {
-  (void)module;
   (void)reserved;
   switch (reason) {
   case DLL_PROCESS_ATTACH:
-    InitializeCriticalSection(&rthc_critical_section);
+    mdbx_rthc_global_init();
     break;
   case DLL_PROCESS_DETACH:
-    DeleteCriticalSection(&rthc_critical_section);
+    mdbx_rthc_global_dtor();
     break;
 
   case DLL_THREAD_ATTACH:
     break;
   case DLL_THREAD_DETACH:
-    mdbx_rthc_cleanup();
+    mdbx_rthc_thread_dtor(module);
     break;
   }
 }
-
-void mdbx_rthc_lock(void) { EnterCriticalSection(&rthc_critical_section); }
-
-void mdbx_rthc_unlock(void) { LeaveCriticalSection(&rthc_critical_section); }
 
 /* *INDENT-OFF* */
 /* clang-format off */
