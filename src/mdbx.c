@@ -210,13 +210,15 @@ static __cold void mdbx_rthc_unlock(void) {
 }
 
 static __inline int mdbx_thread_key_create(mdbx_thread_key_t *key) {
+  int rc;
 #if defined(_WIN32) || defined(_WIN64)
   *key = TlsAlloc();
-  return (*key != TLS_OUT_OF_INDEXES) ? MDBX_SUCCESS : GetLastError();
+  rc = (*key != TLS_OUT_OF_INDEXES) ? MDBX_SUCCESS : GetLastError();
 #else
-  return pthread_key_create(key, nullptr);
+  rc = pthread_key_create(key, nullptr);
 #endif
-  mdbx_trace("&key = %p, value 0x%x", key, (unsigned)*key);
+  mdbx_trace("&key = %p, value 0x%x, rc %d", key, (unsigned)*key, rc);
+  return rc;
 }
 
 static __inline void mdbx_thread_key_delete(mdbx_thread_key_t key) {
