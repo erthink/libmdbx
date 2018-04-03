@@ -241,21 +241,26 @@ static void mdbx_thread_rthc_set(mdbx_thread_key_t key, const void *value) {
 #if defined(_WIN32) || defined(_WIN64)
   mdbx_ensure(nullptr, TlsSetValue(key, (void *)value));
 #else
-  static __thread bool thread_registered;
-  if (value && unlikely(!thread_registered)) {
-    thread_registered = true;
+#define MDBX_THREAD_RTHC_ZERO 0
+#define MDBX_THREAD_RTHC_REGISTERD 1
+#define MDBX_THREAD_RTHC_COUNTED 2
+  static __thread uint32_t thread_registration_state;
+  if (value && unlikely(thread_registration_state == MDBX_THREAD_RTHC_ZERO)) {
+    thread_registration_state = MDBX_THREAD_RTHC_REGISTERD;
+    mdbx_trace("thread registered 0x%" PRIxPTR, (uintptr_t)mdbx_thread_self());
     if (&__cxa_thread_atexit_impl == nullptr ||
-        __cxa_thread_atexit_impl(mdbx_rthc_thread_dtor, &thread_registered,
+        __cxa_thread_atexit_impl(mdbx_rthc_thread_dtor,
+                                 &thread_registration_state,
                                  (void *)&mdbx_version /* dso_anchor */)) {
-      mdbx_ensure(nullptr,
-                  pthread_setspecific(mdbx_rthc_key, &thread_registered) == 0);
+      mdbx_ensure(nullptr, pthread_setspecific(
+                               mdbx_rthc_key, &thread_registration_state) == 0);
+      thread_registration_state = MDBX_THREAD_RTHC_COUNTED;
       const unsigned count_before = mdbx_atomic_add32(&mdbx_rthc_pending, 1);
       mdbx_ensure(nullptr, count_before < INT_MAX);
       mdbx_trace("fallback to pthreads' tsd, key 0x%x, count %u",
                  (unsigned)mdbx_rthc_key, count_before);
       (void)count_before;
     }
-    mdbx_trace("thread registered 0x%" PRIxPTR, (uintptr_t)mdbx_thread_self());
   }
   mdbx_ensure(nullptr, pthread_setspecific(key, value) == 0);
 #endif
@@ -313,7 +318,14 @@ void mdbx_rthc_thread_dtor(void *ptr) {
              ptr);
   mdbx_rthc_unlock();
 #else
-  mdbx_ensure(nullptr, mdbx_atomic_sub32(&mdbx_rthc_pending, 1) > 0);
+  const char self_registration = *(char *)ptr;
+  *(char *)ptr = MDBX_THREAD_RTHC_ZERO;
+  mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %d",
+             (uintptr_t)mdbx_thread_self(), ptr, mdbx_getpid(),
+             self_registration);
+  if (self_registration == MDBX_THREAD_RTHC_COUNTED)
+    mdbx_ensure(nullptr, mdbx_atomic_sub32(&mdbx_rthc_pending, 1) > 0);
+
   if (mdbx_rthc_pending == 0) {
     mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, wake",
                (uintptr_t)mdbx_thread_self(), ptr, mdbx_getpid());
@@ -337,13 +349,18 @@ __cold void mdbx_rthc_global_dtor(void) {
       mdbx_getpid(), &mdbx_rthc_global_dtor, &mdbx_rthc_thread_dtor,
       &mdbx_rthc_remove);
 
-#if defined(_WIN32) || defined(_WIN64)
   mdbx_rthc_lock();
-#else
-  if (pthread_getspecific(mdbx_rthc_key) != nullptr)
-    mdbx_ensure(nullptr, mdbx_atomic_sub32(&mdbx_rthc_pending, 1) > 0);
-  mdbx_thread_key_delete(mdbx_rthc_key);
-  mdbx_rthc_lock();
+#if !defined(_WIN32) && !defined(_WIN64)
+  char *rthc = (char *)pthread_getspecific(mdbx_rthc_key);
+  mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %d",
+             (uintptr_t)mdbx_thread_self(), rthc, mdbx_getpid(),
+             rthc ? *rthc : -1);
+  if (rthc) {
+    const char self_registration = *(char *)rthc;
+    *rthc = MDBX_THREAD_RTHC_ZERO;
+    if (self_registration == MDBX_THREAD_RTHC_COUNTED)
+      mdbx_ensure(nullptr, mdbx_atomic_sub32(&mdbx_rthc_pending, 1) > 0);
+  }
 
   struct timespec abstime;
   mdbx_ensure(nullptr, clock_gettime(CLOCK_REALTIME, &abstime) == 0);
@@ -352,18 +369,18 @@ __cold void mdbx_rthc_global_dtor(void) {
     abstime.tv_nsec -= 1000000000l;
     abstime.tv_sec += 1;
   }
+#if MDBX_DEBUG > 0
+  abstime.tv_sec += 600;
+#endif
 
   for (unsigned left; (left = mdbx_rthc_pending) > 0;) {
     mdbx_trace("pid %d, pending %u, wait for...", mdbx_getpid(), left);
     const int rc =
         pthread_cond_timedwait(&mdbx_rthc_cond, &mdbx_rthc_mutex, &abstime);
-    if (rc && rc != EINTR) {
-      /* LY: yielding a few timeslices to give a more chance
-       * to racing destructor(s) for completion. */
-      mdbx_workaround_glibc_bug21031();
+    if (rc && rc != EINTR)
       break;
-    }
   }
+  mdbx_thread_key_delete(mdbx_rthc_key);
 #endif
 
   const mdbx_pid_t self_pid = mdbx_getpid();
