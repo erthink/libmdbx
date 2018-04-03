@@ -37,7 +37,7 @@ TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
 LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
-EXE_LDFLAGS ?= $(LDFLAGS) -static
+EXE_LDFLAGS ?= -pthread -lrt
 
 # LY: just for benchmarking
 IOARENA ?= $(shell \
@@ -63,7 +63,7 @@ TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 
 .PHONY: mdbx all install clean check coverage
 
-all: $(LIBRARIES) $(TOOLS) test/test example
+all: $(LIBRARIES) $(TOOLS) mdbx_test example
 
 mdbx: libmdbx.a libmdbx.so
 
@@ -83,16 +83,16 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS) test/test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
+	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
 check:	all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
 
 check-singleprocess:	all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; test/test --pathname=$(TESTDB) --dont-cleanup-after --hill | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --dont-cleanup-after --hill | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
 
 check-fault:	all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; test/test --pathname=$(TESTDB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) && ./mdbx_chk -vvn $(TESTDB)
 
 define core-rule
 $(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile
@@ -117,8 +117,8 @@ libmdbx.so: $(CORE_OBJ)
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $^ $(EXE_LDFLAGS) -o $@
 
-test/test: $(TEST_OBJ) libmdbx.a
-	$(CXX) $(CXXFLAGS) $^ $(EXE_LDFLAGS) -o $@
+mdbx_test: $(TEST_OBJ) libmdbx.so
+	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) -o $@
 
 ###############################################################################
 
