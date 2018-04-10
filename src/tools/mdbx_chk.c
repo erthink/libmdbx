@@ -837,8 +837,8 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  print("Running mdbx_chk for 'read-%s' in %s mode...\n", envname,
-        (envflags & MDBX_RDONLY) ? "read" : "write");
+  print("Running mdbx_chk for %s in 'read-%s' mode...\n", envname,
+        (envflags & MDBX_RDONLY) ? "only" : "write");
   fflush(NULL);
 
   rc = mdbx_env_create(&env);
