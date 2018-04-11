@@ -162,7 +162,10 @@ int mdbx_rdt_lock(MDBX_env *env) {
   /* transite from S-? (used) to S-E (locked), e.g. exclusive lock upper-part */
   if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
     return MDBX_SUCCESS;
-  return GetLastError();
+
+  int rc = GetLastError();
+  ReleaseSRWLockShared(&env->me_remap_guard);
+  return rc;
 }
 
 void mdbx_rdt_unlock(MDBX_env *env) {
