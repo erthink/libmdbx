@@ -1,17 +1,22 @@
 cmake_minimum_required(VERSION 2.8.7)
-
 set(TARGET mdbx)
 project(${TARGET})
 
-# FIXME/TODO: Same as https://github.com/leo-yuriev/libfpta
-set(MDBX_VERSION_MAJOR 0)
-set(MDBX_VERSION_MINOR 0)
-set(MDBX_VERSION_PATCH 0)
-set(MDBX_VERSION_STRING ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_PATCH})
+message(WARNING "
+***************************************************************
+  MDBX is under active development, database format and API
+  aren't stable at least until 2018Q3. New version won't be
+  backwards compatible. Main focus of the rework is to provide
+  clear and robust API and new features.
+***************************************************************
+")
 
-add_definitions(-DMDBX_VERSION_MAJOR=${MDBX_VERSION_MAJOR})
-add_definitions(-DMDBX_VERSION_MINOR=${MDBX_VERSION_MINOR})
-add_definitions(-DMDBX_VERSION_PATCH=${MDBX_VERSION_PATCH})
+set(MDBX_VERSION_MAJOR 0)
+set(MDBX_VERSION_MINOR 1)
+set(MDBX_VERSION_RELEASE 3)
+set(MDBX_VERSION_REVISION 1)
+
+set(MDBX_VERSION_STRING ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_RELEASE})
 
 enable_language(C)
 enable_language(CXX)
@@ -34,7 +39,6 @@ else()
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O2")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g3")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-constant-logical-operand")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Werror")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wextra")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -ffunction-sections")
