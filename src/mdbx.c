@@ -2109,6 +2109,10 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
        * catch-up with itself by growing while trying to save it. */
       flags &=
           ~(MDBX_ALLOC_GC | MDBX_ALLOC_KICK | MDBX_COALESCE | MDBX_LIFORECLAIM);
+    } else if (unlikely(txn->mt_dbs[FREE_DBI].md_entries == 0)) {
+      /* avoid (recursive) search inside empty tree and while tree is updating,
+       * https://github.com/leo-yuriev/libmdbx/issues/31 */
+      flags &= ~MDBX_ALLOC_GC;
     }
   }
 
@@ -7965,6 +7969,8 @@ int mdbx_cursor_del(MDBX_cursor *mc, unsigned flags) {
           }
         }
         mc->mc_db->md_entries--;
+        mdbx_cassert(mc, mc->mc_db->md_entries > 0 && mc->mc_db->md_depth > 0 &&
+                             mc->mc_db->md_root != P_INVALID);
         return rc;
       } else {
         mc->mc_xcursor->mx_cursor.mc_flags &= ~C_INITIALIZED;
@@ -9052,6 +9058,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   rc = mdbx_page_loose(csrc, psrc);
   if (unlikely(rc))
     return rc;
+
   if (IS_LEAF(psrc))
     csrc->mc_db->md_leaf_pages--;
   else
@@ -9089,6 +9096,10 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     uint16_t depth = cdst->mc_db->md_depth;
     mdbx_cursor_pop(cdst);
     rc = mdbx_rebalance(cdst);
+    if (unlikely(rc))
+      return rc;
+    mdbx_cassert(cdst, cdst->mc_db->md_entries > 0);
+
     /* Did the tree height change? */
     if (depth != cdst->mc_db->md_depth)
       snum += cdst->mc_db->md_depth - depth;
@@ -9096,7 +9107,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     cdst->mc_snum = (uint16_t)snum;
     cdst->mc_top = (uint16_t)(snum - 1);
   }
-  return rc;
+  return MDBX_SUCCESS;
 }
 
 /* Copy the contents of a cursor.
@@ -9147,12 +9158,14 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       NUMKEYS(mc->mc_pg[mc->mc_top]) >= minkeys) {
     mdbx_debug("no need to rebalance page %" PRIaPGNO ", above fill threshold",
                mc->mc_pg[mc->mc_top]->mp_pgno);
+    mdbx_cassert(mc, mc->mc_db->md_entries > 0);
     return MDBX_SUCCESS;
   }
 
   if (mc->mc_snum < 2) {
-    MDBX_page *mp = mc->mc_pg[0];
-    unsigned nkeys = NUMKEYS(mp);
+    MDBX_page *const mp = mc->mc_pg[0];
+    const unsigned nkeys = NUMKEYS(mp);
+    mdbx_cassert(mc, (mc->mc_db->md_entries == 0) == (nkeys == 0));
     if (IS_SUBP(mp)) {
       mdbx_debug("Can't rebalance a subpage, ignoring");
       return MDBX_SUCCESS;
@@ -9182,7 +9195,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       mc->mc_snum = 0;
       mc->mc_top = 0;
       mc->mc_flags &= ~C_INITIALIZED;
-    } else if (IS_BRANCH(mp) && NUMKEYS(mp) == 1) {
+    } else if (IS_BRANCH(mp) && nkeys == 1) {
       int i;
       mdbx_debug("collapsing root page!");
       rc = mdbx_pnl_append(&mc->mc_txn->mt_befree_pages, mp->mp_pgno);
@@ -9343,12 +9356,17 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
      * Other cursors adjustments were already done
      * by mdbx_rebalance and aren't needed here. */
     if (!mc->mc_snum) {
+      mdbx_cassert(mc, mc->mc_db->md_entries == 0 && mc->mc_db->md_depth == 0 &&
+                           mc->mc_db->md_root == P_INVALID);
       mc->mc_flags |= C_DEL | C_EOF;
       return rc;
     }
 
     mp = mc->mc_pg[mc->mc_top];
     nkeys = NUMKEYS(mp);
+    mdbx_cassert(mc, (mc->mc_db->md_entries > 0 && nkeys > 0) ||
+                         ((mc->mc_flags & C_SUB) &&
+                          mc->mc_db->md_entries == 0 && nkeys == 0));
 
     /* Adjust other cursors pointing to mp */
     for (m2 = mc->mc_txn->mt_cursors[dbi]; !rc && m2; m2 = m2->mc_next) {
@@ -9366,7 +9384,8 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
               m3->mc_flags |= C_EOF;
               rc = MDBX_SUCCESS;
               continue;
-            }
+            } else if (unlikely(rc != MDBX_SUCCESS))
+              break;
           }
           if (mc->mc_db->md_flags & MDBX_DUPSORT) {
             MDBX_node *node =
