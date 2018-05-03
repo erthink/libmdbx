@@ -546,10 +546,12 @@ int mdbx_rpid_clear(MDBX_env *env) {
  *   or otherwise the errcode. */
 int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
   (void)env;
-  HANDLE hProcess = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+  HANDLE hProcess = OpenProcess(SYNCHRONIZE, FALSE, pid);
   int rc;
-  if (hProcess) {
+  if (likely(hProcess)) {
     rc = WaitForSingleObject(hProcess, 0);
+    if (unlikely(rc == WAIT_FAILED))
+      rc = GetLastError();
     CloseHandle(hProcess);
   } else {
     rc = GetLastError();
