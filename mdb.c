@@ -44,10 +44,8 @@
 #	define _GNU_SOURCE
 #endif
 
-/* LY: Please do not ask us for Windows support, just never!
- * But you can make a fork for Windows, or become maintainer for FreeBSD... */
 #ifndef __gnu_linux__
-#	warning "This version of ReOpenMDBX supports only GNU Linux"
+#	warning "This version of libmdbx supports only GNU Linux"
 #endif
 
 #include <stddef.h>
@@ -56,21 +54,21 @@
 #include "./defs.h"
 
 #if !__GNUC_PREREQ(4,2)
-	/* LY: Actualy ReOpenMDBX was not tested with compilers
+	/* LY: Actualy libmdbx was not tested with compilers
 	 *     older than GCC 4.4 (from RHEL6).
 	 * But you could remove this #error and try to continue at your own risk.
 	 * In such case please don't rise up an issues related ONLY to old compilers.
 	 */
-#	warning "ReOpenMDBX required at least GCC 4.2 compatible C/C++ compiler."
+#	warning "libmdbx required at least GCC 4.2 compatible C/C++ compiler."
 #endif
 
 #if !__GLIBC_PREREQ(2,12)
-	/* LY: Actualy ReOpenMDBX was not tested with something
+	/* LY: Actualy libmdbx was not tested with something
 	 *     older than glibc 2.12 (from RHEL6).
 	 * But you could remove this #error and try to continue at your own risk.
 	 * In such case please don't rise up an issues related ONLY to old systems.
 	 */
-#	warning "ReOpenMDBX required at least GLIBC 2.12."
+#	warning "libmdbx required at least GLIBC 2.12."
 #endif
 
 #if MDB_DEBUG
