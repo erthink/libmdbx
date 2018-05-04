@@ -2140,6 +2140,10 @@ mdb_page_alloc(MDB_cursor *mc, int num, MDB_page **mp, int flags)
 			/* If mc is updating the freeDB, then the freelist cannot play
 			 * catch-up with itself by growing while trying to save it. */
 			flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_KICK | MDBX_COALESCE | MDBX_LIFORECLAIM);
+		} else if (unlikely(txn->mt_dbs[FREE_DBI].md_entries == 0)) {
+			/* avoid (recursive) search inside empty tree and while tree is updating,
+			 * https://github.com/leo-yuriev/libmdbx/issues/31 */
+			flags &= ~MDBX_ALLOC_GC;
 		}
 	}
 
