@@ -71,7 +71,7 @@ clean:
 
 tests:	$(TESTS)
 
-check:	tests
+check:	tests mdbx_chk
 	[ -d testdb ] || mkdir testdb && rm -f testdb/* \
 		&& echo "*** LMDB-TEST-0" && ./mtest0 && ./mdbx_chk -v testdb \
 		&& echo "*** LMDB-TEST-1" && ./mtest1 && ./mdbx_chk -v testdb \
