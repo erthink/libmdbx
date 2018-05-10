@@ -7,12 +7,14 @@ libmdbx
 [![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
-### Project Status
+## Project Status for now
 
-**MDBX is under _active development_**, database format and
-API aren't stable at least until 2018Q3. New version won't be
-backwards compatible. Main focus of the rework is to provide
-clear and robust API and new features.
+ - The stable versions (the _stable/*_ branches) of  are frozen, i.e. no new features or API changes, but only bug fixes.
+ - The next (the _devel_ branch) version **is under active development**, i.e. current API and set of features are extreme volatile.
+ - The immediate goal of development is formation of the stable API and the stable internal database format, which allows realise all planned features.
+ - Planned features: Integrity check by Merkle tree, Support for raw block devices, Separate place for large data items, Using "roaring bitmaps" for garbage collector, Non-linear page reclaiming, Asynchronous lazy data flush to disk(s), etc.
+
+-----
 
 Nowadays MDBX intended for Linux and support Windows (since
 Windows Server 2008) as complementary platform. Support for
