@@ -5,8 +5,16 @@ Extended LMDB, aka "Расширенная LMDB".
 *The Future will Positive. Всё будет хорошо.*
 [![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=stable%2F0.0)](https://travis-ci.org/leo-yuriev/libmdbx)
 
-English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/stable%2F0.0).
+## Project Status for now
 
+ - The stable versions (the _stable/*_ branches) of  are frozen, i.e. no new features or API changes, but only bug fixes.
+ - The next (the _devel_ branch) version **is under active development**, i.e. current API and set of features are extreme volatile.
+ - The immediate goal of development is formation of the stable API and the stable internal database format, which allows realise all planned features.
+ - Planned features: Integrity check by Merkle tree, Support for raw block devices, Separate place for large data items, Using "roaring bitmaps" for garbage collector, Non-linear page reclaiming, Asynchronous lazy data flush to disk(s), etc.
+
+-----
+
+English version by Google [is here](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/stable%2F0.0).
 
 ## Кратко
 
