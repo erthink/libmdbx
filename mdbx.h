@@ -1461,6 +1461,9 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, MDBX_val *key,
 /* Delete current key/data pair
  *
  * This function deletes the key/data pair to which the cursor refers.
+ * This does not invalidate the cursor, so operations such as MDBX_NEXT
+ * can still be used on it. Both MDBX_NEXT and MDBX_GET_CURRENT will return
+ * the same record after this operation.
  *
  * [in] cursor  A cursor handle returned by mdbx_cursor_open()
  * [in] flags   Options for this operation. This parameter must be set to 0
