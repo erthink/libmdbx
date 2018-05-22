@@ -12,15 +12,22 @@ libmdbx
  - The stable versions (the _stable/*_ branches) of  are frozen, i.e. no new features or API changes, but only bug fixes.
  - The next (the _devel_ branch) version **is under active development**, i.e. current API and set of features are extreme volatile.
  - The immediate goal of development is formation of the stable API and the stable internal database format, which allows realise all planned features.
- - Planned features: Integrity check by Merkle tree, Support for raw block devices, Separate place for large data items, Using "roaring bitmaps" for garbage collector, Non-linear page reclaiming, Asynchronous lazy data flush to disk(s), etc.
+ - Planned features:
+   1. Integrity check by Merkle tree;
+   2. Support for raw block devices;
+   3. Separate place (HDD) for large data items;
+   4. Using "roaring bitmaps" inside garbage collector;
+   5. Non-linear page reclaiming (like PostgreSQL's Vacuum);
+   6. Asynchronous lazy data flushing to disk(s);
+   7. etc...
 
 -----
 
-Nowadays MDBX intended for Linux and support Windows (since
-Windows Server 2008) as complementary platform. Support for
+Nowadays MDBX intended for Linux, and support Windows (since
+Windows Server 2008) as a complementary platform. Support for
 other OS could be implemented on commercial basis. However such
 enhancements (i.e. pull requests) could be accepted in
-mainstream only when corresponding public and free Countinious
+mainstream only when corresponding public and free Continuous
 Integration service will be available.
 
 ## Contents
