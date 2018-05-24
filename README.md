@@ -9,16 +9,15 @@ libmdbx
 
 ## Project Status for now
 
- - The stable versions (the _stable/*_ branches) of  are frozen, i.e. no new features or API changes, but only bug fixes.
- - The next (the _devel_ branch) version **is under active development**, i.e. current API and set of features are extreme volatile.
- - The immediate goal of development is formation of the stable API and the stable internal database format, which allows realise all planned features.
- - Planned features:
-   1. Integrity check by Merkle tree;
-   2. Support for raw block devices;
+ - The stable versions ([_stable/0.0_](https://github.com/leo-yuriev/libmdbx/tree/stable/0.0) and [_stable/0.1_](https://github.com/leo-yuriev/libmdbx/tree/stable/0.1) branches) of _MDBX_ are frozen, i.e. no new features or API changes, but only bug fixes.
+ - The next version ([_devel_](https://github.com/leo-yuriev/libmdbx/tree/devel) branch) **is under active non-public development**, i.e. current API and set of features are extreme volatile.
+ - The immediate goal of development is formation of the stable API and the stable internal database format, which allows realise all PLANNED FEATURES:
+   1. Integrity check by [Merkle tree](https://en.wikipedia.org/wiki/Merkle_tree);
+   2. Support for [raw block devices](https://en.wikipedia.org/wiki/Raw_device);
    3. Separate place (HDD) for large data items;
-   4. Using "roaring bitmaps" inside garbage collector;
-   5. Non-linear page reclaiming (like PostgreSQL's Vacuum);
-   6. Asynchronous lazy data flushing to disk(s);
+   4. Using "[Roaring bitmaps](http://roaringbitmap.org/about/)" inside garbage collector;
+   5. Non-sequental reclaiming, like PostgreSQL's [Vacuum](https://www.postgresql.org/docs/9.1/static/sql-vacuum.html);
+   6. [Asynchronous lazy data flushing](https://sites.fas.harvard.edu/~cs265/papers/kathuria-2008.pdf) to disk(s);
    7. etc...
 
 -----
