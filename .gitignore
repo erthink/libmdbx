@@ -16,6 +16,7 @@ Win32/
 build-*
 cmake-build-*
 core
+example
 libmdbx.creator.user
 mdbx-dll.VC.VC.opendb
 mdbx-dll.VC.db
@@ -25,7 +26,7 @@ mdbx_copy
 mdbx_dump
 mdbx_load
 mdbx_stat
-ootest/test
+mdbx_test
 test.log
 test/test.vcxproj.user
 test/tmp.db
