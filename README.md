@@ -16,7 +16,7 @@ libmdbx
    2. Support for [raw block devices](https://en.wikipedia.org/wiki/Raw_device);
    3. Separate place (HDD) for large data items;
    4. Using "[Roaring bitmaps](http://roaringbitmap.org/about/)" inside garbage collector;
-   5. Non-sequental reclaiming, like PostgreSQL's [Vacuum](https://www.postgresql.org/docs/9.1/static/sql-vacuum.html);
+   5. Non-sequential reclaiming, like PostgreSQL's [Vacuum](https://www.postgresql.org/docs/9.1/static/sql-vacuum.html);
    6. [Asynchronous lazy data flushing](https://sites.fas.harvard.edu/~cs265/papers/kathuria-2008.pdf) to disk(s);
    7. etc...
 
@@ -33,7 +33,7 @@ Integration service will be available.
 
 - [Overview](#overview)
   - [Comparison with other DBs](#comparison-with-other-dbs)
-  - [History & Acknowledgements](#history)
+  - [History & Acknowledgments](#history)
 - [Main features](#main-features)
 - [Performance comparison](#performance-comparison)
   - [Integral performance](#integral-performance)
@@ -73,7 +73,7 @@ Because  _libmdbx_ is currently overhauled, I think it's better to just link
 
 ### History
 
-_libmdbx_ design is based on [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
+The _libmdbx_ design is based on [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 Initial development was going in [ReOpenLDAP](https://github.com/leo-yuriev/ReOpenLDAP) project, about a year later it
 received separate development effort and in autumn 2015 was isolated to separate project, which was
 [presented at Highload++ 2015 conference](http://www.highload.ru/2015/abstracts/1831.html).
@@ -81,7 +81,7 @@ received separate development effort and in autumn 2015 was isolated to separate
 Since early 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/leo-yuriev/libfpta),
 by [Positive Technologies](https://www.ptsecurity.com).
 
-#### Acknowledgements
+#### Acknowledgments
 
 Howard Chu (Symas Corporation) - the author of LMDB,
 from which originated the MDBX in 2015.
@@ -277,7 +277,7 @@ scanning data directory.
 #### Long-time read transactions problem
 
 Garbage collection problem exists in all databases one way or another (e.g. VACUUM in PostgreSQL).
-But in _libmbdx_ and LMDB it's even more important because of high performance and deliberate
+But in _libmdbx_ and LMDB it's even more important because of high performance and deliberate
 simplification of internals with emphasis on performance.
 
 * Altering data during long read operation may exhaust available space on persistent storage.
@@ -313,7 +313,7 @@ _libmdbx_ addresses the problem, details below. Illustrations to this problem ca
 In `WRITEMAP+MAPSYNC` mode dirty pages are written to persistent storage by kernel. This means that in case of application
 crash OS kernel will write all dirty data to disk and nothing will be lost. But in case of hardware malfunction or OS kernel
 fatal error only some dirty data might be synced to disk, and there is high probability that pages with metadata saved,
-will point to non-saved, hence non-existent, data pages. In such situation DB is completely corrupted and can't be
+will point to non-saved, hence non-existent, data pages. In such situation, DB is completely corrupted and can't be
 repaired even if there was full sync before the crash via `mdbx_env_sync().
 
 _libmdbx_ addresses this by fully reimplementing write path of data:
@@ -336,7 +336,7 @@ synchronization point. So last steady synchronization point creates "long-time r
 of memory exhaustion the problem will be immediately addressed by flushing changes to persistent storage and forming new steady
 synchronization point.
 
-So in async-write mode _libmdbx_ will always use new pages until memory is exhausted or `mdbx_env_sync()`is invoked. Total
+So in async-write mode _libmdbx_ will always use new pages until memory is exhausted or `mdbx_env_sync()` is invoked. Total
 disk usage will be almost the same as in sync-write mode.
 
 Current _libmdbx_ gives a choice of safe async-write mode (default) and `UTTERLY_NOSYNC` mode which may result in full DB
@@ -352,7 +352,7 @@ Improvements over LMDB
 1. `LIFO RECLAIM` mode:
 
 	The newest pages are picked for reuse instead of the oldest.
-	This allows to minimize reclaim loop and make it execution time independent from total page count.
+	This allows to minimize reclaim loop and make it execution time independent of total page count.
 
 	This results in OS kernel cache mechanisms working with maximum efficiency.
 	In case of using disk controllers or storages with
@@ -364,7 +364,7 @@ Improvements over LMDB
 	`mdbx_env_set_oomfunc()` allows to set a callback, which will be called
 	in the event of memory exhausting during long-time read transaction.
 	Callback will be invoked with PID and pthread_id of offending thread as parameters.
-	Callback can do any of this things to remedy the problem:
+	Callback can do any of these things to remedy the problem:
 
 	* wait for read transaction to finish normally;
 
@@ -408,7 +408,7 @@ Improvements over LMDB
 15. Ability to close DB in "dirty" state (without data flush and creation of steady synchronization point)
     via `mdbx_env_close_ex()`.
 
-16. Ability to get addition info, including number of the oldest snapshot of DB, which is used by one of the readers.
+16. Ability to get additional info, including number of the oldest snapshot of DB, which is used by one of the readers.
     Implemented via `mdbx_env_info()`.
 
 17. `mdbx_del()` doesn't ignore additional argument (specifier) `data`
@@ -417,7 +417,7 @@ Improvements over LMDB
 
 18. Ability to open dbi-table with simultaneous setup of comparators for keys and values, via `mdbx_dbi_open_ex()`.
 
-19. Ability to find out if key or value are in dirty page. This may be useful to make a decision to avoid
+19. Ability to find out if key or value is in dirty page. This may be useful to make a decision to avoid
     excessive CoW before updates. Implemented via `mdbx_is_dirty()`.
 
 20. Correct update of current record in `MDBX_CURRENT` mode of `mdbx_cursor_put()`, including sorted duplicated.
@@ -448,12 +448,12 @@ Improvements over LMDB
 27. Advanced dynamic control over DB size, including ability to choose page size via `mdbx_env_set_geometry()`,
     including on Windows.
 
-28. Three meta-pages instead two, this allows to guarantee consistently update weak sync-points without risking to
+28. Three meta-pages instead of two, this allows to guarantee consistently update weak sync-points without risking to
     corrupt last steady sync-point.
 
-29. Automatic reclaim of freed pages to specific reserved space in the end of database file. This lowers amount of pages,
+29. Automatic reclaim of freed pages to specific reserved space at the end of database file. This lowers amount of pages,
     loaded to memory, used in update/flush loop. In fact _libmdbx_ constantly performs compactification of data,
-    but doesn't use addition resources for that. Space reclaim of DB and setup of database geometry parameters also decreases
+    but doesn't use additional resources for that. Space reclaim of DB and setup of database geometry parameters also decreases
     size of the database on disk, including on Windows.
 
 --------------------------------------------------------------------------------
