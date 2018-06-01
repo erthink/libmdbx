@@ -982,7 +982,8 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
                                                MDBX_val *newdata,
                                                pgno_t newpgno, unsigned nflags);
 
-static int __must_check_result mdbx_read_header(MDBX_env *env, MDBX_meta *meta);
+static int __must_check_result mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
+                                                uint64_t *filesize);
 static int __must_check_result mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                                 MDBX_meta *const pending);
 static void mdbx_env_close0(MDBX_env *env);
@@ -4270,11 +4271,17 @@ fail:
 
 /* Read the environment parameters of a DB environment
  * before mapping it into memory. */
-static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
+static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
+                                   uint64_t *filesize) {
   assert(offsetof(MDBX_page, mp_meta) == PAGEHDRSZ);
+
+  int rc = mdbx_filesize(env->me_fd, filesize);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
   memset(meta, 0, sizeof(MDBX_meta));
   meta->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-  int rc = MDBX_CORRUPTED;
+  rc = MDBX_CORRUPTED;
 
   /* Read twice all meta pages so we can find the latest one. */
   unsigned loop_limit = NUM_METAS * 2;
@@ -4410,6 +4417,17 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
       continue;
     }
 
+    /* LY: check filesize & used_bytes */
+    const uint64_t used_bytes =
+        page.mp_meta.mm_geo.next * (uint64_t)page.mp_meta.mm_psize;
+    if (used_bytes > *filesize) {
+      mdbx_notice("meta[%u] used-bytes (%" PRIu64 ") beyond filesize (%" PRIu64
+                  "), skip it",
+                  meta_number, used_bytes, *filesize);
+      rc = MDBX_CORRUPTED;
+      continue;
+    }
+
     /* LY: check mapsize limits */
     const uint64_t mapsize_min =
         page.mp_meta.mm_geo.lower * (uint64_t)page.mp_meta.mm_psize;
@@ -4428,8 +4446,6 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta) {
     if (mapsize_max > MAX_MAPSIZE ||
         MAX_PAGENO < mdbx_roundup2((size_t)mapsize_max, env->me_os_psize) /
                          (size_t)page.mp_meta.mm_psize) {
-      const uint64_t used_bytes =
-          page.mp_meta.mm_geo.next * (uint64_t)page.mp_meta.mm_psize;
       if (page.mp_meta.mm_geo.next - 1 > MAX_PAGENO ||
           used_bytes > MAX_MAPSIZE) {
         mdbx_notice("meta[%u] has too large max-mapsize (%" PRIu64 "), skip it",
@@ -5239,9 +5255,10 @@ int __cold mdbx_env_get_maxreaders(MDBX_env *env, unsigned *readers) {
 
 /* Further setup required for opening an MDBX environment */
 static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
+  uint64_t filesize_before_mmap;
   MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
-  int err = mdbx_read_header(env, &meta);
+  int err = mdbx_read_header(env, &meta, &filesize_before_mmap);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
         (env->me_flags & MDBX_RDONLY) != 0)
@@ -5267,12 +5284,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-    err = mdbx_ftruncate(env->me_fd, env->me_dbgeo.now);
+    err = mdbx_ftruncate(env->me_fd, filesize_before_mmap = env->me_dbgeo.now);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
 #ifndef NDEBUG /* just for checking */
-    err = mdbx_read_header(env, &meta);
+    err = mdbx_read_header(env, &meta, &filesize_before_mmap);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 #endif
@@ -5359,11 +5376,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
     env->me_dbgeo.grow = pgno2bytes(env, meta.mm_geo.grow);
     env->me_dbgeo.shrink = pgno2bytes(env, meta.mm_geo.shrink);
   }
-
-  uint64_t filesize_before_mmap;
-  err = mdbx_filesize(env->me_fd, &filesize_before_mmap);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
 
   const size_t expected_bytes =
       mdbx_roundup2(pgno2bytes(env, meta.mm_geo.now), env->me_os_psize);
