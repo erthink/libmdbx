@@ -4592,7 +4592,30 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 
   const size_t usedbytes = pgno_align2os_bytes(env, pending->mm_geo.next);
   if (env->me_sync_threshold && env->me_sync_pending >= env->me_sync_threshold)
-    flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED;
+    flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
+
+  /* LY: check conditions to shrink datafile */
+  const pgno_t backlog_gap =
+      pending->mm_dbs[FREE_DBI].md_depth + mdbx_backlog_extragap(env);
+  pgno_t shrink = 0;
+  if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
+      pending->mm_geo.now - pending->mm_geo.next >
+          pending->mm_geo.shrink + backlog_gap) {
+    const pgno_t aligner =
+        pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
+    const pgno_t with_backlog_gap = pending->mm_geo.next + backlog_gap;
+    const pgno_t aligned = pgno_align2os_pgno(
+        env, with_backlog_gap + aligner - with_backlog_gap % aligner);
+    const pgno_t bottom =
+        (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
+    if (pending->mm_geo.now > bottom) {
+      flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
+      shrink = pending->mm_geo.now - bottom;
+      pending->mm_geo.now = bottom;
+      if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
+        mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
+    }
+  }
 
   /* LY: step#1 - sync previously written/updated data-pages */
   int rc = MDBX_RESULT_TRUE;
@@ -4616,28 +4639,6 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
       env->me_sync_pending = 0;
-    }
-  }
-
-  /* LY: check conditions to shrink datafile */
-  const pgno_t backlog_gap =
-      pending->mm_dbs[FREE_DBI].md_depth + mdbx_backlog_extragap(env);
-  pgno_t shrink = 0;
-  if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
-      pending->mm_geo.now - pending->mm_geo.next >
-          pending->mm_geo.shrink + backlog_gap) {
-    const pgno_t aligner =
-        pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
-    const pgno_t with_backlog_gap = pending->mm_geo.next + backlog_gap;
-    const pgno_t aligned = pgno_align2os_pgno(
-        env, with_backlog_gap + aligner - with_backlog_gap % aligner);
-    const pgno_t bottom =
-        (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
-    if (pending->mm_geo.now > bottom) {
-      shrink = pending->mm_geo.now - bottom;
-      pending->mm_geo.now = bottom;
-      if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
-        mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
     }
   }
 
@@ -7320,7 +7321,8 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 static int mdbx_cursor_touch(MDBX_cursor *mc) {
   int rc = MDBX_SUCCESS;
 
-  if (mc->mc_dbi >= CORE_DBS && !(*mc->mc_dbflag & (DB_DIRTY | DB_DUPDATA))) {
+  if (mc->mc_dbi >= CORE_DBS &&
+      (*mc->mc_dbflag & (DB_DIRTY | DB_DUPDATA)) == 0) {
     /* Touch DB record of named DB */
     MDBX_cursor mc2;
     MDBX_xcursor mcx;
