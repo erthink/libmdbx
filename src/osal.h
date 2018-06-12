@@ -560,6 +560,23 @@ LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
 int mdbx_rpid_set(MDBX_env *env);
 int mdbx_rpid_clear(MDBX_env *env);
 
+#if defined(_WIN32) || defined(_WIN64)
+typedef struct MDBX_srwlock {
+  union {
+    struct {
+      long volatile readerCount;
+      long volatile writerCount;
+    };
+    RTL_SRWLOCK native;
+  };
+} MDBX_srwlock;
+
+typedef void(WINAPI *MDBX_srwlock_function)(MDBX_srwlock *);
+extern MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
+    mdbx_srwlock_ReleaseShared, mdbx_srwlock_AcquireExclusive,
+    mdbx_srwlock_ReleaseExclusive;
+#endif /* Windows */
+
 /* Checks reader by pid.
  *
  * Returns:
