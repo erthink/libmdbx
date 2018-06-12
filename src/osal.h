@@ -508,6 +508,7 @@ int mdbx_suspend_threads_before_remap(MDBX_env *env,
 int mdbx_resume_threads_after_remap(mdbx_handle_array_t *array);
 #endif /* Windows */
 int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async);
+int mdbx_is_file_local(mdbx_filehandle_t handle, int flags);
 
 static __inline mdbx_pid_t mdbx_getpid(void) {
 #if defined(_WIN32) || defined(_WIN64)
