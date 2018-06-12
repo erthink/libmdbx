@@ -654,20 +654,25 @@ MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
 
 /*----------------------------------------------------------------------------*/
 
+MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
+MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
+MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
+MDBX_NtFsControlFile mdbx_NtFsControlFile;
+
 static void mdbx_winnt_import(void) {
-  HINSTANCE hInst = GetModuleHandleA("kernel32.dll");
-  MDBX_srwlock_function init =
-      (MDBX_srwlock_function)GetProcAddress(hInst, "InitializeSRWLock");
+  const HINSTANCE hKernel32dll = GetModuleHandleA("kernel32.dll");
+  const MDBX_srwlock_function init =
+      (MDBX_srwlock_function)GetProcAddress(hKernel32dll, "InitializeSRWLock");
   if (init != NULL) {
     mdbx_srwlock_Init = init;
-    mdbx_srwlock_AcquireShared =
-        (MDBX_srwlock_function)GetProcAddress(hInst, "AcquireSRWLockShared");
-    mdbx_srwlock_ReleaseShared =
-        (MDBX_srwlock_function)GetProcAddress(hInst, "ReleaseSRWLockShared");
-    mdbx_srwlock_AcquireExclusive =
-        (MDBX_srwlock_function)GetProcAddress(hInst, "AcquireSRWLockExclusive");
-    mdbx_srwlock_ReleaseExclusive =
-        (MDBX_srwlock_function)GetProcAddress(hInst, "ReleaseSRWLockExclusive");
+    mdbx_srwlock_AcquireShared = (MDBX_srwlock_function)GetProcAddress(
+        hKernel32dll, "AcquireSRWLockShared");
+    mdbx_srwlock_ReleaseShared = (MDBX_srwlock_function)GetProcAddress(
+        hKernel32dll, "ReleaseSRWLockShared");
+    mdbx_srwlock_AcquireExclusive = (MDBX_srwlock_function)GetProcAddress(
+        hKernel32dll, "AcquireSRWLockExclusive");
+    mdbx_srwlock_ReleaseExclusive = (MDBX_srwlock_function)GetProcAddress(
+        hKernel32dll, "ReleaseSRWLockExclusive");
   } else {
     mdbx_srwlock_Init = stub_srwlock_Init;
     mdbx_srwlock_AcquireShared = stub_srwlock_AcquireShared;
@@ -675,4 +680,20 @@ static void mdbx_winnt_import(void) {
     mdbx_srwlock_AcquireExclusive = stub_srwlock_AcquireExclusive;
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
+
+  mdbx_GetFileInformationByHandleEx =
+      (MDBX_GetFileInformationByHandleEx)GetProcAddress(
+          hKernel32dll, "GetFileInformationByHandleEx");
+
+  mdbx_GetVolumeInformationByHandleW =
+      (MDBX_GetVolumeInformationByHandleW)GetProcAddress(
+          hKernel32dll, "GetVolumeInformationByHandleW");
+
+  mdbx_GetFinalPathNameByHandleW =
+      (MDBX_GetFinalPathNameByHandleW)GetProcAddress(
+          hKernel32dll, "GetFinalPathNameByHandleW");
+
+  const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
+  mdbx_NtFsControlFile =
+      (MDBX_NtFsControlFile)GetProcAddress(hNtdll, "NtFsControlFile");
 }

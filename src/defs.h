@@ -103,10 +103,6 @@
 
 /*----------------------------------------------------------------------------*/
 
-#if !defined(__thread) && (defined(_MSC_VER) || defined(__DMC__))
-#   define __thread __declspec(thread)
-#endif /* __thread */
-
 #ifndef __alwaysinline
 #   if defined(__GNUC__) || __has_attribute(always_inline)
 #       define __alwaysinline __inline __attribute__((always_inline))

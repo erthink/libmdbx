@@ -34,6 +34,9 @@
 #endif
 
 #ifdef _MSC_VER
+#   if _MSC_VER < 1400
+#       error "Microsoft Visual C++ 8.0 (Visual Studio 2005) or later version is required"
+#   endif
 #   ifndef _CRT_SECURE_NO_WARNINGS
 #       define _CRT_SECURE_NO_WARNINGS
 #   endif

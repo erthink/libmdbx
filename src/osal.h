@@ -65,9 +65,11 @@
 /* Systems includes */
 
 #if defined(_WIN32) || defined(_WIN64)
+#define WIN32_LEAN_AND_MEAN
 #include <tlhelp32.h>
 #include <windows.h>
 #include <winnt.h>
+#include <winternl.h>
 #define HAVE_SYS_STAT_H
 #define HAVE_SYS_TYPES_H
 typedef HANDLE mdbx_thread_t;
@@ -576,6 +578,36 @@ typedef void(WINAPI *MDBX_srwlock_function)(MDBX_srwlock *);
 extern MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
     mdbx_srwlock_ReleaseShared, mdbx_srwlock_AcquireExclusive,
     mdbx_srwlock_ReleaseExclusive;
+
+typedef BOOL(WINAPI *MDBX_GetFileInformationByHandleEx)(
+    _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
+    _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
+extern MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
+
+typedef BOOL(WINAPI *MDBX_GetVolumeInformationByHandleW)(
+    _In_ HANDLE hFile, _Out_opt_ LPWSTR lpVolumeNameBuffer,
+    _In_ DWORD nVolumeNameSize, _Out_opt_ LPDWORD lpVolumeSerialNumber,
+    _Out_opt_ LPDWORD lpMaximumComponentLength,
+    _Out_opt_ LPDWORD lpFileSystemFlags,
+    _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
+
+extern MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
+
+typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile,
+                                                      _Out_ LPWSTR lpszFilePath,
+                                                      _In_ DWORD cchFilePath,
+                                                      _In_ DWORD dwFlags);
+extern MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
+
+typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
+    IN HANDLE FileHandle, IN OUT HANDLE Event,
+    IN OUT PVOID /* PIO_APC_ROUTINE */ ApcRoutine, IN OUT PVOID ApcContext,
+    OUT PIO_STATUS_BLOCK IoStatusBlock, IN ULONG FsControlCode,
+    IN OUT PVOID InputBuffer, IN ULONG InputBufferLength,
+    OUT OPTIONAL PVOID OutputBuffer, IN ULONG OutputBufferLength);
+
+extern MDBX_NtFsControlFile mdbx_NtFsControlFile;
+
 #endif /* Windows */
 
 /* Checks reader by pid.

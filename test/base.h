@@ -80,6 +80,10 @@
 #include "../src/defs.h"
 #include "../src/osal.h"
 
+#if !defined(__thread) && (defined(_MSC_VER) || defined(__DMC__))
+#define __thread __declspec(thread)
+#endif /* __thread */
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #pragma warning(disable : 4201) /* nonstandard extension used :                \

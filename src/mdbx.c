@@ -1134,7 +1134,7 @@ const char *__cold mdbx_strerror(int errnum) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
 #ifdef _MSC_VER
-    static __thread char buffer[1024];
+    static char buffer[1024];
     size_t size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer,
