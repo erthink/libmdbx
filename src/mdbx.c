@@ -5945,8 +5945,19 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
         env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
     if (!dont_sync) {
+#if defined(_WIN32) || defined(_WIN64)
+      /* On windows, without blocking is impossible to determine whether another
+       * process is running a writing transaction or not.
+       * Because in the "owner died" condition kernel don't release
+       * file lock immediately. */
+      rc = mdbx_env_sync_ex(env, true, false);
+#else
       rc = mdbx_env_sync_ex(env, true, true);
-      rc = (rc == MDBX_BUSY) ? MDBX_SUCCESS : rc;
+      rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
+            rc == EWOULDBLOCK)
+               ? MDBX_SUCCESS
+               : rc;
+#endif
     }
   }
 
