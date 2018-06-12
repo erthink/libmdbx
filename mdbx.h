@@ -203,6 +203,21 @@ typedef struct mdbx_build_info {
 extern LIBMDBX_API const mdbx_version_info mdbx_version;
 extern LIBMDBX_API const mdbx_build_info mdbx_build;
 
+#if defined(_WIN32) || defined(_WIN64)
+/* Dll initialization callback for old Windows NT versions. This function MUST
+ * be called once from DllMain() for each reason (DLL_PROCESS_ATTACH,
+ * DLL_PROCESS_DETACH, DLL_THREAD_ATTACH and DLL_THREAD_DETACH). Do this
+ * carefully and ONLY when actual Windows version don't support initialization
+ * via "TLS Directory" (e.g .CRT$XL[A-Z] sections in executable or dll file). */
+#ifndef MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#define MDBX_CONFIG_MANUAL_TLS_CALLBACK 0
+#endif
+#if MDBX_CONFIG_MANUAL_TLS_CALLBACK
+void LIBMDBX_API NTAPI mdbx_dll_callback(PVOID module, DWORD reason,
+                                         PVOID reserved);
+#endif /* MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+#endif /* Windows */
+
 /* The name of the lock file in the DB environment */
 #define MDBX_LOCKNAME "/mdbx.lck"
 /* The name of the data file in the DB environment */

@@ -24,13 +24,17 @@
  * LY
  */
 
-/*----------------------------------------------------------------------------*/
-/* rthc */
+static void mdbx_winnt_import(void);
 
-static void NTAPI tls_callback(PVOID module, DWORD reason, PVOID reserved) {
+#if !MDBX_CONFIG_MANUAL_TLS_CALLBACK
+static
+#endif /* !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+    void NTAPI
+    mdbx_dll_callback(PVOID module, DWORD reason, PVOID reserved) {
   (void)reserved;
   switch (reason) {
   case DLL_PROCESS_ATTACH:
+    mdbx_winnt_import();
     mdbx_rthc_global_init();
     break;
   case DLL_PROCESS_DETACH:
@@ -45,6 +49,7 @@ static void NTAPI tls_callback(PVOID module, DWORD reason, PVOID reserved) {
   }
 }
 
+#if !MDBX_CONFIG_MANUAL_TLS_CALLBACK
 /* *INDENT-OFF* */
 /* clang-format off */
 #if defined(_MSC_VER)
@@ -55,7 +60,7 @@ static void NTAPI tls_callback(PVOID module, DWORD reason, PVOID reserved) {
      /* kick a linker to create the TLS directory if not already done */
 #    pragma comment(linker, "/INCLUDE:_tls_used")
      /* Force some symbol references. */
-#    pragma comment(linker, "/INCLUDE:mdbx_tls_callback")
+#    pragma comment(linker, "/INCLUDE:mdbx_tls_anchor")
      /* specific const-segment for WIN64 */
 #    pragma const_seg(".CRT$XLB")
      const
@@ -63,12 +68,12 @@ static void NTAPI tls_callback(PVOID module, DWORD reason, PVOID reserved) {
      /* kick a linker to create the TLS directory if not already done */
 #    pragma comment(linker, "/INCLUDE:__tls_used")
      /* Force some symbol references. */
-#    pragma comment(linker, "/INCLUDE:_mdbx_tls_callback")
+#    pragma comment(linker, "/INCLUDE:_mdbx_tls_anchor")
      /* specific data-segment for WIN32 */
 #    pragma data_seg(".CRT$XLB")
 #  endif
 
-   PIMAGE_TLS_CALLBACK mdbx_tls_callback = tls_callback;
+   __declspec(allocate(".CRT$XLB")) PIMAGE_TLS_CALLBACK mdbx_tls_anchor = mdbx_dll_callback;
 #  pragma data_seg(pop)
 #  pragma const_seg(pop)
 
@@ -76,13 +81,13 @@ static void NTAPI tls_callback(PVOID module, DWORD reason, PVOID reserved) {
 #  ifdef _WIN64
      const
 #  endif
-   PIMAGE_TLS_CALLBACK mdbx_tls_callback __attribute__((section(".CRT$XLB"), used))
-     = tls_callback;
+   PIMAGE_TLS_CALLBACK mdbx_tls_anchor __attribute__((section(".CRT$XLB"), used)) = mdbx_dll_callback;
 #else
 #  error FIXME
 #endif
 /* *INDENT-ON* */
 /* clang-format on */
+#endif /* !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
 
 /*----------------------------------------------------------------------------*/
 
@@ -643,11 +648,18 @@ static void WINAPI stub_srwlock_ReleaseExclusive(MDBX_srwlock *srwl) {
   srwl->writerCount = 0;
 }
 
-static void WINAPI srwlock_thunk_init(MDBX_srwlock *srwl) {
+MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
+    mdbx_srwlock_ReleaseShared, mdbx_srwlock_AcquireExclusive,
+    mdbx_srwlock_ReleaseExclusive;
+
+/*----------------------------------------------------------------------------*/
+
+static void mdbx_winnt_import(void) {
   HINSTANCE hInst = GetModuleHandleA("kernel32.dll");
   MDBX_srwlock_function init =
       (MDBX_srwlock_function)GetProcAddress(hInst, "InitializeSRWLock");
   if (init != NULL) {
+    mdbx_srwlock_Init = init;
     mdbx_srwlock_AcquireShared =
         (MDBX_srwlock_function)GetProcAddress(hInst, "AcquireSRWLockShared");
     mdbx_srwlock_ReleaseShared =
@@ -657,19 +669,10 @@ static void WINAPI srwlock_thunk_init(MDBX_srwlock *srwl) {
     mdbx_srwlock_ReleaseExclusive =
         (MDBX_srwlock_function)GetProcAddress(hInst, "ReleaseSRWLockExclusive");
   } else {
-    init = stub_srwlock_Init;
+    mdbx_srwlock_Init = stub_srwlock_Init;
     mdbx_srwlock_AcquireShared = stub_srwlock_AcquireShared;
     mdbx_srwlock_ReleaseShared = stub_srwlock_ReleaseShared;
     mdbx_srwlock_AcquireExclusive = stub_srwlock_AcquireExclusive;
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
-  mdbx_compiler_barrier();
-  mdbx_srwlock_Init = init;
-  mdbx_srwlock_Init(srwl);
 }
-
-MDBX_srwlock_function mdbx_srwlock_Init = srwlock_thunk_init;
-MDBX_srwlock_function mdbx_srwlock_AcquireShared;
-MDBX_srwlock_function mdbx_srwlock_ReleaseShared;
-MDBX_srwlock_function mdbx_srwlock_AcquireExclusive;
-MDBX_srwlock_function mdbx_srwlock_ReleaseExclusive;
