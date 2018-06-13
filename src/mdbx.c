@@ -5583,7 +5583,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd == INVALID_HANDLE_VALUE);
 
-  int err = mdbx_openfile(lck_pathname, O_RDWR | O_CREAT, mode, &env->me_lfd);
+  int err = mdbx_openfile(lck_pathname, O_RDWR | O_CREAT, mode, &env->me_lfd,
+                          (env->me_flags & MDBX_EXCLUSIVE) ? true : false);
   if (err != MDBX_SUCCESS) {
     if (err != MDBX_EROFS || (env->me_flags & MDBX_RDONLY) == 0)
       return err;
@@ -5626,10 +5627,14 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
         return err;
       size = wanna;
     }
-  } else if (size > SSIZE_MAX || (size & (env->me_os_psize - 1)) ||
-             size < env->me_os_psize) {
-    mdbx_notice("lck-file has invalid size %" PRIu64 " bytes", size);
-    return MDBX_PROBLEM;
+  } else {
+    if (env->me_flags & MDBX_EXCLUSIVE)
+      return MDBX_BUSY;
+    if (size > SSIZE_MAX || (size & (env->me_os_psize - 1)) ||
+        size < env->me_os_psize) {
+      mdbx_notice("lck-file has invalid size %" PRIu64 " bytes", size);
+      return MDBX_PROBLEM;
+    }
   }
 
   const size_t maxreaders =
@@ -5699,14 +5704,14 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
    MDBX_COALESCE | MDBX_PAGEPERTURB)
 #define CHANGELESS                                                             \
   (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOTLS | MDBX_NORDAHEAD | \
-   MDBX_LIFORECLAIM)
+   MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
 
 #if VALID_FLAGS & PERSISTENT_FLAGS & (CHANGEABLE | CHANGELESS)
 #error "Persistent DB flags & env flags overlap, but both go in mm_flags"
 #endif
 
-int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
-                            mode_t mode, int *exclusive) {
+int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
+                         mode_t mode) {
   if (unlikely(!env || !path))
     return MDBX_EINVAL;
 
@@ -5770,7 +5775,8 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
   else
     oflags = O_RDWR | O_CREAT;
 
-  rc = mdbx_openfile(dxb_pathname, oflags, mode, &env->me_fd);
+  rc = mdbx_openfile(dxb_pathname, oflags, mode, &env->me_fd,
+                     (env->me_flags & MDBX_EXCLUSIVE) ? true : false);
   if (rc != MDBX_SUCCESS)
     goto bailout;
 
@@ -5791,7 +5797,7 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
       MDBX_WRITEMAP | MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC;
   if (lck_rc == MDBX_RESULT_TRUE) {
     env->me_lck->mti_envmode = env->me_flags & (mode_flags | MDBX_RDONLY);
-    if (exclusive == NULL || *exclusive < 2) {
+    if ((env->me_flags & MDBX_EXCLUSIVE) == 0) {
       /* LY: downgrade lock only if exclusive access not requested.
        *     in case exclusive==1, just leave value as is. */
       rc = mdbx_lck_downgrade(env, true);
@@ -5803,10 +5809,6 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
     if (rc != MDBX_SUCCESS)
       goto bailout;
   } else {
-    if (exclusive) {
-      /* LY: just indicate that is not an exclusive access. */
-      *exclusive = 0;
-    }
     if ((env->me_flags & MDBX_RDONLY) == 0) {
       while (env->me_lck->mti_envmode == MDBX_RDONLY) {
         if (mdbx_atomic_compare_and_swap32(&env->me_lck->mti_envmode,
@@ -5875,11 +5877,6 @@ bailout:
     mdbx_env_close0(env);
   free(lck_pathname);
   return rc;
-}
-
-int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
-                         mode_t mode) {
-  return mdbx_env_open_ex(env, path, flags, mode, NULL);
 }
 
 /* Destroy resources from mdbx_env_open(), clear our readers & DBIs */
@@ -10496,8 +10493,8 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags) {
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  int rc =
-      mdbx_openfile(lck_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666, &newfd);
+  int rc = mdbx_openfile(lck_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666,
+                         &newfd, true);
   if (rc == MDBX_SUCCESS) {
     if (env->me_psize >= env->me_os_psize) {
 #ifdef F_NOCACHE /* __APPLE__ */

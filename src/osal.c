@@ -409,19 +409,20 @@ int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 /*----------------------------------------------------------------------------*/
 
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
-                  mdbx_filehandle_t *fd) {
+                  mdbx_filehandle_t *fd, bool exclusive) {
   *fd = INVALID_HANDLE_VALUE;
 #if defined(_WIN32) || defined(_WIN64)
   (void)mode;
 
-  DWORD DesiredAccess;
-  DWORD ShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE;
+  DWORD DesiredAccess, ShareMode;
   DWORD FlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
   switch (flags & (O_RDONLY | O_WRONLY | O_RDWR)) {
   default:
     return ERROR_INVALID_PARAMETER;
   case O_RDONLY:
     DesiredAccess = GENERIC_READ;
+    ShareMode =
+        exclusive ? FILE_SHARE_READ : (FILE_SHARE_READ | FILE_SHARE_WRITE);
     break;
   case O_WRONLY: /* assume for MDBX_env_copy() and friends output */
     DesiredAccess = GENERIC_WRITE;
@@ -430,6 +431,7 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
     break;
   case O_RDWR:
     DesiredAccess = GENERIC_READ | GENERIC_WRITE;
+    ShareMode = exclusive ? 0 : (FILE_SHARE_READ | FILE_SHARE_WRITE);
     break;
   }
 
@@ -468,7 +470,7 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
     }
   }
 #else
-
+  (void)exclusive;
 #ifdef O_CLOEXEC
   flags |= O_CLOEXEC;
 #endif

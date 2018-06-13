@@ -73,8 +73,7 @@ struct {
 } walk;
 
 uint64_t total_unused_bytes;
-int exclusive = 2;
-int envflags = MDBX_RDONLY;
+int envflags = MDBX_RDONLY | MDBX_EXCLUSIVE;
 
 MDBX_env *env;
 MDBX_txn *txn;
@@ -706,7 +705,7 @@ void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
     print(", stay");
 
   if (txnid > envinfo.mi_recent_txnid &&
-      (exclusive || (envflags & MDBX_RDONLY) == 0))
+      (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE)
     print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
           txnid - envinfo.mi_recent_txnid, txnid, envinfo.mi_recent_txnid);
   print("\n");
@@ -805,7 +804,7 @@ int main(int argc, char *argv[]) {
       envflags &= ~MDBX_RDONLY;
       break;
     case 'c':
-      exclusive = 0;
+      envflags &= ~MDBX_EXCLUSIVE;
       break;
     case 'd':
       dont_traversal = 1;
@@ -853,7 +852,19 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  rc = mdbx_env_open_ex(env, envname, envflags, 0664, &exclusive);
+  rc = mdbx_env_open(env, envname, envflags, 0664);
+  if ((envflags & MDBX_EXCLUSIVE) &&
+      (rc == MDBX_BUSY ||
+#if defined(_WIN32) || defined(_WIN64)
+       rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION
+#else
+       rc == EBUSY
+#endif
+       )) {
+    envflags &= ~MDBX_EXCLUSIVE;
+    rc = mdbx_env_open(env, envname, envflags, 0664);
+  }
+
   if (rc) {
     error("mdbx_env_open failed, error %d %s\n", rc, mdbx_strerror(rc));
     if (rc == MDBX_WANNA_RECOVERY && (envflags & MDBX_RDONLY))
@@ -861,7 +872,8 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
   if (verbose)
-    print(" - %s mode\n", exclusive ? "monopolistic" : "cooperative");
+    print(" - %s mode\n",
+          (envflags & MDBX_EXCLUSIVE) ? "monopolistic" : "cooperative");
 
   if ((envflags & MDBX_RDONLY) == 0) {
     rc = mdbx_txn_lock(env, false);
@@ -946,7 +958,7 @@ int main(int argc, char *argv[]) {
     ++problems_meta;
   }
 
-  if (exclusive > 1) {
+  if (envflags & MDBX_EXCLUSIVE) {
     if (verbose)
       print(" - performs full check recent-txn-id with meta-pages\n");
     problems_meta += check_meta_head(true);
@@ -1079,7 +1091,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (problems_maindb == 0 && problems_freedb == 0) {
-    if (!dont_traversal && (exclusive || (envflags & MDBX_RDONLY) == 0)) {
+    if (!dont_traversal &&
+        (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE) {
       if (walk.pgcount != lastpgno - freedb_pages) {
         error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
               walk.pgcount, lastpgno - freedb_pages);

@@ -288,9 +288,8 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 #define MDBX_MAPASYNC 0x100000u
 /* tie reader locktable slots to MDBX_txn objects instead of to threads */
 #define MDBX_NOTLS 0x200000u
-/* don't do any locking, caller must manage their own locks
- * WARNING: libmdbx don't support this mode. */
-#define MDBX_NOLOCK__UNSUPPORTED 0x400000u
+/* open DB in exclusive/monopolistic mode. */
+#define MDBX_EXCLUSIVE 0x400000u
 /* don't do readahead */
 #define MDBX_NORDAHEAD 0x800000u
 /* don't initialize malloc'd memory before writing to datafile */
@@ -670,8 +669,6 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *   - MDBX_EAGAIN   - the environment was locked by another process. */
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
                               mode_t mode);
-LIBMDBX_API int mdbx_env_open_ex(MDBX_env *env, const char *path,
-                                 unsigned flags, mode_t mode, int *exclusive);
 
 /* Copy an MDBX environment to the specified path, with options.
  *

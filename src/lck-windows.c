@@ -132,7 +132,8 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     EnterCriticalSection(&env->me_windowsbug_lock);
   }
 
-  if (flock(env->me_fd,
+  if ((env->me_flags & MDBX_EXCLUSIVE) ||
+      flock(env->me_fd,
             dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT)
                      : (LCK_EXCLUSIVE | LCK_WAITFOR),
             LCK_BODY))
@@ -143,7 +144,8 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
-  int rc = funlock(env->me_fd, LCK_BODY);
+  int rc = (env->me_flags & MDBX_EXCLUSIVE) ? TRUE
+                                            : funlock(env->me_fd, LCK_BODY);
   LeaveCriticalSection(&env->me_windowsbug_lock);
   if (!rc)
     mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
@@ -166,7 +168,8 @@ int mdbx_rdt_lock(MDBX_env *env) {
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
   /* transite from S-? (used) to S-E (locked), e.g. exclusive lock upper-part */
-  if (flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
+  if ((env->me_flags & MDBX_EXCLUSIVE) ||
+      flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
     return MDBX_SUCCESS;
 
   int rc = GetLastError();
@@ -177,7 +180,8 @@ int mdbx_rdt_lock(MDBX_env *env) {
 void mdbx_rdt_unlock(MDBX_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* transite from S-E (locked) to S-? (used), e.g. unlock upper-part */
-    if (!funlock(env->me_lfd, LCK_UPPER))
+    if ((env->me_flags & MDBX_EXCLUSIVE) == 0 &&
+        !funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
   }
   mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
@@ -372,6 +376,9 @@ int mdbx_lck_seize(MDBX_env *env) {
   int rc;
 
   assert(env->me_fd != INVALID_HANDLE_VALUE);
+  if (env->me_flags & MDBX_EXCLUSIVE)
+    return MDBX_RESULT_TRUE /* files were must be opened non-shareable */;
+
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. on read-only filesystem) */
     mdbx_jitter4testing(false);
@@ -414,6 +421,9 @@ int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
+  if (env->me_flags & MDBX_EXCLUSIVE)
+    return MDBX_SUCCESS /* files were must be opened non-shareable */;
+
   /* 1) must be at E-E (exclusive-write) */
   if (!complete) {
     /* transite from E-E to E_? (exclusive-read) */
@@ -448,6 +458,10 @@ int mdbx_lck_upgrade(MDBX_env *env) {
   /* Transite from locked state (S-E) to exclusive-write (E-E) */
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
+  assert((env->me_flags & MDBX_EXCLUSIVE) == 0);
+
+  if (env->me_flags & MDBX_EXCLUSIVE)
+    return MDBX_RESULT_TRUE /* files were must be opened non-shareable */;
 
   /* 1) must be at S-E (locked), transite to ?_E (middle) */
   if (!funlock(env->me_lfd, LCK_LOWER))
