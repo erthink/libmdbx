@@ -4342,8 +4342,8 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
     }
 
     if (page.mp_meta.mm_magic_and_version != MDBX_DATA_MAGIC) {
-      mdbx_error("meta[%u] has invalid magic/version MDBX_DEVEL=%d",
-                 meta_number, MDBX_DEVEL);
+      mdbx_error("meta[%u] has invalid magic/version %" PRIx64, meta_number,
+                 page.mp_meta.mm_magic_and_version);
       return ((page.mp_meta.mm_magic_and_version >> 8) != MDBX_MAGIC)
                  ? MDBX_INVALID
                  : MDBX_VERSION_MISMATCH;
