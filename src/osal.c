@@ -746,7 +746,7 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
 #endif
 }
 
-int mdbx_is_file_local(mdbx_filehandle_t handle, int flags) {
+int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags) {
 #if defined(_WIN32) || defined(_WIN64)
   if (GetFileType(handle) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
@@ -756,10 +756,13 @@ int mdbx_is_file_local(mdbx_filehandle_t handle, int flags) {
     if (mdbx_GetFileInformationByHandleEx(handle, FileRemoteProtocolInfo,
                                           &RemoteProtocolInfo,
                                           sizeof(RemoteProtocolInfo))) {
-      if ((RemoteProtocolInfo.Flags & (REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK |
-                                       REMOTE_PROTOCOL_INFO_FLAG_OFFLINE)) !=
-          REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK)
+
+      if ((RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_OFFLINE) &&
+          !(flags & MDBX_RDONLY))
         return ERROR_FILE_OFFLINE;
+      if (!(RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK) &&
+          !(flags & MDBX_EXCLUSIVE))
+        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
     }
   }
 
@@ -778,10 +781,12 @@ int mdbx_is_file_local(mdbx_filehandle_t handle, int flags) {
                               FSCTL_GET_EXTERNAL_BACKING, NULL, 0,
                               &GetExternalBacking_OutputBuffer,
                               sizeof(GetExternalBacking_OutputBuffer));
-    if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED &&
-        rc != STATUS_INVALID_DEVICE_REQUEST)
-      return NT_SUCCESS(rc) ? ERROR_REMOTE_STORAGE_MEDIA_ERROR
-                            : ntstatus2errcode(rc);
+    if (NT_SUCCESS(rc)) {
+      if (!(flags & MDBX_EXCLUSIVE))
+        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+    } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED &&
+               rc != STATUS_INVALID_DEVICE_REQUEST)
+      return ntstatus2errcode(rc);
   }
 
   if (mdbx_GetVolumeInformationByHandleW && mdbx_GetFinalPathNameByHandleW) {
@@ -802,12 +807,12 @@ int mdbx_is_file_local(mdbx_filehandle_t handle, int flags) {
                                         FILE_NAME_NORMALIZED | VOLUME_NAME_NT))
       return GetLastError();
 
-    if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0)
-      return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
-
-    if (mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
-                                       FILE_NAME_NORMALIZED |
-                                           VOLUME_NAME_DOS)) {
+    if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0) {
+      if (!(flags & MDBX_EXCLUSIVE))
+        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+    } else if (mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
+                                              FILE_NAME_NORMALIZED |
+                                                  VOLUME_NAME_DOS)) {
       UINT DriveType = GetDriveTypeW(PathBuffer);
       if (DriveType == DRIVE_NO_ROOT_DIR &&
           wcsncmp(PathBuffer, L"\\\\?\\", 4) == 0 &&
@@ -824,7 +829,9 @@ int mdbx_is_file_local(mdbx_filehandle_t handle, int flags) {
       case DRIVE_NO_ROOT_DIR:
       case DRIVE_REMOTE:
       default:
-        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+        if (!(flags & MDBX_EXCLUSIVE))
+          return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+      // fall through
       case DRIVE_REMOVABLE:
       case DRIVE_FIXED:
       case DRIVE_RAMDISK:
@@ -848,7 +855,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   map->section = NULL;
   map->address = nullptr;
 
-  NTSTATUS rc = mdbx_is_file_local(map->fd, flags);
+  NTSTATUS rc = mdbx_check4nonlocal(map->fd, flags);
   if (rc != MDBX_SUCCESS)
     return rc;
 
