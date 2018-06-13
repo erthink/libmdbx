@@ -5718,9 +5718,12 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (env->me_fd != INVALID_HANDLE_VALUE ||
-      (flags & ~(CHANGEABLE | CHANGELESS)))
+  if (flags & ~(CHANGEABLE | CHANGELESS))
     return MDBX_EINVAL;
+
+  if (env->me_fd != INVALID_HANDLE_VALUE ||
+      (env->me_flags & MDBX_ENV_ACTIVE) != 0)
+    return MDBX_EPERM;
 
   size_t len_full, len = strlen(path);
   if (flags & MDBX_NOSUBDIR) {
@@ -5755,7 +5758,9 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
           (env->me_dirtylist = calloc(MDBX_PNL_UM_SIZE, sizeof(MDBX_ID2)))))
       rc = MDBX_ENOMEM;
   }
-  env->me_flags = flags |= MDBX_ENV_ACTIVE;
+
+  const uint32_t saved_me_flags = env->me_flags;
+  env->me_flags = flags | MDBX_ENV_ACTIVE;
   if (rc)
     goto bailout;
 
@@ -5873,8 +5878,10 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
 #endif
 
 bailout:
-  if (rc)
+  if (rc) {
     mdbx_env_close0(env);
+    env->me_flags = saved_me_flags;
+  }
   free(lck_pathname);
   return rc;
 }
@@ -5903,10 +5910,8 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
   }
   mdbx_pnl_free(env->me_free_pgs);
 
-  if (env->me_flags & MDBX_ENV_TXKEY) {
+  if (env->me_flags & MDBX_ENV_TXKEY)
     mdbx_rthc_remove(env->me_txkey);
-    env->me_flags &= ~MDBX_ENV_TXKEY;
-  }
 
   if (env->me_map) {
     mdbx_munmap(&env->me_dxb_mmap);
@@ -5922,7 +5927,6 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
 
   if (env->me_lck)
     mdbx_munmap(&env->me_lck_mmap);
-  env->me_pid = 0;
   env->me_oldest = nullptr;
 
   mdbx_lck_destroy(env);
@@ -5930,6 +5934,7 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
     (void)mdbx_closefile(env->me_lfd);
     env->me_lfd = INVALID_HANDLE_VALUE;
   }
+  env->me_flags = 0;
 }
 
 int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
@@ -5980,6 +5985,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
               mdbx_fastmutex_destroy(&env->me_remap_guard) == MDBX_SUCCESS);
 #endif /* Windows */
 
+  env->me_pid = 0;
   env->me_signature = 0;
   free(env);
 
