@@ -2711,7 +2711,7 @@ fail:
   return rc;
 }
 
-int mdbx_env_sync(MDBX_env *env, int force) {
+static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -2729,7 +2729,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
       (!env->me_txn0 || env->me_txn0->mt_owner != mdbx_thread_self());
 
   if (outside_txn) {
-    int rc = mdbx_txn_lock(env, false);
+    int rc = mdbx_txn_lock(env, nonblock);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -2758,7 +2758,7 @@ int mdbx_env_sync(MDBX_env *env, int force) {
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
-      rc = mdbx_txn_lock(env, false);
+      rc = mdbx_txn_lock(env, nonblock);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
@@ -2783,6 +2783,10 @@ int mdbx_env_sync(MDBX_env *env, int force) {
   if (outside_txn)
     mdbx_txn_unlock(env);
   return MDBX_SUCCESS;
+}
+
+int mdbx_env_sync(MDBX_env *env, int force) {
+  return mdbx_env_sync_ex(env, force, false);
 }
 
 /* Back up parent txn's cursors, then grab the originals for tracking */
@@ -4338,8 +4342,8 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
     }
 
     if (page.mp_meta.mm_magic_and_version != MDBX_DATA_MAGIC) {
-      mdbx_error("meta[%u] has invalid magic/version MDBX_DEVEL=%d",
-                 meta_number, MDBX_DEVEL);
+      mdbx_error("meta[%u] has invalid magic/version %" PRIx64, meta_number,
+                 page.mp_meta.mm_magic_and_version);
       return ((page.mp_meta.mm_magic_and_version >> 8) != MDBX_MAGIC)
                  ? MDBX_INVALID
                  : MDBX_VERSION_MISMATCH;
@@ -5940,8 +5944,21 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
     if (env->me_txn0 && env->me_txn0->mt_owner &&
         env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
-    if (!dont_sync)
-      rc = mdbx_env_sync(env, true);
+    if (!dont_sync) {
+#if defined(_WIN32) || defined(_WIN64)
+      /* On windows, without blocking is impossible to determine whether another
+       * process is running a writing transaction or not.
+       * Because in the "owner died" condition kernel don't release
+       * file lock immediately. */
+      rc = mdbx_env_sync_ex(env, true, false);
+#else
+      rc = mdbx_env_sync_ex(env, true, true);
+      rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
+            rc == EWOULDBLOCK)
+               ? MDBX_SUCCESS
+               : rc;
+#endif
+    }
   }
 
   VALGRIND_DESTROY_MEMPOOL(env);
@@ -5968,7 +5985,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   return rc;
 }
 
-int mdbx_env_close(MDBX_env *env) { return mdbx_env_close_ex(env, 0); }
+int mdbx_env_close(MDBX_env *env) { return mdbx_env_close_ex(env, false); }
 
 /* Compare two items pointing at aligned unsigned int's. */
 static int __hot mdbx_cmp_int_ai(const MDBX_val *a, const MDBX_val *b) {
@@ -11473,7 +11490,7 @@ int __cold mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes) {
     return MDBX_EBADSIGN;
 
   env->me_sync_threshold = bytes;
-  return env->me_map ? mdbx_env_sync(env, 0) : MDBX_SUCCESS;
+  return env->me_map ? mdbx_env_sync(env, false) : MDBX_SUCCESS;
 }
 
 int __cold mdbx_env_set_oomfunc(MDBX_env *env, MDBX_oom_func *oomfunc) {

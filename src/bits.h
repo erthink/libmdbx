@@ -23,11 +23,6 @@
 #   undef NDEBUG
 #endif
 
-/* Features under development */
-#ifndef MDBX_DEVEL
-#   define MDBX_DEVEL 0
-#endif
-
 /*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */
@@ -144,9 +139,9 @@
 #define MDBX_MAGIC UINT64_C(/* 56-bit prime */ 0x59659DBDEF4C11)
 
 /* The version number for a database's datafile format. */
-#define MDBX_DATA_VERSION ((MDBX_DEVEL) ? 255 : 2)
+#define MDBX_DATA_VERSION 2
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION ((MDBX_DEVEL) ? 255 : 2)
+#define MDBX_LOCK_VERSION 2
 
 /* handle for the DB used to track free pages. */
 #define FREE_DBI 0
@@ -171,9 +166,7 @@ typedef uint32_t pgno_t;
 /* A transaction ID. */
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
-#if MDBX_DEVEL
-#define MIN_TXNID (UINT64_MAX - UINT32_MAX)
-#elif MDBX_DEBUG
+#if MDBX_DEBUG
 #define MIN_TXNID UINT64_C(0x100000000)
 #else
 #define MIN_TXNID UINT64_C(1)
