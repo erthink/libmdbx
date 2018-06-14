@@ -892,11 +892,6 @@ int mdbx_munmap(mdbx_mmap_t *map) {
   if (!NT_SUCCESS(rc))
     ntstatus2errcode(rc);
 
-  if (map->filesize != map->current &&
-      mdbx_filesize(map->fd, &map->filesize) == MDBX_SUCCESS &&
-      map->filesize != map->current)
-    (void)mdbx_ftruncate(map->fd, map->current);
-
   map->length = 0;
   map->current = 0;
   map->address = nullptr;
@@ -922,8 +917,11 @@ int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
     /* growth rw-section */
     SectionSize.QuadPart = size;
     status = NtExtendSection(map->section, &SectionSize);
-    if (NT_SUCCESS(status))
-      map->filesize = map->current = size;
+    if (NT_SUCCESS(status)) {
+      map->current = size;
+      if (map->filesize < size)
+        map->filesize = size;
+    }
     return ntstatus2errcode(status);
   }
 
