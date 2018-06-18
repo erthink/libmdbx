@@ -42,8 +42,8 @@
 int __hot mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
                                          size_t n) {
   if (unlikely(n > 42
-               /* LY: align followed access if reasonable possible */ &&
-               (((uintptr_t)s1) & 7) != 0 &&
+               /* LY: align followed access if reasonable possible */
+               && (((uintptr_t)s1) & 7) != 0 &&
                (((uintptr_t)s1) & 7) == (((uintptr_t)s2) & 7))) {
     if (((uintptr_t)s1) & 1) {
       const int diff = *(uint8_t *)s1 - *(uint8_t *)s2;
@@ -4733,9 +4733,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, !mdbx_meta_eq(env, pending, meta2));
 
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
-  mdbx_ensure(env,
-              target == head ||
-                  mdbx_meta_txnid_stable(env, target) < pending->mm_txnid_a);
+  mdbx_ensure(env, target == head || mdbx_meta_txnid_stable(env, target) <
+                                         pending->mm_txnid_a);
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
     if (likely(target != head)) {
@@ -5835,9 +5834,9 @@ int __cold mdbx_env_open_ex(MDBX_env *env, const char *path, unsigned flags,
   if ((flags & MDBX_RDONLY) == 0) {
     MDBX_txn *txn;
     int tsize = sizeof(MDBX_txn),
-        size = tsize +
-               env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
-                                 sizeof(unsigned) + 1);
+        size =
+            tsize + env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
+                                      sizeof(unsigned) + 1);
     if ((env->me_pbuf = calloc(1, env->me_psize)) && (txn = calloc(1, size))) {
       txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
       txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
@@ -6085,7 +6084,7 @@ static int __hot mdbx_cmp_int_ua(const MDBX_val *a, const MDBX_val *b) {
     } while (pa != a->iov_base);
     return diff;
   }
-#else /* __BYTE_ORDER__ */
+#else  /* __BYTE_ORDER__ */
   return memcmp(a->iov_base, b->iov_base, a->iov_len);
 #endif /* __BYTE_ORDER__ */
 #endif /* UNALIGNED_OK */
@@ -6315,7 +6314,7 @@ static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
 
 mapped:
   p = pgno2page(env, pgno);
-/* TODO: check p->mp_validator here */
+  /* TODO: check p->mp_validator here */
 
 done:
   *ret = p;
@@ -10038,9 +10037,8 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(flags &
-               ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
-                 MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
+  if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
+                         MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
@@ -10680,9 +10678,9 @@ int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
 }
 
 static MDBX_cmp_func *mdbx_default_keycmp(unsigned flags) {
-  return (flags & MDBX_REVERSEKEY) ? mdbx_cmp_memnr : (flags & MDBX_INTEGERKEY)
-                                                          ? mdbx_cmp_int_a2
-                                                          : mdbx_cmp_memn;
+  return (flags & MDBX_REVERSEKEY)
+             ? mdbx_cmp_memnr
+             : (flags & MDBX_INTEGERKEY) ? mdbx_cmp_int_a2 : mdbx_cmp_memn;
 }
 
 static MDBX_cmp_func *mdbx_default_datacmp(unsigned flags) {
@@ -11872,9 +11870,8 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(flags &
-               ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
-                 MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
+  if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
+                         MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))

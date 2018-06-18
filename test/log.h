@@ -70,7 +70,7 @@ public:
   ~local_suffix();
 };
 
-} /* namespace log */
+} // namespace logging
 
 void __printf_args(1, 2) log_extra(const char *msg, ...);
 void __printf_args(1, 2) log_trace(const char *msg, ...);

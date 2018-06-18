@@ -169,7 +169,7 @@ typedef std::pair<HANDLE, actor_status> child;
 static std::unordered_map<mdbx_pid_t, child> childs;
 
 static void ArgvQuote(std::string &CommandLine, const std::string &Argument,
-               bool Force = false)
+                      bool Force = false)
 
 /*++
 

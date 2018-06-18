@@ -143,8 +143,8 @@ static void readhdr(void) {
                 lineno, (char *)dbuf.iov_base + STRLENOF("mapsize="));
         exit(EXIT_FAILURE);
       }
-    } else if (!strncmp(dbuf.iov_base, "maxreaders=",
-                        STRLENOF("maxreaders="))) {
+    } else if (!strncmp(dbuf.iov_base,
+                        "maxreaders=", STRLENOF("maxreaders="))) {
       int i;
       ptr = memchr(dbuf.iov_base, '\n', dbuf.iov_len);
       if (ptr)
