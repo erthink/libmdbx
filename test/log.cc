@@ -206,7 +206,7 @@ void local_suffix::pop() {
 
 local_suffix::~local_suffix() { suffix.erase(trim_pos); }
 
-} /* namespace log */
+} // namespace logging
 
 void log_extra(const char *msg, ...) {
   if (logging::extra >= logging::level) {

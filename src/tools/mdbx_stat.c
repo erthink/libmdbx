@@ -152,9 +152,15 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
+  if (envinfo || freinfo) {
+    (void)mdbx_env_info(env, &mei, sizeof(mei));
+  } else {
+    /* LY: zap warnings from gcc */
+    memset(&mei, 0, sizeof(mei));
+  }
+
   if (envinfo) {
     (void)mdbx_env_stat(env, &mst, sizeof(mst));
-    (void)mdbx_env_info(env, &mei, sizeof(mei));
     printf("Environment Info\n");
     printf("  Pagesize: %u\n", mst.ms_psize);
     if (mei.mi_geo.lower != mei.mi_geo.upper) {
@@ -183,7 +189,6 @@ int main(int argc, char *argv[]) {
   } else {
     /* LY: zap warnings from gcc */
     memset(&mst, 0, sizeof(mst));
-    memset(&mei, 0, sizeof(mei));
   }
 
   if (rdrinfo) {

@@ -168,6 +168,90 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 typedef std::pair<HANDLE, actor_status> child;
 static std::unordered_map<mdbx_pid_t, child> childs;
 
+static void ArgvQuote(std::string &CommandLine, const std::string &Argument,
+                      bool Force = false)
+
+/*++
+
+https://blogs.msdn.microsoft.com/twistylittlepassagesallalike/2011/04/23/everyone-quotes-command-line-arguments-the-wrong-way/
+
+Routine Description:
+
+    This routine appends the given argument to a command line such
+    that CommandLineToArgvW will return the argument string unchanged.
+    Arguments in a command line should be separated by spaces; this
+    function does not add these spaces.
+
+Arguments:
+
+    Argument - Supplies the argument to encode.
+
+    CommandLine - Supplies the command line to which we append the encoded
+argument string.
+
+    Force - Supplies an indication of whether we should quote
+            the argument even if it does not contain any characters that would
+            ordinarily require quoting.
+
+Return Value:
+
+    None.
+
+Environment:
+
+    Arbitrary.
+
+--*/
+
+{
+  //
+  // Unless we're told otherwise, don't quote unless we actually
+  // need to do so --- hopefully avoid problems if programs won't
+  // parse quotes properly
+  //
+
+  if (Force == false && Argument.empty() == false &&
+      Argument.find_first_of(" \t\n\v\"") == Argument.npos) {
+    CommandLine.append(Argument);
+  } else {
+    CommandLine.push_back('"');
+
+    for (auto It = Argument.begin();; ++It) {
+      unsigned NumberBackslashes = 0;
+
+      while (It != Argument.end() && *It == '\\') {
+        ++It;
+        ++NumberBackslashes;
+      }
+
+      if (It == Argument.end()) {
+        //
+        // Escape all backslashes, but let the terminating
+        // double quotation mark we add below be interpreted
+        // as a metacharacter.
+        //
+        CommandLine.append(NumberBackslashes * 2, '\\');
+        break;
+      } else if (*It == L'"') {
+        //
+        // Escape all backslashes and the following
+        // double quotation mark.
+        //
+        CommandLine.append(NumberBackslashes * 2 + 1, '\\');
+        CommandLine.push_back(*It);
+      } else {
+        //
+        // Backslashes aren't special here.
+        //
+        CommandLine.append(NumberBackslashes, '\\');
+        CommandLine.push_back(*It);
+      }
+    }
+
+    CommandLine.push_back('"');
+  }
+}
+
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (childs.size() == MAXIMUM_WAIT_OBJECTS)
     failure("Could't manage more that %u actors on Windows\n",
@@ -184,7 +268,8 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
                                   &exename_size))
     failure_perror("QueryFullProcessImageName()", GetLastError());
 
-  std::string cmdline = "test_mdbx.child " + thunk_param(config);
+  std::string cmdline = "test_mdbx.child ";
+  ArgvQuote(cmdline, thunk_param(config));
 
   PROCESS_INFORMATION ProcessInformation;
   if (!CreateProcessA(exename, const_cast<char *>(cmdline.c_str()),

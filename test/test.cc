@@ -85,9 +85,9 @@ static void mdbx_logger(int type, const char *function, int line,
     level = logging::failure;
   }
 
-  if (logging::output(level, strncmp(function, "mdbx_", 5) == 0 ? "%s: "
-                                                                : "mdbx: %s: ",
-                      function))
+  if (logging::output(
+          level,
+          strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx: %s: ", function))
     logging::feed(msg, args);
   if (type & MDBX_DBG_ASSERT)
     abort();

@@ -122,9 +122,8 @@ int main(int argc, char *const argv[]) {
   if (argc < 2)
     failure("No parameters given\n");
 
-  if (argc == 2 &&
-      strncmp(argv[1], global::thunk_param_prefix,
-              strlen(global::thunk_param_prefix)) == 0)
+  if (argc == 2 && strncmp(argv[1], global::thunk_param_prefix,
+                           strlen(global::thunk_param_prefix)) == 0)
     return test_execute(
                actor_config(argv[1] + strlen(global::thunk_param_prefix)))
                ? EXIT_SUCCESS

@@ -367,19 +367,19 @@ typedef struct MDBX_page {
 #define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_data))
 
 /* The maximum size of a database page.
-*
-* It is 64K, but value-PAGEHDRSZ must fit in MDBX_page.mp_upper.
-*
-* MDBX will use database pages < OS pages if needed.
-* That causes more I/O in write transactions: The OS must
-* know (read) the whole page before writing a partial page.
-*
-* Note that we don't currently support Huge pages. On Linux,
-* regular data files cannot use Huge pages, and in general
-* Huge pages aren't actually pageable. We rely on the OS
-* demand-pager to read our data and page it out when memory
-* pressure from other processes is high. So until OSs have
-* actual paging support for Huge pages, they're not viable. */
+ *
+ * It is 64K, but value-PAGEHDRSZ must fit in MDBX_page.mp_upper.
+ *
+ * MDBX will use database pages < OS pages if needed.
+ * That causes more I/O in write transactions: The OS must
+ * know (read) the whole page before writing a partial page.
+ *
+ * Note that we don't currently support Huge pages. On Linux,
+ * regular data files cannot use Huge pages, and in general
+ * Huge pages aren't actually pageable. We rely on the OS
+ * demand-pager to read our data and page it out when memory
+ * pressure from other processes is high. So until OSs have
+ * actual paging support for Huge pages, they're not viable. */
 #define MAX_PAGESIZE 0x10000u
 #define MIN_PAGESIZE 512u
 

@@ -20,6 +20,8 @@ libmdbx
    6. [Asynchronous lazy data flushing](https://sites.fas.harvard.edu/~cs265/papers/kathuria-2008.pdf) to disk(s);
    7. etc...
 
+Don't miss [Java Native Interface](https://github.com/castortech/mdbxjni) by [Castor Technologies](https://castortech.com/).
+
 -----
 
 Nowadays MDBX intended for Linux, and support Windows (since
