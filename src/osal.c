@@ -838,13 +838,13 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
   rc = NtCreateSection(
       &map->section,
       /* DesiredAccess */
-          (flags & MDBX_WRITEMAP)
+      (flags & MDBX_WRITEMAP)
           ? SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE |
                 SECTION_MAP_WRITE
           : SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE,
       /* ObjectAttributes */ NULL, /* MaximumSize (InitialSize) */ &SectionSize,
       /* SectionPageProtection */
-          (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
+      (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
       /* AllocationAttributes */ SEC_RESERVE, map->fd);
   if (!NT_SUCCESS(rc))
     return ntstatus2errcode(rc);
@@ -858,7 +858,7 @@ int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size, size_t limit) {
       /* InheritDisposition */ ViewUnmap,
       /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
       /* Win32Protect */
-          (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
+      (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
   if (!NT_SUCCESS(rc)) {
     NtClose(map->section);
     map->section = 0;
@@ -998,14 +998,14 @@ retry_file_and_section:
   status = NtCreateSection(
       &map->section,
       /* DesiredAccess */
-          (flags & MDBX_WRITEMAP)
+      (flags & MDBX_WRITEMAP)
           ? SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE |
                 SECTION_MAP_WRITE
           : SECTION_QUERY | SECTION_MAP_READ | SECTION_EXTEND_SIZE,
       /* ObjectAttributes */ NULL,
       /* MaximumSize (InitialSize) */ &SectionSize,
       /* SectionPageProtection */
-          (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
+      (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
       /* AllocationAttributes */ SEC_RESERVE, map->fd);
 
   if (!NT_SUCCESS(status))
@@ -1030,7 +1030,7 @@ retry_mapview:;
       /* InheritDisposition */ ViewUnmap,
       /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
       /* Win32Protect */
-          (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
+      (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
 
   if (!NT_SUCCESS(status)) {
     if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
