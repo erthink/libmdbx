@@ -1133,8 +1133,8 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
 const char *__cold mdbx_strerror(int errnum) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-#ifdef _MSC_VER
     static char buffer[1024];
+#ifdef _MSC_VER
     size_t size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer,
@@ -1142,6 +1142,12 @@ const char *__cold mdbx_strerror(int errnum) {
     if (size)
       msg = buffer;
 #else
+    if (errnum < 0) {
+      int rc = snprintf(buffer, sizeof(buffer) - 1, "unknown error %d", errnum);
+      assert(rc > 0);
+      (void)rc;
+      return buffer;
+    }
     msg = strerror(errnum);
 #endif
   }
