@@ -1,0 +1,20 @@
+version: 2
+jobs:
+  build:
+    docker:
+      - image: circleci/buildpack-deps:artful
+    environment:
+      - TESTDB: /tmp/test.db
+      - TESTLOG: /tmp/test.log
+    steps:
+      - checkout
+      - run: make all
+      - run: ulimit -c unlimited && make check
+      - run:
+          command: |
+            mkdir -p /tmp/artifacts
+            mv -t /tmp/artifacts $TESTLOG $TESTDB core.*
+          when: on_fail
+      - store_artifacts:
+          path: /tmp/artifacts
+          destination: test-artifacts
