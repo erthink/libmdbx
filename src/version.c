@@ -14,12 +14,12 @@
 
 #include "./bits.h"
 
-#if MDBX_VERSION_MAJOR != 0 || MDBX_VERSION_MINOR != 1
+#if MDBX_VERSION_MAJOR != 0 || MDBX_VERSION_MINOR != 2
 #error "API version mismatch!"
 #endif
 
-#define MDBX_VERSION_RELEASE 5
-#define MDBX_VERSION_REVISION 1
+#define MDBX_VERSION_RELEASE 0
+#define MDBX_VERSION_REVISION 2
 
 /*LIBMDBX_EXPORTS*/ const mdbx_version_info mdbx_version = {
     MDBX_VERSION_MAJOR,

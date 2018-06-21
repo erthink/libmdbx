@@ -165,7 +165,7 @@ typedef pthread_t mdbx_tid_t;
 /*--------------------------------------------------------------------------*/
 
 #define MDBX_VERSION_MAJOR 0
-#define MDBX_VERSION_MINOR 1
+#define MDBX_VERSION_MINOR 2
 
 #if defined(LIBMDBX_EXPORTS)
 #define LIBMDBX_API __dll_export
