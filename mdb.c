@@ -7032,7 +7032,8 @@ more:
 						offset *= 4; /* space for 4 more */
 						break;
 					}
-					/* FALLTHRU: Big enough MDB_DUPFIXED sub-page */
+					/* Big enough MDB_DUPFIXED sub-page */
+					/* fallthrough */
 				case MDB_CURRENT | MDB_NODUPDATA:
 				case MDB_CURRENT:
 					fp->mp_flags |= P_DIRTY;
