@@ -18,6 +18,7 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <sys/sysmacros.h>
 #include "mdbx.h"
 
 #define E(expr) CHECK((rc = (expr)) == MDB_SUCCESS, #expr)
