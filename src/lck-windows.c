@@ -144,8 +144,8 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
-  int rc = (env->me_flags & MDBX_EXCLUSIVE) ? TRUE
-                                            : funlock(env->me_fd, LCK_BODY);
+  int rc =
+      (env->me_flags & MDBX_EXCLUSIVE) ? TRUE : funlock(env->me_fd, LCK_BODY);
   LeaveCriticalSection(&env->me_windowsbug_lock);
   if (!rc)
     mdbx_panic("%s failed: errcode %u", mdbx_func_, GetLastError());
