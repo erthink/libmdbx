@@ -10091,8 +10091,8 @@ typedef struct mdbx_copy {
   MDBX_env *mc_env;
   MDBX_txn *mc_txn;
   mdbx_condmutex_t mc_condmutex;
-  char *mc_wbuf[2];
-  char *mc_over[2];
+  uint8_t *mc_wbuf[2];
+  uint8_t *mc_over[2];
   size_t mc_wlen[2];
   size_t mc_olen[2];
   mdbx_filehandle_t mc_fd;
@@ -10107,7 +10107,7 @@ typedef struct mdbx_copy {
 /* Dedicated writer thread for compacting copy. */
 static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   mdbx_copy *my = arg;
-  char *ptr;
+  uint8_t *ptr;
   int toggle = 0;
   int rc;
 
@@ -10268,7 +10268,7 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             my->mc_wlen[toggle] += my->mc_env->me_psize;
             if (omp->mp_pages > 1) {
               my->mc_olen[toggle] = pgno2bytes(my->mc_env, omp->mp_pages - 1);
-              my->mc_over[toggle] = (char *)omp + my->mc_env->me_psize;
+              my->mc_over[toggle] = (uint8_t *)omp + my->mc_env->me_psize;
               rc = mdbx_env_cthr_toggle(my, 1);
               if (unlikely(rc != MDBX_SUCCESS))
                 goto done;
@@ -10348,23 +10348,26 @@ done:
 static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   MDBX_txn *txn = NULL;
   mdbx_thread_t thr;
-  mdbx_copy my;
-  memset(&my, 0, sizeof(my));
+  mdbx_copy ctx;
+  memset(&ctx, 0, sizeof(ctx));
 
-  int rc = mdbx_condmutex_init(&my.mc_condmutex);
+  int rc = mdbx_condmutex_init(&ctx.mc_condmutex);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  rc = mdbx_memalign_alloc(env->me_os_psize, MDBX_WBUF * 2,
-                           (void **)&my.mc_wbuf[0]);
+
+  const size_t buffer_size = pgno2bytes(env, NUM_METAS) + MDBX_WBUF * 2;
+  uint8_t *buffer = NULL;
+  rc = mdbx_memalign_alloc(env->me_os_psize, buffer_size, (void **)&buffer);
   if (unlikely(rc != MDBX_SUCCESS))
     goto done;
 
-  memset(my.mc_wbuf[0], 0, MDBX_WBUF * 2);
-  my.mc_wbuf[1] = my.mc_wbuf[0] + MDBX_WBUF;
-  my.mc_next_pgno = NUM_METAS;
-  my.mc_env = env;
-  my.mc_fd = fd;
-  rc = mdbx_thread_create(&thr, mdbx_env_copythr, &my);
+  ctx.mc_wbuf[0] = buffer + pgno2bytes(env, NUM_METAS);
+  memset(ctx.mc_wbuf[0], 0, MDBX_WBUF * 2);
+  ctx.mc_wbuf[1] = ctx.mc_wbuf[0] + MDBX_WBUF;
+  ctx.mc_next_pgno = NUM_METAS;
+  ctx.mc_env = env;
+  ctx.mc_fd = fd;
+  rc = mdbx_thread_create(&thr, mdbx_env_copythr, &ctx);
   if (unlikely(rc != MDBX_SUCCESS))
     goto done;
 
@@ -10372,7 +10375,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   if (unlikely(rc != MDBX_SUCCESS))
     goto finish;
 
-  MDBX_page *meta = mdbx_init_metas(env, my.mc_wbuf[0]);
+  MDBX_page *const meta = mdbx_init_metas(env, buffer);
 
   /* Set metapage 1 with current main DB */
   pgno_t new_root, root = txn->mt_dbs[MAIN_DBI].md_root;
@@ -10414,25 +10417,38 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
   /* update signature */
   meta->mp_meta.mm_datasync_sign = mdbx_meta_sign(&meta->mp_meta);
 
-  my.mc_wlen[0] = pgno2bytes(env, NUM_METAS);
-  my.mc_txn = txn;
-  rc = mdbx_env_cwalk(&my, &root, 0);
+  ctx.mc_wlen[0] = pgno2bytes(env, NUM_METAS);
+  ctx.mc_txn = txn;
+  rc = mdbx_env_cwalk(&ctx, &root, 0);
   if (rc == MDBX_SUCCESS && root != new_root) {
-    mdbx_error("unexpected root %" PRIaPGNO " (%" PRIaPGNO ")", root, new_root);
-    rc = MDBX_PROBLEM; /* page leak or corrupt DB */
+    if (root > new_root) {
+      mdbx_error("post-compactification root %" PRIaPGNO
+                 " GT expected %" PRIaPGNO " (source DB corrupted)",
+                 root, new_root);
+      rc = MDBX_CORRUPTED; /* page leak or corrupt DB */
+    } else {
+      mdbx_error("post-compactification root %" PRIaPGNO
+                 " LT expected %" PRIaPGNO " (page leak(s) in source DB)",
+                 root, new_root);
+      /* fixup and rewrite metas */
+      meta->mp_meta.mm_dbs[MAIN_DBI].md_root = root;
+      meta->mp_meta.mm_geo.next = meta->mp_meta.mm_geo.now = root + 1;
+      meta->mp_meta.mm_datasync_sign = mdbx_meta_sign(&meta->mp_meta);
+      rc = mdbx_pwrite(fd, buffer, pgno2bytes(env, NUM_METAS), 0);
+    }
   }
 
 finish:
   if (rc != MDBX_SUCCESS)
-    my.mc_error = rc;
-  mdbx_env_cthr_toggle(&my, 1 | MDBX_EOF);
+    ctx.mc_error = rc;
+  mdbx_env_cthr_toggle(&ctx, 1 | MDBX_EOF);
   rc = mdbx_thread_join(thr);
   mdbx_txn_abort(txn);
 
 done:
-  mdbx_memalign_free(my.mc_wbuf[0]);
-  mdbx_condmutex_destroy(&my.mc_condmutex);
-  return rc ? rc : my.mc_error;
+  mdbx_memalign_free(buffer);
+  mdbx_condmutex_destroy(&ctx.mc_condmutex);
+  return rc ? rc : ctx.mc_error;
 }
 
 /* Copy environment as-is. */
