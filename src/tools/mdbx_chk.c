@@ -1092,7 +1092,7 @@ int main(int argc, char *argv[]) {
 
   if (problems_maindb == 0 && problems_freedb == 0) {
     if (!dont_traversal &&
-        (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE) {
+        (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
       if (walk.pgcount != lastpgno - freedb_pages) {
         error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
               walk.pgcount, lastpgno - freedb_pages);
