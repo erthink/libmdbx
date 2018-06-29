@@ -4600,11 +4600,10 @@ static MDBX_page *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   MDBX_page *page1 = mdbx_meta_model(env, page0, 0);
   MDBX_page *page2 = mdbx_meta_model(env, page1, 1);
   mdbx_meta_model(env, page2, 2);
-  page2->mp_meta.mm_datasync_sign = MDBX_DATASIGN_WEAK;
   mdbx_assert(env, !mdbx_meta_eq(env, &page0->mp_meta, &page1->mp_meta));
   mdbx_assert(env, !mdbx_meta_eq(env, &page1->mp_meta, &page2->mp_meta));
   mdbx_assert(env, !mdbx_meta_eq(env, &page2->mp_meta, &page0->mp_meta));
-  return page1;
+  return page2;
 }
 
 static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
