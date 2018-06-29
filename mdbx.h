@@ -695,7 +695,8 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
  *      NOTE: Currently it fails if the environment has suffered a page leak.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags);
+LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest_path,
+                              unsigned flags);
 
 /* Copy an MDBX environment to the specified file descriptor,
  * with options.

@@ -10488,25 +10488,25 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   return mdbx_env_copy_asis(env, fd);
 }
 
-int __cold mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags) {
-  char *lck_pathname;
+int __cold mdbx_env_copy(MDBX_env *env, const char *dest_path, unsigned flags) {
+  char *dxb_pathname;
   mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
 
   if (env->me_flags & MDBX_NOSUBDIR) {
-    lck_pathname = (char *)path;
+    dxb_pathname = (char *)dest_path;
   } else {
-    size_t len = strlen(path);
+    size_t len = strlen(dest_path);
     len += sizeof(MDBX_DATANAME);
-    lck_pathname = malloc(len);
-    if (!lck_pathname)
+    dxb_pathname = malloc(len);
+    if (!dxb_pathname)
       return MDBX_ENOMEM;
-    sprintf(lck_pathname, "%s" MDBX_DATANAME, path);
+    sprintf(dxb_pathname, "%s" MDBX_DATANAME, dest_path);
   }
 
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  int rc = mdbx_openfile(lck_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666,
+  int rc = mdbx_openfile(dxb_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666,
                          &newfd, true);
   if (rc == MDBX_SUCCESS) {
     if (env->me_psize >= env->me_os_psize) {
@@ -10521,8 +10521,8 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *path, unsigned flags) {
     rc = mdbx_env_copy2fd(env, newfd, flags);
   }
 
-  if (!(env->me_flags & MDBX_NOSUBDIR))
-    free(lck_pathname);
+  if (dxb_pathname != dest_path)
+    free(dxb_pathname);
 
   if (newfd != INVALID_HANDLE_VALUE) {
     int err = mdbx_closefile(newfd);
