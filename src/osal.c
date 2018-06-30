@@ -408,6 +408,13 @@ int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 
 /*----------------------------------------------------------------------------*/
 
+int mdbx_removefile(const char *pathname) {
+#if defined(_WIN32) || defined(_WIN64)
+  return DeleteFileA(pathname) ? MDBX_SUCCESS : GetLastError();
+#else
+  return unlink(pathname) ? errno : MDBX_SUCCESS;
+#endif
+}
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd, bool exclusive) {
   *fd = INVALID_HANDLE_VALUE;

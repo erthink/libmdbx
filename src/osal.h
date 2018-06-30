@@ -479,6 +479,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length);
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd, bool exclusive);
 int mdbx_closefile(mdbx_filehandle_t fd);
+int mdbx_removefile(const char *pathname);
 
 typedef struct mdbx_mmap_param {
   union {
