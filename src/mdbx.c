@@ -10565,14 +10565,16 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *dest_path, unsigned flags) {
     rc = mdbx_env_copy2fd(env, newfd, flags);
   }
 
-  if (dxb_pathname != dest_path)
-    free(dxb_pathname);
-
   if (newfd != INVALID_HANDLE_VALUE) {
     int err = mdbx_closefile(newfd);
     if (rc == MDBX_SUCCESS && err != rc)
       rc = err;
+    if (rc != MDBX_SUCCESS)
+      (void)mdbx_removefile(dxb_pathname);
   }
+
+  if (dxb_pathname != dest_path)
+    free(dxb_pathname);
 
   return rc;
 }
