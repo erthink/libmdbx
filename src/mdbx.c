@@ -10550,7 +10550,7 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *dest_path, unsigned flags) {
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  int rc = mdbx_openfile(dxb_pathname, O_WRONLY | O_CREAT | O_EXCL, 0666,
+  int rc = mdbx_openfile(dxb_pathname, O_WRONLY | O_CREAT | O_EXCL, 0640,
                          &newfd, true);
   if (rc == MDBX_SUCCESS) {
     if (env->me_psize >= env->me_os_psize) {
