@@ -122,7 +122,7 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
 
 static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex, int rc);
 
-int mdbx_lck_init(MDBX_env *env) {
+int __cold mdbx_lck_init(MDBX_env *env) {
   pthread_mutexattr_t ma;
   int rc = pthread_mutexattr_init(&ma);
   if (rc)
@@ -160,7 +160,7 @@ bailout:
   return rc;
 }
 
-void mdbx_lck_destroy(MDBX_env *env) {
+void __cold mdbx_lck_destroy(MDBX_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* try get exclusive access */
     if (env->me_lck && mdbx_lck_exclusive(env->me_lfd) == 0) {
@@ -228,7 +228,7 @@ void mdbx_txn_unlock(MDBX_env *env) {
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
 }
 
-static int internal_seize_lck(int lfd) {
+static int __cold internal_seize_lck(int lfd) {
   assert(lfd != INVALID_HANDLE_VALUE);
 
   /* try exclusive access */
@@ -254,7 +254,7 @@ static int internal_seize_lck(int lfd) {
   return rc;
 }
 
-int mdbx_lck_seize(MDBX_env *env) {
+int __cold mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
 
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
