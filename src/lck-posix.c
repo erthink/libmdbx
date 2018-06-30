@@ -86,16 +86,19 @@ static __inline int mdbx_lck_shared(int lfd) {
 }
 
 int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
   return complete ? mdbx_lck_shared(env->me_lfd) : MDBX_SUCCESS;
 }
 
 int mdbx_lck_upgrade(MDBX_env *env) { return mdbx_lck_exclusive(env->me_lfd); }
 
 int mdbx_rpid_set(MDBX_env *env) {
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
   return mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, env->me_pid, 1);
 }
 
 int mdbx_rpid_clear(MDBX_env *env) {
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
   return mdbx_lck_op(env->me_lfd, F_SETLKW, F_UNLCK, env->me_pid, 1);
 }
 
@@ -106,6 +109,7 @@ int mdbx_rpid_clear(MDBX_env *env) {
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
 int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
+  assert(env->me_lfd != INVALID_HANDLE_VALUE);
   int rc = mdbx_lck_op(env->me_lfd, F_GETLK, F_WRLCK, pid, 1);
   if (rc == 0)
     return MDBX_RESULT_FALSE;
@@ -166,7 +170,8 @@ void mdbx_lck_destroy(MDBX_env *env) {
         rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
       assert(rc == 0);
       (void)rc;
-      /* lock would be released (by kernel) while the me_lfd will be closed */
+      /* file locks would be released (by kernel)
+       * while the me_lfd will be closed */
     }
   }
 }
@@ -209,15 +214,15 @@ void mdbx_rdt_unlock(MDBX_env *env) {
 
 int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
   mdbx_trace(">>");
-  int rc = dontwait ? mdbx_robust_trylock(env, &env->me_lck->mti_wmutex)
-                    : mdbx_robust_lock(env, &env->me_lck->mti_wmutex);
+  int rc = dontwait ? mdbx_robust_trylock(env, env->me_wmutex)
+                    : mdbx_robust_lock(env, env->me_wmutex);
   mdbx_trace("<< rc %d", rc);
   return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
   mdbx_trace(">>");
-  int rc = mdbx_robust_unlock(env, &env->me_lck->mti_wmutex);
+  int rc = mdbx_robust_unlock(env, env->me_wmutex);
   mdbx_trace("<< rc %d", rc);
   if (unlikely(MDBX_IS_ERROR(rc)))
     mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
@@ -253,13 +258,15 @@ int mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
 
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
-    /* LY: without-lck mode (e.g. on read-only filesystem) */
-    int rc = mdbx_lck_op(env->me_fd, F_SETLK, F_RDLCK, 0, LCK_WHOLE);
+    /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
+    int rc = mdbx_lck_op(env->me_fd, F_SETLK,
+                         (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
+                         LCK_WHOLE);
     if (rc != 0) {
       mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "without-lck", rc);
       return rc;
     }
-    return MDBX_RESULT_FALSE;
+    return MDBX_RESULT_TRUE;
   }
 
   if ((env->me_flags & MDBX_RDONLY) == 0) {
@@ -285,7 +292,7 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
   if (rc == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
 
-    int rlocked = (mutex == &env->me_lck->mti_rmutex);
+    int rlocked = (env->me_lck && mutex == &env->me_lck->mti_rmutex);
     rc = MDBX_SUCCESS;
     if (!rlocked) {
       if (unlikely(env->me_txn)) {

@@ -411,7 +411,7 @@ typedef struct MDBX_lockinfo {
   volatile uint32_t mti_envmode;
 
 #ifdef MDBX_OSAL_LOCK
-  /* Mutex protecting write access to this table. */
+  /* Mutex protecting write-txn. */
   union {
     MDBX_OSAL_LOCK mti_wmutex;
     uint8_t pad_mti_wmutex[MDBX_OSAL_LOCK_SIZE % sizeof(size_t)];
@@ -734,14 +734,17 @@ struct MDBX_env {
   /* Max MDBX_lockinfo.mti_numreaders of interest to mdbx_env_close() */
   unsigned me_close_readers;
   mdbx_fastmutex_t me_dbi_lock;
-  MDBX_dbi me_numdbs;          /* number of DBs opened */
-  MDBX_dbi me_maxdbs;          /* size of the DB table */
-  mdbx_pid_t me_pid;           /* process ID of this env */
-  mdbx_thread_key_t me_txkey;  /* thread-key for readers */
-  char *me_path;               /* path to the DB files */
-  void *me_pbuf;               /* scratch area for DUPSORT put() */
-  MDBX_txn *me_txn;            /* current write transaction */
-  MDBX_txn *me_txn0;           /* prealloc'd write transaction */
+  MDBX_dbi me_numdbs;         /* number of DBs opened */
+  MDBX_dbi me_maxdbs;         /* size of the DB table */
+  mdbx_pid_t me_pid;          /* process ID of this env */
+  mdbx_thread_key_t me_txkey; /* thread-key for readers */
+  char *me_path;              /* path to the DB files */
+  void *me_pbuf;              /* scratch area for DUPSORT put() */
+  MDBX_txn *me_txn;           /* current write transaction */
+  MDBX_txn *me_txn0;          /* prealloc'd write transaction */
+#ifdef MDBX_OSAL_LOCK
+  MDBX_OSAL_LOCK *me_wmutex; /* write-txn mutex */
+#endif
   MDBX_dbx *me_dbxs;           /* array of static DB info */
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
@@ -786,6 +789,7 @@ struct MDBX_env {
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION me_windowsbug_lock;
 #else
+  mdbx_fastmutex_t me_lckless_wmutex;
   mdbx_fastmutex_t me_remap_guard;
 #endif
 };
