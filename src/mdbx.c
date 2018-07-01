@@ -7721,6 +7721,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         offset = env->me_psize - (unsigned)olddata.iov_len;
         flags |= F_DUPDATA | F_SUBDATA;
         dummy.md_root = mp->mp_pgno;
+        dummy.md_seq = dummy.md_merkle = 0;
         sub_root = mp;
       }
       if (mp != fp) {
