@@ -5791,7 +5791,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   }
 
   const uint32_t saved_me_flags = env->me_flags;
-  env->me_flags = flags | MDBX_ENV_ACTIVE;
+  env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
   if (rc)
     goto bailout;
 
@@ -5913,7 +5913,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
 bailout:
   if (rc) {
     mdbx_env_close0(env);
-    env->me_flags = saved_me_flags;
+    env->me_flags = saved_me_flags | MDBX_FATAL_ERROR;
   }
   free(lck_pathname);
   return rc;
