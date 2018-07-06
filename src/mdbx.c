@@ -10446,8 +10446,8 @@ static int __cold mdbx_env_compact(MDBX_env *env, mdbx_filehandle_t fd) {
 
   /* update signature */
   meta->mp_meta.mm_datasync_sign = mdbx_meta_sign(&meta->mp_meta);
+  memcpy(ctx.mc_wbuf[0], buffer, ctx.mc_wlen[0] = pgno2bytes(env, NUM_METAS));
 
-  ctx.mc_wlen[0] = pgno2bytes(env, NUM_METAS);
   ctx.mc_txn = txn;
   rc = mdbx_env_cwalk(&ctx, &root, 0);
   if (rc == MDBX_SUCCESS && root != new_root) {
