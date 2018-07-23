@@ -199,7 +199,9 @@ static int suspend_and_append(mdbx_handle_array_t **array,
                                 (limit * 2 - ARRAY_LENGTH((*array)->handles)));
     if (!ptr)
       return MDBX_ENOMEM;
-    (*array) = (mdbx_handle_array_t *)ptr;
+    if (limit == ARRAY_LENGTH((*array)->handles))
+      memcpy(ptr, *array, sizeof(mdbx_handle_array_t));
+    *array = (mdbx_handle_array_t *)ptr;
     (*array)->limit = limit * 2;
   }
 
