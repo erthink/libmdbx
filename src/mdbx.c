@@ -6352,9 +6352,13 @@ static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
 
 mapped:
   p = pgno2page(env, pgno);
-  /* TODO: check p->mp_validator here */
 
 done:
+  if (unlikely(p->mp_upper < p->mp_lower ||
+               PAGEHDRSZ + p->mp_upper > env->me_psize))
+    return MDBX_CORRUPTED;
+  /* TODO: more checks here, including p->mp_validator */
+
   *ret = p;
   if (lvl)
     *lvl = level;
