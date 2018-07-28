@@ -327,6 +327,13 @@
 #   define mdbx_func_ "<mdbx_unknown>"
 #endif
 
+#if defined(__GNUC__) || __has_attribute(format)
+#define __printf_args(format_index, first_arg)                                 \
+  __attribute__((format(printf, format_index, first_arg)))
+#else
+#define __printf_args(format_index, first_arg)
+#endif
+
 /*----------------------------------------------------------------------------*/
 
 #if defined(USE_VALGRIND)

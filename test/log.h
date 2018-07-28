@@ -17,16 +17,7 @@
 #include "base.h"
 
 void __noreturn usage(void);
-
-#ifdef __GNUC__
-#define __printf_args(format_index, first_arg)                                 \
-  __attribute__((format(printf, format_index, first_arg)))
-#else
-#define __printf_args(format_index, first_arg)
-#endif
-
 void __noreturn __printf_args(1, 2) failure(const char *fmt, ...);
-
 void __noreturn failure_perror(const char *what, int errnum);
 const char *test_strerror(int errnum);
 
