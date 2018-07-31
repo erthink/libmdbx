@@ -2,15 +2,6 @@ cmake_minimum_required(VERSION 2.8.7)
 set(TARGET mdbx)
 project(${TARGET})
 
-message(WARNING "
-***************************************************************
-  MDBX is under active development, database format and API
-  aren't stable at least until 2018Q3. New version won't be
-  backwards compatible. Main focus of the rework is to provide
-  clear and robust API and new features.
-***************************************************************
-")
-
 set(MDBX_VERSION_MAJOR 0)
 set(MDBX_VERSION_MINOR 1)
 set(MDBX_VERSION_RELEASE 6)
