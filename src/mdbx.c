@@ -6357,7 +6357,8 @@ mapped:
   p = pgno2page(env, pgno);
 
 done:
-  if (unlikely(p->mp_upper < p->mp_lower ||
+  if ((p->mp_flags & P_OVERFLOW) == 0 &&
+      unlikely(p->mp_upper < p->mp_lower ||
                PAGEHDRSZ + p->mp_upper > env->me_psize))
     return MDBX_CORRUPTED;
   /* TODO: more checks here, including p->mp_validator */
