@@ -5947,7 +5947,7 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
   if (env->me_flags & MDBX_ENV_TXKEY)
     mdbx_rthc_remove(env->me_txkey);
   if (env->me_live_reader)
-    mdbx_rpid_clear(env);
+    (void)mdbx_rpid_clear(env);
 
   if (env->me_map) {
     mdbx_munmap(&env->me_dxb_mmap);
