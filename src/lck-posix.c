@@ -48,7 +48,7 @@ static __cold __attribute__((destructor)) void mdbx_global_destructor(void) {
 #endif
 #define LCK_WHOLE OFF_T_MAX
 
-static int mdbx_lck_op(mdbx_filehandle_t fd, int op, int lck, off_t offset,
+static int mdbx_lck_op(mdbx_filehandle_t fd, int op, short lck, off_t offset,
                        off_t len) {
   for (;;) {
     int rc;
