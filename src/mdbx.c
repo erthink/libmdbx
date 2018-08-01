@@ -2921,7 +2921,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         return MDBX_BAD_RSLOT;
     } else if (env->me_lck) {
       unsigned slot, nreaders;
-      const mdbx_pid_t pid = env->me_pid;
       const mdbx_tid_t tid = mdbx_thread_self();
       mdbx_assert(env, env->me_lck->mti_magic_and_version == MDBX_LOCK_MAGIC);
       mdbx_assert(env, env->me_lck->mti_os_and_format == MDBX_LOCK_FORMAT);
@@ -2931,13 +2930,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         return rc;
       rc = MDBX_SUCCESS;
 
-      if (unlikely(env->me_live_reader != pid)) {
+      if (unlikely(env->me_live_reader != env->me_pid)) {
         rc = mdbx_rpid_set(env);
         if (unlikely(rc != MDBX_SUCCESS)) {
           mdbx_rdt_unlock(env);
           return rc;
         }
-        env->me_live_reader = pid;
+        env->me_live_reader = env->me_pid;
       }
 
       while (1) {
@@ -2970,11 +2969,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         env->me_lck->mti_numreaders = ++nreaders;
       if (env->me_close_readers < nreaders)
         env->me_close_readers = nreaders;
-      r->mr_pid = pid;
+      r->mr_pid = env->me_pid;
       mdbx_rdt_unlock(env);
 
-      if (likely(env->me_flags & MDBX_ENV_TXKEY))
+      if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
+        assert(env->me_live_reader == env->me_pid);
         mdbx_thread_rthc_set(env->me_txkey, r);
+      }
     }
 
     while (1) {
