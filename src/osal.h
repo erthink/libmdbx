@@ -552,7 +552,6 @@ int mdbx_lck_init(MDBX_env *env);
 
 int mdbx_lck_seize(MDBX_env *env);
 int mdbx_lck_downgrade(MDBX_env *env, bool complete);
-int mdbx_lck_upgrade(MDBX_env *env);
 void mdbx_lck_destroy(MDBX_env *env);
 
 int mdbx_rdt_lock(MDBX_env *env);
