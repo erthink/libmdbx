@@ -156,6 +156,10 @@ int __cold mdbx_lck_init(MDBX_env *env) {
     goto bailout;
 #endif /* PTHREAD_PRIO_INHERIT */
 
+  rc = pthread_mutexattr_settype(&ma, PTHREAD_MUTEX_ERRORCHECK);
+  if (rc)
+    goto bailout;
+
   rc = pthread_mutex_init(&env->me_lck->mti_rmutex, &ma);
   if (rc)
     goto bailout;
