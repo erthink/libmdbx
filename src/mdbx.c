@@ -10922,10 +10922,10 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   }
 
   unsigned dbflag = DB_FRESH | DB_VALID | DB_USRVALID;
+  MDBX_db db_dummy;
   if (unlikely(rc)) {
     /* MDBX_NOTFOUND and MDBX_CREATE: Create new DB */
     assert(rc == MDBX_NOTFOUND);
-    MDBX_db db_dummy;
     memset(&db_dummy, 0, sizeof(db_dummy));
     db_dummy.md_root = P_INVALID;
     db_dummy.md_flags = user_flags & PERSISTENT_FLAGS;
