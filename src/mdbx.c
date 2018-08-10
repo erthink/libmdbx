@@ -559,7 +559,6 @@ static bool mdbx_pnl_check(MDBX_PNL pl, bool allocated) {
 /* Sort an PNL.
  * [in,out] pnl The PNL to sort. */
 static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
-  assert(pnl[0] <= MDBX_PNL_MAX && pnl[0] <= pnl[-1]);
   /* Max possible depth of int-indexed tree * 2 items/level */
   int istack[sizeof(int) * CHAR_BIT * 2];
   int i, j, k, l, ir, jstack;
@@ -634,7 +633,7 @@ static void __hot mdbx_pnl_sort(MDBX_PNL pnl) {
   }
 #undef PNL_SMALL
 #undef PNL_SWAP
-  assert(mdbx_pnl_check(pnl, true));
+  assert(mdbx_pnl_check(pnl, false));
 }
 
 /* Search for an ID in an PNL.
@@ -7907,8 +7906,6 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         memcpy(olddata.iov_base, data->iov_base, data->iov_len);
       else {
         mdbx_cassert(mc, NUMKEYS(mc->mc_pg[mc->mc_top]) == 1);
-        mdbx_cassert(mc, mc->mc_pg[mc->mc_top]->mp_upper ==
-                             mc->mc_pg[mc->mc_top]->mp_lower);
         mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) &&
                              !IS_LEAF2(mc->mc_pg[mc->mc_top]));
         mdbx_cassert(mc, NODEDSZ(leaf) == 0);
@@ -7916,7 +7913,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         mdbx_cassert(mc, key->iov_len < UINT16_MAX);
         leaf->mn_ksize = (uint16_t)key->iov_len;
         memcpy(NODEKEY(leaf), key->iov_base, key->iov_len);
-        assert((char *)NODEDATA(leaf) + NODEDSZ(leaf) <
+        assert((char *)NODEKEY(leaf) + NODEDSZ(leaf) <
                (char *)(mc->mc_pg[mc->mc_top]) + env->me_psize);
         goto fix_parent;
       }
