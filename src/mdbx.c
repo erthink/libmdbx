@@ -7535,7 +7535,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
              DVAL((flags & MDBX_RESERVE) ? nullptr : data), data->iov_len);
 
   int dupdata_flag = 0;
-  if (flags & MDBX_CURRENT) {
+  if ((flags & MDBX_CURRENT) != 0 && (mc->mc_flags & C_SUB) == 0) {
     /* Опция MDBX_CURRENT означает, что запрошено обновление текущей записи,
      * на которой сейчас стоит курсор. Проверяем что переданный ключ совпадает
      * со значением в текущей позиции курсора.
