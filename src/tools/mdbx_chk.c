@@ -340,7 +340,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                 data->iov_len);
   else {
     const pgno_t number = *iptr++;
-    if (number >= MDBX_PNL_UM_MAX)
+    if (number < 1 || number > MDBX_PNL_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
     else if ((number + 1) * sizeof(pgno_t) != data->iov_len)

@@ -512,6 +512,7 @@ typedef MDBX_ID2 *MDBX_ID2L;
 
 #define MDBX_PNL_DB_MAX (MDBX_PNL_DB_SIZE - 1)
 #define MDBX_PNL_UM_MAX (MDBX_PNL_UM_SIZE - 1)
+#define MDBX_PNL_MAX (MAX_PAGENO / 4)
 
 #define MDBX_PNL_SIZEOF(pl) (((pl)[0] + 1) * sizeof(pgno_t))
 #define MDBX_PNL_IS_ZERO(pl) ((pl)[0] == 0)
