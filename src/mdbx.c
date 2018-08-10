@@ -3525,13 +3525,13 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
  * This changes the freelist. Keep trying until it stabilizes. */
 static int mdbx_freelist_save(MDBX_txn *txn) {
   /* env->me_reclaimed_pglist[] can grow and shrink during this call.
-   * env->me_last_reclaimed and txn->mt_free_pages[] can only grow.
-   * Page numbers cannot disappear from txn->mt_free_pages[]. */
+   * env->me_last_reclaimed and txn->mt_befree_pages[] can only grow.
+   * Page numbers cannot disappear from txn->mt_befree_pages[]. */
   MDBX_cursor mc;
   MDBX_env *env = txn->mt_env;
   int rc, more = 1;
   txnid_t cleanup_reclaimed_id = 0, head_id = 0;
-  pgno_t befree_count = 0;
+  size_t befree_stored = 0;
   intptr_t head_room = 0, total_room = 0;
   unsigned cleanup_reclaimed_pos = 0, refill_reclaimed_pos = 0;
   const bool lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
@@ -3602,7 +3602,7 @@ again_on_freelist_change:
        * The pages themselves remain in dirtylist. */
       if (unlikely(!env->me_reclaimed_pglist) &&
           !(lifo && env->me_last_reclaimed > 1)) {
-        /* Put loose page numbers in mt_free_pages,
+        /* Put loose page numbers in mt_befree_pages,
          * since unable to return them to me_reclaimed_pglist. */
         if (unlikely((rc = mdbx_pnl_need(&txn->mt_befree_pages,
                                          txn->mt_loose_count)) != 0))
@@ -3681,37 +3681,35 @@ again_on_freelist_change:
     }
 
     /* Save the PNL of pages freed by this txn, to a single record */
-    if (befree_count < txn->mt_befree_pages[0]) {
-      if (unlikely(!befree_count)) {
+    if (befree_stored < txn->mt_befree_pages[0]) {
+      if (unlikely(!befree_stored)) {
         /* Make sure last page of freeDB is touched and on freelist */
         rc = mdbx_page_search(&mc, NULL, MDBX_PS_LAST | MDBX_PS_MODIFY);
         if (unlikely(rc && rc != MDBX_NOTFOUND))
           goto bailout;
       }
-      pgno_t *befree_pages = txn->mt_befree_pages;
       /* Write to last page of freeDB */
       key.iov_len = sizeof(txn->mt_txnid);
       key.iov_base = &txn->mt_txnid;
       do {
-        befree_count = befree_pages[0];
-        data.iov_len = MDBX_PNL_SIZEOF(befree_pages);
+        data.iov_len = MDBX_PNL_SIZEOF(txn->mt_befree_pages);
         rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
         if (unlikely(rc))
           goto bailout;
         /* Retry if mt_free_pages[] grew during the Put() */
-        befree_pages = txn->mt_befree_pages;
-      } while (befree_count < befree_pages[0]);
+      } while (data.iov_len < MDBX_PNL_SIZEOF(txn->mt_befree_pages));
 
-      mdbx_pnl_sort(befree_pages);
-      memcpy(data.iov_base, befree_pages, data.iov_len);
+      befree_stored = txn->mt_befree_pages[0];
+      mdbx_pnl_sort(txn->mt_befree_pages);
+      memcpy(data.iov_base, txn->mt_befree_pages, data.iov_len);
 
       if (mdbx_debug_enabled(MDBX_DBG_EXTRA)) {
-        unsigned i = (unsigned)befree_pages[0];
+        unsigned i = befree_stored;
         mdbx_debug_extra("PNL write txn %" PRIaTXN " root %" PRIaPGNO
                          " num %u, PNL",
                          txn->mt_txnid, txn->mt_dbs[FREE_DBI].md_root, i);
         for (; i; i--)
-          mdbx_debug_extra_print(" %" PRIaPGNO "", befree_pages[i]);
+          mdbx_debug_extra_print(" %" PRIaPGNO "", txn->mt_befree_pages[i]);
         mdbx_debug_extra_print("\n");
       }
       continue;
