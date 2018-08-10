@@ -536,7 +536,7 @@ static void mdbx_txl_free(MDBX_TXL list) {
 
 /* Append ID to PNL. The PNL must be big enough. */
 static __inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t id) {
-  assert(pl[0] + (size_t)1 < MDBX_PNL_ALLOCLEN(pl));
+  assert(pl[0] + (size_t)1 <= MDBX_PNL_ALLOCLEN(pl));
   pl[pl[0] += 1] = id;
 }
 
