@@ -188,20 +188,33 @@ int main(int argc, char *const argv[]) {
                              config::duration, 1))
       continue;
     if (config::parse_option(argc, argv, narg, "keylen.min", params.keylen_min,
-                             config::no_scale, 0, params.keylen_max))
+                             config::no_scale, 0, UINT8_MAX)) {
+      if (params.keylen_max < params.keylen_min)
+        params.keylen_max = params.keylen_min;
       continue;
-    if (config::parse_option(argc, argv, narg, "keylen.max", params.keylen_max,
-                             config::no_scale, params.keylen_min,
-                             mdbx_get_maxkeysize(0)))
+    }
+    if (config::parse_option(
+            argc, argv, narg, "keylen.max", params.keylen_max, config::no_scale,
+            0, std::min(mdbx_get_maxkeysize(0), (int)UINT16_MAX))) {
+
+      if (params.keylen_min > params.keylen_max)
+        params.keylen_min = params.keylen_max;
       continue;
+    }
     if (config::parse_option(argc, argv, narg, "datalen.min",
                              params.datalen_min, config::no_scale, 0,
-                             params.datalen_max))
+                             UINT8_MAX)) {
+      if (params.datalen_max < params.datalen_min)
+        params.datalen_max = params.datalen_min;
       continue;
+    }
     if (config::parse_option(argc, argv, narg, "datalen.max",
-                             params.datalen_max, config::no_scale,
-                             params.datalen_min, MDBX_MAXDATASIZE))
+                             params.datalen_max, config::no_scale, 0,
+                             std::min((int)UINT16_MAX, MDBX_MAXDATASIZE))) {
+      if (params.datalen_min > params.datalen_max)
+        params.datalen_min = params.datalen_max;
       continue;
+    }
     if (config::parse_option(argc, argv, narg, "batch.read", params.batch_read,
                              config::no_scale, 1))
       continue;
