@@ -93,7 +93,7 @@ bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
 
 //-----------------------------------------------------------------------------
 
-/* TODO: replace my 'libmera' fomr t1ha. */
+/* TODO: replace my 'libmera' from t1ha. */
 uint64_t entropy_ticks(void) {
 #if defined(EMSCRIPTEN)
   return (uint64_t)emscripten_get_now();

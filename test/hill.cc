@@ -156,8 +156,6 @@ bool testcase_hill::run() {
               a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
-    if (a_serial == 808)
-      log_trace("!!!");
     int rc = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_1->value,
                           &a_data_0->value, update_flags);
     if (unlikely(rc != MDBX_SUCCESS))
