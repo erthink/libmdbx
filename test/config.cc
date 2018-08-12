@@ -118,7 +118,12 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   char *suffix = nullptr;
   errno = 0;
-  unsigned long raw = strtoul(value_cstr, &suffix, 0);
+  unsigned long long raw = strtoull(value_cstr, &suffix, 0);
+  if ((suffix && *suffix) || errno) {
+    suffix = nullptr;
+    errno = 0;
+    raw = strtoull(value_cstr, &suffix, 10);
+  }
   if (errno)
     failure("Option '--%s' expects a numeric value (%s)\n", option,
             test_strerror(errno));
