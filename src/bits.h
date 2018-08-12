@@ -758,8 +758,8 @@ struct MDBX_env {
   MDBX_PNL me_free_pgs;
   /* ID2L of pages written during a write txn. Length MDBX_PNL_UM_SIZE. */
   MDBX_ID2L me_dirtylist;
-  /* Max number of freelist items that can fit in a single overflow page */
-  unsigned me_maxfree_1pg;
+  /* Number of freelist items that can fit in a single overflow page */
+  unsigned me_maxgc_ov1page;
   /* Max size of a node on a page */
   unsigned me_nodemax;
   unsigned me_maxkey_limit;   /* max size of a key */
