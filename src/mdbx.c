@@ -692,18 +692,18 @@ static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
  * Return the PNL to the size growed by given number.
  * [in,out] ppl Address of the PNL to grow. */
 static int __must_check_result mdbx_pnl_grow(MDBX_PNL *ppl, size_t num) {
-  MDBX_PNL idn = *ppl - 1;
-  assert(idn[0] <= MDBX_PNL_MAX && idn[0] <= idn[-1]);
+  MDBX_PNL pl = *ppl - 1;
+  assert(pl[1] <= MDBX_PNL_MAX && pl[1] <= pl[0]);
   assert(num <= MDBX_PNL_MAX);
-  num += *idn;
+  num += pl[0];
   if (unlikely(num > MDBX_PNL_MAX))
     return MDBX_TXN_FULL;
   /* grow it */
-  idn = realloc(idn, (num + 2) * sizeof(pgno_t));
-  if (unlikely(!idn))
+  pl = realloc(pl, (num + 2) * sizeof(pgno_t));
+  if (unlikely(!pl))
     return MDBX_ENOMEM;
-  *idn++ += (pgno_t)num;
-  *ppl = idn;
+  *pl = (pgno_t)num;
+  *ppl = pl + 1;
   return MDBX_SUCCESS;
 }
 
