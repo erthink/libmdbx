@@ -7893,7 +7893,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       ovpages = omp->mp_pages;
 
       /* Is the ov page large enough? */
-      if (ovpages >= dpages) {
+      if (ovpages ==
+          /* LY: add configuragle theshold to keep reserve space */ dpages) {
         if (!(omp->mp_flags & P_DIRTY) &&
             (level || (env->me_flags & MDBX_WRITEMAP))) {
           rc = mdbx_page_unspill(mc->mc_txn, omp, &omp);
