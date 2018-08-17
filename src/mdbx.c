@@ -682,8 +682,8 @@ static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
     /* shrink to MDBX_PNL_UM_MAX */
     pl = realloc(pl, (MDBX_PNL_UM_MAX + 2) * sizeof(pgno_t));
     if (likely(pl)) {
-      *pl++ = MDBX_PNL_UM_MAX;
-      *ppl = pl;
+      *pl = MDBX_PNL_UM_MAX;
+      *ppl = pl + 1;
     }
   }
 }
@@ -707,36 +707,25 @@ static int __must_check_result mdbx_pnl_grow(MDBX_PNL *ppl, size_t num) {
   return MDBX_SUCCESS;
 }
 
-static int __must_check_result mdbx_txl_grow(MDBX_TXL *ptr, size_t num) {
-  MDBX_TXL list = *ptr - 1;
-  /* grow it */
-  list = realloc(list, ((size_t)*list + num + 2) * sizeof(txnid_t));
-  if (unlikely(!list))
-    return MDBX_ENOMEM;
-  *list++ += num;
-  *ptr = list;
-  return MDBX_SUCCESS;
-}
-
 /* Make room for num additional elements in an PNL.
  * [in,out] ppl Address of the PNL.
  * [in] num Number of elements to make room for.
  * Returns 0 on success, MDBX_ENOMEM on failure. */
 static int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl, size_t num) {
-  MDBX_PNL pl = *ppl;
-  assert(pl[0] <= MDBX_PNL_MAX && pl[0] <= pl[-1]);
+  MDBX_PNL pl = *ppl - 1;
+  assert(pl[1] <= MDBX_PNL_MAX && pl[1] <= pl[0]);
   assert(num <= MDBX_PNL_MAX);
-  num += pl[0];
-  if (unlikely(num > pl[-1])) {
+  num += pl[1];
+  if (unlikely(num > pl[0])) {
     if (unlikely(num > MDBX_PNL_MAX))
       return MDBX_TXN_FULL;
     num = (num + num / 4 + (256 + 2)) & ~255u;
     num = (num < MDBX_PNL_MAX + 2) ? num : MDBX_PNL_MAX + 2;
-    pl = realloc(pl - 1, num * sizeof(pgno_t));
+    pl = realloc(pl, num * sizeof(pgno_t));
     if (unlikely(!pl))
       return MDBX_ENOMEM;
-    *pl++ = (pgno_t)num - 2;
-    *ppl = pl;
+    *pl = (pgno_t)num - 2;
+    *ppl = pl + 1;
   }
   return MDBX_SUCCESS;
 }
@@ -759,20 +748,6 @@ static int __must_check_result mdbx_pnl_append(MDBX_PNL *ppl, pgno_t id) {
   return MDBX_SUCCESS;
 }
 
-static int __must_check_result mdbx_txl_append(MDBX_TXL *ptr, txnid_t id) {
-  MDBX_TXL list = *ptr;
-  /* Too big? */
-  if (unlikely(list[0] >= list[-1])) {
-    int rc = mdbx_txl_grow(ptr, (size_t)list[0]);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
-    list = *ptr;
-  }
-  list[0]++;
-  list[list[0]] = id;
-  return MDBX_SUCCESS;
-}
-
 /* Append an PNL onto an PNL.
  * [in,out] ppl Address of the PNL to append to.
  * [in] app The PNL to append.
@@ -789,21 +764,6 @@ static int __must_check_result mdbx_pnl_append_list(MDBX_PNL *ppl,
   }
   memcpy(&pnl[pnl[0] + 1], &app[1], app[0] * sizeof(pgno_t));
   pnl[0] += app[0];
-  return MDBX_SUCCESS;
-}
-
-static int __must_check_result mdbx_txl_append_list(MDBX_TXL *ptr,
-                                                    MDBX_TXL append) {
-  MDBX_TXL list = *ptr;
-  /* Too big? */
-  if (unlikely(list[0] + append[0] >= list[-1])) {
-    int rc = mdbx_txl_grow(ptr, (size_t)append[0]);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
-    list = *ptr;
-  }
-  memcpy(&list[list[0] + 1], &append[1], (size_t)append[0] * sizeof(txnid_t));
-  list[0] += append[0];
   return MDBX_SUCCESS;
 }
 
@@ -847,6 +807,46 @@ static void __hot mdbx_pnl_xmerge(MDBX_PNL pnl, MDBX_PNL merge) {
   }
   pnl[0] = total;
   assert(mdbx_pnl_check(pnl, true));
+}
+
+static int __must_check_result mdbx_txl_grow(MDBX_TXL *ptr, size_t num) {
+  MDBX_TXL list = *ptr - 1;
+  /* grow it */
+  list = realloc(list, ((size_t)*list + num + 2) * sizeof(txnid_t));
+  if (unlikely(!list))
+    return MDBX_ENOMEM;
+  *list += num;
+  *ptr = list + 1;
+  return MDBX_SUCCESS;
+}
+
+static int __must_check_result mdbx_txl_append(MDBX_TXL *ptr, txnid_t id) {
+  MDBX_TXL list = *ptr;
+  /* Too big? */
+  if (unlikely(list[0] >= list[-1])) {
+    int rc = mdbx_txl_grow(ptr, (size_t)list[0]);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    list = *ptr;
+  }
+  list[0]++;
+  list[list[0]] = id;
+  return MDBX_SUCCESS;
+}
+
+static int __must_check_result mdbx_txl_append_list(MDBX_TXL *ptr,
+                                                    MDBX_TXL append) {
+  MDBX_TXL list = *ptr;
+  /* Too big? */
+  if (unlikely(list[0] + append[0] >= list[-1])) {
+    int rc = mdbx_txl_grow(ptr, (size_t)append[0]);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    list = *ptr;
+  }
+  memcpy(&list[list[0] + 1], &append[1], (size_t)append[0] * sizeof(txnid_t));
+  list[0] += append[0];
+  return MDBX_SUCCESS;
 }
 
 /* Search for an ID in an ID2L.
@@ -900,7 +900,7 @@ static int __must_check_result mdbx_mid2l_insert(MDBX_ID2L pnl, MDBX_ID2 *id) {
   if (unlikely(x < 1))
     return /* internal error */ MDBX_PROBLEM;
 
-  if (x <= pnl[0].mid && pnl[x].mid == id->mid)
+  if (unlikely(pnl[x].mid == id->mid && x <= pnl[0].mid))
     return /* duplicate */ MDBX_PROBLEM;
 
   if (unlikely(pnl[0].mid >= MDBX_PNL_UM_MAX))
