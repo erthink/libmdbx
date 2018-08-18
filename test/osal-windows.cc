@@ -53,7 +53,7 @@ void osal_wait4barrier(void) {
   }
 }
 
-static HANDLE make_inharitable(HANDLE hHandle) {
+static HANDLE make_inheritable(HANDLE hHandle) {
   assert(hHandle != NULL && hHandle != INVALID_HANDLE_VALUE);
   if (!DuplicateHandle(GetCurrentProcess(), hHandle, GetCurrentProcess(),
                        &hHandle, 0, TRUE,
@@ -71,7 +71,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!hEvent)
       failure_perror("CreateEvent()", GetLastError());
-    hEvent = make_inharitable(hEvent);
+    hEvent = make_inheritable(hEvent);
     log_trace("osal_setup: event %" PRIuPTR " -> %p", i, hEvent);
     events[i] = hEvent;
   }
@@ -79,12 +79,12 @@ void osal_setup(const std::vector<actor_config> &actors) {
   hBarrierSemaphore = CreateSemaphore(NULL, 0, (LONG)actors.size(), NULL);
   if (!hBarrierSemaphore)
     failure_perror("CreateSemaphore(BarrierSemaphore)", GetLastError());
-  hBarrierSemaphore = make_inharitable(hBarrierSemaphore);
+  hBarrierSemaphore = make_inheritable(hBarrierSemaphore);
 
   hBarrierEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
   if (!hBarrierEvent)
     failure_perror("CreateEvent(BarrierEvent)", GetLastError());
-  hBarrierEvent = make_inharitable(hBarrierEvent);
+  hBarrierEvent = make_inheritable(hBarrierEvent);
 }
 
 void osal_broadcast(unsigned id) {
