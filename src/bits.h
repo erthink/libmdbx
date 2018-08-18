@@ -506,7 +506,7 @@ typedef MDBX_ID2 *MDBX_ID2L;
 
 /* PNL sizes - likely should be even bigger
  * limiting factors: sizeof(pgno_t), thread stack size */
-#define MDBX_PNL_LOGN 16 /* DB_SIZE is 2^16, UM_SIZE is 2^17 */
+#define MDBX_PNL_LOGN 24 /* DB_SIZE is 2^16, UM_SIZE is 2^17 */
 #define MDBX_PNL_DB_SIZE (1 << MDBX_PNL_LOGN)
 #define MDBX_PNL_UM_SIZE (1 << (MDBX_PNL_LOGN + 1))
 
