@@ -408,7 +408,7 @@ typedef struct MDBX_lockinfo {
   volatile uint32_t mti_envmode;
 
 #ifdef MDBX_OSAL_LOCK
-  /* Mutex protecting write access to this table. */
+  /* Mutex protecting write-txn. */
   union {
     MDBX_OSAL_LOCK mti_wmutex;
     uint8_t pad_mti_wmutex[MDBX_OSAL_LOCK_SIZE % sizeof(size_t)];

@@ -5391,7 +5391,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
 
     /* apply preconfigured params, but only if substantial changes:
      *  - upper or lower limit changes
-     *  - shrink theshold or growth step
+     *  - shrink threshold or growth step
      * But ignore just chagne just a 'now/current' size. */
     if (bytes_align2os_bytes(env, env->me_dbgeo.upper) !=
             pgno_align2os_bytes(env, meta.mm_geo.upper) ||
