@@ -501,7 +501,7 @@ __cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
  * Allocates memory for an PNL of the given size.
  * Returns PNL on success, NULL on failure. */
 static MDBX_PNL mdbx_pnl_alloc(size_t size) {
-  assert(size <= MDBX_PNL_MAX);
+  assert(size <= MDBX_LIST_MAX);
   MDBX_PNL pl = malloc((size + 2) * sizeof(pgno_t));
   if (likely(pl)) {
     *pl++ = (pgno_t)size;
@@ -544,7 +544,7 @@ static __inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t id) {
 static bool mdbx_pnl_check(MDBX_PNL pl, bool allocated) {
   if (pl) {
     if (allocated) {
-      assert(pl[0] <= MDBX_PNL_MAX && pl[0] <= pl[-1]);
+      assert(pl[0] <= MDBX_LIST_MAX && pl[0] <= pl[-1]);
     }
     for (const pgno_t *ptr = pl + pl[0]; --ptr > pl;) {
       assert(MDBX_PNL_ORDERED(ptr[0], ptr[1]));
@@ -678,11 +678,11 @@ static unsigned __hot mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
  * [in,out] ppl Address of the PNL to shrink. */
 static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
   MDBX_PNL pl = *ppl - 1;
-  if (unlikely(*pl > MDBX_PNL_UM_MAX)) {
-    /* shrink to MDBX_PNL_UM_MAX */
-    pl = realloc(pl, (MDBX_PNL_UM_MAX + 2) * sizeof(pgno_t));
+  if (unlikely(*pl > MDBX_LIST_MAX)) {
+    /* shrink to MDBX_LIST_MAX */
+    pl = realloc(pl, (MDBX_LIST_MAX + 2) * sizeof(pgno_t));
     if (likely(pl)) {
-      *pl = MDBX_PNL_UM_MAX;
+      *pl = MDBX_LIST_MAX;
       *ppl = pl + 1;
     }
   }
@@ -693,10 +693,10 @@ static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
  * [in,out] ppl Address of the PNL to grow. */
 static int __must_check_result mdbx_pnl_grow(MDBX_PNL *ppl, size_t num) {
   MDBX_PNL pl = *ppl - 1;
-  assert(pl[1] <= MDBX_PNL_MAX && pl[1] <= pl[0]);
-  assert(num <= MDBX_PNL_MAX);
+  assert(pl[1] <= MDBX_LIST_MAX && pl[1] <= pl[0]);
+  assert(num <= MDBX_LIST_MAX);
   num += pl[0];
-  if (unlikely(num > MDBX_PNL_MAX))
+  if (unlikely(num > MDBX_LIST_MAX))
     return MDBX_TXN_FULL;
   /* grow it */
   pl = realloc(pl, (num + 2) * sizeof(pgno_t));
@@ -713,14 +713,14 @@ static int __must_check_result mdbx_pnl_grow(MDBX_PNL *ppl, size_t num) {
  * Returns 0 on success, MDBX_ENOMEM on failure. */
 static int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl, size_t num) {
   MDBX_PNL pl = *ppl - 1;
-  assert(pl[1] <= MDBX_PNL_MAX && pl[1] <= pl[0]);
-  assert(num <= MDBX_PNL_MAX);
+  assert(pl[1] <= MDBX_LIST_MAX && pl[1] <= pl[0]);
+  assert(num <= MDBX_LIST_MAX);
   num += pl[1];
   if (unlikely(num > pl[0])) {
-    if (unlikely(num > MDBX_PNL_MAX))
+    if (unlikely(num > MDBX_LIST_MAX))
       return MDBX_TXN_FULL;
     num = (num + num / 4 + (256 + 2)) & ~255u;
-    num = (num < MDBX_PNL_MAX + 2) ? num : MDBX_PNL_MAX + 2;
+    num = (num < MDBX_LIST_MAX + 2) ? num : MDBX_LIST_MAX + 2;
     pl = realloc(pl, num * sizeof(pgno_t));
     if (unlikely(!pl))
       return MDBX_ENOMEM;
@@ -738,7 +738,7 @@ static int __must_check_result mdbx_pnl_append(MDBX_PNL *ppl, pgno_t id) {
   MDBX_PNL pl = *ppl;
   /* Too big? */
   if (unlikely(pl[0] >= pl[-1])) {
-    int rc = mdbx_pnl_grow(ppl, MDBX_PNL_UM_MAX);
+    int rc = mdbx_pnl_grow(ppl, MDBX_LIST_MAX);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     pl = *ppl;
@@ -777,7 +777,7 @@ static int __must_check_result mdbx_pnl_append_range(MDBX_PNL *ppl, pgno_t id,
   pgno_t *pnl = *ppl, len = pnl[0];
   /* Too big? */
   if (unlikely(len + n > pnl[-1])) {
-    int rc = mdbx_pnl_grow(ppl, n | MDBX_PNL_UM_MAX);
+    int rc = mdbx_pnl_grow(ppl, n | MDBX_LIST_MAX);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     pnl = *ppl;
@@ -903,7 +903,7 @@ static int __must_check_result mdbx_mid2l_insert(MDBX_ID2L pnl, MDBX_ID2 *id) {
   if (unlikely(pnl[x].mid == id->mid && x <= pnl[0].mid))
     return /* duplicate */ MDBX_PROBLEM;
 
-  if (unlikely(pnl[0].mid >= MDBX_PNL_UM_MAX))
+  if (unlikely(pnl[0].mid >= MDBX_LIST_MAX))
     return /* too big */ MDBX_TXN_FULL;
 
   /* insert id */
@@ -928,7 +928,7 @@ static int __must_check_result mdbx_mid2l_append(MDBX_ID2L pnl, MDBX_ID2 *id) {
 #endif
 
   /* Too big? */
-  if (unlikely(pnl[0].mid >= MDBX_PNL_UM_MAX))
+  if (unlikely(pnl[0].mid >= MDBX_LIST_MAX))
     return /* too big */ MDBX_TXN_FULL;
 
   pnl[0].mid++;
@@ -1698,7 +1698,7 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
     return MDBX_SUCCESS;
 
   if (!txn->mt_spill_pages) {
-    txn->mt_spill_pages = mdbx_pnl_alloc(MDBX_PNL_UM_MAX);
+    txn->mt_spill_pages = mdbx_pnl_alloc(MDBX_LIST_MAX);
     if (unlikely(!txn->mt_spill_pages))
       return MDBX_ENOMEM;
   } else {
@@ -1723,8 +1723,8 @@ static int mdbx_page_spill(MDBX_cursor *m0, MDBX_val *key, MDBX_val *data) {
    * of those pages will need to be used again. So now we spill only 1/8th
    * of the dirty pages. Testing revealed this to be a good tradeoff,
    * better than 1/2, 1/4, or 1/10. */
-  if (need < MDBX_PNL_UM_MAX / 8)
-    need = MDBX_PNL_UM_MAX / 8;
+  if (need < MDBX_LIST_MAX / 8)
+    need = MDBX_LIST_MAX / 8;
 
   /* Save the page IDs of all the pages we're flushing */
   /* flush from the tail forward, this saves a lot of shifting later on. */
@@ -2406,7 +2406,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       }
 
       /* Don't try to coalesce too much. */
-      if (repg_len > MDBX_PNL_UM_SIZE / 2)
+      if (unlikely(repg_len > MDBX_LIST_MAX / 2))
         break;
       if (flags & MDBX_COALESCE) {
         if (repg_len /* current size */ >= env->me_maxgc_ov1page ||
@@ -2709,7 +2709,7 @@ static int mdbx_page_touch(MDBX_cursor *mc) {
     }
 
     mdbx_debug("clone db %d page %" PRIaPGNO, DDBI(mc), mp->mp_pgno);
-    mdbx_cassert(mc, dl[0].mid < MDBX_PNL_UM_MAX);
+    mdbx_cassert(mc, dl[0].mid < MDBX_LIST_MAX);
     /* No - copy it */
     np = mdbx_page_malloc(txn, 1);
     if (unlikely(!np)) {
@@ -3078,7 +3078,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     txn->mt_child = NULL;
     txn->mt_loose_pages = NULL;
     txn->mt_loose_count = 0;
-    txn->mt_dirtyroom = MDBX_PNL_UM_MAX;
+    txn->mt_dirtyroom = MDBX_LIST_MAX;
     txn->mt_rw_dirtylist = env->me_dirtylist;
     txn->mt_rw_dirtylist[0].mid = 0;
     txn->mt_befree_pages = env->me_free_pgs;
@@ -3231,9 +3231,9 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     unsigned i;
     txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
     txn->mt_dbiseqs = parent->mt_dbiseqs;
-    txn->mt_rw_dirtylist = malloc(sizeof(MDBX_ID2) * MDBX_PNL_UM_SIZE);
+    txn->mt_rw_dirtylist = malloc(sizeof(MDBX_ID2) * (MDBX_LIST_MAX + 1));
     if (!txn->mt_rw_dirtylist ||
-        !(txn->mt_befree_pages = mdbx_pnl_alloc(MDBX_PNL_UM_MAX))) {
+        !(txn->mt_befree_pages = mdbx_pnl_alloc(MDBX_LIST_MAX))) {
       free(txn->mt_rw_dirtylist);
       free(txn);
       return MDBX_ENOMEM;
@@ -4243,7 +4243,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
         }
       }
     } else { /* Simplify the above for single-ancestor case */
-      len = MDBX_PNL_UM_MAX - txn->mt_dirtyroom;
+      len = MDBX_LIST_MAX - txn->mt_dirtyroom;
     }
     /* Merge our dirty list with parent's */
     y = src[0].mid;
@@ -4956,9 +4956,9 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   env->me_psize = (unsigned)pagesize;
 
   STATIC_ASSERT(mdbx_maxgc_ov1page(MIN_PAGESIZE) > 42);
-  STATIC_ASSERT(mdbx_maxgc_ov1page(MAX_PAGESIZE) < MDBX_PNL_DB_MAX);
+  STATIC_ASSERT(mdbx_maxgc_ov1page(MAX_PAGESIZE) < MDBX_LIST_MAX);
   const intptr_t maxgc_ov1page = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
-  mdbx_ensure(env, maxgc_ov1page > 42 && maxgc_ov1page < MDBX_PNL_DB_MAX);
+  mdbx_ensure(env, maxgc_ov1page > 42 && maxgc_ov1page < MDBX_LIST_MAX);
   env->me_maxgc_ov1page = (unsigned)maxgc_ov1page;
 
   STATIC_ASSERT(mdbx_nodemax(MIN_PAGESIZE) > 42);
@@ -5871,8 +5871,8 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
     flags &= ~(MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NOSYNC | MDBX_NOMETASYNC |
                MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_NOMEMINIT);
   } else {
-    if (!((env->me_free_pgs = mdbx_pnl_alloc(MDBX_PNL_UM_MAX)) &&
-          (env->me_dirtylist = calloc(MDBX_PNL_UM_SIZE, sizeof(MDBX_ID2)))))
+    if (!((env->me_free_pgs = mdbx_pnl_alloc(MDBX_LIST_MAX)) &&
+          (env->me_dirtylist = calloc(MDBX_LIST_MAX + 1, sizeof(MDBX_ID2)))))
       rc = MDBX_ENOMEM;
   }
 
