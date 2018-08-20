@@ -133,6 +133,16 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
 
+  if (strcmp(value_cstr, "min") == 0 || strcmp(value_cstr, "minimal") == 0) {
+    value = minval;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "max") == 0 || strcmp(value_cstr, "maximal") == 0) {
+    value = maxval;
+    return true;
+  }
+
   char *suffix = nullptr;
   errno = 0;
   unsigned long long raw = strtoull(value_cstr, &suffix, 0);
