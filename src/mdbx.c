@@ -820,6 +820,17 @@ static int __must_check_result mdbx_txl_grow(MDBX_TXL *ptr, size_t num) {
   return MDBX_SUCCESS;
 }
 
+static int mdbx_txl_cmp(const void *pa, const void *pb) {
+  const txnid_t a = *(MDBX_TXL)pa;
+  const txnid_t b = *(MDBX_TXL)pb;
+  return mdbx_cmp2int(b, a);
+}
+
+static void mdbx_txl_sort(MDBX_TXL ptr) {
+  /* LY: temporary */
+  qsort(ptr + 1, (size_t)ptr[0], sizeof(*ptr), mdbx_txl_cmp);
+}
+
 static int __must_check_result mdbx_txl_append(MDBX_TXL *ptr, txnid_t id) {
   MDBX_TXL list = *ptr;
   /* Too big? */
@@ -3553,8 +3564,9 @@ retry:
 
   unsigned placed = 0, cleaned_gc_slot = 0, reused_gc_slot = 0,
            filled_gc_slot = ~0u;
-  txnid_t cleaned_gc_id = 0,
-          head_gc_id = lifo ? *env->me_oldest : env->me_last_reclaimed;
+  txnid_t cleaned_gc_id = 0, head_gc_id = env->me_last_reclaimed
+                                              ? env->me_last_reclaimed
+                                              : ~(txnid_t)0;
 
   while (1) {
     /* Come back here after each Put() in case befree-list changed */
@@ -3587,6 +3599,7 @@ retry:
       /* LY: cleanup reclaimed records. */
       while (cleaned_gc_slot < txn->mt_lifo_reclaimed[0]) {
         cleaned_gc_id = txn->mt_lifo_reclaimed[++cleaned_gc_slot];
+        assert(cleaned_gc_slot > 0 && cleaned_gc_id < *env->me_oldest);
         head_gc_id = (head_gc_id > cleaned_gc_id) ? cleaned_gc_id : head_gc_id;
         key.iov_base = &cleaned_gc_id;
         key.iov_len = sizeof(cleaned_gc_id);
@@ -3607,6 +3620,9 @@ retry:
             goto bailout;
         }
       }
+      mdbx_txl_sort(txn->mt_lifo_reclaimed);
+      assert(txn->mt_lifo_reclaimed[0] == 0 ||
+             txn->mt_lifo_reclaimed[txn->mt_lifo_reclaimed[0]] == head_gc_id);
     }
 
     // handle loose pages - put ones into the reclaimed- or befree-list
