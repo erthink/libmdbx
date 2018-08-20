@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -195,8 +195,8 @@ int main(int argc, char *const argv[]) {
     }
     if (config::parse_option(
             argc, argv, narg, "keylen.max", params.keylen_max, config::no_scale,
-            0, std::min(mdbx_get_maxkeysize(0), (int)UINT16_MAX))) {
-
+            0,
+            std::min((unsigned)mdbx_get_maxkeysize(0), (unsigned)UINT16_MAX))) {
       if (params.keylen_min > params.keylen_max)
         params.keylen_min = params.keylen_max;
       continue;
