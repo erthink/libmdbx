@@ -63,6 +63,10 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   std::string &value, bool allow_empty = false);
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  std::string &value, bool allow_empty,
+                  const char *default_value);
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   bool &value);
 
 struct option_verb {
@@ -75,16 +79,25 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   uint64_t &value, const scale_mode scale,
-                  const uint64_t minval = 0, const uint64_t maxval = INT64_MAX);
+                  const uint64_t minval = 0, const uint64_t maxval = INT64_MAX,
+                  const uint64_t default_value = 0);
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   unsigned &value, const scale_mode scale,
-                  const unsigned minval = 0, const unsigned maxval = INT32_MAX);
+                  const unsigned minval = 0, const unsigned maxval = INT32_MAX,
+                  const unsigned default_value = 0);
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   uint8_t &value, const uint8_t minval = 0,
-                  const uint8_t maxval = 255);
+                  const uint8_t maxval = 255, const uint8_t default_value = 0);
 
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  int64_t &value, const int64_t minval, const int64_t maxval,
+                  const int64_t default_value = -1);
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  int32_t &value, const int32_t minval, const int32_t maxval,
+                  const int32_t default_value = -1);
 //-----------------------------------------------------------------------------
 
 #pragma pack(push, 1)
