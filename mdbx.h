@@ -918,8 +918,7 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
  * [in] env  An environment handle returned by mdbx_env_create()
  *
  * Returns The maximum size of a key we can write. */
-LIBMDBX_API int mdbx_env_get_maxkeysize(MDBX_env *env);
-LIBMDBX_API int mdbx_get_maxkeysize(size_t pagesize);
+LIBMDBX_API intptr_t mdbx_env_get_maxkeysize(MDBX_env *env);
 
 /* Set application information associated with the MDBX_env.
  *
@@ -1691,6 +1690,13 @@ LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr);
 
 LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                                   uint64_t increment);
+
+LIBMDBX_API intptr_t mdbx_limits_pgsize_min(void);
+LIBMDBX_API intptr_t mdbx_limits_pgsize_max(void);
+LIBMDBX_API intptr_t mdbx_limits_dbsize_min(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_dbsize_max(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /*----------------------------------------------------------------------------*/
 /* attribute support functions for Nexenta */

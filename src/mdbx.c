@@ -4921,7 +4921,7 @@ fail:
   return rc;
 }
 
-int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
+intptr_t __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
   if (!env || env->me_signature != MDBX_ME_SIGNATURE || !env->me_maxkey_limit)
     return -MDBX_EINVAL;
   return env->me_maxkey_limit;
@@ -4934,18 +4934,6 @@ int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
 
 #define mdbx_maxgc_ov1page(pagesize)                                           \
   (((pagesize)-PAGEHDRSZ) / sizeof(pgno_t) - 1)
-
-int mdbx_get_maxkeysize(size_t pagesize) {
-  if (pagesize == 0)
-    pagesize = mdbx_syspagesize();
-
-  intptr_t nodemax = mdbx_nodemax(pagesize);
-  if (nodemax < 0)
-    return -MDBX_EINVAL;
-
-  intptr_t maxkey = mdbx_maxkey(nodemax);
-  return (maxkey > 0 && maxkey < INT_MAX) ? (int)maxkey : -MDBX_EINVAL;
-}
 
 static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(SSIZE_MAX > MAX_MAPSIZE);
@@ -12323,6 +12311,53 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
   }
 
   return MDBX_SUCCESS;
+}
+
+/*----------------------------------------------------------------------------*/
+
+__cold intptr_t mdbx_limits_keysize_max(intptr_t pagesize) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_syspagesize();
+  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+                    !mdbx_is_power2((size_t)pagesize)))
+    return -MDBX_EINVAL;
+
+  return mdbx_maxkey(mdbx_nodemax(pagesize));
+}
+
+__cold intptr_t mdbx_limits_pgsize_min(void) { return MIN_PAGESIZE; }
+
+__cold intptr_t mdbx_limits_pgsize_max(void) { return MAX_PAGESIZE; }
+
+__cold intptr_t mdbx_limits_dbsize_min(intptr_t pagesize) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_syspagesize();
+  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+                    !mdbx_is_power2((size_t)pagesize)))
+    return -MDBX_EINVAL;
+
+  return MIN_PAGENO * pagesize;
+}
+
+__cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_syspagesize();
+  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+                    !mdbx_is_power2((size_t)pagesize)))
+    return -MDBX_EINVAL;
+
+  const intptr_t limit = MAX_PAGENO * pagesize;
+  return ((size_t)limit < MAX_MAPSIZE) ? limit : MAX_PAGESIZE;
+}
+
+__cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_syspagesize();
+  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+                    !mdbx_is_power2((size_t)pagesize)))
+    return -MDBX_EINVAL;
+
+  return pagesize * (MDBX_LIST_MAX - 1);
 }
 
 /*----------------------------------------------------------------------------*/
