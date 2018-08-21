@@ -18,13 +18,13 @@ function bits2list {
 	join , "${list[@]}"
 }
 
-for nops in {1..7}; do
+for nops in {7..1}; do
 	for ((wbatch=nops; wbatch > 0; --wbatch)); do
 		for ((bits=2**${#options[@]}; --bits >= 0; )); do
 			echo "=================================== $(date)"
 			rm -f ${TESTDB_PREFIX}*
 			echo --nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits)
-			./mdbx_test --pathname=${TESTDB_PREFIX} --size=8G --keylen.min=1 --keylen.max=250 --datalen.min=1 --datalen.max=500 \
+			./mdbx_test --pathname=${TESTDB_PREFIX} --pagesize=min --size=8G --keylen.min=1 --keylen.max=250 --datalen.min=1 --datalen.max=1500 \
 				--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
 				--keygen.seed=$(date +%N) --hill | bzip2 -c > ${TESTDB_PREFIX}.log.bz2
 			./mdbx_chk -nvv ${TESTDB_PREFIX} | tee ${TESTDB_PREFIX}-chk.log
