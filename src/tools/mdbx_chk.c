@@ -343,9 +343,13 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     if (number < 1 || number > MDBX_LIST_MAX)
       problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
                   number);
-    else if ((number + 1) * sizeof(pgno_t) != data->iov_len)
-      problem_add("entry", record_number, "mismatch idl length",
-                  "%" PRIuSIZE " != %" PRIuSIZE "",
+    else if ((number + 1) * sizeof(pgno_t) > data->iov_len)
+      problem_add("entry", record_number, "trimmed idl",
+                  "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
+                  (number + 1) * sizeof(pgno_t), data->iov_len);
+    else if ((number + 1) * sizeof(pgno_t) < data->iov_len)
+      problem_add("entry", record_number, "extra idl space",
+                  "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
                   (number + 1) * sizeof(pgno_t), data->iov_len);
     else {
       freedb_pages += number;
