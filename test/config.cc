@@ -357,8 +357,11 @@ void dump(const char *title) {
                                               : i->params.pathname_log.c_str());
     }
 
-    log_info("database: %s, size %" PRIu64 "\n", i->params.pathname_db.c_str(),
-             i->params.size);
+    log_info(
+        "database: %s, size %" PRIu64 "[%" PRIi64 "..%" PRIi64 ", %i %i, %i]\n",
+        i->params.pathname_db.c_str(), i->params.size_now, i->params.size_lower,
+        i->params.size_upper, i->params.shrink_threshold, i->params.growth_step,
+        i->params.pagesize);
 
     dump_verbs("mode", i->params.mode_flags, mode_bits);
     dump_verbs("table", i->params.table_flags, table_bits);
