@@ -149,10 +149,10 @@ void testcase::db_prepare() {
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_set_oomfunc()", rc);
 
-  rc = mdbx_env_set_geometry(env, config.params.size_lower,
-                             config.params.size_now, config.params.size_upper,
-                             config.params.shrink_threshold,
-                             config.params.growth_step, config.params.pagesize);
+  rc = mdbx_env_set_geometry(
+      env, config.params.size_lower, config.params.size_now,
+      config.params.size_upper, config.params.growth_step,
+      config.params.shrink_threshold, config.params.pagesize);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_set_mapsize()", rc);
 
