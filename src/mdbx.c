@@ -4991,7 +4991,7 @@ fail:
   return rc;
 }
 
-intptr_t __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
+int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
   if (!env || env->me_signature != MDBX_ME_SIGNATURE || !env->me_maxkey_limit)
     return -MDBX_EINVAL;
   return env->me_maxkey_limit;

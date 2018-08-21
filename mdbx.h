@@ -918,7 +918,7 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
  * [in] env  An environment handle returned by mdbx_env_create()
  *
  * Returns The maximum size of a key we can write. */
-LIBMDBX_API intptr_t mdbx_env_get_maxkeysize(MDBX_env *env);
+LIBMDBX_API int mdbx_env_get_maxkeysize(MDBX_env *env);
 
 /* Set application information associated with the MDBX_env.
  *
