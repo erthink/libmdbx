@@ -12388,21 +12388,23 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 __cold intptr_t mdbx_limits_keysize_max(intptr_t pagesize) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_syspagesize();
-  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+  else if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+                    pagesize > (intptr_t)MAX_PAGESIZE ||
                     !mdbx_is_power2((size_t)pagesize)))
     return -MDBX_EINVAL;
 
   return mdbx_maxkey(mdbx_nodemax(pagesize));
 }
 
-__cold intptr_t mdbx_limits_pgsize_min(void) { return MIN_PAGESIZE; }
+__cold int mdbx_limits_pgsize_min(void) { return MIN_PAGESIZE; }
 
-__cold intptr_t mdbx_limits_pgsize_max(void) { return MAX_PAGESIZE; }
+__cold int mdbx_limits_pgsize_max(void) { return MAX_PAGESIZE; }
 
 __cold intptr_t mdbx_limits_dbsize_min(intptr_t pagesize) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_syspagesize();
-  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+  else if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+                    pagesize > (intptr_t)MAX_PAGESIZE ||
                     !mdbx_is_power2((size_t)pagesize)))
     return -MDBX_EINVAL;
 
@@ -12412,18 +12414,21 @@ __cold intptr_t mdbx_limits_dbsize_min(intptr_t pagesize) {
 __cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_syspagesize();
-  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+  else if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+                    pagesize > (intptr_t)MAX_PAGESIZE ||
                     !mdbx_is_power2((size_t)pagesize)))
     return -MDBX_EINVAL;
 
-  const intptr_t limit = MAX_PAGENO * pagesize;
-  return ((size_t)limit < MAX_MAPSIZE) ? limit : MAX_PAGESIZE;
+  const uint64_t limit = MAX_PAGENO * (uint64_t)pagesize;
+  return (limit < (intptr_t)MAX_MAPSIZE) ? (intptr_t)limit
+                                         : (intptr_t)MAX_PAGESIZE;
 }
 
 __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_syspagesize();
-  else if (unlikely(pagesize < MIN_PAGESIZE || pagesize > MAX_PAGESIZE ||
+  else if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+                    pagesize > (intptr_t)MAX_PAGESIZE ||
                     !mdbx_is_power2((size_t)pagesize)))
     return -MDBX_EINVAL;
 
