@@ -216,12 +216,12 @@ struct actor_params_pod {
 
   unsigned mode_flags;
   unsigned table_flags;
-  int64_t size_lower;
-  int64_t size_now;
-  int64_t size_upper;
-  int32_t shrink_threshold;
-  int32_t growth_step;
-  int32_t pagesize;
+  intptr_t size_lower;
+  intptr_t size_now;
+  intptr_t size_upper;
+  int shrink_threshold;
+  int growth_step;
+  int pagesize;
 
   unsigned test_duration;
   unsigned test_nops;

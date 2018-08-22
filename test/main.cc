@@ -173,15 +173,17 @@ int main(int argc, char *const argv[]) {
                              mdbx_limits_dbsize_min(params.pagesize),
                              mdbx_limits_dbsize_max(params.pagesize)))
       continue;
-    if (config::parse_option(argc, argv, narg, "shrink-threshold",
-                             params.shrink_threshold, 0,
-                             mdbx_limits_dbsize_max(params.pagesize) -
-                                 mdbx_limits_dbsize_min(params.pagesize)))
+    if (config::parse_option(
+            argc, argv, narg, "shrink-threshold", params.shrink_threshold, 0,
+            (int)std::min((intptr_t)INT_MAX,
+                          mdbx_limits_dbsize_max(params.pagesize) -
+                              mdbx_limits_dbsize_min(params.pagesize))))
       continue;
-    if (config::parse_option(argc, argv, narg, "growth-step",
-                             params.growth_step, 0,
-                             mdbx_limits_dbsize_max(params.pagesize) -
-                                 mdbx_limits_dbsize_min(params.pagesize)))
+    if (config::parse_option(
+            argc, argv, narg, "growth-step", params.growth_step, 0,
+            (int)std::min((intptr_t)INT_MAX,
+                          mdbx_limits_dbsize_max(params.pagesize) -
+                              mdbx_limits_dbsize_min(params.pagesize))))
       continue;
 
     if (config::parse_option(argc, argv, narg, "keygen.width",

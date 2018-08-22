@@ -232,7 +232,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   int64_t &value, const int64_t minval, const int64_t maxval,
                   const int64_t default_value) {
-  uint64_t proxy = (size_t)value;
+  uint64_t proxy = (uint64_t)value;
   if (parse_option(argc, argv, narg, option, proxy, config::binary,
                    (uint64_t)minval, (uint64_t)maxval,
                    (uint64_t)default_value)) {
@@ -245,7 +245,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   int32_t &value, const int32_t minval, const int32_t maxval,
                   const int32_t default_value) {
-  uint64_t proxy = (size_t)value;
+  uint64_t proxy = (uint64_t)value;
   if (parse_option(argc, argv, narg, option, proxy, config::binary,
                    (uint64_t)minval, (uint64_t)maxval,
                    (uint64_t)default_value)) {
@@ -357,11 +357,12 @@ void dump(const char *title) {
                                               : i->params.pathname_log.c_str());
     }
 
-    log_info(
-        "database: %s, size %" PRIu64 "[%" PRIi64 "..%" PRIi64 ", %i %i, %i]\n",
-        i->params.pathname_db.c_str(), i->params.size_now, i->params.size_lower,
-        i->params.size_upper, i->params.shrink_threshold, i->params.growth_step,
-        i->params.pagesize);
+    log_info("database: %s, size %" PRIuPTR "[%" PRIiPTR "..%" PRIiPTR
+             ", %i %i, %i]\n",
+             i->params.pathname_db.c_str(), i->params.size_now,
+             i->params.size_lower, i->params.size_upper,
+             i->params.shrink_threshold, i->params.growth_step,
+             i->params.pagesize);
 
     dump_verbs("mode", i->params.mode_flags, mode_bits);
     dump_verbs("table", i->params.table_flags, table_bits);
