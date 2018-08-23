@@ -4365,6 +4365,8 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
 
     unsigned retryleft = 42;
     while (1) {
+      mdbx_trace("reading meta[%d]: offset %u, bytes %u, retry-left %u",
+                 meta_number, offset, (unsigned)sizeof(page), retryleft);
       int err = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
       if (err != MDBX_SUCCESS) {
         mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page),
@@ -4386,9 +4388,12 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       mdbx_info("meta[%u] was updated, re-read it", meta_number);
     }
 
-    if (!retryleft) {
-      mdbx_error("meta[%u] is too volatile, skip it", meta_number);
-      continue;
+    if (page.mp_meta.mm_magic_and_version != MDBX_DATA_MAGIC) {
+      mdbx_error("meta[%u] has invalid magic/version %" PRIx64, meta_number,
+                 page.mp_meta.mm_magic_and_version);
+      return ((page.mp_meta.mm_magic_and_version >> 8) != MDBX_MAGIC)
+                 ? MDBX_INVALID
+                 : MDBX_VERSION_MISMATCH;
     }
 
     if (page.mp_pgno != meta_number) {
@@ -4397,17 +4402,31 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       return MDBX_INVALID;
     }
 
-    if (!F_ISSET(page.mp_flags, P_META)) {
+    if (page.mp_flags != P_META) {
       mdbx_error("page #%u not a meta-page", meta_number);
       return MDBX_INVALID;
     }
 
-    if (page.mp_meta.mm_magic_and_version != MDBX_DATA_MAGIC) {
-      mdbx_error("meta[%u] has invalid magic/version %" PRIx64, meta_number,
-                 page.mp_meta.mm_magic_and_version);
-      return ((page.mp_meta.mm_magic_and_version >> 8) != MDBX_MAGIC)
-                 ? MDBX_INVALID
-                 : MDBX_VERSION_MISMATCH;
+    /* LY: check pagesize */
+    if (!mdbx_is_power2(page.mp_meta.mm_psize) ||
+        page.mp_meta.mm_psize < MIN_PAGESIZE ||
+        page.mp_meta.mm_psize > MAX_PAGESIZE) {
+      mdbx_notice("meta[%u] has invalid pagesize (%u), skip it", meta_number,
+                  page.mp_meta.mm_psize);
+      rc = mdbx_is_power2(page.mp_meta.mm_psize) ? MDBX_VERSION_MISMATCH
+                                                 : MDBX_INVALID;
+      continue;
+    }
+
+    if (meta_number == 0 && guess_pagesize != page.mp_meta.mm_psize) {
+      meta->mm_psize = page.mp_meta.mm_psize;
+      mdbx_info("meta[%u] took pagesize %u", meta_number,
+                page.mp_meta.mm_psize);
+    }
+
+    if (!retryleft) {
+      mdbx_error("meta[%u] is too volatile, skip it", meta_number);
+      continue;
     }
 
     if (page.mp_meta.mm_txnid_a != page.mp_meta.mm_txnid_b) {
@@ -4422,16 +4441,6 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                   " != 0x%" PRIx64 "), skip it",
                   meta_number, page.mp_meta.mm_datasync_sign,
                   mdbx_meta_sign(&page.mp_meta));
-      continue;
-    }
-
-    /* LY: check pagesize */
-    if (!mdbx_is_power2(page.mp_meta.mm_psize) ||
-        page.mp_meta.mm_psize < MIN_PAGESIZE ||
-        page.mp_meta.mm_psize > MAX_PAGESIZE) {
-      mdbx_notice("meta[%u] has invalid pagesize (%u), skip it", meta_number,
-                  page.mp_meta.mm_psize);
-      rc = MDBX_VERSION_MISMATCH;
       continue;
     }
 
