@@ -4806,9 +4806,11 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       target->mm_datasync_sign = MDBX_DATASIGN_WEAK;
       mdbx_meta_update_begin(env, target, pending->mm_txnid_a);
 #ifndef NDEBUG
-      /* debug: provoke failure to catch a violators */
-      memset(target->mm_dbs, 0xCC,
-             sizeof(target->mm_dbs) + sizeof(target->mm_canary));
+      /* debug: provoke failure to catch a violators, but don't touch mm_psize
+       * and mm_flags to allow readers catch actual pagesize. */
+      uint8_t *provoke_begin = (uint8_t *)&target->mm_dbs[FREE_DBI].md_root;
+      uint8_t *provoke_end = (uint8_t *)&target->mm_datasync_sign;
+      memset(provoke_begin, 0xCC, provoke_end - provoke_begin);
       mdbx_jitter4testing(false);
 #endif
 
