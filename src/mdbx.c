@@ -7264,9 +7264,11 @@ set1:
       MDBX_val olddata;
       if (unlikely((rc = mdbx_node_read(mc, leaf, &olddata)) != MDBX_SUCCESS))
         return rc;
+      if (unlikely(mc->mc_dbx->md_dcmp == NULL))
+        return MDBX_EINVAL;
       rc = mc->mc_dbx->md_dcmp(data, &olddata);
       if (rc) {
-        if (op == MDBX_GET_BOTH || rc > 0)
+        if (op != MDBX_GET_BOTH_RANGE || rc > 0)
           return MDBX_NOTFOUND;
         rc = 0;
       }
