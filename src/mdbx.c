@@ -10768,7 +10768,7 @@ static MDBX_cmp_func *mdbx_default_keycmp(unsigned flags) {
 
 static MDBX_cmp_func *mdbx_default_datacmp(unsigned flags) {
   return !(flags & MDBX_DUPSORT)
-             ? 0
+             ? mdbx_cmp_memn
              : ((flags & MDBX_INTEGERDUP)
                     ? mdbx_cmp_int_ua
                     : ((flags & MDBX_REVERSEDUP) ? mdbx_cmp_memnr
