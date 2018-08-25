@@ -902,6 +902,17 @@ static unsigned __hot mdbx_mid2l_search(MDBX_ID2L pnl, pgno_t id) {
   return cursor;
 }
 
+static int mdbx_mid2l_cmp(const void *pa, const void *pb) {
+  const MDBX_ID2 a = *(MDBX_ID2L)pa;
+  const MDBX_ID2 b = *(MDBX_ID2L)pb;
+  return mdbx_cmp2int(a.mid, b.mid);
+}
+
+static void mdbx_mid2l_sort(MDBX_ID2L ptr) {
+  /* LY: temporary */
+  qsort(ptr + 1, (size_t)ptr->mid, sizeof(*ptr), mdbx_mid2l_cmp);
+}
+
 /* Insert an ID2 into a ID2L.
  * [in,out] pnl The ID2L to insert into.
  * [in] id The ID2 to insert.
@@ -3659,6 +3670,7 @@ retry:
       }
 
       MDBX_ID2L dl = txn->mt_rw_dirtylist;
+      mdbx_mid2l_sort(dl);
       for (MDBX_page *mp = txn->mt_loose_pages; mp;) {
         mdbx_tassert(txn, mp->mp_pgno < txn->mt_next_pgno);
         mdbx_ensure(env, mp->mp_pgno >= NUM_METAS);
