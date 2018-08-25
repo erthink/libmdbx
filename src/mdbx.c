@@ -3662,25 +3662,41 @@ retry:
         mdbx_pnl_xmerge(env->me_reclaimed_pglist, loose);
       }
 
+      // filter-out list of dirty-pages from loose-pages
       MDBX_ID2L dl = txn->mt_rw_dirtylist;
       mdbx_mid2l_sort(dl);
+      unsigned left = dl->length;
       for (MDBX_page *mp = txn->mt_loose_pages; mp;) {
         mdbx_tassert(txn, mp->mp_pgno < txn->mt_next_pgno);
         mdbx_ensure(env, mp->mp_pgno >= NUM_METAS);
 
-        unsigned s, d;
-        for (s = d = 0; ++s <= dl[0].length;)
-          if (dl[s].pgno != mp->mp_pgno)
-            dl[++d] = dl[s];
-
-        dl[0].length -= 1;
-        mdbx_tassert(txn, dl[0].length == d);
+        if (left > 0) {
+          const unsigned i = mdbx_mid2l_search(dl, mp->mp_pgno);
+          if (i <= dl->length && dl[i].pgno == mp->mp_pgno) {
+            mdbx_tassert(txn, i > 0 && dl[i].ptr != dl);
+            dl[i].ptr = dl /* mark for deletion */;
+          }
+          left -= 1;
+        }
 
         MDBX_page *dp = mp;
         mp = NEXT_LOOSE_PAGE(mp);
         if ((env->me_flags & MDBX_WRITEMAP) == 0)
           mdbx_dpage_free(env, dp);
       }
+
+      if (left > 0) {
+        MDBX_ID2L r, w, end = dl + dl->length;
+        for (r = w = dl + 1; r <= end; r++) {
+          if (r->ptr != dl) {
+            if (r != w)
+              *w = *r;
+            ++w;
+          }
+        }
+        mdbx_tassert(txn, w - dl == (int)left + 1);
+      }
+      dl->length = left;
 
       txn->mt_loose_pages = NULL;
       txn->mt_loose_count = 0;

@@ -504,7 +504,7 @@ typedef txnid_t *MDBX_TXL;
 typedef union MDBX_ID2 {
   struct {
     pgno_t pgno;
-    MDBX_page *ptr;
+    void *ptr;
   };
   unsigned limit, length;
 } MDBX_ID2;
