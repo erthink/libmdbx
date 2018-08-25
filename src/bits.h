@@ -501,9 +501,12 @@ typedef pgno_t *MDBX_PNL;
 typedef txnid_t *MDBX_TXL;
 
 /* An ID2 is an ID/pointer pair. */
-typedef struct MDBX_ID2 {
-  pgno_t mid; /* The ID */
-  void *mptr; /* The pointer */
+typedef union MDBX_ID2 {
+  struct {
+    pgno_t pgno;
+    MDBX_page *ptr;
+  };
+  unsigned limit, length;
 } MDBX_ID2;
 
 /* An ID2L is an ID2 List, a sorted array of ID2s.
