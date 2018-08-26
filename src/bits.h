@@ -670,6 +670,7 @@ struct MDBX_cursor {
 #define C_DEL 0x08                /* last op was a cursor_del */
 #define C_UNTRACK 0x40            /* Un-track cursor when closing */
 #define C_RECLAIMING 0x80         /* FreeDB lookup is prohibited */
+#define C_GCFREEZE 0x100          /* me_reclaimed_pglist must not be updated */
   unsigned mc_flags;              /* see mdbx_cursor */
   MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
   indx_t mc_ki[CURSOR_STACK];     /* stack of page indices */
@@ -1274,3 +1275,6 @@ static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {
 static __inline pgno_t pgno_align2os_pgno(const MDBX_env *env, pgno_t pgno) {
   return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
 }
+
+/* Do not spill pages to disk if txn is getting full, may fail instead */
+#define MDBX_NOSPILL 0x8000

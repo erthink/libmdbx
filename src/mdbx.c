@@ -2344,6 +2344,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       }
 
       /* Append PNL from FreeDB record to me_reclaimed_pglist */
+      mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
       pgno_t *re_pnl = (pgno_t *)data.iov_base;
       mdbx_tassert(txn, re_pnl[0] == 0 ||
                             data.iov_len == (re_pnl[0] + 1) * sizeof(pgno_t));
@@ -2552,6 +2553,7 @@ done:
   }
 
   if (repg_pos) {
+    mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
     mdbx_tassert(txn, pgno < txn->mt_next_pgno);
     mdbx_tassert(txn, pgno == repg_list[repg_pos]);
     /* Cutoff allocated pages from me_reclaimed_pglist */
@@ -4000,9 +4002,10 @@ retry:
       pgno_t save = end[0];
       end[0] = (pgno_t)chunk;
       mdbx_tassert(txn, mdbx_pnl_check(end, false));
-      mc.mc_flags |= C_RECLAIMING;
-      rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
-      mc.mc_flags ^= C_RECLAIMING;
+      mc.mc_flags |= C_RECLAIMING | C_GCFREEZE;
+      rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_NOSPILL);
+      mdbx_tassert(txn, end[0] == (pgno_t)chunk);
+      mc.mc_flags ^= C_RECLAIMING | C_GCFREEZE;
       mdbx_tassert(txn, mdbx_pnl_check(end, false));
       mdbx_tassert(
           txn, cleaned_gc_slot ==
@@ -6744,6 +6747,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
   pgno_t pn = pg << 1;
   int rc;
 
+  mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
   mdbx_debug("free ov page %" PRIaPGNO " (%u)", pg, ovpages);
   /* If the page is dirty or on the spill list we just acquired it,
    * so we should give it back to our current free list, if any.
@@ -7581,6 +7585,7 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
 
   if (mc->mc_dbi >= CORE_DBS &&
       (*mc->mc_dbflag & (DB_DIRTY | DB_DUPDATA)) == 0) {
+    mdbx_cassert(mc, (mc->mc_flags & C_RECLAIMING) == 0);
     /* Touch DB record of named DB */
     MDBX_cursor mc2;
     MDBX_xcursor mcx;
@@ -7603,9 +7608,6 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
   }
   return rc;
 }
-
-/* Do not spill pages to disk if txn is getting full, may fail instead */
-#define MDBX_NOSPILL 0x8000
 
 int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                     unsigned flags) {
@@ -7987,8 +7989,11 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       ovpages = omp->mp_pages;
 
       /* Is the ov page large enough? */
-      if (ovpages ==
-          /* LY: add configuragle theshold to keep reserve space */ dpages) {
+      if (unlikely(mc->mc_flags & C_GCFREEZE)
+              ? ovpages >= dpages
+              : ovpages ==
+                    /* LY: add configurable threshold to keep reserve space */
+                    dpages) {
         if (!(omp->mp_flags & P_DIRTY) &&
             (level || (env->me_flags & MDBX_WRITEMAP))) {
           rc = mdbx_page_unspill(mc->mc_txn, omp, &omp);
