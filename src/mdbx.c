@@ -2735,8 +2735,10 @@ static int mdbx_page_touch(MDBX_cursor *mc) {
       goto fail;
     }
     rc = mdbx_mid2l_insert(dl, pgno, np);
-    if (unlikely(rc))
+    if (unlikely(rc)) {
+      mdbx_dpage_free(txn->mt_env, np);
       goto fail;
+    }
   } else {
     return MDBX_SUCCESS;
   }
@@ -8015,6 +8017,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             rc2 = mdbx_mid2l_insert(mc->mc_txn->mt_rw_dirtylist, pg, np);
             if (unlikely(rc2 != MDBX_SUCCESS)) {
               rc = rc2;
+              mdbx_dpage_free(env, np);
               goto fail;
             }
 
