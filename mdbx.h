@@ -488,7 +488,7 @@ typedef struct MDBX_envinfo {
     uint64_t lower;   /* lower limit for datafile size */
     uint64_t upper;   /* upper limit for datafile size */
     uint64_t current; /* current datafile size */
-    uint64_t shrink;  /* shrink theshold for datafile */
+    uint64_t shrink;  /* shrink threshold for datafile */
     uint64_t grow;    /* growth step for datafile */
   } mi_geo;
   uint64_t mi_mapsize;             /* Size of the data memory map */
