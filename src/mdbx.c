@@ -7154,10 +7154,9 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       MDBX_GET_KEY2(leaf, nodekey);
     }
     rc = mc->mc_dbx->md_cmp(key, &nodekey);
-    if (rc == 0) {
+    if (unlikely(rc == 0)) {
       /* Probably happens rarely, but first node on the page
-       * was the one we wanted.
-       */
+       * was the one we wanted. */
       mc->mc_ki[mc->mc_top] = 0;
       if (exactp)
         *exactp = 1;
