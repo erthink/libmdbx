@@ -263,8 +263,8 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
     if (header_bytes < (int)sizeof(long) ||
         (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
       problem_add("page", pgno, "illegal header-length",
-                  "%" PRIuPTR " < %i < %" PRIuPTR "", sizeof(long),
-                  header_bytes, envstat.ms_psize - sizeof(long));
+                  "%" PRIuPTR " < %i < %" PRIuPTR, sizeof(long), header_bytes,
+                  envstat.ms_psize - sizeof(long));
     if (payload_bytes < 1) {
       if (nentries > 1) {
         problem_add("page", pgno, "zero size-of-entry",
@@ -294,8 +294,8 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
     if (pgnumber) {
       do {
         if (pgno >= lastpgno)
-          problem_add("page", pgno, "wrong page-no",
-                      "%" PRIu64 " > %" PRIu64 "", pgno, lastpgno);
+          problem_add("page", pgno, "wrong page-no", "%" PRIu64 " > %" PRIu64,
+                      pgno, lastpgno);
         else if (walk.pagemap[pgno])
           problem_add("page", pgno, "already used", "in %s",
                       walk.dbi_names[walk.pagemap[pgno]]);
@@ -331,17 +331,17 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
 
   if (key->iov_len != sizeof(txnid_t))
     problem_add("entry", record_number, "wrong txn-id size",
-                "key-size %" PRIiPTR "", key->iov_len);
+                "key-size %" PRIiPTR, key->iov_len);
   else if (txnid < 1 || txnid > envinfo.mi_recent_txnid)
-    problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN "", txnid);
+    problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
 
   if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
-    problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR "",
+    problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR,
                 data->iov_len);
   else {
     const pgno_t number = *iptr++;
     if (number < 1 || number > MDBX_LIST_MAX)
-      problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR "",
+      problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR,
                   number);
     else if ((number + 1) * sizeof(pgno_t) > data->iov_len)
       problem_add("entry", record_number, "trimmed idl",
@@ -363,12 +363,12 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
         const pgno_t pg = iptr[i];
         if (pg < NUM_METAS || pg > envinfo.mi_last_pgno)
           problem_add("entry", record_number, "wrong idl entry",
-                      "%u < %" PRIaPGNO " < %" PRIu64 "", NUM_METAS, pg,
+                      "%u < %" PRIaPGNO " < %" PRIu64, NUM_METAS, pg,
                       envinfo.mi_last_pgno);
         else if (MDBX_PNL_DISORDERED(prev, pg)) {
           bad = " [bad sequence]";
           problem_add("entry", record_number, "bad sequence",
-                      "%" PRIaPGNO " <> %" PRIaPGNO "", prev, pg);
+                      "%" PRIaPGNO " <> %" PRIaPGNO, prev, pg);
         }
         prev = pg;
         while (i + span < number &&
@@ -535,7 +535,7 @@ static int process_db(MDBX_dbi dbi, char *name, visitor *handler, bool silent) {
     if (prev_key.iov_base) {
       if ((flags & MDBX_DUPFIXED) && prev_data.iov_len != data.iov_len) {
         problem_add("entry", record_count, "different data length",
-                    "%" PRIuPTR " != %" PRIuPTR "", prev_data.iov_len,
+                    "%" PRIuPTR " != %" PRIuPTR, prev_data.iov_len,
                     data.iov_len);
       }
 
@@ -581,7 +581,7 @@ static int process_db(MDBX_dbi dbi, char *name, visitor *handler, bool silent) {
 
   if (record_count != ms.ms_entries)
     problem_add("entry", record_count, "differentent number of entries",
-                "%" PRIuPTR " != %" PRIuPTR "", record_count, ms.ms_entries);
+                "%" PRIuPTR " != %" PRIuPTR, record_count, ms.ms_entries);
 bailout:
   problems_count = problems_pop(saved_list);
   if (!silent && verbose) {
