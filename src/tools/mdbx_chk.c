@@ -61,12 +61,18 @@ static void signal_handler(int sig) {
 #define EXIT_FAILURE_CHECK_MAJOR (EXIT_FAILURE + 1)
 #define EXIT_FAILURE_CHECK_MINOR EXIT_FAILURE
 
+typedef struct {
+  const char *name;
+  struct {
+    uint64_t total;
+    uint64_t empty;
+  } pages;
+  uint64_t payload_bytes;
+  uint64_t lost_bytes;
+} walk_dbi_t;
+
 struct {
-  const char *dbi_names[MAX_DBI];
-  uint64_t dbi_pages[MAX_DBI];
-  uint64_t dbi_empty_pages[MAX_DBI];
-  uint64_t dbi_payload_bytes[MAX_DBI];
-  uint64_t dbi_lost_bytes[MAX_DBI];
+  walk_dbi_t dbi[MAX_DBI];
   short *pagemap;
   uint64_t total_payload_bytes;
   uint64_t pgcount;
@@ -130,9 +136,9 @@ static void pagemap_cleanup(void) {
   int i;
 
   for (i = 1; i < MAX_DBI; ++i) {
-    if (walk.dbi_names[i]) {
-      free((void *)walk.dbi_names[i]);
-      walk.dbi_names[i] = NULL;
+    if (walk.dbi[i].name) {
+      free((void *)walk.dbi[i].name);
+      walk.dbi[i].name = NULL;
     }
   }
 
@@ -140,28 +146,27 @@ static void pagemap_cleanup(void) {
   walk.pagemap = NULL;
 }
 
-static int pagemap_lookup_dbi(const char *dbi) {
-  static int last;
-  int i;
+static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name) {
+  static walk_dbi_t *last;
 
-  if (last > 0 && strcmp(walk.dbi_names[last], dbi) == 0)
+  if (last && strcmp(last->name, dbi_name) == 0)
     return last;
 
-  for (i = 1; walk.dbi_names[i] && last < MAX_DBI; ++i)
-    if (strcmp(walk.dbi_names[i], dbi) == 0)
-      return last = i;
+  walk_dbi_t *dbi = walk.dbi + 1;
+  while (dbi->name) {
+    if (strcmp(dbi->name, dbi_name) == 0)
+      return last = dbi;
+    if (++dbi == walk.dbi + MAX_DBI)
+      return NULL;
+  }
 
-  if (i == MAX_DBI)
-    return -1;
-
-  walk.dbi_names[i] = strdup(dbi);
-
+  dbi->name = strdup(dbi_name);
   if (verbose > 1) {
-    print(" - found '%s' area\n", dbi);
+    print(" - found '%s' area\n", dbi_name);
     fflush(NULL);
   }
 
-  return last = i;
+  return last = dbi;
 }
 
 static void
@@ -236,7 +241,7 @@ static uint64_t problems_pop(struct problem *list) {
 }
 
 static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
-                     const char *dbi, const char *type, size_t nentries,
+                     const char *dbi_name, const char *type, size_t nentries,
                      size_t payload_bytes, size_t header_bytes,
                      size_t unused_bytes) {
   (void)ctx;
@@ -244,18 +249,18 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
   if (type) {
     uint64_t page_bytes = payload_bytes + header_bytes + unused_bytes;
     size_t page_size = (size_t)pgnumber * envstat.ms_psize;
-    int index = pagemap_lookup_dbi(dbi);
-    if (index < 0)
+    walk_dbi_t *dbi = pagemap_lookup_dbi(dbi_name);
+    if (!dbi)
       return MDBX_ENOMEM;
 
-    if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi) == 0)) {
+    if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi_name) == 0)) {
       if (pgnumber == 1)
         print("     %s-page %" PRIu64, type, pgno);
       else
         print("     %s-span %" PRIu64 "[%u]", type, pgno, pgnumber);
       print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR
             ", unused %" PRIiPTR "\n",
-            dbi, header_bytes, payload_bytes, unused_bytes);
+            dbi_name, header_bytes, payload_bytes, unused_bytes);
     }
 
     walk.pgcount += pgnumber;
@@ -282,7 +287,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
         problem_add("page", pgno, "empty",
                     "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
                     payload_bytes, nentries);
-        walk.dbi_empty_pages[index] += 1;
+        dbi->pages.empty += 1;
       }
     }
 
@@ -293,9 +298,9 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
                   page_size, page_bytes, header_bytes, payload_bytes,
                   unused_bytes);
       if (page_size > page_bytes)
-        walk.dbi_lost_bytes[index] += page_size - page_bytes;
+        dbi->lost_bytes += page_size - page_bytes;
     } else {
-      walk.dbi_payload_bytes[index] += payload_bytes + header_bytes;
+      dbi->payload_bytes += payload_bytes + header_bytes;
       walk.total_payload_bytes += payload_bytes + header_bytes;
     }
 
@@ -306,10 +311,10 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
                       pgno, lastpgno);
         else if (walk.pagemap[pgno])
           problem_add("page", pgno, "already used", "in %s",
-                      walk.dbi_names[walk.pagemap[pgno]]);
+                      walk.dbi[walk.pagemap[pgno]].name);
         else {
-          walk.pagemap[pgno] = (short)index;
-          walk.dbi_pages[index] += 1;
+          walk.pagemap[pgno] = (short)(dbi - walk.dbi);
+          dbi->pages.total += 1;
         }
         ++pgno;
       } while (--pgnumber);
@@ -769,7 +774,7 @@ static void print_size(const char *prefix, const uint64_t value,
 }
 
 int main(int argc, char *argv[]) {
-  int i, rc;
+  int rc;
   char *prog = argv[0];
   char *envname;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
@@ -789,14 +794,14 @@ int main(int argc, char *argv[]) {
   }
 #endif
 
-  walk.dbi_names[0] = "@gc";
+  walk.dbi[FREE_DBI].name = "@gc";
   atexit(pagemap_cleanup);
 
   if (argc < 2) {
     usage(prog);
   }
 
-  while ((i = getopt(argc, argv, "Vvqnwcds:")) != EOF) {
+  for (int i; (i = getopt(argc, argv, "Vvqnwcds:")) != EOF;) {
     switch (i) {
     case 'V':
       printf("%s (%s, build %s)\n", mdbx_version.git.describe,
@@ -1012,24 +1017,25 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
 
-    uint64_t n;
-    for (n = 0; n < lastpgno; ++n)
+    for (uint64_t n = 0; n < lastpgno; ++n)
       if (!walk.pagemap[n])
-        walk.dbi_pages[0] += 1;
+        walk.dbi[FREE_DBI].pages.total += 1;
 
     empty_pages = lost_bytes = 0;
-    for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
-      empty_pages += walk.dbi_empty_pages[i];
-      lost_bytes += walk.dbi_lost_bytes[i];
+    for (walk_dbi_t *dbi = walk.dbi; ++dbi < walk.dbi + MAX_DBI && dbi->name;) {
+      empty_pages += dbi->pages.empty;
+      lost_bytes += dbi->lost_bytes;
     }
 
     if (verbose) {
       uint64_t total_page_bytes = walk.pgcount * envstat.ms_psize;
       print(" - dbi pages: %" PRIu64 " total", walk.pgcount);
       if (verbose > 1)
-        for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i)
-          print(", %s %" PRIu64 "", walk.dbi_names[i], walk.dbi_pages[i]);
-      print(", %s %" PRIu64 "\n", walk.dbi_names[0], walk.dbi_pages[0]);
+        for (walk_dbi_t *dbi = walk.dbi;
+             ++dbi < walk.dbi + MAX_DBI && dbi->name;)
+          print(", %s %" PRIu64, dbi->name, dbi->pages.total);
+      print(", %s %" PRIu64 "\n", walk.dbi[FREE_DBI].name,
+            walk.dbi[FREE_DBI].pages.total);
       if (verbose > 1) {
         print(" - space info: total %" PRIu64 " bytes, payload %" PRIu64
               " (%.1f%%), unused "
@@ -1039,19 +1045,19 @@ int main(int argc, char *argv[]) {
               total_page_bytes - walk.total_payload_bytes,
               (total_page_bytes - walk.total_payload_bytes) * 100.0 /
                   total_page_bytes);
-        for (i = 1; i < MAX_DBI && walk.dbi_names[i]; ++i) {
-          uint64_t dbi_bytes = walk.dbi_pages[i] * envstat.ms_psize;
+        for (walk_dbi_t *dbi = walk.dbi;
+             ++dbi < walk.dbi + MAX_DBI && dbi->name;) {
+          uint64_t dbi_bytes = dbi->pages.total * envstat.ms_psize;
           print("     %s: subtotal %" PRIu64 " bytes (%.1f%%),"
                 " payload %" PRIu64 " (%.1f%%), unused %" PRIu64 " (%.1f%%)",
-                walk.dbi_names[i], dbi_bytes,
-                dbi_bytes * 100.0 / total_page_bytes, walk.dbi_payload_bytes[i],
-                walk.dbi_payload_bytes[i] * 100.0 / dbi_bytes,
-                dbi_bytes - walk.dbi_payload_bytes[i],
-                (dbi_bytes - walk.dbi_payload_bytes[i]) * 100.0 / dbi_bytes);
-          if (walk.dbi_empty_pages[i])
-            print(", %" PRIu64 " empty pages", walk.dbi_empty_pages[i]);
-          if (walk.dbi_lost_bytes[i])
-            print(", %" PRIu64 " bytes lost", walk.dbi_lost_bytes[i]);
+                dbi->name, dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
+                dbi->payload_bytes, dbi->payload_bytes * 100.0 / dbi_bytes,
+                dbi_bytes - dbi->payload_bytes,
+                (dbi_bytes - dbi->payload_bytes) * 100.0 / dbi_bytes);
+          if (dbi->pages.empty)
+            print(", %" PRIu64 " empty pages", dbi->pages.empty);
+          if (dbi->lost_bytes)
+            print(", %" PRIu64 " bytes lost", dbi->lost_bytes);
           print("\n");
         }
       }
@@ -1109,9 +1115,9 @@ int main(int argc, char *argv[]) {
         error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
               walk.pgcount, lastpgno - freedb_pages);
       }
-      if (walk.dbi_pages[0] != freedb_pages) {
+      if (walk.dbi[FREE_DBI].pages.total != freedb_pages) {
         error("gc pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
-              walk.dbi_pages[0], freedb_pages);
+              walk.dbi[FREE_DBI].pages.total, freedb_pages);
       }
     } else if (verbose) {
       print(" - skip check used and gc pages (btree-traversal with "
