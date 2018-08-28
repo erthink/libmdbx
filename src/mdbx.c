@@ -7974,6 +7974,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         xdata.iov_base = &dummy;
         if ((rc = mdbx_page_alloc(mc, 1, &mp, MDBX_ALLOC_ALL)))
           return rc;
+        mc->mc_db->md_leaf_pages += 1;
         mdbx_cassert(mc, env->me_psize > olddata.iov_len);
         offset = env->me_psize - (unsigned)olddata.iov_len;
         flags |= F_DUPDATA | F_SUBDATA;
