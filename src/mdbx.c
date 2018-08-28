@@ -678,6 +678,7 @@ static unsigned __hot mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
  * [in,out] ppl Address of the PNL to shrink. */
 static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
   MDBX_PNL pl = *ppl - 1;
+  pl[1] = 0;
   if (unlikely(*pl > MDBX_LIST_MAX)) {
     /* shrink to MDBX_LIST_MAX */
     pl = realloc(pl, (MDBX_LIST_MAX + 2) * sizeof(pgno_t));
