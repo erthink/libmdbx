@@ -11945,7 +11945,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       const size_t over_unused = pgno2bytes(ctx->mw_txn->mt_env, op->mp_pages) -
                                  over_payload - over_header;
 
-      rc = ctx->mw_visitor(large_pgno, op->mp_pages, ctx->mw_user, dbi,
+      rc = ctx->mw_visitor(large_pgno, op->mp_pages, ctx->mw_user, deep, dbi,
                            pgno2bytes(ctx->mw_txn->mt_env, op->mp_pages),
                            MDBX_page_large, 1, over_payload, over_header,
                            over_unused);
@@ -12013,8 +12013,8 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
         }
       }
 
-      rc = ctx->mw_visitor(pgno, 0, ctx->mw_user, dbi, NODEDSZ(node), subtype,
-                           nsubkeys, subpayload_size, subheader_size,
+      rc = ctx->mw_visitor(pgno, 0, ctx->mw_user, deep + 1, dbi, NODEDSZ(node),
+                           subtype, nsubkeys, subpayload_size, subheader_size,
                            subunused_size + subalign_bytes);
       header_size += subheader_size;
       unused_size += subunused_size;
@@ -12030,7 +12030,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       return rc;
   }
 
-  return ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, dbi,
+  return ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, deep, dbi,
                          ctx->mw_txn->mt_env->me_psize, type, nkeys,
                          payload_size, header_size, unused_size + align_bytes);
 }
@@ -12052,16 +12052,17 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_visitor = visitor;
 
   int rc = visitor(
-      0, NUM_METAS, user, "meta", pgno2bytes(txn->mt_env, NUM_METAS),
+      0, NUM_METAS, user, -2, "@META", pgno2bytes(txn->mt_env, NUM_METAS),
       MDBX_page_meta, NUM_METAS, sizeof(MDBX_meta) * NUM_METAS,
       PAGEHDRSZ * NUM_METAS,
       (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) * NUM_METAS);
   if (!rc)
-    rc = mdbx_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0);
+    rc = mdbx_env_walk(&ctx, "@GC", txn->mt_dbs[FREE_DBI].md_root, -1);
   if (!rc)
-    rc = mdbx_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0);
+    rc = mdbx_env_walk(&ctx, "@MAIN", txn->mt_dbs[MAIN_DBI].md_root, 0);
   if (!rc)
-    rc = visitor(P_INVALID, 0, user, NULL, 0, MDBX_page_void, 0, 0, 0, 0);
+    rc = visitor(P_INVALID, 0, user, INT_MIN, NULL, 0, MDBX_page_void, 0, 0, 0,
+                 0);
   return rc;
 }
 

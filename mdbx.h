@@ -1660,7 +1660,7 @@ typedef enum {
 } MDBX_page_type_t;
 
 typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned number, void *ctx,
-                                const char *dbi, size_t page_size,
+                                int deep, const char *dbi, size_t page_size,
                                 MDBX_page_type_t type, size_t nentries,
                                 size_t payload_bytes, size_t header_bytes,
                                 size_t unused_bytes);
