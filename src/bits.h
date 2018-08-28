@@ -668,9 +668,9 @@ struct MDBX_cursor {
 #define C_EOF 0x02                /* No more data */
 #define C_SUB 0x04                /* Cursor is a sub-cursor */
 #define C_DEL 0x08                /* last op was a cursor_del */
-#define C_UNTRACK 0x40            /* Un-track cursor when closing */
-#define C_RECLAIMING 0x80         /* FreeDB lookup is prohibited */
-#define C_GCFREEZE 0x100          /* me_reclaimed_pglist must not be updated */
+#define C_UNTRACK 0x10            /* Un-track cursor when closing */
+#define C_RECLAIMING 0x20         /* FreeDB lookup is prohibited */
+#define C_GCFREEZE 0x40           /* me_reclaimed_pglist must not be updated */
   unsigned mc_flags;              /* see mdbx_cursor */
   MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
   indx_t mc_ki[CURSOR_STACK];     /* stack of page indices */
