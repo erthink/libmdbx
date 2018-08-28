@@ -241,84 +241,112 @@ static uint64_t problems_pop(struct problem *list) {
 }
 
 static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
-                     const char *dbi_name, const char *type, size_t nentries,
+                     const char *dbi_name, size_t page_size,
+                     MDBX_page_type_t pagetype, size_t nentries,
                      size_t payload_bytes, size_t header_bytes,
                      size_t unused_bytes) {
   (void)ctx;
+  if (pagetype == MDBX_page_void)
+    return MDBX_SUCCESS;
 
-  if (type) {
-    uint64_t page_bytes = payload_bytes + header_bytes + unused_bytes;
-    size_t page_size = (size_t)pgnumber * envstat.ms_psize;
-    walk_dbi_t *dbi = pagemap_lookup_dbi(dbi_name);
-    if (!dbi)
-      return MDBX_ENOMEM;
+  uint64_t page_bytes = payload_bytes + header_bytes + unused_bytes;
+  walk_dbi_t *dbi = pagemap_lookup_dbi(dbi_name);
+  if (!dbi)
+    return MDBX_ENOMEM;
 
-    if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi_name) == 0)) {
-      if (pgnumber == 1)
-        print("     %s-page %" PRIu64, type, pgno);
-      else
-        print("     %s-span %" PRIu64 "[%u]", type, pgno, pgnumber);
-      print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR
-            ", unused %" PRIiPTR "\n",
-            dbi_name, header_bytes, payload_bytes, unused_bytes);
-    }
+  walk.pgcount += pgnumber;
+  const char *pagetype_caption;
+  switch (pagetype) {
+  default:
+    problem_add("page", pgno, "unknown page-type", "%u", (unsigned)pagetype);
+    pagetype_caption = "unknown";
+    break;
+  case MDBX_page_meta:
+    pagetype_caption = "meta";
+    break;
+  case MDBX_page_large:
+    pagetype_caption = "large";
+    break;
+  case MDBX_page_branch:
+    pagetype_caption = "branch";
+    break;
+  case MDBX_page_leaf:
+    pagetype_caption = "leaf";
+    break;
+  case MDBX_page_dupfixed_leaf:
+    pagetype_caption = "leaf-dupfixed";
+    break;
+  case MDBX_subpage_leaf:
+    pagetype_caption = "subleaf-dupsort";
+    break;
+  case MDBX_subpage_dupfixed_leaf:
+    pagetype_caption = "subleaf-dupfixed";
+    break;
+  }
 
-    walk.pgcount += pgnumber;
+  if (verbose > 2 && (!only_subdb || strcmp(only_subdb, dbi_name) == 0)) {
+    if (pgnumber == 1)
+      print("     %s-page %" PRIu64, pagetype_caption, pgno);
+    else
+      print("     %s-span %" PRIu64 "[%u]", pagetype_caption, pgno, pgnumber);
+    print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR ", unused %" PRIiPTR
+          "\n",
+          dbi_name, header_bytes, payload_bytes, unused_bytes);
+  }
 
-    if (unused_bytes > page_size)
-      problem_add("page", pgno, "illegal unused-bytes",
-                  "%u < %" PRIuPTR " < %u", 0, unused_bytes, envstat.ms_psize);
+  if (unused_bytes > page_size)
+    problem_add("page", pgno, "illegal unused-bytes", "%u < %" PRIuPTR " < %u",
+                0, unused_bytes, envstat.ms_psize);
 
-    if (header_bytes < (int)sizeof(long) ||
-        (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
-      problem_add("page", pgno, "illegal header-length",
-                  "%" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR, sizeof(long),
-                  header_bytes, envstat.ms_psize - sizeof(long));
-    if (payload_bytes < 1) {
-      if (nentries > 1) {
-        problem_add("page", pgno, "zero size-of-entry",
-                    "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
-                    payload_bytes, nentries);
-        if ((size_t)header_bytes + unused_bytes < page_size) {
-          /* LY: hush a misuse error */
-          page_bytes = page_size;
-        }
-      } else {
-        problem_add("page", pgno, "empty",
-                    "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
-                    payload_bytes, nentries);
-        dbi->pages.empty += 1;
+  if (header_bytes < (int)sizeof(long) ||
+      (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
+    problem_add("page", pgno, "illegal header-length",
+                "%" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR, sizeof(long),
+                header_bytes, envstat.ms_psize - sizeof(long));
+  if (payload_bytes < 1) {
+    if (nentries > 1) {
+      problem_add("page", pgno, "zero size-of-entry",
+                  "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
+                  payload_bytes, nentries);
+      if ((size_t)header_bytes + unused_bytes < page_size) {
+        /* LY: hush a misuse error */
+        page_bytes = page_size;
       }
-    }
-
-    if (page_bytes != page_size) {
-      problem_add("page", pgno, "misused",
-                  "%" PRIu64 " != %" PRIu64 " (%" PRIuPTR "h + %" PRIuPTR
-                  "p + %" PRIuPTR "u)",
-                  page_size, page_bytes, header_bytes, payload_bytes,
-                  unused_bytes);
-      if (page_size > page_bytes)
-        dbi->lost_bytes += page_size - page_bytes;
     } else {
-      dbi->payload_bytes += payload_bytes + header_bytes;
-      walk.total_payload_bytes += payload_bytes + header_bytes;
+      problem_add("page", pgno, "empty",
+                  "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
+                  payload_bytes, nentries);
+      dbi->pages.empty += 1;
     }
+  }
 
-    if (pgnumber) {
-      do {
-        if (pgno >= lastpgno)
-          problem_add("page", pgno, "wrong page-no", "%" PRIu64 " > %" PRIu64,
-                      pgno, lastpgno);
-        else if (walk.pagemap[pgno])
-          problem_add("page", pgno, "already used", "in %s",
-                      walk.dbi[walk.pagemap[pgno]].name);
-        else {
-          walk.pagemap[pgno] = (short)(dbi - walk.dbi);
-          dbi->pages.total += 1;
-        }
-        ++pgno;
-      } while (--pgnumber);
-    }
+  if (page_bytes != page_size) {
+    problem_add("page", pgno, "misused",
+                "%" PRIu64 " != %" PRIu64 " (%" PRIuPTR "h + %" PRIuPTR
+                "p + %" PRIuPTR "u)",
+                page_size, page_bytes, header_bytes, payload_bytes,
+                unused_bytes);
+    if (page_size > page_bytes)
+      dbi->lost_bytes += page_size - page_bytes;
+  } else {
+    dbi->payload_bytes += payload_bytes + header_bytes;
+    walk.total_payload_bytes += payload_bytes + header_bytes;
+  }
+
+  if (pgnumber) {
+    do {
+      if (pgno >= lastpgno)
+        problem_add("page", pgno, "wrong page-no", "%" PRIu64 " > %" PRIu64,
+                    pgno, lastpgno);
+      else if (walk.pagemap[pgno])
+        problem_add("page", pgno, "already used", "in %s",
+                    walk.dbi[walk.pagemap[pgno]].name);
+      else {
+        walk.pagemap[pgno] = (short)(dbi - walk.dbi);
+        dbi->pages.total += 1;
+      }
+      ++pgno;
+    } while (--pgnumber);
   }
 
   return user_break ? MDBX_EINTR : MDBX_SUCCESS;

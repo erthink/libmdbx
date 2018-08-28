@@ -1648,10 +1648,22 @@ typedef void MDBX_debug_func(int type, const char *function, int line,
 
 LIBMDBX_API int mdbx_setup_debug(int flags, MDBX_debug_func *logger);
 
-typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned pgnumber, void *ctx,
-                                const char *dbi, const char *type,
-                                size_t nentries, size_t payload_bytes,
-                                size_t header_bytes, size_t unused_bytes);
+typedef enum {
+  MDBX_page_void,
+  MDBX_page_meta,
+  MDBX_page_large,
+  MDBX_page_branch,
+  MDBX_page_leaf,
+  MDBX_page_dupfixed_leaf,
+  MDBX_subpage_leaf,
+  MDBX_subpage_dupfixed_leaf
+} MDBX_page_type_t;
+
+typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned number, void *ctx,
+                                const char *dbi, size_t page_size,
+                                MDBX_page_type_t type, size_t nentries,
+                                size_t payload_bytes, size_t header_bytes,
+                                size_t unused_bytes);
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                                 void *ctx);
 

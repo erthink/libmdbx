@@ -1290,13 +1290,13 @@ static void mdbx_page_list(MDBX_page *mp) {
     type = "Leaf page";
     break;
   case P_LEAF | P_SUBP:
-    type = "Sub-page";
+    type = "Leaf sub-page";
     break;
   case P_LEAF | P_LEAF2:
-    type = "LEAF2 page";
+    type = "Leaf2 page";
     break;
   case P_LEAF | P_LEAF2 | P_SUBP:
-    type = "LEAF2 sub-page";
+    type = "Leaf2 sub-page";
     break;
   case P_OVERFLOW:
     mdbx_print("Overflow page %" PRIu64 " pages %u%s\n", pgno, mp->mp_pages,
@@ -11855,13 +11855,8 @@ typedef struct mdbx_walk_ctx {
 
 /* Depth-first tree traversal. */
 static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
-                                pgno_t pg, int deep) {
-  MDBX_page *mp;
-  int rc, i, nkeys;
-  size_t header_size, unused_size, payload_size, align_bytes;
-  const char *type;
-
-  if (pg == P_INVALID)
+                                pgno_t pgno, int deep) {
+  if (pgno == P_INVALID)
     return MDBX_SUCCESS; /* empty db */
 
   MDBX_cursor mc;
@@ -11869,116 +11864,174 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
   mc.mc_snum = 1;
   mc.mc_txn = ctx->mw_txn;
 
-  rc = mdbx_page_get(&mc, pg, &mp, NULL);
+  MDBX_page *mp;
+  int rc = mdbx_page_get(&mc, pgno, &mp, NULL);
   if (rc)
     return rc;
-  if (pg != mp->mp_pgno)
+  if (pgno != mp->mp_pgno)
     return MDBX_CORRUPTED;
 
-  nkeys = NUMKEYS(mp);
-  header_size = IS_LEAF2(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->mp_lower;
-  unused_size = SIZELEFT(mp);
-  payload_size = 0;
+  const int nkeys = NUMKEYS(mp);
+  size_t header_size = IS_LEAF2(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->mp_lower;
+  size_t unused_size = SIZELEFT(mp);
+  size_t payload_size = 0;
+  size_t align_bytes = 0;
+  MDBX_page_type_t type;
 
   /* LY: Don't use mask here, e.g bitwise
    * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
    * Pages should not me marked dirty/loose or otherwise. */
   switch (mp->mp_flags) {
   case P_BRANCH:
-    type = "branch";
-    if (nkeys < 1)
+    type = MDBX_page_branch;
+    if (nkeys < 2)
       return MDBX_CORRUPTED;
     break;
   case P_LEAF:
-    type = "leaf";
-    break;
-  case P_LEAF | P_SUBP:
-    type = "dupsort-subleaf";
+    type = MDBX_page_leaf;
     break;
   case P_LEAF | P_LEAF2:
-    type = "dupfixed-leaf";
+    type = MDBX_page_dupfixed_leaf;
     break;
-  case P_LEAF | P_LEAF2 | P_SUBP:
-    type = "dupsort-dupfixed-subleaf";
-    break;
-  case P_META:
-  case P_OVERFLOW:
-    __fallthrough;
   default:
     return MDBX_CORRUPTED;
   }
 
-  for (align_bytes = i = 0; i < nkeys;
+  for (int i = 0; i < nkeys;
        align_bytes += ((payload_size + align_bytes) & 1), i++) {
-    MDBX_node *node;
-
-    if (IS_LEAF2(mp)) {
+    if (type == MDBX_page_dupfixed_leaf) {
       /* LEAF2 pages have no mp_ptrs[] or node headers */
       payload_size += mp->mp_leaf2_ksize;
       continue;
     }
 
-    node = NODEPTR(mp, i);
-    payload_size += NODESIZE + node->mn_ksize;
+    MDBX_node *node = NODEPTR(mp, i);
+    payload_size += NODESIZE + NODEKSZ(node);
 
-    if (IS_BRANCH(mp)) {
+    if (type == MDBX_page_branch) {
       rc = mdbx_env_walk(ctx, dbi, NODEPGNO(node), deep);
       if (rc)
         return rc;
       continue;
     }
 
-    assert(IS_LEAF(mp));
-    if (node->mn_flags & F_BIGDATA) {
-      MDBX_page *omp;
-      pgno_t *opg;
-      size_t over_header, over_payload, over_unused;
+    assert(type == MDBX_page_leaf);
+    switch (node->mn_flags) {
+    case 0 /* usual node */: {
+      payload_size += NODEDSZ(node);
+    } break;
 
+    case F_BIGDATA /* long data on the large/overflow page */: {
       payload_size += sizeof(pgno_t);
-      opg = NODEDATA(node);
-      rc = mdbx_page_get(&mc, *opg, &omp, NULL);
+
+      MDBX_page *op;
+      pgno_t large_pgno;
+      memcpy(&large_pgno, NODEDATA(node), sizeof(pgno_t));
+      rc = mdbx_page_get(&mc, large_pgno, &op, NULL);
       if (rc)
         return rc;
-      if (*opg != omp->mp_pgno)
+
+      if (large_pgno != op->mp_pgno)
         return MDBX_CORRUPTED;
+
       /* LY: Don't use mask here, e.g bitwise
        * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
        * Pages should not me marked dirty/loose or otherwise. */
-      if (P_OVERFLOW != omp->mp_flags)
+      if (P_OVERFLOW != op->mp_flags)
         return MDBX_CORRUPTED;
 
-      over_header = PAGEHDRSZ;
-      over_payload = NODEDSZ(node);
-      over_unused = pgno2bytes(ctx->mw_txn->mt_env, omp->mp_pages) -
-                    over_payload - over_header;
+      const size_t over_header = PAGEHDRSZ;
+      const size_t over_payload = NODEDSZ(node);
+      const size_t over_unused = pgno2bytes(ctx->mw_txn->mt_env, op->mp_pages) -
+                                 over_payload - over_header;
 
-      rc = ctx->mw_visitor(*opg, omp->mp_pages, ctx->mw_user, dbi,
-                           "overflow-data", 1, over_payload, over_header,
+      rc = ctx->mw_visitor(large_pgno, op->mp_pages, ctx->mw_user, dbi,
+                           pgno2bytes(ctx->mw_txn->mt_env, op->mp_pages),
+                           MDBX_page_large, 1, over_payload, over_header,
                            over_unused);
-      if (rc)
-        return rc;
-      continue;
-    }
+    } break;
 
-    payload_size += NODEDSZ(node);
-    if (node->mn_flags & F_SUBDATA) {
-      MDBX_db *db = NODEDATA(node);
-      char *name = NULL;
+    case F_SUBDATA /* sub-db */: {
+      const size_t namelen = NODEKSZ(node);
+      if (namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db))
+        return MDBX_CORRUPTED;
+      payload_size += sizeof(MDBX_db);
 
-      if (!(node->mn_flags & F_DUPDATA)) {
-        name = NODEKEY(node);
-        ptrdiff_t namelen = (char *)db - name;
-        name = memcpy(alloca(namelen + 1), name, namelen);
-        name[namelen] = 0;
+      MDBX_db db;
+      memcpy(&db, NODEDATA(node), sizeof(db));
+      char *name = memcpy(alloca(namelen + 1), NODEKEY(node), namelen);
+      name[namelen] = 0;
+      rc = mdbx_env_walk(ctx, name, db.md_root, deep + 1);
+    } break;
+
+    case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */: {
+      if (NODEDSZ(node) != sizeof(MDBX_db))
+        return MDBX_CORRUPTED;
+      payload_size += sizeof(MDBX_db);
+
+      MDBX_db db;
+      memcpy(&db, NODEDATA(node), sizeof(db));
+      rc = mdbx_env_walk(ctx, dbi, db.md_root, deep + 1);
+    } break;
+
+    case F_DUPDATA /* short sub-page */: {
+      if (NODEDSZ(node) < PAGEHDRSZ)
+        return MDBX_CORRUPTED;
+
+      MDBX_page *sp = NODEDATA(node);
+      const int nsubkeys = NUMKEYS(sp);
+      size_t subheader_size =
+          IS_LEAF2(sp) ? PAGEHDRSZ : PAGEHDRSZ + sp->mp_lower;
+      size_t subunused_size = SIZELEFT(sp);
+      size_t subpayload_size = 0;
+      size_t subalign_bytes = 0;
+      MDBX_page_type_t subtype;
+
+      switch (sp->mp_flags & ~P_DIRTY /* ignore for sub-pages */) {
+      case P_LEAF | P_SUBP:
+        subtype = MDBX_subpage_leaf;
+        break;
+      case P_LEAF | P_LEAF2 | P_SUBP:
+        subtype = MDBX_subpage_dupfixed_leaf;
+        break;
+      default:
+        return MDBX_CORRUPTED;
       }
-      rc = mdbx_env_walk(ctx, (name && name[0]) ? name : dbi, db->md_root,
-                         deep + 1);
-      if (rc)
-        return rc;
+
+      for (int j = 0; j < nsubkeys;
+           subalign_bytes += ((subpayload_size + subalign_bytes) & 1), j++) {
+
+        if (subtype == MDBX_subpage_dupfixed_leaf) {
+          /* LEAF2 pages have no mp_ptrs[] or node headers */
+          subpayload_size += sp->mp_leaf2_ksize;
+        } else {
+          assert(subtype == MDBX_subpage_leaf);
+          MDBX_node *subnode = NODEPTR(sp, j);
+          subpayload_size += NODESIZE + NODEKSZ(subnode) + NODEDSZ(subnode);
+          if (subnode->mn_flags != 0)
+            return MDBX_CORRUPTED;
+        }
+      }
+
+      rc = ctx->mw_visitor(pgno, 0, ctx->mw_user, dbi, NODEDSZ(node), subtype,
+                           nsubkeys, subpayload_size, subheader_size,
+                           subunused_size + subalign_bytes);
+      header_size += subheader_size;
+      unused_size += subunused_size;
+      payload_size += subpayload_size;
+      align_bytes += subalign_bytes;
+    } break;
+
+    default:
+      return MDBX_CORRUPTED;
     }
+
+    if (unlikely(rc))
+      return rc;
   }
 
-  return ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, dbi, type, nkeys,
+  return ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, dbi,
+                         ctx->mw_txn->mt_env->me_psize, type, nkeys,
                          payload_size, header_size, unused_size + align_bytes);
 }
 
@@ -11998,16 +12051,17 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_user = user;
   ctx.mw_visitor = visitor;
 
-  int rc = visitor(0, NUM_METAS, user, "meta", "meta", NUM_METAS,
-                   sizeof(MDBX_meta) * NUM_METAS, PAGEHDRSZ * NUM_METAS,
-                   (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) *
-                       NUM_METAS);
+  int rc = visitor(
+      0, NUM_METAS, user, "meta", pgno2bytes(txn->mt_env, NUM_METAS),
+      MDBX_page_meta, NUM_METAS, sizeof(MDBX_meta) * NUM_METAS,
+      PAGEHDRSZ * NUM_METAS,
+      (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) * NUM_METAS);
   if (!rc)
     rc = mdbx_env_walk(&ctx, "free", txn->mt_dbs[FREE_DBI].md_root, 0);
   if (!rc)
     rc = mdbx_env_walk(&ctx, "main", txn->mt_dbs[MAIN_DBI].md_root, 0);
   if (!rc)
-    rc = visitor(P_INVALID, 0, user, NULL, NULL, 0, 0, 0, 0);
+    rc = visitor(P_INVALID, 0, user, NULL, 0, MDBX_page_void, 0, 0, 0, 0);
   return rc;
 }
 
