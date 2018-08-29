@@ -8337,6 +8337,9 @@ int mdbx_cursor_del(MDBX_cursor *mc, unsigned flags) {
 
     if (leaf->mn_flags & F_SUBDATA) {
       /* add all the child DB's pages to the free list */
+      mc->mc_db->md_branch_pages -= mc->mc_xcursor->mx_db.md_branch_pages;
+      mc->mc_db->md_leaf_pages -= mc->mc_xcursor->mx_db.md_leaf_pages;
+      mc->mc_db->md_overflow_pages -= mc->mc_xcursor->mx_db.md_overflow_pages;
       rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, 0);
       if (unlikely(rc))
         goto fail;
