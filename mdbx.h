@@ -344,17 +344,17 @@ typedef enum MDBX_cursor_op {
   MDBX_GET_BOTH,       /* MDBX_DUPSORT-only: Position at key/data pair. */
   MDBX_GET_BOTH_RANGE, /* MDBX_DUPSORT-only: position at key, nearest data. */
   MDBX_GET_CURRENT,    /* Return key/data at current cursor position */
-  MDBX_GET_MULTIPLE,   /* MDBX_DUPFIXED-only: Return key and up to a page of
-                        * duplicate data items from current cursor position.
-                        * Move cursor to prepare for MDBX_NEXT_MULTIPLE.*/
+  MDBX_GET_MULTIPLE,   /* MDBX_DUPFIXED-only: Return up to a page of duplicate
+                        * data items from current cursor position.
+                        * Move cursor to prepare for MDBX_NEXT_MULTIPLE. */
   MDBX_LAST,           /* Position at last key/data item */
   MDBX_LAST_DUP,       /* MDBX_DUPSORT-only: Position at last data item
                         * of current key. */
   MDBX_NEXT,           /* Position at next data item */
   MDBX_NEXT_DUP,       /* MDBX_DUPSORT-only: Position at next data item
                         * of current key. */
-  MDBX_NEXT_MULTIPLE,  /* MDBX_DUPFIXED-only: Return key and up to a page of
-                        * duplicate data items from next cursor position.
+  MDBX_NEXT_MULTIPLE,  /* MDBX_DUPFIXED-only: Return up to a page of duplicate
+                        * data items from next cursor position.
                         * Move cursor to prepare for MDBX_NEXT_MULTIPLE. */
   MDBX_NEXT_NODUP,     /* Position at first data item of next key */
   MDBX_PREV,           /* Position at previous data item */
@@ -366,7 +366,7 @@ typedef enum MDBX_cursor_op {
   MDBX_SET_RANGE,      /* Position at first key greater than or equal to
                         * specified key. */
   MDBX_PREV_MULTIPLE   /* MDBX_DUPFIXED-only: Position at previous page and
-                        * return key and up to a page of duplicate data items. */
+                        * return up to a page of duplicate data items. */
 } MDBX_cursor_op;
 
 /* Return Codes
@@ -966,7 +966,7 @@ LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDBX_PANIC         - a fatal error occurred earlier and the environment
- *                        must be shut down.
+ *                         must be shut down.
  *  - MDBX_MAP_RESIZED   - another process wrote data beyond this MDBX_env's
  *                         mapsize and this environment's map must be resized
  *                         as well. See mdbx_env_set_mapsize().
