@@ -691,6 +691,11 @@ typedef struct MDBX_xcursor {
   uint8_t mx_dbflag;
 } MDBX_xcursor;
 
+typedef struct MDBX_cursor_couple {
+  MDBX_cursor outer;
+  MDBX_xcursor inner;
+} MDBX_cursor_couple;
+
 /* Check if there is an inited xcursor, so XCURSOR_REFRESH() is proper */
 #define XCURSOR_INITED(mc)                                                     \
   ((mc)->mc_xcursor && ((mc)->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
