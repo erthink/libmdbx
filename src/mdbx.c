@@ -1481,6 +1481,24 @@ static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
   }
 }
 
+static int mdbx_page_befree(MDBX_cursor *mc, MDBX_page *mp) {
+  MDBX_txn *txn = mc->mc_txn;
+
+  mdbx_cassert(mc, (mc->mc_flags & C_SUB) == 0);
+  if (IS_BRANCH(mp)) {
+    mc->mc_db->md_branch_pages--;
+  } else if (IS_LEAF(mp)) {
+    mc->mc_db->md_leaf_pages--;
+  } else {
+    mdbx_cassert(mc, IS_OVERFLOW(mp));
+    mc->mc_db->md_overflow_pages -= mp->mp_pages;
+    return mdbx_pnl_append_range(&txn->mt_befree_pages, mp->mp_pgno,
+                                 mp->mp_pages);
+  }
+
+  return mdbx_pnl_append(&txn->mt_befree_pages, mp->mp_pgno);
+}
+
 /* Loosen or free a single page.
  *
  * Saves single pages to a list for future reuse
@@ -1495,6 +1513,14 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
   int loose = 0;
   const pgno_t pgno = mp->mp_pgno;
   MDBX_txn *txn = mc->mc_txn;
+
+  mdbx_cassert(mc, (mc->mc_flags & C_SUB) == 0);
+  if (IS_BRANCH(mp))
+    mc->mc_db->md_branch_pages--;
+  else {
+    mdbx_cassert(mc, IS_LEAF(mp));
+    mc->mc_db->md_leaf_pages--;
+  }
 
   if ((mp->mp_flags & P_DIRTY) && mc->mc_dbi != FREE_DBI) {
     if (txn->mt_parent) {
@@ -1522,6 +1548,7 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
       loose = 1;
     }
   }
+
   if (loose) {
     mdbx_debug("loosen db %d page %" PRIaPGNO, DDBI(mc), mp->mp_pgno);
     MDBX_page **link = &NEXT_LOOSE_PAGE(mp);
@@ -6785,6 +6812,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
   int rc;
 
   mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
+  mdbx_cassert(mc, (mp->mp_flags & P_OVERFLOW) != 0);
   mdbx_debug("free ov page %" PRIaPGNO " (%u)", pg, ovpages);
   /* If the page is dirty or on the spill list we just acquired it,
    * so we should give it back to our current free list, if any.
@@ -9438,10 +9466,6 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   if (unlikely(rc))
     return rc;
 
-  if (IS_LEAF(psrc))
-    csrc->mc_db->md_leaf_pages--;
-  else
-    csrc->mc_db->md_branch_pages--;
   {
     /* Adjust other cursors pointing to mp */
     MDBX_cursor *m2, *m3;
@@ -11324,11 +11348,9 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
             if (unlikely(rc))
               goto done;
             mdbx_cassert(mc, IS_OVERFLOW(omp));
-            rc =
-                mdbx_pnl_append_range(&txn->mt_befree_pages, pg, omp->mp_pages);
+            rc = mdbx_page_befree(mc, omp);
             if (unlikely(rc))
               goto done;
-            mc->mc_db->md_overflow_pages -= omp->mp_pages;
             if (!mc->mc_db->md_overflow_pages && !subs)
               break;
           } else if (subs && (ni->mn_flags & F_SUBDATA)) {
