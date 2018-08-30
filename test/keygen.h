@@ -120,6 +120,4 @@ public:
   bool increment(serial_t &serial, int delta);
 };
 
-size_t length(serial_t serial);
-
 } /* namespace keygen */

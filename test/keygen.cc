@@ -165,7 +165,7 @@ bool maker::increment(serial_t &serial, int delta) {
 
 //-----------------------------------------------------------------------------
 
-size_t length(serial_t serial) {
+static size_t length(serial_t serial) {
   size_t n = 0;
   if (serial > UINT32_MAX) {
     n = 4;
@@ -199,7 +199,10 @@ void __hot maker::mk(const serial_t serial, const essentials &params,
   assert(params.maxlen >= length(serial));
 
   out.value.iov_base = out.bytes;
-  out.value.iov_len = params.minlen;
+  out.value.iov_len =
+      (params.maxlen > params.minlen)
+          ? params.minlen + serial % (params.maxlen - params.minlen)
+          : params.minlen;
 
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
