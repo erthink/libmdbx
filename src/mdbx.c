@@ -6893,7 +6893,12 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
     if (unlikely(rc))
       return rc;
   }
+
   mc->mc_db->md_overflow_pages -= ovpages;
+  if (unlikely(mc->mc_flags & C_SUB)) {
+    MDBX_db *outer = mdbx_outer_db(mc);
+    outer->md_overflow_pages -= ovpages;
+  }
   return 0;
 }
 
