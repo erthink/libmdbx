@@ -1481,6 +1481,15 @@ static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
   }
 }
 
+static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
+  mdbx_cassert(mc, (mc->mc_flags & C_SUB) != 0);
+  MDBX_xcursor *mx = container_of(mc->mc_db, MDBX_xcursor, mx_db);
+  MDBX_cursor_couple *couple = container_of(mx, MDBX_cursor_couple, inner);
+  mdbx_cassert(mc, mc->mc_db == &couple->outer.mc_xcursor->mx_db);
+  mdbx_cassert(mc, mc->mc_dbx == &couple->outer.mc_xcursor->mx_dbx);
+  return couple->outer.mc_db;
+}
+
 static int mdbx_page_befree(MDBX_cursor *mc, MDBX_page *mp) {
   MDBX_txn *txn = mc->mc_txn;
 
