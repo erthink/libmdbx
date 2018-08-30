@@ -1523,7 +1523,16 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
   const pgno_t pgno = mp->mp_pgno;
   MDBX_txn *txn = mc->mc_txn;
 
-  mdbx_cassert(mc, (mc->mc_flags & C_SUB) == 0);
+  if (unlikely(mc->mc_flags & C_SUB)) {
+    MDBX_db *outer = mdbx_outer_db(mc);
+    if (IS_BRANCH(mp))
+      outer->md_branch_pages--;
+    else {
+      mdbx_cassert(mc, IS_LEAF(mp));
+      outer->md_leaf_pages--;
+    }
+  }
+
   if (IS_BRANCH(mp))
     mc->mc_db->md_branch_pages--;
   else {
@@ -1572,7 +1581,8 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
     mp->mp_flags |= P_LOOSE;
   } else {
     int rc = mdbx_pnl_append(&txn->mt_befree_pages, pgno);
-    if (unlikely(rc))
+    mdbx_tassert(txn, rc == MDBX_SUCCESS);
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
 
