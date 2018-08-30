@@ -11322,9 +11322,7 @@ int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
  * [in] subs non-Zero to check for sub-DBs in this DB.
  * Returns 0 on success, non-zero on failure. */
 static int mdbx_drop0(MDBX_cursor *mc, int subs) {
-  int rc;
-
-  rc = mdbx_page_search(mc, NULL, MDBX_PS_FIRST);
+  int rc = mdbx_page_search(mc, NULL, MDBX_PS_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
     MDBX_txn *txn = mc->mc_txn;
     MDBX_node *ni;
@@ -11335,7 +11333,14 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
      * This also avoids any P_LEAF2 pages, which have no nodes.
      * Also if the DB doesn't have sub-DBs and has no overflow
      * pages, omit scanning leaves. */
-    if ((mc->mc_flags & C_SUB) || (!subs && !mc->mc_db->md_overflow_pages))
+
+    if (mc->mc_flags & C_SUB) {
+      MDBX_db *outer = mdbx_outer_db(mc);
+      outer->md_branch_pages -= mc->mc_db->md_branch_pages;
+      outer->md_leaf_pages -= mc->mc_db->md_leaf_pages;
+      outer->md_overflow_pages -= mc->mc_db->md_overflow_pages;
+      mdbx_cursor_pop(mc);
+    } else if (!subs && !mc->mc_db->md_overflow_pages)
       mdbx_cursor_pop(mc);
 
     mdbx_cursor_copy(mc, &mx);
