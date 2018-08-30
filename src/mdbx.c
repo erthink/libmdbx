@@ -9581,10 +9581,16 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       return MDBX_SUCCESS;
     }
     if (nkeys == 0) {
+      mdbx_cassert(mc, IS_LEAF(mp));
       mdbx_debug("tree is completely empty");
       mc->mc_db->md_root = P_INVALID;
       mc->mc_db->md_depth = 0;
+      mdbx_cassert(mc, mc->mc_db->md_branch_pages == 0 &&
+                           mc->mc_db->md_overflow_pages == 0 &&
+                           mc->mc_db->md_leaf_pages == 1);
       mc->mc_db->md_leaf_pages = 0;
+      if (mc->mc_flags & C_SUB)
+        mdbx_outer_db(mc)->md_leaf_pages -= 1;
       rc = mdbx_pnl_append(&mc->mc_txn->mt_befree_pages, mp->mp_pgno);
       if (unlikely(rc))
         return rc;
@@ -9606,7 +9612,6 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       mc->mc_top = 0;
       mc->mc_flags &= ~C_INITIALIZED;
     } else if (IS_BRANCH(mp) && nkeys == 1) {
-      int i;
       mdbx_debug("collapsing root page!");
       rc = mdbx_pnl_append(&mc->mc_txn->mt_befree_pages, mp->mp_pgno);
       if (unlikely(rc))
@@ -9617,8 +9622,10 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
         return rc;
       mc->mc_db->md_depth--;
       mc->mc_db->md_branch_pages--;
+      if (mc->mc_flags & C_SUB)
+        mdbx_outer_db(mc)->md_branch_pages -= 1;
       mc->mc_ki[0] = mc->mc_ki[1];
-      for (i = 1; i < mc->mc_db->md_depth; i++) {
+      for (int i = 1; i < mc->mc_db->md_depth; i++) {
         mc->mc_pg[i] = mc->mc_pg[i + 1];
         mc->mc_ki[i] = mc->mc_ki[i + 1];
       }
@@ -9637,7 +9644,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
           if (!(m3->mc_flags & C_INITIALIZED))
             continue;
           if (m3->mc_pg[0] == mp) {
-            for (i = 0; i < mc->mc_db->md_depth; i++) {
+            for (int i = 0; i < mc->mc_db->md_depth; i++) {
               m3->mc_pg[i] = m3->mc_pg[i + 1];
               m3->mc_ki[i] = m3->mc_ki[i + 1];
             }
