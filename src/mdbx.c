@@ -8432,12 +8432,25 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
     mc->mc_db->md_branch_pages++;
   else if (IS_LEAF(np))
     mc->mc_db->md_leaf_pages++;
-  else if (IS_OVERFLOW(np)) {
+  else {
+    mdbx_cassert(mc, IS_OVERFLOW(np));
     mc->mc_db->md_overflow_pages += num;
     np->mp_pages = num;
   }
-  *mp = np;
 
+  if (unlikely(mc->mc_flags & C_SUB)) {
+    MDBX_db *outer = mdbx_outer_db(mc);
+    if (IS_BRANCH(np))
+      outer->md_branch_pages++;
+    else if (IS_LEAF(np))
+      outer->md_leaf_pages++;
+    else {
+      mdbx_cassert(mc, IS_OVERFLOW(np));
+      outer->md_overflow_pages += num;
+    }
+  }
+
+  *mp = np;
   return MDBX_SUCCESS;
 }
 
