@@ -379,7 +379,13 @@ void dump(const char *title) {
 
     log_info("threads %u\n", i->params.nthreads);
 
-    log_info("keygen.case: %s\n", keygencase2str(i->params.keygen.keycase));
+    log_info(
+        "keygen.params: case %s, width %u, mesh %u, rotate %u, offset %" PRIu64
+        ", split %u/%u\n",
+        keygencase2str(i->params.keygen.keycase), i->params.keygen.width,
+        i->params.keygen.mesh, i->params.keygen.rotate, i->params.keygen.offset,
+        i->params.keygen.split,
+        i->params.keygen.width - i->params.keygen.split);
     log_info("keygen.seed: %u\n", i->params.keygen.seed);
     log_info("key: minlen %u, maxlen %u\n", i->params.keylen_min,
              i->params.keylen_max);
