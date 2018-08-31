@@ -326,7 +326,7 @@ static void dump_verbs(const char *caption, size_t bits,
     ++verbs;
   }
 
-  logging::feed("\n");
+  logging::feed("%s\n", (*comma == '\0') ? "none" : "");
 }
 
 static void dump_duration(const char *caption, unsigned duration) {
