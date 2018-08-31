@@ -48,8 +48,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   keygen.width = (table_flags & MDBX_DUPSORT) ? 32 : 64;
   keygen.mesh = keygen.width;
   keygen.split = keygen.width / 2;
-  keygen.rotate = 0;
-  keygen.offset = 0;
+  keygen.rotate = 3;
+  keygen.offset = 41;
 
   test_duration = 0;
   test_nops = 1000;
