@@ -542,3 +542,27 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
   TRACE("<< actor_config::deserialize: OK\n");
   return true;
 }
+
+unsigned actor_params::mdbx_keylen_min() const {
+  return (table_flags & MDBX_INTEGERKEY) ? 4 : 0;
+}
+
+unsigned actor_params::mdbx_keylen_max() const {
+  return (table_flags & MDBX_INTEGERKEY)
+             ? 8
+             : std::min((unsigned)mdbx_limits_keysize_max(pagesize),
+                        (unsigned)UINT16_MAX);
+}
+
+unsigned actor_params::mdbx_datalen_min() const {
+  return (table_flags & MDBX_INTEGERDUP) ? 4 : 0;
+}
+
+unsigned actor_params::mdbx_datalen_max() const {
+  return (table_flags & MDBX_INTEGERDUP)
+             ? 8
+             : std::min((table_flags & MDBX_DUPSORT)
+                            ? (unsigned)mdbx_limits_keysize_max(pagesize)
+                            : (unsigned)MDBX_MAXDATASIZE,
+                        (unsigned)UINT16_MAX);
+}

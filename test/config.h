@@ -264,6 +264,11 @@ struct actor_params : public config::actor_params_pod {
   std::string pathname_log;
   std::string pathname_db;
   void set_defaults(const std::string &tmpdir);
+
+  unsigned mdbx_keylen_min() const;
+  unsigned mdbx_keylen_max() const;
+  unsigned mdbx_datalen_min() const;
+  unsigned mdbx_datalen_max() const;
 };
 
 struct actor_config : public config::actor_config_pod {
