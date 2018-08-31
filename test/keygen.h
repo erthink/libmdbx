@@ -85,6 +85,10 @@ struct result {
     uint32_t u32;
     uint64_t u64;
   };
+
+  std::string as_string() const {
+    return std::string((const char *)value.iov_base, value.iov_len);
+  }
 };
 
 //-----------------------------------------------------------------------------

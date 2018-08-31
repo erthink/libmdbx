@@ -78,8 +78,9 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   assert(mapping.mesh <= mapping.width);
   assert(mapping.rotate <= mapping.width);
   assert(mapping.offset <= mask(mapping.width));
-  assert(!(key_essentials.flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
-  assert(!(value_essentials.flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY)));
+  assert(!(key_essentials.flags &
+           ~(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT)));
+  assert(!(value_essentials.flags & ~(MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -109,11 +110,21 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   }
 
   serial_t key_serial = serial;
-  serial_t value_serial = value_age;
+  serial_t value_serial = value_age << mapping.split;
   if (mapping.split) {
-    key_serial = serial >> mapping.split;
-    value_serial =
-        (serial & mask(mapping.split)) | (value_age << mapping.split);
+    if (key_essentials.flags & MDBX_DUPSORT) {
+      key_serial >>= mapping.split;
+      value_serial += serial & mask(mapping.split);
+    } else {
+      /* Без MDBX_DUPSORT требуется уникальность ключей, а для этого нельзя
+       * отбрасывать какие-либо биты serial после инъективного преобразования.
+       * Поэтому key_serial не трогаем, а в value_serial нелинейно вмешиваем
+       * запрошенное количество бит из serial */
+      value_serial +=
+          (serial ^ (serial >> mapping.split)) & mask(mapping.split);
+    }
+
+    value_serial |= value_age << mapping.split;
     log_trace("keygen-pair: split@%u => k%" PRIu64 ", v%" PRIu64, mapping.split,
               key_serial, value_serial);
   }
@@ -134,7 +145,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 void maker::setup(const config::actor_params_pod &actor,
                   unsigned thread_number) {
   key_essentials.flags =
-      actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY);
+      actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
   assert(actor.keylen_min <= UINT8_MAX);
   key_essentials.minlen = (uint8_t)actor.keylen_min;
   assert(actor.keylen_max <= UINT16_MAX);
