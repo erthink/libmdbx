@@ -45,8 +45,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 
   keygen.seed = 1;
   keygen.keycase = kc_random;
-  keygen.width = 32;
-  keygen.mesh = 32;
+  keygen.width = (table_flags & MDBX_DUPSORT) ? 32 : 64;
+  keygen.mesh = keygen.width;
   keygen.split = keygen.width / 2;
   keygen.rotate = 0;
   keygen.offset = 0;
