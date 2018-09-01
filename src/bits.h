@@ -479,6 +479,10 @@ typedef struct MDBX_lockinfo {
 
 #define MDBX_LOCK_MAGIC ((MDBX_MAGIC << 8) + MDBX_LOCK_VERSION)
 
+#ifndef MDBX_ASSUME_MALLOC_OVERHEAD
+#define MDBX_ASSUME_MALLOC_OVERHEAD (sizeof(void *) * 2u)
+#endif /* MDBX_ASSUME_MALLOC_OVERHEAD */
+
 /*----------------------------------------------------------------------------*/
 /* Two kind lists of pages (aka PNL) */
 
@@ -500,33 +504,46 @@ typedef pgno_t *MDBX_PNL;
 /* List of txnid, only for MDBX_env.mt_lifo_reclaimed */
 typedef txnid_t *MDBX_TXL;
 
-/* An ID2 is an ID/pointer pair. */
-typedef union MDBX_ID2 {
+/* An Dirty-Page list item is an pgno/pointer pair. */
+typedef union MDBX_DP {
   struct {
     pgno_t pgno;
     void *ptr;
   };
-  unsigned limit, length;
-} MDBX_ID2;
+  struct {
+    pgno_t unused;
+    unsigned length;
+  };
+} MDBX_DP;
 
-/* An ID2L is an ID2 List, a sorted array of ID2s.
- * The first element's mid member is a count of how many actual
- * elements are in the array. The mptr member of the first element is
- * unused. The array is sorted in ascending order by mid. */
-typedef MDBX_ID2 *MDBX_ID2L;
+/* An DPL (dirty-page list) is a sorted array of MDBX_DPs.
+ * The first element's length member is a count of how many actual
+ * elements are in the array. */
+typedef MDBX_DP *MDBX_DPL;
 
-/* PNL sizes - likely should be even bigger
- * limiting factors: sizeof(pgno_t), thread stack size */
-#define MDBX_LIST_MAX ((1 << 24) - 1)
+/* PNL sizes - likely should be even bigger */
+#define MDBX_PNL_GRANULATE 1024
+#define MDBX_PNL_INITIAL                                                       \
+  (MDBX_PNL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
+#define MDBX_PNL_MAX                                                           \
+  ((1u << 24) - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
+#define MDBX_DPL_TXNFULL (MDBX_PNL_MAX / 4)
 
-#define MDBX_PNL_SIZEOF(pl) (((pl)[0] + 1) * sizeof(pgno_t))
-#define MDBX_PNL_IS_ZERO(pl) ((pl)[0] == 0)
-#define MDBX_PNL_CPY(dst, src) (memcpy(dst, src, MDBX_PNL_SIZEOF(src)))
-#define MDBX_PNL_FIRST(pl) ((pl)[1])
-#define MDBX_PNL_LAST(pl) ((pl)[(pl)[0]])
+#define MDBX_TXL_GRANULATE 32
+#define MDBX_TXL_INITIAL                                                       \
+  (MDBX_TXL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(txnid_t))
+#define MDBX_TXL_MAX                                                           \
+  ((1u << 17) - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(txnid_t))
 
-/* Current max length of an mdbx_pnl_alloc()ed PNL */
 #define MDBX_PNL_ALLOCLEN(pl) ((pl)[-1])
+#define MDBX_PNL_SIZE(pl) ((pl)[0])
+#define MDBX_PNL_FIRST(pl) ((pl)[1])
+#define MDBX_PNL_LAST(pl) ((pl)[MDBX_PNL_SIZE(pl)])
+#define MDBX_PNL_BEGIN(pl) (&(pl)[1])
+#define MDBX_PNL_END(pl) (&(pl)[MDBX_PNL_SIZE(pl) + 1])
+
+#define MDBX_PNL_SIZEOF(pl) ((MDBX_PNL_SIZE(pl) + 1) * sizeof(pgno_t))
+#define MDBX_PNL_IS_EMPTY(pl) (MDBX_PNL_SIZE(pl) == 0)
 
 /*----------------------------------------------------------------------------*/
 /* Internal structures */
@@ -570,7 +587,7 @@ struct MDBX_txn {
   MDBX_PNL mt_spill_pages;
   union {
     /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
-    MDBX_ID2L mt_rw_dirtylist;
+    MDBX_DPL mt_rw_dirtylist;
     /* For read txns: This thread/txn's reader table slot, or NULL. */
     MDBX_reader *mt_ro_reader;
   };
@@ -767,8 +784,8 @@ struct MDBX_env {
   MDBX_page *me_dpages; /* list of malloc'd blocks for re-use */
                         /* PNL of pages that became unused in a write txn */
   MDBX_PNL me_free_pgs;
-  /* ID2L of pages written during a write txn. Length MDBX_LIST_MAX. */
-  MDBX_ID2L me_dirtylist;
+  /* MDBX_DP of pages written during a write txn. Length MDBX_DPL_TXNFULL. */
+  MDBX_DPL me_dirtylist;
   /* Number of freelist items that can fit in a single overflow page */
   unsigned me_maxgc_ov1page;
   /* Max size of a node on a page */
