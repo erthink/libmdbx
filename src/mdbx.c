@@ -3532,10 +3532,12 @@ int mdbx_txn_abort(MDBX_txn *txn) {
 }
 
 static __inline int mdbx_backlog_size(MDBX_txn *txn) {
-  int reclaimed = txn->mt_env->me_reclaimed_pglist
-                      ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist)
-                      : 0;
-  return reclaimed + txn->mt_loose_count + txn->mt_end_pgno - txn->mt_next_pgno;
+  int reclaimed_and_loose =
+      txn->mt_env->me_reclaimed_pglist
+          ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist) +
+                txn->mt_loose_count
+          : 0;
+  return reclaimed_and_loose + txn->mt_end_pgno - txn->mt_next_pgno;
 }
 
 static __inline int mdbx_backlog_extragap(MDBX_env *env) {
