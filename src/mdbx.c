@@ -4535,7 +4535,9 @@ int mdbx_txn_commit(MDBX_txn *txn) {
           goto fail;
         }
         data.iov_base = &txn->mt_dbs[i];
-        rc = mdbx_cursor_put(&mc, &txn->mt_dbxs[i].md_name, &data, F_SUBDATA);
+        WITH_CURSOR_TRACKING(mc,
+                             rc = mdbx_cursor_put(&mc, &txn->mt_dbxs[i].md_name,
+                                                  &data, F_SUBDATA));
         if (unlikely(rc != MDBX_SUCCESS))
           goto fail;
       }
@@ -9201,26 +9203,6 @@ static int mdbx_update_key(MDBX_cursor *mc, MDBX_val *key) {
 }
 
 static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst);
-
-/* Perform act while tracking temporary cursor mn */
-#define WITH_CURSOR_TRACKING(mn, act)                                          \
-  do {                                                                         \
-    mdbx_cassert(&(mn),                                                        \
-                 mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
-    MDBX_cursor mc_dummy, *tracked,                                            \
-        **tp = &(mn).mc_txn->mt_cursors[mn.mc_dbi];                            \
-    if ((mn).mc_flags & C_SUB) {                                               \
-      mc_dummy.mc_flags = C_INITIALIZED;                                       \
-      mc_dummy.mc_xcursor = (MDBX_xcursor *)&(mn);                             \
-      tracked = &mc_dummy;                                                     \
-    } else {                                                                   \
-      tracked = &(mn);                                                         \
-    }                                                                          \
-    tracked->mc_next = *tp;                                                    \
-    *tp = tracked;                                                             \
-    { act; }                                                                   \
-    *tp = tracked->mc_next;                                                    \
-  } while (0)
 
 /* Move a node from csrc to cdst. */
 static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
