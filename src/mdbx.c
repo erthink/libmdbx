@@ -3777,19 +3777,32 @@ retry:
                    txn->mt_loose_count);
       } else {
         /* Room for loose pages + temp PNL with same */
-        rc = mdbx_pnl_need(&env->me_reclaimed_pglist,
-                           2 * txn->mt_loose_count + 2);
-        if (unlikely(rc != MDBX_SUCCESS))
-          goto bailout;
-        MDBX_PNL loose = env->me_reclaimed_pglist +
-                         MDBX_PNL_ALLOCLEN(env->me_reclaimed_pglist) -
-                         txn->mt_loose_count - 1;
-        unsigned count = 0;
-        for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
-          loose[++count] = mp->mp_pgno;
-        MDBX_PNL_SIZE(loose) = count;
-        mdbx_pnl_sort(loose);
-        mdbx_pnl_xmerge(env->me_reclaimed_pglist, loose);
+        if (likely(env->me_reclaimed_pglist != NULL)) {
+          rc = mdbx_pnl_need(&env->me_reclaimed_pglist,
+                             2 * txn->mt_loose_count + 2);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
+          MDBX_PNL loose = env->me_reclaimed_pglist +
+                           MDBX_PNL_ALLOCLEN(env->me_reclaimed_pglist) -
+                           txn->mt_loose_count - 1;
+          unsigned count = 0;
+          for (MDBX_page *mp = txn->mt_loose_pages; mp;
+               mp = NEXT_LOOSE_PAGE(mp))
+            loose[++count] = mp->mp_pgno;
+          MDBX_PNL_SIZE(loose) = count;
+          mdbx_pnl_sort(loose);
+          mdbx_pnl_xmerge(env->me_reclaimed_pglist, loose);
+        } else {
+          env->me_reclaimed_pglist = mdbx_pnl_alloc(txn->mt_loose_count);
+          if (unlikely(env->me_reclaimed_pglist == NULL)) {
+            rc = MDBX_ENOMEM;
+            goto bailout;
+          }
+          for (MDBX_page *mp = txn->mt_loose_pages; mp;
+               mp = NEXT_LOOSE_PAGE(mp))
+            mdbx_pnl_xappend(env->me_reclaimed_pglist, mp->mp_pgno);
+          mdbx_pnl_sort(env->me_reclaimed_pglist);
+        }
         mdbx_trace("%s: append %u loose-pages to reclaimed-pages",
                    dbg_prefix_mode, txn->mt_loose_count);
       }
