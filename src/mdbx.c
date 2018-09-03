@@ -6952,6 +6952,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
   mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
   mdbx_cassert(mc, (mp->mp_flags & P_OVERFLOW) != 0);
   mdbx_debug("free ov page %" PRIaPGNO " (%u)", pg, ovpages);
+
   /* If the page is dirty or on the spill list we just acquired it,
    * so we should give it back to our current free list, if any.
    * Otherwise put it onto the list of pages we freed in this txn.
@@ -6970,6 +6971,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
     rc = mdbx_pnl_need(&env->me_reclaimed_pglist, ovpages);
     if (unlikely(rc))
       return rc;
+
     if (!(mp->mp_flags & P_DIRTY)) {
       /* This page is no longer spilled */
       if (x == MDBX_PNL_SIZE(sl))
@@ -7003,11 +7005,14 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
     /* Insert in me_reclaimed_pglist */
     mop = env->me_reclaimed_pglist;
     j = MDBX_PNL_SIZE(mop) + ovpages;
-    for (i = MDBX_PNL_SIZE(mop); i && mop[i] < pg; i--)
-      mop[j--] = mop[i];
-    while (j > i)
-      mop[j--] = pg++;
+    for (i = MDBX_PNL_SIZE(mop); i && MDBX_PNL_DISORDERED(mop[i], pg);)
+      mop[j--] = mop[i--];
     MDBX_PNL_SIZE(mop) += ovpages;
+
+    pgno_t n = MDBX_PNL_ASCENDING ? pg + ovpages : pg;
+    while (j > i)
+      mop[j--] = MDBX_PNL_ASCENDING ? --n : n++;
+    mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
   } else {
     rc = mdbx_pnl_append_range(&txn->mt_befree_pages, pg, ovpages);
     if (unlikely(rc))
