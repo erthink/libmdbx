@@ -420,7 +420,8 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                   "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
                   (number + 1) * sizeof(pgno_t), data->iov_len);
       number = data->iov_len / sizeof(pgno_t) - 1;
-    } else if ((number + 1) * sizeof(pgno_t) < data->iov_len)
+    } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >
+               sizeof(pgno_t) * 2)
       problem_add("entry", record_number, "extra idl space",
                   "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
                   (number + 1) * sizeof(pgno_t), data->iov_len);

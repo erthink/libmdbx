@@ -2375,7 +2375,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       /* Append PNL from FreeDB record to me_reclaimed_pglist */
       mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
       pgno_t *re_pnl = (pgno_t *)data.iov_base;
-      mdbx_tassert(txn, data.iov_len == MDBX_PNL_SIZEOF(re_pnl));
+      mdbx_tassert(txn, data.iov_len >= MDBX_PNL_SIZEOF(re_pnl));
       mdbx_tassert(txn, mdbx_pnl_check(re_pnl, false));
       repg_pos = MDBX_PNL_SIZE(re_pnl);
       if (!repg_list) {
