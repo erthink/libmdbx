@@ -6953,6 +6953,24 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
   mdbx_cassert(mc, (mp->mp_flags & P_OVERFLOW) != 0);
   mdbx_debug("free ov page %" PRIaPGNO " (%u)", pg, ovpages);
 
+  if (mdbx_audit_enabled() && env->me_reclaimed_pglist) {
+    mdbx_cassert(mc, mdbx_pnl_check(env->me_reclaimed_pglist, true));
+    const unsigned a = mdbx_pnl_search(env->me_reclaimed_pglist, pg);
+    mdbx_cassert(mc, a > MDBX_PNL_SIZE(env->me_reclaimed_pglist) ||
+                         env->me_reclaimed_pglist[a] != pg);
+    if (a <= MDBX_PNL_SIZE(env->me_reclaimed_pglist) &&
+        env->me_reclaimed_pglist[a] == pg)
+      return MDBX_PROBLEM;
+
+    if (ovpages > 1) {
+      const unsigned b =
+          mdbx_pnl_search(env->me_reclaimed_pglist, pg + ovpages - 1);
+      mdbx_cassert(mc, a == b);
+      if (a != b)
+        return MDBX_PROBLEM;
+    }
+  }
+
   /* If the page is dirty or on the spill list we just acquired it,
    * so we should give it back to our current free list, if any.
    * Otherwise put it onto the list of pages we freed in this txn.
