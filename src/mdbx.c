@@ -2451,13 +2451,11 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       }
 
       /* Don't try to coalesce too much. */
-      if (unlikely(repg_len > MDBX_DPL_TXNFULL / 2))
+      if (unlikely(repg_len > MDBX_DPL_TXNFULL / 4))
         break;
-      if (flags & MDBX_COALESCE) {
-        if (repg_len /* current size */ >= env->me_maxgc_ov1page ||
-            repg_pos /* prev size */ >= env->me_maxgc_ov1page / 2)
-          flags &= ~MDBX_COALESCE;
-      }
+      if (repg_len /* current size */ >= env->me_maxgc_ov1page ||
+          repg_pos /* prev size */ >= env->me_maxgc_ov1page / 2)
+        flags &= ~MDBX_COALESCE;
     }
 
     if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) ==
