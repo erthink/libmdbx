@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
-TESTDB_PREFIX=${1:-/dev/shm/mdbx-gc-test}
+make check
+TESTDB_PREFIX=${1:-/dev/shm/mdbx-gc-test}.
 
 function rep9 { printf "%*s" $1 '' | tr ' ' '9'; }
 function join { local IFS="$1"; shift; echo "$*"; }
@@ -18,24 +19,61 @@ function bits2list {
 	join , "${list[@]}"
 }
 
-for nops in {7..1}; do
-	for ((wbatch=nops; wbatch > 0; --wbatch)); do
-		for ((bits=2**${#options[@]}; --bits >= 0; )); do
-			seed=$(date +%N)
-			echo "=================================== $(date)"
-			rm -f ${TESTDB_PREFIX}*
-			echo "./mdbx_test --pathname=${TESTDB_PREFIX} --pagesize=min --size=8G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max --nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) --keygen.seed=${seed} --hill"
-			./mdbx_test --pathname=${TESTDB_PREFIX} --pagesize=min --size=8G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-				--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
-				--keygen.seed=${seed} --hill | lz4 > ${TESTDB_PREFIX}.log.lz4
-			./mdbx_chk -nvvv ${TESTDB_PREFIX} | tee ${TESTDB_PREFIX}-chk.log
-			echo "=================================== $(date)"
-			rm -f ${TESTDB_PREFIX}*
-			echo "./mdbx_test --pathname=${TESTDB_PREFIX} --pagesize=min --size=8G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max --nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) --keygen.seed=${seed} --hill"
-			./mdbx_test --pathname=${TESTDB_PREFIX} --pagesize=min --size=8G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-				--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
-				--keygen.seed=${seed} --hill | lz4 > ${TESTDB_PREFIX}.log.lz4
-			./mdbx_chk -nvvv ${TESTDB_PREFIX} | tee ${TESTDB_PREFIX}-chk.log
+function probe {
+	echo "=============================================== $(date)"
+	echo "${caption}: $*"
+	rm -f ${TESTDB_PREFIX}* \
+		&& ./mdbx_test --pathname=${TESTDB_PREFIX}db "$@" | lz4 > log.lz4 \
+		&& ./mdbx_chk -nvvv ${TESTDB_PREFIX}db | tee ${TESTDB_PREFIX}chk \
+		|| (echo "FAILED"; exit 1)
+}
+
+###############################################################################
+
+caption="Failfast #1" probe \
+	--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+	--nops=99999 --batch.write=9 --mode=-writemap,-coalesce,+lifo --keygen.seed=248240655 --hill
+
+caption="Failfast #2" probe \
+	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=259083046 --hill
+
+caption="Failfast #3" probe \
+	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=522365681 --hill
+
+caption="Failfast #4" probe \
+	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+	--nops=999999 --batch.write=9999 --mode=-writemap,+coalesce,+lifo --keygen.seed=866083781 --hill
+
+caption="Failfast #5" probe \
+	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+	--nops=999999 --batch.write=999 --mode=+writemap,-coalesce,+lifo --keygen.seed=246539192 --hill
+
+caption="Failfast #6" probe \
+	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=540406278 --hill
+
+caption="Failfast #7" probe \
+	--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+	--nops=999999 --batch.write=999 --mode=-writemap,+coalesce,+lifo --keygen.seed=619798690 --hill
+
+count=0
+for nops in {2..7}; do
+	for ((wbatch=nops-1; wbatch > 0; --wbatch)); do
+		loops=$((1111/nops + 2))
+		for ((rep=0; rep++ < loops; )); do
+			for ((bits=2**${#options[@]}; --bits >= 0; )); do
+				seed=$(date +%N)
+				caption="Probe #$((++count)) w/o-dups, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} --hill
+				caption="Probe #$((++count)) with-dups, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} --hill
+			done
 		done
 	done
 done
