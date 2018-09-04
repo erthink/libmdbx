@@ -9319,6 +9319,8 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
   unsigned flags;
 
   DKBUF;
+  mdbx_cassert(csrc, IS_LEAF(csrc->mc_pg[csrc->mc_top]) ==
+                         IS_LEAF(cdst->mc_pg[cdst->mc_top]));
 
   /* Mark src and dst as dirty. */
   if (unlikely((rc = mdbx_page_touch(csrc)) || (rc = mdbx_page_touch(cdst))))
@@ -9398,8 +9400,9 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
              cdst->mc_pg[cdst->mc_top]->mp_pgno);
 
   /* Add the node to the destination page. */
-  rc =
-      mdbx_node_add(cdst, cdst->mc_ki[cdst->mc_top], &key, &data, srcpg, flags);
+  rc = mdbx_node_add(cdst, cdst->mc_ki[cdst->mc_top], &key,
+                     IS_LEAF(cdst->mc_pg[cdst->mc_top]) ? &data : NULL, srcpg,
+                     flags);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -9551,6 +9554,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_debug("merging page %" PRIaPGNO " into %" PRIaPGNO "", psrc->mp_pgno,
              pdst->mp_pgno);
 
+  mdbx_cassert(csrc, IS_LEAF(psrc) == IS_LEAF(pdst));
   mdbx_cassert(csrc, csrc->mc_snum > 1); /* can't merge root page */
   mdbx_cassert(csrc, cdst->mc_snum > 1);
 
@@ -9561,7 +9565,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   /* get dst page again now that we've touched it. */
   pdst = cdst->mc_pg[cdst->mc_top];
 
-  /* Move all nodes from src to dst. */
+  /* Move all nodes from src to dst */
   j = nkeys = NUMKEYS(pdst);
   if (IS_LEAF2(psrc)) {
     key.iov_len = csrc->mc_db->md_xsize;
@@ -9597,9 +9601,13 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         key.iov_base = NODEKEY(srcnode);
       }
 
-      data.iov_len = NODEDSZ(srcnode);
-      data.iov_base = NODEDATA(srcnode);
-      rc = mdbx_node_add(cdst, j, &key, &data, NODEPGNO(srcnode),
+      MDBX_val *pdata = NULL;
+      if (IS_LEAF(psrc)) {
+        data.iov_len = NODEDSZ(srcnode);
+        data.iov_base = NODEDATA(srcnode);
+        pdata = &data;
+      }
+      rc = mdbx_node_add(cdst, j, &key, pdata, NODEPGNO(srcnode),
                          srcnode->mn_flags);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -9821,6 +9829,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
   /* The parent (branch page) must have at least 2 pointers,
    * otherwise the tree is invalid. */
   ptop = mc->mc_top - 1;
+  mdbx_cassert(mc, IS_BRANCH(mc->mc_pg[ptop]));
   mdbx_cassert(mc, NUMKEYS(mc->mc_pg[ptop]) > 1);
 
   /* Leaf page fill factor is below the threshold.
@@ -9840,6 +9849,8 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     rc = mdbx_page_get(mc, NODEPGNO(node), &mn.mc_pg[mn.mc_top], NULL);
     if (unlikely(rc))
       return rc;
+    mdbx_cassert(mc, IS_LEAF(mn.mc_pg[mn.mc_top]) ==
+                         IS_LEAF(mc->mc_pg[mc->mc_top]));
     mn.mc_ki[mn.mc_top] = 0;
     mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]);
     fromleft = 0;
@@ -9851,6 +9862,8 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     rc = mdbx_page_get(mc, NODEPGNO(node), &mn.mc_pg[mn.mc_top], NULL);
     if (unlikely(rc))
       return rc;
+    mdbx_cassert(mc, IS_LEAF(mn.mc_pg[mn.mc_top]) ==
+                         IS_LEAF(mc->mc_pg[mc->mc_top]));
     mn.mc_ki[mn.mc_top] = NUMKEYS(mn.mc_pg[mn.mc_top]) - 1;
     mc->mc_ki[mc->mc_top] = 0;
     fromleft = 1;
@@ -10067,7 +10080,7 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
   unsigned i, ptop;
   MDBX_env *env = mc->mc_txn->mt_env;
   MDBX_node *node;
-  MDBX_val sepkey, rkey, xdata, *rdata = &xdata;
+  MDBX_val sepkey, rkey, xdata;
   MDBX_page *copy = NULL;
   MDBX_page *rp, *pp;
   MDBX_cursor mn;
@@ -10337,6 +10350,7 @@ static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
     i = split_indx;
     indx_t n = 0;
     do {
+      MDBX_val *rdata = NULL;
       if (i == newindx) {
         rkey.iov_base = newkey->iov_base;
         rkey.iov_len = newkey->iov_len;
