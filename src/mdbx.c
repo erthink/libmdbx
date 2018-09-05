@@ -8889,19 +8889,23 @@ static void mdbx_node_shrink(MDBX_page *mp, unsigned indx) {
   node = NODEPTR(mp, indx);
   sp = (MDBX_page *)NODEDATA(node);
   delta = SIZELEFT(sp);
-  nsize = NODEDSZ(node) - delta;
+  assert(delta > 0);
 
   /* Prepare to shift upward, set len = length(subpage part to shift) */
-  if (IS_LEAF2(sp)) {
+  if (unlikely(IS_LEAF2(sp))) {
+    delta &= /* do not make the node uneven-sized */ ~1u;
+    if (unlikely(delta) == 0)
+      return;
+    nsize = NODEDSZ(node) - delta;
+    assert(nsize % 1 == 0);
     len = nsize;
-    if (nsize & 1)
-      return; /* do not make the node uneven-sized */
   } else {
     xp = (MDBX_page *)((char *)sp + delta); /* destination subpage */
     for (i = NUMKEYS(sp); --i >= 0;) {
       assert(sp->mp_ptrs[i] >= delta);
       xp->mp_ptrs[i] = (indx_t)(sp->mp_ptrs[i] - delta);
     }
+    nsize = NODEDSZ(node) - delta;
     len = PAGEHDRSZ;
   }
   sp->mp_upper = sp->mp_lower;
