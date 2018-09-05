@@ -1069,15 +1069,19 @@ static __inline unsigned mdbx_log2(size_t value) {
 #define FILL_THRESHOLD 256
 
 /* Test if a page is a leaf page */
-#define IS_LEAF(p) F_ISSET((p)->mp_flags, P_LEAF)
+#define IS_LEAF(p) (((p)->mp_flags & P_LEAF) != 0)
 /* Test if a page is a LEAF2 page */
-#define IS_LEAF2(p) F_ISSET((p)->mp_flags, P_LEAF2)
+#define IS_LEAF2(p) unlikely(((p)->mp_flags & P_LEAF2) != 0)
 /* Test if a page is a branch page */
-#define IS_BRANCH(p) F_ISSET((p)->mp_flags, P_BRANCH)
+#define IS_BRANCH(p) (((p)->mp_flags & P_BRANCH) != 0)
 /* Test if a page is an overflow page */
-#define IS_OVERFLOW(p) unlikely(F_ISSET((p)->mp_flags, P_OVERFLOW))
+#define IS_OVERFLOW(p) unlikely(((p)->mp_flags & P_OVERFLOW) != 0)
 /* Test if a page is a sub page */
-#define IS_SUBP(p) F_ISSET((p)->mp_flags, P_SUBP)
+#define IS_SUBP(p) (((p)->mp_flags & P_SUBP) != 0)
+/* Test if a page is dirty */
+#define IS_DIRTY(p) (((p)->mp_flags & P_DIRTY) != 0)
+
+#define PAGETYPE(p) ((p)->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW))
 
 /* The number of overflow pages needed to store the given size. */
 #define OVPAGES(env, size) (bytes2pgno(env, PAGEHDRSZ - 1 + (size)) + 1)

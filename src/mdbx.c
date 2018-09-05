@@ -1313,7 +1313,7 @@ static const char *mdbx_leafnode_type(MDBX_node *n) {
 /* Display all the keys in the page. */
 static void mdbx_page_list(MDBX_page *mp) {
   pgno_t pgno = mp->mp_pgno;
-  const char *type, *state = (mp->mp_flags & P_DIRTY) ? ", dirty" : "";
+  const char *type, *state = IS_DIRTY(mp) ? ", dirty" : "";
   MDBX_node *node;
   unsigned i, nkeys, nsize, total = 0;
   MDBX_val key;
@@ -1577,7 +1577,7 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
     mc->mc_db->md_leaf_pages--;
   }
 
-  if ((mp->mp_flags & P_DIRTY) && mc->mc_dbi != FREE_DBI) {
+  if (IS_DIRTY(mp) && mc->mc_dbi != FREE_DBI) {
     if (txn->mt_parent) {
       mdbx_cassert(mc, (txn->mt_env->me_flags & MDBX_WRITEMAP) == 0);
       MDBX_DP *dl = txn->mt_rw_dirtylist;
@@ -1659,7 +1659,7 @@ static int mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, bool all) {
         /* Proceed to mx if it is at a sub-database */
         if (!(mx && (mx->mx_cursor.mc_flags & C_INITIALIZED)))
           break;
-        if (!(mp && (mp->mp_flags & P_LEAF)))
+        if (!(mp && IS_LEAF(mp)))
           break;
         leaf = NODEPTR(mp, m3->mc_ki[j - 1]);
         if (!(leaf->mn_flags & F_SUBDATA))
@@ -6742,9 +6742,9 @@ mapped:
   p = pgno2page(env, pgno);
 
 done:
-  if ((p->mp_flags & P_OVERFLOW) == 0 &&
-      unlikely(p->mp_upper < p->mp_lower ||
-               PAGEHDRSZ + p->mp_upper > env->me_psize))
+  if (unlikely(p->mp_upper < p->mp_lower ||
+               PAGEHDRSZ + p->mp_upper > env->me_psize) &&
+      !IS_OVERFLOW(p))
     return MDBX_CORRUPTED;
   /* TODO: more checks here, including p->mp_validator */
 
@@ -6954,7 +6954,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
   int rc;
 
   mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
-  mdbx_cassert(mc, (mp->mp_flags & P_OVERFLOW) != 0);
+  mdbx_cassert(mc, IS_OVERFLOW(mp));
   mdbx_debug("free ov page %" PRIaPGNO " (%u)", pg, ovpages);
 
   if (mdbx_audit_enabled() && env->me_reclaimed_pglist) {
@@ -6984,7 +6984,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
    * Unsupported in nested txns: They would need to hide the page
    * range in ancestor txns' dirty and spilled lists. */
   if (env->me_reclaimed_pglist && !txn->mt_parent &&
-      ((mp->mp_flags & P_DIRTY) ||
+      (IS_DIRTY(mp) ||
        (sl && (x = mdbx_pnl_search(sl, pn)) <= MDBX_PNL_SIZE(sl) &&
         sl[x] == pn))) {
     unsigned i, j;
@@ -6994,7 +6994,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
     if (unlikely(rc))
       return rc;
 
-    if (!(mp->mp_flags & P_DIRTY)) {
+    if (!IS_DIRTY(mp)) {
       /* This page is no longer spilled */
       if (x == MDBX_PNL_SIZE(sl))
         MDBX_PNL_SIZE(sl)--;
@@ -7380,7 +7380,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       mc->mc_ki[mc->mc_top] = 0;
       return MDBX_NOTFOUND;
     }
-    if (mp->mp_flags & P_LEAF2) {
+    if (IS_LEAF2(mp)) {
       nodekey.iov_len = mc->mc_db->md_xsize;
       nodekey.iov_base = LEAF2KEY(mp, 0, nodekey.iov_len);
     } else {
@@ -7400,7 +7400,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       unsigned i;
       unsigned nkeys = NUMKEYS(mp);
       if (nkeys > 1) {
-        if (mp->mp_flags & P_LEAF2) {
+        if (IS_LEAF2(mp)) {
           nodekey.iov_base = LEAF2KEY(mp, nkeys - 1, nodekey.iov_len);
         } else {
           leaf = NODEPTR(mp, nkeys - 1);
@@ -7418,7 +7418,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         if (rc < 0) {
           if (mc->mc_ki[mc->mc_top] < NUMKEYS(mp)) {
             /* This is definitely the right page, skip search_page */
-            if (mp->mp_flags & P_LEAF2) {
+            if (IS_LEAF2(mp)) {
               nodekey.iov_base =
                   LEAF2KEY(mp, mc->mc_ki[mc->mc_top], nodekey.iov_len);
             } else {
@@ -8007,7 +8007,6 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (unlikely(rc2 = mdbx_page_new(mc, P_LEAF, 1, &np))) {
       return rc2;
     }
-    assert(np->mp_flags & P_LEAF);
     rc2 = mdbx_cursor_push(mc, np);
     if (unlikely(rc2 != MDBX_SUCCESS))
       return rc2;
@@ -8189,7 +8188,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         mp->mp_lower = fp->mp_lower;
         mdbx_cassert(mc, fp->mp_upper + offset <= UINT16_MAX);
         mp->mp_upper = (indx_t)(fp->mp_upper + offset);
-        if (fp_flags & P_LEAF2) {
+        if (unlikely(fp_flags & P_LEAF2)) {
           memcpy(PAGEDATA(mp), PAGEDATA(fp), NUMKEYS(fp) * fp->mp_leaf2_ksize);
         } else {
           memcpy((char *)mp + mp->mp_upper + PAGEHDRSZ,
@@ -8232,15 +8231,14 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
               : ovpages ==
                     /* LY: add configurable threshold to keep reserve space */
                     dpages) {
-        if (!(omp->mp_flags & P_DIRTY) &&
-            (level || (env->me_flags & MDBX_WRITEMAP))) {
+        if (!IS_DIRTY(omp) && (level || (env->me_flags & MDBX_WRITEMAP))) {
           rc = mdbx_page_unspill(mc->mc_txn, omp, &omp);
           if (unlikely(rc))
             return rc;
           level = 0; /* dirty in this txn or clean */
         }
         /* Is it dirty? */
-        if (omp->mp_flags & P_DIRTY) {
+        if (IS_DIRTY(omp)) {
           /* yes, overwrite it. Note in this case we don't
            * bother to try shrinking the page if the new data
            * is smaller than the overflow threshold. */
@@ -8892,7 +8890,7 @@ static void mdbx_node_shrink(MDBX_page *mp, unsigned indx) {
   assert(delta > 0);
 
   /* Prepare to shift upward, set len = length(subpage part to shift) */
-  if (unlikely(IS_LEAF2(sp))) {
+  if (IS_LEAF2(sp)) {
     delta &= /* do not make the node uneven-sized */ ~1u;
     if (unlikely(delta) == 0)
       return;
@@ -12530,7 +12528,7 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
         flags |= MDBX_CURRENT;
       }
 
-      if (page->mp_flags & P_DIRTY) {
+      if (IS_DIRTY(page)) {
         if (unlikely(old_data->iov_len < present_data.iov_len)) {
           old_data->iov_base = NULL;
           old_data->iov_len = present_data.iov_len;
