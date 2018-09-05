@@ -6841,6 +6841,7 @@ static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key, int flags) {
  * be underfilled. */
 static int mdbx_page_search_lowest(MDBX_cursor *mc) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
+  mdbx_cassert(mc, IS_BRANCH(mp));
   MDBX_node *node = NODEPTR(mp, 0);
   int rc;
 
@@ -7373,6 +7374,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   if (mc->mc_flags & C_INITIALIZED) {
     MDBX_val nodekey;
 
+    mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
     mp = mc->mc_pg[mc->mc_top];
     if (!NUMKEYS(mp)) {
       mc->mc_ki[mc->mc_top] = 0;
