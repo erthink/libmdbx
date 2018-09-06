@@ -1058,7 +1058,7 @@ static __inline unsigned mdbx_log2(size_t value) {
 #define NUMKEYS(p) ((unsigned)(p)->mp_lower >> 1)
 
 /* The amount of space remaining in the page */
-#define SIZELEFT(p) (indx_t)((p)->mp_upper - (p)->mp_lower)
+#define SIZELEFT(p) ((indx_t)((p)->mp_upper - (p)->mp_lower))
 
 /* The percentage of space used in the page, in tenths of a percent. */
 #define PAGEFILL(env, p)                                                       \
