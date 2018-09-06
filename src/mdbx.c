@@ -1061,7 +1061,7 @@ static int __must_check_result mdbx_page_merge(MDBX_cursor *csrc,
 
 #define MDBX_SPLIT_REPLACE MDBX_APPENDDUP /* newkey is not new */
 static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
-                                               MDBX_val *newkey,
+                                               const MDBX_val *newkey,
                                                MDBX_val *newdata,
                                                pgno_t newpgno, unsigned nflags);
 
@@ -1073,19 +1073,22 @@ static void mdbx_env_close0(MDBX_env *env);
 
 static MDBX_node *mdbx_node_search(MDBX_cursor *mc, MDBX_val *key, int *exactp);
 static int __must_check_result mdbx_node_add(MDBX_cursor *mc, unsigned indx,
-                                             MDBX_val *key, MDBX_val *data,
-                                             pgno_t pgno, unsigned flags);
+                                             const MDBX_val *key,
+                                             MDBX_val *data, pgno_t pgno,
+                                             unsigned flags);
 static void mdbx_node_del(MDBX_cursor *mc, size_t ksize);
 static void mdbx_node_shrink(MDBX_page *mp, unsigned indx);
 static int __must_check_result mdbx_node_move(MDBX_cursor *csrc,
                                               MDBX_cursor *cdst, int fromleft);
 static int __must_check_result mdbx_node_read(MDBX_cursor *mc, MDBX_node *leaf,
                                               MDBX_val *data);
-static size_t mdbx_leaf_size(MDBX_env *env, MDBX_val *key, MDBX_val *data);
-static size_t mdbx_branch_size(MDBX_env *env, MDBX_val *key);
+static size_t mdbx_leaf_size(MDBX_env *env, const MDBX_val *key,
+                             const MDBX_val *data);
+static size_t mdbx_branch_size(MDBX_env *env, const MDBX_val *key);
 
 static int __must_check_result mdbx_rebalance(MDBX_cursor *mc);
-static int __must_check_result mdbx_update_key(MDBX_cursor *mc, MDBX_val *key);
+static int __must_check_result mdbx_update_key(MDBX_cursor *mc,
+                                               const MDBX_val *key);
 
 static void mdbx_cursor_pop(MDBX_cursor *mc);
 static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
@@ -6561,7 +6564,6 @@ static int __hot mdbx_cmp_memnr(const MDBX_val *a, const MDBX_val *b) {
  * If no entry larger or equal to the key is found, returns NULL. */
 static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
                                          int *exactp) {
-  unsigned i = 0, nkeys;
   int low, high;
   int rc = 0;
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
@@ -6570,7 +6572,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
   MDBX_cmp_func *cmp;
   DKBUF;
 
-  nkeys = NUMKEYS(mp);
+  const unsigned nkeys = NUMKEYS(mp);
 
   mdbx_debug("searching %u keys in %s %spage %" PRIaPGNO "", nkeys,
              IS_LEAF(mp) ? "leaf" : "branch", IS_SUBP(mp) ? "sub-" : "",
@@ -6586,6 +6588,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
   if (cmp == mdbx_cmp_int_a2 && IS_BRANCH(mp))
     cmp = mdbx_cmp_int_ai;
 
+  unsigned i = 0;
   if (IS_LEAF2(mp)) {
     nodekey.iov_len = mc->mc_db->md_xsize;
     node = NODEPTR(mp, 0); /* fake */
@@ -7397,8 +7400,8 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       goto set1;
     }
     if (rc > 0) {
+      const unsigned nkeys = NUMKEYS(mp);
       unsigned i;
-      unsigned nkeys = NUMKEYS(mp);
       if (nkeys > 1) {
         if (IS_LEAF2(mp)) {
           nodekey.iov_base = LEAF2KEY(mp, nkeys - 1, nodekey.iov_len);
@@ -7662,7 +7665,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
       return MDBX_EINVAL;
     MDBX_page *mp = mc->mc_pg[mc->mc_top];
-    unsigned nkeys = NUMKEYS(mp);
+    const unsigned nkeys = NUMKEYS(mp);
     if (mc->mc_ki[mc->mc_top] >= nkeys) {
       mdbx_cassert(mc, nkeys <= UINT16_MAX);
       mc->mc_ki[mc->mc_top] = (uint16_t)nkeys;
@@ -8383,7 +8386,7 @@ new_sub:
         MDBX_xcursor *mx = mc->mc_xcursor;
         unsigned i = mc->mc_top;
         MDBX_page *mp = mc->mc_pg[i];
-        int nkeys = NUMKEYS(mp);
+        const int nkeys = NUMKEYS(mp);
 
         for (m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
           if (m2 == mc || m2->mc_snum < mc->mc_snum)
@@ -8631,8 +8634,8 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
  * [in] data  The data for the node.
  *
  * Returns The number of bytes needed to store the node. */
-static __inline size_t mdbx_leaf_size(MDBX_env *env, MDBX_val *key,
-                                      MDBX_val *data) {
+static __inline size_t mdbx_leaf_size(MDBX_env *env, const MDBX_val *key,
+                                      const MDBX_val *data) {
   size_t sz;
 
   sz = LEAFSIZE(key, data);
@@ -8656,7 +8659,7 @@ static __inline size_t mdbx_leaf_size(MDBX_env *env, MDBX_val *key,
  * [in] key The key for the node.
  *
  * Returns The number of bytes needed to store the node. */
-static __inline size_t mdbx_branch_size(MDBX_env *env, MDBX_val *key) {
+static __inline size_t mdbx_branch_size(MDBX_env *env, const MDBX_val *key) {
   size_t sz;
 
   sz = INDXSIZE(key);
@@ -8687,7 +8690,7 @@ static __inline size_t mdbx_branch_size(MDBX_env *env, MDBX_val *key) {
  * MDBX_PAGE_FULL  - there is insufficient room in the page. This error
  *                  should never happen since all callers already calculate
  *                  the page's free space before calling this function. */
-static int mdbx_node_add(MDBX_cursor *mc, unsigned indx, MDBX_val *key,
+static int mdbx_node_add(MDBX_cursor *mc, unsigned indx, const MDBX_val *key,
                          MDBX_val *data, pgno_t pgno, unsigned flags) {
   unsigned i;
   size_t node_size = NODESIZE;
@@ -9245,7 +9248,7 @@ MDBX_dbi mdbx_cursor_dbi(MDBX_cursor *mc) {
  * [in] mc Cursor pointing to the node to operate on.
  * [in] key The new key to use.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_update_key(MDBX_cursor *mc, MDBX_val *key) {
+static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_page *mp;
   MDBX_node *node;
   char *base;
@@ -9645,7 +9648,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   {
     /* Adjust other cursors pointing to mp */
     MDBX_cursor *m2, *m3;
-    MDBX_dbi dbi = csrc->mc_dbi;
+    const MDBX_dbi dbi = csrc->mc_dbi;
     unsigned top = csrc->mc_top;
 
     for (m2 = csrc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
@@ -10076,8 +10079,8 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
  * [in] newpgno The page number, if the new node is a branch node.
  * [in] nflags The NODE_ADD_FLAGS for the new node.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_split(MDBX_cursor *mc, MDBX_val *newkey, MDBX_val *newdata,
-                           pgno_t newpgno, unsigned nflags) {
+static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
+                           MDBX_val *newdata, pgno_t newpgno, unsigned nflags) {
   unsigned flags;
   int rc = MDBX_SUCCESS, new_root = 0, did_split = 0;
   pgno_t pgno = 0;
