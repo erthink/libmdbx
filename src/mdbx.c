@@ -8696,9 +8696,8 @@ static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
   mdbx_cassert(mc, ksize == key->iov_len);
 
   const int room = SIZELEFT(mp);
-  const int entry_size = ksize + sizeof(indx_t);
-  mdbx_cassert(mc, room >= entry_size);
-  if (unlikely(room < entry_size)) {
+  mdbx_cassert(mc, room >= (int)ksize);
+  if (unlikely(room < (int)ksize)) {
   bailout:
     mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
     return MDBX_PAGE_FULL;
