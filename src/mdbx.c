@@ -8333,7 +8333,11 @@ new_sub:
     rc = mdbx_page_split(mc, key, rdata, P_INVALID, nflags);
   } else {
     /* There is room already in this leaf page. */
-    rc = mdbx_node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, nflags);
+    if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
+      mdbx_cassert(mc, nflags == 0 && rdata->iov_len == 0);
+      rc = mdbx_node_add_leaf2(mc, mc->mc_ki[mc->mc_top], key);
+    } else
+      rc = mdbx_node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, nflags);
     if (likely(rc == 0)) {
       /* Adjust other cursors pointing to mp */
       MDBX_cursor *m2, *m3;
