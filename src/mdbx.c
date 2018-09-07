@@ -8656,7 +8656,7 @@ static __inline size_t mdbx_leaf_size(MDBX_env *env, const MDBX_val *key,
     sz = sz - data->iov_len + sizeof(pgno_t);
   }
 
-  return EVEN(sz + sizeof(indx_t));
+  return EVEN(sz) + sizeof(indx_t);
 }
 
 /* Calculate the size of a branch node.
@@ -8681,7 +8681,7 @@ static __inline size_t mdbx_branch_size(MDBX_env *env, const MDBX_val *key) {
     sz = sz - key->iov_len + sizeof(pgno_t);
   }
 
-  return sz + sizeof(indx_t);
+  return EVEN(sz) + sizeof(indx_t);
 }
 
 static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
@@ -10311,7 +10311,7 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
                            MDBX_val *newdata, pgno_t newpgno, unsigned nflags) {
   unsigned flags;
-  int rc = MDBX_SUCCESS, new_root = 0, did_split = 0;
+  int rc = MDBX_SUCCESS, foliage = 0, did_split = 0;
   pgno_t pgno = 0;
   unsigned i, ptop;
   MDBX_env *env = mc->mc_txn->mt_env;
@@ -10345,15 +10345,16 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     if ((rc = mdbx_page_new(mc, P_BRANCH, 1, &pp)))
       goto done;
     /* shift current top to make room for new parent */
-    for (i = mc->mc_snum; i > 0; i--) {
-      mc->mc_pg[i] = mc->mc_pg[i - 1];
-      mc->mc_ki[i] = mc->mc_ki[i - 1];
-    }
+    mdbx_cassert(mc, mc->mc_snum < 2 && mc->mc_db->md_depth > 0);
+    mc->mc_pg[2] = mc->mc_pg[1];
+    mc->mc_ki[2] = mc->mc_ki[1];
+    mc->mc_pg[1] = mc->mc_pg[0];
+    mc->mc_ki[1] = mc->mc_ki[0];
     mc->mc_pg[0] = pp;
     mc->mc_ki[0] = 0;
     mc->mc_db->md_root = pp->mp_pgno;
     mdbx_debug("root split! new root = %" PRIaPGNO "", pp->mp_pgno);
-    new_root = mc->mc_db->md_depth++;
+    foliage = mc->mc_db->md_depth++;
 
     /* Add left (implicit) pointer. */
     if (unlikely((rc = mdbx_node_add_branch(mc, 0, NULL, mp->mp_pgno)) !=
@@ -10376,6 +10377,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
   mdbx_cursor_copy(mc, &mn);
   mn.mc_xcursor = NULL;
   mn.mc_pg[mn.mc_top] = rp;
+  mn.mc_ki[mn.mc_top] = 0;
   mn.mc_ki[ptop] = mc->mc_ki[ptop] + 1;
 
   unsigned split_indx;
@@ -10386,7 +10388,6 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     nkeys = 0;
   } else {
     split_indx = (nkeys + 1) / 2;
-
     if (IS_LEAF2(rp)) {
       char *split, *ins;
       int x;
@@ -10438,12 +10439,9 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     } else {
       size_t psize, nsize, k;
       /* Maximum free space in an empty page */
-      unsigned pmax = env->me_psize - PAGEHDRSZ;
-      if (IS_LEAF(mp))
-        nsize = mdbx_leaf_size(env, newkey, newdata);
-      else
-        nsize = mdbx_branch_size(env, newkey);
-      nsize = EVEN(nsize);
+      const unsigned pmax = env->me_psize - PAGEHDRSZ;
+      nsize = IS_LEAF(mp) ? mdbx_leaf_size(env, newkey, newdata)
+                          : mdbx_branch_size(env, newkey);
 
       /* grab a page to hold a temporary copy */
       copy = mdbx_page_malloc(mc->mc_txn, 1);
@@ -10529,7 +10527,8 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
 
   /* Copy separator key to the parent. */
   if (SIZELEFT(mn.mc_pg[ptop]) < mdbx_branch_size(env, &sepkey)) {
-    int snum = mc->mc_snum;
+    const int snum = mc->mc_snum;
+    const int depth = mc->mc_db->md_depth;
     mn.mc_snum--;
     mn.mc_top--;
     did_split = 1;
@@ -10538,10 +10537,10 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         mn, rc = mdbx_page_split(&mn, &sepkey, NULL, rp->mp_pgno, 0));
     if (unlikely(rc != MDBX_SUCCESS))
       goto done;
+    mdbx_cassert(mc, mc->mc_snum - snum == mc->mc_db->md_depth - depth);
 
     /* root split? */
-    if (mc->mc_snum > snum)
-      ptop++;
+    ptop += mc->mc_snum - snum;
 
     /* Right page might now have changed parent.
      * Check if left page also changed parent. */
@@ -10557,7 +10556,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
       } else {
         /* find right page's left sibling */
         mc->mc_ki[ptop] = mn.mc_ki[ptop];
-        rc = mdbx_cursor_sibling(mc, 0);
+        rc = mdbx_cursor_sibling(mc, false);
       }
     }
   } else {
@@ -10572,6 +10571,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     }
     goto done;
   }
+
   if (nflags & MDBX_APPEND) {
     mc->mc_pg[mc->mc_top] = rp;
     mc->mc_ki[mc->mc_top] = 0;
@@ -10628,7 +10628,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
 
       switch (PAGETYPE(rp)) {
       case P_BRANCH: {
-        mdbx_cassert(mc, flags == 0);
+        mdbx_cassert(mc, 0 == (uint16_t)flags);
         if (n == 0) {
           /* First branch index doesn't need key data. */
           rkey.iov_len = 0;
@@ -10640,7 +10640,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         rc = mdbx_node_add_leaf(mc, n, &rkey, rdata, flags);
       } break;
       /* case P_LEAF | P_LEAF2: {
-        mdbx_cassert(mc, flags == 0);
+        mdbx_cassert(mc, 0 == (uint16_t)flags);
         mdbx_cassert(mc, gno == 0);
         rc = mdbx_node_add_leaf2(mc, n, &rkey);
       } break; */
@@ -10710,29 +10710,22 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     nkeys = NUMKEYS(mp);
 
     for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
-      if (mc->mc_flags & C_SUB)
-        m3 = &m2->mc_xcursor->mx_cursor;
-      else
-        m3 = m2;
+      m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
       if (m3 == mc)
         continue;
       if (!(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
         continue;
-      if (new_root) {
+      if (foliage) {
         int k;
         /* sub cursors may be on different DB */
         if (m3->mc_pg[0] != mp)
           continue;
         /* root split */
-        for (k = new_root; k >= 0; k--) {
+        for (k = foliage; k >= 0; k--) {
           m3->mc_ki[k + 1] = m3->mc_ki[k];
           m3->mc_pg[k + 1] = m3->mc_pg[k];
         }
-        if (m3->mc_ki[0] >= nkeys) {
-          m3->mc_ki[0] = 1;
-        } else {
-          m3->mc_ki[0] = 0;
-        }
+        m3->mc_ki[0] = (m3->mc_ki[0] >= nkeys) ? 1 : 0;
         m3->mc_pg[0] = mc->mc_pg[0];
         m3->mc_snum++;
         m3->mc_top++;
