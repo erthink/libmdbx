@@ -1514,21 +1514,16 @@ static size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
   return mdbx_roundup2(mdbx_roundup2(bytes, env->me_psize), env->me_os_psize);
 }
 
-static void __cold mdbx_kill_page(MDBX_env *env, pgno_t pgno) {
-  const size_t offs = pgno2bytes(env, pgno);
-  const size_t shift = offsetof(MDBX_page, mp_pages);
+static void __cold mdbx_kill_page(MDBX_env *env, MDBX_page *mp) {
+  const size_t len = env->me_psize - PAGEHDRSZ;
+  void *ptr = (env->me_flags & MDBX_WRITEMAP) ? &mp->mp_data : alloca(len);
+  memset(ptr, 0x6F /* 'o', 111 */, len);
+  if (ptr != &mp->mp_data)
+    (void)mdbx_pwrite(env->me_fd, ptr, len,
+                      pgno2bytes(env, mp->mp_pgno) + PAGEHDRSZ);
 
-  if (env->me_flags & MDBX_WRITEMAP) {
-    MDBX_page *mp = (MDBX_page *)(env->me_map + offs);
-    memset(&mp->mp_pages, 0x6F /* 'o', 111 */, env->me_psize - shift);
-    VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_pages, env->me_psize - shift);
-    ASAN_POISON_MEMORY_REGION(&mp->mp_pages, env->me_psize - shift);
-  } else {
-    intptr_t len = env->me_psize - shift;
-    void *buf = alloca(len);
-    memset(buf, 0x6F /* 'o', 111 */, len);
-    (void)mdbx_pwrite(env->me_fd, buf, len, offs + shift);
-  }
+  VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_data, len);
+  ASAN_POISON_MEMORY_REGION(&mp->mp_data, len);
 }
 
 static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
@@ -1590,8 +1585,9 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
     mc->mc_db->md_leaf_pages--;
   }
 
-  if (IS_DIRTY(mp) && mc->mc_dbi != FREE_DBI) {
+  if (IS_DIRTY(mp)) {
     if (txn->mt_parent) {
+      /* LY: TODO: use dedicated flag for tracking parent's dirty pages */
       mdbx_cassert(mc, (txn->mt_env->me_flags & MDBX_WRITEMAP) == 0);
       MDBX_DP *dl = txn->mt_rw_dirtylist;
       /* If txn has a parent,
@@ -1620,15 +1616,14 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
   if (loose) {
     mdbx_debug("loosen db %d page %" PRIaPGNO, DDBI(mc), mp->mp_pgno);
     MDBX_page **link = &NEXT_LOOSE_PAGE(mp);
-    if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB)) {
-      mdbx_kill_page(txn->mt_env, pgno);
-      VALGRIND_MAKE_MEM_UNDEFINED(link, sizeof(MDBX_page *));
-      ASAN_UNPOISON_MEMORY_REGION(link, sizeof(MDBX_page *));
-    }
+    if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+      mdbx_kill_page(txn->mt_env, mp);
+    mp->mp_flags = P_LOOSE | P_DIRTY;
+    VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
+    VALGRIND_MAKE_MEM_DEFINED(&mp->mp_pgno, sizeof(pgno_t));
     *link = txn->mt_loose_pages;
     txn->mt_loose_pages = mp;
     txn->mt_loose_count++;
-    mp->mp_flags |= P_LOOSE;
   } else {
     int rc = mdbx_pnl_append(&txn->mt_befree_pages, pgno);
     mdbx_tassert(txn, rc == MDBX_SUCCESS);
