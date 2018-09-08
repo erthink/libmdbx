@@ -8341,10 +8341,7 @@ new_sub:
       MDBX_page *mp = mc->mc_pg[i];
 
       for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
-        if (mc->mc_flags & C_SUB)
-          m3 = &m2->mc_xcursor->mx_cursor;
-        else
-          m3 = m2;
+        m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
         if (m3 == mc || m3->mc_snum < mc->mc_snum || m3->mc_pg[i] != mp)
           continue;
         if (m3->mc_ki[i] >= mc->mc_ki[i] && insert_key) {
@@ -9470,10 +9467,9 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   /* Shift node contents if EVEN(key length) changed. */
   if (delta) {
     if (SIZELEFT(mp) < delta) {
-      pgno_t pgno;
       /* not enough space left, do a delete and split */
       mdbx_debug("Not enough room, delta = %d, splitting...", delta);
-      pgno = NODEPGNO(node);
+      pgno_t pgno = NODEPGNO(node);
       mdbx_node_del(mc, 0);
       return mdbx_page_split(mc, key, NULL, pgno, MDBX_SPLIT_REPLACE);
     }
