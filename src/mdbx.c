@@ -10011,12 +10011,14 @@ static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
  * Returns 0 on success, non-zero on failure. */
 static int mdbx_rebalance(MDBX_cursor *mc) {
   MDBX_node *node;
-  int rc, fromleft;
-  unsigned ptop, minkeys, thresh;
-  MDBX_cursor mn;
-  indx_t oldki;
+  int rc;
+  unsigned minkeys, thresh;
 
-  if (IS_BRANCH(mc->mc_pg[mc->mc_top])) {
+  mdbx_cassert(mc, mc->mc_snum > 0);
+  mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
+                       IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
+  const int pagetype = PAGETYPE(mc->mc_pg[mc->mc_top]);
+  if (pagetype == P_BRANCH) {
     minkeys = 2;
     thresh = 1;
   } else {
@@ -10024,9 +10026,9 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     thresh = FILL_THRESHOLD;
   }
   mdbx_debug("rebalancing %s page %" PRIaPGNO " (has %u keys, %.1f%% full)",
-             IS_LEAF(mc->mc_pg[mc->mc_top]) ? "leaf" : "branch",
+             (pagetype & P_LEAF) ? "leaf" : "branch",
              mc->mc_pg[mc->mc_top]->mp_pgno, NUMKEYS(mc->mc_pg[mc->mc_top]),
-             (float)PAGEFILL(mc->mc_txn->mt_env, mc->mc_pg[mc->mc_top]) / 10);
+             PAGEFILL(mc->mc_txn->mt_env, mc->mc_pg[mc->mc_top]) / 10.24);
 
   if (PAGEFILL(mc->mc_txn->mt_env, mc->mc_pg[mc->mc_top]) >= thresh &&
       NUMKEYS(mc->mc_pg[mc->mc_top]) >= minkeys) {
@@ -10042,6 +10044,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     mdbx_cassert(mc, (mc->mc_db->md_entries == 0) == (nkeys == 0));
     if (IS_SUBP(mp)) {
       mdbx_debug("Can't rebalance a subpage, ignoring");
+      mdbx_cassert(mc, pagetype & P_LEAF);
       return MDBX_SUCCESS;
     }
     if (nkeys == 0) {
@@ -10056,7 +10059,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       if (mc->mc_flags & C_SUB)
         mdbx_outer_db(mc)->md_leaf_pages -= 1;
       rc = mdbx_pnl_append(&mc->mc_txn->mt_befree_pages, mp->mp_pgno);
-      if (unlikely(rc))
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
       /* Adjust cursors pointing to mp */
       const MDBX_dbi dbi = mc->mc_dbi;
@@ -10064,7 +10067,8 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
-        if (!(m3->mc_flags & C_INITIALIZED) || (m3->mc_snum < mc->mc_snum))
+        if (m3 == mc || !(m3->mc_flags & C_INITIALIZED) ||
+            (m3->mc_snum < mc->mc_snum))
           continue;
         if (m3->mc_pg[0] == mp) {
           m3->mc_snum = 0;
@@ -10082,7 +10086,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
         return rc;
       mc->mc_db->md_root = NODEPGNO(NODEPTR(mp, 0));
       rc = mdbx_page_get(mc, mc->mc_db->md_root, &mc->mc_pg[0], NULL);
-      if (unlikely(rc))
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
       mc->mc_db->md_depth--;
       mc->mc_db->md_branch_pages--;
@@ -10093,30 +10097,29 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
         mc->mc_pg[i] = mc->mc_pg[i + 1];
         mc->mc_ki[i] = mc->mc_ki[i + 1];
       }
-      {
-        /* Adjust other cursors pointing to mp */
-        MDBX_cursor *m2, *m3;
-        MDBX_dbi dbi = mc->mc_dbi;
 
-        for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
-          if (mc->mc_flags & C_SUB)
-            m3 = &m2->mc_xcursor->mx_cursor;
-          else
-            m3 = m2;
-          if (m3 == mc)
-            continue;
-          if (!(m3->mc_flags & C_INITIALIZED))
-            continue;
-          if (m3->mc_pg[0] == mp) {
-            for (int i = 0; i < mc->mc_db->md_depth; i++) {
-              m3->mc_pg[i] = m3->mc_pg[i + 1];
-              m3->mc_ki[i] = m3->mc_ki[i + 1];
-            }
-            m3->mc_snum--;
-            m3->mc_top--;
+      /* Adjust other cursors pointing to mp */
+      MDBX_cursor *m2, *m3;
+      MDBX_dbi dbi = mc->mc_dbi;
+
+      for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+        m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
+        if (m3 == mc || !(m3->mc_flags & C_INITIALIZED))
+          continue;
+        if (m3->mc_pg[0] == mp) {
+          for (int i = 0; i < mc->mc_db->md_depth; i++) {
+            m3->mc_pg[i] = m3->mc_pg[i + 1];
+            m3->mc_ki[i] = m3->mc_ki[i + 1];
           }
+          m3->mc_snum--;
+          m3->mc_top--;
         }
       }
+
+      mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) ||
+                           PAGETYPE(mc->mc_pg[mc->mc_top]) == pagetype);
+      mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
+                           IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
     } else {
       mdbx_debug("root page %" PRIaPGNO
                  " doesn't need rebalancing (flags 0x%x)",
@@ -10127,50 +10130,53 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
 
   /* The parent (branch page) must have at least 2 pointers,
    * otherwise the tree is invalid. */
-  ptop = mc->mc_top - 1;
-  mdbx_cassert(mc, IS_BRANCH(mc->mc_pg[ptop]));
-  mdbx_cassert(mc, NUMKEYS(mc->mc_pg[ptop]) > 1);
+  const unsigned pre_top = mc->mc_top - 1;
+  mdbx_cassert(mc, IS_BRANCH(mc->mc_pg[pre_top]));
+  mdbx_cassert(mc, !IS_SUBP(mc->mc_pg[0]));
+  mdbx_cassert(mc, NUMKEYS(mc->mc_pg[pre_top]) > 1);
 
   /* Leaf page fill factor is below the threshold.
    * Try to move keys from left or right neighbor, or
    * merge with a neighbor page. */
 
   /* Find neighbors. */
+  MDBX_cursor mn;
   mdbx_cursor_copy(mc, &mn);
   mn.mc_xcursor = NULL;
 
-  oldki = mc->mc_ki[mc->mc_top];
-  if (mc->mc_ki[ptop] == 0) {
+  indx_t oldki = mc->mc_ki[mc->mc_top];
+  bool fromleft;
+  if (mc->mc_ki[pre_top] == 0) {
     /* We're the leftmost leaf in our parent. */
     mdbx_debug("reading right neighbor");
-    mn.mc_ki[ptop]++;
-    node = NODEPTR(mc->mc_pg[ptop], mn.mc_ki[ptop]);
+    mn.mc_ki[pre_top]++;
+    node = NODEPTR(mc->mc_pg[pre_top], mn.mc_ki[pre_top]);
     rc = mdbx_page_get(mc, NODEPGNO(node), &mn.mc_pg[mn.mc_top], NULL);
-    if (unlikely(rc))
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     mdbx_cassert(mc, PAGETYPE(mn.mc_pg[mn.mc_top]) ==
                          PAGETYPE(mc->mc_pg[mc->mc_top]));
     mn.mc_ki[mn.mc_top] = 0;
     mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]);
-    fromleft = 0;
+    fromleft = false;
   } else {
     /* There is at least one neighbor to the left. */
     mdbx_debug("reading left neighbor");
-    mn.mc_ki[ptop]--;
-    node = NODEPTR(mc->mc_pg[ptop], mn.mc_ki[ptop]);
+    mn.mc_ki[pre_top]--;
+    node = NODEPTR(mc->mc_pg[pre_top], mn.mc_ki[pre_top]);
     rc = mdbx_page_get(mc, NODEPGNO(node), &mn.mc_pg[mn.mc_top], NULL);
-    if (unlikely(rc))
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     mdbx_cassert(mc, PAGETYPE(mn.mc_pg[mn.mc_top]) ==
                          PAGETYPE(mc->mc_pg[mc->mc_top]));
     mn.mc_ki[mn.mc_top] = NUMKEYS(mn.mc_pg[mn.mc_top]) - 1;
     mc->mc_ki[mc->mc_top] = 0;
-    fromleft = 1;
+    fromleft = true;
   }
 
   mdbx_debug("found neighbor page %" PRIaPGNO " (%u keys, %.1f%% full)",
              mn.mc_pg[mn.mc_top]->mp_pgno, NUMKEYS(mn.mc_pg[mn.mc_top]),
-             (float)PAGEFILL(mc->mc_txn->mt_env, mn.mc_pg[mn.mc_top]) / 10);
+             PAGEFILL(mc->mc_txn->mt_env, mn.mc_pg[mn.mc_top]) / 10.24);
 
   /* If the neighbor page is above threshold and has enough keys,
    * move one key from it. Otherwise we should try to merge them.
@@ -10178,24 +10184,39 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
   if (PAGEFILL(mc->mc_txn->mt_env, mn.mc_pg[mn.mc_top]) >= thresh &&
       NUMKEYS(mn.mc_pg[mn.mc_top]) > minkeys) {
     rc = mdbx_node_move(&mn, mc, fromleft);
-    if (fromleft) {
-      /* if we inserted on left, bump position up */
-      oldki++;
-    }
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    oldki += fromleft /* if we inserted on left, bump position up */;
+    mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) ||
+                         PAGETYPE(mc->mc_pg[mc->mc_top]) == pagetype);
+    mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
+                         IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
   } else {
     if (!fromleft) {
       rc = mdbx_page_merge(&mn, mc);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+      mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) ||
+                           PAGETYPE(mc->mc_pg[mc->mc_top]) == pagetype);
+      mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
+                           IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
     } else {
       oldki += NUMKEYS(mn.mc_pg[mn.mc_top]);
       mn.mc_ki[mn.mc_top] += mc->mc_ki[mn.mc_top] + 1;
       /* We want mdbx_rebalance to find mn when doing fixups */
       WITH_CURSOR_TRACKING(mn, rc = mdbx_page_merge(mc, &mn));
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
       mdbx_cursor_copy(&mn, mc);
+      mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) ||
+                           PAGETYPE(mc->mc_pg[mc->mc_top]) == pagetype);
+      mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
+                           IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
     }
     mc->mc_flags &= ~C_EOF;
   }
   mc->mc_ki[mc->mc_top] = oldki;
-  return rc;
+  return MDBX_SUCCESS;
 }
 
 /* Complete a delete operation started by mdbx_cursor_del(). */
