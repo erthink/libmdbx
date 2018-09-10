@@ -1475,22 +1475,15 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
   return np;
 }
 
-/* Free a single page.
- * Saves single pages to a list, for future reuse.
- * (This is not used for multi-page overflow pages.) */
-static __inline void mdbx_page_free(MDBX_env *env, MDBX_page *mp) {
-#if MDBX_DEBUG
-  mp->mp_pgno = MAX_PAGENO;
-#endif
-  mp->mp_next = env->me_dpages;
-  VALGRIND_MEMPOOL_FREE(env, mp);
-  env->me_dpages = mp;
-}
-
 /* Free a dirty page */
-static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp) {
-  if (!IS_OVERFLOW(dp) || dp->mp_pages == 1) {
-    mdbx_page_free(env, dp);
+static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned pages) {
+#if MDBX_DEBUG
+  dp->mp_pgno = MAX_PAGENO;
+#endif
+  if (pages == 1) {
+    dp->mp_next = env->me_dpages;
+    VALGRIND_MEMPOOL_FREE(env, dp);
+    env->me_dpages = dp;
   } else {
     /* large pages just get freed directly */
     VALGRIND_MEMPOOL_FREE(env, dp);
@@ -1504,8 +1497,10 @@ static void mdbx_dlist_free(MDBX_txn *txn) {
   MDBX_DPL dl = txn->mt_rw_dirtylist;
   size_t i, n = dl->length;
 
-  for (i = 1; i <= n; i++)
-    mdbx_dpage_free(env, dl[i].ptr);
+  for (i = 1; i <= n; i++) {
+    MDBX_page *dp = dl[i].ptr;
+    mdbx_dpage_free(env, dp, IS_OVERFLOW(dp) ? dp->mp_pages : 1);
+  }
 
   dl->length = 0;
 }
@@ -2771,7 +2766,7 @@ static int mdbx_page_touch(MDBX_cursor *mc) {
     }
     rc = mdbx_dpl_insert(dl, pgno, np);
     if (unlikely(rc)) {
-      mdbx_dpage_free(txn->mt_env, np);
+      mdbx_dpage_free(txn->mt_env, np, 1);
       goto fail;
     }
   } else {
@@ -3833,7 +3828,7 @@ retry:
         MDBX_page *dp = mp;
         mp = NEXT_LOOSE_PAGE(mp);
         if ((env->me_flags & MDBX_WRITEMAP) == 0)
-          mdbx_dpage_free(env, dp);
+          mdbx_dpage_free(env, dp, 1);
       }
 
       if (left > 0) {
@@ -4350,7 +4345,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
       dl[j].pgno = dp->mp_pgno;
       continue;
     }
-    mdbx_dpage_free(env, dp);
+    mdbx_dpage_free(env, dp, IS_OVERFLOW(dp) ? dp->mp_pages : 1);
   }
 
 done:
@@ -7031,7 +7026,7 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
     }
     txn->mt_dirtyroom++;
     if (!(env->me_flags & MDBX_WRITEMAP))
-      mdbx_dpage_free(env, mp);
+      mdbx_dpage_free(env, mp, IS_OVERFLOW(mp) ? mp->mp_pages : 1);
   release:
     /* Insert in me_reclaimed_pglist */
     mop = env->me_reclaimed_pglist;
@@ -8260,7 +8255,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             rc2 = mdbx_dpl_insert(mc->mc_txn->mt_rw_dirtylist, pg, np);
             if (unlikely(rc2 != MDBX_SUCCESS)) {
               rc = rc2;
-              mdbx_dpage_free(env, np);
+              mdbx_dpage_free(env, np, ovpages);
               goto fail;
             }
 
@@ -10838,7 +10833,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
 
 done:
   if (copy) /* tmp page */
-    mdbx_page_free(env, copy);
+    mdbx_dpage_free(env, copy, 1);
   if (unlikely(rc))
     mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
   return rc;
