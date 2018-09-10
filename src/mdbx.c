@@ -10067,8 +10067,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
-        if (m3 == mc || !(m3->mc_flags & C_INITIALIZED) ||
-            (m3->mc_snum < mc->mc_snum))
+        if (m3 == mc || !(m3->mc_flags & C_INITIALIZED))
           continue;
         if (m3->mc_pg[0] == mp) {
           m3->mc_snum = 0;
