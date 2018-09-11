@@ -10222,6 +10222,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
   MDBX_cursor *m2, *m3;
   MDBX_dbi dbi = mc->mc_dbi;
 
+  mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
   ki = mc->mc_ki[mc->mc_top];
   mp = mc->mc_pg[mc->mc_top];
   mdbx_node_del(mc, mc->mc_db->md_xsize);
@@ -10230,9 +10231,9 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
     /* Adjust other cursors pointing to mp */
     for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
       m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
-      if (!(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
+      if (m3 == mc || !(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
         continue;
-      if (m3 == mc || m3->mc_snum < mc->mc_snum)
+      if (m3->mc_snum < mc->mc_snum)
         continue;
       if (m3->mc_pg[mc->mc_top] == mp) {
         if (m3->mc_ki[mc->mc_top] == ki) {
@@ -10264,13 +10265,14 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
     }
 
     mp = mc->mc_pg[mc->mc_top];
+    mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
     nkeys = NUMKEYS(mp);
     mdbx_cassert(mc, (mc->mc_db->md_entries > 0 && nkeys > 0) ||
                          ((mc->mc_flags & C_SUB) &&
                           mc->mc_db->md_entries == 0 && nkeys == 0));
 
-    /* Adjust other cursors pointing to mp */
-    for (m2 = mc->mc_txn->mt_cursors[dbi]; !rc && m2; m2 = m2->mc_next) {
+    /* Adjust THIS and other cursors pointing to mp */
+    for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
       m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
       if (!(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
         continue;
@@ -10280,7 +10282,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
         /* if m3 points past last node in page, find next sibling */
         if (m3->mc_ki[mc->mc_top] >= mc->mc_ki[mc->mc_top]) {
           if (m3->mc_ki[mc->mc_top] >= nkeys) {
-            rc = mdbx_cursor_sibling(m3, 1);
+            rc = mdbx_cursor_sibling(m3, true);
             if (rc == MDBX_NOTFOUND) {
               m3->mc_flags |= C_EOF;
               rc = MDBX_SUCCESS;
@@ -10301,8 +10303,9 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
                   m3->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
               } else {
                 rc = mdbx_xcursor_init1(m3, node);
-                if (likely(rc == MDBX_SUCCESS))
-                  m3->mc_xcursor->mx_cursor.mc_flags |= C_DEL;
+                if (unlikely(rc != MDBX_SUCCESS))
+                  break;
+                m3->mc_xcursor->mx_cursor.mc_flags |= C_DEL;
               }
             }
           }
