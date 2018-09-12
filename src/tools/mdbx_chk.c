@@ -1,4 +1,4 @@
-/* mdbx_chk.c - memory-mapped database check tool */
+﻿/* mdbx_chk.c - memory-mapped database check tool */
 
 /*
  * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>
@@ -94,7 +94,7 @@ struct problem *problems_list;
 uint64_t total_problems;
 
 static void
-#ifdef __GNU__
+#ifdef __GNUC__
     __attribute__((format(printf, 1, 2)))
 #endif
     print(const char *msg, ...) {
@@ -109,7 +109,7 @@ static void
 }
 
 static void
-#ifdef __GNU__
+#ifdef __GNUC__
     __attribute__((format(printf, 1, 2)))
 #endif
     error(const char *msg, ...) {
@@ -164,8 +164,12 @@ static int pagemap_lookup_dbi(const char *dbi) {
   return last = i;
 }
 
-static void problem_add(const char *object, uint64_t entry_number,
-                        const char *msg, const char *extra, ...) {
+static void
+#ifdef __GNUC__
+    __attribute__((format(printf, 4, 5)))
+#endif
+    problem_add(const char *object, uint64_t entry_number, const char *msg,
+                const char *extra, ...) {
   total_problems++;
 
   if (!quiet) {
@@ -257,24 +261,26 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
     walk.pgcount += pgnumber;
 
     if (unused_bytes > page_size)
-      problem_add("page", pgno, "illegal unused-bytes", "%u < %i < %u", 0,
-                  unused_bytes, envstat.ms_psize);
+      problem_add("page", pgno, "illegal unused-bytes",
+                  "%u < %" PRIuPTR " < %u", 0, unused_bytes, envstat.ms_psize);
 
     if (header_bytes < (int)sizeof(long) ||
         (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
       problem_add("page", pgno, "illegal header-length",
-                  "%" PRIuPTR " < %i < %" PRIuPTR, sizeof(long), header_bytes,
-                  envstat.ms_psize - sizeof(long));
+                  "%" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR, sizeof(long),
+                  header_bytes, envstat.ms_psize - sizeof(long));
     if (payload_bytes < 1) {
       if (nentries > 1) {
         problem_add("page", pgno, "zero size-of-entry",
-                    "payload %i bytes, %i entries", payload_bytes, nentries);
+                    "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
+                    payload_bytes, nentries);
         if ((size_t)header_bytes + unused_bytes < page_size) {
           /* LY: hush a misuse error */
           page_bytes = page_size;
         }
       } else {
-        problem_add("page", pgno, "empty", "payload %i bytes, %i entries",
+        problem_add("page", pgno, "empty",
+                    "payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
                     payload_bytes, nentries);
         walk.dbi_empty_pages[index] += 1;
       }
@@ -282,8 +288,10 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx,
 
     if (page_bytes != page_size) {
       problem_add("page", pgno, "misused",
-                  "%" PRIu64 " != %" PRIu64 " (%ih + %ip + %iu)", page_size,
-                  page_bytes, header_bytes, payload_bytes, unused_bytes);
+                  "%" PRIu64 " != %" PRIu64 " (%" PRIuPTR "h + %" PRIuPTR
+                  "p + %" PRIuPTR "u)",
+                  page_size, page_bytes, header_bytes, payload_bytes,
+                  unused_bytes);
       if (page_size > page_bytes)
         walk.dbi_lost_bytes[index] += page_size - page_bytes;
     } else {
@@ -341,7 +349,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
   else {
     const pgno_t number = *iptr++;
     if (number < 1 || number > MDBX_LIST_MAX)
-      problem_add("entry", record_number, "wrong idl length", "%" PRIiPTR,
+      problem_add("entry", record_number, "wrong idl length", "%" PRIaPGNO,
                   number);
     else if ((number + 1) * sizeof(pgno_t) > data->iov_len)
       problem_add("entry", record_number, "trimmed idl",
@@ -519,7 +527,7 @@ static int process_db(MDBX_dbi dbi, char *name, visitor *handler, bool silent) {
 
     if (key.iov_len > maxkeysize) {
       problem_add("entry", record_count, "key length exceeds max-key-size",
-                  "%" PRIuPTR " > %u", key.iov_len, maxkeysize);
+                  "%" PRIuPTR " > %" PRIuPTR, key.iov_len, maxkeysize);
     } else if ((flags & MDBX_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
                key.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong key length",
