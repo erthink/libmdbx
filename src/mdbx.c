@@ -1103,6 +1103,7 @@ static int __must_check_result mdbx_update_key(MDBX_cursor *mc,
 static void mdbx_cursor_pop(MDBX_cursor *mc);
 static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 
+static int __must_check_result mdbx_cursor_check(MDBX_cursor *mc, bool pending);
 static int __must_check_result mdbx_cursor_del0(MDBX_cursor *mc);
 static int __must_check_result mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi,
                                          MDBX_val *key, MDBX_val *data,
@@ -8072,6 +8073,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         if (rc2)
           return rc2;
       }
+
+      if (mdbx_audit_enabled()) {
+        int err = mdbx_cursor_check(mc, false);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
+      }
       return MDBX_SUCCESS;
     }
 
@@ -8278,6 +8285,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             data->iov_base = PAGEDATA(omp);
           else
             memcpy(PAGEDATA(omp), data->iov_base, data->iov_len);
+
+          if (mdbx_audit_enabled()) {
+            int err = mdbx_cursor_check(mc, false);
+            if (unlikely(err != MDBX_SUCCESS))
+              return err;
+          }
           return MDBX_SUCCESS;
         }
       }
@@ -8304,6 +8317,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                (char *)(mc->mc_pg[mc->mc_top]) + env->me_psize);
         goto fix_parent;
       }
+
+      if (mdbx_audit_enabled()) {
+        int err = mdbx_cursor_check(mc, false);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
+      }
       return MDBX_SUCCESS;
     }
     mdbx_node_del(mc, 0);
@@ -8321,6 +8340,8 @@ new_sub:
     if (!insert_key)
       nflags |= MDBX_SPLIT_REPLACE;
     rc = mdbx_page_split(mc, key, rdata, P_INVALID, nflags);
+    if (rc == MDBX_SUCCESS && mdbx_audit_enabled())
+      rc = mdbx_cursor_check(mc, false);
   } else {
     /* There is room already in this leaf page. */
     if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
@@ -8439,6 +8460,8 @@ new_sub:
         }
       }
     }
+    if (rc == MDBX_SUCCESS && mdbx_audit_enabled())
+      rc = mdbx_cursor_check(mc, false);
     return rc;
   bad_sub:
     if (unlikely(rc == MDBX_KEYEXIST))
@@ -9466,7 +9489,10 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
       mdbx_debug("Not enough room, delta = %d, splitting...", delta);
       pgno_t pgno = NODEPGNO(node);
       mdbx_node_del(mc, 0);
-      return mdbx_page_split(mc, key, NULL, pgno, MDBX_SPLIT_REPLACE);
+      int rc = mdbx_page_split(mc, key, NULL, pgno, MDBX_SPLIT_REPLACE);
+      if (rc == MDBX_SUCCESS && mdbx_audit_enabled())
+        rc = mdbx_cursor_check(mc, true);
+      return rc;
     }
 
     numkeys = NUMKEYS(mp);
@@ -9509,6 +9535,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
   MDBX_page *const pdst = cdst->mc_pg[cdst->mc_top];
   mdbx_cassert(csrc, PAGETYPE(psrc) == PAGETYPE(pdst));
   mdbx_cassert(csrc, csrc->mc_dbi == cdst->mc_dbi);
+  mdbx_cassert(csrc, csrc->mc_top == cdst->mc_top);
   if (unlikely(PAGETYPE(psrc) != PAGETYPE(pdst))) {
   bailout:
     csrc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
@@ -9632,11 +9659,13 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
 
   mdbx_cassert(csrc, psrc == csrc->mc_pg[csrc->mc_top]);
   mdbx_cassert(cdst, pdst == cdst->mc_pg[cdst->mc_top]);
+  mdbx_cassert(csrc, PAGETYPE(psrc) == PAGETYPE(pdst));
 
   {
     /* Adjust other cursors pointing to mp */
     MDBX_cursor *m2, *m3;
     const MDBX_dbi dbi = csrc->mc_dbi;
+    mdbx_cassert(csrc, csrc->mc_top == cdst->mc_top);
     if (fromleft) {
       /* If we're adding on the left, bump others up */
       for (m2 = csrc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
@@ -10212,6 +10241,62 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
+static __cold int mdbx_cursor_check(MDBX_cursor *mc, bool pending) {
+  mdbx_cassert(mc, mc->mc_top == mc->mc_snum - 1);
+  if (unlikely(mc->mc_top != mc->mc_snum - 1))
+    return MDBX_CURSOR_FULL;
+  mdbx_cassert(mc, pending ? mc->mc_snum <= mc->mc_db->md_depth
+                           : mc->mc_snum == mc->mc_db->md_depth);
+  if (unlikely(pending ? mc->mc_snum > mc->mc_db->md_depth
+                       : mc->mc_snum != mc->mc_db->md_depth))
+    return MDBX_CURSOR_FULL;
+
+  for (int n = 0; n < mc->mc_snum; ++n) {
+    MDBX_page *mp = mc->mc_pg[n];
+    const unsigned numkeys = NUMKEYS(mp);
+    const bool expect_branch = (n < mc->mc_db->md_depth - 1) ? true : false;
+    const bool expect_nested_leaf =
+        (n + 1 == mc->mc_db->md_depth - 1) ? true : false;
+    const bool branch = IS_BRANCH(mp) ? true : false;
+    mdbx_cassert(mc, branch == expect_branch);
+    if (unlikely(branch != expect_branch))
+      return MDBX_CURSOR_FULL;
+    if (!pending) {
+      mdbx_cassert(mc, numkeys > mc->mc_ki[n] ||
+                           (!branch && numkeys == mc->mc_ki[n] &&
+                            (mc->mc_flags & C_EOF) != 0));
+      if (unlikely(numkeys <= mc->mc_ki[n] &&
+                   !(!branch && numkeys == mc->mc_ki[n] &&
+                     (mc->mc_flags & C_EOF) != 0)))
+        return MDBX_CURSOR_FULL;
+    } else {
+      mdbx_cassert(mc, numkeys + 1 >= mc->mc_ki[n]);
+      if (unlikely(numkeys + 1 < mc->mc_ki[n]))
+        return MDBX_CURSOR_FULL;
+    }
+
+    for (unsigned i = 0; i < numkeys; ++i) {
+      MDBX_node *node = NODEPTR(mp, i);
+      if (branch) {
+        mdbx_cassert(mc, node->mn_flags == 0);
+        if (unlikely(node->mn_flags != 0))
+          return MDBX_CURSOR_FULL;
+        pgno_t pgno = NODEPGNO(node);
+        MDBX_page *np;
+        int rc = mdbx_page_get(mc, pgno, &np, NULL);
+        mdbx_cassert(mc, rc == MDBX_SUCCESS);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
+        const bool nested_leaf = IS_LEAF(np) ? true : false;
+        mdbx_cassert(mc, nested_leaf == expect_nested_leaf);
+        if (unlikely(nested_leaf != expect_nested_leaf))
+          return MDBX_CURSOR_FULL;
+      }
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 /* Complete a delete operation started by mdbx_cursor_del(). */
 static int mdbx_cursor_del0(MDBX_cursor *mc) {
   int rc;
@@ -10313,11 +10398,40 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
         }
       }
     }
+
+    if (mc->mc_ki[mc->mc_top] >= nkeys) {
+      rc = mdbx_cursor_sibling(mc, true);
+      if (rc == MDBX_NOTFOUND) {
+        mc->mc_flags |= C_EOF;
+        rc = MDBX_SUCCESS;
+      }
+    }
+    if ((mc->mc_db->md_flags & MDBX_DUPSORT) != 0 &&
+        (mc->mc_flags & C_EOF) == 0) {
+      MDBX_node *node = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+      /* If this node has dupdata, it may need to be reinited
+       * because its data has moved.
+       * If the xcursor was not initd it must be reinited.
+       * Else if node points to a subDB, nothing is needed. */
+      if (node->mn_flags & F_DUPDATA) {
+        if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+          if (!(node->mn_flags & F_SUBDATA))
+            mc->mc_xcursor->mx_cursor.mc_pg[0] = NODEDATA(node);
+        } else {
+          rc = mdbx_xcursor_init1(mc, node);
+          if (likely(rc != MDBX_SUCCESS))
+            mc->mc_xcursor->mx_cursor.mc_flags |= C_DEL;
+        }
+      }
+    }
     mc->mc_flags |= C_DEL;
   }
 
   if (unlikely(rc))
     mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
+  else if (mdbx_audit_enabled())
+    rc = mdbx_cursor_check(mc, false);
+
   return rc;
 }
 
@@ -10407,6 +10521,11 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   unsigned newindx = mc->mc_ki[mc->mc_top];
   unsigned nkeys = NUMKEYS(mp);
+  if (mdbx_audit_enabled()) {
+    int err = mdbx_cursor_check(mc, true);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
 
   mdbx_debug("-----> splitting %s page %" PRIaPGNO
              " and adding [%s] at index %i/%i",
@@ -10606,6 +10725,14 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
   }
 
   mdbx_debug("separator is %d [%s]", split_indx, DKEY(&sepkey));
+  if (mdbx_audit_enabled()) {
+    int err = mdbx_cursor_check(mc, true);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    err = mdbx_cursor_check(&mn, true);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
 
   /* Copy separator key to the parent. */
   if (SIZELEFT(mn.mc_pg[ptop]) < mdbx_branch_size(env, &sepkey)) {
@@ -10620,6 +10747,11 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     if (unlikely(rc != MDBX_SUCCESS))
       goto done;
     mdbx_cassert(mc, mc->mc_snum - snum == mc->mc_db->md_depth - depth);
+    if (mdbx_audit_enabled()) {
+      int err = mdbx_cursor_check(mc, true);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+    }
 
     /* root split? */
     ptop += mc->mc_snum - snum;
