@@ -10263,6 +10263,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
       return rc;
     }
 
+    ki = mc->mc_ki[mc->mc_top];
     mp = mc->mc_pg[mc->mc_top];
     mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
     nkeys = NUMKEYS(mp);
@@ -10273,23 +10274,24 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
     /* Adjust THIS and other cursors pointing to mp */
     for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
       m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
-      if (!(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
+      if (m3 == mc || !(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
         continue;
       if (m3->mc_snum < mc->mc_snum)
         continue;
       if (m3->mc_pg[mc->mc_top] == mp) {
         /* if m3 points past last node in page, find next sibling */
-        if (m3->mc_ki[mc->mc_top] >= mc->mc_ki[mc->mc_top]) {
-          if (m3->mc_ki[mc->mc_top] >= nkeys) {
-            rc = mdbx_cursor_sibling(m3, true);
-            if (rc == MDBX_NOTFOUND) {
-              m3->mc_flags |= C_EOF;
-              rc = MDBX_SUCCESS;
-              continue;
-            } else if (unlikely(rc != MDBX_SUCCESS))
-              break;
-          }
-          if (mc->mc_db->md_flags & MDBX_DUPSORT) {
+        if (m3->mc_ki[mc->mc_top] >= nkeys) {
+          rc = mdbx_cursor_sibling(m3, true);
+          if (rc == MDBX_NOTFOUND) {
+            m3->mc_flags |= C_EOF;
+            rc = MDBX_SUCCESS;
+            continue;
+          } else if (unlikely(rc != MDBX_SUCCESS))
+            break;
+        }
+        if (m3->mc_ki[mc->mc_top] >= ki || m3->mc_pg[mc->mc_top] != mp) {
+          if ((mc->mc_db->md_flags & MDBX_DUPSORT) != 0 &&
+              (m3->mc_flags & C_EOF) == 0) {
             MDBX_node *node =
                 NODEPTR(m3->mc_pg[m3->mc_top], m3->mc_ki[m3->mc_top]);
             /* If this node has dupdata, it may need to be reinited
