@@ -9911,7 +9911,6 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 
   mdbx_cassert(cdst, cdst->mc_db->md_entries > 0);
   mdbx_cassert(cdst, cdst->mc_snum <= cdst->mc_db->md_depth);
-  mdbx_cassert(cdst, cdst->mc_top >= 0);
   mdbx_cassert(cdst, cdst->mc_snum == cdst->mc_top + 1);
 
   if (IS_LEAF(cdst->mc_pg[cdst->mc_top])) {
