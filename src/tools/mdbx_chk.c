@@ -588,7 +588,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
                         : pagemap_lookup_dbi(dbi_name, true);
   if (!dbi) {
     error("too many DBIs or out of memory\n");
-    return ENOMEM;
+    return MDBX_ENOMEM;
   }
   const uint64_t subtotal_pages =
       ms.ms_branch_pages + ms.ms_leaf_pages + ms.ms_overflow_pages;
