@@ -19,7 +19,7 @@ configuration:
 
 platform:
 - x86
-- x64
+#- x64
 #- ARM
 
 build_script:
