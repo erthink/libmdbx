@@ -4742,6 +4742,11 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       return MDBX_INVALID;
     }
 
+    if (!retryleft) {
+      mdbx_error("meta[%u] is too volatile, skip it", meta_number);
+      continue;
+    }
+
     /* LY: check pagesize */
     if (!mdbx_is_power2(page.mp_meta.mm_psize) ||
         page.mp_meta.mm_psize < MIN_PAGESIZE ||
@@ -4757,11 +4762,6 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       meta->mm_psize = page.mp_meta.mm_psize;
       mdbx_info("meta[%u] took pagesize %u", meta_number,
                 page.mp_meta.mm_psize);
-    }
-
-    if (!retryleft) {
-      mdbx_error("meta[%u] is too volatile, skip it", meta_number);
-      continue;
     }
 
     if (page.mp_meta.mm_txnid_a != page.mp_meta.mm_txnid_b) {
@@ -4830,11 +4830,16 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
     const uint64_t used_bytes =
         page.mp_meta.mm_geo.next * (uint64_t)page.mp_meta.mm_psize;
     if (used_bytes > *filesize) {
-      mdbx_notice("meta[%u] used-bytes (%" PRIu64 ") beyond filesize (%" PRIu64
-                  "), skip it",
-                  meta_number, used_bytes, *filesize);
-      rc = MDBX_CORRUPTED;
-      continue;
+      rc = mdbx_filesize(env->me_fd, filesize);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+      if (used_bytes > *filesize) {
+        mdbx_notice("meta[%u] used-bytes (%" PRIu64
+                    ") beyond filesize (%" PRIu64 "), skip it",
+                    meta_number, used_bytes, *filesize);
+        rc = MDBX_CORRUPTED;
+        continue;
+      }
     }
 
     /* LY: check mapsize limits */
