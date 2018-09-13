@@ -6747,6 +6747,9 @@ mapped:
   p = pgno2page(env, pgno);
 
 done:
+  if (unlikely(p->mp_pgno != pgno))
+    return MDBX_CORRUPTED;
+
   if (unlikely(p->mp_upper < p->mp_lower ||
                PAGEHDRSZ + p->mp_upper > env->me_psize) &&
       !IS_OVERFLOW(p))
@@ -12561,8 +12564,6 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
   int rc = mdbx_page_get(&mc, pgno, &mp, NULL);
   if (rc)
     return rc;
-  if (pgno != mp->mp_pgno)
-    return MDBX_CORRUPTED;
 
   const int nkeys = NUMKEYS(mp);
   size_t header_size = IS_LEAF2(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->mp_lower;
@@ -12623,9 +12624,6 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       rc = mdbx_page_get(&mc, large_pgno, &op, NULL);
       if (rc)
         return rc;
-
-      if (large_pgno != op->mp_pgno)
-        return MDBX_CORRUPTED;
 
       /* LY: Don't use mask here, e.g bitwise
        * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
