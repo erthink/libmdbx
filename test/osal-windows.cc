@@ -268,8 +268,11 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
                                   &exename_size))
     failure_perror("QueryFullProcessImageName()", GetLastError());
 
-  std::string cmdline = "test_mdbx.child ";
+  std::string cmdline = "$ ";
   ArgvQuote(cmdline, thunk_param(config));
+
+  if (cmdline.size() >= 32767)
+    return ERROR_BAD_LENGTH;
 
   PROCESS_INFORMATION ProcessInformation;
   if (!CreateProcessA(exename, const_cast<char *>(cmdline.c_str()),
