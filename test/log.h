@@ -42,7 +42,7 @@ void setlevel(loglevel level);
 bool output(const loglevel priority, const char *format, va_list ap);
 bool __printf_args(2, 3)
     output(const loglevel priority, const char *format, ...);
-bool feed(const char *format, va_list ap);
+bool feed_ap(const char *format, va_list ap);
 bool __printf_args(1, 2) feed(const char *format, ...);
 
 class local_suffix {

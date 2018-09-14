@@ -57,7 +57,7 @@ static void mdbx_logger(int type, const char *function, int line,
   if (logging::output(
           level,
           strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx: %s: ", function))
-    logging::feed(msg, args);
+    logging::feed_ap(msg, args);
   if (type & MDBX_DBG_ASSERT)
     abort();
 }
@@ -193,7 +193,7 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
   return true;
 }
 
-bool feed(const char *format, va_list ap) {
+bool feed_ap(const char *format, va_list ap) {
   if (!last)
     return false;
 
@@ -212,7 +212,7 @@ bool feed(const char *format, ...) {
 
   va_list ap;
   va_start(ap, format);
-  feed(format, ap);
+  feed_ap(format, ap);
   va_end(ap);
   return true;
 }
