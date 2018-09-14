@@ -8351,7 +8351,8 @@ new_sub:
   } else {
     /* There is room already in this leaf page. */
     if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-      mdbx_cassert(mc, nflags == 0 && rdata->iov_len == 0);
+      mdbx_cassert(mc, (nflags & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0 &&
+                           rdata->iov_len == 0);
       rc = mdbx_node_add_leaf2(mc, mc->mc_ki[mc->mc_top], key);
     } else
       rc = mdbx_node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, nflags);
@@ -10797,16 +10798,17 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     mc->mc_ki[mc->mc_top] = 0;
     switch (PAGETYPE(rp)) {
     case P_BRANCH: {
-      mdbx_cassert(mc, nflags == 0);
+      mdbx_cassert(mc, (nflags & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
+      mdbx_cassert(mc, newpgno != 0 || newpgno != P_INVALID);
       rc = mdbx_node_add_branch(mc, 0, newkey, newpgno);
     } break;
     case P_LEAF: {
-      mdbx_cassert(mc, newpgno == 0);
+      mdbx_cassert(mc, newpgno == 0 || newpgno == P_INVALID);
       rc = mdbx_node_add_leaf(mc, 0, newkey, newdata, nflags);
     } break;
     case P_LEAF | P_LEAF2: {
-      mdbx_cassert(mc, nflags == 0);
-      mdbx_cassert(mc, newpgno == 0);
+      mdbx_cassert(mc, (nflags & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
+      mdbx_cassert(mc, newpgno == 0 || newpgno == P_INVALID);
       rc = mdbx_node_add_leaf2(mc, 0, newkey);
     } break;
     default:
@@ -10860,7 +10862,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         rc = mdbx_node_add_leaf(mc, n, &rkey, rdata, flags);
       } break;
       /* case P_LEAF | P_LEAF2: {
-        mdbx_cassert(mc, 0 == (uint16_t)flags);
+        mdbx_cassert(mc, (nflags & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
         mdbx_cassert(mc, gno == 0);
         rc = mdbx_node_add_leaf2(mc, n, &rkey);
       } break; */
