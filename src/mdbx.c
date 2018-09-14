@@ -7714,8 +7714,10 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return MDBX_INCOMPATIBLE;
   /* FALLTHRU */
   case MDBX_SET:
+#ifndef SLAPD_LMDB_LEGACY
     if (op == MDBX_SET && unlikely(data != NULL))
       return MDBX_EINVAL;
+#endif /* SLAPD_LMDB_LEGACY */
   /* FALLTHRU */
   case MDBX_SET_KEY:
   case MDBX_SET_RANGE:
