@@ -44,10 +44,11 @@ test_script:
     }
 
     if ($mdbx_test -ne "") {
-        & "$mdbx_test" --pathname=tmp.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
-        & "$mdbx_chk" -nvv tmp.db | Tee-Object -file chk.log | Select-Object -last 42
+        & "$mdbx_test" --pathname=test.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+        & "$mdbx_chk" -nvv test.db | Tee-Object -file chk.log | Select-Object -last 42
     }
 
 on_failure:
 - ps: Push-AppveyorArtifact test.log
+- ps: Push-AppveyorArtifact test.db
 - ps: Push-AppveyorArtifact chk.log
