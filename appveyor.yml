@@ -19,7 +19,7 @@ configuration:
 
 platform:
 - x86
-#- x64
+- x64
 #- ARM
 
 build_script:
@@ -49,4 +49,5 @@ test_script:
     }
 
 on_failure:
-- ps: Push-AppveyorArtifact test.log chk.log
+- ps: Push-AppveyorArtifact test.log
+- ps: Push-AppveyorArtifact chk.log
