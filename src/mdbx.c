@@ -3576,7 +3576,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
 /* Count all the pages in each DB and in the freelist and make sure
  * it matches the actual number of pages being used.
  * All named DBs must be open for a correct count. */
-static int mdbx_audit(MDBX_txn *txn, unsigned befree_stored) {
+static __cold int mdbx_audit(MDBX_txn *txn, unsigned befree_stored) {
   MDBX_val key, data;
 
   const pgno_t pending =
@@ -3674,12 +3674,11 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   (void)dbg_prefix_mode;
   mdbx_trace("\n>>> @%" PRIaTXN, txn->mt_txnid);
 
+  unsigned befree_stored = 0, loop = 0;
   MDBX_cursor mc;
   int rc = mdbx_cursor_init(&mc, txn, FREE_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  unsigned befree_stored = 0, loop = 0;
+    goto bailout;
 
 retry:
   mdbx_trace(" >> restart");
@@ -3762,6 +3761,11 @@ retry:
 
     // handle loose pages - put ones into the reclaimed- or befree-list
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
+    if (mdbx_audit_enabled()) {
+      rc = mdbx_audit(txn, befree_stored);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+    }
     if (txn->mt_loose_pages) {
       /* Return loose page numbers to me_reclaimed_pglist,
        * though usually none are left at this point.
@@ -3772,7 +3776,7 @@ retry:
          * since unable to return them to me_reclaimed_pglist. */
         if (unlikely((rc = mdbx_pnl_need(&txn->mt_befree_pages,
                                          txn->mt_loose_count)) != 0))
-          return rc;
+          goto bailout;
         for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
           mdbx_pnl_xappend(txn->mt_befree_pages, mp->mp_pgno);
         mdbx_trace("%s: append %u loose-pages to befree-pages", dbg_prefix_mode,
@@ -3851,6 +3855,11 @@ retry:
 
       txn->mt_loose_pages = NULL;
       txn->mt_loose_count = 0;
+      if (mdbx_audit_enabled()) {
+        rc = mdbx_audit(txn, befree_stored);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto bailout;
+      }
     }
 
     // handle reclaimed pages - return suitable into unallocated space
@@ -3884,6 +3893,11 @@ retry:
             dbg_prefix_mode, txn->mt_next_pgno - tail, tail, txn->mt_next_pgno);
         txn->mt_next_pgno = tail;
         mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
+        if (mdbx_audit_enabled()) {
+          rc = mdbx_audit(txn, befree_stored);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
+        }
       }
     }
 
@@ -3931,6 +3945,11 @@ retry:
     mdbx_tassert(txn, txn->mt_loose_count == 0);
 
     mdbx_trace(" >> reserving");
+    if (mdbx_audit_enabled()) {
+      rc = mdbx_audit(txn, befree_stored);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+    }
     const unsigned amount =
         env->me_reclaimed_pglist ? MDBX_PNL_SIZE(env->me_reclaimed_pglist) : 0;
     const unsigned left = amount - settled;
@@ -4213,6 +4232,11 @@ retry:
                  (unsigned)(to - env->me_reclaimed_pglist), to[-1], fill_gc_id);
 
       left -= chunk;
+      if (mdbx_audit_enabled()) {
+        rc = mdbx_audit(txn, befree_stored + amount - left);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto bailout;
+      }
       if (left == 0) {
         rc = MDBX_SUCCESS;
         break;
@@ -4240,11 +4264,12 @@ retry:
     goto retry;
   }
 
+  mdbx_tassert(txn,
+               txn->mt_lifo_reclaimed == NULL ||
+                   cleaned_gc_slot == MDBX_PNL_SIZE(txn->mt_lifo_reclaimed));
+
 bailout:
   if (txn->mt_lifo_reclaimed) {
-    mdbx_tassert(txn,
-                 rc != MDBX_SUCCESS ||
-                     cleaned_gc_slot == MDBX_PNL_SIZE(txn->mt_lifo_reclaimed));
     MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) = 0;
     if (txn != env->me_txn0) {
       mdbx_txl_free(txn->mt_lifo_reclaimed);
