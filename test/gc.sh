@@ -32,31 +32,31 @@ function probe {
 
 caption="Failfast #1" probe \
 	--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-	--nops=99999 --batch.write=9 --mode=-writemap,-coalesce,+lifo --keygen.seed=248240655 --hill
+	--nops=99999 --batch.write=9 --mode=-writemap,-coalesce,+lifo --keygen.seed=248240655 basic
 
 caption="Failfast #2" probe \
 	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=259083046 --hill
+	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=259083046 basic
 
 caption="Failfast #3" probe \
 	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=522365681 --hill
+	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=522365681 basic
 
 caption="Failfast #4" probe \
 	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-	--nops=999999 --batch.write=9999 --mode=-writemap,+coalesce,+lifo --keygen.seed=866083781 --hill
+	--nops=999999 --batch.write=9999 --mode=-writemap,+coalesce,+lifo --keygen.seed=866083781 basic
 
 caption="Failfast #5" probe \
 	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-	--nops=999999 --batch.write=999 --mode=+writemap,-coalesce,+lifo --keygen.seed=246539192 --hill
+	--nops=999999 --batch.write=999 --mode=+writemap,-coalesce,+lifo --keygen.seed=246539192 basic
 
 caption="Failfast #6" probe \
 	--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=540406278 --hill
+	--nops=999999 --batch.write=999 --mode=+writemap,+coalesce,+lifo --keygen.seed=540406278 basic
 
 caption="Failfast #7" probe \
 	--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-	--nops=999999 --batch.write=999 --mode=-writemap,+coalesce,+lifo --keygen.seed=619798690 --hill
+	--nops=999999 --batch.write=999 --mode=-writemap,+coalesce,+lifo --keygen.seed=619798690 basic
 
 count=0
 for nops in {2..7}; do
@@ -68,11 +68,11 @@ for nops in {2..7}; do
 				caption="Probe #$((++count)) w/o-dups, repeat ${rep} of ${loops}" probe \
 					--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} --hill
+					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) with-dups, repeat ${rep} of ${loops}" probe \
 					--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} --hill
+					--keygen.seed=${seed} basic
 			done
 		done
 	done
