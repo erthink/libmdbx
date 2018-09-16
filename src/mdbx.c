@@ -11621,6 +11621,20 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   if (unlikely(!txn || !dbi || (user_flags & ~VALID_FLAGS) != 0))
     return MDBX_EINVAL;
 
+  switch (user_flags &
+          (MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT | MDBX_REVERSEDUP)) {
+  default:
+    return MDBX_EINVAL;
+  case MDBX_DUPSORT:
+  case MDBX_DUPSORT | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP:
+  case 0:
+    break;
+  }
+
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
