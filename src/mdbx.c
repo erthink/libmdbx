@@ -12853,7 +12853,7 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
     rc = mdbx_cursor_get(&cx.outer, &present_key, &present_data, MDBX_SET_KEY);
     if (unlikely(rc != MDBX_SUCCESS)) {
       old_data->iov_base = NULL;
-      old_data->iov_len = rc;
+      old_data->iov_len = 0;
       if (rc != MDBX_NOTFOUND || (flags & MDBX_CURRENT))
         goto bailout;
     } else if (flags & MDBX_NOOVERWRITE) {
