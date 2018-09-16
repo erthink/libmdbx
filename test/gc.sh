@@ -65,6 +65,18 @@ for nops in {2..7}; do
 		for ((rep=0; rep++ < loops; )); do
 			for ((bits=2**${#options[@]}; --bits >= 0; )); do
 				seed=$(date +%N)
+				caption="Probe #$((++count)) int-key,w/o-dups, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size=6G --table=+key.integer,-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) int-key,with-dups, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size=6G --table=+key.integer,+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) int-key,int-data, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size=6G --table=+key.integer,+data.integer --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) w/o-dups, repeat ${rep} of ${loops}" probe \
 					--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
