@@ -3963,7 +3963,7 @@ retry:
     if (0 >= (int)left)
       break;
 
-    const unsigned max_spread = 10;
+    const unsigned prefer_max_scatter = 257;
     txnid_t reservation_gc_id;
     if (lifo) {
       assert(txn->mt_lifo_reclaimed != NULL);
@@ -3976,7 +3976,7 @@ retry:
       }
 
       if (head_gc_id > 1 &&
-          MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) < max_spread &&
+          MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) < prefer_max_scatter &&
           left > ((unsigned)MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) -
                   reused_gc_slots) *
                      env->me_maxgc_ov1page) {
@@ -4005,7 +4005,7 @@ retry:
                      " to lifo-reclaimed, cleaned-gc-slot = %u",
                      dbg_prefix_mode, head_gc_id, cleaned_gc_slot);
         } while (head_gc_id > 1 &&
-                 MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) < max_spread &&
+                 MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) < prefer_max_scatter &&
                  left > ((unsigned)MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) -
                          reused_gc_slots) *
                             env->me_maxgc_ov1page);
@@ -4045,7 +4045,10 @@ retry:
         if (chunk < env->me_maxgc_ov1page * 2)
           chunk /= 2;
         else {
-          const unsigned threshold = env->me_maxgc_ov1page * avail_gs_slots;
+          const unsigned threshold =
+              env->me_maxgc_ov1page * ((avail_gs_slots < prefer_max_scatter)
+                                           ? avail_gs_slots
+                                           : prefer_max_scatter);
           if (left < threshold)
             chunk = env->me_maxgc_ov1page;
           else {
@@ -4071,7 +4074,7 @@ retry:
 
             chunk = (avail >= tail) ? tail - span
                                     : (avail_gs_slots > 3 &&
-                                       reused_gc_slots < max_spread - 3)
+                                       reused_gc_slots < prefer_max_scatter - 3)
                                           ? avail - span
                                           : tail;
           }
@@ -4112,6 +4115,14 @@ retry:
     settled += chunk;
     mdbx_trace("%s.settled %u (+%u), continue", dbg_prefix_mode, settled,
                chunk);
+
+    if (txn->mt_lifo_reclaimed &&
+        unlikely(amount < MDBX_PNL_SIZE(env->me_reclaimed_pglist))) {
+      mdbx_notice("** restart: reclaimed-list growth %u -> %u", amount,
+                  (unsigned)MDBX_PNL_SIZE(env->me_reclaimed_pglist));
+      goto retry;
+    }
+
     continue;
   }
 
