@@ -154,8 +154,14 @@ int main(int argc, char *const argv[]) {
                              config::mode_bits))
       continue;
     if (config::parse_option(argc, argv, narg, "table", params.table_flags,
-                             config::table_bits))
+                             config::table_bits)) {
+      if ((params.table_flags & MDBX_DUPFIXED) == 0)
+        params.table_flags &= ~MDBX_INTEGERDUP;
+      if ((params.table_flags & MDBX_DUPSORT) == 0)
+        params.table_flags &=
+            ~(MDBX_DUPFIXED | MDBX_REVERSEDUP | MDBX_INTEGERDUP);
       continue;
+    }
 
     if (config::parse_option(argc, argv, narg, "pagesize", params.pagesize,
                              mdbx_limits_pgsize_min(),
