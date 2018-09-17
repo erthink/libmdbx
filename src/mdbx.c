@@ -7153,6 +7153,41 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   return mdbx_cursor_set(&cx.outer, key, data, MDBX_SET, &exact);
 }
 
+int mdbx_get2(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
+  int exact = 0;
+  DKBUF;
+
+  mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
+
+  if (unlikely(!key || !data || !txn))
+    return MDBX_EINVAL;
+
+  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return MDBX_THREAD_MISMATCH;
+
+  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+    return MDBX_EINVAL;
+
+  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
+    return MDBX_BAD_TXN;
+
+  MDBX_cursor_couple cx;
+  int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  const int op =
+      (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) ? MDBX_GET_BOTH : MDBX_SET_KEY;
+  rc = mdbx_cursor_set(&cx.outer, key, data, op, &exact);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  return exact ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
+}
+
 /* Find a sibling for a page.
  * Replaces the page at the top of the cursor's stack with the specified
  * sibling, if one exists.

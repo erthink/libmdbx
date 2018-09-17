@@ -1246,6 +1246,8 @@ LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del);
  *  - MDBX_EINVAL   - an invalid parameter was specified. */
 LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                          MDBX_val *data);
+LIBMDBX_API int mdbx_get2(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                          MDBX_val *data);
 
 /* Store items into a database.
  *
