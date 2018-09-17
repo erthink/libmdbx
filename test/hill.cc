@@ -114,6 +114,7 @@ bool testcase_hill::run() {
     log_trace("uphill: update-a (age %" PRIu64 "->0) %" PRIu64, age_shift,
               a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
+    checkdata("uphill: update-a", dbi, a_key->value, a_data_1->value);
     rc = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_0->value,
                       &a_data_1->value, update_flags);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -126,6 +127,7 @@ bool testcase_hill::run() {
 
     // удаляем вторую запись
     log_trace("uphill: delete-b %" PRIu64, b_serial);
+    checkdata("uphill: delete-b", dbi, b_key->value, b_data->value);
     rc = mdbx_del(txn_guard.get(), dbi, &b_key->value, &b_data->value);
     if (unlikely(rc != MDBX_SUCCESS))
       failure_perror("mdbx_del(b)", rc);
@@ -158,6 +160,7 @@ bool testcase_hill::run() {
               a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
+    checkdata("downhill: update-a", dbi, a_key->value, a_data_0->value);
     int rc = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_1->value,
                           &a_data_0->value, update_flags);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -184,6 +187,7 @@ bool testcase_hill::run() {
     // удаляем первую запись
     log_trace("downhill: delete-a (age %" PRIu64 ") %" PRIu64, age_shift,
               a_serial);
+    checkdata("downhill: delete-a", dbi, a_key->value, a_data_1->value);
     rc = mdbx_del(txn_guard.get(), dbi, &a_key->value, &a_data_1->value);
     if (unlikely(rc != MDBX_SUCCESS))
       failure_perror("mdbx_del(a)", rc);
@@ -195,6 +199,7 @@ bool testcase_hill::run() {
 
     // удаляем вторую запись
     log_trace("downhill: delete-b %" PRIu64, b_serial);
+    checkdata("downhill: delete-b", dbi, b_key->value, b_data->value);
     rc = mdbx_del(txn_guard.get(), dbi, &b_key->value, &b_data->value);
     if (unlikely(rc != MDBX_SUCCESS))
       failure_perror("mdbx_del(b)", rc);

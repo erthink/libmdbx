@@ -410,6 +410,16 @@ void testcase::db_table_close(MDBX_dbi handle) {
   log_trace("<< testcase::db_table_close");
 }
 
+void testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key,
+                         MDBX_val expect) {
+  MDBX_val data = expect;
+  int rc = mdbx_get2(txn_guard.get(), handle, &key, &data);
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror(step, rc);
+  if (!is_samedata(&data, &expect))
+    failure("%s data mismatch", step);
+}
+
 //-----------------------------------------------------------------------------
 
 bool test_execute(const actor_config &config) {
