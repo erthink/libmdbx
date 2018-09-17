@@ -142,7 +142,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   }
 }
 
-void maker::setup(const config::actor_params_pod &actor,
+void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
   key_essentials.flags =
       actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
@@ -161,7 +161,7 @@ void maker::setup(const config::actor_params_pod &actor,
   assert(thread_number < 2);
   (void)thread_number;
   mapping = actor.keygen;
-  salt = actor.keygen.seed * UINT64_C(14653293970879851569);
+  salt = (actor.keygen.seed + actor_id) * UINT64_C(14653293970879851569);
 
   // FIXME: TODO
   base = 0;
