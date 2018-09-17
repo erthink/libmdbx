@@ -3680,6 +3680,25 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
+  txnid_t reclaiming_head_id = env->me_last_reclaimed;
+  if (unlikely(reclaiming_head_id == 0)) {
+    reclaiming_head_id = mdbx_find_oldest(txn) - 1;
+    MDBX_val key;
+    rc = mdbx_cursor_get(&mc, &key, NULL, MDBX_FIRST);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if (rc != MDBX_NOTFOUND)
+        goto bailout;
+    } else if (unlikely(key.iov_len != sizeof(txnid_t))) {
+      rc = MDBX_CORRUPTED;
+      goto bailout;
+    } else {
+      txnid_t first_pg;
+      memcpy(&first_pg, key.iov_base, sizeof(txnid_t));
+      if (reclaiming_head_id >= first_pg)
+        reclaiming_head_id = first_pg - 1;
+    }
+  }
+
 retry:
   mdbx_trace(" >> restart");
   mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
@@ -3687,7 +3706,7 @@ retry:
            filled_gc_slot = ~0u;
   txnid_t cleaned_gc_id = 0, head_gc_id = env->me_last_reclaimed
                                               ? env->me_last_reclaimed
-                                              : ~(txnid_t)0;
+                                              : reclaiming_head_id;
 
   if (unlikely(/* paranoia */ ++loop > 42)) {
     mdbx_error("too more loops %u, bailout", loop);
@@ -3995,7 +4014,7 @@ retry:
         /* LY: freedb is empty, will look any free txn-id in high2low order. */
         do {
           --head_gc_id;
-          assert(MDBX_PNL_LAST(txn->mt_lifo_reclaimed) > head_gc_id);
+          mdbx_assert(env, MDBX_PNL_LAST(txn->mt_lifo_reclaimed) > head_gc_id);
           rc = mdbx_txl_append(&txn->mt_lifo_reclaimed, head_gc_id);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
