@@ -112,8 +112,8 @@ protected:
   void fetch_canary();
   void update_canary(uint64_t increment);
   void kick_progress(bool active) const;
-  void checkdata(const char *step, MDBX_dbi handle, MDBX_val key,
-                 MDBX_val expect);
+  void checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
+                 MDBX_val expected_valued);
 
   MDBX_dbi db_table_open(bool create);
   void db_table_drop(MDBX_dbi handle);

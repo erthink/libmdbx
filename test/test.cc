@@ -410,13 +410,13 @@ void testcase::db_table_close(MDBX_dbi handle) {
   log_trace("<< testcase::db_table_close");
 }
 
-void testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key,
-                         MDBX_val expect) {
-  MDBX_val data = expect;
-  int rc = mdbx_get2(txn_guard.get(), handle, &key, &data);
+void testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
+                         MDBX_val expected_valued) {
+  MDBX_val actual_value = expected_valued;
+  int rc = mdbx_get2(txn_guard.get(), handle, &key2check, &actual_value);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror(step, rc);
-  if (!is_samedata(&data, &expect))
+  if (!is_samedata(&actual_value, &expected_valued))
     failure("%s data mismatch", step);
 }
 
