@@ -4013,7 +4013,9 @@ retry:
         /* LY: freedb is empty, will look any free txn-id in high2low order. */
         do {
           --head_gc_id;
-          mdbx_assert(env, MDBX_PNL_LAST(txn->mt_lifo_reclaimed) > head_gc_id);
+          mdbx_assert(env,
+                      MDBX_PNL_IS_EMPTY(txn->mt_lifo_reclaimed) ||
+                          MDBX_PNL_LAST(txn->mt_lifo_reclaimed) > head_gc_id);
           rc = mdbx_txl_append(&txn->mt_lifo_reclaimed, head_gc_id);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
