@@ -421,7 +421,9 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                   (number + 1) * sizeof(pgno_t), data->iov_len);
       number = data->iov_len / sizeof(pgno_t) - 1;
     } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >
-               sizeof(pgno_t) * 2)
+               /* LY: allow gap upto half of page. it is ok
+                * and better than shink-and-retry inside mdbx_update_gc() */
+               envstat.ms_psize / 2)
       problem_add("entry", record_number, "extra idl space",
                   "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
                   (number + 1) * sizeof(pgno_t), data->iov_len);
