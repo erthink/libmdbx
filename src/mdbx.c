@@ -37,7 +37,134 @@
 
 #include "./bits.h"
 
+/*----------------------------------------------------------------------------*/
+/* Internal inlines */
+
+#undef assert
+#define assert(expr) mdbx_assert(NULL, expr)
+
+static __inline bool mdbx_is_power2(size_t x) { return (x & (x - 1)) == 0; }
+
+static __inline size_t mdbx_roundup2(size_t value, size_t granularity) {
+  assert(mdbx_is_power2(granularity));
+  return (value + granularity - 1) & ~(granularity - 1);
+}
+
+static __inline unsigned mdbx_log2(size_t value) {
+  assert(mdbx_is_power2(value));
+
+  unsigned log = 0;
+  while (value > 1) {
+    log += 1;
+    value >>= 1;
+  }
+  return log;
+}
+
+/* Address of node i in page p */
+static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
+  assert(NUMKEYS(p) > (unsigned)(i));
+  return (MDBX_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEHDRSZ);
+}
+
+/* Get the page number pointed to by a branch node */
+static __inline pgno_t NODEPGNO(const MDBX_node *node) {
+  pgno_t pgno;
+  if (UNALIGNED_OK) {
+    pgno = node->mn_ksize_and_pgno;
+    if (sizeof(pgno_t) > 4)
+      pgno &= MAX_PAGENO;
+  } else {
+    pgno = node->mn_lo | ((pgno_t)node->mn_hi << 16);
+    if (sizeof(pgno_t) > 4)
+      pgno |= ((uint64_t)node->mn_flags) << 32;
+  }
+  return pgno;
+}
+
+/* Set the page number in a branch node */
+static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
+  assert(pgno <= MAX_PAGENO);
+
+  if (UNALIGNED_OK) {
+    if (sizeof(pgno_t) > 4)
+      pgno |= ((uint64_t)node->mn_ksize) << 48;
+    node->mn_ksize_and_pgno = pgno;
+  } else {
+    node->mn_lo = (uint16_t)pgno;
+    node->mn_hi = (uint16_t)(pgno >> 16);
+    if (sizeof(pgno_t) > 4)
+      node->mn_flags = (uint16_t)((uint64_t)pgno >> 32);
+  }
+}
+
+/* Get the size of the data in a leaf node */
+static __inline size_t NODEDSZ(const MDBX_node *node) {
+  size_t size;
+  if (UNALIGNED_OK) {
+    size = node->mn_dsize;
+  } else {
+    size = node->mn_lo | ((size_t)node->mn_hi << 16);
+  }
+  return size;
+}
+
+/* Set the size of the data for a leaf node */
+static __inline void SETDSZ(MDBX_node *node, size_t size) {
+  assert(size < INT_MAX);
+  if (UNALIGNED_OK) {
+    node->mn_dsize = (uint32_t)size;
+  } else {
+    node->mn_lo = (uint16_t)size;
+    node->mn_hi = (uint16_t)(size >> 16);
+  }
+}
+
+static __inline size_t pgno2bytes(const MDBX_env *env, pgno_t pgno) {
+  mdbx_assert(env, (1u << env->me_psize2log) == env->me_psize);
+  return ((size_t)pgno) << env->me_psize2log;
+}
+
+static __inline MDBX_page *pgno2page(const MDBX_env *env, pgno_t pgno) {
+  return (MDBX_page *)(env->me_map + pgno2bytes(env, pgno));
+}
+
+static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
+  mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
+  return (pgno_t)(bytes >> env->me_psize2log);
+}
+
+static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {
+  return mdbx_roundup2(pgno2bytes(env, pgno), env->me_os_psize);
+}
+
+static __inline pgno_t pgno_align2os_pgno(const MDBX_env *env, pgno_t pgno) {
+  return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
+}
+
+/* Perform act while tracking temporary cursor mn */
+#define WITH_CURSOR_TRACKING(mn, act)                                          \
+  do {                                                                         \
+    mdbx_cassert(&(mn),                                                        \
+                 mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
+    MDBX_cursor mc_dummy, *tracked,                                            \
+        **tp = &(mn).mc_txn->mt_cursors[mn.mc_dbi];                            \
+    if ((mn).mc_flags & C_SUB) {                                               \
+      mc_dummy.mc_flags = C_INITIALIZED;                                       \
+      mc_dummy.mc_xcursor = (MDBX_xcursor *)&(mn);                             \
+      tracked = &mc_dummy;                                                     \
+    } else {                                                                   \
+      tracked = &(mn);                                                         \
+    }                                                                          \
+    tracked->mc_next = *tp;                                                    \
+    *tp = tracked;                                                             \
+    { act; }                                                                   \
+    *tp = tracked->mc_next;                                                    \
+  } while (0)
+
+/*----------------------------------------------------------------------------*/
 /* LY: temporary workaround for Elbrus's memcmp() bug. */
+
 #if defined(__e2k__) && !__GLIBC_PREREQ(2, 24)
 int __hot mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
                                          size_t n) {

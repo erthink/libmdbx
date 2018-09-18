@@ -967,20 +967,8 @@ void mdbx_panic(const char *fmt, ...)
 /* assert(3) variant in transaction context */
 #define mdbx_tassert(txn, expr) mdbx_assert((txn)->mt_env, expr)
 
-#undef assert
-#define assert(expr) mdbx_assert(NULL, expr)
-
-static __inline void mdbx_jitter4testing(bool tiny) {
-#ifndef NDEBUG
-  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
-    mdbx_osal_jitter(tiny);
-#else
-  (void)tiny;
-#endif
-}
-
 /*----------------------------------------------------------------------------*/
-/* Internal prototypes and inlines */
+/* Internal prototypes */
 
 int mdbx_reader_check0(MDBX_env *env, int rlocked, int *dead);
 int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
@@ -990,24 +978,6 @@ void mdbx_rthc_remove(const mdbx_thread_key_t key);
 void mdbx_rthc_global_init(void);
 void mdbx_rthc_global_dtor(void);
 void mdbx_rthc_thread_dtor(void *ptr);
-
-static __inline bool mdbx_is_power2(size_t x) { return (x & (x - 1)) == 0; }
-
-static __inline size_t mdbx_roundup2(size_t value, size_t granularity) {
-  assert(mdbx_is_power2(granularity));
-  return (value + granularity - 1) & ~(granularity - 1);
-}
-
-static __inline unsigned mdbx_log2(size_t value) {
-  assert(mdbx_is_power2(value));
-
-  unsigned log = 0;
-  while (value > 1) {
-    log += 1;
-    value >>= 1;
-  }
-  return log;
-}
 
 #define MDBX_IS_ERROR(rc)                                                      \
   ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
@@ -1156,70 +1126,11 @@ typedef struct MDBX_node {
  * This is node header plus key plus data size. */
 #define LEAFSIZE(k, d) (NODESIZE + (k)->iov_len + (d)->iov_len)
 
-/* Address of node i in page p */
-static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
-  assert(NUMKEYS(p) > (unsigned)(i));
-  return (MDBX_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEHDRSZ);
-}
-
 /* Address of the key for the node */
 #define NODEKEY(node) (void *)((node)->mn_data)
 
 /* Address of the data for a node */
 #define NODEDATA(node) (void *)((char *)(node)->mn_data + (node)->mn_ksize)
-
-/* Get the page number pointed to by a branch node */
-static __inline pgno_t NODEPGNO(const MDBX_node *node) {
-  pgno_t pgno;
-  if (UNALIGNED_OK) {
-    pgno = node->mn_ksize_and_pgno;
-    if (sizeof(pgno_t) > 4)
-      pgno &= MAX_PAGENO;
-  } else {
-    pgno = node->mn_lo | ((pgno_t)node->mn_hi << 16);
-    if (sizeof(pgno_t) > 4)
-      pgno |= ((uint64_t)node->mn_flags) << 32;
-  }
-  return pgno;
-}
-
-/* Set the page number in a branch node */
-static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
-  assert(pgno <= MAX_PAGENO);
-
-  if (UNALIGNED_OK) {
-    if (sizeof(pgno_t) > 4)
-      pgno |= ((uint64_t)node->mn_ksize) << 48;
-    node->mn_ksize_and_pgno = pgno;
-  } else {
-    node->mn_lo = (uint16_t)pgno;
-    node->mn_hi = (uint16_t)(pgno >> 16);
-    if (sizeof(pgno_t) > 4)
-      node->mn_flags = (uint16_t)((uint64_t)pgno >> 32);
-  }
-}
-
-/* Get the size of the data in a leaf node */
-static __inline size_t NODEDSZ(const MDBX_node *node) {
-  size_t size;
-  if (UNALIGNED_OK) {
-    size = node->mn_dsize;
-  } else {
-    size = node->mn_lo | ((size_t)node->mn_hi << 16);
-  }
-  return size;
-}
-
-/* Set the size of the data for a leaf node */
-static __inline void SETDSZ(MDBX_node *node, size_t size) {
-  assert(size < INT_MAX);
-  if (UNALIGNED_OK) {
-    node->mn_dsize = (uint32_t)size;
-  } else {
-    node->mn_lo = (uint16_t)size;
-    node->mn_hi = (uint16_t)(size >> 16);
-  }
-}
 
 /* The size of a key in a node */
 #define NODEKSZ(node) ((node)->mn_ksize)
@@ -1273,19 +1184,8 @@ static __inline void SETDSZ(MDBX_node *node, size_t size) {
 #define mdbx_cmp2int(a, b) (((a) > (b)) - ((b) > (a)))
 #endif
 
-static __inline size_t pgno2bytes(const MDBX_env *env, pgno_t pgno) {
-  mdbx_assert(env, (1u << env->me_psize2log) == env->me_psize);
-  return ((size_t)pgno) << env->me_psize2log;
-}
-
-static __inline MDBX_page *pgno2page(const MDBX_env *env, pgno_t pgno) {
-  return (MDBX_page *)(env->me_map + pgno2bytes(env, pgno));
-}
-
-static __inline pgno_t bytes2pgno(const MDBX_env *env, size_t bytes) {
-  mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
-  return (pgno_t)(bytes >> env->me_psize2log);
-}
+/* Do not spill pages to disk if txn is getting full, may fail instead */
+#define MDBX_NOSPILL 0x8000
 
 static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
   assert(base <= MAX_PAGENO);
@@ -1297,33 +1197,11 @@ static __inline pgno_t pgno_sub(pgno_t base, pgno_t subtrahend) {
   return (subtrahend < base - MIN_PAGENO) ? base - subtrahend : MIN_PAGENO;
 }
 
-static __inline size_t pgno_align2os_bytes(const MDBX_env *env, pgno_t pgno) {
-  return mdbx_roundup2(pgno2bytes(env, pgno), env->me_os_psize);
+static __inline void mdbx_jitter4testing(bool tiny) {
+#ifndef NDEBUG
+  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
+    mdbx_osal_jitter(tiny);
+#else
+  (void)tiny;
+#endif
 }
-
-static __inline pgno_t pgno_align2os_pgno(const MDBX_env *env, pgno_t pgno) {
-  return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
-}
-
-/* Do not spill pages to disk if txn is getting full, may fail instead */
-#define MDBX_NOSPILL 0x8000
-
-/* Perform act while tracking temporary cursor mn */
-#define WITH_CURSOR_TRACKING(mn, act)                                          \
-  do {                                                                         \
-    mdbx_cassert(&(mn),                                                        \
-                 mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
-    MDBX_cursor mc_dummy, *tracked,                                            \
-        **tp = &(mn).mc_txn->mt_cursors[mn.mc_dbi];                            \
-    if ((mn).mc_flags & C_SUB) {                                               \
-      mc_dummy.mc_flags = C_INITIALIZED;                                       \
-      mc_dummy.mc_xcursor = (MDBX_xcursor *)&(mn);                             \
-      tracked = &mc_dummy;                                                     \
-    } else {                                                                   \
-      tracked = &(mn);                                                         \
-    }                                                                          \
-    tracked->mc_next = *tp;                                                    \
-    *tp = tracked;                                                             \
-    { act; }                                                                   \
-    *tp = tracked->mc_next;                                                    \
-  } while (0)
