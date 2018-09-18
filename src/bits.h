@@ -967,6 +967,9 @@ void mdbx_panic(const char *fmt, ...)
 /* assert(3) variant in transaction context */
 #define mdbx_tassert(txn, expr) mdbx_assert((txn)->mt_env, expr)
 
+#undef assert
+#define assert(expr) mdbx_assert(NULL, expr)
+
 static __inline void mdbx_jitter4testing(bool tiny) {
 #ifndef NDEBUG
   if (MDBX_DBG_JITTER & mdbx_runtime_flags)
