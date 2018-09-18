@@ -822,7 +822,7 @@ void mdbx_panic(const char *fmt, ...)
 
 #else
 #define mdbx_debug_enabled(type) (0)
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(MDBX_FORCE_ASSERT)
 #define mdbx_assert_enabled() (1)
 #else
 #define mdbx_assert_enabled() (0)
