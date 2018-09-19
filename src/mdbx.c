@@ -9849,7 +9849,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
     mdbx_cassert(cdst, cdst->mc_top > 0);
     if (cdst->mc_ki[cdst->mc_top - 1] != 0) {
       MDBX_val key;
-      if (IS_LEAF2(psrc)) {
+      if (IS_LEAF2(pdst)) {
         key.iov_len = pdst->mp_leaf2_ksize;
         key.iov_base = LEAF2KEY(pdst, 0, key.iov_len);
       } else {
@@ -10890,7 +10890,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     switch (PAGETYPE(rp)) {
     case P_BRANCH: {
       mdbx_cassert(mc, (nflags & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
-      mdbx_cassert(mc, newpgno != 0 || newpgno != P_INVALID);
+      mdbx_cassert(mc, newpgno != 0 && newpgno != P_INVALID);
       rc = mdbx_node_add_branch(mc, 0, newkey, newpgno);
     } break;
     case P_LEAF: {
@@ -10950,6 +10950,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
       } break;
       case P_LEAF: {
         mdbx_cassert(mc, pgno == 0);
+        mdbx_cassert(mc, rdata != NULL);
         rc = mdbx_node_add_leaf(mc, n, &rkey, rdata, flags);
       } break;
       /* case P_LEAF | P_LEAF2: {
