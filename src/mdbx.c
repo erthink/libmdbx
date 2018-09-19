@@ -4349,11 +4349,12 @@ retry:
       if (unlikely(chunk > left)) {
         mdbx_trace("%s: chunk %u > left %u, @%" PRIaTXN, dbg_prefix_mode, chunk,
                    left, fill_gc_id);
-        chunk = left;
-        if (loop < 3) {
-          mc.mc_flags ^= C_GCFREEZE;
+        if (loop < 5 || chunk - left > env->me_maxgc_ov1page) {
           data.iov_len = (left + 1) * sizeof(pgno_t);
+          if (loop < 21)
+            mc.mc_flags -= C_GCFREEZE;
         }
+        chunk = left;
       }
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
       mc.mc_flags &= ~(C_RECLAIMING | C_GCFREEZE);
