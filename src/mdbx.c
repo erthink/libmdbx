@@ -2136,13 +2136,13 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 /* Find oldest txnid still referenced. */
 static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   mdbx_tassert(txn, (txn->mt_flags & MDBX_RDONLY) == 0);
-  const MDBX_env *env = txn->mt_env;
+  MDBX_env *env = txn->mt_env;
   const txnid_t edge = mdbx_reclaiming_detent(env);
   mdbx_tassert(txn, edge <= txn->mt_txnid - 1);
 
   MDBX_lockinfo *const lck = env->me_lck;
   if (unlikely(env->me_lck == NULL /* exclusive mode */))
-    return edge;
+    return env->me_oldest_stub = edge;
 
   const txnid_t last_oldest = lck->mti_oldest;
   mdbx_tassert(txn, edge >= last_oldest);
