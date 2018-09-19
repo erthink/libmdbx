@@ -3807,6 +3807,9 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
+  mc.mc_next = txn->mt_cursors[FREE_DBI];
+  txn->mt_cursors[FREE_DBI] = &mc;
+
 retry:
   mdbx_trace(" >> restart");
   mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
@@ -3853,7 +3856,7 @@ retry:
           mdbx_trace("%s.cleanup-reclaimed-id [%u]%" PRIaTXN, dbg_prefix_mode,
                      cleaned_gc_slot, cleaned_gc_id);
           mc.mc_flags |= C_RECLAIMING;
-          WITH_CURSOR_TRACKING(mc, rc = mdbx_cursor_del(&mc, 0));
+          rc = mdbx_cursor_del(&mc, 0);
           mc.mc_flags ^= C_RECLAIMING;
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
@@ -3872,12 +3875,12 @@ retry:
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         cleaned_gc_id = head_gc_id = *(txnid_t *)key.iov_base;
-        mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
         mdbx_tassert(txn, cleaned_gc_id <= env->me_last_reclaimed);
+        mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
         mdbx_trace("%s.cleanup-reclaimed-id %" PRIaTXN, dbg_prefix_mode,
                    cleaned_gc_id);
         mc.mc_flags |= C_RECLAIMING;
-        WITH_CURSOR_TRACKING(mc, rc = mdbx_cursor_del(&mc, 0));
+        rc = mdbx_cursor_del(&mc, 0);
         mc.mc_flags ^= C_RECLAIMING;
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -4040,8 +4043,7 @@ retry:
       key.iov_base = &txn->mt_txnid;
       do {
         data.iov_len = MDBX_PNL_SIZEOF(txn->mt_befree_pages);
-        WITH_CURSOR_TRACKING(
-            mc, rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE));
+        rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         /* Retry if mt_befree_pages[] grew during the Put() */
@@ -4250,9 +4252,7 @@ retry:
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
-    WITH_CURSOR_TRACKING(mc,
-                         rc = mdbx_cursor_put(&mc, &key, &data,
-                                              MDBX_RESERVE | MDBX_NOOVERWRITE));
+    rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
@@ -4355,9 +4355,7 @@ retry:
           data.iov_len = (left + 1) * sizeof(pgno_t);
         }
       }
-      WITH_CURSOR_TRACKING(
-          mc,
-          rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE));
+      rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
       mc.mc_flags &= ~(C_RECLAIMING | C_GCFREEZE);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
@@ -4427,6 +4425,8 @@ retry:
                    cleaned_gc_slot == MDBX_PNL_SIZE(txn->mt_lifo_reclaimed));
 
 bailout:
+  txn->mt_cursors[FREE_DBI] = mc.mc_next;
+
   if (txn->mt_lifo_reclaimed) {
     MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) = 0;
     if (txn != env->me_txn0) {
