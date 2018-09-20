@@ -23,7 +23,7 @@ function probe {
 	echo "=============================================== $(date)"
 	echo "${caption}: $*"
 	rm -f ${TESTDB_PREFIX}* \
-		&& ./mdbx_test --pathname=${TESTDB_PREFIX}db "$@" | lz4 > log.lz4 \
+		&& ./mdbx_test --pathname=${TESTDB_PREFIX}db "$@" | lz4 > ${TESTDB_PREFIX}log.lz4 \
 		&& ./mdbx_chk -nvvv ${TESTDB_PREFIX}db | tee ${TESTDB_PREFIX}chk \
 		|| (echo "FAILED"; exit 1)
 }
