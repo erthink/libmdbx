@@ -3839,9 +3839,6 @@ retry:
           cleaned_gc_id = txn->mt_lifo_reclaimed[++cleaned_gc_slot];
           mdbx_tassert(txn,
                        cleaned_gc_slot > 0 && cleaned_gc_id < *env->me_oldest);
-          head_gc_id = (!head_gc_id || head_gc_id > cleaned_gc_id)
-                           ? cleaned_gc_id
-                           : head_gc_id;
           key.iov_base = &cleaned_gc_id;
           key.iov_len = sizeof(cleaned_gc_id);
           rc = mdbx_cursor_get(&mc, &key, NULL, MDBX_SET);
@@ -3862,7 +3859,7 @@ retry:
             goto bailout;
         } while (cleaned_gc_slot < MDBX_PNL_SIZE(txn->mt_lifo_reclaimed));
         mdbx_txl_sort(txn->mt_lifo_reclaimed);
-        mdbx_tassert(txn, MDBX_PNL_LAST(txn->mt_lifo_reclaimed) == head_gc_id);
+        head_gc_id = MDBX_PNL_LAST(txn->mt_lifo_reclaimed);
       }
     } else {
       /* If using records from freeDB which we have not yet deleted,
