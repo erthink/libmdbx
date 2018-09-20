@@ -61,7 +61,7 @@ caption="Failfast #7" probe \
 count=0
 for nops in {2..7}; do
 	for ((wbatch=nops-1; wbatch > 0; --wbatch)); do
-		loops=$((1111/nops + 2))
+		loops=$(((3333 >> nops) / nops + 1))
 		for ((rep=0; rep++ < loops; )); do
 			for ((bits=2**${#options[@]}; --bits >= 0; )); do
 				seed=$(date +%N)
