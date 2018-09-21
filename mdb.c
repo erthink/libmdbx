@@ -1306,9 +1306,6 @@ static void mdb_debug_log(int type, const char *function, int line, const char *
 #	define mdb_assert_enabled() \
 		unlikely(mdb_runtime_flags & MDBX_DBG_ASSERT)
 
-#	define mdb_audit_enabled() \
-		unlikely(mdb_runtime_flags & MDBX_DBG_AUDIT)
-
 #	define mdb_debug_enabled(type) \
 		unlikely(mdb_runtime_flags & \
 			(type & (MDBX_DBG_TRACE | MDBX_DBG_EXTRA)))
@@ -1319,7 +1316,6 @@ static void mdb_debug_log(int type, const char *function, int line, const char *
 #	else
 #		define mdb_debug_enabled(type) (0)
 #	endif
-#	define mdb_audit_enabled() (0)
 #	define mdb_assert_enabled() (0)
 #	define mdb_assert_fail(env, msg, func, line) \
 		__assert_fail(msg, __FILE__, line, func)
@@ -1427,161 +1423,6 @@ mdb_dkey(MDB_val *key, char *buf)
 	sprintf(buf, "%.*s", key->mv_size, key->mv_data);
 #endif
 	return buf;
-}
-
-#if 0 /* LY: debug stuff */
-static const char *
-mdb_leafnode_type(MDB_node *n)
-{
-	static char *const tp[2][2] = {{"", ": DB"}, {": sub-page", ": sub-DB"}};
-	return F_ISSET(n->mn_flags, F_BIGDATA) ? ": overflow page" :
-		tp[F_ISSET(n->mn_flags, F_DUPDATA)][F_ISSET(n->mn_flags, F_SUBDATA)];
-}
-
-/** Display all the keys in the page. */
-static void
-mdb_page_list(MDB_page *mp)
-{
-	pgno_t pgno = mdb_dbg_pgno(mp);
-	const char *type, *state = (mp->mp_flags & P_DIRTY) ? ", dirty" : "";
-	MDB_node *node;
-	unsigned i, nkeys, nsize, total = 0;
-	MDB_val key;
-	DKBUF;
-
-	switch (mp->mp_flags & (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP)) {
-	case P_BRANCH:              type = "Branch page";		break;
-	case P_LEAF:                type = "Leaf page";			break;
-	case P_LEAF|P_SUBP:         type = "Sub-page";			break;
-	case P_LEAF|P_LEAF2:        type = "LEAF2 page";		break;
-	case P_LEAF|P_LEAF2|P_SUBP: type = "LEAF2 sub-page";	break;
-	case P_OVERFLOW:
-		mdb_print("Overflow page %zu pages %u%s\n",
-			pgno, mp->mp_pages, state);
-		return;
-	case P_META:
-		mdb_print("Meta-page %zu txnid %zu\n",
-			pgno, ((MDB_meta *)PAGEDATA(mp))->mm_txnid);
-		return;
-	default:
-		mdb_print("Bad page %zu flags 0x%X\n", pgno, mp->mp_flags);
-		return;
-	}
-
-	nkeys = NUMKEYS(mp);
-	mdb_print("%s %zu numkeys %u%s\n", type, pgno, nkeys, state);
-
-	for (i=0; i<nkeys; i++) {
-		if (IS_LEAF2(mp)) {	/* LEAF2 pages have no mp_ptrs[] or node headers */
-			key.mv_size = nsize = mp->mp_leaf2_ksize;
-			key.mv_data = LEAF2KEY(mp, i, nsize);
-			total += nsize;
-			mdb_print("key %u: nsize %u, %s\n", i, nsize, DKEY(&key));
-			continue;
-		}
-		node = NODEPTR(mp, i);
-		key.mv_size = node->mn_ksize;
-		key.mv_data = node->mn_data;
-		nsize = NODESIZE + key.mv_size;
-		if (IS_BRANCH(mp)) {
-			mdb_print("key %u: page %zu, %s\n", i, NODEPGNO(node), DKEY(&key));
-			total += nsize;
-		} else {
-			if (F_ISSET(node->mn_flags, F_BIGDATA))
-				nsize += sizeof(pgno_t);
-			else
-				nsize += NODEDSZ(node);
-			total += nsize;
-			nsize += sizeof(indx_t);
-			mdb_print("key %u: nsize %u, %s%s\n",
-				i, nsize, DKEY(&key), mdb_leafnode_type(node));
-		}
-		total = EVEN(total);
-	}
-	mdb_print("Total: header %u + contents %u + unused %u\n",
-		IS_LEAF2(mp) ? PAGEHDRSZ : PAGEBASE + mp->mp_lower, total, SIZELEFT(mp));
-}
-
-static void
-mdb_cursor_chk(MDB_cursor *mc)
-{
-	unsigned i;
-	MDB_node *node;
-	MDB_page *mp;
-
-	if (!mc->mc_snum || !(mc->mc_flags & C_INITIALIZED)) return;
-	for (i=0; i<mc->mc_top; i++) {
-		mp = mc->mc_pg[i];
-		node = NODEPTR(mp, mc->mc_ki[i]);
-		if (unlikely(NODEPGNO(node) != mc->mc_pg[i+1]->mp_pgno))
-			mdb_print("oops!\n");
-	}
-	if (unlikely(mc->mc_ki[i] >= NUMKEYS(mc->mc_pg[i])))
-		mdb_print("ack!\n");
-	if (XCURSOR_INITED(mc)) {
-		node = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
-		if (((node->mn_flags & (F_DUPDATA|F_SUBDATA)) == F_DUPDATA) &&
-			mc->mc_xcursor->mx_cursor.mc_pg[0] != NODEDATA(node)) {
-			mdb_print("blah!\n");
-		}
-	}
-}
-#endif /* 0 */
-
-/** Count all the pages in each DB and in the freelist
- *  and make sure it matches the actual number of pages
- *  being used.
- *  All named DBs must be open for a correct count.
- */
-static void mdb_audit(MDB_txn *txn)
-{
-	MDB_cursor mc;
-	MDB_val key, data;
-	MDB_ID freecount, count;
-	MDB_dbi i;
-	int rc;
-
-	freecount = 0;
-	mdb_cursor_init(&mc, txn, FREE_DBI, NULL);
-	while ((rc = mdb_cursor_get(&mc, &key, &data, MDB_NEXT)) == 0)
-		freecount += *(MDB_ID *)data.mv_data;
-	mdb_tassert(txn, rc == MDB_NOTFOUND);
-
-	count = 0;
-	for (i = 0; i<txn->mt_numdbs; i++) {
-		MDB_xcursor mx;
-		if (!(txn->mt_dbflags[i] & DB_VALID))
-			continue;
-		mdb_cursor_init(&mc, txn, i, &mx);
-		if (txn->mt_dbs[i].md_root == P_INVALID)
-			continue;
-		count += txn->mt_dbs[i].md_branch_pages +
-			txn->mt_dbs[i].md_leaf_pages +
-			txn->mt_dbs[i].md_overflow_pages;
-		if (txn->mt_dbs[i].md_flags & MDB_DUPSORT) {
-			rc = mdb_page_search(&mc, NULL, MDB_PS_FIRST);
-			for (; rc == MDB_SUCCESS; rc = mdb_cursor_sibling(&mc, 1)) {
-				unsigned j;
-				MDB_page *mp;
-				mp = mc.mc_pg[mc.mc_top];
-				for (j=0; j<NUMKEYS(mp); j++) {
-					MDB_node *leaf = NODEPTR(mp, j);
-					if (leaf->mn_flags & F_SUBDATA) {
-						MDB_db db;
-						memcpy(&db, NODEDATA(leaf), sizeof(db));
-						count += db.md_branch_pages + db.md_leaf_pages +
-							db.md_overflow_pages;
-					}
-				}
-			}
-			mdb_tassert(txn, rc == MDB_NOTFOUND);
-		}
-	}
-	if (freecount + count + NUM_METAS != txn->mt_next_pgno) {
-		mdb_print("audit: %lu freecount: %lu count: %lu total: %lu next_pgno: %lu\n",
-			txn->mt_txnid, freecount, count+NUM_METAS,
-			freecount+count+NUM_METAS, txn->mt_next_pgno);
-	}
 }
 
 int
@@ -3994,9 +3835,6 @@ mdb_txn_commit(MDB_txn *txn)
 	mdb_midl_free(env->me_pghead);
 	env->me_pghead = NULL;
 	mdb_midl_shrink(&txn->mt_free_pgs);
-
-	if (mdb_audit_enabled())
-		mdb_audit(txn);
 
 	rc = mdb_page_flush(txn, 0);
 	if (likely(rc == MDB_SUCCESS)) {
