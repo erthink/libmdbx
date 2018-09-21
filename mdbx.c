@@ -530,7 +530,7 @@ int mdbx_replace(MDB_txn *txn, MDB_dbi dbi,
 		rc = mdbx_cursor_get(&mc, &present_key, &present_data, MDB_SET_KEY);
 		if (unlikely(rc != MDB_SUCCESS)) {
 			old_data->iov_base = NULL;
-			old_data->iov_len = rc;
+			old_data->iov_len = 0;
 			if (rc != MDB_NOTFOUND || (flags & MDB_CURRENT))
 				goto bailout;
 		} else if (flags & MDB_NOOVERWRITE) {

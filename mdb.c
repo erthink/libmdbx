@@ -602,6 +602,8 @@ typedef struct MDB_page {
 	indx_t		mp_ptrs[1];		/**< dynamic size */
 } MDB_page;
 
+#define PAGETYPE(p)	 ((p)->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW))
+
 	/** Size of the page header, excluding dynamic data at the end */
 #define PAGEHDRSZ	 ((unsigned) offsetof(MDB_page, mp_ptrs))
 
@@ -3364,6 +3366,8 @@ mdb_freelist_save(MDB_txn *txn)
 	const int lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
 
 	mdb_cursor_init(&mc, txn, FREE_DBI, NULL);
+	mc.mc_next = txn->mt_cursors[FREE_DBI];
+	txn->mt_cursors[FREE_DBI] = &mc;
 
 	/* MDB_RESERVE cancels meminit in ovpage malloc (when no WRITEMAP) */
 	clean_limit = (env->me_flags & (MDB_NOMEMINIT|MDB_WRITEMAP))
@@ -3645,6 +3649,7 @@ bailout:
 			txn->mt_lifo_reclaimed = NULL;
 		}
 	}
+	txn->mt_cursors[FREE_DBI] = mc.mc_next;
 
 	return rc;
 }
@@ -8166,6 +8171,12 @@ mdb_node_move(MDB_cursor *csrc, MDB_cursor *cdst, int fromleft)
 
 	DKBUF;
 
+	mdb_tassert(csrc->mc_txn, PAGETYPE(csrc->mc_pg[csrc->mc_top]) == PAGETYPE(cdst->mc_pg[cdst->mc_top]));
+	if (unlikely(PAGETYPE(csrc->mc_pg[csrc->mc_top]) != PAGETYPE(cdst->mc_pg[cdst->mc_top]))) {
+		cdst->mc_txn->mt_flags |= MDB_TXN_ERROR;
+		return MDB_PROBLEM;
+	}
+
 	/* Mark src and dst as dirty. */
 	if (unlikely((rc = mdb_page_touch(csrc)) ||
 		(rc = mdb_page_touch(cdst))))
@@ -8396,6 +8407,12 @@ mdb_page_merge(MDB_cursor *csrc, MDB_cursor *cdst)
 	mdb_cassert(csrc, csrc->mc_snum > 1);	/* can't merge root page */
 	mdb_cassert(csrc, cdst->mc_snum > 1);
 
+	mdb_tassert(csrc->mc_txn, PAGETYPE(psrc) == PAGETYPE(pdst));
+	if (unlikely(PAGETYPE(psrc) != PAGETYPE(pdst))) {
+		cdst->mc_txn->mt_flags |= MDB_TXN_ERROR;
+		return MDB_PROBLEM;
+	}
+
 	/* Mark dst as dirty. */
 	if (unlikely(rc = mdb_page_touch(cdst)))
 		return rc;
@@ -8599,7 +8616,7 @@ mdb_rebalance(MDB_cursor *mc)
 						m3 = &m2->mc_xcursor->mx_cursor;
 					else
 						m3 = m2;
-					if (!(m3->mc_flags & C_INITIALIZED) || (m3->mc_snum < mc->mc_snum))
+					if (m3 == mc || !(m3->mc_flags & C_INITIALIZED))
 						continue;
 					if (m3->mc_pg[0] == mp) {
 						m3->mc_snum = 0;
