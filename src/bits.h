@@ -817,14 +817,11 @@ void mdbx_panic(const char *fmt, ...)
 
 #define mdbx_assert_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_ASSERT)
 
-#define mdbx_audit_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_AUDIT)
-
 #define mdbx_debug_enabled(type)                                               \
   unlikely(mdbx_runtime_flags &(type & (MDBX_DBG_TRACE | MDBX_DBG_EXTRA)))
 
 #else
 #define mdbx_debug_enabled(type) (0)
-#define mdbx_audit_enabled() (0)
 #ifndef NDEBUG
 #define mdbx_assert_enabled() (1)
 #else
