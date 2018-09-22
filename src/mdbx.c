@@ -650,8 +650,8 @@ static unsigned __hot mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
   while (n > 0) {
     unsigned pivot = n >> 1;
     cursor = base + pivot + 1;
-    val = MDBX_PNL_ASCENDING ? mdbx_cmp2int(pnl[cursor], id)
-                             : mdbx_cmp2int(id, pnl[cursor]);
+    val = MDBX_PNL_ASCENDING ? mdbx_cmp2int(id, pnl[cursor])
+                             : mdbx_cmp2int(pnl[cursor], id);
 
     if (val < 0) {
       n = pivot;
