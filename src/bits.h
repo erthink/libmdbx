@@ -1043,6 +1043,8 @@ static __inline unsigned mdbx_log2(size_t value) {
 /* Test if a page is a sub page */
 #define IS_SUBP(p) F_ISSET((p)->mp_flags, P_SUBP)
 
+#define PAGETYPE(p) ((p)->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW))
+
 /* The number of overflow pages needed to store the given size. */
 #define OVPAGES(env, size) (bytes2pgno(env, PAGEHDRSZ - 1 + (size)) + 1)
 

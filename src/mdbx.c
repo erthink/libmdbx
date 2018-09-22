@@ -8927,6 +8927,14 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
 
   DKBUF;
 
+  mdbx_tassert(csrc->mc_txn, PAGETYPE(csrc->mc_pg[csrc->mc_top]) ==
+                                 PAGETYPE(cdst->mc_pg[cdst->mc_top]));
+  if (unlikely(PAGETYPE(csrc->mc_pg[csrc->mc_top]) !=
+               PAGETYPE(cdst->mc_pg[cdst->mc_top]))) {
+    cdst->mc_txn->mt_flags |= MDBX_TXN_ERROR;
+    return MDBX_PROBLEM;
+  }
+
   /* Mark src and dst as dirty. */
   if (unlikely((rc = mdbx_page_touch(csrc)) || (rc = mdbx_page_touch(cdst))))
     return rc;
@@ -9161,6 +9169,12 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_cassert(csrc, csrc->mc_snum > 1); /* can't merge root page */
   mdbx_cassert(csrc, cdst->mc_snum > 1);
 
+  mdbx_tassert(csrc->mc_txn, PAGETYPE(psrc) == PAGETYPE(pdst));
+  if (unlikely(PAGETYPE(psrc) != PAGETYPE(pdst))) {
+    cdst->mc_txn->mt_flags |= MDBX_TXN_ERROR;
+    return MDBX_PROBLEM;
+  }
+
   /* Mark dst as dirty. */
   if (unlikely(rc = mdbx_page_touch(cdst)))
     return rc;
@@ -9362,7 +9376,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
-        if (!(m3->mc_flags & C_INITIALIZED) || (m3->mc_snum < mc->mc_snum))
+        if (m3 == mc || !(m3->mc_flags & C_INITIALIZED))
           continue;
         if (m3->mc_pg[0] == mp) {
           m3->mc_snum = 0;
