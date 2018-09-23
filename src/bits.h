@@ -160,7 +160,7 @@
  * size up to 2^44 bytes, in case of 4K pages. */
 typedef uint32_t pgno_t;
 #define PRIaPGNO PRIu32
-#define MAX_PAGENO ((pgno_t)UINT64_C(0xffffFFFFffff))
+#define MAX_PAGENO UINT32_C(0x7FFFffff)
 #define MIN_PAGENO NUM_METAS
 
 /* A transaction ID. */
@@ -389,9 +389,7 @@ typedef struct MDBX_page {
 #else
 #define MAX_MAPSIZE32 UINT32_C(0x7ff80000)
 #endif
-#define MAX_MAPSIZE64                                                          \
-  ((sizeof(pgno_t) > 4) ? UINT64_C(0x7fffFFFFfff80000)                         \
-                        : MAX_PAGENO * (uint64_t)MAX_PAGESIZE)
+#define MAX_MAPSIZE64 (MAX_PAGENO * (uint64_t)MAX_PAGESIZE)
 
 #define MAX_MAPSIZE ((sizeof(size_t) < 8) ? MAX_MAPSIZE32 : MAX_MAPSIZE64)
 
