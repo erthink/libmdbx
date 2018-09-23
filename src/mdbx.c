@@ -7906,7 +7906,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (F_ISSET(leaf->mn_flags, F_BIGDATA)) {
       MDBX_page *omp;
       pgno_t pg;
-      int level, ovpages, dpages = OVPAGES(env, data->iov_len);
+      int level, ovpages,
+          dpages = (LEAFSIZE(key, data) > env->me_nodemax)
+                       ? OVPAGES(env, data->iov_len)
+                       : 0;
 
       memcpy(&pg, olddata.iov_base, sizeof(pg));
       if (unlikely((rc2 = mdbx_page_get(mc, pg, &omp, &level)) != 0))
@@ -7914,7 +7917,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       ovpages = omp->mp_pages;
 
       /* Is the ov page large enough? */
-      if (ovpages >= dpages) {
+      if (ovpages ==
+          /* LY: add configuragle theshold to keep reserve space */ dpages) {
         if (!(omp->mp_flags & P_DIRTY) &&
             (level || (env->me_flags & MDBX_WRITEMAP))) {
           rc = mdbx_page_unspill(mc->mc_txn, omp, &omp);
