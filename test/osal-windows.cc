@@ -262,14 +262,23 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   STARTUPINFOA StartupInfo;
   GetStartupInfoA(&StartupInfo);
 
-  char exename[_MAX_PATH];
+  char exename[_MAX_PATH + 1];
   DWORD exename_size = sizeof(exename);
   if (!QueryFullProcessImageNameA(GetCurrentProcess(), 0, exename,
                                   &exename_size))
     failure_perror("QueryFullProcessImageName()", GetLastError());
 
-  std::string cmdline = "test_mdbx.child ";
+  if (exename[1] != ':') {
+    exename_size = GetModuleFileName(NULL, exename, sizeof(exename));
+    if (exename_size >= sizeof(exename))
+      return ERROR_BAD_LENGTH;
+  }
+
+  std::string cmdline = "$ ";
   ArgvQuote(cmdline, thunk_param(config));
+
+  if (cmdline.size() >= 32767)
+    return ERROR_BAD_LENGTH;
 
   PROCESS_INFORMATION ProcessInformation;
   if (!CreateProcessA(exename, const_cast<char *>(cmdline.c_str()),
@@ -280,7 +289,7 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
                       NULL, // Inherit the parent's environment.
                       NULL, // Inherit the parent's current directory.
                       &StartupInfo, &ProcessInformation))
-    return GetLastError();
+    failure_perror(exename, GetLastError());
 
   CloseHandle(ProcessInformation.hThread);
   pid = ProcessInformation.dwProcessId;

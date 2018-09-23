@@ -43,6 +43,11 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   if (narg + 1 < argc && strncmp("--", argv[narg + 1], 2) != 0) {
     *value = argv[narg + 1];
+    if (strcmp(*value, "default") == 0) {
+      if (!default_value)
+        failure("Option '--%s' doen't accept default value\n", option);
+      *value = default_value;
+    }
     ++narg;
     return true;
   }
@@ -57,9 +62,15 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   std::string &value, bool allow_empty) {
+  return parse_option(argc, argv, narg, option, value, allow_empty,
+                      allow_empty ? "" : nullptr);
+}
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  std::string &value, bool allow_empty,
+                  const char *default_value) {
   const char *value_cstr;
-  if (!parse_option(argc, argv, narg, option, &value_cstr,
-                    allow_empty ? "" : nullptr))
+  if (!parse_option(argc, argv, narg, option, &value_cstr, default_value))
     return false;
 
   if (!allow_empty && strlen(value_cstr) == 0)
@@ -110,11 +121,27 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   uint64_t &value, const scale_mode scale,
-                  const uint64_t minval, const uint64_t maxval) {
+                  const uint64_t minval, const uint64_t maxval,
+                  const uint64_t default_value) {
 
   const char *value_cstr;
   if (!parse_option(argc, argv, narg, option, &value_cstr))
     return false;
+
+  if (default_value && strcmp(value_cstr, "default") == 0) {
+    value = default_value;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "min") == 0 || strcmp(value_cstr, "minimal") == 0) {
+    value = minval;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "max") == 0 || strcmp(value_cstr, "maximal") == 0) {
+    value = maxval;
+    return true;
+  }
 
   char *suffix = nullptr;
   errno = 0;
@@ -179,28 +206,58 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   unsigned &value, const scale_mode scale,
-                  const unsigned minval, const unsigned maxval) {
+                  const unsigned minval, const unsigned maxval,
+                  const unsigned default_value) {
 
   uint64_t huge;
-  if (!parse_option(argc, argv, narg, option, huge, scale, minval, maxval))
+  if (!parse_option(argc, argv, narg, option, huge, scale, minval, maxval,
+                    default_value))
     return false;
   value = (unsigned)huge;
   return true;
 }
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  uint8_t &value, const uint8_t minval, const uint8_t maxval) {
+                  uint8_t &value, const uint8_t minval, const uint8_t maxval,
+                  const uint8_t default_value) {
 
   uint64_t huge;
-  if (!parse_option(argc, argv, narg, option, huge, no_scale, minval, maxval))
+  if (!parse_option(argc, argv, narg, option, huge, no_scale, minval, maxval,
+                    default_value))
     return false;
   value = (uint8_t)huge;
   return true;
 }
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  int64_t &value, const int64_t minval, const int64_t maxval,
+                  const int64_t default_value) {
+  uint64_t proxy = (uint64_t)value;
+  if (parse_option(argc, argv, narg, option, proxy, config::binary,
+                   (uint64_t)minval, (uint64_t)maxval,
+                   (uint64_t)default_value)) {
+    value = (int64_t)proxy;
+    return true;
+  }
+  return false;
+}
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  int32_t &value, const int32_t minval, const int32_t maxval,
+                  const int32_t default_value) {
+  uint64_t proxy = (uint64_t)value;
+  if (parse_option(argc, argv, narg, option, proxy, config::binary,
+                   (uint64_t)minval, (uint64_t)maxval,
+                   (uint64_t)default_value)) {
+    value = (int32_t)proxy;
+    return true;
+  }
+  return false;
+}
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   bool &value) {
-  const char *value_cstr = NULL;
+  const char *value_cstr = nullptr;
   if (!parse_option(argc, argv, narg, option, &value_cstr, "yes")) {
     const char *current = argv[narg];
     if (strncmp(current, "--no-", 5) == 0 && strcmp(current + 5, option) == 0) {
@@ -269,7 +326,7 @@ static void dump_verbs(const char *caption, size_t bits,
     ++verbs;
   }
 
-  logging::feed("\n");
+  logging::feed("%s\n", (*comma == '\0') ? "none" : "");
 }
 
 static void dump_duration(const char *caption, unsigned duration) {
@@ -300,8 +357,12 @@ void dump(const char *title) {
                                               : i->params.pathname_log.c_str());
     }
 
-    log_info("database: %s, size %" PRIu64 "\n", i->params.pathname_db.c_str(),
-             i->params.size);
+    log_info("database: %s, size %" PRIuPTR "[%" PRIiPTR "..%" PRIiPTR
+             ", %i %i, %i]\n",
+             i->params.pathname_db.c_str(), i->params.size_now,
+             i->params.size_lower, i->params.size_upper,
+             i->params.shrink_threshold, i->params.growth_step,
+             i->params.pagesize);
 
     dump_verbs("mode", i->params.mode_flags, mode_bits);
     dump_verbs("table", i->params.table_flags, table_bits);
@@ -318,7 +379,13 @@ void dump(const char *title) {
 
     log_info("threads %u\n", i->params.nthreads);
 
-    log_info("keygen.case: %s\n", keygencase2str(i->params.keygen.keycase));
+    log_info(
+        "keygen.params: case %s, width %u, mesh %u, rotate %u, offset %" PRIu64
+        ", split %u/%u\n",
+        keygencase2str(i->params.keygen.keycase), i->params.keygen.width,
+        i->params.keygen.mesh, i->params.keygen.rotate, i->params.keygen.offset,
+        i->params.keygen.split,
+        i->params.keygen.width - i->params.keygen.split);
     log_info("keygen.seed: %u\n", i->params.keygen.seed);
     log_info("key: minlen %u, maxlen %u\n", i->params.keylen_min,
              i->params.keylen_max);
@@ -480,4 +547,28 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
 
   TRACE("<< actor_config::deserialize: OK\n");
   return true;
+}
+
+unsigned actor_params::mdbx_keylen_min() const {
+  return (table_flags & MDBX_INTEGERKEY) ? 4 : 0;
+}
+
+unsigned actor_params::mdbx_keylen_max() const {
+  return (table_flags & MDBX_INTEGERKEY)
+             ? 8
+             : std::min((unsigned)mdbx_get_maxkeysize(pagesize),
+                        (unsigned)UINT16_MAX);
+}
+
+unsigned actor_params::mdbx_datalen_min() const {
+  return (table_flags & MDBX_INTEGERDUP) ? 4 : 0;
+}
+
+unsigned actor_params::mdbx_datalen_max() const {
+  return (table_flags & MDBX_INTEGERDUP)
+             ? 8
+             : std::min((table_flags & MDBX_DUPSORT)
+                            ? (unsigned)mdbx_get_maxkeysize(pagesize)
+                            : (unsigned)MDBX_MAXDATASIZE,
+                        (unsigned)UINT16_MAX);
 }

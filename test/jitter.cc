@@ -58,7 +58,11 @@ bool testcase_jitter::run() {
 
     jitter_delay();
     db_close();
-    report(1);
+
+    /* just 'align' nops with other tests with batching */
+    const auto batching =
+        std::max(config.params.batch_read, config.params.batch_write);
+    report(std::max(1u, batching / 2));
   }
   return true;
 }

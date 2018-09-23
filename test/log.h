@@ -46,11 +46,12 @@ enum loglevel {
 const char *level2str(const loglevel level);
 void setup(loglevel level, const std::string &prefix);
 void setup(const std::string &prefix);
+void setlevel(loglevel level);
 
 bool output(const loglevel priority, const char *format, va_list ap);
 bool __printf_args(2, 3)
     output(const loglevel priority, const char *format, ...);
-bool feed(const char *format, va_list ap);
+bool feed_ap(const char *format, va_list ap);
 bool __printf_args(1, 2) feed(const char *format, ...);
 
 class local_suffix {

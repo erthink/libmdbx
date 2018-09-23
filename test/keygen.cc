@@ -30,7 +30,7 @@ serial_t injective(const serial_t serial,
   /* LY: All these "magic" prime numbers were found
    *     and verified with a bit of brute force. */
 
-  static const uint64_t m[64 - serial_minwith] = {
+  static const uint64_t m[64 - serial_minwith + 1] = {
       /* 8 - 24 */
       113, 157, 397, 653, 1753, 5641, 9697, 23873, 25693, 80833, 105953, 316937,
       309277, 834497, 1499933, 4373441, 10184137,
@@ -43,26 +43,31 @@ serial_t injective(const serial_t serial,
       2420886491930041, 3601632139991929, 11984491914483833, 21805846439714153,
       23171543400565993, 53353226456762893, 155627817337932409,
       227827205384840249, 816509268558278821, 576933057762605689,
-      2623957345935638441, 5048241705479929949, 4634245581946485653};
-  static const uint8_t s[64 - serial_minwith] = {
+      2623957345935638441, 5048241705479929949, 4634245581946485653,
+      4613509448041658233, 4952535426879925961};
+  static const uint8_t s[64 - serial_minwith + 1] = {
       /* 8 - 24 */
       2, 3, 4, 4, 2, 4, 3, 3, 7, 3, 3, 4, 8, 3, 10, 3, 11,
       /* 25 - 64 */
       11, 9, 9, 9, 11, 10, 5, 14, 11, 16, 14, 12, 13, 16, 19, 10, 10, 21, 7, 20,
-      10, 14, 22, 19, 3, 21, 18, 19, 26, 24, 2, 21, 25, 29, 24, 10, 11, 14};
+      10, 14, 22, 19, 3, 21, 18, 19, 26, 24, 2, 21, 25, 29, 24, 10, 11, 14, 20,
+      19};
 
-  serial_t result = serial * m[bits - 8];
+  const auto mult = m[bits - 8];
+  const auto shift = s[bits - 8];
+  serial_t result = serial * mult;
   if (salt) {
     const unsigned left = bits / 2;
     const unsigned right = bits - left;
     result = (result << left) | ((result & mask(bits)) >> right);
-    result = (result ^ salt) * m[bits - 8];
+    result = (result ^ salt) * mult;
   }
 
-  result ^= result << s[bits - 8];
+  result ^= result << shift;
   result &= mask(bits);
-  log_trace("keygen-injective: serial %" PRIu64 " into %" PRIu64, serial,
-            result);
+  log_trace("keygen-injective: serial %" PRIu64 "/%u @%" PRIx64 ",%u,%" PRIu64
+            " => %" PRIu64 "/%u",
+            serial, bits, mult, shift, salt, result, bits);
   return result;
 }
 
@@ -73,8 +78,9 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   assert(mapping.mesh <= mapping.width);
   assert(mapping.rotate <= mapping.width);
   assert(mapping.offset <= mask(mapping.width));
-  assert(!(key_essentials.flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
-  assert(!(value_essentials.flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY)));
+  assert(!(key_essentials.flags &
+           ~(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT)));
+  assert(!(value_essentials.flags & ~(MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -82,31 +88,49 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   if (mapping.mesh >= serial_minwith) {
     serial =
         (serial & ~mask(mapping.mesh)) | injective(serial, mapping.mesh, salt);
-    log_trace("keygen-pair: mesh %" PRIu64, serial);
+    log_trace("keygen-pair: mesh@%u => %" PRIu64, mapping.mesh, serial);
   }
 
   if (mapping.rotate) {
     const unsigned right = mapping.rotate;
     const unsigned left = mapping.width - right;
     serial = (serial << left) | ((serial & mask(mapping.width)) >> right);
-    log_trace("keygen-pair: rotate %" PRIu64 ", 0x%" PRIx64, serial, serial);
+    log_trace("keygen-pair: rotate@%u => %" PRIu64 ", 0x%" PRIx64,
+              mapping.rotate, serial, serial);
   }
 
-  serial = (serial + mapping.offset) & mask(mapping.width);
-  log_trace("keygen-pair: offset %" PRIu64, serial);
-  serial += base;
+  if (mapping.offset) {
+    serial = (serial + mapping.offset) & mask(mapping.width);
+    log_trace("keygen-pair: offset@%" PRIu64 " => %" PRIu64, mapping.offset,
+              serial);
+  }
+  if (base) {
+    serial += base;
+    log_trace("keygen-pair: base@%" PRIu64 " => %" PRIu64, base, serial);
+  }
 
   serial_t key_serial = serial;
-  serial_t value_serial = value_age;
+  serial_t value_serial = value_age << mapping.split;
   if (mapping.split) {
-    key_serial = serial >> mapping.split;
-    value_serial =
-        (serial & mask(mapping.split)) | (value_age << mapping.split);
+    if (key_essentials.flags & MDBX_DUPSORT) {
+      key_serial >>= mapping.split;
+      value_serial += serial & mask(mapping.split);
+    } else {
+      /* Без MDBX_DUPSORT требуется уникальность ключей, а для этого нельзя
+       * отбрасывать какие-либо биты serial после инъективного преобразования.
+       * Поэтому key_serial не трогаем, а в value_serial нелинейно вмешиваем
+       * запрошенное количество бит из serial */
+      value_serial +=
+          (serial ^ (serial >> mapping.split)) & mask(mapping.split);
+    }
+
+    value_serial |= value_age << mapping.split;
+    log_trace("keygen-pair: split@%u => k%" PRIu64 ", v%" PRIu64, mapping.split,
+              key_serial, value_serial);
   }
 
   log_trace("keygen-pair: key %" PRIu64 ", value %" PRIu64, key_serial,
             value_serial);
-
   mk(key_serial, key_essentials, *key);
   mk(value_serial, value_essentials, *value);
 
@@ -118,10 +142,10 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   }
 }
 
-void maker::setup(const config::actor_params_pod &actor,
+void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
   key_essentials.flags =
-      actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY);
+      actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
   assert(actor.keylen_min <= UINT8_MAX);
   key_essentials.minlen = (uint8_t)actor.keylen_min;
   assert(actor.keylen_max <= UINT16_MAX);
@@ -137,7 +161,7 @@ void maker::setup(const config::actor_params_pod &actor,
   assert(thread_number < 2);
   (void)thread_number;
   mapping = actor.keygen;
-  salt = actor.keygen.seed * UINT64_C(14653293970879851569);
+  salt = (actor.keygen.seed + actor_id) * UINT64_C(14653293970879851569);
 
   // FIXME: TODO
   base = 0;
@@ -165,7 +189,7 @@ bool maker::increment(serial_t &serial, int delta) {
 
 //-----------------------------------------------------------------------------
 
-size_t length(serial_t serial) {
+static size_t length(serial_t serial) {
   size_t n = 0;
   if (serial > UINT32_MAX) {
     n = 4;
@@ -199,7 +223,10 @@ void __hot maker::mk(const serial_t serial, const essentials &params,
   assert(params.maxlen >= length(serial));
 
   out.value.iov_base = out.bytes;
-  out.value.iov_len = params.minlen;
+  out.value.iov_len =
+      (params.maxlen > params.minlen)
+          ? params.minlen + serial % (params.maxlen - params.minlen)
+          : params.minlen;
 
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);

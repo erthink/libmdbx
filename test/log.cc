@@ -37,6 +37,31 @@ void __noreturn failure_perror(const char *what, int errnum) {
 
 //-----------------------------------------------------------------------------
 
+static void mdbx_logger(int type, const char *function, int line,
+                        const char *msg, va_list args) {
+  logging::loglevel level = logging::info;
+  if (type & MDBX_DBG_EXTRA)
+    level = logging::extra;
+  if (type & MDBX_DBG_TRACE)
+    level = logging::trace;
+  if (type & MDBX_DBG_PRINT)
+    level = logging::verbose;
+
+  if (!function)
+    function = "unknown";
+  if (type & MDBX_DBG_ASSERT) {
+    log_error("mdbx: assertion failure: %s, %d", function, line);
+    level = logging::failure;
+  }
+
+  if (logging::output(
+          level,
+          strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx: %s: ", function))
+    logging::feed_ap(msg, args);
+  if (type & MDBX_DBG_ASSERT)
+    abort();
+}
+
 namespace logging {
 
 static std::string prefix;
@@ -44,8 +69,19 @@ static std::string suffix;
 static loglevel level;
 static FILE *last;
 
-void setup(loglevel _level, const std::string &_prefix) {
+void setlevel(loglevel _level) {
   level = (_level > error) ? failure : _level;
+  int mdbx_dbg_opts = MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP;
+  if (level <= trace)
+    mdbx_dbg_opts |= MDBX_DBG_TRACE;
+  if (level <= verbose)
+    mdbx_dbg_opts |= MDBX_DBG_PRINT;
+  int rc = mdbx_setup_debug(mdbx_dbg_opts, mdbx_logger);
+  log_trace("set mdbx debug-opts: 0x%02x", rc);
+}
+
+void setup(loglevel _level, const std::string &_prefix) {
+  setlevel(_level);
   prefix = _prefix;
 }
 
@@ -157,7 +193,7 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
   return true;
 }
 
-bool feed(const char *format, va_list ap) {
+bool feed_ap(const char *format, va_list ap) {
   if (!last)
     return false;
 
@@ -176,7 +212,7 @@ bool feed(const char *format, ...) {
 
   va_list ap;
   va_start(ap, format);
-  feed(format, ap);
+  feed_ap(format, ap);
   va_end(ap);
   return true;
 }

@@ -53,7 +53,7 @@ bool testcase_hill::run() {
    */
 
   /* TODO: работа в несколько потоков */
-  keyvalue_maker.setup(config.params, 0 /* thread_number */);
+  keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
 
   keygen::buffer a_key = keygen::alloc(config.params.keylen_max);
   keygen::buffer a_data_0 = keygen::alloc(config.params.datalen_max);
@@ -65,7 +65,9 @@ bool testcase_hill::run() {
                                     ? MDBX_NODUPDATA
                                     : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
   const unsigned update_flags =
-      MDBX_CURRENT | MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+      (config.params.table_flags & MDBX_DUPSORT)
+          ? MDBX_CURRENT | MDBX_NODUPDATA | MDBX_NOOVERWRITE
+          : MDBX_NODUPDATA;
 
   uint64_t serial_count = 0;
   unsigned txn_nops = 0;
@@ -115,7 +117,7 @@ bool testcase_hill::run() {
     rc = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_0->value,
                       &a_data_1->value, update_flags);
     if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_put(update-a: 1->0)", rc);
+      failure_perror("mdbx_replace(update-a: 1->0)", rc);
 
     if (++txn_nops >= config.params.batch_write) {
       txn_restart(false, false);
