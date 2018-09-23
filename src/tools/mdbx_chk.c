@@ -409,14 +409,12 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
   else {
     if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
-      problem_add("entry", record_number, "wrong idl size", "%" PRIuPTR,
-                  data->iov_len);
+      problem_add("entry", txnid, "wrong idl size", "%" PRIuPTR, data->iov_len);
     size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
     if (number < 1 || number > MDBX_PNL_MAX)
-      problem_add("entry", record_number, "wrong idl length", "%" PRIuPTR,
-                  number);
+      problem_add("entry", txnid, "wrong idl length", "%" PRIuPTR, number);
     else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
-      problem_add("entry", record_number, "trimmed idl",
+      problem_add("entry", txnid, "trimmed idl",
                   "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
                   (number + 1) * sizeof(pgno_t), data->iov_len);
       number = data->iov_len / sizeof(pgno_t) - 1;
@@ -424,7 +422,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                /* LY: allow gap upto one page. it is ok
                 * and better than shink-and-retry inside mdbx_update_gc() */
                envstat.ms_psize)
-      problem_add("entry", record_number, "extra idl space",
+      problem_add("entry", txnid, "extra idl space",
                   "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
                   (number + 1) * sizeof(pgno_t), data->iov_len);
 
@@ -438,13 +436,13 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     for (unsigned i = 0; i < number; ++i) {
       const pgno_t pgno = iptr[i];
       if (pgno < NUM_METAS || pgno > envinfo.mi_last_pgno)
-        problem_add("entry", record_number, "wrong idl entry",
+        problem_add("entry", txnid, "wrong idl entry",
                     "%u < %" PRIaPGNO " < %" PRIu64, NUM_METAS, pgno,
                     envinfo.mi_last_pgno);
       else {
         if (MDBX_PNL_DISORDERED(prev, pgno)) {
           bad = " [bad sequence]";
-          problem_add("entry", record_number, "bad sequence",
+          problem_add("entry", txnid, "bad sequence",
                       "%" PRIaPGNO " <> %" PRIaPGNO, prev, pgno);
         }
         if (walk.pagemap && walk.pagemap[pgno]) {
