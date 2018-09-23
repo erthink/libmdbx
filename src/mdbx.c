@@ -3465,6 +3465,9 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  mc.mc_next = txn->mt_cursors[FREE_DBI];
+  txn->mt_cursors[FREE_DBI] = &mc;
+
   const char *dbg_prefix_mode = lifo ? "    lifo" : "    fifo";
   mdbx_trace("\n>>> @%" PRIaTXN, txn->mt_txnid);
   (void)dbg_prefix_mode;
@@ -3480,17 +3483,51 @@ retry:
     goto bailout;
   }
 
-  unsigned placed = 0, cleaned_gc_slot = 0, reused_gc_slot = 0,
+  unsigned settled = 0, cleaned_gc_slot = 0, reused_gc_slot = 0,
            filled_gc_slot = ~0u;
-  txnid_t cleaned_gc_id = 0,
-          head_gc_id = lifo ? *env->me_oldest : env->me_last_reclaimed;
+  txnid_t cleaned_gc_id = 0, head_gc_id = env->me_last_reclaimed;
 
   while (1) {
     /* Come back here after each Put() in case befree-list changed */
     MDBX_val key, data;
+    mdbx_trace(" >> continue");
 
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
-    if (!lifo) {
+    if (txn->mt_lifo_reclaimed) {
+      if (cleaned_gc_slot < txn->mt_lifo_reclaimed[0]) {
+        settled = 0;
+        reused_gc_slot = 0;
+        filled_gc_slot = ~0u;
+        cleaned_gc_slot = 0;
+        head_gc_id = ~(txnid_t)0;
+        /* LY: cleanup reclaimed records. */
+        do {
+          cleaned_gc_id = txn->mt_lifo_reclaimed[++cleaned_gc_slot];
+          mdbx_tassert(txn,
+                       cleaned_gc_slot > 0 && cleaned_gc_id < *env->me_oldest);
+          head_gc_id =
+              (head_gc_id > cleaned_gc_id) ? cleaned_gc_id : head_gc_id;
+          key.iov_base = &cleaned_gc_id;
+          key.iov_len = sizeof(cleaned_gc_id);
+          rc = mdbx_cursor_get(&mc, &key, NULL, MDBX_SET);
+          if (rc == MDBX_NOTFOUND)
+            continue;
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
+          rc = mdbx_prep_backlog(txn, &mc);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
+          mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
+          mdbx_trace("%s.cleanup-reclaimed-id [%u]%" PRIaTXN, dbg_prefix_mode,
+                     cleaned_gc_slot, cleaned_gc_id);
+          mc.mc_flags |= C_RECLAIMING;
+          rc = mdbx_cursor_del(&mc, 0);
+          mc.mc_flags ^= C_RECLAIMING;
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
+        } while (cleaned_gc_slot < txn->mt_lifo_reclaimed[0]);
+      }
+    } else {
       /* If using records from freeDB which we have not yet deleted,
        * now delete them and any we reserved for me_reclaimed_pglist. */
       while (cleaned_gc_id < env->me_last_reclaimed) {
@@ -3501,40 +3538,16 @@ retry:
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         cleaned_gc_id = head_gc_id = *(txnid_t *)key.iov_base;
-        mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
-        placed = 0;
         mdbx_tassert(txn, cleaned_gc_id <= env->me_last_reclaimed);
-        mc.mc_flags |= C_RECLAIMING;
+        mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
         mdbx_trace("%s.cleanup-reclaimed-id %" PRIaTXN, dbg_prefix_mode,
                    cleaned_gc_id);
+        mc.mc_flags |= C_RECLAIMING;
         rc = mdbx_cursor_del(&mc, 0);
         mc.mc_flags ^= C_RECLAIMING;
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-      }
-    } else if (txn->mt_lifo_reclaimed) {
-      /* LY: cleanup reclaimed records. */
-      while (cleaned_gc_slot < txn->mt_lifo_reclaimed[0]) {
-        cleaned_gc_id = txn->mt_lifo_reclaimed[++cleaned_gc_slot];
-        head_gc_id = (head_gc_id > cleaned_gc_id) ? cleaned_gc_id : head_gc_id;
-        key.iov_base = &cleaned_gc_id;
-        key.iov_len = sizeof(cleaned_gc_id);
-        rc = mdbx_cursor_get(&mc, &key, NULL, MDBX_SET);
-        if (likely(rc != MDBX_NOTFOUND)) {
-          if (unlikely(rc != MDBX_SUCCESS))
-            goto bailout;
-          rc = mdbx_prep_backlog(txn, &mc);
-          if (unlikely(rc != MDBX_SUCCESS))
-            goto bailout;
-          mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
-          mc.mc_flags |= C_RECLAIMING;
-          mdbx_trace("%s.cleanup-reclaimed-id [%u]%" PRIaTXN, dbg_prefix_mode,
-                     cleaned_gc_slot, cleaned_gc_id);
-          rc = mdbx_cursor_del(&mc, 0);
-          mc.mc_flags ^= C_RECLAIMING;
-          if (unlikely(rc != MDBX_SUCCESS))
-            goto bailout;
-        }
+        settled = 0;
       }
     }
 
@@ -3666,81 +3679,162 @@ retry:
     // handle reclaimed and loost pages - merge and store both into gc
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     mdbx_tassert(txn, txn->mt_loose_count == 0);
+
+    mdbx_trace(" >> reserving");
     const unsigned amount =
         env->me_reclaimed_pglist ? env->me_reclaimed_pglist[0] : 0;
-    const unsigned left = amount - placed;
-
-    mdbx_trace("%s: amount %u, placed %d, left %d", dbg_prefix_mode, amount,
-               placed, (int)left);
+    const unsigned left = amount - settled;
+    mdbx_trace("%s: amount %u, placed %d, left %d, lifo-reclaimed-slots %u, "
+               "reused-gc-slots %u",
+               dbg_prefix_mode, amount, settled, (int)left,
+               txn->mt_lifo_reclaimed ? (unsigned)txn->mt_lifo_reclaimed[0] : 0,
+               reused_gc_slot);
     if (0 >= (int)left)
       break;
 
-    mdbx_trace(" >> reserving");
+    if (unlikely(head_gc_id == 0)) {
+      head_gc_id = mdbx_find_oldest(txn) - 1;
+      if (txn->mt_lifo_reclaimed == NULL) {
+        rc = mdbx_cursor_get(&mc, &key, NULL, MDBX_FIRST);
+        if (unlikely(rc != MDBX_SUCCESS)) {
+          if (rc != MDBX_NOTFOUND)
+            goto bailout;
+        } else if (unlikely(key.iov_len != sizeof(txnid_t))) {
+          rc = MDBX_CORRUPTED;
+          goto bailout;
+        } else {
+          txnid_t first_txn;
+          memcpy(&first_txn, key.iov_base, sizeof(txnid_t));
+          if (head_gc_id >= first_txn)
+            head_gc_id = first_txn - 1;
+        }
+      }
+    }
+
+    const unsigned prefer_max_scatter = 257;
     txnid_t reservation_gc_id;
-    const unsigned lifo_gc_slots =
-        txn->mt_lifo_reclaimed ? (unsigned)txn->mt_lifo_reclaimed[0] : 0;
     if (lifo) {
-      if (reused_gc_slot >= lifo_gc_slots) {
+      mdbx_tassert(txn, txn->mt_lifo_reclaimed != NULL);
+      if (unlikely(!txn->mt_lifo_reclaimed)) {
+        txn->mt_lifo_reclaimed = mdbx_txl_alloc();
+        if (unlikely(!txn->mt_lifo_reclaimed)) {
+          rc = MDBX_ENOMEM;
+          goto bailout;
+        }
+      }
+
+      if (head_gc_id > 1 && txn->mt_lifo_reclaimed[0] < prefer_max_scatter &&
+          left > ((unsigned)txn->mt_lifo_reclaimed[0] - reused_gc_slot) *
+                     env->me_maxgc_ov1page) {
         /* LY: need just a txn-id for save page list. */
         rc = mdbx_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
-        if (likely(rc == MDBX_SUCCESS))
+        if (likely(rc == MDBX_SUCCESS)) {
           /* LY: ok, reclaimed from freedb. */
+          mdbx_trace("%s: took @%" PRIaTXN " from GC, continue",
+                     dbg_prefix_mode, MDBX_PNL_LAST(txn->mt_lifo_reclaimed));
           continue;
+        }
         if (unlikely(rc != MDBX_NOTFOUND))
           /* LY: other troubles... */
           goto bailout;
 
-        if (unlikely(!txn->mt_lifo_reclaimed)) {
-          txn->mt_lifo_reclaimed = mdbx_txl_alloc();
-          if (unlikely(!txn->mt_lifo_reclaimed)) {
-            rc = MDBX_ENOMEM;
-            goto bailout;
-          }
-        }
         /* LY: freedb is empty, will look any free txn-id in high2low order. */
-        rc = mdbx_txl_append(&txn->mt_lifo_reclaimed, --head_gc_id);
-        if (unlikely(rc != MDBX_SUCCESS))
-          goto bailout;
-        cleaned_gc_slot += 1 /* mark GC cleanup is not needed. */;
+        do {
+          --head_gc_id;
+          mdbx_assert(env,
+                      txn->mt_lifo_reclaimed[0] == 0 ||
+                          txn->mt_lifo_reclaimed[txn->mt_lifo_reclaimed[0]] >
+                              head_gc_id);
+          rc = mdbx_txl_append(&txn->mt_lifo_reclaimed, head_gc_id);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
+          cleaned_gc_slot += 1 /* mark GC cleanup is not needed. */;
 
-        mdbx_trace("%s: append @%" PRIaTXN
-                   " to lifo-reclaimed, cleaned-gc-slot = %u",
-                   dbg_prefix_mode, head_gc_id, cleaned_gc_slot);
+          mdbx_trace("%s: append @%" PRIaTXN
+                     " to lifo-reclaimed, cleaned-gc-slot = %u",
+                     dbg_prefix_mode, head_gc_id, cleaned_gc_slot);
+        } while (head_gc_id > 1 &&
+                 txn->mt_lifo_reclaimed[0] < prefer_max_scatter &&
+                 left > ((unsigned)txn->mt_lifo_reclaimed[0] - reused_gc_slot) *
+                            env->me_maxgc_ov1page);
       }
-      mdbx_tassert(txn, txn->mt_lifo_reclaimed != NULL);
-      reservation_gc_id = txn->mt_lifo_reclaimed[++reused_gc_slot];
+
+      if ((unsigned)txn->mt_lifo_reclaimed[0] <= reused_gc_slot) {
+        mdbx_notice("** restart: reserve depleted (reused_gc_slot %u >= "
+                    "lifo_reclaimed %u" PRIaTXN,
+                    reused_gc_slot, (unsigned)txn->mt_lifo_reclaimed[0]);
+        goto retry;
+      }
+      const unsigned i = (unsigned)txn->mt_lifo_reclaimed[0] - reused_gc_slot;
+      mdbx_tassert(txn, i > 0 && i <= txn->mt_lifo_reclaimed[0]);
+      reservation_gc_id = txn->mt_lifo_reclaimed[i];
       mdbx_trace("%s: take @%" PRIaTXN " from lifo-reclaimed[%u]",
-                 dbg_prefix_mode, reservation_gc_id, reused_gc_slot);
-      head_gc_id =
-          (head_gc_id > reservation_gc_id) ? reservation_gc_id : head_gc_id;
+                 dbg_prefix_mode, reservation_gc_id, i);
     } else {
       mdbx_tassert(txn, txn->mt_lifo_reclaimed == NULL);
-      reused_gc_slot++ /* just count reserved records */;
       reservation_gc_id = head_gc_id--;
       mdbx_trace("%s: take @%" PRIaTXN " from head-gc-id", dbg_prefix_mode,
                  reservation_gc_id);
     }
+    ++reused_gc_slot;
 
-    mdbx_trace("%s: head_gc_id %" PRIaTXN
-               ", reused_gc_slot %u, lifo_gc_slots %u, reservation-id "
+    unsigned chunk = left;
+    if (unlikely(chunk > env->me_maxgc_ov1page)) {
+      const unsigned avail_gc_slots =
+          txn->mt_lifo_reclaimed
+              ? (unsigned)txn->mt_lifo_reclaimed[0] - reused_gc_slot + 1
+              : (head_gc_id < INT16_MAX) ? (unsigned)head_gc_id : INT16_MAX;
+      if (avail_gc_slots > 1) {
+        if (chunk < env->me_maxgc_ov1page * 2)
+          chunk /= 2;
+        else {
+          const unsigned threshold =
+              env->me_maxgc_ov1page * ((avail_gc_slots < prefer_max_scatter)
+                                           ? avail_gc_slots
+                                           : prefer_max_scatter);
+          if (left < threshold)
+            chunk = env->me_maxgc_ov1page;
+          else {
+            const unsigned tail = left - threshold + env->me_maxgc_ov1page + 1;
+            unsigned span = 1;
+            unsigned avail = (unsigned)((pgno2bytes(env, span) - PAGEHDRSZ) /
+                                        sizeof(pgno_t)) /*- 1 + span */;
+            if (tail > avail) {
+              for (unsigned i = amount - span; i > 0; --i) {
+                if (MDBX_PNL_ASCENDING
+                        ? (env->me_reclaimed_pglist[i] + span)
+                        : (env->me_reclaimed_pglist[i] - span) ==
+                              env->me_reclaimed_pglist[i + span]) {
+                  span += 1;
+                  avail = (unsigned)((pgno2bytes(env, span) - PAGEHDRSZ) /
+                                     sizeof(pgno_t)) -
+                          1 + span;
+                  if (avail >= tail)
+                    break;
+                }
+              }
+            }
+
+            chunk = (avail >= tail) ? tail - span
+                                    : (avail_gc_slots > 3 &&
+                                       reused_gc_slot < prefer_max_scatter - 3)
+                                          ? avail - span
+                                          : tail;
+          }
+        }
+      }
+    }
+    mdbx_tassert(txn, chunk > 0);
+
+    mdbx_trace("%s: head_gc_id %" PRIaTXN ", reused_gc_slot %u, reservation-id "
                "%" PRIaTXN,
-               dbg_prefix_mode, head_gc_id, reused_gc_slot, lifo_gc_slots,
-               reservation_gc_id);
+               dbg_prefix_mode, head_gc_id, reused_gc_slot, reservation_gc_id);
 
-    const bool no_slots_more =
-        head_gc_id < 2 && (!lifo || reused_gc_slot >= lifo_gc_slots);
-    const unsigned chunk =
-        (left < env->me_maxgc_ov1page || no_slots_more)
-            ? left
-            : (left < env->me_maxgc_ov1page * 2)
-                  ? /* the half to each of the last two chunks */ left / 2
-                  : env->me_maxgc_ov1page;
-
-    mdbx_trace("%s: chunk %u, no_slots_more %s, gc-per-ovpage %u",
-               dbg_prefix_mode, chunk, no_slots_more ? "yes" : "no",
+    mdbx_trace("%s: chunk %u, gc-per-ovpage %u", dbg_prefix_mode, chunk,
                env->me_maxgc_ov1page);
 
-    mdbx_tassert(txn, reservation_gc_id < *env->me_oldest);
+    mdbx_tassert(txn,
+                 reservation_gc_id > 0 && reservation_gc_id < *env->me_oldest);
     if (unlikely(reservation_gc_id < 1)) {
       /* LY: not any txn in the past of freedb. */
       rc = MDBX_PROBLEM;
@@ -3751,7 +3845,7 @@ retry:
     key.iov_base = &reservation_gc_id;
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
-               placed + 1, placed + chunk + 1, reservation_gc_id);
+               settled + 1, settled + chunk + 1, reservation_gc_id);
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (unlikely(rc != MDBX_SUCCESS))
@@ -3759,8 +3853,8 @@ retry:
 
     /* PNL is initially empty, zero out at least the length */
     memset(data.iov_base, 0, sizeof(pgno_t));
-    placed += chunk;
-    mdbx_trace("%s.placed %u (+%u), continue", dbg_prefix_mode, placed, chunk);
+    settled += chunk;
+    mdbx_trace("%s.placed %u (+%u), continue", dbg_prefix_mode, settled, chunk);
     continue;
   }
 
@@ -3770,7 +3864,9 @@ retry:
 
   mdbx_trace(" >> filling");
   /* Fill in the reserved records */
-  filled_gc_slot = reused_gc_slot;
+  filled_gc_slot = txn->mt_lifo_reclaimed
+                       ? (unsigned)txn->mt_lifo_reclaimed[0] - reused_gc_slot
+                       : reused_gc_slot;
   rc = MDBX_SUCCESS;
   mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
   if (env->me_reclaimed_pglist && env->me_reclaimed_pglist[0]) {
@@ -3778,8 +3874,8 @@ retry:
     key.iov_len = data.iov_len = 0; /* avoid MSVC warning */
     key.iov_base = data.iov_base = NULL;
 
-    unsigned left = env->me_reclaimed_pglist[0];
-    pgno_t *end = env->me_reclaimed_pglist + left;
+    const unsigned amount = env->me_reclaimed_pglist[0];
+    unsigned left = amount;
     if (txn->mt_lifo_reclaimed == nullptr) {
       mdbx_tassert(txn, lifo == 0);
       rc = mdbx_cursor_first(&mc, &key, &data);
@@ -3796,8 +3892,7 @@ retry:
       if (txn->mt_lifo_reclaimed == nullptr) {
         mdbx_tassert(txn, lifo == 0);
         fill_gc_id = *(txnid_t *)key.iov_base;
-        if (filled_gc_slot-- /* just countdown reserved records */ == 0 ||
-            fill_gc_id > env->me_last_reclaimed) {
+        if (filled_gc_slot-- == 0 || fill_gc_id > env->me_last_reclaimed) {
           mdbx_notice(
               "** restart: reserve depleted (filled_slot %u, fill_id %" PRIaTXN
               " > last_reclaimed %" PRIaTXN,
@@ -3806,18 +3901,18 @@ retry:
         }
       } else {
         mdbx_tassert(txn, lifo != 0);
-        if (filled_gc_slot == 0) {
-          mdbx_notice("** restart: reserve depleted (filled_slot == 0)");
+        if (++filled_gc_slot > (unsigned)txn->mt_lifo_reclaimed[0]) {
+          mdbx_notice("** restart: reserve depleted (filled_gc_slot %u > "
+                      "lifo_reclaimed %u" PRIaTXN,
+                      filled_gc_slot, (unsigned)txn->mt_lifo_reclaimed[0]);
           goto retry;
         }
-        mdbx_tassert(txn, filled_gc_slot > 0 &&
-                              filled_gc_slot <= txn->mt_lifo_reclaimed[0]);
-        fill_gc_id = txn->mt_lifo_reclaimed[filled_gc_slot--];
-        mdbx_trace("%s.seek-reservaton @%" PRIaTXN " at lifo_reclaimed[%u]",
-                   dbg_prefix_mode, fill_gc_id, (unsigned)filled_gc_slot);
+        fill_gc_id = txn->mt_lifo_reclaimed[filled_gc_slot];
+        mdbx_trace("%s.seek-reservation @%" PRIaTXN " at lifo_reclaimed[%u]",
+                   dbg_prefix_mode, fill_gc_id, filled_gc_slot);
         key.iov_base = &fill_gc_id;
         key.iov_len = sizeof(fill_gc_id);
-        rc = mdbx_cursor_get(&mc, &key, &data, MDBX_SET);
+        rc = mdbx_cursor_get(&mc, &key, &data, MDBX_SET_KEY);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
@@ -3825,35 +3920,51 @@ retry:
           txn, cleaned_gc_slot ==
                    (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
 
-      mdbx_tassert(txn, data.iov_len >= sizeof(pgno_t) * 2);
+      mdbx_tassert(txn, fill_gc_id > 0 && fill_gc_id < *env->me_oldest);
       const size_t space = (data.iov_len / sizeof(pgno_t)) - 1;
       const unsigned chunk = (space > left) ? left : (unsigned)space;
-      data.iov_len = (chunk + 1) * sizeof(pgno_t);
+      mdbx_tassert(txn, data.iov_len >= sizeof(pgno_t) * 2 && chunk > 0);
+      if ((space > chunk && loop < 3) ||
+          (space > chunk + env->me_maxgc_ov1page && loop < 21))
+        data.iov_len = (chunk + 1) * sizeof(pgno_t);
+      data.iov_base = NULL;
       mdbx_tassert(txn, fill_gc_id > 0 && fill_gc_id < *env->me_oldest);
       key.iov_base = &fill_gc_id;
       key.iov_len = sizeof(fill_gc_id);
 
-      end -= chunk;
-      data.iov_base = end;
-      pgno_t save = end[0];
-      end[0] = (pgno_t)chunk;
-      mdbx_tassert(txn, mdbx_pnl_check(end));
       mc.mc_flags |= C_RECLAIMING;
-      rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT);
+      rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
       mc.mc_flags ^= C_RECLAIMING;
-      mdbx_tassert(txn, mdbx_pnl_check(end));
-      mdbx_tassert(
-          txn, cleaned_gc_slot ==
-                   (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0));
-      pgno_t *from = end + 1, *to = end + end[0];
-      mdbx_trace("%s.fill: %u [ %u:%" PRIaPGNO "...%u:%" PRIaPGNO
-                 "] @%" PRIaTXN,
-                 dbg_prefix_mode, (unsigned)end[0],
-                 (unsigned)(from - env->me_reclaimed_pglist), *from,
-                 (unsigned)(to - env->me_reclaimed_pglist), *to, fill_gc_id);
-      end[0] = save;
+      mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
+
+      if (unlikely(txn->mt_loose_count ||
+                   amount != (unsigned)env->me_reclaimed_pglist[0])) {
+        memset(data.iov_base, 0, sizeof(pgno_t));
+        mdbx_notice("** restart: reclaimed-list changed (%u -> %u, %u)", amount,
+                    (unsigned)env->me_reclaimed_pglist[0], txn->mt_loose_count);
+        goto retry;
+      }
+      if (unlikely(txn->mt_lifo_reclaimed
+                       ? cleaned_gc_slot < (unsigned)txn->mt_lifo_reclaimed[0]
+                       : cleaned_gc_id < env->me_last_reclaimed)) {
+        memset(data.iov_base, 0, sizeof(pgno_t));
+        mdbx_notice("** restart: reclaimed-slots changed");
+        goto retry;
+      }
+
+      pgno_t *dst = data.iov_base;
+      *dst = chunk;
+      pgno_t *src = env->me_reclaimed_pglist + left - chunk + 1;
+      memcpy(dst + 1, src, chunk * sizeof(pgno_t));
+      mdbx_tassert(txn, mdbx_pnl_check(dst));
+      pgno_t *from = src, *to = src + chunk;
+      mdbx_trace("%s.fill: %u [ %u:%" PRIaPGNO "...%u:%" PRIaPGNO
+                 "] @%" PRIaTXN,
+                 dbg_prefix_mode, chunk,
+                 (unsigned)(from - env->me_reclaimed_pglist), from[0],
+                 (unsigned)(to - env->me_reclaimed_pglist), to[-1], fill_gc_id);
 
       left -= chunk;
       if (left == 0) {
@@ -3870,16 +3981,21 @@ retry:
   }
 
   mdbx_tassert(txn, rc == MDBX_SUCCESS);
-  if (txn->mt_lifo_reclaimed) {
-    mdbx_tassert(txn, cleaned_gc_slot == txn->mt_lifo_reclaimed[0]);
-    if (unlikely(filled_gc_slot != 0)) {
-      mdbx_notice("** restart: reserve excess (filled-slot %u > 0)",
-                  filled_gc_slot);
-      goto retry;
-    }
+  if (unlikely(txn->mt_loose_count != 0 ||
+               filled_gc_slot != (txn->mt_lifo_reclaimed
+                                      ? (unsigned)txn->mt_lifo_reclaimed[0]
+                                      : 0))) {
+    mdbx_notice("** restart: reserve excess (filled-slot %u, loose-count %u)",
+                filled_gc_slot, txn->mt_loose_count);
+    goto retry;
   }
 
+  mdbx_tassert(txn, txn->mt_lifo_reclaimed == NULL ||
+                        cleaned_gc_slot == txn->mt_lifo_reclaimed[0]);
+
 bailout:
+  txn->mt_cursors[FREE_DBI] = mc.mc_next;
+
   if (txn->mt_lifo_reclaimed) {
     txn->mt_lifo_reclaimed[0] = 0;
     if (txn != env->me_txn0) {
