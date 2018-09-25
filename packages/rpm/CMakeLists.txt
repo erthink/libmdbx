@@ -2,19 +2,10 @@ cmake_minimum_required(VERSION 2.8.7)
 set(TARGET mdbx)
 project(${TARGET})
 
-message(WARNING "
-***************************************************************
-  MDBX is under active development, database format and API
-  aren't stable at least until 2018Q3. New version won't be
-  backwards compatible. Main focus of the rework is to provide
-  clear and robust API and new features.
-***************************************************************
-")
-
 set(MDBX_VERSION_MAJOR 0)
-set(MDBX_VERSION_MINOR 1)
-set(MDBX_VERSION_RELEASE 3)
-set(MDBX_VERSION_REVISION 1)
+set(MDBX_VERSION_MINOR 2)
+set(MDBX_VERSION_RELEASE 0)
+set(MDBX_VERSION_REVISION 0)
 
 set(MDBX_VERSION_STRING ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_RELEASE})
 
@@ -111,14 +102,14 @@ add_library(${TARGET}_SHARED SHARED
 
 set_target_properties(${TARGET}_SHARED PROPERTIES
   VERSION ${MDBX_VERSION_STRING}
-  SOVERSION ${MDBX_VERSION_MAJOR}
+  SOVERSION ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}
   OUTPUT_NAME ${TARGET}
   CLEAN_DIRECT_OUTPUT 1
   )
 
 set_target_properties(${TARGET}_STATIC PROPERTIES
   VERSION ${MDBX_VERSION_STRING}
-  SOVERSION ${MDBX_VERSION_MAJOR}
+  SOVERSION ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}
   OUTPUT_NAME ${TARGET}
   CLEAN_DIRECT_OUTPUT 1
   )
