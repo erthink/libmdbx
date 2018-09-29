@@ -3805,7 +3805,7 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   MDBX_cursor mc;
   int rc = mdbx_cursor_init(&mc, txn, FREE_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
+    goto bailout_notracking;
 
   mc.mc_next = txn->mt_cursors[FREE_DBI];
   txn->mt_cursors[FREE_DBI] = &mc;
@@ -4423,6 +4423,7 @@ retry:
 bailout:
   txn->mt_cursors[FREE_DBI] = mc.mc_next;
 
+bailout_notracking:
   if (txn->mt_lifo_reclaimed) {
     MDBX_PNL_SIZE(txn->mt_lifo_reclaimed) = 0;
     if (txn != env->me_txn0) {
