@@ -4,10 +4,10 @@ environment:
   matrix:
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
       TOOLSET: v141
-    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
-      TOOLSET: v140
-    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
-      TOOLSET: v120
+#    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+#      TOOLSET: v140
+#    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
+#      TOOLSET: v120
 
 branches:
   except:
