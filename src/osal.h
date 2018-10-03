@@ -402,11 +402,6 @@ int mdbx_asprintf(char **strp, const char *fmt, ...);
   _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
 #endif /* vsnprintf */
 
-#ifdef _ASSERTE
-#undef assert
-#define assert _ASSERTE
-#endif
-
 #endif /* _MSC_VER */
 
 /*----------------------------------------------------------------------------*/
