@@ -6927,13 +6927,20 @@ mapped:
   p = pgno2page(env, pgno);
 
 done:
-  if (unlikely(p->mp_pgno != pgno))
+  if (unlikely(p->mp_pgno != pgno)) {
+    mdbx_error("mismatch pgno %" PRIaPGNO " (actual) != %" PRIaPGNO
+               " (expected)",
+               p->mp_pgno, pgno);
     return MDBX_CORRUPTED;
+  }
 
   if (unlikely(p->mp_upper < p->mp_lower ||
                PAGEHDRSZ + p->mp_upper > env->me_psize) &&
-      !IS_OVERFLOW(p))
+      !IS_OVERFLOW(p)) {
+    mdbx_error("invalid page lower(%u)/upper(%u), pg-limit %u", p->mp_lower,
+               p->mp_upper, env->me_psize - PAGEHDRSZ);
     return MDBX_CORRUPTED;
+  }
   /* TODO: more checks here, including p->mp_validator */
 
   *ret = p;
