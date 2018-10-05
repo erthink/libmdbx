@@ -1389,6 +1389,30 @@ void __cold mdbx_debug_log(int type, const char *function, int line,
   if (mdbx_debug_logger)
     mdbx_debug_logger(type, function, line, fmt, args);
   else {
+#if defined(_WIN32) || defined(_WIN64)
+    if (IsDebuggerPresent()) {
+      int prefix_len = 0;
+      char *prefix = nullptr;
+      if (function && line > 0)
+        prefix_len = mdbx_asprintf(&prefix, "%s:%d ", function, line);
+      else if (function)
+        prefix_len = mdbx_asprintf(&prefix, "%s: ", function);
+      else if (line > 0)
+        prefix_len = mdbx_asprintf(&prefix, "%d: ", line);
+      if (prefix_len > 0 && prefix) {
+        OutputDebugStringA(prefix);
+        free(prefix);
+      }
+      char *msg = nullptr;
+      int msg_len = mdbx_vasprintf(&msg, fmt, args);
+      if (msg_len > 0 && msg) {
+        OutputDebugStringA(msg);
+        free(msg);
+      }
+      va_end(args);
+      return;
+    }
+#endif
     if (function && line > 0)
       fprintf(stderr, "%s:%d ", function, line);
     else if (function)

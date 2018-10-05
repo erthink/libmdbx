@@ -386,8 +386,10 @@ void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
 
 #if __GLIBC_PREREQ(2, 1)
 #define mdbx_asprintf asprintf
+#define mdbx_vasprintf vasprintf
 #else
-int mdbx_asprintf(char **strp, const char *fmt, ...);
+__printf_args(2, 3) int mdbx_asprintf(char **strp, const char *fmt, ...);
+int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
 
 #ifdef _MSC_VER
