@@ -55,7 +55,7 @@ char *optarg;
 int getopt(int argc, char *const argv[], const char *opts) {
   static int sp = 1;
   int c;
-  char *cp;
+  const char *cp;
 
   if (sp == 1) {
     if (optind >= argc || argv[optind][0] != '-' || argv[optind][1] == '\0')

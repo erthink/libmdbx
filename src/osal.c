@@ -137,6 +137,15 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 #define STATUS_INVALID_DEVICE_REQUEST ((NTSTATUS)0xC0000010L)
 #endif
 
+#ifndef FILE_DEVICE_FILE_SYSTEM
+#define FILE_DEVICE_FILE_SYSTEM 0x00000009
+#endif
+
+#ifndef FSCTL_GET_EXTERNAL_BACKING
+#define FSCTL_GET_EXTERNAL_BACKING                                             \
+  CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 196, METHOD_BUFFERED, FILE_ANY_ACCESS)
+#endif
+
 #endif /* _WIN32 || _WIN64 */
 
 /*----------------------------------------------------------------------------*/
