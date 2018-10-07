@@ -26,11 +26,16 @@
 
 static void mdbx_winnt_import(void);
 
+#ifdef MDBX_BUILD_DLL
+BOOL APIENTRY DllMain(HANDLE module, DWORD reason, LPVOID reserved)
+#else
 #if !MDBX_CONFIG_MANUAL_TLS_CALLBACK
 static
 #endif /* !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
     void NTAPI
-    mdbx_dll_callback(PVOID module, DWORD reason, PVOID reserved) {
+    mdbx_dll_callback(PVOID module, DWORD reason, PVOID reserved)
+#endif /* MDBX_BUILD_DLL */
+{
   (void)reserved;
   switch (reason) {
   case DLL_PROCESS_ATTACH:
@@ -47,9 +52,12 @@ static
     mdbx_rthc_thread_dtor(module);
     break;
   }
+#ifdef MDBX_BUILD_DLL
+  return TRUE;
+#endif
 }
 
-#if !MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#if !defined(MDBX_BUILD_DLL) && !MDBX_CONFIG_MANUAL_TLS_CALLBACK
 /* *INDENT-OFF* */
 /* clang-format off */
 #if defined(_MSC_VER)
@@ -87,7 +95,7 @@ static
 #endif
 /* *INDENT-ON* */
 /* clang-format on */
-#endif /* !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+#endif /* !defined(MDBX_BUILD_DLL) && !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
 
 /*----------------------------------------------------------------------------*/
 
