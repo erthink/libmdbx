@@ -155,7 +155,7 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 __nothrow __noreturn void __assert_fail(const char *assertion, const char *file,
                                         unsigned line, const char *function);
 #else
-__extern_C __declspec(dllimport) void __cdecl _assert(char const *message,
+__extern_C /*__declspec(dllimport)*/ void __cdecl _assert(char const *message,
                                                       char const *filename,
                                                       unsigned line);
 #endif /* _MSC_VER */
