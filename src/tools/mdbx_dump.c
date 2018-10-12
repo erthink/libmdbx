@@ -292,7 +292,7 @@ int main(int argc, char *argv[]) {
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
       count++;
-      str = malloc(key.iov_len + 1);
+      str = mdbx_malloc(key.iov_len + 1);
       memcpy(str, key.iov_base, key.iov_len);
       str[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, str, 0, &db2);
@@ -307,7 +307,7 @@ int main(int argc, char *argv[]) {
         }
         mdbx_dbi_close(env, db2);
       }
-      free(str);
+      mdbx_free(str);
       if (rc)
         continue;
     }

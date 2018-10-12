@@ -1,4 +1,4 @@
-﻿/* mdbx_chk.c - memory-mapped database check tool */
+/* mdbx_chk.c - memory-mapped database check tool */
 
 /*
  * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>
@@ -141,12 +141,12 @@ static void
 static void pagemap_cleanup(void) {
   for (int i = CORE_DBS; ++i < MAX_DBI;) {
     if (walk.dbi[i].name) {
-      free((void *)walk.dbi[i].name);
+      mdbx_free((void *)walk.dbi[i].name);
       walk.dbi[i].name = NULL;
     }
   }
 
-  free(walk.pagemap);
+  mdbx_free(walk.pagemap);
   walk.pagemap = NULL;
 }
 
@@ -190,7 +190,7 @@ static void
         break;
 
     if (!p) {
-      p = calloc(1, sizeof(*p));
+      p = mdbx_calloc(1, sizeof(*p));
       p->caption = msg;
       p->pr_next = problems_list;
       problems_list = p;
@@ -233,7 +233,7 @@ static uint64_t problems_pop(struct problem *list) {
       count += problems_list->count;
       print("%s%s (%" PRIu64 ")", i ? ", " : "", problems_list->caption,
             problems_list->count);
-      free(problems_list);
+      mdbx_free(problems_list);
       problems_list = p;
     }
     print("\n");
@@ -497,13 +497,13 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
       return handle_userdb(record_number, key, data);
   }
 
-  name = malloc(key->iov_len + 1);
+  name = mdbx_malloc(key->iov_len + 1);
   memcpy(name, key->iov_base, key->iov_len);
   name[key->iov_len] = '\0';
   userdb_count++;
 
   rc = process_db(~0u, name, handle_userdb, false);
-  free(name);
+  mdbx_free(name);
   if (rc != MDBX_INCOMPATIBLE)
     return rc;
 
@@ -1093,7 +1093,7 @@ int main(int argc, char *argv[]) {
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
     fflush(NULL);
-    walk.pagemap = calloc((size_t)lastpgno, sizeof(*walk.pagemap));
+    walk.pagemap = mdbx_calloc((size_t)lastpgno, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
       rc = errno ? errno : MDBX_ENOMEM;
       error("calloc failed, error %d %s\n", rc, mdbx_strerror(rc));

@@ -105,6 +105,11 @@ typedef struct {
 typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif /* Platform */
 
+#define mdbx_malloc malloc
+#define mdbx_calloc calloc
+#define mdbx_realloc realloc
+#define mdbx_free free
+
 /* *INDENT-OFF* */
 /* clang-format off */
 #if defined(HAVE_SYS_STAT_H) || __has_include(<sys/stat.h>)

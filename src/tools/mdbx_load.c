@@ -110,7 +110,7 @@ static void readhdr(void) {
       if (ptr)
         *ptr = '\0';
       if (subname)
-        free(subname);
+        mdbx_free(subname);
       subname = strdup((char *)dbuf.iov_base + STRLENOF("database="));
     } else if (!strncmp(dbuf.iov_base, "type=", STRLENOF("type="))) {
       if (strncmp((char *)dbuf.iov_base + STRLENOF("type="), "btree",
@@ -237,7 +237,7 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 
   /* Is buffer too short? */
   while (c1[len - 1] != '\n') {
-    buf->iov_base = realloc(buf->iov_base, buf->iov_len * 2);
+    buf->iov_base = mdbx_realloc(buf->iov_base, buf->iov_len * 2);
     if (!buf->iov_base) {
       Eof = 1;
       fprintf(stderr, "%s: line %" PRIiSIZE ": out of memory, line too long\n",
@@ -378,7 +378,7 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   dbuf.iov_len = 4096;
-  dbuf.iov_base = malloc(dbuf.iov_len);
+  dbuf.iov_base = mdbx_malloc(dbuf.iov_len);
 
   if (!(mode & NOHDR))
     readhdr();
@@ -418,7 +418,7 @@ int main(int argc, char *argv[]) {
   }
 
   kbuf.iov_len = mdbx_env_get_maxkeysize(env) * 2 + 2;
-  kbuf.iov_base = malloc(kbuf.iov_len);
+  kbuf.iov_base = mdbx_malloc(kbuf.iov_len);
 
   while (!Eof) {
     if (user_break) {

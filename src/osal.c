@@ -221,7 +221,7 @@ int mdbx_vasprintf(char **strp, const char *fmt, va_list ap) {
     return needed;
   }
 
-  *strp = malloc(needed + 1);
+  *strp = mdbx_malloc(needed + 1);
   if (unlikely(*strp == nullptr)) {
     va_end(ones);
 #if defined(_WIN32) || defined(_WIN64)
@@ -242,7 +242,7 @@ int mdbx_vasprintf(char **strp, const char *fmt, va_list ap) {
 
   assert(actual == needed);
   if (unlikely(actual < 0)) {
-    free(*strp);
+    mdbx_free(*strp);
     *strp = nullptr;
   }
   return actual;
@@ -281,7 +281,7 @@ void mdbx_memalign_free(void *ptr) {
 #if _MSC_VER
   _aligned_free(ptr);
 #else
-  free(ptr);
+  mdbx_free(ptr);
 #endif
 }
 #endif /* mdbx_memalign_free */

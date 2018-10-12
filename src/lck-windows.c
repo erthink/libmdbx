@@ -199,12 +199,12 @@ static int suspend_and_append(mdbx_handle_array_t **array,
                               const DWORD ThreadId) {
   const unsigned limit = (*array)->limit;
   if ((*array)->count == limit) {
-    void *ptr = realloc((limit > ARRAY_LENGTH((*array)->handles))
-                            ? *array
-                            : /* don't free initial array on the stack */ NULL,
-                        sizeof(mdbx_handle_array_t) +
-                            sizeof(HANDLE) *
-                                (limit * 2 - ARRAY_LENGTH((*array)->handles)));
+    void *ptr = mdbx_realloc(
+        (limit > ARRAY_LENGTH((*array)->handles))
+            ? *array
+            : /* don't free initial array on the stack */ NULL,
+        sizeof(mdbx_handle_array_t) +
+            sizeof(HANDLE) * (limit * 2 - ARRAY_LENGTH((*array)->handles)));
     if (!ptr)
       return MDBX_ENOMEM;
     if (limit == ARRAY_LENGTH((*array)->handles))

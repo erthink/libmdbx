@@ -356,13 +356,13 @@ int main(int argc, char *argv[]) {
       MDBX_dbi db2;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      str = malloc(key.iov_len + 1);
+      str = mdbx_malloc(key.iov_len + 1);
       memcpy(str, key.iov_base, key.iov_len);
       str[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, str, 0, &db2);
       if (rc == MDBX_SUCCESS)
         printf("Status of %s\n", str);
-      free(str);
+      mdbx_free(str);
       if (rc)
         continue;
       rc = mdbx_dbi_stat(txn, db2, &mst, sizeof(mst));
