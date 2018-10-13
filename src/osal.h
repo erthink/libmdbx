@@ -94,6 +94,8 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
   return LocalReAlloc(ptr, bytes, LMEM_MOVEABLE);
 }
 #define mdbx_free LocalFree
+#define snprintf _snprintf   /* ntdll */
+#define vsnprintf _vsnprintf /* ntdll */
 #else
 #include <pthread.h>
 #include <signal.h>
@@ -400,20 +402,6 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 __printf_args(2, 3) int mdbx_asprintf(char **strp, const char *fmt, ...);
 int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
-
-#ifdef _MSC_VER
-
-#ifndef snprintf
-#define snprintf(buffer, buffer_size, format, ...)                             \
-  _snprintf_s(buffer, buffer_size, _TRUNCATE, format, __VA_ARGS__)
-#endif /* snprintf */
-
-#ifndef vsnprintf
-#define vsnprintf(buffer, buffer_size, format, args)                           \
-  _vsnprintf_s(buffer, buffer_size, _TRUNCATE, format, args)
-#endif /* vsnprintf */
-
-#endif /* _MSC_VER */
 
 /*----------------------------------------------------------------------------*/
 /* OS abstraction layer stuff */
