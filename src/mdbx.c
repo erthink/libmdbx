@@ -40,9 +40,6 @@
 /*----------------------------------------------------------------------------*/
 /* Internal inlines */
 
-#undef assert
-#define assert(expr) mdbx_assert(NULL, expr)
-
 static __inline bool mdbx_is_power2(size_t x) { return (x & (x - 1)) == 0; }
 
 static __inline size_t mdbx_roundup2(size_t value, size_t granularity) {
@@ -1409,10 +1406,8 @@ void __cold mdbx_debug_log(int type, const char *function, int line,
         OutputDebugStringA(msg);
         mdbx_free(msg);
       }
-      va_end(args);
-      return;
     }
-#endif
+#else
     if (function && line > 0)
       fprintf(stderr, "%s:%d ", function, line);
     else if (function)
@@ -1421,6 +1416,7 @@ void __cold mdbx_debug_log(int type, const char *function, int line,
       fprintf(stderr, "%d: ", line);
     vfprintf(stderr, fmt, args);
     fflush(stderr);
+#endif
   }
   va_end(args);
 }

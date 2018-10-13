@@ -868,6 +868,9 @@ void mdbx_panic(const char *fmt, ...)
 #endif /* NDEBUG */
 #endif /* MDBX_DEBUG */
 
+LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg,
+                                  const char *func, int line);
+
 #define mdbx_print(fmt, ...)                                                   \
   mdbx_debug_log(MDBX_DBG_PRINT, NULL, 0, fmt, ##__VA_ARGS__)
 
@@ -966,6 +969,9 @@ void mdbx_panic(const char *fmt, ...)
 
 /* assert(3) variant in transaction context */
 #define mdbx_tassert(txn, expr) mdbx_assert((txn)->mt_env, expr)
+
+#undef assert
+#define assert(expr) mdbx_assert(NULL, expr)
 
 /*----------------------------------------------------------------------------*/
 /* Internal prototypes */

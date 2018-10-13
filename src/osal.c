@@ -154,13 +154,8 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 3.1 */
 __nothrow __noreturn void __assert_fail(const char *assertion, const char *file,
                                         unsigned line, const char *function);
-#else
-__extern_C __declspec(dllimport) void __cdecl _assert(char const *message,
-                                                      char const *filename,
-                                                      unsigned line);
 #endif /* _MSC_VER */
 
-#ifndef mdbx_assert_fail
 void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
                              const char *func, int line) {
 #if MDBX_DEBUG
@@ -174,30 +169,48 @@ void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
 
   if (mdbx_debug_logger)
     mdbx_debug_log(MDBX_DBG_ASSERT, func, line, "assert: %s\n", msg);
-#ifndef _MSC_VER
-  __assert_fail(msg, "mdbx", line, func);
+  else {
+#if defined(_WIN32) || defined(_WIN64)
+    char *message = nullptr;
+    const int num = mdbx_asprintf(&message, "\r\nMDBX-ASSERTION: %s, %s:%u",
+                                  func ? func : "unknown", line);
+    if (num < 1 || !message)
+      message = "<troubles with assertion-message preparation>";
+    OutputDebugStringA(message);
+    if (IsDebuggerPresent())
+      DebugBreak();
 #else
-  _assert(msg, func, line);
-#endif /* _MSC_VER */
+    __assert_fail(msg, "mdbx", line, func);
+#endif
+  }
+
+#if defined(_WIN32) || defined(_WIN64)
+  FatalExit(ERROR_UNHANDLED_ERROR);
+#else
+  abort();
+#endif
 }
-#endif /* mdbx_assert_fail */
 
 __cold void mdbx_panic(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-#ifdef _MSC_VER
-  if (IsDebuggerPresent()) {
-    OutputDebugStringA("\r\n" FIXME "\r\n");
-    FatalExit(ERROR_UNHANDLED_ERROR);
-  }
-#elif _XOPEN_SOURCE >= 700 || _POSIX_C_SOURCE >= 200809L ||                    \
-    (__GLIBC_PREREQ(1, 0) && !__GLIBC_PREREQ(2, 10) && defined(_GNU_SOURCE))
-  vdprintf(STDERR_FILENO, fmt, ap);
-#else
-#error FIXME
-#endif
+
+  char *message = nullptr;
+  const int num = mdbx_vasprintf(&message, fmt, ap);
   va_end(ap);
+  if (num < 1 || !message)
+    message = "<troubles with panic-message preparation>";
+
+#if defined(_WIN32) || defined(_WIN64)
+  OutputDebugStringA("\r\nMDBX-PANIC: ");
+  OutputDebugStringA(message);
+  if (IsDebuggerPresent())
+    DebugBreak();
+  FatalExit(ERROR_UNHANDLED_ERROR);
+#else
+  __assert_fail(message, "mdbx", 0, "panic");
   abort();
+#endif
 }
 
 /*----------------------------------------------------------------------------*/
