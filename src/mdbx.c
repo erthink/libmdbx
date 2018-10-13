@@ -12793,9 +12793,20 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
       MDBX_db db;
       memcpy(&db, NODEDATA(node), sizeof(db));
-      char *name = memcpy(alloca(namelen + 1), NODEKEY(node), namelen);
-      name[namelen] = 0;
-      rc = mdbx_env_walk(ctx, name, db.md_root, deep + 1);
+
+      char namebuf_onstask[142];
+      char *const name = (namelen < sizeof(namebuf_onstask))
+                             ? namebuf_onstask
+                             : mdbx_malloc(namelen + 1);
+      if (name) {
+        memcpy(name, NODEKEY(node), namelen);
+        name[namelen] = 0;
+        rc = mdbx_env_walk(ctx, name, db.md_root, deep + 1);
+        if (name != namebuf_onstask)
+          mdbx_free(name);
+      } else {
+        rc = MDBX_ENOMEM;
+      }
     } break;
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */: {
