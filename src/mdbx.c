@@ -12427,7 +12427,14 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   }
 
   const unsigned snap_nreaders = lck->mti_numreaders;
-  mdbx_pid_t *pids = alloca((snap_nreaders + 1) * sizeof(mdbx_pid_t));
+  mdbx_pid_t pidsbuf_onstask[142];
+  mdbx_pid_t *const pids =
+      (snap_nreaders < ARRAY_LENGTH(pidsbuf_onstask))
+          ? pidsbuf_onstask
+          : mdbx_malloc((snap_nreaders + 1) * sizeof(mdbx_pid_t));
+  if (unlikely(!pids))
+    return MDBX_ENOMEM;
+
   pids[0] = 0;
 
   int rc = MDBX_SUCCESS, count = 0;
@@ -12492,6 +12499,9 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 
   if (rdt_locked < 0)
     mdbx_rdt_unlock(env);
+
+  if (pids != pidsbuf_onstask)
+    mdbx_free(pids);
 
   if (dead)
     *dead = count;
