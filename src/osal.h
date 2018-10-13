@@ -84,6 +84,16 @@ typedef struct {
   HANDLE event;
 } mdbx_condmutex_t;
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
+static inline void *mdbx_malloc(size_t bytes) {
+  return LocalAlloc(LMEM_FIXED, bytes);
+}
+static inline void *mdbx_calloc(size_t nelem, size_t size) {
+  return LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, nelem * size);
+}
+static inline void *mdbx_realloc(void *ptr, size_t bytes) {
+  return LocalReAlloc(ptr, bytes, LMEM_MOVEABLE);
+}
+#define mdbx_free LocalFree
 #else
 #include <pthread.h>
 #include <signal.h>
@@ -103,12 +113,11 @@ typedef struct {
   pthread_cond_t cond;
 } mdbx_condmutex_t;
 typedef pthread_mutex_t mdbx_fastmutex_t;
-#endif /* Platform */
-
 #define mdbx_malloc malloc
 #define mdbx_calloc calloc
 #define mdbx_realloc realloc
 #define mdbx_free free
+#endif /* Platform */
 
 /* *INDENT-OFF* */
 /* clang-format off */
