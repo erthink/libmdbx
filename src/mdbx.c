@@ -1663,7 +1663,9 @@ static size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
 
 static void __cold mdbx_kill_page(MDBX_env *env, MDBX_page *mp) {
   const size_t len = env->me_psize - PAGEHDRSZ;
-  void *ptr = (env->me_flags & MDBX_WRITEMAP) ? &mp->mp_data : alloca(len);
+  void *ptr = (env->me_flags & MDBX_WRITEMAP)
+                  ? &mp->mp_data
+                  : (void *)((uint8_t *)env->me_pbuf + env->me_psize);
   memset(ptr, 0x6F /* 'o', 111 */, len);
   if (ptr != &mp->mp_data)
     (void)mdbx_pwrite(env->me_fd, ptr, len,
@@ -6474,7 +6476,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
         size =
             tsize + env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
                                       sizeof(unsigned) + 1);
-    if ((env->me_pbuf = mdbx_calloc(1, env->me_psize)) &&
+    if ((env->me_pbuf = mdbx_calloc(2, env->me_psize)) &&
         (txn = mdbx_calloc(1, size))) {
       txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
       txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
