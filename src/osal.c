@@ -817,26 +817,40 @@ int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags) {
   }
 
   if (mdbx_GetVolumeInformationByHandleW && mdbx_GetFinalPathNameByHandleW) {
-    WCHAR PathBuffer[INT16_MAX];
+    WCHAR *PathBuffer = mdbx_malloc(sizeof(WCHAR) * INT16_MAX);
+    if (!PathBuffer)
+      return MDBX_ENOMEM;
+
+    int rc = MDBX_SUCCESS;
     DWORD VolumeSerialNumber, FileSystemFlags;
     if (!mdbx_GetVolumeInformationByHandleW(handle, PathBuffer, INT16_MAX,
                                             &VolumeSerialNumber, NULL,
-                                            &FileSystemFlags, NULL, 0))
-      return GetLastError();
+                                            &FileSystemFlags, NULL, 0)) {
+      rc = GetLastError();
+      goto bailout;
+    }
 
     if ((flags & MDBX_RDONLY) == 0) {
-      if (FileSystemFlags & (FILE_SEQUENTIAL_WRITE_ONCE |
-                             FILE_READ_ONLY_VOLUME | FILE_VOLUME_IS_COMPRESSED))
-        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+      if (FileSystemFlags &
+          (FILE_SEQUENTIAL_WRITE_ONCE | FILE_READ_ONLY_VOLUME |
+           FILE_VOLUME_IS_COMPRESSED)) {
+        rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+        goto bailout;
+      }
     }
 
     if (!mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
-                                        FILE_NAME_NORMALIZED | VOLUME_NAME_NT))
-      return GetLastError();
+                                        FILE_NAME_NORMALIZED |
+                                            VOLUME_NAME_NT)) {
+      rc = GetLastError();
+      goto bailout;
+    }
 
     if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0) {
-      if (!(flags & MDBX_EXCLUSIVE))
-        return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+      if (!(flags & MDBX_EXCLUSIVE)) {
+        rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+        goto bailout;
+      }
     } else if (mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
                                               FILE_NAME_NORMALIZED |
                                                   VOLUME_NAME_DOS)) {
@@ -857,7 +871,7 @@ int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags) {
       case DRIVE_REMOTE:
       default:
         if (!(flags & MDBX_EXCLUSIVE))
-          return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+          rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
       // fall through
       case DRIVE_REMOVABLE:
       case DRIVE_FIXED:
@@ -865,6 +879,9 @@ int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags) {
         break;
       }
     }
+  bailout:
+    mdbx_free(PathBuffer);
+    return rc;
   }
 #else
   (void)handle;
