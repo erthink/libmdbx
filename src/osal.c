@@ -219,14 +219,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
 int mdbx_vasprintf(char **strp, const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
-#ifdef _MSC_VER
-  int needed = _vscprintf(fmt, ap);
-#elif defined(vsnprintf) || defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||    \
-    defined(_ISOC99_SOURCE) || _POSIX_C_SOURCE >= 200112L
   int needed = vsnprintf(nullptr, 0, fmt, ap);
-#else
-#error FIXME
-#endif
 
   if (unlikely(needed < 0 || needed >= INT_MAX)) {
     *strp = nullptr;
@@ -245,12 +238,7 @@ int mdbx_vasprintf(char **strp, const char *fmt, va_list ap) {
     return -1;
   }
 
-#if defined(vsnprintf) || defined(_BSD_SOURCE) || _XOPEN_SOURCE >= 500 ||      \
-    defined(_ISOC99_SOURCE) || _POSIX_C_SOURCE >= 200112L
   int actual = vsnprintf(*strp, needed + 1, fmt, ones);
-#else
-#error FIXME
-#endif
   va_end(ones);
 
   assert(actual == needed);
