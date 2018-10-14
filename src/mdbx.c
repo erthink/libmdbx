@@ -6191,9 +6191,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   mdbx_assert(env, env->me_fd != INVALID_HANDLE_VALUE);
   mdbx_assert(env, env->me_lfd == INVALID_HANDLE_VALUE);
 
-  const int open_flags =
-      (env->me_flags & MDBX_EXCLUSIVE) ? O_RDWR : O_RDWR | O_CREAT;
-  int err = mdbx_openfile(lck_pathname, open_flags, mode, &env->me_lfd,
+  int err = mdbx_openfile(lck_pathname, O_RDWR | O_CREAT, mode, &env->me_lfd,
                           (env->me_flags & MDBX_EXCLUSIVE) ? true : false);
   if (err != MDBX_SUCCESS) {
     if (!(err == MDBX_ENOFILE && (env->me_flags & MDBX_EXCLUSIVE)) &&
