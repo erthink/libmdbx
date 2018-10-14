@@ -870,8 +870,8 @@ int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags) {
                                                   VOLUME_NAME_DOS)) {
       UINT DriveType = GetDriveTypeW(PathBuffer);
       if (DriveType == DRIVE_NO_ROOT_DIR &&
-          wcsncmp(PathBuffer, L"\\\\?\\", 4) == 0 &&
-          wcsncmp(PathBuffer + 5, L":\\", 2) == 0) {
+          _wcsnicmp(PathBuffer, L"\\\\?\\", 4) == 0 &&
+          _wcsnicmp(PathBuffer + 5, L":\\", 2) == 0) {
         PathBuffer[7] = 0;
         DriveType = GetDriveTypeW(PathBuffer + 4);
       }
