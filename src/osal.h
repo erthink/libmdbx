@@ -439,8 +439,12 @@ static __inline int mdbx_get_errno(void) {
   return rc;
 }
 
+#ifndef mdbx_memalign_alloc
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result);
+#endif
+#ifndef mdbx_memalign_free
 void mdbx_memalign_free(void *ptr);
+#endif
 
 int mdbx_condmutex_init(mdbx_condmutex_t *condmutex);
 int mdbx_condmutex_lock(mdbx_condmutex_t *condmutex);

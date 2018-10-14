@@ -262,8 +262,9 @@ int mdbx_asprintf(char **strp, const char *fmt, ...) {
 
 #ifndef mdbx_memalign_alloc
 int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
-#if _MSC_VER
-  *result = _aligned_malloc(bytes, alignment);
+#if defined(_WIN32) || defined(_WIN64)
+  (void)alignment;
+  *result = VirtualAlloc(NULL, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   return *result ? MDBX_SUCCESS : MDBX_ENOMEM /* ERROR_OUTOFMEMORY */;
 #elif __GLIBC_PREREQ(2, 16) || __STDC_VERSION__ >= 201112L
   *result = memalign(alignment, bytes);
@@ -279,8 +280,8 @@ int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
 
 #ifndef mdbx_memalign_free
 void mdbx_memalign_free(void *ptr) {
-#if _MSC_VER
-  _aligned_free(ptr);
+#if defined(_WIN32) || defined(_WIN64)
+  VirtualFree(ptr, 0, MEM_RELEASE);
 #else
   mdbx_free(ptr);
 #endif
