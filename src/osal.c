@@ -53,6 +53,7 @@ static int ntstatus2errcode(NTSTATUS status) {
  * declare them here. Using these APIs also means we must link to
  * ntdll.dll, which is not linked by default in user code. */
 #pragma comment(lib, "ntdll.lib")
+#pragma comment(lib, "mdbx_ntdll_extra.lib")
 
 extern NTSTATUS NTAPI NtCreateSection(
     OUT PHANDLE SectionHandle, IN ACCESS_MASK DesiredAccess,
