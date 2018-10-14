@@ -430,7 +430,7 @@ static __inline size_t mdbx_syspagesize(void) {
 }
 
 #ifndef mdbx_strdup
-char *mdbx_strdup(const char *str);
+LIBMDBX_API char *mdbx_strdup(const char *str);
 #endif
 
 static __inline int mdbx_get_errno(void) {

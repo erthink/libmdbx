@@ -111,7 +111,7 @@ static void readhdr(void) {
         *ptr = '\0';
       if (subname)
         mdbx_free(subname);
-      subname = strdup((char *)dbuf.iov_base + STRLENOF("database="));
+      subname = mdbx_strdup((char *)dbuf.iov_base + STRLENOF("database="));
     } else if (!strncmp(dbuf.iov_base, "type=", STRLENOF("type="))) {
       if (strncmp((char *)dbuf.iov_base + STRLENOF("type="), "btree",
                   STRLENOF("btree"))) {
@@ -349,7 +349,7 @@ int main(int argc, char *argv[]) {
       envflags |= MDBX_NOSUBDIR;
       break;
     case 's':
-      subname = strdup(optarg);
+      subname = mdbx_strdup(optarg);
       break;
     case 'N':
       putflags = MDBX_NOOVERWRITE | MDBX_NODUPDATA;
