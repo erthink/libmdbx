@@ -288,6 +288,18 @@ void mdbx_memalign_free(void *ptr) {
 }
 #endif /* mdbx_memalign_free */
 
+#ifndef mdbx_strdup
+char *mdbx_strdup(const char *str) {
+  if (!str)
+    return NULL;
+  size_t bytes = strlen(str) + 1;
+  char *dup = mdbx_malloc(bytes);
+  if (dup)
+    memcpy(dup, str, bytes);
+  return dup;
+}
+#endif /* mdbx_strdup */
+
 /*----------------------------------------------------------------------------*/
 
 int mdbx_condmutex_init(mdbx_condmutex_t *condmutex) {

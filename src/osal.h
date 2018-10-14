@@ -119,6 +119,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define mdbx_calloc calloc
 #define mdbx_realloc realloc
 #define mdbx_free free
+#define mdbx_strdup strdup
 #endif /* Platform */
 
 /* *INDENT-OFF* */
@@ -422,13 +423,9 @@ static __inline size_t mdbx_syspagesize(void) {
 #endif
 }
 
-static __inline char *mdbx_strdup(const char *str) {
-#ifdef _MSC_VER
-  return _strdup(str);
-#else
-  return strdup(str);
+#ifndef mdbx_strdup
+char *mdbx_strdup(const char *str);
 #endif
-}
 
 static __inline int mdbx_get_errno(void) {
 #if defined(_WIN32) || defined(_WIN64)
