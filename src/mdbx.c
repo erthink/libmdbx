@@ -1325,7 +1325,7 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
   if (!msg) {
     if (!buflen || buflen > INT_MAX)
       return NULL;
-#ifdef _MSC_VER
+#if defined(_WIN32) || defined(_WIN64)
     size_t size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
@@ -1354,7 +1354,7 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
 const char *__cold mdbx_strerror(int errnum) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-#ifdef _MSC_VER
+#if defined(_WIN32) || defined(_WIN64)
     static char buffer[1024];
     size_t size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
@@ -4521,7 +4521,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
         /* Write previous page(s) */
         rc = mdbx_pwritev(env->me_fd, iov, n, wpos, wsize);
         if (unlikely(rc != MDBX_SUCCESS)) {
-          mdbx_debug("Write error: %s", strerror(rc));
+          mdbx_debug("Write error: %s", mdbx_strerror(rc));
           return rc;
         }
         n = 0;

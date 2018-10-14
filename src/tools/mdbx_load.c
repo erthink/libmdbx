@@ -340,7 +340,8 @@ int main(int argc, char *argv[]) {
       break;
     case 'f':
       if (freopen(optarg, "r", stdin) == NULL) {
-        fprintf(stderr, "%s: %s: reopen: %s\n", prog, optarg, strerror(errno));
+        fprintf(stderr, "%s: %s: reopen: %s\n", prog, optarg,
+                mdbx_strerror(errno));
         exit(EXIT_FAILURE);
       }
       break;
