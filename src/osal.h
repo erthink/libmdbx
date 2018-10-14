@@ -90,19 +90,39 @@ typedef struct {
   HANDLE event;
 } mdbx_condmutex_t;
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
+
+#ifndef mdbx_malloc
 static inline void *mdbx_malloc(size_t bytes) {
   return LocalAlloc(LMEM_FIXED, bytes);
 }
+#endif /* mdbx_malloc */
+
+#ifndef mdbx_calloc
 static inline void *mdbx_calloc(size_t nelem, size_t size) {
   return LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, nelem * size);
 }
+#endif /* mdbx_calloc */
+
+#ifndef mdbx_realloc
 static inline void *mdbx_realloc(void *ptr, size_t bytes) {
   return LocalReAlloc(ptr, bytes, LMEM_MOVEABLE);
 }
+#endif /* mdbx_realloc */
+
+#ifndef mdbx_free
 #define mdbx_free LocalFree
-#define snprintf _snprintf   /* ntdll */
+#endif /* mdbx_free */
+
+#ifndef snprintf
+#define snprintf _snprintf /* ntdll */
+#endif
+
+#ifndef vsnprintf
 #define vsnprintf _vsnprintf /* ntdll */
-#else
+#endif
+
+#else /*----------------------------------------------------------------------*/
+
 #include <pthread.h>
 #include <signal.h>
 #include <sys/file.h>
