@@ -28,10 +28,16 @@
 #pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
                                  * mode specified; termination on exception is \
                                  * not guaranteed. Specify /EHsc */
+#endif                          /* _MSC_VER (warnings) */
+
+#if defined(_WIN32) || defined(_WIN64)
 #if !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
-#endif /* _MSC_VER (warnings) */
+#if !defined(_NO_CRT_STDIO_INLINE) && defined(MDBX_BUILD_DLL)
+#define _NO_CRT_STDIO_INLINE
+#endif
+#endif /* Windows */
 
 /*----------------------------------------------------------------------------*/
 /* C99 includes */
