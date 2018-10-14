@@ -27,6 +27,19 @@
 static void mdbx_winnt_import(void);
 
 #ifdef MDBX_BUILD_DLL
+/* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
+ *
+ * Therefore we don't define dll's entry point for debug/checked builds by MSVC.
+ * In this case MSVC's will automatically use DllMainCRTStartup() from CRT
+ * library, which also automatically call DllMain() from our mdbx.dll
+ *
+ * On the other side, for RELEASE builds
+ * we explicitly define DllMain() as the entry point and don't linking with
+ * any CRT libraries (IgnoreAllDefaultLibraries = Yes). */
+#if !defined(_MSC_VER) || defined(NDEBUG)
+#pragma comment(linker, "/ENTRY:DllMain")
+#endif
+
 BOOL APIENTRY DllMain(HANDLE module, DWORD reason, LPVOID reserved)
 #else
 #if !MDBX_CONFIG_MANUAL_TLS_CALLBACK
