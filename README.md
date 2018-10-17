@@ -32,7 +32,12 @@ libmdbx
    6. [Asynchronous lazy data flushing](https://sites.fas.harvard.edu/~cs265/papers/kathuria-2008.pdf) to disk(s);
    7. etc...
 
-Don't miss [Java Native Interface](https://github.com/castortech/mdbxjni) by [Castor Technologies](https://castortech.com/).
+Don't miss libmdbx for other runtimes.
+
+| Runtime  | GitHub | Author |
+| ------------- | ------------- | ------------- |
+| JVM   | [mdbxjni](https://github.com/castortech/mdbxjni) | [Castor Technologies](https://castortech.com/) |
+| .NET  | [mdbx.NET](https://github.com/wangjia184/mdbx.NET)  | [Jerry Wang](https://github.com/wangjia184) |
 
 -----
 
