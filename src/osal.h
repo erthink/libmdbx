@@ -679,6 +679,7 @@ static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
   return __sync_fetch_and_add(p, v);
 #else
 #ifdef _MSC_VER
+  STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile uint32_t));
   return _InterlockedExchangeAdd((volatile long *)p, v);
 #endif
 #ifdef __APPLE__
@@ -719,6 +720,7 @@ static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
   return __sync_bool_compare_and_swap(p, c, v);
 #else
 #ifdef _MSC_VER
+  STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile uint32_t));
   return c == _InterlockedCompareExchange((volatile long *)p, v, c);
 #endif
 #ifdef __APPLE__
