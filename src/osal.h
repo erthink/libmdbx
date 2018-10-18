@@ -593,14 +593,12 @@ int mdbx_rpid_set(MDBX_env *env);
 int mdbx_rpid_clear(MDBX_env *env);
 
 #if defined(_WIN32) || defined(_WIN64)
-typedef struct MDBX_srwlock {
-  union {
-    struct {
-      long volatile readerCount;
-      long volatile writerCount;
-    };
-    RTL_SRWLOCK native;
+typedef union MDBX_srwlock {
+  struct {
+    long volatile readerCount;
+    long volatile writerCount;
   };
+  RTL_SRWLOCK native;
 } MDBX_srwlock;
 
 typedef void(WINAPI *MDBX_srwlock_function)(MDBX_srwlock *);
