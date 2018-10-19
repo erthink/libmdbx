@@ -13329,6 +13329,14 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
     return MDBX_BAD_DBI;
 
+  if (unlikely(txn->mt_dbflags[dbi] & DB_STALE)) {
+    MDBX_cursor_couple cx;
+    /* Stale, must read the DB's root. cursor_init does it for us. */
+    int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+
   MDBX_db *dbs = &txn->mt_dbs[dbi];
   if (likely(result))
     *result = dbs->md_seq;
