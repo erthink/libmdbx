@@ -91,6 +91,7 @@ typedef struct {
 } mdbx_condmutex_t;
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
 
+#ifdef MDBX_AVOID_CRT
 #ifndef mdbx_malloc
 static inline void *mdbx_malloc(size_t bytes) {
   return LocalAlloc(LMEM_FIXED, bytes);
@@ -112,6 +113,13 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
 #ifndef mdbx_free
 #define mdbx_free LocalFree
 #endif /* mdbx_free */
+#else
+#define mdbx_malloc malloc
+#define mdbx_calloc calloc
+#define mdbx_realloc realloc
+#define mdbx_free free
+#define mdbx_strdup _strdup
+#endif /* MDBX_AVOID_CRT */
 
 #ifndef snprintf
 #define snprintf _snprintf /* ntdll */
