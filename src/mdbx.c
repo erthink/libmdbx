@@ -2032,18 +2032,20 @@ bailout:
             VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");
     }
 #endif
-  } else if (rc != MDBX_RESULT_TRUE) {
-    mdbx_error("failed resize datafile/mapping: "
-               "present %" PRIuPTR " -> %" PRIuPTR ", "
-               "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
-               env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
-               rc);
   } else {
-    mdbx_notice("unable resize datafile/mapping: "
-                "present %" PRIuPTR " -> %" PRIuPTR ", "
-                "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
-                env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes,
-                rc);
+    if (rc != MDBX_RESULT_TRUE) {
+      mdbx_error("failed resize datafile/mapping: "
+                 "present %" PRIuPTR " -> %" PRIuPTR ", "
+                 "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
+                 env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper,
+                 limit_bytes, rc);
+    } else {
+      mdbx_notice("unable resize datafile/mapping: "
+                  "present %" PRIuPTR " -> %" PRIuPTR ", "
+                  "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
+                  env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper,
+                  limit_bytes, rc);
+    }
     if (!env->me_dxb_mmap.address) {
       env->me_flags |= MDBX_FATAL_ERROR;
       if (env->me_txn)
@@ -2892,6 +2894,16 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       rc = mdbx_rdt_lock(env);
       if (unlikely(MDBX_IS_ERROR(rc)))
         return rc;
+      if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
+        mdbx_rdt_unlock(env);
+        return MDBX_PANIC;
+      }
+#if defined(_WIN32) || defined(_WIN64)
+      if (unlikely(!env->me_map)) {
+        mdbx_rdt_unlock(env);
+        return MDBX_EPERM;
+      }
+#endif /* Windows */
       rc = MDBX_SUCCESS;
 
       if (unlikely(env->me_live_reader != pid)) {
@@ -2990,6 +3002,16 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     rc = mdbx_txn_lock(env, F_ISSET(flags, MDBX_TRYTXN));
     if (unlikely(rc))
       return rc;
+    if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
+      mdbx_txn_unlock(env);
+      return MDBX_PANIC;
+    }
+#if defined(_WIN32) || defined(_WIN64)
+    if (unlikely(!env->me_map)) {
+      mdbx_txn_unlock(env);
+      return MDBX_EPERM;
+    }
+#endif /* Windows */
 
     mdbx_jitter4testing(false);
     MDBX_meta *meta = mdbx_meta_head(env);
@@ -3049,8 +3071,11 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         goto bailout;
       }
       rc = mdbx_mapresize(env, txn->mt_end_pgno, upper_pgno);
-      if (rc != MDBX_SUCCESS)
+      if (rc != MDBX_SUCCESS) {
+        if (rc == MDBX_RESULT_TRUE)
+          rc = MDBX_MAP_RESIZED;
         goto bailout;
+      }
     }
     txn->mt_owner = mdbx_thread_self();
     return MDBX_SUCCESS;
@@ -3098,6 +3123,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   if (unlikely(!env || !ret))
     return MDBX_EINVAL;
 
+  *ret = NULL;
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
@@ -3107,8 +3133,12 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
+#if !defined(_WIN32) && !defined(_WIN64)
+  /* Don't check env->me_map until lock to avoid race with re-mapping for
+   * shrinking */
   if (unlikely(!env->me_map))
     return MDBX_EPERM;
+#endif /* Windows */
 
   flags &= MDBX_TXN_BEGIN_FLAGS;
   flags |= env->me_flags & MDBX_WRITEMAP;
@@ -3119,16 +3149,21 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
 
   if (parent) {
     if (unlikely(parent->mt_signature != MDBX_MT_SIGNATURE))
-      return MDBX_EINVAL;
+      return MDBX_EBADSIGN;
 
     if (unlikely(parent->mt_owner != mdbx_thread_self()))
       return MDBX_THREAD_MISMATCH;
 
+#if defined(_WIN32) || defined(_WIN64)
+    if (unlikely(!env->me_map))
+      return MDBX_EPERM;
+#endif /* Windows */
+
     /* Nested transactions: Max 1 child, write txns only, no writemap */
     flags |= parent->mt_flags;
-    if (unlikely(flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED))) {
+    if (unlikely(flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED)))
       return (parent->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EINVAL : MDBX_BAD_TXN;
-    }
+
     /* Child txns save MDBX_pgstate and use own copy of cursors */
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_ntxn);
@@ -3204,10 +3239,12 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     rc = mdbx_txn_renew0(txn, flags);
   }
 
-  if (unlikely(rc)) {
+  if (unlikely(rc != MDBX_SUCCESS)) {
     if (txn != env->me_txn0)
       free(txn);
   } else {
+    mdbx_assert(env,
+                (txn->mt_flags & ~(MDBX_TXN_RDONLY | MDBX_TXN_WRITEMAP)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
@@ -4400,8 +4437,11 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     rc = mdbx_sync_locked(
         env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED, &meta);
   }
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    env->me_flags |= MDBX_FATAL_ERROR;
     goto fail;
+  }
+
   env->me_lck->mti_readers_refresh_flag = false;
   end_mode = MDBX_END_COMMITTED | MDBX_END_UPDATE | MDBX_END_EOTDONE;
 
