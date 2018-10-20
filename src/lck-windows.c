@@ -226,12 +226,19 @@ static int suspend_and_append(mdbx_handle_array_t **array,
     (*array)->limit = limit * 2;
   }
 
-  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME, FALSE, ThreadId);
+  HANDLE hThread = OpenThread(THREAD_SUSPEND_RESUME | THREAD_QUERY_INFORMATION,
+                              FALSE, ThreadId);
   if (hThread == NULL)
     return GetLastError();
+
   if (SuspendThread(hThread) == -1) {
+    int err = GetLastError();
+    DWORD ExitCode;
+    if (err == /* workaround for Win10 UCRT bug */ ERROR_ACCESS_DENIED ||
+        !GetExitCodeThread(hThread, &ExitCode) || ExitCode != STILL_ACTIVE)
+      err = MDBX_SUCCESS;
     CloseHandle(hThread);
-    return GetLastError();
+    return err;
   }
 
   (*array)->handles[(*array)->count++] = hThread;
@@ -316,9 +323,15 @@ int mdbx_suspend_threads_before_remap(MDBX_env *env,
 int mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
   int rc = MDBX_SUCCESS;
   for (unsigned i = 0; i < array->count; ++i) {
-    if (ResumeThread(array->handles[i]) == -1)
-      rc = GetLastError();
-    CloseHandle(array->handles[i]);
+    const HANDLE hThread = array->handles[i];
+    if (ResumeThread(hThread) == -1) {
+      const int err = GetLastError();
+      DWORD ExitCode;
+      if (err != /* workaround for Win10 UCRT bug */ ERROR_ACCESS_DENIED &&
+          GetExitCodeThread(hThread, &ExitCode) && ExitCode == STILL_ACTIVE)
+        rc = err;
+    }
+    CloseHandle(hThread);
   }
   return rc;
 }
