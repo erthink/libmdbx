@@ -126,7 +126,8 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
 
 /*---------------------------------------------------------------------------*/
 
-static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex, int rc);
+static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
+                             const int rc);
 
 int __cold mdbx_lck_init(MDBX_env *env) {
   pthread_mutexattr_t ma;
@@ -297,9 +298,10 @@ int __cold mdbx_lck_seize(MDBX_env *env) {
 #endif
 
 static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
-                                    int rc) {
+                                    const int err) {
+  int rc = err;
 #if MDBX_USE_ROBUST
-  if (rc == EOWNERDEAD) {
+  if (err == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
 
     int rlocked = (env->me_lck && mutex == &env->me_lck->mti_rmutex);
@@ -331,10 +333,8 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
   }
 #endif /* MDBX_USE_ROBUST */
 
-  mdbx_error("mutex (un)lock failed, %s", mdbx_strerror(rc));
-  if (rc != EDEADLK) {
+  mdbx_error("mutex (un)lock failed, %s", mdbx_strerror(err));
+  if (rc != EDEADLK)
     env->me_flags |= MDBX_FATAL_ERROR;
-    rc = MDBX_PANIC;
-  }
   return rc;
 }
