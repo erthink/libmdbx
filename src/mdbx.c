@@ -3435,7 +3435,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(txn->mt_owner && txn->mt_owner != mdbx_thread_self()))
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
     return MDBX_THREAD_MISMATCH;
 
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY))
