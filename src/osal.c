@@ -176,7 +176,7 @@ void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #if defined(_WIN32) || defined(_WIN64)
     char *message = nullptr;
     const int num = mdbx_asprintf(&message, "\r\nMDBX-ASSERTION: %s, %s:%u",
-                                  func ? func : "unknown", line);
+                                  msg, func ? func : "unknown", line);
     if (num < 1 || !message)
       message = "<troubles with assertion-message preparation>";
     OutputDebugStringA(message);
