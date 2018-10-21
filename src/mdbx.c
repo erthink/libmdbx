@@ -3514,7 +3514,8 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       mdbx_free(txn);
   } else {
-    mdbx_assert(env, (txn->mt_flags & ~MDBX_RDONLY) == 0);
+    mdbx_assert(env,
+                (txn->mt_flags & ~(MDBX_TXN_RDONLY | MDBX_TXN_WRITEMAP)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
