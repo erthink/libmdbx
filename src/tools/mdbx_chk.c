@@ -267,7 +267,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
   else
     problem_add("deep", deep, "unknown area", "%s", dbi_name);
 
-  const uint64_t page_bytes = payload_bytes + header_bytes + unused_bytes;
+  const size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
   walk.pgcount += pgnumber;
 
   const char *pagetype_caption;
@@ -351,7 +351,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
   if (pgnumber) {
     if (page_bytes != page_size) {
       problem_add("page", pgno, "misused",
-                  "%s-page: %" PRIu64 " != %" PRIu64 " (%" PRIuPTR
+                  "%s-page: %" PRIuPTR " != %" PRIuPTR " (%" PRIuPTR
                   "h + %" PRIuPTR "p + %" PRIuPTR "u)",
                   pagetype_caption, page_size, page_bytes, header_bytes,
                   payload_bytes, unused_bytes);
@@ -689,7 +689,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
   if (record_count != ms.ms_entries)
     problem_add("entry", record_count, "differentent number of entries",
-                "%" PRIuPTR " != %" PRIuPTR, record_count, ms.ms_entries);
+                "%" PRIu64 " != %" PRIu64, record_count, ms.ms_entries);
 bailout:
   problems_count = problems_pop(saved_list);
   if (!silent && verbose) {
@@ -1088,7 +1088,7 @@ int main(int argc, char *argv[]) {
 
   if (!dont_traversal) {
     struct problem *saved_list;
-    uint64_t traversal_problems;
+    size_t traversal_problems;
     uint64_t empty_pages, lost_bytes;
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
@@ -1181,9 +1181,9 @@ int main(int argc, char *argv[]) {
       print(" - summary: average fill %.1f%%",
             walk.total_payload_bytes * 100.0 / total_page_bytes);
       if (empty_pages)
-        print(", %" PRIuPTR " empty pages", empty_pages);
+        print(", %" PRIu64 " empty pages", empty_pages);
       if (lost_bytes)
-        print(", %" PRIuPTR " bytes lost", lost_bytes);
+        print(", %" PRIu64 " bytes lost", lost_bytes);
       print(", %" PRIuPTR " problems\n", traversal_problems);
     }
   } else if (verbose) {
