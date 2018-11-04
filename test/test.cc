@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -31,6 +31,8 @@ const char *testcase2str(const actor_testcase testcase) {
     return "jitter";
   case ac_try:
     return "try";
+  case ac_copy:
+    return "copy";
   }
 }
 
@@ -452,6 +454,9 @@ bool test_execute(const actor_config &config) {
       break;
     case ac_try:
       test.reset(new testcase_try(config, pid));
+      break;
+    case ac_copy:
+      test.reset(new testcase_copy(config, pid));
       break;
     default:
       test.reset(new testcase(config, pid));

@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -26,7 +26,8 @@ enum actor_testcase {
   ac_deadread,
   ac_deadwrite,
   ac_jitter,
-  ac_try
+  ac_try,
+  ac_copy
 };
 
 enum actor_status {
