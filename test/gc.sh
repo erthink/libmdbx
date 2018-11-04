@@ -25,6 +25,7 @@ function probe {
 	rm -f ${TESTDB_PREFIX}* \
 		&& ./mdbx_test --pathname=${TESTDB_PREFIX}db "$@" | lz4 > ${TESTDB_PREFIX}log.lz4 \
 		&& ./mdbx_chk -nvvv ${TESTDB_PREFIX}db | tee ${TESTDB_PREFIX}chk \
+		&& ./mdbx_chk -nvvv ${TESTDB_PREFIX}db-copy | tee ${TESTDB_PREFIX}chk-copy \
 		|| (echo "FAILED"; exit 1)
 }
 
