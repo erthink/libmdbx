@@ -12518,7 +12518,7 @@ __cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
 
   const uint64_t limit = MAX_PAGENO * (uint64_t)pagesize;
   return (limit < (intptr_t)MAX_MAPSIZE) ? (intptr_t)limit
-                                         : (intptr_t)MAX_PAGESIZE;
+                                         : (intptr_t)MAX_MAPSIZE;
 }
 
 /*----------------------------------------------------------------------------*/
