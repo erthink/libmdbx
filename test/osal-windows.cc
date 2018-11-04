@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -404,4 +404,8 @@ std::string osal_tempdir(void) {
   char buf[MAX_PATH + 1];
   DWORD len = GetTempPathA(sizeof(buf), buf);
   return std::string(buf, len);
+}
+
+int osal_removefile(const std::string &pathname) {
+  return DeleteFileA(pathname.c_str()) ? MDBX_SUCCESS : GetLastError();
 }
