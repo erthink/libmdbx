@@ -11534,9 +11534,38 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
     }
   }
 
-  /* update signature */
+  /* Calculate filesize taking in account shrink/growing thresholds */
+  if (meta->mp_meta.mm_geo.next > meta->mp_meta.mm_geo.now) {
+    const pgno_t aligned =
+        pgno_align2os_pgno(env, pgno_add(meta->mp_meta.mm_geo.next,
+                                         meta->mp_meta.mm_geo.grow -
+                                             meta->mp_meta.mm_geo.next %
+                                                 meta->mp_meta.mm_geo.grow));
+    meta->mp_meta.mm_geo.now = aligned;
+  } else if (meta->mp_meta.mm_geo.next < meta->mp_meta.mm_geo.now) {
+    meta->mp_meta.mm_geo.now = meta->mp_meta.mm_geo.next;
+    const pgno_t aligner = meta->mp_meta.mm_geo.grow
+                               ? meta->mp_meta.mm_geo.grow
+                               : meta->mp_meta.mm_geo.shrink;
+    const pgno_t aligned =
+        pgno_align2os_pgno(env, meta->mp_meta.mm_geo.next + aligner -
+                                    meta->mp_meta.mm_geo.next % aligner);
+    meta->mp_meta.mm_geo.now = aligned;
+  }
+
+  if (meta->mp_meta.mm_geo.now < meta->mp_meta.mm_geo.lower)
+    meta->mp_meta.mm_geo.now = meta->mp_meta.mm_geo.lower;
+  if (meta->mp_meta.mm_geo.now > meta->mp_meta.mm_geo.upper)
+    meta->mp_meta.mm_geo.now = meta->mp_meta.mm_geo.upper;
+
+  /* Update signature */
+  assert(meta->mp_meta.mm_geo.now >= meta->mp_meta.mm_geo.next);
   meta->mp_meta.mm_datasync_sign = mdbx_meta_sign(&meta->mp_meta);
-  return MDBX_SUCCESS;
+
+  /* Extend file if required */
+  return (meta->mp_meta.mm_geo.now != meta->mp_meta.mm_geo.next)
+             ? mdbx_ftruncate(fd, pgno2bytes(env, meta->mp_meta.mm_geo.now))
+             : MDBX_SUCCESS;
 }
 
 /* Copy environment as-is. */
