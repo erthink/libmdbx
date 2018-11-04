@@ -97,7 +97,7 @@ const char *only_subdb;
 
 struct problem {
   struct problem *pr_next;
-  uint64_t count;
+  size_t count;
   const char *caption;
 };
 
@@ -221,8 +221,8 @@ static struct problem *problems_push(void) {
   return p;
 }
 
-static uint64_t problems_pop(struct problem *list) {
-  uint64_t count = 0;
+static size_t problems_pop(struct problem *list) {
+  size_t count = 0;
 
   if (problems_list) {
     int i;
@@ -231,7 +231,7 @@ static uint64_t problems_pop(struct problem *list) {
     for (i = 0; problems_list; ++i) {
       struct problem *p = problems_list->pr_next;
       count += problems_list->count;
-      print("%s%s (%" PRIu64 ")", i ? ", " : "", problems_list->caption,
+      print("%s%s (%" PRIuPTR ")", i ? ", " : "", problems_list->caption,
             problems_list->count);
       mdbx_free(problems_list);
       problems_list = p;
