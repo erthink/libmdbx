@@ -1,13 +1,4 @@
-#include "test.h"
-
-bool testcase_try::setup() {
-  log_trace(">> setup");
-  if (!inherited::setup())
-    return false;
-
-  log_trace("<< setup");
-  return true;
-}
+﻿#include "test.h"
 
 bool testcase_try::run() {
   db_open();
@@ -26,12 +17,4 @@ bool testcase_try::run() {
 
   txn_guard.reset(txn);
   return true;
-}
-
-bool testcase_try::teardown() {
-  log_trace(">> teardown");
-  cursor_guard.release();
-  txn_guard.release();
-  db_guard.release();
-  return inherited::teardown();
 }

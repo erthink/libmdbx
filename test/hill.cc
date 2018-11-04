@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -13,17 +13,6 @@
  */
 
 #include "test.h"
-
-bool testcase_hill::setup() {
-  log_trace(">> setup");
-  if (!inherited::setup())
-    return false;
-
-  /* TODO */
-
-  log_trace("<< setup");
-  return true;
-}
 
 bool testcase_hill::run() {
   db_open();
@@ -224,9 +213,4 @@ bool testcase_hill::run() {
       db_table_close(dbi);
   }
   return true;
-}
-
-bool testcase_hill::teardown() {
-  log_trace(">> teardown");
-  return inherited::teardown();
 }

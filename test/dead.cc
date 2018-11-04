@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -14,50 +14,22 @@
 
 #include "test.h"
 
-bool testcase_deadread::setup() {
-  log_trace(">> setup");
-  if (!inherited::setup())
-    return false;
-
-  log_trace("<< setup");
-  return true;
-}
-
 bool testcase_deadread::run() {
   db_open();
   txn_begin(true);
+  cursor_guard.reset();
+  txn_guard.reset();
+  db_guard.reset();
   return true;
-}
-
-bool testcase_deadread::teardown() {
-  log_trace(">> teardown");
-  cursor_guard.release();
-  txn_guard.release();
-  db_guard.release();
-  return inherited::teardown();
 }
 
 //-----------------------------------------------------------------------------
 
-bool testcase_deadwrite::setup() {
-  log_trace(">> setup");
-  if (!inherited::setup())
-    return false;
-
-  log_trace("<< setup");
-  return true;
-}
-
 bool testcase_deadwrite::run() {
   db_open();
   txn_begin(false);
+  cursor_guard.reset();
+  txn_guard.reset();
+  db_guard.reset();
   return true;
-}
-
-bool testcase_deadwrite::teardown() {
-  log_trace(">> teardown");
-  cursor_guard.release();
-  txn_guard.release();
-  db_guard.release();
-  return inherited::teardown();
 }

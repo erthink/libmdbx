@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -13,15 +13,6 @@
  */
 
 #include "test.h"
-
-bool testcase_jitter::setup() {
-  log_trace(">> setup");
-  if (!inherited::setup())
-    return false;
-
-  log_trace("<< setup");
-  return true;
-}
 
 bool testcase_jitter::run() {
   while (should_continue()) {
@@ -65,9 +56,4 @@ bool testcase_jitter::run() {
     report(std::max(1u, batching / 2));
   }
   return true;
-}
-
-bool testcase_jitter::teardown() {
-  log_trace(">> teardown");
-  return inherited::teardown();
 }
