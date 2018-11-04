@@ -203,3 +203,14 @@ public:
   bool run();
   bool teardown();
 };
+
+class testcase_copy : public testcase {
+  const std::string copy_pathname;
+  void copy_db(const bool with_compaction);
+
+public:
+  testcase_copy(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid),
+        copy_pathname(config.params.pathname_db + "-copy") {}
+  bool run();
+};

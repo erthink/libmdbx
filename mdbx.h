@@ -100,6 +100,7 @@ typedef DWORD mdbx_tid_t;
 #define MDBX_EIO ERROR_WRITE_FAULT
 #define MDBX_EPERM ERROR_INVALID_FUNCTION
 #define MDBX_EINTR ERROR_CANCELLED
+#define MDBX_ENOFILE ERROR_FILE_NOT_FOUND
 
 #else
 
@@ -120,6 +121,8 @@ typedef pthread_t mdbx_tid_t;
 #define MDBX_EIO EIO
 #define MDBX_EPERM EPERM
 #define MDBX_EINTR EINTR
+#define MDBX_ENOFILE ENOENT
+
 #endif
 
 #ifdef _MSC_VER

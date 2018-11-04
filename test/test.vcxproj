@@ -184,6 +184,7 @@
     <ClCompile Include="cases.cc" />
     <ClCompile Include="chrono.cc" />
     <ClCompile Include="config.cc" />
+    <ClCompile Include="copy.cc" />
     <ClCompile Include="dead.cc" />
     <ClCompile Include="hill.cc" />
     <ClCompile Include="try.cc" />
