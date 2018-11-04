@@ -25,6 +25,7 @@ function probe {
 	rm -f ${TESTDB_PREFIX}* \
 		&& ./mdbx_test --pathname=${TESTDB_PREFIX}db "$@" | lz4 > ${TESTDB_PREFIX}log.lz4 \
 		&& ./mdbx_chk -nvv ${TESTDB_PREFIX}db | tee ${TESTDB_PREFIX}chk \
+		&& ./mdbx_chk -nvv ${TESTDB_PREFIX}db-copy | tee ${TESTDB_PREFIX}chk-copy \
 		|| (echo "FAILED"; exit 1)
 }
 
@@ -52,11 +53,11 @@ for nops in {2..7}; do
 				caption="Probe #$((++count)) w/o-dups, repeat ${rep} of ${loops}" probe \
 					--pagesize=min --size=6G --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} --hill
+					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) with-dups, repeat ${rep} of ${loops}" probe \
 					--pagesize=min --size=6G --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} --hill
+					--keygen.seed=${seed} basic
 			done
 		done
 	done
