@@ -504,6 +504,7 @@ int mdbx_thread_join(mdbx_thread_t thread);
 int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync);
 int mdbx_filesize_sync(mdbx_filehandle_t fd);
 int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length);
+int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos);
 int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length);
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd, bool exclusive);

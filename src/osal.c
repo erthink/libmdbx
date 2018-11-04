@@ -753,6 +753,19 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
 #endif
 }
 
+int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos) {
+#if defined(_WIN32) || defined(_WIN64)
+  LARGE_INTEGER li;
+  li.QuadPart = pos;
+  return SetFilePointerEx(fd, li, NULL, FILE_BEGIN) ? MDBX_SUCCESS
+                                                    : GetLastError();
+#else
+  STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                    "libmdbx requires 64-bit file I/O on 64-bit systems");
+  return (lseek(fd, pos, SEEK_SET) < 0) ? errno : MDBX_SUCCESS;
+#endif
+}
+
 /*----------------------------------------------------------------------------*/
 
 int mdbx_thread_create(mdbx_thread_t *thread,
