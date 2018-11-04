@@ -184,7 +184,7 @@ void osal_killall_actors(void) {
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   struct timespec ts;
   ts.tv_nsec = 0;
-  ts.tv_sec = timeout;
+  ts.tv_sec = (timeout > INT_MAX) ? INT_MAX : timeout;
 retry:
   int status, options = WNOHANG;
 #ifdef WUNTRACED
