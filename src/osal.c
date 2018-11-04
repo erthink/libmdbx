@@ -399,6 +399,13 @@ int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 
 /*----------------------------------------------------------------------------*/
 
+int mdbx_removefile(const char *pathname) {
+#if defined(_WIN32) || defined(_WIN64)
+  return DeleteFileA(pathname) ? MDBX_SUCCESS : GetLastError();
+#else
+  return unlink(pathname) ? errno : MDBX_SUCCESS;
+#endif
+}
 int mdbx_openfile(const char *pathname, int flags, mode_t mode,
                   mdbx_filehandle_t *fd) {
   *fd = INVALID_HANDLE_VALUE;
@@ -695,6 +702,19 @@ int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
   STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                     "libmdbx requires 64-bit file I/O on 64-bit systems");
   return ftruncate(fd, length) == 0 ? MDBX_SUCCESS : errno;
+#endif
+}
+
+int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos) {
+#if defined(_WIN32) || defined(_WIN64)
+  LARGE_INTEGER li;
+  li.QuadPart = pos;
+  return SetFilePointerEx(fd, li, NULL, FILE_BEGIN) ? MDBX_SUCCESS
+                                                    : GetLastError();
+#else
+  STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                    "libmdbx requires 64-bit file I/O on 64-bit systems");
+  return (lseek(fd, pos, SEEK_SET) < 0) ? errno : MDBX_SUCCESS;
 #endif
 }
 
