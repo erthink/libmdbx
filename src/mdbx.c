@@ -5053,15 +5053,6 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       continue;
     }
 
-    /* LY: check end_pgno */
-    if (page.mp_meta.mm_geo.now < page.mp_meta.mm_geo.lower ||
-        page.mp_meta.mm_geo.now > page.mp_meta.mm_geo.upper) {
-      mdbx_notice("meta[%u] has invalid end-pageno (%" PRIaPGNO "), skip it",
-                  meta_number, page.mp_meta.mm_geo.now);
-      rc = MDBX_CORRUPTED;
-      continue;
-    }
-
     /* LY: check last_pgno */
     if (page.mp_meta.mm_geo.next < MIN_PAGENO ||
         page.mp_meta.mm_geo.next - 1 > MAX_PAGENO) {
@@ -5075,6 +5066,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
     const uint64_t used_bytes =
         page.mp_meta.mm_geo.next * (uint64_t)page.mp_meta.mm_psize;
     if (used_bytes > *filesize) {
+      /* Here could be a race with DB-shrinking performed by other process */
       rc = mdbx_filesize(env->me_fd, filesize);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -5118,9 +5110,19 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                   "but size of used space still acceptable (%" PRIu64 ")",
                   meta_number, mapsize_max, used_bytes);
       page.mp_meta.mm_geo.upper = (pgno_t)(MAX_MAPSIZE / page.mp_meta.mm_psize);
-      if (page.mp_meta.mm_geo.now > page.mp_meta.mm_geo.upper)
-        page.mp_meta.mm_geo.now = page.mp_meta.mm_geo.upper;
     }
+
+    /* LY: check and silently put mm_geo.now into [geo.lower...geo.upper].
+     *
+     * Copy-with-compaction by previous version of libmfbx could produce DB-file
+     * less than meta.geo.lower bound, in case actual filling is low or no data
+     * at all. This is not a problem as there is no damage or loss of data.
+     * Therefore it is better not to consider such situation as an error, but
+     * silently correct it. */
+    if (page.mp_meta.mm_geo.now < page.mp_meta.mm_geo.lower)
+      page.mp_meta.mm_geo.now = page.mp_meta.mm_geo.lower;
+    if (page.mp_meta.mm_geo.now > page.mp_meta.mm_geo.upper)
+      page.mp_meta.mm_geo.now = page.mp_meta.mm_geo.upper;
 
     if (page.mp_meta.mm_geo.next > page.mp_meta.mm_geo.now) {
       mdbx_notice("meta[%u] next-pageno (%" PRIaPGNO
@@ -6059,6 +6061,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
       }
 
       if (env->me_flags & MDBX_RDONLY) {
+        if (filesize_before_mmap % env->me_os_psize) {
+          mdbx_error("filesize should be rounded-up to system page");
+          return MDBX_WANNA_RECOVERY;
+        }
         mdbx_notice("ignore filesize mismatch in readonly-mode");
       } else {
         mdbx_info("resize datafile to %" PRIuSIZE " bytes, %" PRIaPGNO " pages",
