@@ -11213,19 +11213,19 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   bailout:
     free(namedup);
   } else {
-    txn->mt_dbiseqs[slot] = (env->me_dbiseqs[slot] += 1);
     txn->mt_dbflags[slot] = (uint8_t)dbflag;
     txn->mt_dbxs[slot].md_name.iov_base = namedup;
-    mdbx_compiler_barrier();
     txn->mt_dbxs[slot].md_name.iov_len = len;
-    if (slot == txn->mt_numdbs)
-      txn->mt_numdbs++;
+    txn->mt_numdbs += (slot == txn->mt_numdbs);
     if ((dbflag & DB_CREAT) == 0) {
       env->me_dbflags[slot] = txn->mt_dbs[slot].md_flags | MDBX_VALID;
       mdbx_compiler_barrier();
       if (env->me_numdbs <= slot)
         env->me_numdbs = slot + 1;
+    } else {
+      env->me_dbiseqs[slot] += 1;
     }
+    txn->mt_dbiseqs[slot] = env->me_dbiseqs[slot];
     *dbi = slot;
   }
 
