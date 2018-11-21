@@ -1765,7 +1765,7 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
       mdbx_kill_page(txn->mt_env, mp);
     mp->mp_flags = P_LOOSE | P_DIRTY;
     VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
-    VALGRIND_MAKE_MEM_DEFINED(&mp->mp_pgno, sizeof(pgno_t));
+    ASAN_UNPOISON_MEMORY_REGION(link, sizeof(*link));
     *link = txn->mt_loose_pages;
     txn->mt_loose_pages = mp;
     txn->mt_loose_count++;
