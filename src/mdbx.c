@@ -3349,6 +3349,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       }
     }
     txn->mt_owner = mdbx_thread_self();
+#if defined(_WIN32) || defined(_WIN64)
+    if ((txn->mt_flags & MDBX_TXN_RDONLY) != 0 && size > env->me_dbgeo.lower &&
+        env->me_dbgeo.shrink) {
+      txn->mt_flags |= MDBX_SHRINK_ALLOWED;
+      mdbx_srwlock_AcquireShared(&env->me_remap_guard);
+    }
+#endif
     return MDBX_SUCCESS;
   }
 bailout:
@@ -3516,8 +3523,8 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       mdbx_free(txn);
   } else {
-    mdbx_assert(env,
-                (txn->mt_flags & ~(MDBX_TXN_RDONLY | MDBX_TXN_WRITEMAP)) == 0);
+    mdbx_assert(env, (txn->mt_flags & ~(MDBX_TXN_RDONLY | MDBX_TXN_WRITEMAP |
+                                        MDBX_SHRINK_ALLOWED)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
@@ -3610,6 +3617,10 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
              txn->mt_dbs[FREE_DBI].md_root);
 
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)) {
+#if defined(_WIN32) || defined(_WIN64)
+    if (txn->mt_flags & MDBX_SHRINK_ALLOWED)
+      mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
+#endif
     if (txn->mt_ro_reader) {
       txn->mt_ro_reader->mr_txnid = ~(txnid_t)0;
       env->me_lck->mti_readers_refresh_flag = true;
@@ -5843,6 +5854,34 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
                 meta.mm_geo.shrink == bytes2pgno(env, env->me_dbgeo.shrink));
 
     if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
+
+#if defined(_WIN32) || defined(_WIN64)
+      /* Was DB shrinking disabled before and now it will be enabled? */
+      if (meta.mm_geo.lower < meta.mm_geo.upper && meta.mm_geo.shrink &&
+          !(head->mm_geo.lower < head->mm_geo.upper && head->mm_geo.shrink)) {
+        rc = mdbx_rdt_lock(env);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto bailout;
+
+        /* Check if there are any reading threads that do not use the SRWL */
+        const mdbx_pid_t CurrentTid = GetCurrentThreadId();
+        const MDBX_reader *const begin = env->me_lck->mti_readers;
+        const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
+        for (const MDBX_reader *reader = begin; reader < end; ++reader) {
+          if (reader->mr_pid == env->me_pid && reader->mr_tid &&
+              reader->mr_tid != CurrentTid) {
+            /* At least one thread may don't use SRWL */
+            rc = MDBX_EPERM;
+            break;
+          }
+        }
+
+        mdbx_rdt_unlock(env);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto bailout;
+      }
+#endif
+
       if (meta.mm_geo.now != head->mm_geo.now ||
           meta.mm_geo.upper != head->mm_geo.upper) {
         rc = mdbx_mapresize(env, meta.mm_geo.now, meta.mm_geo.upper);
