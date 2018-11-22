@@ -1983,19 +1983,21 @@ static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
       env->me_dxb_mmap.current == env->me_dxb_mmap.filesize)
     goto bailout;
 
-  if ((env->me_flags & MDBX_RDONLY) || limit_bytes != env->me_dxb_mmap.length ||
-      size_bytes < env->me_dxb_mmap.current) {
-    /* Windows allows only extending a read-write section, but not a
-     * corresponing mapped view. Therefore in other cases we must suspend
-     * the local threads for safe remap. */
-    array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
-    array_onstack.count = 0;
-    suspended = &array_onstack;
-    rc = mdbx_suspend_threads_before_remap(env, &suspended);
-    if (rc != MDBX_SUCCESS) {
-      mdbx_error("failed suspend-for-remap: errcode %d", rc);
-      goto bailout;
-    }
+  /* 1) Windows allows only extending a read-write section, but not a
+   *    corresponing mapped view. Therefore in other cases we must suspend
+   *    the local threads for safe remap.
+   * 2) At least on Windows 10 1803 the entire mapped section is unavailable
+   *    for short time during NtExtendSection() or VirtualAlloc() execution.
+   *
+   * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED!
+   */
+  array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
+  array_onstack.count = 0;
+  suspended = &array_onstack;
+  rc = mdbx_suspend_threads_before_remap(env, &suspended);
+  if (rc != MDBX_SUCCESS) {
+    mdbx_error("failed suspend-for-remap: errcode %d", rc);
+    goto bailout;
   }
 #else
   /* Acquire guard to avoid collision between read and write txns
