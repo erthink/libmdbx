@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -190,10 +190,34 @@ uint64_t entropy_ticks(void) {
   uint64_t virtual_timer;
   __asm __volatile("mrs %0, cntvct_el0" : "=r"(virtual_timer));
   return virtual_timer;
-#elif defined(__ARM_ARCH) && __ARM_ARCH > 5 && __ARM_ARCH < 8
-  unsigned long pmccntr;
-  __asm __volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(pmccntr));
-  return pmccntr;
+#elif (defined(__ARM_ARCH) && __ARM_ARCH > 5 && __ARM_ARCH < 8) ||             \
+    defined(_M_ARM)
+  static uint32_t pmcntenset = 0x00425B00;
+  if (unlikely(pmcntenset == 0x00425B00)) {
+    uint32_t pmuseren;
+#ifdef _M_ARM
+    pmuseren = _MoveFromCoprocessor(15, 0, 9, 14, 0);
+#else
+    __asm("mrc p15, 0, %0, c9, c14, 0" : "=r"(pmuseren));
+#endif
+    if (1 & pmuseren /* Is it allowed for user mode code? */) {
+#ifdef _M_ARM
+      pmcntenset = _MoveFromCoprocessor(15, 0, 9, 12, 1);
+#else
+      __asm("mrc p15, 0, %0, c9, c12, 1" : "=r"(pmcntenset));
+#endif
+    } else
+      pmcntenset = 0;
+  }
+  if (pmcntenset & 0x80000000ul /* Is it counting? */) {
+#ifdef _M_ARM
+    return __rdpmccntr64();
+#else
+    uint32_t pmccntr;
+    __asm __volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(pmccntr));
+    return pmccntr;
+#endif
+  }
 #elif defined(__mips__) || defined(__mips) || defined(_R4000)
   unsigned count;
   __asm __volatile("rdhwr %0, $2" : "=r"(count));
@@ -203,8 +227,6 @@ uint64_t entropy_ticks(void) {
 
 #if defined(__e2k__) || defined(__ia32__)
   return __rdtsc();
-#elif defined(_M_ARM)
-  return __rdpmccntr64();
 #elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   LARGE_INTEGER PerformanceCount;
   if (QueryPerformanceCounter(&PerformanceCount))
@@ -213,13 +235,13 @@ uint64_t entropy_ticks(void) {
 #else
   struct timespec ts;
 #if defined(CLOCK_MONOTONIC_COARSE)
-  clockid_t clock = CLOCK_MONOTONIC_COARSE;
+  clockid_t clk_id = CLOCK_MONOTONIC_COARSE;
 #elif defined(CLOCK_MONOTONIC_RAW)
-  clockid_t clock = CLOCK_MONOTONIC_RAW;
+  clockid_t clk_id = CLOCK_MONOTONIC_RAW;
 #else
-  clockid_t clock = CLOCK_MONOTONIC;
+  clockid_t clk_id = CLOCK_MONOTONIC;
 #endif
-  int rc = clock_gettime(clock, &ts);
+  int rc = clock_gettime(clk_id, &ts);
   if (unlikely(rc))
     failure_perror("clock_gettime()", rc);
 

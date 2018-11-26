@@ -376,6 +376,10 @@ int main(int argc, char *const argv[]) {
   if (global::config::cleanup_before)
     cleanup();
 
+  log_trace(">> probe entropy_ticks()");
+  entropy_ticks();
+  log_trace("<< probe entropy_ticks()");
+
   if (global::actors.size() == 1) {
     logging::setup("main");
     global::singlemode = true;
