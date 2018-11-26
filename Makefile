@@ -218,5 +218,7 @@ cross-qemu:
 	@echo "	2) apt install binfmt-support qemu-user-static qemu-user qemu-system-arm qemu-system-mips qemu-system-misc qemu-system-ppc qemu-system-sparc"
 	@for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
-		$(MAKE) clean && CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) check-singleprocess || exit $$?; \
+		$(MAKE) clean && \
+			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static XCFLAGS="-DMDBX_SAFE4QEMU $(XCFLAGS)" \
+			$(MAKE) check-singleprocess || exit $$?; \
 	done

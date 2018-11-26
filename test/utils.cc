@@ -186,7 +186,8 @@ uint64_t entropy_ticks(void) {
   ticks |= low & /* zeroes if high part has changed */
            ~(high_before - high_after);
 #endif
-#elif defined(__aarch64__) || (defined(__ARM_ARCH) && __ARM_ARCH > 7)
+#elif (defined(__aarch64__) || (defined(__ARM_ARCH) && __ARM_ARCH > 7)) &&     \
+    !defined(MDBX_SAFE4QEMU)
   uint64_t virtual_timer;
   __asm __volatile("mrs %0, cntvct_el0" : "=r"(virtual_timer));
   return virtual_timer;

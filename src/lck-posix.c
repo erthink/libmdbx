@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -149,7 +149,7 @@ int __cold mdbx_lck_init(MDBX_env *env) {
     goto bailout;
 #endif /* MDBX_USE_ROBUST */
 
-#if _POSIX_C_SOURCE >= 199506L
+#if _POSIX_C_SOURCE >= 199506L && !defined(MDBX_SAFE4QEMU)
   rc = pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_INHERIT);
   if (rc == ENOTSUP)
     rc = pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_NONE);
