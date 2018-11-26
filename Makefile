@@ -188,7 +188,7 @@ ci:
 
 ###############################################################################
 
-CROSS_LIST = alpha-linux-gnu-gcc mips-linux-gnu-gcc \
+CROSS_LIST = mips-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
 	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc
 
@@ -197,8 +197,11 @@ CROSS_LIST = alpha-linux-gnu-gcc mips-linux-gnu-gcc \
 # sh4-linux-gnu-gcc		- qemu troubles (pread syscall, etc)
 # mips64-linux-gnuabi64-gcc	- qemu troubles (pread syscall, etc)
 # sparc64-linux-gnu-gcc		- qemu troubles (fcntl for F_SETLK/F_GETLK)
+# alpha-linux-gnu-gcc		- qemu (or gcc) troubles (coredump)
+
 CROSS_LIST_NOQEMU = hppa-linux-gnu-gcc s390x-linux-gnu-gcc \
-	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc sparc64-linux-gnu-gcc
+	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc \
+	sparc64-linux-gnu-gcc alpha-linux-gnu-gcc
 
 cross-gcc:
 	@echo "CORRESPONDING CROSS-COMPILERs ARE REQUIRED."
