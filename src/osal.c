@@ -741,11 +741,21 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 
 int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
 #if defined(_WIN32) || defined(_WIN64)
-  LARGE_INTEGER li;
-  li.QuadPart = length;
-  return (SetFilePointerEx(fd, li, NULL, FILE_BEGIN) && SetEndOfFile(fd))
-             ? MDBX_SUCCESS
-             : GetLastError();
+  if (mdbx_SetFileInformationByHandle) {
+    FILE_END_OF_FILE_INFO EndOfFileInfo;
+    EndOfFileInfo.EndOfFile.QuadPart = length;
+    return mdbx_SetFileInformationByHandle(fd, FileEndOfFileInfo,
+                                           &EndOfFileInfo,
+                                           sizeof(FILE_END_OF_FILE_INFO))
+               ? MDBX_SUCCESS
+               : GetLastError();
+  } else {
+    LARGE_INTEGER li;
+    li.QuadPart = length;
+    return (SetFilePointerEx(fd, li, NULL, FILE_BEGIN) && SetEndOfFile(fd))
+               ? MDBX_SUCCESS
+               : GetLastError();
+  }
 #else
   STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                     "libmdbx requires 64-bit file I/O on 64-bit systems");

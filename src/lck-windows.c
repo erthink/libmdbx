@@ -663,6 +663,7 @@ MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
 MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
 MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
 MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
+MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
 MDBX_NtFsControlFile mdbx_NtFsControlFile;
 
 static void mdbx_winnt_import(void) {
@@ -698,6 +699,10 @@ static void mdbx_winnt_import(void) {
   mdbx_GetFinalPathNameByHandleW =
       (MDBX_GetFinalPathNameByHandleW)GetProcAddress(
           hKernel32dll, "GetFinalPathNameByHandleW");
+
+  mdbx_SetFileInformationByHandle =
+      (MDBX_SetFileInformationByHandle)GetProcAddress(
+          hKernel32dll, "SetFileInformationByHandle");
 
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
   mdbx_NtFsControlFile =

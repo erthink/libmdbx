@@ -627,6 +627,12 @@ typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile,
                                                       _In_ DWORD dwFlags);
 extern MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
 
+typedef BOOL(WINAPI *MDBX_SetFileInformationByHandle)(
+    _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
+    _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
+
+extern MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
+
 typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
     IN HANDLE FileHandle, IN OUT HANDLE Event,
     IN OUT PVOID /* PIO_APC_ROUTINE */ ApcRoutine, IN OUT PVOID ApcContext,
