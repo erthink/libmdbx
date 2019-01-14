@@ -5729,19 +5729,21 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     goto bailout;
   }
 
-  if (size_lower < 0) {
+  if (size_lower <= 0) {
     size_lower = MIN_MAPSIZE;
     if (MIN_MAPSIZE / pagesize < MIN_PAGENO)
       size_lower = MIN_PAGENO * pagesize;
   }
 
-  if (size_now < 0) {
+  if (size_now <= 0) {
     size_now = DEFAULT_MAPSIZE;
     if (size_now < size_lower)
       size_now = size_lower;
+    if (size_upper >= size_lower && size_now > size_upper)
+      size_now = size_upper;
   }
 
-  if (size_upper < 0) {
+  if (size_upper <= 0) {
     if ((size_t)size_now >= MAX_MAPSIZE / 2)
       size_upper = MAX_MAPSIZE;
     else if (MAX_MAPSIZE != MAX_MAPSIZE32 &&
