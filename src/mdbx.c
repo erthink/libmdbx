@@ -12810,7 +12810,7 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
       *percent =
           (int)((txn->mt_next_pgno * UINT64_C(100) + txn->mt_end_pgno / 2) /
                 txn->mt_end_pgno);
-    return -1;
+    return 0;
   }
 
   txnid_t recent;

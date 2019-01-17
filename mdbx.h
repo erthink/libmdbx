@@ -1,4 +1,4 @@
-/* LICENSE AND COPYRUSTING *****************************************************
+﻿/* LICENSE AND COPYRUSTING *****************************************************
  *
  * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
@@ -1601,7 +1601,7 @@ LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes);
  * [out] percent  Percentage of page allocation in the database.
  *
  * Returns Number of transactions committed after the given was started for
- * read, or -1 on failure. */
+ * read, or negative value on failure. */
 LIBMDBX_API int mdbx_txn_straggler(MDBX_txn *txn, int *percent);
 
 /* A callback function for killing a laggard readers,
