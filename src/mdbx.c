@@ -7195,13 +7195,13 @@ static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
       return rc;
     rc = mdbx_page_search(&mc2, &mc->mc_dbx->md_name, 0);
     if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+      return (rc == MDBX_NOTFOUND) ? MDBX_BAD_DBI : rc;
     {
       MDBX_val data;
       int exact = 0;
       MDBX_node *leaf = mdbx_node_search(&mc2, &mc->mc_dbx->md_name, &exact);
       if (!exact)
-        return MDBX_NOTFOUND;
+        return MDBX_BAD_DBI;
       if (unlikely((leaf->mn_flags & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
         return MDBX_INCOMPATIBLE; /* not a named DB */
       rc = mdbx_node_read(&mc2, leaf, &data);
