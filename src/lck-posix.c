@@ -20,8 +20,8 @@
 #ifndef MDBX_USE_ROBUST
 /* Howard Chu: Android currently lacks Robust Mutex support */
 #if defined(EOWNERDEAD) &&                                                     \
-    !defined(ANDROID) /* LY: glibc before 2.10 has a troubles with Robust      \
-                         Mutex too. */                                         \
+    !defined(__ANDROID__) /* LY: glibc before 2.10 has a troubles              \
+                                 with Robust Mutex too. */                     \
     && __GLIBC_PREREQ(2, 10)
 #define MDBX_USE_ROBUST 1
 #else
