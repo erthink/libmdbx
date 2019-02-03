@@ -5037,14 +5037,7 @@ int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
   (((pagesize)-PAGEHDRSZ) / sizeof(pgno_t) - 1)
 
 int mdbx_get_maxkeysize(intptr_t pagesize) {
-  if (pagesize < 1)
-    pagesize = (intptr_t)mdbx_syspagesize();
-  else if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
-                    pagesize > (intptr_t)MAX_PAGESIZE ||
-                    !mdbx_is_power2((size_t)pagesize)))
-    return -MDBX_EINVAL;
-
-  return mdbx_maxkey(mdbx_nodemax(pagesize));
+  return (int)mdbx_limits_keysize_max(pagesize);
 }
 
 static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
@@ -12538,6 +12531,17 @@ __cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
   const uint64_t limit = MAX_PAGENO * (uint64_t)pagesize;
   return (limit < (intptr_t)MAX_MAPSIZE) ? (intptr_t)limit
                                          : (intptr_t)MAX_MAPSIZE;
+}
+
+__cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_syspagesize();
+  else if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+                    pagesize > (intptr_t)MAX_PAGESIZE ||
+                    !mdbx_is_power2((size_t)pagesize)))
+    return (MDBX_EINVAL > 0) ? -MDBX_EINVAL : MDBX_EINVAL;
+
+  return pagesize * (MDBX_PNL_UM_SIZE - 1);
 }
 
 /*----------------------------------------------------------------------------*/

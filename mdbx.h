@@ -1683,6 +1683,8 @@ LIBMDBX_API int mdbx_limits_pgsize_min(void);
 LIBMDBX_API int mdbx_limits_pgsize_max(void);
 LIBMDBX_API intptr_t mdbx_limits_dbsize_min(intptr_t pagesize);
 LIBMDBX_API intptr_t mdbx_limits_dbsize_max(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /*----------------------------------------------------------------------------*/
 /* attribute support functions for Nexenta */
