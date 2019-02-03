@@ -1,6 +1,6 @@
 ﻿/* LICENSE AND COPYRUSTING *****************************************************
  *
- * Copyright 2015-2018 Leonid Yuriev <leo@yuriev.ru>
+ * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
  *
@@ -60,8 +60,8 @@
 
 /* IMPENDING CHANGES WARNING ***************************************************
  *
- * MDBX is under active development, database format and API aren't stable
- * at least until 2018Q2. New version won't be backwards compatible. Main focus
+ * MDBX is under active non-public development, database format and API
+ * will be refined. New version won't be backwards compatible. Main focus
  * of the rework is to provide clear and robust API and new features.
  *
  ******************************************************************************/
