@@ -121,6 +121,8 @@ public:
             serial_t value_age);
   void setup(const config::actor_params_pod &actor, unsigned actor_id,
              unsigned thread_number);
+  void make_ordered();
+  bool is_unordered() const;
 
   bool increment(serial_t &serial, int delta);
 };

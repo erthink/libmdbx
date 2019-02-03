@@ -27,6 +27,7 @@ add_executable(${TARGET}
   try.cc
   utils.cc
   utils.h
+  append.cc
   )
 
 target_link_libraries(${TARGET}

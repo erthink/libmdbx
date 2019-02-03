@@ -341,6 +341,10 @@ int main(int argc, char *const argv[]) {
       configure_actor(last_space_id, ac_copy, value, params);
       continue;
     }
+    if (config::parse_option(argc, argv, narg, "append", nullptr)) {
+      configure_actor(last_space_id, ac_append, value, params);
+      continue;
+    }
     if (config::parse_option(argc, argv, narg, "failfast",
                              global::config::failfast))
       continue;

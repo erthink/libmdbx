@@ -181,6 +181,7 @@
     <ClInclude Include="utils.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="append.cc" />
     <ClCompile Include="cases.cc" />
     <ClCompile Include="chrono.cc" />
     <ClCompile Include="config.cc" />

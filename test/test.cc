@@ -33,6 +33,8 @@ const char *testcase2str(const actor_testcase testcase) {
     return "try";
   case ac_copy:
     return "copy";
+  case ac_append:
+    return "append";
   }
 }
 
@@ -185,9 +187,33 @@ void testcase::txn_end(bool abort) {
   log_trace("<< txn_end(%s)", abort ? "abort" : "commit");
 }
 
+void testcase::cursor_open(unsigned dbi) {
+  log_trace(">> cursor_open(%u)", dbi);
+  assert(!cursor_guard);
+  assert(txn_guard);
+
+  MDBX_cursor *cursor = nullptr;
+  int rc = mdbx_cursor_open(txn_guard.get(), dbi, &cursor);
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror("mdbx_cursor_open()", rc);
+  cursor_guard.reset(cursor);
+
+  log_trace("<< cursor_open(%u)", dbi);
+}
+
+void testcase::cursor_close() {
+  log_trace(">> cursor_close()");
+  assert(cursor_guard);
+  MDBX_cursor *cursor = cursor_guard.release();
+  mdbx_cursor_close(cursor);
+  log_trace("<< cursor_close()");
+}
+
 void testcase::txn_restart(bool abort, bool readonly, unsigned flags) {
   if (txn_guard)
     txn_end(abort);
+  if (cursor_guard)
+    cursor_close();
   txn_begin(readonly, flags);
 }
 
@@ -396,7 +422,7 @@ void testcase::db_table_drop(MDBX_dbi handle) {
   if (config.params.drop_table) {
     int rc = mdbx_drop(txn_guard.get(), handle, true);
     if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_drop()", rc);
+      failure_perror("mdbx_drop(delete=true)", rc);
     log_trace("<< testcase::db_table_drop");
   } else {
     log_trace("<< testcase::db_table_drop: not needed");
@@ -457,6 +483,9 @@ bool test_execute(const actor_config &config) {
       break;
     case ac_copy:
       test.reset(new testcase_copy(config, pid));
+      break;
+    case ac_append:
+      test.reset(new testcase_append(config, pid));
       break;
     default:
       test.reset(new testcase(config, pid));

@@ -167,6 +167,15 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   base = 0;
 }
 
+void maker::make_ordered() {
+  mapping.mesh = 0;
+  mapping.rotate = 0;
+}
+
+bool maker::is_unordered() const {
+  return (mapping.mesh >= serial_minwith || mapping.rotate) != 0;
+}
+
 bool maker::increment(serial_t &serial, int delta) {
   if (serial > mask(mapping.width)) {
     log_extra("keygen-increment: %" PRIu64 " > %" PRIu64 ", overflow", serial,

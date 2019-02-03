@@ -107,6 +107,8 @@ protected:
   void txn_begin(bool readonly, unsigned flags = 0);
   void txn_end(bool abort);
   void txn_restart(bool abort, bool readonly, unsigned flags = 0);
+  void cursor_open(unsigned dbi);
+  void cursor_close();
   void txn_inject_writefault(void);
   void txn_inject_writefault(MDBX_txn *txn);
   void fetch_canary();
@@ -154,6 +156,13 @@ public:
 class testcase_hill : public testcase {
 public:
   testcase_hill(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool run();
+};
+
+class testcase_append : public testcase {
+public:
+  testcase_append(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
   bool run();
 };

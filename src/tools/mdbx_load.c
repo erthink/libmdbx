@@ -487,7 +487,7 @@ int main(int argc, char *argv[]) {
         if (dbi_flags & MDBX_DUPSORT) {
           if (prevk.iov_len == key.iov_len &&
               memcmp(prevk.iov_base, key.iov_base, key.iov_len) == 0)
-            appflag = MDBX_CURRENT | MDBX_APPENDDUP;
+            appflag = MDBX_APPEND | MDBX_APPENDDUP;
           else
             memcpy(prevk.iov_base, key.iov_base, prevk.iov_len = key.iov_len);
         }

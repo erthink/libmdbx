@@ -3,6 +3,7 @@ README-RU.md
 pcrf_test/CMakeLists.txt
 src/tools/CMakeLists.txt
 test/CMakeLists.txt
+test/append.cc
 test/copy.cc
 tutorial/CMakeLists.txt
 tutorial/sample-mdbx.c
