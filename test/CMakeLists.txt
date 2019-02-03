@@ -1,4 +1,4 @@
-﻿set(TARGET mdbx_test)
+set(TARGET mdbx_test)
 project(${TARGET})
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-missing-declarations")
