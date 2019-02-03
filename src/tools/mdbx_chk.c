@@ -92,7 +92,8 @@ MDBX_envinfo envinfo;
 MDBX_stat envstat;
 size_t maxkeysize, userdb_count, skipped_subdb;
 uint64_t reclaimable_pages, gc_pages, lastpgno, unused_pages;
-unsigned verbose, quiet;
+unsigned verbose;
+char ignore_wrong_order, quiet;
 const char *only_subdb;
 
 struct problem {
@@ -615,6 +616,8 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
   saved_list = problems_push();
   prev_key.iov_base = NULL;
+  prev_key.iov_len = 0;
+  prev_data.iov_base = NULL;
   prev_data.iov_len = 0;
   rc = mdbx_cursor_get(mc, &key, &data, MDBX_FIRST);
   while (rc == MDBX_SUCCESS) {
@@ -649,17 +652,16 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
       int cmp = mdbx_cmp(txn, dbi_handle, &prev_key, &key);
       if (cmp > 0) {
-        problem_add("entry", record_count, "broken ordering of entries", NULL);
+        if (!ignore_wrong_order)
+          problem_add("entry", record_count, "wrong order of entries", NULL);
       } else if (cmp == 0) {
         ++dups;
         if (!(flags & MDBX_DUPSORT))
           problem_add("entry", record_count, "duplicated entries", NULL);
-        else if (flags & MDBX_INTEGERDUP) {
-          cmp = mdbx_dcmp(txn, dbi_handle, &prev_data, &data);
-          if (cmp > 0)
-            problem_add("entry", record_count,
-                        "broken ordering of multi-values", NULL);
-        }
+        else if (!ignore_wrong_order &&
+                 mdbx_dcmp(txn, dbi_handle, &prev_data, &data) > 0)
+          problem_add("entry", record_count, "wrong order of multi-values",
+                      NULL);
       }
     } else if (verbose) {
       if (flags & MDBX_INTEGERKEY)
@@ -714,7 +716,8 @@ static void usage(char *prog) {
           "  -w\t\tlock DB for writing while checking\n"
           "  -d\t\tdisable page-by-page traversal of b-tree\n"
           "  -s subdb\tprocess a specific subdatabase only\n"
-          "  -c\t\tforce cooperative mode (don't try exclusive)\n",
+          "  -c\t\tforce cooperative mode (don't try exclusive)\n"
+          "  -i\t\tignore wrong order errors (for custom comparators case)\n",
           prog);
   exit(EXIT_INTERRUPTED);
 }
@@ -898,7 +901,7 @@ int main(int argc, char *argv[]) {
     usage(prog);
   }
 
-  for (int i; (i = getopt(argc, argv, "Vvqnwcds:")) != EOF;) {
+  for (int i; (i = getopt(argc, argv, "Vvqnwcdsi:")) != EOF;) {
     switch (i) {
     case 'V':
       printf("%s (%s, build %s)\n", mdbx_version.git.describe,
@@ -927,6 +930,9 @@ int main(int argc, char *argv[]) {
       if (only_subdb && strcmp(only_subdb, optarg))
         usage(prog);
       only_subdb = optarg;
+      break;
+    case 'i':
+      ignore_wrong_order = 1;
       break;
     default:
       usage(prog);
