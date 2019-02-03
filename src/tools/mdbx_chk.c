@@ -651,17 +651,25 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       }
 
       int cmp = mdbx_cmp(txn, dbi_handle, &prev_key, &key);
-      if (cmp > 0) {
-        if (!ignore_wrong_order)
-          problem_add("entry", record_count, "wrong order of entries", NULL);
-      } else if (cmp == 0) {
+      if (cmp == 0) {
         ++dups;
-        if (!(flags & MDBX_DUPSORT))
+        if ((flags & MDBX_DUPSORT) == 0) {
           problem_add("entry", record_count, "duplicated entries", NULL);
-        else if (!ignore_wrong_order &&
-                 mdbx_dcmp(txn, dbi_handle, &prev_data, &data) > 0)
-          problem_add("entry", record_count, "wrong order of multi-values",
-                      NULL);
+          if (data.iov_len == prev_data.iov_len &&
+              memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0) {
+            problem_add("entry", record_count, "complete duplicate", NULL);
+          }
+        } else {
+          cmp = mdbx_dcmp(txn, dbi_handle, &prev_data, &data);
+          if (cmp == 0) {
+            problem_add("entry", record_count, "complete duplicate", NULL);
+          } else if (cmp > 0 && !ignore_wrong_order) {
+            problem_add("entry", record_count, "wrong order of multi-values",
+                        NULL);
+          }
+        }
+      } else if (cmp > 0 && !ignore_wrong_order) {
+        problem_add("entry", record_count, "wrong order of entries", NULL);
       }
     } else if (verbose) {
       if (flags & MDBX_INTEGERKEY)
