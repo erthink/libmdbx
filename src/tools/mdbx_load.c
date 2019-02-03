@@ -1,4 +1,4 @@
-/* mdbx_load.c - memory-mapped database load tool */
+﻿/* mdbx_load.c - memory-mapped database load tool */
 
 /*
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
@@ -57,6 +57,7 @@ static int Eof;
 
 static MDBX_envinfo envinfo;
 static MDBX_val kbuf, dbuf;
+static MDBX_val k0buf;
 
 #define STRLENOF(s) (sizeof(s) - 1)
 
@@ -304,9 +305,16 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 }
 
 static void usage(void) {
-  fprintf(stderr, "usage: %s [-V] [-f input] [-n] [-s name] [-N] [-T] dbpath\n",
+  fprintf(stderr,
+          "usage: %s [-V] [-a] [-f input] [-n] [-s name] [-N] [-T] dbpath\n",
           prog);
   exit(EXIT_FAILURE);
+}
+
+static int anyway_greater(const MDBX_val *a, const MDBX_val *b) {
+  (void)a;
+  (void)b;
+  return 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -316,27 +324,31 @@ int main(int argc, char *argv[]) {
   MDBX_cursor *mc = NULL;
   MDBX_dbi dbi;
   char *envname = NULL;
-  int envflags = 0, putflags = 0;
+  int envflags = MDBX_UTTERLY_NOSYNC, putflags = 0;
+  int append = 0;
+  MDBX_val prevk;
 
   prog = argv[0];
-
-  if (argc < 2) {
+  if (argc < 2)
     usage();
-  }
 
-  /* -f: load file instead of stdin
+  /* -a: append records in input order
+   * -f: load file instead of stdin
    * -n: use NOSUBDIR flag on env_open
    * -s: load into named subDB
    * -N: use NOOVERWRITE on puts
    * -T: read plaintext
    * -V: print version and exit
    */
-  while ((i = getopt(argc, argv, "f:ns:NTV")) != EOF) {
+  while ((i = getopt(argc, argv, "af:ns:NTV")) != EOF) {
     switch (i) {
     case 'V':
       printf("%s (%s, build %s)\n", mdbx_version.git.describe,
              mdbx_version.git.datetime, mdbx_build.datetime);
       exit(EXIT_SUCCESS);
+      break;
+    case 'a':
+      append = 1;
       break;
     case 'f':
       if (freopen(optarg, "r", stdin) == NULL) {
@@ -381,6 +393,7 @@ int main(int argc, char *argv[]) {
   dbuf.iov_len = 4096;
   dbuf.iov_base = mdbx_malloc(dbuf.iov_len);
 
+  /* read first header for mapsize= */
   if (!(mode & NOHDR))
     readhdr();
 
@@ -419,16 +432,16 @@ int main(int argc, char *argv[]) {
   }
 
   kbuf.iov_len = mdbx_env_get_maxkeysize(env) * 2 + 2;
-  kbuf.iov_base = mdbx_malloc(kbuf.iov_len);
+  kbuf.iov_base = malloc(kbuf.iov_len * 2);
+  k0buf.iov_len = kbuf.iov_len;
+  k0buf.iov_base = (char *)kbuf.iov_base + kbuf.iov_len;
+  prevk.iov_base = k0buf.iov_base;
 
   while (!Eof) {
     if (user_break) {
       rc = MDBX_EINTR;
       break;
     }
-
-    MDBX_val key, data;
-    int batch = 0;
 
     rc = mdbx_txn_begin(env, NULL, 0, &txn);
     if (rc) {
@@ -437,7 +450,9 @@ int main(int argc, char *argv[]) {
       goto env_close;
     }
 
-    rc = mdbx_dbi_open(txn, subname, dbi_flags | MDBX_CREATE, &dbi);
+    rc = mdbx_dbi_open_ex(txn, subname, dbi_flags | MDBX_CREATE, &dbi,
+                          append ? anyway_greater : NULL,
+                          append ? anyway_greater : NULL);
     if (rc) {
       fprintf(stderr, "mdbx_open failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto txn_abort;
@@ -450,11 +465,15 @@ int main(int argc, char *argv[]) {
       goto txn_abort;
     }
 
+    int batch = 0;
+    prevk.iov_len = 0;
     while (1) {
+      MDBX_val key;
       rc = readline(&key, &kbuf);
       if (rc) /* rc == EOF */
         break;
 
+      MDBX_val data;
       rc = readline(&data, &dbuf);
       if (rc) {
         fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n",
@@ -462,7 +481,18 @@ int main(int argc, char *argv[]) {
         goto txn_abort;
       }
 
-      rc = mdbx_cursor_put(mc, &key, &data, putflags);
+      int appflag = 0;
+      if (append) {
+        appflag = MDBX_APPEND;
+        if (dbi_flags & MDBX_DUPSORT) {
+          if (prevk.iov_len == key.iov_len &&
+              memcmp(prevk.iov_base, key.iov_base, key.iov_len) == 0)
+            appflag = MDBX_CURRENT | MDBX_APPENDDUP;
+          else
+            memcpy(prevk.iov_base, key.iov_base, prevk.iov_len = key.iov_len);
+        }
+      }
+      rc = mdbx_cursor_put(mc, &key, &data, putflags | appflag);
       if (rc == MDBX_KEYEXIST && putflags)
         continue;
       if (rc) {
@@ -501,6 +531,8 @@ int main(int argc, char *argv[]) {
       goto env_close;
     }
     mdbx_dbi_close(env, dbi);
+
+    /* try read next header */
     if (!(mode & NOHDR))
       readhdr();
   }
