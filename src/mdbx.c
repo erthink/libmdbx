@@ -5127,7 +5127,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
 
     /* LY: check and silently put mm_geo.now into [geo.lower...geo.upper].
      *
-     * Copy-with-compaction by previous version of libmfbx could produce DB-file
+     * Copy-with-compaction by previous version of libmdbx could produce DB-file
      * less than meta.geo.lower bound, in case actual filling is low or no data
      * at all. This is not a problem as there is no damage or loss of data.
      * Therefore it is better not to consider such situation as an error, but
