@@ -431,7 +431,13 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
-  kbuf.iov_len = mdbx_env_get_maxkeysize(env) * 2 + 2;
+  kbuf.iov_len = mdbx_env_get_maxkeysize(env);
+  if (kbuf.iov_len >= SIZE_MAX / 4) {
+    fprintf(stderr, "mdbx_env_get_maxkeysize failed, returns %zu\n",
+            kbuf.iov_len);
+    goto env_close;
+  }
+  kbuf.iov_len = (kbuf.iov_len + 1) * 2;
   kbuf.iov_base = malloc(kbuf.iov_len * 2);
   k0buf.iov_len = kbuf.iov_len;
   k0buf.iov_base = (char *)kbuf.iov_base + kbuf.iov_len;
