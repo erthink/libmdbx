@@ -685,8 +685,7 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
  *
  * For more info about of a corresponding fdatasync() bug
  * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-#if _POSIX_C_SOURCE >= 199309L || _XOPEN_SOURCE >= 500 ||                      \
-    defined(_POSIX_SYNCHRONIZED_IO)
+#if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
     if (!filesize_changed && fdatasync(fd) == 0)
       return MDBX_SUCCESS;
 #else
