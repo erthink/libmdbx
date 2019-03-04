@@ -153,8 +153,10 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 
 /*----------------------------------------------------------------------------*/
 
-#ifndef _MSC_VER
-/* Prototype should match libc runtime. ISO POSIX (2003) & LSB 3.1 */
+#if !defined(_MSC_VER) &&                                                      \
+    /* workaround for avoid musl libc wrong prototype */ (                     \
+        defined(__GLIBC__) || defined(__GNU_LIBRARY__))
+/* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
 __nothrow __noreturn void __assert_fail(const char *assertion, const char *file,
                                         unsigned line, const char *function);
 #endif /* _MSC_VER */
