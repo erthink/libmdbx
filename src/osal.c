@@ -674,29 +674,26 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
   (void)filesize_changed;
   return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
 #else
-  for (;;) {
-/* LY: It is no reason to use fdatasync() here, even in case
- * no such bug in a kernel. Because "no-bug" mean that a kernel
- * internally do nearly the same, e.g. fdatasync() == fsync()
- * when no-kernel-bug and file size was changed.
- *
- * So, this code is always safe and without appreciable
- * performance degradation.
- *
- * For more info about of a corresponding fdatasync() bug
- * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
+  int rc;
+  do {
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
-    if (!filesize_changed && fdatasync(fd) == 0)
-      return MDBX_SUCCESS;
+    /* LY: This code is always safe and without appreciable performance
+     * degradation, even on a kernel with fdatasync's bug.
+     *
+     * For more info about of a corresponding fdatasync() bug
+     * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
+    if (!filesize_changed) {
+      if (fdatasync(fd) == 0)
+        return MDBX_SUCCESS;
+    } else
 #else
     (void)filesize_changed;
 #endif
-    if (fsync(fd) == 0)
+        if (fsync(fd) == 0)
       return MDBX_SUCCESS;
-    int rc = errno;
-    if (rc != EINTR)
-      return rc;
-  }
+    rc = errno;
+  } while (rc == EINTR);
+  return rc;
 #endif
 }
 
