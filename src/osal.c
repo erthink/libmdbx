@@ -673,8 +673,7 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)filesize_changed;
   return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
-#elif __GLIBC_PREREQ(2, 16) || _BSD_SOURCE || _XOPEN_SOURCE ||                 \
-    (__GLIBC_PREREQ(2, 8) && _POSIX_C_SOURCE >= 200112L)
+#else
   for (;;) {
 /* LY: It is no reason to use fdatasync() here, even in case
  * no such bug in a kernel. Because "no-bug" mean that a kernel
@@ -699,8 +698,6 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
     if (rc != EINTR)
       return rc;
   }
-#else
-#error FIXME
 #endif
 }
 
