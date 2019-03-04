@@ -29,6 +29,12 @@
 #ifndef _GNU_SOURCE
 #   define _GNU_SOURCE 1
 #endif
+#ifndef _POSIX_C_SOURCE
+#   define _POSIX_C_SOURCE 200112L
+#endif
+#ifndef _XOPEN_SOURCE
+#   define _XOPEN_SOURCE 500
+#endif
 #ifndef _FILE_OFFSET_BITS
 #   define _FILE_OFFSET_BITS 64
 #endif
