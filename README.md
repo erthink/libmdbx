@@ -170,30 +170,18 @@ regular maintenance. Backups can be made on the fly on working DB
 Improvements over LMDB
 ======================
 
-1. `mdbx_chk` tool for DB integrity check.
-
-2. Automatic dynamic DB size management according to the parameters
-specified by `mdbx_env_set_geometry()` function. Including including
+1. Automatic dynamic DB size management according to the parameters
+specified by `mdbx_env_set_geometry()` function. Including
 growth step and truncation threshold, as well as the choice of page
 size.
 
-3. Automatic returning of freed pages into unallocated space at the end
-of database file with optionally automatic shrinking it. This reduces
+2. Automatic returning of freed pages into unallocated space at the end
+of database file, with optionally automatic shrinking it. This reduces
 amount of pages resides in RAM and circulated in disk I/O. In fact
 _libmdbx_ constantly performs DB compactification, without spending
 additional resources for that.
 
-4. Support for keys and values of zero length, including sorted
-duplicates.
-
-5. Ability to assign up to 3 markers to commiting transaction with
-`mdbx_canary_put()` and then get them in read transaction by
-`mdbx_canary_get()`.
-
-6. Ability to update or delete record and get previous value via
-`mdbx_replace()` Also can update specific multi-value.
-
-7. `LIFO RECLAIM` mode:
+3. `LIFO RECLAIM` mode:
 
     The newest pages are picked for reuse instead of the oldest. This allows
     to minimize reclaim loop and make it execution time independent of total
@@ -204,9 +192,25 @@ duplicates.
     [BBWC](https://en.wikipedia.org/wiki/Disk_buffer#Write_acceleration)
     this may greatly improve write performance.
 
-8. Sequence generation via `mdbx_dbi_sequence()`.
+4. Fast estimation of range query result size via functions `mdbx_estimate_range()`,
+`mdbx_estimate_move()` and `mdbx_estimate_distance()`. E.g. for selection the
+optimal query execution plan.
 
-9. `OOM-KICK` callback.
+5. `mdbx_chk` tool for DB integrity check.
+
+6. Support for keys and values of zero length, including sorted
+duplicates.
+
+7. Ability to assign up to 3 markers to commiting transaction with
+`mdbx_canary_put()` and then get them in read transaction by
+`mdbx_canary_get()`.
+
+8. Ability to update or delete record and get previous value via
+`mdbx_replace()`. Also can update specific multi-value.
+
+9. Sequence generation via `mdbx_dbi_sequence()`.
+
+10. `OOM-KICK` callback.
 
     `mdbx_env_set_oomfunc()` allows to set a callback, which will be called
     in the event of DB space exhausting during long-time read transaction in
@@ -224,75 +228,75 @@ duplicates.
 
     * abort current write transaction with returning error code.
 
-10. Ability to open DB in exclusive mode with `MDBX_EXCLUSIVE` flag.
+11. Ability to open DB in exclusive mode with `MDBX_EXCLUSIVE` flag.
 
-11. Ability to get how far current read-only snapshot is from latest
+12. Ability to get how far current read-only snapshot is from latest
 version of the DB by `mdbx_txn_straggler()`.
 
-12. Ability to explicitly request update of present record without
+13. Ability to explicitly request update of present record without
 creating new record. Implemented as `MDBX_CURRENT` flag for
 `mdbx_put()`.
 
-13. Fixed `mdbx_cursor_count()`, which returns correct count of
+14. Fixed `mdbx_cursor_count()`, which returns correct count of
 duplicated for all table types and any cursor position.
 
-14. `mdbx_env_info()` to getting additional info, including number of
+15. `mdbx_env_info()` to getting additional info, including number of
 the oldest snapshot of DB, which is used by one of the readers.
 
-15. `mdbx_del()` doesn't ignore additional argument (specifier) `data`
+16. `mdbx_del()` doesn't ignore additional argument (specifier) `data`
 for tables without duplicates (without flag `MDBX_DUPSORT`), if `data`
 is not null then always uses it to verify record, which is being
 deleted.
 
-16. Ability to open dbi-table with simultaneous setup of comparators for
+17. Ability to open dbi-table with simultaneous setup of comparators for
 keys and values, via `mdbx_dbi_open_ex()`.
 
-17. `mdbx_is_dirty()`to find out if key or value is on dirty page, that
+18. `mdbx_is_dirty()`to find out if key or value is on dirty page, that
 useful to avoid copy-out before updates.
 
-18. Correct update of current record in `MDBX_CURRENT` mode of
+19. Correct update of current record in `MDBX_CURRENT` mode of
 `mdbx_cursor_put()`, including sorted duplicated.
 
-19. Check if there is a row with data after current cursor position via
+20. Check if there is a row with data after current cursor position via
 `mdbx_cursor_eof()`.
 
-20. Additional error code `MDBX_EMULTIVAL`, which is returned by
+21. Additional error code `MDBX_EMULTIVAL`, which is returned by
 `mdbx_put()` and `mdbx_replace()` in case is ambiguous update or delete.
 
-21. Ability to get value by key and duplicates count by `mdbx_get_ex()`.
+22. Ability to get value by key and duplicates count by `mdbx_get_ex()`.
 
-22. Functions `mdbx_cursor_on_first()` and `mdbx_cursor_on_last()`,
+23. Functions `mdbx_cursor_on_first()` and `mdbx_cursor_on_last()`,
 which allows to know if cursor is currently on first or last position
 respectively.
 
-23. Automatic creation of synchronization points (flush changes to
+24. Automatic creation of synchronization points (flush changes to
 persistent storage) when changes reach set threshold (threshold can be
 set by `mdbx_env_set_syncbytes()`).
 
-24. Control over debugging and receiving of debugging messages via
+25. Control over debugging and receiving of debugging messages via
 `mdbx_setup_debug()`.
 
-25. Function `mdbx_env_pgwalk()` for page-walking all pages in DB.
+26. Function `mdbx_env_pgwalk()` for page-walking all pages in DB.
 
-26. Three meta-pages instead of two, this allows to guarantee
+27. Three meta-pages instead of two, this allows to guarantee
 consistently update weak sync-points without risking to corrupt last
 steady sync-point.
 
-27. Guarantee of DB integrity in `WRITEMAP+MAPSYNC` mode:
+28. Guarantee of DB integrity in `WRITEMAP+MAPSYNC` mode:
   > Current _libmdbx_ gives a choice of safe async-write mode (default)
   > and `UTTERLY_NOSYNC` mode which may result in full
   > DB corruption during system crash as with LMDB. For details see
   > [Data safety in async-write mode](#data-safety-in-async-write-mode).
 
-28. Ability to close DB in "dirty" state (without data flush and
+29. Ability to close DB in "dirty" state (without data flush and
 creation of steady synchronization point) via `mdbx_env_close_ex()`.
 
-29. If read transaction is aborted via `mdbx_txn_abort()` or
+30. If read transaction is aborted via `mdbx_txn_abort()` or
 `mdbx_txn_reset()` then DBI-handles, which were opened in it, aren't
 closed or deleted. This allows to avoid several types of hard-to-debug
 errors.
 
-30. All cursors in all read and write transactions can be reused by
+31. All cursors in all read and write transactions can be reused by
 `mdbx_cursor_renew()` and MUST be freed explicitly.
   > ## Caution, please pay attention!
   >
@@ -594,11 +598,11 @@ $ objdump -f -h -j .text libmdbx.so
 libmdbx.so:     file format elf64-x86-64
 architecture: i386:x86-64, flags 0x00000150:
 HAS_SYMS, DYNAMIC, D_PAGED
-start address 0x000030e0
+start address 0x0000000000003870
 
 Sections:
 Idx Name          Size      VMA               LMA               File off  Algn
- 11 .text         00014d84  00000000000030e0  00000000000030e0  000030e0  2**4
+ 11 .text         000173d4  0000000000003870  0000000000003870  00003870  2**4
                   CONTENTS, ALLOC, LOAD, READONLY, CODE
 
 ```
