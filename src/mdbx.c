@@ -13423,7 +13423,6 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     return MDBX_SUCCESS;
   }
 
-  MDBX_val origin_begin_key, origin_begin_data;
   if (!begin_key) {
     if (unlikely(!end_key)) {
       /* LY: FIRST..LAST case */
@@ -13432,42 +13431,35 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     }
     MDBX_val stub = {0, 0};
     rc = mdbx_cursor_first(&begin.outer, &stub, &stub);
+  } else if (end_key && !begin_data && !end_data &&
+             (begin_key == end_key || mdbx_is_samedata(begin_key, end_key))) {
+    /* LY: single key case */
+    int exact = 0;
+    rc = mdbx_cursor_set(&begin.outer, begin_key, NULL, MDBX_SET, &exact);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      *size_items = 0;
+      return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+    }
+    *size_items = 1;
+    if (begin.outer.mc_xcursor != NULL) {
+      MDBX_node *leaf = NODEPTR(begin.outer.mc_pg[begin.outer.mc_top],
+                                begin.outer.mc_ki[begin.outer.mc_top]);
+      if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+        /* LY: return the number of duplicates for given key */
+        mdbx_tassert(txn, begin.outer.mc_xcursor == &begin.inner &&
+                              (begin.inner.mx_cursor.mc_flags & C_INITIALIZED));
+        *size_items =
+            (sizeof(*size_items) >= sizeof(begin.inner.mx_db.md_entries) ||
+             begin.inner.mx_db.md_entries <= SIZE_MAX)
+                ? (size_t)begin.inner.mx_db.md_entries
+                : SIZE_MAX;
+      }
+    }
+    return MDBX_SUCCESS;
   } else {
-    if (end_key && !begin_data && !end_data &&
-        (begin_key == end_key || mdbx_is_samedata(begin_key, end_key))) {
-      /* LY: single key case */
-      int exact = 0;
-      rc = mdbx_cursor_set(&begin.outer, begin_key, NULL, MDBX_SET, &exact);
-      if (unlikely(rc != MDBX_SUCCESS)) {
-        *size_items = 0;
-        return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
-      }
-      *size_items = 1;
-      if (begin.outer.mc_xcursor != NULL) {
-        MDBX_node *leaf = NODEPTR(begin.outer.mc_pg[begin.outer.mc_top],
-                                  begin.outer.mc_ki[begin.outer.mc_top]);
-        if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
-          /* LY: return the number of duplicates for given key */
-          mdbx_tassert(txn,
-                       begin.outer.mc_xcursor == &begin.inner &&
-                           (begin.inner.mx_cursor.mc_flags & C_INITIALIZED));
-          *size_items =
-              (sizeof(*size_items) >= sizeof(begin.inner.mx_db.md_entries) ||
-               begin.inner.mx_db.md_entries <= SIZE_MAX)
-                  ? (size_t)begin.inner.mx_db.md_entries
-                  : SIZE_MAX;
-        }
-      }
-      return MDBX_SUCCESS;
-    }
-
-    MDBX_cursor_op begin_op = MDBX_SET_RANGE;
-    if (begin_data) {
-      begin_op = MDBX_GET_BOTH_RANGE;
-      origin_begin_data = *begin_data;
-    }
-    origin_begin_key = *begin_key;
-    rc = mdbx_cursor_set(&begin.outer, begin_key, begin_data, begin_op, NULL);
+    rc = mdbx_cursor_set(&begin.outer, begin_key, begin_data,
+                         begin_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE,
+                         NULL);
   }
 
   if (unlikely(rc != MDBX_SUCCESS)) {
@@ -13479,18 +13471,12 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
   rc = mdbx_cursor_init(&end.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  MDBX_val origin_end_key, origin_end_data;
   if (!end_key) {
     MDBX_val stub = {0, 0};
     rc = mdbx_cursor_last(&end.outer, &stub, &stub);
   } else {
-    MDBX_cursor_op end_op = MDBX_SET_RANGE;
-    if (end_data) {
-      end_op = MDBX_GET_BOTH_RANGE;
-      origin_end_data = *end_data;
-    }
-    origin_end_key = *end_key;
-    rc = mdbx_cursor_set(&end.outer, end_key, end_data, end_op, NULL);
+    rc = mdbx_cursor_set(&end.outer, end_key, end_data,
+                         end_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE, NULL);
   }
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_NOTFOUND || !(end.outer.mc_flags & C_INITIALIZED))
@@ -13502,6 +13488,13 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     return rc;
   assert(*size_items >= -(ptrdiff_t)begin.outer.mc_db->md_entries &&
          *size_items <= (ptrdiff_t)begin.outer.mc_db->md_entries);
+
+#if 0 /* LY: Was decided to returns as-is (i.e. negative) the estimation       \
+       * results for an inverted ranges. */
+
+  /* Commit 8ddfd1f34ad7cf7a3c4aa75d2e248ca7e639ed63
+     Change-Id: If59eccf7311123ab6384c4b93f9b1fed5a0a10d1 */
+
   if (*size_items < 0) {
     /* LY: inverted range case */
     *size_items += (ptrdiff_t)begin.outer.mc_db->md_entries;
@@ -13515,9 +13508,10 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
       *size_items = (ptrdiff_t)begin.outer.mc_db->md_entries;
     }
   }
-
   assert(*size_items >= 0 &&
          *size_items <= (ptrdiff_t)begin.outer.mc_db->md_entries);
+#endif
+
   return MDBX_SUCCESS;
 }
 
