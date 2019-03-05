@@ -5723,6 +5723,11 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     }
   }
 
+  if (pagesize == 0)
+    pagesize = MIN_PAGESIZE;
+  else if (pagesize == INTPTR_MAX)
+    pagesize = MAX_PAGESIZE;
+
   if (pagesize < (intptr_t)MIN_PAGESIZE || pagesize > (intptr_t)MAX_PAGESIZE ||
       !mdbx_is_power2(pagesize)) {
     rc = MDBX_EINVAL;
