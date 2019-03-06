@@ -13180,79 +13180,80 @@ struct diff_result {
   int root_nkeys;
 };
 
-static int cursor_diff(const MDBX_cursor *const __restrict first,
-                       const MDBX_cursor *const __restrict last,
-                       struct diff_result *const __restrict dr) {
-  dr->root_nkeys = 0;
-  dr->level = 0;
-  dr->diff = 0;
+/* calculates: r = x - y */
+__hot static int cursor_diff(const MDBX_cursor *const __restrict x,
+                             const MDBX_cursor *const __restrict y,
+                             struct diff_result *const __restrict r) {
+  r->diff = 0;
+  r->level = 0;
+  r->root_nkeys = 0;
 
-  if (unlikely(first->mc_signature != MDBX_MC_SIGNATURE ||
-               last->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(y->mc_signature != MDBX_MC_SIGNATURE ||
+               x->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(first->mc_dbi != last->mc_dbi))
+  if (unlikely(y->mc_dbi != x->mc_dbi))
     return MDBX_EINVAL;
 
-  if (unlikely(!(first->mc_flags & last->mc_flags & C_INITIALIZED)))
+  if (unlikely(!(y->mc_flags & x->mc_flags & C_INITIALIZED)))
     return MDBX_ENODATA;
 
-  while (likely(dr->level < first->mc_snum && dr->level < last->mc_snum)) {
-    if (unlikely(first->mc_pg[dr->level] != last->mc_pg[dr->level]))
+  while (likely(r->level < y->mc_snum && r->level < x->mc_snum)) {
+    if (unlikely(y->mc_pg[r->level] != x->mc_pg[r->level]))
       return MDBX_PROBLEM;
 
-    int nkeys = NUMKEYS(first->mc_pg[dr->level]);
+    int nkeys = NUMKEYS(y->mc_pg[r->level]);
     assert(nkeys > 0);
-    if (dr->level == 0)
-      dr->root_nkeys = nkeys;
+    if (r->level == 0)
+      r->root_nkeys = nkeys;
 
-    int max_ki = nkeys - 1;
-    int last_ki = last->mc_ki[dr->level];
-    int first_ki = first->mc_ki[dr->level];
-    dr->diff = ((last_ki < max_ki) ? last_ki : max_ki) -
-               ((first_ki < max_ki) ? first_ki : max_ki);
-    if (dr->diff == 0) {
-      dr->level += 1;
+    const int limit_ki = nkeys - 1;
+    const int x_ki = x->mc_ki[r->level];
+    const int y_ki = y->mc_ki[r->level];
+    r->diff = ((x_ki < limit_ki) ? x_ki : limit_ki) -
+              ((y_ki < limit_ki) ? y_ki : limit_ki);
+    if (r->diff == 0) {
+      r->level += 1;
       continue;
     }
 
-    while (unlikely(dr->diff == 1) && likely(dr->level + 1 < first->mc_snum &&
-                                             dr->level + 1 < last->mc_snum)) {
-      dr->level += 1;
+    while (unlikely(r->diff == 1) &&
+           likely(r->level + 1 < y->mc_snum && r->level + 1 < x->mc_snum)) {
+      r->level += 1;
       /*   DB'PAGEs: 0------------------>MAX
        *
-       *    CURSORs:   first < last
+       *    CURSORs:       y < x
        *  STACK[i ]:         |
-       *  STACK[+1]:  ...f++N|0++l...
+       *  STACK[+1]:  ...y++N|0++x...
        */
-      nkeys = NUMKEYS(first->mc_pg[dr->level]);
-      dr->diff = (nkeys - first->mc_ki[dr->level]) + last->mc_ki[dr->level];
-      assert(dr->diff > 0);
+      nkeys = NUMKEYS(y->mc_pg[r->level]);
+      r->diff = (nkeys - y->mc_ki[r->level]) + x->mc_ki[r->level];
+      assert(r->diff > 0);
     }
 
-    while (unlikely(dr->diff == -1) && likely(dr->level + 1 < first->mc_snum &&
-                                              dr->level + 1 < last->mc_snum)) {
-      dr->level += 1;
+    while (unlikely(r->diff == -1) &&
+           likely(r->level + 1 < y->mc_snum && r->level + 1 < x->mc_snum)) {
+      r->level += 1;
       /*   DB'PAGEs: 0------------------>MAX
        *
-       *    CURSORs:    last < first
+       *    CURSORs:       x < y
        *  STACK[i ]:         |
-       *  STACK[+1]:  ...l--N|0--f...
+       *  STACK[+1]:  ...x--N|0--y...
        */
-      nkeys = NUMKEYS(last->mc_pg[dr->level]);
-      dr->diff = -(nkeys - last->mc_ki[dr->level]) - first->mc_ki[dr->level];
-      assert(dr->diff < 0);
+      nkeys = NUMKEYS(x->mc_pg[r->level]);
+      r->diff = -(nkeys - x->mc_ki[r->level]) - y->mc_ki[r->level];
+      assert(r->diff < 0);
     }
 
     return MDBX_SUCCESS;
   }
 
-  dr->diff = mdbx_cmp2int(last->mc_flags & C_EOF, first->mc_flags & C_EOF);
+  r->diff = mdbx_cmp2int(x->mc_flags & C_EOF, y->mc_flags & C_EOF);
   return MDBX_SUCCESS;
 }
 
-static ptrdiff_t estimate(const MDBX_db *db,
-                          struct diff_result *const __restrict dr) {
+__hot static ptrdiff_t estimate(const MDBX_db *db,
+                                struct diff_result *const __restrict dr) {
   /*        root: branch-page    => scale = leaf-factor * branch-factor(N-1)
    *     level-1: branch-page(s) => scale = leaf-factor * branch-factor^2
    *     level-2: branch-page(s) => scale = leaf-factor * branch-factor
@@ -13273,9 +13274,9 @@ static ptrdiff_t estimate(const MDBX_db *db,
     return (ptrdiff_t)db->md_entries * dr->diff / (ptrdiff_t)dr->root_nkeys;
   }
 
-  /* average_branch_fillfactor = total(branch_entries) / branch_pages
-   * total(branch_entries) = leaf_pages + branch_pages - 1 (root page) */
-  const size_t log2_fixedpoint = 3;
+  /* average_branchpage_fillfactor = total(branch_entries) / branch_pages
+     total(branch_entries) = leaf_pages + branch_pages - 1 (root page) */
+  const size_t log2_fixedpoint = sizeof(size_t) - 1;
   const size_t half = UINT64_C(1) << (log2_fixedpoint - 1);
   const size_t factor =
       ((db->md_leaf_pages + db->md_branch_pages - 1) << log2_fixedpoint) /
@@ -13314,14 +13315,15 @@ static ptrdiff_t estimate(const MDBX_db *db,
   }
 }
 
-int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *last,
-                           ptrdiff_t *distance_items) {
+__hot int mdbx_estimate_distance(const MDBX_cursor *first,
+                                 const MDBX_cursor *last,
+                                 ptrdiff_t *distance_items) {
   if (unlikely(first == NULL || last == NULL || distance_items == NULL))
     return MDBX_EINVAL;
 
   *distance_items = 0;
   struct diff_result dr;
-  int rc = cursor_diff(first, last, &dr);
+  int rc = cursor_diff(last, first, &dr);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
