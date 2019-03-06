@@ -406,7 +406,7 @@ __cold void mdbx_rthc_global_init(void) {
 }
 
 /* dtor called for thread, i.e. for all mdbx's environment objects */
-void mdbx_rthc_thread_dtor(void *ptr) {
+__cold void mdbx_rthc_thread_dtor(void *ptr) {
   mdbx_rthc_lock();
   mdbx_trace(">> pid %d, thread 0x%" PRIxPTR ", rthc %p", mdbx_getpid(),
              (uintptr_t)mdbx_thread_self(), ptr);
@@ -2214,8 +2214,8 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
   return MDBX_SUCCESS;
 }
 
-static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
-                          const pgno_t limit_pgno) {
+__cold static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
+                                 const pgno_t limit_pgno) {
 #ifdef USE_VALGRIND
   const size_t prev_mapsize = env->me_mapsize;
   void *const prev_mapaddr = env->me_map;
@@ -2770,7 +2770,8 @@ done:
  * [in] dst page to copy into
  * [in] src page to copy from
  * [in] psize size of a page */
-static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, unsigned psize) {
+__hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
+                                 unsigned psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
   STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 42);
   enum { Align = sizeof(pgno_t) };
@@ -2797,8 +2798,9 @@ static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, unsigned psize) {
  * [in] mp    the page being referenced. It must not be dirty.
  * [out] ret  the writable page, if any.
  *            ret is unchanged if mp wasn't spilled. */
-static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
-                                                 MDBX_page **ret) {
+__hot static int __must_check_result mdbx_page_unspill(MDBX_txn *txn,
+                                                       MDBX_page *mp,
+                                                       MDBX_page **ret) {
   MDBX_env *env = txn->mt_env;
   const MDBX_txn *tx2;
   unsigned x;
@@ -2856,7 +2858,7 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
  * [in] mc  cursor pointing to the page to be touched
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_touch(MDBX_cursor *mc) {
+__hot static int mdbx_page_touch(MDBX_cursor *mc) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top], *np;
   MDBX_txn *txn = mc->mc_txn;
   MDBX_cursor *m2, *m3;
@@ -2963,7 +2965,7 @@ fail:
   return rc;
 }
 
-static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
+__cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -3034,7 +3036,7 @@ static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_env_sync(MDBX_env *env, int force) {
+__cold int mdbx_env_sync(MDBX_env *env, int force) {
   return mdbx_env_sync_ex(env, force, false);
 }
 
@@ -5643,11 +5645,10 @@ static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
   return MDBX_SUCCESS;
 }
 
-LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
-                                      intptr_t size_now, intptr_t size_upper,
-                                      intptr_t growth_step,
-                                      intptr_t shrink_threshold,
-                                      intptr_t pagesize) {
+__cold LIBMDBX_API int
+mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
+                      intptr_t size_upper, intptr_t growth_step,
+                      intptr_t shrink_threshold, intptr_t pagesize) {
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -6720,7 +6721,9 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   return rc;
 }
 
-int mdbx_env_close(MDBX_env *env) { return mdbx_env_close_ex(env, false); }
+__cold int mdbx_env_close(MDBX_env *env) {
+  return mdbx_env_close_ex(env, false);
+}
 
 /* Compare two items pointing at aligned unsigned int's. */
 static int __hot mdbx_cmp_int_ai(const MDBX_val *a, const MDBX_val *b) {
@@ -7002,8 +7005,8 @@ static int mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp) {
  *            0=mapped page.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
-                         int *lvl) {
+__hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
+                               int *lvl) {
   MDBX_txn *txn = mc->mc_txn;
   MDBX_env *env = txn->mt_env;
   MDBX_page *p = NULL;
@@ -7071,7 +7074,8 @@ done:
 
 /* Finish mdbx_page_search() / mdbx_page_search_lowest().
  * The cursor is at the root page, set up the rest of it. */
-static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key, int flags) {
+__hot static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key,
+                                       int flags) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   int rc;
   DKBUF;
@@ -7154,7 +7158,7 @@ static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key, int flags) {
  * before calling mdbx_page_search_root(), because the callers
  * are all in situations where the current page is known to
  * be underfilled. */
-static int mdbx_page_search_lowest(MDBX_cursor *mc) {
+__hot static int mdbx_page_search_lowest(MDBX_cursor *mc) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   mdbx_cassert(mc, IS_BRANCH(mp));
   MDBX_node *node = NODEPTR(mp, 0);
@@ -7183,7 +7187,7 @@ static int mdbx_page_search_lowest(MDBX_cursor *mc) {
  *              lookups.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
+__hot static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
   int rc;
   pgno_t root;
 
@@ -7698,8 +7702,8 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 }
 
 /* Set the cursor on a specific data item. */
-static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                           MDBX_cursor_op op, int *exactp) {
+__hot static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                                 MDBX_cursor_op op, int *exactp) {
   int rc;
   MDBX_page *mp;
   MDBX_node *leaf = NULL;
