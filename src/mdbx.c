@@ -13254,7 +13254,7 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x,
 
 __hot static ptrdiff_t estimate(const MDBX_db *db,
                                 struct diff_result *const __restrict dr) {
-  /*        root: branch-page    => scale = leaf-factor * branch-factor(N-1)
+  /*        root: branch-page    => scale = leaf-factor * branch-factor^(N-1)
    *     level-1: branch-page(s) => scale = leaf-factor * branch-factor^2
    *     level-2: branch-page(s) => scale = leaf-factor * branch-factor
    *     level-N: branch-page(s) => scale = leaf-factor
