@@ -1737,6 +1737,7 @@ LIBMDBX_API int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key,
  * [out] distance_items   A pointer to store range estimation result.
  *
  * Returns A non-zero error value on failure and 0 on success. */
+#define MDBX_EPSILON ((MDBX_val *)((ptrdiff_t)-1))
 LIBMDBX_API int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi,
                                     MDBX_val *begin_key, MDBX_val *begin_data,
                                     MDBX_val *end_key, MDBX_val *end_data,

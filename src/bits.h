@@ -1155,7 +1155,7 @@ typedef struct MDBX_node {
 #define LEAF2KEY(p, i, ks) ((char *)(p) + PAGEHDRSZ + ((i) * (ks)))
 
 /* Set the node's key into keyptr, if requested. */
-#define MDBX_GET_KEY(node, keyptr)                                             \
+#define MDBX_GET_MAYNULL_KEYPTR(node, keyptr)                                  \
   do {                                                                         \
     if ((keyptr) != NULL) {                                                    \
       (keyptr)->iov_len = NODEKSZ(node);                                       \
@@ -1164,7 +1164,7 @@ typedef struct MDBX_node {
   } while (0)
 
 /* Set the node's key into key. */
-#define MDBX_GET_KEY2(node, key)                                               \
+#define MDBX_GET_KEYVALUE(node, key)                                           \
   do {                                                                         \
     key.iov_len = NODEKSZ(node);                                               \
     key.iov_base = NODEKEY(node);                                              \
