@@ -13456,7 +13456,6 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
                  : rc;
     }
   } else {
-    bool step_backward = false;
     if (unlikely(begin_key == MDBX_EPSILON)) {
       if (end_key == NULL) {
         /* LY: -epsilon..LAST case */
@@ -13469,7 +13468,6 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
       /* LY: -epsilon..value case */
       assert(end_key != MDBX_EPSILON);
       begin_key = end_key;
-      step_backward = true;
     } else if (unlikely(end_key == MDBX_EPSILON)) {
       /* LY: value..+epsilon case */
       assert(begin_key != MDBX_EPSILON);
@@ -13480,8 +13478,6 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
       /* LY: single key case */
       int exact = 0;
       rc = mdbx_cursor_set(&begin.outer, begin_key, NULL, MDBX_SET, &exact);
-      if (unlikely(step_backward) && rc == MDBX_SUCCESS)
-        rc = mdbx_cursor_prev(&begin.outer, NULL, NULL, MDBX_PREV_NODUP);
       if (unlikely(rc != MDBX_SUCCESS)) {
         *size_items = 0;
         return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
