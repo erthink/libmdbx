@@ -1177,20 +1177,22 @@ int main(int argc, char *argv[]) {
                   total_page_bytes);
       if (verbose > 2) {
         for (walk_dbi_t *dbi = walk.dbi; dbi < walk.dbi + MAX_DBI && dbi->name;
-             ++dbi) {
-          uint64_t dbi_bytes = dbi->pages.total * envstat.ms_psize;
-          print("     %s: subtotal %" PRIu64 " bytes (%.1f%%),"
-                " payload %" PRIu64 " (%.1f%%), unused %" PRIu64 " (%.1f%%)",
-                dbi->name, dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
-                dbi->payload_bytes, dbi->payload_bytes * 100.0 / dbi_bytes,
-                dbi_bytes - dbi->payload_bytes,
-                (dbi_bytes - dbi->payload_bytes) * 100.0 / dbi_bytes);
-          if (dbi->pages.empty)
-            print(", %" PRIu64 " empty pages", dbi->pages.empty);
-          if (dbi->lost_bytes)
-            print(", %" PRIu64 " bytes lost", dbi->lost_bytes);
-          print("\n");
-        }
+             ++dbi)
+          if (dbi->pages.total) {
+            uint64_t dbi_bytes = dbi->pages.total * envstat.ms_psize;
+            print("     %s: subtotal %" PRIu64 " bytes (%.1f%%),"
+                  " payload %" PRIu64 " (%.1f%%), unused %" PRIu64 " (%.1f%%)",
+                  dbi->name, dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
+                  dbi->payload_bytes, dbi->payload_bytes * 100.0 / dbi_bytes,
+                  dbi_bytes - dbi->payload_bytes,
+                  (dbi_bytes - dbi->payload_bytes) * 100.0 / dbi_bytes);
+            if (dbi->pages.empty)
+              print(", %" PRIu64 " empty pages", dbi->pages.empty);
+            if (dbi->lost_bytes)
+              print(", %" PRIu64 " bytes lost", dbi->lost_bytes);
+            print("\n");
+          } else
+            print("     %s: empty\n", dbi->name);
       }
       print(" - summary: average fill %.1f%%",
             walk.total_payload_bytes * 100.0 / total_page_bytes);
