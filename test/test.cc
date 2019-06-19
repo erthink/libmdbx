@@ -322,6 +322,7 @@ bool testcase::setup() {
     return false;
 
   start_timestamp = chrono::now_motonic();
+  nops_completed = 0;
   return true;
 }
 
@@ -492,18 +493,31 @@ bool test_execute(const actor_config &config) {
       break;
     }
 
-    if (!test->setup())
-      log_notice("test setup failed");
-    else if (!test->run())
-      log_notice("test failed");
-    else if (!test->teardown())
-      log_notice("test teardown failed");
-    else {
-      log_info("test successed");
-      return true;
-    }
+    size_t iter = 0;
+    do {
+      iter++;
+      if (!test->setup()) {
+        log_notice("test setup failed");
+        return false;
+      } else if (!test->run()) {
+        log_notice("test failed");
+        return false;
+      } else if (!test->teardown()) {
+        log_notice("test teardown failed");
+        return false;
+      } else {
+        if (config.params.nrepeat == 1)
+          log_info("test successed");
+        else if (config.params.nrepeat == 1)
+          log_info("test successed (iteration %zi of %zi)", iter,
+                   size_t(config.params.nrepeat));
+        else
+          log_info("test successed (iteration %zi)", iter);
+      }
+    } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
+    return true;
   } catch (const std::exception &pipets) {
     failure("***** Exception: %s *****", pipets.what());
+    return false;
   }
-  return false;
 }

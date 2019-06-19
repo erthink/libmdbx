@@ -37,7 +37,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   table_flags = MDBX_DUPSORT;
 
   size_lower = -1;
-  size_now = 1024 * 1024 * ((table_flags & MDBX_DUPSORT) ? 4 : 256);
+  size_now = intptr_t(1024) * 1024 * ((table_flags & MDBX_DUPSORT) ? 4 : 256);
   size_upper = -1;
   shrink_threshold = -1;
   growth_step = -1;
