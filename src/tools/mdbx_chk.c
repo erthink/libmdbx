@@ -269,9 +269,11 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
   walk.pgcount += pgnumber;
 
   const char *pagetype_caption;
+  bool branch = false;
   switch (pagetype) {
   default:
-    problem_add("page", pgno, "unknown page-type", "%u", (unsigned)pagetype);
+    problem_add("page", pgno, "unknown page-type", "type %u, deep %i",
+                (unsigned)pagetype, deep);
     pagetype_caption = "unknown";
     dbi->pages.other += pgnumber;
     break;
@@ -287,6 +289,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
   case MDBX_page_branch:
     pagetype_caption = "branch";
     dbi->pages.branch += pgnumber;
+    branch = true;
     break;
   case MDBX_page_leaf:
     pagetype_caption = "leaf";
@@ -315,6 +318,36 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
       print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR
             ", unused %" PRIiPTR ", deep %i\n",
             dbi->name, header_bytes, payload_bytes, unused_bytes, deep);
+    }
+  }
+
+  if (pgnumber) {
+    bool already_used = false;
+    do {
+      if (pgno >= lastpgno)
+        problem_add("page", pgno, "wrong page-no",
+                    "%s-page: %" PRIu64 " > %" PRIu64 ", deep %i",
+                    pagetype_caption, pgno, lastpgno, deep);
+      else if (walk.pagemap[pgno]) {
+        walk_dbi_t *coll_dbi = &walk.dbi[walk.pagemap[pgno] - 1];
+        problem_add(
+            "page", pgno, (branch && coll_dbi == dbi) ? "loop" : "already used",
+            "%s-page: by %s, deep %i", pagetype_caption, coll_dbi->name, deep);
+        already_used = true;
+      } else {
+        walk.pagemap[pgno] = (short)(dbi - walk.dbi + 1);
+        dbi->pages.total += 1;
+      }
+      ++pgno;
+    } while (--pgnumber);
+
+    if (already_used)
+      return branch ? MDBX_RESULT_TRUE /* avoid infinite loop/recursion */
+                    : MDBX_SUCCESS;
+
+    if (deep > 42) {
+      problem_add("deep", deep, "too large", nullptr);
+      return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
     }
   }
 
@@ -360,23 +393,6 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
       dbi->payload_bytes += payload_bytes + header_bytes;
       walk.total_payload_bytes += payload_bytes + header_bytes;
     }
-  }
-
-  if (pgnumber) {
-    do {
-      if (pgno >= lastpgno)
-        problem_add("page", pgno, "wrong page-no",
-                    "%s-page: %" PRIu64 " > %" PRIu64, pagetype_caption, pgno,
-                    lastpgno);
-      else if (walk.pagemap[pgno])
-        problem_add("page", pgno, "already used", "%s-page: by %s",
-                    pagetype_caption, walk.dbi[walk.pagemap[pgno] - 1].name);
-      else {
-        walk.pagemap[pgno] = (short)(dbi - walk.dbi + 1);
-        dbi->pages.total += 1;
-      }
-      ++pgno;
-    } while (--pgnumber);
   }
 
   return user_break ? MDBX_EINTR : MDBX_SUCCESS;

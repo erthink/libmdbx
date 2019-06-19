@@ -12963,6 +12963,8 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
         rc = mdbx_env_walk(ctx, name, db.md_root, deep + 1);
         if (name != namebuf_onstask)
           mdbx_free(name);
+        if (rc == MDBX_SUCCESS && dbi != MDBX_PGWALK_MAIN)
+          rc = MDBX_RESULT_TRUE;
       } else {
         rc = MDBX_ENOMEM;
       }
@@ -13030,8 +13032,11 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       return MDBX_CORRUPTED;
     }
 
-    if (unlikely(rc))
+    if (unlikely(rc)) {
+      if (rc == MDBX_RESULT_TRUE)
+        break;
       return rc;
+    }
   }
 
   return ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, deep, dbi,
