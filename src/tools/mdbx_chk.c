@@ -642,48 +642,56 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       goto bailout;
     }
 
+    bool bad_key = false;
     if (key.iov_len > maxkeysize) {
       problem_add("entry", record_count, "key length exceeds max-key-size",
                   "%" PRIuPTR " > %" PRIuPTR, key.iov_len, maxkeysize);
+      bad_key = true;
     } else if ((flags & MDBX_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
                key.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong key length",
                   "%" PRIuPTR " != 4or8", key.iov_len);
+      bad_key = true;
     }
 
+    bool bad_data = false;
     if ((flags & MDBX_INTEGERDUP) && data.iov_len != sizeof(uint64_t) &&
         data.iov_len != sizeof(uint32_t)) {
       problem_add("entry", record_count, "wrong data length",
                   "%" PRIuPTR " != 4or8", data.iov_len);
+      bad_data = true;
     }
 
-    if (prev_key.iov_base) {
+    if (prev_key.iov_base && !bad_data) {
       if ((flags & MDBX_DUPFIXED) && prev_data.iov_len != data.iov_len) {
         problem_add("entry", record_count, "different data length",
                     "%" PRIuPTR " != %" PRIuPTR, prev_data.iov_len,
                     data.iov_len);
+        bad_data = true;
       }
 
-      int cmp = mdbx_cmp(txn, dbi_handle, &prev_key, &key);
-      if (cmp == 0) {
-        ++dups;
-        if ((flags & MDBX_DUPSORT) == 0) {
-          problem_add("entry", record_count, "duplicated entries", NULL);
-          if (data.iov_len == prev_data.iov_len &&
-              memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0) {
-            problem_add("entry", record_count, "complete duplicate", NULL);
+      if (!bad_key) {
+        int cmp = mdbx_cmp(txn, dbi_handle, &prev_key, &key);
+        if (cmp == 0) {
+          ++dups;
+          if ((flags & MDBX_DUPSORT) == 0) {
+            problem_add("entry", record_count, "duplicated entries", NULL);
+            if (data.iov_len == prev_data.iov_len &&
+                memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0) {
+              problem_add("entry", record_count, "complete duplicate", NULL);
+            }
+          } else if (!bad_data) {
+            cmp = mdbx_dcmp(txn, dbi_handle, &prev_data, &data);
+            if (cmp == 0) {
+              problem_add("entry", record_count, "complete duplicate", NULL);
+            } else if (cmp > 0 && !ignore_wrong_order) {
+              problem_add("entry", record_count, "wrong order of multi-values",
+                          NULL);
+            }
           }
-        } else {
-          cmp = mdbx_dcmp(txn, dbi_handle, &prev_data, &data);
-          if (cmp == 0) {
-            problem_add("entry", record_count, "complete duplicate", NULL);
-          } else if (cmp > 0 && !ignore_wrong_order) {
-            problem_add("entry", record_count, "wrong order of multi-values",
-                        NULL);
-          }
+        } else if (cmp > 0 && !ignore_wrong_order) {
+          problem_add("entry", record_count, "wrong order of entries", NULL);
         }
-      } else if (cmp > 0 && !ignore_wrong_order) {
-        problem_add("entry", record_count, "wrong order of entries", NULL);
       }
     } else if (verbose) {
       if (flags & MDBX_INTEGERKEY)
@@ -702,8 +710,10 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     key_bytes += key.iov_len;
     data_bytes += data.iov_len;
 
-    prev_key = key;
-    prev_data = data;
+    if (!bad_key)
+      prev_key = key;
+    if (!bad_data)
+      prev_data = data;
     rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT);
   }
   if (rc != MDBX_NOTFOUND)
