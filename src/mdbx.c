@@ -12905,7 +12905,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     payload_size += NODESIZE + NODEKSZ(node);
 
     if (type == MDBX_page_branch) {
-      rc = mdbx_env_walk(ctx, dbi, NODEPGNO(node), deep);
+      rc = mdbx_env_walk(ctx, dbi, NODEPGNO(node), deep + 1);
       if (rc)
         return rc;
       continue;
@@ -13056,15 +13056,16 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_visitor = visitor;
 
   int rc = visitor(
-      0, NUM_METAS, user, -2, "@META", pgno2bytes(txn->mt_env, NUM_METAS),
-      MDBX_page_meta, NUM_METAS, sizeof(MDBX_meta) * NUM_METAS,
-      PAGEHDRSZ * NUM_METAS,
+      0, NUM_METAS, user, 0, MDBX_PGWALK_META,
+      pgno2bytes(txn->mt_env, NUM_METAS), MDBX_page_meta, NUM_METAS,
+      sizeof(MDBX_meta) * NUM_METAS, PAGEHDRSZ * NUM_METAS,
       (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) * NUM_METAS);
-  if (!rc)
-    rc = mdbx_env_walk(&ctx, "@GC", txn->mt_dbs[FREE_DBI].md_root, -1);
-  if (!rc)
-    rc = mdbx_env_walk(&ctx, "@MAIN", txn->mt_dbs[MAIN_DBI].md_root, 0);
-  if (!rc)
+  if (!MDBX_IS_ERROR(rc))
+    rc = mdbx_env_walk(&ctx, MDBX_PGWALK_GC, txn->mt_dbs[FREE_DBI].md_root, 0);
+  if (!MDBX_IS_ERROR(rc))
+    rc =
+        mdbx_env_walk(&ctx, MDBX_PGWALK_MAIN, txn->mt_dbs[MAIN_DBI].md_root, 0);
+  if (!MDBX_IS_ERROR(rc))
     rc = visitor(P_INVALID, 0, user, INT_MIN, NULL, 0, MDBX_page_void, 0, 0, 0,
                  0);
   return rc;

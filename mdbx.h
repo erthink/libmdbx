@@ -1666,6 +1666,10 @@ typedef enum {
   MDBX_subpage_dupfixed_leaf
 } MDBX_page_type_t;
 
+#define MDBX_PGWALK_MAIN ((const char *)((ptrdiff_t)0))
+#define MDBX_PGWALK_GC ((const char *)((ptrdiff_t)-1))
+#define MDBX_PGWALK_META ((const char *)((ptrdiff_t)-2))
+
 typedef int MDBX_pgvisitor_func(uint64_t pgno, unsigned number, void *ctx,
                                 int deep, const char *dbi, size_t page_size,
                                 MDBX_page_type_t type, size_t nentries,

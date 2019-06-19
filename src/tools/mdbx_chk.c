@@ -154,6 +154,13 @@ static void pagemap_cleanup(void) {
 static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
   static walk_dbi_t *last;
 
+  if (dbi_name == MDBX_PGWALK_MAIN)
+    return &dbi_main;
+  if (dbi_name == MDBX_PGWALK_GC)
+    return &dbi_free;
+  if (dbi_name == MDBX_PGWALK_META)
+    return &dbi_meta;
+
   if (last && strcmp(last->name, dbi_name) == 0)
     return last;
 
@@ -246,7 +253,7 @@ static size_t problems_pop(struct problem *list) {
 }
 
 static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
-                     const char *dbi_name, size_t page_size,
+                     const char *dbi_name_or_tag, size_t page_size,
                      MDBX_page_type_t pagetype, size_t nentries,
                      size_t payload_bytes, size_t header_bytes,
                      size_t unused_bytes) {
@@ -254,19 +261,9 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
   if (pagetype == MDBX_page_void)
     return MDBX_SUCCESS;
 
-  walk_dbi_t fake, *dbi = &fake;
-  if (deep > 0) {
-    dbi = pagemap_lookup_dbi(dbi_name, false);
-    if (!dbi)
-      return MDBX_ENOMEM;
-  } else if (deep == 0 && strcmp(dbi_name, dbi_main.name) == 0)
-    dbi = &dbi_main;
-  else if (deep == -1 && strcmp(dbi_name, dbi_free.name) == 0)
-    dbi = &dbi_free;
-  else if (deep == -2 && strcmp(dbi_name, dbi_meta.name) == 0)
-    dbi = &dbi_meta;
-  else
-    problem_add("deep", deep, "unknown area", "%s", dbi_name);
+  walk_dbi_t *dbi = pagemap_lookup_dbi(dbi_name_or_tag, false);
+  if (!dbi)
+    return MDBX_ENOMEM;
 
   const size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
   walk.pgcount += pgnumber;
@@ -310,14 +307,14 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
   }
 
   if (pgnumber) {
-    if (verbose > 3 && (!only_subdb || strcmp(only_subdb, dbi_name) == 0)) {
+    if (verbose > 3 && (!only_subdb || strcmp(only_subdb, dbi->name) == 0)) {
       if (pgnumber == 1)
         print("     %s-page %" PRIu64, pagetype_caption, pgno);
       else
         print("     %s-span %" PRIu64 "[%u]", pagetype_caption, pgno, pgnumber);
       print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR
-            ", unused %" PRIiPTR "\n",
-            dbi_name, header_bytes, payload_bytes, unused_bytes);
+            ", unused %" PRIiPTR ", deep %i\n",
+            dbi->name, header_bytes, payload_bytes, unused_bytes, deep);
     }
   }
 
@@ -343,8 +340,9 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
       } */
     } else {
       problem_add("page", pgno, "empty",
-                  "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
-                  pagetype_caption, payload_bytes, nentries);
+                  "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
+                  " entries, deep %i",
+                  pagetype_caption, payload_bytes, nentries, deep);
       dbi->pages.empty += 1;
     }
   }
@@ -353,9 +351,9 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
     if (page_bytes != page_size) {
       problem_add("page", pgno, "misused",
                   "%s-page: %" PRIuPTR " != %" PRIuPTR " (%" PRIuPTR
-                  "h + %" PRIuPTR "p + %" PRIuPTR "u)",
+                  "h + %" PRIuPTR "p + %" PRIuPTR "u), deep %i",
                   pagetype_caption, page_size, page_bytes, header_bytes,
-                  payload_bytes, unused_bytes);
+                  payload_bytes, unused_bytes, deep);
       if (page_size > page_bytes)
         dbi->lost_bytes += page_size - page_bytes;
     } else {
