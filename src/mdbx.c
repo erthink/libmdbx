@@ -12904,12 +12904,8 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     MDBX_node *node = NODEPTR(mp, i);
     payload_size += NODESIZE + NODEKSZ(node);
 
-    if (type == MDBX_page_branch) {
-      rc = mdbx_env_walk(ctx, dbi, NODEPGNO(node), deep + 1);
-      if (rc)
-        return rc;
+    if (type == MDBX_page_branch)
       continue;
-    }
 
     assert(type == MDBX_page_leaf);
     switch (node->mn_flags) {
@@ -12949,35 +12945,12 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       if (namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db))
         return MDBX_CORRUPTED;
       payload_size += sizeof(MDBX_db);
-
-      MDBX_db db;
-      memcpy(&db, NODEDATA(node), sizeof(db));
-
-      char namebuf_onstask[142];
-      char *const name = (namelen < sizeof(namebuf_onstask))
-                             ? namebuf_onstask
-                             : mdbx_malloc(namelen + 1);
-      if (name) {
-        memcpy(name, NODEKEY(node), namelen);
-        name[namelen] = 0;
-        rc = mdbx_env_walk(ctx, name, db.md_root, deep + 1);
-        if (name != namebuf_onstask)
-          mdbx_free(name);
-        if (rc == MDBX_SUCCESS && dbi != MDBX_PGWALK_MAIN)
-          rc = MDBX_RESULT_TRUE;
-      } else {
-        rc = MDBX_ENOMEM;
-      }
     } break;
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */: {
       if (NODEDSZ(node) != sizeof(MDBX_db))
         return MDBX_CORRUPTED;
       payload_size += sizeof(MDBX_db);
-
-      MDBX_db db;
-      memcpy(&db, NODEDATA(node), sizeof(db));
-      rc = mdbx_env_walk(ctx, dbi, db.md_root, deep + 1);
     } break;
 
     case F_DUPDATA /* short sub-page */: {
@@ -13032,16 +13005,68 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       return MDBX_CORRUPTED;
     }
 
-    if (unlikely(rc)) {
-      if (rc == MDBX_RESULT_TRUE)
-        break;
+    if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    }
   }
 
-  return ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, deep, dbi,
-                         ctx->mw_txn->mt_env->me_psize, type, nkeys,
-                         payload_size, header_size, unused_size + align_bytes);
+  rc = ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, deep, dbi,
+                       ctx->mw_txn->mt_env->me_psize, type, nkeys, payload_size,
+                       header_size, unused_size + align_bytes);
+
+  if (unlikely(rc != MDBX_SUCCESS))
+    return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : MDBX_SUCCESS;
+
+  for (int i = 0; i < nkeys; i++) {
+    if (type == MDBX_page_dupfixed_leaf)
+      continue;
+
+    MDBX_node *node = NODEPTR(mp, i);
+    if (type == MDBX_page_branch) {
+      rc = mdbx_env_walk(ctx, dbi, NODEPGNO(node), deep + 1);
+      continue;
+    }
+
+    assert(type == MDBX_page_leaf);
+    MDBX_db db;
+    switch (node->mn_flags) {
+    default:
+      continue;
+
+    case F_SUBDATA /* sub-db */: {
+      const size_t namelen = NODEKSZ(node);
+      if (namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db))
+        return MDBX_CORRUPTED;
+
+      char namebuf_onstask[142];
+      char *const name = (namelen < sizeof(namebuf_onstask))
+                             ? namebuf_onstask
+                             : mdbx_malloc(namelen + 1);
+      if (name) {
+        memcpy(name, NODEKEY(node), namelen);
+        name[namelen] = 0;
+        memcpy(&db, NODEDATA(node), sizeof(db));
+        rc = mdbx_env_walk(ctx, name, db.md_root, deep + 1);
+        if (name != namebuf_onstask)
+          mdbx_free(name);
+      } else {
+        rc = MDBX_ENOMEM;
+      }
+    } break;
+
+    case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
+      if (NODEDSZ(node) != sizeof(MDBX_db))
+        return MDBX_CORRUPTED;
+
+      memcpy(&db, NODEDATA(node), sizeof(db));
+      rc = mdbx_env_walk(ctx, dbi, db.md_root, deep + 1);
+      break;
+    }
+
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+
+  return MDBX_SUCCESS;
 }
 
 int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
