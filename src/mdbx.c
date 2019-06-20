@@ -12854,7 +12854,7 @@ typedef struct mdbx_walk_ctx {
 /* Depth-first tree traversal. */
 static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
                                 pgno_t pgno, int deep) {
-  if (pgno == P_INVALID)
+  if (unlikely(pgno == P_INVALID))
     return MDBX_SUCCESS; /* empty db */
 
   MDBX_cursor mc;
@@ -12864,7 +12864,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
   MDBX_page *mp;
   int rc = mdbx_page_get(&mc, pgno, &mp, NULL);
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   const int nkeys = NUMKEYS(mp);
@@ -12880,7 +12880,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
   switch (mp->mp_flags) {
   case P_BRANCH:
     type = MDBX_page_branch;
-    if (nkeys < 2)
+    if (unlikely(nkeys < 2))
       return MDBX_CORRUPTED;
     break;
   case P_LEAF:
@@ -12920,13 +12920,13 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       pgno_t large_pgno;
       memcpy(&large_pgno, NODEDATA(node), sizeof(pgno_t));
       rc = mdbx_page_get(&mc, large_pgno, &op, NULL);
-      if (rc)
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
       /* LY: Don't use mask here, e.g bitwise
        * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
        * Pages should not me marked dirty/loose or otherwise. */
-      if (P_OVERFLOW != op->mp_flags)
+      if (unlikely(P_OVERFLOW != op->mp_flags))
         return MDBX_CORRUPTED;
 
       const size_t over_header = PAGEHDRSZ;
@@ -12942,19 +12942,19 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
     case F_SUBDATA /* sub-db */: {
       const size_t namelen = NODEKSZ(node);
-      if (namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db))
+      if (unlikely(namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db)))
         return MDBX_CORRUPTED;
       payload_size += sizeof(MDBX_db);
     } break;
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */: {
-      if (NODEDSZ(node) != sizeof(MDBX_db))
+      if (unlikely(NODEDSZ(node) != sizeof(MDBX_db)))
         return MDBX_CORRUPTED;
       payload_size += sizeof(MDBX_db);
     } break;
 
     case F_DUPDATA /* short sub-page */: {
-      if (NODEDSZ(node) < PAGEHDRSZ)
+      if (unlikely(NODEDSZ(node) < PAGEHDRSZ))
         return MDBX_CORRUPTED;
 
       MDBX_page *sp = NODEDATA(node);
@@ -12987,7 +12987,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
           assert(subtype == MDBX_subpage_leaf);
           MDBX_node *subnode = NODEPTR(sp, j);
           subpayload_size += NODESIZE + NODEKSZ(subnode) + NODEDSZ(subnode);
-          if (subnode->mn_flags != 0)
+          if (unlikely(subnode->mn_flags != 0))
             return MDBX_CORRUPTED;
         }
       }
@@ -13034,7 +13034,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
     case F_SUBDATA /* sub-db */: {
       const size_t namelen = NODEKSZ(node);
-      if (namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db))
+      if (unlikely(namelen == 0 || NODEDSZ(node) != sizeof(MDBX_db)))
         return MDBX_CORRUPTED;
 
       char namebuf_onstask[142];
@@ -13054,7 +13054,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     } break;
 
     case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
-      if (NODEDSZ(node) != sizeof(MDBX_db))
+      if (unlikely(NODEDSZ(node) != sizeof(MDBX_db)))
         return MDBX_CORRUPTED;
 
       memcpy(&db, NODEDATA(node), sizeof(db));
