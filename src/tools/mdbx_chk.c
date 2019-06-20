@@ -173,7 +173,7 @@ static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
   }
 
   dbi->name = mdbx_strdup(dbi_name);
-  if (verbose > 1 && !silent) {
+  if (verbose > 0 && !silent) {
     print(" - found '%s' area\n", dbi_name);
     fflush(NULL);
   }
