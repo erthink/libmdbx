@@ -258,6 +258,11 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
                      size_t payload_bytes, size_t header_bytes,
                      size_t unused_bytes) {
   (void)ctx;
+  if (deep > 42) {
+    problem_add("deep", deep, "too large", nullptr);
+    return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
+  }
+
   if (pagetype == MDBX_page_void)
     return MDBX_SUCCESS;
 
@@ -319,9 +324,7 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
             ", unused %" PRIiPTR ", deep %i\n",
             dbi->name, header_bytes, payload_bytes, unused_bytes, deep);
     }
-  }
 
-  if (pgnumber) {
     bool already_used = false;
     do {
       if (pgno >= lastpgno)
@@ -344,11 +347,6 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
     if (already_used)
       return branch ? MDBX_RESULT_TRUE /* avoid infinite loop/recursion */
                     : MDBX_SUCCESS;
-
-    if (deep > 42) {
-      problem_add("deep", deep, "too large", nullptr);
-      return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
-    }
   }
 
   if (unused_bytes > page_size)
