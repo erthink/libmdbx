@@ -37,7 +37,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   table_flags = MDBX_DUPSORT;
 
   size_lower = -1;
-  size_now = intptr_t(1024) * 1024 * ((table_flags & MDBX_DUPSORT) ? 4 : 256);
+  size_now =
+      intptr_t(1024) * 1024 * ((table_flags & MDBX_DUPSORT) ? 256 : 1024);
   size_upper = -1;
   shrink_threshold = -1;
   growth_step = -1;
@@ -61,8 +62,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   datalen_min = mdbx_datalen_min();
   datalen_max = std::min(mdbx_datalen_max(), 256u * 1024 + 42);
 
-  batch_read = 4;
-  batch_write = 4;
+  batch_read = 42;
+  batch_write = 42;
 
   delaystart = 0;
   waitfor_nops = 0;
@@ -343,6 +344,10 @@ int main(int argc, char *const argv[]) {
     }
     if (config::parse_option(argc, argv, narg, "append", nullptr)) {
       configure_actor(last_space_id, ac_append, value, params);
+      continue;
+    }
+    if (config::parse_option(argc, argv, narg, "ttl", nullptr)) {
+      configure_actor(last_space_id, ac_ttl, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "failfast",

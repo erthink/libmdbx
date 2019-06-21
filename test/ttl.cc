@@ -56,14 +56,16 @@ bool testcase_ttl::run() {
 
   /* LY: для параметризации используем подходящие параметры, которые не имеют
    * здесь смысла в первоначальном значении */
-  const unsigned window_max = config.params.batch_read;
+  const unsigned window_max =
+      (config.params.batch_read > 999) ? config.params.batch_read : 1000;
+  const unsigned count_max =
+      (config.params.batch_write > 999) ? config.params.batch_write : 1000;
   log_info("ttl: using `batch_read` value %u for window_max", window_max);
-  const unsigned count_max = config.params.batch_write;
   log_info("ttl: using `batch_write` value %u for count_max", count_max);
 
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
-  keygen::buffer key = keygen::alloc(config.params.keylen_max);
-  keygen::buffer data = keygen::alloc(config.params.datalen_max);
+  key = keygen::alloc(config.params.keylen_max);
+  data = keygen::alloc(config.params.datalen_max);
   const unsigned insert_flags = (config.params.table_flags & MDBX_DUPSORT)
                                     ? MDBX_NODUPDATA
                                     : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
@@ -85,7 +87,7 @@ bool testcase_ttl::run() {
       fifo.pop();
       for (unsigned n = 0; n < tail_count; ++n) {
         log_trace("ttl: remove-tail %" PRIu64, serial);
-        generate_pair(tail_serial, key, data, 0);
+        generate_pair(tail_serial);
         int err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
         if (unlikely(err != MDBX_SUCCESS))
           failure_perror("mdbx_del(tail)", err);
@@ -102,7 +104,7 @@ bool testcase_ttl::run() {
 
     for (unsigned n = 0; n < head_count; ++n) {
       log_trace("ttl: insert-head %" PRIu64, serial);
-      generate_pair(serial, key, data, 0);
+      generate_pair(serial);
       int err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value,
                          insert_flags);
       if (unlikely(err != MDBX_SUCCESS))
