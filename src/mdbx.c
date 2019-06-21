@@ -4320,7 +4320,9 @@ retry:
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
+    mc.mc_flags |= C_RECLAIMING;
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
+    mc.mc_flags -= C_RECLAIMING;
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
