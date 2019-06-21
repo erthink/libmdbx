@@ -35,6 +35,8 @@ const char *testcase2str(const actor_testcase testcase) {
     return "copy";
   case ac_append:
     return "append";
+  case ac_ttl:
+    return "ttl";
   }
 }
 
@@ -487,6 +489,9 @@ bool test_execute(const actor_config &config) {
       break;
     case ac_append:
       test.reset(new testcase_append(config, pid));
+      break;
+    case ac_ttl:
+      test.reset(new testcase_ttl(config, pid));
       break;
     default:
       test.reset(new testcase(config, pid));

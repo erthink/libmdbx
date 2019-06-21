@@ -5,6 +5,7 @@ src/tools/CMakeLists.txt
 test/CMakeLists.txt
 test/append.cc
 test/copy.cc
+test/ttl.cc
 tutorial/CMakeLists.txt
 tutorial/sample-mdbx.c
 AUTHORS

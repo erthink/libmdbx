@@ -153,6 +153,13 @@ public:
   virtual ~testcase() {}
 };
 
+class testcase_ttl : public testcase {
+public:
+  testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool run();
+};
+
 class testcase_hill : public testcase {
 public:
   testcase_hill(const actor_config &config, const mdbx_pid_t pid)

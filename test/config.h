@@ -28,7 +28,8 @@ enum actor_testcase {
   ac_jitter,
   ac_try,
   ac_copy,
-  ac_append
+  ac_append,
+  ac_ttl
 };
 
 enum actor_status {

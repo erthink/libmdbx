@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -176,7 +176,7 @@ bool maker::is_unordered() const {
   return (mapping.mesh >= serial_minwith || mapping.rotate) != 0;
 }
 
-bool maker::increment(serial_t &serial, int delta) {
+bool maker::increment(serial_t &serial, int delta) const {
   if (serial > mask(mapping.width)) {
     log_extra("keygen-increment: %" PRIu64 " > %" PRIu64 ", overflow", serial,
               mask(mapping.width));

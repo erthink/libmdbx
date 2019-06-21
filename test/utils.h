@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -327,7 +327,47 @@ std::string format(const char *fmt, ...);
 
 uint64_t entropy_ticks(void);
 uint64_t entropy_white(void);
-uint64_t prng64_careless(uint64_t &state);
+static inline uint64_t bleach64(uint64_t dirty) {
+  return mul_64x64_high(bswap64(dirty), UINT64_C(17048867929148541611));
+}
+
+static inline uint32_t bleach32(uint32_t dirty) {
+  return (uint32_t)((bswap32(dirty) * UINT64_C(2175734609)) >> 32);
+}
+
+static inline uint64_t prng64_map1_careless(uint64_t state) {
+  return state * UINT64_C(6364136223846793005) + 1;
+}
+
+static inline uint64_t prng64_map2_careless(uint64_t state) {
+  return (state + UINT64_C(1442695040888963407)) *
+         UINT64_C(6364136223846793005);
+}
+
+static inline uint64_t prng64_map1_white(uint64_t state) {
+  return bleach64(prng64_map1_careless(state));
+}
+
+static inline uint64_t prng64_map2_white(uint64_t state) {
+  return bleach64(prng64_map2_careless(state));
+}
+
+static inline uint64_t prng64_careless(uint64_t &state) {
+  state = prng64_map1_careless(state);
+  return state;
+}
+
+static inline double u64_to_double1(uint64_t v) {
+  union {
+    uint64_t u64;
+    double d;
+  } casting;
+
+  casting.u64 = UINT64_C(0x3ff) << 52 | (v >> 12);
+  assert(casting.d >= 1.0 && casting.d < 2.0);
+  return casting.d - 1.0;
+}
+
 uint64_t prng64_white(uint64_t &state);
 uint32_t prng32(uint64_t &state);
 void prng_fill(uint64_t &state, void *ptr, size_t bytes);

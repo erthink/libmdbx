@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -124,7 +124,7 @@ public:
   void make_ordered();
   bool is_unordered() const;
 
-  bool increment(serial_t &serial, int delta);
+  bool increment(serial_t &serial, int delta) const;
 };
 
 } /* namespace keygen */
