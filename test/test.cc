@@ -432,6 +432,14 @@ void testcase::db_table_drop(MDBX_dbi handle) {
   }
 }
 
+void testcase::db_table_clear(MDBX_dbi handle) {
+  log_trace(">> testcase::db_table_clear, handle %u", handle);
+  int rc = mdbx_drop(txn_guard.get(), handle, false);
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror("mdbx_drop(delete=false)", rc);
+  log_trace("<< testcase::db_table_clear");
+}
+
 void testcase::db_table_close(MDBX_dbi handle) {
   log_trace(">> testcase::db_table_close, handle %u", handle);
   assert(!txn_guard);

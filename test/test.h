@@ -119,6 +119,7 @@ protected:
 
   MDBX_dbi db_table_open(bool create);
   void db_table_drop(MDBX_dbi handle);
+  void db_table_clear(MDBX_dbi handle);
   void db_table_close(MDBX_dbi handle);
 
   bool wait4start();

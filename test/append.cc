@@ -19,9 +19,7 @@ bool testcase_append::run() {
 
   txn_begin(false);
   MDBX_dbi dbi = db_table_open(true);
-  int rc = mdbx_drop(txn_guard.get(), dbi, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_drop(delete=false)", rc);
+  db_table_clear(dbi);
 
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   /* LY: тест наполнения таблиц в append-режиме,
@@ -59,10 +57,10 @@ bool testcase_append::run() {
     if (cmp == 0 && (config.params.table_flags & MDBX_DUPSORT))
       cmp = mdbx_dcmp(txn_guard.get(), dbi, &data->value, &last_data->value);
 
-    rc = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value, flags);
+    int err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value, flags);
     if (cmp > 0) {
-      if (unlikely(rc != MDBX_SUCCESS))
-        failure_perror("mdbx_put(appenda-a)", rc);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_put(appenda-a)", err);
       memcpy(last_key->value.iov_base, key->value.iov_base,
              last_key->value.iov_len = key->value.iov_len);
       memcpy(last_data->value.iov_base, data->value.iov_base,
@@ -71,8 +69,8 @@ bool testcase_append::run() {
       inserted_checksum.push((uint32_t)inserted_number, key->value);
       inserted_checksum.push(10639, data->value);
     } else {
-      if (unlikely(rc != MDBX_EKEYMISMATCH))
-        failure_perror("mdbx_put(appenda-a) != MDBX_EKEYMISMATCH", rc);
+      if (unlikely(err != MDBX_EKEYMISMATCH))
+        failure_perror("mdbx_put(appenda-a) != MDBX_EKEYMISMATCH", err);
     }
 
     if (++txn_nops >= config.params.batch_write) {
@@ -88,23 +86,24 @@ bool testcase_append::run() {
   cursor_open(dbi);
 
   MDBX_val check_key, check_data;
-  rc = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, MDBX_FIRST);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_cursor_get(MDBX_FIRST)", rc);
+  int err =
+      mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, MDBX_FIRST);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_cursor_get(MDBX_FIRST)", err);
 
   simple_checksum read_checksum;
   uint64_t read_count = 0;
-  while (rc == MDBX_SUCCESS) {
+  while (err == MDBX_SUCCESS) {
     ++read_count;
     read_checksum.push((uint32_t)read_count, check_key);
     read_checksum.push(10639, check_data);
 
-    rc =
+    err =
         mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, MDBX_NEXT);
   }
 
-  if (unlikely(rc != MDBX_NOTFOUND))
-    failure_perror("mdbx_cursor_get(MDBX_NEXT) != EOF", rc);
+  if (unlikely(err != MDBX_NOTFOUND))
+    failure_perror("mdbx_cursor_get(MDBX_NEXT) != EOF", err);
 
   if (unlikely(read_count != inserted_number))
     failure("read_count(%" PRIu64 ") != inserted_number(%" PRIu64 ")",
