@@ -461,8 +461,9 @@ void testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
 
 //-----------------------------------------------------------------------------
 
-bool test_execute(const actor_config &config) {
+bool test_execute(const actor_config &config_const) {
   const mdbx_pid_t pid = osal_getpid();
+  actor_config config = config_const;
 
   if (global::singlemode) {
     logging::setup(format("single_%s", testcase2str(config.testcase)));
@@ -526,6 +527,7 @@ bool test_execute(const actor_config &config) {
                    size_t(config.params.nrepeat));
         else
           log_info("test successed (iteration %zi)", iter);
+        config.params.keygen.seed += INT32_C(0xA4F4D37B);
       }
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
     return true;
