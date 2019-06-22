@@ -16,16 +16,16 @@
 #include <cmath>
 #include <queue>
 
+static unsigned edge2window(uint64_t edge, unsigned window_max) {
+  const double rnd = u64_to_double1(bleach64(edge));
+  const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
+  return window - (window > 0);
+}
+
 static unsigned edge2count(uint64_t edge, unsigned count_max) {
   const double rnd = u64_to_double1(prng64_map1_white(edge));
   const unsigned count = std::lrint(std::pow(count_max, rnd));
   return count;
-}
-
-static unsigned edge2window(uint64_t edge, unsigned window_max) {
-  const double rnd = u64_to_double1(prng64_map2_white(edge));
-  const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
-  return window - (window > 0);
 }
 
 bool testcase_ttl::run() {
@@ -63,6 +63,7 @@ bool testcase_ttl::run() {
   log_info("ttl: using `batch_read` value %u for window_max", window_max);
   log_info("ttl: using `batch_write` value %u for count_max", count_max);
 
+  uint64_t seed = prng64_map2_white(config.params.keygen.seed) + config.actor_id;
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
@@ -75,7 +76,7 @@ bool testcase_ttl::run() {
   while (should_continue()) {
     if (!txn_guard)
       txn_begin(false);
-    const uint64_t salt = mdbx_txn_id(txn_guard.get());
+    const uint64_t salt = prng64_white(seed)/* mdbx_txn_id(txn_guard.get()) */;
 
     const unsigned window = edge2window(salt, window_max);
     log_trace("ttl: window %u at %" PRIu64, window, salt);
