@@ -23,9 +23,9 @@ function probe {
 	echo "=============================================== $(date)"
 	echo "${caption}: $*"
 	rm -f ${TESTDB_PREFIX}* \
-		&& ./mdbx_test --pathname=${TESTDB_PREFIX}db "$@" | lz4 > ${TESTDB_PREFIX}log.lz4 \
+		&& ./mdbx_test --repeat=12 --pathname=${TESTDB_PREFIX}db "$@" | lz4 > ${TESTDB_PREFIX}log.lz4 \
 		&& ./mdbx_chk -nvvv ${TESTDB_PREFIX}db | tee ${TESTDB_PREFIX}chk \
-		&& ./mdbx_chk -nvvv ${TESTDB_PREFIX}db-copy | tee ${TESTDB_PREFIX}chk-copy \
+		&& ([ ! -e ${TESTDB_PREFIX}db-copy ] || ./mdbx_chk -nvvv ${TESTDB_PREFIX}db-copy | tee ${TESTDB_PREFIX}chk-copy) \
 		|| (echo "FAILED"; exit 1)
 }
 
@@ -34,7 +34,7 @@ function probe {
 count=0
 for nops in {2..7}; do
 	for ((wbatch=nops-1; wbatch > 0; --wbatch)); do
-		loops=$(((3333 >> nops) / nops + 1))
+		loops=$(((333 >> nops) / nops + 3))
 		for ((rep=0; rep++ < loops; )); do
 			for ((bits=2**${#options[@]}; --bits >= 0; )); do
 				seed=$(date +%N)
