@@ -7283,14 +7283,14 @@ static int mdbx_ovpage_free(MDBX_cursor *mc, MDBX_page *mp) {
     mdbx_cassert(mc, a > MDBX_PNL_SIZE(env->me_reclaimed_pglist) ||
                          env->me_reclaimed_pglist[a] != pg);
     if (a <= MDBX_PNL_SIZE(env->me_reclaimed_pglist) &&
-        env->me_reclaimed_pglist[a] == pg)
+        unlikely(env->me_reclaimed_pglist[a] == pg))
       return MDBX_PROBLEM;
 
     if (ovpages > 1) {
       const unsigned b =
           mdbx_pnl_search(env->me_reclaimed_pglist, pg + ovpages - 1);
       mdbx_cassert(mc, a == b);
-      if (a != b)
+      if (unlikely(a != b))
         return MDBX_PROBLEM;
     }
   }
