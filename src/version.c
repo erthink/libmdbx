@@ -18,8 +18,8 @@
 #error "API version mismatch!"
 #endif
 
-#define MDBX_VERSION_RELEASE 6
-#define MDBX_VERSION_REVISION 1
+#define MDBX_VERSION_RELEASE 7
+#define MDBX_VERSION_REVISION 0
 
 /*LIBMDBX_EXPORTS*/ const mdbx_version_info mdbx_version = {
     MDBX_VERSION_MAJOR,
