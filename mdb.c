@@ -3171,6 +3171,7 @@ mdb_prep_backlog(MDB_txn *txn, MDB_cursor *mc)
 	const int extra = (txn->mt_env->me_flags & MDBX_LIFORECLAIM) ? 2 : 1;
 
 	if (mdb_backlog_size(txn) < mc->mc_db->md_depth + extra) {
+		mc->mc_flags &= ~C_RECLAIMING;
 		int rc = mdb_cursor_touch(mc);
 		if (unlikely(rc))
 			return rc;
@@ -3183,6 +3184,7 @@ mdb_prep_backlog(MDB_txn *txn, MDB_cursor *mc)
 				break;
 			}
 		}
+		mc->  mc_flags |= C_RECLAIMING;
 	}
 
 	return MDB_SUCCESS;
@@ -3207,6 +3209,7 @@ mdb_freelist_save(MDB_txn *txn)
 	const int lifo = (env->me_flags & MDBX_LIFORECLAIM) != 0;
 
 	mdb_cursor_init(&mc, txn, FREE_DBI, NULL);
+	mc.mc_flags |= C_RECLAIMING;
 	mc.mc_next = txn->mt_cursors[FREE_DBI];
 	txn->mt_cursors[FREE_DBI] = &mc;
 
@@ -3235,9 +3238,7 @@ again:
 				total_room = head_room = 0;
 				more = 1;
 				mdb_tassert(txn, pglast <= env->me_pglast);
-				mc.mc_flags |= C_RECLAIMING;
 				rc = mdb_cursor_del(&mc, 0);
-				mc.mc_flags &= ~C_RECLAIMING;
 				if (unlikely(rc))
 					goto bailout;
 			}
@@ -3254,9 +3255,7 @@ again:
 					rc = mdb_prep_backlog(txn, &mc);
 					if (unlikely(rc))
 						goto bailout;
-					mc.mc_flags |= C_RECLAIMING;
 					rc = mdb_cursor_del(&mc, 0);
-					mc.mc_flags &= ~C_RECLAIMING;
 					if (unlikely(rc))
 						goto bailout;
 				}
@@ -3279,7 +3278,9 @@ again:
 		if (freecnt < txn->mt_free_pgs[0]) {
 			if (unlikely(!freecnt)) {
 				/* Make sure last page of freeDB is touched and on freelist */
+				mc.mc_flags &= ~C_RECLAIMING;
 				rc = mdb_page_search(&mc, NULL, MDB_PS_LAST|MDB_PS_MODIFY);
+				mc.mc_flags |= C_RECLAIMING;
 				if (unlikely(rc && rc != MDB_NOTFOUND))
 					goto bailout;
 			}
@@ -3333,7 +3334,9 @@ again:
 		if (lifo) {
 			if (refill_idx > (txn->mt_lifo_reclaimed ? txn->mt_lifo_reclaimed[0] : 0)) {
 				/* LY: need just a txn-id for save page list. */
+				mc.mc_flags &= ~C_RECLAIMING;
 				rc = mdb_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
+				mc.mc_flags |= C_RECLAIMING;
 				if (likely(rc == 0))
 					/* LY: ok, reclaimed from freedb. */
 					continue;
