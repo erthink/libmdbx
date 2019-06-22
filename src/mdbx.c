@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -3471,6 +3471,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
   const int extra = mdbx_backlog_extragap(txn->mt_env);
 
   if (mdbx_backlog_size(txn) < mc->mc_db->md_depth + extra) {
+    mc->mc_flags &= ~C_RECLAIMING;
     int rc = mdbx_cursor_touch(mc);
     if (unlikely(rc))
       return rc;
@@ -3484,6 +3485,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
         break;
       }
     }
+    mc->mc_flags |= C_RECLAIMING;
   }
 
   return MDBX_SUCCESS;
@@ -3504,6 +3506,7 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  mc.mc_flags |= C_RECLAIMING;
   mc.mc_next = txn->mt_cursors[FREE_DBI];
   txn->mt_cursors[FREE_DBI] = &mc;
 
@@ -3559,9 +3562,7 @@ retry:
           mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
           mdbx_trace("%s.cleanup-reclaimed-id [%u]%" PRIaTXN, dbg_prefix_mode,
                      cleaned_gc_slot, cleaned_gc_id);
-          mc.mc_flags |= C_RECLAIMING;
           rc = mdbx_cursor_del(&mc, 0);
-          mc.mc_flags ^= C_RECLAIMING;
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
         } while (cleaned_gc_slot < txn->mt_lifo_reclaimed[0]);
@@ -3581,9 +3582,7 @@ retry:
         mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
         mdbx_trace("%s.cleanup-reclaimed-id %" PRIaTXN, dbg_prefix_mode,
                    cleaned_gc_id);
-        mc.mc_flags |= C_RECLAIMING;
         rc = mdbx_cursor_del(&mc, 0);
-        mc.mc_flags ^= C_RECLAIMING;
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         settled = 0;
@@ -3681,7 +3680,9 @@ retry:
     if (befree_stored < txn->mt_befree_pages[0]) {
       if (unlikely(!befree_stored)) {
         /* Make sure last page of freeDB is touched and on befree-list */
+        mc.mc_flags &= ~C_RECLAIMING;
         rc = mdbx_page_search(&mc, NULL, MDBX_PS_LAST | MDBX_PS_MODIFY);
+        mc.mc_flags |= C_RECLAIMING;
         if (unlikely(rc != MDBX_SUCCESS && rc != MDBX_NOTFOUND))
           goto bailout;
       }
@@ -3766,7 +3767,9 @@ retry:
           left > ((unsigned)txn->mt_lifo_reclaimed[0] - reused_gc_slot) *
                      env->me_maxgc_ov1page) {
         /* LY: need just a txn-id for save page list. */
+        mc.mc_flags &= ~C_RECLAIMING;
         rc = mdbx_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
+        mc.mc_flags |= C_RECLAIMING;
         if (likely(rc == MDBX_SUCCESS)) {
           /* LY: ok, reclaimed from freedb. */
           mdbx_trace("%s: took @%" PRIaTXN " from GC, continue",
@@ -3885,9 +3888,7 @@ retry:
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
-    mc.mc_flags |= C_RECLAIMING;
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
-    mc.mc_flags -= C_RECLAIMING;
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
@@ -3973,9 +3974,7 @@ retry:
       key.iov_base = &fill_gc_id;
       key.iov_len = sizeof(fill_gc_id);
 
-      mc.mc_flags |= C_RECLAIMING;
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
-      mc.mc_flags ^= C_RECLAIMING;
       mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist));
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
