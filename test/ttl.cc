@@ -14,12 +14,12 @@
 
 #include "test.h"
 #include <cmath>
-#include <queue>
+#include <deque>
 
 static unsigned edge2window(uint64_t edge, unsigned window_max) {
   const double rnd = u64_to_double1(bleach64(edge));
   const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
-  return window - (window > 0);
+  return window;
 }
 
 static unsigned edge2count(uint64_t edge, unsigned count_max) {
@@ -33,9 +33,7 @@ bool testcase_ttl::run() {
 
   txn_begin(false);
   MDBX_dbi dbi = db_table_open(true);
-  int rc = mdbx_drop(txn_guard.get(), dbi, false);
-  if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_drop(delete=false)", rc);
+  db_table_clear(dbi);
   txn_end(false);
 
   /* LY: тест "эмуляцией time-to-live":
@@ -63,7 +61,8 @@ bool testcase_ttl::run() {
   log_info("ttl: using `batch_read` value %u for window_max", window_max);
   log_info("ttl: using `batch_write` value %u for count_max", count_max);
 
-  uint64_t seed = prng64_map2_white(config.params.keygen.seed) + config.actor_id;
+  uint64_t seed =
+      prng64_map2_white(config.params.keygen.seed) + config.actor_id;
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
@@ -71,37 +70,44 @@ bool testcase_ttl::run() {
                                     ? MDBX_NODUPDATA
                                     : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
 
-  std::queue<std::pair<uint64_t, unsigned>> fifo;
+  std::deque<std::pair<uint64_t, unsigned>> fifo;
   uint64_t serial = 0;
   while (should_continue()) {
     if (!txn_guard)
       txn_begin(false);
-    const uint64_t salt = prng64_white(seed)/* mdbx_txn_id(txn_guard.get()) */;
+    const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
-    const unsigned window = edge2window(salt, window_max);
-    log_trace("ttl: window %u at %" PRIu64, window, salt);
-    while (fifo.size() > window) {
-      uint64_t tail_serial = fifo.front().first;
-      const unsigned tail_count = fifo.front().second;
-      log_trace("ttl: pop-tail (serial %" PRIu64 ", count %u)", tail_serial,
-                tail_count);
-      fifo.pop();
-      for (unsigned n = 0; n < tail_count; ++n) {
-        log_trace("ttl: remove-tail %" PRIu64, serial);
-        generate_pair(tail_serial);
-        int err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
-        if (unlikely(err != MDBX_SUCCESS))
-          failure_perror("mdbx_del(tail)", err);
-        if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
-          failure("ttl: unexpected key-space overflow on the tail");
+    const unsigned window_width = edge2window(salt, window_max);
+    const unsigned head_count = edge2count(salt, count_max);
+    log_info("ttl: step #%zu (serial %" PRIu64
+             ", window %u, count %u) salt %" PRIu64,
+             nops_completed, serial, window_width, head_count, salt);
+
+    if (window_width) {
+      while (fifo.size() > window_width) {
+        uint64_t tail_serial = fifo.back().first;
+        const unsigned tail_count = fifo.back().second;
+        log_trace("ttl: pop-tail (serial %" PRIu64 ", count %u)", tail_serial,
+                  tail_count);
+        fifo.pop_back();
+        for (unsigned n = 0; n < tail_count; ++n) {
+          log_trace("ttl: remove-tail %" PRIu64, serial);
+          generate_pair(tail_serial);
+          int err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
+          if (unlikely(err != MDBX_SUCCESS))
+            failure_perror("mdbx_del(tail)", err);
+          if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
+            failure("ttl: unexpected key-space overflow on the tail");
+        }
       }
+    } else {
+      log_trace("ttl: purge state");
+      db_table_clear(dbi);
+      fifo.clear();
     }
 
     txn_restart(false, false);
-    const unsigned head_count = edge2count(salt, count_max);
-    fifo.push(std::make_pair(serial, head_count));
-    log_trace("ttl: push-head (serial %" PRIu64 ", count %u)", serial,
-              head_count);
+    fifo.push_front(std::make_pair(serial, head_count));
 
     for (unsigned n = 0; n < head_count; ++n) {
       log_trace("ttl: insert-head %" PRIu64, serial);
