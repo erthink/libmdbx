@@ -12849,9 +12849,9 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
 }
 
 typedef struct mdbx_walk_ctx {
-  MDBX_txn *mw_txn;
   void *mw_user;
   MDBX_pgvisitor_func *mw_visitor;
+  MDBX_cursor mw_cursor;
 } mdbx_walk_ctx_t;
 
 /* Depth-first tree traversal. */
@@ -12860,13 +12860,8 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
   if (unlikely(pgno == P_INVALID))
     return MDBX_SUCCESS; /* empty db */
 
-  MDBX_cursor mc;
-  memset(&mc, 0, sizeof(mc));
-  mc.mc_snum = 1;
-  mc.mc_txn = ctx->mw_txn;
-
   MDBX_page *mp;
-  int rc = mdbx_page_get(&mc, pgno, &mp, NULL);
+  int rc = mdbx_page_get(&ctx->mw_cursor, pgno, &mp, NULL);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -12922,7 +12917,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       MDBX_page *op;
       pgno_t large_pgno;
       memcpy(&large_pgno, NODEDATA(node), sizeof(pgno_t));
-      rc = mdbx_page_get(&mc, large_pgno, &op, NULL);
+      rc = mdbx_page_get(&ctx->mw_cursor, large_pgno, &op, NULL);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
@@ -12934,13 +12929,14 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
       const size_t over_header = PAGEHDRSZ;
       const size_t over_payload = NODEDSZ(node);
-      const size_t over_unused = pgno2bytes(ctx->mw_txn->mt_env, op->mp_pages) -
-                                 over_payload - over_header;
+      const size_t over_unused =
+          pgno2bytes(ctx->mw_cursor.mc_txn->mt_env, op->mp_pages) -
+          over_payload - over_header;
 
-      rc = ctx->mw_visitor(large_pgno, op->mp_pages, ctx->mw_user, deep, dbi,
-                           pgno2bytes(ctx->mw_txn->mt_env, op->mp_pages),
-                           MDBX_page_large, 1, over_payload, over_header,
-                           over_unused);
+      rc = ctx->mw_visitor(
+          large_pgno, op->mp_pages, ctx->mw_user, deep, dbi,
+          pgno2bytes(ctx->mw_cursor.mc_txn->mt_env, op->mp_pages),
+          MDBX_page_large, 1, over_payload, over_header, over_unused);
     } break;
 
     case F_SUBDATA /* sub-db */: {
@@ -13013,8 +13009,8 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
   }
 
   rc = ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, deep, dbi,
-                       ctx->mw_txn->mt_env->me_psize, type, nkeys, payload_size,
-                       header_size, unused_size + align_bytes);
+                       ctx->mw_cursor.mc_txn->mt_env->me_psize, type, nkeys,
+                       payload_size, header_size, unused_size + align_bytes);
 
   if (unlikely(rc != MDBX_SUCCESS))
     return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : MDBX_SUCCESS;
@@ -13084,7 +13080,9 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
     return MDBX_THREAD_MISMATCH;
 
   mdbx_walk_ctx_t ctx;
-  ctx.mw_txn = txn;
+  memset(&ctx, 0, sizeof(ctx));
+  ctx.mw_cursor.mc_snum = 1;
+  ctx.mw_cursor.mc_txn = txn;
   ctx.mw_user = user;
   ctx.mw_visitor = visitor;
 
