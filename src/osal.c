@@ -533,17 +533,25 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
     return (bytes == written) ? MDBX_SUCCESS : MDBX_EIO /* ERROR_WRITE_FAULT */;
   return GetLastError();
 #else
-  int rc;
-  intptr_t written;
-  do {
+  while (true) {
     STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                       "libmdbx requires 64-bit file I/O on 64-bit systems");
-    written = pwrite(fd, buf, bytes, offset);
+    const intptr_t written =
+        pwrite(fd, buf, (bytes <= MAX_WRITE) ? bytes : MAX_WRITE, offset);
     if (likely(bytes == (size_t)written))
       return MDBX_SUCCESS;
-    rc = errno;
-  } while (rc == EINTR);
-  return (written < 0) ? rc : MDBX_EIO /* Use which error code (ENOSPC)? */;
+    if (written < 0) {
+      const int rc = errno;
+      if (rc != EINTR)
+        return rc;
+    } else if (written > 0) {
+      bytes -= written;
+      offset += written;
+      buf = (char *)buf + written;
+    } else {
+      return -1;
+    }
+  }
 #endif
 }
 
