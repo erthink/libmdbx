@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2017-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -412,6 +412,8 @@ void dump(const char *title) {
              i->params.max_tables);
 
     log_info("drop table: %s\n", i->params.drop_table ? "Yes" : "No");
+    log_info("ignore MDBX_MAP_FULL error: %s\n",
+             i->params.ignore_dbfull ? "Yes" : "No");
     indent.pop();
   }
 

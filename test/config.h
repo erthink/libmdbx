@@ -248,6 +248,7 @@ struct actor_params_pod {
   keygen_params_pod keygen;
 
   bool drop_table;
+  bool ignore_dbfull;
 };
 
 struct actor_config_pod {

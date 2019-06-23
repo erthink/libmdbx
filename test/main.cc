@@ -70,6 +70,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   inject_writefaultn = 0;
 
   drop_table = false;
+  ignore_dbfull = false;
 
   max_readers = 42;
   max_tables = 42;
@@ -287,6 +288,9 @@ int main(int argc, char *const argv[]) {
                              params.inject_writefaultn, config::decimal))
       continue;
     if (config::parse_option(argc, argv, narg, "drop", params.drop_table))
+      continue;
+    if (config::parse_option(argc, argv, narg, "ignore-dbfull",
+                             params.ignore_dbfull))
       continue;
     if (config::parse_option(argc, argv, narg, "dump-config",
                              global::config::dump_config))

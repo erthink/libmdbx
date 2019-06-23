@@ -29,12 +29,12 @@ static unsigned edge2count(uint64_t edge, unsigned count_max) {
 }
 
 bool testcase_ttl::run() {
-  db_open();
-
-  txn_begin(false);
-  MDBX_dbi dbi = db_table_open(true);
-  db_table_clear(dbi);
-  txn_end(false);
+  MDBX_dbi dbi;
+  int err = db_open__begin__table_create_open_clean(dbi);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    log_notice("ttl: bailout-prepare due '%s'", mdbx_strerror(err));
+    return true;
+  }
 
   /* LY: тест "эмуляцией time-to-live":
    *  - организуется "скользящее окно", которое двигается вперед вдоль
@@ -73,12 +73,10 @@ bool testcase_ttl::run() {
   std::deque<std::pair<uint64_t, unsigned>> fifo;
   uint64_t serial = 0;
   while (should_continue()) {
-    if (!txn_guard)
-      txn_begin(false);
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
     const unsigned window_width = edge2window(salt, window_max);
-    const unsigned head_count = edge2count(salt, count_max);
+    unsigned head_count = edge2count(salt, count_max);
     log_info("ttl: step #%zu (serial %" PRIu64
              ", window %u, count %u) salt %" PRIu64,
              nops_completed, serial, window_width, head_count, salt);
@@ -93,9 +91,14 @@ bool testcase_ttl::run() {
         for (unsigned n = 0; n < tail_count; ++n) {
           log_trace("ttl: remove-tail %" PRIu64, serial);
           generate_pair(tail_serial);
-          int err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
-          if (unlikely(err != MDBX_SUCCESS))
+          err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
+          if (unlikely(err != MDBX_SUCCESS)) {
+            if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+              log_notice("ttl: tail-bailout due '%s'", mdbx_strerror(err));
+              goto bailout;
+            }
             failure_perror("mdbx_del(tail)", err);
+          }
           if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
             failure("ttl: unexpected key-space overflow on the tail");
         }
@@ -106,30 +109,52 @@ bool testcase_ttl::run() {
       fifo.clear();
     }
 
-    txn_restart(false, false);
+    err = breakable_restart();
+    if (unlikely(err != MDBX_SUCCESS)) {
+      log_notice("ttl: bailout at commit due '%s'", mdbx_strerror(err));
+      break;
+    }
     fifo.push_front(std::make_pair(serial, head_count));
-
+  retry:
     for (unsigned n = 0; n < head_count; ++n) {
       log_trace("ttl: insert-head %" PRIu64, serial);
       generate_pair(serial);
-      int err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value,
-                         insert_flags);
-      if (unlikely(err != MDBX_SUCCESS))
+      err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value,
+                     insert_flags);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+          log_notice("ttl: head-insert skip due '%s'", mdbx_strerror(err));
+          txn_restart(true, false);
+          serial = fifo.front().first;
+          fifo.front().second = head_count = n;
+          goto retry;
+        }
         failure_perror("mdbx_put(head)", err);
+      }
 
       if (unlikely(!keyvalue_maker.increment(serial, 1)))
         failure("uphill: unexpected key-space overflow");
     }
-
-    txn_end(false);
+    err = breakable_restart();
+    if (unlikely(err != MDBX_SUCCESS)) {
+      log_notice("ttl: head-commit skip due '%s'", mdbx_strerror(err));
+      serial = fifo.front().first;
+      fifo.pop_front();
+    }
     report(1);
   }
 
+bailout:
+  txn_end(true);
   if (dbi) {
     if (config.params.drop_table && !mode_readonly()) {
       txn_begin(false);
       db_table_drop(dbi);
-      txn_end(false);
+      err = breakable_commit();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("ttl: bailout-clean due '%s'", mdbx_strerror(err));
+        return true;
+      }
     } else
       db_table_close(dbi);
   }

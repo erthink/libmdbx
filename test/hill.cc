@@ -15,11 +15,12 @@
 #include "test.h"
 
 bool testcase_hill::run() {
-  db_open();
-
-  txn_begin(false);
-  MDBX_dbi dbi = db_table_open(true);
-  txn_end(false);
+  MDBX_dbi dbi;
+  int err = db_open__begin__table_create_open_clean(dbi);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    log_notice("hill: bailout-prepare due '%s'", mdbx_strerror(err));
+    return true;
+  }
 
   /* LY: тест "холмиком":
    *  - сначала наполняем таблицу циклическими CRUD-манипуляциями,
@@ -59,9 +60,8 @@ bool testcase_hill::run() {
           : MDBX_NODUPDATA;
 
   uint64_t serial_count = 0;
+  uint64_t commited_serial = serial_count;
   unsigned txn_nops = 0;
-  if (!txn_guard)
-    txn_begin(false);
 
   while (should_continue()) {
     const keygen::serial_t a_serial = serial_count;
@@ -76,26 +76,52 @@ bool testcase_hill::run() {
     log_trace("uphill: insert-a (age %" PRIu64 ") %" PRIu64, age_shift,
               a_serial);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
-    int rc = mdbx_put(txn_guard.get(), dbi, &a_key->value, &a_data_1->value,
-                      insert_flags);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_put(insert-a.1)", rc);
+    err = mdbx_put(txn_guard.get(), dbi, &a_key->value, &a_data_1->value,
+                   insert_flags);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("uphill: bailout at insert-a due '%s'", mdbx_strerror(err));
+        txn_restart(true, false);
+        serial_count = commited_serial;
+        break;
+      }
+      failure_perror("mdbx_put(insert-a.1)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
+        serial_count = commited_serial;
+        break;
+      }
+      commited_serial = a_serial;
       txn_nops = 0;
     }
 
     // создаем вторую запись из пары
     log_trace("uphill: insert-b %" PRIu64, b_serial);
     generate_pair(b_serial, b_key, b_data, 0);
-    rc = mdbx_put(txn_guard.get(), dbi, &b_key->value, &b_data->value,
-                  insert_flags);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_put(insert-b)", rc);
+    err = mdbx_put(txn_guard.get(), dbi, &b_key->value, &b_data->value,
+                   insert_flags);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("uphill: bailout at insert-b due '%s'", mdbx_strerror(err));
+        txn_restart(true, false);
+        serial_count = commited_serial;
+        break;
+      }
+      failure_perror("mdbx_put(insert-b)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
+        serial_count = commited_serial;
+        break;
+      }
+      commited_serial = a_serial;
       txn_nops = 0;
     }
 
@@ -104,25 +130,51 @@ bool testcase_hill::run() {
               a_serial);
     generate_pair(a_serial, a_key, a_data_0, 0);
     checkdata("uphill: update-a", dbi, a_key->value, a_data_1->value);
-    rc = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_0->value,
-                      &a_data_1->value, update_flags);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_replace(update-a: 1->0)", rc);
+    err = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_0->value,
+                       &a_data_1->value, update_flags);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("uphill: bailout at update-a due '%s'", mdbx_strerror(err));
+        txn_restart(true, false);
+        serial_count = commited_serial;
+        break;
+      }
+      failure_perror("mdbx_replace(update-a: 1->0)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
+        serial_count = commited_serial;
+        break;
+      }
+      commited_serial = a_serial;
       txn_nops = 0;
     }
 
     // удаляем вторую запись
     log_trace("uphill: delete-b %" PRIu64, b_serial);
     checkdata("uphill: delete-b", dbi, b_key->value, b_data->value);
-    rc = mdbx_del(txn_guard.get(), dbi, &b_key->value, &b_data->value);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_del(b)", rc);
+    err = mdbx_del(txn_guard.get(), dbi, &b_key->value, &b_data->value);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("uphill: bailout at delete-b due '%s'", mdbx_strerror(err));
+        txn_restart(true, false);
+        serial_count = commited_serial;
+        break;
+      }
+      failure_perror("mdbx_del(b)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
+        serial_count = commited_serial;
+        break;
+      }
+      commited_serial = a_serial;
       txn_nops = 0;
     }
 
@@ -150,26 +202,48 @@ bool testcase_hill::run() {
     generate_pair(a_serial, a_key, a_data_0, 0);
     generate_pair(a_serial, a_key, a_data_1, age_shift);
     checkdata("downhill: update-a", dbi, a_key->value, a_data_0->value);
-    int rc = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_1->value,
-                          &a_data_0->value, update_flags);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_put(update-a: 0->1)", rc);
+    err = mdbx_replace(txn_guard.get(), dbi, &a_key->value, &a_data_1->value,
+                       &a_data_0->value, update_flags);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("downhill: bailout at update-a due '%s'",
+                   mdbx_strerror(err));
+        txn_end(true);
+        break;
+      }
+      failure_perror("mdbx_put(update-a: 0->1)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
+        break;
+      }
       txn_nops = 0;
     }
 
     // создаем вторую запись из пары
     log_trace("downhill: insert-b %" PRIu64, b_serial);
     generate_pair(b_serial, b_key, b_data, 0);
-    rc = mdbx_put(txn_guard.get(), dbi, &b_key->value, &b_data->value,
-                  insert_flags);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_put(insert-b)", rc);
+    err = mdbx_put(txn_guard.get(), dbi, &b_key->value, &b_data->value,
+                   insert_flags);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("downhill: bailout at insert-a due '%s'",
+                   mdbx_strerror(err));
+        txn_end(true);
+        break;
+      }
+      failure_perror("mdbx_put(insert-b)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
+        break;
+      }
       txn_nops = 0;
     }
 
@@ -177,24 +251,46 @@ bool testcase_hill::run() {
     log_trace("downhill: delete-a (age %" PRIu64 ") %" PRIu64, age_shift,
               a_serial);
     checkdata("downhill: delete-a", dbi, a_key->value, a_data_1->value);
-    rc = mdbx_del(txn_guard.get(), dbi, &a_key->value, &a_data_1->value);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_del(a)", rc);
+    err = mdbx_del(txn_guard.get(), dbi, &a_key->value, &a_data_1->value);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("downhill: bailout at delete-a due '%s'",
+                   mdbx_strerror(err));
+        txn_end(true);
+        break;
+      }
+      failure_perror("mdbx_del(a)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
+        break;
+      }
       txn_nops = 0;
     }
 
     // удаляем вторую запись
     log_trace("downhill: delete-b %" PRIu64, b_serial);
     checkdata("downhill: delete-b", dbi, b_key->value, b_data->value);
-    rc = mdbx_del(txn_guard.get(), dbi, &b_key->value, &b_data->value);
-    if (unlikely(rc != MDBX_SUCCESS))
-      failure_perror("mdbx_del(b)", rc);
+    err = mdbx_del(txn_guard.get(), dbi, &b_key->value, &b_data->value);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+        log_notice("downhill: bailout at delete-b due '%s'",
+                   mdbx_strerror(err));
+        txn_end(true);
+        break;
+      }
+      failure_perror("mdbx_del(b)", err);
+    }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
+        break;
+      }
       txn_nops = 0;
     }
 
@@ -208,7 +304,11 @@ bool testcase_hill::run() {
     if (config.params.drop_table && !mode_readonly()) {
       txn_begin(false);
       db_table_drop(dbi);
-      txn_end(false);
+      err = breakable_commit();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("hill: bailout-clean due '%s'", mdbx_strerror(err));
+        return true;
+      }
     } else
       db_table_close(dbi);
   }

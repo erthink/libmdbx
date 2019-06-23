@@ -15,11 +15,12 @@
 #include "test.h"
 
 bool testcase_append::run() {
-  db_open();
-
-  txn_begin(false);
-  MDBX_dbi dbi = db_table_open(true);
-  db_table_clear(dbi);
+  MDBX_dbi dbi;
+  int err = db_open__begin__table_create_open_clean(dbi);
+  if (unlikely(err != MDBX_SUCCESS)) {
+    log_notice("append: bailout-prepare due '%s'", mdbx_strerror(err));
+    return true;
+  }
 
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   /* LY: тест наполнения таблиц в append-режиме,
@@ -41,7 +42,10 @@ bool testcase_append::run() {
   simple_checksum inserted_checksum;
   uint64_t inserted_number = 0;
   uint64_t serial_count = 0;
+
   unsigned txn_nops = 0;
+  uint64_t commited_inserted_number = inserted_number;
+  simple_checksum commited_inserted_checksum = inserted_checksum;
   while (should_continue()) {
     const keygen::serial_t serial = serial_count;
     if (!keyvalue_maker.increment(serial_count, 1)) {
@@ -57,10 +61,19 @@ bool testcase_append::run() {
     if (cmp == 0 && (config.params.table_flags & MDBX_DUPSORT))
       cmp = mdbx_dcmp(txn_guard.get(), dbi, &data->value, &last_data->value);
 
-    int err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value, flags);
+    err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value, flags);
+    if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
+      log_notice("append: bailout-insert due '%s'", mdbx_strerror(err));
+      txn_end(true);
+      inserted_number = commited_inserted_number;
+      inserted_checksum = commited_inserted_checksum;
+      break;
+    }
+
     if (cmp > 0) {
       if (unlikely(err != MDBX_SUCCESS))
         failure_perror("mdbx_put(appenda-a)", err);
+
       memcpy(last_key->value.iov_base, key->value.iov_base,
              last_key->value.iov_len = key->value.iov_len);
       memcpy(last_data->value.iov_base, data->value.iov_base,
@@ -74,22 +87,40 @@ bool testcase_append::run() {
     }
 
     if (++txn_nops >= config.params.batch_write) {
-      txn_restart(false, false);
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("append: bailout-commit due '%s'", mdbx_strerror(err));
+        inserted_number = commited_inserted_number;
+        inserted_checksum = commited_inserted_checksum;
+        break;
+      }
+      commited_inserted_number = inserted_number;
+      commited_inserted_checksum = inserted_checksum;
       txn_nops = 0;
     }
 
     report(1);
   }
 
-  txn_restart(false, true);
+  if (txn_guard) {
+    err = breakable_commit();
+    if (unlikely(err != MDBX_SUCCESS)) {
+      log_notice("append: bailout-commit due '%s'", mdbx_strerror(err));
+      inserted_number = commited_inserted_number;
+      inserted_checksum = commited_inserted_checksum;
+    }
+  }
   //----------------------------------------------------------------------------
+  txn_begin(true);
   cursor_open(dbi);
 
   MDBX_val check_key, check_data;
-  int err =
+  err =
       mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, MDBX_FIRST);
-  if (unlikely(err != MDBX_SUCCESS))
-    failure_perror("mdbx_cursor_get(MDBX_FIRST)", err);
+  if (likely(inserted_number)) {
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_cursor_get(MDBX_FIRST)", err);
+  }
 
   simple_checksum read_checksum;
   uint64_t read_count = 0;
@@ -115,15 +146,18 @@ bool testcase_append::run() {
             read_checksum.value, inserted_checksum.value);
 
   cursor_close();
+  txn_end(true);
   //----------------------------------------------------------------------------
-  if (txn_guard)
-    txn_end(false);
 
   if (dbi) {
     if (config.params.drop_table && !mode_readonly()) {
       txn_begin(false);
       db_table_drop(dbi);
-      txn_end(false);
+      err = breakable_commit();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("append: bailout-clean due '%s'", mdbx_strerror(err));
+        return true;
+      }
     } else
       db_table_close(dbi);
   }
