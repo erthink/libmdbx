@@ -182,11 +182,11 @@ int main(int argc, char *const argv[]) {
                              mdbx_limits_dbsize_min(params.pagesize),
                              mdbx_limits_dbsize_max(params.pagesize)))
       continue;
-    if (config::parse_option(argc, argv, narg, "size", params.size_now,
+    if (config::parse_option(argc, argv, narg, "size-upper", params.size_upper,
                              mdbx_limits_dbsize_min(params.pagesize),
                              mdbx_limits_dbsize_max(params.pagesize)))
       continue;
-    if (config::parse_option(argc, argv, narg, "size-upper", params.size_upper,
+    if (config::parse_option(argc, argv, narg, "size", params.size_now,
                              mdbx_limits_dbsize_min(params.pagesize),
                              mdbx_limits_dbsize_max(params.pagesize)))
       continue;
