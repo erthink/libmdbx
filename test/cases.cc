@@ -63,8 +63,7 @@ void testcase_setup(const char *casename, actor_params &params,
     log_notice(">>> testcase_setup(%s)", casename);
     configure_actor(last_space_id, ac_jitter, nullptr, params);
     configure_actor(last_space_id, ac_hill, nullptr, params);
-    configure_actor(last_space_id, ac_jitter, nullptr, params);
-    configure_actor(last_space_id, ac_hill, nullptr, params);
+    configure_actor(last_space_id, ac_ttl, nullptr, params);
     configure_actor(last_space_id, ac_jitter, nullptr, params);
     configure_actor(last_space_id, ac_hill, nullptr, params);
     configure_actor(last_space_id, ac_ttl, nullptr, params);
