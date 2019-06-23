@@ -297,8 +297,11 @@ bool testcase_hill::run() {
     report(1);
   }
 
-  if (txn_guard)
-    txn_end(false);
+  if (txn_guard) {
+    err = breakable_restart();
+    if (unlikely(err != MDBX_SUCCESS))
+      log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
+  }
 
   if (dbi) {
     if (config.params.drop_table && !mode_readonly()) {
