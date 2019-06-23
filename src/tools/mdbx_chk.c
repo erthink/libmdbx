@@ -252,11 +252,12 @@ static size_t problems_pop(struct problem *list) {
   return count;
 }
 
-static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
-                     const char *dbi_name_or_tag, size_t page_size,
-                     MDBX_page_type_t pagetype, size_t nentries,
-                     size_t payload_bytes, size_t header_bytes,
-                     size_t unused_bytes) {
+static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
+                     void *const ctx, const int deep,
+                     const char *const dbi_name_or_tag, const size_t page_size,
+                     const MDBX_page_type_t pagetype, const size_t nentries,
+                     const size_t payload_bytes, const size_t header_bytes,
+                     const size_t unused_bytes) {
   (void)ctx;
   if (deep > 42) {
     problem_add("deep", deep, "too large", nullptr);
@@ -326,23 +327,24 @@ static int pgvisitor(uint64_t pgno, unsigned pgnumber, void *ctx, int deep,
     }
 
     bool already_used = false;
-    do {
-      if (pgno >= lastpgno)
-        problem_add("page", pgno, "wrong page-no",
+    for (unsigned n = 0; n < pgnumber; ++n) {
+      uint64_t spanpgno = pgno + n;
+      if (spanpgno >= lastpgno)
+        problem_add("page", spanpgno, "wrong page-no",
                     "%s-page: %" PRIu64 " > %" PRIu64 ", deep %i",
-                    pagetype_caption, pgno, lastpgno, deep);
-      else if (walk.pagemap[pgno]) {
-        walk_dbi_t *coll_dbi = &walk.dbi[walk.pagemap[pgno] - 1];
-        problem_add(
-            "page", pgno, (branch && coll_dbi == dbi) ? "loop" : "already used",
-            "%s-page: by %s, deep %i", pagetype_caption, coll_dbi->name, deep);
+                    pagetype_caption, spanpgno, lastpgno, deep);
+      else if (walk.pagemap[spanpgno]) {
+        walk_dbi_t *coll_dbi = &walk.dbi[walk.pagemap[spanpgno] - 1];
+        problem_add("page", spanpgno,
+                    (branch && coll_dbi == dbi) ? "loop" : "already used",
+                    "%s-page: by %s, deep %i", pagetype_caption, coll_dbi->name,
+                    deep);
         already_used = true;
       } else {
-        walk.pagemap[pgno] = (short)(dbi - walk.dbi + 1);
+        walk.pagemap[spanpgno] = (short)(dbi - walk.dbi + 1);
         dbi->pages.total += 1;
       }
-      ++pgno;
-    } while (--pgnumber);
+    }
 
     if (already_used)
       return branch ? MDBX_RESULT_TRUE /* avoid infinite loop/recursion */
