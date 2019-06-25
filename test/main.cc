@@ -27,6 +27,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   loglevel =
 #ifdef NDEBUG
       logging::info;
+#elif defined(_WIN32) || defined(_WIN64)
+      logging::verbose;
 #else
       logging::trace;
 #endif

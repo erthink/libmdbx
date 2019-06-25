@@ -576,7 +576,7 @@ bool test_execute(const actor_config &config_const) {
       } else {
         if (config.params.nrepeat == 1)
           log_info("test successed");
-        else if (config.params.nrepeat == 1)
+        else if (config.params.nrepeat)
           log_info("test successed (iteration %zi of %zi)", iter,
                    size_t(config.params.nrepeat));
         else

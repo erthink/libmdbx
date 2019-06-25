@@ -298,7 +298,7 @@ bool testcase_hill::run() {
   }
 
   if (txn_guard) {
-    err = breakable_restart();
+    err = breakable_commit();
     if (unlikely(err != MDBX_SUCCESS))
       log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
   }
