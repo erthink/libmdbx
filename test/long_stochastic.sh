@@ -34,8 +34,8 @@ fi
 # that malloc() will not return the allocated memory to the
 # system immediately, as well some space is required for logs.
 #
-db_size=$(expr '(' ${ram_avail_mb} - ${ram_reserve4logs_mb} ')' / 4)M
-echo "=== ${ram_avail_mb}M RAM available, use ${db_size} for DB"
+db_size_mb=$(expr '(' ${ram_avail_mb} - ${ram_reserve4logs_mb} ')' / 4)
+echo "=== ${ram_avail_mb}M RAM available, use ${db_size_mb}M for DB"
 
 make check
 rm -f $(dirname ${TESTDB_PREFIX})/*
@@ -70,31 +70,37 @@ function probe {
 
 ###############################################################################
 
+if [ ${db_size_mb} -gt 5555 ]; then
+biggest=7
+else
+biggest=6
+fi
+
 count=0
-for nops in {7..2}; do
+for nops in $(seq ${biggest} -1 2); do
 	for ((wbatch=nops-1; wbatch > 0; --wbatch)); do
 		loops=$(((99 >> nops) / nops + 3))
 		for ((rep=0; rep++ < loops; )); do
 			for ((bits=2**${#options[@]}; --bits >= 0; )); do
 				seed=$(date +%N)
 				caption="Probe #$((++count)) int-key,w/o-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size} --table=+key.integer,-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) int-key,with-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size} --table=+key.integer,+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) int-key,int-data, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size} --table=+key.integer,+data.integer --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) w/o-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size} --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
 				caption="Probe #$((++count)) with-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size} --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
 					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
 			done
