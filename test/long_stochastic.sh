@@ -70,10 +70,10 @@ function probe {
 
 ###############################################################################
 
-if [ ${db_size_mb} -gt 5555 ]; then
-biggest=7
-else
+if [ ${db_size_mb} -gt 1111 ]; then
 biggest=6
+else
+biggest=5
 fi
 
 count=0
