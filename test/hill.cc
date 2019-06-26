@@ -65,8 +65,10 @@ bool testcase_hill::run() {
 
   while (should_continue()) {
     const keygen::serial_t a_serial = serial_count;
-    if (unlikely(!keyvalue_maker.increment(serial_count, 1)))
-      failure("uphill: unexpected key-space overflow");
+    if (unlikely(!keyvalue_maker.increment(serial_count, 1))) {
+      log_notice("uphill: unexpected key-space overflow");
+      break;
+    }
 
     const keygen::serial_t b_serial = serial_count;
     assert(b_serial > a_serial);
@@ -186,7 +188,7 @@ bool testcase_hill::run() {
     }
   }
 
-  while (serial_count > 0) {
+  while (serial_count > 1) {
     if (unlikely(!keyvalue_maker.increment(serial_count, -2)))
       failure("downhill: unexpected key-space underflow");
 

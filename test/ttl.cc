@@ -132,8 +132,10 @@ bool testcase_ttl::run() {
         failure_perror("mdbx_put(head)", err);
       }
 
-      if (unlikely(!keyvalue_maker.increment(serial, 1)))
-        failure("uphill: unexpected key-space overflow");
+      if (unlikely(!keyvalue_maker.increment(serial, 1))) {
+        log_notice("ttl: unexpected key-space overflow");
+        goto bailout;
+      }
     }
     err = breakable_restart();
     if (unlikely(err != MDBX_SUCCESS)) {

@@ -184,7 +184,8 @@ bool maker::increment(serial_t &serial, int delta) const {
   }
 
   serial_t target = serial + (int64_t)delta;
-  if (target > mask(mapping.width)) {
+  if (target > mask(mapping.width) ||
+      ((delta > 0) ? target < serial : target > serial)) {
     log_extra("keygen-increment: %" PRIu64 "%-d => %" PRIu64 ", overflow",
               serial, delta, target);
     return false;
