@@ -1,4 +1,4 @@
-/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
+﻿/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
 
 /*
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
@@ -494,7 +494,6 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
 int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t count, uint64_t offset);
 int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t count,
                 uint64_t offset);
-int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t count);
 
 int mdbx_thread_create(mdbx_thread_t *thread,
                        THREAD_RESULT(THREAD_CALL *start_routine)(void *),

@@ -11281,6 +11281,7 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   uint8_t *ptr;
   int toggle = 0;
   int rc;
+  size_t offset = pgno2bytes(my->mc_env, NUM_METAS);
 
 #if defined(F_SETNOSIGPIPE)
   /* OS X delivers SIGPIPE to the whole process, not the thread that caused it.
@@ -11309,7 +11310,7 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     ptr = my->mc_wbuf[toggle];
   again:
     if (wsize > 0 && !my->mc_error) {
-      rc = mdbx_write(my->mc_fd, ptr, wsize);
+      rc = mdbx_pwrite(my->mc_fd, ptr, wsize, offset);
       if (rc != MDBX_SUCCESS) {
 #if defined(SIGPIPE) && !defined(_WIN32) && !defined(_WIN64)
         if (rc == EPIPE) {
@@ -11320,7 +11321,9 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
         }
 #endif
         my->mc_error = rc;
+        break;
       }
+      offset += wsize;
     }
 
     /* If there's an overflow page tail, write it too */
@@ -11708,7 +11711,7 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   /* Firstly write a stub to meta-pages.
    * Now we sure to incomplete copy will not be used. */
   memset(buffer, -1, pgno2bytes(env, NUM_METAS));
-  rc = mdbx_write(fd, buffer, pgno2bytes(env, NUM_METAS));
+  rc = mdbx_pwrite(fd, buffer, pgno2bytes(env, NUM_METAS), 0);
   if (likely(rc == MDBX_SUCCESS)) {
     memset(buffer, 0, pgno2bytes(env, NUM_METAS));
     rc = (flags & MDBX_CP_COMPACT)

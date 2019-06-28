@@ -1,4 +1,4 @@
-/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
+﻿/* https://en.wikipedia.org/wiki/Operating_system_abstraction_layer */
 
 /*
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
@@ -569,21 +569,21 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
 
 int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
                 uint64_t offset) {
-#if defined(_WIN32) || defined(_WIN64)
-  if (bytes > MAX_WRITE)
-    return ERROR_INVALID_PARAMETER;
-
-  OVERLAPPED ov;
-  ov.hEvent = 0;
-  ov.Offset = (DWORD)offset;
-  ov.OffsetHigh = HIGH_DWORD(offset);
-
-  DWORD written;
-  if (likely(WriteFile(fd, buf, (DWORD)bytes, &written, &ov)))
-    return (bytes == written) ? MDBX_SUCCESS : MDBX_EIO /* ERROR_WRITE_FAULT */;
-  return GetLastError();
-#else
   while (true) {
+#if defined(_WIN32) || defined(_WIN64)
+    OVERLAPPED ov;
+    ov.hEvent = 0;
+    ov.Offset = (DWORD)offset;
+    ov.OffsetHigh = HIGH_DWORD(offset);
+
+    DWORD written;
+    if (unlikely(!WriteFile(fd, buf,
+                            (bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE,
+                            &written, &ov)))
+      return GetLastError();
+    if (likely(bytes == written))
+      return MDBX_SUCCESS;
+#else
     STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                       "libmdbx requires 64-bit file I/O on 64-bit systems");
     const intptr_t written =
@@ -594,15 +594,13 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
       const int rc = errno;
       if (rc != EINTR)
         return rc;
-    } else if (written > 0) {
-      bytes -= written;
-      offset += written;
-      buf = (char *)buf + written;
-    } else {
-      return -1;
+      continue;
     }
-  }
 #endif
+    bytes -= written;
+    offset += written;
+    buf = (char *)buf + written;
+  }
 }
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
@@ -631,52 +629,6 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
   } while (rc == EINTR);
   return (written < 0) ? rc : MDBX_EIO /* Use which error code? */;
 #endif
-}
-
-int mdbx_write(mdbx_filehandle_t fd, const void *buf, size_t bytes) {
-#ifdef SIGPIPE
-  sigset_t set, old;
-  sigemptyset(&set);
-  sigaddset(&set, SIGPIPE);
-  int rc = pthread_sigmask(SIG_BLOCK, &set, &old);
-  if (rc != 0)
-    return rc;
-#endif
-
-  const char *ptr = buf;
-  for (;;) {
-    size_t chunk = (MAX_WRITE < bytes) ? MAX_WRITE : bytes;
-#if defined(_WIN32) || defined(_WIN64)
-    DWORD written;
-    if (unlikely(!WriteFile(fd, ptr, (DWORD)chunk, &written, NULL)))
-      return GetLastError();
-#else
-    intptr_t written = write(fd, ptr, chunk);
-    if (written < 0) {
-      int rc = errno;
-#ifdef SIGPIPE
-      if (rc == EPIPE) {
-        /* Collect the pending SIGPIPE, otherwise at least OS X
-         * gives it to the process on thread-exit (ITS#8504). */
-        int tmp;
-        sigwait(&set, &tmp);
-        written = 0;
-        continue;
-      }
-      pthread_sigmask(SIG_SETMASK, &old, NULL);
-#endif
-      return rc;
-    }
-#endif
-    if (likely(bytes == (size_t)written)) {
-#ifdef SIGPIPE
-      pthread_sigmask(SIG_SETMASK, &old, NULL);
-#endif
-      return MDBX_SUCCESS;
-    }
-    ptr += written;
-    bytes -= written;
-  }
 }
 
 int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
