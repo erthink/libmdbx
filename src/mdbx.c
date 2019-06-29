@@ -11283,23 +11283,6 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   int rc;
   size_t offset = pgno2bytes(my->mc_env, NUM_METAS);
 
-#if defined(F_SETNOSIGPIPE)
-  /* OS X delivers SIGPIPE to the whole process, not the thread that caused it.
-   * Disable SIGPIPE using platform specific fcntl. */
-  int enabled = 1;
-  if (fcntl(my->mc_fd, F_SETNOSIGPIPE, &enabled))
-    my->mc_error = errno;
-#endif
-
-#if defined(SIGPIPE) && !defined(_WIN32) && !defined(_WIN64)
-  sigset_t set;
-  sigemptyset(&set);
-  sigaddset(&set, SIGPIPE);
-  rc = pthread_sigmask(SIG_BLOCK, &set, NULL);
-  if (rc != 0)
-    my->mc_error = rc;
-#endif
-
   mdbx_condmutex_lock(&my->mc_condmutex);
   while (!my->mc_error) {
     while (!my->mc_new)
@@ -11312,14 +11295,6 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     if (wsize > 0 && !my->mc_error) {
       rc = mdbx_pwrite(my->mc_fd, ptr, wsize, offset);
       if (rc != MDBX_SUCCESS) {
-#if defined(SIGPIPE) && !defined(_WIN32) && !defined(_WIN64)
-        if (rc == EPIPE) {
-          /* Collect the pending SIGPIPE, otherwise (at least OS X)
-           * gives it to the process on thread-exit (ITS#8504). */
-          int tmp;
-          sigwait(&set, &tmp);
-        }
-#endif
         my->mc_error = rc;
         break;
       }
