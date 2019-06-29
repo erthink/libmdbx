@@ -544,7 +544,6 @@ int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes, uint64_t offset) {
   if (bytes > MAX_WRITE)
     return MDBX_EINVAL;
 #if defined(_WIN32) || defined(_WIN64)
-
   OVERLAPPED ov;
   ov.hEvent = 0;
   ov.Offset = (DWORD)offset;

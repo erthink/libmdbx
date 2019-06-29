@@ -11253,7 +11253,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 }
 
 #ifndef MDBX_WBUF
-#define MDBX_WBUF (1024 * 1024)
+#define MDBX_WBUF ((size_t)1024 * 1024)
 #endif
 #define MDBX_EOF 0x10 /* mdbx_env_copyfd1() is done reading */
 
@@ -11632,12 +11632,13 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     return rc;
   }
 
+  const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
   /* Make a snapshot of meta-pages,
    * but writing ones after the data was flushed */
-  memcpy(buffer, env->me_map, pgno2bytes(env, NUM_METAS));
+  memcpy(buffer, env->me_map, meta_bytes);
   MDBX_meta *const headcopy = /* LY: get pointer to the spanshot copy */
       (MDBX_meta *)(buffer + ((uint8_t *)mdbx_meta_head(env) - env->me_map));
-  const uint64_t size =
+  const uint64_t whole_size =
       mdbx_roundup2(pgno2bytes(env, headcopy->mm_geo.now), env->me_os_psize);
   mdbx_txn_unlock(env);
 
@@ -11645,12 +11646,19 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   headcopy->mm_datasync_sign = mdbx_meta_sign(headcopy);
 
   /* Copy the data */
-  rc = mdbx_pwrite(fd, env->me_map + pgno2bytes(env, NUM_METAS),
-                   pgno2bytes(env, read_txn->mt_next_pgno - NUM_METAS),
-                   pgno2bytes(env, NUM_METAS));
+  const size_t data_bytes = pgno2bytes(env, read_txn->mt_next_pgno);
+  uint8_t *data_buffer = buffer + meta_bytes;
+  for (size_t offset = meta_bytes;
+       likely(rc == MDBX_SUCCESS) && offset < data_bytes;) {
+    const size_t chunk =
+        (MDBX_WBUF < data_bytes - offset) ? MDBX_WBUF : data_bytes - offset;
+    memcpy(data_buffer, env->me_map + offset, chunk);
+    rc = mdbx_pwrite(fd, data_buffer, chunk, offset);
+    offset += chunk;
+  }
 
   if (likely(rc == MDBX_SUCCESS))
-    rc = mdbx_ftruncate(fd, size);
+    rc = mdbx_ftruncate(fd, whole_size);
 
   return rc;
 }
@@ -11667,8 +11675,10 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  const size_t buffer_size = pgno2bytes(env, NUM_METAS) +
-                             ((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : 0);
+  const size_t buffer_size =
+      pgno2bytes(env, NUM_METAS) +
+      ((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF);
+
   uint8_t *buffer = NULL;
   rc = mdbx_memalign_alloc(env->me_os_psize, buffer_size, (void **)&buffer);
   if (unlikely(rc != MDBX_SUCCESS))
