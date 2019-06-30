@@ -11647,6 +11647,17 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 
   /* Copy the data */
   const size_t data_bytes = pgno2bytes(env, read_txn->mt_next_pgno);
+#if __GLIBC_PREREQ(2, 27)
+  for (off_t in_offset = meta_bytes; in_offset < (off_t)data_bytes;) {
+    off_t out_offset = in_offset;
+    ssize_t bytes_copied = copy_file_range(
+        env->me_fd, &in_offset, fd, &out_offset, data_bytes - in_offset, 0);
+    if (bytes_copied < 0) {
+      rc = errno;
+      break;
+    }
+  }
+#else
   uint8_t *data_buffer = buffer + meta_bytes;
   for (size_t offset = meta_bytes;
        likely(rc == MDBX_SUCCESS) && offset < data_bytes;) {
@@ -11656,8 +11667,9 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     rc = mdbx_pwrite(fd, data_buffer, chunk, offset);
     offset += chunk;
   }
+#endif
 
-  if (likely(rc == MDBX_SUCCESS))
+  if (likely(rc == MDBX_SUCCESS) && whole_size != data_bytes)
     rc = mdbx_ftruncate(fd, whole_size);
 
   return rc;
