@@ -216,7 +216,7 @@ retry:
     if (ts.tv_sec == 0 && ts.tv_nsec == 0)
       ts.tv_nsec = 1;
     if (nanosleep(&ts, &ts) == 0) {
-      /* timeout and no signal fomr child */
+      /* timeout and no signal from child */
       pid = 0;
       return 0;
     }
