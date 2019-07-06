@@ -13013,7 +13013,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
                        payload_size, header_size, unused_size + align_bytes);
 
   if (unlikely(rc != MDBX_SUCCESS))
-    return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : MDBX_SUCCESS;
+    return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
 
   for (int i = 0; i < nkeys; i++) {
     if (type == MDBX_page_dupfixed_leaf)
@@ -13022,6 +13022,11 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     MDBX_node *node = NODEPTR(mp, i);
     if (type == MDBX_page_branch) {
       rc = mdbx_env_walk(ctx, dbi, NODEPGNO(node), deep + 1);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc != MDBX_RESULT_TRUE)
+          return rc;
+        break;
+      }
       continue;
     }
 
