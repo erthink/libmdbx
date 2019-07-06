@@ -702,7 +702,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
     if (handler) {
       rc = handler(record_count, &key, &data);
-      if (rc)
+      if (MDBX_IS_ERROR(rc))
         goto bailout;
     }
 
@@ -735,7 +735,7 @@ bailout:
   }
 
   mdbx_cursor_close(mc);
-  return rc || problems_count;
+  return (rc || problems_count) ? MDBX_RESULT_TRUE : MDBX_SUCCESS;
 }
 
 static void usage(char *prog) {
