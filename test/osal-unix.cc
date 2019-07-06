@@ -199,7 +199,9 @@ retry:
     if (WIFEXITED(status))
       childs[pid] =
           (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
-    else if (WIFSIGNALED(status) || WCOREDUMP(status))
+    else if (WCOREDUMP(status))
+      childs[pid] = as_coredump;
+    else if (WIFSIGNALED(status))
       childs[pid] = as_killed;
     else if (WIFSTOPPED(status))
       childs[pid] = as_debuging;

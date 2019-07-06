@@ -55,6 +55,8 @@ const char *status2str(actor_status status) {
     return "killed";
   case as_failed:
     return "failed";
+  case as_coredump:
+    return "coredump";
   }
 }
 

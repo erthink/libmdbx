@@ -38,7 +38,8 @@ enum actor_status {
   as_running,
   as_successful,
   as_killed,
-  as_failed
+  as_failed,
+  as_coredump,
 };
 
 const char *testcase2str(const actor_testcase);

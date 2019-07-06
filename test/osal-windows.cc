@@ -312,13 +312,21 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
   case EXIT_SUCCESS:
     status = as_successful;
     break;
-  // case EXCEPTION_BREAKPOINT:
+  case EXCEPTION_BREAKPOINT:
   case EXCEPTION_SINGLE_STEP:
     status = as_debuging;
     break;
   case STATUS_CONTROL_C_EXIT:
-  case EXCEPTION_NONCONTINUABLE_EXCEPTION:
     status = as_killed;
+    break;
+  case EXCEPTION_ACCESS_VIOLATION:
+  case EXCEPTION_ARRAY_BOUNDS_EXCEEDED:
+  case EXCEPTION_DATATYPE_MISALIGNMENT:
+  case EXCEPTION_STACK_OVERFLOW:
+  case EXCEPTION_INVALID_DISPOSITION:
+  case EXCEPTION_ILLEGAL_INSTRUCTION:
+  case EXCEPTION_NONCONTINUABLE_EXCEPTION:
+    status = as_coredump;
     break;
   default:
     status = as_failed;
