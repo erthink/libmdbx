@@ -44,7 +44,8 @@ static __cold __attribute__((destructor)) void mdbx_global_destructor(void) {
 /* lck */
 
 #ifndef OFF_T_MAX
-#define OFF_T_MAX (sizeof(off_t) > 4 ? INT64_MAX : INT32_MAX)
+#define OFF_T_MAX                                                              \
+  ((sizeof(off_t) > 4 ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff)
 #endif
 #define LCK_WHOLE OFF_T_MAX
 
