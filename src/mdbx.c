@@ -3269,6 +3269,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     mdbx_assert(env, txn->mt_txnid >= *env->me_oldest);
     txn->mt_ro_reader = r;
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
+    mdbx_ensure(env, txn->mt_txnid >=
+                         /* paranoia is appropriate here */ *env->me_oldest);
   } else {
     /* Not yet touching txn == env->me_txn0, it may be active */
     mdbx_jitter4testing(false);
@@ -3618,12 +3620,17 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
              (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
              txn->mt_dbs[FREE_DBI].md_root);
 
+  mdbx_ensure(env, txn->mt_txnid >=
+                       /* paranoia is appropriate here */ *env->me_oldest);
   if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)) {
 #if defined(_WIN32) || defined(_WIN64)
     if (txn->mt_flags & MDBX_SHRINK_ALLOWED)
       mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
 #endif
     if (txn->mt_ro_reader) {
+      mdbx_ensure(env, /* paranoia is appropriate here */
+                  txn->mt_txnid == txn->mt_ro_reader->mr_txnid &&
+                      txn->mt_ro_reader->mr_txnid >= env->me_lck->mti_oldest);
       txn->mt_ro_reader->mr_txnid = ~(txnid_t)0;
       env->me_lck->mti_readers_refresh_flag = true;
       if (mode & MDBX_END_SLOT) {
@@ -5964,7 +5971,7 @@ int __cold mdbx_env_get_maxreaders(MDBX_env *env, unsigned *readers) {
 }
 
 /* Further setup required for opening an MDBX environment */
-static int __cold mdbx_setup_dxb(MDBX_env *env, int lck_rc) {
+static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   uint64_t filesize_before_mmap;
   MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
