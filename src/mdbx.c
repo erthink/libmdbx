@@ -11652,8 +11652,8 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     off_t out_offset = in_offset;
     ssize_t bytes_copied = copy_file_range(
         env->me_fd, &in_offset, fd, &out_offset, data_bytes - in_offset, 0);
-    if (bytes_copied < 0) {
-      rc = errno;
+    if (unlikely(bytes_copied <= 0)) {
+      rc = bytes_copied ? errno : MDBX_ENODATA;
       break;
     }
   }
