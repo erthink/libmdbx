@@ -11639,6 +11639,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     return rc;
   }
 
+  mdbx_jitter4testing(false);
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
   /* Make a snapshot of meta-pages,
    * but writing ones after the data was flushed */
@@ -11654,6 +11655,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 
   /* Copy the data */
   const size_t data_bytes = pgno2bytes(env, read_txn->mt_next_pgno);
+  mdbx_jitter4testing(false);
 #if __GLIBC_PREREQ(2, 27)
   for (off_t in_offset = meta_bytes; in_offset < (off_t)data_bytes;) {
     off_t out_offset = in_offset;

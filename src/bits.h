@@ -1212,7 +1212,7 @@ static __inline pgno_t pgno_sub(pgno_t base, pgno_t subtrahend) {
 }
 
 static __inline void mdbx_jitter4testing(bool tiny) {
-#ifndef NDEBUG
+#if MDBX_DEBUG
   if (MDBX_DBG_JITTER & mdbx_runtime_flags)
     mdbx_osal_jitter(tiny);
 #else

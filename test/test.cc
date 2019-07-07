@@ -139,6 +139,8 @@ void testcase::db_open() {
 
   if (!db_guard)
     db_prepare();
+
+  jitter_delay(true);
   int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(),
                          (unsigned)config.params.mode_flags, 0640);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -569,22 +571,27 @@ bool test_execute(const actor_config &config_const) {
       if (!test->setup()) {
         log_notice("test setup failed");
         return false;
-      } else if (!test->run()) {
+      }
+      if (!test->run()) {
         log_notice("test failed");
         return false;
-      } else if (!test->teardown()) {
+      }
+      if (!test->teardown()) {
         log_notice("test teardown failed");
         return false;
-      } else {
-        if (config.params.nrepeat == 1)
-          log_info("test successed");
-        else if (config.params.nrepeat)
+      }
+
+      if (config.params.nrepeat == 1)
+        log_info("test successed");
+      else {
+        if (config.params.nrepeat)
           log_info("test successed (iteration %zi of %zi)", iter,
                    size_t(config.params.nrepeat));
         else
           log_info("test successed (iteration %zi)", iter);
         config.params.keygen.seed += INT32_C(0xA4F4D37B);
       }
+
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
     return true;
   } catch (const std::exception &pipets) {
