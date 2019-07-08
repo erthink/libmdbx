@@ -2163,7 +2163,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   mdbx_tassert(txn, edge <= txn->mt_txnid - 1);
 
   MDBX_lockinfo *const lck = env->me_lck;
-  if (unlikely(env->me_lck == NULL /* exclusive mode */))
+  if (unlikely(lck == NULL /* exclusive mode */))
     return env->me_oldest_stub = edge;
 
   const txnid_t last_oldest = lck->mti_oldest;
@@ -2199,6 +2199,25 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
     lck->mti_oldest = oldest;
   }
   return oldest;
+}
+
+/* Find largest mvcc-snapshot still referenced. */
+static pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
+  MDBX_lockinfo *const lck = env->me_lck;
+  if (likely(lck != NULL /* exclusive mode */)) {
+    const unsigned snap_nreaders = lck->mti_numreaders;
+    for (unsigned i = 0; i < snap_nreaders; ++i) {
+      if (lck->mti_readers[i].mr_pid) {
+        /* mdbx_jitter4testing(true); */
+        const pgno_t snap = lck->mti_readers[i].mr_snapshot_pages;
+        if (snap && snap >= largest &&
+            lck->mti_oldest >= lck->mti_readers[i].mr_txnid)
+          largest = snap;
+      }
+    }
+  }
+
+  return largest;
 }
 
 /* Add a page to the txn's dirty list */
@@ -3233,6 +3252,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       const txnid_t snap = mdbx_meta_txnid_fluid(env, meta);
       mdbx_jitter4testing(false);
       if (r) {
+        r->mr_snapshot_pages = meta->mm_geo.next;
         r->mr_txnid = snap;
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
@@ -3631,7 +3651,9 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       mdbx_ensure(env, /* paranoia is appropriate here */
                   txn->mt_txnid == txn->mt_ro_reader->mr_txnid &&
                       txn->mt_ro_reader->mr_txnid >= env->me_lck->mti_oldest);
+      txn->mt_ro_reader->mr_snapshot_pages = 0;
       txn->mt_ro_reader->mr_txnid = ~(txnid_t)0;
+      mdbx_memory_barrier();
       env->me_lck->mti_readers_refresh_flag = true;
       if (mode & MDBX_END_SLOT) {
         if ((env->me_flags & MDBX_ENV_TXKEY) == 0)
@@ -5321,19 +5343,23 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
       pending->mm_geo.now - pending->mm_geo.next >
           pending->mm_geo.shrink + backlog_gap) {
-    const pgno_t aligner =
-        pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
-    const pgno_t with_backlog_gap = pending->mm_geo.next + backlog_gap;
-    const pgno_t aligned = pgno_align2os_pgno(
-        env, with_backlog_gap + aligner - with_backlog_gap % aligner);
-    const pgno_t bottom =
-        (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
-    if (pending->mm_geo.now > bottom) {
-      flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
-      shrink = pending->mm_geo.now - bottom;
-      pending->mm_geo.now = bottom;
-      if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
-        mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
+    const pgno_t largest = mdbx_find_largest(env, pending->mm_geo.next);
+    if (pending->mm_geo.now > largest &&
+        pending->mm_geo.now - largest > pending->mm_geo.shrink + backlog_gap) {
+      const pgno_t aligner =
+          pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
+      const pgno_t with_backlog_gap = largest + backlog_gap;
+      const pgno_t aligned = pgno_align2os_pgno(
+          env, with_backlog_gap + aligner - with_backlog_gap % aligner);
+      const pgno_t bottom =
+          (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
+      if (pending->mm_geo.now > bottom) {
+        flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
+        shrink = pending->mm_geo.now - bottom;
+        pending->mm_geo.now = bottom;
+        if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
+          mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
+      }
     }
   }
 
@@ -11687,12 +11713,13 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   }
 #else
   uint8_t *data_buffer = buffer + meta_bytes;
-  for (size_t offset = meta_bytes;
-       likely(rc == MDBX_SUCCESS) && offset < data_bytes;) {
+  for (size_t offset = meta_bytes; offset < data_bytes;) {
     const size_t chunk =
         (MDBX_WBUF < data_bytes - offset) ? MDBX_WBUF : data_bytes - offset;
     memcpy(data_buffer, env->me_map + offset, chunk);
     rc = mdbx_pwrite(fd, data_buffer, chunk, offset);
+    if (unlikely(rc != MDBX_SUCCESS))
+      break;
     offset += chunk;
   }
 #endif
