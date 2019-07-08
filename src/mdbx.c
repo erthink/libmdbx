@@ -3748,7 +3748,7 @@ static __inline int mdbx_backlog_size(MDBX_txn *txn) {
           ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist) +
                 txn->mt_loose_count
           : 0;
-  return reclaimed_and_loose + txn->mt_end_pgno - txn->mt_next_pgno;
+  return reclaimed_and_loose;
 }
 
 static __inline int mdbx_backlog_extragap(MDBX_env *env) {
@@ -3761,7 +3761,9 @@ static __inline int mdbx_backlog_extragap(MDBX_env *env) {
  * in mdbx_page_alloc() during a deleting, when freeDB tree is unbalanced. */
 static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
   /* LY: extra page(s) for b-tree rebalancing */
-  const int extra = mdbx_backlog_extragap(txn->mt_env);
+  const int extra =
+      mdbx_backlog_extragap(txn->mt_env) +
+      MDBX_PNL_SIZEOF(txn->mt_befree_pages) / txn->mt_env->me_maxkey_limit;
 
   if (mdbx_backlog_size(txn) < mc->mc_db->md_depth + extra) {
     mc->mc_flags &= ~C_RECLAIMING;
@@ -3769,11 +3771,10 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
     if (unlikely(rc))
       return rc;
 
-    int backlog;
-    while (unlikely((backlog = mdbx_backlog_size(txn)) < extra)) {
+    while (unlikely(mdbx_backlog_size(txn) < extra)) {
       rc = mdbx_page_alloc(mc, 1, NULL, MDBX_ALLOC_GC);
       if (unlikely(rc)) {
-        if (unlikely(rc != MDBX_NOTFOUND))
+        if (rc != MDBX_NOTFOUND)
           return rc;
         break;
       }
@@ -3782,6 +3783,20 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
   }
 
   return MDBX_SUCCESS;
+}
+
+static void mdbx_prep_backlog_data(MDBX_txn *txn, MDBX_cursor *mc,
+                                   size_t bytes) {
+  const int wanna =
+      (int)OVPAGES(txn->mt_env, bytes) + mdbx_backlog_extragap(txn->mt_env);
+  if (unlikely(wanna > mdbx_backlog_size(txn))) {
+    mc->mc_flags &= ~C_RECLAIMING;
+    do {
+      if (mdbx_page_alloc(mc, 1, NULL, MDBX_ALLOC_GC) != MDBX_SUCCESS)
+        break;
+    } while (wanna > mdbx_backlog_size(txn));
+    mc->mc_flags |= C_RECLAIMING;
+  }
 }
 
 /* Count all the pages in each DB and in the freelist and make sure
@@ -4115,7 +4130,7 @@ retry:
         mc.mc_flags &= ~C_RECLAIMING;
         rc = mdbx_page_search(&mc, NULL, MDBX_PS_LAST | MDBX_PS_MODIFY);
         mc.mc_flags |= C_RECLAIMING;
-        if (unlikely(rc != MDBX_SUCCESS && rc != MDBX_NOTFOUND))
+        if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_NOTFOUND)
           goto bailout;
       }
       /* Write to last page of freeDB */
@@ -4123,6 +4138,7 @@ retry:
       key.iov_base = &txn->mt_txnid;
       do {
         data.iov_len = MDBX_PNL_SIZEOF(txn->mt_befree_pages);
+        mdbx_prep_backlog_data(txn, &mc, data.iov_len);
         rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -4332,6 +4348,7 @@ retry:
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
+    mdbx_prep_backlog_data(txn, &mc, data.iov_len);
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
     if (unlikely(rc != MDBX_SUCCESS))
@@ -4429,13 +4446,15 @@ retry:
       if (unlikely(chunk > left)) {
         mdbx_trace("%s: chunk %u > left %u, @%" PRIaTXN, dbg_prefix_mode, chunk,
                    left, fill_gc_id);
-        if (loop < 5 || chunk - left > env->me_maxgc_ov1page) {
+        if ((loop < 5 && chunk - left > loop / 2) ||
+            chunk - left > env->me_maxgc_ov1page) {
           data.iov_len = (left + 1) * sizeof(pgno_t);
-          if (loop < 21)
+          if (loop < 7)
             mc.mc_flags &= ~C_GCFREEZE;
         }
         chunk = left;
       }
+      mdbx_prep_backlog_data(txn, &mc, data.iov_len);
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
       mc.mc_flags &= ~C_GCFREEZE;
       if (unlikely(rc != MDBX_SUCCESS))
