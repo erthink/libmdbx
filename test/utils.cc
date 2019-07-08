@@ -353,7 +353,7 @@ void jitter_delay(bool extra) {
         cpu_relax();
         if (dice > 2) {
           unsigned us = entropy_white() &
-                        (extra ? 0xfffff /* 1.05 s */ : 0x3ff /* 1 ms */);
+                        (extra ? 0xffff /* 656 ms */ : 0x3ff /* 1 ms */);
           log_trace("== jitter.delay: %0.6f", us / 1000000.0);
           osal_udelay(us);
         }

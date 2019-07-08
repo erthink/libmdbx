@@ -77,9 +77,9 @@ bool testcase_ttl::run() {
 
     const unsigned window_width = edge2window(salt, window_max);
     unsigned head_count = edge2count(salt, count_max);
-    log_info("ttl: step #%zu (serial %" PRIu64
-             ", window %u, count %u) salt %" PRIu64,
-             nops_completed, serial, window_width, head_count, salt);
+    log_verbose("ttl: step #%zu (serial %" PRIu64
+                ", window %u, count %u) salt %" PRIu64,
+                nops_completed, serial, window_width, head_count, salt);
 
     if (window_width) {
       while (fifo.size() > window_width) {
