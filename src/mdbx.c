@@ -2207,12 +2207,19 @@ static pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
   if (likely(lck != NULL /* exclusive mode */)) {
     const unsigned snap_nreaders = lck->mti_numreaders;
     for (unsigned i = 0; i < snap_nreaders; ++i) {
+    retry:
       if (lck->mti_readers[i].mr_pid) {
         /* mdbx_jitter4testing(true); */
-        const pgno_t snap = lck->mti_readers[i].mr_snapshot_pages;
-        if (snap && snap >= largest &&
-            lck->mti_oldest >= lck->mti_readers[i].mr_txnid)
-          largest = snap;
+        const pgno_t snap_pages = lck->mti_readers[i].mr_snapshot_pages;
+        const txnid_t snap_txnid = lck->mti_readers[i].mr_txnid;
+        mdbx_memory_barrier();
+        if (unlikely(snap_pages != lck->mti_readers[i].mr_snapshot_pages ||
+                     snap_txnid != lck->mti_readers[i].mr_txnid))
+          goto retry;
+        if (largest < snap_pages &&
+            lck->mti_oldest <= /* ignore pending updates */ snap_txnid &&
+            snap_txnid <= env->me_txn0->mt_txnid)
+          largest = snap_pages;
       }
     }
   }
