@@ -244,11 +244,14 @@ typedef struct MDBX_reader {
   volatile mdbx_pid_t mr_pid;
   /* The thread ID of the thread owning this txn. */
   volatile mdbx_tid_t mr_tid;
+  /* The number of pages used in the reader's MVCC snapshot,
+   * i.e. the value of meta->mm_geo.next and txn->mt_next_pgno */
+  volatile pgno_t mr_snapshot_pages;
 
   /* cache line alignment */
-  uint8_t pad[MDBX_CACHELINE_SIZE -
-              (sizeof(txnid_t) + sizeof(mdbx_pid_t) + sizeof(mdbx_tid_t)) %
-                  MDBX_CACHELINE_SIZE];
+  uint8_t pad[MDBX_CACHELINE_SIZE - (sizeof(txnid_t) + sizeof(mdbx_pid_t) +
+                                     sizeof(mdbx_tid_t) + sizeof(pgno_t)) %
+                                        MDBX_CACHELINE_SIZE];
 } MDBX_reader;
 
 /* Information about a single database in the environment. */
