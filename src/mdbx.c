@@ -4483,7 +4483,6 @@ retry:
         }
         chunk = left;
       }
-      mdbx_prep_backlog_data(txn, &mc, data.iov_len);
       rc = mdbx_cursor_put(&mc, &key, &data, MDBX_CURRENT | MDBX_RESERVE);
       mc.mc_flags &= ~C_GCFREEZE;
       if (unlikely(rc != MDBX_SUCCESS))
