@@ -73,16 +73,10 @@ function probe {
 
 ###############################################################################
 
-if [ ${db_size_mb} -gt 1111 ]; then
-biggest=6
-else
-biggest=5
-fi
-
 count=0
-for nops in $(seq ${biggest} -1 2); do
+for nops in $(seq 2 6); do
 	for ((wbatch=nops-1; wbatch > 0; --wbatch)); do
-		loops=$(((99 >> nops) / nops + 3))
+		loops=$(((111 >> nops) / nops + 3))
 		for ((rep=0; rep++ < loops; )); do
 			for ((bits=2**${#options[@]}; --bits >= 0; )); do
 				seed=$(date +%N)
