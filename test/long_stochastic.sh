@@ -1,4 +1,9 @@
 #!/bin/bash
+if ! which make cc c++ tee lz4 >/dev/null; then
+	echo "Please install the following prerequisites: make cc c++ tee lz4" >&2
+	exit -1
+fi
+
 set -euo pipefail
 TESTDB_PREFIX=${1:-/dev/shm/mdbx-gc-test}.
 
