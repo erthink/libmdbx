@@ -32,7 +32,7 @@ TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
-LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O,--no-as-needed,-lrt
+LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O1,--no-as-needed,-lrt
 EXE_LDFLAGS ?= -pthread -lrt
 
 # LY: just for benchmarking
