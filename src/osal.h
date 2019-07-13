@@ -434,7 +434,8 @@ static __inline void mdbx_invalidate_cache(void *addr, size_t nbytes) {
 /*----------------------------------------------------------------------------*/
 /* libc compatibility stuff */
 
-#if __GLIBC_PREREQ(2, 1)
+#if (!defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) &&                           \
+    (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
 #define mdbx_asprintf asprintf
 #define mdbx_vasprintf vasprintf
 #else

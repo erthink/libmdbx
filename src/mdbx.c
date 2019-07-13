@@ -11707,7 +11707,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   /* Copy the data */
   const size_t data_bytes = pgno2bytes(env, read_txn->mt_next_pgno);
   mdbx_jitter4testing(false);
-#if __GLIBC_PREREQ(2, 27)
+#if __GLIBC_PREREQ(2, 27) && defined(_GNU_SOURCE)
   for (off_t in_offset = meta_bytes; in_offset < (off_t)data_bytes;) {
     off_t out_offset = in_offset;
     ssize_t bytes_copied = copy_file_range(
