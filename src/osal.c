@@ -153,13 +153,21 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 
 /*----------------------------------------------------------------------------*/
 
-#if !defined(_MSC_VER) &&                                                      \
+#if _POSIX_C_SOURCE > 200212 &&                                                \
     /* workaround for avoid musl libc wrong prototype */ (                     \
         defined(__GLIBC__) || defined(__GNU_LIBRARY__))
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
 __nothrow __noreturn void __assert_fail(const char *assertion, const char *file,
                                         unsigned line, const char *function);
-#endif /* _MSC_VER */
+#elif (defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||  \
+       defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||         \
+       defined(__DragonFly__))
+__nothrow __noreturn void __assert(const char *function, const char *file,
+                                   int line, const char *assertion);
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert(function, file, line, assertion)
+
+#endif /* __assert_fail */
 
 void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
                              const char *func, int line) {
