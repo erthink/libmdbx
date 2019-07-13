@@ -112,7 +112,11 @@ typedef DWORD mdbx_tid_t;
 typedef int mdbx_filehandle_t;
 typedef pid_t mdbx_pid_t;
 typedef pthread_t mdbx_tid_t;
+#ifdef ENODATA
 #define MDBX_ENODATA ENODATA
+#else
+#define MDBX_ENODATA -1
+#endif
 #define MDBX_EINVAL EINVAL
 #define MDBX_EACCESS EACCES
 #define MDBX_ENOMEM ENOMEM
