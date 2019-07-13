@@ -26,9 +26,14 @@
 #endif
 
 #if __GNUC_PREREQ(4, 4) || defined(__clang__)
+#ifndef bswap64
 #define bswap64(v) __builtin_bswap64(v)
+#endif
+#ifndef bswap32
 #define bswap32(v) __builtin_bswap32(v)
-#if __GNUC_PREREQ(4, 8) || __has_builtin(__builtin_bswap16)
+#endif
+#if (__GNUC_PREREQ(4, 8) || __has_builtin(__builtin_bswap16)) &&               \
+    !defined(bswap16)
 #define bswap16(v) __builtin_bswap16(v)
 #endif
 
