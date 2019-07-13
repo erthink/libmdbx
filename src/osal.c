@@ -279,12 +279,15 @@ int mdbx_memalign_alloc(size_t alignment, size_t bytes, void **result) {
   (void)alignment;
   *result = VirtualAlloc(NULL, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   return *result ? MDBX_SUCCESS : MDBX_ENOMEM /* ERROR_OUTOFMEMORY */;
-#elif __GLIBC_PREREQ(2, 16) || __STDC_VERSION__ >= 201112L
-  *result = memalign(alignment, bytes);
+#elif defined(_ISOC11_SOURCE)
+  *result = aligned_alloc(alignment, bytes);
   return *result ? MDBX_SUCCESS : errno;
 #elif _POSIX_VERSION >= 200112L
   *result = nullptr;
   return posix_memalign(result, alignment, bytes);
+#elif __GLIBC_PREREQ(2, 16) || __STDC_VERSION__ >= 201112L
+  *result = memalign(alignment, bytes);
+  return *result ? MDBX_SUCCESS : errno;
 #else
 #error FIXME
 #endif
