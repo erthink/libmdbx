@@ -22,7 +22,8 @@
 #if defined(EOWNERDEAD) &&                                                     \
     !defined(__ANDROID__) /* LY: glibc before 2.10 has a troubles              \
                                  with Robust Mutex too. */                     \
-    && __GLIBC_PREREQ(2, 10)
+    && (!defined(__GLIBC__) || __GLIBC_PREREQ(2, 10) ||                        \
+        _POSIX_C_SOURCE >= 200809L)
 #define MDBX_USE_ROBUST 1
 #else
 #define MDBX_USE_ROBUST 0
@@ -141,10 +142,11 @@ int __cold mdbx_lck_init(MDBX_env *env) {
     goto bailout;
 
 #if MDBX_USE_ROBUST
-#if __GLIBC_PREREQ(2, 12)
-  rc = pthread_mutexattr_setrobust(&ma, PTHREAD_MUTEX_ROBUST);
-#else
+#if defined(__GLIBC__) && !__GLIBC_PREREQ(2, 12) &&                            \
+    !defined(pthread_mutex_consistent) && _POSIX_C_SOURCE < 200809L
   rc = pthread_mutexattr_setrobust_np(&ma, PTHREAD_MUTEX_ROBUST_NP);
+#else
+  rc = pthread_mutexattr_setrobust(&ma, PTHREAD_MUTEX_ROBUST);
 #endif
   if (rc)
     goto bailout;
@@ -294,10 +296,6 @@ int __cold mdbx_lck_seize(MDBX_env *env) {
   return internal_seize_lck(env->me_lfd);
 }
 
-#if !__GLIBC_PREREQ(2, 12) && !defined(pthread_mutex_consistent)
-#define pthread_mutex_consistent(mutex) pthread_mutex_consistent_np(mutex)
-#endif
-
 static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                                     const int err) {
   int rc = err;
@@ -321,7 +319,12 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
     int check_rc = mdbx_reader_check0(env, rlocked, NULL);
     check_rc = (check_rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : check_rc;
 
+#if defined(__GLIBC__) && !__GLIBC_PREREQ(2, 12) &&                            \
+    !defined(pthread_mutex_consistent) && _POSIX_C_SOURCE < 200809L
+    int mreco_rc = pthread_mutex_consistent_np(mutex);
+#else
     int mreco_rc = pthread_mutex_consistent(mutex);
+#endif
     check_rc = (mreco_rc == 0) ? check_rc : mreco_rc;
 
     if (unlikely(mreco_rc))
@@ -332,6 +335,8 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
       pthread_mutex_unlock(mutex);
     return rc;
   }
+#else
+  (void)mutex;
 #endif /* MDBX_USE_ROBUST */
 
   mdbx_error("mutex (un)lock failed, %s", mdbx_strerror(err));

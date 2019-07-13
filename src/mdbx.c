@@ -1331,7 +1331,7 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
     return size ? buf : NULL;
-#elif defined(_GNU_SOURCE)
+#elif defined(_GNU_SOURCE) && defined(__GLIBC__)
     /* GNU-specific */
     msg = strerror_r(errnum, buf, buflen);
 #elif (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
