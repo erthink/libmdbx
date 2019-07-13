@@ -1147,11 +1147,21 @@ retry_mapview:;
   return rc;
 #else
   if (limit != map->length) {
-    void *ptr = mremap(map->address, map->length, limit, MREMAP_MAYMOVE);
-    if (ptr == MAP_FAILED)
-      return errno;
+#if defined(_GNU_SOURCE) && !defined(__FreeBSD__)
+    void *ptr = mremap(map->address, map->length, limit,
+                       /* LY: in case changing the mapping size calling code
+                          must guarantees the absence of competing threads, and
+                          a willingness to another base address */
+                       MREMAP_MAYMOVE);
+    if (ptr == MAP_FAILED) {
+      int err = errno;
+      return (err == EAGAIN || err == ENOMEM) ? MDBX_RESULT_TRUE : err;
+    }
     map->address = ptr;
     map->length = limit;
+#else
+    return MDBX_RESULT_TRUE;
+#endif /* mremap() <= _GNU_SOURCE && !__FreeBSD__ */
   }
   return (flags & MDBX_RDONLY) ? MDBX_SUCCESS : mdbx_ftruncate(map->fd, size);
 #endif
