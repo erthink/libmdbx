@@ -50,10 +50,14 @@
 #include <assert.h>
 #include <fcntl.h>
 #include <limits.h>
-#include <malloc.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#if !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
+      defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||          \
+      defined(__DragonFly__))
+#include <malloc.h>
+#endif /* xBSD */
 
 #ifndef _POSIX_C_SOURCE
 #ifdef _POSIX_SOURCE
