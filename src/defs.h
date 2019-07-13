@@ -240,9 +240,9 @@
 
 #ifndef __dll_hidden
 #   if defined(__GNUC__) || __has_attribute(visibility)
-#       define __hidden __attribute__((visibility("hidden")))
+#       define __dll_hidden __attribute__((visibility("hidden")))
 #   else
-#       define __hidden
+#       define __dll_hidden
 #   endif
 #endif /* __dll_hidden */
 
