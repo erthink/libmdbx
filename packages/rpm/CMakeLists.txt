@@ -3,8 +3,8 @@ set(TARGET mdbx)
 project(${TARGET})
 
 set(MDBX_VERSION_MAJOR 0)
-set(MDBX_VERSION_MINOR 2)
-set(MDBX_VERSION_RELEASE 0)
+set(MDBX_VERSION_MINOR 3)
+set(MDBX_VERSION_RELEASE 1)
 set(MDBX_VERSION_REVISION 0)
 
 set(MDBX_VERSION_STRING ${MDBX_VERSION_MAJOR}.${MDBX_VERSION_MINOR}.${MDBX_VERSION_RELEASE})
@@ -83,7 +83,7 @@ set(${TARGET}_SRC
   mdbx.h
   src/bits.h
   src/defs.h
-  src/lck-posix.c
+  src/lck-linux.c
   src/mdbx.c
   src/osal.c
   src/osal.h

@@ -12,6 +12,12 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
+#if !(defined(__linux__) || defined(__gnu_linux__))
+#error "This implementation of locking only supports Linux,\
+ where is no interaction between the types of lock placed\
+ by flock() and fcntl()."
+#endif
+
 #include "./bits.h"
 
 /* Some platforms define the EOWNERDEAD error code
