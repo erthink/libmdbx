@@ -189,50 +189,6 @@ static __inline uint64_t rot64(uint64_t v, unsigned s) {
 }
 #endif /* rot64 */
 
-#ifndef mul_32x32_64
-static __inline uint64_t mul_32x32_64(uint32_t a, uint32_t b) {
-  return a * (uint64_t)b;
-}
-#endif /* mul_32x32_64 */
-
-#ifndef mul_64x64_128
-
-static __inline unsigned add_with_carry(uint64_t *sum, uint64_t addend) {
-  *sum += addend;
-  return (*sum < addend) ? 1u : 0u;
-}
-
-static __inline uint64_t mul_64x64_128(uint64_t a, uint64_t b, uint64_t *h) {
-#if defined(__SIZEOF_INT128__) ||                                              \
-    (defined(_INTEGRAL_MAX_BITS) && _INTEGRAL_MAX_BITS >= 128)
-  __uint128_t r = (__uint128_t)a * (__uint128_t)b;
-  /* modern GCC could nicely optimize this */
-  *h = r >> 64;
-  return r;
-#elif defined(mul_64x64_high)
-  *h = mul_64x64_high(a, b);
-  return a * b;
-#else
-  /* performs 64x64 to 128 bit multiplication */
-  uint64_t ll = mul_32x32_64((uint32_t)a, (uint32_t)b);
-  uint64_t lh = mul_32x32_64(a >> 32, (uint32_t)b);
-  uint64_t hl = mul_32x32_64((uint32_t)a, b >> 32);
-  *h = mul_32x32_64(a >> 32, b >> 32) + (lh >> 32) + (hl >> 32) +
-       add_with_carry(&ll, lh << 32) + add_with_carry(&ll, hl << 32);
-  return ll;
-#endif
-}
-
-#endif /* mul_64x64_128() */
-
-#ifndef mul_64x64_high
-static __inline uint64_t mul_64x64_high(uint64_t a, uint64_t b) {
-  uint64_t h;
-  mul_64x64_128(a, b, &h);
-  return h;
-}
-#endif /* mul_64x64_high */
-
 static __inline bool is_power2(size_t x) { return (x & (x - 1)) == 0; }
 
 #undef roundup2
