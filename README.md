@@ -54,8 +54,8 @@ and free Continuous Integration service will be available.
 - [Main features](#main-features)
 - [Improvements over LMDB](#improvements-over-lmdb)
 - [Gotchas](#gotchas)
-  - [Long-time read transactions problem](#long-time-read-transactions-problem)
-  - [Data safety in async-write-mode](#data-safety-in-async-write-mode)
+  - [Problem of long-time reading](#problem-of-long-time-reading)
+  - [Durability in asynchronous writing mode](#durability-in-asynchronous-writing-mode)
 - [Performance comparison](#performance-comparison)
   - [Integral performance](#integral-performance)
   - [Read scalability](#read-scalability)
@@ -72,42 +72,31 @@ for performance under Linux and Windows.
 _libmdbx_ allows multiple processes to read and update several key-value
 tables concurrently, while being
 [ACID](https://en.wikipedia.org/wiki/ACID)-compliant, with minimal
-overhead and operation cost of Olog(N).
+overhead and Olog(N) operation cost.
 
-_libmdbx_ provides
-[serializability](https://en.wikipedia.org/wiki/Serializability) and
-consistency of data after crash. Read-write transactions don't block
-read-only transactions and are
-[serialized](https://en.wikipedia.org/wiki/Serializability) by
-[mutex](https://en.wikipedia.org/wiki/Mutual_exclusion).
+_libmdbx_ enforce [serializability](https://en.wikipedia.org/wiki/Serializability) for writers by single [mutex](https://en.wikipedia.org/wiki/Mutual_exclusion) and affords [wait-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Wait-freedom) for parallel readers without atomic/interlocked operations, while writing and reading transactions do not block each other.
 
-_libmdbx_
-[wait-free](https://en.wikipedia.org/wiki/Non-blocking_algorithm#Wait-freedom)
-provides parallel read transactions without atomic operations or
-synchronization primitives.
+_libmdbx_ can guarantee consistency after crash depending of operation mode.
 
 _libmdbx_ uses [B+Trees](https://en.wikipedia.org/wiki/B%2B_tree) and
-[mmap](https://en.wikipedia.org/wiki/Memory-mapped_file), doesn't use
-[WAL](https://en.wikipedia.org/wiki/Write-ahead_logging). This might
-have caveats for some workloads.
+[Memory-Mapping](https://en.wikipedia.org/wiki/Memory-mapped_file), doesn't use
+[WAL](https://en.wikipedia.org/wiki/Write-ahead_logging) which
+might be a caveat for some workloads.
 
 ### Comparison with other DBs
-Because _libmdbx_ is currently overhauled, I think it's better to just
-link [chapter of Comparison with other
-databases](https://github.com/coreos/bbolt#comparison-with-other-databases)
-here.
+For now please refer to [chapter of "BoltDB comparison with other
+databases"](https://github.com/coreos/bbolt#comparison-with-other-databases)
+which is also (mostly) applicable to MDBX.
 
 ### History
 The _libmdbx_ design is based on [Lightning Memory-Mapped
 Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
-Initial development was going in
-[ReOpenLDAP](https://github.com/leo-yuriev/ReOpenLDAP) project, about a
-year later it received separate development effort and in autumn 2015
-was isolated to separate project, which was [presented at Highload++
+Initial development was going in [ReOpenLDAP](https://github.com/leo-yuriev/ReOpenLDAP) project.
+About a year later libmdbx was isolated to separate project, which was [presented at Highload++
 2015 conference](http://www.highload.ru/2015/abstracts/1831.html).
 
-Since early 2017 _libmdbx_ is used in [Fast PositiveTables](https://github.com/leo-yuriev/libfpta),
-by [Positive Technologies](https://www.ptsecurity.com).
+Since early 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/leo-yuriev/libfpta),
+and development is funded by [Positive Technologies](https://www.ptsecurity.com).
 
 #### Acknowledgments
 Howard Chu (Symas Corporation) - the author of LMDB, from which
@@ -143,10 +132,10 @@ don't use [atomic
 operations](https://en.wikipedia.org/wiki/Linearizability#High-level_atomic_operations).
 Readers don't block each other and aren't blocked by writers. Read
 performance scales linearly with CPU core count.
-  > Though "connect to DB" (start of first read transaction in thread) and
+  > Nonetheless, "connect to DB" (start of first read transaction in thread) and
   > "disconnect from DB" (shutdown or thread termination) requires to
   > acquire a lock to register/unregister current thread from "readers
-  > table"
+  > table".
 
 5. Keys with multiple values are stored efficiently without key
 duplication, sorted by value, including integers (reasonable for
@@ -201,7 +190,7 @@ optimal query execution plan.
 6. Support for keys and values of zero length, including sorted
 duplicates.
 
-7. Ability to assign up to 3 markers to commiting transaction with
+7. Ability to assign up to 3 persistent 64-bit markers to commiting transaction with
 `mdbx_canary_put()` and then get them in read transaction by
 `mdbx_canary_get()`.
 
@@ -346,7 +335,7 @@ performance bottleneck in `MAPASYNC` mode.
   > storage then it's much more preferable to use `std::map`.
 
 
-4. LMDB has a problem of long-time readers which degrades performance
+4. _LMDB_ has a problem of long-time readers which degrades performance
 and bloats DB.
   > _libmdbx_ addresses that, details below.
 
@@ -357,56 +346,41 @@ of data.
   > Details below.
 
 
-#### Long-time read transactions problem
+#### Problem of long-time reading
 Garbage collection problem exists in all databases one way or another
 (e.g. VACUUM in PostgreSQL). But in _libmdbx_ and LMDB it's even more
-important because of high performance and deliberate simplification of
-internals with emphasis on performance.
+discernible because of high transaction rate and intentional internals
+simplification in favor of performance.
 
-* Altering data during long read operation may exhaust available space
-on persistent storage.
+Understanding the problem requires some explanation, but can be
+difficult for quick perception. So is is reasonable
+to simplify this as follows:
 
-* If available space is exhausted then any attempt to update data
-results in `MAP_FULL` error until long read operation ends.
+* Massive altering of data during a parallel long read operation may
+exhaust the free DB space.
 
-* Main examples of long readers is hot backup and debugging of client
-application which actively uses read transactions.
+* If the available space is exhausted, any attempt to update the data
+* will cause a "MAP_FULL" error until a long read transaction is completed.
+
+* A good example of long readers is a hot backup or debugging of
+a client application while retaining an active read transaction.
 
 * In _LMDB_ this results in degraded performance of all operations of
-syncing data to persistent storage.
+writing data to persistent storage.
 
-* _libmdbx_ has a mechanism which aborts such operations and `LIFO RECLAIM`
-mode which addresses performance degradation.
+* _libmdbx_ has the `OOM-KICK` mechanism which allow to abort such
+operations and the `LIFO RECLAIM` mode which addresses performance
+degradation.
 
-Read operations operate only over snapshot of DB which is consistent on
-the moment when read transaction started. This snapshot doesn't change
-throughout the transaction but this leads to inability to reclaim the
-pages until read transaction ends.
-
-In _LMDB_ this leads to a problem that memory pages, allocated for
-operations during long read, will be used for operations and won't be
-reclaimed until DB process terminates. In _LMDB_ they are used in
-[FIFO](https://en.wikipedia.org/wiki/FIFO_(computing_and_electronics))
-manner, which causes increased page count and less chance of cache hit
-during I/O. In other words: one long-time reader can impact performance
-of all database until it'll be reopened.
-
-_libmdbx_ addresses the problem, details below. Illustrations to this
-problem can be found in the
-[presentation](http://www.slideshare.net/leoyuriev/lmdb). There is also
-example of performance increase thanks to
-[BBWC](https://en.wikipedia.org/wiki/Disk_buffer#Write_acceleration)
-when `LIFO RECLAIM` enabled in _libmdbx_.
-
-#### Data safety in async-write mode
-In `WRITEMAP+MAPSYNC` mode dirty pages are written to persistent storage
-by kernel. This means that in case of application crash OS kernel will
-write all dirty data to disk and nothing will be lost. But in case of
-hardware malfunction or OS kernel fatal error only some dirty data might
-be synced to disk, and there is high probability that pages with
-metadata saved, will point to non-saved, hence non-existent, data pages.
-In such situation, DB is completely corrupted and can't be repaired even
-if there was full sync before the crash via `mdbx_env_sync().
+#### Durability in asynchronous writing mode
+In `WRITEMAP+MAPSYNC` mode updated (aka dirty) pages are written
+to persistent storage by the OS kernel. This means that if the
+application fails, the OS kernel will finish writing all updated
+data to disk and nothing will be lost.
+However, in the case of hardware malfunction or OS kernel fatal error,
+only some updated data can be written to disk and the database structure
+is likely to be destroyed.
+In such situation, DB is completely corrupted and can't be repaired.
 
 _libmdbx_ addresses this by fully reimplementing write path of data:
 
@@ -414,39 +388,38 @@ _libmdbx_ addresses this by fully reimplementing write path of data:
 instead their shadow copies are used and their updates are synced after
 data is flushed to disk.
 
-* During transaction commit _libmdbx_ marks synchronization points as
-steady or weak depending on how much synchronization needed between RAM
-and persistent storage, e.g. in `WRITEMAP+MAPSYNC` commited transactions
-are marked as weak, but during explicit data synchronization - as
-steady.
+* During transaction commit _libmdbx_ marks it as a steady or weak
+depending on synchronization status between RAM and persistent storage.
+For instance, in the `WRITEMAP+MAPSYNC` mode committed transactions
+are marked as weak by default, but as steady after explicit data flushes.
 
 * _libmdbx_ maintains three separate meta-pages instead of two. This
-allows to commit transaction with steady or weak synchronization point
-without losing two previous synchronization points (one of them can be
-steady, and second - weak). This allows to order weak and steady
-synchronization points in any order without losing consistency in case
-of system crash.
+allows to commit transaction as steady or weak without losing two
+previous commit points (one of them can be steady, and another
+weak). Thus, after a fatal system failure, it will be possible to
+rollback to the last steady commit point.
 
-* During DB open _libmdbx_ rollbacks to the last steady synchronization
-point, this guarantees database integrity.
+* During DB open _libmdbx_ rollbacks to the last steady commit point,
+this guarantees database integrity after a crash. However, if the
+database opening in read-only mode, such rollback cannot be performed
+which will cause returning the MDBX_WANNA_RECOVERY error.
 
-For data safety pages which form database snapshot with steady
-synchronization point must not be updated until next steady
-synchronization point. So last steady synchronization point creates
-"long-time read" effect. The only difference that in case of memory
-exhaustion the problem will be immediately addressed by flushing changes
-to persistent storage and forming new steady synchronization point.
+For data integrity a pages which form database snapshot with steady
+commit point, must not be updated until next steady commit point.
+Therefore the last steady commit point creates an effect analogues to "long-time read".
+The only difference that now in case of space exhaustion the problem
+will be immediately addressed by writing changes to disk and forming
+the new steady commit point.
 
-So in async-write mode _libmdbx_ will always use new pages until memory
-is exhausted or `mdbx_env_sync()` is invoked. Total disk usage will be
-almost the same as in sync-write mode.
+So in async-write mode _libmdbx_ will always use new pages until the
+free DB space will be exhausted or `mdbx_env_sync()` will be invoked,
+and the total write traffic to the disk will be the same as in sync-write mode.
 
-Current _libmdbx_ gives a choice of safe async-write mode (default) and
-`UTTERLY_NOSYNC` mode which may result in full DB corruption during
-system crash as with LMDB.
+Currently libmdbx gives a choice between a safe async-write mode (default) and
+`UTTERLY_NOSYNC` mode which may lead to DB corruption after a system crash, i.e. like the LMDB.
 
-Next version of _libmdbx_ will create steady synchronization points
-automatically in async-write mode.
+Next version of _libmdbx_ will be automatically create steady commit
+points in async-write mode upon completion transfer data to the disk.
 
 --------------------------------------------------------------------------------
 
