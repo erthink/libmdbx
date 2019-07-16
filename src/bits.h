@@ -1213,3 +1213,16 @@ static __inline void mdbx_jitter4testing(bool tiny) {
   (void)tiny;
 #endif
 }
+
+/* Controls checking PID against reuse DB environment after the fork() */
+#ifndef MDBX_TXN_CHECKPID
+#if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
+/* PID check could be ommited:
+ *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
+ *    mapped pages will not be available for child process.
+ *  - in Windows where fork() not available. */
+#define MDBX_TXN_CHECKPID 0
+#else
+#define MDBX_TXN_CHECKPID 1
+#endif
+#endif /* MDBX_TXN_CHECKPID */

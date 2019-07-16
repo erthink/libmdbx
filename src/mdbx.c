@@ -3155,10 +3155,12 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   MDBX_env *env = txn->mt_env;
   int rc;
 
+#if MDBX_TXN_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
+#endif /* MDBX_TXN_CHECKPID */
 
   STATIC_ASSERT(sizeof(MDBX_reader) == MDBX_CACHELINE_SIZE);
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_numreaders) % MDBX_CACHELINE_SIZE ==
@@ -3436,8 +3438,10 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
+#if MDBX_TXN_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid()))
     env->me_flags |= MDBX_FATAL_ERROR;
+#endif /* MDBX_TXN_CHECKPID */
 
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
@@ -3635,10 +3639,12 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *env = txn->mt_env;
   static const char *const names[] = MDBX_END_NAMES;
 
+#if MDBX_TXN_CHECKPID
   if (unlikely(txn->mt_env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
+#endif /* MDBX_TXN_CHECKPID */
 
   mdbx_debug("%s txn %" PRIaTXN "%c %p on mdbenv %p, root page %" PRIaPGNO
              "/%" PRIaPGNO,
@@ -4719,10 +4725,12 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     return MDBX_THREAD_MISMATCH;
 
   MDBX_env *env = txn->mt_env;
+#if MDBX_TXN_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
+#endif /* MDBX_TXN_CHECKPID */
 
   if (txn->mt_child) {
     rc = mdbx_txn_commit(txn->mt_child);
@@ -5716,8 +5724,10 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
+#if MDBX_TXN_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid()))
     env->me_flags |= MDBX_FATAL_ERROR;
+#endif /* MDBX_TXN_CHECKPID */
 
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
@@ -12636,10 +12646,12 @@ int __cold mdbx_reader_check(MDBX_env *env, int *dead) {
 int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   mdbx_assert(env, rdt_locked >= 0);
 
+#if MDBX_TXN_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
+#endif /* MDBX_TXN_CHECKPID */
 
   MDBX_lockinfo *const lck = env->me_lck;
   if (unlikely(lck == NULL)) {
