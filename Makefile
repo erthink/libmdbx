@@ -91,7 +91,7 @@ check-singleprocess:	all
 
 check-fault:	all
 	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
-	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
+	; ./mdbx_chk -vvnw $(TESTDB) && ([ ! -e $(TESTDB)-copy ] || ./mdbx_chk -vvn $(TESTDB)-copy)
 
 define core-rule
 $(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile
