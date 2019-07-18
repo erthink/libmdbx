@@ -187,15 +187,14 @@ optimal query execution plan.
 
 5. `mdbx_chk` tool for DB integrity check.
 
-6. Support for keys and values of zero length, including sorted
-duplicates.
+6. Support for keys and values of zero length, including multi-values (aka sorted duplicates).
 
 7. Ability to assign up to 3 persistent 64-bit markers to commiting transaction with
 `mdbx_canary_put()` and then get them in read transaction by
 `mdbx_canary_get()`.
 
-8. Ability to update or delete record and get previous value via
-`mdbx_replace()`. Also can update specific multi-value.
+8. Ability to update or delete record and get previous value via `mdbx_replace()`.
+Also allows update the specific item from multi-value with the same key.
 
 9. Sequence generation via `mdbx_dbi_sequence()`.
 
@@ -217,30 +216,29 @@ duplicates.
 
     * abort current write transaction with returning error code.
 
-11. Ability to open DB in exclusive mode with `MDBX_EXCLUSIVE` flag.
+11. Ability to open DB in exclusive mode by `MDBX_EXCLUSIVE` flag.
 
-12. Ability to get how far current read-only snapshot is from latest
-version of the DB by `mdbx_txn_straggler()`.
+12. Ability to get how far current read-transaction snapshot lags
+from the latest version of the DB by `mdbx_txn_straggler()`.
 
-13. Ability to explicitly request update of present record without
-creating new record. Implemented as `MDBX_CURRENT` flag for
-`mdbx_put()`.
+13. Ability to explicitly update the existing record, not insertion
+a new one. Implemented as `MDBX_CURRENT` flag for `mdbx_put()`.
 
 14. Fixed `mdbx_cursor_count()`, which returns correct count of
-duplicated for all table types and any cursor position.
+duplicated (aka multi-value) for all cases and any cursor position.
 
 15. `mdbx_env_info()` to getting additional info, including number of
-the oldest snapshot of DB, which is used by one of the readers.
+the oldest snapshot of DB, which is used by someone of the readers.
 
 16. `mdbx_del()` doesn't ignore additional argument (specifier) `data`
 for tables without duplicates (without flag `MDBX_DUPSORT`), if `data`
 is not null then always uses it to verify record, which is being
 deleted.
 
-17. Ability to open dbi-table with simultaneous setup of comparators for
-keys and values, via `mdbx_dbi_open_ex()`.
+17. Ability to open dbi-table with simultaneous with race-free setup
+of comparators for keys and values, via `mdbx_dbi_open_ex()`.
 
-18. `mdbx_is_dirty()`to find out if key or value is on dirty page, that
+18. `mdbx_is_dirty()`to find out if given key or value is on dirty page, that
 useful to avoid copy-out before updates.
 
 19. Correct update of current record in `MDBX_CURRENT` mode of
@@ -255,21 +253,21 @@ useful to avoid copy-out before updates.
 22. Ability to get value by key and duplicates count by `mdbx_get_ex()`.
 
 23. Functions `mdbx_cursor_on_first()` and `mdbx_cursor_on_last()`,
-which allows to know if cursor is currently on first or last position
+which allows to check cursor is currently on first or last position
 respectively.
 
-24. Automatic creation of synchronization points (flush changes to
-persistent storage) when changes reach set threshold (threshold can be
-set by `mdbx_env_set_syncbytes()`).
+24. Automatic creation of steady commit-points (flushing data to the
+disk) when the volume of changes reaches a threshold, which can be
+set by `mdbx_env_set_syncbytes()`.
 
 25. Control over debugging and receiving of debugging messages via
 `mdbx_setup_debug()`.
 
-26. Function `mdbx_env_pgwalk()` for page-walking all pages in DB.
+26. Function `mdbx_env_pgwalk()` for page-walking the DB.
 
-27. Three meta-pages instead of two, this allows to guarantee
-consistently update weak sync-points without risking to corrupt last
-steady sync-point.
+27. Three meta-pages instead of two, that allows to guarantee
+consistency of data when updating weak commit-points without the
+risk of damaging the last steady commit-point.
 
 28. Guarantee of DB integrity in `WRITEMAP+MAPSYNC` mode:
   > Current _libmdbx_ gives a choice of safe async-write mode (default)
@@ -281,9 +279,9 @@ steady sync-point.
 creation of steady synchronization point) via `mdbx_env_close_ex()`.
 
 30. If read transaction is aborted via `mdbx_txn_abort()` or
-`mdbx_txn_reset()` then DBI-handles, which were opened in it, aren't
-closed or deleted. This allows to avoid several types of hard-to-debug
-errors.
+`mdbx_txn_reset()` then DBI-handles, which were opened during it,
+will not be closed or deleted. In several cases this allows
+to avoid hard-to-debug errors.
 
 31. All cursors in all read and write transactions can be reused by
 `mdbx_cursor_renew()` and MUST be freed explicitly.
@@ -300,9 +298,8 @@ errors.
 
 ## Gotchas
 
-1. At one moment there can be only one writer. But this allows to
-serialize writes and eliminate any possibility of conflict or logical
-errors during transaction rollback.
+1. There cannot be more than one writer at a time. This allows serialize an
+updates and eliminate any possibility of conflicts, deadlocks or logical errors.
 
 2. No [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging) means
 relatively big [WAF](https://en.wikipedia.org/wiki/Write_amplification)
