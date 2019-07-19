@@ -109,40 +109,38 @@ was used for begin development of LMDB.
 Main features
 =============
 
-_libmdbx_ inherits all keys features and characteristics from
+_libmdbx_ inherits all features and characteristics from
 [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database):
 
-1. Data is stored in ordered map, keys are always sorted, range lookups
-are supported.
+1. Key-value pairs are stored in ordered map(s), keys are always sorted,
+range lookups are supported.
 
-2. Data is [mmaped](https://en.wikipedia.org/wiki/Memory-mapped_file) to
-memory of each worker DB process, read transactions are zero-copy.
+2. Data is [memory-mapped](https://en.wikipedia.org/wiki/Memory-mapped_file)
+into each worker DB process, and could be accessed zero-copy from transactions.
 
 3. Transactions are
-[ACID](https://en.wikipedia.org/wiki/ACID)-compliant, thanks to
+[ACID](https://en.wikipedia.org/wiki/ACID)-compliant, through to
 [MVCC](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
 and [CoW](https://en.wikipedia.org/wiki/Copy-on-write). Writes are
 strongly serialized and aren't blocked by reads, transactions can't
 conflict with each other. Reads are guaranteed to get only commited data
 ([relaxing serializability](https://en.wikipedia.org/wiki/Serializability#Relaxing_serializability)).
 
-4. Reads and queries are
+4. Read transactions are
 [non-blocking](https://en.wikipedia.org/wiki/Non-blocking_algorithm),
-don't use [atomic
-operations](https://en.wikipedia.org/wiki/Linearizability#High-level_atomic_operations).
+don't use [atomic operations](https://en.wikipedia.org/wiki/Linearizability#High-level_atomic_operations).
 Readers don't block each other and aren't blocked by writers. Read
 performance scales linearly with CPU core count.
-  > Nonetheless, "connect to DB" (start of first read transaction in thread) and
-  > "disconnect from DB" (shutdown or thread termination) requires to
-  > acquire a lock to register/unregister current thread from "readers
-  > table".
+  > Nonetheless, "connect to DB" (starting the first read transaction in a thread) and
+  > "disconnect from DB" (closing DB or thread termination) requires a lock
+  > acquisition to register/unregister at the "readers table".
 
 5. Keys with multiple values are stored efficiently without key
-duplication, sorted by value, including integers (reasonable for
+duplication, sorted by value, including integers (valuable for
 secondary indexes).
 
-6. Efficient operation on short fixed length keys, including integer
-ones.
+6. Efficient operation on short fixed length keys,
+including 32/64-bit integer types.
 
 7. [WAF](https://en.wikipedia.org/wiki/Write_amplification) (Write
 Amplification Factor) и RAF (Read Amplification Factor) are Olog(N).
@@ -150,9 +148,9 @@ Amplification Factor) и RAF (Read Amplification Factor) are Olog(N).
 8. No [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging) and
 transaction journal. In case of a crash no recovery needed. No need for
 regular maintenance. Backups can be made on the fly on working DB
- without freezing writers.
+without freezing writers.
 
-9. No custom memory management, all done with standard OS syscalls.
+9. No additional memory management, all done by basic OS services.
 
 --------------------------------------------------------------------------------
 
@@ -357,7 +355,7 @@ to simplify this as follows:
 exhaust the free DB space.
 
 * If the available space is exhausted, any attempt to update the data
-* will cause a "MAP_FULL" error until a long read transaction is completed.
+will cause a "MAP_FULL" error until a long read transaction is completed.
 
 * A good example of long readers is a hot backup or debugging of
 a client application while retaining an active read transaction.
