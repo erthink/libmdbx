@@ -4639,6 +4639,9 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
           mdbx_debug("Write error: %s", mdbx_strerror(rc));
           return rc;
         }
+#if MDBX_CPU_CACHE_MMAP_NONCOHERENT == 1
+        mdbx_invalidate_mmap_noncoherent_cache(env->me_map + wpos, wsize);
+#endif
         n = 0;
       }
       if (i > pagecount)
@@ -4654,7 +4657,13 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
     n++;
   }
 
-  mdbx_invalidate_cache(env->me_map, pgno2bytes(env, txn->mt_next_pgno));
+#if MDBX_CPU_CACHE_MMAP_NONCOHERENT > 1
+  /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
+   * arguments, making this function fairly expensive. Therefore, the whole
+   * cache is always flushed. */
+  mdbx_invalidate_mmap_noncoherent_cache(env->me_map,
+                                         pgno2bytes(env, txn->mt_next_pgno));
+#endif
 
   for (i = keep; ++i <= pagecount;) {
     dp = dl[i].ptr;
@@ -5524,7 +5533,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                   (uint8_t *)target - env->me_map);
       goto fail;
     }
-    mdbx_invalidate_cache(target, sizeof(MDBX_meta));
+    mdbx_invalidate_mmap_noncoherent_cache(target, sizeof(MDBX_meta));
   }
 
   /* LY: step#3 - sync meta-pages. */
@@ -6269,7 +6278,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       if (err)
         return err;
 
-      mdbx_invalidate_cache(env->me_map, pgno2bytes(env, NUM_METAS));
+      mdbx_invalidate_mmap_noncoherent_cache(env->me_map,
+                                             pgno2bytes(env, NUM_METAS));
       mdbx_ensure(env, undo_txnid == mdbx_meta_txnid_fluid(env, head));
       mdbx_ensure(env, 0 == mdbx_meta_eq_mask(env));
       continue;
