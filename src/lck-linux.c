@@ -19,6 +19,7 @@
 #endif
 
 #include "./bits.h"
+#include <sys/utsname.h>
 
 /* Some platforms define the EOWNERDEAD error code
  * even though they don't support Robust Mutexes.
@@ -36,10 +37,31 @@
 #endif
 #endif /* MDBX_USE_ROBUST */
 
+uint32_t linux_kernel_version;
+
 /*----------------------------------------------------------------------------*/
 /* rthc */
 
 static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
+  struct utsname buffer;
+  if (uname(&buffer) == 0) {
+    int i = 0;
+    char *p = buffer.release;
+    while (*p && i < 4) {
+      if (*p >= '0' && *p <= '9') {
+        long number = strtol(p, &p, 10);
+        if (number > 0) {
+          if (number > 255)
+            number = 255;
+          linux_kernel_version += number << (24 - i * 8);
+        }
+        ++i;
+      } else {
+        ++p;
+      }
+    }
+  }
+
   mdbx_rthc_global_init();
 }
 

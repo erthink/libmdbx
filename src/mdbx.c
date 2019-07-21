@@ -4639,9 +4639,17 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
           mdbx_debug("Write error: %s", mdbx_strerror(rc));
           return rc;
         }
-#if MDBX_CPU_CACHE_MMAP_NONCOHERENT == 1
-        mdbx_invalidate_mmap_noncoherent_cache(env->me_map + wpos, wsize);
-#endif
+
+#if MDBX_CPU_CACHE_MMAP_NONCOHERENT
+#if defined(__linux__) || defined(__gnu_linux__)
+        if (linux_kernel_version >= 0x02060b00)
+        /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
+         * arguments, making this function fairly expensive. Therefore, the
+         * whole cache is always flushed. */
+#endif /* Linux */
+          mdbx_invalidate_mmap_noncoherent_cache(env->me_map + wpos, wsize);
+#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
+
         n = 0;
       }
       if (i > pagecount)
@@ -4657,13 +4665,16 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
     n++;
   }
 
-#if MDBX_CPU_CACHE_MMAP_NONCOHERENT > 1
-  /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
-   * arguments, making this function fairly expensive. Therefore, the whole
-   * cache is always flushed. */
-  mdbx_invalidate_mmap_noncoherent_cache(env->me_map,
-                                         pgno2bytes(env, txn->mt_next_pgno));
-#endif
+#if MDBX_CPU_CACHE_MMAP_NONCOHERENT &&                                         \
+    (defined(__linux__) || defined(__gnu_linux__))
+  if (linux_kernel_version < 0x02060b00) {
+    /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
+     * arguments, making this function fairly expensive. Therefore, the whole
+     * cache is always flushed. */
+    mdbx_invalidate_mmap_noncoherent_cache(env->me_map,
+                                           pgno2bytes(env, txn->mt_next_pgno));
+  }
+#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT && Linux */
 
   for (i = keep; ++i <= pagecount;) {
     dp = dl[i].ptr;

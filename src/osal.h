@@ -462,6 +462,10 @@ int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 /* max bytes to write in one call */
 #define MAX_WRITE UINT32_C(0x3fff0000)
 
+#if defined(__linux__) || defined(__gnu_linux__)
+extern uint32_t linux_kernel_version;
+#endif /* Linux */
+
 /* Get the size of a memory page for the system.
  * This is the basic size that the platform's memory manager uses, and is
  * fundamental to the use of memory-mapped files. */
