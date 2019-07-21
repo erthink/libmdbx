@@ -2008,7 +2008,7 @@ static __inline void mdbx_meta_update_begin(const MDBX_env *env,
   mdbx_assert(env, meta->mm_txnid_a < txnid && meta->mm_txnid_b < txnid);
   meta->mm_txnid_a = txnid;
   (void)env;
-  mdbx_coherent_barrier();
+  mdbx_flush_noncoherent_cpu_writeback();
 }
 
 static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
@@ -2019,7 +2019,7 @@ static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
 
   mdbx_jitter4testing(true);
   meta->mm_txnid_b = txnid;
-  mdbx_coherent_barrier();
+  mdbx_flush_noncoherent_cpu_writeback();
 }
 
 static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
@@ -2179,7 +2179,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
 
   txnid_t oldest = edge;
   lck->mti_readers_refresh_flag = nothing_changed;
-  mdbx_coherent_barrier();
+  mdbx_flush_noncoherent_cpu_writeback();
   const unsigned snap_nreaders = lck->mti_numreaders;
   for (unsigned i = 0; i < snap_nreaders; ++i) {
     if (lck->mti_readers[i].mr_pid) {
@@ -3241,7 +3241,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       r->mr_pid = 0;
       r->mr_txnid = ~(txnid_t)0;
       r->mr_tid = tid;
-      mdbx_coherent_barrier();
+      mdbx_flush_noncoherent_cpu_writeback();
       if (slot == nreaders)
         env->me_lck->mti_numreaders = ++nreaders;
       if (env->me_close_readers < nreaders)
@@ -3267,7 +3267,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
         mdbx_assert(env, r->mr_tid == mdbx_thread_self());
         mdbx_assert(env, r->mr_txnid == snap);
-        mdbx_coherent_barrier();
+        mdbx_flush_noncoherent_cpu_writeback();
         env->me_lck->mti_readers_refresh_flag = true;
       }
       mdbx_jitter4testing(true);
@@ -3674,7 +3674,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
         txn->mt_ro_reader = NULL;
       }
     }
-    mdbx_coherent_barrier();
+    mdbx_flush_noncoherent_cpu_writeback();
     txn->mt_numdbs = 0; /* prevent further DBI activity */
     txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
@@ -5500,7 +5500,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
       target->mm_canary = pending->mm_canary;
       mdbx_jitter4testing(true);
-      mdbx_coherent_barrier();
+      mdbx_flush_noncoherent_cpu_writeback();
 
       /* LY: 'commit' the meta */
       mdbx_meta_update_end(env, target, pending->mm_txnid_b);
@@ -5519,7 +5519,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                               sizeof(head->mm_canary)) == 0);
     }
     target->mm_datasync_sign = pending->mm_datasync_sign;
-    mdbx_coherent_barrier();
+    mdbx_flush_noncoherent_cpu_writeback();
     mdbx_jitter4testing(true);
   } else {
     rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta),
@@ -12852,7 +12852,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
       if (rc > 1) {
         asleep->mr_tid = 0;
         asleep->mr_pid = 0;
-        mdbx_coherent_barrier();
+        mdbx_flush_noncoherent_cpu_writeback();
       }
     }
   }

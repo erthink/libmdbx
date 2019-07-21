@@ -382,14 +382,14 @@ static __inline void mdbx_memory_barrier(void) {
 /*----------------------------------------------------------------------------*/
 /* Cache coherence and invalidation */
 
-#ifndef MDBX_CACHE_IS_COHERENT
+#ifndef MDBX_CPU_WRITEBACK_IS_COHERENT
 #if defined(__ia32__) || defined(__e2k__) || defined(__hppa) ||                \
     defined(__hppa__)
-#define MDBX_CACHE_IS_COHERENT 1
+#define MDBX_CPU_WRITEBACK_IS_COHERENT 1
 #else
-#define MDBX_CACHE_IS_COHERENT 0
+#define MDBX_CPU_WRITEBACK_IS_COHERENT 0
 #endif
-#endif /* MDBX_CACHE_IS_COHERENT */
+#endif /* MDBX_CPU_WRITEBACK_IS_COHERENT */
 
 #ifndef MDBX_CACHELINE_SIZE
 #if defined(SYSTEM_CACHE_ALIGNMENT_SIZE)
@@ -401,10 +401,10 @@ static __inline void mdbx_memory_barrier(void) {
 #endif
 #endif /* MDBX_CACHELINE_SIZE */
 
-#if MDBX_CACHE_IS_COHERENT
-#define mdbx_coherent_barrier() mdbx_compiler_barrier()
+#if MDBX_CPU_WRITEBACK_IS_COHERENT
+#define mdbx_flush_noncoherent_cpu_writeback() mdbx_compiler_barrier()
 #else
-#define mdbx_coherent_barrier() mdbx_memory_barrier()
+#define mdbx_flush_noncoherent_cpu_writeback() mdbx_memory_barrier()
 #endif
 
 #if __has_include(<sys/cachectl.h>)
