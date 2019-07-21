@@ -86,7 +86,10 @@ check:	all
 	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
 
 check-singleprocess:	all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --repeat=42 --pathname=$(TESTDB) --dont-cleanup-after --hill --copy | tee -a $(TESTLOG) | tail -n 42) \
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; \
+		./mdbx_test --repeat=4 --pathname=$(TESTDB) --dont-cleanup-after --hill && \
+		./mdbx_test --repeat=2 --pathname=$(TESTDB) --dont-cleanup-before --dont-cleanup-after --copy \
+		| tee -a $(TESTLOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
 
 check-fault:	all
