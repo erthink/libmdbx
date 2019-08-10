@@ -50,10 +50,31 @@ TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 SHELL		:= /bin/bash
 
-CORE_SRC	:= $(filter-out src/lck-windows.c, $(wildcard src/*.c))
+ifdef MSVC
+  LCK_IMPL := windows
+  TEST_OSAL := windows
+else
+  define uname2lck
+    case "`uname -s 2>/dev/null`" in
+      Linux) echo linux;;
+      CYGWIN*|MINGW32*|MSYS*) echo windows;;
+      *) echo posix;;
+    esac
+  endef
+  define uname2osal
+    case "`uname -s 2>/dev/null`" in
+      CYGWIN*|MINGW32*|MSYS*) echo windows;;
+      *) echo unix;;
+    esac
+  endef
+  LCK_IMPL := $(shell $(uname2lck))
+  TEST_OSAL := $(shell $(uname2osal))
+endif
+
+CORE_SRC	:= src/lck-$(LCK_IMPL).c $(filter-out $(wildcard src/lck-*.c), $(wildcard src/*.c))
 CORE_INC	:= $(wildcard src/*.h)
 CORE_OBJ	:= $(patsubst %.c,%.o,$(CORE_SRC))
-TEST_SRC	:= $(filter-out test/osal-windows.cc, $(wildcard test/*.cc))
+TEST_SRC	:= test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
 TEST_INC	:= $(wildcard test/*.h)
 TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 

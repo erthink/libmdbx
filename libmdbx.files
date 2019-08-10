@@ -9,6 +9,7 @@ mdbx.h
 src/bits.h
 src/defs.h
 src/lck-linux.c
+src/lck-posix.c
 src/lck-windows.c
 src/mdbx.c
 src/osal.c
