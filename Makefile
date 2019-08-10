@@ -1,4 +1,4 @@
-# GNU Makefile for libmdbx, https://github.com/leo-yuriev/libmdbx
+# GNU Makefile for libmdbx, https://abf.io/erthink/libmdbx
 
 ########################################################################
 # Configuration. The compiler options must enable threaded compilation.

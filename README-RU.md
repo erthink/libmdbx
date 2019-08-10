@@ -1,3 +1,7 @@
+## The [repository was moved out from Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
+<!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
+---
+
 libmdbx
 ======================================
 **The revised and extended descendant of [Symas LMDB](https://symas.com/lmdb/).**
@@ -20,13 +24,13 @@ and [by Yandex](https://translate.yandex.ru/translate?url=https%3A%2F%2Fgithub.c
 добавление новых функции, а также наделение базы данных новыми
 свойствами.
 
-В настоящее время MDBX предназначена для Linux, а также поддерживает
-Windows (начиная с Windows Server 2008) в качестве дополнительной
-платформы. Поддержка других ОС может быть обеспечена на коммерческой
-основе. Однако такие усовершенствования (т. е. pull-requests) могут быть
-приняты в мейнстрим только в том случае, если будет доступен
-соответствующий публичный и бесплатный сервис непрерывной интеграции
-(aka Continuous Integration).
+В настоящее время MDBX работает на Linux и ОС соответствующих
+POSIX.1-2008, а также поддерживает Windows (начиная с Windows XP) в
+качестве дополнительной платформы. Поддержка других ОС может быть
+обеспечена на коммерческой основе. Однако такие усовершенствования (т.
+е. pull-requests) могут быть приняты в мейнстрим только в том случае,
+если будет доступен соответствующий публичный и бесплатный сервис
+непрерывной интеграции (aka Continuous Integration).
 
 ## Содержание
 - [Обзор](#Обзор)

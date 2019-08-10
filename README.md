@@ -1,5 +1,5 @@
-## The [repository was moved](https://abf.io/erthink/libmdbx) due to illegal discriminatory blocking of access from the territory of the Russian Crimea and for sovereign crimeans.
-
+## The [repository was moved out from Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
+<!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 ---
 
 libmdbx
@@ -45,11 +45,12 @@ Don't miss libmdbx for other runtimes.
 
 -----
 
-Nowadays MDBX intended for Linux, and support Windows (since Windows
-Server 2008) as a complementary platform. Support for other OS could be
-implemented on commercial basis. However such enhancements (i.e. pull
-requests) could be accepted in mainstream only when corresponding public
-and free Continuous Integration service will be available.
+Nowadays MDBX works on Linux and OS'es compliant with POSIX.1-2008, but
+also support Windows (since Windows XP) as a complementary platform.
+Support for other OS could be implemented on commercial basis. However
+such enhancements (i.e. pull requests) could be accepted in mainstream
+only when corresponding public and free Continuous Integration service
+will be available.
 
 ## Contents
 - [Overview](#overview)
