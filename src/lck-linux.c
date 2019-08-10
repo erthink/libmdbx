@@ -38,6 +38,7 @@
 #endif /* MDBX_USE_ROBUST */
 
 uint32_t linux_kernel_version;
+static int cmd_setlk = F_SETLK, cmd_setlkw = F_SETLKW, cmd_getlk = F_GETLK;
 
 /*----------------------------------------------------------------------------*/
 /* rthc */
@@ -62,6 +63,15 @@ static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
     }
   }
 
+#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)
+  if (linux_kernel_version >
+      0x030f0000 /* OFD locks are available since 3.15, but engages here only
+        for 3.16 and larer kernels (LTS) for reliability reasons */) {
+    cmd_setlk = F_OFD_SETLK;
+    cmd_setlkw = F_OFD_SETLKW;
+    cmd_getlk = F_OFD_GETLK;
+  }
+#endif /* OFD locks */
   mdbx_rthc_global_init();
 }
 
@@ -116,20 +126,25 @@ static __cold __attribute__((destructor)) void mdbx_global_destructor(void) {
 static int mdbx_lck_op(mdbx_filehandle_t fd, int op, short lck, off_t offset,
                        off_t len) {
   for (;;) {
-    int rc;
     struct flock lock_op;
     memset(&lock_op, 0, sizeof(lock_op));
     lock_op.l_type = lck;
     lock_op.l_whence = SEEK_SET;
     lock_op.l_start = offset;
     lock_op.l_len = len;
-    if ((rc = fcntl(fd, op, &lock_op)) == 0) {
-      if (op == F_GETLK && lock_op.l_type != F_UNLCK)
-        rc = -lock_op.l_pid;
-    } else if ((rc = errno) == EINTR) {
-      continue;
+    if (fcntl(fd, op, &lock_op) == 0) {
+      if (op == cmd_getlk) {
+        /* Checks reader by pid. Returns:
+         *   MDBX_RESULT_TRUE   - if pid is live (unable to acquire lock)
+         *   MDBX_RESULT_FALSE  - if pid is dead (lock acquired). */
+        return (lock_op.l_type == F_UNLCK) ? MDBX_RESULT_FALSE
+                                           : MDBX_RESULT_TRUE;
+      }
+      return 0;
     }
-    return rc;
+    int rc = errno;
+    if (rc != EINTR)
+      return rc;
   }
 }
 
@@ -137,7 +152,7 @@ static __inline int mdbx_lck_exclusive(int lfd, bool fallback2shared) {
   assert(lfd != INVALID_HANDLE_VALUE);
   if (flock(lfd, LOCK_EX | LOCK_NB))
     return errno;
-  int rc = mdbx_lck_op(lfd, F_SETLK, F_WRLCK, 0, 1);
+  int rc = mdbx_lck_op(lfd, cmd_setlk, F_WRLCK, 0, 1);
   if (rc != 0 && fallback2shared) {
     while (flock(lfd, LOCK_SH)) {
       int rc = errno;
@@ -155,7 +170,7 @@ static __inline int mdbx_lck_shared(int lfd) {
     if (rc != EINTR)
       return rc;
   }
-  return mdbx_lck_op(lfd, F_SETLKW, F_RDLCK, 0, 1);
+  return mdbx_lck_op(lfd, cmd_setlkw, F_RDLCK, 0, 1);
 }
 
 int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
@@ -165,28 +180,17 @@ int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
 
 int mdbx_rpid_set(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
-  return mdbx_lck_op(env->me_lfd, F_SETLK, F_WRLCK, env->me_pid, 1);
+  return mdbx_lck_op(env->me_lfd, cmd_setlk, F_WRLCK, env->me_pid, 1);
 }
 
 int mdbx_rpid_clear(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
-  return mdbx_lck_op(env->me_lfd, F_SETLKW, F_UNLCK, env->me_pid, 1);
+  return mdbx_lck_op(env->me_lfd, cmd_setlkw, F_UNLCK, env->me_pid, 1);
 }
 
-/* Checks reader by pid.
- *
- * Returns:
- *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
- *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
- *   or otherwise the errcode. */
 int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
-  int rc = mdbx_lck_op(env->me_lfd, F_GETLK, F_WRLCK, pid, 1);
-  if (rc == 0)
-    return MDBX_RESULT_FALSE;
-  if (rc < 0 && -rc == pid)
-    return MDBX_RESULT_TRUE;
-  return rc;
+  return mdbx_lck_op(env->me_lfd, cmd_getlk, F_WRLCK, pid, 1);
 }
 
 /*---------------------------------------------------------------------------*/
@@ -336,7 +340,7 @@ int __cold mdbx_lck_seize(MDBX_env *env) {
 
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
-    int rc = mdbx_lck_op(env->me_fd, F_SETLK,
+    int rc = mdbx_lck_op(env->me_fd, cmd_setlk,
                          (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
                          LCK_WHOLE);
     if (rc != 0) {
@@ -348,7 +352,7 @@ int __cold mdbx_lck_seize(MDBX_env *env) {
 
   if ((env->me_flags & MDBX_RDONLY) == 0) {
     /* Check that another process don't operates in without-lck mode. */
-    int rc = mdbx_lck_op(env->me_fd, F_SETLK, F_WRLCK, env->me_pid, 1);
+    int rc = mdbx_lck_op(env->me_fd, cmd_setlk, F_WRLCK, env->me_pid, 1);
     if (rc != 0) {
       mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
                  "lock-against-without-lck", rc);
