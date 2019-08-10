@@ -151,7 +151,7 @@ int __cold mdbx_lck_seize(MDBX_env *env) {
                        OFF_T_MAX);
   if (rc == 0) {
     /* got dxb-exclusive, try lck-exclusive */
-    rc = mdbx_lck_op(env->me_lfd, OP_SETLK, F_WRLCK, 0, OFF_T_MAX);
+    rc = mdbx_lck_op(env->me_lfd, OP_SETLKW, F_WRLCK, 0, OFF_T_MAX);
     if (rc == 0) {
       /* got both exclusive */
       return MDBX_RESULT_TRUE;
@@ -256,7 +256,7 @@ void __cold mdbx_lck_destroy(MDBX_env *env) {
     if (mdbx_lck_op(env->me_fd, OP_SETLK,
                     (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
                     OFF_T_MAX) == 0 &&
-        mdbx_lck_op(env->me_lfd, OP_SETLK, F_WRLCK, 0, OFF_T_MAX) == 0) {
+        mdbx_lck_op(env->me_lfd, OP_SETLKW, F_WRLCK, 0, OFF_T_MAX) == 0) {
       mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
       int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
       if (rc == 0)
