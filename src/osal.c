@@ -530,16 +530,27 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
   (void)exclusive;
 #ifdef O_CLOEXEC
   flags |= O_CLOEXEC;
-#endif
+#endif /* O_CLOEXEC */
   *fd = open(pathname, flags, mode);
   if (*fd < 0)
     return errno;
-#if defined(FD_CLOEXEC) && defined(F_GETFD)
-  flags = fcntl(*fd, F_GETFD);
-  if (flags >= 0)
-    (void)fcntl(*fd, F_SETFD, flags | FD_CLOEXEC);
+
+#if defined(FD_CLOEXEC) && !defined(O_CLOEXEC)
+  int fd_flags = fcntl(*fd, F_GETFD);
+  if (fd_flags != -1)
+    (void)fcntl(*fd, F_SETFD, fd_flags | FD_CLOEXEC);
+#endif /* FD_CLOEXEC && !O_CLOEXEC */
+
+  if ((flags & (O_RDONLY | O_WRONLY | O_RDWR)) == O_WRONLY) {
+    /* assume for MDBX_env_copy() and friends output */
+#if defined(O_DIRECT)
+    int fd_flags = fcntl(*fd, F_GETFD);
+    if (fd_flags != -1)
+      (void)fcntl(*fd, F_SETFL, fd_flags | O_DIRECT);
+#endif /* O_DIRECT */
+  }
 #endif
-#endif
+
   return MDBX_SUCCESS;
 }
 
