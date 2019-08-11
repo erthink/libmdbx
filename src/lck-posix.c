@@ -167,11 +167,16 @@ int __cold mdbx_lck_seize(MDBX_env *env) {
                      (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK,
                      env->me_pid, 1);
     if (rc == 0) {
-      /* got dxb-shared-rw */
-      return MDBX_RESULT_FALSE;
+      /* got dxb-shared, try lck-shared */
+      rc = mdbx_lck_op(env->me_lfd, OP_SETLKW, F_RDLCK, 0, 1);
+      if (rc == 0) {
+        /* got both dxb and lck shared lock */
+        return MDBX_RESULT_FALSE;
+      }
+      mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "lck-shared", rc);
+    } else {
+      mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "dxb-shared", rc);
     }
-    mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
-               "lock-against-without-lck", rc);
     assert(MDBX_IS_ERROR(rc));
   }
 
@@ -184,7 +189,9 @@ bailout:
 
 int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
-  int rc = mdbx_lck_op(env->me_lfd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
+  int rc = mdbx_lck_op(env->me_lfd, OP_SETLK, F_UNLCK, 1, OFF_T_MAX - 1);
+  if (rc == 0)
+    rc = mdbx_lck_op(env->me_lfd, OP_SETLKW, F_RDLCK, 0, 1);
   if (unlikely(rc != 0)) {
     mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "lck", rc);
     goto bailout;
@@ -251,22 +258,13 @@ bailout:
 }
 
 void __cold mdbx_lck_destroy(MDBX_env *env) {
-  if (env->me_lfd != INVALID_HANDLE_VALUE && env->me_lck) {
-    /* try get exclusive access */
-    if (mdbx_lck_op(env->me_fd, OP_SETLK,
-                    (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
-                    OFF_T_MAX) == 0 &&
-        mdbx_lck_op(env->me_lfd, OP_SETLKW, F_WRLCK, 0, OFF_T_MAX) == 0) {
-      mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
-      int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
-      if (rc == 0)
-        rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
-      assert(rc == 0);
-      (void)rc;
-      /* file locks would be released (by kernel)
-       * while the me_lfd will be closed */
-    }
-  }
+  /* File locks would be released (by kernel) while the file-descriptors
+   * will be closed. But to avoid false-positive EDEADLK from the kernel,
+   * locks should be released here explicitly with properly order. */
+  if (env->me_lfd != INVALID_HANDLE_VALUE)
+    (void)mdbx_lck_op(env->me_lfd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
+  assert(env->me_fd != INVALID_HANDLE_VALUE);
+  (void)mdbx_lck_op(env->me_fd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
 }
 
 static int mdbx_robust_lock(MDBX_env *env, pthread_mutex_t *mutex) {
