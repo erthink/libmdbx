@@ -1072,9 +1072,54 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
+  mdbx_filehandle_t dxb_fd;
+  rc = mdbx_env_get_fd(env, &dxb_fd);
+  if (rc) {
+    error("mdbx_env_get_fd failed, error %d %s\n", rc, mdbx_strerror(rc));
+    goto bailout;
+  }
+
+  uint64_t dxb_filesize = 0;
+  rc = mdbx_filesize(dxb_fd, &dxb_filesize);
+  if (rc) {
+    error("mdbx_filesize failed, error %d %s\n", rc, mdbx_strerror(rc));
+    goto bailout;
+  }
+
+  errno = 0;
+  const uint64_t dxbfile_pages = dxb_filesize / envinfo.mi_dxb_pagesize;
   alloc_pages = txn->mt_next_pgno;
   backed_pages = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
-  errno = 0;
+  if ((envflags & MDBX_EXCLUSIVE) && backed_pages != dxbfile_pages) {
+    print(" ! backed-pages %" PRIu64 " != file-pages %" PRIu64 "\n",
+          backed_pages, dxbfile_pages);
+    ++problems_meta;
+  }
+  if (dxbfile_pages < NUM_METAS)
+    print(" ! file-pages %" PRIu64 " < %u\n", dxbfile_pages, NUM_METAS);
+  if (backed_pages < NUM_METAS)
+    print(" ! backed-pages %" PRIu64 " < %u\n", backed_pages, NUM_METAS);
+  if (backed_pages < NUM_METAS || dxbfile_pages < NUM_METAS)
+    goto bailout;
+  if (backed_pages > MAX_PAGENO) {
+    print(" ! backed-pages %" PRIu64 " > max-pages %" PRIaPGNO "\n",
+          backed_pages, MAX_PAGENO);
+    ++problems_meta;
+    backed_pages = MAX_PAGENO;
+  }
+  if (backed_pages > dxbfile_pages) {
+    print(" ! backed-pages %" PRIu64 " > file-pages %" PRIu64 "\n",
+          backed_pages, dxbfile_pages);
+    ++problems_meta;
+    backed_pages = dxbfile_pages;
+  }
+
+  if (alloc_pages > backed_pages) {
+    print(" ! alloc-pages %" PRIu64 " > backed-pages %" PRIu64 "\n",
+          alloc_pages, backed_pages);
+    ++problems_meta;
+    alloc_pages = backed_pages;
+  }
 
   if (verbose) {
     print(" - pagesize %u (%u system), max keysize %" PRIuPTR
@@ -1107,17 +1152,17 @@ int main(int argc, char *argv[]) {
     print(" - performs check for meta-pages clashes\n");
   if (meta_eq(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
               envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign)) {
-    print(" - meta-%d and meta-%d are clashed\n", 0, 1);
+    print(" ! meta-%d and meta-%d are clashed\n", 0, 1);
     ++problems_meta;
   }
   if (meta_eq(envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
               envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign)) {
-    print(" - meta-%d and meta-%d are clashed\n", 1, 2);
+    print(" ! meta-%d and meta-%d are clashed\n", 1, 2);
     ++problems_meta;
   }
   if (meta_eq(envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign,
               envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign)) {
-    print(" - meta-%d and meta-%d are clashed\n", 2, 0);
+    print(" ! meta-%d and meta-%d are clashed\n", 2, 0);
     ++problems_meta;
   }
 
