@@ -143,7 +143,7 @@ static int mdbx_lck_op(mdbx_filehandle_t fd, int cmd, short lck, off_t offset,
       return 0;
     }
     int rc = errno;
-    if (rc != EINTR)
+    if (rc != EINTR || cmd == op_setlkw)
       return rc;
   }
 }
