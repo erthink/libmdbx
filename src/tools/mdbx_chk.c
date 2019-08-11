@@ -91,7 +91,7 @@ MDBX_txn *txn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
 size_t maxkeysize, userdb_count, skipped_subdb;
-uint64_t reclaimable_pages, gc_pages, lastpgno, unused_pages;
+uint64_t reclaimable_pages, gc_pages, alloc_pages, unused_pages, backed_pages;
 unsigned verbose;
 char ignore_wrong_order, quiet;
 const char *only_subdb;
@@ -329,10 +329,10 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
     bool already_used = false;
     for (unsigned n = 0; n < pgnumber; ++n) {
       uint64_t spanpgno = pgno + n;
-      if (spanpgno >= lastpgno)
+      if (spanpgno >= alloc_pages)
         problem_add("page", spanpgno, "wrong page-no",
                     "%s-page: %" PRIu64 " > %" PRIu64 ", deep %i",
-                    pagetype_caption, spanpgno, lastpgno, deep);
+                    pagetype_caption, spanpgno, alloc_pages, deep);
       else if (walk.pagemap[spanpgno]) {
         walk_dbi_t *coll_dbi = &walk.dbi[walk.pagemap[spanpgno] - 1];
         problem_add("page", spanpgno,
@@ -450,9 +450,17 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     pgno_t span = 1;
     for (unsigned i = 0; i < number; ++i) {
       const pgno_t pgno = iptr[i];
-      if (pgno < NUM_METAS || pgno > envinfo.mi_last_pgno)
+      if (pgno < NUM_METAS)
         problem_add("entry", txnid, "wrong idl entry",
-                    "%u < %" PRIaPGNO " < %" PRIu64, NUM_METAS, pgno,
+                    "pgno %" PRIaPGNO " < meta-pages %u", pgno, NUM_METAS);
+      else if (pgno >= backed_pages)
+        problem_add("entry", txnid, "wrong idl entry",
+                    "pgno %" PRIaPGNO " >= backed-pages %" PRIu64, pgno,
+                    backed_pages);
+      else if (pgno > envinfo.mi_last_pgno &&
+               envinfo.mi_recent_txnid == txn->mt_txnid)
+        problem_add("entry", txnid, "wrong idl entry",
+                    "pgno %" PRIaPGNO " > alloc-pages %" PRIu64, pgno,
                     envinfo.mi_last_pgno);
       else {
         if (MDBX_PNL_DISORDERED(prev, pgno)) {
@@ -1062,7 +1070,8 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  lastpgno = envinfo.mi_last_pgno + 1;
+  alloc_pages = envinfo.mi_last_pgno + 1;
+  backed_pages = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
   errno = 0;
 
   if (verbose) {
@@ -1131,7 +1140,7 @@ int main(int argc, char *argv[]) {
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
     fflush(NULL);
-    walk.pagemap = mdbx_calloc((size_t)lastpgno, sizeof(*walk.pagemap));
+    walk.pagemap = mdbx_calloc((size_t)alloc_pages, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
       rc = errno ? errno : MDBX_ENOMEM;
       error("calloc failed, error %d %s\n", rc, mdbx_strerror(rc));
@@ -1152,7 +1161,7 @@ int main(int argc, char *argv[]) {
       goto bailout;
     }
 
-    for (uint64_t n = 0; n < lastpgno; ++n)
+    for (uint64_t n = 0; n < alloc_pages; ++n)
       if (!walk.pagemap[n])
         unused_pages += 1;
 
@@ -1242,15 +1251,16 @@ int main(int argc, char *argv[]) {
     uint64_t value = envinfo.mi_mapsize / envstat.ms_psize;
     double percent = value / 100.0;
     print(" - space: %" PRIu64 " total pages", value);
-    value = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
-    print(", backed %" PRIu64 " (%.1f%%)", value, value / percent);
-    print(", allocated %" PRIu64 " (%.1f%%)", lastpgno, lastpgno / percent);
+    print(", backed %" PRIu64 " (%.1f%%)", backed_pages,
+          backed_pages / percent);
+    print(", allocated %" PRIu64 " (%.1f%%)", alloc_pages,
+          alloc_pages / percent);
 
     if (verbose > 1) {
-      value = envinfo.mi_mapsize / envstat.ms_psize - lastpgno;
+      value = envinfo.mi_mapsize / envstat.ms_psize - alloc_pages;
       print(", remained %" PRIu64 " (%.1f%%)", value, value / percent);
 
-      value = lastpgno - gc_pages;
+      value = alloc_pages - gc_pages;
       print(", used %" PRIu64 " (%.1f%%)", value, value / percent);
 
       print(", gc %" PRIu64 " (%.1f%%)", gc_pages, gc_pages / percent);
@@ -1263,16 +1273,16 @@ int main(int argc, char *argv[]) {
     }
 
     value =
-        envinfo.mi_mapsize / envstat.ms_psize - lastpgno + reclaimable_pages;
+        envinfo.mi_mapsize / envstat.ms_psize - alloc_pages + reclaimable_pages;
     print(", available %" PRIu64 " (%.1f%%)\n", value, value / percent);
   }
 
   if (problems_maindb == 0 && problems_freedb == 0) {
     if (!dont_traversal &&
         (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
-      if (walk.pgcount != lastpgno - gc_pages) {
+      if (walk.pgcount != alloc_pages - gc_pages) {
         error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
-              walk.pgcount, lastpgno - gc_pages);
+              walk.pgcount, alloc_pages - gc_pages);
       }
       if (unused_pages != gc_pages) {
         error("gc pages mismatch (%" PRIu64 " != %" PRIu64 ")\n", unused_pages,
