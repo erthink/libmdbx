@@ -73,10 +73,10 @@ typedef struct {
 } walk_dbi_t;
 
 struct {
-  walk_dbi_t dbi[MAX_DBI];
   short *pagemap;
   uint64_t total_payload_bytes;
   uint64_t pgcount;
+  walk_dbi_t dbi[MAX_DBI];
 } walk;
 
 #define dbi_free walk.dbi[FREE_DBI]
@@ -445,8 +445,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     if (envinfo.mi_latter_reader_txnid > txnid)
       reclaimable_pages += number;
 
-    pgno_t prev =
-        MDBX_PNL_ASCENDING ? NUM_METAS - 1 : (pgno_t)envinfo.mi_last_pgno + 1;
+    pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : txn->mt_next_pgno;
     pgno_t span = 1;
     for (unsigned i = 0; i < number; ++i) {
       const pgno_t pgno = iptr[i];
@@ -455,26 +454,29 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                     "pgno %" PRIaPGNO " < meta-pages %u", pgno, NUM_METAS);
       else if (pgno >= backed_pages)
         problem_add("entry", txnid, "wrong idl entry",
-                    "pgno %" PRIaPGNO " >= backed-pages %" PRIu64, pgno,
+                    "pgno %" PRIaPGNO " > backed-pages %" PRIu64, pgno,
                     backed_pages);
-      else if (pgno > envinfo.mi_last_pgno &&
-               envinfo.mi_recent_txnid == txn->mt_txnid)
+      else if (pgno >= alloc_pages)
         problem_add("entry", txnid, "wrong idl entry",
                     "pgno %" PRIaPGNO " > alloc-pages %" PRIu64, pgno,
-                    envinfo.mi_last_pgno);
+                    alloc_pages - 1);
       else {
         if (MDBX_PNL_DISORDERED(prev, pgno)) {
           bad = " [bad sequence]";
           problem_add("entry", txnid, "bad sequence",
-                      "%" PRIaPGNO " <> %" PRIaPGNO, prev, pgno);
+                      "%" PRIaPGNO " %c [%u].%" PRIaPGNO, prev,
+                      (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'),
+                      i, pgno);
         }
-        if (walk.pagemap && walk.pagemap[pgno]) {
-          if (walk.pagemap[pgno] > 0)
+        if (walk.pagemap) {
+          int idx = walk.pagemap[pgno];
+          if (idx == 0)
+            walk.pagemap[pgno] = -1;
+          else if (idx > 0)
             problem_add("page", pgno, "already used", "by %s",
-                        walk.dbi[walk.pagemap[pgno] - 1].name);
+                        walk.dbi[idx - 1].name);
           else
             problem_add("page", pgno, "already listed in GC", nullptr);
-          walk.pagemap[pgno] = -1;
         }
       }
       prev = pgno;
@@ -1070,7 +1072,7 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  alloc_pages = envinfo.mi_last_pgno + 1;
+  alloc_pages = txn->mt_next_pgno;
   backed_pages = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
   errno = 0;
 
@@ -1140,7 +1142,7 @@ int main(int argc, char *argv[]) {
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
     fflush(NULL);
-    walk.pagemap = mdbx_calloc((size_t)alloc_pages, sizeof(*walk.pagemap));
+    walk.pagemap = mdbx_calloc((size_t)backed_pages, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
       rc = errno ? errno : MDBX_ENOMEM;
       error("calloc failed, error %d %s\n", rc, mdbx_strerror(rc));
