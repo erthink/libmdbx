@@ -11966,7 +11966,8 @@ int __cold mdbx_env_get_fd(MDBX_env *env, mdbx_filehandle_t *arg) {
  * [in] db the MDBX_db record containing the stats to return.
  * [out] arg the address of an MDBX_stat structure to receive the stats.
  * Returns 0, this function always succeeds. */
-static int __cold mdbx_stat0(MDBX_env *env, MDBX_db *db, MDBX_stat *arg) {
+static int __cold mdbx_stat0(const MDBX_env *env, const MDBX_db *db,
+                             MDBX_stat *arg) {
   arg->ms_psize = env->me_psize;
   arg->ms_depth = db->md_depth;
   arg->ms_branch_pages = db->md_branch_pages;
@@ -11977,60 +11978,108 @@ static int __cold mdbx_stat0(MDBX_env *env, MDBX_db *db, MDBX_stat *arg) {
 }
 
 int __cold mdbx_env_stat(MDBX_env *env, MDBX_stat *arg, size_t bytes) {
-  MDBX_meta *meta;
+  return mdbx_env_stat2(env, NULL, arg, bytes);
+}
 
-  if (unlikely(env == NULL || arg == NULL))
+int __cold mdbx_env_stat2(const MDBX_env *env, const MDBX_txn *txn,
+                          MDBX_stat *arg, size_t bytes) {
+  if (unlikely((env == NULL && txn == NULL) || arg == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDBX_EBADSIGN;
+  if (txn) {
+    if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+      return MDBX_EBADSIGN;
+    if (unlikely(txn->mt_owner != mdbx_thread_self()))
+      return MDBX_THREAD_MISMATCH;
+  }
+  if (env) {
+    if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+      return MDBX_EBADSIGN;
+    if (txn && unlikely(txn->mt_env != env))
+      return MDBX_EINVAL;
+  }
 
   if (unlikely(bytes != sizeof(MDBX_stat)))
     return MDBX_EINVAL;
 
-  meta = mdbx_meta_head(env);
-  return mdbx_stat0(env, &meta->mm_dbs[MAIN_DBI], arg);
+  const MDBX_db *db =
+      txn ? &txn->mt_dbs[MAIN_DBI] : &mdbx_meta_head(env)->mm_dbs[MAIN_DBI];
+  return mdbx_stat0(txn->mt_env, db, arg);
 }
 
 int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
-  if (unlikely(env == NULL || arg == NULL))
+  return mdbx_env_info2(env, NULL, arg, bytes);
+}
+
+int __cold mdbx_env_info2(const MDBX_env *env, const MDBX_txn *txn,
+                          MDBX_envinfo *arg, size_t bytes) {
+  if (unlikely((env == NULL && txn == NULL) || arg == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDBX_EBADSIGN;
+  if (txn) {
+    if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+      return MDBX_EBADSIGN;
+    if (unlikely(txn->mt_owner != mdbx_thread_self()))
+      return MDBX_THREAD_MISMATCH;
+  }
+  if (env) {
+    if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+      return MDBX_EBADSIGN;
+    if (txn && unlikely(txn->mt_env != env))
+      return MDBX_EINVAL;
+  } else {
+    env = txn->mt_env;
+  }
 
-  if (bytes != sizeof(MDBX_envinfo))
+  if (unlikely(bytes != sizeof(MDBX_envinfo)))
     return MDBX_EINVAL;
 
   const MDBX_meta *const meta0 = METAPAGE(env, 0);
   const MDBX_meta *const meta1 = METAPAGE(env, 1);
   const MDBX_meta *const meta2 = METAPAGE(env, 2);
-  const MDBX_meta *meta;
-  do {
-    meta = mdbx_meta_head(env);
-    arg->mi_recent_txnid = mdbx_meta_txnid_fluid(env, meta);
+  while (1) {
+    if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
+      return MDBX_PANIC;
+
+    const MDBX_meta *const recent_meta = mdbx_meta_head(env);
+    arg->mi_recent_txnid = mdbx_meta_txnid_fluid(env, recent_meta);
     arg->mi_meta0_txnid = mdbx_meta_txnid_fluid(env, meta0);
     arg->mi_meta0_sign = meta0->mm_datasync_sign;
     arg->mi_meta1_txnid = mdbx_meta_txnid_fluid(env, meta1);
     arg->mi_meta1_sign = meta1->mm_datasync_sign;
     arg->mi_meta2_txnid = mdbx_meta_txnid_fluid(env, meta2);
     arg->mi_meta2_sign = meta2->mm_datasync_sign;
-    arg->mi_last_pgno = meta->mm_geo.next - 1;
-    arg->mi_geo.lower = pgno2bytes(env, meta->mm_geo.lower);
-    arg->mi_geo.upper = pgno2bytes(env, meta->mm_geo.upper);
-    arg->mi_geo.current = pgno2bytes(env, meta->mm_geo.now);
-    arg->mi_geo.shrink = pgno2bytes(env, meta->mm_geo.shrink);
-    arg->mi_geo.grow = pgno2bytes(env, meta->mm_geo.grow);
+
+    const MDBX_meta *txn_meta = recent_meta;
+    arg->mi_last_pgno = txn_meta->mm_geo.next - 1;
+    arg->mi_geo.current = pgno2bytes(env, txn_meta->mm_geo.now);
+    if (txn) {
+      arg->mi_last_pgno = txn->mt_next_pgno - 1;
+      arg->mi_geo.current = pgno2bytes(env, txn->mt_end_pgno);
+
+      const txnid_t wanna_meta_txnid =
+          (txn->mt_flags & MDBX_RDONLY) ? txn->mt_txnid : txn->mt_txnid - 1;
+      txn_meta = (arg->mi_meta0_txnid == wanna_meta_txnid) ? meta0 : txn_meta;
+      txn_meta = (arg->mi_meta1_txnid == wanna_meta_txnid) ? meta1 : txn_meta;
+      txn_meta = (arg->mi_meta2_txnid == wanna_meta_txnid) ? meta2 : txn_meta;
+    }
+    arg->mi_geo.lower = pgno2bytes(env, txn_meta->mm_geo.lower);
+    arg->mi_geo.upper = pgno2bytes(env, txn_meta->mm_geo.upper);
+    arg->mi_geo.shrink = pgno2bytes(env, txn_meta->mm_geo.shrink);
+    arg->mi_geo.grow = pgno2bytes(env, txn_meta->mm_geo.grow);
+
     arg->mi_mapsize = env->me_mapsize;
     mdbx_compiler_barrier();
-  } while (unlikely(arg->mi_meta0_txnid != mdbx_meta_txnid_fluid(env, meta0) ||
-                    arg->mi_meta0_sign != meta0->mm_datasync_sign ||
-                    arg->mi_meta1_txnid != mdbx_meta_txnid_fluid(env, meta1) ||
-                    arg->mi_meta1_sign != meta1->mm_datasync_sign ||
-                    arg->mi_meta2_txnid != mdbx_meta_txnid_fluid(env, meta2) ||
-                    arg->mi_meta2_sign != meta2->mm_datasync_sign ||
-                    meta != mdbx_meta_head(env) ||
-                    arg->mi_recent_txnid != mdbx_meta_txnid_fluid(env, meta)));
+    if (likely(arg->mi_meta0_txnid == mdbx_meta_txnid_fluid(env, meta0) &&
+               arg->mi_meta0_sign == meta0->mm_datasync_sign &&
+               arg->mi_meta1_txnid == mdbx_meta_txnid_fluid(env, meta1) &&
+               arg->mi_meta1_sign == meta1->mm_datasync_sign &&
+               arg->mi_meta2_txnid == mdbx_meta_txnid_fluid(env, meta2) &&
+               arg->mi_meta2_sign == meta2->mm_datasync_sign &&
+               recent_meta == mdbx_meta_head(env) &&
+               arg->mi_recent_txnid == mdbx_meta_txnid_fluid(env, recent_meta)))
+      break;
+  }
 
   arg->mi_maxreaders = env->me_maxreaders;
   arg->mi_numreaders = env->me_lck ? env->me_lck->mti_numreaders : INT32_MAX;

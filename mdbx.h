@@ -735,6 +735,8 @@ LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
  * [out] stat   The address of an MDBX_stat structure where the statistics
  *              will be copied */
 LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat, size_t bytes);
+LIBMDBX_API int mdbx_env_stat2(const MDBX_env *env, const MDBX_txn *txn,
+                               MDBX_stat *stat, size_t bytes);
 
 /* Return information about the MDBX environment.
  *
@@ -742,6 +744,8 @@ LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat, size_t bytes);
  * [out] stat   The address of an MDBX_envinfo structure
  *              where the information will be copied */
 LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info, size_t bytes);
+LIBMDBX_API int mdbx_env_info2(const MDBX_env *env, const MDBX_txn *txn,
+                               MDBX_envinfo *info, size_t bytes);
 
 /* Flush the data buffers to disk.
  *
