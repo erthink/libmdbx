@@ -21,6 +21,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include "darwin/pthread_barrier.c"
+#endif
+
 struct shared_t {
   pthread_barrier_t barrier;
   pthread_mutex_t mutex;

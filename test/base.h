@@ -39,6 +39,10 @@
 #include <SDKDDKVer.h>
 #endif /* WINDOWS */
 
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+
 #include <errno.h>
 #include <limits.h>
 #include <stdio.h>

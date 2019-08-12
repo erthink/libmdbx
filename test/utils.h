@@ -247,18 +247,20 @@ struct simple_checksum {
 
   simple_checksum() : value(0) {}
 
-  void push(uint32_t data) {
+  void push(const uint32_t &data) {
     value += data * UINT64_C(9386433910765580089) + 1;
     value ^= value >> 41;
     value *= UINT64_C(0xBD9CACC22C6E9571);
   }
 
-  void push(uint64_t data) {
+  void push(const uint64_t &data) {
     push((uint32_t)data);
     push((uint32_t)(data >> 32));
   }
 
-  void push(bool data) { push(data ? UINT32_C(0x780E) : UINT32_C(0xFA18E)); }
+  void push(const bool data) {
+    push(data ? UINT32_C(0x780E) : UINT32_C(0xFA18E));
+  }
 
   void push(const void *ptr, size_t bytes) {
     const uint8_t *data = (const uint8_t *)ptr;
@@ -271,7 +273,7 @@ struct simple_checksum {
   void push(const std::string &str) { push(str.data(), str.size()); }
 
   void push(unsigned salt, const MDBX_val &val) {
-    push(val.iov_len);
+    push(unsigned(val.iov_len));
     push(salt);
     push(val.iov_base, val.iov_len);
   }

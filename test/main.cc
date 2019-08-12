@@ -182,17 +182,19 @@ int main(int argc, char *const argv[]) {
         params.datalen_max = datalen_max;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "size-lower", params.size_lower,
-                             mdbx_limits_dbsize_min(params.pagesize),
-                             mdbx_limits_dbsize_max(params.pagesize)))
+    if (config::parse_option_intptr(argc, argv, narg, "size-lower",
+                                    params.size_lower,
+                                    mdbx_limits_dbsize_min(params.pagesize),
+                                    mdbx_limits_dbsize_max(params.pagesize)))
       continue;
-    if (config::parse_option(argc, argv, narg, "size-upper", params.size_upper,
-                             mdbx_limits_dbsize_min(params.pagesize),
-                             mdbx_limits_dbsize_max(params.pagesize)))
+    if (config::parse_option_intptr(argc, argv, narg, "size-upper",
+                                    params.size_upper,
+                                    mdbx_limits_dbsize_min(params.pagesize),
+                                    mdbx_limits_dbsize_max(params.pagesize)))
       continue;
-    if (config::parse_option(argc, argv, narg, "size", params.size_now,
-                             mdbx_limits_dbsize_min(params.pagesize),
-                             mdbx_limits_dbsize_max(params.pagesize)))
+    if (config::parse_option_intptr(argc, argv, narg, "size", params.size_now,
+                                    mdbx_limits_dbsize_min(params.pagesize),
+                                    mdbx_limits_dbsize_max(params.pagesize)))
       continue;
     if (config::parse_option(
             argc, argv, narg, "shrink-threshold", params.shrink_threshold, 0,

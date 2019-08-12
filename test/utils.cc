@@ -17,6 +17,9 @@
 #if defined(HAVE_IEEE754_H) || __has_include(<ieee754.h>)
 #include <ieee754.h>
 #endif
+#if defined(__APPLE__) || defined(__MACH__)
+#include <mach/mach_time.h>
+#endif /* defined(__APPLE__) || defined(__MACH__) */
 
 std::string format(const char *fmt, ...) {
   va_list ap, ones;
