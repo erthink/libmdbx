@@ -1108,11 +1108,13 @@ int main(int argc, char *argv[]) {
   const uint64_t dxbfile_pages = dxb_filesize / envinfo.mi_dxb_pagesize;
   alloc_pages = txn->mt_next_pgno;
   backed_pages = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
+#if !(defined(_WIN32) || defined(_WIN64))
   if ((envflags & MDBX_EXCLUSIVE) && backed_pages != dxbfile_pages) {
     print(" ! backed-pages %" PRIu64 " != file-pages %" PRIu64 "\n",
           backed_pages, dxbfile_pages);
     ++problems_meta;
   }
+#endif /* !Windows */
   if (dxbfile_pages < NUM_METAS)
     print(" ! file-pages %" PRIu64 " < %u\n", dxbfile_pages, NUM_METAS);
   if (backed_pages < NUM_METAS)
