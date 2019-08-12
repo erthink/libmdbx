@@ -159,9 +159,14 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
 __nothrow __noreturn void __assert_fail(const char *assertion, const char *file,
                                         unsigned line, const char *function);
-#elif (defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||  \
-       defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||         \
-       defined(__DragonFly__))
+#elif defined(__APPLE__) || defined(__MACH__)
+__nothrow __noreturn void __assert_rtn(const char *function, const char *file,
+                                       int line, const char *assertion);
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert_rtn(function, file, line, assertion)
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
+    defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
+    defined(__DragonFly__)
 __nothrow __noreturn void __assert(const char *function, const char *file,
                                    int line, const char *assertion);
 #define __assert_fail(assertion, file, line, function)                         \
@@ -548,6 +553,9 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
     if (fd_flags != -1)
       (void)fcntl(*fd, F_SETFL, fd_flags | O_DIRECT);
 #endif /* O_DIRECT */
+#if defined(F_NOCACHE)
+    (void)fcntl(*fd, F_NOCACHE, 1);
+#endif /* F_NOCACHE */
   }
 #endif
 
@@ -626,7 +634,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  uint64_t offset, size_t expected_written) {
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
   size_t written = 0;
   for (int i = 0; i < iovcnt; ++i) {
     int rc = mdbx_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
@@ -1158,7 +1166,10 @@ retry_mapview:;
   return rc;
 #else
   if (limit != map->length) {
-#if defined(_GNU_SOURCE) && !defined(__FreeBSD__)
+#if defined(_GNU_SOURCE) &&                                                    \
+    !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
+      defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||          \
+      defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__))
     void *ptr = mremap(map->address, map->length, limit,
                        /* LY: in case changing the mapping size calling code
                           must guarantees the absence of competing threads, and

@@ -30,6 +30,10 @@
 #   define _FILE_OFFSET_BITS 64
 #endif
 
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
+#endif
+
 #ifdef _MSC_VER
 #   if _MSC_VER < 1400
 #       error "Microsoft Visual C++ 8.0 (Visual Studio 2005) or later version is required"

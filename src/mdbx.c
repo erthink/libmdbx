@@ -292,6 +292,16 @@ static CRITICAL_SECTION rthc_critical_section;
 #else
 int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj, void *dso_symbol)
     __attribute__((weak));
+#ifdef __APPLE__ /* FIXME: Thread-Local Storage destructors & DSO-unloading */
+int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj,
+                             void *dso_symbol) {
+  (void)dtor;
+  (void)obj;
+  (void)dso_symbol;
+  return -1;
+}
+#endif           /* __APPLE__ */
+
 static pthread_mutex_t mdbx_rthc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t mdbx_rthc_cond = PTHREAD_COND_INITIALIZER;
 static mdbx_thread_key_t mdbx_rthc_key;
@@ -515,9 +525,9 @@ __cold void mdbx_rthc_global_dtor(void) {
     mdbx_thread_key_delete(key);
     for (MDBX_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
          ++rthc) {
-      mdbx_trace("== [%i] = key %u, %p ... %p, rthc %p (%+i), "
+      mdbx_trace("== [%i] = key %zu, %p ... %p, rthc %p (%+i), "
                  "rthc-pid %i, current-pid %i",
-                 i, key, rthc_table[i].begin, rthc_table[i].end, rthc,
+                 i, (size_t)key, rthc_table[i].begin, rthc_table[i].end, rthc,
                  (int)(rthc - rthc_table[i].begin), rthc->mr_pid, self_pid);
       if (rthc->mr_pid == self_pid) {
         rthc->mr_pid = 0;
@@ -553,8 +563,8 @@ __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
     return rc;
 
   mdbx_rthc_lock();
-  mdbx_trace(">> key 0x%x, rthc_count %u, rthc_limit %u", *key, rthc_count,
-             rthc_limit);
+  mdbx_trace(">> key %zu, rthc_count %u, rthc_limit %u", (size_t)*key,
+             rthc_count, rthc_limit);
   if (rthc_count == rthc_limit) {
     rthc_entry_t *new_table =
         mdbx_realloc((rthc_table == rthc_table_static) ? nullptr : rthc_table,
@@ -568,13 +578,14 @@ __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
     rthc_table = new_table;
     rthc_limit *= 2;
   }
-  mdbx_trace("== [%i] = key %u, %p ... %p", rthc_count, *key, begin, end);
+  mdbx_trace("== [%i] = key %zu, %p ... %p", rthc_count, (size_t)*key, begin,
+             end);
   rthc_table[rthc_count].key = *key;
   rthc_table[rthc_count].begin = begin;
   rthc_table[rthc_count].end = end;
   ++rthc_count;
-  mdbx_trace("<< key 0x%x, rthc_count %u, rthc_limit %u", *key, rthc_count,
-             rthc_limit);
+  mdbx_trace("<< key %zu, rthc_count %u, rthc_limit %u", (size_t)*key,
+             rthc_count, rthc_limit);
   mdbx_rthc_unlock();
   return MDBX_SUCCESS;
 
@@ -587,8 +598,8 @@ bailout:
 __cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
   mdbx_thread_key_delete(key);
   mdbx_rthc_lock();
-  mdbx_trace(">> key 0x%x, rthc_count %u, rthc_limit %u", key, rthc_count,
-             rthc_limit);
+  mdbx_trace(">> key %zu, rthc_count %u, rthc_limit %u", (size_t)key,
+             rthc_count, rthc_limit);
 
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (key == rthc_table[i].key) {
@@ -614,8 +625,8 @@ __cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
     }
   }
 
-  mdbx_trace("<< key 0x%x, rthc_count %u, rthc_limit %u", key, rthc_count,
-             rthc_limit);
+  mdbx_trace("<< key %zu, rthc_count %u, rthc_limit %u", (size_t)key,
+             rthc_count, rthc_limit);
   mdbx_rthc_unlock();
 }
 

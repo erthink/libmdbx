@@ -23,6 +23,7 @@ suffix	?=
 
 CC	?= gcc
 CXX	?= g++
+LD	?= ld
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 
 XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
@@ -32,8 +33,8 @@ TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
-LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O1,--no-as-needed,-lrt
-EXE_LDFLAGS ?= -pthread -lrt
+LDFLAGS	?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
+EXE_LDFLAGS ?= -pthread
 
 # LY: just for benchmarking
 IOARENA ?= $(shell \
