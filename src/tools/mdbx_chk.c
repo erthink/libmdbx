@@ -1080,7 +1080,25 @@ int main(int argc, char *argv[]) {
   }
 
   uint64_t dxb_filesize = 0;
-  rc = mdbx_filesize(dxb_fd, &dxb_filesize);
+#if defined(_WIN32) || defined(_WIN64)
+  {
+    BY_HANDLE_FILE_INFORMATION info;
+    if (!GetFileInformationByHandle(dxb_fd, &info))
+      rc = GetLastError();
+    else
+      dxb_filesize = info.nFileSizeLow | (uint64_t)info.nFileSizeHigh << 32;
+  }
+#else
+  {
+    struct stat st;
+    STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(uint64_t),
+                      "libmdbx requires 64-bit file I/O on 64-bit systems");
+    if (fstat(dxb_fd, &st))
+      rc = errno;
+    else
+      dxb_filesize = st.st_size;
+  }
+#endif
   if (rc) {
     error("mdbx_filesize failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
