@@ -2278,8 +2278,7 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
    * 2) At least on Windows 10 1803 the entire mapped section is unavailable
    *    for short time during NtExtendSection() or VirtualAlloc() execution.
    *
-   * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED!
-   */
+   * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED! */
   array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
   array_onstack.count = 0;
   suspended = &array_onstack;
@@ -2312,7 +2311,7 @@ bailout:
     env->me_dbgeo.upper = limit_bytes;
     if (env->me_txn) {
       mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
-      env->me_txn->mt_end_pgno = size_pgno;
+      env->me_txn->mt_end_pgno = env->me_txn0->mt_end_pgno = size_pgno;
     }
 #ifdef USE_VALGRIND
     if (prev_mapsize != env->me_mapsize || prev_mapaddr != env->me_map) {
@@ -3168,7 +3167,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
 
-  pgno_t upper_pgno = 0;
+  pgno_t upper_limit_pgno = 0;
   if (flags & MDBX_TXN_RDONLY) {
     txn->mt_flags = MDBX_TXN_RDONLY;
     MDBX_reader *r = txn->mt_ro_reader;
@@ -3235,7 +3234,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       r = &env->me_lck->mti_readers[slot];
       /* Claim the reader slot, carefully since other code
        * uses the reader table un-mutexed: First reset the
-       * slot, next publish it in mtb.mti_numreaders.  After
+       * slot, next publish it in lck->mti_numreaders.  After
        * that, it is safe for mdbx_env_close() to touch it.
        * When it will be closed, we can finally claim it. */
       r->mr_pid = 0;
@@ -3260,15 +3259,16 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       mdbx_jitter4testing(false);
       const txnid_t snap = mdbx_meta_txnid_fluid(env, meta);
       mdbx_jitter4testing(false);
-      if (r) {
+      if (likely(r)) {
         r->mr_snapshot_pages = meta->mm_geo.next;
         r->mr_txnid = snap;
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
         mdbx_assert(env, r->mr_tid == mdbx_thread_self());
         mdbx_assert(env, r->mr_txnid == snap);
-        mdbx_flush_noncoherent_cpu_writeback();
+        mdbx_compiler_barrier();
         env->me_lck->mti_readers_refresh_flag = true;
+        mdbx_flush_noncoherent_cpu_writeback();
       }
       mdbx_jitter4testing(true);
 
@@ -3276,7 +3276,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       txn->mt_txnid = snap;
       txn->mt_next_pgno = meta->mm_geo.next;
       txn->mt_end_pgno = meta->mm_geo.now;
-      upper_pgno = meta->mm_geo.upper;
+      upper_limit_pgno = meta->mm_geo.upper;
       memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
       txn->mt_canary = meta->mm_canary;
 
@@ -3348,7 +3348,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     /* Moved to here to avoid a data race in read TXNs */
     txn->mt_next_pgno = meta->mm_geo.next;
     txn->mt_end_pgno = meta->mm_geo.now;
-    upper_pgno = meta->mm_geo.upper;
+    upper_limit_pgno = meta->mm_geo.upper;
   }
 
   /* Setup db info */
@@ -3369,12 +3369,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   } else {
     const size_t size = pgno2bytes(env, txn->mt_end_pgno);
     if (unlikely(size > env->me_mapsize)) {
-      if (upper_pgno > MAX_PAGENO ||
-          bytes2pgno(env, pgno2bytes(env, upper_pgno)) != upper_pgno) {
+      if (upper_limit_pgno > MAX_PAGENO ||
+          bytes2pgno(env, pgno2bytes(env, upper_limit_pgno)) !=
+              upper_limit_pgno) {
         rc = MDBX_MAP_RESIZED;
         goto bailout;
       }
-      rc = mdbx_mapresize(env, txn->mt_end_pgno, upper_pgno);
+      rc = mdbx_mapresize(env, txn->mt_end_pgno, upper_limit_pgno);
       if (rc != MDBX_SUCCESS) {
         if (rc == MDBX_RESULT_TRUE)
           rc = MDBX_MAP_RESIZED;
@@ -5377,7 +5378,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
       pending->mm_geo.now - pending->mm_geo.next >
           pending->mm_geo.shrink + backlog_gap) {
-    const pgno_t largest = mdbx_find_largest(env, pending->mm_geo.next);
+    const pgno_t largest = mdbx_find_largest(
+        env, (head->mm_geo.next > pending->mm_geo.next) ? head->mm_geo.next
+                                                        : pending->mm_geo.next);
     if (pending->mm_geo.now > largest &&
         pending->mm_geo.now - largest > pending->mm_geo.shrink + backlog_gap) {
       const pgno_t aligner =
