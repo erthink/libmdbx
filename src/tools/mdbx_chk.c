@@ -1020,7 +1020,7 @@ int main(int argc, char *argv[]) {
 #if defined(_WIN32) || defined(_WIN64)
        rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION
 #else
-       rc == EBUSY
+       rc == EBUSY || rc == EAGAIN
 #endif
        )) {
     envflags &= ~MDBX_EXCLUSIVE;
@@ -1109,7 +1109,8 @@ int main(int argc, char *argv[]) {
   alloc_pages = txn->mt_next_pgno;
   backed_pages = envinfo.mi_geo.current / envinfo.mi_dxb_pagesize;
 #if !(defined(_WIN32) || defined(_WIN64))
-  if ((envflags & MDBX_EXCLUSIVE) && backed_pages != dxbfile_pages) {
+  if ((envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY &&
+      backed_pages != dxbfile_pages) {
     print(" ! backed-pages %" PRIu64 " != file-pages %" PRIu64 "\n",
           backed_pages, dxbfile_pages);
     ++problems_meta;
@@ -1127,18 +1128,36 @@ int main(int argc, char *argv[]) {
     ++problems_meta;
     backed_pages = MAX_PAGENO;
   }
-  if (backed_pages > dxbfile_pages) {
-    print(" ! backed-pages %" PRIu64 " > file-pages %" PRIu64 "\n",
-          backed_pages, dxbfile_pages);
-    ++problems_meta;
-    backed_pages = dxbfile_pages;
-  }
 
-  if (alloc_pages > backed_pages) {
-    print(" ! alloc-pages %" PRIu64 " > backed-pages %" PRIu64 "\n",
-          alloc_pages, backed_pages);
-    ++problems_meta;
-    alloc_pages = backed_pages;
+  if ((envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
+    if (backed_pages > dxbfile_pages) {
+      print(" ! backed-pages %" PRIu64 " > file-pages %" PRIu64 "\n",
+            backed_pages, dxbfile_pages);
+      ++problems_meta;
+      backed_pages = dxbfile_pages;
+    }
+    if (alloc_pages > backed_pages) {
+      print(" ! alloc-pages %" PRIu64 " > backed-pages %" PRIu64 "\n",
+            alloc_pages, backed_pages);
+      ++problems_meta;
+      alloc_pages = backed_pages;
+    }
+  } else {
+    /* LY: DB may be shrinked by writer downto the allocated pages. */
+    if (alloc_pages > backed_pages) {
+      print(" ! alloc-pages %" PRIu64 " > backed-pages %" PRIu64 "\n",
+            alloc_pages, backed_pages);
+      ++problems_meta;
+      alloc_pages = backed_pages;
+    }
+    if (alloc_pages > dxbfile_pages) {
+      print(" ! alloc-pages %" PRIu64 " > file-pages %" PRIu64 "\n",
+            alloc_pages, dxbfile_pages);
+      ++problems_meta;
+      alloc_pages = dxbfile_pages;
+    }
+    if (backed_pages > dxbfile_pages)
+      backed_pages = dxbfile_pages;
   }
 
   if (verbose) {
