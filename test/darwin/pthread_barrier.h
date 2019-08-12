@@ -48,7 +48,8 @@ extern "C" {
 #endif
 
 typedef struct {
-  char unused_pad;
+  pthread_mutexattr_t mattr;
+  pthread_condattr_t cattr;
 } pthread_barrierattr_t;
 
 typedef struct {

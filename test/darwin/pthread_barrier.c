@@ -33,50 +33,51 @@
 
 #define __unused __attribute__((unused))
 
-int pthread_barrierattr_init(pthread_barrierattr_t *attr __unused) { return 0; }
-
-int pthread_barrierattr_destroy(pthread_barrierattr_t *attr __unused) {
-  return 0;
+int pthread_barrierattr_init(pthread_barrierattr_t *attr) {
+  memset(attr, 0, sizeof(pthread_barrierattr_t));
+  int m = pthread_mutexattr_init(&attr->mattr);
+  int c = pthread_condattr_init(&attr->cattr);
+  return m ? m : c;
 }
 
-int pthread_barrierattr_getpshared(
-    const pthread_barrierattr_t *__restrict attr __unused,
-    int *__restrict pshared) {
-  *pshared = PTHREAD_PROCESS_PRIVATE;
-  return 0;
+int pthread_barrierattr_destroy(pthread_barrierattr_t *attr) {
+  int c = pthread_condattr_destroy(&attr->cattr);
+  int m = pthread_mutexattr_destroy(&attr->mattr);
+  return m ? m : c;
 }
 
-int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr __unused,
-                                   int pshared) {
-  if (pshared != PTHREAD_PROCESS_PRIVATE) {
-    errno = EINVAL;
-    return -1;
-  }
-  return 0;
+int pthread_barrierattr_getpshared(const pthread_barrierattr_t *__restrict attr,
+                                   int *__restrict pshared) {
+  return pthread_condattr_getpshared(&attr->cattr, pshared);
+}
+
+int pthread_barrierattr_setpshared(pthread_barrierattr_t *attr, int pshared) {
+  int m = pthread_mutexattr_setpshared(&attr->mattr, pshared);
+  int c = pthread_condattr_setpshared(&attr->cattr, pshared);
+  return m ? m : c;
 }
 
 int pthread_barrier_init(pthread_barrier_t *__restrict barrier,
-                         const pthread_barrierattr_t *__restrict attr __unused,
+                         const pthread_barrierattr_t *__restrict attr,
                          unsigned count) {
-  if (count == 0) {
-    errno = EINVAL;
-    return -1;
-  }
+  if (count == 0)
+    return errno = EINVAL;
 
-  if (pthread_mutex_init(&barrier->mutex, 0) < 0) {
-    return -1;
-  }
-  if (pthread_cond_init(&barrier->cond, 0) < 0) {
+  int rc = pthread_mutex_init(&barrier->mutex, attr ? &attr->mattr : 0);
+  if (rc)
+    return rc;
+
+  rc = pthread_cond_init(&barrier->cond, attr ? &attr->cattr : 0);
+  if (rc) {
     int errno_save = errno;
     pthread_mutex_destroy(&barrier->mutex);
     errno = errno_save;
-    return -1;
+    return rc;
   }
 
   barrier->limit = count;
   barrier->count = 0;
   barrier->phase = 0;
-
   return 0;
 }
 
@@ -87,7 +88,10 @@ int pthread_barrier_destroy(pthread_barrier_t *barrier) {
 }
 
 int pthread_barrier_wait(pthread_barrier_t *barrier) {
-  pthread_mutex_lock(&barrier->mutex);
+  int rc = pthread_mutex_lock(&barrier->mutex);
+  if (rc)
+    return rc;
+
   barrier->count++;
   if (barrier->count >= barrier->limit) {
     barrier->phase++;
