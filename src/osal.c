@@ -664,6 +664,9 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)filesize_changed;
   return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
+#elif defined(__APPLE__)
+  (void)filesize_changed;
+  return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
 #else
   int rc;
   do {
