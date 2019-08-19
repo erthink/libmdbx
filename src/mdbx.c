@@ -3041,7 +3041,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
       int rc = (flags & MDBX_WRITEMAP)
                    ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes,
                                 flags & MDBX_MAPASYNC)
-                   : mdbx_filesync(env->me_fd, false);
+                   : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
@@ -5422,14 +5422,16 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         goto fail;
       if ((flags & MDBX_MAPASYNC) == 0) {
         if (unlikely(pending->mm_geo.next > steady->mm_geo.now)) {
-          rc = mdbx_filesize_sync(env->me_fd);
+          rc = mdbx_filesync(env->me_fd, MDBX_SYNC_SIZE);
           if (unlikely(rc != MDBX_SUCCESS))
             goto fail;
         }
         env->me_sync_pending = 0;
       }
     } else {
-      rc = mdbx_filesync(env->me_fd, pending->mm_geo.next > steady->mm_geo.now);
+      rc = mdbx_filesync(env->me_fd, (pending->mm_geo.next > steady->mm_geo.now)
+                                         ? MDBX_SYNC_DATA | MDBX_SYNC_SIZE
+                                         : MDBX_SYNC_DATA);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
       env->me_sync_pending = 0;
@@ -5577,7 +5579,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     } else {
-      rc = mdbx_filesync(env->me_fd, false);
+      rc = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       if (rc != MDBX_SUCCESS)
         goto undo;
     }
@@ -11825,11 +11827,14 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   mdbx_txn_abort(read_txn);
 
   if (likely(rc == MDBX_SUCCESS))
-    rc = mdbx_filesync(fd, true);
+    rc = mdbx_filesync(fd, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
 
   /* Write actual meta */
   if (likely(rc == MDBX_SUCCESS))
     rc = mdbx_pwrite(fd, buffer, pgno2bytes(env, NUM_METAS), 0);
+
+  if (likely(rc == MDBX_SUCCESS))
+    rc = mdbx_filesync(fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
 
   mdbx_memalign_free(buffer);
   return rc;
@@ -12871,7 +12876,7 @@ int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
   unsigned ret = mdbx_runtime_flags;
   mdbx_runtime_flags = flags;
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__gnu_linux__)
   if (flags & MDBX_DBG_DUMP) {
     int core_filter_fd = open("/proc/self/coredump_filter", O_TRUNC | O_RDWR);
     if (core_filter_fd >= 0) {
@@ -12894,7 +12899,7 @@ int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
       close(core_filter_fd);
     }
   }
-#endif /* __linux__ */
+#endif /* Linux */
 
   mdbx_debug_logger = logger;
   return ret;

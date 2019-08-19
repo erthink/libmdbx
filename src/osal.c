@@ -660,14 +660,22 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
 #endif
 }
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
+int mdbx_filesync(mdbx_filehandle_t fd, enum mdbx_syncmode_bits mode_bits) {
 #if defined(_WIN32) || defined(_WIN64)
-  (void)filesize_changed;
-  return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
-#elif defined(__APPLE__)
-  (void)filesize_changed;
-  return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
+  return ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) == 0 ||
+          FlushFileBuffers(fd))
+             ? MDBX_SUCCESS
+             : GetLastError();
 #else
+
+#ifdef __APPLE__
+  if (mode_bits & MDBX_SYNC_IODQ)
+    return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
+#endif /* MacOS */
+#if defined(__linux__) || defined(__gnu_linux__)
+  if (mode_bits == MDBX_SYNC_SIZE && linux_kernel_version >= 0x03060000)
+    return MDBX_SUCCESS;
+#endif /* Linux */
   int rc;
   do {
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
@@ -676,34 +684,18 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
      *
      * For more info about of a corresponding fdatasync() bug
      * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-    if (!filesize_changed) {
+    if ((mode_bits & MDBX_SYNC_SIZE) == 0) {
       if (fdatasync(fd) == 0)
         return MDBX_SUCCESS;
     } else
 #else
-    (void)filesize_changed;
+    (void)mode_bits;
 #endif
         if (fsync(fd) == 0)
       return MDBX_SUCCESS;
     rc = errno;
   } while (rc == EINTR);
   return rc;
-#endif
-}
-
-int mdbx_filesize_sync(mdbx_filehandle_t fd) {
-#if defined(_WIN32) || defined(_WIN64)
-  (void)fd;
-  /* Nothing on Windows (i.e. newer 100% steady) */
-  return MDBX_SUCCESS;
-#else
-  for (;;) {
-    if (fsync(fd) == 0)
-      return MDBX_SUCCESS;
-    int rc = errno;
-    if (rc != EINTR)
-      return rc;
-  }
 #endif
 }
 

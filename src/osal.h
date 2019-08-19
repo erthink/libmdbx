@@ -522,7 +522,13 @@ int mdbx_thread_create(mdbx_thread_t *thread,
                        void *arg);
 int mdbx_thread_join(mdbx_thread_t thread);
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool fullsync);
+enum mdbx_syncmode_bits {
+  MDBX_SYNC_DATA = 1,
+  MDBX_SYNC_SIZE = 2,
+  MDBX_SYNC_IODQ = 4
+};
+
+int mdbx_filesync(mdbx_filehandle_t fd, enum mdbx_syncmode_bits mode_bits);
 int mdbx_filesize_sync(mdbx_filehandle_t fd);
 int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length);
 int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos);
