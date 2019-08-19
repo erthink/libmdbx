@@ -784,6 +784,13 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
     return MDBX_SUCCESS;
   return GetLastError();
 #else
+#ifdef __linux__
+  if (async && linux_kernel_version > 0x02061300)
+    /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op,
+       since the kernel properly tracks dirty pages and flushes them to storage
+       as necessary. */
+    return MDBX_SUCCESS;
+#endif /* Linux */
   const int mode = async ? MS_ASYNC : MS_SYNC;
   return (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
 #endif
