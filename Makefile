@@ -52,24 +52,34 @@ MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 SHELL		:= /bin/bash
 
 ifdef MSVC
+  UNAME := Windows
   LCK_IMPL := windows
   TEST_OSAL := windows
+  TEST_ITER := 42
 else
+  UNAME	:= $(shell uname -s 2>/dev/null || echo Unknown)
   define uname2lck
-    case "`uname -s 2>/dev/null`" in
+    case "$(UNAME)" in
       Linux) echo linux;;
-      CYGWIN*|MINGW32*|MSYS*) echo windows;;
+      CYGWIN*|MINGW32*|MSYS*|Windows*) echo windows;;
       *) echo posix;;
     esac
   endef
   define uname2osal
-    case "`uname -s 2>/dev/null`" in
-      CYGWIN*|MINGW32*|MSYS*) echo windows;;
+    case "$(UNAME)" in
+      CYGWIN*|MINGW32*|MSYS*|Windows*) echo windows;;
       *) echo unix;;
+    esac
+  endef
+  define uname2titer
+    case "$(UNAME)" in
+      Darwin*|Mach*) echo 3;;
+      *) echo 42;;
     esac
   endef
   LCK_IMPL := $(shell $(uname2lck))
   TEST_OSAL := $(shell $(uname2osal))
+  TEST_ITER := $(shell $(uname2titer))
 endif
 
 CORE_SRC	:= src/lck-$(LCK_IMPL).c $(filter-out $(wildcard src/lck-*.c), $(wildcard src/*.c))
@@ -104,7 +114,7 @@ clean:
 	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
 check:	all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --repeat=42 --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --repeat=$(TEST_ITER) --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
 
 check-singleprocess:	all
