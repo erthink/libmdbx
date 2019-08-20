@@ -669,7 +669,7 @@ int mdbx_filesync(mdbx_filehandle_t fd, enum mdbx_syncmode_bits mode_bits) {
 #else
 
 #if defined(__APPLE__) &&                                                      \
-    MDBX_OSX_SPEED_OR_DURABILITY == MDBX_OSX_WANNA_DURABILITY
+    MDBX_OSX_SPEED_INSTEADOF_DURABILITY == MDBX_OSX_WANNA_DURABILITY
   if (mode_bits & MDBX_SYNC_IODQ)
     return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
 #endif /* MacOS */
@@ -798,7 +798,7 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
   const int mode = async ? MS_ASYNC : MS_SYNC;
   int rc = (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
 #if defined(__APPLE__) &&                                                      \
-    MDBX_OSX_SPEED_OR_DURABILITY == MDBX_OSX_WANNA_DURABILITY
+    MDBX_OSX_SPEED_INSTEADOF_DURABILITY == MDBX_OSX_WANNA_DURABILITY
   if (rc == MDBX_SUCCESS && mode == MS_SYNC)
     rc = likely(fcntl(map->fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
 #endif /* MacOS */
