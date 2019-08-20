@@ -1,55 +1,50 @@
-## The [repository now only mirrored on the Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
+### The [repository now only mirrored on the Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
----
+-----
 
 libmdbx
 ======================================
-**Revised and extended descendant of [Symas LMDB](https://symas.com/lmdb/).**
+Revised and extended descendant of [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) (aka _LMDB_).
+Русскоязычная версия [здесь](README-RU.md).
 
-*The Future will (be) positive.*
+_libmdbx_ is superior to LMDB in terms of features and reliability, not
+inferior in performance. _libmdbx_ works on Linux, FreeBSD, MacOS X and
+other systems compliant with POSIX.1-2008, but also support Windows as a
+complementary platform.
+
+The next version is under active non-public development, which will
+radically change both the API and the database format. The goal of this
+revolution is to provide a clearer and more reliable API, add more
+features and new database properties.
+
+*The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
+
 [![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=master)](https://travis-ci.org/leo-yuriev/libmdbx)
 [![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
-Русскоязычная версия этого README [здесь](README-RU.md).
-
-## Project Status
-
-_libmdbx_ works on Linux, FreeBSD, MacOS X and other systems compliant
-with POSIX.1-2008, but also support Windows as a complementary platform.
-
-The next version
-([_devel_](https://github.com/leo-yuriev/libmdbx/tree/devel) branch) is
-under active non-public development, i.e. API and set of features are
-volatile. The goal of this revolution is to provide a clearer and more
-reliable API, adding set of features and a new database properties.
-
-Don't miss libmdbx for other runtimes:
-
-  | Runtime  | GitHub | Author |
-  | ------------- | ------------- | ------------- |
-  | Java  | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
-  | .NET  | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
+## Table of Contents
+- [Overview](#overview)
+    - [Comparison with other databases](#comparison-with-other-databases)
+    - [History & Acknowledgments](#history)
+- [Description](#description)
+    - [Key features](#key-features)
+    - [Improvements over LMDB](#improvements-over-lmdb)
+    - [Gotchas](#gotchas)
+        - [Problem of long-time reading](#problem-of-long-time-reading)
+        - [Durability in asynchronous writing mode](#durability-in-asynchronous-writing-mode)
+- [Usage](#usage)
+    - [Building](#building)
+    - [Bindings](#bindings)
+- [Performance comparison](#performance-comparison)
+    - [Integral performance](#integral-performance)
+    - [Read scalability](#read-scalability)
+    - [Sync-write mode](#sync-write-mode)
+    - [Lazy-write mode](#lazy-write-mode)
+    - [Async-write mode](#async-write-mode)
+    - [Cost comparison](#cost-comparison)
 
 -----
-
-## Contents
-- [Overview](#overview)
-  - [Comparison with other DBs](#comparison-with-other-dbs)
-  - [History & Acknowledgments](#history)
-- [Main features](#main-features)
-- [Improvements over LMDB](#improvements-over-lmdb)
-- [Gotchas](#gotchas)
-  - [Problem of long-time reading](#problem-of-long-time-reading)
-  - [Durability in asynchronous writing mode](#durability-in-asynchronous-writing-mode)
-- [Performance comparison](#performance-comparison)
-  - [Integral performance](#integral-performance)
-  - [Read scalability](#read-scalability)
-  - [Sync-write mode](#sync-write-mode)
-  - [Lazy-write mode](#lazy-write-mode)
-  - [Async-write mode](#async-write-mode)
-  - [Cost comparison](#cost-comparison)
-
 
 ## Overview
 _libmdbx_ is an embedded lightweight key-value database engine oriented
@@ -76,7 +71,7 @@ _libmdbx_ uses [B+Trees](https://en.wikipedia.org/wiki/B%2B_tree) and
 doesn't use [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging)
 which might be a caveat for some workloads.
 
-### Comparison with other DBs
+### Comparison with other databases
 For now please refer to [chapter of "BoltDB comparison with other
 databases"](https://github.com/coreos/bbolt#comparison-with-other-databases)
 which is also (mostly) applicable to MDBX.
@@ -93,16 +88,19 @@ conference](http://www.highload.ru/2015/abstracts/1831.html).
 Since early 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/leo-yuriev/libfpta),
 and development is funded by [Positive Technologies](https://www.ptsecurity.com).
 
-#### Acknowledgments
-Howard Chu <hyc@openldap.org> - the author of LMDB, from which
+### Acknowledgments
+Howard Chu <hyc@openldap.org> is the author of LMDB, from which
 originated the MDBX in 2015.
 
-Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code, which
+Martin Hedenfalk <martin@bzero.se> is the author of `btree.c` code, which
 was used for begin development of LMDB.
 
+-----
 
-Main features
-=============
+Description
+===========
+
+## Key features
 
 _libmdbx_ inherits all features and characteristics from
 [LMDB](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database):
@@ -147,10 +145,8 @@ without freezing writers.
 
 9. No additional memory management, all done by basic OS services.
 
---------------------------------------------------------------------------------
 
-Improvements over LMDB
-======================
+## Improvements over LMDB
 
 1. Automatic dynamic DB size management according to the parameters
 specified by `mdbx_env_set_geometry()` function. Including
@@ -308,7 +304,6 @@ against incompetent user actions (aka
 _libmdbx_ may be a little lag in performance tests from LMDB where a
 named mutexes are used.
 
---------------------------------------------------------------------------------
 
 ## Gotchas
 
@@ -357,7 +352,7 @@ of data.
   > Details below.
 
 
-#### Problem of long-time reading
+### Problem of long-time reading
 Garbage collection problem exists in all databases one way or another
 (e.g. VACUUM in PostgreSQL). But in _libmdbx_ and LMDB it's even more
 discernible because of high transaction rate and intentional internals
@@ -384,7 +379,7 @@ writing data to persistent storage.
 operations and the `LIFO RECLAIM` mode which addresses performance
 degradation.
 
-#### Durability in asynchronous writing mode
+### Durability in asynchronous writing mode
 In `WRITEMAP+MAPSYNC` mode updated (aka dirty) pages are written to
 persistent storage by the OS kernel. This means that if the application
 fails, the OS kernel will finish writing all updated data to disk and
@@ -436,6 +431,119 @@ points in async-write mode upon completion transfer data to the disk.
 
 --------------------------------------------------------------------------------
 
+Usage
+=====
+
+## Building
+
+To build on all platforms except Windows the prerequirements are the
+same: non-obsolete versions of GNU Make,
+[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)), C and C++
+compilers compatible with GCC or CLANG. On Windows you will need only :
+Microsoft Visual Studio 2015 or later, Windows SDK for Windows 8 or
+later.
+
+Historically, the libmdbx builing is based on single
+[Makefile](https://en.wikipedia.org/wiki/Makefile) which assumes
+different recipes depending on target platform. In the next versions, it
+is planned to switch to [CMake](https://en.wikipedia.org/wiki/CMake),
+with the refusal to support other tools.
+
+#### DSO/DLL unloading and destructors of Thread-Local-Storage objects
+When building _libmdbx_ as a shared library or use static _libmdbx_ as a
+part of another dynamic library, it is advisable to make sure that your
+system ensures the correctness of the call destructors of
+Thread-Local-Storage objects when unloading dynamic libraries'.
+
+If this is not the case, then unloading a dynamic-link library with
+_libmdbx_ code inside, can result in either a resource leak or a crash
+due to calling destructors from an already unloaded DSO/DLL object. The
+problem can only manifest in a multithreaded application, which makes
+the unloading of shared dynamic libraries with _libmdbx_ code inside,
+after using _libmdbx_. It is known that TLS-destructors are properly
+maintained in the following cases:
+
+- On all modern versions of Windows (Windows 7 and later).
+
+- On systems with the
+[`__cxa_thread_atexit_impl()`](https://sourceware.org/glibc/wiki/Destructor%20support%20for%20thread_local%20variables)
+function in the standard C library, including systems with GNU libc
+version 2.18 and later.
+
+- On systems with libpthread/ntpl from GNU libc with bug fixes
+[#21031](https://sourceware.org/bugzilla/show_bug.cgi?id=21031) and
+[#21032](https://sourceware.org/bugzilla/show_bug.cgi?id=21032), or
+where there are no similar bugs in the pthreads implementation.
+
+### Linux and other platforms with GNU Make
+To build the library it is enough to execute `make all` in the directory
+of source code, and `make check` for execute the basic tests.
+
+If the `make` installed on the system is not GNU Make, there will be a
+lot of errors from make when trying to build. In this case, perhaps you
+should use `gmake` instead of `make`, or even `gnu-make`, etc.
+
+### FreeBSD and related platforms
+As a rule, in such systems, the default is to use Berkeley Make. And GNU
+Make is called by the gmake command or may be missing. In addition,
+[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) may be absent.
+
+You need to install the required components: GNU Make, bash, C and C++
+compilers compatible with GCC or CLANG. After that, to build the
+library, it is enough execute `gmake all` (or `make all`) in the
+directory with source code, and `gmake check` (or `make check`) to run
+the basic tests.
+
+### Windows
+For building _libmdbx_ on Windows the [Microsoft Visual
+Studio](https://en.wikipedia.org/wiki/Microsoft_Visual_Studio) is
+recommended, but not tools such as MinGW, MSYS, or Cygwin. To do this,
+the libmdbx source code includes the set of appropriate project files
+that are compatible with Visual Studio 2015, the Windows SDK for Windows
+8.1, and later. Just open `mdbx.sln` in Visual Studio and build the
+library.
+
+To build with newer versions of the SDK or Visual Studio, it should be
+sufficient to execute "Retarget solution". To build for older versions
+of Windows (such as Windows XP) or by older compilers, you will need to
+convert or recreate the corresponding project files yourself.
+
+Building by MinGW, MSYS or Cygwin is potentially possible. However,
+these scripts are not tested and will probably require you to modify the
+Makefile. It should be noted that in _libmdbx_ was efforts to resolve
+runtime dependencies from CRT and other libraries Visual Studio.
+
+An example of running a basic test script can be found in the
+[CI-script](appveyor.yml) for [AppVeyor](https://www.appveyor.com/). To
+run the [long stochastic test scenario](test/long_stochastic.sh),
+[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) is required, and
+the such testing is recommended with place the test data on the
+[RAM-disk](https://en.wikipedia.org/wiki/RAM_drive).
+
+### MacOS X
+Current [native build tools](https://en.wikipedia.org/wiki/Xcode) for
+MacOS X include GNU Make, CLANG and an outdated version of bash.
+Therefore, to build the library, it is enough to run `make all` in the
+directory with source code, and run `make check` to execute the base
+tests. If something goes wrong, it is recommended to install
+[Homebrew](https://brew.sh/) and try again.
+
+To run the [long stochastic test scenario](test/long_stochastic.sh), you
+will need to install the current (not outdated) version of
+[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, we
+recommend that you install [Homebrew](https://brew.sh/) and then execute
+`brew install bash`.
+
+## Bindings
+
+  | Runtime  | GitHub | Author |
+  | -------- | ------ | ------ |
+  | Java     | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
+  | .NET     | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
+
+
+--------------------------------------------------------------------------------
+
 Performance comparison
 ======================
 
@@ -444,9 +552,7 @@ and multiple [scripts](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015)
 runs on Lenovo Carbon-2 laptop, i7-4600U 2.1 GHz, 8 Gb RAM,
 SSD SAMSUNG MZNTD512HAGL-000L1 (DXT23L0Q) 512 Gb.
 
---------------------------------------------------------------------------------
-
-### Integral performance
+## Integral performance
 
 Here showed sum of performance metrics in 3 benchmarks:
 
@@ -472,7 +578,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 
 --------------------------------------------------------------------------------
 
-### Read Scalability
+## Read Scalability
 
 Summary performance with concurrent read/search queries in 1-2-4-8
 threads on 4 CPU cores machine.
@@ -481,7 +587,7 @@ threads on 4 CPU cores machine.
 
 --------------------------------------------------------------------------------
 
-### Sync-write mode
+## Sync-write mode
 
  - Linear scale on left and dark rectangles mean arithmetic mean
  transactions per second;
@@ -503,7 +609,7 @@ and after full run the database contains 10,000 small key-value records.
 
 --------------------------------------------------------------------------------
 
-### Lazy-write mode
+## Lazy-write mode
 
  - Linear scale on left and dark rectangles mean arithmetic mean of
  thousands transactions per second;
@@ -530,7 +636,7 @@ records.
 
 --------------------------------------------------------------------------------
 
-### Async-write mode
+## Async-write mode
 
  - Linear scale on left and dark rectangles mean arithmetic mean of
  thousands transactions per second;
@@ -554,7 +660,7 @@ and after full run the database contains 10,000 small key-value records.
 
 --------------------------------------------------------------------------------
 
-### Cost comparison
+## Cost comparison
 
 Summary of used resources during lazy-write mode benchmarks:
 
