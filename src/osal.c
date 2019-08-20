@@ -159,9 +159,14 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
 __nothrow __noreturn void __assert_fail(const char *assertion, const char *file,
                                         unsigned line, const char *function);
-#elif (defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||  \
-       defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||         \
-       defined(__DragonFly__))
+#elif defined(__APPLE__) || defined(__MACH__)
+__nothrow __noreturn void __assert_rtn(const char *function, const char *file,
+                                       int line, const char *assertion);
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert_rtn(function, file, line, assertion)
+#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
+    defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
+    defined(__DragonFly__)
 __nothrow __noreturn void __assert(const char *function, const char *file,
                                    int line, const char *assertion);
 #define __assert_fail(assertion, file, line, function)                         \
@@ -548,6 +553,9 @@ int mdbx_openfile(const char *pathname, int flags, mode_t mode,
     if (fd_flags != -1)
       (void)fcntl(*fd, F_SETFL, fd_flags | O_DIRECT);
 #endif /* O_DIRECT */
+#if defined(F_NOCACHE)
+    (void)fcntl(*fd, F_NOCACHE, 1);
+#endif /* F_NOCACHE */
   }
 #endif
 
@@ -626,7 +634,7 @@ int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf, size_t bytes,
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  uint64_t offset, size_t expected_written) {
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
   size_t written = 0;
   for (int i = 0; i < iovcnt; ++i) {
     int rc = mdbx_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
@@ -652,11 +660,23 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
 #endif
 }
 
-int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
+int mdbx_filesync(mdbx_filehandle_t fd, enum mdbx_syncmode_bits mode_bits) {
 #if defined(_WIN32) || defined(_WIN64)
-  (void)filesize_changed;
-  return FlushFileBuffers(fd) ? MDBX_SUCCESS : GetLastError();
+  return ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) == 0 ||
+          FlushFileBuffers(fd))
+             ? MDBX_SUCCESS
+             : GetLastError();
 #else
+
+#if defined(__APPLE__) &&                                                      \
+    MDBX_OSX_SPEED_OR_DURABILITY == MDBX_OSX_WANNA_DURABILITY
+  if (mode_bits & MDBX_SYNC_IODQ)
+    return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
+#endif /* MacOS */
+#if defined(__linux__) || defined(__gnu_linux__)
+  if (mode_bits == MDBX_SYNC_SIZE && linux_kernel_version >= 0x03060000)
+    return MDBX_SUCCESS;
+#endif /* Linux */
   int rc;
   do {
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
@@ -665,34 +685,18 @@ int mdbx_filesync(mdbx_filehandle_t fd, bool filesize_changed) {
      *
      * For more info about of a corresponding fdatasync() bug
      * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-    if (!filesize_changed) {
+    if ((mode_bits & MDBX_SYNC_SIZE) == 0) {
       if (fdatasync(fd) == 0)
         return MDBX_SUCCESS;
     } else
 #else
-    (void)filesize_changed;
+    (void)mode_bits;
 #endif
         if (fsync(fd) == 0)
       return MDBX_SUCCESS;
     rc = errno;
   } while (rc == EINTR);
   return rc;
-#endif
-}
-
-int mdbx_filesize_sync(mdbx_filehandle_t fd) {
-#if defined(_WIN32) || defined(_WIN64)
-  (void)fd;
-  /* Nothing on Windows (i.e. newer 100% steady) */
-  return MDBX_SUCCESS;
-#else
-  for (;;) {
-    if (fsync(fd) == 0)
-      return MDBX_SUCCESS;
-    int rc = errno;
-    if (rc != EINTR)
-      return rc;
-  }
 #endif
 }
 
@@ -792,7 +796,13 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
     return MDBX_SUCCESS;
 #endif /* Linux */
   const int mode = async ? MS_ASYNC : MS_SYNC;
-  return (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
+  int rc = (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
+#if defined(__APPLE__) &&                                                      \
+    MDBX_OSX_SPEED_OR_DURABILITY == MDBX_OSX_WANNA_DURABILITY
+  if (rc == MDBX_SUCCESS && mode == MS_SYNC)
+    rc = likely(fcntl(map->fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
+#endif /* MacOS */
+  return rc;
 #endif
 }
 
@@ -1165,7 +1175,10 @@ retry_mapview:;
   return rc;
 #else
   if (limit != map->length) {
-#if defined(_GNU_SOURCE) && !defined(__FreeBSD__)
+#if defined(_GNU_SOURCE) &&                                                    \
+    !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
+      defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||          \
+      defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__))
     void *ptr = mremap(map->address, map->length, limit,
                        /* LY: in case changing the mapping size calling code
                           must guarantees the absence of competing threads, and

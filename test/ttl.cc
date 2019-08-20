@@ -53,11 +53,26 @@ bool testcase_ttl::run() {
    */
 
   /* LY: для параметризации используем подходящие параметры, которые не имеют
-   * здесь смысла в первоначальном значении */
-  const unsigned window_max =
-      (config.params.batch_read > 999) ? config.params.batch_read : 1000;
-  const unsigned count_max =
-      (config.params.batch_write > 999) ? config.params.batch_write : 1000;
+   * здесь смысла в первоначальном значении. */
+  const unsigned window_max_lower =
+#ifdef __APPLE__
+      333;
+#else
+      999;
+#endif
+  const unsigned count_max_lower =
+#ifdef __APPLE__
+      333;
+#else
+      999;
+#endif
+
+  const unsigned window_max = (config.params.batch_read > window_max_lower)
+                                  ? config.params.batch_read
+                                  : window_max_lower;
+  const unsigned count_max = (config.params.batch_write > count_max_lower)
+                                 ? config.params.batch_write
+                                 : count_max_lower;
   log_info("ttl: using `batch_read` value %u for window_max", window_max);
   log_info("ttl: using `batch_write` value %u for count_max", count_max);
 

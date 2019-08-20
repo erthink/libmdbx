@@ -23,6 +23,7 @@ suffix	?=
 
 CC	?= gcc
 CXX	?= g++
+LD	?= ld
 CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
 
 XCFLAGS	?= -DNDEBUG=1 -DMDBX_DEBUG=0 -DLIBMDBX_EXPORTS=1
@@ -32,8 +33,8 @@ TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
-LDFLAGS	?= -Wl,--gc-sections,-z,relro,-O1,--no-as-needed,-lrt
-EXE_LDFLAGS ?= -pthread -lrt
+LDFLAGS	?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
+EXE_LDFLAGS ?= -pthread
 
 # LY: just for benchmarking
 IOARENA ?= $(shell \
@@ -44,32 +45,50 @@ NN	?= 25000000
 
 ########################################################################
 
-HEADERS		:= mdbx.h
-LIBRARIES	:= libmdbx.a libmdbx.so
-TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
-MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
-SHELL		:= /bin/bash
-
 ifdef MSVC
+  UNAME := Windows
   LCK_IMPL := windows
   TEST_OSAL := windows
+  TEST_ITER := 42
 else
+  UNAME	:= $(shell uname -s 2>/dev/null || echo Unknown)
   define uname2lck
-    case "`uname -s 2>/dev/null`" in
+    case "$(UNAME)" in
       Linux) echo linux;;
-      CYGWIN*|MINGW32*|MSYS*) echo windows;;
+      CYGWIN*|MINGW32*|MSYS*|Windows*) echo windows;;
       *) echo posix;;
     esac
   endef
   define uname2osal
-    case "`uname -s 2>/dev/null`" in
-      CYGWIN*|MINGW32*|MSYS*) echo windows;;
+    case "$(UNAME)" in
+      CYGWIN*|MINGW32*|MSYS*|Windows*) echo windows;;
       *) echo unix;;
+    esac
+  endef
+  define uname2titer
+    case "$(UNAME)" in
+      Darwin*|Mach*) echo 3;;
+      *) echo 42;;
+    esac
+  endef
+  define uname2suffix
+    case "$(UNAME)" in
+      Darwin*|Mach*) echo dylib;;
+      CYGWIN*|MINGW32*|MSYS*|Windows*) echo dll;;
+      *) echo so;;
     esac
   endef
   LCK_IMPL := $(shell $(uname2lck))
   TEST_OSAL := $(shell $(uname2osal))
+  TEST_ITER := $(shell $(uname2titer))
+  SO_SUFFIX := $(shell $(uname2suffix))
 endif
+
+HEADERS		:= mdbx.h
+LIBRARIES	:= libmdbx.a libmdbx.$(SO_SUFFIX)
+TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
+MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
+SHELL		:= /bin/bash
 
 CORE_SRC	:= src/lck-$(LCK_IMPL).c $(filter-out $(wildcard src/lck-*.c), $(wildcard src/*.c))
 CORE_INC	:= $(wildcard src/*.h)
@@ -82,10 +101,10 @@ TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
 
 all: $(LIBRARIES) $(TOOLS) mdbx_test example
 
-mdbx: libmdbx.a libmdbx.so
+mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
 
-example: mdbx.h tutorial/sample-mdbx.c libmdbx.so
-	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.so -o example
+example: mdbx.h tutorial/sample-mdbx.c libmdbx.$(SO_SUFFIX)
+	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.$(SO_SUFFIX) -o example
 
 tools: $(TOOLS)
 
@@ -103,7 +122,7 @@ clean:
 	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
 
 check:	all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --repeat=42 --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
+	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --repeat=$(TEST_ITER) --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
 
 check-singleprocess:	all
@@ -134,13 +153,13 @@ $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 libmdbx.a: $(CORE_OBJ)
 	$(AR) rs $@ $?
 
-libmdbx.so: $(CORE_OBJ)
+libmdbx.$(SO_SUFFIX): $(CORE_OBJ)
 	$(CC) $(CFLAGS) -save-temps $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $^ $(EXE_LDFLAGS) -o $@
 
-mdbx_test: $(TEST_OBJ) libmdbx.so
+mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) -o $@
 
 ###############################################################################
@@ -166,7 +185,7 @@ bench-$(1)_$(2).txt: $(3) $(IOARENA) Makefile
 
 endef
 
-$(eval $(call bench-rule,mdbx,$(NN),libmdbx.so))
+$(eval $(call bench-rule,mdbx,$(NN),libmdbx.$(SO_SUFFIX)))
 
 $(eval $(call bench-rule,sophia,$(NN)))
 $(eval $(call bench-rule,leveldb,$(NN)))

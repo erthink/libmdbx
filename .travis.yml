@@ -7,6 +7,7 @@ compiler:
 
 os:
 - linux
+- osx
 
 script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all check; fi
 

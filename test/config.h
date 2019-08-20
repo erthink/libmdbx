@@ -102,6 +102,22 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   int32_t &value, const int32_t minval, const int32_t maxval,
                   const int32_t default_value = -1);
+
+inline bool parse_option_intptr(int argc, char *const argv[], int &narg,
+                                const char *option, intptr_t &value,
+                                const intptr_t minval, const intptr_t maxval,
+                                const intptr_t default_value = -1) {
+  static_assert(sizeof(intptr_t) == 4 || sizeof(intptr_t) == 8, "WTF?");
+  if (sizeof(intptr_t) == 8)
+    return parse_option(argc, argv, narg, option,
+                        *reinterpret_cast<int64_t *>(&value), int64_t(minval),
+                        int64_t(maxval), int64_t(default_value));
+  else
+    return parse_option(argc, argv, narg, option,
+                        *reinterpret_cast<int32_t *>(&value), int32_t(minval),
+                        int32_t(maxval), int32_t(default_value));
+}
+
 //-----------------------------------------------------------------------------
 
 #pragma pack(push, 1)

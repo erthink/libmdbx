@@ -23,11 +23,21 @@
 #   undef NDEBUG
 #endif
 
+#define MDBX_OSX_WANNA_DURABILITY 0 /* using fcntl(F_FULLFSYNC) with 5-10 times slowdown */
+#define MDBX_OSX_WANNA_SPEED 1      /* using fsync() with chance of data lost on power failure */
+#ifndef MDBX_OSX_SPEED_OR_DURABILITY
+#define MDBX_OSX_SPEED_OR_DURABILITY MDBX_OSX_WANNA_DURABILITY
+#endif
+
 /*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */
 #ifndef _FILE_OFFSET_BITS
 #   define _FILE_OFFSET_BITS 64
+#endif
+
+#ifdef __APPLE__
+#define _DARWIN_C_SOURCE
 #endif
 
 #ifdef _MSC_VER

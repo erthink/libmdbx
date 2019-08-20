@@ -18,7 +18,7 @@
  * even though they don't support Robust Mutexes.
  * Compile with -DMDBX_USE_ROBUST=0. */
 #ifndef MDBX_USE_ROBUST
-#if defined(EOWNERDEAD) || _POSIX_C_SOURCE >= 200809L
+#if (defined(EOWNERDEAD) || _POSIX_C_SOURCE >= 200809L) && !defined(__APPLE__)
 #define MDBX_USE_ROBUST 1
 #else
 #define MDBX_USE_ROBUST 0

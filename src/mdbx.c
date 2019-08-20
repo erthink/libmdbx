@@ -292,6 +292,16 @@ static CRITICAL_SECTION rthc_critical_section;
 #else
 int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj, void *dso_symbol)
     __attribute__((weak));
+#ifdef __APPLE__ /* FIXME: Thread-Local Storage destructors & DSO-unloading */
+int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj,
+                             void *dso_symbol) {
+  (void)dtor;
+  (void)obj;
+  (void)dso_symbol;
+  return -1;
+}
+#endif           /* __APPLE__ */
+
 static pthread_mutex_t mdbx_rthc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t mdbx_rthc_cond = PTHREAD_COND_INITIALIZER;
 static mdbx_thread_key_t mdbx_rthc_key;
@@ -515,9 +525,9 @@ __cold void mdbx_rthc_global_dtor(void) {
     mdbx_thread_key_delete(key);
     for (MDBX_reader *rthc = rthc_table[i].begin; rthc < rthc_table[i].end;
          ++rthc) {
-      mdbx_trace("== [%i] = key %u, %p ... %p, rthc %p (%+i), "
+      mdbx_trace("== [%i] = key %zu, %p ... %p, rthc %p (%+i), "
                  "rthc-pid %i, current-pid %i",
-                 i, key, rthc_table[i].begin, rthc_table[i].end, rthc,
+                 i, (size_t)key, rthc_table[i].begin, rthc_table[i].end, rthc,
                  (int)(rthc - rthc_table[i].begin), rthc->mr_pid, self_pid);
       if (rthc->mr_pid == self_pid) {
         rthc->mr_pid = 0;
@@ -553,8 +563,8 @@ __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
     return rc;
 
   mdbx_rthc_lock();
-  mdbx_trace(">> key 0x%x, rthc_count %u, rthc_limit %u", *key, rthc_count,
-             rthc_limit);
+  mdbx_trace(">> key %zu, rthc_count %u, rthc_limit %u", (size_t)*key,
+             rthc_count, rthc_limit);
   if (rthc_count == rthc_limit) {
     rthc_entry_t *new_table =
         mdbx_realloc((rthc_table == rthc_table_static) ? nullptr : rthc_table,
@@ -568,13 +578,14 @@ __cold int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
     rthc_table = new_table;
     rthc_limit *= 2;
   }
-  mdbx_trace("== [%i] = key %u, %p ... %p", rthc_count, *key, begin, end);
+  mdbx_trace("== [%i] = key %zu, %p ... %p", rthc_count, (size_t)*key, begin,
+             end);
   rthc_table[rthc_count].key = *key;
   rthc_table[rthc_count].begin = begin;
   rthc_table[rthc_count].end = end;
   ++rthc_count;
-  mdbx_trace("<< key 0x%x, rthc_count %u, rthc_limit %u", *key, rthc_count,
-             rthc_limit);
+  mdbx_trace("<< key %zu, rthc_count %u, rthc_limit %u", (size_t)*key,
+             rthc_count, rthc_limit);
   mdbx_rthc_unlock();
   return MDBX_SUCCESS;
 
@@ -587,8 +598,8 @@ bailout:
 __cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
   mdbx_thread_key_delete(key);
   mdbx_rthc_lock();
-  mdbx_trace(">> key 0x%x, rthc_count %u, rthc_limit %u", key, rthc_count,
-             rthc_limit);
+  mdbx_trace(">> key %zu, rthc_count %u, rthc_limit %u", (size_t)key,
+             rthc_count, rthc_limit);
 
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (key == rthc_table[i].key) {
@@ -614,8 +625,8 @@ __cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
     }
   }
 
-  mdbx_trace("<< key 0x%x, rthc_count %u, rthc_limit %u", key, rthc_count,
-             rthc_limit);
+  mdbx_trace("<< key %zu, rthc_count %u, rthc_limit %u", (size_t)key,
+             rthc_count, rthc_limit);
   mdbx_rthc_unlock();
 }
 
@@ -3030,7 +3041,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
       int rc = (flags & MDBX_WRITEMAP)
                    ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes,
                                 flags & MDBX_MAPASYNC)
-                   : mdbx_filesync(env->me_fd, false);
+                   : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
@@ -5411,14 +5422,16 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         goto fail;
       if ((flags & MDBX_MAPASYNC) == 0) {
         if (unlikely(pending->mm_geo.next > steady->mm_geo.now)) {
-          rc = mdbx_filesize_sync(env->me_fd);
+          rc = mdbx_filesync(env->me_fd, MDBX_SYNC_SIZE);
           if (unlikely(rc != MDBX_SUCCESS))
             goto fail;
         }
         env->me_sync_pending = 0;
       }
     } else {
-      rc = mdbx_filesync(env->me_fd, pending->mm_geo.next > steady->mm_geo.now);
+      rc = mdbx_filesync(env->me_fd, (pending->mm_geo.next > steady->mm_geo.now)
+                                         ? MDBX_SYNC_DATA | MDBX_SYNC_SIZE
+                                         : MDBX_SYNC_DATA);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
       env->me_sync_pending = 0;
@@ -5566,7 +5579,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
     } else {
-      rc = mdbx_filesync(env->me_fd, false);
+      rc = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       if (rc != MDBX_SUCCESS)
         goto undo;
     }
@@ -11814,11 +11827,14 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   mdbx_txn_abort(read_txn);
 
   if (likely(rc == MDBX_SUCCESS))
-    rc = mdbx_filesync(fd, true);
+    rc = mdbx_filesync(fd, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
 
   /* Write actual meta */
   if (likely(rc == MDBX_SUCCESS))
     rc = mdbx_pwrite(fd, buffer, pgno2bytes(env, NUM_METAS), 0);
+
+  if (likely(rc == MDBX_SUCCESS))
+    rc = mdbx_filesync(fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
 
   mdbx_memalign_free(buffer);
   return rc;
@@ -12860,7 +12876,7 @@ int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
   unsigned ret = mdbx_runtime_flags;
   mdbx_runtime_flags = flags;
 
-#ifdef __linux__
+#if defined(__linux__) || defined(__gnu_linux__)
   if (flags & MDBX_DBG_DUMP) {
     int core_filter_fd = open("/proc/self/coredump_filter", O_TRUNC | O_RDWR);
     if (core_filter_fd >= 0) {
@@ -12883,7 +12899,7 @@ int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
       close(core_filter_fd);
     }
   }
-#endif /* __linux__ */
+#endif /* Linux */
 
   mdbx_debug_logger = logger;
   return ret;
