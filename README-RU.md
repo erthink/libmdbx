@@ -1,4 +1,4 @@
-## The [repository was moved out from Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
+## The [repository now only mirrored on the Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 ---
 
@@ -6,31 +6,24 @@ libmdbx
 ======================================
 **The revised and extended descendant of [Symas LMDB](https://symas.com/lmdb/).**
 
-*The Future will Positive. Всё будет хорошо.*
+*The Future will (be) Positive. Всё будет хорошо.*
 [![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=master)](https://travis-ci.org/leo-yuriev/libmdbx)
 [![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
-English version [by Google](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/master)
+English version of this README is [here](README.md), also the translations [by Google](https://translate.googleusercontent.com/translate_c?act=url&ie=UTF8&sl=ru&tl=en&u=https://github.com/leo-yuriev/libmdbx/tree/master)
 and [by Yandex](https://translate.yandex.ru/translate?url=https%3A%2F%2Fgithub.com%2FReOpen%2Flibmdbx%2Ftree%2Fmaster&lang=ru-en).
 
-### Project Status
+### Статус проекта
 
-**Сейчас MDBX _активно перерабатывается_** предстоит
-большое изменение как API, так и формата базы данных. К сожалению,
-обновление приведет к потере совместимости с предыдущими версиями.
+_libmdbx_ работает на Linux, FreeBSD, MacOS X и других ОС
+соответствующих POSIX.1-2008, а также поддерживает Windows (начиная с
+Windows XP) в качестве дополнительной платформы.
 
-Цель этой революции - обеспечение более четкого надежного API и
-добавление новых функции, а также наделение базы данных новыми
-свойствами.
-
-В настоящее время MDBX работает на Linux и ОС соответствующих
-POSIX.1-2008, а также поддерживает Windows (начиная с Windows XP) в
-качестве дополнительной платформы. Поддержка других ОС может быть
-обеспечена на коммерческой основе. Однако такие усовершенствования (т.
-е. pull-requests) могут быть приняты в мейнстрим только в том случае,
-если будет доступен соответствующий публичный и бесплатный сервис
-непрерывной интеграции (aka Continuous Integration).
+Отдельно ведётся не-публичная разработка следующей версии, в которой
+будет большое изменение как API, так и формата базы данных. Цель этой
+революции - обеспечение более четкого и надежного API, добавление новых
+функций, а также наделение базы данных новыми свойствами.
 
 ## Содержание
 - [Обзор](#Обзор)
@@ -53,8 +46,7 @@ POSIX.1-2008, а также поддерживает Windows (начиная с 
 ## Обзор
 _libmdbx_ - это встраиваемый key-value движок хранения со специфическим
 набором свойств и возможностей, ориентированный на создание уникальных
-легковесных решений с предельной производительностью под Linux и
-Windows.
+легковесных решений с предельной производительностью.
 
 _libmdbx_ позволяет множеству процессов совместно читать и обновлять
 несколько key-value таблиц с соблюдением
@@ -84,10 +76,11 @@ _libmdbx_ не использует
 
 
 ### Сравнение с другими СУБД
-Ввиду того, что в _libmdbx_ сейчас происходит революция, я посчитал
-лучшим решением ограничится здесь ссылкой на [главу Comparison with
-other databases](https://github.com/coreos/bbolt#comparison-with-other-databases)
-в описании _BoltDB_.
+
+На данный момент, пожалуйста, обратитесь к [главе "сравнение BoltDB с
+другими базами
+данных"](https://github.com/coreos/bbolt#comparison-with-other-databases),
+которая также (в основном) применима к MDBX.
 
 
 ### История
@@ -108,13 +101,13 @@ Tables](https://github.com/leo-yuriev/libfpta), aka ["Позитивные
 Technologies](https://www.ptsecurity.ru).
 
 
-#### Acknowledgments
-Howard Chu (Symas Corporation) - the author of LMDB, from which
-originated the MDBX in 2015.
+#### Выражение признательности
 
-Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code, which
-was used for begin development of LMDB.
+Говард Чу (Howard Chu) <hyc@openldap.org> - автор движка LMDB, от
+которого в 2015 году произошел MDBX.
 
+Мартин Хеденфальк (Martin Hedenfalk) <martin@bzero.se> - автор кода
+`btree.c`, который использовался для начала разработки LMDB.
 
 Основные свойства
 =================
@@ -331,6 +324,25 @@ Amplification Factor) и RAF (Read Amplification Factor) также Olog(N).
   >  - обращение к уже освобожденной памяти;
   >  - попытки повторного освобождения памяти;
   >  - повреждение памяти и ошибки сегментации.
+
+32. На **MacOS X** для синхронизации данных с диском _по-умолчанию_
+используется системная функция `fcntl(F_FULLFSYNC)`, так как [только
+этим гарантируется сохранность
+данных](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html)
+при сбое электропитания. К сожалению, в сценариях с высокой
+интенсивностью пишущих транзакций, использование `F_FULLFSYNC` приводит
+к существенной деградации производительности в сравнении с LMDB, где
+используется системная функция `fsync()`. Поэтому _libmdbx_ позволяет
+переопределить это поведение определением опции
+`MDBX_OSX_SPEED_INSTEADOF_DURABILITY=1` при сборке библиотеки.
+
+33. На **Windows** _libmdbx_ использует файловые блокировки
+`LockFileEx()`, так как это позволяет размещать БД на сетевых дисках, а
+также обеспечивает защиту от некомпетентных действий пользователя
+([защиту от
+дурака](https://ru.wikipedia.org/wiki/%D0%97%D0%B0%D1%89%D0%B8%D1%82%D0%B0_%D0%BE%D1%82_%D0%B4%D1%83%D1%80%D0%B0%D0%BA%D0%B0)).
+Поэтому _libmdbx_ может немного отставать в тестах производительность от
+LMDB, где используются именованные мьютексы.
 
 --------------------------------------------------------------------------------
 
