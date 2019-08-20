@@ -55,13 +55,13 @@ else
   define uname2lck
     case "$(UNAME)" in
       Linux) echo linux;;
-      CYGWIN*|MINGW32*|MSYS*|Windows*) echo windows;;
+      CYGWIN*|MINGW*|MSYS*|Windows*) echo windows;;
       *) echo posix;;
     esac
   endef
   define uname2osal
     case "$(UNAME)" in
-      CYGWIN*|MINGW32*|MSYS*|Windows*) echo windows;;
+      CYGWIN*|MINGW*|MSYS*|Windows*) echo windows;;
       *) echo unix;;
     esac
   endef
@@ -74,7 +74,7 @@ else
   define uname2suffix
     case "$(UNAME)" in
       Darwin*|Mach*) echo dylib;;
-      CYGWIN*|MINGW32*|MSYS*|Windows*) echo dll;;
+      CYGWIN*|MINGW*|MSYS*|Windows*) echo dll;;
       *) echo so;;
     esac
   endef
