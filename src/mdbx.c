@@ -12023,7 +12023,7 @@ int __cold mdbx_env_stat2(const MDBX_env *env, const MDBX_txn *txn,
 
   const MDBX_db *db =
       txn ? &txn->mt_dbs[MAIN_DBI] : &mdbx_meta_head(env)->mm_dbs[MAIN_DBI];
-  return mdbx_stat0(txn->mt_env, db, arg);
+  return mdbx_stat0(txn ? txn->mt_env : env, db, arg);
 }
 
 int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
