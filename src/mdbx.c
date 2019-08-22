@@ -5749,6 +5749,10 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
       need_unlock = true;
     }
     MDBX_meta *head = mdbx_meta_head(env);
+    if (!inside_txn) {
+      env->me_txn0->mt_txnid = meta_txnid(env, head, false);
+      mdbx_find_oldest(env->me_txn0);
+    }
 
     if (pagesize < 0)
       pagesize = env->me_psize;
@@ -5768,7 +5772,8 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
     if (shrink_threshold < 0)
       shrink_threshold = pgno2bytes(env, head->mm_geo.shrink);
 
-    const size_t usedbytes = pgno2bytes(env, head->mm_geo.next);
+    const size_t usedbytes =
+        pgno2bytes(env, mdbx_find_largest(env, head->mm_geo.next));
     if ((size_t)size_upper < usedbytes) {
       rc = MDBX_MAP_FULL;
       goto bailout;
