@@ -11749,21 +11749,20 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   memcpy(buffer, env->me_map, meta_bytes);
   MDBX_meta *const headcopy = /* LY: get pointer to the spanshot copy */
       (MDBX_meta *)(buffer + ((uint8_t *)mdbx_meta_head(env) - env->me_map));
-  const uint64_t whole_size =
-      mdbx_roundup2(pgno2bytes(env, headcopy->mm_geo.now), env->me_os_psize);
-  mdbx_txn_unlock(env);
-
   /* Update signature to steady */
   headcopy->mm_datasync_sign = mdbx_meta_sign(headcopy);
+  mdbx_txn_unlock(env);
 
   /* Copy the data */
-  const size_t data_bytes = pgno2bytes(env, read_txn->mt_next_pgno);
+  const uint64_t whole_size =
+      mdbx_roundup2(pgno2bytes(env, read_txn->mt_end_pgno), env->me_os_psize);
+  const size_t used_size = pgno2bytes(env, read_txn->mt_next_pgno);
   mdbx_jitter4testing(false);
 #if __GLIBC_PREREQ(2, 27) && defined(_GNU_SOURCE)
-  for (off_t in_offset = meta_bytes; in_offset < (off_t)data_bytes;) {
+  for (off_t in_offset = meta_bytes; in_offset < (off_t)used_size;) {
     off_t out_offset = in_offset;
     ssize_t bytes_copied = copy_file_range(
-        env->me_fd, &in_offset, fd, &out_offset, data_bytes - in_offset, 0);
+        env->me_fd, &in_offset, fd, &out_offset, used_size - in_offset, 0);
     if (unlikely(bytes_copied <= 0)) {
       rc = bytes_copied ? errno : MDBX_ENODATA;
       break;
@@ -11771,9 +11770,9 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   }
 #else
   uint8_t *data_buffer = buffer + meta_bytes;
-  for (size_t offset = meta_bytes; offset < data_bytes;) {
+  for (size_t offset = meta_bytes; offset < used_size;) {
     const size_t chunk =
-        (MDBX_WBUF < data_bytes - offset) ? MDBX_WBUF : data_bytes - offset;
+        (MDBX_WBUF < used_size - offset) ? MDBX_WBUF : used_size - offset;
     memcpy(data_buffer, env->me_map + offset, chunk);
     rc = mdbx_pwrite(fd, data_buffer, chunk, offset);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -11782,7 +11781,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   }
 #endif
 
-  if (likely(rc == MDBX_SUCCESS) && whole_size != data_bytes)
+  if (likely(rc == MDBX_SUCCESS) && whole_size != used_size)
     rc = mdbx_ftruncate(fd, whole_size);
 
   return rc;
