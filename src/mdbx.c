@@ -1898,7 +1898,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   MDBX_lockinfo *const lck = env->me_lck;
 
   const txnid_t edge = mdbx_reclaiming_detent(env);
-  mdbx_tassert(txn, edge <= txn->mt_txnid - 1);
+  mdbx_tassert(txn, edge <= txn->mt_txnid);
   const txnid_t last_oldest = lck->mti_oldest;
   mdbx_tassert(txn, edge >= last_oldest);
   if (last_oldest == edge)
@@ -1935,7 +1935,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
 }
 
 /* Find largest mvcc-snapshot still referenced. */
-static pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
+static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
   MDBX_lockinfo *const lck = env->me_lck;
   if (likely(lck != NULL /* exclusive mode */)) {
     const unsigned snap_nreaders = lck->mti_numreaders;
@@ -2739,39 +2739,43 @@ static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
       return rc;
   }
 
-  MDBX_meta *head = mdbx_meta_head(env);
+  const MDBX_meta *head = mdbx_meta_head(env);
   if (!META_IS_STEADY(head) || env->me_sync_pending) {
 
     if (force || (env->me_sync_threshold &&
                   env->me_sync_pending >= env->me_sync_threshold))
       flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
-    if (outside_txn &&
-        env->me_sync_pending >
-            pgno2bytes(env, 16 /* FIXME: define threshold */) &&
-        (flags & MDBX_NOSYNC) == 0) {
-      mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
-      const size_t usedbytes = pgno_align2os_bytes(env, head->mm_geo.next);
+    if (outside_txn) {
+      if (env->me_sync_pending >
+              pgno2bytes(env, 16 /* FIXME: define threshold */) &&
+          (flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) == 0) {
+        mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
+        const size_t usedbytes = pgno_align2os_bytes(env, head->mm_geo.next);
 
-      mdbx_txn_unlock(env);
+        mdbx_txn_unlock(env);
 
-      /* LY: pre-sync without holding lock to reduce latency for writer(s) */
-      int rc = (flags & MDBX_WRITEMAP)
-                   ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes,
-                                flags & MDBX_MAPASYNC)
-                   : mdbx_filesync(env->me_fd, false);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+        /* LY: pre-sync without holding lock to reduce latency for writer(s) */
+        int rc = (flags & MDBX_WRITEMAP)
+                     ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, false)
+                     : mdbx_filesync(env->me_fd, false);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
 
-      rc = mdbx_txn_lock(env, nonblock);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
+        rc = mdbx_txn_lock(env, nonblock);
+        if (unlikely(rc != MDBX_SUCCESS))
+          return rc;
 
-      /* LY: head may be changed. */
-      head = mdbx_meta_head(env);
+        /* LY: head may be changed. */
+        head = mdbx_meta_head(env);
+      }
+      env->me_txn0->mt_txnid = meta_txnid(env, head, false);
+      mdbx_find_oldest(env->me_txn0);
     }
 
-    if (!META_IS_STEADY(head) || env->me_sync_pending) {
+    if (!META_IS_STEADY(head) ||
+        ((flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) == 0 &&
+         env->me_sync_pending)) {
       mdbx_debug("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIuPTR,
                  container_of(head, MDBX_page, mp_data)->mp_pgno,
                  mdbx_durable_str(head), env->me_sync_pending);
