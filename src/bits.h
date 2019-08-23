@@ -810,6 +810,8 @@ struct MDBX_env {
   unsigned me_maxkey_limit;  /* max size of a key */
   mdbx_pid_t me_live_reader; /* have liveness lock in reader table */
   void *me_userctx;          /* User-settable context */
+  volatile uint64_t *me_unsynced_timeout;
+  volatile uint64_t *me_autosync_period;
   volatile pgno_t *me_unsynced_pages;
   volatile pgno_t *me_autosync_threshold;
   MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
@@ -818,6 +820,8 @@ struct MDBX_env {
     MDBX_OSAL_LOCK wmutex;
 #endif
     txnid_t oldest;
+    uint64_t unsynced_timeout;
+    uint64_t autosync_period;
     pgno_t autosync_pending;
     pgno_t autosync_threshold;
   } me_lckless_stub;

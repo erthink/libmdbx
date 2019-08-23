@@ -1601,6 +1601,32 @@ LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, int dont_sync);
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes);
 
+/* Sets relative period since the last unsteay commit to force flush the data
+ * buffers to disk, even of MDBX_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC flags
+ * in the environment. The value affects all processes which operates with given
+ * DB until the last process close DB or a new value will be settled.
+ *
+ * Data is always written to disk when mdbx_txn_commit() is called,
+ * but the operating system may keep it buffered. MDBX always flushes
+ * the OS buffers upon commit as well, unless the environment was
+ * opened with MDBX_NOSYNC, MDBX_MAPASYNC or in part MDBX_NOMETASYNC.
+ *
+ * Settled period don't checked asynchronously, but only inside the functions.
+ * mdbx_txn_commit() and mdbx_env_sync(). Therefore, in cases where transactions
+ * are committed infrequently and/or irregularly, polling by mdbx_env_sync() may
+ * be a reasonable solution to timeout enforcement.
+ *
+ * The default is 0, than mean no any timeout checked, and no additional
+ * flush will be made.
+ *
+ * [in] env               An environment handle returned by mdbx_env_create()
+ * [in] seconds_16dot16   The period in 1/65536 of second when a synchronous
+ *                        flush would be made since the last unsteay commit.
+ *
+ * Returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_env_set_syncperiod(MDBX_env *env,
+                                        unsigned seconds_16dot16);
+
 /* Returns a lag of the reading for the given transaction.
  *
  * Returns an information for estimate how much given read-only

@@ -1223,3 +1223,71 @@ __cold void mdbx_osal_jitter(bool tiny) {
 #endif
   }
 }
+
+#if defined(_WIN32) || defined(_WIN64)
+#elif defined(__APPLE__) || defined(__MACH__)
+#include <mach/mach_time.h>
+#elif defined(__linux__) || defined(__gnu_linux__)
+static __cold clockid_t choise_monoclock() {
+  struct timespec probe;
+#if defined(CLOCK_BOOTTIME)
+  if (clock_gettime(CLOCK_BOOTTIME, &probe) == 0)
+    return CLOCK_BOOTTIME;
+#elif defined(CLOCK_MONOTONIC_RAW)
+  if (clock_gettime(CLOCK_MONOTONIC_RAW, &probe) == 0)
+    return CLOCK_MONOTONIC_RAW;
+#elif defined(CLOCK_MONOTONIC_COARSE)
+  if (clock_gettime(CLOCK_MONOTONIC_COARSE, &probe) == 0)
+    return CLOCK_MONOTONIC_COARSE;
+#endif
+  return CLOCK_MONOTONIC;
+}
+#endif
+
+uint64_t mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
+#if defined(_WIN32) || defined(_WIN64)
+  static LARGE_INTEGER performance_frequency;
+  if (performance_frequency.QuadPart == 0)
+    QueryPerformanceFrequency(&performance_frequency);
+  const uint64_t ratio = performance_frequency.QuadPart;
+#elif defined(__APPLE__) || defined(__MACH__)
+  static uint64_t ratio;
+  if (!ratio) {
+    mach_timebase_info_data_t ti;
+    mach_timebase_info(&ti);
+    ratio = UINT64_C(1000000000) * ti.denom / ti.numer;
+  }
+#else
+  const uint64_t ratio = UINT64_C(1000000000);
+#endif
+  return (ratio * seconds_16dot16 + 32768) >> 16;
+}
+
+uint64_t mdbx_osal_monotime(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  LARGE_INTEGER counter;
+  counter.QuadPart = 0;
+  QueryPerformanceCounter(&counter);
+  return counter.QuadPart;
+#elif defined(__APPLE__) || defined(__MACH__)
+  return mach_absolute_time();
+#else
+
+#if defined(__linux__) || defined(__gnu_linux__)
+  static clockid_t posix_clockid = -1;
+  if (unlikely(posix_clockid < 0))
+    posix_clockid = choise_monoclock();
+#elif defined(CLOCK_MONOTONIC)
+#define posix_clockid CLOCK_MONOTONIC
+#else
+#define posix_clockid CLOCK_REALTIME
+#endif
+
+  struct timespec ts;
+  if (unlikely(clock_gettime(posix_clockid, &ts) != 0)) {
+    ts.tv_nsec = 0;
+    ts.tv_sec = 0;
+  }
+  return ts.tv_sec * UINT64_C(1000000000) + ts.tv_nsec;
+#endif
+}

@@ -3025,7 +3025,9 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   pgno_t unsynced_pages = *env->me_unsynced_pages;
   if (!META_IS_STEADY(head) || unsynced_pages) {
     const pgno_t autosync_threshold = *env->me_autosync_threshold;
-    if (force || (autosync_threshold && unsynced_pages >= autosync_threshold))
+    const uint64_t unsynced_timeout = *env->me_unsynced_timeout;
+    if (force || (autosync_threshold && unsynced_pages >= autosync_threshold) ||
+        (unsynced_timeout && mdbx_osal_monotime() >= unsynced_timeout))
       flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
     if (outside_txn) {
@@ -5390,7 +5392,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if (flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) {
     /* Check auto-sync conditions */
     const pgno_t autosync_threshold = *env->me_autosync_threshold;
-    if (autosync_threshold && *env->me_unsynced_pages >= autosync_threshold)
+    const uint64_t unsynced_timeout = *env->me_unsynced_timeout;
+    if ((autosync_threshold && *env->me_unsynced_pages >= autosync_threshold) ||
+        (unsynced_timeout && mdbx_osal_monotime() >= unsynced_timeout))
       flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
   }
 
@@ -5457,8 +5461,12 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if (rc == MDBX_RESULT_FALSE /* carry steady */) {
     pending->mm_datasync_sign = mdbx_meta_sign(pending);
     *env->me_unsynced_pages = 0;
+    *env->me_unsynced_timeout = 0;
   } else {
     assert(rc == MDBX_RESULT_TRUE /* carry non-steady */);
+    const uint64_t autosync_period = *env->me_autosync_period;
+    if (autosync_period && *env->me_unsynced_timeout == 0)
+      *env->me_unsynced_timeout = mdbx_osal_monotime() + autosync_period;
     pending->mm_datasync_sign =
         (flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC
             ? MDBX_DATASIGN_NONE
@@ -6430,6 +6438,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
       return rc;
 
     env->me_oldest = &env->me_lckless_stub.oldest;
+    env->me_unsynced_timeout = &env->me_lckless_stub.unsynced_timeout;
+    env->me_autosync_period = &env->me_lckless_stub.autosync_period;
     env->me_unsynced_pages = &env->me_lckless_stub.autosync_pending;
     env->me_autosync_threshold = &env->me_lckless_stub.autosync_threshold;
     env->me_maxreaders = UINT_MAX;
@@ -6540,6 +6550,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
   mdbx_assert(env, !MDBX_IS_ERROR(rc));
   env->me_oldest = &env->me_lck->mti_oldest_reader;
+  env->me_unsynced_timeout = &env->me_lck->mti_unsynced_timeout;
+  env->me_autosync_period = &env->me_lck->mti_autosync_period;
   env->me_unsynced_pages = &env->me_lck->mti_unsynced_pages;
   env->me_autosync_threshold = &env->me_lck->mti_autosync_threshold;
 #ifdef MDBX_OSAL_LOCK
@@ -6788,6 +6800,8 @@ static void __cold mdbx_env_close0(MDBX_env *env) {
   if (env->me_lck)
     mdbx_munmap(&env->me_lck_mmap);
   env->me_oldest = nullptr;
+  env->me_unsynced_timeout = nullptr;
+  env->me_autosync_period = nullptr;
   env->me_unsynced_pages = nullptr;
   env->me_autosync_threshold = nullptr;
 
@@ -13026,6 +13040,23 @@ int __cold mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes) {
 
   *env->me_autosync_threshold = bytes2pgno(env, bytes + env->me_psize - 1);
   return bytes ? mdbx_env_sync(env, false) : MDBX_SUCCESS;
+}
+
+int __cold mdbx_env_set_syncperiod(MDBX_env *env, unsigned seconds_16dot16) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+
+  if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (unlikely(env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)))
+    return MDBX_EACCESS;
+
+  if (unlikely(!env->me_map))
+    return MDBX_EPERM;
+
+  *env->me_autosync_period = mdbx_osal_16dot16_to_monotime(seconds_16dot16);
+  return seconds_16dot16 ? mdbx_env_sync(env, false) : MDBX_SUCCESS;
 }
 
 int __cold mdbx_env_set_oomfunc(MDBX_env *env, MDBX_oom_func *oomfunc) {

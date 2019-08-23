@@ -599,6 +599,8 @@ static __inline mdbx_tid_t mdbx_thread_self(void) {
 }
 
 void mdbx_osal_jitter(bool tiny);
+uint64_t mdbx_osal_monotime(void);
+uint64_t mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 
 /*----------------------------------------------------------------------------*/
 /* lck stuff */
