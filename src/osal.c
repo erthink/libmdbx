@@ -1228,7 +1228,7 @@ __cold void mdbx_osal_jitter(bool tiny) {
 #elif defined(__APPLE__) || defined(__MACH__)
 #include <mach/mach_time.h>
 #elif defined(__linux__) || defined(__gnu_linux__)
-static __cold clockid_t choise_monoclock() {
+static __cold clockid_t choice_monoclock() {
   struct timespec probe;
 #if defined(CLOCK_BOOTTIME)
   if (clock_gettime(CLOCK_BOOTTIME, &probe) == 0)
@@ -1276,7 +1276,7 @@ uint64_t mdbx_osal_monotime(void) {
 #if defined(__linux__) || defined(__gnu_linux__)
   static clockid_t posix_clockid = -1;
   if (unlikely(posix_clockid < 0))
-    posix_clockid = choise_monoclock();
+    posix_clockid = choice_monoclock();
 #elif defined(CLOCK_MONOTONIC)
 #define posix_clockid CLOCK_MONOTONIC
 #else
