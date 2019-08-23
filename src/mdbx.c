@@ -2150,7 +2150,9 @@ static __hot MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
 
 static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
   if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC))
-    return env->me_txn->mt_txnid - 1;
+    return likely(env->me_txn0->mt_owner == mdbx_thread_self())
+               ? env->me_txn0->mt_txnid - 1
+               : mdbx_meta_txnid_fluid(env, mdbx_meta_head(env));
 
   return mdbx_meta_txnid_stable(env, mdbx_meta_steady(env));
 }
