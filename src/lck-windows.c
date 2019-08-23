@@ -1,4 +1,4 @@
-/*
+﻿/*
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  * All rights reserved.
@@ -179,7 +179,7 @@ void mdbx_txn_unlock(MDBX_env *env) {
 #define LCK_LO_OFFSET 0
 #define LCK_LO_LEN offsetof(MDBX_lockinfo, mti_numreaders)
 #define LCK_UP_OFFSET LCK_LO_LEN
-#define LCK_UP_LEN (MDBX_LOCKINFO_WHOLE_SIZE - LCK_UP_OFFSET)
+#define LCK_UP_LEN (sizeof(MDBX_lockinfo) - LCK_UP_OFFSET)
 #define LCK_LOWER LCK_LO_OFFSET, LCK_LO_LEN
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
@@ -414,7 +414,9 @@ int mdbx_lck_seize(MDBX_env *env) {
 
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   if (env->me_flags & MDBX_EXCLUSIVE)
-    return MDBX_RESULT_TRUE /* files were must be opened non-shareable */;
+    return MDBX_RESULT_TRUE /* nope since files were must be opened
+                               non-shareable */
+        ;
 
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. on read-only filesystem) */
@@ -459,7 +461,8 @@ int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
   if (env->me_flags & MDBX_EXCLUSIVE)
-    return MDBX_SUCCESS /* files were must be opened non-shareable */;
+    return MDBX_SUCCESS /* nope since files were must be opened non-shareable */
+        ;
 
   /* 1) must be at E-E (exclusive-write) */
   if (!complete) {

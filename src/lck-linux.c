@@ -41,7 +41,7 @@ uint32_t linux_kernel_version;
 static int op_setlk = F_SETLK, op_setlkw = F_SETLKW, op_getlk = F_GETLK;
 
 /*----------------------------------------------------------------------------*/
-/* rthc */
+/* global constructor/destructor */
 
 static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
   struct utsname buffer;
@@ -72,6 +72,7 @@ static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
     op_getlk = F_OFD_GETLK;
   }
 #endif /* OFD locks */
+
   mdbx_rthc_global_init();
 }
 

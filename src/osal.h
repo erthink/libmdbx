@@ -41,7 +41,6 @@
 
 /*----------------------------------------------------------------------------*/
 /* C99 includes */
-
 #include <inttypes.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -59,6 +58,22 @@
 #include <malloc.h>
 #endif /* xBSD */
 
+/* C11 stdalign.h */
+#if __has_include(<stdalign.h>)
+#include <stdalign.h>
+#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
+#define alignas(N) _Alignas(N)
+#elif defined(_MSC_VER)
+#define alignas(N) __declspec(align(N))
+#elif __has_attribute(aligned) || defined(__GNUC__)
+#define alignas(N) __attribute__((aligned(N)))
+#else
+#error "FIXME: Required _alignas() or equivalent."
+#endif
+
+/*----------------------------------------------------------------------------*/
+/* Systems includes */
+
 #ifndef _POSIX_C_SOURCE
 #ifdef _POSIX_SOURCE
 #define _POSIX_C_SOURCE 1
@@ -70,9 +85,6 @@
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 0
 #endif
-
-/*----------------------------------------------------------------------------*/
-/* Systems includes */
 
 #if defined(_WIN32) || defined(_WIN64)
 #define WIN32_LEAN_AND_MEAN
@@ -598,12 +610,6 @@ void mdbx_osal_jitter(bool tiny);
 #define MDBX_OSAL_LOCK pthread_mutex_t
 #define MDBX_OSAL_LOCK_SIGN UINT32_C(0x8017)
 #endif /* MDBX_OSAL_LOCK */
-
-#ifdef MDBX_OSAL_LOCK
-#define MDBX_OSAL_LOCK_SIZE sizeof(MDBX_OSAL_LOCK)
-#else
-#define MDBX_OSAL_LOCK_SIZE 0
-#endif /* MDBX_OSAL_LOCK_SIZE */
 
 /// \brief Инициализация объектов синхронизации внутри текущего процесса
 ///   связанных с экземпляром MDBX_env.

@@ -2177,7 +2177,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   if (unlikely(lck == NULL /* exclusive mode */))
     return env->me_oldest_stub = edge;
 
-  const txnid_t last_oldest = lck->mti_oldest;
+  const txnid_t last_oldest = lck->mti_oldest_reader;
   mdbx_tassert(txn, edge >= last_oldest);
   if (likely(last_oldest == edge))
     return edge;
@@ -2206,8 +2206,8 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
 
   if (oldest != last_oldest) {
     mdbx_notice("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest, oldest);
-    mdbx_tassert(txn, oldest >= lck->mti_oldest);
-    lck->mti_oldest = oldest;
+    mdbx_tassert(txn, oldest >= lck->mti_oldest_reader);
+    lck->mti_oldest_reader = oldest;
   }
   return oldest;
 }
@@ -2221,14 +2221,14 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
     retry:
       if (lck->mti_readers[i].mr_pid) {
         /* mdbx_jitter4testing(true); */
-        const pgno_t snap_pages = lck->mti_readers[i].mr_snapshot_pages;
+        const pgno_t snap_pages = lck->mti_readers[i].mr_snapshot_pages_used;
         const txnid_t snap_txnid = lck->mti_readers[i].mr_txnid;
         mdbx_memory_barrier();
-        if (unlikely(snap_pages != lck->mti_readers[i].mr_snapshot_pages ||
+        if (unlikely(snap_pages != lck->mti_readers[i].mr_snapshot_pages_used ||
                      snap_txnid != lck->mti_readers[i].mr_txnid))
           goto retry;
         if (largest < snap_pages &&
-            lck->mti_oldest <= /* ignore pending updates */ snap_txnid &&
+            lck->mti_oldest_reader <= /* ignore pending updates */ snap_txnid &&
             snap_txnid <= env->me_txn0->mt_txnid)
           largest = snap_pages;
       }
@@ -3176,9 +3176,16 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   }
 #endif /* MDBX_TXN_CHECKPID */
 
-  STATIC_ASSERT(sizeof(MDBX_reader) == MDBX_CACHELINE_SIZE);
+  STATIC_ASSERT(sizeof(MDBX_reader) == 32);
+#ifdef MDBX_OSAL_LOCK
+  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_wmutex) % MDBX_CACHELINE_SIZE == 0);
+  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_rmutex) % MDBX_CACHELINE_SIZE == 0);
+#else
+  STATIC_ASSERT(
+      offsetof(MDBX_lockinfo, mti_oldest_reader) % MDBX_CACHELINE_SIZE == 0);
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_numreaders) % MDBX_CACHELINE_SIZE ==
                 0);
+#endif
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
 
@@ -3258,8 +3265,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       mdbx_flush_noncoherent_cpu_writeback();
       if (slot == nreaders)
         env->me_lck->mti_numreaders = ++nreaders;
-      if (env->me_close_readers < nreaders)
-        env->me_close_readers = nreaders;
       r->mr_pid = env->me_pid;
       mdbx_rdt_unlock(env);
 
@@ -3275,7 +3280,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       const txnid_t snap = mdbx_meta_txnid_fluid(env, meta);
       mdbx_jitter4testing(false);
       if (likely(r)) {
-        r->mr_snapshot_pages = meta->mm_geo.next;
+        r->mr_snapshot_pages_used = meta->mm_geo.next;
         r->mr_txnid = snap;
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
@@ -3679,8 +3684,9 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     if (txn->mt_ro_reader) {
       mdbx_ensure(env, /* paranoia is appropriate here */
                   txn->mt_txnid == txn->mt_ro_reader->mr_txnid &&
-                      txn->mt_ro_reader->mr_txnid >= env->me_lck->mti_oldest);
-      txn->mt_ro_reader->mr_snapshot_pages = 0;
+                      txn->mt_ro_reader->mr_txnid >=
+                          env->me_lck->mti_oldest_reader);
+      txn->mt_ro_reader->mr_snapshot_pages_used = 0;
       txn->mt_ro_reader->mr_txnid = ~(txnid_t)0;
       mdbx_memory_barrier();
       env->me_lck->mti_readers_refresh_flag = true;
@@ -6510,8 +6516,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     env->me_lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
     env->me_lck->mti_os_and_format = MDBX_LOCK_FORMAT;
   } else {
-    if (env->me_lck->mti_magic_and_version != MDBX_LOCK_MAGIC &&
-        env->me_lck->mti_magic_and_version != MDBX_LOCK_MAGIC_DEVEL) {
+    if (env->me_lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
       mdbx_error("lock region has invalid magic/version");
       return ((env->me_lck->mti_magic_and_version >> 8) != MDBX_MAGIC)
                  ? MDBX_INVALID
@@ -6525,7 +6530,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   }
 
   mdbx_assert(env, !MDBX_IS_ERROR(rc));
-  env->me_oldest = &env->me_lck->mti_oldest;
+  env->me_oldest = &env->me_lck->mti_oldest_reader;
 #ifdef MDBX_OSAL_LOCK
   env->me_wmutex = &env->me_lck->mti_wmutex;
 #endif
