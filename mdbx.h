@@ -1684,6 +1684,7 @@ LIBMDBX_API MDBX_oom_func *mdbx_env_get_oomfunc(MDBX_env *env);
 #define MDBX_DBG_AUDIT 16
 #define MDBX_DBG_JITTER 32
 #define MDBX_DBG_DUMP 64
+#define MDBX_DBG_LEGACY_MULTIOPEN 128
 
 typedef void MDBX_debug_func(int type, const char *function, int line,
                              const char *msg, va_list args);

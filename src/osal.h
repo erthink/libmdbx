@@ -475,7 +475,7 @@ int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #define MAX_WRITE UINT32_C(0x3fff0000)
 
 #if defined(__linux__) || defined(__gnu_linux__)
-extern uint32_t linux_kernel_version;
+extern uint32_t mdbx_linux_kernel_version;
 #endif /* Linux */
 
 /* Get the size of a memory page for the system.

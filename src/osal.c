@@ -674,7 +674,7 @@ int mdbx_filesync(mdbx_filehandle_t fd, enum mdbx_syncmode_bits mode_bits) {
     return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
 #endif /* MacOS */
 #if defined(__linux__) || defined(__gnu_linux__)
-  if (mode_bits == MDBX_SYNC_SIZE && linux_kernel_version >= 0x03060000)
+  if (mode_bits == MDBX_SYNC_SIZE && mdbx_linux_kernel_version >= 0x03060000)
     return MDBX_SUCCESS;
 #endif /* Linux */
   int rc;
@@ -789,7 +789,7 @@ int mdbx_msync(mdbx_mmap_t *map, size_t offset, size_t length, int async) {
   return GetLastError();
 #else
 #ifdef __linux__
-  if (async && linux_kernel_version > 0x02061300)
+  if (async && mdbx_linux_kernel_version > 0x02061300)
     /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op,
        since the kernel properly tracks dirty pages and flushes them to storage
        as necessary. */

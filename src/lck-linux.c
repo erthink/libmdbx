@@ -37,12 +37,10 @@
 #endif
 #endif /* MDBX_USE_ROBUST */
 
-uint32_t linux_kernel_version;
-static int op_setlk = F_SETLK, op_setlkw = F_SETLKW, op_getlk = F_GETLK;
-
 /*----------------------------------------------------------------------------*/
 /* global constructor/destructor */
 
+uint32_t mdbx_linux_kernel_version;
 static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
   struct utsname buffer;
   if (uname(&buffer) == 0) {
@@ -54,7 +52,7 @@ static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
         if (number > 0) {
           if (number > 255)
             number = 255;
-          linux_kernel_version += number << (24 - i * 8);
+          mdbx_linux_kernel_version += number << (24 - i * 8);
         }
         ++i;
       } else {
@@ -62,16 +60,6 @@ static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
       }
     }
   }
-
-#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)
-  if (linux_kernel_version >
-      0x030f0000 /* OFD locks are available since 3.15, but engages here only
-        for 3.16 and larer kernels (LTS) for reliability reasons */) {
-    op_setlk = F_OFD_SETLK;
-    op_setlkw = F_OFD_SETLKW;
-    op_getlk = F_OFD_GETLK;
-  }
-#endif /* OFD locks */
 
   mdbx_rthc_global_init();
 }
@@ -117,6 +105,25 @@ static __cold __attribute__((destructor)) void mdbx_global_destructor(void) {
  *    от проблем не-аторманости flock() при переходе между эксклюзивным
  *    и атомарным режимами блокировок.
  */
+
+static int op_setlk, op_setlkw, op_getlk;
+static void __cold choice_fcntl() {
+  assert(!op_setlk && !op_setlkw && !op_getlk);
+#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)
+  if (mdbx_linux_kernel_version >
+          0x030f0000 /* OFD locks are available since 3.15, but engages here
+          only for 3.16 and larer kernels (LTS) for reliability reasons */
+      && (mdbx_runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0) {
+    op_setlk = F_OFD_SETLK;
+    op_setlkw = F_OFD_SETLKW;
+    op_getlk = F_OFD_GETLK;
+    return;
+  }
+#endif /* OFD locks */
+  op_setlk = F_SETLK;
+  op_setlkw = F_SETLKW;
+  op_getlk = F_GETLK;
+}
 
 #ifndef OFF_T_MAX
 #define OFF_T_MAX                                                              \
@@ -341,6 +348,8 @@ static int __cold internal_seize_lck(int lfd) {
 
 int __cold mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
+  if (unlikely(op_setlk == 0))
+    choice_fcntl();
 
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */

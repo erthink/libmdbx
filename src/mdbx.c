@@ -12917,36 +12917,51 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 }
 
 int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
-  unsigned ret = mdbx_runtime_flags;
-  mdbx_runtime_flags = flags;
-
+  const int rc = mdbx_runtime_flags;
+  if (flags != -1) {
+#if MDBX_DEBUG
+    flags &= MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN;
+#else
+    flags &= MDBX_DBG_ASSERT | MDBX_DBG_PRINT | MDBX_DBG_TRACE |
+             MDBX_DBG_EXTRA | MDBX_DBG_AUDIT | MDBX_DBG_JITTER | MDBX_DBG_DUMP |
+             MDBX_DBG_LEGACY_MULTIOPEN;
+#endif
 #if defined(__linux__) || defined(__gnu_linux__)
-  if (flags & MDBX_DBG_DUMP) {
-    int core_filter_fd = open("/proc/self/coredump_filter", O_TRUNC | O_RDWR);
-    if (core_filter_fd >= 0) {
-      char buf[32];
-      const unsigned r = pread(core_filter_fd, buf, sizeof(buf), 0);
-      if (r > 0 && r < sizeof(buf)) {
-        buf[r] = 0;
-        unsigned long mask = strtoul(buf, NULL, 16);
-        if (mask != ULONG_MAX) {
-          mask |= 1 << 3 /* Dump file-backed shared mappings */;
-          mask |= 1 << 6 /* Dump shared huge pages */;
-          mask |= 1 << 8 /* Dump shared DAX pages */;
-          unsigned w = snprintf(buf, sizeof(buf), "0x%lx\n", mask);
-          if (w > 0 && w < sizeof(buf)) {
-            w = pwrite(core_filter_fd, buf, w, 0);
-            (void)w;
+    if ((mdbx_runtime_flags ^ flags) & MDBX_DBG_DUMP) {
+      /* http://man7.org/linux/man-pages/man5/core.5.html */
+      const unsigned long dump_bits =
+          1 << 3   /* Dump file-backed shared mappings */
+          | 1 << 6 /* Dump shared huge pages */
+          | 1 << 8 /* Dump shared DAX pages */;
+      const int core_filter_fd =
+          open("/proc/self/coredump_filter", O_TRUNC | O_RDWR);
+      if (core_filter_fd != -1) {
+        char buf[32];
+        intptr_t bytes = pread(core_filter_fd, buf, sizeof(buf), 0);
+        if (bytes > 0 && (size_t)bytes < sizeof(buf)) {
+          buf[bytes] = 0;
+          const unsigned long present_mask = strtoul(buf, NULL, 16);
+          const unsigned long wanna_mask = (flags & MDBX_DBG_DUMP)
+                                               ? present_mask | dump_bits
+                                               : present_mask & ~dump_bits;
+          if (wanna_mask != present_mask) {
+            bytes = snprintf(buf, sizeof(buf), "0x%lx\n", wanna_mask);
+            if (bytes > 0 && (size_t)bytes < sizeof(buf)) {
+              bytes = pwrite(core_filter_fd, buf, bytes, 0);
+              (void)bytes;
+            }
           }
         }
+        close(core_filter_fd);
       }
-      close(core_filter_fd);
     }
-  }
 #endif /* Linux */
+    mdbx_runtime_flags = flags;
+  }
 
-  mdbx_debug_logger = logger;
-  return ret;
+  if (-1 != (intptr_t)logger)
+    mdbx_debug_logger = logger;
+  return rc;
 }
 
 static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
