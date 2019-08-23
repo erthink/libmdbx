@@ -1581,14 +1581,15 @@ LIBMDBX_API char *mdbx_dkey(const MDBX_val *key, char *const buf,
 
 LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, int dont_sync);
 
-/* Set threshold to force flush the data buffers to disk,
+/* Sets threshold to force flush the data buffers to disk,
  * even of MDBX_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC flags
- * in the environment.
+ * in the environment. The value affects all processes which operates with given
+ * DB until the last process close DB or a new value will be settled.
  *
  * Data is always written to disk when mdbx_txn_commit() is called,
  * but the operating system may keep it buffered. MDBX always flushes
  * the OS buffers upon commit as well, unless the environment was
- * opened with MDBX_NOSYNC or in part MDBX_NOMETASYNC.
+ * opened with MDBX_NOSYNC, MDBX_MAPASYNC or in part MDBX_NOMETASYNC.
  *
  * The default is 0, than mean no any threshold checked, and no additional
  * flush will be made.

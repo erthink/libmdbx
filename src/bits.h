@@ -807,14 +807,20 @@ struct MDBX_env {
   unsigned me_maxgc_ov1page;
   /* Max size of a node on a page */
   unsigned me_nodemax;
-  unsigned me_maxkey_limit;   /* max size of a key */
-  mdbx_pid_t me_live_reader;  /* have liveness lock in reader table */
-  void *me_userctx;           /* User-settable context */
-  size_t me_sync_pending;     /* Total dirty/non-sync'ed bytes
-                               * since the last mdbx_env_sync() */
-  size_t me_sync_threshold;   /* Treshold of above to force synchronous flush */
+  unsigned me_maxkey_limit;  /* max size of a key */
+  mdbx_pid_t me_live_reader; /* have liveness lock in reader table */
+  void *me_userctx;          /* User-settable context */
+  volatile pgno_t *me_unsynced_pages;
+  volatile pgno_t *me_autosync_threshold;
   MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
-  txnid_t me_oldest_stub;
+  struct {
+#ifdef MDBX_OSAL_LOCK
+    MDBX_OSAL_LOCK wmutex;
+#endif
+    txnid_t oldest;
+    pgno_t autosync_pending;
+    pgno_t autosync_threshold;
+  } me_lckless_stub;
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
@@ -835,7 +841,6 @@ struct MDBX_env {
   /* Workaround for LockFileEx and WriteFile multithread bug */
   CRITICAL_SECTION me_windowsbug_lock;
 #else
-  mdbx_fastmutex_t me_lckless_wmutex;
   mdbx_fastmutex_t me_remap_guard;
 #endif
 };
