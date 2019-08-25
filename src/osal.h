@@ -52,11 +52,6 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
-#if !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
-      defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||          \
-      defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__))
-#include <malloc.h>
-#endif /* xBSD */
 
 /* C11 stdalign.h */
 #if __has_include(<stdalign.h>)
@@ -74,6 +69,12 @@
 /*----------------------------------------------------------------------------*/
 /* Systems includes */
 
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
+    defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
+    defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__)
+#include <sys/cdefs.h>
+#else
+#include <malloc.h>
 #ifndef _POSIX_C_SOURCE
 #ifdef _POSIX_SOURCE
 #define _POSIX_C_SOURCE 1
@@ -81,6 +82,7 @@
 #define _POSIX_C_SOURCE 0
 #endif
 #endif
+#endif /* !xBSD */
 
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 0
