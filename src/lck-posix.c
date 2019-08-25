@@ -265,8 +265,8 @@ void __cold mdbx_lck_destroy(MDBX_env *env) {
    * locks should be released here explicitly with properly order. */
   if (env->me_lfd != INVALID_HANDLE_VALUE)
     (void)mdbx_lck_op(env->me_lfd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
-  assert(env->me_fd != INVALID_HANDLE_VALUE);
-  (void)mdbx_lck_op(env->me_fd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
+  if (env->me_fd != INVALID_HANDLE_VALUE)
+    (void)mdbx_lck_op(env->me_fd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
 }
 
 static int mdbx_robust_lock(MDBX_env *env, pthread_mutex_t *mutex) {
