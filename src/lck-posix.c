@@ -263,8 +263,19 @@ void __cold mdbx_lck_destroy(MDBX_env *env) {
   /* File locks would be released (by kernel) while the file-descriptors
    * will be closed. But to avoid false-positive EDEADLK from the kernel,
    * locks should be released here explicitly with properly order. */
-  if (env->me_lfd != INVALID_HANDLE_VALUE)
+  if (env->me_lfd != INVALID_HANDLE_VALUE) {
+    /* try get exclusive access */
+    if (env->me_lck &&
+        mdbx_lck_op(env->me_lfd, OP_SETLK, F_WRLCK, 0, OFF_T_MAX) == 0) {
+      mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
+      int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
+      if (rc == 0)
+        rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
+      assert(rc == 0);
+      (void)rc;
+    }
     (void)mdbx_lck_op(env->me_lfd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
+  }
   if (env->me_fd != INVALID_HANDLE_VALUE)
     (void)mdbx_lck_op(env->me_fd, OP_SETLK, F_UNLCK, 0, OFF_T_MAX);
 }
