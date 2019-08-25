@@ -863,17 +863,9 @@ extern MDBX_debug_func *mdbx_debug_logger;
 extern txnid_t mdbx_debug_edge;
 
 void mdbx_debug_log(int type, const char *function, int line, const char *fmt,
-                    ...)
-#if defined(__GNUC__) || __has_attribute(format)
-    __attribute__((format(printf, 4, 5)))
-#endif
-    ;
+                    ...) __printf_args(4, 5);
 
-void mdbx_panic(const char *fmt, ...)
-#if defined(__GNUC__) || __has_attribute(format)
-    __attribute__((format(printf, 1, 2)))
-#endif
-    ;
+void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 
 #if MDBX_DEBUG
 

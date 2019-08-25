@@ -65,8 +65,8 @@
 #define alignas(N) _Alignas(N)
 #elif defined(_MSC_VER)
 #define alignas(N) __declspec(align(N))
-#elif __has_attribute(aligned) || defined(__GNUC__)
-#define alignas(N) __attribute__((aligned(N)))
+#elif __has_attribute(__aligned__) || defined(__GNUC__)
+#define alignas(N) __attribute__((__aligned__(N)))
 #else
 #error "FIXME: Required _alignas() or equivalent."
 #endif

@@ -291,7 +291,7 @@ typedef struct rthc_entry_t {
 static CRITICAL_SECTION rthc_critical_section;
 #else
 int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj, void *dso_symbol)
-    __attribute__((weak));
+    __attribute__((__weak__));
 #ifdef __APPLE__ /* FIXME: Thread-Local Storage destructors & DSO-unloading */
 int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj,
                              void *dso_symbol) {
@@ -13095,7 +13095,7 @@ MDBX_oom_func *__cold mdbx_env_get_oomfunc(MDBX_env *env) {
 
 #ifdef __SANITIZE_THREAD__
 /* LY: avoid tsan-trap by me_txn, mm_last_pg and mt_next_pgno */
-__attribute__((no_sanitize_thread, noinline))
+__attribute__((__no_sanitize_thread__, __noinline__))
 #endif
 int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
 {
@@ -14403,7 +14403,7 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 //----------------------------------------------------------------------------
 
 #ifdef __SANITIZE_ADDRESS__
-LIBMDBX_API __attribute__((weak)) const char *__asan_default_options() {
+LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {
   return "symbolize=1:allow_addr2line=1:"
 #ifdef _DEBUG
          "debug=1:"

@@ -104,8 +104,8 @@
 /*----------------------------------------------------------------------------*/
 
 #ifndef __always_inline
-#   if defined(__GNUC__) || __has_attribute(always_inline)
-#       define __always_inline __inline __attribute__((always_inline))
+#   if defined(__GNUC__) || __has_attribute(__always_inline__)
+#       define __always_inline __inline __attribute__((__always_inline__))
 #   elif defined(_MSC_VER)
 #       define __always_inline __forceinline
 #   else
@@ -114,8 +114,8 @@
 #endif /* __always_inline */
 
 #ifndef __noinline
-#   if defined(__GNUC__) || __has_attribute(noinline)
-#       define __noinline __attribute__((noinline))
+#   if defined(__GNUC__) || __has_attribute(__noinline__)
+#       define __noinline __attribute__((__noinline__))
 #   elif defined(_MSC_VER)
 #       define __noinline __declspec(noinline)
 #   elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
@@ -126,16 +126,16 @@
 #endif /* __noinline */
 
 #ifndef __must_check_result
-#   if defined(__GNUC__) || __has_attribute(warn_unused_result)
-#       define __must_check_result __attribute__((warn_unused_result))
+#   if defined(__GNUC__) || __has_attribute(__warn_unused_result__)
+#       define __must_check_result __attribute__((__warn_unused_result__))
 #   else
 #       define __must_check_result
 #   endif
 #endif /* __must_check_result */
 
 #ifndef __deprecated
-#   if defined(__GNUC__) || __has_attribute(deprecated)
-#       define __deprecated __attribute__((deprecated))
+#   if defined(__GNUC__) || __has_attribute(__deprecated__)
+#       define __deprecated __attribute__((__deprecated__))
 #   elif defined(_MSC_VER)
 #       define __deprecated __declspec(deprecated)
 #   else
@@ -163,8 +163,8 @@
 #endif /* __noop */
 
 #ifndef __fallthrough
-#	if __GNUC_PREREQ(7, 0) || __has_attribute(fallthrough)
-#		define __fallthrough __attribute__((fallthrough))
+#	if __GNUC_PREREQ(7, 0) || __has_attribute(__fallthrough__)
+#		define __fallthrough __attribute__((__fallthrough__))
 #	else
 #		define __fallthrough __noop()
 #	endif
@@ -189,8 +189,8 @@
 #endif /* __prefetch */
 
 #ifndef __noreturn
-#   if defined(__GNUC__) || __has_attribute(noreturn)
-#       define __noreturn __attribute__((noreturn))
+#   if defined(__GNUC__) || __has_attribute(__noreturn__)
+#       define __noreturn __attribute__((__noreturn__))
 #   elif defined(_MSC_VER)
 #       define __noreturn __declspec(noreturn)
 #   else
@@ -199,8 +199,14 @@
 #endif /* __noreturn */
 
 #ifndef __nothrow
-#   if defined(__GNUC__) || __has_attribute(nothrow)
-#       define __nothrow __attribute__((nothrow))
+#   if defined(__cplusplus)
+#       if __cplusplus < 201703L
+#           define __nothrow throw()
+#       else
+#           define __nothrow noexcept(true)
+#       endif /* __cplusplus */
+#   elif defined(__GNUC__) || __has_attribute(__nothrow__)
+#       define __nothrow __attribute__((__nothrow__))
 #   elif defined(_MSC_VER) && defined(__cplusplus)
 #       define __nothrow __declspec(nothrow)
 #   else
@@ -214,8 +220,8 @@
      * Such a function can be subject to common subexpression elimination
      * and loop optimization just as an arithmetic operator would be.
      * These functions should be declared with the attribute pure. */
-#   if defined(__GNUC__) || __has_attribute(pure)
-#       define __pure_function __attribute__((pure))
+#   if defined(__GNUC__) || __has_attribute(__pure__)
+#       define __pure_function __attribute__((__pure__))
 #   else
 #       define __pure_function
 #   endif
@@ -231,27 +237,27 @@
      * data pointed to must not be declared const. Likewise, a function
      * that calls a non-const function usually must not be const.
      * It does not make sense for a const function to return void. */
-#   if defined(__GNUC__) || __has_attribute(const)
-#       define __const_function __attribute__((const))
+#   if defined(__GNUC__) || __has_attribute(__const__)
+#       define __const_function __attribute__((__const__))
 #   else
 #       define __const_function
 #   endif
 #endif /* __const_function */
 
-#ifndef __dll_hidden
-#   if defined(__GNUC__) || __has_attribute(visibility)
-#       define __dll_hidden __attribute__((visibility("hidden")))
+#ifndef __hidden
+#   if defined(__GNUC__) || __has_attribute(__visibility__)
+#       define __hidden __attribute__((__visibility__("hidden")))
 #   else
-#       define __dll_hidden
+#       define __hidden
 #   endif
-#endif /* __dll_hidden */
+#endif /* __hidden */
 
 #ifndef __optimize
 #   if defined(__OPTIMIZE__)
-#     if defined(__clang__) && !__has_attribute(optimize)
+#     if defined(__clang__) && !__has_attribute(__optimize__)
 #           define __optimize(ops)
-#       elif defined(__GNUC__) || __has_attribute(optimize)
-#           define __optimize(ops) __attribute__((optimize(ops)))
+#       elif defined(__GNUC__) || __has_attribute(__optimize__)
+#           define __optimize(ops) __attribute__((__optimize__(ops)))
 #       else
 #           define __optimize(ops)
 #       endif
@@ -263,12 +269,13 @@
 #ifndef __hot
 #   if defined(__OPTIMIZE__)
 #       if defined(__e2k__)
-#           define __hot __attribute__((hot)) __optimize(3)
-#       elif defined(__clang__) && !__has_attribute(hot)
+#           define __hot __attribute__((__hot__)) __optimize(3)
+#       elif defined(__clang__) && !__has_attribute(__hot_) \
+        && __has_attribute(__section__) && (defined(__linux__) || defined(__gnu_linux__))
             /* just put frequently used functions in separate section */
-#           define __hot __attribute__((section("text.hot"))) __optimize("O3")
-#       elif defined(__GNUC__) || __has_attribute(hot)
-#           define __hot __attribute__((hot)) __optimize("O3")
+#           define __hot __attribute__((__section__("text.hot"))) __optimize("O3")
+#       elif defined(__GNUC__) || __has_attribute(__hot__)
+#           define __hot __attribute__((__hot__)) __optimize("O3")
 #       else
 #           define __hot  __optimize("O3")
 #       endif
@@ -280,12 +287,13 @@
 #ifndef __cold
 #   if defined(__OPTIMIZE__)
 #       if defined(__e2k__)
-#           define __cold __attribute__((cold)) __optimize(1)
-#       elif defined(__clang__) && !__has_attribute(cold)
+#           define __cold __attribute__((__cold__)) __optimize(1)
+#       elif defined(__clang__) && !__has_attribute(cold) \
+        && __has_attribute(__section__) && (defined(__linux__) || defined(__gnu_linux__))
             /* just put infrequently used functions in separate section */
-#           define __cold __attribute__((section("text.unlikely"))) __optimize("Os")
+#           define __cold __attribute__((__section__("text.unlikely"))) __optimize("Os")
 #       elif defined(__GNUC__) || __has_attribute(cold)
-#           define __cold __attribute__((cold)) __optimize("Os")
+#           define __cold __attribute__((__cold__)) __optimize("Os")
 #       else
 #           define __cold __optimize("Os")
 #       endif
@@ -295,8 +303,8 @@
 #endif /* __cold */
 
 #ifndef __flatten
-#   if defined(__OPTIMIZE__) && (defined(__GNUC__) || __has_attribute(flatten))
-#       define __flatten __attribute__((flatten))
+#   if defined(__OPTIMIZE__) && (defined(__GNUC__) || __has_attribute(__flatten__))
+#       define __flatten __attribute__((__flatten__))
 #   else
 #       define __flatten
 #   endif
@@ -338,9 +346,9 @@ typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));
 #   define mdbx_func_ "<mdbx_unknown>"
 #endif
 
-#if defined(__GNUC__) || __has_attribute(format)
+#if defined(__GNUC__) || __has_attribute(__format__)
 #define __printf_args(format_index, first_arg)                                 \
-  __attribute__((format(printf, format_index, first_arg)))
+  __attribute__((__format__(printf, format_index, first_arg)))
 #else
 #define __printf_args(format_index, first_arg)
 #endif

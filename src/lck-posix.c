@@ -28,11 +28,13 @@
 /*----------------------------------------------------------------------------*/
 /* rthc */
 
-static __cold __attribute__((constructor)) void mdbx_global_constructor(void) {
+static __cold __attribute__((__constructor__)) void
+mdbx_global_constructor(void) {
   mdbx_rthc_global_init();
 }
 
-static __cold __attribute__((destructor)) void mdbx_global_destructor(void) {
+static __cold __attribute__((__destructor__)) void
+mdbx_global_destructor(void) {
   mdbx_rthc_global_dtor();
 }
 

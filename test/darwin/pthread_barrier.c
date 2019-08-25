@@ -31,8 +31,6 @@
 
 #ifdef __APPLE__
 
-#define __unused __attribute__((unused))
-
 int pthread_barrierattr_init(pthread_barrierattr_t *attr) {
   memset(attr, 0, sizeof(pthread_barrierattr_t));
   int m = pthread_mutexattr_init(&attr->mattr);

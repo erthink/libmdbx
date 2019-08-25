@@ -102,7 +102,7 @@ static
 #  ifdef _WIN64
      const
 #  endif
-   PIMAGE_TLS_CALLBACK mdbx_tls_anchor __attribute__((section(".CRT$XLB"), used)) = mdbx_dll_callback;
+   PIMAGE_TLS_CALLBACK mdbx_tls_anchor __attribute__((__section__(".CRT$XLB"), used)) = mdbx_dll_callback;
 #else
 #  error FIXME
 #endif

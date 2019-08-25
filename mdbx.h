@@ -148,8 +148,8 @@ typedef pthread_t mdbx_tid_t;
 #else
 #define __dll_export
 #endif
-#elif defined(__GNUC__) || __has_attribute(visibility)
-#define __dll_export __attribute__((visibility("default")))
+#elif defined(__GNUC__) || __has_attribute(__visibility__)
+#define __dll_export __attribute__((__visibility__("default")))
 #else
 #define __dll_export
 #endif
