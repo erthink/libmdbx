@@ -99,7 +99,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBMDBX_EXPORTS;MDBX_BUILD_DLL;MDBX_AVOID_CRT;%(PreprocessorDefinitions);MDBX_DEBUG=1</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_WINDOWS;_USRDLL;LIBMDBX_EXPORTS;MDBX_BUILD_DLL;MDBX_AVOID_CRT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <WarningLevel>EnableAllWarnings</WarningLevel>
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
@@ -162,7 +162,7 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>EnableAllWarnings</WarningLevel>
-      <PreprocessorDefinitions>WIN64;_DEBUG;_WINDOWS;_USRDLL;LIBMDBX_EXPORTS;MDBX_BUILD_DLL;MDBX_AVOID_CRT;%(PreprocessorDefinitions);MDBX_DEBUG=1</PreprocessorDefinitions>
+      <PreprocessorDefinitions>WIN64;_DEBUG;_WINDOWS;_USRDLL;LIBMDBX_EXPORTS;MDBX_BUILD_DLL;MDBX_AVOID_CRT;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
       <StringPooling>true</StringPooling>
       <TreatWarningAsError>true</TreatWarningAsError>

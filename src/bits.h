@@ -15,10 +15,16 @@
 /* *INDENT-OFF* */
 /* clang-format off */
 
+/* In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
 #ifndef MDBX_DEBUG
+#ifdef NDEBUG
 #   define MDBX_DEBUG 0
+#else
+#   define MDBX_DEBUG 1
+#endif
 #endif
 
+/* Undefine the NDEBUG if debugging is enforced by MDBX_DEBUG */
 #if MDBX_DEBUG
 #   undef NDEBUG
 #endif
