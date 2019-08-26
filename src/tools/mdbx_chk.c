@@ -20,6 +20,8 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
+/* Avoid reference to mdbx_runtime_flags from assert() */
+#define mdbx_runtime_flags (~0u)
 #include "../bits.h"
 
 typedef struct flagbit {

@@ -864,7 +864,9 @@ typedef struct MDBX_ntxn {
 /*----------------------------------------------------------------------------*/
 /* Debug and Logging stuff */
 
+#ifndef mdbx_runtime_flags /* avoid override from tools */
 extern int mdbx_runtime_flags;
+#endif
 extern MDBX_debug_func *mdbx_debug_logger;
 extern txnid_t mdbx_debug_edge;
 
