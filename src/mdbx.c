@@ -5819,6 +5819,14 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
     if (unlikely(rc != 0))
       return errno;
 #endif
+#if defined(_WIN32) || defined(_WIN64)
+    if (mdbx_PrefetchVirtualMemory) {
+      WIN32_MEMORY_RANGE_ENTRY hint;
+      hint.VirtualAddress = env->me_map;
+      hint.NumberOfBytes = usedsize;
+      (void)mdbx_PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0);
+    }
+#endif /* Windows */
   }
 
 #ifdef USE_VALGRIND

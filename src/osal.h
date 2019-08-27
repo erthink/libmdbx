@@ -732,7 +732,6 @@ typedef BOOL(WINAPI *MDBX_GetVolumeInformationByHandleW)(
     _Out_opt_ LPDWORD lpMaximumComponentLength,
     _Out_opt_ LPDWORD lpFileSystemFlags,
     _Out_opt_ LPWSTR lpFileSystemNameBuffer, _In_ DWORD nFileSystemNameSize);
-
 extern MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
 
 typedef DWORD(WINAPI *MDBX_GetFinalPathNameByHandleW)(_In_ HANDLE hFile,
@@ -744,7 +743,6 @@ extern MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
 typedef BOOL(WINAPI *MDBX_SetFileInformationByHandle)(
     _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,
     _Out_ LPVOID lpFileInformation, _In_ DWORD dwBufferSize);
-
 extern MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
 
 typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
@@ -753,8 +751,19 @@ typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
     OUT PIO_STATUS_BLOCK IoStatusBlock, IN ULONG FsControlCode,
     IN OUT PVOID InputBuffer, IN ULONG InputBufferLength,
     OUT OPTIONAL PVOID OutputBuffer, IN ULONG OutputBufferLength);
-
 extern MDBX_NtFsControlFile mdbx_NtFsControlFile;
+
+#ifndef _WIN32_WINNT_WIN8
+typedef struct _WIN32_MEMORY_RANGE_ENTRY {
+  PVOID VirtualAddress;
+  SIZE_T NumberOfBytes;
+} WIN32_MEMORY_RANGE_ENTRY, *PWIN32_MEMORY_RANGE_ENTRY;
+#endif
+
+typedef BOOL(WINAPI *MDBX_PrefetchVirtualMemory)(
+    HANDLE hProcess, ULONG_PTR NumberOfEntries,
+    PWIN32_MEMORY_RANGE_ENTRY VirtualAddresses, ULONG Flags);
+extern MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 
 #endif /* Windows */
 

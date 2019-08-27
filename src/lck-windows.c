@@ -667,6 +667,7 @@ MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
 MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
 MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
 MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
+MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 MDBX_NtFsControlFile mdbx_NtFsControlFile;
 
 static void mdbx_winnt_import(void) {
@@ -691,21 +692,14 @@ static void mdbx_winnt_import(void) {
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
 
-  mdbx_GetFileInformationByHandleEx =
-      (MDBX_GetFileInformationByHandleEx)GetProcAddress(
-          hKernel32dll, "GetFileInformationByHandleEx");
+#define GET_KERNEL32_PROC(ENTRY)                                               \
+  mdbx_##ENTRY = (MDBX_##ENTRY)GetProcAddress(hKernel32dll, #ENTRY)
 
-  mdbx_GetVolumeInformationByHandleW =
-      (MDBX_GetVolumeInformationByHandleW)GetProcAddress(
-          hKernel32dll, "GetVolumeInformationByHandleW");
-
-  mdbx_GetFinalPathNameByHandleW =
-      (MDBX_GetFinalPathNameByHandleW)GetProcAddress(
-          hKernel32dll, "GetFinalPathNameByHandleW");
-
-  mdbx_SetFileInformationByHandle =
-      (MDBX_SetFileInformationByHandle)GetProcAddress(
-          hKernel32dll, "SetFileInformationByHandle");
+  GET_KERNEL32_PROC(GetFileInformationByHandleEx);
+  GET_KERNEL32_PROC(GetVolumeInformationByHandleW);
+  GET_KERNEL32_PROC(GetFinalPathNameByHandleW);
+  GET_KERNEL32_PROC(SetFileInformationByHandle);
+  GET_KERNEL32_PROC(PrefetchVirtualMemory);
 
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
   mdbx_NtFsControlFile =
