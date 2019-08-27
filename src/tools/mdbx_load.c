@@ -266,10 +266,9 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 
   if (mode & PRINT) {
     while (c2 < end) {
-      if (*c2 == '\\') {
+      if (unlikely(*c2 == '\\')) {
         if (c2[1] == '\\') {
-          c1++;
-          c2 += 2;
+          *c1++ = '\\';
         } else {
           if (c2 + 3 > end || !isxdigit(c2[1]) || !isxdigit(c2[2])) {
             Eof = 1;
@@ -277,8 +276,8 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
             return EOF;
           }
           *c1++ = (char)unhex(++c2);
-          c2 += 2;
         }
+        c2 += 2;
       } else {
         /* copies are redundant when no escapes were used */
         *c1++ = *c2++;
