@@ -192,6 +192,22 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define SSIZE_MAX INTPTR_MAX
 #endif
 
+#if !defined(MADV_DODUMP) && defined(MADV_CORE)
+#define MADV_DODUMP MADV_CORE
+#endif /* MADV_CORE -> MADV_DODUMP */
+
+#if !defined(MADV_DONTDUMP) && defined(MADV_NOCORE)
+#define MADV_DONTDUMP MADV_NOCORE
+#endif /* MADV_NOCORE -> MADV_DONTDUMP */
+
+#ifndef MADV_REMOVE_OR_FREE
+#ifdef MADV_REMOVE
+#define MADV_REMOVE_OR_FREE MADV_REMOVE
+#elif defined(MADV_FREE)
+#define MADV_REMOVE_OR_FREE MADV_FREE
+#endif
+#endif /* MADV_REMOVE_OR_FREE */
+
 #if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
     defined(i486) || defined(__i486) || defined(__i486__) ||                   \
     defined(i586) | defined(__i586) || defined(__i586__) || defined(i686) ||   \

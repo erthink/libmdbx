@@ -5730,14 +5730,15 @@ bailout:
   return rc;
 }
 
-static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
+static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
+                               const size_t usedsize) {
   int rc = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
                      env->me_dbgeo.upper);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
 #ifdef MADV_DONTFORK
-  if (madvise(env->me_map, env->me_mapsize, MADV_DONTFORK))
+  if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_DONTFORK) != 0))
     return errno;
 #endif
 
@@ -5753,21 +5754,72 @@ static int __cold mdbx_env_map(MDBX_env *env, size_t usedsize) {
                   MADV_DONTDUMP);
 #endif
 
-#ifdef MADV_REMOVE
-  if (usedsize && (env->me_flags & MDBX_WRITEMAP)) {
-    (void)madvise(env->me_map + usedsize, env->me_mapsize - usedsize,
-                  MADV_REMOVE);
-  }
+  if (is_exclusive && (env->me_flags & MDBX_WRITEMAP) != 0) {
+#ifdef MADV_REMOVE_OR_FREE
+    const size_t used_alined2os = mdbx_roundup2(usedsize, env->me_os_psize);
+    if (used_alined2os < env->me_mapsize)
+      (void)madvise(env->me_map + used_alined2os,
+                    env->me_mapsize - used_alined2os, MADV_REMOVE_OR_FREE);
 #else
-  (void)usedsize;
+    (void)usedsize;
 #endif
+  }
 
-#if defined(MADV_RANDOM) && defined(MADV_WILLNEED)
-  /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
-  if (madvise(env->me_map, env->me_mapsize,
-              (env->me_flags & MDBX_NORDAHEAD) ? MADV_RANDOM : MADV_WILLNEED))
+#ifdef POSIX_FADV_RANDOM
+  /* this also checks that the file size is valid for a particular FS */
+  rc = posix_fadvise(env->me_fd, 0, env->me_dbgeo.upper, POSIX_FADV_RANDOM);
+  if (unlikely(rc != 0))
+    return rc;
+#elif defined(F_RDAHEAD)
+  if (unlikely(fcntl(env->me_fd, F_RDAHEAD, 0) == -1))
     return errno;
 #endif
+
+#if defined(MADV_RANDOM)
+  if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_RANDOM) != 0))
+    return errno;
+#elif defined(POSIX_MADV_RANDOM)
+  rc = posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_RANDOM);
+  if (unlikely(rc != 0))
+    return errno;
+#endif
+
+  /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
+  if (env->me_flags & MDBX_NORDAHEAD) {
+#ifdef POSIX_FADV_DONTNEED
+    rc = posix_fadvise(env->me_fd, 0, env->me_mapsize, POSIX_FADV_DONTNEED);
+    if (unlikely(rc != 0))
+      return rc;
+#endif
+#if defined(MADV_DONTNEED)
+    if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_DONTNEED) != 0))
+      return errno;
+#elif defined(POSIX_MADV_DONTNEED)
+    rc = posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_DONTNEED);
+    if (unlikely(rc != 0))
+      return errno;
+#endif
+  } else {
+#ifdef POSIX_FADV_WILLNEED
+    rc = posix_fadvise(env->me_fd, 0, usedsize, POSIX_FADV_WILLNEED);
+    if (unlikely(rc != 0))
+      return rc;
+#elif defined(F_RDADVISE)
+    struct radvisory hint;
+    hint.ra_offset = 0;
+    hint.ra_count = usedsize;
+    if (unlikely(fcntl(env->me_fd, F_RDADVISE, &hint) == -1))
+      return errno;
+#endif
+#if defined(MADV_WILLNEED)
+    if (unlikely(madvise(env->me_map, usedsize, MADV_WILLNEED) != 0))
+      return errno;
+#elif defined(POSIX_MADV_WILLNEED)
+    rc = posix_madvise(env->me_map, usedsize, POSIX_MADV_WILLNEED);
+    if (unlikely(rc != 0))
+      return errno;
+#endif
+  }
 
 #ifdef USE_VALGRIND
   env->me_valgrind_handle =
@@ -5967,6 +6019,15 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   shrink_threshold = mdbx_roundup2(shrink_threshold, env->me_os_psize);
   if (bytes2pgno(env, shrink_threshold) > UINT16_MAX)
     shrink_threshold = pgno2bytes(env, UINT16_MAX);
+
+#ifdef POSIX_FADV_RANDOM
+  if (env->me_fd != INVALID_HANDLE_VALUE) {
+    /* this also checks that the file size is valid for a particular FS */
+    rc = posix_fadvise(env->me_fd, 0, env->me_dbgeo.upper, POSIX_FADV_RANDOM);
+    if (unlikely(rc != 0))
+      goto bailout;
+  }
+#endif
 
   /* save user's geo-params for future open/create */
   env->me_dbgeo.lower = size_lower;
@@ -6269,9 +6330,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     }
   }
 
-  err = mdbx_env_map(env, (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE)
-                              ? 0
-                              : expected_bytes);
+  err = mdbx_env_map(env, lck_rc /* exclusive status */, expected_bytes);
   if (err != MDBX_SUCCESS)
     return err;
 
