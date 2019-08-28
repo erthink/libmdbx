@@ -12986,7 +12986,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 int __cold mdbx_setup_debug(int flags, MDBX_debug_func *logger) {
   const int rc = mdbx_runtime_flags;
   if (flags != -1) {
-#if MDBX_DEBUG
+#if !MDBX_DEBUG
     flags &= MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN;
 #else
     flags &= MDBX_DBG_ASSERT | MDBX_DBG_PRINT | MDBX_DBG_TRACE |
