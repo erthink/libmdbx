@@ -9,6 +9,10 @@
 #ifndef _WINGETOPT_H_
 #define _WINGETOPT_H_
 
+/* Bit of madness for Windows console */
+#define mdbx_strerror mdbx_strerror_ANSI2OEM
+#define mdbx_strerror_r mdbx_strerror_r_ANSI2OEM
+
 #ifdef __cplusplus
 extern "C" {
 #endif
