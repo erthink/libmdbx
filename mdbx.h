@@ -526,6 +526,13 @@ typedef struct MDBX_envinfo {
 LIBMDBX_API const char *mdbx_strerror(int errnum);
 LIBMDBX_API const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
 
+#if defined(_WIN32) || defined(_WIN64)
+/* Bit of madness for Windows */
+LIBMDBX_API const char *mdbx_strerror_ANSI2OEM(int errnum);
+LIBMDBX_API const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf,
+                                                 size_t buflen);
+#endif /* Bit of madness for Windows */
+
 /* Create an MDBX environment handle.
  *
  * This function allocates memory for a MDBX_env structure. To release

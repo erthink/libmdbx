@@ -1335,7 +1335,7 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
   const char *msg = __mdbx_strerr(errnum);
   if (!msg && buflen > 0 && buflen < INT_MAX) {
 #if defined(_WIN32) || defined(_WIN64)
-    const size_t size = FormatMessageA(
+    const DWORD size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
@@ -1366,7 +1366,7 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
 const char *__cold mdbx_strerror(int errnum) {
 #if defined(_WIN32) || defined(_WIN64)
   static char buf[1024];
-  return mdbx_strerror_r(errnu, buf, sizeof(buf));
+  return mdbx_strerror_r(errnum, buf, sizeof(buf));
 #else
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
@@ -1380,6 +1380,26 @@ const char *__cold mdbx_strerror(int errnum) {
   return msg;
 #endif
 }
+
+#if defined(_WIN32) || defined(_WIN64) /* Bit of madness for Windows */
+const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf, size_t buflen) {
+  const char *msg = __mdbx_strerr(errnum);
+  if (!msg && buflen > 0 && buflen < INT_MAX) {
+    const DWORD size = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
+        errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
+        NULL);
+    if (size && CharToOemBuffA(buf, buf, size))
+      msg = buf;
+  }
+  return msg;
+}
+
+const char *mdbx_strerror_ANSI2OEM(int errnum) {
+  static char buf[1024];
+  return mdbx_strerror_r_ANSI2OEM(errnum, buf, sizeof(buf));
+}
+#endif /* Bit of madness for Windows */
 
 static txnid_t mdbx_oomkick(MDBX_env *env, const txnid_t laggard);
 
