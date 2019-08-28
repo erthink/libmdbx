@@ -870,8 +870,8 @@ static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
 
 /*----------------------------------------------------------------------------*/
 
-#if defined(_MSC_VER) && _MSC_VER >= 1900 && _MSC_VER < 1920
-/* LY: MSVC 2015/2017 has buggy/inconsistent PRIuPTR/PRIxPTR macros
+#if defined(_MSC_VER) && _MSC_VER >= 1900
+/* LY: MSVC 2015/2017/2019 has buggy/inconsistent PRIuPTR/PRIxPTR macros
  * for internal format-args checker. */
 #undef PRIuPTR
 #undef PRIiPTR
