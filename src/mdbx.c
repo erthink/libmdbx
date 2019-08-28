@@ -1333,11 +1333,9 @@ static const char *__mdbx_strerr(int errnum) {
 
 const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
   const char *msg = __mdbx_strerr(errnum);
-  if (!msg) {
-    if (!buflen || buflen > INT_MAX)
-      return NULL;
+  if (!msg && buflen > 0 && buflen < INT_MAX) {
 #if defined(_WIN32) || defined(_WIN64)
-    size_t size = FormatMessageA(
+    const size_t size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
@@ -1347,44 +1345,40 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
     msg = strerror_r(errnum, buf, buflen);
 #elif (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
     /* XSI-compliant */
-    int rc = strerror_r(errnum, buf, buflen);
-    if (rc) {
-      rc = snprintf(buf, buflen, "error %d", errnum);
-      assert(rc > 0);
-    }
-    return buf;
+    if (strerror_r(errnum, buf, buflen) == 0)
+      msg = buf;
 #else
-    strncpy(buf, strerror(errnum), buflen);
-    buf[buflen - 1] = '\0';
-    return buf;
+    msg = strerror(errnum);
+    if (msg) {
+      strncpy(buf, msg, buflen);
+      msg = buf;
+    }
 #endif
+    if (!msg) {
+      (void)snprintf(buf, buflen, "error %d", errnum);
+      msg = buf;
+    }
+    buf[buflen - 1] = '\0';
   }
   return msg;
 }
 
 const char *__cold mdbx_strerror(int errnum) {
+#if defined(_WIN32) || defined(_WIN64)
+  static char buf[1024];
+  return mdbx_strerror_r(errnu, buf, sizeof(buf));
+#else
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-#if defined(_WIN32) || defined(_WIN64)
-    static char buffer[1024];
-    size_t size = FormatMessageA(
-        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
-        errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buffer,
-        sizeof(buffer), NULL);
-    if (size)
-      msg = buffer;
-#else
-    if (errnum < 0) {
-      static char buffer[32];
-      int rc = snprintf(buffer, sizeof(buffer) - 1, "unknown error %d", errnum);
-      assert(rc > 0);
-      (void)rc;
-      return buffer;
-    }
     msg = strerror(errnum);
-#endif
+    if (!msg) {
+      static char buf[32];
+      (void)snprintf(buf, sizeof(buf) - 1, "error %d", errnum);
+      msg = buf;
+    }
   }
   return msg;
+#endif
 }
 
 static txnid_t mdbx_oomkick(MDBX_env *env, const txnid_t laggard);
