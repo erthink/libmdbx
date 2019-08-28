@@ -663,11 +663,21 @@ MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
 
 /*----------------------------------------------------------------------------*/
 
+static DWORD WINAPI stub_DiscardVirtualMemory(PVOID VirtualAddress,
+                                              SIZE_T Size) {
+  return VirtualAlloc(VirtualAddress, Size, MEM_RESET, PAGE_NOACCESS)
+             ? ERROR_SUCCESS
+             : GetLastError();
+}
+
+/*----------------------------------------------------------------------------*/
+
 MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
 MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
 MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
 MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
 MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
+MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 MDBX_NtFsControlFile mdbx_NtFsControlFile;
 
 static void mdbx_winnt_import(void) {
@@ -700,6 +710,9 @@ static void mdbx_winnt_import(void) {
   GET_KERNEL32_PROC(GetFinalPathNameByHandleW);
   GET_KERNEL32_PROC(SetFileInformationByHandle);
   GET_KERNEL32_PROC(PrefetchVirtualMemory);
+  GET_KERNEL32_PROC(DiscardVirtualMemory);
+  if (!mdbx_DiscardVirtualMemory)
+    mdbx_DiscardVirtualMemory = stub_DiscardVirtualMemory;
 
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
   mdbx_NtFsControlFile =

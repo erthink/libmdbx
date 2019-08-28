@@ -5400,31 +5400,51 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
   }
 
-  /* LY: check conditions to shrink datafile */
-  const pgno_t backlog_gap =
-      pending->mm_dbs[FREE_DBI].md_depth + mdbx_backlog_extragap(env);
   pgno_t shrink = 0;
-  if ((flags & MDBX_SHRINK_ALLOWED) && pending->mm_geo.shrink &&
-      pending->mm_geo.now - pending->mm_geo.next >
-          pending->mm_geo.shrink + backlog_gap) {
-    const pgno_t largest = mdbx_find_largest(
+  if (flags & MDBX_SHRINK_ALLOWED) {
+    /* LY: check conditions to discard unused pages */
+    const pgno_t largest_pgno = mdbx_find_largest(
         env, (head->mm_geo.next > pending->mm_geo.next) ? head->mm_geo.next
                                                         : pending->mm_geo.next);
-    if (pending->mm_geo.now > largest &&
-        pending->mm_geo.now - largest > pending->mm_geo.shrink + backlog_gap) {
-      const pgno_t aligner =
-          pending->mm_geo.grow ? pending->mm_geo.grow : pending->mm_geo.shrink;
-      const pgno_t with_backlog_gap = largest + backlog_gap;
-      const pgno_t aligned = pgno_align2os_pgno(
-          env, with_backlog_gap + aligner - with_backlog_gap % aligner);
-      const pgno_t bottom =
-          (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
-      if (pending->mm_geo.now > bottom) {
-        flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
-        shrink = pending->mm_geo.now - bottom;
-        pending->mm_geo.now = bottom;
-        if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
-          mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
+    const size_t largest_aligned2os_bytes =
+        pgno_align2os_bytes(env, largest_pgno);
+    const pgno_t largest_aligned2os_pgno =
+        bytes2pgno(env, largest_aligned2os_bytes);
+    const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
+    *env->me_discarded_tail = largest_aligned2os_pgno;
+    if (prev_discarded_pgno > largest_aligned2os_pgno) {
+      const size_t prev_discarded_bytes =
+          pgno_align2os_bytes(env, prev_discarded_pgno);
+      mdbx_ensure(env, prev_discarded_bytes > largest_aligned2os_bytes);
+#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
+      (void)madvise(env->me_map + largest_aligned2os_bytes,
+                    prev_discarded_bytes - largest_aligned2os_bytes,
+                    MADV_REMOVE_OR_FREE_OR_DONTNEED);
+#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
+    }
+
+    /* LY: check conditions to shrink datafile */
+    const pgno_t backlog_gap =
+        pending->mm_dbs[FREE_DBI].md_depth + mdbx_backlog_extragap(env);
+    if (pending->mm_geo.shrink && pending->mm_geo.now - pending->mm_geo.next >
+                                      pending->mm_geo.shrink + backlog_gap) {
+      if (pending->mm_geo.now > largest_pgno &&
+          pending->mm_geo.now - largest_pgno >
+              pending->mm_geo.shrink + backlog_gap) {
+        const pgno_t aligner = pending->mm_geo.grow ? pending->mm_geo.grow
+                                                    : pending->mm_geo.shrink;
+        const pgno_t with_backlog_gap = largest_pgno + backlog_gap;
+        const pgno_t aligned = pgno_align2os_pgno(
+            env, with_backlog_gap + aligner - with_backlog_gap % aligner);
+        const pgno_t bottom =
+            (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
+        if (pending->mm_geo.now > bottom) {
+          flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
+          shrink = pending->mm_geo.now - bottom;
+          pending->mm_geo.now = bottom;
+          if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
+            mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
+        }
       }
     }
   }
@@ -5755,14 +5775,16 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
 #endif
 
   if (is_exclusive && (env->me_flags & MDBX_WRITEMAP) != 0) {
-#ifdef MADV_REMOVE_OR_FREE
-    const size_t used_alined2os = mdbx_roundup2(usedsize, env->me_os_psize);
-    if (used_alined2os < env->me_mapsize)
-      (void)madvise(env->me_map + used_alined2os,
-                    env->me_mapsize - used_alined2os, MADV_REMOVE_OR_FREE);
-#else
-    (void)usedsize;
-#endif
+    const size_t used_aligned2os_bytes =
+        mdbx_roundup2(usedsize, env->me_os_psize);
+    *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
+    if (used_aligned2os_bytes < env->me_mapsize) {
+#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
+      (void)madvise(env->me_map + used_aligned2os_bytes,
+                    env->me_mapsize - used_aligned2os_bytes,
+                    MADV_REMOVE_OR_FREE_OR_DONTNEED);
+#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
+    }
   }
 
 #ifdef POSIX_FADV_RANDOM
@@ -6511,6 +6533,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     env->me_autosync_period = &env->me_lckless_stub.autosync_period;
     env->me_unsynced_pages = &env->me_lckless_stub.autosync_pending;
     env->me_autosync_threshold = &env->me_lckless_stub.autosync_threshold;
+    env->me_discarded_tail = &env->me_lckless_stub.discarded_tail;
     env->me_maxreaders = UINT_MAX;
 #ifdef MDBX_OSAL_LOCK
     env->me_wmutex = &env->me_lckless_stub.wmutex;
@@ -6623,6 +6646,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   env->me_autosync_period = &env->me_lck->mti_autosync_period;
   env->me_unsynced_pages = &env->me_lck->mti_unsynced_pages;
   env->me_autosync_threshold = &env->me_lck->mti_autosync_threshold;
+  env->me_discarded_tail = &env->me_lck->mti_discarded_tail;
 #ifdef MDBX_OSAL_LOCK
   env->me_wmutex = &env->me_lck->mti_wmutex;
 #endif

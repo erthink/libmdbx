@@ -475,6 +475,9 @@ typedef struct MDBX_lockinfo {
   /* Number un-synced-with-disk pages for auto-sync feature. */
   volatile pgno_t mti_unsynced_pages;
 
+  /* Number of page which was discarded last time by madvise(MADV_FREE). */
+  volatile pgno_t mti_discarded_tail;
+
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
 #ifdef MDBX_OSAL_LOCK
@@ -820,6 +823,7 @@ struct MDBX_env {
   volatile uint64_t *me_autosync_period;
   volatile pgno_t *me_unsynced_pages;
   volatile pgno_t *me_autosync_threshold;
+  volatile pgno_t *me_discarded_tail;
   MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
   struct {
 #ifdef MDBX_OSAL_LOCK
@@ -830,6 +834,7 @@ struct MDBX_env {
     uint64_t autosync_period;
     pgno_t autosync_pending;
     pgno_t autosync_threshold;
+    pgno_t discarded_tail;
   } me_lckless_stub;
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */

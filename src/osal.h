@@ -200,13 +200,15 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define MADV_DONTDUMP MADV_NOCORE
 #endif /* MADV_NOCORE -> MADV_DONTDUMP */
 
-#ifndef MADV_REMOVE_OR_FREE
+#ifndef MADV_REMOVE_OR_FREE_OR_DONTNEED
 #ifdef MADV_REMOVE
-#define MADV_REMOVE_OR_FREE MADV_REMOVE
+#define MADV_REMOVE_OR_FREE_OR_DONTNEED MADV_REMOVE
 #elif defined(MADV_FREE)
-#define MADV_REMOVE_OR_FREE MADV_FREE
+#define MADV_REMOVE_OR_FREE_OR_DONTNEED MADV_FREE
+#elif defined(MADV_DONTNEED)
+#define MADV_REMOVE_OR_FREE_OR_DONTNEED MADV_DONTNEED
 #endif
-#endif /* MADV_REMOVE_OR_FREE */
+#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
 
 #if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
     defined(i486) || defined(__i486) || defined(__i486__) ||                   \
@@ -764,6 +766,10 @@ typedef BOOL(WINAPI *MDBX_PrefetchVirtualMemory)(
     HANDLE hProcess, ULONG_PTR NumberOfEntries,
     PWIN32_MEMORY_RANGE_ENTRY VirtualAddresses, ULONG Flags);
 extern MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
+
+typedef DWORD(WINAPI *MDBX_DiscardVirtualMemory)(PVOID VirtualAddress,
+                                                 SIZE_T Size);
+extern MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 
 #endif /* Windows */
 
