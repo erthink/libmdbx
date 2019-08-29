@@ -4,18 +4,27 @@
 
 libmdbx
 ======================================
-Revised and extended descendant of [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database) (aka _LMDB_).
-Русскоязычная версия [здесь](README-RU.md).
+Revised and extended descendant of [Lightning Memory-Mapped
+Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database)
+(aka _LMDB_). Permissive non-copyleft BSD-style [OpenLDAP Public License
+2.8](LICENSE). Русскоязычная версия этого README [здесь](README-RU.md).
 
 _libmdbx_ is superior to LMDB in terms of features and reliability, not
 inferior in performance. _libmdbx_ works on Linux, FreeBSD, MacOS X and
 other systems compliant with POSIX.1-2008, but also support Windows as a
 complementary platform.
 
-The next version is under active non-public development, which will
-radically change both the API and the database format. The goal of this
-revolution is to provide a clearer and more reliable API, add more
-features and new database properties.
+The next version is under active non-public development and will be
+released as **_MithrilDB_** and `libmithrildb` for libraries & packages.
+Admittedly mythical [Mithril](https://en.wikipedia.org/wiki/Mithril) is
+resembling silver but being stronger and lighter than steel. Therefore
+_MithrilDB_ is rightly relevant name.
+
+_MithrilDB_ will be radically different from _libmdbx_ by the new
+database format and API based on C++17, as well as the [Apache 2.0
+License](https://www.apache.org/licenses/LICENSE-2.0). The goal of this
+revolution is to provide a clearer and robust API, add more features and
+new valuable properties of database.
 
 *The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
 
