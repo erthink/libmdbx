@@ -18,6 +18,8 @@
 
 #if defined(_WIN32) || defined(_WIN64)
 
+#include <winioctl.h>
+
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
