@@ -457,6 +457,12 @@ typedef struct MDBX_lockinfo {
    * Zero means timed auto-sync is disabled. */
   volatile uint64_t mti_autosync_period;
 
+  /* Marker to distinguish uniqueness of DB/CLK.*/
+  volatile uint64_t mti_bait_uniqueness;
+
+  /* /proc/sys/kernel/random/boot_id */
+  volatile uint64_t mti_boot_id;
+
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 #ifdef MDBX_OSAL_LOCK
       /* Mutex protecting write-txn. */
@@ -842,6 +848,7 @@ struct MDBX_env {
 #ifdef USE_VALGRIND
   int me_valgrind_handle;
 #endif
+  MDBX_env *me_lcklist_next;
 
   struct {
     size_t lower;  /* minimal size of datafile */

@@ -211,7 +211,10 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
 static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                              const int rc);
 
-int __cold mdbx_lck_init(MDBX_env *env) {
+int __cold mdbx_lck_init(MDBX_env *env, int global_uniqueness_flag) {
+  if (global_uniqueness_flag == MDBX_RESULT_FALSE)
+    return MDBX_SUCCESS;
+
   pthread_mutexattr_t ma;
   int rc = pthread_mutexattr_init(&ma);
   if (rc)
@@ -254,20 +257,73 @@ bailout:
   return rc;
 }
 
-void __cold mdbx_lck_destroy(MDBX_env *env) {
-  if (env->me_lfd != INVALID_HANDLE_VALUE) {
-    /* try get exclusive access */
-    if (env->me_lck && mdbx_lck_exclusive(env->me_lfd, false) == 0) {
-      mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
-      int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
-      if (rc == 0)
-        rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
-      assert(rc == 0);
-      (void)rc;
-      /* file locks would be released (by kernel)
-       * while the me_lfd will be closed */
+int __cold mdbx_lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor) {
+  if (env->me_lfd != INVALID_HANDLE_VALUE && !inprocess_neighbor &&
+      env->me_lck &&
+      /* try get exclusive access */ mdbx_lck_exclusive(env->me_lfd, false) ==
+          0) {
+    mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
+    int rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
+    if (rc == 0)
+      rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
+    assert(rc == 0);
+    (void)rc;
+    msync(env->me_lck, env->me_os_psize, MS_ASYNC);
+    /* file locks would be released (by kernel)
+     * while the me_lfd will be closed */
+  }
+
+  if (op_setlk == F_SETLK) {
+    /* File locks would be released (by kernel) while the file-descriptors
+     * will be closed. But to avoid false-positive EDEADLK from the kernel,
+     * locks should be released here explicitly with properly order. */
+
+    /* POSIX's fcntl() locks should be restored after file was closed.
+     * FIXME: This code should be rethinked and retested, since it will
+     * executed in really rare cases.
+     *
+     * On the other hand, seems more reasonable to disallow multi-open feature
+     * by default, and describe it as "use at your own risk". Currently
+     * multi-open required only for libfpta's unit-tests. */
+
+    int rc = MDBX_SUCCESS;
+    /* close clk and restore locks */
+    if (env->me_lfd != INVALID_HANDLE_VALUE) {
+      (void)close(env->me_lfd);
+      env->me_lfd = INVALID_HANDLE_VALUE;
+      if (inprocess_neighbor) {
+        /* restore file-locks */
+        if (rc == MDBX_SUCCESS)
+          rc = mdbx_lck_op(inprocess_neighbor->me_lfd, F_SETLKW, F_RDLCK, 0, 1);
+        if (rc == MDBX_SUCCESS)
+          rc = mdbx_rpid_set(inprocess_neighbor);
+      }
+    }
+
+    /* close dxb and restore lock */
+    if (env->me_fd != INVALID_HANDLE_VALUE) {
+      (void)close(env->me_fd);
+      env->me_fd = INVALID_HANDLE_VALUE;
+      if (inprocess_neighbor && rc == MDBX_SUCCESS) {
+        /* restore file-lock */
+        rc = mdbx_lck_op(
+            inprocess_neighbor->me_fd, F_SETLKW,
+            (inprocess_neighbor->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK,
+            (inprocess_neighbor->me_lfd == INVALID_HANDLE_VALUE)
+                ? 0
+                : inprocess_neighbor->me_pid,
+            (inprocess_neighbor->me_lfd == INVALID_HANDLE_VALUE) ? OFF_T_MAX
+                                                                 : 1);
+      }
+    }
+
+    if (inprocess_neighbor && rc != MDBX_SUCCESS) {
+      inprocess_neighbor->me_flags |= MDBX_FATAL_ERROR;
+      return rc;
     }
   }
+
+  return MDBX_SUCCESS;
 }
 
 static int mdbx_robust_lock(MDBX_env *env, pthread_mutex_t *mutex) {
