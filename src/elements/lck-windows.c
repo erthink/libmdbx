@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "./bits.h"
+#include "./internals.h"
 
 /* PREAMBLE FOR WINDOWS:
  *
@@ -183,7 +183,7 @@ void mdbx_txn_unlock(MDBX_env *env) {
 #define LCK_LOWER LCK_LO_OFFSET, LCK_LO_LEN
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
-int mdbx_rdt_lock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
   mdbx_srwlock_AcquireShared(&env->me_remap_guard);
   if (env->me_lfd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
@@ -198,7 +198,7 @@ int mdbx_rdt_lock(MDBX_env *env) {
   return rc;
 }
 
-void mdbx_rdt_unlock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* transite from S-E (locked) to S-? (used), e.g. unlock upper-part */
     if ((env->me_flags & MDBX_EXCLUSIVE) == 0 &&
@@ -245,8 +245,8 @@ static int suspend_and_append(mdbx_handle_array_t **array,
   return MDBX_SUCCESS;
 }
 
-int mdbx_suspend_threads_before_remap(MDBX_env *env,
-                                      mdbx_handle_array_t **array) {
+MDBX_INTERNAL_FUNC int
+mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   const mdbx_pid_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->me_lck) {
@@ -320,7 +320,8 @@ int mdbx_suspend_threads_before_remap(MDBX_env *env,
   return MDBX_SUCCESS;
 }
 
-int mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
+MDBX_INTERNAL_FUNC int
+mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
   int rc = MDBX_SUCCESS;
   for (unsigned i = 0; i < array->count; ++i) {
     const HANDLE hThread = array->handles[i];
@@ -398,13 +399,15 @@ static void lck_unlock(MDBX_env *env) {
   }
 }
 
-int mdbx_lck_init(MDBX_env *env, int global_uniqueness_flag) {
+MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
+                                     int global_uniqueness_flag) {
   (void)env;
   (void)global_uniqueness_flag;
   return MDBX_SUCCESS;
 }
 
-int mdbx_lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor) {
+MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
+                                        MDBX_env *inprocess_neighbor) {
   (void)inprocess_neighbor;
   lck_unlock(env);
   return MDBX_SUCCESS;
@@ -462,7 +465,7 @@ static int internal_seize_lck(HANDLE lfd) {
   return rc;
 }
 
-int mdbx_lck_seize(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
   int rc;
 
   assert(env->me_fd != INVALID_HANDLE_VALUE);
@@ -508,7 +511,7 @@ int mdbx_lck_seize(MDBX_env *env) {
   return rc;
 }
 
-int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
+MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
   /* Transite from exclusive state (E-?) to used (S-?) */
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
@@ -550,12 +553,12 @@ int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
 /*----------------------------------------------------------------------------*/
 /* reader checking (by pid) */
 
-int mdbx_rpid_set(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env) {
   (void)env;
   return MDBX_SUCCESS;
 }
 
-int mdbx_rpid_clear(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
   (void)env;
   return MDBX_SUCCESS;
 }
@@ -566,7 +569,7 @@ int mdbx_rpid_clear(MDBX_env *env) {
  *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
-int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
   (void)env;
   HANDLE hProcess = OpenProcess(SYNCHRONIZE, FALSE, pid);
   int rc;
@@ -678,7 +681,7 @@ static DWORD WINAPI stub_DiscardVirtualMemory(PVOID VirtualAddress,
 }
 
 /*----------------------------------------------------------------------------*/
-
+#ifndef MDBX_ALLOY
 MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
 MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
 MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
@@ -686,6 +689,7 @@ MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
 MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 MDBX_NtFsControlFile mdbx_NtFsControlFile;
+#endif /* MDBX_ALLOY */
 
 static void mdbx_winnt_import(void) {
   const HINSTANCE hKernel32dll = GetModuleHandleA("kernel32.dll");

@@ -133,6 +133,14 @@
 #   endif
 #endif /* __must_check_result */
 
+#ifndef __maybe_unused
+#   if defined(__GNUC__) || __has_attribute(__unused__)
+#       define __maybe_unused __attribute__((__unused__))
+#   else
+#       define __maybe_unused
+#   endif
+#endif /* __maybe_unused */
+
 #ifndef __deprecated
 #   if defined(__GNUC__) || __has_attribute(__deprecated__)
 #       define __deprecated __attribute__((__deprecated__))

@@ -18,7 +18,7 @@
  by flock() and fcntl()."
 #endif
 
-#include "./bits.h"
+#include "./internals.h"
 #include <sys/utsname.h>
 
 /* Some platforms define the EOWNERDEAD error code
@@ -40,7 +40,10 @@
 /*----------------------------------------------------------------------------*/
 /* global constructor/destructor */
 
+#ifndef MDBX_ALLOY
 uint32_t mdbx_linux_kernel_version;
+#endif /* MDBX_ALLOY */
+
 static __cold __attribute__((__constructor__)) void
 mdbx_global_constructor(void) {
   struct utsname buffer;
@@ -183,24 +186,24 @@ static __inline int mdbx_lck_shared(int lfd) {
   return mdbx_lck_op(lfd, op_setlkw, F_RDLCK, 0, 1);
 }
 
-int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
+MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   return complete ? mdbx_lck_shared(env->me_lfd) : MDBX_SUCCESS;
 }
 
-int mdbx_rpid_set(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(env->me_pid > 0);
   return mdbx_lck_op(env->me_lfd, op_setlk, F_WRLCK, env->me_pid, 1);
 }
 
-int mdbx_rpid_clear(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(env->me_pid > 0);
   return mdbx_lck_op(env->me_lfd, op_setlkw, F_UNLCK, env->me_pid, 1);
 }
 
-int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(pid > 0);
   return mdbx_lck_op(env->me_lfd, op_getlk, F_WRLCK, pid, 1);
@@ -211,7 +214,8 @@ int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
 static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                              const int rc);
 
-int __cold mdbx_lck_init(MDBX_env *env, int global_uniqueness_flag) {
+MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
+                                            int global_uniqueness_flag) {
   if (global_uniqueness_flag == MDBX_RESULT_FALSE)
     return MDBX_SUCCESS;
 
@@ -257,7 +261,8 @@ bailout:
   return rc;
 }
 
-int __cold mdbx_lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor) {
+MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
+                                               MDBX_env *inprocess_neighbor) {
   if (env->me_lfd != INVALID_HANDLE_VALUE && !inprocess_neighbor &&
       env->me_lck &&
       /* try get exclusive access */ mdbx_lck_exclusive(env->me_lfd, false) ==
@@ -347,14 +352,14 @@ static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
   return rc;
 }
 
-int mdbx_rdt_lock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
   mdbx_trace(">>");
   int rc = mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
   mdbx_trace("<< rc %d", rc);
   return rc;
 }
 
-void mdbx_rdt_unlock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
   mdbx_trace(">>");
   int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rmutex);
   mdbx_trace("<< rc %d", rc);
@@ -404,7 +409,7 @@ static int __cold internal_seize_lck(int lfd) {
   return rc;
 }
 
-int __cold mdbx_lck_seize(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   if (unlikely(op_setlk == 0))
     choice_fcntl();

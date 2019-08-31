@@ -47,18 +47,10 @@ NN	?= 25000000
 
 ifdef MSVC
   UNAME := Windows
-  LCK_IMPL := windows
   TEST_OSAL := windows
   TEST_ITER := 42
 else
   UNAME	:= $(shell uname -s 2>/dev/null || echo Unknown)
-  define uname2lck
-    case "$(UNAME)" in
-      Linux) echo linux;;
-      CYGWIN*|MINGW*|MSYS*|Windows*) echo windows;;
-      *) echo posix;;
-    esac
-  endef
   define uname2osal
     case "$(UNAME)" in
       CYGWIN*|MINGW*|MSYS*|Windows*) echo windows;;
@@ -78,7 +70,6 @@ else
       *) echo so;;
     esac
   endef
-  LCK_IMPL := $(shell $(uname2lck))
   TEST_OSAL := $(shell $(uname2osal))
   TEST_ITER := $(shell $(uname2titer))
   SO_SUFFIX := $(shell $(uname2suffix))
@@ -90,9 +81,7 @@ TOOLS		:= mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES	:= mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
 SHELL		:= /bin/bash
 
-CORE_SRC	:= src/lck-$(LCK_IMPL).c $(filter-out $(wildcard src/lck-*.c), $(wildcard src/*.c))
-CORE_INC	:= $(wildcard src/*.h)
-CORE_OBJ	:= $(patsubst %.c,%.o,$(CORE_SRC))
+ALLOY_DEPS      := $(wildcard src/elements/*)
 TEST_SRC	:= test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
 TEST_INC	:= $(wildcard test/*.h)
 TEST_OBJ	:= $(patsubst %.cc,%.o,$(TEST_SRC))
@@ -136,25 +125,21 @@ check-fault:	all
 	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TESTDB) && ([ ! -e $(TESTDB)-copy ] || ./mdbx_chk -vvn $(TESTDB)-copy)
 
-define core-rule
-$(patsubst %.c,%.o,$(1)): $(1) $(CORE_INC) mdbx.h Makefile
-	$(CC) $(CFLAGS) -c $(1) -o $$@
-
-endef
-$(foreach file,$(CORE_SRC),$(eval $(call core-rule,$(file))))
+libmdbx.o: src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+	$(CC) $(CFLAGS) -c src/alloy.c -o $@
 
 define test-rule
-$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h Makefile
+$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
 	$(CXX) $(CXXFLAGS) -c $(1) -o $$@
 
 endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
-libmdbx.a: $(CORE_OBJ)
+libmdbx.a: libmdbx.o
 	$(AR) rs $@ $?
 
-libmdbx.$(SO_SUFFIX): $(CORE_OBJ)
-	$(CC) $(CFLAGS) -save-temps $^ -pthread -shared $(LDFLAGS) -o $@
+libmdbx.$(SO_SUFFIX): libmdbx.o
+	$(CC) $(CFLAGS) $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $^ $(EXE_LDFLAGS) -o $@

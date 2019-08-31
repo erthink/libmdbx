@@ -22,7 +22,7 @@
 
 /* Avoid reference to mdbx_runtime_flags from assert() */
 #define mdbx_runtime_flags (~0u)
-#include "../bits.h"
+#include "../elements/internals.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "wingetopt.h"

@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "./bits.h"
+#include "./internals.h"
 
 /* Some platforms define the EOWNERDEAD error code
  * even though they don't support Robust Mutexes.
@@ -112,26 +112,26 @@ static int mdbx_lck_op(mdbx_filehandle_t fd, int cmd, short lck, off_t offset,
   }
 }
 
-int mdbx_rpid_set(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(env->me_pid > 0 && env->me_pid <= PID_T_MAX);
   return mdbx_lck_op(env->me_lfd, OP_SETLK, F_WRLCK, env->me_pid, 1);
 }
 
-int mdbx_rpid_clear(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(env->me_pid > 0 && env->me_pid <= PID_T_MAX);
   return mdbx_lck_op(env->me_lfd, OP_SETLKW, F_UNLCK, env->me_pid, 1);
 }
 
-int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(pid > 0 && pid <= PID_T_MAX);
   assert(PID_T_MAX < OFF_T_MAX);
   return mdbx_lck_op(env->me_lfd, OP_GETLK, F_WRLCK, pid, 1);
 }
 
-int __cold mdbx_lck_seize(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_pid > 0 && env->me_pid <= PID_T_MAX);
 
@@ -229,7 +229,8 @@ bailout:
 static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                              const int rc);
 
-int __cold mdbx_lck_init(MDBX_env *env, int global_uniqueness_flag) {
+MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
+                                            int global_uniqueness_flag) {
   if (global_uniqueness_flag == MDBX_RESULT_FALSE)
     return MDBX_SUCCESS;
 
@@ -270,7 +271,8 @@ bailout:
   return rc;
 }
 
-int __cold mdbx_lck_destroy(MDBX_env *env, MDBX_env *inprocess_neighbor) {
+MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
+                                               MDBX_env *inprocess_neighbor) {
   /* File locks would be released (by kernel) while the file-descriptors
    * will be closed. But to avoid false-positive EDEADLK from the kernel,
    * locks should be released here explicitly with properly order. */
@@ -358,14 +360,14 @@ static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
   return rc;
 }
 
-int mdbx_rdt_lock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
   mdbx_trace(">>");
   int rc = mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
   mdbx_trace("<< rc %d", rc);
   return rc;
 }
 
-void mdbx_rdt_unlock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
   mdbx_trace(">>");
   int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rmutex);
   mdbx_trace("<< rc %d", rc);

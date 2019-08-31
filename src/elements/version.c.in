@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "./bits.h"
+#include "./internals.h"
 
 #if MDBX_VERSION_MAJOR != 0 || MDBX_VERSION_MINOR != 3
 #error "API version mismatch!"

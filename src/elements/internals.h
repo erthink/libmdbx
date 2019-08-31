@@ -35,6 +35,16 @@
 #define MDBX_OSX_SPEED_INSTEADOF_DURABILITY MDBX_OSX_WANNA_DURABILITY
 #endif
 
+#ifdef MDBX_ALLOY
+/* Amalgamated build */
+#define MDBX_INTERNAL_FUNC static
+#define MDBX_INTERNAL_VAR static
+#else
+/* Non-amalgamated build */
+#define MDBX_INTERNAL_FUNC
+#define MDBX_INTERNAL_VAR extern
+#endif /* MDBX_ALLOY */
+
 /*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */
@@ -72,7 +82,7 @@
 #pragma warning(disable : 4366) /* the result of the unary '&' operator may be unaligned */
 #endif                          /* _MSC_VER (warnings) */
 
-#include "../mdbx.h"
+#include "../../mdbx.h"
 #include "./defs.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4,2)
@@ -876,16 +886,21 @@ typedef struct MDBX_ntxn {
 /*----------------------------------------------------------------------------*/
 /* Debug and Logging stuff */
 
+#define MDBX_RUNTIME_FLAGS_INIT                                                \
+  (MDBX_DBG_PRINT | ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT |                     \
+   ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT | ((MDBX_DEBUG) > 2) * MDBX_DBG_TRACE | \
+   ((MDBX_DEBUG) > 3) * MDBX_DBG_EXTRA)
+
 #ifndef mdbx_runtime_flags /* avoid override from tools */
-extern int mdbx_runtime_flags;
+MDBX_INTERNAL_VAR int mdbx_runtime_flags;
 #endif
-extern MDBX_debug_func *mdbx_debug_logger;
-extern txnid_t mdbx_debug_edge;
+MDBX_INTERNAL_VAR MDBX_debug_func *mdbx_debug_logger;
 
-void mdbx_debug_log(int type, const char *function, int line, const char *fmt,
-                    ...) __printf_args(4, 5);
+MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
+                                       const char *fmt, ...)
+    __printf_args(4, 5);
 
-void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
+MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 
 #if MDBX_DEBUG
 
@@ -906,8 +921,8 @@ void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 #endif /* NDEBUG */
 #endif /* MDBX_DEBUG */
 
-LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg,
-                                  const char *func, int line);
+MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
+                                         const char *func, int line);
 
 #define mdbx_print(fmt, ...)                                                   \
   mdbx_debug_log(MDBX_DBG_PRINT, NULL, 0, fmt, ##__VA_ARGS__)
@@ -1014,14 +1029,15 @@ LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 /*----------------------------------------------------------------------------*/
 /* Internal prototypes */
 
-int mdbx_reader_check0(MDBX_env *env, int rlocked, int *dead);
-int mdbx_rthc_alloc(mdbx_thread_key_t *key, MDBX_reader *begin,
-                    MDBX_reader *end);
-void mdbx_rthc_remove(const mdbx_thread_key_t key);
+MDBX_INTERNAL_FUNC int mdbx_reader_check0(MDBX_env *env, int rlocked,
+                                          int *dead);
+MDBX_INTERNAL_FUNC int mdbx_rthc_alloc(mdbx_thread_key_t *key,
+                                       MDBX_reader *begin, MDBX_reader *end);
+MDBX_INTERNAL_FUNC void mdbx_rthc_remove(const mdbx_thread_key_t key);
 
-void mdbx_rthc_global_init(void);
-void mdbx_rthc_global_dtor(void);
-void mdbx_rthc_thread_dtor(void *ptr);
+MDBX_INTERNAL_FUNC void mdbx_rthc_global_init(void);
+MDBX_INTERNAL_FUNC void mdbx_rthc_global_dtor(void);
+MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 
 #define MDBX_IS_ERROR(rc)                                                      \
   ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)

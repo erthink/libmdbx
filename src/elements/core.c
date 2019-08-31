@@ -35,7 +35,7 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
 
-#include "./bits.h"
+#include "./internals.h"
 
 /*----------------------------------------------------------------------------*/
 /* Internal inlines */
@@ -1288,22 +1288,10 @@ static int __must_check_result mdbx_dpl_append(MDBX_DPL dl, pgno_t pgno,
 
 /*----------------------------------------------------------------------------*/
 
-int mdbx_runtime_flags = MDBX_DBG_PRINT
-#if MDBX_DEBUG
-                         | MDBX_DBG_ASSERT
-#endif
-#if MDBX_DEBUG > 1
-                         | MDBX_DBG_TRACE
-#endif
-#if MDBX_DEBUG > 2
-                         | MDBX_DBG_AUDIT
-#endif
-#if MDBX_DEBUG > 3
-                         | MDBX_DBG_EXTRA
-#endif
-    ;
-
+#ifndef MDBX_ALLOY
+int mdbx_runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
 MDBX_debug_func *mdbx_debug_logger;
+#endif /* MDBX_ALLOY */
 
 static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
                            int flags);
