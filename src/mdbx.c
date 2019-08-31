@@ -1496,16 +1496,19 @@ const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
     return size ? buf : NULL;
 #elif defined(_GNU_SOURCE) && defined(__GLIBC__)
     /* GNU-specific */
-    msg = strerror_r(errnum, buf, buflen);
+    if (errnum > 0)
+      msg = strerror_r(errnum, buf, buflen);
 #elif (_POSIX_C_SOURCE >= 200112L || _XOPEN_SOURCE >= 600)
     /* XSI-compliant */
-    if (strerror_r(errnum, buf, buflen) == 0)
+    if (errnum > 0 && strerror_r(errnum, buf, buflen) == 0)
       msg = buf;
 #else
-    msg = strerror(errnum);
-    if (msg) {
-      strncpy(buf, msg, buflen);
-      msg = buf;
+    if (errnum > 0) {
+      msg = strerror(errnum);
+      if (msg) {
+        strncpy(buf, msg, buflen);
+        msg = buf;
+      }
     }
 #endif
     if (!msg) {
@@ -1524,7 +1527,8 @@ const char *__cold mdbx_strerror(int errnum) {
 #else
   const char *msg = __mdbx_strerr(errnum);
   if (!msg) {
-    msg = strerror(errnum);
+    if (errnum > 0)
+      msg = strerror(errnum);
     if (!msg) {
       static char buf[32];
       (void)snprintf(buf, sizeof(buf) - 1, "error %d", errnum);
