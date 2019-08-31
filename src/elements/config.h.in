@@ -1,0 +1,16 @@
+#cmakedefine HAVE_UNISTD_H
+#cmakedefine HAVE_SYS_UIO_H
+#cmakedefine HAVE_SYS_STAT_H
+#cmakedefine HAVE_TIMEVAL_TV_USEC
+#cmakedefine HAVE_TIMESPEC_TV_NSEC
+#cmakedefine CMAKE_HAVE_PTHREAD_H
+#cmakedefine HAVE_VALGRIND_MEMCHECK_H
+#cmakedefine HAS_RELAXED_CONSTEXPR
+
+#cmakedefine LTO_ENABLED
+#cmakedefine ENABLE_VALGRIND
+#cmakedefine ENABLE_GPROF
+#cmakedefine ENABLE_GCOV
+#cmakedefine ENABLE_ASAN
+
+#cmakedefine01 HAVE_MDBX_VERSIONINFO

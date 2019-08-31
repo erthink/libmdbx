@@ -11,16 +11,16 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_ALLOY 1 /* Amalgamated build */
-
-/* Turn off formatters to avoid reordering the #includes */
-/* *INDENT-OFF* */
-/* clang-format off */
-
+/* Amalgamated build */
+#define MDBX_ALLOY 1
 #include "elements/internals.h" /* must be included fisrt */
+
 #include "../mdbx.h"
 #include "elements/defs.h"
 #include "elements/osal.h"
+
+#include "elements/core.c"
+#include "elements/osal.c"
 
 #if defined(__linux__) || defined(__gnu_linux__)
 #include "elements/lck-linux.c"
@@ -29,10 +29,3 @@
 #else
 #include "elements/lck-posix.c"
 #endif
-
-#include "elements/osal.c"
-#include "elements/core.c"
-#include "elements/version.c.in"
-
-/* *INDENT-ON* */
-/* clang-format on */

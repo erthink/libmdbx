@@ -1,15 +1,11 @@
-# GNU Makefile for libmdbx, https://abf.io/erthink/libmdbx
-
-########################################################################
-# Configuration. The compiler options must enable threaded compilation.
+# This makefile is for GNU Make, and nowadays provided
+# just for compatibility and preservation of traditions.
+# Please use CMake in case of any difficulties or problems.
 #
-# Preprocessor macros (for XCFLAGS) of interest...
-# Note that the defaults should already be correct for most
-# platforms; you should not need to change any of these.
-# Read their descriptions in mdb.c if you do. There may be
-# other macros of interest. You should read mdb.c
-# before changing any of them.
-#
+# Preprocessor macros (for MDBX_OPTIONS) of interest...
+# Note that the defaults should already be correct for most platforms;
+# you should not need to change any of these. Read their descriptions
+# in README and source code if you do. There may be other macros of interest.
 
 # install sandbox
 SANDBOX	?=
@@ -24,10 +20,9 @@ suffix	?=
 CC	?= gcc
 CXX	?= g++
 LD	?= ld
-CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden
+MDBX_OPTIONS ?= -D_GNU_SOURCE=1 -DNDEBUG=1 -DLIBMDBX_EXPORTS=1
+CFLAGS	?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread
 
-XCFLAGS	?= -DNDEBUG=1 -DLIBMDBX_EXPORTS=1
-CFLAGS	+= -D_GNU_SOURCE=1 -std=gnu11 -pthread $(XCFLAGS)
 CXXFLAGS = -std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
 TESTDB	?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TESTLOG ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
@@ -125,24 +120,45 @@ check-fault:	all
 	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TESTDB) && ([ ! -e $(TESTDB)-copy ] || ./mdbx_chk -vvn $(TESTDB)-copy)
 
+MDBX_VERSION_GIT = ${shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or install latest git version'}
+version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) .git/HEAD .git/index .git/refs/tags
+	sed \
+	        -e "s|@MDBX_BUILD_TIMESTAMP@|$(shell date +%Y-%m-%dT%H:%M:%S%z)|" \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$(shell git describe --tags --long --dirty=-dirty || echo 'Please fetch tags and/or install latest git version')|" \
+		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 1)|" \
+		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 2)|" \
+		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 3)|" \
+		-e "s|\$${MDBX_VERSION_REVISION}|$(shell git rev-list --count --no-merges HEAD || echo 'Please fetch tags and/or install latest git version')|" \
+		-e "s|@MDBX_OPTIONS@|$(MDBX_OPTIONS)|" \
+		-e "s|\$${MDBX_COMPILE_FLAGS}|\"$(CFLAGS) $(LDFLAGS)\"|" \
+		-e "s|@MDBX_BUILD_COMPILER@|$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')|" \
+		-e "s|\$${MDBX_BUILD_TARGET}|\"$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')\"|" \
+	src/elements/version.c.in > $@
+
+version.o: version.c $(lastword $(MAKEFILE_LIST))
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -I./src -c version.c -o $@
+
 libmdbx.o: src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) -c src/alloy.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -c src/alloy.c -o $@
 
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
-	$(CXX) $(CXXFLAGS) -c $(1) -o $$@
+	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) -c $(1) -o $$@
 
 endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
-libmdbx.a: libmdbx.o
+libmdbx.a: libmdbx.o version.o
 	$(AR) rs $@ $?
 
-libmdbx.$(SO_SUFFIX): libmdbx.o
+libmdbx.$(SO_SUFFIX): libmdbx.o version.o
 	$(CC) $(CFLAGS) $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $^ $(EXE_LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) $^ $(EXE_LDFLAGS) -o $@
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) -o $@

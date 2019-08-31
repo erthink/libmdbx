@@ -36,7 +36,7 @@
   (int)((addr) >> 24), (int)((addr) >> 16 & 0xff), (int)((addr) >> 8 & 0xff),  \
       (int)((addr)&0xff)
 
-char opt_db_path[PATH_MAX] = "/root/lmdbx_bench2";
+char opt_db_path[PATH_MAX] = "./lmdbx_bench2";
 static MDBX_env *env;
 #define REC_COUNT 10240000
 int64_t ids[REC_COUNT * 10];

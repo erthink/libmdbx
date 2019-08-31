@@ -1,11 +1,13 @@
 AUTHORS
 CMakeLists.txt
+CMakeLists.txt
 LICENSE
 GNUmakefile
 README-RU.md
 README.md
 TODO.md
 mdbx.h
+src/CMakeLists.txt
 src/alloy.c
 src/elements/data.c
 src/elements/internals.h

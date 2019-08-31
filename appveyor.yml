@@ -2,12 +2,16 @@ version: 0.3.2.{build}
 
 environment:
   matrix:
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      CMAKE_GENERATOR: Visual Studio 16 2019
+      TOOLSET: 142
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
-      TOOLSET: v141
+      CMAKE_GENERATOR: Visual Studio 15 2017
+      TOOLSET: 141
 #    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
-#      TOOLSET: v140
+#      TOOLSET: 140
 #    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
-#      TOOLSET: v120
+#      TOOLSET: 120
 
 branches:
   except:
@@ -18,34 +22,56 @@ configuration:
 - Release
 
 platform:
-- x86
+- Win32
 - x64
-#- ARM
+
+before_build:
+- git submodule sync
+- git fetch --tags --prune
+- git submodule update --init --recursive
+- git submodule foreach --recursive git fetch --tags --prune
+- cmake --version
 
 build_script:
-- ps: >
-    msbuild "C:\projects\libmdbx\mdbx.sln" /verbosity:minimal
-    /logger:"C:\Program Files\AppVeyor\BuildAgent\Appveyor.MSBuildLogger.dll"
-    /property:PlatformToolset=$env:TOOLSET
-    /property:Configuration=$env:CONFIGURATION
-    /property:Platform=$env:PLATFORM
+- ps: |
+    Write-Output "*******************************************************************************"
+    Write-Output "Configuration: $env:CONFIGURATION"
+    Write-Output "Platform: $env:PLATFORM"
+    Write-Output "Toolchain: $env:CMAKE_GENERATOR v$env:TOOLSET"
+    Write-Output "*******************************************************************************"
+
+    md _build -Force | Out-Null
+    cd _build
+
+    $generator = $env:CMAKE_GENERATOR
+    if ($env:TOOLSET -lt 142) {
+        if ($env:PLATFORM -eq "x64") {
+            $generator = "$generator Win64"
+        }
+        & cmake -G "$generator" -DCMAKE_CONFIGURATION_TYPES="Debug;Release" ..
+    } else {
+        & cmake -G "$generator" -A $env:PLATFORM -DCMAKE_CONFIGURATION_TYPES="Debug;Release" ..
+    }
+    if ($LastExitCode -ne 0) {
+        throw "Exec: $ErrorMessage"
+    }
+    Write-Output "*******************************************************************************"
+
+    & cmake --build . --config $env:CONFIGURATION
+    if ($LastExitCode -ne 0) {
+        throw "Exec: $ErrorMessage"
+    }
+    Write-Output "*******************************************************************************"
 
 test_script:
 - ps: |
-    if (($env:PLATFORM -eq "x86") -and (Test-Path "C:\projects\libmdbx\Win32\$env:CONFIGURATION\mdbx_test.exe" -PathType Leaf)) {
-      $mdbx_test = "C:\projects\libmdbx\Win32\$env:CONFIGURATION\mdbx_test.exe"
-      $mdbx_chk = "C:\projects\libmdbx\Win32\$env:CONFIGURATION\mdbx_chk.exe"
-    } elseif (($env:PLATFORM -ne "ARM") -and ($env:PLATFORM -ne "ARM64")) {
-      $mdbx_test = "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\mdbx_test.exe"
-      $mdbx_chk = "C:\projects\libmdbx\$env:PLATFORM\$env:CONFIGURATION\mdbx_chk.exe"
-    } else {
-      $mdbx_test = ""
-      $mdbx_chk = ""
-    }
-
-    if ($mdbx_test -ne "") {
-        & "$mdbx_test" --pathname=test.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
-        & "$mdbx_chk" -nvv test.db | Tee-Object -file chk.log | Select-Object -last 42
+    if (($env:PLATFORM -ne "ARM") -and ($env:PLATFORM -ne "ARM64")) {
+        & test\mdbx_test.exe --pathname=test.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+        if ($LastExitCode -ne 0) {
+            throw "Exec: $ErrorMessage"
+        } else {
+            & src\tools\mdbx_chk.exe -nvv test.db | Tee-Object -file chk.log | Select-Object -last 42
+        }
     }
 
 on_failure:
