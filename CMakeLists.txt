@@ -84,6 +84,15 @@ else()
   unset(CI)
 endif()
 
+# output all mdbx-related targets in single directory
+if(NOT DEFINED MDBX_OUTPUT_DIR)
+  set(MDBX_OUTPUT_DIR ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${MDBX_OUTPUT_DIR})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${MDBX_OUTPUT_DIR})
+set(CMAKE_PDB_OUTPUT_DIRECTORY ${MDBX_OUTPUT_DIR})
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${MDBX_OUTPUT_DIR})
+
 include(CheckLibraryExists)
 include(CheckIncludeFiles)
 include(CheckCCompilerFlag)
