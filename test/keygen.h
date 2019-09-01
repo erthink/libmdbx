@@ -93,7 +93,7 @@ struct result {
 
 //-----------------------------------------------------------------------------
 
-struct buffer_deleter : public std::unary_function<void, result *> {
+struct buffer_deleter /* : public std::unary_function<void, result *> */ {
   void operator()(result *buffer) const { free(buffer); }
 };
 

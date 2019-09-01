@@ -55,11 +55,11 @@ extern bool progress_indicator;
 
 //-----------------------------------------------------------------------------
 
-struct db_deleter : public std::unary_function<void, MDBX_env *> {
+struct db_deleter /* : public std::unary_function<void, MDBX_env *> */ {
   void operator()(MDBX_env *env) const { mdbx_env_close(env); }
 };
 
-struct txn_deleter : public std::unary_function<void, MDBX_txn *> {
+struct txn_deleter /* : public std::unary_function<void, MDBX_txn *> */ {
   void operator()(MDBX_txn *txn) const {
     int rc = mdbx_txn_abort(txn);
     if (rc)
@@ -67,7 +67,7 @@ struct txn_deleter : public std::unary_function<void, MDBX_txn *> {
   }
 };
 
-struct cursor_deleter : public std::unary_function<void, MDBX_cursor *> {
+struct cursor_deleter /* : public std::unary_function<void, MDBX_cursor *> */ {
   void operator()(MDBX_cursor *cursor) const { mdbx_cursor_close(cursor); }
 };
 
