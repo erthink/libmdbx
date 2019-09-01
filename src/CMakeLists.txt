@@ -12,6 +12,8 @@
 ##  <http://www.OpenLDAP.org/license.html>.
 ##
 
+option(MDBX_ALLOY_MODE "Build MDBX library as single object file." ON)
+
 #
 # Get version
 if(HAVE_MDBX_VERSIONINFO)
@@ -21,10 +23,24 @@ else()
   set(MDBX_VERSION "unversioned")
 endif()
 
-add_library(mdbx_objects OBJECT ${CMAKE_CURRENT_BINARY_DIR}/version.c alloy.c)
+if(MDBX_ALLOY_MODE)
+  set(LIBMDBX_SOURCES alloy.c)
+else()
+  if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    set(LIBMDBX_OSAL windows)
+  elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+    set(LIBMDBX_OSAL linux)
+  else()
+    set(LIBMDBX_OSAL posix)
+  endif()
+  set(LIBMDBX_SOURCES
+    elements/defs.h elements/internals.h elements/osal.h
+    elements/core.c elements/osal.c elements/lck-${LIBMDBX_OSAL}.c)
+endif()
+
+add_library(mdbx_objects OBJECT ../mdbx.h ${CMAKE_CURRENT_BINARY_DIR}/version.c ${LIBMDBX_SOURCES})
 set_target_properties(mdbx_objects PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>
-  POSITION_INDEPENDENT_CODE ON
   C_STANDARD 11
   C_STANDARD_REQUIRED OFF
   PUBLIC_HEADER "../mdbx.h"
