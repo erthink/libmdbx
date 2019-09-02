@@ -336,37 +336,6 @@ typedef struct MDBX_page {
 /* Size of the page header, excluding dynamic data at the end */
 #define PAGEHDRSZ ((unsigned)offsetof(MDBX_page, mp_data))
 
-/* The maximum size of a database page.
- *
- * It is 64K, but value-PAGEHDRSZ must fit in MDBX_page.mp_upper.
- *
- * MDBX will use database pages < OS pages if needed.
- * That causes more I/O in write transactions: The OS must
- * know (read) the whole page before writing a partial page.
- *
- * Note that we don't currently support Huge pages. On Linux,
- * regular data files cannot use Huge pages, and in general
- * Huge pages aren't actually pageable. We rely on the OS
- * demand-pager to read our data and page it out when memory
- * pressure from other processes is high. So until OSs have
- * actual paging support for Huge pages, they're not viable. */
-#define MAX_PAGESIZE 0x10000u
-#define MIN_PAGESIZE 512u
-
-#define MIN_MAPSIZE (MIN_PAGESIZE * MIN_PAGENO)
-#if defined(_WIN32) || defined(_WIN64)
-#define MAX_MAPSIZE32 UINT32_C(0x38000000)
-#else
-#define MAX_MAPSIZE32 UINT32_C(0x7ff80000)
-#endif
-#define MAX_MAPSIZE64 (MAX_PAGENO * (uint64_t)MAX_PAGESIZE)
-
-#if MDBX_WORDBITS >= 64
-#define MAX_MAPSIZE MAX_MAPSIZE64
-#else
-#define MAX_MAPSIZE MAX_MAPSIZE32
-#endif /* MDBX_WORDBITS */
-
 #pragma pack(pop)
 
 /* Reader Lock Table
@@ -526,6 +495,40 @@ typedef struct MDBX_lockinfo {
 #ifndef MDBX_ASSUME_MALLOC_OVERHEAD
 #define MDBX_ASSUME_MALLOC_OVERHEAD (sizeof(void *) * 2u)
 #endif /* MDBX_ASSUME_MALLOC_OVERHEAD */
+
+/* The maximum size of a database page.
+ *
+ * It is 64K, but value-PAGEHDRSZ must fit in MDBX_page.mp_upper.
+ *
+ * MDBX will use database pages < OS pages if needed.
+ * That causes more I/O in write transactions: The OS must
+ * know (read) the whole page before writing a partial page.
+ *
+ * Note that we don't currently support Huge pages. On Linux,
+ * regular data files cannot use Huge pages, and in general
+ * Huge pages aren't actually pageable. We rely on the OS
+ * demand-pager to read our data and page it out when memory
+ * pressure from other processes is high. So until OSs have
+ * actual paging support for Huge pages, they're not viable. */
+#define MAX_PAGESIZE 0x10000u
+#define MIN_PAGESIZE 512u
+
+#define MIN_MAPSIZE (MIN_PAGESIZE * MIN_PAGENO)
+#if defined(_WIN32) || defined(_WIN64)
+#define MAX_MAPSIZE32 UINT32_C(0x38000000)
+#else
+#define MAX_MAPSIZE32 UINT32_C(0x7ff80000)
+#endif
+#define MAX_MAPSIZE64 (MAX_PAGENO * (uint64_t)MAX_PAGESIZE)
+
+#if MDBX_WORDBITS >= 64
+#define MAX_MAPSIZE MAX_MAPSIZE64
+#define MDBX_READERS_LIMIT                                                     \
+  ((65536 - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1)
+#else
+#define MDBX_READERS_LIMIT 1024
+#define MAX_MAPSIZE MAX_MAPSIZE32
+#endif /* MDBX_WORDBITS */
 
 /*----------------------------------------------------------------------------*/
 /* Two kind lists of pages (aka PNL) */

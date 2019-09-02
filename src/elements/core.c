@@ -6323,7 +6323,7 @@ int __cold mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
 }
 
 int __cold mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers) {
-  if (unlikely(readers < 1 || readers > INT16_MAX))
+  if (unlikely(readers < 1 || readers > MDBX_READERS_LIMIT))
     return MDBX_EINVAL;
 
   if (unlikely(!env))
@@ -6781,7 +6781,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
   const size_t maxreaders =
       ((size_t)size - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1;
-  if (maxreaders < 2 || maxreaders > UINT16_MAX) {
+  if (maxreaders < 2 || maxreaders > MDBX_READERS_LIMIT) {
     mdbx_error("lck-size too big (up to %" PRIuPTR " readers)", maxreaders);
     err = MDBX_PROBLEM;
     goto bailout;
