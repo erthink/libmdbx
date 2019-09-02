@@ -1,4 +1,4 @@
-set(MDBX_TOOLS
+﻿set(MDBX_TOOLS
   mdbx_chk
   mdbx_copy
   mdbx_dump
@@ -13,7 +13,7 @@ foreach (TOOL ${MDBX_TOOLS})
     add_executable(${TOOL} ${TOOL}.c)
   endif()
 
-  target_link_libraries(${TOOL} mdbx_objects ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(${TOOL} mdbx)
   set_target_properties(${TOOL} PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
 

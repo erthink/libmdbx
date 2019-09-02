@@ -132,10 +132,10 @@ version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) .git/HEAD .git
 		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 2)|" \
 		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 3)|" \
 		-e "s|\$${MDBX_VERSION_REVISION}|$(shell git rev-list --count --no-merges HEAD || echo 'Please fetch tags and/or install latest git version')|" \
-		-e "s|@MDBX_OPTIONS@|$(MDBX_OPTIONS)|" \
-		-e "s|\$${MDBX_COMPILE_FLAGS}|\"$(CFLAGS) $(LDFLAGS)\"|" \
+		-e "s|@MDBX_OPTIONS_STRING@|$(MDBX_OPTIONS)|" \
+		-e "s|\$${MDBX_COMPILE_FLAGS}|$(CFLAGS) $(LDFLAGS)|" \
 		-e "s|@MDBX_BUILD_COMPILER@|$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')|" \
-		-e "s|\$${MDBX_BUILD_TARGET}|\"$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')\"|" \
+		-e "s|\$${MDBX_BUILD_TARGET}|$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')|" \
 	src/elements/version.c.in > $@
 
 version.o: version.c $(lastword $(MAKEFILE_LIST))

@@ -719,14 +719,14 @@ MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env);
 
 /// \brief Захватывает блокировку для изменения БД (при старте пишущей
 ///   транзакции). Транзакции чтения при этом никак не блокируются.
-///   Объявлена без MDBX_INTERNAL_FUNC так как используется в mdbx_chk.
+///   Объявлена LIBMDBX_API так как используется в mdbx_chk.
 /// \return Код ошибки или 0 в случае успеха.
-int mdbx_txn_lock(MDBX_env *env, bool dontwait);
+LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dontwait);
 
 /// \brief Освобождает блокировку по окончанию изменения БД (после завершения
 ///   пишущей транзакции).
-///   Объявлена без MDBX_INTERNAL_FUNC так как используется в mdbx_chk.
-void mdbx_txn_unlock(MDBX_env *env);
+///   Объявлена LIBMDBX_API так как используется в mdbx_chk.
+LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
 
 /// \brief Устанавливает alive-флажок присутствия (индицирующую блокировку)
 ///   читателя для pid текущего процесса. Функции может выполнить не более

@@ -12,9 +12,6 @@
 ##  <http://www.OpenLDAP.org/license.html>.
 ##
 
-option(MDBX_ALLOY_MODE "Build MDBX library as single object file." ON)
-
-#
 # Get version
 if(HAVE_MDBX_VERSIONINFO)
   fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION")
@@ -35,48 +32,49 @@ else()
     elements/defs.h elements/internals.h elements/osal.h
     elements/core.c elements/osal.c elements/lck-${LIBMDBX_OSAL}.c)
 endif()
-
-add_library(mdbx_objects OBJECT ../mdbx.h ${CMAKE_CURRENT_BINARY_DIR}/version.c ${LIBMDBX_SOURCES})
-set_target_properties(mdbx_objects PROPERTIES
-  INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>
-  C_STANDARD 11
-  C_STANDARD_REQUIRED OFF
-  PUBLIC_HEADER "../mdbx.h"
-  )
-target_compile_definitions(mdbx_objects PRIVATE "LIBMDBX_EXPORTS")
-target_include_directories(mdbx_objects PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
-
-if(CC_HAS_FASTMATH)
-  target_compile_options(mdbx_objects PRIVATE "-ffast-math")
-endif()
-if(BUILD_FOR_NATIVE_CPU AND CC_HAS_ARCH_NATIVE)
-  target_compile_options(mdbx_objects PUBLIC "-march=native")
-endif()
-if(CC_HAS_VISIBILITY)
-  target_compile_options(mdbx_objects PRIVATE "-fvisibility=hidden")
-endif()
+list(APPEND LIBMDBX_SOURCES ../mdbx.h
+  "${CMAKE_CURRENT_BINARY_DIR}/version.c"
+  "${CMAKE_CURRENT_BINARY_DIR}/mdbx-config.h")
 
 if(BUILD_SHARED_LIBS)
-  set(LIBMDBX_TYPE SHARED)
-else()
-  set(LIBMDBX_TYPE STATIC)
-endif()
-
-add_library(mdbx ${LIBMDBX_TYPE} $<TARGET_OBJECTS:mdbx_objects>)
-target_link_libraries(mdbx INTERFACE ${CMAKE_THREAD_LIBS_INIT})
-if(LIBFPTU_TYPE STREQUAL "SHARED")
-  target_compile_definitions(mdbx INTERFACE "LIBMDBX_IMPORTS")
+  add_library(mdbx SHARED ${LIBMDBX_SOURCES})
+  target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
+  if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    target_compile_definitions(mdbx PRIVATE MDBX_BUILD_DLL)
+  endif()
   if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))
     set_target_properties(mdbx PROPERTIES LINK_FLAGS "-fvisibility=hidden")
   endif()
+  target_link_libraries(mdbx PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+else()
+  add_library(mdbx STATIC ${LIBMDBX_SOURCES})
+  target_link_libraries(mdbx INTERFACE ${CMAKE_THREAD_LIBS_INIT})
+endif()
+
+set_target_properties(mdbx PROPERTIES
+  INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>
+  C_STANDARD 11
+  C_STANDARD_REQUIRED OFF
+  PUBLIC_HEADER "../mdbx.h")
+target_include_directories(mdbx PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
+
+if(CC_HAS_FASTMATH)
+  target_compile_options(mdbx PRIVATE "-ffast-math")
+endif()
+if(BUILD_FOR_NATIVE_CPU AND CC_HAS_ARCH_NATIVE)
+  target_compile_options(mdbx PUBLIC "-march=native")
+endif()
+if(CC_HAS_VISIBILITY)
+  target_compile_options(mdbx PRIVATE "-fvisibility=hidden")
 endif()
 
 install(TARGETS mdbx
   LIBRARY DESTINATION lib COMPONENT runtime
   RUNTIME DESTINATION bin COMPONENT runtime
   ARCHIVE DESTINATION lib/static COMPONENT devel
-  PUBLIC_HEADER DESTINATION include/libmdbx INCLUDES DESTINATION include COMPONENT devel
-  )
+  PUBLIC_HEADER DESTINATION include/libmdbx
+  INCLUDES DESTINATION include COMPONENT devel)
 
 foreach(file mdbx.h LICENSE README.md AUTHORS)
   install(FILES "../${file}" DESTINATION "include/libmdbx")
@@ -88,7 +86,7 @@ endforeach()
 #
 
 # get definitions as a string of "-Dxyz=124 ..."
-get_target_property(MDBX_DEFINITIONS mdbx_objects COMPILE_DEFINITIONS)
+get_target_property(MDBX_DEFINITIONS mdbx COMPILE_DEFINITIONS)
 if(NOT MDBX_DEFINITIONS)
   set(MDBX_DEFINITIONS "")
 endif()
@@ -97,7 +95,7 @@ string(REGEX REPLACE "([^;]+)" " -D\\1" MDBX_DEFINITIONS "${MDBX_DEFINITIONS}")
 string(STRIP MDBX_DEFINITIONS "${MDBX_DEFINITIONS}")
 
 # get target compile options as a list
-get_target_property(mdbx_compile_options mdbx_objects COMPILE_OPTIONS)
+get_target_property(mdbx_compile_options mdbx COMPILE_OPTIONS)
 if(NOT mdbx_compile_options)
   set(mdbx_compile_options "")
 endif()
@@ -109,7 +107,9 @@ unset(cmake_c_options)
 
 # append cmake's build-type flags and defines
 if(NOT CMAKE_CONFIGURATION_TYPES)
-  string(REPLACE " " ";" cmake_cxx_options "${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}" "${CMAKE_C_DEFINES_${CMAKE_BUILD_TYPE_UPPERCASE}}")
+  string(REPLACE " " ";" cmake_cxx_options
+    "${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}"
+    "${CMAKE_C_DEFINES_${CMAKE_BUILD_TYPE_UPPERCASE}}")
   list(APPEND mdbx_compile_options "${cmake_c_options}")
   unset(cmake_c_options)
 endif()
@@ -131,49 +131,73 @@ string(STRIP "${MDBX_COMPILE_FLAGS}${MDBX_DEFINITIONS}" MDBX_COMPILE_FLAGS)
 if(CMAKE_CONFIGURATION_TYPES)
   # add dynamic part via per-configuration define
   message(STATUS "MDBX Compile Flags: ${MDBX_COMPILE_FLAGS} <AND CONFIGURATION DEPENDENT>")
-  set(MDBX_COMPILE_FLAGS "MDBX_COMPILE_FLAGS \"${MDBX_COMPILE_FLAGS}\"")
+  set(MDBX_COMPILE_FLAGS "${MDBX_COMPILE_FLAGS}")
   add_definitions(
     -DMDBX_COMPILE_FLAGS="$<$<CONFIG:Debug>:${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_DEFINES_DEBUG}>$<$<CONFIG:Release>:${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_DEFINES_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_DEFINES_RELWITHDEBINFO}>$<$<CONFIG:MinSizeRel>:${CMAKE_C_FLAGS_MINSIZEREL} ${CMAKE_C_DEFINES_MINSIZEREL}>"
     )
 else()
   message(STATUS "MDBX Compile Flags: ${MDBX_COMPILE_FLAGS}")
-  set(MDBX_COMPILE_FLAGS "\"${MDBX_COMPILE_FLAGS}\"")
+  set(MDBX_COMPILE_FLAGS "${MDBX_COMPILE_FLAGS}")
 endif()
+
+# get compiler info
+execute_process(COMMAND sh -c "${CMAKE_C_COMPILER} --version | head -1"
+  OUTPUT_VARIABLE MDBX_BUILD_COMPILER
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+  ERROR_QUIET
+  RESULT_VARIABLE rc)
+if(rc OR NOT MDBX_BUILD_COMPILER)
+  set(MDBX_BUILD_COMPILER "")
+else()
+  set(MDBX_BUILD_COMPILER " | ${MDBX_BUILD_COMPILER}" )
+endif()
+string(STRIP "${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}${MDBX_BUILD_COMPILER}" MDBX_BUILD_COMPILER)
 
 # make a build-target triplet
 if(CMAKE_CONFIGURATION_TYPES)
   # via per-configuration define
-  add_definitions(-DMDBX_BUILD_TARGET="${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-$<CONFIG>")
+  add_definitions(-DMDBX_BUILD_TARGET="${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}-$<CONFIG>")
   set(MDBX_BUILD_TARGET "MDBX_BUILD_TARGET")
 else()
-  string(STRIP "\"${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_BUILD_TYPE}\"" MDBX_BUILD_TARGET)
+  string(STRIP "${CMAKE_SYSTEM_PROCESSOR}-${CMAKE_SYSTEM_NAME}-${CMAKE_BUILD_TYPE}" MDBX_BUILD_TARGET)
 endif()
 
-# generate version file
+# options
 string(TIMESTAMP MDBX_BUILD_TIMESTAMP UTC)
-string(REPLACE "  " " " MDBX_OPTIONS "-DCMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX}"
-  " -DENABLE_ASAN=${ENABLE_ASAN}"
-  " -DENABLE_VALGRIND=${ENABLE_VALGRIND}"
-  " -DENABLE_GPROF=${ENABLE_GPROF}"
-  " -DENABLE_GCOV=${ENABLE_GCOV}"
-  " -DENABLE_BACKTRACE=${ENABLE_BACKTRACE}"
-  )
-
-string(STRIP "${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}" MDBX_BUILD_COMPILER)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c.in ${CMAKE_CURRENT_BINARY_DIR}/version.c)
-
-set(options VERSION C_COMPILER C_COMPILER DEFINITIONS
-  ENABLE_GCOV ENABLE_GPROF ENABLE_VALGRIND ENABLE_BACKTRACE BUILD_TARGET
-  HAVE_BFD ENABLE_ASAN)
-foreach(option IN LISTS options)
-  if(DEFINED MDBX_${option})
-    set(value ${MDBX_${option}})
-  elseif(DEFINED ${option})
-    set(value "${${option}}")
+set(MDBX_OPTIONS_STRING -DCMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
+foreach(item IN LISTS MDBX_BUILD_OPTIONS)
+  if(DEFINED ${item} AND NOT "${${item}}" STREQUAL "AUTO")
+    string(APPEND MDBX_OPTIONS_STRING " -D${item}=${${item}}")
+    message(STATUS "${item}: ${${item}}")
   else()
-    set(value "${CMAKE_${option}}")
+    unset(${item} CACHE)
+    set(${item}_AUTO ON)
+    string(APPEND MDBX_OPTIONS_STRING " -D${item}=AUTO")
+    message(STATUS "${item}: AUTO")
   endif()
-  message(STATUS "MDBX_${option}: ${value}")
-endforeach(option)
+endforeach()
+set(options VERSION C_COMPILER CXX_COMPILER DEFINITIONS)
+foreach(item IN LISTS options)
+  if(DEFINED ${item})
+    set(value "${${item}}")
+  elseif(DEFINED MDBX_${item})
+    set(item MDBX_${item})
+    set(value "${${item}}")
+  elseif(DEFINED CMAKE_${item})
+    set(item CMAKE_${item})
+    set(value "${${item}}")
+  else()
+    set(value "undefined")
+  endif()
+  message(STATUS "${item}: ${value}")
+endforeach(item)
+
+# generate version file
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/version.c" ESCAPE_QUOTES)
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h.in"
+  "${CMAKE_CURRENT_BINARY_DIR}/mdbx-config.h")
+
+target_compile_definitions(mdbx PRIVATE MDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/mdbx-config.h")
 
 add_subdirectory(tools)

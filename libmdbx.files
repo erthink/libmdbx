@@ -9,6 +9,7 @@ TODO.md
 mdbx.h
 src/CMakeLists.txt
 src/alloy.c
+src/elements/config.h.in
 src/elements/data.c
 src/elements/internals.h
 src/elements/defs.h

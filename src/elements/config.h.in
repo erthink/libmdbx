@@ -1,10 +1,4 @@
-#cmakedefine HAVE_UNISTD_H
-#cmakedefine HAVE_SYS_UIO_H
-#cmakedefine HAVE_SYS_STAT_H
-#cmakedefine HAVE_TIMEVAL_TV_USEC
-#cmakedefine HAVE_TIMESPEC_TV_NSEC
-#cmakedefine CMAKE_HAVE_PTHREAD_H
-#cmakedefine HAVE_VALGRIND_MEMCHECK_H
+﻿#cmakedefine HAVE_VALGRIND_MEMCHECK_H
 #cmakedefine HAS_RELAXED_CONSTEXPR
 
 #cmakedefine LTO_ENABLED
@@ -14,3 +8,29 @@
 #cmakedefine ENABLE_ASAN
 
 #cmakedefine01 HAVE_MDBX_VERSIONINFO
+
+/* Common */
+#cmakedefine01 MDBX_TXN_CHECKPID
+#cmakedefine01 MDBX_TXN_CHECKOWNER
+
+/* Windows */
+#cmakedefine MDBX_BUILD_DLL
+#cmakedefine01 MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#cmakedefine MDBX_AVOID_CRT
+
+/* MacOS */
+#cmakedefine01 MDBX_OSX_SPEED_INSTEADOF_DURABILITY
+
+/* POSIX */
+#cmakedefine01 MDBX_USE_ROBUST
+#cmakedefine01 MDBX_USE_OFDLOCKS
+
+/* Simulate "AUTO" values of tristate options */
+#cmakedefine MDBX_USE_ROBUST_AUTO
+#ifdef MDBX_USE_ROBUST_AUTO
+#undef MDBX_USE_ROBUST
+#endif
+#cmakedefine MDBX_USE_OFDLOCKS_AUTO
+#ifdef MDBX_USE_OFDLOCKS_AUTO
+#undef MDBX_USE_OFDLOCKS
+#endif

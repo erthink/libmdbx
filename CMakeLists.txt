@@ -61,6 +61,13 @@ else()
   endif()
 endif()
 
+macro(add_mdbx_option NAME DESCPTION DEFAULT)
+  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
+  if(NOT ${DEFAULT} STREQUAL "AUTO")
+    option(${NAME} "${DESCPTION}" ${DEFAULT})
+  endif()
+endmacro()
+
 # only for compatibility testing
 # set(CMAKE_CXX_STANDARD 14)
 
@@ -150,7 +157,11 @@ endif()
 
 find_package(Threads REQUIRED)
 
-if(NOT SUBPROJECT)
+if(SUBPROJECT)
+  if(NOT DEFINED BUILD_SHARED_LIBS)
+    option(BUILD_SHARED_LIBS "Build shared libraries (DLLs)." OFF)
+  endif()
+else()
   option(CMAKE_POSITION_INDEPENDENT_CODE "Generate position independed (PIC)." ON)
   option(BUILD_SHARED_LIBS "Build shared libraries (DLLs)." ON)
   if (CC_HAS_ARCH_NATIVE)
@@ -249,9 +260,46 @@ if(NOT SUBPROJECT)
   endif()
 
   setup_compile_flags()
-endif(NOT SUBPROJECT)
+endif(SUBPROJECT)
 
 option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
+
+##############################################################################
+##############################################################################
+#
+#         ####   #####    #####     #     ####   #    #   ####
+#        #    #  #    #     #       #    #    #  ##   #  #
+#        #    #  #    #     #       #    #    #  # #  #   ####
+#        #    #  #####      #       #    #    #  #  # #       #
+#        #    #  #          #       #    #    #  #   ##  #    #
+#         ####   #          #       #     ####   #    #   ####
+#
+
+set(MDBX_BUILD_OPTIONS ENABLE_ASAN ENABLE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
+add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library as single object file" ON)
+add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
+add_mdbx_option(MDBX_TXN_CHECKPID "Paranoid checking PID inside libmdbx's API" OFF)
+mark_as_advanced(MDBX_TXN_CHECKPID)
+if(APPLE)
+  add_mdbx_option(MDBX_OSX_SPEED_INSTEADOF_DURABILITY "Disable use fcntl(F_FULLFSYNC) in favor of speed" OFF)
+  mark_as_advanced(MDBX_OSX_SPEED_INSTEADOF_DURABILITY)
+endif()
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  add_mdbx_option(MDBX_AVOID_CRT "Avoid dependence from MSVC CRT" ${BUILD_SHARED_LIBS})
+  if(NOT BUILD_SHARED_LIBS)
+    add_mdbx_option(MDBX_CONFIG_MANUAL_TLS_CALLBACK
+      "Provide mdbx_dll_callback() for manual initialization" OFF)
+    mark_as_advanced(MDBX_CONFIG_MANUAL_TLS_CALLBACK)
+  endif()
+else()
+  add_mdbx_option(MDBX_USE_ROBUST "Use POSIX.1-2008 robust mutexes" AUTO)
+  mark_as_advanced(MDBX_USE_ROBUST)
+  add_mdbx_option(MDBX_USE_OFDLOCKS "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
+  mark_as_advanced(MDBX_USE_OFDLOCKS)
+endif()
+
+################################################################################
+################################################################################
 
 ################################################################################
 
@@ -260,9 +308,6 @@ if(PROVIDE_VERSIONINFO)
 else()
   set(HAVE_MDBX_VERSIONINFO FALSE)
 endif()
-
-set(LIBMDBX_CONFIG_H "${CMAKE_CURRENT_BINARY_DIR}/mdbx-build-config.h")
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/src/elements/config.h.in ${LIBMDBX_CONFIG_H})
 
 add_subdirectory(src)
 if(MDBX_ENABLE_TESTS)

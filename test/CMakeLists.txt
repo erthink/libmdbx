@@ -63,7 +63,7 @@ if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))
   set_target_properties(mdbx_test PROPERTIES LINK_FLAGS "-fvisibility=hidden")
 endif()
 
-target_link_libraries(mdbx_test mdbx ${LIB_MATH})
+target_link_libraries(mdbx_test mdbx ${LIB_MATH} ${CMAKE_THREAD_LIBS_INIT})
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   target_link_libraries(mdbx_test winmm.lib)
 endif()
