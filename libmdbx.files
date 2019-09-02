@@ -12,7 +12,6 @@ src/alloy.c
 src/elements/data.c
 src/elements/internals.h
 src/elements/defs.h
-src/elements/lck-linux.c
 src/elements/lck-posix.c
 src/elements/lck-windows.c
 src/elements/core.c

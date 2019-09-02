@@ -341,17 +341,32 @@ mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
 /* global `initial` lock for lockfile initialization,
  * exclusive/shared locking first cacheline */
 
-/* FIXME: locking schema/algo descritpion.
- ?-?  = free
- S-?  = used
- E-?  = exclusive-read
- ?-S
- ?-E  = middle
- S-S
- S-E  = locked
- E-S
- E-E  = exclusive-write
-*/
+/* Briefly descritpion of locking schema/algorithm:
+ *  - Windows does not support upgrading or downgrading for file locking.
+ *  - Therefore upgrading/downgrading is emulated by shared and exclusive
+ *    locking of upper and lower halves.
+ *  - In other words, we have FSM with possible 9 states,
+ *    i.e. free/shared/exclusive x free/shared/exclusive == 9.
+ *    Only 6 states of FSM are used, which 2 of ones are transitive.
+ *
+ *  The mdbx_lck_seize() moves the locking-FSM from the initial free/unlocked
+ *  state to the "exclusive write" (and returns MDBX_RESULT_TRUE) if possible,
+ *  or to the "used" (and returns MDBX_RESULT_FALSE).
+ *
+ *  The mdbx_lck_downgrade() moves the locking-FSM from "exclusive write"
+ *  state to the "used" (i.e. shared) state.
+ *
+ * States:
+ *   ?-?  = free, i.e. unlocked
+ *   S-?  = used, i.e. shared lock
+ *   E-?  = exclusive-read, i.e. operational exclusive
+ *   ?-S
+ *   ?-E  = middle (transitive state)
+ *   S-S
+ *   S-E  = locked (transitive state)
+ *   E-S
+ *   E-E  = exclusive-write, i.e. exclusive due (re)initialization
+ */
 
 static void lck_unlock(MDBX_env *env) {
   int rc;
@@ -414,8 +429,8 @@ MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
 }
 
 /* Seize state as 'exclusive-write' (E-E and returns MDBX_RESULT_TRUE)
- * or as 'used' (S-? and returns MDBX_RESULT_FALSE), otherwise returns an error
- */
+ * or as 'used' (S-? and returns MDBX_RESULT_FALSE).
+ * Oherwise returns an error. */
 static int internal_seize_lck(HANDLE lfd) {
   int rc;
   assert(lfd != INVALID_HANDLE_VALUE);
@@ -511,23 +526,25 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env, bool complete) {
+MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
   /* Transite from exclusive state (E-?) to used (S-?) */
   assert(env->me_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
+#if 1
   if (env->me_flags & MDBX_EXCLUSIVE)
     return MDBX_SUCCESS /* nope since files were must be opened non-shareable */
         ;
-
+#else
   /* 1) must be at E-E (exclusive-write) */
-  if (!complete) {
+  if (env->me_flags & MDBX_EXCLUSIVE) {
     /* transite from E-E to E_? (exclusive-read) */
     if (!funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s(%s) failed: errcode %u", mdbx_func_,
                  "E-E(exclusive-write) >> E-?(exclusive-read)", GetLastError());
     return MDBX_SUCCESS /* 2) now at E-? (exclusive-read), done */;
   }
+#endif
 
   /* 3) now at E-E (exclusive-write), transite to ?_E (middle) */
   if (!funlock(env->me_lfd, LCK_LOWER))

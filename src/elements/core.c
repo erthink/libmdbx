@@ -674,93 +674,80 @@ static uint64_t rrxmrrxmsx_0(uint64_t v) {
   return v ^ v >> 28;
 }
 
-static int uniq_poke(const mdbx_mmap_t *map, const uint64_t cadabra) {
-  int rc;
-  if (map->lck) {
-    map->lck->mti_bait_uniqueness = cadabra;
-    mdbx_flush_noncoherent_cpu_writeback();
-    rc = MDBX_SUCCESS;
-  } else {
-    rc = mdbx_pwrite(map->fd, &cadabra, sizeof(map->lck->mti_bait_uniqueness),
-                     offsetof(MDBX_lockinfo, mti_bait_uniqueness));
-  }
-  mdbx_trace("uniq-poke: %s, cadabra 0x016%" PRIx64 ", rc %d",
-             map->lck ? "mem" : "file", cadabra, rc);
-  return rc;
-}
-
-static int uniq_peek(const mdbx_mmap_t *map, const uint64_t cadabra) {
+static int uniq_peek(const mdbx_mmap_t *pending, mdbx_mmap_t *scan) {
   int rc;
   uint64_t bait;
-  if (map->lck) {
-    mdbx_invalidate_mmap_noncoherent_cache(map->lck, sizeof(*map->lck));
-    bait = map->lck->mti_bait_uniqueness;
+  if (pending->address) {
+    bait = pending->lck->mti_bait_uniqueness;
     rc = MDBX_SUCCESS;
   } else {
-    rc = mdbx_pread(map->fd, &bait, sizeof(map->lck->mti_bait_uniqueness),
-                    offsetof(MDBX_lockinfo, mti_bait_uniqueness));
+    bait = 0 /* hush MSVC warning */;
+    rc = mdbx_msync(scan, 0, sizeof(MDBX_lockinfo), true);
+    if (rc == MDBX_SUCCESS)
+      rc =
+          mdbx_pread(pending->fd, &bait, sizeof(scan->lck->mti_bait_uniqueness),
+                     offsetof(MDBX_lockinfo, mti_bait_uniqueness));
   }
+  if (likely(rc == MDBX_SUCCESS) && bait == scan->lck->mti_bait_uniqueness)
+    rc = MDBX_RESULT_TRUE;
 
-  if (unlikely(!MDBX_IS_ERROR(rc)))
-    rc = (bait == cadabra) ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
-
-  mdbx_trace("uniq-peek: %s, cadabra 0x%016" PRIx64 ", bait 0x%016" PRIx64
-             ",%s rc %d",
-             map->lck ? "mem" : "file", cadabra, bait,
+  mdbx_trace("uniq-peek: %s, bait 0x%016" PRIx64 ",%s rc %d",
+             pending->lck ? "mem" : "file", bait,
              (rc == MDBX_RESULT_TRUE) ? " found," : (rc ? " FAILED," : ""), rc);
   return rc;
 }
 
-__cold static int uniq_probe(const mdbx_mmap_t *map, const mdbx_pid_t pid,
-                             MDBX_env **found) {
-  if (inprocess_lcklist_head == RTHC_ENVLIST_END) {
-    mdbx_info("<< uniq-probe: pid %u, env-list empty, skip probing, rc %d",
-              (unsigned)pid, MDBX_RESULT_TRUE);
-    return MDBX_RESULT_TRUE;
+static int uniq_poke(const mdbx_mmap_t *pending, mdbx_mmap_t *scan,
+                     uint64_t *abra) {
+  if (*abra == 0) {
+    const mdbx_tid_t tid = mdbx_thread_self();
+    size_t uit = 0;
+    memcpy(&uit, &tid, (sizeof(tid) < sizeof(uit)) ? sizeof(tid) : sizeof(uit));
+    *abra =
+        rrxmrrxmsx_0(mdbx_osal_monotime() + UINT64_C(5873865991930747) * uit);
   }
+  const uint64_t cadabra =
+      rrxmrrxmsx_0(*abra + UINT64_C(7680760450171793) * (unsigned)mdbx_getpid())
+          << 24 |
+      *abra >> 40;
+  scan->lck->mti_bait_uniqueness = cadabra;
+  mdbx_flush_noncoherent_cpu_writeback();
+  *abra = *abra * UINT64_C(6364136223846793005) + 1;
+  return uniq_peek(pending, scan);
+}
 
-  const mdbx_tid_t tid = mdbx_thread_self();
-  size_t uit = 0;
-  memcpy(&uit, &tid, (sizeof(tid) < sizeof(uit)) ? sizeof(tid) : sizeof(uit));
-  uint64_t abra =
-      rrxmrrxmsx_0(mdbx_osal_monotime() + UINT64_C(5873865991930747) * uit);
-
-  for (unsigned bits = 4; bits; bits >>= 1) {
-    abra = abra * UINT64_C(6364136223846793005) + 1;
-    const uint64_t cadabra =
-        rrxmrrxmsx_0(abra + UINT64_C(7680760450171793) * pid) << 20 |
-        abra >> 44;
-
-    int err = uniq_poke(map, cadabra);
-    *found = nullptr;
-    for (MDBX_env *env = inprocess_lcklist_head;
-         err == MDBX_SUCCESS && env != RTHC_ENVLIST_END;
-         env = env->me_lcklist_next) {
-      err = uniq_peek(&env->me_lck_mmap, cadabra);
-      if (err == MDBX_RESULT_TRUE)
-        *found = env;
+__cold static int uniq_check(const mdbx_mmap_t *pending, MDBX_env **found) {
+  *found = nullptr;
+  uint64_t salt = 0;
+  for (MDBX_env *scan = inprocess_lcklist_head; scan != RTHC_ENVLIST_END;
+       scan = scan->me_lcklist_next) {
+    int err = scan->me_lck_mmap.lck->mti_bait_uniqueness
+                  ? uniq_peek(pending, &scan->me_lck_mmap)
+                  : uniq_poke(pending, &scan->me_lck_mmap, &salt);
+    if (err == MDBX_RESULT_TRUE)
+      err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
+    if (err == MDBX_RESULT_TRUE) {
+      (void)mdbx_msync(&scan->me_lck_mmap, 0, sizeof(MDBX_lockinfo), false);
+      err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     }
-
-    if (unlikely(MDBX_IS_ERROR(err))) {
-      mdbx_verbose("<< uniq-probe: pid %u, uit %zu, failed rc %d",
-                   (unsigned)pid, uit, err);
-      return err;
-    }
-
-    bits += 8 & err;
-    if (bits == 15) {
-      mdbx_info("<< uniq-probe: pid %u, uit %zu, found %p", (unsigned)pid, uit,
-                *found);
+    if (err == MDBX_RESULT_TRUE) {
+      err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
+      *found = scan;
+      mdbx_info("<< uniq-probe: found %p", *found);
       return MDBX_RESULT_FALSE;
     }
+    if (unlikely(err != MDBX_SUCCESS)) {
+      mdbx_verbose("<< uniq-probe: failed rc %d", err);
+      return err;
+    }
   }
 
-  mdbx_info("<< uniq-probe: pid %u, uit %zu, unique", (unsigned)pid, uit);
+  mdbx_info("<< uniq-probe: unique");
   return MDBX_RESULT_TRUE;
 }
 
 static int lcklist_detach_locked(MDBX_env *env) {
-  MDBX_env *dup = nullptr;
+  MDBX_env *inprocess_neighbor = nullptr;
   int rc = MDBX_SUCCESS;
   if (env->me_lcklist_next != nullptr) {
     mdbx_ensure(env, env->me_lcklist_next != nullptr);
@@ -776,11 +763,11 @@ static int lcklist_detach_locked(MDBX_env *env) {
     mdbx_ensure(env, env->me_lcklist_next == nullptr);
   }
 
-  rc = uniq_probe(&env->me_lck_mmap, env->me_pid, &dup);
-  if (!dup && env->me_live_reader)
+  rc = uniq_check(&env->me_lck_mmap, &inprocess_neighbor);
+  if (!inprocess_neighbor && env->me_live_reader)
     (void)mdbx_rpid_clear(env);
   if (!MDBX_IS_ERROR(rc))
-    rc = mdbx_lck_destroy(env, dup);
+    rc = mdbx_lck_destroy(env, inprocess_neighbor);
   return rc;
 }
 
@@ -6731,11 +6718,15 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     return err;
   }
 
+  MDBX_env *inprocess_neighbor = nullptr;
   if (err == MDBX_RESULT_TRUE) {
-    MDBX_env *unused_lckdup_found;
-    err = uniq_probe(&env->me_lck_mmap, env->me_pid, &unused_lckdup_found);
+    err = uniq_check(&env->me_lck_mmap, &inprocess_neighbor);
     if (MDBX_IS_ERROR(err))
       goto bailout;
+    if (inprocess_neighbor && (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE)) {
+      err = MDBX_BUSY;
+      goto bailout;
+    }
   }
   const int lck_seize_rc = err;
 
@@ -6814,6 +6805,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
     /* LY: exlcusive mode, reset lck */
     memset(env->me_lck, 0, (size_t)size);
+    mdbx_jitter4testing(false);
     env->me_lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
     env->me_lck->mti_os_and_format = MDBX_LOCK_FORMAT;
   } else {
@@ -6966,15 +6958,9 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
         MDBX_WRITEMAP | MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC;
     if (lck_rc == MDBX_RESULT_TRUE) {
       env->me_lck->mti_envmode = env->me_flags & (mode_flags | MDBX_RDONLY);
-      if ((env->me_flags & MDBX_EXCLUSIVE) == 0) {
-        /* LY: downgrade lock only if exclusive access not requested.
-         *     in case exclusive==1, just leave value as is. */
-        rc = mdbx_lck_downgrade(env, true);
-        mdbx_debug("lck-downgrade-full: rc %i ", rc);
-      } else {
-        rc = mdbx_lck_downgrade(env, false);
-        mdbx_debug("lck-downgrade-partial: rc %i ", rc);
-      }
+      rc = mdbx_lck_downgrade(env);
+      mdbx_debug("lck-downgrade-%s: rc %i",
+                 (env->me_flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
       if (rc != MDBX_SUCCESS)
         goto bailout;
     } else {

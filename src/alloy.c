@@ -22,9 +22,7 @@
 #include "elements/core.c"
 #include "elements/osal.c"
 
-#if defined(__linux__) || defined(__gnu_linux__)
-#include "elements/lck-linux.c"
-#elif defined(_WIN32) || defined(_WIN64)
+#if defined(_WIN32) || defined(_WIN64)
 #include "elements/lck-windows.c"
 #else
 #include "elements/lck-posix.c"
