@@ -75,6 +75,6 @@ test_script:
     }
 
 on_failure:
-- ps: Push-AppveyorArtifact test.log
-- ps: Push-AppveyorArtifact test.db
-- ps: Push-AppveyorArtifact chk.log
+- ps: Push-AppveyorArtifact _build\test.log
+- ps: Push-AppveyorArtifact _build\test.db
+- ps: Push-AppveyorArtifact _build\chk.log
