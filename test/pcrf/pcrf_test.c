@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2016-2019 Leonid Yuriev <leo@yuriev.ru>.
  * Copyright 2015 Vladimir Romanov
  * <https://www.linkedin.com/in/vladimirromanov>, Yota Lab.
  *
@@ -36,7 +36,7 @@
   (int)((addr) >> 24), (int)((addr) >> 16 & 0xff), (int)((addr) >> 8 & 0xff),  \
       (int)((addr)&0xff)
 
-char opt_db_path[PATH_MAX] = "./lmdbx_bench2";
+char opt_db_path[PATH_MAX] = "./mdbx_bench2";
 static MDBX_env *env;
 #define REC_COUNT 10240000
 int64_t ids[REC_COUNT * 10];
@@ -126,7 +126,7 @@ static void db_connect() {
   printf("Connection open\n");
 }
 
-static void create_record(int64_t record_id) {
+static void create_record(uint64_t record_id) {
   MDBX_dbi dbi_session;
   MDBX_dbi dbi_session_id;
   MDBX_dbi dbi_event;
@@ -136,11 +136,13 @@ static void create_record(int64_t record_id) {
   session_data_t data;
   // transaction init
   snprintf(data.session_id1, sizeof(data.session_id1),
-           "prefix%02ld_%02ld.fill.fill.fill.fill.fill.fill;%ld",
-           record_id % 3 + 1, record_id % 9 + 1, record_id);
+           "prefix%02u_%02u.fill.fill.fill.fill.fill.fill;%" PRIu64,
+           (unsigned)(record_id % 3) + 1, (unsigned)(record_id % 9) + 1,
+           record_id);
   snprintf(data.session_id2, sizeof(data.session_id2),
-           "dprefix%ld;%ld.fill.fill.;suffix", record_id,
-           record_id % 1000000000 + 99999);
+           "dprefix%" PRIu64 ";%" PRIu64 ".fill.fill.;suffix", record_id,
+           (record_id + UINT64_C(1442695040888963407)) %
+               UINT64_C(6364136223846793005));
   snprintf(data.ip, sizeof(data.ip), "%d.%d.%d.%d",
            IP_PRINTF_ARG_HOST(record_id & 0xFFFFFFFF));
   event.obj_id = record_id;
@@ -241,8 +243,9 @@ static void get_db_stat(const char *db, int64_t *ms_branch_pages,
   MDBX_CHECK(mdbx_dbi_open(txn, db, MDBX_CREATE, &dbi));
   MDBX_CHECK(mdbx_dbi_stat(txn, dbi, &stat, sizeof(stat)));
   mdbx_txn_abort(txn);
-  printf("%15s | %15ld | %5u | %10ld | %10ld | %11ld |\n", db,
-         stat.ms_branch_pages, stat.ms_depth, stat.ms_entries,
+  printf("%15s | %15" PRIu64 " | %5u | %10" PRIu64 " | %10" PRIu64
+         " | %11" PRIu64 " |\n",
+         db, stat.ms_branch_pages, stat.ms_depth, stat.ms_entries,
          stat.ms_leaf_pages, stat.ms_overflow_pages);
   (*ms_branch_pages) += stat.ms_branch_pages;
   (*ms_leaf_pages) += stat.ms_leaf_pages;
@@ -287,8 +290,8 @@ static void periodic_stat(void) {
   get_db_stat("session_id", &ms_branch_pages, &ms_leaf_pages);
   get_db_stat("event", &ms_branch_pages, &ms_leaf_pages);
   get_db_stat("ip", &ms_branch_pages, &ms_leaf_pages);
-  printf("%15s | %15ld | %5s | %10s | %10ld | %11s |\n", "", ms_branch_pages,
-         "", "", ms_leaf_pages, "");
+  printf("%15s | %15" PRIu64 " | %5s | %10s | %10" PRIu64 " | %11s |\n", "",
+         ms_branch_pages, "", "", ms_leaf_pages, "");
 
   static int64_t prev_add_count;
   static int64_t prev_del_count;
@@ -297,26 +300,32 @@ static void periodic_stat(void) {
   static int64_t t = -1;
   if (t > 0) {
     int64_t delta = (getClockUs() - t);
-    printf(
-        "CPS: add %ld, delete %ld, items processed - %ldK data=%ldK key=%ldK\n",
-        (mdbx_add_count - prev_add_count) * 1000000 / delta,
-        (mdbx_del_count - prev_del_count) * 1000000 / delta, obj_id / 1024,
-        mdbx_data_size / 1024, mdbx_key_size / 1024);
-    printf("usage data=%ld%%", ((mdbx_data_size + mdbx_key_size) * 100) /
-                                   ((ms_leaf_pages + ms_branch_pages) * 4096));
+    printf("CPS: add %" PRIu64 ", delete %" PRIu64
+           ", items processed - %" PRIu64 "K data=%" PRIu64 "K key=%" PRIu64
+           "K\n",
+           (mdbx_add_count - prev_add_count) * 1000000 / delta,
+           (mdbx_del_count - prev_del_count) * 1000000 / delta, obj_id / 1024,
+           mdbx_data_size / 1024, mdbx_key_size / 1024);
+    printf("usage data=%" PRIu64 "%%",
+           ((mdbx_data_size + mdbx_key_size) * 100) /
+               ((ms_leaf_pages + ms_branch_pages) * 4096));
     if (prev_add_time != mdbx_add_time) {
-      printf(" Add : %ld c/s", (mdbx_add_count - prev_add_count) * 1000000 /
-                                   (mdbx_add_time - prev_add_time));
+      printf(" Add : %" PRIu64 " c/s", (mdbx_add_count - prev_add_count) *
+                                           1000000 /
+                                           (mdbx_add_time - prev_add_time));
     }
     if (prev_del_time != mdbx_del_time) {
-      printf(" Del : %ld c/s", (mdbx_del_count - prev_del_count) * 1000000 /
-                                   (mdbx_del_time - prev_del_time));
+      printf(" Del : %" PRIu64 " c/s", (mdbx_del_count - prev_del_count) *
+                                           1000000 /
+                                           (mdbx_del_time - prev_del_time));
     }
     if (mdbx_add_time) {
-      printf(" tAdd : %ld c/s", mdbx_add_count * 1000000 / mdbx_add_time);
+      printf(" tAdd : %" PRIu64 " c/s",
+             mdbx_add_count * 1000000 / mdbx_add_time);
     }
     if (mdbx_del_time) {
-      printf(" tDel : %ld c/s", mdbx_del_count * 1000000 / mdbx_del_time);
+      printf(" tDel : %" PRIu64 " c/s",
+             mdbx_del_count * 1000000 / mdbx_del_time);
     }
     puts("");
   }
@@ -385,14 +394,14 @@ int main(int argc, char **argv) {
       id = get_id_from_pool();
       delete_record(id);
     }
-    //        for (i = 0; i < 50; i++) {
-    //            int64_t id = obj_id++;
-    //            create_record(id);
-    //            add_id_to_pool(id);
-    //        }
-    // int64_t id = obj_id++;
-    // create_record(id);
-    // add_id_to_pool(id);
+    //    for (i = 0; i < 50; i++) {
+    //      int64_t id = obj_id++;
+    //      create_record(id);
+    //      add_id_to_pool(id);
+    //    }
+    //    int64_t id = obj_id++;
+    //    create_record(id);
+    //    add_id_to_pool(id);
     int64_t now = getClockUs();
     if ((now - t) > 10000000L) {
       periodic_stat();

@@ -53,6 +53,8 @@ test/osal-unix.cc
 test/osal-windows.cc
 test/osal.h
 test/pcrf/CMakeLists.txt
+test/pcrf/README.md
+test/pcrf/pcrf_test.c
 test/test.cc
 test/test.h
 test/try.cc
