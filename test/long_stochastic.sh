@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 if ! which make cc c++ tee lz4 >/dev/null; then
 	echo "Please install the following prerequisites: make cc c++ tee lz4" >&2
 	exit 1
@@ -7,19 +7,29 @@ fi
 set -euo pipefail
 
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
+
+###############################################################################
+# 1. clean data from prev runs and examine available RAM
+
+WANNA_MOUNT=0
 case ${UNAME} in
 	Linux)
 		MAKE=make
 		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
+			for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]*); do
+				rm -rf $old_test_dir
+			done
 			TESTDB_DIR="/dev/shm/mdbx-test.$$"
 		fi
 		mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+
 		if LC_ALL=C free | grep -q -i available; then
 			ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 7) / 1024))
 		else
 			ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 4) / 1024))
 		fi
 	;;
+
 	FreeBSD)
 		MAKE=gmake
 		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
@@ -27,17 +37,45 @@ case ${UNAME} in
 				umount $old_test_dir && rm -r $old_test_dir
 			done
 			TESTDB_DIR="/tmp/mdbx-test.$$"
-			rm -rf $TESTDB_DIR && mkdir -p $TESTDB_DIR && mount -t tmpfs tmpfs $TESTDB_DIR
+			rm -rf $TESTDB_DIR && mkdir -p $TESTDB_DIR
+			WANNA_MOUNT=1
 		else
 			mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
 		fi
+
 		ram_avail_mb=$(($(LC_ALL=C vmstat -s | grep -ie '[0-9] pages free$' | cut -d p -f 1) * ($(LC_ALL=C vmstat -s | grep -ie '[0-9] bytes per page$' | cut -d b -f 1) / 1024) / 1024))
 	;;
+
+	Darwin)
+		MAKE=make
+		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
+			for vol in $(ls -d /Volumes/mdx[0-9]*[0-9]tst); do
+				disk=$(mount | grep $vol | cut -d ' ' -f 1)
+				echo "umount: volume $vol disk $disk"
+				hdiutil unmount $vol -force
+				hdiutil detach $disk
+			done
+			TESTDB_DIR="/Volumes/mdx$$tst"
+			WANNA_MOUNT=1
+		else
+			mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+		fi
+
+		pagesize=$(($(LC_ALL=C vm_stat | grep -o 'page size of [0-9]\+ bytes' | cut -d' ' -f 4) / 1024))
+		freepages=$(LC_ALL=C vm_stat | grep '^Pages free:' | grep -o '[0-9]\+\.$' | cut -d'.' -f 1)
+		ram_avail_mb=$((pagesize * freepages / 1024))
+		echo "pagesize ${pagesize}K, freepages ${freepages}, ram_avail_mb ${ram_avail_mb}"
+
+	;;
+
 	*)
 		echo "FIXME: ${UNAME} not supported by this script"
 		exit 2
 	;;
 esac
+
+###############################################################################
+# 2. estimate reasonable RAM space for test-db
 
 echo "=== ${ram_avail_mb}M RAM available"
 ram_reserve4logs_mb=1234
@@ -70,10 +108,41 @@ if [ $db_size_mb -gt 3072 ]; then
 fi
 echo "=== use ${db_size_mb}M for DB"
 
+###############################################################################
+# 3. Create test-directory in ramfs/tmpfs, i.e. create/format/mount if required
+case ${UNAME} in
+	Linux)
+	;;
+
+	FreeBSD)
+		if [[ WANNA_MOUNT ]]; then
+			mount -t tmpfs tmpfs $TESTDB_DIR
+		fi
+	;;
+
+	Darwin)
+		if [[ WANNA_MOUNT ]]; then
+			ramdisk_size_mb=$((42 + db_size_mb * 2 + ram_reserve4logs_mb))
+			number_of_sectors=$((ramdisk_size_mb * 2048))
+			ramdev=$(hdiutil attach -nomount ram://${number_of_sectors})
+			diskutil erasevolume ExFAT "mdx$$tst" ${ramdev}
+		fi
+	;;
+
+	*)
+		echo "FIXME: ${UNAME} not supported by this script"
+		exit 2
+	;;
+esac
+
+###############################################################################
+# 4. Run basic test, i.e. `make check`
+
 ${MAKE} TESTDB=${TESTDB_DIR}/smoke.db TESTLOG=${TESTDB_DIR}/smoke.log check
 rm -f ${TESTDB_DIR}/*
 
 ###############################################################################
+# 5. run stochastic iterations
 
 function rep9 { printf "%*s" $1 '' | tr ' ' '9'; }
 function join { local IFS="$1"; shift; echo "$*"; }
@@ -101,7 +170,7 @@ function probe {
 		|| (echo "FAILED"; exit 1)
 }
 
-###############################################################################
+#------------------------------------------------------------------------------
 
 count=0
 for nops in $(seq 2 6); do
