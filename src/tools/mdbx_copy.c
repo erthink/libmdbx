@@ -56,9 +56,17 @@ int main(int argc, char *argv[]) {
     else if (argv[1][1] == 'c' && argv[1][2] == '\0')
       cpflags |= MDBX_CP_COMPACT;
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
-      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_build.datetime);
-      exit(EXIT_SUCCESS);
+      printf("mdbx_copy version %d.%d.%d.%d\n"
+             " - source: %s %s, commit %s, tree %s\n"
+             " - build: %s for %s by %s\n"
+             " - flags: %s\n"
+             " - options: %s\n",
+             mdbx_version.major, mdbx_version.minor, mdbx_version.release,
+             mdbx_version.revision, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit,
+             mdbx_version.git.tree, mdbx_build.datetime, mdbx_build.target,
+             mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      return EXIT_SUCCESS;
     } else
       argc = 0;
   }
@@ -80,6 +88,11 @@ int main(int argc, char *argv[]) {
   signal(SIGINT, signal_handler);
   signal(SIGTERM, signal_handler);
 #endif /* !WINDOWS */
+
+  printf("mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
+         mdbx_version.git.describe, mdbx_version.git.datetime,
+         mdbx_version.git.tree, argv[1], (argc == 2) ? "stdout" : argv[2]);
+  fflush(NULL);
 
   act = "opening environment";
   rc = mdbx_env_create(&env);

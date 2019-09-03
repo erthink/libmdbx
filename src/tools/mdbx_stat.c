@@ -71,9 +71,8 @@ int main(int argc, char *argv[]) {
   char *subname = NULL;
   int alldbs = 0, envinfo = 0, envflags = 0, freinfo = 0, rdrinfo = 0;
 
-  if (argc < 2) {
+  if (argc < 2)
     usage(prog);
-  }
 
   /* -a: print stat of main DB and all subDBs
    * -s: print stat of only the named subDB
@@ -87,10 +86,17 @@ int main(int argc, char *argv[]) {
   while ((o = getopt(argc, argv, "Vaefnrs:")) != EOF) {
     switch (o) {
     case 'V':
-      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_build.datetime);
-      exit(EXIT_SUCCESS);
-      break;
+      printf("mdbx_stat version %d.%d.%d.%d\n"
+             " - source: %s %s, commit %s, tree %s\n"
+             " - build: %s for %s by %s\n"
+             " - flags: %s\n"
+             " - options: %s\n",
+             mdbx_version.major, mdbx_version.minor, mdbx_version.release,
+             mdbx_version.revision, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit,
+             mdbx_version.git.tree, mdbx_build.datetime, mdbx_build.target,
+             mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      return EXIT_SUCCESS;
     case 'a':
       if (subname)
         usage(prog);
@@ -135,6 +141,12 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
+  envname = argv[optind];
+  printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n",
+         mdbx_version.git.describe, mdbx_version.git.datetime,
+         mdbx_version.git.tree, envname);
+  fflush(NULL);
+
   rc = mdbx_env_create(&env);
   if (rc) {
     fprintf(stderr, "mdbx_env_create failed, error %d %s\n", rc,
@@ -142,9 +154,8 @@ int main(int argc, char *argv[]) {
     return EXIT_FAILURE;
   }
 
-  if (alldbs || subname) {
+  if (alldbs || subname)
     mdbx_env_set_maxdbs(env, 4);
-  }
 
   rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0664);
   if (rc) {

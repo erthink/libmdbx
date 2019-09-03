@@ -175,9 +175,8 @@ int main(int argc, char *argv[]) {
   char *subname = NULL;
   int alldbs = 0, envflags = 0, list = 0;
 
-  if (argc < 2) {
+  if (argc < 2)
     usage(prog);
-  }
 
   /* -a: dump main DB and all subDBs
    * -s: dump only the named subDB
@@ -190,10 +189,17 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "af:lnps:V")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_build.datetime);
-      exit(EXIT_SUCCESS);
-      break;
+      printf("mdbx_dump version %d.%d.%d.%d\n"
+             " - source: %s %s, commit %s, tree %s\n"
+             " - build: %s for %s by %s\n"
+             " - flags: %s\n"
+             " - options: %s\n",
+             mdbx_version.major, mdbx_version.minor, mdbx_version.release,
+             mdbx_version.revision, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit,
+             mdbx_version.git.tree, mdbx_build.datetime, mdbx_build.target,
+             mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      return EXIT_SUCCESS;
     case 'l':
       list = 1;
       /*FALLTHROUGH*/;
@@ -243,6 +249,11 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
+  printf("mdbx_dump %s (%s, T-%s)\nRunning for %s...\n",
+         mdbx_version.git.describe, mdbx_version.git.datetime,
+         mdbx_version.git.tree, envname);
+  fflush(NULL);
+
   rc = mdbx_env_create(&env);
   if (rc) {
     fprintf(stderr, "mdbx_env_create failed, error %d %s\n", rc,

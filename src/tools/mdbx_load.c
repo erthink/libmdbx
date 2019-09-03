@@ -344,10 +344,17 @@ int main(int argc, char *argv[]) {
   while ((i = getopt(argc, argv, "af:ns:NTV")) != EOF) {
     switch (i) {
     case 'V':
-      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_build.datetime);
-      exit(EXIT_SUCCESS);
-      break;
+      printf("mdbx_load version %d.%d.%d.%d\n"
+             " - source: %s %s, commit %s, tree %s\n"
+             " - build: %s for %s by %s\n"
+             " - flags: %s\n"
+             " - options: %s\n",
+             mdbx_version.major, mdbx_version.minor, mdbx_version.release,
+             mdbx_version.revision, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit,
+             mdbx_version.git.tree, mdbx_build.datetime, mdbx_build.target,
+             mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      return EXIT_SUCCESS;
     case 'a':
       append = 1;
       break;
@@ -391,6 +398,12 @@ int main(int argc, char *argv[]) {
   signal(SIGTERM, signal_handler);
 #endif /* !WINDOWS */
 
+  envname = argv[optind];
+  printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n",
+         mdbx_version.git.describe, mdbx_version.git.datetime,
+         mdbx_version.git.tree, envname);
+  fflush(NULL);
+
   dbuf.iov_len = 4096;
   dbuf.iov_base = mdbx_malloc(dbuf.iov_len);
 
@@ -398,7 +411,6 @@ int main(int argc, char *argv[]) {
   if (!(mode & NOHDR))
     readhdr();
 
-  envname = argv[optind];
   rc = mdbx_env_create(&env);
   if (rc) {
     fprintf(stderr, "mdbx_env_create failed, error %d %s\n", rc,

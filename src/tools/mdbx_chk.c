@@ -930,17 +930,23 @@ int main(int argc, char *argv[]) {
   dbi_main.name = "@MAIN";
   atexit(pagemap_cleanup);
 
-  if (argc < 2) {
+  if (argc < 2)
     usage(prog);
-  }
 
   for (int i; (i = getopt(argc, argv, "Vvqnwcdsi:")) != EOF;) {
     switch (i) {
     case 'V':
-      printf("%s (%s, build %s)\n", mdbx_version.git.describe,
-             mdbx_version.git.datetime, mdbx_build.datetime);
-      exit(EXIT_SUCCESS);
-      break;
+      printf("mdbx_chk version %d.%d.%d.%d\n"
+             " - source: %s %s, commit %s, tree %s\n"
+             " - build: %s for %s by %s\n"
+             " - flags: %s\n"
+             " - options: %s\n",
+             mdbx_version.major, mdbx_version.minor, mdbx_version.release,
+             mdbx_version.revision, mdbx_version.git.describe,
+             mdbx_version.git.datetime, mdbx_version.git.commit,
+             mdbx_version.git.tree, mdbx_build.datetime, mdbx_build.target,
+             mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+      return EXIT_SUCCESS;
     case 'v':
       verbose++;
       break;
@@ -989,7 +995,9 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  print("Running mdbx_chk for %s in 'read-%s' mode...\n", envname,
+  print("mdbx_chk %s (%s, T-%s)\nRunning for %s in 'read-%s' mode...\n",
+        mdbx_version.git.describe, mdbx_version.git.datetime,
+        mdbx_version.git.tree, envname,
         (envflags & MDBX_RDONLY) ? "only" : "write");
   fflush(NULL);
 
