@@ -5977,8 +5977,8 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
     struct radvisory hint;
     hint.ra_offset = 0;
     hint.ra_count = usedsize;
-    if (unlikely(fcntl(env->me_fd, F_RDADVISE, &hint) == -1))
-      return errno;
+    (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
+        env->me_fd, F_RDADVISE, &hint);
 #endif
 #if defined(MADV_WILLNEED)
     if (unlikely(madvise(env->me_map, usedsize, MADV_WILLNEED) != 0))
