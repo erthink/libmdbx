@@ -39,16 +39,70 @@ list(APPEND LIBMDBX_SOURCES ../mdbx.h
 if(BUILD_SHARED_LIBS)
   add_library(mdbx SHARED ${LIBMDBX_SOURCES})
   target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
-  if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    target_compile_definitions(mdbx PRIVATE MDBX_BUILD_DLL)
-  endif()
   if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))
     set_target_properties(mdbx PROPERTIES LINK_FLAGS "-fvisibility=hidden")
   endif()
-  target_link_libraries(mdbx PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+  set(MDBX_LIBDEP_MODE PRIVATE)
 else()
   add_library(mdbx STATIC ${LIBMDBX_SOURCES})
-  target_link_libraries(mdbx INTERFACE ${CMAKE_THREAD_LIBS_INIT})
+  set(MDBX_LIBDEP_MODE PUBLIC)
+endif()
+
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  if(MSVC)
+    if(NOT MSVC_LIB_EXE)
+      # Find lib.exe
+      get_filename_component (CL_NAME ${CMAKE_C_COMPILER} NAME)
+      string (REPLACE cl.exe lib.exe MSVC_LIB_EXE ${CL_NAME})
+      find_program(MSVC_LIB_EXE ${MSVC_LIB_EXE})
+    endif()
+    if(MSVC_LIB_EXE)
+      message (STATUS "Found MSVC's lib tool: ${MSVC_LIB_EXE}")
+      set(MDBX_NTDLL_EXTRA_IMPLIB ${CMAKE_CURRENT_BINARY_DIR}/mdbx_ntdll_extra.lib)
+      add_custom_command(OUTPUT ${MDBX_NTDLL_EXTRA_IMPLIB}
+        COMMENT "Create extra-import-library for ntdll.dll"
+        MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def"
+        COMMAND ${MSVC_LIB_EXE} /def:"${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def" /out:"${MDBX_NTDLL_EXTRA_IMPLIB}" ${INITIAL_CMAKE_STATIC_LINKER_FLAGS})
+    else()
+      message (SEND_ERROR "MSVC's lib tool not found")
+    endif()
+  elseif(MINGW OR MINGW64)
+    if(NOT DLLTOOL)
+      # Find dlltool
+      get_filename_component (GCC_NAME ${CMAKE_C_COMPILER} NAME)
+      string (REPLACE gcc dlltool DLLTOOL_NAME ${GCC_NAME})
+      find_program (DLLTOOL NAMES ${DLLTOOL_NAME})
+    endif()
+    if(DLLTOOL)
+      message (STATUS "Found dlltool: ${DLLTOOL}")
+      set(MDBX_NTDLL_EXTRA_IMPLIB "${CMAKE_CURRENT_BINARY_DIR}/mdbx_ntdll_extra.a")
+      add_custom_command(OUTPUT ${MDBX_NTDLL_EXTRA_IMPLIB}
+        COMMENT "Create extra-import-library for ntdll.dll"
+        MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def"
+        COMMAND ${DLLTOOL} -d "${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def" -l "${MDBX_NTDLL_EXTRA_IMPLIB}")
+    else()
+      message (SEND_ERROR "dlltool not found")
+    endif()
+  endif()
+endif()
+
+target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} ${CMAKE_THREAD_LIBS_INIT})
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  target_compile_definitions(mdbx ${MDBX_LIBDEP_MODE} MDBX_BUILD_DLL)
+  target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} ntdll.lib)
+  if(MDBX_NTDLL_EXTRA_IMPLIB)
+    # LY: Sometimes Cmake requires a nightmarish magic for simple things.
+    # 1) create a target out of the library compilation result
+    add_custom_target(ntdll_extra_target DEPENDS ${MDBX_NTDLL_EXTRA_IMPLIB})
+    # 2) create an library target out of the library compilation result
+    add_library(ntdll_extra STATIC IMPORTED GLOBAL)
+    add_dependencies(ntdll_extra ntdll_extra_target)
+    # 3) specify where the library is (and where to find the headers)
+    set_target_properties(ntdll_extra
+      PROPERTIES
+      IMPORTED_LOCATION ${MDBX_NTDLL_EXTRA_IMPLIB})
+    target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} ntdll_extra)
+  endif()
 endif()
 
 set_target_properties(mdbx PROPERTIES
