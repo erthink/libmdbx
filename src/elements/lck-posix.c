@@ -167,7 +167,7 @@ static void __cold choice_fcntl() {
   ((sizeof(off_t) > 4 ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff)
 #endif
 
-static int lck_op(mdbx_filehandle_t fd, int cmd, short lck, off_t offset,
+static int lck_op(mdbx_filehandle_t fd, int cmd, int lck, off_t offset,
                   off_t len) {
   mdbx_jitter4testing(true);
   for (;;) {
