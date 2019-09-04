@@ -415,8 +415,10 @@ static void lck_unlock(MDBX_env *env) {
 }
 
 MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
+                                     MDBX_env *inprocess_neighbor,
                                      int global_uniqueness_flag) {
   (void)env;
+  (void)inprocess_neighbor;
   (void)global_uniqueness_flag;
   return MDBX_SUCCESS;
 }

@@ -392,9 +392,32 @@ static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                              const int rc);
 
 MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
+                                            MDBX_env *inprocess_neighbor,
                                             int global_uniqueness_flag) {
+  if (inprocess_neighbor)
+    return MDBX_SUCCESS /* currently don't need any initialization
+      if LCK already opened/used inside current process */
+        ;
+
+    /* FIXME: Unfortunately, there is no other reliable way but to long testing
+     * on each platform. On the other hand, behavior like FreeBSD is incorrect
+     * and we can expect it to be rare. Moreover, even on FreeBSD without
+     * additional in-process initialization, the probability of an problem
+     * occurring is vanishingly small, and the symptom is a return of EINVAL
+     * while locking a mutex. In other words, in the worst case, the problem
+     * results in an EINVAL error at the start of the transaction, but NOT data
+     * loss, nor database corruption, nor other fatal troubles. Thus, the code
+     * below I am inclined to think the workaround for erroneous platforms (like
+     * FreeBSD), rather than a defect of libmdbx. */
+#if defined(__FreeBSD__)
+  /* seems that shared mutexes on FreeBSD required in-process initialization */
+  (void)global_uniqueness_flag;
+#else
+  /* shared mutexes on many other platforms (including Darwin and Linux's
+   * futexes) doesn't need any addition in-process initialization */
   if (global_uniqueness_flag != MDBX_RESULT_TRUE)
     return MDBX_SUCCESS;
+#endif
 
   pthread_mutexattr_t ma;
   int rc = pthread_mutexattr_init(&ma);

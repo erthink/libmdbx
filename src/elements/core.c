@@ -6824,7 +6824,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     }
   }
 
-  err = mdbx_lck_init(env, lck_seize_rc);
+  err = mdbx_lck_init(env, inprocess_neighbor, lck_seize_rc);
   if (MDBX_IS_ERROR(err))
     goto bailout;
 

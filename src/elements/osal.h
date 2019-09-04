@@ -657,7 +657,9 @@ mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 ///     НЕ должна инициализировать уже используемые разделяемые объекты
 ///     синхронизации расположенные в отображенном в память LCK-файле.
 /// \return Код ошибки или 0 в случае успеха.
-MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env, int global_uniqueness_flag);
+MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
+                                     MDBX_env *inprocess_neighbor,
+                                     int global_uniqueness_flag);
 
 /// \brief Отключение от общих межпроцесных объектов и разрушение объектов
 ///   синхронизации внутри текущего процесса связанных с экземпляром MDBX_env.
