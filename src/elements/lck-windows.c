@@ -27,16 +27,13 @@
 static void mdbx_winnt_import(void);
 
 #ifdef MDBX_BUILD_DLL
+#if MDBX_AVOID_CRT && defined(NDEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
- * Therefore we don't define dll's entry point for debug/checked builds by MSVC.
- * In this case MSVC's will automatically use DllMainCRTStartup() from CRT
- * library, which also automatically call DllMain() from our mdbx.dll
- *
- * On the other side, for RELEASE builds
- * we explicitly define DllMain() as the entry point and don't linking with
- * any CRT libraries (IgnoreAllDefaultLibraries = Yes). */
-#if !defined(_MSC_VER) || defined(NDEBUG)
+ * Define dll's entry point only for Release build when NDEBUG is defined and
+ * MDBX_AVOID_CRT=ON. if the entry point isn't defined then MSVC's will
+ * automatically use DllMainCRTStartup() from CRT library, which also
+ * automatically call DllMain() from our mdbx.dll */
 #pragma comment(linker, "/ENTRY:DllMain")
 #endif
 
@@ -734,7 +731,6 @@ static void mdbx_winnt_import(void) {
 
 #define GET_KERNEL32_PROC(ENTRY)                                               \
   mdbx_##ENTRY = (MDBX_##ENTRY)GetProcAddress(hKernel32dll, #ENTRY)
-
   GET_KERNEL32_PROC(GetFileInformationByHandleEx);
   GET_KERNEL32_PROC(GetVolumeInformationByHandleW);
   GET_KERNEL32_PROC(GetFinalPathNameByHandleW);
@@ -743,6 +739,7 @@ static void mdbx_winnt_import(void) {
   GET_KERNEL32_PROC(DiscardVirtualMemory);
   if (!mdbx_DiscardVirtualMemory)
     mdbx_DiscardVirtualMemory = stub_DiscardVirtualMemory;
+#undef GET_KERNEL32_PROC
 
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
   mdbx_NtFsControlFile =
