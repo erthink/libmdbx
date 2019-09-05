@@ -417,6 +417,9 @@ typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));
 #   define STRINGIFY(x) STRINGIFY_HELPER(x)
 #endif /* STRINGIFY */
 
+#define CONCAT(a,b) a##b
+#define XCONCAT(a,b) CONCAT(a,b)
+
 #ifndef offsetof
 #   define offsetof(type, member)  __builtin_offsetof(type, member)
 #endif /* offsetof */

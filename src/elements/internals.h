@@ -15,9 +15,7 @@
 /* *INDENT-OFF* */
 /* clang-format off */
 
-#ifdef MDBX_CONFIG_H
-#include MDBX_CONFIG_H
-#endif
+#include "config.h"
 
 /* In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
 #ifndef MDBX_DEBUG
@@ -153,6 +151,57 @@
 #define MDBX_WORDBITS 32
 #endif /* MDBX_WORDBITS */
 
+/* Some platforms define the EOWNERDEAD error code even though they
+ *  don't support Robust Mutexes. Compile with -DMDBX_USE_ROBUST=0. */
+#ifndef MDBX_USE_ROBUST
+#define MDBX_USE_ROBUST_CONFIG AUTO
+/* Howard Chu: Android currently lacks Robust Mutex support */
+#if defined(EOWNERDEAD) && !defined(__ANDROID__) && !defined(__APPLE__) &&     \
+    (!defined(__GLIBC__) ||                                                    \
+     __GLIBC_PREREQ(                                                           \
+         2,                                                                    \
+         10) /* LY: glibc before 2.10 has a troubles with Robust Mutex too. */ \
+     || _POSIX_C_SOURCE >= 200809L)
+#define MDBX_USE_ROBUST 1
+#else
+#define MDBX_USE_ROBUST 0
+#endif
+#else
+#define MDBX_USE_ROBUST_CONFIG MDBX_USE_ROBUST
+#endif /* MDBX_USE_ROBUST */
+
+#ifndef MDBX_USE_OFDLOCKS
+#define MDBX_USE_OFDLOCKS_CONFIG AUTO
+#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)
+#define MDBX_USE_OFDLOCKS 1
+#else
+#define MDBX_USE_OFDLOCKS 0
+#endif
+#else
+#define MDBX_USE_OFDLOCKS_CONFIG MDBX_USE_OFDLOCKS
+#endif /* MDBX_USE_OFDLOCKS */
+
+/* Controls checking PID against reuse DB environment after the fork() */
+#ifndef MDBX_TXN_CHECKPID
+#define MDBX_TXN_CHECKPID_CONFIG AUTO
+#if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
+/* PID check could be ommited:
+ *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
+ *    mapped pages will not be available for child process.
+ *  - in Windows where fork() not available. */
+#define MDBX_TXN_CHECKPID 0
+#else
+#define MDBX_TXN_CHECKPID 1
+#endif
+#else
+#define MDBX_TXN_CHECKPID_CONFIG MDBX_TXN_CHECKPID
+#endif /* MDBX_TXN_CHECKPID */
+
+#define mdbx_sourcery_anchor XCONCAT(mdbx_sourcery_, MDBX_BUILD_SOURCERY)
+#if defined(MDBX_TOOLS)
+extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
+#endif
+
 /*----------------------------------------------------------------------------*/
 /* Basic constants and types */
 
@@ -202,11 +251,7 @@ typedef uint32_t pgno_t;
 /* A transaction ID. */
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
-#if MDBX_DEBUG
 #define MIN_TXNID UINT64_C(0x100000000)
-#else
-#define MIN_TXNID UINT64_C(1)
-#endif /* MIN_TXNID */
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
@@ -1274,16 +1319,3 @@ static __inline void mdbx_jitter4testing(bool tiny) {
   (void)tiny;
 #endif
 }
-
-/* Controls checking PID against reuse DB environment after the fork() */
-#ifndef MDBX_TXN_CHECKPID
-#if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
-/* PID check could be ommited:
- *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
- *    mapped pages will not be available for child process.
- *  - in Windows where fork() not available. */
-#define MDBX_TXN_CHECKPID 0
-#else
-#define MDBX_TXN_CHECKPID 1
-#endif
-#endif /* MDBX_TXN_CHECKPID */

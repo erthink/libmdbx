@@ -121,9 +121,8 @@ check-fault:	all
 	; ./mdbx_chk -vvnw $(TESTDB) && ([ ! -e $(TESTDB)-copy ] || ./mdbx_chk -vvn $(TESTDB)-copy)
 
 MDBX_VERSION_GIT = ${shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or install latest git version'}
-version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) .git/HEAD .git/index .git/refs/tags
+src/elements/version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) .git/HEAD .git/index .git/refs/tags
 	sed \
-	        -e "s|@MDBX_BUILD_TIMESTAMP@|$(shell date +%Y-%m-%dT%H:%M:%S%z)|" \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
@@ -132,16 +131,18 @@ version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) .git/HEAD .git
 		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 2)|" \
 		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 3)|" \
 		-e "s|\$${MDBX_VERSION_REVISION}|$(shell git rev-list --count --no-merges HEAD || echo 'Please fetch tags and/or install latest git version')|" \
-		-e "s|@MDBX_OPTIONS_STRING@|$(MDBX_OPTIONS)|" \
-		-e "s|\$${MDBX_COMPILE_FLAGS}|$(CFLAGS) $(LDFLAGS)|" \
-		-e "s|@MDBX_BUILD_COMPILER@|$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')|" \
-		-e "s|\$${MDBX_BUILD_TARGET}|$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')|" \
-	src/elements/version.c.in > $@
+	src/elements/version.c.in > $@ || rm -f $@
 
-version.o: version.c $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -I./src -c version.c -o $@
+src/elements/config.h: src/elements/version.c $(lastword $(MAKEFILE_LIST))
+	(echo '#define MDBX_BUILD_TIMESTAMP "$(shell date +%Y-%m-%dT%H:%M:%S%z)"' \
+	&& echo '#define MDBX_BUILD_OPTIONS_STRING "$(MDBX_OPTIONS)"' \
+	&& echo '#define MDBX_BUILD_FLAGS "$(CFLAGS) $(LDFLAGS)"' \
+	&& echo '#define MDBX_BUILD_COMPILER "$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')"' \
+	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')"' \
+	&& echo '#define MDBX_BUILD_SOURCERY $(shell set -o pipefail; ((openssl dgst -r -sha256 src/elements/version.c.in || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 && echo -n `git describe --tags --long --dirty=-dirty`) | tr -c -s '[a-zA-Z0-9]' _ || echo 'Please install openssl or sha256sum or shasum')' \
+	) > $@ || rm -f $@
 
-libmdbx.o: src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
+libmdbx.o: src/elements/config.h src/elements/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -c src/alloy.c -o $@
 
 define test-rule
@@ -151,10 +152,10 @@ $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
 endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
-libmdbx.a: libmdbx.o version.o
+libmdbx.a: libmdbx.o
 	$(AR) rs $@ $?
 
-libmdbx.$(SO_SUFFIX): libmdbx.o version.o
+libmdbx.$(SO_SUFFIX): libmdbx.o
 	$(CC) $(CFLAGS) $^ -pthread -shared $(LDFLAGS) -o $@
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a

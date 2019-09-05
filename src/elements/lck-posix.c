@@ -14,30 +14,6 @@
 
 #include "./internals.h"
 
-/* Some platforms define the EOWNERDEAD error code even though they
- *  don't support Robust Mutexes. Compile with -DMDBX_USE_ROBUST=0. */
-#ifndef MDBX_USE_ROBUST
-/* Howard Chu: Android currently lacks Robust Mutex support */
-#if defined(EOWNERDEAD) && !defined(__ANDROID__) && !defined(__APPLE__) &&     \
-    (!defined(__GLIBC__) ||                                                    \
-     __GLIBC_PREREQ(                                                           \
-         2,                                                                    \
-         10) /* LY: glibc before 2.10 has a troubles with Robust Mutex too. */ \
-     || _POSIX_C_SOURCE >= 200809L)
-#define MDBX_USE_ROBUST 1
-#else
-#define MDBX_USE_ROBUST 0
-#endif
-#endif /* MDBX_USE_ROBUST */
-
-#ifndef MDBX_USE_OFDLOCKS
-#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)
-#define MDBX_USE_OFDLOCKS 1
-#else
-#define MDBX_USE_OFDLOCKS 0
-#endif
-#endif /* MDBX_USE_OFDLOCKS */
-
 /*----------------------------------------------------------------------------*/
 /* global constructor/destructor */
 

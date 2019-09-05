@@ -13,7 +13,7 @@ foreach (TOOL ${MDBX_TOOLS})
     add_executable(${TOOL} ${TOOL}.c)
   endif()
 
-  target_link_libraries(${TOOL} mdbx)
+  target_link_libraries(${TOOL} mdbx ${CMAKE_THREAD_LIBS_INIT})
   set_target_properties(${TOOL} PROPERTIES
     INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
 

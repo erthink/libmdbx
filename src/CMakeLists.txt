@@ -13,12 +13,8 @@
 ##
 
 # Get version
-if(HAVE_MDBX_VERSIONINFO)
-  fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION")
-  message(STATUS "libmdbx version is ${MDBX_VERSION}")
-else()
-  set(MDBX_VERSION "unversioned")
-endif()
+fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}/../VERSION")
+message(STATUS "libmdbx version is ${MDBX_VERSION}")
 
 if(MDBX_ALLOY_MODE)
   set(LIBMDBX_SOURCES alloy.c)
@@ -33,10 +29,10 @@ else()
     elements/core.c elements/osal.c elements/lck-${LIBMDBX_OSAL}.c)
 endif()
 list(APPEND LIBMDBX_SOURCES ../mdbx.h
-  "${CMAKE_CURRENT_BINARY_DIR}/version.c"
-  "${CMAKE_CURRENT_BINARY_DIR}/mdbx-config.h")
+  "${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c"
+  "${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h")
 
-if(BUILD_SHARED_LIBS)
+if(MDBX_BUILD_SHARED_LIBRARY)
   add_library(mdbx SHARED ${LIBMDBX_SOURCES})
   target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
   if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))
@@ -52,43 +48,42 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   if(MSVC)
     if(NOT MSVC_LIB_EXE)
       # Find lib.exe
-      get_filename_component (CL_NAME ${CMAKE_C_COMPILER} NAME)
-      string (REPLACE cl.exe lib.exe MSVC_LIB_EXE ${CL_NAME})
+      get_filename_component(CL_NAME ${CMAKE_C_COMPILER} NAME)
+      string(REPLACE cl.exe lib.exe MSVC_LIB_EXE ${CL_NAME})
       find_program(MSVC_LIB_EXE ${MSVC_LIB_EXE})
     endif()
     if(MSVC_LIB_EXE)
-      message (STATUS "Found MSVC's lib tool: ${MSVC_LIB_EXE}")
+      message(STATUS "Found MSVC's lib tool: ${MSVC_LIB_EXE}")
       set(MDBX_NTDLL_EXTRA_IMPLIB ${CMAKE_CURRENT_BINARY_DIR}/mdbx_ntdll_extra.lib)
       add_custom_command(OUTPUT ${MDBX_NTDLL_EXTRA_IMPLIB}
         COMMENT "Create extra-import-library for ntdll.dll"
         MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def"
         COMMAND ${MSVC_LIB_EXE} /def:"${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def" /out:"${MDBX_NTDLL_EXTRA_IMPLIB}" ${INITIAL_CMAKE_STATIC_LINKER_FLAGS})
     else()
-      message (SEND_ERROR "MSVC's lib tool not found")
+      message(SEND_ERROR "MSVC's lib tool not found")
     endif()
   elseif(MINGW OR MINGW64)
     if(NOT DLLTOOL)
       # Find dlltool
-      get_filename_component (GCC_NAME ${CMAKE_C_COMPILER} NAME)
-      string (REPLACE gcc dlltool DLLTOOL_NAME ${GCC_NAME})
-      find_program (DLLTOOL NAMES ${DLLTOOL_NAME})
+      get_filename_component(GCC_NAME ${CMAKE_C_COMPILER} NAME)
+      string(REPLACE gcc dlltool DLLTOOL_NAME ${GCC_NAME})
+      find_program(DLLTOOL NAMES ${DLLTOOL_NAME})
     endif()
     if(DLLTOOL)
-      message (STATUS "Found dlltool: ${DLLTOOL}")
+      message(STATUS "Found dlltool: ${DLLTOOL}")
       set(MDBX_NTDLL_EXTRA_IMPLIB "${CMAKE_CURRENT_BINARY_DIR}/mdbx_ntdll_extra.a")
       add_custom_command(OUTPUT ${MDBX_NTDLL_EXTRA_IMPLIB}
         COMMENT "Create extra-import-library for ntdll.dll"
         MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def"
         COMMAND ${DLLTOOL} -d "${CMAKE_CURRENT_SOURCE_DIR}/elements/ntdll.def" -l "${MDBX_NTDLL_EXTRA_IMPLIB}")
     else()
-      message (SEND_ERROR "dlltool not found")
+      message(SEND_ERROR "dlltool not found")
     endif()
   endif()
 endif()
 
 target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} ${CMAKE_THREAD_LIBS_INIT})
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-  target_compile_definitions(mdbx ${MDBX_LIBDEP_MODE} MDBX_BUILD_DLL)
   target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} ntdll.lib)
   if(MDBX_NTDLL_EXTRA_IMPLIB)
     # LY: Sometimes Cmake requires a nightmarish magic for simple things.
@@ -110,8 +105,6 @@ set_target_properties(mdbx PROPERTIES
   C_STANDARD 11
   C_STANDARD_REQUIRED OFF
   PUBLIC_HEADER "../mdbx.h")
-target_include_directories(mdbx PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
 
 if(CC_HAS_FASTMATH)
   target_compile_options(mdbx PRIVATE "-ffast-math")
@@ -179,19 +172,19 @@ endif()
 list(REMOVE_DUPLICATES mdbx_compile_options)
 
 # make string of space separated flags
-string(REPLACE ";" " " MDBX_COMPILE_FLAGS "${mdbx_compile_options}")
+string(REPLACE ";" " " MDBX_BUILD_FLAGS "${mdbx_compile_options}")
 unset(mdbx_compile_options)
-string(STRIP "${MDBX_COMPILE_FLAGS}${MDBX_DEFINITIONS}" MDBX_COMPILE_FLAGS)
+string(STRIP "${MDBX_BUILD_FLAGS}${MDBX_DEFINITIONS}" MDBX_BUILD_FLAGS)
 if(CMAKE_CONFIGURATION_TYPES)
   # add dynamic part via per-configuration define
-  message(STATUS "MDBX Compile Flags: ${MDBX_COMPILE_FLAGS} <AND CONFIGURATION DEPENDENT>")
-  set(MDBX_COMPILE_FLAGS "${MDBX_COMPILE_FLAGS}")
+  message(STATUS "MDBX Compile Flags: ${MDBX_BUILD_FLAGS} <AND CONFIGURATION DEPENDENT>")
+  set(MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
   add_definitions(
     -DMDBX_COMPILE_FLAGS="$<$<CONFIG:Debug>:${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_DEFINES_DEBUG}>$<$<CONFIG:Release>:${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_DEFINES_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_DEFINES_RELWITHDEBINFO}>$<$<CONFIG:MinSizeRel>:${CMAKE_C_FLAGS_MINSIZEREL} ${CMAKE_C_DEFINES_MINSIZEREL}>"
     )
 else()
-  message(STATUS "MDBX Compile Flags: ${MDBX_COMPILE_FLAGS}")
-  set(MDBX_COMPILE_FLAGS "${MDBX_COMPILE_FLAGS}")
+  message(STATUS "MDBX Compile Flags: ${MDBX_BUILD_FLAGS}")
+  set(MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
 endif()
 
 # get compiler info
@@ -201,11 +194,8 @@ execute_process(COMMAND sh -c "${CMAKE_C_COMPILER} --version | head -1"
   ERROR_QUIET
   RESULT_VARIABLE rc)
 if(rc OR NOT MDBX_BUILD_COMPILER)
-  set(MDBX_BUILD_COMPILER "")
-else()
-  set(MDBX_BUILD_COMPILER " | ${MDBX_BUILD_COMPILER}" )
+  string(STRIP "${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}" MDBX_BUILD_COMPILER)
 endif()
-string(STRIP "${CMAKE_C_COMPILER_ID}-${CMAKE_C_COMPILER_VERSION}${MDBX_BUILD_COMPILER}" MDBX_BUILD_COMPILER)
 
 # make a build-target triplet
 if(CMAKE_C_COMPILER_TARGET)
@@ -229,15 +219,15 @@ endif()
 
 # options
 string(TIMESTAMP MDBX_BUILD_TIMESTAMP UTC)
-set(MDBX_OPTIONS_STRING -DCMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
+set(MDBX_BUILD_OPTIONS_STRING -DCMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}")
 foreach(item IN LISTS MDBX_BUILD_OPTIONS)
   if(DEFINED ${item} AND NOT "${${item}}" STREQUAL "AUTO")
-    string(APPEND MDBX_OPTIONS_STRING " -D${item}=${${item}}")
+    string(APPEND MDBX_BUILD_OPTIONS_STRING " -D${item}=${${item}}")
     message(STATUS "${item}: ${${item}}")
   else()
     unset(${item} CACHE)
     set(${item}_AUTO ON)
-    string(APPEND MDBX_OPTIONS_STRING " -D${item}=AUTO")
+    string(APPEND MDBX_BUILD_OPTIONS_STRING " -D${item}=AUTO")
     message(STATUS "${item}: AUTO")
   endif()
 endforeach()
@@ -257,12 +247,15 @@ foreach(item IN LISTS options)
   message(STATUS "${item}: ${value}")
 endforeach(item)
 
-# generate version file
+# generate version and config files
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/version.c" ESCAPE_QUOTES)
-configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h.in"
-  "${CMAKE_CURRENT_BINARY_DIR}/mdbx-config.h" ESCAPE_QUOTES)
+  "${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c" ESCAPE_QUOTES)
 
-target_compile_definitions(mdbx PRIVATE MDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/mdbx-config.h")
+file(SHA256 "${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c" MDBX_SOURCERY_DIGEST)
+string(MAKE_C_IDENTIFIER "${MDBX_GIT_DESCRIBE}" MDBX_SOURCERY_SUFFIX)
+set(MDBX_BUILD_SOURCERY "${MDBX_SOURCERY_DIGEST}_${MDBX_SOURCERY_SUFFIX}")
+
+configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h" ESCAPE_QUOTES)
 
 add_subdirectory(tools)

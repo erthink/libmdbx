@@ -15,12 +15,9 @@
 #define MDBX_ALLOY 1
 #include "elements/internals.h" /* must be included fisrt */
 
-#include "../mdbx.h"
-#include "elements/defs.h"
-#include "elements/osal.h"
-
 #include "elements/core.c"
 #include "elements/osal.c"
+#include "elements/version.c"
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "elements/lck-windows.c"

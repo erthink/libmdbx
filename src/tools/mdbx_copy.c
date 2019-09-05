@@ -58,14 +58,16 @@ int main(int argc, char *argv[]) {
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
       printf("mdbx_copy version %d.%d.%d.%d\n"
              " - source: %s %s, commit %s, tree %s\n"
+             " - anchor: %s\n"
              " - build: %s for %s by %s\n"
              " - flags: %s\n"
              " - options: %s\n",
              mdbx_version.major, mdbx_version.minor, mdbx_version.release,
              mdbx_version.revision, mdbx_version.git.describe,
              mdbx_version.git.datetime, mdbx_version.git.commit,
-             mdbx_version.git.tree, mdbx_build.datetime, mdbx_build.target,
-             mdbx_build.compiler, mdbx_build.flags, mdbx_build.options);
+             mdbx_version.git.tree, mdbx_sourcery_anchor, mdbx_build.datetime,
+             mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
+             mdbx_build.options);
       return EXIT_SUCCESS;
     } else
       argc = 0;

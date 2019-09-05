@@ -197,6 +197,7 @@ typedef struct mdbx_version_info {
     const char *commit;
     const char *describe;
   } git;
+  const char *sourcery;
 } mdbx_version_info;
 
 typedef struct mdbx_build_info {
@@ -211,7 +212,7 @@ extern LIBMDBX_API const mdbx_version_info mdbx_version;
 extern LIBMDBX_API const mdbx_build_info mdbx_build;
 
 #if defined(_WIN32) || defined(_WIN64)
-#ifndef MDBX_BUILD_DLL
+#if !MDBX_BUILD_SHARED_LIBRARY
 
 /* Dll initialization callback for ability to dynamically load MDBX DLL by
  * LoadLibrary() on Windows versions before Windows Vista. This function MUST be
@@ -227,7 +228,7 @@ extern LIBMDBX_API const mdbx_build_info mdbx_build;
 void LIBMDBX_API NTAPI mdbx_dll_callback(PVOID module, DWORD reason,
                                          PVOID reserved);
 #endif /* MDBX_CONFIG_MANUAL_TLS_CALLBACK */
-#endif /* MDBX_BUILD_DLL */
+#endif /* !MDBX_BUILD_SHARED_LIBRARY */
 #endif /* Windows */
 
 /* The name of the lock file in the DB environment */

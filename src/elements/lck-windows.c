@@ -26,7 +26,7 @@
 
 static void mdbx_winnt_import(void);
 
-#ifdef MDBX_BUILD_DLL
+#ifdef MDBX_BUILD_SHARED_LIBRARY
 #if MDBX_AVOID_CRT && defined(NDEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
@@ -44,7 +44,7 @@ static
 #endif /* !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
     void NTAPI
     mdbx_dll_callback(PVOID module, DWORD reason, PVOID reserved)
-#endif /* MDBX_BUILD_DLL */
+#endif /* MDBX_BUILD_SHARED_LIBRARY */
 {
   (void)reserved;
   switch (reason) {
@@ -62,12 +62,12 @@ static
     mdbx_rthc_thread_dtor(module);
     break;
   }
-#ifdef MDBX_BUILD_DLL
+#if MDBX_BUILD_SHARED_LIBRARY
   return TRUE;
 #endif
 }
 
-#if !defined(MDBX_BUILD_DLL) && !MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#if !MDBX_BUILD_SHARED_LIBRARY && !MDBX_CONFIG_MANUAL_TLS_CALLBACK
 /* *INDENT-OFF* */
 /* clang-format off */
 #if defined(_MSC_VER)
@@ -105,7 +105,7 @@ static
 #endif
 /* *INDENT-ON* */
 /* clang-format on */
-#endif /* !defined(MDBX_BUILD_DLL) && !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+#endif /* !MDBX_BUILD_SHARED_LIBRARY && !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
 
 /*----------------------------------------------------------------------------*/
 

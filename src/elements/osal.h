@@ -34,7 +34,8 @@
 #if !defined(_CRT_SECURE_NO_WARNINGS)
 #define _CRT_SECURE_NO_WARNINGS
 #endif
-#if !defined(_NO_CRT_STDIO_INLINE) && defined(MDBX_BUILD_DLL)
+#if !defined(_NO_CRT_STDIO_INLINE) && MDBX_BUILD_SHARED_LIBRARY &&             \
+    !defined(MDBX_TOOLS)
 #define _NO_CRT_STDIO_INLINE
 #endif
 #endif /* Windows */
@@ -109,7 +110,7 @@ typedef struct {
 } mdbx_condmutex_t;
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
 
-#ifdef MDBX_AVOID_CRT
+#if MDBX_AVOID_CRT
 #ifndef mdbx_malloc
 static inline void *mdbx_malloc(size_t bytes) {
   return LocalAlloc(LMEM_FIXED, bytes);

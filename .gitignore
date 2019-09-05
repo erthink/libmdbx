@@ -29,4 +29,5 @@ test/tmp.db-lck
 tmp.db
 tmp.db-lck
 valgrind.*
-version.c
+src/elements/version.c
+src/elements/config.h

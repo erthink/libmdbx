@@ -14686,6 +14686,53 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 
 //----------------------------------------------------------------------------
 
+__dll_export
+#ifdef __attribute_used__
+    __attribute_used__
+#elif defined(__GNUC__) || __has_attribute(__used__)
+    __attribute__((__used__))
+#endif
+#ifdef __attribute_externally_visible__
+        __attribute_externally_visible__
+#elif (defined(__GNUC__) && !defined(__clang__)) ||                            \
+    __has_attribute(__externally_visible__)
+    __attribute__((__externally_visible__))
+#endif
+    const mdbx_build_info mdbx_build = {
+#ifdef MDBX_BUILD_TIMESTAMP
+        MDBX_BUILD_TIMESTAMP
+#else
+        __DATE__ " " __TIME__
+#endif
+        ,
+#ifdef MDBX_BUILD_TARGET
+        MDBX_BUILD_TARGET
+#else
+        "UNKNOWN_BUILD_TARGET"
+#endif
+#ifdef MDBX_BUILD_CONFIG
+        "-" MDBX_BUILD_CONFIG
+#endif
+        ,
+#ifdef MDBX_BUILD_OPTIONS_STRING
+        MDBX_BUILD_OPTIONS_STRING
+#else
+        "@TODO: MDBX_BUILD_OPTIONS_STRING"
+#endif
+        ,
+#ifdef MDBX_BUILD_COMPILER
+        MDBX_BUILD_COMPILER
+#else
+        "@TODO: MDBX_BUILD_COMPILER"
+#endif
+        ,
+#ifdef MDBX_BUILD_FLAGS
+        MDBX_BUILD_FLAGS
+#else
+        "@TODO: MDBX_BUILD_FLAGS"
+#endif
+    };
+
 #ifdef __SANITIZE_ADDRESS__
 LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {
   return "symbolize=1:allow_addr2line=1:"
