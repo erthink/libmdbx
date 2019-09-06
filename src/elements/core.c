@@ -14520,10 +14520,6 @@ __cold intptr_t mdbx_limits_keysize_max(intptr_t pagesize) {
   return mdbx_maxkey(mdbx_nodemax(pagesize));
 }
 
-__cold int mdbx_limits_pgsize_min(void) { return MIN_PAGESIZE; }
-
-__cold int mdbx_limits_pgsize_max(void) { return MAX_PAGESIZE; }
-
 __cold intptr_t mdbx_limits_dbsize_min(intptr_t pagesize) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_syspagesize();

@@ -892,6 +892,16 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
                                       intptr_t growth_step,
                                       intptr_t shrink_threshold,
                                       intptr_t pagesize);
+#define MDBX_MIN_PAGESIZE 512
+__inline intptr_t mdbx_limits_pgsize_min(void) { return MDBX_MIN_PAGESIZE; }
+
+#define MDBX_MAX_PAGESIZE 65536
+__inline intptr_t mdbx_limits_pgsize_max(void) { return MDBX_MAX_PAGESIZE; }
+
+LIBMDBX_API intptr_t mdbx_limits_dbsize_min(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_dbsize_max(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize);
+LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /* Set the maximum number of threads/reader slots for the environment.
  *
@@ -1819,13 +1829,6 @@ LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr);
 
 LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                                   uint64_t increment);
-
-LIBMDBX_API int mdbx_limits_pgsize_min(void);
-LIBMDBX_API int mdbx_limits_pgsize_max(void);
-LIBMDBX_API intptr_t mdbx_limits_dbsize_min(intptr_t pagesize);
-LIBMDBX_API intptr_t mdbx_limits_dbsize_max(intptr_t pagesize);
-LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize);
-LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /*----------------------------------------------------------------------------*/
 /* attribute support functions for Nexenta */
