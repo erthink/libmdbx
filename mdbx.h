@@ -58,11 +58,24 @@
 #ifndef LIBMDBX_H
 #define LIBMDBX_H
 
-/* IMPENDING CHANGES WARNING ***************************************************
+/*******************************************************************************
  *
- * MDBX is under active non-public development, database format and API
- * will be refined. New version won't be backwards compatible. Main focus
- * of the rework is to provide clear and robust API and new features.
+ * libmdbx is superior to LMDB in terms of features and reliability, not
+ * inferior in performance.  libmdbx works on Linux, FreeBSD, MacOS X and other
+ * systems compliant with POSIX.1-2008, but also support Windows as a
+ * complementary platform.
+ *
+ * The next version is under active non-public development and will be released
+ * as MithrilDB and libmithrildb for libraries & packages.  Admittedly mythical
+ * Mithril is resembling silver but being stronger and lighter than steel.
+ * Therefore MithrilDB is rightly relevant name.
+ *
+ * MithrilDB will be radically different from libmdbx by the new database format
+ * and API based on C++17, as well as the Apache 2.0 License.  The goal of this
+ * revolution is to provide a clearer and robust API, add more features and new
+ * valuable properties of database.
+ *
+ * The Future will (be) Positive. Всё будет хорошо.
  *
  ******************************************************************************/
 
@@ -191,21 +204,21 @@ typedef struct mdbx_version_info {
   uint8_t minor;
   uint16_t release;
   uint32_t revision;
-  struct {
-    const char *datetime;
-    const char *tree;
-    const char *commit;
-    const char *describe;
+  struct /* source info from git */ {
+    const char *datetime /* committer date, strict ISO-8601 format */;
+    const char *tree /* commit hash (hexadecimal digits) */;
+    const char *commit /* tree hash, i.e. digest of the source code */;
+    const char *describe /* git-describe string */;
   } git;
-  const char *sourcery;
+  const char *sourcery /* sourcery anchor for pinning */;
 } mdbx_version_info;
 
 typedef struct mdbx_build_info {
-  const char *datetime;
-  const char *target;
-  const char *options;
-  const char *compiler;
-  const char *flags;
+  const char *datetime /* build timestamp (ISO-8601 or __DATE__ __TIME__) */;
+  const char *target /* cpu/arch-system-config triplet */;
+  const char *options /* mdbx-related options */;
+  const char *compiler /* compiler */;
+  const char *flags /* CFLAGS */;
 } mdbx_build_info;
 
 extern LIBMDBX_API const mdbx_version_info mdbx_version;
