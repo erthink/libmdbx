@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "./internals.h"
+#include "internals.h"
 
 /* PREAMBLE FOR WINDOWS:
  *

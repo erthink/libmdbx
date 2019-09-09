@@ -14,7 +14,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "./internals.h"
+#include "internals.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 

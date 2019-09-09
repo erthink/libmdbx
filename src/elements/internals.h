@@ -85,7 +85,7 @@
 #endif                          /* _MSC_VER (warnings) */
 
 #include "../../mdbx.h"
-#include "./defs.h"
+#include "defs.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4,2)
     /* Actualy libmdbx was not tested with compilers older than GCC from RHEL6.
@@ -140,7 +140,7 @@
 #   endif
 #endif /* -Walignment-reduction-ignored */
 
-#include "./osal.h"
+#include "osal.h"
 
 /* *INDENT-ON* */
 /* clang-format on */

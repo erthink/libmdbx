@@ -31,3 +31,5 @@ tmp.db-lck
 valgrind.*
 src/elements/version.c
 src/elements/config.h
+dist/
+*.tar*
