@@ -1,4 +1,4 @@
-﻿/* mdbx_load.c - memory-mapped database load tool */
+/* mdbx_load.c - memory-mapped database load tool */
 
 /*
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>

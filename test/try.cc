@@ -1,4 +1,4 @@
-﻿#include "test.h"
+#include "test.h"
 
 bool testcase_try::run() {
   db_open();

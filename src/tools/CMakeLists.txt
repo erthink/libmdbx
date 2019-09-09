@@ -1,4 +1,4 @@
-﻿set(MDBX_TOOLS
+set(MDBX_TOOLS
   mdbx_chk
   mdbx_copy
   mdbx_dump

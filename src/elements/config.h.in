@@ -1,4 +1,7 @@
-﻿/* *INDENT-OFF* */
+/* This is CMake-template for libmdbx's config.h
+ ******************************************************************************/
+
+/* *INDENT-OFF* */
 /* clang-format off */
 
 #cmakedefine HAVE_VALGRIND_MEMCHECK_H

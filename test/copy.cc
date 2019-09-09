@@ -1,4 +1,4 @@
-﻿#include "test.h"
+#include "test.h"
 
 void testcase_copy::copy_db(const bool with_compaction) {
   int err = osal_removefile(copy_pathname);
