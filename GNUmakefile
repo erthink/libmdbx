@@ -57,16 +57,6 @@ tools: $(TOOLS)
 strip: all
 	strip libmdbx.$(SO_SUFFIX) $(TOOLS)
 
-install: $(LIBRARIES) $(TOOLS) $(HEADERS)
-	mkdir -p $(SANDBOX)$(prefix)/bin$(suffix) \
-		&& cp -t $(SANDBOX)$(prefix)/bin$(suffix) $(TOOLS) && \
-	mkdir -p $(SANDBOX)$(prefix)/lib$(suffix) \
-		&& cp -t $(SANDBOX)$(prefix)/lib$(suffix) $(LIBRARIES) && \
-	mkdir -p $(SANDBOX)$(prefix)/include \
-		&& cp -t $(SANDBOX)$(prefix)/include $(HEADERS) && \
-	mkdir -p $(SANDBOX)$(mandir)/man1 \
-		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
-
 clean:
 	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o example dist \
@@ -84,6 +74,7 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 
 ################################################################################
 # Amalgamated source code, i.e. distributed after `make dists`
+MAN_SRCDIR := man1/
 
 config.h: mdbx.c $(lastword $(MAKEFILE_LIST))
 	(echo '#define MDBX_BUILD_TIMESTAMP "$(shell date +%Y-%m-%dT%H:%M:%S%z)"' \
@@ -120,6 +111,8 @@ define uname2titer
     *) echo 12;;
   esac
 endef
+
+MAN_SRCDIR := src/man1/
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
@@ -199,10 +192,10 @@ dist: lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
 lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist/mdbx.c dist/mdbx.h \
 		dist/mdbx_chk.c dist/mdbx_copy.c dist/mdbx_dump.c dist/mdbx_load.c dist/mdbx_stat.c \
-		dist/GNUmakefile $(lastword $(MAKEFILE_LIST))
+		dist/GNUmakefile $(lastword $(MAKEFILE_LIST)) $(addprefix dist/man1/,$(MANPAGES))
 	tar -c -a -f $@ --owner=0 --group=0 -C dist mdbx.c mdbx.h \
-    mdbx_chk.c mdbx_copy.c mdbx_dump.c mdbx_load.c mdbx_stat.c GNUmakefile \
-    && rm dist/@tmp-shared_internals.inc
+	mdbx_chk.c mdbx_copy.c mdbx_dump.c mdbx_load.c mdbx_stat.c GNUmakefile man1 \
+	&& rm dist/@tmp-shared_internals.inc
 
 dist/mdbx.h: mdbx.h src/elements/version.c $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && cp $< $@
@@ -239,6 +232,9 @@ dist/$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
 
 endef
 $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
+
+dist/man1/mdbx_%.1: src/man1/mdbx_%.1
+	mkdir -p dist/man1/ && cp $< $@
 
 endif
 
@@ -283,6 +279,16 @@ cross-qemu:
 	done
 
 #< dist-cutoff-end
+install: $(LIBRARIES) $(TOOLS) $(HEADERS)
+	mkdir -p $(SANDBOX)$(prefix)/bin$(suffix) \
+		&& cp -t $(SANDBOX)$(prefix)/bin$(suffix) $(TOOLS) && \
+	mkdir -p $(SANDBOX)$(prefix)/lib$(suffix) \
+		&& cp -t $(SANDBOX)$(prefix)/lib$(suffix) $(LIBRARIES) && \
+	mkdir -p $(SANDBOX)$(prefix)/include \
+		&& cp -t $(SANDBOX)$(prefix)/include $(HEADERS) && \
+	mkdir -p $(SANDBOX)$(mandir)/man1 \
+		&& cp -t $(SANDBOX)$(mandir)/man1 $(addprefix $(MAN_SRCDIR), $(MANPAGES))
+
 ################################################################################
 # Benchmarking by ioarena
 

@@ -120,12 +120,8 @@ install(TARGETS mdbx
   LIBRARY DESTINATION lib COMPONENT runtime
   RUNTIME DESTINATION bin COMPONENT runtime
   ARCHIVE DESTINATION lib/static COMPONENT devel
-  PUBLIC_HEADER DESTINATION include/libmdbx
+  PUBLIC_HEADER DESTINATION include
   INCLUDES DESTINATION include COMPONENT devel)
-
-foreach(file mdbx.h LICENSE README.md AUTHORS)
-  install(FILES "../${file}" DESTINATION "include/libmdbx")
-endforeach()
 
 ################################################################################
 #
