@@ -253,7 +253,7 @@ typedef uint32_t pgno_t;
 /* A transaction ID. */
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
-#define MIN_TXNID UINT64_C(0x100000000)
+#define MIN_TXNID UINT64_C(1)
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
