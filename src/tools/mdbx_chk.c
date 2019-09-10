@@ -94,7 +94,7 @@ MDBX_stat envstat;
 size_t maxkeysize, userdb_count, skipped_subdb;
 uint64_t reclaimable_pages, gc_pages, alloc_pages, unused_pages, backed_pages;
 unsigned verbose;
-char ignore_wrong_order, quiet;
+bool ignore_wrong_order, quiet;
 const char *only_subdb;
 
 struct problem {
@@ -747,7 +747,7 @@ static void usage(char *prog) {
           "  -n\t\tNOSUBDIR mode for open\n"
           "  -q\t\tbe quiet\n"
           "  -w\t\tlock DB for writing while checking\n"
-          "  -d\t\tdisable page-by-page traversal of b-tree\n"
+          "  -d\t\tdisable page-by-page traversal of B-tree\n"
           "  -s subdb\tprocess a specific subdatabase only\n"
           "  -c\t\tforce cooperative mode (don't try exclusive)\n"
           "  -i\t\tignore wrong order errors (for custom comparators case)\n",
@@ -909,7 +909,7 @@ int main(int argc, char *argv[]) {
   char *prog = argv[0];
   char *envname;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
-  int dont_traversal = 0;
+  bool dont_traversal = false;
   bool locked = false;
 
   double elapsed;
@@ -953,7 +953,7 @@ int main(int argc, char *argv[]) {
       verbose++;
       break;
     case 'q':
-      quiet = 1;
+      quiet = true;
       break;
     case 'n':
       envflags |= MDBX_NOSUBDIR;
@@ -965,7 +965,7 @@ int main(int argc, char *argv[]) {
       envflags &= ~MDBX_EXCLUSIVE;
       break;
     case 'd':
-      dont_traversal = 1;
+      dont_traversal = true;
       break;
     case 's':
       if (only_subdb && strcmp(only_subdb, optarg))
@@ -973,7 +973,7 @@ int main(int argc, char *argv[]) {
       only_subdb = optarg;
       break;
     case 'i':
-      ignore_wrong_order = 1;
+      ignore_wrong_order = true;
       break;
     default:
       usage(prog);
