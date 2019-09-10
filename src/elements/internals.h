@@ -12,18 +12,20 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #pragma once
+#ifdef MDBX_CONFIG_H
+#include MDBX_CONFIG_H
+#endif
+
 /* *INDENT-OFF* */
 /* clang-format off */
 
-#include "config.h"
-
 /* In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
 #ifndef MDBX_DEBUG
-#ifdef NDEBUG
-#   define MDBX_DEBUG 0
-#else
-#   define MDBX_DEBUG 1
-#endif
+#   ifdef NDEBUG
+#       define MDBX_DEBUG 0
+#   else
+#       define MDBX_DEBUG 1
+#   endif
 #endif
 
 /* Undefine the NDEBUG if debugging is enforced by MDBX_DEBUG */
@@ -34,17 +36,17 @@
 #define MDBX_OSX_WANNA_DURABILITY 0 /* using fcntl(F_FULLFSYNC) with 5-10 times slowdown */
 #define MDBX_OSX_WANNA_SPEED 1      /* using fsync() with chance of data lost on power failure */
 #ifndef MDBX_OSX_SPEED_INSTEADOF_DURABILITY
-#define MDBX_OSX_SPEED_INSTEADOF_DURABILITY MDBX_OSX_WANNA_DURABILITY
+#   define MDBX_OSX_SPEED_INSTEADOF_DURABILITY MDBX_OSX_WANNA_DURABILITY
 #endif
 
 #ifdef MDBX_ALLOY
 /* Amalgamated build */
-#define MDBX_INTERNAL_FUNC static
-#define MDBX_INTERNAL_VAR static
+#   define MDBX_INTERNAL_FUNC static
+#   define MDBX_INTERNAL_VAR static
 #else
 /* Non-amalgamated build */
-#define MDBX_INTERNAL_FUNC
-#define MDBX_INTERNAL_VAR extern
+#   define MDBX_INTERNAL_FUNC
+#   define MDBX_INTERNAL_VAR extern
 #endif /* MDBX_ALLOY */
 
 /*----------------------------------------------------------------------------*/

@@ -6,6 +6,7 @@
 # Note that the defaults should already be correct for most platforms;
 # you should not need to change any of these. Read their descriptions
 # in README and source code if you do. There may be other macros of interest.
+SHELL   := /bin/bash
 
 # install sandbox
 SANDBOX ?=
@@ -44,7 +45,6 @@ HEADERS    := mdbx.h
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1
-SHELL      := /bin/bash
 
 .PHONY: mdbx all install clean check coverage
 
@@ -68,7 +68,9 @@ install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 		&& cp -t $(SANDBOX)$(mandir)/man1 $(MANPAGES)
 
 clean:
-	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* *.gcov *.log *.err src/*.o test/*.o
+	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* \
+		*.gcov *.log *.err src/*.o test/*.o example dist \
+		config.h src/elements/config.h src/elements/version.c *.tar*
 
 libmdbx.a: mdbx-static.o
 	$(AR) rs $@ $?
@@ -83,27 +85,27 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 ################################################################################
 # Amalgamated source code, i.e. distributed after `make dists`
 
-mdbx-config.h: mdbx-config.h.in mdbx.c $(lastword $(MAKEFILE_LIST))
+config.h: mdbx.c $(lastword $(MAKEFILE_LIST))
 	(echo '#define MDBX_BUILD_TIMESTAMP "$(shell date +%Y-%m-%dT%H:%M:%S%z)"' \
 	&& echo '#define MDBX_BUILD_OPTIONS_STRING "$(MDBX_OPTIONS)"' \
 	&& echo '#define MDBX_BUILD_FLAGS "$(CFLAGS) $(LDFLAGS)"' \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')"' \
-	) > $@ || rm -f $@
+	) > $@
 
-mdbx-dylib.o: mdbx-config.h mdbx.c $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -DLIBMDBX_EXPORTS=1 -c mdbx.c -o $@
+mdbx-dylib.o: config.h mdbx.c $(lastword $(MAKEFILE_LIST))
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c -o $@
 
-mdbx-static.o: mdbx-config.h mdbx.c $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -ULIBMDBX_EXPORTS -c mdbx.c -o $@
+mdbx-static.o: config.h mdbx.c $(lastword $(MAKEFILE_LIST))
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
 
 mdbx_%:	mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) $^ $(EXE_LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) -o $@
 
 #> dist-cutoff-begin
 else
 ################################################################################
-# Plain (non-amalgamated) sources
+# Plain (non-amalgamated) sources with test
 
 define uname2osal
   case "$(UNAME)" in
@@ -111,37 +113,46 @@ define uname2osal
     *) echo unix;;
   esac
 endef
+
 define uname2titer
   case "$(UNAME)" in
     Darwin*|Mach*) echo 3;;
     *) echo 12;;
   esac
 endef
+
+TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
+TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
-TESTDB     ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
-TESTLOG    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
 TEST_INC   := $(wildcard test/*.h)
 TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
 
+ALLOY_DEPS = $(wildcard src/elements/*)
+MDBX_VERSION_GIT = ${shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or install latest git version'}
+MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')
+MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'Please fetch tags and/or install latest git version')
+MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
+MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c && (openssl dgst -r -sha256 src/elements/version.c || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
+
 check: all example mdbx_test
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --repeat=$(TEST_ITER) --pathname=$(TESTDB) --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
-	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
+	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 example: mdbx.h tutorial/sample-mdbx.c libmdbx.$(SO_SUFFIX)
 	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.$(SO_SUFFIX) -o example
 
 check-singleprocess: all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; \
-		./mdbx_test --repeat=4 --pathname=$(TESTDB) --dont-cleanup-after --hill && \
-		./mdbx_test --repeat=2 --pathname=$(TESTDB) --dont-cleanup-before --dont-cleanup-after --copy \
-		| tee -a $(TESTLOG) | tail -n 42) \
-	&& ./mdbx_chk -vvn $(TESTDB) && ./mdbx_chk -vvn $(TESTDB)-copy
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
+		./mdbx_test --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
+		./mdbx_test --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy \
+		| tee -a $(TEST_LOG) | tail -n 42) \
+	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 check-fault: all
-	rm -f $(TESTDB) $(TESTLOG) && (set -o pipefail; ./mdbx_test --pathname=$(TESTDB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TESTLOG) | tail -n 42) \
-	; ./mdbx_chk -vvnw $(TESTDB) && ([ ! -e $(TESTDB)-copy ] || ./mdbx_chk -vvn $(TESTDB)-copy)
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
+	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
@@ -151,27 +162,22 @@ endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) $^ $(EXE_LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) -o $@
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) -o $@
 
-ALLOY_DEPS = $(wildcard src/elements/*)
-MDBX_VERSION_GIT = ${shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or install latest git version'}
-MDBX_VERSION_SUFFIX = $(shell set -o pipefail; git describe --tags --long --dirty=-dirty | tr -c -s '[a-zA-Z0-9]\n' _ || echo 'Please fetch tags and/or install latest git version')
-MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c && (openssl dgst -r -sha256 src/elements/version.c || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
-
 src/elements/version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) .git/HEAD .git/index .git/refs/tags
 	sed \
-		-e "s|@MDBX_GIT_TIMESTAMP@|$(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
 		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
 		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
-		-e "s|@MDBX_GIT_DESCRIBE@|$(shell git describe --tags --long --dirty=-dirty || echo 'Please fetch tags and/or install latest git version')|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
 		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 1)|" \
 		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 2)|" \
 		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_VERSION_GIT)' | cut -d . -f 3)|" \
 		-e "s|\$${MDBX_VERSION_REVISION}|$(shell git rev-list --count --no-merges HEAD || echo 'Please fetch tags and/or install latest git version')|" \
-	src/elements/version.c.in > $@ || rm -f $@
+	src/elements/version.c.in > $@
 
 src/elements/config.h: src/elements/version.c $(lastword $(MAKEFILE_LIST))
 	(echo '#define MDBX_BUILD_TIMESTAMP "$(shell date +%Y-%m-%dT%H:%M:%S%z)"' \
@@ -180,21 +186,21 @@ src/elements/config.h: src/elements/version.c $(lastword $(MAKEFILE_LIST))
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')"' \
 	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
-	) > $@ || rm -f $@
+	) > $@
 
 mdbx-dylib.o: src/elements/config.h src/elements/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -DLIBMDBX_EXPORTS=1 -c src/alloy.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/alloy.c -o $@
 
 mdbx-static.o: src/elements/config.h src/elements/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
 
 .PHONY: dist
 dist: lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
-lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist/mdbx.c dist/mdbx-config.h.in dist/mdbx.h \
+lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist/mdbx.c dist/mdbx.h \
 		dist/mdbx_chk.c dist/mdbx_copy.c dist/mdbx_dump.c dist/mdbx_load.c dist/mdbx_stat.c \
 		dist/GNUmakefile $(lastword $(MAKEFILE_LIST))
-	tar -c -a -f $@ --owner=0 --group=0 -C dist mdbx.c mdbx-config.h.in mdbx.h \
+	tar -c -a -f $@ --owner=0 --group=0 -C dist mdbx.c mdbx.h \
     mdbx_chk.c mdbx_copy.c mdbx_dump.c mdbx_load.c mdbx_stat.c GNUmakefile \
     && rm dist/@tmp-shared_internals.inc
 
@@ -206,7 +212,7 @@ dist/GNUmakefile: GNUmakefile
 
 dist/@tmp-shared_internals.inc: src/elements/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && sed \
-		-e 's|#include "config.h"|@INCLUDE "mdbx-config.h"\n#define MDBX_ALLOY 1\n#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)|' \
+		-e 's|#pragma once|#define MDBX_ALLOY 1\n#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)|' \
 		-e 's|#include "../../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#include "defs.h"/r src/elements/defs.h' \
 		-e '/#include "osal.h"/r src/elements/osal.h' \
@@ -221,20 +227,18 @@ dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	) | grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|' > $@
 
 define dist-tool-rule
-dist/mdbx_$(1).c: src/tools/mdbx_$(1).c src/tools/wingetopt.h src/tools/wingetopt.c dist/mdbx.c $(lastword $(MAKEFILE_LIST))
+dist/$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
+		dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && sed \
 		-e '/#include "..\/elements\/internals.h"/r dist/@tmp-shared_internals.inc' \
 		-e '/#include "wingetopt.h"/r r/src/tools/wingetopt.c' \
 		-e '/#include "wingetopt.h"/r r/src/tools/wingetopt.h' \
-		src/tools/mdbx_$(1).c \
+		src/tools/$(1).c \
 	| grep -v -e '#include "' -e '#pragma once' -e '#define MDBX_ALLOY' \
 	| sed 's|@INCLUDE|#include|' > $$@
 
 endef
-$(foreach file,chk copy dump load stat,$(eval $(call dist-tool-rule,$(file))))
-
-dist/mdbx-config.h.in: src/elements/config.h.in $(lastword $(MAKEFILE_LIST))
-	mkdir -p dist && grep -v MDBX_BUILD_SOURCERY $< > $@
+$(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 
 endif
 

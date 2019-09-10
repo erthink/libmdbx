@@ -138,7 +138,7 @@ esac
 ###############################################################################
 # 4. Run basic test, i.e. `make check`
 
-${MAKE} TESTDB=${TESTDB_DIR}/smoke.db TESTLOG=${TESTDB_DIR}/smoke.log check
+${MAKE} TEST_DB=${TESTDB_DIR}/smoke.db TEST_LOG=${TESTDB_DIR}/smoke.log check
 rm -f ${TESTDB_DIR}/*
 
 ###############################################################################

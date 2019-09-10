@@ -257,5 +257,6 @@ set(MDBX_BUILD_SOURCERY "${MDBX_SOURCERY_DIGEST}_${MDBX_SOURCERY_SUFFIX}")
 
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h.in"
   "${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h" ESCAPE_QUOTES)
+add_definitions(-DMDBX_CONFIG_H="config.h")
 
 add_subdirectory(tools)
