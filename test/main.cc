@@ -168,8 +168,8 @@ int main(int argc, char *const argv[]) {
     }
 
     if (config::parse_option(argc, argv, narg, "pagesize", params.pagesize,
-                             mdbx_limits_pgsize_min(),
-                             mdbx_limits_pgsize_max())) {
+                             int(mdbx_limits_pgsize_min()),
+                             int(mdbx_limits_pgsize_max()))) {
       const unsigned keylen_max = params.mdbx_keylen_max();
       if (params.keylen_min > keylen_max)
         params.keylen_min = keylen_max;
