@@ -112,7 +112,8 @@ define uname2titer
   esac
 endef
 
-MAN_SRCDIR := src/man1/
+DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile $(addprefix man1/, $(MANPAGES))
+DIST_SRC   := mdbx.h mdbx.c $(addsuffix .c, $(TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
@@ -122,6 +123,7 @@ TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc),
 TEST_INC   := $(wildcard test/*.h)
 TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
 
+MAN_SRCDIR := src/man1/
 ALLOY_DEPS = $(wildcard src/elements/*)
 MDBX_VERSION_GIT = ${shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or install latest git version'}
 MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')
@@ -190,11 +192,8 @@ mdbx-static.o: src/elements/config.h src/elements/version.c src/alloy.c $(ALLOY_
 .PHONY: dist
 dist: lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
-lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist/mdbx.c dist/mdbx.h \
-		dist/mdbx_chk.c dist/mdbx_copy.c dist/mdbx_dump.c dist/mdbx_load.c dist/mdbx_stat.c \
-		dist/GNUmakefile $(lastword $(MAKEFILE_LIST)) $(addprefix dist/man1/,$(MANPAGES))
-	tar -c -a -f $@ --owner=0 --group=0 -C dist mdbx.c mdbx.h \
-	mdbx_chk.c mdbx_copy.c mdbx_dump.c mdbx_load.c mdbx_stat.c GNUmakefile man1 \
+lidmbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA)) $(addprefix dist/man1/,$(MANPAGES))
+	tar -c -a -f $@ --owner=0 --group=0 -C dist $(DIST_SRC) $(DIST_EXTRA) \
 	&& rm dist/@tmp-shared_internals.inc
 
 dist/mdbx.h: mdbx.h src/elements/version.c $(lastword $(MAKEFILE_LIST))
@@ -235,7 +234,12 @@ $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
 
 dist/man1/mdbx_%.1: src/man1/mdbx_%.1
 	mkdir -p dist/man1/ && cp $< $@
-
+dist/LICENSE: LICENSE
+	mkdir -p dist/man1/ && cp $< $@
+dist/README.md: README.md
+	mkdir -p dist/man1/ && cp $< $@
+dist/CMakeLists.txt: CMakeLists.dist-minimal
+	mkdir -p dist/man1/ && cp $< $@
 endif
 
 ################################################################################

@@ -127,60 +127,34 @@ install(TARGETS mdbx
 #
 # library build info (used in library version output)
 #
-
-# get definitions as a string of "-Dxyz=124 ..."
-get_target_property(MDBX_DEFINITIONS mdbx COMPILE_DEFINITIONS)
-if(NOT MDBX_DEFINITIONS)
-  set(MDBX_DEFINITIONS "")
-endif()
-list(REMOVE_DUPLICATES MDBX_DEFINITIONS)
-string(REGEX REPLACE "([^;]+)" " -D\\1" MDBX_DEFINITIONS "${MDBX_DEFINITIONS}")
-string(STRIP MDBX_DEFINITIONS "${MDBX_DEFINITIONS}")
-
-# get target compile options as a list
-get_target_property(mdbx_compile_options mdbx COMPILE_OPTIONS)
-if(NOT mdbx_compile_options)
-  set(mdbx_compile_options "")
-endif()
-
-# append cmake's common cxx flags and defines
-string(REPLACE " " ";" cmake_cxx_options "${CMAKE_C_FLAGS}" "${CMAKE_C_DEFINES}")
-list(INSERT mdbx_compile_options 0 "${cmake_c_options}")
-unset(cmake_c_options)
+set(MDBX_BUILD_FLAGS "")
 
 # append cmake's build-type flags and defines
 if(NOT CMAKE_CONFIGURATION_TYPES)
-  string(REPLACE " " ";" cmake_cxx_options
-    "${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}}"
-    "${CMAKE_C_DEFINES_${CMAKE_BUILD_TYPE_UPPERCASE}}")
-  list(APPEND mdbx_compile_options "${cmake_c_options}")
-  unset(cmake_c_options)
+  list(APPEND MDBX_BUILD_FLAGS ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}})
+  list(APPEND MDBX_BUILD_FLAGS ${CMAKE_C_DEFINES_${CMAKE_BUILD_TYPE_UPPERCASE}})
 endif()
 
 # append linker dll's options
 if(LIBMDBX_TYPE STREQUAL "SHARED")
-  string(REPLACE " " ";" cmake_shared_linker_options "${CMAKE_SHARED_LINKER_FLAGS}")
-  list(APPEND mdbx_compile_options ${cmake_shared_linker_options})
-  unset(cmake_shared_linker_options)
+  list(APPEND MDBX_BUILD_FLAGS ${CMAKE_SHARED_LINKER_FLAGS})
 endif()
 
-# drop duplicates in the option list
-list(REMOVE_DUPLICATES mdbx_compile_options)
+# get definitions
+get_target_property(defs_list mdbx COMPILE_DEFINITIONS)
+list(APPEND MDBX_BUILD_FLAGS ${defs_list})
 
-# make string of space separated flags
-string(REPLACE ";" " " MDBX_BUILD_FLAGS "${mdbx_compile_options}")
-unset(mdbx_compile_options)
-string(STRIP "${MDBX_BUILD_FLAGS}${MDBX_DEFINITIONS}" MDBX_BUILD_FLAGS)
+# get target compile options
+get_target_property(options_list mdbx COMPILE_OPTIONS)
+list(APPEND MDBX_BUILD_FLAGS ${options_list})
+
+list(REMOVE_DUPLICATES MDBX_BUILD_FLAGS)
 if(CMAKE_CONFIGURATION_TYPES)
   # add dynamic part via per-configuration define
   message(STATUS "MDBX Compile Flags: ${MDBX_BUILD_FLAGS} <AND CONFIGURATION DEPENDENT>")
-  set(MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
-  add_definitions(
-    -DMDBX_COMPILE_FLAGS="$<$<CONFIG:Debug>:${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_DEFINES_DEBUG}>$<$<CONFIG:Release>:${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_DEFINES_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_DEFINES_RELWITHDEBINFO}>$<$<CONFIG:MinSizeRel>:${CMAKE_C_FLAGS_MINSIZEREL} ${CMAKE_C_DEFINES_MINSIZEREL}>"
-    )
+  add_definitions(-MDBX_BUILD_FLAGS_CONFIG="$<$<CONFIG:Debug>:${CMAKE_C_FLAGS_DEBUG} ${CMAKE_C_DEFINES_DEBUG}>$<$<CONFIG:Release>:${CMAKE_C_FLAGS_RELEASE} ${CMAKE_C_DEFINES_RELEASE}>$<$<CONFIG:RelWithDebInfo>:${CMAKE_C_FLAGS_RELWITHDEBINFO} ${CMAKE_C_DEFINES_RELWITHDEBINFO}>$<$<CONFIG:MinSizeRel>:${CMAKE_C_FLAGS_MINSIZEREL} ${CMAKE_C_DEFINES_MINSIZEREL}>")
 else()
   message(STATUS "MDBX Compile Flags: ${MDBX_BUILD_FLAGS}")
-  set(MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
 endif()
 
 # get compiler info

@@ -63,6 +63,12 @@ else()
   endif()
 endif()
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING
+    "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
+    FORCE)
+endif()
+
 macro(add_mdbx_option NAME DESCPTION DEFAULT)
   list(APPEND MDBX_BUILD_OPTIONS ${NAME})
   if(NOT ${DEFAULT} STREQUAL "AUTO")

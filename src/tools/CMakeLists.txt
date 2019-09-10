@@ -1,12 +1,6 @@
-set(MDBX_TOOLS
-  mdbx_chk
-  mdbx_copy
-  mdbx_dump
-  mdbx_load
-  mdbx_stat
-  )
+set(MDBX_TOOLS mdbx_chk mdbx_copy mdbx_dump mdbx_load mdbx_stat)
 
-foreach (TOOL ${MDBX_TOOLS})
+foreach(TOOL ${MDBX_TOOLS})
   if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     add_executable(${TOOL} ${TOOL}.c wingetopt.c wingetopt.h)
   else()
