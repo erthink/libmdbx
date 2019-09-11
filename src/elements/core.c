@@ -6964,6 +6964,9 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
       if (rc != MDBX_SUCCESS)
         goto bailout;
     } else {
+      rc = mdbx_reader_check0(env, false, NULL);
+      if (MDBX_IS_ERROR(rc))
+        goto bailout;
       if ((env->me_flags & MDBX_RDONLY) == 0) {
         while (env->me_lck->mti_envmode == MDBX_RDONLY) {
           if (mdbx_atomic_compare_and_swap32(&env->me_lck->mti_envmode,
