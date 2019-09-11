@@ -6666,7 +6666,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
                           (env->me_flags & MDBX_EXCLUSIVE) ? true : false);
   if (err != MDBX_SUCCESS) {
     if (!(err == MDBX_ENOFILE && (env->me_flags & MDBX_EXCLUSIVE)) &&
-        !(err == MDBX_EROFS && (env->me_flags & MDBX_RDONLY)))
+        !((err == MDBX_EROFS || err == MDBX_EACCESS || err == MDBX_EPERM) &&
+          (env->me_flags & MDBX_RDONLY)))
       return err;
 
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
