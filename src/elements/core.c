@@ -4094,6 +4094,16 @@ static __cold int mdbx_audit(MDBX_txn *txn, unsigned befree_stored) {
   return MDBX_PROBLEM;
 }
 
+static __inline void clean_reserved_rc_pnl(MDBX_env *env, MDBX_val pnl) {
+  /* PNL is initially empty, zero out at least the length */
+  memset(pnl.iov_base, 0, sizeof(pgno_t));
+  if ((env->me_flags & (MDBX_WRITEMAP | MDBX_NOMEMINIT)) == 0)
+    /* zero out to avoid leaking values from uninitialized malloc'ed memory
+     * to the file in non-writemap mode if length of the saving page-list
+     * was changed during space reservation. */
+    memset(pnl.iov_base, 0, pnl.iov_len);
+}
+
 /* Cleanup reclaimed GC records, than save the befree-list as of this
  * transaction to GC (aka freeDB). This recursive changes the reclaimed-list
  * loose-list and befree-list. Keep trying until it stabilizes. */
@@ -4354,6 +4364,7 @@ retry:
 
       befree_stored = (unsigned)MDBX_PNL_SIZE(txn->mt_befree_pages);
       mdbx_pnl_sort(txn->mt_befree_pages);
+      mdbx_assert(env, data.iov_len == MDBX_PNL_SIZEOF(txn->mt_befree_pages));
       memcpy(data.iov_base, txn->mt_befree_pages, data.iov_len);
 
       mdbx_trace("%s.put-befree #%u @ %" PRIaTXN, dbg_prefix_mode,
@@ -4561,8 +4572,7 @@ retry:
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
-    /* PNL is initially empty, zero out at least the length */
-    memset(data.iov_base, 0, sizeof(pgno_t));
+    clean_reserved_rc_pnl(env, data);
     settled += chunk;
     mdbx_trace("%s.settled %u (+%u), continue", dbg_prefix_mode, settled,
                chunk);
@@ -4665,10 +4675,10 @@ retry:
       mc.mc_flags &= ~C_GCFREEZE;
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
+      clean_reserved_rc_pnl(env, data);
 
       if (unlikely(txn->mt_loose_count ||
                    amount != MDBX_PNL_SIZE(env->me_reclaimed_pglist))) {
-        memset(data.iov_base, 0, sizeof(pgno_t));
         mdbx_notice("** restart: reclaimed-list changed (%u -> %u, %u)", amount,
                     MDBX_PNL_SIZE(env->me_reclaimed_pglist),
                     txn->mt_loose_count);
@@ -4677,7 +4687,6 @@ retry:
       if (unlikely(txn->mt_lifo_reclaimed
                        ? cleaned_gc_slot < MDBX_PNL_SIZE(txn->mt_lifo_reclaimed)
                        : cleaned_gc_id < env->me_last_reclaimed)) {
-        memset(data.iov_base, 0, sizeof(pgno_t));
         mdbx_notice("** restart: reclaimed-slots changed");
         goto retry;
       }
