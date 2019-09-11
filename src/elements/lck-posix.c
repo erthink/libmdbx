@@ -457,7 +457,7 @@ static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
   int rc = pthread_mutex_unlock(mutex);
   mdbx_jitter4testing(true);
   if (unlikely(rc != 0))
-    rc = mdbx_mutex_failed(env, mutex, rc);
+    env->me_flags |= MDBX_FATAL_ERROR;
   return rc;
 }
 
