@@ -4814,7 +4814,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
 
 #if MDBX_CPU_CACHE_MMAP_NONCOHERENT
 #if defined(__linux__) || defined(__gnu_linux__)
-        if (linux_kernel_version >= 0x02060b00)
+        if (mdbx_linux_kernel_version >= 0x02060b00)
         /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
          * arguments, making this function fairly expensive. Therefore, the
          * whole cache is always flushed. */
@@ -4839,7 +4839,7 @@ static int mdbx_page_flush(MDBX_txn *txn, pgno_t keep) {
 
 #if MDBX_CPU_CACHE_MMAP_NONCOHERENT &&                                         \
     (defined(__linux__) || defined(__gnu_linux__))
-  if (linux_kernel_version < 0x02060b00) {
+  if (mdbx_linux_kernel_version < 0x02060b00) {
     /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
      * arguments, making this function fairly expensive. Therefore, the whole
      * cache is always flushed. */

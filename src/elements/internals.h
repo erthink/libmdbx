@@ -174,7 +174,8 @@
 
 #ifndef MDBX_USE_OFDLOCKS
 #define MDBX_USE_OFDLOCKS_CONFIG AUTO
-#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK)
+#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK) &&   \
+    !defined(MDBX_SAFE4QEMU)
 #define MDBX_USE_OFDLOCKS 1
 #else
 #define MDBX_USE_OFDLOCKS 0

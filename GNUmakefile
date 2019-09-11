@@ -138,14 +138,14 @@ check: all example mdbx_test
 example: mdbx.h tutorial/sample-mdbx.c libmdbx.$(SO_SUFFIX)
 	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.$(SO_SUFFIX) -o example
 
-check-singleprocess: all
+check-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		./mdbx_test --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
 		./mdbx_test --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy \
 		| tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-check-fault: all
+check-fault: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
@@ -278,7 +278,7 @@ cross-qemu:
 	@for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) clean && \
-			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static XCFLAGS="-DMDBX_SAFE4QEMU $(XCFLAGS)" \
+			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_OPTIONS)" \
 			$(MAKE) check-singleprocess || exit $$?; \
 	done
 
