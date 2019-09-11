@@ -9,8 +9,6 @@ os:
 - linux
 - osx
 
-script: if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then make all check; fi
-
 script: >
   if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then
     git fetch --unshallow --tags --prune &&
@@ -23,7 +21,9 @@ script: >
         exit -1;
       fi) &&
     make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
-  fi
+  else
+    [ ! -s cov-int/scm_log.txt ] || cat cov-int/scm_log.txt;
+  fi && sleep 3
 
 env:
   global:
@@ -39,6 +39,6 @@ addons:
       version: 0.1
       description: "Build submitted via Travis CI"
     notification_email: leo@yuriev.ru
-    build_command_prepend: "make clean"
-    build_command: "make all -j 2"
+    build_command_prepend: "make clean && git fetch --unshallow --tags --prune && make dist"
+    build_command: "make -C dist all"
     branch_pattern: coverity_scan
