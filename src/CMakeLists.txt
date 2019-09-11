@@ -142,11 +142,15 @@ endif()
 
 # get definitions
 get_target_property(defs_list mdbx COMPILE_DEFINITIONS)
-list(APPEND MDBX_BUILD_FLAGS ${defs_list})
+if(defs_list)
+  list(APPEND MDBX_BUILD_FLAGS ${defs_list})
+endif()
 
 # get target compile options
 get_target_property(options_list mdbx COMPILE_OPTIONS)
-list(APPEND MDBX_BUILD_FLAGS ${options_list})
+if(options_list)
+  list(APPEND MDBX_BUILD_FLAGS ${options_list})
+endif()
 
 list(REMOVE_DUPLICATES MDBX_BUILD_FLAGS)
 if(CMAKE_CONFIGURATION_TYPES)
