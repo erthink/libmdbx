@@ -13121,6 +13121,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
     return MDBX_SUCCESS;
   }
 
+  lck->mti_reader_check_timestamp = mdbx_osal_monotime();
   const unsigned snap_nreaders = lck->mti_numreaders;
   mdbx_pid_t pidsbuf_onstask[142];
   mdbx_pid_t *const pids =

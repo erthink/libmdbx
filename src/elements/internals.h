@@ -481,6 +481,9 @@ typedef struct MDBX_lockinfo {
   /* Threshold of un-synced-with-disk pages for auto-sync feature,
    * zero means no-threshold, i.e. auto-sync is disabled. */
   volatile pgno_t mti_autosync_threshold;
+
+  uint32_t reserved_pad;
+
   /* Period for timed auto-sync feature, i.e. at the every steady checkpoint
    * the mti_unsynced_timeout sets to the current_time + mti_autosync_period.
    * The time value is represented in a suitable system-dependent form, for
@@ -491,7 +494,7 @@ typedef struct MDBX_lockinfo {
   /* Marker to distinguish uniqueness of DB/CLK.*/
   volatile uint64_t mti_bait_uniqueness;
 
-  /* /proc/sys/kernel/random/boot_id */
+  /* the hash of /proc/sys/kernel/random/boot_id or analogue */
   volatile uint64_t mti_boot_id;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
@@ -514,6 +517,9 @@ typedef struct MDBX_lockinfo {
 
   /* Number of page which was discarded last time by madvise(MADV_FREE). */
   volatile pgno_t mti_discarded_tail;
+
+  /* Timestamp of the last readers check. */
+  volatile uint64_t mti_reader_check_timestamp;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
