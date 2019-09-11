@@ -763,7 +763,9 @@ static int lcklist_detach_locked(MDBX_env *env) {
     mdbx_ensure(env, env->me_lcklist_next == nullptr);
   }
 
-  rc = uniq_check(&env->me_lck_mmap, &inprocess_neighbor);
+  rc = likely(mdbx_getpid() == env->me_pid)
+           ? uniq_check(&env->me_lck_mmap, &inprocess_neighbor)
+           : MDBX_PANIC;
   if (!inprocess_neighbor && env->me_live_reader)
     (void)mdbx_rpid_clear(env);
   if (!MDBX_IS_ERROR(rc))
@@ -3156,6 +3158,17 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
+
+#if MDBX_TXN_CHECKPID || !(defined(_WIN32) || defined(_WIN64))
+  /* Check the PID even if MDBX_TXN_CHECKPID=0 on non-Windows
+   * platforms (i.e. where fork() is available).
+   * This is required to legitimize a call to mdbx_end_close() after fork()
+   * from a child process, that should be allowed to free resources. */
+  if (unlikely(env->me_pid != mdbx_getpid())) {
+    env->me_flags |= MDBX_FATAL_ERROR;
+    return MDBX_PANIC;
+  }
+#endif /* MDBX_TXN_CHECKPID */
 
   unsigned flags = env->me_flags & ~MDBX_NOMETASYNC;
   if (unlikely(flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)))
