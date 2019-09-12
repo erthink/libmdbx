@@ -238,6 +238,9 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 /* Number of DBs in metapage (free and main) - also hardcoded elsewhere */
 #define CORE_DBS 2
 #define MAX_DBI (INT16_MAX - CORE_DBS)
+#if MAX_DBI != MDBX_MAX_DBI
+#error "Opps, MAX_DBI != MDBX_MAX_DBI"
+#endif
 
 /* Number of meta pages - also hardcoded elsewhere */
 #define NUM_METAS 3

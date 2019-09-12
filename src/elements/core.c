@@ -1418,8 +1418,8 @@ static const char *__mdbx_strerr(int errnum) {
       "MDBX_DBS_FULL: Too may DBI (maxdbs reached)",
       "MDBX_READERS_FULL: Too many readers (maxreaders reached)",
       NULL /* MDBX_TLS_FULL (-30789): unused in MDBX */,
-      "MDBX_TXN_FULL: Transaction has too many dirty pages - transaction too "
-      "big",
+      "MDBX_TXN_FULL: Transaction has too many dirty pages, "
+      "i.e transaction too big",
       "MDBX_CURSOR_FULL: Internal error - cursor stack limit reached",
       "MDBX_PAGE_FULL: Internal error - page has no more space",
       "MDBX_MAP_RESIZED: Database contents grew beyond environment mapsize",
@@ -1430,7 +1430,8 @@ static const char *__mdbx_strerr(int errnum) {
       "DUPFIXED size",
       "MDBX_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
       "MDBX_PROBLEM: Unexpected problem - txn should abort",
-      "MDBX_BUSY: Another write transaction is started",
+      "MDBX_BUSY: Another write transaction is running or "
+      "environment is already used while opening with MDBX_EXCLUSIVE flag",
   };
 
   if (errnum >= MDBX_KEYEXIST && errnum <= MDBX_LAST_ERRCODE) {
@@ -1861,10 +1862,10 @@ static int mdbx_page_befree(MDBX_cursor *mc, MDBX_page *mp) {
 /* Loosen or free a single page.
  *
  * Saves single pages to a list for future reuse
- * in this same txn. It has been pulled from the freeDB
+ * in this same txn. It has been pulled from the GC
  * and already resides on the dirty list, but has been
  * deleted. Use these pages first before pulling again
- * from the freeDB.
+ * from the GC.
  *
  * If the page wasn't dirtied in this txn, just add it
  * to this txn's free list. */
@@ -2529,7 +2530,7 @@ bailout:
  *
  * If there are free pages available from older transactions, they
  * are re-used first. Otherwise allocate a new page at mt_next_pgno.
- * Do not modify the freedB, just merge freeDB records into me_reclaimed_pglist
+ * Do not modify the freedB, just merge GC records into me_reclaimed_pglist
  * and move me_last_reclaimed to say which records were consumed.  Only this
  * function can create me_reclaimed_pglist and move
  * me_last_reclaimed/mt_next_pgno.
@@ -2559,7 +2560,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
   if (likely(flags & MDBX_ALLOC_GC)) {
     flags |= env->me_flags & (MDBX_COALESCE | MDBX_LIFORECLAIM);
     if (unlikely(mc->mc_flags & C_RECLAIMING)) {
-      /* If mc is updating the freeDB, then the befree-list cannot play
+      /* If mc is updating the GC, then the befree-list cannot play
        * catch-up with itself by growing while trying to save it. */
       flags &=
           ~(MDBX_ALLOC_GC | MDBX_ALLOC_KICK | MDBX_COALESCE | MDBX_LIFORECLAIM);
@@ -2822,7 +2823,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
 #endif /* MDBX_PNL sort-order */
     }
 
-    /* Use new pages from the map when nothing suitable in the freeDB */
+    /* Use new pages from the map when nothing suitable in the GC */
     repg_pos = 0;
     pgno = txn->mt_next_pgno;
     rc = MDBX_MAP_FULL;
@@ -3978,7 +3979,7 @@ static __inline int mdbx_backlog_extragap(MDBX_env *env) {
 
 /* LY: Prepare a backlog of pages to modify FreeDB itself,
  * while reclaiming is prohibited. It should be enough to prevent search
- * in mdbx_page_alloc() during a deleting, when freeDB tree is unbalanced. */
+ * in mdbx_page_alloc() during a deleting, when GC tree is unbalanced. */
 static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
   /* LY: extra page(s) for b-tree rebalancing */
   const int extra =
@@ -4190,7 +4191,7 @@ retry:
         head_gc_id = MDBX_PNL_LAST(txn->mt_lifo_reclaimed);
       }
     } else {
-      /* If using records from freeDB which we have not yet deleted,
+      /* If using records from GC which we have not yet deleted,
        * now delete them and any we reserved for me_reclaimed_pglist. */
       while (cleaned_gc_id < env->me_last_reclaimed) {
         rc = mdbx_cursor_first(&mc, &key, NULL);
@@ -4356,14 +4357,14 @@ retry:
     // handle befree-list - store ones into singe gc-record
     if (befree_stored < MDBX_PNL_SIZE(txn->mt_befree_pages)) {
       if (unlikely(!befree_stored)) {
-        /* Make sure last page of freeDB is touched and on befree-list */
+        /* Make sure last page of GC is touched and on befree-list */
         mc.mc_flags &= ~C_RECLAIMING;
         rc = mdbx_page_search(&mc, NULL, MDBX_PS_LAST | MDBX_PS_MODIFY);
         mc.mc_flags |= C_RECLAIMING;
         if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_NOTFOUND)
           goto bailout;
       }
-      /* Write to last page of freeDB */
+      /* Write to last page of GC */
       key.iov_len = sizeof(txn->mt_txnid);
       key.iov_base = &txn->mt_txnid;
       do {
@@ -11973,7 +11974,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
     meta->mp_meta.mm_dbs[MAIN_DBI].md_flags =
         read_txn->mt_dbs[MAIN_DBI].md_flags;
   } else {
-    /* Count free pages + freeDB pages.  Subtract from last_pg
+    /* Count free pages + GC pages.  Subtract from last_pg
      * to find the new last_pg, which also becomes the new root. */
     pgno_t freecount = 0;
     MDBX_cursor mc;
@@ -14708,6 +14709,8 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
 }
 
 //----------------------------------------------------------------------------
+/* *INDENT-OFF* */
+/* clang-format off */
 
 __dll_export
 #ifdef __attribute_used__
@@ -14778,3 +14781,6 @@ LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {
          "abort_on_error=1";
 }
 #endif /* __SANITIZE_ADDRESS__ */
+
+/* *INDENT-ON* */
+/* clang-format on */

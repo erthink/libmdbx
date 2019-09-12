@@ -1,69 +1,15 @@
-/* LICENSE AND COPYRUSTING *****************************************************
+/**** BRIEFLY ******************************************************************
  *
- * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
+ * libmdbx is superior to LMDB in terms of features and reliability,
+ * not inferior in performance.  libmdbx works on Linux, FreeBSD, MacOS X
+ * and other systems compliant with POSIX.1-2008, but also support
+ * Windows as a complementary platform.
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
+ * Look below for API description, for other information (build, embedding and
+ * amalgamation, improvements over LMDB, benchmarking, etc) please refer to
+ * README.md at https://abf.io/erthink/libmdbx.
  *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- *
- * ---
- *
- * This code is derived from "LMDB engine" written by
- * Howard Chu (Symas Corporation), which itself derived from btree.c
- * written by Martin Hedenfalk.
- *
- * ---
- *
- * Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- *
- * ---
- *
- * Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE. */
-
-/* ACKNOWLEDGEMENTS ************************************************************
- *
- * Howard Chu (Symas Corporation) - the author of LMDB,
- * from which originated the MDBX in 2015.
- *
- * Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code,
- * which was used for begin development of LMDB. */
-
-#pragma once
-#ifndef LIBMDBX_H
-#define LIBMDBX_H
-
-/*******************************************************************************
- *
- * libmdbx is superior to LMDB in terms of features and reliability, not
- * inferior in performance.  libmdbx works on Linux, FreeBSD, MacOS X and other
- * systems compliant with POSIX.1-2008, but also support Windows as a
- * complementary platform.
+ *  ---
  *
  * The next version is under active non-public development and will be released
  * as MithrilDB and libmithrildb for libraries & packages.  Admittedly mythical
@@ -77,7 +23,229 @@
  *
  * The Future will (be) Positive. Всё будет хорошо.
  *
+ *
+ **** INTRODUCTION *************************************************************
+ *
+ *   // For the most part, this section is a copy of the corresponding text
+ *   // from LMDB description, but with some edits reflecting the improvements
+ *   // and enhancements were made in MDBX.
+ *
+ * MDBX is a Btree-based database management library modeled loosely on the
+ * BerkeleyDB API, but much simplified. The entire database (aka "environment")
+ * is exposed in a memory map, and all data fetches return data directly from
+ * the mapped memory, so no malloc's or memcpy's occur during data fetches.
+ * As such, the library is extremely simple because it requires no page caching
+ * layer of its own, and it is extremely high performance and memory-efficient.
+ * It is also fully transactional with full ACID semantics, and when the memory
+ * map is read-only, the database integrity cannot be corrupted by stray pointer
+ * writes from application code.
+ *
+ * The library is fully thread-aware and supports concurrent read/write access
+ * from multiple processes and threads. Data pages use a copy-on-write strategy
+ * so no active data pages are ever overwritten, which also provides resistance
+ * to corruption and eliminates the need of any special recovery procedures
+ * after a system crash. Writes are fully serialized; only one write transaction
+ * may be active at a time, which guarantees that writers can never deadlock.
+ * The database structure is multi-versioned so readers run with no locks;
+ * writers cannot block readers, and readers don't block writers.
+ *
+ * Unlike other well-known database mechanisms which use either write-ahead
+ * transaction logs or append-only data writes, MDBX requires no maintenance
+ * during operation. Both write-ahead loggers and append-only databases require
+ * periodic checkpointing and/or compaction of their log or database files
+ * otherwise they grow without bound. MDBX tracks free pages within the database
+ * and re-uses them for new write operations, so the database size does not grow
+ * without bound in normal use. It is worth noting that the "next" version
+ * libmdbx (MithrilDB) will solve this problem.
+ *
+ * The memory map can be used as a read-only or read-write map. It is read-only
+ * by default as this provides total immunity to corruption. Using read-write
+ * mode offers much higher write performance, but adds the possibility for stray
+ * application writes thru pointers to silently corrupt the database.
+ * Of course if your application code is known to be bug-free (...) then this is
+ * not an issue.
+ *
+ * If this is your first time using a transactional embedded key/value store,
+ * you may find the "GETTING STARTED" section below to be helpful.
+ *
+ *  ---
+ *  Restrictions and Caveats (in addition to those listed for some functions):
+ *
+ *  - Troubleshooting the LCK-file.
+ *	    1. A broken LCK-file can cause sync issues, including appearance of
+ *         wrong/inconsistent data for readers. When database opened in the
+ *         cooperative read-write mode the LCK-file requires to be mapped to
+ *         memory in read-write access. In this case it is always possible for
+ *         stray/malfunctioned application could writes thru pointers to
+ *         silently corrupt the LCK-file.
+ *
+ *         Unfortunately, there is no any portable way to prevent such
+ *         corruption, since the LCK-file is updated concurrently by
+ *         multiple processes in a lock-free manner and any locking is
+ *         unwise due to a large overhead.
+ *
+ *         The "next" version of libmdbx (MithrilDB) will solve this issue.
+ *
+ *         Workaround: Just make all programs using the database close it;
+ *                     the LCK-file is always reset on first open.
+ *
+ *	    2. Stale reader transactions left behind by an aborted program cause
+ *         further writes to grow the database quickly, and stale locks can
+ *         block further operation.
+ *         MDBX checks for stale readers while opening environment and before
+ *         growth the database. But in some cases, this may not be enough.
+ *
+ *         Workaround: Check for stale readers periodically, using the
+ *	                   mdbx_reader_check() function or the mdbx_stat tool.
+ *
+ *      3. Stale writers will be cleared automatically by MDBX on supprted
+ *         platforms. But this is platform-specific, especially of
+ *         implementation of shared POSIX-mutexes and support for robust
+ *         mutexes. For instance there are no known issues on Linux, OSX,
+ *         Windows and FreeBSD.
+ *
+ *         Workaround: Otherwise just make all programs using the database
+ *                     close it; the LCK-file is always reset on first open
+ *                     of the environment.
+ *
+ *  - Do not use MDBX databases on remote filesystems, even between processes
+ *    on the same host. This breaks file locks on some platforms, possibly
+ *    memory map sync, and certainly sync between programs on different hosts.
+ *
+ *    On the other hand, MDBX support the exclusive database operation over
+ *    a network, and cooperative read-only access to the database placed on
+ *    a read-only network shares.
+ *
+ *  - There is no pure read-only mode in a normal explicitly way, since
+ *    readers need write access to LCK-file to be ones visible for writer.
+ *    MDBX always tries to open/create LCK-file for read-write, but switches
+ *    to without-LCK mode on appropriate errors (EROFS, EACCESS, EPERM)
+ *    if the read-only mode was requested by the MDBX_RDONLY flag which is
+ *    described below.
+ *
+ *    The "next" version of libmdbx (MithrilDB) will solve this issue.
+ *
+ *  - A thread can only use one transaction at a time, plus any nested
+ *	  read-write transactions in the non-writemap mode. Each transaction
+ *    belongs to one thread. The MDBX_NOTLS flag changes this for read-only
+ *    transactions. See below.
+ *
+ *  - MDBX_env instance(s) should not be used in child processes after fork().
+ *    It would be insane to call fork() and any MDBX-functions simultaneously
+ *    from multiple threads. The best way is to prevent the presence of open
+ *    MDBX-instances during fork().
+ *
+ *    The MDBX_TXN_CHECKPID build-time option, which is ON by default on
+ *    non-Windows platforms (i.e. where fork() is available), enables PID
+ *    checking at a few critical points. But this does not give any guarantees,
+ *    but only allows you to detect such errors a little sooner. Depending on
+ *    the platform, you should expect an application crash and/or database
+ *    corruption in such cases.
+ *
+ *    On the other hand, MDBX allow calling mdbx_close_env() in such cases to
+ *    release resources, but no more and in general this is a wrong way.
+ *
+ *  - Do not have open an MDBX database twice in the same process at
+ *	  the same time. Not even from a plain open() call - close()ing it
+ *	  breaks POSIX's fcntl() advisory locking. It is OK to reopen it after
+ *	  fork() or exec(), since the opened files has FD_CLOEXEC set.
+ *
+ *    Unlike the LMDB, the MDBX uses the "Open file description" locks (aka
+ *    OFD-locks) when ones available, also performing additional checks against
+ *    double-opening.
+ *
+ *  - Avoid long-lived transactions, especially in the scenarios with a high
+ *    rate of write transactions. Read transactions prevent reuse of pages
+ *    freed by newer write transactions, thus the database can grow quickly.
+ *    Write transactions prevent other write transactions, since writes are
+ *    serialized.
+ *
+ *    The "next" version of libmdbx (MithrilDB) will solve this issue
+ *    for read-only transactions.
+ *
+ *  - Avoid suspending a process with active transactions. These would then be
+ *    "long-lived" as above.
+ *
+ *    The "next" version of libmdbx (MithrilDB) will solve this issue.
+ *
+ *  - Avoid aborting a process with an active read-only transaction in scenaries
+ *    with high rate of write transactions. The transaction becomes "long-lived"
+ *    as above until a check for stale readers is performed or the LCK-file is
+ *    reset, since the process may not remove it from the lockfile. This does
+ *    not apply to write transactions if the system clears stale writers, see
+ *    above.
+ *
+ *  - An MDBX database configuration will often reserve considerable unused
+ *	  memory address space and maybe file size for future growth. This does
+ *    not use actual memory or disk space, but users may need to understand
+ *    the difference so they won't be scared off.
+ *
+ **** GETTING STARTED **********************************************************
+ *
+ * TBD
+ *
+ **** LICENSE AND COPYRUSTING **************************************************
+ *
+ * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>
+ * and other libmdbx authors: please see AUTHORS file.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+ *
+ *  ---
+ *
+ * This code is derived from "LMDB engine" written by
+ * Howard Chu (Symas Corporation), which itself derived from btree.c
+ * written by Martin Hedenfalk.
+ *
+ *  ---
+ *
+ * Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted only as authorized by the OpenLDAP
+ * Public License.
+ *
+ * A copy of this license is available in the file LICENSE in the
+ * top-level directory of the distribution or, alternatively, at
+ * <http://www.OpenLDAP.org/license.html>.
+ *
+ *  ---
+ *
+ * Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
+ *
+ * Permission to use, copy, modify, and distribute this software for any
+ * purpose with or without fee is hereby granted, provided that the above
+ * copyright notice and this permission notice appear in all copies.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ *
+ *
+ **** ACKNOWLEDGEMENTS *********************************************************
+ *
+ * Howard Chu (Symas Corporation) - the author of LMDB,
+ * from which originated the MDBX in 2015.
+ *
+ * Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code,
+ * which was used for begin development of LMDB.
+ *
  ******************************************************************************/
+
+#pragma once
+#ifndef LIBMDBX_H
+#define LIBMDBX_H
 
 #ifdef _MSC_VER
 #pragma warning(push, 1)
@@ -201,6 +369,7 @@ typedef pthread_t mdbx_tid_t;
 extern "C" {
 #endif
 
+/* MDBX version information. */
 typedef struct mdbx_version_info {
   uint8_t major;
   uint8_t minor;
@@ -214,7 +383,11 @@ typedef struct mdbx_version_info {
   } git;
   const char *sourcery /* sourcery anchor for pinning */;
 } mdbx_version_info;
+extern LIBMDBX_API const mdbx_version_info mdbx_version;
 
+/* MDBX build information.
+ * WARNING: Some strings could be NULL in case no corresponding information was
+ *          provided at build time (i.e. flags). */
 typedef struct mdbx_build_info {
   const char *datetime /* build timestamp (ISO-8601 or __DATE__ __TIME__) */;
   const char *target /* cpu/arch-system-config triplet */;
@@ -223,22 +396,48 @@ typedef struct mdbx_build_info {
   const char *flags /* CFLAGS */;
 } mdbx_build_info;
 
-extern LIBMDBX_API const mdbx_version_info mdbx_version;
 extern LIBMDBX_API const mdbx_build_info mdbx_build;
 
 #if defined(_WIN32) || defined(_WIN64)
 #if !MDBX_BUILD_SHARED_LIBRARY
 
-/* Dll initialization callback for ability to dynamically load MDBX DLL by
- * LoadLibrary() on Windows versions before Windows Vista. This function MUST be
- * called once from DllMain() for each reason (DLL_PROCESS_ATTACH,
- * DLL_PROCESS_DETACH, DLL_THREAD_ATTACH and DLL_THREAD_DETACH). Do this
- * carefully and ONLY when actual Windows version don't support initialization
- * via "TLS Directory" (e.g .CRT$XL[A-Z] sections in executable or dll file). */
+/* MDBX internally uses global and thread local storage destructors to
+ * automatically (de)initialization, releasing reader lock table slots
+ * and so on.
+ *
+ * If MDBX builded as a DLL this is done out-of-the-box by DllEntry() function,
+ * which called automatically by Windows core with passing corresponding reason
+ * argument.
+ *
+ * Otherwise, if MDBX was builded not as a DLL, some black magic
+ * may be required depending of Windows version:
+ *  - Modern Windows versions, including Windows Vista and later, provides
+ *    support for "TLS Directory" (e.g .CRT$XL[A-Z] sections in executable
+ *    or dll file). In this case, MDBX capable of doing all automatically,
+ *    and you do not need to call mdbx_dll_callback().
+ *  - Obsolete versions of Windows, prior to Windows Vista, REQUIRES calling
+ *    mdbx_dll_callback() manually from corresponding DllMain() or WinMain()
+ *    of your DLL or application.
+ *  - This behavior is under control of the MODX_CONFIG_MANUAL_TLS_CALLBACK
+ *    option, which is determined by default according to the target version
+ *    of Windows at build time.
+ *    But you may override MODX_CONFIG_MANUAL_TLS_CALLBACK in special cases.
+ *
+ * Therefore, building MDBX as a DLL is recommended for all version of Windows.
+ * So, if you doubt, just build MDBX as the separate DLL and don't worry. */
 
 #ifndef MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#if defined(_WIN32_WINNT_VISTA) && WINVER >= _WIN32_WINNT_VISTA
+/* As described above mdbx_dll_callback() is NOT needed forWindows Vista
+ * and later. */
 #define MDBX_CONFIG_MANUAL_TLS_CALLBACK 0
+#else
+/* As described above mdbx_dll_callback() IS REQUIRED for Windows versions
+ * prior to Windows Vista. */
+#define MDBX_CONFIG_MANUAL_TLS_CALLBACK 1
 #endif
+#endif /* MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+
 #if MDBX_CONFIG_MANUAL_TLS_CALLBACK
 void LIBMDBX_API NTAPI mdbx_dll_callback(PVOID module, DWORD reason,
                                          PVOID reserved);
@@ -246,12 +445,7 @@ void LIBMDBX_API NTAPI mdbx_dll_callback(PVOID module, DWORD reason,
 #endif /* !MDBX_BUILD_SHARED_LIBRARY */
 #endif /* Windows */
 
-/* The name of the lock file in the DB environment */
-#define MDBX_LOCKNAME "/mdbx.lck"
-/* The name of the data file in the DB environment */
-#define MDBX_DATANAME "/mdbx.dat"
-/* The suffix of the lock file when no subdir is used */
-#define MDBX_LOCK_SUFFIX "-lck"
+/**** TOP-LEVEL STRUCTURES ****************************************************/
 
 /* Opaque structure for a database environment.
  *
@@ -265,8 +459,11 @@ typedef struct MDBX_env MDBX_env;
  * read-only or read-write. */
 typedef struct MDBX_txn MDBX_txn;
 
-/* A handle for an individual database in the DB environment. */
+/* A handle for an individual database (key-value spaces) in the DB environment.
+ * Zero handle is used internally (hidden Garbage Collection DB).
+ * So, any valid DBI-handle great than 0 and less than or equal MDBX_MAX_DBI. */
 typedef uint32_t MDBX_dbi;
+#define MDBX_MAX_DBI UINT32_C(32765)
 
 /* Opaque structure for navigating through a database */
 typedef struct MDBX_cursor MDBX_cursor;
@@ -298,23 +495,75 @@ typedef struct iovec MDBX_val;
 /* A callback function used to compare two keys in a database */
 typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 
-/* Environment Flags */
-/* no environment directory */
+/**** THE FILES ****************************************************************
+ * At the file system level, the environment corresponds to a pair of files.
+ * */
+
+/* The name of the lock file in the DB environment */
+#define MDBX_LOCKNAME "/mdbx.lck"
+/* The name of the data file in the DB environment */
+#define MDBX_DATANAME "/mdbx.dat"
+
+/* The suffix of the lock file when MDBX_NOSUBDIR is used */
+#define MDBX_LOCK_SUFFIX "-lck"
+
+/**** Environment Flags *******************************************************/
+
+/* MDBX_NOSUBDIR = no environment directory.
+ *
+ *  - with MDBX_NOSUBDIR = in a filesystem we have the pair of MDBX-files which
+ *    names derived from given pathname by appending predefined suffixes.
+ *
+ *  - without MDBX_NOSUBDIR = in a filesystem we have the MDBX-directory with
+ *    given pathname, within that a pair of MDBX-files with predefined names. */
 #define MDBX_NOSUBDIR 0x4000u
-/* don't fsync after commit */
-#define MDBX_NOSYNC 0x10000u
-/* read only */
+
+/* MDBX_RDONLY = read only mode.
+ *  - with MDBX_RDONLY = open environment in read-only mode.
+ *
+ *  - without MDBX_RDONLY = open environment in read-write mode*/
 #define MDBX_RDONLY 0x20000u
-/* don't fsync metapage after commit */
-#define MDBX_NOMETASYNC 0x40000u
+
+/* MDBX_EXCLUSIVE = open DB in exclusive/monopolistic mode.
+ *
+ *  - with MDBX_EXCLUSIVE = open environment in exclusive/monopolistic mode
+ *    or return MDBX_BUSY if environment already used by other process.
+ *    The main feature of the exclusive mode is the ability to open the
+ *    environment placed on a network share..
+ *
+ *  - without MDBX_RDONLY = open environment in cooperative mode,
+ *    i.e. for multi-process access/interaction/cooperation.
+ *    The main requirements of the cooperative mode are:
+ *      1. data files MUST be placed in the LOCAL file system,
+ *         but NOT on a network share.
+ *      2. environment MUST be opened only by LOCAL processes,
+ *         but NOT over a network.
+ *      3. OS kernel (i.e. file system and memory mapping implementation) and
+ *         all processes that open the given environment MUST be running
+ *         in the physically single RAM with cache-coherency. The only
+ *         exception for cache-consistency requirement is Linux on MIPS
+ *         architecture, but this case has not been tested for a long time). */
+#define MDBX_EXCLUSIVE 0x400000u
+
 /* use writable mmap */
 #define MDBX_WRITEMAP 0x80000u
 /* use asynchronous msync when MDBX_WRITEMAP is used */
 #define MDBX_MAPASYNC 0x100000u
+
+/* MDBX_NOSYNC = don't sync data to persistent storage (e.g. disk)
+ *               at the end of transaction commit.
+ *
+ */
+#define MDBX_NOSYNC 0x10000u
+
+/* don't fsync metapage after commit */
+#define MDBX_NOMETASYNC 0x40000u
+
+/* make a steady-sync only on close and explicit env-sync */
+#define MDBX_UTTERLY_NOSYNC (MDBX_NOSYNC | MDBX_MAPASYNC)
+
 /* tie reader locktable slots to MDBX_txn objects instead of to threads */
 #define MDBX_NOTLS 0x200000u
-/* open DB in exclusive/monopolistic mode. */
-#define MDBX_EXCLUSIVE 0x400000u
 /* don't do readahead */
 #define MDBX_NORDAHEAD 0x800000u
 /* don't initialize malloc'd memory before writing to datafile */
@@ -323,8 +572,6 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 #define MDBX_COALESCE 0x2000000u
 /* LIFO policy for reclaiming FreeDB records */
 #define MDBX_LIFORECLAIM 0x4000000u
-/* make a steady-sync only on close and explicit env-sync */
-#define MDBX_UTTERLY_NOSYNC (MDBX_NOSYNC | MDBX_MAPASYNC)
 /* debuging option, fill/perturb released pages */
 #define MDBX_PAGEPERTURB 0x8000000u
 
@@ -463,7 +710,8 @@ typedef enum MDBX_cursor_op {
 #define MDBX_BAD_DBI (-30780)
 /* Unexpected problem - txn should abort */
 #define MDBX_PROBLEM (-30779)
-/* Another write transaction is running */
+/* Another write transaction is running or environment is already used while
+ * opening with MDBX_EXCLUSIVE flag */
 #define MDBX_BUSY (-30778)
 /* The last defined error code */
 #define MDBX_LAST_ERRCODE MDBX_BUSY
