@@ -6954,9 +6954,30 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   int oflags;
   if (F_ISSET(flags, MDBX_RDONLY))
     oflags = O_RDONLY;
-  else if (mode != 0)
+  else if (mode != 0) {
+    if ((flags & MDBX_NOSUBDIR) == 0) {
+#if defined(_WIN32) || defined(_WIN64)
+      if (!CreateDirectoryA(path, nullptr)) {
+        rc = GetLastError();
+        if (rc != ERROR_ALREADY_EXISTS)
+          goto bailout;
+      }
+#else
+      const mode_t dir_mode =
+          (/* inherit read/write permissions for group and others */ mode &
+           (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
+          /* always add read/write/search for owner */ S_IRWXU |
+          ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
+          ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
+      if (mkdir(path, dir_mode)) {
+        rc = errno;
+        if (rc != EEXIST)
+          goto bailout;
+      }
+#endif
+    }
     oflags = O_RDWR | O_CREAT;
-  else
+  } else
     oflags = O_RDWR;
 
   rc = mdbx_openfile(dxb_pathname, oflags, mode, &env->me_fd,
