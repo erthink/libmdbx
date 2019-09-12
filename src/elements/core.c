@@ -6747,7 +6747,9 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     err = uniq_check(&env->me_lck_mmap, &inprocess_neighbor);
     if (MDBX_IS_ERROR(err))
       goto bailout;
-    if (inprocess_neighbor && (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE)) {
+    if (inprocess_neighbor &&
+        ((mdbx_runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0 ||
+         (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE) != 0)) {
       err = MDBX_BUSY;
       goto bailout;
     }
