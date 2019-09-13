@@ -727,14 +727,9 @@ struct MDBX_txn {
 /* mdbx_txn_begin() flags */
 #define MDBX_TXN_BEGIN_FLAGS                                                   \
   (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_RDONLY | MDBX_TRYTXN)
-#define MDBX_TXN_NOMETASYNC                                                    \
-  MDBX_NOMETASYNC                   /* don't sync meta for this txn on commit */
-#define MDBX_TXN_NOSYNC MDBX_NOSYNC /* don't sync this txn on commit */
-#define MDBX_TXN_RDONLY MDBX_RDONLY /* read-only transaction */
-                                    /* internal txn flags */
-#define MDBX_TXN_WRITEMAP MDBX_WRITEMAP /* copy of MDBX_env flag in writers */
-#define MDBX_TXN_FINISHED 0x01          /* txn is finished or never began */
-#define MDBX_TXN_ERROR 0x02             /* txn is unusable after an error */
+  /* internal txn flags */
+#define MDBX_TXN_FINISHED 0x01  /* txn is finished or never began */
+#define MDBX_TXN_ERROR 0x02     /* txn is unusable after an error */
 #define MDBX_TXN_DIRTY 0x04     /* must write, even if dirty list is empty */
 #define MDBX_TXN_SPILLS 0x08    /* txn or a parent has spilled pages */
 #define MDBX_TXN_HAS_CHILD 0x10 /* txn has an MDBX_txn.mt_child */

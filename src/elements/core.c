@@ -2393,7 +2393,7 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
 /* Add a page to the txn's dirty list */
 static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
   int (*const adder)(MDBX_DPL, pgno_t pgno, MDBX_page * page) =
-      (txn->mt_flags & MDBX_TXN_WRITEMAP) ? mdbx_dpl_append : mdbx_dpl_insert;
+      (txn->mt_flags & MDBX_WRITEMAP) ? mdbx_dpl_append : mdbx_dpl_insert;
   const int rc = adder(txn->mt_rw_dirtylist, mp->mp_pgno, mp);
   if (unlikely(rc != MDBX_SUCCESS)) {
     txn->mt_flags |= MDBX_TXN_ERROR;
@@ -3354,8 +3354,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
                 0);
 
   pgno_t upper_limit_pgno = 0;
-  if (flags & MDBX_TXN_RDONLY) {
-    txn->mt_flags = MDBX_TXN_RDONLY;
+  if (flags & MDBX_RDONLY) {
+    txn->mt_flags = MDBX_RDONLY;
     MDBX_reader *r = txn->mt_ro_reader;
     if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
       mdbx_assert(env, !(env->me_flags & MDBX_NOTLS));
@@ -3568,7 +3568,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     }
     txn->mt_owner = mdbx_thread_self();
 #if defined(_WIN32) || defined(_WIN64)
-    if ((txn->mt_flags & MDBX_TXN_RDONLY) != 0 && size > env->me_dbgeo.lower &&
+    if ((txn->mt_flags & MDBX_RDONLY) != 0 && size > env->me_dbgeo.lower &&
         env->me_dbgeo.shrink) {
       txn->mt_flags |= MDBX_SHRINK_ALLOWED;
       mdbx_srwlock_AcquireShared(&env->me_remap_guard);
@@ -3591,18 +3591,18 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely((txn->mt_flags & MDBX_TXN_RDONLY) == 0))
+  if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_owner != 0))
     return MDBX_THREAD_MISMATCH;
 
-  rc = mdbx_txn_renew0(txn, MDBX_TXN_RDONLY);
+  rc = mdbx_txn_renew0(txn, MDBX_RDONLY);
   if (rc == MDBX_SUCCESS) {
     txn->mt_owner = mdbx_thread_self();
     mdbx_debug("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
                "/%" PRIaPGNO,
-               txn->mt_txnid, (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w',
+               txn->mt_txnid, (txn->mt_flags & MDBX_RDONLY) ? 'r' : 'w',
                (void *)txn, (void *)txn->mt_env, txn->mt_dbs[MAIN_DBI].md_root,
                txn->mt_dbs[FREE_DBI].md_root);
   }
@@ -3660,7 +3660,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     /* Nested transactions: Max 1 child, write txns only, no writemap */
     flags |= parent->mt_flags;
     if (unlikely(flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED)))
-      return (parent->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EINVAL : MDBX_BAD_TXN;
+      return (parent->mt_flags & MDBX_RDONLY) ? MDBX_EINVAL : MDBX_BAD_TXN;
 
     /* Child txns save MDBX_pgstate and use own copy of cursors */
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
@@ -3743,7 +3743,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       mdbx_free(txn);
   } else {
-    mdbx_assert(env, (txn->mt_flags & ~(MDBX_TXN_RDONLY | MDBX_TXN_WRITEMAP |
+    mdbx_assert(env, (txn->mt_flags & ~(MDBX_RDONLY | MDBX_WRITEMAP |
                                         MDBX_SHRINK_ALLOWED)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
@@ -3834,13 +3834,13 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   mdbx_debug("%s txn %" PRIaTXN "%c %p on mdbenv %p, root page %" PRIaPGNO
              "/%" PRIaPGNO,
              names[mode & MDBX_END_OPMASK], txn->mt_txnid,
-             (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn,
+             (txn->mt_flags & MDBX_RDONLY) ? 'r' : 'w', (void *)txn,
              (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
              txn->mt_dbs[FREE_DBI].md_root);
 
   mdbx_ensure(env, txn->mt_txnid >=
                        /* paranoia is appropriate here */ *env->me_oldest);
-  if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)) {
+  if (F_ISSET(txn->mt_flags, MDBX_RDONLY)) {
 #if defined(_WIN32) || defined(_WIN64)
     if (txn->mt_flags & MDBX_SHRINK_ALLOWED)
       mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
@@ -3862,7 +3862,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     }
     mdbx_flush_noncoherent_cpu_writeback();
     txn->mt_numdbs = 0; /* prevent further DBI activity */
-    txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+    txn->mt_flags = MDBX_RDONLY | MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
   } else if (!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED)) {
     /* Export or close DBI handles created in this txn */
@@ -3930,7 +3930,7 @@ int mdbx_txn_reset(MDBX_txn *txn) {
     return MDBX_THREAD_MISMATCH;
 
   /* This call is only valid for read-only txns */
-  if (unlikely(!(txn->mt_flags & MDBX_TXN_RDONLY)))
+  if (unlikely(!(txn->mt_flags & MDBX_RDONLY)))
     return MDBX_EINVAL;
 
   /* LY: don't close DBI-handles in MDBX mode */
@@ -3952,7 +3952,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(txn->mt_owner != mdbx_thread_self()))
     return MDBX_THREAD_MISMATCH;
 
-  if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY))
+  if (F_ISSET(txn->mt_flags, MDBX_RDONLY))
     /* LY: don't close DBI-handles in MDBX mode */
     return mdbx_txn_end(txn, MDBX_END_ABORT | MDBX_END_UPDATE | MDBX_END_SLOT |
                                  MDBX_END_FREE);
@@ -4957,7 +4957,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   /* mdbx_txn_end() mode for a commit which writes nothing */
   unsigned end_mode =
       MDBX_END_EMPTY_COMMIT | MDBX_END_UPDATE | MDBX_END_SLOT | MDBX_END_FREE;
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
+  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
     goto done;
 
   if (unlikely(txn->mt_flags & (MDBX_TXN_FINISHED | MDBX_TXN_ERROR))) {
@@ -7501,7 +7501,7 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
   MDBX_page *p = NULL;
   int level;
 
-  if (!(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_WRITEMAP))) {
+  if (!(txn->mt_flags & (MDBX_RDONLY | MDBX_WRITEMAP))) {
     MDBX_txn *tx2 = txn;
     level = 1;
     do {
@@ -8724,9 +8724,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   nospill = flags & MDBX_NOSPILL;
   flags &= ~MDBX_NOSPILL;
 
-  if (unlikely(mc->mc_txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
-                                                    : MDBX_BAD_TXN;
+  if (unlikely(mc->mc_txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
+    return (mc->mc_txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   if (unlikely(key->iov_len > env->me_maxkey_limit))
     return MDBX_BAD_VALSIZE;
@@ -9322,9 +9321,8 @@ int mdbx_cursor_del(MDBX_cursor *mc, unsigned flags) {
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(mc->mc_txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
-                                                    : MDBX_BAD_TXN;
+  if (unlikely(mc->mc_txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
+    return (mc->mc_txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
     return MDBX_EINVAL;
@@ -10009,7 +10007,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
 
-  if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
+  if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_RDONLY)))
     return MDBX_EINVAL;
 
   const size_t size = (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT)
@@ -11157,8 +11155,8 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   return mdbx_del0(txn, dbi, key, data, 0);
 }
@@ -11705,8 +11703,8 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
                          MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
   int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
@@ -12537,7 +12535,7 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
        * seems that is case #1 above */
       user_flags = txn->mt_dbs[dbi].md_flags;
     } else if ((user_flags & MDBX_CREATE) && txn->mt_dbs[dbi].md_entries == 0) {
-      if (txn->mt_flags & MDBX_TXN_RDONLY)
+      if (txn->mt_flags & MDBX_RDONLY)
         return /* FIXME: return extended info */ MDBX_EACCESS;
       /* make sure flags changes get committed */
       txn->mt_dbs[dbi].md_flags = user_flags & PERSISTENT_FLAGS;
@@ -12654,7 +12652,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
       return MDBX_INCOMPATIBLE;
   }
 
-  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_TXN_RDONLY))
+  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_RDONLY))
     return MDBX_EACCESS;
 
   /* Done here so we cannot fail after creating a new DB */
@@ -12961,7 +12959,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
     return MDBX_BAD_DBI;
 
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
+  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
     return MDBX_EACCESS;
 
   MDBX_cursor *mc;
@@ -13739,7 +13737,7 @@ int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
   if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
 
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
+  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
     return MDBX_EACCESS;
 
   if (likely(canary)) {
@@ -14262,8 +14260,8 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
                          MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
   int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
@@ -14456,7 +14454,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
   if (unlikely(txn->mt_owner != mdbx_thread_self()))
     return MDBX_THREAD_MISMATCH;
 
-  if (unlikely(txn->mt_flags & MDBX_TXN_RDONLY))
+  if (unlikely(txn->mt_flags & MDBX_RDONLY))
     return MDBX_RESULT_FALSE;
 
   const MDBX_env *env = txn->mt_env;
@@ -14542,7 +14540,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
     if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
       return MDBX_BAD_TXN;
 
-    if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
+    if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
       return MDBX_EACCESS;
 
     uint64_t new = dbs->md_seq + increment;
@@ -14694,8 +14692,8 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
   MDBX_val old_data;
