@@ -3632,18 +3632,20 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     return MDBX_PANIC;
 
 #if !defined(_WIN32) && !defined(_WIN64)
-  /* Don't check env->me_map until lock to avoid race with re-mapping for
-   * shrinking */
+  /* Don't check env->me_map until lock to
+   * avoid race with re-mapping for shrinking */
   if (unlikely(!env->me_map))
     return MDBX_EPERM;
 #endif /* Windows */
 
-  flags &= MDBX_TXN_BEGIN_FLAGS;
-  flags |= env->me_flags & MDBX_WRITEMAP;
+  if (unlikely(flags & ~MDBX_TXN_BEGIN_FLAGS))
+    return MDBX_EINVAL;
 
   if (unlikely(env->me_flags & MDBX_RDONLY &
                ~flags)) /* write txn in RDONLY env */
     return MDBX_EACCESS;
+
+  flags |= env->me_flags & MDBX_WRITEMAP;
 
   if (parent) {
     if (unlikely(parent->mt_signature != MDBX_MT_SIGNATURE))
@@ -5659,10 +5661,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     const uint64_t autosync_period = *env->me_autosync_period;
     if (autosync_period && *env->me_unsynced_timeout == 0)
       *env->me_unsynced_timeout = mdbx_osal_monotime() + autosync_period;
-    pending->mm_datasync_sign =
-        (flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC
-            ? MDBX_DATASIGN_NONE
-            : MDBX_DATASIGN_WEAK;
+    pending->mm_datasync_sign = F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC)
+                                    ? MDBX_DATASIGN_NONE
+                                    : MDBX_DATASIGN_WEAK;
   }
 
   MDBX_meta *target = nullptr;

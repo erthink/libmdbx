@@ -726,7 +726,7 @@ struct MDBX_txn {
 /* Transaction Flags */
 /* mdbx_txn_begin() flags */
 #define MDBX_TXN_BEGIN_FLAGS                                                   \
-  (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_RDONLY | MDBX_TRYTXN)
+  (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_MAPASYNC | MDBX_RDONLY | MDBX_TRYTXN)
   /* internal txn flags */
 #define MDBX_TXN_FINISHED 0x01  /* txn is finished or never began */
 #define MDBX_TXN_ERROR 0x02     /* txn is unusable after an error */
