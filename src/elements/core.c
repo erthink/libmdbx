@@ -3616,10 +3616,12 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   int rc;
   unsigned size, tsize;
 
-  if (unlikely(!env || !ret))
+  if (unlikely(!ret))
     return MDBX_EINVAL;
-
   *ret = NULL;
+
+  if (unlikely(!env))
+    return MDBX_EINVAL;
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
@@ -9993,7 +9995,11 @@ static int mdbx_cursor_init(MDBX_cursor *mc, MDBX_txn *txn, MDBX_dbi dbi) {
 }
 
 int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
-  if (unlikely(!ret || !txn))
+  if (unlikely(!ret))
+    return MDBX_EINVAL;
+  *ret = NULL;
+
+  if (unlikely(!txn))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
