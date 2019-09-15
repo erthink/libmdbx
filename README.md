@@ -10,9 +10,10 @@ Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database)
 2.8](LICENSE). Русскоязычная версия этого README [здесь](README-RU.md).
 
 _libmdbx_ is superior to LMDB in terms of features and reliability, not
-inferior in performance. _libmdbx_ works on Linux, FreeBSD, MacOS X and
-other systems compliant with POSIX.1-2008, but also support Windows as a
-complementary platform.
+inferior in performance. In comparison to LMDB, _libmdbx_ makes many
+things just work perfectly, not silently and catastrophically break
+down. _libmdbx_ supports Linux, Windows, MacOS, FreeBSD and other
+systems compliant with POSIX.1-2008.
 
 The next version is under active non-public development and will be
 released as **_MithrilDB_** and `libmithrildb` for libraries & packages.

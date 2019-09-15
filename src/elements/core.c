@@ -1411,7 +1411,7 @@ static const char *__mdbx_strerr(int errnum) {
       "MDBX_NOTFOUND: No matching key/data pair found",
       "MDBX_PAGE_NOTFOUND: Requested page not found",
       "MDBX_CORRUPTED: Database is corrupted",
-      "MDBX_PANIC: Update of meta page failed or environment had fatal error",
+      "MDBX_PANIC: Environment had fatal error",
       "MDBX_VERSION_MISMATCH: DB version mismatch libmdbx",
       "MDBX_INVALID: File is not an MDBX file",
       "MDBX_MAP_FULL: Environment mapsize limit reached",
@@ -2937,7 +2937,7 @@ done:
     mdbx_assert(env, txn->mt_next_pgno <= txn->mt_end_pgno);
   }
 
-  if (env->me_flags & MDBX_PAGEPERTURB)
+  if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
     memset(np, 0x71 /* 'q', 113 */, pgno2bytes(env, num));
   VALGRIND_MAKE_MEM_UNDEFINED(np, pgno2bytes(env, num));
 
@@ -5872,7 +5872,7 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
 
 int __cold mdbx_env_create(MDBX_env **penv) {
   MDBX_env *env = mdbx_calloc(1, sizeof(MDBX_env));
-  if (!env)
+  if (unlikely(!env))
     return MDBX_ENOMEM;
 
   env->me_maxreaders = DEFAULT_READERS;
@@ -5883,7 +5883,7 @@ int __cold mdbx_env_create(MDBX_env **penv) {
 
   int rc;
   const size_t os_psize = mdbx_syspagesize();
-  if (!mdbx_is_power2(os_psize) || os_psize < MIN_PAGESIZE) {
+  if (unlikely(!mdbx_is_power2(os_psize) || os_psize < MIN_PAGESIZE)) {
     mdbx_error("unsuitable system pagesize %" PRIuPTR, os_psize);
     rc = MDBX_INCOMPATIBLE;
     goto bailout;
@@ -5942,7 +5942,7 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
 #if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
   const size_t meta_length = pgno2bytes(env, NUM_METAS);
   (void)madvise(env->me_map, meta_length, MADV_DODUMP);
-  if (!(env->me_flags & MDBX_PAGEPERTURB))
+  if ((env->me_flags & MDBX_PAGEPERTURB) == 0)
     (void)madvise(env->me_map + meta_length, env->me_mapsize - meta_length,
                   MADV_DONTDUMP);
 #endif
@@ -13921,7 +13921,7 @@ __hot static ptrdiff_t estimate(const MDBX_db *db,
    *     level-1: branch-page(s) => scale = leaf-factor * branch-factor^2
    *     level-2: branch-page(s) => scale = leaf-factor * branch-factor
    *     level-N: branch-page(s) => scale = leaf-factor
-   *  last-level: leaf-page(s)   => scale = 1
+   *  leaf-level: leaf-page(s)   => scale = 1
    */
   ptrdiff_t btree_power = db->md_depth - 2 - dr->level;
   if (btree_power < 0)
@@ -14611,8 +14611,8 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
   return pagesize * (MDBX_DPL_TXNFULL - 1);
 }
 
-/*----------------------------------------------------------------------------*/
-/* attribute support functions for Nexenta */
+/*** Attribute support functions for Nexenta **********************************/
+#ifdef MDBX_NEXENTA_ATTRS
 
 static __inline int mdbx_attr_peek(MDBX_val *data, mdbx_attr_t *attrptr) {
   if (unlikely(data->iov_len < sizeof(mdbx_attr_t)))
@@ -14735,8 +14735,9 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   txn->mt_cursors[dbi] = cx.outer.mc_next;
   return rc;
 }
+#endif /* MDBX_NEXENTA_ATTRS */
 
-//----------------------------------------------------------------------------
+/******************************************************************************/
 /* *INDENT-OFF* */
 /* clang-format off */
 
