@@ -3184,6 +3184,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
       return rc;
   }
 
+  unsigned need_metasync = env->me_flags & MDBX_NOMETASYNC;
   const MDBX_meta *head = mdbx_meta_head(env);
   pgno_t unsynced_pages = *env->me_unsynced_pages;
   if (!META_IS_STEADY(head) || unsynced_pages) {
@@ -3205,6 +3206,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
         int rc = (flags & MDBX_WRITEMAP)
                      ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, false)
                      : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
+        need_metasync = 0;
         if (unlikely(rc != MDBX_SUCCESS))
           return rc;
 
@@ -3227,6 +3229,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
                  mdbx_durable_str(head), unsynced_pages);
       MDBX_meta meta = *head;
       int rc = mdbx_sync_locked(env, flags | MDBX_SHRINK_ALLOWED, &meta);
+      need_metasync = 0;
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (outside_txn)
           mdbx_txn_unlock(env);
@@ -3235,9 +3238,17 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
     }
   }
 
+  int rc = MDBX_SUCCESS;
+  /* LY: sync meta-pages if MDBX_NOMETASYNC enabled
+   *     and someone was not synced above. */
+  if (need_metasync && force)
+    rc = (flags & MDBX_WRITEMAP)
+             ? mdbx_msync(&env->me_dxb_mmap, 0, pgno2bytes(env, NUM_METAS),
+                          false)
+             : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   if (outside_txn)
     mdbx_txn_unlock(env);
-  return MDBX_SUCCESS;
+  return rc;
 }
 
 __cold int mdbx_env_sync(MDBX_env *env, int force) {
