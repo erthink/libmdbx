@@ -636,9 +636,9 @@ MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
     ov.OffsetHigh = HIGH_DWORD(offset);
 
     DWORD written;
-    if (unlikely(!WriteFile(fd, buf,
-                            (bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE,
-                            &written, &ov)))
+    if (unlikely(!WriteFile(
+            fd, buf, likely(bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE,
+            &written, &ov)))
       return GetLastError();
     if (likely(bytes == written))
       return MDBX_SUCCESS;
@@ -646,7 +646,7 @@ MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
     STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                       "libmdbx requires 64-bit file I/O on 64-bit systems");
     const intptr_t written =
-        pwrite(fd, buf, (bytes <= MAX_WRITE) ? bytes : MAX_WRITE, offset);
+        pwrite(fd, buf, likely(bytes <= MAX_WRITE) ? bytes : MAX_WRITE, offset);
     if (likely(bytes == (size_t)written))
       return MDBX_SUCCESS;
     if (written < 0) {
@@ -658,6 +658,36 @@ MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
 #endif
     bytes -= written;
     offset += written;
+    buf = (char *)buf + written;
+  }
+}
+
+MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
+                                  size_t bytes) {
+  while (true) {
+#if defined(_WIN32) || defined(_WIN64)
+    DWORD written;
+    if (unlikely(!WriteFile(
+            fd, buf, likely(bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE,
+            &written, nullptr)))
+      return GetLastError();
+    if (likely(bytes == written))
+      return MDBX_SUCCESS;
+#else
+    STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
+                      "libmdbx requires 64-bit file I/O on 64-bit systems");
+    const intptr_t written =
+        write(fd, buf, likely(bytes <= MAX_WRITE) ? bytes : MAX_WRITE);
+    if (likely(bytes == (size_t)written))
+      return MDBX_SUCCESS;
+    if (written < 0) {
+      const int rc = errno;
+      if (rc != EINTR)
+        return rc;
+      continue;
+    }
+#endif
+    bytes -= written;
     buf = (char *)buf + written;
   }
 }
@@ -748,6 +778,37 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
   *length = st.st_size;
 #endif
   return MDBX_SUCCESS;
+}
+
+MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd) {
+#if defined(_WIN32) || defined(_WIN64)
+  switch (GetFileType(fd)) {
+  case FILE_TYPE_DISK:
+    return MDBX_RESULT_FALSE;
+  case FILE_TYPE_CHAR:
+  case FILE_TYPE_PIPE:
+    return MDBX_RESULT_TRUE;
+  default:
+    return GetLastError();
+  }
+#else
+  struct stat info;
+  if (fstat(fd, &info))
+    return errno;
+  switch (info.st_mode & S_IFMT) {
+  case S_IFBLK:
+  case S_IFREG:
+    return MDBX_RESULT_FALSE;
+  case S_IFCHR:
+  case S_IFIFO:
+  case S_IFSOCK:
+    return MDBX_RESULT_TRUE;
+  case S_IFDIR:
+  case S_IFLNK:
+  default:
+    return MDBX_INCOMPATIBLE;
+  }
+#endif
 }
 
 MDBX_INTERNAL_FUNC int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {

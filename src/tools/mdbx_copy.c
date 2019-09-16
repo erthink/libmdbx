@@ -49,12 +49,15 @@ int main(int argc, char *argv[]) {
   const char *progname = argv[0], *act;
   unsigned flags = MDBX_RDONLY;
   unsigned cpflags = 0;
+  bool quiet = false;
 
   for (; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
     if (argv[1][1] == 'n' && argv[1][2] == '\0')
       flags |= MDBX_NOSUBDIR;
     else if (argv[1][1] == 'c' && argv[1][2] == '\0')
       cpflags |= MDBX_CP_COMPACT;
+    else if (argv[1][1] == 'q' && argv[1][2] == '\0')
+      quiet = true;
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
       printf("mdbx_copy version %d.%d.%d.%d\n"
              " - source: %s %s, commit %s, tree %s\n"
@@ -74,7 +77,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (argc < 2 || argc > 3) {
-    fprintf(stderr, "usage: %s [-V] [-c] [-n] srcpath [dstpath]\n", progname);
+    fprintf(stderr, "usage: %s [-V] [-q] [-c] [-n] srcpath [dstpath]\n",
+            progname);
     exit(EXIT_FAILURE);
   }
 
@@ -91,10 +95,13 @@ int main(int argc, char *argv[]) {
   signal(SIGTERM, signal_handler);
 #endif /* !WINDOWS */
 
-  printf("mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
-         mdbx_version.git.describe, mdbx_version.git.datetime,
-         mdbx_version.git.tree, argv[1], (argc == 2) ? "stdout" : argv[2]);
-  fflush(NULL);
+  if (!quiet) {
+    fprintf((argc == 2) ? stderr : stdout,
+            "mdbx_copy %s (%s, T-%s)\nRunning for copy %s to %s...\n",
+            mdbx_version.git.describe, mdbx_version.git.datetime,
+            mdbx_version.git.tree, argv[1], (argc == 2) ? "stdout" : argv[2]);
+    fflush(NULL);
+  }
 
   act = "opening environment";
   rc = mdbx_env_create(&env);

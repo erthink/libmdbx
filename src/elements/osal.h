@@ -85,6 +85,10 @@
 #endif
 #endif /* !xBSD */
 
+#if defined(__linux__) || defined(__gnu_linux__)
+#include <sys/sendfile.h>
+#endif /* Linux */
+
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 0
 #endif
@@ -494,7 +498,11 @@ MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 /* OS abstraction layer stuff */
 
 /* max bytes to write in one call */
+#if defined(_WIN32) || defined(_WIN64)
+#define MAX_WRITE UINT32_C(0x01000000)
+#else
 #define MAX_WRITE UINT32_C(0x3fff0000)
+#endif
 
 #if defined(__linux__) || defined(__gnu_linux__)
 MDBX_INTERNAL_VAR uint32_t mdbx_linux_kernel_version;
@@ -553,6 +561,8 @@ MDBX_INTERNAL_FUNC int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t count,
                                   uint64_t offset);
 MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
                                    size_t count, uint64_t offset);
+MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
+                                  size_t count);
 
 MDBX_INTERNAL_FUNC int
 mdbx_thread_create(mdbx_thread_t *thread,
@@ -576,6 +586,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const char *pathname, int flags,
                                      bool exclusive);
 MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname);
+MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
 
 typedef struct mdbx_mmap_param {
   union {
