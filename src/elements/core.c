@@ -3160,11 +3160,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_TXN_CHECKPID || !(defined(_WIN32) || defined(_WIN64))
-  /* Check the PID even if MDBX_TXN_CHECKPID=0 on non-Windows
-   * platforms (i.e. where fork() is available).
-   * This is required to legitimize a call to mdbx_end_close() after fork()
-   * from a child process, that should be allowed to free resources. */
+#if MDBX_TXN_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
@@ -7170,6 +7166,15 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
+
+#if MDBX_TXN_CHECKPID || !(defined(_WIN32) || defined(_WIN64))
+  /* Check the PID even if MDBX_TXN_CHECKPID=0 on non-Windows
+   * platforms (i.e. where fork() is available).
+   * This is required to legitimize a call after fork()
+   * from a child process, that should be allowed to free resources. */
+  if (unlikely(env->me_pid != mdbx_getpid()))
+    env->me_flags |= MDBX_FATAL_ERROR;
+#endif /* MDBX_TXN_CHECKPID */
 
   if ((env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0) {
     if (env->me_txn0 && env->me_txn0->mt_owner &&
