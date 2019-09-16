@@ -3179,12 +3179,12 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
       (!env->me_txn0 || env->me_txn0->mt_owner != mdbx_thread_self());
 
   if (outside_txn) {
-    int rc = mdbx_txn_lock(env, nonblock);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+    int err = mdbx_txn_lock(env, nonblock);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
   }
 
-  unsigned need_metasync = env->me_flags & MDBX_NOMETASYNC;
+  int rc = MDBX_RESULT_FALSE /* means "nothing to sync" */;
   const MDBX_meta *head = mdbx_meta_head(env);
   pgno_t unsynced_pages = *env->me_unsynced_pages;
   if (!META_IS_STEADY(head) || unsynced_pages) {
@@ -3203,16 +3203,15 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
         mdbx_txn_unlock(env);
 
         /* LY: pre-sync without holding lock to reduce latency for writer(s) */
-        int rc = (flags & MDBX_WRITEMAP)
-                     ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, false)
-                     : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
-        need_metasync = 0;
-        if (unlikely(rc != MDBX_SUCCESS))
-          return rc;
+        int err = (flags & MDBX_WRITEMAP)
+                      ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, false)
+                      : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
 
-        rc = mdbx_txn_lock(env, nonblock);
-        if (unlikely(rc != MDBX_SUCCESS))
-          return rc;
+        err = mdbx_txn_lock(env, nonblock);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
 
         /* LY: head and unsynced_pages may be changed. */
         head = mdbx_meta_head(env);
@@ -3220,6 +3219,7 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
       }
       env->me_txn0->mt_txnid = meta_txnid(env, head, false);
       mdbx_find_oldest(env->me_txn0);
+      rc = MDBX_RESULT_TRUE /* means "some data was synced" */;
     }
 
     if (!META_IS_STEADY(head) ||
@@ -3228,20 +3228,19 @@ __cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
                  container_of(head, MDBX_page, mp_data)->mp_pgno,
                  mdbx_durable_str(head), unsynced_pages);
       MDBX_meta meta = *head;
-      int rc = mdbx_sync_locked(env, flags | MDBX_SHRINK_ALLOWED, &meta);
-      need_metasync = 0;
-      if (unlikely(rc != MDBX_SUCCESS)) {
+      int err = mdbx_sync_locked(env, flags | MDBX_SHRINK_ALLOWED, &meta);
+      if (unlikely(err != MDBX_SUCCESS)) {
         if (outside_txn)
           mdbx_txn_unlock(env);
-        return rc;
+        return err;
       }
+      rc = MDBX_RESULT_TRUE /* means "some data was synced" */;
     }
   }
 
-  int rc = MDBX_SUCCESS;
   /* LY: sync meta-pages if MDBX_NOMETASYNC enabled
    *     and someone was not synced above. */
-  if (need_metasync && force)
+  if (rc == MDBX_RESULT_FALSE && (env->me_flags & MDBX_NOMETASYNC) != 0)
     rc = (flags & MDBX_WRITEMAP)
              ? mdbx_msync(&env->me_dxb_mmap, 0, pgno2bytes(env, NUM_METAS),
                           false)
@@ -7183,10 +7182,11 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
        * Because in the "owner died" condition kernel don't release
        * file lock immediately. */
       rc = mdbx_env_sync_ex(env, true, false);
+      rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
 #else
       rc = mdbx_env_sync_ex(env, true, true);
       rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
-            rc == EWOULDBLOCK)
+            rc == EWOULDBLOCK || rc == MDBX_RESULT_TRUE)
                ? MDBX_SUCCESS
                : rc;
 #endif
