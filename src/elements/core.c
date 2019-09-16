@@ -12493,9 +12493,20 @@ int __cold mdbx_env_stat2(const MDBX_env *env, const MDBX_txn *txn,
   if (unlikely(bytes != sizeof(MDBX_stat)))
     return MDBX_EINVAL;
 
-  const MDBX_db *db =
-      txn ? &txn->mt_dbs[MAIN_DBI] : &mdbx_meta_head(env)->mm_dbs[MAIN_DBI];
-  return mdbx_stat0(txn ? txn->mt_env : env, db, arg);
+  if (txn)
+    return mdbx_stat0(txn->mt_env, &txn->mt_dbs[MAIN_DBI], arg);
+
+  while (1) {
+    const MDBX_meta *const recent_meta = mdbx_meta_head(env);
+    const txnid_t txnid = mdbx_meta_txnid_fluid(env, recent_meta);
+    const int err = mdbx_stat0(env, &recent_meta->mm_dbs[MAIN_DBI], arg);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    mdbx_compiler_barrier();
+    if (likely(txnid == mdbx_meta_txnid_fluid(env, recent_meta) &&
+               recent_meta == mdbx_meta_head(env)))
+      return MDBX_SUCCESS;
+  }
 }
 
 int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
