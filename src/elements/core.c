@@ -3359,7 +3359,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
 
-  pgno_t upper_limit_pgno = 0;
   if (flags & MDBX_RDONLY) {
     txn->mt_flags = MDBX_RDONLY;
     MDBX_reader *r = txn->mt_ro_reader;
@@ -3464,9 +3463,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 
       /* Snap the state from current meta-head */
       txn->mt_txnid = snap;
-      txn->mt_next_pgno = meta->mm_geo.next;
-      txn->mt_end_pgno = meta->mm_geo.now;
-      upper_limit_pgno = meta->mm_geo.upper;
+      txn->mt_geo = meta->mm_geo;
       memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
       txn->mt_canary = meta->mm_canary;
 
@@ -3536,9 +3533,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     /* Copy the DB info and flags */
     memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
     /* Moved to here to avoid a data race in read TXNs */
-    txn->mt_next_pgno = meta->mm_geo.next;
-    txn->mt_end_pgno = meta->mm_geo.now;
-    upper_limit_pgno = meta->mm_geo.upper;
+    txn->mt_geo = meta->mm_geo;
   }
 
   /* Setup db info */
@@ -3559,13 +3554,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   } else {
     const size_t size = pgno2bytes(env, txn->mt_end_pgno);
     if (unlikely(size > env->me_mapsize)) {
-      if (upper_limit_pgno > MAX_PAGENO ||
-          bytes2pgno(env, pgno2bytes(env, upper_limit_pgno)) !=
-              upper_limit_pgno) {
+      if (txn->mt_geo.upper > MAX_PAGENO ||
+          bytes2pgno(env, pgno2bytes(env, txn->mt_geo.upper)) !=
+              txn->mt_geo.upper) {
         rc = MDBX_MAP_RESIZED;
         goto bailout;
       }
-      rc = mdbx_mapresize(env, txn->mt_end_pgno, upper_limit_pgno);
+      rc = mdbx_mapresize(env, txn->mt_end_pgno, txn->mt_geo.upper);
       if (rc != MDBX_SUCCESS) {
         if (rc == MDBX_RESULT_TRUE)
           rc = MDBX_MAP_RESIZED;
@@ -3715,8 +3710,8 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     txn->mt_dirtyroom = parent->mt_dirtyroom;
     txn->mt_rw_dirtylist->length = 0;
     txn->mt_spill_pages = NULL;
-    txn->mt_next_pgno = parent->mt_next_pgno;
-    txn->mt_end_pgno = parent->mt_end_pgno;
+    txn->mt_geo = parent->mt_geo;
+    txn->mt_canary = parent->mt_canary;
     parent->mt_flags |= MDBX_TXN_HAS_CHILD;
     parent->mt_child = txn;
     txn->mt_parent = parent;
@@ -5006,8 +5001,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     /* Failures after this must either undo the changes
      * to the parent or set MDBX_TXN_ERROR in the parent. */
 
-    parent->mt_next_pgno = txn->mt_next_pgno;
-    parent->mt_end_pgno = txn->mt_end_pgno;
+    parent->mt_geo = txn->mt_geo;
+    parent->mt_canary = txn->mt_canary;
     parent->mt_flags = txn->mt_flags;
 
     /* Merge our cursors into parent's and close them */
@@ -5190,9 +5185,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     meta.mm_validator_id = head->mm_validator_id;
     meta.mm_extra_pagehdr = head->mm_extra_pagehdr;
 
-    meta.mm_geo = head->mm_geo;
-    meta.mm_geo.next = txn->mt_next_pgno;
-    meta.mm_geo.now = txn->mt_end_pgno;
+    meta.mm_geo = txn->mt_geo;
     meta.mm_dbs[FREE_DBI] = txn->mt_dbs[FREE_DBI];
     meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
     meta.mm_canary = txn->mt_canary;
@@ -6247,35 +6240,43 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   rc = MDBX_SUCCESS;
 
   if (env->me_map) {
-    /* apply new params */
+    /* apply new params to opened environment */
     mdbx_assert(env, pagesize == (intptr_t)env->me_psize);
+    MDBX_meta meta;
+    MDBX_meta *head = nullptr;
+    const mdbx_geo_t *current_geo;
+    if (inside_txn) {
+      current_geo = &env->me_txn->mt_geo;
+    } else {
+      head = mdbx_meta_head(env);
+      meta = *head;
+      current_geo = &meta.mm_geo;
+    }
 
-    MDBX_meta *head = mdbx_meta_head(env);
-    MDBX_meta meta = *head;
-    meta.mm_geo.lower = bytes2pgno(env, env->me_dbgeo.lower);
-    meta.mm_geo.now = bytes2pgno(env, env->me_dbgeo.now);
-    meta.mm_geo.upper = bytes2pgno(env, env->me_dbgeo.upper);
-    meta.mm_geo.grow = (uint16_t)bytes2pgno(env, env->me_dbgeo.grow);
-    meta.mm_geo.shrink = (uint16_t)bytes2pgno(env, env->me_dbgeo.shrink);
+    mdbx_geo_t new_geo;
+    new_geo.lower = bytes2pgno(env, env->me_dbgeo.lower);
+    new_geo.now = bytes2pgno(env, env->me_dbgeo.now);
+    new_geo.upper = bytes2pgno(env, env->me_dbgeo.upper);
+    new_geo.grow = (uint16_t)bytes2pgno(env, env->me_dbgeo.grow);
+    new_geo.shrink = (uint16_t)bytes2pgno(env, env->me_dbgeo.shrink);
+    new_geo.next = current_geo->next;
 
     mdbx_assert(env, env->me_dbgeo.lower >= MIN_MAPSIZE);
-    mdbx_assert(env, meta.mm_geo.lower >= MIN_PAGENO);
+    mdbx_assert(env, new_geo.lower >= MIN_PAGENO);
     mdbx_assert(env, env->me_dbgeo.upper <= MAX_MAPSIZE);
-    mdbx_assert(env, meta.mm_geo.upper <= MAX_PAGENO);
-    mdbx_assert(env, meta.mm_geo.now >= meta.mm_geo.next);
+    mdbx_assert(env, new_geo.upper <= MAX_PAGENO);
+    mdbx_assert(env, new_geo.now >= new_geo.next);
     mdbx_assert(env, env->me_dbgeo.upper >= env->me_dbgeo.lower);
-    mdbx_assert(env, meta.mm_geo.upper >= meta.mm_geo.now);
-    mdbx_assert(env, meta.mm_geo.now >= meta.mm_geo.lower);
-    mdbx_assert(env, meta.mm_geo.grow == bytes2pgno(env, env->me_dbgeo.grow));
-    mdbx_assert(env,
-                meta.mm_geo.shrink == bytes2pgno(env, env->me_dbgeo.shrink));
+    mdbx_assert(env, new_geo.upper >= new_geo.now);
+    mdbx_assert(env, new_geo.now >= new_geo.lower);
+    mdbx_assert(env, new_geo.grow == bytes2pgno(env, env->me_dbgeo.grow));
+    mdbx_assert(env, new_geo.shrink == bytes2pgno(env, env->me_dbgeo.shrink));
 
-    if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
-
+    if (memcmp(current_geo, &new_geo, sizeof(mdbx_geo_t)) != 0) {
 #if defined(_WIN32) || defined(_WIN64)
       /* Was DB shrinking disabled before and now it will be enabled? */
-      if (meta.mm_geo.lower < meta.mm_geo.upper && meta.mm_geo.shrink &&
-          !(head->mm_geo.lower < head->mm_geo.upper && head->mm_geo.shrink)) {
+      if (new_geo.lower < new_geo.upper && new_geo.shrink &&
+          !(current_geo->lower < current_geo->upper && current_geo->shrink)) {
         rc = mdbx_rdt_lock(env);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -6299,16 +6300,26 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       }
 #endif
 
-      if (meta.mm_geo.now != head->mm_geo.now ||
-          meta.mm_geo.upper != head->mm_geo.upper) {
-        rc = mdbx_mapresize(env, meta.mm_geo.now, meta.mm_geo.upper);
+      if (new_geo.now != current_geo->now ||
+          new_geo.upper != current_geo->upper) {
+        rc = mdbx_mapresize(env, new_geo.now, new_geo.upper);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-        head = /* base address could be changed */ mdbx_meta_head(env);
+        mdbx_assert(env, (head == nullptr) == inside_txn);
+        if (head)
+          head = /* base address could be changed */ mdbx_meta_head(env);
       }
-      *env->me_unsynced_pages += 1;
-      mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
-      rc = mdbx_sync_locked(env, env->me_flags, &meta);
+      if (inside_txn) {
+        env->me_txn->mt_geo = new_geo;
+        if ((env->me_txn->mt_flags & MDBX_TXN_DIRTY) == 0) {
+          env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
+          *env->me_unsynced_pages += 1;
+        }
+      } else {
+        *env->me_unsynced_pages += 1;
+        mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
+        rc = mdbx_sync_locked(env, env->me_flags, &meta);
+      }
     }
   } else if (pagesize != (intptr_t)env->me_psize) {
     mdbx_setup_pagesize(env, pagesize);

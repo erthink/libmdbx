@@ -284,6 +284,17 @@ typedef struct MDBX_db {
   uint64_t md_merkle;       /* Merkle tree checksum */
 } MDBX_db;
 
+/* database size-related parameters */
+typedef struct mdbx_geo_t {
+  uint16_t grow;   /* datafile growth step in pages */
+  uint16_t shrink; /* datafile shrink threshold in pages */
+  pgno_t lower;    /* minimal size of datafile in pages */
+  pgno_t upper;    /* maximal size of datafile in pages */
+  pgno_t now;      /* current size of datafile in pages */
+  pgno_t next;     /* first unused page in the datafile,
+                    * but actually the file may be shorter. */
+} mdbx_geo_t;
+
 /* Meta page content.
  * A meta page is the start point for accessing a database snapshot.
  * Pages 0-1 are meta pages. Transaction N writes meta page (N % 2). */
@@ -301,15 +312,7 @@ typedef struct MDBX_meta {
   uint8_t mm_extra_pagehdr; /* extra bytes in the page header,
                              * zero (nothing) for now */
 
-  struct {
-    uint16_t grow;   /* datafile growth step in pages */
-    uint16_t shrink; /* datafile shrink threshold in pages */
-    pgno_t lower;    /* minimal size of datafile in pages */
-    pgno_t upper;    /* maximal size of datafile in pages */
-    pgno_t now;      /* current size of datafile in pages */
-    pgno_t next;     /* first unused page in the datafile,
-                      * but actually the file may be shorter. */
-  } mm_geo;
+  mdbx_geo_t mm_geo; /* database size-related parameters */
 
   MDBX_db mm_dbs[CORE_DBS]; /* first is free space, 2nd is main db */
                             /* The size of pages used in this DB */
@@ -673,8 +676,26 @@ struct MDBX_txn {
   MDBX_txn *mt_parent; /* parent of a nested txn */
   /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
   MDBX_txn *mt_child;
-  pgno_t mt_next_pgno; /* next unallocated page */
-  pgno_t mt_end_pgno;  /* corresponding to the current size of datafile */
+  mdbx_geo_t mt_geo;
+  /* next unallocated page */
+#define mt_next_pgno mt_geo.next
+  /* corresponding to the current size of datafile */
+#define mt_end_pgno mt_geo.now
+
+  /* Transaction Flags */
+/* mdbx_txn_begin() flags */
+#define MDBX_TXN_BEGIN_FLAGS                                                   \
+  (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_MAPASYNC | MDBX_RDONLY | MDBX_TRYTXN)
+  /* internal txn flags */
+#define MDBX_TXN_FINISHED 0x01  /* txn is finished or never began */
+#define MDBX_TXN_ERROR 0x02     /* txn is unusable after an error */
+#define MDBX_TXN_DIRTY 0x04     /* must write, even if dirty list is empty */
+#define MDBX_TXN_SPILLS 0x08    /* txn or a parent has spilled pages */
+#define MDBX_TXN_HAS_CHILD 0x10 /* txn has an MDBX_txn.mt_child */
+/* most operations on the txn are currently illegal */
+#define MDBX_TXN_BLOCKED                                                       \
+  (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD)
+  unsigned mt_flags;
   /* The ID of this transaction. IDs are integers incrementing from 1.
    * Only committed write transactions increment the ID. If a transaction
    * aborts, the ID may be re-used by the next writer. */
@@ -722,21 +743,6 @@ struct MDBX_txn {
    * This number only ever increments until the txn finishes; we
    * don't decrement it when individual DB handles are closed. */
   MDBX_dbi mt_numdbs;
-
-/* Transaction Flags */
-/* mdbx_txn_begin() flags */
-#define MDBX_TXN_BEGIN_FLAGS                                                   \
-  (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_MAPASYNC | MDBX_RDONLY | MDBX_TRYTXN)
-  /* internal txn flags */
-#define MDBX_TXN_FINISHED 0x01  /* txn is finished or never began */
-#define MDBX_TXN_ERROR 0x02     /* txn is unusable after an error */
-#define MDBX_TXN_DIRTY 0x04     /* must write, even if dirty list is empty */
-#define MDBX_TXN_SPILLS 0x08    /* txn or a parent has spilled pages */
-#define MDBX_TXN_HAS_CHILD 0x10 /* txn has an MDBX_txn.mt_child */
-/* most operations on the txn are currently illegal */
-#define MDBX_TXN_BLOCKED                                                       \
-  (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD)
-  unsigned mt_flags;
   /* dirtylist room: Array size - dirty pages visible to this txn.
    * Includes ancestor txns' dirty pages not hidden by other txns'
    * dirty/spilled pages. Thus commit(nested txn) has room to merge
