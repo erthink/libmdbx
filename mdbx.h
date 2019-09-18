@@ -2716,31 +2716,49 @@ LIBMDBX_API int mdbx_cmp(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
 LIBMDBX_API int mdbx_dcmp(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
                           const MDBX_val *b);
 
-/* A callback function used to print a message from the library.
+/* A callback function used to enumerate the reader lock table.
  *
- * [in] msg   The string to be printed.
- * [in] ctx   An arbitrary context pointer for the callback.
+ * [in] ctx           An arbitrary context pointer for the callback.
+ * [in] num           The serial number during enumeration, starting from 1.
+ * [in] slot          The reader lock table slot number.
+ * [in] txnid         The ID of the transaction being read,
+ *                    i.e. the MVCC-snaphot number.
+ * [in] lag           The lag from a recent MVCC-snapshot, i.e. the number of
+ *                    committed transaction since read transaction started.
+ * [in] pid           The reader process ID.
+ * [in] thread        The reader thread ID.
+ * [in] bytes_used    The number of last used page in the MVCC-snapshot which
+ *                    being read, i.e. database file can't shrinked beyond this.
+ * [in] bytes_retired The total size of the database pages that were retired by
+ *                    committed write transactions after the reader's
+ *                    MVCC-snapshot, i.e. the space which would be freed after
+ *                    the Reader releases the MVCC-snapshot for reuse by
+ *                    completion read transaction.
  *
  * Returns < 0 on failure, >= 0 on success. */
-typedef int(MDBX_msg_func)(const char *msg, void *ctx);
+typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,
+                                   mdbx_tid_t thread, uint64_t txnid,
+                                   uint64_t lag, size_t bytes_used,
+                                   size_t bytes_retired);
 
-/* FIXME: Rework this function.
+/* Enumarete the entries in the reader lock table.
  *
- * Dump the entries in the reader lock table.
+ * [in] env     An environment handle returned by mdbx_env_create()
+ * [in] func    A MDBX_reader_list_func function
+ * [in] ctx     An arbitrary context pointer for the enumeration function.
  *
- * [in] env   An environment handle returned by mdbx_env_create()
- * [in] func  A MDBX_msg_func function
- * [in] ctx   Anything the message function needs
- *
- * Returns < 0 on failure, >= 0 on success. */
-LIBMDBX_API int mdbx_reader_list(MDBX_env *env, MDBX_msg_func *func, void *ctx);
+ * Returns A non-zero error value on failure and 0 on success,
+ * or MDBX_RESULT_TRUE (-1) if the reader lock table is empty. */
+LIBMDBX_API int mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
+                                 void *ctx);
 
 /* Check for stale entries in the reader lock table.
  *
  * [in] env     An environment handle returned by mdbx_env_create()
  * [out] dead   Number of stale slots that were cleared
  *
- * Returns 0 on success, non-zero on failure. */
+ * Returns A non-zero error value on failure and 0 on success,
+ * or MDBX_RESULT_TRUE (-1) if a dead reader(s) found or mutex was recovered. */
 LIBMDBX_API int mdbx_reader_check(MDBX_env *env, int *dead);
 
 /* Returns a lag of the reading for the given transaction.

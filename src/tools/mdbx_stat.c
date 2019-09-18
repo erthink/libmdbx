@@ -59,6 +59,27 @@ static void usage(char *prog) {
   exit(EXIT_FAILURE);
 }
 
+static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
+                            mdbx_tid_t thread, uint64_t txnid, uint64_t lag,
+                            size_t bytes_used, size_t bytes_retired) {
+  (void)ctx;
+  if (num == 1)
+    printf("Reader Table Status\n"
+           "   #\tslot\t%6s %*s %20s %10s %13s %13s\n",
+           "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used",
+           "retained");
+
+  printf(" %3d)\t[%d]\t%6" PRIdSIZE " %*" PRIxSIZE, num, slot, (size_t)pid,
+         (int)sizeof(size_t) * 2, (size_t)thread);
+  if (txnid)
+    printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag,
+           bytes_used / 1048576.0, bytes_retired / 1048576.0);
+  else
+    printf(" %20s %10s %13s %13s\n", "-", "0", "0", "0");
+
+  return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
+}
+
 int main(int argc, char *argv[]) {
   int o, rc;
   MDBX_env *env;
@@ -206,13 +227,24 @@ int main(int argc, char *argv[]) {
   }
 
   if (rdrinfo) {
-    printf("Reader Table Status\n");
-    rc = mdbx_reader_list(env, (MDBX_msg_func *)fputs, stdout);
-    if (rdrinfo > 1) {
+    rc = mdbx_reader_list(env, reader_list_func, nullptr);
+    if (rc == MDBX_RESULT_TRUE)
+      printf("Reader Table is empty\n");
+    else if (rc == MDBX_SUCCESS && rdrinfo > 1) {
       int dead;
-      mdbx_reader_check(env, &dead);
-      printf("  %d stale readers cleared.\n", dead);
-      rc = mdbx_reader_list(env, (MDBX_msg_func *)fputs, stdout);
+      rc = mdbx_reader_check(env, &dead);
+      if (rc == MDBX_RESULT_TRUE) {
+        printf("  %d stale readers cleared.\n", dead);
+        rc = mdbx_reader_list(env, reader_list_func, nullptr);
+        if (rc == MDBX_RESULT_TRUE)
+          printf("  Now Reader Table is empty\n");
+      } else
+        printf("  No stale readers.\n");
+    }
+    if (MDBX_IS_ERROR(rc)) {
+      fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
+              mdbx_strerror(rc));
+      goto env_close;
     }
     if (!(subname || alldbs || freinfo))
       goto env_close;

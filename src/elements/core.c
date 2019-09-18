@@ -13195,46 +13195,66 @@ int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
   return MDBX_SUCCESS;
 }
 
-int __cold mdbx_reader_list(MDBX_env *env, MDBX_msg_func *func, void *ctx) {
-  char buf[64];
-  int rc = 0, first = 1;
-
+int __cold mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
+                            void *ctx) {
   if (unlikely(!env || !func))
-    return (MDBX_EINVAL > 0) ? -MDBX_EINVAL : MDBX_EINVAL;
+    return MDBX_EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  const MDBX_lockinfo *const lck = env->me_lck;
-  if (likely(lck)) {
-    const unsigned snap_nreaders = lck->mti_numreaders;
+  int rc = MDBX_RESULT_TRUE;
+  int serial = 0;
+  if (likely(env->me_lck)) {
+    const unsigned snap_nreaders = env->me_lck->mti_numreaders;
     for (unsigned i = 0; i < snap_nreaders; i++) {
-      if (lck->mti_readers[i].mr_pid) {
-        const txnid_t txnid = lck->mti_readers[i].mr_txnid;
-        if (txnid == ~(txnid_t)0)
-          snprintf(buf, sizeof(buf), "%10" PRIuPTR " %" PRIxPTR " -\n",
-                   (uintptr_t)lck->mti_readers[i].mr_pid,
-                   (uintptr_t)lck->mti_readers[i].mr_tid);
-        else
-          snprintf(buf, sizeof(buf),
-                   "%10" PRIuPTR " %" PRIxPTR " %" PRIaTXN "\n",
-                   (uintptr_t)lck->mti_readers[i].mr_pid,
-                   (uintptr_t)lck->mti_readers[i].mr_tid, txnid);
+      const MDBX_reader *r = env->me_lck->mti_readers + i;
+    retry_reader:;
+      const mdbx_pid_t pid = r->mr_pid;
+      if (!pid)
+        continue;
+      txnid_t txnid = r->mr_txnid;
+      const mdbx_tid_t tid = r->mr_tid;
+      const pgno_t pages_used = r->mr_snapshot_pages_used;
+      const uint64_t reader_pages_retired = r->mr_snapshot_pages_retired;
+      mdbx_compiler_barrier();
+      if (unlikely(pid != r->mr_pid || txnid != r->mr_txnid ||
+                   tid != r->mr_tid ||
+                   pages_used != r->mr_snapshot_pages_used ||
+                   reader_pages_retired != r->mr_snapshot_pages_retired))
+        goto retry_reader;
 
-        if (first) {
-          first = 0;
-          rc = func("    pid     thread     txnid\n", ctx);
-          if (rc < 0)
-            break;
-        }
-        rc = func(buf, ctx);
-        if (rc < 0)
-          break;
+      mdbx_assert(env, txnid > 0);
+      if (txnid == ~(txnid_t)0)
+        txnid = 0;
+
+      size_t bytes_used = 0;
+      size_t bytes_retained = 0;
+      uint64_t lag = 0;
+      if (txnid) {
+      retry_header:;
+        const MDBX_meta *const recent_meta = mdbx_meta_head(env);
+        const uint64_t head_pages_retired = recent_meta->mm_pages_retired;
+        const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, recent_meta);
+        mdbx_compiler_barrier();
+        if (unlikely(recent_meta != mdbx_meta_head(env) ||
+                     head_pages_retired != recent_meta->mm_pages_retired) ||
+            head_txnid != mdbx_meta_txnid_fluid(env, recent_meta))
+          goto retry_header;
+
+        lag = head_txnid - txnid;
+        bytes_used = pgno2bytes(env, pages_used);
+        bytes_retained = (head_pages_retired > reader_pages_retired)
+                             ? pgno2bytes(env, (pgno_t)(head_pages_retired -
+                                                        reader_pages_retired))
+                             : 0;
       }
+      rc = func(ctx, ++serial, i, pid, tid, txnid, lag, bytes_used,
+                bytes_retained);
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
     }
   }
-  if (first)
-    rc = func("(no active readers)\n", ctx);
 
   return rc;
 }
