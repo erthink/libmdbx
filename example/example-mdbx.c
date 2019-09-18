@@ -1,11 +1,11 @@
-/* sample-mdb.txt - MDB toy/sample
+/* MDBX usage examle
  *
  * Do a line-by-line comparison of this and sample-bdb.txt
  */
 
 /*
- * Copyright 2017 Ilya Shipitsin <chipitsine@gmail.com>.
  * Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>.
+ * Copyright 2017 Ilya Shipitsin <chipitsine@gmail.com>.
  * Copyright 2012-2015 Howard Chu, Symas Corp.
  * All rights reserved.
  *

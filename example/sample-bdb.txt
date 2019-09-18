@@ -1,6 +1,6 @@
-/* sample-bdb.txt - BerkeleyDB toy/sample
+/* BerkeleyDB toy/sample
  *
- * Do a line-by-line comparison of this and sample-mdb.txt
+ * Do a line-by-line comparison of this and example-mdbx.c
  */
 
 /*

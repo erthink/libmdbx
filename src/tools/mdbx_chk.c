@@ -1063,13 +1063,13 @@ int main(int argc, char *argv[]) {
   }
   maxkeysize = rc;
 
-  rc = mdbx_env_info2(env, txn, &envinfo, sizeof(envinfo));
+  rc = mdbx_env_info_ex(env, txn, &envinfo, sizeof(envinfo));
   if (rc) {
     error("mdbx_env_info failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
-  rc = mdbx_env_stat2(env, txn, &envstat, sizeof(envstat));
+  rc = mdbx_env_stat_ex(env, txn, &envstat, sizeof(envstat));
   if (rc) {
     error("mdbx_env_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;

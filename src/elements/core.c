@@ -3153,7 +3153,7 @@ fail:
   return rc;
 }
 
-__cold static int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
+__cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -3770,7 +3770,7 @@ MDBX_env *mdbx_txn_env(MDBX_txn *txn) {
 
 uint64_t mdbx_txn_id(MDBX_txn *txn) {
   if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
-    return ~(txnid_t)0;
+    return 0;
   return txn->mt_txnid;
 }
 
@@ -6063,7 +6063,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   int rc = MDBX_PROBLEM;
   if (env->me_map) {
     /* env already mapped */
-    if (!env->me_lck || (env->me_flags & MDBX_RDONLY))
+    if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
 
     if (!inside_txn) {
@@ -6277,6 +6277,10 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       /* Was DB shrinking disabled before and now it will be enabled? */
       if (new_geo.lower < new_geo.upper && new_geo.shrink &&
           !(current_geo->lower < current_geo->upper && current_geo->shrink)) {
+        if (!env->me_lck) {
+          rc = MDBX_EPERM;
+          goto bailout;
+        }
         rc = mdbx_rdt_lock(env);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -7993,9 +7997,8 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int move_right) {
   MDBX_node *indx;
   MDBX_page *mp;
 
-  if (unlikely(mc->mc_snum < 2)) {
+  if (unlikely(mc->mc_snum < 2))
     return MDBX_NOTFOUND; /* root has no siblings */
-  }
 
   mdbx_cursor_pop(mc);
   mdbx_debug("parent page is page %" PRIaPGNO ", index %u",
@@ -12496,11 +12499,11 @@ static int __cold mdbx_stat0(const MDBX_env *env, const MDBX_db *db,
 }
 
 int __cold mdbx_env_stat(MDBX_env *env, MDBX_stat *arg, size_t bytes) {
-  return mdbx_env_stat2(env, NULL, arg, bytes);
+  return mdbx_env_stat_ex(env, NULL, arg, bytes);
 }
 
-int __cold mdbx_env_stat2(const MDBX_env *env, const MDBX_txn *txn,
-                          MDBX_stat *arg, size_t bytes) {
+int __cold mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
+                            MDBX_stat *arg, size_t bytes) {
   if (unlikely((env == NULL && txn == NULL) || arg == NULL))
     return MDBX_EINVAL;
 
@@ -12537,11 +12540,11 @@ int __cold mdbx_env_stat2(const MDBX_env *env, const MDBX_txn *txn,
 }
 
 int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
-  return mdbx_env_info2(env, NULL, arg, bytes);
+  return mdbx_env_info_ex(env, NULL, arg, bytes);
 }
 
-int __cold mdbx_env_info2(const MDBX_env *env, const MDBX_txn *txn,
-                          MDBX_envinfo *arg, size_t bytes) {
+int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
+                            MDBX_envinfo *arg, size_t bytes) {
   if (unlikely((env == NULL && txn == NULL) || arg == NULL))
     return MDBX_EINVAL;
 

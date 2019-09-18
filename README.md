@@ -4,7 +4,9 @@
 
 libmdbx
 ======================================
-Revised and extended descendant of [Lightning Memory-Mapped
+MDBX is compact, fast, powerful, and robust and implements a simplified
+variant of the BerkeleyDB API. In fact _libmdbx_ is revised and extended
+descendant of [Lightning Memory-Mapped
 Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database)
 (aka _LMDB_). Permissive non-copyleft BSD-style [OpenLDAP Public License
 2.8](LICENSE). Русскоязычная версия этого README [здесь](README-RU.md).

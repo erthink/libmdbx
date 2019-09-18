@@ -59,7 +59,7 @@ strip: all
 
 clean:
 	rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *~ tmp.db/* \
-		*.gcov *.log *.err src/*.o test/*.o example dist \
+		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist \
 		config.h src/elements/config.h src/elements/version.c *.tar*
 
 libmdbx.a: mdbx-static.o
@@ -131,12 +131,12 @@ MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'P
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c && (openssl dgst -r -sha256 src/elements/version.c || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
 
-check: all example mdbx_test
+check: all mdbx_example mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-example: mdbx.h tutorial/sample-mdbx.c libmdbx.$(SO_SUFFIX)
-	$(CC) $(CFLAGS) -I. tutorial/sample-mdbx.c ./libmdbx.$(SO_SUFFIX) -o example
+mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
+	$(CC) $(CFLAGS) -I. example/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
 
 check-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
