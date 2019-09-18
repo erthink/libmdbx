@@ -3360,7 +3360,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
                 0);
 
   if (flags & MDBX_RDONLY) {
-    txn->mt_flags = MDBX_RDONLY;
+    txn->mt_flags = MDBX_RDONLY | (env->me_flags & MDBX_NOTLS);
     MDBX_reader *r = txn->mt_ro_reader;
     if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
       mdbx_assert(env, !(env->me_flags & MDBX_NOTLS));
@@ -3583,6 +3583,46 @@ bailout:
   return rc;
 }
 
+static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
+  if (unlikely(!txn))
+    return MDBX_EINVAL;
+
+  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_flags & bad_bits))
+    return MDBX_BAD_TXN;
+
+#if MDBX_TXN_CHECKOWNER
+  if ((txn->mt_flags & MDBX_NOTLS) == 0 &&
+      unlikely(txn->mt_owner != mdbx_thread_self()))
+    return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
+#endif /* MDBX_TXN_CHECKOWNER */
+
+  return MDBX_SUCCESS;
+}
+
+static __always_inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
+  if (unlikely(!txn))
+    return MDBX_EINVAL;
+
+  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+  if (unlikely(txn->mt_flags & bad_bits))
+    return MDBX_BAD_TXN;
+
+  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
+    return MDBX_EACCESS;
+
+#if MDBX_TXN_CHECKOWNER
+  if (unlikely(txn->mt_owner != mdbx_thread_self()))
+    return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
+#endif /* MDBX_TXN_CHECKOWNER */
+
+  return MDBX_SUCCESS;
+}
+
 int mdbx_txn_renew(MDBX_txn *txn) {
   int rc;
 
@@ -3651,23 +3691,18 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   flags |= env->me_flags & MDBX_WRITEMAP;
 
   if (parent) {
-    if (unlikely(parent->mt_signature != MDBX_MT_SIGNATURE))
-      return MDBX_EBADSIGN;
-
-    if (unlikely(parent->mt_owner != mdbx_thread_self()))
-      return MDBX_THREAD_MISMATCH;
+    /* Nested transactions: Max 1 child, write txns only, no writemap */
+    rc = check_txn_rw(parent, MDBX_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
 
 #if defined(_WIN32) || defined(_WIN64)
     if (unlikely(!env->me_map))
       return MDBX_EPERM;
 #endif /* Windows */
 
-    /* Nested transactions: Max 1 child, write txns only, no writemap */
-    flags |= parent->mt_flags;
-    if (unlikely(flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED)))
-      return (parent->mt_flags & MDBX_RDONLY) ? MDBX_EINVAL : MDBX_BAD_TXN;
-
     /* Child txns save MDBX_pgstate and use own copy of cursors */
+    flags |= parent->mt_flags;
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_ntxn);
   } else if (flags & MDBX_RDONLY) {
@@ -3925,21 +3960,16 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
 }
 
 int mdbx_txn_reset(MDBX_txn *txn) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   /* This call is only valid for read-only txns */
-  if (unlikely(!(txn->mt_flags & MDBX_RDONLY)))
+  if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0))
     return MDBX_EINVAL;
 
   /* LY: don't close DBI-handles in MDBX mode */
-  int rc = mdbx_txn_end(txn, MDBX_END_RESET | MDBX_END_UPDATE);
+  rc = mdbx_txn_end(txn, MDBX_END_RESET | MDBX_END_UPDATE);
   if (rc == MDBX_SUCCESS) {
     mdbx_tassert(txn, txn->mt_signature == MDBX_MT_SIGNATURE);
     mdbx_tassert(txn, txn->mt_owner == 0);
@@ -3948,14 +3978,9 @@ int mdbx_txn_reset(MDBX_txn *txn) {
 }
 
 int mdbx_txn_abort(MDBX_txn *txn) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, 0);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (F_ISSET(txn->mt_flags, MDBX_RDONLY))
     /* LY: don't close DBI-handles in MDBX mode */
@@ -4933,16 +4958,9 @@ static __inline bool TXN_DBI_EXIST(MDBX_txn *txn, MDBX_dbi dbi,
 }
 
 int mdbx_txn_commit(MDBX_txn *txn) {
-  int rc;
-
-  if (unlikely(txn == NULL))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   MDBX_env *env = txn->mt_env;
 #if MDBX_TXN_CHECKPID
@@ -4952,25 +4970,17 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   }
 #endif /* MDBX_TXN_CHECKPID */
 
-  if (txn->mt_child) {
-    rc = mdbx_txn_commit(txn->mt_child);
-    txn->mt_child = NULL;
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
-  }
-
   /* mdbx_txn_end() mode for a commit which writes nothing */
   unsigned end_mode =
       MDBX_END_EMPTY_COMMIT | MDBX_END_UPDATE | MDBX_END_SLOT | MDBX_END_FREE;
   if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
     goto done;
 
-  if (unlikely(txn->mt_flags & (MDBX_TXN_FINISHED | MDBX_TXN_ERROR))) {
-    mdbx_debug("error flag is set, can't commit");
-    if (txn->mt_parent)
-      txn->mt_parent->mt_flags |= MDBX_TXN_ERROR;
-    rc = MDBX_BAD_TXN;
-    goto fail;
+  if (txn->mt_child) {
+    rc = mdbx_txn_commit(txn->mt_child);
+    txn->mt_child = NULL;
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto fail;
   }
 
   if (txn->mt_parent) {
@@ -7921,47 +7931,38 @@ static __inline int mdbx_node_read(MDBX_cursor *mc, MDBX_node *leaf,
 }
 
 int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
-  int exact = 0;
   DKBUF;
-
   mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
 
-  if (unlikely(!key || !data || !txn))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!key || !data))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
   MDBX_cursor_couple cx;
-  int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  rc = mdbx_cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
+
+  int exact = 0;
   return mdbx_cursor_set(&cx.outer, key, data, MDBX_SET, &exact);
 }
 
 int mdbx_get2(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
-  int exact = 0;
   DKBUF;
-
   mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
 
-  if (unlikely(!key || !data || !txn))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!key || !data))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -7970,17 +7971,65 @@ int mdbx_get2(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
     return MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
-  int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  rc = mdbx_cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   const int op =
       (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) ? MDBX_GET_BOTH : MDBX_SET_KEY;
+  int exact = 0;
   rc = mdbx_cursor_set(&cx.outer, key, data, op, &exact);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   return exact ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
+}
+
+int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
+                size_t *values_count) {
+  DKBUF;
+  mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
+
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!key || !data))
+    return MDBX_EINVAL;
+
+  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+    return MDBX_EINVAL;
+
+  MDBX_cursor_couple cx;
+  rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  int exact = 0;
+  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_KEY, &exact);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    if (rc == MDBX_NOTFOUND && values_count)
+      *values_count = 0;
+    return rc;
+  }
+
+  if (values_count) {
+    *values_count = 1;
+    if (cx.outer.mc_xcursor != NULL) {
+      MDBX_node *leaf = NODEPTR(cx.outer.mc_pg[cx.outer.mc_top],
+                                cx.outer.mc_ki[cx.outer.mc_top]);
+      if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
+        mdbx_tassert(txn, cx.outer.mc_xcursor == &cx.inner &&
+                              (cx.inner.mx_cursor.mc_flags & C_INITIALIZED));
+        *values_count =
+            (sizeof(*values_count) >= sizeof(cx.inner.mx_db.md_entries) ||
+             cx.inner.mx_db.md_entries <= PTRDIFF_MAX)
+                ? (size_t)cx.inner.mx_db.md_entries
+                : PTRDIFF_MAX;
+      }
+    }
+  }
+  return MDBX_SUCCESS;
 }
 
 /* Find a sibling for a page.
@@ -8518,19 +8567,18 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
 int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                     MDBX_cursor_op op) {
-  int rc;
-  int exact = 0;
-  int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
-
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(mc->mc_txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
+  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
+  int exact = 0;
+  int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
   switch (op) {
   case MDBX_GET_CURRENT: {
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
@@ -8726,7 +8774,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   MDBX_db dummy;
   unsigned mcount = 0, dcount = 0, nospill;
   size_t nsize;
-  int rc = MDBX_SUCCESS, rc2;
+  int rc2;
   unsigned nflags;
   DKBUF;
 
@@ -8735,6 +8783,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  int rc = check_txn_rw(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   env = mc->mc_txn->mt_env;
 
@@ -9346,7 +9398,6 @@ fail:
 int mdbx_cursor_del(MDBX_cursor *mc, unsigned flags) {
   MDBX_node *leaf;
   MDBX_page *mp;
-  int rc;
 
   if (unlikely(!mc))
     return MDBX_EINVAL;
@@ -9354,8 +9405,9 @@ int mdbx_cursor_del(MDBX_cursor *mc, unsigned flags) {
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(mc->mc_txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
-    return (mc->mc_txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  int rc = check_txn_rw(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
     return MDBX_EINVAL;
@@ -10029,23 +10081,15 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
     return MDBX_EINVAL;
   *ret = NULL;
 
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
   if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_RDONLY)))
-    return MDBX_EINVAL;
+    return MDBX_EACCESS;
 
   const size_t size = (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT)
                           ? sizeof(MDBX_cursor_couple)
@@ -10053,7 +10097,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
 
   MDBX_cursor *mc;
   if (likely((mc = mdbx_malloc(size)) != NULL)) {
-    int rc = mdbx_cursor_init(mc, txn, dbi);
+    rc = mdbx_cursor_init(mc, txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS)) {
       mdbx_free(mc);
       return rc;
@@ -10072,21 +10116,16 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
 }
 
 int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
-  if (unlikely(!mc || !txn))
+  if (unlikely(!mc))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
-
-  if (unlikely(txn->mt_flags & (MDBX_TXN_FINISHED | MDBX_TXN_ERROR)))
-    return MDBX_BAD_TXN;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE &&
                mc->mc_signature != MDBX_MC_READY4CLOSE))
     return MDBX_EINVAL;
+
+  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (unlikely(!TXN_DBI_EXIST(txn, mc->mc_dbi, DB_VALID)))
     return MDBX_EINVAL;
@@ -10111,19 +10150,17 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
 
 /* Return the count of duplicate data items for the current key */
 int mdbx_cursor_count(MDBX_cursor *mc, size_t *countp) {
-  if (unlikely(mc == NULL || countp == NULL))
+  if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
   if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely(mc->mc_txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-  if (unlikely(mc->mc_txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
-  if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
+  if (unlikely(countp == NULL || !(mc->mc_flags & C_INITIALIZED)))
     return MDBX_EINVAL;
 
   if (!mc->mc_snum) {
@@ -11180,14 +11217,12 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
 }
 
 int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
-  if (unlikely(!key || !txn))
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!key))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -11723,15 +11758,12 @@ done:
 
 int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
              unsigned flags) {
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-  if (unlikely(!key || !data || !txn))
+  if (unlikely(!key || !data))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -11744,7 +11776,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
-  int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  rc = mdbx_cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   cx.outer.mc_next = txn->mt_cursors[dbi];
@@ -12508,10 +12540,9 @@ int __cold mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
     return MDBX_EINVAL;
 
   if (txn) {
-    if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-      return MDBX_EBADSIGN;
-    if (unlikely(txn->mt_owner != mdbx_thread_self()))
-      return MDBX_THREAD_MISMATCH;
+    int err = check_txn(txn, MDBX_TXN_BLOCKED);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
   }
   if (env) {
     if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
@@ -12549,10 +12580,9 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     return MDBX_EINVAL;
 
   if (txn) {
-    if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-      return MDBX_EBADSIGN;
-    if (unlikely(txn->mt_owner != mdbx_thread_self()))
-      return MDBX_THREAD_MISMATCH;
+    int err = check_txn(txn, MDBX_TXN_BLOCKED);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
   }
   if (env) {
     if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
@@ -12703,7 +12733,11 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
 int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
                      MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
                      MDBX_cmp_func *datacmp) {
-  if (unlikely(!txn || !dbi || (user_flags & ~VALID_FLAGS) != 0))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!dbi || (user_flags & ~VALID_FLAGS) != 0))
     return MDBX_EINVAL;
 
   switch (user_flags &
@@ -12719,15 +12753,6 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   case 0:
     break;
   }
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
-
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
 
   /* main table? */
   if (!table_name) {
@@ -12774,7 +12799,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   key.iov_len = len;
   key.iov_base = (void *)table_name;
   MDBX_cursor mc;
-  int rc = mdbx_cursor_init(&mc, txn, MAIN_DBI);
+  rc = mdbx_cursor_init(&mc, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   rc = mdbx_cursor_set(&mc, &key, &data, MDBX_SET, &exact);
@@ -12891,14 +12916,12 @@ int mdbx_dbi_open(MDBX_txn *txn, const char *table_name, unsigned table_flags,
 
 int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *arg,
                          size_t bytes) {
-  if (unlikely(!arg || !txn))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!arg))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
@@ -12912,7 +12935,7 @@ int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *arg,
   if (unlikely(txn->mt_dbflags[dbi] & DB_STALE)) {
     MDBX_cursor_couple cx;
     /* Stale, must read the DB's root. cursor_init does it for us. */
-    int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+    rc = mdbx_cursor_init(&cx.outer, txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -12957,14 +12980,12 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
 
 int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                       unsigned *state) {
-  if (unlikely(!txn || !flags || !state))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!flags || !state))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
@@ -13080,14 +13101,12 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
 }
 
 int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
-  if (unlikely(1 < (unsigned)del || !txn))
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(1 < (unsigned)del))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -13095,11 +13114,8 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
     return MDBX_BAD_DBI;
 
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
-    return MDBX_EACCESS;
-
   MDBX_cursor *mc;
-  int rc = mdbx_cursor_open(txn, dbi, &mc);
+  rc = mdbx_cursor_open(txn, dbi, &mc);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -13156,14 +13172,9 @@ bailout:
 }
 
 int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -13173,14 +13184,9 @@ int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
 }
 
 int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -13568,14 +13574,9 @@ __attribute__((__no_sanitize_thread__, __noinline__))
 #endif
 int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
 {
-  if (unlikely(!txn))
-    return (MDBX_EINVAL > 0) ? -MDBX_EINVAL : MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return (rc > 0) ? -rc : rc;
 
   MDBX_env *env = txn->mt_env;
   if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0)) {
@@ -13828,14 +13829,9 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
 
 int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                            void *user) {
-  if (unlikely(!txn))
-    return MDBX_BAD_TXN;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   mdbx_walk_ctx_t ctx;
   memset(&ctx, 0, sizeof(ctx));
@@ -13844,11 +13840,11 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_user = user;
   ctx.mw_visitor = visitor;
 
-  int rc = visitor(
-      0, NUM_METAS, user, 0, MDBX_PGWALK_META,
-      pgno2bytes(txn->mt_env, NUM_METAS), MDBX_page_meta, NUM_METAS,
-      sizeof(MDBX_meta) * NUM_METAS, PAGEHDRSZ * NUM_METAS,
-      (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) * NUM_METAS);
+  rc = visitor(0, NUM_METAS, user, 0, MDBX_PGWALK_META,
+               pgno2bytes(txn->mt_env, NUM_METAS), MDBX_page_meta, NUM_METAS,
+               sizeof(MDBX_meta) * NUM_METAS, PAGEHDRSZ * NUM_METAS,
+               (txn->mt_env->me_psize - sizeof(MDBX_meta) - PAGEHDRSZ) *
+                   NUM_METAS);
   if (!MDBX_IS_ERROR(rc))
     rc = mdbx_env_walk(&ctx, MDBX_PGWALK_GC, txn->mt_dbs[FREE_DBI].md_root, 0);
   if (!MDBX_IS_ERROR(rc))
@@ -13861,20 +13857,9 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
 }
 
 int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
-
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
-    return MDBX_EACCESS;
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (likely(canary)) {
     if (txn->mt_canary.x == canary->x && txn->mt_canary.y == canary->y &&
@@ -13894,14 +13879,12 @@ int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
 }
 
 int mdbx_canary_get(MDBX_txn *txn, mdbx_canary *canary) {
-  if (unlikely(txn == NULL || canary == NULL))
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(canary == NULL))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   *canary = txn->mt_canary;
   return MDBX_SUCCESS;
@@ -13983,6 +13966,13 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x,
   if (unlikely(y->mc_signature != MDBX_MC_SIGNATURE ||
                x->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
+
+  int rc = check_txn(x->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(x->mc_txn != y->mc_txn))
+    return MDBX_BAD_TXN;
 
   if (unlikely(y->mc_dbi != x->mc_dbi))
     return MDBX_EINVAL;
@@ -14144,6 +14134,10 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
   if (unlikely(cursor->mc_signature != MDBX_MC_SIGNATURE))
     return MDBX_EBADSIGN;
 
+  int rc = check_txn(cursor->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
   if (!(cursor->mc_flags & C_INITIALIZED))
     return MDBX_ENODATA;
 
@@ -14152,7 +14146,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
   next.outer.mc_xcursor = NULL;
   if (cursor->mc_db->md_flags & MDBX_DUPSORT) {
     next.outer.mc_xcursor = &next.inner;
-    int rc = mdbx_xcursor_init0(&next.outer);
+    rc = mdbx_xcursor_init0(&next.outer);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     MDBX_xcursor *mx = &container_of(cursor, MDBX_cursor_couple, outer)->inner;
@@ -14177,7 +14171,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
     key = &stub;
   }
 
-  int rc = mdbx_cursor_get(&next.outer, key, data, move_op);
+  rc = mdbx_cursor_get(&next.outer, key, data, move_op);
   if (unlikely(rc != MDBX_SUCCESS &&
                (rc != MDBX_NOTFOUND || !(next.outer.mc_flags & C_INITIALIZED))))
     return rc;
@@ -14193,8 +14187,11 @@ static int mdbx_is_samedata(const MDBX_val *a, const MDBX_val *b) {
 int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
                         MDBX_val *begin_data, MDBX_val *end_key,
                         MDBX_val *end_data, ptrdiff_t *size_items) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-  if (unlikely(!txn || !size_items))
+  if (unlikely(!size_items))
     return MDBX_EINVAL;
 
   if (unlikely(begin_data && (begin_key == NULL || begin_key == MDBX_EPSILON)))
@@ -14206,21 +14203,12 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
   if (unlikely(begin_key == MDBX_EPSILON && end_key == MDBX_EPSILON))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
-
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
   MDBX_cursor_couple begin;
   /* LY: first, initialize cursor to refresh a DB in case it have DB_STALE */
-  int rc = mdbx_cursor_init(&begin.outer, txn, dbi);
+  rc = mdbx_cursor_init(&begin.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -14374,14 +14362,12 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
  */
 int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
                  MDBX_val *old_data, unsigned flags) {
-  if (unlikely(!key || !old_data || !txn || old_data == new_data))
+  int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!key || !old_data || old_data == new_data))
     return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
 
   if (unlikely(old_data->iov_base == NULL && old_data->iov_len))
     return MDBX_EINVAL;
@@ -14396,11 +14382,8 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
                          MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
-
   MDBX_cursor_couple cx;
-  int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  rc = mdbx_cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   cx.outer.mc_next = txn->mt_cursors[dbi];
@@ -14506,58 +14489,6 @@ bailout:
   return rc;
 }
 
-int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
-                size_t *values_count) {
-  DKBUF;
-  mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
-
-  if (unlikely(!key || !data || !txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
-
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
-  MDBX_cursor_couple cx;
-  int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  int exact = 0;
-  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_KEY, &exact);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    if (rc == MDBX_NOTFOUND && values_count)
-      *values_count = 0;
-    return rc;
-  }
-
-  if (values_count) {
-    *values_count = 1;
-    if (cx.outer.mc_xcursor != NULL) {
-      MDBX_node *leaf = NODEPTR(cx.outer.mc_pg[cx.outer.mc_top],
-                                cx.outer.mc_ki[cx.outer.mc_top]);
-      if (F_ISSET(leaf->mn_flags, F_DUPDATA)) {
-        mdbx_tassert(txn, cx.outer.mc_xcursor == &cx.inner &&
-                              (cx.inner.mx_cursor.mc_flags & C_INITIALIZED));
-        *values_count =
-            (sizeof(*values_count) >= sizeof(cx.inner.mx_db.md_entries) ||
-             cx.inner.mx_db.md_entries <= PTRDIFF_MAX)
-                ? (size_t)cx.inner.mx_db.md_entries
-                : PTRDIFF_MAX;
-      }
-    }
-  }
-  return MDBX_SUCCESS;
-}
-
 /* Функция сообщает находится ли указанный адрес в "грязной" странице у
  * заданной пишущей транзакции. В конечном счете это позволяет избавиться от
  * лишнего копирования данных из НЕ-грязных страниц.
@@ -14581,16 +14512,11 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
  * расположен в той-же странице памяти, в том числе для многостраничных
  * P_OVERFLOW страниц с длинными данными. */
 int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
-
-  if (unlikely(txn->mt_flags & MDBX_RDONLY))
+  if (txn->mt_flags & MDBX_RDONLY)
     return MDBX_RESULT_FALSE;
 
   const MDBX_env *env = txn->mt_env;
@@ -14645,14 +14571,9 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
 
 int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                       uint64_t increment) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return MDBX_THREAD_MISMATCH;
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
@@ -14663,7 +14584,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
   if (unlikely(txn->mt_dbflags[dbi] & DB_STALE)) {
     MDBX_cursor_couple cx;
     /* Stale, must read the DB's root. cursor_init does it for us. */
-    int rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+    rc = mdbx_cursor_init(&cx.outer, txn, dbi);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -14673,10 +14594,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
     *result = dbs->md_seq;
 
   if (likely(increment > 0)) {
-    if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-      return MDBX_BAD_TXN;
-
-    if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
+    if (unlikely(txn->mt_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
 
     uint64_t new = dbs->md_seq + increment;

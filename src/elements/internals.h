@@ -200,6 +200,11 @@
 #define MDBX_TXN_CHECKPID_CONFIG MDBX_TXN_CHECKPID
 #endif /* MDBX_TXN_CHECKPID */
 
+#ifndef MDBX_TXN_CHECKOWNER
+#define MDBX_TXN_CHECKOWNER_CONFIG AUTO
+#define MDBX_TXN_CHECKOWNER 1
+#endif /* MDBX_TXN_CHECKOWNER */
+
 #define mdbx_sourcery_anchor XCONCAT(mdbx_sourcery_, MDBX_BUILD_SOURCERY)
 #if defined(MDBX_TOOLS)
 extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
