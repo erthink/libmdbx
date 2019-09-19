@@ -153,6 +153,7 @@ if(options_list)
 endif()
 
 list(REMOVE_DUPLICATES MDBX_BUILD_FLAGS)
+string(REPLACE ";" "" MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
 if(CMAKE_CONFIGURATION_TYPES)
   # add dynamic part via per-configuration define
   message(STATUS "MDBX Compile Flags: ${MDBX_BUILD_FLAGS} <AND CONFIGURATION DEPENDENT>")
