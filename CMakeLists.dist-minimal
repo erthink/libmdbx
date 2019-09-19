@@ -61,6 +61,8 @@ else()
   project(libmdbx C CXX)
 endif()
 
+find_package(Threads REQUIRED)
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release CACHE STRING
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
@@ -123,22 +125,29 @@ list(REMOVE_DUPLICATES MDBX_BUILD_FLAGS)
 string(REPLACE ";" "" MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
 add_definitions(-DMDBX_BUILD_FLAGS="${MDBX_BUILD_FLAGS}")
 
-# add targets both for shared and static libraries
-# static library used for tools, to avoid rpath/dll-path troubles
-add_library(mdbx SHARED mdbx.c mdbx.h)
-add_library(mdbx-static STATIC EXCLUDE_FROM_ALL mdbx.c mdbx.h)
-target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
+# shared library
+if(DEFINED BUILD_SHARED_LIBS)
+  option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
+else()
+  option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ON)
+endif()
+if(MDBX_BUILD_SHARED_LIBRARY)
+  add_library(mdbx SHARED mdbx.c mdbx.h)
+  target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
+  target_link_libraries(mdbx PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+  if(WIN32)
+    target_link_libraries(mdbx PRIVATE ntdll.lib)
+  endif()
+endif()
 
-# link libraries
-find_package(Threads REQUIRED)
-target_link_libraries(mdbx PRIVATE ${CMAKE_THREAD_LIBS_INIT})
+# static library used for tools, to avoid rpath/dll-path troubles
+add_library(mdbx-static STATIC EXCLUDE_FROM_ALL mdbx.c mdbx.h)
 target_link_libraries(mdbx-static INTERFACE ${CMAKE_THREAD_LIBS_INIT})
 if(WIN32)
-  target_link_libraries(mdbx PRIVATE ntdll.lib)
   target_link_libraries(mdbx-static INTERFACE ntdll.lib)
 endif()
 
-# add target for mdbx-tools
+# mdbx-tools
 foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load)
   add_executable(${TOOL} ${TOOL}.c)
   target_link_libraries(${TOOL} mdbx-static)
