@@ -223,8 +223,7 @@ dist/$(1).c: src/tools/$(1).c src/tools/wingetopt.h src/tools/wingetopt.c \
 		dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && sed \
 		-e '/#include "..\/elements\/internals.h"/r dist/@tmp-shared_internals.inc' \
-		-e '/#include "wingetopt.h"/r r/src/tools/wingetopt.c' \
-		-e '/#include "wingetopt.h"/r r/src/tools/wingetopt.h' \
+		-e '/#include "wingetopt.h"/r src/tools/wingetopt.c' \
 		src/tools/$(1).c \
 	| grep -v -e '#include "' -e '#pragma once' -e '#define MDBX_ALLOY' \
 	| sed 's|@INCLUDE|#include|' > $$@
