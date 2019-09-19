@@ -153,7 +153,7 @@
 
 #if !defined(__noop) && !defined(_MSC_VER)
 #	ifdef __cplusplus
-		static inline void __noop_consume_args() {}
+		static __maybe_unused inline void __noop_consume_args() {}
 		template <typename First, typename... Rest>
 		static inline void
 		__noop_consume_args(const First &first, const Rest &... rest) {
@@ -161,7 +161,7 @@
 		}
 #		define __noop(...) __noop_consume_args(__VA_ARGS__)
 #	elif defined(__GNUC__) && (!defined(__STRICT_ANSI__) || !__STRICT_ANSI__)
-		static __inline void __noop_consume_args(void* anchor, ...) {
+		static __maybe_unused __inline void __noop_consume_args(void* anchor, ...) {
 			(void) anchor;
 		}
 #		define __noop(...) __noop_consume_args(0, ##__VA_ARGS__)

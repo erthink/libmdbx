@@ -1319,17 +1319,17 @@ typedef struct MDBX_node {
 /* Do not spill pages to disk if txn is getting full, may fail instead */
 #define MDBX_NOSPILL 0x8000
 
-static __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
+static __maybe_unused __inline pgno_t pgno_add(pgno_t base, pgno_t augend) {
   assert(base <= MAX_PAGENO);
   return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
 }
 
-static __inline pgno_t pgno_sub(pgno_t base, pgno_t subtrahend) {
+static __maybe_unused __inline pgno_t pgno_sub(pgno_t base, pgno_t subtrahend) {
   assert(base >= MIN_PAGENO);
   return (subtrahend < base - MIN_PAGENO) ? base - subtrahend : MIN_PAGENO;
 }
 
-static __inline void mdbx_jitter4testing(bool tiny) {
+static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
 #if MDBX_DEBUG
   if (MDBX_DBG_JITTER & mdbx_runtime_flags)
     mdbx_osal_jitter(tiny);

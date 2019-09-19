@@ -358,7 +358,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 /*----------------------------------------------------------------------------*/
 /* Memory/Compiler barriers, cache coherence */
 
-static __inline void mdbx_compiler_barrier(void) {
+static __maybe_unused __inline void mdbx_compiler_barrier(void) {
 #if defined(__clang__) || defined(__GNUC__)
   __asm__ __volatile__("" ::: "memory");
 #elif defined(_MSC_VER)
@@ -386,7 +386,7 @@ static __inline void mdbx_compiler_barrier(void) {
 #endif
 }
 
-static __inline void mdbx_memory_barrier(void) {
+static __maybe_unused __inline void mdbx_memory_barrier(void) {
 #if __has_extension(c_atomic) || __has_extension(cxx_atomic)
   __c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
 #elif defined(__ATOMIC_SEQ_CST)
@@ -465,8 +465,8 @@ static __inline void mdbx_memory_barrier(void) {
 #endif
 #endif /* ndef MDBX_CPU_CACHE_MMAP_NONCOHERENT */
 
-static __inline void mdbx_invalidate_mmap_noncoherent_cache(void *addr,
-                                                            size_t nbytes) {
+static __maybe_unused __inline void
+mdbx_invalidate_mmap_noncoherent_cache(void *addr, size_t nbytes) {
 #if MDBX_CPU_CACHE_MMAP_NONCOHERENT
 #ifdef DCACHE
   /* MIPS has cache coherency issues.
@@ -511,7 +511,7 @@ MDBX_INTERNAL_VAR uint32_t mdbx_linux_kernel_version;
 /* Get the size of a memory page for the system.
  * This is the basic size that the platform's memory manager uses, and is
  * fundamental to the use of memory-mapped files. */
-static __inline size_t mdbx_syspagesize(void) {
+static __maybe_unused __inline size_t mdbx_syspagesize(void) {
 #if defined(_WIN32) || defined(_WIN64)
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -525,7 +525,7 @@ static __inline size_t mdbx_syspagesize(void) {
 LIBMDBX_API char *mdbx_strdup(const char *str);
 #endif
 
-static __inline int mdbx_get_errno(void) {
+static __maybe_unused __inline int mdbx_get_errno(void) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD rc = GetLastError();
 #else
@@ -624,7 +624,7 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
                                   size_t length, int async);
 MDBX_INTERNAL_FUNC int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags);
 
-static __inline mdbx_pid_t mdbx_getpid(void) {
+static __maybe_unused __inline mdbx_pid_t mdbx_getpid(void) {
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
 #else
@@ -632,7 +632,7 @@ static __inline mdbx_pid_t mdbx_getpid(void) {
 #endif
 }
 
-static __inline mdbx_tid_t mdbx_thread_self(void) {
+static __maybe_unused __inline mdbx_tid_t mdbx_thread_self(void) {
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentThreadId();
 #else
@@ -860,7 +860,8 @@ MDBX_INTERNAL_VAR MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 #error FIXME atomic-ops
 #endif
 
-static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
+static __maybe_unused __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p,
+                                                          uint32_t v) {
 #if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint32_t *)p, v);
@@ -877,7 +878,8 @@ static __inline uint32_t mdbx_atomic_add32(volatile uint32_t *p, uint32_t v) {
 #endif
 }
 
-static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
+static __maybe_unused __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p,
+                                                          uint64_t v) {
 #if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint64_t *)p, v);
@@ -900,8 +902,8 @@ static __inline uint64_t mdbx_atomic_add64(volatile uint64_t *p, uint64_t v) {
 #define mdbx_atomic_sub32(p, v) mdbx_atomic_add32(p, 0 - (v))
 #define mdbx_atomic_sub64(p, v) mdbx_atomic_add64(p, 0 - (v))
 
-static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
-                                                    uint32_t c, uint32_t v) {
+static __maybe_unused __inline bool
+mdbx_atomic_compare_and_swap32(volatile uint32_t *p, uint32_t c, uint32_t v) {
 #if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint32_t *)p, &c, v);
@@ -918,8 +920,8 @@ static __inline bool mdbx_atomic_compare_and_swap32(volatile uint32_t *p,
 #endif
 }
 
-static __inline bool mdbx_atomic_compare_and_swap64(volatile uint64_t *p,
-                                                    uint64_t c, uint64_t v) {
+static __maybe_unused __inline bool
+mdbx_atomic_compare_and_swap64(volatile uint64_t *p, uint64_t c, uint64_t v) {
 #if !defined(__cplusplus) && defined(ATOMIC_VAR_INIT)
   assert(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint64_t *)p, &c, v);
