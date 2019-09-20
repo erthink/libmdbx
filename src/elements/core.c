@@ -1915,6 +1915,48 @@ static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
   return mdbx_pnl_append(&txn->mt_retired_pages, mp->mp_pgno);
 }
 
+/* try to refund loose pages */
+static __must_check_result int mdbx_refund_loose(MDBX_txn *txn) {
+  mdbx_tassert(txn, txn->mt_loose_pages != nullptr);
+  mdbx_tassert(txn, txn->mt_loose_count > 0);
+  for (MDBX_page **link = &txn->mt_loose_pages; *link;) {
+    MDBX_page *mp = *link;
+    if (likely(txn->mt_next_pgno != mp->mp_pgno + 1)) {
+      link = &NEXT_LOOSE_PAGE(*link);
+    } else {
+      *link = NEXT_LOOSE_PAGE(mp);
+      mdbx_info("refund loose-page: %" PRIaPGNO " -> %" PRIaPGNO,
+                txn->mt_next_pgno, mp->mp_pgno);
+      txn->mt_next_pgno = mp->mp_pgno;
+      if (txn->mt_rw_dirtylist) {
+        MDBX_DPL dl = txn->mt_rw_dirtylist;
+        for (unsigned i = 1; i <= dl->length; ++i)
+          if (dl[i].pgno == mp->mp_pgno) {
+            while (i < dl->length) {
+              dl[i] = dl[i + 1];
+              ++i;
+            }
+            dl->length -= 1;
+            dl = nullptr;
+            break;
+          }
+        if (unlikely(dl)) {
+          mdbx_error("not found page 0x%p #%" PRIaPGNO " in the dirtylist", mp,
+                     mp->mp_pgno);
+          txn->mt_flags |= MDBX_TXN_ERROR;
+          return MDBX_PROBLEM;
+        }
+      }
+
+      txn->mt_loose_count -= 1;
+      txn->mt_dirtyroom += 1;
+      if ((txn->mt_env->me_flags & MDBX_WRITEMAP) == 0)
+        mdbx_dpage_free(txn->mt_env, mp, 1);
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 /* Loosen or free a single page.
  *
  * Saves single pages to a list for future reuse
@@ -1977,15 +2019,18 @@ static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
 
   if (loose) {
     mdbx_debug("loosen db %d page %" PRIaPGNO, DDBI(mc), mp->mp_pgno);
-    MDBX_page **link = &NEXT_LOOSE_PAGE(mp);
     if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
       mdbx_kill_page(txn->mt_env, mp);
+    MDBX_page **link = &NEXT_LOOSE_PAGE(mp);
     mp->mp_flags = P_LOOSE | P_DIRTY;
     VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
     ASAN_UNPOISON_MEMORY_REGION(link, sizeof(*link));
     *link = txn->mt_loose_pages;
     txn->mt_loose_pages = mp;
     txn->mt_loose_count++;
+    int rc = mdbx_refund_loose(txn);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
   } else {
     int rc = mdbx_pnl_append(&txn->mt_retired_pages, pgno);
     mdbx_tassert(txn, rc == MDBX_SUCCESS);
@@ -4309,21 +4354,28 @@ retry:
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
+
     if (txn->mt_loose_pages) {
       /* Return loose page numbers to me_reclaimed_pglist,
        * though usually none are left at this point.
        * The pages themselves remain in dirtylist. */
       if (unlikely(!env->me_reclaimed_pglist) && !txn->mt_lifo_reclaimed &&
           env->me_last_reclaimed < 1) {
-        /* Put loose page numbers in mt_retired_pages,
-         * since unable to return them to me_reclaimed_pglist. */
-        if (unlikely((rc = mdbx_pnl_need(&txn->mt_retired_pages,
-                                         txn->mt_loose_count)) != 0))
+        rc = mdbx_refund_loose(txn);
+        if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-        for (MDBX_page *mp = txn->mt_loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
-          mdbx_pnl_xappend(txn->mt_retired_pages, mp->mp_pgno);
-        mdbx_trace("%s: append %u loose-pages to retired-pages",
-                   dbg_prefix_mode, txn->mt_loose_count);
+        if (txn->mt_loose_count > 0) {
+          /* Put loose page numbers in mt_retired_pages,
+           * since unable to return them to me_reclaimed_pglist. */
+          if (unlikely((rc = mdbx_pnl_need(&txn->mt_retired_pages,
+                                           txn->mt_loose_count)) != 0))
+            goto bailout;
+          for (MDBX_page *mp = txn->mt_loose_pages; mp;
+               mp = NEXT_LOOSE_PAGE(mp))
+            mdbx_pnl_xappend(txn->mt_retired_pages, mp->mp_pgno);
+          mdbx_trace("%s: append %u loose-pages to retired-pages",
+                     dbg_prefix_mode, txn->mt_loose_count);
+        }
       } else {
         /* Room for loose pages + temp PNL with same */
         if (likely(env->me_reclaimed_pglist != NULL)) {
