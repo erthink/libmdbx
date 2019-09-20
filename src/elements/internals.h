@@ -263,6 +263,7 @@ typedef uint32_t pgno_t;
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
 #define MIN_TXNID UINT64_C(1)
+#define BAD_TXNID UINT64_C(0xffffFFFF00000000)
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
