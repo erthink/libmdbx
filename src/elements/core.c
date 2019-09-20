@@ -3506,6 +3506,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       if (likely(r)) {
         safe_txnid_reset(&r->mr_txnid);
         r->mr_snapshot_pages_used = meta->mm_geo.next;
+        r->mr_snapshot_pages_retired = meta->mm_pages_retired;
         safe_txnid_set(&r->mr_txnid, snap);
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
@@ -4197,7 +4198,7 @@ static __cold int mdbx_audit(MDBX_txn *txn, unsigned retired_stored) {
   return MDBX_PROBLEM;
 }
 
-static __inline void clean_reserved_rc_pnl(MDBX_env *env, MDBX_val pnl) {
+static __inline void clean_reserved_gc_pnl(MDBX_env *env, MDBX_val pnl) {
   /* PNL is initially empty, zero out at least the length */
   memset(pnl.iov_base, 0, sizeof(pgno_t));
   if ((env->me_flags & (MDBX_WRITEMAP | MDBX_NOMEMINIT)) == 0)
@@ -4443,7 +4444,7 @@ retry:
       }
     }
 
-    // handle retired-list - store ones into singe gc-record
+    // handle retired-list - store ones into single gc-record
     if (retired_stored < MDBX_PNL_SIZE(txn->mt_retired_pages)) {
       if (unlikely(!retired_stored)) {
         /* Make sure last page of GC is touched and on retired-list */
@@ -4675,7 +4676,7 @@ retry:
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
-    clean_reserved_rc_pnl(env, data);
+    clean_reserved_gc_pnl(env, data);
     settled += chunk;
     mdbx_trace("%s.settled %u (+%u), continue", dbg_prefix_mode, settled,
                chunk);
@@ -4778,7 +4779,7 @@ retry:
       mc.mc_flags &= ~C_GCFREEZE;
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
-      clean_reserved_rc_pnl(env, data);
+      clean_reserved_gc_pnl(env, data);
 
       if (unlikely(txn->mt_loose_count ||
                    amount != MDBX_PNL_SIZE(env->me_reclaimed_pglist))) {
@@ -5237,7 +5238,6 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
   mdbx_pnl_free(env->me_reclaimed_pglist);
   env->me_reclaimed_pglist = NULL;
-  mdbx_pnl_shrink(&txn->mt_retired_pages);
 
   if (mdbx_audit_enabled()) {
     rc = mdbx_audit(txn, 0);
@@ -5253,6 +5253,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     meta.mm_extra_flags = head->mm_extra_flags;
     meta.mm_validator_id = head->mm_validator_id;
     meta.mm_extra_pagehdr = head->mm_extra_pagehdr;
+    meta.mm_pages_retired =
+        head->mm_pages_retired + MDBX_PNL_SIZE(txn->mt_retired_pages);
 
     meta.mm_geo = txn->mt_geo;
     meta.mm_dbs[FREE_DBI] = txn->mt_dbs[FREE_DBI];
@@ -5814,6 +5816,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       target->mm_dbs[FREE_DBI] = pending->mm_dbs[FREE_DBI];
       target->mm_dbs[MAIN_DBI] = pending->mm_dbs[MAIN_DBI];
       target->mm_canary = pending->mm_canary;
+      target->mm_pages_retired = pending->mm_pages_retired;
       mdbx_jitter4testing(true);
       mdbx_flush_noncoherent_cpu_writeback();
 
