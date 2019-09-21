@@ -1,13 +1,15 @@
-language: c
-dist: xenial
+language: c cpp
 
-compiler:
-- gcc
-- clang
-
-os:
-- linux
-- osx
+matrix:
+  include:
+    - os: linux
+      compiler: gcc
+    - os: linux
+      compiler: clang
+    - os: osx
+      osx_image: xcode11
+    - os: osx
+      osx_image: xcode9.4
 
 script: >
   if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then
