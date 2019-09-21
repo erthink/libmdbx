@@ -2048,6 +2048,69 @@ LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
 LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
                                MDBX_txn **txn);
 
+/* Information about the transaction */
+typedef struct MDBX_txn_info {
+  uint64_t txn_id; /* The ID of the transaction. For a READ-ONLY transaction,
+                      this corresponds to the snapshot being read. */
+
+  uint64_t
+      txn_reader_lag; /* For READ-ONLY transaction: the lag from a recent
+                         MVCC-snapshot, i.e. the number of committed
+                         transaction since read transaction started.
+                         For WRITE transaction (provided if scan_rlt=true): the
+                         lag of the oldest reader from current transaction (i.e.
+                         atleast 1 if any reader running). */
+
+  uint64_t txn_space_used; /* Used space by this transaction, i.e. corresponding
+                              to the last used database page. */
+
+  uint64_t txn_space_limit_soft; /* Current size of database file. */
+
+  uint64_t
+      txn_space_limit_hard; /* Upper bound for size the database file,
+                               i.e. the value "size_upper" argument of the
+                               approriate call of mdbx_env_set_geometry(). */
+
+  uint64_t txn_space_retired; /* For READ-ONLY transaction: The total size of
+                                 the database pages that were retired by
+                                 committed write transactions after the reader's
+                                 MVCC-snapshot, i.e. the space which would be
+                                 freed after the Reader releases the
+                                 MVCC-snapshot for reuse by completion read
+                                 transaction.
+                                 For WRITE transaction: The summarized size of
+                                 the database pages that were retired for now
+                                 due Copy-On-Write during this transaction. */
+
+  uint64_t
+      txn_space_leftover; /* For READ-ONLY transaction: the space available for
+                             writer(s) and that must be exhausted for reason to
+                             call the OOM-killer for this read transaction.
+                             For WRITE transaction: the space inside transaction
+                             that left to MDBX_TXN_FULL error. */
+
+  uint64_t
+      txn_space_dirty; /* For READ-ONLY transaction (provided if scan_rlt=true):
+                          The retired distance for next more recent reader, i.e.
+                          the space that actually become available for reuse
+                          when only this transaction will be finished. For WRITE
+                          transaction: The summarized size of the dirty database
+                          pages that generated during this transaction. */
+} MDBX_txn_info;
+
+/* Return information about the MDBX transaction.
+ *
+ * [in] txn        A transaction handle returned by mdbx_txn_begin().
+ * [out] stat      The address of an MDBX_txn_info structure
+ *                 where the information will be copied.
+ * [in[ scan_rlt   The boolean flag controls the scan of the read lock table to
+ *                 provide complete information. Such scan is relatively
+ *                 expensive and you can avoid it if corresponding fields are
+ *                 not needed (see description of MDBX_txn_info above).
+ *
+ * Returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_txn_info(MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt);
+
 /* Returns the transaction's MDBX_env
  *
  * [in] txn  A transaction handle returned by mdbx_txn_begin() */
@@ -2059,7 +2122,7 @@ LIBMDBX_API MDBX_env *mdbx_txn_env(MDBX_txn *txn);
  *
  * [in] txn A transaction handle returned by mdbx_txn_begin()
  *
- * Returns A transaction flags, valid if input is an active transaction,
+ * Returns A transaction flags, valid if input is an valid transaction,
  * otherwise -1. */
 LIBMDBX_API int mdbx_txn_flags(MDBX_txn *txn);
 

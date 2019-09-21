@@ -3903,8 +3903,115 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   return rc;
 }
 
+int mdbx_txn_info(MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!info))
+    return MDBX_EINVAL;
+
+  MDBX_env *const env = txn->mt_env;
+#if MDBX_TXN_CHECKPID
+  if (unlikely(env->me_pid != mdbx_getpid())) {
+    env->me_flags |= MDBX_FATAL_ERROR;
+    return MDBX_PANIC;
+  }
+#endif /* MDBX_TXN_CHECKPID */
+
+  info->txn_id = txn->mt_txnid;
+  info->txn_space_used = pgno2bytes(env, txn->mt_geo.next);
+
+  if (txn->mt_flags & MDBX_RDONLY) {
+    const MDBX_meta *head_meta;
+    txnid_t head_txnid;
+    uint64_t head_retired;
+    do {
+      /* fetch info from volatile head */
+      head_meta = mdbx_meta_head(env);
+      head_txnid = mdbx_meta_txnid_fluid(env, head_meta);
+      head_retired = head_meta->mm_pages_retired;
+      info->txn_space_limit_soft = pgno2bytes(env, head_meta->mm_geo.now);
+      info->txn_space_limit_hard = pgno2bytes(env, head_meta->mm_geo.upper);
+      info->txn_space_leftover =
+          pgno2bytes(env, head_meta->mm_geo.now - head_meta->mm_geo.next);
+      mdbx_compiler_barrier();
+    } while (unlikely(head_meta != mdbx_meta_head(env) ||
+                      head_txnid != mdbx_meta_txnid_fluid(env, head_meta)));
+
+    info->txn_reader_lag = head_txnid - info->txn_id;
+    info->txn_space_dirty = info->txn_space_retired = 0;
+    if (txn->mt_ro_reader &&
+        head_retired > txn->mt_ro_reader->mr_snapshot_pages_retired) {
+      info->txn_space_dirty = info->txn_space_retired = pgno2bytes(
+          env, (pgno_t)(head_retired -
+                        txn->mt_ro_reader->mr_snapshot_pages_retired));
+
+      MDBX_lockinfo *const lck = env->me_lck;
+      if (scan_rlt && info->txn_reader_lag > 1 && lck) {
+        /* find next more recent reader */
+        txnid_t next_reader = head_txnid;
+        const unsigned snap_nreaders = lck->mti_numreaders;
+        for (unsigned i = 0; i < snap_nreaders; ++i) {
+        retry:
+          if (lck->mti_readers[i].mr_pid) {
+            mdbx_jitter4testing(true);
+            const txnid_t snap_txnid = lck->mti_readers[i].mr_txnid;
+            const uint64_t snap_retired =
+                lck->mti_readers[i].mr_snapshot_pages_retired;
+            mdbx_compiler_barrier();
+            if (unlikely(snap_txnid != lck->mti_readers[i].mr_txnid ||
+                         snap_retired !=
+                             lck->mti_readers[i].mr_snapshot_pages_retired))
+              goto retry;
+            if (snap_txnid > txn->mt_txnid && snap_txnid < next_reader) {
+              next_reader = snap_txnid;
+              info->txn_space_dirty = pgno2bytes(
+                  env, (pgno_t)(snap_retired -
+                                txn->mt_ro_reader->mr_snapshot_pages_retired));
+            }
+          }
+        }
+      }
+    }
+  } else {
+    info->txn_space_limit_soft = pgno2bytes(env, txn->mt_geo.now);
+    info->txn_space_limit_hard = pgno2bytes(env, txn->mt_geo.upper);
+    info->txn_space_retired =
+        pgno2bytes(env, MDBX_PNL_SIZE(txn->mt_retired_pages));
+    info->txn_space_leftover = pgno2bytes(env, txn->mt_dirtyroom);
+    info->txn_space_dirty =
+        pgno2bytes(env, MDBX_DPL_TXNFULL - txn->mt_dirtyroom);
+    info->txn_reader_lag = INT64_MAX;
+    MDBX_lockinfo *const lck = env->me_lck;
+    if (scan_rlt && lck) {
+      txnid_t oldest_snapshot = txn->mt_txnid;
+      const unsigned snap_nreaders = lck->mti_numreaders;
+      if (snap_nreaders) {
+        oldest_snapshot = mdbx_find_oldest(txn);
+        if (oldest_snapshot == txn->mt_txnid - 1) {
+          /* check if there is at least one reader */
+          bool exists = false;
+          for (unsigned i = 0; i < snap_nreaders; ++i) {
+            if (lck->mti_readers[i].mr_pid &&
+                txn->mt_txnid > lck->mti_readers[i].mr_txnid) {
+              exists = true;
+              break;
+            }
+          }
+          oldest_snapshot += !exists;
+        }
+      }
+      info->txn_reader_lag = txn->mt_txnid - oldest_snapshot;
+    }
+  }
+
+  return MDBX_SUCCESS;
+}
+
 MDBX_env *mdbx_txn_env(MDBX_txn *txn) {
-  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE ||
+               txn->mt_env->me_signature != MDBX_ME_SIGNATURE))
     return NULL;
   return txn->mt_env;
 }
@@ -3918,7 +4025,6 @@ uint64_t mdbx_txn_id(MDBX_txn *txn) {
 int mdbx_txn_flags(MDBX_txn *txn) {
   if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
     return -1;
-
   return txn->mt_flags;
 }
 
