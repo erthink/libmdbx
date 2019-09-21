@@ -628,7 +628,7 @@ typedef union MDBX_DP {
     void *ptr;
   };
   struct {
-    pgno_t unused;
+    unsigned sorted;
     unsigned length;
   };
 } MDBX_DP;
