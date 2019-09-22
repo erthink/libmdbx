@@ -944,6 +944,42 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_SHELLPASS(TYPE, CMP, begin, end, 1);                                  \
   }
 
+/*------------------------------------------------------------------------------
+ * LY: Binary search */
+
+#define SEARCH_IMPL(NAME, TYPE_LIST, TYPE_ARG, CMP)                            \
+  static __always_inline TYPE_LIST *NAME(TYPE_LIST *first, unsigned length,    \
+                                         const TYPE_ARG item) {                \
+    while (length > 3) {                                                       \
+      const size_t half = length >> 1;                                         \
+      TYPE_LIST *const middle = first + half;                                  \
+      if (CMP(*middle, item)) {                                                \
+        first = middle + 1;                                                    \
+        length -= half + 1;                                                    \
+      } else                                                                   \
+        length = half;                                                         \
+    }                                                                          \
+                                                                               \
+    switch (length) {                                                          \
+    case 3:                                                                    \
+      if (!CMP(*first, item))                                                  \
+        break;                                                                 \
+      ++first;                                                                 \
+      /* fall through */                                                       \
+      __fallthrough;                                                           \
+    case 2:                                                                    \
+      if (!CMP(*first, item))                                                  \
+        break;                                                                 \
+      ++first;                                                                 \
+      /* fall through */                                                       \
+      __fallthrough;                                                           \
+    case 1:                                                                    \
+      if (CMP(*first, item))                                                   \
+        ++first;                                                               \
+    }                                                                          \
+    return first;                                                              \
+  }
+
 /*----------------------------------------------------------------------------*/
 
 static __inline size_t pnl2bytes(const size_t size) {
@@ -1132,37 +1168,19 @@ static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
  * [in] pl The PNL to search.
  * [in] id The ID to search for.
  * Returns The index of the first ID greater than or equal to id. */
-static unsigned __hot mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
+SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
+
+static __noinline __hot unsigned mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
   assert(mdbx_pnl_check(pnl, true));
-
-  /* binary search of id in pl
-   * if found, returns position of id
-   * if not found, returns first position greater than id */
-  unsigned base = 0;
-  unsigned cursor = 1;
-  int val = 0;
-  unsigned n = MDBX_PNL_SIZE(pnl);
-
-  while (n > 0) {
-    unsigned pivot = n >> 1;
-    cursor = base + pivot + 1;
-    val = MDBX_PNL_ASCENDING ? mdbx_cmp2int(id, pnl[cursor])
-                             : mdbx_cmp2int(pnl[cursor], id);
-
-    if (val < 0) {
-      n = pivot;
-    } else if (val > 0) {
-      base = cursor;
-      n -= pivot + 1;
-    } else {
-      return cursor;
-    }
-  }
-
-  if (val > 0)
-    ++cursor;
-
-  return cursor;
+  pgno_t *begin = MDBX_PNL_BEGIN(pnl);
+  pgno_t *it = pgno_bsearch(begin, MDBX_PNL_SIZE(pnl), id);
+  pgno_t *end = begin + MDBX_PNL_SIZE(pnl);
+  assert(it >= begin && it <= end);
+  if (it != begin)
+    assert(it[-1] < id);
+  if (it != end)
+    assert(it[0] >= id);
+  return (unsigned)(it - begin);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -8896,7 +8914,8 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return MDBX_EINVAL;
     if (unlikely(mc->mc_xcursor == NULL))
       return MDBX_INCOMPATIBLE;
-  /* FALLTHRU */
+    /* fall through */
+    __fallthrough;
   case MDBX_SET:
   case MDBX_SET_KEY:
   case MDBX_SET_RANGE:
