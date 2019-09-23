@@ -740,8 +740,68 @@ typedef struct iovec MDBX_val;
  * MDBX only store a 32 bit value for node sizes. */
 #define MDBX_MAXDATASIZE INT32_MAX
 
-/* A callback function used to compare two keys in a database */
-typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
+/*** DEBUG & LOGGING **********************************************************
+ * Logging and runtime debug flags.
+ *
+ * NOTE: Most of debug feature enabled only if libmdbx builded with MDBX_DEBUG.
+ */
+
+/* Log level (requires build libmdbx with MDBX_DEBUG) */
+#define MDBX_LOG_FATAL 0   /* critical conditions, i.e. assertion failures */
+#define MDBX_LOG_ERROR 1   /* error conditions */
+#define MDBX_LOG_WARN 2    /* warning conditions */
+#define MDBX_LOG_NOTICE 3  /* normal but significant condition */
+#define MDBX_LOG_VERBOSE 4 /* verbose informational */
+#define MDBX_LOG_DEBUG 5   /* debug-level messages */
+#define MDBX_LOG_TRACE 6   /* trace debug-level messages */
+#define MDBX_LOG_EXTRA 7   /* extra debug-level messages (dump pgno lists) */
+
+/* Runtime debug flags.
+ *
+ * MDBX_DBG_DUMP and MDBX_DBG_LEGACY_MULTIOPEN always have an effect,
+ * but MDBX_DBG_ASSERT, MDBX_DBG_AUDIT and MDBX_DBG_JITTER only if libmdbx
+ * builded with MDBX_DEBUG. */
+
+#define MDBX_DBG_ASSERT 1 /* Enable assertion checks */
+#define MDBX_DBG_AUDIT 2  /* Enable pages usage audit at commit transactions */
+#define MDBX_DBG_JITTER 4 /* Enable small random delays in critical points */
+#define MDBX_DBG_DUMP 8   /* Include or not database(s) in coredump files */
+#define MDBX_DBG_LEGACY_MULTIOPEN 16 /* Enable multi-opening environment(s) */
+
+/* A debug-logger callback function,
+ * called before printing the message and aborting.
+ *
+ * [in] env  An environment handle returned by mdbx_env_create().
+ * [in] msg  The assertion message, not including newline. */
+typedef void MDBX_debug_func(int loglevel, const char *function, int line,
+                             const char *msg, va_list args);
+
+/* FIXME: Complete description */
+LIBMDBX_API int mdbx_setup_debug(int loglevel, int flags,
+                                 MDBX_debug_func *logger);
+
+/* A callback function for most MDBX assert() failures,
+ * called before printing the message and aborting.
+ *
+ * [in] env  An environment handle returned by mdbx_env_create().
+ * [in] msg  The assertion message, not including newline. */
+typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
+                              const char *function, unsigned line);
+
+/* Set or reset the assert() callback of the environment.
+ *
+ * Does nothing if libmdbx was built with MDBX_DEBUG=0 or with NDEBUG,
+ * and will return MDBX_ENOSYS in such case.
+ *
+ * [in] env   An environment handle returned by mdbx_env_create().
+ * [in] func  An MDBX_assert_func function, or 0.
+ *
+ * Returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
+
+/* FIXME: Complete description */
+LIBMDBX_API char *mdbx_dump_val(const MDBX_val *key, char *const buf,
+                                const size_t bufsize);
 
 /**** THE FILES ****************************************************************
  * At the file system level, the environment corresponds to a pair of files. */
@@ -1981,25 +2041,6 @@ LIBMDBX_API int mdbx_env_set_userctx(MDBX_env *env, void *ctx);
  * Returns The pointer set by mdbx_env_set_userctx(). */
 LIBMDBX_API void *mdbx_env_get_userctx(MDBX_env *env);
 
-/* A callback function for most MDBX assert() failures,
- * called before printing the message and aborting.
- *
- * [in] env  An environment handle returned by mdbx_env_create().
- * [in] msg  The assertion message, not including newline. */
-typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
-                              const char *function, unsigned line);
-
-/* Set or reset the assert() callback of the environment.
- *
- * Does nothing if libmdbx was built with MDBX_DEBUG=0 or with NDEBUG,
- * and will return MDBX_ENOSYS in such case.
- *
- * [in] env   An environment handle returned by mdbx_env_create().
- * [in] func  An MDBX_assert_func function, or 0.
- *
- * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
-
 /* Create a transaction for use with the environment.
  *
  * The transaction handle may be discarded using mdbx_txn_abort()
@@ -2211,6 +2252,9 @@ typedef struct mdbx_canary {
 /* FIXME: Complete description */
 LIBMDBX_API int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary);
 LIBMDBX_API int mdbx_canary_get(MDBX_txn *txn, mdbx_canary *canary);
+
+/* A callback function used to compare two keys in a database */
+typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 
 /* Open a database in the environment.
  *
@@ -3057,27 +3101,6 @@ LIBMDBX_API int mdbx_cursor_get_attr(MDBX_cursor *mc, MDBX_val *key,
 LIBMDBX_API int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                               MDBX_val *data, mdbx_attr_t *attrptr);
 #endif /* MDBX_NEXENTA_ATTRS */
-
-/*** DEBUG & LOGGING **********************************************************/
-/* FIXME: Complete description */
-#define MDBX_DBG_ASSERT 1
-#define MDBX_DBG_PRINT 2
-#define MDBX_DBG_TRACE 4
-#define MDBX_DBG_EXTRA 8
-#define MDBX_DBG_AUDIT 16
-#define MDBX_DBG_JITTER 32
-#define MDBX_DBG_DUMP 64
-#define MDBX_DBG_LEGACY_MULTIOPEN 128
-
-typedef void MDBX_debug_func(int type, const char *function, int line,
-                             const char *msg, va_list args);
-
-/* FIXME: Complete description */
-LIBMDBX_API int mdbx_setup_debug(int flags, MDBX_debug_func *logger);
-
-/* FIXME: Complete description */
-LIBMDBX_API char *mdbx_dkey(const MDBX_val *key, char *const buf,
-                            const size_t bufsize);
 
 /******************************************************************************/
 /* LY: temporary workaround for Elbrus's memcmp() bug. */

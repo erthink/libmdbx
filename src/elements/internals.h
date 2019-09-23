@@ -987,12 +987,13 @@ typedef struct MDBX_ntxn {
 /* Debug and Logging stuff */
 
 #define MDBX_RUNTIME_FLAGS_INIT                                                \
-  (MDBX_DBG_PRINT | ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT |                     \
-   ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT | ((MDBX_DEBUG) > 2) * MDBX_DBG_TRACE | \
-   ((MDBX_DEBUG) > 3) * MDBX_DBG_EXTRA)
+  ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
 
 #ifndef mdbx_runtime_flags /* avoid override from tools */
-MDBX_INTERNAL_VAR int mdbx_runtime_flags;
+MDBX_INTERNAL_VAR uint8_t mdbx_runtime_flags;
+#endif
+#ifndef mdbx_runtime_flags /* avoid override from tools */
+MDBX_INTERNAL_VAR uint8_t mdbx_loglevel;
 #endif
 MDBX_INTERNAL_VAR MDBX_debug_func *mdbx_debug_logger;
 
@@ -1008,99 +1009,98 @@ MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 
 #define mdbx_audit_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_AUDIT)
 
-#define mdbx_debug_enabled(type)                                               \
-  unlikely(mdbx_runtime_flags &(type & (MDBX_DBG_TRACE | MDBX_DBG_EXTRA)))
-
+#ifdef MDBX_LOGLEVEL_BUILD
+#define mdbx_log_enabled(msg)                                                  \
+  (msg <= MDBX_LOGLEVEL_BUILD && unlikely(msg <= mdbx_loglevel))
 #else
-#define mdbx_debug_enabled(type) (0)
+#define mdbx_log_enabled(msg) unlikely(msg <= mdbx_loglevel)
+#endif /* MDBX_LOGLEVEL_BUILD */
+
+#else /* MDBX_DEBUG */
+
 #define mdbx_audit_enabled() (0)
+
 #if !defined(NDEBUG) || defined(MDBX_FORCE_ASSERT)
 #define mdbx_assert_enabled() (1)
 #else
 #define mdbx_assert_enabled() (0)
 #endif /* NDEBUG */
+
+#ifdef MDBX_LOGLEVEL_BUILD
+#define mdbx_log_enabled(msg) (msg <= MDBX_LOGLEVEL_BUILD)
+#else
+#define mdbx_log_enabled(msg) (0)
+#endif /* MDBX_LOGLEVEL_BUILD */
+
 #endif /* MDBX_DEBUG */
 
 MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
                                          const char *func, int line);
 
-#define mdbx_print(fmt, ...)                                                   \
-  mdbx_debug_log(MDBX_DBG_PRINT, NULL, 0, fmt, ##__VA_ARGS__)
-
-#define mdbx_trace(fmt, ...)                                                   \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE))                                    \
-      mdbx_debug_log(MDBX_DBG_TRACE, __FUNCTION__, __LINE__, fmt "\n",         \
-                     ##__VA_ARGS__);                                           \
-  } while (0)
-
-#define mdbx_verbose(fmt, ...)                                                 \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
-      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
-                     fmt "\n", ##__VA_ARGS__);                                 \
-  } while (0)
-
-#define mdbx_info(fmt, ...)                                                    \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
-      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
-                     fmt "\n", ##__VA_ARGS__);                                 \
-  } while (0)
-
-#define mdbx_notice(fmt, ...)                                                  \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
-      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
-                     fmt "\n", ##__VA_ARGS__);                                 \
-  } while (0)
-
-#define mdbx_warning(fmt, ...)                                                 \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
-      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
-                     fmt "\n", ##__VA_ARGS__);                                 \
-  } while (0)
-
-#define mdbx_error(fmt, ...)                                                   \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
-      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
-                     fmt "\n", ##__VA_ARGS__);                                 \
-  } while (0)
-
-#define mdbx_fatal(fmt, ...)                                                   \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE /* FIXME */))                        \
-      mdbx_debug_log(MDBX_DBG_TRACE /* FIXME */, __FUNCTION__, __LINE__,       \
-                     fmt "\n", ##__VA_ARGS__);                                 \
-  } while (0)
-
-#define mdbx_debug(fmt, ...)                                                   \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE))                                    \
-      mdbx_debug_log(MDBX_DBG_TRACE, __FUNCTION__, __LINE__, fmt "\n",         \
-                     ##__VA_ARGS__);                                           \
-  } while (0)
-
-#define mdbx_debug_print(fmt, ...)                                             \
-  do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_TRACE))                                    \
-      mdbx_debug_log(MDBX_DBG_TRACE, NULL, 0, fmt, ##__VA_ARGS__);             \
-  } while (0)
-
 #define mdbx_debug_extra(fmt, ...)                                             \
   do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_EXTRA))                                    \
-      mdbx_debug_log(MDBX_DBG_EXTRA, __FUNCTION__, __LINE__, fmt,              \
+    if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
+      mdbx_debug_log(MDBX_LOG_EXTRA, __FUNCTION__, __LINE__, fmt,              \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
 #define mdbx_debug_extra_print(fmt, ...)                                       \
   do {                                                                         \
-    if (mdbx_debug_enabled(MDBX_DBG_EXTRA))                                    \
-      mdbx_debug_log(MDBX_DBG_EXTRA, NULL, 0, fmt, ##__VA_ARGS__);             \
+    if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
+      mdbx_debug_log(MDBX_LOG_EXTRA, NULL, 0, fmt, ##__VA_ARGS__);             \
   } while (0)
+
+#define mdbx_trace(fmt, ...)                                                   \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_TRACE))                                      \
+      mdbx_debug_log(MDBX_LOG_TRACE, __FUNCTION__, __LINE__, fmt "\n",         \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_debug(fmt, ...)                                                   \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_DEBUG))                                      \
+      mdbx_debug_log(MDBX_LOG_DEBUG, __FUNCTION__, __LINE__, fmt "\n",         \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_debug_print(fmt, ...)                                             \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_DEBUG))                                      \
+      mdbx_debug_log(MDBX_LOG_DEBUG, NULL, 0, fmt, ##__VA_ARGS__);             \
+  } while (0)
+
+#define mdbx_verbose(fmt, ...)                                                 \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_VERBOSE))                                    \
+      mdbx_debug_log(MDBX_LOG_VERBOSE, __FUNCTION__, __LINE__, fmt "\n",       \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_notice(fmt, ...)                                                  \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_NOTICE))                                     \
+      mdbx_debug_log(MDBX_LOG_NOTICE, __FUNCTION__, __LINE__, fmt "\n",        \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_warning(fmt, ...)                                                 \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_WARN))                                       \
+      mdbx_debug_log(MDBX_LOG_WARN, __FUNCTION__, __LINE__, fmt "\n",          \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_error(fmt, ...)                                                   \
+  do {                                                                         \
+    if (mdbx_log_enabled(MDBX_LOG_ERROR))                                      \
+      mdbx_debug_log(MDBX_LOG_ERROR, __FUNCTION__, __LINE__, fmt "\n",         \
+                     ##__VA_ARGS__);                                           \
+  } while (0)
+
+#define mdbx_fatal(fmt, ...)                                                   \
+  mdbx_debug_log(MDBX_LOG_FATAL, __FUNCTION__, __LINE__, fmt "\n",             \
+                 ##__VA_ARGS__);
 
 #define mdbx_ensure_msg(env, expr, msg)                                        \
   do {                                                                         \
@@ -1156,9 +1156,9 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 
 #if MDBX_DEBUG
 #define DKBUF char _kbuf[DKBUF_MAXKEYSIZE * 4 + 2]
-#define DKEY(x) mdbx_dkey(x, _kbuf, DKBUF_MAXKEYSIZE * 2 + 1)
+#define DKEY(x) mdbx_dump_val(x, _kbuf, DKBUF_MAXKEYSIZE * 2 + 1)
 #define DVAL(x)                                                                \
-  mdbx_dkey(x, _kbuf + DKBUF_MAXKEYSIZE * 2 + 1, DKBUF_MAXKEYSIZE * 2 + 1)
+  mdbx_dump_val(x, _kbuf + DKBUF_MAXKEYSIZE * 2 + 1, DKBUF_MAXKEYSIZE * 2 + 1)
 #else
 #define DKBUF ((void)(0))
 #define DKEY(x) ("-")

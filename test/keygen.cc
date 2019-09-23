@@ -137,8 +137,8 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   if (log_enabled(logging::trace)) {
     char dump_key[128], dump_value[128];
     log_trace("keygen-pair: key %s, value %s",
-              mdbx_dkey(&key->value, dump_key, sizeof(dump_key)),
-              mdbx_dkey(&value->value, dump_value, sizeof(dump_value)));
+              mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
+              mdbx_dump_val(&value->value, dump_value, sizeof(dump_value)));
   }
 }
 

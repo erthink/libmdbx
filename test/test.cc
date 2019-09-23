@@ -328,8 +328,8 @@ void testcase::report(size_t nops_done) {
     return;
 
   nops_completed += nops_done;
-  log_verbose("== complete +%" PRIuPTR " iteration, total %" PRIuPTR " done",
-              nops_done, nops_completed);
+  log_debug("== complete +%" PRIuPTR " iteration, total %" PRIuPTR " done",
+            nops_done, nops_completed);
 
   if (global::config::progress_indicator)
     kick_progress(true);
@@ -464,7 +464,7 @@ MDBX_dbi testcase::db_table_open(bool create) {
       failure("snprintf(tablename): %d", rc);
     tablename = tablename_buf;
   }
-  log_verbose("use %s table", tablename ? tablename : "MAINDB");
+  log_debug("use %s table", tablename ? tablename : "MAINDB");
 
   MDBX_dbi handle = 0;
   int rc = mdbx_dbi_open(txn_guard.get(), tablename,

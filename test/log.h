@@ -24,14 +24,14 @@ const char *test_strerror(int errnum);
 namespace logging {
 
 enum loglevel {
-  extra,
-  trace,
-  verbose,
-  info,
-  notice,
-  warning,
-  error,
-  failure,
+  extra = MDBX_LOG_EXTRA,
+  trace = MDBX_LOG_TRACE,
+  debug = MDBX_LOG_DEBUG,
+  info = MDBX_LOG_VERBOSE,
+  notice = MDBX_LOG_NOTICE,
+  warning = MDBX_LOG_WARN,
+  error = MDBX_LOG_ERROR,
+  failure = MDBX_LOG_FATAL
 };
 
 const char *level2str(const loglevel level);
@@ -66,7 +66,7 @@ public:
 
 void __printf_args(1, 2) log_extra(const char *msg, ...);
 void __printf_args(1, 2) log_trace(const char *msg, ...);
-void __printf_args(1, 2) log_verbose(const char *msg, ...);
+void __printf_args(1, 2) log_debug(const char *msg, ...);
 void __printf_args(1, 2) log_info(const char *msg, ...);
 void __printf_args(1, 2) log_notice(const char *msg, ...);
 void __printf_args(1, 2) log_warning(const char *msg, ...);

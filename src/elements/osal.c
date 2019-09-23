@@ -211,7 +211,7 @@ MDBX_INTERNAL_FUNC void __cold mdbx_assert_fail(const MDBX_env *env,
 #endif /* MDBX_DEBUG */
 
   if (mdbx_debug_logger)
-    mdbx_debug_log(MDBX_DBG_ASSERT, func, line, "assert: %s\n", msg);
+    mdbx_debug_log(MDBX_LOG_FATAL, func, line, "assert: %s\n", msg);
   else {
 #if defined(_WIN32) || defined(_WIN64)
     char *message = nullptr;

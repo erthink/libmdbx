@@ -318,7 +318,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
       lck_op(env->me_fd, op_setlk,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX)) {
-    mdbx_info("%s: got exclusive, drown mutexes", mdbx_func_);
+    mdbx_verbose("%s: got exclusive, drown mutexes", mdbx_func_);
     rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
     if (rc == 0)
       rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);

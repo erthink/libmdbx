@@ -28,7 +28,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 #ifdef NDEBUG
       logging::info;
 #elif defined(_WIN32) || defined(_WIN64)
-      logging::verbose;
+      logging::debug;
 #else
       logging::trace;
 #endif

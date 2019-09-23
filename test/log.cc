@@ -37,29 +37,18 @@ void __noreturn failure_perror(const char *what, int errnum) {
 
 //-----------------------------------------------------------------------------
 
-static void mdbx_logger(int type, const char *function, int line,
+static void mdbx_logger(int loglevel, const char *function, int line,
                         const char *msg, va_list args) {
-  logging::loglevel level = logging::info;
-  if (type & MDBX_DBG_EXTRA)
-    level = logging::extra;
-  if (type & MDBX_DBG_TRACE)
-    level = logging::trace;
-  if (type & MDBX_DBG_PRINT)
-    level = logging::verbose;
-
   if (!function)
     function = "unknown";
-  if (type & MDBX_DBG_ASSERT) {
-    log_error("mdbx: assertion failure: %s, %d", function, line);
-    level = logging::failure;
-  }
+
+  if (loglevel == MDBX_LOG_FATAL)
+    log_error("mdbx: fatal failure: %s, %d", function, line);
 
   if (logging::output(
-          level,
+          logging::loglevel(loglevel),
           strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx: %s: ", function))
     logging::feed_ap(msg, args);
-  if (type & MDBX_DBG_ASSERT)
-    abort();
 }
 
 namespace logging {
@@ -70,13 +59,8 @@ static loglevel level;
 static FILE *last;
 
 void setlevel(loglevel _level) {
-  level = (_level > error) ? failure : _level;
-  int mdbx_dbg_opts = MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP;
-  if (level <= trace)
-    mdbx_dbg_opts |= MDBX_DBG_TRACE;
-  if (level <= verbose)
-    mdbx_dbg_opts |= MDBX_DBG_PRINT;
-  int rc = mdbx_setup_debug(mdbx_dbg_opts, mdbx_logger);
+  int rc = mdbx_setup_debug(
+      _level, MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP, mdbx_logger);
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
@@ -95,8 +79,8 @@ const char *level2str(const loglevel alevel) {
     return "extra";
   case trace:
     return "trace";
-  case verbose:
-    return "verbose";
+  case debug:
+    return "debug";
   case info:
     return "info";
   case notice:
@@ -111,7 +95,7 @@ const char *level2str(const loglevel alevel) {
 }
 
 bool output(const loglevel priority, const char *format, ...) {
-  if (priority < level)
+  if (priority > level)
     return false;
 
   va_list ap;
@@ -245,7 +229,7 @@ local_suffix::~local_suffix() { suffix.erase(trim_pos); }
 } // namespace logging
 
 void log_extra(const char *msg, ...) {
-  if (logging::extra >= logging::level) {
+  if (logging::extra <= logging::level) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::extra, msg, ap);
@@ -255,7 +239,7 @@ void log_extra(const char *msg, ...) {
 }
 
 void log_trace(const char *msg, ...) {
-  if (logging::trace >= logging::level) {
+  if (logging::trace <= logging::level) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::trace, msg, ap);
@@ -264,18 +248,18 @@ void log_trace(const char *msg, ...) {
     logging::last = nullptr;
 }
 
-void log_verbose(const char *msg, ...) {
-  if (logging::verbose >= logging::level) {
+void log_debug(const char *msg, ...) {
+  if (logging::debug <= logging::level) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::verbose, msg, ap);
+    logging::output(logging::debug, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
 void log_info(const char *msg, ...) {
-  if (logging::info >= logging::level) {
+  if (logging::info <= logging::level) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::info, msg, ap);
@@ -285,7 +269,7 @@ void log_info(const char *msg, ...) {
 }
 
 void log_notice(const char *msg, ...) {
-  if (logging::notice >= logging::level) {
+  if (logging::notice <= logging::level) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::notice, msg, ap);
@@ -295,7 +279,7 @@ void log_notice(const char *msg, ...) {
 }
 
 void log_warning(const char *msg, ...) {
-  if (logging::warning >= logging::level) {
+  if (logging::warning <= logging::level) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::warning, msg, ap);
@@ -305,7 +289,7 @@ void log_warning(const char *msg, ...) {
 }
 
 void log_error(const char *msg, ...) {
-  if (logging::error >= logging::level) {
+  if (logging::error <= logging::level) {
     va_list ap;
     va_start(ap, msg);
     logging::output(logging::error, msg, ap);
