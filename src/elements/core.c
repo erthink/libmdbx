@@ -273,59 +273,82 @@ size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
 #endif /* Elbrus's memcmp() bug. */
 
 /*------------------------------------------------------------------------------
- * safe write volatile txnid for non-64-bit and/or not-atomic platforms. */
+ * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
-#ifndef MDBX_64BIT_ATOMIC
+static __inline bool safe64_is_valid(uint64_t v) {
 #if MDBX_WORDBITS >= 64
-#define MDBX_64BIT_ATOMIC 1
+  return v < SAFE64_INVALID_THRESHOLD;
 #else
-#define MDBX_64BIT_ATOMIC 0
-#endif
-#endif /* MDBX_64BIT_ATOMIC */
+  return (v >> 32) != UINT32_MAX;
+#endif /* MDBX_WORDBITS */
+}
 
-static __always_inline void safe_txnid_reset(volatile uint64_t *const ptr) {
+static __inline bool safe64_is_valid_ptr(const mdbx_safe64_t *ptr) {
   mdbx_compiler_barrier();
 #if MDBX_64BIT_ATOMIC
-  *ptr = UINT64_MAX;
+  return ptr->atomic < SAFE64_INVALID_THRESHOLD;
 #else
-  volatile uint32_t *const high_part =
-      ((volatile uint32_t *)ptr) + (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__);
-  *high_part = UINT32_MAX;
+  return ptr->high != UINT32_MAX;
 #endif /* MDBX_64BIT_ATOMIC */
+}
+
+static __inline void safe64_reset(mdbx_safe64_t *ptr) {
+  mdbx_compiler_barrier();
+#if MDBX_64BIT_ATOMIC
+  ptr->atomic = UINT64_MAX;
+#else
+  /* atomically make value >= SAFE64_INVALID_THRESHOLD */
+  ptr->high = UINT32_MAX;
+#endif /* MDBX_64BIT_ATOMIC */
+  assert(ptr->inconsistent >= SAFE64_INVALID_THRESHOLD);
   mdbx_flush_noncoherent_cpu_writeback();
   mdbx_jitter4testing(true);
 }
 
-static __always_inline void safe_txnid_set(volatile uint64_t *const ptr,
-                                           uint64_t v) {
+static __inline void safe64_write(mdbx_safe64_t *ptr, const uint64_t v) {
   mdbx_compiler_barrier();
-  assert(*ptr >= BAD_TXNID);
+  assert(ptr->inconsistent >= SAFE64_INVALID_THRESHOLD);
 #if MDBX_64BIT_ATOMIC
-  *ptr = v;
-#else
-  volatile uint32_t *const high_part =
-      ((volatile uint32_t *)ptr) + (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__);
-  volatile uint32_t *const lower_part =
-      ((volatile uint32_t *)ptr) + (__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__);
-  mdbx_jitter4testing(true);
-  *lower_part = (uint32_t)v;
+  ptr->atomic = v;
+#else  /* MDBX_64BIT_ATOMIC */
+  /* update low-part but still value >= SAFE64_INVALID_THRESHOLD */
+  ptr->low = (uint32_t)v;
+  assert(ptr->inconsistent >= SAFE64_INVALID_THRESHOLD);
   mdbx_flush_noncoherent_cpu_writeback();
   mdbx_jitter4testing(true);
-  *high_part = (uint32_t)(v >> 32);
+  /* update high-part from SAFE64_INVALID_THRESHOLD to actual value */
+  ptr->high = (uint32_t)(v >> 32);
 #endif /* MDBX_64BIT_ATOMIC */
-  mdbx_compiler_barrier();
+  assert(ptr->inconsistent == v);
+  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_jitter4testing(true);
 }
 
-static __always_inline void safe_txnid_update(volatile uint64_t *const ptr,
-                                              uint64_t v) {
-#if MDBX_64BIT_ATOMIC
+static __always_inline uint64_t safe64_read(const mdbx_safe64_t *ptr) {
   mdbx_compiler_barrier();
-  *ptr = v;
-#else
-  safe_txnid_reset(ptr);
-  safe_txnid_set(ptr, v);
+  mdbx_jitter4testing(true);
+  uint64_t v;
+#if MDBX_64BIT_ATOMIC
+  v = ptr->atomic;
+#else  /* MDBX_64BIT_ATOMIC */
+  uint32_t hi, lo;
+  do {
+    hi = ptr->high;
+    mdbx_compiler_barrier();
+    mdbx_jitter4testing(true);
+    lo = ptr->low;
+    mdbx_compiler_barrier();
+    mdbx_jitter4testing(true);
+  } while (unlikely(hi != ptr->high));
+  v = lo | (uint64_t)hi << 32;
 #endif /* MDBX_64BIT_ATOMIC */
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_jitter4testing(true);
+  return v;
+}
+
+static __inline void safe64_update(mdbx_safe64_t *ptr, const uint64_t v) {
+  safe64_reset(ptr);
+  safe64_write(ptr, v);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -1851,8 +1874,8 @@ static void mdbx_page_list(MDBX_page *mp) {
                state);
     return;
   case P_META:
-    mdbx_print("Meta-page %" PRIu64 " txnid %" PRIu64 "\n", pgno,
-               ((MDBX_meta *)PAGEDATA(mp))->mm_txnid);
+    mdbx_print("Meta-page %" PRIaPGNO " txnid %" PRIu64 "\n", pgno,
+               ((MDBX_meta *)PAGEDATA(mp))->mm_txnid_a.inconsistent);
     return;
   default:
     mdbx_print("Bad page %" PRIu64 " flags 0x%X\n", pgno, mp->mp_flags);
@@ -2368,8 +2391,8 @@ bailout:
 static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
                                    bool allow_volatile) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
-  txnid_t a = meta->mm_txnid_a;
-  txnid_t b = meta->mm_txnid_b;
+  txnid_t a = safe64_read(&meta->mm_txnid_a);
+  txnid_t b = safe64_read(&meta->mm_txnid_b);
   if (allow_volatile)
     return (a == b) ? a : 0;
   mdbx_assert(env, a == b);
@@ -2389,27 +2412,30 @@ static __inline txnid_t mdbx_meta_txnid_fluid(const MDBX_env *env,
 static __inline void mdbx_meta_update_begin(const MDBX_env *env,
                                             MDBX_meta *meta, txnid_t txnid) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
-  mdbx_assert(env, meta->mm_txnid_a < txnid && meta->mm_txnid_b < txnid);
+  mdbx_assert(env, meta->mm_txnid_a.inconsistent < txnid &&
+                       meta->mm_txnid_b.inconsistent < txnid);
   (void)env;
-  safe_txnid_update(&meta->mm_txnid_a, txnid);
+  safe64_update(&meta->mm_txnid_a, txnid);
 }
 
 static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
                                           txnid_t txnid) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
-  mdbx_assert(env, meta->mm_txnid_a == txnid);
-  mdbx_assert(env, meta->mm_txnid_b < txnid);
+  mdbx_assert(env, meta->mm_txnid_a.inconsistent == txnid);
+  mdbx_assert(env, meta->mm_txnid_b.inconsistent < txnid);
   (void)env;
   mdbx_jitter4testing(true);
-  safe_txnid_update(&meta->mm_txnid_b, txnid);
+  safe64_update(&meta->mm_txnid_b, txnid);
 }
 
 static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
                                          txnid_t txnid) {
   mdbx_assert(env, meta < METAPAGE(env, 0) || meta > METAPAGE_END(env));
   (void)env;
-  meta->mm_txnid_a = txnid;
-  meta->mm_txnid_b = txnid;
+  /* update inconsistent since this function used ONLY for filling meta-image
+   * for writing, but not the actual meta-page */
+  meta->mm_txnid_a.inconsistent = txnid;
+  meta->mm_txnid_b.inconsistent = txnid;
 }
 
 static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
@@ -2569,7 +2595,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   for (unsigned i = 0; i < snap_nreaders; ++i) {
     if (lck->mti_readers[i].mr_pid) {
       /* mdbx_jitter4testing(true); */
-      const txnid_t snap = lck->mti_readers[i].mr_txnid;
+      const txnid_t snap = safe64_read(&lck->mti_readers[i].mr_txnid);
       if (oldest > snap && last_oldest <= /* ignore pending updates */ snap) {
         oldest = snap;
         if (oldest == last_oldest)
@@ -2596,10 +2622,10 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
       if (lck->mti_readers[i].mr_pid) {
         /* mdbx_jitter4testing(true); */
         const pgno_t snap_pages = lck->mti_readers[i].mr_snapshot_pages_used;
-        const txnid_t snap_txnid = lck->mti_readers[i].mr_txnid;
+        const txnid_t snap_txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
         mdbx_memory_barrier();
         if (unlikely(snap_pages != lck->mti_readers[i].mr_snapshot_pages_used ||
-                     snap_txnid != lck->mti_readers[i].mr_txnid))
+                     snap_txnid != safe64_read(&lck->mti_readers[i].mr_txnid)))
           goto retry;
         if (largest < snap_pages &&
             lck->mti_oldest_reader <= /* ignore pending updates */ snap_txnid &&
@@ -3596,7 +3622,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     }
 
     if (likely(r)) {
-      if (unlikely(r->mr_pid != env->me_pid || r->mr_txnid < BAD_TXNID))
+      if (unlikely(r->mr_pid != env->me_pid ||
+                   r->mr_txnid.inconsistent < SAFE64_INVALID_THRESHOLD))
         return MDBX_BAD_RSLOT;
     } else if (env->me_lck) {
       unsigned slot, nreaders;
@@ -3651,7 +3678,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
        * that, it is safe for mdbx_env_close() to touch it.
        * When it will be closed, we can finally claim it. */
       r->mr_pid = 0;
-      safe_txnid_reset(&r->mr_txnid);
+      safe64_reset(&r->mr_txnid);
       if (slot == nreaders)
         env->me_lck->mti_numreaders = ++nreaders;
       r->mr_tid = tid;
@@ -3670,14 +3697,14 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       const txnid_t snap = mdbx_meta_txnid_fluid(env, meta);
       mdbx_jitter4testing(false);
       if (likely(r)) {
-        safe_txnid_reset(&r->mr_txnid);
+        safe64_reset(&r->mr_txnid);
         r->mr_snapshot_pages_used = meta->mm_geo.next;
         r->mr_snapshot_pages_retired = meta->mm_pages_retired;
-        safe_txnid_set(&r->mr_txnid, snap);
+        safe64_write(&r->mr_txnid, snap);
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
         mdbx_assert(env, r->mr_tid == mdbx_thread_self());
-        mdbx_assert(env, r->mr_txnid == snap);
+        mdbx_assert(env, r->mr_txnid.inconsistent == snap);
         mdbx_compiler_barrier();
         env->me_lck->mti_readers_refresh_flag = true;
         mdbx_flush_noncoherent_cpu_writeback();
@@ -3700,7 +3727,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       }
     }
 
-    if (unlikely(txn->mt_txnid == 0 || txn->mt_txnid >= BAD_TXNID)) {
+    if (unlikely(txn->mt_txnid == 0 ||
+                 txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
       mdbx_error("environment corrupted by died writer, must shutdown!");
       rc = MDBX_WANNA_RECOVERY;
       goto bailout;
@@ -3737,7 +3765,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 #else
     txn->mt_txnid = snap + 1;
 #endif
-    if (unlikely(txn->mt_txnid >= BAD_TXNID)) {
+    if (unlikely(txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
       mdbx_debug("txnid overflow!");
       rc = MDBX_TXN_FULL;
       goto bailout;
@@ -4077,13 +4105,14 @@ int mdbx_txn_info(MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt) {
         retry:
           if (lck->mti_readers[i].mr_pid) {
             mdbx_jitter4testing(true);
-            const txnid_t snap_txnid = lck->mti_readers[i].mr_txnid;
+            const txnid_t snap_txnid =
+                safe64_read(&lck->mti_readers[i].mr_txnid);
             const uint64_t snap_retired =
                 lck->mti_readers[i].mr_snapshot_pages_retired;
             mdbx_compiler_barrier();
-            if (unlikely(snap_txnid != lck->mti_readers[i].mr_txnid ||
-                         snap_retired !=
-                             lck->mti_readers[i].mr_snapshot_pages_retired))
+            if (unlikely(snap_retired !=
+                         lck->mti_readers[i].mr_snapshot_pages_retired) ||
+                snap_txnid != safe64_read(&lck->mti_readers[i].mr_txnid))
               goto retry;
             if (snap_txnid > txn->mt_txnid && snap_txnid < next_reader) {
               next_reader = snap_txnid;
@@ -4115,7 +4144,7 @@ int mdbx_txn_info(MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt) {
           bool exists = false;
           for (unsigned i = 0; i < snap_nreaders; ++i) {
             if (lck->mti_readers[i].mr_pid &&
-                txn->mt_txnid > lck->mti_readers[i].mr_txnid) {
+                txn->mt_txnid > safe64_read(&lck->mti_readers[i].mr_txnid)) {
               exists = true;
               break;
             }
@@ -4220,11 +4249,11 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
 #endif
     if (txn->mt_ro_reader) {
       mdbx_ensure(env, /* paranoia is appropriate here */
-                  txn->mt_txnid == txn->mt_ro_reader->mr_txnid &&
-                      txn->mt_ro_reader->mr_txnid >=
+                  txn->mt_txnid == txn->mt_ro_reader->mr_txnid.inconsistent &&
+                      txn->mt_ro_reader->mr_txnid.inconsistent >=
                           env->me_lck->mti_oldest_reader);
       txn->mt_ro_reader->mr_snapshot_pages_used = 0;
-      safe_txnid_reset(&txn->mt_ro_reader->mr_txnid);
+      safe64_reset(&txn->mt_ro_reader->mr_txnid);
       if (mode & MDBX_END_SLOT) {
         if ((env->me_flags & MDBX_ENV_TXKEY) == 0)
           txn->mt_ro_reader->mr_pid = 0;
@@ -5635,7 +5664,8 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                 page.mp_meta.mm_psize);
     }
 
-    if (page.mp_meta.mm_txnid_a != page.mp_meta.mm_txnid_b) {
+    if (safe64_read(&page.mp_meta.mm_txnid_a) !=
+        safe64_read(&page.mp_meta.mm_txnid_b)) {
       mdbx_warning("meta[%u] not completely updated, skip it", meta_number);
       continue;
     }
@@ -5657,7 +5687,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                page.mp_meta.mm_dbs[FREE_DBI].md_root, page.mp_meta.mm_geo.lower,
                page.mp_meta.mm_geo.next, page.mp_meta.mm_geo.now,
                page.mp_meta.mm_geo.upper, page.mp_meta.mm_geo.grow,
-               page.mp_meta.mm_geo.shrink, page.mp_meta.mm_txnid_a,
+               page.mp_meta.mm_geo.shrink, page.mp_meta.mm_txnid_a.inconsistent,
                mdbx_durable_str(&page.mp_meta));
 
     /* LY: check min-pages value */
@@ -5797,7 +5827,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       continue;
     }
 
-    if (page.mp_meta.mm_txnid_a == 0) {
+    if (safe64_read(&page.mp_meta.mm_txnid_a) == 0) {
       mdbx_warning("meta[%u] has zero txnid, skip it", meta_number);
       continue;
     }
@@ -5943,8 +5973,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
           flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
           shrink = pending->mm_geo.now - bottom;
           pending->mm_geo.now = bottom;
-          if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a)
-            mdbx_meta_set_txnid(env, pending, pending->mm_txnid_a + 1);
+          if (mdbx_meta_txnid_stable(env, head) ==
+              pending->mm_txnid_a.inconsistent)
+            mdbx_meta_set_txnid(env, pending,
+                                pending->mm_txnid_a.inconsistent + 1);
         }
       }
     }
@@ -5996,7 +6028,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   }
 
   MDBX_meta *target = nullptr;
-  if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a) {
+  if (mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a.inconsistent) {
     mdbx_assert(env, memcmp(&head->mm_dbs, &pending->mm_dbs,
                             sizeof(head->mm_dbs)) == 0);
     mdbx_assert(env, memcmp(&head->mm_canary, &pending->mm_canary,
@@ -6027,8 +6059,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
              pending->mm_dbs[MAIN_DBI].md_root,
              pending->mm_dbs[FREE_DBI].md_root, pending->mm_geo.lower,
              pending->mm_geo.next, pending->mm_geo.now, pending->mm_geo.upper,
-             pending->mm_geo.grow, pending->mm_geo.shrink, pending->mm_txnid_a,
-             mdbx_durable_str(pending));
+             pending->mm_geo.grow, pending->mm_geo.shrink,
+             pending->mm_txnid_a.inconsistent, mdbx_durable_str(pending));
 
   mdbx_debug("meta0: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO
              "/%" PRIaPGNO,
@@ -6052,12 +6084,12 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   mdbx_ensure(env, target == head || mdbx_meta_txnid_stable(env, target) <
-                                         pending->mm_txnid_a);
+                                         pending->mm_txnid_a.inconsistent);
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
     if (likely(target != head)) {
       /* LY: 'invalidate' the meta. */
-      mdbx_meta_update_begin(env, target, pending->mm_txnid_a);
+      mdbx_meta_update_begin(env, target, pending->mm_txnid_a.inconsistent);
       target->mm_datasync_sign = MDBX_DATASIGN_WEAK;
 #ifndef NDEBUG
       /* debug: provoke failure to catch a violators, but don't touch mm_psize
@@ -6078,14 +6110,14 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       mdbx_flush_noncoherent_cpu_writeback();
 
       /* LY: 'commit' the meta */
-      mdbx_meta_update_end(env, target, pending->mm_txnid_b);
+      mdbx_meta_update_end(env, target, pending->mm_txnid_b.inconsistent);
       mdbx_jitter4testing(true);
     } else {
       /* dangerous case (target == head), only mm_datasync_sign could
        * me updated, check assertions once again */
-      mdbx_ensure(env,
-                  mdbx_meta_txnid_stable(env, head) == pending->mm_txnid_a &&
-                      !META_IS_STEADY(head) && META_IS_STEADY(pending));
+      mdbx_ensure(env, mdbx_meta_txnid_stable(env, head) ==
+                               pending->mm_txnid_a.inconsistent &&
+                           !META_IS_STEADY(head) && META_IS_STEADY(pending));
       mdbx_ensure(env, memcmp(&head->mm_geo, &pending->mm_geo,
                               sizeof(head->mm_geo)) == 0);
       mdbx_ensure(env, memcmp(&head->mm_dbs, &pending->mm_dbs,
@@ -6761,7 +6793,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
             meta.mm_dbs[MAIN_DBI].md_root, meta.mm_dbs[FREE_DBI].md_root,
             meta.mm_geo.lower, meta.mm_geo.next, meta.mm_geo.now,
             meta.mm_geo.upper, meta.mm_geo.grow, meta.mm_geo.shrink,
-            meta.mm_txnid_a, mdbx_durable_str(&meta));
+            meta.mm_txnid_a.inconsistent, mdbx_durable_str(&meta));
 
   mdbx_setup_pagesize(env, meta.mm_psize);
   const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
@@ -6824,7 +6856,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                 meta.mm_dbs[MAIN_DBI].md_root, meta.mm_dbs[FREE_DBI].md_root,
                 meta.mm_geo.lower, meta.mm_geo.next, meta.mm_geo.now,
                 meta.mm_geo.upper, meta.mm_geo.grow, meta.mm_geo.shrink,
-                meta.mm_txnid_a, mdbx_durable_str(&meta));
+                meta.mm_txnid_a.inconsistent, mdbx_durable_str(&meta));
     }
     mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
   } else {
@@ -6896,7 +6928,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   while (1) {
     MDBX_meta *head = mdbx_meta_head(env);
     const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
-    if (head_txnid == meta.mm_txnid_a)
+    if (head_txnid == meta.mm_txnid_a.inconsistent)
       break;
 
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
@@ -6904,7 +6936,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       if (env->me_flags & MDBX_RDONLY) {
         mdbx_error("rollback needed: (from head %" PRIaTXN
                    " to steady %" PRIaTXN "), but unable in read-only mode",
-                   head_txnid, meta.mm_txnid_a);
+                   head_txnid, meta.mm_txnid_a.inconsistent);
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
@@ -6917,21 +6949,23 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
           (head != meta1 && mdbx_meta_txnid_fluid(env, meta1) == undo_txnid) ||
           (head != meta2 && mdbx_meta_txnid_fluid(env, meta2) == undo_txnid))
         undo_txnid += 1;
-      if (unlikely(undo_txnid >= meta.mm_txnid_a)) {
+      if (unlikely(undo_txnid >= meta.mm_txnid_a.inconsistent)) {
         mdbx_fatal("rollback failed: no suitable txnid (0,1,2) < %" PRIaTXN,
-                   meta.mm_txnid_a);
+                   meta.mm_txnid_a.inconsistent);
         return MDBX_PANIC /* LY: could not recovery/rollback */;
       }
 
       /* LY: rollback weak checkpoint */
       mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN " as %" PRIaTXN,
-                 head_txnid, meta.mm_txnid_a, undo_txnid);
+                 head_txnid, meta.mm_txnid_a.inconsistent, undo_txnid);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
 
       if (env->me_flags & MDBX_WRITEMAP) {
-        head->mm_txnid_a = undo_txnid;
+        /* It is possible to update txnid without safe64_write(),
+         * since DB opened exclusive for now */
+        head->mm_txnid_a.inconsistent = undo_txnid;
         head->mm_datasync_sign = MDBX_DATASIGN_WEAK;
-        head->mm_txnid_b = undo_txnid;
+        head->mm_txnid_b.inconsistent = undo_txnid;
         const size_t offset =
             ((uint8_t *)container_of(head, MDBX_page, mp_meta)) -
             env->me_dxb_mmap.dxb;
@@ -12958,13 +12992,13 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
 
   arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid = 0;
   if (env->me_lck) {
-    MDBX_reader *r = env->me_lck->mti_readers;
+    MDBX_reader *rlt = env->me_lck->mti_readers;
     arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
         arg->mi_recent_txnid;
     for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
-      const uint32_t pid = r[i].mr_pid;
+      const uint32_t pid = rlt[i].mr_pid;
       if (pid) {
-        const txnid_t txnid = r[i].mr_txnid;
+        const txnid_t txnid = safe64_read(&rlt[i].mr_txnid);
         if (arg->mi_latter_reader_txnid > txnid)
           arg->mi_latter_reader_txnid = txnid;
         if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
@@ -13521,19 +13555,19 @@ int __cold mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
       const uint32_t pid = r->mr_pid;
       if (!pid)
         continue;
-      txnid_t txnid = r->mr_txnid;
+      txnid_t txnid = safe64_read(&r->mr_txnid);
       const size_t tid = r->mr_tid;
       const pgno_t pages_used = r->mr_snapshot_pages_used;
       const uint64_t reader_pages_retired = r->mr_snapshot_pages_retired;
       mdbx_compiler_barrier();
-      if (unlikely(pid != r->mr_pid || txnid != r->mr_txnid ||
-                   tid != r->mr_tid ||
+      if (unlikely(tid != r->mr_tid ||
                    pages_used != r->mr_snapshot_pages_used ||
-                   reader_pages_retired != r->mr_snapshot_pages_retired))
+                   reader_pages_retired != r->mr_snapshot_pages_retired ||
+                   txnid != safe64_read(&r->mr_txnid) || pid != r->mr_pid))
         goto retry_reader;
 
       mdbx_assert(env, txnid > 0);
-      if (txnid >= BAD_TXNID)
+      if (txnid >= SAFE64_INVALID_THRESHOLD)
         txnid = 0;
 
       size_t bytes_used = 0;
@@ -13700,7 +13734,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
     for (unsigned j = i; j < snap_nreaders; j++) {
       if (lck->mti_readers[j].mr_pid == pid) {
         mdbx_debug("clear stale reader pid %" PRIuPTR " txn %" PRIaTXN,
-                   (size_t)pid, lck->mti_readers[j].mr_txnid);
+                   (size_t)pid, lck->mti_readers[j].mr_txnid.inconsistent);
         lck->mti_readers[j].mr_pid = 0;
         lck->mti_readers_refresh_flag = true;
         count++;
@@ -13782,15 +13816,15 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
     if (MDBX_IS_ERROR(mdbx_reader_check0(env, false, NULL)))
       break;
 
-    MDBX_reader *const rtbl = env->me_lck->mti_readers;
+    MDBX_reader *const rlt = env->me_lck->mti_readers;
     MDBX_reader *asleep = nullptr;
     for (int i = env->me_lck->mti_numreaders; --i >= 0;) {
-      if (rtbl[i].mr_pid) {
+      if (rlt[i].mr_pid) {
         mdbx_jitter4testing(true);
-        const txnid_t snap = rtbl[i].mr_txnid;
+        const txnid_t snap = safe64_read(&rlt[i].mr_txnid);
         if (oldest > snap && laggard <= /* ignore pending updates */ snap) {
           oldest = snap;
-          asleep = &rtbl[i];
+          asleep = &rlt[i];
         }
       }
     }
@@ -13813,7 +13847,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
 
     uint32_t pid = asleep->mr_pid;
     size_t tid = asleep->mr_tid;
-    if (asleep->mr_txnid != laggard || pid <= 0)
+    if (safe64_read(&asleep->mr_txnid) != laggard || pid <= 0)
       continue;
 
     const txnid_t gap =
@@ -13825,7 +13859,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
       break;
 
     if (rc) {
-      safe_txnid_reset(&asleep->mr_txnid);
+      safe64_reset(&asleep->mr_txnid);
       if (rc > 1) {
         asleep->mr_tid = 0;
         asleep->mr_pid = 0;

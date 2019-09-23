@@ -153,6 +153,14 @@
 #define MDBX_WORDBITS 32
 #endif /* MDBX_WORDBITS */
 
+#ifndef MDBX_64BIT_ATOMIC
+#if MDBX_WORDBITS >= 64
+#define MDBX_64BIT_ATOMIC 1
+#else
+#define MDBX_64BIT_ATOMIC 0
+#endif
+#endif /* MDBX_64BIT_ATOMIC */
+
 /* Some platforms define the EOWNERDEAD error code even though they
  *  don't support Robust Mutexes. Compile with -DMDBX_USE_ROBUST=0. */
 #ifndef MDBX_USE_ROBUST
@@ -263,7 +271,6 @@ typedef uint32_t pgno_t;
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
 #define MIN_TXNID UINT64_C(1)
-#define BAD_TXNID UINT64_C(0xffffFFFF00000000)
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
@@ -275,6 +282,27 @@ typedef uint16_t indx_t;
 /*----------------------------------------------------------------------------*/
 /* Core structures for database and shared memory (i.e. format definition) */
 #pragma pack(push, 1)
+
+typedef union mdbx_safe64 {
+  volatile uint64_t inconsistent;
+#if MDBX_64BIT_ATOMIC
+  volatile uint64_t atomic;
+#else
+  struct {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    volatile uint32_t low;
+    volatile uint32_t high;
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    volatile uint32_t high;
+    volatile uint32_t low;
+#else
+#error "FIXME: Unsupported byte order"
+#endif /* __BYTE_ORDER__ */
+  };
+#endif /* MDBX_64BIT_ATOMIC */
+} mdbx_safe64_t;
+
+#define SAFE64_INVALID_THRESHOLD UINT64_C(0xffffFFFF00000000)
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {
@@ -310,7 +338,7 @@ typedef struct MDBX_meta {
   uint64_t mm_magic_and_version;
 
   /* txnid that committed this page, the first of a two-phase-update pair */
-  volatile txnid_t mm_txnid_a;
+  mdbx_safe64_t mm_txnid_a;
 
   uint16_t mm_extra_flags;  /* extra DB flags, zero (nothing) for now */
   uint8_t mm_validator_id;  /* ID of checksum and page validation method,
@@ -336,7 +364,7 @@ typedef struct MDBX_meta {
   volatile uint64_t mm_datasync_sign;
 
   /* txnid that committed this page, the second of a two-phase-update pair */
-  volatile txnid_t mm_txnid_b;
+  mdbx_safe64_t mm_txnid_b;
 
   /* Number of non-meta pages which were put in GC after COW. May be 0 in case
    * DB was previously handled by libmdbx without corresponding feature.
@@ -448,7 +476,7 @@ typedef struct MDBX_reader {
    * anything; all we need to know is which version of the DB they
    * started from so we can avoid overwriting any data used in that
    * particular version. */
-  volatile uint64_t /* txnid_t */ mr_txnid;
+  mdbx_safe64_t /* txnid_t */ mr_txnid;
 
   /* The information we store in a single slot of the reader table.
    * In addition to a transaction ID, we also record the process and
