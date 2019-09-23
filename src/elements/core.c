@@ -951,7 +951,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
   static __always_inline TYPE_LIST *NAME(TYPE_LIST *first, unsigned length,    \
                                          const TYPE_ARG item) {                \
     while (length > 3) {                                                       \
-      const size_t half = length >> 1;                                         \
+      const unsigned half = length >> 1;                                       \
       TYPE_LIST *const middle = first + half;                                  \
       if (CMP(*middle, item)) {                                                \
         first = middle + 1;                                                    \
@@ -1308,20 +1308,55 @@ static __inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
 
 /* Returns the index of the first dirty-page whose pgno
  * member is greater than or equal to id. */
+#define DP_SEARCH_CMP(dp, id) ((dp).pgno < (id))
+SEARCH_IMPL(dp_bsearch, MDBX_DP, pgno_t, DP_SEARCH_CMP)
+
 static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t id) {
+  if (dl->sorted < dl->length) {
+    /* unsorted tail case  */
 #if MDBX_DEBUG
-  for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;)
-    assert(ptr[0].pgno < ptr[1].pgno);
+    for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;) {
+      assert(ptr[0].pgno < ptr[1].pgno);
+      assert(ptr[0].pgno >= NUM_METAS);
+    }
 #endif
 
-  dl = mdbx_dpl_sort(dl);
-  /* binary search of id in array
-   * if found, returns position of id
-   * if not found, returns first position greater than id */
-  unsigned base = 0;
-  unsigned cursor = 1;
-  int val = 0;
-  unsigned n = dl->length;
+    /* try linear search until the threshold */
+    if (dl->length - dl->sorted < SORT_THRESHOLD / 2) {
+      unsigned i = dl->length;
+      while (i - dl->sorted > 7) {
+        if (dl[i].pgno == id)
+          return i;
+        if (dl[i - 1].pgno == id)
+          return i - 1;
+        if (dl[i - 2].pgno == id)
+          return i - 2;
+        if (dl[i - 3].pgno == id)
+          return i - 3;
+        if (dl[i - 4].pgno == id)
+          return i - 4;
+        if (dl[i - 5].pgno == id)
+          return i - 5;
+        if (dl[i - 6].pgno == id)
+          return i - 6;
+        if (dl[i - 7].pgno == id)
+          return i - 7;
+        i -= 8;
+      }
+      while (i > dl->sorted) {
+        if (dl[i].pgno == id)
+          return i;
+        --i;
+      }
+
+      MDBX_DPL it = dp_bsearch(dl + 1, i, id);
+      return (unsigned)(it - dl);
+    }
+
+    /* sort a whole */
+    dl->sorted = dl->length;
+    dp_sort(dl + 1, dl + dl->length + 1);
+  }
 
 #if MDBX_DEBUG
   for (const MDBX_DP *ptr = dl + dl->length; --ptr > dl;) {
@@ -1330,25 +1365,8 @@ static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t id) {
   }
 #endif
 
-  while (n > 0) {
-    unsigned pivot = n >> 1;
-    cursor = base + pivot + 1;
-    val = mdbx_cmp2int(id, dl[cursor].pgno);
-
-    if (val < 0) {
-      n = pivot;
-    } else if (val > 0) {
-      base = cursor;
-      n -= pivot + 1;
-    } else {
-      return cursor;
-    }
-  }
-
-  if (val > 0)
-    ++cursor;
-
-  return cursor;
+  MDBX_DPL it = dp_bsearch(dl + 1, dl->length, id);
+  return (unsigned)(it - dl);
 }
 
 static __inline MDBX_page *mdbx_dpl_find(MDBX_DPL dl, pgno_t id) {
