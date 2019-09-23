@@ -481,7 +481,7 @@ __cold void mdbx_rthc_thread_dtor(void *ptr) {
   mdbx_trace(">> pid %d, thread 0x%" PRIxPTR ", rthc %p", mdbx_getpid(),
              (uintptr_t)mdbx_thread_self(), ptr);
 
-  const mdbx_pid_t self_pid = mdbx_getpid();
+  const uint32_t self_pid = mdbx_getpid();
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (!rthc_table[i].key_valid)
       continue;
@@ -580,7 +580,7 @@ __cold void mdbx_rthc_global_dtor(void) {
   thread_key_delete(rthc_key);
 #endif
 
-  const mdbx_pid_t self_pid = mdbx_getpid();
+  const uint32_t self_pid = mdbx_getpid();
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (!rthc_table[i].key_valid)
       continue;
@@ -673,7 +673,7 @@ __cold void mdbx_rthc_remove(const mdbx_thread_key_t key) {
 
   for (unsigned i = 0; i < rthc_count; ++i) {
     if (rthc_table[i].key_valid && key == rthc_table[i].thr_tls_key) {
-      const mdbx_pid_t self_pid = mdbx_getpid();
+      const uint32_t self_pid = mdbx_getpid();
       mdbx_trace("== [%i], %p ...%p, current-pid %d", i, rthc_table[i].begin,
                  rthc_table[i].end, self_pid);
 
@@ -756,7 +756,7 @@ static int uniq_peek(const mdbx_mmap_t *pending, mdbx_mmap_t *scan) {
 static int uniq_poke(const mdbx_mmap_t *pending, mdbx_mmap_t *scan,
                      uint64_t *abra) {
   if (*abra == 0) {
-    const mdbx_tid_t tid = mdbx_thread_self();
+    const size_t tid = mdbx_thread_self();
     size_t uit = 0;
     memcpy(&uit, &tid, (sizeof(tid) < sizeof(uit)) ? sizeof(tid) : sizeof(uit));
     *abra =
@@ -3583,6 +3583,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   if (flags & MDBX_RDONLY) {
     txn->mt_flags = MDBX_RDONLY | (env->me_flags & MDBX_NOTLS);
     MDBX_reader *r = txn->mt_ro_reader;
+    STATIC_ASSERT(sizeof(size_t) == sizeof(r->mr_tid));
     if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
       mdbx_assert(env, !(env->me_flags & MDBX_NOTLS));
       r = thread_rthc_get(env->me_txkey);
@@ -3599,7 +3600,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         return MDBX_BAD_RSLOT;
     } else if (env->me_lck) {
       unsigned slot, nreaders;
-      const mdbx_tid_t tid = mdbx_thread_self();
+      const size_t tid = mdbx_thread_self();
       mdbx_assert(env, env->me_lck->mti_magic_and_version == MDBX_LOCK_MAGIC);
       mdbx_assert(env, env->me_lck->mti_os_and_format == MDBX_LOCK_FORMAT);
 
@@ -6614,7 +6615,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
           goto bailout;
 
         /* Check if there are any reading threads that do not use the SRWL */
-        const mdbx_pid_t CurrentTid = GetCurrentThreadId();
+        const size_t CurrentTid = GetCurrentThreadId();
         const MDBX_reader *const begin = env->me_lck->mti_readers;
         const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
         for (const MDBX_reader *reader = begin; reader < end; ++reader) {
@@ -12961,7 +12962,7 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
         arg->mi_recent_txnid;
     for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
-      const mdbx_pid_t pid = r[i].mr_pid;
+      const uint32_t pid = r[i].mr_pid;
       if (pid) {
         const txnid_t txnid = r[i].mr_txnid;
         if (arg->mi_latter_reader_txnid > txnid)
@@ -13517,11 +13518,11 @@ int __cold mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
     for (unsigned i = 0; i < snap_nreaders; i++) {
       const MDBX_reader *r = env->me_lck->mti_readers + i;
     retry_reader:;
-      const mdbx_pid_t pid = r->mr_pid;
+      const uint32_t pid = r->mr_pid;
       if (!pid)
         continue;
       txnid_t txnid = r->mr_txnid;
-      const mdbx_tid_t tid = r->mr_tid;
+      const size_t tid = r->mr_tid;
       const pgno_t pages_used = r->mr_snapshot_pages_used;
       const uint64_t reader_pages_retired = r->mr_snapshot_pages_retired;
       mdbx_compiler_barrier();
@@ -13556,7 +13557,7 @@ int __cold mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
                                                         reader_pages_retired))
                              : 0;
       }
-      rc = func(ctx, ++serial, i, pid, tid, txnid, lag, bytes_used,
+      rc = func(ctx, ++serial, i, pid, (mdbx_tid_t)tid, txnid, lag, bytes_used,
                 bytes_retained);
       if (unlikely(rc != MDBX_SUCCESS))
         break;
@@ -13568,7 +13569,7 @@ int __cold mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
 
 /* Insert pid into list if not already present.
  * return -1 if already present. */
-static int __cold mdbx_pid_insert(mdbx_pid_t *ids, mdbx_pid_t pid) {
+static int __cold mdbx_pid_insert(uint32_t *ids, uint32_t pid) {
   /* binary search of pid in list */
   unsigned base = 0;
   unsigned cursor = 1;
@@ -13637,11 +13638,11 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 
   lck->mti_reader_check_timestamp = mdbx_osal_monotime();
   const unsigned snap_nreaders = lck->mti_numreaders;
-  mdbx_pid_t pidsbuf_onstask[142];
-  mdbx_pid_t *const pids =
+  uint32_t pidsbuf_onstask[142];
+  uint32_t *const pids =
       (snap_nreaders < ARRAY_LENGTH(pidsbuf_onstask))
           ? pidsbuf_onstask
-          : mdbx_malloc((snap_nreaders + 1) * sizeof(mdbx_pid_t));
+          : mdbx_malloc((snap_nreaders + 1) * sizeof(uint32_t));
   if (unlikely(!pids))
     return MDBX_ENOMEM;
 
@@ -13649,7 +13650,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 
   int rc = MDBX_SUCCESS, count = 0;
   for (unsigned i = 0; i < snap_nreaders; i++) {
-    const mdbx_pid_t pid = lck->mti_readers[i].mr_pid;
+    const uint32_t pid = lck->mti_readers[i].mr_pid;
     if (pid == 0)
       continue /* skip empty */;
     if (pid == env->me_pid)
@@ -13810,15 +13811,15 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
     if (!env->me_oom_func)
       break;
 
-    mdbx_pid_t pid = asleep->mr_pid;
-    mdbx_tid_t tid = asleep->mr_tid;
+    uint32_t pid = asleep->mr_pid;
+    size_t tid = asleep->mr_tid;
     if (asleep->mr_txnid != laggard || pid <= 0)
       continue;
 
     const txnid_t gap =
         mdbx_meta_txnid_stable(env, mdbx_meta_head(env)) - laggard;
     int rc =
-        env->me_oom_func(env, pid, tid, laggard,
+        env->me_oom_func(env, pid, (mdbx_tid_t)tid, laggard,
                          (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, retry);
     if (rc < 0)
       break;

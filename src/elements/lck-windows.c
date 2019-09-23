@@ -244,13 +244,13 @@ static int suspend_and_append(mdbx_handle_array_t **array,
 
 MDBX_INTERNAL_FUNC int
 mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
-  const mdbx_pid_t CurrentTid = GetCurrentThreadId();
+  const size_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->me_lck) {
     /* Scan LCK for threads of the current process */
     const MDBX_reader *const begin = env->me_lck->mti_readers;
     const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
-    const mdbx_tid_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
+    const size_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
     for (const MDBX_reader *reader = begin; reader < end; ++reader) {
       if (reader->mr_pid != env->me_pid || !reader->mr_tid) {
       skip_lck:
@@ -265,7 +265,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
             goto skip_lck;
       }
 
-      rc = suspend_and_append(array, reader->mr_tid);
+      rc = suspend_and_append(array, (mdbx_tid_t)reader->mr_tid);
       if (rc != MDBX_SUCCESS) {
       bailout_lck:
         (void)mdbx_resume_threads_after_remap(*array);
@@ -273,7 +273,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
       }
     }
     if (WriteTxnOwner && WriteTxnOwner != CurrentTid) {
-      rc = suspend_and_append(array, WriteTxnOwner);
+      rc = suspend_and_append(array, (mdbx_tid_t)WriteTxnOwner);
       if (rc != MDBX_SUCCESS)
         goto bailout_lck;
     }
@@ -585,7 +585,7 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
  *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
-MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid) {
   (void)env;
   HANDLE hProcess = OpenProcess(SYNCHRONIZE, FALSE, pid);
   int rc;

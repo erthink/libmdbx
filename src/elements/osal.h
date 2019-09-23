@@ -624,7 +624,8 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
                                   size_t length, int async);
 MDBX_INTERNAL_FUNC int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags);
 
-static __maybe_unused __inline mdbx_pid_t mdbx_getpid(void) {
+static __maybe_unused __inline uint32_t mdbx_getpid(void) {
+  STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
 #else
@@ -632,11 +633,12 @@ static __maybe_unused __inline mdbx_pid_t mdbx_getpid(void) {
 #endif
 }
 
-static __maybe_unused __inline mdbx_tid_t mdbx_thread_self(void) {
+static __maybe_unused __inline size_t mdbx_thread_self(void) {
+  STATIC_ASSERT(sizeof(mdbx_tid_t) <= sizeof(size_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentThreadId();
 #else
-  return pthread_self();
+  return (size_t)pthread_self();
 #endif
 }
 
@@ -765,7 +767,7 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
 ///   MDBX_RESULT_FALSE (0) - если процесс-читатель с соответствующим pid
 ///     отсутствует или не работает с БД (индицирующая блокировка отсутствует).
 ///   Иначе (не 0 и не -1) - код ошибки.
-MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid);
+MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid);
 
 #if defined(_WIN32) || defined(_WIN64)
 typedef union MDBX_srwlock {

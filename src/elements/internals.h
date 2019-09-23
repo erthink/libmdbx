@@ -448,7 +448,7 @@ typedef struct MDBX_reader {
    * anything; all we need to know is which version of the DB they
    * started from so we can avoid overwriting any data used in that
    * particular version. */
-  volatile txnid_t mr_txnid;
+  volatile uint64_t /* txnid_t */ mr_txnid;
 
   /* The information we store in a single slot of the reader table.
    * In addition to a transaction ID, we also record the process and
@@ -460,15 +460,16 @@ typedef struct MDBX_reader {
    * opening the lock file. */
 
   /* The thread ID of the thread owning this txn. */
-  union {
-    volatile mdbx_tid_t mr_tid;
-    volatile uint64_t mr_tid_u64;
-  };
+#if MDBX_WORDBITS >= 64
+  volatile uint64_t mr_tid;
+#else
+  volatile uint32_t mr_tid;
+  volatile uint32_t mr_aba_curer; /* CSN to resolve ABA_problems on 32-bit arch,
+                                     unused for now */
+#endif
   /* The process ID of the process owning this reader txn. */
-  union {
-    volatile mdbx_pid_t mr_pid;
-    volatile uint32_t mr_pid_u32;
-  };
+  volatile uint32_t mr_pid;
+
   /* The number of pages used in the reader's MVCC snapshot,
    * i.e. the value of meta->mm_geo.next and txn->mt_next_pgno */
   volatile pgno_t mr_snapshot_pages_used;
@@ -754,7 +755,7 @@ struct MDBX_txn {
    * dirty/spilled pages. Thus commit(nested txn) has room to merge
    * dirtylist into mt_parent after freeing hidden mt_parent pages. */
   unsigned mt_dirtyroom;
-  mdbx_tid_t mt_owner; /* thread ID that owns this transaction */
+  size_t mt_owner; /* thread ID that owns this transaction */
   mdbx_canary mt_canary;
 };
 
@@ -878,7 +879,7 @@ struct MDBX_env {
   mdbx_fastmutex_t me_dbi_lock;
   MDBX_dbi me_numdbs;         /* number of DBs opened */
   MDBX_dbi me_maxdbs;         /* size of the DB table */
-  mdbx_pid_t me_pid;          /* process ID of this env */
+  uint32_t me_pid;            /* process ID of this env */
   mdbx_thread_key_t me_txkey; /* thread-key for readers */
   char *me_path;              /* path to the DB files */
   void *me_pbuf;              /* scratch area for DUPSORT put() */
@@ -903,9 +904,9 @@ struct MDBX_env {
   unsigned me_maxgc_ov1page;
   /* Max size of a node on a page */
   unsigned me_nodemax;
-  unsigned me_maxkey_limit;  /* max size of a key */
-  mdbx_pid_t me_live_reader; /* have liveness lock in reader table */
-  void *me_userctx;          /* User-settable context */
+  unsigned me_maxkey_limit; /* max size of a key */
+  uint32_t me_live_reader;  /* have liveness lock in reader table */
+  void *me_userctx;         /* User-settable context */
   volatile uint64_t *me_unsynced_timeout;
   volatile uint64_t *me_autosync_period;
   volatile pgno_t *me_unsynced_pages;

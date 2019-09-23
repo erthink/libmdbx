@@ -187,7 +187,7 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
   return lck_op(env->me_lfd, op_setlk, F_UNLCK, env->me_pid, 1);
 }
 
-MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, mdbx_pid_t pid) {
+MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(pid > 0);
   return lck_op(env->me_lfd, op_getlk, F_WRLCK, pid, 1);
