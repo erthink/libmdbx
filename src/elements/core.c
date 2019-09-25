@@ -67,7 +67,7 @@ static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
 /* Get the page number pointed to by a branch node */
 static __inline pgno_t NODEPGNO(const MDBX_node *node) {
   pgno_t pgno;
-  if (UNALIGNED_OK) {
+  if (MDBX_UNALIGNED_OK) {
     pgno = node->mn_ksize_and_pgno;
     if (sizeof(pgno_t) > 4)
       pgno &= MAX_PAGENO;
@@ -83,7 +83,7 @@ static __inline pgno_t NODEPGNO(const MDBX_node *node) {
 static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
   assert(pgno <= MAX_PAGENO);
 
-  if (UNALIGNED_OK) {
+  if (MDBX_UNALIGNED_OK) {
     if (sizeof(pgno_t) > 4)
       pgno |= ((uint64_t)node->mn_ksize) << 48;
     node->mn_ksize_and_pgno = pgno;
@@ -98,7 +98,7 @@ static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
 /* Get the size of the data in a leaf node */
 static __inline size_t NODEDSZ(const MDBX_node *node) {
   size_t size;
-  if (UNALIGNED_OK) {
+  if (MDBX_UNALIGNED_OK) {
     size = node->mn_dsize;
   } else {
     size = node->mn_lo | ((size_t)node->mn_hi << 16);
@@ -109,7 +109,7 @@ static __inline size_t NODEDSZ(const MDBX_node *node) {
 /* Set the size of the data for a leaf node */
 static __inline void SETDSZ(MDBX_node *node, size_t size) {
   assert(size < INT_MAX);
-  if (UNALIGNED_OK) {
+  if (MDBX_UNALIGNED_OK) {
     node->mn_dsize = (uint32_t)size;
   } else {
     node->mn_lo = (uint16_t)size;
@@ -7642,7 +7642,7 @@ static int __hot mdbx_cmp_int_a2(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   mdbx_assert(NULL, 0 == (uintptr_t)a->iov_base % sizeof(uint16_t) &&
                         0 == (uintptr_t)b->iov_base % sizeof(uint16_t));
-#if UNALIGNED_OK
+#if MDBX_UNALIGNED_OK
   switch (a->iov_len) {
   case 4:
     return mdbx_cmp2int(*(uint32_t *)a->iov_base, *(uint32_t *)b->iov_base);
@@ -7677,7 +7677,7 @@ static int __hot mdbx_cmp_int_a2(const MDBX_val *a, const MDBX_val *b) {
     } while (pa != end);
     return diff;
   }
-#endif /* UNALIGNED_OK */
+#endif /* MDBX_UNALIGNED_OK */
 }
 
 /* Compare two items pointing at unsigneds of unknown alignment.
@@ -7685,7 +7685,7 @@ static int __hot mdbx_cmp_int_a2(const MDBX_val *a, const MDBX_val *b) {
  * This is also set as MDBX_INTEGERDUP|MDBX_DUPFIXED's MDBX_dbx.md_dcmp. */
 static int __hot mdbx_cmp_int_ua(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
-#if UNALIGNED_OK
+#if MDBX_UNALIGNED_OK
   switch (a->iov_len) {
   case 4:
     return mdbx_cmp2int(*(uint32_t *)a->iov_base, *(uint32_t *)b->iov_base);
@@ -7716,7 +7716,7 @@ static int __hot mdbx_cmp_int_ua(const MDBX_val *a, const MDBX_val *b) {
 #else  /* __BYTE_ORDER__ */
   return memcmp(a->iov_base, b->iov_base, a->iov_len);
 #endif /* __BYTE_ORDER__ */
-#endif /* UNALIGNED_OK */
+#endif /* MDBX_UNALIGNED_OK */
 }
 
 /* Compare two items lexically */
@@ -15177,39 +15177,185 @@ __dll_export
 #endif
     const mdbx_build_info mdbx_build = {
 #ifdef MDBX_BUILD_TIMESTAMP
-        MDBX_BUILD_TIMESTAMP
+    MDBX_BUILD_TIMESTAMP
 #else
-        __DATE__ " " __TIME__
-#endif
-        ,
+    __DATE__ " " __TIME__
+#endif /* MDBX_BUILD_TIMESTAMP */
+
+    ,
 #ifdef MDBX_BUILD_TARGET
-        MDBX_BUILD_TARGET
+    MDBX_BUILD_TARGET
 #else
-        "UNKNOWN_BUILD_TARGET"
-#endif
+  #if defined(__ANDROID__)
+    "Android"
+  #elif defined(__linux__) || defined(__gnu_linux__)
+    "Linux"
+  #elif defined(EMSCRIPTEN) || defined(__EMSCRIPTEN__)
+    "webassembly"
+  #elif defined(__CYGWIN__)
+    "CYGWIN"
+  #elif defined(_WIN64) || defined(_WIN32) || defined(__TOS_WIN__) \
+      || defined(__WINDOWS__)
+    "Windows"
+  #elif defined(__APPLE__)
+    #if (defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE) \
+      || (defined(TARGET_IPHONE_SIMULATOR) && TARGET_IPHONE_SIMULATOR)
+      "iOS"
+    #else
+      "MacOS"
+    #endif
+  #elif defined(__FreeBSD__)
+    "FreeBSD"
+  #elif defined(__DragonFly__)
+    "DragonFlyBSD"
+  #elif defined(__NetBSD__) || defined(__NETBSD__)
+    "NetBSD"
+  #elif defined(__OpenBSD__)
+    "OpenBSD"
+  #elif defined(__bsdi__)
+    "UnixBSDI"
+  #elif defined(__MACH__)
+    "MACH"
+  #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC))
+    "HPUX"
+  #elif defined(_AIX)
+    "AIX"
+  #elif defined(__sun) && defined(__SVR4)
+    "Solaris"
+  #elif defined(__BSD__) || defined(BSD)
+    "UnixBSD"
+  #elif defined(__unix__) || defined(UNIX) || defined(__unix) \
+      || defined(__UNIX) || defined(__UNIX__)
+    "UNIX"
+  #elif defined(_POSIX_VERSION)
+    "POSIX" STRINGIFY(_POSIX_VERSION)
+  #else
+    "UnknownOS"
+  #endif /* Target OS */
+
+    "-"
+
+  #if defined(__amd64__)
+    "AMD64"
+  #elif defined(__ia32__)
+    "IA32"
+  #elif defined(__e2k__) || defined(__elbrus__)
+    "Elbrus"
+  #elif defined(__alpha__) || defined(__alpha) || defined(_M_ALPHA)
+    "Alpha"
+  #elif defined(__aarch64__) || defined(_M_ARM64)
+    "ARM64"
+  #elif defined(__arm__) || defined(__thumb__) || defined(__TARGET_ARCH_ARM) \
+      || defined(__TARGET_ARCH_THUMB) || defined(_ARM) || defined(_M_ARM) \
+      || defined(_M_ARMT) || defined(__arm)
+    "ARM"
+  #elif defined(__mips64) || defined(__mips64__) || (defined(__mips) && (__mips >= 64))
+    "MIPS64"
+  #elif if defined(__mips__) || defined(__mips) || defined(_R4000) || defined(__MIPS__)
+    "MIPS"
+  #elif defined(__hppa64__) || defined(__HPPA64__) || defined(__hppa64)
+    "PARISC64"
+  #elif defined(__hppa__) || defined(__HPPA__) || defined(__hppa)
+    "PARISC"
+  #elif defined(__ia64__) || defined(__ia64) || defined(_IA64) \
+      || defined(__IA64__) || defined(_M_IA64) || defined(__itanium__)
+    "Itanium"
+  #elif defined(__powerpc64__) || defined(__ppc64__) || defined(__ppc64) \
+      || defined(__powerpc64) || defined(_ARCH_PPC64)
+    "PowerPC64"
+  #elif defined(__powerpc__) || defined(__ppc__) || defined(__powerpc) \
+      || defined(__ppc) || defined(_ARCH_PPC) || defined(__PPC__) || defined(__POWERPC__)
+    "PowerPC"
+  #elif defined(__sparc64__) || defined(__sparc64)
+    "SPARC64"
+  #elif defined(__sparc__) || defined(__sparc)
+    "SPARC"
+  #elif defined(__s390__) || defined(__s390) || defined(__zarch__) || defined(__zarch)
+    "S390"
+  #else
+    "UnknownARCH"
+  #endif
+#endif /* MDBX_BUILD_TARGET */
+
 #ifdef MDBX_BUILD_CONFIG
-        "-" MDBX_BUILD_CONFIG
-#endif
-        ,
-#ifdef MDBX_BUILD_OPTIONS_STRING
-        MDBX_BUILD_OPTIONS_STRING
+    "-" MDBX_BUILD_CONFIG
+#endif /* MDBX_BUILD_CONFIG */
+    ,
+    "MDBX_DEBUG=" STRINGIFY(MDBX_DEBUG)
+#ifdef MDBX_CONFIG_H
+    " MDBX_CONFIG_H=" STRINGIFY(MDBX_CONFIG_H)
+#endif /* MDBX_CONFIG_H */
+    " MDBX_WORDBITS=" STRINGIFY(MDBX_WORDBITS)
+    " BYTE_ORDER="
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+    "LITTLE_ENDIAN"
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+    "BIG_ENDIAN"
 #else
-        "@TODO: MDBX_BUILD_OPTIONS_STRING"
+    #error "FIXME: Unsupported byte order"
+#endif /* __BYTE_ORDER__ */
+    " MDBX_TXN_CHECKPID=" STRINGIFY(MDBX_TXN_CHECKPID)
+    " MDBX_TXN_CHECKOWNER=" STRINGIFY(MDBX_TXN_CHECKOWNER)
+    " MDBX_64BIT_ATOMIC=" STRINGIFY(MDBX_64BIT_ATOMIC)
+#ifdef __APPLE__
+    " MDBX_OSX_SPEED_INSTEADOF_DURABILITY=" STRINGIFY(MDBX_OSX_SPEED_INSTEADOF_DURABILITY)
+#endif /* MacOS */
+#if defined(_WIN32) || defined(_WIN64)
+    " MDBX_AVOID_CRT=" STRINGIFY(MDBX_AVOID_CRT)
+    " MDBX_CONFIG_MANUAL_TLS_CALLBACK=" STRINGIFY(MDBX_CONFIG_MANUAL_TLS_CALLBACK)
+    " MDBX_BUILD_SHARED_LIBRARY=" STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
+    " WINVER=" STRINGIFY(WINVER)
+#else /* Windows */
+    " MDBX_USE_ROBUST=" MDBX_USE_ROBUST_CONFIG
+    " MDBX_USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
+#endif /* !Windows */
+#ifdef MDBX_OSAL_LOCK
+    " MDBX_OSAL_LOCK=" STRINGIFY(MDBX_OSAL_LOCK)
 #endif
-        ,
+    " MDBX_CACHELINE_SIZE=" STRINGIFY(MDBX_CACHELINE_SIZE)
+    " MDBX_CPU_WRITEBACK_IS_COHERENT=" STRINGIFY(MDBX_CPU_WRITEBACK_IS_COHERENT)
+    " MDBX_UNALIGNED_OK=" STRINGIFY(MDBX_UNALIGNED_OK)
+    " MDBX_PNL_ASCENDING=" STRINGIFY(MDBX_PNL_ASCENDING)
+    ,
 #ifdef MDBX_BUILD_COMPILER
-        MDBX_BUILD_COMPILER
+    MDBX_BUILD_COMPILER
 #else
-        "@TODO: MDBX_BUILD_COMPILER"
-#endif
-        ,
+  #ifdef __INTEL_COMPILER
+    "Intel C/C++ " STRINGIFY(__INTEL_COMPILER)
+  #elsif defined(__apple_build_version__)
+    "Apple clang " STRINGIFY(__apple_build_version__)
+  #elif defined(__ibmxl__)
+    "IBM clang C " STRINGIFY(__ibmxl_version__) "." STRINGIFY(__ibmxl_release__)
+    "." STRINGIFY(__ibmxl_modification__) "." STRINGIFY(__ibmxl_ptf_fix_level__)
+  #elif defined(__clang__)
+    "clang " STRINGIFY(__clang_version__)
+  #elif defined(__MINGW64__)
+    "MINGW-64 " STRINGIFY(__MINGW64_MAJOR_VERSION) "." STRINGIFY(__MINGW64_MINOR_VERSION)
+  #elif defined(__MINGW32__)
+    "MINGW-32 " STRINGIFY(__MINGW32_MAJOR_VERSION) "." STRINGIFY(__MINGW32_MINOR_VERSION)
+  #elif defined(__IBMC__)
+    "IBM C " STRINGIFY(__IBMC__)
+  #elif defined(__GNUC__)
+    "GNU C/C++ "
+    #ifdef __VERSION__
+      __VERSION__
+    #else
+      STRINGIFY(__GNUC__) "." STRINGIFY(__GNUC_MINOR__) "." STRINGIFY(__GNUC_PATCHLEVEL__)
+    #endif
+  #elif defined(_MSC_VER)
+    "MSVC " STRINGIFY(_MSC_FULL_VER) "-" STRINGIFY(_MSC_BUILD)
+  #else
+    "Unknown compiler"
+  #endif
+#endif /* MDBX_BUILD_COMPILER */
+    ,
 #ifdef MDBX_BUILD_FLAGS
-        MDBX_BUILD_FLAGS
-#endif
+    MDBX_BUILD_FLAGS
+#endif /* MDBX_BUILD_FLAGS */
 #ifdef MDBX_BUILD_FLAGS_CONFIG
-        MDBX_BUILD_FLAGS_CONFIG
-#endif
-    };
+    MDBX_BUILD_FLAGS_CONFIG
+#endif /* MDBX_BUILD_FLAGS_CONFIG */
+};
 
 #ifdef __SANITIZE_ADDRESS__
 LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {

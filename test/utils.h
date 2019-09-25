@@ -151,7 +151,7 @@ template <typename T> static __inline T load(const void *ptr) {
 #if defined(_MSC_VER) &&                                                       \
     (defined(_M_ARM64) || defined(_M_X64) || defined(_M_IA64))
   return *(const T __unaligned *)ptr;
-#elif UNALIGNED_OK
+#elif MDBX_UNALIGNED_OK
   return *(const T *)ptr;
 #else
   T local;
@@ -161,14 +161,14 @@ template <typename T> static __inline T load(const void *ptr) {
   memcpy(&local, (const T *)ptr, sizeof(T));
 #endif /* __GNUC__ || __clang__ */
   return local;
-#endif /* UNALIGNED_OK */
+#endif /* MDBX_UNALIGNED_OK */
 }
 
 template <typename T> static __inline void store(void *ptr, const T &value) {
 #if defined(_MSC_VER) &&                                                       \
     (defined(_M_ARM64) || defined(_M_X64) || defined(_M_IA64))
   *((T __unaligned *)ptr) = value;
-#elif UNALIGNED_OK
+#elif MDBX_UNALIGNED_OK
   *(volatile T *)ptr = value;
 #else
 #if defined(__GNUC__) || defined(__clang__)
@@ -176,7 +176,7 @@ template <typename T> static __inline void store(void *ptr, const T &value) {
 #else
   memcpy(ptr, &value, sizeof(T));
 #endif /* __GNUC__ || __clang__ */
-#endif /* UNALIGNED_OK */
+#endif /* MDBX_UNALIGNED_OK */
 }
 
 } /* namespace unaligned */

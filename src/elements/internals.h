@@ -164,7 +164,6 @@
 /* Some platforms define the EOWNERDEAD error code even though they
  *  don't support Robust Mutexes. Compile with -DMDBX_USE_ROBUST=0. */
 #ifndef MDBX_USE_ROBUST
-#define MDBX_USE_ROBUST_CONFIG AUTO
 /* Howard Chu: Android currently lacks Robust Mutex support */
 #if defined(EOWNERDEAD) && !defined(__ANDROID__) && !defined(__APPLE__) &&     \
     (!defined(__GLIBC__) ||                                                    \
@@ -176,25 +175,25 @@
 #else
 #define MDBX_USE_ROBUST 0
 #endif
+#define MDBX_USE_ROBUST_CONFIG "AUTO=" STRINGIFY(MDBX_USE_ROBUST)
 #else
-#define MDBX_USE_ROBUST_CONFIG MDBX_USE_ROBUST
+#define MDBX_USE_ROBUST_CONFIG STRINGIFY(MDBX_USE_ROBUST)
 #endif /* MDBX_USE_ROBUST */
 
 #ifndef MDBX_USE_OFDLOCKS
-#define MDBX_USE_OFDLOCKS_CONFIG AUTO
 #if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK) &&   \
     !defined(MDBX_SAFE4QEMU)
 #define MDBX_USE_OFDLOCKS 1
 #else
 #define MDBX_USE_OFDLOCKS 0
 #endif
+#define MDBX_USE_OFDLOCKS_CONFIG "AUTO=" STRINGIFY(MDBX_USE_OFDLOCKS)
 #else
-#define MDBX_USE_OFDLOCKS_CONFIG MDBX_USE_OFDLOCKS
+#define MDBX_USE_OFDLOCKS_CONFIG STRINGIFY(MDBX_USE_OFDLOCKS)
 #endif /* MDBX_USE_OFDLOCKS */
 
 /* Controls checking PID against reuse DB environment after the fork() */
 #ifndef MDBX_TXN_CHECKPID
-#define MDBX_TXN_CHECKPID_CONFIG AUTO
 #if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
 /* PID check could be ommited:
  *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
@@ -209,7 +208,6 @@
 #endif /* MDBX_TXN_CHECKPID */
 
 #ifndef MDBX_TXN_CHECKOWNER
-#define MDBX_TXN_CHECKOWNER_CONFIG AUTO
 #define MDBX_TXN_CHECKOWNER 1
 #endif /* MDBX_TXN_CHECKOWNER */
 

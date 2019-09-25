@@ -234,15 +234,15 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif /* __amd64__ */
 #endif /* all x86 */
 
-#if !defined(UNALIGNED_OK)
+#if !defined(MDBX_UNALIGNED_OK)
 #if (defined(__ia32__) || defined(__e2k__) ||                                  \
      defined(__ARM_FEATURE_UNALIGNED)) &&                                      \
     !defined(__ALIGNED__)
-#define UNALIGNED_OK 1
+#define MDBX_UNALIGNED_OK 1
 #else
-#define UNALIGNED_OK 0
+#define MDBX_UNALIGNED_OK 0
 #endif
-#endif /* UNALIGNED_OK */
+#endif /* MDBX_UNALIGNED_OK */
 
 #if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
 #error                                                                         \
