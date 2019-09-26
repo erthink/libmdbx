@@ -15,7 +15,7 @@
 cmake-build-*
 @*
 core
-example
+mdbx_example
 libmdbx.creator.user
 mdbx_chk
 mdbx_copy

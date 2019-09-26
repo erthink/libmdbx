@@ -61,7 +61,7 @@ static void usage(char *prog) {
 
 static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
                             mdbx_tid_t thread, uint64_t txnid, uint64_t lag,
-                            size_t bytes_used, size_t bytes_retired) {
+                            size_t bytes_used, size_t bytes_retained) {
   (void)ctx;
   if (num == 1)
     printf("Reader Table Status\n"
@@ -73,7 +73,7 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
          (int)sizeof(size_t) * 2, (size_t)thread);
   if (txnid)
     printf(" %20" PRIu64 " %10" PRIu64 " %12.1fM %12.1fM\n", txnid, lag,
-           bytes_used / 1048576.0, bytes_retired / 1048576.0);
+           bytes_used / 1048576.0, bytes_retained / 1048576.0);
   else
     printf(" %20s %10s %13s %13s\n", "-", "0", "0", "0");
 

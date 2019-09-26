@@ -16,7 +16,7 @@ case ${UNAME} in
 	Linux)
 		MAKE=make
 		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
-			for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]*); do
+			for old_test_dir in $(ls -d /dev/shm/mdbx-test.[0-9]*); do
 				rm -rf $old_test_dir
 			done
 			TESTDB_DIR="/dev/shm/mdbx-test.$$"

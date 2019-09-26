@@ -76,8 +76,8 @@ const char *keygencase2str(const keygen_case keycase) {
 
 //-----------------------------------------------------------------------------
 
-int testcase::oom_callback(MDBX_env *env, int pid, mdbx_tid_t tid, uint64_t txn,
-                           unsigned gap, int retry) {
+int testcase::oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
+                           uint64_t txn, unsigned gap, int retry) {
 
   testcase *self = (testcase *)mdbx_env_get_userctx(env);
 
@@ -510,7 +510,7 @@ void testcase::db_table_close(MDBX_dbi handle) {
 void testcase::checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
                          MDBX_val expected_valued) {
   MDBX_val actual_value = expected_valued;
-  int rc = mdbx_get2(txn_guard.get(), handle, &key2check, &actual_value);
+  int rc = mdbx_get_nearest(txn_guard.get(), handle, &key2check, &actual_value);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror(step, rc);
   if (!is_samedata(&actual_value, &expected_valued))

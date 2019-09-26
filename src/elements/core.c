@@ -37,8 +37,8 @@
 
 #include "internals.h"
 
-/*----------------------------------------------------------------------------*/
-/* Internal inlines */
+/*------------------------------------------------------------------------------
+ * Internal inlines */
 
 static __inline bool mdbx_is_power2(size_t x) { return (x & (x - 1)) == 0; }
 
@@ -159,8 +159,8 @@ static __inline pgno_t pgno_align2os_pgno(const MDBX_env *env, pgno_t pgno) {
     *tp = tracked->mc_next;                                                    \
   } while (0)
 
-/*----------------------------------------------------------------------------*/
-/* LY: temporary workaround for Elbrus's memcmp() bug. */
+/*------------------------------------------------------------------------------
+ * LY: temporary workaround for Elbrus's memcmp() bug. */
 
 #if defined(__e2k__) && !__GLIBC_PREREQ(2, 24)
 int __hot mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
@@ -2057,7 +2057,8 @@ static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
   return couple->outer.mc_db;
 }
 
-static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
+static __must_check_result int mdbx_page_retire(MDBX_cursor *mc,
+                                                MDBX_page *mp) {
   MDBX_txn *txn = mc->mc_txn;
 
   mdbx_cassert(mc, (mc->mc_flags & C_SUB) == 0);
@@ -2117,7 +2118,7 @@ static __must_check_result int mdbx_refund_loose(MDBX_txn *txn) {
  *
  * If the page wasn't dirtied in this txn, just add it
  * to this txn's free list. */
-static int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
+static __must_check_result int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
   int loose = 0;
   const pgno_t pgno = mp->mp_pgno;
   MDBX_txn *txn = mc->mc_txn;
@@ -4361,12 +4362,10 @@ int mdbx_txn_abort(MDBX_txn *txn) {
 }
 
 static __inline int mdbx_backlog_size(MDBX_txn *txn) {
-  int reclaimed_and_loose =
-      txn->mt_env->me_reclaimed_pglist
-          ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist) +
-                txn->mt_loose_count
-          : 0;
-  return reclaimed_and_loose;
+  int reclaimed = txn->mt_env->me_reclaimed_pglist
+                      ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist)
+                      : 0;
+  return reclaimed + txn->mt_loose_count;
 }
 
 static __inline int mdbx_backlog_extragap(MDBX_env *env) {
@@ -7073,7 +7072,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   return rc;
 }
 
-/****************************************************************************/
+/******************************************************************************/
 
 /* Open and/or initialize the lock region for the environment. */
 static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
@@ -8303,7 +8302,8 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   return mdbx_cursor_set(&cx.outer, key, data, MDBX_SET, &exact);
 }
 
-int mdbx_get2(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
+int mdbx_get_nearest(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                     MDBX_val *data) {
   DKBUF;
   mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
 
@@ -8325,12 +8325,19 @@ int mdbx_get2(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  const int op =
-      (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) ? MDBX_GET_BOTH : MDBX_SET_KEY;
+  MDBX_val save_data = *data;
   int exact = 0;
-  rc = mdbx_cursor_set(&cx.outer, key, data, op, &exact);
+  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_RANGE, &exact);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
+
+  if (exact && (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) != 0) {
+    *data = save_data;
+    exact = 0;
+    rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_GET_BOTH_RANGE, &exact);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
 
   return exact ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
 }
@@ -8828,7 +8835,6 @@ set1:
 /* Move the cursor to the first item in the database. */
 static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   int rc;
-  MDBX_node *leaf;
 
   if (mc->mc_xcursor)
     mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED | C_EOF);
@@ -8840,7 +8846,7 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   }
   mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
 
-  leaf = NODEPTR(mc->mc_pg[mc->mc_top], 0);
+  MDBX_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], 0);
   mc->mc_flags |= C_INITIALIZED;
   mc->mc_flags &= ~C_EOF;
 
@@ -8872,7 +8878,6 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 /* Move the cursor to the last item in the database. */
 static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   int rc;
-  MDBX_node *leaf;
 
   if (mc->mc_xcursor)
     mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED | C_EOF);
@@ -8888,7 +8893,7 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
 
   mc->mc_ki[mc->mc_top] = NUMKEYS(mc->mc_pg[mc->mc_top]) - 1;
   mc->mc_flags |= C_INITIALIZED | C_EOF;
-  leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+  MDBX_node *leaf = NODEPTR(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
 
   if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
     key->iov_len = mc->mc_db->md_xsize;
@@ -14879,7 +14884,7 @@ bailout:
  * перед передачей в качестве аргументов для дальнейших модификаций, либо
  * отвергнуты на стадии проверки корректности аргументов.
  *
- * Таким образом, функция позволяет как избавится от лишнего копирования,
+ * Таким образом, функция позволяет как избавиться от лишнего копирования,
  * так и выполнить более полную проверку аргументов.
  *
  * ВАЖНО: Передаваемый указатель должен указывать на начало данных. Только
@@ -14899,7 +14904,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
   const MDBX_page *page = (const MDBX_page *)((uintptr_t)ptr & mask);
 
   /* LY: Тут не всё хорошо с абсолютной достоверностью результата,
-   * так как флажок P_DIRTY в LMDB может означать не совсем то,
+   * так как флажок P_DIRTY может означать не совсем то,
    * что было исходно задумано, детали см в логике кода mdbx_page_touch().
    *
    * Более того, в режиме БЕЗ WRITEMAP грязные страницы выделяются через
