@@ -660,9 +660,9 @@ extern LIBMDBX_API const mdbx_build_info mdbx_build;
  *  - Modern Windows versions, including Windows Vista and later, provides
  *    support for "TLS Directory" (e.g .CRT$XL[A-Z] sections in executable
  *    or dll file). In this case, MDBX capable of doing all automatically,
- *    and you do not need to call mdbx_dll_callback().
+ *    and you do not need to call mdbx_dll_handler().
  *  - Obsolete versions of Windows, prior to Windows Vista, REQUIRES calling
- *    mdbx_dll_callback() manually from corresponding DllMain() or WinMain()
+ *    mdbx_dll_handler() manually from corresponding DllMain() or WinMain()
  *    of your DLL or application.
  *  - This behavior is under control of the MODX_CONFIG_MANUAL_TLS_CALLBACK
  *    option, which is determined by default according to the target version
@@ -674,19 +674,19 @@ extern LIBMDBX_API const mdbx_build_info mdbx_build;
 
 #ifndef MDBX_CONFIG_MANUAL_TLS_CALLBACK
 #if defined(_WIN32_WINNT_VISTA) && WINVER >= _WIN32_WINNT_VISTA
-/* As described above mdbx_dll_callback() is NOT needed forWindows Vista
+/* As described above mdbx_dll_handler() is NOT needed forWindows Vista
  * and later. */
 #define MDBX_CONFIG_MANUAL_TLS_CALLBACK 0
 #else
-/* As described above mdbx_dll_callback() IS REQUIRED for Windows versions
+/* As described above mdbx_dll_handler() IS REQUIRED for Windows versions
  * prior to Windows Vista. */
 #define MDBX_CONFIG_MANUAL_TLS_CALLBACK 1
 #endif
 #endif /* MDBX_CONFIG_MANUAL_TLS_CALLBACK */
 
 #if MDBX_CONFIG_MANUAL_TLS_CALLBACK
-void LIBMDBX_API NTAPI mdbx_dll_callback(PVOID module, DWORD reason,
-                                         PVOID reserved);
+void LIBMDBX_API NTAPI mdbx_dll_handler(PVOID module, DWORD reason,
+                                        PVOID reserved);
 #endif /* MDBX_CONFIG_MANUAL_TLS_CALLBACK */
 #endif /* !MDBX_BUILD_SHARED_LIBRARY */
 #endif /* Windows */
@@ -743,7 +743,8 @@ typedef struct iovec MDBX_val;
 /**** DEBUG & LOGGING **********************************************************
  * Logging and runtime debug flags.
  *
- * NOTE: Most of debug feature enabled only if libmdbx builded with MDBX_DEBUG.
+ * NOTE: Most of debug feature enabled only when libmdbx builded with
+ *       MDBX_DEBUG options.
  */
 
 /* Log level (requires build libmdbx with MDBX_DEBUG) */

@@ -299,7 +299,7 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   add_mdbx_option(MDBX_AVOID_CRT "Avoid dependence from MSVC CRT" ${NOT_SUBPROJECT})
   if(NOT BUILD_SHARED_LIBS)
     add_mdbx_option(MDBX_CONFIG_MANUAL_TLS_CALLBACK
-      "Provide mdbx_dll_callback() for manual initialization" OFF)
+      "Provide mdbx_dll_handler() for manual initialization" OFF)
     mark_as_advanced(MDBX_CONFIG_MANUAL_TLS_CALLBACK)
   endif()
 else()
