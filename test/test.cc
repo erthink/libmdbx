@@ -77,14 +77,15 @@ const char *keygencase2str(const keygen_case keycase) {
 //-----------------------------------------------------------------------------
 
 int testcase::oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                           uint64_t txn, unsigned gap, int retry) {
+                           uint64_t txn, unsigned gap, size_t space,
+                           int retry) {
 
   testcase *self = (testcase *)mdbx_env_get_userctx(env);
 
   if (retry == 0)
     log_notice("oom_callback: waitfor pid %u, thread %" PRIuPTR
-               ", txn #%" PRIu64 ", gap %d",
-               pid, (size_t)tid, txn, gap);
+               ", txn #%" PRIu64 ", gap %d, scape %zu",
+               pid, (size_t)tid, txn, gap, space);
 
   if (self->should_continue(true)) {
     osal_yield();

@@ -3082,22 +3082,59 @@ LIBMDBX_API int mdbx_reader_check(MDBX_env *env, int *dead);
  * read, or negative value on failure. */
 LIBMDBX_API int mdbx_txn_straggler(MDBX_txn *txn, int *percent);
 
-/* A callback function for killing a laggard readers,
- * but also could waiting ones. Called in case of MDBX_MAP_FULL error.
+/* A callback function to resolve issues with a laggard readers.
+ *
+ * Read transactions prevent reuse of pages freed by newer write transactions,
+ * thus the database can grow quickly. This callback will be called when there
+ * is not enough space in the database (ie. before increasing the database size
+ * or before MDBX_MAP_FULL error) and thus can be used to resolve issues with
+ * a "long-lived" read transactions.
+ *
+ * Depending on the arguments and needs, your implementation may wait, terminate
+ * a process or thread that is performing a long read, or perform some other
+ * action. In doing so it is important that the returned code always corresponds
+ * to the performed action.
  *
  * [in] env     An environment handle returned by mdbx_env_create().
- * [in] pid     pid of the reader process.
- * [in] tid     thread_id of the reader thread.
- * [in] txn     Transaction number on which stalled.
+ * [in] pid     A pid of the reader process.
+ * [in] tid     A thread_id of the reader thread.
+ * [in] txn     A transaction number on which stalled.
  * [in] gap     A lag from the last commited txn.
- * [in] retry   A retry number, less that zero for notify end of OOM-loop.
+ * [in] space   A space that actually become available for reuse after this
+ *              reader finished. The callback function can take this value into
+ *              account to evaluate the impact that a long-running transaction
+ *              has.
+ * [in] retry   A retry number starting from 0. if callback has returned 0
+ *              at least once, then at end of current OOM-handler loop callback
+ *              will be called additionally with negative value to notify about
+ *              the end of loop. The callback function can use this value to
+ *              implement timeout logic while waiting for readers.
  *
- * Returns -1 on failure (reader is not killed),
- *  0 should wait or retry,
- *  1 drop reader txn-lock (reading-txn was aborted),
- *  >1 drop reader registration (reader process was killed). */
+ * The RETURN CODE determines the further actions libmdbx and must match the
+ * action which was executed by the callback:
+ *
+ *   -2 or less      = An error condition and the reader was not killed.
+ *
+ *   -1              = The callback was unable to solve the problem and agreed
+ *                     on MDBX_MAP_FULL error, libmdbx should increase the
+ *                     database size or return MDBX_MAP_FULL error.
+ *
+ *    0 (zero)       = The callback solved the problem or just waited for
+ *                     a while, libmdbx should rescan the reader lock table and
+ *                     retry. This also includes a situation when corresponding
+ *                     transaction terminated in normal way by mdbx_txn_abort()
+ *                     or mdbx_txn_reset(), and my be restarted. I.e. reader
+ *                     slot don't needed to be cleaned from transaction.
+ *
+ *    1              = Transaction aborted asynchronous and reader slot should
+ *                     be cleared immediately, i.e. read transaction will not
+ *                     continue but mdbx_txn_abort() or mdbx_txn_reset() will
+ *                     be called later.
+ *
+ *    2 or great     = The reader process was terminated or killed, and libmdbx
+ *                     should entirely reset reader registration. */
 typedef int(MDBX_oom_func)(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                           uint64_t txn, unsigned gap, int retry);
+                           uint64_t txn, unsigned gap, size_t space, int retry);
 
 /* Set the OOM callback.
  *
@@ -3105,16 +3142,13 @@ typedef int(MDBX_oom_func)(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
  * lagging reader(s) (i.e. to kill it) for resume reuse pages from the garbage
  * collector.
  *
- * [in] env       An environment handle returned by mdbx_env_create().
- * [in] oomfunc   A MDBX_oom_func function or NULL to disable.
+ * [in] env        An environment handle returned by mdbx_env_create().
+ * [in] oom_func   A MDBX_oom_func function or NULL to disable.
  *
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_oomfunc(MDBX_env *env, MDBX_oom_func *oom_func);
 
 /* Get the current oom_func callback.
- *
- * Callback will be called only on out-of-pages case for killing
- * a laggard readers to allowing reclaiming of freeDB.
  *
  * [in] env   An environment handle returned by mdbx_env_create().
  *

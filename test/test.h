@@ -99,7 +99,7 @@ protected:
   } last;
 
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                          uint64_t txn, unsigned gap, int retry);
+                          uint64_t txn, unsigned gap, size_t space, int retry);
 
   void db_prepare();
   void db_open();
