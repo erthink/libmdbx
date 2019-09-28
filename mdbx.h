@@ -1717,11 +1717,15 @@ LIBMDBX_API int mdbx_env_close(MDBX_env *env);
 /* Set environment flags.
  *
  * This may be used to set some flags in addition to those from
- * mdbx_env_open(), or to unset these flags.  If several threads
- * change the flags at the same time, the result is undefined.
+ * mdbx_env_open(), or to unset these flags.
  *
- * [in] env     An environment handle returned by mdbx_env_create()
- * [in] flags   The flags to change, bitwise OR'ed together
+ * NOTE: In contrast to LMDB, the MDBX serialize threads via mutex while
+ * changing the flags. Therefore this function will be blocked while a write
+ * transaction running by other thread, or MDBX_BUSY will be returned if
+ * function called within a write transaction.
+ *
+ * [in] env     An environment handle returned by mdbx_env_create().
+ * [in] flags   The flags to change, bitwise OR'ed together.
  * [in] onoff   A non-zero value sets the flags, zero clears them.
  *
  * Returns A non-zero error value on failure and 0 on success, some

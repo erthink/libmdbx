@@ -12806,7 +12806,13 @@ int __cold mdbx_env_set_flags(MDBX_env *env, unsigned flags, int onoff) {
     return MDBX_EBADSIGN;
 
   if (unlikely(flags & ~CHANGEABLE))
-    return MDBX_EINVAL;
+    return MDBX_EPERM;
+
+  if (unlikely(env->me_flags & MDBX_RDONLY))
+    return MDBX_EACCESS;
+
+  if (unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
+    return MDBX_BUSY;
 
   int rc = mdbx_txn_lock(env, false);
   if (unlikely(rc))
