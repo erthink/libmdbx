@@ -4104,6 +4104,7 @@ int mdbx_txn_info(MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt) {
           env, (pgno_t)(head_retired -
                         txn->mt_ro_reader->mr_snapshot_pages_retired));
 
+      size_t retired_next_reader = 0;
       MDBX_lockinfo *const lck = env->me_lck;
       if (scan_rlt && info->txn_reader_lag > 1 && lck) {
         /* find next more recent reader */
@@ -4122,15 +4123,20 @@ int mdbx_txn_info(MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt) {
                          lck->mti_readers[i].mr_snapshot_pages_retired) ||
                 snap_txnid != safe64_read(&lck->mti_readers[i].mr_txnid))
               goto retry;
-            if (snap_txnid > txn->mt_txnid && snap_txnid < next_reader) {
+            if (snap_txnid <= txn->mt_txnid) {
+              retired_next_reader = 0;
+              break;
+            }
+            if (snap_txnid < next_reader) {
               next_reader = snap_txnid;
-              info->txn_space_dirty = pgno2bytes(
+              retired_next_reader = pgno2bytes(
                   env, (pgno_t)(snap_retired -
                                 txn->mt_ro_reader->mr_snapshot_pages_retired));
             }
           }
         }
       }
+      info->txn_space_dirty = retired_next_reader;
     }
   } else {
     info->txn_space_limit_soft = pgno2bytes(env, txn->mt_geo.now);

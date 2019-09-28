@@ -2132,13 +2132,13 @@ typedef struct MDBX_txn_info {
                              For WRITE transaction: the space inside transaction
                              that left to MDBX_TXN_FULL error. */
 
-  uint64_t
-      txn_space_dirty; /* For READ-ONLY transaction (provided if scan_rlt=true):
-                          The retired distance for next more recent reader, i.e.
-                          the space that actually become available for reuse
-                          when only this transaction will be finished. For WRITE
-                          transaction: The summarized size of the dirty database
-                          pages that generated during this transaction. */
+  uint64_t txn_space_dirty; /* For READ-ONLY transaction (provided if
+                               scan_rlt=true): The space that actually become
+                               available for reuse when only this transaction
+                               will be finished.
+                               For WRITE transaction: The summarized size of the
+                               dirty database pages that generated during this
+                               transaction. */
 } MDBX_txn_info;
 
 /* Return information about the MDBX transaction.
