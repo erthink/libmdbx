@@ -1614,8 +1614,11 @@ LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info, size_t bytes);
  * provide polling mode for lazy/asynchronous sync in conjunction with
  * mdbx_env_set_syncbytes() and/or mdbx_env_set_syncperiod().
  *
- * Legacy mdbx_env_sync() correspond to calling mdbx_env_sync_ex() with the
- * argument nonblock=false.
+ * The mdbx_env_sync() is shortcut to calling mdbx_env_sync_ex() with
+ * try force=true and nonblock=false arguments.
+ *
+ * The mdbx_env_sync_poll() is shortcut to calling mdbx_env_sync_ex() with
+ * the force=false and nonblock=true arguments.
  *
  * NOTE: This call is not valid if the environment was opened with MDBX_RDONLY.
  *
@@ -1628,13 +1631,15 @@ LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info, size_t bytes);
  * [in] nonblock  Don't wait if write transaction is running by other thread.
  *
  * Returns A non-zero error value on failure and MDBX_RESULT_TRUE or 0 on
- * success. The MDBX_RESULT_TRUE means some data was flushed to disk,
+ * success. The MDBX_RESULT_TRUE means no data pending for flush to disk,
  * and 0 otherwise. Some possible errors are:
  *  - MDBX_EACCES   = the environment is read-only.
+ *  - MDBX_BUSY     = the environment is used by other thread and nonblock=true.
  *  - MDBX_EINVAL   = an invalid parameter was specified.
  *  - MDBX_EIO      = an error occurred during synchronization. */
 LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock);
-LIBMDBX_API int mdbx_env_sync(MDBX_env *env, int force);
+LIBMDBX_API int mdbx_env_sync(MDBX_env *env);
+LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
 
 /* Sets threshold to force flush the data buffers to disk,
  * even of MDBX_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC flags
@@ -1649,12 +1654,12 @@ LIBMDBX_API int mdbx_env_sync(MDBX_env *env, int force);
  * The default is 0, than mean no any threshold checked, and no additional
  * flush will be made.
  *
- * [in] env     An environment handle returned by mdbx_env_create()
- * [in] bytes   The size in bytes of summary changes when a synchronous
- *              flush would be made.
+ * [in] env         An environment handle returned by mdbx_env_create().
+ * [in] threshold   The size in bytes of summary changes when a synchronous
+ *                  flush would be made.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t bytes);
+LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
 
 /* Sets relative period since the last unsteay commit to force flush the data
  * buffers to disk, even of MDBX_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC flags

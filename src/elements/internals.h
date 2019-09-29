@@ -521,7 +521,9 @@ typedef struct MDBX_lockinfo {
    * zero means no-threshold, i.e. auto-sync is disabled. */
   volatile pgno_t mti_autosync_threshold;
 
-  uint32_t reserved_pad;
+  /* Low 32-bit of txnid with which meta-pages was synced,
+   * i.e. for sync-polling in the MDBX_NOMETASYNC mode. */
+  volatile uint32_t mti_meta_sync_txnid;
 
   /* Period for timed auto-sync feature, i.e. at the every steady checkpoint
    * the mti_unsynced_timeout sets to the current_time + mti_autosync_period.
@@ -938,6 +940,7 @@ struct MDBX_env {
   volatile pgno_t *me_unsynced_pages;
   volatile pgno_t *me_autosync_threshold;
   volatile pgno_t *me_discarded_tail;
+  volatile uint32_t *me_meta_sync_txnid;
   MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
   struct {
 #ifdef MDBX_OSAL_LOCK
@@ -949,6 +952,7 @@ struct MDBX_env {
     pgno_t autosync_pending;
     pgno_t autosync_threshold;
     pgno_t discarded_tail;
+    uint32_t meta_sync_txnid;
   } me_lckless_stub;
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
