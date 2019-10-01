@@ -535,8 +535,12 @@ typedef struct MDBX_lockinfo {
   /* Marker to distinguish uniqueness of DB/CLK.*/
   volatile uint64_t mti_bait_uniqueness;
 
-  /* the hash of /proc/sys/kernel/random/boot_id or analogue */
-  volatile uint64_t mti_boot_id;
+  /* The analogue /proc/sys/kernel/random/boot_id or similar to determine
+   * whether the system was rebooted after the last use of the database files.
+   * If there was no reboot, but there is no need to rollback to the last
+   * steady sync point. Zeros mean that no relevant information is available
+   * from the system. */
+  volatile uint64_t mti_bootid[2];
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 #ifdef MDBX_OSAL_LOCK

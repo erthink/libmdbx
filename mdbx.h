@@ -1606,6 +1606,31 @@ typedef struct MDBX_envinfo {
   uint32_t mi_numreaders;   /* max reader slots used in the environment */
   uint32_t mi_dxb_pagesize; /* database pagesize */
   uint32_t mi_sys_pagesize; /* system pagesize */
+
+  uint64_t
+      mi_bootid[2]; /* A mostly unique ID that is regenerated on each boot.
+                       As such it can be used to identify the local
+                       machine's current boot. MDBX uses such when open
+                       the database to determine whether rollback required
+                       to the last steady sync point or not. I.e. if current
+                       bootid is differ from the value within a database then
+                       the system was rebooted and all changes since last steady
+                       sync must be reverted for data integrity. Zeros mean that
+                       no relevant information is available from the system. */
+  uint64_t mi_unsync_volume; /* bytes not explicitly synchronized to disk */
+  uint64_t mi_autosync_threshold;        /* current auto-sync threshold, see
+                                            mdbx_env_set_syncbytes(). */
+  uint32_t mi_since_sync_seconds16dot16; /* time since the last steady sync in
+                                            1/65536 of second */
+  uint32_t mi_autosync_period_seconds16dot16 /* current auto-sync period in
+                                                1/65536 of second, see
+                                                mdbx_env_set_syncperiod(). */
+      ;
+  uint32_t mi_since_reader_check_seconds16dot16; /* time since the last readers
+                                                    check in 1/65536 of second,
+                                                    see mdbx_reader_check(). */
+  uint32_t mi_mode; /* current environment mode, the same as
+                       mdbx_env_get_flags() returns. */
 } MDBX_envinfo;
 
 /* Return information about the MDBX environment.

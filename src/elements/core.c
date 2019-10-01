@@ -13027,12 +13027,14 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     env = txn->mt_env;
   }
 
-  if (unlikely(bytes != sizeof(MDBX_envinfo)))
+  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
+  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid)
     return MDBX_EINVAL;
 
   const MDBX_meta *const meta0 = METAPAGE(env, 0);
   const MDBX_meta *const meta1 = METAPAGE(env, 1);
   const MDBX_meta *const meta2 = METAPAGE(env, 2);
+  pgno_t unsynced_pages;
   while (1) {
     if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
       return MDBX_PANIC;
@@ -13063,6 +13065,8 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_geo.upper = pgno2bytes(env, txn_meta->mm_geo.upper);
     arg->mi_geo.shrink = pgno2bytes(env, txn_meta->mm_geo.shrink);
     arg->mi_geo.grow = pgno2bytes(env, txn_meta->mm_geo.grow);
+    unsynced_pages = *env->me_unsynced_pages +
+                     (*env->me_meta_sync_txnid != (uint32_t)arg->mi_last_pgno);
 
     arg->mi_mapsize = env->me_mapsize;
     mdbx_compiler_barrier();
@@ -13082,15 +13086,32 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   arg->mi_dxb_pagesize = env->me_psize;
   arg->mi_sys_pagesize = env->me_os_psize;
 
+  const MDBX_lockinfo *const lck = env->me_lck;
+  if (likely(bytes > size_before_bootid)) {
+    arg->mi_unsync_volume = pgno2bytes(env, unsynced_pages);
+    const uint64_t monotime_now = mdbx_osal_monotime();
+    arg->mi_since_sync_seconds16dot16 =
+        mdbx_osal_monotime_to_16dot16(monotime_now - *env->me_sync_timestamp);
+    arg->mi_since_reader_check_seconds16dot16 =
+        lck ? mdbx_osal_monotime_to_16dot16(monotime_now -
+                                            lck->mti_reader_check_timestamp)
+            : 0;
+    arg->mi_autosync_threshold = pgno2bytes(env, *env->me_autosync_threshold);
+    arg->mi_autosync_period_seconds16dot16 =
+        mdbx_osal_monotime_to_16dot16(*env->me_autosync_period);
+    arg->mi_bootid[0] = lck ? lck->mti_bootid[0] : 0;
+    arg->mi_bootid[1] = lck ? lck->mti_bootid[1] : 0;
+    arg->mi_mode = lck ? lck->mti_envmode : env->me_flags;
+  }
+
   arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid = 0;
-  if (env->me_lck) {
-    MDBX_reader *rlt = env->me_lck->mti_readers;
+  if (lck) {
     arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
         arg->mi_recent_txnid;
     for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
-      const uint32_t pid = rlt[i].mr_pid;
+      const uint32_t pid = lck->mti_readers[i].mr_pid;
       if (pid) {
-        const txnid_t txnid = safe64_read(&rlt[i].mr_txnid);
+        const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
         if (arg->mi_latter_reader_txnid > txnid)
           arg->mi_latter_reader_txnid = txnid;
         if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
