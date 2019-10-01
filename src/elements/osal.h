@@ -671,6 +671,19 @@ mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 ///     НЕ должна инициализировать уже используемые разделяемые объекты
 ///     синхронизации расположенные в отображенном в память LCK-файле.
 /// \return Код ошибки или 0 в случае успеха.
+
+/// \brief Initialization of synchronization primitives linked with MDBX_env
+///   instance both in LCK-file and within the current process.
+/// \param
+///   global_uniqueness_flag = true - denotes that there are no other processes 
+///     working with DB and LCK-file. Thus the function MUST initialize 
+///     shared syncronization objects in memory-mapped LCK-file.
+///   global_uniqueness_flag = false - denotes that at least one process is
+///     alerady working with DB and LCK-file, including the case when DB
+///     has already been opened in the current process. Thus the function
+///     MUST NOT initialize shared synchronization objects in memory-mapped
+///     LCK-file that are already in use.
+/// \return Error code or zero on success.
 MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
                                      MDBX_env *inprocess_neighbor,
                                      int global_uniqueness_flag);
@@ -692,6 +705,24 @@ MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
 ///     MDBX_env внутри процесса - например, восстановить POSIX-fcntl блокировки
 ///     после закрытия файловых дескрипторов.
 /// \return Код ошибки (MDBX_PANIC) или 0 в случае успеха.
+
+/// \brief Disconnects from shared interprocess objects and destructs
+///   synchronization objects linked with MDBX_env instance
+///   within the current process.
+/// \param
+///   inprocess_neighbor = NULL - if the current process does not have other
+///     instances of MDBX_env linked with the DB being closed.
+///     Thus the function MUST check for other processes working with DB or
+///     LCK-file, and keep or destroy shared synchronization objects in
+///     memory-mapped LCK-file depending of the result.
+///   inprocess_neighbor = not-NULL - pointer to another instance of MDBX_env
+///     (anyone of there are several) wotking with DB or LCK-file wthin the
+///     current process. Thus the function MUST NOT try to acquire exclusive
+///     lock and/or try to destruct shared synchronization objects linked with
+///     DB or LCK-file. Moreover, the implementation MUST ensure correct work
+///     of other instances of MDBX_env within the current process, e.g. 
+///     restore POSIX-fcntl locks after closing of file descriptors.
+/// \return Error code (MDBX_PANIC) or zero on success.
 MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
                                         MDBX_env *inprocess_neighbor);
 
@@ -711,6 +742,19 @@ MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
 ///     блокировку и, следовательно, БД уже открыта и используется другими
 ///     процессами.
 ///   Иначе (не 0 и не -1) - код ошибки.
+
+/// \brief Connects to shared interprocess locking objects and tries to acquire
+///   maximum lock (shared if exclusive is not available)
+///   Depending on implementation or/and platform (Windows) this function may
+///   acquire non-OS super-level lock (e.g. for shared syncronization objects
+///   initialization), which will be downgraded to OS-exclusive or shared
+///   via explicit calling of mdbx_lck_downgrade().
+/// \return
+///   MDBX_RESULT_TRUE (-1) - if exclusive lock was acquired and thus
+///     the current process is the first and only after the last use of DB.
+///   MDBX_RESULT_FALSE (0) - if shared lock was acquired and thus
+///     DB has already been opened and now is used by other processes.
+///   Otherwise (not 0 and not -1) - error code.
 MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env);
 
 /// \brief Снижает уровень первоначальной захваченной блокировки до
@@ -724,38 +768,52 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env);
 ///   блокировки. (env->me_flags & MDBX_EXCLUSIVE) != 0 - понижение до
 ///   эксклюзивной операционной блокировки.
 /// \return Код ошибки или 0 в случае успеха.
+
+/// \brief Downgrades the level of initially acquired lock to 
+///   operational level specified by agrument. The reson for such downgrade:
+///    - unblocking of other processes that are waiting for access, i.e.
+///      if (env->me_flags & MDBX_EXCLUSIVE) != 0, then other processes 
+///      should be made aware that access is unavailable rather than 
+///      wait for it.
+///    - freeing locks that interfere file operation (expecially for Windows)
+///   (env->me_flags & MDBX_EXCLUSIVE) == 0 - downgrade to shared lock.
+///   (env->me_flags & MDBX_EXCLUSIVE) != 0 - downgrade to exclusive
+///   operational lock.
+/// \return Error code or zero on success
 MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env);
 
-/// \brief Блокирует lck-файл и/или таблицу читателей для (де)регистрации.
-/// \return Код ошибки или 0 в случае успеха.
+/// \brief Locks LCK-file or/and table of readers for (de)registering.
+/// \return Error code or zero on success
 MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env);
 
-/// \brief Разблокирует lck-файл и/или таблицу читателей после (де)регистрации.
+/// \brief Unlocks LCK-file or/and table of readers after (de)resitrering.
 MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env);
 
-/// \brief Захватывает блокировку для изменения БД (при старте пишущей
-///   транзакции). Транзакции чтения при этом никак не блокируются.
-///   Объявлена LIBMDBX_API так как используется в mdbx_chk.
-/// \return Код ошибки или 0 в случае успеха.
+/// \brief Acquires lock for DB change (on writing transaction start)
+///   Reading transactions will not be blocked.
+///   Declared as LIBMDBX_API because it is used in mdbx_chk.
+/// \return Error code or zero on success
 LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dontwait);
 
 /// \brief Освобождает блокировку по окончанию изменения БД (после завершения
 ///   пишущей транзакции).
 ///   Объявлена LIBMDBX_API так как используется в mdbx_chk.
+
+/// \brief Releases lock once DB changes is made (after writing transaction
+///   has finished).
+///   Declared as LIBMDBX_API because it is used in mdbx_chk.
 LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
 
-/// \brief Устанавливает alive-флажок присутствия (индицирующую блокировку)
-///   читателя для pid текущего процесса. Функции может выполнить не более
-///   необходимого минимума для корректной работы mdbx_rpid_check() в других
-///   процессах.
-/// \return Код ошибки или 0 в случае успеха.
+/// \brief Sets alive-flag of reader presence (indicative lock) for pid of
+///   current process. The function does no more than needed for correct
+///   working of mdbx_rpid_check() in other processes.
+/// \return Error code or zero on success
 MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env);
 
-/// \brief Снимает alive-флажок присутствия (индицирующую блокировку)
-///   читателя для pid текущего процесса. Функции может выполнить не более
-///   необходимого минимума для корректной работы mdbx_rpid_check() в других
-///   процессах.
-/// \return Код ошибки или 0 в случае успеха.
+/// \brief Resets alive-flag of reader presence (indicative lock)
+///   for pid of curreny process. The function does no more than needed
+///   for correct working of mdbx_rpid_check() in other processes.
+/// \return Error code or zero on success
 MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
 
 /// \brief Проверяет жив ли процесс-читатель с заданным pid
@@ -767,6 +825,15 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
 ///   MDBX_RESULT_FALSE (0) - если процесс-читатель с соответствующим pid
 ///     отсутствует или не работает с БД (индицирующая блокировка отсутствует).
 ///   Иначе (не 0 и не -1) - код ошибки.
+
+/// \brief Checks for reading process status with the given pid with help of
+///   alive-flag of presence (indicative lock) or using another way.
+/// \return
+///   MDBX_RESULT_TRUE (-1) - if reader process with the given pid is alive 
+///     and working with DB (indicative lock is present).
+///   MDBX_RESULT_FALSE (0) - if reader process with the given pid is absent
+///     or not working with DB (indicative lock is not present).
+///   Otherwise (not 0 and not -1) - error code.
 MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid);
 
 #if defined(_WIN32) || defined(_WIN64)
