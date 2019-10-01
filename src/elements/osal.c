@@ -1344,24 +1344,49 @@ static __cold clockid_t choice_monoclock() {
 }
 #endif
 
+/*----------------------------------------------------------------------------*/
+
+#if defined(_WIN32) || defined(_WIN64)
+static LARGE_INTEGER performance_frequency;
+#elif defined(__APPLE__) || defined(__MACH__)
+static uint64_t ratio_16dot16_to_monotine;
+#endif
+
 MDBX_INTERNAL_FUNC uint64_t
 mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
 #if defined(_WIN32) || defined(_WIN64)
-  static LARGE_INTEGER performance_frequency;
-  if (performance_frequency.QuadPart == 0)
+  if (unlikely(performance_frequency.QuadPart == 0))
     QueryPerformanceFrequency(&performance_frequency);
   const uint64_t ratio = performance_frequency.QuadPart;
 #elif defined(__APPLE__) || defined(__MACH__)
-  static uint64_t ratio;
-  if (!ratio) {
+  if (unlikely(ratio_16dot16_to_monotine == 0)) {
     mach_timebase_info_data_t ti;
     mach_timebase_info(&ti);
-    ratio = UINT64_C(1000000000) * ti.denom / ti.numer;
+    ratio_16dot16_to_monotine = UINT64_C(1000000000) * ti.denom / ti.numer;
   }
+  const uint64_t ratio = ratio_16dot16_to_monotine;
 #else
   const uint64_t ratio = UINT64_C(1000000000);
 #endif
   return (ratio * seconds_16dot16 + 32768) >> 16;
+}
+
+MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
+  static uint64_t limit;
+  if (unlikely(monotime > limit)) {
+    if (limit != 0)
+      return UINT32_MAX;
+    limit = mdbx_osal_16dot16_to_monotime(UINT32_MAX - 1);
+    if (monotime > limit)
+      return UINT32_MAX;
+  }
+#if defined(_WIN32) || defined(_WIN64)
+  return (uint32_t)((monotime << 16) / performance_frequency.QuadPart);
+#elif defined(__APPLE__) || defined(__MACH__)
+  return (uint32_t)((monotime << 16) / ratio_16dot16_to_monotine);
+#else
+  return (uint32_t)(monotime * 128 / 1953125);
+#endif
 }
 
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void) {

@@ -505,6 +505,20 @@ __cold void mdbx_rthc_global_init(void) {
   mdbx_trace("pid %d, &mdbx_rthc_key = %p, value 0x%x", mdbx_getpid(),
              &rthc_key, (unsigned)rthc_key);
 #endif
+  /* checking time conversion, this also avoids racing on 32-bit architectures
+   * during writing calculated 64-bit ratio(s) into memory. */
+  uint32_t proba = UINT32_MAX;
+  while (true) {
+    unsigned time_conversion_checkup =
+        mdbx_osal_monotime_to_16dot16(mdbx_osal_16dot16_to_monotime(proba));
+    unsigned one_more = (proba < UINT32_MAX) ? proba + 1 : proba;
+    unsigned one_less = (proba > 0) ? proba - 1 : proba;
+    mdbx_ensure(nullptr, time_conversion_checkup >= one_less &&
+                             time_conversion_checkup <= one_more);
+    if (proba == 0)
+      break;
+    proba >>= 1;
+  }
 }
 
 /* dtor called for thread, i.e. for all mdbx's environment objects */

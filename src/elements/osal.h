@@ -646,6 +646,7 @@ MDBX_INTERNAL_FUNC void __maybe_unused mdbx_osal_jitter(bool tiny);
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t
 mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
+MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime);
 
 /*----------------------------------------------------------------------------*/
 /* lck stuff */
