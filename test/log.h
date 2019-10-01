@@ -15,6 +15,7 @@
 #pragma once
 
 #include "base.h"
+#include "chrono.h"
 
 void __noreturn usage(void);
 void __noreturn __printf_args(1, 2) failure(const char *fmt, ...);
@@ -53,6 +54,8 @@ bool __printf_args(2, 3)
     output(const loglevel priority, const char *format, ...);
 bool feed_ap(const char *format, va_list ap);
 bool __printf_args(1, 2) feed(const char *format, ...);
+
+void progress_canary(bool active);
 
 class local_suffix {
 protected:

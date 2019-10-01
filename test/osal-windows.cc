@@ -16,6 +16,7 @@
 
 static std::unordered_map<unsigned, HANDLE> events;
 static HANDLE hBarrierSemaphore, hBarrierEvent;
+static HANDLE hProgressActiveEvent, hProgressPassiveEvent;
 
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
@@ -85,6 +86,16 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (!hBarrierEvent)
     failure_perror("CreateEvent(BarrierEvent)", GetLastError());
   hBarrierEvent = make_inheritable(hBarrierEvent);
+
+  hProgressActiveEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (!hProgressActiveEvent)
+    failure_perror("CreateEvent(ProgressActiveEvent)", GetLastError());
+  hProgressActiveEvent = make_inheritable(hProgressActiveEvent);
+
+  hProgressPassiveEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  if (!hProgressPassiveEvent)
+    failure_perror("CreateEvent(ProgressPassiveEvent)", GetLastError());
+  hProgressPassiveEvent = make_inheritable(hProgressPassiveEvent);
 }
 
 void osal_broadcast(unsigned id) {
@@ -112,6 +123,8 @@ const std::string
 actor_config::osal_serialize(simple_checksum &checksum) const {
   checksum.push(hBarrierSemaphore);
   checksum.push(hBarrierEvent);
+  checksum.push(hProgressActiveEvent);
+  checksum.push(hProgressPassiveEvent);
 
   HANDLE hWait = INVALID_HANDLE_VALUE;
   if (wait4id) {
@@ -125,8 +138,8 @@ actor_config::osal_serialize(simple_checksum &checksum) const {
     checksum.push(hSignal);
   }
 
-  return format("%p.%p.%p.%p", hBarrierSemaphore, hBarrierEvent, hWait,
-                hSignal);
+  return format("%p.%p.%p.%p.%p.%p", hBarrierSemaphore, hBarrierEvent, hWait,
+                hSignal, hProgressActiveEvent, hProgressPassiveEvent);
 }
 
 bool actor_config::osal_deserialize(const char *str, const char *end,
@@ -137,17 +150,22 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 
   assert(hBarrierSemaphore == 0);
   assert(hBarrierEvent == 0);
+  assert(hProgressActiveEvent == 0);
+  assert(hProgressPassiveEvent == 0);
   assert(events.empty());
 
   HANDLE hWait, hSignal;
-  if (sscanf_s(copy.c_str(), "%p.%p.%p.%p", &hBarrierSemaphore, &hBarrierEvent,
-               &hWait, &hSignal) != 4) {
+  if (sscanf_s(copy.c_str(), "%p.%p.%p.%p.%p.%p", &hBarrierSemaphore,
+               &hBarrierEvent, &hWait, &hSignal, &hProgressActiveEvent,
+               &hProgressPassiveEvent) != 6) {
     TRACE("<< osal_deserialize: failed\n");
     return false;
   }
 
   checksum.push(hBarrierSemaphore);
   checksum.push(hBarrierEvent);
+  checksum.push(hProgressActiveEvent);
+  checksum.push(hProgressPassiveEvent);
 
   if (wait4id) {
     checksum.push(hWait);
@@ -167,6 +185,17 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 
 typedef std::pair<HANDLE, actor_status> child;
 static std::unordered_map<mdbx_pid_t, child> childs;
+
+bool osal_progress_push(bool active) {
+  if (childs.empty()) {
+    if (!SetEvent(active ? hProgressActiveEvent : hProgressPassiveEvent))
+      failure_perror("osal_progress_push: SetEvent(overlord.progress)",
+                     GetLastError());
+    return true;
+  }
+
+  return false;
+}
 
 static void ArgvQuote(std::string &CommandLine, const std::string &Argument,
                       bool Force = false)
@@ -344,17 +373,29 @@ void osal_killall_actors(void) {
 
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   std::vector<HANDLE> handles;
-  handles.reserve(childs.size());
+  handles.reserve(childs.size() + 2);
+  handles.push_back(hProgressActiveEvent);
+  handles.push_back(hProgressPassiveEvent);
   for (const auto &pair : childs)
     if (pair.second.second <= as_running)
       handles.push_back(pair.second.first);
 
+loop:
   DWORD rc =
       MsgWaitForMultipleObjectsEx((DWORD)handles.size(), &handles[0],
                                   (timeout > 60) ? 60 * 1000 : timeout * 1000,
                                   QS_ALLINPUT | QS_ALLPOSTMESSAGE, 0);
 
-  if (rc >= WAIT_OBJECT_0 && rc < WAIT_OBJECT_0 + handles.size()) {
+  if (rc == WAIT_OBJECT_0) {
+    logging::progress_canary(true);
+    goto loop;
+  }
+  if (rc == WAIT_OBJECT_0 + 1) {
+    logging::progress_canary(false);
+    goto loop;
+  }
+
+  if (rc >= WAIT_OBJECT_0 + 2 && rc < WAIT_OBJECT_0 + handles.size()) {
     pid = 0;
     for (const auto &pair : childs)
       if (pair.second.first == handles[rc - WAIT_OBJECT_0]) {

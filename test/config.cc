@@ -427,6 +427,8 @@ void dump(const char *title) {
   log_verbose("failfast: %s\n", global::config::failfast ? "Yes" : "No");
   log_verbose("progress indicator: %s\n",
               global::config::progress_indicator ? "Yes" : "No");
+  log_verbose("console mode: %s\n",
+              global::config::console_mode ? "Yes" : "No");
 }
 
 } /* namespace config */
@@ -454,26 +456,31 @@ const std::string actor_config::serialize(const char *prefix) const {
 
   checksum.push(params.pathname_db);
   result.append(params.pathname_db);
-  result.append("|");
+  result.push_back('|');
 
   checksum.push(params.pathname_log);
   result.append(params.pathname_log);
-  result.append("|");
+  result.push_back('|');
 
   static_assert(std::is_pod<actor_params_pod>::value,
                 "actor_params_pod should by POD");
   result.append(data2hex(static_cast<const actor_params_pod *>(&params),
                          sizeof(actor_params_pod), checksum));
-  result.append("|");
+  result.push_back('|');
 
   static_assert(std::is_pod<actor_config_pod>::value,
                 "actor_config_pod should by POD");
   result.append(data2hex(static_cast<const actor_config_pod *>(this),
                          sizeof(actor_config_pod), checksum));
-  result.append("|");
+  result.push_back('|');
+  result.push_back(global::config::progress_indicator ? 'Y' : 'N');
+  checksum.push(global::config::progress_indicator);
+  result.push_back(global::config::console_mode ? 'Y' : 'N');
+  checksum.push(global::config::console_mode);
+  result.push_back('|');
 
   result.append(osal_serialize(checksum));
-  result.append("|");
+  result.push_back('|');
 
   result.append(std::to_string(checksum.value));
   return result;
@@ -537,6 +544,20 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-5\n");
     return false;
   }
+  if ((str[0] == 'Y' || str[0] == 'N') && (str[1] == 'Y' || str[1] == 'N')) {
+    global::config::progress_indicator = str[0] == 'Y';
+    checksum.push(global::config::progress_indicator);
+    global::config::console_mode = str[1] == 'Y';
+    checksum.push(global::config::console_mode);
+    str = slash + 1;
+
+    slash = strchr(str, '|');
+    if (!slash) {
+      TRACE("<< actor_config::deserialize: slash-6\n");
+      return false;
+    }
+  }
+
   if (!config.osal_deserialize(str, slash, checksum)) {
     TRACE("<< actor_config::deserialize: osal\n");
     return false;

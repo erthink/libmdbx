@@ -49,6 +49,7 @@ extern bool cleanup_before;
 extern bool cleanup_after;
 extern bool failfast;
 extern bool progress_indicator;
+extern bool console_mode;
 } /* namespace config */
 
 } /* namespace global */
@@ -95,7 +96,6 @@ protected:
 
   struct {
     mdbx_canary canary;
-    mutable chrono::time progress_timestamp;
   } last;
 
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
@@ -115,7 +115,6 @@ protected:
   void txn_inject_writefault(MDBX_txn *txn);
   void fetch_canary();
   void update_canary(uint64_t increment);
-  void kick_progress(bool active) const;
   void checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
                  MDBX_val expected_valued);
 
@@ -155,6 +154,7 @@ public:
   virtual bool run() { return true; }
   virtual bool teardown();
   virtual ~testcase() {}
+  void kick_progress(bool active) const;
 };
 
 class testcase_ttl : public testcase {

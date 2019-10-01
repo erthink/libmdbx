@@ -241,6 +241,56 @@ void local_suffix::pop() {
 
 local_suffix::~local_suffix() { suffix.erase(trim_pos); }
 
+void progress_canary(bool active) {
+  static chrono::time progress_timestamp;
+  chrono::time now = chrono::now_motonic();
+
+  if (now.fixedpoint - progress_timestamp.fixedpoint <
+      chrono::from_ms(42).fixedpoint)
+    return;
+
+  if (osal_progress_push(active)) {
+    progress_timestamp = now;
+    return;
+  }
+
+  if (progress_timestamp.fixedpoint == 0) {
+    putc('>', stderr);
+    progress_timestamp = now;
+  } else if (global::config::console_mode) {
+    if (active) {
+      static int last_point = -1;
+      int point = (now.fixedpoint >> 29) & 3;
+      if (point != last_point) {
+        progress_timestamp = now;
+        fprintf(stderr, "%c\b", "-\\|/"[last_point = point]);
+      }
+    } else if (now.fixedpoint - progress_timestamp.fixedpoint >
+               chrono::from_seconds(2).fixedpoint) {
+      progress_timestamp = now;
+      fprintf(stderr, "%c\b", "@*"[now.utc & 1]);
+    }
+  } else {
+    static int count;
+    if (active && now.fixedpoint - progress_timestamp.fixedpoint >
+                      chrono::from_seconds(1).fixedpoint) {
+      putc('.', stderr);
+      progress_timestamp = now;
+      ++count;
+    } else if (now.fixedpoint - progress_timestamp.fixedpoint >
+               chrono::from_seconds(5).fixedpoint) {
+      putc("@*"[now.utc & 1], stderr);
+      progress_timestamp = now;
+      ++count;
+    }
+    if (count == 60) {
+      count = 0;
+      putc('\n', stderr);
+    }
+  }
+  fflush(stderr);
+}
+
 } // namespace logging
 
 void log_extra(const char *msg, ...) {

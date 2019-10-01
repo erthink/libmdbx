@@ -26,6 +26,8 @@ void osal_killall_actors(void);
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout);
 void osal_wait4barrier(void);
 
+bool osal_progress_push(bool active);
+
 mdbx_pid_t osal_getpid(void);
 int osal_delay(unsigned seconds);
 void osal_udelay(unsigned us);

@@ -15,7 +15,6 @@
 #pragma once
 
 #include "base.h"
-#include "log.h"
 #include "utils.h"
 
 namespace chrono {

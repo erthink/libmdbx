@@ -82,7 +82,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   global::config::cleanup_before = true;
   global::config::cleanup_after = true;
   global::config::failfast = true;
-  global::config::progress_indicator = osal_istty(STDERR_FILENO);
+  global::config::progress_indicator = true;
+  global::config::console_mode = osal_istty(STDERR_FILENO);
 }
 
 namespace global {
@@ -103,6 +104,7 @@ bool cleanup_before;
 bool cleanup_after;
 bool failfast;
 bool progress_indicator;
+bool console_mode;
 } /* namespace config */
 
 } /* namespace global */
@@ -363,6 +365,9 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "progress",
                              global::config::progress_indicator))
+      continue;
+    if (config::parse_option(argc, argv, narg, "console",
+                             global::config::console_mode))
       continue;
 
     if (*argv[narg] != '-')

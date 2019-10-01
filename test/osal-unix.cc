@@ -149,21 +149,64 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 
 //-----------------------------------------------------------------------------
 
+static pid_t overlord_pid;
+
+static volatile sig_atomic_t sigusr1_head, sigusr2_head;
+static void handler_SIGUSR(int signum) {
+  switch (signum) {
+  case SIGUSR1:
+    sigusr1_head += 1;
+    return;
+  case SIGUSR2:
+    sigusr2_head += 1;
+    return;
+  default:
+    abort();
+  }
+}
+
+bool osal_progress_push(bool active) {
+  if (overlord_pid) {
+    if (kill(overlord_pid, active ? SIGUSR1 : SIGUSR2))
+      failure_perror("osal_progress_push: kill(overload)", errno);
+    return true;
+  }
+
+  return false;
+}
+
+//-----------------------------------------------------------------------------
+
 static std::unordered_map<pid_t, actor_status> childs;
 
-static void handler_SIGCHLD(int unused) { (void)unused; }
+static void handler_SIGCHLD(int signum) { (void)signum; }
 
 mdbx_pid_t osal_getpid(void) { return getpid(); }
 
 int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
-  if (childs.empty())
-    signal(SIGCHLD, handler_SIGCHLD);
+  if (childs.empty()) {
+    struct sigaction act;
+    memset(&act, 0, sizeof(act));
+    act.sa_handler = handler_SIGCHLD;
+    sigaction(SIGCHLD, &act, nullptr);
+    act.sa_handler = handler_SIGUSR;
+    sigaction(SIGUSR1, &act, nullptr);
+    sigaction(SIGUSR2, &act, nullptr);
+
+    sigset_t mask;
+    sigemptyset(&mask);
+    sigaddset(&mask, SIGCHLD);
+    sigaddset(&mask, SIGUSR1);
+    sigaddset(&mask, SIGUSR2);
+    sigprocmask(SIG_UNBLOCK, &mask, nullptr);
+  }
 
   pid = fork();
 
   if (pid == 0) {
+    overlord_pid = getppid();
     const bool result = test_execute(config);
     exit(result ? EXIT_SUCCESS : EXIT_FAILURE);
   }
@@ -215,6 +258,16 @@ retry:
       assert(false);
     }
     return 0;
+  }
+
+  static sig_atomic_t sigusr1_tail, sigusr2_tail;
+  if (sigusr1_tail != sigusr1_head) {
+    sigusr1_tail = sigusr1_head;
+    logging::progress_canary(true);
+  }
+  if (sigusr2_tail != sigusr2_head) {
+    sigusr2_tail = sigusr2_head;
+    logging::progress_canary(false);
   }
 
   if (pid == 0) {
