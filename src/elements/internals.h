@@ -546,12 +546,10 @@ typedef struct MDBX_lockinfo {
 
   volatile txnid_t mti_oldest_reader;
 
-  /* Timestamp for auto-sync feature, i.e. the steady checkpoint should be
-   * created at the first commit that will be not early this timestamp.
-   * The time value is represented in a suitable system-dependent form, for
-   * example clock_gettime(CLOCK_BOOTTIME) or clock_gettime(CLOCK_MONOTONIC).
-   * Zero means timed auto-sync is not pending. */
-  volatile uint64_t mti_unsynced_timeout;
+  /* Timestamp of the last steady sync. Value is represented in a suitable
+   * system-dependent form, for example clock_gettime(CLOCK_BOOTTIME) or
+   * clock_gettime(CLOCK_MONOTONIC). */
+  volatile uint64_t mti_sync_timestamp;
 
   /* Number un-synced-with-disk pages for auto-sync feature. */
   volatile pgno_t mti_unsynced_pages;
@@ -935,7 +933,7 @@ struct MDBX_env {
   unsigned me_maxkey_limit; /* max size of a key */
   uint32_t me_live_reader;  /* have liveness lock in reader table */
   void *me_userctx;         /* User-settable context */
-  volatile uint64_t *me_unsynced_timeout;
+  volatile uint64_t *me_sync_timestamp;
   volatile uint64_t *me_autosync_period;
   volatile pgno_t *me_unsynced_pages;
   volatile pgno_t *me_autosync_threshold;
@@ -947,7 +945,7 @@ struct MDBX_env {
     MDBX_OSAL_LOCK wmutex;
 #endif
     txnid_t oldest;
-    uint64_t unsynced_timeout;
+    uint64_t sync_timestamp;
     uint64_t autosync_period;
     pgno_t autosync_pending;
     pgno_t autosync_threshold;
