@@ -66,7 +66,8 @@ build_script:
 test_script:
 - ps: |
     if (($env:PLATFORM -ne "ARM") -and ($env:PLATFORM -ne "ARM64")) {
-        & ./$env:CONFIGURATION/mdbx_test.exe --pathname=test.db --dont-cleanup-after basic | Tee-Object -file test.log | Select-Object -last 42
+        & ./$env:CONFIGURATION/mdbx_test.exe --progress --console=no --pathname=test.db --dont-cleanup-after basic > test.log
+        Get-Content test.log | Select-Object -last 42
         if ($LastExitCode -ne 0) {
             throw "Exec: $ErrorMessage"
         } else {

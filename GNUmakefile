@@ -131,7 +131,7 @@ MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | 
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c && (openssl dgst -r -sha256 src/elements/version.c || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
 
 check: all mdbx_example mdbx_test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
@@ -139,13 +139,13 @@ mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 
 check-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
-		./mdbx_test --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
-		./mdbx_test --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy \
+		./mdbx_test --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
+		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy \
 		| tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 check-fault: all mdbx_test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 define test-rule
