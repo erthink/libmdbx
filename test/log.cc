@@ -20,7 +20,7 @@ void failure(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   fflushall();
-  logging::output(logging::failure, fmt, ap);
+  logging::output_ap(logging::failure, fmt, ap);
   va_end(ap);
   fflushall();
   exit(EXIT_FAILURE);
@@ -37,17 +37,17 @@ void __noreturn failure_perror(const char *what, int errnum) {
 
 //-----------------------------------------------------------------------------
 
-static void mdbx_logger(int loglevel, const char *function, int line,
+static void mdbx_logger(int priority, const char *function, int line,
                         const char *msg, va_list args) {
   if (!function)
     function = "unknown";
 
-  if (loglevel == MDBX_LOG_FATAL)
+  if (priority == MDBX_LOG_FATAL)
     log_error("mdbx: fatal failure: %s, %d", function, line);
 
   if (logging::output(
-          logging::loglevel(loglevel),
-          strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx: %s: ", function))
+          logging::loglevel(priority),
+          strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function))
     logging::feed_ap(msg, args);
 }
 
@@ -58,14 +58,15 @@ static std::string suffix;
 static loglevel level;
 static FILE *last;
 
-void setlevel(loglevel _level) {
+void setlevel(loglevel priority) {
+  level = priority;
   int rc = mdbx_setup_debug(
-      _level, MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP, mdbx_logger);
+      priority, MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP, mdbx_logger);
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
-void setup(loglevel _level, const std::string &_prefix) {
-  setlevel(_level);
+void setup(loglevel priority, const std::string &_prefix) {
+  setlevel(priority);
   prefix = _prefix;
 }
 
@@ -81,8 +82,8 @@ const char *level2str(const loglevel alevel) {
     return "trace";
   case debug:
     return "debug";
-  case info:
-    return "info";
+  case verbose:
+    return "verbose";
   case notice:
     return "notice";
   case warning:
@@ -95,24 +96,29 @@ const char *level2str(const loglevel alevel) {
 }
 
 bool output(const loglevel priority, const char *format, ...) {
-  if (priority > level)
+  if (lower(priority, level))
     return false;
 
   va_list ap;
   va_start(ap, format);
-  output(priority, format, ap);
+  output_ap(priority, format, ap);
   va_end(ap);
   return true;
 }
 
-bool output(const logging::loglevel priority, const char *format, va_list ap) {
+bool output_ap(const logging::loglevel priority, const char *format,
+               va_list ap) {
   if (last) {
     putc('\n', last);
     fflush(last);
+    if (last == stderr) {
+      putc('\n', stdout);
+      fflush(stdout);
+    }
     last = nullptr;
   }
 
-  if (priority < level)
+  if (lower(priority, level))
     return false;
 
   chrono::time now = chrono::now_realtime();
@@ -135,7 +141,7 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
 
   va_list ones;
   memset(&ones, 0, sizeof(ones)) /* zap MSVC and other stupid compilers */;
-  if (priority >= error)
+  if (same_or_higher(priority, error))
     va_copy(ones, ap);
   vfprintf(last, format, ap);
 
@@ -162,14 +168,15 @@ bool output(const logging::loglevel priority, const char *format, va_list ap) {
     break;
   }
 
-  if (priority >= error) {
+  if (same_or_higher(priority, error)) {
     if (last != stderr) {
       fprintf(stderr, "[ %05u %-10s %.4s ] %s", osal_getpid(), prefix.c_str(),
               level2str(priority), suffix.c_str());
       vfprintf(stderr, format, ones);
-      if (end != '\n')
-        putc('\n', stderr);
-      fflush(stderr);
+      if (end == '\n')
+        fflush(stderr);
+      else
+        last = stderr;
     }
     va_end(ones);
   }
@@ -181,10 +188,18 @@ bool feed_ap(const char *format, va_list ap) {
   if (!last)
     return false;
 
+  if (last == stderr) {
+    va_list ones;
+    va_copy(ones, ap);
+    vfprintf(stdout, format, ones);
+    va_end(ones);
+  }
   vfprintf(last, format, ap);
   size_t len = strlen(format);
   if (len && format[len - 1] == '\n') {
     fflush(last);
+    if (last == stderr)
+      fflush(stdout);
     last = nullptr;
   }
   return true;
@@ -229,70 +244,70 @@ local_suffix::~local_suffix() { suffix.erase(trim_pos); }
 } // namespace logging
 
 void log_extra(const char *msg, ...) {
-  if (logging::extra <= logging::level) {
+  if (logging::same_or_higher(logging::extra, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::extra, msg, ap);
+    logging::output_ap(logging::extra, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
 void log_trace(const char *msg, ...) {
-  if (logging::trace <= logging::level) {
+  if (logging::same_or_higher(logging::trace, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::trace, msg, ap);
+    logging::output_ap(logging::trace, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
 void log_debug(const char *msg, ...) {
-  if (logging::debug <= logging::level) {
+  if (logging::same_or_higher(logging::debug, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::debug, msg, ap);
+    logging::output_ap(logging::debug, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
-void log_info(const char *msg, ...) {
-  if (logging::info <= logging::level) {
+void log_verbose(const char *msg, ...) {
+  if (logging::same_or_higher(logging::verbose, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::info, msg, ap);
+    logging::output_ap(logging::verbose, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
 void log_notice(const char *msg, ...) {
-  if (logging::notice <= logging::level) {
+  if (logging::same_or_higher(logging::notice, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::notice, msg, ap);
+    logging::output_ap(logging::notice, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
 void log_warning(const char *msg, ...) {
-  if (logging::warning <= logging::level) {
+  if (logging::same_or_higher(logging::warning, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::warning, msg, ap);
+    logging::output_ap(logging::warning, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
 }
 
 void log_error(const char *msg, ...) {
-  if (logging::error <= logging::level) {
+  if (logging::same_or_higher(logging::error, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output(logging::error, msg, ap);
+    logging::output_ap(logging::error, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -303,7 +318,7 @@ void log_trouble(const char *where, const char *what, int errnum) {
 }
 
 bool log_enabled(const logging::loglevel priority) {
-  return (priority >= logging::level);
+  return logging::same_or_higher(priority, logging::level);
 }
 
 void log_flush(void) { fflushall(); }

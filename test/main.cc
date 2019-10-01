@@ -26,7 +26,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   pathname_log = "";
   loglevel =
 #ifdef NDEBUG
-      logging::info;
+      logging::verbose;
 #elif defined(_WIN32) || defined(_WIN64)
       logging::debug;
 #else
@@ -456,8 +456,8 @@ int main(int argc, char *const argv[]) {
         if (!actor)
           continue;
 
-        log_info("actor #%u, id %d, pid %u: %s\n", actor->actor_id,
-                 actor->space_id, pid, status2str(status));
+        log_verbose("actor #%u, id %d, pid %u: %s\n", actor->actor_id,
+                    actor->space_id, pid, status2str(status));
         if (status > as_running) {
           left -= 1;
           if (status != as_successful) {
@@ -480,7 +480,7 @@ int main(int argc, char *const argv[]) {
   log_notice("RESULT: %s\n", failed ? "Failed" : "Successful");
   if (global::config::cleanup_before) {
     if (failed)
-      log_info("skip cleanup");
+      log_verbose("skip cleanup");
     else
       cleanup();
   }

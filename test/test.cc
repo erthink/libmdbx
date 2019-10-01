@@ -265,8 +265,9 @@ void testcase::txn_inject_writefault(MDBX_txn *txn) {
   if (config.params.inject_writefaultn && txn) {
     if (config.params.inject_writefaultn <= nops_completed &&
         (mdbx_txn_flags(txn) & MDBX_RDONLY) == 0) {
-      log_info("== txn_inject_writefault(): got %u nops or more, inject FAULT",
-               config.params.inject_writefaultn);
+      log_verbose(
+          "== txn_inject_writefault(): got %u nops or more, inject FAULT",
+          config.params.inject_writefaultn);
       log_flush();
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
       TerminateProcess(GetCurrentProcess(), 42);
@@ -583,13 +584,13 @@ bool test_execute(const actor_config &config_const) {
       }
 
       if (config.params.nrepeat == 1)
-        log_info("test successed");
+        log_verbose("test successed");
       else {
         if (config.params.nrepeat)
-          log_info("test successed (iteration %zi of %zi)", iter,
-                   size_t(config.params.nrepeat));
+          log_verbose("test successed (iteration %zi of %zi)", iter,
+                      size_t(config.params.nrepeat));
         else
-          log_info("test successed (iteration %zi)", iter);
+          log_verbose("test successed (iteration %zi)", iter);
         config.params.keygen.seed += INT32_C(0xA4F4D37B);
       }
 

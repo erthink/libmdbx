@@ -73,8 +73,8 @@ bool testcase_ttl::run() {
   const unsigned count_max = (config.params.batch_write > count_max_lower)
                                  ? config.params.batch_write
                                  : count_max_lower;
-  log_info("ttl: using `batch_read` value %u for window_max", window_max);
-  log_info("ttl: using `batch_write` value %u for count_max", count_max);
+  log_verbose("ttl: using `batch_read` value %u for window_max", window_max);
+  log_verbose("ttl: using `batch_write` value %u for count_max", count_max);
 
   uint64_t seed =
       prng64_map2_white(config.params.keygen.seed) + config.actor_id;
