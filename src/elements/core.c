@@ -5678,8 +5678,13 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                  meta_number, offset, (unsigned)sizeof(page), retryleft);
       int err = mdbx_pread(env->me_fd, &page, sizeof(page), offset);
       if (err != MDBX_SUCCESS) {
-        mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page),
-                   err, mdbx_strerror(err));
+        if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 &&
+            *filesize == 0 && (env->me_flags & MDBX_RDONLY) == 0)
+          mdbx_notice("read meta: empty file (%d, %s)", err,
+                      mdbx_strerror(err));
+        else
+          mdbx_error("read meta[%u,%u]: %i, %s", offset, (unsigned)sizeof(page),
+                     err, mdbx_strerror(err));
         return err;
       }
 
