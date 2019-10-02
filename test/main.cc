@@ -25,10 +25,8 @@ void __noreturn usage(void) {
 void actor_params::set_defaults(const std::string &tmpdir) {
   pathname_log = "";
   loglevel =
-#ifdef NDEBUG
+#if defined(NDEBUG) || defined(_WIN32) || defined(_WIN64)
       logging::verbose;
-#elif defined(_WIN32) || defined(_WIN64)
-      logging::debug;
 #else
       logging::trace;
 #endif
