@@ -1604,6 +1604,9 @@ static int __must_check_result mdbx_update_key(MDBX_cursor *mc,
 static void mdbx_cursor_pop(MDBX_cursor *mc);
 static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 
+static int __must_check_result mdbx_page_check(MDBX_env *env,
+                                               const MDBX_page *const mp,
+                                               bool maybe_unfinished);
 static int __must_check_result mdbx_cursor_check(MDBX_cursor *mc, bool pending);
 static int __must_check_result mdbx_cursor_del0(MDBX_cursor *mc);
 static int __must_check_result mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi,
@@ -7868,11 +7871,14 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
 
   unsigned i = 0;
   if (IS_LEAF2(mp)) {
-    nodekey.iov_len = mc->mc_db->md_xsize;
+    mdbx_cassert(mc, mp->mp_leaf2_ksize == mc->mc_db->md_xsize);
+    nodekey.iov_len = mp->mp_leaf2_ksize;
     node = NODEPTR(mp, 0); /* fake */
     while (low <= high) {
       i = (low + high) >> 1;
       nodekey.iov_base = LEAF2KEY(mp, i, nodekey.iov_len);
+      mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
+                           (char *)nodekey.iov_base + nodekey.iov_len);
       rc = cmp(key, &nodekey);
       mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY(&nodekey), rc);
       if (rc == 0)
@@ -7889,6 +7895,8 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
       node = NODEPTR(mp, i);
       nodekey.iov_len = NODEKSZ(node);
       nodekey.iov_base = NODEKEY(node);
+      mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
+                           (char *)nodekey.iov_base + nodekey.iov_len);
 
       rc = cmp(key, &nodekey);
       if (IS_LEAF(mp))
@@ -8036,6 +8044,12 @@ done:
     return MDBX_CORRUPTED;
   }
   /* TODO: more checks here, including p->mp_validator */
+
+  if (mdbx_audit_enabled()) {
+    int err = mdbx_page_check(env, p, true);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
 
   *ret = p;
   if (lvl)
@@ -9477,9 +9491,11 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           fp->mp_flags |= P_LEAF2;
           fp->mp_leaf2_ksize = (uint16_t)data->iov_len;
           xdata.iov_len += 2 * data->iov_len; /* leave space for 2 more */
+          mdbx_cassert(mc, xdata.iov_len <= env->me_psize);
         } else {
           xdata.iov_len += 2 * (sizeof(indx_t) + NODESIZE) +
                            (dkey.iov_len & 1) + (data->iov_len & 1);
+          mdbx_cassert(mc, xdata.iov_len <= env->me_psize);
         }
         fp->mp_upper = (uint16_t)(xdata.iov_len - PAGEHDRSZ);
         olddata.iov_len = xdata.iov_len; /* pretend olddata is fp */
@@ -11457,6 +11473,133 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
+static __cold int mdbx_page_check(MDBX_env *env, const MDBX_page *const mp,
+                                  bool maybe_unfinished) {
+  const unsigned nkeys = NUMKEYS(mp);
+  char *const end_of_page = (char *)mp + env->me_psize;
+  mdbx_assert(env, mp->mp_pgno >= MIN_PAGENO && mp->mp_pgno <= MAX_PAGENO);
+  if (unlikely(mp->mp_pgno < MIN_PAGENO || mp->mp_pgno > MAX_PAGENO))
+    return MDBX_CORRUPTED;
+  if (IS_OVERFLOW(mp)) {
+    mdbx_assert(env, mp->mp_pages >= 1 && mp->mp_pages < MAX_PAGENO / 2);
+    if (unlikely(mp->mp_pages < 1 && mp->mp_pages >= MAX_PAGENO / 2))
+      return MDBX_CORRUPTED;
+    mdbx_assert(env, mp->mp_pgno <= MAX_PAGENO - mp->mp_pages);
+    if (unlikely(mp->mp_pgno > MAX_PAGENO - mp->mp_pages))
+      return MDBX_CORRUPTED;
+    return MDBX_SUCCESS;
+  }
+  if (!(IS_DIRTY(mp) && maybe_unfinished)) {
+    mdbx_assert(env, nkeys >= 2 || !IS_BRANCH(mp));
+    if (unlikely(nkeys < 2 && IS_BRANCH(mp)))
+      return MDBX_CORRUPTED;
+  }
+
+  for (unsigned i = IS_LEAF(mp) ? 0 : 1; i < nkeys; ++i) {
+    const MDBX_node *const node = NODEPTR(mp, i);
+    if (IS_LEAF2(mp)) {
+      const size_t ksize = mp->mp_leaf2_ksize;
+      const char *const key = LEAF2KEY(mp, i, ksize);
+      mdbx_assert(env, key + ksize <= end_of_page);
+      if (unlikely(end_of_page < key + ksize))
+        return MDBX_CORRUPTED;
+    } else {
+      const char *node_end = (char *)node + NODESIZE;
+      mdbx_assert(env, node_end <= end_of_page);
+      if (unlikely(node_end > end_of_page))
+        return MDBX_CORRUPTED;
+      if (IS_LEAF(mp) || i > 0) {
+        size_t ksize = NODEKSZ(node);
+        char *key = NODEKEY(node);
+        mdbx_assert(env, key + ksize <= end_of_page);
+        if (unlikely(end_of_page < key + ksize))
+          return MDBX_CORRUPTED;
+      }
+      if (IS_BRANCH(mp))
+        continue;
+      if (node->mn_flags == F_BIGDATA /* data on large-page */) {
+        continue;
+      }
+      const size_t dsize = NODEDSZ(node);
+      const char *const data = NODEDATA(node);
+      mdbx_assert(env, data + dsize <= end_of_page);
+      if (unlikely(end_of_page < data + dsize))
+        return MDBX_CORRUPTED;
+
+      switch (node->mn_flags) {
+      default:
+        mdbx_assert(env, false);
+        return MDBX_CORRUPTED;
+      case 0 /* usual */:
+        break;
+      case F_SUBDATA /* sub-db */:
+        mdbx_assert(env, dsize == sizeof(MDBX_db));
+        if (unlikely(dsize != sizeof(MDBX_db)))
+          return MDBX_CORRUPTED;
+        break;
+      case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
+        mdbx_assert(env, dsize == sizeof(MDBX_db));
+        if (unlikely(dsize != sizeof(MDBX_db)))
+          return MDBX_CORRUPTED;
+        break;
+      case F_DUPDATA /* short sub-page */:
+        mdbx_assert(env, dsize > PAGEHDRSZ);
+        if (unlikely(dsize <= PAGEHDRSZ))
+          return MDBX_CORRUPTED;
+        else {
+          const MDBX_page *const sp = (MDBX_page *)data;
+          const char *const end_of_subpage = data + dsize;
+          const int nsubkeys = NUMKEYS(sp);
+          switch (sp->mp_flags & ~P_DIRTY /* ignore for sub-pages */) {
+          case P_LEAF | P_SUBP:
+          case P_LEAF | P_LEAF2 | P_SUBP:
+            break;
+          default:
+            mdbx_assert(env, false);
+            return MDBX_CORRUPTED;
+          }
+
+          for (int j = 0; j < nsubkeys; j++) {
+            if (IS_LEAF2(sp)) {
+              /* LEAF2 pages have no mp_ptrs[] or node headers */
+              size_t sub_ksize = sp->mp_leaf2_ksize;
+              char *sub_key = LEAF2KEY(sp, j, sub_ksize);
+              mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
+              if (unlikely(end_of_subpage < sub_key + sub_ksize))
+                return MDBX_CORRUPTED;
+            } else {
+              mdbx_assert(env, IS_LEAF(sp));
+              if (unlikely(!IS_LEAF(sp)))
+                return MDBX_CORRUPTED;
+              const MDBX_node *const sub_node = NODEPTR(sp, j);
+              const char *sub_node_end = (char *)sub_node + NODESIZE;
+              mdbx_assert(env, sub_node_end <= end_of_subpage);
+              if (unlikely(sub_node_end > end_of_subpage))
+                return MDBX_CORRUPTED;
+              mdbx_assert(env, sub_node->mn_flags == 0);
+              if (unlikely(sub_node->mn_flags != 0))
+                return MDBX_CORRUPTED;
+
+              size_t sub_ksize = NODEKSZ(sub_node);
+              char *sub_key = NODEKEY(sub_node);
+              size_t sub_dsize = NODEDSZ(sub_node);
+              char *sub_data = NODEDATA(sub_node);
+              mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
+              if (unlikely(end_of_subpage < sub_key + sub_ksize))
+                return MDBX_CORRUPTED;
+              mdbx_assert(env, sub_data + sub_dsize <= end_of_subpage);
+              if (unlikely(end_of_subpage < sub_data + sub_dsize))
+                return MDBX_CORRUPTED;
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+  return MDBX_SUCCESS;
+}
+
 static __cold int mdbx_cursor_check(MDBX_cursor *mc, bool pending) {
   mdbx_cassert(mc, mc->mc_top == mc->mc_snum - 1);
   if (unlikely(mc->mc_top != mc->mc_snum - 1))
@@ -11491,6 +11634,10 @@ static __cold int mdbx_cursor_check(MDBX_cursor *mc, bool pending) {
         return MDBX_CURSOR_FULL;
     }
 
+    int err = mdbx_page_check(mc->mc_txn->mt_env, mp, pending);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     for (unsigned i = 0; i < numkeys; ++i) {
       MDBX_node *node = NODEPTR(mp, i);
       if (branch) {
@@ -11507,6 +11654,9 @@ static __cold int mdbx_cursor_check(MDBX_cursor *mc, bool pending) {
         mdbx_cassert(mc, nested_leaf == expect_nested_leaf);
         if (unlikely(nested_leaf != expect_nested_leaf))
           return MDBX_CURSOR_FULL;
+        err = mdbx_page_check(mc->mc_txn->mt_env, np, pending);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
       }
     }
   }
@@ -14135,6 +14285,10 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  rc = mdbx_page_check(ctx->mw_cursor.mc_txn->mt_env, mp, false);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
   const int nkeys = NUMKEYS(mp);
   size_t header_size = IS_LEAF2(mp) ? PAGEHDRSZ : PAGEHDRSZ + mp->mp_lower;
   size_t unused_size = SIZELEFT(mp);
@@ -14188,6 +14342,9 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
       pgno_t large_pgno;
       memcpy(&large_pgno, NODEDATA(node), sizeof(pgno_t));
       rc = mdbx_page_get(&ctx->mw_cursor, large_pgno, &op, NULL);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+      rc = mdbx_page_check(ctx->mw_cursor.mc_txn->mt_env, op, false);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
 
