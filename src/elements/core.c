@@ -3262,19 +3262,20 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
                                  unsigned psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
   STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 42);
-  enum { Align = sizeof(pgno_t) };
-  indx_t upper = src->mp_upper, lower = src->mp_lower, unused = upper - lower;
+  if (!IS_LEAF2(src)) {
+    size_t upper = src->mp_upper, lower = src->mp_lower, unused = upper - lower;
 
-  /* If page isn't full, just copy the used portion. Adjust
-   * alignment so memcpy may copy words instead of bytes. */
-  if ((unused &= -Align) && !IS_LEAF2(src)) {
-    upper = (upper + PAGEHDRSZ) & -Align;
-    memcpy(dst, src, (lower + PAGEHDRSZ + (Align - 1)) & -Align);
-    memcpy((pgno_t *)((char *)dst + upper), (pgno_t *)((char *)src + upper),
-           psize - upper);
-  } else {
-    memcpy(dst, src, psize - unused);
+    /* If page isn't full, just copy the used portion. Adjust
+     * alignment so memcpy may copy words instead of bytes. */
+    if (unused > sizeof(void *) * 42) {
+      lower = mdbx_roundup2(lower + PAGEHDRSZ, sizeof(void *));
+      upper = (upper + PAGEHDRSZ) & ~(sizeof(void *) - 1);
+      memcpy(dst, src, lower);
+      memcpy((char *)dst + upper, (char *)src + upper, psize - upper);
+      return;
+    }
   }
+  memcpy(dst, src, psize);
 }
 
 /* Pull a page off the txn's spill list, if present.
