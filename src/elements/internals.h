@@ -1243,30 +1243,26 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
  * F_DUPDATA and F_SUBDATA can be combined giving duplicate data in
  * a sub-page/sub-database, and named databases (just F_SUBDATA). */
 typedef struct MDBX_node {
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   union {
     struct {
-#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-      union {
-        struct {
-          uint16_t mn_lo, mn_hi; /* part of data size or pgno */
-        };
-        uint32_t mn_dsize;
-      };
-      uint16_t mn_flags; /* see mdbx_node */
-      uint16_t mn_ksize; /* key size */
-#else
-      uint16_t mn_ksize; /* key size */
-      uint16_t mn_flags; /* see mdbx_node */
-      union {
-        struct {
-          uint16_t mn_hi, mn_lo; /* part of data size or pgno */
-        };
-        uint32_t mn_dsize;
-      };
-#endif
+      uint16_t mn_lo, mn_hi; /* part of data size or pgno */
     };
-    pgno_t mn_ksize_and_pgno;
+    uint32_t mn_dsize;
+    uint32_t mn_pgno32;
   };
+  uint16_t mn_flags; /* see mdbx_node */
+  uint16_t mn_ksize; /* key size */
+#else
+  uint16_t mn_ksize; /* key size */
+  uint16_t mn_flags; /* see mdbx_node */
+  union {
+    struct {
+      uint16_t mn_hi, mn_lo; /* part of data size or pgno */
+    };
+    uint32_t mn_dsize;
+  };
+#endif
 
 /* mdbx_node Flags */
 #define F_BIGDATA 0x01 /* data put on overflow page */

@@ -59,7 +59,7 @@ static __inline unsigned mdbx_log2(size_t value) {
 }
 
 /* Address of node i in page p */
-static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
+static __inline MDBX_node *NODEPTR(const MDBX_page *p, unsigned i) {
   assert(NUMKEYS(p) > (unsigned)(i));
   return (MDBX_node *)((char *)(p) + (p)->mp_ptrs[i] + PAGEHDRSZ);
 }
@@ -68,7 +68,7 @@ static __inline MDBX_node *NODEPTR(MDBX_page *p, unsigned i) {
 static __inline pgno_t NODEPGNO(const MDBX_node *node) {
   pgno_t pgno;
   if (MDBX_UNALIGNED_OK) {
-    pgno = node->mn_ksize_and_pgno;
+    pgno = node->mn_pgno32;
     if (sizeof(pgno_t) > 4)
       pgno &= MAX_PAGENO;
   } else {
@@ -85,13 +85,13 @@ static __inline void SETPGNO(MDBX_node *node, pgno_t pgno) {
 
   if (MDBX_UNALIGNED_OK) {
     if (sizeof(pgno_t) > 4)
-      pgno |= ((uint64_t)node->mn_ksize) << 48;
-    node->mn_ksize_and_pgno = pgno;
+      pgno |= ((uint64_t)node->mn_ksize) << 32;
+    node->mn_pgno32 = pgno;
   } else {
     node->mn_lo = (uint16_t)pgno;
     node->mn_hi = (uint16_t)(pgno >> 16);
     if (sizeof(pgno_t) > 4)
-      node->mn_flags = (uint16_t)((uint64_t)pgno >> 32);
+      node->mn_ksize = (uint16_t)((uint64_t)pgno >> 32);
   }
 }
 
