@@ -1234,9 +1234,9 @@ static __noinline __hot unsigned mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
   pgno_t *end = begin + MDBX_PNL_SIZE(pnl);
   assert(it >= begin && it <= end);
   if (it != begin)
-    assert(it[-1] < id);
+    assert(MDBX_PNL_ORDERED(it[-1], id));
   if (it != end)
-    assert(it[0] >= id);
+    assert(!MDBX_PNL_ORDERED(it[0], id));
   return (unsigned)(it - begin);
 }
 
