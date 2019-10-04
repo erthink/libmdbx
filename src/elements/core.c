@@ -988,6 +988,8 @@ static int lcklist_detach_locked(MDBX_env *env) {
                                                                                \
     SORT_SHELLPASS(TYPE, CMP, begin, end, 8);                                  \
     SORT_SHELLPASS(TYPE, CMP, begin, end, 1);                                  \
+    for (TYPE *scan = begin + 1; scan < end; ++scan)                           \
+      assert(CMP(scan[-1], scan[0]));                                          \
   }
 
 /*------------------------------------------------------------------------------
@@ -996,6 +998,8 @@ static int lcklist_detach_locked(MDBX_env *env) {
 #define SEARCH_IMPL(NAME, TYPE_LIST, TYPE_ARG, CMP)                            \
   static __always_inline TYPE_LIST *NAME(TYPE_LIST *first, unsigned length,    \
                                          const TYPE_ARG item) {                \
+    TYPE_LIST *const begin = first, *const end = begin + length;               \
+                                                                               \
     while (length > 3) {                                                       \
       const unsigned half = length >> 1;                                       \
       TYPE_LIST *const middle = first + half;                                  \
@@ -1023,6 +1027,13 @@ static int lcklist_detach_locked(MDBX_env *env) {
       if (CMP(*first, item))                                                   \
         ++first;                                                               \
     }                                                                          \
+                                                                               \
+    for (TYPE_LIST *scan = begin; scan < first; ++scan)                        \
+      assert(CMP(*scan, item));                                                \
+    for (TYPE_LIST *scan = first; scan < end; ++scan)                          \
+      assert(!CMP(*scan, item));                                               \
+    (void)begin, (void)end;                                                    \
+                                                                               \
     return first;                                                              \
   }
 
