@@ -60,8 +60,10 @@ static FILE *last;
 
 void setlevel(loglevel priority) {
   level = priority;
-  int rc = mdbx_setup_debug(
-      priority, MDBX_DBG_ASSERT | MDBX_DBG_JITTER | MDBX_DBG_DUMP, mdbx_logger);
+  int rc = mdbx_setup_debug(priority,
+                            MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
+                                MDBX_DBG_DUMP,
+                            mdbx_logger);
   log_trace("set mdbx debug-opts: 0x%02x", rc);
 }
 
