@@ -5606,7 +5606,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   env->me_reclaimed_pglist = NULL;
 
   if (mdbx_audit_enabled()) {
-    rc = mdbx_audit(txn, 0);
+    rc = mdbx_audit(txn, MDBX_PNL_SIZE(txn->mt_retired_pages));
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }
