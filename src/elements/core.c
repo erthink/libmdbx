@@ -6285,7 +6285,7 @@ int __cold mdbx_env_get_maxkeysize(MDBX_env *env) {
 #define mdbx_nodemax(pagesize)                                                 \
   (((((pagesize)-PAGEHDRSZ) / MDBX_MINKEYS) & ~(uintptr_t)1) - sizeof(indx_t))
 
-#define mdbx_maxkey(nodemax) (((nodemax)-NODESIZE - sizeof(MDBX_db)) / 2)
+#define mdbx_maxkey(nodemax) ((nodemax)-NODESIZE - sizeof(MDBX_db))
 
 #define mdbx_maxgc_ov1page(pagesize)                                           \
   (((pagesize)-PAGEHDRSZ) / sizeof(pgno_t) - 1)
@@ -9329,6 +9329,11 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             return rc;
           flags -= MDBX_CURRENT;
         }
+      } else if (unlikely(LEAFSIZE(key, data) > env->me_nodemax)) {
+        rc = mdbx_cursor_del(mc, 0);
+        if (rc != MDBX_SUCCESS)
+          return rc;
+        flags -= MDBX_CURRENT;
       }
     }
   }
@@ -9560,17 +9565,20 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         /* Was a single item before, must convert now */
         if (!F_ISSET(leaf->mn_flags, F_DUPDATA)) {
 
+          /* Just overwrite the current item */
+          if (flags & MDBX_CURRENT) {
+            mdbx_cassert(mc, LEAFSIZE(key, data) <= env->me_nodemax);
+            goto current;
+          }
+
           /* does data match? */
           if (!mc->mc_dbx->md_dcmp(data, &olddata)) {
             if (unlikely(flags & (MDBX_NODUPDATA | MDBX_APPENDDUP)))
               return MDBX_KEYEXIST;
             /* overwrite it */
+            mdbx_cassert(mc, LEAFSIZE(key, data) <= env->me_nodemax);
             goto current;
           }
-
-          /* Just overwrite the current item */
-          if (flags & MDBX_CURRENT)
-            goto current;
 
           /* Back up original data item */
           dupdata_flag = 1;
@@ -10218,6 +10226,7 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
     node_size += sizeof(pgno_t);
   } else if (unlikely(node_size + data->iov_len >
                       mc->mc_txn->mt_env->me_nodemax)) {
+    mdbx_cassert(mc, !F_ISSET(mc->mc_db->md_flags, MDBX_DUPSORT));
     const pgno_t ovpages = OVPAGES(mc->mc_txn->mt_env, data->iov_len);
     /* Put data on overflow page. */
     mdbx_debug("data size is %" PRIuPTR ", node would be %" PRIuPTR
