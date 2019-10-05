@@ -3275,7 +3275,7 @@ done:
 __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
                                  unsigned psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
-  STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 42);
+  STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 4);
   if (!IS_LEAF2(src)) {
     size_t upper = src->mp_upper, lower = src->mp_lower, unused = upper - lower;
 
@@ -6298,7 +6298,7 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   mdbx_ensure(env, pagesize <= MAX_PAGESIZE);
   env->me_psize = (unsigned)pagesize;
 
-  STATIC_ASSERT(mdbx_maxgc_ov1page(MIN_PAGESIZE) > 42);
+  STATIC_ASSERT(mdbx_maxgc_ov1page(MIN_PAGESIZE) > 4);
   STATIC_ASSERT(mdbx_maxgc_ov1page(MAX_PAGESIZE) < MDBX_DPL_TXNFULL);
   const intptr_t maxgc_ov1page = (pagesize - PAGEHDRSZ) / sizeof(pgno_t) - 1;
   mdbx_ensure(env,
