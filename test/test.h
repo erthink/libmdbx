@@ -22,6 +22,21 @@
 #include "osal.h"
 #include "utils.h"
 
+#include <set>
+
+#ifndef HAVE_cxx17_std_string_view
+#if __cplusplus >= 201703L && __has_include(<string_view>)
+#include <string_view>
+#define HAVE_cxx17_std_string_view 1
+#else
+#define HAVE_cxx17_std_string_view 0
+#endif
+#endif /* HAVE_cxx17_std_string_view */
+
+#if HAVE_cxx17_std_string_view
+#include <string_view>
+#endif
+
 bool test_execute(const actor_config &config);
 std::string thunk_param(const actor_config &config);
 void testcase_setup(const char *casename, actor_params &params,
@@ -165,10 +180,59 @@ public:
 };
 
 class testcase_hill : public testcase {
+  using inherited = testcase;
+
+#if HAVE_cxx17_std_string_view
+  using data_view = std::string_view;
+#else
+  using data_view = std::string;
+#endif
+
+  MDBX_dbi dbi;
+  using Item = std::pair<std::string, std::string>;
+  struct ItemCompare {
+    const testcase_hill *context;
+    ItemCompare(const testcase_hill *owner) : context(owner) {}
+
+    bool operator()(const Item &a, const Item &b) const {
+      MDBX_val va, vb;
+      va.iov_base = (void *)a.first.data();
+      va.iov_len = a.first.size();
+      vb.iov_base = (void *)b.first.data();
+      vb.iov_len = b.first.size();
+      int cmp = mdbx_cmp(context->txn_guard.get(), context->dbi, &va, &vb);
+      if (cmp == 0 &&
+          (context->config.params.table_flags & MDBX_DUPSORT) != 0) {
+        va.iov_base = (void *)a.second.data();
+        va.iov_len = a.second.size();
+        vb.iov_base = (void *)b.second.data();
+        vb.iov_len = b.second.size();
+        cmp = mdbx_dcmp(context->txn_guard.get(), context->dbi, &va, &vb);
+      }
+      return cmp < 0;
+    }
+  };
+
+  using set = std::set<Item, ItemCompare>;
+  set mirror, mirror_commited;
+
+  bool verify() const;
+  int insert(const keygen::buffer &akey, const keygen::buffer &adata,
+             unsigned flags);
+  int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
+              const keygen::buffer &old_value, unsigned flags);
+  int remove(const keygen::buffer &akey, const keygen::buffer &adata);
+
+  static inline data_view S(const MDBX_val &v) {
+    return data_view(static_cast<const char *>(v.iov_base), v.iov_len);
+  }
+  static inline data_view S(const keygen::buffer &b) { return S(b->value); }
+
 public:
   testcase_hill(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run();
+      : testcase(config, pid), mirror(ItemCompare(this)),
+        mirror_commited(ItemCompare(this)) {}
+  bool run() override;
 };
 
 class testcase_append : public testcase {
