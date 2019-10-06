@@ -11919,9 +11919,9 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
   unsigned newindx = mc->mc_ki[mc->mc_top];
   unsigned nkeys = NUMKEYS(mp);
   if (mdbx_audit_enabled()) {
-    int err = mdbx_cursor_check(mc, true);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
+    rc = mdbx_cursor_check(mc, true);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
   }
 
   mdbx_debug("-----> splitting %s page %" PRIaPGNO
@@ -12123,12 +12123,12 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
 
   mdbx_debug("separator is %d [%s]", split_indx, DKEY(&sepkey));
   if (mdbx_audit_enabled()) {
-    int err = mdbx_cursor_check(mc, true);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-    err = mdbx_cursor_check(&mn, true);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
+    rc = mdbx_cursor_check(mc, true);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto done;
+    rc = mdbx_cursor_check(&mn, true);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto done;
   }
 
   /* Copy separator key to the parent. */
@@ -12145,9 +12145,9 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
       goto done;
     mdbx_cassert(mc, mc->mc_snum - snum == mc->mc_db->md_depth - depth);
     if (mdbx_audit_enabled()) {
-      int err = mdbx_cursor_check(mc, true);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
+      rc = mdbx_cursor_check(mc, true);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto done;
     }
 
     /* root split? */
