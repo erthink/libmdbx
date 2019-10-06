@@ -19,11 +19,9 @@ mandir  ?= $(prefix)/man
 suffix  ?=
 
 CC      ?= gcc
-CXX     ?= g++
 LD      ?= ld
 MDBX_OPTIONS ?= -D_GNU_SOURCE=1 -DNDEBUG=1
 CFLAGS  ?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread
-CXXFLAGS = -std=c++11 $(filter-out -std=gnu11,$(CFLAGS))
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
 LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
@@ -121,9 +119,12 @@ TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
 TEST_INC   := $(wildcard test/*.h)
 TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
+CXX        ?= g++
+CXXSTD     ?= $(shell $(CXX) -std=c++27 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
+CXXFLAGS   := $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 
 MAN_SRCDIR := src/man1/
-ALLOY_DEPS = $(wildcard src/elements/*)
+ALLOY_DEPS := $(wildcard src/elements/*)
 MDBX_VERSION_GIT = ${shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or install latest git version'}
 MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')
 MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'Please fetch tags and/or install latest git version')
