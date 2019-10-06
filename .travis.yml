@@ -3,13 +3,26 @@ language: c cpp
 matrix:
   include:
     - os: linux
-      compiler: gcc
+      dist: precise
+      env: CC=cc CXX=c++
     - os: linux
+      dist: trusty
       compiler: clang
+      env: CC=clang CXX=clang++
+    - os: linux
+      dist: xenial
+      compiler: gcc
+      env: CC=gcc CXX=g++
+    - os: linux
+      dist: bionic
+      compiler: clang
+      env: CC=clang CXX=clang++
     - os: osx
       osx_image: xcode11
+      env: CC=cc CXX=c++
     - os: osx
       osx_image: xcode9.4
+      env: CC=cc CXX=c++
 
 script: >
   if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then
@@ -33,6 +46,8 @@ env:
 
 before_install:
   - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+  - ${CC} --version
+  - ${CXX} --version
 
 addons:
   coverity_scan:
