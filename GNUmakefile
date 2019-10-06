@@ -20,7 +20,7 @@ suffix  ?=
 
 CC      ?= gcc
 LD      ?= ld
-MDBX_OPTIONS ?= -D_GNU_SOURCE=1 -DNDEBUG=1
+MDBX_OPTIONS ?= -DNDEBUG=1
 CFLAGS  ?= -O2 -g3 -Wall -Werror -Wextra -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old

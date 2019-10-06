@@ -49,6 +49,15 @@
 #   define MDBX_INTERNAL_VAR extern
 #endif /* MDBX_ALLOY */
 
+#ifndef MDBX_DISABLE_GNU_SOURCE
+#define MDBX_DISABLE_GNU_SOURCE 0
+#endif
+#if MDBX_DISABLE_GNU_SOURCE
+#undef _GNU_SOURCE
+#elif defined(__linux__) || defined(__gnu_linux__)
+#define _GNU_SOURCE
+#endif
+
 /*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */

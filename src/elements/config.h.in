@@ -28,6 +28,7 @@
 /* POSIX */
 #cmakedefine01 MDBX_USE_ROBUST
 #cmakedefine01 MDBX_USE_OFDLOCKS
+#cmakedefine01 MDBX_DISABLE_GNU_SOURCE
 
 /* Simulate "AUTO" values of tristate options */
 #cmakedefine MDBX_TXN_CHECKPID_AUTO

@@ -1275,10 +1275,7 @@ retry_mapview:;
   return rc;
 #else
   if (limit != map->length) {
-#if defined(_GNU_SOURCE) &&                                                    \
-    !(defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
-      defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||          \
-      defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__))
+#if defined(_GNU_SOURCE) && (defined(__linux__) || defined(__gnu_linux__))
     void *ptr = mremap(map->address, map->length, limit,
                        /* LY: in case changing the mapping size calling code
                           must guarantees the absence of competing threads, and
@@ -1292,7 +1289,7 @@ retry_mapview:;
     map->length = limit;
 #else
     return MDBX_RESULT_TRUE;
-#endif /* mremap() <= _GNU_SOURCE && !__FreeBSD__ */
+#endif /* _GNU_SOURCE && __linux__ */
   }
   return (flags & MDBX_RDONLY) ? MDBX_SUCCESS : mdbx_ftruncate(map->fd, size);
 #endif
