@@ -1615,6 +1615,13 @@ static int __must_check_result mdbx_update_key(MDBX_cursor *mc,
 static void mdbx_cursor_pop(MDBX_cursor *mc);
 static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 
+static int __must_check_result mdbx_audit_ex(MDBX_txn *txn,
+                                             unsigned retired_stored,
+                                             bool dont_filter_gc);
+static __inline int __must_check_result mdbx_audit(MDBX_txn *txn) {
+  return mdbx_audit_ex(txn, 0, (txn->mt_flags & MDBX_RDONLY) != 0);
+}
+
 static int __must_check_result mdbx_page_check(MDBX_env *env,
                                                const MDBX_page *const mp,
                                                bool maybe_unfinished);
@@ -4504,19 +4511,21 @@ static void mdbx_prep_backlog_data(MDBX_txn *txn, MDBX_cursor *mc,
 /* Count all the pages in each DB and in the freelist and make sure
  * it matches the actual number of pages being used.
  * All named DBs must be open for a correct count. */
-static __cold int mdbx_audit(MDBX_txn *txn, unsigned retired_stored) {
-  MDBX_val key, data;
+static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
+                                bool dont_filter_gc) {
+  pgno_t pending = 0;
+  if ((txn->mt_flags & MDBX_RDONLY) == 0) {
+    pending = txn->mt_loose_count +
+            (txn->mt_env->me_reclaimed_pglist
+                 ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist)
+                 : 0) +
+            (txn->mt_retired_pages
+                 ? MDBX_PNL_SIZE(txn->mt_retired_pages) - retired_stored
+                 : 0);
 
-  const pgno_t pending =
-      (txn->mt_flags & MDBX_RDONLY)
-          ? 0
-          : txn->mt_loose_count +
-                (txn->mt_env->me_reclaimed_pglist
-                     ? MDBX_PNL_SIZE(txn->mt_env->me_reclaimed_pglist)
-                     : 0) +
-                (txn->mt_retired_pages
-                     ? MDBX_PNL_SIZE(txn->mt_retired_pages) - retired_stored
-                     : 0);
+    for (MDBX_txn *parent = txn->mt_parent; parent; parent = parent->mt_parent)
+      pending += parent->mt_loose_count;
+  }
 
   MDBX_cursor_couple cx;
   int rc = mdbx_cursor_init(&cx.outer, txn, FREE_DBI);
@@ -4524,9 +4533,26 @@ static __cold int mdbx_audit(MDBX_txn *txn, unsigned retired_stored) {
     return rc;
 
   pgno_t freecount = 0;
-  while ((rc = mdbx_cursor_get(&cx.outer, &key, &data, MDBX_NEXT)) == 0)
+  MDBX_val key, data;
+  while ((rc = mdbx_cursor_get(&cx.outer, &key, &data, MDBX_NEXT)) == 0) {
+    if (!dont_filter_gc) {
+      txnid_t id;
+      memcpy(&id, key.iov_base, key.iov_len);
+      if (txn->mt_lifo_reclaimed) {
+        for (unsigned i = 1; i <= MDBX_PNL_SIZE(txn->mt_lifo_reclaimed); ++i)
+          if (id == txn->mt_lifo_reclaimed[i])
+            goto skip;
+      } else if (id <= txn->mt_env->me_last_reclaimed)
+        goto skip;
+    }
+
     freecount += *(pgno_t *)data.iov_base;
+  skip:;
+  }
   mdbx_tassert(txn, rc == MDBX_NOTFOUND);
+
+  for (MDBX_dbi i = FREE_DBI; i < txn->mt_numdbs; i++)
+    txn->mt_dbflags[i] &= ~DB_AUDITED;
 
   pgno_t count = 0;
   for (MDBX_dbi i = FREE_DBI; i <= MAIN_DBI; i++) {
@@ -4535,26 +4561,31 @@ static __cold int mdbx_audit(MDBX_txn *txn, unsigned retired_stored) {
     rc = mdbx_cursor_init(&cx.outer, txn, i);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
+    txn->mt_dbflags[i] |= DB_AUDITED;
     if (txn->mt_dbs[i].md_root == P_INVALID)
       continue;
     count += txn->mt_dbs[i].md_branch_pages + txn->mt_dbs[i].md_leaf_pages +
              txn->mt_dbs[i].md_overflow_pages;
 
+    if (i != MAIN_DBI)
+      continue;
     rc = mdbx_page_search(&cx.outer, NULL, MDBX_PS_FIRST);
     while (rc == MDBX_SUCCESS) {
       MDBX_page *mp = cx.outer.mc_pg[cx.outer.mc_top];
       for (unsigned j = 0; j < NUMKEYS(mp); j++) {
         MDBX_node *leaf = NODEPTR(mp, j);
-        if ((leaf->mn_flags & (F_DUPDATA | F_SUBDATA)) == F_SUBDATA) {
+        if (leaf->mn_flags == F_SUBDATA) {
           MDBX_db db_copy, *db;
           memcpy(db = &db_copy, NODEDATA(leaf), sizeof(db_copy));
           if ((txn->mt_flags & MDBX_RDONLY) == 0) {
             for (MDBX_dbi k = txn->mt_numdbs; --k > MAIN_DBI;) {
-              if ((txn->mt_dbflags[k] & MDBX_TBL_DIRTY) &&
+              if ((txn->mt_dbflags[k] & DB_DIRTY) &&
                   /* txn->mt_dbxs[k].md_name.iov_len > 0 && */
                   NODEKSZ(leaf) == txn->mt_dbxs[k].md_name.iov_len &&
                   memcmp(NODEKEY(leaf), txn->mt_dbxs[k].md_name.iov_base,
                          NODEKSZ(leaf)) == 0) {
+                mdbx_tassert(txn, (txn->mt_dbflags[k] & DB_STALE) == 0);
+                txn->mt_dbflags[k] |= DB_AUDITED;
                 db = txn->mt_dbs + k;
                 break;
               }
@@ -4567,6 +4598,20 @@ static __cold int mdbx_audit(MDBX_txn *txn, unsigned retired_stored) {
       rc = mdbx_cursor_sibling(&cx.outer, 1);
     }
     mdbx_tassert(txn, rc == MDBX_NOTFOUND);
+  }
+
+  for (MDBX_dbi i = FREE_DBI; i < txn->mt_numdbs; i++) {
+    if ((txn->mt_dbflags[i] & (DB_VALID | DB_AUDITED | DB_STALE)) != DB_VALID)
+      continue;
+    if (F_ISSET(txn->mt_dbflags[i], DB_DIRTY | DB_CREAT)) {
+      count += txn->mt_dbs[i].md_branch_pages + txn->mt_dbs[i].md_leaf_pages +
+               txn->mt_dbs[i].md_overflow_pages;
+    } else {
+      mdbx_warning("audit %s@%" PRIaTXN ": unable account dbi %d / \"%*s\"",
+                   txn->mt_parent ? "nested-" : "", txn->mt_txnid, i,
+                   (int)txn->mt_dbxs[i].md_name.iov_len,
+                   (const char *)txn->mt_dbxs[i].md_name.iov_base);
+    }
   }
 
   if (pending + freecount + count + NUM_METAS == txn->mt_next_pgno)
@@ -4696,7 +4741,7 @@ retry:
     // handle loose pages - put ones into the reclaimed- or retired-list
     mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
     if (mdbx_audit_enabled()) {
-      rc = mdbx_audit(txn, retired_stored);
+      rc = mdbx_audit_ex(txn, retired_stored, false);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
@@ -4783,7 +4828,7 @@ retry:
       txn->mt_loose_pages = NULL;
       txn->mt_loose_count = 0;
       if (mdbx_audit_enabled()) {
-        rc = mdbx_audit(txn, retired_stored);
+        rc = mdbx_audit_ex(txn, retired_stored, false);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
@@ -4821,7 +4866,7 @@ retry:
         txn->mt_next_pgno = tail;
         mdbx_tassert(txn, mdbx_pnl_check(env->me_reclaimed_pglist, true));
         if (mdbx_audit_enabled()) {
-          rc = mdbx_audit(txn, retired_stored);
+          rc = mdbx_audit_ex(txn, retired_stored, false);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
         }
@@ -4876,7 +4921,7 @@ retry:
 
     mdbx_trace(" >> reserving");
     if (mdbx_audit_enabled()) {
-      rc = mdbx_audit(txn, retired_stored);
+      rc = mdbx_audit_ex(txn, retired_stored, false);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
@@ -5192,7 +5237,7 @@ retry:
 
       left -= chunk;
       if (mdbx_audit_enabled()) {
-        rc = mdbx_audit(txn, retired_stored + amount - left);
+        rc = mdbx_audit_ex(txn, retired_stored + amount - left, true);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
@@ -5617,7 +5662,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   env->me_reclaimed_pglist = NULL;
 
   if (mdbx_audit_enabled()) {
-    rc = mdbx_audit(txn, MDBX_PNL_SIZE(txn->mt_retired_pages));
+    rc = mdbx_audit_ex(txn, MDBX_PNL_SIZE(txn->mt_retired_pages), true);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }

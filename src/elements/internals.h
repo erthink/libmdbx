@@ -781,6 +781,7 @@ struct MDBX_txn {
 #define DB_VALID 0x10           /* DB handle is valid, see also MDBX_VALID */
 #define DB_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
 #define DB_DUPDATA 0x40         /* DB is MDBX_DUPSORT data */
+#define DB_AUDITED 0x80         /* Internal flag for accounting during audit */
   /* In write txns, array of cursors for each DB */
   MDBX_cursor **mt_cursors;
   /* Array of flags for each DB */
