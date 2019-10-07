@@ -15153,7 +15153,7 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
             *old_data = *new_data;
             goto bailout;
           }
-          /* В оригинальной LMDB фладок MDBX_CURRENT здесь приведет
+          /* В оригинальной LMDB флажок MDBX_CURRENT здесь приведет
            * к замене данных без учета MDBX_DUPSORT сортировки,
            * но здесь это в любом случае допустимо, так как мы
            * проверили что для ключа есть только одно значение. */
