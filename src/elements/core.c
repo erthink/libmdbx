@@ -14359,8 +14359,10 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     MDBX_node *node = NODEPTR(mp, i);
     payload_size += NODESIZE + NODEKSZ(node);
 
-    if (type == MDBX_page_branch)
+    if (type == MDBX_page_branch) {
+      assert(i > 0 || NODEKSZ(node) == 0);
       continue;
+    }
 
     assert(type == MDBX_page_leaf);
     switch (node->mn_flags) {
@@ -14413,7 +14415,7 @@ static int __cold mdbx_env_walk(mdbx_walk_ctx_t *ctx, const char *dbi,
     } break;
 
     case F_DUPDATA /* short sub-page */: {
-      if (unlikely(NODEDSZ(node) < PAGEHDRSZ))
+      if (unlikely(NODEDSZ(node) <= PAGEHDRSZ))
         return MDBX_CORRUPTED;
 
       MDBX_page *sp = NODEDATA(node);
