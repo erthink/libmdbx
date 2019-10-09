@@ -232,18 +232,18 @@ void testcase::txn_end(bool abort) {
   log_trace("<< txn_end(%s)", abort ? "abort" : "commit");
 }
 
-void testcase::cursor_open(unsigned dbi) {
-  log_trace(">> cursor_open(%u)", dbi);
+void testcase::cursor_open(MDBX_dbi handle) {
+  log_trace(">> cursor_open(%u)", handle);
   assert(!cursor_guard);
   assert(txn_guard);
 
   MDBX_cursor *cursor = nullptr;
-  int rc = mdbx_cursor_open(txn_guard.get(), dbi, &cursor);
+  int rc = mdbx_cursor_open(txn_guard.get(), handle, &cursor);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_cursor_open()", rc);
   cursor_guard.reset(cursor);
 
-  log_trace("<< cursor_open(%u)", dbi);
+  log_trace("<< cursor_open(%u)", handle);
 }
 
 void testcase::cursor_close() {
@@ -435,14 +435,14 @@ void testcase::update_canary(uint64_t increment) {
   log_trace("<< update_canary: sequence = %" PRIu64, canary_now.y);
 }
 
-int testcase::db_open__begin__table_create_open_clean(MDBX_dbi &dbi) {
+int testcase::db_open__begin__table_create_open_clean(MDBX_dbi &handle) {
   db_open();
 
   int err, retry_left = 42;
   for (;;) {
     txn_begin(false);
-    dbi = db_table_open(true);
-    db_table_clear(dbi);
+    handle = db_table_open(true);
+    db_table_clear(handle);
     err = breakable_commit();
     if (likely(err == MDBX_SUCCESS)) {
       txn_begin(false);

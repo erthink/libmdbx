@@ -175,7 +175,7 @@ protected:
   void txn_end(bool abort);
   int breakable_restart();
   void txn_restart(bool abort, bool readonly, unsigned flags = 0);
-  void cursor_open(unsigned dbi);
+  void cursor_open(MDBX_dbi handle);
   void cursor_close();
   void txn_inject_writefault(void);
   void txn_inject_writefault(MDBX_txn *txn);
@@ -189,7 +189,7 @@ protected:
   void db_table_drop(MDBX_dbi handle);
   void db_table_clear(MDBX_dbi handle, MDBX_txn *txn = nullptr);
   void db_table_close(MDBX_dbi handle);
-  int db_open__begin__table_create_open_clean(MDBX_dbi &dbi);
+  int db_open__begin__table_create_open_clean(MDBX_dbi &handle);
 
   bool wait4start();
   void report(size_t nops_done);

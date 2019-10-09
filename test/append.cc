@@ -15,7 +15,6 @@
 #include "test.h"
 
 bool testcase_append::run() {
-  MDBX_dbi dbi;
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {
     log_notice("append: bailout-prepare due '%s'", mdbx_strerror(err));
