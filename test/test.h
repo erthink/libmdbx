@@ -95,9 +95,45 @@ typedef std::unique_ptr<MDBX_cursor, cursor_deleter> scoped_cursor_guard;
 
 class testcase {
 protected:
+#if HAVE_cxx17_std_string_view
+  using data_view = std::string_view;
+#else
+  using data_view = std::string;
+#endif
+  static inline data_view S(const MDBX_val &v) {
+    return data_view(static_cast<const char *>(v.iov_base), v.iov_len);
+  }
+  static inline data_view S(const keygen::buffer &b) { return S(b->value); }
+
+  using Item = std::pair<std::string, std::string>;
+  struct ItemCompare {
+    const testcase *context;
+    ItemCompare(const testcase *owner) : context(owner) {}
+
+    bool operator()(const Item &a, const Item &b) const {
+      MDBX_val va, vb;
+      va.iov_base = (void *)a.first.data();
+      va.iov_len = a.first.size();
+      vb.iov_base = (void *)b.first.data();
+      vb.iov_len = b.first.size();
+      int cmp = mdbx_cmp(context->txn_guard.get(), context->dbi, &va, &vb);
+      if (cmp == 0 &&
+          (context->config.params.table_flags & MDBX_DUPSORT) != 0) {
+        va.iov_base = (void *)a.second.data();
+        va.iov_len = a.second.size();
+        vb.iov_base = (void *)b.second.data();
+        vb.iov_len = b.second.size();
+        cmp = mdbx_dcmp(context->txn_guard.get(), context->dbi, &va, &vb);
+      }
+      return cmp < 0;
+    }
+  };
+  using SET = std::set<Item, ItemCompare>;
+
   const actor_config &config;
   const mdbx_pid_t pid;
 
+  MDBX_dbi dbi;
   scoped_db_guard db_guard;
   scoped_txn_guard txn_guard;
   scoped_cursor_guard cursor_guard;
@@ -112,6 +148,14 @@ protected:
   struct {
     mdbx_canary canary;
   } last;
+
+  SET speculum;
+  bool speculum_verify() const;
+  int insert(const keygen::buffer &akey, const keygen::buffer &adata,
+             unsigned flags);
+  int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
+              const keygen::buffer &old_value, unsigned flags);
+  int remove(const keygen::buffer &akey, const keygen::buffer &adata);
 
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                           uint64_t txn, unsigned gap, size_t space, int retry);
@@ -160,7 +204,8 @@ protected:
 
 public:
   testcase(const actor_config &config, const mdbx_pid_t pid)
-      : config(config), pid(pid), signalled(false), nops_completed(0) {
+      : config(config), pid(pid), signalled(false), nops_completed(0),
+        speculum(ItemCompare(this)) {
     start_timestamp.reset();
     memset(&last, 0, sizeof(last));
   }
@@ -181,57 +226,11 @@ public:
 
 class testcase_hill : public testcase {
   using inherited = testcase;
-
-#if HAVE_cxx17_std_string_view
-  using data_view = std::string_view;
-#else
-  using data_view = std::string;
-#endif
-
-  MDBX_dbi dbi;
-  using Item = std::pair<std::string, std::string>;
-  struct ItemCompare {
-    const testcase_hill *context;
-    ItemCompare(const testcase_hill *owner) : context(owner) {}
-
-    bool operator()(const Item &a, const Item &b) const {
-      MDBX_val va, vb;
-      va.iov_base = (void *)a.first.data();
-      va.iov_len = a.first.size();
-      vb.iov_base = (void *)b.first.data();
-      vb.iov_len = b.first.size();
-      int cmp = mdbx_cmp(context->txn_guard.get(), context->dbi, &va, &vb);
-      if (cmp == 0 &&
-          (context->config.params.table_flags & MDBX_DUPSORT) != 0) {
-        va.iov_base = (void *)a.second.data();
-        va.iov_len = a.second.size();
-        vb.iov_base = (void *)b.second.data();
-        vb.iov_len = b.second.size();
-        cmp = mdbx_dcmp(context->txn_guard.get(), context->dbi, &va, &vb);
-      }
-      return cmp < 0;
-    }
-  };
-
-  using set = std::set<Item, ItemCompare>;
-  set mirror, mirror_commited;
-
-  bool verify() const;
-  int insert(const keygen::buffer &akey, const keygen::buffer &adata,
-             unsigned flags);
-  int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
-              const keygen::buffer &old_value, unsigned flags);
-  int remove(const keygen::buffer &akey, const keygen::buffer &adata);
-
-  static inline data_view S(const MDBX_val &v) {
-    return data_view(static_cast<const char *>(v.iov_base), v.iov_len);
-  }
-  static inline data_view S(const keygen::buffer &b) { return S(b->value); }
+  SET speculum_commited;
 
 public:
   testcase_hill(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid), mirror(ItemCompare(this)),
-        mirror_commited(ItemCompare(this)) {}
+      : testcase(config, pid), speculum_commited(ItemCompare(this)) {}
   bool run() override;
 };
 

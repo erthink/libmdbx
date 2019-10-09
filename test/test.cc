@@ -588,3 +588,128 @@ bool test_execute(const actor_config &config_const) {
     return false;
   }
 }
+
+//-----------------------------------------------------------------------------
+
+int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
+                     unsigned flags) {
+  int err = mdbx_put(txn_guard.get(), dbi, &akey->value, &adata->value, flags);
+  if (err == MDBX_SUCCESS && config.params.speculum) {
+    const auto S_key = S(akey);
+    const auto S_data = S(adata);
+    const bool inserted = speculum.emplace(S_key, S_data).second;
+    assert(inserted);
+    (void)inserted;
+  }
+  return err;
+}
+
+int testcase::replace(const keygen::buffer &akey,
+                      const keygen::buffer &new_data,
+                      const keygen::buffer &old_data, unsigned flags) {
+  if (config.params.speculum) {
+    const auto S_key = S(akey);
+    const auto S_old = S(old_data);
+    const auto S_new = S(new_data);
+    const auto removed = speculum.erase(SET::key_type(S_key, S_old));
+    assert(removed == 1);
+    (void)removed;
+    const bool inserted = speculum.emplace(S_key, S_new).second;
+    assert(inserted);
+    (void)inserted;
+  }
+  return mdbx_replace(txn_guard.get(), dbi, &akey->value, &new_data->value,
+                      &old_data->value, flags);
+}
+
+int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
+  if (config.params.speculum) {
+    const auto S_key = S(akey);
+    const auto S_data = S(adata);
+    const auto removed = speculum.erase(SET::key_type(S_key, S_data));
+    assert(removed == 1);
+    (void)removed;
+  }
+  return mdbx_del(txn_guard.get(), dbi, &akey->value, &adata->value);
+}
+
+bool testcase::speculum_verify() const {
+  if (!config.params.speculum)
+    return true;
+
+  char dump_key[128], dump_value[128];
+  char dump_mkey[128], dump_mvalue[128];
+
+  MDBX_cursor *cursor;
+  int err = mdbx_cursor_open(txn_guard.get(), dbi, &cursor);
+  if (err != MDBX_SUCCESS)
+    failure_perror("mdbx_cursor_open()", err);
+
+  bool rc = true;
+  MDBX_val akey, avalue;
+  MDBX_val mkey, mvalue;
+  err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_FIRST);
+
+  assert(std::is_sorted(speculum.cbegin(), speculum.cend(), ItemCompare(this)));
+  auto it = speculum.cbegin();
+  while (true) {
+    if (err != MDBX_SUCCESS) {
+      akey.iov_len = avalue.iov_len = 0;
+      akey.iov_base = avalue.iov_base = nullptr;
+    }
+    const auto S_key = S(akey);
+    const auto S_data = S(avalue);
+    if (it != speculum.cend()) {
+      mkey.iov_base = (void *)it->first.c_str();
+      mkey.iov_len = it->first.size();
+      mvalue.iov_base = (void *)it->second.c_str();
+      mvalue.iov_len = it->second.size();
+    }
+    if (err == MDBX_SUCCESS && it != speculum.cend() && S_key == it->first &&
+        S_data == it->second) {
+      ++it;
+      err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_NEXT);
+    } else if (err == MDBX_SUCCESS &&
+               (it == speculum.cend() || S_key < it->first ||
+                (S_key == it->first && S_data < it->second))) {
+      if (it != speculum.cend()) {
+        log_error("extra pair: db{%s, %s} < mi{%s, %s}",
+                  mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
+                  mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)),
+                  mdbx_dump_val(&mkey, dump_mkey, sizeof(dump_mkey)),
+                  mdbx_dump_val(&mvalue, dump_mvalue, sizeof(dump_mvalue)));
+      } else {
+        log_error("extra pair: db{%s, %s} < mi.END",
+                  mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
+                  mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)));
+      }
+      err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_NEXT);
+      rc = false;
+    } else if (it != speculum.cend() &&
+               (err == MDBX_NOTFOUND || S_key > it->first ||
+                (S_key == it->first && S_data > it->second))) {
+      if (err == MDBX_NOTFOUND) {
+        log_error("lost pair: db.END > mi{%s, %s}",
+                  mdbx_dump_val(&mkey, dump_mkey, sizeof(dump_mkey)),
+                  mdbx_dump_val(&mvalue, dump_mvalue, sizeof(dump_mvalue)));
+      } else {
+        log_error("lost pair: db{%s, %s} > mi{%s, %s}",
+                  mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
+                  mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)),
+                  mdbx_dump_val(&mkey, dump_mkey, sizeof(dump_mkey)),
+                  mdbx_dump_val(&mvalue, dump_mvalue, sizeof(dump_mvalue)));
+      }
+      ++it;
+      rc = false;
+    } else if (err == MDBX_NOTFOUND && it == speculum.cend()) {
+      break;
+    } else if (err != MDBX_SUCCESS) {
+      failure_perror("mdbx_cursor_get()", err);
+    } else {
+      assert(!"WTF?");
+    }
+  }
+
+  mdbx_cursor_close(cursor);
+  return rc;
+}

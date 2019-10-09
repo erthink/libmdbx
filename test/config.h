@@ -266,6 +266,7 @@ struct actor_params_pod {
 
   bool drop_table;
   bool ignore_dbfull;
+  bool speculum;
 };
 
 struct actor_config_pod {

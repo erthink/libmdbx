@@ -416,6 +416,9 @@ void dump(const char *title) {
     log_verbose("drop table: %s\n", i->params.drop_table ? "Yes" : "No");
     log_verbose("ignore MDBX_MAP_FULL error: %s\n",
                 i->params.ignore_dbfull ? "Yes" : "No");
+    log_verbose("verifying by speculum: %s\n",
+                i->params.speculum ? "Yes" : "No");
+
     indent.pop();
   }
 

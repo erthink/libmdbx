@@ -71,6 +71,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 
   drop_table = false;
   ignore_dbfull = false;
+  speculum = false;
 
   max_readers = 42;
   max_tables = 42;
@@ -295,6 +296,8 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "ignore-dbfull",
                              params.ignore_dbfull))
+      continue;
+    if (config::parse_option(argc, argv, narg, "speculum", params.speculum))
       continue;
     if (config::parse_option(argc, argv, narg, "dump-config",
                              global::config::dump_config))

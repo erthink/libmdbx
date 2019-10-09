@@ -29,7 +29,6 @@ static unsigned edge2count(uint64_t edge, unsigned count_max) {
 }
 
 bool testcase_ttl::run() {
-  MDBX_dbi dbi;
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {
     log_notice("ttl: bailout-prepare due '%s'", mdbx_strerror(err));
