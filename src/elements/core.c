@@ -275,7 +275,7 @@ size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
-static __inline bool safe64_is_valid(uint64_t v) {
+static __maybe_unused __inline bool safe64_is_valid(uint64_t v) {
 #if MDBX_WORDBITS >= 64
   return v < SAFE64_INVALID_THRESHOLD;
 #else
@@ -283,7 +283,8 @@ static __inline bool safe64_is_valid(uint64_t v) {
 #endif /* MDBX_WORDBITS */
 }
 
-static __inline bool safe64_is_valid_ptr(const mdbx_safe64_t *ptr) {
+static __maybe_unused __inline bool
+safe64_is_valid_ptr(const mdbx_safe64_t *ptr) {
   mdbx_compiler_barrier();
 #if MDBX_64BIT_ATOMIC
   return ptr->atomic < SAFE64_INVALID_THRESHOLD;
@@ -1611,7 +1612,8 @@ static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 static int __must_check_result mdbx_audit_ex(MDBX_txn *txn,
                                              unsigned retired_stored,
                                              bool dont_filter_gc);
-static __inline int __must_check_result mdbx_audit(MDBX_txn *txn) {
+static __maybe_unused __inline int __must_check_result
+mdbx_audit(MDBX_txn *txn) {
   return mdbx_audit_ex(txn, 0, (txn->mt_flags & MDBX_RDONLY) != 0);
 }
 
