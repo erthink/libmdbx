@@ -75,7 +75,11 @@ void testcase_nested::push_txn() {
       prng32() & (MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC), &txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
+#if __cplusplus >= 201703L
   stack.emplace(txn, serial, fifo, speculum);
+#else
+  stack.push(std::make_tuple(scoped_txn_guard(txn), serial, fifo, speculum));
+#endif
   std::swap(txn_guard, std::get<0>(stack.top()));
   log_verbose("begin level#%zu txn, serial %" PRIu64, stack.size(), serial);
 }
