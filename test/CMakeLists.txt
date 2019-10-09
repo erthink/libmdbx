@@ -29,6 +29,7 @@ add_executable(mdbx_test
   utils.h
   append.cc
   ttl.cc
+  nested.cc
   )
 
 set_target_properties(mdbx_test PROPERTIES

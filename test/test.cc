@@ -37,6 +37,8 @@ const char *testcase2str(const actor_testcase testcase) {
     return "append";
   case ac_ttl:
     return "ttl";
+  case ac_nested:
+    return "nested";
   }
 }
 
@@ -195,6 +197,20 @@ int testcase::breakable_commit() {
 
   log_trace("<< txn_commit: %s", rc ? "failed" : "Ok");
   return rc;
+}
+
+unsigned testcase::txn_underutilization_x256(MDBX_txn *txn) const {
+  if (txn) {
+    MDBX_txn_info info;
+    int err = mdbx_txn_info(txn, &info, false);
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_txn_info()", err);
+    const size_t left = size_t(info.txn_space_leftover);
+    const size_t total =
+        size_t(info.txn_space_leftover) + size_t(info.txn_space_dirty);
+    return (unsigned)(left / (total >> 8));
+  }
+  return 0;
 }
 
 void testcase::txn_end(bool abort) {
@@ -479,9 +495,9 @@ void testcase::db_table_drop(MDBX_dbi handle) {
   }
 }
 
-void testcase::db_table_clear(MDBX_dbi handle) {
+void testcase::db_table_clear(MDBX_dbi handle, MDBX_txn *txn) {
   log_trace(">> testcase::db_table_clear, handle %u", handle);
-  int rc = mdbx_drop(txn_guard.get(), handle, false);
+  int rc = mdbx_drop(txn ? txn : txn_guard.get(), handle, false);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_drop(delete=false)", rc);
   log_trace("<< testcase::db_table_clear");
@@ -548,6 +564,9 @@ bool test_execute(const actor_config &config_const) {
       break;
     case ac_ttl:
       test.reset(new testcase_ttl(config, pid));
+      break;
+    case ac_nested:
+      test.reset(new testcase_nested(config, pid));
       break;
     default:
       test.reset(new testcase(config, pid));

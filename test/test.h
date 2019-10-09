@@ -22,7 +22,10 @@
 #include "osal.h"
 #include "utils.h"
 
+#include <deque>
 #include <set>
+#include <stack>
+#include <tuple>
 
 #ifndef HAVE_cxx17_std_string_view
 #if __cplusplus >= 201703L && __has_include(<string_view>)
@@ -160,6 +163,10 @@ protected:
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                           uint64_t txn, unsigned gap, size_t space, int retry);
 
+  bool is_nested_txn_available() const {
+    return (config.params.mode_flags & MDBX_WRITEMAP) == 0;
+  }
+  void kick_progress(bool active) const;
   void db_prepare();
   void db_open();
   void db_close();
@@ -176,10 +183,11 @@ protected:
   void update_canary(uint64_t increment);
   void checkdata(const char *step, MDBX_dbi handle, MDBX_val key2check,
                  MDBX_val expected_valued);
+  unsigned txn_underutilization_x256(MDBX_txn *txn) const;
 
   MDBX_dbi db_table_open(bool create);
   void db_table_drop(MDBX_dbi handle);
-  void db_table_clear(MDBX_dbi handle);
+  void db_table_clear(MDBX_dbi handle, MDBX_txn *txn = nullptr);
   void db_table_close(MDBX_dbi handle);
   int db_open__begin__table_create_open_clean(MDBX_dbi &dbi);
 
@@ -214,14 +222,13 @@ public:
   virtual bool run() { return true; }
   virtual bool teardown();
   virtual ~testcase() {}
-  void kick_progress(bool active) const;
 };
 
 class testcase_ttl : public testcase {
 public:
   testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
-  bool run();
+  bool run() override;
 };
 
 class testcase_hill : public testcase {
@@ -238,35 +245,35 @@ class testcase_append : public testcase {
 public:
   testcase_append(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
-  bool run();
+  bool run() override;
 };
 
 class testcase_deadread : public testcase {
 public:
   testcase_deadread(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
-  bool run();
+  bool run() override;
 };
 
 class testcase_deadwrite : public testcase {
 public:
   testcase_deadwrite(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
-  bool run();
+  bool run() override;
 };
 
 class testcase_jitter : public testcase {
 public:
   testcase_jitter(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
-  bool run();
+  bool run() override;
 };
 
 class testcase_try : public testcase {
 public:
   testcase_try(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
-  bool run();
+  bool run() override;
 };
 
 class testcase_copy : public testcase {
@@ -277,5 +284,28 @@ public:
   testcase_copy(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid),
         copy_pathname(config.params.pathname_db + "-copy") {}
-  bool run();
+  bool run() override;
+};
+
+class testcase_nested : public testcase {
+  using inherited = testcase;
+  using FIFO = std::deque<std::pair<uint64_t, unsigned>>;
+
+  uint64_t serial;
+  FIFO fifo;
+  std::stack<std::tuple<scoped_txn_guard, uint64_t, FIFO, SET>> stack;
+
+  bool trim_tail(unsigned window_width);
+  bool grow_head(unsigned head_count);
+  bool pop_txn(bool abort);
+  bool pop_txn() { return pop_txn(flipcoin_x2()); }
+  void push_txn();
+  bool stochastic_breakable_restart_with_nested(bool force_restart = false);
+
+public:
+  testcase_nested(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool setup() override;
+  bool run() override;
+  bool teardown() override;
 };

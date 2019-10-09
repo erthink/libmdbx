@@ -361,6 +361,10 @@ int main(int argc, char *const argv[]) {
       configure_actor(last_space_id, ac_ttl, value, params);
       continue;
     }
+    if (config::parse_option(argc, argv, narg, "nested", nullptr)) {
+      configure_actor(last_space_id, ac_nested, value, params);
+      continue;
+    }
     if (config::parse_option(argc, argv, narg, "failfast",
                              global::config::failfast))
       continue;

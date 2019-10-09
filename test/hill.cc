@@ -18,7 +18,7 @@ bool testcase_hill::run() {
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {
     log_notice("hill: bailout-prepare due '%s'", mdbx_strerror(err));
-    return true;
+    return false;
   }
   speculum.clear();
   speculum_commited.clear();

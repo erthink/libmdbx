@@ -331,6 +331,7 @@ double double_from_upper(uint64_t salt) {
 }
 
 bool flipcoin() { return bleach32((uint32_t)entropy_ticks()) & 1; }
+bool flipcoin_x2() { return (bleach32((uint32_t)entropy_ticks()) & 3) == 0; }
 
 bool jitter(unsigned probability_percent) {
   const uint32_t top = UINT32_MAX - UINT32_MAX % 100;

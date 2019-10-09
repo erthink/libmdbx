@@ -32,7 +32,7 @@ bool testcase_ttl::run() {
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {
     log_notice("ttl: bailout-prepare due '%s'", mdbx_strerror(err));
-    return true;
+    return false;
   }
 
   /* LY: тест "эмуляцией time-to-live":
@@ -53,18 +53,8 @@ bool testcase_ttl::run() {
 
   /* LY: для параметризации используем подходящие параметры, которые не имеют
    * здесь смысла в первоначальном значении. */
-  const unsigned window_max_lower =
-#ifdef __APPLE__
-      333;
-#else
-      999;
-#endif
-  const unsigned count_max_lower =
-#ifdef __APPLE__
-      333;
-#else
-      999;
-#endif
+  const unsigned window_max_lower = 333;
+  const unsigned count_max_lower = 333;
 
   const unsigned window_max = (config.params.batch_read > window_max_lower)
                                   ? config.params.batch_read
@@ -86,6 +76,7 @@ bool testcase_ttl::run() {
 
   std::deque<std::pair<uint64_t, unsigned>> fifo;
   uint64_t serial = 0;
+  bool rc = false;
   while (should_continue()) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
@@ -103,7 +94,7 @@ bool testcase_ttl::run() {
                   tail_count);
         fifo.pop_back();
         for (unsigned n = 0; n < tail_count; ++n) {
-          log_trace("ttl: remove-tail %" PRIu64, serial);
+          log_trace("ttl: remove-tail %" PRIu64, tail_serial);
           generate_pair(tail_serial);
           err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
           if (unlikely(err != MDBX_SUCCESS)) {
@@ -157,7 +148,9 @@ bool testcase_ttl::run() {
       serial = fifo.front().first;
       fifo.pop_front();
     }
+
     report(1);
+    rc = true;
   }
 
 bailout:
@@ -169,10 +162,10 @@ bailout:
       err = breakable_commit();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("ttl: bailout-clean due '%s'", mdbx_strerror(err));
-        return true;
+        return false;
       }
     } else
       db_table_close(dbi);
   }
-  return true;
+  return rc;
 }
