@@ -722,8 +722,8 @@ void LIBMDBX_API NTAPI mdbx_dll_handler(PVOID module, DWORD reason,
 
 /* Opaque structure for a database environment.
  *
- * An environment supports multiple databases, all residing in the same
- * shared-memory map. */
+ * An environment supports multiple key-value databases (aka key-value spaces
+ * or tables), all residing in the same shared-memory map. */
 typedef struct MDBX_env MDBX_env;
 
 /* Opaque structure for a transaction handle.
@@ -907,11 +907,20 @@ LIBMDBX_API char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 /* MDBX_WRITEMAP = map data into memory with write permission.
  *
  * Use a writeable memory map unless MDBX_RDONLY is set. This uses fewer mallocs
- * but loses protection from application bugs like wild pointer writes and other
- * bad updates into the database. This may be slightly faster for DBs that fit
- * entirely in RAM, but is slower for DBs larger than RAM. Also adds the
- * possibility for stray application writes thru pointers to silently corrupt
- * the database. Incompatible with nested transactions.
+ * and requires much less work for tracking database pages, but loses protection
+ * from application bugs like wild pointer writes and other bad updates into the
+ * database. This may be slightly faster for DBs that fit entirely in RAM, but
+ * is slower for DBs larger than RAM. Also adds the possibility for stray
+ * application writes thru pointers to silently corrupt the database.
+ * Incompatible with nested transactions.
+ *
+ * NOTE: The MDBX_WRITEMAP mode is incompatible with nested transactions, since
+ *       this is unreasonable. I.e. nested transactions requires mallocation of
+ *       database pages and more work for tracking ones, which neuters a
+ *       performance boost caused by the MDBX_WRITEMAP mode.
+ *
+ * NOTE: MDBX don't allow to mix processes with and without MDBX_WRITEMAP on
+ *       the same environment. In such case MDBX_INCOMPATIBLE will be generated.
  *
  *  - with MDBX_WRITEMAP = all data will be mapped into memory in the read-write
  *    mode. This offers a significant performance benefit, since the data will
@@ -924,9 +933,6 @@ LIBMDBX_API char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *  - without MDBX_WRITEMAP = data will be mapped into memory in the read-only
  *    mode. This requires stocking all modified database pages in memory and
  *    then writing them to disk through file operations.
- *
- * NOTE: MDBX don't allow to mix processes with and without MDBX_WRITEMAP on
- *       the same environment. In such case MDBX_INCOMPATIBLE will be generated.
  *
  * This flag affects only at environment opening but can't be changed after. */
 #define MDBX_WRITEMAP 0x80000u
