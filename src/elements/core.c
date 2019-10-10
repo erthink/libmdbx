@@ -938,7 +938,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
                                                                                \
       TYPE *hi = end - 1;                                                      \
       TYPE *lo = begin;                                                        \
-      while (top >= stack) {                                                   \
+      while (true) {                                                           \
         TYPE *mid = lo + ((hi - lo) >> 1);                                     \
         if (CMP(*mid, *lo))                                                    \
           SORT_SWAP(TYPE, *mid, *lo);                                          \
@@ -971,9 +971,12 @@ static int lcklist_detach_locked(MDBX_env *env) {
         } while (left <= right);                                               \
                                                                                \
         if (lo + SORT_THRESHOLD > right) {                                     \
-          if (left + SORT_THRESHOLD > hi)                                      \
-            SORT_POP(lo, hi);                                                  \
-          else                                                                 \
+          if (left + SORT_THRESHOLD > hi) {                                    \
+            if (top == stack)                                                  \
+              break;                                                           \
+            else                                                               \
+              SORT_POP(lo, hi);                                                \
+          } else                                                               \
             lo = left;                                                         \
         } else if (left + SORT_THRESHOLD > hi)                                 \
           hi = right;                                                          \
