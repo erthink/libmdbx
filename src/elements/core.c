@@ -7640,6 +7640,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
     mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
     mdbx_pnl_free(env->me_txn0->tw.retired_pages);
     mdbx_pnl_free(env->me_txn0->tw.spill_pages);
+    mdbx_pnl_free(env->me_txn0->tw.reclaimed_pglist);
     mdbx_free(env->me_txn0);
   }
 
