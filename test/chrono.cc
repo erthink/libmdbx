@@ -16,7 +16,10 @@
 
 namespace chrono {
 
+#ifndef NSEC_PER_SEC
 #define NSEC_PER_SEC 1000000000u
+#endif /* NSEC_PER_SEC */
+
 uint32_t ns2fractional(uint32_t ns) {
   assert(ns < NSEC_PER_SEC);
   /* LY: здесь и далее используется "длинное деление", которое
@@ -30,7 +33,9 @@ uint32_t fractional2ns(uint32_t fractional) {
   return (fractional * (uint64_t)NSEC_PER_SEC) >> 32;
 }
 
+#ifndef USEC_PER_SEC
 #define USEC_PER_SEC 1000000u
+#endif /* USEC_PER_SEC */
 uint32_t us2fractional(uint32_t us) {
   assert(us < USEC_PER_SEC);
   return ((uint64_t)us << 32) / USEC_PER_SEC;
@@ -40,7 +45,9 @@ uint32_t fractional2us(uint32_t fractional) {
   return (fractional * (uint64_t)USEC_PER_SEC) >> 32;
 }
 
+#ifndef MSEC_PER_SEC
 #define MSEC_PER_SEC 1000u
+#endif /* MSEC_PER_SEC */
 uint32_t ms2fractional(uint32_t ms) {
   assert(ms < MSEC_PER_SEC);
   return ((uint64_t)ms << 32) / MSEC_PER_SEC;
