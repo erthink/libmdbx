@@ -278,5 +278,5 @@ bool testcase_nested::run() {
   while (!stack.empty())
     pop_txn(false);
 
-  return true;
+  return speculum_verify();
 }
