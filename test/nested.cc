@@ -105,7 +105,8 @@ bool testcase_nested::pop_txn(bool abort) {
       should_continue = false;
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
         err = mdbx_txn_abort(txn);
-        if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH))
+        if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH &&
+                     err != MDBX_BAD_TXN))
           failure_perror("mdbx_txn_abort()", err);
       } else
         failure_perror("mdbx_txn_commit()", err);
