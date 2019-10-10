@@ -85,6 +85,10 @@
 #endif
 #endif /* !xBSD */
 
+#if defined(__APPLE__) || defined(__MACH__) || __has_include(<malloc/malloc.h>)
+#include <malloc/malloc.h>
+#endif /* MacOS */
+
 #if defined(__linux__) || defined(__gnu_linux__)
 #include <sys/sendfile.h>
 #endif /* Linux */
@@ -178,6 +182,14 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define mdbx_free free
 #define mdbx_strdup strdup
 #endif /* Platform */
+
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+/* malloc_usable_size() already provided */
+#elif defined(__APPLE__)
+#define malloc_usable_size(ptr) malloc_size(ptr)
+#elif defined(_MSC_VER) && !MDBX_AVOID_CRT
+#define malloc_usable_size(ptr) _msize(ptr)
+#endif /* malloc_usable_size */
 
 /* *INDENT-OFF* */
 /* clang-format off */
