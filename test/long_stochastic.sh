@@ -8,8 +8,21 @@ set -euo pipefail
 
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
 
+## NOTE: Valgrind could produce some false-positive warnings
+##       in multi-process environment with shared memory.
+##       For instance, when the process "A" explicitly marks a memory
+##       region as "undefined", the process "B" fill it,
+##       and after this process "A" read such region, etc.
+#VALGRIND="valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt"
+
 ###############################################################################
 # 1. clean data from prev runs and examine available RAM
+
+if [[ -v VALGRIND && ! -z "$VALGRIND" ]]; then
+	rm -f valgrind-*.log
+else
+	VALGRIND=time
+fi
 
 WANNA_MOUNT=0
 case ${UNAME} in
@@ -164,9 +177,9 @@ function probe {
 	echo "=============================================== $(date)"
 	echo "${caption}: $*"
 	rm -f ${TESTDB_DIR}/* \
-		&& ./mdbx_test --ignore-dbfull --repeat=42 --pathname=${TESTDB_DIR}/long.db "$@" | lz4 > ${TESTDB_DIR}/long.log.lz4 \
-		&& ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=42 --pathname=${TESTDB_DIR}/long.db "$@" | lz4 > ${TESTDB_DIR}/long.log.lz4 \
+		&& ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
+		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
 		|| (echo "FAILED"; exit 1)
 }
 

@@ -965,8 +965,11 @@ struct MDBX_env {
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
-#ifdef USE_VALGRIND
+#ifdef MDBX_USE_VALGRIND
   int me_valgrind_handle;
+#endif
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+  pgno_t me_poison_edge;
 #endif
   MDBX_env *me_lcklist_next;
 

@@ -2211,12 +2211,12 @@ static __must_check_result int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
 
   if (loose) {
     mdbx_debug("loosen db %d page %" PRIaPGNO, DDBI(mc), mp->mp_pgno);
+    VALGRIND_MAKE_MEM_UNDEFINED(mp, txn->mt_env->me_psize);
+    VALGRIND_MAKE_MEM_DEFINED(&mp->mp_pgno, sizeof(mp->mp_pgno));
     if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
       mdbx_kill_page(txn->mt_env, mp);
     MDBX_page **link = &NEXT_LOOSE_PAGE(mp);
     mp->mp_flags = P_LOOSE | P_DIRTY;
-    VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
-    ASAN_UNPOISON_MEMORY_REGION(link, sizeof(*link));
     *link = txn->tw.loose_pages;
     txn->tw.loose_pages = mp;
     txn->tw.loose_count++;
@@ -2721,7 +2721,7 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
 
 __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
                                  const pgno_t limit_pgno) {
-#ifdef USE_VALGRIND
+#ifdef MDBX_USE_VALGRIND
   const size_t prev_mapsize = env->me_mapsize;
   void *const prev_mapaddr = env->me_map;
 #endif
@@ -2792,7 +2792,7 @@ bailout:
       mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
       env->me_txn->mt_end_pgno = env->me_txn0->mt_end_pgno = size_pgno;
     }
-#ifdef USE_VALGRIND
+#ifdef MDBX_USE_VALGRIND
     if (prev_mapsize != env->me_mapsize || prev_mapaddr != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
       env->me_valgrind_handle = 0;
@@ -3664,6 +3664,77 @@ static void mdbx_cursors_eot(MDBX_txn *txn, unsigned merge) {
   }
 }
 
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+/* Find largest mvcc-snapshot still referenced by this process. */
+static pgno_t mdbx_find_largest_this(MDBX_env *env, pgno_t largest) {
+  MDBX_lockinfo *const lck = env->me_lck;
+  if (likely(lck != NULL /* exclusive mode */)) {
+    const unsigned snap_nreaders = lck->mti_numreaders;
+    for (unsigned i = 0; i < snap_nreaders; ++i) {
+    retry:
+      if (lck->mti_readers[i].mr_pid == env->me_pid) {
+        /* mdbx_jitter4testing(true); */
+        const pgno_t snap_pages = lck->mti_readers[i].mr_snapshot_pages_used;
+        const txnid_t snap_txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
+        mdbx_memory_barrier();
+        if (unlikely(snap_pages != lck->mti_readers[i].mr_snapshot_pages_used ||
+                     snap_txnid != safe64_read(&lck->mti_readers[i].mr_txnid)))
+          goto retry;
+        if (largest < snap_pages &&
+            lck->mti_oldest_reader <= /* ignore pending updates */ snap_txnid &&
+            snap_txnid <= env->me_txn0->mt_txnid)
+          largest = snap_pages;
+      }
+    }
+  }
+  return largest;
+}
+
+static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
+#if !defined(__SANITIZE_ADDRESS__)
+  if (!RUNNING_ON_VALGRIND)
+    return;
+#endif
+
+  if (txn) { /* transaction start */
+    if (env->me_poison_edge < txn->mt_next_pgno)
+      env->me_poison_edge = txn->mt_next_pgno;
+    VALGRIND_MAKE_MEM_DEFINED(env->me_map, pgno2bytes(env, txn->mt_next_pgno));
+    ASAN_UNPOISON_MEMORY_REGION(env->me_map,
+                                pgno2bytes(env, txn->mt_next_pgno));
+    /* don't touch more, it should be already poisoned */
+  } else { /* transaction end */
+    bool should_unlock = false;
+    pgno_t last = MAX_PAGENO;
+    if (env->me_txn0 && env->me_txn0->mt_owner == mdbx_thread_self()) {
+      /* inside write-txn */
+      MDBX_meta *head = mdbx_meta_head(env);
+      last = head->mm_geo.next;
+    } else if (mdbx_txn_lock(env, true) == MDBX_SUCCESS) {
+      /* no write-txn */
+      last = NUM_METAS;
+      should_unlock = true;
+    } else {
+      /* write txn is running, therefore shouldn't poison any memory range */
+      return;
+    }
+
+    last = mdbx_find_largest_this(env, last);
+    const pgno_t edge = env->me_poison_edge ? env->me_poison_edge
+                                            : bytes2pgno(env, env->me_mapsize);
+    if (edge > last) {
+      env->me_poison_edge = last;
+      VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, last),
+                                 pgno2bytes(env, edge - last));
+      ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, last),
+                                pgno2bytes(env, edge - last));
+    }
+    if (should_unlock)
+      mdbx_txn_unlock(env);
+  }
+}
+#endif /* MDBX_USE_VALGRIND */
+
 /* Common code for mdbx_txn_begin() and mdbx_txn_renew(). */
 static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   MDBX_env *env = txn->mt_env;
@@ -3912,6 +3983,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       txn->mt_flags |= MDBX_SHRINK_ALLOWED;
       mdbx_srwlock_AcquireShared(&env->me_remap_guard);
     }
+#endif
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+    mdbx_txn_valgrind(env, txn);
 #endif
     return MDBX_SUCCESS;
   }
@@ -4338,11 +4412,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
 
   mdbx_ensure(env, txn->mt_txnid >=
                        /* paranoia is appropriate here */ *env->me_oldest);
+
   if (F_ISSET(txn->mt_flags, MDBX_RDONLY)) {
-#if defined(_WIN32) || defined(_WIN64)
-    if (txn->mt_flags & MDBX_SHRINK_ALLOWED)
-      mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
-#endif
     if (txn->to.reader) {
       mdbx_ensure(env, /* paranoia is appropriate here */
                   txn->mt_txnid == txn->to.reader->mr_txnid.inconsistent &&
@@ -4358,13 +4429,23 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       env->me_lck->mti_readers_refresh_flag = true;
       mdbx_flush_noncoherent_cpu_writeback();
     }
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+    mdbx_txn_valgrind(env, nullptr);
+#endif
+#if defined(_WIN32) || defined(_WIN64)
+    if (txn->mt_flags & MDBX_SHRINK_ALLOWED)
+      mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
+#endif
     txn->mt_numdbs = 0; /* prevent further DBI activity */
     txn->mt_flags = MDBX_RDONLY | MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
   } else if (!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED)) {
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+    if (txn == env->me_txn0)
+      mdbx_txn_valgrind(env, nullptr);
+#endif
     /* Export or close DBI handles created in this txn */
     mdbx_dbis_update(txn, mode & MDBX_END_UPDATE);
-
     if (!(mode & MDBX_END_EOTDONE)) /* !(already closed cursors) */
       mdbx_cursors_eot(txn, 0);
     if (!(env->me_flags & MDBX_WRITEMAP))
@@ -6074,6 +6155,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     const pgno_t largest_pgno = mdbx_find_largest(
         env, (head->mm_geo.next > pending->mm_geo.next) ? head->mm_geo.next
                                                         : pending->mm_geo.next);
+    VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, largest_pgno),
+                               env->me_mapsize - pgno2bytes(env, largest_pgno));
+    ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, largest_pgno),
+                              env->me_mapsize - pgno2bytes(env, largest_pgno));
     const size_t largest_aligned2os_bytes =
         pgno_align2os_bytes(env, largest_pgno);
     const pgno_t largest_aligned2os_pgno =
@@ -6420,10 +6505,15 @@ bailout:
 
 static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
                                const size_t usedsize) {
+  mdbx_assert(env, usedsize >= pgno2bytes(env, NUM_METAS));
   int rc = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
                      env->me_dbgeo.upper);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
+
+  VALGRIND_MAKE_MEM_NOACCESS(env->me_map + usedsize,
+                             env->me_mapsize - usedsize);
+  ASAN_POISON_MEMORY_REGION(env->me_map + usedsize, env->me_mapsize - usedsize);
 
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_DONTFORK) != 0))
@@ -6519,7 +6609,7 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
 #endif /* Windows */
   }
 
-#ifdef USE_VALGRIND
+#ifdef MDBX_USE_VALGRIND
   env->me_valgrind_handle =
       VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");
 #endif
@@ -7051,7 +7141,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     }
   }
 
-  err = mdbx_env_map(env, lck_rc /* exclusive status */, expected_bytes);
+  err = mdbx_env_map(env, lck_rc /* exclusive status */, used_bytes);
   if (err != MDBX_SUCCESS)
     return err;
 
@@ -7652,7 +7742,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
 
   if (env->me_map) {
     mdbx_munmap(&env->me_dxb_mmap);
-#ifdef USE_VALGRIND
+#ifdef MDBX_USE_VALGRIND
     VALGRIND_DISCARD(env->me_valgrind_handle);
     env->me_valgrind_handle = -1;
 #endif
@@ -15670,6 +15760,12 @@ __dll_export
     " MDBX_TXN_CHECKPID=" STRINGIFY(MDBX_TXN_CHECKPID)
     " MDBX_TXN_CHECKOWNER=" STRINGIFY(MDBX_TXN_CHECKOWNER)
     " MDBX_64BIT_ATOMIC=" STRINGIFY(MDBX_64BIT_ATOMIC)
+#ifdef __SANITIZE_ADDRESS__
+    " SANITIZE_ADDRESS=YES"
+#endif /* __SANITIZE_ADDRESS__ */
+#ifdef MDBX_USE_VALGRIND
+    " MDBX_USE_VALGRIND=YES"
+#endif /* MDBX_USE_VALGRIND */
 #ifdef _GNU_SOURCE
     " _GNU_SOURCE=YES"
 #else

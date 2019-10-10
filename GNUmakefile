@@ -149,6 +149,14 @@ check-fault: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
+VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
+memcheck check-valgrind: all mdbx_test
+	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
+		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
+		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy \
+		| tee -a $(TEST_LOG) | tail -n 42) \
+	&& $(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
+
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
 	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) -c $(1) -o $$@
