@@ -2126,9 +2126,9 @@ static __must_check_result int mdbx_refund_loose(MDBX_txn *txn) {
   for (MDBX_page **link = &txn->tw.loose_pages; *link;) {
     MDBX_page *mp = *link;
     if (likely(txn->mt_next_pgno != mp->mp_pgno + 1)) {
-      link = &NEXT_LOOSE_PAGE(*link);
+      link = &(*link)->mp_next;
     } else {
-      *link = NEXT_LOOSE_PAGE(mp);
+      *link = mp->mp_next;
       mdbx_verbose("refund loose-page: %" PRIaPGNO " -> %" PRIaPGNO,
                    txn->mt_next_pgno, mp->mp_pgno);
       txn->mt_next_pgno = mp->mp_pgno;
@@ -2215,9 +2215,8 @@ static __must_check_result int mdbx_page_loose(MDBX_cursor *mc, MDBX_page *mp) {
     VALGRIND_MAKE_MEM_DEFINED(&mp->mp_pgno, sizeof(mp->mp_pgno));
     if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
       mdbx_kill_page(txn->mt_env, mp);
-    MDBX_page **link = &NEXT_LOOSE_PAGE(mp);
     mp->mp_flags = P_LOOSE | P_DIRTY;
-    *link = txn->tw.loose_pages;
+    mp->mp_next = txn->tw.loose_pages;
     txn->tw.loose_pages = mp;
     txn->tw.loose_count++;
     int rc = mdbx_refund_loose(txn);
@@ -2892,7 +2891,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     mdbx_assert(env, mp && num);
     if (likely(num == 1 && txn->tw.loose_pages)) {
       np = txn->tw.loose_pages;
-      txn->tw.loose_pages = NEXT_LOOSE_PAGE(np);
+      txn->tw.loose_pages = np->mp_next;
       txn->tw.loose_count--;
       mdbx_debug("db %d use loose page %" PRIaPGNO, DDBI(mc), np->mp_pgno);
       ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize);
@@ -4832,8 +4831,7 @@ retry:
           if (unlikely((rc = mdbx_pnl_need(&txn->tw.retired_pages,
                                            txn->tw.loose_count)) != 0))
             goto bailout;
-          for (MDBX_page *mp = txn->tw.loose_pages; mp;
-               mp = NEXT_LOOSE_PAGE(mp))
+          for (MDBX_page *mp = txn->tw.loose_pages; mp; mp = mp->mp_next)
             mdbx_pnl_xappend(txn->tw.retired_pages, mp->mp_pgno);
           mdbx_trace("%s: append %u loose-pages to retired-pages",
                      dbg_prefix_mode, txn->tw.loose_count);
@@ -4848,7 +4846,7 @@ retry:
                          MDBX_PNL_ALLOCLEN(txn->tw.reclaimed_pglist) -
                          txn->tw.loose_count - 1;
         unsigned count = 0;
-        for (MDBX_page *mp = txn->tw.loose_pages; mp; mp = NEXT_LOOSE_PAGE(mp))
+        for (MDBX_page *mp = txn->tw.loose_pages; mp; mp = mp->mp_next)
           loose[++count] = mp->mp_pgno;
         MDBX_PNL_SIZE(loose) = count;
         mdbx_pnl_sort(loose);
@@ -4868,7 +4866,7 @@ retry:
           left -= mdbx_dpl_mark4removal(dl, mp);
 
         MDBX_page *dp = mp;
-        mp = NEXT_LOOSE_PAGE(mp);
+        mp = mp->mp_next;
         if ((env->me_flags & MDBX_WRITEMAP) == 0)
           mdbx_dpage_free(env, dp, 1);
       }
@@ -5683,7 +5681,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     /* Append our loose page list to parent's */
     MDBX_page **lp = &parent->tw.loose_pages;
     while (*lp)
-      lp = &NEXT_LOOSE_PAGE(*lp);
+      lp = &(*lp)->mp_next;
     *lp = txn->tw.loose_pages;
     parent->tw.loose_count += txn->tw.loose_count;
 

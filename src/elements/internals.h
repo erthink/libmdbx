@@ -399,8 +399,7 @@ typedef struct MDBX_meta {
  * in the snapshot: Either used by a database or listed in a freeDB record. */
 typedef struct MDBX_page {
   union {
-    struct MDBX_page *mp_next; /* for in-memory list of freed pages,
-                                * must be first field, see NEXT_LOOSE_PAGE */
+    struct MDBX_page *mp_next; /* for in-memory list of freed pages */
     uint64_t mp_validator;     /* checksum of page content or a txnid during
                                 * which the page has been updated */
   };
@@ -1227,10 +1226,6 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 
 /* The number of overflow pages needed to store the given size. */
 #define OVPAGES(env, size) (bytes2pgno(env, PAGEHDRSZ - 1 + (size)) + 1)
-
-/* Link in MDBX_txn.tw.loose_pages list.
- * Kept outside the page header, which is needed when reusing the page. */
-#define NEXT_LOOSE_PAGE(p) (*(MDBX_page **)((p) + 2))
 
 /* Header for a single key/data pair within a page.
  * Used in pages of type P_BRANCH and P_LEAF without P_LEAF2.
