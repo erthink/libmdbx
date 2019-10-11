@@ -6172,22 +6172,25 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                 pgno2bytes(env, edge - largest_pgno));
     }
 #endif /* MDBX_USE_VALGRIND */
+#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
     const size_t largest_aligned2os_bytes =
         pgno_align2os_bytes(env, largest_pgno);
     const pgno_t largest_aligned2os_pgno =
         bytes2pgno(env, largest_aligned2os_bytes);
     const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
-    *env->me_discarded_tail = largest_aligned2os_pgno;
-    if (prev_discarded_pgno > largest_aligned2os_pgno) {
+    if (prev_discarded_pgno >
+        largest_aligned2os_pgno +
+            /* 256Kb threshold to avoid unreasonable madvise() call */
+            bytes2pgno(env, 256 * 1024)) {
+      *env->me_discarded_tail = largest_aligned2os_pgno;
       const size_t prev_discarded_bytes =
           pgno_align2os_bytes(env, prev_discarded_pgno);
       mdbx_ensure(env, prev_discarded_bytes > largest_aligned2os_bytes);
-#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
       (void)madvise(env->me_map + largest_aligned2os_bytes,
                     prev_discarded_bytes - largest_aligned2os_bytes,
                     MADV_REMOVE_OR_FREE_OR_DONTNEED);
-#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
     }
+#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
 
     /* LY: check conditions to shrink datafile */
     const pgno_t backlog_gap =
@@ -6540,18 +6543,20 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
                                                      : MADV_DONTDUMP);
 #endif
 
+#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
   if (is_exclusive && (env->me_flags & MDBX_WRITEMAP) != 0) {
     const size_t used_aligned2os_bytes =
         mdbx_roundup2(usedsize, env->me_os_psize);
     *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
     if (used_aligned2os_bytes < env->me_mapsize) {
-#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
       (void)madvise(env->me_map + used_aligned2os_bytes,
                     env->me_mapsize - used_aligned2os_bytes,
                     MADV_REMOVE_OR_FREE_OR_DONTNEED);
-#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
     }
   }
+#else
+  (void)is_exclusive;
+#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
 
 #ifdef POSIX_FADV_RANDOM
   /* this also checks that the file size is valid for a particular FS */
