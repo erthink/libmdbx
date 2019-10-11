@@ -13087,8 +13087,9 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   }
 
   const size_t buffer_size =
-      pgno2bytes(env, NUM_METAS) +
-      ((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF);
+      mdbx_roundup2(pgno2bytes(env, NUM_METAS) +
+                        ((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF),
+                    env->me_os_psize);
 
   uint8_t *buffer = NULL;
   int rc = mdbx_memalign_alloc(env->me_os_psize, buffer_size, (void **)&buffer);
