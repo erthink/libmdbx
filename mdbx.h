@@ -1949,8 +1949,8 @@ LIBMDBX_API int mdbx_env_get_fd(MDBX_env *env, mdbx_filehandle_t *fd);
  * option.
  *
  * Legacy mdbx_env_set_mapsize() correspond to calling mdbx_env_set_geometry()
- * with the argument size_now=size and -1 (i.e. default) for all other
- * parameters.
+ * with the arguments size_lower, size_now, size_upper equal to the size
+ * and -1 (i.e. default) for all other parameters.
  *
  * [in] env               An environment handle returned by mdbx_env_create()
  *

@@ -6923,7 +6923,7 @@ bailout:
 }
 
 int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
-  return mdbx_env_set_geometry(env, -1, size, -1, -1, -1, -1);
+  return mdbx_env_set_geometry(env, size, size, size, -1, -1, -1);
 }
 
 int __cold mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
