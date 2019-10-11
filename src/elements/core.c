@@ -4515,7 +4515,7 @@ int mdbx_txn_reset(MDBX_txn *txn) {
   if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0))
     return MDBX_EINVAL;
 
-  /* LY: don't close DBI-handles in MDBX mode */
+  /* LY: don't close DBI-handles */
   rc = mdbx_txn_end(txn, MDBX_END_RESET | MDBX_END_UPDATE);
   if (rc == MDBX_SUCCESS) {
     mdbx_tassert(txn, txn->mt_signature == MDBX_MT_SIGNATURE);
@@ -4530,7 +4530,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
     return rc;
 
   if (F_ISSET(txn->mt_flags, MDBX_RDONLY))
-    /* LY: don't close DBI-handles in MDBX mode */
+    /* LY: don't close DBI-handles */
     return mdbx_txn_end(txn, MDBX_END_ABORT | MDBX_END_UPDATE | MDBX_END_SLOT |
                                  MDBX_END_FREE);
 

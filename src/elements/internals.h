@@ -216,6 +216,8 @@
 #define MDBX_TXN_CHECKPID_CONFIG MDBX_TXN_CHECKPID
 #endif /* MDBX_TXN_CHECKPID */
 
+/* Controls checking transaction owner thread against misuse transactions from
+ * other threads. */
 #ifndef MDBX_TXN_CHECKOWNER
 #define MDBX_TXN_CHECKOWNER 1
 #endif /* MDBX_TXN_CHECKOWNER */
