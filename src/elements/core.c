@@ -4415,23 +4415,30 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
 
   if (F_ISSET(txn->mt_flags, MDBX_RDONLY)) {
     if (txn->to.reader) {
-      mdbx_ensure(env, /* paranoia is appropriate here */
-                  txn->mt_txnid == txn->to.reader->mr_txnid.inconsistent &&
-                      txn->to.reader->mr_txnid.inconsistent >=
-                          env->me_lck->mti_oldest_reader);
-      txn->to.reader->mr_snapshot_pages_used = 0;
-      safe64_reset(&txn->to.reader->mr_txnid);
+      MDBX_reader *slot = txn->to.reader;
+      mdbx_assert(env, slot->mr_pid == env->me_pid);
+      if (likely(!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED))) {
+        mdbx_assert(env, txn->mt_txnid == slot->mr_txnid.inconsistent &&
+                             slot->mr_txnid.inconsistent >=
+                                 env->me_lck->mti_oldest_reader);
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+        mdbx_txn_valgrind(env, nullptr);
+#endif
+        slot->mr_snapshot_pages_used = 0;
+        safe64_reset(&slot->mr_txnid);
+        env->me_lck->mti_readers_refresh_flag = true;
+        mdbx_flush_noncoherent_cpu_writeback();
+      } else {
+        mdbx_assert(env, slot->mr_pid == env->me_pid);
+        mdbx_assert(env,
+                    slot->mr_txnid.inconsistent >= SAFE64_INVALID_THRESHOLD);
+      }
       if (mode & MDBX_END_SLOT) {
         if ((env->me_flags & MDBX_ENV_TXKEY) == 0)
-          txn->to.reader->mr_pid = 0;
+          slot->mr_pid = 0;
         txn->to.reader = NULL;
       }
-      env->me_lck->mti_readers_refresh_flag = true;
-      mdbx_flush_noncoherent_cpu_writeback();
     }
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-    mdbx_txn_valgrind(env, nullptr);
-#endif
 #if defined(_WIN32) || defined(_WIN64)
     if (txn->mt_flags & MDBX_SHRINK_ALLOWED)
       mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
