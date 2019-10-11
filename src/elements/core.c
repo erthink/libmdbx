@@ -2077,6 +2077,7 @@ static size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
 }
 
 static void __cold mdbx_kill_page(MDBX_env *env, MDBX_page *mp) {
+  mdbx_assert(env, mp->mp_pgno >= NUM_METAS);
   const size_t len = env->me_psize - PAGEHDRSZ;
   void *ptr = (env->me_flags & MDBX_WRITEMAP)
                   ? &mp->mp_data
@@ -3719,9 +3720,9 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
     }
 
     last = mdbx_find_largest_this(env, last);
-    const pgno_t edge = env->me_poison_edge ? env->me_poison_edge
-                                            : bytes2pgno(env, env->me_mapsize);
+    const pgno_t edge = env->me_poison_edge;
     if (edge > last) {
+      mdbx_assert(env, last >= NUM_METAS);
       env->me_poison_edge = last;
       VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, last),
                                  pgno2bytes(env, edge - last));
@@ -6153,10 +6154,17 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     const pgno_t largest_pgno = mdbx_find_largest(
         env, (head->mm_geo.next > pending->mm_geo.next) ? head->mm_geo.next
                                                         : pending->mm_geo.next);
-    VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, largest_pgno),
-                               env->me_mapsize - pgno2bytes(env, largest_pgno));
-    ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, largest_pgno),
-                              env->me_mapsize - pgno2bytes(env, largest_pgno));
+    mdbx_assert(env, largest_pgno >= NUM_METAS);
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+    const pgno_t edge = env->me_poison_edge;
+    if (edge > largest_pgno) {
+      env->me_poison_edge = largest_pgno;
+      VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, largest_pgno),
+                                 pgno2bytes(env, edge - largest_pgno));
+      ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, largest_pgno),
+                                pgno2bytes(env, edge - largest_pgno));
+    }
+#endif /* MDBX_USE_VALGRIND */
     const size_t largest_aligned2os_bytes =
         pgno_align2os_bytes(env, largest_pgno);
     const pgno_t largest_aligned2os_pgno =
@@ -6503,15 +6511,10 @@ bailout:
 
 static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
                                const size_t usedsize) {
-  mdbx_assert(env, usedsize >= pgno2bytes(env, NUM_METAS));
   int rc = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
                      env->me_dbgeo.upper);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-
-  VALGRIND_MAKE_MEM_NOACCESS(env->me_map + usedsize,
-                             env->me_mapsize - usedsize);
-  ASAN_POISON_MEMORY_REGION(env->me_map + usedsize, env->me_mapsize - usedsize);
 
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_DONTFORK) != 0))
@@ -7143,6 +7146,20 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   if (err != MDBX_SUCCESS)
     return err;
 
+  mdbx_assert(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
+                       used_bytes <= env->me_mapsize);
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+  VALGRIND_MAKE_MEM_NOACCESS(env->me_map + used_bytes,
+                             env->me_mapsize - used_bytes);
+  ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
+                            env->me_mapsize - used_bytes);
+  env->me_poison_edge = bytes2pgno(env, env->me_mapsize);
+#endif /* MDBX_USE_VALGRIND */
+
+  /* NOTE: AddressSanitizer (at least GCC 7.x, 8.x) could generate
+   *       false-positive alarm here. I have no other explanation for this
+   *       except due to an internal ASAN error, as the problem is reproduced
+   *       in a single-threaded application under the active assert() above. */
   const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
   if (meta_clash_mask) {
     mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
