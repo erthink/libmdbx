@@ -325,7 +325,7 @@ clean-bench:
 re-bench: clean-bench bench
 
 define bench-rule
-bench-$(1)_$(2).txt: $(3) $(IOARENA) Makefile
+bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
 	LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
 		$(IOARENA) -D $(1) -B crud -m nosync -n $(2) \
 		| tee $$@ | grep throughput && \
