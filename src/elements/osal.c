@@ -882,7 +882,7 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
     return MDBX_SUCCESS;
   return GetLastError();
 #else
-#ifdef __linux__
+#if defined(__linux__) || defined(__gnu_linux__)
   if (async && mdbx_linux_kernel_version > 0x02061300)
     /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op,
        since the kernel properly tracks dirty pages and flushes them to storage
