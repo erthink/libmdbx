@@ -74,6 +74,14 @@
     defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
     defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__)
 #include <sys/cdefs.h>
+#include <sys/sysctl.h>
+#include <sys/types.h>
+#if defined(__FreeBSD__) || defined(__DragonFly__)
+#include <vm/vm_param.h>
+#elif defined(__OpenBSD__) || defined(__NetBSD__)
+#include <uvm/uvm_param.h>
+#endif
+#include <sys/vmmeter.h>
 #else
 #include <malloc.h>
 #ifndef _POSIX_C_SOURCE
@@ -89,7 +97,15 @@
 #include <malloc/malloc.h>
 #endif /* MacOS */
 
+#if defined(__MACH__)
+#include <mach/host_info.h>
+#include <mach/mach_host.h>
+#include <mach/mach_port.h>
+#undef P_DIRTY
+#endif
+
 #if defined(__linux__) || defined(__gnu_linux__)
+#include <linux/sysctl.h>
 #include <sys/sendfile.h>
 #endif /* Linux */
 

@@ -965,6 +965,10 @@ LIBMDBX_API char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  * may help random read performance when the DB is larger than RAM and system
  * RAM is full.
  *
+ * NOTE: The mdbx_is_readahead_reasonable() function allows to quickly find out
+ *       whether to use readahead or not based on the size of the data and the
+ *       amount of available memory.
+ *
  * This flag affects only at environment opening and can't be changed after. */
 #define MDBX_NORDAHEAD 0x800000u
 
@@ -2013,6 +2017,20 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
                                       intptr_t shrink_threshold,
                                       intptr_t pagesize);
 LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env, size_t size);
+
+/* Find out whether to use readahead or not, based on the given database size
+ * and the amount of available memory.
+ *
+ * [in] volume      The expected database size in bytes.
+ * [in] redundancy  Additional reserve or overload in case of negative value.
+ *
+ * Returns:
+ *  - MDBX_RESULT_TRUE    = readahead is reasonable.
+ *  - MDBX_RESULT_FALSE   = readahead is NOT reasonable, i.e. MDBX_NORDAHEAD
+ *                          is useful to open environment by mdbx_env_open().
+ *  - Otherwise the error code. */
+LIBMDBX_API int mdbx_is_readahead_reasonable(size_t volume,
+                                             intptr_t redundancy);
 
 /* The minimal database page size in bytes. */
 #define MDBX_MIN_PAGESIZE 512

@@ -7516,6 +7516,112 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   return lck_seize_rc;
 }
 
+__cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
+  if (volume <= 1024 * 1024 * 4ul)
+    return MDBX_RESULT_TRUE;
+
+  const size_t pagesize = mdbx_syspagesize();
+  if (unlikely(!mdbx_is_power2(pagesize) || pagesize < MIN_PAGESIZE))
+    return MDBX_INCOMPATIBLE;
+
+#if defined(_WIN32) || defined(_WIN64)
+  MEMORYSTATUSEX info;
+  memset(&info, 0, sizeof(info));
+  info.dwLength = sizeof(info);
+  if (!GlobalMemoryStatusEx(&info))
+    return GetLastError();
+#endif
+  const int log2page = mdbx_log2(pagesize);
+
+#if defined(_WIN32) || defined(_WIN64)
+  const intptr_t total_ram_pages = (intptr_t)(info.ullTotalPhys >> log2page);
+#elif defined(_SC_PHYS_PAGES)
+  const intptr_t total_ram_pages = sysconf(_SC_PHYS_PAGES);
+  if (total_ram_pages == -1)
+    return errno;
+#elif defined(_SC_AIX_REALMEM)
+  const intptr_t total_ram_Kb = sysconf(_SC_AIX_REALMEM);
+  if (total_ram_Kb == -1)
+    return errno;
+  const intptr_t total_ram_pages = (total_ram_Kb << 10) >> log2page;
+#elif defined(HW_USERMEM) || defined(HW_PHYSMEM64) || defined(HW_MEMSIZE) ||   \
+    defined(HW_PHYSMEM)
+  size_t ram;
+  size_t len = sizeof(ram);
+  static const int mib[2] = {
+    CTL_HW,
+#if defined(HW_USERMEM)
+    HW_USERMEM
+#elif defined(HW_PHYSMEM64)
+    HW_PHYSMEM64
+#elif defined(HW_MEMSIZE)
+    HW_MEMSIZE
+#else
+    HW_PHYSMEM
+#endif
+  };
+  if (sysctl(mib, ARRAY_LENGTH(mib), &ram, &len, NULL, 0) != 0)
+    return errno;
+  if (len != sizeof(ram))
+    return MDBX_ENOSYS;
+  const intptr_t total_ram_pages = (intptr_t)(ram >> log2page);
+#else
+#error "FIXME: Get User-accessible or physical RAM"
+#endif
+  if (total_ram_pages < 1)
+    return MDBX_ENOSYS;
+
+  const intptr_t volume_pages = (volume + pagesize - 1) >> log2page;
+  const intptr_t redundancy_pages =
+      (redundancy < 0) ? -(intptr_t)((-redundancy + pagesize - 1) >> log2page)
+                       : (intptr_t)(redundancy + pagesize - 1) >> log2page;
+  if (volume_pages >= total_ram_pages ||
+      volume_pages + redundancy_pages >= total_ram_pages)
+    return MDBX_RESULT_FALSE;
+
+#if defined(_WIN32) || defined(_WIN64)
+  const intptr_t avail_ram_pages = (intptr_t)(info.ullAvailPhys >> log2page);
+#elif defined(_SC_AVPHYS_PAGES)
+  const intptr_t avail_ram_pages = sysconf(_SC_AVPHYS_PAGES);
+  if (avail_ram_pages == -1)
+    return errno;
+#elif defined(__MACH__)
+  mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+  vm_statistics_data_t vmstat;
+  mach_port_t mport = mach_host_self();
+  kern_return_t kerr = host_statistics(mach_host_self(), HOST_VM_INFO,
+                                       (host_info_t)&vmstat, &count);
+  mach_port_deallocate(mach_task_self(), mport);
+  if (unlikely(kerr != KERN_SUCCESS))
+    return MDBX_ENOSYS;
+  const intptr_t avail_ram_pages = vmstat.free_count;
+#elif defined(VM_TOTAL) || defined(VM_METER)
+  struct vmtotal info;
+  size_t len = sizeof(info);
+  static const int mib[2] = {
+    CTL_VM,
+#if defined(VM_TOTAL)
+    VM_TOTAL
+#elif defined(VM_METER)
+    VM_METER
+#endif
+  };
+  if (sysctl(mib, ARRAY_LENGTH(mib), &info, &len, NULL, 0) != 0)
+    return errno;
+  if (len != sizeof(info))
+    return MDBX_ENOSYS;
+  const intptr_t avail_ram_pages = info.t_free;
+#else
+#error "FIXME: Get Available RAM"
+#endif
+  if (avail_ram_pages < 1)
+    return MDBX_ENOSYS;
+
+  return (volume_pages + redundancy_pages >= avail_ram_pages)
+             ? MDBX_RESULT_FALSE
+             : MDBX_RESULT_TRUE;
+}
+
 /* Only a subset of the mdbx_env flags can be changed
  * at runtime. Changing other flags requires closing the
  * environment and re-opening it with the new flags. */
