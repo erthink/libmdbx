@@ -179,7 +179,11 @@ bool osal_progress_push(bool active) {
 
 static std::unordered_map<pid_t, actor_status> childs;
 
-static void handler_SIGCHLD(int signum) { (void)signum; }
+static volatile sig_atomic_t sigalarm_head;
+static void handler_SIGCHLD(int signum) {
+  if (signum == SIGALRM)
+    sigalarm_head += 1;
+}
 
 mdbx_pid_t osal_getpid(void) { return getpid(); }
 
@@ -191,6 +195,7 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
     memset(&act, 0, sizeof(act));
     act.sa_handler = handler_SIGCHLD;
     sigaction(SIGCHLD, &act, nullptr);
+    sigaction(SIGALRM, &act, nullptr);
     act.sa_handler = handler_SIGUSR;
     sigaction(SIGUSR1, &act, nullptr);
     sigaction(SIGUSR2, &act, nullptr);
@@ -229,70 +234,67 @@ void osal_killall_actors(void) {
 }
 
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
-  struct timespec ts;
-  ts.tv_nsec = 0;
-  ts.tv_sec = (timeout > INT_MAX) ? INT_MAX : timeout;
-retry:
-  int status, options = WNOHANG;
+  static sig_atomic_t sigalarm_tail;
+  alarm(0) /* cancel prev timeout */;
+  sigalarm_tail = sigalarm_head /* reset timeout flag */;
+
+  int options = WNOHANG;
+  if (timeout) {
+    alarm((timeout > INT_MAX) ? INT_MAX : timeout);
+    options = 0;
+  }
+
 #ifdef WUNTRACED
   options |= WUNTRACED;
 #endif
 #ifdef WCONTINUED
   options |= WCONTINUED;
 #endif
-  pid = waitpid(0, &status, options);
 
-  if (pid > 0) {
-    if (WIFEXITED(status))
-      childs[pid] =
-          (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
-    else if (WCOREDUMP(status))
-      childs[pid] = as_coredump;
-    else if (WIFSIGNALED(status))
-      childs[pid] = as_killed;
-    else if (WIFSTOPPED(status))
-      childs[pid] = as_debuging;
-    else if (WIFCONTINUED(status))
-      childs[pid] = as_running;
-    else {
-      assert(false);
-    }
-    return 0;
-  }
+  while (sigalarm_tail == sigalarm_head) {
+    int status;
+    pid = waitpid(0, &status, options);
 
-  static sig_atomic_t sigusr1_tail, sigusr2_tail;
-  if (sigusr1_tail != sigusr1_head) {
-    sigusr1_tail = sigusr1_head;
-    logging::progress_canary(true);
-  }
-  if (sigusr2_tail != sigusr2_head) {
-    sigusr2_tail = sigusr2_head;
-    logging::progress_canary(false);
-  }
-
-  if (pid == 0) {
-    /* child still running */
-    if (ts.tv_sec == 0 && ts.tv_nsec == 0)
-      ts.tv_nsec = 1;
-    if (nanosleep(&ts, &ts) == 0) {
-      /* timeout and no signal from child */
-      pid = 0;
+    if (pid > 0) {
+      if (WIFEXITED(status))
+        childs[pid] =
+            (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
+      else if (WCOREDUMP(status))
+        childs[pid] = as_coredump;
+      else if (WIFSIGNALED(status))
+        childs[pid] = as_killed;
+      else if (WIFSTOPPED(status))
+        childs[pid] = as_debuging;
+      else if (WIFCONTINUED(status))
+        childs[pid] = as_running;
+      else {
+        assert(false);
+      }
       return 0;
     }
-    if (errno == EINTR)
-      goto retry;
-  }
 
-  switch (errno) {
-  case EINTR:
-    pid = 0;
-    return 0;
+    static sig_atomic_t sigusr1_tail, sigusr2_tail;
+    if (sigusr1_tail != sigusr1_head) {
+      sigusr1_tail = sigusr1_head;
+      logging::progress_canary(true);
+      if (pid < 0 && errno == EINTR)
+        continue;
+    }
+    if (sigusr2_tail != sigusr2_head) {
+      sigusr2_tail = sigusr2_head;
+      logging::progress_canary(false);
+      if (pid < 0 && errno == EINTR)
+        continue;
+    }
 
-  case ECHILD:
-  default:
-    pid = 0;
-    return errno;
+    if (pid == 0)
+      break;
+
+    int err = errno;
+    if (err != EINTR)
+      return err;
   }
+  return 0 /* timeout */;
 }
 
 void osal_yield(void) {
