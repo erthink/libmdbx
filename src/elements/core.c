@@ -6568,17 +6568,16 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
     return errno;
 #endif
 
-#if defined(MADV_RANDOM)
-  if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_RANDOM) != 0))
-    return errno;
-#elif defined(POSIX_MADV_RANDOM)
-  rc = posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_RANDOM);
-  if (unlikely(rc != 0))
-    return errno;
-#endif
-
   /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
   if (env->me_flags & MDBX_NORDAHEAD) {
+#if defined(MADV_RANDOM)
+    if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_RANDOM) != 0))
+      return errno;
+#elif defined(POSIX_MADV_RANDOM)
+    rc = posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_RANDOM);
+    if (unlikely(rc != 0))
+      return errno;
+#endif
 #ifdef POSIX_FADV_DONTNEED
     rc = posix_fadvise(env->me_fd, 0, env->me_mapsize, POSIX_FADV_DONTNEED);
     if (unlikely(rc != 0))
