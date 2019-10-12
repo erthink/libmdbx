@@ -93,6 +93,10 @@
 #endif
 #endif /* !xBSD */
 
+#if defined(__FreeBSD__) || defined(__OpenBSD__) || __has_include(<malloc_np.h>)
+#include <malloc_np.h>
+#endif
+
 #if defined(__APPLE__) || defined(__MACH__) || __has_include(<malloc/malloc.h>)
 #include <malloc/malloc.h>
 #endif /* MacOS */

@@ -1062,7 +1062,8 @@ static MDBX_PNL mdbx_pnl_alloc(size_t size) {
   size_t bytes = pnl2bytes(size);
   MDBX_PNL pl = mdbx_malloc(bytes);
   if (likely(pl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(__OpenBSD__) ||   \
+    defined(malloc_usable_size)
     bytes = malloc_usable_size(pl);
 #endif /* malloc_usable_size */
     pl[0] = bytes2pnl(bytes);
@@ -1089,7 +1090,8 @@ static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
     size_t bytes = pnl2bytes(MDBX_PNL_INITIAL);
     MDBX_PNL pl = mdbx_realloc(*ppl - 1, bytes);
     if (likely(pl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(__OpenBSD__) ||   \
+    defined(malloc_usable_size)
       bytes = malloc_usable_size(pl);
 #endif /* malloc_usable_size */
       *pl = bytes2pnl(bytes);
@@ -1115,7 +1117,8 @@ static int mdbx_pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
   size_t bytes = pnl2bytes(size);
   MDBX_PNL pl = mdbx_realloc(*ppl - 1, bytes);
   if (likely(pl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(__OpenBSD__) ||   \
+    defined(malloc_usable_size)
     bytes = malloc_usable_size(pl);
 #endif /* malloc_usable_size */
     *pl = bytes2pnl(bytes);
@@ -1270,7 +1273,8 @@ static MDBX_TXL mdbx_txl_alloc(void) {
   size_t bytes = txl2bytes(MDBX_TXL_INITIAL);
   MDBX_TXL tl = mdbx_malloc(bytes);
   if (likely(tl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(__OpenBSD__) ||   \
+    defined(malloc_usable_size)
     bytes = malloc_usable_size(tl);
 #endif /* malloc_usable_size */
     tl[0] = bytes2txl(bytes);
@@ -1302,7 +1306,8 @@ static int mdbx_txl_reserve(MDBX_TXL *ptl, const size_t wanna) {
   size_t bytes = txl2bytes(size);
   MDBX_TXL tl = mdbx_realloc(*ptl - 1, bytes);
   if (likely(tl)) {
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(__OpenBSD__) ||   \
+    defined(malloc_usable_size)
     bytes = malloc_usable_size(tl);
 #endif /* malloc_usable_size */
     *tl = bytes2txl(bytes);
