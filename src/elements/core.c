@@ -1204,22 +1204,22 @@ static bool mdbx_pnl_check(MDBX_PNL pl, bool allocated) {
 }
 
 /* Merge an PNL onto an PNL. The destination PNL must be big enough */
-static void __hot mdbx_pnl_xmerge(MDBX_PNL pnl, MDBX_PNL merge) {
-  assert(mdbx_pnl_check(pnl, true));
-  assert(mdbx_pnl_check(merge, false));
-  pgno_t old_id, merge_id, i = MDBX_PNL_SIZE(merge), j = MDBX_PNL_SIZE(pnl),
-                           k = i + j, total = k;
-  pnl[0] =
-      MDBX_PNL_ASCENDING ? 0 : ~(pgno_t)0; /* delimiter for pl scan below */
-  old_id = pnl[j];
-  while (i) {
-    merge_id = merge[i--];
-    for (; MDBX_PNL_ORDERED(merge_id, old_id); old_id = pnl[--j])
-      pnl[k--] = old_id;
-    pnl[k--] = merge_id;
+static void __hot mdbx_pnl_xmerge(MDBX_PNL dst, const MDBX_PNL src) {
+  assert(mdbx_pnl_check(dst, true));
+  assert(mdbx_pnl_check(src, false));
+  const size_t total = MDBX_PNL_SIZE(dst) + MDBX_PNL_SIZE(src);
+  assert(MDBX_PNL_ALLOCLEN(dst) >= total);
+  pgno_t *w = dst + total;
+  pgno_t *d = dst + MDBX_PNL_SIZE(dst);
+  const pgno_t *s = src + MDBX_PNL_SIZE(src);
+  dst[0] = /* detent for scan below */ (MDBX_PNL_ASCENDING ? 0 : ~(pgno_t)0);
+  while (s > src) {
+    while (MDBX_PNL_ORDERED(*s, *d))
+      *w-- = *d--;
+    *w-- = *s--;
   }
-  MDBX_PNL_SIZE(pnl) = total;
-  assert(mdbx_pnl_check(pnl, true));
+  MDBX_PNL_SIZE(dst) = (pgno_t)total;
+  assert(mdbx_pnl_check(dst, true));
 }
 
 SORT_IMPL(pgno_sort, pgno_t, MDBX_PNL_ORDERED)
