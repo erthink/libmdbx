@@ -380,37 +380,38 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
     if (pair.second.second <= as_running)
       handles.push_back(pair.second.first);
 
-loop:
-  DWORD rc =
-      MsgWaitForMultipleObjectsEx((DWORD)handles.size(), &handles[0],
-                                  (timeout > 60) ? 60 * 1000 : timeout * 1000,
-                                  QS_ALLINPUT | QS_ALLPOSTMESSAGE, 0);
+  while (true) {
+    DWORD rc =
+        MsgWaitForMultipleObjectsEx((DWORD)handles.size(), &handles[0],
+                                    (timeout > 60) ? 60 * 1000 : timeout * 1000,
+                                    QS_ALLINPUT | QS_ALLPOSTMESSAGE, 0);
 
-  if (rc == WAIT_OBJECT_0) {
-    logging::progress_canary(true);
-    goto loop;
-  }
-  if (rc == WAIT_OBJECT_0 + 1) {
-    logging::progress_canary(false);
-    goto loop;
-  }
+    if (rc == WAIT_OBJECT_0) {
+      logging::progress_canary(true);
+      continue;
+    }
+    if (rc == WAIT_OBJECT_0 + 1) {
+      logging::progress_canary(false);
+      continue;
+    }
 
-  if (rc >= WAIT_OBJECT_0 + 2 && rc < WAIT_OBJECT_0 + handles.size()) {
-    pid = 0;
-    for (const auto &pair : childs)
-      if (pair.second.first == handles[rc - WAIT_OBJECT_0]) {
-        pid = pair.first;
-        break;
-      }
-    return 0;
-  }
+    if (rc >= WAIT_OBJECT_0 + 2 && rc < WAIT_OBJECT_0 + handles.size()) {
+      pid = 0;
+      for (const auto &pair : childs)
+        if (pair.second.first == handles[rc - WAIT_OBJECT_0]) {
+          pid = pair.first;
+          break;
+        }
+      return 0;
+    }
 
-  if (rc == WAIT_TIMEOUT) {
-    pid = 0;
-    return 0;
-  }
+    if (rc == WAIT_TIMEOUT) {
+      pid = 0;
+      return 0;
+    }
 
-  return waitstatus2errcode(rc);
+    return waitstatus2errcode(rc);
+  }
 }
 
 void osal_yield(void) { SwitchToThread(); }
