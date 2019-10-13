@@ -700,6 +700,14 @@ typedef MDBX_DP *MDBX_DPL;
 #define MDBX_PNL_BEGIN(pl) (&(pl)[1])
 #define MDBX_PNL_END(pl) (&(pl)[MDBX_PNL_SIZE(pl) + 1])
 
+#if MDBX_PNL_ASCENDING
+#define MDBX_PNL_LEAST(pl) MDBX_PNL_FIRST(pl)
+#define MDBX_PNL_MOST(pl) MDBX_PNL_LAST(pl)
+#else
+#define MDBX_PNL_LEAST(pl) MDBX_PNL_LAST(pl)
+#define MDBX_PNL_MOST(pl) MDBX_PNL_FIRST(pl)
+#endif
+
 #define MDBX_PNL_SIZEOF(pl) ((MDBX_PNL_SIZE(pl) + 1) * sizeof(pgno_t))
 #define MDBX_PNL_IS_EMPTY(pl) (MDBX_PNL_SIZE(pl) == 0)
 
