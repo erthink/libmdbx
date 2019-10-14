@@ -666,7 +666,7 @@ typedef txnid_t *MDBX_TXL;
 typedef union MDBX_DP {
   struct {
     pgno_t pgno;
-    void *ptr;
+    MDBX_page *ptr;
   };
   struct {
     unsigned sorted;
