@@ -155,10 +155,11 @@ check-fault: all mdbx_test
 
 VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
 memcheck check-valgrind: all mdbx_test
+	@echo "$(MDBX_OPTIONS)" | grep -q MDBX_USE_VALGRIND || echo "WARNING: Please build libmdbx with -DMDBX_USE_VALGRIND to avoid false-positives from Valgrind !!!" >&2
 	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
-		($(VALGRIND) ./mdbx_test --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
+		($(VALGRIND) ./mdbx_test --mode=-writemap,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		$(VALGRIND) ./mdbx_test --mode=-writemap,-lifo --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
+		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
 		| tee -a $(TEST_LOG) | tail -n 42) \
 	&& $(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 

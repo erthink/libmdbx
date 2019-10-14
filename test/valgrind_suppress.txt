@@ -14,3 +14,12 @@
    ...
    fun:mdbx_env_sync_ex
 }
+{
+   pwrite-page-flush
+   Memcheck:Param
+   pwritev(vector[...])
+   fun:pwritev
+   fun:mdbx_pwritev
+   fun:mdbx_page_flush
+   fun:mdbx_txn_commit
+}
