@@ -4764,14 +4764,16 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
           memcpy(db = &db_copy, NODEDATA(leaf), sizeof(db_copy));
           if ((txn->mt_flags & MDBX_RDONLY) == 0) {
             for (MDBX_dbi k = txn->mt_numdbs; --k > MAIN_DBI;) {
-              if ((txn->mt_dbflags[k] & DB_DIRTY) &&
+              if ((txn->mt_dbflags[k] & DB_VALID) &&
                   /* txn->mt_dbxs[k].md_name.iov_len > 0 && */
                   NODEKSZ(leaf) == txn->mt_dbxs[k].md_name.iov_len &&
                   memcmp(NODEKEY(leaf), txn->mt_dbxs[k].md_name.iov_base,
                          NODEKSZ(leaf)) == 0) {
-                mdbx_tassert(txn, (txn->mt_dbflags[k] & DB_STALE) == 0);
                 txn->mt_dbflags[k] |= DB_AUDITED;
-                db = txn->mt_dbs + k;
+                if (txn->mt_dbflags[k] & DB_DIRTY) {
+                  mdbx_tassert(txn, (txn->mt_dbflags[k] & DB_STALE) == 0);
+                  db = txn->mt_dbs + k;
+                }
                 break;
               }
             }
@@ -4792,10 +4794,12 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
       count += txn->mt_dbs[i].md_branch_pages + txn->mt_dbs[i].md_leaf_pages +
                txn->mt_dbs[i].md_overflow_pages;
     } else {
-      mdbx_warning("audit %s@%" PRIaTXN ": unable account dbi %d / \"%*s\"",
+      mdbx_warning("audit %s@%" PRIaTXN
+                   ": unable account dbi %d / \"%*s\", state 0x%02x",
                    txn->mt_parent ? "nested-" : "", txn->mt_txnid, i,
                    (int)txn->mt_dbxs[i].md_name.iov_len,
-                   (const char *)txn->mt_dbxs[i].md_name.iov_base);
+                   (const char *)txn->mt_dbxs[i].md_name.iov_base,
+                   txn->mt_dbflags[i]);
     }
   }
 
