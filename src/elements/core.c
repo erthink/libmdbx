@@ -2707,7 +2707,7 @@ static __hot txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
 static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
   if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC))
     return likely(env->me_txn0->mt_owner == mdbx_thread_self())
-               ? env->me_txn0->mt_txnid - 1
+               ? env->me_txn0->mt_txnid - MDBX_TXNID_STEP
                : mdbx_recent_committed_txnid(env);
 
   return mdbx_recent_steady_txnid(env);
@@ -4016,11 +4016,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     mdbx_jitter4testing(false);
     txn->mt_canary = meta->mm_canary;
     const txnid_t snap = mdbx_meta_txnid_stable(env, meta);
-#if MDBX_DEBUG
-    txn->mt_txnid = snap + UINT32_MAX / 3;
-#else
-    txn->mt_txnid = snap + 1;
-#endif
+    txn->mt_txnid = snap + MDBX_TXNID_STEP;
     if (unlikely(txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
       mdbx_debug("txnid overflow!");
       rc = MDBX_TXN_FULL;

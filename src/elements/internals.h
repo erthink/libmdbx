@@ -280,6 +280,11 @@ typedef uint32_t pgno_t;
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
 #define MIN_TXNID UINT64_C(1)
+/* LY: for testing non-atomic 64-bit txnid on 32-bit arches.
+ * #define MDBX_TXNID_STEP (UINT32_MAX / 3) */
+#ifndef MDBX_TXNID_STEP
+#define MDBX_TXNID_STEP 1
+#endif /* MDBX_TXNID_STEP */
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
