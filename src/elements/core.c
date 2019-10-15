@@ -2083,9 +2083,6 @@ static void __cold mdbx_kill_page(MDBX_env *env, MDBX_page *mp) {
   if (ptr != &mp->mp_data)
     (void)mdbx_pwrite(env->me_fd, ptr, len,
                       pgno2bytes(env, mp->mp_pgno) + PAGEHDRSZ);
-
-  VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_data, len);
-  ASAN_POISON_MEMORY_REGION(&mp->mp_data, len);
 }
 
 static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
@@ -2263,6 +2260,10 @@ static __must_check_result __hot int mdbx_loose_page(MDBX_txn *txn,
   VALGRIND_MAKE_MEM_DEFINED(&mp->mp_pgno, sizeof(mp->mp_pgno));
   if (unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
     mdbx_kill_page(txn->mt_env, mp);
+
+  VALGRIND_MAKE_MEM_NOACCESS(&mp->mp_data, txn->mt_env->me_psize - PAGEHDRSZ);
+  ASAN_POISON_MEMORY_REGION(&mp->mp_data, txn->mt_env->me_psize - PAGEHDRSZ);
+
   mp->mp_flags = P_LOOSE | P_DIRTY;
   if (likely(txn->mt_next_pgno != mp->mp_pgno + 1)) {
     mp->mp_next = txn->tw.loose_pages;
@@ -2985,9 +2986,12 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
       txn->tw.loose_pages = np->mp_next;
       txn->tw.loose_count--;
       mdbx_debug("db %d use loose page %" PRIaPGNO, DDBI(mc), np->mp_pgno);
-      ASAN_UNPOISON_MEMORY_REGION(np, env->me_psize);
       mdbx_tassert(txn, np->mp_pgno < txn->mt_next_pgno);
       mdbx_ensure(env, np->mp_pgno >= NUM_METAS);
+      VALGRIND_MAKE_MEM_UNDEFINED(&np->mp_data,
+                                  txn->mt_env->me_psize - PAGEHDRSZ);
+      ASAN_UNPOISON_MEMORY_REGION(&np->mp_data,
+                                  txn->mt_env->me_psize - PAGEHDRSZ);
       *mp = np;
       return MDBX_SUCCESS;
     }
@@ -3780,7 +3784,7 @@ static pgno_t mdbx_find_largest_this(MDBX_env *env, pgno_t largest) {
           goto retry;
         if (largest < snap_pages &&
             lck->mti_oldest_reader <= /* ignore pending updates */ snap_txnid &&
-            snap_txnid <= env->me_txn0->mt_txnid)
+            snap_txnid < SAFE64_INVALID_THRESHOLD)
           largest = snap_pages;
       }
     }
