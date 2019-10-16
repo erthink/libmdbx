@@ -168,7 +168,39 @@
 #else
 #define MDBX_64BIT_ATOMIC 0
 #endif
+#define MDBX_64BIT_ATOMIC_CONFIG "AUTO=" STRINGIFY(MDBX_64BIT_ATOMIC)
+#else
+#define MDBX_64BIT_ATOMIC_CONFIG STRINGIFY(MDBX_64BIT_ATOMIC)
 #endif /* MDBX_64BIT_ATOMIC */
+
+#ifndef MDBX_64BIT_CAS
+#if defined(ATOMIC_LLONG_LOCK_FREE)
+#if ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(__GCC_ATOMIC_LLONG_LOCK_FREE)
+#if __GCC_ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(__CLANG_ATOMIC_LLONG_LOCK_FREE)
+#if __CLANG_ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(_MSC_VER) || defined(__APPLE__)
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS MDBX_64BIT_ATOMIC
+#endif
+#define MDBX_64BIT_CAS_CONFIG "AUTO=" STRINGIFY(MDBX_64BIT_CAS)
+#else
+#define MDBX_64BIT_CAS_CONFIG STRINGIFY(MDBX_64BIT_CAS)
+#endif /* MDBX_64BIT_CAS */
 
 /* Some platforms define the EOWNERDEAD error code even though they
  *  don't support Robust Mutexes. Compile with -DMDBX_USE_ROBUST=0. */
@@ -283,7 +315,11 @@ typedef uint64_t txnid_t;
 /* LY: for testing non-atomic 64-bit txnid on 32-bit arches.
  * #define MDBX_TXNID_STEP (UINT32_MAX / 3) */
 #ifndef MDBX_TXNID_STEP
-#define MDBX_TXNID_STEP 1
+#if MDBX_64BIT_CAS
+#define MDBX_TXNID_STEP 1u
+#else
+#define MDBX_TXNID_STEP 2u
+#endif
 #endif /* MDBX_TXNID_STEP */
 
 /* Used for offsets within a single page.
@@ -301,7 +337,7 @@ typedef union mdbx_safe64 {
   volatile uint64_t inconsistent;
 #if MDBX_64BIT_ATOMIC
   volatile uint64_t atomic;
-#else
+#endif /* MDBX_64BIT_ATOMIC */
   struct {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
     volatile uint32_t low;
@@ -313,7 +349,6 @@ typedef union mdbx_safe64 {
 #error "FIXME: Unsupported byte order"
 #endif /* __BYTE_ORDER__ */
   };
-#endif /* MDBX_64BIT_ATOMIC */
 } mdbx_safe64_t;
 
 #define SAFE64_INVALID_THRESHOLD UINT64_C(0xffffFFFF00000000)

@@ -275,6 +275,63 @@ size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
+#if MDBX_64BIT_CAS
+static __inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
+                                  uint64_t v) {
+#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LLONG_LOCK_FREE)
+  STATIC_ASSERT(sizeof(long long int) == 8);
+  STATIC_ASSERT(atomic_is_lock_free(p));
+  return atomic_compare_exchange_strong((_Atomic uint64_t *)p, &c, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_bool_compare_and_swap(p, c, v);
+#elif defined(_MSC_VER)
+  return c ==
+         (uint64_t)_InterlockedCompareExchange64((volatile int64_t *)p, v, c);
+#elif defined(__APPLE__)
+  return OSAtomicCompareAndSwap64Barrier(c, v, (volatile uint64_t *)p);
+#else
+#error FIXME: Unsupported compiler
+#endif
+}
+#endif /* MDBX_64BIT_CAS */
+
+static __inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
+                                  uint32_t v) {
+#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LONG_LOCK_FREE)
+  STATIC_ASSERT(sizeof(long int) >= 4);
+  STATIC_ASSERT(atomic_is_lock_free(p));
+  return atomic_compare_exchange_strong((_Atomic uint32_t *)p, &c, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_bool_compare_and_swap(p, c, v);
+#elif defined(_MSC_VER)
+  STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile uint32_t));
+  return c == (uint32_t)_InterlockedCompareExchange((volatile long *)p, v, c);
+#elif defined(__APPLE__)
+  return OSAtomicCompareAndSwap32Barrier(c, v, (volatile int32_t *)p);
+#else
+#error FIXME: Unsupported compiler
+#endif
+}
+
+static __inline uint32_t atomic_add32(volatile uint32_t *p, uint32_t v) {
+#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LONG_LOCK_FREE)
+  STATIC_ASSERT(sizeof(long int) >= 4);
+  STATIC_ASSERT(atomic_is_lock_free(p));
+  return atomic_fetch_add((_Atomic uint32_t *)p, v);
+#elif defined(__GNUC__) || defined(__clang__)
+  return __sync_fetch_and_add(p, v);
+#elif defined(_MSC_VER)
+  STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile uint32_t));
+  return _InterlockedExchangeAdd((volatile long *)p, v);
+#elif defined(__APPLE__)
+  return OSAtomicAdd32Barrier(v, (volatile int32_t *)p);
+#else
+#error FIXME: Unsupported compiler
+#endif
+}
+
+#define atomic_sub32(p, v) atomic_add32(p, 0 - (v))
+
 static __maybe_unused __inline bool safe64_is_valid(uint64_t v) {
 #if MDBX_WORDBITS >= 64
   return v < SAFE64_INVALID_THRESHOLD;
@@ -293,10 +350,31 @@ safe64_is_valid_ptr(const mdbx_safe64_t *ptr) {
 #endif /* MDBX_64BIT_ATOMIC */
 }
 
-static __inline void safe64_reset(mdbx_safe64_t *ptr) {
+static __inline uint64_t safe64_txnid_next(uint64_t txnid) {
+  txnid += MDBX_TXNID_STEP;
+#if !MDBX_64BIT_CAS
+  /* avoid overflow of low-part in safe64_reset() */
+  txnid += (UINT32_MAX == (uint32_t)txnid);
+#endif
+  return txnid;
+}
+
+static __inline void safe64_reset(mdbx_safe64_t *ptr, bool single_writer) {
   mdbx_compiler_barrier();
+#if !MDBX_64BIT_CAS
+  if (!single_writer) {
+    STATIC_ASSERT(MDBX_TXNID_STEP > 1);
+    /* it is safe to increment low-part to avoid ABA, since MDBX_TXNID_STEP > 1
+     * and overflow was preserved in safe64_txnid_next() */
+    atomic_add32(&ptr->low, 1) /* avoid ABA in safe64_reset_compare() */;
+    ptr->high = UINT32_MAX /* atomically make >= SAFE64_INVALID_THRESHOLD */;
+    atomic_add32(&ptr->low, 1) /* avoid ABA in safe64_reset_compare() */;
+  } else
+#else
+  (void)single_writer;
+#endif /* !MDBX_64BIT_CAS */
 #if MDBX_64BIT_ATOMIC
-  ptr->atomic = UINT64_MAX;
+    ptr->atomic = UINT64_MAX;
 #else
   /* atomically make value >= SAFE64_INVALID_THRESHOLD */
   ptr->high = UINT32_MAX;
@@ -308,9 +386,28 @@ static __inline void safe64_reset(mdbx_safe64_t *ptr) {
 
 static __inline bool safe64_reset_compare(mdbx_safe64_t *ptr, txnid_t compare) {
   mdbx_compiler_barrier();
-  bool rc =
-      mdbx_atomic_compare_and_swap64(&ptr->inconsistent, compare, UINT64_MAX);
+  /* LY: This function is used to reset `mr_txnid` from OOM-kick in case
+   *     the asynchronously cancellation of read transaction. Therefore,
+   *     there may be a collision between the cleanup performed here and
+   *     asynchronous termination and restarting of the read transaction
+   *     in another proces/thread. In general we MUST NOT reset the `mr_txnid`
+   *     if a new transaction was started (i.e. if `mr_txnid` was changed). */
+#if MDBX_64BIT_CAS
+  bool rc = atomic_cas64(&ptr->inconsistent, compare, UINT64_MAX);
   mdbx_flush_noncoherent_cpu_writeback();
+#else
+  /* LY: There is no gold ratio here since shared mutex is too costly,
+   *     in such way we must acquire/release it for every update of mr_txnid,
+   *     i.e. twice for each read transaction). */
+  bool rc = false;
+  if (likely(ptr->low == (uint32_t)compare &&
+             atomic_cas32(&ptr->high, (uint32_t)(compare >> 32), UINT32_MAX))) {
+    if (unlikely(ptr->low != (uint32_t)compare))
+      atomic_cas32(&ptr->high, UINT32_MAX, (uint32_t)(compare >> 32));
+    else
+      rc = true;
+  }
+#endif /* MDBX_64BIT_CAS */
   mdbx_jitter4testing(true);
   return rc;
 }
@@ -357,7 +454,7 @@ static __always_inline uint64_t safe64_read(const mdbx_safe64_t *ptr) {
 }
 
 static __inline void safe64_update(mdbx_safe64_t *ptr, const uint64_t v) {
-  safe64_reset(ptr);
+  safe64_reset(ptr, true);
   safe64_write(ptr, v);
 }
 
@@ -483,7 +580,7 @@ static void thread_rthc_set(mdbx_thread_key_t key, const void *value) {
       mdbx_ensure(nullptr, pthread_setspecific(
                                rthc_key, &thread_registration_state) == 0);
       thread_registration_state = MDBX_THREAD_RTHC_COUNTED;
-      const unsigned count_before = mdbx_atomic_add32(&rthc_pending, 1);
+      const unsigned count_before = atomic_add32(&rthc_pending, 1);
       mdbx_ensure(nullptr, count_before < INT_MAX);
       mdbx_trace("fallback to pthreads' tsd, key 0x%x, count %u",
                  (unsigned)rthc_key, count_before);
@@ -569,7 +666,7 @@ __cold void mdbx_rthc_thread_dtor(void *ptr) {
              (uintptr_t)mdbx_thread_self(), ptr, mdbx_getpid(),
              self_registration);
   if (self_registration == MDBX_THREAD_RTHC_COUNTED)
-    mdbx_ensure(nullptr, mdbx_atomic_sub32(&rthc_pending, 1) > 0);
+    mdbx_ensure(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
 
   if (rthc_pending == 0) {
     mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, wake",
@@ -604,7 +701,7 @@ __cold void mdbx_rthc_global_dtor(void) {
     const char self_registration = *(char *)rthc;
     *rthc = MDBX_THREAD_RTHC_ZERO;
     if (self_registration == MDBX_THREAD_RTHC_COUNTED)
-      mdbx_ensure(nullptr, mdbx_atomic_sub32(&rthc_pending, 1) > 0);
+      mdbx_ensure(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
   }
 
   struct timespec abstime;
@@ -3286,7 +3383,7 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
         }
       }
 
-      if (rc == MDBX_MAP_FULL && oldest < txn->mt_txnid - 1) {
+      if (rc == MDBX_MAP_FULL && oldest < txn->mt_txnid - MDBX_TXNID_STEP) {
         if (mdbx_oomkick(env, oldest) > oldest)
           continue;
       }
@@ -3934,7 +4031,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
        * that, it is safe for mdbx_env_close() to touch it.
        * When it will be closed, we can finally claim it. */
       r->mr_pid = 0;
-      safe64_reset(&r->mr_txnid);
+      safe64_reset(&r->mr_txnid, true);
       if (slot == nreaders)
         env->me_lck->mti_numreaders = ++nreaders;
       r->mr_tid = tid;
@@ -3953,7 +4050,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       const txnid_t snap = mdbx_meta_txnid_fluid(env, meta);
       mdbx_jitter4testing(false);
       if (likely(r)) {
-        safe64_reset(&r->mr_txnid);
+        safe64_reset(&r->mr_txnid, false);
         r->mr_snapshot_pages_used = meta->mm_geo.next;
         r->mr_snapshot_pages_retired = meta->mm_pages_retired;
         safe64_write(&r->mr_txnid, snap);
@@ -4016,7 +4113,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     mdbx_jitter4testing(false);
     txn->mt_canary = meta->mm_canary;
     const txnid_t snap = mdbx_meta_txnid_stable(env, meta);
-    txn->mt_txnid = snap + MDBX_TXNID_STEP;
+    txn->mt_txnid = safe64_txnid_next(snap);
     if (unlikely(txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
       mdbx_debug("txnid overflow!");
       rc = MDBX_TXN_FULL;
@@ -4526,7 +4623,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
         mdbx_txn_valgrind(env, nullptr);
 #endif
         slot->mr_snapshot_pages_used = 0;
-        safe64_reset(&slot->mr_txnid);
+        safe64_reset(&slot->mr_txnid, false);
         env->me_lck->mti_readers_refresh_flag = true;
         mdbx_flush_noncoherent_cpu_writeback();
       } else {
@@ -6375,8 +6472,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
           pending->mm_geo.now = bottom;
           if (mdbx_meta_txnid_stable(env, head) ==
               pending->mm_txnid_a.inconsistent)
-            mdbx_meta_set_txnid(env, pending,
-                                pending->mm_txnid_a.inconsistent + 1);
+            mdbx_meta_set_txnid(
+                env, pending,
+                safe64_txnid_next(pending->mm_txnid_a.inconsistent));
         }
       }
     }
@@ -7081,7 +7179,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
         }
       } else {
         *env->me_unsynced_pages += 1;
-        mdbx_meta_set_txnid(env, &meta, mdbx_meta_txnid_stable(env, head) + 1);
+        mdbx_meta_set_txnid(
+            env, &meta, safe64_txnid_next(mdbx_meta_txnid_stable(env, head)));
         rc = mdbx_sync_locked(env, env->me_flags, &meta);
       }
     }
@@ -7357,12 +7456,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       const MDBX_meta *const meta0 = METAPAGE(env, 0);
       const MDBX_meta *const meta1 = METAPAGE(env, 1);
       const MDBX_meta *const meta2 = METAPAGE(env, 2);
-      txnid_t undo_txnid = 0;
+      txnid_t undo_txnid = 0 /* zero means undo is unneeded */;
       while (
           (head != meta0 && mdbx_meta_txnid_fluid(env, meta0) == undo_txnid) ||
           (head != meta1 && mdbx_meta_txnid_fluid(env, meta1) == undo_txnid) ||
           (head != meta2 && mdbx_meta_txnid_fluid(env, meta2) == undo_txnid))
-        undo_txnid += 1;
+        undo_txnid = safe64_txnid_next(undo_txnid);
       if (unlikely(undo_txnid >= meta.mm_txnid_a.inconsistent)) {
         mdbx_fatal("rollback failed: no suitable txnid (0,1,2) < %" PRIaTXN,
                    meta.mm_txnid_a.inconsistent);
@@ -7446,6 +7545,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
     if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
       const txnid_t txnid = mdbx_meta_txnid_stable(env, head);
+      const txnid_t next_txnid = safe64_txnid_next(txnid);
       mdbx_verbose("updating meta.geo: "
                    "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
                    "/s%u-g%u (txn#%" PRIaTXN "), "
@@ -7454,10 +7554,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                    head->mm_geo.lower, head->mm_geo.now, head->mm_geo.upper,
                    head->mm_geo.shrink, head->mm_geo.grow, txnid,
                    meta.mm_geo.lower, meta.mm_geo.now, meta.mm_geo.upper,
-                   meta.mm_geo.shrink, meta.mm_geo.grow, txnid + 1);
+                   meta.mm_geo.shrink, meta.mm_geo.grow, next_txnid);
 
       mdbx_ensure(env, mdbx_meta_eq(env, &meta, head));
-      mdbx_meta_set_txnid(env, &meta, txnid + 1);
+      mdbx_meta_set_txnid(env, &meta, next_txnid);
       *env->me_unsynced_pages += 1;
       err = mdbx_sync_locked(env, env->me_flags | MDBX_SHRINK_ALLOWED, &meta);
       if (err) {
@@ -7470,7 +7570,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                      head->mm_geo.upper, head->mm_geo.shrink, head->mm_geo.grow,
                      txnid, meta.mm_geo.lower, meta.mm_geo.now,
                      meta.mm_geo.upper, meta.mm_geo.shrink, meta.mm_geo.grow,
-                     txnid + 1);
+                     next_txnid);
         return err;
       }
     }
@@ -7925,9 +8025,8 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
         goto bailout;
       if ((env->me_flags & MDBX_RDONLY) == 0) {
         while (env->me_lck->mti_envmode == MDBX_RDONLY) {
-          if (mdbx_atomic_compare_and_swap32(&env->me_lck->mti_envmode,
-                                             MDBX_RDONLY,
-                                             env->me_flags & mode_flags))
+          if (atomic_cas32(&env->me_lck->mti_envmode, MDBX_RDONLY,
+                           env->me_flags & mode_flags))
             break;
           /* TODO: yield/relax cpu */
         }
@@ -13665,8 +13764,9 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
       arg->mi_last_pgno = txn->mt_next_pgno - 1;
       arg->mi_geo.current = pgno2bytes(env, txn->mt_end_pgno);
 
-      const txnid_t wanna_meta_txnid =
-          (txn->mt_flags & MDBX_RDONLY) ? txn->mt_txnid : txn->mt_txnid - 1;
+      const txnid_t wanna_meta_txnid = (txn->mt_flags & MDBX_RDONLY)
+                                           ? txn->mt_txnid
+                                           : txn->mt_txnid - MDBX_TXNID_STEP;
       txn_meta = (arg->mi_meta0_txnid == wanna_meta_txnid) ? meta0 : txn_meta;
       txn_meta = (arg->mi_meta1_txnid == wanna_meta_txnid) ? meta1 : txn_meta;
       txn_meta = (arg->mi_meta2_txnid == wanna_meta_txnid) ? meta2 : txn_meta;
@@ -14328,7 +14428,7 @@ int __cold mdbx_reader_list(MDBX_env *env, MDBX_reader_list_func *func,
             head_txnid != mdbx_meta_txnid_fluid(env, recent_meta))
           goto retry_header;
 
-        lag = head_txnid - txnid;
+        lag = (head_txnid - txnid) / MDBX_TXNID_STEP;
         bytes_used = pgno2bytes(env, pages_used);
         bytes_retained = (head_pages_retired > reader_pages_retired)
                              ? pgno2bytes(env, (pgno_t)(head_pages_retired -
@@ -14615,7 +14715,8 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
       continue;
 
     const MDBX_meta *head_meta = mdbx_meta_head(env);
-    const txnid_t gap = mdbx_meta_txnid_stable(env, head_meta) - laggard;
+    const txnid_t gap =
+        (mdbx_meta_txnid_stable(env, head_meta) - laggard) / MDBX_TXNID_STEP;
     const uint64_t head_retired = head_meta->mm_pages_retired;
     const size_t space =
         (oldest_retired > head_retired)
@@ -14631,7 +14732,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
       if (rc == 1) {
         safe64_reset_compare(&asleep->mr_txnid, laggard);
       } else {
-        safe64_reset(&asleep->mr_txnid);
+        safe64_reset(&asleep->mr_txnid, true);
         asleep->mr_tid = 0;
         asleep->mr_pid = 0;
       }
@@ -14738,7 +14839,7 @@ int mdbx_txn_straggler(MDBX_txn *txn, int *percent)
     }
   } while (unlikely(recent != mdbx_meta_txnid_fluid(env, meta)));
 
-  txnid_t lag = recent - txn->mt_txnid;
+  txnid_t lag = (recent - txn->mt_txnid) / MDBX_TXNID_STEP;
   return (lag > INT_MAX) ? INT_MAX : (int)lag;
 }
 
@@ -16065,7 +16166,8 @@ __dll_export
 #endif /* __BYTE_ORDER__ */
     " MDBX_TXN_CHECKPID=" STRINGIFY(MDBX_TXN_CHECKPID)
     " MDBX_TXN_CHECKOWNER=" STRINGIFY(MDBX_TXN_CHECKOWNER)
-    " MDBX_64BIT_ATOMIC=" STRINGIFY(MDBX_64BIT_ATOMIC)
+    " MDBX_64BIT_ATOMIC=" STRINGIFY(MDBX_64BIT_ATOMIC_CONFIG)
+    " MDBX_64BIT_CAS=" STRINGIFY(MDBX_64BIT_CAS_CONFIG)
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */
