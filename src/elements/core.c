@@ -15669,35 +15669,30 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
     return MDBX_RESULT_FALSE;
 
   const MDBX_env *env = txn->mt_env;
-  const uintptr_t mask = ~(uintptr_t)(env->me_psize - 1);
-  const MDBX_page *page = (const MDBX_page *)((uintptr_t)ptr & mask);
-
-  /* LY: Тут не всё хорошо с абсолютной достоверностью результата,
-   * так как флажок P_DIRTY может означать не совсем то,
-   * что было исходно задумано, детали см в логике кода mdbx_page_touch().
-   *
-   * Более того, в режиме БЕЗ WRITEMAP грязные страницы выделяются через
-   * malloc(), т.е. находятся вне mmap-диапазона и тогда чтобы отличить
-   * действительно грязную страницу от указателя на данные пользователя
-   * следует сканировать dirtylist, что накладно.
-   *
-   * Тем не менее, однозначно страница "не грязная" (не будет переписана
-   * во время транзакции) если адрес находится внутри mmap-диапазона
-   * и в заголовке страницы нет флажка P_DIRTY. */
-  if (env->me_map < (uint8_t *)page) {
-    const size_t usedbytes = pgno2bytes(env, txn->mt_next_pgno);
-    if ((uint8_t *)page < env->me_map + usedbytes) {
-      /* страница внутри диапазона, смотрим на флажки */
-      return (page->mp_flags & (P_DIRTY | P_LOOSE | P_KEEP))
-                 ? MDBX_RESULT_TRUE
-                 : MDBX_RESULT_FALSE;
+  const ptrdiff_t offset = (uint8_t *)ptr - env->me_map;
+  if (offset >= 0) {
+    const pgno_t pgno = bytes2pgno(env, offset);
+    if (likely(pgno < txn->mt_next_pgno)) {
+      const MDBX_page *page = pgno2page(env, pgno);
+      if (unlikely(page->mp_pgno != pgno)) {
+        /* The ptr pointed into middle of a large page,
+         * not to the beginning of a data. */
+        return MDBX_EINVAL;
+      }
+      if (unlikely(page->mp_flags & (P_DIRTY | P_LOOSE | P_KEEP)))
+        return MDBX_RESULT_TRUE;
+      if (likely(txn->tw.spill_pages == nullptr))
+        return MDBX_RESULT_FALSE;
+      return mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1) ? MDBX_RESULT_TRUE
+                                                            : MDBX_RESULT_FALSE;
     }
-    /* Гипотетически здесь возможна ситуация, когда указатель адресует что-то
-     * в пределах mmap, но за границей распределенных страниц. Это тяжелая
-     * ошибка, к которой не возможно прийти без каких-то больших нарушений.
-     * Поэтому не проверяем этот случай кроме как assert-ом, на то что
-     * страница вне mmap-диаппазона. */
-    mdbx_tassert(txn, (uint8_t *)page >= env->me_map + env->me_mapsize);
+    if ((size_t)offset < env->me_mapsize) {
+      /* Указатель адресует что-то в пределах mmap, но за границей
+       * распределенных страниц. Такое может случится если mdbx_is_dirty()
+       * вызывает после операции, в ходе которой гразная страница попала
+       * в loose и затем была возвращена в нераспределенное пространство. */
+      return MDBX_RESULT_TRUE;
+    }
   }
 
   /* Страница вне используемого mmap-диапазона, т.е. либо в функцию был
