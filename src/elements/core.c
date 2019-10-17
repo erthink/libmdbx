@@ -1575,37 +1575,6 @@ static __inline bool mdbx_dpl_mark4removal(MDBX_DPL dl, MDBX_page *mp) {
   return false;
 }
 
-static __hot void mdbx_dpl_remove_marked(MDBX_DPL dl) {
-  assert(dl->sorted <= dl->length);
-  assert(dl->length <= MDBX_DPL_TXNFULL);
-
-  MDBX_DPL r, w;
-  const MDBX_DPL end_sorted = dl + dl->sorted;
-  for (r = w = dl + 1; r <= end_sorted; r++) {
-    if (r->ptr) {
-      if (r != w)
-        *w = *r;
-      ++w;
-    }
-  }
-  dl->sorted = (unsigned)(w - dl - 1);
-
-  const MDBX_DPL end = dl + dl->length;
-  for (; r <= end; r++) {
-    if (r->ptr) {
-      if (r != w)
-        *w = *r;
-      ++w;
-    }
-  }
-  dl->length = (unsigned)(w - dl - 1);
-
-#if MDBX_DEBUG
-  for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;)
-    assert(ptr[0].pgno < ptr[1].pgno);
-#endif
-}
-
 static __inline int __must_check_result mdbx_dpl_append(MDBX_DPL dl,
                                                         pgno_t pgno,
                                                         MDBX_page *page) {
@@ -5268,41 +5237,31 @@ retry:
                    dbg_prefix_mode, txn->tw.loose_count);
       }
 
-      // filter-out list of dirty-pages from loose-pages
-      MDBX_DPL dl = txn->tw.dirtylist;
-      unsigned left = dl->length;
-      for (MDBX_page *mp = txn->tw.loose_pages; mp;) {
-        mdbx_tassert(txn, mp->mp_pgno < txn->mt_next_pgno);
-        mdbx_ensure(env, mp->mp_pgno >= NUM_METAS);
-
-        if (left > 0)
-          left -= mdbx_dpl_mark4removal(dl, mp);
-
-        MDBX_page *dp = mp;
-        mp = mp->mp_next;
-        if ((env->me_flags & MDBX_WRITEMAP) == 0)
-          mdbx_dpage_free(env, dp, 1);
+      /* filter-out list of dirty-pages from loose-pages */
+      const MDBX_DPL dl = txn->tw.dirtylist;
+      unsigned w = 0;
+      for (unsigned r = w; ++r <= dl->length;) {
+        MDBX_page *dp = dl[r].ptr;
+        mdbx_tassert(txn, (dp->mp_flags & P_DIRTY));
+        mdbx_tassert(txn, dl[r].pgno + (IS_OVERFLOW(dp) ? dp->mp_pages : 1) <=
+                              txn->mt_next_pgno);
+        if ((dp->mp_flags & P_LOOSE) == 0) {
+          if (++w != r)
+            dl[w] = dl[r];
+        } else {
+          mdbx_tassert(txn, dp->mp_flags == (P_LOOSE | P_DIRTY));
+          if ((env->me_flags & MDBX_WRITEMAP) == 0)
+            mdbx_dpage_free(env, dp, 1);
+        }
       }
-      if (left != dl->length) {
-        mdbx_trace("%s: filtered-out loose-pages from %u -> %u dirty-pages",
-                   dbg_prefix_mode, dl->length, left);
-        txn->tw.dirtyroom += dl->length - left;
-        if (!MDBX_DEBUG && unlikely(left == 0))
-          mdbx_dpl_clear(dl);
-        else
-          mdbx_dpl_remove_marked(dl);
-        mdbx_tassert(txn, dl->length == left);
-      }
-      mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                            MDBX_DPL_TXNFULL);
-
+      mdbx_trace("%s: filtered-out loose-pages from %u -> %u dirty-pages",
+                 dbg_prefix_mode, dl->length, w);
+      mdbx_tassert(txn, txn->tw.loose_count == dl->length - w);
+      dl->length = w;
+      dl->sorted = 0;
+      txn->tw.dirtyroom += txn->tw.loose_count;
       txn->tw.loose_pages = NULL;
       txn->tw.loose_count = 0;
-      if (mdbx_audit_enabled()) {
-        rc = mdbx_audit_ex(txn, retired_stored, false);
-        if (unlikely(rc != MDBX_SUCCESS))
-          goto bailout;
-      }
     }
 
     // handle retired-list - store ones into single gc-record
