@@ -829,6 +829,16 @@ struct MDBX_txn {
       MDBX_reader *reader;
     } to;
     struct {
+      pgno_t *reclaimed_pglist; /* Reclaimed freeDB pages */
+      txnid_t last_reclaimed;   /* ID of last used record */
+      pgno_t loose_refund_wl /* FIXME: describe */;
+      /* dirtylist room: Dirty array size - dirty pages visible to this txn.
+       * Includes ancestor txns' dirty pages not hidden by other txns'
+       * dirty/spilled pages. Thus commit(nested txn) has room to merge
+       * dirtylist into mt_parent after freeing hidden mt_parent pages. */
+      unsigned dirtyroom;
+      /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
+      MDBX_DPL dirtylist;
       /* The list of reclaimed txns from GC */
       MDBX_TXL lifo_reclaimed;
       /* The list of pages that became unused during this transaction. */
@@ -847,15 +857,6 @@ struct MDBX_txn {
        * because the dirty list was full. page numbers in here are
        * shifted left by 1, deleted slots have the LSB set. */
       MDBX_PNL spill_pages;
-      /* dirtylist room: Dirty array size - dirty pages visible to this txn.
-       * Includes ancestor txns' dirty pages not hidden by other txns'
-       * dirty/spilled pages. Thus commit(nested txn) has room to merge
-       * dirtylist into mt_parent after freeing hidden mt_parent pages. */
-      unsigned dirtyroom;
-      /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
-      MDBX_DPL dirtylist;
-      pgno_t *reclaimed_pglist; /* Reclaimed freeDB pages */
-      txnid_t last_reclaimed;   /* ID of last used record */
     } tw;
   };
 };
