@@ -802,36 +802,6 @@ struct MDBX_txn {
   MDBX_db *mt_dbs;
   /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
-  union {
-    struct {
-      /* For read txns: This thread/txn's reader table slot, or NULL. */
-      MDBX_reader *reader;
-    } to;
-    struct {
-      /* The list of reclaimed txns from GC */
-      MDBX_TXL lifo_reclaimed;
-      /* The list of pages that became unused during this transaction. */
-      MDBX_PNL retired_pages;
-      /* The list of loose pages that became unused and may be reused
-       * in this transaction, linked through NEXT_LOOSE_PAGE(page). */
-      MDBX_page *loose_pages;
-      /* Number of loose pages (tw.loose_pages) */
-      unsigned loose_count;
-      /* The sorted list of dirty pages we temporarily wrote to disk
-       * because the dirty list was full. page numbers in here are
-       * shifted left by 1, deleted slots have the LSB set. */
-      MDBX_PNL spill_pages;
-      /* dirtylist room: Array size - dirty pages visible to this txn.
-       * Includes ancestor txns' dirty pages not hidden by other txns'
-       * dirty/spilled pages. Thus commit(nested txn) has room to merge
-       * dirtylist into mt_parent after freeing hidden mt_parent pages. */
-      unsigned dirtyroom;
-      /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
-      MDBX_DPL dirtylist;
-      pgno_t *reclaimed_pglist; /* Reclaimed freeDB pages */
-      txnid_t last_reclaimed;   /* ID of last used record */
-    } tw;
-  };
 
 /* Transaction DB Flags */
 #define DB_DIRTY MDBX_TBL_DIRTY /* DB was written in this txn */
@@ -852,6 +822,42 @@ struct MDBX_txn {
   MDBX_dbi mt_numdbs;
   size_t mt_owner; /* thread ID that owns this transaction */
   mdbx_canary mt_canary;
+
+  union {
+    struct {
+      /* For read txns: This thread/txn's reader table slot, or NULL. */
+      MDBX_reader *reader;
+    } to;
+    struct {
+      /* The list of reclaimed txns from GC */
+      MDBX_TXL lifo_reclaimed;
+      /* The list of pages that became unused during this transaction. */
+      MDBX_PNL retired_pages;
+      /* The list of loose pages that became unused and may be reused
+       * in this transaction, linked through `mp_next`. */
+      MDBX_page *loose_pages;
+      /* Number of loose pages (tw.loose_pages) */
+      unsigned loose_count;
+      /* Number of retired to parent pages (tw.retired2parent_pages) */
+      unsigned retired2parent_count;
+      /* The list of parent's txn dirty pages that retired (became unused)
+       * in this transaction, linked through `mp_next`. */
+      MDBX_page *retired2parent_pages;
+      /* The sorted list of dirty pages we temporarily wrote to disk
+       * because the dirty list was full. page numbers in here are
+       * shifted left by 1, deleted slots have the LSB set. */
+      MDBX_PNL spill_pages;
+      /* dirtylist room: Dirty array size - dirty pages visible to this txn.
+       * Includes ancestor txns' dirty pages not hidden by other txns'
+       * dirty/spilled pages. Thus commit(nested txn) has room to merge
+       * dirtylist into mt_parent after freeing hidden mt_parent pages. */
+      unsigned dirtyroom;
+      /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
+      MDBX_DPL dirtylist;
+      pgno_t *reclaimed_pglist; /* Reclaimed freeDB pages */
+      txnid_t last_reclaimed;   /* ID of last used record */
+    } tw;
+  };
 };
 
 /* Enough space for 2^32 nodes with minimum of 2 keys per node. I.e., plenty.
