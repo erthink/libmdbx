@@ -247,7 +247,8 @@ bool testcase_nested::run() {
 
   while (should_continue()) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
-    const unsigned window_width = edge2window(salt, window_max);
+    const unsigned window_width =
+        flipcoin_x4() ? 0 : edge2window(salt, window_max);
     const unsigned head_count = edge2count(salt, count_max);
     log_debug("nested: step #%zu (serial %" PRIu64
               ", window %u, count %u) salt %" PRIu64,
