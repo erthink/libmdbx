@@ -44,7 +44,7 @@ LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1
 
-.PHONY: mdbx all install clean check coverage
+.PHONY: mdbx all install clean test dist check
 
 all: $(LIBRARIES) $(TOOLS)
 
@@ -131,7 +131,7 @@ MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'P
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c && (openssl dgst -r -sha256 src/elements/version.c || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
 
-check: all mdbx_example mdbx_test
+test check: all mdbx_example mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		./mdbx_test --mode=-writemap,-lifo --progress --console=no --repeat=1 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
