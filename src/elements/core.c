@@ -3203,7 +3203,7 @@ bailout:
  *
  * If there are free pages available from older transactions, they
  * are re-used first. Otherwise allocate a new page at mt_next_pgno.
- * Do not modify the freedB, just merge GC records into mt_reclaimed_pglist
+ * Do not modify the GC, just merge GC records into mt_reclaimed_pglist
  * and move mt_last_reclaimed to say which records were consumed.  Only this
  * function can create mt_reclaimed_pglist and move
  * mt_last_reclaimed/mt_next_pgno.
@@ -3272,8 +3272,8 @@ skip_cache:
 
   mdbx_tassert(
       txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist, txn->mt_next_pgno));
-  pgno_t pgno, *repg_list = txn->tw.reclaimed_pglist;
-  unsigned repg_pos = 0, repg_len = MDBX_PNL_SIZE(repg_list);
+  pgno_t pgno, *re_list = txn->tw.reclaimed_pglist;
+  unsigned range_begin = 0, re_len = MDBX_PNL_SIZE(re_list);
   txnid_t oldest = 0, last = 0;
   const unsigned wanna_range = num - 1;
 
@@ -3293,24 +3293,33 @@ skip_cache:
        * Prefer pages with lower pgno. */
       mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                               txn->mt_next_pgno));
-      if (likely(flags & MDBX_ALLOC_CACHE) && repg_len > wanna_range &&
+      if (likely(flags & MDBX_ALLOC_CACHE) && re_len > wanna_range &&
           (!(flags & MDBX_COALESCE) || op == MDBX_FIRST)) {
-        mdbx_tassert(txn, MDBX_PNL_LAST(repg_list) < txn->mt_next_pgno &&
-                              MDBX_PNL_FIRST(repg_list) < txn->mt_next_pgno);
+        mdbx_tassert(txn, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
+                              MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
+        range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
+        pgno = MDBX_PNL_LEAST(re_list);
+        if (likely(wanna_range == 0))
+          goto done;
 #if MDBX_PNL_ASCENDING
-        for (repg_pos = 1; repg_pos <= repg_len - wanna_range; ++repg_pos) {
-          pgno = repg_list[repg_pos];
-          if (likely(repg_list[repg_pos + wanna_range - 1] ==
-                     pgno + wanna_range - 1))
+        mdbx_tassert(txn, pgno == re_list[1] && range_begin == 1);
+        while (true) {
+          unsigned range_end = range_begin + wanna_range;
+          if (re_list[range_end] - pgno == wanna_range)
             goto done;
+          if (range_end == re_len)
+            break;
+          pgno = re_list[++range_begin];
         }
 #else
-        repg_pos = repg_len;
-        do {
-          pgno = repg_list[repg_pos];
-          if (likely(repg_list[repg_pos - wanna_range] == pgno + wanna_range))
+        mdbx_tassert(txn, pgno == re_list[re_len] && range_begin == re_len);
+        while (true) {
+          if (re_list[range_begin - wanna_range] - pgno == wanna_range)
             goto done;
-        } while (--repg_pos > wanna_range);
+          if (range_begin == wanna_range)
+            break;
+          pgno = re_list[--range_begin];
+        }
 #endif /* MDBX_PNL sort-order */
       }
 
@@ -3369,7 +3378,15 @@ skip_cache:
         goto fail;
       }
 
-      last = *(txnid_t *)key.iov_base;
+      if (unlikely(key.iov_len != sizeof(txnid_t))) {
+        rc = MDBX_CORRUPTED;
+        goto fail;
+      }
+      memcpy(&last, key.iov_base, sizeof(txnid_t));
+      if (unlikely(last < 1 || last >= SAFE64_INVALID_THRESHOLD)) {
+        rc = MDBX_CORRUPTED;
+        goto fail;
+      }
       if (oldest <= last) {
         oldest = mdbx_find_oldest(txn);
         if (oldest <= last) {
@@ -3407,20 +3424,20 @@ skip_cache:
 
       /* Append PNL from GC record to me_reclaimed_pglist */
       mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
-      pgno_t *re_pnl = (pgno_t *)data.iov_base;
-      mdbx_tassert(txn, data.iov_len >= MDBX_PNL_SIZEOF(re_pnl));
-      if (unlikely(data.iov_len < MDBX_PNL_SIZEOF(re_pnl) ||
-                   !mdbx_pnl_check(re_pnl, txn->mt_next_pgno))) {
+      pgno_t *gc_pnl = (pgno_t *)data.iov_base;
+      mdbx_tassert(txn, data.iov_len >= MDBX_PNL_SIZEOF(gc_pnl));
+      if (unlikely(data.iov_len < MDBX_PNL_SIZEOF(gc_pnl) ||
+                   !mdbx_pnl_check(gc_pnl, txn->mt_next_pgno))) {
         rc = MDBX_CORRUPTED;
         goto fail;
       }
-      repg_pos = MDBX_PNL_SIZE(re_pnl);
-      rc = mdbx_pnl_need(&txn->tw.reclaimed_pglist, repg_pos);
+      const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
+      rc = mdbx_pnl_need(&txn->tw.reclaimed_pglist, gc_len);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
-      repg_list = txn->tw.reclaimed_pglist;
+      re_list = txn->tw.reclaimed_pglist;
 
-      /* Remember ID of FreeDB record */
+      /* Remember ID of GC record */
       if (flags & MDBX_LIFORECLAIM) {
         if ((rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, last)) != 0)
           goto fail;
@@ -3430,66 +3447,76 @@ skip_cache:
       if (mdbx_log_enabled(MDBX_LOG_EXTRA)) {
         mdbx_debug_extra("PNL read txn %" PRIaTXN " root %" PRIaPGNO
                          " num %u, PNL",
-                         last, txn->mt_dbs[FREE_DBI].md_root, repg_pos);
+                         last, txn->mt_dbs[FREE_DBI].md_root, gc_len);
         unsigned i;
-        for (i = repg_pos; i; i--)
-          mdbx_debug_extra_print(" %" PRIaPGNO, re_pnl[i]);
+        for (i = gc_len; i; i--)
+          mdbx_debug_extra_print(" %" PRIaPGNO, gc_pnl[i]);
         mdbx_debug_extra_print("\n");
       }
 
       /* Merge in descending sorted order */
-      mdbx_pnl_xmerge(repg_list, re_pnl);
+      const unsigned prev_re_len = MDBX_PNL_SIZE(re_list);
+      mdbx_pnl_xmerge(re_list, gc_pnl);
       /* re-check to avoid duplicates */
-      if (unlikely(!mdbx_pnl_check(repg_list, txn->mt_next_pgno))) {
+      if (unlikely(!mdbx_pnl_check(re_list, txn->mt_next_pgno))) {
         rc = MDBX_CORRUPTED;
         goto fail;
       }
-      repg_len = MDBX_PNL_SIZE(repg_list);
+
+      re_len = MDBX_PNL_SIZE(re_list);
+      mdbx_tassert(txn, re_len == 0 || re_list[re_len] < txn->mt_next_pgno);
+      if (re_len && unlikely(MDBX_PNL_MOST(re_list) == txn->mt_next_pgno - 1)) {
+        /* Refund suitable pages into "unallocated" space */
+        mdbx_refund(txn);
+        re_list = txn->tw.reclaimed_pglist;
+        re_len = MDBX_PNL_SIZE(re_list);
+      }
+
       if (unlikely((flags & MDBX_ALLOC_CACHE) == 0)) {
         /* Done for a kick-reclaim mode, actually no page needed */
         return MDBX_SUCCESS;
       }
 
-      mdbx_tassert(txn,
-                   repg_len == 0 || repg_list[repg_len] < txn->mt_next_pgno);
-      if (repg_len &&
-          unlikely(MDBX_PNL_MOST(repg_list) == txn->mt_next_pgno - 1)) {
-        /* Refund suitable pages into "unallocated" space */
-        mdbx_refund(txn);
-        repg_list = txn->tw.reclaimed_pglist;
-        repg_len = MDBX_PNL_SIZE(repg_list);
-      }
-
       /* Don't try to coalesce too much. */
-      if (unlikely(repg_len > MDBX_DPL_TXNFULL / 4))
+      if (unlikely(re_len > MDBX_DPL_TXNFULL / 4))
         break;
-      if (repg_len /* current size */ >= env->me_maxgc_ov1page ||
-          repg_pos /* prev size */ >= env->me_maxgc_ov1page / 2)
+      if (re_len /* current size */ >= env->me_maxgc_ov1page ||
+          (re_len > prev_re_len && re_len - prev_re_len /* delta from prev */ >=
+                                       env->me_maxgc_ov1page / 2))
         flags &= ~MDBX_COALESCE;
     }
 
     if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) ==
             (MDBX_COALESCE | MDBX_ALLOC_CACHE) &&
-        repg_len > wanna_range) {
+        re_len > wanna_range) {
+      range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
+      pgno = MDBX_PNL_LEAST(re_list);
+      if (likely(wanna_range == 0))
+        goto done;
 #if MDBX_PNL_ASCENDING
-      for (repg_pos = 1; repg_pos <= repg_len - wanna_range; ++repg_pos) {
-        pgno = repg_list[repg_pos];
-        if (likely(repg_list[repg_pos + wanna_range - 1] ==
-                   pgno + wanna_range - 1))
+      mdbx_tassert(txn, pgno == re_list[1] && range_begin == 1);
+      while (true) {
+        unsigned range_end = range_begin + wanna_range;
+        if (re_list[range_end] - pgno == wanna_range)
           goto done;
+        if (range_end == re_len)
+          break;
+        pgno = re_list[++range_begin];
       }
 #else
-      repg_pos = repg_len;
-      do {
-        pgno = repg_list[repg_pos];
-        if (likely(repg_list[repg_pos - wanna_range] == pgno + wanna_range))
+      mdbx_tassert(txn, pgno == re_list[re_len] && range_begin == re_len);
+      while (true) {
+        if (re_list[range_begin - wanna_range] - pgno == wanna_range)
           goto done;
-      } while (--repg_pos > wanna_range);
+        if (range_begin == wanna_range)
+          break;
+        pgno = re_list[--range_begin];
+      }
 #endif /* MDBX_PNL sort-order */
     }
 
     /* Use new pages from the map when nothing suitable in the GC */
-    repg_pos = 0;
+    range_begin = 0;
     pgno = txn->mt_next_pgno;
     rc = MDBX_MAP_FULL;
     const pgno_t next = pgno_add(pgno, num);
@@ -3590,14 +3617,20 @@ done:
     }
   }
 
-  if (repg_pos) {
+  if (range_begin) {
     mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
     mdbx_tassert(txn, pgno < txn->mt_next_pgno);
-    mdbx_tassert(txn, pgno == repg_list[repg_pos]);
+    mdbx_tassert(txn, pgno == re_list[range_begin]);
     /* Cutoff allocated pages from me_reclaimed_pglist */
-    MDBX_PNL_SIZE(repg_list) = repg_len -= num;
-    for (unsigned i = repg_pos - num; i < repg_len;)
-      repg_list[++i] = repg_list[++repg_pos];
+#if MDBX_PNL_ASCENDING
+    for (unsigned i = range_begin + num; i <= re_len;)
+      re_list[range_begin++] = re_list[i++];
+    MDBX_PNL_SIZE(re_list) = re_len = range_begin - 1;
+#else
+    MDBX_PNL_SIZE(re_list) = re_len -= num;
+    for (unsigned i = range_begin - num; i < re_len;)
+      re_list[++i] = re_list[++range_begin];
+#endif
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
   } else {
@@ -3606,7 +3639,7 @@ done:
   }
 
   if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
-    memset(np, 0x71 /* 'q', 113 */, pgno2bytes(env, num));
+    memset(np, -1, pgno2bytes(env, num));
   VALGRIND_MAKE_MEM_UNDEFINED(np, pgno2bytes(env, num));
 
   np->mp_pgno = pgno;
@@ -5369,7 +5402,7 @@ retry:
         rc = mdbx_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
         mc.mc_flags |= C_RECLAIMING;
         if (likely(rc == MDBX_SUCCESS)) {
-          /* LY: ok, reclaimed from freedb. */
+          /* LY: ok, reclaimed from GC. */
           mdbx_trace("%s: took @%" PRIaTXN " from GC, continue",
                      dbg_prefix_mode, MDBX_PNL_LAST(txn->tw.lifo_reclaimed));
           continue;
@@ -5378,7 +5411,7 @@ retry:
           /* LY: other troubles... */
           goto bailout;
 
-        /* LY: freedb is empty, will look any free txn-id in high2low order. */
+        /* LY: GC is empty, will look any free txn-id in high2low order. */
         do {
           --head_gc_id;
           mdbx_assert(env,
@@ -5479,7 +5512,7 @@ retry:
     mdbx_tassert(txn, reservation_gc_id < *env->me_oldest);
     if (unlikely(reservation_gc_id < 1 ||
                  reservation_gc_id >= *env->me_oldest)) {
-      /* LY: not any txn in the past of freedb. */
+      /* LY: not any txn in the past of GC. */
       rc = MDBX_PROBLEM;
       goto bailout;
     }
@@ -6414,20 +6447,20 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
       continue;
     }
 
-    /* LY: FreeDB root */
+    /* LY: GC root */
     if (page.mp_meta.mm_dbs[FREE_DBI].md_root == P_INVALID) {
       if (page.mp_meta.mm_dbs[FREE_DBI].md_branch_pages ||
           page.mp_meta.mm_dbs[FREE_DBI].md_depth ||
           page.mp_meta.mm_dbs[FREE_DBI].md_entries ||
           page.mp_meta.mm_dbs[FREE_DBI].md_leaf_pages ||
           page.mp_meta.mm_dbs[FREE_DBI].md_overflow_pages) {
-        mdbx_notice("meta[%u] has false-empty freedb, skip it", meta_number);
+        mdbx_notice("meta[%u] has false-empty GC, skip it", meta_number);
         rc = MDBX_CORRUPTED;
         continue;
       }
     } else if (page.mp_meta.mm_dbs[FREE_DBI].md_root >=
                page.mp_meta.mm_geo.next) {
-      mdbx_notice("meta[%u] has invalid freedb-root %" PRIaPGNO ", skip it",
+      mdbx_notice("meta[%u] has invalid GC-root %" PRIaPGNO ", skip it",
                   meta_number, page.mp_meta.mm_dbs[FREE_DBI].md_root);
       rc = MDBX_CORRUPTED;
       continue;
@@ -8744,8 +8777,8 @@ __hot static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key,
 
     mdbx_debug("branch page %" PRIaPGNO " has %u keys", mp->mp_pgno,
                NUMKEYS(mp));
-    /* Don't assert on branch pages in the FreeDB. We can get here
-     * while in the process of rebalancing a FreeDB branch page; we must
+    /* Don't assert on branch pages in the GC. We can get here
+     * while in the process of rebalancing a GC branch page; we must
      * let that proceed. ITS#8336 */
     mdbx_cassert(mc, !mc->mc_dbi || NUMKEYS(mp) > 1);
     mdbx_debug("found index 0 to page %" PRIaPGNO, NODEPGNO(NODEPTR(mp, 0)));
@@ -11738,7 +11771,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     }
   }
 
-  /* If not operating on FreeDB, allow this page to be reused
+  /* If not operating on GC, allow this page to be reused
    * in this txn. Otherwise just add to free list. */
   rc = mdbx_page_retire(csrc, psrc);
   if (unlikely(rc))

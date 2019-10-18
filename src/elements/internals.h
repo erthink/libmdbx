@@ -438,7 +438,7 @@ typedef struct MDBX_meta {
  * P_META pages contain MDBX_meta, the start point of an MDBX snapshot.
  *
  * Each non-metapage up to MDBX_meta.mm_last_pg is reachable exactly once
- * in the snapshot: Either used by a database or listed in a freeDB record. */
+ * in the snapshot: Either used by a database or listed in a GC record. */
 typedef struct MDBX_page {
   union {
     struct MDBX_page *mp_next; /* for in-memory list of freed pages */
@@ -829,7 +829,7 @@ struct MDBX_txn {
       MDBX_reader *reader;
     } to;
     struct {
-      pgno_t *reclaimed_pglist; /* Reclaimed freeDB pages */
+      pgno_t *reclaimed_pglist; /* Reclaimed GC pages */
       txnid_t last_reclaimed;   /* ID of last used record */
       pgno_t loose_refund_wl /* FIXME: describe */;
       /* dirtylist room: Dirty array size - dirty pages visible to this txn.
@@ -904,7 +904,7 @@ struct MDBX_cursor {
 #define C_SUB 0x04                /* Cursor is a sub-cursor */
 #define C_DEL 0x08                /* last op was a cursor_del */
 #define C_UNTRACK 0x10            /* Un-track cursor when closing */
-#define C_RECLAIMING 0x20         /* FreeDB lookup is prohibited */
+#define C_RECLAIMING 0x20         /* GC lookup is prohibited */
 #define C_GCFREEZE 0x40           /* reclaimed_pglist must not be updated */
   unsigned mc_flags;              /* see mdbx_cursor */
   MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
