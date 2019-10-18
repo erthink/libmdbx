@@ -14350,13 +14350,6 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  MDBX_env *env = txn->mt_env;
-  rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    mdbx_cursor_close(mc);
-    return rc;
-  }
-
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID))) {
     rc = MDBX_EINVAL;
     goto bailout;
@@ -14377,9 +14370,17 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   /* Can't delete the main DB */
   if (del && dbi >= CORE_DBS) {
     rc = mdbx_del0(txn, MAIN_DBI, &mc->mc_dbx->md_name, NULL, F_SUBDATA);
-    if (likely(!rc)) {
+    if (likely(rc == MDBX_SUCCESS)) {
       txn->mt_dbflags[dbi] = DB_STALE;
+      MDBX_env *env = txn->mt_env;
+      rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        txn->mt_flags |= MDBX_TXN_ERROR;
+        goto bailout;
+      }
       mdbx_dbi_close_locked(env, dbi);
+      mdbx_ensure(env,
+                  mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
     } else {
       txn->mt_flags |= MDBX_TXN_ERROR;
     }
@@ -14398,7 +14399,6 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
 
 bailout:
   mdbx_cursor_close(mc);
-  mdbx_ensure(env, mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
   return rc;
 }
 
