@@ -10580,35 +10580,25 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
 
   if (unlikely((rc = mdbx_page_alloc(mc, num, &np, MDBX_ALLOC_ALL))))
     return rc;
+  *mp = np;
   mdbx_debug("allocated new page #%" PRIaPGNO ", size %u", np->mp_pgno,
              mc->mc_txn->mt_env->me_psize);
   np->mp_flags = (uint16_t)(flags | P_DIRTY);
   np->mp_lower = 0;
   np->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
 
-  if (IS_BRANCH(np))
-    mc->mc_db->md_branch_pages++;
-  else if (IS_LEAF(np))
-    mc->mc_db->md_leaf_pages++;
-  else {
-    mdbx_cassert(mc, IS_OVERFLOW(np));
+  mc->mc_db->md_branch_pages += IS_BRANCH(np);
+  mc->mc_db->md_leaf_pages += IS_LEAF(np);
+  if (unlikely(IS_OVERFLOW(np))) {
     mc->mc_db->md_overflow_pages += num;
     np->mp_pages = num;
-  }
-
-  if (unlikely(mc->mc_flags & C_SUB)) {
+    mdbx_cassert(mc, !(mc->mc_flags & C_SUB));
+  } else if (unlikely(mc->mc_flags & C_SUB)) {
     MDBX_db *outer = mdbx_outer_db(mc);
-    if (IS_BRANCH(np))
-      outer->md_branch_pages++;
-    else if (IS_LEAF(np))
-      outer->md_leaf_pages++;
-    else {
-      mdbx_cassert(mc, IS_OVERFLOW(np));
-      outer->md_overflow_pages += num;
-    }
+    outer->md_branch_pages += IS_BRANCH(np);
+    outer->md_leaf_pages += IS_LEAF(np);
   }
 
-  *mp = np;
   return MDBX_SUCCESS;
 }
 
