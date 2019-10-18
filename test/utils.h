@@ -356,5 +356,7 @@ void prng_fill(void *ptr, size_t bytes);
 
 bool flipcoin();
 bool flipcoin_x2();
+bool flipcoin_x3();
+bool flipcoin_x4();
 bool jitter(unsigned probability_percent);
 void jitter_delay(bool extra = false);

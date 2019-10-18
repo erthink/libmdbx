@@ -298,7 +298,10 @@ class testcase_nested : public testcase {
   bool trim_tail(unsigned window_width);
   bool grow_head(unsigned head_count);
   bool pop_txn(bool abort);
-  bool pop_txn() { return pop_txn(flipcoin_x2()); }
+  bool pop_txn() {
+    return pop_txn(inherited::is_nested_txn_available() ? flipcoin_x3()
+                                                        : flipcoin_x2());
+  }
   void push_txn();
   bool stochastic_breakable_restart_with_nested(bool force_restart = false);
 
