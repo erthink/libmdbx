@@ -123,7 +123,7 @@ static void __printf_args(1, 2) error(const char *msg, ...) {
   if (!quiet) {
     va_list args;
 
-    fflush(stdout);
+    fflush(NULL);
     va_start(args, msg);
     fputs(" ! ", stderr);
     vfprintf(stderr, msg, args);
@@ -1370,12 +1370,13 @@ int main(int argc, char *argv[]) {
     if (!dont_traversal &&
         (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
       if (walk.pgcount != alloc_pages - gc_pages) {
-        error("used pages mismatch (%" PRIu64 " != %" PRIu64 ")\n",
+        error("used pages mismatch (%" PRIu64 "(walked) != %" PRIu64
+              "(allocated - GC))\n",
               walk.pgcount, alloc_pages - gc_pages);
       }
       if (unused_pages != gc_pages) {
-        error("gc pages mismatch (%" PRIu64 " != %" PRIu64 ")\n", unused_pages,
-              gc_pages);
+        error("gc pages mismatch (%" PRIu64 "(walked) != %" PRIu64 "(GC))\n",
+              unused_pages, gc_pages);
       }
     } else if (verbose) {
       print(" - skip check used and gc pages (btree-traversal with "
