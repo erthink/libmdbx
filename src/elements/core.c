@@ -7606,7 +7606,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
           mdbx_error("filesize should be rounded-up to system page");
           return MDBX_WANNA_RECOVERY;
         }
-        mdbx_notice("ignore filesize mismatch in readonly-mode");
+        mdbx_warning("ignore filesize mismatch in readonly-mode");
       } else {
         mdbx_verbose("resize datafile to %" PRIuSIZE " bytes, %" PRIaPGNO
                      " pages",
@@ -7656,9 +7656,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
       mdbx_assert(env, META_IS_STEADY(&meta) && !META_IS_STEADY(head));
       if (env->me_flags & MDBX_RDONLY) {
-        mdbx_error("rollback needed: (from head %" PRIaTXN
-                   " to steady %" PRIaTXN "), but unable in read-only mode",
-                   head_txnid, meta.mm_txnid_a.inconsistent);
+        mdbx_warning("rollback needed: (from head %" PRIaTXN
+                     " to steady %" PRIaTXN "), but unable in read-only mode",
+                     head_txnid, meta.mm_txnid_a.inconsistent);
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
@@ -7739,8 +7739,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       if (filesize_after_mmap % env->me_os_psize ||
           filesize_after_mmap > env->me_dbgeo.upper ||
           filesize_after_mmap < used_bytes) {
-        mdbx_verbose("unacceptable/unexpected  datafile size %" PRIu64,
-                     filesize_after_mmap);
+        mdbx_error("unacceptable/unexpected datafile size %" PRIu64,
+                   filesize_after_mmap);
         return MDBX_PROBLEM;
       }
       if ((env->me_flags & MDBX_RDONLY) == 0) {
