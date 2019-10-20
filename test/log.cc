@@ -20,7 +20,7 @@ void failure(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   fflushall();
-  logging::output_ap(logging::failure, fmt, ap);
+  logging::output_nocheckloglevel_ap(logging::failure, fmt, ap);
   va_end(ap);
   fflushall();
   exit(EXIT_FAILURE);
@@ -45,10 +45,10 @@ static void mdbx_logger(int priority, const char *function, int line,
   if (priority == MDBX_LOG_FATAL)
     log_error("mdbx: fatal failure: %s, %d", function, line);
 
-  if (logging::output(
-          logging::loglevel(priority),
-          strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function))
-    logging::feed_ap(msg, args);
+  logging::output_nocheckloglevel(
+      logging::loglevel(priority),
+      strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function);
+  logging::feed_ap(msg, args);
 }
 
 namespace logging {
@@ -103,13 +103,13 @@ bool output(const loglevel priority, const char *format, ...) {
 
   va_list ap;
   va_start(ap, format);
-  output_ap(priority, format, ap);
+  output_nocheckloglevel_ap(priority, format, ap);
   va_end(ap);
   return true;
 }
 
-bool output_ap(const logging::loglevel priority, const char *format,
-               va_list ap) {
+void output_nocheckloglevel_ap(const logging::loglevel priority,
+                               const char *format, va_list ap) {
   if (last) {
     putc('\n', last);
     fflush(last);
@@ -119,9 +119,6 @@ bool output_ap(const logging::loglevel priority, const char *format,
     }
     last = nullptr;
   }
-
-  if (lower(priority, level))
-    return false;
 
   chrono::time now = chrono::now_realtime();
   struct tm tm;
@@ -182,8 +179,6 @@ bool output_ap(const logging::loglevel priority, const char *format,
     }
     va_end(ones);
   }
-
-  return true;
 }
 
 bool feed_ap(const char *format, va_list ap) {
@@ -299,7 +294,7 @@ void log_extra(const char *msg, ...) {
   if (logging::same_or_higher(logging::extra, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::extra, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::extra, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -309,7 +304,7 @@ void log_trace(const char *msg, ...) {
   if (logging::same_or_higher(logging::trace, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::trace, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::trace, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -319,7 +314,7 @@ void log_debug(const char *msg, ...) {
   if (logging::same_or_higher(logging::debug, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::debug, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::debug, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -329,7 +324,7 @@ void log_verbose(const char *msg, ...) {
   if (logging::same_or_higher(logging::verbose, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::verbose, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::verbose, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -339,7 +334,7 @@ void log_notice(const char *msg, ...) {
   if (logging::same_or_higher(logging::notice, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::notice, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::notice, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -349,7 +344,7 @@ void log_warning(const char *msg, ...) {
   if (logging::same_or_higher(logging::warning, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::warning, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::warning, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;
@@ -359,7 +354,7 @@ void log_error(const char *msg, ...) {
   if (logging::same_or_higher(logging::error, logging::level)) {
     va_list ap;
     va_start(ap, msg);
-    logging::output_ap(logging::error, msg, ap);
+    logging::output_nocheckloglevel_ap(logging::error, msg, ap);
     va_end(ap);
   } else
     logging::last = nullptr;

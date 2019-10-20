@@ -49,11 +49,20 @@ void setup(loglevel priority, const std::string &prefix);
 void setup(const std::string &prefix);
 void setlevel(loglevel priority);
 
-bool output_ap(const loglevel priority, const char *format, va_list ap);
+void output_nocheckloglevel_ap(const loglevel priority, const char *format,
+                               va_list ap);
 bool __printf_args(2, 3)
     output(const loglevel priority, const char *format, ...);
 bool feed_ap(const char *format, va_list ap);
 bool __printf_args(1, 2) feed(const char *format, ...);
+
+void inline __printf_args(2, 3)
+    output_nocheckloglevel(const loglevel priority, const char *format, ...) {
+  va_list ap;
+  va_start(ap, format);
+  output_nocheckloglevel_ap(priority, format, ap);
+  va_end(ap);
+}
 
 void progress_canary(bool active);
 
