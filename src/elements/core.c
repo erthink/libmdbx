@@ -1241,49 +1241,90 @@ static __inline int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl,
 static __inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t pgno) {
   assert(MDBX_PNL_SIZE(pl) < MDBX_PNL_ALLOCLEN(pl));
   if (mdbx_assert_enabled()) {
-    for (unsigned i = 1; i <= MDBX_PNL_SIZE(pl); ++i)
+    for (unsigned i = MDBX_PNL_SIZE(pl); i > 0; --i)
       assert(pgno != pl[i]);
   }
   MDBX_PNL_SIZE(pl) += 1;
   MDBX_PNL_LAST(pl) = pgno;
 }
 
-/* Append an ID onto an PNL */
-static int __must_check_result mdbx_pnl_append(MDBX_PNL *ppl, pgno_t id) {
+/* Append an pgno onto an unsorted PNL */
+static __hot int __must_check_result mdbx_pnl_append(MDBX_PNL *ppl,
+                                                     pgno_t pgno) {
   /* Too big? */
   if (unlikely(MDBX_PNL_SIZE(*ppl) == MDBX_PNL_ALLOCLEN(*ppl))) {
     int rc = mdbx_pnl_need(ppl, MDBX_PNL_GRANULATE);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
-  mdbx_pnl_xappend(*ppl, id);
+  mdbx_pnl_xappend(*ppl, pgno);
   return MDBX_SUCCESS;
 }
 
-/* Append an PNL onto an PNL */
+/* Append an PNL onto an unsorted PNL */
 static int __must_check_result mdbx_pnl_append_list(MDBX_PNL *ppl,
                                                     MDBX_PNL append) {
-  int rc = mdbx_pnl_need(ppl, MDBX_PNL_SIZE(append));
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+  const unsigned len = MDBX_PNL_SIZE(append);
+  if (likely(len)) {
+    int rc = mdbx_pnl_need(ppl, MDBX_PNL_SIZE(append));
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
 
-  memcpy(MDBX_PNL_END(*ppl), MDBX_PNL_BEGIN(append),
-         MDBX_PNL_SIZE(append) * sizeof(pgno_t));
-  MDBX_PNL_SIZE(*ppl) += MDBX_PNL_SIZE(append);
+    const MDBX_PNL pnl = *ppl;
+    unsigned w = MDBX_PNL_SIZE(pnl), r = 1;
+    do
+      pnl[++w] = append[r];
+    while (++r <= len);
+    MDBX_PNL_SIZE(pnl) = w;
+  }
   return MDBX_SUCCESS;
 }
 
-/* Append an ID range onto an PNL */
-static int __must_check_result mdbx_pnl_append_range(MDBX_PNL *ppl, pgno_t id,
-                                                     size_t n) {
+/* Append an pgno range onto an unsorted PNL */
+static __hot int __must_check_result mdbx_pnl_append_range(MDBX_PNL *ppl,
+                                                           pgno_t pgno,
+                                                           unsigned n) {
+  assert(n > 0);
   int rc = mdbx_pnl_need(ppl, n);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  pgno_t *ap = MDBX_PNL_END(*ppl);
-  MDBX_PNL_SIZE(*ppl) += (unsigned)n;
-  for (pgno_t *const end = MDBX_PNL_END(*ppl); ap < end;)
-    *ap++ = id++;
+  const MDBX_PNL pnl = *ppl;
+#if MDBX_PNL_ASCENDING
+  unsigned w = MDBX_PNL_SIZE(pnl);
+  do
+    pnl[++w] = pgno++;
+  while (--n);
+  MDBX_PNL_SIZE(pnl) = w;
+#else
+  unsigned w = MDBX_PNL_SIZE(pnl) + n;
+  MDBX_PNL_SIZE(pnl) = w;
+  do
+    pnl[w--] = --n + pgno;
+  while (n);
+#endif
+
+  return MDBX_SUCCESS;
+}
+
+/* Append an pgno range into the sorted PNL */
+static __hot int __must_check_result mdbx_pnl_insert_range(MDBX_PNL *ppl,
+                                                           pgno_t pgno,
+                                                           unsigned n) {
+  assert(n > 0);
+  int rc = mdbx_pnl_need(ppl, n);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  const MDBX_PNL pnl = *ppl;
+  unsigned r = MDBX_PNL_SIZE(pnl), w = r + n;
+  MDBX_PNL_SIZE(pnl) = w;
+  while (r && MDBX_PNL_DISORDERED(pnl[r], pgno))
+    pnl[w--] = pnl[r--];
+
+  for (pgno_t fill = MDBX_PNL_ASCENDING ? pgno + n : pgno; w > r; --w)
+    pnl[w] = MDBX_PNL_ASCENDING ? --fill : fill++;
+
   return MDBX_SUCCESS;
 }
 
@@ -1343,10 +1384,8 @@ static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
   assert(mdbx_pnl_check(pnl, MAX_PAGENO + 1));
 }
 
-/* Search for an ID in an PNL.
- * [in] pl The PNL to search.
- * [in] id The ID to search for.
- * Returns The index of the first ID greater than or equal to id. */
+/* Search for an pgno in an PNL.
+ * Returns The index of the first item greater than or equal to pgno. */
 SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
 
 static __hot unsigned mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
@@ -1485,7 +1524,7 @@ static __inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
 #define DP_SEARCH_CMP(dp, id) ((dp).pgno < (id))
 SEARCH_IMPL(dp_bsearch, MDBX_DP, pgno_t, DP_SEARCH_CMP)
 
-static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t id) {
+static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t pgno) {
   if (dl->sorted < dl->length) {
     /* unsorted tail case  */
 #if MDBX_DEBUG
@@ -1499,31 +1538,31 @@ static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t id) {
     if (dl->length - dl->sorted < SORT_THRESHOLD / 2) {
       unsigned i = dl->length;
       while (i - dl->sorted > 7) {
-        if (dl[i].pgno == id)
+        if (dl[i].pgno == pgno)
           return i;
-        if (dl[i - 1].pgno == id)
+        if (dl[i - 1].pgno == pgno)
           return i - 1;
-        if (dl[i - 2].pgno == id)
+        if (dl[i - 2].pgno == pgno)
           return i - 2;
-        if (dl[i - 3].pgno == id)
+        if (dl[i - 3].pgno == pgno)
           return i - 3;
-        if (dl[i - 4].pgno == id)
+        if (dl[i - 4].pgno == pgno)
           return i - 4;
-        if (dl[i - 5].pgno == id)
+        if (dl[i - 5].pgno == pgno)
           return i - 5;
-        if (dl[i - 6].pgno == id)
+        if (dl[i - 6].pgno == pgno)
           return i - 6;
-        if (dl[i - 7].pgno == id)
+        if (dl[i - 7].pgno == pgno)
           return i - 7;
         i -= 8;
       }
       while (i > dl->sorted) {
-        if (dl[i].pgno == id)
+        if (dl[i].pgno == pgno)
           return i;
         --i;
       }
 
-      MDBX_DPL it = dp_bsearch(dl + 1, i, id);
+      MDBX_DPL it = dp_bsearch(dl + 1, i, pgno);
       return (unsigned)(it - dl);
     }
 
@@ -1539,14 +1578,14 @@ static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t id) {
   }
 #endif
 
-  MDBX_DPL it = dp_bsearch(dl + 1, dl->length, id);
+  MDBX_DPL it = dp_bsearch(dl + 1, dl->length, pgno);
   return (unsigned)(it - dl);
 }
 
-static __inline MDBX_page *mdbx_dpl_find(MDBX_DPL dl, pgno_t id) {
-  const unsigned i = mdbx_dpl_search(dl, id);
+static __inline MDBX_page *mdbx_dpl_find(MDBX_DPL dl, pgno_t pgno) {
+  const unsigned i = mdbx_dpl_search(dl, pgno);
   assert((int)i > 0);
-  return (i <= dl->length && dl[i].pgno == id) ? dl[i].ptr : nullptr;
+  return (i <= dl->length && dl[i].pgno == pgno) ? dl[i].ptr : nullptr;
 }
 
 static __hot MDBX_page *mdbx_dpl_remove(MDBX_DPL dl, pgno_t prno) {
@@ -2153,7 +2192,7 @@ static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
   return couple->outer.mc_db;
 }
 
-static __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
+static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
   unsigned loose = 0;
   for (unsigned i = txn->tw.dirtylist->length; i > 0; --i) {
     const MDBX_page *const dp = txn->tw.dirtylist[i].ptr;
@@ -2260,7 +2299,6 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
 
   if (dl->length - dl->sorted > txn->tw.loose_count) {
     /* Dirty list is useless since unsorted. */
-    MDBX_PNL_SIZE(suitable) = 0;
     if (bytes2pnl(sizeof(onstack)) < txn->tw.loose_count) {
       suitable = mdbx_pnl_alloc(txn->tw.loose_count);
       if (unlikely(!suitable))
@@ -2270,22 +2308,22 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
     /* Collect loose-pages which may be refunded. */
     mdbx_tassert(txn, txn->mt_next_pgno >= MIN_PAGENO + txn->tw.loose_count);
     pgno_t most = MIN_PAGENO;
+    unsigned w = 0;
     for (const MDBX_page *dp = txn->tw.loose_pages; dp; dp = dp->mp_next) {
       mdbx_tassert(txn, dp->mp_flags == (P_LOOSE | P_DIRTY));
       mdbx_tassert(txn, txn->mt_next_pgno > dp->mp_pgno);
       if (likely(txn->mt_next_pgno - txn->tw.loose_count <= dp->mp_pgno)) {
         mdbx_tassert(txn,
-                     MDBX_PNL_SIZE(suitable) <
-                         ((suitable == onstack) ? bytes2pnl(sizeof(onstack))
+                     w < ((suitable == onstack) ? bytes2pnl(sizeof(onstack))
                                                 : MDBX_PNL_ALLOCLEN(suitable)));
-        MDBX_PNL_SIZE(suitable) += 1;
-        MDBX_PNL_LAST(suitable) = dp->mp_pgno;
+        suitable[++w] = dp->mp_pgno;
         most = (dp->mp_pgno > most) ? dp->mp_pgno : most;
       }
     }
 
     if (most + 1 == txn->mt_next_pgno) {
       /* Sort suitable list and refund pages at the tail. */
+      MDBX_PNL_SIZE(suitable) = w;
       mdbx_pnl_sort(suitable);
 
       /* Scanning in descend order */
@@ -2308,7 +2346,8 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
       txn->mt_next_pgno = most;
 
       /* Filter-out dirty list */
-      unsigned w = 0, r = w;
+      unsigned r = 0;
+      w = 0;
       if (dl->sorted) {
         do {
           if (dl[++r].pgno < most) {
@@ -2503,20 +2542,9 @@ static __hot int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
       return MDBX_SUCCESS;
     }
 
-    int rc = mdbx_pnl_need(&txn->tw.reclaimed_pglist, npages);
+    int rc = mdbx_pnl_insert_range(&txn->tw.reclaimed_pglist, pgno, npages);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-
-    /* Insert in me_reclaimed_pglist */
-    const MDBX_PNL pnl = txn->tw.reclaimed_pglist;
-    unsigned r = MDBX_PNL_SIZE(pnl), w = r + npages;
-    MDBX_PNL_SIZE(pnl) = w;
-    while (r && MDBX_PNL_DISORDERED(pnl[r], pgno))
-      pnl[w--] = pnl[r--];
-
-    for (pgno_t fill = MDBX_PNL_ASCENDING ? pgno + npages : pgno; w > r; --w)
-      pnl[w] = MDBX_PNL_ASCENDING ? --fill : fill++;
-
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
     return MDBX_SUCCESS;
@@ -2576,9 +2604,7 @@ static __hot int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
   }
 
   mdbx_tassert(txn, mp == pgno2page(txn->mt_env, pgno));
-  int rc = (npages == 1)
-               ? mdbx_pnl_append(&txn->tw.retired_pages, pgno)
-               : mdbx_pnl_append_range(&txn->tw.retired_pages, pgno, npages);
+  int rc = mdbx_pnl_append_range(&txn->tw.retired_pages, pgno, npages);
   mdbx_tassert(txn, mdbx_dpl_find(txn->tw.dirtylist, pgno) == nullptr);
   return rc;
 }
@@ -5985,20 +6011,21 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
     if (parent->tw.spill_pages && MDBX_PNL_SIZE(parent->tw.spill_pages) > 0 &&
         MDBX_PNL_MOST(parent->tw.spill_pages) >= parent->mt_next_pgno << 1) {
-      MDBX_PNL ps = parent->tw.spill_pages;
+      const MDBX_PNL ps = parent->tw.spill_pages;
 #if MDBX_PNL_ASCENDING
-      do {
-        assert(MDBX_PNL_MOST(ps) == MDBX_PNL_LAST(ps));
-        MDBX_PNL_SIZE(ps) -= 1;
-      } while (MDBX_PNL_SIZE(ps) && MDBX_PNL_LAST(ps) >= parent->mt_next_pgno
-                                                             << 1);
+      unsigned i = MDBX_PNL_SIZE(ps);
+      assert(MDBX_PNL_MOST(ps) == MDBX_PNL_LAST(ps));
+      do
+        i -= 1;
+      while (i && ps[i] >= parent->mt_next_pgno << 1);
+      MDBX_PNL_SIZE(ps) = i;
 #else
       assert(MDBX_PNL_MOST(ps) == MDBX_PNL_FIRST(ps));
-      unsigned i = 1;
-      while (i < MDBX_PNL_SIZE(ps) && ps[i + 1] >= parent->mt_next_pgno << 1)
+      unsigned i = 1, len = MDBX_PNL_SIZE(ps);
+      while (i < len && ps[i + 1] >= parent->mt_next_pgno << 1)
         ++i;
-      MDBX_PNL_SIZE(ps) -= i;
-      for (unsigned k = 1; k <= MDBX_PNL_SIZE(ps); ++k)
+      MDBX_PNL_SIZE(ps) = len -= i;
+      for (unsigned k = 1; k <= len; ++k)
         ps[k] = ps[k + i];
 #endif
     }
