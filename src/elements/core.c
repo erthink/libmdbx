@@ -2500,7 +2500,7 @@ static __hot int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
 
   mdbx_debug("loosen page %" PRIaPGNO, pgno);
   const bool is_dirty = IS_DIRTY(mp);
-  if (MDBX_DEBUG || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB)) {
+  if (MDBX_DEBUG || unlikely((txn->mt_env->me_flags & MDBX_PAGEPERTURB) != 0)) {
     mdbx_kill_page(txn->mt_env, mp, pgno, npages);
     VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
   }
@@ -4552,9 +4552,11 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     mdbx_dpl_clear(txn->tw.dirtylist);
     memcpy(txn->tw.reclaimed_pglist, parent->tw.reclaimed_pglist,
            MDBX_PNL_SIZEOF(parent->tw.reclaimed_pglist));
-    mdbx_assert(
-        env, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
-                                   txn->mt_next_pgno = parent->mt_next_pgno));
+    mdbx_assert(env, mdbx_pnl_check4assert(
+                         txn->tw.reclaimed_pglist,
+                         (txn->mt_next_pgno /* LY: intentional assigment here,
+                                                   only for assertion */
+                          = parent->mt_next_pgno)));
 
     txn->tw.last_reclaimed = parent->tw.last_reclaimed;
     if (parent->tw.lifo_reclaimed) {
@@ -6181,7 +6183,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
         break;
       }
     }
-    mdbx_tassert(txn, mdbx_dirtylist_check(parent));
+    mdbx_tassert(parent, mdbx_dirtylist_check(parent));
     return MDBX_SUCCESS;
   }
 
@@ -8008,8 +8010,8 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   if (volume <= 1024 * 1024 * 4ul)
     return MDBX_RESULT_TRUE;
 
-  const size_t pagesize = mdbx_syspagesize();
-  if (unlikely(!mdbx_is_power2(pagesize) || pagesize < MIN_PAGESIZE))
+  const intptr_t pagesize = mdbx_syspagesize();
+  if (unlikely(pagesize < MIN_PAGESIZE || !mdbx_is_power2(pagesize)))
     return MDBX_INCOMPATIBLE;
 
 #if defined(_WIN32) || defined(_WIN64)
