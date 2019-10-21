@@ -1604,16 +1604,6 @@ static __hot MDBX_page *mdbx_dpl_remove(MDBX_DPL dl, pgno_t prno) {
   return mp;
 }
 
-static __inline bool mdbx_dpl_mark4removal(MDBX_DPL dl, MDBX_page *mp) {
-  const unsigned i = mdbx_dpl_search(dl, mp->mp_pgno);
-  if (i <= dl->length && dl[i].pgno == mp->mp_pgno) {
-    assert((int)i > 0 && dl[i].ptr == mp);
-    dl[i].ptr = nullptr /* mark for deletion */;
-    return true;
-  }
-  return false;
-}
-
 static __inline int __must_check_result mdbx_dpl_append(MDBX_DPL dl,
                                                         pgno_t pgno,
                                                         MDBX_page *page) {
