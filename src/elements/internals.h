@@ -467,11 +467,7 @@ typedef struct MDBX_page {
   pgno_t mp_pgno; /* page number */
 
   /* dynamic size */
-  union {
-    indx_t mp_ptrs[1];
-    MDBX_meta mp_meta;
-    uint8_t mp_data[1];
-  };
+  indx_t mp_ptrs[/* C99 */];
 } MDBX_page;
 
 /* Size of the page header, excluding dynamic data at the end */
@@ -629,7 +625,7 @@ typedef struct MDBX_lockinfo {
   volatile unsigned mti_readers_refresh_flag;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
-      MDBX_reader mti_readers[1];
+      MDBX_reader mti_readers[/* C99 */];
 } MDBX_lockinfo;
 
 /* Lockfile format signature: version, features and field layout */
@@ -637,7 +633,8 @@ typedef struct MDBX_lockinfo {
   (MDBX_OSAL_LOCK_SIGN * 27733 + (unsigned)sizeof(MDBX_reader) * 13 +          \
    (unsigned)offsetof(MDBX_reader, mr_snapshot_pages_used) * 251 +             \
    (unsigned)offsetof(MDBX_lockinfo, mti_oldest_reader) * 83 +                 \
-   (unsigned)offsetof(MDBX_lockinfo, mti_numreaders) * 29)
+   (unsigned)offsetof(MDBX_lockinfo, mti_numreaders) * 37 +                    \
+   (unsigned)offsetof(MDBX_lockinfo, mti_readers) * 29)
 
 #define MDBX_DATA_MAGIC ((MDBX_MAGIC << 8) + MDBX_DATA_VERSION)
 #define MDBX_DATA_MAGIC_DEVEL ((MDBX_MAGIC << 8) + 255)
@@ -676,7 +673,7 @@ typedef struct MDBX_lockinfo {
 #if MDBX_WORDBITS >= 64
 #define MAX_MAPSIZE MAX_MAPSIZE64
 #define MDBX_READERS_LIMIT                                                     \
-  ((65536 - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader) + 1)
+  ((65536 - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader))
 #else
 #define MDBX_READERS_LIMIT 1024
 #define MAX_MAPSIZE MAX_MAPSIZE32
@@ -779,7 +776,7 @@ struct MDBX_txn {
 #define mt_end_pgno mt_geo.now
 
   /* Transaction Flags */
-/* mdbx_txn_begin() flags */
+  /* mdbx_txn_begin() flags */
 #define MDBX_TXN_BEGIN_FLAGS                                                   \
   (MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_MAPASYNC | MDBX_RDONLY | MDBX_TRYTXN)
   /* internal txn flags */
@@ -788,7 +785,7 @@ struct MDBX_txn {
 #define MDBX_TXN_DIRTY 0x04     /* must write, even if dirty list is empty */
 #define MDBX_TXN_SPILLS 0x08    /* txn or a parent has spilled pages */
 #define MDBX_TXN_HAS_CHILD 0x10 /* txn has an MDBX_txn.mt_child */
-/* most operations on the txn are currently illegal */
+  /* most operations on the txn are currently illegal */
 #define MDBX_TXN_BLOCKED                                                       \
   (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD)
   unsigned mt_flags;
@@ -804,7 +801,7 @@ struct MDBX_txn {
   /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
 
-/* Transaction DB Flags */
+  /* Transaction DB Flags */
 #define DB_DIRTY MDBX_TBL_DIRTY /* DB was written in this txn */
 #define DB_STALE MDBX_TBL_STALE /* Named-DB record is older than txnID */
 #define DB_FRESH MDBX_TBL_FRESH /* Named-DB handle opened in this txn */
@@ -948,13 +945,13 @@ struct MDBX_env {
 #define me_lfd me_lck_mmap.fd
 #define me_lck me_lck_mmap.lck
 
-/* Failed to update the meta page. Probably an I/O error. */
+  /* Failed to update the meta page. Probably an I/O error. */
 #define MDBX_FATAL_ERROR UINT32_C(0x80000000)
-/* Additional flag for mdbx_sync_locked() */
+  /* Additional flag for mdbx_sync_locked() */
 #define MDBX_SHRINK_ALLOWED UINT32_C(0x40000000)
-/* Some fields are initialized. */
+  /* Some fields are initialized. */
 #define MDBX_ENV_ACTIVE UINT32_C(0x20000000)
-/* me_txkey is set */
+  /* me_txkey is set */
 #define MDBX_ENV_TXKEY UINT32_C(0x10000000)
   uint32_t me_flags;      /* see mdbx_env */
   unsigned me_psize;      /* DB page size, inited from me_os_psize */
@@ -1231,7 +1228,7 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 /* Default size of memory map.
  * This is certainly too small for any actual applications. Apps should
  * always set  the size explicitly using mdbx_env_set_mapsize(). */
-#define DEFAULT_MAPSIZE 1048576
+#define DEFAULT_MAPSIZE MEGABYTE
 
 /* Number of slots in the reader table.
  * This value was chosen somewhat arbitrarily. The 61 is a prime number,
@@ -1290,12 +1287,12 @@ typedef struct MDBX_node {
   };
 #endif
 
-/* mdbx_node Flags */
+  /* mdbx_node Flags */
 #define F_BIGDATA 0x01 /* data put on overflow page */
 #define F_SUBDATA 0x02 /* data is a sub-database */
 #define F_DUPDATA 0x04 /* data has duplicates */
 
-/* valid flags for mdbx_node_add() */
+  /* valid flags for mdbx_node_add() */
 #define NODE_ADD_FLAGS (F_DUPDATA | F_SUBDATA | MDBX_RESERVE | MDBX_APPEND)
   uint8_t mn_data[/* C99 */]; /* key and data are appended here */
 } MDBX_node;
