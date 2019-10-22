@@ -34,9 +34,7 @@ add_executable(mdbx_test
 
 set_target_properties(mdbx_test PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>
-  CXX_STANDARD 17
-  CXX_STANDARD_REQUIRED ON
-  )
+  CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
 
 if(CC_HAS_FASTMATH)
   target_compile_options(mdbx_test PRIVATE "-ffast-math")

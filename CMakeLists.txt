@@ -272,7 +272,13 @@ else()
   setup_compile_flags()
 endif(SUBPROJECT)
 
-option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
+list(FIND CMAKE_C_COMPILE_FEATURES c_std_11 HAS_C11)
+if(NOT HAS_C11 LESS 0)
+  set(MDBX_C_STANDARD 11)
+else()
+  set(MDBX_C_STANDARD 99)
+endif()
+message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 
 ##############################################################################
 ##############################################################################
@@ -312,6 +318,7 @@ else()
   add_mdbx_option(MDBX_USE_OFDLOCKS "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
   mark_as_advanced(MDBX_USE_OFDLOCKS)
 endif()
+option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
 
 ################################################################################
 ################################################################################

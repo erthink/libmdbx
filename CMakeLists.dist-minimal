@@ -75,6 +75,14 @@ if(NOT CMAKE_BUILD_TYPE)
     FORCE)
 endif()
 
+list(FIND CMAKE_C_COMPILE_FEATURES c_std_11 HAS_C11)
+if(NOT HAS_C11 LESS 0)
+  set(MDBX_C_STANDARD 11)
+else()
+  set(MDBX_C_STANDARD 99)
+endif()
+message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
+
 # not supported by this (minimal) script
 add_definitions(-DMDBX_AVOID_CRT=0)
 
@@ -141,9 +149,13 @@ if(NOT DEFINED MDBX_BUILD_SHARED_LIBRARY)
 endif()
 if(MDBX_BUILD_SHARED_LIBRARY)
   add_library(mdbx SHARED mdbx.c mdbx.h)
+  set_target_properties(mdbx PROPERTIES
+    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
+    PUBLIC_HEADER mdbx.h)
   target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
   if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
-    set_target_properties(mdbx PROPERTIES INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
+    set_target_properties(mdbx PROPERTIES
+      INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
   endif()
   target_link_libraries(mdbx PRIVATE ${CMAKE_THREAD_LIBS_INIT})
   if(WIN32)
@@ -153,9 +165,13 @@ endif()
 
 # static library used for tools, to avoid rpath/dll-path troubles
 add_library(mdbx-static STATIC EXCLUDE_FROM_ALL mdbx.c mdbx.h)
+set_target_properties(mdbx-static PROPERTIES
+  C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
+  PUBLIC_HEADER mdbx.h)
 target_link_libraries(mdbx-static INTERFACE ${CMAKE_THREAD_LIBS_INIT})
 if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
-  set_target_properties(mdbx-static PROPERTIES INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
+  set_target_properties(mdbx-static PROPERTIES
+    INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
 endif()
 if(WIN32)
   target_link_libraries(mdbx-static INTERFACE ntdll.lib)
@@ -164,8 +180,11 @@ endif()
 # mdbx-tools
 foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load)
   add_executable(${TOOL} ${TOOL}.c)
+  set_target_properties(${TOOL} PROPERTIES
+    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
   if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
-    set_target_properties(${TOOL} PROPERTIES INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
+    set_target_properties(${TOOL} PROPERTIES
+      INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
   endif()
   target_link_libraries(${TOOL} mdbx-static)
 endforeach()
