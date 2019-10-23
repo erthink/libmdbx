@@ -267,8 +267,11 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif /* all x86 */
 
 #if !defined(MDBX_UNALIGNED_OK)
-#if (defined(__ia32__) || defined(__e2k__) ||                                  \
-     defined(__ARM_FEATURE_UNALIGNED)) &&                                      \
+#if defined(_MSC_VER)
+#define MDBX_UNALIGNED_OK 1 /* avoid MSVC misoptimization */
+#elif __CLANG_PREREQ(5, 0) || __GNUC_PREREQ(5, 0)
+#define MDBX_UNALIGNED_OK 0 /* expecting optimization is well done */
+#elif (defined(__ia32__) || defined(__ARM_FEATURE_UNALIGNED)) &&               \
     !defined(__ALIGNED__)
 #define MDBX_UNALIGNED_OK 1
 #else

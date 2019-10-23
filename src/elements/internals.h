@@ -1273,11 +1273,13 @@ typedef struct MDBX_node {
     uint32_t mn_dsize;
     uint32_t mn_pgno32;
   };
-  uint16_t mn_flags; /* see mdbx_node */
+  uint8_t mn_flags; /* see mdbx_node flags */
+  uint8_t mn_extra;
   uint16_t mn_ksize; /* key size */
 #else
   uint16_t mn_ksize; /* key size */
-  uint16_t mn_flags; /* see mdbx_node */
+  uint8_t mn_extra;
+  uint8_t mn_flags; /* see mdbx_node flags */
   union {
     uint32_t mn_pgno32;
     uint32_t mn_dsize;

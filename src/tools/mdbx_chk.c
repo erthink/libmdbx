@@ -408,93 +408,97 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                          const MDBX_val *data) {
   char *bad = "";
   pgno_t *iptr = data->iov_base;
-  txnid_t txnid = *(txnid_t *)key->iov_base;
 
   if (key->iov_len != sizeof(txnid_t))
     problem_add("entry", record_number, "wrong txn-id size",
                 "key-size %" PRIiPTR, key->iov_len);
-  else if (txnid < 1 || txnid > envinfo.mi_recent_txnid)
-    problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
   else {
-    if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
-      problem_add("entry", txnid, "wrong idl size", "%" PRIuPTR, data->iov_len);
-    size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
-    if (number < 1 || number > MDBX_PNL_MAX)
-      problem_add("entry", txnid, "wrong idl length", "%" PRIuPTR, number);
-    else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
-      problem_add("entry", txnid, "trimmed idl",
-                  "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
-                  (number + 1) * sizeof(pgno_t), data->iov_len);
-      number = data->iov_len / sizeof(pgno_t) - 1;
-    } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
-               /* LY: allow gap upto one page. it is ok
-                * and better than shink-and-retry inside mdbx_update_gc() */
-               envstat.ms_psize)
-      problem_add("entry", txnid, "extra idl space",
-                  "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
-                  (number + 1) * sizeof(pgno_t), data->iov_len);
+    txnid_t txnid;
+    memcpy(&txnid, key->iov_base, sizeof(txnid));
+    if (txnid < 1 || txnid > envinfo.mi_recent_txnid)
+      problem_add("entry", record_number, "wrong txn-id", "%" PRIaTXN, txnid);
+    else {
+      if (data->iov_len < sizeof(pgno_t) || data->iov_len % sizeof(pgno_t))
+        problem_add("entry", txnid, "wrong idl size", "%" PRIuPTR,
+                    data->iov_len);
+      size_t number = (data->iov_len >= sizeof(pgno_t)) ? *iptr++ : 0;
+      if (number < 1 || number > MDBX_PNL_MAX)
+        problem_add("entry", txnid, "wrong idl length", "%" PRIuPTR, number);
+      else if ((number + 1) * sizeof(pgno_t) > data->iov_len) {
+        problem_add("entry", txnid, "trimmed idl",
+                    "%" PRIuSIZE " > %" PRIuSIZE " (corruption)",
+                    (number + 1) * sizeof(pgno_t), data->iov_len);
+        number = data->iov_len / sizeof(pgno_t) - 1;
+      } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
+                 /* LY: allow gap upto one page. it is ok
+                  * and better than shink-and-retry inside mdbx_update_gc() */
+                 envstat.ms_psize)
+        problem_add("entry", txnid, "extra idl space",
+                    "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
+                    (number + 1) * sizeof(pgno_t), data->iov_len);
 
-    gc_pages += number;
-    if (envinfo.mi_latter_reader_txnid > txnid)
-      reclaimable_pages += number;
+      gc_pages += number;
+      if (envinfo.mi_latter_reader_txnid > txnid)
+        reclaimable_pages += number;
 
-    pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : txn->mt_next_pgno;
-    pgno_t span = 1;
-    for (unsigned i = 0; i < number; ++i) {
-      const pgno_t pgno = iptr[i];
-      if (pgno < NUM_METAS)
-        problem_add("entry", txnid, "wrong idl entry",
-                    "pgno %" PRIaPGNO " < meta-pages %u", pgno, NUM_METAS);
-      else if (pgno >= backed_pages)
-        problem_add("entry", txnid, "wrong idl entry",
-                    "pgno %" PRIaPGNO " > backed-pages %" PRIu64, pgno,
-                    backed_pages);
-      else if (pgno >= alloc_pages)
-        problem_add("entry", txnid, "wrong idl entry",
-                    "pgno %" PRIaPGNO " > alloc-pages %" PRIu64, pgno,
-                    alloc_pages - 1);
-      else {
-        if (MDBX_PNL_DISORDERED(prev, pgno)) {
-          bad = " [bad sequence]";
-          problem_add("entry", txnid, "bad sequence",
-                      "%" PRIaPGNO " %c [%u].%" PRIaPGNO, prev,
-                      (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'),
-                      i, pgno);
+      pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : txn->mt_next_pgno;
+      pgno_t span = 1;
+      for (unsigned i = 0; i < number; ++i) {
+        const pgno_t pgno = iptr[i];
+        if (pgno < NUM_METAS)
+          problem_add("entry", txnid, "wrong idl entry",
+                      "pgno %" PRIaPGNO " < meta-pages %u", pgno, NUM_METAS);
+        else if (pgno >= backed_pages)
+          problem_add("entry", txnid, "wrong idl entry",
+                      "pgno %" PRIaPGNO " > backed-pages %" PRIu64, pgno,
+                      backed_pages);
+        else if (pgno >= alloc_pages)
+          problem_add("entry", txnid, "wrong idl entry",
+                      "pgno %" PRIaPGNO " > alloc-pages %" PRIu64, pgno,
+                      alloc_pages - 1);
+        else {
+          if (MDBX_PNL_DISORDERED(prev, pgno)) {
+            bad = " [bad sequence]";
+            problem_add("entry", txnid, "bad sequence",
+                        "%" PRIaPGNO " %c [%u].%" PRIaPGNO, prev,
+                        (prev == pgno) ? '=' : (MDBX_PNL_ASCENDING ? '>' : '<'),
+                        i, pgno);
+          }
+          if (walk.pagemap) {
+            int idx = walk.pagemap[pgno];
+            if (idx == 0)
+              walk.pagemap[pgno] = -1;
+            else if (idx > 0)
+              problem_add("page", pgno, "already used", "by %s",
+                          walk.dbi[idx - 1].name);
+            else
+              problem_add("page", pgno, "already listed in GC", nullptr);
+          }
         }
-        if (walk.pagemap) {
-          int idx = walk.pagemap[pgno];
-          if (idx == 0)
-            walk.pagemap[pgno] = -1;
-          else if (idx > 0)
-            problem_add("page", pgno, "already used", "by %s",
-                        walk.dbi[idx - 1].name);
-          else
-            problem_add("page", pgno, "already listed in GC", nullptr);
-        }
-      }
-      prev = pgno;
-      while (i + span < number &&
-             iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span)
-                                                   : pgno_sub(pgno, span)))
-        ++span;
-    }
-    if (verbose > 3 && !only_subdb) {
-      print("     transaction %" PRIaTXN ", %" PRIuPTR
-            " pages, maxspan %" PRIaPGNO "%s\n",
-            txnid, number, span, bad);
-      if (verbose > 4) {
-        for (unsigned i = 0; i < number; i += span) {
-          const pgno_t pgno = iptr[i];
-          for (span = 1;
-               i + span < number &&
+        prev = pgno;
+        while (i + span < number &&
                iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span)
-                                                     : pgno_sub(pgno, span));
-               ++span)
-            ;
-          if (span > 1) {
-            print("    %9" PRIaPGNO "[%" PRIaPGNO "]\n", pgno, span);
-          } else
-            print("    %9" PRIaPGNO "\n", pgno);
+                                                     : pgno_sub(pgno, span)))
+          ++span;
+      }
+      if (verbose > 3 && !only_subdb) {
+        print("     transaction %" PRIaTXN ", %" PRIuPTR
+              " pages, maxspan %" PRIaPGNO "%s\n",
+              txnid, number, span, bad);
+        if (verbose > 4) {
+          for (unsigned i = 0; i < number; i += span) {
+            const pgno_t pgno = iptr[i];
+            for (span = 1;
+                 i + span < number &&
+                 iptr[i + span] == (MDBX_PNL_ASCENDING ? pgno_add(pgno, span)
+                                                       : pgno_sub(pgno, span));
+                 ++span)
+              ;
+            if (span > 1) {
+              print("    %9" PRIaPGNO "[%" PRIaPGNO "]\n", pgno, span);
+            } else
+              print("    %9" PRIaPGNO "\n", pgno);
+          }
         }
       }
     }

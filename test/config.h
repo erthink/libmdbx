@@ -124,8 +124,6 @@ inline bool parse_option_intptr(int argc, char *const argv[], int &narg,
 #pragma pack(push, 1)
 
 struct keygen_params_pod {
-  keygen_case keycase;
-
   /* Параметры генератора пар key-value.
    *
    * Ключи и значения генерируются по задаваемым параметрам на основе "плоской"
@@ -232,11 +230,10 @@ struct keygen_params_pod {
   uint8_t split;
   uint32_t seed;
   uint64_t offset;
+  keygen_case keycase;
 };
 
 struct actor_params_pod {
-  unsigned loglevel;
-
   unsigned mode_flags;
   unsigned table_flags;
   intptr_t size_lower;
@@ -265,6 +262,7 @@ struct actor_params_pod {
   unsigned max_tables;
   keygen_params_pod keygen;
 
+  uint8_t loglevel;
   bool drop_table;
   bool ignore_dbfull;
   bool speculum;
