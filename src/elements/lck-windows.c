@@ -26,7 +26,7 @@
 
 static void mdbx_winnt_import(void);
 
-#ifdef MDBX_BUILD_SHARED_LIBRARY
+#if MDBX_BUILD_SHARED_LIBRARY
 #if MDBX_AVOID_CRT && defined(NDEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
@@ -35,7 +35,7 @@ static void mdbx_winnt_import(void);
  * automatically use DllMainCRTStartup() from CRT library, which also
  * automatically call DllMain() from our mdbx.dll */
 #pragma comment(linker, "/ENTRY:DllMain")
-#endif
+#endif /* MDBX_AVOID_CRT */
 
 BOOL APIENTRY DllMain(HANDLE module, DWORD reason, LPVOID reserved)
 #else

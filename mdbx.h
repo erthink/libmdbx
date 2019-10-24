@@ -643,6 +643,13 @@ extern "C" {
 #endif
 
 /**** MDBX version information ************************************************/
+
+#if defined(LIBMDBX_IMPORTS)
+#define LIBMDBX_VERINFO_API __dll_import
+#else
+#define LIBMDBX_VERINFO_API __dll_export
+#endif /* LIBMDBX_VERINFO_API */
+
 typedef struct mdbx_version_info {
   uint8_t major;
   uint8_t minor;
@@ -656,7 +663,7 @@ typedef struct mdbx_version_info {
   } git;
   const char *sourcery /* sourcery anchor for pinning */;
 } mdbx_version_info;
-extern LIBMDBX_API const mdbx_version_info mdbx_version;
+extern LIBMDBX_VERINFO_API const mdbx_version_info mdbx_version;
 
 /* MDBX build information.
  * WARNING: Some strings could be NULL in case no corresponding information was
@@ -668,8 +675,7 @@ typedef struct mdbx_build_info {
   const char *compiler /* compiler */;
   const char *flags /* CFLAGS */;
 } mdbx_build_info;
-
-extern LIBMDBX_API const mdbx_build_info mdbx_build;
+extern LIBMDBX_VERINFO_API const mdbx_build_info mdbx_build;
 
 #if defined(_WIN32) || defined(_WIN64)
 #if !MDBX_BUILD_SHARED_LIBRARY
