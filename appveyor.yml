@@ -5,13 +5,29 @@ environment:
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
       CMAKE_GENERATOR: Visual Studio 16 2019
       TOOLSET: 142
+      MDBX_BUILD_SHARED_LIBRARY: OFF
+      MDBX_AVOID_CRT: OFF
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      CMAKE_GENERATOR: Visual Studio 16 2019
+      TOOLSET: 142
+      MDBX_BUILD_SHARED_LIBRARY: ON
+      MDBX_AVOID_CRT: ON
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      CMAKE_GENERATOR: Visual Studio 16 2019
+      TOOLSET: 142
+      MDBX_BUILD_SHARED_LIBRARY: OFF
+      MDBX_AVOID_CRT: ON
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2019
+      CMAKE_GENERATOR: Visual Studio 16 2019
+      TOOLSET: 142
+      MDBX_BUILD_SHARED_LIBRARY: ON
+      MDBX_AVOID_CRT: OFF
     - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2017
       CMAKE_GENERATOR: Visual Studio 15 2017
       TOOLSET: 141
-#    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
-#      TOOLSET: 140
-#    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2013
-#      TOOLSET: 120
+    - APPVEYOR_BUILD_WORKER_IMAGE: Visual Studio 2015
+      CMAKE_GENERATOR: Visual Studio 14 2015
+      TOOLSET: 140
 
 branches:
   except:
@@ -26,6 +42,7 @@ platform:
 - x64
 
 before_build:
+- git clean -x -f -d
 - git submodule sync
 - git fetch --tags --prune
 - git submodule update --init --recursive
@@ -38,6 +55,7 @@ build_script:
     Write-Output "Configuration: $env:CONFIGURATION"
     Write-Output "Platform: $env:PLATFORM"
     Write-Output "Toolchain: $env:CMAKE_GENERATOR v$env:TOOLSET"
+    Write-Output "Options: MDBX_AVOID_CRT=$env:MDBX_AVOID_CRT MDBX_BUILD_SHARED_LIBRARY=$env:MDBX_BUILD_SHARED_LIBRARY"
     Write-Output "*******************************************************************************"
 
     md _build -Force | Out-Null
@@ -48,9 +66,9 @@ build_script:
         if ($env:PLATFORM -eq "x64") {
             $generator = "$generator Win64"
         }
-        & cmake -G "$generator" -DCMAKE_CONFIGURATION_TYPES="Debug;Release" ..
+        & cmake -G "$generator" -D CMAKE_CONFIGURATION_TYPES="Debug;Release" -D MDBX_AVOID_CRT:BOOL=$env:MDBX_AVOID_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
     } else {
-        & cmake -G "$generator" -A $env:PLATFORM -DCMAKE_CONFIGURATION_TYPES="Debug;Release" ..
+        & cmake -G "$generator" -A $env:PLATFORM -D CMAKE_CONFIGURATION_TYPES="Debug;Release" -DMDBX_AVOID_CRT:BOOL=$env:MDBX_AVOID_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
     }
     if ($LastExitCode -ne 0) {
         throw "Exec: $ErrorMessage"
