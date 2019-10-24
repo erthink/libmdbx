@@ -194,7 +194,7 @@ endif()
 
 # options
 string(TIMESTAMP MDBX_BUILD_TIMESTAMP UTC)
-set(options VERSION C_COMPILER CXX_COMPILER DEFINITIONS)
+set(options VERSION C_COMPILER CXX_COMPILER)
 foreach(item IN LISTS options)
   if(DEFINED ${item})
     set(value "${${item}}")

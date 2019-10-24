@@ -16420,6 +16420,9 @@ __dll_export
 #endif /* MDBX_BUILD_TARGET */
 
 #ifdef MDBX_BUILD_CONFIG
+# if defined(_MSC_VER)
+#   pragma message("Configuration-depended MDBX_BUILD_CONFIG: " MDBX_BUILD_CONFIG)
+# endif
     "-" MDBX_BUILD_CONFIG
 #endif /* MDBX_BUILD_CONFIG */
     ,

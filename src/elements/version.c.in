@@ -3,13 +3,6 @@
 
 #include "internals.h"
 
-#if defined(_MSC_VER) && defined(MDBX_BUILD_TARGET)
-#pragma message("Configuration-depended MDBX_BUILD_TARGET: " MDBX_BUILD_TARGET)
-#endif
-#if defined(_MSC_VER) && defined(MDBX_BUILD_FLAGS)
-#pragma message("Configuration-depended MDBX_BUILD_FLAGS: " MDBX_BUILD_FLAGS)
-#endif
-
 #if MDBX_VERSION_MAJOR != ${MDBX_VERSION_MAJOR} ||                             \
     MDBX_VERSION_MINOR != ${MDBX_VERSION_MINOR}
 #error "API version mismatch! Had `git fetch --tags` done?"
