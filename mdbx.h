@@ -1571,12 +1571,13 @@ LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 /* Statistics for a database in the environment */
 typedef struct MDBX_stat {
   uint32_t ms_psize;          /* Size of a database page.
-                               * This is currently the same for all databases. */
+                               * This is the same for all databases. */
   uint32_t ms_depth;          /* Depth (height) of the B-tree */
   uint64_t ms_branch_pages;   /* Number of internal (non-leaf) pages */
   uint64_t ms_leaf_pages;     /* Number of leaf pages */
   uint64_t ms_overflow_pages; /* Number of overflow pages */
   uint64_t ms_entries;        /* Number of data items */
+  uint64_t ms_mod_txnid;      /* Transaction ID of commited last modification */
 } MDBX_stat;
 
 /* Return statistics about the MDBX environment.

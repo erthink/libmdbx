@@ -365,7 +365,7 @@ typedef struct MDBX_db {
   pgno_t md_overflow_pages; /* number of overflow pages */
   uint64_t md_seq;          /* table sequence counter */
   uint64_t md_entries;      /* number of data items */
-  uint64_t md_merkle;       /* Merkle tree checksum */
+  uint64_t md_mod_txnid;    /* txnid of last commited modification */
 } MDBX_db;
 
 /* database size-related parameters */
