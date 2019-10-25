@@ -2203,8 +2203,8 @@ void __cold mdbx_debug_log(int level, const char *function, int line,
 }
 
 /* Dump a key in ascii or hexadecimal. */
-char *mdbx_dump_val(const MDBX_val *key, char *const buf,
-                    const size_t bufsize) {
+const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
+                          const size_t bufsize) {
   if (!key)
     return "<null>";
   if (!buf || bufsize < 4)
@@ -2249,7 +2249,8 @@ char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  LY: debug stuff */
 
 static const char *mdbx_leafnode_type(MDBX_node *n) {
-  static char *const tp[2][2] = {{"", ": DB"}, {": sub-page", ": sub-DB"}};
+  static const char *const tp[2][2] = {{"", ": DB"},
+                                       {": sub-page", ": sub-DB"}};
   return F_ISSET(node_flags(n), F_BIGDATA)
              ? ": overflow page"
              : tp[F_ISSET(node_flags(n), F_DUPDATA)]
@@ -10625,7 +10626,7 @@ new_sub:
       size_t ecount;
     put_sub:
       xdata.iov_len = 0;
-      xdata.iov_base = "";
+      xdata.iov_base = nullptr;
       MDBX_node *node = page_node(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (flags & MDBX_CURRENT) {
         xflags = (flags & MDBX_NODUPDATA)
@@ -10916,7 +10917,7 @@ static __pure_function __inline size_t branch_size(MDBX_env *env,
   if (unlikely(sz > env->me_nodemax)) {
     /* put on overflow page */
     /* not implemented */
-    mdbx_assert_fail(env, "INDXSIZE(key) <= env->me_nodemax", __FUNCTION__,
+    mdbx_assert_fail(env, "INDXSIZE(key) <= env->me_nodemax", __func__,
                      __LINE__);
     sz = sz - key->iov_len + sizeof(pgno_t);
   }

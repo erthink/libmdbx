@@ -1090,8 +1090,7 @@ MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #define mdbx_debug_extra(fmt, ...)                                             \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
-      mdbx_debug_log(MDBX_LOG_EXTRA, __FUNCTION__, __LINE__, fmt,              \
-                     ##__VA_ARGS__);                                           \
+      mdbx_debug_log(MDBX_LOG_EXTRA, __func__, __LINE__, fmt, ##__VA_ARGS__);  \
   } while (0)
 
 #define mdbx_debug_extra_print(fmt, ...)                                       \
@@ -1103,14 +1102,14 @@ MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #define mdbx_trace(fmt, ...)                                                   \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_TRACE))                                      \
-      mdbx_debug_log(MDBX_LOG_TRACE, __FUNCTION__, __LINE__, fmt "\n",         \
+      mdbx_debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n",             \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
 #define mdbx_debug(fmt, ...)                                                   \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_DEBUG))                                      \
-      mdbx_debug_log(MDBX_LOG_DEBUG, __FUNCTION__, __LINE__, fmt "\n",         \
+      mdbx_debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n",             \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
@@ -1123,39 +1122,38 @@ MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #define mdbx_verbose(fmt, ...)                                                 \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_VERBOSE))                                    \
-      mdbx_debug_log(MDBX_LOG_VERBOSE, __FUNCTION__, __LINE__, fmt "\n",       \
+      mdbx_debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n",           \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
 #define mdbx_notice(fmt, ...)                                                  \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_NOTICE))                                     \
-      mdbx_debug_log(MDBX_LOG_NOTICE, __FUNCTION__, __LINE__, fmt "\n",        \
+      mdbx_debug_log(MDBX_LOG_NOTICE, __func__, __LINE__, fmt "\n",            \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
 #define mdbx_warning(fmt, ...)                                                 \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_WARN))                                       \
-      mdbx_debug_log(MDBX_LOG_WARN, __FUNCTION__, __LINE__, fmt "\n",          \
+      mdbx_debug_log(MDBX_LOG_WARN, __func__, __LINE__, fmt "\n",              \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
 #define mdbx_error(fmt, ...)                                                   \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_ERROR))                                      \
-      mdbx_debug_log(MDBX_LOG_ERROR, __FUNCTION__, __LINE__, fmt "\n",         \
+      mdbx_debug_log(MDBX_LOG_ERROR, __func__, __LINE__, fmt "\n",             \
                      ##__VA_ARGS__);                                           \
   } while (0)
 
 #define mdbx_fatal(fmt, ...)                                                   \
-  mdbx_debug_log(MDBX_LOG_FATAL, __FUNCTION__, __LINE__, fmt "\n",             \
-                 ##__VA_ARGS__);
+  mdbx_debug_log(MDBX_LOG_FATAL, __func__, __LINE__, fmt "\n", ##__VA_ARGS__);
 
 #define mdbx_ensure_msg(env, expr, msg)                                        \
   do {                                                                         \
     if (unlikely(!(expr)))                                                     \
-      mdbx_assert_fail(env, msg, __FUNCTION__, __LINE__);                      \
+      mdbx_assert_fail(env, msg, __func__, __LINE__);                          \
   } while (0)
 
 #define mdbx_ensure(env, expr) mdbx_ensure_msg(env, expr, #expr)

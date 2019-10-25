@@ -349,7 +349,7 @@ typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
 #   define mdbx_func_ __func__
 #elif (defined(__GNUC__) && __GNUC__ >= 2) || defined(__clang__) || defined(_MSC_VER)
-#   define mdbx_func_ __FUNCTION__
+#   define mdbx_func_ __func__
 #else
 #   define mdbx_func_ "<mdbx_unknown>"
 #endif

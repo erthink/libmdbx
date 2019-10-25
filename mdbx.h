@@ -834,8 +834,8 @@ typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
 LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
 
 /* FIXME: Complete description */
-LIBMDBX_API char *mdbx_dump_val(const MDBX_val *key, char *const buf,
-                                const size_t bufsize);
+LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
+                                      const size_t bufsize);
 
 /**** THE FILES ****************************************************************
  * At the file system level, the environment corresponds to a pair of files. */

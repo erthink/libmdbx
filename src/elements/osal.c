@@ -241,17 +241,18 @@ MDBX_INTERNAL_FUNC __cold void mdbx_panic(const char *fmt, ...) {
   char *message = nullptr;
   const int num = mdbx_vasprintf(&message, fmt, ap);
   va_end(ap);
-  if (num < 1 || !message)
-    message = "<troubles with panic-message preparation>";
+  const char *const const_message =
+      (num < 1 || !message) ? "<troubles with panic-message preparation>"
+                            : message;
 
 #if defined(_WIN32) || defined(_WIN64)
   OutputDebugStringA("\r\nMDBX-PANIC: ");
-  OutputDebugStringA(message);
+  OutputDebugStringA(const_message);
   if (IsDebuggerPresent())
     DebugBreak();
   FatalExit(ERROR_UNHANDLED_ERROR);
 #else
-  __assert_fail(message, "mdbx", 0, "panic");
+  __assert_fail(const_message, "mdbx", 0, "panic");
   abort();
 #endif
 }
@@ -1325,7 +1326,7 @@ MDBX_INTERNAL_FUNC __cold void mdbx_osal_jitter(bool tiny) {
 #elif defined(__APPLE__) || defined(__MACH__)
 #include <mach/mach_time.h>
 #elif defined(__linux__) || defined(__gnu_linux__)
-static __cold clockid_t choice_monoclock() {
+static __cold clockid_t choice_monoclock(void) {
   struct timespec probe;
 #if defined(CLOCK_BOOTTIME)
   if (clock_gettime(CLOCK_BOOTTIME, &probe) == 0)
