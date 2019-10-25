@@ -511,6 +511,35 @@ size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
+static __inline void atomic_yield(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  YieldProcessor();
+#elif defined(__x86_64__) || defined(__i386__) || defined(__e2k__)
+  __builtin_ia32_pause();
+#elif defined(__ia64__)
+#if defined(__HP_cc__) || defined(__HP_aCC__)
+  _Asm_hint(_HINT_PAUSE);
+#else
+  __asm__ __volatile__("hint @pause");
+#endif
+#elif defined(__arm__) || defined(__aarch64__)
+#ifdef __CC_ARM
+  __yield();
+#else
+  __asm__ __volatile__("yield");
+#endif
+#elif (defined(__mips64) || defined(__mips64__)) && defined(__mips_isa_rev) && \
+    __mips_isa_rev >= 2
+  __asm__ __volatile__("pause");
+#elif defined(__mips) || defined(__mips__) || defined(__mips64) ||             \
+    defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
+    defined(__MWERKS__) || defined(__sgi)
+  __asm__ __volatile__(".word 0x00000140");
+#else
+  pthread_yield();
+#endif
+}
+
 #if MDBX_64BIT_CAS
 static __inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
                                   uint64_t v) {
@@ -8526,7 +8555,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
           if (atomic_cas32(&env->me_lck->mti_envmode, MDBX_RDONLY,
                            env->me_flags & mode_flags))
             break;
-          /* TODO: yield/relax cpu */
+          atomic_yield();
         }
         if ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) {
           mdbx_error("%s", "current mode/flags incompatible with requested");
