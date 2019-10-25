@@ -294,7 +294,7 @@ message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 #         ####   #          #       #     ####   #    #   ####
 #
 
-set(MDBX_BUILD_OPTIONS ENABLE_ASAN ENABLE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
+set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
 add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
 add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library as single object file" ON)
 add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)

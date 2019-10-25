@@ -8,7 +8,7 @@
 #cmakedefine HAS_RELAXED_CONSTEXPR
 
 #cmakedefine LTO_ENABLED
-#cmakedefine ENABLE_VALGRIND
+#cmakedefine MDBX_USE_VALGRIND
 #cmakedefine ENABLE_GPROF
 #cmakedefine ENABLE_GCOV
 #cmakedefine ENABLE_ASAN

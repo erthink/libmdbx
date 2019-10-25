@@ -34,9 +34,9 @@ else()
   check_include_file(valgrind/memcheck.h HAVE_VALGRIND_MEMCHECK_H)
 endif()
 
-option(ENABLE_VALGRIND "Enable integration with valgrind, a memory analyzing tool" OFF)
-if(ENABLE_VALGRIND AND NOT HAVE_VALGRIND_MEMCHECK_H)
-  message(FATAL_ERROR "ENABLE_VALGRIND option is set but valgrind/memcheck.h is not found")
+option(MDBX_USE_VALGRIND "Enable integration with valgrind, a memory analyzing tool" OFF)
+if(MDBX_USE_VALGRIND AND NOT HAVE_VALGRIND_MEMCHECK_H)
+  message(FATAL_ERROR "MDBX_USE_VALGRIND option is set but valgrind/memcheck.h is not found")
 endif()
 
 option(ENABLE_ASAN
