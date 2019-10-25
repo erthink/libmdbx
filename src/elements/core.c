@@ -190,7 +190,7 @@ static __inline void unaligned_poke_u64(const unsigned expected_alignment,
 /* Get the page number pointed to by a branch node */
 static __pure_function __inline pgno_t node_pgno(const MDBX_node *node) {
   pgno_t pgno = UNALIGNED_PEEK_32(node, MDBX_node, mn_pgno32);
-  if (sizeof(pgno_t) > 4)
+  if (sizeof(pgno) > 4)
     pgno |= ((uint64_t)UNALIGNED_PEEK_8(node, MDBX_node, mn_extra)) << 32;
   return pgno;
 }
@@ -200,7 +200,7 @@ static __inline void node_set_pgno(MDBX_node *node, pgno_t pgno) {
   assert(pgno >= MIN_PAGENO && pgno <= MAX_PAGENO);
 
   UNALIGNED_POKE_32(node, MDBX_node, mn_pgno32, (uint32_t)pgno);
-  if (sizeof(pgno_t) > 4)
+  if (sizeof(pgno) > 4)
     UNALIGNED_POKE_8(node, MDBX_node, mn_extra,
                      (uint8_t)((uint64_t)pgno >> 32));
 }
