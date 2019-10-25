@@ -152,22 +152,7 @@
 #endif /* __deprecated */
 
 #if !defined(__noop) && !defined(_MSC_VER)
-#	ifdef __cplusplus
-		static __maybe_unused inline void __noop_consume_args() {}
-		template <typename First, typename... Rest>
-		static inline void
-		__noop_consume_args(const First &first, const Rest &... rest) {
-			(void) first; __noop_consume_args(rest...);
-		}
-#		define __noop(...) __noop_consume_args(__VA_ARGS__)
-#	elif defined(__GNUC__) && (!defined(__STRICT_ANSI__) || !__STRICT_ANSI__)
-		static __maybe_unused __inline void __noop_consume_args(void* anchor, ...) {
-			(void) anchor;
-		}
-#		define __noop(...) __noop_consume_args(0, ##__VA_ARGS__)
-#	else
 #		define __noop(...) do {} while(0)
-#	endif
 #endif /* __noop */
 
 #ifndef __fallthrough
@@ -345,21 +330,28 @@ typedef __complex__ float __cfloat128 __attribute__ ((__mode__ (__TC__)));
 typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));
 #endif /* Workaround for Coverity Scan */
 
-/* Wrapper around __func__, which is a C99 feature */
-#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
-#   define mdbx_func_ __func__
-#elif (defined(__GNUC__) && __GNUC__ >= 2) || defined(__clang__) || defined(_MSC_VER)
-#   define mdbx_func_ __func__
-#else
-#   define mdbx_func_ "<mdbx_unknown>"
-#endif
+#ifndef __printf_args
+#   if defined(__GNUC__) || __has_attribute(__format__)
+#       define __printf_args(format_index, first_arg)                          \
+            __attribute__((__format__(printf, format_index, first_arg)))
+#   else
+#       define __printf_args(format_index, first_arg)
+#   endif
+#endif /* __printf_args */
 
-#if defined(__GNUC__) || __has_attribute(__format__)
-#define __printf_args(format_index, first_arg)                                 \
-  __attribute__((__format__(printf, format_index, first_arg)))
-#else
-#define __printf_args(format_index, first_arg)
-#endif
+#ifndef __anonymous_struct_extension__
+#   if defined(__GNUC__)
+#       define __anonymous_struct_extension__ __extension__
+#   else
+#       define __anonymous_struct_extension__
+#   endif
+#endif /* __anonymous_struct_extension__ */
+
+#ifndef __Wpedantic_format_voidptr
+    static __inline const void* __pure_function
+        __Wpedantic_format_voidptr(const void* ptr) {return ptr;}
+#   define __Wpedantic_format_voidptr(ARG) __Wpedantic_format_voidptr(ARG)
+#endif /* __Wpedantic_format_voidptr */
 
 /*----------------------------------------------------------------------------*/
 

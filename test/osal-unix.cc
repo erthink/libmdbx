@@ -90,7 +90,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     if (rc)
       failure_perror("pthread_cond_init(shared)", rc);
     log_trace("osal_setup: event(shared pthread_cond) %" PRIuPTR " -> %p", i,
-              event);
+              __Wpedantic_format_voidptr(event));
   }
   shared->conds_size = actors.size() + 1;
 

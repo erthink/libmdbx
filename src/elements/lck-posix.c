@@ -211,7 +211,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
         lck_op(env->me_fd, op_setlk,
                (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
     if (rc != MDBX_SUCCESS) {
-      mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "without-lck", rc);
+      mdbx_error("%s(%s) failed: errcode %u", __func__, "without-lck", rc);
       mdbx_assert(env, MDBX_IS_ERROR(rc));
       return rc;
     }
@@ -231,7 +231,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
     /* the cause may be a collision with POSIX's file-lock recovery. */
     if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK ||
           rc == EDEADLK)) {
-      mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "dxb-exclusive", rc);
+      mdbx_error("%s(%s) failed: errcode %u", __func__, "dxb-exclusive", rc);
       mdbx_assert(env, MDBX_IS_ERROR(rc));
       return rc;
     }
@@ -239,8 +239,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
     /* Fallback to lck-shared */
     rc = lck_op(env->me_lfd, op_setlk, F_RDLCK, 0, 1);
     if (rc != MDBX_SUCCESS) {
-      mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "fallback-shared",
-                 rc);
+      mdbx_error("%s(%s) failed: errcode %u", __func__, "fallback-shared", rc);
       mdbx_assert(env, MDBX_IS_ERROR(rc));
       return rc;
     }
@@ -253,7 +252,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
    * competing process doesn't call lck_downgrade(). */
   rc = lck_op(env->me_lfd, op_setlkw, F_RDLCK, 0, 1);
   if (rc != MDBX_SUCCESS) {
-    mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "try-shared", rc);
+    mdbx_error("%s(%s) failed: errcode %u", __func__, "try-shared", rc);
     mdbx_assert(env, MDBX_IS_ERROR(rc));
     return rc;
   }
@@ -263,7 +262,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
       lck_op(env->me_fd, op_setlk,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, env->me_pid, 1);
   if (rc != MDBX_SUCCESS) {
-    mdbx_error("%s(%s) failed: errcode %u", mdbx_func_,
+    mdbx_error("%s(%s) failed: errcode %u", __func__,
                "lock-against-without-lck", rc);
     mdbx_assert(env, MDBX_IS_ERROR(rc));
     return rc;
@@ -280,7 +279,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
                                 but shared locks are alive. */
         ;
 
-  mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "try-exclusive", rc);
+  mdbx_error("%s(%s) failed: errcode %u", __func__, "try-exclusive", rc);
   mdbx_assert(env, MDBX_IS_ERROR(rc));
   return rc;
 }
@@ -300,7 +299,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
   if (rc == MDBX_SUCCESS)
     rc = lck_op(env->me_lfd, op_setlk, F_RDLCK, 0, 1);
   if (unlikely(rc != 0)) {
-    mdbx_error("%s(%s) failed: errcode %u", mdbx_func_, "lck", rc);
+    mdbx_error("%s(%s) failed: errcode %u", __func__, "lck", rc);
     assert(MDBX_IS_ERROR(rc));
   }
   return rc;
@@ -318,7 +317,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
       lck_op(env->me_fd, op_setlk,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX)) {
-    mdbx_verbose("%s: got exclusive, drown mutexes", mdbx_func_);
+    mdbx_verbose("%s: got exclusive, drown mutexes", __func__);
     rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
     if (rc == 0)
       rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
@@ -472,22 +471,22 @@ static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
 }
 
 MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
-  mdbx_trace(">>");
+  mdbx_trace("%s", ">>");
   int rc = mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
   mdbx_trace("<< rc %d", rc);
   return rc;
 }
 
 MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
-  mdbx_trace(">>");
+  mdbx_trace("%s", ">>");
   int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rmutex);
   mdbx_trace("<< rc %d", rc);
   if (unlikely(MDBX_IS_ERROR(rc)))
-    mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
+    mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
 }
 
 int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
-  mdbx_trace(">>");
+  mdbx_trace("%s", ">>");
   int rc = dontwait ? mdbx_robust_trylock(env, env->me_wmutex)
                     : mdbx_robust_lock(env, env->me_wmutex);
   mdbx_trace("<< rc %d", rc);
@@ -495,11 +494,11 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
-  mdbx_trace(">>");
+  mdbx_trace("%s", ">>");
   int rc = mdbx_robust_unlock(env, env->me_wmutex);
   mdbx_trace("<< rc %d", rc);
   if (unlikely(MDBX_IS_ERROR(rc)))
-    mdbx_panic("%s() failed: errcode %d\n", mdbx_func_, rc);
+    mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
 }
 
 static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
