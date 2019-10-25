@@ -1160,6 +1160,15 @@ __cold static int uniq_check(const mdbx_mmap_t *pending, MDBX_env **found) {
     int err = scan->me_lck_mmap.lck->mti_bait_uniqueness
                   ? uniq_peek(pending, &scan->me_lck_mmap)
                   : uniq_poke(pending, &scan->me_lck_mmap, &salt);
+    if (err == MDBX_ENODATA) {
+      uint64_t length;
+      if (likely(mdbx_filesize(pending->fd, &length) == MDBX_SUCCESS &&
+                 length == 0)) {
+        /* LY: skip checking since LCK-file is empty, i.e. just created. */
+        mdbx_debug("uniq-probe: unique (new/empty lck)");
+        return MDBX_RESULT_TRUE;
+      }
+    }
     if (err == MDBX_RESULT_TRUE)
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     if (err == MDBX_RESULT_TRUE) {
@@ -1169,16 +1178,16 @@ __cold static int uniq_check(const mdbx_mmap_t *pending, MDBX_env **found) {
     if (err == MDBX_RESULT_TRUE) {
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
       *found = scan;
-      mdbx_verbose("<< uniq-probe: found %p", *found);
+      mdbx_debug("uniq-probe: found %p", *found);
       return MDBX_RESULT_FALSE;
     }
     if (unlikely(err != MDBX_SUCCESS)) {
-      mdbx_verbose("<< uniq-probe: failed rc %d", err);
+      mdbx_debug("uniq-probe: failed rc %d", err);
       return err;
     }
   }
 
-  mdbx_verbose("<< uniq-probe: unique");
+  mdbx_debug("uniq-probe: unique");
   return MDBX_RESULT_TRUE;
 }
 
