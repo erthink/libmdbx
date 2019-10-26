@@ -3422,8 +3422,8 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
                env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes);
 
   mdbx_assert(env, limit_bytes >= size_bytes);
-  mdbx_assert(env, bytes2pgno(env, size_bytes) == size_pgno);
-  mdbx_assert(env, bytes2pgno(env, limit_bytes) == limit_pgno);
+  mdbx_assert(env, bytes2pgno(env, size_bytes) >= size_pgno);
+  mdbx_assert(env, bytes2pgno(env, limit_bytes) >= limit_pgno);
 
 #if defined(_WIN32) || defined(_WIN64)
   /* Acquire guard in exclusive mode for:
@@ -3459,10 +3459,34 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
   int rc = mdbx_fastmutex_acquire(&env->me_remap_guard);
   if (rc != MDBX_SUCCESS)
     return rc;
-  if (limit_bytes == env->me_dxb_mmap.length &&
-      bytes2pgno(env, size_bytes) == env->me_dbgeo.now)
+  if (limit_bytes == env->me_dxb_mmap.length && size_bytes == env->me_dbgeo.now)
     goto bailout;
 #endif /* Windows */
+
+  if (size_bytes < env->me_dbgeo.now) {
+    mdbx_notice("resize-MADV_%s %u..%u",
+                (env->me_flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED",
+                size_pgno, bytes2pgno(env, env->me_dbgeo.now));
+#if defined(MADV_REMOVE)
+    if ((env->me_flags & MDBX_WRITEMAP) == 0 ||
+        madvise(env->me_map + size_bytes, env->me_dbgeo.now - size_bytes,
+                MADV_REMOVE) != 0)
+#endif
+#if defined(MADV_DONTNEED)
+      (void)madvise(env->me_map + size_bytes, env->me_dbgeo.now - size_bytes,
+                    MADV_DONTNEED);
+#elif defined(POSIX_MADV_DONTNEED)
+    (void)posix_madvise(env->me_map + size_bytes,
+                        env->me_dbgeo.now - size_bytes, POSIX_MADV_DONTNEED);
+#elif defined(POSIX_FADV_DONTNEED)
+    (void)posix_fadvise(env->me_fd, size_bytes, env->me_dbgeo.now - size_bytes,
+                        POSIX_FADV_DONTNEED);
+#else
+    __noop();
+#endif /* MADV_DONTNEED */
+    if (*env->me_discarded_tail > size_pgno)
+      *env->me_discarded_tail = size_pgno;
+  }
 
   rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
 
@@ -4685,17 +4709,20 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         goto bailout;
       }
     }
-    txn->mt_owner = mdbx_thread_self();
+    if (txn->mt_flags & MDBX_RDONLY) {
 #if defined(_WIN32) || defined(_WIN64)
-    if ((txn->mt_flags & MDBX_RDONLY) != 0 && size > env->me_dbgeo.lower &&
-        env->me_dbgeo.shrink) {
-      txn->mt_flags |= MDBX_SHRINK_ALLOWED;
-      mdbx_srwlock_AcquireShared(&env->me_remap_guard);
-    }
+      if (size > env->me_dbgeo.lower && env->me_dbgeo.shrink) {
+        txn->mt_flags |= MDBX_SHRINK_ALLOWED;
+        mdbx_srwlock_AcquireShared(&env->me_remap_guard);
+      }
 #endif
+    } else {
+      env->me_dbgeo.now = size;
+    }
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     mdbx_txn_valgrind(env, txn);
 #endif
+    txn->mt_owner = mdbx_thread_self();
     return MDBX_SUCCESS;
   }
 bailout:
@@ -6963,7 +6990,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                 pgno2bytes(env, edge - largest_pgno));
     }
 #endif /* MDBX_USE_VALGRIND */
-#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
+#if defined(MADV_DONTNEED)
     const size_t largest_aligned2os_bytes =
         pgno_align2os_bytes(env, largest_pgno);
     const pgno_t largest_aligned2os_pgno =
@@ -6971,17 +6998,29 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
     if (prev_discarded_pgno >
         largest_aligned2os_pgno +
-            /* 256Kb threshold to avoid unreasonable madvise() call */
-            bytes2pgno(env, 256 * 1024)) {
+            /* 1M threshold to avoid unreasonable madvise() call */
+            bytes2pgno(env, MEGABYTE)) {
+      mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
+                  largest_pgno);
       *env->me_discarded_tail = largest_aligned2os_pgno;
       const size_t prev_discarded_bytes =
           pgno_align2os_bytes(env, prev_discarded_pgno);
       mdbx_ensure(env, prev_discarded_bytes > largest_aligned2os_bytes);
-      (void)madvise(env->me_map + largest_aligned2os_bytes,
-                    prev_discarded_bytes - largest_aligned2os_bytes,
-                    MADV_REMOVE_OR_FREE_OR_DONTNEED);
+      int advise = MADV_DONTNEED;
+#if defined(MADV_FREE) &&                                                      \
+    0 /* MADV_FREE works for only anon vma at the moment */
+      if ((env->me_flags & MDBX_WRITEMAP) &&
+          mdbx_linux_kernel_version > 0x04050000)
+        advise = MADV_FREE;
+#endif /* MADV_FREE */
+      int err = madvise(env->me_map + largest_aligned2os_bytes,
+                        prev_discarded_bytes - largest_aligned2os_bytes, advise)
+                    ? errno
+                    : MDBX_SUCCESS;
+      mdbx_assert(env, err == MDBX_SUCCESS);
+      (void)err;
     }
-#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
+#endif /* MADV_FREE || MADV_DONTNEED */
 
     /* LY: check conditions to shrink datafile */
     const pgno_t backlog_gap =
@@ -7332,82 +7371,29 @@ static int __cold mdbx_env_map(MDBX_env *env, const int is_exclusive,
                                                      : MADV_DONTDUMP);
 #endif
 
-#if defined(MADV_REMOVE_OR_FREE_OR_DONTNEED)
-  if (is_exclusive && (env->me_flags & MDBX_WRITEMAP) != 0) {
-    const size_t used_aligned2os_bytes =
-        roundup_powerof2(usedsize, env->me_os_psize);
-    *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
-    if (used_aligned2os_bytes < env->me_mapsize) {
+  const size_t used_aligned2os_bytes =
+      roundup_powerof2(usedsize, env->me_os_psize);
+  *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
+  if (used_aligned2os_bytes < env->me_dbgeo.now) {
+#if defined(MADV_REMOVE)
+    if (is_exclusive && (env->me_flags & MDBX_WRITEMAP) != 0)
       (void)madvise(env->me_map + used_aligned2os_bytes,
-                    env->me_mapsize - used_aligned2os_bytes,
-                    MADV_REMOVE_OR_FREE_OR_DONTNEED);
-    }
-  }
+                    env->me_dbgeo.now - used_aligned2os_bytes, MADV_REMOVE);
 #else
-  (void)is_exclusive;
-#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
-
-#ifdef POSIX_FADV_RANDOM
-  /* this also checks that the file size is valid for a particular FS */
-  rc = posix_fadvise(env->me_fd, 0, env->me_dbgeo.upper, POSIX_FADV_RANDOM);
-  if (unlikely(rc != 0))
-    return rc;
-#elif defined(F_RDAHEAD)
-  if (unlikely(fcntl(env->me_fd, F_RDAHEAD, 0) == -1))
-    return errno;
-#endif
-
-  /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
-  if (env->me_flags & MDBX_NORDAHEAD) {
-#if defined(MADV_RANDOM)
-    if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_RANDOM) != 0))
-      return errno;
-#elif defined(POSIX_MADV_RANDOM)
-    rc = posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_RANDOM);
-    if (unlikely(rc != 0))
-      return errno;
-#endif
-#ifdef POSIX_FADV_DONTNEED
-    rc = posix_fadvise(env->me_fd, 0, env->me_mapsize, POSIX_FADV_DONTNEED);
-    if (unlikely(rc != 0))
-      return rc;
-#endif
+    (void)is_exclusive;
+#endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
-    if (unlikely(madvise(env->me_map, env->me_mapsize, MADV_DONTNEED) != 0))
-      return errno;
+    (void)madvise(env->me_map + used_aligned2os_bytes,
+                  env->me_dbgeo.now - used_aligned2os_bytes, MADV_DONTNEED);
 #elif defined(POSIX_MADV_DONTNEED)
-    rc = posix_madvise(env->me_map, env->me_mapsize, POSIX_MADV_DONTNEED);
-    if (unlikely(rc != 0))
-      return errno;
-#endif
-  } else {
-#ifdef POSIX_FADV_WILLNEED
-    rc = posix_fadvise(env->me_fd, 0, usedsize, POSIX_FADV_WILLNEED);
-    if (unlikely(rc != 0))
-      return rc;
-#elif defined(F_RDADVISE)
-    struct radvisory hint;
-    hint.ra_offset = 0;
-    hint.ra_count = usedsize;
-    (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
-        env->me_fd, F_RDADVISE, &hint);
-#endif
-#if defined(MADV_WILLNEED)
-    if (unlikely(madvise(env->me_map, usedsize, MADV_WILLNEED) != 0))
-      return errno;
-#elif defined(POSIX_MADV_WILLNEED)
-    rc = posix_madvise(env->me_map, usedsize, POSIX_MADV_WILLNEED);
-    if (unlikely(rc != 0))
-      return errno;
-#endif
-#if defined(_WIN32) || defined(_WIN64)
-    if (mdbx_PrefetchVirtualMemory) {
-      WIN32_MEMORY_RANGE_ENTRY hint;
-      hint.VirtualAddress = env->me_map;
-      hint.NumberOfBytes = usedsize;
-      (void)mdbx_PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0);
-    }
-#endif /* Windows */
+    (void)madvise(env->me_map + used_aligned2os_bytes,
+                  env->me_dbgeo.now - used_aligned2os_bytes,
+                  POSIX_MADV_DONTNEED);
+#elif defined(POSIX_FADV_DONTNEED)
+    (void)posix_fadvise(env->me_fd, used_aligned2os_bytes,
+                        env->me_dbgeo.now - used_aligned2os_bytes,
+                        POSIX_FADV_DONTNEED);
+#endif /* MADV_DONTNEED */
   }
 
 #ifdef MDBX_USE_VALGRIND

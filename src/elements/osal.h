@@ -239,16 +239,6 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define MADV_DONTDUMP MADV_NOCORE
 #endif /* MADV_NOCORE -> MADV_DONTDUMP */
 
-#ifndef MADV_REMOVE_OR_FREE_OR_DONTNEED
-#ifdef MADV_REMOVE
-#define MADV_REMOVE_OR_FREE_OR_DONTNEED MADV_REMOVE
-#elif defined(MADV_FREE)
-#define MADV_REMOVE_OR_FREE_OR_DONTNEED MADV_FREE
-#elif defined(MADV_DONTNEED)
-#define MADV_REMOVE_OR_FREE_OR_DONTNEED MADV_DONTNEED
-#endif
-#endif /* MADV_REMOVE_OR_FREE_OR_DONTNEED */
-
 #if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
     defined(i486) || defined(__i486) || defined(__i486__) ||                   \
     defined(i586) | defined(__i586) || defined(__i586__) || defined(i686) ||   \
@@ -860,9 +850,31 @@ typedef BOOL(WINAPI *MDBX_PrefetchVirtualMemory)(
     PWIN32_MEMORY_RANGE_ENTRY VirtualAddresses, ULONG Flags);
 MDBX_INTERNAL_VAR MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 
+#if 0 /* LY: unused for now */
+#if !defined(_WIN32_WINNT_WIN81) || _WIN32_WINNT < _WIN32_WINNT_WIN81
+typedef enum OFFER_PRIORITY {
+  VmOfferPriorityVeryLow = 1,
+  VmOfferPriorityLow,
+  VmOfferPriorityBelowNormal,
+  VmOfferPriorityNormal
+} OFFER_PRIORITY;
+#endif /* Windows 8.1 */
+
 typedef DWORD(WINAPI *MDBX_DiscardVirtualMemory)(PVOID VirtualAddress,
                                                  SIZE_T Size);
 MDBX_INTERNAL_VAR MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
+
+typedef DWORD(WINAPI *MDBX_ReclaimVirtualMemory)(PVOID VirtualAddress,
+                                                 SIZE_T Size);
+MDBX_INTERNAL_VAR MDBX_ReclaimVirtualMemory mdbx_ReclaimVirtualMemory;
+
+typedef DWORD(WINAPI *MDBX_OfferVirtualMemory(
+  PVOID          VirtualAddress,
+  SIZE_T         Size,
+  OFFER_PRIORITY Priority
+);
+MDBX_INTERNAL_VAR MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
+#endif /* unused for now */
 
 #endif /* Windows */
 
