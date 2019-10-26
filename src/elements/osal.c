@@ -1089,13 +1089,24 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size,
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
       MAP_SHARED, map->fd, 0);
-  if (likely(map->address != MAP_FAILED)) {
-    map->length = limit;
-    return MDBX_SUCCESS;
+
+  if (unlikely(map->address == MAP_FAILED)) {
+    map->length = 0;
+    map->address = nullptr;
+    return errno;
   }
-  map->length = 0;
-  map->address = nullptr;
-  return errno;
+  map->length = limit;
+
+#ifdef MADV_DONTFORK
+  if (unlikely(madvise(map->address, map->length, MADV_DONTFORK) != 0))
+    return errno;
+#endif
+
+#ifdef MADV_NOHUGEPAGE
+  (void)madvise(map->address, map->length, MADV_NOHUGEPAGE);
+#endif
+
+  return MDBX_SUCCESS;
 #endif
 }
 

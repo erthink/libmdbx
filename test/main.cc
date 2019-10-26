@@ -32,8 +32,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 #endif
 
   pathname_db = tmpdir + "mdbx-test.db";
-  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NORDAHEAD |
-               MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM;
+  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NOMEMINIT |
+               MDBX_COALESCE | MDBX_LIFORECLAIM;
   table_flags = MDBX_DUPSORT;
 
   size_lower = -1;
