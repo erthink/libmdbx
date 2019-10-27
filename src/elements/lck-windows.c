@@ -423,6 +423,14 @@ MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
 MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
                                         MDBX_env *inprocess_neighbor) {
   (void)inprocess_neighbor;
+
+  /* LY: should unmap before releasing the locks to avoid race condition and
+   * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
+  if (env->me_map)
+    mdbx_munmap(&env->me_dxb_mmap);
+  if (env->me_lck)
+    mdbx_munmap(&env->me_lck_mmap);
+
   lck_unlock(env);
   return MDBX_SUCCESS;
 }

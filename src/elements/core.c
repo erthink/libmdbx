@@ -8024,9 +8024,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
       mdbx_assert(env, META_IS_STEADY(&meta) && !META_IS_STEADY(head));
       if (env->me_flags & MDBX_RDONLY) {
-        mdbx_warning("rollback needed: (from head %" PRIaTXN
-                     " to steady %" PRIaTXN "), but unable in read-only mode",
-                     head_txnid, meta.mm_txnid_a.inconsistent);
+        mdbx_error("rollback needed: (from head %" PRIaTXN
+                   " to steady %" PRIaTXN "), but unable in read-only mode",
+                   head_txnid, meta.mm_txnid_a.inconsistent);
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
@@ -8068,8 +8068,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
                           (uint8_t *)head - (uint8_t *)env->me_map);
       }
-      if (err)
+      if (err) {
+        mdbx_error("error %d rollback from %" PRIaTXN ", to %" PRIaTXN
+                   " as %" PRIaTXN,
+                   err, head_txnid, meta.mm_txnid_a.inconsistent, undo_txnid);
         return err;
+      }
 
       mdbx_invalidate_mmap_noncoherent_cache(env->me_map,
                                              pgno2bytes(env, NUM_METAS));
@@ -8136,16 +8140,15 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       *env->me_unsynced_pages += 1;
       err = mdbx_sync_locked(env, env->me_flags | MDBX_SHRINK_ALLOWED, &meta);
       if (err) {
-        mdbx_verbose("error %d, while updating meta.geo: "
-                     "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
-                     "/s%u-g%u (txn#%" PRIaTXN "), "
-                     "to l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
-                     "/s%u-g%u (txn#%" PRIaTXN ")",
-                     err, head->mm_geo.lower, head->mm_geo.now,
-                     head->mm_geo.upper, head->mm_geo.shrink, head->mm_geo.grow,
-                     txnid, meta.mm_geo.lower, meta.mm_geo.now,
-                     meta.mm_geo.upper, meta.mm_geo.shrink, meta.mm_geo.grow,
-                     next_txnid);
+        mdbx_error("error %d, while updating meta.geo: "
+                   "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
+                   "/s%u-g%u (txn#%" PRIaTXN "), "
+                   "to l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
+                   "/s%u-g%u (txn#%" PRIaTXN ")",
+                   err, head->mm_geo.lower, head->mm_geo.now,
+                   head->mm_geo.upper, head->mm_geo.shrink, head->mm_geo.grow,
+                   txnid, meta.mm_geo.lower, meta.mm_geo.now, meta.mm_geo.upper,
+                   meta.mm_geo.shrink, meta.mm_geo.grow, next_txnid);
         return err;
       }
     }
@@ -8671,33 +8674,21 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
     mdbx_ensure(env, env->me_lcklist_next == nullptr);
     return MDBX_SUCCESS;
   }
+
   env->me_flags &= ~MDBX_ENV_ACTIVE;
+  env->me_oldest = nullptr;
+  env->me_sync_timestamp = nullptr;
+  env->me_autosync_period = nullptr;
+  env->me_unsynced_pages = nullptr;
+  env->me_autosync_threshold = nullptr;
+  env->me_discarded_tail = nullptr;
+  env->me_meta_sync_txnid = nullptr;
+  if (env->me_flags & MDBX_ENV_TXKEY)
+    mdbx_rthc_remove(env->me_txkey);
+
   lcklist_lock();
   const int rc = lcklist_detach_locked(env);
   lcklist_unlock();
-
-  /* Doing this here since me_dbxs may not exist during mdbx_env_close */
-  if (env->me_dbxs) {
-    for (unsigned i = env->me_maxdbs; --i >= CORE_DBS;)
-      mdbx_free(env->me_dbxs[i].md_name.iov_base);
-    mdbx_free(env->me_dbxs);
-  }
-
-  mdbx_free(env->me_pbuf);
-  mdbx_free(env->me_dbiseqs);
-  mdbx_free(env->me_dbflags);
-  mdbx_free(env->me_path);
-  mdbx_free(env->me_dirtylist);
-  if (env->me_txn0) {
-    mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
-    mdbx_pnl_free(env->me_txn0->tw.retired_pages);
-    mdbx_pnl_free(env->me_txn0->tw.spill_pages);
-    mdbx_pnl_free(env->me_txn0->tw.reclaimed_pglist);
-    mdbx_free(env->me_txn0);
-  }
-
-  if (env->me_flags & MDBX_ENV_TXKEY)
-    mdbx_rthc_remove(env->me_txkey);
 
   if (env->me_map) {
     mdbx_munmap(&env->me_dxb_mmap);
@@ -8713,17 +8704,28 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
 
   if (env->me_lck)
     mdbx_munmap(&env->me_lck_mmap);
-  env->me_oldest = nullptr;
-  env->me_sync_timestamp = nullptr;
-  env->me_autosync_period = nullptr;
-  env->me_unsynced_pages = nullptr;
-  env->me_autosync_threshold = nullptr;
-  env->me_discarded_tail = nullptr;
-  env->me_meta_sync_txnid = nullptr;
 
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     (void)mdbx_closefile(env->me_lfd);
     env->me_lfd = INVALID_HANDLE_VALUE;
+  }
+
+  if (env->me_dbxs) {
+    for (unsigned i = env->me_maxdbs; --i >= CORE_DBS;)
+      mdbx_free(env->me_dbxs[i].md_name.iov_base);
+    mdbx_free(env->me_dbxs);
+  }
+  mdbx_free(env->me_pbuf);
+  mdbx_free(env->me_dbiseqs);
+  mdbx_free(env->me_dbflags);
+  mdbx_free(env->me_path);
+  mdbx_free(env->me_dirtylist);
+  if (env->me_txn0) {
+    mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
+    mdbx_pnl_free(env->me_txn0->tw.retired_pages);
+    mdbx_pnl_free(env->me_txn0->tw.spill_pages);
+    mdbx_pnl_free(env->me_txn0->tw.reclaimed_pglist);
+    mdbx_free(env->me_txn0);
   }
   env->me_flags = 0;
   return rc;
