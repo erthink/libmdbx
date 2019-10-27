@@ -94,6 +94,6 @@ test_script:
     }
 
 on_failure:
-- ps: Push-AppveyorArtifact _build\test.log
-- ps: Push-AppveyorArtifact _build\test.db
-- ps: Push-AppveyorArtifact _build\chk.log
+- ps: Push-AppveyorArtifact \projects\libmdbx\_build\test.log
+- ps: Push-AppveyorArtifact \projects\libmdbx\_build\test.db
+- ps: Push-AppveyorArtifact \projects\libmdbx\_build\chk.log
