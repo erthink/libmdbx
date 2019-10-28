@@ -3577,10 +3577,6 @@ bailout:
     mdbx_assert(env, size_bytes <= env->me_dxb_mmap.filesize);
     mdbx_assert(env, limit_bytes == env->me_dxb_mmap.limit);
 #endif /* Windows */
-    if (env->me_txn) {
-      mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
-      env->me_txn->mt_end_pgno = env->me_txn0->mt_end_pgno = size_pgno;
-    }
 #ifdef MDBX_USE_VALGRIND
     if (prev_limit != env->me_dxb_mmap.limit || prev_addr != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -4011,7 +4007,7 @@ skip_cache:
                    aligned, aligned - txn->mt_end_pgno);
       rc = mdbx_mapresize(env, aligned, head->mm_geo.upper);
       if (rc == MDBX_SUCCESS) {
-        mdbx_tassert(env->me_txn, txn->mt_end_pgno >= next);
+        env->me_txn->mt_end_pgno = aligned;
         if (!mp)
           return rc;
         goto done;
@@ -5233,6 +5229,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   mdbx_ensure(env, txn->mt_txnid >=
                        /* paranoia is appropriate here */ *env->me_oldest);
 
+  int rc = MDBX_SUCCESS;
   if (F_ISSET(txn->mt_flags, MDBX_RDONLY)) {
     if (txn->to.reader) {
       MDBX_reader *slot = txn->to.reader;
@@ -5291,30 +5288,53 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       mdbx_assert(env, txn->mt_parent != NULL);
       mdbx_assert(env, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                              txn->mt_next_pgno));
+      MDBX_txn *const parent = txn->mt_parent;
       env->me_txn->mt_child = NULL;
       env->me_txn->mt_flags &= ~MDBX_TXN_HAS_CHILD;
       mdbx_pnl_free(txn->tw.reclaimed_pglist);
       mdbx_pnl_free(txn->tw.spill_pages);
 
       if (txn->tw.lifo_reclaimed) {
-        mdbx_assert(env,
-                    MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) >=
-                        (unsigned)(uintptr_t)txn->mt_parent->tw.lifo_reclaimed);
+        mdbx_assert(env, MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) >=
+                             (unsigned)(uintptr_t)parent->tw.lifo_reclaimed);
         MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) =
-            (unsigned)(uintptr_t)txn->mt_parent->tw.lifo_reclaimed;
-        txn->mt_parent->tw.lifo_reclaimed = txn->tw.lifo_reclaimed;
+            (unsigned)(uintptr_t)parent->tw.lifo_reclaimed;
+        parent->tw.lifo_reclaimed = txn->tw.lifo_reclaimed;
       }
 
       if (txn->tw.retired_pages) {
-        mdbx_assert(env,
-                    MDBX_PNL_SIZE(txn->tw.retired_pages) >=
-                        (unsigned)(uintptr_t)txn->mt_parent->tw.retired_pages);
+        mdbx_assert(env, MDBX_PNL_SIZE(txn->tw.retired_pages) >=
+                             (unsigned)(uintptr_t)parent->tw.retired_pages);
         MDBX_PNL_SIZE(txn->tw.retired_pages) =
-            (unsigned)(uintptr_t)txn->mt_parent->tw.retired_pages;
-        txn->mt_parent->tw.retired_pages = txn->tw.retired_pages;
+            (unsigned)(uintptr_t)parent->tw.retired_pages;
+        parent->tw.retired_pages = txn->tw.retired_pages;
       }
 
       mdbx_free(txn->tw.dirtylist);
+
+      if (parent->mt_geo.upper != txn->mt_geo.upper ||
+          parent->mt_geo.now != txn->mt_geo.now) {
+        /* undo resize performed by child txn */
+        rc = mdbx_mapresize(env, parent->mt_geo.now, parent->mt_geo.upper);
+        if (rc == MDBX_RESULT_TRUE) {
+          /* unable undo resize (it is regular for Windows),
+           * therefore promote size changes from child to the parent txn */
+          mdbx_notice("unable undo resize performed by child txn, promote to "
+                      "the parent (%u->%u, %u->%u)",
+                      txn->mt_geo.now, parent->mt_geo.now, txn->mt_geo.upper,
+                      parent->mt_geo.upper);
+          parent->mt_geo.now = txn->mt_geo.now;
+          parent->mt_geo.upper = txn->mt_geo.upper;
+          rc = MDBX_SUCCESS;
+        } else if (unlikely(rc != MDBX_SUCCESS)) {
+          mdbx_error("error %d while undo resize performed by child txn, fail "
+                     "the parent",
+                     rc);
+          parent->mt_flags |= MDBX_TXN_ERROR;
+          if (!env->me_dxb_mmap.address)
+            env->me_flags |= MDBX_FATAL_ERROR;
+        }
+      }
     }
   }
 
@@ -5324,7 +5344,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     mdbx_free(txn);
   }
 
-  return MDBX_SUCCESS;
+  return rc;
 }
 
 int mdbx_txn_reset(MDBX_txn *txn) {
