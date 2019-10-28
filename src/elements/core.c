@@ -311,6 +311,12 @@ static __pure_function __inline pgno_t pgno_align2os_pgno(const MDBX_env *env,
   return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
 }
 
+static __pure_function __inline size_t bytes_align2os_bytes(const MDBX_env *env,
+                                                            size_t bytes) {
+  return roundup_powerof2(roundup_powerof2(bytes, env->me_psize),
+                          env->me_os_psize);
+}
+
 /* Address of first usable data byte in a page, after the header */
 static __pure_function __inline void *page_data(MDBX_page *mp) {
   return (char *)mp + PAGEHDRSZ;
@@ -2481,11 +2487,6 @@ static void mdbx_dlist_free(MDBX_txn *txn) {
   }
 
   mdbx_dpl_clear(dl);
-}
-
-static size_t bytes_align2os_bytes(const MDBX_env *env, size_t bytes) {
-  return roundup_powerof2(roundup_powerof2(bytes, env->me_psize),
-                          env->me_os_psize);
 }
 
 static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
@@ -7083,7 +7084,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                   largest_pgno);
       *env->me_discarded_tail = largest_aligned2os_pgno;
       const size_t prev_discarded_bytes =
-          pgno_align2os_bytes(env, prev_discarded_pgno);
+          pgno2bytes(env, prev_discarded_pgno) & ~(env->me_os_psize - 1);
       mdbx_ensure(env, prev_discarded_bytes > largest_aligned2os_bytes);
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
@@ -7846,7 +7847,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     /* apply preconfigured params, but only if substantial changes:
      *  - upper or lower limit changes
      *  - shrink threshold or growth step
-     * But ignore just chagne just a 'now/current' size. */
+     * But ignore change just a 'now/current' size. */
     if (bytes_align2os_bytes(env, env->me_dbgeo.upper) !=
             pgno_align2os_bytes(env, meta.mm_geo.upper) ||
         bytes_align2os_bytes(env, env->me_dbgeo.lower) !=
@@ -7895,8 +7896,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     env->me_dbgeo.shrink = pgno2bytes(env, meta.mm_geo.shrink);
   }
 
-  const size_t expected_bytes =
-      roundup_powerof2(pgno2bytes(env, meta.mm_geo.now), env->me_os_psize);
+  const size_t expected_bytes = pgno_align2os_bytes(env, meta.mm_geo.now);
   mdbx_ensure(env, expected_bytes >= used_bytes);
   if (filesize_before_mmap != expected_bytes) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
@@ -13780,8 +13780,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   mdbx_txn_unlock(env);
 
   /* Copy the data */
-  const size_t whole_size = roundup_powerof2(
-      pgno2bytes(env, read_txn->mt_end_pgno), env->me_os_psize);
+  const size_t whole_size = pgno_align2os_bytes(env, read_txn->mt_end_pgno);
   const size_t used_size = pgno2bytes(env, read_txn->mt_next_pgno);
   mdbx_jitter4testing(false);
 
@@ -13865,7 +13864,7 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   }
 
   const size_t buffer_size =
-      roundup_powerof2(pgno2bytes(env, NUM_METAS), env->me_os_psize) +
+      pgno_align2os_bytes(env, NUM_METAS) +
       roundup_powerof2(((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF),
                        env->me_os_psize);
 
