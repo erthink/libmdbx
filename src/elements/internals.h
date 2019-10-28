@@ -940,7 +940,6 @@ struct MDBX_env {
   mdbx_mmap_t me_dxb_mmap; /*  The main data file */
 #define me_map me_dxb_mmap.dxb
 #define me_fd me_dxb_mmap.fd
-#define me_mapsize me_dxb_mmap.length
   mdbx_mmap_t me_lck_mmap; /*  The lock file */
 #define me_lfd me_lck_mmap.fd
 #define me_lck me_lck_mmap.lck
@@ -1016,13 +1015,16 @@ struct MDBX_env {
 #endif
   MDBX_env *me_lcklist_next;
 
+  /* struct me_dbgeo used for accepting db-geo params from user for the new
+   * database creation, i.e. when mdbx_env_set_geometry() was called before
+   * mdbx_env_open(). */
   struct {
     size_t lower;  /* minimal size of datafile */
     size_t upper;  /* maximal size of datafile */
     size_t now;    /* current size of datafile */
     size_t grow;   /* step to grow datafile */
     size_t shrink; /* threshold to shrink datafile */
-  } me_dbgeo;      /* */
+  } me_dbgeo;
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_srwlock me_remap_guard;

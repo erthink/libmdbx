@@ -622,18 +622,19 @@ typedef struct mdbx_mmap_param {
     struct MDBX_lockinfo *lck;
   };
   mdbx_filehandle_t fd;
-  size_t length; /* mapping length, but NOT a size of file or DB */
+  size_t limit;   /* mapping length, but NOT a size of file nor DB */
+  size_t current; /* mapped region size, i.e. the size of file and DB */
 #if defined(_WIN32) || defined(_WIN64)
-  size_t current; /* mapped region size, e.g. file and DB */
-  uint64_t filesize;
+  uint64_t filesize /* in-process cache of a file size. */;
 #endif
 #ifdef MDBX_OSAL_SECTION
   MDBX_OSAL_SECTION section;
 #endif
 } mdbx_mmap_t;
 
-MDBX_INTERNAL_FUNC int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t must,
-                                 size_t limit);
+MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
+                                 const size_t must, const size_t limit,
+                                 const bool truncate);
 MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map);
 MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current,
                                     size_t wanna);

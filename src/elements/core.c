@@ -3411,7 +3411,6 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
 static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
                                      const size_t length, const bool enable) {
   assert(length > 0);
-
   mdbx_notice("readahead %s %u..%u", enable ? "ON" : "OFF",
               bytes2pgno(env, offset), bytes2pgno(env, offset + length));
 
@@ -3466,18 +3465,14 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
 
 static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
                                  const pgno_t limit_pgno) {
-#ifdef MDBX_USE_VALGRIND
-  const size_t prev_mapsize = env->me_mapsize;
-  void *const prev_mapaddr = env->me_map;
-#endif
-
   const size_t limit_bytes = pgno_align2os_bytes(env, limit_pgno);
   const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
 
   mdbx_verbose("resize datafile/mapping: "
                "present %" PRIuPTR " -> %" PRIuPTR ", "
                "limit %" PRIuPTR " -> %" PRIuPTR,
-               env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper, limit_bytes);
+               env->me_dxb_mmap.current, size_bytes, env->me_dxb_mmap.limit,
+               limit_bytes);
 
   mdbx_assert(env, limit_bytes >= size_bytes);
   mdbx_assert(env, bytes2pgno(env, size_bytes) >= size_pgno);
@@ -3491,9 +3486,9 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
   mdbx_handle_array_t *suspended = NULL;
   mdbx_handle_array_t array_onstack;
   int rc = MDBX_SUCCESS;
-  if (limit_bytes == env->me_dxb_mmap.length &&
+  if (limit_bytes == env->me_dxb_mmap.limit &&
       size_bytes == env->me_dxb_mmap.current &&
-      env->me_dxb_mmap.current == env->me_dxb_mmap.filesize)
+      size_bytes == env->me_dxb_mmap.filesize)
     goto bailout;
 
   /* 1) Windows allows only extending a read-write section, but not a
@@ -3517,27 +3512,31 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
   int rc = mdbx_fastmutex_acquire(&env->me_remap_guard);
   if (rc != MDBX_SUCCESS)
     return rc;
-  if (limit_bytes == env->me_dxb_mmap.length && size_bytes == env->me_dbgeo.now)
+  if (limit_bytes == env->me_dxb_mmap.limit &&
+      size_bytes == env->me_dxb_mmap.current)
     goto bailout;
 #endif /* Windows */
 
-  if (size_bytes < env->me_dbgeo.now) {
+  const size_t prev_limit = env->me_dxb_mmap.limit;
+  const void *const prev_addr = env->me_map;
+  const size_t prev_size = env->me_dxb_mmap.current;
+  if (size_bytes < prev_size) {
     mdbx_notice("resize-MADV_%s %u..%u",
                 (env->me_flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED",
-                size_pgno, bytes2pgno(env, env->me_dbgeo.now));
+                size_pgno, bytes2pgno(env, prev_size));
 #if defined(MADV_REMOVE)
     if ((env->me_flags & MDBX_WRITEMAP) == 0 ||
-        madvise(env->me_map + size_bytes, env->me_dbgeo.now - size_bytes,
+        madvise(env->me_map + size_bytes, prev_size - size_bytes,
                 MADV_REMOVE) != 0)
 #endif
 #if defined(MADV_DONTNEED)
-      (void)madvise(env->me_map + size_bytes, env->me_dbgeo.now - size_bytes,
+      (void)madvise(env->me_map + size_bytes, prev_size - size_bytes,
                     MADV_DONTNEED);
 #elif defined(POSIX_MADV_DONTNEED)
-    (void)posix_madvise(env->me_map + size_bytes,
-                        env->me_dbgeo.now - size_bytes, POSIX_MADV_DONTNEED);
+    (void)posix_madvise(env->me_map + size_bytes, prev_size - size_bytes,
+                        POSIX_MADV_DONTNEED);
 #elif defined(POSIX_FADV_DONTNEED)
-    (void)posix_fadvise(env->me_fd, size_bytes, env->me_dbgeo.now - size_bytes,
+    (void)posix_fadvise(env->me_fd, size_bytes, prev_size - size_bytes,
                         POSIX_FADV_DONTNEED);
 #else
     __noop();
@@ -3548,24 +3547,25 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
 
   rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
   if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_NORDAHEAD) == 0) {
-    const size_t readahead_offset =
-        (limit_bytes != env->me_dbgeo.upper
-#if defined(_WIN32) || defined(_WIN64)
-         || env->me_dbgeo.now > size_bytes
-#endif /* Windows */
-         )
-            ? 0 /* reassign readahead to the entire map
-                   because it (likely) was remapped */
-            : env->me_dbgeo.now;
     rc = mdbx_is_readahead_reasonable(size_bytes, 0);
     if (rc == MDBX_RESULT_FALSE)
-      rc = mdbx_set_readahead(env, 0, size_bytes, false);
+      rc = mdbx_set_readahead(
+          env, 0, (size_bytes > prev_size) ? size_bytes : prev_size, false);
     else if (rc == MDBX_RESULT_TRUE) {
       rc = MDBX_SUCCESS;
-      if (size_bytes > readahead_offset) {
+      const size_t readahead_pivot =
+          (limit_bytes != prev_limit || env->me_dxb_mmap.address != prev_addr
+#if defined(_WIN32) || defined(_WIN64)
+           || prev_size > size_bytes
+#endif /* Windows */
+           )
+              ? 0 /* reassign readahead to the entire map
+                     because it was remapped */
+              : prev_size;
+      if (size_bytes > readahead_pivot) {
         *env->me_discarded_tail = size_pgno;
-        rc = mdbx_set_readahead(env, readahead_offset,
-                                size_bytes - readahead_offset, true);
+        rc = mdbx_set_readahead(env, readahead_pivot,
+                                size_bytes - readahead_pivot, true);
       }
     }
   }
@@ -3575,35 +3575,33 @@ bailout:
 #if defined(_WIN32) || defined(_WIN64)
     mdbx_assert(env, size_bytes == env->me_dxb_mmap.current);
     mdbx_assert(env, size_bytes <= env->me_dxb_mmap.filesize);
-    mdbx_assert(env, limit_bytes == env->me_dxb_mmap.length);
-#endif
-    env->me_dbgeo.now = size_bytes;
-    env->me_dbgeo.upper = limit_bytes;
+    mdbx_assert(env, limit_bytes == env->me_dxb_mmap.limit);
+#endif /* Windows */
     if (env->me_txn) {
       mdbx_tassert(env->me_txn, size_pgno >= env->me_txn->mt_next_pgno);
       env->me_txn->mt_end_pgno = env->me_txn0->mt_end_pgno = size_pgno;
     }
 #ifdef MDBX_USE_VALGRIND
-    if (prev_mapsize != env->me_mapsize || prev_mapaddr != env->me_map) {
+    if (prev_limit != env->me_dxb_mmap.limit || prev_addr != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
       env->me_valgrind_handle = 0;
-      if (env->me_mapsize)
+      if (env->me_dxb_mmap.limit)
         env->me_valgrind_handle =
-            VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");
+            VALGRIND_CREATE_BLOCK(env->me_map, env->me_dxb_mmap.limit, "mdbx");
     }
-#endif
+#endif /* MDBX_USE_VALGRIND */
   } else {
     if (rc != MDBX_RESULT_TRUE) {
       mdbx_error("failed resize datafile/mapping: "
                  "present %" PRIuPTR " -> %" PRIuPTR ", "
                  "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
-                 env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper,
+                 env->me_dxb_mmap.current, size_bytes, env->me_dxb_mmap.limit,
                  limit_bytes, rc);
     } else {
       mdbx_notice("unable resize datafile/mapping: "
                   "present %" PRIuPTR " -> %" PRIuPTR ", "
                   "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
-                  env->me_dbgeo.now, size_bytes, env->me_dbgeo.upper,
+                  env->me_dxb_mmap.current, size_bytes, env->me_dxb_mmap.limit,
                   limit_bytes, rc);
     }
     if (!env->me_dxb_mmap.address) {
@@ -4775,7 +4773,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     rc = MDBX_PANIC;
   } else {
     const size_t size = pgno2bytes(env, txn->mt_end_pgno);
-    if (unlikely(size > env->me_mapsize)) {
+    if (unlikely(size > env->me_dxb_mmap.limit)) {
       if (txn->mt_geo.upper > MAX_PAGENO ||
           bytes2pgno(env, pgno2bytes(env, txn->mt_geo.upper)) !=
               txn->mt_geo.upper) {
@@ -4797,7 +4795,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       }
 #endif
     } else {
-      env->me_dbgeo.now = size;
+      env->me_dxb_mmap.current = size;
     }
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     mdbx_txn_valgrind(env, txn);
@@ -7943,14 +7941,14 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   }
 
   err = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
-                  env->me_dbgeo.upper);
+                  env->me_dbgeo.upper, lck_rc);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
 #if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
   const size_t meta_length = pgno2bytes(env, NUM_METAS);
   (void)madvise(env->me_map, meta_length, MADV_DODUMP);
-  (void)madvise(env->me_map + meta_length, env->me_mapsize - meta_length,
+  (void)madvise(env->me_map + meta_length, env->me_dxb_mmap.limit - meta_length,
                 (mdbx_runtime_flags & MDBX_DBG_DUMP) ? MADV_DODUMP
                                                      : MADV_DONTDUMP);
 #endif
@@ -7958,51 +7956,53 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   const size_t used_aligned2os_bytes =
       roundup_powerof2(used_bytes, env->me_os_psize);
   *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
-  if (used_aligned2os_bytes < env->me_dbgeo.now) {
+  if (used_aligned2os_bytes < env->me_dxb_mmap.current) {
 #if defined(MADV_REMOVE)
     if (lck_rc && (env->me_flags & MDBX_WRITEMAP) != 0) {
       mdbx_notice("open-MADV_%s %u..%u", "REMOVE", *env->me_discarded_tail,
-                  bytes2pgno(env, env->me_dbgeo.now));
+                  bytes2pgno(env, env->me_dxb_mmap.current));
       (void)madvise(env->me_map + used_aligned2os_bytes,
-                    env->me_dbgeo.now - used_aligned2os_bytes, MADV_REMOVE);
+                    env->me_dxb_mmap.current - used_aligned2os_bytes,
+                    MADV_REMOVE);
     }
 #endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
     mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
-                bytes2pgno(env, env->me_dbgeo.now));
+                bytes2pgno(env, env->me_dxb_mmap.current));
     (void)madvise(env->me_map + used_aligned2os_bytes,
-                  env->me_dbgeo.now - used_aligned2os_bytes, MADV_DONTNEED);
+                  env->me_dxb_mmap.current - used_aligned2os_bytes,
+                  MADV_DONTNEED);
 #elif defined(POSIX_MADV_DONTNEED)
     (void)madvise(env->me_map + used_aligned2os_bytes,
-                  env->me_dbgeo.now - used_aligned2os_bytes,
+                  env->me_dxb_mmap.current - used_aligned2os_bytes,
                   POSIX_MADV_DONTNEED);
 #elif defined(POSIX_FADV_DONTNEED)
     (void)posix_fadvise(env->me_fd, used_aligned2os_bytes,
-                        env->me_dbgeo.now - used_aligned2os_bytes,
+                        env->me_dxb_mmap.current - used_aligned2os_bytes,
                         POSIX_FADV_DONTNEED);
 #endif /* MADV_DONTNEED */
   }
 
 #ifdef MDBX_USE_VALGRIND
   env->me_valgrind_handle =
-      VALGRIND_CREATE_BLOCK(env->me_map, env->me_mapsize, "mdbx");
+      VALGRIND_CREATE_BLOCK(env->me_map, env->me_dxb_mmap.limit, "mdbx");
 #endif
 
-  const bool readahead =
-      (env->me_flags & MDBX_NORDAHEAD) == 0 &&
-      mdbx_is_readahead_reasonable(env->me_dbgeo.now, 0) == MDBX_RESULT_TRUE;
-  err = mdbx_set_readahead(env, 0, env->me_dbgeo.now, readahead);
+  const bool readahead = (env->me_flags & MDBX_NORDAHEAD) == 0 &&
+                         mdbx_is_readahead_reasonable(env->me_dxb_mmap.current,
+                                                      0) == MDBX_RESULT_TRUE;
+  err = mdbx_set_readahead(env, 0, env->me_dxb_mmap.current, readahead);
   if (err != MDBX_SUCCESS)
     return err;
 
   mdbx_assert(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
-                       used_bytes <= env->me_mapsize);
+                       used_bytes <= env->me_dxb_mmap.limit);
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
   VALGRIND_MAKE_MEM_NOACCESS(env->me_map + used_bytes,
-                             env->me_mapsize - used_bytes);
+                             env->me_dxb_mmap.limit - used_bytes);
   ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
-                            env->me_mapsize - used_bytes);
-  env->me_poison_edge = bytes2pgno(env, env->me_mapsize);
+                            env->me_dxb_mmap.limit - used_bytes);
+  env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
 #endif /* MDBX_USE_VALGRIND */
 
   /* NOTE: AddressSanitizer (at least GCC 7.x, 8.x) could generate
@@ -8097,29 +8097,19 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
   const MDBX_meta *head = mdbx_meta_head(env);
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
-    /* re-check file size after mmap */
-    uint64_t filesize_after_mmap;
-    err = mdbx_filesize(env->me_fd, &filesize_after_mmap);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-    if (filesize_after_mmap != expected_bytes) {
-      if (filesize_after_mmap != filesize_before_mmap)
-        mdbx_verbose("datafile resized by system to %" PRIu64 " bytes",
-                     filesize_after_mmap);
-      if (filesize_after_mmap % env->me_os_psize ||
-          filesize_after_mmap > env->me_dbgeo.upper ||
-          filesize_after_mmap < used_bytes) {
-        mdbx_error("unacceptable/unexpected datafile size %" PRIu64,
-                   filesize_after_mmap);
-        return MDBX_PROBLEM;
-      }
-      if ((env->me_flags & MDBX_RDONLY) == 0) {
-        meta.mm_geo.now =
-            bytes2pgno(env, env->me_dbgeo.now = (size_t)filesize_after_mmap);
-        mdbx_verbose("update meta-geo to filesize %" PRIuPTR
-                     " bytes, %" PRIaPGNO " pages",
-                     env->me_dbgeo.now, meta.mm_geo.now);
-      }
+    /* re-check size after mmap */
+    if ((env->me_dxb_mmap.current & (env->me_os_psize - 1)) != 0 ||
+        env->me_dxb_mmap.current < used_bytes) {
+      mdbx_error("unacceptable/unexpected datafile size %" PRIuPTR,
+                 env->me_dxb_mmap.current);
+      return MDBX_PROBLEM;
+    }
+    if (env->me_dxb_mmap.current != expected_bytes &&
+        (env->me_flags & MDBX_RDONLY) == 0) {
+      meta.mm_geo.now = bytes2pgno(env, env->me_dxb_mmap.current);
+      mdbx_verbose("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
+                   " pages",
+                   env->me_dxb_mmap.current, meta.mm_geo.now);
     }
 
     if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
@@ -8248,30 +8238,23 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     goto bailout;
 
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    uint64_t wanna = roundup_powerof2(env->me_maxreaders * sizeof(MDBX_reader) +
-                                          sizeof(MDBX_lockinfo),
-                                      env->me_os_psize);
+    size = roundup_powerof2(env->me_maxreaders * sizeof(MDBX_reader) +
+                                sizeof(MDBX_lockinfo),
+                            env->me_os_psize);
 #ifndef NDEBUG
-    err = mdbx_ftruncate(env->me_lfd, size = 0);
+    err = mdbx_ftruncate(env->me_lfd, 0);
     if (unlikely(err != MDBX_SUCCESS))
       goto bailout;
 #endif
     mdbx_jitter4testing(false);
-
-    if (size != wanna) {
-      err = mdbx_ftruncate(env->me_lfd, wanna);
-      if (unlikely(err != MDBX_SUCCESS))
-        goto bailout;
-      size = wanna;
-    }
   } else {
     if (env->me_flags & MDBX_EXCLUSIVE) {
       err = MDBX_BUSY;
       goto bailout;
     }
-    if (size > PTRDIFF_MAX || (size & (env->me_os_psize - 1)) ||
+    if (size > INT_MAX || (size & (env->me_os_psize - 1)) != 0 ||
         size < env->me_os_psize) {
-      mdbx_notice("lck-file has invalid size %" PRIu64 " bytes", size);
+      mdbx_error("lck-file has invalid size %" PRIu64 " bytes", size);
       err = MDBX_PROBLEM;
       goto bailout;
     }
@@ -8286,7 +8269,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   }
   env->me_maxreaders = (unsigned)maxreaders;
 
-  err = mdbx_mmap(MDBX_WRITEMAP, &env->me_lck_mmap, (size_t)size, (size_t)size);
+  err = mdbx_mmap(MDBX_WRITEMAP, &env->me_lck_mmap, (size_t)size, (size_t)size,
+                  lck_seize_rc);
   if (unlikely(err != MDBX_SUCCESS))
     goto bailout;
 
@@ -14185,7 +14169,7 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     unsynced_pages = *env->me_unsynced_pages +
                      (*env->me_meta_sync_txnid != (uint32_t)arg->mi_last_pgno);
 
-    arg->mi_mapsize = env->me_mapsize;
+    arg->mi_mapsize = env->me_dxb_mmap.limit;
     mdbx_compiler_barrier();
     if (likely(arg->mi_meta0_txnid == mdbx_meta_txnid_fluid(env, meta0) &&
                arg->mi_meta0_sign == meta0->mm_datasync_sign &&
@@ -16167,7 +16151,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
       return mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1) ? MDBX_RESULT_TRUE
                                                             : MDBX_RESULT_FALSE;
     }
-    if ((size_t)offset < env->me_mapsize) {
+    if ((size_t)offset < env->me_dxb_mmap.limit) {
       /* Указатель адресует что-то в пределах mmap, но за границей
        * распределенных страниц. Такое может случится если mdbx_is_dirty()
        * вызывает после операции, в ходе которой гразная страница попала

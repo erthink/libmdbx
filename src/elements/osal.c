@@ -1020,33 +1020,47 @@ MDBX_INTERNAL_FUNC int mdbx_check4nonlocal(mdbx_filehandle_t handle,
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size,
-                                 size_t limit) {
+MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
+                                 const size_t size, const size_t limit,
+                                 const bool truncate) {
   assert(size <= limit);
-#if defined(_WIN32) || defined(_WIN64)
-  map->length = 0;
+  map->limit = 0;
   map->current = 0;
-  map->section = NULL;
   map->address = nullptr;
+#if defined(_WIN32) || defined(_WIN64)
+  map->section = NULL;
+  map->filesize = 0;
+#endif /* Windows */
 
-  NTSTATUS rc = mdbx_check4nonlocal(map->fd, flags);
-  if (rc != MDBX_SUCCESS)
-    return rc;
+  int err = mdbx_check4nonlocal(map->fd, flags);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
-  rc = mdbx_filesize(map->fd, &map->filesize);
-  if (rc != MDBX_SUCCESS)
-    return rc;
-  if ((flags & MDBX_RDONLY) == 0 && map->filesize != size) {
-    rc = mdbx_ftruncate(map->fd, size);
-    if (rc == MDBX_SUCCESS)
-      map->filesize = size;
-    /* ignore error, because Windows unable shrink file
-     * that already mapped (by another process) */
+  if ((flags & MDBX_RDONLY) == 0 && truncate) {
+    err = mdbx_ftruncate(map->fd, size);
+    if (err != MDBX_SUCCESS)
+      return err;
+#if defined(_WIN32) || defined(_WIN64)
+    map->filesize = size;
+#else
+    map->current = size;
+#endif
+  } else {
+    uint64_t filesize;
+    err = mdbx_filesize(map->fd, &filesize);
+    if (err != MDBX_SUCCESS)
+      return err;
+#if defined(_WIN32) || defined(_WIN64)
+    map->filesize = filesize;
+#else
+    map->current = (filesize > limit) ? limit : (size_t)filesize;
+#endif
   }
 
+#if defined(_WIN32) || defined(_WIN64)
   LARGE_INTEGER SectionSize;
   SectionSize.QuadPart = size;
-  rc = NtCreateSection(
+  err = NtCreateSection(
       &map->section,
       /* DesiredAccess */
       (flags & MDBX_WRITEMAP)
@@ -1057,11 +1071,11 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size,
       /* SectionPageProtection */
       (flags & MDBX_RDONLY) ? PAGE_READONLY : PAGE_READWRITE,
       /* AllocationAttributes */ SEC_RESERVE, map->fd);
-  if (!NT_SUCCESS(rc))
-    return ntstatus2errcode(rc);
+  if (!NT_SUCCESS(err))
+    return ntstatus2errcode(err);
 
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? 0 : limit;
-  rc = NtMapViewOfSection(
+  err = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,
       /* CommitSize */ 0,
@@ -1070,44 +1084,42 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(int flags, mdbx_mmap_t *map, size_t size,
       /* AllocationType */ (flags & MDBX_RDONLY) ? 0 : MEM_RESERVE,
       /* Win32Protect */
       (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
-  if (!NT_SUCCESS(rc)) {
+  if (!NT_SUCCESS(err)) {
     NtClose(map->section);
     map->section = 0;
     map->address = nullptr;
-    return ntstatus2errcode(rc);
+    return ntstatus2errcode(err);
   }
   assert(map->address != MAP_FAILED);
 
   map->current = (size_t)SectionSize.QuadPart;
-  map->length = ViewSize;
-  return MDBX_SUCCESS;
+  map->limit = ViewSize;
+
 #else
-  int err = mdbx_check4nonlocal(map->fd, flags);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-  (void)size;
+
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
       MAP_SHARED, map->fd, 0);
 
   if (unlikely(map->address == MAP_FAILED)) {
-    map->length = 0;
+    map->limit = 0;
+    map->current = 0;
     map->address = nullptr;
     return errno;
   }
-  map->length = limit;
+  map->limit = limit;
 
 #ifdef MADV_DONTFORK
-  if (unlikely(madvise(map->address, map->length, MADV_DONTFORK) != 0))
+  if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
     return errno;
 #endif
-
 #ifdef MADV_NOHUGEPAGE
-  (void)madvise(map->address, map->length, MADV_NOHUGEPAGE);
+  (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
+#endif
+
 #endif
 
   return MDBX_SUCCESS;
-#endif
 }
 
 MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
@@ -1117,16 +1129,14 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
   if (!NT_SUCCESS(rc))
     ntstatus2errcode(rc);
+#else
+  if (unlikely(munmap(map->address, map->limit)))
+    return errno;
+#endif
 
-  map->length = 0;
+  map->limit = 0;
   map->current = 0;
   map->address = nullptr;
-#else
-  if (unlikely(munmap(map->address, map->length)))
-    return errno;
-  map->length = 0;
-  map->address = nullptr;
-#endif
   return MDBX_SUCCESS;
 }
 
@@ -1134,13 +1144,13 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
                                     size_t limit) {
   assert(size <= limit);
 #if defined(_WIN32) || defined(_WIN64)
-  assert(size != map->current || limit != map->length || size < map->filesize);
+  assert(size != map->current || limit != map->limit || size < map->filesize);
 
   NTSTATUS status;
   LARGE_INTEGER SectionSize;
   int err, rc = MDBX_SUCCESS;
 
-  if (!(flags & MDBX_RDONLY) && limit == map->length && size > map->current) {
+  if (!(flags & MDBX_RDONLY) && limit == map->limit && size > map->current) {
     /* growth rw-section */
     SectionSize.QuadPart = size;
     status = NtExtendSection(map->section, &SectionSize);
@@ -1152,10 +1162,10 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     return ntstatus2errcode(status);
   }
 
-  if (limit > map->length) {
+  if (limit > map->limit) {
     /* check ability of address space for growth before umnap */
-    PVOID BaseAddress = (PBYTE)map->address + map->length;
-    SIZE_T RegionSize = limit - map->length;
+    PVOID BaseAddress = (PBYTE)map->address + map->limit;
+    SIZE_T RegionSize = limit - map->limit;
     status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
                                      &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
     if (!NT_SUCCESS(status))
@@ -1185,7 +1195,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     err = ntstatus2errcode(status);
   bailout:
     map->address = NULL;
-    map->current = map->length = 0;
+    map->current = map->limit = 0;
     if (ReservedAddress)
       (void)NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress,
                                 &ReservedSize, MEM_RELEASE);
@@ -1268,12 +1278,12 @@ retry_mapview:;
     NtClose(map->section);
     map->section = NULL;
 
-    if (map->address && (size != map->current || limit != map->length)) {
+    if (map->address && (size != map->current || limit != map->limit)) {
       /* try remap with previously size and limit,
        * but will return MDBX_RESULT_TRUE on success */
       rc = MDBX_RESULT_TRUE;
       size = map->current;
-      limit = map->length;
+      limit = map->limit;
       goto retry_file_and_section;
     }
 
@@ -1283,28 +1293,54 @@ retry_mapview:;
   assert(map->address != MAP_FAILED);
 
   map->current = (size_t)SectionSize.QuadPart;
-  map->length = ViewSize;
-  return rc;
+  map->limit = ViewSize;
 #else
-  if (limit != map->length) {
+
+  uint64_t filesize;
+  int rc = mdbx_filesize(map->fd, &filesize);
+  if (rc != MDBX_SUCCESS)
+    return rc;
+
+  if (flags & MDBX_RDONLY) {
+    map->current = (filesize > limit) ? limit : (size_t)filesize;
+    if (map->current != size)
+      rc = MDBX_RESULT_TRUE;
+  } else if (filesize != size) {
+    rc = mdbx_ftruncate(map->fd, size);
+    if (rc != MDBX_SUCCESS)
+      return rc;
+    map->current = size;
+  }
+
+  if (limit != map->limit) {
 #if defined(_GNU_SOURCE) && (defined(__linux__) || defined(__gnu_linux__))
-    void *ptr = mremap(map->address, map->length, limit,
+    void *ptr = mremap(map->address, map->limit, limit,
                        /* LY: in case changing the mapping size calling code
-                          must guarantees the absence of competing threads, and
-                          a willingness to another base address */
+                          must guarantees the absence of competing threads,
+                          and a willingness to another base address */
                        MREMAP_MAYMOVE);
     if (ptr == MAP_FAILED) {
-      int err = errno;
-      return (err == EAGAIN || err == ENOMEM) ? MDBX_RESULT_TRUE : err;
+      rc = errno;
+      return (rc == EAGAIN || rc == ENOMEM) ? MDBX_RESULT_TRUE : rc;
     }
     map->address = ptr;
-    map->length = limit;
+    map->limit = limit;
+
+#ifdef MADV_DONTFORK
+    if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
+      return errno;
+#endif
+
+#ifdef MADV_NOHUGEPAGE
+    (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
+#endif
+
 #else
-    return MDBX_RESULT_TRUE;
+    rc = MDBX_RESULT_TRUE;
 #endif /* _GNU_SOURCE && __linux__ */
   }
-  return (flags & MDBX_RDONLY) ? MDBX_SUCCESS : mdbx_ftruncate(map->fd, size);
 #endif
+  return rc;
 }
 
 /*----------------------------------------------------------------------------*/
