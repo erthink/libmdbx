@@ -7792,10 +7792,10 @@ int __cold mdbx_env_get_maxreaders(MDBX_env *env, unsigned *readers) {
 
 /* Further setup required for opening an MDBX environment */
 static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
-  uint64_t filesize_before_mmap;
+  uint64_t filesize_before;
   MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
-  int err = mdbx_read_header(env, &meta, &filesize_before_mmap);
+  int err = mdbx_read_header(env, &meta, &filesize_before);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
         (env->me_flags & MDBX_RDONLY) != 0)
@@ -7821,12 +7821,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-    err = mdbx_ftruncate(env->me_fd, filesize_before_mmap = env->me_dbgeo.now);
+    err = mdbx_ftruncate(env->me_fd, filesize_before = env->me_dbgeo.now);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
 #ifndef NDEBUG /* just for checking */
-    err = mdbx_read_header(env, &meta, &filesize_before_mmap);
+    err = mdbx_read_header(env, &meta, &filesize_before);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 #endif
@@ -7842,38 +7842,39 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
   mdbx_setup_pagesize(env, meta.mm_psize);
   const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
+  const size_t used_aligned2os_bytes =
+      roundup_powerof2(used_bytes, env->me_os_psize);
   if ((env->me_flags & MDBX_RDONLY) /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */) {
     /* use present params from db */
+    const size_t pagesize = meta.mm_psize;
     err = mdbx_env_set_geometry(
-        env, meta.mm_geo.lower * (uint64_t)meta.mm_psize,
-        meta.mm_geo.now * (uint64_t)meta.mm_psize,
-        meta.mm_geo.upper * (uint64_t)meta.mm_psize,
-        meta.mm_geo.grow * (uint64_t)meta.mm_psize,
-        meta.mm_geo.shrink * (uint64_t)meta.mm_psize, meta.mm_psize);
+        env, meta.mm_geo.lower * pagesize, meta.mm_geo.now * pagesize,
+        meta.mm_geo.upper * pagesize, meta.mm_geo.grow * pagesize,
+        meta.mm_geo.shrink * pagesize, meta.mm_psize);
     if (unlikely(err != MDBX_SUCCESS)) {
       mdbx_error("%s", "could not use present dbsize-params from db");
       return MDBX_INCOMPATIBLE;
     }
   } else if (env->me_dbgeo.now) {
     /* silently growth to last used page */
-    if (env->me_dbgeo.now < used_bytes)
-      env->me_dbgeo.now = used_bytes;
-    if (env->me_dbgeo.upper < used_bytes)
-      env->me_dbgeo.upper = used_bytes;
+    if (env->me_dbgeo.now < used_aligned2os_bytes)
+      env->me_dbgeo.now = used_aligned2os_bytes;
+    if (env->me_dbgeo.upper < used_aligned2os_bytes)
+      env->me_dbgeo.upper = used_aligned2os_bytes;
 
     /* apply preconfigured params, but only if substantial changes:
      *  - upper or lower limit changes
      *  - shrink threshold or growth step
      * But ignore change just a 'now/current' size. */
     if (bytes_align2os_bytes(env, env->me_dbgeo.upper) !=
-            pgno_align2os_bytes(env, meta.mm_geo.upper) ||
+            pgno2bytes(env, meta.mm_geo.upper) ||
         bytes_align2os_bytes(env, env->me_dbgeo.lower) !=
-            pgno_align2os_bytes(env, meta.mm_geo.lower) ||
+            pgno2bytes(env, meta.mm_geo.lower) ||
         bytes_align2os_bytes(env, env->me_dbgeo.shrink) !=
-            pgno_align2os_bytes(env, meta.mm_geo.shrink) ||
+            pgno2bytes(env, meta.mm_geo.shrink) ||
         bytes_align2os_bytes(env, env->me_dbgeo.grow) !=
-            pgno_align2os_bytes(env, meta.mm_geo.grow)) {
+            pgno2bytes(env, meta.mm_geo.grow)) {
 
       if (env->me_dbgeo.shrink && env->me_dbgeo.now > used_bytes)
         /* pre-shrink if enabled */
@@ -7902,11 +7903,15 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                    meta.mm_geo.lower, meta.mm_geo.next, meta.mm_geo.now,
                    meta.mm_geo.upper, meta.mm_geo.grow, meta.mm_geo.shrink,
                    meta.mm_txnid_a.inconsistent, mdbx_durable_str(&meta));
+    } else {
+      /* fetch back 'now/current' size, since it was ignored during comparison
+       * and may differ. */
+      env->me_dbgeo.now = pgno_align2os_bytes(env, meta.mm_geo.now);
     }
     mdbx_ensure(env, meta.mm_geo.now >= meta.mm_geo.next);
   } else {
-    /* geo-params not pre-configured by user,
-     * get current values from a meta. */
+    /* geo-params are not pre-configured by user,
+     * get current values from the meta. */
     env->me_dbgeo.now = pgno2bytes(env, meta.mm_geo.now);
     env->me_dbgeo.lower = pgno2bytes(env, meta.mm_geo.lower);
     env->me_dbgeo.upper = pgno2bytes(env, meta.mm_geo.upper);
@@ -7914,48 +7919,38 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     env->me_dbgeo.shrink = pgno2bytes(env, meta.mm_geo.shrink);
   }
 
-  const size_t expected_bytes = pgno_align2os_bytes(env, meta.mm_geo.now);
-  mdbx_ensure(env, expected_bytes >= used_bytes);
-  if (filesize_before_mmap != expected_bytes) {
+  mdbx_ensure(env,
+              pgno_align2os_bytes(env, meta.mm_geo.now) == env->me_dbgeo.now);
+  mdbx_ensure(env, env->me_dbgeo.now >= used_bytes);
+  if (unlikely(filesize_before != env->me_dbgeo.now)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
       mdbx_verbose("filesize mismatch (expect %" PRIuPTR "b/%" PRIaPGNO
                    "p, have %" PRIu64 "b/%" PRIaPGNO "p), "
                    "assume other process working",
-                   expected_bytes, bytes2pgno(env, expected_bytes),
-                   filesize_before_mmap,
-                   bytes2pgno(env, (size_t)filesize_before_mmap));
+                   env->me_dbgeo.now, bytes2pgno(env, env->me_dbgeo.now),
+                   filesize_before, bytes2pgno(env, (size_t)filesize_before));
     } else {
       mdbx_notice("filesize mismatch (expect %" PRIuSIZE "b/%" PRIaPGNO
                   "p, have %" PRIu64 "b/%" PRIaPGNO "p)",
-                  expected_bytes, bytes2pgno(env, expected_bytes),
-                  filesize_before_mmap,
-                  bytes2pgno(env, (size_t)filesize_before_mmap));
-      if (filesize_before_mmap < used_bytes) {
+                  env->me_dbgeo.now, bytes2pgno(env, env->me_dbgeo.now),
+                  filesize_before, bytes2pgno(env, (size_t)filesize_before));
+      if (filesize_before < used_bytes) {
         mdbx_error("last-page beyond end-of-file (last %" PRIaPGNO
                    ", have %" PRIaPGNO ")",
-                   meta.mm_geo.next,
-                   bytes2pgno(env, (size_t)filesize_before_mmap));
+                   meta.mm_geo.next, bytes2pgno(env, (size_t)filesize_before));
         return MDBX_CORRUPTED;
       }
 
       if (env->me_flags & MDBX_RDONLY) {
-        if (filesize_before_mmap % env->me_os_psize) {
+        if (filesize_before & (env->me_os_psize - 1)) {
           mdbx_error("%s", "filesize should be rounded-up to system page");
           return MDBX_WANNA_RECOVERY;
         }
         mdbx_warning("%s", "ignore filesize mismatch in readonly-mode");
       } else {
-        mdbx_verbose("resize datafile to %" PRIuSIZE " bytes, %" PRIaPGNO
+        mdbx_verbose("will resize datafile to %" PRIuSIZE " bytes, %" PRIaPGNO
                      " pages",
-                     expected_bytes, bytes2pgno(env, expected_bytes));
-        err = mdbx_ftruncate(env->me_fd, expected_bytes);
-        if (unlikely(err != MDBX_SUCCESS)) {
-          mdbx_error("error %d, while resize datafile to %" PRIuSIZE
-                     " bytes, %" PRIaPGNO " pages",
-                     rc, expected_bytes, bytes2pgno(env, expected_bytes));
-          return err;
-        }
-        filesize_before_mmap = expected_bytes;
+                     env->me_dbgeo.now, bytes2pgno(env, env->me_dbgeo.now));
       }
     }
   }
@@ -7973,8 +7968,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                                                      : MADV_DONTDUMP);
 #endif
 
-  const size_t used_aligned2os_bytes =
-      roundup_powerof2(used_bytes, env->me_os_psize);
   *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
   if (used_aligned2os_bytes < env->me_dxb_mmap.current) {
 #if defined(MADV_REMOVE)
@@ -8124,7 +8117,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                  env->me_dxb_mmap.current);
       return MDBX_PROBLEM;
     }
-    if (env->me_dxb_mmap.current != expected_bytes &&
+    if (env->me_dxb_mmap.current != env->me_dbgeo.now &&
         (env->me_flags & MDBX_RDONLY) == 0) {
       meta.mm_geo.now = bytes2pgno(env, env->me_dxb_mmap.current);
       mdbx_verbose("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
