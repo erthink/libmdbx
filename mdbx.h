@@ -2040,7 +2040,7 @@ LIBMDBX_API int mdbx_is_readahead_reasonable(size_t volume,
                                              intptr_t redundancy);
 
 /* The minimal database page size in bytes. */
-#define MDBX_MIN_PAGESIZE 512
+#define MDBX_MIN_PAGESIZE 256
 __inline intptr_t mdbx_limits_pgsize_min(void) { return MDBX_MIN_PAGESIZE; }
 
 /* The maximal database page size in bytes. */

@@ -659,8 +659,8 @@ typedef struct MDBX_lockinfo {
  * demand-pager to read our data and page it out when memory
  * pressure from other processes is high. So until OSs have
  * actual paging support for Huge pages, they're not viable. */
-#define MAX_PAGESIZE 0x10000
-#define MIN_PAGESIZE 256
+#define MAX_PAGESIZE MDBX_MAX_PAGESIZE
+#define MIN_PAGESIZE MDBX_MIN_PAGESIZE
 
 #define MIN_MAPSIZE (MIN_PAGESIZE * MIN_PAGENO)
 #if defined(_WIN32) || defined(_WIN64)
