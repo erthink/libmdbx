@@ -7492,13 +7492,9 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       mdbx_find_oldest(env->me_txn0);
     }
 
+    /* get untouched params from DB */
     if (pagesize < 0)
       pagesize = env->me_psize;
-    if (pagesize != (intptr_t)env->me_psize) {
-      rc = MDBX_EINVAL;
-      goto bailout;
-    }
-
     if (size_lower < 0)
       size_lower = pgno2bytes(env, head->mm_geo.lower);
     if (size_now < 0)
@@ -7510,6 +7506,10 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (shrink_threshold < 0)
       shrink_threshold = pgno2bytes(env, head->mm_geo.shrink);
 
+    if (pagesize != (intptr_t)env->me_psize) {
+      rc = MDBX_EINVAL;
+      goto bailout;
+    }
     const size_t usedbytes =
         pgno2bytes(env, mdbx_find_largest(env, head->mm_geo.next));
     if ((size_t)size_upper < usedbytes) {
@@ -7594,7 +7594,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
 
   /* LY: подбираем значение size_upper:
    *  - кратное размеру системной страницы
-   *  - без нарушения MAX_MAPSIZE или MAX_PAGENO */
+   *  - без нарушения MAX_MAPSIZE и MAX_PAGENO */
   while (unlikely((size_t)size_upper > MAX_MAPSIZE ||
                   (uint64_t)size_upper / pagesize > MAX_PAGENO)) {
     if ((size_t)size_upper < env->me_os_psize + MIN_MAPSIZE ||
@@ -7623,15 +7623,14 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if ((size_t)growth_step > MEGABYTE * 16)
       growth_step = MEGABYTE * 16;
   }
+  if (growth_step == 0 && shrink_threshold > 0)
+    growth_step = 1;
   growth_step = roundup_powerof2(growth_step, env->me_os_psize);
   if (bytes2pgno(env, growth_step) > UINT16_MAX)
     growth_step = pgno2bytes(env, UINT16_MAX);
 
-  if (shrink_threshold < 0) {
+  if (shrink_threshold < 0)
     shrink_threshold = growth_step + growth_step;
-    if (shrink_threshold < growth_step)
-      shrink_threshold = growth_step;
-  }
   shrink_threshold = roundup_powerof2(shrink_threshold, env->me_os_psize);
   if (bytes2pgno(env, shrink_threshold) > UINT16_MAX)
     shrink_threshold = pgno2bytes(env, UINT16_MAX);
@@ -7644,9 +7643,34 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   env->me_dbgeo.shrink = shrink_threshold;
   rc = MDBX_SUCCESS;
 
+  mdbx_ensure(env, pagesize >= MIN_PAGESIZE);
+  mdbx_ensure(env, pagesize <= MAX_PAGESIZE);
+  mdbx_ensure(env, is_powerof2(pagesize));
+  mdbx_ensure(env, is_powerof2(env->me_os_psize));
+
+  mdbx_ensure(env, env->me_dbgeo.lower >= MIN_MAPSIZE);
+  mdbx_ensure(env, env->me_dbgeo.lower / pagesize >= MIN_PAGENO);
+  mdbx_ensure(env, env->me_dbgeo.lower % pagesize == 0);
+  mdbx_ensure(env, env->me_dbgeo.lower % env->me_os_psize == 0);
+
+  mdbx_ensure(env, env->me_dbgeo.upper <= MAX_MAPSIZE);
+  mdbx_ensure(env, env->me_dbgeo.upper / pagesize <= MAX_PAGENO);
+  mdbx_ensure(env, env->me_dbgeo.upper % pagesize == 0);
+  mdbx_ensure(env, env->me_dbgeo.upper % env->me_os_psize == 0);
+
+  mdbx_ensure(env, env->me_dbgeo.now >= env->me_dbgeo.lower);
+  mdbx_ensure(env, env->me_dbgeo.now <= env->me_dbgeo.upper);
+  mdbx_ensure(env, env->me_dbgeo.now % pagesize == 0);
+  mdbx_ensure(env, env->me_dbgeo.now % env->me_os_psize == 0);
+
+  mdbx_ensure(env, env->me_dbgeo.grow % pagesize == 0);
+  mdbx_ensure(env, env->me_dbgeo.grow % env->me_os_psize == 0);
+  mdbx_ensure(env, env->me_dbgeo.shrink % pagesize == 0);
+  mdbx_ensure(env, env->me_dbgeo.shrink % env->me_os_psize == 0);
+
   if (env->me_map) {
     /* apply new params to opened environment */
-    mdbx_assert(env, pagesize == (intptr_t)env->me_psize);
+    mdbx_ensure(env, pagesize == (intptr_t)env->me_psize);
     MDBX_meta meta;
     MDBX_meta *head = nullptr;
     const mdbx_geo_t *current_geo;
@@ -7666,16 +7690,24 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     new_geo.shrink = (uint16_t)bytes2pgno(env, env->me_dbgeo.shrink);
     new_geo.next = current_geo->next;
 
-    mdbx_assert(env, env->me_dbgeo.lower >= MIN_MAPSIZE);
-    mdbx_assert(env, new_geo.lower >= MIN_PAGENO);
-    mdbx_assert(env, env->me_dbgeo.upper <= MAX_MAPSIZE);
-    mdbx_assert(env, new_geo.upper <= MAX_PAGENO);
-    mdbx_assert(env, new_geo.now >= new_geo.next);
-    mdbx_assert(env, env->me_dbgeo.upper >= env->me_dbgeo.lower);
-    mdbx_assert(env, new_geo.upper >= new_geo.now);
-    mdbx_assert(env, new_geo.now >= new_geo.lower);
-    mdbx_assert(env, new_geo.grow == bytes2pgno(env, env->me_dbgeo.grow));
-    mdbx_assert(env, new_geo.shrink == bytes2pgno(env, env->me_dbgeo.shrink));
+    mdbx_ensure(env,
+                pgno_align2os_bytes(env, new_geo.lower) == env->me_dbgeo.lower);
+    mdbx_ensure(env,
+                pgno_align2os_bytes(env, new_geo.upper) == env->me_dbgeo.upper);
+    mdbx_ensure(env,
+                pgno_align2os_bytes(env, new_geo.now) == env->me_dbgeo.now);
+    mdbx_ensure(env,
+                pgno_align2os_bytes(env, new_geo.grow) == env->me_dbgeo.grow);
+    mdbx_ensure(env, pgno_align2os_bytes(env, new_geo.shrink) ==
+                         env->me_dbgeo.shrink);
+
+    mdbx_ensure(env, env->me_dbgeo.lower >= MIN_MAPSIZE);
+    mdbx_ensure(env, new_geo.lower >= MIN_PAGENO);
+    mdbx_ensure(env, env->me_dbgeo.upper <= MAX_MAPSIZE);
+    mdbx_ensure(env, new_geo.upper <= MAX_PAGENO);
+    mdbx_ensure(env, new_geo.now >= new_geo.next);
+    mdbx_ensure(env, new_geo.upper >= new_geo.now);
+    mdbx_ensure(env, new_geo.now >= new_geo.lower);
 
     if (memcmp(current_geo, &new_geo, sizeof(mdbx_geo_t)) != 0) {
 #if defined(_WIN32) || defined(_WIN64)
