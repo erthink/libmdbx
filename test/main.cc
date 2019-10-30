@@ -14,6 +14,11 @@
 
 #include "test.h"
 
+#if !(defined(_WIN32) || defined(_WIN64))
+#include <sys/resource.h>
+#include <sys/time.h>
+#endif /* !Windows */
+
 void __noreturn usage(void) {
   printf("usage:\n"
          "\tFIXME\n");
@@ -494,5 +499,25 @@ int main(int argc, char *const argv[]) {
     else
       cleanup();
   }
+
+#if !(defined(_WIN32) || defined(_WIN64))
+  struct rusage spent;
+  if (getrusage(RUSAGE_CHILDREN, &spent) == 0) {
+    log_notice("%6s: user %f, system %f", "CPU",
+               spent.ru_utime.tv_sec + spent.ru_utime.tv_usec * 1e-6,
+               spent.ru_stime.tv_sec + spent.ru_stime.tv_usec * 1e-6);
+#if defined(__linux__) || defined(__gnu_linux__) || defined(__FreeBSD__) ||    \
+    defined(__NetBSD__) || defined(__OpenBSD__) || defined(__BSD__) ||         \
+    defined(__NETBSD__) || defined(__bsdi__) || defined(__DragonFly__) ||      \
+    defined(__APPLE__) || defined(__MACH__)
+    log_notice("%6s: read %ld, write %ld", "IOPs", spent.ru_inblock,
+               spent.ru_oublock);
+    log_notice("%6s: %ld Kb", "RAM", spent.ru_maxrss);
+    log_notice("%6s: reclaims %ld, faults %ld, swaps %ld", "Paging",
+               spent.ru_minflt, spent.ru_majflt, spent.ru_nswap);
+#endif /* Linux */
+  }
+#endif /* !Windows */
+
   return failed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
