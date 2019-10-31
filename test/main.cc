@@ -20,8 +20,94 @@
 #endif /* !Windows */
 
 void __noreturn usage(void) {
-  printf("usage:\n"
-         "\tFIXME\n");
+  puts(
+      "usage:\n"
+      "  --help or -h              Show this text\n"
+      "Common parameters:\n"
+      "  --pathname=...            Path and/or name of database files\n"
+      "  --repeat=N                Set repeat counter\n"
+      "  --threads=N               Number of thread (unsunpported for now)\n"
+      "  --timeout=N[s|m|h|d]      Set timeout in seconds/minutes/hours/days\n"
+      "  --failfast[=YES/no]       Lill all actors on first failure/error\n"
+      "  --max-readers=N           See mdbx_env_set_maxreaders() description\n"
+      "  --max-tables=N            Se mdbx_env_set_maxdbs() description\n"
+      "  --dump-config[=YES/no]    Dump entire test config before run\n"
+      "  --progress[=YES/no]       Enable/disable progress `canary`\n"
+      "  --console[=yes/no]        Enable/disable console-like output\n"
+      "  --cleanup-before[=YES/no] Cleanup/remove and re-create database\n"
+      "  --cleanup-after[=YES/no]  Cleanup/remove database after completion\n"
+      "Database size control:\n"
+      "  --pagesize=...            Database page size: min, max, 256..65536\n"
+      "  --size-lower=N[K|M|G|T]   Lower-bound of size in Kb/Mb/Gb/Tb\n"
+      "  --size-upper              Upper-bound of size in Kb/Mb/Gb/Tb\n"
+      "  --size                    Initial size in Kb/Mb/Gb/Tb\n"
+      "  --shrink-threshold        Shrink threshold in Kb/Mb/Gb/Tb\n"
+      "  --growth-step             Grow step in Kb/Mb/Gb/Tb\n"
+      "Predefined complext scenarios/cases:\n"
+      "  --case=...   Only `basic` scenario implemented for now\n"
+      "    basic == Simultaneous multi-process execution\n"
+      "             of test-actors: nested,hill,ttl,copy,append,jitter,try\n"
+      "Test actors:\n"
+      "  --hill                        Fill-up and empty-down\n"
+      "                                by CRUD-operation quads\n"
+      "  --ttl                         Stochastic time-to-live simulation\n"
+      "  --nested                      Nested transactionы\n"
+      "                                with stochastic-size bellows\n"
+      "  --jitter                      Jitter/delays simulation\n"
+      "  --try                         Try write-transaction, no more\n"
+      "  --copy                        Online copy/backup\n"
+      "  --append                      Append-mode insertions\n"
+      "  --dead.reader                 Dead-reader simulator\n"
+      "  --dead.writer                 Dead-writer simulator\n"
+      "Actor options:\n"
+      "  --batch.read=N                Read-operations batch size\n"
+      "  --batch.write=N               Write-operations batch size\n"
+      "  --delay=N | --no-delay        (no)Delay test-actor before start\n"
+      "  --wait4ops=N | --no-wait4ops  (no)Wait for previous test-actor\n"
+      "                                completes # ops before start\n"
+      "  --duration=N[s|m|h|d]         Define running duration\n"
+      "  --nops=N[K|M|G|T]             Define number of operations/steps\n"
+      "  --inject-writefault[=yes|NO]  TBD (see the source code)\n"
+      "  --drop[=yes|NO]               Drop key-value space/table on "
+      "completion\n"
+      "  --ignore-dbfull[=yes|NO]      Ignore MDBX_MAP_FULL error\n"
+      "  --speculum[=yes|NO]           Use internal `speculum` to check "
+      "dataset\n"
+      "Keys and Value:\n"
+      "  --keygen.min=N                Minimal keys length\n"
+      "  --keygen.max=N                Miximal keys length\n"
+      "  --datalen.min=N               Minimal data length\n"
+      "  --datalen.max=N               Miximal data length\n"
+      "  --keygen.width=N              TBD (see the source code)\n"
+      "  --keygen.mesh=N               TBD (see the source code)\n"
+      "  --keygen.seed=N               TBD (see the source code)\n"
+      "  --keygen.split=N              TBD (see the source code)\n"
+      "  --keygen.rotate=N             TBD (see the source code)\n"
+      "  --keygen.offset=N             TBD (see the source code)\n"
+      "  --keygen.case=random          Generator case (only `random` for now)\n"
+      "Database operation mode:\n"
+      "  --mode={[+-]FLAG}[,[+-]FLAG]...\n"
+      "    nosubdir   == MDBX_NOSUBDIR\n"
+      "    rdonly     == MDBX_RDONLY\n"
+      "    nometasync == MDBX_NOMETASYNC\n"
+      "    lifo       == MDBX_LIFORECLAIM\n"
+      "    coalesce   == MDBX_COALESCE\n"
+      "    nosync     == MDBX_NOSYNC\n"
+      "    writemap   == MDBX_WRITEMAP\n"
+      "    mapasync   == MDBX_MAPASYNC\n"
+      "    utterly    == MDBX_UTTERLY_NOSYNC\n"
+      "    perturb    == MDBX_PAGEPERTURB\n"
+      "    notls      == MDBX_NOTLS\n"
+      "    nordahead  == MDBX_NORDAHEAD\n"
+      "    nomeminit  == MDBX_NOMEMINIT\n"
+      "Key-value space/table options:\n"
+      "  --table={[+-]FLAG}[,[+-]FLAG]...\n"
+      "    key.reverse  == MDBX_REVERSEKEY\n"
+      "    key.integer  == MDBX_INTEGERKEY\n"
+      "    data.dups    == MDBX_DUPSORT\n"
+      "    data.integer == MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT\n"
+      "    data.fixed   == MDBX_DUPFIXED | MDBX_DUPSORT\n"
+      "    data.reverse == MDBX_REVERSEDUP | MDBX_DUPSORT\n");
   exit(EXIT_FAILURE);
 }
 
@@ -136,7 +222,7 @@ int main(int argc, char *const argv[]) {
 #endif /* _DEBUG */
 
   if (argc < 2)
-    failure("No parameters given\n");
+    failure("No parameters given. Try --help\n");
 
   if (argc == 2 && strncmp(argv[1], global::thunk_param_prefix,
                            strlen(global::thunk_param_prefix)) == 0)
@@ -144,6 +230,10 @@ int main(int argc, char *const argv[]) {
                actor_config(argv[1] + strlen(global::thunk_param_prefix)))
                ? EXIT_SUCCESS
                : EXIT_FAILURE;
+
+  if (argc == 2 &&
+      (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0))
+    usage();
 
   actor_params params;
   params.set_defaults(osal_tempdir());
@@ -188,6 +278,17 @@ int main(int argc, char *const argv[]) {
         params.datalen_max = datalen_max;
       continue;
     }
+    if (config::parse_option(argc, argv, narg, "repeat", params.nrepeat,
+                             config::no_scale))
+      continue;
+    if (config::parse_option(argc, argv, narg, "threads", params.nthreads,
+                             config::no_scale, 1, 64))
+      continue;
+    if (config::parse_option(argc, argv, narg, "timeout",
+                             global::config::timeout_duration_seconds,
+                             config::duration, 1))
+      continue;
+
     if (config::parse_option_intptr(argc, argv, narg, "size-lower",
                                     params.size_lower,
                                     mdbx_limits_dbsize_min(params.pagesize),
@@ -237,17 +338,6 @@ int main(int argc, char *const argv[]) {
       keycase_setup(value, params);
       continue;
     }
-
-    if (config::parse_option(argc, argv, narg, "repeat", params.nrepeat,
-                             config::no_scale))
-      continue;
-    if (config::parse_option(argc, argv, narg, "threads", params.nthreads,
-                             config::no_scale, 1, 64))
-      continue;
-    if (config::parse_option(argc, argv, narg, "timeout",
-                             global::config::timeout_duration_seconds,
-                             config::duration, 1))
-      continue;
     if (config::parse_option(argc, argv, narg, "keylen.min", params.keylen_min,
                              config::no_scale, params.mdbx_keylen_min(),
                              params.mdbx_keylen_max())) {
@@ -324,7 +414,7 @@ int main(int argc, char *const argv[]) {
       params.delaystart = 0;
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "no-wait", nullptr)) {
+    if (config::parse_option(argc, argv, narg, "no-wait4ops", nullptr)) {
       params.waitfor_nops = 0;
       continue;
     }
@@ -352,6 +442,10 @@ int main(int argc, char *const argv[]) {
     }
     if (config::parse_option(argc, argv, narg, "dead.writer", nullptr)) {
       configure_actor(last_space_id, ac_deadwrite, value, params);
+      continue;
+    }
+    if (config::parse_option(argc, argv, narg, "try", nullptr)) {
+      configure_actor(last_space_id, ac_try, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "copy", nullptr)) {
@@ -383,7 +477,7 @@ int main(int argc, char *const argv[]) {
     if (*argv[narg] != '-')
       testcase_setup(argv[narg], params, last_space_id);
     else
-      failure("Unknown option '%s'\n", argv[narg]);
+      failure("Unknown option '%s'. Try --help\n", argv[narg]);
   }
 
   if (global::config::dump_config)
