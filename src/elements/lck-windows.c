@@ -702,9 +702,17 @@ static DWORD WINAPI stub_DiscardVirtualMemory(PVOID VirtualAddress,
                                               SIZE_T Size) {
   return VirtualAlloc(VirtualAddress, Size, MEM_RESET, PAGE_NOACCESS)
              ? ERROR_SUCCESS
-             : GetLastError();
+	  : GetLastError();
 }
 #endif /* unused for now */
+
+static uint64_t WINAPI stub_GetTickCount64(void) {
+  LARGE_INTEGER Counter, Frequency;
+  return (QueryPerformanceFrequency(&Frequency) &&
+          QueryPerformanceCounter(&Counter))
+             ? Counter.QuadPart * 1000ul / Frequency.QuadPart
+             : 0;
+}
 
 /*----------------------------------------------------------------------------*/
 #ifndef MDBX_ALLOY
@@ -714,6 +722,7 @@ MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
 MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
 MDBX_NtFsControlFile mdbx_NtFsControlFile;
 MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
+MDBX_GetTickCount64 mdbx_GetTickCount64;
 #if 0  /* LY: unused for now */
 MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
@@ -750,6 +759,9 @@ static void mdbx_winnt_import(void) {
   GET_KERNEL32_PROC(GetFinalPathNameByHandleW);
   GET_KERNEL32_PROC(SetFileInformationByHandle);
   GET_KERNEL32_PROC(PrefetchVirtualMemory);
+  GET_KERNEL32_PROC(GetTickCount64);
+  if (!mdbx_GetTickCount64)
+    mdbx_GetTickCount64 = stub_GetTickCount64;
 #if 0  /* LY: unused for now */
   GET_KERNEL32_PROC(DiscardVirtualMemory);
   if (!mdbx_DiscardVirtualMemory)

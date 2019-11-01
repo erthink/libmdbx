@@ -80,6 +80,8 @@
 #include <vm/vm_param.h>
 #elif defined(__OpenBSD__) || defined(__NetBSD__)
 #include <uvm/uvm_param.h>
+#else
+#define SYSCTL_LEGACY_NONCONST_MIB
 #endif
 #include <sys/vmmeter.h>
 #else
@@ -105,17 +107,29 @@
 #include <mach/host_info.h>
 #include <mach/mach_host.h>
 #include <mach/mach_port.h>
+#include <uuid/uuid.h>
 #undef P_DIRTY
 #endif
 
 #if defined(__linux__) || defined(__gnu_linux__)
 #include <linux/sysctl.h>
 #include <sys/sendfile.h>
+#include <sys/statvfs.h>
 #endif /* Linux */
 
 #ifndef _XOPEN_SOURCE
 #define _XOPEN_SOURCE 0
 #endif
+
+#ifndef _XOPEN_SOURCE_EXTENDED
+#define _XOPEN_SOURCE_EXTENDED 0
+#else
+#include <utmpx.h>
+#endif /* _XOPEN_SOURCE_EXTENDED */
+
+#if defined(__sun) || defined(__SVR4) || defined(__svr4__)
+#include <kstat.h>
+#endif /* SunOS/Solaris */
 
 #if defined(_WIN32) || defined(_WIN64)
 #ifndef WIN32_LEAN_AND_MEAN
@@ -676,6 +690,12 @@ MDBX_INTERNAL_FUNC uint64_t
 mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime);
 
+typedef union bin128 {
+  __anonymous_struct_extension__ struct { uint64_t x, y; };
+  __anonymous_struct_extension__ struct { uint32_t a, b, c, d; };
+} bin128_t;
+
+MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void);
 /*----------------------------------------------------------------------------*/
 /* lck stuff */
 
@@ -838,6 +858,9 @@ typedef NTSTATUS(NTAPI *MDBX_NtFsControlFile)(
     IN OUT PVOID InputBuffer, IN ULONG InputBufferLength,
     OUT OPTIONAL PVOID OutputBuffer, IN ULONG OutputBufferLength);
 MDBX_INTERNAL_VAR MDBX_NtFsControlFile mdbx_NtFsControlFile;
+
+typedef uint64_t(WINAPI *MDBX_GetTickCount64)(void);
+MDBX_INTERNAL_VAR MDBX_GetTickCount64 mdbx_GetTickCount64;
 
 #if !defined(_WIN32_WINNT_WIN8) || _WIN32_WINNT < _WIN32_WINNT_WIN8
 typedef struct _WIN32_MEMORY_RANGE_ENTRY {

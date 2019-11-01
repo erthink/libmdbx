@@ -1462,3 +1462,432 @@ MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void) {
   return ts.tv_sec * UINT64_C(1000000000) + ts.tv_nsec;
 #endif
 }
+
+/*----------------------------------------------------------------------------*/
+
+static void bootid_shake(bin128_t *p) {
+  /* Bob Jenkins's PRNG: https://burtleburtle.net/bob/rand/smallprng.html */
+  const uint32_t e = p->a - (p->b << 23 | p->b >> 9);
+  p->a = p->b ^ (p->c << 16 | p->c >> 16);
+  p->b = p->c + (p->d << 11 | p->d >> 21);
+  p->c = p->d + e;
+  p->d = e + p->a;
+}
+
+static void bootid_collect(bin128_t *p, const void *s, size_t n) {
+  p->y += UINT64_C(64526882297375213);
+  bootid_shake(p);
+  for (size_t i = 0; i < n; ++i) {
+    bootid_shake(p);
+    p->y ^= UINT64_C(48797879452804441) * ((const uint8_t *)s)[i];
+    bootid_shake(p);
+    p->y += 14621231;
+  }
+  bootid_shake(p);
+
+  /* minor non-linear tomfoolery */
+  const unsigned z = p->x % 61;
+  p->y = p->y << z | p->y >> (64 - z);
+  bootid_shake(p);
+  bootid_shake(p);
+  const unsigned q = p->x % 59;
+  p->y = p->y << q | p->y >> (64 - q);
+  bootid_shake(p);
+  bootid_shake(p);
+  bootid_shake(p);
+}
+
+#if defined(_WIN32) || defined(_WIN64)
+
+static uint64_t windows_systemtime_ms() {
+  FILETIME ft;
+  GetSystemTimeAsFileTime(&ft);
+  return ((uint64_t)ft.dwHighDateTime << 32 | ft.dwLowDateTime) / 10000ul;
+}
+
+static uint64_t windows_bootime(void) {
+  unsigned confirmed = 0;
+  uint64_t boottime = 0;
+  uint64_t up0 = mdbx_GetTickCount64();
+  uint64_t st0 = windows_systemtime_ms();
+  for (uint64_t fuse = st0; up0 && st0 < fuse + 1000 * 1000u / 42;) {
+    YieldProcessor();
+    const uint64_t up1 = mdbx_GetTickCount64();
+    const uint64_t st1 = windows_systemtime_ms();
+    if (st1 > fuse && st1 == st0 && up1 == up0) {
+      uint64_t diff = st1 - up1;
+      if (boottime == diff) {
+        if (++confirmed > 4)
+          return boottime;
+      } else {
+        confirmed = 0;
+        boottime = diff;
+      }
+      fuse = st1;
+      Sleep(1);
+    }
+    st0 = st1;
+    up0 = up1;
+  }
+  return 0;
+}
+
+static LSTATUS mdbx_RegGetValue(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
+                                DWORD dwFlags, LPDWORD pdwType, PVOID pvData,
+                                LPDWORD pcbData) {
+  LSTATUS rc =
+      RegGetValueW(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+  if (rc != ERROR_FILE_NOT_FOUND)
+    return rc;
+
+  rc = RegGetValueW(hkey, lpSubKey, lpValue,
+                    dwFlags | 0x00010000 /* RRF_SUBKEY_WOW6464KEY */, pdwType,
+                    pvData, pcbData);
+  if (rc != ERROR_FILE_NOT_FOUND)
+    return rc;
+  return RegGetValueW(hkey, lpSubKey, lpValue,
+                      dwFlags | 0x00020000 /* RRF_SUBKEY_WOW6432KEY */, pdwType,
+                      pvData, pcbData);
+}
+#endif
+
+static __cold __maybe_unused bool bootid_parse_uuid(bin128_t *s, const void *p,
+                                                    const size_t n) {
+  if (n > 31) {
+    unsigned bits = 0;
+    for (unsigned i = 0; i < n; ++i) /* try parse an UUID in text form */ {
+      uint8_t c = ((const uint8_t *)p)[i];
+      if (c >= '0' && c <= '9')
+        c -= '0';
+      else if (c >= 'a' && c <= 'f')
+        c -= 'a' - 10;
+      else if (c >= 'A' && c <= 'F')
+        c -= 'A' - 10;
+      else
+        continue;
+      assert(c <= 15);
+      c ^= s->y >> 60;
+      s->y = s->y << 4 | s->x >> 60;
+      s->x = s->x << 4 | c;
+      bits += 4;
+    }
+    if (bits > 42 * 3)
+      /* UUID parsed successfully */
+      return true;
+  }
+
+  if (n > 15) /* is enough handle it as a binary? */ {
+    if (n == sizeof(bin128_t)) {
+      bin128_t aligned;
+      memcpy(&aligned, p, sizeof(bin128_t));
+      s->x += aligned.x;
+      s->y += aligned.y;
+    } else
+      bootid_collect(s, p, n);
+    return true;
+  }
+
+  if (n)
+    bootid_collect(s, p, n);
+  return false;
+}
+
+__cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
+  bin128_t bin = {{0, 0}};
+  bool got_machineid = false, got_bootime = false, got_bootseq = false;
+
+#if defined(__linux__) || defined(__gnu_linux__)
+  {
+    const int fd =
+        open("/proc/sys/kernel/random/boot_id", O_RDONLY | O_NOFOLLOW);
+    if (fd != -1) {
+      struct statvfs fs;
+      char buf[42];
+      const ssize_t len =
+          (fstatvfs(fd, &fs) == 0 && fs.f_fsid == /* procfs */ 0x00009FA0)
+              ? read(fd, buf, sizeof(buf))
+              : -1;
+      close(fd);
+      if (len > 0 && bootid_parse_uuid(&bin, buf, len))
+        return bin;
+    }
+  }
+#endif /* Linux */
+
+#if defined(__APPLE__) || defined(__MACH__)
+  {
+    char buf[42];
+    size_t len = sizeof(buf);
+    if (!sysctlbyname("kern.bootsessionuuid", buf, &len, nullptr, 0) &&
+        bootid_parse_uuid(&bin, buf, len))
+      return bin;
+
+#if defined(__MAC_OS_X_VERSION_MIN_REQUIRED) &&                                \
+    __MAC_OS_X_VERSION_MIN_REQUIRED > 1050
+    uuid_t uuid;
+    struct timespec wait = {0, 1000000000u / 42};
+    if (!gethostuuid(uuid, &wait) &&
+        bootid_parse_uuid(&bin, uuid, sizeof(uuid)))
+      got_machineid = true;
+#endif /* > 10.5 */
+
+    struct timeval boottime;
+    len = sizeof(boottime);
+    if (!sysctlbyname("kern.boottime", &boottime, &len, nullptr, 0) &&
+        len == sizeof(boottime) && boottime.tv_sec)
+      got_bootime = true;
+  }
+#endif /* Apple/Darwin */
+
+#if defined(_WIN32) || defined(_WIN64)
+  {
+    union buf {
+      DWORD BootId;
+      DWORD BaseTime;
+      SYSTEM_TIMEOFDAY_INFORMATION SysTimeOfDayInfo;
+      struct {
+        LARGE_INTEGER BootTime;
+        LARGE_INTEGER CurrentTime;
+        LARGE_INTEGER TimeZoneBias;
+        ULONG TimeZoneId;
+        ULONG Reserved;
+        ULONGLONG BootTimeBias;
+        ULONGLONG SleepTimeBias;
+      } SysTimeOfDayInfoHacked;
+      wchar_t MachineGuid[42];
+      char DigitalProductId[248];
+    } buf;
+
+    static const wchar_t HKLM_MicrosoftCryptography[] =
+        L"SOFTWARE\\Microsoft\\Cryptography";
+    DWORD len = sizeof(buf);
+    /* Windows is madness and must die */
+    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_MicrosoftCryptography,
+                         L"MachineGuid", RRF_RT_ANY, NULL, &buf.MachineGuid,
+                         &len) == ERROR_SUCCESS &&
+        len > 42 && len < sizeof(buf))
+      got_machineid = bootid_parse_uuid(&bin, &buf.MachineGuid, len);
+
+    if (!got_machineid) {
+      /* again, Windows is madness */
+      static const wchar_t HKLM_WindowsNT[] =
+          L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+      static const wchar_t HKLM_WindowsNT_DPK[] =
+          L"SOFTWARE\\Microsoft\\Windows "
+          L"NT\\CurrentVersion\\DefaultProductKey";
+      static const wchar_t HKLM_WindowsNT_DPK2[] =
+          L"SOFTWARE\\Microsoft\\Windows "
+          L"NT\\CurrentVersion\\DefaultProductKey2";
+
+      len = sizeof(buf);
+      if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT,
+                           L"DigitalProductId", RRF_RT_ANY, NULL,
+                           &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
+          len > 42 && len < sizeof(buf)) {
+        bootid_collect(&bin, &buf.DigitalProductId, len);
+        got_machineid = true;
+      }
+      len = sizeof(buf);
+      if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT_DPK,
+                           L"DigitalProductId", RRF_RT_ANY, NULL,
+                           &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
+          len > 42 && len < sizeof(buf)) {
+        bootid_collect(&bin, &buf.DigitalProductId, len);
+        got_machineid = true;
+      }
+      len = sizeof(buf);
+      if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT_DPK2,
+                           L"DigitalProductId", RRF_RT_ANY, NULL,
+                           &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
+          len > 42 && len < sizeof(buf)) {
+        bootid_collect(&bin, &buf.DigitalProductId, len);
+        got_machineid = true;
+      }
+    }
+
+    static const wchar_t HKLM_PrefetcherParams[] =
+        L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory "
+        L"Management\\PrefetchParameters";
+    len = sizeof(buf);
+    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, L"BootId",
+                         RRF_RT_DWORD, NULL, &buf.BootId,
+                         &len) == ERROR_SUCCESS &&
+        len > 1 && len < sizeof(buf)) {
+      bootid_collect(&bin, &buf.BootId, len);
+      got_bootseq = true;
+    }
+
+    len = sizeof(buf);
+    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, L"BaseTime",
+                         RRF_RT_DWORD, NULL, &buf.BaseTime,
+                         &len) == ERROR_SUCCESS &&
+        len >= sizeof(buf.BaseTime) && buf.BaseTime) {
+      bootid_collect(&bin, &buf.BaseTime, len);
+      got_bootime = true;
+    }
+
+    /* BootTime from SYSTEM_TIMEOFDAY_INFORMATION */
+    NTSTATUS status = NtQuerySystemInformation(
+        0x03 /* SystemTmeOfDayInformation */, &buf.SysTimeOfDayInfo,
+        sizeof(buf.SysTimeOfDayInfo), &len);
+    if (NT_SUCCESS(status) &&
+        len >= offsetof(union buf, SysTimeOfDayInfoHacked.BootTime) +
+                   sizeof(buf.SysTimeOfDayInfoHacked.BootTime) &&
+        buf.SysTimeOfDayInfoHacked.BootTime.QuadPart) {
+      bootid_collect(&bin, &buf.SysTimeOfDayInfoHacked.BootTime,
+                     sizeof(buf.SysTimeOfDayInfoHacked.BootTime));
+      got_bootime = true;
+    }
+
+    if (!got_bootime) {
+      uint64_t boottime = windows_bootime();
+      if (boottime) {
+        bootid_collect(&bin, &boottime, sizeof(boottime));
+        got_bootime = true;
+      }
+    }
+  }
+#endif /* Windows */
+
+#if defined(CTL_HW) && defined(HW_UUID)
+  if (!got_machineid) {
+    static const int mib[] = {CTL_HW, HW_UUID};
+    char buf[42];
+    size_t len = sizeof(buf);
+    if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+            (int *)
+#endif
+                mib,
+            ARRAY_LENGTH(mib), &buf, &len, NULL, 0) == 0)
+      got_machineid = bootid_parse_uuid(&bin, buf, len);
+  }
+#endif /* CTL_HW && HW_UUID */
+
+#if defined(CTL_KERN) && defined(KERN_HOSTUUID)
+  if (!got_machineid) {
+    static const int mib[] = {CTL_KERN, KERN_HOSTUUID};
+    char buf[42];
+    size_t len = sizeof(buf);
+    if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+            (int *)
+#endif
+                mib,
+            ARRAY_LENGTH(mib), &buf, &len, NULL, 0) == 0)
+      got_machineid = bootid_parse_uuid(&bin, buf, len);
+  }
+#endif /* CTL_KERN && KERN_HOSTUUID */
+
+#if defined(__NetBSD__)
+  if (!got_machineid) {
+    char buf[42];
+    size_t len = sizeof(buf);
+    if (sysctlbyname("machdep.dmi.system-uuid", buf, &len, NULL, 0) == 0)
+      got_machineid = bootid_parse_uuid(&bin, buf, len);
+  }
+#endif /* __NetBSD__ */
+
+#if _XOPEN_SOURCE_EXTENDED
+  if (!got_machineid) {
+    const int hostid = gethostid();
+    if (hostid > 0) {
+      bootid_collect(&bin, &hostid, sizeof(hostid));
+      got_machineid = true;
+    }
+  }
+#endif /* _XOPEN_SOURCE_EXTENDED */
+
+  if (!got_machineid) {
+  lack:
+    bin.x = bin.y = 0;
+    return bin;
+  }
+
+  /*--------------------------------------------------------------------------*/
+
+#if defined(CTL_KERN) && defined(KERN_BOOTTIME)
+  if (!got_bootime) {
+    static const int mib[] = {CTL_KERN, KERN_BOOTTIME};
+    struct timeval boottime;
+    size_t len = sizeof(boottime);
+    if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+            (int *)
+#endif
+                mib,
+            ARRAY_LENGTH(mib), &boottime, &len, NULL, 0) == 0 &&
+        len == sizeof(boottime) && boottime.tv_sec) {
+      bootid_collect(&bin, &boottime, len);
+      got_bootime = true;
+    }
+  }
+#endif /* CTL_KERN && KERN_BOOTTIME */
+
+#if defined(__sun) || defined(__SVR4) || defined(__svr4__)
+  if (!got_bootime) {
+    kstat_ctl_t *kc = kstat_open();
+    if (kc) {
+      kstat_t *kp = kstat_lookup(kc, "unix", 0, "system_misc");
+      if (kp && kstat_read(kc, kp, 0) != -1) {
+        kstat_named_t *kn = (kstat_named_t *)kstat_data_lookup(kp, "boot_time");
+        if (kn) {
+          switch (kn->data_type) {
+          case KSTAT_DATA_INT32:
+          case KSTAT_DATA_UINT32:
+            bootid_collect(&bin, &kn->value, sizeof(int32_t));
+            got_boottime = true;
+          case KSTAT_DATA_INT64:
+          case KSTAT_DATA_UINT64:
+            bootid_collect(&bin, &kn->value, sizeof(int64_t));
+            got_boottime = true;
+          }
+        }
+      }
+      kstat_close(kc);
+    }
+  }
+#endif /* SunOS / Solaris */
+
+#if _XOPEN_SOURCE_EXTENDED && defined(BOOT_TIME)
+  if (!got_bootime) {
+    setutxent();
+    const struct utmpx id = {.ut_type = BOOT_TIME};
+    const struct utmpx *entry = getutxid(&id);
+    if (entry) {
+      bootid_collect(&bin, entry, sizeof(*entry));
+      got_bootime = true;
+      while (unlikely((entry = getutxid(&id)) != nullptr)) {
+        /* have multiple reboot records, assuming we can distinguish next
+         * bootsession even if RTC is wrong or absent */
+        bootid_collect(&bin, entry, sizeof(*entry));
+        got_bootseq = true;
+      }
+    }
+    endutxent();
+  }
+#endif /* _XOPEN_SOURCE_EXTENDED && BOOT_TIME */
+
+  if (!got_bootseq) {
+    if (!got_bootime || !MDBX_TRUST_RTC)
+      goto lack;
+
+#if defined(_WIN32) || defined(_WIN64)
+    FILETIME now;
+    GetSystemTimeAsFileTime(&now);
+    if (0x1CCCCCC > now.dwHighDateTime)
+#else
+    struct timespec mono, real;
+    if (clock_gettime(CLOCK_MONOTONIC, &mono) ||
+        clock_gettime(CLOCK_REALTIME, &real) ||
+        /* wrong time, RTC is mad or absent */
+        1555555555l > real.tv_sec ||
+        /* seems no adjustment by RTC/NTP, i.e. a fake time */
+        real.tv_sec < mono.tv_sec || 1234567890l > real.tv_sec - mono.tv_sec ||
+        (real.tv_sec - mono.tv_sec) % 900u == 0)
+#endif
+      goto lack;
+  }
+
+  return bin;
+}

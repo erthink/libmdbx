@@ -745,6 +745,7 @@ typedef struct rthc_entry_t {
 #define RTHC_INITIAL_LIMIT 16
 #endif
 
+static bin128_t bootid;
 #if defined(_WIN32) || defined(_WIN64)
 static CRITICAL_SECTION rthc_critical_section;
 static CRITICAL_SECTION lcklist_critical_section;
@@ -889,6 +890,8 @@ __cold void mdbx_rthc_global_init(void) {
       break;
     proba >>= 1;
   }
+
+  bootid = mdbx_osal_bootid();
 }
 
 /* dtor called for thread, i.e. for all mdbx's environment objects */
@@ -8406,7 +8409,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #elif defined(HW_USERMEM) || defined(HW_PHYSMEM64) || defined(HW_MEMSIZE) ||   \
     defined(HW_PHYSMEM)
   size_t ram, len = sizeof(ram);
-  static const int mib[2] = {
+  static const int mib[] = {
     CTL_HW,
 #if defined(HW_USERMEM)
     HW_USERMEM
@@ -8418,7 +8421,12 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
     HW_PHYSMEM
 #endif
   };
-  if (sysctl(mib, ARRAY_LENGTH(mib), &ram, &len, NULL, 0) != 0)
+  if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+          (int *)
+#endif
+              mib,
+          ARRAY_LENGTH(mib), &ram, &len, NULL, 0) != 0)
     return errno;
   if (len != sizeof(ram))
     return MDBX_ENOSYS;
@@ -8456,7 +8464,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #elif defined(VM_TOTAL) || defined(VM_METER)
   struct vmtotal info;
   size_t len = sizeof(info);
-  static const int mib[2] = {
+  static const int mib[] = {
     CTL_VM,
 #if defined(VM_TOTAL)
     VM_TOTAL
@@ -8464,7 +8472,12 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
     VM_METER
 #endif
   };
-  if (sysctl(mib, ARRAY_LENGTH(mib), &info, &len, NULL, 0) != 0)
+  if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+          (int *)
+#endif
+              mib,
+          ARRAY_LENGTH(mib), &info, &len, NULL, 0) != 0)
     return errno;
   if (len != sizeof(info))
     return MDBX_ENOSYS;
@@ -14245,8 +14258,8 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_autosync_threshold = pgno2bytes(env, *env->me_autosync_threshold);
     arg->mi_autosync_period_seconds16dot16 =
         mdbx_osal_monotime_to_16dot16(*env->me_autosync_period);
-    arg->mi_bootid[0] = lck ? lck->mti_bootid[0] : 0;
-    arg->mi_bootid[1] = lck ? lck->mti_bootid[1] : 0;
+    arg->mi_bootid[0] = lck ? lck->mti_bootid.x : 0;
+    arg->mi_bootid[1] = lck ? lck->mti_bootid.y : 0;
     arg->mi_mode = lck ? lck->mti_envmode : env->me_flags;
   }
 
@@ -16574,10 +16587,11 @@ __dll_export
 #else
     #error "FIXME: Unsupported byte order"
 #endif /* __BYTE_ORDER__ */
-    " MDBX_TXN_CHECKPID=" STRINGIFY(MDBX_TXN_CHECKPID)
-    " MDBX_TXN_CHECKOWNER=" STRINGIFY(MDBX_TXN_CHECKOWNER)
-    " MDBX_64BIT_ATOMIC=" STRINGIFY(MDBX_64BIT_ATOMIC_CONFIG)
-    " MDBX_64BIT_CAS=" STRINGIFY(MDBX_64BIT_CAS_CONFIG)
+    " MDBX_TXN_CHECKPID=" MDBX_TXN_CHECKPID_CONFIG
+    " MDBX_TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
+    " MDBX_64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
+    " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
+    " MDBX_TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */
