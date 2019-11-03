@@ -5930,6 +5930,7 @@ retry:
         }
 
         mdbx_tassert(txn, txn->tw.lifo_reclaimed != nullptr);
+        rc = MDBX_RESULT_TRUE;
         do {
           if (unlikely(gc_rid <= 1)) {
             if (unlikely(MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) <=
@@ -5957,6 +5958,11 @@ retry:
                  left > ((unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) -
                          reused_gc_slot) *
                             env->me_maxgc_ov1page);
+        if (reused_gc_slot && rc != MDBX_RESULT_TRUE) {
+          mdbx_trace("%s: restart innter-loop since reused_gc_slot %u > 0",
+                     dbg_prefix_mode, reused_gc_slot);
+          continue;
+        }
       }
 
       const unsigned i =
@@ -6000,18 +6006,18 @@ retry:
 
     unsigned chunk = left;
     if (unlikely(chunk > env->me_maxgc_ov1page)) {
-      const unsigned avail_gs_slots =
+      const unsigned avail_gc_slots =
           txn->tw.lifo_reclaimed
               ? (unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) -
                     reused_gc_slot + 1
               : (gc_rid < INT16_MAX) ? (unsigned)gc_rid : INT16_MAX;
-      if (avail_gs_slots > 1) {
+      if (avail_gc_slots > 1) {
         if (chunk < env->me_maxgc_ov1page * 2)
           chunk /= 2;
         else {
           const unsigned threshold =
-              env->me_maxgc_ov1page * ((avail_gs_slots < prefer_max_scatter)
-                                           ? avail_gs_slots
+              env->me_maxgc_ov1page * ((avail_gc_slots < prefer_max_scatter)
+                                           ? avail_gc_slots
                                            : prefer_max_scatter);
           if (left < threshold)
             chunk = env->me_maxgc_ov1page;
@@ -6037,7 +6043,7 @@ retry:
             }
 
             chunk = (avail >= tail) ? tail - span
-                                    : (avail_gs_slots > 3 &&
+                                    : (avail_gc_slots > 3 &&
                                        reused_gc_slot < prefer_max_scatter - 3)
                                           ? avail - span
                                           : tail;
