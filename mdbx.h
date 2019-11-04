@@ -1457,13 +1457,13 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  * Indifferently this function will fails or not, the mdbx_env_close() must be
  * called later to discard the MDBX_env handle and release associated resources.
  *
- * [in] env    An environment handle returned by mdbx_env_create()
- * [in] path   The directory in which the database files reside.
- *             This directory must already exist and be writable.
- * [in] flags  Special options for this environment. This parameter
- *             must be set to 0 or by bitwise OR'ing together one
- *             or more of the values described above in the
- *             "ENVIRONMENT FLAGS" and "SYNC MODES" sections.
+ * [in] env       An environment handle returned by mdbx_env_create()
+ * [in] pathname  The directory in which the database files reside.
+ *                This directory must already exist and be writable.
+ * [in] flags     Special options for this environment. This parameter
+ *                must be set to 0 or by bitwise OR'ing together one
+ *                or more of the values described above in the
+ *                "ENVIRONMENT FLAGS" and "SYNC MODES" sections.
  *
  * Flags set by mdbx_env_set_flags() are also used:
  *  - MDBX_NOSUBDIR, MDBX_RDONLY, MDBX_EXCLUSIVE, MDBX_WRITEMAP, MDBX_NOTLS,
@@ -1514,8 +1514,8 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *                             after a system crash.
  *   - MDBX_TOO_LARGE        = Database is too large for this process, i.e.
  *                             32-bit process tries to open >4Gb database. */
-LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
-                              mode_t mode);
+LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
+                              unsigned flags, mode_t mode);
 
 /* Copy an MDBX environment to the specified path, with options.
  *
@@ -1527,7 +1527,7 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
  *
  * [in] env    An environment handle returned by mdbx_env_create(). It must
  *             have already been opened successfully.
- * [in] path   The directory in which the copy will reside. This directory
+ * [in] dest   The directory in which the copy will reside. This directory
  *             must already exist and be writable but must otherwise be empty.
  * [in] flags  Special options for this operation. This parameter must be set
  *             to 0 or by bitwise OR'ing together one or more of the values
@@ -1540,8 +1540,7 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
  *      account skipping free pages.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest_path,
-                              unsigned flags);
+LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest, unsigned flags);
 
 /* Copy an MDBX environment to the specified file descriptor,
  * with options.
@@ -1821,14 +1820,14 @@ LIBMDBX_API int mdbx_env_get_flags(MDBX_env *env, unsigned *flags);
 /* Return the path that was used in mdbx_env_open().
  *
  * [in] env     An environment handle returned by mdbx_env_create()
- * [out] path   Address of a string pointer to contain the path.
+ * [out] dest   Address of a string pointer to contain the path.
  *              This is the actual string in the environment, not a copy.
  *              It should not be altered in any way.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
  *  - MDBX_EINVAL   = an invalid parameter was specified. */
-LIBMDBX_API int mdbx_env_get_path(MDBX_env *env, const char **path);
+LIBMDBX_API int mdbx_env_get_path(MDBX_env *env, const char **dest);
 
 /* Return the file descriptor for the given environment.
  *

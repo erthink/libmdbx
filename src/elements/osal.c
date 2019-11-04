@@ -505,6 +505,12 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const char *pathname, int flags,
   *fd = INVALID_HANDLE_VALUE;
 #if defined(_WIN32) || defined(_WIN64)
   (void)mode;
+  size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
 
   DWORD DesiredAccess, ShareMode;
   DWORD FlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
@@ -544,7 +550,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const char *pathname, int flags,
     break;
   }
 
-  *fd = CreateFileA(pathname, DesiredAccess, ShareMode, NULL,
+  *fd = CreateFileW(pathnameW, DesiredAccess, ShareMode, NULL,
                     CreationDisposition, FlagsAndAttributes, NULL);
 
   if (*fd == INVALID_HANDLE_VALUE)
