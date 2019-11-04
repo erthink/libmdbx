@@ -179,8 +179,19 @@ __extern_C void __assert_rtn(const char *function, const char *file, int line,
 
 #define __assert_fail(assertion, file, line, function)                         \
   __assert_rtn(function, file, line, assertion)
-#elif defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||   \
-    defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
+#elif defined(__OpenBSD__)
+__extern_C __dead void __assert2(const char *file, int line,
+                                 const char *function,
+                                 const char *assertion) /* __nothrow */;
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert2(file, line, function, assertion)
+#elif defined(__NetBSD__)
+__extern_C __dead void __assert13(const char *file, int line,
+                                  const char *function,
+                                  const char *assertion) /* __nothrow */;
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert13(file, line, function, assertion)
+#elif defined(__FreeBSD__) || defined(__BSD__) || defined(__bsdi__) ||         \
     defined(__DragonFly__)
 __extern_C void __assert(const char *function, const char *file, int line,
                          const char *assertion) /* __nothrow */
@@ -907,8 +918,36 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_check4nonlocal(mdbx_filehandle_t handle,
-                                           int flags) {
+MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
+                                            const char *pathname, int err) {
+#if defined(_WIN32) || defined(_WIN64)
+  (void)pathname;
+  (void)err;
+  if (!mdbx_GetVolumeInformationByHandleW)
+    return MDBX_ENOSYS;
+  DWORD unused, flags;
+  if (!mdbx_GetVolumeInformationByHandleW(handle, nullptr, 0, nullptr, &unused,
+                                          &flags, nullptr, 0))
+    return GetLastError();
+  if ((flags & FILE_READ_ONLY_VOLUME) == 0)
+    return MDBX_EACCESS;
+#else
+  struct statvfs info;
+  if (err != MDBX_ENOFILE) {
+    if (statvfs(pathname, &info))
+      return errno;
+    if ((info.f_flag & ST_RDONLY) == 0)
+      return err;
+  }
+  if (fstatvfs(handle, &info))
+    return errno;
+  if ((info.f_flag & ST_RDONLY) == 0)
+    return (err == MDBX_ENOFILE) ? MDBX_EACCESS : err;
+#endif /* !Windows */
+  return MDBX_SUCCESS;
+}
+
+static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #if defined(_WIN32) || defined(_WIN64)
   if (GetFileType(handle) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
@@ -1019,10 +1058,109 @@ MDBX_INTERNAL_FUNC int mdbx_check4nonlocal(mdbx_filehandle_t handle,
     return rc;
   }
 #else
-  (void)handle;
-  /* TODO: check for NFS handle ? */
-  (void)flags;
+
+  struct statvfs statvfs_info;
+  if (fstatvfs(handle, &statvfs_info))
+    return errno;
+#if defined(ST_LOCAL) || defined(ST_EXPORTED)
+  const unsigned long st_flags = statvfs_info.f_flag;
+#endif /* ST_LOCAL || ST_EXPORTED */
+
+#if defined(__NetBSD__)
+  const unsigned type = 0;
+  const char *const name = statvfs_info.f_fstypename;
+  const size_t name_len = VFS_NAMELEN;
+#elif defined(_AIX) || defined(__OS400__) || defined(FSTYPSZ) ||               \
+    defined(_FSTYPSZ)
+  const unsigned type = 0;
+  const char *const name = statfs_info.f_basetype;
+  const size_t name_len = sizeof(statfs_info.f_basetype);
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                \
+    defined(ST_FSTYPSZ) || defined(_ST_FSTYPSZ)
+  const unsigned type = 0;
+#if defined(_ST_FSTYPSZ) || defined(_ST_FSTYPSZ)
+  struct stat stat_info;
+  if (fstat(handle, &stat_info))
+    return errno;
+  const char *const name = stat_info.st_fstype;
+  const size_t name_len = strlen(name);
+#else
+  const char *const name = "";
+  const size_t name_len = 0;
 #endif
+#else
+  struct statfs statfs_info;
+  if (fstatfs(handle, &statfs_info))
+    return errno;
+#if defined(__OpenBSD__)
+  const unsigned type = 0;
+#else
+  const unsigned type = statfs_info.f_type;
+#endif
+#if defined(MNT_LOCAL) || defined(MNT_EXPORTED)
+  const unsigned long mnt_flags = statfs_info.f_flags;
+#endif /* MNT_LOCAL || MNT_EXPORTED */
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
+    defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
+    defined(__APPLE__) || defined(__MACH__) || defined(MFSNAMELEN) ||          \
+    defined(MFSTYPENAMELEN) || defined(VFS_NAMELEN)
+  const char *const name = statfs_info.f_fstypename;
+  const size_t name_len = sizeof(statfs_info.f_fstypename);
+#else
+  const char *const name = "";
+  const unsigned name_len = 0;
+#endif
+#endif
+
+  if (name_len) {
+    if (((name_len > 2 && strncasecmp("nfs", name, 3) == 0) ||
+         strncasecmp("cifs", name, name_len) == 0 ||
+         strncasecmp("ncpfs", name, name_len) == 0 ||
+         strncasecmp("smbfs", name, name_len) == 0 ||
+         ((name_len > 3 && strncasecmp("fuse", name, 4) == 0) &&
+          strncasecmp("fuseblk", name, name_len) != 0)) &&
+        !(flags & MDBX_EXCLUSIVE))
+      return MDBX_EREMOTE;
+    if (strcasecmp("ftp", name) == 0 || strcasecmp("http", name) == 0 ||
+        strcasecmp("sshfs", name) == 0)
+      return MDBX_EREMOTE;
+  }
+
+#ifdef ST_LOCAL
+  if ((st_flags & ST_LOCAL) == 0 && !(flags & MDBX_EXCLUSIVE))
+    return MDBX_EREMOTE;
+#elif defined(MNT_LOCAL)
+  if ((mnt_flags & MNT_LOCAL) == 0 && !(flags & MDBX_EXCLUSIVE))
+    return MDBX_EREMOTE;
+#endif /* ST/MNT_LOCAL */
+
+#ifdef ST_EXPORTED
+  if (st_flags & ST_EXPORTED)
+    return MDBX_EREMOTE;
+#elif defined(MNT_EXPORTED)
+  if (mnt_flags & MNT_EXPORTED)
+    return MDBX_EREMOTE;
+#endif /* ST/MNT_EXPORTED */
+
+  switch (type) {
+  case 0xFF534D42 /* CIFS_MAGIC_NUMBER */:
+  case 0x6969 /* NFS_SUPER_MAGIC */:
+  case 0x564c /* NCP_SUPER_MAGIC */:
+  case 0x517B /* SMB_SUPER_MAGIC */:
+#if defined(__digital__) || defined(__osf__) || defined(__osf)
+  case 0x0E /* Tru64 NFS */:
+#endif
+#ifdef ST_FST_NFS
+  case ST_FST_NFS:
+#endif
+    if ((flags & MDBX_EXCLUSIVE) == 0)
+      return MDBX_EREMOTE;
+  case 0:
+  default:
+    break;
+  }
+#endif /* Unix */
+
   return MDBX_SUCCESS;
 }
 
@@ -1038,7 +1176,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   map->filesize = 0;
 #endif /* Windows */
 
-  int err = mdbx_check4nonlocal(map->fd, flags);
+  int err = mdbx_check_fs_local(map->fd, flags);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -1607,10 +1745,10 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
     const int fd =
         open("/proc/sys/kernel/random/boot_id", O_RDONLY | O_NOFOLLOW);
     if (fd != -1) {
-      struct statvfs fs;
+      struct statfs fs;
       char buf[42];
       const ssize_t len =
-          (fstatvfs(fd, &fs) == 0 && fs.f_fsid == /* procfs */ 0x00009FA0)
+          (fstatfs(fd, &fs) == 0 && fs.f_type == /* procfs */ 0x9FA0)
               ? read(fd, buf, sizeof(buf))
               : -1;
       close(fd);

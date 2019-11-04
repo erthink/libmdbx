@@ -74,6 +74,7 @@
     defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
     defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__)
 #include <sys/cdefs.h>
+#include <sys/mount.h>
 #include <sys/sysctl.h>
 #include <sys/types.h>
 #if defined(__FreeBSD__) || defined(__DragonFly__)
@@ -95,7 +96,7 @@
 #endif
 #endif /* !xBSD */
 
-#if defined(__FreeBSD__) || defined(__OpenBSD__) || __has_include(<malloc_np.h>)
+#if defined(__FreeBSD__) || __has_include(<malloc_np.h>)
 #include <malloc_np.h>
 #endif
 
@@ -114,7 +115,7 @@
 #if defined(__linux__) || defined(__gnu_linux__)
 #include <linux/sysctl.h>
 #include <sys/sendfile.h>
-#include <sys/statvfs.h>
+#include <sys/statfs.h>
 #endif /* Linux */
 
 #ifndef _XOPEN_SOURCE
@@ -200,6 +201,7 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>
+#include <sys/statvfs.h>
 #include <sys/uio.h>
 #include <unistd.h>
 typedef pthread_t mdbx_thread_t;
@@ -347,7 +349,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #include <sys/endian.h>
 #include <sys/types.h>
 #elif defined(__bsdi__) || defined(__DragonFly__) || defined(__FreeBSD__) ||   \
-    defined(__NETBSD__) || defined(__NetBSD__) ||                              \
+    defined(__NetBSD__) ||                              \
     defined(HAVE_SYS_PARAM_H) || __has_include(<sys/param.h>)
 #include <sys/param.h>
 #endif /* OS */
@@ -664,7 +666,8 @@ mdbx_resume_threads_after_remap(mdbx_handle_array_t *array);
 #endif /* Windows */
 MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
                                   size_t length, int async);
-MDBX_INTERNAL_FUNC int mdbx_check4nonlocal(mdbx_filehandle_t handle, int flags);
+MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
+                                            const char *pathname, int err);
 
 static __maybe_unused __inline uint32_t mdbx_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));

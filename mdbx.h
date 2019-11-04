@@ -555,6 +555,7 @@ typedef DWORD mdbx_tid_t;
 #define MDBX_EPERM ERROR_INVALID_FUNCTION
 #define MDBX_EINTR ERROR_CANCELLED
 #define MDBX_ENOFILE ERROR_FILE_NOT_FOUND
+#define MDBX_EREMOTE ERROR_REMOTE_STORAGE_MEDIA_ERROR
 
 #else
 
@@ -580,6 +581,7 @@ typedef pthread_t mdbx_tid_t;
 #define MDBX_EPERM EPERM
 #define MDBX_EINTR EINTR
 #define MDBX_ENOFILE ENOENT
+#define MDBX_EREMOTE ENOTBLK
 
 #endif
 
