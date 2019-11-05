@@ -6,7 +6,7 @@
 # Note that the defaults should already be correct for most platforms;
 # you should not need to change any of these. Read their descriptions
 # in README and source code if you do. There may be other macros of interest.
-SHELL   := /bin/bash
+SHELL   := env bash
 
 # install sandbox
 SANDBOX ?=
@@ -21,7 +21,8 @@ suffix  ?=
 CC      ?= gcc
 LD      ?= ld
 MDBX_OPTIONS ?= -DNDEBUG=1
-CFLAGS  ?= -Os -g3 -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-tautological-compare
+CFLAGS  ?= -Os -g3 -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes
+# -Wno-tautological-compare
 
 # LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
 LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
