@@ -602,8 +602,8 @@ int main(int argc, char *const argv[]) {
                spent.ru_stime.tv_sec + spent.ru_stime.tv_usec * 1e-6);
 #if defined(__linux__) || defined(__gnu_linux__) || defined(__FreeBSD__) ||    \
     defined(__NetBSD__) || defined(__OpenBSD__) || defined(__BSD__) ||         \
-    defined(__NETBSD__) || defined(__bsdi__) || defined(__DragonFly__) ||      \
-    defined(__APPLE__) || defined(__MACH__)
+    defined(__bsdi__) || defined(__DragonFly__) || defined(__APPLE__) ||       \
+    defined(__MACH__)
     log_notice("%6s: read %ld, write %ld", "IOPs", spent.ru_inblock,
                spent.ru_oublock);
     log_notice("%6s: %ld Kb", "RAM", spent.ru_maxrss);

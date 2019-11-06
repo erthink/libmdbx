@@ -203,24 +203,36 @@
 #define MDBX_64BIT_CAS_CONFIG STRINGIFY(MDBX_64BIT_CAS)
 #endif /* MDBX_64BIT_CAS */
 
+#if defined(_WIN32) || defined(_WIN64)
+#define MDBX_USE_MUTEXES -1 /* Windows don't support POSIX */
+#else
+#ifndef MDBX_USE_MUTEXES
+#if defined(__linux__) || defined(__gnu_linux__) || defined(__FreeBSD__) ||    \
+    defined(__APPLE__) ||                                                      \
+    (defined(_POSIX_THREAD_PROCESS_SHARED) &&                                  \
+     _POSIX_THREAD_PROCESS_SHARED > 0)
+
 /* Some platforms define the EOWNERDEAD error code even though they
- *  don't support Robust Mutexes. Compile with -DMDBX_USE_ROBUST=0. */
-#ifndef MDBX_USE_ROBUST
-/* Howard Chu: Android currently lacks Robust Mutex support */
-#if defined(EOWNERDEAD) && !defined(__ANDROID__) && !defined(__APPLE__) &&     \
-    (!defined(__GLIBC__) ||                                                    \
-     __GLIBC_PREREQ(                                                           \
-         2,                                                                    \
-         10) /* LY: glibc before 2.10 has a troubles with Robust Mutex too. */ \
-     || _POSIX_C_SOURCE >= 200809L)
-#define MDBX_USE_ROBUST 1
+ * don't support Robust Mutexes. If doubt compile with -MDBX_USE_MUTEXES=1. */
+#if defined(EOWNERDEAD) && _POSIX_C_SOURCE >= 200809L &&                       \
+    (!defined(__GLIBC__) || /* LY: glibc before 2.10 has a troubles with       \
+                               Robust mutexes. */                              \
+     __GLIBC_PREREQ(2, 10)) &&                                                 \
+    (defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP) ||      \
+     defined(PTHREAD_MUTEX_STALLED_NP) || defined(__GLIBC__) ||                \
+     (!defined(__ANDROID__) && !defined(__APPLE__)))
+#define MDBX_USE_MUTEXES 2 /* use robust shared pthread mutexes */
 #else
-#define MDBX_USE_ROBUST 0
+#define MDBX_USE_MUTEXES 1 /* use shared pthread mutexes */
 #endif
-#define MDBX_USE_ROBUST_CONFIG "AUTO=" STRINGIFY(MDBX_USE_ROBUST)
 #else
-#define MDBX_USE_ROBUST_CONFIG STRINGIFY(MDBX_USE_ROBUST)
-#endif /* MDBX_USE_ROBUST */
+#define MDBX_USE_MUTEXES 0 /* use unnamed shared semaphores */
+#endif
+#define MDBX_USE_MUTEXES_CONFIG "AUTO=" STRINGIFY(MDBX_USE_MUTEXES)
+#else
+#define MDBX_USE_MUTEXES_CONFIG STRINGIFY(MDBX_USE_MUTEXES)
+#endif /* MDBX_USE_MUTEXES */
+#endif /* !Windows */
 
 #ifndef MDBX_USE_OFDLOCKS
 #if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK) &&   \
@@ -607,10 +619,16 @@ typedef struct MDBX_lockinfo {
   volatile bin128_t mti_bootid;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
-#ifdef MDBX_OSAL_LOCK
-      /* Mutex protecting write-txn. */
-      MDBX_OSAL_LOCK mti_wmutex;
-#endif
+  /* Write transation lok. */
+#if MDBX_USE_MUTEXES > 0
+      pthread_mutex_t mti_wlock;
+#define MDBX_OSAL_LOCK_SIGN UINT32_C(0x8017)
+#elif MDBX_USE_MUTEXES == 0
+      sem_t mti_wlock;
+#define MDBX_OSAL_LOCK_SIGN UINT32_C(0xFC29)
+#else
+#define MDBX_OSAL_LOCK_SIGN UINT32_C(0xF10C)
+#endif /* MDBX_USE_MUTEXES */
 
   volatile txnid_t mti_oldest_reader;
 
@@ -630,10 +648,12 @@ typedef struct MDBX_lockinfo {
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
-#ifdef MDBX_OSAL_LOCK
-      /* Mutex protecting readers registration access to this table. */
-      MDBX_OSAL_LOCK mti_rmutex;
-#endif
+  /* Readeaders registration lock. */
+#if MDBX_USE_MUTEXES > 0
+      pthread_mutex_t mti_rlock;
+#elif MDBX_USE_MUTEXES == 0
+      sem_t mti_rlock;
+#endif /* MDBX_USE_MUTEXES */
 
   /* The number of slots that have been used in the reader table.
    * This always records the maximum count, it is not decremented
@@ -983,9 +1003,14 @@ struct MDBX_env {
   void *me_pbuf;              /* scratch area for DUPSORT put() */
   MDBX_txn *me_txn;           /* current write transaction */
   MDBX_txn *me_txn0;          /* prealloc'd write transaction */
-#ifdef MDBX_OSAL_LOCK
-  MDBX_OSAL_LOCK *me_wmutex; /* write-txn mutex */
-#endif
+
+  /* write-txn lock */
+#if MDBX_USE_MUTEXES > 0
+  pthread_mutex_t *me_wlock;
+#elif MDBX_USE_MUTEXES == 0
+  sem_t *me_wlock;
+#endif /* MDBX_USE_MUTEXES */
+
   MDBX_dbx *me_dbxs;           /* array of static DB info */
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
@@ -1010,9 +1035,11 @@ struct MDBX_env {
   volatile uint32_t *me_meta_sync_txnid;
   MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
   struct {
-#ifdef MDBX_OSAL_LOCK
-    MDBX_OSAL_LOCK wmutex;
-#endif
+#if MDBX_USE_MUTEXES > 0
+    pthread_mutex_t wlock;
+#elif MDBX_USE_MUTEXES == 0
+    sem_t wlock;
+#endif /* MDBX_USE_MUTEXES */
     txnid_t oldest;
     uint64_t sync_timestamp;
     uint64_t autosync_period;

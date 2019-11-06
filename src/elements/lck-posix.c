@@ -318,9 +318,15 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
       lck_op(env->me_fd, op_setlk,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX)) {
     mdbx_verbose("%s: got exclusive, drown mutexes", __func__);
-    rc = pthread_mutex_destroy(&env->me_lck->mti_rmutex);
+#if MDBX_USE_MUTEXES > 0
+    rc = pthread_mutex_destroy(&env->me_lck->mti_rlock);
     if (rc == 0)
-      rc = pthread_mutex_destroy(&env->me_lck->mti_wmutex);
+      rc = pthread_mutex_destroy(&env->me_lck->mti_wlock);
+#else
+    rc = sem_destroy(&env->me_lck->mti_rlock) ? errno : 0;
+    if (rc == 0)
+      rc = sem_destroy(&env->me_lck->mti_wlock) ? errno : 0;
+#endif /* MDBX_USE_MUTEXES */
     mdbx_assert(env, rc == 0);
     if (rc == 0) {
       memset(env->me_lck, 0x81, sizeof(MDBX_lockinfo));
@@ -373,9 +379,6 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
 
 /*---------------------------------------------------------------------------*/
 
-static int mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
-                             const int rc);
-
 MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
                                             MDBX_env *inprocess_neighbor,
                                             int global_uniqueness_flag) {
@@ -383,6 +386,19 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
     return MDBX_SUCCESS /* currently don't need any initialization
       if LCK already opened/used inside current process */
         ;
+
+#if MDBX_USE_MUTEXES == 0
+
+  /* don't initialize semaphores twice */
+  if (global_uniqueness_flag == MDBX_RESULT_TRUE) {
+    if (sem_init(&env->me_lck->mti_rlock, true, 1))
+      return errno;
+    if (sem_init(&env->me_lck->mti_wlock, true, 1))
+      return errno;
+  }
+  return MDBX_SUCCESS;
+
+#else
 
     /* FIXME: Unfortunately, there is no other reliable way but to long testing
      * on each platform. On the other hand, behavior like FreeBSD is incorrect
@@ -413,18 +429,24 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
   if (rc)
     goto bailout;
 
-#if MDBX_USE_ROBUST
-#if defined(__GLIBC__) && !__GLIBC_PREREQ(2, 12) &&                            \
-    !defined(pthread_mutex_consistent) && _POSIX_C_SOURCE < 200809L
+#if MDBX_USE_MUTEXES > 1
+#if defined(PTHREAD_MUTEX_ROBUST)
+  rc = pthread_mutexattr_setrobust(&ma, PTHREAD_MUTEX_ROBUST);
+#elif defined(PTHREAD_MUTEX_ROBUST_NP)
+  rc = pthread_mutexattr_setrobust_np(&ma, PTHREAD_MUTEX_ROBUST_NP);
+#elif /* defined(__GLIBC__) && !__GLIBC_PREREQ(2, 12) &&                       \
+    !defined(pthread_mutex_consistent) && */                                   \
+    _POSIX_C_SOURCE < 200809L
   rc = pthread_mutexattr_setrobust_np(&ma, PTHREAD_MUTEX_ROBUST_NP);
 #else
   rc = pthread_mutexattr_setrobust(&ma, PTHREAD_MUTEX_ROBUST);
 #endif
   if (rc)
     goto bailout;
-#endif /* MDBX_USE_ROBUST */
+#endif /* MDBX_USE_MUTEXES > 1 (USE_ROBUST) */
 
-#if _POSIX_C_SOURCE >= 199506L && !defined(MDBX_SAFE4QEMU)
+#if defined(_POSIX_THREAD_PRIO_INHERIT) && _POSIX_THREAD_PRIO_INHERIT > 0 &&   \
+    !defined(MDBX_SAFE4QEMU)
   rc = pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_INHERIT);
   if (rc == ENOTSUP)
     rc = pthread_mutexattr_setprotocol(&ma, PTHREAD_PRIO_NONE);
@@ -436,79 +458,26 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
   if (rc)
     goto bailout;
 
-  rc = pthread_mutex_init(&env->me_lck->mti_rmutex, &ma);
+  rc = pthread_mutex_init(&env->me_lck->mti_rlock, &ma);
   if (rc)
     goto bailout;
-  rc = pthread_mutex_init(&env->me_lck->mti_wmutex, &ma);
+  rc = pthread_mutex_init(&env->me_lck->mti_wlock, &ma);
 
 bailout:
   pthread_mutexattr_destroy(&ma);
   return rc;
+#endif /* MDBX_USE_MUTEXES */
 }
 
-static int mdbx_robust_lock(MDBX_env *env, pthread_mutex_t *mutex) {
-  mdbx_jitter4testing(true);
-  int rc = pthread_mutex_lock(mutex);
-  if (unlikely(rc != 0))
-    rc = mdbx_mutex_failed(env, mutex, rc);
-  return rc;
-}
-
-static int mdbx_robust_trylock(MDBX_env *env, pthread_mutex_t *mutex) {
-  mdbx_jitter4testing(true);
-  int rc = pthread_mutex_trylock(mutex);
-  if (unlikely(rc != 0 && rc != EBUSY))
-    rc = mdbx_mutex_failed(env, mutex, rc);
-  return (rc != EBUSY) ? rc : MDBX_BUSY;
-}
-
-static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
-  int rc = pthread_mutex_unlock(mutex);
-  mdbx_jitter4testing(true);
-  if (unlikely(rc != 0))
-    env->me_flags |= MDBX_FATAL_ERROR;
-  return rc;
-}
-
-MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
-  mdbx_trace("%s", ">>");
-  int rc = mdbx_robust_lock(env, &env->me_lck->mti_rmutex);
-  mdbx_trace("<< rc %d", rc);
-  return rc;
-}
-
-MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
-  mdbx_trace("%s", ">>");
-  int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rmutex);
-  mdbx_trace("<< rc %d", rc);
-  if (unlikely(MDBX_IS_ERROR(rc)))
-    mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
-}
-
-int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
-  mdbx_trace("%s", ">>");
-  int rc = dontwait ? mdbx_robust_trylock(env, env->me_wmutex)
-                    : mdbx_robust_lock(env, env->me_wmutex);
-  mdbx_trace("<< rc %d", rc);
-  return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
-}
-
-void mdbx_txn_unlock(MDBX_env *env) {
-  mdbx_trace("%s", ">>");
-  int rc = mdbx_robust_unlock(env, env->me_wmutex);
-  mdbx_trace("<< rc %d", rc);
-  if (unlikely(MDBX_IS_ERROR(rc)))
-    mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
-}
-
+#if MDBX_USE_MUTEXES > 0
 static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
                                     const int err) {
   int rc = err;
-#if MDBX_USE_ROBUST
+#if MDBX_USE_MUTEXES > 1
   if (err == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
 
-    int rlocked = (env->me_lck && mutex == &env->me_lck->mti_rmutex);
+    int rlocked = (env->me_lck && mutex == &env->me_lck->mti_rlock);
     rc = MDBX_SUCCESS;
     if (!rlocked) {
       if (unlikely(env->me_txn)) {
@@ -542,10 +511,93 @@ static int __cold mdbx_mutex_failed(MDBX_env *env, pthread_mutex_t *mutex,
   }
 #else
   (void)mutex;
-#endif /* MDBX_USE_ROBUST */
+#endif /* MDBX_USE_MUTEXES > 1 (USE_ROBUST) */
 
   mdbx_error("mutex (un)lock failed, %s", mdbx_strerror(err));
   if (rc != EDEADLK)
     env->me_flags |= MDBX_FATAL_ERROR;
   return rc;
+}
+
+static int mdbx_robust_lock(MDBX_env *env, pthread_mutex_t *mutex) {
+  int rc = pthread_mutex_lock(mutex);
+  if (unlikely(rc != 0))
+    rc = mdbx_mutex_failed(env, mutex, rc);
+  return rc;
+}
+
+static int mdbx_robust_trylock(MDBX_env *env, pthread_mutex_t *mutex) {
+  int rc = pthread_mutex_trylock(mutex);
+  if (unlikely(rc != 0 && rc != EBUSY))
+    rc = mdbx_mutex_failed(env, mutex, rc);
+  return (rc != EBUSY) ? rc : MDBX_BUSY;
+}
+
+static int mdbx_robust_unlock(MDBX_env *env, pthread_mutex_t *mutex) {
+  int rc = pthread_mutex_unlock(mutex);
+  if (unlikely(rc != 0))
+    env->me_flags |= MDBX_FATAL_ERROR;
+  return rc;
+}
+#endif /* MDBX_USE_MUTEXES */
+
+MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
+  mdbx_trace("%s", ">>");
+  mdbx_jitter4testing(true);
+#if MDBX_USE_MUTEXES > 0
+  int rc = mdbx_robust_lock(env, &env->me_lck->mti_rlock);
+#else
+  int rc = sem_wait(&env->me_lck->mti_rlock) ? errno : MDBX_SUCCESS;
+#endif /* MDBX_USE_MUTEXES */
+  mdbx_trace("<< rc %d", rc);
+  return rc;
+}
+
+MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
+  mdbx_trace("%s", ">>");
+#if MDBX_USE_MUTEXES > 0
+  int rc = mdbx_robust_unlock(env, &env->me_lck->mti_rlock);
+#else
+  int rc = sem_post(&env->me_lck->mti_rlock) ? errno : MDBX_SUCCESS;
+#endif /* MDBX_USE_MUTEXES */
+  mdbx_trace("<< rc %d", rc);
+  if (unlikely(MDBX_IS_ERROR(rc)))
+    mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
+  else
+    mdbx_jitter4testing(true);
+}
+
+int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
+  mdbx_trace("%s", ">>");
+  mdbx_jitter4testing(true);
+#if MDBX_USE_MUTEXES > 0
+  int rc = dontwait ? mdbx_robust_trylock(env, env->me_wlock)
+                    : mdbx_robust_lock(env, env->me_wlock);
+#else
+  int rc = MDBX_SUCCESS;
+  if (dontwait) {
+    if (sem_trywait(&env->me_lck->mti_wlock)) {
+      rc = errno;
+      if (rc == EAGAIN)
+        rc = MDBX_BUSY;
+    }
+  } else if (sem_wait(&env->me_lck->mti_wlock))
+    rc = errno;
+#endif /* MDBX_USE_MUTEXES */
+  mdbx_trace("<< rc %d", rc);
+  return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
+}
+
+void mdbx_txn_unlock(MDBX_env *env) {
+  mdbx_trace("%s", ">>");
+#if MDBX_USE_MUTEXES > 0
+  int rc = mdbx_robust_unlock(env, env->me_wlock);
+#else
+  int rc = sem_post(&env->me_lck->mti_wlock) ? errno : MDBX_SUCCESS;
+#endif /* MDBX_USE_MUTEXES */
+  mdbx_trace("<< rc %d", rc);
+  if (unlikely(MDBX_IS_ERROR(rc)))
+    mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
+  else
+    mdbx_jitter4testing(true);
 }

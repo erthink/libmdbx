@@ -603,7 +603,7 @@ static __inline void atomic_yield(void) {
 static __inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
                                   uint64_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LLONG_LOCK_FREE)
-  STATIC_ASSERT(sizeof(long long int) == 8);
+  STATIC_ASSERT(sizeof(long long) >= sizeof(uint64_t));
   STATIC_ASSERT(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint64_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -621,8 +621,8 @@ static __inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
 
 static __inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
                                   uint32_t v) {
-#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LONG_LOCK_FREE)
-  STATIC_ASSERT(sizeof(long int) >= 4);
+#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_INT_LOCK_FREE)
+  STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
   STATIC_ASSERT(atomic_is_lock_free(p));
   return atomic_compare_exchange_strong((_Atomic uint32_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -638,8 +638,8 @@ static __inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
 }
 
 static __inline uint32_t atomic_add32(volatile uint32_t *p, uint32_t v) {
-#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LONG_LOCK_FREE)
-  STATIC_ASSERT(sizeof(long int) >= 4);
+#if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_INT_LOCK_FREE)
+  STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
   STATIC_ASSERT(atomic_is_lock_free(p));
   return atomic_fetch_add((_Atomic uint32_t *)p, v);
 #elif defined(__GNUC__) || defined(__clang__)
@@ -4606,14 +4606,14 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 #endif /* MDBX_TXN_CHECKPID */
 
   STATIC_ASSERT(sizeof(MDBX_reader) == 32);
-#ifdef MDBX_OSAL_LOCK
-  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_wmutex) % MDBX_CACHELINE_SIZE == 0);
-  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_rmutex) % MDBX_CACHELINE_SIZE == 0);
-#else
+#if MDBX_USE_MUTEXES < 0
   STATIC_ASSERT(
       offsetof(MDBX_lockinfo, mti_oldest_reader) % MDBX_CACHELINE_SIZE == 0);
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_numreaders) % MDBX_CACHELINE_SIZE ==
                 0);
+#else
+  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_wlock) % MDBX_CACHELINE_SIZE == 0);
+  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_rlock) % MDBX_CACHELINE_SIZE == 0);
 #endif
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
@@ -7480,7 +7480,12 @@ int __cold mdbx_env_create(MDBX_env **penv) {
     mdbx_fastmutex_destroy(&env->me_dbi_lock);
     goto bailout;
   }
-  rc = mdbx_fastmutex_init(&env->me_lckless_stub.wmutex);
+
+#if MDBX_USE_MUTEXES == 0
+  rc = sem_init(&env->me_lckless_stub.wlock, false, 1) ? errno : MDBX_SUCCESS;
+#elif MDBX_USE_MUTEXES > 0
+  rc = pthread_mutex_init(&env->me_lckless_stub.wlock, nullptr);
+#endif
   if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_fastmutex_destroy(&env->me_remap_guard);
     mdbx_fastmutex_destroy(&env->me_dbi_lock);
@@ -8293,8 +8298,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     env->me_discarded_tail = &env->me_lckless_stub.discarded_tail;
     env->me_meta_sync_txnid = &env->me_lckless_stub.meta_sync_txnid;
     env->me_maxreaders = UINT_MAX;
-#ifdef MDBX_OSAL_LOCK
-    env->me_wmutex = &env->me_lckless_stub.wmutex;
+#if MDBX_USE_MUTEXES >= 0
+    env->me_wlock = &env->me_lckless_stub.wlock;
 #endif
     mdbx_debug("lck-setup:%s%s%s", " lck-less",
                (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
@@ -8428,8 +8433,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   env->me_autosync_threshold = &env->me_lck->mti_autosync_threshold;
   env->me_discarded_tail = &env->me_lck->mti_discarded_tail;
   env->me_meta_sync_txnid = &env->me_lck->mti_meta_sync_txnid;
-#ifdef MDBX_OSAL_LOCK
-  env->me_wmutex = &env->me_lck->mti_wmutex;
+#if MDBX_USE_MUTEXES >= 0
+  env->me_wlock = &env->me_lck->mti_wlock;
 #endif
   return lck_seize_rc;
 }
@@ -8888,9 +8893,10 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
               mdbx_fastmutex_destroy(&env->me_remap_guard) == MDBX_SUCCESS);
 #endif /* Windows */
 
-#ifdef MDBX_OSAL_LOCK
-  mdbx_ensure(env, mdbx_fastmutex_destroy(&env->me_lckless_stub.wmutex) ==
-                       MDBX_SUCCESS);
+#if MDBX_USE_MUTEXES == 0
+  mdbx_ensure(env, sem_destroy(&env->me_lckless_stub.wlock) == 0);
+#elif MDBX_USE_MUTEXES > 0
+  mdbx_ensure(env, pthread_mutex_destroy(&env->me_lckless_stub.wlock) == 0);
 #endif
 
   mdbx_ensure(env, env->me_lcklist_next == nullptr);
@@ -16518,7 +16524,7 @@ __dll_export
     "FreeBSD"
   #elif defined(__DragonFly__)
     "DragonFlyBSD"
-  #elif defined(__NetBSD__) || defined(__NETBSD__)
+  #elif defined(__NetBSD__)
     "NetBSD"
   #elif defined(__OpenBSD__)
     "OpenBSD"
@@ -16632,12 +16638,9 @@ __dll_export
     " MDBX_BUILD_SHARED_LIBRARY=" STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
     " WINVER=" STRINGIFY(WINVER)
 #else /* Windows */
-    " MDBX_USE_ROBUST=" MDBX_USE_ROBUST_CONFIG
+    " MDBX_USE_MUTEXES=" MDBX_USE_MUTEXES_CONFIG
     " MDBX_USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
 #endif /* !Windows */
-#ifdef MDBX_OSAL_LOCK
-    " MDBX_OSAL_LOCK=" STRINGIFY(MDBX_OSAL_LOCK)
-#endif
     " MDBX_CACHELINE_SIZE=" STRINGIFY(MDBX_CACHELINE_SIZE)
     " MDBX_CPU_WRITEBACK_IS_COHERENT=" STRINGIFY(MDBX_CPU_WRITEBACK_IS_COHERENT)
     " MDBX_UNALIGNED_OK=" STRINGIFY(MDBX_UNALIGNED_OK)

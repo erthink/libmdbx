@@ -71,8 +71,8 @@
 /* Systems includes */
 
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
-    defined(__BSD__) || defined(__NETBSD__) || defined(__bsdi__) ||            \
-    defined(__DragonFly__) || defined(__APPLE__) || defined(__MACH__)
+    defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
+    defined(__APPLE__) || defined(__MACH__)
 #include <sys/cdefs.h>
 #include <sys/mount.h>
 #include <sys/sysctl.h>
@@ -196,6 +196,7 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
 #else /*----------------------------------------------------------------------*/
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <signal.h>
 #include <sys/file.h>
 #include <sys/mman.h>
@@ -701,14 +702,6 @@ typedef union bin128 {
 MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void);
 /*----------------------------------------------------------------------------*/
 /* lck stuff */
-
-#if defined(_WIN32) || defined(_WIN64)
-#undef MDBX_OSAL_LOCK
-#define MDBX_OSAL_LOCK_SIGN UINT32_C(0xF10C)
-#else
-#define MDBX_OSAL_LOCK pthread_mutex_t
-#define MDBX_OSAL_LOCK_SIGN UINT32_C(0x8017)
-#endif /* MDBX_OSAL_LOCK */
 
 /// \brief Initialization of synchronization primitives linked with MDBX_env
 ///   instance both in LCK-file and within the current process.
