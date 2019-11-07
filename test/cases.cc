@@ -17,7 +17,6 @@
 void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
                      const char *space_id_cstr, const actor_params &params) {
   unsigned wait4id = 0;
-
   if (params.waitfor_nops) {
     for (auto i = global::actors.rbegin(); i != global::actors.rend(); ++i) {
       if (i->is_waitable(params.waitfor_nops)) {

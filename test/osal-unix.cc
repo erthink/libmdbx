@@ -21,22 +21,67 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#ifdef __APPLE__
+#if !defined(_POSIX_THREAD_PROCESS_SHARED) || _POSIX_THREAD_PROCESS_SHARED < 1
+#include <semaphore.h>
+#elif defined(__APPLE__)
 #include "darwin/pthread_barrier.c"
 #endif
 
+#if __cplusplus >= 201103L
+#include <atomic>
+static __inline __maybe_unused int atomic_decrement(std::atomic_int *p) {
+  return std::atomic_fetch_sub(p, 1) - 1;
+}
+#else
+static __inline __maybe_unused int atomic_decrement(volatile int *p) {
+#if defined(__GNUC__) || defined(__clang__)
+  return __sync_sub_and_fetch(p, 1);
+#elif defined(_MSC_VER)
+  STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile int));
+  return _InterlockedDecrement((volatile long *)p);
+#elif defined(__APPLE__)
+  return OSAtomicDecrement32Barrier((volatile int *)p);
+#else
+#error FIXME: Unsupported compiler
+#endif
+}
+#endif /* C++11 */
+
 struct shared_t {
+#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
   pthread_barrier_t barrier;
   pthread_mutex_t mutex;
-  size_t conds_size;
-  pthread_cond_t conds[1];
+  size_t count;
+  pthread_cond_t events[1];
+#else
+  struct {
+#if __cplusplus >= 201103L
+    std::atomic_int countdown;
+#else
+    volatile int countdown;
+#endif /* C++11 */
+    sem_t sema;
+  } barrier;
+  size_t count;
+  sem_t events[1];
+#endif /* _POSIX_THREAD_PROCESS_SHARED */
 };
 
 static shared_t *shared;
 
 void osal_wait4barrier(void) {
   assert(shared != nullptr && shared != MAP_FAILED);
+#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
   int rc = pthread_barrier_wait(&shared->barrier);
+#else
+  int rc = (atomic_decrement(&shared->barrier.countdown) > 0 &&
+            sem_wait(&shared->barrier.sema))
+               ? errno
+               : 0;
+  if (rc == 0)
+    rc = sem_post(&shared->barrier.sema) ? errno : 0;
+#endif
+
   if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
     failure_perror("pthread_barrier_wait(shared)", rc);
   }
@@ -45,21 +90,43 @@ void osal_wait4barrier(void) {
 void osal_setup(const std::vector<actor_config> &actors) {
   assert(shared == nullptr);
 
-  pthread_mutexattr_t mutexattr;
-  int rc = pthread_mutexattr_init(&mutexattr);
-  if (rc)
-    failure_perror("pthread_mutexattr_init()", rc);
-  rc = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED);
-  if (rc)
-    failure_perror("pthread_mutexattr_setpshared()", rc);
+  shared = (shared_t *)mmap(
+      nullptr, sizeof(shared_t) + actors.size() * sizeof(shared->events[0]),
+      PROT_READ | PROT_WRITE,
+      MAP_SHARED | MAP_ANONYMOUS
+#ifdef MAP_HASSEMAPHORE
+          | MAP_HASSEMAPHORE
+#endif
+      ,
+      -1, 0);
+  if (MAP_FAILED == (void *)shared)
+    failure_perror("mmap(shared_conds)", errno);
+
+  shared->count = actors.size() + 1;
+
+#if defined(__APPLE__) || (defined(_POSIX_THREAD_PROCESS_SHARED) &&            \
+                           _POSIX_THREAD_PROCESS_SHARED > 0)
 
   pthread_barrierattr_t barrierattr;
-  rc = pthread_barrierattr_init(&barrierattr);
+  int rc = pthread_barrierattr_init(&barrierattr);
   if (rc)
     failure_perror("pthread_barrierattr_init()", rc);
   rc = pthread_barrierattr_setpshared(&barrierattr, PTHREAD_PROCESS_SHARED);
   if (rc)
     failure_perror("pthread_barrierattr_setpshared()", rc);
+
+  rc = pthread_barrier_init(&shared->barrier, &barrierattr, shared->count);
+  if (rc)
+    failure_perror("pthread_barrier_init(shared)", rc);
+  pthread_barrierattr_destroy(&barrierattr);
+
+  pthread_mutexattr_t mutexattr;
+  rc = pthread_mutexattr_init(&mutexattr);
+  if (rc)
+    failure_perror("pthread_mutexattr_init()", rc);
+  rc = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED);
+  if (rc)
+    failure_perror("pthread_mutexattr_setpshared()", rc);
 
   pthread_condattr_t condattr;
   rc = pthread_condattr_init(&condattr);
@@ -69,64 +136,76 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (rc)
     failure_perror("pthread_condattr_setpshared()", rc);
 
-  shared = (shared_t *)mmap(
-      nullptr, sizeof(shared_t) + actors.size() * sizeof(pthread_cond_t),
-      PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
-  if (MAP_FAILED == (void *)shared)
-    failure_perror("mmap(shared_conds)", errno);
-
   rc = pthread_mutex_init(&shared->mutex, &mutexattr);
   if (rc)
     failure_perror("pthread_mutex_init(shared)", rc);
 
-  rc = pthread_barrier_init(&shared->barrier, &barrierattr, actors.size() + 1);
-  if (rc)
-    failure_perror("pthread_barrier_init(shared)", rc);
-
-  const size_t n = actors.size() + 1;
-  for (size_t i = 0; i < n; ++i) {
-    pthread_cond_t *event = &shared->conds[i];
+  for (size_t i = 0; i < shared->count; ++i) {
+    pthread_cond_t *event = &shared->events[i];
     rc = pthread_cond_init(event, &condattr);
     if (rc)
       failure_perror("pthread_cond_init(shared)", rc);
     log_trace("osal_setup: event(shared pthread_cond) %" PRIuPTR " -> %p", i,
               __Wpedantic_format_voidptr(event));
   }
-  shared->conds_size = actors.size() + 1;
-
-  pthread_barrierattr_destroy(&barrierattr);
   pthread_condattr_destroy(&condattr);
   pthread_mutexattr_destroy(&mutexattr);
+#else
+  shared->barrier.countdown = shared->count;
+  int rc = sem_init(&shared->barrier.sema, true, 1) ? errno : 0;
+  if (rc)
+    failure_perror("sem_init(shared.barrier)", rc);
+  for (size_t i = 0; i < shared->count; ++i) {
+    sem_t *event = &shared->events[i];
+    rc = sem_init(event, true, 0) ? errno : 0;
+    if (rc)
+      failure_perror("sem_init(shared.event)", rc);
+    log_trace("osal_setup: event(shared sem_init) %" PRIuPTR " -> %p", i,
+              __Wpedantic_format_voidptr(event));
+  }
+#endif
 }
 
 void osal_broadcast(unsigned id) {
   assert(shared != nullptr && shared != MAP_FAILED);
   log_trace("osal_broadcast: event %u", id);
-  if (id >= shared->conds_size)
+  if (id >= shared->count)
     failure("osal_broadcast: id > limit");
-  int rc = pthread_cond_broadcast(shared->conds + id);
+#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
+  int rc = pthread_cond_broadcast(shared->events + id);
+  if (rc)
+    failure_perror("pthread_cond_broadcast(shared)", rc);
+#else
+  int rc = sem_post(shared->events + id) ? errno : 0;
   if (rc)
     failure_perror("sem_post(shared)", rc);
+#endif
 }
 
 int osal_waitfor(unsigned id) {
   assert(shared != nullptr && shared != MAP_FAILED);
 
   log_trace("osal_waitfor: event %u", id);
-  if (id >= shared->conds_size)
+  if (id >= shared->count)
     failure("osal_waitfor: id > limit");
 
+#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
   int rc = pthread_mutex_lock(&shared->mutex);
   if (rc != 0)
     failure_perror("pthread_mutex_lock(shared)", rc);
 
-  rc = pthread_cond_wait(shared->conds + id, &shared->mutex);
+  rc = pthread_cond_wait(shared->events + id, &shared->mutex);
   if (rc && rc != EINTR)
     failure_perror("pthread_cond_wait(shared)", rc);
 
   rc = pthread_mutex_unlock(&shared->mutex);
   if (rc != 0)
     failure_perror("pthread_mutex_unlock(shared)", rc);
+#else
+  int rc = sem_wait(shared->events + id) ? errno : 0;
+  if (rc == 0)
+    rc = sem_post(shared->events + id) ? errno : 0;
+#endif
 
   return (rc == 0) ? true : false;
 }
@@ -309,9 +388,16 @@ void osal_udelay(unsigned us) {
 
   static unsigned threshold_us;
   if (threshold_us == 0) {
+#ifdef CLOCK_PROCESS_CPUTIME_ID
     if (clock_getres(CLOCK_PROCESS_CPUTIME_ID, &ts)) {
       int rc = errno;
-      failure_perror("clock_getres(CLOCK_PROCESS_CPUTIME_ID)", rc);
+      log_warning("clock_getres(CLOCK_PROCESS_CPUTIME_ID), failed errno %d",
+                  rc);
+    }
+#endif /* CLOCK_PROCESS_CPUTIME_ID */
+    if (threshold_us == 0 && clock_getres(CLOCK_MONOTONIC, &ts)) {
+      int rc = errno;
+      failure_perror("clock_getres(CLOCK_MONOTONIC)", rc);
     }
     chrono::time threshold = chrono::from_timespec(ts);
     assert(threshold.seconds() == 0);
