@@ -973,6 +973,12 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  * may help random read performance when the DB is larger than RAM and system
  * RAM is full.
  *
+ * By default libmdbx dynamically enables/disables readahead depending on the
+ * actual database size and currently available memory. On the other hand, such
+ * automation has some limitation, i.e. could be performed only when DB size
+ * changing but can't tracks and reacts changing a free RAM availability, since
+ * it changes independently and asynchronously.
+ *
  * NOTE: The mdbx_is_readahead_reasonable() function allows to quickly find out
  *       whether to use readahead or not based on the size of the data and the
  *       amount of available memory.
