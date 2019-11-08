@@ -110,7 +110,7 @@ define uname2titer
   esac
 endef
 
-DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile $(addprefix man1/, $(MANPAGES))
+DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile Makefile $(addprefix man1/, $(MANPAGES))
 DIST_SRC   := mdbx.h mdbx.c $(addsuffix .c, $(TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
@@ -213,6 +213,9 @@ libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: $(addprefix dist/, $(DIST_SRC) $(
 	&& rm dist/@tmp-shared_internals.inc
 
 dist/mdbx.h: mdbx.h src/elements/version.c $(lastword $(MAKEFILE_LIST))
+	mkdir -p dist && cp $< $@
+
+dist/Makefile: Makefile
 	mkdir -p dist && cp $< $@
 
 dist/GNUmakefile: GNUmakefile
