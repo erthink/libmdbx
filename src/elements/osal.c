@@ -1166,7 +1166,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
 
 MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
                                  const size_t size, const size_t limit,
-                                 const bool truncate) {
+                                 const unsigned options) {
   assert(size <= limit);
   map->limit = 0;
   map->current = 0;
@@ -1180,7 +1180,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-  if ((flags & MDBX_RDONLY) == 0 && truncate) {
+  if ((flags & MDBX_RDONLY) == 0 && (options & MMAP_OPTION_TRUNCATE) != 0) {
     err = mdbx_ftruncate(map->fd, size);
     if (err != MDBX_SUCCESS)
       return err;
@@ -1243,7 +1243,18 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
-      MAP_SHARED, map->fd, 0);
+      MAP_SHARED | MAP_FILE
+#ifdef MAP_NOSYNC
+          | (((options & MMAP_OPTION_SEMAPHORE) != 0 ||
+              F_ISSET(flags, MDBX_UTTERLY_NOSYNC))
+                 ? MAP_NOSYNC
+                 : 0)
+#endif
+#ifdef MAP_HASSEMAPHORE
+          | ((options & MMAP_OPTION_SEMAPHORE) ? MAP_HASSEMAPHORE : 0)
+#endif
+          ,
+      map->fd, 0);
 
   if (unlikely(map->address == MAP_FAILED)) {
     map->limit = 0;

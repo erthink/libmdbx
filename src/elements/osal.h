@@ -649,9 +649,11 @@ typedef struct mdbx_mmap_param {
 #endif
 } mdbx_mmap_t;
 
+#define MMAP_OPTION_TRUNCATE 1
+#define MMAP_OPTION_SEMAPHORE 2
 MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
                                  const size_t must, const size_t limit,
-                                 const bool truncate);
+                                 const unsigned options);
 MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map);
 MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t current,
                                     size_t wanna);
