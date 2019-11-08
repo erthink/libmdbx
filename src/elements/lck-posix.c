@@ -158,8 +158,8 @@ static int lck_op(mdbx_filehandle_t fd, int cmd, int lck, off_t offset,
     if (rc != -1) {
       if (cmd == op_getlk) {
         /* Checks reader by pid. Returns:
-         *   MDBX_RESULT_TRUE   - if pid is live (unable to acquire lock)
-         *   MDBX_RESULT_FALSE  - if pid is dead (lock acquired). */
+         *   MDBX_RESULT_TRUE   - if pid is live (reader holds a lock).
+         *   MDBX_RESULT_FALSE  - if pid is dead (a lock could be placed). */
         return (lock_op.l_type == F_UNLCK) ? MDBX_RESULT_FALSE
                                            : MDBX_RESULT_TRUE;
       }
@@ -218,6 +218,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
     return MDBX_RESULT_TRUE /* Done: return with exclusive locking. */;
   }
 
+retry_exclusive:
   /* Firstly try to get exclusive locking.  */
   rc = lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, 1);
   if (rc == MDBX_SUCCESS) {
@@ -237,15 +238,14 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
     }
 
     /* Fallback to lck-shared */
-    rc = lck_op(env->me_lfd, op_setlk, F_RDLCK, 0, 1);
-    if (rc != MDBX_SUCCESS) {
-      mdbx_error("%s(%s) failed: errcode %u", __func__, "fallback-shared", rc);
-      mdbx_assert(env, MDBX_IS_ERROR(rc));
-      return rc;
-    }
-    /* Done: return with shared locking. */
-    return MDBX_RESULT_FALSE;
   }
+
+  /* Here could be one of two::
+   *  - mdbx_lck_destroy() from the another process was hold the lock
+   *    during a destruction.
+   *  - either mdbx_lck_seize() from the another process was got the exclusive
+   *    lock and doing initialization.
+   * For distinguish these cases will use size of the lck-file later. */
 
   /* Wait for lck-shared now. */
   /* Here may be await during transient processes, for instance until another
@@ -255,6 +255,39 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
     mdbx_error("%s(%s) failed: errcode %u", __func__, "try-shared", rc);
     mdbx_assert(env, MDBX_IS_ERROR(rc));
     return rc;
+  }
+
+  /* got shared, retry exclusive */
+  rc = lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, 1);
+  if (rc == MDBX_SUCCESS)
+    goto continue_dxb_exclusive;
+
+  if (!(rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK ||
+        rc == EDEADLK)) {
+    mdbx_error("%s(%s) failed: errcode %u", __func__, "try-exclusive", rc);
+    mdbx_assert(env, MDBX_IS_ERROR(rc));
+    return rc;
+  }
+
+  /* Checking file size for detect the situation when we got the shared lock
+   * immediately after mdbx_lck_destroy(). */
+  struct stat st;
+  if (fstat(env->me_lfd, &st)) {
+    rc = errno;
+    mdbx_error("%s(%s) failed: errcode %u", __func__, "check-filesize", rc);
+    mdbx_assert(env, MDBX_IS_ERROR(rc));
+    return rc;
+  }
+  if (st.st_size < (unsigned)(sizeof(MDBX_lockinfo) + sizeof(MDBX_reader))) {
+    mdbx_verbose("lck-file is too short (%u), retry exclusive-lock",
+                 (unsigned)st.st_size);
+    rc = lck_op(env->me_lfd, op_setlk, F_UNLCK, 0, 1);
+    if (rc != MDBX_SUCCESS) {
+      mdbx_error("%s(%s) failed: errcode %u", __func__, "retry-exclusive", rc);
+      mdbx_assert(env, MDBX_IS_ERROR(rc));
+      return rc;
+    }
+    goto retry_exclusive;
   }
 
   /* Lock against another process operating in without-lck or exclusive mode. */
@@ -268,20 +301,8 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
     return rc;
   }
 
-  /* got shared, retry exclusive */
-  rc = lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, 1);
-  if (rc == MDBX_SUCCESS)
-    goto continue_dxb_exclusive;
-
-  if (rc == EAGAIN || rc == EACCES || rc == EBUSY || rc == EWOULDBLOCK ||
-      rc == EDEADLK)
-    return MDBX_RESULT_FALSE /* Done: exclusive is unavailable,
-                                but shared locks are alive. */
-        ;
-
-  mdbx_error("%s(%s) failed: errcode %u", __func__, "try-exclusive", rc);
-  mdbx_assert(env, MDBX_IS_ERROR(rc));
-  return rc;
+  /* Done: return with shared locking. */
+  return MDBX_RESULT_FALSE;
 }
 
 MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
@@ -316,7 +337,8 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
       /* try get exclusive access */
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
       lck_op(env->me_fd, op_setlk,
-             (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX)) {
+             (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
+             OFF_T_MAX) == 0) {
     mdbx_verbose("%s: got exclusive, drown mutexes", __func__);
 #if MDBX_USE_MUTEXES > 0
     rc = pthread_mutex_destroy(&env->me_lck->mti_rlock);
@@ -328,10 +350,12 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
       rc = sem_destroy(&env->me_lck->mti_wlock) ? errno : 0;
 #endif /* MDBX_USE_MUTEXES */
     mdbx_assert(env, rc == 0);
+
     if (rc == 0) {
-      memset(env->me_lck, 0x81, sizeof(MDBX_lockinfo));
-      msync(env->me_lck, env->me_os_psize, MS_ASYNC);
+      mdbx_munmap(&env->me_lck_mmap);
+      rc = ftruncate(env->me_lfd, 0) ? errno : 0;
     }
+
     mdbx_jitter4testing(false);
   }
 
