@@ -3595,12 +3595,11 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
 
   rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
   if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_NORDAHEAD) == 0) {
-    rc = mdbx_is_readahead_reasonable(size_bytes, 0);
-    if (rc == MDBX_RESULT_FALSE)
+    const int readahead = mdbx_is_readahead_reasonable(size_bytes, 0);
+    if (readahead == MDBX_RESULT_FALSE)
       rc = mdbx_set_readahead(
           env, 0, (size_bytes > prev_size) ? size_bytes : prev_size, false);
-    else if (rc == MDBX_RESULT_TRUE) {
-      rc = MDBX_SUCCESS;
+    else if (readahead == MDBX_RESULT_TRUE) {
       const size_t readahead_pivot =
           (limit_bytes != prev_limit || env->me_dxb_mmap.address != prev_addr
 #if defined(_WIN32) || defined(_WIN64)
@@ -4061,7 +4060,7 @@ skip_cache:
         goto done;
       }
 
-      mdbx_warning("unable growth datafile to %" PRIaPGNO "pages (+%" PRIaPGNO
+      mdbx_warning("unable growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
                    "), errcode %d",
                    aligned, aligned - txn->mt_end_pgno, rc);
     }
