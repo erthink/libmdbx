@@ -207,20 +207,17 @@
 #define MDBX_USE_MUTEXES -1 /* Windows don't support POSIX */
 #else
 #ifndef MDBX_USE_MUTEXES
-#if defined(__linux__) || defined(__gnu_linux__) || defined(__FreeBSD__) ||    \
-    defined(__APPLE__) ||                                                      \
-    (defined(_POSIX_THREAD_PROCESS_SHARED) &&                                  \
-     _POSIX_THREAD_PROCESS_SHARED > 0)
+#if defined(_POSIX_THREAD_PROCESS_SHARED) &&                                   \
+    _POSIX_THREAD_PROCESS_SHARED >= 200112L && !defined(__FreeBSD__)
 
 /* Some platforms define the EOWNERDEAD error code even though they
  * don't support Robust Mutexes. If doubt compile with -MDBX_USE_MUTEXES=1. */
-#if defined(EOWNERDEAD) && _POSIX_C_SOURCE >= 200809L &&                       \
-    (!defined(__GLIBC__) || /* LY: glibc before 2.10 has a troubles with       \
-                               Robust mutexes. */                              \
-     __GLIBC_PREREQ(2, 10)) &&                                                 \
-    (defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP) ||      \
-     defined(PTHREAD_MUTEX_STALLED_NP) || defined(__GLIBC__) ||                \
-     (!defined(__ANDROID__) && !defined(__APPLE__)))
+#if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&          \
+    (defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) ||                             \
+     defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) ||                             \
+     defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP)) &&     \
+    (!defined(__GLIBC__) ||                                                    \
+     __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */)
 #define MDBX_USE_MUTEXES 2 /* use robust shared pthread mutexes */
 #else
 #define MDBX_USE_MUTEXES 1 /* use shared pthread mutexes */

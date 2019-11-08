@@ -388,7 +388,8 @@ void osal_udelay(unsigned us) {
 
   static unsigned threshold_us;
   if (threshold_us == 0) {
-#ifdef CLOCK_PROCESS_CPUTIME_ID
+#if defined(_POSIX_CPUTIME) && _POSIX_CPUTIME > -1 &&                          \
+    defined(CLOCK_PROCESS_CPUTIME_ID)
     if (clock_getres(CLOCK_PROCESS_CPUTIME_ID, &ts)) {
       int rc = errno;
       log_warning("clock_getres(CLOCK_PROCESS_CPUTIME_ID), failed errno %d",
