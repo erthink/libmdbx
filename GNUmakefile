@@ -21,11 +21,13 @@ suffix  ?=
 CC      ?= gcc
 LD      ?= ld
 MDBX_OPTIONS ?= -DNDEBUG=1
-CFLAGS  ?= -Os -g3 -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes
+CFLAGS  ?= -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes
 # -Wno-tautological-compare
 
-# LY: '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old
-LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
+# HITH: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old.
+LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt")
+
+LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip') $(LIBS)
 EXE_LDFLAGS ?= -pthread
 
 ################################################################################
@@ -209,7 +211,7 @@ mdbx-static.o: src/elements/config.h src/elements/version.c src/alloy.c $(ALLOY_
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
 libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA)) $(addprefix dist/man1/,$(MANPAGES))
-	tar -c -a -f $@ --owner=0 --group=0 -C dist $(DIST_SRC) $(DIST_EXTRA) \
+	tar -c --owner=0 --group=0 -C dist $(DIST_SRC) $(DIST_EXTRA) -f - | gzip -c > $@ \
 	&& rm dist/@tmp-shared_internals.inc
 
 dist/mdbx.h: mdbx.h src/elements/version.c $(lastword $(MAKEFILE_LIST))

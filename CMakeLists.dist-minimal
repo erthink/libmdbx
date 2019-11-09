@@ -161,6 +161,9 @@ if(MDBX_BUILD_SHARED_LIBRARY)
   if(WIN32)
     target_link_libraries(mdbx PRIVATE ntdll.lib)
   endif()
+  if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Solaris")
+    target_link_libraries(mdbx PRIVATE kstat)
+  endif()
 endif()
 
 # static library used for tools, to avoid rpath/dll-path troubles
@@ -175,6 +178,9 @@ if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
 endif()
 if(WIN32)
   target_link_libraries(mdbx-static INTERFACE ntdll.lib)
+endif()
+if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Solaris")
+  target_link_libraries(mdbx-static INTERFACE kstat)
 endif()
 
 # mdbx-tools
