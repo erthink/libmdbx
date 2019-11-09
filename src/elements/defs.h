@@ -348,7 +348,7 @@ typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));
 #endif /* __anonymous_struct_extension__ */
 
 #ifndef __Wpedantic_format_voidptr
-    static __inline const void* __pure_function
+    static __inline __maybe_unused const void* __pure_function
         __Wpedantic_format_voidptr(const void* ptr) {return ptr;}
 #   define __Wpedantic_format_voidptr(ARG) __Wpedantic_format_voidptr(ARG)
 #endif /* __Wpedantic_format_voidptr */
