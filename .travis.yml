@@ -3,7 +3,7 @@ language: c cpp
 matrix:
   include:
     - os: linux
-      dist: precise
+      dist: trusty
       env: CC=cc CXX=c++
     - os: linux
       dist: trusty
