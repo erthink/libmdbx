@@ -133,9 +133,9 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
 
   last = stdout;
   fprintf(last,
-          "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05u %-10s %.4s ] %s" /* TODO */,
+          "[ %02d%02d%02d-%02d:%02d:%02d.%06d_%05lu %-10s %.4s ] %s" /* TODO */,
           tm.tm_year - 100, tm.tm_mon + 1, tm.tm_mday, tm.tm_hour, tm.tm_min,
-          tm.tm_sec, chrono::fractional2us(now.fractional), osal_getpid(),
+          tm.tm_sec, chrono::fractional2us(now.fractional), (long)osal_getpid(),
           prefix.c_str(), level2str(priority), suffix.c_str());
 
   va_list ones;
@@ -169,8 +169,8 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
 
   if (same_or_higher(priority, error)) {
     if (last != stderr) {
-      fprintf(stderr, "[ %05u %-10s %.4s ] %s", osal_getpid(), prefix.c_str(),
-              level2str(priority), suffix.c_str());
+      fprintf(stderr, "[ %05lu %-10s %.4s ] %s", (long)osal_getpid(),
+              prefix.c_str(), level2str(priority), suffix.c_str());
       vfprintf(stderr, format, ones);
       if (end == '\n')
         fflush(stderr);

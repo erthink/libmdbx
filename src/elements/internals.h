@@ -233,7 +233,8 @@
 
 #ifndef MDBX_USE_OFDLOCKS
 #if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK) &&   \
-    !defined(MDBX_SAFE4QEMU)
+    !defined(MDBX_SAFE4QEMU) &&                                                \
+    !defined(__sun) /* OFD-lock are broken on Solaris */
 #define MDBX_USE_OFDLOCKS 1
 #else
 #define MDBX_USE_OFDLOCKS 0

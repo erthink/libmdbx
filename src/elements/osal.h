@@ -38,6 +38,8 @@
     !defined(MDBX_TOOLS)
 #define _NO_CRT_STDIO_INLINE
 #endif
+#elif !defined(_POSIX_C_SOURCE)
+#define _POSIX_C_SOURCE 200809L
 #endif /* Windows */
 
 /*----------------------------------------------------------------------------*/
@@ -87,13 +89,6 @@
 #include <sys/vmmeter.h>
 #else
 #include <malloc.h>
-#ifndef _POSIX_C_SOURCE
-#ifdef _POSIX_SOURCE
-#define _POSIX_C_SOURCE 1
-#else
-#define _POSIX_C_SOURCE 0
-#endif
-#endif
 #endif /* !xBSD */
 
 #if defined(__FreeBSD__) || __has_include(<malloc_np.h>)

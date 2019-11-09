@@ -298,7 +298,8 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (pid < 0)
     return errno;
 
-  log_trace("osal_actor_start: fork pid %i for %u", pid, config.actor_id);
+  log_trace("osal_actor_start: fork pid %ld for %u", (long)pid,
+            config.actor_id);
   childs[pid] = as_running;
   return 0;
 }

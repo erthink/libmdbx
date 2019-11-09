@@ -85,9 +85,9 @@ int testcase::oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
   testcase *self = (testcase *)mdbx_env_get_userctx(env);
 
   if (retry == 0)
-    log_notice("oom_callback: waitfor pid %u, thread %" PRIuPTR
+    log_notice("oom_callback: waitfor pid %lu, thread %" PRIuPTR
                ", txn #%" PRIu64 ", gap %d, scape %zu",
-               pid, (size_t)tid, txn, gap, space);
+               (long)pid, (size_t)tid, txn, gap, space);
 
   if (self->should_continue(true)) {
     osal_yield();

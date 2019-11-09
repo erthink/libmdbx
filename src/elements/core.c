@@ -3479,8 +3479,8 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
     if (unlikely(madvise(env->me_map + offset, length, MADV_WILLNEED) != 0))
       return errno;
 #elif defined(POSIX_MADV_WILLNEED)
-    rc = posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED);
-    if (unlikely(rc != 0))
+    int err = posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED);
+    if (unlikely(err != 0))
       return errno;
 #elif defined(_WIN32) || defined(_WIN64)
     if (mdbx_PrefetchVirtualMemory) {
@@ -6329,7 +6329,7 @@ static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
         }
         iov_off = pgno2bytes(env, dp->mp_pgno);
       }
-      iov[iov_items].iov_base = dp;
+      iov[iov_items].iov_base = (void *)dp;
       iov[iov_items].iov_len = size;
       iov_items += 1;
       iov_bytes += size;
@@ -7428,7 +7428,8 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   STATIC_ASSERT(mdbx_nodemax(MIN_PAGESIZE) > 42);
   STATIC_ASSERT(mdbx_nodemax(MAX_PAGESIZE) < UINT16_MAX);
   const intptr_t nodemax = mdbx_nodemax(pagesize);
-  mdbx_ensure(env, nodemax > 42 && nodemax < UINT16_MAX && nodemax % 2 == 0);
+  mdbx_ensure(env,
+              nodemax > 42 && nodemax < (int)UINT16_MAX && nodemax % 2 == 0);
   env->me_nodemax = (unsigned)nodemax;
 
   STATIC_ASSERT(mdbx_maxkey(MIN_PAGESIZE) > 42);
@@ -8076,9 +8077,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                   env->me_dxb_mmap.current - used_aligned2os_bytes,
                   MADV_DONTNEED);
 #elif defined(POSIX_MADV_DONTNEED)
-    (void)madvise(env->me_map + used_aligned2os_bytes,
-                  env->me_dxb_mmap.current - used_aligned2os_bytes,
-                  POSIX_MADV_DONTNEED);
+    (void)posix_madvise(env->me_map + used_aligned2os_bytes,
+                        env->me_dxb_mmap.current - used_aligned2os_bytes,
+                        POSIX_MADV_DONTNEED);
 #elif defined(POSIX_FADV_DONTNEED)
     (void)posix_fadvise(env->me_fd, used_aligned2os_bytes,
                         env->me_dxb_mmap.current - used_aligned2os_bytes,
@@ -8094,8 +8095,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   const bool readahead = (env->me_flags & MDBX_NORDAHEAD) == 0 &&
                          mdbx_is_readahead_reasonable(env->me_dxb_mmap.current,
                                                       0) == MDBX_RESULT_TRUE;
-  err = mdbx_set_readahead(env, 0, env->me_dxb_mmap.current, readahead);
-  if (err != MDBX_SUCCESS)
+  err = mdbx_set_readahead(env, 0, used_bytes, readahead);
+  if (err != MDBX_SUCCESS && lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE)
     return err;
 
   mdbx_assert(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
@@ -13025,7 +13026,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         rp->mp_lower += sizeof(indx_t);
         mdbx_cassert(mc, rp->mp_upper >= ksize - sizeof(indx_t));
         rp->mp_upper -= (indx_t)(ksize - sizeof(indx_t));
-        mdbx_cassert(mc, x <= UINT16_MAX);
+        mdbx_cassert(mc, x <= (int)UINT16_MAX);
         mc->mc_ki[mc->mc_top] = (indx_t)x;
       }
     } else {

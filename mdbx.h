@@ -769,7 +769,16 @@ struct iovec {
 #define HAVE_STRUCT_IOVEC
 #endif /* HAVE_STRUCT_IOVEC */
 
+#if defined(__sun) || defined(__SVR4) || defined(__svr4__)
+/* The `iov_len` is signed on Sun/Solaris.
+ * So define custom MDBX_val to avoid a lot of warings. */
+typedef struct MDBX_val {
+  void *iov_base /* pointer to some data */;
+  size_t iov_len /* the length of data in bytes */;
+} MDBX_val;
+#else
 typedef struct iovec MDBX_val;
+#endif
 
 /* The maximum size of a data item.
  * MDBX only store a 32 bit value for node sizes. */

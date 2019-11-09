@@ -179,6 +179,11 @@ __extern_C void __assert_rtn(const char *function, const char *file, int line,
 
 #define __assert_fail(assertion, file, line, function)                         \
   __assert_rtn(function, file, line, assertion)
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
+__extern_C void __assert_c99(const char *assection, const char *file, int line,
+                             const char *function) __noreturn;
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert_c99(assertion, file, line, function)
 #elif defined(__OpenBSD__)
 __extern_C __dead void __assert2(const char *file, int line,
                                  const char *function,
@@ -1070,24 +1075,27 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
   const unsigned type = 0;
   const char *const name = statvfs_info.f_fstypename;
   const size_t name_len = VFS_NAMELEN;
-#elif defined(_AIX) || defined(__OS400__) || defined(FSTYPSZ) ||               \
-    defined(_FSTYPSZ)
+#elif defined(_AIX) || defined(__OS400__)
+  const char *const name = statvfs_info.f_basetype;
+  const size_t name_len = sizeof(statvfs_info.f_basetype);
+  struct stat st;
+  if (fstat(handle, &st))
+    return errno;
+  const unsigned type = st.st_vfstype;
+  if ((st.st_flag & FS_REMOTE) != 0 && !(flags & MDBX_EXCLUSIVE))
+    return MDBX_EREMOTE;
+#elif defined(FSTYPSZ) || defined(_FSTYPSZ)
   const unsigned type = 0;
-  const char *const name = statfs_info.f_basetype;
-  const size_t name_len = sizeof(statfs_info.f_basetype);
+  const char *const name = statvfs_info.f_basetype;
+  const size_t name_len = sizeof(statvfs_info.f_basetype);
 #elif defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                \
     defined(ST_FSTYPSZ) || defined(_ST_FSTYPSZ)
   const unsigned type = 0;
-#if defined(_ST_FSTYPSZ) || defined(_ST_FSTYPSZ)
-  struct stat stat_info;
-  if (fstat(handle, &stat_info))
+  struct stat st;
+  if (fstat(handle, &st))
     return errno;
-  const char *const name = stat_info.st_fstype;
+  const char *const name = st.st_fstype;
   const size_t name_len = strlen(name);
-#else
-  const char *const name = "";
-  const size_t name_len = 0;
-#endif
 #else
   struct statfs statfs_info;
   if (fstatfs(handle, &statfs_info))
@@ -1135,10 +1143,10 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #endif /* ST/MNT_LOCAL */
 
 #ifdef ST_EXPORTED
-  if (st_flags & ST_EXPORTED)
+  if ((st_flags & ST_EXPORTED) != 0 && !(flags & MDBX_RDONLY))
     return MDBX_EREMOTE;
 #elif defined(MNT_EXPORTED)
-  if (mnt_flags & MNT_EXPORTED)
+  if ((mnt_flags & MNT_EXPORTED) != 0 && !(flags & MDBX_RDONLY))
     return MDBX_EREMOTE;
 #endif /* ST/MNT_EXPORTED */
 
@@ -1190,7 +1198,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     map->current = size;
 #endif
   } else {
-    uint64_t filesize;
+    uint64_t filesize = 0;
     err = mdbx_filesize(map->fd, &filesize);
     if (err != MDBX_SUCCESS)
       return err;
@@ -1451,7 +1459,7 @@ retry_mapview:;
   map->limit = ViewSize;
 #else
 
-  uint64_t filesize;
+  uint64_t filesize = 0;
   int rc = mdbx_filesize(map->fd, &filesize);
   if (rc != MDBX_SUCCESS)
     return rc;
@@ -1749,7 +1757,7 @@ static __cold __maybe_unused bool bootid_parse_uuid(bin128_t *s, const void *p,
 
 __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
   bin128_t bin = {{0, 0}};
-  bool got_machineid = false, got_bootime = false, got_bootseq = false;
+  bool got_machineid = false, got_boottime = false, got_bootseq = false;
 
 #if defined(__linux__) || defined(__gnu_linux__)
   {
@@ -1790,7 +1798,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
     len = sizeof(boottime);
     if (!sysctlbyname("kern.boottime", &boottime, &len, nullptr, 0) &&
         len == sizeof(boottime) && boottime.tv_sec)
-      got_bootime = true;
+      got_boottime = true;
   }
 #endif /* Apple/Darwin */
 
@@ -1878,7 +1886,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
                          &len) == ERROR_SUCCESS &&
         len >= sizeof(buf.BaseTime) && buf.BaseTime) {
       bootid_collect(&bin, &buf.BaseTime, len);
-      got_bootime = true;
+      got_boottime = true;
     }
 
     /* BootTime from SYSTEM_TIMEOFDAY_INFORMATION */
@@ -1891,14 +1899,14 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
         buf.SysTimeOfDayInfoHacked.BootTime.QuadPart) {
       bootid_collect(&bin, &buf.SysTimeOfDayInfoHacked.BootTime,
                      sizeof(buf.SysTimeOfDayInfoHacked.BootTime));
-      got_bootime = true;
+      got_boottime = true;
     }
 
-    if (!got_bootime) {
+    if (!got_boottime) {
       uint64_t boottime = windows_bootime();
       if (boottime) {
         bootid_collect(&bin, &boottime, sizeof(boottime));
-        got_bootime = true;
+        got_boottime = true;
       }
     }
   }
@@ -1962,7 +1970,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
   /*--------------------------------------------------------------------------*/
 
 #if defined(CTL_KERN) && defined(KERN_BOOTTIME)
-  if (!got_bootime) {
+  if (!got_boottime) {
     static const int mib[] = {CTL_KERN, KERN_BOOTTIME};
     struct timeval boottime;
     size_t len = sizeof(boottime);
@@ -1974,13 +1982,13 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
             ARRAY_LENGTH(mib), &boottime, &len, NULL, 0) == 0 &&
         len == sizeof(boottime) && boottime.tv_sec) {
       bootid_collect(&bin, &boottime, len);
-      got_bootime = true;
+      got_boottime = true;
     }
   }
 #endif /* CTL_KERN && KERN_BOOTTIME */
 
 #if defined(__sun) || defined(__SVR4) || defined(__svr4__)
-  if (!got_bootime) {
+  if (!got_boottime) {
     kstat_ctl_t *kc = kstat_open();
     if (kc) {
       kstat_t *kp = kstat_lookup(kc, "unix", 0, "system_misc");
@@ -2005,13 +2013,13 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
 #endif /* SunOS / Solaris */
 
 #if _XOPEN_SOURCE_EXTENDED && defined(BOOT_TIME)
-  if (!got_bootime) {
+  if (!got_boottime) {
     setutxent();
     const struct utmpx id = {.ut_type = BOOT_TIME};
     const struct utmpx *entry = getutxid(&id);
     if (entry) {
       bootid_collect(&bin, entry, sizeof(*entry));
-      got_bootime = true;
+      got_boottime = true;
       while (unlikely((entry = getutxid(&id)) != nullptr)) {
         /* have multiple reboot records, assuming we can distinguish next
          * bootsession even if RTC is wrong or absent */
@@ -2024,7 +2032,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
 #endif /* _XOPEN_SOURCE_EXTENDED && BOOT_TIME */
 
   if (!got_bootseq) {
-    if (!got_bootime || !MDBX_TRUST_RTC)
+    if (!got_boottime || !MDBX_TRUST_RTC)
       goto lack;
 
 #if defined(_WIN32) || defined(_WIN64)

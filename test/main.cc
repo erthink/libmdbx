@@ -565,8 +565,8 @@ int main(int argc, char *const argv[]) {
         if (!actor)
           continue;
 
-        log_verbose("actor #%u, id %d, pid %u: %s\n", actor->actor_id,
-                    actor->space_id, pid, status2str(status));
+        log_verbose("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
+                    actor->space_id, (long)pid, status2str(status));
         if (status > as_running) {
           left -= 1;
           if (status != as_successful) {
@@ -603,10 +603,18 @@ int main(int argc, char *const argv[]) {
 #if defined(__linux__) || defined(__gnu_linux__) || defined(__FreeBSD__) ||    \
     defined(__NetBSD__) || defined(__OpenBSD__) || defined(__BSD__) ||         \
     defined(__bsdi__) || defined(__DragonFly__) || defined(__APPLE__) ||       \
-    defined(__MACH__)
+    defined(__MACH__) || defined(__sun)
     log_notice("%6s: read %ld, write %ld", "IOPs", spent.ru_inblock,
                spent.ru_oublock);
-    log_notice("%6s: %ld Kb", "RAM", spent.ru_maxrss);
+    if (spent.ru_maxrss > 0)
+      log_notice("%6s: %ld Kb", "RAM",
+                 spent.ru_maxrss
+#if defined(__sun)
+                     * getpagesize() / 1024u
+#elif defined(__APPLE__)
+                     / 1024u
+#endif
+      );
     log_notice("%6s: reclaims %ld, faults %ld, swaps %ld", "Paging",
                spent.ru_minflt, spent.ru_majflt, spent.ru_nswap);
 #endif /* Linux */
