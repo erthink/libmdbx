@@ -4611,15 +4611,15 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 #endif /* MDBX_TXN_CHECKPID */
 
   STATIC_ASSERT(sizeof(MDBX_reader) == 32);
-#if MDBX_USE_MUTEXES < 0
+#if MDBX_LOCKING > 0
+  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_wlock) % MDBX_CACHELINE_SIZE == 0);
+  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_rlock) % MDBX_CACHELINE_SIZE == 0);
+#else
   STATIC_ASSERT(
       offsetof(MDBX_lockinfo, mti_oldest_reader) % MDBX_CACHELINE_SIZE == 0);
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_numreaders) % MDBX_CACHELINE_SIZE ==
                 0);
-#else
-  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_wlock) % MDBX_CACHELINE_SIZE == 0);
-  STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_rlock) % MDBX_CACHELINE_SIZE == 0);
-#endif
+#endif /* MDBX_LOCKING */
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
 
@@ -7494,11 +7494,9 @@ int __cold mdbx_env_create(MDBX_env **penv) {
     goto bailout;
   }
 
-#if MDBX_USE_MUTEXES == 0
-  rc = sem_init(&env->me_lckless_stub.wlock, false, 1) ? errno : MDBX_SUCCESS;
-#elif MDBX_USE_MUTEXES > 0
-  rc = pthread_mutex_init(&env->me_lckless_stub.wlock, nullptr);
-#endif
+#if MDBX_LOCKING > 0
+  rc = mdbx_ipclock_stub(&env->me_lckless_stub.wlock);
+#endif /* MDBX_LOCKING */
   if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_fastmutex_destroy(&env->me_remap_guard);
     mdbx_fastmutex_destroy(&env->me_dbi_lock);
@@ -8338,9 +8336,9 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     env->me_discarded_tail = &env->me_lckless_stub.discarded_tail;
     env->me_meta_sync_txnid = &env->me_lckless_stub.meta_sync_txnid;
     env->me_maxreaders = UINT_MAX;
-#if MDBX_USE_MUTEXES >= 0
+#if MDBX_LOCKING > 0
     env->me_wlock = &env->me_lckless_stub.wlock;
-#endif
+#endif /* MDBX_LOCKING */
     mdbx_debug("lck-setup:%s%s%s", " lck-less",
                (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
                (rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
@@ -8472,9 +8470,9 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   env->me_autosync_threshold = &lck->mti_autosync_threshold;
   env->me_discarded_tail = &lck->mti_discarded_tail;
   env->me_meta_sync_txnid = &lck->mti_meta_sync_txnid;
-#if MDBX_USE_MUTEXES >= 0
+#if MDBX_LOCKING > 0
   env->me_wlock = &lck->mti_wlock;
-#endif
+#endif /* MDBX_LOCKING */
   return lck_seize_rc;
 }
 
@@ -8932,11 +8930,9 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
               mdbx_fastmutex_destroy(&env->me_remap_guard) == MDBX_SUCCESS);
 #endif /* Windows */
 
-#if MDBX_USE_MUTEXES == 0
-  mdbx_ensure(env, sem_destroy(&env->me_lckless_stub.wlock) == 0);
-#elif MDBX_USE_MUTEXES > 0
-  mdbx_ensure(env, pthread_mutex_destroy(&env->me_lckless_stub.wlock) == 0);
-#endif
+#if MDBX_LOCKING > 0
+  mdbx_ensure(env, mdbx_ipclock_destroy(&env->me_lckless_stub.wlock) == 0);
+#endif /* MDBX_LOCKING */
 
   mdbx_ensure(env, env->me_lcklist_next == nullptr);
   env->me_pid = 0;
@@ -15043,7 +15039,7 @@ int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
 
       rdt_locked = -1;
       if (err == MDBX_RESULT_TRUE) {
-        /* mutex recovered, the mdbx_mutex_failed() checked all readers */
+        /* mutex recovered, the mdbx_ipclock_failed() checked all readers */
         rc = MDBX_RESULT_TRUE;
         break;
       }
@@ -16677,7 +16673,7 @@ __dll_export
     " MDBX_BUILD_SHARED_LIBRARY=" STRINGIFY(MDBX_BUILD_SHARED_LIBRARY)
     " WINVER=" STRINGIFY(WINVER)
 #else /* Windows */
-    " MDBX_USE_MUTEXES=" MDBX_USE_MUTEXES_CONFIG
+    " MDBX_LOCKING=" MDBX_LOCKING_CONFIG
     " MDBX_USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
 #endif /* !Windows */
     " MDBX_CACHELINE_SIZE=" STRINGIFY(MDBX_CACHELINE_SIZE)

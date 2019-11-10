@@ -774,7 +774,7 @@ MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env);
 ///   Reading transactions will not be blocked.
 ///   Declared as LIBMDBX_API because it is used in mdbx_chk.
 /// \return Error code or zero on success
-LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dontwait);
+LIBMDBX_API int mdbx_txn_lock(MDBX_env *env, bool dont_wait);
 
 /// \brief Releases lock once DB changes is made (after writing transaction
 ///   has finished).
