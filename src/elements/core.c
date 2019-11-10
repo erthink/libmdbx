@@ -5828,6 +5828,7 @@ retry:
       txn->tw.loose_count = 0;
     }
 
+    const unsigned amount = (unsigned)MDBX_PNL_SIZE(txn->tw.reclaimed_pglist);
     /* handle retired-list - store ones into single gc-record */
     if (retired_stored < MDBX_PNL_SIZE(txn->tw.retired_pages)) {
       if (unlikely(!retired_stored)) {
@@ -5867,6 +5868,8 @@ retry:
           mdbx_debug_extra_print(" %" PRIaPGNO, txn->tw.retired_pages[i]);
         mdbx_debug_extra_print("%s", "\n");
       }
+      if (unlikely(amount != MDBX_PNL_SIZE(txn->tw.reclaimed_pglist)))
+        goto retry /* rare case, but avoids GC fragmentation and one loop. */;
       continue;
     }
 
@@ -5881,7 +5884,6 @@ retry:
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
     }
-    const unsigned amount = (unsigned)MDBX_PNL_SIZE(txn->tw.reclaimed_pglist);
     const unsigned left = amount - settled;
     mdbx_trace("%s: amount %u, settled %d, left %d, lifo-reclaimed-slots %u, "
                "reused-gc-slots %u",
@@ -5959,8 +5961,11 @@ retry:
                          reused_gc_slot) *
                             env->me_maxgc_ov1page);
         if (reused_gc_slot && rc != MDBX_RESULT_TRUE) {
-          mdbx_trace("%s: restart innter-loop since reused_gc_slot %u > 0",
+          mdbx_trace("%s: restart inner-loop since reused_gc_slot %u > 0",
                      dbg_prefix_mode, reused_gc_slot);
+          /* rare case, but it is better to clear and re-create GC entries with
+           * less fragmentation. */
+          cleaned_gc_slot = 0;
           continue;
         }
       }
