@@ -125,6 +125,9 @@
 
 #if defined(__sun) || defined(__SVR4) || defined(__svr4__)
 #include <kstat.h>
+/* On Solaris, it's easier to add a missing prototype rather than find a
+ * combination of #defines that break nothing. */
+__extern_C key_t ftok(const char *, int);
 #endif /* SunOS/Solaris */
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -194,6 +197,7 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
 #include <semaphore.h>
 #include <signal.h>
 #include <sys/file.h>
+#include <sys/ipc.h>
 #include <sys/mman.h>
 #include <sys/param.h>
 #include <sys/stat.h>

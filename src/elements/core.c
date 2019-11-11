@@ -7494,7 +7494,7 @@ int __cold mdbx_env_create(MDBX_env **penv) {
     goto bailout;
   }
 
-#if MDBX_LOCKING > 0
+#if MDBX_LOCKING > MDBX_LOCKING_SYSV
   rc = mdbx_ipclock_stub(&env->me_lckless_stub.wlock);
 #endif /* MDBX_LOCKING */
   if (unlikely(rc != MDBX_SUCCESS)) {
@@ -8338,7 +8338,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     env->me_maxreaders = UINT_MAX;
 #if MDBX_LOCKING > 0
     env->me_wlock = &env->me_lckless_stub.wlock;
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > 0 */
     mdbx_debug("lck-setup:%s%s%s", " lck-less",
                (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
                (rc == MDBX_RESULT_TRUE) ? " exclusive" : " cooperative");
@@ -8472,7 +8472,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   env->me_meta_sync_txnid = &lck->mti_meta_sync_txnid;
 #if MDBX_LOCKING > 0
   env->me_wlock = &lck->mti_wlock;
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > 0 */
   return lck_seize_rc;
 }
 
@@ -8704,6 +8704,14 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   if (rc != MDBX_SUCCESS)
     goto bailout;
 
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  env->me_sysv_ipc.key = ftok(dxb_pathname, 42);
+  if (env->me_sysv_ipc.key == -1) {
+    rc = errno;
+    goto bailout;
+  }
+#endif /* MDBX_LOCKING */
+
   const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
     rc = lck_rc;
@@ -8930,7 +8938,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
               mdbx_fastmutex_destroy(&env->me_remap_guard) == MDBX_SUCCESS);
 #endif /* Windows */
 
-#if MDBX_LOCKING > 0
+#if MDBX_LOCKING > MDBX_LOCKING_SYSV
   mdbx_ensure(env, mdbx_ipclock_destroy(&env->me_lckless_stub.wlock) == 0);
 #endif /* MDBX_LOCKING */
 

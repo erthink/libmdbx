@@ -13,6 +13,7 @@
  */
 
 #include "internals.h"
+#include <sys/sem.h>
 
 /*----------------------------------------------------------------------------*/
 /* global constructor/destructor */
@@ -195,7 +196,7 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid) {
 
 /*---------------------------------------------------------------------------*/
 
-#if MDBX_LOCKING > 0
+#if MDBX_LOCKING > MDBX_LOCKING_SYSV
 MDBX_INTERNAL_FUNC int mdbx_ipclock_stub(mdbx_ipclock_t *ipc) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   return sem_init(ipc, false, 1) ? errno : 0;
@@ -217,7 +218,7 @@ MDBX_INTERNAL_FUNC int mdbx_ipclock_destroy(mdbx_ipclock_t *ipc) {
 #error "FIXME"
 #endif
 }
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > MDBX_LOCKING_SYSV */
 
 MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_fd != INVALID_HANDLE_VALUE);
@@ -365,7 +366,10 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
              OFF_T_MAX) == 0) {
 
     mdbx_verbose("%s: got exclusive, drown locks", __func__);
-#if MDBX_LOCKING > 0
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+    if (env->me_sysv_ipc.semid != -1)
+      rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
+#else
     rc = mdbx_ipclock_destroy(&env->me_lck->mti_rlock);
     if (rc == 0)
       rc = mdbx_ipclock_destroy(&env->me_lck->mti_wlock);
@@ -431,8 +435,58 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
     return MDBX_SUCCESS /* currently don't need any initialization
       if LCK already opened/used inside current process */
         ;
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  int semid = -1;
+  if (global_uniqueness_flag) {
+    struct stat st;
+    if (fstat(env->me_fd, &st))
+      return errno;
+  sysv_retry_create:
+    semid = semget(env->me_sysv_ipc.key, 2,
+                   IPC_CREAT | IPC_EXCL |
+                       (st.st_mode & (S_IRWXU | S_IRWXG | S_IRWXO)));
+    if (unlikely(semid == -1)) {
+      int err = errno;
+      if (err != EEXIST)
+        return err;
 
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX1988
+      /* remove and re-create semaphore set */
+      semid = semget(env->me_sysv_ipc.key, 2, 0);
+      if (semid == -1) {
+        err = errno;
+        if (err != ENOENT)
+          return err;
+        goto sysv_retry_create;
+      }
+      if (semctl(semid, 2, IPC_RMID)) {
+        err = errno;
+        if (err != EIDRM)
+          return err;
+      }
+      goto sysv_retry_create;
+    }
+
+    unsigned short val_array[2] = {1, 1};
+    if (semctl(semid, 2, SETALL, val_array))
+      return errno;
+  } else {
+    semid = semget(env->me_sysv_ipc.key, 2, 0);
+    if (semid == -1)
+      return errno;
+
+    /* check read & write access */
+    struct semid_ds data[2];
+    if (semctl(semid, 2, IPC_STAT, data) || semctl(semid, 2, IPC_SET, data))
+      return errno;
+  }
+
+  env->me_sysv_ipc.semid = semid;
+
+  return MDBX_SUCCESS;
+
+#elif MDBX_LOCKING == MDBX_LOCKING_FUTEX
+#warning "TODO"
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
 
   /* don't initialize semaphores twice */
   if (global_uniqueness_flag == MDBX_RESULT_TRUE) {
@@ -519,7 +573,7 @@ bailout:
 static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
                                       const int err) {
   int rc = err;
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2008 || MDBX_LOCKING == MDBX_LOCKING_SYSV
   if (err == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
 
@@ -533,12 +587,15 @@ static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
         rc = MDBX_PANIC;
       }
     }
-    mdbx_notice("%cmutex owner died, %s", (rlocked ? 'r' : 'w'),
+    mdbx_notice("%clock owner died, %s", (rlocked ? 'r' : 'w'),
                 (rc ? "this process' env is hosed" : "recovering"));
 
     int check_rc = mdbx_reader_check0(env, rlocked, NULL);
     check_rc = (check_rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : check_rc;
 
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+    rc = (rc == MDBX_SUCCESS) ? check_rc : rc;
+#else
 #if defined(PTHREAD_MUTEX_ROBUST) || defined(pthread_mutex_consistent)
     int mreco_rc = pthread_mutex_consistent(ipc);
 #elif defined(PTHREAD_MUTEX_ROBUST_NP) || defined(pthread_mutex_consistent_np)
@@ -551,16 +608,20 @@ static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
     check_rc = (mreco_rc == 0) ? check_rc : mreco_rc;
 
     if (unlikely(mreco_rc))
-      mdbx_error("mutex recovery failed, %s", mdbx_strerror(mreco_rc));
+      mdbx_error("lock recovery failed, %s", mdbx_strerror(mreco_rc));
 
     rc = (rc == MDBX_SUCCESS) ? check_rc : rc;
     if (MDBX_IS_ERROR(rc))
       pthread_mutex_unlock(ipc);
+#endif /* MDBX_LOCKING == MDBX_LOCKING_POSIX2008 */
     return rc;
   }
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001
   (void)ipc;
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
+  (void)ipc;
+#elif MDBX_LOCKING == MDBX_LOCKING_FUTEX
+#warning "TODO"
   (void)ipc;
 #else
 #error "FIXME"
@@ -588,6 +649,19 @@ static int mdbx_ipclock_lock(MDBX_env *env, mdbx_ipclock_t *ipc,
     }
   } else if (sem_wait(ipc))
     rc = errno;
+#elif MDBX_LOCKING == MDBX_LOCKING_SYSV
+  struct sembuf op = {.sem_num = (ipc != env->me_wlock),
+                      .sem_op = -1,
+                      .sem_flg = dont_wait ? IPC_NOWAIT | SEM_UNDO : SEM_UNDO};
+  int rc;
+  if (semop(env->me_sysv_ipc.semid, &op, 1)) {
+    rc = errno;
+    if (dont_wait && rc == EAGAIN)
+      rc = MDBX_BUSY;
+  } else {
+    rc = *ipc ? EOWNERDEAD : MDBX_SUCCESS;
+    *ipc = env->me_pid;
+  }
 #else
 #error "FIXME"
 #endif /* MDBX_LOCKING */
@@ -597,12 +671,21 @@ static int mdbx_ipclock_lock(MDBX_env *env, mdbx_ipclock_t *ipc,
   return rc;
 }
 
-static int mdbx_ipclock_unlock(mdbx_ipclock_t *ipc) {
+static int mdbx_ipclock_unlock(MDBX_env *env, mdbx_ipclock_t *ipc) {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   int rc = pthread_mutex_unlock(ipc);
+  (void)env;
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   int rc = sem_post(ipc) ? errno : MDBX_SUCCESS;
+  (void)env;
+#elif MDBX_LOCKING == MDBX_LOCKING_SYSV
+  if (unlikely(*ipc != (pid_t)env->me_pid))
+    return EPERM;
+  *ipc = 0;
+  struct sembuf op = {
+      .sem_num = (ipc != env->me_wlock), .sem_op = 1, .sem_flg = SEM_UNDO};
+  int rc = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
 #else
 #error "FIXME"
 #endif /* MDBX_LOCKING */
@@ -619,7 +702,7 @@ MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
 
 MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
   mdbx_trace("%s", ">>");
-  int rc = mdbx_ipclock_unlock(&env->me_lck->mti_rlock);
+  int rc = mdbx_ipclock_unlock(env, &env->me_lck->mti_rlock);
   mdbx_trace("<< rc %d", rc);
   if (unlikely(rc != MDBX_SUCCESS))
     mdbx_panic("%s() failed: errcode %d\n", __func__, rc);
@@ -636,7 +719,7 @@ int mdbx_txn_lock(MDBX_env *env, bool dont_wait) {
 
 void mdbx_txn_unlock(MDBX_env *env) {
   mdbx_trace("%s", ">>");
-  int rc = mdbx_ipclock_unlock(env->me_wlock);
+  int rc = mdbx_ipclock_unlock(env, env->me_wlock);
   mdbx_trace("<< rc %d", rc);
   if (unlikely(rc != MDBX_SUCCESS))
     mdbx_panic("%s() failed: errcode %d\n", __func__, rc);

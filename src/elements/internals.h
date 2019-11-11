@@ -204,9 +204,11 @@
 #endif /* MDBX_64BIT_CAS */
 
 #define MDBX_LOCKING_WIN32FILES -1
+#define MDBX_LOCKING_SYSV 5         /* SystemV IPC semaphores */
 #define MDBX_LOCKING_POSIX1988 1988 /* POSIX-1 Shared anonymous semaphores */
 #define MDBX_LOCKING_POSIX2001 2001 /* POSIX-2001 Shared Mutexes */
 #define MDBX_LOCKING_POSIX2008 2008 /* POSIX-2008 Robust Mutexes */
+#define MDBX_LOCKING_BENAPHORE 1995 /* BeOS Benaphores, aka Futexes */
 
 #if defined(_WIN32) || defined(_WIN64)
 #define MDBX_LOCKING MDBX_LOCKING_WIN32FILES
@@ -227,8 +229,10 @@
 #else
 #define MDBX_LOCKING MDBX_LOCKING_POSIX2001
 #endif
-#else
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
 #define MDBX_LOCKING MDBX_LOCKING_POSIX1988
+#else
+#define MDBX_LOCKING MDBX_LOCKING_SYSV
 #endif
 #define MDBX_LOCKING_CONFIG "AUTO=" STRINGIFY(MDBX_LOCKING)
 #else
@@ -507,8 +511,18 @@ typedef struct MDBX_page {
 
 #pragma pack(pop)
 
-#if MDBX_LOCKING > 0
-#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
+#if MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
+#define MDBX_CLOCK_SIGN UINT32_C(0xF10C)
+typedef void mdbx_ipclock_t;
+#elif MDBX_LOCKING == MDBX_LOCKING_SYSV
+
+#define MDBX_CLOCK_SIGN UINT32_C(0xF18D)
+typedef mdbx_pid_t mdbx_ipclock_t;
+#ifndef EOWNERDEAD
+#define EOWNERDEAD MDBX_RESULT_TRUE
+#endif
+
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
 #define MDBX_CLOCK_SIGN UINT32_C(0x8017)
 typedef pthread_mutex_t mdbx_ipclock_t;
@@ -517,13 +531,11 @@ typedef pthread_mutex_t mdbx_ipclock_t;
 typedef sem_t mdbx_ipclock_t;
 #else
 #error "FIXME"
-#endif
+#endif /* MDBX_LOCKING */
 
+#if MDBX_LOCKING > MDBX_LOCKING_SYSV
 MDBX_INTERNAL_FUNC int mdbx_ipclock_stub(mdbx_ipclock_t *ipc);
 MDBX_INTERNAL_FUNC int mdbx_ipclock_destroy(mdbx_ipclock_t *ipc);
-
-#else
-#define MDBX_CLOCK_SIGN UINT32_C(0xF10C)
 #endif /* MDBX_LOCKING */
 
 /* Reader Lock Table
@@ -642,10 +654,10 @@ typedef struct MDBX_lockinfo {
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
-  /* Write transation lok. */
+  /* Write transation lock. */
 #if MDBX_LOCKING > 0
       mdbx_ipclock_t mti_wlock;
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > 0 */
 
   volatile txnid_t mti_oldest_reader;
 
@@ -668,7 +680,7 @@ typedef struct MDBX_lockinfo {
   /* Readeaders registration lock. */
 #if MDBX_LOCKING > 0
       mdbx_ipclock_t mti_rlock;
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > 0 */
 
   /* The number of slots that have been used in the reader table.
    * This always records the maximum count, it is not decremented
@@ -1020,9 +1032,16 @@ struct MDBX_env {
   MDBX_txn *me_txn0;          /* prealloc'd write transaction */
 
   /* write-txn lock */
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  union {
+    key_t key;
+    int semid;
+  } me_sysv_ipc;
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
+
 #if MDBX_LOCKING > 0
   mdbx_ipclock_t *me_wlock;
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > 0 */
 
   MDBX_dbx *me_dbxs;           /* array of static DB info */
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
@@ -1050,7 +1069,7 @@ struct MDBX_env {
   struct {
 #if MDBX_LOCKING > 0
     mdbx_ipclock_t wlock;
-#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING > 0 */
     txnid_t oldest;
     uint64_t sync_timestamp;
     uint64_t autosync_period;
