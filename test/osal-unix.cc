@@ -59,7 +59,15 @@ static __inline __maybe_unused int atomic_decrement(volatile int *p) {
 #endif /* C++11 */
 #endif /* MDBX_LOCKING == MDBX_LOCKING_POSIX1988 */
 
-#if MDBX_LOCKING != MDBX_LOCKING_SYSV
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+static int ipc;
+static pid_t ipc_overlord_pid;
+static void ipc_remove(void) {
+  if (ipc_overlord_pid == getpid())
+    semctl(ipc, 0, IPC_RMID, nullptr);
+}
+
+#else
 struct shared_t {
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
@@ -87,7 +95,16 @@ static shared_t *shared;
 
 void osal_wait4barrier(void) {
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-#warning "TODO"
+  struct sembuf op;
+  op.sem_num = 0;
+  op.sem_op = -1;
+  op.sem_flg = IPC_NOWAIT;
+  if (semop(ipc, &op, 1))
+    failure_perror("semop(dec)", errno);
+  op.sem_op = 0;
+  op.sem_flg = 0;
+  if (semop(ipc, &op, 1))
+    failure_perror("semop(wait)", errno);
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   assert(shared != nullptr && shared != MAP_FAILED);
@@ -111,7 +128,19 @@ void osal_wait4barrier(void) {
 
 void osal_setup(const std::vector<actor_config> &actors) {
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-#warning "TODO"
+  if (ipc_overlord_pid)
+    failure("ipc already created by %ld pid", (long)ipc_overlord_pid);
+  ipc_overlord_pid = getpid();
+  ipc = semget(IPC_PRIVATE, actors.size() + 2, IPC_CREAT | SEM_A | SEM_R);
+  if (ipc < 0)
+    failure_perror("semget(IPC_PRIVATE, shared_sems)", errno);
+  if (atexit(ipc_remove))
+    failure_perror("atexit(ipc_remove)", errno);
+  if (semctl(ipc, 0, SETVAL, (int)(actors.size() + 1)))
+    failure_perror("semctl(SETVAL.0, shared_sems)", errno);
+  for (size_t i = 1; i < actors.size() + 2; ++i)
+    if (semctl(ipc, i, SETVAL, 1))
+      failure_perror("semctl(SETVAL.N, shared_sems)", errno);
 #else
   assert(shared == nullptr);
   shared = (shared_t *)mmap(
@@ -193,7 +222,8 @@ void osal_setup(const std::vector<actor_config> &actors) {
 void osal_broadcast(unsigned id) {
   log_trace("osal_broadcast: event %u", id);
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-#warning "TODO"
+  if (semctl(ipc, id + 1, SETVAL, 0))
+    failure_perror("semctl(SETVAL)", errno);
 #else
   assert(shared != nullptr && shared != MAP_FAILED);
   if (id >= shared->count)
@@ -215,7 +245,10 @@ void osal_broadcast(unsigned id) {
 int osal_waitfor(unsigned id) {
   log_trace("osal_waitfor: event %u", id);
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-#warning "TODO"
+  struct sembuf op;
+  memset(&op, 0, sizeof(op));
+  op.sem_num = (short)(id + 1);
+  int rc = semop(ipc, &op, 1) ? errno : MDBX_SUCCESS;
 #else
   assert(shared != nullptr && shared != MAP_FAILED);
   if (id >= shared->count)
