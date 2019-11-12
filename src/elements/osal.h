@@ -954,3 +954,114 @@ MDBX_INTERNAL_VAR MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
+
+/*----------------------------------------------------------------------------*/
+
+#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define MDBX_WORDBITS 64
+#else
+#define MDBX_WORDBITS 32
+#endif /* MDBX_WORDBITS */
+
+#ifndef MDBX_64BIT_ATOMIC
+#if MDBX_WORDBITS >= 64
+#define MDBX_64BIT_ATOMIC 1
+#else
+#define MDBX_64BIT_ATOMIC 0
+#endif
+#define MDBX_64BIT_ATOMIC_CONFIG "AUTO=" STRINGIFY(MDBX_64BIT_ATOMIC)
+#else
+#define MDBX_64BIT_ATOMIC_CONFIG STRINGIFY(MDBX_64BIT_ATOMIC)
+#endif /* MDBX_64BIT_ATOMIC */
+
+#ifndef MDBX_64BIT_CAS
+#if defined(ATOMIC_LLONG_LOCK_FREE)
+#if ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(__GCC_ATOMIC_LLONG_LOCK_FREE)
+#if __GCC_ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(__CLANG_ATOMIC_LLONG_LOCK_FREE)
+#if __CLANG_ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(_MSC_VER) || defined(__APPLE__)
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS MDBX_64BIT_ATOMIC
+#endif
+#define MDBX_64BIT_CAS_CONFIG "AUTO=" STRINGIFY(MDBX_64BIT_CAS)
+#else
+#define MDBX_64BIT_CAS_CONFIG STRINGIFY(MDBX_64BIT_CAS)
+#endif /* MDBX_64BIT_CAS */
+
+#define MDBX_LOCKING_WIN32FILES -1
+#define MDBX_LOCKING_SYSV 5         /* SystemV IPC semaphores */
+#define MDBX_LOCKING_POSIX1988 1988 /* POSIX-1 Shared anonymous semaphores */
+#define MDBX_LOCKING_POSIX2001 2001 /* POSIX-2001 Shared Mutexes */
+#define MDBX_LOCKING_POSIX2008 2008 /* POSIX-2008 Robust Mutexes */
+#define MDBX_LOCKING_BENAPHORE 1995 /* BeOS Benaphores, aka Futexes */
+
+#if defined(_WIN32) || defined(_WIN64)
+#define MDBX_LOCKING MDBX_LOCKING_WIN32FILES
+#else
+#ifndef MDBX_LOCKING
+#if defined(_POSIX_THREAD_PROCESS_SHARED) &&                                   \
+    _POSIX_THREAD_PROCESS_SHARED >= 200112L && !defined(__FreeBSD__)
+
+/* Some platforms define the EOWNERDEAD error code even though they
+ * don't support Robust Mutexes. If doubt compile with -MDBX_LOCKING=2001. */
+#if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&          \
+    (defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) ||                             \
+     defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) ||                             \
+     defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP)) &&     \
+    (!defined(__GLIBC__) ||                                                    \
+     __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */)
+#define MDBX_LOCKING MDBX_LOCKING_POSIX2008
+#else
+#define MDBX_LOCKING MDBX_LOCKING_POSIX2001
+#endif
+#elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
+#define MDBX_LOCKING MDBX_LOCKING_POSIX1988
+#else
+#define MDBX_LOCKING MDBX_LOCKING_SYSV
+#endif
+#define MDBX_LOCKING_CONFIG "AUTO=" STRINGIFY(MDBX_LOCKING)
+#else
+#define MDBX_LOCKING_CONFIG STRINGIFY(MDBX_LOCKING)
+#endif /* MDBX_LOCKING */
+#endif /* !Windows */
+
+#ifndef MDBX_USE_OFDLOCKS
+#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK) &&   \
+    !defined(MDBX_SAFE4QEMU) &&                                                \
+    !defined(__sun) /* OFD-lock are broken on Solaris */
+#define MDBX_USE_OFDLOCKS 1
+#else
+#define MDBX_USE_OFDLOCKS 0
+#endif
+#define MDBX_USE_OFDLOCKS_CONFIG "AUTO=" STRINGIFY(MDBX_USE_OFDLOCKS)
+#else
+#define MDBX_USE_OFDLOCKS_CONFIG STRINGIFY(MDBX_USE_OFDLOCKS)
+#endif /* MDBX_USE_OFDLOCKS */
+
+/* Does a system have battery-backed Real-Time Clock or just a fake. */
+#ifndef MDBX_TRUST_RTC
+#if defined(__linux__) || defined(__gnu_linux__) || defined(__NetBSD__) ||     \
+    defined(__OpenBSD__)
+#define MDBX_TRUST_RTC 0 /* a lot of embedded systems have a fake RTC */
+#else
+#define MDBX_TRUST_RTC 1
+#endif
+#define MDBX_TRUST_RTC_CONFIG "AUTO=" STRINGIFY(MDBX_TRUST_RTC)
+#else
+#define MDBX_TRUST_RTC_CONFIG STRINGIFY(MDBX_TRUST_RTC)
+#endif /* MDBX_TRUST_RTC */
