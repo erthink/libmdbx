@@ -24,10 +24,10 @@ MDBX_OPTIONS ?= -DNDEBUG=1
 CFLAGS  ?= -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes
 # -Wno-tautological-compare
 
-# HITH: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old.
+# HINT: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old.
 LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt")
 
-LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip') $(LIBS)
+LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
 EXE_LDFLAGS ?= -pthread
 
 ################################################################################
@@ -67,7 +67,7 @@ libmdbx.a: mdbx-static.o
 	$(AR) rs $@ $?
 
 libmdbx.$(SO_SUFFIX): mdbx-dylib.o
-	$(CC) $(CFLAGS) $^ -pthread -shared $(LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIBS) -o $@
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
@@ -79,7 +79,7 @@ MAN_SRCDIR := man1/
 
 config.h: mdbx.c $(lastword $(MAKEFILE_LIST))
 	(echo '#define MDBX_BUILD_TIMESTAMP "$(shell date +%Y-%m-%dT%H:%M:%S%z)"' \
-	&& echo '#define MDBX_BUILD_FLAGS "$(CFLAGS) $(LDFLAGS)"' \
+	&& echo '#define MDBX_BUILD_FLAGS "$(CFLAGS) $(LDFLAGS) $(LIBS)"' \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')"' \
 	) > $@
@@ -91,7 +91,7 @@ mdbx-static.o: config.h mdbx.c $(lastword $(MAKEFILE_LIST))
 	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
 
 mdbx_%:	mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
 
 #> dist-cutoff-begin
 else
@@ -174,10 +174,10 @@ endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
 mdbx_%:	src/tools/mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
-	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) -o $@
+	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
 
 git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo "Please use libmdbx as a git-submodule or the amalgamated source code" >&2 && echo git_directory; fi)
 
@@ -195,7 +195,7 @@ src/elements/version.c: src/elements/version.c.in $(lastword $(MAKEFILE_LIST)) $
 
 src/elements/config.h: src/elements/version.c $(lastword $(MAKEFILE_LIST))
 	(echo '#define MDBX_BUILD_TIMESTAMP "$(shell date +%Y-%m-%dT%H:%M:%S%z)"' \
-	&& echo '#define MDBX_BUILD_FLAGS "$(CFLAGS) $(LDFLAGS)"' \
+	&& echo '#define MDBX_BUILD_FLAGS "$(CFLAGS) $(LDFLAGS) $(LIBS)"' \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell set -o pipefail; $(CC) --version | head -1 || echo 'Please use GCC or CLANG compatible compiler')"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || echo 'Please use GCC or CLANG compatible compiler')"' \
 	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
