@@ -21,11 +21,22 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#if !defined(_POSIX_THREAD_PROCESS_SHARED) || _POSIX_THREAD_PROCESS_SHARED < 1
-#include <semaphore.h>
-#elif defined(__APPLE__)
-#include "darwin/pthread_barrier.c"
+#ifndef MDBX_LOCKING
+#error "Opps, MDBX_LOCKING is undefined!"
 #endif
+
+#if defined(__APPLE__) && (MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||           \
+                           MDBX_LOCKING == MDBX_LOCKING_POSIX2008)
+#include "darwin/pthread_barrier.c"
+#endif /* __APPLE__ && MDBX_LOCKING >= MDBX_LOCKING_POSIX2001 */
+
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
+
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX1988
+#include <semaphore.h>
 
 #if __cplusplus >= 201103L
 #include <atomic>
@@ -46,14 +57,17 @@ static __inline __maybe_unused int atomic_decrement(volatile int *p) {
 #endif
 }
 #endif /* C++11 */
+#endif /* MDBX_LOCKING == MDBX_LOCKING_POSIX1988 */
 
+#if MDBX_LOCKING != MDBX_LOCKING_SYSV
 struct shared_t {
-#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
+    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   pthread_barrier_t barrier;
   pthread_mutex_t mutex;
   size_t count;
   pthread_cond_t events[1];
-#else
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   struct {
 #if __cplusplus >= 201103L
     std::atomic_int countdown;
@@ -64,32 +78,42 @@ struct shared_t {
   } barrier;
   size_t count;
   sem_t events[1];
-#endif /* _POSIX_THREAD_PROCESS_SHARED */
+#else
+#error "FIXME"
+#endif /* MDBX_LOCKING */
 };
-
 static shared_t *shared;
+#endif /* MDBX_LOCKING != MDBX_LOCKING_SYSV */
 
 void osal_wait4barrier(void) {
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#warning "TODO"
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
+    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   assert(shared != nullptr && shared != MAP_FAILED);
-#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
-  int rc = pthread_barrier_wait(&shared->barrier);
+  int err = pthread_barrier_wait(&shared->barrier);
+  if (err != 0 && err != PTHREAD_BARRIER_SERIAL_THREAD)
+    failure_perror("pthread_barrier_wait(shared)", err);
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
+  assert(shared != nullptr && shared != MAP_FAILED);
+  int err = (atomic_decrement(&shared->barrier.countdown) > 0 &&
+             sem_wait(&shared->barrier.sema))
+                ? errno
+                : 0;
+  if (err != 0)
+    failure_perror("sem_wait(shared)", err);
+  if (sem_post(&shared->barrier.sema))
+    failure_perror("sem_post(shared)", errno);
 #else
-  int rc = (atomic_decrement(&shared->barrier.countdown) > 0 &&
-            sem_wait(&shared->barrier.sema))
-               ? errno
-               : 0;
-  if (rc == 0)
-    rc = sem_post(&shared->barrier.sema) ? errno : 0;
-#endif
-
-  if (rc != 0 && rc != PTHREAD_BARRIER_SERIAL_THREAD) {
-    failure_perror("pthread_barrier_wait(shared)", rc);
-  }
+#error "FIXME"
+#endif /* MDBX_LOCKING */
 }
 
 void osal_setup(const std::vector<actor_config> &actors) {
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#warning "TODO"
+#else
   assert(shared == nullptr);
-
   shared = (shared_t *)mmap(
       nullptr, sizeof(shared_t) + actors.size() * sizeof(shared->events[0]),
       PROT_READ | PROT_WRITE,
@@ -104,92 +128,101 @@ void osal_setup(const std::vector<actor_config> &actors) {
 
   shared->count = actors.size() + 1;
 
-#if defined(__APPLE__) || (defined(_POSIX_THREAD_PROCESS_SHARED) &&            \
-                           _POSIX_THREAD_PROCESS_SHARED > 0)
-
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
+    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   pthread_barrierattr_t barrierattr;
-  int rc = pthread_barrierattr_init(&barrierattr);
-  if (rc)
-    failure_perror("pthread_barrierattr_init()", rc);
-  rc = pthread_barrierattr_setpshared(&barrierattr, PTHREAD_PROCESS_SHARED);
-  if (rc)
-    failure_perror("pthread_barrierattr_setpshared()", rc);
+  int err = pthread_barrierattr_init(&barrierattr);
+  if (err)
+    failure_perror("pthread_barrierattr_init()", err);
+  err = pthread_barrierattr_setpshared(&barrierattr, PTHREAD_PROCESS_SHARED);
+  if (err)
+    failure_perror("pthread_barrierattr_setpshared()", err);
 
-  rc = pthread_barrier_init(&shared->barrier, &barrierattr, shared->count);
-  if (rc)
-    failure_perror("pthread_barrier_init(shared)", rc);
+  err = pthread_barrier_init(&shared->barrier, &barrierattr, shared->count);
+  if (err)
+    failure_perror("pthread_barrier_init(shared)", err);
   pthread_barrierattr_destroy(&barrierattr);
 
   pthread_mutexattr_t mutexattr;
-  rc = pthread_mutexattr_init(&mutexattr);
-  if (rc)
-    failure_perror("pthread_mutexattr_init()", rc);
-  rc = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED);
-  if (rc)
-    failure_perror("pthread_mutexattr_setpshared()", rc);
+  err = pthread_mutexattr_init(&mutexattr);
+  if (err)
+    failure_perror("pthread_mutexattr_init()", err);
+  err = pthread_mutexattr_setpshared(&mutexattr, PTHREAD_PROCESS_SHARED);
+  if (err)
+    failure_perror("pthread_mutexattr_setpshared()", err);
 
   pthread_condattr_t condattr;
-  rc = pthread_condattr_init(&condattr);
-  if (rc)
-    failure_perror("pthread_condattr_init()", rc);
-  rc = pthread_condattr_setpshared(&condattr, PTHREAD_PROCESS_SHARED);
-  if (rc)
-    failure_perror("pthread_condattr_setpshared()", rc);
+  err = pthread_condattr_init(&condattr);
+  if (err)
+    failure_perror("pthread_condattr_init()", err);
+  err = pthread_condattr_setpshared(&condattr, PTHREAD_PROCESS_SHARED);
+  if (err)
+    failure_perror("pthread_condattr_setpshared()", err);
 
-  rc = pthread_mutex_init(&shared->mutex, &mutexattr);
-  if (rc)
-    failure_perror("pthread_mutex_init(shared)", rc);
+  err = pthread_mutex_init(&shared->mutex, &mutexattr);
+  if (err)
+    failure_perror("pthread_mutex_init(shared)", err);
 
   for (size_t i = 0; i < shared->count; ++i) {
     pthread_cond_t *event = &shared->events[i];
-    rc = pthread_cond_init(event, &condattr);
-    if (rc)
-      failure_perror("pthread_cond_init(shared)", rc);
+    err = pthread_cond_init(event, &condattr);
+    if (err)
+      failure_perror("pthread_cond_init(shared)", err);
     log_trace("osal_setup: event(shared pthread_cond) %" PRIuPTR " -> %p", i,
               __Wpedantic_format_voidptr(event));
   }
   pthread_condattr_destroy(&condattr);
   pthread_mutexattr_destroy(&mutexattr);
-#else
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   shared->barrier.countdown = shared->count;
-  int rc = sem_init(&shared->barrier.sema, true, 1) ? errno : 0;
-  if (rc)
-    failure_perror("sem_init(shared.barrier)", rc);
+  if (sem_init(&shared->barrier.sema, true, 1))
+    failure_perror("sem_init(shared.barrier)", errno);
   for (size_t i = 0; i < shared->count; ++i) {
     sem_t *event = &shared->events[i];
-    rc = sem_init(event, true, 0) ? errno : 0;
-    if (rc)
-      failure_perror("sem_init(shared.event)", rc);
+    if (sem_init(event, true, 0))
+      failure_perror("sem_init(shared.event)", errno);
     log_trace("osal_setup: event(shared sem_init) %" PRIuPTR " -> %p", i,
               __Wpedantic_format_voidptr(event));
   }
-#endif
+#else
+#error "FIXME"
+#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING != MDBX_LOCKING_SYSV */
 }
 
 void osal_broadcast(unsigned id) {
-  assert(shared != nullptr && shared != MAP_FAILED);
   log_trace("osal_broadcast: event %u", id);
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#warning "TODO"
+#else
+  assert(shared != nullptr && shared != MAP_FAILED);
   if (id >= shared->count)
     failure("osal_broadcast: id > limit");
-#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
-  int rc = pthread_cond_broadcast(shared->events + id);
-  if (rc)
-    failure_perror("pthread_cond_broadcast(shared)", rc);
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
+    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+  int err = pthread_cond_broadcast(shared->events + id);
+  if (err)
+    failure_perror("pthread_cond_broadcast(shared)", err);
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
+  if (sem_post(shared->events + id))
+    failure_perror("sem_post(shared)", errno);
 #else
-  int rc = sem_post(shared->events + id) ? errno : 0;
-  if (rc)
-    failure_perror("sem_post(shared)", rc);
-#endif
+#error "FIXME"
+#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING != MDBX_LOCKING_SYSV */
 }
 
 int osal_waitfor(unsigned id) {
-  assert(shared != nullptr && shared != MAP_FAILED);
-
   log_trace("osal_waitfor: event %u", id);
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+#warning "TODO"
+#else
+  assert(shared != nullptr && shared != MAP_FAILED);
   if (id >= shared->count)
     failure("osal_waitfor: id > limit");
 
-#if defined(_POSIX_THREAD_PROCESS_SHARED) && _POSIX_THREAD_PROCESS_SHARED > 0
+#if MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                  \
+    MDBX_LOCKING == MDBX_LOCKING_POSIX2008
   int rc = pthread_mutex_lock(&shared->mutex);
   if (rc != 0)
     failure_perror("pthread_mutex_lock(shared)", rc);
@@ -201,11 +234,14 @@ int osal_waitfor(unsigned id) {
   rc = pthread_mutex_unlock(&shared->mutex);
   if (rc != 0)
     failure_perror("pthread_mutex_unlock(shared)", rc);
-#else
+#elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   int rc = sem_wait(shared->events + id) ? errno : 0;
-  if (rc == 0)
-    rc = sem_post(shared->events + id) ? errno : 0;
-#endif
+  if (rc == 0 && sem_post(shared->events + id))
+    failure_perror("sem_post(shared)", errno);
+#else
+#error "FIXME"
+#endif /* MDBX_LOCKING */
+#endif /* MDBX_LOCKING != MDBX_LOCKING_SYSV */
 
   return (rc == 0) ? true : false;
 }
