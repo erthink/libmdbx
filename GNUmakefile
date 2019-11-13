@@ -134,7 +134,9 @@ MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'P
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c && (openssl dgst -r -sha256 src/elements/version.c || sha256sum src/elements/version.c || shasum -a 256 src/elements/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
 
-test check: all mdbx_example mdbx_test
+check: test mdbx_example dist
+
+test: all mdbx_example mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
@@ -144,7 +146,7 @@ test check: all mdbx_example mdbx_test
 mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	$(CC) $(CFLAGS) -I. example/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
 
-check-singleprocess: all mdbx_test
+test-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
@@ -152,12 +154,12 @@ check-singleprocess: all mdbx_test
 		| tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-check-fault: all mdbx_test
+test-fault: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
-memcheck check-valgrind: all mdbx_test
+memcheck test-valgrind: all mdbx_test
 	@echo "$(MDBX_OPTIONS)" | grep -q MDBX_USE_VALGRIND || echo "WARNING: Please build libmdbx with -DMDBX_USE_VALGRIND to avoid false-positives from Valgrind !!!" >&2
 	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		($(VALGRIND) ./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
@@ -297,7 +299,7 @@ cross-qemu:
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) clean && \
 			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_OPTIONS)" \
-			$(MAKE) check-singleprocess || exit $$?; \
+			$(MAKE) test-singleprocess || exit $$?; \
 	done
 
 #< dist-cutoff-end
