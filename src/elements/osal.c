@@ -1249,19 +1249,28 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 
 #else
 
+#ifndef MAP_TRYFIXED
+#define MAP_TRYFIXED 0
+#endif
+
+#ifndef MAP_HASSEMAPHORE
+#define MAP_HASSEMAPHORE 0
+#endif
+
+#ifndef MAP_CONCEAL
+#define MAP_CONCEAL 0
+#endif
+
+#ifndef MAP_NOSYNC
+#define MAP_NOSYNC 0
+#endif
+
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
-      MAP_SHARED | MAP_FILE
-#ifdef MAP_NOSYNC
-          | (((options & MMAP_OPTION_SEMAPHORE) != 0 ||
-              F_ISSET(flags, MDBX_UTTERLY_NOSYNC))
-                 ? MAP_NOSYNC
-                 : 0)
-#endif
-#ifdef MAP_HASSEMAPHORE
-          | ((options & MMAP_OPTION_SEMAPHORE) ? MAP_HASSEMAPHORE : 0)
-#endif
-          ,
+      MAP_SHARED | MAP_FILE |
+          (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0) |
+          ((options & MMAP_OPTION_SEMAPHORE) ? MAP_HASSEMAPHORE | MAP_NOSYNC
+                                             : MAP_CONCEAL),
       map->fd, 0);
 
   if (unlikely(map->address == MAP_FAILED)) {
