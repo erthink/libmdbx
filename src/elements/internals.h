@@ -1080,12 +1080,6 @@ MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
                      __VA_ARGS__);                                             \
   } while (0)
 
-#define mdbx_debug_print(fmt, ...)                                             \
-  do {                                                                         \
-    if (mdbx_log_enabled(MDBX_LOG_DEBUG))                                      \
-      mdbx_debug_log(MDBX_LOG_DEBUG, NULL, 0, fmt, __VA_ARGS__);               \
-  } while (0)
-
 #define mdbx_verbose(fmt, ...)                                                 \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_VERBOSE))                                    \
