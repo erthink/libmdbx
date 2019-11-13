@@ -91,6 +91,8 @@
 #define __thread __declspec(thread)
 #endif /* __thread */
 
+#include "../src/elements/options.h"
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #pragma warning(disable : 4201) /* nonstandard extension used :                \

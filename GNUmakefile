@@ -231,6 +231,7 @@ dist/@tmp-shared_internals.inc: src/elements/version.c $(ALLOY_DEPS) $(lastword 
 		-e 's|#include "../../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#include "defs.h"/r src/elements/defs.h' \
 		-e '/#include "osal.h"/r src/elements/osal.h' \
+		-e '/#include "options.h"/r src/elements/options.h' \
 		src/elements/internals.h > $@
 
 dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))

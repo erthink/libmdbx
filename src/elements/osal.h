@@ -274,23 +274,16 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif /* __amd64__ */
 #endif /* all x86 */
 
-#if !defined(MDBX_UNALIGNED_OK)
-#if defined(_MSC_VER)
-#define MDBX_UNALIGNED_OK 1 /* avoid MSVC misoptimization */
-#elif __CLANG_PREREQ(5, 0) || __GNUC_PREREQ(5, 0)
-#define MDBX_UNALIGNED_OK 0 /* expecting optimization is well done */
-#elif (defined(__ia32__) || defined(__ARM_FEATURE_UNALIGNED)) &&               \
-    !defined(__ALIGNED__)
-#define MDBX_UNALIGNED_OK 1
-#else
-#define MDBX_UNALIGNED_OK 0
-#endif
-#endif /* MDBX_UNALIGNED_OK */
-
 #if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
 #error                                                                         \
     "Sanity checking failed: Two's complement, reasonably sized integer types"
 #endif
+
+#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+#define MDBX_WORDBITS 64
+#else
+#define MDBX_WORDBITS 32
+#endif /* MDBX_WORDBITS */
 
 /*----------------------------------------------------------------------------*/
 /* Compiler's includes for builtins/intrinsics */
@@ -401,6 +394,15 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 /*----------------------------------------------------------------------------*/
 /* Memory/Compiler barriers, cache coherence */
 
+#if __has_include(<sys/cachectl.h>)
+#include <sys/cachectl.h>
+#elif defined(__mips) || defined(__mips__) || defined(__mips64) ||             \
+    defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
+    defined(__MWERKS__) || defined(__sgi)
+/* MIPS should have explicit cache control */
+#include <sys/cachectl.h>
+#endif
+
 static __maybe_unused __inline void mdbx_compiler_barrier(void) {
 #if defined(__clang__) || defined(__GNUC__)
   __asm__ __volatile__("" ::: "memory");
@@ -457,71 +459,6 @@ static __maybe_unused __inline void mdbx_memory_barrier(void) {
 #else
 #error "Could not guess the kind of compiler, please report to us."
 #endif
-}
-
-/*----------------------------------------------------------------------------*/
-/* Cache coherence and invalidation */
-
-#ifndef MDBX_CPU_WRITEBACK_IS_COHERENT
-#if defined(__ia32__) || defined(__e2k__) || defined(__hppa) ||                \
-    defined(__hppa__)
-#define MDBX_CPU_WRITEBACK_IS_COHERENT 1
-#else
-#define MDBX_CPU_WRITEBACK_IS_COHERENT 0
-#endif
-#endif /* MDBX_CPU_WRITEBACK_IS_COHERENT */
-
-#ifndef MDBX_CACHELINE_SIZE
-#if defined(SYSTEM_CACHE_ALIGNMENT_SIZE)
-#define MDBX_CACHELINE_SIZE SYSTEM_CACHE_ALIGNMENT_SIZE
-#elif defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
-#define MDBX_CACHELINE_SIZE 128
-#else
-#define MDBX_CACHELINE_SIZE 64
-#endif
-#endif /* MDBX_CACHELINE_SIZE */
-
-#if MDBX_CPU_WRITEBACK_IS_COHERENT
-#define mdbx_flush_noncoherent_cpu_writeback() mdbx_compiler_barrier()
-#else
-#define mdbx_flush_noncoherent_cpu_writeback() mdbx_memory_barrier()
-#endif
-
-#if __has_include(<sys/cachectl.h>)
-#include <sys/cachectl.h>
-#elif defined(__mips) || defined(__mips__) || defined(__mips64) ||             \
-    defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
-    defined(__MWERKS__) || defined(__sgi)
-/* MIPS should have explicit cache control */
-#include <sys/cachectl.h>
-#endif
-
-#ifndef MDBX_CPU_CACHE_MMAP_NONCOHERENT
-#if defined(__mips) || defined(__mips__) || defined(__mips64) ||               \
-    defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
-    defined(__MWERKS__) || defined(__sgi)
-/* MIPS has cache coherency issues. */
-#define MDBX_CPU_CACHE_MMAP_NONCOHERENT 1
-#else
-/* LY: assume no relevant mmap/dcache issues. */
-#define MDBX_CPU_CACHE_MMAP_NONCOHERENT 0
-#endif
-#endif /* ndef MDBX_CPU_CACHE_MMAP_NONCOHERENT */
-
-static __maybe_unused __inline void
-mdbx_invalidate_mmap_noncoherent_cache(void *addr, size_t nbytes) {
-#if MDBX_CPU_CACHE_MMAP_NONCOHERENT
-#ifdef DCACHE
-  /* MIPS has cache coherency issues.
-   * Note: for any nbytes >= on-chip cache size, entire is flushed. */
-  cacheflush(addr, nbytes, DCACHE);
-#else
-#error "Oops, cacheflush() not available"
-#endif /* DCACHE */
-#else  /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
-  (void)addr;
-  (void)nbytes;
-#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
 }
 
 /*----------------------------------------------------------------------------*/
@@ -954,114 +891,3 @@ MDBX_INTERNAL_VAR MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-/*----------------------------------------------------------------------------*/
-
-#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
-#define MDBX_WORDBITS 64
-#else
-#define MDBX_WORDBITS 32
-#endif /* MDBX_WORDBITS */
-
-#ifndef MDBX_64BIT_ATOMIC
-#if MDBX_WORDBITS >= 64
-#define MDBX_64BIT_ATOMIC 1
-#else
-#define MDBX_64BIT_ATOMIC 0
-#endif
-#define MDBX_64BIT_ATOMIC_CONFIG "AUTO=" STRINGIFY(MDBX_64BIT_ATOMIC)
-#else
-#define MDBX_64BIT_ATOMIC_CONFIG STRINGIFY(MDBX_64BIT_ATOMIC)
-#endif /* MDBX_64BIT_ATOMIC */
-
-#ifndef MDBX_64BIT_CAS
-#if defined(ATOMIC_LLONG_LOCK_FREE)
-#if ATOMIC_LLONG_LOCK_FREE > 1
-#define MDBX_64BIT_CAS 1
-#else
-#define MDBX_64BIT_CAS 0
-#endif
-#elif defined(__GCC_ATOMIC_LLONG_LOCK_FREE)
-#if __GCC_ATOMIC_LLONG_LOCK_FREE > 1
-#define MDBX_64BIT_CAS 1
-#else
-#define MDBX_64BIT_CAS 0
-#endif
-#elif defined(__CLANG_ATOMIC_LLONG_LOCK_FREE)
-#if __CLANG_ATOMIC_LLONG_LOCK_FREE > 1
-#define MDBX_64BIT_CAS 1
-#else
-#define MDBX_64BIT_CAS 0
-#endif
-#elif defined(_MSC_VER) || defined(__APPLE__)
-#define MDBX_64BIT_CAS 1
-#else
-#define MDBX_64BIT_CAS MDBX_64BIT_ATOMIC
-#endif
-#define MDBX_64BIT_CAS_CONFIG "AUTO=" STRINGIFY(MDBX_64BIT_CAS)
-#else
-#define MDBX_64BIT_CAS_CONFIG STRINGIFY(MDBX_64BIT_CAS)
-#endif /* MDBX_64BIT_CAS */
-
-#define MDBX_LOCKING_WIN32FILES -1
-#define MDBX_LOCKING_SYSV 5         /* SystemV IPC semaphores */
-#define MDBX_LOCKING_POSIX1988 1988 /* POSIX-1 Shared anonymous semaphores */
-#define MDBX_LOCKING_POSIX2001 2001 /* POSIX-2001 Shared Mutexes */
-#define MDBX_LOCKING_POSIX2008 2008 /* POSIX-2008 Robust Mutexes */
-#define MDBX_LOCKING_BENAPHORE 1995 /* BeOS Benaphores, aka Futexes */
-
-#if defined(_WIN32) || defined(_WIN64)
-#define MDBX_LOCKING MDBX_LOCKING_WIN32FILES
-#else
-#ifndef MDBX_LOCKING
-#if defined(_POSIX_THREAD_PROCESS_SHARED) &&                                   \
-    _POSIX_THREAD_PROCESS_SHARED >= 200112L && !defined(__FreeBSD__)
-
-/* Some platforms define the EOWNERDEAD error code even though they
- * don't support Robust Mutexes. If doubt compile with -MDBX_LOCKING=2001. */
-#if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&          \
-    (defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) ||                             \
-     defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) ||                             \
-     defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP)) &&     \
-    (!defined(__GLIBC__) ||                                                    \
-     __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */)
-#define MDBX_LOCKING MDBX_LOCKING_POSIX2008
-#else
-#define MDBX_LOCKING MDBX_LOCKING_POSIX2001
-#endif
-#elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
-#define MDBX_LOCKING MDBX_LOCKING_POSIX1988
-#else
-#define MDBX_LOCKING MDBX_LOCKING_SYSV
-#endif
-#define MDBX_LOCKING_CONFIG "AUTO=" STRINGIFY(MDBX_LOCKING)
-#else
-#define MDBX_LOCKING_CONFIG STRINGIFY(MDBX_LOCKING)
-#endif /* MDBX_LOCKING */
-#endif /* !Windows */
-
-#ifndef MDBX_USE_OFDLOCKS
-#if defined(F_OFD_SETLK) && defined(F_OFD_SETLKW) && defined(F_OFD_GETLK) &&   \
-    !defined(MDBX_SAFE4QEMU) &&                                                \
-    !defined(__sun) /* OFD-lock are broken on Solaris */
-#define MDBX_USE_OFDLOCKS 1
-#else
-#define MDBX_USE_OFDLOCKS 0
-#endif
-#define MDBX_USE_OFDLOCKS_CONFIG "AUTO=" STRINGIFY(MDBX_USE_OFDLOCKS)
-#else
-#define MDBX_USE_OFDLOCKS_CONFIG STRINGIFY(MDBX_USE_OFDLOCKS)
-#endif /* MDBX_USE_OFDLOCKS */
-
-/* Does a system have battery-backed Real-Time Clock or just a fake. */
-#ifndef MDBX_TRUST_RTC
-#if defined(__linux__) || defined(__gnu_linux__) || defined(__NetBSD__) ||     \
-    defined(__OpenBSD__)
-#define MDBX_TRUST_RTC 0 /* a lot of embedded systems have a fake RTC */
-#else
-#define MDBX_TRUST_RTC 1
-#endif
-#define MDBX_TRUST_RTC_CONFIG "AUTO=" STRINGIFY(MDBX_TRUST_RTC)
-#else
-#define MDBX_TRUST_RTC_CONFIG STRINGIFY(MDBX_TRUST_RTC)
-#endif /* MDBX_TRUST_RTC */

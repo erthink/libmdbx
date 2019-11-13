@@ -25,7 +25,7 @@ else()
     set(LIBMDBX_OSAL posix)
   endif()
   set(LIBMDBX_SOURCES
-    elements/defs.h elements/internals.h elements/osal.h
+    elements/options.h elements/defs.h elements/internals.h elements/osal.h
     elements/core.c elements/osal.c elements/lck-${LIBMDBX_OSAL}.c)
 endif()
 list(APPEND LIBMDBX_SOURCES ../mdbx.h

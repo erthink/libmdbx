@@ -33,12 +33,6 @@
 #   undef NDEBUG
 #endif
 
-#define MDBX_OSX_WANNA_DURABILITY 0 /* using fcntl(F_FULLFSYNC) with 5-10 times slowdown */
-#define MDBX_OSX_WANNA_SPEED 1      /* using fsync() with chance of data lost on power failure */
-#ifndef MDBX_OSX_SPEED_INSTEADOF_DURABILITY
-#   define MDBX_OSX_SPEED_INSTEADOF_DURABILITY MDBX_OSX_WANNA_DURABILITY
-#endif
-
 #ifdef MDBX_ALLOY
 /* Amalgamated build */
 #   define MDBX_INTERNAL_FUNC static
@@ -152,40 +146,42 @@
 #   endif
 #endif /* -Walignment-reduction-ignored */
 
-#include "osal.h"
-
 /* *INDENT-ON* */
 /* clang-format on */
 
-/* Controls checking PID against reuse DB environment after the fork() */
-#ifndef MDBX_TXN_CHECKPID
-#if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
-/* PID check could be ommited:
- *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
- *    mapped pages will not be available for child process.
- *  - in Windows where fork() not available. */
-#define MDBX_TXN_CHECKPID 0
-#else
-#define MDBX_TXN_CHECKPID 1
-#endif
-#define MDBX_TXN_CHECKPID_CONFIG "AUTO=" STRINGIFY(MDBX_TXN_CHECKPID)
-#else
-#define MDBX_TXN_CHECKPID_CONFIG STRINGIFY(MDBX_TXN_CHECKPID)
-#endif /* MDBX_TXN_CHECKPID */
-
-/* Controls checking transaction owner thread against misuse transactions from
- * other threads. */
-#ifndef MDBX_TXN_CHECKOWNER
-#define MDBX_TXN_CHECKOWNER 1
-#define MDBX_TXN_CHECKOWNER_CONFIG "AUTO=" STRINGIFY(MDBX_TXN_CHECKOWNER)
-#else
-#define MDBX_TXN_CHECKOWNER_CONFIG STRINGIFY(MDBX_TXN_CHECKOWNER)
-#endif /* MDBX_TXN_CHECKOWNER */
+#include "osal.h"
 
 #define mdbx_sourcery_anchor XCONCAT(mdbx_sourcery_, MDBX_BUILD_SOURCERY)
 #if defined(MDBX_TOOLS)
 extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #endif
+
+#include "options.h"
+
+/*----------------------------------------------------------------------------*/
+/* Cache coherence and invalidation */
+
+#if MDBX_CPU_WRITEBACK_IS_COHERENT
+#define mdbx_flush_noncoherent_cpu_writeback() mdbx_compiler_barrier()
+#else
+#define mdbx_flush_noncoherent_cpu_writeback() mdbx_memory_barrier()
+#endif
+
+static __maybe_unused __inline void
+mdbx_invalidate_mmap_noncoherent_cache(void *addr, size_t nbytes) {
+#if MDBX_CPU_CACHE_MMAP_NONCOHERENT
+#ifdef DCACHE
+  /* MIPS has cache coherency issues.
+   * Note: for any nbytes >= on-chip cache size, entire is flushed. */
+  cacheflush(addr, nbytes, DCACHE);
+#else
+#error "Oops, cacheflush() not available"
+#endif /* DCACHE */
+#else  /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
+  (void)addr;
+  (void)nbytes;
+#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
+}
 
 /*----------------------------------------------------------------------------*/
 /* Basic constants and types */
@@ -1246,7 +1242,7 @@ typedef struct MDBX_node {
       uint16_t mn_hi, mn_lo; /* part of data size or pgno */
     };
   };
-#endif
+#endif /* __BYTE_ORDER__ */
 
   /* mdbx_node Flags */
 #define F_BIGDATA 0x01 /* data put on overflow page */
