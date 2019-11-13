@@ -704,7 +704,7 @@ static __inline void safe64_reset(mdbx_safe64_t *ptr, bool single_writer) {
   ptr->high = UINT32_MAX;
 #endif /* MDBX_64BIT_ATOMIC */
   assert(ptr->inconsistent >= SAFE64_INVALID_THRESHOLD);
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_flush_incoherent_cpu_writeback();
   mdbx_jitter4testing(true);
 }
 
@@ -718,7 +718,7 @@ static __inline bool safe64_reset_compare(mdbx_safe64_t *ptr, txnid_t compare) {
    *     if a new transaction was started (i.e. if `mr_txnid` was changed). */
 #if MDBX_64BIT_CAS
   bool rc = atomic_cas64(&ptr->inconsistent, compare, UINT64_MAX);
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_flush_incoherent_cpu_writeback();
 #else
   /* LY: There is no gold ratio here since shared mutex is too costly,
    *     in such way we must acquire/release it for every update of mr_txnid,
@@ -745,13 +745,13 @@ static __inline void safe64_write(mdbx_safe64_t *ptr, const uint64_t v) {
   /* update low-part but still value >= SAFE64_INVALID_THRESHOLD */
   ptr->low = (uint32_t)v;
   assert(ptr->inconsistent >= SAFE64_INVALID_THRESHOLD);
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_flush_incoherent_cpu_writeback();
   mdbx_jitter4testing(true);
   /* update high-part from SAFE64_INVALID_THRESHOLD to actual value */
   ptr->high = (uint32_t)(v >> 32);
 #endif /* MDBX_64BIT_ATOMIC */
   assert(ptr->inconsistent == v);
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_flush_incoherent_cpu_writeback();
   mdbx_jitter4testing(true);
 }
 
@@ -1247,7 +1247,7 @@ static int uniq_poke(const mdbx_mmap_t *pending, mdbx_mmap_t *scan,
           << 24 |
       *abra >> 40;
   scan->lck->mti_bait_uniqueness = cadabra;
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_flush_incoherent_cpu_writeback();
   *abra = *abra * UINT64_C(6364136223846793005) + 1;
   return uniq_peek(pending, scan);
 }
@@ -3399,7 +3399,7 @@ static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
 
   txnid_t oldest = edge;
   lck->mti_readers_refresh_flag = nothing_changed;
-  mdbx_flush_noncoherent_cpu_writeback();
+  mdbx_flush_incoherent_cpu_writeback();
   const unsigned snap_nreaders = lck->mti_numreaders;
   for (unsigned i = 0; i < snap_nreaders; ++i) {
     if (lck->mti_readers[i].mr_pid) {
@@ -4724,7 +4724,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         mdbx_assert(env, r->mr_txnid.inconsistent == snap);
         mdbx_compiler_barrier();
         env->me_lck->mti_readers_refresh_flag = true;
-        mdbx_flush_noncoherent_cpu_writeback();
+        mdbx_flush_incoherent_cpu_writeback();
       }
       mdbx_jitter4testing(true);
 
@@ -5297,7 +5297,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
         slot->mr_snapshot_pages_used = 0;
         safe64_reset(&slot->mr_txnid, false);
         env->me_lck->mti_readers_refresh_flag = true;
-        mdbx_flush_noncoherent_cpu_writeback();
+        mdbx_flush_incoherent_cpu_writeback();
       } else {
         mdbx_assert(env, slot->mr_pid == env->me_pid);
         mdbx_assert(env,
@@ -6325,16 +6325,14 @@ static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
           int rc = mdbx_flush_iov(txn, iov, iov_items, iov_off, iov_bytes);
           if (unlikely(rc != MDBX_SUCCESS))
             return rc;
-#if MDBX_CPU_CACHE_MMAP_NONCOHERENT
 #if defined(__linux__) || defined(__gnu_linux__)
           if (mdbx_linux_kernel_version >= 0x02060b00)
           /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
            * arguments, making this function fairly expensive. Therefore, the
            * whole cache is always flushed. */
 #endif /* Linux */
-            mdbx_invalidate_mmap_noncoherent_cache(env->me_map + iov_off,
-                                                   iov_bytes);
-#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
+            mdbx_flush_incoherent_mmap(env->me_map + iov_off, iov_bytes,
+                                       env->me_os_psize);
           iov_items = 0;
           iov_bytes = 0;
         }
@@ -6353,17 +6351,16 @@ static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
       return rc;
   }
 
-#if MDBX_CPU_CACHE_MMAP_NONCOHERENT &&                                         \
-    (defined(__linux__) || defined(__gnu_linux__))
+#if defined(__linux__) || defined(__gnu_linux__)
   if ((env->me_flags & MDBX_WRITEMAP) == 0 &&
       mdbx_linux_kernel_version < 0x02060b00)
     /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
      * arguments, making this function fairly expensive. Therefore, the
      * whole cache is always flushed. */
-    mdbx_invalidate_mmap_noncoherent_cache(
-        env->me_map + pgno2bytes(env, flush_begin),
-        pgno2bytes(env, flush_end - flush_begin));
-#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT && Linux */
+    mdbx_flush_incoherent_mmap(env->me_map + pgno2bytes(env, flush_begin),
+                               pgno2bytes(env, flush_end - flush_begin),
+                               env->me_os_psize);
+#endif /* Linux */
 
   /* TODO: use flush_begin & flush_end for msync() & sync_file_range(). */
   (void)flush_begin;
@@ -7336,7 +7333,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       target->mm_canary = pending->mm_canary;
       target->mm_pages_retired = pending->mm_pages_retired;
       mdbx_jitter4testing(true);
-      mdbx_flush_noncoherent_cpu_writeback();
+      mdbx_flush_incoherent_cpu_writeback();
 
       /* LY: 'commit' the meta */
       mdbx_meta_update_end(env, target, pending->mm_txnid_b.inconsistent);
@@ -7355,7 +7352,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                               sizeof(head->mm_canary)) == 0);
     }
     target->mm_datasync_sign = pending->mm_datasync_sign;
-    mdbx_flush_noncoherent_cpu_writeback();
+    mdbx_flush_incoherent_cpu_writeback();
     mdbx_jitter4testing(true);
   } else {
     rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta),
@@ -7369,7 +7366,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                   (uint8_t *)target - env->me_map);
       goto fail;
     }
-    mdbx_invalidate_mmap_noncoherent_cache(target, sizeof(MDBX_meta));
+    mdbx_flush_incoherent_mmap(target, sizeof(MDBX_meta), env->me_os_psize);
   }
 
   /* LY: step#3 - sync meta-pages. */
@@ -8217,8 +8214,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         return err;
       }
 
-      mdbx_invalidate_mmap_noncoherent_cache(env->me_map,
-                                             pgno2bytes(env, NUM_METAS));
+      mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
+                                 env->me_os_psize);
       mdbx_ensure(env, undo_txnid == mdbx_meta_txnid_fluid(env, head));
       mdbx_ensure(env, 0 == mdbx_meta_eq_mask(env));
       continue;
@@ -15229,7 +15226,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
         asleep->mr_pid = 0;
       }
       lck->mti_readers_refresh_flag = true;
-      mdbx_flush_noncoherent_cpu_writeback();
+      mdbx_flush_incoherent_cpu_writeback();
     }
   }
 
@@ -16685,7 +16682,9 @@ __dll_export
     " MDBX_USE_OFDLOCKS=" MDBX_USE_OFDLOCKS_CONFIG
 #endif /* !Windows */
     " MDBX_CACHELINE_SIZE=" STRINGIFY(MDBX_CACHELINE_SIZE)
-    " MDBX_CPU_WRITEBACK_IS_COHERENT=" STRINGIFY(MDBX_CPU_WRITEBACK_IS_COHERENT)
+    " MDBX_CPU_WRITEBACK_INCOHERENT=" STRINGIFY(MDBX_CPU_WRITEBACK_INCOHERENT)
+    " MDBX_MMAP_INCOHERENT_CPU_CACHE=" STRINGIFY(MDBX_MMAP_INCOHERENT_CPU_CACHE)
+    " MDBX_MMAP_INCOHERENT_FILE_WRITE=" STRINGIFY(MDBX_MMAP_INCOHERENT_FILE_WRITE)
     " MDBX_UNALIGNED_OK=" STRINGIFY(MDBX_UNALIGNED_OK)
     " MDBX_PNL_ASCENDING=" STRINGIFY(MDBX_PNL_ASCENDING)
     ,

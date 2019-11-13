@@ -159,31 +159,6 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #include "options.h"
 
 /*----------------------------------------------------------------------------*/
-/* Cache coherence and invalidation */
-
-#if MDBX_CPU_WRITEBACK_IS_COHERENT
-#define mdbx_flush_noncoherent_cpu_writeback() mdbx_compiler_barrier()
-#else
-#define mdbx_flush_noncoherent_cpu_writeback() mdbx_memory_barrier()
-#endif
-
-static __maybe_unused __inline void
-mdbx_invalidate_mmap_noncoherent_cache(void *addr, size_t nbytes) {
-#if MDBX_CPU_CACHE_MMAP_NONCOHERENT
-#ifdef DCACHE
-  /* MIPS has cache coherency issues.
-   * Note: for any nbytes >= on-chip cache size, entire is flushed. */
-  cacheflush(addr, nbytes, DCACHE);
-#else
-#error "Oops, cacheflush() not available"
-#endif /* DCACHE */
-#else  /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
-  (void)addr;
-  (void)nbytes;
-#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
-}
-
-/*----------------------------------------------------------------------------*/
 /* Basic constants and types */
 
 /* The minimum number of keys required in a database page.
@@ -1132,6 +1107,44 @@ MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #undef assert
 #define assert(expr) mdbx_assert(NULL, expr)
 #endif
+
+/*----------------------------------------------------------------------------*/
+/* Cache coherence and mmap invalidation */
+
+#if MDBX_CPU_WRITEBACK_INCOHERENT
+#define mdbx_flush_incoherent_cpu_writeback() mdbx_memory_barrier()
+#else
+#define mdbx_flush_incoherent_cpu_writeback() mdbx_compiler_barrier()
+#endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
+
+static __inline void mdbx_flush_incoherent_mmap(void *addr, size_t nbytes,
+                                                const intptr_t pagesize) {
+#if MDBX_MMAP_INCOHERENT_FILE_WRITE
+  char *const begin = (char *)(-pagesize & (intptr_t)addr);
+  char *const end =
+      (char *)(-pagesize & (intptr_t)((char *)addr + nbytes + pagesize - 1));
+  int err = msync(begin, end - begin, MS_SYNC | MS_INVALIDATE) ? errno : 0;
+  mdbx_assert(nullptr, err == 0);
+  (void)err;
+#else
+  (void)pagesize;
+#endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
+
+#if MDBX_MMAP_INCOHERENT_CPU_CACHE
+#ifdef DCACHE
+  /* MIPS has cache coherency issues.
+   * Note: for any nbytes >= on-chip cache size, entire is flushed. */
+  cacheflush(addr, nbytes, DCACHE);
+#else
+#error "Oops, cacheflush() not available"
+#endif /* DCACHE */
+#endif /* MDBX_MMAP_INCOHERENT_CPU_CACHE */
+
+#if !MDBX_MMAP_INCOHERENT_FILE_WRITE && !MDBX_MMAP_INCOHERENT_CPU_CACHE
+  (void)addr;
+  (void)nbytes;
+#endif
+}
 
 /*----------------------------------------------------------------------------*/
 /* Internal prototypes */

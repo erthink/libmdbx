@@ -114,26 +114,34 @@
 
 //------------------------------------------------------------------------------
 
-#ifndef MDBX_CPU_WRITEBACK_IS_COHERENT
+#ifndef MDBX_CPU_WRITEBACK_INCOHERENT
 #if defined(__ia32__) || defined(__e2k__) || defined(__hppa) ||                \
     defined(__hppa__)
-#define MDBX_CPU_WRITEBACK_IS_COHERENT 1
+#define MDBX_CPU_WRITEBACK_INCOHERENT 0
 #else
-#define MDBX_CPU_WRITEBACK_IS_COHERENT 0
+#define MDBX_CPU_WRITEBACK_INCOHERENT 1
 #endif
-#endif /* MDBX_CPU_WRITEBACK_IS_COHERENT */
+#endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
-#ifndef MDBX_CPU_CACHE_MMAP_NONCOHERENT
+#ifndef MDBX_MMAP_INCOHERENT_FILE_WRITE
+#ifdef __OpenBSD__
+#define MDBX_MMAP_INCOHERENT_FILE_WRITE 1
+#else
+#define MDBX_MMAP_INCOHERENT_FILE_WRITE 0
+#endif
+#endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
+
+#ifndef MDBX_MMAP_INCOHERENT_CPU_CACHE
 #if defined(__mips) || defined(__mips__) || defined(__mips64) ||               \
     defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
     defined(__MWERKS__) || defined(__sgi)
 /* MIPS has cache coherency issues. */
-#define MDBX_CPU_CACHE_MMAP_NONCOHERENT 1
+#define MDBX_MMAP_INCOHERENT_CPU_CACHE 1
 #else
 /* LY: assume no relevant mmap/dcache issues. */
-#define MDBX_CPU_CACHE_MMAP_NONCOHERENT 0
+#define MDBX_MMAP_INCOHERENT_CPU_CACHE 0
 #endif
-#endif /* MDBX_CPU_CACHE_MMAP_NONCOHERENT */
+#endif /* MDBX_MMAP_INCOHERENT_CPU_CACHE */
 
 #ifndef MDBX_64BIT_ATOMIC
 #if MDBX_WORDBITS >= 64
