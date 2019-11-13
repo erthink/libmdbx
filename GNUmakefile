@@ -137,7 +137,7 @@ MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/elements/version.c
 test check: all mdbx_example mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
-		./mdbx_test --mode=-writemap,-lifo --progress --console=no --repeat=1 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
+		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
 		| tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
@@ -148,7 +148,7 @@ check-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		./mdbx_test --mode=-writemap,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --nested) \
+		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --nested) \
 		| tee -a $(TEST_LOG) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
@@ -160,7 +160,7 @@ VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=f
 memcheck check-valgrind: all mdbx_test
 	@echo "$(MDBX_OPTIONS)" | grep -q MDBX_USE_VALGRIND || echo "WARNING: Please build libmdbx with -DMDBX_USE_VALGRIND to avoid false-positives from Valgrind !!!" >&2
 	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
-		($(VALGRIND) ./mdbx_test --mode=-writemap,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
+		($(VALGRIND) ./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
 		| tee -a $(TEST_LOG) | tail -n 42) \
