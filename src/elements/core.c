@@ -3461,6 +3461,30 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
   return MDBX_SUCCESS;
 }
 
+static __inline __maybe_unused int ignore_enosys(int err) {
+#ifdef ENOSYS
+  if (err == ENOSYS)
+    return MDBX_RESULT_TRUE;
+#endif /* ENOSYS */
+#ifdef ENOIMPL
+  if (err == ENOIMPL)
+    return MDBX_RESULT_TRUE;
+#endif /* ENOIMPL */
+#ifdef ENOTSUP
+  if (err == ENOTSUP)
+    return MDBX_RESULT_TRUE;
+#endif /* ENOTSUP */
+#ifdef ENOSUPP
+  if (err == ENOSUPP)
+    return MDBX_RESULT_TRUE;
+#endif /* ENOSUPP */
+#ifdef EOPNOTSUPP
+  if (err == EOPNOTSUPP)
+    return MDBX_RESULT_TRUE;
+#endif /* EOPNOTSUPP */
+  return err;
+}
+
 /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
 static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
                                      const size_t length, const bool enable) {
@@ -3482,12 +3506,16 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
         env->me_fd, F_RDADVISE, &hint);
 #endif /* F_RDADVISE */
 #if defined(MADV_WILLNEED)
-    if (unlikely(madvise(env->me_map + offset, length, MADV_WILLNEED) != 0))
-      return errno;
+    int err = madvise(env->me_map + offset, length, MADV_WILLNEED)
+                  ? ignore_enosys(errno)
+                  : MDBX_SUCCESS;
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
 #elif defined(POSIX_MADV_WILLNEED)
-    int err = posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED);
-    if (unlikely(err != 0))
-      return errno;
+    int err = ignore_enosys(
+        posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED));
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
 #elif defined(_WIN32) || defined(_WIN64)
     if (mdbx_PrefetchVirtualMemory) {
       WIN32_MEMORY_RANGE_ENTRY hint;
@@ -3496,21 +3524,27 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
       (void)mdbx_PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0);
     }
 #elif defined(POSIX_FADV_WILLNEED)
-    int err = posix_fadvise(env->me_fd, offset, length, POSIX_FADV_WILLNEED);
-    if (unlikely(err != 0))
+    int err = ignore_enosys(
+        posix_fadvise(env->me_fd, offset, length, POSIX_FADV_WILLNEED));
+    if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #endif /* MADV_WILLNEED */
   } else {
 #if defined(MADV_RANDOM)
-    if (unlikely(madvise(env->me_map + offset, length, MADV_RANDOM) != 0))
-      return errno;
+    int err = madvise(env->me_map + offset, length, MADV_RANDOM)
+                  ? ignore_enosys(errno)
+                  : MDBX_SUCCESS;
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
 #elif defined(POSIX_MADV_RANDOM)
-    int err = posix_madvise(env->me_map + offset, length, POSIX_MADV_RANDOM);
-    if (unlikely(err != 0))
+    int err = ignore_enosys(
+        posix_madvise(env->me_map + offset, length, POSIX_MADV_RANDOM));
+    if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_FADV_RANDOM)
-    int err = posix_fadvise(env->me_fd, offset, length, POSIX_FADV_RANDOM);
-    if (unlikely(err != 0))
+    int err = ignore_enosys(
+        posix_fadvise(env->me_fd, offset, length, POSIX_FADV_RANDOM));
+    if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #endif /* MADV_RANDOM */
   }
@@ -3578,23 +3612,32 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t size_pgno,
     mdbx_notice("resize-MADV_%s %u..%u",
                 (env->me_flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED",
                 size_pgno, bytes2pgno(env, prev_size));
+    rc = MDBX_RESULT_TRUE;
 #if defined(MADV_REMOVE)
-    if ((env->me_flags & MDBX_WRITEMAP) == 0 ||
-        madvise(env->me_map + size_bytes, prev_size - size_bytes,
-                MADV_REMOVE) != 0)
-#endif
+    if (env->me_flags & MDBX_WRITEMAP)
+      rc =
+          madvise(env->me_map + size_bytes, prev_size - size_bytes, MADV_REMOVE)
+              ? ignore_enosys(errno)
+              : MDBX_SUCCESS;
+#endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
-      (void)madvise(env->me_map + size_bytes, prev_size - size_bytes,
-                    MADV_DONTNEED);
+    if (rc == MDBX_RESULT_TRUE)
+      rc = madvise(env->me_map + size_bytes, prev_size - size_bytes,
+                   MADV_DONTNEED)
+               ? ignore_enosys(errno)
+               : MDBX_SUCCESS;
 #elif defined(POSIX_MADV_DONTNEED)
-    (void)posix_madvise(env->me_map + size_bytes, prev_size - size_bytes,
-                        POSIX_MADV_DONTNEED);
+    if (rc == MDBX_RESULT_TRUE)
+      rc = ignore_enosys(posix_madvise(env->me_map + size_bytes,
+                                       prev_size - size_bytes,
+                                       POSIX_MADV_DONTNEED));
 #elif defined(POSIX_FADV_DONTNEED)
-    (void)posix_fadvise(env->me_fd, size_bytes, prev_size - size_bytes,
-                        POSIX_FADV_DONTNEED);
-#else
-    __noop();
+    if (rc == MDBX_RESULT_TRUE)
+      rc = ignore_enosys(posix_fadvise(
+          env->me_fd, size_bytes, prev_size - size_bytes, POSIX_FADV_DONTNEED));
 #endif /* MADV_DONTNEED */
+    if (unlikely(MDBX_IS_ERROR(rc)))
+      goto bailout;
     if (*env->me_discarded_tail > size_pgno)
       *env->me_discarded_tail = size_pgno;
   }
@@ -7169,17 +7212,17 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       mdbx_ensure(env, prev_discarded_bytes > largest_aligned2os_bytes);
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
-    0 /* MADV_FREE works for only anon vma at the moment */
+    0 /* MADV_FREE works for only anonymous vma at the moment */
       if ((env->me_flags & MDBX_WRITEMAP) &&
           mdbx_linux_kernel_version > 0x04050000)
         advise = MADV_FREE;
 #endif /* MADV_FREE */
       int err = madvise(env->me_map + largest_aligned2os_bytes,
                         prev_discarded_bytes - largest_aligned2os_bytes, advise)
-                    ? errno
+                    ? ignore_enosys(errno)
                     : MDBX_SUCCESS;
-      mdbx_assert(env, err == MDBX_SUCCESS);
-      (void)err;
+      if (unlikely(MDBX_IS_ERROR(err)))
+        return err;
     }
 #endif /* MADV_FREE || MADV_DONTNEED */
 
@@ -8067,10 +8110,17 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
 #if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
   const size_t meta_length = pgno2bytes(env, NUM_METAS);
-  (void)madvise(env->me_map, meta_length, MADV_DODUMP);
-  (void)madvise(env->me_map + meta_length, env->me_dxb_mmap.limit - meta_length,
+  err = madvise(env->me_map, meta_length, MADV_DODUMP) ? ignore_enosys(errno)
+                                                       : MDBX_SUCCESS;
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return err;
+  err = madvise(env->me_map + meta_length, env->me_dxb_mmap.limit - meta_length,
                 (mdbx_runtime_flags & MDBX_DBG_DUMP) ? MADV_DODUMP
-                                                     : MADV_DONTDUMP);
+                                                     : MADV_DONTDUMP)
+            ? ignore_enosys(errno)
+            : MDBX_SUCCESS;
+  if (unlikely(MDBX_IS_ERROR(err)))
+    return err;
 #endif
 
   *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
@@ -8079,25 +8129,37 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     if (lck_rc && (env->me_flags & MDBX_WRITEMAP) != 0) {
       mdbx_notice("open-MADV_%s %u..%u", "REMOVE", *env->me_discarded_tail,
                   bytes2pgno(env, env->me_dxb_mmap.current));
-      (void)madvise(env->me_map + used_aligned2os_bytes,
-                    env->me_dxb_mmap.current - used_aligned2os_bytes,
-                    MADV_REMOVE);
+      err =
+          madvise(env->me_map + used_aligned2os_bytes,
+                  env->me_dxb_mmap.current - used_aligned2os_bytes, MADV_REMOVE)
+              ? ignore_enosys(errno)
+              : MDBX_SUCCESS;
+      if (unlikely(MDBX_IS_ERROR(err)))
+        return err;
     }
 #endif /* MADV_REMOVE */
 #if defined(MADV_DONTNEED)
     mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
                 bytes2pgno(env, env->me_dxb_mmap.current));
-    (void)madvise(env->me_map + used_aligned2os_bytes,
-                  env->me_dxb_mmap.current - used_aligned2os_bytes,
-                  MADV_DONTNEED);
+    err =
+        madvise(env->me_map + used_aligned2os_bytes,
+                env->me_dxb_mmap.current - used_aligned2os_bytes, MADV_DONTNEED)
+            ? ignore_enosys(errno)
+            : MDBX_SUCCESS;
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
 #elif defined(POSIX_MADV_DONTNEED)
-    (void)posix_madvise(env->me_map + used_aligned2os_bytes,
-                        env->me_dxb_mmap.current - used_aligned2os_bytes,
-                        POSIX_MADV_DONTNEED);
+    err = ignore_enosys(posix_madvise(
+        env->me_map + used_aligned2os_bytes,
+        env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_MADV_DONTNEED));
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
 #elif defined(POSIX_FADV_DONTNEED)
-    (void)posix_fadvise(env->me_fd, used_aligned2os_bytes,
-                        env->me_dxb_mmap.current - used_aligned2os_bytes,
-                        POSIX_FADV_DONTNEED);
+    err = ignore_enosys(posix_fadvise(
+        env->me_fd, used_aligned2os_bytes,
+        env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_FADV_DONTNEED));
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
 #endif /* MADV_DONTNEED */
   }
 
@@ -8415,13 +8477,18 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     goto bailout;
 
 #ifdef MADV_DODUMP
-  (void)madvise(env->me_lck, size, MADV_DODUMP);
-#endif
+  err = madvise(env->me_lck, size, MADV_DODUMP) ? ignore_enosys(errno)
+                                                : MDBX_SUCCESS;
+  if (unlikely(MDBX_IS_ERROR(err)))
+    goto bailout;
+#endif /* MADV_DODUMP */
 
 #ifdef MADV_WILLNEED
-  if (madvise(env->me_lck, size, MADV_WILLNEED) < 0)
+  err = madvise(env->me_lck, size, MADV_WILLNEED) ? ignore_enosys(errno)
+                                                  : MDBX_SUCCESS;
+  if (unlikely(MDBX_IS_ERROR(err)))
     goto bailout;
-#endif
+#endif /* MADV_WILLNEED */
 
   struct MDBX_lockinfo *const lck = env->me_lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
