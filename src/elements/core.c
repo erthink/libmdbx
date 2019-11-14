@@ -8713,6 +8713,17 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
     flags &= ~(MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NOSYNC | MDBX_NOMETASYNC |
                MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_NOMEMINIT);
   } else {
+#ifdef __OpenBSD__
+    /* Temporary `workaround` for OpenBSD kernel's bug.
+     * See https://github.com/leo-yuriev/libmdbx/issues/67 */
+    if ((flags & MDBX_WRITEMAP) == 0) {
+      mdbx_debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
+                     "OpenBSD requires MDBX_WRITEMAP because of an internal "
+                     "bug(s) in a file/buffer/page cache.\n");
+      rc = 42 /* ENOPROTOOPT */;
+      goto bailout;
+    }
+#endif /* __OpenBSD__ */
     env->me_dirtylist = mdbx_calloc(MDBX_DPL_TXNFULL + 1, sizeof(MDBX_DP));
     if (!env->me_dirtylist)
       rc = MDBX_ENOMEM;
