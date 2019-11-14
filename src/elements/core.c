@@ -4666,6 +4666,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
 
+  mdbx_assert(env, (flags & ~(MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS |
+                              MDBX_WRITEMAP)) == 0);
   if (flags & MDBX_RDONLY) {
     txn->mt_flags = MDBX_RDONLY | (env->me_flags & MDBX_NOTLS);
     MDBX_reader *r = txn->to.reader;
@@ -5018,8 +5020,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
       return MDBX_EPERM;
 #endif /* Windows */
 
-    flags |= parent->mt_flags &
-             (MDBX_TXN_BEGIN_FLAGS | MDBX_SHRINK_ALLOWED | MDBX_TXN_SPILLS);
+    flags |= parent->mt_flags & (MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS);
     /* Child txns save MDBX_pgstate and use own copy of cursors */
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_txn);
@@ -6515,7 +6516,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
     parent->mt_geo = txn->mt_geo;
     parent->mt_canary = txn->mt_canary;
-    parent->mt_flags = txn->mt_flags;
+    parent->mt_flags = txn->mt_flags | (parent->mt_flags & MDBX_SHRINK_ALLOWED);
 
     /* Merge our cursors into parent's and close them */
     mdbx_cursors_eot(txn, 1);
@@ -8660,7 +8661,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
  * environment and re-opening it with the new flags. */
 #define CHANGEABLE                                                             \
   (MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC | MDBX_NOMEMINIT |            \
-   MDBX_COALESCE | MDBX_PAGEPERTURB)
+   MDBX_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE)
 #define CHANGELESS                                                             \
   (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOTLS | MDBX_NORDAHEAD | \
    MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
@@ -8711,17 +8712,21 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
     /* LY: silently ignore irrelevant flags when
      * we're only getting read access */
     flags &= ~(MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NOSYNC | MDBX_NOMETASYNC |
-               MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_NOMEMINIT);
+               MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_NOMEMINIT | MDBX_ACCEDE);
   } else {
 #ifdef __OpenBSD__
     /* Temporary `workaround` for OpenBSD kernel's bug.
      * See https://github.com/leo-yuriev/libmdbx/issues/67 */
     if ((flags & MDBX_WRITEMAP) == 0) {
-      mdbx_debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
-                     "OpenBSD requires MDBX_WRITEMAP because of an internal "
-                     "bug(s) in a file/buffer/page cache.\n");
-      rc = 42 /* ENOPROTOOPT */;
-      goto bailout;
+      if (flags & MDBX_ACCEDE)
+        flags |= MDBX_WRITEMAP;
+      else {
+        mdbx_debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
+                       "OpenBSD requires MDBX_WRITEMAP because of an internal "
+                       "bug(s) in a file/buffer/page cache.\n");
+        rc = 42 /* ENOPROTOOPT */;
+        goto bailout;
+      }
     }
 #endif /* __OpenBSD__ */
     env->me_dirtylist = mdbx_calloc(MDBX_DPL_TXNFULL + 1, sizeof(MDBX_DP));
@@ -8793,6 +8798,36 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
     goto bailout;
   }
 
+  const unsigned rigorous_flags = MDBX_WRITEMAP | MDBX_NOSYNC | MDBX_MAPASYNC;
+  const unsigned mode_flags = rigorous_flags | MDBX_NOMETASYNC |
+                              MDBX_LIFORECLAIM | MDBX_COALESCE | MDBX_NORDAHEAD;
+
+  if (env->me_lck && lck_rc != MDBX_RESULT_TRUE &&
+      (env->me_flags & MDBX_RDONLY) == 0) {
+    while (env->me_lck->mti_envmode == MDBX_RDONLY) {
+      if (atomic_cas32(&env->me_lck->mti_envmode, MDBX_RDONLY,
+                       env->me_flags & mode_flags))
+        break;
+      atomic_yield();
+    }
+
+    if (env->me_flags & MDBX_ACCEDE) {
+      /* pickup current mode-flags, including MDBX_LIFORECLAIM |
+       * MDBX_COALESCE | MDBX_NORDAHEAD */
+      const unsigned diff =
+          (env->me_lck->mti_envmode ^ env->me_flags) & mode_flags;
+      mdbx_notice("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff, env->me_flags,
+                  env->me_flags ^ diff);
+      env->me_flags ^= diff;
+    }
+
+    if ((env->me_lck->mti_envmode ^ env->me_flags) & rigorous_flags) {
+      mdbx_error("%s", "current mode/flags incompatible with requested");
+      rc = MDBX_INCOMPATIBLE;
+      goto bailout;
+    }
+  }
+
   const int dxb_rc = mdbx_setup_dxb(env, lck_rc);
   if (MDBX_IS_ERROR(dxb_rc)) {
     rc = dxb_rc;
@@ -8801,8 +8836,6 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
 
   mdbx_debug("opened dbenv %p", (void *)env);
   if (env->me_lck) {
-    const unsigned mode_flags =
-        MDBX_WRITEMAP | MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC;
     if (lck_rc == MDBX_RESULT_TRUE) {
       env->me_lck->mti_envmode = env->me_flags & (mode_flags | MDBX_RDONLY);
       rc = mdbx_lck_downgrade(env);
@@ -8814,19 +8847,6 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
       rc = mdbx_reader_check0(env, false, NULL);
       if (MDBX_IS_ERROR(rc))
         goto bailout;
-      if ((env->me_flags & MDBX_RDONLY) == 0) {
-        while (env->me_lck->mti_envmode == MDBX_RDONLY) {
-          if (atomic_cas32(&env->me_lck->mti_envmode, MDBX_RDONLY,
-                           env->me_flags & mode_flags))
-            break;
-          atomic_yield();
-        }
-        if ((env->me_lck->mti_envmode ^ env->me_flags) & mode_flags) {
-          mdbx_error("%s", "current mode/flags incompatible with requested");
-          rc = MDBX_INCOMPATIBLE;
-          goto bailout;
-        }
-      }
     }
 
     if ((env->me_flags & MDBX_NOTLS) == 0) {

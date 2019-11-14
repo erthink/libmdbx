@@ -294,14 +294,21 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 //-----------------------------------------------------------------------------
 
-const struct option_verb mode_bits[] = {
-    {"rdonly", MDBX_RDONLY},          {"mapasync", MDBX_MAPASYNC},
-    {"utterly", MDBX_UTTERLY_NOSYNC}, {"nosubdir", MDBX_NOSUBDIR},
-    {"nosync", MDBX_NOSYNC},          {"nometasync", MDBX_NOMETASYNC},
-    {"writemap", MDBX_WRITEMAP},      {"notls", MDBX_NOTLS},
-    {"nordahead", MDBX_NORDAHEAD},    {"nomeminit", MDBX_NOMEMINIT},
-    {"coalesce", MDBX_COALESCE},      {"lifo", MDBX_LIFORECLAIM},
-    {"perturb", MDBX_PAGEPERTURB},    {nullptr, 0}};
+const struct option_verb mode_bits[] = {{"rdonly", MDBX_RDONLY},
+                                        {"mapasync", MDBX_MAPASYNC},
+                                        {"utterly", MDBX_UTTERLY_NOSYNC},
+                                        {"nosubdir", MDBX_NOSUBDIR},
+                                        {"nosync", MDBX_NOSYNC},
+                                        {"nometasync", MDBX_NOMETASYNC},
+                                        {"writemap", MDBX_WRITEMAP},
+                                        {"notls", MDBX_NOTLS},
+                                        {"nordahead", MDBX_NORDAHEAD},
+                                        {"nomeminit", MDBX_NOMEMINIT},
+                                        {"coalesce", MDBX_COALESCE},
+                                        {"lifo", MDBX_LIFORECLAIM},
+                                        {"perturb", MDBX_PAGEPERTURB},
+                                        {"accede", MDBX_ACCEDE},
+                                        {nullptr, 0}};
 
 const struct option_verb table_bits[] = {
     {"key.reverse", MDBX_REVERSEKEY},

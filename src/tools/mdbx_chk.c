@@ -968,7 +968,7 @@ int main(int argc, char *argv[]) {
       envflags &= ~MDBX_RDONLY;
       break;
     case 'c':
-      envflags &= ~MDBX_EXCLUSIVE;
+      envflags = (envflags & ~MDBX_EXCLUSIVE) | MDBX_ACCEDE;
       break;
     case 'd':
       dont_traversal = true;
@@ -1031,7 +1031,7 @@ int main(int argc, char *argv[]) {
 #endif
        )) {
     envflags &= ~MDBX_EXCLUSIVE;
-    rc = mdbx_env_open(env, envname, envflags, 0664);
+    rc = mdbx_env_open(env, envname, envflags | MDBX_ACCEDE, 0664);
   }
 
   if (rc) {

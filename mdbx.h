@@ -921,6 +921,22 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  * This flag affects only at environment opening but can't be changed after. */
 #define MDBX_EXCLUSIVE 0x400000u
 
+/* MDBX_ACCEDE = using database which already opened by another process(es).
+ *
+ * The MDBX_ACCEDE flag avoid MDBX_INCOMPATIBLE error while opening If the
+ * database is already used by another process(es) and environment mode/flags
+ * isn't compatible. In such cases, when using the MDBX_ACCEDE flag, instead of
+ * the specified incompatible options, the mode in which the database is already
+ * opened by other processes will be used, including MDBX_LIFORECLAIM,
+ * MDBX_COALESCE and MDBX_NORDAHEAD. The MDBX_ACCEDE flag is useful to open a
+ * database that already used by another process(es) and used mode/flags isn't
+ * known.
+ *
+ * MDBX_ACCEDE has no effect if the current process is the only one either
+ * opening the DB in read-only mode or other process(es) uses the DB in
+ * read-only mode. */
+#define MDBX_ACCEDE 0x40000000u
+
 /* MDBX_WRITEMAP = map data into memory with write permission.
  *
  * Use a writeable memory map unless MDBX_RDONLY is set. This uses fewer mallocs
