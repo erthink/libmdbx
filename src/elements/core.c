@@ -3461,6 +3461,7 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
   return MDBX_SUCCESS;
 }
 
+#if !(defined(_WIN32) || defined(_WIN64))
 static __inline __maybe_unused int ignore_enosys(int err) {
 #ifdef ENOSYS
   if (err == ENOSYS)
@@ -3482,8 +3483,11 @@ static __inline __maybe_unused int ignore_enosys(int err) {
   if (err == EOPNOTSUPP)
     return MDBX_RESULT_TRUE;
 #endif /* EOPNOTSUPP */
+  if (err == EAGAIN)
+    return MDBX_RESULT_TRUE;
   return err;
 }
+#endif /* defined(_WIN32) || defined(_WIN64) */
 
 /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
 static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
@@ -8110,12 +8114,14 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     return err;
 
 #if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
-  const size_t meta_length = pgno2bytes(env, NUM_METAS);
-  err = madvise(env->me_map, meta_length, MADV_DODUMP) ? ignore_enosys(errno)
-                                                       : MDBX_SUCCESS;
+  const size_t meta_length_aligned2os = pgno_align2os_bytes(env, NUM_METAS);
+  err = madvise(env->me_map, meta_length_aligned2os, MADV_DODUMP)
+            ? ignore_enosys(errno)
+            : MDBX_SUCCESS;
   if (unlikely(MDBX_IS_ERROR(err)))
     return err;
-  err = madvise(env->me_map + meta_length, env->me_dxb_mmap.limit - meta_length,
+  err = madvise(env->me_map + meta_length_aligned2os,
+                env->me_dxb_mmap.current - meta_length_aligned2os,
                 (mdbx_runtime_flags & MDBX_DBG_DUMP) ? MADV_DODUMP
                                                      : MADV_DONTDUMP)
             ? ignore_enosys(errno)
