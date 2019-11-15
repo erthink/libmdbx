@@ -5752,7 +5752,6 @@ retry:
             goto bailout;
         } while (cleaned_gc_slot < MDBX_PNL_SIZE(txn->tw.lifo_reclaimed));
         mdbx_txl_sort(txn->tw.lifo_reclaimed);
-        gc_rid = MDBX_PNL_LAST(txn->tw.lifo_reclaimed);
       }
     } else {
       /* If using records from GC which we have not yet deleted,
@@ -5951,43 +5950,61 @@ retry:
     const unsigned prefer_max_scatter = 257;
     txnid_t reservation_gc_id;
     if (lifo) {
-      const unsigned lifo_len =
-          txn->tw.lifo_reclaimed
-              ? (unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)
-              : 0;
-      if (lifo_len < prefer_max_scatter &&
-          left > (lifo_len - reused_gc_slot) * env->me_maxgc_ov1page) {
+      if (txn->tw.lifo_reclaimed == nullptr) {
+        txn->tw.lifo_reclaimed = mdbx_txl_alloc();
+        if (unlikely(!txn->tw.lifo_reclaimed)) {
+          rc = MDBX_ENOMEM;
+          goto bailout;
+        }
+      }
+      if ((unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) <
+              prefer_max_scatter &&
+          left > ((unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) -
+                  reused_gc_slot) *
+                     env->me_maxgc_ov1page) {
+
         /* LY: need just a txn-id for save page list. */
         mc.mc_flags &= ~C_RECLAIMING;
-        rc = mdbx_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
+        bool need_cleanup = false;
+        do {
+          rc = mdbx_page_alloc(&mc, 0, NULL, MDBX_ALLOC_GC | MDBX_ALLOC_KICK);
+          if (likely(rc == MDBX_SUCCESS)) {
+            mdbx_trace("%s: took @%" PRIaTXN " from GC", dbg_prefix_mode,
+                       MDBX_PNL_LAST(txn->tw.lifo_reclaimed));
+            need_cleanup = true;
+          }
+        } while (rc == MDBX_SUCCESS &&
+                 (unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) <
+                     prefer_max_scatter &&
+                 left > ((unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) -
+                         reused_gc_slot) *
+                            env->me_maxgc_ov1page);
         mc.mc_flags |= C_RECLAIMING;
+
         if (likely(rc == MDBX_SUCCESS)) {
-          /* LY: ok, reclaimed from GC. */
-          mdbx_trace("%s: took @%" PRIaTXN " from GC, continue",
-                     dbg_prefix_mode, MDBX_PNL_LAST(txn->tw.lifo_reclaimed));
+          mdbx_trace("%s: got enough from GC.", dbg_prefix_mode);
           continue;
-        }
-        if (unlikely(rc != MDBX_NOTFOUND))
-          /* LY: other troubles... */
+        } else if (unlikely(rc != MDBX_NOTFOUND))
+          /* LY: some troubles... */
           goto bailout;
 
-        /* LY: GC is empty, will look any free txn-id in high2low order. */
-        if (unlikely(gc_rid == 0)) {
+        if (MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)) {
+          if (need_cleanup)
+            mdbx_txl_sort(txn->tw.lifo_reclaimed);
+          gc_rid = MDBX_PNL_LAST(txn->tw.lifo_reclaimed);
+        } else {
           mdbx_tassert(txn, txn->tw.last_reclaimed == 0);
           txn->tw.last_reclaimed = gc_rid = mdbx_find_oldest(txn) - 1;
-          if (txn->tw.lifo_reclaimed == nullptr) {
-            txn->tw.lifo_reclaimed = mdbx_txl_alloc();
-            if (unlikely(!txn->tw.lifo_reclaimed)) {
-              rc = MDBX_ENOMEM;
-              goto bailout;
-            }
-          }
+          mdbx_trace("%s: none recycled yet, set rid to @%" PRIaTXN,
+                     dbg_prefix_mode, gc_rid);
         }
 
-        mdbx_tassert(txn, txn->tw.lifo_reclaimed != nullptr);
-        rc = MDBX_RESULT_TRUE;
-        do {
-          if (unlikely(gc_rid <= 1)) {
+        /* LY: GC is empty, will look any free txn-id in high2low order. */
+        while (MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) < prefer_max_scatter &&
+               left > ((unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) -
+                       reused_gc_slot) *
+                          env->me_maxgc_ov1page) {
+          if (unlikely(gc_rid < 2)) {
             if (unlikely(MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) <=
                          reused_gc_slot)) {
               mdbx_notice("** restart: reserve depleted (reused_gc_slot %u >= "
@@ -6003,22 +6020,24 @@ retry:
           rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, --gc_rid);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
-          cleaned_gc_slot += 1 /* mark GC cleanup is not needed. */;
+
+          if (reused_gc_slot)
+            /* rare case, but it is better to clear and re-create GC entries
+             * with less fragmentation. */
+            need_cleanup = true;
+          else
+            cleaned_gc_slot +=
+                1 /* mark cleanup is not needed for added slot. */;
 
           mdbx_trace("%s: append @%" PRIaTXN
                      " to lifo-reclaimed, cleaned-gc-slot = %u",
                      dbg_prefix_mode, gc_rid, cleaned_gc_slot);
-        } while (gc_rid &&
-                 MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) < prefer_max_scatter &&
-                 left > ((unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) -
-                         reused_gc_slot) *
-                            env->me_maxgc_ov1page);
-        if (reused_gc_slot && rc != MDBX_RESULT_TRUE) {
-          mdbx_trace("%s: restart inner-loop since reused_gc_slot %u > 0",
-                     dbg_prefix_mode, reused_gc_slot);
-          /* rare case, but it is better to clear and re-create GC entries with
-           * less fragmentation. */
+        }
+
+        if (need_cleanup) {
           cleaned_gc_slot = 0;
+          mdbx_trace("%s: restart inner-loop to clear and re-create GC entries",
+                     dbg_prefix_mode);
           continue;
         }
       }
@@ -6048,12 +6067,10 @@ retry:
             gc_rid = gc_first - 1;
           if (unlikely(gc_rid == 0)) {
             mdbx_error("%s", "** no GC tail-space to store");
-            rc = MDBX_PROBLEM;
-            goto bailout;
+            goto retry;
           }
         } else if (rc != MDBX_NOTFOUND)
           goto bailout;
-        mdbx_tassert(txn, txn->tw.last_reclaimed == 0);
         txn->tw.last_reclaimed = gc_rid;
       }
       reservation_gc_id = gc_rid--;
