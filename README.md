@@ -85,8 +85,9 @@ which might be a caveat for some workloads.
 DB](https://en.wikipedia.org/wiki/Berkeley_DB) and/or
 [dbm](https://en.wikipedia.org/wiki/DBM_(computing)) API.
 
- - _libmdbx_ supports Linux, Windows, MacOS, FreeBSD and other systems
-compliant with POSIX.1-2008.
+ - _libmdbx_ supports Linux, Windows, MacOS, FreeBSD, DragonFly, Solaris,
+OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems compliant with
+POSIX.1-2008.
 
 ### Comparison with other databases
 For now please refer to [chapter of "BoltDB comparison with other

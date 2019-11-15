@@ -3,8 +3,9 @@
  * libmdbx is superior to LMDB (https://bit.ly/26ts7tL) in terms of features
  * and reliability, not inferior in performance. In comparison to LMDB, libmdbx
  * makes many things just work perfectly, not silently and catastrophically
- * break down. libmdbx supports Linux, Windows, MacOS, FreeBSD and other
- * systems compliant with POSIX.1-2008.
+ * break down. libmdbx supports Linux, Windows, MacOS, FreeBSD, DragonFly,
+ * Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems
+ * compliant with POSIX.1-2008.
  *
  * Look below for API description, for other information (build, embedding and
  * amalgamation, improvements over LMDB, benchmarking, etc) please refer to
