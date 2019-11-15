@@ -9012,11 +9012,16 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
       rc = mdbx_env_sync_ex(env, true, false);
       rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
 #else
-      rc = mdbx_env_sync_ex(env, true, true);
-      rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
-            rc == EWOULDBLOCK || rc == MDBX_RESULT_TRUE)
-               ? MDBX_SUCCESS
-               : rc;
+      struct stat st;
+      if (unlikely(fstat(env->me_fd, &st)))
+        rc = errno;
+      else if (st.st_nlink > 0 /* don't sync deleted files */) {
+        rc = mdbx_env_sync_ex(env, true, true);
+        rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
+              rc == EWOULDBLOCK || rc == MDBX_RESULT_TRUE)
+                 ? MDBX_SUCCESS
+                 : rc;
+      }
 #endif
     }
   }
