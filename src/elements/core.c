@@ -1582,7 +1582,7 @@ static __inline int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl,
 
 static __inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t pgno) {
   assert(MDBX_PNL_SIZE(pl) < MDBX_PNL_ALLOCLEN(pl));
-  if (mdbx_assert_enabled()) {
+  if (mdbx_audit_enabled()) {
     for (unsigned i = MDBX_PNL_SIZE(pl); i > 0; --i)
       assert(pgno != pl[i]);
   }
@@ -1682,10 +1682,12 @@ static bool __hot mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
       return false;
     if (unlikely(MDBX_PNL_MOST(pl) >= limit))
       return false;
-    for (const pgno_t *scan = &MDBX_PNL_LAST(pl); --scan > pl;) {
-      assert(MDBX_PNL_ORDERED(scan[0], scan[1]));
-      if (unlikely(!MDBX_PNL_ORDERED(scan[0], scan[1])))
-        return false;
+    if (mdbx_audit_enabled()) {
+      for (const pgno_t *scan = &MDBX_PNL_LAST(pl); --scan > pl;) {
+        assert(MDBX_PNL_ORDERED(scan[0], scan[1]));
+        if (unlikely(!MDBX_PNL_ORDERED(scan[0], scan[1])))
+          return false;
+      }
     }
   }
   return true;
@@ -1867,12 +1869,12 @@ SEARCH_IMPL(dp_bsearch, MDBX_DP, pgno_t, DP_SEARCH_CMP)
 static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t pgno) {
   if (dl->sorted < dl->length) {
     /* unsorted tail case  */
-#if MDBX_DEBUG
-    for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;) {
-      assert(ptr[0].pgno < ptr[1].pgno);
-      assert(ptr[0].pgno >= NUM_METAS);
+    if (mdbx_audit_enabled()) {
+      for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;) {
+        assert(ptr[0].pgno < ptr[1].pgno);
+        assert(ptr[0].pgno >= NUM_METAS);
+      }
     }
-#endif
 
     /* try linear search until the threshold */
     if (dl->length - dl->sorted < SORT_THRESHOLD / 2) {
@@ -1911,12 +1913,12 @@ static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t pgno) {
     dp_sort(dl + 1, dl + dl->length + 1);
   }
 
-#if MDBX_DEBUG
-  for (const MDBX_DP *ptr = dl + dl->length; --ptr > dl;) {
-    assert(ptr[0].pgno < ptr[1].pgno);
-    assert(ptr[0].pgno >= NUM_METAS);
+  if (mdbx_audit_enabled()) {
+    for (const MDBX_DP *ptr = dl + dl->length; --ptr > dl;) {
+      assert(ptr[0].pgno < ptr[1].pgno);
+      assert(ptr[0].pgno >= NUM_METAS);
+    }
   }
-#endif
 
   MDBX_DPL it = dp_bsearch(dl + 1, dl->length, pgno);
   return (unsigned)(it - dl);
@@ -1948,13 +1950,13 @@ static __inline int __must_check_result mdbx_dpl_append(MDBX_DPL dl,
                                                         pgno_t pgno,
                                                         MDBX_page *page) {
   assert(dl->length <= MDBX_DPL_TXNFULL);
-#if MDBX_DEBUG
-  for (unsigned i = dl->length; i > 0; --i) {
-    assert(dl[i].pgno != pgno);
-    if (unlikely(dl[i].pgno == pgno))
-      return MDBX_PROBLEM;
+  if (mdbx_audit_enabled()) {
+    for (unsigned i = dl->length; i > 0; --i) {
+      assert(dl[i].pgno != pgno);
+      if (unlikely(dl[i].pgno == pgno))
+        return MDBX_PROBLEM;
+    }
   }
-#endif
 
   if (unlikely(dl->length == MDBX_DPL_TXNFULL))
     return MDBX_TXN_FULL;
@@ -2553,6 +2555,9 @@ static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
 }
 
 static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
+  if (!mdbx_audit_enabled())
+    return true;
+
   unsigned loose = 0;
   for (unsigned i = txn->tw.dirtylist->length; i > 0; --i) {
     const MDBX_page *const dp = txn->tw.dirtylist[i].ptr;
