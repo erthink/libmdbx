@@ -1021,7 +1021,7 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  rc = mdbx_env_open(env, envname, envflags, 0664);
+  rc = mdbx_env_open(env, envname, envflags, 0);
   if ((envflags & MDBX_EXCLUSIVE) &&
       (rc == MDBX_BUSY ||
 #if defined(_WIN32) || defined(_WIN64)
@@ -1031,7 +1031,7 @@ int main(int argc, char *argv[]) {
 #endif
        )) {
     envflags &= ~MDBX_EXCLUSIVE;
-    rc = mdbx_env_open(env, envname, envflags | MDBX_ACCEDE, 0664);
+    rc = mdbx_env_open(env, envname, envflags | MDBX_ACCEDE, 0);
   }
 
   if (rc) {
