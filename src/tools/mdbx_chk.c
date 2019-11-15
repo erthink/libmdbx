@@ -25,16 +25,16 @@
 
 typedef struct flagbit {
   int bit;
-  char *name;
+  const char *name;
 } flagbit;
 
-flagbit dbflags[] = {{MDBX_DUPSORT, "dupsort"},
-                     {MDBX_INTEGERKEY, "integerkey"},
-                     {MDBX_REVERSEKEY, "reversekey"},
-                     {MDBX_DUPFIXED, "dupfixed"},
-                     {MDBX_REVERSEDUP, "reversedup"},
-                     {MDBX_INTEGERDUP, "integerdup"},
-                     {0, NULL}};
+const flagbit dbflags[] = {{MDBX_DUPSORT, "dupsort"},
+                           {MDBX_INTEGERKEY, "integerkey"},
+                           {MDBX_REVERSEKEY, "reversekey"},
+                           {MDBX_DUPFIXED, "dupfixed"},
+                           {MDBX_REVERSEDUP, "reversedup"},
+                           {MDBX_INTEGERDUP, "integerdup"},
+                           {0, NULL}};
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "wingetopt.h"
@@ -84,15 +84,14 @@ struct {
 #define dbi_main walk.dbi[MAIN_DBI]
 #define dbi_meta walk.dbi[CORE_DBS]
 
-uint64_t total_unused_bytes;
 int envflags = MDBX_RDONLY | MDBX_EXCLUSIVE;
-
 MDBX_env *env;
 MDBX_txn *txn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
 size_t maxkeysize, userdb_count, skipped_subdb;
-uint64_t reclaimable_pages, gc_pages, alloc_pages, unused_pages, backed_pages;
+uint64_t total_unused_bytes, reclaimable_pages, gc_pages, alloc_pages,
+    unused_pages, backed_pages;
 unsigned verbose;
 bool ignore_wrong_order, quiet;
 const char *only_subdb;
