@@ -1657,16 +1657,19 @@ typedef struct MDBX_envinfo {
   uint32_t mi_dxb_pagesize; /* database pagesize */
   uint32_t mi_sys_pagesize; /* system pagesize */
 
-  uint64_t
-      mi_bootid[2]; /* A mostly unique ID that is regenerated on each boot.
-                       As such it can be used to identify the local
-                       machine's current boot. MDBX uses such when open
-                       the database to determine whether rollback required
-                       to the last steady sync point or not. I.e. if current
-                       bootid is differ from the value within a database then
-                       the system was rebooted and all changes since last steady
-                       sync must be reverted for data integrity. Zeros mean that
-                       no relevant information is available from the system. */
+  struct {
+    /* A mostly unique ID that is regenerated on each boot. As such it can be
+       used to identify the local machine's current boot. MDBX uses such when
+       open the database to determine whether rollback required to the last
+       steady sync point or not. I.e. if current bootid is differ from the value
+       within a database then the system was rebooted and all changes since last
+       steady sync must be reverted for data integrity. Zeros mean that no
+       relevant information is available from the system. */
+    struct {
+      uint64_t l, h;
+    } current, meta0, meta1, meta2;
+  } mi_bootid;
+
   uint64_t mi_unsync_volume; /* bytes not explicitly synchronized to disk */
   uint64_t mi_autosync_threshold;        /* current auto-sync threshold, see
                                             mdbx_env_set_syncbytes(). */

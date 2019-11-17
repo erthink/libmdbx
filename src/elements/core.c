@@ -799,10 +799,6 @@ typedef struct rthc_entry_t {
 #endif
 
 static bin128_t bootid;
-static __inline bool bootid_match(const struct MDBX_lockinfo *const lck) {
-  return (bootid.x | bootid.y) != 0 && lck && lck->mti_bootid.x == bootid.x &&
-         lck->mti_bootid.y == bootid.y;
-}
 
 #if defined(_WIN32) || defined(_WIN64)
 static CRITICAL_SECTION rthc_critical_section;
@@ -2039,7 +2035,7 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
 
 static int __must_check_result mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                                                 uint64_t *filesize,
-                                                const bool accept_weak);
+                                                const int lck_exclusive);
 static int __must_check_result mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                                 MDBX_meta *const pending);
 static int mdbx_env_close0(MDBX_env *env);
@@ -3177,11 +3173,23 @@ bailout:
 
 /*----------------------------------------------------------------------------*/
 
+static __inline bool meta_bootid_match(const MDBX_meta *meta) {
+  return meta->mm_bootid.x == bootid.x && meta->mm_bootid.y == bootid.y &&
+         (bootid.x | bootid.y) != 0;
+}
+
+static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
+                                 const int lck_exlusive) {
+  return lck_exlusive ? /* exclusive lock */ meta_bootid_match(meta)
+                      : /* db already opened */ env->me_lck &&
+                            (env->me_lck->mti_envmode & MDBX_RDONLY) == 0;
+}
+
 #define METAPAGE(env, n) page_meta(pgno2page(env, n))
 #define METAPAGE_END(env) METAPAGE(env, NUM_METAS)
 
 static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
-                                   bool allow_volatile) {
+                                   const bool allow_volatile) {
   mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
   txnid_t a = safe64_read(&meta->mm_txnid_a);
   txnid_t b = safe64_read(&meta->mm_txnid_b);
@@ -3217,6 +3225,7 @@ static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
   mdbx_assert(env, meta->mm_txnid_b.inconsistent < txnid);
   (void)env;
   mdbx_jitter4testing(true);
+  meta->mm_bootid = bootid;
   safe64_update(&meta->mm_txnid_b, txnid);
 }
 
@@ -3226,6 +3235,7 @@ static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
   (void)env;
   /* update inconsistent since this function used ONLY for filling meta-image
    * for writing, but not the actual meta-page */
+  meta->mm_bootid = bootid;
   meta->mm_txnid_a.inconsistent = txnid;
   meta->mm_txnid_b.inconsistent = txnid;
 }
@@ -6837,10 +6847,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     goto fail;
   }
 
-  if (likely(env->me_lck)) {
-    env->me_lck->mti_bootid = bootid;
+  if (likely(env->me_lck))
     env->me_lck->mti_readers_refresh_flag = false;
-  }
   end_mode = MDBX_END_COMMITTED | MDBX_END_UPDATE | MDBX_END_EOTDONE;
 
 done:
@@ -7038,7 +7046,8 @@ static int __cold mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
 /* Read the environment parameters of a DB environment
  * before mapping it into memory. */
 static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
-                                   uint64_t *filesize, const bool accept_weak) {
+                                   uint64_t *filesize,
+                                   const int lck_exclusive) {
   int rc = mdbx_filesize(env->me_fd, filesize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -7103,8 +7112,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
     if (rc != MDBX_SUCCESS)
       continue;
 
-    if (mdbx_meta_ot(accept_weak ? prefer_last : prefer_noweak, env, dest,
-                     meta)) {
+    if (mdbx_meta_ot(prefer_noweak, env, dest, meta)) {
       *dest = *meta;
       if (META_IS_WEAK(dest))
         loop_limit += 1; /* LY: should re-read to hush race with update */
@@ -7112,7 +7120,8 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
     }
   }
 
-  if (dest->mm_psize == 0 || (META_IS_WEAK(dest) && !accept_weak)) {
+  if (dest->mm_psize == 0 ||
+      (META_IS_WEAK(dest) && !meta_weak_acceptable(env, dest, lck_exclusive))) {
     mdbx_error("%s", "no usable meta-pages, database is corrupted");
     return rc;
   }
@@ -7964,10 +7973,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   uint64_t filesize_before;
   MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
-  int err = mdbx_read_header(
-      env, &meta, &filesize_before,
-      lck_rc ? bootid_match(env->me_lck)
-             : (env->me_lck && !(env->me_lck->mti_envmode & MDBX_RDONLY)));
+  int err = mdbx_read_header(env, &meta, &filesize_before, lck_rc);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
         (env->me_flags & MDBX_RDONLY) != 0)
@@ -7998,7 +8004,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       return err;
 
 #ifndef NDEBUG /* just for checking */
-    err = mdbx_read_header(env, &meta, &filesize_before, false);
+    err = mdbx_read_header(env, &meta, &filesize_before, lck_rc);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 #endif
@@ -8152,57 +8158,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     return err;
 #endif
 
-  *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
-  if (used_aligned2os_bytes < env->me_dxb_mmap.current) {
-#if defined(MADV_REMOVE)
-    if (lck_rc && (env->me_flags & MDBX_WRITEMAP) != 0) {
-      mdbx_notice("open-MADV_%s %u..%u", "REMOVE", *env->me_discarded_tail,
-                  bytes2pgno(env, env->me_dxb_mmap.current));
-      err =
-          madvise(env->me_map + used_aligned2os_bytes,
-                  env->me_dxb_mmap.current - used_aligned2os_bytes, MADV_REMOVE)
-              ? ignore_enosys(errno)
-              : MDBX_SUCCESS;
-      if (unlikely(MDBX_IS_ERROR(err)))
-        return err;
-    }
-#endif /* MADV_REMOVE */
-#if defined(MADV_DONTNEED)
-    mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
-                bytes2pgno(env, env->me_dxb_mmap.current));
-    err =
-        madvise(env->me_map + used_aligned2os_bytes,
-                env->me_dxb_mmap.current - used_aligned2os_bytes, MADV_DONTNEED)
-            ? ignore_enosys(errno)
-            : MDBX_SUCCESS;
-    if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
-#elif defined(POSIX_MADV_DONTNEED)
-    err = ignore_enosys(posix_madvise(
-        env->me_map + used_aligned2os_bytes,
-        env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_MADV_DONTNEED));
-    if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
-#elif defined(POSIX_FADV_DONTNEED)
-    err = ignore_enosys(posix_fadvise(
-        env->me_fd, used_aligned2os_bytes,
-        env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_FADV_DONTNEED));
-    if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
-#endif /* MADV_DONTNEED */
-  }
-
 #ifdef MDBX_USE_VALGRIND
   env->me_valgrind_handle =
       VALGRIND_CREATE_BLOCK(env->me_map, env->me_dxb_mmap.limit, "mdbx");
 #endif
-
-  const bool readahead = (env->me_flags & MDBX_NORDAHEAD) == 0 &&
-                         mdbx_is_readahead_reasonable(env->me_dxb_mmap.current,
-                                                      0) == MDBX_RESULT_TRUE;
-  err = mdbx_set_readahead(env, 0, used_bytes, readahead);
-  if (err != MDBX_SUCCESS && lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE)
-    return err;
 
   mdbx_assert(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
                        used_bytes <= env->me_dxb_mmap.limit);
@@ -8227,7 +8186,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   while (1) {
     MDBX_meta *const head = mdbx_meta_head(env);
     const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
-    if (head_txnid == meta.mm_txnid_a.inconsistent)
+    MDBX_meta *const steady = mdbx_meta_steady(env);
+    const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
+    if (head_txnid == steady_txnid)
       break;
 
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
@@ -8235,11 +8196,11 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       if (env->me_flags & MDBX_RDONLY) {
         mdbx_error("rollback needed: (from head %" PRIaTXN
                    " to steady %" PRIaTXN "), but unable in read-only mode",
-                   head_txnid, meta.mm_txnid_a.inconsistent);
+                   head_txnid, steady_txnid);
         return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
-      if (bootid_match(env->me_lck)) {
+      if (meta_bootid_match(head)) {
         MDBX_meta clone = *head;
         uint64_t filesize = env->me_dbgeo.now;
         err = mdbx_validate_meta(
@@ -8252,6 +8213,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                       "rollback NOT needed",
                       bootid.x, bootid.y);
           meta = clone;
+          *env->me_unsynced_pages = meta.mm_geo.next;
           break;
         }
         mdbx_notice("opening after an unclean shutdown, "
@@ -8269,15 +8231,15 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
           (head != meta1 && mdbx_meta_txnid_fluid(env, meta1) == undo_txnid) ||
           (head != meta2 && mdbx_meta_txnid_fluid(env, meta2) == undo_txnid))
         undo_txnid = safe64_txnid_next(undo_txnid);
-      if (unlikely(undo_txnid >= meta.mm_txnid_a.inconsistent)) {
+      if (unlikely(undo_txnid >= steady_txnid)) {
         mdbx_fatal("rollback failed: no suitable txnid (0,1,2) < %" PRIaTXN,
-                   meta.mm_txnid_a.inconsistent);
+                   steady_txnid);
         return MDBX_PANIC /* LY: could not recovery/rollback */;
       }
 
       /* LY: rollback weak checkpoint */
       mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN " as %" PRIaTXN,
-                 head_txnid, meta.mm_txnid_a.inconsistent, undo_txnid);
+                 head_txnid, steady_txnid, undo_txnid);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
 
       if (env->me_flags & MDBX_WRITEMAP) {
@@ -8301,7 +8263,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       if (err) {
         mdbx_error("error %d rollback from %" PRIaTXN ", to %" PRIaTXN
                    " as %" PRIaTXN,
-                   err, head_txnid, meta.mm_txnid_a.inconsistent, undo_txnid);
+                   err, head_txnid, steady_txnid, undo_txnid);
         return err;
       }
 
@@ -8373,6 +8335,53 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       }
     }
   }
+
+  *env->me_discarded_tail = bytes2pgno(env, used_aligned2os_bytes);
+  if (used_aligned2os_bytes < env->me_dxb_mmap.current) {
+#if defined(MADV_REMOVE)
+    if (lck_rc && (env->me_flags & MDBX_WRITEMAP) != 0) {
+      mdbx_notice("open-MADV_%s %u..%u", "REMOVE", *env->me_discarded_tail,
+                  bytes2pgno(env, env->me_dxb_mmap.current));
+      err =
+          madvise(env->me_map + used_aligned2os_bytes,
+                  env->me_dxb_mmap.current - used_aligned2os_bytes, MADV_REMOVE)
+              ? ignore_enosys(errno)
+              : MDBX_SUCCESS;
+      if (unlikely(MDBX_IS_ERROR(err)))
+        return err;
+    }
+#endif /* MADV_REMOVE */
+#if defined(MADV_DONTNEED)
+    mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
+                bytes2pgno(env, env->me_dxb_mmap.current));
+    err =
+        madvise(env->me_map + used_aligned2os_bytes,
+                env->me_dxb_mmap.current - used_aligned2os_bytes, MADV_DONTNEED)
+            ? ignore_enosys(errno)
+            : MDBX_SUCCESS;
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
+#elif defined(POSIX_MADV_DONTNEED)
+    err = ignore_enosys(posix_madvise(
+        env->me_map + used_aligned2os_bytes,
+        env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_MADV_DONTNEED));
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
+#elif defined(POSIX_FADV_DONTNEED)
+    err = ignore_enosys(posix_fadvise(
+        env->me_fd, used_aligned2os_bytes,
+        env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_FADV_DONTNEED));
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
+#endif /* MADV_DONTNEED */
+  }
+
+  const bool readahead = (env->me_flags & MDBX_NORDAHEAD) == 0 &&
+                         mdbx_is_readahead_reasonable(env->me_dxb_mmap.current,
+                                                      0) == MDBX_RESULT_TRUE;
+  err = mdbx_set_readahead(env, 0, used_bytes, readahead);
+  if (err != MDBX_SUCCESS && lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE)
+    return err;
 
   return rc;
 }
@@ -8522,12 +8531,10 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   struct MDBX_lockinfo *const lck = env->me_lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
     /* LY: exlcusive mode, check and reset lck content */
-    const bin128_t save_bootid = lck->mti_bootid;
     memset(lck, 0, (size_t)size);
     mdbx_jitter4testing(false);
     lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
     lck->mti_os_and_format = MDBX_LOCK_FORMAT;
-    lck->mti_bootid = save_bootid;
   } else {
     if (lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
       mdbx_error("%s", "lock region has invalid magic/version");
@@ -14402,6 +14409,14 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_meta1_sign = meta1->mm_datasync_sign;
     arg->mi_meta2_txnid = mdbx_meta_txnid_fluid(env, meta2);
     arg->mi_meta2_sign = meta2->mm_datasync_sign;
+    if (likely(bytes > size_before_bootid)) {
+      arg->mi_bootid.meta0.l = meta0->mm_bootid.x;
+      arg->mi_bootid.meta1.l = meta0->mm_bootid.x;
+      arg->mi_bootid.meta2.l = meta0->mm_bootid.x;
+      arg->mi_bootid.meta0.h = meta0->mm_bootid.y;
+      arg->mi_bootid.meta1.h = meta0->mm_bootid.y;
+      arg->mi_bootid.meta2.h = meta0->mm_bootid.y;
+    }
 
     const MDBX_meta *txn_meta = recent_meta;
     arg->mi_last_pgno = txn_meta->mm_geo.next - 1;
@@ -14455,8 +14470,8 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_autosync_threshold = pgno2bytes(env, *env->me_autosync_threshold);
     arg->mi_autosync_period_seconds16dot16 =
         mdbx_osal_monotime_to_16dot16(*env->me_autosync_period);
-    arg->mi_bootid[0] = lck ? lck->mti_bootid.x : 0;
-    arg->mi_bootid[1] = lck ? lck->mti_bootid.y : 0;
+    arg->mi_bootid.current.l = bootid.x;
+    arg->mi_bootid.current.h = bootid.y;
     arg->mi_mode = lck ? lck->mti_envmode : env->me_flags;
   }
 

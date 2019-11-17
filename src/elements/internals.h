@@ -319,6 +319,14 @@ typedef struct MDBX_meta {
    * This value in couple with mr_snapshot_pages_retired allows fast estimation
    * of "how much reader is restraining GC recycling". */
   uint64_t mm_pages_retired;
+
+  /* The analogue /proc/sys/kernel/random/boot_id or similar to determine
+   * whether the system was rebooted after the last use of the database files.
+   * If there was no reboot, but there is no need to rollback to the last
+   * steady sync point. Zeros mean that no relevant information is available
+   * from the system. */
+  bin128_t mm_bootid;
+
 } MDBX_meta;
 
 /* Common header for all page types. The page type depends on mp_flags.
@@ -506,13 +514,6 @@ typedef struct MDBX_lockinfo {
 
   /* Marker to distinguish uniqueness of DB/CLK.*/
   volatile uint64_t mti_bait_uniqueness;
-
-  /* The analogue /proc/sys/kernel/random/boot_id or similar to determine
-   * whether the system was rebooted after the last use of the database files.
-   * If there was no reboot, but there is no need to rollback to the last
-   * steady sync point. Zeros mean that no relevant information is available
-   * from the system. */
-  volatile bin128_t mti_bootid;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
