@@ -834,9 +834,13 @@ static int meta_steady(void) { return meta_recent(true); }
 
 static int meta_head(void) { return meta_recent(false); }
 
-void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
+void verbose_meta(int num, txnid_t txnid, uint64_t sign, uint64_t bootid_h,
+                  uint64_t bootid_l) {
   print(" - meta-%d: %s %" PRIu64, num, meta_synctype(sign), txnid);
   bool stay = true;
+  const bool bootid_match = bootid_h == envinfo.mi_bootid.current.h &&
+                            bootid_l == envinfo.mi_bootid.current.l &&
+                            (bootid_h | bootid_l) != 0;
 
   const int steady = meta_steady();
   const int head = meta_head();
@@ -847,7 +851,7 @@ void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
     print(", head-steady");
     stay = false;
   } else if (num == head) {
-    print(", head-weak");
+    print(", head-weak%s", bootid_match ? "-intact (same boot-id)" : "");
     stay = false;
   }
   if (num == meta_tail(head)) {
@@ -864,38 +868,19 @@ void verbose_meta(int num, txnid_t txnid, uint64_t sign) {
   print("\n");
 }
 
-static int check_meta_head(bool steady) {
-  switch (meta_recent(steady)) {
+static uint64_t get_meta_txnid(const unsigned meta_id) {
+  switch (meta_id) {
   default:
     assert(false);
-    error("unexpected internal error (%s)\n",
-          steady ? "meta_steady_head" : "meta_weak_head");
-    __fallthrough;
+    error("unexpected meta_id %u\n", meta_id);
+    return 0;
   case 0:
-    if (envinfo.mi_meta0_txnid != envinfo.mi_recent_txnid) {
-      print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
-            ")\n",
-            0, envinfo.mi_meta0_txnid, envinfo.mi_recent_txnid);
-      return 1;
-    }
-    break;
+    return envinfo.mi_meta0_txnid;
   case 1:
-    if (envinfo.mi_meta1_txnid != envinfo.mi_recent_txnid) {
-      print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
-            ")\n",
-            1, envinfo.mi_meta1_txnid, envinfo.mi_recent_txnid);
-      return 1;
-    }
-    break;
+    return envinfo.mi_meta1_txnid;
   case 2:
-    if (envinfo.mi_meta2_txnid != envinfo.mi_recent_txnid) {
-      print(" - meta-%d txn-id mismatch recent-txn-id (%" PRIi64 " != %" PRIi64
-            ")\n",
-            2, envinfo.mi_meta2_txnid, envinfo.mi_recent_txnid);
-      return 1;
-    }
+    return envinfo.mi_meta2_txnid;
   }
-  return 0;
 }
 
 static void print_size(const char *prefix, const uint64_t value,
@@ -1185,12 +1170,15 @@ int main(int argc, char *argv[]) {
           envinfo.mi_recent_txnid, envinfo.mi_latter_reader_txnid,
           envinfo.mi_recent_txnid - envinfo.mi_latter_reader_txnid);
 
-    verbose_meta(0, envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign);
-    verbose_meta(1, envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign);
-    verbose_meta(2, envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign);
+    verbose_meta(0, envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+                 envinfo.mi_bootid.meta0.h, envinfo.mi_bootid.meta0.l);
+    verbose_meta(1, envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
+                 envinfo.mi_bootid.meta1.h, envinfo.mi_bootid.meta1.l);
+    verbose_meta(2, envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign,
+                 envinfo.mi_bootid.meta2.h, envinfo.mi_bootid.meta2.l);
   }
 
-  if (verbose)
+  if (verbose > 1)
     print(" - performs check for meta-pages clashes\n");
   if (meta_eq(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
               envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign)) {
@@ -1208,19 +1196,34 @@ int main(int argc, char *argv[]) {
     ++problems_meta;
   }
 
+  const unsigned steady_meta_id = meta_recent(true);
+  const uint64_t steady_meta_txnid = get_meta_txnid(steady_meta_id);
+  const unsigned weak_meta_id = meta_recent(false);
+  const uint64_t weak_meta_txnid = get_meta_txnid(weak_meta_id);
   if (envflags & MDBX_EXCLUSIVE) {
-    if (verbose)
+    if (verbose > 1)
       print(" - performs full check recent-txn-id with meta-pages\n");
-    problems_meta += check_meta_head(true);
+    if (steady_meta_txnid != envinfo.mi_recent_txnid) {
+      print(" ! steady meta-%d txn-id mismatch recent-txn-id (%" PRIi64
+            " != %" PRIi64 ")\n",
+            steady_meta_id, steady_meta_txnid, envinfo.mi_recent_txnid);
+      ++problems_meta;
+    }
   } else if (locked) {
-    if (verbose)
+    if (verbose > 1)
       print(" - performs lite check recent-txn-id with meta-pages (not a "
             "monopolistic mode)\n");
-    problems_meta += check_meta_head(false);
+    if (weak_meta_txnid != envinfo.mi_recent_txnid) {
+      print(" ! weak meta-%d txn-id mismatch recent-txn-id (%" PRIi64
+            " != %" PRIi64 ")\n",
+            weak_meta_id, weak_meta_txnid, envinfo.mi_recent_txnid);
+      ++problems_meta;
+    }
   } else if (verbose) {
     print(" - skip check recent-txn-id with meta-pages (monopolistic or "
           "read-write mode only)\n");
   }
+  total_problems += problems_meta;
 
   if (!dont_traversal) {
     struct problem *saved_list;
@@ -1389,17 +1392,41 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (rc == 0 && total_problems == 1 && problems_meta == 1 && !dont_traversal &&
+      (envflags & MDBX_RDONLY) == 0 && !only_subdb &&
+      steady_meta_txnid < envinfo.mi_recent_txnid) {
+    print("Perform sync-to-disk for make steady checkpoint at txn-id #%" PRIi64
+          "\n",
+          envinfo.mi_recent_txnid);
+    fflush(NULL);
+    if (locked) {
+      mdbx_txn_unlock(env);
+      locked = false;
+    }
+    rc = mdbx_env_sync_ex(env, true, false);
+    if (rc != MDBX_SUCCESS)
+      error("mdbx_env_pgwalk failed, error %d %s\n", rc, mdbx_strerror(rc));
+    else {
+      total_problems -= 1;
+      problems_meta -= 1;
+    }
+  }
+
 bailout:
   if (txn)
     mdbx_txn_abort(txn);
-  if (locked)
+  if (locked) {
     mdbx_txn_unlock(env);
-  if (env)
-    mdbx_env_close(env);
+    locked = false;
+  }
+  if (env) {
+    const bool dont_sync = rc != 0 || total_problems;
+    mdbx_env_close_ex(env, dont_sync);
+  }
   fflush(NULL);
   if (rc) {
     if (rc < 0)
-      return (user_break) ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
+      return user_break ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
     return EXIT_FAILURE_MDB;
   }
 
@@ -1416,8 +1443,7 @@ bailout:
             (timestamp_finish.tv_nsec - timestamp_start.tv_nsec) * 1e-9;
 #endif /* !WINDOWS */
 
-  total_problems += problems_meta;
-  if (total_problems || problems_maindb || problems_freedb) {
+  if (total_problems) {
     print("Total %" PRIu64 " error%s detected, elapsed %.3f seconds.\n",
           total_problems, (total_problems > 1) ? "s are" : " is", elapsed);
     if (problems_meta || problems_maindb || problems_freedb)
