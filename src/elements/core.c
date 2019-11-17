@@ -8827,6 +8827,17 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   }
 #endif /* MDBX_LOCKING */
 
+#if !(defined(_WIN32) || defined(_WIN64))
+  if (mode == 0) {
+    struct stat st;
+    if (fstat(env->me_fd, &st)) {
+      rc = errno;
+      goto bailout;
+    }
+    mode = st.st_mode;
+  }
+#endif
+
   const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
     rc = lck_rc;
