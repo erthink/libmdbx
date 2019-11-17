@@ -1070,7 +1070,7 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  * This flag may be changed at any time using mdbx_env_set_flags(). */
 #define MDBX_LIFORECLAIM 0x4000000u
 
-/* Debuging option, fill/perturb released pages. */
+/* Debugging option, fill/perturb released pages. */
 #define MDBX_PAGEPERTURB 0x8000000u
 
 /**** SYNC MODES ***************************************************************

@@ -343,7 +343,7 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
     break;
   case EXCEPTION_BREAKPOINT:
   case EXCEPTION_SINGLE_STEP:
-    status = as_debuging;
+    status = as_debugging;
     break;
   case STATUS_CONTROL_C_EXIT:
     status = as_killed;

@@ -35,7 +35,7 @@ enum actor_testcase {
 
 enum actor_status {
   as_unknown,
-  as_debuging,
+  as_debugging,
   as_running,
   as_successful,
   as_killed,

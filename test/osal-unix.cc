@@ -413,7 +413,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
       else if (WIFSIGNALED(status))
         childs[pid] = as_killed;
       else if (WIFSTOPPED(status))
-        childs[pid] = as_debuging;
+        childs[pid] = as_debugging;
       else if (WIFCONTINUED(status))
         childs[pid] = as_running;
       else {

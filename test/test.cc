@@ -47,8 +47,8 @@ const char *status2str(actor_status status) {
   default:
     assert(false);
     return "?!";
-  case as_debuging:
-    return "debuging";
+  case as_debugging:
+    return "debugging";
   case as_running:
     return "running";
   case as_successful:

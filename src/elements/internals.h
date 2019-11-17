@@ -1166,7 +1166,7 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 /* Internal error codes, not exposed outside libmdbx */
 #define MDBX_NO_ROOT (MDBX_LAST_ERRCODE + 10)
 
-/* Debuging output value of a cursor DBI: Negative in a sub-cursor. */
+/* Debugging output value of a cursor DBI: Negative in a sub-cursor. */
 #define DDBI(mc)                                                               \
   (((mc)->mc_flags & C_SUB) ? -(int)(mc)->mc_dbi : (int)(mc)->mc_dbi)
 
