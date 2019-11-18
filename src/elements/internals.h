@@ -978,12 +978,13 @@ struct MDBX_env {
 #define MDBX_RUNTIME_FLAGS_INIT                                                \
   ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
 
-#ifndef mdbx_runtime_flags /* avoid override from tools */
-MDBX_INTERNAL_VAR uint8_t mdbx_runtime_flags;
-#endif
-#ifndef mdbx_runtime_flags /* avoid override from tools */
-MDBX_INTERNAL_VAR uint8_t mdbx_loglevel;
-#endif
+#ifdef MDBX_ALLOY
+static uint8_t mdbx_runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
+static uint8_t mdbx_loglevel = MDBX_DEBUG;
+#else
+extern uint8_t mdbx_runtime_flags;
+extern uint8_t mdbx_loglevel;
+#endif /* MDBX_ALLOY */
 MDBX_INTERNAL_VAR MDBX_debug_func *mdbx_debug_logger;
 
 MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
