@@ -7200,7 +7200,6 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env,
               pending < METAPAGE(env, 0) || pending > METAPAGE(env, NUM_METAS));
   mdbx_assert(env, (env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0);
-  mdbx_assert(env, !META_IS_STEADY(head) || *env->me_unsynced_pages != 0);
   mdbx_assert(env, pending->mm_geo.next <= pending->mm_geo.now);
 
   if (flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) {
@@ -7898,12 +7897,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       }
       if (inside_txn) {
         env->me_txn->mt_geo = new_geo;
-        if ((env->me_txn->mt_flags & MDBX_TXN_DIRTY) == 0) {
-          env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
-          *env->me_unsynced_pages += 1;
-        }
+        env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
       } else {
-        *env->me_unsynced_pages += 1;
         mdbx_meta_set_txnid(
             env, &meta, safe64_txnid_next(mdbx_meta_txnid_stable(env, head)));
         rc = mdbx_sync_locked(env, env->me_flags, &meta);
@@ -8319,7 +8314,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
       mdbx_ensure(env, mdbx_meta_eq(env, &meta, head));
       mdbx_meta_set_txnid(env, &meta, next_txnid);
-      *env->me_unsynced_pages += 1;
       err = mdbx_sync_locked(env, env->me_flags | MDBX_SHRINK_ALLOWED, &meta);
       if (err) {
         mdbx_error("error %d, while updating meta.geo: "
@@ -15765,11 +15759,8 @@ int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
     txn->mt_canary.z = canary->z;
   }
   txn->mt_canary.v = txn->mt_txnid;
+  txn->mt_flags |= MDBX_TXN_DIRTY;
 
-  if ((txn->mt_flags & MDBX_TXN_DIRTY) == 0) {
-    txn->mt_flags |= MDBX_TXN_DIRTY;
-    *txn->mt_env->me_unsynced_pages += 1;
-  }
   return MDBX_SUCCESS;
 }
 
