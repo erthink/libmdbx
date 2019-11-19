@@ -6562,7 +6562,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
     parent->mt_geo = txn->mt_geo;
     parent->mt_canary = txn->mt_canary;
-    parent->mt_flags = txn->mt_flags | (parent->mt_flags & MDBX_SHRINK_ALLOWED);
+    parent->mt_flags |= txn->mt_flags & MDBX_TXN_DIRTY;
 
     /* Merge our cursors into parent's and close them */
     mdbx_cursors_eot(txn, 1);
@@ -6739,9 +6739,14 @@ int mdbx_txn_commit(MDBX_txn *txn) {
         parent->tw.spill_pages = txn->tw.spill_pages;
       }
     }
-    if (parent->tw.spill_pages)
+
+    parent->mt_flags &= ~(MDBX_TXN_SPILLS | MDBX_TXN_HAS_CHILD);
+    if (parent->tw.spill_pages) {
       assert(mdbx_pnl_check4assert(parent->tw.spill_pages,
                                    parent->mt_next_pgno << 1));
+      if (MDBX_PNL_SIZE(parent->tw.spill_pages))
+        parent->mt_flags |= MDBX_TXN_SPILLS;
+    }
 
     /* Append our loose page list to parent's */
     if (txn->tw.loose_pages) {
@@ -6785,8 +6790,11 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   end_mode |= MDBX_END_EOTDONE;
 
   if (txn->tw.dirtylist->length == 0 &&
-      (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0)
+      (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
+    for (int i = txn->mt_numdbs; --i >= 0;)
+      mdbx_tassert(txn, (txn->mt_dbflags[i] & DB_DIRTY) == 0);
     goto done;
+  }
 
   mdbx_debug("committing txn %" PRIaTXN " %p on mdbenv %p, root page %" PRIaPGNO
              "/%" PRIaPGNO,
