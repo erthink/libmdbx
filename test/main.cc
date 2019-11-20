@@ -596,7 +596,7 @@ int main(int argc, char *const argv[]) {
 
 #if !(defined(_WIN32) || defined(_WIN64))
   struct rusage spent;
-  if (getrusage(RUSAGE_CHILDREN, &spent) == 0) {
+  if (!getrusage(global::singlemode ? RUSAGE_SELF : RUSAGE_CHILDREN, &spent)) {
     log_notice("%6s: user %f, system %f", "CPU",
                spent.ru_utime.tv_sec + spent.ru_utime.tv_usec * 1e-6,
                spent.ru_stime.tv_sec + spent.ru_stime.tv_usec * 1e-6);
