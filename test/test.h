@@ -153,7 +153,7 @@ protected:
   } last;
 
   SET speculum;
-  bool speculum_verify() const;
+  bool speculum_verify();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              unsigned flags);
   int replace(const keygen::buffer &akey, const keygen::buffer &new_value,

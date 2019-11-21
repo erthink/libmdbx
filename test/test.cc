@@ -654,9 +654,12 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
   return mdbx_del(txn_guard.get(), dbi, &akey->value, &adata->value);
 }
 
-bool testcase::speculum_verify() const {
+bool testcase::speculum_verify() {
   if (!config.params.speculum)
     return true;
+
+  if (!txn_guard)
+    txn_begin(true);
 
   char dump_key[128], dump_value[128];
   char dump_mkey[128], dump_mvalue[128];
