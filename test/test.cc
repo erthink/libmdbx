@@ -674,6 +674,7 @@ bool testcase::speculum_verify() {
   MDBX_val mkey, mvalue;
   err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_FIRST);
 
+  unsigned extra = 0, lost = 0, n = 0;
   assert(std::is_sorted(speculum.cbegin(), speculum.cend(), ItemCompare(this)));
   auto it = speculum.cbegin();
   while (true) {
@@ -696,14 +697,15 @@ bool testcase::speculum_verify() {
     } else if (err == MDBX_SUCCESS &&
                (it == speculum.cend() || S_key < it->first ||
                 (S_key == it->first && S_data < it->second))) {
+      extra += 1;
       if (it != speculum.cend()) {
-        log_error("extra pair: db{%s, %s} < mi{%s, %s}",
+        log_error("extra pair %u/%u: db{%s, %s} < mi{%s, %s}", n, extra,
                   mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
                   mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)),
                   mdbx_dump_val(&mkey, dump_mkey, sizeof(dump_mkey)),
                   mdbx_dump_val(&mvalue, dump_mvalue, sizeof(dump_mvalue)));
       } else {
-        log_error("extra pair: db{%s, %s} < mi.END",
+        log_error("extra pair %u/%u: db{%s, %s} < mi.END", n, extra,
                   mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
                   mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)));
       }
@@ -712,12 +714,13 @@ bool testcase::speculum_verify() {
     } else if (it != speculum.cend() &&
                (err == MDBX_NOTFOUND || S_key > it->first ||
                 (S_key == it->first && S_data > it->second))) {
+      lost += 1;
       if (err == MDBX_NOTFOUND) {
-        log_error("lost pair: db.END > mi{%s, %s}",
+        log_error("lost pair %u/%u: db.END > mi{%s, %s}", n, lost,
                   mdbx_dump_val(&mkey, dump_mkey, sizeof(dump_mkey)),
                   mdbx_dump_val(&mvalue, dump_mvalue, sizeof(dump_mvalue)));
       } else {
-        log_error("lost pair: db{%s, %s} > mi{%s, %s}",
+        log_error("lost pair %u/%u: db{%s, %s} > mi{%s, %s}", n, lost,
                   mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
                   mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)),
                   mdbx_dump_val(&mkey, dump_mkey, sizeof(dump_mkey)),
@@ -732,6 +735,7 @@ bool testcase::speculum_verify() {
     } else {
       assert(!"WTF?");
     }
+    n += 1;
   }
 
   mdbx_cursor_close(cursor);

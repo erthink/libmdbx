@@ -70,9 +70,8 @@ static unsigned edge2count(uint64_t edge, unsigned count_max) {
 
 void testcase_nested::push_txn() {
   MDBX_txn *txn;
-  int err = mdbx_txn_begin(
-      db_guard.get(), txn_guard.get(),
-      prng32() & (MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC), &txn);
+  unsigned flags = prng32() & (MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC);
+  int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
 #if __cplusplus >= 201703L
@@ -81,7 +80,8 @@ void testcase_nested::push_txn() {
   stack.push(std::make_tuple(scoped_txn_guard(txn), serial, fifo, speculum));
 #endif
   std::swap(txn_guard, std::get<0>(stack.top()));
-  log_verbose("begin level#%zu txn, serial %" PRIu64, stack.size(), serial);
+  log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
+              stack.size(), mdbx_txn_id(txn), flags, serial);
 }
 
 bool testcase_nested::pop_txn(bool abort) {
@@ -90,8 +90,9 @@ bool testcase_nested::pop_txn(bool abort) {
   MDBX_txn *txn = txn_guard.release();
   bool commited = false;
   if (abort) {
-    log_verbose("abort level#%zu txn, undo serial %" PRIu64 " <- %" PRIu64,
-                stack.size(), serial, std::get<1>(stack.top()));
+    log_verbose(
+        "abort level#%zu txn #%" PRIu64 ", undo serial %" PRIu64 " <- %" PRIu64,
+        stack.size(), mdbx_txn_id(txn), serial, std::get<1>(stack.top()));
     int err = mdbx_txn_abort(txn);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);
@@ -152,8 +153,8 @@ bool testcase_nested::trim_tail(unsigned window_width) {
     while (fifo.size() > window_width) {
       uint64_t tail_serial = fifo.back().first;
       const unsigned tail_count = fifo.back().second;
-      log_trace("nested: pop-tail (serial %" PRIu64 ", count %u)", tail_serial,
-                tail_count);
+      log_verbose("nested: pop-tail (serial %" PRIu64 ", count %u)",
+                  tail_serial, tail_count);
       fifo.pop_back();
       for (unsigned n = 0; n < tail_count; ++n) {
         log_trace("nested: remove-tail %" PRIu64, tail_serial);
@@ -170,8 +171,10 @@ bool testcase_nested::trim_tail(unsigned window_width) {
           failure("nested: unexpected key-space overflow on the tail");
       }
     }
-  } else {
-    log_trace("nested: purge state");
+  } else if (!fifo.empty()) {
+    log_verbose("nested: purge state %" PRIu64 " - %" PRIu64 ", fifo-items %zu",
+                fifo.front().first, fifo.back().first + fifo.back().second,
+                fifo.size());
     db_table_clear(dbi, txn_guard.get());
     fifo.clear();
     speculum.clear();
