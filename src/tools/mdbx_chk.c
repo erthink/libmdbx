@@ -42,7 +42,7 @@ const flagbit dbflags[] = {{MDBX_DUPSORT, "dupsort"},
 static volatile BOOL user_break;
 static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
   (void)dwCtrlType;
-  user_break = true;
+  user_break = 1;
   return true;
 }
 
@@ -129,6 +129,18 @@ static void __printf_args(1, 2) error(const char *msg, ...) {
     va_end(args);
     fflush(NULL);
   }
+}
+
+static int check_user_break(void) {
+  switch (user_break) {
+  case 0:
+    return MDBX_SUCCESS;
+  case 1:
+    print(" - interrupted by signal\n");
+    fflush(NULL);
+    user_break = 2;
+  }
+  return MDBX_EINTR;
 }
 
 static void pagemap_cleanup(void) {
@@ -387,7 +399,7 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
     }
   }
 
-  return user_break ? MDBX_EINTR : MDBX_SUCCESS;
+  return check_user_break();
 }
 
 typedef int(visitor)(const uint64_t record_number, const MDBX_val *key,
@@ -400,7 +412,7 @@ static int handle_userdb(const uint64_t record_number, const MDBX_val *key,
   (void)record_number;
   (void)key;
   (void)data;
-  return MDBX_SUCCESS;
+  return check_user_break();
 }
 
 static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
@@ -443,6 +455,8 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
       pgno_t prev = MDBX_PNL_ASCENDING ? NUM_METAS - 1 : txn->mt_next_pgno;
       pgno_t span = 1;
       for (unsigned i = 0; i < number; ++i) {
+        if (check_user_break())
+          return MDBX_EINTR;
         const pgno_t pgno = iptr[i];
         if (pgno < NUM_METAS)
           problem_add("entry", txnid, "wrong idl entry",
@@ -503,7 +517,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
     }
   }
 
-  return MDBX_SUCCESS;
+  return check_user_break();
 }
 
 static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
@@ -641,12 +655,9 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   prev_data.iov_len = 0;
   rc = mdbx_cursor_get(mc, &key, &data, MDBX_FIRST);
   while (rc == MDBX_SUCCESS) {
-    if (user_break) {
-      print(" - interrupted by signal\n");
-      fflush(NULL);
-      rc = MDBX_EINTR;
+    rc = check_user_break();
+    if (rc)
       goto bailout;
-    }
 
     bool bad_key = false;
     if (key.iov_len > maxkeysize) {
@@ -1244,12 +1255,8 @@ int main(int argc, char *argv[]) {
     traversal_problems = problems_pop(saved_list);
 
     if (rc) {
-      if (rc == MDBX_EINTR && user_break) {
-        print(" - interrupted by signal\n");
-        fflush(NULL);
-      } else {
+      if (rc != MDBX_EINTR || !check_user_break())
         error("mdbx_env_pgwalk failed, error %d %s\n", rc, mdbx_strerror(rc));
-      }
       goto bailout;
     }
 
