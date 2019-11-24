@@ -589,10 +589,7 @@ unsigned actor_params::mdbx_keylen_min() const {
 }
 
 unsigned actor_params::mdbx_keylen_max() const {
-  return (table_flags & MDBX_INTEGERKEY)
-             ? 8
-             : std::min((unsigned)mdbx_limits_keysize_max(pagesize),
-                        (unsigned)UINT16_MAX);
+  return (unsigned)mdbx_limits_keysize_max(pagesize, table_flags);
 }
 
 unsigned actor_params::mdbx_datalen_min() const {
@@ -600,10 +597,6 @@ unsigned actor_params::mdbx_datalen_min() const {
 }
 
 unsigned actor_params::mdbx_datalen_max() const {
-  return (table_flags & MDBX_INTEGERDUP)
-             ? 8
-             : std::min((table_flags & MDBX_DUPSORT)
-                            ? (unsigned)mdbx_limits_keysize_max(pagesize)
-                            : (unsigned)MDBX_MAXDATASIZE,
-                        (unsigned)UINT16_MAX);
+  return std::min((unsigned)UINT16_MAX,
+                  (unsigned)mdbx_limits_valsize_max(pagesize, table_flags));
 }

@@ -107,18 +107,25 @@ class maker {
   serial_t salt;
 
   struct essentials {
-    uint8_t minlen;
-    uint8_t flags;
-    uint16_t maxlen;
+    uint16_t minlen;
+    uint16_t flags;
+    uint32_t maxlen;
   } key_essentials, value_essentials;
 
-  static void mk(const serial_t serial, const essentials &params, result &out);
+  static void mk_begin(const serial_t serial, const essentials &params,
+                       result &out);
+  static void mk_continue(const serial_t serial, const essentials &params,
+                          result &out);
+  static void mk(const serial_t serial, const essentials &params, result &out) {
+    mk_begin(serial, params, out);
+    mk_continue(serial, params, out);
+  }
 
 public:
   maker() { memset(this, 0, sizeof(*this)); }
 
   void pair(serial_t serial, const buffer &key, buffer &value,
-            serial_t value_age);
+            serial_t value_age, const bool keylen_changeable);
   void setup(const config::actor_params_pod &actor, unsigned actor_id,
              unsigned thread_number);
   void make_ordered();

@@ -2084,19 +2084,21 @@ __inline intptr_t mdbx_limits_pgsize_min(void) { return MDBX_MIN_PAGESIZE; }
 __inline intptr_t mdbx_limits_pgsize_max(void) { return MDBX_MAX_PAGESIZE; }
 
 /* Returns minimal database size in bytes for given page size,
- * or the negative error code. */
+ * or -1 if pagesize is invalid. */
 LIBMDBX_API intptr_t mdbx_limits_dbsize_min(intptr_t pagesize);
 
 /* Returns maximal database size in bytes for given page size,
- * or the negative error code. */
+ * or -1 if pagesize is invalid. */
 LIBMDBX_API intptr_t mdbx_limits_dbsize_max(intptr_t pagesize);
 
-/* Returns maximal key size in bytes for given page size,
- * or the negative error code. */
-LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize);
+/* Returns maximal key and data size in bytes for given page size
+ * and database flags (see mdbx_dbi_open_ex() description),
+ * or -1 if pagesize is invalid. */
+LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize, unsigned flags);
+LIBMDBX_API intptr_t mdbx_limits_valsize_max(intptr_t pagesize, unsigned flags);
 
 /* Returns maximal write transaction size (i.e. limit for summary volume of
- * dirty pages) in bytes for given page size, or the negative error code. */
+ * dirty pages) in bytes for given page size, or -1 if pagesize is invalid. */
 LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /* Set the maximum number of threads/reader slots for the environment.
@@ -2150,11 +2152,16 @@ LIBMDBX_API int mdbx_env_get_maxreaders(MDBX_env *env, unsigned *readers);
  *  - MDBX_EPERM    = the environment is already open. */
 LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
 
-/* Get the maximum size of keys and MDBX_DUPSORT data we can write.
+/* Get the maximum size of keys and data we can write.
  *
- * [in] env  An environment handle returned by mdbx_env_create().
+ * [in] env    An environment handle returned by mdbx_env_create().
+ * [in] flags  Database options (MDBX_DUPSORT, MDBX_INTEGERKEY ans so on),
+ *             see mdbx_dbi_open_ex() description.
  *
- * Returns The maximum size of a key we can write. */
+ * Returns The maximum size of a key we can write,
+ * or -1 if something is wrong. */
+LIBMDBX_API int mdbx_env_get_maxkeysize_ex(MDBX_env *env, unsigned flags);
+LIBMDBX_API int mdbx_env_get_maxvalsize_ex(MDBX_env *env, unsigned flags);
 LIBMDBX_API int mdbx_env_get_maxkeysize(MDBX_env *env);
 
 /* Set application information associated with the MDBX_env.

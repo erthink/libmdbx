@@ -72,7 +72,7 @@ serial_t injective(const serial_t serial,
 }
 
 void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
-                       serial_t value_age) {
+                       serial_t value_age, const bool keylen_changeable) {
   assert(mapping.width >= serial_minwith && mapping.width <= serial_maxwith);
   assert(mapping.split <= mapping.width);
   assert(mapping.mesh <= mapping.width);
@@ -131,11 +131,62 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
   log_trace("keygen-pair: key %" PRIu64 ", value %" PRIu64, key_serial,
             value_serial);
-  mk(key_serial, key_essentials, *key);
-  mk(value_serial, value_essentials, *value);
+  mk_begin(key_serial, key_essentials, *key);
+  mk_begin(value_serial, value_essentials, *value);
+
+#if 0 /* unused for now */
+  if (key->value.iov_len + value->value.iov_len > pair_maxlen) {
+    unsigned extra = key->value.iov_len + value->value.iov_len - pair_maxlen;
+    if (keylen_changeable &&
+        key->value.iov_len > std::max(8u, (unsigned)key_essentials.minlen)) {
+#if defined(__GNUC__) || defined(__clang__)
+      const bool coin = __builtin_parityll(serial) != 0;
+#else
+      const bool coin = INT64_C(0xF2CEECA9989BD96A) * int64_t(serial) < 0;
+#endif
+      if (coin) {
+        const unsigned gap =
+            key->value.iov_len - std::max(8u, (unsigned)key_essentials.minlen);
+        const unsigned chop = std::min(gap, extra);
+        log_trace("keygen-pair: chop %u key-len %u -> %u", chop,
+                  (unsigned)key->value.iov_len,
+                  (unsigned)key->value.iov_len - chop);
+        key->value.iov_len -= chop;
+        extra -= chop;
+      }
+    }
+    if (extra && value->value.iov_len >
+                     std::max(8u, (unsigned)value_essentials.minlen)) {
+      const unsigned gap = value->value.iov_len -
+                           std::max(8u, (unsigned)value_essentials.minlen);
+      const unsigned chop = std::min(gap, extra);
+      log_trace("keygen-pair: chop %u value-len %u -> %u", chop,
+                (unsigned)value->value.iov_len,
+                (unsigned)value->value.iov_len - chop);
+      value->value.iov_len -= chop;
+      extra -= chop;
+    }
+    if (keylen_changeable && extra &&
+        key->value.iov_len > std::max(8u, (unsigned)key_essentials.minlen)) {
+      const unsigned gap =
+          key->value.iov_len - std::max(8u, (unsigned)key_essentials.minlen);
+      const unsigned chop = std::min(gap, extra);
+      log_trace("keygen-pair: chop %u key-len %u -> %u", chop,
+                (unsigned)key->value.iov_len,
+                (unsigned)key->value.iov_len - chop);
+      key->value.iov_len -= chop;
+      extra -= chop;
+    }
+  }
+#else
+  (void)keylen_changeable;
+#endif /* unused for now */
+
+  mk_continue(key_serial, key_essentials, *key);
+  mk_continue(value_serial, value_essentials, *value);
 
   if (log_enabled(logging::trace)) {
-    char dump_key[128], dump_value[128];
+    char dump_key[4096], dump_value[4096];
     log_trace("keygen-pair: key %s, value %s",
               mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
               mdbx_dump_val(&value->value, dump_value, sizeof(dump_value)));
@@ -146,19 +197,22 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
   key_essentials.flags =
       actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
-  assert(actor.keylen_min <= UINT8_MAX);
-  key_essentials.minlen = (uint8_t)actor.keylen_min;
-  assert(actor.keylen_max <= UINT16_MAX);
-  key_essentials.maxlen = (uint16_t)actor.keylen_max;
+  assert(actor.keylen_min <= UINT16_MAX);
+  key_essentials.minlen = (uint16_t)actor.keylen_min;
+  assert(actor.keylen_max <= UINT32_MAX);
+  key_essentials.maxlen = std::min(
+      (uint32_t)actor.keylen_max,
+      (uint32_t)mdbx_limits_keysize_max(actor.pagesize, key_essentials.flags));
 
   value_essentials.flags =
       actor.table_flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP);
-  assert(actor.datalen_min <= UINT8_MAX);
-  value_essentials.minlen = (uint8_t)actor.datalen_min;
-  assert(actor.datalen_max <= UINT16_MAX);
-  value_essentials.maxlen = (uint16_t)actor.datalen_max;
+  assert(actor.datalen_min <= UINT16_MAX);
+  value_essentials.minlen = (uint16_t)actor.datalen_min;
+  assert(actor.datalen_max <= UINT32_MAX);
+  value_essentials.maxlen = std::min(
+      (uint32_t)actor.datalen_max,
+      (uint32_t)mdbx_limits_valsize_max(actor.pagesize, key_essentials.flags));
 
-  assert(thread_number < 2);
   (void)thread_number;
   mapping = actor.keygen;
   salt = (actor.keygen.seed + actor_id) * UINT64_C(14653293970879851569);
@@ -226,18 +280,25 @@ buffer alloc(size_t limit) {
   return buffer(ptr);
 }
 
-void __hot maker::mk(const serial_t serial, const essentials &params,
-                     result &out) {
+void __hot maker::mk_begin(const serial_t serial, const essentials &params,
+                           result &out) {
   assert(out.limit >= params.maxlen);
   assert(params.maxlen >= params.minlen);
   assert(params.maxlen >= length(serial));
 
-  out.value.iov_base = out.bytes;
   out.value.iov_len =
       (params.maxlen > params.minlen)
           ? params.minlen + serial % (params.maxlen - params.minlen)
           : params.minlen;
 
+  if ((params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) == 0 &&
+      out.value.iov_len < 8)
+    out.value.iov_len = std::max(length(serial), out.value.iov_len);
+}
+
+void __hot maker::mk_continue(const serial_t serial, const essentials &params,
+                              result &out) {
+  out.value.iov_base = out.bytes;
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
     assert(params.minlen == 4 || params.minlen == 8);
@@ -251,17 +312,13 @@ void __hot maker::mk(const serial_t serial, const essentials &params,
       unaligned::store(out.bytes + out.value.iov_len - 8, htobe64(serial));
     } else {
       out.u64 = htobe64(serial);
-      if (out.value.iov_len < 8) {
-        out.value.iov_len = std::max(length(serial), out.value.iov_len);
+      if (out.value.iov_len < 8)
         out.value.iov_base = out.bytes + 8 - out.value.iov_len;
-      }
     }
   } else {
     out.u64 = htole64(serial);
     if (out.value.iov_len > 8)
       memset(out.bytes + 8, '\0', out.value.iov_len - 8);
-    else
-      out.value.iov_len = std::max(length(serial), out.value.iov_len);
   }
 
   assert(out.value.iov_len >= params.minlen);

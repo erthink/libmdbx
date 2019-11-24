@@ -53,7 +53,7 @@ bool testcase_append::run() {
     }
 
     log_trace("append: append-a %" PRIu64, serial);
-    generate_pair(serial, key, data);
+    generate_pair(serial);
     int cmp = inserted_number ? mdbx_cmp(txn_guard.get(), dbi, &key->value,
                                          &last_key->value)
                               : 1;

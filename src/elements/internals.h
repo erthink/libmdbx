@@ -644,7 +644,7 @@ typedef union MDBX_DP {
  * elements are in the array. */
 typedef MDBX_DP *MDBX_DPL;
 
-/* PNL sizes - likely should be even bigger */
+/* PNL sizes */
 #define MDBX_PNL_GRANULATE 1024
 #define MDBX_PNL_INITIAL                                                       \
   (MDBX_PNL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
@@ -917,11 +917,11 @@ struct MDBX_env {
   MDBX_DPL me_dirtylist;
   /* Number of freelist items that can fit in a single overflow page */
   unsigned me_maxgc_ov1page;
-  /* Max size of a node on a page */
-  unsigned me_nodemax;
-  unsigned me_maxkey_limit; /* max size of a key */
-  uint32_t me_live_reader;  /* have liveness lock in reader table */
-  void *me_userctx;         /* User-settable context */
+  unsigned me_branch_nodemax; /* max size of a branch-node */
+  uint16_t me_maxkey_nd, me_maxkey_ds;
+  unsigned me_maxval_nd, me_maxval_ds;
+  uint32_t me_live_reader; /* have liveness lock in reader table */
+  void *me_userctx;        /* User-settable context */
   volatile uint64_t *me_sync_timestamp;
   volatile uint64_t *me_autosync_period;
   volatile pgno_t *me_unsynced_pages;

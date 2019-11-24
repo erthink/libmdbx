@@ -197,13 +197,12 @@ protected:
   bool should_continue(bool check_timeout_only = false) const;
 
   void generate_pair(const keygen::serial_t serial, keygen::buffer &out_key,
-                     keygen::buffer &out_value, keygen::serial_t data_age = 0) {
-    keyvalue_maker.pair(serial, out_key, out_value, data_age);
+                     keygen::buffer &out_value, keygen::serial_t data_age) {
+    keyvalue_maker.pair(serial, out_key, out_value, data_age, false);
   }
 
-  void generate_pair(const keygen::serial_t serial,
-                     keygen::serial_t data_age = 0) {
-    generate_pair(serial, key, data, data_age);
+  void generate_pair(const keygen::serial_t serial) {
+    keyvalue_maker.pair(serial, key, data, 0, true);
   }
 
   bool mode_readonly() const {
