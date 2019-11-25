@@ -89,7 +89,7 @@ MDBX_env *env;
 MDBX_txn *txn;
 MDBX_envinfo envinfo;
 MDBX_stat envstat;
-size_t maxkeysize, userdb_count, skipped_subdb;
+size_t userdb_count, skipped_subdb;
 uint64_t total_unused_bytes, reclaimable_pages, gc_pages, alloc_pages,
     unused_pages, backed_pages;
 unsigned verbose;
@@ -648,6 +648,8 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     return rc;
   }
 
+  const size_t maxkeysize = mdbx_env_get_maxkeysize_ex(env, flags);
+
   saved_list = problems_push();
   prev_key.iov_base = NULL;
   prev_key.iov_len = 0;
@@ -1054,14 +1056,6 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  rc = mdbx_env_get_maxkeysize(env);
-  if (rc < 0) {
-    error("mdbx_env_get_maxkeysize failed, error %d %s\n", rc,
-          mdbx_strerror(rc));
-    goto bailout;
-  }
-  maxkeysize = rc;
-
   rc = mdbx_env_info_ex(env, txn, &envinfo, sizeof(envinfo));
   if (rc) {
     error("mdbx_env_info failed, error %d %s\n", rc, mdbx_strerror(rc));
@@ -1160,10 +1154,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (verbose) {
-    print(" - pagesize %u (%u system), max keysize %" PRIuPTR
+    print(" - pagesize %u (%u system), max keysize %d..%d"
           ", max readers %u\n",
-          envinfo.mi_dxb_pagesize, envinfo.mi_sys_pagesize, maxkeysize,
-          envinfo.mi_maxreaders);
+          envinfo.mi_dxb_pagesize, envinfo.mi_sys_pagesize,
+          mdbx_env_get_maxkeysize_ex(env, MDBX_DUPSORT),
+          mdbx_env_get_maxkeysize_ex(env, 0), envinfo.mi_maxreaders);
     print_size(" - mapsize ", envinfo.mi_mapsize, "\n");
     if (envinfo.mi_geo.lower == envinfo.mi_geo.upper)
       print_size(" - fixed datafile: ", envinfo.mi_geo.current, "");
