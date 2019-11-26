@@ -962,7 +962,6 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     if (mdbx_GetFileInformationByHandleEx(handle, FileRemoteProtocolInfo,
                                           &RemoteProtocolInfo,
                                           sizeof(RemoteProtocolInfo))) {
-
       if ((RemoteProtocolInfo.Flags & REMOTE_PROTOCOL_INFO_FLAG_OFFLINE) &&
           !(flags & MDBX_RDONLY))
         return ERROR_FILE_OFFLINE;
@@ -1115,9 +1114,43 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
   const char *const name = statfs_info.f_fstypename;
   const size_t name_len = sizeof(statfs_info.f_fstypename);
 #else
-  const char *const name = "";
-  const unsigned name_len = 0;
+
+  const char *name = "";
+  unsigned name_len = 0;
+
+  struct stat st;
+  if (fstat(handle, &st))
+    return errno;
+
+  char pathbuf[PATH_MAX];
+  FILE *mounted = nullptr;
+#if defined(__linux__) || defined(__gnu_linux__)
+  mounted = setmntent("/proc/mounts", "r");
+#endif /* Linux */
+  if (!mounted)
+    mounted = setmntent("/etc/mtab", "r");
+  if (mounted) {
+    const struct mntent *ent;
+#if defined(_BSD_SOURCE) || defined(_SVID_SOURCE) ||                           \
+    (defined(_DEFAULT_SOURCE) && __GLIBC_PREREQ(2, 19))
+    struct mntent entbuf;
+    while (nullptr !=
+           (ent = getmntent_r(mounted, &entbuf, pathbuf, sizeof(pathbuf))))
+#else
+    while (nullptr != (ent = getmntent(mounted))))
 #endif
+    {
+      struct stat mnt;
+      if (!stat(ent->mnt_dir, &mnt) && mnt.st_dev == st.st_dev) {
+        name =
+            strncpy(pathbuf, ent->mnt_fsname, name_len = sizeof(pathbuf) - 1);
+        pathbuf[name_len] = 0;
+        break;
+      }
+    }
+    endmntent(mounted);
+  }
+#endif /* !xBSD */
 #endif
 
   if (name_len) {

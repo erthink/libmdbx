@@ -89,6 +89,10 @@
 #include <sys/vmmeter.h>
 #else
 #include <malloc.h>
+#if !(defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                \
+      defined(_WIN32) || defined(_WIN64))
+#include <mntent.h>
+#endif /* !Solaris */
 #endif /* !xBSD */
 
 #if defined(__FreeBSD__) || __has_include(<malloc_np.h>)
@@ -125,6 +129,7 @@
 
 #if defined(__sun) || defined(__SVR4) || defined(__svr4__)
 #include <kstat.h>
+#include <sys/mnttab.h>
 /* On Solaris, it's easier to add a missing prototype rather than find a
  * combination of #defines that break nothing. */
 __extern_C key_t ftok(const char *, int);
