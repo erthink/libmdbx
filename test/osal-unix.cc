@@ -131,6 +131,12 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (ipc_overlord_pid)
     failure("ipc already created by %ld pid", (long)ipc_overlord_pid);
   ipc_overlord_pid = getpid();
+#ifndef SEM_A
+#define SEM_A S_IRUSR
+#endif
+#ifndef SEM_R
+#define SEM_R S_IWUSR
+#endif
   ipc = semget(IPC_PRIVATE, actors.size() + 2, IPC_CREAT | SEM_A | SEM_R);
   if (ipc < 0)
     failure_perror("semget(IPC_PRIVATE, shared_sems)", errno);
