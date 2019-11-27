@@ -160,7 +160,18 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-f output] [-l] [-n] [-p] [-a|-s subdb] dbpath\n",
+          "usage: %s [-V] [-q] [-f output] [-l] [-p] [-a|-s subdb] [-r] [-n] "
+          "dbpath\n"
+          "  -V\t\tprint version and exit\n"
+          "  -q\t\tbe quiet\n"
+          "  -f\t\twrite to file instead of stdout\n"
+          "  -l\t\tlist subDBs and exit\n"
+          "  -p\t\tuse printable characters\n"
+          "  -a\t\tdump main DB and all subDBs,\n"
+          "    \t\tby default dump only the main DB\n"
+          "  -s\t\tdump only the named subDB\n"
+          "  -r\t\trescure mode (ignore errors to dump corrupted DB)\n"
+          "  -n\t\tNOSUBDIR mode for open\n",
           prog);
   exit(EXIT_FAILURE);
 }
@@ -178,14 +189,6 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  /* -a: dump main DB and all subDBs
-   * -s: dump only the named subDB
-   * -n: use NOSUBDIR flag on env_open
-   * -p: use printable characters
-   * -f: write to file instead of stdout
-   * -V: print version and exit
-   * (default) dump only the main DB
-   */
   while ((i = getopt(argc, argv, "af:lnps:Vrq")) != EOF) {
     switch (i) {
     case 'V':

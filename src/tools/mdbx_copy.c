@@ -43,6 +43,19 @@ static void signal_handler(int sig) {
 
 #endif /* !WINDOWS */
 
+static void usage(const char *prog) {
+  fprintf(stderr,
+          "usage: %s [-V] [-q] [-c] [-n] src_path [dest_path]\n"
+          "  -V\t\tprint version and exit\n"
+          "  -q\t\tbe quiet\n"
+          "  -c\t\tenable compactification (skip unused pages)\n"
+          "  -n\t\tNOSUBDIR mode for open\n"
+          "  src_path\tsource database\n"
+          "  dest_path\tdestination (stdout if not specified)\n",
+          prog);
+  exit(EXIT_FAILURE);
+}
+
 int main(int argc, char *argv[]) {
   int rc;
   MDBX_env *env = NULL;
@@ -58,6 +71,9 @@ int main(int argc, char *argv[]) {
       cpflags |= MDBX_CP_COMPACT;
     else if (argv[1][1] == 'q' && argv[1][2] == '\0')
       quiet = true;
+    else if ((argv[1][1] == 'h' && argv[1][2] == '\0') ||
+             strcmp(argv[1], "--help") == 0)
+      usage(progname);
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
       printf("mdbx_copy version %d.%d.%d.%d\n"
              " - source: %s %s, commit %s, tree %s\n"
@@ -76,11 +92,8 @@ int main(int argc, char *argv[]) {
       argc = 0;
   }
 
-  if (argc < 2 || argc > 3) {
-    fprintf(stderr, "usage: %s [-V] [-q] [-c] [-n] srcpath [dstpath]\n",
-            progname);
-    exit(EXIT_FAILURE);
-  }
+  if (argc < 2 || argc > 3)
+    usage(progname);
 
 #if defined(_WIN32) || defined(_WIN64)
   SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);

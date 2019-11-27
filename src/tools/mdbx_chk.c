@@ -759,8 +759,8 @@ bailout:
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s dbpath [-V] [-v] [-n] [-q] [-w] [-c] [-d] [-s subdb]\n"
-          "  -V\t\tshow version\n"
+          "usage: %s [-V] [-v] [-n] [-q] [-w] [-c] [-d] [-s subdb] dbpath\n"
+          "  -V\t\tprint version and exit\n"
           "  -v\t\tmore verbose, could be used multiple times\n"
           "  -n\t\tNOSUBDIR mode for open\n"
           "  -q\t\tbe quiet\n"

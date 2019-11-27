@@ -307,7 +307,17 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-a] [-f input] [-n] [-s name] [-N] [-T] dbpath\n",
+          "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] [-n] "
+          "dbpath\n"
+          "  -V\t\tprint version and exit\n"
+          "  -q\t\tbe quiet\n"
+          "  -a\t\tappend records in input order\n"
+          "  -f file\tread from file instead of stdin\n"
+          "  -s name\tload into named subDB\n"
+          "  -N\t\tuse NOOVERWRITE on puts\n"
+          "  -T\t\tread plaintext\n"
+          "  -r\t\trescure mode (ignore errors to load corrupted DB dump)\n"
+          "  -n\t\tNOSUBDIR mode for open\n",
           prog);
   exit(EXIT_FAILURE);
 }
@@ -335,14 +345,6 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage();
 
-  /* -a: append records in input order
-   * -f: load file instead of stdin
-   * -n: use NOSUBDIR flag on env_open
-   * -s: load into named subDB
-   * -N: use NOOVERWRITE on puts
-   * -T: read plaintext
-   * -V: print version and exit
-   */
   while ((i = getopt(argc, argv, "af:ns:NTVrq")) != EOF) {
     switch (i) {
     case 'V':

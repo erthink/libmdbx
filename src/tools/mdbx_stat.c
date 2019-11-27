@@ -54,7 +54,15 @@ static void prstat(MDBX_stat *ms) {
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-n] [-e] [-r[r]] [-f[f[f]]] [-a|-s subdb] dbpath\n",
+          "usage: %s [-V] [-e] [-r[r]] [-f[f[f]]] [-a|-s name] [-n] dbpath\n"
+          "  -V\t\tprint version and exit\n"
+          "  -a\t\tprint stat of main DB and all subDBs\n"
+          "  -s name\tprint stat of only the named subDB\n"
+          "  -e\t\tshow whole DB info\n"
+          "  -f\t\tshow GC info\n"
+          "  -r\t\tshow readers\n"
+          "  \t\t(default) print stat of only the main DB\n"
+          "  -n\t\tNOSUBDIR mode for open\n",
           prog);
   exit(EXIT_FAILURE);
 }
@@ -95,15 +103,6 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  /* -a: print stat of main DB and all subDBs
-   * -s: print stat of only the named subDB
-   * -e: print env info
-   * -f: print freelist info
-   * -r: print reader info
-   * -n: use NOSUBDIR flag on env_open
-   * -V: print version and exit
-   * (default) print stat of only the main DB
-   */
   while ((o = getopt(argc, argv, "Vaefnrs:")) != EOF) {
     switch (o) {
     case 'V':
