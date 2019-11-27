@@ -327,6 +327,8 @@ int main(int argc, char *argv[]) {
   char *envname = NULL;
   int envflags = MDBX_UTTERLY_NOSYNC, putflags = 0;
   int append = 0;
+  int quiet = 0;
+  int rescue = 0;
   MDBX_val prevk;
 
   prog = argv[0];
@@ -341,7 +343,7 @@ int main(int argc, char *argv[]) {
    * -T: read plaintext
    * -V: print version and exit
    */
-  while ((i = getopt(argc, argv, "af:ns:NTV")) != EOF) {
+  while ((i = getopt(argc, argv, "af:ns:NTVrq")) != EOF) {
     switch (i) {
     case 'V':
       printf("mdbx_load version %d.%d.%d.%d\n"
@@ -379,6 +381,12 @@ int main(int argc, char *argv[]) {
     case 'T':
       mode |= NOHDR | PRINT;
       break;
+    case 'q':
+      quiet = 1;
+      break;
+    case 'r':
+      rescue = 1;
+      break;
     default:
       usage();
     }
@@ -401,9 +409,10 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n",
-         mdbx_version.git.describe, mdbx_version.git.datetime,
-         mdbx_version.git.tree, envname);
+  if (!quiet)
+    printf("mdbx_load %s (%s, T-%s)\nRunning for %s...\n",
+           mdbx_version.git.describe, mdbx_version.git.datetime,
+           mdbx_version.git.tree, envname);
   fflush(NULL);
 
   dbuf.iov_len = 4096;
@@ -516,6 +525,11 @@ int main(int argc, char *argv[]) {
       rc = mdbx_cursor_put(mc, &key, &data, putflags | appflag);
       if (rc == MDBX_KEYEXIST && putflags)
         continue;
+      if (rc == MDBX_BAD_VALSIZE && rescue) {
+        fprintf(stderr, "%s: skip line %" PRIiSIZE ": due %s\n", prog, lineno,
+                mdbx_strerror(rc));
+        continue;
+      }
       if (rc) {
         fprintf(stderr, "mdbx_cursor_put failed, error %d %s\n", rc,
                 mdbx_strerror(rc));
