@@ -251,9 +251,9 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  printf("mdbx_dump %s (%s, T-%s)\nRunning for %s...\n",
-         mdbx_version.git.describe, mdbx_version.git.datetime,
-         mdbx_version.git.tree, envname);
+  fprintf(stderr, "mdbx_dump %s (%s, T-%s)\nRunning for %s...\n",
+          mdbx_version.git.describe, mdbx_version.git.datetime,
+          mdbx_version.git.tree, envname);
   fflush(NULL);
 
   rc = mdbx_env_create(&env);
