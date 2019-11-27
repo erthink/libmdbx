@@ -173,7 +173,7 @@ int main(int argc, char *argv[]) {
   char *prog = argv[0];
   char *envname;
   char *subname = NULL;
-  int alldbs = 0, envflags = 0, list = 0;
+  int alldbs = 0, envflags = 0, list = 0, quiet = 0, rescue = 0;
 
   if (argc < 2)
     usage(prog);
@@ -186,7 +186,7 @@ int main(int argc, char *argv[]) {
    * -V: print version and exit
    * (default) dump only the main DB
    */
-  while ((i = getopt(argc, argv, "af:lnps:V")) != EOF) {
+  while ((i = getopt(argc, argv, "af:lnps:Vrq")) != EOF) {
     switch (i) {
     case 'V':
       printf("mdbx_dump version %d.%d.%d.%d\n"
@@ -229,6 +229,12 @@ int main(int argc, char *argv[]) {
         usage(prog);
       subname = optarg;
       break;
+    case 'q':
+      quiet = 1;
+      break;
+    case 'r':
+      rescue = 1;
+      break;
     default:
       usage(prog);
     }
@@ -251,10 +257,12 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  fprintf(stderr, "mdbx_dump %s (%s, T-%s)\nRunning for %s...\n",
-          mdbx_version.git.describe, mdbx_version.git.datetime,
-          mdbx_version.git.tree, envname);
-  fflush(NULL);
+  if (!quiet) {
+    fprintf(stderr, "mdbx_dump %s (%s, T-%s)\nRunning for %s...\n",
+            mdbx_version.git.describe, mdbx_version.git.datetime,
+            mdbx_version.git.tree, envname);
+    fflush(NULL);
+  }
 
   rc = mdbx_env_create(&env);
   if (rc) {
@@ -267,7 +275,9 @@ int main(int argc, char *argv[]) {
     mdbx_env_set_maxdbs(env, 2);
   }
 
-  rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0664);
+  rc = mdbx_env_open(
+      env, envname,
+      envflags | (rescue ? MDBX_RDONLY | MDBX_EXCLUSIVE : MDBX_RDONLY), 0);
   if (rc) {
     fprintf(stderr, "mdbx_env_open failed, error %d %s\n", rc,
             mdbx_strerror(rc));
@@ -318,8 +328,32 @@ int main(int argc, char *argv[]) {
           list++;
         } else {
           rc = dumpit(txn, db2, str);
-          if (rc)
-            break;
+          if (rc) {
+            if (!rescue)
+              break;
+            fprintf(stderr, "%s: %s: ignore %s for `%s` and continue\n", prog,
+                    envname, mdbx_strerror(rc), str);
+            /* Here is a hack for rescue mode, don't do that:
+             *  - we should restart transaction in case error due
+             *    database corruption;
+             *  - but we won't close cursor, reopen and re-positioning it
+             *    for new a transaction;
+             *  - this is possible since DB is opened in read-only exclusive
+             *    mode and transaction is the same, i.e. has the same address
+             *    and so on. */
+            rc = mdbx_txn_reset(txn);
+            if (rc) {
+              fprintf(stderr, "mdbx_txn_reset failed, error %d %s\n", rc,
+                      mdbx_strerror(rc));
+              goto env_close;
+            }
+            rc = mdbx_txn_renew(txn);
+            if (rc) {
+              fprintf(stderr, "mdbx_txn_renew failed, error %d %s\n", rc,
+                      mdbx_strerror(rc));
+              goto env_close;
+            }
+          }
         }
         mdbx_dbi_close(env, db2);
       }
