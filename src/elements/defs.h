@@ -141,16 +141,6 @@
 #   endif
 #endif /* __maybe_unused */
 
-#ifndef __deprecated
-#   if defined(__GNUC__) || __has_attribute(__deprecated__)
-#       define __deprecated __attribute__((__deprecated__))
-#   elif defined(_MSC_VER)
-#       define __deprecated __declspec(deprecated)
-#   else
-#       define __deprecated
-#   endif
-#endif /* __deprecated */
-
 #if !defined(__noop) && !defined(_MSC_VER)
 #		define __noop(...) do {} while(0)
 #endif /* __noop */

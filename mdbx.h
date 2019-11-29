@@ -594,7 +594,17 @@ typedef pthread_t mdbx_tid_t;
 
 #ifndef __has_attribute
 #define __has_attribute(x) (0)
+#endif /* __has_attribute */
+
+#ifndef __deprecated
+#if defined(__GNUC__) || __has_attribute(__deprecated__)
+#define __deprecated __attribute__((__deprecated__))
+#elif defined(_MSC_VER)
+#define __deprecated __declspec(deprecated)
+#else
+#define __deprecated
 #endif
+#endif /* __deprecated */
 
 #ifndef __dll_export
 #if defined(_WIN32) || defined(__CYGWIN__)
@@ -1632,7 +1642,8 @@ typedef struct MDBX_stat {
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                                  MDBX_stat *stat, size_t bytes);
-LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat, size_t bytes);
+__deprecated LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
+                                           size_t bytes);
 
 /* Information about the environment */
 typedef struct MDBX_envinfo {
@@ -1705,7 +1716,8 @@ typedef struct MDBX_envinfo {
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
                                  MDBX_envinfo *info, size_t bytes);
-LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info, size_t bytes);
+__deprecated LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
+                                           size_t bytes);
 
 /* Flush the environment data buffers to disk.
  *
@@ -2059,7 +2071,7 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
                                       intptr_t growth_step,
                                       intptr_t shrink_threshold,
                                       intptr_t pagesize);
-LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env, size_t size);
+__deprecated LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env, size_t size);
 
 /* Find out whether to use readahead or not, based on the given database size
  * and the amount of available memory.
@@ -2162,7 +2174,7 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
  * or -1 if something is wrong. */
 LIBMDBX_API int mdbx_env_get_maxkeysize_ex(MDBX_env *env, unsigned flags);
 LIBMDBX_API int mdbx_env_get_maxvalsize_ex(MDBX_env *env, unsigned flags);
-LIBMDBX_API int mdbx_env_get_maxkeysize(MDBX_env *env);
+__deprecated LIBMDBX_API int mdbx_env_get_maxkeysize(MDBX_env *env);
 
 /* Set application information associated with the MDBX_env.
  *
@@ -3228,13 +3240,14 @@ LIBMDBX_API int mdbx_reader_check(MDBX_env *env, int *dead);
  *
  * Returns an information for estimate how much given read-only
  * transaction is lagging relative the to actual head.
+ * This is deprecated function, use mdbx_txn_info() instead.
  *
  * [in] txn       A transaction handle returned by mdbx_txn_begin().
  * [out] percent  Percentage of page allocation in the database.
  *
  * Returns Number of transactions committed after the given was started for
  * read, or negative value on failure. */
-LIBMDBX_API int mdbx_txn_straggler(MDBX_txn *txn, int *percent);
+__deprecated LIBMDBX_API int mdbx_txn_straggler(MDBX_txn *txn, int *percent);
 
 /* A lack-of-space callback function to resolve issues with a laggard readers.
  *
