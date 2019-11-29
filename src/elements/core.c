@@ -8112,7 +8112,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
     if (!env->me_dbgeo.now) {
       /* set defaults if not configured */
-      err = mdbx_env_set_mapsize(env, DEFAULT_MAPSIZE);
+      err = mdbx_env_set_geometry(env, 0, -1, DEFAULT_MAPSIZE, -1, -1, -1);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }

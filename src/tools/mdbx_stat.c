@@ -186,15 +186,22 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
+  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
+  if (rc) {
+    fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
+            mdbx_strerror(rc));
+    goto env_close;
+  }
+
   if (envinfo || freinfo) {
-    (void)mdbx_env_info(env, &mei, sizeof(mei));
+    (void)mdbx_env_info_ex(env, txn, &mei, sizeof(mei));
   } else {
     /* LY: zap warnings from gcc */
     memset(&mei, 0, sizeof(mei));
   }
 
   if (envinfo) {
-    (void)mdbx_env_stat(env, &mst, sizeof(mst));
+    (void)mdbx_env_stat_ex(env, txn, &mst, sizeof(mst));
     printf("Environment Info\n");
     printf("  Pagesize: %u\n", mst.ms_psize);
     if (mei.mi_geo.lower != mei.mi_geo.upper) {
@@ -247,13 +254,6 @@ int main(int argc, char *argv[]) {
     }
     if (!(subname || alldbs || freinfo))
       goto env_close;
-  }
-
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
-  if (rc) {
-    fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
-    goto env_close;
   }
 
   if (freinfo) {

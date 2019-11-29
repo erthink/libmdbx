@@ -115,7 +115,7 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   if (rc)
     return rc;
 
-  rc = mdbx_env_info(mdbx_txn_env(txn), &info, sizeof(info));
+  rc = mdbx_env_info_ex(mdbx_txn_env(txn), txn, &info, sizeof(info));
   if (rc)
     return rc;
 
@@ -124,7 +124,7 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   if (name)
     printf("database=%s\n", name);
   printf("type=btree\n");
-  printf("mapsize=%" PRIu64 "\n", info.mi_mapsize);
+  printf("mapsize=%" PRIu64 "\n", info.mi_geo.upper);
   printf("maxreaders=%u\n", info.mi_maxreaders);
 
   for (i = 0; dbflags[i].bit; i++)

@@ -442,7 +442,13 @@ int main(int argc, char *argv[]) {
               mdbx_strerror(MDBX_TOO_LARGE));
       return EXIT_FAILURE;
     }
-    mdbx_env_set_mapsize(env, (size_t)envinfo.mi_mapsize);
+    rc = mdbx_env_set_geometry(env, 0, -1, (size_t)envinfo.mi_mapsize, -1, -1,
+                               -1);
+    if (rc) {
+      fprintf(stderr, "mdbx_env_set_geometry failed, error %d %s\n", rc,
+              mdbx_strerror(rc));
+      goto env_close;
+    }
   }
 
 #ifdef MDBX_FIXEDMAP
@@ -457,7 +463,7 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
-  kbuf.iov_len = mdbx_env_get_maxkeysize(env);
+  kbuf.iov_len = mdbx_env_get_maxvalsize_ex(env, MDBX_DUPSORT);
   if (kbuf.iov_len >= SIZE_MAX / 4) {
     fprintf(stderr, "mdbx_env_get_maxkeysize failed, returns %zu\n",
             kbuf.iov_len);
