@@ -305,9 +305,7 @@ typedef struct MDBX_meta {
 
 #define MDBX_DATASIGN_NONE 0u
 #define MDBX_DATASIGN_WEAK 1u
-#define SIGN_IS_WEAK(sign) ((sign) == MDBX_DATASIGN_WEAK)
 #define SIGN_IS_STEADY(sign) ((sign) > MDBX_DATASIGN_WEAK)
-#define META_IS_WEAK(meta) SIGN_IS_WEAK((meta)->mm_datasync_sign)
 #define META_IS_STEADY(meta) SIGN_IS_STEADY((meta)->mm_datasync_sign)
   volatile uint64_t mm_datasync_sign;
 

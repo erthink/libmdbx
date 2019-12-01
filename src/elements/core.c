@@ -2107,6 +2107,8 @@ static __must_check_result int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp);
 static __must_check_result int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp);
 static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
                            int flags);
+static txnid_t mdbx_oomkick(MDBX_env *env, const txnid_t laggard);
+
 static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, unsigned num,
                          MDBX_page **mp);
 static int mdbx_page_touch(MDBX_cursor *mc);
@@ -2371,8 +2373,6 @@ const char *mdbx_strerror_ANSI2OEM(int errnum) {
   return mdbx_strerror_r_ANSI2OEM(errnum, buf, sizeof(buf));
 }
 #endif /* Bit of madness for Windows */
-
-static txnid_t mdbx_oomkick(MDBX_env *env, const txnid_t laggard);
 
 void __cold mdbx_debug_log(int level, const char *function, int line,
                            const char *fmt, ...) {
@@ -3374,7 +3374,7 @@ static __inline uint64_t mdbx_meta_sign(const MDBX_meta *meta) {
   return (sign > MDBX_DATASIGN_WEAK) ? sign : ~sign;
 }
 
-enum meta_choise_mode { prefer_last, prefer_noweak, prefer_steady };
+enum meta_choise_mode { prefer_last, prefer_steady };
 
 static __inline bool mdbx_meta_ot(const enum meta_choise_mode mode,
                                   const MDBX_env *env, const MDBX_meta *a,
@@ -3395,15 +3395,10 @@ static __inline bool mdbx_meta_ot(const enum meta_choise_mode mode,
       return META_IS_STEADY(b);
     /* fall through */
     __fallthrough;
-  case prefer_noweak:
-    if (META_IS_WEAK(a) != META_IS_WEAK(b))
-      return !META_IS_WEAK(b);
-    /* fall through */
-    __fallthrough;
   case prefer_last:
     mdbx_jitter4testing(true);
     if (txnid_a == txnid_b)
-      return META_IS_STEADY(b) || (META_IS_WEAK(a) && !META_IS_WEAK(b));
+      return META_IS_STEADY(b);
     return txnid_a < txnid_b;
   }
 }
@@ -3494,12 +3489,10 @@ static __hot txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
 }
 
 static const char *mdbx_durable_str(const MDBX_meta *const meta) {
-  if (META_IS_WEAK(meta))
-    return "Weak";
   if (META_IS_STEADY(meta))
     return (meta->mm_datasync_sign == mdbx_meta_sign(meta)) ? "Steady"
                                                             : "Tainted";
-  return "Legacy";
+  return "Weak";
 }
 
 /*----------------------------------------------------------------------------*/
@@ -7316,16 +7309,17 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
     if (rc != MDBX_SUCCESS)
       continue;
 
-    if (mdbx_meta_ot(prefer_noweak, env, dest, meta)) {
+    if (mdbx_meta_ot(prefer_steady, env, dest, meta)) {
       *dest = *meta;
-      if (META_IS_WEAK(dest))
+      if (!META_IS_STEADY(dest))
         loop_limit += 1; /* LY: should re-read to hush race with update */
       mdbx_verbose("latch meta[%u]", meta_number);
     }
   }
 
   if (dest->mm_psize == 0 ||
-      (META_IS_WEAK(dest) && !meta_weak_acceptable(env, dest, lck_exclusive))) {
+      (!META_IS_STEADY(dest) &&
+       !meta_weak_acceptable(env, dest, lck_exclusive))) {
     mdbx_error("%s", "no usable meta-pages, database is corrupted");
     return rc;
   }
@@ -7531,9 +7525,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     *env->me_sync_timestamp = mdbx_osal_monotime();
   } else {
     assert(rc == MDBX_RESULT_TRUE /* carry non-steady */);
-    pending->mm_datasync_sign = F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC)
-                                    ? MDBX_DATASIGN_NONE
-                                    : MDBX_DATASIGN_WEAK;
+    pending->mm_datasync_sign = MDBX_DATASIGN_WEAK;
   }
 
   MDBX_meta *target = nullptr;
