@@ -3493,15 +3493,6 @@ static __hot txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
   }
 }
 
-static __hot txnid_t mdbx_reclaiming_detent(const MDBX_env *env) {
-  if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC))
-    return likely(env->me_txn0->mt_owner == mdbx_thread_self())
-               ? env->me_txn0->mt_txnid - MDBX_TXNID_STEP
-               : mdbx_recent_committed_txnid(env);
-
-  return mdbx_recent_steady_txnid(env);
-}
-
 static const char *mdbx_durable_str(const MDBX_meta *const meta) {
   if (META_IS_WEAK(meta))
     return "Weak";
@@ -3517,7 +3508,7 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 static txnid_t mdbx_find_oldest(MDBX_txn *txn) {
   mdbx_tassert(txn, (txn->mt_flags & MDBX_RDONLY) == 0);
   MDBX_env *env = txn->mt_env;
-  const txnid_t edge = mdbx_reclaiming_detent(env);
+  const txnid_t edge = mdbx_recent_steady_txnid(env);
   mdbx_tassert(txn, edge <= txn->mt_txnid);
 
   MDBX_lockinfo *const lck = env->me_lck;
@@ -3872,6 +3863,52 @@ bailout:
   return rc;
 }
 
+static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
+                              MDBX_meta *const meta) {
+  const uint64_t wipe = MDBX_DATASIGN_NONE;
+  if (META_IS_STEADY(meta) &&
+      mdbx_meta_txnid_stable(env, meta) <= last_steady) {
+    mdbx_notice("wipe txn #%" PRIaTXN ", meta %" PRIaPGNO, last_steady,
+                data_page(meta)->mp_pgno);
+    if (env->me_flags & MDBX_WRITEMAP)
+      meta->mm_datasync_sign = wipe;
+    else
+      return mdbx_pwrite(env->me_fd, &wipe, sizeof(meta->mm_datasync_sign),
+                         (uint8_t *)&meta->mm_datasync_sign - env->me_map);
+  }
+  return MDBX_SUCCESS;
+}
+
+__cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
+  int err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 0));
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 1));
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 2));
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  if (env->me_flags & MDBX_WRITEMAP) {
+    mdbx_flush_incoherent_cpu_writeback();
+    return mdbx_msync(&env->me_dxb_mmap, 0, pgno2bytes(env, NUM_METAS), false);
+  }
+
+#if defined(__linux__) || defined(__gnu_linux__)
+  if (sync_file_range(env->me_fd, 0, pgno2bytes(env, NUM_METAS),
+                      SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
+    err = errno;
+#else
+  err = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+#endif
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
+                             env->me_os_psize);
+  return MDBX_SUCCESS;
+}
+
 /* Allocate page numbers and memory for writing.  Maintain mt_last_reclaimed,
  * mt_reclaimed_pglist and mt_next_pgno.  Set MDBX_TXN_ERROR on failure.
  *
@@ -4112,7 +4149,8 @@ skip_cache:
 
       /* Remember ID of GC record */
       if (flags & MDBX_LIFORECLAIM) {
-        if ((rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, last)) != 0)
+        rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, last);
+        if (unlikely(rc != MDBX_SUCCESS))
           goto fail;
       }
       txn->tw.last_reclaimed = last;
@@ -4188,80 +4226,110 @@ skip_cache:
 #endif /* MDBX_PNL sort-order */
     }
 
-    /* Use new pages from the map when nothing suitable in the GC */
+    /* There is no suitable pages in the GC and to be able to allocate
+     * we should CHOICE one of:
+     *  - make a new steady checkpoint if reclaiming was stopped by
+     *    the last steady-sync, or wipe it in the MDBX_UTTERLY_NOSYNC mode;
+     *  - kick lagging reader(s) if reclaiming was stopped by ones of it.
+     *  - extend the database file. */
+
+    /* Will use new pages from the map if nothing is suitable in the GC. */
     range_begin = 0;
     pgno = txn->mt_next_pgno;
-    rc = MDBX_MAP_FULL;
     const pgno_t next = pgno_add(pgno, num);
-    if (likely(next <= txn->mt_end_pgno)) {
-      rc = MDBX_NOTFOUND;
-      if (likely(flags & MDBX_ALLOC_NEW))
-        goto done;
-    }
 
-    const MDBX_meta *head = mdbx_meta_head(env);
-    if ((flags & MDBX_ALLOC_GC) &&
-        ((flags & MDBX_ALLOC_KICK) || rc == MDBX_MAP_FULL)) {
-      MDBX_meta *steady = mdbx_meta_steady(env);
-
-      if (oldest == mdbx_meta_txnid_stable(env, steady) &&
-          !META_IS_STEADY(head) && META_IS_STEADY(steady)) {
-        /* LY: Here an oom was happened:
-         *  - all pages had allocated;
-         *  - reclaiming was stopped at the last steady-sync;
-         *  - the head-sync is weak.
-         * Now we need make a sync to resume reclaiming. If both
-         * MDBX_NOSYNC and MDBX_MAPASYNC flags are set, then assume that
-         * utterly no-sync write mode was requested. In such case
-         * don't make a steady-sync, but only a legacy-mode checkpoint,
-         * just for resume reclaiming only, not for data consistency. */
-
-        mdbx_debug("kick-gc: head %" PRIaTXN "-%s, tail %" PRIaTXN
+    if (flags & MDBX_ALLOC_GC) {
+      const MDBX_meta *const head = mdbx_meta_head(env);
+      MDBX_meta *const steady = mdbx_meta_steady(env);
+      /* does reclaiming stopped at the last steady point? */
+      if (head != steady && META_IS_STEADY(steady) &&
+          oldest == mdbx_meta_txnid_stable(env, steady)) {
+        mdbx_debug("gc-kick-steady: head %" PRIaTXN "-%s, tail %" PRIaTXN
                    "-%s, oldest %" PRIaTXN,
                    mdbx_meta_txnid_stable(env, head), mdbx_durable_str(head),
                    mdbx_meta_txnid_stable(env, steady),
                    mdbx_durable_str(steady), oldest);
-
-        const unsigned syncflags = F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC)
-                                       ? env->me_flags
-                                       : env->me_flags & MDBX_WRITEMAP;
-        MDBX_meta meta = *head;
-        if (mdbx_sync_locked(env, syncflags, &meta) == MDBX_SUCCESS) {
-          txnid_t snap = mdbx_find_oldest(txn);
-          if (snap > oldest)
-            continue;
+        rc = MDBX_RESULT_TRUE;
+        const pgno_t autosync_threshold = *env->me_autosync_threshold;
+        const uint64_t autosync_period = *env->me_autosync_period;
+        /* wipe the last steady-point if:
+         *  - UTTERLY_NOSYNC mode AND auto-sync threshold is NOT specified
+         * otherwise, make a new steady-point if:
+         *  - auto-sync threshold is specified and reached;
+         *  - OR upper limit of database size is reached;
+         *  - OR database is full (with the current file size)
+         *       AND auto-sync threshold it NOT specified */
+        if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) &&
+            (autosync_threshold | autosync_period) == 0) {
+          /* wipe steady checkpoint in MDBX_UTTERLY_NOSYNC mode
+           * without any auto-sync treshold(s). */
+          rc = mdbx_wipe_steady(env, oldest);
+          mdbx_debug("gc-wipe-steady, rc %d", rc);
+          mdbx_assert(env, steady != mdbx_meta_steady(env));
+        } else if ((autosync_threshold &&
+                    *env->me_unsynced_pages >= autosync_threshold) ||
+                   (autosync_period &&
+                    mdbx_osal_monotime() - *env->me_sync_timestamp >=
+                        autosync_period) ||
+                   next >= txn->mt_geo.upper ||
+                   (next >= txn->mt_end_pgno &&
+                    (autosync_threshold | autosync_period) == 0)) {
+          /* make steady checkpoint. */
+          MDBX_meta meta = *head;
+          rc = mdbx_sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta);
+          mdbx_debug("gc-make-steady, rc %d", rc);
+          mdbx_assert(env, steady != mdbx_meta_steady(env));
         }
-      }
-
-      if (rc == MDBX_MAP_FULL && oldest < txn->mt_txnid - MDBX_TXNID_STEP) {
-        if (mdbx_oomkick(env, oldest) > oldest)
-          continue;
+        if (rc == MDBX_SUCCESS) {
+          if (mdbx_find_oldest(txn) > oldest)
+            continue;
+          /* it is reasonable check/kick lagging reader(s) here,
+           * since we made a new steady point or wipe the last. */
+          if (oldest < txn->mt_txnid - MDBX_TXNID_STEP &&
+              mdbx_oomkick(env, oldest) > oldest)
+            continue;
+        } else if (unlikely(rc != MDBX_RESULT_TRUE))
+          goto fail;
       }
     }
 
-    if (rc == MDBX_MAP_FULL && next < head->mm_geo.upper) {
-      mdbx_assert(env, next > txn->mt_end_pgno);
-      pgno_t aligned = pgno_align2os_pgno(
-          env, pgno_add(next, head->mm_geo.grow - next % head->mm_geo.grow));
+    /* don't kick lagging reader(s) if is enough unallocated space
+     * at the end of database file. */
+    if ((flags & MDBX_ALLOC_NEW) && next <= txn->mt_end_pgno)
+      goto done;
+    if ((flags & MDBX_ALLOC_GC) && oldest < txn->mt_txnid - MDBX_TXNID_STEP &&
+        mdbx_oomkick(env, oldest) > oldest)
+      continue;
 
-      if (aligned > head->mm_geo.upper)
-        aligned = head->mm_geo.upper;
-      mdbx_assert(env, aligned > txn->mt_end_pgno);
+    rc = MDBX_NOTFOUND;
+    if (flags & MDBX_ALLOC_NEW) {
+      rc = MDBX_MAP_FULL;
+      if (next <= txn->mt_geo.upper) {
+        mdbx_assert(env, next > txn->mt_end_pgno);
+        pgno_t aligned = pgno_align2os_pgno(
+            env, pgno_add(next, txn->mt_geo.grow - next % txn->mt_geo.grow));
 
-      mdbx_verbose("try growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
-                   ")",
-                   aligned, aligned - txn->mt_end_pgno);
-      rc = mdbx_mapresize(env, txn->mt_next_pgno, aligned, head->mm_geo.upper);
-      if (rc == MDBX_SUCCESS) {
-        env->me_txn->mt_end_pgno = aligned;
-        if (!mp)
-          return rc;
-        goto done;
+        if (aligned > txn->mt_geo.upper)
+          aligned = txn->mt_geo.upper;
+        mdbx_assert(env, aligned > txn->mt_end_pgno);
+
+        mdbx_verbose("try growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
+                     ")",
+                     aligned, aligned - txn->mt_end_pgno);
+        rc = mdbx_mapresize(env, txn->mt_next_pgno, aligned, txn->mt_geo.upper);
+        if (rc == MDBX_SUCCESS) {
+          env->me_txn->mt_end_pgno = aligned;
+          if (!mp)
+            return rc;
+          goto done;
+        }
+
+        mdbx_warning("unable growth datafile to %" PRIaPGNO
+                     " pages (+%" PRIaPGNO "), errcode %d",
+                     aligned, aligned - txn->mt_end_pgno, rc);
+      } else {
+        mdbx_debug("gc-alloc: next %u > upper %u", next, txn->mt_geo.upper);
       }
-
-      mdbx_warning("unable growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
-                   "), errcode %d",
-                   aligned, aligned - txn->mt_end_pgno, rc);
     }
 
   fail:
@@ -4329,10 +4397,7 @@ done:
   return MDBX_SUCCESS;
 }
 
-/* Copy the used portions of a non-overflow page.
- * [in] dst page to copy into
- * [in] src page to copy from
- * [in] psize size of a page */
+/* Copy the used portions of a non-overflow page. */
 __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
                                  unsigned psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
@@ -15480,7 +15545,7 @@ static txnid_t __cold mdbx_oomkick(MDBX_env *env, const txnid_t laggard) {
 
   int retry;
   for (retry = 0; retry < INT_MAX; ++retry) {
-    txnid_t oldest = mdbx_reclaiming_detent(env);
+    txnid_t oldest = mdbx_recent_steady_txnid(env);
     mdbx_assert(env, oldest < env->me_txn0->mt_txnid);
     mdbx_assert(env, oldest >= laggard);
     mdbx_assert(env, oldest >= *env->me_oldest);
