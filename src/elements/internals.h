@@ -1117,8 +1117,8 @@ MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #define mdbx_flush_incoherent_cpu_writeback() mdbx_compiler_barrier()
 #endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
-static __inline void mdbx_flush_incoherent_mmap(void *addr, size_t nbytes,
-                                                const intptr_t pagesize) {
+static __maybe_unused __inline void
+mdbx_flush_incoherent_mmap(void *addr, size_t nbytes, const intptr_t pagesize) {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
   char *const begin = (char *)(-pagesize & (intptr_t)addr);
   char *const end =
