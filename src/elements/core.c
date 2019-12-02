@@ -7459,7 +7459,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         const pgno_t bottom =
             (aligned > pending->mm_geo.lower) ? aligned : pending->mm_geo.lower;
         if (pending->mm_geo.now > bottom) {
-          flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
+          if (META_IS_STEADY(mdbx_meta_steady(env)))
+            /* force steady, but only if steady-checkpoint is present */
+            flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED;
           shrink = pending->mm_geo.now - bottom;
           pending->mm_geo.now = bottom;
           if (mdbx_meta_txnid_stable(env, head) ==
