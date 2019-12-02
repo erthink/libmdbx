@@ -2105,8 +2105,8 @@ MDBX_debug_func *mdbx_debug_logger;
 static bool mdbx_refund(MDBX_txn *txn);
 static __must_check_result int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp);
 static __must_check_result int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp);
-static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
-                           int flags);
+static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
+                           MDBX_page **const mp, int flags);
 static txnid_t mdbx_oomkick(MDBX_env *env, const txnid_t laggard);
 
 static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, unsigned num,
@@ -3925,8 +3925,8 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 #define MDBX_ALLOC_NEW 4
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
-static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
-                           int flags) {
+static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
+                           MDBX_page **const mp, int flags) {
   int rc;
   MDBX_txn *txn = mc->mc_txn;
   MDBX_env *env = txn->mt_env;
@@ -3945,10 +3945,10 @@ static int mdbx_page_alloc(MDBX_cursor *mc, unsigned num, MDBX_page **mp,
     }
   }
 
-  if (likely(flags & MDBX_ALLOC_CACHE)) {
+  if (likely(num == 1 && (flags & MDBX_ALLOC_CACHE) != 0)) {
     /* If there are any loose pages, just use them */
     mdbx_assert(env, mp && num);
-    if (likely(num == 1 && txn->tw.loose_pages)) {
+    if (likely(txn->tw.loose_pages)) {
       if (txn->tw.loose_refund_wl > txn->mt_next_pgno) {
         mdbx_refund(txn);
         if (unlikely(!txn->tw.loose_pages))
@@ -3976,7 +3976,7 @@ skip_cache:
   txnid_t oldest = 0, last = 0;
   const unsigned wanna_range = num - 1;
 
-  while (1) { /* oom-kick retry loop */
+  while (true) { /* oom-kick retry loop */
     /* If our dirty list is already full, we can't do anything */
     if (unlikely(txn->tw.dirtyroom == 0)) {
       rc = MDBX_TXN_FULL;
@@ -4098,8 +4098,8 @@ skip_cache:
       if (flags & MDBX_LIFORECLAIM) {
         /* skip IDs of records that already reclaimed */
         if (txn->tw.lifo_reclaimed) {
-          unsigned i;
-          for (i = (unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed); i > 0; --i)
+          size_t i;
+          for (i = (size_t)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed); i > 0; --i)
             if (txn->tw.lifo_reclaimed[i] == last)
               break;
           if (i)
@@ -4187,8 +4187,7 @@ skip_cache:
         flags &= ~MDBX_COALESCE;
     }
 
-    if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) ==
-            (MDBX_COALESCE | MDBX_ALLOC_CACHE) &&
+    if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) == MDBX_ALLOC_CACHE &&
         re_len > wanna_range) {
       range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
       pgno = MDBX_PNL_LEAST(re_list);
@@ -4256,7 +4255,8 @@ skip_cache:
           rc = mdbx_wipe_steady(env, oldest);
           mdbx_debug("gc-wipe-steady, rc %d", rc);
           mdbx_assert(env, steady != mdbx_meta_steady(env));
-        } else if ((autosync_threshold &&
+        } else if ((flags & MDBX_ALLOC_NEW) == 0 ||
+                   (autosync_threshold &&
                     *env->me_unsynced_pages >= autosync_threshold) ||
                    (autosync_period &&
                     mdbx_osal_monotime() - *env->me_sync_timestamp >=
@@ -4309,8 +4309,6 @@ skip_cache:
         rc = mdbx_mapresize(env, txn->mt_next_pgno, aligned, txn->mt_geo.upper);
         if (rc == MDBX_SUCCESS) {
           env->me_txn->mt_end_pgno = aligned;
-          if (!mp)
-            return rc;
           goto done;
         }
 
@@ -4325,8 +4323,8 @@ skip_cache:
   fail:
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
-    if (mp) {
-      *mp = NULL;
+    if (likely(mp)) {
+      *mp = nullptr;
       txn->mt_flags |= MDBX_TXN_ERROR;
     }
     mdbx_assert(env, rc != MDBX_SUCCESS);
@@ -4334,7 +4332,8 @@ skip_cache:
   }
 
 done:
-  mdbx_tassert(txn, mp && num);
+  if (unlikely(mp == nullptr))
+    return MDBX_SUCCESS;
   mdbx_ensure(env, pgno >= NUM_METAS);
   if (env->me_flags & MDBX_WRITEMAP) {
     np = pgno2page(env, pgno);
@@ -5685,60 +5684,6 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   return mdbx_txn_end(txn, MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE);
 }
 
-static __inline int mdbx_backlog_size(MDBX_txn *txn) {
-  int reclaimed = MDBX_PNL_SIZE(txn->tw.reclaimed_pglist);
-  return reclaimed + txn->tw.loose_count;
-}
-
-static __inline int mdbx_backlog_extragap(MDBX_env *env) {
-  /* LY: extra page(s) for b-tree rebalancing */
-  return (env->me_flags & MDBX_LIFORECLAIM) ? 2 : 1;
-}
-
-/* LY: Prepare a backlog of pages to modify GC itself,
- * while reclaiming is prohibited. It should be enough to prevent search
- * in mdbx_page_alloc() during a deleting, when GC tree is unbalanced. */
-static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *mc) {
-  /* LY: extra page(s) for b-tree rebalancing */
-  const int extra =
-      mdbx_backlog_extragap(txn->mt_env) +
-      MDBX_PNL_SIZEOF(txn->tw.retired_pages) / txn->mt_env->me_maxgc_ov1page +
-      1;
-
-  if (mdbx_backlog_size(txn) < mc->mc_db->md_depth + extra) {
-    mc->mc_flags &= ~C_RECLAIMING;
-    int rc = mdbx_cursor_touch(mc);
-    if (unlikely(rc))
-      return rc;
-
-    while (unlikely(mdbx_backlog_size(txn) < extra)) {
-      rc = mdbx_page_alloc(mc, 1, NULL, MDBX_ALLOC_GC);
-      if (unlikely(rc)) {
-        if (rc != MDBX_NOTFOUND)
-          return rc;
-        break;
-      }
-    }
-    mc->mc_flags |= C_RECLAIMING;
-  }
-
-  return MDBX_SUCCESS;
-}
-
-static void mdbx_prep_backlog_data(MDBX_txn *txn, MDBX_cursor *mc,
-                                   size_t bytes) {
-  const int wanna = (int)number_of_ovpages(txn->mt_env, bytes) +
-                    mdbx_backlog_extragap(txn->mt_env);
-  if (unlikely(wanna > mdbx_backlog_size(txn))) {
-    mc->mc_flags &= ~C_RECLAIMING;
-    do {
-      if (mdbx_page_alloc(mc, 1, NULL, MDBX_ALLOC_GC) != MDBX_SUCCESS)
-        break;
-    } while (wanna > mdbx_backlog_size(txn));
-    mc->mc_flags |= C_RECLAIMING;
-  }
-}
-
 /* Count all the pages in each DB and in the freelist and make sure
  * it matches the actual number of pages being used.
  * All named DBs must be open for a correct count. */
@@ -5866,6 +5811,46 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
   return MDBX_PROBLEM;
 }
 
+static __inline unsigned backlog_size(MDBX_txn *txn) {
+  return MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) + txn->tw.loose_count;
+}
+
+static __inline unsigned gctree_backlog(MDBX_txn *txn) {
+  return /* for split upto root page */ txn->mt_dbs[FREE_DBI].md_depth +
+         /* for rebalance */ 2 + /* for grow */ 1;
+}
+
+/* LY: Prepare a backlog of pages to modify GC itself,
+ * while reclaiming is prohibited. It should be enough to prevent search
+ * in mdbx_page_alloc() during a deleting, when GC tree is unbalanced. */
+static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
+                             const size_t pnl_bytes) {
+  const unsigned linear = number_of_ovpages(
+      txn->mt_env,
+      pnl_bytes ? pnl_bytes : MDBX_PNL_SIZEOF(txn->tw.retired_pages));
+  const unsigned backlog = linear + gctree_backlog(txn);
+
+  if (likely(
+          linear == 1 &&
+          backlog_size(txn) >
+              (pnl_bytes
+                   ? backlog
+                   : backlog + /* for COW */ txn->mt_dbs[FREE_DBI].md_depth)))
+    return MDBX_SUCCESS;
+
+  gc_cursor->mc_flags &= ~C_RECLAIMING;
+
+  int err = mdbx_cursor_touch(gc_cursor);
+  if (err == MDBX_SUCCESS && linear > 1)
+    err = mdbx_page_alloc(gc_cursor, linear, nullptr, MDBX_ALLOC_ALL);
+
+  while (err == MDBX_SUCCESS && backlog_size(txn) < backlog)
+    err = mdbx_page_alloc(gc_cursor, 1, NULL, MDBX_ALLOC_GC);
+
+  gc_cursor->mc_flags |= C_RECLAIMING;
+  return (err != MDBX_NOTFOUND) ? err : MDBX_SUCCESS;
+}
+
 static __inline void clean_reserved_gc_pnl(MDBX_env *env, MDBX_val pnl) {
   /* PNL is initially empty, zero out at least the length */
   memset(pnl.iov_base, 0, sizeof(pgno_t));
@@ -5940,7 +5925,7 @@ retry:
             continue;
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
-          rc = mdbx_prep_backlog(txn, &mc);
+          rc = mdbx_prep_backlog(txn, &mc, 0);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
           mdbx_tassert(txn, cleaned_gc_id < *env->me_oldest);
@@ -5977,7 +5962,7 @@ retry:
         if (cleaned_gc_id > txn->tw.last_reclaimed)
           break;
         if (cleaned_gc_id < txn->tw.last_reclaimed) {
-          rc = mdbx_prep_backlog(txn, &mc);
+          rc = mdbx_prep_backlog(txn, &mc, 0);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
         }
@@ -6095,7 +6080,7 @@ retry:
       key.iov_base = &txn->mt_txnid;
       do {
         data.iov_len = MDBX_PNL_SIZEOF(txn->tw.retired_pages);
-        mdbx_prep_backlog_data(txn, &mc, data.iov_len);
+        mdbx_prep_backlog(txn, &mc, data.iov_len);
         rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -6347,7 +6332,7 @@ retry:
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
-    mdbx_prep_backlog_data(txn, &mc, data.iov_len);
+    mdbx_prep_backlog(txn, &mc, data.iov_len);
     rc = mdbx_cursor_put(&mc, &key, &data, MDBX_RESERVE | MDBX_NOOVERWRITE);
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
@@ -7460,8 +7445,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #endif /* MADV_FREE || MADV_DONTNEED */
 
     /* LY: check conditions to shrink datafile */
-    const pgno_t backlog_gap =
-        pending->mm_dbs[FREE_DBI].md_depth + mdbx_backlog_extragap(env);
+    const pgno_t backlog_gap = 3 + pending->mm_dbs[FREE_DBI].md_depth * 3;
     if (pending->mm_geo.shrink && pending->mm_geo.now - pending->mm_geo.next >
                                       pending->mm_geo.shrink + backlog_gap) {
       if (pending->mm_geo.now > largest_pgno &&
