@@ -9206,9 +9206,8 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
     env->me_flags |= MDBX_FATAL_ERROR;
 #endif /* MDBX_TXN_CHECKPID */
 
-  if ((env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0) {
-    if (env->me_txn0 && env->me_txn0->mt_owner &&
-        env->me_txn0->mt_owner != mdbx_thread_self())
+  if ((env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0 && env->me_txn0) {
+    if (env->me_txn0->mt_owner && env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
     if (!dont_sync) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -12884,7 +12883,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
       return rc;
     }
-  } else {
+  } else if (likely(right)) {
     /* try merge with right */
     mdbx_cassert(mc, page_numkeys(right) >= minkeys);
     mn.mc_pg[mn.mc_top] = right;
