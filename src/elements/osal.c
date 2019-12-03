@@ -1134,17 +1134,24 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #if defined(_BSD_SOURCE) || defined(_SVID_SOURCE) ||                           \
     (defined(_DEFAULT_SOURCE) && __GLIBC_PREREQ(2, 19))
     struct mntent entbuf;
+    const bool should_copy = false;
     while (nullptr !=
            (ent = getmntent_r(mounted, &entbuf, pathbuf, sizeof(pathbuf))))
 #else
+    const bool should_copy = true;
     while (nullptr != (ent = getmntent(mounted))))
 #endif
     {
       struct stat mnt;
       if (!stat(ent->mnt_dir, &mnt) && mnt.st_dev == st.st_dev) {
-        name =
-            strncpy(pathbuf, ent->mnt_fsname, name_len = sizeof(pathbuf) - 1);
-        pathbuf[name_len] = 0;
+        if (should_copy) {
+          name =
+              strncpy(pathbuf, ent->mnt_fsname, name_len = sizeof(pathbuf) - 1);
+          pathbuf[name_len] = 0;
+        } else {
+          name = ent->mnt_fsname;
+          name_len = strlen(name);
+        }
         break;
       }
     }

@@ -3699,6 +3699,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
   mdbx_assert(env, limit_bytes >= size_bytes);
   mdbx_assert(env, bytes2pgno(env, size_bytes) >= size_pgno);
   mdbx_assert(env, bytes2pgno(env, limit_bytes) >= limit_pgno);
+  const size_t prev_limit = env->me_dxb_mmap.limit;
+  const void *const prev_addr = env->me_map;
 
 #if defined(_WIN32) || defined(_WIN64)
   /* Acquire guard in exclusive mode for:
@@ -3739,8 +3741,6 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     goto bailout;
 #endif /* Windows */
 
-  const size_t prev_limit = env->me_dxb_mmap.limit;
-  const void *const prev_addr = env->me_map;
   const size_t prev_size = env->me_dxb_mmap.current;
   if (size_bytes < prev_size) {
     mdbx_notice("resize-MADV_%s %u..%u",
