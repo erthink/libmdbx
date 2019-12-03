@@ -10623,8 +10623,7 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
 int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                     unsigned flags) {
   MDBX_env *env;
-  MDBX_page *fp, *sub_root = NULL;
-  uint16_t fp_flags;
+  MDBX_page *sub_root = NULL;
   MDBX_val xdata, *rdata, dkey, olddata;
   MDBX_db nested_dupdb;
   unsigned mcount = 0, dcount = 0, nospill;
@@ -10812,6 +10811,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   bool insert_key, insert_data, do_sub = false;
   insert_key = insert_data = (rc != MDBX_SUCCESS);
+  uint16_t fp_flags = P_LEAF | P_DIRTY;
+  MDBX_page *fp = env->me_pbuf;
   if (insert_key) {
     /* The key does not exist */
     mdbx_debug("inserting key at index %i", mc->mc_ki[mc->mc_top]);
@@ -10820,8 +10821,6 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             /* See note inside leaf_size() */ env->me_branch_nodemax) {
       /* Too big for a node, insert in sub-DB.  Set up an empty
        * "old sub-page" for prep_subDB to expand to a full page. */
-      fp_flags = P_LEAF | P_DIRTY;
-      fp = env->me_pbuf;
       fp->mp_leaf2_ksize = (uint16_t)data->iov_len /* used if MDBX_DUPFIXED */;
       fp->mp_lower = fp->mp_upper = 0;
       olddata.iov_len = PAGEHDRSZ;
