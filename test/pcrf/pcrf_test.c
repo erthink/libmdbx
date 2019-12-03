@@ -105,8 +105,8 @@ static void db_connect() {
   MDBX_dbi dbi_ip;
 
   MDBX_CHECK(mdbx_env_create(&env));
-  MDBX_CHECK(
-      mdbx_env_set_mapsize(env, REC_COUNT * sizeof(session_data_t) * 10));
+  MDBX_CHECK(mdbx_env_set_geometry(
+      env, 0, 0, REC_COUNT * sizeof(session_data_t) * 10, -1, -1, -1));
   MDBX_CHECK(mdbx_env_set_maxdbs(env, 30));
   MDBX_CHECK(mdbx_env_open(env, opt_db_path,
                            MDBX_CREATE | MDBX_WRITEMAP | MDBX_MAPASYNC |
@@ -256,8 +256,8 @@ static void periodic_stat(void) {
   int64_t ms_leaf_pages = 0;
   MDBX_stat mst;
   MDBX_envinfo mei;
-  MDBX_CHECK(mdbx_env_stat(env, &mst, sizeof(mst)));
-  MDBX_CHECK(mdbx_env_info(env, &mei, sizeof(mei)));
+  MDBX_CHECK(mdbx_env_stat_ex(env, NULL, &mst, sizeof(mst)));
+  MDBX_CHECK(mdbx_env_info_ex(env, NULL, &mei, sizeof(mei)));
   printf("Environment Info\n");
   printf("  Pagesize: %u\n", mst.ms_psize);
   if (mei.mi_geo.lower != mei.mi_geo.upper) {
