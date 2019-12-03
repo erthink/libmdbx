@@ -40,3 +40,6 @@ if(LIB_MATH)
   target_link_libraries(mdbx_chk ${LIB_MATH})
   target_link_libraries(mdbx_stat ${LIB_MATH})
 endif()
+
+install(TARGETS mdbx_chk mdbx_stat mdbx_copy mdbx_dump mdbx_load
+  RUNTIME DESTINATION bin COMPONENT runtime)

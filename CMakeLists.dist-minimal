@@ -195,4 +195,22 @@ foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load)
   target_link_libraries(${TOOL} mdbx-static)
 endforeach()
 
+# installation
+if(MDBX_BUILD_SHARED_LIBRARY)
+  install(TARGETS mdbx EXPORT libmdbx
+    LIBRARY DESTINATION lib COMPONENT runtime
+    PUBLIC_HEADER DESTINATION include
+    INCLUDES DESTINATION include COMPONENT devel)
+endif()
+
+install(TARGETS mdbx-static EXPORT libmdbx
+  LIBRARY DESTINATION lib COMPONENT runtime
+  OBJECTS DESTINATION lib/static COMPONENT devel
+  ARCHIVE DESTINATION lib/static COMPONENT devel
+  PUBLIC_HEADER DESTINATION include
+  INCLUDES DESTINATION include COMPONENT devel)
+
+install(TARGETS mdbx_chk mdbx_stat mdbx_copy mdbx_dump mdbx_load
+  RUNTIME DESTINATION bin COMPONENT runtime)
+
 cmake_policy(POP)

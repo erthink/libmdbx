@@ -226,4 +226,11 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h.in"
   "${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h" ESCAPE_QUOTES)
 add_definitions(-DMDBX_CONFIG_H="config.h")
 
+install(TARGETS mdbx EXPORT libmdbx
+  LIBRARY DESTINATION lib COMPONENT runtime
+  OBJECTS DESTINATION lib/static COMPONENT devel
+  ARCHIVE DESTINATION lib/static COMPONENT devel
+  PUBLIC_HEADER DESTINATION include
+  INCLUDES DESTINATION include COMPONENT devel)
+
 add_subdirectory(tools)
