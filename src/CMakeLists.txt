@@ -120,13 +120,6 @@ if(CC_HAS_VISIBILITY)
   target_compile_options(mdbx PRIVATE "-fvisibility=hidden")
 endif()
 
-install(TARGETS mdbx
-  LIBRARY DESTINATION lib COMPONENT runtime
-  RUNTIME DESTINATION bin COMPONENT runtime
-  ARCHIVE DESTINATION lib/static COMPONENT devel
-  PUBLIC_HEADER DESTINATION include
-  INCLUDES DESTINATION include COMPONENT devel)
-
 ################################################################################
 #
 # library build info (used in library version output)
@@ -226,11 +219,50 @@ configure_file("${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h.in"
   "${CMAKE_CURRENT_SOURCE_DIR}/elements/config.h" ESCAPE_QUOTES)
 add_definitions(-DMDBX_CONFIG_H="config.h")
 
-install(TARGETS mdbx EXPORT libmdbx
-  LIBRARY DESTINATION lib COMPONENT runtime
-  OBJECTS DESTINATION lib/static COMPONENT devel
-  ARCHIVE DESTINATION lib/static COMPONENT devel
-  PUBLIC_HEADER DESTINATION include
-  INCLUDES DESTINATION include COMPONENT devel)
+# installation
+if(MDBX_BUILD_SHARED_LIBRARY)
+  if(CMAKE_VERSION VERSION_LESS 3.12)
+    install(TARGETS mdbx EXPORT libmdbx
+      RUNTIME
+        DESTINATION bin
+        COMPONENT runtime
+      LIBRARY
+        DESTINATION lib
+        COMPONENT runtime
+      OBJECTS
+        DESTINATION lib
+        COMPONENT devel
+      ARCHIVE
+        DESTINATION lib
+        COMPONENT devel
+      PUBLIC_HEADER
+        DESTINATION include
+        COMPONENT devel
+      INCLUDES
+        DESTINATION include
+        COMPONENT devel)
+  else()
+    install(TARGETS mdbx EXPORT libmdbx
+      RUNTIME
+        DESTINATION bin
+        COMPONENT runtime
+      LIBRARY
+        DESTINATION lib
+        COMPONENT runtime
+        NAMELINK_COMPONENT devel
+      OBJECTS
+        DESTINATION lib
+        COMPONENT devel
+      ARCHIVE
+        DESTINATION lib
+        COMPONENT devel
+      PUBLIC_HEADER
+        DESTINATION include
+        COMPONENT devel
+      INCLUDES
+        DESTINATION include
+        COMPONENT devel)
+  endif()
+endif()
 
 add_subdirectory(tools)

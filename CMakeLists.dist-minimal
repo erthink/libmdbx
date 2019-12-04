@@ -167,7 +167,7 @@ if(MDBX_BUILD_SHARED_LIBRARY)
 endif()
 
 # static library used for tools, to avoid rpath/dll-path troubles
-add_library(mdbx-static STATIC EXCLUDE_FROM_ALL mdbx.c mdbx.h)
+add_library(mdbx-static STATIC mdbx.c mdbx.h)
 set_target_properties(mdbx-static PROPERTIES
   C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
   PUBLIC_HEADER mdbx.h)
@@ -197,20 +197,112 @@ endforeach()
 
 # installation
 if(MDBX_BUILD_SHARED_LIBRARY)
-  install(TARGETS mdbx EXPORT libmdbx
-    LIBRARY DESTINATION lib COMPONENT runtime
-    PUBLIC_HEADER DESTINATION include
-    INCLUDES DESTINATION include COMPONENT devel)
+  if(CMAKE_VERSION VERSION_LESS 3.12)
+    install(TARGETS mdbx EXPORT libmdbx
+      RUNTIME
+        DESTINATION bin
+        COMPONENT runtime
+      LIBRARY
+        DESTINATION lib
+        COMPONENT runtime
+      OBJECTS
+        DESTINATION lib
+        COMPONENT devel
+      ARCHIVE
+        DESTINATION lib
+        COMPONENT devel
+      PUBLIC_HEADER
+        DESTINATION include
+        COMPONENT devel
+      INCLUDES
+        DESTINATION include
+        COMPONENT devel)
+  else()
+    install(TARGETS mdbx EXPORT libmdbx
+      RUNTIME
+        DESTINATION bin
+        COMPONENT runtime
+      LIBRARY
+        DESTINATION lib
+        COMPONENT runtime
+        NAMELINK_COMPONENT devel
+      OBJECTS
+        DESTINATION lib
+        COMPONENT devel
+      ARCHIVE
+        DESTINATION lib
+        COMPONENT devel
+      PUBLIC_HEADER
+        DESTINATION include
+        COMPONENT devel
+      INCLUDES
+        DESTINATION include
+        COMPONENT devel)
+  endif()
 endif()
 
-install(TARGETS mdbx-static EXPORT libmdbx
-  LIBRARY DESTINATION lib COMPONENT runtime
-  OBJECTS DESTINATION lib/static COMPONENT devel
-  ARCHIVE DESTINATION lib/static COMPONENT devel
-  PUBLIC_HEADER DESTINATION include
-  INCLUDES DESTINATION include COMPONENT devel)
+if(CMAKE_VERSION VERSION_LESS 3.12)
+  install(TARGETS mdbx-static EXPORT libmdbx EXCLUDE_FROM_ALL
+    RUNTIME
+      DESTINATION bin
+      COMPONENT runtime
+    LIBRARY
+      DESTINATION lib
+      COMPONENT runtime
+    OBJECTS
+      DESTINATION lib
+      COMPONENT devel
+    ARCHIVE
+      DESTINATION lib
+      COMPONENT devel
+    PUBLIC_HEADER
+      DESTINATION include
+      COMPONENT devel
+    INCLUDES
+      DESTINATION include
+      COMPONENT devel)
+else()
+  install(TARGETS mdbx-static EXPORT libmdbx EXCLUDE_FROM_ALL
+    RUNTIME
+      DESTINATION bin
+      COMPONENT runtime
+    LIBRARY
+      DESTINATION lib
+      COMPONENT runtime
+      NAMELINK_COMPONENT devel
+    OBJECTS
+      DESTINATION lib
+      COMPONENT devel
+    ARCHIVE
+      DESTINATION lib
+      COMPONENT devel
+    PUBLIC_HEADER
+      DESTINATION include
+      COMPONENT devel
+    INCLUDES
+      DESTINATION include
+      COMPONENT devel)
+endif()
 
-install(TARGETS mdbx_chk mdbx_stat mdbx_copy mdbx_dump mdbx_load
-  RUNTIME DESTINATION bin COMPONENT runtime)
+install(
+  TARGETS
+    mdbx_chk
+    mdbx_stat
+    mdbx_copy
+    mdbx_dump
+    mdbx_load
+  RUNTIME
+    DESTINATION bin
+    COMPONENT runtime)
+
+install(
+  FILES
+    man1/mdbx_chk.1
+    man1/mdbx_stat.1
+    man1/mdbx_copy.1
+    man1/mdbx_dump.1
+    man1/mdbx_load.1
+  DESTINATION man/man1
+  COMPONENT doc)
 
 cmake_policy(POP)

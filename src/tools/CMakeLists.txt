@@ -31,9 +31,6 @@ foreach(TOOL ${MDBX_TOOLS})
   set_target_properties(${TOOL} PROPERTIES
     C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
     INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
-
-  install(TARGETS ${TOOL} DESTINATION ${CMAKE_INSTALL_PREFIX}/bin COMPONENT mdbx)
-  install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/../man1/${TOOL}.1 DESTINATION ${CMAKE_INSTALL_PREFIX}/man/man1 COMPONENT mdbx)
 endforeach()
 
 if(LIB_MATH)
@@ -41,5 +38,23 @@ if(LIB_MATH)
   target_link_libraries(mdbx_stat ${LIB_MATH})
 endif()
 
-install(TARGETS mdbx_chk mdbx_stat mdbx_copy mdbx_dump mdbx_load
-  RUNTIME DESTINATION bin COMPONENT runtime)
+install(
+  TARGETS
+    mdbx_chk
+    mdbx_stat
+    mdbx_copy
+    mdbx_dump
+    mdbx_load
+  RUNTIME
+    DESTINATION bin
+    COMPONENT runtime)
+
+install(
+  FILES
+    ../man1/mdbx_chk.1
+    ../man1/mdbx_stat.1
+    ../man1/mdbx_copy.1
+    ../man1/mdbx_dump.1
+    ../man1/mdbx_load.1
+  DESTINATION man/man1
+  COMPONENT doc)
