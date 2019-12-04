@@ -3893,7 +3893,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
                       SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
     err = errno;
 #else
-  err = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+  err = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
 #endif
   if (unlikely(err != MDBX_SUCCESS))
     return err;
@@ -14371,7 +14371,7 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 
   if (!dest_is_pipe) {
     if (likely(rc == MDBX_SUCCESS))
-      rc = mdbx_filesync(fd, MDBX_SYNC_DATA | MDBX_SYNC_SIZE | MDBX_SYNC_IODQ);
+      rc = mdbx_filesync(fd, MDBX_SYNC_DATA | MDBX_SYNC_SIZE);
 
     /* Write actual meta */
     if (likely(rc == MDBX_SUCCESS))
