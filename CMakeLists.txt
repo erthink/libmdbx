@@ -76,6 +76,8 @@ macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
   list(APPEND MDBX_BUILD_OPTIONS ${NAME})
   if(NOT ${DEFAULT} STREQUAL "AUTO")
     option(${NAME} "${DESCRIPTION}" ${DEFAULT})
+  elseif(NOT DEFINED ${NAME})
+    set(${NAME}_AUTO ON)
   endif()
 endmacro()
 
@@ -283,15 +285,15 @@ else()
 endif()
 message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 
-##############################################################################
-##############################################################################
+################################################################################
+################################################################################
 #
-#         ####   #####    #####     #     ####   #    #   ####
-#        #    #  #    #     #       #    #    #  ##   #  #
-#        #    #  #    #     #       #    #    #  # #  #   ####
-#        #    #  #####      #       #    #    #  #  # #       #
-#        #    #  #          #       #    #    #  #   ##  #    #
-#         ####   #          #       #     ####   #    #   ####
+#           ####   #####    #####     #     ####   #    #   ####
+#          #    #  #    #     #       #    #    #  ##   #  #
+#          #    #  #    #     #       #    #    #  # #  #   ####
+#          #    #  #####      #       #    #    #  #  # #       #
+#          #    #  #          #       #    #    #  #   ##  #    #
+#           ####   #          #       #     ####   #    #   ####
 #
 
 set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
@@ -316,11 +318,13 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     mark_as_advanced(MDBX_CONFIG_MANUAL_TLS_CALLBACK)
   endif()
 else()
-  add_mdbx_option(MDBX_USE_ROBUST "Use POSIX.1-2008 robust mutexes" AUTO)
-  mark_as_advanced(MDBX_USE_ROBUST)
   add_mdbx_option(MDBX_USE_OFDLOCKS "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
   mark_as_advanced(MDBX_USE_OFDLOCKS)
 endif()
+add_mdbx_option(MDBX_LOCKING "Locking method (Win32=-1, SysV=5, POSIX=1988, POSIX=2001, POSIX=2008, Futexes=1995)" AUTO)
+mark_as_advanced(MDBX_LOCKING)
+add_mdbx_option(MDBX_TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake." AUTO)
+mark_as_advanced(MDBX_TRUST_RTC)
 option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
 
 ################################################################################

@@ -14,9 +14,20 @@
 #cmakedefine ENABLE_ASAN
 
 /* Common */
-#cmakedefine01 MDBX_TXN_CHECKPID
 #cmakedefine01 MDBX_TXN_CHECKOWNER
+#cmakedefine MDBX_TXN_CHECKPID_AUTO
+#ifndef MDBX_TXN_CHECKPID_AUTO
+#cmakedefine01 MDBX_TXN_CHECKPID
+#endif
 #cmakedefine01 MDBX_BUILD_SHARED_LIBRARY
+#cmakedefine MDBX_LOCKING_AUTO
+#ifndef MDBX_LOCKING_AUTO
+#cmakedefine MDBX_LOCKING @MDBX_LOCKING@
+#endif
+#cmakedefine MDBX_TRUST_RTC_AUTO
+#ifndef MDBX_TRUST_RTC_AUTO
+#cmakedefine01 MDBX_TRUST_RTC
+#endif
 
 /* Windows */
 #cmakedefine01 MDBX_CONFIG_MANUAL_TLS_CALLBACK
@@ -26,22 +37,10 @@
 #cmakedefine01 MDBX_OSX_SPEED_INSTEADOF_DURABILITY
 
 /* POSIX */
-#cmakedefine01 MDBX_USE_ROBUST
-#cmakedefine01 MDBX_USE_OFDLOCKS
 #cmakedefine01 MDBX_DISABLE_GNU_SOURCE
-
-/* Simulate "AUTO" values of tristate options */
-#cmakedefine MDBX_TXN_CHECKPID_AUTO
-#ifdef MDBX_TXN_CHECKPID_AUTO
-#undef MDBX_TXN_CHECKPID
-#endif
-#cmakedefine MDBX_USE_ROBUST_AUTO
-#ifdef MDBX_USE_ROBUST_AUTO
-#undef MDBX_USE_ROBUST
-#endif
 #cmakedefine MDBX_USE_OFDLOCKS_AUTO
-#ifdef MDBX_USE_OFDLOCKS_AUTO
-#undef MDBX_USE_OFDLOCKS
+#ifndef MDBX_USE_OFDLOCKS_AUTO
+#cmakedefine01 MDBX_USE_OFDLOCKS
 #endif
 
 /* Build Info */
