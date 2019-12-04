@@ -2,7 +2,7 @@
 .\" Copyright 2012-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_STAT 1 "2019-09-10" "MDBX 0.x"
+.TH MDBX_STAT 1 "2019-12-05" "MDBX 0.4.x"
 .SH NAME
 mdbx_stat \- MDBX environment status tool
 .SH SYNOPSIS
@@ -10,17 +10,19 @@ mdbx_stat \- MDBX environment status tool
 [\c
 .BR \-V ]
 [\c
+.BR \-q ]
+[\c
 .BR \-e ]
 [\c
 .BR \-f [ f [ f ]]]
-[\c
-.BR \-n ]
 [\c
 .BR \-r [ r ]]
 [\c
 .BR \-a \ |
 .BI \-s \ subdb\fR]
-.BR \ envpath
+.BR \ dbpath
+[\c
+.BR \-n ]
 .SH DESCRIPTION
 The
 .B mdbx_stat
@@ -30,6 +32,9 @@ utility displays the status of an MDBX environment.
 .BR \-V
 Write the library version number to the standard output, and exit.
 .TP
+.BR \-q
+Be quiet.
+.TP
 .BR \-e
 Display information about the database environment.
 .TP
@@ -37,9 +42,6 @@ Display information about the database environment.
 Display information about the environment freelist.
 If \fB\-ff\fP is given, summarize each freelist entry.
 If \fB\-fff\fP is given, display the full list of page IDs in the freelist.
-.TP
-.BR \-n
-Display the status of an MDBX database which does not use subdirectories.
 .TP
 .BR \-r
 Display information about the environment reader table.
@@ -56,6 +58,9 @@ Display the status of all of the subdatabases in the environment.
 .TP
 .BR \-s \ subdb
 Display the status of a specific subdatabase.
+.TP
+.BR \-n
+Display the status of an MDBX database which does not use subdirectories.
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur.
 Errors result in a non-zero exit status and
@@ -66,4 +71,5 @@ a diagnostic message being written to standard error.
 .BR mdbx_dump (1),
 .BR mdbx_load (1)
 .SH AUTHOR
-Howard Chu of Symas Corporation <http://www.symas.com>
+Howard Chu of Symas Corporation <http://www.symas.com>,
+Leonid Yuriev <https://github.com/leo-yuriev>

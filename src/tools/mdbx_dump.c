@@ -160,7 +160,7 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-f output] [-l] [-p] [-a|-s subdb] [-r] [-n] "
+          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-a|-s subdb] [-r] [-n] "
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"

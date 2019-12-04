@@ -1,6 +1,6 @@
 .\" Copyright 2015-2019 Leonid Yuriev <leo@yuriev.ru>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_CHK 1 "2019-09-10" "MDBX 0.x"
+.TH MDBX_CHK 1 "2019-12-05" "MDBX 0.4.x"
 .SH NAME
 mdbx_chk \- MDBX checking tool
 .SH SYNOPSIS
@@ -14,16 +14,16 @@ mdbx_chk \- MDBX checking tool
 [\c
 .BR \-q ]
 [\c
+.BR \-c ]
+[\c
 .BR \-w ]
 [\c
 .BR \-d ]
 [\c
-.BI \-s \ subdb\fR]
-[\c
-.BR \-c ]
-[\c
 .BR \-i ]
-.BR \ envpath
+[\c
+.BI \-s \ subdb\fR]
+.BR \ dbpath
 .SH DESCRIPTION
 The
 .B mdbx_chk
@@ -50,6 +50,11 @@ Open MDBX environment(s) which do not use subdirectories.
 .BR \-q
 Be quiet; do not output anything even if an error was detected.
 .TP
+.BR \-c
+Force using cooperative mode while opening environment, i.e. don't try to open
+in exclusive/monopolistic mode. Only exclusive/monopolistic mode allow complete
+check, including full check of all meta-pages and actual size of database file.
+.TP
 .BR \-w
 Open environment in read-write mode and lock for writing while checking.
 This could be impossible if environment already used by another process(s)
@@ -63,17 +68,12 @@ Disable page-by-page traversal of B-tree. In this case, without B-tree
 traversal, it is unable to check for lost-unused pages nor for double-used
 pages.
 .TP
-.BR \-s \ subdb
-Verify and show info only for a specific subdatabase.
-.TP
-.BR \-c
-Force using cooperative mode while opening environment, i.e. don't try to open
-in exclusive/monopolistic mode. Only exclusive/monopolistic mode allow complete
-check, including full check of all meta-pages and actual size of database file.
-.TP
 .BR \-i
 Ignore wrong order errors, which will likely false-positive if custom
 comparator(s) was used.
+.TP
+.BR \-s \ subdb
+Verify and show info only for a specific subdatabase.
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur. Errors result in a non-zero exit status
 and a diagnostic message being written to standard error

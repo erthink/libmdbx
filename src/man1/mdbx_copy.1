@@ -2,7 +2,7 @@
 .\" Copyright 2012-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_COPY 1 "2019-09-10" "MDBX 0.x"
+.TH MDBX_COPY 1 "2019-12-05" "MDBX 0.4.x"
 .SH NAME
 mdbx_copy \- MDBX environment copy tool
 .SH SYNOPSIS
@@ -10,12 +10,14 @@ mdbx_copy \- MDBX environment copy tool
 [\c
 .BR \-V ]
 [\c
+.BR \-q ]
+[\c
 .BR \-c ]
 [\c
 .BR \-n ]
-.B srcpath
+.B src_path
 [\c
-.BR dstpath ]
+.BR dest_path ]
 .SH DESCRIPTION
 The
 .B mdbx_copy
@@ -24,7 +26,7 @@ be copied regardless of whether it is currently in use.
 No lockfile is created, since it gets recreated at need.
 
 If
-.I dstpath
+.I dest_path
 is specified it must be the path of an empty directory
 for storing the backup. Otherwise, the backup will be
 written to stdout.
@@ -33,6 +35,9 @@ written to stdout.
 .TP
 .BR \-V
 Write the library version number to the standard output, and exit.
+.TP
+.BR \-q
+Be quiet.
 .TP
 .BR \-c
 Compact while copying. Only current data pages will be copied; freed
@@ -57,4 +62,5 @@ free during copying cannot be reused until the copy is done.
 .BR mdbx_stat (1),
 .BR mdbx_load (1)
 .SH AUTHOR
-Howard Chu of Symas Corporation <http://www.symas.com>
+Howard Chu of Symas Corporation <http://www.symas.com>,
+Leonid Yuriev <https://github.com/leo-yuriev>

@@ -2,7 +2,7 @@
 .\" Copyright 2014-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_LOAD 1 "2019-09-10" "MDBX 0.x"
+.TH MDBX_LOAD 1 "2019-12-05" "MDBX 0.4.x"
 .SH NAME
 mdbx_load \- MDBX environment import tool
 .SH SYNOPSIS
@@ -10,22 +10,28 @@ mdbx_load \- MDBX environment import tool
 [\c
 .BR \-V ]
 [\c
-.BI \-f \ file\fR]
+.BR \-q ]
 [\c
-.BR \-n ]
+.BR \-a ]
+[\c
+.BI \-f \ file\fR]
 [\c
 .BI \-s \ subdb\fR]
 [\c
 .BR \-N ]
 [\c
 .BR \-T ]
-.BR \ envpath
+[\c
+.BR \-r ]
+[\c
+.BR \-n ]
+.BR \ dbpath
 .SH DESCRIPTION
 The
 .B mdbx_load
 utility reads from the standard input and loads it into the
 MDBX environment
-.BR envpath .
+.BR dbpath .
 
 The input to
 .B mdbx_load
@@ -39,6 +45,9 @@ option below.
 .BR \-V
 Write the library version number to the standard output, and exit.
 .TP
+.BR \-q
+Be quiet.
+.TP
 .BR \-a
 Append all records in the order they appear in the input. The input is assumed to already be
 in correctly sorted order and no sorting or checking for redundant values will be performed.
@@ -48,9 +57,6 @@ on a database that uses custom compare functions.
 .TP
 .BR \-f \ file
 Read from the specified file instead of from the standard input.
-.TP
-.BR \-n
-Load an MDBX database which does not use subdirectories.
 .TP
 .BR \-s \ subdb
 Load a specific subdatabase. If no database is specified, data is loaded into the main database.
@@ -62,6 +68,12 @@ Don't overwrite existing records when loading into an already existing database;
 Load data from simple text files. The input must be paired lines of text, where the first
 line of the pair is the key item, and the second line of the pair is its corresponding
 data item.
+.TP
+.BR \-r
+Rescure mode. Ignore errors to load corrupted DB dump.
+.TP
+.BR \-n
+Load an MDBX database which does not use subdirectories.
 
 A simple escape mechanism, where newline and backslash (\\) characters are special, is
 applied to the text input. Newline characters are interpreted as record separators.
@@ -86,4 +98,5 @@ a diagnostic message being written to standard error.
 .BR mdbx_stat (1),
 .BR mdbx_copy (1)
 .SH AUTHOR
-Howard Chu of Symas Corporation <http://www.symas.com>
+Howard Chu of Symas Corporation <http://www.symas.com>,
+Leonid Yuriev <https://github.com/leo-yuriev>

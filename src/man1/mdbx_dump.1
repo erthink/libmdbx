@@ -2,7 +2,7 @@
 .\" Copyright 2014-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_DUMP 1 "2019-09-10" "MDBX 0.x"
+.TH MDBX_DUMP 1 "2019-12-05" "MDBX 0.4.x"
 .SH NAME
 mdbx_dump \- MDBX environment export tool
 .SH SYNOPSIS
@@ -10,17 +10,21 @@ mdbx_dump \- MDBX environment export tool
 [\c
 .BR \-V ]
 [\c
+.BR \-q ]
+[\c
 .BI \-f \ file\fR]
 [\c
 .BR \-l ]
-[\c
-.BR \-n ]
 [\c
 .BR \-p ]
 [\c
 .BR \-a \ |
 .BI \-s \ subdb\fR]
-.BR \ envpath
+[\c
+.BR \-r ]
+[\c
+.BR \-n ]
+.BR \ dbpath
 .SH DESCRIPTION
 The
 .B mdbx_dump
@@ -34,15 +38,15 @@ utility.
 .BR \-V
 Write the library version number to the standard output, and exit.
 .TP
+.BR \-q
+Be quiet.
+.TP
 .BR \-f \ file
 Write to the specified file instead of to the standard output.
 .TP
 .BR \-l
 List the databases stored in the environment. Just the
 names will be listed, no data will be output.
-.TP
-.BR \-n
-Dump an MDBX database which does not use subdirectories.
 .TP
 .BR \-p
 If characters in either the key or data items are printing characters (as
@@ -58,6 +62,12 @@ Dump all of the subdatabases in the environment.
 .TP
 .BR \-s \ subdb
 Dump a specific subdatabase. If no database is specified, only the main database is dumped.
+.TP
+.BR \-r
+Rescure mode. Ignore some errors to dump corrupted DB.
+.TP
+.BR \-n
+Dump an MDBX database which does not use subdirectories.
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur.
 Errors result in a non-zero exit status and
@@ -77,4 +87,5 @@ utility to load the database using the correct comparison functions.
 .BR mdbx_chk (1),
 .BR mdbx_stat (1)
 .SH AUTHOR
-Howard Chu of Symas Corporation <http://www.symas.com>
+Howard Chu of Symas Corporation <http://www.symas.com>,
+Leonid Yuriev <https://github.com/leo-yuriev>
