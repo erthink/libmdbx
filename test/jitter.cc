@@ -27,6 +27,29 @@ bool testcase_jitter::run() {
       txn_end(flipcoin());
     }
 
+    int err;
+    intptr_t upper_limit = config.params.size_upper;
+    if (upper_limit < 1)
+      upper_limit = config.params.size_now;
+    if (upper_limit < 1) {
+      MDBX_envinfo info;
+      err = mdbx_env_info_ex(db_guard.get(), txn_guard.get(), &info,
+                             sizeof(info));
+      if (err)
+        failure_perror("mdbx_env_info_ex()", err);
+      upper_limit = (info.mi_geo.upper < INTPTR_MAX)
+                        ? (intptr_t)info.mi_geo.upper
+                        : INTPTR_MAX;
+    }
+
+    const bool xcoin = flipcoin();
+    err = mdbx_env_set_geometry(db_guard.get(), -1, -1,
+                                xcoin ? upper_limit / 2 : upper_limit * 3 / 2,
+                                -1, -1, -1);
+    if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE &&
+        err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+      failure_perror("mdbx_env_set_geometry-1", err);
+
     jitter_delay();
     txn_begin(mode_readonly());
     jitter_delay();
@@ -40,6 +63,13 @@ bool testcase_jitter::run() {
     }
     txn_end(flipcoin());
 
+    err = mdbx_env_set_geometry(db_guard.get(), -1, -1,
+                                !xcoin ? upper_limit / 2 : upper_limit * 3 / 2,
+                                -1, -1, -1);
+    if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE &&
+        err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+      failure_perror("mdbx_env_set_geometry-2", err);
+
     if (flipcoin()) {
       jitter_delay();
       txn_begin(true);
@@ -48,6 +78,12 @@ bool testcase_jitter::run() {
     }
 
     jitter_delay();
+    err =
+        mdbx_env_set_geometry(db_guard.get(), -1, -1, upper_limit, -1, -1, -1);
+    if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE &&
+        err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+      failure_perror("mdbx_env_set_geometry-3", err);
+
     db_close();
 
     /* just 'align' nops with other tests with batching */
