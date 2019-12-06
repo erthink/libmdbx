@@ -187,7 +187,7 @@ typedef std::pair<HANDLE, actor_status> child;
 static std::unordered_map<mdbx_pid_t, child> childs;
 
 bool osal_progress_push(bool active) {
-  if (childs.empty()) {
+  if (!childs.empty()) {
     if (!SetEvent(active ? hProgressActiveEvent : hProgressPassiveEvent))
       failure_perror("osal_progress_push: SetEvent(overlord.progress)",
                      GetLastError());
