@@ -2294,7 +2294,7 @@ typedef struct MDBX_txn_info {
  * [in] txn        A transaction handle returned by mdbx_txn_begin().
  * [out] stat      The address of an MDBX_txn_info structure
  *                 where the information will be copied.
- * [in[ scan_rlt   The boolean flag controls the scan of the read lock table to
+ * [in] scan_rlt   The boolean flag controls the scan of the read lock table to
  *                 provide complete information. Such scan is relatively
  *                 expensive and you can avoid it if corresponding fields are
  *                 not needed (see description of MDBX_txn_info above).
