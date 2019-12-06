@@ -1525,12 +1525,8 @@ retry_mapview:;
   }
 
   if (limit != map->limit) {
-#if defined(_GNU_SOURCE) && (defined(__linux__) || defined(__gnu_linux__))
-    void *ptr = mremap(map->address, map->limit, limit,
-                       /* LY: in case changing the mapping size calling code
-                          must guarantees the absence of competing threads,
-                          and a willingness to another base address */
-                       MREMAP_MAYMOVE);
+#if defined(MREMAP_MAYMOVE)
+    void *ptr = mremap(map->address, map->limit, limit, 0);
     if (ptr == MAP_FAILED) {
       rc = errno;
       return (rc == EAGAIN || rc == ENOMEM) ? MDBX_RESULT_TRUE : rc;
@@ -1541,15 +1537,17 @@ retry_mapview:;
 #ifdef MADV_DONTFORK
     if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
       return errno;
-#endif
+#endif /* MADV_DONTFORK */
 
 #ifdef MADV_NOHUGEPAGE
     (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
-#endif
+#endif /* MADV_NOHUGEPAGE */
 
-#else
+#else  /* MREMAP_MAYMOVE */
+    /* TODO: Perhaps here it is worth to implement suspend/resume threads
+     *       and perform unmap/map as like for Windows. */
     rc = MDBX_RESULT_TRUE;
-#endif /* _GNU_SOURCE && __linux__ */
+#endif /* !MREMAP_MAYMOVE */
   }
 #endif
   return rc;
