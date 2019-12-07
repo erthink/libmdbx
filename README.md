@@ -1,7 +1,3 @@
-### The [repository now only mirrored on the Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
-<!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
------
-
 libmdbx
 ======================================
 
@@ -161,25 +157,37 @@ without freezing writers.
 
 ## Improvements over LMDB
 
-_libmdbx_ is superior to _legendary [LMDB](https://symas.com/lmdb/)_ in
+_libmdbx_ is superior to legendary _[LMDB](https://symas.com/lmdb/)_ in
 terms of features and reliability, not inferior in performance. In
-comparison to LMDB, _libmdbx_ make things "just work" perfectly and
+comparison to _LMDB_, _libmdbx_ make things "just work" perfectly and
 out-of-the-box, not silently and catastrophically break down. The list
 below is pruned down to the improvements most notable and obvious from
 the user's point of view.
 
-1. Automatic on-the-fly database size control by preset parameters, both
+1. Larger limit for keys size. More than 2 larger than _LMDB_.
+  > For DB with default page size _libmdbx_ support keys up to 1300 bytes
+  > and up to 21780 bytes for 64K page size. _LMDB_ allows key size up to
+  > 511 bytes and may silently loses data with large values.
+
+2. Up to 20% faster than _LMDB_ in [CRUD](https://en.wikipedia.org/wiki/Create,_read,_update_and_delete) benchmarks.
+  > Benchmarks of the in-[tmpfs](https://en.wikipedia.org/wiki/Tmpfs) scenarios,
+  > that tests the speed of engine itself, shown that _libmdbx_ 10-20% faster than _LMDB_.
+  > These and other results could be easily reproduced with [ioArena](https://github.com/pmwkaa/ioarena) just by `make bench-quartet`,
+  > including comparisons with [RockDB](https://en.wikipedia.org/wiki/RocksDB)
+  > and [WiredTiger](https://en.wikipedia.org/wiki/WiredTiger).
+
+3. Automatic on-the-fly database size control by preset parameters, both
 reduction and increment.
   > _libmdbx_ manage the database size according to parameters specified
   > by `mdbx_env_set_geometry()` function,
   > ones include the growth step and the truncation threshold.
 
-2. Automatic continuous zero-overhead database compactification.
+4. Automatic continuous zero-overhead database compactification.
   > _libmdbx_ logically move as possible a freed pages
   > at end of allocation area into unallocated space,
   > and then release such space if a lot of.
 
-3. LIFO policy for recycling a Garbage Collection items. On systems with a disk
+5. LIFO policy for recycling a Garbage Collection items. On systems with a disk
 write-back cache, this can significantly increase write performance, up to
 several times in a best case scenario.
   > LIFO means that for reuse pages will be taken which became unused the lastest.
@@ -188,63 +196,63 @@ several times in a best case scenario.
   > and on disk during a series of write transactions, will be as small as possible.
   > Thus creates ideal conditions for the efficient operation of the disk write-back cache.
 
-4. Fast estimation of range query result volume, i.e. how many items can
+6. Fast estimation of range query result volume, i.e. how many items can
 be found between a `KEY1` and a `KEY2`. This is prerequisite for build
 and/or optimize query execution plans.
   > _libmdbx_ performs a rough estimate based only on b-tree pages that
   > are common for the both stacks of cursors that were set to corresponing
   > keys.
 
-5. `mdbx_chk` tool for database integrity check.
+7. `mdbx_chk` tool for database integrity check.
 
-6. Guarantee of database integrity even in asynchronous unordered write-to-disk mode.
+8. Guarantee of database integrity even in asynchronous unordered write-to-disk mode.
   > _libmdbx_ propose additional trade-off by implementing append-like manner for updates
   > in `NOSYNC` and `MAPASYNC` modes, that avoid database corruption after a system crash
   > contrary to LMDB. Nevertheless, the `MDBX_UTTERLY_NOSYNC` mode available to match LMDB behaviour,
   > and for a special use-cases.
 
-7. Automated steady flush to disk upon volume of changes and/or by
+9. Automated steady flush to disk upon volume of changes and/or by
 timeout via cheap polling.
 
-8. Sequence generation and three cheap persistent 64-bit markers with ACID.
+10. Sequence generation and three cheap persistent 64-bit markers with ACID.
 
-9. Support for keys and values of zero length, including multi-values
+11. Support for keys and values of zero length, including multi-values
 (aka sorted duplicates).
 
-10. The handler of lack-of-space condition with a callback,
+12. The handler of lack-of-space condition with a callback,
 that allow you to control and resolve such situations.
 
-11. Support for opening a database in the exclusive mode, including on a network share.
+13. Support for opening a database in the exclusive mode, including on a network share.
 
-12. Extended transaction info, including dirty and leftover space info
+14. Extended transaction info, including dirty and leftover space info
 for a write transaction, reading lag and hold over space for read
 transactions.
 
-13. Extended whole-database info (aka environment) and reader enumeration.
+15. Extended whole-database info (aka environment) and reader enumeration.
 
-14. Extended update or delete, _at once_ with getting previous value
+16. Extended update or delete, _at once_ with getting previous value
 and addressing the particular item from multi-value with the same key.
 
-15. Support for explicitly updating the existing record, not insertion a new one.
+17. Support for explicitly updating the existing record, not insertion a new one.
 
-16. All cursors are uniformly, can be reused and should be closed explicitly,
+18. All cursors are uniformly, can be reused and should be closed explicitly,
 regardless ones were opened within write or read transaction.
 
-17. Correct update of current record with `MDBX_CURRENT` flag when size
+19. Correct update of current record with `MDBX_CURRENT` flag when size
 of key or data was changed, including sorted duplicated.
 
-18. Opening database handles is spared from race conditions and
+20. Opening database handles is spared from race conditions and
 pre-opening is not needed.
 
-19. Ability to determine whether the particular data is on a dirty page
+21. Ability to determine whether the particular data is on a dirty page
 or not, that allows to avoid copy-out before updates.
 
-20. Ability to determine whether the cursor is pointed to a key-value
+22. Ability to determine whether the cursor is pointed to a key-value
 pair, to the first, to the last, or not set to anything.
 
-21. Returning `MDBX_EMULTIVAL` error in case of ambiguous update or delete.
+23. Returning `MDBX_EMULTIVAL` error in case of ambiguous update or delete.
 
-22. On **MacOS** the `fcntl(F_FULLFSYNC)` syscall is used _by
+24. On **MacOS** the `fcntl(F_FULLFSYNC)` syscall is used _by
 default_ to synchronize data with the disk, as this is [the only way to
 guarantee data
 durability](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html)
@@ -254,7 +262,7 @@ compared to LMDB, where the `fsync()` syscall is used. Therefore,
 _libmdbx_ allows you to override this behavior by defining the
 `MDBX_OSX_SPEED_INSTEADOF_DURABILITY=1` option while build the library.
 
-23. On **Windows** the `LockFileEx()` syscall is used for locking, since
+25. On **Windows** the `LockFileEx()` syscall is used for locking, since
 it allows place the database on network drives, and provides protection
 against incompetent user actions (aka
 [poka-yoke](https://en.wikipedia.org/wiki/Poka-yoke)). Therefore
@@ -433,14 +441,14 @@ recommend that you install [Homebrew](https://brew.sh/) and then execute
   | -------- | ------ | ------ |
   | Java     | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
   | .NET     | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
-
+  | Rust     | [mdbx-rs](https://github.com/Kerollmops/mdbx-rs)   | [Clément Renault](https://github.com/Kerollmops) |
 
 --------------------------------------------------------------------------------
 
 Performance comparison
 ======================
 
-All benchmarks were done by [IOArena](https://github.com/pmwkaa/ioarena)
+All benchmarks were done in 2015 by [IOArena](https://github.com/pmwkaa/ioarena)
 and multiple [scripts](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015)
 runs on Lenovo Carbon-2 laptop, i7-4600U 2.1 GHz, 8 Gb RAM,
 SSD SAMSUNG MZNTD512HAGL-000L1 (DXT23L0Q) 512 Gb.
@@ -577,16 +585,5 @@ syscall and by scanning data directory.
 
 --------------------------------------------------------------------------------
 
-```
-$ objdump -f -h -j .text libmdbx.so
-
-libmdbx.so:     file format elf64-x86-64
-architecture: i386:x86-64, flags 0x00000150:
-HAS_SYMS, DYNAMIC, D_PAGED
-start address 0x0000000000003710
-
-Sections:
-Idx Name          Size      VMA               LMA               File off  Algn
- 11 .text         00015eff  0000000000003710  0000000000003710  00003710  2**4
-                  CONTENTS, ALLOC, LOAD, READONLY, CODE
-```
+### The [repository now only mirrored on the Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
+<!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
