@@ -541,7 +541,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const char *pathname, int flags,
   case O_WRONLY: /* assume for MDBX_env_copy() and friends output */
     DesiredAccess = GENERIC_WRITE;
     ShareMode = 0;
-    FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH;
+    FlagsAndAttributes |= FILE_FLAG_WRITE_THROUGH;
     break;
   case O_RDWR:
     DesiredAccess = GENERIC_READ | GENERIC_WRITE;
