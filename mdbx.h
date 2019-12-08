@@ -3512,16 +3512,10 @@ LIBMDBX_API int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
 #endif /* MDBX_NEXENTA_ATTRS */
 
 /*******************************************************************************
- * LY: temporary workaround for Elbrus's memcmp() bug. */
-#ifndef __GLIBC_PREREQ
-#if defined(__GLIBC__) && defined(__GLIBC_MINOR__)
-#define __GLIBC_PREREQ(maj, min)                                               \
-  ((__GLIBC__ << 16) + __GLIBC_MINOR__ >= ((maj) << 16) + (min))
-#else
-#define __GLIBC_PREREQ(maj, min) (0)
-#endif
-#endif /* __GLIBC_PREREQ */
-#if defined(__e2k__) && !__GLIBC_PREREQ(2, 24)
+ * Workaround for mmaped-lookahead-cross-page-boundary bug
+ * in an obsolete versions of Elbrus's libc and kernels. */
+#if defined(__e2k__) && defined(MDBX_E2K_MLHCPB_WORKAROUND) &&                 \
+    MDBX_E2K_MLHCPB_WORKAROUND
 LIBMDBX_API int mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
                                                size_t n);
 LIBMDBX_API int mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2);
@@ -3544,8 +3538,7 @@ LIBMDBX_API size_t mdbx_e2k_strnlen_bug_workaround(const char *s,
 #define strlen mdbx_e2k_strlen_bug_workaround
 #undef strnlen
 #define strnlen mdbx_e2k_strnlen_bug_workaround
-
-#endif /* Elbrus's memcmp() bug. */
+#endif /* MDBX_E2K_MLHCPB_WORKAROUND */
 
 #ifdef __cplusplus
 }
