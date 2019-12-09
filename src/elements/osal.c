@@ -371,11 +371,11 @@ MDBX_INTERNAL_FUNC int mdbx_condmutex_init(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   int rc = MDBX_SUCCESS;
   condmutex->event = NULL;
-  condmutex->mutex = CreateMutex(NULL, FALSE, NULL);
+  condmutex->mutex = CreateMutexW(NULL, FALSE, NULL);
   if (!condmutex->mutex)
     return GetLastError();
 
-  condmutex->event = CreateEvent(NULL, FALSE, FALSE, NULL);
+  condmutex->event = CreateEventW(NULL, TRUE, FALSE, NULL);
   if (!condmutex->event) {
     rc = GetLastError();
     (void)CloseHandle(condmutex->mutex);
@@ -459,8 +459,11 @@ MDBX_INTERNAL_FUNC int mdbx_condmutex_wait(mdbx_condmutex_t *condmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code =
       SignalObjectAndWait(condmutex->mutex, condmutex->event, INFINITE, FALSE);
-  if (code == WAIT_OBJECT_0)
+  if (code == WAIT_OBJECT_0) {
     code = WaitForSingleObject(condmutex->mutex, INFINITE);
+    if (code == WAIT_OBJECT_0)
+      return ResetEvent(condmutex->event) ? MDBX_SUCCESS : GetLastError();
+  }
   return waitstatus2errcode(code);
 #else
   return pthread_cond_wait(&condmutex->cond, &condmutex->mutex);

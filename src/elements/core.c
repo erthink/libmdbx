@@ -13851,22 +13851,26 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   mdbx_copy *my = arg;
   uint8_t *ptr;
   int toggle = 0;
-  int rc;
 
   mdbx_condmutex_lock(&my->mc_condmutex);
   while (!my->mc_error) {
-    while (!my->mc_new)
-      mdbx_condmutex_wait(&my->mc_condmutex);
+    while (!my->mc_new && !my->mc_error) {
+      int err = mdbx_condmutex_wait(&my->mc_condmutex);
+      if (err != MDBX_SUCCESS) {
+        my->mc_error = err;
+        goto bailout;
+      }
+    }
     if (my->mc_new == 0 + MDBX_EOF) /* 0 buffers, just EOF */
       break;
     size_t wsize = my->mc_wlen[toggle];
     ptr = my->mc_wbuf[toggle];
   again:
     if (wsize > 0 && !my->mc_error) {
-      rc = mdbx_write(my->mc_fd, ptr, wsize);
-      if (rc != MDBX_SUCCESS) {
-        my->mc_error = rc;
-        break;
+      int err = mdbx_write(my->mc_fd, ptr, wsize);
+      if (err != MDBX_SUCCESS) {
+        my->mc_error = err;
+        goto bailout;
       }
     }
 
@@ -13883,6 +13887,7 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     my->mc_new--;
     mdbx_condmutex_signal(&my->mc_condmutex);
   }
+bailout:
   mdbx_condmutex_unlock(&my->mc_condmutex);
   return (THREAD_RESULT)0;
 }
@@ -13895,8 +13900,11 @@ static int __cold mdbx_env_cthr_toggle(mdbx_copy *my, int adjust) {
   mdbx_condmutex_lock(&my->mc_condmutex);
   my->mc_new += (short)adjust;
   mdbx_condmutex_signal(&my->mc_condmutex);
-  while (my->mc_new & 2) /* both buffers in use */
-    mdbx_condmutex_wait(&my->mc_condmutex);
+  while (!my->mc_error && (my->mc_new & 2) /* both buffers in use */) {
+    int err = mdbx_condmutex_wait(&my->mc_condmutex);
+    if (err != MDBX_SUCCESS)
+      my->mc_error = err;
+  }
   mdbx_condmutex_unlock(&my->mc_condmutex);
 
   my->mc_toggle ^= (adjust & 1);
