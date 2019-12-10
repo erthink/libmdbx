@@ -1816,7 +1816,7 @@ static __hot int __must_check_result mdbx_pnl_insert_range(MDBX_PNL *ppl,
   return MDBX_SUCCESS;
 }
 
-static bool __hot mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
+static bool mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
   assert(limit >= MIN_PAGENO && limit <= MAX_PAGENO + 1);
   if (likely(MDBX_PNL_SIZE(pl))) {
     assert(MDBX_PNL_LEAST(pl) >= MIN_PAGENO);
@@ -2992,7 +2992,7 @@ static __cold void mdbx_kill_page(MDBX_env *env, MDBX_page *mp, pgno_t pgno,
  * If the page wasn't dirtied in this txn, just add it
  * to this txn's free list. */
 
-static __hot int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
+static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
   const unsigned npages = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
   const pgno_t pgno = mp->mp_pgno;
 
@@ -3072,7 +3072,7 @@ static __hot int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
   return MDBX_SUCCESS;
 }
 
-static __hot int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
+static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
   const unsigned npages = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
   const pgno_t pgno = mp->mp_pgno;
   MDBX_txn *const txn = mc->mc_txn;
@@ -3484,15 +3484,15 @@ mdbx_meta_mostrecent(const enum meta_choise_mode mode, const MDBX_env *env) {
   return head;
 }
 
-static __hot MDBX_meta *mdbx_meta_steady(const MDBX_env *env) {
+static MDBX_meta *mdbx_meta_steady(const MDBX_env *env) {
   return mdbx_meta_mostrecent(prefer_steady, env);
 }
 
-static __hot MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
+static MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
   return mdbx_meta_mostrecent(prefer_last, env);
 }
 
-static __hot txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
+static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
   while (true) {
     const MDBX_meta *head = mdbx_meta_head(env);
     const txnid_t recent = mdbx_meta_txnid_fluid(env, head);
@@ -3503,7 +3503,7 @@ static __hot txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
   }
 }
 
-static __hot txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
+static txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
   while (true) {
     const MDBX_meta *head = mdbx_meta_steady(env);
     const txnid_t recent = mdbx_meta_txnid_fluid(env, head);
@@ -3951,8 +3951,8 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 #define MDBX_ALLOC_NEW 4
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
-static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
-                           MDBX_page **const mp, int flags) {
+__hot static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
+                                 MDBX_page **const mp, int flags) {
   int rc;
   MDBX_txn *txn = mc->mc_txn;
   MDBX_env *env = txn->mt_env;
@@ -4442,9 +4442,8 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
  * [in] mp    the page being referenced. It must not be dirty.
  * [out] ret  the writable page, if any.
  *            ret is unchanged if mp wasn't spilled. */
-__hot static int __must_check_result mdbx_page_unspill(MDBX_txn *txn,
-                                                       MDBX_page *mp,
-                                                       MDBX_page **ret) {
+static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
+                                                 MDBX_page **ret) {
   MDBX_env *env = txn->mt_env;
   pgno_t pgno = mp->mp_pgno, pn = pgno << 1;
 
@@ -6565,7 +6564,7 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
  * [in] txn   the transaction that's being committed
  * [in] keep  number of initial pages in dirtylist to keep dirty.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
+__hot static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
   struct iovec iov[MDBX_COMMIT_PAGES];
   const MDBX_DPL dl = (keep || txn->tw.loose_count > 1)
                           ? mdbx_dpl_sort(txn->tw.dirtylist)
@@ -10163,8 +10162,8 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 }
 
 /* Set the cursor on a specific data item. */
-__hot static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                                 MDBX_cursor_op op, int *exactp) {
+static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                           MDBX_cursor_op op, int *exactp) {
   int rc;
   MDBX_page *mp;
   MDBX_node *node = NULL;
@@ -16212,9 +16211,8 @@ __hot static ptrdiff_t estimate(const MDBX_db *db,
   }
 }
 
-__hot int mdbx_estimate_distance(const MDBX_cursor *first,
-                                 const MDBX_cursor *last,
-                                 ptrdiff_t *distance_items) {
+int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *last,
+                           ptrdiff_t *distance_items) {
   if (unlikely(first == NULL || last == NULL || distance_items == NULL))
     return MDBX_EINVAL;
 
