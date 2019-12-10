@@ -77,15 +77,19 @@ field_alignment(unsigned alignment_baseline, size_t field_offset) {
 }
 
 /* read-thunk for UB-sanitizer */
-static __pure_function __always_inline uint8_t peek_u8(const uint8_t *ptr) {
+static __pure_function __always_inline uint8_t
+peek_u8(const uint8_t *const __restrict ptr) {
   return *ptr;
 }
 
 /* write-thunk for UB-sanitizer */
-static __always_inline void poke_u8(uint8_t *ptr, const uint8_t v) { *ptr = v; }
+static __always_inline void poke_u8(uint8_t *const __restrict ptr,
+                                    const uint8_t v) {
+  *ptr = v;
+}
 
 static __pure_function __always_inline uint16_t
-unaligned_peek_u16(const unsigned expected_alignment, const void *ptr) {
+unaligned_peek_u16(const unsigned expected_alignment, const void *const ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint16_t)) == 0)
     return *(const uint16_t *)ptr;
@@ -97,8 +101,8 @@ unaligned_peek_u16(const unsigned expected_alignment, const void *ptr) {
 }
 
 static __always_inline void
-unaligned_poke_u16(const unsigned expected_alignment, void *ptr,
-                   const uint16_t v) {
+unaligned_poke_u16(const unsigned expected_alignment,
+                   void *const __restrict ptr, const uint16_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
     *(uint16_t *)ptr = v;
@@ -106,8 +110,8 @@ unaligned_poke_u16(const unsigned expected_alignment, void *ptr,
     memcpy(ptr, &v, sizeof(v));
 }
 
-static __pure_function __always_inline uint32_t
-unaligned_peek_u32(const unsigned expected_alignment, const void *ptr) {
+static __pure_function __always_inline uint32_t unaligned_peek_u32(
+    const unsigned expected_alignment, const void *const __restrict ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint32_t)) == 0)
     return *(const uint32_t *)ptr;
@@ -125,8 +129,8 @@ unaligned_peek_u32(const unsigned expected_alignment, const void *ptr) {
 }
 
 static __always_inline void
-unaligned_poke_u32(const unsigned expected_alignment, void *ptr,
-                   const uint32_t v) {
+unaligned_poke_u32(const unsigned expected_alignment,
+                   void *const __restrict ptr, const uint32_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
     *(uint32_t *)ptr = v;
@@ -138,8 +142,8 @@ unaligned_poke_u32(const unsigned expected_alignment, void *ptr,
     memcpy(ptr, &v, sizeof(v));
 }
 
-static __pure_function __always_inline uint64_t
-unaligned_peek_u64(const unsigned expected_alignment, const void *ptr) {
+static __pure_function __always_inline uint64_t unaligned_peek_u64(
+    const unsigned expected_alignment, const void *const __restrict ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint64_t)) == 0)
     return *(const uint64_t *)ptr;
@@ -157,8 +161,8 @@ unaligned_peek_u64(const unsigned expected_alignment, const void *ptr) {
 }
 
 static __always_inline void
-unaligned_poke_u64(const unsigned expected_alignment, void *ptr,
-                   const uint64_t v) {
+unaligned_poke_u64(const unsigned expected_alignment,
+                   void *const __restrict ptr, const uint64_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
     *(uint64_t *)ptr = v;
@@ -191,7 +195,8 @@ unaligned_poke_u64(const unsigned expected_alignment, void *ptr,
   unaligned_poke_u64(1, (char *)(ptr) + offsetof(struct, field), value)
 
 /* Get the page number pointed to by a branch node */
-static __pure_function __always_inline pgno_t node_pgno(const MDBX_node *node) {
+static __pure_function __always_inline pgno_t
+node_pgno(const MDBX_node *const __restrict node) {
   pgno_t pgno = UNALIGNED_PEEK_32(node, MDBX_node, mn_pgno32);
   if (sizeof(pgno) > 4)
     pgno |= ((uint64_t)UNALIGNED_PEEK_8(node, MDBX_node, mn_extra)) << 32;
@@ -199,7 +204,8 @@ static __pure_function __always_inline pgno_t node_pgno(const MDBX_node *node) {
 }
 
 /* Set the page number in a branch node */
-static __always_inline void node_set_pgno(MDBX_node *node, pgno_t pgno) {
+static __always_inline void node_set_pgno(MDBX_node *const __restrict node,
+                                          pgno_t pgno) {
   assert(pgno >= MIN_PAGENO && pgno <= MAX_PAGENO);
 
   UNALIGNED_POKE_32(node, MDBX_node, mn_pgno32, (uint32_t)pgno);
@@ -209,33 +215,38 @@ static __always_inline void node_set_pgno(MDBX_node *node, pgno_t pgno) {
 }
 
 /* Get the size of the data in a leaf node */
-static __pure_function __always_inline size_t node_ds(const MDBX_node *node) {
+static __pure_function __always_inline size_t
+node_ds(const MDBX_node *const __restrict node) {
   return UNALIGNED_PEEK_32(node, MDBX_node, mn_dsize);
 }
 
 /* Set the size of the data for a leaf node */
-static __always_inline void node_set_ds(MDBX_node *node, size_t size) {
+static __always_inline void node_set_ds(MDBX_node *const __restrict node,
+                                        size_t size) {
   assert(size < INT_MAX);
   UNALIGNED_POKE_32(node, MDBX_node, mn_dsize, (uint32_t)size);
 }
 
 /* The size of a key in a node */
-static __pure_function __always_inline size_t node_ks(const MDBX_node *node) {
+static __pure_function __always_inline size_t
+node_ks(const MDBX_node *const __restrict node) {
   return UNALIGNED_PEEK_16(node, MDBX_node, mn_ksize);
 }
 
 /* Set the size of the key for a leaf node */
-static __always_inline void node_set_ks(MDBX_node *node, size_t size) {
+static __always_inline void node_set_ks(MDBX_node *const __restrict node,
+                                        size_t size) {
   assert(size < INT16_MAX);
   UNALIGNED_POKE_16(node, MDBX_node, mn_ksize, (uint16_t)size);
 }
 
 static __pure_function __always_inline uint8_t
-node_flags(const MDBX_node *node) {
+node_flags(const MDBX_node *const __restrict node) {
   return UNALIGNED_PEEK_8(node, MDBX_node, mn_flags);
 }
 
-static __always_inline void node_set_flags(MDBX_node *node, uint8_t flags) {
+static __always_inline void node_set_flags(MDBX_node *const __restrict node,
+                                           uint8_t flags) {
   UNALIGNED_POKE_8(node, MDBX_node, mn_flags, flags);
 }
 
@@ -243,12 +254,14 @@ static __always_inline void node_set_flags(MDBX_node *node, uint8_t flags) {
 #define NODESIZE offsetof(MDBX_node, mn_data)
 
 /* Address of the key for the node */
-static __pure_function __always_inline void *node_key(const MDBX_node *node) {
+static __pure_function __always_inline void *
+node_key(const MDBX_node *const __restrict node) {
   return (char *)node + NODESIZE;
 }
 
 /* Address of the data for a node */
-static __pure_function __always_inline void *node_data(const MDBX_node *node) {
+static __pure_function __always_inline void *
+node_data(const MDBX_node *const __restrict node) {
   return (char *)node_key(node) + node_ks(node);
 }
 
@@ -263,7 +276,8 @@ static __pure_function __always_inline size_t node_size(const MDBX_val *key,
   return node_size_len(key ? key->iov_len : 0, value ? value->iov_len : 0);
 }
 
-static __pure_function __always_inline pgno_t peek_pgno(const void *ptr) {
+static __pure_function __always_inline pgno_t
+peek_pgno(const void *const __restrict ptr) {
   if (sizeof(pgno_t) == sizeof(uint32_t))
     return (pgno_t)unaligned_peek_u32(1, ptr);
   else if (sizeof(pgno_t) == sizeof(uint64_t))
@@ -275,7 +289,8 @@ static __pure_function __always_inline pgno_t peek_pgno(const void *ptr) {
   }
 }
 
-static __always_inline void poke_pgno(void *ptr, const pgno_t pgno) {
+static __always_inline void poke_pgno(void *const __restrict ptr,
+                                      const pgno_t pgno) {
   if (sizeof(pgno) == sizeof(uint32_t))
     unaligned_poke_u32(1, ptr, pgno);
   else if (sizeof(pgno) == sizeof(uint64_t))
@@ -285,7 +300,7 @@ static __always_inline void poke_pgno(void *ptr, const pgno_t pgno) {
 }
 
 static __pure_function __always_inline pgno_t
-node_largedata_pgno(const MDBX_node *node) {
+node_largedata_pgno(const MDBX_node *const __restrict node) {
   assert(node_flags(node) & F_BIGDATA);
   return peek_pgno(node_data(node));
 }
