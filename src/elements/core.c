@@ -4898,7 +4898,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   mdbx_assert(env, (flags & ~(MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS |
                               MDBX_WRITEMAP)) == 0);
   if (flags & MDBX_RDONLY) {
-    txn->mt_flags = MDBX_RDONLY | (env->me_flags & MDBX_NOTLS);
+    txn->mt_flags =
+        MDBX_RDONLY | (env->me_flags & (MDBX_NOTLS | MDBX_WRITEMAP));
     MDBX_reader *r = txn->to.reader;
     STATIC_ASSERT(sizeof(size_t) == sizeof(r->mr_tid));
     if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
@@ -9528,14 +9529,14 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
   MDBX_txn *txn = mc->mc_txn;
   if (unlikely(pgno >= txn->mt_next_pgno)) {
     mdbx_debug("page %" PRIaPGNO " not found", pgno);
-    txn->mt_flags |= MDBX_TXN_ERROR;
-    return MDBX_PAGE_NOTFOUND;
+    goto corrupted;
   }
 
-  MDBX_env *env = txn->mt_env;
+  MDBX_env *const env = txn->mt_env;
   MDBX_page *p = NULL;
   int level;
-  if ((txn->mt_flags & (MDBX_RDONLY | MDBX_WRITEMAP)) == 0) {
+  mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
+  if (unlikely((txn->mt_flags & (MDBX_RDONLY | MDBX_WRITEMAP)) == 0)) {
     level = 1;
     do {
       /* Spilled pages were dirtied in this txn and flushed
@@ -9556,20 +9557,21 @@ mapped:
   p = pgno2page(env, pgno);
 
 done:
-  txn = nullptr /* avoid future use */;
   if (unlikely(p->mp_pgno != pgno)) {
     mdbx_error("mismatch pgno %" PRIaPGNO " (actual) != %" PRIaPGNO
                " (expected)",
                p->mp_pgno, pgno);
-    return MDBX_CORRUPTED;
+    goto corrupted;
   }
 
-  if (unlikely(p->mp_upper < p->mp_lower || ((p->mp_lower | p->mp_upper) & 1) ||
-               PAGEHDRSZ + p->mp_upper > env->me_psize) &&
-      !IS_OVERFLOW(p)) {
-    mdbx_error("invalid page lower(%u)/upper(%u), pg-limit %u", p->mp_lower,
-               p->mp_upper, page_space(env));
-    return MDBX_CORRUPTED;
+  if (likely(!IS_OVERFLOW(p))) {
+    if (unlikely(p->mp_upper < p->mp_lower ||
+                 ((p->mp_lower | p->mp_upper) & 1) ||
+                 PAGEHDRSZ + p->mp_upper > env->me_psize)) {
+      mdbx_error("invalid page lower(%u)/upper(%u), pg-limit %u", p->mp_lower,
+                 p->mp_upper, page_space(env));
+      goto corrupted;
+    }
   }
   /* TODO: more checks here, including p->mp_validator */
 
@@ -9583,6 +9585,10 @@ done:
   if (lvl)
     *lvl = level;
   return MDBX_SUCCESS;
+
+corrupted:
+  txn->mt_flags |= MDBX_TXN_ERROR;
+  return MDBX_CORRUPTED;
 }
 
 /* Finish mdbx_page_search() / mdbx_page_search_lowest().
