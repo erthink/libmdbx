@@ -11,9 +11,8 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-/* Amalgamated build */
-#define MDBX_ALLOY 1
-#include "elements/internals.h" /* must be included fisrt */
+#define MDBX_ALLOY 1            /* amalgamated build */
+#include "elements/internals.h" /* must be included first */
 
 #include "elements/core.c"
 #include "elements/osal.c"
