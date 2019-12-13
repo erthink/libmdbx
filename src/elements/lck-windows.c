@@ -613,6 +613,10 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid) {
   case WAIT_OBJECT_0:
     /* process just exited */
     return MDBX_RESULT_FALSE;
+  case ERROR_ACCESS_DENIED:
+    /* The ERROR_ACCESS_DENIED would be returned for CSRSS-processes, etc.
+     * assume pid exists */
+    return MDBX_RESULT_TRUE;
   case WAIT_TIMEOUT:
     /* pid running */
     return MDBX_RESULT_TRUE;
