@@ -5842,39 +5842,40 @@ static __always_inline unsigned backlog_size(MDBX_txn *txn) {
   return MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) + txn->tw.loose_count;
 }
 
-static __always_inline unsigned gctree_backlog(MDBX_txn *txn) {
-  return /* for split upto root page */ txn->mt_dbs[FREE_DBI].md_depth +
-         /* for rebalance */ 2 + /* for grow */ 1;
-}
-
 /* LY: Prepare a backlog of pages to modify GC itself,
  * while reclaiming is prohibited. It should be enough to prevent search
  * in mdbx_page_alloc() during a deleting, when GC tree is unbalanced. */
 static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
                              const size_t pnl_bytes) {
-  const unsigned linear = number_of_ovpages(
-      txn->mt_env,
-      pnl_bytes ? pnl_bytes : MDBX_PNL_SIZEOF(txn->tw.retired_pages));
-  const unsigned backlog = linear + gctree_backlog(txn);
+  const unsigned linear4list = number_of_ovpages(txn->mt_env, pnl_bytes);
+  const unsigned backlog4cow = txn->mt_dbs[FREE_DBI].md_depth;
+  const unsigned backlog4rebalance = backlog4cow + 1;
 
-  if (likely(
-          linear == 1 &&
-          backlog_size(txn) >
-              (pnl_bytes
-                   ? backlog
-                   : backlog + /* for COW */ txn->mt_dbs[FREE_DBI].md_depth)))
+  if (likely(linear4list == 1 &&
+             backlog_size(txn) > (pnl_bytes
+                                      ? backlog4rebalance
+                                      : (backlog4cow + backlog4rebalance))))
     return MDBX_SUCCESS;
 
+  mdbx_trace(">> pnl_bytes %zu, backlog %u, 4list %u, 4cow %u, 4rebalance %u",
+             pnl_bytes, backlog_size(txn), linear4list, backlog4cow,
+             backlog4rebalance);
+
   gc_cursor->mc_flags &= ~C_RECLAIMING;
-
   int err = mdbx_cursor_touch(gc_cursor);
-  if (err == MDBX_SUCCESS && linear > 1)
-    err = mdbx_page_alloc(gc_cursor, linear, nullptr, MDBX_ALLOC_ALL);
+  mdbx_trace("== after-touch, backlog %u, err %d", backlog_size(txn), err);
 
-  while (err == MDBX_SUCCESS && backlog_size(txn) < backlog)
+  if (linear4list > 1 && err == MDBX_SUCCESS) {
+    err = mdbx_page_alloc(gc_cursor, linear4list, nullptr,
+                          MDBX_ALLOC_GC | MDBX_ALLOC_CACHE);
+    mdbx_trace("== after-4linear, backlog %u, err %d", backlog_size(txn), err);
+  }
+
+  while (backlog_size(txn) < backlog4cow + linear4list && err == MDBX_SUCCESS)
     err = mdbx_page_alloc(gc_cursor, 1, NULL, MDBX_ALLOC_GC);
 
   gc_cursor->mc_flags |= C_RECLAIMING;
+  mdbx_trace("<< backlog %u, err %d", backlog_size(txn), err);
   return (err != MDBX_NOTFOUND) ? err : MDBX_SUCCESS;
 }
 
@@ -5923,6 +5924,10 @@ retry:
     rc = MDBX_PROBLEM;
     goto bailout;
   }
+
+  rc = mdbx_prep_backlog(txn, &mc, MDBX_PNL_SIZEOF(txn->tw.retired_pages));
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
 
   unsigned settled = 0, cleaned_gc_slot = 0, reused_gc_slot = 0,
            filled_gc_slot = ~0u;
@@ -6131,8 +6136,11 @@ retry:
           mdbx_debug_extra_print(" %" PRIaPGNO, txn->tw.retired_pages[i]);
         mdbx_debug_extra_print("%s", "\n");
       }
-      if (unlikely(amount != MDBX_PNL_SIZE(txn->tw.reclaimed_pglist)))
+      if (unlikely(amount != MDBX_PNL_SIZE(txn->tw.reclaimed_pglist))) {
+        mdbx_trace("%s.reclaimed-list changed %u -> %u, retry", dbg_prefix_mode,
+                   amount, (unsigned)MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
         goto retry /* rare case, but avoids GC fragmentation and one loop. */;
+      }
       continue;
     }
 
