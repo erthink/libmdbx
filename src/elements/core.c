@@ -40,12 +40,12 @@
 /*------------------------------------------------------------------------------
  * Internal inlines */
 
-static __pure_function __inline bool is_powerof2(size_t x) {
+static __pure_function __always_inline bool is_powerof2(size_t x) {
   return (x & (x - 1)) == 0;
 }
 
-static __pure_function __inline size_t roundup_powerof2(size_t value,
-                                                        size_t granularity) {
+static __pure_function __always_inline size_t
+roundup_powerof2(size_t value, size_t granularity) {
   assert(is_powerof2(granularity));
   return (value + granularity - 1) & ~(granularity - 1);
 }
@@ -70,21 +70,21 @@ static __pure_function unsigned log2n(size_t value) {
 /*------------------------------------------------------------------------------
  * Unaligned access */
 
-static __pure_function __maybe_unused __inline unsigned
+static __pure_function __maybe_unused __always_inline unsigned
 field_alignment(unsigned alignment_baseline, size_t field_offset) {
   unsigned merge = alignment_baseline | (unsigned)field_offset;
   return merge & -(int)merge;
 }
 
 /* read-thunk for UB-sanitizer */
-static __pure_function __inline uint8_t peek_u8(const uint8_t *ptr) {
+static __pure_function __always_inline uint8_t peek_u8(const uint8_t *ptr) {
   return *ptr;
 }
 
 /* write-thunk for UB-sanitizer */
-static __inline void poke_u8(uint8_t *ptr, const uint8_t v) { *ptr = v; }
+static __always_inline void poke_u8(uint8_t *ptr, const uint8_t v) { *ptr = v; }
 
-static __pure_function __inline uint16_t
+static __pure_function __always_inline uint16_t
 unaligned_peek_u16(const unsigned expected_alignment, const void *ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint16_t)) == 0)
@@ -96,8 +96,9 @@ unaligned_peek_u16(const unsigned expected_alignment, const void *ptr) {
   }
 }
 
-static __inline void unaligned_poke_u16(const unsigned expected_alignment,
-                                        void *ptr, const uint16_t v) {
+static __always_inline void
+unaligned_poke_u16(const unsigned expected_alignment, void *ptr,
+                   const uint16_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
     *(uint16_t *)ptr = v;
@@ -105,7 +106,7 @@ static __inline void unaligned_poke_u16(const unsigned expected_alignment,
     memcpy(ptr, &v, sizeof(v));
 }
 
-static __pure_function __inline uint32_t
+static __pure_function __always_inline uint32_t
 unaligned_peek_u32(const unsigned expected_alignment, const void *ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint32_t)) == 0)
@@ -123,8 +124,9 @@ unaligned_peek_u32(const unsigned expected_alignment, const void *ptr) {
   }
 }
 
-static __inline void unaligned_poke_u32(const unsigned expected_alignment,
-                                        void *ptr, const uint32_t v) {
+static __always_inline void
+unaligned_poke_u32(const unsigned expected_alignment, void *ptr,
+                   const uint32_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
     *(uint32_t *)ptr = v;
@@ -136,7 +138,7 @@ static __inline void unaligned_poke_u32(const unsigned expected_alignment,
     memcpy(ptr, &v, sizeof(v));
 }
 
-static __pure_function __inline uint64_t
+static __pure_function __always_inline uint64_t
 unaligned_peek_u64(const unsigned expected_alignment, const void *ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint64_t)) == 0)
@@ -154,8 +156,9 @@ unaligned_peek_u64(const unsigned expected_alignment, const void *ptr) {
   }
 }
 
-static __inline void unaligned_poke_u64(const unsigned expected_alignment,
-                                        void *ptr, const uint64_t v) {
+static __always_inline void
+unaligned_poke_u64(const unsigned expected_alignment, void *ptr,
+                   const uint64_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
     *(uint64_t *)ptr = v;
@@ -188,7 +191,7 @@ static __inline void unaligned_poke_u64(const unsigned expected_alignment,
   unaligned_poke_u64(1, (char *)(ptr) + offsetof(struct, field), value)
 
 /* Get the page number pointed to by a branch node */
-static __pure_function __inline pgno_t node_pgno(const MDBX_node *node) {
+static __pure_function __always_inline pgno_t node_pgno(const MDBX_node *node) {
   pgno_t pgno = UNALIGNED_PEEK_32(node, MDBX_node, mn_pgno32);
   if (sizeof(pgno) > 4)
     pgno |= ((uint64_t)UNALIGNED_PEEK_8(node, MDBX_node, mn_extra)) << 32;
@@ -196,7 +199,7 @@ static __pure_function __inline pgno_t node_pgno(const MDBX_node *node) {
 }
 
 /* Set the page number in a branch node */
-static __inline void node_set_pgno(MDBX_node *node, pgno_t pgno) {
+static __always_inline void node_set_pgno(MDBX_node *node, pgno_t pgno) {
   assert(pgno >= MIN_PAGENO && pgno <= MAX_PAGENO);
 
   UNALIGNED_POKE_32(node, MDBX_node, mn_pgno32, (uint32_t)pgno);
@@ -206,32 +209,33 @@ static __inline void node_set_pgno(MDBX_node *node, pgno_t pgno) {
 }
 
 /* Get the size of the data in a leaf node */
-static __pure_function __inline size_t node_ds(const MDBX_node *node) {
+static __pure_function __always_inline size_t node_ds(const MDBX_node *node) {
   return UNALIGNED_PEEK_32(node, MDBX_node, mn_dsize);
 }
 
 /* Set the size of the data for a leaf node */
-static __inline void node_set_ds(MDBX_node *node, size_t size) {
+static __always_inline void node_set_ds(MDBX_node *node, size_t size) {
   assert(size < INT_MAX);
   UNALIGNED_POKE_32(node, MDBX_node, mn_dsize, (uint32_t)size);
 }
 
 /* The size of a key in a node */
-static __pure_function __inline size_t node_ks(const MDBX_node *node) {
+static __pure_function __always_inline size_t node_ks(const MDBX_node *node) {
   return UNALIGNED_PEEK_16(node, MDBX_node, mn_ksize);
 }
 
 /* Set the size of the key for a leaf node */
-static __inline void node_set_ks(MDBX_node *node, size_t size) {
+static __always_inline void node_set_ks(MDBX_node *node, size_t size) {
   assert(size < INT16_MAX);
   UNALIGNED_POKE_16(node, MDBX_node, mn_ksize, (uint16_t)size);
 }
 
-static __pure_function __inline uint8_t node_flags(const MDBX_node *node) {
+static __pure_function __always_inline uint8_t
+node_flags(const MDBX_node *node) {
   return UNALIGNED_PEEK_8(node, MDBX_node, mn_flags);
 }
 
-static __inline void node_set_flags(MDBX_node *node, uint8_t flags) {
+static __always_inline void node_set_flags(MDBX_node *node, uint8_t flags) {
   UNALIGNED_POKE_8(node, MDBX_node, mn_flags, flags);
 }
 
@@ -239,27 +243,27 @@ static __inline void node_set_flags(MDBX_node *node, uint8_t flags) {
 #define NODESIZE offsetof(MDBX_node, mn_data)
 
 /* Address of the key for the node */
-static __pure_function __inline void *node_key(const MDBX_node *node) {
+static __pure_function __always_inline void *node_key(const MDBX_node *node) {
   return (char *)node + NODESIZE;
 }
 
 /* Address of the data for a node */
-static __pure_function __inline void *node_data(const MDBX_node *node) {
+static __pure_function __always_inline void *node_data(const MDBX_node *node) {
   return (char *)node_key(node) + node_ks(node);
 }
 
 /* Size of a node in a leaf page with a given key and data.
  * This is node header plus key plus data size. */
-static __pure_function __inline size_t node_size_len(const size_t key_len,
-                                                     const size_t value_len) {
+static __pure_function __always_inline size_t
+node_size_len(const size_t key_len, const size_t value_len) {
   return NODESIZE + EVEN(key_len + value_len);
 }
-static __pure_function __inline size_t node_size(const MDBX_val *key,
-                                                 const MDBX_val *value) {
+static __pure_function __always_inline size_t node_size(const MDBX_val *key,
+                                                        const MDBX_val *value) {
   return node_size_len(key ? key->iov_len : 0, value ? value->iov_len : 0);
 }
 
-static __pure_function __inline pgno_t peek_pgno(const void *ptr) {
+static __pure_function __always_inline pgno_t peek_pgno(const void *ptr) {
   if (sizeof(pgno_t) == sizeof(uint32_t))
     return (pgno_t)unaligned_peek_u32(1, ptr);
   else if (sizeof(pgno_t) == sizeof(uint64_t))
@@ -271,7 +275,7 @@ static __pure_function __inline pgno_t peek_pgno(const void *ptr) {
   }
 }
 
-static __inline void poke_pgno(void *ptr, const pgno_t pgno) {
+static __always_inline void poke_pgno(void *ptr, const pgno_t pgno) {
   if (sizeof(pgno) == sizeof(uint32_t))
     unaligned_poke_u32(1, ptr, pgno);
   else if (sizeof(pgno) == sizeof(uint64_t))
@@ -280,7 +284,7 @@ static __inline void poke_pgno(void *ptr, const pgno_t pgno) {
     memcpy(ptr, &pgno, sizeof(pgno));
 }
 
-static __pure_function __inline pgno_t
+static __pure_function __always_inline pgno_t
 node_largedata_pgno(const MDBX_node *node) {
   assert(node_flags(node) & F_BIGDATA);
   return peek_pgno(node_data(node));
@@ -399,8 +403,9 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize, unsigned flags) {
  * size will only include the key and not the data. Sizes are always
  * rounded up to an even number of bytes, to guarantee 2-byte alignment
  * of the MDBX_node headers. */
-static __pure_function __inline size_t
-leaf_size(const MDBX_env *env, const MDBX_val *key, const MDBX_val *data) {
+static __pure_function __always_inline size_t leaf_size(const MDBX_env *env,
+                                                        const MDBX_val *key,
+                                                        const MDBX_val *data) {
   size_t node_bytes = node_size(key, data);
   /* NOTE: The actual limit is LEAF_NODEMAX(env->me_psize), but it reasonable to
    * use env->me_branch_nodemax (which is 3 times less) as the treshold because:
@@ -442,8 +447,8 @@ leaf_size(const MDBX_env *env, const MDBX_val *key, const MDBX_val *data) {
  * [in] key The key for the node.
  *
  * Returns The number of bytes needed to store the node. */
-static __pure_function __inline size_t branch_size(const MDBX_env *env,
-                                                   const MDBX_val *key) {
+static __pure_function __always_inline size_t branch_size(const MDBX_env *env,
+                                                          const MDBX_val *key) {
   /* Size of a node in a branch page with a given key.
    * This is just the node header plus the key, there is no data. */
   size_t node_bytes = node_size(key, nullptr);
@@ -460,69 +465,72 @@ static __pure_function __inline size_t branch_size(const MDBX_env *env,
 
 /*----------------------------------------------------------------------------*/
 
-static __pure_function __inline size_t pgno2bytes(const MDBX_env *env,
-                                                  pgno_t pgno) {
+static __pure_function __always_inline size_t pgno2bytes(const MDBX_env *env,
+                                                         pgno_t pgno) {
   mdbx_assert(env, (1u << env->me_psize2log) == env->me_psize);
   return ((size_t)pgno) << env->me_psize2log;
 }
 
-static __pure_function __inline MDBX_page *pgno2page(const MDBX_env *env,
-                                                     pgno_t pgno) {
+static __pure_function __always_inline MDBX_page *pgno2page(const MDBX_env *env,
+                                                            pgno_t pgno) {
   return (MDBX_page *)(env->me_map + pgno2bytes(env, pgno));
 }
 
-static __pure_function __inline pgno_t bytes2pgno(const MDBX_env *env,
-                                                  size_t bytes) {
+static __pure_function __always_inline pgno_t bytes2pgno(const MDBX_env *env,
+                                                         size_t bytes) {
   mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
   return (pgno_t)(bytes >> env->me_psize2log);
 }
 
-static __pure_function __inline size_t pgno_align2os_bytes(const MDBX_env *env,
-                                                           pgno_t pgno) {
+static __pure_function size_t pgno_align2os_bytes(const MDBX_env *env,
+                                                  pgno_t pgno) {
   return roundup_powerof2(pgno2bytes(env, pgno), env->me_os_psize);
 }
 
-static __pure_function __inline pgno_t pgno_align2os_pgno(const MDBX_env *env,
-                                                          pgno_t pgno) {
+static __pure_function pgno_t pgno_align2os_pgno(const MDBX_env *env,
+                                                 pgno_t pgno) {
   return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
 }
 
-static __pure_function __inline size_t bytes_align2os_bytes(const MDBX_env *env,
-                                                            size_t bytes) {
+static __pure_function size_t bytes_align2os_bytes(const MDBX_env *env,
+                                                   size_t bytes) {
   return roundup_powerof2(roundup_powerof2(bytes, env->me_psize),
                           env->me_os_psize);
 }
 
 /* Address of first usable data byte in a page, after the header */
-static __pure_function __inline void *page_data(const MDBX_page *mp) {
+static __pure_function __always_inline void *page_data(const MDBX_page *mp) {
   return (char *)mp + PAGEHDRSZ;
 }
 
-static __pure_function __inline const MDBX_page *data_page(const void *data) {
+static __pure_function __always_inline const MDBX_page *
+data_page(const void *data) {
   return container_of(data, MDBX_page, mp_ptrs);
 }
 
-static __pure_function __inline MDBX_meta *page_meta(MDBX_page *mp) {
+static __pure_function __always_inline MDBX_meta *page_meta(MDBX_page *mp) {
   return (MDBX_meta *)page_data(mp);
 }
 
 /* Number of nodes on a page */
-static __pure_function __inline unsigned page_numkeys(const MDBX_page *mp) {
+static __pure_function __always_inline unsigned
+page_numkeys(const MDBX_page *mp) {
   return mp->mp_lower >> 1;
 }
 
 /* The amount of space remaining in the page */
-static __pure_function __inline unsigned page_room(const MDBX_page *mp) {
+static __pure_function __always_inline unsigned page_room(const MDBX_page *mp) {
   return mp->mp_upper - mp->mp_lower;
 }
 
-static __pure_function __inline unsigned page_space(const MDBX_env *env) {
+static __pure_function __always_inline unsigned
+page_space(const MDBX_env *env) {
   STATIC_ASSERT(PAGEHDRSZ % 2 == 0);
   return env->me_psize - PAGEHDRSZ;
 }
 
-static __pure_function __inline unsigned page_used(const MDBX_env *env,
-                                                   const MDBX_page *mp) {
+static __pure_function __always_inline unsigned page_used(const MDBX_env *env,
+                                                          const MDBX_page *mp) {
   return page_space(env) - page_room(mp);
 }
 
@@ -540,14 +548,14 @@ page_fill_enough(const MDBX_page *mp, unsigned spaceleft_threshold,
 }
 
 /* The number of overflow pages needed to store the given size. */
-static __pure_function __inline pgno_t number_of_ovpages(const MDBX_env *env,
-                                                         size_t bytes) {
+static __pure_function __always_inline pgno_t
+number_of_ovpages(const MDBX_env *env, size_t bytes) {
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;
 }
 
 /* Address of node i in page p */
-static __pure_function __inline MDBX_node *page_node(const MDBX_page *mp,
-                                                     unsigned i) {
+static __pure_function __always_inline MDBX_node *page_node(const MDBX_page *mp,
+                                                            unsigned i) {
   assert((mp->mp_flags & (P_LEAF2 | P_OVERFLOW | P_META)) == 0);
   assert(page_numkeys(mp) > (unsigned)(i));
   assert(mp->mp_ptrs[i] % 2 == 0);
@@ -557,7 +565,7 @@ static __pure_function __inline MDBX_node *page_node(const MDBX_page *mp,
 /* The address of a key in a LEAF2 page.
  * LEAF2 pages are used for MDBX_DUPFIXED sorted-duplicate sub-DBs.
  * There are no node headers, keys are stored contiguously. */
-static __pure_function __inline void *
+static __pure_function __always_inline void *
 page_leaf2key(const MDBX_page *mp, unsigned i, size_t keysize) {
   assert(mp->mp_leaf2_ksize == keysize);
   (void)keysize;
@@ -565,14 +573,14 @@ page_leaf2key(const MDBX_page *mp, unsigned i, size_t keysize) {
 }
 
 /* Set the node's key into keyptr. */
-static __inline void get_key(const MDBX_node *node, MDBX_val *keyptr) {
+static __always_inline void get_key(const MDBX_node *node, MDBX_val *keyptr) {
   keyptr->iov_len = node_ks(node);
   keyptr->iov_base = node_key(node);
 }
 
 /* Set the node's key into keyptr, if requested. */
-static __inline void get_key_optional(const MDBX_node *node,
-                                      MDBX_val *keyptr /* __may_null */) {
+static __always_inline void
+get_key_optional(const MDBX_node *node, MDBX_val *keyptr /* __may_null */) {
   if (keyptr)
     get_key(node, keyptr);
 }
@@ -694,7 +702,7 @@ size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
-static __inline void atomic_yield(void) {
+static __always_inline void atomic_yield(void) {
 #if defined(_WIN32) || defined(_WIN64)
   YieldProcessor();
 #elif defined(__x86_64__) || defined(__i386__) || defined(__e2k__)
@@ -724,8 +732,8 @@ static __inline void atomic_yield(void) {
 }
 
 #if MDBX_64BIT_CAS
-static __inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
-                                  uint64_t v) {
+static __always_inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
+                                         uint64_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LLONG_LOCK_FREE)
   STATIC_ASSERT(sizeof(long long) >= sizeof(uint64_t));
   STATIC_ASSERT(atomic_is_lock_free(p));
@@ -743,8 +751,8 @@ static __inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
 }
 #endif /* MDBX_64BIT_CAS */
 
-static __inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
-                                  uint32_t v) {
+static __always_inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
+                                         uint32_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_INT_LOCK_FREE)
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
   STATIC_ASSERT(atomic_is_lock_free(p));
@@ -761,7 +769,7 @@ static __inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
 #endif
 }
 
-static __inline uint32_t atomic_add32(volatile uint32_t *p, uint32_t v) {
+static __always_inline uint32_t atomic_add32(volatile uint32_t *p, uint32_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_INT_LOCK_FREE)
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
   STATIC_ASSERT(atomic_is_lock_free(p));
@@ -780,7 +788,7 @@ static __inline uint32_t atomic_add32(volatile uint32_t *p, uint32_t v) {
 
 #define atomic_sub32(p, v) atomic_add32(p, 0 - (v))
 
-static __maybe_unused __inline bool safe64_is_valid(uint64_t v) {
+static __maybe_unused __always_inline bool safe64_is_valid(uint64_t v) {
 #if MDBX_WORDBITS >= 64
   return v < SAFE64_INVALID_THRESHOLD;
 #else
@@ -788,7 +796,7 @@ static __maybe_unused __inline bool safe64_is_valid(uint64_t v) {
 #endif /* MDBX_WORDBITS */
 }
 
-static __maybe_unused __inline bool
+static __maybe_unused __always_inline bool
 safe64_is_valid_ptr(const mdbx_safe64_t *ptr) {
   mdbx_compiler_barrier();
 #if MDBX_64BIT_ATOMIC
@@ -798,7 +806,7 @@ safe64_is_valid_ptr(const mdbx_safe64_t *ptr) {
 #endif /* MDBX_64BIT_ATOMIC */
 }
 
-static __inline uint64_t safe64_txnid_next(uint64_t txnid) {
+static __always_inline uint64_t safe64_txnid_next(uint64_t txnid) {
   txnid += MDBX_TXNID_STEP;
 #if !MDBX_64BIT_CAS
   /* avoid overflow of low-part in safe64_reset() */
@@ -807,7 +815,8 @@ static __inline uint64_t safe64_txnid_next(uint64_t txnid) {
   return txnid;
 }
 
-static __inline void safe64_reset(mdbx_safe64_t *ptr, bool single_writer) {
+static __always_inline void safe64_reset(mdbx_safe64_t *ptr,
+                                         bool single_writer) {
   mdbx_compiler_barrier();
 #if !MDBX_64BIT_CAS
   if (!single_writer) {
@@ -832,7 +841,8 @@ static __inline void safe64_reset(mdbx_safe64_t *ptr, bool single_writer) {
   mdbx_jitter4testing(true);
 }
 
-static __inline bool safe64_reset_compare(mdbx_safe64_t *ptr, txnid_t compare) {
+static __always_inline bool safe64_reset_compare(mdbx_safe64_t *ptr,
+                                                 txnid_t compare) {
   mdbx_compiler_barrier();
   /* LY: This function is used to reset `mr_txnid` from OOM-kick in case
    *     the asynchronously cancellation of read transaction. Therefore,
@@ -860,7 +870,7 @@ static __inline bool safe64_reset_compare(mdbx_safe64_t *ptr, txnid_t compare) {
   return rc;
 }
 
-static __inline void safe64_write(mdbx_safe64_t *ptr, const uint64_t v) {
+static __always_inline void safe64_write(mdbx_safe64_t *ptr, const uint64_t v) {
   mdbx_compiler_barrier();
   assert(ptr->inconsistent >= SAFE64_INVALID_THRESHOLD);
 #if MDBX_64BIT_ATOMIC
@@ -901,7 +911,8 @@ static __always_inline uint64_t safe64_read(const mdbx_safe64_t *ptr) {
   return v;
 }
 
-static __inline void safe64_update(mdbx_safe64_t *ptr, const uint64_t v) {
+static __always_inline void safe64_update(mdbx_safe64_t *ptr,
+                                          const uint64_t v) {
   safe64_reset(ptr, true);
   safe64_write(ptr, v);
 }
@@ -1605,7 +1616,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
 
 /*----------------------------------------------------------------------------*/
 
-static __inline size_t pnl2bytes(const size_t size) {
+static __always_inline size_t pnl2bytes(const size_t size) {
   assert(size > 0 && size <= MDBX_PNL_MAX * 2);
   size_t bytes = roundup_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD +
                                       sizeof(pgno_t) * (size + 2),
@@ -1614,7 +1625,7 @@ static __inline size_t pnl2bytes(const size_t size) {
   return bytes;
 }
 
-static __inline pgno_t bytes2pnl(const size_t bytes) {
+static __always_inline pgno_t bytes2pnl(const size_t bytes) {
   size_t size = bytes / sizeof(pgno_t);
   assert(size > 2 && size <= MDBX_PNL_MAX * 2);
   return (pgno_t)size - 2;
@@ -1689,8 +1700,8 @@ static int mdbx_pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
 }
 
 /* Make room for num additional elements in an PNL */
-static __inline int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl,
-                                                      size_t num) {
+static __always_inline int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl,
+                                                             size_t num) {
   assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PNL_MAX &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_SIZE(*ppl));
   assert(num <= MDBX_PNL_MAX);
@@ -1700,7 +1711,7 @@ static __inline int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl,
              : mdbx_pnl_reserve(ppl, wanna);
 }
 
-static __inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t pgno) {
+static __always_inline void mdbx_pnl_xappend(MDBX_PNL pl, pgno_t pgno) {
   assert(MDBX_PNL_SIZE(pl) < MDBX_PNL_ALLOCLEN(pl));
   if (mdbx_audit_enabled()) {
     for (unsigned i = MDBX_PNL_SIZE(pl); i > 0; --i)
@@ -1813,8 +1824,8 @@ static bool __hot mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
   return true;
 }
 
-static __inline bool mdbx_pnl_check4assert(const MDBX_PNL pl,
-                                           const pgno_t limit) {
+static __always_inline bool mdbx_pnl_check4assert(const MDBX_PNL pl,
+                                                  const pgno_t limit) {
   if (unlikely(pl == nullptr))
     return true;
   assert(MDBX_PNL_ALLOCLEN(pl) >= MDBX_PNL_SIZE(pl));
@@ -1872,7 +1883,7 @@ static __hot unsigned mdbx_pnl_exist(MDBX_PNL pnl, pgno_t id) {
 
 /*----------------------------------------------------------------------------*/
 
-static __inline size_t txl2bytes(const size_t size) {
+static __always_inline size_t txl2bytes(const size_t size) {
   assert(size > 0 && size <= MDBX_TXL_MAX * 2);
   size_t bytes = roundup_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD +
                                       sizeof(txnid_t) * (size + 2),
@@ -1881,7 +1892,7 @@ static __inline size_t txl2bytes(const size_t size) {
   return bytes;
 }
 
-static __inline size_t bytes2txl(const size_t bytes) {
+static __always_inline size_t bytes2txl(const size_t bytes) {
   size_t size = bytes / sizeof(txnid_t);
   assert(size > 2 && size <= MDBX_TXL_MAX * 2);
   return size - 2;
@@ -1934,8 +1945,8 @@ static int mdbx_txl_reserve(MDBX_TXL *ptl, const size_t wanna) {
   return MDBX_ENOMEM;
 }
 
-static __inline int __must_check_result mdbx_txl_need(MDBX_TXL *ptl,
-                                                      size_t num) {
+static __always_inline int __must_check_result mdbx_txl_need(MDBX_TXL *ptl,
+                                                             size_t num) {
   assert(MDBX_PNL_SIZE(*ptl) <= MDBX_TXL_MAX &&
          MDBX_PNL_ALLOCLEN(*ptl) >= MDBX_PNL_SIZE(*ptl));
   assert(num <= MDBX_PNL_MAX);
@@ -1945,7 +1956,7 @@ static __inline int __must_check_result mdbx_txl_need(MDBX_TXL *ptl,
              : mdbx_txl_reserve(ptl, wanna);
 }
 
-static __inline void mdbx_txl_xappend(MDBX_TXL tl, txnid_t id) {
+static __always_inline void mdbx_txl_xappend(MDBX_TXL tl, txnid_t id) {
   assert(MDBX_PNL_SIZE(tl) < MDBX_PNL_ALLOCLEN(tl));
   MDBX_PNL_SIZE(tl) += 1;
   MDBX_PNL_LAST(tl) = id;
@@ -1971,7 +1982,7 @@ static int __must_check_result mdbx_txl_append(MDBX_TXL *ptl, txnid_t id) {
 
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, MDBX_DP, DP_SORT_CMP)
-static __inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
+static __always_inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
   assert(dl->length <= MDBX_DPL_TXNFULL);
   assert(dl->sorted <= dl->length);
   if (dl->sorted != dl->length) {
@@ -2044,7 +2055,7 @@ static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t pgno) {
   return (unsigned)(it - dl);
 }
 
-static __inline MDBX_page *mdbx_dpl_find(MDBX_DPL dl, pgno_t pgno) {
+static __always_inline MDBX_page *mdbx_dpl_find(MDBX_DPL dl, pgno_t pgno) {
   const unsigned i = mdbx_dpl_search(dl, pgno);
   assert((int)i > 0);
   return (i <= dl->length && dl[i].pgno == pgno) ? dl[i].ptr : nullptr;
@@ -2066,9 +2077,8 @@ static __hot MDBX_page *mdbx_dpl_remove(MDBX_DPL dl, pgno_t prno) {
   return mp;
 }
 
-static __inline int __must_check_result mdbx_dpl_append(MDBX_DPL dl,
-                                                        pgno_t pgno,
-                                                        MDBX_page *page) {
+static __always_inline int __must_check_result
+mdbx_dpl_append(MDBX_DPL dl, pgno_t pgno, MDBX_page *page) {
   assert(dl->length <= MDBX_DPL_TXNFULL);
   if (mdbx_audit_enabled()) {
     for (unsigned i = dl->length; i > 0; --i) {
@@ -2091,7 +2101,7 @@ static __inline int __must_check_result mdbx_dpl_append(MDBX_DPL dl,
   return MDBX_SUCCESS;
 }
 
-static __inline void mdbx_dpl_clear(MDBX_DPL dl) {
+static __always_inline void mdbx_dpl_clear(MDBX_DPL dl) {
   dl->sorted = dl->length = 0;
 }
 
@@ -2197,7 +2207,7 @@ static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 static int __must_check_result mdbx_audit_ex(MDBX_txn *txn,
                                              unsigned retired_stored,
                                              bool dont_filter_gc);
-static __maybe_unused __inline int __must_check_result
+static __maybe_unused __always_inline int __must_check_result
 mdbx_audit(MDBX_txn *txn) {
   return mdbx_audit_ex(txn, 0, (txn->mt_flags & MDBX_RDONLY) != 0);
 }
@@ -2665,7 +2675,7 @@ static void mdbx_dlist_free(MDBX_txn *txn) {
   mdbx_dpl_clear(dl);
 }
 
-static __inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
+static __always_inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
   mdbx_cassert(mc, (mc->mc_flags & C_SUB) != 0);
   MDBX_xcursor *mx = container_of(mc->mc_db, MDBX_xcursor, mx_db);
   MDBX_cursor_couple *couple = container_of(mx, MDBX_cursor_couple, inner);
@@ -3096,8 +3106,8 @@ static __hot int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
   return rc;
 }
 
-static __must_check_result __inline int mdbx_retire_pgno(MDBX_cursor *mc,
-                                                         const pgno_t pgno) {
+static __must_check_result __always_inline int
+mdbx_retire_pgno(MDBX_cursor *mc, const pgno_t pgno) {
   MDBX_page *mp;
   int rc = mdbx_page_get(mc, pgno, &mp, NULL);
   if (likely(rc == MDBX_SUCCESS))
@@ -3297,7 +3307,7 @@ bailout:
 
 /*----------------------------------------------------------------------------*/
 
-static __inline bool meta_bootid_match(const MDBX_meta *meta) {
+static __always_inline bool meta_bootid_match(const MDBX_meta *meta) {
   return meta->mm_bootid.x == bootid.x && meta->mm_bootid.y == bootid.y &&
          (bootid.x | bootid.y) != 0;
 }
@@ -3585,7 +3595,7 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
 }
 
 #if !(defined(_WIN32) || defined(_WIN64))
-static __inline __maybe_unused int ignore_enosys(int err) {
+static __always_inline __maybe_unused int ignore_enosys(int err) {
 #ifdef ENOSYS
   if (err == ENOSYS)
     return MDBX_RESULT_TRUE;
@@ -5812,11 +5822,11 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
   return MDBX_PROBLEM;
 }
 
-static __inline unsigned backlog_size(MDBX_txn *txn) {
+static __always_inline unsigned backlog_size(MDBX_txn *txn) {
   return MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) + txn->tw.loose_count;
 }
 
-static __inline unsigned gctree_backlog(MDBX_txn *txn) {
+static __always_inline unsigned gctree_backlog(MDBX_txn *txn) {
   return /* for split upto root page */ txn->mt_dbs[FREE_DBI].md_depth +
          /* for rebalance */ 2 + /* for grow */ 1;
 }
@@ -6659,8 +6669,8 @@ static __cold bool mdbx_txn_import_dbi(MDBX_txn *txn, MDBX_dbi dbi) {
 }
 
 /* Check txn and dbi arguments to a function */
-static __inline bool TXN_DBI_EXIST(MDBX_txn *txn, MDBX_dbi dbi,
-                                   unsigned validity) {
+static __always_inline bool TXN_DBI_EXIST(MDBX_txn *txn, MDBX_dbi dbi,
+                                          unsigned validity) {
   if (likely(dbi < txn->mt_numdbs && (txn->mt_dbflags[dbi] & validity)))
     return true;
 
@@ -9761,8 +9771,8 @@ __hot static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
  * [out] data   Updated to point to the node's data.
  *
  * Returns 0 on success, non-zero on failure. */
-static __inline int mdbx_node_read(MDBX_cursor *mc, MDBX_node *node,
-                                   MDBX_val *data) {
+static __always_inline int mdbx_node_read(MDBX_cursor *mc, MDBX_node *node,
+                                          MDBX_val *data) {
   data->iov_len = node_ds(node);
   data->iov_base = node_data(node);
   if (unlikely(F_ISSET(node_flags(node), F_BIGDATA))) {
