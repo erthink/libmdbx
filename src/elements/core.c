@@ -8597,8 +8597,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   mdbx_assert(env, env->me_fd != INVALID_HANDLE_VALUE);
   mdbx_assert(env, env->me_lfd == INVALID_HANDLE_VALUE);
 
-  int err = mdbx_openfile(lck_pathname, O_RDWR | O_CREAT, mode, &env->me_lfd,
-                          (env->me_flags & MDBX_EXCLUSIVE) ? true : false);
+  int err = mdbx_openfile(MDBX_OPEN_LCK, env, lck_pathname, &env->me_lfd, mode);
   if (err != MDBX_SUCCESS) {
     if (!(err == MDBX_ENOFILE && (env->me_flags & MDBX_EXCLUSIVE)) &&
         !((err == MDBX_EROFS || err == MDBX_EACCESS || err == MDBX_EPERM) &&
@@ -8908,9 +8907,9 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #error "Persistent DB flags & env flags overlap, but both go in mm_flags"
 #endif
 
-int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
+int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
                          mode_t mode) {
-  if (unlikely(!env || !path))
+  if (unlikely(!env || !pathname))
     return MDBX_EINVAL;
 
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
@@ -8923,7 +8922,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
       (env->me_flags & MDBX_ENV_ACTIVE) != 0)
     return MDBX_EPERM;
 
-  size_t len_full, len = strlen(path);
+  size_t len_full, len = strlen(pathname);
   if (flags & MDBX_NOSUBDIR) {
     len_full = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
   } else {
@@ -8936,12 +8935,12 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   char *dxb_pathname;
   if (flags & MDBX_NOSUBDIR) {
     dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCK_SUFFIX);
-    sprintf(lck_pathname, "%s" MDBX_LOCK_SUFFIX, path);
-    strcpy(dxb_pathname, path);
+    sprintf(lck_pathname, "%s" MDBX_LOCK_SUFFIX, pathname);
+    strcpy(dxb_pathname, pathname);
   } else {
     dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCKNAME);
-    sprintf(lck_pathname, "%s" MDBX_LOCKNAME, path);
-    sprintf(dxb_pathname, "%s" MDBX_DATANAME, path);
+    sprintf(lck_pathname, "%s" MDBX_LOCKNAME, pathname);
+    sprintf(dxb_pathname, "%s" MDBX_DATANAME, pathname);
   }
 
   int rc = MDBX_SUCCESS;
@@ -8978,7 +8977,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   if (rc)
     goto bailout;
 
-  env->me_path = mdbx_strdup(path);
+  env->me_path = mdbx_strdup(pathname);
   env->me_dbxs = mdbx_calloc(env->me_maxdbs, sizeof(MDBX_dbx));
   env->me_dbflags = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbflags[0]));
   env->me_dbiseqs = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbiseqs[0]));
@@ -8989,37 +8988,39 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   env->me_dbxs[FREE_DBI].md_cmp =
       mdbx_cmp_int_align4; /* aligned MDBX_INTEGERKEY */
 
-  int oflags;
-  if (F_ISSET(flags, MDBX_RDONLY))
-    oflags = O_RDONLY;
-  else if (mode != 0) {
-    if ((flags & MDBX_NOSUBDIR) == 0) {
+  if ((flags & (MDBX_RDONLY | MDBX_NOSUBDIR)) == 0 && mode != 0) {
 #if defined(_WIN32) || defined(_WIN64)
-      if (!CreateDirectoryA(path, nullptr)) {
-        rc = GetLastError();
-        if (rc != ERROR_ALREADY_EXISTS)
-          goto bailout;
-      }
-#else
-      const mode_t dir_mode =
-          (/* inherit read/write permissions for group and others */ mode &
-           (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
-          /* always add read/write/search for owner */ S_IRWXU |
-          ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
-          ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
-      if (mkdir(path, dir_mode)) {
-        rc = errno;
-        if (rc != EEXIST)
-          goto bailout;
-      }
-#endif
+    const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+    if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+      return ERROR_INVALID_NAME;
+    wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+    if (wlen != mbstowcs(pathnameW, pathname, wlen + 1)) {
+      rc = ERROR_INVALID_NAME;
+      goto bailout;
     }
-    oflags = O_RDWR | O_CREAT;
-  } else
-    oflags = O_RDWR;
+    if (!CreateDirectoryW(pathnameW, nullptr)) {
+      rc = GetLastError();
+      if (rc != ERROR_ALREADY_EXISTS)
+        goto bailout;
+    }
+#else
+    const mode_t dir_mode =
+        (/* inherit read/write permissions for group and others */ mode &
+         (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
+        /* always add read/write/search for owner */ S_IRWXU |
+        ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
+        ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
+    if (mkdir(pathname, dir_mode)) {
+      rc = errno;
+      if (rc != EEXIST)
+        goto bailout;
+    }
+#endif
+  }
 
-  rc = mdbx_openfile(dxb_pathname, oflags, mode, &env->me_fd,
-                     (env->me_flags & MDBX_EXCLUSIVE) ? true : false);
+  rc = mdbx_openfile(F_ISSET(flags, MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
+                                                 : MDBX_OPEN_DXB_LAZY,
+                     env, dxb_pathname, &env->me_fd, mode);
   if (rc != MDBX_SUCCESS)
     goto bailout;
 
@@ -14443,48 +14444,27 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *dest_path, unsigned flags) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  char *dxb_pathname;
-  mdbx_filehandle_t newfd = INVALID_HANDLE_VALUE;
-
-  if (env->me_flags & MDBX_NOSUBDIR) {
-    dxb_pathname = (char *)dest_path;
-  } else {
-    size_t len = strlen(dest_path);
-    len += sizeof(MDBX_DATANAME);
-    dxb_pathname = mdbx_malloc(len);
-    if (!dxb_pathname)
-      return MDBX_ENOMEM;
-    sprintf(dxb_pathname, "%s" MDBX_DATANAME, dest_path);
-  }
-
   /* The destination path must exist, but the destination file must not.
    * We don't want the OS to cache the writes, since the source data is
    * already in the OS cache. */
-  int rc = mdbx_openfile(dxb_pathname, O_WRONLY | O_CREAT | O_EXCL, 0640,
-                         &newfd, true);
-  if (rc == MDBX_SUCCESS) {
-    if (env->me_psize >= env->me_os_psize) {
-#ifdef F_NOCACHE /* __APPLE__ */
-      (void)fcntl(newfd, F_NOCACHE, 1);
-#elif defined(O_DIRECT) && defined(F_GETFL)
-      /* Set O_DIRECT if the file system supports it */
-      if ((rc = fcntl(newfd, F_GETFL)) != -1)
-        (void)fcntl(newfd, F_SETFL, rc | O_DIRECT);
+  mdbx_filehandle_t newfd;
+  int rc = mdbx_openfile(MDBX_OPEN_COPY, env, dest_path, &newfd,
+#if defined(_WIN32) || defined(_WIN64)
+                         (mode_t)-1
+#else
+                         S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
-    }
+  );
+  if (rc == MDBX_SUCCESS)
     rc = mdbx_env_copy2fd(env, newfd, flags);
-  }
 
   if (newfd != INVALID_HANDLE_VALUE) {
     int err = mdbx_closefile(newfd);
     if (rc == MDBX_SUCCESS && err != rc)
       rc = err;
     if (rc != MDBX_SUCCESS)
-      (void)mdbx_removefile(dxb_pathname);
+      (void)mdbx_removefile(dest_path);
   }
-
-  if (dxb_pathname != dest_path)
-    mdbx_free(dxb_pathname);
 
   return rc;
 }

@@ -512,106 +512,156 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
-  return DeleteFileA(pathname) ? MDBX_SUCCESS : GetLastError();
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
+  return DeleteFileW(pathnameW) ? MDBX_SUCCESS : GetLastError();
 #else
   return unlink(pathname) ? errno : MDBX_SUCCESS;
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_openfile(const char *pathname, int flags,
-                                     mode_t mode, mdbx_filehandle_t *fd,
-                                     bool exclusive) {
+MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
+                                     const MDBX_env *env, const char *pathname,
+                                     mdbx_filehandle_t *fd,
+                                     mode_t unix_mode_bits) {
   *fd = INVALID_HANDLE_VALUE;
+
 #if defined(_WIN32) || defined(_WIN64)
-  (void)mode;
-  size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
   if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
     return ERROR_INVALID_NAME;
   wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
   if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
     return ERROR_INVALID_NAME;
 
-  DWORD DesiredAccess, ShareMode;
-  DWORD FlagsAndAttributes = FILE_ATTRIBUTE_NORMAL;
-  switch (flags & (O_RDONLY | O_WRONLY | O_RDWR)) {
+  DWORD CreationDisposition = unix_mode_bits ? OPEN_ALWAYS : OPEN_EXISTING;
+  DWORD FlagsAndAttributes =
+      FILE_FLAG_POSIX_SEMANTICS | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+  DWORD DesiredAccess = FILE_READ_ATTRIBUTES;
+  DWORD ShareMode = (env->me_flags & MDBX_EXCLUSIVE)
+                        ? 0
+                        : (FILE_SHARE_READ | FILE_SHARE_WRITE);
+
+  switch (purpose) {
   default:
     return ERROR_INVALID_PARAMETER;
-  case O_RDONLY:
-    DesiredAccess = GENERIC_READ;
-    ShareMode =
-        exclusive ? FILE_SHARE_READ : (FILE_SHARE_READ | FILE_SHARE_WRITE);
+  case MDBX_OPEN_LCK:
+    CreationDisposition = OPEN_ALWAYS;
+    DesiredAccess |= GENERIC_READ | GENERIC_WRITE;
+    FlagsAndAttributes |= FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_TEMPORARY;
     break;
-  case O_WRONLY: /* assume for MDBX_env_copy() and friends output */
-    DesiredAccess = GENERIC_WRITE;
-    ShareMode = 0;
+  case MDBX_OPEN_DXB_READ:
+    CreationDisposition = OPEN_EXISTING;
+    DesiredAccess |= GENERIC_READ;
+    ShareMode |= FILE_SHARE_READ;
+    break;
+  case MDBX_OPEN_DXB_LAZY:
+    DesiredAccess |= GENERIC_READ | GENERIC_WRITE;
+    break;
+  case MDBX_OPEN_DXB_DSYNC:
+    CreationDisposition = OPEN_EXISTING;
+    DesiredAccess |= GENERIC_WRITE;
     FlagsAndAttributes |= FILE_FLAG_WRITE_THROUGH;
     break;
-  case O_RDWR:
-    DesiredAccess = GENERIC_READ | GENERIC_WRITE;
-    ShareMode = exclusive ? 0 : (FILE_SHARE_READ | FILE_SHARE_WRITE);
-    break;
-  }
-
-  DWORD CreationDisposition;
-  switch (flags & (O_EXCL | O_CREAT)) {
-  default:
-    return ERROR_INVALID_PARAMETER;
-  case 0:
-    CreationDisposition = OPEN_EXISTING;
-    break;
-  case O_EXCL | O_CREAT:
+  case MDBX_OPEN_COPY:
     CreationDisposition = CREATE_NEW;
-    FlagsAndAttributes |= FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
-    break;
-  case O_CREAT:
-    CreationDisposition = OPEN_ALWAYS;
-    FlagsAndAttributes |= FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
+    ShareMode = 0;
+    DesiredAccess |= GENERIC_WRITE;
+    FlagsAndAttributes |=
+        (env->me_psize < env->me_os_psize) ? 0 : FILE_FLAG_NO_BUFFERING;
     break;
   }
 
   *fd = CreateFileW(pathnameW, DesiredAccess, ShareMode, NULL,
                     CreationDisposition, FlagsAndAttributes, NULL);
-
   if (*fd == INVALID_HANDLE_VALUE)
     return GetLastError();
-  if ((flags & O_CREAT) && GetLastError() != ERROR_ALREADY_EXISTS) {
-    /* set FILE_ATTRIBUTE_NOT_CONTENT_INDEXED for new file */
-    DWORD FileAttributes = GetFileAttributesA(pathname);
-    if (FileAttributes == INVALID_FILE_ATTRIBUTES ||
-        !SetFileAttributesA(pathname, FileAttributes |
-                                          FILE_ATTRIBUTE_NOT_CONTENT_INDEXED)) {
-      int rc = GetLastError();
-      CloseHandle(*fd);
-      *fd = INVALID_HANDLE_VALUE;
-      return rc;
-    }
+
+  BY_HANDLE_FILE_INFORMATION info;
+  if (!GetFileInformationByHandle(*fd, &info)) {
+    int err = GetLastError();
+    CloseHandle(*fd);
+    *fd = INVALID_HANDLE_VALUE;
+    return err;
   }
+  const DWORD AttributesDiff =
+      (info.dwFileAttributes ^ FlagsAndAttributes) &
+      (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED |
+       FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_COMPRESSED);
+  if (AttributesDiff)
+    (void)SetFileAttributesW(pathnameW, info.dwFileAttributes ^ AttributesDiff);
+
 #else
-  (void)exclusive;
+  int flags = unix_mode_bits ? O_CREAT : 0;
+  switch (purpose) {
+  default:
+    return EINVAL;
+  case MDBX_OPEN_LCK:
+    flags |= O_RDWR;
+    break;
+  case MDBX_OPEN_DXB_READ:
+    flags = O_RDONLY;
+    break;
+  case MDBX_OPEN_DXB_LAZY:
+    flags |= O_RDWR;
+    break;
+  case MDBX_OPEN_COPY:
+    flags = O_CREAT | O_WRONLY | O_EXCL;
+    break;
+  case MDBX_OPEN_DXB_DSYNC:
+    flags |= O_WRONLY;
+#if defined(O_DSYNC)
+    flags |= O_DSYNC;
+#elif defined(O_SYNC)
+    flags |= O_SYNC;
+#elif defined(O_FSYNC)
+    flags |= O_FSYNC;
+#endif
+    break;
+  }
+
+  const bool direct_nocache_for_copy =
+      env->me_psize >= env->me_os_psize && purpose == MDBX_OPEN_COPY;
+  if (direct_nocache_for_copy) {
+#if defined(O_DIRECT)
+    flags |= O_DIRECT;
+#endif /* O_DIRECT */
+#if defined(O_NOCACHE)
+    flags |= O_NOCACHE;
+#endif /* O_NOCACHE */
+  }
+
 #ifdef O_CLOEXEC
   flags |= O_CLOEXEC;
 #endif /* O_CLOEXEC */
-  *fd = open(pathname, flags, mode);
+
+  *fd = open(pathname, flags, unix_mode_bits);
+#if defined(O_DIRECT)
+  if (*fd < 0 && (flags & O_DIRECT) &&
+      (errno == EINVAL || errno == EAFNOSUPPORT)) {
+    flags &= ~(O_DIRECT | O_EXCL);
+    *fd = open(pathname, flags, unix_mode_bits);
+  }
+#endif /* O_DIRECT */
   if (*fd < 0)
     return errno;
 
 #if defined(FD_CLOEXEC) && !defined(O_CLOEXEC)
-  int fd_flags = fcntl(*fd, F_GETFD);
+  const int fd_flags = fcntl(*fd, F_GETFD);
   if (fd_flags != -1)
     (void)fcntl(*fd, F_SETFD, fd_flags | FD_CLOEXEC);
 #endif /* FD_CLOEXEC && !O_CLOEXEC */
 
-  if ((flags & (O_RDONLY | O_WRONLY | O_RDWR)) == O_WRONLY) {
-    /* assume for MDBX_env_copy() and friends output */
-#if defined(O_DIRECT)
-    int fd_flags = fcntl(*fd, F_GETFD);
-    if (fd_flags != -1)
-      (void)fcntl(*fd, F_SETFL, fd_flags | O_DIRECT);
-#endif /* O_DIRECT */
-#if defined(F_NOCACHE)
+  if (direct_nocache_for_copy) {
+#if defined(F_NOCACHE) && !defined(O_NOCACHE)
     (void)fcntl(*fd, F_NOCACHE, 1);
 #endif /* F_NOCACHE */
   }
+
 #endif
 
   return MDBX_SUCCESS;
