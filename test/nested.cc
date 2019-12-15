@@ -70,7 +70,8 @@ static unsigned edge2count(uint64_t edge, unsigned count_max) {
 
 void testcase_nested::push_txn() {
   MDBX_txn *txn;
-  unsigned flags = prng32() & (MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC);
+  unsigned flags =
+      prng32() & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC);
   int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);

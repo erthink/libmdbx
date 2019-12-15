@@ -4631,7 +4631,7 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
 
     if (outside_txn) {
       if (unsynced_pages > /* FIXME: define threshold */ 16 &&
-          (flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) == 0) {
+          (flags & (MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)) == 0) {
         mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
         const size_t usedbytes = pgno_align2os_bytes(env, head->mm_geo.next);
 
@@ -4658,7 +4658,7 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
     }
 
     if (!META_IS_STEADY(head) ||
-        ((flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) == 0 && unsynced_pages)) {
+        ((flags & (MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)) == 0 && unsynced_pages)) {
       mdbx_debug("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIaPGNO,
                  data_page(head)->mp_pgno, mdbx_durable_str(head),
                  unsynced_pages);
@@ -5329,9 +5329,10 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       mdbx_free(txn);
   } else {
-    mdbx_assert(env, (txn->mt_flags &
-                      ~(MDBX_RDONLY | MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
-                        MDBX_NOMETASYNC | MDBX_NOSYNC | MDBX_MAPASYNC)) == 0);
+    mdbx_assert(env,
+                (txn->mt_flags &
+                 ~(MDBX_RDONLY | MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
+                   MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
@@ -7396,7 +7397,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, (env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0);
   mdbx_assert(env, pending->mm_geo.next <= pending->mm_geo.now);
 
-  if (flags & (MDBX_NOSYNC | MDBX_MAPASYNC)) {
+  if (flags & (MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)) {
     /* Check auto-sync conditions */
     const pgno_t autosync_threshold = *env->me_autosync_threshold;
     const uint64_t autosync_period = *env->me_autosync_period;
@@ -7488,7 +7489,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   /* LY: step#1 - sync previously written/updated data-pages */
   int rc = *env->me_unsynced_pages ? MDBX_RESULT_TRUE /* carry non-steady */
                                    : MDBX_RESULT_FALSE /* carry steady */;
-  if (rc != MDBX_RESULT_FALSE && (flags & MDBX_NOSYNC) == 0) {
+  if (rc != MDBX_RESULT_FALSE && (flags & MDBX_SAFE_NOSYNC) == 0) {
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     MDBX_meta *const recent_steady_meta = mdbx_meta_steady(env);
     if (flags & MDBX_WRITEMAP) {
@@ -7642,7 +7643,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 
   /* LY: step#3 - sync meta-pages. */
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
-  if ((flags & (MDBX_NOSYNC | MDBX_NOMETASYNC)) == 0) {
+  if ((flags & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) == 0) {
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     if (flags & MDBX_WRITEMAP) {
       const size_t offset = (uint8_t *)data_page(head) - env->me_dxb_mmap.dxb;
@@ -8873,7 +8874,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
  * at runtime. Changing other flags requires closing the
  * environment and re-opening it with the new flags. */
 #define CHANGEABLE                                                             \
-  (MDBX_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC | MDBX_NOMEMINIT |            \
+  (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC | MDBX_NOMEMINIT |       \
    MDBX_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE)
 #define CHANGELESS                                                             \
   (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOTLS | MDBX_NORDAHEAD | \
@@ -8924,8 +8925,9 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
   if (flags & MDBX_RDONLY) {
     /* LY: silently ignore irrelevant flags when
      * we're only getting read access */
-    flags &= ~(MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NOSYNC | MDBX_NOMETASYNC |
-               MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_NOMEMINIT | MDBX_ACCEDE);
+    flags &=
+        ~(MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC |
+          MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_NOMEMINIT | MDBX_ACCEDE);
   } else {
 #ifdef __OpenBSD__
     /* Temporary `workaround` for OpenBSD kernel's bug.
@@ -9022,7 +9024,8 @@ int __cold mdbx_env_open(MDBX_env *env, const char *path, unsigned flags,
     goto bailout;
   }
 
-  const unsigned rigorous_flags = MDBX_WRITEMAP | MDBX_NOSYNC | MDBX_MAPASYNC;
+  const unsigned rigorous_flags =
+      MDBX_WRITEMAP | MDBX_SAFE_NOSYNC | MDBX_MAPASYNC;
   const unsigned mode_flags = rigorous_flags | MDBX_NOMETASYNC |
                               MDBX_LIFORECLAIM | MDBX_COALESCE | MDBX_NORDAHEAD;
 

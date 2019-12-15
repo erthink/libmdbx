@@ -1071,11 +1071,11 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  * conditions for the efficient operation of the disk write-back cache.
  *
  * MDBX_LIFORECLAIM is compatible with all no-sync flags (i.e. MDBX_NOMETASYNC,
- * MDBX_NOSYNC, MDBX_UTTERLY_NOSYNC, MDBX_MAPASYNC), but gives no noticeable
- * impact in combination with MDB_NOSYNC and MDX_MAPASYNC. Because MDBX will
- * not reused paged from the last "steady" MVCC-snapshot and later, i.e. the
- * loop length of database pages circulation will be mostly defined by frequency
- * of calling mdbx_env_sync() rather than LIFO and FIFO difference.
+ * MDBX_SAFE_NOSYNC, MDBX_UTTERLY_NOSYNC, MDBX_MAPASYNC), but gives no
+ * noticeable impact in combination with MDBX_SAFE_NOSYNC. Because MDBX will
+ * reused pages only before the last "steady" MVCC-snapshot, i.e. the loop
+ * length of database pages circulation will be mostly defined by frequency of
+ * calling mdbx_env_sync() rather than LIFO and FIFO difference.
  *
  * This flag may be changed at any time using mdbx_env_set_flags(). */
 #define MDBX_LIFORECLAIM 0x4000000u
@@ -1084,12 +1084,12 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 #define MDBX_PAGEPERTURB 0x8000000u
 
 /**** SYNC MODES ***************************************************************
- * (!!!) Using any combination of MDBX_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC
- * and especially MDBX_UTTERLY_NOSYNC is always a deal to reduce durability
- * for gain write performance. You must know exactly what you are doing and
- * what risks you are taking!
+ * (!!!) Using any combination of MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC,
+ * MDBX_MAPASYNC and especially MDBX_UTTERLY_NOSYNC is always a deal to reduce
+ * durability for gain write performance. You must know exactly what you are
+ * doing and what risks you are taking!
  *
- * NOTE for LMDB users: MDBX_NOSYNC is NOT similar to LMDB_NOSYNC, but
+ * NOTE for LMDB users: MDBX_SAFE_NOSYNC is NOT similar to LMDB_NOSYNC, but
  *                      MDBX_UTTERLY_NOSYNC is exactly match LMDB_NOSYNC.
  *                      See details below.
  *
@@ -1179,24 +1179,25 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *      for particular write transaction.
  *
  *
- * MDBX_NOSYNC = don't sync anything but keep previous steady commits.
+ * MDBX_SAFE_NOSYNC = don't sync anything but keep previous steady commits.
  *
- *      Like MDBX_UTTERLY_NOSYNC the MDBX_NOSYNC flag similarly disable flush
- *      system buffers to disk when committing a transaction. But there is a
- *      huge difference in how are recycled the MVCC snapshots corresponding
- *      to previous "steady" transactions (see below).
+ *      Like MDBX_UTTERLY_NOSYNC the MDBX_SAFE_NOSYNC flag similarly disable
+ *      flush system buffers to disk when committing a transaction. But there
+ *      is a huge difference in how are recycled the MVCC snapshots
+ *      corresponding to previous "steady" transactions (see below).
  *
- *      Depending on the platform and hardware, with MDBX_NOSYNC you may get
- *      a multiple increase of write performance, even 10 times or more.
- *      NOTE that (MDBX_NOSYNC | MDBX_WRITEMAP) leaves the system with no hint
- *      for when to write transactions to disk. Therefore the (MDBX_MAPASYNC |
- *      MDBX_WRITEMAP) may be preferable, but without MDBX_NOSYNC because
- *      the (MDBX_MAPASYNC | MDBX_NOSYNC) actually gives MDBX_UTTERLY_NOSYNC.
+ *      Depending on the platform and hardware, with MDBX_SAFE_NOSYNC you may
+ *      get a multiple increase of write performance, even 10 times or more.
+ *      NOTE that (MDBX_SAFE_NOSYNC | MDBX_WRITEMAP) leaves the system with no
+ *      hint for when to write transactions to disk. Therefore the
+ *      (MDBX_MAPASYNC | MDBX_WRITEMAP) may be preferable, but without
+ *      MDBX_SAFE_NOSYNC because the (MDBX_MAPASYNC | MDBX_SAFE_NOSYNC) actually
+ *      gives MDBX_UTTERLY_NOSYNC.
  *
- *      In contrast to MDBX_UTTERLY_NOSYNC mode, with MDBX_NOSYNC flag MDBX will
- *      keeps untouched pages within B-tree of the last transaction "steady"
- *      which was synced to disk completely. This has big implications for both
- *      data durability and (unfortunately) performance:
+ *      In contrast to MDBX_UTTERLY_NOSYNC mode, with MDBX_SAFE_NOSYNC flag MDBX
+ *      will keeps untouched pages within B-tree of the last transaction
+ *      "steady" which was synced to disk completely. This has big implications
+ *      for both data durability and (unfortunately) performance:
  *       - a system crash can't corrupt the database, but you will lose the
  *         last transactions; because MDBX will rollback to last steady commit
  *         since it kept explicitly.
@@ -1209,22 +1210,22 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *         insufficient space and before increasing the size of the file on
  *         disk.
  *
- *       In other words, with MDBX_NOSYNC flag MDBX insures you from the whole
- *       database corruption, at the cost increasing database size and/or number
- *       of disk IOPS. So, MDBX_NOSYNC flag could be used with mdbx_env_synv()
- *       as alternatively for batch committing or nested transaction (in some
- *       cases). As well, auto-sync feature exposed by mdbx_env_set_syncbytes()
- *       and mdbx_env_set_syncperiod() functions could be very usefull with
- *       MDBX_NOSYNC flag.
+ *      In other words, with MDBX_SAFE_NOSYNC flag MDBX insures you from the
+ *      whole database corruption, at the cost increasing database size and/or
+ *      number of disk IOPS. So, MDBX_SAFE_NOSYNC flag could be used with
+ *      mdbx_env_synv() as alternatively for batch committing or nested
+ *      transaction (in some cases). As well, auto-sync feature exposed by
+ *      mdbx_env_set_syncbytes() and mdbx_env_set_syncperiod() functions could
+ *      be very usefull with MDBX_SAFE_NOSYNC flag.
  *
- *       The number and volume of of disk IOPS with MDBX_NOSYNC flag will
- *       exactly the as without any no-sync flags. However, you should expect
- *       a larger process's work set (https://bit.ly/2kA2tFX) and significantly
- *       worse a locality of reference (https://bit.ly/2mbYq2J), due to the
- *       more intensive allocation of previously unused pages and increase the
- *       size of the database.
+ *      The number and volume of of disk IOPS with MDBX_SAFE_NOSYNC flag will
+ *      exactly the as without any no-sync flags. However, you should expect a
+ *      larger process's work set (https://bit.ly/2kA2tFX) and significantly
+ *      worse a locality of reference (https://bit.ly/2mbYq2J), due to the more
+ *      intensive allocation of previously unused pages and increase the size of
+ *      the database.
  *
- *      MDBX_NOSYNC flag may be changed at any time using
+ *      MDBX_SAFE_NOSYNC flag may be changed at any time using
  *      mdbx_env_set_flags() or by passing to mdbx_txn_begin() for particular
  *      write transaction.
  *
@@ -1232,12 +1233,13 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  * MDBX_MAPASYNC = use asynchronous msync when MDBX_WRITEMAP is used.
  *
  *      MDBX_MAPASYNC meaningful and give effect only in conjunction
- *      with MDBX_WRITEMAP or MDBX_NOSYNC:
- *       - with MDBX_NOSYNC actually gives MDBX_UTTERLY_NOSYNC, which
+ *      with MDBX_WRITEMAP or MDBX_SAFE_NOSYNC:
+ *       - with MDBX_SAFE_NOSYNC actually gives MDBX_UTTERLY_NOSYNC, which
  *         wipe previous steady commits for reuse pages as described above.
- *       - with MDBX_WRITEMAP but without MDBX_NOSYNC instructs MDBX to use
+ *       - with MDBX_WRITEMAP but without MDBX_SAFE_NOSYNC instructs MDBX to use
  *         asynchronous mmap-flushes to disk as described below.
- *       - with both MDBX_WRITEMAP and MDBX_NOSYNC you get the both effects.
+ *       - with both MDBX_WRITEMAP and MDBX_SAFE_NOSYNC you get the both
+ *         effects.
  *
  *      Asynchronous mmap-flushes means that actually all writes will scheduled
  *      and performed by operation system on it own manner, i.e. unordered.
@@ -1245,10 +1247,10 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *      data to disk, but no more.
  *
  *      With MDBX_MAPASYNC flag, but without MDBX_UTTERLY_NOSYNC (i.e. without
- *      OR'ing with MDBX_NOSYNC) MDBX will keeps untouched pages within B-tree
- *      of the last transaction "steady" which was synced to disk completely.
- *      So, this makes exactly the same "long-lived" impact and the same
- *      consequences as described above for MDBX_NOSYNC flag.
+ *      OR'ing with MDBX_SAFE_NOSYNC) MDBX will keeps untouched pages within
+ *      B-tree of the last transaction "steady" which was synced to disk
+ *      completely. So, this makes exactly the same "long-lived" impact and the
+ *      same consequences as described above for MDBX_SAFE_NOSYNC flag.
  *
  *      Depending on the platform and hardware, with combination of
  *      MDBX_WRITEMAP and MDBX_MAPASYNC you may get a multiple increase of write
@@ -1266,18 +1268,18 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *
  * (!) don't combine this flag with MDBX_MAPASYNC
  *     since you will got MDBX_UTTERLY_NOSYNC in that way (see below) */
-#define MDBX_NOSYNC 0x10000u
+#define MDBX_SAFE_NOSYNC 0x10000u
 
 /* Use asynchronous msync when MDBX_WRITEMAP is used,
  * see description in the "SYNC MODES" section above.
  *
- * (!) don't combine this flag with MDBX_NOSYNC
+ * (!) don't combine this flag with MDBX_SAFE_NOSYNC
  *     since you will got MDBX_UTTERLY_NOSYNC in that way (see below) */
 #define MDBX_MAPASYNC 0x100000u
 
 /* Don't sync anything and wipe previous steady commits,
  * see description in the "SYNC MODES" section above. */
-#define MDBX_UTTERLY_NOSYNC (MDBX_NOSYNC | MDBX_MAPASYNC)
+#define MDBX_UTTERLY_NOSYNC (MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)
 
 /**** DATABASE FLAGS **********************************************************/
 /* Use reverse string keys */
@@ -1514,14 +1516,14 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *    MDBX_NORDAHEAD, MDBX_NOMEMINIT, MDBX_COALESCE, MDBX_LIFORECLAIM.
  *    See "ENVIRONMENT FLAGS" section above.
  *
- *  - MDBX_NOMETASYNC, MDBX_NOSYNC, MDBX_UTTERLY_NOSYNC, MDBX_MAPASYNC.
+ *  - MDBX_NOMETASYNC, MDBX_SAFE_NOSYNC, MDBX_UTTERLY_NOSYNC, MDBX_MAPASYNC.
  *    See "SYNC MODES" section above.
  *
  * NOTE: MDB_NOLOCK flag don't supported by MDBX,
  *       try use MDBX_EXCLUSIVE as a replacement.
  *
  * NOTE: MDBX don't allow to mix processes with different MDBX_WRITEMAP,
- *       MDBX_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC flags onthe same
+ *       MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC flags on the same
  *       environment. In such case MDBX_INCOMPATIBLE will be returned.
  *
  * If the database is already exist and parameters specified early by
@@ -1547,7 +1549,7 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *                             more than once.
  *   - MDBX_INCOMPATIBLE     = Environment is already opened by another process,
  *                             but with different set of MDBX_WRITEMAP,
- *                             MDBX_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC
+ *                             MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC
  *                             flags.
  *                             Or if the database is already exist and
  *                             parameters specified early by
@@ -1722,7 +1724,7 @@ __deprecated LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
 /* Flush the environment data buffers to disk.
  *
  * Unless the environment was opened with no-sync flags (MDBX_NOMETASYNC,
- * MDBX_NOSYNC, MDBX_UTTERLY_NOSYNC and MDBX_MAPASYNC), then data is always
+ * MDBX_SAFE_NOSYNC, MDBX_UTTERLY_NOSYNC and MDBX_MAPASYNC), then data is always
  * written an flushed to disk when mdbx_txn_commit() is called. Otherwise
  * mdbx_env_sync() may be called to manually write and flush unsynced data to
  * disk.
@@ -1758,14 +1760,15 @@ LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock);
 LIBMDBX_API int mdbx_env_sync(MDBX_env *env);
 LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
 
-/* Sets threshold to force flush the data buffers to disk, even of MDBX_NOSYNC,
- * MDBX_NOMETASYNC and MDBX_MAPASYNC flags in the environment. The threshold
- * value affects all processes which operates with given environment until the
- * last process close environment or a new value will be settled.
+/* Sets threshold to force flush the data buffers to disk, even of
+ * MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC flags in the environment.
+ * The threshold value affects all processes which operates with given
+ * environment until the last process close environment or a new value will be
+ * settled.
  *
  * Data is always written to disk when mdbx_txn_commit() is called,  but the
  * operating system may keep it buffered. MDBX always flushes the OS buffers
- * upon commit as well, unless the environment was opened with MDBX_NOSYNC,
+ * upon commit as well, unless the environment was opened with MDBX_SAFE_NOSYNC,
  * MDBX_MAPASYNC or in part MDBX_NOMETASYNC.
  *
  * The default is 0, than mean no any threshold checked, and no additional
@@ -1779,14 +1782,14 @@ LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
 LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
 
 /* Sets relative period since the last unsteay commit to force flush the data
- * buffers to disk, even of MDBX_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC flags
- * in the environment. The relative period value affects all processes which
- * operates with given environment until the last process close environment or a
- * new value will be settled.
+ * buffers to disk, even of MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC and MDBX_MAPASYNC
+ * flags in the environment. The relative period value affects all processes
+ * which operates with given environment until the last process close
+ * environment or a new value will be settled.
  *
  * Data is always written to disk when mdbx_txn_commit() is called, but the
  * operating system may keep it buffered. MDBX always flushes the OS buffers
- * upon commit as well, unless the environment was opened with MDBX_NOSYNC,
+ * upon commit as well, unless the environment was opened with MDBX_SAFE_NOSYNC,
  * MDBX_MAPASYNC or in part MDBX_NOMETASYNC.
  *
  * Settled period don't checked asynchronously, but only by the
@@ -2218,9 +2221,9 @@ LIBMDBX_API void *mdbx_env_get_userctx(MDBX_env *env);
  *  - MDBX_TRYTXN
  *      Do not block when starting a write transaction.
  *
- *  - MDBX_NOSYNC, MDBX_NOMETASYNC or MDBX_MAPASYNC
+ *  - MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC or MDBX_MAPASYNC
  *      Do not sync data to disk corresponding to MDBX_NOMETASYNC
- *      or MDBX_NOSYNC description (see abobe).
+ *      or MDBX_SAFE_NOSYNC description (see abobe).
  *
  * [out] txn Address where the new MDBX_txn handle will be stored
  *
