@@ -821,7 +821,9 @@ typedef struct iovec MDBX_val;
 #define MDBX_DBG_ASSERT 1 /* Enable assertion checks */
 #define MDBX_DBG_AUDIT 2  /* Enable pages usage audit at commit transactions */
 #define MDBX_DBG_JITTER 4 /* Enable small random delays in critical points */
-#define MDBX_DBG_DUMP 8   /* Include or not database(s) in coredump files */
+#define MDBX_DBG_DUMP     /* Include or not meta-pages in coredump files, MAY  \
+                           affect performance in MDBX_WRITEMAP mode */         \
+  8
 #define MDBX_DBG_LEGACY_MULTIOPEN 16 /* Enable multi-opening environment(s) */
 
 /* A debug-logger callback function,

@@ -1532,7 +1532,13 @@ retry_mapview:;
     void *ptr = mremap(map->address, map->limit, limit, 0);
     if (ptr == MAP_FAILED) {
       rc = errno;
-      return (rc == EAGAIN || rc == ENOMEM) ? MDBX_RESULT_TRUE : rc;
+      switch (rc) {
+      case EAGAIN:
+      case ENOMEM:
+      case EFAULT /* MADV_DODUMP / MADV_DONTDUMP are mixed for mmap-mange */:
+        rc = MDBX_RESULT_TRUE;
+      }
+      return rc;
     }
     map->address = ptr;
     map->limit = limit;

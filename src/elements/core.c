@@ -8321,27 +8321,28 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-#if defined(MADV_DODUMP) && defined(MADV_DONTDUMP)
-  const size_t meta_length_aligned2os = pgno_align2os_bytes(env, NUM_METAS);
-  err = madvise(env->me_map, meta_length_aligned2os, MADV_DODUMP)
+#if defined(MADV_DONTDUMP)
+  err = madvise(env->me_map, env->me_dxb_mmap.limit, MADV_DONTDUMP)
             ? ignore_enosys(errno)
             : MDBX_SUCCESS;
   if (unlikely(MDBX_IS_ERROR(err)))
     return err;
-  err = madvise(env->me_map + meta_length_aligned2os,
-                env->me_dxb_mmap.current - meta_length_aligned2os,
-                (mdbx_runtime_flags & MDBX_DBG_DUMP) ? MADV_DODUMP
-                                                     : MADV_DONTDUMP)
-            ? ignore_enosys(errno)
-            : MDBX_SUCCESS;
-  if (unlikely(MDBX_IS_ERROR(err)))
-    return err;
-#endif
+#endif /* MADV_DONTDUMP */
+#if defined(MADV_DODUMP)
+  if (mdbx_runtime_flags & MDBX_DBG_DUMP) {
+    const size_t meta_length_aligned2os = pgno_align2os_bytes(env, NUM_METAS);
+    err = madvise(env->me_map, meta_length_aligned2os, MADV_DODUMP)
+              ? ignore_enosys(errno)
+              : MDBX_SUCCESS;
+    if (unlikely(MDBX_IS_ERROR(err)))
+      return err;
+  }
+#endif /* MADV_DODUMP */
 
 #ifdef MDBX_USE_VALGRIND
   env->me_valgrind_handle =
       VALGRIND_CREATE_BLOCK(env->me_map, env->me_dxb_mmap.limit, "mdbx");
-#endif
+#endif /* MDBX_USE_VALGRIND */
 
   mdbx_assert(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
                        used_bytes <= env->me_dxb_mmap.limit);
@@ -15497,36 +15498,6 @@ int __cold mdbx_setup_debug(int loglevel, int flags, MDBX_debug_func *logger) {
     flags &= MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
              MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN;
 #endif
-#if defined(__linux__) || defined(__gnu_linux__)
-    if ((mdbx_runtime_flags ^ flags) & MDBX_DBG_DUMP) {
-      /* http://man7.org/linux/man-pages/man5/core.5.html */
-      const unsigned long dump_bits =
-          1 << 3   /* Dump file-backed shared mappings */
-          | 1 << 6 /* Dump shared huge pages */
-          | 1 << 8 /* Dump shared DAX pages */;
-      const int core_filter_fd =
-          open("/proc/self/coredump_filter", O_TRUNC | O_RDWR);
-      if (core_filter_fd != -1) {
-        char buf[32];
-        intptr_t bytes = pread(core_filter_fd, buf, sizeof(buf), 0);
-        if (bytes > 0 && (size_t)bytes < sizeof(buf)) {
-          buf[bytes] = 0;
-          const unsigned long present_mask = strtoul(buf, NULL, 16);
-          const unsigned long wanna_mask = (flags & MDBX_DBG_DUMP)
-                                               ? present_mask | dump_bits
-                                               : present_mask & ~dump_bits;
-          if (wanna_mask != present_mask) {
-            bytes = snprintf(buf, sizeof(buf), "0x%lx\n", wanna_mask);
-            if (bytes > 0 && (size_t)bytes < sizeof(buf)) {
-              bytes = pwrite(core_filter_fd, buf, bytes, 0);
-              (void)bytes;
-            }
-          }
-        }
-        close(core_filter_fd);
-      }
-    }
-#endif /* Linux */
     mdbx_runtime_flags = (uint8_t)flags;
   }
 
