@@ -221,7 +221,7 @@ MDBX_INTERNAL_FUNC int mdbx_ipclock_destroy(mdbx_ipclock_t *ipc) {
 #endif /* MDBX_LOCKING > MDBX_LOCKING_SYSV */
 
 MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
-  assert(env->me_fd != INVALID_HANDLE_VALUE);
+  assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
   if (unlikely(mdbx_getpid() != env->me_pid))
     return MDBX_PANIC;
 #if MDBX_USE_OFDLOCKS
@@ -233,7 +233,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
     rc =
-        lck_op(env->me_fd, op_setlk,
+        lck_op(env->me_lazy_fd, op_setlk,
                (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
     if (rc != MDBX_SUCCESS) {
       mdbx_error("%s(%s) failed: errcode %u", __func__, "without-lck", rc);
@@ -249,7 +249,7 @@ retry_exclusive:
   if (rc == MDBX_SUCCESS) {
   continue_dxb_exclusive:
     rc =
-        lck_op(env->me_fd, op_setlk,
+        lck_op(env->me_lazy_fd, op_setlk,
                (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0, OFF_T_MAX);
     if (rc == MDBX_SUCCESS)
       return MDBX_RESULT_TRUE /* Done: return with exclusive locking. */;
@@ -265,7 +265,7 @@ retry_exclusive:
     /* Fallback to lck-shared */
   }
 
-  /* Here could be one of two::
+  /* Here could be one of two:
    *  - mdbx_lck_destroy() from the another process was hold the lock
    *    during a destruction.
    *  - either mdbx_lck_seize() from the another process was got the exclusive
@@ -317,7 +317,7 @@ retry_exclusive:
 
   /* Lock against another process operating in without-lck or exclusive mode. */
   rc =
-      lck_op(env->me_fd, op_setlk,
+      lck_op(env->me_lazy_fd, op_setlk,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, env->me_pid, 1);
   if (rc != MDBX_SUCCESS) {
     mdbx_error("%s(%s) failed: errcode %u", __func__,
@@ -337,9 +337,9 @@ MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
 
   int rc = MDBX_SUCCESS;
   if ((env->me_flags & MDBX_EXCLUSIVE) == 0) {
-    rc = lck_op(env->me_fd, op_setlk, F_UNLCK, 0, env->me_pid);
+    rc = lck_op(env->me_lazy_fd, op_setlk, F_UNLCK, 0, env->me_pid);
     if (rc == MDBX_SUCCESS)
-      rc = lck_op(env->me_fd, op_setlk, F_UNLCK, env->me_pid + 1,
+      rc = lck_op(env->me_lazy_fd, op_setlk, F_UNLCK, env->me_pid + 1,
                   OFF_T_MAX - env->me_pid - 1);
   }
   if (rc == MDBX_SUCCESS)
@@ -361,7 +361,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
       env->me_lck &&
       /* try get exclusive access */
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
-      lck_op(env->me_fd, op_setlk,
+      lck_op(env->me_lazy_fd, op_setlk,
              (env->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK, 0,
              OFF_T_MAX) == 0) {
 
@@ -392,14 +392,19 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
    * locks should be released here explicitly with properly order. */
 
   /* close dxb and restore lock */
-  if (env->me_fd != INVALID_HANDLE_VALUE) {
-    if (unlikely(close(env->me_fd) != 0) && rc == MDBX_SUCCESS)
+  if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
+    if (unlikely(close(env->me_dsync_fd) != 0) && rc == MDBX_SUCCESS)
       rc = errno;
-    env->me_fd = INVALID_HANDLE_VALUE;
+    env->me_dsync_fd = INVALID_HANDLE_VALUE;
+  }
+  if (env->me_lazy_fd != INVALID_HANDLE_VALUE) {
+    if (unlikely(close(env->me_lazy_fd) != 0) && rc == MDBX_SUCCESS)
+      rc = errno;
+    env->me_lazy_fd = INVALID_HANDLE_VALUE;
     if (op_setlk == F_SETLK && inprocess_neighbor && rc == MDBX_SUCCESS) {
       /* restore file-lock */
       rc = lck_op(
-          inprocess_neighbor->me_fd, F_SETLKW,
+          inprocess_neighbor->me_lazy_fd, F_SETLKW,
           (inprocess_neighbor->me_flags & MDBX_RDONLY) ? F_RDLCK : F_WRLCK,
           (inprocess_neighbor->me_flags & MDBX_EXCLUSIVE)
               ? 0
@@ -439,7 +444,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
   int semid = -1;
   if (global_uniqueness_flag) {
     struct stat st;
-    if (fstat(env->me_fd, &st))
+    if (fstat(env->me_lazy_fd, &st))
       return errno;
   sysv_retry_create:
     semid = semget(env->me_sysv_ipc.key, 2,

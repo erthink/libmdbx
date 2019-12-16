@@ -151,7 +151,7 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
   }
 
   if ((env->me_flags & MDBX_EXCLUSIVE) ||
-      flock(env->me_fd,
+      flock(env->me_lazy_fd,
             dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT)
                      : (LCK_EXCLUSIVE | LCK_WAITFOR),
             LCK_BODY))
@@ -162,8 +162,9 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
-  int rc =
-      (env->me_flags & MDBX_EXCLUSIVE) ? TRUE : funlock(env->me_fd, LCK_BODY);
+  int rc = (env->me_flags & MDBX_EXCLUSIVE)
+               ? TRUE
+               : funlock(env->me_lazy_fd, LCK_BODY);
   LeaveCriticalSection(&env->me_windowsbug_lock);
   if (!rc)
     mdbx_panic("%s failed: errcode %u", __func__, GetLastError());
@@ -385,24 +386,24 @@ static void lck_unlock(MDBX_env *env) {
     SetLastError(ERROR_SUCCESS);
   }
 
-  if (env->me_fd != INVALID_HANDLE_VALUE) {
+  if (env->me_lazy_fd != INVALID_HANDLE_VALUE) {
     /* explicitly unlock to avoid latency for other processes (windows kernel
      * releases such locks via deferred queues) */
-    while (funlock(env->me_fd, LCK_BODY))
+    while (funlock(env->me_lazy_fd, LCK_BODY))
       ;
     rc = GetLastError();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
 
-    while (funlock(env->me_fd, LCK_META))
+    while (funlock(env->me_lazy_fd, LCK_META))
       ;
     rc = GetLastError();
     assert(rc == ERROR_NOT_LOCKED);
     (void)rc;
     SetLastError(ERROR_SUCCESS);
 
-    while (funlock(env->me_fd, LCK_WHOLE))
+    while (funlock(env->me_lazy_fd, LCK_WHOLE))
       ;
     rc = GetLastError();
     assert(rc == ERROR_NOT_LOCKED);
@@ -490,7 +491,7 @@ static int internal_seize_lck(HANDLE lfd) {
 MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
   int rc;
 
-  assert(env->me_fd != INVALID_HANDLE_VALUE);
+  assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
   if (env->me_flags & MDBX_EXCLUSIVE)
     return MDBX_RESULT_TRUE /* nope since files were must be opened
                                non-shareable */
@@ -499,7 +500,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. on read-only filesystem) */
     mdbx_jitter4testing(false);
-    if (!flock(env->me_fd, LCK_SHARED | LCK_DONTWAIT, LCK_WHOLE)) {
+    if (!flock(env->me_lazy_fd, LCK_SHARED | LCK_DONTWAIT, LCK_WHOLE)) {
       rc = GetLastError();
       mdbx_error("%s(%s) failed: errcode %u", __func__, "without-lck", rc);
       return rc;
@@ -516,7 +517,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
      *  - we need an exclusive lock for do so;
      *  - we can't lock meta-pages, otherwise other process could get an error
      *    while opening db in valid (non-conflict) mode. */
-    if (!flock(env->me_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY)) {
+    if (!flock(env->me_lazy_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY)) {
       rc = GetLastError();
       mdbx_error("%s(%s) failed: errcode %u", __func__,
                  "lock-against-without-lck", rc);
@@ -524,7 +525,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
       lck_unlock(env);
     } else {
       mdbx_jitter4testing(false);
-      if (!funlock(env->me_fd, LCK_BODY))
+      if (!funlock(env->me_lazy_fd, LCK_BODY))
         mdbx_panic("%s(%s) failed: errcode %u", __func__,
                    "unlock-against-without-lck", GetLastError());
     }
@@ -535,7 +536,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
 
 MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
   /* Transite from exclusive state (E-?) to used (S-?) */
-  assert(env->me_fd != INVALID_HANDLE_VALUE);
+  assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
 #if 1

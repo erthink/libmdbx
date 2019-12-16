@@ -2961,7 +2961,7 @@ static __cold void mdbx_kill_page(MDBX_env *env, MDBX_page *mp, pgno_t pgno,
     memset(mp, 0, bytes);
     mp->mp_pgno = pgno;
     if ((env->me_flags & MDBX_WRITEMAP) == 0)
-      mdbx_pwrite(env->me_fd, mp, bytes, pgno2bytes(env, pgno));
+      mdbx_pwrite(env->me_lazy_fd, mp, bytes, pgno2bytes(env, pgno));
   } else {
     struct iovec iov[MDBX_COMMIT_PAGES];
     iov[0].iov_len = env->me_psize;
@@ -2971,13 +2971,13 @@ static __cold void mdbx_kill_page(MDBX_env *env, MDBX_page *mp, pgno_t pgno,
     while (--npages) {
       iov[n] = iov[0];
       if (++n == MDBX_COMMIT_PAGES) {
-        mdbx_pwritev(env->me_fd, iov, MDBX_COMMIT_PAGES, iov_off,
+        mdbx_pwritev(env->me_lazy_fd, iov, MDBX_COMMIT_PAGES, iov_off,
                      pgno2bytes(env, MDBX_COMMIT_PAGES));
         iov_off += pgno2bytes(env, MDBX_COMMIT_PAGES);
         n = 0;
       }
     }
-    mdbx_pwritev(env->me_fd, iov, n, iov_off, pgno2bytes(env, n));
+    mdbx_pwritev(env->me_lazy_fd, iov, n, iov_off, pgno2bytes(env, n));
   }
 }
 
@@ -3645,7 +3645,7 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
               bytes2pgno(env, offset), bytes2pgno(env, offset + length));
 
 #if defined(F_RDAHEAD)
-  if (unlikely(fcntl(env->me_fd, F_RDAHEAD, enable) == -1))
+  if (unlikely(fcntl(env->me_lazy_fd, F_RDAHEAD, enable) == -1))
     return errno;
 #endif /* F_RDAHEAD */
 
@@ -3655,7 +3655,7 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
     hint.ra_offset = offset;
     hint.ra_count = length;
     (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
-        env->me_fd, F_RDADVISE, &hint);
+        env->me_lazy_fd, F_RDADVISE, &hint);
 #endif /* F_RDADVISE */
 #if defined(MADV_WILLNEED)
     int err = madvise(env->me_map + offset, length, MADV_WILLNEED)
@@ -3677,7 +3677,7 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
     }
 #elif defined(POSIX_FADV_WILLNEED)
     int err = ignore_enosys(
-        posix_fadvise(env->me_fd, offset, length, POSIX_FADV_WILLNEED));
+        posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_WILLNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #endif /* MADV_WILLNEED */
@@ -3695,7 +3695,7 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
       return err;
 #elif defined(POSIX_FADV_RANDOM)
     int err = ignore_enosys(
-        posix_fadvise(env->me_fd, offset, length, POSIX_FADV_RANDOM));
+        posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #endif /* MADV_RANDOM */
@@ -3793,8 +3793,9 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                                        POSIX_MADV_DONTNEED));
 #elif defined(POSIX_FADV_DONTNEED)
     if (rc == MDBX_RESULT_TRUE)
-      rc = ignore_enosys(posix_fadvise(
-          env->me_fd, size_bytes, prev_size - size_bytes, POSIX_FADV_DONTNEED));
+      rc = ignore_enosys(posix_fadvise(env->me_lazy_fd, size_bytes,
+                                       prev_size - size_bytes,
+                                       POSIX_FADV_DONTNEED));
 #endif /* MADV_DONTNEED */
     if (unlikely(MDBX_IS_ERROR(rc)))
       goto bailout;
@@ -3892,7 +3893,7 @@ static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
     if (env->me_flags & MDBX_WRITEMAP)
       meta->mm_datasync_sign = wipe;
     else
-      return mdbx_pwrite(env->me_fd, &wipe, sizeof(meta->mm_datasync_sign),
+      return mdbx_pwrite(env->me_lazy_fd, &wipe, sizeof(meta->mm_datasync_sign),
                          (uint8_t *)&meta->mm_datasync_sign - env->me_map);
   }
   return MDBX_SUCCESS;
@@ -3911,15 +3912,16 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_flush_incoherent_cpu_writeback();
-    return mdbx_msync(&env->me_dxb_mmap, 0, pgno2bytes(env, NUM_METAS), false);
+    return mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
+                      false);
   }
 
 #if defined(__linux__) || defined(__gnu_linux__)
-  if (sync_file_range(env->me_fd, 0, pgno2bytes(env, NUM_METAS),
+  if (sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
                       SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
     err = errno;
 #else
-  err = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
+  err = mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_DATA);
 #endif
   if (unlikely(err != MDBX_SUCCESS))
     return err;
@@ -4654,7 +4656,7 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
         /* LY: pre-sync without holding lock to reduce latency for writer(s) */
         int err = (flags & MDBX_WRITEMAP)
                       ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, false)
-                      : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA);
+                      : mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_DATA);
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
@@ -4693,10 +4695,11 @@ fastpath:
   if (rc == MDBX_RESULT_TRUE && (env->me_flags & MDBX_NOMETASYNC) != 0) {
     const txnid_t head_txnid = mdbx_recent_committed_txnid(env);
     if (*env->me_meta_sync_txnid != (uint32_t)head_txnid) {
-      rc = (flags & MDBX_WRITEMAP)
-               ? mdbx_msync(&env->me_dxb_mmap, 0, pgno2bytes(env, NUM_METAS),
-                            false)
-               : mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+      rc =
+          (flags & MDBX_WRITEMAP)
+              ? mdbx_msync(&env->me_dxb_mmap, 0,
+                           pgno_align2os_bytes(env, NUM_METAS), false)
+              : mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       if (likely(rc == MDBX_SUCCESS))
         *env->me_meta_sync_txnid = (uint32_t)head_txnid;
     }
@@ -6556,7 +6559,7 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
                           unsigned iov_items, size_t iov_off,
                           size_t iov_bytes) {
   MDBX_env *const env = txn->mt_env;
-  int rc = mdbx_pwritev(env->me_fd, iov, iov_items, iov_off, iov_bytes);
+  int rc = mdbx_pwritev(env->me_lazy_fd, iov, iov_items, iov_off, iov_bytes);
   if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_error("Write error: %s", mdbx_strerror(rc));
     txn->mt_flags |= MDBX_TXN_ERROR;
@@ -7163,7 +7166,7 @@ static int __cold mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
   const uint64_t used_bytes = meta->mm_geo.next * (uint64_t)meta->mm_psize;
   if (used_bytes > *filesize) {
     /* Here could be a race with DB-shrinking performed by other process */
-    int err = mdbx_filesize(env->me_fd, filesize);
+    int err = mdbx_filesize(env->me_lazy_fd, filesize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     if (used_bytes > *filesize) {
@@ -7265,7 +7268,7 @@ static int __cold mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
 static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
                                    uint64_t *filesize,
                                    const int lck_exclusive) {
-  int rc = mdbx_filesize(env->me_fd, filesize);
+  int rc = mdbx_filesize(env->me_lazy_fd, filesize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -7291,7 +7294,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
     while (1) {
       mdbx_trace("reading meta[%d]: offset %u, bytes %u, retry-left %u",
                  meta_number, offset, MIN_PAGESIZE, retryleft);
-      int err = mdbx_pread(env->me_fd, buffer, MIN_PAGESIZE, offset);
+      int err = mdbx_pread(env->me_lazy_fd, buffer, MIN_PAGESIZE, offset);
       if (err != MDBX_SUCCESS) {
         if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 &&
             *filesize == 0 && (env->me_flags & MDBX_RDONLY) == 0)
@@ -7304,7 +7307,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
       }
 
       char again[MIN_PAGESIZE];
-      err = mdbx_pread(env->me_fd, again, MIN_PAGESIZE, offset);
+      err = mdbx_pread(env->me_lazy_fd, again, MIN_PAGESIZE, offset);
       if (err != MDBX_SUCCESS) {
         mdbx_error("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
                    mdbx_strerror(err));
@@ -7516,21 +7519,25 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     MDBX_meta *const recent_steady_meta = mdbx_meta_steady(env);
     if (flags & MDBX_WRITEMAP) {
-      const size_t usedbytes = pgno_align2os_bytes(env, pending->mm_geo.next);
-      rc = mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, flags & MDBX_MAPASYNC);
-      if (unlikely(rc != MDBX_SUCCESS))
-        goto fail;
+      const size_t begin = pgno2bytes(env, NUM_METAS) & ~(env->me_os_psize - 1);
+      const size_t end = pgno_align2os_bytes(env, pending->mm_geo.next);
+      if (end > begin) {
+        rc = mdbx_msync(&env->me_dxb_mmap, begin, end - begin,
+                        flags & MDBX_MAPASYNC);
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto fail;
+      }
       rc = MDBX_RESULT_TRUE /* carry non-steady */;
       if ((flags & MDBX_MAPASYNC) == 0) {
         if (unlikely(pending->mm_geo.next > recent_steady_meta->mm_geo.now)) {
-          rc = mdbx_filesync(env->me_fd, MDBX_SYNC_SIZE);
+          rc = mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_SIZE);
           if (unlikely(rc != MDBX_SUCCESS))
             goto fail;
         }
         rc = MDBX_RESULT_FALSE /* carry steady */;
       }
     } else {
-      rc = mdbx_filesync(env->me_fd,
+      rc = mdbx_filesync(env->me_lazy_fd,
                          (pending->mm_geo.next > recent_steady_meta->mm_geo.now)
                              ? MDBX_SYNC_DATA | MDBX_SYNC_SIZE
                              : MDBX_SYNC_DATA);
@@ -7606,7 +7613,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   mdbx_ensure(env, target == head || mdbx_meta_txnid_stable(env, target) <
                                          pending->mm_txnid_a.inconsistent);
-  if (env->me_flags & MDBX_WRITEMAP) {
+  if (flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
     if (likely(target != head)) {
       /* LY: 'invalidate' the meta. */
@@ -7649,40 +7656,49 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     target->mm_datasync_sign = pending->mm_datasync_sign;
     mdbx_flush_incoherent_cpu_writeback();
     mdbx_jitter4testing(true);
+    if ((flags & MDBX_SAFE_NOSYNC) == 0) {
+      /* sync meta-pages */
+      const bool weak = (flags & (MDBX_MAPASYNC | MDBX_NOMETASYNC)) != 0;
+      rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
+                      weak);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto fail;
+      if (!weak) {
+#if defined(__APPLE__) &&                                                      \
+    MDBX_OSX_SPEED_INSTEADOF_DURABILITY == MDBX_OSX_WANNA_DURABILITY
+        rc = likely(fcntl(env->me_lazy_fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS
+                                                               : errno;
+        if (unlikely(rc != MDBX_SUCCESS))
+          goto fail;
+#endif /* MacOS */
+        *env->me_meta_sync_txnid = (uint32_t)pending->mm_txnid_a.inconsistent;
+      }
+    }
   } else {
-    rc = mdbx_pwrite(env->me_fd, pending, sizeof(MDBX_meta),
+    const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
+                                     ? env->me_dsync_fd
+                                     : env->me_lazy_fd;
+    rc = mdbx_pwrite(fd, pending, sizeof(MDBX_meta),
                      (uint8_t *)target - env->me_map);
     if (unlikely(rc != MDBX_SUCCESS)) {
     undo:
       mdbx_debug("%s", "write failed, disk error?");
       /* On a failure, the pagecache still contains the new data.
        * Try write some old data back, to prevent it from being used. */
-      mdbx_pwrite(env->me_fd, (void *)target, sizeof(MDBX_meta),
+      mdbx_pwrite(fd, (void *)target, sizeof(MDBX_meta),
                   (uint8_t *)target - env->me_map);
       goto fail;
     }
     mdbx_flush_incoherent_mmap(target, sizeof(MDBX_meta), env->me_os_psize);
-  }
-
-  /* LY: step#3 - sync meta-pages. */
-  mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
-  if ((flags & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) == 0) {
-    mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
-    if (flags & MDBX_WRITEMAP) {
-      const size_t offset = (uint8_t *)data_page(head) - env->me_dxb_mmap.dxb;
-      const size_t paged_offset = offset & ~(env->me_os_psize - 1);
-      const size_t paged_length = roundup_powerof2(
-          env->me_psize + offset - paged_offset, env->me_os_psize);
-      rc = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length,
-                      flags & MDBX_MAPASYNC);
-      if (unlikely(rc != MDBX_SUCCESS))
-        goto fail;
-    } else {
-      rc = mdbx_filesync(env->me_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-      if (rc != MDBX_SUCCESS)
-        goto undo;
+    if ((flags & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) == 0) {
+      /* sync meta-pages */
+      if (fd == env->me_lazy_fd) {
+        rc = mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+        if (rc != MDBX_SUCCESS)
+          goto undo;
+      }
+      *env->me_meta_sync_txnid = (uint32_t)pending->mm_txnid_a.inconsistent;
     }
-    *env->me_meta_sync_txnid = (uint32_t)pending->mm_txnid_a.inconsistent;
   }
 
   /* LY: shrink datafile if needed */
@@ -7749,7 +7765,8 @@ int __cold mdbx_env_create(MDBX_env **penv) {
 
   env->me_maxreaders = DEFAULT_READERS;
   env->me_maxdbs = env->me_numdbs = CORE_DBS;
-  env->me_fd = INVALID_HANDLE_VALUE;
+  env->me_lazy_fd = INVALID_HANDLE_VALUE;
+  env->me_dsync_fd = INVALID_HANDLE_VALUE;
   env->me_lfd = INVALID_HANDLE_VALUE;
   env->me_pid = mdbx_getpid();
 
@@ -8197,12 +8214,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       return MDBX_ENOMEM;
 
     meta = *mdbx_init_metas(env, buffer);
-    err = mdbx_pwrite(env->me_fd, buffer, env->me_psize * NUM_METAS, 0);
+    err = mdbx_pwrite(env->me_lazy_fd, buffer, env->me_psize * NUM_METAS, 0);
     mdbx_free(buffer);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-    err = mdbx_ftruncate(env->me_fd, filesize_before = env->me_dbgeo.now);
+    err = mdbx_ftruncate(env->me_lazy_fd, filesize_before = env->me_dbgeo.now);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
@@ -8461,7 +8478,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         MDBX_meta rollback = *head;
         mdbx_meta_set_txnid(env, &rollback, undo_txnid);
         rollback.mm_datasync_sign = MDBX_DATASIGN_WEAK;
-        err = mdbx_pwrite(env->me_fd, &rollback, sizeof(MDBX_meta),
+        err = mdbx_pwrite(env->me_lazy_fd, &rollback, sizeof(MDBX_meta),
                           (uint8_t *)head - (uint8_t *)env->me_map);
       }
       if (err) {
@@ -8572,7 +8589,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       return err;
 #elif defined(POSIX_FADV_DONTNEED)
     err = ignore_enosys(posix_fadvise(
-        env->me_fd, used_aligned2os_bytes,
+        env->me_lazy_fd, used_aligned2os_bytes,
         env->me_dxb_mmap.current - used_aligned2os_bytes, POSIX_FADV_DONTNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
@@ -8594,7 +8611,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 /* Open and/or initialize the lock region for the environment. */
 static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
                                  mode_t mode) {
-  mdbx_assert(env, env->me_fd != INVALID_HANDLE_VALUE);
+  mdbx_assert(env, env->me_lazy_fd != INVALID_HANDLE_VALUE);
   mdbx_assert(env, env->me_lfd == INVALID_HANDLE_VALUE);
 
   int err = mdbx_openfile(MDBX_OPEN_LCK, env, lck_pathname, &env->me_lfd, mode);
@@ -8605,7 +8622,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
       return err;
 
     /* ensure the file system is read-only */
-    err = mdbx_check_fs_rdonly(env->me_fd, lck_pathname, err);
+    err = mdbx_check_fs_rdonly(env->me_lazy_fd, lck_pathname, err);
     if (err != MDBX_SUCCESS)
       return err;
 
@@ -8918,7 +8935,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
   if (flags & ~(CHANGEABLE | CHANGELESS))
     return MDBX_EINVAL;
 
-  if (env->me_fd != INVALID_HANDLE_VALUE ||
+  if (env->me_lazy_fd != INVALID_HANDLE_VALUE ||
       (env->me_flags & MDBX_ENV_ACTIVE) != 0)
     return MDBX_EPERM;
 
@@ -9020,9 +9037,17 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
 
   rc = mdbx_openfile(F_ISSET(flags, MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
                                                  : MDBX_OPEN_DXB_LAZY,
-                     env, dxb_pathname, &env->me_fd, mode);
+                     env, dxb_pathname, &env->me_lazy_fd, mode);
   if (rc != MDBX_SUCCESS)
     goto bailout;
+
+  mdbx_assert(env, env->me_dsync_fd == INVALID_HANDLE_VALUE);
+  if ((flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) == 0) {
+    rc = mdbx_openfile(MDBX_OPEN_DXB_DSYNC, env, dxb_pathname,
+                       &env->me_dsync_fd, 0);
+    mdbx_ensure(env, (rc != MDBX_SUCCESS) ==
+                         (env->me_dsync_fd == INVALID_HANDLE_VALUE));
+  }
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   env->me_sysv_ipc.key = ftok(dxb_pathname, 42);
@@ -9035,7 +9060,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
 #if !(defined(_WIN32) || defined(_WIN64))
   if (mode == 0) {
     struct stat st;
-    if (fstat(env->me_fd, &st)) {
+    if (fstat(env->me_lazy_fd, &st)) {
       rc = errno;
       goto bailout;
     }
@@ -9192,9 +9217,15 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
     env->me_valgrind_handle = -1;
 #endif
   }
-  if (env->me_fd != INVALID_HANDLE_VALUE) {
-    (void)mdbx_closefile(env->me_fd);
-    env->me_fd = INVALID_HANDLE_VALUE;
+
+  if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
+    (void)mdbx_closefile(env->me_dsync_fd);
+    env->me_dsync_fd = INVALID_HANDLE_VALUE;
+  }
+
+  if (env->me_lazy_fd != INVALID_HANDLE_VALUE) {
+    (void)mdbx_closefile(env->me_lazy_fd);
+    env->me_lazy_fd = INVALID_HANDLE_VALUE;
   }
 
   if (env->me_lck)
@@ -9258,7 +9289,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
       rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
 #else
       struct stat st;
-      if (unlikely(fstat(env->me_fd, &st)))
+      if (unlikely(fstat(env->me_lazy_fd, &st)))
         rc = errno;
       else if (st.st_nlink > 0 /* don't sync deleted files */) {
         rc = mdbx_env_sync_ex(env, true, true);
@@ -14318,7 +14349,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 #if defined(__linux__) || defined(__gnu_linux__)
       off_t in_offset = offset;
       const intptr_t written =
-          sendfile(fd, env->me_fd, &in_offset, used_size - offset);
+          sendfile(fd, env->me_lazy_fd, &in_offset, used_size - offset);
       if (unlikely(written <= 0)) {
         rc = written ? errno : MDBX_ENODATA;
         break;
@@ -14330,7 +14361,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 #if __GLIBC_PREREQ(2, 27) && defined(_GNU_SOURCE)
       off_t in_offset = offset, out_offset = offset;
       ssize_t bytes_copied = copy_file_range(
-          env->me_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
+          env->me_lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
       if (unlikely(bytes_copied <= 0)) {
         rc = bytes_copied ? errno : MDBX_ENODATA;
         break;
@@ -14560,7 +14591,7 @@ int __cold mdbx_env_get_fd(MDBX_env *env, mdbx_filehandle_t *arg) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  *arg = env->me_fd;
+  *arg = env->me_lazy_fd;
   return MDBX_SUCCESS;
 }
 

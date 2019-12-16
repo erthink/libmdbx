@@ -663,7 +663,6 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   }
 
 #endif
-
   return MDBX_SUCCESS;
 }
 
@@ -967,11 +966,6 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
 #endif /* Linux */
   const int mode = async ? MS_ASYNC : MS_SYNC;
   int rc = (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
-#if defined(__APPLE__) &&                                                      \
-    MDBX_OSX_SPEED_INSTEADOF_DURABILITY == MDBX_OSX_WANNA_DURABILITY
-  if (rc == MDBX_SUCCESS && mode == MS_SYNC)
-    rc = likely(fcntl(map->fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
-#endif /* MacOS */
   return rc;
 #endif
 }
