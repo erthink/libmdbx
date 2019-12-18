@@ -6696,8 +6696,8 @@ static __cold bool mdbx_txn_import_dbi(MDBX_txn *txn, MDBX_dbi dbi) {
 }
 
 /* Check txn and dbi arguments to a function */
-static __always_inline bool TXN_DBI_EXIST(MDBX_txn *txn, MDBX_dbi dbi,
-                                          unsigned validity) {
+static __always_inline bool mdbx_txn_dbi_exists(MDBX_txn *txn, MDBX_dbi dbi,
+                                                unsigned validity) {
   if (likely(dbi < txn->mt_numdbs && (txn->mt_dbflags[dbi] & validity)))
     return true;
 
@@ -9864,7 +9864,7 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(!key || !data))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   MDBX_cursor_couple cx;
@@ -9888,7 +9888,7 @@ int mdbx_get_nearest(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
   if (unlikely(!key || !data))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
@@ -9928,7 +9928,7 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(!key || !data))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   MDBX_cursor_couple cx;
@@ -11940,7 +11940,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
 
   if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_RDONLY)))
@@ -11982,7 +11982,7 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, mc->mc_dbi, DB_VALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, mc->mc_dbi, DB_VALID)))
     return MDBX_EINVAL;
 
   if (unlikely(mc->mc_backup))
@@ -13314,7 +13314,7 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data) {
   if (unlikely(!key))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
@@ -13855,7 +13855,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(!key || !data))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
@@ -15039,7 +15039,7 @@ int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
   if (unlikely(!dest))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
 
   const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
@@ -15103,7 +15103,7 @@ int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
   if (unlikely(!flags || !state))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_VALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_VALID)))
     return MDBX_EINVAL;
 
   *flags = txn->mt_dbs[dbi].md_flags & PERSISTENT_FLAGS;
@@ -15217,7 +15217,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(1 < (unsigned)del))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
@@ -15228,7 +15228,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID))) {
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID))) {
     rc = MDBX_EINVAL;
     goto bailout;
   }
@@ -15285,7 +15285,7 @@ int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   txn->mt_dbxs[dbi].md_cmp = cmp;
@@ -15297,7 +15297,7 @@ int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   txn->mt_dbxs[dbi].md_dcmp = cmp;
@@ -16341,7 +16341,7 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
   if (unlikely(begin_key == MDBX_EPSILON && end_key == MDBX_EPSILON))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   MDBX_cursor_couple begin;
@@ -16513,7 +16513,7 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *new_data,
   if (unlikely(new_data == NULL && !(flags & MDBX_CURRENT)))
     return MDBX_EINVAL;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
@@ -16708,7 +16708,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
