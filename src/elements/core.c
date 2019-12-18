@@ -6595,8 +6595,12 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
     mdbx_tassert(txn, dp->mp_flags & P_DIRTY);
 
     /* Don't flush this page yet */
-    if (dp->mp_flags & (P_LOOSE | P_KEEP)) {
+    if (dp->mp_flags & P_KEEP) {
       dp->mp_flags &= ~P_KEEP;
+      dl[++w] = dl[r];
+      continue;
+    }
+    if (dp->mp_flags & P_LOOSE) {
       dl[++w] = dl[r];
       continue;
     }
@@ -7671,7 +7675,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         if (unlikely(rc != MDBX_SUCCESS))
           goto fail;
 #endif /* MacOS */
-        *env->me_meta_sync_txnid = (uint32_t)pending->mm_txnid_a.inconsistent;
+        *env->me_meta_sync_txnid = pending->mm_txnid_a.low;
       }
     }
   } else {
@@ -7697,7 +7701,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         if (rc != MDBX_SUCCESS)
           goto undo;
       }
-      *env->me_meta_sync_txnid = (uint32_t)pending->mm_txnid_a.inconsistent;
+      *env->me_meta_sync_txnid = pending->mm_txnid_a.low;
     }
   }
 
