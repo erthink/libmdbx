@@ -7071,8 +7071,6 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     goto fail;
   }
 
-  if (likely(env->me_lck))
-    env->me_lck->mti_readers_refresh_flag = false;
   end_mode = MDBX_END_COMMITTED | MDBX_END_UPDATE | MDBX_END_EOTDONE;
 
 done:
@@ -7715,6 +7713,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     if (MDBX_IS_ERROR(rc))
       goto fail;
   }
+
+  if (likely(env->me_lck))
+    /* toggle oldest refresh */
+    env->me_lck->mti_readers_refresh_flag = false;
 
   return MDBX_SUCCESS;
 
