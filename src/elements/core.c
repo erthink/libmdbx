@@ -3912,21 +3912,27 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_flush_incoherent_cpu_writeback();
-    return mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
-                      false);
+    err = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
+                     false);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  } else {
+#if defined(__linux__) || defined(__gnu_linux__)
+    if (sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
+                        SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
+      err = errno;
+#else
+    err = mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_DATA);
+#endif
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
+                               env->me_os_psize);
   }
 
-#if defined(__linux__) || defined(__gnu_linux__)
-  if (sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
-                      SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
-    err = errno;
-#else
-  err = mdbx_filesync(env->me_lazy_fd, MDBX_SYNC_DATA);
-#endif
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-  mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
-                             env->me_os_psize);
+  if (likely(env->me_lck))
+    /* force oldest refresh */
+    env->me_lck->mti_readers_refresh_flag = true;
   return MDBX_SUCCESS;
 }
 
