@@ -4275,15 +4275,17 @@ skip_cache:
         rc = MDBX_RESULT_TRUE;
         const pgno_t autosync_threshold = *env->me_autosync_threshold;
         const uint64_t autosync_period = *env->me_autosync_period;
-        /* wipe the last steady-point if:
+        /* wipe the last steady-point if one of:
          *  - UTTERLY_NOSYNC mode AND auto-sync threshold is NOT specified
-         * otherwise, make a new steady-point if:
+         *  - UTTERLY_NOSYNC mode AND free space at steady-point is exhausted
+         * otherwise, make a new steady-point if one of:
          *  - auto-sync threshold is specified and reached;
-         *  - OR upper limit of database size is reached;
-         *  - OR database is full (with the current file size)
+         *  - upper limit of database size is reached;
+         *  - database is full (with the current file size)
          *       AND auto-sync threshold it NOT specified */
         if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) &&
-            (autosync_threshold | autosync_period) == 0) {
+            ((autosync_threshold | autosync_period) == 0 ||
+             next >= steady->mm_geo.now)) {
           /* wipe steady checkpoint in MDBX_UTTERLY_NOSYNC mode
            * without any auto-sync treshold(s). */
           rc = mdbx_wipe_steady(env, oldest);
