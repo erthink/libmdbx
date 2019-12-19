@@ -326,6 +326,7 @@ mark_as_advanced(MDBX_LOCKING)
 add_mdbx_option(MDBX_TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake." AUTO)
 mark_as_advanced(MDBX_TRUST_RTC)
 option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
+option(MDBX_FORCE_ASSERTIONS "Force enable assertion checking." OFF)
 
 ################################################################################
 ################################################################################

@@ -12,6 +12,7 @@
 #cmakedefine ENABLE_GPROF
 #cmakedefine ENABLE_GCOV
 #cmakedefine ENABLE_ASAN
+#cmakedefine MDBX_FORCE_ASSERTIONS
 
 /* Common */
 #cmakedefine01 MDBX_TXN_CHECKOWNER

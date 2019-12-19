@@ -1010,7 +1010,7 @@ MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 
 #define mdbx_audit_enabled() (0)
 
-#if !defined(NDEBUG) || defined(MDBX_FORCE_ASSERT)
+#if !defined(NDEBUG) || defined(MDBX_FORCE_ASSERTIONS)
 #define mdbx_assert_enabled() (1)
 #else
 #define mdbx_assert_enabled() (0)
