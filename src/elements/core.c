@@ -9151,27 +9151,32 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
-    rc = MDBX_ENOMEM;
-    MDBX_txn *txn;
-    int tsize = sizeof(MDBX_txn),
-        size =
-            tsize + env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
-                                      sizeof(unsigned) + 1);
-    if ((env->me_pbuf = mdbx_calloc(
-             1 /* page buffer */ + 1 /* page killer bufer */, env->me_psize)) &&
-        (txn = mdbx_calloc(1, size))) {
-      txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
-      txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
-      txn->mt_dbiseqs = (unsigned *)(txn->mt_cursors + env->me_maxdbs);
-      txn->mt_dbflags = (uint8_t *)(txn->mt_dbiseqs + env->me_maxdbs);
-      txn->mt_env = env;
-      txn->mt_dbxs = env->me_dbxs;
-      txn->mt_flags = MDBX_TXN_FINISHED;
-      env->me_txn0 = txn;
-      txn->tw.retired_pages = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
-      txn->tw.reclaimed_pglist = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
-      if (txn->tw.retired_pages && txn->tw.reclaimed_pglist)
-        rc = MDBX_SUCCESS;
+    const size_t tsize = sizeof(MDBX_txn),
+                 size = tsize + env->me_maxdbs *
+                                    (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
+                                     sizeof(unsigned) + 1);
+    rc = mdbx_memalign_alloc(
+        env->me_os_psize,
+        env->me_psize * (1 /* page buffer */ + 1 /* page killer bufer */),
+        &env->me_pbuf);
+    if (rc == MDBX_SUCCESS) {
+      memset(env->me_pbuf, -1, env->me_psize * 2);
+      MDBX_txn *txn = mdbx_calloc(1, size);
+      if (txn) {
+        txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
+        txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
+        txn->mt_dbiseqs = (unsigned *)(txn->mt_cursors + env->me_maxdbs);
+        txn->mt_dbflags = (uint8_t *)(txn->mt_dbiseqs + env->me_maxdbs);
+        txn->mt_env = env;
+        txn->mt_dbxs = env->me_dbxs;
+        txn->mt_flags = MDBX_TXN_FINISHED;
+        env->me_txn0 = txn;
+        txn->tw.retired_pages = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
+        txn->tw.reclaimed_pglist = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
+        if (!txn->tw.retired_pages || !txn->tw.reclaimed_pglist)
+          rc = MDBX_ENOMEM;
+      } else
+        rc = MDBX_ENOMEM;
     }
   }
 
@@ -9256,7 +9261,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
       mdbx_free(env->me_dbxs[i].md_name.iov_base);
     mdbx_free(env->me_dbxs);
   }
-  mdbx_free(env->me_pbuf);
+  mdbx_memalign_free(env->me_pbuf);
   mdbx_free(env->me_dbiseqs);
   mdbx_free(env->me_dbflags);
   mdbx_free(env->me_path);
