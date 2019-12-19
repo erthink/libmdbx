@@ -7679,6 +7679,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       }
     }
   } else {
+    const MDBX_meta undo_meta = *target;
     const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
                                      ? env->me_dsync_fd
                                      : env->me_lazy_fd;
@@ -7689,7 +7690,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       mdbx_debug("%s", "write failed, disk error?");
       /* On a failure, the pagecache still contains the new data.
        * Try write some old data back, to prevent it from being used. */
-      mdbx_pwrite(fd, (void *)target, sizeof(MDBX_meta),
+      mdbx_pwrite(fd, &undo_meta, sizeof(MDBX_meta),
                   (uint8_t *)target - env->me_map);
       goto fail;
     }
