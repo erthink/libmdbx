@@ -216,6 +216,14 @@ int main(int argc, char *argv[]) {
              mei.mi_mapsize, mei.mi_mapsize / mst.ms_psize);
       printf("  Current datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
              mei.mi_geo.current, mei.mi_geo.current / mst.ms_psize);
+#if defined(_WIN32) || defined(_WIN64)
+      if (mei.mi_geo.shrink && mei.mi_geo.current != mei.mi_geo.upper)
+        printf("                    WARNING: Due Windows system limitations a "
+               "file couldn't\n                    be truncated while database "
+               "is opened. So, the size of\n                    database file "
+               "may by large than the database itself,\n                    "
+               "until it will be closed or reopened in read-write mode.\n");
+#endif
     } else {
       printf("  Fixed datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
              mei.mi_geo.current, mei.mi_geo.current / mst.ms_psize);

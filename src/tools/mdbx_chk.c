@@ -1172,6 +1172,14 @@ int main(int argc, char *argv[]) {
     }
     printf(", %" PRIu64 " pages\n",
            envinfo.mi_geo.current / envinfo.mi_dxb_pagesize);
+#if defined(_WIN32) || defined(_WIN64)
+    if (envinfo.mi_geo.shrink && envinfo.mi_geo.current != envinfo.mi_geo.upper)
+      print("                     WARNING: Due Windows system limitations a "
+            "file couldn't\n                     be truncated while database "
+            "is opened. So, the size of\n                     database file "
+            "may by large than the database itself,\n                     "
+            "until it will be closed or reopened in read-write mode.\n");
+#endif
     print(" - transactions: recent %" PRIu64 ", latter reader %" PRIu64
           ", lag %" PRIi64 "\n",
           envinfo.mi_recent_txnid, envinfo.mi_latter_reader_txnid,
