@@ -72,7 +72,7 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
                             size_t bytes_used, size_t bytes_retained) {
   (void)ctx;
   if (num == 1)
-    printf("Reader Table Status\n"
+    printf("Reader Table\n"
            "   #\tslot\t%6s %*s %20s %10s %13s %13s\n",
            "pid", (int)sizeof(size_t) * 2, "thread", "txnid", "lag", "used",
            "retained");
@@ -212,21 +212,20 @@ int main(int argc, char *argv[]) {
              mei.mi_geo.shrink, mei.mi_geo.lower / mst.ms_psize,
              mei.mi_geo.upper / mst.ms_psize, mei.mi_geo.grow / mst.ms_psize,
              mei.mi_geo.shrink / mst.ms_psize);
+      printf("  Current mapsize: %" PRIu64 " bytes, %" PRIu64 " pages \n",
+             mei.mi_mapsize, mei.mi_mapsize / mst.ms_psize);
       printf("  Current datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
              mei.mi_geo.current, mei.mi_geo.current / mst.ms_psize);
     } else {
       printf("  Fixed datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
              mei.mi_geo.current, mei.mi_geo.current / mst.ms_psize);
     }
-    printf("  Current mapsize: %" PRIu64 " bytes, %" PRIu64 " pages \n",
-           mei.mi_mapsize, mei.mi_mapsize / mst.ms_psize);
-    printf("  Number of pages used: %" PRIu64 "\n", mei.mi_last_pgno + 1);
     printf("  Last transaction ID: %" PRIu64 "\n", mei.mi_recent_txnid);
-    printf("  Tail transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
+    printf("  Latter reader transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
            mei.mi_latter_reader_txnid,
            mei.mi_latter_reader_txnid - mei.mi_recent_txnid);
     printf("  Max readers: %u\n", mei.mi_maxreaders);
-    printf("  Number of readers used: %u\n", mei.mi_numreaders);
+    printf("  Number of reader slots uses: %u\n", mei.mi_numreaders);
   } else {
     /* LY: zap warnings from gcc */
     memset(&mst, 0, sizeof(mst));
@@ -262,7 +261,7 @@ int main(int argc, char *argv[]) {
     pgno_t pages = 0, *iptr;
     pgno_t reclaimable = 0;
 
-    printf("Freelist Status\n");
+    printf("Garbage Collection\n");
     dbi = 0;
     rc = mdbx_cursor_open(txn, dbi, &cursor);
     if (rc) {
@@ -343,20 +342,23 @@ int main(int argc, char *argv[]) {
     if (envinfo) {
       uint64_t value = mei.mi_mapsize / mst.ms_psize;
       double percent = value / 100.0;
-      printf("Page Allocation Info\n");
-      printf("  Max pages: %" PRIu64 " 100%%\n", value);
+      printf("Page Usage\n");
+      printf("  Total: %" PRIu64 " 100%%\n", value);
+
+      value = mei.mi_geo.current / mst.ms_psize;
+      printf("  Backed: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = mei.mi_last_pgno + 1;
-      printf("  Pages used: %" PRIu64 " %.1f%%\n", value, value / percent);
+      printf("  Allocated: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = mei.mi_mapsize / mst.ms_psize - (mei.mi_last_pgno + 1);
       printf("  Remained: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = mei.mi_last_pgno + 1 - pages;
-      printf("  Used now: %" PRIu64 " %.1f%%\n", value, value / percent);
+      printf("  Used: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = pages;
-      printf("  Unallocated: %" PRIu64 " %.1f%%\n", value, value / percent);
+      printf("  GC: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = pages - reclaimable;
       printf("  Detained: %" PRIu64 " %.1f%%\n", value, value / percent);
@@ -368,7 +370,7 @@ int main(int argc, char *argv[]) {
           mei.mi_mapsize / mst.ms_psize - (mei.mi_last_pgno + 1) + reclaimable;
       printf("  Available: %" PRIu64 " %.1f%%\n", value, value / percent);
     } else
-      printf("  Free pages: %" PRIaPGNO "\n", pages);
+      printf("  GC: %" PRIaPGNO " pages\n", pages);
   }
 
   rc = mdbx_dbi_open(txn, subname, 0, &dbi);
