@@ -256,7 +256,7 @@ typedef union mdbx_safe64 {
 typedef struct MDBX_db {
   uint16_t md_flags;        /* see mdbx_dbi_open */
   uint16_t md_depth;        /* depth of this tree */
-  uint32_t md_xsize;        /* also ksize for LEAF2 pages */
+  uint32_t md_xsize;        /* key-size for MDBX_DUPFIXED (LEAF2 pages) */
   pgno_t md_root;           /* the root page of this tree */
   pgno_t md_branch_pages;   /* number of internal pages */
   pgno_t md_leaf_pages;     /* number of leaf pages */
