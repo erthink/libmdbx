@@ -9085,7 +9085,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
     }
     mode = st.st_mode;
   }
-#endif
+#endif /* !Windows */
 
   const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
