@@ -93,7 +93,7 @@ size_t userdb_count, skipped_subdb;
 uint64_t total_unused_bytes, reclaimable_pages, gc_pages, alloc_pages,
     unused_pages, backed_pages;
 unsigned verbose;
-bool ignore_wrong_order, quiet;
+bool ignore_wrong_order, quiet, dont_traversal;
 const char *only_subdb;
 
 struct problem {
@@ -626,22 +626,23 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     error("too many DBIs or out of memory\n");
     return MDBX_ENOMEM;
   }
-  const uint64_t subtotal_pages =
-      ms.ms_branch_pages + ms.ms_leaf_pages + ms.ms_overflow_pages;
-  if (subtotal_pages != dbi->pages.total)
-    error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n", "subtotal",
-          subtotal_pages, dbi->pages.total);
-  if (ms.ms_branch_pages != dbi->pages.branch)
-    error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n", "branch",
-          ms.ms_branch_pages, dbi->pages.branch);
-  const uint64_t allleaf_pages = dbi->pages.leaf + dbi->pages.leaf_dupfixed;
-  if (ms.ms_leaf_pages != allleaf_pages)
-    error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n", "all-leaf",
-          ms.ms_leaf_pages, allleaf_pages);
-  if (ms.ms_overflow_pages != dbi->pages.large_volume)
-    error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n",
-          "large/overlow", ms.ms_overflow_pages, dbi->pages.large_volume);
-
+  if (!dont_traversal) {
+    const uint64_t subtotal_pages =
+        ms.ms_branch_pages + ms.ms_leaf_pages + ms.ms_overflow_pages;
+    if (subtotal_pages != dbi->pages.total)
+      error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n",
+            "subtotal", subtotal_pages, dbi->pages.total);
+    if (ms.ms_branch_pages != dbi->pages.branch)
+      error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n", "branch",
+            ms.ms_branch_pages, dbi->pages.branch);
+    const uint64_t allleaf_pages = dbi->pages.leaf + dbi->pages.leaf_dupfixed;
+    if (ms.ms_leaf_pages != allleaf_pages)
+      error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n",
+            "all-leaf", ms.ms_leaf_pages, allleaf_pages);
+    if (ms.ms_overflow_pages != dbi->pages.large_volume)
+      error("%s pages mismatch (%" PRIu64 " != walked %" PRIu64 ")\n",
+            "large/overlow", ms.ms_overflow_pages, dbi->pages.large_volume);
+  }
   rc = mdbx_cursor_open(txn, dbi_handle, &mc);
   if (rc) {
     error("mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
@@ -913,7 +914,6 @@ int main(int argc, char *argv[]) {
   char *prog = argv[0];
   char *envname;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
-  bool dont_traversal = false;
   bool locked = false;
 
   double elapsed;
