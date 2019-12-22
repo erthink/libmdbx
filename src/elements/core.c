@@ -3920,7 +3920,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   } else {
-#if defined(__linux__) || defined(__gnu_linux__)
+#if (defined(__linux__) || defined(__gnu_linux__)) && !defined(MDBX_SAFE4QEMU)
     if (sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
                         SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
       err = errno;
@@ -14387,7 +14387,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       buffer + roundup_powerof2(meta_bytes, env->me_os_psize);
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
     if (dest_is_pipe) {
-#if defined(__linux__) || defined(__gnu_linux__)
+#if defined(__linux__) || defined(__gnu_linux__) && !defined(MDBX_SAFE4QEMU)
       off_t in_offset = offset;
       const intptr_t written =
           sendfile(fd, env->me_lazy_fd, &in_offset, used_size - offset);
@@ -14399,7 +14399,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       continue;
 #endif
     } else {
-#if __GLIBC_PREREQ(2, 27) && defined(_GNU_SOURCE)
+#if __GLIBC_PREREQ(2, 27) && defined(_GNU_SOURCE) && !defined(MDBX_SAFE4QEMU)
       off_t in_offset = offset, out_offset = offset;
       ssize_t bytes_copied = copy_file_range(
           env->me_lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
