@@ -7465,21 +7465,29 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     }
 #endif /* MDBX_USE_VALGRIND */
 #if defined(MADV_DONTNEED)
-    const size_t largest_aligned2os_bytes =
-        pgno_align2os_bytes(env, largest_pgno);
-    const pgno_t largest_aligned2os_pgno =
-        bytes2pgno(env, largest_aligned2os_bytes);
+    const size_t largest_bytes = pgno2bytes(env, largest_pgno);
+    const size_t madvise_gap = (largest_bytes < 65536 * 256)
+                                   ? 65536
+                                   : (largest_bytes > MEGABYTE * 4 * 256)
+                                         ? MEGABYTE * 4
+                                         : largest_bytes >> 8;
+    const size_t discard_edge_bytes = bytes_align2os_bytes(
+        env,
+        (MDBX_RDONLY & (env->me_lck ? env->me_lck->mti_envmode : env->me_flags))
+            ? largest_bytes
+            : largest_bytes + madvise_gap);
+    const pgno_t discard_edge_pgno = bytes2pgno(env, discard_edge_bytes);
     const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
     if (prev_discarded_pgno >
-        largest_aligned2os_pgno +
-            /* 1M threshold to avoid unreasonable madvise() call */
-            bytes2pgno(env, MEGABYTE)) {
+        discard_edge_pgno +
+            /* threshold to avoid unreasonable frequent madvise() calls */
+            bytes2pgno(env, madvise_gap)) {
       mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
                   largest_pgno);
-      *env->me_discarded_tail = largest_aligned2os_pgno;
+      *env->me_discarded_tail = discard_edge_pgno;
       const size_t prev_discarded_bytes =
           pgno2bytes(env, prev_discarded_pgno) & ~(env->me_os_psize - 1);
-      mdbx_ensure(env, prev_discarded_bytes > largest_aligned2os_bytes);
+      mdbx_ensure(env, prev_discarded_bytes > discard_edge_bytes);
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
     0 /* MADV_FREE works for only anonymous vma at the moment */
@@ -7487,8 +7495,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
           mdbx_linux_kernel_version > 0x04050000)
         advise = MADV_FREE;
 #endif /* MADV_FREE */
-      int err = madvise(env->me_map + largest_aligned2os_bytes,
-                        prev_discarded_bytes - largest_aligned2os_bytes, advise)
+      int err = madvise(env->me_map + discard_edge_bytes,
+                        prev_discarded_bytes - discard_edge_bytes, advise)
                     ? ignore_enosys(errno)
                     : MDBX_SUCCESS;
       if (unlikely(MDBX_IS_ERROR(err)))
