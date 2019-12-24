@@ -1422,13 +1422,16 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
   }
 
   if (limit > map->limit) {
-    /* check ability of address space for growth before umnap */
+    /* check ability of address space for growth before unmap */
     PVOID BaseAddress = (PBYTE)map->address + map->limit;
     SIZE_T RegionSize = limit - map->limit;
     status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
                                      &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
-    if (!NT_SUCCESS(status))
+    if (!NT_SUCCESS(status)) {
+      if (status == /* STATUS_INVALID_ADDRESS */ 0xC0000141)
+        status = /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018;
       return ntstatus2errcode(status);
+    }
 
     status = NtFreeVirtualMemory(GetCurrentProcess(), &BaseAddress, &RegionSize,
                                  MEM_RELEASE);
@@ -1468,7 +1471,8 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
                                    &ReservedSize, MEM_RESERVE, PAGE_NOACCESS);
   if (!NT_SUCCESS(status)) {
     ReservedAddress = NULL;
-    if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
+    if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
+        status != /* STATUS_INVALID_ADDRESS */ 0xC0000141)
       goto bailout_ntstatus /* no way to recovery */;
 
     /* assume we can change base address if mapping size changed or prev address
@@ -1528,7 +1532,8 @@ retry_mapview:;
       (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
 
   if (!NT_SUCCESS(status)) {
-    if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
+    if ((status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 ||
+         status == /* STATUS_INVALID_ADDRESS */ 0xC0000141) &&
         map->address) {
       /* try remap at another base address */
       map->address = NULL;
