@@ -5045,6 +5045,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
     mdbx_ensure(env, txn->mt_txnid >=
                          /* paranoia is appropriate here */ *env->me_oldest);
+    txn->mt_numdbs = env->me_numdbs;
   } else {
     /* Not yet touching txn == env->me_txn0, it may be active */
     mdbx_jitter4testing(false);
@@ -5087,7 +5088,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     if (txn->tw.lifo_reclaimed)
       MDBX_PNL_SIZE(txn->tw.lifo_reclaimed) = 0;
     env->me_txn = txn;
-    memcpy(txn->mt_dbiseqs, env->me_dbiseqs, env->me_maxdbs * sizeof(unsigned));
+    txn->mt_numdbs = env->me_numdbs;
+    memcpy(txn->mt_dbiseqs, env->me_dbiseqs, txn->mt_numdbs * sizeof(unsigned));
     /* Copy the DB info and flags */
     memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
     /* Moved to here to avoid a data race in read TXNs */
@@ -5096,7 +5098,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   }
 
   /* Setup db info */
-  txn->mt_numdbs = env->me_numdbs;
   mdbx_compiler_barrier();
   for (unsigned i = CORE_DBS; i < txn->mt_numdbs; i++) {
     unsigned x = env->me_dbflags[i];
@@ -9269,7 +9270,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
   }
 
   if (env->me_dbxs) {
-    for (unsigned i = env->me_maxdbs; --i >= CORE_DBS;)
+    for (unsigned i = env->me_numdbs; --i >= CORE_DBS;)
       mdbx_free(env->me_dbxs[i].md_name.iov_base);
     mdbx_free(env->me_dbxs);
   }
@@ -15108,8 +15109,9 @@ int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
 }
 
 static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
-  if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
-    return MDBX_EINVAL;
+  mdbx_assert(env, dbi >= CORE_DBS);
+  if (unlikely(dbi >= env->me_numdbs))
+    return MDBX_BAD_DBI;
 
   char *ptr = env->me_dbxs[dbi].md_name.iov_base;
   /* If there was no name, this was already closed */
