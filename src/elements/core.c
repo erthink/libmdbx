@@ -4073,7 +4073,7 @@ skip_cache:
           goto fail;
         if (flags & MDBX_LIFORECLAIM) {
           /* Begin from oldest reader if any */
-          if (oldest > 2) {
+          if (oldest > MIN_TXNID) {
             last = oldest - 1;
             op = MDBX_SET_RANGE;
           }
