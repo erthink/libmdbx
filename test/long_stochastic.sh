@@ -161,7 +161,7 @@ function rep9 { printf "%*s" $1 '' | tr ' ' '9'; }
 function join { local IFS="$1"; shift; echo "$*"; }
 function bit2option { local -n arr=$1; (( ($2&(1<<$3)) != 0 )) && echo -n '+' || echo -n '-'; echo "${arr[$3]}"; }
 
-options=(writemap coalesce lifo)
+options=(writemap coalesce lifo notls)
 
 function bits2list {
 	local -n arr=$1
