@@ -5361,9 +5361,9 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
       mdbx_free(txn);
   } else {
     mdbx_assert(env,
-                (txn->mt_flags &
-                 ~(MDBX_RDONLY | MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
-                   MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)) == 0);
+                (txn->mt_flags & ~(MDBX_NOTLS | MDBX_RDONLY | MDBX_WRITEMAP |
+                                   MDBX_SHRINK_ALLOWED | MDBX_NOMETASYNC |
+                                   MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
