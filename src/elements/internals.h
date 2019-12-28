@@ -949,7 +949,7 @@ struct MDBX_env {
 #endif
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
   pgno_t me_poison_edge;
-#endif
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
   MDBX_env *me_lcklist_next;
 
   /* struct me_dbgeo used for accepting db-geo params from user for the new

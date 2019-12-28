@@ -4883,7 +4883,7 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
       mdbx_txn_unlock(env);
   }
 }
-#endif /* MDBX_USE_VALGRIND */
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
 /* Common code for mdbx_txn_begin() and mdbx_txn_renew(). */
 static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
@@ -7464,7 +7464,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, largest_pgno),
                                 pgno2bytes(env, edge - largest_pgno));
     }
-#endif /* MDBX_USE_VALGRIND */
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 #if defined(MADV_DONTNEED)
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
     const size_t madvise_gap = (largest_bytes < 65536 * 256)
@@ -8420,7 +8420,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
                             env->me_dxb_mmap.limit - used_bytes);
   env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
-#endif /* MDBX_USE_VALGRIND */
+#endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
   /* NOTE: AddressSanitizer (at least GCC 7.x, 8.x) could generate
    *       false-positive alarm here. I have no other explanation for this
@@ -9213,6 +9213,9 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
 #endif
 
 bailout:
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+  mdbx_txn_valgrind(env, nullptr);
+#endif
   if (rc) {
     rc = mdbx_env_close0(env) ? MDBX_PANIC : rc;
     env->me_flags = saved_me_flags | MDBX_FATAL_ERROR;

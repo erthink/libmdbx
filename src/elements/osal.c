@@ -1378,10 +1378,14 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 
 #endif
 
+  VALGRIND_MAKE_MEM_DEFINED(map->address, map->current);
+  ASAN_UNPOISON_MEMORY_REGION(map->address, map->current);
   return MDBX_SUCCESS;
 }
 
 MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
+  VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+  ASAN_POISON_MEMORY_REGION(map->address, map->current);
 #if defined(_WIN32) || defined(_WIN64)
   if (map->section)
     NtClose(map->section);
