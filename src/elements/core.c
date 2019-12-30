@@ -7012,6 +7012,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
       (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
     for (int i = txn->mt_numdbs; --i >= 0;)
       mdbx_tassert(txn, (txn->mt_dbflags[i] & DB_DIRTY) == 0);
+    rc = MDBX_SUCCESS;
     goto done;
   }
 
