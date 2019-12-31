@@ -639,7 +639,7 @@ typedef pthread_t mdbx_tid_t;
 /*----------------------------------------------------------------------------*/
 
 #define MDBX_VERSION_MAJOR 0
-#define MDBX_VERSION_MINOR 4
+#define MDBX_VERSION_MINOR 5
 
 #ifndef LIBMDBX_API
 #if defined(LIBMDBX_EXPORTS)
