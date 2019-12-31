@@ -4353,9 +4353,10 @@ skip_cache:
           goto done;
         }
 
-        mdbx_warning("unable growth datafile to %" PRIaPGNO
-                     " pages (+%" PRIaPGNO "), errcode %d",
-                     aligned, aligned - txn->mt_end_pgno, rc);
+        mdbx_error("unable growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
+                   "), errcode %d",
+                   aligned, aligned - txn->mt_end_pgno, rc);
+        rc = (rc == MDBX_RESULT_TRUE) ? MDBX_MAP_FULL : rc;
       } else {
         mdbx_debug("gc-alloc: next %u > upper %u", next, txn->mt_geo.upper);
       }
