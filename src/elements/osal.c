@@ -1588,7 +1588,7 @@ retry_mapview:;
       switch (rc) {
       case EAGAIN:
       case ENOMEM:
-      case EFAULT /* MADV_DODUMP / MADV_DONTDUMP are mixed for mmap-mange */:
+      case EFAULT /* MADV_DODUMP / MADV_DONTDUMP are mixed for mmap-range */:
         rc = MDBX_RESULT_TRUE;
       }
       return rc;

@@ -4073,7 +4073,7 @@ skip_cache:
           goto fail;
         if (flags & MDBX_LIFORECLAIM) {
           /* Begin from oldest reader if any */
-          if (oldest > 2) {
+          if (oldest > MIN_TXNID) {
             last = oldest - 1;
             op = MDBX_SET_RANGE;
           }
@@ -7012,6 +7012,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
       (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
     for (int i = txn->mt_numdbs; --i >= 0;)
       mdbx_tassert(txn, (txn->mt_dbflags[i] & DB_DIRTY) == 0);
+    rc = MDBX_SUCCESS;
     goto done;
   }
 
@@ -11014,9 +11015,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
                     /* LY: add configurable threshold to keep reserve space */
                     dpages) {
         if (!IS_DIRTY(omp) && (level || (env->me_flags & MDBX_WRITEMAP))) {
-          rc = mdbx_page_unspill(mc->mc_txn, omp, &omp);
-          if (unlikely(rc))
-            return rc;
+          rc2 = mdbx_page_unspill(mc->mc_txn, omp, &omp);
+          if (unlikely(rc2))
+            return rc2;
           level = 0; /* dirty in this txn or clean */
         }
         /* Is it dirty? */
@@ -11183,8 +11184,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           nested_dupdb.md_entries = page_numkeys(fp);
           xdata.iov_len = sizeof(nested_dupdb);
           xdata.iov_base = &nested_dupdb;
-          if ((rc = mdbx_page_alloc(mc, 1, &mp, MDBX_ALLOC_ALL)))
-            return rc;
+          if ((rc2 = mdbx_page_alloc(mc, 1, &mp, MDBX_ALLOC_ALL)))
+            return rc2;
           mc->mc_db->md_leaf_pages += 1;
           mdbx_cassert(mc, env->me_psize > olddata.iov_len);
           offset = env->me_psize - (unsigned)olddata.iov_len;
