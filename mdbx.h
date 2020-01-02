@@ -55,10 +55,10 @@
  * transaction logs or append-only data writes, MDBX requires no maintenance
  * during operation. Both write-ahead loggers and append-only databases require
  * periodic checkpointing and/or compaction of their log or database files
- * otherwise they grow without bound. MDBX tracks free pages within the database
- * and re-uses them for new write operations, so the database size does not grow
- * without bound in normal use. It is worth noting that the "next" version
- * libmdbx (MithrilDB) will solve this problem.
+ * otherwise they grow without bound. MDBX tracks retired/freed pages within the
+ * database and re-uses them for new write operations, so the database size does
+ * not grow without bound in normal use. It is worth noting that the "next"
+ * version libmdbx (MithrilDB) will solve this problem.
  *
  * The memory map can be used as a read-only or read-write map. It is read-only
  * by default as this provides total immunity to corruption. Using read-write
@@ -403,17 +403,16 @@
  *    the lock was restored - we have to wait until such a process releases the
  *    database, and so on.
  *
- *  - Avoid long-lived transactions, especially in the scenarios with a high
- *    rate of write transactions. Read transactions prevent reuse of pages
- *    freed by newer write transactions, thus the database can grow quickly.
- *    Write transactions prevent other write transactions, since writes are
- *    serialized.
+ *  - Avoid long-lived read transactions, especially in the scenarios with a
+ *    high rate of write transactions. Long-lived read transactions prevents
+ *    recycling pages retired/freed by newer write transactions, thus the
+ *    database can grow quickly.
  *
  *    Understanding the problem of long-lived read transactions requires some
  *    explanation, but can be difficult for quick perception. So is is
  *    reasonable to simplify this as follows:
  *      1. Garbage collection problem exists in all databases one way or
- *         another, e.g. VACUUM in PostgreSQL. But in _libmdbx_ it's even more
+ *         another, e.g. VACUUM in PostgreSQL. But in MDBX it's even more
  *         discernible because of high transaction rate and intentional
  *         internals simplification in favor of performance.
  *
