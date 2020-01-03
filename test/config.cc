@@ -417,8 +417,9 @@ void dump(const char *title) {
     else
       log_verbose("no-inject-writefault\n");
 
-    log_verbose("limits: readers %u, tables %u\n", i->params.max_readers,
-                i->params.max_tables);
+    log_verbose("limits: readers %u, tables %u, txn-bytes %zu\n",
+                i->params.max_readers, i->params.max_tables,
+                mdbx_limits_txnsize_max(i->params.pagesize));
 
     log_verbose("drop table: %s\n", i->params.drop_table ? "Yes" : "No");
     log_verbose("ignore MDBX_MAP_FULL error: %s\n",
