@@ -7772,12 +7772,10 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   mdbx_ensure(env, branch_nodemax > 42 && branch_nodemax < (int)UINT16_MAX &&
                        branch_nodemax % 2 == 0);
   env->me_branch_nodemax = (unsigned)branch_nodemax;
-  env->me_maxkey_nd = (uint16_t)mdbx_limits_keysize_max(env->me_psize, 0);
-  env->me_maxkey_ds =
-      (uint16_t)mdbx_limits_keysize_max(env->me_psize, MDBX_DUPSORT);
-  env->me_maxval_nd = (unsigned)mdbx_limits_valsize_max(env->me_psize, 0);
-  env->me_maxval_ds =
-      (unsigned)mdbx_limits_valsize_max(env->me_psize, MDBX_DUPSORT);
+  env->me_maxkey_nd = (uint16_t)mdbx_limits_keysize_max(pagesize, 0);
+  env->me_maxkey_ds = (uint16_t)mdbx_limits_keysize_max(pagesize, MDBX_DUPSORT);
+  env->me_maxval_nd = (unsigned)mdbx_limits_valsize_max(pagesize, 0);
+  env->me_maxval_ds = (unsigned)mdbx_limits_valsize_max(pagesize, MDBX_DUPSORT);
   mdbx_ensure(env, env->me_maxkey_nd ==
                        env->me_branch_nodemax - NODESIZE - sizeof(pgno_t));
   mdbx_ensure(env, env->me_maxkey_ds ==
@@ -7988,22 +7986,24 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     goto bailout;
   }
 
-  size_lower = roundup_powerof2(size_lower, env->me_os_psize);
-  size_upper = roundup_powerof2(size_upper, env->me_os_psize);
-  size_now = roundup_powerof2(size_now, env->me_os_psize);
+  const size_t unit =
+      (env->me_os_psize > (size_t)pagesize) ? env->me_os_psize : pagesize;
+  size_lower = roundup_powerof2(size_lower, unit);
+  size_upper = roundup_powerof2(size_upper, unit);
+  size_now = roundup_powerof2(size_now, unit);
 
   /* LY: подбираем значение size_upper:
-   *  - кратное размеру системной страницы
+   *  - кратное размеру страницы
    *  - без нарушения MAX_MAPSIZE и MAX_PAGENO */
   while (unlikely((size_t)size_upper > MAX_MAPSIZE ||
                   (uint64_t)size_upper / pagesize > MAX_PAGENO)) {
-    if ((size_t)size_upper < env->me_os_psize + MIN_MAPSIZE ||
-        (size_t)size_upper < env->me_os_psize * (MIN_PAGENO + 1)) {
+    if ((size_t)size_upper < unit + MIN_MAPSIZE ||
+        (size_t)size_upper < (size_t)pagesize * (MIN_PAGENO + 1)) {
       /* паранойа на случай переполнения при невероятных значениях */
       rc = MDBX_EINVAL;
       goto bailout;
     }
-    size_upper -= env->me_os_psize;
+    size_upper -= unit;
     if ((size_t)size_upper < (size_t)size_lower)
       size_lower = size_upper;
   }
@@ -8025,13 +8025,13 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   }
   if (growth_step == 0 && shrink_threshold > 0)
     growth_step = 1;
-  growth_step = roundup_powerof2(growth_step, env->me_os_psize);
+  growth_step = roundup_powerof2(growth_step, unit);
   if (bytes2pgno(env, growth_step) > UINT16_MAX)
     growth_step = pgno2bytes(env, UINT16_MAX);
 
   if (shrink_threshold < 0)
     shrink_threshold = growth_step + growth_step;
-  shrink_threshold = roundup_powerof2(shrink_threshold, env->me_os_psize);
+  shrink_threshold = roundup_powerof2(shrink_threshold, unit);
   if (bytes2pgno(env, shrink_threshold) > UINT16_MAX)
     shrink_threshold = pgno2bytes(env, UINT16_MAX);
 
