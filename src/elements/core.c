@@ -10954,7 +10954,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
       char *ptr;
       unsigned ksize = mc->mc_db->md_xsize;
-      if (key->iov_len != ksize)
+      if (unlikely(key->iov_len != ksize))
         return MDBX_BAD_VALSIZE;
       ptr = page_leaf2key(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top], ksize);
       memcpy(ptr, key->iov_base, ksize);
