@@ -1417,12 +1417,12 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     /* growth rw-section */
     SectionSize.QuadPart = size;
     status = NtExtendSection(map->section, &SectionSize);
-    if (NT_SUCCESS(status)) {
-      map->current = size;
-      if (map->filesize < size)
-        map->filesize = size;
-    }
-    return ntstatus2errcode(status);
+    if (!NT_SUCCESS(status))
+      return ntstatus2errcode(status);
+    map->current = size;
+    if (map->filesize < size)
+      map->filesize = size;
+    return MDBX_SUCCESS;
   }
 
   if (limit > map->limit) {
@@ -1431,11 +1431,10 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     SIZE_T RegionSize = limit - map->limit;
     status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
                                      &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
-    if (!NT_SUCCESS(status)) {
-      if (status == /* STATUS_INVALID_ADDRESS */ 0xC0000141)
-        status = /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018;
+    if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
+      return MDBX_RESULT_TRUE;
+    if (!NT_SUCCESS(status))
       return ntstatus2errcode(status);
-    }
 
     status = NtFreeVirtualMemory(GetCurrentProcess(), &BaseAddress, &RegionSize,
                                  MEM_RELEASE);
@@ -1462,9 +1461,13 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
   bailout:
     map->address = NULL;
     map->current = map->limit = 0;
-    if (ReservedAddress)
-      (void)NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress,
-                                &ReservedSize, MEM_RELEASE);
+    if (ReservedAddress) {
+      ReservedSize = 0;
+      status = NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress,
+                                   &ReservedSize, MEM_RELEASE);
+      assert(NT_SUCCESS(status));
+      (void)status;
+    }
     return err;
   }
 
@@ -1475,8 +1478,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
                                    &ReservedSize, MEM_RESERVE, PAGE_NOACCESS);
   if (!NT_SUCCESS(status)) {
     ReservedAddress = NULL;
-    if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
-        status != /* STATUS_INVALID_ADDRESS */ 0xC0000141)
+    if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       goto bailout_ntstatus /* no way to recovery */;
 
     /* assume we can change base address if mapping size changed or prev address
@@ -1516,6 +1518,7 @@ retry_file_and_section:
 
   if (ReservedAddress) {
     /* release reserved address space */
+    ReservedSize = 0;
     status = NtFreeVirtualMemory(GetCurrentProcess(), &ReservedAddress,
                                  &ReservedSize, MEM_RELEASE);
     ReservedAddress = NULL;
@@ -1536,8 +1539,7 @@ retry_mapview:;
       (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
 
   if (!NT_SUCCESS(status)) {
-    if ((status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 ||
-         status == /* STATUS_INVALID_ADDRESS */ 0xC0000141) &&
+    if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
         map->address) {
       /* try remap at another base address */
       map->address = NULL;

@@ -5135,9 +5135,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         txn->mt_flags |= MDBX_SHRINK_ALLOWED;
         mdbx_srwlock_AcquireShared(&env->me_remap_guard);
       }
-#endif
+#endif /* Windows */
     } else {
       env->me_dxb_mmap.current = size;
+#if defined(_WIN32) || defined(_WIN64)
+      env->me_dxb_mmap.filesize =
+          (env->me_dxb_mmap.filesize < size) ? size : env->me_dxb_mmap.filesize;
+#endif /* Windows */
     }
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     mdbx_txn_valgrind(env, txn);
