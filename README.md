@@ -1,7 +1,7 @@
 libmdbx
 =======
 
-_libmdbx_ is an extremely fast, compact, powerful, embedded
+_libmdbx_ is an extremely fast, compact, powerful, embedded,
 transactional [key-value store](https://en.wikipedia.org/wiki/Key-value_database)
 database, with [permissive license](LICENSE).
 _MDBX_ has a specific set of properties and capabilities,
@@ -11,7 +11,7 @@ focused on creating unique lightweight solutions with extraordinary performance.
 
 2. Provides **extraordinary performance**, minimal overhead through [Memory-Mapping](https://en.wikipedia.org/wiki/Memory-mapped_file) and `Olog(N)` operations costs by virtue of [B+ tree](https://en.wikipedia.org/wiki/B%2B_tree).
 
-3. Requires **no maintenance and no crash recovery** since doesn't use [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging), but that might be a caveat for some workloads.
+3. Requires **no maintenance and no crash recovery** since doesn't use [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging), but that might be a caveat for write-intensive workloads.
 
 4. **Compact and friendly for fully embeddeding**. Only 25KLOC of `C11`, 64K x86 binary code,
 no internal threads neither processes, but implements a simplified variant of the
@@ -418,14 +418,14 @@ Performance comparison
 
 All benchmarks were done in 2015 by [IOArena](https://github.com/pmwkaa/ioarena)
 and multiple [scripts](https://github.com/pmwkaa/ioarena/tree/HL%2B%2B2015)
-runs on Lenovo Carbon-2 laptop, i7-4600U 2.1 GHz, 8 Gb RAM,
+runs on Lenovo Carbon-2 laptop, i7-4600U 2.1 GHz (2 physical cores, 4 HyperThreading cores), 8 Gb RAM,
 SSD SAMSUNG MZNTD512HAGL-000L1 (DXT23L0Q) 512 Gb.
 
 ## Integral performance
 
 Here showed sum of performance metrics in 3 benchmarks:
 
- - Read/Search on 4 CPU cores machine;
+ - Read/Search on machine with 4 logical CPU in HyperThreading mode (i.e. actually 2 physical CPU cores);
 
  - Transactions with [CRUD](https://en.wikipedia.org/wiki/CRUD)
  operations in sync-write mode (fdatasync is called after each
