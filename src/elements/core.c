@@ -2520,61 +2520,57 @@ static __always_inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
 SEARCH_IMPL(dp_bsearch, MDBX_DP, pgno_t, DP_SEARCH_CMP)
 
 static unsigned __hot mdbx_dpl_search(MDBX_DPL dl, pgno_t pgno) {
-  if (dl->sorted < dl->length) {
-    /* unsorted tail case  */
-    if (mdbx_audit_enabled()) {
-      for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;) {
-        assert(ptr[0].pgno < ptr[1].pgno);
-        assert(ptr[0].pgno >= NUM_METAS);
-      }
-    }
-
-    /* try linear search until the threshold */
-    if (dl->length - dl->sorted < SORT_THRESHOLD / 2) {
-      unsigned i = dl->length;
-      while (i - dl->sorted > 7) {
-        if (dl[i].pgno == pgno)
-          return i;
-        if (dl[i - 1].pgno == pgno)
-          return i - 1;
-        if (dl[i - 2].pgno == pgno)
-          return i - 2;
-        if (dl[i - 3].pgno == pgno)
-          return i - 3;
-        if (dl[i - 4].pgno == pgno)
-          return i - 4;
-        if (dl[i - 5].pgno == pgno)
-          return i - 5;
-        if (dl[i - 6].pgno == pgno)
-          return i - 6;
-        if (dl[i - 7].pgno == pgno)
-          return i - 7;
-        i -= 8;
-      }
-      while (i > dl->sorted) {
-        if (dl[i].pgno == pgno)
-          return i;
-        --i;
-      }
-
-      MDBX_DPL it = dp_bsearch(dl + 1, i, pgno);
-      return (unsigned)(it - dl);
-    }
-
-    /* sort a whole */
-    dl->sorted = dl->length;
-    dp_sort(dl + 1, dl + dl->length + 1);
-  }
-
   if (mdbx_audit_enabled()) {
-    for (const MDBX_DP *ptr = dl + dl->length; --ptr > dl;) {
+    for (const MDBX_DP *ptr = dl + dl->sorted; --ptr > dl;) {
       assert(ptr[0].pgno < ptr[1].pgno);
       assert(ptr[0].pgno >= NUM_METAS);
     }
   }
 
-  MDBX_DPL it = dp_bsearch(dl + 1, dl->length, pgno);
-  return (unsigned)(it - dl);
+  switch (dl->length - dl->sorted) {
+  default:
+    /* sort a whole */
+    dl->sorted = dl->length;
+    dp_sort(dl + 1, dl + dl->length + 1);
+    __fallthrough; /* fall through */
+  case 0:
+    /* whole sorted cases */
+    if (mdbx_audit_enabled()) {
+      for (const MDBX_DP *ptr = dl + dl->length; --ptr > dl;) {
+        assert(ptr[0].pgno < ptr[1].pgno);
+        assert(ptr[0].pgno >= NUM_METAS);
+      }
+    }
+    return (unsigned)(dp_bsearch(dl + 1, dl->length, pgno) - dl);
+
+#define LINEAR_SEARCH_CASE(N)                                                  \
+  case N:                                                                      \
+    if (dl[dl->length - N + 1].pgno == pgno)                                   \
+      return dl->length - N + 1;                                               \
+    __fallthrough
+
+    /* try linear search until the threshold */
+    LINEAR_SEARCH_CASE(16); /* fall through */
+    LINEAR_SEARCH_CASE(15); /* fall through */
+    LINEAR_SEARCH_CASE(14); /* fall through */
+    LINEAR_SEARCH_CASE(13); /* fall through */
+    LINEAR_SEARCH_CASE(12); /* fall through */
+    LINEAR_SEARCH_CASE(11); /* fall through */
+    LINEAR_SEARCH_CASE(10); /* fall through */
+    LINEAR_SEARCH_CASE(9);  /* fall through */
+    LINEAR_SEARCH_CASE(8);  /* fall through */
+    LINEAR_SEARCH_CASE(7);  /* fall through */
+    LINEAR_SEARCH_CASE(6);  /* fall through */
+    LINEAR_SEARCH_CASE(5);  /* fall through */
+    LINEAR_SEARCH_CASE(4);  /* fall through */
+    LINEAR_SEARCH_CASE(3);  /* fall through */
+    LINEAR_SEARCH_CASE(2);  /* fall through */
+  case 1:
+    if (dl[dl->length].pgno == pgno)
+      return dl->length;
+    /* continue bsearch on the sorted part */
+    return (unsigned)(dp_bsearch(dl + 1, dl->sorted, pgno) - dl);
+  }
 }
 
 static __always_inline MDBX_page *mdbx_dpl_find(MDBX_DPL dl, pgno_t pgno) {
