@@ -154,7 +154,7 @@
 #endif /* __fallthrough */
 
 #ifndef __unreachable
-#	if __GNUC_PREREQ(4,5)
+#	if __GNUC_PREREQ(4,5) || __has_builtin(__builtin_unreachable)
 #		define __unreachable() __builtin_unreachable()
 #	elif defined(_MSC_VER)
 #		define __unreachable() __assume(0)
@@ -294,7 +294,7 @@
 #endif /* __flatten */
 
 #ifndef likely
-#   if (defined(__GNUC__) || defined(__clang__)) && !defined(__COVERITY__)
+#   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #       define likely(cond) __builtin_expect(!!(cond), 1)
 #   else
 #       define likely(x) (x)
@@ -302,7 +302,7 @@
 #endif /* likely */
 
 #ifndef unlikely
-#   if (defined(__GNUC__) || defined(__clang__)) && !defined(__COVERITY__)
+#   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #       define unlikely(cond) __builtin_expect(!!(cond), 0)
 #   else
 #       define unlikely(x) (x)
