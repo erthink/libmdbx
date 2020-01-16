@@ -15387,19 +15387,21 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
     }
   }
 
-  if (!txn->mt_dbxs[dbi].md_cmp || MDBX_DEBUG) {
-    if (!keycmp)
-      keycmp = mdbx_default_keycmp(user_flags);
-    mdbx_tassert(txn, !txn->mt_dbxs[dbi].md_cmp ||
-                          txn->mt_dbxs[dbi].md_cmp == keycmp);
+  if (!keycmp)
+    keycmp = txn->mt_dbxs[dbi].md_cmp ? txn->mt_dbxs[dbi].md_cmp
+                                      : mdbx_default_keycmp(user_flags);
+  if (txn->mt_dbxs[dbi].md_cmp != keycmp) {
+    if (txn->mt_dbxs[dbi].md_cmp)
+      return MDBX_EINVAL;
     txn->mt_dbxs[dbi].md_cmp = keycmp;
   }
 
-  if (!txn->mt_dbxs[dbi].md_dcmp || MDBX_DEBUG) {
-    if (!datacmp)
-      datacmp = mdbx_default_datacmp(user_flags);
-    mdbx_tassert(txn, !txn->mt_dbxs[dbi].md_dcmp ||
-                          txn->mt_dbxs[dbi].md_dcmp == datacmp);
+  if (!datacmp)
+    datacmp = txn->mt_dbxs[dbi].md_dcmp ? txn->mt_dbxs[dbi].md_dcmp
+                                        : mdbx_default_datacmp(user_flags);
+  if (txn->mt_dbxs[dbi].md_dcmp != datacmp) {
+    if (txn->mt_dbxs[dbi].md_dcmp)
+      return MDBX_EINVAL;
     txn->mt_dbxs[dbi].md_dcmp = datacmp;
   }
 
