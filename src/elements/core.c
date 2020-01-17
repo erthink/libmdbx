@@ -11375,7 +11375,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   } else if ((flags & MDBX_CURRENT) == 0) {
     int exact = 0;
     MDBX_val d2;
-    if (flags & MDBX_APPEND) {
+    if ((flags & MDBX_APPEND) != 0 && mc->mc_db->md_entries > 0) {
       MDBX_val k2;
       rc = mdbx_cursor_last(mc, &k2, &d2);
       if (rc == 0) {
