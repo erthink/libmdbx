@@ -15403,12 +15403,13 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
 int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
                      MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
                      MDBX_cmp_func *datacmp) {
+  if (unlikely(!dbi || (user_flags & ~VALID_FLAGS) != 0))
+    return MDBX_EINVAL;
+  *dbi = (MDBX_dbi)-1;
+
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-
-  if (unlikely(!dbi || (user_flags & ~VALID_FLAGS) != 0))
-    return MDBX_EINVAL;
 
   switch (user_flags &
           (MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT | MDBX_REVERSEDUP)) {
@@ -15426,8 +15427,10 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
 
   /* main table? */
   if (!table_name) {
-    *dbi = MAIN_DBI;
-    return mdbx_dbi_bind(txn, MAIN_DBI, user_flags, keycmp, datacmp);
+    rc = mdbx_dbi_bind(txn, MAIN_DBI, user_flags, keycmp, datacmp);
+    if (likely(rc == MDBX_SUCCESS))
+      *dbi = MAIN_DBI;
+    return rc;
   }
 
   if (txn->mt_dbxs[MAIN_DBI].md_cmp == NULL) {
