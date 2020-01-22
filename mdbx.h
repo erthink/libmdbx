@@ -298,12 +298,12 @@
  *     - optimize (bulk) loading speed
  *     - (temporarily) reduce robustness to gain even more speed
  *     - gather statistics about the database
- *     - define custom sort orders
  *     - estimate size of range query result
  *     - double perfomance by LIFO reclaiming on storages with write-back
  *     - use sequences and canary markers
  *     - use lack-of-space callback (aka OOM-KICK)
  *     - use exclusive mode
+ *     - define custom sort orders (but this is recommended to be avoided)
  *
  *
  **** RESTRICTIONS & CAVEATS ***************************************************
@@ -2466,9 +2466,6 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  * In contrast to LMDB, the MDBX allow this function to be called from multiple
  * concurrent transactions or threads in the same process.
  *
- * Legacy mdbx_dbi_open() correspond to calling mdbx_dbi_open_ex() with the null
- * keycmp and datacmp arguments.
- *
  * To use named database (with name != NULL), mdbx_env_set_maxdbs()
  * must be called before opening the environment. Table names are
  * keys in the internal unnamed database, and may be read but not written.
@@ -2509,10 +2506,19 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  *      Create the named database if it doesn't exist. This option is not
  *      allowed in a read-only transaction or a read-only environment.
  *
+ * [out] dbi     Address where the new MDBX_dbi handle will be stored.
+ *
+ * For mdbx_dbi_open_ex() additional arguments allow you to set custom
+ * comparison functions for keys and values (for multimaps).
+ * However, I recommend not using custom comparison functions, but instead
+ * converting the keys to one of the forms that are suitable for built-in
+ * comparators. The main reason for this is that you can't use mdbx_chk tools
+ * with a custom comparators. For instance take look to the mdbx_key_from_xxx()
+ * functions.
+ *
  * [in] keycmp   Optional custom key comparison function for a database.
  * [in] datacmp  Optional custom data comparison function for a database, takes
  *               effect only if database was opened with the MDB_DUPSORT flag.
- * [out] dbi     Address where the new MDBX_dbi handle will be stored.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
@@ -2529,6 +2535,25 @@ LIBMDBX_API int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name,
                                  MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name, unsigned flags,
                               MDBX_dbi *dbi);
+
+/* Key-making functions to avoid custom comparators.
+ *
+ * The mdbx_key_from_jsonInteger() build key which are comparable with
+ * keys created by mdbx_key_from_double(). So this allow mix int64 and IEEE754
+ * double values in one index for JSON-numbers with restriction for integer
+ * numbers range corresponding to RFC-7159 (i.e. [-(2**53)+1, (2**53)-1].
+ * See bottom of page 6 at https://tools.ietf.org/html/rfc7159 */
+LIBMDBX_API uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer);
+LIBMDBX_API uint64_t mdbx_key_from_double(const double ieee754_64bit);
+LIBMDBX_API uint64_t mdbx_key_from_ptrdouble(const double *const ieee754_64bit);
+LIBMDBX_API uint32_t mdbx_key_from_float(const float ieee754_32bit);
+LIBMDBX_API uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit);
+__inline uint64_t mdbx_key_from_int64(const int64_t i64) {
+  return UINT64_C(0x8000000000000000) + i64;
+}
+__inline uint32_t mdbx_key_from_int32(const int32_t i32) {
+  return UINT32_C(0x80000000) + i32;
+}
 
 /* Retrieve statistics for a database.
  *
