@@ -17377,8 +17377,7 @@ uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit) {
 #define IEEE754_DOUBLE_MAX 0x7FF
 #define IEEE754_DOUBLE_IMPLICIT_LEAD UINT64_C(0x0010000000000000)
 #define IEEE754_DOUBLE_MANTISSA_MASK UINT64_C(0x000FFFFFFFFFFFFF)
-#define JSON_MAX_SAFE_INTEGER ((INT64_C(1) << 53) - 1)
-#define JSON_MIN_SAFE_INTEGER (-JSON_MAX_SAFE_INTEGER)
+#define IEEE754_DOUBLE_MANTISSA_AMAX UINT64_C(0x001FFFFFFFFFFFFF)
 
 static __inline int clz64(uint64_t value) {
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_clzl)
@@ -17421,21 +17420,31 @@ static __inline int clz64(uint64_t value) {
   return debruijn_clz64[value * UINT64_C(0x03F79D71B4CB0A89) >> 58];
 }
 
+static uint64_t round_mantissa(const uint64_t u64, int shift) {
+  assert(shift < 0 && u64 > 0);
+  shift = -shift;
+  const unsigned half = 1 << (shift - 1);
+  const unsigned lsb = 1 & (unsigned)(u64 >> shift);
+  const unsigned tie2even = 1 ^ lsb;
+  return (u64 + half - tie2even) >> shift;
+}
+
 uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   const uint64_t biased_zero = UINT64_C(0x8000000000000000);
   if (json_integer > 0) {
-    if (unlikely(json_integer > JSON_MAX_SAFE_INTEGER))
-      goto fallback;
     const uint64_t u64 = json_integer;
-    const int extra_zeros =
-        clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
-    assert(extra_zeros >= 0);
-    const uint64_t mantissa = u64 << extra_zeros;
-    assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD);
-    assert(mantissa <=
-           IEEE754_DOUBLE_MANTISSA_MASK + IEEE754_DOUBLE_IMPLICIT_LEAD);
+    int shift = clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
+    uint64_t mantissa = u64 << shift;
+    if (unlikely(shift < 0)) {
+      mantissa = round_mantissa(u64, shift);
+      if (mantissa > IEEE754_DOUBLE_MANTISSA_AMAX)
+        mantissa = round_mantissa(u64, --shift);
+    }
+
+    assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD &&
+           mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent =
-        IEEE754_DOUBLE_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - extra_zeros;
+        IEEE754_DOUBLE_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
     assert(exponent > 0 && exponent <= IEEE754_DOUBLE_MAX);
     const uint64_t key = biased_zero +
                          (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) +
@@ -17445,18 +17454,19 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   }
 
   if (json_integer < 0) {
-    if (unlikely(json_integer < JSON_MIN_SAFE_INTEGER))
-      goto fallback;
     const uint64_t u64 = -json_integer;
-    const int extra_zeros =
-        clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
-    assert(extra_zeros >= 0);
-    const uint64_t mantissa = u64 << extra_zeros;
-    assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD);
-    assert(mantissa <=
-           IEEE754_DOUBLE_MANTISSA_MASK + IEEE754_DOUBLE_IMPLICIT_LEAD);
+    int shift = clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
+    uint64_t mantissa = u64 << shift;
+    if (unlikely(shift < 0)) {
+      mantissa = round_mantissa(u64, shift);
+      if (mantissa > IEEE754_DOUBLE_MANTISSA_AMAX)
+        mantissa = round_mantissa(u64, --shift);
+    }
+
+    assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD &&
+           mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent =
-        IEEE754_DOUBLE_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - extra_zeros;
+        IEEE754_DOUBLE_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
     assert(exponent > 0 && exponent <= IEEE754_DOUBLE_MAX);
     const uint64_t key = biased_zero -
                          (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) -
@@ -17466,10 +17476,6 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   }
 
   return biased_zero;
-
-fallback:;
-  const double ieee754_64bit = (double)json_integer;
-  return double2key(&ieee754_64bit);
 }
 
 /*** Attribute support functions for Nexenta **********************************/
