@@ -17424,7 +17424,7 @@ static __inline int clz64(uint64_t value) {
 uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
   const uint64_t biased_zero = UINT64_C(0x8000000000000000);
   if (json_integer > 0) {
-    if (unlikely(json_integer < JSON_MAX_SAFE_INTEGER))
+    if (unlikely(json_integer > JSON_MAX_SAFE_INTEGER))
       goto fallback;
     const uint64_t u64 = json_integer;
     const int extra_zeros =
