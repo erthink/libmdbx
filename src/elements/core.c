@@ -4924,8 +4924,7 @@ done:
 }
 
 /* Copy the used portions of a non-overflow page. */
-__hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
-                                 unsigned psize) {
+__hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
   STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 4);
   if (!IS_LEAF2(src)) {
@@ -4933,12 +4932,13 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src,
 
     /* If page isn't full, just copy the used portion. Adjust
      * alignment so memcpy may copy words instead of bytes. */
-    if (unused > sizeof(void *) * 42) {
+    if (unused >= MDBX_CACHELINE_SIZE * 2) {
       lower = roundup_powerof2(lower + PAGEHDRSZ, sizeof(void *));
       upper = (upper + PAGEHDRSZ) & ~(sizeof(void *) - 1);
       memcpy(dst, src, lower);
-      memcpy((char *)dst + upper, (char *)src + upper, psize - upper);
-      return;
+      dst = (void *)((char *)dst + upper);
+      src = (void *)((char *)src + upper);
+      psize -= upper;
     }
   }
   memcpy(dst, src, psize);
@@ -11611,9 +11611,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           }
 
           /* Back up original data item */
+          memcpy(dkey.iov_base = fp + 1, olddata.iov_base,
+                 dkey.iov_len = olddata.iov_len);
           dupdata_flag = 1;
-          dkey.iov_len = olddata.iov_len;
-          dkey.iov_base = memcpy(fp + 1, olddata.iov_base, olddata.iov_len);
 
           /* Make sub-page header for the dup items, with dummy body */
           fp->mp_flags = P_LEAF | P_DIRTY | P_SUBP;
@@ -12702,8 +12702,7 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   /* But even if no shift was needed, update ksize */
   node_set_ks(node, key->iov_len);
 
-  if (key->iov_len)
-    memcpy(node_key(node), key->iov_base, key->iov_len);
+  memcpy(node_key(node), key->iov_base, key->iov_len);
   return MDBX_SUCCESS;
 }
 
@@ -14045,8 +14044,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         mdbx_cassert(mc, mp->mp_upper >= ksize - sizeof(indx_t));
         mp->mp_upper -= (indx_t)(ksize - sizeof(indx_t));
       } else {
-        if (x)
-          memcpy(rp->mp_ptrs, split, x * ksize);
+        memcpy(rp->mp_ptrs, split, x * ksize);
         ins = page_leaf2key(rp, x, ksize);
         memcpy(ins, newkey->iov_base, ksize);
         memcpy(ins + ksize, split + x * ksize, rsize - x * ksize);
