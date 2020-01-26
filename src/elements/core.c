@@ -1466,7 +1466,8 @@ static int lcklist_detach_locked(MDBX_env *env) {
 
 /*------------------------------------------------------------------------------
  * LY: State of the art quicksort-based sorting, with internal stack
- *     and bitonic-sort for small chunks. */
+ * and network-sort for small chunks.
+ * Thanks to John M. Gamble for the http://pages.ripco.net/~jgamble/nw.html */
 
 #define SORT_CMP_SWAP(TYPE, CMP, a, b)                                         \
   do {                                                                         \
@@ -1476,19 +1477,36 @@ static int lcklist_detach_locked(MDBX_env *env) {
     (b) = swap_cmp ? b : swap_tmp;                                             \
   } while (0)
 
-#define SORT_BITONIC_2(TYPE, CMP, begin)                                       \
-  do {                                                                         \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
-  } while (0)
-
-#define SORT_BITONIC_3(TYPE, CMP, begin)                                       \
+//  3 comparators, 3 parallel operations
+//  o-----^--^--o
+//        |  |
+//  o--^--|--v--o
+//     |  |
+//  o--v--v-----o
+//
+//  [[1,2]]
+//  [[0,2]]
+//  [[0,1]]
+#define SORT_NETWORK_3(TYPE, CMP, begin)                                       \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
   } while (0)
 
-#define SORT_BITONIC_4(TYPE, CMP, begin)                                       \
+//  5 comparators, 3 parallel operations
+//  o--^--^--------o
+//     |  |
+//  o--v--|--^--^--o
+//        |  |  |
+//  o--^--v--|--v--o
+//     |     |
+//  o--v-----v-----o
+//
+//  [[0,1],[2,3]]
+//  [[0,2],[1,3]]
+//  [[1,2]]
+#define SORT_NETWORK_4(TYPE, CMP, begin)                                       \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
@@ -1497,20 +1515,55 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
   } while (0)
 
-#define SORT_BITONIC_5(TYPE, CMP, begin)                                       \
+//  9 comparators, 5 parallel operations
+//  o--^--^-----^-----------o
+//     |  |     |
+//  o--|--|--^--v-----^--^--o
+//     |  |  |        |  |
+//  o--|--v--|--^--^--|--v--o
+//     |     |  |  |  |
+//  o--|-----v--|--v--|--^--o
+//     |        |     |  |
+//  o--v--------v-----v--v--o
+//
+//  [[0,4],[1,3]]
+//  [[0,2]]
+//  [[2,4],[0,1]]
+//  [[2,3],[1,4]]
+//  [[1,2],[3,4]]
+#define SORT_NETWORK_5(TYPE, CMP, begin)                                       \
   do {                                                                         \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[3]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[4]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[3]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[2]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[3]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[4]);                              \
   } while (0)
 
-#define SORT_BITONIC_6(TYPE, CMP, begin)                                       \
+//  12 comparators, 6 parallel operations
+//  o-----^--^--^-----------------o
+//        |  |  |
+//  o--^--|--v--|--^--------^-----o
+//     |  |     |  |        |
+//  o--v--v-----|--|--^--^--|--^--o
+//              |  |  |  |  |  |
+//  o-----^--^--v--|--|--|--v--v--o
+//        |  |     |  |  |
+//  o--^--|--v-----v--|--v--------o
+//     |  |           |
+//  o--v--v-----------v-----------o
+//
+//  [[1,2],[4,5]]
+//  [[0,2],[3,5]]
+//  [[0,1],[3,4],[2,5]]
+//  [[0,3],[1,4]]
+//  [[2,4],[1,3]]
+//  [[2,3]]
+#define SORT_NETWORK_6(TYPE, CMP, begin)                                       \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[5]);                              \
@@ -1526,50 +1579,122 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
   } while (0)
 
-#define SORT_BITONIC_7(TYPE, CMP, begin)                                       \
+//  16 comparators, 6 parallel operations
+//  o--^--------^-----^-----------------o
+//     |        |     |
+//  o--|--^-----|--^--v--------^--^-----o
+//     |  |     |  |           |  |
+//  o--|--|--^--v--|--^-----^--|--v-----o
+//     |  |  |     |  |     |  |
+//  o--|--|--|-----v--|--^--v--|--^--^--o
+//     |  |  |        |  |     |  |  |
+//  o--v--|--|--^-----v--|--^--v--|--v--o
+//        |  |  |        |  |     |
+//  o-----v--|--|--------v--v-----|--^--o
+//           |  |                 |  |
+//  o--------v--v-----------------v--v--o
+//
+//  [[0,4],[1,5],[2,6]]
+//  [[0,2],[1,3],[4,6]]
+//  [[2,4],[3,5],[0,1]]
+//  [[2,3],[4,5]]
+//  [[1,4],[3,6]]
+//  [[1,2],[3,4],[5,6]]
+#define SORT_NETWORK_7(TYPE, CMP, begin)                                       \
   do {                                                                         \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[5]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[6]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[2]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[3]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[6]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[5]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[5]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[6]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[4]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[5], begin[6]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[2]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[5]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[6]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[5]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[6]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[4]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[5]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[3]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[5]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[3]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[4]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
   } while (0)
 
-#define SORT_BITONIC_8(TYPE, CMP, begin)                                       \
+//  19 comparators, 6 parallel operations
+//  o--^--------^-----^-----------------o
+//     |        |     |
+//  o--|--^-----|--^--v--------^--^-----o
+//     |  |     |  |           |  |
+//  o--|--|--^--v--|--^-----^--|--v-----o
+//     |  |  |     |  |     |  |
+//  o--|--|--|--^--v--|--^--v--|--^--^--o
+//     |  |  |  |     |  |     |  |  |
+//  o--v--|--|--|--^--v--|--^--v--|--v--o
+//        |  |  |  |     |  |     |
+//  o-----v--|--|--|--^--v--v-----|--^--o
+//           |  |  |  |           |  |
+//  o--------v--|--v--|--^--------v--v--o
+//              |     |  |
+//  o-----------v-----v--v--------------o
+//
+//  [[0,4],[1,5],[2,6],[3,7]]
+//  [[0,2],[1,3],[4,6],[5,7]]
+//  [[2,4],[3,5],[0,1],[6,7]]
+//  [[2,3],[4,5]]
+//  [[1,4],[3,6]]
+//  [[1,2],[3,4],[5,6]]
+#define SORT_NETWORK_8(TYPE, CMP, begin)                                       \
   do {                                                                         \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[5]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[6], begin[7]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[5]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[6]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[7]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[3]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[6]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[5], begin[7]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[5], begin[6]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[4]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[7]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[5]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[6]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[4]);                              \
-    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[6]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[4]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[5]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[6], begin[7]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[5]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[6]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[2]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[4]);                              \
+    SORT_CMP_SWAP(TYPE, CMP, begin[5], begin[6]);                              \
   } while (0)
 
-#define SORT_BITONIC_9(TYPE, CMP, begin)                                       \
+//  25 comparators, 9 parallel operations
+//  o--^-----^--^-----^-----------------------------------o
+//     |     |  |     |
+//  o--v--^--v--|-----|--^-----^-----------^--------------o
+//        |     |     |  |     |           |
+//  o-----v-----|-----|--|-----|--^-----^--|--^-----^--^--o
+//              |     |  |     |  |     |  |  |     |  |
+//  o--^-----^--v--^--v--|-----|--|-----|--v--|-----|--v--o
+//     |     |     |     |     |  |     |     |     |
+//  o--v--^--v-----|-----v--^--v--|-----|-----|--^--v-----o
+//        |        |        |     |     |     |  |
+//  o-----v--------|--------|-----v--^--v--^--|--|--^-----o
+//                 |        |        |     |  |  |  |
+//  o--^-----^-----v--------|--------|-----|--v--v--v-----o
+//     |     |              |        |     |
+//  o--v--^--v--------------v--------|-----v--------------o
+//        |                          |
+//  o-----v--------------------------v--------------------o
+//
+//  [[0,1],[3,4],[6,7]]
+//  [[1,2],[4,5],[7,8]]
+//  [[0,1],[3,4],[6,7],[2,5]]
+//  [[0,3],[1,4],[5,8]]
+//  [[3,6],[4,7],[2,5]]
+//  [[0,3],[1,4],[5,7],[2,6]]
+//  [[1,3],[4,6]]
+//  [[2,4],[5,6]]
+//  [[2,3]]
+#define SORT_NETWORK_9(TYPE, CMP, begin)                                       \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[4]);                              \
@@ -1598,7 +1723,37 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
   } while (0)
 
-#define SORT_BITONIC_10(TYPE, CMP, begin)                                      \
+//  29 comparators, 9 parallel operations
+//  o--------------^-----^--^--^-----------------------o
+//                 |     |  |  |
+//  o-----------^--|--^--|--|--v--^--------^-----------o
+//              |  |  |  |  |     |        |
+//  o--------^--|--|--|--|--v--^--v-----^--|--^--------o
+//           |  |  |  |  |     |        |  |  |
+//  o-----^--|--|--|--|--v--^--|-----^--|--v--v--^-----o
+//        |  |  |  |  |     |  |     |  |        |
+//  o--^--|--|--|--|--v-----|--v--^--|--|--^-----v--^--o
+//     |  |  |  |  |        |     |  |  |  |        |
+//  o--|--|--|--|--v--^-----|--^--|--v--v--|-----^--v--o
+//     |  |  |  |     |     |  |  |        |     |
+//  o--|--|--|--v--^--|-----v--|--v--^-----|--^--v-----o
+//     |  |  |     |  |        |     |     |  |
+//  o--|--|--v-----|--|--^-----v--^--|-----v--v--------o
+//     |  |        |  |  |        |  |
+//  o--|--v--------|--v--|--^-----v--v-----------------o
+//     |           |     |  |
+//  o--v-----------v-----v--v--------------------------o
+//
+//  [[4,9],[3,8],[2,7],[1,6],[0,5]]
+//  [[1,4],[6,9],[0,3],[5,8]]
+//  [[0,2],[3,6],[7,9]]
+//  [[0,1],[2,4],[5,7],[8,9]]
+//  [[1,2],[4,6],[7,8],[3,5]]
+//  [[2,5],[6,8],[1,3],[4,7]]
+//  [[2,3],[6,7]]
+//  [[3,4],[5,6]]
+//  [[4,5]]
+#define SORT_NETWORK_10(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[9]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[3], begin[8]);                              \
@@ -1631,7 +1786,39 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[4], begin[5]);                              \
   } while (0)
 
-#define SORT_BITONIC_11(TYPE, CMP, begin)                                      \
+//  35 comparators, 9 parallel operations
+//  o--^-----^-----------------^--------^--------------------o
+//     |     |                 |        |
+//  o--v--^--|--^--^--------^--|--------|--^-----------------o
+//        |  |  |  |        |  |        |  |
+//  o--^--|--v--v--|-----^--|--|--------|--|-----^--^--------o
+//     |  |        |     |  |  |        |  |     |  |
+//  o--v--v--------|-----|--|--|--^-----|--|--^--v--|--^--^--o
+//                 |     |  |  |  |     |  |  |     |  |  |
+//  o--^-----^-----|-----|--|--v--|--^--v--v--|-----v--|--v--o
+//     |     |     |     |  |     |  |        |        |
+//  o--v--^--|--^--v--^--|--v-----|--|--------|--------v--^--o
+//        |  |  |     |  |        |  |        |           |
+//  o--^--|--v--v--^--|--v--^-----|--|--------|--------^--v--o
+//     |  |        |  |     |     |  |        |        |
+//  o--v--v--------|--|-----|-----v--|--^-----|-----^--|--^--o
+//                 |  |     |        |  |     |     |  |  |
+//  o--^--^--------|--|-----|--------v--|-----v--^--|--v--v--o
+//     |  |        |  |     |           |        |  |
+//  o--v--|--^-----|--v-----|-----------|--------v--v--------o
+//        |  |     |        |           |
+//  o-----v--v-----v--------v-----------v--------------------o
+//
+//  [[0,1],[2,3],[4,5],[6,7],[8,9]]
+//  [[1,3],[5,7],[0,2],[4,6],[8,10]]
+//  [[1,2],[5,6],[9,10],[0,4],[3,7]]
+//  [[1,5],[6,10],[4,8]]
+//  [[5,9],[2,6],[0,4],[3,8]]
+//  [[1,5],[6,10],[2,3],[8,9]]
+//  [[1,4],[7,10],[3,5],[6,8]]
+//  [[2,4],[7,9],[5,6]]
+//  [[3,4],[7,8]]
+#define SORT_NETWORK_11(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
@@ -1670,7 +1857,41 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[7], begin[8]);                              \
   } while (0)
 
-#define SORT_BITONIC_12(TYPE, CMP, begin)                                      \
+//  39 comparators, parallel operations
+//  o--^-----^-----------------^--------^--------------------o
+//     |     |                 |        |
+//  o--v--^--|--^--^--------^--|--------|--^-----------------o
+//        |  |  |  |        |  |        |  |
+//  o--^--|--v--v--|-----^--|--|--------|--|-----^--^--------o
+//     |  |        |     |  |  |        |  |     |  |
+//  o--v--v--------|-----|--|--|--^-----|--|--^--v--|--^--^--o
+//                 |     |  |  |  |     |  |  |     |  |  |
+//  o--^-----^-----|-----|--|--v--|--^--v--v--|-----v--|--v--o
+//     |     |     |     |  |     |  |        |        |
+//  o--v--^--|--^--v--^--|--v-----|--|--------|--------v--^--o
+//        |  |  |     |  |        |  |        |           |
+//  o--^--|--v--v--^--|--v--^-----|--|--------|--------^--v--o
+//     |  |        |  |     |     |  |        |        |
+//  o--v--v--------|--|-----|--^--v--|--^--^--|-----^--|--^--o
+//                 |  |     |  |     |  |  |  |     |  |  |
+//  o--^-----^-----|--|-----|--|-----v--|--|--v--^--|--v--v--o
+//     |     |     |  |     |  |        |  |     |  |
+//  o--v--^--|--^--|--v-----|--|--------|--|-----v--v--------o
+//        |  |  |  |        |  |        |  |
+//  o--^--|--v--v--v--------v--|--------|--v-----------------o
+//     |  |                    |        |
+//  o--v--v--------------------v--------v--------------------o
+//
+//  [[0,1],[2,3],[4,5],[6,7],[8,9],[10,11]]
+//  [[1,3],[5,7],[9,11],[0,2],[4,6],[8,10]]
+//  [[1,2],[5,6],[9,10],[0,4],[7,11]]
+//  [[1,5],[6,10],[3,7],[4,8]]
+//  [[5,9],[2,6],[0,4],[7,11],[3,8]]
+//  [[1,5],[6,10],[2,3],[8,9]]
+//  [[1,4],[7,10],[3,5],[6,8]]
+//  [[2,4],[7,9],[5,6]]
+//  [[3,4],[7,8]]
+#define SORT_NETWORK_12(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
@@ -1713,7 +1934,44 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[7], begin[8]);                              \
   } while (0)
 
-#define SORT_BITONIC_13(TYPE, CMP, begin)                                      \
+//  45 comparators, 10 parallel operations
+//  o--------^--^-----^-----------------------------^-----------------o
+//           |  |     |                             |
+//  o--^-----|--v-----|-----^--------------^-----^--|-----^-----------o
+//     |     |        |     |              |     |  |     |
+//  o--|-----|--^--^--v-----|--------------|--^--|--|--^--v--^--------o
+//     |     |  |  |        |              |  |  |  |  |     |
+//  o--|--^--|--|--v-----^--|--------^-----|--|--v--|--|--^--v-----^--o
+//     |  |  |  |        |  |        |     |  |     |  |  |        |
+//  o--|--v--|--|--^-----|--v-----^--v-----|--|--^--|--|--|--^--^--v--o
+//     |     |  |  |     |        |        |  |  |  |  |  |  |  |
+//  o--|--^--|--|--|--^--|--------|-----^--|--|--|--v--v--v--|--v--^--o
+//     |  |  |  |  |  |  |        |     |  |  |  |           |     |
+//  o--|--|--|--v--v--|--|--^-----|--^--v--|--v--|--^--------v--^--v--o
+//     |  |  |        |  |  |     |  |     |     |  |           |
+//  o--v--|--|-----^--|--v--|--^--|--|-----v-----v--|--^--------v-----o
+//        |  |     |  |     |  |  |  |              |  |
+//  o-----v--|--^--|--|-----|--v--|--|--^-----^-----v--v--^-----------o
+//           |  |  |  |     |     |  |  |     |           |
+//  o--^-----|--|--|--v-----|-----v--|--v--^--|--^--------v-----------o
+//     |     |  |  |        |        |     |  |  |
+//  o--|-----|--|--|--^-----|--------v--^--|--v--v--------------------o
+//     |     |  |  |  |     |           |  |
+//  o--v-----|--v--|--v-----|--^--------v--v--------------------------o
+//           |     |        |  |
+//  o--------v-----v--------v--v--------------------------------------o
+//
+//  [[1,7],[9,11],[3,4],[5,8],[0,12],[2,6]]
+//  [[0,1],[2,3],[4,6],[8,11],[7,12],[5,9]]
+//  [[0,2],[3,7],[10,11],[1,4],[6,12]]
+//  [[7,8],[11,12],[4,9],[6,10]]
+//  [[3,4],[5,6],[8,9],[10,11],[1,7]]
+//  [[2,6],[9,11],[1,3],[4,7],[8,10],[0,5]]
+//  [[2,5],[6,8],[9,10]]
+//  [[1,2],[3,5],[7,8],[4,6]]
+//  [[2,3],[4,5],[6,7],[8,9]]
+//  [[3,4],[5,6]]
+#define SORT_NETWORK_13(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[1], begin[7]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[9], begin[11]);                             \
@@ -1762,7 +2020,53 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[5], begin[6]);                              \
   } while (0)
 
-#define SORT_BITONIC_14(TYPE, CMP, begin)                                      \
+/* *INDENT-OFF* */
+/* clang-format off */
+
+//  51 comparators, 10 parallel operations
+//  o--^--^-----^-----------^-----------------------------------------------------------o
+//     |  |     |           |
+//  o--v--|--^--|--^--------|--^-----^-----------------------^--------------------------o
+//        |  |  |  |        |  |     |                       |
+//  o--^--v--|--|--|--^-----|--|--^--v-----------------------|--^--^--------------------o
+//     |     |  |  |  |     |  |  |                          |  |  |
+//  o--v-----v--|--|--|--^--|--|--|--^--------------^--------|--|--|--^--^--^-----------o
+//              |  |  |  |  |  |  |  |              |        |  |  |  |  |  |
+//  o--^--^-----v--|--|--|--|--|--|--|--^-----------|-----^--v--|--v--|--|--v-----------o
+//     |  |        |  |  |  |  |  |  |  |           |     |     |     |  |
+//  o--v--|--^-----v--|--|--|--|--|--|--|--^--^-----|-----|-----|--^--|--v-----^--------o
+//        |  |        |  |  |  |  |  |  |  |  |     |     |     |  |  |        |
+//  o--^--v--|--------v--|--|--|--|--|--|--|--|--^--|-----|-----|--v--|-----^--v-----^--o
+//     |     |           |  |  |  |  |  |  |  |  |  |     |     |     |     |        |
+//  o--v-----v-----------v--|--|--|--|--|--|--|--|--|--^--|--^--|-----|--^--|--^--^--v--o
+//                          |  |  |  |  |  |  |  |  |  |  |  |  |     |  |  |  |  |
+//  o--^--^-----^-----------v--|--|--|--|--|--|--|--|--|--v--|--v-----v--|--v--|--v--^--o
+//     |  |     |              |  |  |  |  |  |  |  |  |     |           |     |     |
+//  o--v--|--^--|--^-----------v--|--|--|--|--|--v--|--|-----|--^--------|-----v--^--v--o
+//        |  |  |  |              |  |  |  |  |     |  |     |  |        |        |
+//  o--^--v--|--|--|--------------v--|--|--|--v-----|--|-----|--v--------|--^-----v-----o
+//     |     |  |  |                 |  |  |        |  |     |           |  |
+//  o--v-----v--|--|-----------------v--|--|--------|--v-----|--^--------|--|--^--------o
+//              |  |                    |  |        |        |  |        |  |  |
+//  o--^--------v--|--------------------v--|--------v--------|--|--------v--v--v--------o
+//     |           |                       |                 |  |
+//  o--v-----------v-----------------------v-----------------v--v-----------------------o
+//
+//  [[0,1],[2,3],[4,5],[6,7],[8,9],[10,11],[12,13]]
+//  [[0,2],[4,6],[8,10],[1,3],[5,7],[9,11]]
+//  [[0,4],[8,12],[1,5],[9,13],[2,6],[3,7]]
+//  [[0,8],[1,9],[2,10],[3,11],[4,12],[5,13]]
+//  [[5,10],[6,9],[3,12],[7,11],[1,2],[4,8]]
+//  [[1,4],[7,13],[2,8],[5,6],[9,10]]
+//  [[2,4],[11,13],[3,8],[7,12]]
+//  [[6,8],[10,12],[3,5],[7,9]]
+//  [[3,4],[5,6],[7,8],[9,10],[11,12]]
+//  [[6,7],[8,9]]
+
+/* *INDENT-ON* */
+/* clang-format on */
+
+#define SORT_NETWORK_14(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
@@ -1817,7 +2121,55 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[8], begin[9]);                              \
   } while (0)
 
-#define SORT_BITONIC_15(TYPE, CMP, begin)                                      \
+/* *INDENT-OFF* */
+/* clang-format off */
+
+//  56 comparators, 10 parallel operations
+//  o--^--^-----^-----------^--------------------------------------------------------------o
+//     |  |     |           |
+//  o--v--|--^--|--^--------|--^-----^--------------------------^--------------------------o
+//        |  |  |  |        |  |     |                          |
+//  o--^--v--|--|--|--^-----|--|--^--v--------------------------|--^--^--------------------o
+//     |     |  |  |  |     |  |  |                             |  |  |
+//  o--v-----v--|--|--|--^--|--|--|--^-----------------^--------|--|--|--^--^--^-----------o
+//              |  |  |  |  |  |  |  |                 |        |  |  |  |  |  |
+//  o--^--^-----v--|--|--|--|--|--|--|--^--------------|-----^--v--|--v--|--|--v-----------o
+//     |  |        |  |  |  |  |  |  |  |              |     |     |     |  |
+//  o--v--|--^-----v--|--|--|--|--|--|--|--^-----^-----|-----|-----|--^--|--v-----^--------o
+//        |  |        |  |  |  |  |  |  |  |     |     |     |     |  |  |        |
+//  o--^--v--|--------v--|--|--|--|--|--|--|--^--|--^--|-----|-----|--v--|-----^--v-----^--o
+//     |     |           |  |  |  |  |  |  |  |  |  |  |     |     |     |     |        |
+//  o--v-----v-----------v--|--|--|--|--|--|--|--|--|--|--^--|--^--|-----|--^--|--^--^--v--o
+//                          |  |  |  |  |  |  |  |  |  |  |  |  |  |     |  |  |  |  |
+//  o--^--^-----^-----------v--|--|--|--|--|--|--|--|--|--|--v--|--v-----v--|--v--|--v--^--o
+//     |  |     |              |  |  |  |  |  |  |  |  |  |     |           |     |     |
+//  o--v--|--^--|--^-----------v--|--|--|--|--|--|--v--|--|-----|--^--------|-----v--^--v--o
+//        |  |  |  |              |  |  |  |  |  |     |  |     |  |        |        |
+//  o--^--v--|--|--|--^-----------v--|--|--|--|--v-----|--|-----|--v--------|--^-----v-----o
+//     |     |  |  |  |              |  |  |  |        |  |     |           |  |
+//  o--v-----v--|--|--|--------------v--|--|--|--------|--v-----|--^--^-----|--|--^--------o
+//              |  |  |                 |  |  |        |        |  |  |     |  |  |
+//  o--^--^-----v--|--|-----------------v--|--|--------v--------|--|--|-----v--v--v--------o
+//     |  |        |  |                    |  |                 |  |  |
+//  o--v--|--------v--|--------------------v--|--^--------------v--|--v--------------------o
+//        |           |                       |  |                 |
+//  o-----v-----------v-----------------------v--v-----------------v-----------------------o
+//
+//  [[0,1],[2,3],[4,5],[6,7],[8,9],[10,11],[12,13]]
+//  [[0,2],[4,6],[8,10],[12,14],[1,3],[5,7],[9,11]]
+//  [[0,4],[8,12],[1,5],[9,13],[2,6],[10,14],[3,7]]
+//  [[0,8],[1,9],[2,10],[3,11],[4,12],[5,13],[6,14]]
+//  [[5,10],[6,9],[3,12],[13,14],[7,11],[1,2],[4,8]]
+//  [[1,4],[7,13],[2,8],[11,14],[5,6],[9,10]]
+//  [[2,4],[11,13],[3,8],[7,12]]
+//  [[6,8],[10,12],[3,5],[7,9]]
+//  [[3,4],[5,6],[7,8],[9,10],[11,12]]
+//  [[6,7],[8,9]]
+
+/* *INDENT-ON* */
+/* clang-format on */
+
+#define SORT_NETWORK_15(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
@@ -1877,7 +2229,57 @@ static int lcklist_detach_locked(MDBX_env *env) {
     SORT_CMP_SWAP(TYPE, CMP, begin[8], begin[9]);                              \
   } while (0)
 
-#define SORT_BITONIC_16(TYPE, CMP, begin)                                      \
+/* *INDENT-OFF* */
+/* clang-format off */
+
+//  60 comparators, 10 parallel operations
+//  o--^--^-----^-----------^-----------------------------------------------------------------o
+//     |  |     |           |
+//  o--v--|--^--|--^--------|--^-----^-----------------------------^--------------------------o
+//        |  |  |  |        |  |     |                             |
+//  o--^--v--|--|--|--^-----|--|--^--v-----------------------------|--^--^--------------------o
+//     |     |  |  |  |     |  |  |                                |  |  |
+//  o--v-----v--|--|--|--^--|--|--|--^--------------------^--------|--|--|--^--^--^-----------o
+//              |  |  |  |  |  |  |  |                    |        |  |  |  |  |  |
+//  o--^--^-----v--|--|--|--|--|--|--|--^-----------------|-----^--v--|--v--|--|--v-----------o
+//     |  |        |  |  |  |  |  |  |  |                 |     |     |     |  |
+//  o--v--|--^-----v--|--|--|--|--|--|--|--^--------^-----|-----|-----|--^--|--v-----^--------o
+//        |  |        |  |  |  |  |  |  |  |        |     |     |     |  |  |        |
+//  o--^--v--|--------v--|--|--|--|--|--|--|--^-----|--^--|-----|-----|--v--|-----^--v-----^--o
+//     |     |           |  |  |  |  |  |  |  |     |  |  |     |     |     |     |        |
+//  o--v-----v-----------v--|--|--|--|--|--|--|--^--|--|--|--^--|--^--|-----|--^--|--^--^--v--o
+//                          |  |  |  |  |  |  |  |  |  |  |  |  |  |  |     |  |  |  |  |
+//  o--^--^-----^-----------v--|--|--|--|--|--|--|--|--|--|--|--v--|--v-----v--|--v--|--v--^--o
+//     |  |     |              |  |  |  |  |  |  |  |  |  |  |     |           |     |     |
+//  o--v--|--^--|--^-----------v--|--|--|--|--|--|--|--v--|--|-----|--^--------|-----v--^--v--o
+//        |  |  |  |              |  |  |  |  |  |  |     |  |     |  |        |        |
+//  o--^--v--|--|--|--^-----------v--|--|--|--|--|--v-----|--|-----|--v--------|--^-----v-----o
+//     |     |  |  |  |              |  |  |  |  |        |  |     |           |  |
+//  o--v-----v--|--|--|--^-----------v--|--|--|--|--------|--v-----|--^--^-----|--|--^--------o
+//              |  |  |  |              |  |  |  |        |        |  |  |     |  |  |
+//  o--^--^-----v--|--|--|--------------v--|--|--|--------v--------|--|--|-----v--v--v--------o
+//     |  |        |  |  |                 |  |  |                 |  |  |
+//  o--v--|--^-----v--|--|-----------------v--|--|--^--------------v--|--v--------------------o
+//        |  |        |  |                    |  |  |                 |
+//  o--^--v--|--------v--|--------------------v--|--v-----------------v-----------------------o
+//     |     |           |                       |
+//  o--v-----v-----------v-----------------------v--------------------------------------------o
+//
+//  [[0,1],[2,3],[4,5],[6,7],[8,9],[10,11],[12,13],[14,15]]
+//  [[0,2],[4,6],[8,10],[12,14],[1,3],[5,7],[9,11],[13,15]]
+//  [[0,4],[8,12],[1,5],[9,13],[2,6],[10,14],[3,7],[11,15]]
+//  [[0,8],[1,9],[2,10],[3,11],[4,12],[5,13],[6,14],[7,15]]
+//  [[5,10],[6,9],[3,12],[13,14],[7,11],[1,2],[4,8]]
+//  [[1,4],[7,13],[2,8],[11,14],[5,6],[9,10]]
+//  [[2,4],[11,13],[3,8],[7,12]]
+//  [[6,8],[10,12],[3,5],[7,9]]
+//  [[3,4],[5,6],[7,8],[9,10],[11,12]]
+//  [[6,7],[8,9]]
+
+/* *INDENT-ON* */
+/* clang-format on */
+
+#define SORT_NETWORK_16(TYPE, CMP, begin)                                      \
   do {                                                                         \
     SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     SORT_CMP_SWAP(TYPE, CMP, begin[2], begin[3]);                              \
@@ -1949,49 +2351,49 @@ static int lcklist_detach_locked(MDBX_env *env) {
   case 1:                                                                      \
     break;                                                                     \
   case 2:                                                                      \
-    SORT_BITONIC_2(TYPE, CMP, begin);                                          \
+    SORT_CMP_SWAP(TYPE, CMP, begin[0], begin[1]);                              \
     break;                                                                     \
   case 3:                                                                      \
-    SORT_BITONIC_3(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_3(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 4:                                                                      \
-    SORT_BITONIC_4(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_4(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 5:                                                                      \
-    SORT_BITONIC_5(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_5(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 6:                                                                      \
-    SORT_BITONIC_6(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_6(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 7:                                                                      \
-    SORT_BITONIC_7(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_7(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 8:                                                                      \
-    SORT_BITONIC_8(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_8(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 9:                                                                      \
-    SORT_BITONIC_9(TYPE, CMP, begin);                                          \
+    SORT_NETWORK_9(TYPE, CMP, begin);                                          \
     break;                                                                     \
   case 10:                                                                     \
-    SORT_BITONIC_10(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_10(TYPE, CMP, begin);                                         \
     break;                                                                     \
   case 11:                                                                     \
-    SORT_BITONIC_11(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_11(TYPE, CMP, begin);                                         \
     break;                                                                     \
   case 12:                                                                     \
-    SORT_BITONIC_12(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_12(TYPE, CMP, begin);                                         \
     break;                                                                     \
   case 13:                                                                     \
-    SORT_BITONIC_13(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_13(TYPE, CMP, begin);                                         \
     break;                                                                     \
   case 14:                                                                     \
-    SORT_BITONIC_14(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_14(TYPE, CMP, begin);                                         \
     break;                                                                     \
   case 15:                                                                     \
-    SORT_BITONIC_15(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_15(TYPE, CMP, begin);                                         \
     break;                                                                     \
   case 16:                                                                     \
-    SORT_BITONIC_16(TYPE, CMP, begin);                                         \
+    SORT_NETWORK_16(TYPE, CMP, begin);                                         \
     break;                                                                     \
   }
 
