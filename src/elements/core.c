@@ -9960,87 +9960,91 @@ static int __hot mdbx_cmp_memnr(const MDBX_val *a, const MDBX_val *b) {
  * If no entry larger or equal to the key is found, returns NULL. */
 static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
                                          int *exactp) {
-  int low, high;
-  int rc = 0;
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
-  MDBX_node *node = nullptr;
-  MDBX_val nodekey;
-  MDBX_cmp_func *cmp;
+  const int nkeys = page_numkeys(mp);
   DKBUF;
-
-  const unsigned nkeys = page_numkeys(mp);
 
   mdbx_debug("searching %u keys in %s %spage %" PRIaPGNO, nkeys,
              IS_LEAF(mp) ? "leaf" : "branch", IS_SUBP(mp) ? "sub-" : "",
              mp->mp_pgno);
 
-  low = IS_LEAF(mp) ? 0 : 1;
-  high = nkeys - 1;
-  cmp = mc->mc_dbx->md_cmp;
+  int low = IS_LEAF(mp) ? 0 : 1;
+  int high = nkeys - 1;
+  *exactp = 0;
+  if (unlikely(high < low)) {
+    mc->mc_ki[mc->mc_top] = 0;
+    return NULL;
+  }
 
-  /* Branch pages have no data, so if using integer keys,
-   * alignment is guaranteed. Use faster mdbx_cmp_int_align4(). */
-  if (cmp == mdbx_cmp_int_align2 && IS_BRANCH(mp))
-    cmp = mdbx_cmp_int_align4;
-
-  unsigned i = 0;
-  if (IS_LEAF2(mp)) {
+  int rc = 0, i = 0;
+  MDBX_cmp_func *cmp = mc->mc_dbx->md_cmp;
+  MDBX_val nodekey;
+  if (unlikely(IS_LEAF2(mp))) {
     mdbx_cassert(mc, mp->mp_leaf2_ksize == mc->mc_db->md_xsize);
     nodekey.iov_len = mp->mp_leaf2_ksize;
-    node = (MDBX_node *)(intptr_t)-1; /* fake */
-    while (low <= high) {
+    do {
       i = (low + high) >> 1;
       nodekey.iov_base = page_leaf2key(mp, i, nodekey.iov_len);
       mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
                            (char *)nodekey.iov_base + nodekey.iov_len);
       rc = cmp(key, &nodekey);
       mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY(&nodekey), rc);
-      if (rc == 0)
+      if (unlikely(rc == 0)) {
+        *exactp = 1;
         break;
-      if (rc > 0)
-        low = i + 1;
-      else
-        high = i - 1;
-    }
-  } else {
-    while (low <= high) {
-      i = (low + high) >> 1;
+      }
+      low = (rc < 0) ? low : i + 1;
+      high = (rc < 0) ? i - 1 : high;
+    } while (likely(low <= high));
 
-      node = page_node(mp, i);
-      nodekey.iov_len = node_ks(node);
-      nodekey.iov_base = node_key(node);
-      mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
-                           (char *)nodekey.iov_base + nodekey.iov_len);
+    /* Found entry is less than the key. */
+    /* Skip to get the smallest entry larger than key. */
+    i += rc > 0;
 
-      rc = cmp(key, &nodekey);
-      if (IS_LEAF(mp))
-        mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY(&nodekey), rc);
-      else
-        mdbx_debug("found branch index %u [%s -> %" PRIaPGNO "], rc = %i", i,
-                   DKEY(&nodekey), node_pgno(node), rc);
-      if (rc == 0)
-        break;
-      if (rc > 0)
-        low = i + 1;
-      else
-        high = i - 1;
-    }
+    /* store the key index */
+    mc->mc_ki[mc->mc_top] = (indx_t)i;
+    return (i < nkeys)
+               ? /* fake for LEAF2 */ (MDBX_node *)(intptr_t)-1
+               : /* There is no entry larger or equal to the key. */ NULL;
   }
 
-  if (rc > 0) /* Found entry is less than the key. */
-    i++;      /* Skip to get the smallest entry larger than key. */
+  if (cmp == mdbx_cmp_int_align2 && IS_BRANCH(mp))
+    /* Branch pages have no data, so if using integer keys,
+     * alignment is guaranteed. Use faster mdbx_cmp_int_align4(). */
+    cmp = mdbx_cmp_int_align4;
 
-  if (exactp)
-    *exactp = (rc == 0 && nkeys > 0);
+  MDBX_node *node;
+  do {
+    i = (low + high) >> 1;
+
+    node = page_node(mp, i);
+    nodekey.iov_len = node_ks(node);
+    nodekey.iov_base = node_key(node);
+    mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
+                         (char *)nodekey.iov_base + nodekey.iov_len);
+
+    rc = cmp(key, &nodekey);
+    if (IS_LEAF(mp))
+      mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY(&nodekey), rc);
+    else
+      mdbx_debug("found branch index %u [%s -> %" PRIaPGNO "], rc = %i", i,
+                 DKEY(&nodekey), node_pgno(node), rc);
+    if (unlikely(rc == 0)) {
+      *exactp = 1;
+      break;
+    }
+    low = (rc < 0) ? low : i + 1;
+    high = (rc < 0) ? i - 1 : high;
+  } while (likely(low <= high));
+
+  /* Found entry is less than the key. */
+  /* Skip to get the smallest entry larger than key. */
+  i += rc > 0;
+
   /* store the key index */
-  mdbx_cassert(mc, i <= UINT16_MAX);
   mc->mc_ki[mc->mc_top] = (indx_t)i;
-  if (i >= nkeys)
-    /* There is no entry larger or equal to the key. */
-    return NULL;
-
-  /* page_node is fake for LEAF2 */
-  return IS_LEAF2(mp) ? node : page_node(mp, i);
+  return (i < nkeys) ? page_node(mp, i)
+                     : /* There is no entry larger or equal to the key. */ NULL;
 }
 
 #if 0 /* unused for now */
@@ -10758,7 +10762,10 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   int rc;
   MDBX_page *mp;
   MDBX_node *node = NULL;
+  int stub_exactp;
   DKBUF;
+
+  exactp = exactp ? exactp : &stub_exactp;
 
   if ((mc->mc_db->md_flags & MDBX_INTEGERKEY) &&
       unlikely(key->iov_len != sizeof(uint32_t) &&
@@ -10792,8 +10799,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       /* Probably happens rarely, but first node on the page
        * was the one we wanted. */
       mc->mc_ki[mc->mc_top] = 0;
-      if (exactp)
-        *exactp = 1;
+      *exactp = 1;
       goto set1;
     }
     if (rc > 0) {
@@ -10811,8 +10817,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           /* last node was the one we wanted */
           mdbx_cassert(mc, nkeys >= 1 && nkeys <= UINT16_MAX + 1);
           mc->mc_ki[mc->mc_top] = (indx_t)(nkeys - 1);
-          if (exactp)
-            *exactp = 1;
+          *exactp = 1;
           goto set1;
         }
         if (rc < 0) {
@@ -10828,8 +10833,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             rc = mc->mc_dbx->md_cmp(key, &nodekey);
             if (rc == 0) {
               /* current node was the one we wanted */
-              if (exactp)
-                *exactp = 1;
+              *exactp = 1;
               goto set1;
             }
           }
@@ -10853,7 +10857,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (!mc->mc_top) {
       /* There are no other pages */
       mc->mc_ki[mc->mc_top] = 0;
-      if (op == MDBX_SET_RANGE && !exactp) {
+      if (op == MDBX_SET_RANGE && exactp == &stub_exactp) {
         rc = 0;
         goto set1;
       } else
@@ -10872,7 +10876,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
 set2:
   node = mdbx_node_search(mc, key, exactp);
-  if (exactp != NULL && !*exactp) {
+  if (exactp != &stub_exactp && !*exactp) {
     /* MDBX_SET specified and not an exact match. */
     return MDBX_NOTFOUND;
   }
