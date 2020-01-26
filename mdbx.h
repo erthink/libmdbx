@@ -1605,8 +1605,8 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
  *
  * [in] env    An environment handle returned by mdbx_env_create(). It must
  *             have already been opened successfully.
- * [in] dest   The directory in which the copy will reside. This directory
- *             must already exist and be writable but must otherwise be empty.
+ * [in] dest   The pathname of a file in which the copy will reside. This file
+ *             must not be already exist, but parent directory must be writable.
  * [in] flags  Special options for this operation. This parameter must be set
  *             to 0 or by bitwise OR'ing together one or more of the values
  *             described here:
