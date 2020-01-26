@@ -10116,6 +10116,10 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
   MDBX_page *p = NULL;
   int level;
   mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
+  const uint16_t illegal_bits = (txn->mt_flags & MDBX_RDONLY)
+                                    ? P_LOOSE | P_SUBP | P_META | P_DIRTY
+                                    : P_LOOSE | P_SUBP | P_META;
+  const uint64_t txnid = txn->mt_txnid;
   if (unlikely((txn->mt_flags & (MDBX_RDONLY | MDBX_WRITEMAP)) == 0)) {
     level = 1;
     do {
@@ -10144,21 +10148,18 @@ dirty:
     goto corrupted;
   }
 
-  if (unlikely((p->mp_flags & (P_LOOSE | P_SUBP | P_META | P_DIRTY)) != 0 ||
-               p->mp_txnid > mc->mc_txn->mt_txnid)) {
-    if (unlikely((mc->mc_txn->mt_flags & MDBX_RDONLY) != 0 ||
-                 (p->mp_flags & (P_LOOSE | P_SUBP | P_META | P_DIRTY)) !=
-                     P_DIRTY)) {
-      mdbx_error("invalid page's flags (0x%x) or txnid %" PRIaTXN
-                 " > (actual) %" PRIaTXN " (expected)",
-                 p->mp_flags, p->mp_txnid, mc->mc_txn->mt_txnid);
-      goto corrupted;
-    }
+  if (unlikely((p->mp_flags & illegal_bits) != 0 ||
+               p->mp_txnid > ((p->mp_flags & P_DIRTY) ? UINT64_MAX : txnid))) {
+    mdbx_error("invalid page's flags (0x%x) or txnid %" PRIaTXN
+               " > (actual) %" PRIaTXN " (expected)",
+               p->mp_flags, p->mp_txnid, mc->mc_txn->mt_txnid);
+    goto corrupted;
   }
 
-  if (unlikely(!IS_OVERFLOW(p) && (p->mp_upper < p->mp_lower ||
-                                   ((p->mp_lower | p->mp_upper) & 1) != 0 ||
-                                   PAGEHDRSZ + p->mp_upper > env->me_psize))) {
+  if (unlikely((p->mp_upper < p->mp_lower ||
+                ((p->mp_lower | p->mp_upper) & 1) != 0 ||
+                PAGEHDRSZ + p->mp_upper > env->me_psize) &&
+               !IS_OVERFLOW(p))) {
     mdbx_error("invalid page lower(%u)/upper(%u), pg-limit %u", p->mp_lower,
                p->mp_upper, page_space(env));
     goto corrupted;
@@ -10170,9 +10171,8 @@ dirty:
       return err;
   }
 
+  *(lvl ? lvl : &level) = level;
   *ret = p;
-  if (lvl)
-    *lvl = level;
   return MDBX_SUCCESS;
 
 corrupted:
