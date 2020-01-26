@@ -9979,8 +9979,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
   cmp = mc->mc_dbx->md_cmp;
 
   /* Branch pages have no data, so if using integer keys,
-   * alignment is guaranteed. Use faster mdbx_cmp_int_ai.
-   */
+   * alignment is guaranteed. Use faster mdbx_cmp_int_align4(). */
   if (cmp == mdbx_cmp_int_align2 && IS_BRANCH(mp))
     cmp = mdbx_cmp_int_align4;
 
@@ -11297,18 +11296,28 @@ int mdbx_cursor_put(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return MDBX_BAD_VALSIZE;
     }
 
-    if ((mc->mc_db->md_flags & MDBX_INTEGERKEY) &&
-        unlikely(key->iov_len != sizeof(uint32_t) &&
-                 key->iov_len != sizeof(uint64_t))) {
-      mdbx_cassert(mc, !"key-size is invalid for MDBX_INTEGERKEY");
-      return MDBX_BAD_VALSIZE;
+    if ((mc->mc_db->md_flags & MDBX_INTEGERKEY)) {
+      if (unlikely(key->iov_len != sizeof(uint32_t) &&
+                   key->iov_len != sizeof(uint64_t))) {
+        mdbx_cassert(mc, !"key-size is invalid for MDBX_INTEGERKEY");
+        return MDBX_BAD_VALSIZE;
+      }
+      if (unlikely(3 & (uintptr_t)key->iov_base)) {
+        mdbx_cassert(mc, !"key-alignment is invalid for MDBX_INTEGERKEY");
+        return MDBX_BAD_VALSIZE;
+      }
     }
 
-    if ((mc->mc_db->md_flags & MDBX_INTEGERDUP) &&
-        unlikely(data->iov_len != sizeof(uint32_t) &&
-                 data->iov_len != sizeof(uint64_t))) {
-      mdbx_cassert(mc, !"data-size is invalid MDBX_INTEGERDUP");
-      return MDBX_BAD_VALSIZE;
+    if ((mc->mc_db->md_flags & MDBX_INTEGERDUP)) {
+      if (unlikely(data->iov_len != sizeof(uint32_t) &&
+                   data->iov_len != sizeof(uint64_t))) {
+        mdbx_cassert(mc, !"data-size is invalid for MDBX_INTEGERDUP");
+        return MDBX_BAD_VALSIZE;
+      }
+      if (unlikely(3 & (uintptr_t)data->iov_base)) {
+        mdbx_cassert(mc, !"data-alignment is invalid for MDBX_INTEGERDUP");
+        return MDBX_BAD_VALSIZE;
+      }
     }
   }
 

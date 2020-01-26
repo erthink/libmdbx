@@ -1285,17 +1285,26 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 /**** DATABASE FLAGS **********************************************************/
 /* Use reverse string keys */
 #define MDBX_REVERSEKEY 0x02u
+
 /* Use sorted duplicates */
 #define MDBX_DUPSORT 0x04u
+
 /* Numeric keys in native byte order, either uint32_t or uint64_t.
- * The keys must all be of the same size. */
+ * The keys must all be of the same size and must be aligned while passing as
+ * arguments. */
 #define MDBX_INTEGERKEY 0x08u
+
 /* With MDBX_DUPSORT, sorted dup items have fixed size */
 #define MDBX_DUPFIXED 0x10u
-/* With MDBX_DUPSORT, dups are MDBX_INTEGERKEY-style integers */
+
+/* With MDBX_DUPSORT, dups are MDBX_INTEGERKEY-style integers.
+ * The data values must all be of the same size and must be aligned while
+ * passing as arguments. */
 #define MDBX_INTEGERDUP 0x20u
+
 /* With MDBX_DUPSORT, use reverse string dups */
 #define MDBX_REVERSEDUP 0x40u
+
 /* Create DB if not already existing */
 #define MDBX_CREATE 0x40000u
 
@@ -1375,51 +1384,73 @@ typedef enum MDBX_cursor_op {
 
 /* key/data pair already exists */
 #define MDBX_KEYEXIST (-30799)
+
 /* key/data pair not found (EOF) */
 #define MDBX_NOTFOUND (-30798)
+
 /* Requested page not found - this usually indicates corruption */
 #define MDBX_PAGE_NOTFOUND (-30797)
+
 /* Database is corrupted (page was wrong type and so on) */
 #define MDBX_CORRUPTED (-30796)
+
 /* Environment had fatal error (i.e. update of meta page failed and so on) */
 #define MDBX_PANIC (-30795)
+
 /* DB file version mismatch with libmdbx */
 #define MDBX_VERSION_MISMATCH (-30794)
+
 /* File is not a valid MDBX file */
 #define MDBX_INVALID (-30793)
+
 /* Environment mapsize reached */
 #define MDBX_MAP_FULL (-30792)
+
 /* Environment maxdbs reached */
 #define MDBX_DBS_FULL (-30791)
+
 /* Environment maxreaders reached */
 #define MDBX_READERS_FULL (-30790)
+
 /* Txn has too many dirty pages */
 #define MDBX_TXN_FULL (-30788)
+
 /* Cursor stack too deep - internal error */
 #define MDBX_CURSOR_FULL (-30787)
+
 /* Page has not enough space - internal error */
 #define MDBX_PAGE_FULL (-30786)
+
 /* Database contents grew beyond environment mapsize */
 #define MDBX_MAP_RESIZED (-30785)
+
 /* Operation and DB incompatible, or DB type changed. This can mean:
  *  - The operation expects an MDBX_DUPSORT / MDBX_DUPFIXED database.
  *  - Opening a named DB when the unnamed DB has MDBX_DUPSORT/MDBX_INTEGERKEY.
  *  - Accessing a data record as a database, or vice versa.
  *  - The database was dropped and recreated with different flags. */
 #define MDBX_INCOMPATIBLE (-30784)
+
 /* Invalid reuse of reader locktable slot */
 #define MDBX_BAD_RSLOT (-30783)
+
 /* Transaction must abort, has a child, or is invalid */
 #define MDBX_BAD_TXN (-30782)
-/* Unsupported size of key/DB name/data, or wrong DUPFIXED size */
+
+/* Unsupported size of key/DB name/data, or wrong DUPFIXED size,
+ * or wrong aligment */
 #define MDBX_BAD_VALSIZE (-30781)
+
 /* The specified DBI was changed unexpectedly */
 #define MDBX_BAD_DBI (-30780)
+
 /* Unexpected problem - txn should abort */
 #define MDBX_PROBLEM (-30779)
+
 /* Another write transaction is running or environment is already used while
  * opening with MDBX_EXCLUSIVE flag */
 #define MDBX_BUSY (-30778)
+
 /* The last defined error code */
 #define MDBX_LAST_ERRCODE MDBX_BUSY
 
@@ -2487,7 +2518,7 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  *  - MDBX_INTEGERKEY
  *      Keys are binary integers in native byte order, either uin32_t or
  *      uint64_t, and will be sorted as such. The keys must all be of the
- *      same size.
+ *      same size and must be aligned while passing as arguments.
  *  - MDBX_DUPFIXED
  *      This flag may only be used in combination with MDBX_DUPSORT. This
  *      option tells the library that the data items for this database are
@@ -2497,7 +2528,8 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  *      to retrieve multiple items at once.
  *  - MDBX_INTEGERDUP
  *      This option specifies that duplicate data items are binary integers,
- *      similar to MDBX_INTEGERKEY keys.
+ *      similar to MDBX_INTEGERKEY keys. The data values must all be of the
+ *      same size and must be aligned while passing as arguments.
  *  - MDBX_REVERSEDUP
  *      This option specifies that duplicate data items should be compared as
  *      strings in reverse order (the comparison is performed in the direction
