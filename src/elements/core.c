@@ -15818,7 +15818,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
                      MDBX_cmp_func *datacmp) {
   if (unlikely(!dbi || (user_flags & ~VALID_FLAGS) != 0))
     return MDBX_EINVAL;
-  *dbi = (MDBX_dbi)-1;
+  *dbi = 0;
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
