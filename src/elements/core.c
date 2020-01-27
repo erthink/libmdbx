@@ -17808,14 +17808,14 @@ static __inline int clz64(uint64_t value) {
   unsigned long index;
 #if defined(_M_AMD64) || defined(_M_ARM64) || defined(_M_X64)
   _BitScanReverse64(&index, value);
-  return index;
+  return 63 - index;
 #else
   if (value > UINT32_MAX) {
     _BitScanReverse(&index, (uint32_t)(value >> 32));
-    return index;
+    return 31 - index;
   }
   _BitScanReverse(&index, (uint32_t)value);
-  return index + 32;
+  return 63 - index;
 #endif
 #endif /* MSVC */
 
