@@ -751,7 +751,9 @@ static __always_inline bool atomic_cas64(volatile uint64_t *p, uint64_t c,
                                          uint64_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_LLONG_LOCK_FREE)
   STATIC_ASSERT(sizeof(long long) >= sizeof(uint64_t));
+#ifndef __COVERITY__
   STATIC_ASSERT(atomic_is_lock_free(p));
+#endif /* Workaround for Coverity */
   return atomic_compare_exchange_strong((_Atomic uint64_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(p, c, v);
@@ -770,7 +772,9 @@ static __always_inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
                                          uint32_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_INT_LOCK_FREE)
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
+#ifndef __COVERITY__
   STATIC_ASSERT(atomic_is_lock_free(p));
+#endif /* Workaround for Coverity */
   return atomic_compare_exchange_strong((_Atomic uint32_t *)p, &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(p, c, v);
@@ -787,7 +791,9 @@ static __always_inline bool atomic_cas32(volatile uint32_t *p, uint32_t c,
 static __always_inline uint32_t atomic_add32(volatile uint32_t *p, uint32_t v) {
 #if defined(ATOMIC_VAR_INIT) || defined(ATOMIC_INT_LOCK_FREE)
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
+#ifndef __COVERITY__
   STATIC_ASSERT(atomic_is_lock_free(p));
+#endif /* Workaround for Coverity */
   return atomic_fetch_add((_Atomic uint32_t *)p, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(p, v);

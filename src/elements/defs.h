@@ -309,17 +309,6 @@
 #   endif
 #endif /* unlikely */
 
-/* Workaround for Coverity Scan */
-#if defined(__COVERITY__) && __GNUC_PREREQ(7, 0) && !defined(__cplusplus)
-typedef float _Float32;
-typedef double _Float32x;
-typedef double _Float64;
-typedef long double _Float64x;
-typedef float _Float128 __attribute__((__mode__(__TF__)));
-typedef __complex__ float __cfloat128 __attribute__ ((__mode__ (__TC__)));
-typedef _Complex float __cfloat128 __attribute__ ((__mode__ (__TC__)));
-#endif /* Workaround for Coverity Scan */
-
 #ifndef __printf_args
 #   if defined(__GNUC__) || __has_attribute(__format__)
 #       define __printf_args(format_index, first_arg)                          \
