@@ -2488,8 +2488,10 @@ static int lcklist_detach_locked(MDBX_env *env) {
       }                                                                        \
     }                                                                          \
                                                                                \
-    for (TYPE *scan = begin + 1; scan < end; ++scan)                           \
-      assert(CMP(scan[-1], scan[0]));                                          \
+    if (mdbx_audit_enabled()) {                                                \
+      for (TYPE *scan = begin + 1; scan < end; ++scan)                         \
+        assert(CMP(scan[-1], scan[0]));                                        \
+    }                                                                          \
   }
 
 /*------------------------------------------------------------------------------
@@ -2528,11 +2530,13 @@ static int lcklist_detach_locked(MDBX_env *env) {
         ++first;                                                               \
     }                                                                          \
                                                                                \
-    for (TYPE_LIST *scan = begin; scan < first; ++scan)                        \
-      assert(CMP(*scan, item));                                                \
-    for (TYPE_LIST *scan = first; scan < end; ++scan)                          \
-      assert(!CMP(*scan, item));                                               \
-    (void)begin, (void)end;                                                    \
+    if (mdbx_audit_enabled()) {                                                \
+      for (TYPE_LIST *scan = begin; scan < first; ++scan)                      \
+        assert(CMP(*scan, item));                                              \
+      for (TYPE_LIST *scan = first; scan < end; ++scan)                        \
+        assert(!CMP(*scan, item));                                             \
+      (void)begin, (void)end;                                                  \
+    }                                                                          \
                                                                                \
     return first;                                                              \
   }
