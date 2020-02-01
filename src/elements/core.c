@@ -5820,6 +5820,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 
   mdbx_assert(env, (flags & ~(MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS |
                               MDBX_WRITEMAP)) == 0);
+  const size_t tid = mdbx_thread_self();
   if (flags & MDBX_RDONLY) {
     txn->mt_flags =
         MDBX_RDONLY | (env->me_flags & (MDBX_NOTLS | MDBX_WRITEMAP));
@@ -5842,7 +5843,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         return MDBX_BAD_RSLOT;
     } else if (env->me_lck) {
       unsigned slot, nreaders;
-      const size_t tid = mdbx_thread_self();
       mdbx_assert(env, env->me_lck->mti_magic_and_version == MDBX_LOCK_MAGIC);
       mdbx_assert(env, env->me_lck->mti_os_and_format == MDBX_LOCK_FORMAT);
 
@@ -5896,7 +5896,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       safe64_reset(&r->mr_txnid, true);
       if (slot == nreaders)
         env->me_lck->mti_numreaders = ++nreaders;
-      r->mr_tid = tid;
+      r->mr_tid = (env->me_flags & MDBX_NOTLS) ? 0 : tid;
       r->mr_pid = env->me_pid;
       mdbx_rdt_unlock(env);
 
@@ -5918,7 +5918,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         safe64_write(&r->mr_txnid, snap);
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid == mdbx_getpid());
-        mdbx_assert(env, r->mr_tid == mdbx_thread_self());
+        mdbx_assert(
+            env, r->mr_tid ==
+                     ((env->me_flags & MDBX_NOTLS) ? 0 : mdbx_thread_self()));
         mdbx_assert(env, r->mr_txnid.inconsistent == snap);
         mdbx_compiler_barrier();
         env->me_lck->mti_readers_refresh_flag = true;
@@ -6053,7 +6055,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     mdbx_txn_valgrind(env, txn);
 #endif
-    txn->mt_owner = mdbx_thread_self();
+    txn->mt_owner = tid;
     return MDBX_SUCCESS;
   }
 bailout:
