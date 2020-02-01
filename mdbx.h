@@ -1447,12 +1447,12 @@ typedef enum MDBX_cursor_op {
 /* Unexpected problem - txn should abort */
 #define MDBX_PROBLEM (-30779)
 
+/* The last LMDB-compatible defined error code */
+#define MDBX_LAST_LMDB_ERRCODE MDBX_PROBLEM
+
 /* Another write transaction is running or environment is already used while
  * opening with MDBX_EXCLUSIVE flag */
 #define MDBX_BUSY (-30778)
-
-/* The last defined error code */
-#define MDBX_LAST_ERRCODE MDBX_BUSY
 
 /* The mdbx_put() or mdbx_replace() was called for key,
  * that has more that one associated value. */

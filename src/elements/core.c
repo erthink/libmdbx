@@ -3205,7 +3205,7 @@ static const char *__mdbx_strerr(int errnum) {
       "environment is already used while opening with MDBX_EXCLUSIVE flag",
   };
 
-  if (errnum >= MDBX_KEYEXIST && errnum <= MDBX_LAST_ERRCODE) {
+  if (errnum >= MDBX_KEYEXIST && errnum <= MDBX_LAST_LMDB_ERRCODE) {
     int i = errnum - MDBX_KEYEXIST;
     return tbl[i];
   }
