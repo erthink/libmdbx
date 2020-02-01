@@ -142,33 +142,33 @@
 #endif /* __maybe_unused */
 
 #if !defined(__noop) && !defined(_MSC_VER)
-#		define __noop(...) do {} while(0)
+#   define __noop(...) do {} while(0)
 #endif /* __noop */
 
 #ifndef __fallthrough
-#	if __GNUC_PREREQ(7, 0) || __has_attribute(__fallthrough__)
-#		define __fallthrough __attribute__((__fallthrough__))
-#	else
-#		define __fallthrough __noop()
-#	endif
+#   if __GNUC_PREREQ(7, 0) || __has_attribute(__fallthrough__)
+#       define __fallthrough __attribute__((__fallthrough__))
+#   else
+#       define __fallthrough __noop()
+#   endif
 #endif /* __fallthrough */
 
 #ifndef __unreachable
-#	if __GNUC_PREREQ(4,5) || __has_builtin(__builtin_unreachable)
-#		define __unreachable() __builtin_unreachable()
-#	elif defined(_MSC_VER)
-#		define __unreachable() __assume(0)
-#	else
-#		define __unreachable() __noop()
-#	endif
+#   if __GNUC_PREREQ(4,5) || __has_builtin(__builtin_unreachable)
+#       define __unreachable() __builtin_unreachable()
+#   elif defined(_MSC_VER)
+#       define __unreachable() __assume(0)
+#   else
+#       define __unreachable() __noop()
+#   endif
 #endif /* __unreachable */
 
 #ifndef __prefetch
-#	if defined(__GNUC__) || defined(__clang__)
-#		define __prefetch(ptr) __builtin_prefetch(ptr)
-#	else
-#		define __prefetch(ptr) __noop(ptr)
-#	endif
+#   if defined(__GNUC__) || defined(__clang__)
+#       define __prefetch(ptr) __builtin_prefetch(ptr)
+#   else
+#       define __prefetch(ptr) __noop(ptr)
+#   endif
 #endif /* __prefetch */
 
 #ifndef __noreturn

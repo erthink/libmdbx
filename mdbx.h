@@ -310,7 +310,7 @@
  *    in addition to those listed for some functions.
  *
  *  - Troubleshooting the LCK-file.
- *	    1. A broken LCK-file can cause sync issues, including appearance of
+ *      1. A broken LCK-file can cause sync issues, including appearance of
  *         wrong/inconsistent data for readers. When database opened in the
  *         cooperative read-write mode the LCK-file requires to be mapped to
  *         memory in read-write access. In this case it is always possible for
@@ -327,14 +327,14 @@
  *         Workaround: Just make all programs using the database close it;
  *                     the LCK-file is always reset on first open.
  *
- *	    2. Stale reader transactions left behind by an aborted program cause
+ *      2. Stale reader transactions left behind by an aborted program cause
  *         further writes to grow the database quickly, and stale locks can
  *         block further operation.
  *         MDBX checks for stale readers while opening environment and before
  *         growth the database. But in some cases, this may not be enough.
  *
  *         Workaround: Check for stale readers periodically, using the
- *	                   mdbx_reader_check() function or the mdbx_stat tool.
+ *                     mdbx_reader_check() function or the mdbx_stat tool.
  *
  *      3. Stale writers will be cleared automatically by MDBX on supprted
  *         platforms. But this is platform-specific, especially of
@@ -379,7 +379,7 @@
  *    The "next" version of libmdbx (MithrilDB) will solve this issue.
  *
  *  - A thread can only use one transaction at a time, plus any nested
- *	  read-write transactions in the non-writemap mode. Each transaction
+ *    read-write transactions in the non-writemap mode. Each transaction
  *    belongs to one thread. The MDBX_NOTLS flag changes this for read-only
  *    transactions. See below.
  *
@@ -451,7 +451,7 @@
  *    above.
  *
  *  - An MDBX database configuration will often reserve considerable unused
- *	  memory address space and maybe file size for future growth. This does
+ *    memory address space and maybe file size for future growth. This does
  *    not use actual memory or disk space, but users may need to understand
  *    the difference so they won't be scared off.
  *
@@ -3434,7 +3434,7 @@ typedef uint_fast64_t mdbx_attr_t;
  * [in] flags   Options for this operation. This parameter must be set to 0
  *              or one of the values described here:
  *
- *	- MDBX_CURRENT
+ *  - MDBX_CURRENT
  *      Replace the item at the current cursor position. The key parameter
  *      must still be provided, and must match it, otherwise the function
  *      return MDBX_EKEYMISMATCH.
@@ -3516,8 +3516,8 @@ LIBMDBX_API int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *	 - MDBX_NOTFOUND   = the key-value pair was not in the database.
- *	 - MDBX_EINVAL     = an invalid parameter was specified. */
+ *  - MDBX_NOTFOUND   = the key-value pair was not in the database.
+ *  - MDBX_EINVAL     = an invalid parameter was specified. */
 LIBMDBX_API int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                               MDBX_val *data, mdbx_attr_t attr);
 
