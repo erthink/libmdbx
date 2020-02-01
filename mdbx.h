@@ -1479,6 +1479,9 @@ typedef enum MDBX_cursor_op {
  * e.g. a transaction that started by another thread. */
 #define MDBX_THREAD_MISMATCH (-30416)
 
+/* Overlapping read and write transactions for the same thread */
+#define MDBX_TXN_OVERLAPPING (-30415)
+
 /**** FUNCTIONS & RELATED STRUCTURES ******************************************/
 
 /* Return a string describing a given error code.

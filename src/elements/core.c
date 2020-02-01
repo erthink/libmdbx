@@ -3229,6 +3229,9 @@ static const char *__mdbx_strerr(int errnum) {
   case MDBX_THREAD_MISMATCH:
     return "MDBX_THREAD_MISMATCH: A thread has attempted to use a not "
            "owned object, e.g. a transaction that started by another thread";
+  case MDBX_TXN_OVERLAPPING:
+    return "MDBX_TXN_OVERLAPPING: Overlapping read and write transactions for "
+           "the same thread";
   default:
     return NULL;
   }
@@ -5957,6 +5960,21 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
                          /* paranoia is appropriate here */ *env->me_oldest);
     txn->mt_numdbs = env->me_numdbs;
   } else {
+    if (unlikely(txn->mt_owner == tid))
+      return MDBX_BUSY;
+    MDBX_lockinfo *const lck = env->me_lck;
+    if (lck && (env->me_flags & MDBX_NOTLS) == 0) {
+      const unsigned snap_nreaders = lck->mti_numreaders;
+      for (unsigned i = 0; i < snap_nreaders; ++i) {
+        if (lck->mti_readers[i].mr_pid == env->me_pid &&
+            unlikely(lck->mti_readers[i].mr_tid == tid)) {
+          const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
+          if (txnid >= MIN_TXNID && txnid < SAFE64_INVALID_THRESHOLD)
+            return MDBX_TXN_OVERLAPPING;
+        }
+      }
+    }
+
     /* Not yet touching txn == env->me_txn0, it may be active */
     mdbx_jitter4testing(false);
     rc = mdbx_txn_lock(env, F_ISSET(flags, MDBX_TRYTXN));
@@ -6187,15 +6205,13 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     size += tsize = sizeof(MDBX_txn);
   } else if (flags & MDBX_RDONLY) {
     if (env->me_txn0 && unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
-      return MDBX_BUSY;
+      return MDBX_TXN_OVERLAPPING;
     size = env->me_maxdbs * (sizeof(MDBX_db) + 1);
     size += tsize = sizeof(MDBX_txn);
   } else {
     /* Reuse preallocated write txn. However, do not touch it until
      * mdbx_txn_renew0() succeeds, since it currently may be active. */
     txn = env->me_txn0;
-    if (unlikely(txn->mt_owner == mdbx_thread_self()))
-      return MDBX_BUSY;
     goto renew;
   }
   if (unlikely((txn = mdbx_malloc(size)) == NULL)) {
