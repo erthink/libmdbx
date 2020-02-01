@@ -1412,7 +1412,7 @@ typedef enum MDBX_cursor_op {
 /* Environment maxreaders reached */
 #define MDBX_READERS_FULL (-30790)
 
-/* Txn has too many dirty pages */
+/* Transaction has too many dirty pages, i.e transaction too big */
 #define MDBX_TXN_FULL (-30788)
 
 /* Cursor stack too deep - internal error */
@@ -1421,30 +1421,35 @@ typedef enum MDBX_cursor_op {
 /* Page has not enough space - internal error */
 #define MDBX_PAGE_FULL (-30786)
 
-/* Database contents grew beyond environment mapsize */
+/* Database contents grew beyond environment mapsize and engine was
+ * unable to extend mapping, e.g. since address space is unavailable or busy */
 #define MDBX_MAP_RESIZED (-30785)
 
-/* Operation and DB incompatible, or DB type changed. This can mean:
+/* Environment or database is not compatible with the requested operation
+ * or the specified flags. This can mean:
  *  - The operation expects an MDBX_DUPSORT / MDBX_DUPFIXED database.
  *  - Opening a named DB when the unnamed DB has MDBX_DUPSORT/MDBX_INTEGERKEY.
  *  - Accessing a data record as a database, or vice versa.
  *  - The database was dropped and recreated with different flags. */
 #define MDBX_INCOMPATIBLE (-30784)
 
-/* Invalid reuse of reader locktable slot */
+/* Invalid reuse of reader locktable slot,
+ * e.g. read-transaction already run for current thread */
 #define MDBX_BAD_RSLOT (-30783)
 
-/* Transaction must abort, has a child, or is invalid */
+/* Transaction is not valid for requested operation,
+ * e.g. had errored and be must aborted, has a child, or is invalid */
 #define MDBX_BAD_TXN (-30782)
 
-/* Unsupported size of key/DB name/data, or wrong DUPFIXED size,
- * or wrong aligment */
+/* Invalid size or alignment of key or data for target database,
+ * either invalid subDB name */
 #define MDBX_BAD_VALSIZE (-30781)
 
-/* The specified DBI was changed unexpectedly */
+/* The specified DBI-handle is invalid
+ * or changed by another thread/transaction */
 #define MDBX_BAD_DBI (-30780)
 
-/* Unexpected problem - txn should abort */
+/* Unexpected internal error, transaction should be aborted */
 #define MDBX_PROBLEM (-30779)
 
 /* The last LMDB-compatible defined error code */
@@ -1454,8 +1459,7 @@ typedef enum MDBX_cursor_op {
  * opening with MDBX_EXCLUSIVE flag */
 #define MDBX_BUSY (-30778)
 
-/* The mdbx_put() or mdbx_replace() was called for key,
- * that has more that one associated value. */
+/* The specified key has more than one associated value */
 #define MDBX_EMULTIVAL (-30421)
 
 /* Bad signature of a runtime object(s), this can mean:
@@ -1463,8 +1467,8 @@ typedef enum MDBX_cursor_op {
  *  - ABI version mismatch (rare case); */
 #define MDBX_EBADSIGN (-30420)
 
-/* Database should be recovered, but this could NOT be done automatically
- * right now (e.g. in readonly mode and so forth). */
+/* Database should be recovered, but this could NOT be done for now
+ * since it opened in read-only mode */
 #define MDBX_WANNA_RECOVERY (-30419)
 
 /* The given key value is mismatched to the current cursor position,
@@ -1479,7 +1483,7 @@ typedef enum MDBX_cursor_op {
  * e.g. a transaction that started by another thread. */
 #define MDBX_THREAD_MISMATCH (-30416)
 
-/* Overlapping read and write transactions for the same thread */
+/* Overlapping read and write transactions for the current thread */
 #define MDBX_TXN_OVERLAPPING (-30415)
 
 /**** FUNCTIONS & RELATED STRUCTURES ******************************************/

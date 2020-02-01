@@ -3186,23 +3186,29 @@ static const char *__mdbx_strerr(int errnum) {
       "MDBX_VERSION_MISMATCH: DB version mismatch libmdbx",
       "MDBX_INVALID: File is not an MDBX file",
       "MDBX_MAP_FULL: Environment mapsize limit reached",
-      "MDBX_DBS_FULL: Too may DBI (maxdbs reached)",
+      "MDBX_DBS_FULL: Too may DBI-handles (maxdbs reached)",
       "MDBX_READERS_FULL: Too many readers (maxreaders reached)",
       NULL /* MDBX_TLS_FULL (-30789): unused in MDBX */,
-      "MDBX_TXN_FULL: Transaction has too many dirty pages, "
-      "i.e transaction too big",
-      "MDBX_CURSOR_FULL: Internal error - cursor stack limit reached",
-      "MDBX_PAGE_FULL: Internal error - page has no more space",
-      "MDBX_MAP_RESIZED: Database contents grew beyond environment mapsize",
-      "MDBX_INCOMPATIBLE: Operation and DB incompatible, or DB flags changed",
-      "MDBX_BAD_RSLOT: Invalid reuse of reader locktable slot",
-      "MDBX_BAD_TXN: Transaction must abort, has a child, or is invalid",
-      "MDBX_BAD_VALSIZE: Unsupported size of key/DB name/data, or wrong "
-      "DUPFIXED size",
-      "MDBX_BAD_DBI: The specified DBI handle was closed/changed unexpectedly",
-      "MDBX_PROBLEM: Unexpected problem - txn should abort",
-      "MDBX_BUSY: Another write transaction is running or "
-      "environment is already used while opening with MDBX_EXCLUSIVE flag",
+      "MDBX_TXN_FULL: Transaction has too many dirty pages,"
+      " i.e transaction too big",
+      "MDBX_CURSOR_FULL: Internal error - Cursor stack limit reached",
+      "MDBX_PAGE_FULL: Internal error - Page has no more space",
+      "MDBX_MAP_RESIZED: Database contents grew beyond environment mapsize"
+      " and engine was unable to extend mapping,"
+      " e.g. since address space is unavailable or busy",
+      "MDBX_INCOMPATIBLE: Environment or database is not compatible"
+      " with the requested operation or the specified flags",
+      "MDBX_BAD_RSLOT: Invalid reuse of reader locktable slot,"
+      " e.g. read-transaction already run for current thread",
+      "MDBX_BAD_TXN: Transaction is not valid for requested operation,"
+      " e.g. had errored and be must aborted, has a child, or is invalid",
+      "MDBX_BAD_VALSIZE: Invalid size or alignment of key or data"
+      " for target database, either invalid subDB name",
+      "MDBX_BAD_DBI: The specified DBI-handle is invalid"
+      " or changed by another thread/transaction",
+      "MDBX_PROBLEM: Unexpected internal error, transaction should be aborted",
+      "MDBX_BUSY: Another write transaction is running,"
+      " or environment is already used while opening with MDBX_EXCLUSIVE flag",
   };
 
   if (errnum >= MDBX_KEYEXIST && errnum <= MDBX_LAST_LMDB_ERRCODE) {
@@ -3214,24 +3220,27 @@ static const char *__mdbx_strerr(int errnum) {
   case MDBX_SUCCESS:
     return "MDBX_SUCCESS: Successful";
   case MDBX_EMULTIVAL:
-    return "MDBX_EMULTIVAL: Unable to update multi-value for the given key";
+    return "MDBX_EMULTIVAL: The specified key has"
+           " more than one associated value";
   case MDBX_EBADSIGN:
-    return "MDBX_EBADSIGN: Wrong signature of a runtime object(s)";
+    return "MDBX_EBADSIGN: Wrong signature of a runtime object(s),"
+           " e.g. memory corruption or double-free";
   case MDBX_WANNA_RECOVERY:
-    return "MDBX_WANNA_RECOVERY: Database should be recovered, but this could "
-           "NOT be done in a read-only mode";
+    return "MDBX_WANNA_RECOVERY: Database should be recovered,"
+           " but this could NOT be done automatically for now"
+           " since it opened in read-only mode";
   case MDBX_EKEYMISMATCH:
-    return "MDBX_EKEYMISMATCH: The given key value is mismatched to the "
-           "current cursor position";
+    return "MDBX_EKEYMISMATCH: The given key value is mismatched to the"
+           " current cursor position";
   case MDBX_TOO_LARGE:
-    return "MDBX_TOO_LARGE: Database is too large for current system, "
-           "e.g. could NOT be mapped into RAM";
+    return "MDBX_TOO_LARGE: Database is too large for current system,"
+           " e.g. could NOT be mapped into RAM";
   case MDBX_THREAD_MISMATCH:
-    return "MDBX_THREAD_MISMATCH: A thread has attempted to use a not "
-           "owned object, e.g. a transaction that started by another thread";
+    return "MDBX_THREAD_MISMATCH: A thread has attempted to use a not"
+           " owned object, e.g. a transaction that started by another thread";
   case MDBX_TXN_OVERLAPPING:
-    return "MDBX_TXN_OVERLAPPING: Overlapping read and write transactions for "
-           "the same thread";
+    return "MDBX_TXN_OVERLAPPING: Overlapping read and write transactions for"
+           " the current thread";
   default:
     return NULL;
   }
@@ -5950,7 +5959,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     if (unlikely(txn->mt_txnid == 0 ||
                  txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
       mdbx_error("%s", "environment corrupted by died writer, must shutdown!");
-      rc = MDBX_WANNA_RECOVERY;
+      rc = MDBX_CORRUPTED;
       goto bailout;
     }
     mdbx_assert(env, txn->mt_txnid >= *env->me_oldest);
@@ -9360,7 +9369,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
   if (meta_clash_mask) {
     mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
-    return MDBX_WANNA_RECOVERY;
+    return MDBX_CORRUPTED;
   }
 
   while (1) {
