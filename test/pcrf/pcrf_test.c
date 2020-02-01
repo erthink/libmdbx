@@ -336,20 +336,22 @@ static void periodic_stat(void) {
   prev_del_time = mdbx_del_time;
 }
 
-// static void periodic_add_rec() {
-//	for (int i = 0; i < 10240; i++) {
-//		if (ids_count <= REC_COUNT) {
-//			int64_t id = obj_id++;
-//			create_record(id);
-//			add_id_to_pool(id);
-//		}
-//		if (ids_count > REC_COUNT) {
-//			int64_t id = get_id_from_pool();
-//			delete_record(id);
-//		}
-//	}
-//	periodic_stat();
-//}
+#if 0 /* unused */
+static void periodic_add_rec() {
+  for (int i = 0; i < 10240; i++) {
+    if (ids_count <= REC_COUNT) {
+      int64_t id = obj_id++;
+      create_record(id);
+      add_id_to_pool(id);
+    }
+    if (ids_count > REC_COUNT) {
+      int64_t id = get_id_from_pool();
+      delete_record(id);
+    }
+  }
+  periodic_stat();
+}
+#endif
 
 int main(int argc, char **argv) {
   (void)argc;
@@ -358,14 +360,12 @@ int main(int argc, char **argv) {
   char filename[PATH_MAX];
   int i;
 
-  mkdir(opt_db_path, 0775);
-
   strcpy(filename, opt_db_path);
-  strcat(filename, "/mdbx.dat");
+  strcat(filename, MDBX_DATANAME);
   remove(filename);
 
   strcpy(filename, opt_db_path);
-  strcat(filename, "/mdbx.lck");
+  strcat(filename, MDBX_LOCKNAME);
   remove(filename);
 
   puts("Open DB...");
@@ -394,14 +394,14 @@ int main(int argc, char **argv) {
       id = get_id_from_pool();
       delete_record(id);
     }
-    //    for (i = 0; i < 50; i++) {
-    //      int64_t id = obj_id++;
-    //      create_record(id);
-    //      add_id_to_pool(id);
-    //    }
-    //    int64_t id = obj_id++;
-    //    create_record(id);
-    //    add_id_to_pool(id);
+    for (i = 0; i < 50; i++) {
+      int64_t id = obj_id++;
+      create_record(id);
+      add_id_to_pool(id);
+    }
+    int64_t id = obj_id++;
+    create_record(id);
+    add_id_to_pool(id);
     int64_t now = getClockUs();
     if ((now - t) > 10000000L) {
       periodic_stat();
