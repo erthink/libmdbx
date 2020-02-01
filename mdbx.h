@@ -201,6 +201,14 @@
  *    necessary) in a child process would be both extreme complicated and so
  *    fragile.
  *
+ * Do not start more than one transaction for a one thread. If you think about
+ * this, it's really strange to do something with two data snapshots at once,
+ * which may be different. MDBX checks and preventing this by returning
+ * corresponding error code (MDBX_TXN_OVERLAPPING, MDBX_BAD_RSLOT, MDBX_BUSY)
+ * unless you using MDBX_NOTLS option on the environment. Nonetheless, with the
+ * MDBX_NOTLS option, you must know exactly what you are doing, otherwise you
+ * will get deadlocks or reading an alien data.
+ *
  * Also note that a transaction is tied to one thread by default using Thread
  * Local Storage. If you want to pass read-only transactions across threads,
  * you can use the MDBX_NOTLS option on the environment. Nevertheless, a write
@@ -382,6 +390,14 @@
  *    read-write transactions in the non-writemap mode. Each transaction
  *    belongs to one thread. The MDBX_NOTLS flag changes this for read-only
  *    transactions. See below.
+ *
+ *    Do not start more than one transaction for a one thread. If you think
+ *    about this, it's really strange to do something with two data snapshots
+ *    at once, which may be different. MDBX checks and preventing this by
+ *    returning corresponding error code (MDBX_TXN_OVERLAPPING, MDBX_BAD_RSLOT,
+ *    MDBX_BUSY) unless you using MDBX_NOTLS option on the environment.
+ *    Nonetheless, with the MDBX_NOTLS option, you must know exactly what you
+ *    are doing, otherwise you will get deadlocks or reading an alien data.
  *
  *  - Do not have open an MDBX database twice in the same process at the same
  *    time. By default MDBX prevent this in most cases by tracking databases
