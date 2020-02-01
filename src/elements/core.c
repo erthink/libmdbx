@@ -9362,10 +9362,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
-  /* NOTE: AddressSanitizer (at least GCC 7.x, 8.x) could generate
-   *       false-positive alarm here. I have no other explanation for this
-   *       except due to an internal ASAN error, as the problem is reproduced
-   *       in a single-threaded application under the active assert() above. */
   const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
   if (meta_clash_mask) {
     mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
