@@ -40,16 +40,6 @@
 /*------------------------------------------------------------------------------
  * Internal inlines */
 
-static __pure_function __always_inline bool is_powerof2(size_t x) {
-  return (x & (x - 1)) == 0;
-}
-
-static __pure_function __always_inline size_t
-roundup_powerof2(size_t value, size_t granularity) {
-  assert(is_powerof2(granularity));
-  return (value + granularity - 1) & ~(granularity - 1);
-}
-
 static __pure_function unsigned log2n(size_t value) {
   assert(value > 0 && value < INT32_MAX && is_powerof2(value));
   assert((value & -(int32_t)value) == value);

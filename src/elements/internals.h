@@ -1318,3 +1318,14 @@ static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
   (void)tiny;
 #endif
 }
+
+static __pure_function __always_inline __maybe_unused bool
+is_powerof2(size_t x) {
+  return (x & (x - 1)) == 0;
+}
+
+static __pure_function __always_inline __maybe_unused size_t
+roundup_powerof2(size_t value, size_t granularity) {
+  assert(is_powerof2(granularity));
+  return (value + granularity - 1) & ~(granularity - 1);
+}
