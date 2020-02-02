@@ -833,13 +833,24 @@ typedef struct iovec MDBX_val;
  * but MDBX_DBG_ASSERT, MDBX_DBG_AUDIT and MDBX_DBG_JITTER only if libmdbx
  * builded with MDBX_DEBUG. */
 
-#define MDBX_DBG_ASSERT 1 /* Enable assertion checks */
-#define MDBX_DBG_AUDIT 2  /* Enable pages usage audit at commit transactions */
-#define MDBX_DBG_JITTER 4 /* Enable small random delays in critical points */
-#define MDBX_DBG_DUMP     /* Include or not meta-pages in coredump files, MAY  \
-                           affect performance in MDBX_WRITEMAP mode */         \
-  8
-#define MDBX_DBG_LEGACY_MULTIOPEN 16 /* Enable multi-opening environment(s) */
+/* Enable assertion checks */
+#define MDBX_DBG_ASSERT 1
+
+/* Enable pages usage audit at commit transactions */
+#define MDBX_DBG_AUDIT 2
+
+/* Enable small random delays in critical points */
+#define MDBX_DBG_JITTER 4
+
+/* Include or not meta-pages in coredump files,
+ * MAY affect performance in MDBX_WRITEMAP mode */
+#define MDBX_DBG_DUMP 8
+
+/* Allow multi-opening environment(s) */
+#define MDBX_DBG_LEGACY_MULTIOPEN 16
+
+/* Allow read and write transactions overlapping for the same thread */
+#define MDBX_DBG_LEGACY_OVERLAP 32
 
 /* A debug-logger callback function,
  * called before printing the message and aborting.
@@ -849,7 +860,12 @@ typedef struct iovec MDBX_val;
 typedef void MDBX_debug_func(int loglevel, const char *function, int line,
                              const char *msg, va_list args);
 
-/* FIXME: Complete description */
+/* Don't change current settings */
+#define MDBX_LOG_DONTCHANGE (-1)
+#define MDBX_DBG_DONTCHANGE (-1)
+#define MDBX_LOGGER_DONTCHANGE ((MDBX_debug_func *)(intptr_t)-1)
+
+/* Setup global log-level, debug options and debug logger. */
 LIBMDBX_API int mdbx_setup_debug(int loglevel, int flags,
                                  MDBX_debug_func *logger);
 

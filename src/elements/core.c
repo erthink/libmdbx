@@ -5972,7 +5972,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     if (unlikely(txn->mt_owner == tid))
       return MDBX_BUSY;
     MDBX_lockinfo *const lck = env->me_lck;
-    if (lck && (env->me_flags & MDBX_NOTLS) == 0) {
+    if (lck && (env->me_flags & MDBX_NOTLS) == 0 &&
+        (mdbx_runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0) {
       const unsigned snap_nreaders = lck->mti_numreaders;
       for (unsigned i = 0; i < snap_nreaders; ++i) {
         if (lck->mti_readers[i].mr_pid == env->me_pid &&
@@ -6213,7 +6214,9 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_txn);
   } else if (flags & MDBX_RDONLY) {
-    if (env->me_txn0 && unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
+    if (env->me_txn0 &&
+        unlikely(env->me_txn0->mt_owner == mdbx_thread_self()) &&
+        (mdbx_runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
       return MDBX_TXN_OVERLAPPING;
     size = env->me_maxdbs * (sizeof(MDBX_db) + 1);
     size += tsize = sizeof(MDBX_txn);
@@ -16532,21 +16535,20 @@ int __cold mdbx_setup_debug(int loglevel, int flags, MDBX_debug_func *logger) {
 #if !MDBX_DEBUG
   (void)loglevel;
 #else
-  if (loglevel != -1)
+  if (loglevel != MDBX_LOG_DONTCHANGE)
     mdbx_loglevel = (uint8_t)loglevel;
 #endif
 
-  if (flags != -1) {
-#if !MDBX_DEBUG
-    flags &= MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN;
-#else
-    flags &= MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
-             MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN;
+  if (flags != MDBX_DBG_DONTCHANGE) {
+    flags &=
+#if MDBX_DEBUG
+        MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
 #endif
+        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP;
     mdbx_runtime_flags = (uint8_t)flags;
   }
 
-  if (-1 != (intptr_t)logger)
+  if (logger != MDBX_LOGGER_DONTCHANGE)
     mdbx_debug_logger = logger;
   return rc;
 }
