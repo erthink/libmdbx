@@ -3180,7 +3180,7 @@ static const char *__mdbx_strerr(int errnum) {
       "MDBX_VERSION_MISMATCH: DB version mismatch libmdbx",
       "MDBX_INVALID: File is not an MDBX file",
       "MDBX_MAP_FULL: Environment mapsize limit reached",
-      "MDBX_DBS_FULL: Too may DBI-handles (maxdbs reached)",
+      "MDBX_DBS_FULL: Too many DBI-handles (maxdbs reached)",
       "MDBX_READERS_FULL: Too many readers (maxreaders reached)",
       NULL /* MDBX_TLS_FULL (-30789): unused in MDBX */,
       "MDBX_TXN_FULL: Transaction has too many dirty pages,"
