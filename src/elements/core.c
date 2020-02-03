@@ -2493,13 +2493,13 @@ static int lcklist_detach_locked(MDBX_env *env) {
     TYPE_LIST *const begin = first, *const end = begin + length;               \
                                                                                \
     while (length > 3) {                                                       \
-      const unsigned half = length >> 1;                                       \
-      TYPE_LIST *const middle = first + half;                                  \
+      const unsigned whole = length;                                           \
+      length >>= 1;                                                            \
+      TYPE_LIST *const middle = first + length;                                \
       if (CMP(*middle, item)) {                                                \
         first = middle + 1;                                                    \
-        length -= half + 1;                                                    \
-      } else                                                                   \
-        length = half;                                                         \
+        length = whole - length - 1;                                           \
+      }                                                                        \
     }                                                                          \
                                                                                \
     switch (length) {                                                          \
@@ -2507,17 +2507,21 @@ static int lcklist_detach_locked(MDBX_env *env) {
       if (!CMP(*first, item))                                                  \
         break;                                                                 \
       ++first;                                                                 \
-      /* fall through */                                                       \
-      __fallthrough;                                                           \
+      __fallthrough /* fall through */;                                        \
     case 2:                                                                    \
       if (!CMP(*first, item))                                                  \
         break;                                                                 \
       ++first;                                                                 \
-      /* fall through */                                                       \
-      __fallthrough;                                                           \
+      __fallthrough /* fall through */;                                        \
     case 1:                                                                    \
-      if (CMP(*first, item))                                                   \
-        ++first;                                                               \
+      if (!CMP(*first, item))                                                  \
+        break;                                                                 \
+      ++first;                                                                 \
+      __fallthrough /* fall through */;                                        \
+    case 0:                                                                    \
+      break;                                                                   \
+    default:                                                                   \
+      __unreachable();                                                         \
     }                                                                          \
                                                                                \
     if (mdbx_audit_enabled()) {                                                \
