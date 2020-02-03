@@ -1503,8 +1503,7 @@ typedef enum MDBX_cursor_op {
  * since it opened in read-only mode */
 #define MDBX_WANNA_RECOVERY (-30419)
 
-/* The given key value is mismatched to the current cursor position,
- * when mdbx_cursor_put() called with MDBX_CURRENT option. */
+/* The given key value is mismatched to the current cursor position */
 #define MDBX_EKEYMISMATCH (-30418)
 
 /* Database is too large for current system,
