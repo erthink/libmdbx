@@ -118,10 +118,8 @@
 #       define __noinline __attribute__((__noinline__))
 #   elif defined(_MSC_VER)
 #       define __noinline __declspec(noinline)
-#   elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
-#       define __noinline inline
-#   elif !defined(__INTEL_COMPILER)
-#       define __noinline /* FIXME ? */
+#   else
+#       define __noinline
 #   endif
 #endif /* __noinline */
 
@@ -164,7 +162,7 @@
 #endif /* __unreachable */
 
 #ifndef __prefetch
-#   if defined(__GNUC__) || defined(__clang__)
+#   if defined(__GNUC__) || defined(__clang__) || __has_builtin(__builtin_prefetch)
 #       define __prefetch(ptr) __builtin_prefetch(ptr)
 #   else
 #       define __prefetch(ptr) __noop(ptr)
@@ -237,15 +235,13 @@
 
 #ifndef __optimize
 #   if defined(__OPTIMIZE__)
-#     if defined(__clang__) && !__has_attribute(__optimize__)
-#           define __optimize(ops)
-#       elif defined(__GNUC__) || __has_attribute(__optimize__)
+#       if (defined(__GNUC__) && !defined(__clang__)) || __has_attribute(__optimize__)
 #           define __optimize(ops) __attribute__((__optimize__(ops)))
 #       else
 #           define __optimize(ops)
 #       endif
 #   else
-#           define __optimize(ops)
+#       define __optimize(ops)
 #   endif
 #endif /* __optimize */
 
@@ -312,7 +308,7 @@
 #ifndef __printf_args
 #   if defined(__GNUC__) || __has_attribute(__format__)
 #       define __printf_args(format_index, first_arg)                          \
-            __attribute__((__format__(printf, format_index, first_arg)))
+            __attribute__((__format__(__printf__, format_index, first_arg)))
 #   else
 #       define __printf_args(format_index, first_arg)
 #   endif

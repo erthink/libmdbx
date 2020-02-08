@@ -623,8 +623,8 @@ typedef pthread_t mdbx_tid_t;
 
 #ifndef __dll_export
 #if defined(_WIN32) || defined(__CYGWIN__)
-#if defined(__GNUC__) || __has_attribute(dllexport)
-#define __dll_export __attribute__((dllexport))
+#if defined(__GNUC__) || __has_attribute(__dllexport__)
+#define __dll_export __attribute__((__dllexport__))
 #elif defined(_MSC_VER)
 #define __dll_export __declspec(dllexport)
 #else
@@ -639,8 +639,8 @@ typedef pthread_t mdbx_tid_t;
 
 #ifndef __dll_import
 #if defined(_WIN32) || defined(__CYGWIN__)
-#if defined(__GNUC__) || __has_attribute(dllimport)
-#define __dll_import __attribute__((dllimport))
+#if defined(__GNUC__) || __has_attribute(__dllimport__)
+#define __dll_import __attribute__((__dllimport__))
 #elif defined(_MSC_VER)
 #define __dll_import __declspec(dllimport)
 #else
