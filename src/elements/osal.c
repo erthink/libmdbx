@@ -67,11 +67,6 @@ typedef struct _SECTION_BASIC_INFORMATION {
   LARGE_INTEGER SectionSize;
 } SECTION_BASIC_INFORMATION, *PSECTION_BASIC_INFORMATION;
 
-extern NTSTATUS NTAPI NtExtendSection(IN HANDLE SectionHandle,
-                                      IN PLARGE_INTEGER NewSectionSize);
-
-typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
-
 extern NTSTATUS NTAPI NtMapViewOfSection(
     IN HANDLE SectionHandle, IN HANDLE ProcessHandle, IN OUT PVOID *BaseAddress,
     IN ULONG_PTR ZeroBits, IN SIZE_T CommitSize,
@@ -1404,8 +1399,10 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
 
   if (!(flags & MDBX_RDONLY) && limit == map->limit && size > map->current) {
     /* growth rw-section */
+    if (!mdbx_NtExtendSection)
+      return ERROR_CALL_NOT_IMPLEMENTED /* workaround for Wine */;
     SectionSize.QuadPart = size;
-    status = NtExtendSection(map->section, &SectionSize);
+    status = mdbx_NtExtendSection(map->section, &SectionSize);
     if (!NT_SUCCESS(status))
       return ntstatus2errcode(status);
     map->current = size;

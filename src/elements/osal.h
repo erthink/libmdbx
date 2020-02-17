@@ -849,6 +849,12 @@ typedef DWORD(WINAPI *MDBX_OfferVirtualMemory(
 MDBX_INTERNAL_VAR MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
 #endif /* unused for now */
 
+typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
+
+typedef NTSTATUS(NTAPI *MDBX_NtExtendSection)(IN HANDLE SectionHandle,
+                                              IN PLARGE_INTEGER NewSectionSize);
+MDBX_INTERNAL_VAR MDBX_NtExtendSection mdbx_NtExtendSection;
+
 #endif /* Windows */
 
 /*----------------------------------------------------------------------------*/

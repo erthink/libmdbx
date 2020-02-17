@@ -717,6 +717,7 @@ static uint64_t WINAPI stub_GetTickCount64(void) {
 
 /*----------------------------------------------------------------------------*/
 #ifndef MDBX_ALLOY
+MDBX_NtExtendSection mdbx_NtExtendSection;
 MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
 MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
 MDBX_GetFinalPathNameByHandleW mdbx_GetFinalPathNameByHandleW;
@@ -775,4 +776,6 @@ static void mdbx_winnt_import(void) {
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
   mdbx_NtFsControlFile =
       (MDBX_NtFsControlFile)GetProcAddress(hNtdll, "NtFsControlFile");
+  mdbx_NtExtendSection =
+      (MDBX_NtExtendSection)GetProcAddress(hNtdll, "NtExtendSection");
 }
