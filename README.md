@@ -555,4 +555,4 @@ syscall and by scanning data directory.
 
 --------------------------------------------------------------------------------
 
-### The [repository now only mirrored on the Github](https://abf.io/erthink/libmdbx) due to illegal discriminatory restrictions for Russian Crimea and for sovereign crimeans.
+#### This is a mirror of the origin repository that was moved to [abf.io](https://abf.io/erthink/) because of discriminatory restrictions for Russian Crimea.
