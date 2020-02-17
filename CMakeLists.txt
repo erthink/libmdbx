@@ -14,7 +14,7 @@
 
 ##
 ##  libmdbx = { Revised and extended descendant of Symas LMDB. }
-##  Please see README.md at https://github.com/leo-yuriev/libmdbx
+##  Please see README.md at https://github.com/erthink/libmdbx
 ##
 ##  Libmdbx is superior to LMDB in terms of features and reliability,
 ##  not inferior in performance. libmdbx works on Linux, FreeBSD, MacOS X

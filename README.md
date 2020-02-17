@@ -49,8 +49,8 @@ _MithrilDB_ is rightly relevant name.
   > revolution is to provide a clearer and robust API, add more features and
   > new valuable properties of database.
 
-[![Build Status](https://travis-ci.org/leo-yuriev/libmdbx.svg?branch=master)](https://travis-ci.org/leo-yuriev/libmdbx)
-[![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
+[![Build Status](https://travis-ci.org/erthink/libmdbx.svg?branch=master)](https://travis-ci.org/erthink/libmdbx)
+[![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/erthink/libmdbx/branch/master)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
 *The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
@@ -268,12 +268,12 @@ named mutexes are used.
 
 ### History
 At first the development was carried out within the
-[ReOpenLDAP](https://github.com/leo-yuriev/ReOpenLDAP) project. About a
+[ReOpenLDAP](https://github.com/erthink/ReOpenLDAP) project. About a
 year later _libmdbx_ was separated into standalone project, which was
 [presented at Highload++ 2015
 conference](http://www.highload.ru/2015/abstracts/1831.html).
 
-Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/leo-yuriev/libfpta),
+Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/erthink/libfpta),
 and development is funded by [Positive Technologies](https://www.ptsecurity.com).
 
 ### Acknowledgments
@@ -445,7 +445,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 
   2. Performance gap is too high to compare in any meaningful way.
 
-![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-1.png)
+![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-1.png)
 
 --------------------------------------------------------------------------------
 
@@ -454,7 +454,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 Summary performance with concurrent read/search queries in 1-2-4-8
 threads on 4 CPU cores machine.
 
-![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-2.png)
+![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-2.png)
 
 --------------------------------------------------------------------------------
 
@@ -476,7 +476,7 @@ In the benchmark each transaction contains combined CRUD operations (2
 inserts, 1 read, 1 update, 1 delete). Benchmark starts on empty database
 and after full run the database contains 10,000 small key-value records.
 
-![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-3.png)
+![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-3.png)
 
 --------------------------------------------------------------------------------
 
@@ -503,7 +503,7 @@ and after full run the database contains 100,000 small key-value
 records.
 
 
-![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-4.png)
+![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-4.png)
 
 --------------------------------------------------------------------------------
 
@@ -527,7 +527,7 @@ In the benchmark each transaction contains combined CRUD operations (2
 inserts, 1 read, 1 update, 1 delete). Benchmark starts on empty database
 and after full run the database contains 10,000 small key-value records.
 
-![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-5.png)
+![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-5.png)
 
 --------------------------------------------------------------------------------
 
@@ -551,7 +551,7 @@ All benchmark data is gathered by
 [getrusage()](http://man7.org/linux/man-pages/man2/getrusage.2.html)
 syscall and by scanning data directory.
 
-![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/leo-yuriev/libmdbx/img/perf-slide-6.png)
+![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-6.png)
 
 --------------------------------------------------------------------------------
 

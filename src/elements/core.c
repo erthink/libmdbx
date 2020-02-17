@@ -4890,7 +4890,7 @@ __hot static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
       flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE | MDBX_LIFORECLAIM);
     } else if (unlikely(txn->mt_dbs[FREE_DBI].md_entries == 0)) {
       /* avoid (recursive) search inside empty tree and while tree is updating,
-       * https://github.com/leo-yuriev/libmdbx/issues/31 */
+       * https://github.com/erthink/libmdbx/issues/31 */
       flags &= ~MDBX_ALLOC_GC;
     }
   }
@@ -9932,7 +9932,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
   } else {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
     /* Temporary `workaround` for OpenBSD kernel's flaw.
-     * See https://github.com/leo-yuriev/libmdbx/issues/67 */
+     * See https://github.com/erthink/libmdbx/issues/67 */
     if ((flags & MDBX_WRITEMAP) == 0) {
       if (flags & MDBX_ACCEDE)
         flags |= MDBX_WRITEMAP;
