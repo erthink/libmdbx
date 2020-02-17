@@ -67,18 +67,6 @@ typedef struct _SECTION_BASIC_INFORMATION {
   LARGE_INTEGER SectionSize;
 } SECTION_BASIC_INFORMATION, *PSECTION_BASIC_INFORMATION;
 
-typedef enum _SECTION_INFORMATION_CLASS {
-  SectionBasicInformation,
-  SectionImageInformation,
-  SectionRelocationInformation, // name:wow64:whNtQuerySection_SectionRelocationInformation
-  MaxSectionInfoClass
-} SECTION_INFORMATION_CLASS;
-
-extern NTSTATUS NTAPI NtQuerySection(
-    IN HANDLE SectionHandle, IN SECTION_INFORMATION_CLASS InformationClass,
-    OUT PVOID InformationBuffer, IN ULONG InformationBufferSize,
-    OUT PULONG ResultLength OPTIONAL);
-
 extern NTSTATUS NTAPI NtExtendSection(IN HANDLE SectionHandle,
                                       IN PLARGE_INTEGER NewSectionSize);
 
