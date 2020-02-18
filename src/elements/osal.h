@@ -760,6 +760,7 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
 MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid);
 
 #if defined(_WIN32) || defined(_WIN64)
+
 typedef union MDBX_srwlock {
   struct {
     long volatile readerCount;
@@ -854,6 +855,10 @@ typedef enum _SECTION_INHERIT { ViewShare = 1, ViewUnmap = 2 } SECTION_INHERIT;
 typedef NTSTATUS(NTAPI *MDBX_NtExtendSection)(IN HANDLE SectionHandle,
                                               IN PLARGE_INTEGER NewSectionSize);
 MDBX_INTERNAL_VAR MDBX_NtExtendSection mdbx_NtExtendSection;
+
+static __inline bool mdbx_RunningUnderWine(void) {
+  return !mdbx_NtExtendSection;
+}
 
 #endif /* Windows */
 

@@ -985,6 +985,9 @@ MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
 
 static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #if defined(_WIN32) || defined(_WIN64)
+  if (mdbx_RunningUnderWine() && !(flags & MDBX_EXCLUSIVE))
+    return ERROR_NOT_CAPABLE /* workaround for Wine */;
+
   if (GetFileType(handle) != FILE_TYPE_DISK)
     return ERROR_FILE_OFFLINE;
 

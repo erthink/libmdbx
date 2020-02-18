@@ -733,7 +733,47 @@ MDBX_ReclaimVirtualMemory mdbx_ReclaimVirtualMemory;
 #endif /* MDBX_ALLOY */
 
 static void mdbx_winnt_import(void) {
+  const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
+
+#define GET_PROC_ADDR(dll, ENTRY)                                              \
+  mdbx_##ENTRY = (MDBX_##ENTRY)GetProcAddress(dll, #ENTRY)
+
+  if (GetProcAddress(hNtdll, "wine_get_version")) {
+    assert(mdbx_RunningUnderWine());
+  } else {
+    GET_PROC_ADDR(hNtdll, NtFsControlFile);
+    GET_PROC_ADDR(hNtdll, NtExtendSection);
+    assert(!mdbx_RunningUnderWine());
+  }
+
   const HINSTANCE hKernel32dll = GetModuleHandleA("kernel32.dll");
+  GET_PROC_ADDR(hKernel32dll, GetFileInformationByHandleEx);
+  GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
+  GET_PROC_ADDR(hKernel32dll, GetTickCount64);
+  if (!mdbx_GetTickCount64)
+    mdbx_GetTickCount64 = stub_GetTickCount64;
+  if (!mdbx_RunningUnderWine()) {
+    GET_PROC_ADDR(hKernel32dll, GetVolumeInformationByHandleW);
+    GET_PROC_ADDR(hKernel32dll, GetFinalPathNameByHandleW);
+    GET_PROC_ADDR(hKernel32dll, PrefetchVirtualMemory);
+  }
+
+#if 0  /* LY: unused for now */
+  if (!mdbx_RunningUnderWine()) {
+    GET_PROC_ADDR(hKernel32dll, DiscardVirtualMemory);
+    GET_PROC_ADDR(hKernel32dll, OfferVirtualMemory);
+    GET_PROC_ADDR(hKernel32dll, ReclaimVirtualMemory);
+  }
+  if (!mdbx_DiscardVirtualMemory)
+    mdbx_DiscardVirtualMemory = stub_DiscardVirtualMemory;
+  if (!mdbx_OfferVirtualMemory)
+    mdbx_OfferVirtualMemory = stub_OfferVirtualMemory;
+  if (!mdbx_ReclaimVirtualMemory)
+    mdbx_ReclaimVirtualMemory = stub_ReclaimVirtualMemory;
+#endif /* unused for now */
+
+#undef GET_PROC_ADDR
+
   const MDBX_srwlock_function init =
       (MDBX_srwlock_function)GetProcAddress(hKernel32dll, "InitializeSRWLock");
   if (init != NULL) {
@@ -753,29 +793,4 @@ static void mdbx_winnt_import(void) {
     mdbx_srwlock_AcquireExclusive = stub_srwlock_AcquireExclusive;
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
-
-#define GET_KERNEL32_PROC(ENTRY)                                               \
-  mdbx_##ENTRY = (MDBX_##ENTRY)GetProcAddress(hKernel32dll, #ENTRY)
-  GET_KERNEL32_PROC(GetFileInformationByHandleEx);
-  GET_KERNEL32_PROC(GetVolumeInformationByHandleW);
-  GET_KERNEL32_PROC(GetFinalPathNameByHandleW);
-  GET_KERNEL32_PROC(SetFileInformationByHandle);
-  GET_KERNEL32_PROC(PrefetchVirtualMemory);
-  GET_KERNEL32_PROC(GetTickCount64);
-  if (!mdbx_GetTickCount64)
-    mdbx_GetTickCount64 = stub_GetTickCount64;
-#if 0  /* LY: unused for now */
-  GET_KERNEL32_PROC(DiscardVirtualMemory);
-  if (!mdbx_DiscardVirtualMemory)
-    mdbx_DiscardVirtualMemory = stub_DiscardVirtualMemory;
-  GET_KERNEL32_PROC(OfferVirtualMemory);
-  GET_KERNEL32_PROC(ReclaimVirtualMemory);
-#endif /* unused for now */
-#undef GET_KERNEL32_PROC
-
-  const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
-  mdbx_NtFsControlFile =
-      (MDBX_NtFsControlFile)GetProcAddress(hNtdll, "NtFsControlFile");
-  mdbx_NtExtendSection =
-      (MDBX_NtExtendSection)GetProcAddress(hNtdll, "NtExtendSection");
 }
