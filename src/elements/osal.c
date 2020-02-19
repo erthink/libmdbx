@@ -1795,20 +1795,20 @@ static uint64_t windows_bootime(void) {
   return 0;
 }
 
-static LSTATUS mdbx_RegGetValue(HKEY hkey, LPCWSTR lpSubKey, LPCWSTR lpValue,
+static LSTATUS mdbx_RegGetValue(HKEY hkey, LPCSTR lpSubKey, LPCSTR lpValue,
                                 DWORD dwFlags, LPDWORD pdwType, PVOID pvData,
                                 LPDWORD pcbData) {
   LSTATUS rc =
-      RegGetValueW(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+      RegGetValueA(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
   if (rc != ERROR_FILE_NOT_FOUND)
     return rc;
 
-  rc = RegGetValueW(hkey, lpSubKey, lpValue,
+  rc = RegGetValueA(hkey, lpSubKey, lpValue,
                     dwFlags | 0x00010000 /* RRF_SUBKEY_WOW6464KEY */, pdwType,
                     pvData, pcbData);
   if (rc != ERROR_FILE_NOT_FOUND)
     return rc;
-  return RegGetValueW(hkey, lpSubKey, lpValue,
+  return RegGetValueA(hkey, lpSubKey, lpValue,
                       dwFlags | 0x00020000 /* RRF_SUBKEY_WOW6432KEY */, pdwType,
                       pvData, pcbData);
 }
@@ -1921,30 +1921,30 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
       char DigitalProductId[248];
     } buf;
 
-    static const wchar_t HKLM_MicrosoftCryptography[] =
-        L"SOFTWARE\\Microsoft\\Cryptography";
+    static const char HKLM_MicrosoftCryptography[] =
+        "SOFTWARE\\Microsoft\\Cryptography";
     DWORD len = sizeof(buf);
     /* Windows is madness and must die */
     if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_MicrosoftCryptography,
-                         L"MachineGuid", RRF_RT_ANY, NULL, &buf.MachineGuid,
+                         "MachineGuid", RRF_RT_ANY, NULL, &buf.MachineGuid,
                          &len) == ERROR_SUCCESS &&
         len > 42 && len < sizeof(buf))
       got_machineid = bootid_parse_uuid(&bin, &buf.MachineGuid, len);
 
     if (!got_machineid) {
       /* again, Windows is madness */
-      static const wchar_t HKLM_WindowsNT[] =
-          L"SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
-      static const wchar_t HKLM_WindowsNT_DPK[] =
-          L"SOFTWARE\\Microsoft\\Windows "
-          L"NT\\CurrentVersion\\DefaultProductKey";
-      static const wchar_t HKLM_WindowsNT_DPK2[] =
-          L"SOFTWARE\\Microsoft\\Windows "
-          L"NT\\CurrentVersion\\DefaultProductKey2";
+      static const char HKLM_WindowsNT[] =
+          "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion";
+      static const char HKLM_WindowsNT_DPK[] =
+          "SOFTWARE\\Microsoft\\Windows "
+          "NT\\CurrentVersion\\DefaultProductKey";
+      static const char HKLM_WindowsNT_DPK2[] =
+          "SOFTWARE\\Microsoft\\Windows "
+          "NT\\CurrentVersion\\DefaultProductKey2";
 
       len = sizeof(buf);
       if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT,
-                           L"DigitalProductId", RRF_RT_ANY, NULL,
+                           "DigitalProductId", RRF_RT_ANY, NULL,
                            &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
           len > 42 && len < sizeof(buf)) {
         bootid_collect(&bin, &buf.DigitalProductId, len);
@@ -1952,7 +1952,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
       }
       len = sizeof(buf);
       if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT_DPK,
-                           L"DigitalProductId", RRF_RT_ANY, NULL,
+                           "DigitalProductId", RRF_RT_ANY, NULL,
                            &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
           len > 42 && len < sizeof(buf)) {
         bootid_collect(&bin, &buf.DigitalProductId, len);
@@ -1960,7 +1960,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
       }
       len = sizeof(buf);
       if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT_DPK2,
-                           L"DigitalProductId", RRF_RT_ANY, NULL,
+                           "DigitalProductId", RRF_RT_ANY, NULL,
                            &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
           len > 42 && len < sizeof(buf)) {
         bootid_collect(&bin, &buf.DigitalProductId, len);
@@ -1968,11 +1968,11 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
       }
     }
 
-    static const wchar_t HKLM_PrefetcherParams[] =
-        L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory "
-        L"Management\\PrefetchParameters";
+    static const char HKLM_PrefetcherParams[] =
+        "SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Memory "
+        "Management\\PrefetchParameters";
     len = sizeof(buf);
-    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, L"BootId",
+    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, "BootId",
                          RRF_RT_DWORD, NULL, &buf.BootId,
                          &len) == ERROR_SUCCESS &&
         len > 1 && len < sizeof(buf)) {
@@ -1981,7 +1981,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
     }
 
     len = sizeof(buf);
-    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, L"BaseTime",
+    if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, "BaseTime",
                          RRF_RT_DWORD, NULL, &buf.BaseTime,
                          &len) == ERROR_SUCCESS &&
         len >= sizeof(buf.BaseTime) && buf.BaseTime) {
