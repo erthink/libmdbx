@@ -753,11 +753,11 @@ static void mdbx_winnt_import(void) {
 
   const HINSTANCE hKernel32dll = GetModuleHandleA("kernel32.dll");
   GET_PROC_ADDR(hKernel32dll, GetFileInformationByHandleEx);
-  GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
   GET_PROC_ADDR(hKernel32dll, GetTickCount64);
   if (!mdbx_GetTickCount64)
     mdbx_GetTickCount64 = stub_GetTickCount64;
   if (!mdbx_RunningUnderWine()) {
+    GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
     GET_PROC_ADDR(hKernel32dll, GetVolumeInformationByHandleW);
     GET_PROC_ADDR(hKernel32dll, GetFinalPathNameByHandleW);
     GET_PROC_ADDR(hKernel32dll, PrefetchVirtualMemory);
