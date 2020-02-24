@@ -4662,6 +4662,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
    *    the local threads for safe remap.
    * 2) At least on Windows 10 1803 the entire mapped section is unavailable
    *    for short time during NtExtendSection() or VirtualAlloc() execution.
+   * 3) Under Wine runtime environment on Linux a section extending is not
+   *    supported. Therefore thread suspending is always required.
    *
    * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED! */
   array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
@@ -6062,7 +6064,12 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     }
     if (txn->mt_flags & MDBX_RDONLY) {
 #if defined(_WIN32) || defined(_WIN64)
-      if (size > env->me_dbgeo.lower && env->me_dbgeo.shrink) {
+      if ((size > env->me_dbgeo.lower && env->me_dbgeo.shrink) ||
+          (mdbx_RunningUnderWine() &&
+           /* under Wine acquisition of remap_guard is always required,
+            * since Wine don't support section extending,
+            * i.e. in both cases unmap+map are required. */
+           size < env->me_dbgeo.upper && env->me_dbgeo.grow)) {
         txn->mt_flags |= MDBX_SHRINK_ALLOWED;
         mdbx_srwlock_AcquireShared(&env->me_remap_guard);
       }

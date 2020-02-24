@@ -1300,7 +1300,8 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   if (!NT_SUCCESS(err))
     return ntstatus2errcode(err);
 
-  SIZE_T ViewSize = (flags & MDBX_RDONLY) ? 0 : limit;
+  SIZE_T ViewSize =
+      (flags & MDBX_RDONLY) ? 0 : mdbx_RunningUnderWine() ? size : limit;
   err = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,
