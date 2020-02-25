@@ -1202,10 +1202,10 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *         In case single transaction after mdbx_env_sync, you may lose
  *         transaction itself, but not a whole database.
  *
- *      Nevertheless, MDBX_UTTERLY_NOSYNC provides ACID in case of a application
- *      crash, and therefore may be very useful in scenarios where data
- *      durability is not required over a system failure (e.g for short-lived
- *      data), or if you can ignore such risk.
+ *      Nevertheless, MDBX_UTTERLY_NOSYNC provides ACI (without Durability) in
+ *      case of a application crash, and therefore may be very useful in
+ *      scenarios where data durability is not required over a system failure
+ *      (e.g for short-lived data), or if you can ignore such risk.
  *
  *      MDBX_UTTERLY_NOSYNC flag may be changed at any time using
  *      mdbx_env_set_flags(), but don't has effect if passed to mdbx_txn_begin()

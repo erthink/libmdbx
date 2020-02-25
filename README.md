@@ -9,15 +9,25 @@ database, with [permissive license](LICENSE).
 _MDBX_ has a specific set of properties and capabilities,
 focused on creating unique lightweight solutions with extraordinary performance.
 
-1. Allows **swarm of multi-threaded processes to [ACID]((https://en.wikipedia.org/wiki/ACID))ly read and update** several key-value [maps](https://en.wikipedia.org/wiki/Associative_array) and [multimaps](https://en.wikipedia.org/wiki/Multimap) in a localy-shared database.
+1. Allows **swarm of multi-threaded processes to
+[ACID]((https://en.wikipedia.org/wiki/ACID))ly read and update** several
+key-value [maps](https://en.wikipedia.org/wiki/Associative_array) and
+[multimaps](https://en.wikipedia.org/wiki/Multimap) in a localy-shared
+database.
 
-2. Provides **extraordinary performance**, minimal overhead through [Memory-Mapping](https://en.wikipedia.org/wiki/Memory-mapped_file) and `Olog(N)` operations costs by virtue of [B+ tree](https://en.wikipedia.org/wiki/B%2B_tree).
+2. Provides **extraordinary performance**, minimal overhead through
+[Memory-Mapping](https://en.wikipedia.org/wiki/Memory-mapped_file) and
+`Olog(N)` operations costs by virtue of [B+
+tree](https://en.wikipedia.org/wiki/B%2B_tree).
 
-3. Requires **no maintenance and no crash recovery** since doesn't use [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging), but that might be a caveat for write-intensive workloads.
+3. Requires **no maintenance and no crash recovery** since doesn't use
+[WAL](https://en.wikipedia.org/wiki/Write-ahead_logging), but that might
+be a caveat for write-intensive workloads with durability requirements.
 
-4. **Compact and friendly for fully embeddeding**. Only 25KLOC of `C11`, 64K x86 binary code,
-no internal threads neither processes, but implements a simplified variant of the
-[Berkeley DB](https://en.wikipedia.org/wiki/Berkeley_DB) and
+4. **Compact and friendly for fully embeddeding**. Only 25KLOC of `C11`,
+64K x86 binary code, no internal threads neither processes, but
+implements a simplified variant of the [Berkeley
+DB](https://en.wikipedia.org/wiki/Berkeley_DB) and
 [dbm](https://en.wikipedia.org/wiki/DBM_(computing)) API.
 
 5. Enforces [serializability](https://en.wikipedia.org/wiki/Serializability) for
