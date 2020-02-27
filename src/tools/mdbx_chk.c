@@ -559,6 +559,12 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   uint64_t record_count = 0, dups = 0;
   uint64_t key_bytes = 0, data_bytes = 0;
 
+  if ((MDBX_TXN_FINISHED | MDBX_TXN_ERROR) & mdbx_txn_flags(txn)) {
+    print(" ! abort processing '%s' due to a previous error\n",
+          dbi_name ? dbi_name : "@MAIN");
+    return MDBX_BAD_TXN;
+  }
+
   if (dbi_handle == ~0u) {
     rc = mdbx_dbi_open(txn, dbi_name, 0, &dbi_handle);
     if (rc) {
