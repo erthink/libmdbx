@@ -12,17 +12,15 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "internals.h"
+#if defined(_WIN32) || defined(_WIN64) /* Windows LCK-implementation */
 
 /* PREAMBLE FOR WINDOWS:
  *
  * We are not concerned for performance here.
  * If you are running Windows a performance could NOT be the goal.
- * Otherwise please use Linux.
- *
- * Regards,
- * LY
- */
+ * Otherwise please use Linux. */
+
+#include "internals.h"
 
 static void mdbx_winnt_import(void);
 
@@ -367,22 +365,24 @@ mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
  */
 
 static void lck_unlock(MDBX_env *env) {
-  int rc;
+  int err;
 
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* double `unlock` for robustly remove overlapped shared/exclusive locks */
     while (funlock(env->me_lfd, LCK_LOWER))
       ;
-    rc = GetLastError();
-    assert(rc == ERROR_NOT_LOCKED);
-    (void)rc;
+    err = GetLastError();
+    assert(err == ERROR_NOT_LOCKED ||
+           (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
+    (void)err;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_lfd, LCK_UPPER))
       ;
-    rc = GetLastError();
-    assert(rc == ERROR_NOT_LOCKED);
-    (void)rc;
+    err = GetLastError();
+    assert(err == ERROR_NOT_LOCKED ||
+           (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
+    (void)err;
     SetLastError(ERROR_SUCCESS);
   }
 
@@ -391,23 +391,26 @@ static void lck_unlock(MDBX_env *env) {
      * releases such locks via deferred queues) */
     while (funlock(env->me_lazy_fd, LCK_BODY))
       ;
-    rc = GetLastError();
-    assert(rc == ERROR_NOT_LOCKED);
-    (void)rc;
+    err = GetLastError();
+    assert(err == ERROR_NOT_LOCKED ||
+           (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
+    (void)err;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_lazy_fd, LCK_META))
       ;
-    rc = GetLastError();
-    assert(rc == ERROR_NOT_LOCKED);
-    (void)rc;
+    err = GetLastError();
+    assert(err == ERROR_NOT_LOCKED ||
+           (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
+    (void)err;
     SetLastError(ERROR_SUCCESS);
 
     while (funlock(env->me_lazy_fd, LCK_WHOLE))
       ;
-    rc = GetLastError();
-    assert(rc == ERROR_NOT_LOCKED);
-    (void)rc;
+    err = GetLastError();
+    assert(err == ERROR_NOT_LOCKED ||
+           (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
+    (void)err;
     SetLastError(ERROR_SUCCESS);
   }
 }
@@ -748,11 +751,11 @@ static void mdbx_winnt_import(void) {
 
   const HINSTANCE hKernel32dll = GetModuleHandleA("kernel32.dll");
   GET_PROC_ADDR(hKernel32dll, GetFileInformationByHandleEx);
-  GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
   GET_PROC_ADDR(hKernel32dll, GetTickCount64);
   if (!mdbx_GetTickCount64)
     mdbx_GetTickCount64 = stub_GetTickCount64;
   if (!mdbx_RunningUnderWine()) {
+    GET_PROC_ADDR(hKernel32dll, SetFileInformationByHandle);
     GET_PROC_ADDR(hKernel32dll, GetVolumeInformationByHandleW);
     GET_PROC_ADDR(hKernel32dll, GetFinalPathNameByHandleW);
     GET_PROC_ADDR(hKernel32dll, PrefetchVirtualMemory);
@@ -794,3 +797,5 @@ static void mdbx_winnt_import(void) {
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
 }
+
+#endif /* Windows LCK-implementation */

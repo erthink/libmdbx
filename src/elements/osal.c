@@ -1300,7 +1300,8 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   if (!NT_SUCCESS(err))
     return ntstatus2errcode(err);
 
-  SIZE_T ViewSize = (flags & MDBX_RDONLY) ? 0 : limit;
+  SIZE_T ViewSize =
+      (flags & MDBX_RDONLY) ? 0 : mdbx_RunningUnderWine() ? size : limit;
   err = NtMapViewOfSection(
       map->section, GetCurrentProcess(), &map->address,
       /* ZeroBits */ 0,
@@ -1403,7 +1404,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
   if (!(flags & MDBX_RDONLY) && limit == map->limit && size > map->current) {
     /* growth rw-section */
     if (!mdbx_NtExtendSection)
-      return ERROR_CALL_NOT_IMPLEMENTED /* workaround for Wine */;
+      return MDBX_UNABLE_EXTEND_MAPSIZE /* workaround for Wine */;
     SectionSize.QuadPart = size;
     status = mdbx_NtExtendSection(map->section, &SectionSize);
     if (!NT_SUCCESS(status))
@@ -1421,7 +1422,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
                                      &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
     if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
-      return MDBX_RESULT_TRUE;
+      return MDBX_UNABLE_EXTEND_MAPSIZE;
     if (!NT_SUCCESS(status))
       return ntstatus2errcode(status);
 
@@ -1539,8 +1540,8 @@ retry_mapview:;
 
     if (map->address && (size != map->current || limit != map->limit)) {
       /* try remap with previously size and limit,
-       * but will return MDBX_RESULT_TRUE on success */
-      rc = MDBX_RESULT_TRUE;
+       * but will return MDBX_UNABLE_EXTEND_MAPSIZE on success */
+      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
       size = map->current;
       limit = map->limit;
       goto retry_file_and_section;
@@ -1563,7 +1564,7 @@ retry_mapview:;
   if (flags & MDBX_RDONLY) {
     map->current = (filesize > limit) ? limit : (size_t)filesize;
     if (map->current != size)
-      rc = MDBX_RESULT_TRUE;
+      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
   } else if (filesize != size) {
     rc = mdbx_ftruncate(map->fd, size);
     if (rc != MDBX_SUCCESS)
@@ -1580,7 +1581,7 @@ retry_mapview:;
       case EAGAIN:
       case ENOMEM:
       case EFAULT /* MADV_DODUMP / MADV_DONTDUMP are mixed for mmap-range */:
-        rc = MDBX_RESULT_TRUE;
+        rc = MDBX_UNABLE_EXTEND_MAPSIZE;
       }
       return rc;
     }
@@ -1599,7 +1600,7 @@ retry_mapview:;
 #else  /* MREMAP_MAYMOVE */
     /* TODO: Perhaps here it is worth to implement suspend/resume threads
      *       and perform unmap/map as like for Windows. */
-    rc = MDBX_RESULT_TRUE;
+    rc = MDBX_UNABLE_EXTEND_MAPSIZE;
 #endif /* !MREMAP_MAYMOVE */
   }
 #endif

@@ -3184,12 +3184,12 @@ static const char *__mdbx_strerr(int errnum) {
       "MDBX_READERS_FULL: Too many readers (maxreaders reached)",
       NULL /* MDBX_TLS_FULL (-30789): unused in MDBX */,
       "MDBX_TXN_FULL: Transaction has too many dirty pages,"
-      " i.e transaction too big",
+      " i.e transaction is too big",
       "MDBX_CURSOR_FULL: Internal error - Cursor stack limit reached",
       "MDBX_PAGE_FULL: Internal error - Page has no more space",
-      "MDBX_MAP_RESIZED: Database contents grew beyond environment mapsize"
-      " and engine was unable to extend mapping,"
-      " e.g. since address space is unavailable or busy",
+      "MDBX_UNABLE_EXTEND_MAPSIZE: Database engine was unable to extend"
+      " mapping, e.g. since address space is unavailable or busy,"
+      " or Operation system not supported such operations"
       "MDBX_INCOMPATIBLE: Environment or database is not compatible"
       " with the requested operation or the specified flags",
       "MDBX_BAD_RSLOT: Invalid reuse of reader locktable slot,"
@@ -4662,6 +4662,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
    *    the local threads for safe remap.
    * 2) At least on Windows 10 1803 the entire mapped section is unavailable
    *    for short time during NtExtendSection() or VirtualAlloc() execution.
+   * 3) Under Wine runtime environment on Linux a section extending is not
+   *    supported. Therefore thread suspending is always required.
    *
    * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED! */
   array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
@@ -4760,7 +4762,7 @@ bailout:
     }
 #endif /* MDBX_USE_VALGRIND */
   } else {
-    if (rc != MDBX_RESULT_TRUE) {
+    if (rc != MDBX_UNABLE_EXTEND_MAPSIZE) {
       mdbx_error("failed resize datafile/mapping: "
                  "present %" PRIuPTR " -> %" PRIuPTR ", "
                  "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
@@ -5248,7 +5250,7 @@ skip_cache:
     rc = MDBX_NOTFOUND;
     if (flags & MDBX_ALLOC_NEW) {
       rc = MDBX_MAP_FULL;
-      if (next <= txn->mt_geo.upper) {
+      if (next <= txn->mt_geo.upper && txn->mt_geo.grow) {
         mdbx_assert(env, next > txn->mt_end_pgno);
         pgno_t aligned = pgno_align2os_pgno(
             env, pgno_add(next, txn->mt_geo.grow - next % txn->mt_geo.grow));
@@ -5269,7 +5271,6 @@ skip_cache:
         mdbx_error("unable growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
                    "), errcode %d",
                    aligned, aligned - txn->mt_end_pgno, rc);
-        rc = (rc == MDBX_RESULT_TRUE) ? MDBX_MAP_FULL : rc;
       } else {
         mdbx_debug("gc-alloc: next %u > upper %u", next, txn->mt_geo.upper);
       }
@@ -6049,20 +6050,22 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       if (txn->mt_geo.upper > MAX_PAGENO ||
           bytes2pgno(env, pgno2bytes(env, txn->mt_geo.upper)) !=
               txn->mt_geo.upper) {
-        rc = MDBX_MAP_RESIZED;
+        rc = MDBX_UNABLE_EXTEND_MAPSIZE;
         goto bailout;
       }
       rc = mdbx_mapresize(env, txn->mt_next_pgno, txn->mt_end_pgno,
                           txn->mt_geo.upper);
-      if (rc != MDBX_SUCCESS) {
-        if (rc == MDBX_RESULT_TRUE)
-          rc = MDBX_MAP_RESIZED;
+      if (rc != MDBX_SUCCESS)
         goto bailout;
-      }
     }
     if (txn->mt_flags & MDBX_RDONLY) {
 #if defined(_WIN32) || defined(_WIN64)
-      if (size > env->me_dbgeo.lower && env->me_dbgeo.shrink) {
+      if ((size > env->me_dbgeo.lower && env->me_dbgeo.shrink) ||
+          (mdbx_RunningUnderWine() &&
+           /* under Wine acquisition of remap_guard is always required,
+            * since Wine don't support section extending,
+            * i.e. in both cases unmap+map are required. */
+           size < env->me_dbgeo.upper && env->me_dbgeo.grow)) {
         txn->mt_flags |= MDBX_SHRINK_ALLOWED;
         mdbx_srwlock_AcquireShared(&env->me_remap_guard);
       }

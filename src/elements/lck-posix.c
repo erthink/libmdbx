@@ -12,6 +12,8 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
+#if !(defined(_WIN32) || defined(_WIN64)) /* !Windows LCK-implementation */
+
 #include "internals.h"
 #include <sys/sem.h>
 
@@ -803,3 +805,10 @@ void mdbx_txn_unlock(MDBX_env *env) {
     mdbx_panic("%s() failed: err %d\n", __func__, rc);
   mdbx_jitter4testing(true);
 }
+
+#else
+#ifdef _MSC_VER
+#pragma warning(disable : 4206) /* nonstandard extension used: translation     \
+                                   unit is empty */
+#endif                          /* _MSC_VER (warnings) */
+#endif                          /* !Windows LCK-implementation */
