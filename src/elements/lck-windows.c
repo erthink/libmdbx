@@ -12,17 +12,15 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "internals.h"
+#if defined(_WIN32) || defined(_WIN64) /* Windows LCK-implementation */
 
 /* PREAMBLE FOR WINDOWS:
  *
  * We are not concerned for performance here.
  * If you are running Windows a performance could NOT be the goal.
- * Otherwise please use Linux.
- *
- * Regards,
- * LY
- */
+ * Otherwise please use Linux. */
+
+#include "internals.h"
 
 static void mdbx_winnt_import(void);
 
@@ -799,3 +797,5 @@ static void mdbx_winnt_import(void) {
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
 }
+
+#endif /* Windows LCK-implementation */

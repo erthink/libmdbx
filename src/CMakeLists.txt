@@ -19,14 +19,9 @@ message(STATUS "libmdbx version is ${MDBX_VERSION}")
 if(MDBX_ALLOY_MODE)
   set(LIBMDBX_SOURCES alloy.c)
 else()
-  if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-    set(LIBMDBX_OSAL windows)
-  else()
-    set(LIBMDBX_OSAL posix)
-  endif()
   set(LIBMDBX_SOURCES
     elements/options.h elements/defs.h elements/internals.h elements/osal.h
-    elements/core.c elements/osal.c elements/lck-${LIBMDBX_OSAL}.c)
+    elements/core.c elements/osal.c elements/lck-posix.c elements/lck-windows.c)
 endif()
 list(APPEND LIBMDBX_SOURCES ../mdbx.h
   "${CMAKE_CURRENT_SOURCE_DIR}/elements/version.c"

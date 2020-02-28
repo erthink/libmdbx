@@ -236,10 +236,7 @@ dist/@tmp-shared_internals.inc: src/elements/version.c $(ALLOY_DEPS) $(lastword 
 
 dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && (cat dist/@tmp-shared_internals.inc \
-	&& cat src/elements/core.c src/elements/osal.c src/elements/version.c \
-	&& echo '#if defined(_WIN32) || defined(_WIN64)' \
-	&& cat src/elements/lck-windows.c && echo '#else /* LCK-implementation */' \
-	&& cat src/elements/lck-posix.c && echo '#endif /* LCK-implementation */' \
+	&& cat src/elements/core.c src/elements/osal.c src/elements/version.c src/elements/lck-windows.c src/elements/lck-posix.c \
 	) | grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|' > $@
 
 define dist-tool-rule
