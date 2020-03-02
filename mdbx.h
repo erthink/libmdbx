@@ -2590,9 +2590,14 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  * comparison functions for keys and values (for multimaps).
  * However, I recommend not using custom comparison functions, but instead
  * converting the keys to one of the forms that are suitable for built-in
- * comparators. The main reason for this is that you can't use mdbx_chk tools
- * with a custom comparators. For instance take look to the mdbx_key_from_xxx()
- * functions.
+ * comparators (for instance take look to the mdbx_key_from_xxx()
+ * functions). The reasons to not using custom comparators are:
+ *   - The order of records could not be validated without your code.
+ *     So mdbx_chk utility will reports "wrong order" errors
+ *     and the '-i' option is required to ignore ones.
+ *   - A records could not be ordered or sorted without your code.
+ *     So mdbx_load utility should be used with '-a' option to preserve
+ *     input data order.
  *
  * [in] keycmp   Optional custom key comparison function for a database.
  * [in] datacmp  Optional custom data comparison function for a database, takes
