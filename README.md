@@ -420,9 +420,9 @@ For more information and API description see the [mdbx.h](mdbx.h) header.
 
   | Runtime  | GitHub | Author |
   | -------- | ------ | ------ |
+  | Rust     | [mdbx-rs](https://github.com/Kerollmops/mdbx-rs)   | [@Kerollmops](https://github.com/Kerollmops) |
   | Java     | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
   | .NET     | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
-  | Rust     | [mdbx-rs](https://github.com/Kerollmops/mdbx-rs)   | [Clément Renault](https://github.com/Kerollmops) |
 
 --------------------------------------------------------------------------------
 
