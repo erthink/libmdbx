@@ -243,13 +243,13 @@ static int suspend_and_append(mdbx_handle_array_t **array,
 
 MDBX_INTERNAL_FUNC int
 mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
-  const size_t CurrentTid = GetCurrentThreadId();
+  const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->me_lck) {
     /* Scan LCK for threads of the current process */
     const MDBX_reader *const begin = env->me_lck->mti_readers;
     const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
-    const size_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
+    const uintptr_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
     for (const MDBX_reader *reader = begin; reader < end; ++reader) {
       if (reader->mr_pid != env->me_pid || !reader->mr_tid) {
       skip_lck:
