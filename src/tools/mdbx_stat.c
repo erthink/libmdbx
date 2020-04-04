@@ -294,7 +294,7 @@ int main(int argc, char *argv[]) {
       const pgno_t number = *iptr++;
 
       pages += number;
-      if (envinfo && mei.mi_latter_reader_txnid > *(size_t *)key.iov_base)
+      if (envinfo && mei.mi_latter_reader_txnid > *(txnid_t *)key.iov_base)
         reclaimable += number;
 
       if (freinfo > 1) {
