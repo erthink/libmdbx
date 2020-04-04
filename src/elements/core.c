@@ -18267,12 +18267,16 @@ __dll_export
   #endif
 #endif /* MDBX_BUILD_COMPILER */
     ,
-#ifdef MDBX_BUILD_FLAGS
-    MDBX_BUILD_FLAGS
-#endif /* MDBX_BUILD_FLAGS */
 #ifdef MDBX_BUILD_FLAGS_CONFIG
     MDBX_BUILD_FLAGS_CONFIG
 #endif /* MDBX_BUILD_FLAGS_CONFIG */
+#ifdef MDBX_BUILD_FLAGS
+    MDBX_BUILD_FLAGS
+#endif /* MDBX_BUILD_FLAGS */
+#if !(defined(MDBX_BUILD_FLAGS_CONFIG) || defined(MDBX_BUILD_FLAGS))
+    "undefined (please use correct build script)"
+#warning "Build flags undefined. Please use correct build script"
+#endif
 };
 
 #ifdef __SANITIZE_ADDRESS__
