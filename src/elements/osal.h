@@ -633,12 +633,14 @@ static __maybe_unused __inline uint32_t mdbx_getpid(void) {
 }
 
 static __maybe_unused __inline size_t mdbx_thread_self(void) {
-  STATIC_ASSERT(sizeof(mdbx_tid_t) <= sizeof(size_t));
+  mdbx_tid_t thunk;
+  STATIC_ASSERT(sizeof(size_t) >= sizeof(thunk));
 #if defined(_WIN32) || defined(_WIN64)
-  return GetCurrentThreadId();
+  thunk = GetCurrentThreadId();
 #else
-  return (size_t)pthread_self();
+  thunk = pthread_self();
 #endif
+  return (size_t)thunk;
 }
 
 MDBX_INTERNAL_FUNC void __maybe_unused mdbx_osal_jitter(bool tiny);
