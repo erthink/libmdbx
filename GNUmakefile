@@ -125,6 +125,7 @@ TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
 CXX        ?= g++
 CXXSTD     ?= $(shell $(CXX) -std=c++27 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
 CXXFLAGS   := $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
+TAR        ?= $(shell which gnu-tar || echo tar)
 
 MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(wildcard src/elements/*)
@@ -213,7 +214,7 @@ mdbx-static.o: src/elements/config.h src/elements/version.c src/alloy.c $(ALLOY_
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
 libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA)) $(addprefix dist/man1/,$(MANPAGES))
-	tar -c --owner=0 --group=0 -C dist $(DIST_SRC) $(DIST_EXTRA) -f - | gzip -c > $@ \
+	$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c > $@ \
 	&& rm dist/@tmp-shared_internals.inc
 
 dist/mdbx.h: mdbx.h src/elements/version.c $(lastword $(MAKEFILE_LIST))
