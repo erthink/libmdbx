@@ -4933,7 +4933,7 @@ skip_cache:
       goto fail;
     }
 
-    MDBX_cursor recur;
+    MDBX_cursor_couple recur;
     for (MDBX_cursor_op op = MDBX_FIRST;;
          op = (flags & MDBX_LIFORECLAIM) ? MDBX_PREV : MDBX_NEXT) {
       MDBX_val key, data;
@@ -4979,7 +4979,7 @@ skip_cache:
         /* Prepare to fetch more and coalesce */
         oldest = (flags & MDBX_LIFORECLAIM) ? mdbx_find_oldest(txn)
                                             : *env->me_oldest;
-        rc = mdbx_cursor_init(&recur, txn, FREE_DBI);
+        rc = mdbx_cursor_init(&recur.outer, txn, FREE_DBI);
         if (unlikely(rc != MDBX_SUCCESS))
           goto fail;
         if (flags & MDBX_LIFORECLAIM) {
@@ -5007,7 +5007,7 @@ skip_cache:
         }
       }
 
-      rc = mdbx_cursor_get(&recur, &key, NULL, op);
+      rc = mdbx_cursor_get(&recur.outer, &key, NULL, op);
       if (rc == MDBX_NOTFOUND && (flags & MDBX_LIFORECLAIM)) {
         if (op == MDBX_SET_RANGE)
           continue;
@@ -5018,7 +5018,7 @@ skip_cache:
           key.iov_base = &last;
           key.iov_len = sizeof(last);
           op = MDBX_SET_RANGE;
-          rc = mdbx_cursor_get(&recur, &key, NULL, op);
+          rc = mdbx_cursor_get(&recur.outer, &key, NULL, op);
         }
       }
       if (unlikely(rc)) {
@@ -5058,9 +5058,10 @@ skip_cache:
       }
 
       /* Reading next GC record */
-      np = recur.mc_pg[recur.mc_top];
+      np = recur.outer.mc_pg[recur.outer.mc_top];
       if (unlikely((rc = mdbx_node_read(
-                        &recur, page_node(np, recur.mc_ki[recur.mc_top]),
+                        &recur.outer,
+                        page_node(np, recur.outer.mc_ki[recur.outer.mc_top]),
                         &data)) != MDBX_SUCCESS))
         goto fail;
 
