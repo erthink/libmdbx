@@ -328,7 +328,7 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  */
 
 #define PAGEROOM(pagesize) ((pagesize)-PAGEHDRSZ)
-#define EVEN_FLOOR(n) ((n) & ~1ul)
+#define EVEN_FLOOR(n) ((n) & ~(size_t)1)
 #define BRANCH_NODEMAX(pagesize)                                               \
   (EVEN_FLOOR(PAGEROOM(pagesize) / (MDBX_MINKEYS * 2 - 1)) - sizeof(indx_t))
 #define LEAF_NODEMAX(pagesize) (PAGEROOM(pagesize) - sizeof(indx_t))
@@ -12749,7 +12749,7 @@ static void mdbx_node_shrink(MDBX_page *mp, unsigned indx) {
 
   /* Prepare to shift upward, set len = length(subpage part to shift) */
   if (IS_LEAF2(sp)) {
-    delta &= /* do not make the node uneven-sized */ ~1u;
+    delta &= /* do not make the node uneven-sized */ ~(size_t)1;
     if (unlikely(delta) == 0)
       return;
     nsize = node_ds(node) - delta;
