@@ -91,7 +91,7 @@
 #define SYSCTL_LEGACY_NONCONST_MIB
 #endif
 #if defined(__APPLE__) && !__has_include(<sys/vmmeter.h>)
-#warning "Header <sys/vmmeter.h> by default is missing in iOS SDK. " \
+#warning "The <sys/vmmeter.h> header is missing in iOS SDK. "   \
    "Copy it manually from the OSX SDK or iPhoneSimulator SDK. " \
    "Don't forget to thank Apple for taking care of you!"
 /*** FOR INSTANCE:
