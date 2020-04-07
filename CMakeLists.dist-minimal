@@ -46,16 +46,21 @@
 ##
 
 cmake_minimum_required(VERSION 3.8.2)
+
 cmake_policy(PUSH)
 cmake_policy(VERSION 3.8.2)
-if(NOT CMAKE_VERSION VERSION_LESS 3.9)
-  cmake_policy(SET CMP0069 NEW)
+if(NOT CMAKE_VERSION VERSION_LESS 3.13)
+  cmake_policy(SET CMP0077 NEW)
 endif()
 if(NOT CMAKE_VERSION VERSION_LESS 3.12)
   cmake_policy(SET CMP0075 NEW)
 endif()
-if(NOT CMAKE_VERSION VERSION_LESS 3.13)
-  cmake_policy(SET CMP0077 NEW)
+if(NOT CMAKE_VERSION VERSION_LESS 3.9)
+  cmake_policy(SET CMP0069 NEW)
+  include(CheckIPOSupported)
+  check_ipo_supported(RESULT CMAKE_INTERPROCEDURAL_OPTIMIZATION_AVAILABLE)
+else()
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_AVAILABLE FALSE)
 endif()
 
 if(DEFINED PROJECT_NAME)
@@ -67,12 +72,43 @@ else()
   project(libmdbx C CXX)
 endif()
 
-find_package(Threads REQUIRED)
-
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
     FORCE)
+endif()
+
+if(NOT_SUBPROJECT AND (CMAKE_CROSSCOMPILING OR IOS))
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+endif()
+
+if(IOS)
+  set(MDBX_BUILD_TOOLS_DEFAULT OFF)
+  if(NOT_SUBPROJECT)
+    cmake_policy(SET CMP0006 OLD)
+    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+  endif()
+else()
+  set(MDBX_BUILD_TOOLS_DEFAULT ON)
+endif()
+
+find_package(Threads REQUIRED)
+
+if(SUBPROJECT)
+  if(NOT DEFINED BUILD_SHARED_LIBS)
+    option(BUILD_SHARED_LIBS "Build shared libraries (DLLs)" OFF)
+  endif()
+  if(NOT DEFINED CMAKE_POSITION_INDEPENDENT_CODE)
+    option(CMAKE_POSITION_INDEPENDENT_CODE "Generate position independed (PIC)" ON)
+  endif()
+else()
+  option(BUILD_SHARED_LIBS "Build shared libraries (DLLs)" ON)
+  option(CMAKE_POSITION_INDEPENDENT_CODE "Generate position independed (PIC)" ON)
+  if(CMAKE_CONFIGURATION_TYPES OR NOT CMAKE_BUILD_TYPE_UPPERCASE STREQUAL "DEBUG")
+    set(INTERPROCEDURAL_OPTIMIZATION_DEFAULT ON)
+  else()
+    set(INTERPROCEDURAL_OPTIMIZATION_DEFAULT OFF)
+  endif()
 endif()
 
 list(FIND CMAKE_C_COMPILE_FEATURES c_std_11 HAS_C11)
@@ -83,8 +119,60 @@ else()
 endif()
 message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 
-# not supported by this (minimal) script
-add_definitions(-DMDBX_AVOID_CRT=0)
+macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
+  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
+  if(NOT ${DEFAULT} STREQUAL "AUTO")
+    option(${NAME} "${DESCRIPTION}" ${DEFAULT})
+  elseif(NOT DEFINED ${NAME})
+    set(${NAME}_AUTO ON)
+  endif()
+endmacro()
+
+################################################################################
+################################################################################
+#
+#           ####   #####    #####     #     ####   #    #   ####
+#          #    #  #    #     #       #    #    #  ##   #  #
+#          #    #  #    #     #       #    #    #  # #  #   ####
+#          #    #  #####      #       #    #    #  #  # #       #
+#          #    #  #          #       #    #    #  #   ##  #    #
+#           ####   #          #       #     ####   #    #   ####
+#
+
+set(MDBX_BUILD_OPTIONS "")
+add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
+add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)" ${MDBX_BUILD_TOOLS_DEFAULT})
+add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library as single object file" ON)
+add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
+add_mdbx_option(MDBX_TXN_CHECKPID "Paranoid checking PID inside libmdbx's API" AUTO)
+mark_as_advanced(MDBX_TXN_CHECKPID)
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Linux")
+  add_mdbx_option(MDBX_DISABLE_GNU_SOURCE "Don't use nonstandard GNU/Linux extension functions" OFF)
+  mark_as_advanced(MDBX_DISABLE_GNU_SOURCE)
+endif()
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin")
+  add_mdbx_option(MDBX_OSX_SPEED_INSTEADOF_DURABILITY "Disable use fcntl(F_FULLFSYNC) in favor of speed" OFF)
+  mark_as_advanced(MDBX_OSX_SPEED_INSTEADOF_DURABILITY)
+endif()
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+  add_mdbx_option(MDBX_AVOID_CRT "Avoid dependence from MSVC CRT" OFF)
+  if(NOT MDBX_BUILD_SHARED_LIBRARY)
+    add_mdbx_option(MDBX_CONFIG_MANUAL_TLS_CALLBACK
+      "Provide mdbx_dll_handler() for manual initialization" OFF)
+    mark_as_advanced(MDBX_CONFIG_MANUAL_TLS_CALLBACK)
+  endif()
+else()
+  add_mdbx_option(MDBX_USE_OFDLOCKS "Use Open file description locks (aka OFD locks, non-POSIX)" AUTO)
+  mark_as_advanced(MDBX_USE_OFDLOCKS)
+endif()
+add_mdbx_option(MDBX_LOCKING "Locking method (Win32=-1, SysV=5, POSIX=1988, POSIX=2001, POSIX=2008, Futexes=1995)" AUTO)
+mark_as_advanced(MDBX_LOCKING)
+add_mdbx_option(MDBX_TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake." AUTO)
+mark_as_advanced(MDBX_TRUST_RTC)
+option(MDBX_FORCE_ASSERTIONS "Force enable assertion checking." OFF)
+
+################################################################################
+################################################################################
 
 # provide build timestamp
 string(TIMESTAMP MDBX_BUILD_TIMESTAMP UTC)
@@ -139,14 +227,9 @@ list(REMOVE_DUPLICATES MDBX_BUILD_FLAGS)
 string(REPLACE ";" " " MDBX_BUILD_FLAGS "${MDBX_BUILD_FLAGS}")
 add_definitions(-DMDBX_BUILD_FLAGS="${MDBX_BUILD_FLAGS}")
 
+################################################################################
+
 # shared library
-if(NOT DEFINED MDBX_BUILD_SHARED_LIBRARY)
-  if(DEFINED BUILD_SHARED_LIBS)
-    option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
-  else()
-    option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ON)
-  endif()
-endif()
 if(MDBX_BUILD_SHARED_LIBRARY)
   add_library(mdbx SHARED mdbx.c mdbx.h)
   set_target_properties(mdbx PROPERTIES
@@ -164,6 +247,7 @@ if(MDBX_BUILD_SHARED_LIBRARY)
   if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Solaris")
     target_link_libraries(mdbx PRIVATE kstat)
   endif()
+  list(APPEND MDBX_BUILD_FLAGS ${CMAKE_SHARED_LINKER_FLAGS})
 endif()
 
 # static library used for tools, to avoid rpath/dll-path troubles
@@ -184,16 +268,18 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Solar
 endif()
 
 # mdbx-tools
-foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load)
-  add_executable(${TOOL} ${TOOL}.c)
-  set_target_properties(${TOOL} PROPERTIES
-    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
-  if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
+if(MDBX_BUILD_TOOLS)
+  foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load)
+    add_executable(${TOOL} ${TOOL}.c)
     set_target_properties(${TOOL} PROPERTIES
-      INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
-  endif()
-  target_link_libraries(${TOOL} mdbx-static)
-endforeach()
+      C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+    if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
+      set_target_properties(${TOOL} PROPERTIES
+        INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
+    endif()
+    target_link_libraries(${TOOL} mdbx-static)
+  endforeach()
+endif()
 
 # installation
 if(MDBX_BUILD_SHARED_LIBRARY)
@@ -284,25 +370,26 @@ else()
       COMPONENT devel)
 endif()
 
-install(
-  TARGETS
-    mdbx_chk
-    mdbx_stat
-    mdbx_copy
-    mdbx_dump
-    mdbx_load
-  RUNTIME
-    DESTINATION bin
-    COMPONENT runtime)
-
-install(
-  FILES
-    man1/mdbx_chk.1
-    man1/mdbx_stat.1
-    man1/mdbx_copy.1
-    man1/mdbx_dump.1
-    man1/mdbx_load.1
-  DESTINATION man/man1
-  COMPONENT doc)
+if(MDBX_BUILD_TOOLS)
+  install(
+    TARGETS
+      mdbx_chk
+      mdbx_stat
+      mdbx_copy
+      mdbx_dump
+      mdbx_load
+    RUNTIME
+      DESTINATION bin
+      COMPONENT runtime)
+  install(
+    FILES
+      man1/mdbx_chk.1
+      man1/mdbx_stat.1
+      man1/mdbx_copy.1
+      man1/mdbx_dump.1
+      man1/mdbx_load.1
+    DESTINATION man/man1
+    COMPONENT doc)
+endif()
 
 cmake_policy(POP)
