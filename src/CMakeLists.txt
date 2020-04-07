@@ -260,4 +260,6 @@ if(MDBX_BUILD_SHARED_LIBRARY)
   endif()
 endif()
 
-add_subdirectory(tools)
+if(MDBX_BUILD_TOOLS)
+  add_subdirectory(tools)
+endif()

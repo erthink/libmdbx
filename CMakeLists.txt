@@ -35,6 +35,7 @@
 ##
 
 cmake_minimum_required(VERSION 3.8.2)
+
 cmake_policy(PUSH)
 cmake_policy(VERSION 3.8.2)
 if(NOT CMAKE_VERSION VERSION_LESS 3.13)
@@ -71,15 +72,6 @@ if(NOT CMAKE_BUILD_TYPE)
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
     FORCE)
 endif()
-
-macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
-  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
-  if(NOT ${DEFAULT} STREQUAL "AUTO")
-    option(${NAME} "${DESCRIPTION}" ${DEFAULT})
-  elseif(NOT DEFINED ${NAME})
-    set(${NAME}_AUTO ON)
-  endif()
-endmacro()
 
 # only for compatibility testing
 # set(CMAKE_CXX_STANDARD 14)
@@ -285,6 +277,15 @@ else()
 endif()
 message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 
+macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
+  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
+  if(NOT ${DEFAULT} STREQUAL "AUTO")
+    option(${NAME} "${DESCRIPTION}" ${DEFAULT})
+  elseif(NOT DEFINED ${NAME})
+    set(${NAME}_AUTO ON)
+  endif()
+endmacro()
+
 ################################################################################
 ################################################################################
 #
@@ -298,6 +299,7 @@ message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 
 set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
 add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
+add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)" ON)
 add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library as single object file" ON)
 add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
 add_mdbx_option(MDBX_TXN_CHECKPID "Paranoid checking PID inside libmdbx's API" AUTO)
@@ -325,8 +327,8 @@ add_mdbx_option(MDBX_LOCKING "Locking method (Win32=-1, SysV=5, POSIX=1988, POSI
 mark_as_advanced(MDBX_LOCKING)
 add_mdbx_option(MDBX_TRUST_RTC "Does a system have battery-backed Real-Time Clock or just a fake." AUTO)
 mark_as_advanced(MDBX_TRUST_RTC)
-option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
 option(MDBX_FORCE_ASSERTIONS "Force enable assertion checking." OFF)
+option(MDBX_ENABLE_TESTS "Build MDBX tests." ${BUILD_TESTING})
 
 ################################################################################
 ################################################################################
