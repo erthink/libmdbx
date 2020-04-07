@@ -72,6 +72,10 @@
 /*----------------------------------------------------------------------------*/
 /* Systems includes */
 
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif /* Apple OSX & iOS */
+
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
     defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
     defined(__APPLE__) || defined(__MACH__)
@@ -86,6 +90,25 @@
 #else
 #define SYSCTL_LEGACY_NONCONST_MIB
 #endif
+#if defined(__APPLE__) && !__has_include(<sys/vmmeter.h>)
+#warning "Header <sys/vmmeter.h> by default is missing in iOS SDK. " \
+   "Copy it manually from the OSX SDK or iPhoneSimulator SDK. " \
+   "Don't forget to thank Apple for taking care of you!"
+/*** FOR INSTANCE:
+   $ xcode-select --install
+   $ sudo installer -pkg
+       /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg
+       -target $ cd <your Xcode.app>
+   $ sudo cp
+       ./Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/vmmeter.h
+       ./Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/sys/
+ *** OR:
+   $ cd <your Xcode.app>
+   $ sudo cp
+       ./Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include/sys/vmmeter.h
+       ./Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/sys/
+ ***/
+#endif /* iOS */
 #include <sys/vmmeter.h>
 #else
 #include <malloc.h>
