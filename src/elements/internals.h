@@ -1325,7 +1325,12 @@ is_powerof2(size_t x) {
 }
 
 static __pure_function __always_inline __maybe_unused size_t
-ceil_powerof2(size_t value, size_t granularity) {
+floor_powerof2(size_t value, size_t granularity) {
   assert(is_powerof2(granularity));
-  return (value + granularity - 1) & ~(granularity - 1);
+  return value & ~(granularity - 1);
+}
+
+static __pure_function __always_inline __maybe_unused size_t
+ceil_powerof2(size_t value, size_t granularity) {
+  return floor_powerof2(value + granularity - 1, granularity);
 }
