@@ -313,7 +313,7 @@ MDBX_INTERNAL_FUNC int mdbx_memalign_alloc(size_t alignment, size_t bytes,
   *result = VirtualAlloc(NULL, bytes, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
   return *result ? MDBX_SUCCESS : MDBX_ENOMEM /* ERROR_OUTOFMEMORY */;
 #elif defined(_ISOC11_SOURCE)
-  *result = aligned_alloc(alignment, roundup_powerof2(bytes, alignment));
+  *result = aligned_alloc(alignment, ceil_powerof2(bytes, alignment));
   return *result ? MDBX_SUCCESS : errno;
 #elif _POSIX_VERSION >= 200112L
   *result = nullptr;

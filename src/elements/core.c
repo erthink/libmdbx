@@ -489,7 +489,7 @@ static __pure_function __always_inline pgno_t bytes2pgno(const MDBX_env *env,
 
 static __pure_function size_t pgno_align2os_bytes(const MDBX_env *env,
                                                   pgno_t pgno) {
-  return roundup_powerof2(pgno2bytes(env, pgno), env->me_os_psize);
+  return ceil_powerof2(pgno2bytes(env, pgno), env->me_os_psize);
 }
 
 static __pure_function pgno_t pgno_align2os_pgno(const MDBX_env *env,
@@ -499,8 +499,7 @@ static __pure_function pgno_t pgno_align2os_pgno(const MDBX_env *env,
 
 static __pure_function size_t bytes_align2os_bytes(const MDBX_env *env,
                                                    size_t bytes) {
-  return roundup_powerof2(roundup_powerof2(bytes, env->me_psize),
-                          env->me_os_psize);
+  return ceil_powerof2(ceil_powerof2(bytes, env->me_psize), env->me_os_psize);
 }
 
 /* Address of first usable data byte in a page, after the header */
@@ -2535,10 +2534,10 @@ static int lcklist_detach_locked(MDBX_env *env) {
 
 static __always_inline size_t pnl2bytes(const size_t size) {
   assert(size > 0 && size <= MDBX_PNL_MAX * 2);
-  size_t bytes = roundup_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD +
-                                      sizeof(pgno_t) * (size + 2),
-                                  MDBX_PNL_GRANULATE * sizeof(pgno_t)) -
-                 MDBX_ASSUME_MALLOC_OVERHEAD;
+  size_t bytes =
+      ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(pgno_t) * (size + 2),
+                    MDBX_PNL_GRANULATE * sizeof(pgno_t)) -
+      MDBX_ASSUME_MALLOC_OVERHEAD;
   return bytes;
 }
 
@@ -2802,10 +2801,10 @@ static __hot unsigned mdbx_pnl_exist(MDBX_PNL pnl, pgno_t id) {
 
 static __always_inline size_t txl2bytes(const size_t size) {
   assert(size > 0 && size <= MDBX_TXL_MAX * 2);
-  size_t bytes = roundup_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD +
-                                      sizeof(txnid_t) * (size + 2),
-                                  MDBX_TXL_GRANULATE * sizeof(txnid_t)) -
-                 MDBX_ASSUME_MALLOC_OVERHEAD;
+  size_t bytes =
+      ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(txnid_t) * (size + 2),
+                    MDBX_TXL_GRANULATE * sizeof(txnid_t)) -
+      MDBX_ASSUME_MALLOC_OVERHEAD;
   return bytes;
 }
 
@@ -5349,7 +5348,7 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
     /* If page isn't full, just copy the used portion. Adjust
      * alignment so memcpy may copy words instead of bytes. */
     if (unused >= MDBX_CACHELINE_SIZE * 2) {
-      lower = roundup_powerof2(lower + PAGEHDRSZ, sizeof(void *));
+      lower = ceil_powerof2(lower + PAGEHDRSZ, sizeof(void *));
       upper = (upper + PAGEHDRSZ) & ~(sizeof(void *) - 1);
       memcpy(dst, src, lower);
       dst = (void *)((char *)dst + upper);
@@ -8142,7 +8141,7 @@ static int __cold mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
   const uint64_t mapsize_max = meta->mm_geo.upper * (uint64_t)meta->mm_psize;
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
   if (mapsize_max > MAX_MAPSIZE ||
-      MAX_PAGENO < roundup_powerof2((size_t)mapsize_max, env->me_os_psize) /
+      MAX_PAGENO < ceil_powerof2((size_t)mapsize_max, env->me_os_psize) /
                        (size_t)meta->mm_psize) {
     if (meta->mm_geo.next - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE) {
       mdbx_notice("meta[%u] has too large max-mapsize (%" PRIu64 "), skip it",
@@ -8923,9 +8922,9 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
 
   const size_t unit =
       (env->me_os_psize > (size_t)pagesize) ? env->me_os_psize : pagesize;
-  size_lower = roundup_powerof2(size_lower, unit);
-  size_upper = roundup_powerof2(size_upper, unit);
-  size_now = roundup_powerof2(size_now, unit);
+  size_lower = ceil_powerof2(size_lower, unit);
+  size_upper = ceil_powerof2(size_upper, unit);
+  size_now = ceil_powerof2(size_now, unit);
 
   /* LY: подбираем значение size_upper:
    *  - кратное размеру страницы
@@ -8960,13 +8959,13 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   }
   if (growth_step == 0 && shrink_threshold > 0)
     growth_step = 1;
-  growth_step = roundup_powerof2(growth_step, unit);
+  growth_step = ceil_powerof2(growth_step, unit);
   if (bytes2pgno(env, growth_step) > UINT16_MAX)
     growth_step = pgno2bytes(env, UINT16_MAX);
 
   if (shrink_threshold < 0)
     shrink_threshold = growth_step + growth_step;
-  shrink_threshold = roundup_powerof2(shrink_threshold, unit);
+  shrink_threshold = ceil_powerof2(shrink_threshold, unit);
   if (bytes2pgno(env, shrink_threshold) > UINT16_MAX)
     shrink_threshold = pgno2bytes(env, UINT16_MAX);
 
@@ -9206,7 +9205,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   mdbx_setup_pagesize(env, meta.mm_psize);
   const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
   const size_t used_aligned2os_bytes =
-      roundup_powerof2(used_bytes, env->me_os_psize);
+      ceil_powerof2(used_bytes, env->me_os_psize);
   if ((env->me_flags & MDBX_RDONLY) /* readonly */
       || lck_rc != MDBX_RESULT_TRUE /* not exclusive */) {
     /* use present params from db */
@@ -9432,7 +9431,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         head->mm_txnid_b.inconsistent = undo_txnid;
         const size_t offset = (uint8_t *)data_page(head) - env->me_dxb_mmap.dxb;
         const size_t paged_offset = offset & ~(env->me_os_psize - 1);
-        const size_t paged_length = roundup_powerof2(
+        const size_t paged_length = ceil_powerof2(
             env->me_psize + offset - paged_offset, env->me_os_psize);
         err = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length, false);
       } else {
@@ -9662,9 +9661,9 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     goto bailout;
 
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    size = roundup_powerof2(env->me_maxreaders * sizeof(MDBX_reader) +
-                                sizeof(MDBX_lockinfo),
-                            env->me_os_psize);
+    size = ceil_powerof2(env->me_maxreaders * sizeof(MDBX_reader) +
+                             sizeof(MDBX_lockinfo),
+                         env->me_os_psize);
     mdbx_jitter4testing(false);
   } else {
     if (env->me_flags & MDBX_EXCLUSIVE) {
@@ -15174,7 +15173,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
                                    const bool dest_is_pipe) {
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
   uint8_t *const data_buffer =
-      buffer + roundup_powerof2(meta_bytes, env->me_os_psize);
+      buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
   MDBX_meta *const meta = mdbx_init_metas(env, buffer);
   /* copy canary sequenses if present */
   if (read_txn->mt_canary.v) {
@@ -15340,7 +15339,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     rc = mdbx_write(fd, buffer, meta_bytes);
 
   uint8_t *const data_buffer =
-      buffer + roundup_powerof2(meta_bytes, env->me_os_psize);
+      buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
     if (dest_is_pipe) {
 #if defined(__linux__) || defined(__gnu_linux__) && !defined(MDBX_SAFE4QEMU)
@@ -15417,8 +15416,8 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 
   const size_t buffer_size =
       pgno_align2os_bytes(env, NUM_METAS) +
-      roundup_powerof2(((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF),
-                       env->me_os_psize);
+      ceil_powerof2(((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF),
+                    env->me_os_psize);
 
   uint8_t *buffer = NULL;
   int rc = mdbx_memalign_alloc(env->me_os_psize, buffer_size, (void **)&buffer);
