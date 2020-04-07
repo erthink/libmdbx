@@ -73,6 +73,20 @@ if(NOT CMAKE_BUILD_TYPE)
     FORCE)
 endif()
 
+if(NOT_SUBPROJECT AND (CMAKE_CROSSCOMPILING OR IOS))
+  set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
+endif()
+
+if(IOS)
+  set(MDBX_BUILD_TOOLS_DEFAULT OFF)
+  if(NOT_SUBPROJECT)
+    cmake_policy(SET CMP0006 OLD)
+    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+  endif()
+else()
+  set(MDBX_BUILD_TOOLS_DEFAULT ON)
+endif()
+
 # only for compatibility testing
 # set(CMAKE_CXX_STANDARD 14)
 
@@ -299,7 +313,7 @@ endmacro()
 
 set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
 add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
-add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)" ON)
+add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)" ${MDBX_BUILD_TOOLS_DEFAULT})
 add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library as single object file" ON)
 add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
 add_mdbx_option(MDBX_TXN_CHECKPID "Paranoid checking PID inside libmdbx's API" AUTO)
