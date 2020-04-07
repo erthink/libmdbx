@@ -8403,27 +8403,26 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 #if defined(MADV_DONTNEED)
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
-    const size_t madvise_gap = (largest_bytes < 65536 * 256)
-                                   ? 65536
-                                   : (largest_bytes > MEGABYTE * 4 * 256)
-                                         ? MEGABYTE * 4
-                                         : largest_bytes >> 8;
+    /* threshold to avoid unreasonable frequent madvise() calls */
+    const size_t madvise_treshold = (largest_bytes < 65536 * 256)
+                                        ? 65536
+                                        : (largest_bytes > MEGABYTE * 4 * 256)
+                                              ? MEGABYTE * 4
+                                              : largest_bytes >> 10;
     const size_t discard_edge_bytes = bytes_align2os_bytes(
-        env,
-        (MDBX_RDONLY & (env->me_lck ? env->me_lck->mti_envmode : env->me_flags))
-            ? largest_bytes
-            : largest_bytes + madvise_gap);
+        env, ((MDBX_RDONLY &
+               (env->me_lck ? env->me_lck->mti_envmode : env->me_flags))
+                  ? largest_bytes
+                  : largest_bytes + madvise_treshold));
     const pgno_t discard_edge_pgno = bytes2pgno(env, discard_edge_bytes);
     const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
-    if (prev_discarded_pgno >
-        discard_edge_pgno +
-            /* threshold to avoid unreasonable frequent madvise() calls */
-            bytes2pgno(env, madvise_gap)) {
+    if (prev_discarded_pgno >=
+        discard_edge_pgno + bytes2pgno(env, madvise_treshold)) {
       mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
                   largest_pgno);
       *env->me_discarded_tail = discard_edge_pgno;
       const size_t prev_discarded_bytes =
-          pgno2bytes(env, prev_discarded_pgno) & ~(env->me_os_psize - 1);
+          ceil_powerof2(pgno2bytes(env, prev_discarded_pgno), env->me_os_psize);
       mdbx_ensure(env, prev_discarded_bytes > discard_edge_bytes);
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
