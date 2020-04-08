@@ -72,6 +72,16 @@ else()
   project(libmdbx C CXX)
 endif()
 
+if(NOT DEFINED IOS)
+  if(APPLE AND (CMAKE_SYSTEM_NAME STREQUAL "iOS"
+      OR DEFINED CMAKE_IOS_DEVELOPER_ROOT
+      OR DEFINED IOS_PLATFORM OR DEFINED IOS_ARCH))
+    set(IOS TRUE)
+  else()
+    set(IOS FALSE)
+  endif()
+endif()
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
