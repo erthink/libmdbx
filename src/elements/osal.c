@@ -1389,7 +1389,10 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 
 MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
-  ASAN_POISON_MEMORY_REGION(map->address, map->current);
+  /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
+   * when this memory will re-used by malloc or another mmaping.
+   * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
+  ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
 #if defined(_WIN32) || defined(_WIN64)
   if (map->section)
     NtClose(map->section);
