@@ -10179,6 +10179,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
   lcklist_unlock();
 
   if (env->me_map) {
+    ASAN_UNPOISON_MEMORY_REGION(env->me_map, env->me_dxb_mmap.limit);
     mdbx_munmap(&env->me_dxb_mmap);
 #ifdef MDBX_USE_VALGRIND
     VALGRIND_DISCARD(env->me_valgrind_handle);
