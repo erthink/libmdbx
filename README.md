@@ -417,13 +417,6 @@ recommend that you install [Homebrew](https://brew.sh/) and then execute
 `brew install bash`.
 
 ### iOS
-Unfortunately, the current versions of the iPhone SDK are missing few
-important system header files, and one of these files is required for
-building the library. So you should manually copy at least the `sys/vmmeter.h`
-from the OSX SDK or iPhoneSimulator SDK. If this header file is missing,
-you will get the corresponding message from the compiler, and near in the
-src/elements/osal.h` file there are [examples of how this can be done](src/elements/osal.h#L97-L109).
-
 To build _libmdbx_ for iOS, we recommend using CMake using the
 "[toolchain file](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html)"
 from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
