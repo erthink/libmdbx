@@ -90,26 +90,9 @@
 #else
 #define SYSCTL_LEGACY_NONCONST_MIB
 #endif
-#if defined(__APPLE__) && !__has_include(<sys/vmmeter.h>)
-#warning "The <sys/vmmeter.h> header is missing in iOS SDK. "   \
-   "Copy it manually from the OSX SDK or iPhoneSimulator SDK. " \
-   "Don't forget to thank Apple for taking care of you!"
-/*** FOR INSTANCE:
-   $ xcode-select --install
-   $ sudo installer -pkg
-       /Library/Developer/CommandLineTools/Packages/macOS_SDK_headers_for_macOS_10.14.pkg
-       -target $ cd <your Xcode.app>
-   $ sudo cp
-       ./Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/vmmeter.h
-       ./Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/sys/
- *** OR:
-   $ cd <your Xcode.app>
-   $ sudo cp
-       ./Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator.sdk/usr/include/sys/vmmeter.h
-       ./Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk/usr/include/sys/
- ***/
-#endif /* iOS */
+#ifndef __MACH__
 #include <sys/vmmeter.h>
+#endif
 #else
 #include <malloc.h>
 #if !(defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                \
