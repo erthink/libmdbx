@@ -21,28 +21,31 @@
 /* global constructor/destructor */
 
 #if defined(__linux__) || defined(__gnu_linux__)
+
 #include <sys/utsname.h>
+
 #ifndef MDBX_ALLOY
 uint32_t mdbx_linux_kernel_version;
 bool mdbx_RunningOnWSL;
 #endif /* MDBX_ALLOY */
-#endif /* Linux */
 
-static __cold unsigned probe_for_WSL(const char *tag) {
+static __cold bool probe_for_WSL(const char *tag) {
   /* "Official" way of detecting WSL but not WSL2
    * https://github.com/Microsoft/WSL/issues/423#issuecomment-221627364 */
   return strstr(tag, "Microsoft") || strstr(tag, "WSL");
 }
+
+#endif /* Linux */
 
 static __cold __attribute__((__constructor__)) void
 mdbx_global_constructor(void) {
 #if defined(__linux__) || defined(__gnu_linux__)
   struct utsname buffer;
   if (uname(&buffer) == 0) {
-    int i = 0;
     mdbx_RunningOnWSL = probe_for_WSL(buffer.version) ||
                         probe_for_WSL(buffer.sysname) ||
                         probe_for_WSL(buffer.release);
+    int i = 0;
     char *p = buffer.release;
     while (*p && i < 4) {
       if (*p >= '0' && *p <= '9') {
@@ -304,12 +307,12 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
   int rc = MDBX_SUCCESS;
 #if defined(__linux__) || defined(__gnu_linux__)
   if (unlikely(mdbx_RunningOnWSL)) {
-    rc = ENOLCK;
+    rc = ENOLCK /* No record locks available */;
     mdbx_error("%s, err %u",
                "WSL (Windows Subsystem for Linux) is mad and trouble-full, "
                "injecting failure to avoid data loss",
                rc);
-    return rc /* No record locks available */;
+    return rc;
   }
 #endif /* Linux */
 
