@@ -497,6 +497,8 @@ MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 
 #if defined(__linux__) || defined(__gnu_linux__)
 MDBX_INTERNAL_VAR uint32_t mdbx_linux_kernel_version;
+MDBX_INTERNAL_VAR bool
+    mdbx_RunningOnWSL /* Windows Subsystem for Linux is mad and trouble-full */;
 #endif /* Linux */
 
 /* Get the size of a memory page for the system.

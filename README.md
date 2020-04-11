@@ -421,6 +421,12 @@ To build _libmdbx_ for iOS, we recommend using CMake using the
 "[toolchain file](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html)"
 from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 
+### Windows Subsystem for Linux
+_libmdbx_ could be using in [WSL2](https://en.wikipedia.org/wiki/Windows_Subsystem_for_Linux#WSL_2)
+but NOT in [WSL1](https://en.wikipedia.org/wiki/Windows_Subsystem_for_Linux#WSL_1) environment.
+This is a consequence of the fundamental shortcomings of _WSL1_ and cannot be fixed.
+To avoid data loss, _libmdbx_ returns the `ENOLCK` (37, "No record locks available")
+error when opening the database in a _WSL1_ environment.
 
 ## API description
 For more information and API description see the [mdbx.h](mdbx.h) header.
