@@ -123,7 +123,8 @@ static void __cold choice_fcntl() {
 #if defined(__linux__) || defined(__gnu_linux__)
       && mdbx_linux_kernel_version >
              0x030f0000 /* OFD locks are available since 3.15, but engages here
-             only for 3.16 and larer kernels (LTS) for reliability reasons */
+                           only for 3.16 and later kernels (i.e. LTS) because
+                           of reliability reasons */
 #endif                  /* linux */
   ) {
     op_setlk = F_OFD_SETLK;
