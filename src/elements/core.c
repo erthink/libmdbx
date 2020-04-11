@@ -10148,12 +10148,13 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
 #endif
 
 bailout:
-#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-  mdbx_txn_valgrind(env, nullptr);
-#endif
-  if (rc) {
+  if (rc != MDBX_SUCCESS) {
     rc = mdbx_env_close0(env) ? MDBX_PANIC : rc;
     env->me_flags = saved_me_flags | MDBX_FATAL_ERROR;
+  } else {
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+    mdbx_txn_valgrind(env, nullptr);
+#endif
   }
   mdbx_free(lck_pathname);
   return rc;
