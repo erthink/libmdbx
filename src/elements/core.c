@@ -5771,6 +5771,9 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
       /* inside write-txn */
       MDBX_meta *head = mdbx_meta_head(env);
       last = head->mm_geo.next;
+    } else if (env->me_flags & MDBX_RDONLY) {
+      /* read-only mode, no write-txn, no wlock mutex */
+      last = NUM_METAS;
     } else if (mdbx_txn_lock(env, true) == MDBX_SUCCESS) {
       /* no write-txn */
       last = NUM_METAS;
