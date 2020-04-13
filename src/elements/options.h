@@ -79,8 +79,10 @@
 /* Some platforms define the EOWNERDEAD error code even though they
  * don't support Robust Mutexes. If doubt compile with -MDBX_LOCKING=2001. */
 #if defined(EOWNERDEAD) && _POSIX_THREAD_PROCESS_SHARED >= 200809L &&          \
-    (defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) ||                             \
-     defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) ||                             \
+    ((defined(_POSIX_THREAD_ROBUST_PRIO_INHERIT) &&                            \
+      _POSIX_THREAD_ROBUST_PRIO_INHERIT > 0) ||                                \
+     (defined(_POSIX_THREAD_ROBUST_PRIO_PROTECT) &&                            \
+      _POSIX_THREAD_ROBUST_PRIO_PROTECT > 0) ||                                \
      defined(PTHREAD_MUTEX_ROBUST) || defined(PTHREAD_MUTEX_ROBUST_NP)) &&     \
     (!defined(__GLIBC__) ||                                                    \
      __GLIBC_PREREQ(2, 10) /* troubles with Robust mutexes before 2.10 */)
