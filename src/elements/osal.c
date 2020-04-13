@@ -1173,7 +1173,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
            (ent = getmntent_r(mounted, &entbuf, pathbuf, sizeof(pathbuf))))
 #else
     const bool should_copy = true;
-    while (nullptr != (ent = getmntent(mounted))))
+    while (nullptr != (ent = getmntent(mounted)))
 #endif
     {
       struct stat mnt;
