@@ -100,6 +100,10 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "SunOS" OR ${CMAKE_SYSTEM_NAME} STREQUAL "Solar
   target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} kstat)
 endif()
 
+if(${CMAKE_SYSTEM_NAME} STREQUAL "Android")
+  target_link_libraries(mdbx ${MDBX_LIBDEP_MODE} log)
+endif()
+
 set_target_properties(mdbx PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>
   C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON

@@ -991,8 +991,6 @@ MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
                                        const char *fmt, ...)
     __printf_args(4, 5);
 
-MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
-
 #if MDBX_DEBUG
 
 #define mdbx_assert_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_ASSERT)
@@ -1024,8 +1022,20 @@ MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 
 #endif /* MDBX_DEBUG */
 
+#if defined(__ANDROID_API__)
+#define mdbx_panic(fmt, ...)                                                   \
+  __android_log_assert("panic", "mdbx", fmt, __VA_ARGS__)
+#else
+MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
+#endif
+
+#if !MDBX_DEBUG && defined(__ANDROID_API__)
+#define mdbx_assert_fail(env, msg, func, line)                                 \
+  __android_log_assert(msg, "mdbx", "%s:%u", func, line)
+#else
 MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
                                          const char *func, int line);
+#endif
 
 #define mdbx_debug_extra(fmt, ...)                                             \
   do {                                                                         \

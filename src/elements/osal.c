@@ -197,6 +197,8 @@ __extern_C void __assert(const char *function, const char *file, int line,
 
 #endif /* __assert_fail */
 
+#if !defined(__ANDROID_API__) || MDBX_DEBUG
+
 MDBX_INTERNAL_FUNC void __cold mdbx_assert_fail(const MDBX_env *env,
                                                 const char *msg,
                                                 const char *func, int line) {
@@ -221,6 +223,8 @@ MDBX_INTERNAL_FUNC void __cold mdbx_assert_fail(const MDBX_env *env,
     OutputDebugStringA(message);
     if (IsDebuggerPresent())
       DebugBreak();
+#elif defined(__ANDROID_API__)
+    __android_log_assert(msg, "mdbx", "%s:%u", func, line);
 #else
     __assert_fail(msg, "mdbx", line, func);
 #endif
@@ -232,6 +236,10 @@ MDBX_INTERNAL_FUNC void __cold mdbx_assert_fail(const MDBX_env *env,
   abort();
 #endif
 }
+
+#endif /* __ANDROID_API__ || MDBX_DEBUG */
+
+#if !defined(__ANDROID_API__)
 
 MDBX_INTERNAL_FUNC __cold void mdbx_panic(const char *fmt, ...) {
   va_list ap;
@@ -255,6 +263,8 @@ MDBX_INTERNAL_FUNC __cold void mdbx_panic(const char *fmt, ...) {
   abort();
 #endif
 }
+
+#endif /* !  __ANDROID_API__ */
 
 /*----------------------------------------------------------------------------*/
 
@@ -315,7 +325,8 @@ MDBX_INTERNAL_FUNC int mdbx_memalign_alloc(size_t alignment, size_t bytes,
 #elif defined(_ISOC11_SOURCE)
   *result = aligned_alloc(alignment, ceil_powerof2(bytes, alignment));
   return *result ? MDBX_SUCCESS : errno;
-#elif _POSIX_VERSION >= 200112L
+#elif _POSIX_VERSION >= 200112L &&                                             \
+    (!defined(__ANDROID_API__) || __ANDROID_API__ >= 17)
   *result = nullptr;
   return posix_memalign(result, alignment, bytes);
 #elif __GLIBC_PREREQ(2, 16) || __STDC_VERSION__ >= 201112L
@@ -753,7 +764,8 @@ MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
 
 int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  uint64_t offset, size_t expected_written) {
-#if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__)
+#if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__) ||                \
+    (defined(__ANDROID_API__) && __ANDROID_API__ < 24)
   size_t written = 0;
   for (int i = 0; i < iovcnt; ++i) {
     int rc = mdbx_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
@@ -1095,6 +1107,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     mdbx_free(PathBuffer);
     return rc;
   }
+
 #else
 
   struct statvfs statvfs_info;
@@ -1147,6 +1160,9 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     defined(MFSTYPENAMELEN) || defined(VFS_NAMELEN)
   const char *const name = statfs_info.f_fstypename;
   const size_t name_len = sizeof(statfs_info.f_fstypename);
+#elif defined(__ANDROID_API__) && __ANDROID_API__ < 21
+  const char *const name = "";
+  const unsigned name_len = 0;
 #else
 
   const char *name = "";
@@ -1165,7 +1181,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     mounted = setmntent("/etc/mtab", "r");
   if (mounted) {
     const struct mntent *ent;
-#if defined(_BSD_SOURCE) || defined(_SVID_SOURCE) ||                           \
+#if defined(_BSD_SOURCE) || defined(_SVID_SOURCE) || defined(__BIONIC__) ||    \
     (defined(_DEFAULT_SOURCE) && __GLIBC_PREREQ(2, 19))
     struct mntent entbuf;
     const bool should_copy = false;
@@ -1191,7 +1207,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     }
     endmntent(mounted);
   }
-#endif /* !xBSD */
+#endif /* !xBSD && !Android/Bionic */
 #endif
 
   if (name_len) {

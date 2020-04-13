@@ -240,6 +240,13 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define malloc_usable_size(ptr) _msize(ptr)
 #endif /* malloc_usable_size */
 
+#ifdef __ANDROID_API__
+#include <android/log.h>
+#if __ANDROID_API__ >= 21
+#include <sys/sendfile.h>
+#endif
+#endif /* Android */
+
 /* *INDENT-OFF* */
 /* clang-format off */
 #if defined(HAVE_SYS_STAT_H) || __has_include(<sys/stat.h>)
@@ -340,7 +347,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 
 /* *INDENT-OFF* */
 /* clang-format off */
-#if defined(__GLIBC__) || defined(__GNU_LIBRARY__) || defined(__ANDROID__) ||  \
+#if defined(__GLIBC__) || defined(__GNU_LIBRARY__) || defined(__ANDROID_API__) ||  \
     defined(HAVE_ENDIAN_H) || __has_include(<endian.h>)
 #include <endian.h>
 #elif defined(__APPLE__) || defined(__MACH__) || defined(__OpenBSD__) ||       \
