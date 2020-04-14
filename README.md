@@ -40,7 +40,7 @@ for parallel readers without atomic/interlocked operations, while
 6. **Guarantee data integrity** after crash unless this was explicitly
 neglected in favour of write performance.
 
-7. Supports Linux, Windows, MacOS, FreeBSD, DragonFly, Solaris,
+7. Supports Linux, Windows, MacOS, Android, iOS, FreeBSD, DragonFly, Solaris,
 OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems compliant with
 **POSIX.1-2008**.
 
@@ -416,8 +416,12 @@ will need to install the current (not outdated) version of
 recommend that you install [Homebrew](https://brew.sh/) and then execute
 `brew install bash`.
 
+### Android
+We recommend using CMake to build _libmdbx_ for Android.
+Please refer to the [official guide](https://developer.android.com/studio/projects/add-native-code).
+
 ### iOS
-To build _libmdbx_ for iOS, we recommend using CMake using the
+To build _libmdbx_ for iOS, we recommend using CMake with the
 "[toolchain file](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html)"
 from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 
@@ -430,6 +434,8 @@ error when opening the database in a _WSL1_ environment.
 
 ## API description
 For more information and API description see the [mdbx.h](mdbx.h) header.
+Please do not hesitate to point out errors in the documentation,
+including creating [PR](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests) with corrections and improvements.
 
 ## Bindings
 
