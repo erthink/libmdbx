@@ -90,7 +90,7 @@
 #pragma warning(disable : 4200) /* nonstandard extension used: zero-sized array in struct/union */
 #endif                          /* _MSC_VER (warnings) */
 
-#include "../../mdbx.h"
+#include "../mdbx.h"
 #include "defs.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4,2)

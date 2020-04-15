@@ -18181,12 +18181,12 @@ __dll_export
   #endif
 #endif /* MDBX_BUILD_TARGET */
 
-#ifdef MDBX_BUILD_CONFIG
+#ifdef MDBX_BUILD_TYPE
 # if defined(_MSC_VER)
-#   pragma message("Configuration-depended MDBX_BUILD_CONFIG: " MDBX_BUILD_CONFIG)
+#   pragma message("Configuration-depended MDBX_BUILD_TYPE: " MDBX_BUILD_TYPE)
 # endif
-    "-" MDBX_BUILD_CONFIG
-#endif /* MDBX_BUILD_CONFIG */
+    "-" MDBX_BUILD_TYPE
+#endif /* MDBX_BUILD_TYPE */
     ,
     "MDBX_DEBUG=" STRINGIFY(MDBX_DEBUG)
 #ifdef MDBX_LOGLEVEL_BUILD

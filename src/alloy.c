@@ -11,15 +11,15 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
-#define MDBX_ALLOY 1            /* amalgamated build */
-#include "elements/internals.h" /* must be included first */
+#define MDBX_ALLOY 1   /* alloyed build */
+#include "internals.h" /* must be included first */
 
-#include "elements/core.c"
-#include "elements/osal.c"
-#include "elements/version.c"
+#include "core.c"
+#include "osal.c"
+#include "version.c"
 
 #if defined(_WIN32) || defined(_WIN64)
-#include "elements/lck-windows.c"
+#include "lck-windows.c"
 #else
-#include "elements/lck-posix.c"
+#include "lck-posix.c"
 #endif

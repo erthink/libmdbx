@@ -14,6 +14,8 @@
 
 #include "test.h"
 
+#if !(defined(_WIN32) || defined(_WIN64))
+
 #include <pthread.h>
 #include <signal.h>
 #include <sys/mman.h>
@@ -529,3 +531,5 @@ std::string osal_tempdir(void) {
 int osal_removefile(const std::string &pathname) {
   return unlink(pathname.c_str()) ? errno : MDBX_SUCCESS;
 }
+
+#endif /* !Windows */

@@ -1,9 +1,3 @@
-if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
-  set(TEST_OSAL windows)
-else()
-  set(TEST_OSAL unix)
-endif()
-
 add_executable(mdbx_test
   base.h
   cases.cc
@@ -21,7 +15,8 @@ add_executable(mdbx_test
   log.h
   main.cc
   osal.h
-  osal-${TEST_OSAL}.cc
+  osal-unix.cc
+  osal-windows.cc
   test.cc
   test.h
   try.cc
@@ -35,19 +30,15 @@ add_executable(mdbx_test
 set_target_properties(mdbx_test PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>
   CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON)
+target_setup_options(mdbx_test)
 
-if(CC_HAS_FASTMATH)
-  target_compile_options(mdbx_test PRIVATE "-ffast-math")
-endif()
-if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))
-  set_target_properties(mdbx_test PROPERTIES LINK_FLAGS "-fvisibility=hidden")
-endif()
-
-target_link_libraries(mdbx_test mdbx ${LIB_MATH} ${CMAKE_THREAD_LIBS_INIT})
+target_link_libraries(mdbx_test ${TOOL_MDBX_LIB} ${LIB_MATH} ${CMAKE_THREAD_LIBS_INIT})
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   target_link_libraries(mdbx_test winmm.lib)
 endif()
 
 if(UNIX AND NOT SUBPROJECT)
-  add_subdirectory(pcrf)
+  add_executable(pcrf_test pcrf/pcrf_test.c)
+  target_include_directories(pcrf_test PRIVATE "${PROJECT_SOURCE_DIR}")
+  target_link_libraries(pcrf_test ${TOOL_MDBX_LIB})
 endif()

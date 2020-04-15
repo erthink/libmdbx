@@ -84,14 +84,14 @@
 #define MDBX_INTERNAL_VAR extern
 #define MDBX_TOOLS /* Avoid using internal mdbx_assert() */
 #include "../mdbx.h"
-#include "../src/elements/defs.h"
-#include "../src/elements/osal.h"
+#include "../src/defs.h"
+#include "../src/osal.h"
 
 #if !defined(__thread) && (defined(_MSC_VER) || defined(__DMC__))
 #define __thread __declspec(thread)
 #endif /* __thread */
 
-#include "../src/elements/options.h"
+#include "../src/options.h"
 
 #ifdef _MSC_VER
 #pragma warning(pop)

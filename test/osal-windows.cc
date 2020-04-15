@@ -14,6 +14,8 @@
 
 #include "test.h"
 
+#if defined(_WIN32) || defined(_WIN64)
+
 static std::unordered_map<unsigned, HANDLE> events;
 static HANDLE hBarrierSemaphore, hBarrierEvent;
 static HANDLE hProgressActiveEvent, hProgressPassiveEvent;
@@ -459,3 +461,5 @@ std::string osal_tempdir(void) {
 int osal_removefile(const std::string &pathname) {
   return DeleteFileA(pathname.c_str()) ? MDBX_SUCCESS : GetLastError();
 }
+
+#endif /* Windows */

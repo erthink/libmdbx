@@ -21,7 +21,7 @@
 #endif                          /* _MSC_VER (warnings) */
 
 #define MDBX_TOOLS /* Avoid using internal mdbx_assert() */
-#include "../elements/internals.h"
+#include "internals.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "wingetopt.h"
