@@ -478,6 +478,7 @@ endif()
 set_target_properties(mdbx-static PROPERTIES
   C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
   PUBLIC_HEADER mdbx.h)
+target_compile_definitions(mdbx-static PRIVATE MDBX_BUILD_SHARED_LIBRARY=0)
 target_setup_options(mdbx-static)
 libmdbx_setup_libs(mdbx-static INTERFACE)
 if(MDBX_BUILD_SHARED_LIBRARY)
@@ -494,7 +495,7 @@ if(MDBX_BUILD_SHARED_LIBRARY)
   set_target_properties(mdbx PROPERTIES
     C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
     PUBLIC_HEADER mdbx.h)
-  target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS INTERFACE LIBMDBX_IMPORTS)
+  target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS MDBX_BUILD_SHARED_LIBRARY=1 INTERFACE LIBMDBX_IMPORTS)
   target_setup_options(mdbx)
   libmdbx_setup_libs(mdbx PRIVATE)
   if(CC_HAS_VISIBILITY AND (LTO_ENABLED OR INTERPROCEDURAL_OPTIMIZATION))
