@@ -1449,7 +1449,8 @@ typedef enum MDBX_cursor_op {
 /* Transaction has too many dirty pages, i.e transaction too big */
 #define MDBX_TXN_FULL (-30788)
 
-/* Cursor stack too deep - internal error */
+/* Cursor stack too deep - this usually indicates corruption,
+ * i.e branch-pages loop */
 #define MDBX_CURSOR_FULL (-30787)
 
 /* Page has not enough space - internal error */

@@ -3180,7 +3180,8 @@ static const char *__mdbx_strerr(int errnum) {
       NULL /* MDBX_TLS_FULL (-30789): unused in MDBX */,
       "MDBX_TXN_FULL: Transaction has too many dirty pages,"
       " i.e transaction is too big",
-      "MDBX_CURSOR_FULL: Internal error - Cursor stack limit reached",
+      "MDBX_CURSOR_FULL: Cursor stack limit reachedn - this usually indicates"
+      " corruption, i.e branch-pages loop",
       "MDBX_PAGE_FULL: Internal error - Page has no more space",
       "MDBX_UNABLE_EXTEND_MAPSIZE: Database engine was unable to extend"
       " mapping, e.g. since address space is unavailable or busy,"
