@@ -1465,6 +1465,13 @@ typedef enum MDBX_cursor_op {
  *    or explicit call of mdbx_env_set_geometry(). */
 #define MDBX_UNABLE_EXTEND_MAPSIZE (-30785)
 
+/* MDBX_MAP_RESIZED is deprecated.
+ * Please review your code to use MDBX_UNABLE_EXTEND_MAPSIZE instead. */
+static __inline int __deprecated MDBX_MAP_RESIZED() {
+  return MDBX_UNABLE_EXTEND_MAPSIZE;
+}
+#define MDBX_MAP_RESIZED MDBX_MAP_RESIZED()
+
 /* Environment or database is not compatible with the requested operation
  * or the specified flags. This can mean:
  *  - The operation expects an MDBX_DUPSORT / MDBX_DUPFIXED database.
