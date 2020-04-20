@@ -5528,20 +5528,8 @@ fail:
   return rc;
 }
 
-__cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
-  if (unlikely(!env))
-    return MDBX_EINVAL;
-
-  if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-#if MDBX_TXN_CHECKPID
-  if (unlikely(env->me_pid != mdbx_getpid())) {
-    env->me_flags |= MDBX_FATAL_ERROR;
-    return MDBX_PANIC;
-  }
-#endif /* MDBX_TXN_CHECKPID */
-
+__cold static int mdbx_env_sync_internal(MDBX_env *env, int force,
+                                         int nonblock) {
   unsigned flags = env->me_flags & ~MDBX_NOMETASYNC;
   if (unlikely(flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)))
     return MDBX_EACCESS;
@@ -5634,6 +5622,23 @@ fastpath:
   if (need_unlock)
     mdbx_txn_unlock(env);
   return rc;
+}
+
+__cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
+  if (unlikely(!env))
+    return MDBX_EINVAL;
+
+  if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
+    return MDBX_EBADSIGN;
+
+#if MDBX_TXN_CHECKPID
+  if (unlikely(env->me_pid != mdbx_getpid())) {
+    env->me_flags |= MDBX_FATAL_ERROR;
+    return MDBX_PANIC;
+  }
+#endif /* MDBX_TXN_CHECKPID */
+
+  return mdbx_env_sync_internal(env, force, nonblock);
 }
 
 __cold int mdbx_env_sync(MDBX_env *env) {
@@ -10171,6 +10176,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
     return MDBX_SUCCESS;
   }
 
+  env->me_signature = 0;
   env->me_flags &= ~MDBX_ENV_ACTIVE;
   env->me_oldest = nullptr;
   env->me_sync_timestamp = nullptr;
@@ -10255,36 +10261,33 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   if ((env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0 && env->me_txn0) {
     if (env->me_txn0->mt_owner && env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
-    if (!dont_sync) {
-#if defined(_WIN32) || defined(_WIN64)
-      /* On windows, without blocking is impossible to determine whether another
-       * process is running a writing transaction or not.
-       * Because in the "owner died" condition kernel don't release
-       * file lock immediately. */
-      rc = mdbx_env_sync_ex(env, true, false);
-      rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
-#else
-      struct stat st;
-      if (unlikely(fstat(env->me_lazy_fd, &st)))
-        rc = errno;
-      else if (st.st_nlink > 0 /* don't sync deleted files */) {
-        rc = mdbx_env_sync_ex(env, true, true);
-        rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
-              rc == EWOULDBLOCK || rc == MDBX_RESULT_TRUE)
-                 ? MDBX_SUCCESS
-                 : rc;
-      }
-#endif
-    }
-  }
+  } else
+    dont_sync = true;
 
-  while ((dp = env->me_dpages) != NULL) {
-    ASAN_UNPOISON_MEMORY_REGION(&dp->mp_next, sizeof(dp->mp_next));
-    VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
-    env->me_dpages = dp->mp_next;
-    mdbx_free(dp);
+  if (!atomic_cas32(&env->me_signature, MDBX_ME_SIGNATURE, 0))
+    return MDBX_EBADSIGN;
+
+  if (!dont_sync) {
+#if defined(_WIN32) || defined(_WIN64)
+    /* On windows, without blocking is impossible to determine whether another
+     * process is running a writing transaction or not.
+     * Because in the "owner died" condition kernel don't release
+     * file lock immediately. */
+    rc = mdbx_env_sync_internal(env, true, false);
+    rc = (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
+#else
+    struct stat st;
+    if (unlikely(fstat(env->me_lazy_fd, &st)))
+      rc = errno;
+    else if (st.st_nlink > 0 /* don't sync deleted files */) {
+      rc = mdbx_env_sync_internal(env, true, true);
+      rc = (rc == MDBX_BUSY || rc == EAGAIN || rc == EACCES || rc == EBUSY ||
+            rc == EWOULDBLOCK || rc == MDBX_RESULT_TRUE)
+               ? MDBX_SUCCESS
+               : rc;
+    }
+#endif
   }
-  VALGRIND_DESTROY_MEMPOOL(env);
 
   rc = mdbx_env_close0(env) ? MDBX_PANIC : rc;
   mdbx_ensure(env, mdbx_fastmutex_destroy(&env->me_dbi_lock) == MDBX_SUCCESS);
@@ -10300,9 +10303,15 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   mdbx_ensure(env, mdbx_ipclock_destroy(&env->me_lckless_stub.wlock) == 0);
 #endif /* MDBX_LOCKING */
 
+  while ((dp = env->me_dpages) != NULL) {
+    ASAN_UNPOISON_MEMORY_REGION(&dp->mp_next, sizeof(dp->mp_next));
+    VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
+    env->me_dpages = dp->mp_next;
+    mdbx_free(dp);
+  }
+  VALGRIND_DESTROY_MEMPOOL(env);
   mdbx_ensure(env, env->me_lcklist_next == nullptr);
   env->me_pid = 0;
-  env->me_signature = 0;
   mdbx_free(env);
 
   return rc;

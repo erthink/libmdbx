@@ -1914,14 +1914,17 @@ LIBMDBX_API int mdbx_env_set_syncperiod(MDBX_env *env,
  *
  * Returns A non-zero error value on failure and 0 on success.
  * Some possible errors are:
- *  - MDBX_BUSY    = The write transaction is running by other thread, in such
- *                   case MDBX_env instance has NOT be destroyed not released!
- *                   NOTE: if any OTHER error code was returned then given
- *                         MDBX_env instance has been destroyed and released.
- *  - MDBX_PANIC   = If mdbx_env_close_ex() was called in the child process
- *                   after fork(). In this case MDBX_PANIC is a expecte,
- *                   i.e. MDBX_env instance was freed in proper manner.
- *  - MDBX_EIO     = an error occurred during synchronization. */
+ *  - MDBX_BUSY      = The write transaction is running by other thread, in such
+ *                     case MDBX_env instance has NOT be destroyed not released!
+ *                     NOTE: if any OTHER error code was returned then given
+ *                          MDBX_env instance has been destroyed and released.
+ *  - MDBX_EBADSIGN  = Environment handle already closed (i.e. mdbx_env_close()
+ *                     was already called or not valid (i.e. was not created
+ *                     by mdbx_env_create()).
+ *  - MDBX_PANIC     = If mdbx_env_close_ex() was called in the child process
+ *                     after fork(). In this case MDBX_PANIC is a expecte,
+ *                     i.e. MDBX_env instance was freed in proper manner.
+ *  - MDBX_EIO       = an error occurred during synchronization. */
 LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, int dont_sync);
 LIBMDBX_API int mdbx_env_close(MDBX_env *env);
 

@@ -862,15 +862,7 @@ typedef struct MDBX_cursor_couple {
 /* The database environment. */
 struct MDBX_env {
 #define MDBX_ME_SIGNATURE UINT32_C(0x9A899641)
-  size_t me_signature;
-  mdbx_mmap_t me_dxb_mmap; /*  The main data file */
-#define me_map me_dxb_mmap.dxb
-#define me_lazy_fd me_dxb_mmap.fd
-  mdbx_filehandle_t me_dsync_fd;
-  mdbx_mmap_t me_lck_mmap; /*  The lock file */
-#define me_lfd me_lck_mmap.fd
-#define me_lck me_lck_mmap.lck
-
+  uint32_t me_signature;
   /* Failed to update the meta page. Probably an I/O error. */
 #define MDBX_FATAL_ERROR UINT32_C(0x80000000)
   /* Additional flag for mdbx_sync_locked() */
@@ -879,7 +871,15 @@ struct MDBX_env {
 #define MDBX_ENV_ACTIVE UINT32_C(0x20000000)
   /* me_txkey is set */
 #define MDBX_ENV_TXKEY UINT32_C(0x10000000)
-  uint32_t me_flags;      /* see mdbx_env */
+  uint32_t me_flags;
+  mdbx_mmap_t me_dxb_mmap; /*  The main data file */
+#define me_map me_dxb_mmap.dxb
+#define me_lazy_fd me_dxb_mmap.fd
+  mdbx_filehandle_t me_dsync_fd;
+  mdbx_mmap_t me_lck_mmap; /*  The lock file */
+#define me_lfd me_lck_mmap.fd
+#define me_lck me_lck_mmap.lck
+
   unsigned me_psize;      /* DB page size, inited from me_os_psize */
   unsigned me_psize2log;  /* log2 of DB page size */
   unsigned me_os_psize;   /* OS page size, from mdbx_syspagesize() */
