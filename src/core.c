@@ -9911,6 +9911,33 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
       (env->me_flags & MDBX_ENV_ACTIVE) != 0)
     return MDBX_EPERM;
 
+#if defined(_WIN32) || defined(_WIN64)
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
+#endif /* Windows */
+
+  if (mode == 0 /* open existing, don't create */) {
+    /* ignore passed MDBX_NOSUBDIR flag and auto-detect it */
+    flags |= MDBX_NOSUBDIR;
+#if defined(_WIN32) || defined(_WIN64)
+    const DWORD dwAttrib = GetFileAttributesW(pathnameW);
+    if (dwAttrib == INVALID_FILE_ATTRIBUTES)
+      return GetLastError();
+    if (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)
+      flags -= MDBX_NOSUBDIR;
+#else
+    struct stat st;
+    if (stat(pathname, &st))
+      return errno;
+    if (S_ISDIR(st.st_mode))
+      flags -= MDBX_NOSUBDIR;
+#endif
+  }
+
   size_t len_full, len = strlen(pathname);
   if (flags & MDBX_NOSUBDIR) {
     len_full = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
@@ -9979,14 +10006,6 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
 
   if ((flags & (MDBX_RDONLY | MDBX_NOSUBDIR)) == 0 && mode != 0) {
 #if defined(_WIN32) || defined(_WIN64)
-    const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-    if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-      return ERROR_INVALID_NAME;
-    wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-    if (wlen != mbstowcs(pathnameW, pathname, wlen + 1)) {
-      rc = ERROR_INVALID_NAME;
-      goto bailout;
-    }
     if (!CreateDirectoryW(pathnameW, nullptr)) {
       rc = GetLastError();
       if (rc != ERROR_ALREADY_EXISTS)
