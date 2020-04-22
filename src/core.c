@@ -9920,23 +9920,59 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
     return ERROR_INVALID_NAME;
 #endif /* Windows */
 
-  if (mode == 0 /* open existing, don't create */) {
-    /* ignore passed MDBX_NOSUBDIR flag and auto-detect it */
-    flags |= MDBX_NOSUBDIR;
+  flags |= env->me_flags /* pickup previously mdbx_env_set_flags() */;
+
 #if defined(_WIN32) || defined(_WIN64)
-    const DWORD dwAttrib = GetFileAttributesW(pathnameW);
-    if (dwAttrib == INVALID_FILE_ATTRIBUTES)
-      return GetLastError();
+  const DWORD dwAttrib = GetFileAttributesW(pathnameW);
+  if (dwAttrib == INVALID_FILE_ATTRIBUTES) {
+    int rc = GetLastError();
+    if (rc != MDBX_ENOFILE)
+      return rc;
+    if (mode == 0 || (flags & MDBX_RDONLY) != 0)
+      /* can't open existing */
+      return rc;
+
+    /* auto-create directory if requested */
+    if ((flags & MDBX_NOSUBDIR) == 0 && !CreateDirectoryW(pathnameW, nullptr)) {
+      rc = GetLastError();
+      if (rc != ERROR_ALREADY_EXISTS)
+        return rc;
+    }
+  } else {
+    /* ignore passed MDBX_NOSUBDIR flag and set it automatically */
+    flags |= MDBX_NOSUBDIR;
     if (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)
       flags -= MDBX_NOSUBDIR;
+  }
 #else
-    struct stat st;
-    if (stat(pathname, &st))
-      return errno;
+  struct stat st;
+  if (stat(pathname, &st)) {
+    int rc = errno;
+    if (rc != MDBX_ENOFILE)
+      return rc;
+    if (mode == 0 || (flags & MDBX_RDONLY) != 0)
+      /* can't open existing */
+      return rc;
+
+    /* auto-create directory if requested */
+    const mode_t dir_mode =
+        (/* inherit read/write permissions for group and others */ mode &
+         (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
+        /* always add read/write/search for owner */ S_IRWXU |
+        ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
+        ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
+    if ((flags & MDBX_NOSUBDIR) == 0 && mkdir(pathname, dir_mode)) {
+      rc = errno;
+      if (rc != EEXIST)
+        return rc;
+    }
+  } else {
+    /* ignore passed MDBX_NOSUBDIR flag and set it automatically */
+    flags |= MDBX_NOSUBDIR;
     if (S_ISDIR(st.st_mode))
       flags -= MDBX_NOSUBDIR;
-#endif
   }
+#endif
 
   size_t len_full, len = strlen(pathname);
   if (flags & MDBX_NOSUBDIR) {
@@ -9960,7 +9996,6 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
   }
 
   int rc = MDBX_SUCCESS;
-  flags |= env->me_flags;
   if (flags & MDBX_RDONLY) {
     /* LY: silently ignore irrelevant flags when
      * we're only getting read access */
@@ -10004,28 +10039,6 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
   env->me_dbxs[FREE_DBI].md_cmp =
       mdbx_cmp_int_align4; /* aligned MDBX_INTEGERKEY */
 
-  if ((flags & (MDBX_RDONLY | MDBX_NOSUBDIR)) == 0 && mode != 0) {
-#if defined(_WIN32) || defined(_WIN64)
-    if (!CreateDirectoryW(pathnameW, nullptr)) {
-      rc = GetLastError();
-      if (rc != ERROR_ALREADY_EXISTS)
-        goto bailout;
-    }
-#else
-    const mode_t dir_mode =
-        (/* inherit read/write permissions for group and others */ mode &
-         (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
-        /* always add read/write/search for owner */ S_IRWXU |
-        ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
-        ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
-    if (mkdir(pathname, dir_mode)) {
-      rc = errno;
-      if (rc != EEXIST)
-        goto bailout;
-    }
-#endif
-  }
-
   rc = mdbx_openfile(F_ISSET(flags, MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
                                                  : MDBX_OPEN_DXB_LAZY,
                      env, dxb_pathname, &env->me_lazy_fd, mode);
@@ -10050,7 +10063,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
 
 #if !(defined(_WIN32) || defined(_WIN64))
   if (mode == 0) {
-    struct stat st;
+    /* pickup mode for lck-file */
     if (fstat(env->me_lazy_fd, &st)) {
       rc = errno;
       goto bailout;
@@ -10058,7 +10071,6 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
     mode = st.st_mode;
   }
 #endif /* !Windows */
-
   const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
     rc = lck_rc;
