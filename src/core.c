@@ -9896,6 +9896,19 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #error "Persistent DB flags & env flags overlap, but both go in mm_flags"
 #endif
 
+/* Merge flags and avoid false MDBX_UTTERLY_NOSYNC */
+static uint32_t merge_flags(const uint32_t a, const uint32_t b) {
+  uint32_t r = a | b;
+  if (F_ISSET(r, MDBX_UTTERLY_NOSYNC) && !F_ISSET(a, MDBX_UTTERLY_NOSYNC) &&
+      !F_ISSET(b, MDBX_UTTERLY_NOSYNC))
+    r -= (r & MDBX_WRITEMAP) ? MDBX_UTTERLY_NOSYNC ^ MDBX_MAPASYNC
+                             : MDBX_UTTERLY_NOSYNC ^ MDBX_SAFE_NOSYNC;
+  assert(!(F_ISSET(r, MDBX_UTTERLY_NOSYNC) &&
+           !F_ISSET(a, MDBX_UTTERLY_NOSYNC) &&
+           !F_ISSET(b, MDBX_UTTERLY_NOSYNC)));
+  return r;
+}
+
 int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
                          mode_t mode) {
   if (unlikely(!env || !pathname))
@@ -9920,7 +9933,9 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
     return ERROR_INVALID_NAME;
 #endif /* Windows */
 
-  flags |= env->me_flags /* pickup previously mdbx_env_set_flags() */;
+  /* pickup previously mdbx_env_set_flags(),
+   * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
+  flags = merge_flags(flags, env->me_flags);
 
 #if defined(_WIN32) || defined(_WIN64)
   const DWORD dwAttrib = GetFileAttributesW(pathnameW);
@@ -15571,7 +15586,7 @@ int __cold mdbx_env_set_flags(MDBX_env *env, unsigned flags, int onoff) {
     return rc;
 
   if (onoff)
-    env->me_flags |= flags;
+    env->me_flags = merge_flags(env->me_flags, flags);
   else
     env->me_flags &= ~flags;
 
