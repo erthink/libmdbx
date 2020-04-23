@@ -133,10 +133,9 @@ static __inline BOOL funlock(mdbx_filehandle_t fd, uint64_t offset,
 
 #define LCK_MAXLEN (1u + (size_t)(MAXSSIZE_T))
 #define LCK_META_OFFSET 0
-#define LCK_META_LEN 0x10000u
+#define LCK_META_LEN (MAX_PAGESIZE * NUM_METAS)
 #define LCK_BODY_OFFSET LCK_META_LEN
 #define LCK_BODY_LEN (LCK_MAXLEN - LCK_BODY_OFFSET)
-#define LCK_META LCK_META_OFFSET, LCK_META_LEN
 #define LCK_BODY LCK_BODY_OFFSET, LCK_BODY_LEN
 #define LCK_WHOLE 0, LCK_MAXLEN
 
@@ -390,14 +389,6 @@ static void lck_unlock(MDBX_env *env) {
     /* explicitly unlock to avoid latency for other processes (windows kernel
      * releases such locks via deferred queues) */
     while (funlock(env->me_lazy_fd, LCK_BODY))
-      ;
-    err = GetLastError();
-    assert(err == ERROR_NOT_LOCKED ||
-           (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
-    (void)err;
-    SetLastError(ERROR_SUCCESS);
-
-    while (funlock(env->me_lazy_fd, LCK_META))
       ;
     err = GetLastError();
     assert(err == ERROR_NOT_LOCKED ||

@@ -8837,7 +8837,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     }
 
     /* get untouched params from DB */
-    if (pagesize < 0)
+    if (pagesize <= 0 || pagesize >= INT_MAX)
       pagesize = env->me_psize;
     if (size_lower < 0)
       size_lower = pgno2bytes(env, head->mm_geo.lower);
@@ -8867,18 +8867,33 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (unlikely(inside_txn))
       return MDBX_PANIC;
 
-    if (pagesize < 0) {
-      pagesize = env->me_os_psize;
-      if ((uintptr_t)pagesize > MAX_PAGESIZE)
-        pagesize = MAX_PAGESIZE;
-      mdbx_assert(env, (uintptr_t)pagesize >= MIN_PAGESIZE);
+    /* is requested some auto-value for pagesize ? */
+    if (pagesize >= INT_MAX /* maximal */)
+      pagesize = MAX_PAGESIZE;
+    else if (pagesize <= 0) {
+      if (pagesize < 0 /* default */) {
+        pagesize = env->me_os_psize;
+        if ((uintptr_t)pagesize > MAX_PAGESIZE)
+          pagesize = MAX_PAGESIZE;
+        mdbx_assert(env, (uintptr_t)pagesize >= MIN_PAGESIZE);
+      } else if (pagesize == 0 /* minimal */)
+        pagesize = MIN_PAGESIZE;
+
+      /* choose pagesize */
+      intptr_t max_size = (size_now > size_lower) ? size_now : size_lower;
+      max_size = (size_upper > max_size) ? size_upper : max_size;
+      if (max_size < 0 /* default */)
+        max_size = DEFAULT_MAPSIZE;
+      else if (max_size == 0 /* minimal */)
+        max_size = MIN_MAPSIZE;
+      else if (max_size >= (intptr_t)MAX_MAPSIZE /* maximal */)
+        max_size = MAX_MAPSIZE;
+
+      while (max_size > pagesize * (int64_t)MAX_PAGENO &&
+             pagesize < MAX_PAGESIZE)
+        pagesize <<= 1;
     }
   }
-
-  if (pagesize == 0)
-    pagesize = MIN_PAGESIZE;
-  else if (pagesize == INTPTR_MAX)
-    pagesize = MAX_PAGESIZE;
 
   if (pagesize < (intptr_t)MIN_PAGESIZE || pagesize > (intptr_t)MAX_PAGESIZE ||
       !is_powerof2(pagesize)) {
@@ -8891,6 +8906,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (MIN_MAPSIZE / pagesize < MIN_PAGENO)
       size_lower = MIN_PAGENO * pagesize;
   }
+  if (size_lower == INTPTR_MAX)
+    size_lower = MAX_MAPSIZE;
 
   if (size_now <= 0) {
     size_now = DEFAULT_MAPSIZE;
@@ -8899,6 +8916,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (size_upper >= size_lower && size_now > size_upper)
       size_now = size_upper;
   }
+  if (size_now == INTPTR_MAX)
+    size_now = MAX_MAPSIZE;
 
   if (size_upper <= 0) {
     if ((size_t)size_now >= MAX_MAPSIZE / 2)
@@ -8932,8 +8951,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     goto bailout;
   }
 
-  const size_t unit =
-      (env->me_os_psize > (size_t)pagesize) ? env->me_os_psize : pagesize;
+  const size_t unit = (env->me_os_psize > (size_t)pagesize) ? env->me_os_psize
+                                                            : (size_t)pagesize;
   size_lower = ceil_powerof2(size_lower, unit);
   size_upper = ceil_powerof2(size_upper, unit);
   size_now = ceil_powerof2(size_now, unit);
@@ -17830,6 +17849,7 @@ __cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
                     !is_powerof2((size_t)pagesize)))
     return -1;
 
+  STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t limit = MAX_PAGENO * (uint64_t)pagesize;
   return (limit < (intptr_t)MAX_MAPSIZE) ? (intptr_t)limit
                                          : (intptr_t)MAX_MAPSIZE;
@@ -17843,6 +17863,7 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
                     !is_powerof2((size_t)pagesize)))
     return -1;
 
+  STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t limit = pagesize * (uint64_t)(MDBX_DPL_TXNFULL - 1);
   return (limit < (intptr_t)MAX_MAPSIZE) ? (intptr_t)limit
                                          : (intptr_t)MAX_MAPSIZE;
