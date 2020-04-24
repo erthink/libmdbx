@@ -7669,9 +7669,16 @@ static __always_inline bool mdbx_txn_dbi_exists(MDBX_txn *txn, MDBX_dbi dbi,
 }
 
 int mdbx_txn_commit(MDBX_txn *txn) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
+  STATIC_ASSERT(MDBX_TXN_FINISHED ==
+                MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR);
+  int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
+
+  if (unlikely(txn->mt_flags & MDBX_TXN_ERROR)) {
+    rc = MDBX_RESULT_TRUE;
+    goto fail;
+  }
 
   MDBX_env *env = txn->mt_env;
 #if MDBX_TXN_CHECKPID

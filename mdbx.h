@@ -2425,20 +2425,37 @@ LIBMDBX_API uint64_t mdbx_txn_id(const MDBX_txn *txn);
 
 /* Commit all the operations of a transaction into the database.
  *
- * The transaction handle is freed. It and its cursors must not be used again
- * after this call, except with mdbx_cursor_renew() and mdbx_cursor_close().
- *
- * A cursor must be closed explicitly always, before or after its transaction
- * ends. It can be reused with mdbx_cursor_renew() before finally closing it.
+ * If the current thread is not eligible to manage the transaction then
+ * the MDBX_THREAD_MISMATCH error will returned. Otherwise the transaction
+ * will be committed and its handle is freed. If the transaction cannot
+ * be committed, it will be aborted with the corresponding error returned.
+ * Thus, a result other than MDBX_THREAD_MISMATCH means that the transaction
+ * is terminated:
+ *  - Resources are released;
+ *  - Transaction handle is invalid;
+ *  - Cursor(s) associated with transaction must not be used, except with
+ *    mdbx_cursor_renew() and mdbx_cursor_close().
+ *    Such cursor(s) must be closed explicitly by mdbx_cursor_close() before
+ *    or after transaction commit, either can be reused with mdbx_cursor_renew()
+ *    until it will be explicitly closed by mdbx_cursor_close().
  *
  * [in] txn  A transaction handle returned by mdbx_txn_begin().
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDBX_EINVAL   = an invalid parameter was specified.
- *  - MDBX_ENOSPC   = no more disk space.
- *  - MDBX_EIO      = a low-level I/O error occurred while writing.
- *  - MDBX_ENOMEM   = out of memory. */
+ *  - MDBX_RESULT_TRUE      = transaction was aborted since it should be aborted
+ *                            due to previous errors.
+ *  - MDBX_PANIC            = a fatal error occurred earlier and the environment
+ *                            must be shut down.
+ *  - MDBX_BAD_TXN          = transaction is already fihished or never began.
+ *  - MDBX_EBADSIGN         = transaction object has invalid signature,
+ *                            e.g. transaction was already terminated
+ *                            or memory was corrupted.
+ *  - MDBX_THREAD_MISMATCH  = given transaction is not owned by current thread.
+ *  - MDBX_EINVAL           = transaction handle is NULL.
+ *  - MDBX_ENOSPC           = no more disk space.
+ *  - MDBX_EIO              = a system-level I/O error occurred while writing.
+ *  - MDBX_ENOMEM           = out of memory. */
 LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
 
 /* Abandon all the operations of the transaction instead of saving them.
@@ -2446,12 +2463,30 @@ LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
  * The transaction handle is freed. It and its cursors must not be used again
  * after this call, except with mdbx_cursor_renew() and mdbx_cursor_close().
  *
- * A cursor must be closed explicitly always, before or after its transaction
- * ends. It can be reused with mdbx_cursor_renew() before finally closing it.
+ * If the current thread is not eligible to manage the transaction then
+ * the MDBX_THREAD_MISMATCH error will returned. Otherwise the transaction
+ * will be aborted and its handle is freed. Thus, a result other than
+ * MDBX_THREAD_MISMATCH means that the transaction is terminated:
+ *  - Resources are released;
+ *  - Transaction handle is invalid;
+ *  - Cursor(s) associated with transaction must not be used, except with
+ *    mdbx_cursor_renew() and mdbx_cursor_close().
+ *    Such cursor(s) must be closed explicitly by mdbx_cursor_close() before
+ *    or after transaction abort, either can be reused with mdbx_cursor_renew()
+ *    until it will be explicitly closed by mdbx_cursor_close().
  *
  * [in] txn  A transaction handle returned by mdbx_txn_begin().
  *
- * Returns A non-zero error value on failure and 0 on success. */
+ * Returns A non-zero error value on failure and 0 on success, some
+ * possible errors are:
+ *  - MDBX_PANIC            = a fatal error occurred earlier and the environment
+ *                            must be shut down.
+ *  - MDBX_BAD_TXN          = transaction is already fihished or never began.
+ *  - MDBX_EBADSIGN         = transaction object has invalid signature,
+ *                            e.g. transaction was already terminated
+ *                            or memory was corrupted.
+ *  - MDBX_THREAD_MISMATCH  = given transaction is not owned by current thread.
+ *  - MDBX_EINVAL           = transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
 
 /* Reset a read-only transaction.
