@@ -6138,8 +6138,6 @@ static __always_inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
 }
 
 int mdbx_txn_renew(MDBX_txn *txn) {
-  int rc;
-
   if (unlikely(!txn))
     return MDBX_EINVAL;
 
@@ -6149,8 +6147,12 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_owner != 0))
-    return MDBX_THREAD_MISMATCH;
+  int rc;
+  if (unlikely(txn->mt_owner != 0 || !(txn->mt_flags & MDBX_TXN_FINISHED))) {
+    rc = mdbx_txn_reset(txn);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
 
   rc = mdbx_txn_renew0(txn, MDBX_RDONLY);
   if (rc == MDBX_SUCCESS) {

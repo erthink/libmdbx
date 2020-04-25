@@ -2509,7 +2509,16 @@ LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
  *
  * [in] txn  A transaction handle returned by mdbx_txn_begin().
  *
- * Returns A non-zero error value on failure and 0 on success. */
+ * Returns A non-zero error value on failure and 0 on success, some
+ * possible errors are:
+ *  - MDBX_PANIC            = a fatal error occurred earlier and the environment
+ *                            must be shut down.
+ *  - MDBX_BAD_TXN          = transaction is already fihished or never began.
+ *  - MDBX_EBADSIGN         = transaction object has invalid signature,
+ *                            e.g. transaction was already terminated
+ *                            or memory was corrupted.
+ *  - MDBX_THREAD_MISMATCH  = given transaction is not owned by current thread.
+ *  - MDBX_EINVAL           = transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
 
 /* Renew a read-only transaction.
@@ -2522,9 +2531,14 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
- *  - MDBX_PANIC     = a fatal error occurred earlier and the environment
- *                     must be shut down.
- *  - MDBX_EINVAL    = an invalid parameter was specified. */
+ *  - MDBX_PANIC            = a fatal error occurred earlier and the environment
+ *                            must be shut down.
+ *  - MDBX_BAD_TXN          = transaction is already fihished or never began.
+ *  - MDBX_EBADSIGN         = transaction object has invalid signature,
+ *                            e.g. transaction was already terminated
+ *                            or memory was corrupted.
+ *  - MDBX_THREAD_MISMATCH  = transaction is running by other thread.
+ *  - MDBX_EINVAL           = transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
 
 /* The fours integers markers (aka "canary") associated with the environment.
