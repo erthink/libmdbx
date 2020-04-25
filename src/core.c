@@ -15149,7 +15149,6 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             mo = (MDBX_page *)(my->mc_wbuf[toggle] + my->mc_wlen[toggle]);
             memcpy(mo, omp, my->mc_env->me_psize);
             mo->mp_pgno = my->mc_next_pgno;
-            mo->mp_txnid = MIN_TXNID;
             my->mc_next_pgno += omp->mp_pages;
             my->mc_wlen[toggle] += my->mc_env->me_psize;
             if (omp->mp_pages > 1) {
@@ -15214,7 +15213,6 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
     }
     mo = (MDBX_page *)(my->mc_wbuf[toggle] + my->mc_wlen[toggle]);
     mdbx_page_copy(mo, mp, my->mc_env->me_psize);
-    mo->mp_txnid = MIN_TXNID;
     mo->mp_pgno = my->mc_next_pgno++;
     my->mc_wlen[toggle] += my->mc_env->me_psize;
     if (mc.mc_top) {
@@ -15268,6 +15266,8 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
   uint8_t *const data_buffer =
       buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
   MDBX_meta *const meta = mdbx_init_metas(env, buffer);
+  mdbx_meta_set_txnid(env, meta, read_txn->mt_txnid);
+
   /* copy canary sequenses if present */
   if (read_txn->mt_canary.v) {
     meta->mm_canary = read_txn->mt_canary;
