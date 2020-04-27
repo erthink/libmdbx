@@ -1283,8 +1283,8 @@ int main(int argc, char *argv[]) {
 
     if (verbose) {
       uint64_t total_page_bytes = walk.pgcount * envstat.ms_psize;
-      print(" - pages: total %" PRIu64 ", unused %" PRIu64 "\n", walk.pgcount,
-            unused_pages);
+      print(" - pages: walked %" PRIu64 ", left/unused %" PRIu64 "\n",
+            walk.pgcount, unused_pages);
       if (verbose > 1) {
         for (walk_dbi_t *dbi = walk.dbi; dbi < ARRAY_END(walk.dbi) && dbi->name;
              ++dbi) {
