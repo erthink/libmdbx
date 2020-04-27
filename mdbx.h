@@ -1370,6 +1370,7 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 /**** ENVIRONMENT COPY FLAGS **************************************************/
 /* Compacting: Omit free space from copy, and renumber all pages sequentially */
 #define MDBX_CP_COMPACT 1u
+#define MDBX_CP_FORCE_RESIZEABLE 2u
 
 /**** CURSOR OPERATIONS ********************************************************
  *

@@ -15258,15 +15258,31 @@ static __cold void compact_fixup_meta(MDBX_env *env, MDBX_meta *meta) {
   meta->mm_datasync_sign = mdbx_meta_sign(meta);
 }
 
+/* Make resizeable */
+static __cold void make_sizeable(MDBX_meta *meta) {
+  meta->mm_geo.lower = MIN_PAGENO;
+  if (meta->mm_geo.grow == 0) {
+    const size_t step = 1 + (meta->mm_geo.upper - meta->mm_geo.lower) / 42;
+    meta->mm_geo.grow = (step < UINT16_MAX) ? (uint16_t)step : UINT16_MAX;
+  }
+  if (meta->mm_geo.shrink == 0) {
+    const size_t step = meta->mm_geo.grow + meta->mm_geo.grow;
+    meta->mm_geo.shrink = (step < UINT16_MAX) ? (uint16_t)step : UINT16_MAX;
+  }
+}
+
 /* Copy environment with compaction. */
 static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
                                    mdbx_filehandle_t fd, uint8_t *buffer,
-                                   const bool dest_is_pipe) {
+                                   const bool dest_is_pipe, const int flags) {
   const size_t meta_bytes = pgno2bytes(env, NUM_METAS);
   uint8_t *const data_buffer =
       buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
   MDBX_meta *const meta = mdbx_init_metas(env, buffer);
   mdbx_meta_set_txnid(env, meta, read_txn->mt_txnid);
+
+  if (flags & MDBX_CP_FORCE_RESIZEABLE)
+    make_sizeable(meta);
 
   /* copy canary sequenses if present */
   if (read_txn->mt_canary.v) {
@@ -15395,7 +15411,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
 /* Copy environment as-is. */
 static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
                                      mdbx_filehandle_t fd, uint8_t *buffer,
-                                     const bool dest_is_pipe) {
+                                     const bool dest_is_pipe, const int flags) {
   /* We must start the actual read txn after blocking writers */
   int rc = mdbx_txn_end(read_txn, MDBX_END_RESET_TMP);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -15419,9 +15435,12 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   memcpy(buffer, env->me_map, meta_bytes);
   MDBX_meta *const headcopy = /* LY: get pointer to the spanshot copy */
       (MDBX_meta *)(buffer + ((uint8_t *)mdbx_meta_head(env) - env->me_map));
+  mdbx_txn_unlock(env);
+
+  if (flags & MDBX_CP_FORCE_RESIZEABLE)
+    make_sizeable(headcopy);
   /* Update signature to steady */
   headcopy->mm_datasync_sign = mdbx_meta_sign(headcopy);
-  mdbx_txn_unlock(env);
 
   /* Copy the data */
   const size_t whole_size = pgno_align2os_bytes(env, read_txn->mt_end_pgno);
@@ -15537,9 +15556,8 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 
   if (likely(rc == MDBX_SUCCESS)) {
     memset(buffer, 0, pgno2bytes(env, NUM_METAS));
-    rc = (flags & MDBX_CP_COMPACT)
-             ? mdbx_env_compact(env, read_txn, fd, buffer, dest_is_pipe)
-             : mdbx_env_copy_asis(env, read_txn, fd, buffer, dest_is_pipe);
+    rc = ((flags & MDBX_CP_COMPACT) ? mdbx_env_compact : mdbx_env_copy_asis)(
+        env, read_txn, fd, buffer, dest_is_pipe, flags);
   }
   mdbx_txn_abort(read_txn);
 
