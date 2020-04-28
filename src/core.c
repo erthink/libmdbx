@@ -15233,19 +15233,15 @@ done:
 
 static __cold void compact_fixup_meta(MDBX_env *env, MDBX_meta *meta) {
   /* Calculate filesize taking in account shrink/growing thresholds */
-  if (meta->mm_geo.next > meta->mm_geo.now) {
-    const pgno_t aligned = pgno_align2os_pgno(
-        env,
-        pgno_add(meta->mm_geo.next,
-                 meta->mm_geo.grow - meta->mm_geo.next % meta->mm_geo.grow));
-    meta->mm_geo.now = aligned;
-  } else if (meta->mm_geo.next < meta->mm_geo.now) {
+  if (meta->mm_geo.next != meta->mm_geo.now) {
     meta->mm_geo.now = meta->mm_geo.next;
     const pgno_t aligner =
         meta->mm_geo.grow ? meta->mm_geo.grow : meta->mm_geo.shrink;
-    const pgno_t aligned = pgno_align2os_pgno(
-        env, meta->mm_geo.next + aligner - meta->mm_geo.next % aligner);
-    meta->mm_geo.now = aligned;
+    if (aligner) {
+      const pgno_t aligned = pgno_align2os_pgno(
+          env, meta->mm_geo.next + aligner - meta->mm_geo.next % aligner);
+      meta->mm_geo.now = aligned;
+    }
   }
 
   if (meta->mm_geo.now < meta->mm_geo.lower)
