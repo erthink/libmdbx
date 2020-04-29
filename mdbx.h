@@ -919,7 +919,9 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *  - without MDBX_NOSUBDIR = in a filesystem we have the MDBX-directory with
  *    given pathname, within that a pair of MDBX-files with predefined names.
  *
- * This flag affects only at environment opening and can't be changed after. */
+ * This flag affects only at new environment creating by mdbx_env_open(),
+ * otherwise at opening an existing environment libmdbx will choice this
+ * automatically. */
 #define MDBX_NOSUBDIR 0x4000u
 
 /* MDBX_RDONLY = read only mode.
