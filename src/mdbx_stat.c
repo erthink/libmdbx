@@ -54,15 +54,14 @@ static void prstat(MDBX_stat *ms) {
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] [-n] dbpath\n"
+          "usage: %s [-V] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -e\t\tshow whole DB info\n"
           "  -f\t\tshow GC info\n"
           "  -r\t\tshow readers\n"
           "  -a\t\tprint stat of main DB and all subDBs\n"
           "  \t\t(default) print stat of only the main DB\n"
-          "  -s name\tprint stat of only the named subDB\n"
-          "  -n\t\tNOSUBDIR mode for open\n",
+          "  -s name\tprint stat of only the named subDB\n",
           prog);
   exit(EXIT_FAILURE);
 }

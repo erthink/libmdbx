@@ -765,19 +765,17 @@ bailout:
 }
 
 static void usage(char *prog) {
-  fprintf(
-      stderr,
-      "usage: %s [-V] [-v] [-n] [-q] [-c] [-w] [-d] [-i] [-s subdb] dbpath\n"
-      "  -V\t\tprint version and exit\n"
-      "  -v\t\tmore verbose, could be used multiple times\n"
-      "  -n\t\tNOSUBDIR mode for open\n"
-      "  -q\t\tbe quiet\n"
-      "  -c\t\tforce cooperative mode (don't try exclusive)\n"
-      "  -w\t\tlock DB for writing while checking\n"
-      "  -d\t\tdisable page-by-page traversal of B-tree\n"
-      "  -i\t\tignore wrong order errors (for custom comparators case)\n"
-      "  -s subdb\tprocess a specific subdatabase only\n",
-      prog);
+  fprintf(stderr,
+          "usage: %s [-V] [-v] [-q] [-c] [-w] [-d] [-i] [-s subdb] dbpath\n"
+          "  -V\t\tprint version and exit\n"
+          "  -v\t\tmore verbose, could be used multiple times\n"
+          "  -q\t\tbe quiet\n"
+          "  -c\t\tforce cooperative mode (don't try exclusive)\n"
+          "  -w\t\tlock DB for writing while checking\n"
+          "  -d\t\tdisable page-by-page traversal of B-tree\n"
+          "  -i\t\tignore wrong order errors (for custom comparators case)\n"
+          "  -s subdb\tprocess a specific subdatabase only\n",
+          prog);
   exit(EXIT_INTERRUPTED);
 }
 

@@ -335,7 +335,7 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] [-n] "
+          "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] "
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
@@ -345,8 +345,7 @@ static void usage(void) {
           "  -s name\tload into named subDB\n"
           "  -N\t\tuse NOOVERWRITE on puts\n"
           "  -T\t\tread plaintext\n"
-          "  -r\t\trescure mode (ignore errors to load corrupted DB dump)\n"
-          "  -n\t\tNOSUBDIR mode for open\n",
+          "  -r\t\trescure mode (ignore errors to load corrupted DB dump)\n",
           prog);
   exit(EXIT_FAILURE);
 }

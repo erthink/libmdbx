@@ -45,11 +45,10 @@ static void signal_handler(int sig) {
 
 static void usage(const char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-c] [-n] src_path [dest_path]\n"
+          "usage: %s [-V] [-q] [-c] src_path [dest_path]\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -c\t\tenable compactification (skip unused pages)\n"
-          "  -n\t\tNOSUBDIR mode for open\n"
           "  src_path\tsource database\n"
           "  dest_path\tdestination (stdout if not specified)\n",
           prog);

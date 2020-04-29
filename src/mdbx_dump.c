@@ -160,7 +160,7 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-a|-s subdb] [-r] [-n] "
+          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-a|-s subdb] [-r] "
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
@@ -170,8 +170,7 @@ static void usage(char *prog) {
           "  -a\t\tdump main DB and all subDBs,\n"
           "    \t\tby default dump only the main DB\n"
           "  -s\t\tdump only the named subDB\n"
-          "  -r\t\trescure mode (ignore errors to dump corrupted DB)\n"
-          "  -n\t\tNOSUBDIR mode for open\n",
+          "  -r\t\trescure mode (ignore errors to dump corrupted DB)\n",
           prog);
   exit(EXIT_FAILURE);
 }
