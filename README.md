@@ -263,7 +263,7 @@ pre-opening is not needed.
   > contrary to LMDB. Nevertheless, the `MDBX_UTTERLY_NOSYNC` mode available to match LMDB behaviour,
   > and for a special use-cases.
 
-6. On **MacOS** the `fcntl(F_FULLFSYNC)` syscall is used _by
+6. On **MacOS & iOS** the `fcntl(F_FULLFSYNC)` syscall is used _by
 default_ to synchronize data with the disk, as this is [the only way to
 guarantee data
 durability](https://developer.apple.com/library/archive/documentation/System/Conceptual/ManPages_iPhoneOS/man2/fsync.2.html)
