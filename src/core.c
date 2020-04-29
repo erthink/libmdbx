@@ -571,6 +571,8 @@ static __pure_function __always_inline MDBX_node *page_node(const MDBX_page *mp,
  * There are no node headers, keys are stored contiguously. */
 static __pure_function __always_inline void *
 page_leaf2key(const MDBX_page *mp, unsigned i, size_t keysize) {
+  assert((mp->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_META)) ==
+         (P_LEAF | P_LEAF2));
   assert(mp->mp_leaf2_ksize == keysize);
   (void)keysize;
   return (char *)mp + PAGEHDRSZ + (i * mp->mp_leaf2_ksize);
@@ -13606,7 +13608,15 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         rc = mdbx_page_search_lowest(&mn);
         if (unlikely(rc))
           return rc;
-        MDBX_node *lowest = page_node(mn.mc_pg[mn.mc_top], 0);
+
+        const MDBX_node *lowest;
+        const MDBX_page *mp = mn.mc_pg[mn.mc_top];
+        if (unlikely(IS_LEAF2(mp))) {
+          assert(mn.mc_top > csrc->mc_top);
+          mp = mn.mc_pg[mn.mc_top - 1];
+          lowest = page_node(mp, mn.mc_ki[mn.mc_top - 1]);
+        } else
+          lowest = page_node(mp, 0);
         key.iov_len = node_ks(lowest);
         key.iov_base = node_key(lowest);
 
