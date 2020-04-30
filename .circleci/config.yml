@@ -2,7 +2,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/buildpack-deps:artful
+      - image: circleci/buildpack-deps:20.04
     environment:
       - TESTDB: /tmp/test.db
       - TESTLOG: /tmp/test.log
