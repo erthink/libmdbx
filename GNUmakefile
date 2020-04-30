@@ -118,7 +118,7 @@ DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile Makefile VERSION conf
 DIST_SRC   := mdbx.h mdbx.c $(addsuffix .c, $(TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
-TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
+TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log.gz
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
@@ -144,7 +144,7 @@ test: all mdbx_example mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
-		| tee -a $(TEST_LOG) | tail -n 42) \
+		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
@@ -155,11 +155,12 @@ test-singleprocess: all mdbx_test
 		(./mdbx_test --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --nested) \
-		| tee -a $(TEST_LOG) | tail -n 42) \
+		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 test-fault: all mdbx_test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic | tee -a $(TEST_LOG) | tail -n 42) \
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic \
+		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
@@ -169,7 +170,7 @@ memcheck test-valgrind: all mdbx_test
 		($(VALGRIND) ./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
-		| tee -a $(TEST_LOG) | tail -n 42) \
+		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	&& $(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 define test-rule
