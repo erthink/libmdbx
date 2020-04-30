@@ -104,7 +104,9 @@ protected:
   using data_view = std::string;
 #endif
   static inline data_view S(const MDBX_val &v) {
-    return data_view(static_cast<const char *>(v.iov_base), v.iov_len);
+    return (v.iov_base && v.iov_len)
+               ? data_view(static_cast<const char *>(v.iov_base), v.iov_len)
+               : data_view();
   }
   static inline data_view S(const keygen::buffer &b) { return S(b->value); }
 
@@ -136,13 +138,13 @@ protected:
   const actor_config &config;
   const mdbx_pid_t pid;
 
-  MDBX_dbi dbi;
+  MDBX_dbi dbi{0};
   scoped_db_guard db_guard;
   scoped_txn_guard txn_guard;
   scoped_cursor_guard cursor_guard;
-  bool signalled;
+  bool signalled{false};
 
-  size_t nops_completed;
+  size_t nops_completed{0};
   chrono::time start_timestamp;
   keygen::buffer key;
   keygen::buffer data;
@@ -152,7 +154,7 @@ protected:
     mdbx_canary canary;
   } last;
 
-  SET speculum;
+  SET speculum{ItemCompare(this)};
   bool speculum_verify();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              unsigned flags);
@@ -211,8 +213,7 @@ protected:
 
 public:
   testcase(const actor_config &config, const mdbx_pid_t pid)
-      : config(config), pid(pid), signalled(false), nops_completed(0),
-        speculum(ItemCompare(this)) {
+      : config(config), pid(pid) {
     start_timestamp.reset();
     memset(&last, 0, sizeof(last));
   }
@@ -290,7 +291,7 @@ class testcase_nested : public testcase {
   using inherited = testcase;
   using FIFO = std::deque<std::pair<uint64_t, unsigned>>;
 
-  uint64_t serial;
+  uint64_t serial{0};
   FIFO fifo;
   std::stack<std::tuple<scoped_txn_guard, uint64_t, FIFO, SET>> stack;
 

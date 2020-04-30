@@ -517,9 +517,9 @@ std::string osal_tempdir(void) {
     tempdir = getenv("TEMPDIR");
   if (!tempdir)
     tempdir = getenv("TEMP");
-  if (tempdir) {
+  if (tempdir && *tempdir) {
     std::string dir(tempdir);
-    if (!dir.empty() && dir.at(dir.length() - 1) != '/')
+    if (dir.back() != '/')
       dir.append("/");
     return dir;
   }
