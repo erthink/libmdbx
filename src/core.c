@@ -3187,7 +3187,7 @@ static const char *__mdbx_strerr(int errnum) {
       "MDBX_PAGE_FULL: Internal error - Page has no more space",
       "MDBX_UNABLE_EXTEND_MAPSIZE: Database engine was unable to extend"
       " mapping, e.g. since address space is unavailable or busy,"
-      " or Operation system not supported such operations"
+      " or Operation system not supported such operations",
       "MDBX_INCOMPATIBLE: Environment or database is not compatible"
       " with the requested operation or the specified flags",
       "MDBX_BAD_RSLOT: Invalid reuse of reader locktable slot,"
