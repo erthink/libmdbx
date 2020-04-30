@@ -61,7 +61,7 @@ macro(set_source_files_compile_flags)
   unset(_lang)
 endmacro(set_source_files_compile_flags)
 
-macro(fetch_version name version_file parent_scope)
+macro(fetch_version name source_root_directory parent_scope)
   set(${name}_VERSION "")
   set(${name}_GIT_DESCRIBE "")
   set(${name}_GIT_TIMESTAMP "")
@@ -69,11 +69,11 @@ macro(fetch_version name version_file parent_scope)
   set(${name}_GIT_COMMIT "")
   set(${name}_GIT_REVISION 0)
   set(${name}_GIT_VERSION "")
-  if(GIT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+  if(GIT AND EXISTS "${source_root_directory}/.git")
     execute_process(COMMAND ${GIT} describe --tags --long --dirty=-dirty
       OUTPUT_VARIABLE ${name}_GIT_DESCRIBE
       OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_DESCRIBE" STREQUAL "")
       message(FATAL_ERROR "Please fetch tags and/or install latest version of git ('describe --tags --long --dirty' failed)")
@@ -82,13 +82,13 @@ macro(fetch_version name version_file parent_scope)
     execute_process(COMMAND ${GIT} show --no-patch --format=%cI HEAD
       OUTPUT_VARIABLE ${name}_GIT_TIMESTAMP
       OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_TIMESTAMP" STREQUAL "%cI")
       execute_process(COMMAND ${GIT} show --no-patch --format=%ci HEAD
         OUTPUT_VARIABLE ${name}_GIT_TIMESTAMP
         OUTPUT_STRIP_TRAILING_WHITESPACE
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        WORKING_DIRECTORY ${source_root_directory}
         RESULT_VARIABLE rc)
       if(rc OR "${name}_GIT_TIMESTAMP" STREQUAL "%ci")
         message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%cI HEAD' failed)")
@@ -98,7 +98,7 @@ macro(fetch_version name version_file parent_scope)
     execute_process(COMMAND ${GIT} show --no-patch --format=%T HEAD
       OUTPUT_VARIABLE ${name}_GIT_TREE
       OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_TREE" STREQUAL "")
       message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%T HEAD' failed)")
@@ -107,7 +107,7 @@ macro(fetch_version name version_file parent_scope)
     execute_process(COMMAND ${GIT} show --no-patch --format=%H HEAD
       OUTPUT_VARIABLE ${name}_GIT_COMMIT
       OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_COMMIT" STREQUAL "")
       message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%H HEAD' failed)")
@@ -116,7 +116,7 @@ macro(fetch_version name version_file parent_scope)
     execute_process(COMMAND ${GIT} rev-list --count --no-merges HEAD
       OUTPUT_VARIABLE ${name}_GIT_REVISION
       OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_REVISION" STREQUAL "")
       message(FATAL_ERROR "Please install latest version of git ('rev-list --count --no-merges HEAD' failed)")
@@ -137,7 +137,7 @@ macro(fetch_version name version_file parent_scope)
   endif()
 
   if(NOT ${name}_GIT_VERSION OR NOT ${name}_GIT_TIMESTAMP OR NOT ${name}_GIT_REVISION)
-    if(GIT AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git")
+    if(GIT AND EXISTS "${source_root_directory}/.git")
       message(WARNING "Unable to retrive ${name} version from git.")
     endif()
     set(${name}_GIT_VERSION "0;0;0;0")
@@ -145,8 +145,8 @@ macro(fetch_version name version_file parent_scope)
     set(${name}_GIT_REVISION 0)
 
     # Try to get version from VERSION file
-    if(EXISTS "${version_file}")
-      file(STRINGS "${version_file}" ${name}_VERSION)
+    if(EXISTS "${version_file}/VERSION")
+      file(STRINGS "${version_file}/VERSION" ${name}_VERSION)
     endif()
 
     if(NOT ${name}_VERSION)
