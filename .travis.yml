@@ -24,38 +24,38 @@ matrix:
       osx_image: xcode9.4
       env: CC=cc CXX=c++
 
-script: >
-  if [ "${COVERITY_SCAN_BRANCH}" != 1 ]; then
-    git fetch --unshallow --tags --prune &&
-    git submodule foreach --recursive git fetch --unshallow --tags --prune &&
-    (if which clang-format-6.0 > /dev/null && make reformat && [[ -n $(git diff) ]];
-      then
-        echo "You must run 'make reformat' before submitting a pull request";
-        echo "";
-        git diff;
-        exit -1;
-      fi) &&
-    make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
-  else
-    [ ! -s cov-int/scm_log.txt ] || cat cov-int/scm_log.txt;
-  fi && sleep 3
-
 env:
   global:
    - secure: "M+W+heGGyRQJoBq2W0uqWVrpL4KBXmL0MFL7FSs7f9vmAaDyEgziUXeZRj3GOKzW4kTef3LpIeiu9SmvqSMoQivGGiomZShqPVl045o/OUgRCAT7Al1RLzEZ0efSHpIPf0PZ6byEf6GR2ML76OfuL6JxTVdnz8iVyO2sgLE1HbX1VeB+wgd/jfMeOBhCCXskfK6MLyZihfMYsiYZYSaV98ZDhDLSlzuuRIgzb0bMi8aL6AErs0WLW0NelRBeHkKPYfAUc85pdQHscgrJw6Rh/zT6+8BQ/q5f4IgWhiu4xoRg3Ngl7SNoedRQh93ADM3UG2iGl6HDFpVORaXcFWKAtuYY+kHQ0HB84BRYpQmeBuXNpltsfxQ3d1Q3u0RlE45zRvmr2+X1mFnkcNUAWISLPbsOUlriDQM8irGwRpho77/uYnRC00bJsHW//s6+uPf9zrAw1nI4f0y3PAWukGF/xs6HAI3FZPsuSSnx18Tj3Opgbc9Spop+V3hkhdiJoPGpNKTkFX4ZRXfkPgoRVJmtp4PpbpH0Ps/mCriKjMEfGGi0HcVCi0pEGLXiecdqJ5KPg5+22zNycEujQBJcNTKd9shN+R3glrbmhAxTEzGdGwxXXJ2ybwJ2PWJLMYZ7g98nLyX+uQPaA3BlsbYJHNeS5283/9pJsd9DzfHKsN2nFSc="
 
-before_install:
-  - echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
-  - ${CC} --version
-  - ${CXX} --version
+before_script: |
+  if [ "${TRAVIS_BRANCH}" = "coverity_scan" ]; then
+    # call Coverity Scan manually of addons.coverity_scan for first job only
+    if [ "${TRAVIS_JOB_NUMBER}" = "${TRAVIS_BUILD_NUMBER}.1" ]; then
+      export COVERITY_SCAN_BRANCH=1
+      echo -n | openssl s_client -connect scan.coverity.com:443 | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' | sudo tee -a /etc/ssl/certs/ca-
+      curl -s 'https://scan.coverity.com/scripts/travisci_build_coverity_scan.sh' -o coverity_scan.sh
+    else
+      echo 'echo "Skip CoverityScan for unrelated os/compiler"' > coverity_scan.sh
+    fi
+  elif [ "${TRAVIS_JOB_NUMBER}" = "${TRAVIS_BUILD_NUMBER}.1" ] && make reformat && [[ -n $(git diff) ]]; then
+    echo "You must run 'make reformat' before submitting a pull request"
+    echo ""
+    git diff
+    exit -1
+  fi
 
-addons:
-  coverity_scan:
-    project:
-      name: "ReOpen/libmdbx"
-      version: 0.1
-      description: "Build submitted via Travis CI"
-    notification_email: leo@yuriev.ru
-    build_command_prepend: "git fetch --unshallow --tags --prune && make dist"
-    build_command: "make MDBX_OPTIONS=-DMDBX_DEBUG=2 -C dist all"
-    branch_pattern: coverity_scan
+script: |
+  ${CC} --version
+  ${CXX} --version
+  git fetch --unshallow --tags --prune || exit 1
+  if [ ! -s ./coverity_scan.sh ]; then
+    make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
+  else
+    COVERITY_SCAN_PROJECT_NAME="ReOpen/libmdbx" \
+    COVERITY_SCAN_NOTIFICATION_EMAIL="leo@yuriev.ru" \
+    COVERITY_SCAN_BUILD_COMMAND_PREPEND="" \
+    COVERITY_SCAN_BUILD_COMMAND="make MDBX_OPTIONS=-DMDBX_DEBUG=2 build-test" \
+    COVERITY_SCAN_BRANCH_PATTERN="$TRAVIS_BRANCH" \
+      bash ./coverity_scan.sh || cat cov-int/scm_log.txt
+  fi

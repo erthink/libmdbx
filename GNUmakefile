@@ -146,9 +146,11 @@ MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'P
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/version.c && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
 
-check: test mdbx_example dist
+check: test dist
 
-test: all mdbx_example mdbx_test
+build-test: all mdbx_example mdbx_test
+
+test: build-test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
