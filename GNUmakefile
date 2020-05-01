@@ -128,6 +128,14 @@ CXX        ?= g++
 CXXSTD     ?= $(shell $(CXX) -std=c++27 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
 CXXFLAGS   := $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 TAR        ?= $(shell which gnu-tar || echo tar)
+CLANG_FORMAT ?= $(shell (which clang-format || which clang-format-8 || which clang-format-9 || which clang-format-10 || which clang-format-11 || which clang-format-12) 2>/dev/null)
+
+reformat:
+	@if [ -n "$(CLANG_FORMAT)" ]; then \
+		git ls-files | grep -E '\.(c|cxx|cc|cpp|h|hxx|hpp)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
+	else \
+		echo "clang-format version 8..12 not found for 'reformat'"; \
+	fi
 
 MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(wildcard src/*)
