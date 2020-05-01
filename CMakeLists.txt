@@ -557,45 +557,21 @@ endif()
 if(MDBX_BUILD_SHARED_LIBRARY)
   if(CMAKE_VERSION VERSION_LESS 3.12)
     install(TARGETS mdbx EXPORT libmdbx
-      RUNTIME
-      DESTINATION bin
-      COMPONENT runtime
-      LIBRARY
-      DESTINATION lib
-      COMPONENT runtime
-      OBJECTS
-      DESTINATION lib
-      COMPONENT devel
-      ARCHIVE
-      DESTINATION lib
-      COMPONENT devel
-      PUBLIC_HEADER
-      DESTINATION include
-      COMPONENT devel
-      INCLUDES
-      DESTINATION include
-      COMPONENT devel)
+      RUNTIME DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION bin COMPONENT runtime
+      OBJECTS DESTINATION lib COMPONENT devel
+      ARCHIVE DESTINATION lib COMPONENT devel
+      PUBLIC_HEADER DESTINATION include COMPONENT devel
+      INCLUDES DESTINATION include COMPONENT devel)
   else()
     install(TARGETS mdbx EXPORT libmdbx
-      RUNTIME
-      DESTINATION bin
-      COMPONENT runtime
-      LIBRARY
-      DESTINATION lib
-      COMPONENT runtime
+      RUNTIME DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION bin COMPONENT runtime
       NAMELINK_COMPONENT devel
-      OBJECTS
-      DESTINATION lib
-      COMPONENT devel
-      ARCHIVE
-      DESTINATION lib
-      COMPONENT devel
-      PUBLIC_HEADER
-      DESTINATION include
-      COMPONENT devel
-      INCLUDES
-      DESTINATION include
-      COMPONENT devel)
+      OBJECTS DESTINATION lib COMPONENT devel
+      ARCHIVE DESTINATION lib COMPONENT devel
+      PUBLIC_HEADER DESTINATION include COMPONENT devel
+      INCLUDES DESTINATION include COMPONENT devel)
   endif()
 endif(MDBX_BUILD_SHARED_LIBRARY)
 
@@ -626,45 +602,21 @@ endif(MDBX_BUILD_TOOLS)
 if(MDBX_INSTALL_STATIC)
   if(CMAKE_VERSION VERSION_LESS 3.12)
     install(TARGETS mdbx-static EXPORT libmdbx
-      RUNTIME
-      DESTINATION bin
-      COMPONENT runtime
-      LIBRARY
-      DESTINATION lib
-      COMPONENT runtime
-      OBJECTS
-      DESTINATION lib
-      COMPONENT devel
-      ARCHIVE
-      DESTINATION lib
-      COMPONENT devel
-      PUBLIC_HEADER
-      DESTINATION include
-      COMPONENT devel
-      INCLUDES
-      DESTINATION include
-      COMPONENT devel)
+      RUNTIME DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION bin COMPONENT runtime
+      OBJECTS DESTINATION lib COMPONENT devel
+      ARCHIVE DESTINATION lib COMPONENT devel
+      PUBLIC_HEADER DESTINATION include COMPONENT devel
+      INCLUDES DESTINATION include COMPONENT devel)
   else()
     install(TARGETS mdbx-static EXPORT libmdbx
-      RUNTIME
-      DESTINATION bin
-      COMPONENT runtime
-      LIBRARY
-      DESTINATION lib
-      COMPONENT runtime
+      RUNTIME DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION bin COMPONENT runtime
       NAMELINK_COMPONENT devel
-      OBJECTS
-      DESTINATION lib
-      COMPONENT devel
-      ARCHIVE
-      DESTINATION lib
-      COMPONENT devel
-      PUBLIC_HEADER
-      DESTINATION include
-      COMPONENT devel
-      INCLUDES
-      DESTINATION include
-      COMPONENT devel)
+      OBJECTS DESTINATION lib COMPONENT devel
+      ARCHIVE DESTINATION lib COMPONENT devel
+      PUBLIC_HEADER DESTINATION include COMPONENT devel
+      INCLUDES DESTINATION include COMPONENT devel)
   endif()
 endif(MDBX_INSTALL_STATIC)
 
