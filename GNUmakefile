@@ -148,6 +148,19 @@ MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/version.c && (open
 
 check: test dist
 
+check-analyzer:
+	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
+	$(MAKE) --always-make CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
+
+check-ubsan:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" check
+
+check-asan:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Os -fsanitize=address" check
+
+check-leak:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-fsanitize=leak" check
+
 build-test: all mdbx_example mdbx_test
 
 test: build-test
