@@ -224,55 +224,61 @@ struct keygen_params_pod {
    *  номера будет отрезано для генерации значения.
    */
 
-  uint8_t width;
-  uint8_t mesh;
-  uint8_t rotate;
-  uint8_t split;
-  uint32_t seed;
-  uint64_t offset;
-  keygen_case keycase;
+  uint8_t width{0};
+  uint8_t mesh{0};
+  uint8_t rotate{0};
+  uint8_t split{0};
+  uint32_t seed{0};
+  uint64_t offset{0};
+  keygen_case keycase{kc_random};
 };
 
 struct actor_params_pod {
-  unsigned mode_flags;
-  unsigned table_flags;
-  intptr_t size_lower;
-  intptr_t size_now;
-  intptr_t size_upper;
-  int shrink_threshold;
-  int growth_step;
-  int pagesize;
+  unsigned mode_flags{0};
+  unsigned table_flags{0};
+  intptr_t size_lower{0};
+  intptr_t size_now{0};
+  intptr_t size_upper{0};
+  int shrink_threshold{0};
+  int growth_step{0};
+  int pagesize{0};
 
-  unsigned test_duration;
-  unsigned test_nops;
-  unsigned nrepeat;
-  unsigned nthreads;
+  unsigned test_duration{0};
+  unsigned test_nops{0};
+  unsigned nrepeat{0};
+  unsigned nthreads{0};
 
-  unsigned keylen_min, keylen_max;
-  unsigned datalen_min, datalen_max;
+  unsigned keylen_min{0}, keylen_max{0};
+  unsigned datalen_min{0}, datalen_max{0};
 
-  unsigned batch_read;
-  unsigned batch_write;
+  unsigned batch_read{0};
+  unsigned batch_write{0};
 
-  unsigned delaystart;
-  unsigned waitfor_nops;
-  unsigned inject_writefaultn;
+  unsigned delaystart{0};
+  unsigned waitfor_nops{0};
+  unsigned inject_writefaultn{0};
 
-  unsigned max_readers;
-  unsigned max_tables;
+  unsigned max_readers{0};
+  unsigned max_tables{0};
   keygen_params_pod keygen;
 
-  uint8_t loglevel;
-  bool drop_table;
-  bool ignore_dbfull;
-  bool speculum;
+  uint8_t loglevel{0};
+  bool drop_table{0};
+  bool ignore_dbfull{0};
+  bool speculum{0};
 };
 
 struct actor_config_pod {
-  unsigned actor_id, space_id;
-  actor_testcase testcase;
-  unsigned wait4id;
-  unsigned signal_nops;
+  unsigned actor_id{0}, space_id{0};
+  actor_testcase testcase{ac_none};
+  unsigned wait4id{0};
+  unsigned signal_nops{0};
+
+  actor_config_pod() = default;
+  actor_config_pod(unsigned actor_id, actor_testcase testcase,
+                   unsigned space_id, unsigned wait4id)
+      : actor_id(actor_id), space_id(space_id), testcase(testcase),
+        wait4id(wait4id) {}
 };
 
 #pragma pack(pop)
@@ -286,8 +292,9 @@ void dump(const char *title = "config-dump: ");
 struct actor_params : public config::actor_params_pod {
   std::string pathname_log;
   std::string pathname_db;
-  void set_defaults(const std::string &tmpdir);
+  actor_params() = default;
 
+  void set_defaults(const std::string &tmpdir);
   unsigned mdbx_keylen_min() const;
   unsigned mdbx_keylen_max() const;
   unsigned mdbx_datalen_min() const;
@@ -299,10 +306,11 @@ struct actor_config : public config::actor_config_pod {
 
   bool wanna_event4signalling() const { return true /* TODO ? */; }
 
+  actor_config() = default;
   actor_config(actor_testcase testcase, const actor_params &params,
                unsigned space_id, unsigned wait4id);
 
-  actor_config(const char *str) {
+  actor_config(const char *str) : actor_config() {
     if (!deserialize(str, *this))
       failure("Invalid internal parameter '%s'\n", str);
   }

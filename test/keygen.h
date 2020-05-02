@@ -103,13 +103,13 @@ buffer alloc(size_t limit);
 
 class maker {
   config::keygen_params_pod mapping;
-  serial_t base;
-  serial_t salt;
+  serial_t base{0};
+  serial_t salt{0};
 
   struct essentials {
-    uint16_t minlen;
-    uint16_t flags;
-    uint32_t maxlen;
+    uint16_t minlen{0};
+    uint16_t flags{0};
+    uint32_t maxlen{0};
   } key_essentials, value_essentials;
 
   static void mk_begin(const serial_t serial, const essentials &params,
@@ -122,8 +122,6 @@ class maker {
   }
 
 public:
-  maker() { memset(this, 0, sizeof(*this)); }
-
   void pair(serial_t serial, const buffer &key, buffer &value,
             serial_t value_age, const bool keylen_changeable);
   void setup(const config::actor_params_pod &actor, unsigned actor_id,

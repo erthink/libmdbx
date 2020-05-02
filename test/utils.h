@@ -243,9 +243,9 @@ static __inline void cpu_relax() {
 //-----------------------------------------------------------------------------
 
 struct simple_checksum {
-  uint64_t value;
+  uint64_t value{0};
 
-  simple_checksum() : value(0) {}
+  simple_checksum() = default;
 
   void push(const uint32_t &data) {
     value += data * UINT64_C(9386433910765580089) + 1;

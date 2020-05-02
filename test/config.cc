@@ -450,18 +450,14 @@ using namespace config;
 
 actor_config::actor_config(actor_testcase testcase, const actor_params &params,
                            unsigned space_id, unsigned wait4id)
-    : params(params) {
-  this->space_id = space_id;
-  this->actor_id = 1 + (unsigned)global::actors.size();
-  this->testcase = testcase;
-  this->wait4id = wait4id;
-  signal_nops = 0;
-}
+    : actor_config_pod(1 + unsigned(global::actors.size()), testcase, space_id,
+                       wait4id),
+      params(params) {}
 
 const std::string actor_config::serialize(const char *prefix) const {
   simple_checksum checksum;
-
   std::string result;
+
   if (prefix)
     result.append(prefix);
 
@@ -473,13 +469,13 @@ const std::string actor_config::serialize(const char *prefix) const {
   result.append(params.pathname_log);
   result.push_back('|');
 
-  static_assert(std::is_pod<actor_params_pod>::value,
+  static_assert(std::is_trivially_copyable<actor_params_pod>::value,
                 "actor_params_pod should by POD");
   result.append(data2hex(static_cast<const actor_params_pod *>(&params),
                          sizeof(actor_params_pod), checksum));
   result.push_back('|');
 
-  static_assert(std::is_pod<actor_config_pod>::value,
+  static_assert(std::is_trivially_copyable<actor_config_pod>::value,
                 "actor_config_pod should by POD");
   result.append(data2hex(static_cast<const actor_config_pod *>(this),
                          sizeof(actor_config_pod), checksum));
@@ -525,7 +521,7 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-3\n");
     return false;
   }
-  static_assert(std::is_pod<actor_params_pod>::value,
+  static_assert(std::is_trivially_copyable<actor_params_pod>::value,
                 "actor_params_pod should by POD");
   if (!hex2data(str, slash, static_cast<actor_params_pod *>(&config.params),
                 sizeof(actor_params_pod), checksum)) {
@@ -540,7 +536,7 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-4\n");
     return false;
   }
-  static_assert(std::is_pod<actor_config_pod>::value,
+  static_assert(std::is_trivially_copyable<actor_config_pod>::value,
                 "actor_config_pod should by POD");
   if (!hex2data(str, slash, static_cast<actor_config_pod *>(&config),
                 sizeof(actor_config_pod), checksum)) {
