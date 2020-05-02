@@ -12756,14 +12756,16 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
       memcpy(nodedata, data->iov_base, sizeof(pgno_t));
     else if (unlikely(flags & MDBX_RESERVE))
       data->iov_base = nodedata;
-    else if (likely(nodedata != data->iov_base))
+    else if (likely(nodedata != data->iov_base &&
+                    data->iov_len /* to avoid UBSAN traps*/ != 0))
       memcpy(nodedata, data->iov_base, data->iov_len);
   } else {
     poke_pgno(nodedata, largepage->mp_pgno);
     nodedata = page_data(largepage);
     if (unlikely(flags & MDBX_RESERVE))
       data->iov_base = nodedata;
-    else if (likely(nodedata != data->iov_base))
+    else if (likely(nodedata != data->iov_base &&
+                    data->iov_len /* to avoid UBSAN traps*/ != 0))
       memcpy(nodedata, data->iov_base, data->iov_len);
   }
   return MDBX_SUCCESS;
@@ -13245,7 +13247,8 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   /* But even if no shift was needed, update ksize */
   node_set_ks(node, key->iov_len);
 
-  memcpy(node_key(node), key->iov_base, key->iov_len);
+  if (likely(key->iov_len /* to avoid UBSAN traps*/ != 0))
+    memcpy(node_key(node), key->iov_base, key->iov_len);
   return MDBX_SUCCESS;
 }
 
