@@ -148,30 +148,12 @@ MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) -s src/version.c && (open
 
 check: test dist
 
-check-analyzer:
-	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
-	$(MAKE) --always-make CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
-
-check-ubsan:
-	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" check
-
-check-asan:
-	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Os -fsanitize=address" check
-
-check-leak:
-	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-fsanitize=leak" check
-
-build-test: all mdbx_example mdbx_test
-
 test: build-test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
 		(./mdbx_test --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
 		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
-
-mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
-	$(CC) $(CFLAGS) -I. example/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
 
 test-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
@@ -196,6 +178,24 @@ memcheck test-valgrind:
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
 	) | tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42)
+
+gcc-analyzer:
+	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
+	$(MAKE) --always-make CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
+
+test-ubsan:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" check
+
+test-asan:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Os -fsanitize=address" check
+
+test-leak:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-fsanitize=leak" check
+
+mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
+	$(CC) $(CFLAGS) -I. example/example-mdbx.c ./libmdbx.$(SO_SUFFIX) -o $@
+
+build-test: all mdbx_example mdbx_test
 
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
