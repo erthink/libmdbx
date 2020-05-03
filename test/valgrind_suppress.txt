@@ -14,14 +14,6 @@
    ...
    fun:mdbx_env_sync_internal
 }
-{
-   pwrite-page-flush
-   Memcheck:Param
-   pwritev(vector[...])
-   fun:pwritev
-   ...
-   fun:mdbx_page_flush
-}
 
 # modern Valgrind don't support the `vector[...]` pattern
 # for((i=0;i<64;++i)); do echo -e "{\n   pwrite-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:mdbx_page_flush\n}"; done >> valgrind_suppress.txt
