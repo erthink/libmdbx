@@ -187,14 +187,15 @@ test-fault: all mdbx_test
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
-memcheck test-valgrind: all mdbx_test
-	@echo "$(MDBX_OPTIONS)" | grep -q MDBX_USE_VALGRIND || echo "WARNING: Please build libmdbx with -DMDBX_USE_VALGRIND to avoid false-positives from Valgrind !!!" >&2
-	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
-		($(VALGRIND) ./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
+memcheck test-valgrind:
+	$(MAKE) clean && $(MAKE) CFLAGS_EXTRA="-Ofast -DMDBX_USE_VALGRIND" build-test && \
+	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ( \
+		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		$(VALGRIND) ./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
-		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
-	&& $(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
+		$(VALGRIND) ./mdbx_test --mode=-writemap,-mapasync,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
+		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
+		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
+	) | tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42)
 
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
