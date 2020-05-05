@@ -128,7 +128,7 @@ CXX        ?= g++
 CXXSTD     ?= $(shell $(CXX) -std=c++27 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
 CXXFLAGS   := $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 TAR        ?= $(shell which gnu-tar || echo tar)
-CLANG_FORMAT ?= $(shell (which clang-format || which clang-format-8 || which clang-format-9 || which clang-format-10 || which clang-format-11 || which clang-format-12) 2>/dev/null)
+CLANG_FORMAT ?= $(shell (which clang-format-12 || which clang-format-11 || which clang-format-10 || which clang-format) 2>/dev/null)
 
 reformat:
 	@if [ -n "$(CLANG_FORMAT)" ]; then \

@@ -253,17 +253,23 @@ else()
       add_custom_target(ctags DEPENDS tags)
     endif(CTAGS)
 
-    # Enable 'make reformat' target.
-    find_program(CLANG_FORMAT
-      NAMES clang-format-11.0 clang-format-10.0 clang-format-9.0 clang-format-8.0 clang-format)
-    if(CLANG_FORMAT AND UNIX)
-      add_custom_target(reformat
-        VERBATIM
-        COMMAND
-        git ls-files |
-        grep -E \\.\(c|cxx|cc|cpp|h|hxx|hpp\)\(\\.in\)?\$ |
-        xargs ${CLANG_FORMAT} -i --style=file
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    if(UNIX)
+      find_program(CLANG_FORMAT
+        NAMES clang-format-12 clang-format-11 clang-format-10 clang-format)
+      if(CLANG_FORMAT)
+        execute_process(COMMAND ${CLANG_FORMAT} "--version" OUTPUT_VARIABLE clang_format_version_info)
+        string(REGEX MATCH "version ([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" clang_format_version_info CLANG_FORMAT_VERSION)
+        if(clang_format_version_info AND NOT CLANG_FORMAT_VERSION VERSION_LESS 10.0)
+          # Enable 'make reformat' target.
+          add_custom_target(reformat
+            VERBATIM
+            COMMAND
+            git ls-files |
+            grep -E \\.\(c|cxx|cc|cpp|h|hxx|hpp\)\(\\.in\)?\$ |
+            xargs ${CLANG_FORMAT} -i --style=file
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+        endif()
+      endif()
     endif()
 
     if(NOT "${PROJECT_BINARY_DIR}" STREQUAL "${PROJECT_SOURCE_DIR}")
