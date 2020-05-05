@@ -15978,18 +15978,26 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
 int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
                      MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
                      MDBX_cmp_func *datacmp) {
-  if (unlikely(!dbi || (user_flags & ~VALID_FLAGS) != 0))
-    return MDBX_EINVAL;
-  *dbi = 0;
-
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
+  int rc = MDBX_EINVAL;
+  if (unlikely(!dbi))
     return rc;
+
+  if (unlikely((user_flags & ~VALID_FLAGS) != 0)) {
+  early_bailout:
+    *dbi = 0;
+    return rc;
+  }
+
+  rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto early_bailout;
 
   switch (user_flags &
           (MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT | MDBX_REVERSEDUP)) {
   default:
-    return MDBX_EINVAL;
+    rc = MDBX_EINVAL;
+    goto early_bailout;
+
   case MDBX_DUPSORT:
   case MDBX_DUPSORT | MDBX_REVERSEDUP:
   case MDBX_DUPSORT | MDBX_DUPFIXED:
@@ -16003,8 +16011,9 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   /* main table? */
   if (!table_name) {
     rc = mdbx_dbi_bind(txn, MAIN_DBI, user_flags, keycmp, datacmp);
-    if (likely(rc == MDBX_SUCCESS))
-      *dbi = MAIN_DBI;
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto early_bailout;
+    *dbi = MAIN_DBI;
     return rc;
   }
 
@@ -16026,20 +16035,27 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     }
     if (len == txn->mt_dbxs[scan].md_name.iov_len &&
         !strncmp(table_name, txn->mt_dbxs[scan].md_name.iov_base, len)) {
+      rc = mdbx_dbi_bind(txn, scan, user_flags, keycmp, datacmp);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto early_bailout;
       *dbi = scan;
-      return mdbx_dbi_bind(txn, scan, user_flags, keycmp, datacmp);
+      return rc;
     }
   }
 
   /* Fail, if no free slot and max hit */
   MDBX_env *env = txn->mt_env;
-  if (unlikely(slot >= env->me_maxdbs))
-    return MDBX_DBS_FULL;
+  if (unlikely(slot >= env->me_maxdbs)) {
+    rc = MDBX_DBS_FULL;
+    goto early_bailout;
+  }
 
   /* Cannot mix named table with some main-table flags */
   if (unlikely(txn->mt_dbs[MAIN_DBI].md_flags &
-               (MDBX_DUPSORT | MDBX_INTEGERKEY)))
-    return (user_flags & MDBX_CREATE) ? MDBX_INCOMPATIBLE : MDBX_NOTFOUND;
+               (MDBX_DUPSORT | MDBX_INTEGERKEY))) {
+    rc = (user_flags & MDBX_CREATE) ? MDBX_INCOMPATIBLE : MDBX_NOTFOUND;
+    goto early_bailout;
+  }
 
   /* Find the DB info */
   int exact = 0;
@@ -16049,36 +16065,46 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   MDBX_cursor_couple couple;
   rc = mdbx_cursor_init(&couple.outer, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    goto early_bailout;
   rc = mdbx_cursor_set(&couple.outer, &key, &data, MDBX_SET, &exact);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_NOTFOUND || !(user_flags & MDBX_CREATE))
-      return rc;
+      goto early_bailout;
   } else {
     /* make sure this is actually a table */
     MDBX_node *node = page_node(couple.outer.mc_pg[couple.outer.mc_top],
                                 couple.outer.mc_ki[couple.outer.mc_top]);
-    if (unlikely((node_flags(node) & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
-      return MDBX_INCOMPATIBLE;
-    if (unlikely(data.iov_len < sizeof(MDBX_db)))
-      return MDBX_CORRUPTED;
+    if (unlikely((node_flags(node) & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA)) {
+      rc = MDBX_INCOMPATIBLE;
+      goto early_bailout;
+    }
+    if (unlikely(data.iov_len < sizeof(MDBX_db))) {
+      rc = MDBX_CORRUPTED;
+      goto early_bailout;
+    }
   }
 
-  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_RDONLY))
-    return MDBX_EACCESS;
+  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_RDONLY)) {
+    rc = MDBX_EACCESS;
+    goto early_bailout;
+  }
 
   /* Done here so we cannot fail after creating a new DB */
   char *namedup = mdbx_strdup(table_name);
-  if (unlikely(!namedup))
-    return MDBX_ENOMEM;
+  if (unlikely(!namedup)) {
+    rc = MDBX_ENOMEM;
+    goto early_bailout;
+  }
 
   int err = mdbx_fastmutex_acquire(&env->me_dbi_lock);
   if (unlikely(err != MDBX_SUCCESS)) {
+    rc = err;
     mdbx_free(namedup);
-    return err;
+    goto early_bailout;
   }
 
   if (txn->mt_numdbs < env->me_numdbs) {
+    /* Import handles from env */
     for (unsigned i = txn->mt_numdbs; i < env->me_numdbs; ++i) {
       txn->mt_dbflags[i] = 0;
       if (env->me_dbflags[i] & MDBX_VALID) {
@@ -16090,6 +16116,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     txn->mt_numdbs = env->me_numdbs;
   }
 
+  /* Rescan after mutex acquisition & import handles */
   for (slot = scan = txn->mt_numdbs; --scan >= CORE_DBS;) {
     if (!txn->mt_dbxs[scan].md_name.iov_len) {
       /* Remember this free slot */
@@ -16098,15 +16125,17 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     }
     if (len == txn->mt_dbxs[scan].md_name.iov_len &&
         !strncmp(table_name, txn->mt_dbxs[scan].md_name.iov_base, len)) {
-      *dbi = scan;
       rc = mdbx_dbi_bind(txn, scan, user_flags, keycmp, datacmp);
-      goto bailout;
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto later_bailout;
+      *dbi = scan;
+      goto later_exit;
     }
   }
 
   if (unlikely(slot >= env->me_maxdbs)) {
     rc = MDBX_DBS_FULL;
-    goto bailout;
+    goto later_bailout;
   }
 
   unsigned dbflag = DB_FRESH | DB_VALID | DB_USRVALID;
@@ -16124,7 +16153,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
                                               F_SUBDATA | MDBX_NOOVERWRITE));
 
     if (unlikely(rc != MDBX_SUCCESS))
-      goto bailout;
+      goto later_bailout;
 
     dbflag |= DB_DIRTY | DB_CREAT;
   }
@@ -16137,7 +16166,9 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   rc = mdbx_dbi_bind(txn, slot, user_flags, keycmp, datacmp);
   if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_tassert(txn, (dbflag & DB_CREAT) == 0);
-  bailout:
+  later_bailout:
+    *dbi = 0;
+  later_exit:
     mdbx_free(namedup);
   } else {
     txn->mt_dbflags[slot] = (uint8_t)dbflag;
