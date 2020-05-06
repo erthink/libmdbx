@@ -10257,7 +10257,6 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
     return MDBX_SUCCESS;
   }
 
-  env->me_signature = 0;
   env->me_flags &= ~MDBX_ENV_ACTIVE;
   env->me_oldest = nullptr;
   env->me_sync_timestamp = nullptr;
@@ -10370,6 +10369,7 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
 #endif
   }
 
+  env->me_signature = 0;
   rc = mdbx_env_close0(env) ? MDBX_PANIC : rc;
   mdbx_ensure(env, mdbx_fastmutex_destroy(&env->me_dbi_lock) == MDBX_SUCCESS);
 #if defined(_WIN32) || defined(_WIN64)
