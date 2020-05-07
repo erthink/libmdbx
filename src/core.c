@@ -18193,7 +18193,7 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return MDBX_EINVAL;
 
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_VERSION_MISMATCH;
+    return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
