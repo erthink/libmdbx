@@ -1235,11 +1235,6 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
  * Used in pages of type P_BRANCH and P_LEAF without P_LEAF2.
  * We guarantee 2-byte alignment for 'MDBX_node's.
  *
- * mn_lo and mn_hi are used for data size on leaf nodes, and for child
- * pgno on branch nodes.  On 64 bit platforms, mn_flags is also used
- * for pgno.  (Branch nodes have no flags).  Lo and hi are in host byte
- * order in case some accesses can be optimized to 32-bit word access.
- *
  * Leaf node flags describe node contents.  F_BIGDATA says the node's
  * data part is the page number of an overflow page with actual data.
  * F_DUPDATA and F_SUBDATA can be combined giving duplicate data in
@@ -1247,9 +1242,6 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 typedef struct MDBX_node {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
   union {
-    struct {
-      uint16_t mn_lo, mn_hi; /* part of data size or pgno */
-    };
     uint32_t mn_dsize;
     uint32_t mn_pgno32;
   };
@@ -1263,9 +1255,6 @@ typedef struct MDBX_node {
   union {
     uint32_t mn_pgno32;
     uint32_t mn_dsize;
-    struct {
-      uint16_t mn_hi, mn_lo; /* part of data size or pgno */
-    };
   };
 #endif /* __BYTE_ORDER__ */
 
