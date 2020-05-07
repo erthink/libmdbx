@@ -388,8 +388,7 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize, unsigned flags) {
   if (flags & MDBX_INTEGERDUP)
     return 8 /* sizeof(uint64_t) */;
 
-  if (flags &
-      (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP))
+  if (flags & (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP))
     return BRANCH_NODEMAX(pagesize) - NODESIZE;
 
   const unsigned page_ln2 = log2n(pagesize);
@@ -466,6 +465,25 @@ static __pure_function __always_inline size_t branch_size(const MDBX_env *env,
   }
 
   return node_bytes + sizeof(indx_t);
+}
+
+static __pure_function __always_inline uint16_t
+flags_db2sub(uint16_t db_flags) {
+  uint16_t sub_flags = db_flags & MDBX_DUPFIXED;
+
+  /* MDBX_INTEGERDUP => MDBX_INTEGERKEY */
+#define SHIFT_INTEGERDUP_TO_INTEGERKEY 2
+  STATIC_ASSERT((MDBX_INTEGERDUP >> SHIFT_INTEGERDUP_TO_INTEGERKEY) ==
+                MDBX_INTEGERKEY);
+  sub_flags |= (db_flags & MDBX_INTEGERDUP) >> SHIFT_INTEGERDUP_TO_INTEGERKEY;
+
+  /* MDBX_REVERSEDUP => MDBX_REVERSEKEY */
+#define SHIFT_REVERSEDUP_TO_REVERSEKEY 5
+  STATIC_ASSERT((MDBX_REVERSEDUP >> SHIFT_REVERSEDUP_TO_REVERSEKEY) ==
+                MDBX_REVERSEKEY);
+  sub_flags |= (db_flags & MDBX_REVERSEDUP) >> SHIFT_REVERSEDUP_TO_REVERSEKEY;
+
+  return sub_flags;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -12227,12 +12245,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           fp_flags &= ~P_SUBP;
         prep_subDB:
           nested_dupdb.md_xsize = 0;
-          nested_dupdb.md_flags = 0;
+          nested_dupdb.md_flags = flags_db2sub(mc->mc_db->md_flags);
           if (mc->mc_db->md_flags & MDBX_DUPFIXED) {
             fp_flags |= P_LEAF2;
             nested_dupdb.md_xsize = fp->mp_leaf2_ksize;
-            if (mc->mc_db->md_flags & MDBX_INTEGERDUP)
-              nested_dupdb.md_flags = MDBX_INTEGERKEY;
           }
           nested_dupdb.md_depth = 1;
           nested_dupdb.md_branch_pages = 0;
@@ -12421,8 +12437,10 @@ new_sub:
       }
       mdbx_cassert(mc, mc->mc_xcursor->mx_db.md_entries < PTRDIFF_MAX);
       ecount = (size_t)mc->mc_xcursor->mx_db.md_entries;
-      if (flags & MDBX_APPENDDUP)
-        xflags |= MDBX_APPEND;
+#define SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND 1
+      STATIC_ASSERT((MDBX_APPENDDUP >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND) ==
+                    MDBX_APPEND);
+      xflags |= (flags & MDBX_APPENDDUP) >> SHIFT_MDBX_APPENDDUP_TO_MDBX_APPEND;
       rc = mdbx_cursor_put(&mc->mc_xcursor->mx_cursor, data, &xdata, xflags);
       if (flags & F_SUBDATA) {
         void *db = node_data(node);
@@ -12951,7 +12969,6 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
       return MDBX_CORRUPTED;
     MDBX_page *fp = node_data(node);
     mx->mx_db.md_xsize = 0;
-    mx->mx_db.md_flags = 0;
     mx->mx_db.md_depth = 1;
     mx->mx_db.md_branch_pages = 0;
     mx->mx_db.md_leaf_pages = 1;
@@ -12963,12 +12980,11 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
     mx->mx_cursor.mc_flags = C_INITIALIZED | C_SUB;
     mx->mx_cursor.mc_pg[0] = fp;
     mx->mx_cursor.mc_ki[0] = 0;
-    if (mc->mc_db->md_flags & MDBX_DUPFIXED) {
+    mx->mx_db.md_flags = flags_db2sub(mc->mc_db->md_flags);
+    if (mc->mc_db->md_flags & MDBX_DUPFIXED)
       mx->mx_db.md_xsize = fp->mp_leaf2_ksize;
-      if (mc->mc_db->md_flags & MDBX_INTEGERDUP)
-        mx->mx_db.md_flags = MDBX_INTEGERKEY;
-    }
   }
+
   mdbx_debug("Sub-db -%u root page %" PRIaPGNO, mx->mx_cursor.mc_dbi,
              mx->mx_db.md_root);
   mx->mx_dbstate = DB_VALID | DB_USRVALID | DB_DUPDATA;
