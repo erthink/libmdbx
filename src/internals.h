@@ -726,6 +726,8 @@ struct MDBX_txn {
   MDBX_db *mt_dbs;
   /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
+  /* In write txns, array of cursors for each DB */
+  MDBX_cursor **mt_cursors;
 
   /* Transaction DB Flags */
 #define DB_DIRTY MDBX_TBL_DIRTY /* DB was written in this txn */
@@ -736,10 +738,8 @@ struct MDBX_txn {
 #define DB_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
 #define DB_DUPDATA 0x40         /* DB is MDBX_DUPSORT data */
 #define DB_AUDITED 0x80         /* Internal flag for accounting during audit */
-  /* In write txns, array of cursors for each DB */
-  MDBX_cursor **mt_cursors;
   /* Array of flags for each DB */
-  uint8_t *mt_dbflags;
+  uint8_t *mt_dbstate;
   /* Number of DB records in use, or 0 when the txn is finished.
    * This number only ever increments until the txn finishes; we
    * don't decrement it when individual DB handles are closed. */
@@ -822,10 +822,10 @@ struct MDBX_cursor {
   MDBX_db *mc_db;
   /* The database auxiliary record for this cursor */
   MDBX_dbx *mc_dbx;
-  /* The mt_dbflag for this database */
-  uint8_t *mc_dbflag;
-  uint16_t mc_snum;               /* number of pushed pages */
-  uint16_t mc_top;                /* index of top page, normally mc_snum-1 */
+  /* The mt_dbstate for this database */
+  uint8_t *mc_dbstate;
+  unsigned mc_snum;               /* number of pushed pages */
+  unsigned mc_top;                /* index of top page, normally mc_snum-1 */
                                   /* Cursor state flags. */
 #define C_INITIALIZED 0x01        /* cursor has been initialized and is valid */
 #define C_EOF 0x02                /* No more data */
@@ -850,8 +850,8 @@ typedef struct MDBX_xcursor {
   MDBX_db mx_db;
   /* The auxiliary DB record for this Dup DB */
   MDBX_dbx mx_dbx;
-  /* The mt_dbflag for this Dup DB */
-  uint8_t mx_dbflag;
+  /* The mt_dbstate for this Dup DB */
+  uint8_t mx_dbstate;
 } MDBX_xcursor;
 
 typedef struct MDBX_cursor_couple {
