@@ -3164,7 +3164,7 @@ static int __must_check_result mdbx_drop0(MDBX_cursor *mc, int subs);
 static int __must_check_result mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi);
 
 static MDBX_cmp_func mdbx_cmp_memn, mdbx_cmp_memnr, mdbx_cmp_int_align4,
-    mdbx_cmp_int_align2, mdbx_cmp_int_unaligned;
+    mdbx_cmp_int_align2, mdbx_cmp_int_unaligned, mdbx_cmp_lenfast;
 
 static const char *__mdbx_strerr(int errnum) {
   /* Table of descriptions for MDBX errors */
@@ -10088,6 +10088,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
   }
   env->me_dbxs[FREE_DBI].md_cmp =
       mdbx_cmp_int_align4; /* aligned MDBX_INTEGERKEY */
+  env->me_dbxs[FREE_DBI].md_dcmp = mdbx_cmp_lenfast;
 
   rc = mdbx_openfile(F_ISSET(flags, MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
                                                  : MDBX_OPEN_DXB_LAZY,
@@ -10479,6 +10480,12 @@ static int __hot mdbx_cmp_memnr(const MDBX_val *a, const MDBX_val *b) {
       return diff;
   }
   return CMP2INT(a->iov_len, b->iov_len);
+}
+
+/* Fast non-lexically comparator */
+static int __hot mdbx_cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
+  int diff = CMP2INT(a->iov_len, b->iov_len);
+  return likely(diff) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
 
 /* Search for key within a page, using binary search.
@@ -11909,12 +11916,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     rc = MDBX_NO_ROOT;
   } else if ((flags & MDBX_CURRENT) == 0) {
     int exact = 0;
-    MDBX_val d2;
     if ((flags & MDBX_APPEND) != 0 && mc->mc_db->md_entries > 0) {
-      MDBX_val k2;
-      rc = mdbx_cursor_last(mc, &k2, &d2);
+      rc = mdbx_cursor_last(mc, &dkey, &olddata);
       if (rc == 0) {
-        rc = mc->mc_dbx->md_cmp(key, &k2);
+        rc = mc->mc_dbx->md_cmp(key, &dkey);
         if (rc > 0) {
           rc = MDBX_NOTFOUND;
           mc->mc_ki[mc->mc_top]++;
@@ -11924,15 +11929,24 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         }
       }
     } else {
-      rc = mdbx_cursor_set(mc, (MDBX_val *)key, &d2, MDBX_SET, &exact);
+      rc = mdbx_cursor_set(mc, (MDBX_val *)key, &olddata, MDBX_SET, &exact);
     }
     if ((flags & MDBX_NOOVERWRITE) &&
         (rc == MDBX_SUCCESS || rc == MDBX_EKEYMISMATCH)) {
       mdbx_debug("duplicate key [%s]", DKEY(key));
-      *data = d2;
+      *data = olddata;
       return MDBX_KEYEXIST;
     }
-    if (rc && unlikely(rc != MDBX_NOTFOUND))
+    if (rc == MDBX_SUCCESS) {
+      if (exact) {
+        if (mc->mc_flags & C_SUB) {
+          mdbx_assert(env, data->iov_len == 0 && olddata.iov_len == 0);
+          return rc;
+        }
+        if (!(flags & MDBX_RESERVE) && mc->mc_dbx->md_dcmp(data, &olddata) == 0)
+          return rc;
+      }
+    } else if (unlikely(rc != MDBX_NOTFOUND))
       return rc;
   }
 
@@ -15919,7 +15933,7 @@ static MDBX_cmp_func *mdbx_default_keycmp(unsigned flags) {
 
 static MDBX_cmp_func *mdbx_default_datacmp(unsigned flags) {
   return !(flags & MDBX_DUPSORT)
-             ? mdbx_cmp_memn
+             ? mdbx_cmp_lenfast
              : ((flags & MDBX_INTEGERDUP)
                     ? mdbx_cmp_int_unaligned
                     : ((flags & MDBX_REVERSEDUP) ? mdbx_cmp_memnr
