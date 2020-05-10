@@ -13292,7 +13292,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
     key4move.iov_base = node_key(srcnode);
 
     if (csrc->mc_ki[csrc->mc_top] == 0) {
-      const uint16_t snum = csrc->mc_snum;
+      const unsigned snum = csrc->mc_snum;
       mdbx_cassert(csrc, snum > 0);
       /* must find the lowest key below src */
       rc = mdbx_page_search_lowest(csrc);
@@ -13324,7 +13324,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
     }
 
     if (cdst->mc_ki[cdst->mc_top] == 0) {
-      const uint16_t snum = cdst->mc_snum;
+      const unsigned snum = cdst->mc_snum;
       mdbx_cassert(csrc, snum > 0);
       MDBX_cursor mn;
       mdbx_cursor_copy(cdst, &mn);
@@ -13737,7 +13737,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_cassert(cdst, cdst->mc_snum == cdst->mc_top + 1);
   MDBX_page *const top_page = cdst->mc_pg[cdst->mc_top];
   const indx_t top_indx = cdst->mc_ki[cdst->mc_top];
-  const uint16_t save_snum = cdst->mc_snum;
+  const unsigned save_snum = cdst->mc_snum;
   const uint16_t save_depth = cdst->mc_db->md_depth;
   mdbx_cursor_pop(cdst);
   rc = mdbx_rebalance(cdst);
