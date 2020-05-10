@@ -385,8 +385,8 @@ the basic tests.
 
 ### Windows
 For build _libmdbx_ on Windows the _original_ CMake and [Microsoft Visual
-Studio](https://en.wikipedia.org/wiki/Microsoft_Visual_Studio) are
-recommended.
+Studio 2019](https://en.wikipedia.org/wiki/Microsoft_Visual_Studio) are
+recommended. Otherwise do not forget add `ntdll.lib` to linking.
 
 Building by MinGW, MSYS or Cygwin is potentially possible. However,
 these scripts are not tested and will probably require you to modify the
