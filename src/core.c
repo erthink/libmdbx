@@ -13058,10 +13058,19 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
         (mc->mc_db->md_flags & MDBX_DUPFIXED) ? fp->mp_leaf2_ksize : 0;
   }
 
+  if (unlikely(mx->mx_db.md_xsize != mc->mc_db->md_xsize)) {
+    if (unlikely(mc->mc_db->md_xsize != 0))
+      return MDBX_CORRUPTED;
+    if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
+      return MDBX_CORRUPTED;
+    if (unlikely(mx->mx_db.md_xsize < mc->mc_dbx->md_vlen_min ||
+                 mx->mx_db.md_xsize > mc->mc_dbx->md_vlen_max))
+      return MDBX_CORRUPTED;
+    mc->mc_db->md_xsize = mx->mx_db.md_xsize;
+    mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max = mx->mx_db.md_xsize;
+  }
   mx->mx_dbx.md_klen_min = mc->mc_dbx->md_vlen_min;
   mx->mx_dbx.md_klen_max = mc->mc_dbx->md_vlen_max;
-  if (unlikely(mx->mx_db.md_xsize != mc->mc_db->md_xsize))
-    return MDBX_CORRUPTED;
 
   mdbx_debug("Sub-db -%u root page %" PRIaPGNO, mx->mx_cursor.mc_dbi,
              mx->mx_db.md_root);
