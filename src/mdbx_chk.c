@@ -1259,7 +1259,7 @@ int main(int argc, char *argv[]) {
     }
 
     saved_list = problems_push();
-    rc = mdbx_env_pgwalk(txn, pgvisitor, NULL);
+    rc = mdbx_env_pgwalk(txn, pgvisitor, NULL, ignore_wrong_order);
     traversal_problems = problems_pop(saved_list);
 
     if (rc) {

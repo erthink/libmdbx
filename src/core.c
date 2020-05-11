@@ -3188,6 +3188,9 @@ static int __must_check_result mdbx_setup_dbx(MDBX_dbx *const dbx,
 static MDBX_cmp_func mdbx_cmp_memn, mdbx_cmp_memnr, mdbx_cmp_int_align4,
     mdbx_cmp_int_align2, mdbx_cmp_int_unaligned, mdbx_cmp_lenfast;
 
+static MDBX_cmp_func *mdbx_default_keycmp(unsigned flags);
+static MDBX_cmp_func *mdbx_default_datacmp(unsigned flags);
+
 static const char *__mdbx_strerr(int errnum) {
   /* Table of descriptions for MDBX errors */
   static const char *const tbl[] = {
@@ -10831,6 +10834,11 @@ __hot static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key,
 
 static int mdbx_setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
                           const unsigned pagesize) {
+  if (unlikely(!dbx->md_cmp)) {
+    dbx->md_cmp = mdbx_default_keycmp(db->md_flags);
+    dbx->md_dcmp = mdbx_default_datacmp(db->md_flags);
+  }
+
   dbx->md_klen_min =
       (db->md_flags & MDBX_INTEGERKEY) ? 4 /* sizeof(uint32_t) */ : 0;
   dbx->md_klen_max = mdbx_limits_keysize_max(pagesize, db->md_flags);
@@ -13010,7 +13018,7 @@ static int mdbx_xcursor_init0(MDBX_cursor *mc) {
   mx->mx_cursor.mc_dbstate = &mx->mx_dbstate;
   mx->mx_cursor.mc_snum = 0;
   mx->mx_cursor.mc_top = 0;
-  mx->mx_cursor.mc_flags = C_SUB;
+  mx->mx_cursor.mc_flags = C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
   mx->mx_dbx.md_name.iov_len = 0;
   mx->mx_dbx.md_name.iov_base = NULL;
   mx->mx_dbx.md_cmp = mc->mc_dbx->md_dcmp;
@@ -13037,7 +13045,7 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
     mx->mx_cursor.mc_pg[0] = 0;
     mx->mx_cursor.mc_snum = 0;
     mx->mx_cursor.mc_top = 0;
-    mx->mx_cursor.mc_flags = C_SUB;
+    mx->mx_cursor.mc_flags = C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
   } else {
     if (unlikely(node_ds(node) <= PAGEHDRSZ))
       return MDBX_CORRUPTED;
@@ -13050,7 +13058,8 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node) {
     mx->mx_db.md_root = fp->mp_pgno;
     mx->mx_cursor.mc_snum = 1;
     mx->mx_cursor.mc_top = 0;
-    mx->mx_cursor.mc_flags = C_INITIALIZED | C_SUB;
+    mx->mx_cursor.mc_flags =
+        C_INITIALIZED | C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
     mx->mx_cursor.mc_pg[0] = fp;
     mx->mx_cursor.mc_ki[0] = 0;
     mx->mx_db.md_flags = flags_db2sub(mc->mc_db->md_flags);
@@ -13760,6 +13769,8 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
           lowest = page_node(mp, 0);
         key.iov_len = node_ks(lowest);
         key.iov_base = node_key(lowest);
+        mdbx_cassert(csrc, key.iov_len >= csrc->mc_dbx->md_klen_min);
+        mdbx_cassert(csrc, key.iov_len <= csrc->mc_dbx->md_klen_max);
 
         const size_t dst_room = page_room(pdst);
         const size_t src_used = page_used(cdst->mc_txn->mt_env, psrc);
@@ -14212,7 +14223,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
 
 static __cold int mdbx_page_check(MDBX_cursor *const mc,
                                   const MDBX_page *const mp, unsigned options) {
-  options |= mc->mc_flags & (C_COPYING | C_UPDATING | C_RETIRING);
+  options |= mc->mc_flags & (C_COPYING | C_UPDATING | C_RETIRING | C_SKIPORD);
   MDBX_env *const env = mc->mc_txn->mt_env;
   const unsigned nkeys = page_numkeys(mp);
   char *const end_of_page = (char *)mp + env->me_psize;
@@ -14234,22 +14245,35 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
       return MDBX_CORRUPTED;
   }
 
-  for (unsigned i = IS_LEAF(mp) ? 0 : 1; i < nkeys; ++i) {
+  MDBX_val here, prev = {0, 0};
+  for (unsigned i = 0; i < nkeys; ++i) {
     if (IS_LEAF2(mp)) {
       const size_t ksize = mp->mp_leaf2_ksize;
-      if ((options & C_COPYING) == 0 &&
-          unlikely(ksize != mc->mc_dbx->md_klen_min)) {
-        mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
-        mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
-        if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
-                     ksize > mc->mc_dbx->md_klen_max))
-          return MDBX_CORRUPTED;
-        mc->mc_dbx->md_klen_min = mc->mc_dbx->md_klen_max = ksize;
-      }
-      const char *const key = page_leaf2key(mp, i, ksize);
+      char *const key = page_leaf2key(mp, i, ksize);
       mdbx_assert(env, key + ksize <= end_of_page);
       if (unlikely(end_of_page < key + ksize))
         return MDBX_CORRUPTED;
+
+      if ((options & C_COPYING) == 0) {
+        if (unlikely(ksize != mc->mc_dbx->md_klen_min)) {
+          mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
+          mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
+          if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
+                       ksize > mc->mc_dbx->md_klen_max))
+            return MDBX_CORRUPTED;
+          mc->mc_dbx->md_klen_min = mc->mc_dbx->md_klen_max = ksize;
+        }
+        if ((options & C_SKIPORD) == 0) {
+          here.iov_len = ksize;
+          here.iov_base = key;
+          if (prev.iov_base) {
+            mdbx_assert(env, mc->mc_dbx->md_cmp(&here, &prev) > 0);
+            if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+              return MDBX_CORRUPTED;
+          }
+          prev = here;
+        }
+      }
     } else {
       const MDBX_node *const node = page_node(mp, i);
       const char *node_end = (char *)node + NODESIZE;
@@ -14258,17 +14282,29 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
         return MDBX_CORRUPTED;
       if (IS_LEAF(mp) || i > 0) {
         size_t ksize = node_ks(node);
+        char *key = node_key(node);
+        mdbx_assert(env, key + ksize <= end_of_page);
+        if (unlikely(end_of_page < key + ksize))
+          return MDBX_CORRUPTED;
+
         if ((options & C_COPYING) == 0) {
           mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
           mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
           if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
                        ksize > mc->mc_dbx->md_klen_max))
             return MDBX_CORRUPTED;
+
+          if ((options & C_SKIPORD) == 0) {
+            here.iov_base = key;
+            here.iov_len = ksize;
+            if (prev.iov_base) {
+              mdbx_assert(env, mc->mc_dbx->md_cmp(&here, &prev) > 0);
+              if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+                return MDBX_CORRUPTED;
+            }
+            prev = here;
+          }
         }
-        char *key = node_key(node);
-        mdbx_assert(env, key + ksize <= end_of_page);
-        if (unlikely(end_of_page < key + ksize))
-          return MDBX_CORRUPTED;
       }
       if (IS_BRANCH(mp)) {
         if ((options & C_RETIRING) == 0) {
@@ -14349,27 +14385,42 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
             return MDBX_CORRUPTED;
           }
 
+          MDBX_val sub_here, sub_prev = {0, 0};
           for (int j = 0; j < nsubkeys; j++) {
+            mdbx_assert(env, IS_LEAF(sp));
+            if (unlikely(!IS_LEAF(sp)))
+              return MDBX_CORRUPTED;
             if (IS_LEAF2(sp)) {
               /* LEAF2 pages have no mp_ptrs[] or node headers */
               size_t sub_ksize = sp->mp_leaf2_ksize;
-              if ((options & C_COPYING) == 0 &&
-                  unlikely(sub_ksize != mc->mc_dbx->md_vlen_min)) {
-                mdbx_assert(env, sub_ksize >= mc->mc_dbx->md_vlen_min);
-                mdbx_assert(env, sub_ksize <= mc->mc_dbx->md_vlen_max);
-                if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
-                             sub_ksize > mc->mc_dbx->md_vlen_max))
-                  return MDBX_CORRUPTED;
-                mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max = sub_ksize;
-              }
               char *sub_key = page_leaf2key(sp, j, sub_ksize);
               mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
               if (unlikely(end_of_subpage < sub_key + sub_ksize))
                 return MDBX_CORRUPTED;
+
+              if ((options & C_COPYING) == 0) {
+                if (unlikely(sub_ksize != mc->mc_dbx->md_vlen_min)) {
+                  mdbx_assert(env, sub_ksize >= mc->mc_dbx->md_vlen_min);
+                  mdbx_assert(env, sub_ksize <= mc->mc_dbx->md_vlen_max);
+                  if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
+                               sub_ksize > mc->mc_dbx->md_vlen_max))
+                    return MDBX_CORRUPTED;
+                  mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max = sub_ksize;
+                }
+                if ((options & C_SKIPORD) == 0) {
+                  sub_here.iov_len = sub_ksize;
+                  sub_here.iov_base = sub_key;
+                  if (sub_prev.iov_base) {
+                    mdbx_assert(env,
+                                mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) < 0);
+                    if (unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >=
+                                 0))
+                      return MDBX_CORRUPTED;
+                  }
+                  sub_prev = sub_here;
+                }
+              }
             } else {
-              mdbx_assert(env, IS_LEAF(sp));
-              if (unlikely(!IS_LEAF(sp)))
-                return MDBX_CORRUPTED;
               const MDBX_node *const sub_node = page_node(sp, j);
               const char *sub_node_end = (char *)sub_node + NODESIZE;
               mdbx_assert(env, sub_node_end <= end_of_subpage);
@@ -14390,6 +14441,19 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                 if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
                              sub_ksize > mc->mc_dbx->md_vlen_max))
                   return MDBX_CORRUPTED;
+
+                if ((options & C_SKIPORD) == 0) {
+                  sub_here.iov_len = sub_ksize;
+                  sub_here.iov_base = sub_key;
+                  if (sub_prev.iov_base) {
+                    mdbx_assert(env,
+                                mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) < 0);
+                    if (unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >=
+                                 0))
+                      return MDBX_CORRUPTED;
+                  }
+                  sub_prev = sub_here;
+                }
               }
               mdbx_assert(env, sub_dsize == 0);
               if (unlikely(sub_dsize != 0))
@@ -15317,7 +15381,8 @@ static int __cold mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
   memset(&couple, 0, sizeof(couple));
   couple.outer.mc_snum = 1;
   couple.outer.mc_txn = my->mc_txn;
-  couple.outer.mc_flags = couple.inner.mx_cursor.mc_flags = C_COPYING;
+  couple.outer.mc_flags = couple.inner.mx_cursor.mc_flags =
+      C_COPYING | C_SKIPORD;
 
   rc = mdbx_page_get(&couple.outer, *pg, &couple.outer.mc_pg[0], NULL);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -17113,6 +17178,7 @@ typedef struct mdbx_walk_ctx {
   MDBX_pgvisitor_func *mw_visitor;
   MDBX_txn *mw_txn;
   MDBX_cursor *mw_cursor;
+  bool mw_dont_check_keys_ordering;
 } mdbx_walk_ctx_t;
 
 static int __cold mdbx_walk_sdb(mdbx_walk_ctx_t *ctx, MDBX_db *const db,
@@ -17365,6 +17431,10 @@ static int __cold mdbx_walk_sdb(mdbx_walk_ctx_t *ctx, MDBX_db *const db,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (ctx->mw_dont_check_keys_ordering) {
+    couple.outer.mc_flags |= C_SKIPORD;
+    couple.inner.mx_cursor.mc_flags |= C_SKIPORD;
+  }
   couple.outer.mc_next = ctx->mw_cursor;
   ctx->mw_cursor = &couple.outer;
   rc = mdbx_walk_tree(ctx, db->md_root, name, deep);
@@ -17373,7 +17443,7 @@ static int __cold mdbx_walk_sdb(mdbx_walk_ctx_t *ctx, MDBX_db *const db,
 }
 
 int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
-                           void *user) {
+                           void *user, int dont_check_keys_ordering) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -17383,6 +17453,7 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   ctx.mw_txn = txn;
   ctx.mw_user = user;
   ctx.mw_visitor = visitor;
+  ctx.mw_dont_check_keys_ordering = dont_check_keys_ordering != 0;
 
   rc = visitor(0, NUM_METAS, user, 0, MDBX_PGWALK_META,
                pgno2bytes(txn->mt_env, NUM_METAS), MDBX_page_meta, NUM_METAS,

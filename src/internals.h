@@ -843,6 +843,7 @@ struct MDBX_cursor {
 #define C_COPYING 0x100  /* skip key-value length check (copying simplify) */
 #define C_UPDATING 0x200 /* update/rebalance pending */
 #define C_RETIRING 0x400 /* refs to child pages may be invalid */
+#define C_SKIPORD 0x800  /* don't check keys ordering */
 
   unsigned mc_flags;              /* see mdbx_cursor */
   MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */

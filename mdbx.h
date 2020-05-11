@@ -3530,7 +3530,7 @@ MDBX_pgvisitor_func(const uint64_t pgno, const unsigned number, void *const ctx,
 
 /* B-tree traversal function. */
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
-                                void *ctx);
+                                void *ctx, int dont_check_keys_ordering);
 
 /**** Attribute support functions for Nexenta *********************************/
 #ifdef MDBX_NEXENTA_ATTRS
