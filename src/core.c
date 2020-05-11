@@ -13762,15 +13762,20 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         const MDBX_node *lowest;
         const MDBX_page *mp = mn.mc_pg[mn.mc_top];
         if (unlikely(IS_LEAF2(mp))) {
-          assert(mn.mc_top > csrc->mc_top);
-          mp = mn.mc_pg[mn.mc_top - 1];
-          lowest = page_node(mp, mn.mc_ki[mn.mc_top - 1]);
-        } else
+          mdbx_cassert(&mn, mn.mc_top > csrc->mc_top);
+          unsigned i = mn.mc_top;
+          do
+            mp = mn.mc_pg[--i];
+          while (i && IS_BRANCH(mp) && mn.mc_ki[i] == 0);
+          lowest = page_node(mp, mn.mc_ki[i]);
+        } else {
+          mdbx_cassert(&mn, IS_LEAF(mp));
           lowest = page_node(mp, 0);
+        }
         key.iov_len = node_ks(lowest);
         key.iov_base = node_key(lowest);
-        mdbx_cassert(csrc, key.iov_len >= csrc->mc_dbx->md_klen_min);
-        mdbx_cassert(csrc, key.iov_len <= csrc->mc_dbx->md_klen_max);
+        mdbx_cassert(&mn, key.iov_len >= csrc->mc_dbx->md_klen_min);
+        mdbx_cassert(&mn, key.iov_len <= csrc->mc_dbx->md_klen_max);
 
         const size_t dst_room = page_room(pdst);
         const size_t src_used = page_used(cdst->mc_txn->mt_env, psrc);
