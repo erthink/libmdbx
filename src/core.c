@@ -17718,11 +17718,6 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
   return mdbx_estimate_distance(cursor, &next.outer, distance_items);
 }
 
-static int mdbx_is_samedata(const MDBX_val *a, const MDBX_val *b) {
-  return a->iov_len == b->iov_len &&
-         memcmp(a->iov_base, b->iov_base, a->iov_len) == 0;
-}
-
 int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
                         MDBX_val *begin_data, MDBX_val *end_key,
                         MDBX_val *end_data, ptrdiff_t *size_items) {
@@ -17789,7 +17784,8 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
       end_key = begin_key;
     }
     if (end_key && !begin_data && !end_data &&
-        (begin_key == end_key || mdbx_is_samedata(begin_key, end_key))) {
+        (begin_key == end_key ||
+         begin.outer.mc_dbx->md_cmp(begin_key, end_key) == 0)) {
       /* LY: single key case */
       int exact = 0;
       rc = mdbx_cursor_set(&begin.outer, begin_key, NULL, MDBX_SET, &exact);
@@ -17945,7 +17941,7 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 
     if (new_data) {
       /* обновление конкретного дубликата */
-      if (mdbx_is_samedata(old_data, new_data))
+      if (cx.outer.mc_dbx->md_dcmp(old_data, new_data) == 0)
         /* если данные совпадают, то ничего делать не надо */
         goto bailout;
     }
@@ -17979,7 +17975,8 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
             }
           }
           /* если данные совпадают, то ничего делать не надо */
-          if (new_data && mdbx_is_samedata(&present_data, new_data)) {
+          if (new_data &&
+              cx.outer.mc_dbx->md_dcmp(&present_data, new_data) == 0) {
             *old_data = *new_data;
             goto bailout;
           }
@@ -17988,14 +17985,15 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
            * но здесь это в любом случае допустимо, так как мы
            * проверили что для ключа есть только одно значение. */
         } else if ((flags & MDBX_NODUPDATA) &&
-                   mdbx_is_samedata(&present_data, new_data)) {
+                   cx.outer.mc_dbx->md_dcmp(&present_data, new_data) == 0) {
           /* если данные совпадают и установлен MDBX_NODUPDATA */
           rc = MDBX_KEYEXIST;
           goto bailout;
         }
       } else {
         /* если данные совпадают, то ничего делать не надо */
-        if (new_data && mdbx_is_samedata(&present_data, new_data)) {
+        if (new_data &&
+            cx.outer.mc_dbx->md_dcmp(&present_data, new_data) == 0) {
           *old_data = *new_data;
           goto bailout;
         }
