@@ -12942,6 +12942,13 @@ static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
   mp->mp_lower -= sizeof(indx_t);
   mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_upper >= sz);
   mp->mp_upper += (indx_t)sz;
+
+#if MDBX_DEBUG > 0
+  if (mdbx_audit_enabled()) {
+    int page_check_err = mdbx_page_check(mc, mp, C_UPDATING);
+    mdbx_cassert(mc, page_check_err == MDBX_SUCCESS);
+  }
+#endif
 }
 
 /* Compact the main page after deleting a node on a subpage.
@@ -14189,8 +14196,13 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     }
   }
 
-  if (nkeys >= minkeys)
+  if (nkeys >= minkeys) {
+#if MDBX_DEBUG > 0
+    if (mdbx_audit_enabled())
+      return mdbx_cursor_check(mc, C_UPDATING);
+#endif
     return MDBX_SUCCESS;
+  }
 
   if (left && (!right || page_room(left) > page_room(right))) {
     /* try merge with left */
