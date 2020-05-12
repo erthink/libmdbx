@@ -12023,10 +12023,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       if (exact) {
         if (mc->mc_flags & C_SUB) {
           mdbx_assert(env, data->iov_len == 0 && olddata.iov_len == 0);
-          return rc;
+          return (flags & MDBX_NODUPDATA) ? MDBX_KEYEXIST : MDBX_SUCCESS;
         }
-        if (!(flags & MDBX_RESERVE) && mc->mc_dbx->md_dcmp(data, &olddata) == 0)
-          return rc;
+        if (!(flags & MDBX_RESERVE) &&
+            unlikely(mc->mc_dbx->md_dcmp(data, &olddata) == 0))
+          return ((flags & MDBX_NODUPDATA) && mc->mc_xcursor) ? MDBX_KEYEXIST
+                                                              : MDBX_SUCCESS;
       }
     } else if (unlikely(rc != MDBX_NOTFOUND))
       return rc;
