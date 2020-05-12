@@ -17670,7 +17670,7 @@ __hot static ptrdiff_t estimate(const MDBX_db *db,
    *     level-N: branch-page(s) => scale = leaf-factor
    *  leaf-level: leaf-page(s)   => scale = 1
    */
-  ptrdiff_t btree_power = db->md_depth - 2 - dr->level;
+  ptrdiff_t btree_power = (ptrdiff_t)db->md_depth - 2 - (ptrdiff_t)dr->level;
   if (btree_power < 0)
     return dr->diff;
 
