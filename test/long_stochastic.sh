@@ -157,7 +157,6 @@ rm -f ${TESTDB_DIR}/*
 ###############################################################################
 # 5. run stochastic iterations
 
-function rep9 { printf "%*s" $1 '' | tr ' ' '9'; }
 function join { local IFS="$1"; shift; echo "$*"; }
 function bit2option { local -n arr=$1; (( ($2&(1<<$3)) != 0 )) && echo -n '+' || echo -n '-'; echo "${arr[$3]}"; }
 
@@ -177,7 +176,7 @@ function probe {
 	echo "=============================================== $(date)"
 	echo "${caption}: $*"
 	rm -f ${TESTDB_DIR}/* \
-		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=42 --pathname=${TESTDB_DIR}/long.db "$@" | lz4 > ${TESTDB_DIR}/long.log.lz4 \
+		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db "$@" | lz4 > ${TESTDB_DIR}/long.log.lz4 \
 		&& ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
 		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
 		|| (echo "FAILED"; exit 1)
@@ -186,34 +185,82 @@ function probe {
 #------------------------------------------------------------------------------
 
 count=0
-for nops in $(seq 2 6); do
-	for ((wbatch=nops-1; wbatch > 0; --wbatch)); do
-		loops=$(((111 >> nops) / nops + 3))
+for nops in 10 10000 100 1000 10000000; do
+	exp=$(expr length "$nops")
+	loops=$(( (exp < 5) ? 5 - exp : 1 ))
+	wbatch=$((nops / 10 + 1))
+	while true; do
+		wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
 		for ((rep=0; rep++ < loops; )); do
 			for ((bits=2**${#options[@]}; --bits >= 0; )); do
 				seed=$(($(date +%s) + RANDOM))
-				caption="Probe #$((++count)) int-key,w/o-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+
+				split=30
+				caption="Probe #$((++count)) int-key,with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,with-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,int-data, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+				caption="Probe #$((++count)) with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) w/o-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+
+				split=24
+				caption="Probe #$((++count)) int-key,with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) with-dups, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$( rep9 $nops ) --batch.write=$( rep9 $wbatch ) --mode=$(bits2list options $bits) \
+				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+
+				split=16
+				caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) int-key,with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+
+				split=4
+				caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+					--keygen.seed=${seed} basic
+				caption="Probe #$((++count)) w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
+					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
 			done
 		done
+		if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
 	done
 done
 
