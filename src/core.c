@@ -3999,11 +3999,12 @@ static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
     return MDBX_SUCCESS;
   }
 
+  mp->mp_pgno = pgno;
   mp->mp_flags = P_LOOSE | P_DIRTY;
   mp->mp_next = txn->tw.loose_pages;
   txn->tw.loose_pages = mp;
   txn->tw.loose_count++;
-  if (unlikely(txn->mt_next_pgno == mp->mp_pgno + 1))
+  if (unlikely(txn->mt_next_pgno == pgno + 1))
     mdbx_refund(txn);
 
   return MDBX_SUCCESS;
