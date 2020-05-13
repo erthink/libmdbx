@@ -209,7 +209,11 @@ std::string thunk_param(const actor_config &config) {
 
 void cleanup() {
   log_trace(">> cleanup");
-  /* TODO: remove each database */
+  for (const auto &db_path : global::databases) {
+    int err = osal_removefile(db_path);
+    if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+      failure_perror(db_path.c_str(), err);
+  }
   log_trace("<< cleanup");
 }
 
@@ -587,7 +591,7 @@ int main(int argc, char *const argv[]) {
   }
 
   log_notice("RESULT: %s\n", failed ? "Failed" : "Successful");
-  if (global::config::cleanup_before) {
+  if (global::config::cleanup_after) {
     if (failed)
       log_verbose("skip cleanup");
     else

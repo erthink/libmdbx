@@ -176,7 +176,7 @@ function probe {
 	echo "=============================================== $(date)"
 	echo "${caption}: $*"
 	rm -f ${TESTDB_DIR}/* \
-		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db "$@" | lz4 > ${TESTDB_DIR}/long.log.lz4 \
+		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db "$@" --cleanup-after=no | lz4 > ${TESTDB_DIR}/long.log.lz4 \
 		&& ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
 		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
 		|| (echo "FAILED"; exit 1)
