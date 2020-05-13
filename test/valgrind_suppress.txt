@@ -19,6 +19,14 @@
 # for((i=0;i<64;++i)); do echo -e "{\n   pwrite-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:mdbx_page_flush\n}"; done >> valgrind_suppress.txt
 
 {
+   pwrite-page-flush
+   Memcheck:Param
+   pwritev(vector[...])
+   fun:pwritev
+   ...
+   fun:mdbx_page_flush
+}
+{
    pwrite-page-flush-0
    Memcheck:Param
    pwritev(vector[0])
