@@ -1280,7 +1280,7 @@ typedef struct MDBX_node {
 } MDBX_node;
 
 #define MDBX_VALID 0x8000 /* DB handle is valid, for me_dbflags */
-#define PERSISTENT_FLAGS (0xffff & ~(MDBX_VALID))
+#define PERSISTENT_FLAGS (0xffff & ~(MDBX_VALID | MDBX_NOSUBDIR))
 /* mdbx_dbi_open() flags */
 #define VALID_FLAGS                                                            \
   (MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED |          \
