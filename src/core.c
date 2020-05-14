@@ -5075,7 +5075,7 @@ skip_cache:
         goto fail;
       }
       last = unaligned_peek_u64(4, key.iov_base);
-      if (unlikely(last < 1 || last >= SAFE64_INVALID_THRESHOLD)) {
+      if (unlikely(last < MIN_TXNID || last > MAX_TXNID)) {
         rc = MDBX_CORRUPTED;
         goto fail;
       }
@@ -5792,7 +5792,7 @@ static pgno_t mdbx_find_largest_this(MDBX_env *env, pgno_t largest) {
           goto retry;
         if (largest < snap_pages &&
             lck->mti_oldest_reader <= /* ignore pending updates */ snap_txnid &&
-            snap_txnid < SAFE64_INVALID_THRESHOLD)
+            snap_txnid <= MAX_TXNID)
           largest = snap_pages;
       }
     }
@@ -5999,8 +5999,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       }
     }
 
-    if (unlikely(txn->mt_txnid == 0 ||
-                 txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
+    if (unlikely(txn->mt_txnid < MIN_TXNID || txn->mt_txnid > MAX_TXNID)) {
       mdbx_error("%s", "environment corrupted by died writer, must shutdown!");
       rc = MDBX_CORRUPTED;
       goto bailout;
@@ -6022,7 +6021,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         if (lck->mti_readers[i].mr_pid == env->me_pid &&
             unlikely(lck->mti_readers[i].mr_tid == tid)) {
           const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
-          if (txnid >= MIN_TXNID && txnid < SAFE64_INVALID_THRESHOLD)
+          if (txnid >= MIN_TXNID && txnid <= MAX_TXNID)
             return MDBX_TXN_OVERLAPPING;
         }
       }
@@ -6050,7 +6049,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
     txn->mt_canary = meta->mm_canary;
     const txnid_t snap = mdbx_meta_txnid_stable(env, meta);
     txn->mt_txnid = safe64_txnid_next(snap);
-    if (unlikely(txn->mt_txnid >= SAFE64_INVALID_THRESHOLD)) {
+    if (unlikely(txn->mt_txnid > MAX_TXNID)) {
       mdbx_debug("%s", "txnid overflow!");
       rc = MDBX_TXN_FULL;
       goto bailout;
@@ -6992,8 +6991,7 @@ retry:
           goto bailout;
         }
         cleaned_gc_id = unaligned_peek_u64(4, key.iov_base);
-        if (unlikely(cleaned_gc_id < 1 ||
-                     cleaned_gc_id >= SAFE64_INVALID_THRESHOLD)) {
+        if (unlikely(cleaned_gc_id < MIN_TXNID || cleaned_gc_id > MAX_TXNID)) {
           rc = MDBX_CORRUPTED;
           goto bailout;
         }
@@ -7242,7 +7240,7 @@ retry:
             break;
           }
 
-          mdbx_tassert(txn, gc_rid > 1 && gc_rid < SAFE64_INVALID_THRESHOLD);
+          mdbx_tassert(txn, gc_rid >= MIN_TXNID && gc_rid <= MAX_TXNID);
           rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, --gc_rid);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
@@ -7285,7 +7283,7 @@ retry:
             goto bailout;
           }
           txnid_t gc_first = unaligned_peek_u64(4, key.iov_base);
-          if (unlikely(gc_first < 1 || gc_first >= SAFE64_INVALID_THRESHOLD)) {
+          if (unlikely(gc_first < MIN_TXNID || gc_first > MAX_TXNID)) {
             rc = MDBX_CORRUPTED;
             goto bailout;
           }

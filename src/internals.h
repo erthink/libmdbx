@@ -207,10 +207,13 @@ typedef uint32_t pgno_t;
 #define MAX_PAGENO UINT32_C(0x7FFFffff)
 #define MIN_PAGENO NUM_METAS
 
+#define SAFE64_INVALID_THRESHOLD UINT64_C(0xffffFFFF00000000)
+
 /* A transaction ID. */
 typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
 #define MIN_TXNID UINT64_C(1)
+#define MAX_TXNID (SAFE64_INVALID_THRESHOLD - 1)
 #define INVALID_TXNID UINT64_MAX
 /* LY: for testing non-atomic 64-bit txnid on 32-bit arches.
  * #define MDBX_TXNID_STEP (UINT32_MAX / 3) */
@@ -250,8 +253,6 @@ typedef union mdbx_safe64 {
 #endif /* __BYTE_ORDER__ */
   };
 } mdbx_safe64_t;
-
-#define SAFE64_INVALID_THRESHOLD UINT64_C(0xffffFFFF00000000)
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {
