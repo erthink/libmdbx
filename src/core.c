@@ -3082,14 +3082,15 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode);
 static int __must_check_result mdbx_page_get(MDBX_cursor *mc, pgno_t pgno,
                                              MDBX_page **mp, int *lvl);
 static int __must_check_result mdbx_page_search_root(MDBX_cursor *mc,
-                                                     MDBX_val *key, int modify);
+                                                     const MDBX_val *key,
+                                                     int modify);
 
 #define MDBX_PS_MODIFY 1
 #define MDBX_PS_ROOTONLY 2
 #define MDBX_PS_FIRST 4
 #define MDBX_PS_LAST 8
-static int __must_check_result mdbx_page_search(MDBX_cursor *mc, MDBX_val *key,
-                                                int flags);
+static int __must_check_result mdbx_page_search(MDBX_cursor *mc,
+                                                const MDBX_val *key, int flags);
 static int __must_check_result mdbx_page_merge(MDBX_cursor *csrc,
                                                MDBX_cursor *cdst);
 static int __must_check_result mdbx_page_flush(MDBX_txn *txn,
@@ -3108,7 +3109,8 @@ static int __must_check_result mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                                 MDBX_meta *const pending);
 static int mdbx_env_close0(MDBX_env *env);
 
-static MDBX_node *mdbx_node_search(MDBX_cursor *mc, MDBX_val *key, int *exactp);
+static MDBX_node *mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
+                                   int *exactp);
 
 static int __must_check_result mdbx_node_add_branch(MDBX_cursor *mc,
                                                     unsigned indx,
@@ -10530,7 +10532,7 @@ static int __hot mdbx_cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
  * in *exactp (1 or 0).
  * Updates the cursor index with the index of the found entry.
  * If no entry larger or equal to the key is found, returns NULL. */
-static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, MDBX_val *key,
+static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
                                          int *exactp) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   const int nkeys = page_numkeys(mp);
@@ -10754,7 +10756,7 @@ corrupted:
 
 /* Finish mdbx_page_search() / mdbx_page_search_lowest().
  * The cursor is at the root page, set up the rest of it. */
-__hot static int mdbx_page_search_root(MDBX_cursor *mc, MDBX_val *key,
+__hot static int mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key,
                                        int flags) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   int rc;
@@ -10937,7 +10939,8 @@ __hot static int mdbx_page_search_lowest(MDBX_cursor *mc) {
  *              lookups.
  *
  * Returns 0 on success, non-zero on failure. */
-__hot static int mdbx_page_search(MDBX_cursor *mc, MDBX_val *key, int flags) {
+__hot static int mdbx_page_search(MDBX_cursor *mc, const MDBX_val *key,
+                                  int flags) {
   int rc;
   pgno_t root;
 
@@ -11373,35 +11376,31 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   exactp = exactp ? exactp : &stub_exactp;
 
-  static const unsigned keycheck_op_mask =
-      (1 << MDBX_GET_BOTH) | (1 << MDBX_GET_BOTH_RANGE) | (1 << MDBX_SET) |
-      (1 << MDBX_SET_KEY) | (1 << MDBX_SET_RANGE);
-  static const unsigned datacheck_op_mask =
-      (1 << MDBX_GET_BOTH) | (1 << MDBX_GET_BOTH_RANGE);
-  const unsigned op_mask = 1 << op;
+  if (unlikely(key->iov_len < mc->mc_dbx->md_klen_min ||
+               key->iov_len > mc->mc_dbx->md_klen_max)) {
+    mdbx_cassert(mc, !"Invalid key-size");
+    return MDBX_BAD_VALSIZE;
+  }
 
-  if (op_mask & keycheck_op_mask) {
-    if (unlikely(key->iov_len < mc->mc_dbx->md_klen_min ||
-                 key->iov_len > mc->mc_dbx->md_klen_max)) {
-      mdbx_cassert(mc, !"Invalid key-size");
+  MDBX_val aligned_key = *key;
+  uint64_t aligned_keybytes;
+  if (mc->mc_db->md_flags & MDBX_INTEGERKEY) {
+    switch (aligned_key.iov_len) {
+    default:
+      mdbx_cassert(mc, !"key-size is invalid for MDBX_INTEGERKEY");
       return MDBX_BAD_VALSIZE;
-    }
-    if ((mc->mc_db->md_flags & MDBX_INTEGERKEY) != 0 &&
-        unlikely((key->iov_len & 3) | (1 & (uintptr_t)key->iov_base))) {
-      mdbx_cassert(mc, !"key-size/alignment is invalid for MDBX_INTEGERKEY");
-      return MDBX_BAD_VALSIZE;
-    }
-    if (op_mask & datacheck_op_mask) {
-      if (unlikely(data->iov_len < mc->mc_dbx->md_vlen_min ||
-                   data->iov_len > mc->mc_dbx->md_vlen_max)) {
-        mdbx_cassert(mc, !"Invalid data-size");
-        return MDBX_BAD_VALSIZE;
-      }
-      if ((mc->mc_db->md_flags & MDBX_INTEGERDUP) != 0 &&
-          unlikely((data->iov_len & 3) | (1 & (uintptr_t)data->iov_base))) {
-        mdbx_cassert(mc, !"data-size/alignment is invalid for MDBX_INTEGERDUP");
-        return MDBX_BAD_VALSIZE;
-      }
+    case 4:
+      if (unlikely(3 & (uintptr_t)aligned_key.iov_base))
+        /* copy instead of return error to avoid break compatibility */
+        aligned_key.iov_base =
+            memcpy(&aligned_keybytes, aligned_key.iov_base, 4);
+      break;
+    case 8:
+      if (unlikely(7 & (uintptr_t)aligned_key.iov_base))
+        /* copy instead of return error to avoid break compatibility */
+        aligned_key.iov_base =
+            memcpy(&aligned_keybytes, aligned_key.iov_base, 8);
+      break;
     }
   }
 
@@ -11425,7 +11424,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       node = page_node(mp, 0);
       get_key(node, &nodekey);
     }
-    rc = mc->mc_dbx->md_cmp(key, &nodekey);
+    rc = mc->mc_dbx->md_cmp(&aligned_key, &nodekey);
     if (unlikely(rc == 0)) {
       /* Probably happens rarely, but first node on the page
        * was the one we wanted. */
@@ -11443,7 +11442,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           node = page_node(mp, nkeys - 1);
           get_key(node, &nodekey);
         }
-        rc = mc->mc_dbx->md_cmp(key, &nodekey);
+        rc = mc->mc_dbx->md_cmp(&aligned_key, &nodekey);
         if (rc == 0) {
           /* last node was the one we wanted */
           mdbx_cassert(mc, nkeys >= 1 && nkeys <= UINT16_MAX + 1);
@@ -11461,7 +11460,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
               node = page_node(mp, mc->mc_ki[mc->mc_top]);
               get_key(node, &nodekey);
             }
-            rc = mc->mc_dbx->md_cmp(key, &nodekey);
+            rc = mc->mc_dbx->md_cmp(&aligned_key, &nodekey);
             if (rc == 0) {
               /* current node was the one we wanted */
               *exactp = 1;
@@ -11498,7 +11497,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     mc->mc_pg[0] = 0;
   }
 
-  rc = mdbx_page_search(mc, key, 0);
+  rc = mdbx_page_search(mc, &aligned_key, 0);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -11506,7 +11505,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   mdbx_cassert(mc, IS_LEAF(mp));
 
 set2:
-  node = mdbx_node_search(mc, key, exactp);
+  node = mdbx_node_search(mc, &aligned_key, exactp);
   if (exactp != &stub_exactp && !*exactp) {
     /* MDBX_SET specified and not an exact match. */
     return MDBX_NOTFOUND;
@@ -11545,25 +11544,43 @@ set1:
       if (op == MDBX_SET || op == MDBX_SET_KEY || op == MDBX_SET_RANGE) {
         rc = mdbx_cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
       } else {
-        int ex2, *ex2p;
-        if (op == MDBX_GET_BOTH) {
-          ex2p = &ex2;
-          ex2 = 0;
-        } else {
-          ex2p = NULL;
-        }
+        int ex2 = 0, *ex2p = (op == MDBX_GET_BOTH) ? &ex2 : NULL;
         rc = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
                              MDBX_SET_RANGE, ex2p);
         if (unlikely(rc != MDBX_SUCCESS))
           return rc;
       }
     } else if (op == MDBX_GET_BOTH || op == MDBX_GET_BOTH_RANGE) {
+      if (unlikely(data->iov_len < mc->mc_dbx->md_vlen_min ||
+                   data->iov_len > mc->mc_dbx->md_vlen_max)) {
+        mdbx_cassert(mc, !"Invalid data-size");
+        return MDBX_BAD_VALSIZE;
+      }
+      MDBX_val aligned_data = *data;
+      uint64_t aligned_databytes;
+      if (mc->mc_db->md_flags & MDBX_INTEGERDUP) {
+        switch (aligned_data.iov_len) {
+        default:
+          mdbx_cassert(mc, !"data-size is invalid for MDBX_INTEGERDUP");
+          return MDBX_BAD_VALSIZE;
+        case 4:
+          if (unlikely(3 & (uintptr_t)aligned_data.iov_base))
+            /* copy instead of return error to avoid break compatibility */
+            aligned_data.iov_base =
+                memcpy(&aligned_databytes, aligned_data.iov_base, 4);
+          break;
+        case 8:
+          if (unlikely(7 & (uintptr_t)aligned_data.iov_base))
+            /* copy instead of return error to avoid break compatibility */
+            aligned_data.iov_base =
+                memcpy(&aligned_databytes, aligned_data.iov_base, 8);
+          break;
+        }
+      }
       MDBX_val olddata;
       if (unlikely((rc = mdbx_node_read(mc, node, &olddata)) != MDBX_SUCCESS))
         return rc;
-      if (unlikely(mc->mc_dbx->md_dcmp == NULL))
-        return MDBX_EINVAL;
-      rc = mc->mc_dbx->md_dcmp(data, &olddata);
+      rc = mc->mc_dbx->md_dcmp(&aligned_data, &olddata);
       if (rc) {
         if (op != MDBX_GET_BOTH_RANGE || rc > 0)
           return MDBX_NOTFOUND;
@@ -11910,7 +11927,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   }
 
   if (flags & MDBX_RESERVE) {
-    if (unlikely(mc->mc_db->md_flags & (MDBX_DUPSORT | MDBX_REVERSEDUP)))
+    if (unlikely(mc->mc_db->md_flags & (MDBX_DUPSORT | MDBX_REVERSEDUP |
+                                        MDBX_INTEGERDUP | MDBX_DUPFIXED)))
       return MDBX_INCOMPATIBLE;
     data->iov_base = nullptr;
   }
@@ -11921,6 +11939,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   if (unlikely(mc->mc_txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
     return (mc->mc_txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
+  uint64_t aligned_keybytes, aligned_databytes;
+  MDBX_val aligned_key, aligned_data;
   if (likely((mc->mc_flags & C_SUB) == 0)) {
     if (unlikely(key->iov_len < mc->mc_dbx->md_klen_min ||
                  key->iov_len > mc->mc_dbx->md_klen_max)) {
@@ -11933,15 +11953,51 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       return MDBX_BAD_VALSIZE;
     }
 
-    if ((mc->mc_db->md_flags & MDBX_INTEGERKEY) != 0 &&
-        unlikely((key->iov_len | (uintptr_t)key->iov_base) & 3)) {
-      mdbx_cassert(mc, !"key-size/alignment is invalid for MDBX_INTEGERKEY");
-      return MDBX_BAD_VALSIZE;
+    if (mc->mc_db->md_flags & MDBX_INTEGERKEY) {
+      switch (key->iov_len) {
+      default:
+        mdbx_cassert(mc, !"key-size is invalid for MDBX_INTEGERKEY");
+        return MDBX_BAD_VALSIZE;
+      case 4:
+        if (unlikely(3 & (uintptr_t)key->iov_base)) {
+          /* copy instead of return error to avoid break compatibility */
+          aligned_key.iov_base =
+              memcpy(&aligned_keybytes, key->iov_base, aligned_key.iov_len = 4);
+          key = &aligned_key;
+        }
+        break;
+      case 8:
+        if (unlikely(7 & (uintptr_t)key->iov_base)) {
+          /* copy instead of return error to avoid break compatibility */
+          aligned_key.iov_base =
+              memcpy(&aligned_keybytes, key->iov_base, aligned_key.iov_len = 8);
+          key = &aligned_key;
+        }
+        break;
+      }
     }
-    if ((mc->mc_db->md_flags & MDBX_INTEGERDUP) != 0 &&
-        unlikely((data->iov_len | (uintptr_t)data->iov_base) & 3)) {
-      mdbx_cassert(mc, !"data-size/alignment is invalid for MDBX_INTEGERDUP");
-      return MDBX_BAD_VALSIZE;
+    if (mc->mc_db->md_flags & MDBX_INTEGERDUP) {
+      switch (data->iov_len) {
+      default:
+        mdbx_cassert(mc, !"data-size is invalid for MDBX_INTEGERKEY");
+        return MDBX_BAD_VALSIZE;
+      case 4:
+        if (unlikely(3 & (uintptr_t)data->iov_base)) {
+          /* copy instead of return error to avoid break compatibility */
+          aligned_data.iov_base = memcpy(&aligned_databytes, data->iov_base,
+                                         aligned_data.iov_len = 4);
+          data = &aligned_data;
+        }
+        break;
+      case 8:
+        if (unlikely(7 & (uintptr_t)data->iov_base)) {
+          /* copy instead of return error to avoid break compatibility */
+          aligned_data.iov_base = memcpy(&aligned_databytes, data->iov_base,
+                                         aligned_data.iov_len = 8);
+          data = &aligned_data;
+        }
+        break;
+      }
     }
   }
 
