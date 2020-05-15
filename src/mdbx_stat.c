@@ -396,7 +396,7 @@ int main(int argc, char *argv[]) {
       printf("  GC: %" PRIaPGNO " pages\n", pages);
   }
 
-  rc = mdbx_dbi_open(txn, subname, 0, &dbi);
+  rc = mdbx_dbi_open(txn, subname, MDBX_ACCEDE, &dbi);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_dbi_open", rc);
     goto txn_abort;
@@ -426,7 +426,7 @@ int main(int argc, char *argv[]) {
       subname = mdbx_malloc(key.iov_len + 1);
       memcpy(subname, key.iov_base, key.iov_len);
       subname[key.iov_len] = '\0';
-      rc = mdbx_dbi_open(txn, subname, 0, &subdbi);
+      rc = mdbx_dbi_open(txn, subname, MDBX_ACCEDE, &subdbi);
       if (rc == MDBX_SUCCESS)
         printf("Status of %s\n", subname);
       mdbx_free(subname);

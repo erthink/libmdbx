@@ -356,7 +356,7 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
-  rc = mdbx_dbi_open(txn, subname, 0, &dbi);
+  rc = mdbx_dbi_open(txn, subname, MDBX_ACCEDE, &dbi);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_dbi_open", rc);
     goto txn_abort;
@@ -394,7 +394,7 @@ int main(int argc, char *argv[]) {
       subname[key.iov_len] = '\0';
 
       MDBX_dbi sub_dbi;
-      rc = mdbx_dbi_open_ex(txn, subname, 0, &sub_dbi,
+      rc = mdbx_dbi_open_ex(txn, subname, MDBX_ACCEDE, &sub_dbi,
                             rescue ? equal_or_greater : nullptr,
                             rescue ? equal_or_greater : nullptr);
       if (unlikely(rc != MDBX_SUCCESS)) {

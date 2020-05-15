@@ -16284,8 +16284,9 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
    */
   if ((user_flags ^ txn->mt_dbs[dbi].md_flags) & PERSISTENT_FLAGS) {
     /* flags ara differs, check other conditions */
-    if (!user_flags && (!keycmp || keycmp == txn->mt_dbxs[dbi].md_cmp) &&
-        (!datacmp || datacmp == txn->mt_dbxs[dbi].md_dcmp)) {
+    if ((!user_flags && (!keycmp || keycmp == txn->mt_dbxs[dbi].md_cmp) &&
+         (!datacmp || datacmp == txn->mt_dbxs[dbi].md_dcmp)) ||
+        user_flags == MDBX_ACCEDE) {
       /* no comparators were provided and flags are zero,
        * seems that is case #1 above */
       user_flags = txn->mt_dbs[dbi].md_flags;
@@ -16338,8 +16339,12 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   if (unlikely(rc != MDBX_SUCCESS))
     goto early_bailout;
 
-  switch (user_flags &
-          (MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT | MDBX_REVERSEDUP)) {
+  switch (user_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT |
+                        MDBX_REVERSEDUP | MDBX_ACCEDE)) {
+  case MDBX_ACCEDE:
+    if ((user_flags & MDBX_CREATE) == 0)
+      break;
+    __fallthrough /* fall through */;
   default:
     rc = MDBX_EINVAL;
     goto early_bailout;

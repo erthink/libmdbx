@@ -1285,7 +1285,7 @@ typedef struct MDBX_node {
 /* mdbx_dbi_open() flags */
 #define VALID_FLAGS                                                            \
   (MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED |          \
-   MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_CREATE)
+   MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_CREATE | MDBX_ACCEDE)
 
 /* max number of pages to commit in one writev() call */
 #define MDBX_COMMIT_PAGES 64

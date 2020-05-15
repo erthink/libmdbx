@@ -574,7 +574,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
   if (dbi_handle == ~0u) {
     rc = mdbx_dbi_open_ex(
-        txn, dbi_name, 0, &dbi_handle,
+        txn, dbi_name, MDBX_ACCEDE, &dbi_handle,
         (dbi_name && ignore_wrong_order) ? equal_or_greater : nullptr,
         (dbi_name && ignore_wrong_order) ? equal_or_greater : nullptr);
     if (rc) {
