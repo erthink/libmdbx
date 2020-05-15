@@ -681,9 +681,12 @@ typedef MDBX_DP *MDBX_DPL;
  * The information here is mostly static/read-only. There is
  * only a single copy of this record in the environment. */
 typedef struct MDBX_dbx {
-  MDBX_val md_name;       /* name of the database */
-  MDBX_cmp_func *md_cmp;  /* function for comparing keys */
-  MDBX_cmp_func *md_dcmp; /* function for comparing data items */
+  MDBX_val md_name;                /* name of the database */
+  MDBX_cmp_func *md_cmp;           /* function for comparing keys */
+  MDBX_cmp_func *md_dcmp;          /* function for comparing data items */
+  size_t md_klen_min, md_klen_max; /* min/max key length for the database */
+  size_t md_vlen_min,
+      md_vlen_max; /* min/max value/data length for the database */
 } MDBX_dbx;
 
 /* A database transaction.
@@ -824,16 +827,23 @@ struct MDBX_cursor {
   MDBX_dbx *mc_dbx;
   /* The mt_dbstate for this database */
   uint8_t *mc_dbstate;
-  unsigned mc_snum;               /* number of pushed pages */
-  unsigned mc_top;                /* index of top page, normally mc_snum-1 */
-                                  /* Cursor state flags. */
-#define C_INITIALIZED 0x01        /* cursor has been initialized and is valid */
-#define C_EOF 0x02                /* No more data */
-#define C_SUB 0x04                /* Cursor is a sub-cursor */
-#define C_DEL 0x08                /* last op was a cursor_del */
-#define C_UNTRACK 0x10            /* Un-track cursor when closing */
-#define C_RECLAIMING 0x20         /* GC lookup is prohibited */
-#define C_GCFREEZE 0x40           /* reclaimed_pglist must not be updated */
+  unsigned mc_snum; /* number of pushed pages */
+  unsigned mc_top;  /* index of top page, normally mc_snum-1 */
+
+  /* Cursor state flags. */
+#define C_INITIALIZED 0x01 /* cursor has been initialized and is valid */
+#define C_EOF 0x02         /* No more data */
+#define C_SUB 0x04         /* Cursor is a sub-cursor */
+#define C_DEL 0x08         /* last op was a cursor_del */
+#define C_UNTRACK 0x10     /* Un-track cursor when closing */
+#define C_RECLAIMING 0x20  /* GC lookup is prohibited */
+#define C_GCFREEZE 0x40    /* reclaimed_pglist must not be updated */
+
+  /* Cursor checing flags. */
+#define C_COPYING 0x100  /* skip key-value length check (copying simplify) */
+#define C_UPDATING 0x200 /* update/rebalance pending */
+#define C_RETIRING 0x400 /* refs to child pages may be invalid */
+
   unsigned mc_flags;              /* see mdbx_cursor */
   MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
   indx_t mc_ki[CURSOR_STACK];     /* stack of page indices */
