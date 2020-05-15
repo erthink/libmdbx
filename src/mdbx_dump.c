@@ -26,7 +26,8 @@
 #include <ctype.h>
 
 #define PRINT 1
-static int mode;
+#define GLOBAL 2
+static int mode = GLOBAL;
 
 typedef struct flagbit {
   int bit;
@@ -39,7 +40,7 @@ flagbit dbflags[] = {{MDBX_REVERSEKEY, "reversekey"},
                      {MDBX_DUPFIXED, "dupfixed"},
                      {MDBX_INTEGERDUP, "integerdup"},
                      {MDBX_REVERSEDUP, "reversedup"},
-                     {0, NULL}};
+                     {0, nullptr}};
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "wingetopt.h"
@@ -92,53 +93,105 @@ static void dumpval(MDBX_val *v) {
   putchar(' ');
   c = v->iov_base;
   end = c + v->iov_len;
-  while (c < end) {
+  while (c < end)
     dumpbyte(*c++);
-  }
   putchar('\n');
 }
 
+bool quiet = false, rescue = false;
+const char *prog;
+static void error(const char *func, int rc) {
+  fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
+}
+
 /* Dump in BDB-compatible format */
-static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
-  MDBX_cursor *mc;
-  MDBX_stat ms;
-  MDBX_val key, data;
-  MDBX_envinfo info;
+static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   unsigned int flags;
-  int rc, i;
-
-  rc = mdbx_dbi_flags(txn, dbi, &flags);
-  if (rc)
+  int rc = mdbx_dbi_flags(txn, dbi, &flags);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_dbi_flags", rc);
     return rc;
+  }
 
+  MDBX_stat ms;
   rc = mdbx_dbi_stat(txn, dbi, &ms, sizeof(ms));
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_dbi_stat", rc);
     return rc;
+  }
 
+  MDBX_envinfo info;
   rc = mdbx_env_info_ex(mdbx_txn_env(txn), txn, &info, sizeof(info));
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_env_info_ex", rc);
     return rc;
+  }
 
   printf("VERSION=3\n");
+  if (mode & GLOBAL) {
+    mode -= GLOBAL;
+    if (info.mi_geo.upper != info.mi_geo.lower)
+      printf("geometry=l%" PRIu64 ",c%" PRIu64 ",u%" PRIu64 ",s%" PRIu64
+             ",g%" PRIu64 "\n",
+             info.mi_geo.lower, info.mi_geo.current, info.mi_geo.upper,
+             info.mi_geo.shrink, info.mi_geo.grow);
+    printf("mapsize=%" PRIu64 "\n", info.mi_geo.upper);
+    printf("maxreaders=%u\n", info.mi_maxreaders);
+
+    mdbx_canary canary;
+    rc = mdbx_canary_get(txn, &canary);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_canary_get", rc);
+      return rc;
+    }
+    if (canary.v)
+      printf("canary=v%" PRIu64 ",x%" PRIu64 ",y%" PRIu64 ",z%" PRIu64 "\n",
+             canary.v, canary.x, canary.y, canary.z);
+  }
   printf("format=%s\n", mode & PRINT ? "print" : "bytevalue");
   if (name)
     printf("database=%s\n", name);
   printf("type=btree\n");
-  printf("mapsize=%" PRIu64 "\n", info.mi_geo.upper);
-  printf("maxreaders=%u\n", info.mi_maxreaders);
+  printf("db_pagesize=%u\n", ms.ms_psize);
+  /* if (ms.ms_mod_txnid)
+    printf("txnid=%" PRIaTXN "\n", ms.ms_mod_txnid);
+  else if (!name)
+    printf("txnid=%" PRIaTXN "\n", mdbx_txn_id(txn)); */
 
-  for (i = 0; dbflags[i].bit; i++)
+  printf("duplicates=%d\n", (flags & (MDBX_DUPSORT | MDBX_DUPFIXED |
+                                      MDBX_INTEGERDUP | MDBX_REVERSEDUP))
+                                ? 1
+                                : 0);
+  for (int i = 0; dbflags[i].bit; i++)
     if (flags & dbflags[i].bit)
       printf("%s=1\n", dbflags[i].name);
 
-  printf("db_pagesize=%d\n", ms.ms_psize);
-  printf("HEADER=END\n");
-
-  rc = mdbx_cursor_open(txn, dbi, &mc);
-  if (rc)
+  uint64_t sequence;
+  rc = mdbx_dbi_sequence(txn, dbi, &sequence, 0);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_dbi_sequence", rc);
     return rc;
+  }
+  if (sequence)
+    printf("sequence=%" PRIu64 "\n", sequence);
 
-  while ((rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT)) == MDBX_SUCCESS) {
+  printf("HEADER=END\n"); /*-------------------------------------------------*/
+
+  MDBX_cursor *cursor;
+  MDBX_val key, data;
+  rc = mdbx_cursor_open(txn, dbi, &cursor);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_cursor_open", rc);
+    return rc;
+  }
+  if (MDBX_DEBUG > 0 && rescue) {
+    cursor->mc_flags |= C_SKIPORD;
+    if (cursor->mc_xcursor)
+      cursor->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+  }
+
+  while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) ==
+         MDBX_SUCCESS) {
     if (user_break) {
       rc = MDBX_EINTR;
       break;
@@ -154,11 +207,12 @@ static int dumpit(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
   printf("DATA=END\n");
   if (rc == MDBX_NOTFOUND)
     rc = MDBX_SUCCESS;
-
+  if (unlikely(rc != MDBX_SUCCESS))
+    error("mdbx_cursor_get", rc);
   return rc;
 }
 
-static void usage(char *prog) {
+static void usage(void) {
   fprintf(stderr,
           "usage: %s [-V] [-q] [-f file] [-l] [-p] [-a|-s subdb] [-r] "
           "dbpath\n"
@@ -175,18 +229,25 @@ static void usage(char *prog) {
   exit(EXIT_FAILURE);
 }
 
+static int anyway_greater(const MDBX_val *a, const MDBX_val *b) {
+  (void)a;
+  (void)b;
+  return 1;
+}
+
 int main(int argc, char *argv[]) {
   int i, rc;
   MDBX_env *env;
   MDBX_txn *txn;
   MDBX_dbi dbi;
-  char *prog = argv[0];
+  prog = argv[0];
   char *envname;
-  char *subname = NULL;
-  int alldbs = 0, envflags = 0, list = 0, quiet = 0, rescue = 0;
+  char *subname = nullptr;
+  unsigned envflags = 0;
+  bool alldbs = false, list = false;
 
   if (argc < 2)
-    usage(prog);
+    usage();
 
   while ((i = getopt(argc, argv, "af:lnps:Vrq")) != EOF) {
     switch (i) {
@@ -205,16 +266,16 @@ int main(int argc, char *argv[]) {
              mdbx_build.options);
       return EXIT_SUCCESS;
     case 'l':
-      list = 1;
+      list = true;
       /*FALLTHROUGH*/;
       __fallthrough;
     case 'a':
       if (subname)
-        usage(prog);
-      alldbs++;
+        usage();
+      alldbs = true;
       break;
     case 'f':
-      if (freopen(optarg, "w", stdout) == NULL) {
+      if (freopen(optarg, "w", stdout) == nullptr) {
         fprintf(stderr, "%s: %s: reopen: %s\n", prog, optarg,
                 mdbx_strerror(errno));
         exit(EXIT_FAILURE);
@@ -228,22 +289,22 @@ int main(int argc, char *argv[]) {
       break;
     case 's':
       if (alldbs)
-        usage(prog);
+        usage();
       subname = optarg;
       break;
     case 'q':
-      quiet = 1;
+      quiet = true;
       break;
     case 'r':
-      rescue = 1;
+      rescue = true;
       break;
     default:
-      usage(prog);
+      usage();
     }
   }
 
   if (optind != argc - 1)
-    usage(prog);
+    usage();
 
 #if defined(_WIN32) || defined(_WIN64)
   SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
@@ -263,78 +324,97 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "mdbx_dump %s (%s, T-%s)\nRunning for %s...\n",
             mdbx_version.git.describe, mdbx_version.git.datetime,
             mdbx_version.git.tree, envname);
-    fflush(NULL);
+    fflush(nullptr);
   }
 
   rc = mdbx_env_create(&env);
-  if (rc) {
-    fprintf(stderr, "mdbx_env_create failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_env_create", rc);
     return EXIT_FAILURE;
   }
 
   if (alldbs || subname) {
-    mdbx_env_set_maxdbs(env, 2);
+    rc = mdbx_env_set_maxdbs(env, 2);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_env_set_maxdbs", rc);
+      goto env_close;
+    }
   }
 
   rc = mdbx_env_open(
       env, envname,
       envflags | (rescue ? MDBX_RDONLY | MDBX_EXCLUSIVE : MDBX_RDONLY), 0);
-  if (rc) {
-    fprintf(stderr, "mdbx_env_open failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_env_open", rc);
     goto env_close;
   }
 
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
-  if (rc) {
-    fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
+  rc = mdbx_txn_begin(env, nullptr, MDBX_RDONLY, &txn);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_txn_begin", rc);
     goto env_close;
   }
 
   rc = mdbx_dbi_open(txn, subname, 0, &dbi);
-  if (rc) {
-    fprintf(stderr, "mdbx_open failed, error %d %s\n", rc, mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_dbi_open", rc);
     goto txn_abort;
   }
 
   if (alldbs) {
-    MDBX_cursor *cursor;
-    MDBX_val key;
-    int count = 0;
+    assert(dbi == MAIN_DBI);
 
-    rc = mdbx_cursor_open(txn, dbi, &cursor);
-    if (rc) {
-      fprintf(stderr, "mdbx_cursor_open failed, error %d %s\n", rc,
-              mdbx_strerror(rc));
+    MDBX_cursor *cursor;
+    rc = mdbx_cursor_open(txn, MAIN_DBI, &cursor);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_cursor_open", rc);
       goto txn_abort;
     }
-    while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDBX_NEXT_NODUP)) == 0) {
+    if (MDBX_DEBUG > 0 && rescue) {
+      cursor->mc_flags |= C_SKIPORD;
+      if (cursor->mc_xcursor)
+        cursor->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+    }
+
+    bool have_raw = false;
+    int count = 0;
+    MDBX_val key;
+    while (MDBX_SUCCESS ==
+           (rc = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
       if (user_break) {
         rc = MDBX_EINTR;
         break;
       }
-      char *str;
-      MDBX_dbi db2;
+
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      count++;
-      str = mdbx_malloc(key.iov_len + 1);
-      memcpy(str, key.iov_base, key.iov_len);
-      str[key.iov_len] = '\0';
-      rc = mdbx_dbi_open(txn, str, 0, &db2);
-      if (rc == MDBX_SUCCESS) {
+      subname = mdbx_malloc(key.iov_len + 1);
+      memcpy(subname, key.iov_base, key.iov_len);
+      subname[key.iov_len] = '\0';
+
+      MDBX_dbi sub_dbi;
+      rc = mdbx_dbi_open_ex(txn, subname, 0, &sub_dbi,
+                            rescue ? anyway_greater : nullptr,
+                            rescue ? anyway_greater : nullptr);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc == MDBX_INCOMPATIBLE) {
+          have_raw = true;
+          continue;
+        }
+        error("mdbx_dbi_open", rc);
+        if (!rescue)
+          break;
+      } else {
+        count++;
         if (list) {
-          printf("%s\n", str);
-          list++;
+          printf("%s\n", subname);
         } else {
-          rc = dumpit(txn, db2, str);
-          if (rc) {
+          rc = dump_sdb(txn, sub_dbi, subname);
+          if (unlikely(rc != MDBX_SUCCESS)) {
             if (!rescue)
               break;
             fprintf(stderr, "%s: %s: ignore %s for `%s` and continue\n", prog,
-                    envname, mdbx_strerror(rc), str);
+                    envname, mdbx_strerror(rc), subname);
             /* Here is a hack for rescue mode, don't do that:
              *  - we should restart transaction in case error due
              *    database corruption;
@@ -344,39 +424,51 @@ int main(int argc, char *argv[]) {
              *    mode and transaction is the same, i.e. has the same address
              *    and so on. */
             rc = mdbx_txn_reset(txn);
-            if (rc) {
-              fprintf(stderr, "mdbx_txn_reset failed, error %d %s\n", rc,
-                      mdbx_strerror(rc));
+            if (unlikely(rc != MDBX_SUCCESS)) {
+              error("mdbx_txn_reset", rc);
               goto env_close;
             }
             rc = mdbx_txn_renew(txn);
-            if (rc) {
-              fprintf(stderr, "mdbx_txn_renew failed, error %d %s\n", rc,
-                      mdbx_strerror(rc));
+            if (unlikely(rc != MDBX_SUCCESS)) {
+              error("mdbx_txn_renew", rc);
               goto env_close;
             }
           }
         }
-        mdbx_dbi_close(env, db2);
+        rc = mdbx_dbi_close(env, sub_dbi);
+        if (unlikely(rc != MDBX_SUCCESS)) {
+          error("mdbx_dbi_close", rc);
+          break;
+        }
       }
-      mdbx_free(str);
-      if (rc)
-        continue;
+      mdbx_free(subname);
     }
     mdbx_cursor_close(cursor);
-    if (!count) {
+    cursor = nullptr;
+
+    if (have_raw && (!count /* || rescue */))
+      rc = dump_sdb(txn, MAIN_DBI, nullptr);
+    else if (!count) {
       fprintf(stderr, "%s: %s does not contain multiple databases\n", prog,
               envname);
       rc = MDBX_NOTFOUND;
-    } else if (rc == MDBX_INCOMPATIBLE) {
-      /* LY: the record it not a named sub-db. */
-      rc = MDBX_SUCCESS;
     }
   } else {
-    rc = dumpit(txn, dbi, subname);
+    rc = dump_sdb(txn, dbi, subname);
   }
-  if (rc && rc != MDBX_NOTFOUND)
-    fprintf(stderr, "%s: %s: %s\n", prog, envname, mdbx_strerror(rc));
+
+  switch (rc) {
+  case MDBX_NOTFOUND:
+    rc = MDBX_SUCCESS;
+  case MDBX_SUCCESS:
+    break;
+  case MDBX_EINTR:
+    fprintf(stderr, "Interrupted by signal/user\n");
+    break;
+  default:
+    if (unlikely(rc != MDBX_SUCCESS))
+      error("mdbx_cursor_get", rc);
+  }
 
   mdbx_dbi_close(env, dbi);
 txn_abort:
