@@ -43,7 +43,7 @@ static void signal_handler(int sig) {
 
 #endif /* !WINDOWS */
 
-static void prstat(MDBX_stat *ms) {
+static void print_stat(MDBX_stat *ms) {
   printf("  Pagesize: %u\n", ms->ms_psize);
   printf("  Tree depth: %u\n", ms->ms_depth);
   printf("  Branch pages: %" PRIu64 "\n", ms->ms_branch_pages);
@@ -52,7 +52,7 @@ static void prstat(MDBX_stat *ms) {
   printf("  Entries: %" PRIu64 "\n", ms->ms_entries);
 }
 
-static void usage(char *prog) {
+static void usage(const char *prog) {
   fprintf(stderr,
           "usage: %s [-V] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath\n"
           "  -V\t\tprint version and exit\n"
@@ -87,6 +87,11 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
   return user_break ? MDBX_RESULT_TRUE : MDBX_RESULT_FALSE;
 }
 
+const char *prog;
+static void error(const char *func, int rc) {
+  fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
+}
+
 int main(int argc, char *argv[]) {
   int o, rc;
   MDBX_env *env;
@@ -94,9 +99,9 @@ int main(int argc, char *argv[]) {
   MDBX_dbi dbi;
   MDBX_stat mst;
   MDBX_envinfo mei;
-  char *prog = argv[0];
+  prog = argv[0];
   char *envname;
-  char *subname = NULL;
+  char *subname = nullptr;
   int alldbs = 0, envinfo = 0, envflags = 0, freinfo = 0, rdrinfo = 0;
 
   if (argc < 2)
@@ -166,41 +171,51 @@ int main(int argc, char *argv[]) {
   printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n",
          mdbx_version.git.describe, mdbx_version.git.datetime,
          mdbx_version.git.tree, envname);
-  fflush(NULL);
+  fflush(nullptr);
 
   rc = mdbx_env_create(&env);
-  if (rc) {
-    fprintf(stderr, "mdbx_env_create failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_env_create", rc);
     return EXIT_FAILURE;
   }
 
-  if (alldbs || subname)
-    mdbx_env_set_maxdbs(env, 4);
+  if (alldbs || subname) {
+    rc = mdbx_env_set_maxdbs(env, 2);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_env_set_maxdbs", rc);
+      goto env_close;
+    }
+  }
 
   rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0664);
-  if (rc) {
-    fprintf(stderr, "mdbx_env_open failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_env_open", rc);
     goto env_close;
   }
 
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
-  if (rc) {
-    fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
-    goto env_close;
+  rc = mdbx_txn_begin(env, nullptr, MDBX_RDONLY, &txn);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_txn_begin", rc);
+    goto txn_abort;
   }
 
   if (envinfo || freinfo) {
-    (void)mdbx_env_info_ex(env, txn, &mei, sizeof(mei));
+    rc = mdbx_env_info_ex(env, txn, &mei, sizeof(mei));
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_env_info_ex", rc);
+      goto txn_abort;
+    }
   } else {
     /* LY: zap warnings from gcc */
     memset(&mei, 0, sizeof(mei));
   }
 
   if (envinfo) {
-    (void)mdbx_env_stat_ex(env, txn, &mst, sizeof(mst));
+    rc = mdbx_env_stat_ex(env, txn, &mst, sizeof(mst));
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_env_stat_ex", rc);
+      goto txn_abort;
+    }
     printf("Environment Info\n");
     printf("  Pagesize: %u\n", mst.ms_psize);
     if (mei.mi_geo.lower != mei.mi_geo.upper) {
@@ -240,11 +255,19 @@ int main(int argc, char *argv[]) {
 
   if (rdrinfo) {
     rc = mdbx_reader_list(env, reader_list_func, nullptr);
+    if (MDBX_IS_ERROR(rc)) {
+      error("mdbx_reader_list", rc);
+      goto txn_abort;
+    }
     if (rc == MDBX_RESULT_TRUE)
       printf("Reader Table is empty\n");
     else if (rc == MDBX_SUCCESS && rdrinfo > 1) {
       int dead;
       rc = mdbx_reader_check(env, &dead);
+      if (MDBX_IS_ERROR(rc)) {
+        error("mdbx_reader_check", rc);
+        goto txn_abort;
+      }
       if (rc == MDBX_RESULT_TRUE) {
         printf("  %d stale readers cleared.\n", dead);
         rc = mdbx_reader_list(env, reader_list_func, nullptr);
@@ -253,38 +276,31 @@ int main(int argc, char *argv[]) {
       } else
         printf("  No stale readers.\n");
     }
-    if (MDBX_IS_ERROR(rc)) {
-      fprintf(stderr, "mdbx_txn_begin failed, error %d %s\n", rc,
-              mdbx_strerror(rc));
-      goto env_close;
-    }
     if (!(subname || alldbs || freinfo))
-      goto env_close;
+      goto txn_abort;
   }
 
   if (freinfo) {
-    MDBX_cursor *cursor;
-    MDBX_val key, data;
-    pgno_t pages = 0, *iptr;
-    pgno_t reclaimable = 0;
-
     printf("Garbage Collection\n");
     dbi = 0;
+    MDBX_cursor *cursor;
     rc = mdbx_cursor_open(txn, dbi, &cursor);
-    if (rc) {
-      fprintf(stderr, "mdbx_cursor_open failed, error %d %s\n", rc,
-              mdbx_strerror(rc));
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_cursor_open", rc);
       goto txn_abort;
     }
     rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
-    if (rc) {
-      fprintf(stderr, "mdbx_dbi_stat failed, error %d %s\n", rc,
-              mdbx_strerror(rc));
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_dbi_stat", rc);
       goto txn_abort;
     }
-    prstat(&mst);
-    while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) ==
-           MDBX_SUCCESS) {
+    print_stat(&mst);
+
+    pgno_t pages = 0, *iptr;
+    pgno_t reclaimable = 0;
+    MDBX_val key, data;
+    while (MDBX_SUCCESS ==
+           (rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT))) {
       if (user_break) {
         rc = MDBX_EINTR;
         break;
@@ -332,6 +348,7 @@ int main(int argc, char *argv[]) {
       }
     }
     mdbx_cursor_close(cursor);
+    cursor = nullptr;
 
     switch (rc) {
     case MDBX_SUCCESS:
@@ -341,8 +358,7 @@ int main(int argc, char *argv[]) {
       fprintf(stderr, "Interrupted by signal/user\n");
       goto txn_abort;
     default:
-      fprintf(stderr, "mdbx_cursor_get failed, error %d %s\n", rc,
-              mdbx_strerror(rc));
+      error("mdbx_cursor_get", rc);
       goto txn_abort;
     }
 
@@ -381,58 +397,74 @@ int main(int argc, char *argv[]) {
   }
 
   rc = mdbx_dbi_open(txn, subname, 0, &dbi);
-  if (rc) {
-    fprintf(stderr, "mdbx_open failed, error %d %s\n", rc, mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_dbi_open", rc);
     goto txn_abort;
   }
-
   rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
-  if (rc) {
-    fprintf(stderr, "mdbx_dbi_stat failed, error %d %s\n", rc,
-            mdbx_strerror(rc));
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    error("mdbx_dbi_stat", rc);
     goto txn_abort;
   }
   printf("Status of %s\n", subname ? subname : "Main DB");
-  prstat(&mst);
+  print_stat(&mst);
 
   if (alldbs) {
     MDBX_cursor *cursor;
-    MDBX_val key;
-
     rc = mdbx_cursor_open(txn, dbi, &cursor);
-    if (rc) {
-      fprintf(stderr, "mdbx_cursor_open failed, error %d %s\n", rc,
-              mdbx_strerror(rc));
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      error("mdbx_cursor_open", rc);
       goto txn_abort;
     }
-    while ((rc = mdbx_cursor_get(cursor, &key, NULL, MDBX_NEXT_NODUP)) == 0) {
-      char *str;
-      MDBX_dbi db2;
+
+    MDBX_val key;
+    while (MDBX_SUCCESS ==
+           (rc = mdbx_cursor_get(cursor, &key, nullptr, MDBX_NEXT_NODUP))) {
+      MDBX_dbi subdbi;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      str = mdbx_malloc(key.iov_len + 1);
-      memcpy(str, key.iov_base, key.iov_len);
-      str[key.iov_len] = '\0';
-      rc = mdbx_dbi_open(txn, str, 0, &db2);
+      subname = mdbx_malloc(key.iov_len + 1);
+      memcpy(subname, key.iov_base, key.iov_len);
+      subname[key.iov_len] = '\0';
+      rc = mdbx_dbi_open(txn, subname, 0, &subdbi);
       if (rc == MDBX_SUCCESS)
-        printf("Status of %s\n", str);
-      mdbx_free(str);
-      if (rc)
-        continue;
-      rc = mdbx_dbi_stat(txn, db2, &mst, sizeof(mst));
-      if (rc) {
-        fprintf(stderr, "mdbx_dbi_stat failed, error %d %s\n", rc,
-                mdbx_strerror(rc));
+        printf("Status of %s\n", subname);
+      mdbx_free(subname);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        if (rc == MDBX_INCOMPATIBLE)
+          continue;
+        error("mdbx_dbi_open", rc);
         goto txn_abort;
       }
-      prstat(&mst);
-      mdbx_dbi_close(env, db2);
+
+      rc = mdbx_dbi_stat(txn, subdbi, &mst, sizeof(mst));
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        error("mdbx_dbi_stat", rc);
+        goto txn_abort;
+      }
+      print_stat(&mst);
+
+      rc = mdbx_dbi_close(env, subdbi);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        error("mdbx_dbi_close", rc);
+        goto txn_abort;
+      }
     }
     mdbx_cursor_close(cursor);
+    cursor = nullptr;
   }
 
-  if (rc == MDBX_NOTFOUND)
-    rc = MDBX_SUCCESS;
+  switch (rc) {
+  case MDBX_SUCCESS:
+  case MDBX_NOTFOUND:
+    break;
+  case MDBX_EINTR:
+    fprintf(stderr, "Interrupted by signal/user\n");
+    break;
+  default:
+    if (unlikely(rc != MDBX_SUCCESS))
+      error("mdbx_cursor_get", rc);
+  }
 
   mdbx_dbi_close(env, dbi);
 txn_abort:
