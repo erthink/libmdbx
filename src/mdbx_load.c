@@ -462,10 +462,11 @@ static void usage(void) {
   exit(EXIT_FAILURE);
 }
 
-static int anyway_greater(const MDBX_val *a, const MDBX_val *b) {
-  (void)a;
-  (void)b;
-  return 1;
+static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
+  return (a->iov_len == b->iov_len &&
+          memcmp(a->iov_base, b->iov_base, a->iov_len) == 0)
+             ? 0
+             : 1;
 }
 
 int main(int argc, char *argv[]) {
@@ -656,8 +657,8 @@ int main(int argc, char *argv[]) {
 
     const char *const dbi_name = subname ? subname : "@MAIN";
     rc = mdbx_dbi_open_ex(txn, subname, dbi_flags | MDBX_CREATE, &dbi,
-                          append ? anyway_greater : nullptr,
-                          append ? anyway_greater : nullptr);
+                          append ? equal_or_greater : nullptr,
+                          append ? equal_or_greater : nullptr);
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_dbi_open_ex", rc);
       goto txn_abort;

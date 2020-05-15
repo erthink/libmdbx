@@ -34,7 +34,7 @@ const flagbit dbflags[] = {{MDBX_DUPSORT, "dupsort"},
                            {MDBX_DUPFIXED, "dupfixed"},
                            {MDBX_REVERSEDUP, "reversedup"},
                            {MDBX_INTEGERDUP, "integerdup"},
-                           {0, NULL}};
+                           {0, nullptr}};
 
 #if defined(_WIN32) || defined(_WIN64)
 #include "wingetopt.h"
@@ -122,12 +122,12 @@ static void __printf_args(1, 2) error(const char *msg, ...) {
   if (!quiet) {
     va_list args;
 
-    fflush(NULL);
+    fflush(nullptr);
     va_start(args, msg);
     fputs(" ! ", stderr);
     vfprintf(stderr, msg, args);
     va_end(args);
-    fflush(NULL);
+    fflush(nullptr);
   }
 }
 
@@ -137,7 +137,7 @@ static int check_user_break(void) {
     return MDBX_SUCCESS;
   case 1:
     print(" - interrupted by signal\n");
-    fflush(NULL);
+    fflush(nullptr);
     user_break = 2;
   }
   return MDBX_EINTR;
@@ -148,12 +148,12 @@ static void pagemap_cleanup(void) {
        i < ARRAY_LENGTH(walk.dbi); ++i) {
     if (walk.dbi[i].name) {
       mdbx_free((void *)walk.dbi[i].name);
-      walk.dbi[i].name = NULL;
+      walk.dbi[i].name = nullptr;
     }
   }
 
   mdbx_free(walk.pagemap);
-  walk.pagemap = NULL;
+  walk.pagemap = nullptr;
 }
 
 static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
@@ -177,11 +177,11 @@ static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
 
   if (verbose > 0 && !silent) {
     print(" - found '%s' area\n", dbi_name);
-    fflush(NULL);
+    fflush(nullptr);
   }
 
   if (dbi == ARRAY_END(walk.dbi))
-    return NULL;
+    return nullptr;
 
   dbi->name = mdbx_strdup(dbi_name);
   return last = dbi;
@@ -222,14 +222,14 @@ static void __printf_args(4, 5)
       }
       printf("\n");
       if (need_fflush)
-        fflush(NULL);
+        fflush(nullptr);
     }
   }
 }
 
 static struct problem *problems_push(void) {
   struct problem *p = problems_list;
-  problems_list = NULL;
+  problems_list = nullptr;
   return p;
 }
 
@@ -249,7 +249,7 @@ static size_t problems_pop(struct problem *list) {
       problems_list = p;
     }
     print("\n");
-    fflush(NULL);
+    fflush(nullptr);
   }
 
   problems_list = list;
@@ -520,6 +520,13 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
   return check_user_break();
 }
 
+static int equal_or_greater(const MDBX_val *a, const MDBX_val *b) {
+  return (a->iov_len == b->iov_len &&
+          memcmp(a->iov_base, b->iov_base, a->iov_len) == 0)
+             ? 0
+             : 1;
+}
+
 static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
                          const MDBX_val *data) {
   char *name;
@@ -566,7 +573,10 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   }
 
   if (dbi_handle == ~0u) {
-    rc = mdbx_dbi_open(txn, dbi_name, 0, &dbi_handle);
+    rc = mdbx_dbi_open_ex(
+        txn, dbi_name, 0, &dbi_handle,
+        (dbi_name && ignore_wrong_order) ? equal_or_greater : nullptr,
+        (dbi_name && ignore_wrong_order) ? equal_or_greater : nullptr);
     if (rc) {
       if (!dbi_name ||
           rc !=
@@ -582,7 +592,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       strcmp(only_subdb, dbi_name) != 0) {
     if (verbose) {
       print("Skip processing '%s'...\n", dbi_name);
-      fflush(NULL);
+      fflush(nullptr);
     }
     skipped_subdb++;
     return MDBX_SUCCESS;
@@ -590,7 +600,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
   if (!silent && verbose) {
     print("Processing '%s'...\n", dbi_name ? dbi_name : "@MAIN");
-    fflush(NULL);
+    fflush(nullptr);
   }
 
   rc = mdbx_dbi_flags(txn, dbi_handle, &flags);
@@ -654,13 +664,18 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     error("mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc;
   }
+  /* if (ignore_wrong_order) {
+    mc->mc_flags |= C_SKIPORD;
+    if (mc->mc_xcursor)
+      mc->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+  } */
 
   const size_t maxkeysize = mdbx_env_get_maxkeysize_ex(env, flags);
 
   saved_list = problems_push();
-  prev_key.iov_base = NULL;
+  prev_key.iov_base = nullptr;
   prev_key.iov_len = 0;
-  prev_data.iov_base = NULL;
+  prev_data.iov_base = nullptr;
   prev_data.iov_len = 0;
   rc = mdbx_cursor_get(mc, &key, &data, MDBX_FIRST);
   while (rc == MDBX_SUCCESS) {
@@ -697,26 +712,26 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       }
 
       if (!bad_key) {
-        int cmp = mdbx_cmp(txn, dbi_handle, &prev_key, &key);
+        int cmp = mdbx_cmp(txn, dbi_handle, &key, &prev_key);
         if (cmp == 0) {
           ++dups;
           if ((flags & MDBX_DUPSORT) == 0) {
-            problem_add("entry", record_count, "duplicated entries", NULL);
+            problem_add("entry", record_count, "duplicated entries", nullptr);
             if (data.iov_len == prev_data.iov_len &&
                 memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0) {
-              problem_add("entry", record_count, "complete duplicate", NULL);
+              problem_add("entry", record_count, "complete duplicate", nullptr);
             }
           } else if (!bad_data) {
-            cmp = mdbx_dcmp(txn, dbi_handle, &prev_data, &data);
+            cmp = mdbx_dcmp(txn, dbi_handle, &data, &prev_data);
             if (cmp == 0) {
-              problem_add("entry", record_count, "complete duplicate", NULL);
-            } else if (cmp > 0 && !ignore_wrong_order) {
+              problem_add("entry", record_count, "complete duplicate", nullptr);
+            } else if (cmp < 0 && !ignore_wrong_order) {
               problem_add("entry", record_count, "wrong order of multi-values",
-                          NULL);
+                          nullptr);
             }
           }
-        } else if (cmp > 0 && !ignore_wrong_order) {
-          problem_add("entry", record_count, "wrong order of entries", NULL);
+        } else if (cmp < 0 && !ignore_wrong_order) {
+          problem_add("entry", record_count, "wrong order of entries", nullptr);
         }
       }
     } else if (verbose) {
@@ -757,7 +772,7 @@ bailout:
           " key's bytes, %" PRIu64 " data's "
           "bytes, %" PRIu64 " problems\n",
           record_count, dups, key_bytes, data_bytes, problems_count);
-    fflush(NULL);
+    fflush(nullptr);
   }
 
   mdbx_cursor_close(mc);
@@ -941,7 +956,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  for (int i; (i = getopt(argc, argv, "Vvqnwcdsi:")) != EOF;) {
+  for (int i; (i = getopt(argc, argv, "Vvqnwcdis:")) != EOF;) {
     switch (i) {
     case 'V':
       printf("mdbx_chk version %d.%d.%d.%d\n"
@@ -1009,7 +1024,7 @@ int main(int argc, char *argv[]) {
         mdbx_version.git.describe, mdbx_version.git.datetime,
         mdbx_version.git.tree, envname,
         (envflags & MDBX_RDONLY) ? "only" : "write");
-  fflush(NULL);
+  fflush(nullptr);
 
   rc = mdbx_env_create(&env);
   if (rc) {
@@ -1055,7 +1070,7 @@ int main(int argc, char *argv[]) {
     locked = true;
   }
 
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, nullptr, MDBX_RDONLY, &txn);
   if (rc) {
     error("mdbx_txn_begin() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
@@ -1250,7 +1265,7 @@ int main(int argc, char *argv[]) {
     uint64_t empty_pages, lost_bytes;
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
-    fflush(NULL);
+    fflush(nullptr);
     walk.pagemap = mdbx_calloc((size_t)backed_pages, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
       rc = errno ? errno : MDBX_ENOMEM;
@@ -1259,7 +1274,7 @@ int main(int argc, char *argv[]) {
     }
 
     saved_list = problems_push();
-    rc = mdbx_env_pgwalk(txn, pgvisitor, NULL, ignore_wrong_order);
+    rc = mdbx_env_pgwalk(txn, pgvisitor, nullptr, ignore_wrong_order);
     traversal_problems = problems_pop(saved_list);
 
     if (rc) {
@@ -1346,12 +1361,12 @@ int main(int argc, char *argv[]) {
     }
   } else if (verbose) {
     print("Skipping b-tree walk...\n");
-    fflush(NULL);
+    fflush(nullptr);
   }
 
   if (!verbose)
     print("Iterating DBIs...\n");
-  problems_maindb = process_db(~0u, /* MAIN_DBI */ NULL, NULL, false);
+  problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
   problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb, false);
 
   if (verbose) {
@@ -1401,7 +1416,7 @@ int main(int argc, char *argv[]) {
             "monopolistic or read-write mode only)\n");
     }
 
-    if (!process_db(MAIN_DBI, NULL, handle_maindb, true)) {
+    if (!process_db(MAIN_DBI, nullptr, handle_maindb, true)) {
       if (!userdb_count && verbose)
         print(" - does not contain multiple databases\n");
     }
@@ -1413,7 +1428,7 @@ int main(int argc, char *argv[]) {
     print("Perform sync-to-disk for make steady checkpoint at txn-id #%" PRIi64
           "\n",
           envinfo.mi_recent_txnid);
-    fflush(NULL);
+    fflush(nullptr);
     if (locked) {
       mdbx_txn_unlock(env);
       locked = false;
@@ -1438,7 +1453,7 @@ bailout:
     const bool dont_sync = rc != 0 || total_problems;
     mdbx_env_close_ex(env, dont_sync);
   }
-  fflush(NULL);
+  fflush(nullptr);
   if (rc) {
     if (rc < 0)
       return user_break ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
