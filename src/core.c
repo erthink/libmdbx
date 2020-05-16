@@ -13823,21 +13823,17 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
         if (unlikely(rc))
           return rc;
 
-        const MDBX_node *lowest;
         const MDBX_page *mp = mn.mc_pg[mn.mc_top];
-        if (unlikely(IS_LEAF2(mp))) {
-          mdbx_cassert(&mn, mn.mc_top > csrc->mc_top);
-          unsigned i = mn.mc_top;
-          do
-            mp = mn.mc_pg[--i];
-          while (i && IS_BRANCH(mp) && mn.mc_ki[i] == 0);
-          lowest = page_node(mp, mn.mc_ki[i]);
-        } else {
+        if (likely(!IS_LEAF2(mp))) {
           mdbx_cassert(&mn, IS_LEAF(mp));
-          lowest = page_node(mp, 0);
+          const MDBX_node *lowest = page_node(mp, 0);
+          key.iov_len = node_ks(lowest);
+          key.iov_base = node_key(lowest);
+        } else {
+          mdbx_cassert(&mn, mn.mc_top > csrc->mc_top);
+          key.iov_len = mp->mp_leaf2_ksize;
+          key.iov_base = page_leaf2key(mp, mn.mc_ki[mn.mc_top], key.iov_len);
         }
-        key.iov_len = node_ks(lowest);
-        key.iov_base = node_key(lowest);
         mdbx_cassert(&mn, key.iov_len >= csrc->mc_dbx->md_klen_min);
         mdbx_cassert(&mn, key.iov_len <= csrc->mc_dbx->md_klen_max);
 
