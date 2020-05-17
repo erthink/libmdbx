@@ -6917,13 +6917,15 @@ static int mdbx_update_gc(MDBX_txn *txn) {
   txn->mt_cursors[FREE_DBI] = &couple.outer;
 
 retry:
+  ++loop;
+retry_noaccount:
   mdbx_trace("%s", " >> restart");
   mdbx_tassert(
       txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist, txn->mt_next_pgno));
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
   mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                         MDBX_DPL_TXNFULL);
-  if (unlikely(/* paranoia */ ++loop > 42)) {
+  if (unlikely(/* paranoia */ loop > ((MDBX_DEBUG > 0) ? 9 : 99))) {
     mdbx_error("too more loops %u, bailout", loop);
     rc = MDBX_PROBLEM;
     goto bailout;
@@ -7144,7 +7146,9 @@ retry:
       if (unlikely(amount != MDBX_PNL_SIZE(txn->tw.reclaimed_pglist))) {
         mdbx_trace("%s.reclaimed-list changed %u -> %u, retry", dbg_prefix_mode,
                    amount, (unsigned)MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
-        goto retry /* rare case, but avoids GC fragmentation and one loop. */;
+        goto retry_noaccount /* rare case, but avoids GC fragmentation and one
+                                cycle. */
+            ;
       }
       continue;
     }
@@ -7389,7 +7393,7 @@ retry:
         unlikely(amount < MDBX_PNL_SIZE(txn->tw.reclaimed_pglist))) {
       mdbx_notice("** restart: reclaimed-list growth %u -> %u", amount,
                   (unsigned)MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
-      goto retry;
+      goto retry_noaccount;
     }
 
     continue;
@@ -7490,8 +7494,8 @@ retry:
 
       if (unlikely(txn->tw.loose_count ||
                    amount != MDBX_PNL_SIZE(txn->tw.reclaimed_pglist))) {
-        mdbx_notice("** restart: reclaimed-list changed (%u -> %u, %u)", amount,
-                    MDBX_PNL_SIZE(txn->tw.reclaimed_pglist),
+        mdbx_notice("** restart: reclaimed-list growth (%u -> %u, loose +%u)",
+                    amount, MDBX_PNL_SIZE(txn->tw.reclaimed_pglist),
                     txn->tw.loose_count);
         goto retry;
       }
