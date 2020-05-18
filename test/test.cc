@@ -172,6 +172,7 @@ void testcase::txn_begin(bool readonly, unsigned flags) {
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin()", rc);
   txn_guard.reset(txn);
+  need_speculum_assign = config.params.speculum && !readonly;
 
   log_trace("<< txn_begin(%s, 0x%04X)", readonly ? "read-only" : "read-write",
             flags);
@@ -192,9 +193,12 @@ int testcase::breakable_commit() {
       if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH &&
                    err != MDBX_BAD_TXN))
         failure_perror("mdbx_txn_abort()", err);
+      if (need_speculum_assign)
+        speculum = speculum_commited;
     } else
       failure_perror("mdbx_txn_commit()", err);
-  }
+  } else if (need_speculum_assign)
+    speculum_commited = speculum;
 
   log_trace("<< txn_commit: %s", rc ? "failed" : "Ok");
   return rc;
@@ -224,11 +228,15 @@ void testcase::txn_end(bool abort) {
     if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH &&
                  err != MDBX_BAD_TXN))
       failure_perror("mdbx_txn_abort()", err);
+    if (need_speculum_assign)
+      speculum = speculum_commited;
   } else {
     txn_inject_writefault(txn);
     int err = mdbx_txn_commit(txn);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_commit()", err);
+    if (need_speculum_assign)
+      speculum_commited = speculum;
   }
 
   log_trace("<< txn_end(%s)", abort ? "abort" : "commit");
@@ -491,6 +499,7 @@ void testcase::db_table_drop(MDBX_dbi handle) {
     int rc = mdbx_drop(txn_guard.get(), handle, true);
     if (unlikely(rc != MDBX_SUCCESS))
       failure_perror("mdbx_drop(delete=true)", rc);
+    speculum.clear();
     log_trace("<< testcase::db_table_drop");
   } else {
     log_trace("<< testcase::db_table_drop: not needed");
@@ -502,6 +511,7 @@ void testcase::db_table_clear(MDBX_dbi handle, MDBX_txn *txn) {
   int rc = mdbx_drop(txn ? txn : txn_guard.get(), handle, false);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_drop(delete=false)", rc);
+  speculum.clear();
   log_trace("<< testcase::db_table_clear");
 }
 

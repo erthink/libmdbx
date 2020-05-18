@@ -97,7 +97,7 @@ bool testcase_ttl::run() {
         for (unsigned n = 0; n < tail_count; ++n) {
           log_trace("ttl: remove-tail %" PRIu64, tail_serial);
           generate_pair(tail_serial);
-          err = mdbx_del(txn_guard.get(), dbi, &key->value, &data->value);
+          err = remove(key, data);
           if (unlikely(err != MDBX_SUCCESS)) {
             if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
               log_notice("ttl: tail-bailout due '%s'", mdbx_strerror(err));
@@ -120,13 +120,17 @@ bool testcase_ttl::run() {
       log_notice("ttl: bailout at commit due '%s'", mdbx_strerror(err));
       break;
     }
+    if (!speculum_verify()) {
+      log_notice("ttl: bailout after tail-trim");
+      return false;
+    }
+
     fifo.push_front(std::make_pair(serial, head_count));
   retry:
     for (unsigned n = 0; n < head_count; ++n) {
       log_trace("ttl: insert-head %" PRIu64, serial);
       generate_pair(serial);
-      err = mdbx_put(txn_guard.get(), dbi, &key->value, &data->value,
-                     insert_flags);
+      err = insert(key, data, insert_flags);
       if (unlikely(err != MDBX_SUCCESS)) {
         if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
           log_notice("ttl: head-insert skip due '%s'", mdbx_strerror(err));
@@ -148,6 +152,10 @@ bool testcase_ttl::run() {
       log_notice("ttl: head-commit skip due '%s'", mdbx_strerror(err));
       serial = fifo.front().first;
       fifo.pop_front();
+    }
+    if (!speculum_verify()) {
+      log_notice("ttl: bailout after head-grow");
+      return false;
     }
 
     report(1);

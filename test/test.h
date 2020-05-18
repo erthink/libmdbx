@@ -133,6 +133,9 @@ protected:
       return cmp < 0;
     }
   };
+
+  // for simplify the set<pair<key,value>>
+  // is used instead of multimap<key,value>
   using SET = std::set<Item, ItemCompare>;
 
   const actor_config &config;
@@ -143,6 +146,7 @@ protected:
   scoped_txn_guard txn_guard;
   scoped_cursor_guard cursor_guard;
   bool signalled{false};
+  bool need_speculum_assign{false};
 
   size_t nops_completed{0};
   chrono::time start_timestamp;
@@ -154,7 +158,7 @@ protected:
     mdbx_canary canary;
   } last;
 
-  SET speculum{ItemCompare(this)};
+  SET speculum{ItemCompare(this)}, speculum_commited{ItemCompare(this)};
   bool speculum_verify();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              unsigned flags);
@@ -233,11 +237,10 @@ public:
 
 class testcase_hill : public testcase {
   using inherited = testcase;
-  SET speculum_commited;
 
 public:
   testcase_hill(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid), speculum_commited(ItemCompare(this)) {}
+      : testcase(config, pid) {}
   bool run() override;
 };
 

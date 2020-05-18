@@ -178,7 +178,6 @@ bool testcase_nested::trim_tail(unsigned window_width) {
                 fifo.size());
     db_table_clear(dbi, txn_guard.get());
     fifo.clear();
-    speculum.clear();
   }
   return true;
 }
