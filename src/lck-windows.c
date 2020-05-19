@@ -526,43 +526,31 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
 }
 
 MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
-  /* Transite from exclusive state (E-?) to used (S-?) */
+  /* Transite from exclusive-write state (E-E) to used (S-?) */
   assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
-#if 1
   if (env->me_flags & MDBX_EXCLUSIVE)
     return MDBX_SUCCESS /* nope since files were must be opened non-shareable */
         ;
-#else
-  /* 1) must be at E-E (exclusive-write) */
-  if (env->me_flags & MDBX_EXCLUSIVE) {
-    /* transite from E-E to E_? (exclusive-read) */
-    if (!funlock(env->me_lfd, LCK_UPPER))
-      mdbx_panic("%s(%s) failed: err %u", __func__,
-                 "E-E(exclusive-write) >> E-?(exclusive-read)", GetLastError());
-    return MDBX_SUCCESS /* 2) now at E-? (exclusive-read), done */;
-  }
-#endif
-
-  /* 3) now at E-E (exclusive-write), transite to ?_E (middle) */
+  /* 1) now at E-E (exclusive-write), transite to ?_E (middle) */
   if (!funlock(env->me_lfd, LCK_LOWER))
     mdbx_panic("%s(%s) failed: err %u", __func__,
                "E-E(exclusive-write) >> ?-E(middle)", GetLastError());
 
-  /* 4) now at ?-E (middle), transite to S-E (locked) */
+  /* 2) now at ?-E (middle), transite to S-E (locked) */
   if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
-    int rc = GetLastError() /* 5) something went wrong, give up */;
+    int rc = GetLastError() /* 3) something went wrong, give up */;
     mdbx_error("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
     return rc;
   }
 
-  /* 6) got S-E (locked), continue transition to S-? (used) */
+  /* 4) got S-E (locked), continue transition to S-? (used) */
   if (!funlock(env->me_lfd, LCK_UPPER))
     mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> S-?(used)",
                GetLastError());
 
-  return MDBX_SUCCESS /* 7) now at S-? (used), done */;
+  return MDBX_SUCCESS /* 5) now at S-? (used), done */;
 }
 
 /*----------------------------------------------------------------------------*/
