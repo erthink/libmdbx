@@ -148,6 +148,7 @@ protected:
   bool signalled{false};
   bool need_speculum_assign{false};
 
+  unsigned nops_target{config.params.test_nops};
   size_t nops_completed{0};
   chrono::time start_timestamp;
   keygen::buffer key;
@@ -229,10 +230,13 @@ public:
 };
 
 class testcase_ttl : public testcase {
+  using inherited = testcase;
+
 public:
   testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
   bool run() override;
+  bool setup() override;
 };
 
 class testcase_hill : public testcase {

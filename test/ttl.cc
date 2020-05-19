@@ -16,6 +16,27 @@
 #include <cmath>
 #include <deque>
 
+bool testcase_ttl::setup() {
+  if (!inherited::setup())
+    return false;
+
+  constexpr unsigned reduce_nops_threshold = 10000;
+  if (nops_target > reduce_nops_threshold) {
+    unsigned batching = config.params.batch_read + config.params.batch_write;
+    unsigned reduce_nops =
+        reduce_nops_threshold + (nops_target - reduce_nops_threshold +
+                                 nops_target / (batching ? batching : 1)) /
+                                    5;
+    if (reduce_nops >= config.signal_nops) {
+      log_notice("ttl: return target-nops from %u to %u", nops_target,
+                 reduce_nops);
+      nops_target = reduce_nops;
+    }
+  }
+
+  return true;
+}
+
 static unsigned edge2window(uint64_t edge, unsigned window_max) {
   const double rnd = u64_to_double1(bleach64(edge));
   const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
@@ -108,11 +129,13 @@ bool testcase_ttl::run() {
           if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
             failure("ttl: unexpected key-space overflow on the tail");
         }
+        report(1);
       }
     } else {
       log_trace("ttl: purge state");
       db_table_clear(dbi);
       fifo.clear();
+      report(1);
     }
 
     err = breakable_restart();

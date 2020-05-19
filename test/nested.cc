@@ -24,6 +24,20 @@ bool testcase_nested::setup() {
     return false;
   }
 
+  constexpr unsigned reduce_nops_threshold = 5000;
+  if (nops_target > reduce_nops_threshold) {
+    unsigned batching = config.params.batch_read + config.params.batch_write;
+    unsigned reduce_nops =
+        reduce_nops_threshold +
+        5 * unsigned(sqrt(nops_target - reduce_nops_threshold +
+                          nops_target / (batching ? batching : 1)));
+    if (reduce_nops >= config.signal_nops) {
+      log_notice("nested: return target-nops from %u to %u", nops_target,
+                 reduce_nops);
+      nops_target = reduce_nops;
+    }
+  }
+
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
@@ -83,6 +97,7 @@ void testcase_nested::push_txn() {
   std::swap(txn_guard, std::get<0>(stack.top()));
   log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
               stack.size(), mdbx_txn_id(txn), flags, serial);
+  report(1);
 }
 
 bool testcase_nested::pop_txn(bool abort) {
@@ -122,6 +137,7 @@ bool testcase_nested::pop_txn(bool abort) {
     std::swap(speculum, std::get<3>(stack.top()));
   }
   stack.pop();
+  report(1);
   return should_continue;
 }
 
@@ -171,6 +187,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
         if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
           failure("nested: unexpected key-space overflow on the tail");
       }
+      report(1);
     }
   } else if (!fifo.empty()) {
     log_verbose("nested: purge state %" PRIu64 " - %" PRIu64 ", fifo-items %zu",
@@ -178,6 +195,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
                 fifo.size());
     db_table_clear(dbi, txn_guard.get());
     fifo.clear();
+    report(1);
   }
   return true;
 }
@@ -208,6 +226,7 @@ retry:
     }
   }
 
+  report(1);
   return true;
 }
 
@@ -276,8 +295,6 @@ bool testcase_nested::run() {
       log_notice("nested: bailout after head-grow");
       return false;
     }
-
-    report(1);
   }
 
   while (!stack.empty())

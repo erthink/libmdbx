@@ -398,8 +398,7 @@ bool testcase::should_continue(bool check_timeout_only) const {
       result = false;
   }
 
-  if (!check_timeout_only && config.params.test_nops &&
-      nops_completed >= config.params.test_nops)
+  if (!check_timeout_only && nops_target && nops_completed >= nops_target)
     result = false;
 
   if (result)
