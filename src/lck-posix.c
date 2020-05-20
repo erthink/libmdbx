@@ -477,8 +477,10 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
 
     mdbx_assert(env, rc == 0);
     if (rc == 0) {
+      const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages == 0;
       mdbx_munmap(&env->me_lck_mmap);
-      rc = ftruncate(env->me_lfd, 0) ? errno : 0;
+      if (synced)
+        rc = ftruncate(env->me_lfd, 0) ? errno : 0;
     }
 
     mdbx_jitter4testing(false);
