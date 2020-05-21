@@ -15356,7 +15356,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
 typedef struct mdbx_copy {
   MDBX_env *mc_env;
   MDBX_txn *mc_txn;
-  mdbx_condmutex_t mc_condmutex;
+  mdbx_condpair_t mc_condpair;
   uint8_t *mc_wbuf[2];
   uint8_t *mc_over[2];
   size_t mc_wlen[2];
@@ -15376,10 +15376,10 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   uint8_t *ptr;
   int toggle = 0;
 
-  mdbx_condmutex_lock(&my->mc_condmutex);
+  mdbx_condpair_lock(&my->mc_condpair);
   while (!my->mc_error) {
     while (!my->mc_new && !my->mc_error) {
-      int err = mdbx_condmutex_wait(&my->mc_condmutex);
+      int err = mdbx_condpair_wait(&my->mc_condpair, true);
       if (err != MDBX_SUCCESS) {
         my->mc_error = err;
         goto bailout;
@@ -15409,10 +15409,10 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     toggle ^= 1;
     /* Return the empty buffer to provider */
     my->mc_new--;
-    mdbx_condmutex_signal(&my->mc_condmutex);
+    mdbx_condpair_signal(&my->mc_condpair, false);
   }
 bailout:
-  mdbx_condmutex_unlock(&my->mc_condmutex);
+  mdbx_condpair_unlock(&my->mc_condpair);
   return (THREAD_RESULT)0;
 }
 
@@ -15421,15 +15421,15 @@ bailout:
  * [in] my control structure.
  * [in] adjust (1 to hand off 1 buffer) | (MDBX_EOF when ending). */
 static int __cold mdbx_env_cthr_toggle(mdbx_copy *my, int adjust) {
-  mdbx_condmutex_lock(&my->mc_condmutex);
+  mdbx_condpair_lock(&my->mc_condpair);
   my->mc_new += (short)adjust;
-  mdbx_condmutex_signal(&my->mc_condmutex);
+  mdbx_condpair_signal(&my->mc_condpair, true);
   while (!my->mc_error && (my->mc_new & 2) /* both buffers in use */) {
-    int err = mdbx_condmutex_wait(&my->mc_condmutex);
+    int err = mdbx_condpair_wait(&my->mc_condpair, false);
     if (err != MDBX_SUCCESS)
       my->mc_error = err;
   }
-  mdbx_condmutex_unlock(&my->mc_condmutex);
+  mdbx_condpair_unlock(&my->mc_condpair);
 
   my->mc_toggle ^= (adjust & 1);
   /* Both threads reset mc_wlen, to be safe from threading errors */
@@ -15694,7 +15694,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
 
     mdbx_copy ctx;
     memset(&ctx, 0, sizeof(ctx));
-    rc = mdbx_condmutex_init(&ctx.mc_condmutex);
+    rc = mdbx_condpair_init(&ctx.mc_condpair);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
@@ -15717,7 +15717,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
         rc = mdbx_env_cwalk(&ctx, &root, 0);
       mdbx_env_cthr_toggle(&ctx, 1 | MDBX_EOF);
       thread_err = mdbx_thread_join(thread);
-      mdbx_condmutex_destroy(&ctx.mc_condmutex);
+      mdbx_condpair_destroy(&ctx.mc_condpair);
     }
     if (unlikely(thread_err != MDBX_SUCCESS))
       return thread_err;
