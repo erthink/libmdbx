@@ -236,7 +236,6 @@ public:
   testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
   bool run() override;
-  bool setup() override;
 };
 
 class testcase_hill : public testcase {
@@ -299,6 +298,9 @@ class testcase_nested : public testcase {
   using FIFO = std::deque<std::pair<uint64_t, unsigned>>;
 
   uint64_t serial{0};
+  unsigned clear_wholetable_passed{0};
+  unsigned clear_stepbystep_passed{0};
+  unsigned dbfull_passed{0};
   FIFO fifo;
   std::stack<std::tuple<scoped_txn_guard, uint64_t, FIFO, SET>> stack;
 

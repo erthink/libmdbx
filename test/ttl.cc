@@ -16,27 +16,6 @@
 #include <cmath>
 #include <deque>
 
-bool testcase_ttl::setup() {
-  if (!inherited::setup())
-    return false;
-
-  constexpr unsigned reduce_nops_threshold = 10000;
-  if (nops_target > reduce_nops_threshold) {
-    unsigned batching = config.params.batch_read + config.params.batch_write;
-    unsigned reduce_nops =
-        reduce_nops_threshold + (nops_target - reduce_nops_threshold +
-                                 nops_target / (batching ? batching : 1)) /
-                                    5;
-    if (reduce_nops >= config.signal_nops) {
-      log_notice("ttl: return target-nops from %u to %u", nops_target,
-                 reduce_nops);
-      nops_target = reduce_nops;
-    }
-  }
-
-  return true;
-}
-
 static unsigned edge2window(uint64_t edge, unsigned window_max) {
   const double rnd = u64_to_double1(bleach64(edge));
   const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
@@ -98,17 +77,23 @@ bool testcase_ttl::run() {
   std::deque<std::pair<uint64_t, unsigned>> fifo;
   uint64_t serial = 0;
   bool rc = false;
-  while (should_continue()) {
+  unsigned clear_wholetable_passed = 0;
+  unsigned clear_stepbystep_passed = 0;
+  unsigned dbfull_passed = 0;
+  unsigned loops = 0;
+  while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
-    const unsigned window_width =
-        flipcoin_x4() ? 0 : edge2window(salt, window_max);
+    const unsigned window_width = (!should_continue() || flipcoin_x4())
+                                      ? 0
+                                      : edge2window(salt, window_max);
     unsigned head_count = edge2count(salt, count_max);
     log_debug("ttl: step #%zu (serial %" PRIu64
               ", window %u, count %u) salt %" PRIu64,
               nops_completed, serial, window_width, head_count, salt);
 
-    if (window_width) {
+    if (window_width || flipcoin()) {
+      clear_stepbystep_passed += window_width == 0;
       while (fifo.size() > window_width) {
         uint64_t tail_serial = fifo.back().first;
         const unsigned tail_count = fifo.back().second;
@@ -135,6 +120,7 @@ bool testcase_ttl::run() {
       log_trace("ttl: purge state");
       db_table_clear(dbi);
       fifo.clear();
+      clear_wholetable_passed += 1;
       report(1);
     }
 
@@ -148,41 +134,58 @@ bool testcase_ttl::run() {
       return false;
     }
 
-    fifo.push_front(std::make_pair(serial, head_count));
-  retry:
-    for (unsigned n = 0; n < head_count; ++n) {
-      log_trace("ttl: insert-head %" PRIu64, serial);
-      generate_pair(serial);
-      err = insert(key, data, insert_flags);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-          log_notice("ttl: head-insert skip due '%s'", mdbx_strerror(err));
-          txn_restart(true, false);
-          serial = fifo.front().first;
-          fifo.front().second = head_count = n;
-          goto retry;
+    if (should_continue() || !clear_wholetable_passed ||
+        !clear_stepbystep_passed) {
+      unsigned underutilization_x256 =
+          txn_underutilization_x256(txn_guard.get());
+      if (dbfull_passed > underutilization_x256) {
+        log_notice("ttl: skip head-grow to avoid one more dbfull (was %u, "
+                   "underutilization %.2f%%)",
+                   dbfull_passed, underutilization_x256 / 2.560);
+        continue;
+      }
+      fifo.push_front(std::make_pair(serial, head_count));
+    retry:
+      for (unsigned n = 0; n < head_count; ++n) {
+        log_trace("ttl: insert-head %" PRIu64, serial);
+        generate_pair(serial);
+        err = insert(key, data, insert_flags);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          if ((err == MDBX_TXN_FULL || err == MDBX_MAP_FULL) &&
+              config.params.ignore_dbfull) {
+            log_notice("ttl: head-insert skip due '%s'", mdbx_strerror(err));
+            txn_restart(true, false);
+            serial = fifo.front().first;
+            fifo.front().second = head_count = n;
+            dbfull_passed += 1;
+            goto retry;
+          }
+          failure_perror("mdbx_put(head)", err);
         }
-        failure_perror("mdbx_put(head)", err);
-      }
 
-      if (unlikely(!keyvalue_maker.increment(serial, 1))) {
-        log_notice("ttl: unexpected key-space overflow");
-        goto bailout;
+        if (unlikely(!keyvalue_maker.increment(serial, 1))) {
+          log_notice("ttl: unexpected key-space overflow");
+          goto bailout;
+        }
       }
+      err = breakable_restart();
+      if (unlikely(err != MDBX_SUCCESS)) {
+        log_notice("ttl: head-commit skip due '%s'", mdbx_strerror(err));
+        serial = fifo.front().first;
+        fifo.pop_front();
+      }
+      if (!speculum_verify()) {
+        log_notice("ttl: bailout after head-grow");
+        return false;
+      }
+      loops += 1;
+    } else if (fifo.empty()) {
+      log_notice("ttl: done %u whole loops", loops);
+      rc = true;
+      break;
+    } else {
+      log_notice("ttl: done, wait for empty, skip head-grow");
     }
-    err = breakable_restart();
-    if (unlikely(err != MDBX_SUCCESS)) {
-      log_notice("ttl: head-commit skip due '%s'", mdbx_strerror(err));
-      serial = fifo.front().first;
-      fifo.pop_front();
-    }
-    if (!speculum_verify()) {
-      log_notice("ttl: bailout after head-grow");
-      return false;
-    }
-
-    report(1);
-    rc = true;
   }
 
 bailout:

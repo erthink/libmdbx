@@ -24,20 +24,6 @@ bool testcase_nested::setup() {
     return false;
   }
 
-  constexpr unsigned reduce_nops_threshold = 5000;
-  if (nops_target > reduce_nops_threshold) {
-    unsigned batching = config.params.batch_read + config.params.batch_write;
-    unsigned reduce_nops =
-        reduce_nops_threshold +
-        5 * unsigned(sqrt(nops_target - reduce_nops_threshold +
-                          nops_target / (batching ? batching : 1)));
-    if (reduce_nops >= config.signal_nops) {
-      log_notice("nested: return target-nops from %u to %u", nops_target,
-                 reduce_nops);
-      nops_target = reduce_nops;
-    }
-  }
-
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
@@ -97,7 +83,6 @@ void testcase_nested::push_txn() {
   std::swap(txn_guard, std::get<0>(stack.top()));
   log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
               stack.size(), mdbx_txn_id(txn), flags, serial);
-  report(1);
 }
 
 bool testcase_nested::pop_txn(bool abort) {
@@ -137,7 +122,6 @@ bool testcase_nested::pop_txn(bool abort) {
     std::swap(speculum, std::get<3>(stack.top()));
   }
   stack.pop();
-  report(1);
   return should_continue;
 }
 
@@ -166,7 +150,8 @@ bool testcase_nested::stochastic_breakable_restart_with_nested(
 }
 
 bool testcase_nested::trim_tail(unsigned window_width) {
-  if (window_width) {
+  if (window_width || flipcoin()) {
+    clear_stepbystep_passed += window_width == 0;
     while (fifo.size() > window_width) {
       uint64_t tail_serial = fifo.back().first;
       const unsigned tail_count = fifo.back().second;
@@ -195,6 +180,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
                 fifo.size());
     db_table_clear(dbi, txn_guard.get());
     fifo.clear();
+    clear_wholetable_passed += 1;
     report(1);
   }
   return true;
@@ -215,6 +201,7 @@ retry:
         log_notice("nested: head-insert skip due '%s'", mdbx_strerror(err));
         head_count = n;
         stochastic_breakable_restart_with_nested(true);
+        dbfull_passed += 1;
         goto retry;
       }
       failure_perror("mdbx_put(head)", err);
@@ -226,7 +213,6 @@ retry:
     }
   }
 
-  report(1);
   return true;
 }
 
@@ -267,10 +253,15 @@ bool testcase_nested::run() {
   uint64_t seed =
       prng64_map2_white(config.params.keygen.seed) + config.actor_id;
 
-  while (should_continue()) {
+  clear_wholetable_passed = 0;
+  clear_stepbystep_passed = 0;
+  dbfull_passed = 0;
+  unsigned loops = 0;
+  while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
-    const unsigned window_width =
-        flipcoin_x4() ? 0 : edge2window(salt, window_max);
+    const unsigned window_width = (!should_continue() || flipcoin_x4())
+                                      ? 0
+                                      : edge2window(salt, window_max);
     const unsigned head_count = edge2count(salt, count_max);
     log_debug("nested: step #%zu (serial %" PRIu64
               ", window %u, count %u) salt %" PRIu64,
@@ -287,13 +278,30 @@ bool testcase_nested::run() {
       return false;
     }
 
-    if (!grow_head(head_count))
-      return false;
-    if (!stochastic_breakable_restart_with_nested())
-      log_notice("nested: skip commit/restart after head-grow");
-    if (!speculum_verify()) {
-      log_notice("nested: bailout after head-grow");
-      return false;
+    if (should_continue() || !clear_wholetable_passed ||
+        !clear_stepbystep_passed) {
+      unsigned underutilization_x256 =
+          txn_underutilization_x256(txn_guard.get());
+      if (dbfull_passed > underutilization_x256) {
+        log_notice("nested: skip head-grow to avoid one more dbfull (was %u, "
+                   "underutilization %.2f%%)",
+                   dbfull_passed, underutilization_x256 / 2.560);
+        continue;
+      }
+      if (!grow_head(head_count))
+        return false;
+      if (!stochastic_breakable_restart_with_nested())
+        log_notice("nested: skip commit/restart after head-grow");
+      if (!speculum_verify()) {
+        log_notice("nested: bailout after head-grow");
+        return false;
+      }
+      loops += 1;
+    } else if (fifo.empty()) {
+      log_notice("nested: done %u whole loops", loops);
+      break;
+    } else {
+      log_notice("nested: done, wait for empty, skip head-grow");
     }
   }
 
