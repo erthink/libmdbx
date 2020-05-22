@@ -179,26 +179,23 @@ void testcase::txn_begin(bool readonly, unsigned flags) {
 }
 
 int testcase::breakable_commit() {
-  int rc = MDBX_SUCCESS;
   log_trace(">> txn_commit");
   assert(txn_guard);
 
   MDBX_txn *txn = txn_guard.release();
   txn_inject_writefault(txn);
-  int err = mdbx_txn_commit(txn);
-  if (unlikely(err != MDBX_SUCCESS)) {
-    if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-      rc = err;
-      err = mdbx_txn_abort(txn);
-      if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH &&
-                   err != MDBX_BAD_TXN))
-        failure_perror("mdbx_txn_abort()", err);
-      if (need_speculum_assign)
-        speculum = speculum_commited;
-    } else
-      failure_perror("mdbx_txn_commit()", err);
-  } else if (need_speculum_assign)
-    speculum_commited = speculum;
+  int rc = mdbx_txn_commit(txn);
+  if (unlikely(rc != MDBX_SUCCESS) &&
+      (rc != MDBX_MAP_FULL || !config.params.ignore_dbfull))
+    failure_perror("mdbx_txn_commit()", rc);
+
+  if (need_speculum_assign) {
+    need_speculum_assign = false;
+    if (unlikely(rc != MDBX_SUCCESS))
+      speculum = speculum_commited;
+    else
+      speculum_commited = speculum;
+  }
 
   log_trace("<< txn_commit: %s", rc ? "failed" : "Ok");
   return rc;
@@ -225,8 +222,7 @@ void testcase::txn_end(bool abort) {
   MDBX_txn *txn = txn_guard.release();
   if (abort) {
     int err = mdbx_txn_abort(txn);
-    if (unlikely(err != MDBX_SUCCESS && err != MDBX_THREAD_MISMATCH &&
-                 err != MDBX_BAD_TXN))
+    if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);
     if (need_speculum_assign)
       speculum = speculum_commited;
