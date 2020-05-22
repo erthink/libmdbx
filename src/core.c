@@ -12081,7 +12081,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     if (likely(rc == MDBX_SUCCESS)) {
       if (exact) {
         if (mc->mc_flags & C_SUB) {
-          mdbx_assert(env, data->iov_len == 0 && olddata.iov_len == 0);
+          mdbx_assert(env, data->iov_len == 0);
           return (flags & MDBX_NODUPDATA) ? MDBX_KEYEXIST : MDBX_SUCCESS;
         }
         if (!(flags & MDBX_RESERVE) &&
