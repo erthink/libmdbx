@@ -232,6 +232,47 @@ bool testcase_hill::run() {
     }
   }
 
+  if (txn_guard) {
+    MDBX_stat stat;
+    err = mdbx_dbi_stat(txn_guard.get(), dbi, &stat, sizeof(stat));
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_dbi_stat()", err);
+
+    uint32_t nested_deepmask;
+    err = mdbx_dbi_dupsort_depthmask(txn_guard.get(), dbi, &nested_deepmask);
+    if (unlikely(err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE))
+      failure_perror("mdbx_dbi_stat_nested_deepmask()", err);
+
+    if (err != MDBX_SUCCESS) {
+      log_notice("hill: reached %d tree depth", stat.ms_depth);
+    } else {
+      std::string str;
+      int prev = -2, i = 0;
+      do {
+        while (!(nested_deepmask & 1))
+          ++i, nested_deepmask >>= 1;
+        if (prev + 1 == i) {
+          if (str.back() != '-')
+            str.push_back('-');
+          prev = i;
+          continue;
+        }
+        if (!str.empty()) {
+          if (str.back() == '-')
+            str.append(std::to_string(prev));
+          str.push_back(',');
+        }
+        str.append(std::to_string(i));
+        prev = i;
+      } while (++i, nested_deepmask >>= 1);
+      if (str.back() == '-')
+        str.append(std::to_string(prev));
+
+      log_notice("hill: reached %d tree depth & %s sub-tree depth(s)",
+                 stat.ms_depth, str.c_str());
+    }
+  }
+
   while (serial_count > 1) {
     if (unlikely(!keyvalue_maker.increment(serial_count, -2)))
       failure("downhill: unexpected key-space underflow");
