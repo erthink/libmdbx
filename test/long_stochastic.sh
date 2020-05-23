@@ -176,9 +176,9 @@ function probe {
 	echo "=============================================== $(date)"
 	echo "${caption}: $*"
 	rm -f ${TESTDB_DIR}/* \
-		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db "$@" --cleanup-after=no | lz4 > ${TESTDB_DIR}/long.log.lz4 \
-		&& ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk -nvvv ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db "$@" --cleanup-after=no | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
+		&& ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
+		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
 		|| (echo "FAILED"; exit 1)
 }
 
@@ -258,10 +258,10 @@ for nops in 10 10000 100 1000 10000000; do
 					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
 					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
 					--keygen.seed=${seed} basic
-			done
-		done
+			done # options
+		done # repeats
 		if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
-	done
-done
+	done # batch (write-ops per txn)
+done # n-ops
 
 echo "=== ALL DONE ====================== $(date)"
