@@ -16129,6 +16129,56 @@ int __cold mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
   }
 }
 
+int __cold mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
+                                      uint32_t *mask) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!mask))
+    return MDBX_EINVAL;
+
+  if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DB_VALID)))
+    return MDBX_EINVAL;
+
+  MDBX_cursor_couple cx;
+  rc = mdbx_cursor_init(&cx.outer, txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+  if ((cx.outer.mc_db->md_flags & MDBX_DUPSORT) == 0)
+    return MDBX_RESULT_TRUE;
+
+  MDBX_val key, data;
+  rc = mdbx_cursor_first(&cx.outer, &key, &data);
+  *mask = 0;
+  while (rc == MDBX_SUCCESS) {
+    const MDBX_node *node = page_node(cx.outer.mc_pg[cx.outer.mc_top],
+                                      cx.outer.mc_ki[cx.outer.mc_top]);
+    const MDBX_db *db = node_data(node);
+    const unsigned flags = node_flags(node);
+    switch (flags) {
+    case F_BIGDATA:
+    case 0:
+      /* single-value entry, deep = 0 */
+      *mask |= 1 << 0;
+      break;
+    case F_DUPDATA:
+      /* single sub-page, deep = 1 */
+      *mask |= 1 << 1;
+      break;
+    case F_DUPDATA | F_SUBDATA:
+      /* sub-tree */
+      *mask |= 1 << unaligned_peek_u16(1, &db->md_depth);
+      break;
+    default:
+      return MDBX_CORRUPTED;
+    }
+    rc = mdbx_cursor_next(&cx.outer, &key, &data, MDBX_NEXT_NODUP);
+  }
+
+  return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
+}
+
 int __cold mdbx_env_info(MDBX_env *env, MDBX_envinfo *arg, size_t bytes) {
   return mdbx_env_info_ex(env, NULL, arg, bytes);
 }

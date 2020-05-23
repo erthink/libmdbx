@@ -2716,6 +2716,21 @@ __inline uint32_t mdbx_key_from_int32(const int32_t i32) {
 LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *stat,
                               size_t bytes);
 
+/* Retrieve depth (bitmask) information of nested dupsort (multi-value) B+trees
+ * for given database.
+ *
+ * [in] txn     A transaction handle returned by mdbx_txn_begin().
+ * [in] dbi     A database handle returned by mdbx_dbi_open().
+ * [out] mask   The address of an uint32_t value where the bitmask
+ *              will be stored.
+ *
+ * Returns A non-zero error value on failure and 0 on success, some
+ * possible errors are:
+ *  - MDBX_EINVAL       = an invalid parameter was specified.
+ *  - MDBX_RESULT_TRUE  = the dbi isn't a dupsort (multi-value) database. */
+LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
+                                           uint32_t *mask);
+
 /* Retrieve the DB flags and status for a database handle.
  *
  * [in] txn     A transaction handle returned by mdbx_txn_begin().
