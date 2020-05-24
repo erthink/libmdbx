@@ -239,7 +239,7 @@ bool testcase_nested::run() {
     const unsigned window_width =
         (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
     const unsigned head_count = edge2count(salt);
-    log_debug("nested: step #%zu (serial %" PRIu64
+    log_debug("nested: step #%" PRIu64 " (serial %" PRIu64
               ", window %u, count %u) salt %" PRIu64,
               nops_completed, serial, window_width, head_count, salt);
 

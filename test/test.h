@@ -148,7 +148,7 @@ protected:
   bool signalled{false};
   bool need_speculum_assign{false};
 
-  size_t nops_completed{0};
+  uint64_t nops_completed{0};
   chrono::time start_timestamp;
   keygen::buffer key;
   keygen::buffer data;

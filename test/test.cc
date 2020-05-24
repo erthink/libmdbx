@@ -340,18 +340,18 @@ void testcase::report(size_t nops_done) {
     return;
 
   nops_completed += nops_done;
-  log_debug("== complete +%" PRIuPTR " iteration, total %" PRIuPTR " done",
+  log_debug("== complete +%" PRIuPTR " iteration, total %" PRIu64 " done",
             nops_done, nops_completed);
 
   kick_progress(true);
 
   if (config.signal_nops && !signalled &&
       config.signal_nops <= nops_completed) {
-    log_trace(">> signal(n-ops %" PRIuPTR ")", nops_completed);
+    log_trace(">> signal(n-ops %" PRIu64 ")", nops_completed);
     if (!global::singlemode)
       osal_broadcast(config.actor_id);
     signalled = true;
-    log_trace("<< signal(n-ops %" PRIuPTR ")", nops_completed);
+    log_trace("<< signal(n-ops %" PRIu64 ")", nops_completed);
   }
 }
 
