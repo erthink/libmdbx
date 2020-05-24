@@ -15,6 +15,25 @@
 #include "test.h"
 #include <cmath>
 
+/* LY: тест "эмуляцией time-to-live" с вложенными транзакциями:
+ *  - организуется "скользящее окно", которое каждую транзакцию сдвигается
+ *    вперед вдоль числовой оси.
+ *  - по переднему краю "скользящего окна" записи добавляются в таблицу,
+ *    а по заднему удаляются.
+ *  - количество добавляемых/удаляемых записей псевдослучайно зависит
+ *    от номера транзакции, но с экспоненциальным распределением.
+ *  - размер "скользящего окна" также псевдослучайно зависит от номера
+ *    транзакции с "отрицательным" экспоненциальным распределением
+ *    MAX_WIDTH - exp(rnd(N)), при уменьшении окна сдвигается задний
+ *    край и удаляются записи позади него.
+ *  - групповое добавление данных в начало окна и групповое удаление в конце,
+ *    преимущественно выполняются во вложенных транзакциях.
+ *  - меньшая часть запускаемых вложенных транзакций отменяется, с последующим
+ *    продолжением итераций с состояния предыдущиего коммита.
+ *
+ *  Таким образом имитируется поведение таблицы с TTL: записи стохастически
+ *  добавляются и удаляются, и изредка происходят массивные удаления. */
+
 bool testcase_nested::setup() {
   if (!inherited::setup())
     return false;
@@ -54,18 +73,6 @@ bool testcase_nested::teardown() {
     dbi = 0;
   }
   return inherited::teardown() && ok;
-}
-
-static unsigned edge2window(uint64_t edge, unsigned window_max) {
-  const double rnd = u64_to_double1(bleach64(edge));
-  const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
-  return window;
-}
-
-static unsigned edge2count(uint64_t edge, unsigned count_max) {
-  const double rnd = u64_to_double1(prng64_map1_white(edge));
-  const unsigned count = std::lrint(std::pow(count_max, rnd));
-  return count;
 }
 
 void testcase_nested::push_txn() {
@@ -172,7 +179,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
         if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
           failure("nested: unexpected key-space overflow on the tail");
       }
-      report(1);
+      report(tail_count);
     }
   } else if (!fifo.empty()) {
     log_verbose("nested: purge state %" PRIu64 " - %" PRIu64 ", fifo-items %zu",
@@ -220,39 +227,6 @@ retry:
 }
 
 bool testcase_nested::run() {
-  /* LY: тест "эмуляцией time-to-live" с вложенными транзакциями:
-   *  - организуется "скользящее окно", которое каждую транзакцию сдвигается
-   *    вперед вдоль числовой оси.
-   *  - по переднему краю "скользящего окна" записи добавляются в таблицу,
-   *    а по заднему удаляются.
-   *  - количество добавляемых/удаляемых записей псевдослучайно зависит
-   *    от номера транзакции, но с экспоненциальным распределением.
-   *  - размер "скользящего окна" также псевдослучайно зависит от номера
-   *    транзакции с "отрицательным" экспоненциальным распределением
-   *    MAX_WIDTH - exp(rnd(N)), при уменьшении окна сдвигается задний
-   *    край и удаляются записи позади него.
-   *  - групповое добавление данных в начало окна и групповое уделение в конце,
-   *    в половине случаев выполняются во вложенных транзакциях.
-   *  - половина запускаемых вложенных транзакций отменяется, последуюим
-   *    повтором групповой операции.
-   *
-   *  Таким образом имитируется поведение таблицы с TTL: записи стохастически
-   *  добавляются и удаляются, но изредка происходят массивные удаления. */
-
-  /* LY: для параметризации используем подходящие параметры, которые не имеют
-   * здесь смысла в первоначальном значении. */
-  const unsigned window_max_lower = 333;
-  const unsigned count_max_lower = 333;
-
-  const unsigned window_max = (config.params.batch_read > window_max_lower)
-                                  ? config.params.batch_read
-                                  : window_max_lower;
-  const unsigned count_max = (config.params.batch_write > count_max_lower)
-                                 ? config.params.batch_write
-                                 : count_max_lower;
-  log_verbose("nested: using `batch_read` value %u for window_max", window_max);
-  log_verbose("nested: using `batch_write` value %u for count_max", count_max);
-
   uint64_t seed =
       prng64_map2_white(config.params.keygen.seed) + config.actor_id;
 
@@ -262,10 +236,9 @@ bool testcase_nested::run() {
   unsigned loops = 0;
   while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
-    const unsigned window_width = (!should_continue() || flipcoin_x4())
-                                      ? 0
-                                      : edge2window(salt, window_max);
-    const unsigned head_count = edge2count(salt, count_max);
+    const unsigned window_width =
+        (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
+    const unsigned head_count = edge2count(salt);
     log_debug("nested: step #%zu (serial %" PRIu64
               ", window %u, count %u) salt %" PRIu64,
               nops_completed, serial, window_width, head_count, salt);
@@ -301,7 +274,9 @@ bool testcase_nested::run() {
       }
       loops += 1;
     } else if (fifo.empty()) {
-      log_notice("nested: done %u whole loops", loops);
+      log_notice("nested: done %u whole loops, %" PRIu64 " ops, %" PRIu64
+                 " items",
+                 loops, nops_completed, serial);
       break;
     } else {
       log_notice("nested: done, wait for empty, skip head-grow");

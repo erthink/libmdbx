@@ -148,7 +148,6 @@ protected:
   bool signalled{false};
   bool need_speculum_assign{false};
 
-  unsigned nops_target{config.params.test_nops};
   size_t nops_completed{0};
   chrono::time start_timestamp;
   keygen::buffer key;
@@ -229,18 +228,7 @@ public:
   virtual ~testcase() {}
 };
 
-class testcase_ttl : public testcase {
-  using inherited = testcase;
-
-public:
-  testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
 class testcase_hill : public testcase {
-  using inherited = testcase;
-
 public:
   testcase_hill(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
@@ -293,8 +281,26 @@ public:
   bool run() override;
 };
 
-class testcase_nested : public testcase {
+class testcase_ttl : public testcase {
   using inherited = testcase;
+
+protected:
+  struct {
+    unsigned max_window_size{0};
+    unsigned max_step_size{0};
+  } sliding;
+  unsigned edge2window(uint64_t edge);
+  unsigned edge2count(uint64_t edge);
+
+public:
+  testcase_ttl(const actor_config &config, const mdbx_pid_t pid)
+      : inherited(config, pid) {}
+  bool setup() override;
+  bool run() override;
+};
+
+class testcase_nested : public testcase_ttl {
+  using inherited = testcase_ttl;
   using FIFO = std::deque<std::pair<uint64_t, unsigned>>;
 
   uint64_t serial{0};
@@ -317,7 +323,7 @@ class testcase_nested : public testcase {
 
 public:
   testcase_nested(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
+      : inherited(config, pid) {}
   bool setup() override;
   bool run() override;
   bool teardown() override;

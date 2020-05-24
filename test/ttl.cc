@@ -16,16 +16,97 @@
 #include <cmath>
 #include <deque>
 
-static unsigned edge2window(uint64_t edge, unsigned window_max) {
-  const double rnd = u64_to_double1(bleach64(edge));
-  const unsigned window = window_max - std::lrint(std::pow(window_max, rnd));
-  return window;
+/* LY: тест "эмуляцией time-to-live":
+ *  - организуется "скользящее окно", которое двигается вперед вдоль
+ *    числовой оси каждую транзакцию.
+ *  - по переднему краю "скользящего окна" записи добавляются в таблицу,
+ *    а по заднему удаляются.
+ *  - количество добавляемых/удаляемых записей псевдослучайно зависит
+ *    от номера транзакции, но с экспоненциальным распределением.
+ *  - размер "скользящего окна" также псевдослучайно зависит от номера
+ *    транзакции с "отрицательным" экспоненциальным распределением
+ *    MAX_WIDTH - exp(rnd(N)), при уменьшении окна сдвигается задний
+ *    край и удаляются записи позади него.
+ *
+ *  Таким образом имитируется поведение таблицы с TTL: записи стохастически
+ *  добавляются и удаляются, но изредка происходит массивное удаление.
+ */
+
+unsigned testcase_ttl::edge2count(uint64_t edge) {
+  const double rnd = u64_to_double1(prng64_map1_white(edge));
+  const unsigned count = std::lrint(std::pow(sliding.max_step_size, rnd));
+  // average value: (X - 1) / ln(X), where X = sliding.max_step_size
+  return count;
 }
 
-static unsigned edge2count(uint64_t edge, unsigned count_max) {
-  const double rnd = u64_to_double1(prng64_map1_white(edge));
-  const unsigned count = std::lrint(std::pow(count_max, rnd));
-  return count;
+unsigned testcase_ttl::edge2window(uint64_t edge) {
+  const double rnd = u64_to_double1(bleach64(edge));
+  const unsigned size = sliding.max_window_size -
+                        std::lrint(std::pow(sliding.max_window_size, rnd));
+  // average value: Y - (Y - 1) / ln(Y), where Y = sliding.max_window_size
+  return size;
+}
+
+static inline double estimate(const double x, const double y) {
+  /* среднее кол-во операций N = X' * Y', где X' и Y' средние значения
+   * размера окна и кол-ва добавляемых за один шаг записей:
+   *  X' = (X - 1) / ln(X), где X = sliding.max_step_size
+   *  Y' = Y - (Y - 1) / ln(Y), где Y = sliding.max_window_size */
+  return (x - 1) / std::log(x) * (y - (y - 1) / std::log(y));
+}
+
+bool testcase_ttl::setup() {
+  const unsigned window_top_lower =
+      7 /* нижний предел для верхней границы диапазона, в котором будет
+           стохастически колебаться размер окна */
+      ;
+  const unsigned count_top_lower =
+      7 /* нижний предел для верхней границы диапазона, в котором будет
+           стохастически колебаться кол-во записей добавляемых на одном шаге */
+      ;
+
+  /* для параметризации используем подходящие параметры,
+   * которые не имеют здесь смысла в первоначальном значении. */
+  const double ratio =
+      double(config.params.batch_read ? config.params.batch_read : 1) /
+      double(config.params.batch_write ? config.params.batch_write : 1);
+
+  /* проще найти двоичным поиском (вариация метода Ньютона) */
+  double hi = config.params.test_nops, lo = 1;
+  double x = std::sqrt(hi + lo) / ratio;
+  while (hi > lo) {
+    const double n = estimate(x, x * ratio);
+    if (n > config.params.test_nops)
+      hi = x - 1;
+    else
+      lo = x + 1;
+    x = (hi + lo) / 2;
+  }
+
+  sliding.max_step_size = std::lrint(x);
+  if (sliding.max_step_size < count_top_lower)
+    sliding.max_step_size = count_top_lower;
+  sliding.max_window_size = std::lrint(x * ratio);
+  if (sliding.max_window_size < window_top_lower)
+    sliding.max_window_size = window_top_lower;
+
+  while (estimate(sliding.max_step_size, sliding.max_window_size) >
+         config.params.test_nops * 2.0) {
+    if (ratio * sliding.max_step_size > sliding.max_window_size) {
+      if (sliding.max_step_size < count_top_lower)
+        break;
+      sliding.max_step_size = sliding.max_step_size * 7 / 8;
+    } else {
+      if (sliding.max_window_size < window_top_lower)
+        break;
+      sliding.max_window_size = sliding.max_window_size * 7 / 8;
+    }
+  }
+
+  log_verbose("come up window_max %u from `batch_read`",
+              sliding.max_window_size);
+  log_verbose("come up step_max %u from `batch_write`", sliding.max_step_size);
+  return inherited::setup();
 }
 
 bool testcase_ttl::run() {
@@ -34,36 +115,6 @@ bool testcase_ttl::run() {
     log_notice("ttl: bailout-prepare due '%s'", mdbx_strerror(err));
     return false;
   }
-
-  /* LY: тест "эмуляцией time-to-live":
-   *  - организуется "скользящее окно", которое двигается вперед вдоль
-   *    числовой оси каждую транзакцию.
-   *  - по переднему краю "скользящего окна" записи добавляются в таблицу,
-   *    а по заднему удаляются.
-   *  - количество добавляемых/удаляемых записей псевдослучайно зависит
-   *    от номера транзакции, но с экспоненциальным распределением.
-   *  - размер "скользящего окна" также псевдослучайно зависит от номера
-   *    транзакции с "отрицательным" экспоненциальным распределением
-   *    MAX_WIDTH - exp(rnd(N)), при уменьшении окна сдвигается задний
-   *    край и удаляются записи позади него.
-   *
-   *  Таким образом имитируется поведение таблицы с TTL: записи стохастически
-   *  добавляются и удаляются, но изредка происходят массивные удаления.
-   */
-
-  /* LY: для параметризации используем подходящие параметры, которые не имеют
-   * здесь смысла в первоначальном значении. */
-  const unsigned window_max_lower = 333;
-  const unsigned count_max_lower = 333;
-
-  const unsigned window_max = (config.params.batch_read > window_max_lower)
-                                  ? config.params.batch_read
-                                  : window_max_lower;
-  const unsigned count_max = (config.params.batch_write > count_max_lower)
-                                 ? config.params.batch_write
-                                 : count_max_lower;
-  log_verbose("ttl: using `batch_read` value %u for window_max", window_max);
-  log_verbose("ttl: using `batch_write` value %u for count_max", count_max);
 
   uint64_t seed =
       prng64_map2_white(config.params.keygen.seed) + config.actor_id;
@@ -85,10 +136,9 @@ bool testcase_ttl::run() {
   while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
-    const unsigned window_width = (!should_continue() || flipcoin_x4())
-                                      ? 0
-                                      : edge2window(salt, window_max);
-    unsigned head_count = edge2count(salt, count_max);
+    const unsigned window_width =
+        (!should_continue() || flipcoin_x4()) ? 0 : edge2window(salt);
+    unsigned head_count = edge2count(salt);
     log_debug("ttl: step #%zu (serial %" PRIu64
               ", window %u, count %u) salt %" PRIu64,
               nops_completed, serial, window_width, head_count, salt);
@@ -115,7 +165,7 @@ bool testcase_ttl::run() {
           if (unlikely(!keyvalue_maker.increment(tail_serial, 1)))
             failure("ttl: unexpected key-space overflow on the tail");
         }
-        report(1);
+        report(tail_count);
       }
     } else {
       log_trace("ttl: purge state");
@@ -185,7 +235,8 @@ bool testcase_ttl::run() {
       }
       loops += 1;
     } else if (fifo.empty()) {
-      log_notice("ttl: done %u whole loops", loops);
+      log_notice("ttl: done %u whole loops, %" PRIu64 " ops, %" PRIu64 " items",
+                 loops, nops_completed, serial);
       rc = true;
       break;
     } else {
