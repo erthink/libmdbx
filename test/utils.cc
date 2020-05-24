@@ -265,22 +265,24 @@ uint32_t prng32(uint64_t &state) {
 }
 
 void prng_fill(uint64_t &state, void *ptr, size_t bytes) {
+  uint32_t u32 = prng32(state);
+
   while (bytes >= 4) {
-    *((uint32_t *)ptr) = prng32(state);
+    memcpy(ptr, &u32, 4);
     ptr = (uint32_t *)ptr + 1;
     bytes -= 4;
+    u32 = prng32(state);
   }
 
   switch (bytes & 3) {
-  case 3: {
-    uint32_t u32 = prng32(state);
+  case 3:
     memcpy(ptr, &u32, 3);
-  } break;
+    break;
   case 2:
-    *((uint16_t *)ptr) = (uint16_t)prng32(state);
+    memcpy(ptr, &u32, 2);
     break;
   case 1:
-    *((uint8_t *)ptr) = (uint8_t)prng32(state);
+    memcpy(ptr, &u32, 1);
     break;
   case 0:
     break;

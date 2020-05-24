@@ -395,6 +395,8 @@ void dump(const char *title) {
         i->params.keygen.split,
         i->params.keygen.width - i->params.keygen.split);
     log_verbose("keygen.seed: %u\n", i->params.keygen.seed);
+    log_verbose("keygen.zerofill: %s\n",
+                i->params.keygen.zero_fill ? "Yes" : "No");
     log_verbose("key: minlen %u, maxlen %u\n", i->params.keylen_min,
                 i->params.keylen_max);
     log_verbose("data: minlen %u, maxlen %u\n", i->params.datalen_min,

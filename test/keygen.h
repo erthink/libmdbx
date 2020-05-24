@@ -108,6 +108,7 @@ class maker {
 
   struct essentials {
     uint16_t minlen{0};
+    enum { prng_fill_flag = 1 };
     uint16_t flags{0};
     uint32_t maxlen{0};
   } key_essentials, value_essentials;

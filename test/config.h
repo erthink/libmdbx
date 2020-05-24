@@ -231,6 +231,7 @@ struct keygen_params_pod {
   uint32_t seed{0};
   uint64_t offset{0};
   keygen_case keycase{kc_random};
+  bool zero_fill{false};
 };
 
 struct actor_params_pod {

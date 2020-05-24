@@ -81,6 +81,7 @@ void __noreturn usage(void) {
       "  --keygen.width=N              TBD (see the source code)\n"
       "  --keygen.mesh=N               TBD (see the source code)\n"
       "  --keygen.seed=N               TBD (see the source code)\n"
+      "  --keygen.zerofill=yes|NO      TBD (see the source code)\n"
       "  --keygen.split=N              TBD (see the source code)\n"
       "  --keygen.rotate=N             TBD (see the source code)\n"
       "  --keygen.offset=N             TBD (see the source code)\n"
@@ -136,6 +137,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   pagesize = -1;
 
   keygen.seed = 1;
+  keygen.zero_fill = false;
   keygen.keycase = kc_random;
   keygen.width = (table_flags & MDBX_DUPSORT) ? 32 : 64;
   keygen.mesh = keygen.width;
@@ -328,6 +330,9 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.seed",
                              params.keygen.seed, config::no_scale))
+      continue;
+    if (config::parse_option(argc, argv, narg, "keygen.zerofill",
+                             params.keygen.zero_fill))
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.split",
                              params.keygen.split, 1, 64))

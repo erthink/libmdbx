@@ -78,9 +78,11 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   assert(mapping.mesh <= mapping.width);
   assert(mapping.rotate <= mapping.width);
   assert(mapping.offset <= mask(mapping.width));
-  assert(!(key_essentials.flags &
-           ~(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT)));
-  assert(!(value_essentials.flags & ~(MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
+  assert(
+      !(key_essentials.flags & ~(essentials::prng_fill_flag | MDBX_INTEGERKEY |
+                                 MDBX_REVERSEKEY | MDBX_DUPSORT)));
+  assert(!(value_essentials.flags &
+           ~(essentials::prng_fill_flag | MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -213,6 +215,11 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
       (uint32_t)actor.datalen_max,
       (uint32_t)mdbx_limits_valsize_max(actor.pagesize, key_essentials.flags));
 
+  if (!actor.keygen.zero_fill) {
+    key_essentials.flags |= essentials::prng_fill_flag;
+    value_essentials.flags |= essentials::prng_fill_flag;
+  }
+
   (void)thread_number;
   mapping = actor.keygen;
   salt = (actor.keygen.seed + actor_id) * UINT64_C(14653293970879851569);
@@ -298,6 +305,10 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,
                               result &out) {
+  static_assert((essentials::prng_fill_flag &
+                 (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
+                  MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0,
+                "WTF?");
   out.value.iov_base = out.bytes;
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
@@ -308,7 +319,11 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
       out.u32 = (uint32_t)serial;
   } else if (params.flags & (MDBX_REVERSEKEY | MDBX_REVERSEDUP)) {
     if (out.value.iov_len > 8) {
-      memset(out.bytes, '\0', out.value.iov_len - 8);
+      if (params.flags & essentials::prng_fill_flag) {
+        uint64_t state = serial ^ UINT64_C(0x41803711c9b75f19);
+        prng_fill(state, out.bytes, out.value.iov_len - 8);
+      } else
+        memset(out.bytes, '\0', out.value.iov_len - 8);
       unaligned::store(out.bytes + out.value.iov_len - 8, htobe64(serial));
     } else {
       out.u64 = htobe64(serial);
@@ -317,8 +332,13 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
     }
   } else {
     out.u64 = htole64(serial);
-    if (out.value.iov_len > 8)
-      memset(out.bytes + 8, '\0', out.value.iov_len - 8);
+    if (out.value.iov_len > 8) {
+      if (params.flags & essentials::prng_fill_flag) {
+        uint64_t state = serial ^ UINT64_C(0x923ab47b7ee6f6e4);
+        prng_fill(state, out.bytes + 8, out.value.iov_len - 8);
+      } else
+        memset(out.bytes + 8, '\0', out.value.iov_len - 8);
+    }
   }
 
   assert(out.value.iov_len >= params.minlen);
