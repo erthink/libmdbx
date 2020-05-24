@@ -209,7 +209,10 @@ retry:
 
     if (unlikely(!keyvalue_maker.increment(serial, 1))) {
       log_notice("nested: unexpected key-space overflow");
-      return false;
+      keyspace_overflow = true;
+      head_count = n;
+      stochastic_breakable_restart_with_nested(true);
+      goto retry;
     }
   }
 
@@ -278,8 +281,8 @@ bool testcase_nested::run() {
       return false;
     }
 
-    if (should_continue() || !clear_wholetable_passed ||
-        !clear_stepbystep_passed) {
+    if (!keyspace_overflow && (should_continue() || !clear_wholetable_passed ||
+                               !clear_stepbystep_passed)) {
       unsigned underutilization_x256 =
           txn_underutilization_x256(txn_guard.get());
       if (dbfull_passed > underutilization_x256) {

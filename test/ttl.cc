@@ -81,6 +81,7 @@ bool testcase_ttl::run() {
   unsigned clear_stepbystep_passed = 0;
   unsigned dbfull_passed = 0;
   unsigned loops = 0;
+  bool keyspace_overflow = false;
   while (true) {
     const uint64_t salt = prng64_white(seed) /* mdbx_txn_id(txn_guard.get()) */;
 
@@ -134,8 +135,8 @@ bool testcase_ttl::run() {
       return false;
     }
 
-    if (should_continue() || !clear_wholetable_passed ||
-        !clear_stepbystep_passed) {
+    if (!keyspace_overflow && (should_continue() || !clear_wholetable_passed ||
+                               !clear_stepbystep_passed)) {
       unsigned underutilization_x256 =
           txn_underutilization_x256(txn_guard.get());
       if (dbfull_passed > underutilization_x256) {
@@ -165,7 +166,11 @@ bool testcase_ttl::run() {
 
         if (unlikely(!keyvalue_maker.increment(serial, 1))) {
           log_notice("ttl: unexpected key-space overflow");
-          goto bailout;
+          keyspace_overflow = true;
+          txn_restart(true, false);
+          serial = fifo.front().first;
+          fifo.front().second = head_count = n;
+          goto retry;
         }
       }
       err = breakable_restart();

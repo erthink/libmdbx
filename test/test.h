@@ -301,6 +301,7 @@ class testcase_nested : public testcase {
   unsigned clear_wholetable_passed{0};
   unsigned clear_stepbystep_passed{0};
   unsigned dbfull_passed{0};
+  bool keyspace_overflow{false};
   FIFO fifo;
   std::stack<std::tuple<scoped_txn_guard, uint64_t, FIFO, SET>> stack;
 
