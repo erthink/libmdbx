@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 if ! which make cc c++ tee lz4 >/dev/null; then
-	echo "Please install the following prerequisites: make cc c++ tee lz4" >&2
-	exit 1
+  echo "Please install the following prerequisites: make cc c++ tee lz4" >&2
+  exit 1
 fi
 
 set -euo pipefail
@@ -19,72 +19,72 @@ UNAME="$(uname -s 2>/dev/null || echo Unknown)"
 # 1. clean data from prev runs and examine available RAM
 
 if [[ -v VALGRIND && ! -z "$VALGRIND" ]]; then
-	rm -f valgrind-*.log
+  rm -f valgrind-*.log
 else
-	VALGRIND=time
+  VALGRIND=time
 fi
 
 WANNA_MOUNT=0
 case ${UNAME} in
-	Linux)
-		MAKE=make
-		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
-			for old_test_dir in $(ls -d /dev/shm/mdbx-test.[0-9]*); do
-				rm -rf $old_test_dir
-			done
-			TESTDB_DIR="/dev/shm/mdbx-test.$$"
-		fi
-		mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+  Linux)
+    MAKE=make
+    if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
+      for old_test_dir in $(ls -d /dev/shm/mdbx-test.[0-9]*); do
+        rm -rf $old_test_dir
+      done
+      TESTDB_DIR="/dev/shm/mdbx-test.$$"
+    fi
+    mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
 
-		if LC_ALL=C free | grep -q -i available; then
-			ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 7) / 1024))
-		else
-			ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 4) / 1024))
-		fi
-	;;
+    if LC_ALL=C free | grep -q -i available; then
+      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 7) / 1024))
+    else
+      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 4) / 1024))
+    fi
+  ;;
 
-	FreeBSD)
-		MAKE=gmake
-		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
-			for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]*); do
-				umount $old_test_dir && rm -r $old_test_dir
-			done
-			TESTDB_DIR="/tmp/mdbx-test.$$"
-			rm -rf $TESTDB_DIR && mkdir -p $TESTDB_DIR
-			WANNA_MOUNT=1
-		else
-			mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
-		fi
+  FreeBSD)
+    MAKE=gmake
+    if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
+      for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]*); do
+        umount $old_test_dir && rm -r $old_test_dir
+      done
+      TESTDB_DIR="/tmp/mdbx-test.$$"
+      rm -rf $TESTDB_DIR && mkdir -p $TESTDB_DIR
+      WANNA_MOUNT=1
+    else
+      mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+    fi
 
-		ram_avail_mb=$(($(LC_ALL=C vmstat -s | grep -ie '[0-9] pages free$' | cut -d p -f 1) * ($(LC_ALL=C vmstat -s | grep -ie '[0-9] bytes per page$' | cut -d b -f 1) / 1024) / 1024))
-	;;
+    ram_avail_mb=$(($(LC_ALL=C vmstat -s | grep -ie '[0-9] pages free$' | cut -d p -f 1) * ($(LC_ALL=C vmstat -s | grep -ie '[0-9] bytes per page$' | cut -d b -f 1) / 1024) / 1024))
+  ;;
 
-	Darwin)
-		MAKE=make
-		if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
-			for vol in $(ls -d /Volumes/mdx[0-9]*[0-9]tst); do
-				disk=$(mount | grep $vol | cut -d ' ' -f 1)
-				echo "umount: volume $vol disk $disk"
-				hdiutil unmount $vol -force
-				hdiutil detach $disk
-			done
-			TESTDB_DIR="/Volumes/mdx$$tst"
-			WANNA_MOUNT=1
-		else
-			mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
-		fi
+  Darwin)
+    MAKE=make
+    if [[ ! -v TESTDB_DIR || -z "$TESTDB_DIR" ]]; then
+      for vol in $(ls -d /Volumes/mdx[0-9]*[0-9]tst); do
+        disk=$(mount | grep $vol | cut -d ' ' -f 1)
+        echo "umount: volume $vol disk $disk"
+        hdiutil unmount $vol -force
+        hdiutil detach $disk
+      done
+      TESTDB_DIR="/Volumes/mdx$$tst"
+      WANNA_MOUNT=1
+    else
+      mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+    fi
 
-		pagesize=$(($(LC_ALL=C vm_stat | grep -o 'page size of [0-9]\+ bytes' | cut -d' ' -f 4) / 1024))
-		freepages=$(LC_ALL=C vm_stat | grep '^Pages free:' | grep -o '[0-9]\+\.$' | cut -d'.' -f 1)
-		ram_avail_mb=$((pagesize * freepages / 1024))
-		echo "pagesize ${pagesize}K, freepages ${freepages}, ram_avail_mb ${ram_avail_mb}"
+    pagesize=$(($(LC_ALL=C vm_stat | grep -o 'page size of [0-9]\+ bytes' | cut -d' ' -f 4) / 1024))
+    freepages=$(LC_ALL=C vm_stat | grep '^Pages free:' | grep -o '[0-9]\+\.$' | cut -d'.' -f 1)
+    ram_avail_mb=$((pagesize * freepages / 1024))
+    echo "pagesize ${pagesize}K, freepages ${freepages}, ram_avail_mb ${ram_avail_mb}"
 
-	;;
+  ;;
 
-	*)
-		echo "FIXME: ${UNAME} not supported by this script"
-		exit 2
-	;;
+  *)
+    echo "FIXME: ${UNAME} not supported by this script"
+    exit 2
+  ;;
 esac
 
 ###############################################################################
@@ -93,8 +93,8 @@ esac
 echo "=== ${ram_avail_mb}M RAM available"
 ram_reserve4logs_mb=1234
 if [ $ram_avail_mb -lt $ram_reserve4logs_mb ]; then
-	echo "=== At least ${ram_reserve4logs_mb}Mb RAM required"
-	exit 3
+  echo "=== At least ${ram_reserve4logs_mb}Mb RAM required"
+  exit 3
 fi
 
 #
@@ -117,35 +117,35 @@ fi
 #
 db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
 if [ $db_size_mb -gt 3072 ]; then
-	db_size_mb=3072
+  db_size_mb=3072
 fi
 echo "=== use ${db_size_mb}M for DB"
 
 ###############################################################################
 # 3. Create test-directory in ramfs/tmpfs, i.e. create/format/mount if required
 case ${UNAME} in
-	Linux)
-	;;
+  Linux)
+  ;;
 
-	FreeBSD)
-		if [[ WANNA_MOUNT ]]; then
-			mount -t tmpfs tmpfs $TESTDB_DIR
-		fi
-	;;
+  FreeBSD)
+    if [[ WANNA_MOUNT ]]; then
+      mount -t tmpfs tmpfs $TESTDB_DIR
+    fi
+  ;;
 
-	Darwin)
-		if [[ WANNA_MOUNT ]]; then
-			ramdisk_size_mb=$((42 + db_size_mb * 2 + ram_reserve4logs_mb))
-			number_of_sectors=$((ramdisk_size_mb * 2048))
-			ramdev=$(hdiutil attach -nomount ram://${number_of_sectors})
-			diskutil erasevolume ExFAT "mdx$$tst" ${ramdev}
-		fi
-	;;
+  Darwin)
+    if [[ WANNA_MOUNT ]]; then
+      ramdisk_size_mb=$((42 + db_size_mb * 2 + ram_reserve4logs_mb))
+      number_of_sectors=$((ramdisk_size_mb * 2048))
+      ramdev=$(hdiutil attach -nomount ram://${number_of_sectors})
+      diskutil erasevolume ExFAT "mdx$$tst" ${ramdev}
+    fi
+  ;;
 
-	*)
-		echo "FIXME: ${UNAME} not supported by this script"
-		exit 2
-	;;
+  *)
+    echo "FIXME: ${UNAME} not supported by this script"
+    exit 2
+  ;;
 esac
 
 ###############################################################################
@@ -163,105 +163,104 @@ function bit2option { local -n arr=$1; (( ($2&(1<<$3)) != 0 )) && echo -n '+' ||
 options=(writemap coalesce lifo notls)
 
 function bits2list {
-	local -n arr=$1
-	local i
-	local list=()
-	for ((i=0; i<${#arr[@]}; ++i)) do
-		list[$i]=$(bit2option $1 $2 $i)
-	done
-	join , "${list[@]}"
+  local -n arr=$1
+  local i
+  local list=()
+  for ((i=0; i<${#arr[@]}; ++i)) do
+    list[$i]=$(bit2option $1 $2 $i)
+  done
+  join , "${list[@]}"
 }
 
 function probe {
-	echo "=============================================== $(date)"
-	echo "${caption}: $*"
-	rm -f ${TESTDB_DIR}/* \
-		&& ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db "$@" --cleanup-after=no | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
-		&& ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-		&& ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
-		|| (echo "FAILED"; exit 1)
+  echo "=============================================== $(date)"
+  echo "${caption}: $*"
+  rm -f ${TESTDB_DIR}/* \
+    && ${VALGRIND} ./mdbx_test --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
+    && ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
+    && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+    || (echo "FAILED"; exit 1)
 }
 
 #------------------------------------------------------------------------------
 
 count=0
-for nops in 10 10000 100 1000 10000000; do
-	exp=$(expr length "$nops")
-	loops=$(( (exp < 5) ? 5 - exp : 1 ))
-	wbatch=$((nops / 10 + 1))
-	while true; do
-		wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
-		for ((rep=0; rep++ < loops; )); do
-			for ((bits=2**${#options[@]}; --bits >= 0; )); do
-				seed=$(($(date +%s) + RANDOM))
+cases='?'
+for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
+  wbatch=$((nops / 10 + 1))
+  while true; do
+    wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
+    subcase=0
+    for ((bits=2**${#options[@]}; --bits >= 0; )); do
+      seed=$(($(date +%s) + RANDOM))
 
-				split=30
-				caption="Probe #$((++count)) int-key,with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
+      split=30
+      caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
 
-				split=24
-				caption="Probe #$((++count)) int-key,with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
+      split=24
+      caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
 
-				split=16
-				caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) with-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
+      split=16
+      caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
 
-				split=4
-				caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) int-key,int-data, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-				caption="Probe #$((++count)) w/o-dups, split=${split}, repeat ${rep} of ${loops}" probe \
-					--pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-					--nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
-					--keygen.seed=${seed} basic
-			done # options
-		done # repeats
-		if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
-	done # batch (write-ops per txn)
+      split=4
+      caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+      caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
+        --pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --keygen.seed=${seed} basic
+    done # options
+    cases="${subcase}"
+    if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
+  done # batch (write-ops per txn)
 done # n-ops
 
 echo "=== ALL DONE ====================== $(date)"
