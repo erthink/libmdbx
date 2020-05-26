@@ -9801,6 +9801,16 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     mdbx_jitter4testing(false);
     lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
     lck->mti_os_and_format = MDBX_LOCK_FORMAT;
+    err = mdbx_msync(&env->me_lck_mmap, 0, (size_t)size, false);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      mdbx_error("initial-%s for lck-file failed", "msync");
+      goto bailout;
+    }
+    err = mdbx_filesync(env->me_lck_mmap.fd, MDBX_SYNC_SIZE);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      mdbx_error("initial-%s for lck-file failed", "fsync");
+      goto bailout;
+    }
   } else {
     if (lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
       mdbx_error("%s", "lock region has invalid magic/version");
