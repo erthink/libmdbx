@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-if ! which make cc c++ tee lz4 >/dev/null; then
-  echo "Please install the following prerequisites: make cc c++ tee lz4" >&2
+if ! which make cc c++ tee lz4 banner >/dev/null; then
+  echo "Please install the following prerequisites: make cc c++ tee lz4 banner" >&2
   exit 1
 fi
 
@@ -173,7 +173,7 @@ function bits2list {
 }
 
 function probe {
-  echo "=============================================== $(date)"
+  echo "----------------------------------------------- $(date)"
   echo "${caption}: $*"
   rm -f ${TESTDB_DIR}/* \
     && ${VALGRIND} ./mdbx_test --speculum --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
@@ -188,9 +188,12 @@ function probe {
 count=0
 cases='?'
 for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
+  echo "======================================================================="
   wbatch=$((nops / 10 + 1))
   while true; do
     wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
+    echo "======================================================================="
+    banner "$nops / $wbatch"
     subcase=0
     for ((bits=2**${#options[@]}; --bits >= 0; )); do
       seed=$(($(date +%s) + RANDOM))
