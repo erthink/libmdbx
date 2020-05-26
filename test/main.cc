@@ -323,10 +323,10 @@ int main(int argc, char *const argv[]) {
       continue;
 
     if (config::parse_option(argc, argv, narg, "keygen.width",
-                             params.keygen.width, 1, 64))
+                             params.keygen.width, 8, 64))
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.mesh",
-                             params.keygen.mesh, 1, 64))
+                             params.keygen.mesh, 0, 64))
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.seed",
                              params.keygen.seed, config::no_scale))
@@ -335,10 +335,10 @@ int main(int argc, char *const argv[]) {
                              params.keygen.zero_fill))
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.split",
-                             params.keygen.split, 1, 64))
+                             params.keygen.split, 0, 63))
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.rotate",
-                             params.keygen.rotate, 1, 64))
+                             params.keygen.rotate, 0, 63))
       continue;
     if (config::parse_option(argc, argv, narg, "keygen.offset",
                              params.keygen.offset, config::binary))
