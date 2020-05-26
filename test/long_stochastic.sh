@@ -116,8 +116,8 @@ fi
 # system immediately, as well some space is required for logs.
 #
 db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
-if [ $db_size_mb -gt 3072 ]; then
-  db_size_mb=3072
+if [ $db_size_mb -gt 17408 ]; then
+  db_size_mb=17408
 fi
 echo "=== use ${db_size_mb}M for DB"
 
@@ -191,7 +191,6 @@ for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
   echo "======================================================================="
   wbatch=$((nops / 10 + 1))
   while true; do
-    wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
     echo "======================================================================="
     banner "$nops / $wbatch"
     subcase=0
@@ -263,6 +262,7 @@ for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
         --keygen.seed=${seed} basic
     done # options
     cases="${subcase}"
+    wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
     if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
   done # batch (write-ops per txn)
 done # n-ops
