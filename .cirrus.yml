@@ -1,0 +1,6 @@
+freebsd_instance:
+  image_family: freebsd-12-1-snap
+
+task:
+  install_script: pkg install -y gmake bash git
+  script: git fetch --tags && gmake check

@@ -64,6 +64,7 @@ _MithrilDB_ is rightly relevant name.
 [![Build status](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
 [![CircleCI](https://circleci.com/gh/erthink/libmdbx/tree/master.svg?style=svg)](https://circleci.com/gh/erthink/libmdbx/tree/master)
 [![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
+[![Build Status](https://api.cirrus-ci.com/github/erthink/libmdbx.svg)](https://cirrus-ci.com/github/erthink/libmdbx)
 
 *The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
 
