@@ -16343,7 +16343,7 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
    *    = assume that a properly create request with custom flags;
    */
   if ((user_flags ^ txn->mt_dbs[dbi].md_flags) & PERSISTENT_FLAGS) {
-    /* flags ara differs, check other conditions */
+    /* flags are differs, check other conditions */
     if ((!user_flags && (!keycmp || keycmp == txn->mt_dbxs[dbi].md_cmp) &&
          (!datacmp || datacmp == txn->mt_dbxs[dbi].md_dcmp)) ||
         user_flags == MDBX_ACCEDE) {
