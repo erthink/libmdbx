@@ -566,7 +566,7 @@ int main(int argc, char *argv[]) {
     rc = readhdr();
     if (unlikely(rc != MDBX_SUCCESS)) {
       if (rc == EOF)
-        rc = ENODATA;
+        rc = MDBX_ENODATA;
       error("readheader", rc);
       goto env_close;
     }
