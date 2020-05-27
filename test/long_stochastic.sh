@@ -176,7 +176,7 @@ function probe {
   echo "----------------------------------------------- $(date)"
   echo "${caption}: $*"
   rm -f ${TESTDB_DIR}/* \
-    && ${VALGRIND} ./mdbx_test --speculum --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
+    && ${VALGRIND} ./mdbx_test ${speculum} --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
       | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
     && ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
     && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
@@ -190,6 +190,7 @@ cases='?'
 for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
   echo "======================================================================="
   wbatch=$((nops / 10 + 1))
+  speculum=$([ $nops -le 1000 ] && echo '--speculum' || true)
   while true; do
     echo "======================================================================="
     banner "$nops / $wbatch"
