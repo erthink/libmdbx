@@ -7567,17 +7567,25 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
                           unsigned iov_items, size_t iov_off,
                           size_t iov_bytes) {
   MDBX_env *const env = txn->mt_env;
-  int rc = mdbx_pwritev(env->me_lazy_fd, iov, iov_items, iov_off, iov_bytes);
-  if (unlikely(rc != MDBX_SUCCESS)) {
-    mdbx_error("Write error: %s", mdbx_strerror(rc));
-    txn->mt_flags |= MDBX_TXN_ERROR;
+  mdbx_assert(env, iov_items > 0);
+  if (likely(iov_items == 1)) {
+    mdbx_assert(env, iov->iov_len == iov_bytes);
+    int rc = mdbx_pwrite(env->me_lazy_fd, iov->iov_base, iov_bytes, iov_off);
+    mdbx_dpage_free(env, (MDBX_page *)iov->iov_base,
+                    bytes2pgno(env, iov_bytes));
+    return rc;
+  } else {
+    int rc = mdbx_pwritev(env->me_lazy_fd, iov, iov_items, iov_off, iov_bytes);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      mdbx_error("Write error: %s", mdbx_strerror(rc));
+      txn->mt_flags |= MDBX_TXN_ERROR;
+    }
+
+    for (unsigned i = 0; i < iov_items; i++)
+      mdbx_dpage_free(env, (MDBX_page *)iov[i].iov_base,
+                      bytes2pgno(env, iov[i].iov_len));
+    return rc;
   }
-
-  for (unsigned i = 0; i < iov_items; i++)
-    mdbx_dpage_free(env, (MDBX_page *)iov[i].iov_base,
-                    bytes2pgno(env, iov[i].iov_len));
-
-  return rc;
 }
 
 /* Flush (some) dirty pages to the map, after clearing their dirty flag.
