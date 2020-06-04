@@ -16599,7 +16599,7 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
       if (env->me_numdbs <= slot)
         env->me_numdbs = slot + 1;
     } else {
-      env->me_dbiseqs[slot] += 1;
+      env->me_dbiseqs[slot]++;
     }
     txn->mt_dbiseqs[slot] = env->me_dbiseqs[slot];
     *dbi = slot;
@@ -16655,7 +16655,6 @@ static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
   env->me_dbflags[dbi] = 0;
   env->me_dbxs[dbi].md_name.iov_len = 0;
   mdbx_compiler_barrier();
-  env->me_dbiseqs[dbi]++;
   env->me_dbxs[dbi].md_name.iov_base = NULL;
   mdbx_free(ptr);
   return MDBX_SUCCESS;
@@ -16841,6 +16840,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
         txn->mt_flags |= MDBX_TXN_ERROR;
         goto bailout;
       }
+      env->me_dbiseqs[dbi]++;
       mdbx_dbi_close_locked(env, dbi);
       mdbx_ensure(env,
                   mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
