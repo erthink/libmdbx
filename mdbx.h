@@ -1383,7 +1383,8 @@ typedef enum MDBX_cursor_op {
   MDBX_FIRST_DUP,      /* MDBX_DUPSORT-only: Position at first data item
                         * of current key. */
   MDBX_GET_BOTH,       /* MDBX_DUPSORT-only: Position at key/data pair. */
-  MDBX_GET_BOTH_RANGE, /* MDBX_DUPSORT-only: position at key, nearest data. */
+  MDBX_GET_BOTH_RANGE, /* MDBX_DUPSORT-only: Position at given key and at first
+                        * data greater than or equal to specified data. */
   MDBX_GET_CURRENT,    /* Return key/data at current cursor position */
   MDBX_GET_MULTIPLE,   /* MDBX_DUPFIXED-only: Return up to a page of duplicate
                         * data items from current cursor position.
