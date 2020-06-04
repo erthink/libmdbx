@@ -3089,14 +3089,15 @@ LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
  * [in] key       The key operated on.
  * [in,out] data  The data operated on.
  * [in] flags     Options for this operation. This parameter
- *                must be set to 0 or one of the values described here:
+ *                must be set to 0 or by bitwise OR'ing together one or more of
+ *                the values described here:
  *
  *  - MDBX_CURRENT
  *      Replace the item at the current cursor position. The key parameter
  *      must still be provided, and must match it, otherwise the function
  *      return MDBX_EKEYMISMATCH.
  *
- *      NOTE: MDBX unlike LMDB allows you to change the size of the data and
+ *      NOTE: MDBX allows (unlike LMDB) you to change the size of the data and
  *      automatically handles reordering for sorted duplicates (MDBX_DUPSORT).
  *
  *  - MDBX_NODUPDATA
