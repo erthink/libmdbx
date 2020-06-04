@@ -82,11 +82,7 @@ void testcase_nested::push_txn() {
   int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
-#if __cplusplus >= 201703L
-  stack.emplace(txn, serial, fifo, speculum);
-#else
-  stack.push(std::make_tuple(scoped_txn_guard(txn), serial, fifo, speculum));
-#endif
+  stack.emplace(scoped_txn_guard(txn), serial, fifo, speculum);
   std::swap(txn_guard, std::get<0>(stack.top()));
   log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
               stack.size(), mdbx_txn_id(txn), flags, serial);
