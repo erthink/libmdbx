@@ -2973,7 +2973,8 @@ LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  *
  * NOTE: The data parameter is NOT ignored regardless the database does
  * support sorted duplicate data items or not. If the data parameter
- * is non-NULL only the matching data item will be deleted.
+ * is non-NULL only the matching data item will be deleted. Otherwise, if data
+ * parameter is NULL, any/all value(s) for specified key will be deleted.
  *
  * This function will return MDBX_NOTFOUND if the specified key/data
  * pair is not in the database.
@@ -3160,8 +3161,8 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key,
  *              or one of the values described here.
  *
  *  - MDBX_NODUPDATA
- *      Delete all of the data items for the current key. This flag may only
- *      be specified if the database was opened with MDBX_DUPSORT.
+ *      Delete all of the data items for the current key. This flag has effect
+ *      only for database(s) was created with MDBX_DUPSORT.
  *
  * Returns A non-zero error value on failure and 0 on success, some
  * possible errors are:
