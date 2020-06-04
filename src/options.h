@@ -13,6 +13,11 @@
  *
  */
 
+/* Support for huge write-transactions */
+#ifndef MDBX_HUGE_TRANSACTIONS
+#define MDBX_HUGE_TRANSACTIONS 0
+#endif /* MDBX_HUGE_TRANSACTIONS */
+
 /* using fcntl(F_FULLFSYNC) with 5-10 times slowdown */
 #define MDBX_OSX_WANNA_DURABILITY 0
 /* using fsync() with chance of data lost on power failure */

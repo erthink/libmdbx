@@ -394,9 +394,9 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize, unsigned flags) {
   const unsigned page_ln2 = log2n(pagesize);
   const size_t hard = 0x7FF00000ul;
   const size_t hard_pages = hard >> page_ln2;
-  const size_t limit = (hard_pages < MDBX_DPL_TXNFULL)
+  const size_t limit = (hard_pages < MDBX_DPL_TXNFULL / 3)
                            ? hard
-                           : ((size_t)MDBX_DPL_TXNFULL << page_ln2);
+                           : ((size_t)MDBX_DPL_TXNFULL / 3 << page_ln2);
   return (limit < MAX_MAPSIZE) ? limit / 2 : MAX_MAPSIZE / 2;
 }
 
@@ -4201,8 +4201,17 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
   if (txn->tw.dirtyroom > i)
     return MDBX_SUCCESS;
 
+  /* Less aggressive spill - we originally spilled the entire dirty list,
+   * with a few exceptions for cursor pages and DB root pages. But this
+   * turns out to be a lot of wasted effort because in a large txn many
+   * of those pages will need to be used again. So now we spill only 1/8th
+   * of the dirty pages. Testing revealed this to be a good tradeoff,
+   * better than 1/2, 1/4, or 1/10. */
+  if (need < MDBX_DPL_TXNFULL / 8)
+    need = MDBX_DPL_TXNFULL / 8;
+
   if (!txn->tw.spill_pages) {
-    txn->tw.spill_pages = mdbx_pnl_alloc(MDBX_DPL_TXNFULL / 8);
+    txn->tw.spill_pages = mdbx_pnl_alloc(need);
     if (unlikely(!txn->tw.spill_pages))
       return MDBX_ENOMEM;
   } else {
@@ -4220,15 +4229,6 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
   int rc = mdbx_pages_xkeep(mc, P_DIRTY, true);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
-
-  /* Less aggressive spill - we originally spilled the entire dirty list,
-   * with a few exceptions for cursor pages and DB root pages. But this
-   * turns out to be a lot of wasted effort because in a large txn many
-   * of those pages will need to be used again. So now we spill only 1/8th
-   * of the dirty pages. Testing revealed this to be a good tradeoff,
-   * better than 1/2, 1/4, or 1/10. */
-  if (need < MDBX_DPL_TXNFULL / 8)
-    need = MDBX_DPL_TXNFULL / 8;
 
   /* Save the page IDs of all the pages we're flushing */
   /* flush from the tail forward, this saves a lot of shifting later on. */
@@ -5173,7 +5173,7 @@ skip_cache:
       }
 
       /* Don't try to coalesce too much. */
-      if (unlikely(re_len > MDBX_DPL_TXNFULL / 4))
+      if (unlikely(re_len > MDBX_DPL_TXNFULL / 42))
         break;
       if (re_len /* current size */ >= env->me_maxgc_ov1page ||
           (re_len > prev_re_len && re_len - prev_re_len /* delta from prev */ >=
@@ -18813,6 +18813,9 @@ __dll_export
 #else
     #error "FIXME: Unsupported byte order"
 #endif /* __BYTE_ORDER__ */
+#if MDBX_HUGE_TRANSACTIONS
+    " MDBX_HUGE_TRANSACTIONS=YES"
+#endif /* MDBX_HUGE_TRANSACTIONS */
     " MDBX_TXN_CHECKPID=" MDBX_TXN_CHECKPID_CONFIG
     " MDBX_TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
     " MDBX_64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
