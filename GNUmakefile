@@ -125,7 +125,7 @@ TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc),
 TEST_INC   := $(wildcard test/*.h)
 TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
 CXX        ?= g++
-CXXSTD     ?= $(shell $(CXX) -std=c++27 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
+CXXSTD     ?= $(shell $(CXX) -std=c++17 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
 CXXFLAGS   := $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 TAR        ?= $(shell which gnu-tar || echo tar)
 CLANG_FORMAT ?= $(shell (which clang-format-12 || which clang-format-11 || which clang-format-10 || which clang-format) 2>/dev/null)
