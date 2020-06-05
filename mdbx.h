@@ -653,9 +653,9 @@ typedef pthread_t mdbx_tid_t;
 
 /*----------------------------------------------------------------------------*/
 
-/* MDBX version 0.7.0, released 2020-03-18 */
+/* MDBX version 0.8.0, released 2020-06-05 */
 #define MDBX_VERSION_MAJOR 0
-#define MDBX_VERSION_MINOR 7
+#define MDBX_VERSION_MINOR 8
 
 #ifndef LIBMDBX_API
 #if defined(LIBMDBX_EXPORTS)
