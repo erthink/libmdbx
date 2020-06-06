@@ -486,7 +486,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 ## Read Scalability
 
 Summary performance with concurrent read/search queries in 1-2-4-8
-threads on 4 CPU cores machine.
+threads on machine with 4 logical CPU in HyperThreading mode (i.e. actually 2 physical CPU cores).
 
 ![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-2.png)
 
