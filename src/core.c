@@ -9310,8 +9310,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         meta.mm_geo.upper * pagesize, meta.mm_geo.grow * pagesize,
         meta.mm_geo.shrink * pagesize, meta.mm_psize);
     if (unlikely(err != MDBX_SUCCESS)) {
-      mdbx_error("%s", "could not use present dbsize-params from db");
-      return MDBX_INCOMPATIBLE;
+      mdbx_error("%s: err %d", "could not apply preconfigured db-geometry",
+                 err);
+      return (err == MDBX_EINVAL) ? MDBX_INCOMPATIBLE : err;
     }
   } else if (env->me_dbgeo.now) {
     /* silently growth to last used page */
@@ -9342,8 +9343,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                                   env->me_dbgeo.upper, env->me_dbgeo.grow,
                                   env->me_dbgeo.shrink, meta.mm_psize);
       if (unlikely(err != MDBX_SUCCESS)) {
-        mdbx_error("%s", "could not apply preconfigured dbsize-params to db");
-        return MDBX_INCOMPATIBLE;
+        mdbx_error("%s: err %d", "could not apply preconfigured db-geometry",
+                   err);
+        return (err == MDBX_EINVAL) ? MDBX_INCOMPATIBLE : err;
       }
 
       /* update meta fields */
