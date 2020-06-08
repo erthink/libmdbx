@@ -9183,6 +9183,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
         env->me_txn->mt_geo = new_geo;
         env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
       } else {
+        meta.mm_geo = new_geo;
         mdbx_meta_set_txnid(
             env, &meta, safe64_txnid_next(mdbx_meta_txnid_stable(env, head)));
         rc = mdbx_sync_locked(env, env->me_flags, &meta);
