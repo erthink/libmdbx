@@ -113,13 +113,30 @@ macro(fetch_version name source_root_directory parent_scope)
       message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%H HEAD' failed)")
     endif()
 
-    execute_process(COMMAND ${GIT} rev-list --count --no-merges HEAD
+    execute_process(COMMAND ${GIT} tag --sort=-version:refname
+      OUTPUT_VARIABLE tag_list
+      OUTPUT_STRIP_TRAILING_WHITESPACE
+      WORKING_DIRECTORY ${source_root_directory}
+      RESULT_VARIABLE rc)
+    if(rc)
+      message(FATAL_ERROR "Please install latest version of git ('tag --sort=-version:refname' failed)")
+    endif()
+    string(REGEX REPLACE "\n" ";" tag_list "${tag_list}")
+    set(last_release_tag "")
+    set(git_revlist_arg "HEAD")
+    foreach(tag IN LISTS tag_list)
+      if(NOT last_release_tag)
+        string(REGEX MATCH "^v[0-9]+(\.[0-9]+)+" last_release_tag "${tag}")
+        set(git_revlist_arg "${tag}..HEAD")
+      endif()
+    endforeach(tag)
+    execute_process(COMMAND ${GIT} rev-list --count "${git_revlist_arg}"
       OUTPUT_VARIABLE ${name}_GIT_REVISION
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_REVISION" STREQUAL "")
-      message(FATAL_ERROR "Please install latest version of git ('rev-list --count --no-merges HEAD' failed)")
+      message(FATAL_ERROR "Please install latest version of git ('rev-list --count ${git_revlist_arg}' failed)")
     endif()
 
     string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" git_version_valid "${${name}_GIT_DESCRIBE}")
@@ -136,7 +153,7 @@ macro(fetch_version name source_root_directory parent_scope)
     endif()
   endif()
 
-  if(NOT ${name}_GIT_VERSION OR NOT ${name}_GIT_TIMESTAMP OR NOT ${name}_GIT_REVISION)
+  if(NOT ${name}_GIT_VERSION OR NOT ${name}_GIT_TIMESTAMP OR ${name}_GIT_REVISION STREQUAL "")
     if(GIT AND EXISTS "${source_root_directory}/.git")
       message(WARNING "Unable to retrive ${name} version from git.")
     endif()
