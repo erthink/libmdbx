@@ -1,6 +1,7 @@
 v0.9.x (in the development):
   - TODO: Native bindings for C++.
   - TODO: Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
+  - Support multi-opening the same DB in a process with SysV locking (BSD).
 
 v0.8.1 2020-06-12:
   - Minor change versioning. The last number in version now mean the number of commits since last release/tag.

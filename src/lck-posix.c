@@ -538,13 +538,11 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
 MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
                                             MDBX_env *inprocess_neighbor,
                                             int global_uniqueness_flag) {
-  if (inprocess_neighbor)
-    return MDBX_SUCCESS /* currently don't need any initialization
-      if LCK already opened/used inside current process */
-        ;
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   int semid = -1;
-  if (global_uniqueness_flag) {
+  /* don't initialize semaphores twice */
+  (void)inprocess_neighbor;
+  if (global_uniqueness_flag == MDBX_RESULT_TRUE) {
     struct stat st;
     if (fstat(env->me_lazy_fd, &st))
       return errno;
@@ -588,14 +586,17 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
   }
 
   env->me_sysv_ipc.semid = semid;
-
   return MDBX_SUCCESS;
 
 #elif MDBX_LOCKING == MDBX_LOCKING_FUTEX
-#warning "TODO"
+  (void)inprocess_neighbor;
+  if (global_uniqueness_flag != MDBX_RESULT_TRUE)
+    return MDBX_SUCCESS;
+#error "FIXME: Not implemented"
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
 
   /* don't initialize semaphores twice */
+  (void)inprocess_neighbor;
   if (global_uniqueness_flag == MDBX_RESULT_TRUE) {
     if (sem_init(&env->me_lck->mti_rlock, true, 1))
       return errno;
@@ -606,6 +607,10 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
 
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||                                \
     MDBX_LOCKING == MDBX_LOCKING_POSIX2008
+  if (inprocess_neighbor)
+    return MDBX_SUCCESS /* don't need any initialization for mutexes
+      if LCK already opened/used inside current process */
+        ;
 
     /* FIXME: Unfortunately, there is no other reliable way but to long testing
      * on each platform. On the other hand, behavior like FreeBSD is incorrect
