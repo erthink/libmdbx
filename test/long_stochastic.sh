@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-if ! which make cc c++ tee lz4 banner >/dev/null; then
+if ! which make cc c++ tee lz4 >/dev/null; then
   echo "Please install the following prerequisites: make cc c++ tee lz4 banner" >&2
   exit 1
 fi
 
-set -euo pipefail
-
+BANNER="$(which banner 2>/dev/null | echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
+set -euo pipefail
 
 ## NOTE: Valgrind could produce some false-positive warnings
 ##       in multi-process environment with shared memory.
@@ -193,7 +193,7 @@ for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
   speculum=$([ $nops -le 1000 ] && echo '--speculum' || true)
   while true; do
     echo "======================================================================="
-    banner "$nops / $wbatch"
+    ${BANNER} "$nops / $wbatch"
     subcase=0
     for ((bits=2**${#options[@]}; --bits >= 0; )); do
       seed=$(($(date +%s) + RANDOM))
