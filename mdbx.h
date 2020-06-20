@@ -999,9 +999,6 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
  *       database pages and more work for tracking ones, which neuters a
  *       performance boost caused by the MDBX_WRITEMAP mode.
  *
- * NOTE: MDBX don't allow to mix processes with and without MDBX_WRITEMAP on
- *       the same environment. In such case MDBX_INCOMPATIBLE will be generated.
- *
  *  - with MDBX_WRITEMAP = all data will be mapped into memory in the read-write
  *    mode. This offers a significant performance benefit, since the data will
  *    be modified directly in mapped memory and then flushed to disk by
@@ -1611,9 +1608,9 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  * NOTE: MDB_NOLOCK flag don't supported by MDBX,
  *       try use MDBX_EXCLUSIVE as a replacement.
  *
- * NOTE: MDBX don't allow to mix processes with different MDBX_WRITEMAP,
- *       MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC flags on the same
- *       environment. In such case MDBX_INCOMPATIBLE will be returned.
+ * NOTE: MDBX don't allow to mix processes with different MDBX_SAFE_NOSYNC,
+ *       MDBX_NOMETASYNC, MDBX_MAPASYNC flags on the same environment.
+ *       In such case MDBX_INCOMPATIBLE will be returned.
  *
  * If the database is already exist and parameters specified early by
  * mdbx_env_set_geometry() are incompatible (i.e. for instance, different page
@@ -1637,9 +1634,8 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *                             or the current process tries to open environment
  *                             more than once.
  *   - MDBX_INCOMPATIBLE     = Environment is already opened by another process,
- *                             but with different set of MDBX_WRITEMAP,
- *                             MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC, MDBX_MAPASYNC
- *                             flags.
+ *                             but with different set of MDBX_SAFE_NOSYNC,
+ *                             MDBX_NOMETASYNC, MDBX_MAPASYNC flags.
  *                             Or if the database is already exist and
  *                             parameters specified early by
  *                             mdbx_env_set_geometry() are incompatible (i.e.
