@@ -46,7 +46,7 @@ OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems compliant with
 
 Historically, _MDBX_ is deeply revised and extended descendant of amazing
 [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
-_MDBX_ inherits all benefits from _LMDB_, but resolves some issues and adds set of improvements.
+_MDBX_ inherits all benefits from _LMDB_, but resolves some issues and adds [set of improvements](#improvements-beyond-lmdb).
 
 The next version is under active non-public development from scratch and will be
 released as **_MithrilDB_** and `libmithrildb` for libraries & packages.
