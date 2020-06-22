@@ -73,23 +73,6 @@ if(CMAKE_CXX_COMPILER_LOADED AND CMAKE_CXX_COMPILER_ID MATCHES ".*[Cc][Ll][Aa][N
   set(CMAKE_COMPILER_IS_GNUCXX OFF)
 endif()
 
-# Hard coding the compiler version is ugly from cmake POV, but
-# at least gives user a friendly error message. The most critical
-# demand for C++ compiler is support of C++11 lambdas, added
-# only in version 4.5 https://gcc.gnu.org/projects/cxx0x.html
-if(CMAKE_COMPILER_IS_GNUCC)
-  if(CMAKE_C_COMPILER_VERSION VERSION_LESS 4.5)
-    message(FATAL_ERROR "
-      Your GCC version is ${CMAKE_C_COMPILER_VERSION}, please update")
-  endif()
-endif()
-if(CMAKE_COMPILER_IS_GNUCXX)
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.5)
-    message(FATAL_ERROR "
-      Your G++ version is ${CMAKE_CXX_COMPILER_VERSION}, please update")
-  endif()
-endif()
-
 if(CMAKE_C_COMPILER_LOADED)
   # Check for Elbrus lcc
   execute_process(COMMAND ${CMAKE_C_COMPILER} --version
@@ -136,6 +119,25 @@ if(CMAKE_CXX_COMPILER_LOADED)
   endif()
   unset(tmp_lxx_probe_version)
   unset(tmp_lxx_probe_result)
+endif()
+
+# Hard coding the compiler version is ugly from cmake POV, but
+# at least gives user a friendly error message. The most critical
+# demand for C++ compiler is support of C++11 lambdas, added
+# only in version 4.5 https://gcc.gnu.org/projects/cxx0x.html
+if(CMAKE_COMPILER_IS_GNUCC)
+  if(CMAKE_C_COMPILER_VERSION VERSION_LESS 4.5
+      AND NOT CMAKE_COMPILER_IS_ELBRUSC)
+    message(FATAL_ERROR "
+      Your GCC version is ${CMAKE_C_COMPILER_VERSION}, please update")
+  endif()
+endif()
+if(CMAKE_COMPILER_IS_GNUCXX)
+  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4.5
+      AND NOT CMAKE_COMPILER_IS_ELBRUSCXX)
+    message(FATAL_ERROR "
+      Your G++ version is ${CMAKE_CXX_COMPILER_VERSION}, please update")
+  endif()
 endif()
 
 if(CMAKE_CL_64)
