@@ -2681,7 +2681,7 @@ LIBMDBX_API int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name,
 LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name, unsigned flags,
                               MDBX_dbi *dbi);
 
-/* Key-making functions to avoid custom comparators.
+/* Key-making (value-to-key) functions to avoid custom comparators.
  *
  * The mdbx_key_from_jsonInteger() build key which are comparable with
  * keys created by mdbx_key_from_double(). So this allow mix int64 and IEEE754
@@ -2699,6 +2699,13 @@ __inline uint64_t mdbx_key_from_int64(const int64_t i64) {
 __inline uint32_t mdbx_key_from_int32(const int32_t i32) {
   return UINT32_C(0x80000000) + i32;
 }
+
+/* Key-reverse (key-to-value) functions to avoid custom comparators. */
+LIBMDBX_API int64_t mdbx_jsonInteger_from_key(const MDBX_val);
+LIBMDBX_API double mdbx_double_from_key(const MDBX_val);
+LIBMDBX_API float mdbx_float_from_key(const MDBX_val);
+LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val);
+LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val);
 
 /* Retrieve statistics for a database.
  *

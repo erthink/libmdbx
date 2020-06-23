@@ -18402,18 +18402,50 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
 
 /*** Key-making functions to avoid custom comparators *************************/
 
+static __always_inline double key2double(const int64_t key) {
+  union {
+    uint64_t u;
+    double f;
+  } casting;
+
+  casting.u = (key < 0) ? key + UINT64_C(0x8000000000000000)
+                        : UINT64_C(0xffffFFFFffffFFFF) - key;
+  return casting.f;
+}
+
 static __always_inline uint64_t double2key(const double *const ptr) {
   STATIC_ASSERT(sizeof(double) == sizeof(int64_t));
-  const int64_t i64 = *(const int64_t *)ptr;
-  return (i64 >= 0) ? /* positive */ UINT64_C(0x8000000000000000) + i64
-                    : /* negative */ (uint64_t)-i64;
+  const int64_t i = *(const int64_t *)ptr;
+  const uint64_t u = (i < 0) ? UINT64_C(0xffffFFFFffffFFFF) - i
+                             : i + UINT64_C(0x8000000000000000);
+  if (mdbx_assert_enabled()) {
+    const double f = key2double(u);
+    assert(memcmp(&f, ptr, 8) == 0);
+  }
+  return u;
+}
+
+static __always_inline float key2float(const int32_t key) {
+  union {
+    uint32_t u;
+    float f;
+  } casting;
+
+  casting.u =
+      (key < 0) ? key + UINT32_C(0x80000000) : UINT32_C(0xffffFFFF) - key;
+  return casting.f;
 }
 
 static __always_inline uint32_t float2key(const float *const ptr) {
   STATIC_ASSERT(sizeof(float) == sizeof(int32_t));
-  const int32_t i32 = *(const int32_t *)ptr;
-  return (i32 >= 0) ? /* positive */ UINT32_C(0x80000000) + i32
-                    : /* negative */ (uint32_t)-i32;
+  const int32_t i = *(const int32_t *)ptr;
+  const uint32_t u =
+      (i < 0) ? UINT32_C(0xffffFFFF) - i : i + UINT32_C(0x80000000);
+  if (mdbx_assert_enabled()) {
+    const float f = key2float(u);
+    assert(memcmp(&f, ptr, 4) == 0);
+  }
+  return u;
 }
 
 uint64_t mdbx_key_from_double(const double ieee754_64bit) {
@@ -18433,8 +18465,8 @@ uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit) {
 }
 
 #define IEEE754_DOUBLE_MANTISSA_SIZE 52
-#define IEEE754_DOUBLE_BIAS 0x3FF
-#define IEEE754_DOUBLE_MAX 0x7FF
+#define IEEE754_DOUBLE_EXPONENTA_BIAS 0x3FF
+#define IEEE754_DOUBLE_EXPONENTA_MAX 0x7FF
 #define IEEE754_DOUBLE_IMPLICIT_LEAD UINT64_C(0x0010000000000000)
 #define IEEE754_DOUBLE_MANTISSA_MASK UINT64_C(0x000FFFFFFFFFFFFF)
 #define IEEE754_DOUBLE_MANTISSA_AMAX UINT64_C(0x001FFFFFFFFFFFFF)
@@ -18480,7 +18512,7 @@ static __inline int clz64(uint64_t value) {
   return debruijn_clz64[value * UINT64_C(0x03F79D71B4CB0A89) >> 58];
 }
 
-static uint64_t round_mantissa(const uint64_t u64, int shift) {
+static __inline uint64_t round_mantissa(const uint64_t u64, int shift) {
   assert(shift < 0 && u64 > 0);
   shift = -shift;
   const unsigned half = 1 << (shift - 1);
@@ -18490,7 +18522,7 @@ static uint64_t round_mantissa(const uint64_t u64, int shift) {
 }
 
 uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
-  const uint64_t biased_zero = UINT64_C(0x8000000000000000);
+  const uint64_t bias = UINT64_C(0x8000000000000000);
   if (json_integer > 0) {
     const uint64_t u64 = json_integer;
     int shift = clz64(u64) - (64 - IEEE754_DOUBLE_MANTISSA_SIZE - 1);
@@ -18504,10 +18536,9 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD &&
            mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent =
-        IEEE754_DOUBLE_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
-    assert(exponent > 0 && exponent <= IEEE754_DOUBLE_MAX);
-    const uint64_t key = biased_zero +
-                         (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) +
+        IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
+    assert(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
+    const uint64_t key = bias + (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) +
                          (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
 #if !defined(_MSC_VER) ||                                                      \
     defined(                                                                   \
@@ -18531,10 +18562,9 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     assert(mantissa >= IEEE754_DOUBLE_IMPLICIT_LEAD &&
            mantissa <= IEEE754_DOUBLE_MANTISSA_AMAX);
     const uint64_t exponent =
-        IEEE754_DOUBLE_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
-    assert(exponent > 0 && exponent <= IEEE754_DOUBLE_MAX);
-    const uint64_t key = biased_zero -
-                         (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) -
+        IEEE754_DOUBLE_EXPONENTA_BIAS + IEEE754_DOUBLE_MANTISSA_SIZE - shift;
+    assert(exponent > 0 && exponent <= IEEE754_DOUBLE_EXPONENTA_MAX);
+    const uint64_t key = bias - 1 - (exponent << IEEE754_DOUBLE_MANTISSA_SIZE) -
                          (mantissa - IEEE754_DOUBLE_IMPLICIT_LEAD);
 #if !defined(_MSC_VER) ||                                                      \
     defined(                                                                   \
@@ -18545,7 +18575,52 @@ uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer) {
     return key;
   }
 
-  return biased_zero;
+  return bias;
+}
+
+int64_t mdbx_jsonInteger_from_key(const MDBX_val v) {
+  assert(v.iov_len == 8);
+  const uint64_t key = unaligned_peek_u64(2, v.iov_base);
+  const uint64_t bias = UINT64_C(0x8000000000000000);
+  const uint64_t covalent = (key > bias) ? key - bias : bias - key - 1;
+  const int shift = IEEE754_DOUBLE_EXPONENTA_BIAS + 63 -
+                    (IEEE754_DOUBLE_EXPONENTA_MAX &
+                     (int)(covalent >> IEEE754_DOUBLE_MANTISSA_SIZE));
+  if (unlikely(shift < 1))
+    return (key < bias) ? INT64_MIN : INT64_MAX;
+  if (unlikely(shift > 63))
+    return 0;
+
+  const uint64_t unscaled = ((covalent & IEEE754_DOUBLE_MANTISSA_MASK)
+                             << (63 - IEEE754_DOUBLE_MANTISSA_SIZE)) +
+                            bias;
+  const int64_t absolute = unscaled >> shift;
+  const int64_t value = (key < bias) ? -absolute : absolute;
+  assert(key == mdbx_key_from_jsonInteger(value) ||
+         (mdbx_key_from_jsonInteger(value - 1) < key &&
+          key < mdbx_key_from_jsonInteger(value + 1)));
+  return value;
+}
+
+double mdbx_double_from_key(const MDBX_val v) {
+  assert(v.iov_len == 8);
+  return key2double(unaligned_peek_u64(2, v.iov_base));
+}
+
+float mdbx_float_from_key(const MDBX_val v) {
+  assert(v.iov_len == 4);
+  return key2float(unaligned_peek_u32(2, v.iov_base));
+}
+
+int32_t mdbx_int32_from_key(const MDBX_val v) {
+  assert(v.iov_len == 4);
+  return (int32_t)(unaligned_peek_u32(2, v.iov_base) - UINT32_C(0x80000000));
+}
+
+int64_t mdbx_int64_from_key(const MDBX_val v) {
+  assert(v.iov_len == 8);
+  return (int64_t)(unaligned_peek_u64(2, v.iov_base) -
+                   UINT64_C(0x8000000000000000));
 }
 
 /*** Attribute support functions for Nexenta **********************************/
