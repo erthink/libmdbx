@@ -3374,6 +3374,7 @@ LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
 LIBMDBX_API int mdbx_cmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
                          const MDBX_val *b);
+LIBMDBX_API MDBX_cmp_func *mdbx_get_keycmp(unsigned flags);
 
 /* Compare two data items according to a particular database.
  *
@@ -3388,6 +3389,7 @@ LIBMDBX_API int mdbx_cmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
  * Returns < 0 if a < b, 0 if a == b, > 0 if a > b */
 LIBMDBX_API int mdbx_dcmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
                           const MDBX_val *b);
+LIBMDBX_API MDBX_cmp_func *mdbx_get_datacmp(unsigned flags);
 
 /* A callback function used to enumerate the reader lock table.
  *

@@ -3187,11 +3187,11 @@ static int __must_check_result mdbx_setup_dbx(MDBX_dbx *const dbx,
                                               const MDBX_db *const db,
                                               const unsigned pagesize);
 
-static MDBX_cmp_func mdbx_cmp_memn, mdbx_cmp_memnr, mdbx_cmp_int_align4,
-    mdbx_cmp_int_align2, mdbx_cmp_int_unaligned, mdbx_cmp_lenfast;
+static MDBX_cmp_func cmp_lexical, cmp_reverse, cmp_int_align4, cmp_int_align2,
+    cmp_int_unaligned, cmp_lenfast;
 
-static MDBX_cmp_func *mdbx_default_keycmp(unsigned flags);
-static MDBX_cmp_func *mdbx_default_datacmp(unsigned flags);
+static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags);
+static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags);
 
 static const char *__mdbx_strerr(int errnum) {
   /* Table of descriptions for MDBX errors */
@@ -10147,9 +10147,8 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname, unsigned flags,
     rc = MDBX_ENOMEM;
     goto bailout;
   }
-  env->me_dbxs[FREE_DBI].md_cmp =
-      mdbx_cmp_int_align4; /* aligned MDBX_INTEGERKEY */
-  env->me_dbxs[FREE_DBI].md_dcmp = mdbx_cmp_lenfast;
+  env->me_dbxs[FREE_DBI].md_cmp = cmp_int_align4; /* aligned MDBX_INTEGERKEY */
+  env->me_dbxs[FREE_DBI].md_dcmp = cmp_lenfast;
 
   rc = mdbx_openfile(F_ISSET(flags, MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
                                                  : MDBX_OPEN_DXB_LAZY,
@@ -10464,7 +10463,7 @@ __cold int mdbx_env_close(MDBX_env *env) {
 }
 
 /* Compare two items pointing at aligned unsigned int's. */
-static int __hot mdbx_cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
+static int __hot cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   switch (a->iov_len) {
   case 4:
@@ -10481,7 +10480,7 @@ static int __hot mdbx_cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
-static int __hot mdbx_cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
+static int __hot cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   switch (a->iov_len) {
   case 4:
@@ -10500,7 +10499,7 @@ static int __hot mdbx_cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
 /* Compare two items pointing at unsigneds of unknown alignment.
  *
  * This is also set as MDBX_INTEGERDUP|MDBX_DUPFIXED's MDBX_dbx.md_dcmp. */
-static int __hot mdbx_cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
+static int __hot cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   switch (a->iov_len) {
   case 4:
@@ -10517,7 +10516,7 @@ static int __hot mdbx_cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Compare two items lexically */
-static int __hot mdbx_cmp_memn(const MDBX_val *a, const MDBX_val *b) {
+static int __hot cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
   if (a->iov_len == b->iov_len)
     return memcmp(a->iov_base, b->iov_base, a->iov_len);
 
@@ -10528,7 +10527,7 @@ static int __hot mdbx_cmp_memn(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Compare two items in reverse byte order */
-static int __hot mdbx_cmp_memnr(const MDBX_val *a, const MDBX_val *b) {
+static int __hot cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
   const uint8_t *pa = (const uint8_t *)a->iov_base + a->iov_len;
   const uint8_t *pb = (const uint8_t *)b->iov_base + b->iov_len;
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
@@ -10543,7 +10542,7 @@ static int __hot mdbx_cmp_memnr(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Fast non-lexically comparator */
-static int __hot mdbx_cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
+static int __hot cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
   int diff = CMP2INT(a->iov_len, b->iov_len);
   return likely(diff) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
@@ -10604,10 +10603,10 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
                : /* There is no entry larger or equal to the key. */ NULL;
   }
 
-  if (cmp == mdbx_cmp_int_align2 && IS_BRANCH(mp))
+  if (cmp == cmp_int_align2 && IS_BRANCH(mp))
     /* Branch pages have no data, so if using integer keys,
      * alignment is guaranteed. Use faster mdbx_cmp_int_align4(). */
-    cmp = mdbx_cmp_int_align4;
+    cmp = cmp_int_align4;
 
   MDBX_node *node;
   do {
@@ -10860,8 +10859,8 @@ __hot static int mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key,
 static int mdbx_setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
                           const unsigned pagesize) {
   if (unlikely(!dbx->md_cmp)) {
-    dbx->md_cmp = mdbx_default_keycmp(db->md_flags);
-    dbx->md_dcmp = mdbx_default_datacmp(db->md_flags);
+    dbx->md_cmp = get_default_keycmp(db->md_flags);
+    dbx->md_dcmp = get_default_datacmp(db->md_flags);
   }
 
   dbx->md_klen_min =
@@ -16327,19 +16326,18 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   return MDBX_SUCCESS;
 }
 
-static MDBX_cmp_func *mdbx_default_keycmp(unsigned flags) {
+static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags) {
   return (flags & MDBX_REVERSEKEY)
-             ? mdbx_cmp_memnr
-             : (flags & MDBX_INTEGERKEY) ? mdbx_cmp_int_align2 : mdbx_cmp_memn;
+             ? cmp_reverse
+             : (flags & MDBX_INTEGERKEY) ? cmp_int_align2 : cmp_lexical;
 }
 
-static MDBX_cmp_func *mdbx_default_datacmp(unsigned flags) {
+static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags) {
   return !(flags & MDBX_DUPSORT)
-             ? mdbx_cmp_lenfast
+             ? cmp_lenfast
              : ((flags & MDBX_INTEGERDUP)
-                    ? mdbx_cmp_int_unaligned
-                    : ((flags & MDBX_REVERSEDUP) ? mdbx_cmp_memnr
-                                                 : mdbx_cmp_memn));
+                    ? cmp_int_unaligned
+                    : ((flags & MDBX_REVERSEDUP) ? cmp_reverse : cmp_lexical));
 }
 
 static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
@@ -16373,7 +16371,7 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
 
   if (!keycmp)
     keycmp = txn->mt_dbxs[dbi].md_cmp ? txn->mt_dbxs[dbi].md_cmp
-                                      : mdbx_default_keycmp(user_flags);
+                                      : get_default_keycmp(user_flags);
   if (txn->mt_dbxs[dbi].md_cmp != keycmp) {
     if (txn->mt_dbxs[dbi].md_cmp)
       return MDBX_EINVAL;
@@ -16382,7 +16380,7 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
 
   if (!datacmp)
     datacmp = txn->mt_dbxs[dbi].md_dcmp ? txn->mt_dbxs[dbi].md_dcmp
-                                        : mdbx_default_datacmp(user_flags);
+                                        : get_default_datacmp(user_flags);
   if (txn->mt_dbxs[dbi].md_dcmp != datacmp) {
     if (txn->mt_dbxs[dbi].md_dcmp)
       return MDBX_EINVAL;
@@ -16440,9 +16438,9 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
 
   if (txn->mt_dbxs[MAIN_DBI].md_cmp == NULL) {
     txn->mt_dbxs[MAIN_DBI].md_cmp =
-        mdbx_default_keycmp(txn->mt_dbs[MAIN_DBI].md_flags);
+        get_default_keycmp(txn->mt_dbs[MAIN_DBI].md_flags);
     txn->mt_dbxs[MAIN_DBI].md_dcmp =
-        mdbx_default_datacmp(txn->mt_dbs[MAIN_DBI].md_flags);
+        get_default_datacmp(txn->mt_dbs[MAIN_DBI].md_flags);
   }
 
   /* Is the DB already open? */
@@ -18621,6 +18619,14 @@ int64_t mdbx_int64_from_key(const MDBX_val v) {
   assert(v.iov_len == 8);
   return (int64_t)(unaligned_peek_u64(2, v.iov_base) -
                    UINT64_C(0x8000000000000000));
+}
+
+__cold MDBX_cmp_func *mdbx_get_keycmp(unsigned flags) {
+  return get_default_keycmp(flags);
+}
+
+__cold MDBX_cmp_func *mdbx_get_datacmp(unsigned flags) {
+  return get_default_datacmp(flags);
 }
 
 /*** Attribute support functions for Nexenta **********************************/
