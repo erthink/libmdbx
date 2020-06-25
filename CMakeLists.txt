@@ -299,7 +299,9 @@ if(NOT HAS_C11 LESS 0)
 else()
   set(MDBX_C_STANDARD 99)
 endif()
-message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
+if(MDBX_C_STANDARD)
+  message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
+endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.def")
   if(MSVC)
@@ -485,9 +487,11 @@ if(MDBX_INSTALL_STATIC)
 else()
   add_library(mdbx-static STATIC EXCLUDE_FROM_ALL ${LIBMDBX_SOURCES})
 endif()
-set_target_properties(mdbx-static PROPERTIES
-  C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
-  PUBLIC_HEADER mdbx.h)
+set_target_properties(mdbx-static PROPERTIES PUBLIC_HEADER mdbx.h)
+if(MDBX_C_STANDARD)
+  set_target_properties(mdbx-static PROPERTIES
+    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+endif()
 target_compile_definitions(mdbx-static PRIVATE MDBX_BUILD_SHARED_LIBRARY=0)
 target_setup_options(mdbx-static)
 libmdbx_setup_libs(mdbx-static INTERFACE)
@@ -502,9 +506,11 @@ endif()
 # build shared library
 if(MDBX_BUILD_SHARED_LIBRARY)
   add_library(mdbx SHARED ${LIBMDBX_SOURCES})
-  set_target_properties(mdbx PROPERTIES
-    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON
-    PUBLIC_HEADER mdbx.h)
+  set_target_properties(mdbx PROPERTIES PUBLIC_HEADER mdbx.h)
+  if(MDBX_C_STANDARD)
+    set_target_properties(mdbx PROPERTIES
+      C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+  endif()
   target_compile_definitions(mdbx PRIVATE LIBMDBX_EXPORTS MDBX_BUILD_SHARED_LIBRARY=1 INTERFACE LIBMDBX_IMPORTS)
   target_setup_options(mdbx)
   libmdbx_setup_libs(mdbx PRIVATE)
@@ -557,8 +563,10 @@ if(MDBX_BUILD_TOOLS)
 
   foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load)
     add_executable(${TOOL} mdbx.h ${MDBX_SOURCE_DIR}/${TOOL}.c ${WINGETOPT_SRC})
-    set_target_properties(${TOOL} PROPERTIES
-      C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+    if(MDBX_C_STANDARD)
+      set_target_properties(${TOOL} PROPERTIES
+        C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+    endif()
     target_setup_options(${TOOL})
     target_link_libraries(${TOOL} ${TOOL_MDBX_LIB})
   endforeach()
