@@ -651,6 +651,10 @@ macro(setup_compile_flags)
     add_compile_flags("C;CXX" -fsanitize=address)
   endif()
 
+  if(ENABLE_UBSAN)
+    add_compile_flags("C;CXX" -fsanitize=undefined)
+  endif()
+
   if(ENABLE_GCOV)
     if(NOT HAVE_GCOV)
       message(FATAL_ERROR

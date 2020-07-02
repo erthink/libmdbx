@@ -42,4 +42,7 @@ endif()
 option(ENABLE_ASAN
   "Enable AddressSanitizer, a fast memory error detector based on compiler instrumentation" OFF)
 
+option(ENABLE_UBSAN
+  "Enable UndefinedBehaviorSanitizer, a fast undefined behavior detector based on compiler instrumentation" OFF)
+
 cmake_policy(POP)
