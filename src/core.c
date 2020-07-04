@@ -8371,7 +8371,7 @@ static int __cold mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
       (!META_IS_STEADY(dest) &&
        !meta_weak_acceptable(env, dest, lck_exclusive))) {
     mdbx_error("%s", "no usable meta-pages, database is corrupted");
-    return rc;
+    return rc ? rc : MDBX_CORRUPTED;
   }
 
   return MDBX_SUCCESS;
