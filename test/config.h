@@ -265,9 +265,10 @@ struct actor_params_pod {
   keygen_params_pod keygen;
 
   uint8_t loglevel{0};
-  bool drop_table{0};
-  bool ignore_dbfull{0};
-  bool speculum{0};
+  bool drop_table{false};
+  bool ignore_dbfull{false};
+  bool speculum{false};
+  bool random_writemap{true};
 };
 
 struct actor_config_pod {

@@ -169,8 +169,9 @@ protected:
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                           uint64_t txn, unsigned gap, size_t space, int retry);
 
+  unsigned actual_db_mode{0};
   bool is_nested_txn_available() const {
-    return (config.params.mode_flags & MDBX_WRITEMAP) == 0;
+    return (actual_db_mode & MDBX_WRITEMAP) == 0;
   }
   void kick_progress(bool active) const;
   void db_prepare();

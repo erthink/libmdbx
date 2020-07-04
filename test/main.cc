@@ -101,6 +101,7 @@ void __noreturn usage(void) {
       "    notls          == MDBX_NOTLS\n"
       "    nordahead      == MDBX_NORDAHEAD\n"
       "    nomeminit      == MDBX_NOMEMINIT\n"
+      "  --random-writemap[=YES|no]    Toggle MDBX_WRITEMAP randomly\n"
       "Key-value space/table options:\n"
       "  --table={[+-]FLAG}[,[+-]FLAG]...\n"
       "    key.reverse  == MDBX_REVERSEKEY\n"
@@ -165,6 +166,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   drop_table = false;
   ignore_dbfull = false;
   speculum = false;
+  random_writemap = true;
 
   max_readers = 42;
   max_tables = 42;
@@ -258,6 +260,9 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "mode", params.mode_flags,
                              config::mode_bits))
+      continue;
+    if (config::parse_option(argc, argv, narg, "random-writemap",
+                             params.random_writemap))
       continue;
     if (config::parse_option(argc, argv, narg, "table", params.table_flags,
                              config::table_bits)) {

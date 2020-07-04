@@ -144,8 +144,14 @@ void testcase::db_open() {
     db_prepare();
 
   jitter_delay(true);
+
+  unsigned mode = (unsigned)config.params.mode_flags;
+  if (config.params.random_writemap && flipcoin())
+    mode ^= MDBX_WRITEMAP;
+
+  actual_db_mode = mode;
   int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(),
-                         (unsigned)config.params.mode_flags, 0640);
+                         mode, 0640);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_open()", rc);
 
