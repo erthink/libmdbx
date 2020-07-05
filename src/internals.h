@@ -716,6 +716,9 @@ struct MDBX_txn {
 #define MDBX_TXN_BEGIN_FLAGS                                                   \
   (MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC | MDBX_MAPASYNC | MDBX_RDONLY |          \
    MDBX_TRYTXN)
+  /* Additional flag for mdbx_sync_locked() */
+#define MDBX_SHRINK_ALLOWED UINT32_C(0x40000000)
+
   /* internal txn flags */
 #define MDBX_TXN_FINISHED 0x01  /* txn is finished or never began */
 #define MDBX_TXN_ERROR 0x02     /* txn is unusable after an error */
@@ -725,6 +728,16 @@ struct MDBX_txn {
   /* most operations on the txn are currently illegal */
 #define MDBX_TXN_BLOCKED                                                       \
   (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD)
+
+#define TXN_FLAGS                                                              \
+  (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS |     \
+   MDBX_TXN_HAS_CHILD)
+
+#if (TXN_FLAGS & MDBX_TXN_BEGIN_FLAGS) ||                                      \
+    ((MDBX_TXN_BEGIN_FLAGS | TXN_FLAGS) & MDBX_SHRINK_ALLOWED)
+#error "Opps, some flags overlapped or wrong"
+#endif
+
   unsigned mt_flags;
   /* The ID of this transaction. IDs are integers incrementing from 1.
    * Only committed write transactions increment the ID. If a transaction
@@ -740,17 +753,17 @@ struct MDBX_txn {
   /* In write txns, array of cursors for each DB */
   MDBX_cursor **mt_cursors;
 
-  /* Transaction DB Flags */
-#define DB_DIRTY MDBX_TBL_DIRTY /* DB was written in this txn */
-#define DB_STALE MDBX_TBL_STALE /* Named-DB record is older than txnID */
-#define DB_FRESH MDBX_TBL_FRESH /* Named-DB handle opened in this txn */
-#define DB_CREAT MDBX_TBL_CREAT /* Named-DB handle created in this txn */
-#define DB_VALID 0x10           /* DB handle is valid, see also MDBX_VALID */
-#define DB_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
-#define DB_DUPDATA 0x40         /* DB is MDBX_DUPSORT data */
-#define DB_AUDITED 0x80         /* Internal flag for accounting during audit */
+  /* Transaction DBI Flags */
+#define DBI_DIRTY MDBX_DBI_DIRTY /* DB was written in this txn */
+#define DBI_STALE MDBX_DBI_STALE /* Named-DB record is older than txnID */
+#define DBI_FRESH MDBX_DBI_FRESH /* Named-DB handle opened in this txn */
+#define DBI_CREAT MDBX_DBI_CREAT /* Named-DB handle created in this txn */
+#define DBI_VALID 0x10           /* DB handle is valid, see also DB_VALID */
+#define DBI_USRVALID 0x20        /* As DB_VALID, but not set for FREE_DBI */
+#define DBI_DUPDATA 0x40         /* DB is MDBX_DUPSORT data */
+#define DBI_AUDITED 0x80         /* Internal flag for accounting during audit */
   /* Array of flags for each DB */
-  uint8_t *mt_dbstate;
+  uint8_t *mt_dbistate;
   /* Number of DB records in use, or 0 when the txn is finished.
    * This number only ever increments until the txn finishes; we
    * don't decrement it when individual DB handles are closed. */
@@ -833,8 +846,8 @@ struct MDBX_cursor {
   MDBX_db *mc_db;
   /* The database auxiliary record for this cursor */
   MDBX_dbx *mc_dbx;
-  /* The mt_dbstate for this database */
-  uint8_t *mc_dbstate;
+  /* The mt_dbistate for this database */
+  uint8_t *mc_dbistate;
   unsigned mc_snum; /* number of pushed pages */
   unsigned mc_top;  /* index of top page, normally mc_snum-1 */
 
@@ -869,8 +882,8 @@ typedef struct MDBX_xcursor {
   MDBX_db mx_db;
   /* The auxiliary DB record for this Dup DB */
   MDBX_dbx mx_dbx;
-  /* The mt_dbstate for this Dup DB */
-  uint8_t mx_dbstate;
+  /* The mt_dbistate for this Dup DB */
+  uint8_t mx_dbistate;
 } MDBX_xcursor;
 
 typedef struct MDBX_cursor_couple {
@@ -884,12 +897,11 @@ struct MDBX_env {
   uint32_t me_signature;
   /* Failed to update the meta page. Probably an I/O error. */
 #define MDBX_FATAL_ERROR UINT32_C(0x80000000)
-  /* Additional flag for mdbx_sync_locked() */
-#define MDBX_SHRINK_ALLOWED UINT32_C(0x40000000)
   /* Some fields are initialized. */
 #define MDBX_ENV_ACTIVE UINT32_C(0x20000000)
   /* me_txkey is set */
 #define MDBX_ENV_TXKEY UINT32_C(0x10000000)
+#define ENV_INTERNAL_FLAGS (MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE | MDBX_ENV_TXKEY)
   uint32_t me_flags;
   mdbx_mmap_t me_dxb_mmap; /*  The main data file */
 #define me_map me_dxb_mmap.dxb
@@ -1287,12 +1299,22 @@ typedef struct MDBX_node {
   uint8_t mn_data[/* C99 */]; /* key and data are appended here */
 } MDBX_node;
 
-#define MDBX_VALID 0x8000 /* DB handle is valid, for me_dbflags */
-#define PERSISTENT_FLAGS (0xffff & ~(MDBX_VALID | MDBX_NOSUBDIR))
-/* mdbx_dbi_open() flags */
-#define VALID_FLAGS                                                            \
+#define DB_PERSISTENT_FLAGS                                                    \
   (MDBX_REVERSEKEY | MDBX_DUPSORT | MDBX_INTEGERKEY | MDBX_DUPFIXED |          \
-   MDBX_INTEGERDUP | MDBX_REVERSEDUP | MDBX_CREATE | MDBX_ACCEDE)
+   MDBX_INTEGERDUP | MDBX_REVERSEDUP)
+
+/* mdbx_dbi_open() flags */
+#define DB_USABLE_FLAGS (DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_ACCEDE)
+
+#define DB_VALID 0x8000 /* DB handle is valid, for me_dbflags */
+#define DB_INTERNAL_FLAGS DB_VALID
+
+#if DB_INTERNAL_FLAGS & DB_USABLE_FLAGS
+#error "Opps, some flags overlapped or wrong"
+#endif
+#if DB_PERSISTENT_FLAGS & ~DB_USABLE_FLAGS
+#error "Opps, some flags overlapped or wrong"
+#endif
 
 /* max number of pages to commit in one writev() call */
 #define MDBX_COMMIT_PAGES 64
