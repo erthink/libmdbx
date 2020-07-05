@@ -4838,6 +4838,20 @@ bailout:
   return rc;
 }
 
+static __cold int mdbx_mapresize_implicit(MDBX_env *env, const pgno_t used_pgno,
+                                          const pgno_t size_pgno,
+                                          const pgno_t limit_pgno) {
+  const pgno_t mapped_pgno = bytes2pgno(env, env->me_dxb_mmap.limit);
+  mdbx_assert(env, mapped_pgno >= used_pgno);
+  return mdbx_mapresize(
+      env, used_pgno, size_pgno,
+      (size_pgno > mapped_pgno)
+          ? limit_pgno
+          : /* The actual mapsize may be less since the geo.upper may be changed
+               by other process. So, avoids remapping until it necessary. */
+          mapped_pgno);
+}
+
 static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
                               MDBX_meta *const meta) {
   const uint64_t wipe = MDBX_DATASIGN_NONE;
@@ -5302,7 +5316,8 @@ skip_cache:
         mdbx_verbose("try growth datafile to %" PRIaPGNO " pages (+%" PRIaPGNO
                      ")",
                      aligned, aligned - txn->mt_end_pgno);
-        rc = mdbx_mapresize(env, txn->mt_next_pgno, aligned, txn->mt_geo.upper);
+        rc = mdbx_mapresize_implicit(env, txn->mt_next_pgno, aligned,
+                                     txn->mt_geo.upper);
         if (rc == MDBX_SUCCESS) {
           env->me_txn->mt_end_pgno = aligned;
           goto done;
@@ -6100,8 +6115,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         rc = MDBX_UNABLE_EXTEND_MAPSIZE;
         goto bailout;
       }
-      rc = mdbx_mapresize(env, txn->mt_next_pgno, txn->mt_end_pgno,
-                          txn->mt_geo.upper);
+      rc = mdbx_mapresize_implicit(env, txn->mt_next_pgno, txn->mt_end_pgno,
+                                   txn->mt_geo.upper);
       if (rc != MDBX_SUCCESS)
         goto bailout;
     }
@@ -6647,8 +6662,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       if (parent->mt_geo.upper != txn->mt_geo.upper ||
           parent->mt_geo.now != txn->mt_geo.now) {
         /* undo resize performed by child txn */
-        rc = mdbx_mapresize(env, parent->mt_next_pgno, parent->mt_geo.now,
-                            parent->mt_geo.upper);
+        rc = mdbx_mapresize_implicit(env, parent->mt_next_pgno,
+                                     parent->mt_geo.now, parent->mt_geo.upper);
         if (rc == MDBX_RESULT_TRUE) {
           /* unable undo resize (it is regular for Windows),
            * therefore promote size changes from child to the parent txn */
@@ -8746,8 +8761,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   if (unlikely(shrink)) {
     mdbx_verbose("shrink to %" PRIaPGNO " pages (-%" PRIaPGNO ")",
                  pending->mm_geo.now, shrink);
-    rc = mdbx_mapresize(env, pending->mm_geo.next, pending->mm_geo.now,
-                        pending->mm_geo.upper);
+    rc = mdbx_mapresize_implicit(env, pending->mm_geo.next, pending->mm_geo.now,
+                                 pending->mm_geo.upper);
     if (MDBX_IS_ERROR(rc))
       goto fail;
   }

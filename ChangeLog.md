@@ -11,6 +11,8 @@ v0.8.2 2020-07-??:
   - Workaround for CLANG bug https://bugs.llvm.org/show_bug.cgi?id=43275.
   - Returning MDBX_CORRUPTED in case all meta-pages are weak and no other error.
   - Refined mode bits while auto-creating LCK-file.
+  - Avoids unnecessary database file re-mapping in case geometry changed by another process(es).
+    From the user's point of view, the MDBX_UNABLE_EXTEND_MAPSIZE error will now be returned less frequently and only when using the DB in the current process really requires it to be reopened.
 
 v0.8.1 2020-06-12:
   - Minor change versioning. The last number in the version now means the number of commits since last release/tag.
