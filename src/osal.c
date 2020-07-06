@@ -1403,7 +1403,7 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
 }
 
 MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
-                                    size_t limit) {
+                                    size_t limit, const bool may_move) {
   assert(size <= limit);
 #if defined(_WIN32) || defined(_WIN64)
   assert(size != map->current || limit != map->limit || size < map->filesize);
@@ -1482,9 +1482,9 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       goto bailout_ntstatus /* no way to recovery */;
 
-    /* assume we can change base address if mapping size changed or prev address
-     * couldn't be used */
-    map->address = NULL;
+    if (may_move)
+      /* the base address could be changed */
+      map->address = NULL;
   }
 
 retry_file_and_section:
@@ -1541,7 +1541,7 @@ retry_mapview:;
 
   if (!NT_SUCCESS(status)) {
     if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
-        map->address) {
+        map->address && may_move) {
       /* try remap at another base address */
       map->address = NULL;
       goto retry_mapview;
@@ -1565,6 +1565,7 @@ retry_mapview:;
 
   map->current = (size_t)SectionSize.QuadPart;
   map->limit = ViewSize;
+
 #else
 
   uint64_t filesize = 0;
@@ -1585,7 +1586,8 @@ retry_mapview:;
 
   if (limit != map->limit) {
 #if defined(MREMAP_MAYMOVE)
-    void *ptr = mremap(map->address, map->limit, limit, 0);
+    void *ptr =
+        mremap(map->address, map->limit, limit, may_move ? MREMAP_MAYMOVE : 0);
     if (ptr == MAP_FAILED) {
       rc = errno;
       switch (rc) {
@@ -1596,7 +1598,59 @@ retry_mapview:;
       }
       return rc;
     }
-    map->address = ptr;
+#else
+    if (!may_move)
+      /* TODO: Perhaps here it is worth to implement suspend/resume threads
+       *       and perform unmap/map as like for Windows. */
+      return MDBX_UNABLE_EXTEND_MAPSIZE;
+
+    if (unlikely(munmap(map->address, map->limit)))
+      return errno;
+
+    unsigned mmap_flags =
+        MAP_CONCEAL | MAP_SHARED | MAP_FILE |
+        (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0);
+#ifdef MAP_FIXED
+    if (!may_move)
+      mmap_flags |= MAP_FIXED;
+#endif
+
+    void *ptr =
+        mmap(map->address, limit,
+             (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
+             mmap_flags, map->fd, 0);
+    if (unlikely(ptr == MAP_FAILED)) {
+      ptr = mmap(map->address, map->limit,
+                 (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
+                 mmap_flags, map->fd, 0);
+      if (unlikely(ptr == MAP_FAILED)) {
+        VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+        /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
+         * when this memory will re-used by malloc or another mmaping.
+         * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
+         */
+        ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
+        map->limit = 0;
+        map->current = 0;
+        map->address = nullptr;
+        return errno;
+      }
+      return MDBX_UNABLE_EXTEND_MAPSIZE;
+    }
+#endif /* !MREMAP_MAYMOVE */
+
+    if (map->address != ptr) {
+      VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+      /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
+       * when this memory will re-used by malloc or another mmaping.
+       * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
+       */
+      ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
+
+      VALGRIND_MAKE_MEM_DEFINED(ptr, map->current);
+      ASAN_UNPOISON_MEMORY_REGION(ptr, map->current);
+      map->address = ptr;
+    }
     map->limit = limit;
 
 #ifdef MADV_DONTFORK
@@ -1607,14 +1661,9 @@ retry_mapview:;
 #ifdef MADV_NOHUGEPAGE
     (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
-
-#else  /* MREMAP_MAYMOVE */
-    /* TODO: Perhaps here it is worth to implement suspend/resume threads
-     *       and perform unmap/map as like for Windows. */
-    rc = MDBX_UNABLE_EXTEND_MAPSIZE;
-#endif /* !MREMAP_MAYMOVE */
   }
 #endif
+
   return rc;
 }
 

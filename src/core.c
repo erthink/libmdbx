@@ -4658,7 +4658,7 @@ static int __cold mdbx_set_readahead(MDBX_env *env, const size_t offset,
 
 static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                                  const pgno_t size_pgno,
-                                 const pgno_t limit_pgno) {
+                                 const pgno_t limit_pgno, const bool implicit) {
   if ((env->me_flags & MDBX_WRITEMAP) && *env->me_unsynced_pages) {
     int err = mdbx_msync(&env->me_dxb_mmap, 0,
                          pgno_align2os_bytes(env, used_pgno), true);
@@ -4711,16 +4711,40 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     mdbx_error("failed suspend-for-remap: errcode %d", rc);
     goto bailout;
   }
-#else
+  const bool mapping_can_be_moved = !implicit;
+#else /* Windows */
   /* Acquire guard to avoid collision between read and write txns
    * around env->me_dbgeo */
+  bool mapping_can_be_moved = false;
   int rc = mdbx_fastmutex_acquire(&env->me_remap_guard);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
   if (limit_bytes == env->me_dxb_mmap.limit &&
       size_bytes == env->me_dxb_mmap.current)
     goto bailout;
-#endif /* Windows */
+
+  if (limit_bytes != env->me_dxb_mmap.limit && env->me_lck && !implicit) {
+    rc = mdbx_rdt_lock(env) /* lock readers table until remap done */;
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+
+    /* looking for readers from this process */
+    MDBX_lockinfo *const lck = env->me_lck;
+    const unsigned snap_nreaders = lck->mti_numreaders;
+    mapping_can_be_moved = true;
+    for (unsigned i = 0; i < snap_nreaders; ++i) {
+      if (lck->mti_readers[i].mr_pid == env->me_pid &&
+          lck->mti_readers[i].mr_tid != mdbx_thread_self()) {
+        /* the base address of the mapping can't be changed since
+         * the other reader thread from this process exists. */
+        mdbx_rdt_unlock(env);
+        mapping_can_be_moved = false;
+        break;
+      }
+    }
+  }
+
+#endif /* ! Windows */
 
   const size_t prev_size = env->me_dxb_mmap.current;
   if (size_bytes < prev_size) {
@@ -4758,7 +4782,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
       *env->me_discarded_tail = size_pgno;
   }
 
-  rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
+  rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes,
+                    mapping_can_be_moved);
   if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_NORDAHEAD) == 0) {
     const int readahead = mdbx_is_readahead_reasonable(size_bytes, 0);
     if (readahead == MDBX_RESULT_FALSE)
@@ -4829,6 +4854,8 @@ bailout:
       mdbx_free(suspended);
   }
 #else
+  if (env->me_lck && mapping_can_be_moved)
+    mdbx_rdt_unlock(env);
   int err = mdbx_fastmutex_release(&env->me_remap_guard);
 #endif /* Windows */
   if (err != MDBX_SUCCESS) {
@@ -4849,7 +4876,8 @@ static __cold int mdbx_mapresize_implicit(MDBX_env *env, const pgno_t used_pgno,
           ? limit_pgno
           : /* The actual mapsize may be less since the geo.upper may be changed
                by other process. So, avoids remapping until it necessary. */
-          mapped_pgno);
+          mapped_pgno,
+      true);
 }
 
 static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
@@ -6115,8 +6143,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
         rc = MDBX_UNABLE_EXTEND_MAPSIZE;
         goto bailout;
       }
-      rc = mdbx_mapresize_implicit(env, txn->mt_next_pgno, txn->mt_end_pgno,
-                                   txn->mt_geo.upper);
+      rc = mdbx_mapresize(env, txn->mt_next_pgno, txn->mt_end_pgno,
+                          txn->mt_geo.upper,
+                          (txn->mt_flags & MDBX_RDONLY) ? true : false);
       if (rc != MDBX_SUCCESS)
         goto bailout;
     }
@@ -9192,7 +9221,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
 
       if (new_geo.now != current_geo->now ||
           new_geo.upper != current_geo->upper) {
-        rc = mdbx_mapresize(env, current_geo->next, new_geo.now, new_geo.upper);
+        rc = mdbx_mapresize(env, current_geo->next, new_geo.now, new_geo.upper,
+                            false);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
         mdbx_assert(env, (head == nullptr) == inside_txn);

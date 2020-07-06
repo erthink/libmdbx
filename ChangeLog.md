@@ -13,6 +13,8 @@ v0.8.2 2020-07-??:
   - Refined mode bits while auto-creating LCK-file.
   - Avoids unnecessary database file re-mapping in case geometry changed by another process(es).
     From the user's point of view, the MDBX_UNABLE_EXTEND_MAPSIZE error will now be returned less frequently and only when using the DB in the current process really requires it to be reopened.
+  - Remapping on-the-fly and of the database file was implemented.
+    Now remapping with a change of address is performed automatically if there are no dependent readers in the current process.
 
 v0.8.1 2020-06-12:
   - Minor change versioning. The last number in the version now means the number of commits since last release/tag.
