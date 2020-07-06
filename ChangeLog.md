@@ -1,8 +1,9 @@
 v0.9.x (in the development):
+  - TODO: API for explicit threads (de)registration.
   - TODO: Native bindings for C++.
   - TODO: Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
 
-v0.8.2 2020-07-??:
+v0.8.2 2020-07-06:
   - Added support multi-opening the same DB in a process with SysV locking (BSD).
   - Fixed warnings & minors for LCC compiler (E2K).
   - Enabled to simultaneously open the same database from processes with and without the `MDBX_WRITEMAP` option.

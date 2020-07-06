@@ -653,7 +653,7 @@ typedef pthread_t mdbx_tid_t;
 
 /*----------------------------------------------------------------------------*/
 
-/* MDBX version 0.8.0, released 2020-06-05 */
+/* MDBX version 0.8.2, released 2020-07-06 */
 #define MDBX_VERSION_MAJOR 0
 #define MDBX_VERSION_MINOR 8
 
