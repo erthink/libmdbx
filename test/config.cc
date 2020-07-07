@@ -80,8 +80,10 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   return true;
 }
 
-bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  unsigned &mask, const option_verb *verbs) {
+template <>
+bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
+                            const char *option, unsigned &mask,
+                            const option_verb *verbs) {
   const char *list;
   if (!parse_option(argc, argv, narg, option, &list))
     return false;
@@ -213,7 +215,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   if (!parse_option(argc, argv, narg, option, huge, scale, minval, maxval,
                     default_value))
     return false;
-  value = (unsigned)huge;
+  value = unsigned(huge);
   return true;
 }
 
@@ -225,18 +227,18 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   if (!parse_option(argc, argv, narg, option, huge, no_scale, minval, maxval,
                     default_value))
     return false;
-  value = (uint8_t)huge;
+  value = uint8_t(huge);
   return true;
 }
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   int64_t &value, const int64_t minval, const int64_t maxval,
                   const int64_t default_value) {
-  uint64_t proxy = (uint64_t)value;
+  uint64_t proxy = uint64_t(value);
   if (parse_option(argc, argv, narg, option, proxy, config::binary,
-                   (uint64_t)minval, (uint64_t)maxval,
-                   (uint64_t)default_value)) {
-    value = (int64_t)proxy;
+                   uint64_t(minval), uint64_t(maxval),
+                   uint64_t(default_value))) {
+    value = int64_t(proxy);
     return true;
   }
   return false;
@@ -245,11 +247,11 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   int32_t &value, const int32_t minval, const int32_t maxval,
                   const int32_t default_value) {
-  uint64_t proxy = (uint64_t)value;
+  uint64_t proxy = uint64_t(value);
   if (parse_option(argc, argv, narg, option, proxy, config::binary,
-                   (uint64_t)minval, (uint64_t)maxval,
-                   (uint64_t)default_value)) {
-    value = (int32_t)proxy;
+                   uint64_t(minval), uint64_t(maxval),
+                   uint64_t(default_value))) {
+    value = int32_t(proxy);
     return true;
   }
   return false;
@@ -294,29 +296,30 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 //-----------------------------------------------------------------------------
 
-const struct option_verb mode_bits[] = {{"rdonly", MDBX_RDONLY},
-                                        {"mapasync", MDBX_MAPASYNC},
-                                        {"nosync-utterly", MDBX_UTTERLY_NOSYNC},
-                                        {"nosubdir", MDBX_NOSUBDIR},
-                                        {"nosync-safe", MDBX_SAFE_NOSYNC},
-                                        {"nometasync", MDBX_NOMETASYNC},
-                                        {"writemap", MDBX_WRITEMAP},
-                                        {"notls", MDBX_NOTLS},
-                                        {"nordahead", MDBX_NORDAHEAD},
-                                        {"nomeminit", MDBX_NOMEMINIT},
-                                        {"coalesce", MDBX_COALESCE},
-                                        {"lifo", MDBX_LIFORECLAIM},
-                                        {"perturb", MDBX_PAGEPERTURB},
-                                        {"accede", MDBX_ACCEDE},
-                                        {nullptr, 0}};
+const struct option_verb mode_bits[] = {
+    {"rdonly", unsigned(MDBX_RDONLY)},
+    {"mapasync", unsigned(MDBX_MAPASYNC)},
+    {"nosync-utterly", unsigned(MDBX_UTTERLY_NOSYNC)},
+    {"nosubdir", unsigned(MDBX_NOSUBDIR)},
+    {"nosync-safe", unsigned(MDBX_SAFE_NOSYNC)},
+    {"nometasync", unsigned(MDBX_NOMETASYNC)},
+    {"writemap", unsigned(MDBX_WRITEMAP)},
+    {"notls", unsigned(MDBX_NOTLS)},
+    {"nordahead", unsigned(MDBX_NORDAHEAD)},
+    {"nomeminit", unsigned(MDBX_NOMEMINIT)},
+    {"coalesce", unsigned(MDBX_COALESCE)},
+    {"lifo", unsigned(MDBX_LIFORECLAIM)},
+    {"perturb", unsigned(MDBX_PAGEPERTURB)},
+    {"accede", unsigned(MDBX_ACCEDE)},
+    {nullptr, 0}};
 
 const struct option_verb table_bits[] = {
-    {"key.reverse", MDBX_REVERSEKEY},
-    {"key.integer", MDBX_INTEGERKEY},
-    {"data.integer", MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT},
-    {"data.fixed", MDBX_DUPFIXED | MDBX_DUPSORT},
-    {"data.reverse", MDBX_REVERSEDUP | MDBX_DUPSORT},
-    {"data.dups", MDBX_DUPSORT},
+    {"key.reverse", unsigned(MDBX_REVERSEKEY)},
+    {"key.integer", unsigned(MDBX_INTEGERKEY)},
+    {"data.integer", unsigned(MDBX_INTEGERDUP | MDBX_DUPFIXED | MDBX_DUPSORT)},
+    {"data.fixed", unsigned(MDBX_DUPFIXED | MDBX_DUPSORT)},
+    {"data.reverse", unsigned(MDBX_REVERSEDUP | MDBX_DUPSORT)},
+    {"data.dups", unsigned(MDBX_DUPSORT)},
     {nullptr, 0}};
 
 static void dump_verbs(const char *caption, size_t bits,
@@ -590,7 +593,7 @@ unsigned actor_params::mdbx_keylen_min() const {
 }
 
 unsigned actor_params::mdbx_keylen_max() const {
-  return (unsigned)mdbx_limits_keysize_max(pagesize, table_flags);
+  return unsigned(mdbx_limits_keysize_max(pagesize, table_flags));
 }
 
 unsigned actor_params::mdbx_datalen_min() const {
@@ -598,6 +601,6 @@ unsigned actor_params::mdbx_datalen_min() const {
 }
 
 unsigned actor_params::mdbx_datalen_max() const {
-  return std::min((unsigned)UINT16_MAX,
-                  (unsigned)mdbx_limits_valsize_max(pagesize, table_flags));
+  return std::min(unsigned(UINT16_MAX),
+                  unsigned(mdbx_limits_valsize_max(pagesize, table_flags)));
 }

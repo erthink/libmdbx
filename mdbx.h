@@ -552,29 +552,15 @@
 #include <stdint.h>
 
 #if defined(_WIN32) || defined(_WIN64)
-
 #include <windows.h>
 #include <winnt.h>
 #ifndef __mode_t_defined
 typedef unsigned short mode_t;
-#endif
+#endif /* __mode_t_defined */
 typedef HANDLE mdbx_filehandle_t;
 typedef DWORD mdbx_pid_t;
 typedef DWORD mdbx_tid_t;
-#define MDBX_ENODATA ERROR_HANDLE_EOF
-#define MDBX_EINVAL ERROR_INVALID_PARAMETER
-#define MDBX_EACCESS ERROR_ACCESS_DENIED
-#define MDBX_ENOMEM ERROR_OUTOFMEMORY
-#define MDBX_EROFS ERROR_FILE_READ_ONLY
-#define MDBX_ENOSYS ERROR_NOT_SUPPORTED
-#define MDBX_EIO ERROR_WRITE_FAULT
-#define MDBX_EPERM ERROR_INVALID_FUNCTION
-#define MDBX_EINTR ERROR_CANCELLED
-#define MDBX_ENOFILE ERROR_FILE_NOT_FOUND
-#define MDBX_EREMOTE ERROR_REMOTE_STORAGE_MEDIA_ERROR
-
-#else
-
+#else                  /* Windows */
 #include <errno.h>     /* for error codes */
 #include <pthread.h>   /* for pthread_t */
 #include <sys/types.h> /* for pid_t */
@@ -583,23 +569,7 @@ typedef DWORD mdbx_tid_t;
 typedef int mdbx_filehandle_t;
 typedef pid_t mdbx_pid_t;
 typedef pthread_t mdbx_tid_t;
-#ifdef ENODATA
-#define MDBX_ENODATA ENODATA
-#else
-#define MDBX_ENODATA -1
-#endif
-#define MDBX_EINVAL EINVAL
-#define MDBX_EACCESS EACCES
-#define MDBX_ENOMEM ENOMEM
-#define MDBX_EROFS EROFS
-#define MDBX_ENOSYS ENOSYS
-#define MDBX_EIO EIO
-#define MDBX_EPERM EPERM
-#define MDBX_EINTR EINTR
-#define MDBX_ENOFILE ENOENT
-#define MDBX_EREMOTE ENOTBLK
-
-#endif
+#endif /* !Windows */
 
 #ifdef _MSC_VER
 #pragma warning(pop)
@@ -652,6 +622,81 @@ typedef pthread_t mdbx_tid_t;
 #define __dll_import
 #endif
 #endif /* __dll_import */
+
+/*----------------------------------------------------------------------------*/
+
+#if !defined(cxx11_noexcept)
+#if defined(__cplusplus) && __cplusplus >= 201103L
+#define cxx11_noexcept noexcept
+#else
+#define cxx11_noexcept
+#endif
+#endif /* cxx11_noexcept */
+
+#if !defined(cxx17_noexcept)
+#if !defined(__cpp_noexcept_function_type) ||                                  \
+    __cpp_noexcept_function_type < 201510L
+#define cxx17_noexcept
+#else
+#define cxx17_noexcept noexcept
+#endif
+#endif /* cxx17_noexcept */
+
+#if !defined(cxx11_constexpr)
+#if !defined(__cplusplus)
+#define cxx11_constexpr __inline
+#define cxx11_constexpr_var const
+#elif !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                \
+    (defined(__LCC__) && __LCC__ < 124)
+#define cxx11_constexpr inline
+#define cxx11_constexpr_var const
+#else
+#define cxx11_constexpr constexpr
+#define cxx11_constexpr_var constexpr
+#endif
+#endif /* cxx11_constexpr */
+
+#if !defined(cxx14_constexpr)
+#if !defined(__cplusplus)
+#define cxx14_constexpr __inline
+#define cxx14_constexpr_var const
+#elif defined(__cpp_constexpr) && __cpp_constexpr >= 201304L &&                \
+    ((defined(_MSC_VER) && _MSC_VER >= 1910) ||                                \
+     (defined(__clang__) && __clang_major__ > 4) ||                            \
+     (defined(__GNUC__) && __GNUC__ > 6) ||                                    \
+     (!defined(__GNUC__) && !defined(__clang__) && !defined(_MSC_VER)))
+#define cxx14_constexpr constexpr
+#define cxx14_constexpr_var constexpr
+#else
+#define cxx14_constexpr inline
+#define cxx14_constexpr_var const
+#endif
+#endif /* cxx14_constexpr */
+
+#ifndef DEFINE_ENUM_FLAG_OPERATORS
+#if defined(__cplusplus)
+// Define operator overloads to enable bit operations on enum values that are
+// used to define flags (based on Microsoft's DEFINE_ENUM_FLAG_OPERATORS).
+#define DEFINE_ENUM_FLAG_OPERATORS(ENUM)                                       \
+  extern "C++" {                                                               \
+  cxx11_constexpr ENUM operator|(ENUM a, ENUM b) {                             \
+    return ENUM(std::size_t(a) | std::size_t(b));                              \
+  }                                                                            \
+  cxx14_constexpr ENUM &operator|=(ENUM &a, ENUM b) { return a = a | b; }      \
+  cxx11_constexpr ENUM operator&(ENUM a, ENUM b) {                             \
+    return ENUM(std::size_t(a) & std::size_t(b));                              \
+  }                                                                            \
+  cxx14_constexpr ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; }      \
+  cxx11_constexpr ENUM operator~(ENUM a) { return ENUM(~std::size_t(a)); }     \
+  cxx11_constexpr ENUM operator^(ENUM a, ENUM b) {                             \
+    return ENUM(std::size_t(a) ^ std::size_t(b));                              \
+  }                                                                            \
+  cxx14_constexpr ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; }      \
+  }
+#else                                    /* __cplusplus */
+#define DEFINE_ENUM_FLAG_OPERATORS(ENUM) /* nope, C allows these operators */
+#endif                                   /* !__cplusplus */
+#endif                                   /* DEFINE_ENUM_FLAG_OPERATORS */
 
 /*----------------------------------------------------------------------------*/
 
@@ -757,28 +802,40 @@ void LIBMDBX_API NTAPI mdbx_dll_handler(PVOID module, DWORD reason,
 
 /**** OPACITY STRUCTURES ******************************************************/
 
-/* Opaque structure for a database environment.
+/** Opaque structure for a database environment.
  *
  * An environment supports multiple key-value databases (aka key-value spaces
  * or tables), all residing in the same shared-memory map. */
+#ifndef __cplusplus
 typedef struct MDBX_env MDBX_env;
+#else
+struct MDBX_env;
+#endif
 
-/* Opaque structure for a transaction handle.
+/** Opaque structure for a transaction handle.
  *
  * All database operations require a transaction handle. Transactions may be
  * read-only or read-write. */
+#ifndef __cplusplus
 typedef struct MDBX_txn MDBX_txn;
+#else
+struct MDBX_txn;
+#endif
 
-/* A handle for an individual database (key-value spaces) in the environment.
+/** A handle for an individual database (key-value spaces) in the environment.
+ *
  * Zero handle is used internally (hidden Garbage Collection DB).
  * So, any valid DBI-handle great than 0 and less than or equal MDBX_MAX_DBI. */
 typedef uint32_t MDBX_dbi;
-#define MDBX_MAX_DBI UINT32_C(32765)
 
-/* Opaque structure for navigating through a database */
+/** Opaque structure for navigating through a database */
+#ifndef __cplusplus
 typedef struct MDBX_cursor MDBX_cursor;
+#else
+struct MDBX_cursor;
+#endif
 
-/* Generic structure used for passing keys and data in and out of the database.
+/** Generic structure used for passing keys and data in and out of the database.
  *
  * Values returned from the database are valid only until a subsequent
  * update operation, or the end of the transaction. Do not modify or
@@ -801,17 +858,30 @@ struct iovec {
 #if defined(__sun) || defined(__SVR4) || defined(__svr4__)
 /* The `iov_len` is signed on Sun/Solaris.
  * So define custom MDBX_val to avoid a lot of warings. */
-typedef struct MDBX_val {
+struct MDBX_val {
   void *iov_base /* pointer to some data */;
   size_t iov_len /* the length of data in bytes */;
-} MDBX_val;
-#else
-typedef struct iovec MDBX_val;
+};
+#ifndef __cplusplus
+typedef struct MDBX_val MDBX_val;
 #endif
+#else  /* SunOS */
+typedef struct iovec MDBX_val;
+#endif /* ! SunOS */
 
-/* The maximum size of a data item.
- * MDBX only store a 32 bit value for node sizes. */
-#define MDBX_MAXDATASIZE INT32_MAX
+enum MDBX_constants {
+  /** The hard limit for DBI handles */
+
+  MDBX_MAX_DBI = UINT32_C(32765),
+  /** The maximum size of a data item. */
+
+  MDBX_MAXDATASIZE = UINT32_C(0x7fff0000),
+  /** The minimal database page size in bytes. */
+  MDBX_MIN_PAGESIZE = 256,
+
+  /** The maximal database page size in bytes. */
+  MDBX_MAX_PAGESIZE = 65536,
+};
 
 /**** DEBUG & LOGGING **********************************************************
  * Logging and runtime debug flags.
@@ -820,59 +890,66 @@ typedef struct iovec MDBX_val;
  *       MDBX_DEBUG options.
  */
 
-/* Log level (requires build libmdbx with MDBX_DEBUG) */
-#define MDBX_LOG_FATAL 0   /* critical conditions, i.e. assertion failures */
-#define MDBX_LOG_ERROR 1   /* error conditions */
-#define MDBX_LOG_WARN 2    /* warning conditions */
-#define MDBX_LOG_NOTICE 3  /* normal but significant condition */
-#define MDBX_LOG_VERBOSE 4 /* verbose informational */
-#define MDBX_LOG_DEBUG 5   /* debug-level messages */
-#define MDBX_LOG_TRACE 6   /* trace debug-level messages */
-#define MDBX_LOG_EXTRA 7   /* extra debug-level messages (dump pgno lists) */
+/** Log level (requires build libmdbx with MDBX_DEBUG) */
+enum MDBX_log_level_t {
+  MDBX_LOG_FATAL = 0 /** critical conditions, i.e. assertion failures */,
+  MDBX_LOG_ERROR = 1 /** error conditions */,
+  MDBX_LOG_WARN = 2 /** warning conditions */,
+  MDBX_LOG_NOTICE = 3 /** normal but significant condition */,
+  MDBX_LOG_VERBOSE = 4 /** verbose informational */,
+  MDBX_LOG_DEBUG = 5 /** debug-level messages */,
+  MDBX_LOG_TRACE = 6 /** trace debug-level messages */,
+  MDBX_LOG_EXTRA = 7 /** extra debug-level messages (dump pgno lists) */,
 
-/* Runtime debug flags.
+  /** for mdbx_setup_debug() only: Don't change current settings */
+  MDBX_LOG_DONTCHANGE = -1
+};
+#ifndef __cplusplus
+typedef enum MDBX_log_level_t MDBX_log_level_t;
+#endif
+
+/** Runtime debug flags.
  *
  * MDBX_DBG_DUMP and MDBX_DBG_LEGACY_MULTIOPEN always have an effect,
  * but MDBX_DBG_ASSERT, MDBX_DBG_AUDIT and MDBX_DBG_JITTER only if libmdbx
  * builded with MDBX_DEBUG. */
+enum MDBX_debug_flags_t {
+  MDBX_DBG_ASSERT = 1 /** Enable assertion checks */,
+  MDBX_DBG_AUDIT = 2 /** Enable pages usage audit at commit transactions */,
+  MDBX_DBG_JITTER = 4 /** Enable small random delays in critical points */,
+  MDBX_DBG_DUMP = 8 /** Include or not meta-pages in coredump files,
+                       MAY affect performance in MDBX_WRITEMAP mode */
+  ,
+  MDBX_DBG_LEGACY_MULTIOPEN = 16 /** Allow multi-opening environment(s) */,
+  MDBX_DBG_LEGACY_OVERLAP = 32 /** Allow read and write transactions overlapping
+                                  for the same thread */
+  ,
 
-/* Enable assertion checks */
-#define MDBX_DBG_ASSERT 1
+  /** for mdbx_setup_debug() only: Don't change current settings */
+  MDBX_DBG_DONTCHANGE = -1
+};
+#ifndef __cplusplus
+typedef enum MDBX_debug_flags_t MDBX_debug_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
+#endif
 
-/* Enable pages usage audit at commit transactions */
-#define MDBX_DBG_AUDIT 2
-
-/* Enable small random delays in critical points */
-#define MDBX_DBG_JITTER 4
-
-/* Include or not meta-pages in coredump files,
- * MAY affect performance in MDBX_WRITEMAP mode */
-#define MDBX_DBG_DUMP 8
-
-/* Allow multi-opening environment(s) */
-#define MDBX_DBG_LEGACY_MULTIOPEN 16
-
-/* Allow read and write transactions overlapping for the same thread */
-#define MDBX_DBG_LEGACY_OVERLAP 32
-
-/* A debug-logger callback function,
+/** A debug-logger callback function,
  * called before printing the message and aborting.
  *
  * [in] env  An environment handle returned by mdbx_env_create().
  * [in] msg  The assertion message, not including newline. */
-typedef void MDBX_debug_func(int loglevel, const char *function, int line,
-                             const char *msg, va_list args);
+typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
+                             int line, const char *msg, va_list args);
 
-/* Don't change current settings */
-#define MDBX_LOG_DONTCHANGE (-1)
-#define MDBX_DBG_DONTCHANGE (-1)
 #define MDBX_LOGGER_DONTCHANGE ((MDBX_debug_func *)(intptr_t)-1)
 
 /* Setup global log-level, debug options and debug logger. */
-LIBMDBX_API int mdbx_setup_debug(int loglevel, int flags,
+LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t loglevel,
+                                 MDBX_debug_flags_t flags,
                                  MDBX_debug_func *logger);
 
-/* A callback function for most MDBX assert() failures,
+/** A callback function for most MDBX assert() failures,
  * called before printing the message and aborting.
  *
  * [in] env  An environment handle returned by mdbx_env_create().
@@ -880,7 +957,7 @@ LIBMDBX_API int mdbx_setup_debug(int loglevel, int flags,
 typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
                               const char *function, unsigned line);
 
-/* Set or reset the assert() callback of the environment.
+/** Set or reset the assert() callback of the environment.
  *
  * Does nothing if libmdbx was built with MDBX_DEBUG=0 or with NDEBUG,
  * and will return MDBX_ENOSYS in such case.
@@ -898,642 +975,730 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 /**** THE FILES ****************************************************************
  * At the file system level, the environment corresponds to a pair of files. */
 
-/* The name of the lock file in the environment */
+/** The name of the lock file in the environment */
 #define MDBX_LOCKNAME "/mdbx.lck"
-/* The name of the data file in the environment */
+/** The name of the data file in the environment */
 #define MDBX_DATANAME "/mdbx.dat"
 
-/* The suffix of the lock file when MDBX_NOSUBDIR is used */
+/** The suffix of the lock file when MDBX_NOSUBDIR is used */
 #define MDBX_LOCK_SUFFIX "-lck"
 
-/**** ENVIRONMENT FLAGS *******************************************************/
+/** ENVIRONMENT FLAGS *********************************************************/
+enum MDBX_env_flags_t {
+  MDBX_ENV_DEFAULTS = 0,
 
-/* MDBX_NOSUBDIR = no environment directory.
- *
- * By default, MDBX creates its environment in a directory whose pathname is
- * given in path, and creates its data and lock files under that directory.
- * With this option, path is used as-is for the database main data file.
- * The database lock file is the path with "-lck" appended.
- *
- *  - with MDBX_NOSUBDIR = in a filesystem we have the pair of MDBX-files which
- *    names derived from given pathname by appending predefined suffixes.
- *
- *  - without MDBX_NOSUBDIR = in a filesystem we have the MDBX-directory with
- *    given pathname, within that a pair of MDBX-files with predefined names.
- *
- * This flag affects only at new environment creating by mdbx_env_open(),
- * otherwise at opening an existing environment libmdbx will choice this
- * automatically. */
-#define MDBX_NOSUBDIR 0x4000u
+  /** MDBX_NOSUBDIR = no environment directory.
+   *
+   * By default, MDBX creates its environment in a directory whose pathname is
+   * given in path, and creates its data and lock files under that directory.
+   * With this option, path is used as-is for the database main data file.
+   * The database lock file is the path with "-lck" appended.
+   *
+   *  - with MDBX_NOSUBDIR = in a filesystem we have the pair of MDBX-files
+   * which names derived from given pathname by appending predefined suffixes.
+   *
+   *  - without MDBX_NOSUBDIR = in a filesystem we have the MDBX-directory with
+   *    given pathname, within that a pair of MDBX-files with predefined names.
+   *
+   * This flag affects only at new environment creating by mdbx_env_open(),
+   * otherwise at opening an existing environment libmdbx will choice this
+   * automatically. */
+  MDBX_NOSUBDIR = UINT32_C(0x4000),
 
-/* MDBX_RDONLY = read only mode.
- *
- * Open the environment in read-only mode. No write operations will be allowed.
- * MDBX will still modify the lock file - except on read-only filesystems,
- * where MDBX does not use locks.
- *
- *  - with MDBX_RDONLY = open environment in read-only mode.
- *    MDBX supports pure read-only mode (i.e. without opening LCK-file) only
- *    when environment directory and/or both files are not writable (and the
- *    LCK-file may be missing). In such case allowing file(s) to be placed
- *    on a network read-only share.
- *
- *  - without MDBX_RDONLY = open environment in read-write mode.
- *
- * This flag affects only at environment opening but can't be changed after. */
-#define MDBX_RDONLY 0x20000u
+  /** MDBX_RDONLY = read only mode.
+   *
+   * Open the environment in read-only mode. No write operations will be
+   * allowed. MDBX will still modify the lock file - except on read-only
+   * filesystems, where MDBX does not use locks.
+   *
+   *  - with MDBX_RDONLY = open environment in read-only mode.
+   *    MDBX supports pure read-only mode (i.e. without opening LCK-file) only
+   *    when environment directory and/or both files are not writable (and the
+   *    LCK-file may be missing). In such case allowing file(s) to be placed
+   *    on a network read-only share.
+   *
+   *  - without MDBX_RDONLY = open environment in read-write mode.
+   *
+   * This flag affects only at environment opening but can't be changed after.
+   */
+  MDBX_RDONLY = UINT32_C(0x20000),
 
-/* MDBX_EXCLUSIVE = open environment in exclusive/monopolistic mode.
- *
- * MDBX_EXCLUSIVE flag can be used as a replacement for MDB_NOLOCK, which don't
- * supported by MDBX. In this way, you can get the minimal overhead, but with
- * the correct multi-process and mutli-thread locking.
- *
- *  - with MDBX_EXCLUSIVE = open environment in exclusive/monopolistic mode
- *    or return MDBX_BUSY if environment already used by other process.
- *    The main feature of the exclusive mode is the ability to open the
- *    environment placed on a network share.
- *
- *  - without MDBX_EXCLUSIVE = open environment in cooperative mode,
- *    i.e. for multi-process access/interaction/cooperation.
- *    The main requirements of the cooperative mode are:
- *      1. data files MUST be placed in the LOCAL file system,
- *         but NOT on a network share.
- *      2. environment MUST be opened only by LOCAL processes,
- *         but NOT over a network.
- *      3. OS kernel (i.e. file system and memory mapping implementation) and
- *         all processes that open the given environment MUST be running
- *         in the physically single RAM with cache-coherency. The only
- *         exception for cache-consistency requirement is Linux on MIPS
- *         architecture, but this case has not been tested for a long time).
+  /** MDBX_EXCLUSIVE = open environment in exclusive/monopolistic mode.
+   *
+   * MDBX_EXCLUSIVE flag can be used as a replacement for MDB_NOLOCK, which
+   don't
+   * supported by MDBX. In this way, you can get the minimal overhead, but with
+   * the correct multi-process and mutli-thread locking.
+   *
+   *  - with MDBX_EXCLUSIVE = open environment in exclusive/monopolistic mode
+   *    or return MDBX_BUSY if environment already used by other process.
+   *    The main feature of the exclusive mode is the ability to open the
+   *    environment placed on a network share.
+   *
+   *  - without MDBX_EXCLUSIVE = open environment in cooperative mode,
+   *    i.e. for multi-process access/interaction/cooperation.
+   *    The main requirements of the cooperative mode are:
+   *      1. data files MUST be placed in the LOCAL file system,
+   *         but NOT on a network share.
+   *      2. environment MUST be opened only by LOCAL processes,
+   *         but NOT over a network.
+   *      3. OS kernel (i.e. file system and memory mapping implementation) and
+   *         all processes that open the given environment MUST be running
+   *         in the physically single RAM with cache-coherency. The only
+   *         exception for cache-consistency requirement is Linux on MIPS
+   *         architecture, but this case has not been tested for a long time).
 
- * This flag affects only at environment opening but can't be changed after. */
-#define MDBX_EXCLUSIVE 0x400000u
+   * This flag affects only at environment opening but can't be changed after.
+   */
+  MDBX_EXCLUSIVE = UINT32_C(0x400000),
 
-/* MDBX_ACCEDE = using database which already opened by another process(es).
- *
- * The MDBX_ACCEDE flag avoid MDBX_INCOMPATIBLE error while opening If the
- * database is already used by another process(es) and environment mode/flags
- * isn't compatible. In such cases, when using the MDBX_ACCEDE flag, instead of
- * the specified incompatible options, the mode in which the database is already
- * opened by other processes will be used, including MDBX_LIFORECLAIM,
- * MDBX_COALESCE and MDBX_NORDAHEAD. The MDBX_ACCEDE flag is useful to open a
- * database that already used by another process(es) and used mode/flags isn't
- * known.
- *
- * MDBX_ACCEDE has no effect if the current process is the only one either
- * opening the DB in read-only mode or other process(es) uses the DB in
- * read-only mode. */
-#define MDBX_ACCEDE 0x40000000u
+  /** MDBX_ACCEDE = using database which already opened by another process(es).
+   *
+   * The MDBX_ACCEDE flag avoid MDBX_INCOMPATIBLE error while opening If the
+   * database is already used by another process(es) and environment mode/flags
+   * isn't compatible. In such cases, when using the MDBX_ACCEDE flag, instead
+   * of the specified incompatible options, the mode in which the database is
+   * already opened by other processes will be used, including MDBX_LIFORECLAIM,
+   * MDBX_COALESCE and MDBX_NORDAHEAD. The MDBX_ACCEDE flag is useful to open a
+   * database that already used by another process(es) and used mode/flags isn't
+   * known.
+   *
+   * MDBX_ACCEDE has no effect if the current process is the only one either
+   * opening the DB in read-only mode or other process(es) uses the DB in
+   * read-only mode. */
+  MDBX_ACCEDE = UINT32_C(0x40000000),
 
-/* MDBX_WRITEMAP = map data into memory with write permission.
- *
- * Use a writeable memory map unless MDBX_RDONLY is set. This uses fewer mallocs
- * and requires much less work for tracking database pages, but loses protection
- * from application bugs like wild pointer writes and other bad updates into the
- * database. This may be slightly faster for DBs that fit entirely in RAM, but
- * is slower for DBs larger than RAM. Also adds the possibility for stray
- * application writes thru pointers to silently corrupt the database.
- * Incompatible with nested transactions.
- *
- * NOTE: The MDBX_WRITEMAP mode is incompatible with nested transactions, since
- *       this is unreasonable. I.e. nested transactions requires mallocation of
- *       database pages and more work for tracking ones, which neuters a
- *       performance boost caused by the MDBX_WRITEMAP mode.
- *
- *  - with MDBX_WRITEMAP = all data will be mapped into memory in the read-write
- *    mode. This offers a significant performance benefit, since the data will
- *    be modified directly in mapped memory and then flushed to disk by
- *    single system call, without any memory management nor copying.
- *    (!) On the other hand, MDBX_WRITEMAP adds the possibility for stray
- *    application writes thru pointers to silently corrupt the database.
- *    Moreover, MDBX_WRITEMAP disallows nested write transactions.
- *
- *  - without MDBX_WRITEMAP = data will be mapped into memory in the read-only
- *    mode. This requires stocking all modified database pages in memory and
- *    then writing them to disk through file operations.
- *
- * This flag affects only at environment opening but can't be changed after. */
-#define MDBX_WRITEMAP 0x80000u
+  /** MDBX_WRITEMAP = map data into memory with write permission.
+   *
+   * Use a writeable memory map unless MDBX_RDONLY is set. This uses fewer
+   * mallocs and requires much less work for tracking database pages, but loses
+   * protection from application bugs like wild pointer writes and other bad
+   * updates into the database. This may be slightly faster for DBs that fit
+   * entirely in RAM, but is slower for DBs larger than RAM. Also adds the
+   * possibility for stray application writes thru pointers to silently corrupt
+   * the database. Incompatible with nested transactions.
+   *
+   * NOTE: The MDBX_WRITEMAP mode is incompatible with nested transactions,
+   * since this is unreasonable. I.e. nested transactions requires mallocation
+   * of database pages and more work for tracking ones, which neuters a
+   *       performance boost caused by the MDBX_WRITEMAP mode.
+   *
+   *  - with MDBX_WRITEMAP = all data will be mapped into memory in the
+   * read-write mode. This offers a significant performance benefit, since the
+   * data will be modified directly in mapped memory and then flushed to disk by
+   *    single system call, without any memory management nor copying.
+   *    (!) On the other hand, MDBX_WRITEMAP adds the possibility for stray
+   *    application writes thru pointers to silently corrupt the database.
+   *    Moreover, MDBX_WRITEMAP disallows nested write transactions.
+   *
+   *  - without MDBX_WRITEMAP = data will be mapped into memory in the read-only
+   *    mode. This requires stocking all modified database pages in memory and
+   *    then writing them to disk through file operations.
+   *
+   * This flag affects only at environment opening but can't be changed after.
+   */
+  MDBX_WRITEMAP = UINT32_C(0x80000),
 
-/* MDBX_NOTLS = tie reader locktable slots to read-only transactions instead
- * of to threads.
- *
- * Don't use Thread-Local Storage, instead tie reader locktable slots to
- * MDBX_txn objects instead of to threads. So, mdbx_txn_reset() keeps the slot
- * reserved for the MDBX_txn object. A thread may use parallel read-only
- * transactions. And a read-only transaction may span threads if you
- * synchronizes its use.
- *
- * Applications that multiplex many user threads over individual OS threads need
- * this option. Such an application must also serialize the write transactions
- * in an OS thread, since MDBX's write locking is unaware of the user threads.
- *
- * NOTE: Regardless to MDBX_NOTLS flag a write transaction entirely should
- * always be used in one thread from start to finish. MDBX checks this in a
- * reasonable manner and return the MDBX_THREAD_MISMATCH error in rules
- * violation.
- *
- * This flag affects only at environment opening but can't be changed after. */
-#define MDBX_NOTLS 0x200000u
+  /** MDBX_NOTLS = tie reader locktable slots to read-only transactions instead
+   * of to threads.
+   *
+   * Don't use Thread-Local Storage, instead tie reader locktable slots to
+   * MDBX_txn objects instead of to threads. So, mdbx_txn_reset() keeps the slot
+   * reserved for the MDBX_txn object. A thread may use parallel read-only
+   * transactions. And a read-only transaction may span threads if you
+   * synchronizes its use.
+   *
+   * Applications that multiplex many user threads over individual OS threads
+   * need this option. Such an application must also serialize the write
+   * transactions in an OS thread, since MDBX's write locking is unaware of the
+   * user threads.
+   *
+   * NOTE: Regardless to MDBX_NOTLS flag a write transaction entirely should
+   * always be used in one thread from start to finish. MDBX checks this in a
+   * reasonable manner and return the MDBX_THREAD_MISMATCH error in rules
+   * violation.
+   *
+   * This flag affects only at environment opening but can't be changed after.
+   */
+  MDBX_NOTLS = UINT32_C(0x200000),
 
-/* MDBX_NORDAHEAD = don't do readahead.
- *
- * Turn off readahead. Most operating systems perform readahead on read requests
- * by default. This option turns it off if the OS supports it. Turning it off
- * may help random read performance when the DB is larger than RAM and system
- * RAM is full.
- *
- * By default libmdbx dynamically enables/disables readahead depending on the
- * actual database size and currently available memory. On the other hand, such
- * automation has some limitation, i.e. could be performed only when DB size
- * changing but can't tracks and reacts changing a free RAM availability, since
- * it changes independently and asynchronously.
- *
- * NOTE: The mdbx_is_readahead_reasonable() function allows to quickly find out
- *       whether to use readahead or not based on the size of the data and the
- *       amount of available memory.
- *
- * This flag affects only at environment opening and can't be changed after. */
-#define MDBX_NORDAHEAD 0x800000u
+  /** MDBX_NORDAHEAD = don't do readahead.
+   *
+   * Turn off readahead. Most operating systems perform readahead on read
+   * requests by default. This option turns it off if the OS supports it.
+   * Turning it off may help random read performance when the DB is larger than
+   * RAM and system RAM is full.
+   *
+   * By default libmdbx dynamically enables/disables readahead depending on the
+   * actual database size and currently available memory. On the other hand,
+   * such automation has some limitation, i.e. could be performed only when DB
+   * size changing but can't tracks and reacts changing a free RAM availability,
+   * since it changes independently and asynchronously.
+   *
+   * NOTE: The mdbx_is_readahead_reasonable() function allows to quickly find
+   * out whether to use readahead or not based on the size of the data and the
+   *       amount of available memory.
+   *
+   * This flag affects only at environment opening and can't be changed after.
+   */
+  MDBX_NORDAHEAD = UINT32_C(0x800000),
 
-/* MDBX_NOMEMINIT = don't initialize malloc'd memory before writing to datafile.
- *
- * Don't initialize malloc'd memory before writing to unused spaces in the data
- * file. By default, memory for pages written to the data file is obtained using
- * malloc. While these pages may be reused in subsequent transactions, freshly
- * malloc'd pages will be initialized to zeroes before use. This avoids
- * persisting leftover data from other code (that used the heap and subsequently
- * freed the memory) into the data file.
- *
- * Note that many other system libraries may allocate and free memory from the
- * heap for arbitrary uses. E.g., stdio may use the heap for file I/O buffers.
- * This initialization step has a modest performance cost so some applications
- * may want to disable it using this flag. This option can be a problem for
- * applications which handle sensitive data like passwords, and it makes memory
- * checkers like Valgrind noisy. This flag is not needed with MDBX_WRITEMAP,
- * which writes directly to the mmap instead of using malloc for pages. The
- * initialization is also skipped if MDBX_RESERVE is used; the caller is
- * expected to overwrite all of the memory that was reserved in that case.
- *
- * This flag may be changed at any time using mdbx_env_set_flags(). */
-#define MDBX_NOMEMINIT 0x1000000u
+  /** MDBX_NOMEMINIT = don't initialize malloc'd memory before writing to
+   * datafile.
+   *
+   * Don't initialize malloc'd memory before writing to unused spaces in the
+   * data file. By default, memory for pages written to the data file is
+   * obtained using malloc. While these pages may be reused in subsequent
+   * transactions, freshly malloc'd pages will be initialized to zeroes before
+   * use. This avoids persisting leftover data from other code (that used the
+   * heap and subsequently freed the memory) into the data file.
+   *
+   * Note that many other system libraries may allocate and free memory from the
+   * heap for arbitrary uses. E.g., stdio may use the heap for file I/O buffers.
+   * This initialization step has a modest performance cost so some applications
+   * may want to disable it using this flag. This option can be a problem for
+   * applications which handle sensitive data like passwords, and it makes
+   * memory checkers like Valgrind noisy. This flag is not needed with
+   * MDBX_WRITEMAP, which writes directly to the mmap instead of using malloc
+   * for pages. The initialization is also skipped if MDBX_RESERVE is used; the
+   * caller is expected to overwrite all of the memory that was reserved in that
+   * case.
+   *
+   * This flag may be changed at any time using mdbx_env_set_flags(). */
+  MDBX_NOMEMINIT = UINT32_C(0x1000000),
 
-/* MDBX_COALESCE = aims to coalesce a Garbage Collection items.
- *
- * With MDBX_COALESCE flag MDBX will aims to coalesce items while recycling
- * a Garbage Collection. Technically, when possible short lists of pages will
- * be combined into longer ones, but to fit on one database page. As a result,
- * there will be fewer items in Garbage Collection and a page lists are longer,
- * which slightly increases the likelihood of returning pages to Unallocated
- * space and reducing the database file.
- *
- * This flag may be changed at any time using mdbx_env_set_flags(). */
-#define MDBX_COALESCE 0x2000000u
+  /** MDBX_COALESCE = aims to coalesce a Garbage Collection items.
+   *
+   * With MDBX_COALESCE flag MDBX will aims to coalesce items while recycling
+   * a Garbage Collection. Technically, when possible short lists of pages will
+   * be combined into longer ones, but to fit on one database page. As a result,
+   * there will be fewer items in Garbage Collection and a page lists are
+   * longer, which slightly increases the likelihood of returning pages to
+   * Unallocated space and reducing the database file.
+   *
+   * This flag may be changed at any time using mdbx_env_set_flags(). */
+  MDBX_COALESCE = UINT32_C(0x2000000),
 
-/* MDBX_LIFORECLAIM = LIFO policy for recycling a Garbage Collection items.
- *
- * MDBX_LIFORECLAIM flag turns on LIFO policy for recycling a Garbage
- * Collection items, instead of FIFO by default. On systems with a disk
- * write-back cache, this can significantly increase write performance, up to
- * several times in a best case scenario.
- *
- * LIFO recycling policy means that for reuse pages will be taken which became
- * unused the lastest (i.e. just now or most recently). Therefore the loop of
- * database pages circulation becomes as short as possible. In other words, the
- * number of pages, that are overwritten in memory and on disk during a series
- * of write transactions, will be as small as possible. Thus creates ideal
- * conditions for the efficient operation of the disk write-back cache.
- *
- * MDBX_LIFORECLAIM is compatible with all no-sync flags (i.e. MDBX_NOMETASYNC,
- * MDBX_SAFE_NOSYNC, MDBX_UTTERLY_NOSYNC, MDBX_MAPASYNC), but gives no
- * noticeable impact in combination with MDBX_SAFE_NOSYNC. Because MDBX will
- * reused pages only before the last "steady" MVCC-snapshot, i.e. the loop
- * length of database pages circulation will be mostly defined by frequency of
- * calling mdbx_env_sync() rather than LIFO and FIFO difference.
- *
- * This flag may be changed at any time using mdbx_env_set_flags(). */
-#define MDBX_LIFORECLAIM 0x4000000u
+  /** MDBX_LIFORECLAIM = LIFO policy for recycling a Garbage Collection items.
+   *
+   * MDBX_LIFORECLAIM flag turns on LIFO policy for recycling a Garbage
+   * Collection items, instead of FIFO by default. On systems with a disk
+   * write-back cache, this can significantly increase write performance, up to
+   * several times in a best case scenario.
+   *
+   * LIFO recycling policy means that for reuse pages will be taken which became
+   * unused the lastest (i.e. just now or most recently). Therefore the loop of
+   * database pages circulation becomes as short as possible. In other words,
+   * the number of pages, that are overwritten in memory and on disk during a
+   * series of write transactions, will be as small as possible. Thus creates
+   * ideal conditions for the efficient operation of the disk write-back cache.
+   *
+   * MDBX_LIFORECLAIM is compatible with all no-sync flags (i.e.
+   * MDBX_NOMETASYNC, MDBX_SAFE_NOSYNC, MDBX_UTTERLY_NOSYNC, MDBX_MAPASYNC), but
+   * gives no noticeable impact in combination with MDBX_SAFE_NOSYNC. Because
+   * MDBX will reused pages only before the last "steady" MVCC-snapshot, i.e.
+   * the loop length of database pages circulation will be mostly defined by
+   * frequency of calling mdbx_env_sync() rather than LIFO and FIFO difference.
+   *
+   * This flag may be changed at any time using mdbx_env_set_flags(). */
+  MDBX_LIFORECLAIM = UINT32_C(0x4000000),
 
-/* Debugging option, fill/perturb released pages. */
-#define MDBX_PAGEPERTURB 0x8000000u
+  /** Debugging option, fill/perturb released pages. */
+  MDBX_PAGEPERTURB = UINT32_C(0x8000000),
 
-/**** SYNC MODES ***************************************************************
- * (!!!) Using any combination of MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC,
- * MDBX_MAPASYNC and especially MDBX_UTTERLY_NOSYNC is always a deal to reduce
- * durability for gain write performance. You must know exactly what you are
- * doing and what risks you are taking!
- *
- * NOTE for LMDB users: MDBX_SAFE_NOSYNC is NOT similar to LMDB_NOSYNC, but
- *                      MDBX_UTTERLY_NOSYNC is exactly match LMDB_NOSYNC.
- *                      See details below.
- *
- * THE SCENE:
- *   - The DAT-file contains several MVCC-snapshots of B-tree at same time,
- *     each of those B-tree has its own root page.
- *   - Each of meta pages at the beginning of the DAT file contains a pointer
- *     to the root page of B-tree which is the result of the particular
- *     transaction, and a number of this transaction.
- *   - For data durability, MDBX must first write all MVCC-snapshot data pages
- *     and ensure that are written to the disk, then update a meta page with
- *     the new transaction number and a pointer to the corresponding new root
- *     page, and flush any buffers yet again.
- *   - Thus during commit a I/O buffers should be flushed to the disk twice;
- *     i.e. fdatasync(), FlushFileBuffers() or similar syscall should be called
- *     twice for each commit. This is very expensive for performance, but
- *     guaranteed durability even on unexpected system failure or power outage.
- *     Of course, provided that the operating system and the underlying hardware
- *     (e.g. disk) work correctly.
- *
- * TRADE-OFF: By skipping some stages described above, you can significantly
- * benefit in speed, while partially or completely losing in the guarantee of
- * data durability and/or consistency in the event of system or power failure.
- * Moreover, if for any reason disk write order is not preserved, then at moment
- * of a system crash, a meta-page with a pointer to the new B-tree may be
- * written to disk, while the itself B-tree not yet. In that case, the database
- * will be corrupted!
- *
- *
- * MDBX_NOMETASYNC = don't sync the meta-page after commit.
- *
- *      Flush system buffers to disk only once per transaction, omit the
- *      metadata flush. Defer that until the system flushes files to disk,
- *      or next non-MDBX_RDONLY commit or mdbx_env_sync(). Depending on the
- *      platform and hardware, with MDBX_NOMETASYNC you may get a doubling of
- *      write performance.
- *
- *      This trade-off maintains database integrity, but a system crash may
- *      undo the last committed transaction. I.e. it preserves the ACI
- *      (atomicity, consistency, isolation) but not D (durability) database
- *      property.
- *
- *      MDBX_NOMETASYNC flag may be changed at any time using
- *      mdbx_env_set_flags() or by passing to mdbx_txn_begin() for particular
- *      write transaction.
- *
- *
- * MDBX_UTTERLY_NOSYNC = don't sync anything and wipe previous steady commits.
- *
- *      Don't flush system buffers to disk when committing a transaction. This
- *      optimization means a system crash can corrupt the database, if buffers
- *      are not yet flushed to disk. Depending on the platform and hardware,
- *      with MDBX_UTTERLY_NOSYNC you may get a multiple increase of write
- *      performance, even 100 times or more.
- *
- *      If the filesystem preserves write order (which is rare and never
- *      provided unless explicitly noted) and the MDBX_WRITEMAP and
- *      MDBX_LIFORECLAIM flags are not used, then a system crash can't corrupt
- *      the database, but you can lose the last transactions, if at least one
- *      buffer is not yet flushed to disk. The risk is governed by how often the
- *      system flushes dirty buffers to disk and how often mdbx_env_sync() is
- *      called. So, transactions exhibit ACI (atomicity, consistency, isolation)
- *      properties and only lose D (durability). I.e. database integrity is
- *      maintained, but a system crash may undo the final transactions.
- *
- *      Otherwise, if the filesystem not preserves write order (which is
- *      typically) or MDBX_WRITEMAP or MDBX_LIFORECLAIM flags are used, you
- *      should expect the corrupted database after a system crash.
- *
- *      So, most important thing about MDBX_UTTERLY_NOSYNC:
- *       - a system crash immediately after commit the write transaction
- *         high likely lead to database corruption.
- *       - successful completion of mdbx_env_sync(force = true) after one or
- *         more commited transactions guarantees consystency and durability.
- *       - BUT by committing two or more transactions you back database into a
- *         weak state, in which a system crash may lead to database corruption!
- *         In case single transaction after mdbx_env_sync, you may lose
- *         transaction itself, but not a whole database.
- *
- *      Nevertheless, MDBX_UTTERLY_NOSYNC provides "weak" durability in case of
- *      an application crash (but no durability on system failure), and
- *      therefore may be very useful in scenarios where data durability is not
- *      required over a system failure (e.g for short-lived data), or if you can
- *      take such risk.
- *
- *      MDBX_UTTERLY_NOSYNC flag may be changed at any time using
- *      mdbx_env_set_flags(), but don't has effect if passed to mdbx_txn_begin()
- *      for particular write transaction.
- *
- *
- * MDBX_SAFE_NOSYNC = don't sync anything but keep previous steady commits.
- *
- *      Like MDBX_UTTERLY_NOSYNC the MDBX_SAFE_NOSYNC flag similarly disable
- *      flush system buffers to disk when committing a transaction. But there
- *      is a huge difference in how are recycled the MVCC snapshots
- *      corresponding to previous "steady" transactions (see below).
- *
- *      Depending on the platform and hardware, with MDBX_SAFE_NOSYNC you may
- *      get a multiple increase of write performance, even 10 times or more.
- *      NOTE that (MDBX_SAFE_NOSYNC | MDBX_WRITEMAP) leaves the system with no
- *      hint for when to write transactions to disk. Therefore the
- *      (MDBX_MAPASYNC | MDBX_WRITEMAP) may be preferable, but without
- *      MDBX_SAFE_NOSYNC because the (MDBX_MAPASYNC | MDBX_SAFE_NOSYNC) actually
- *      gives MDBX_UTTERLY_NOSYNC.
- *
- *      In contrast to MDBX_UTTERLY_NOSYNC mode, with MDBX_SAFE_NOSYNC flag MDBX
- *      will keeps untouched pages within B-tree of the last transaction
- *      "steady" which was synced to disk completely. This has big implications
- *      for both data durability and (unfortunately) performance:
- *       - a system crash can't corrupt the database, but you will lose the
- *         last transactions; because MDBX will rollback to last steady commit
- *         since it kept explicitly.
- *       - the last steady transaction makes an effect similar to "long-lived"
- *         read transaction (see above in the "RESTRICTIONS & CAVEATS" section)
- *         since prevents reuse of pages freed by newer write transactions,
- *         thus the any data changes will be placed in newly allocated pages.
- *       - to avoid rapid database growth, the system will sync data and issue
- *         a steady commit-point to resume reuse pages, each time there is
- *         insufficient space and before increasing the size of the file on
- *         disk.
- *
- *      In other words, with MDBX_SAFE_NOSYNC flag MDBX insures you from the
- *      whole database corruption, at the cost increasing database size and/or
- *      number of disk IOPS. So, MDBX_SAFE_NOSYNC flag could be used with
- *      mdbx_env_synv() as alternatively for batch committing or nested
- *      transaction (in some cases). As well, auto-sync feature exposed by
- *      mdbx_env_set_syncbytes() and mdbx_env_set_syncperiod() functions could
- *      be very usefull with MDBX_SAFE_NOSYNC flag.
- *
- *      The number and volume of of disk IOPS with MDBX_SAFE_NOSYNC flag will
- *      exactly the as without any no-sync flags. However, you should expect a
- *      larger process's work set (https://bit.ly/2kA2tFX) and significantly
- *      worse a locality of reference (https://bit.ly/2mbYq2J), due to the more
- *      intensive allocation of previously unused pages and increase the size of
- *      the database.
- *
- *      MDBX_SAFE_NOSYNC flag may be changed at any time using
- *      mdbx_env_set_flags() or by passing to mdbx_txn_begin() for particular
- *      write transaction.
- *
- *
- * MDBX_MAPASYNC = use asynchronous msync when MDBX_WRITEMAP is used.
- *
- *      MDBX_MAPASYNC meaningful and give effect only in conjunction
- *      with MDBX_WRITEMAP or MDBX_SAFE_NOSYNC:
- *       - with MDBX_SAFE_NOSYNC actually gives MDBX_UTTERLY_NOSYNC, which
- *         wipe previous steady commits for reuse pages as described above.
- *       - with MDBX_WRITEMAP but without MDBX_SAFE_NOSYNC instructs MDBX to use
- *         asynchronous mmap-flushes to disk as described below.
- *       - with both MDBX_WRITEMAP and MDBX_SAFE_NOSYNC you get the both
- *         effects.
- *
- *      Asynchronous mmap-flushes means that actually all writes will scheduled
- *      and performed by operation system on it own manner, i.e. unordered.
- *      MDBX itself just notify operating system that it would be nice to write
- *      data to disk, but no more.
- *
- *      With MDBX_MAPASYNC flag, but without MDBX_UTTERLY_NOSYNC (i.e. without
- *      OR'ing with MDBX_SAFE_NOSYNC) MDBX will keeps untouched pages within
- *      B-tree of the last transaction "steady" which was synced to disk
- *      completely. So, this makes exactly the same "long-lived" impact and the
- *      same consequences as described above for MDBX_SAFE_NOSYNC flag.
- *
- *      Depending on the platform and hardware, with combination of
- *      MDBX_WRITEMAP and MDBX_MAPASYNC you may get a multiple increase of write
- *      performance, even 25 times or more. MDBX_MAPASYNC flag may be changed at
- *      any time using mdbx_env_set_flags() or by passing to mdbx_txn_begin()
- *      for particular write transaction.
- */
+  /**** SYNC MODES *************************************************************
+   * (!!!) Using any combination of MDBX_SAFE_NOSYNC, MDBX_NOMETASYNC,
+   * MDBX_MAPASYNC and especially MDBX_UTTERLY_NOSYNC is always a deal to reduce
+   * durability for gain write performance. You must know exactly what you are
+   * doing and what risks you are taking!
+   *
+   * NOTE for LMDB users: MDBX_SAFE_NOSYNC is NOT similar to LMDB_NOSYNC, but
+   *                      MDBX_UTTERLY_NOSYNC is exactly match LMDB_NOSYNC.
+   *                      See details below.
+   *
+   * THE SCENE:
+   *   - The DAT-file contains several MVCC-snapshots of B-tree at same time,
+   *     each of those B-tree has its own root page.
+   *   - Each of meta pages at the beginning of the DAT file contains a pointer
+   *     to the root page of B-tree which is the result of the particular
+   *     transaction, and a number of this transaction.
+   *   - For data durability, MDBX must first write all MVCC-snapshot data pages
+   *     and ensure that are written to the disk, then update a meta page with
+   *     the new transaction number and a pointer to the corresponding new root
+   *     page, and flush any buffers yet again.
+   *   - Thus during commit a I/O buffers should be flushed to the disk twice;
+   *     i.e. fdatasync(), FlushFileBuffers() or similar syscall should be
+   *     called twice for each commit. This is very expensive for performance,
+   *     but guaranteed durability even on unexpected system failure or power
+   *     outage. Of course, provided that the operating system and the
+   *     underlying hardware (e.g. disk) work correctly.
+   *
+   * TRADE-OFF: By skipping some stages described above, you can significantly
+   * benefit in speed, while partially or completely losing in the guarantee of
+   * data durability and/or consistency in the event of system or power failure.
+   * Moreover, if for any reason disk write order is not preserved, then at
+   * moment of a system crash, a meta-page with a pointer to the new B-tree may
+   * be written to disk, while the itself B-tree not yet. In that case, the
+   * database will be corrupted!
+   *
+   *
+   * MDBX_NOMETASYNC = don't sync the meta-page after commit.
+   *
+   *      Flush system buffers to disk only once per transaction, omit the
+   *      metadata flush. Defer that until the system flushes files to disk,
+   *      or next non-MDBX_RDONLY commit or mdbx_env_sync(). Depending on the
+   *      platform and hardware, with MDBX_NOMETASYNC you may get a doubling of
+   *      write performance.
+   *
+   *      This trade-off maintains database integrity, but a system crash may
+   *      undo the last committed transaction. I.e. it preserves the ACI
+   *      (atomicity, consistency, isolation) but not D (durability) database
+   *      property.
+   *
+   *      MDBX_NOMETASYNC flag may be changed at any time using
+   *      mdbx_env_set_flags() or by passing to mdbx_txn_begin() for particular
+   *      write transaction.
+   *
+   *
+   * MDBX_UTTERLY_NOSYNC = don't sync anything and wipe previous steady commits.
+   *
+   *      Don't flush system buffers to disk when committing a transaction. This
+   *      optimization means a system crash can corrupt the database, if buffers
+   *      are not yet flushed to disk. Depending on the platform and hardware,
+   *      with MDBX_UTTERLY_NOSYNC you may get a multiple increase of write
+   *      performance, even 100 times or more.
+   *
+   *      If the filesystem preserves write order (which is rare and never
+   *      provided unless explicitly noted) and the MDBX_WRITEMAP and
+   *      MDBX_LIFORECLAIM flags are not used, then a system crash can't corrupt
+   *      the database, but you can lose the last transactions, if at least one
+   *      buffer is not yet flushed to disk. The risk is governed by how often
+   *      the system flushes dirty buffers to disk and how often mdbx_env_sync()
+   *      is called. So, transactions exhibit ACI (atomicity, consistency,
+   *      isolation) properties and only lose D (durability). I.e. database
+   *      integrity is maintained, but a system crash may undo the final
+   *      transactions.
+   *
+   *      Otherwise, if the filesystem not preserves write order (which is
+   *      typically) or MDBX_WRITEMAP or MDBX_LIFORECLAIM flags are used, you
+   *      should expect the corrupted database after a system crash.
+   *
+   *      So, most important thing about MDBX_UTTERLY_NOSYNC:
+   *       - a system crash immediately after commit the write transaction
+   *         high likely lead to database corruption.
+   *       - successful completion of mdbx_env_sync(force = true) after one or
+   *         more commited transactions guarantees consystency and durability.
+   *       - BUT by committing two or more transactions you back database into a
+   *         weak state, in which a system crash may lead to database
+   *         corruption! In case single transaction after mdbx_env_sync,
+   *         you may lose transaction itself, but not a whole database.
+   *
+   *      Nevertheless, MDBX_UTTERLY_NOSYNC provides "weak" durability in case
+   *      of an application crash (but no durability on system failure), and
+   *      therefore may be very useful in scenarios where data durability is not
+   *      required over a system failure (e.g for short-lived data), or if you
+   *      can take such risk.
+   *
+   *      MDBX_UTTERLY_NOSYNC flag may be changed at any time using
+   *      mdbx_env_set_flags(), but don't has effect if passed to
+   *      mdbx_txn_begin() for particular write transaction.
+   *
+   *
+   * MDBX_SAFE_NOSYNC = don't sync anything but keep previous steady commits.
+   *
+   *      Like MDBX_UTTERLY_NOSYNC the MDBX_SAFE_NOSYNC flag similarly disable
+   *      flush system buffers to disk when committing a transaction. But there
+   *      is a huge difference in how are recycled the MVCC snapshots
+   *      corresponding to previous "steady" transactions (see below).
+   *
+   *      Depending on the platform and hardware, with MDBX_SAFE_NOSYNC you may
+   *      get a multiple increase of write performance, even 10 times or more.
+   *      NOTE that (MDBX_SAFE_NOSYNC | MDBX_WRITEMAP) leaves the system with no
+   *      hint for when to write transactions to disk. Therefore the
+   *      (MDBX_MAPASYNC | MDBX_WRITEMAP) may be preferable, but without
+   *      MDBX_SAFE_NOSYNC because the (MDBX_MAPASYNC | MDBX_SAFE_NOSYNC)
+   *      actually gives MDBX_UTTERLY_NOSYNC.
+   *
+   *      In contrast to MDBX_UTTERLY_NOSYNC mode, with MDBX_SAFE_NOSYNC flag
+   *      MDBX will keeps untouched pages within B-tree of the last transaction
+   *      "steady" which was synced to disk completely. This has big
+   *      implications for both data durability and (unfortunately) performance:
+   *       - a system crash can't corrupt the database, but you will lose the
+   *         last transactions; because MDBX will rollback to last steady commit
+   *         since it kept explicitly.
+   *       - the last steady transaction makes an effect similar to "long-lived"
+   *         read transaction (see above in the "RESTRICTIONS & CAVEATS"
+   *         section) since prevents reuse of pages freed by newer write
+   *         transactions, thus the any data changes will be placed in newly
+   *         allocated pages.
+   *       - to avoid rapid database growth, the system will sync data and issue
+   *         a steady commit-point to resume reuse pages, each time there is
+   *         insufficient space and before increasing the size of the file on
+   *         disk.
+   *
+   *      In other words, with MDBX_SAFE_NOSYNC flag MDBX insures you from the
+   *      whole database corruption, at the cost increasing database size and/or
+   *      number of disk IOPS. So, MDBX_SAFE_NOSYNC flag could be used with
+   *      mdbx_env_synv() as alternatively for batch committing or nested
+   *      transaction (in some cases). As well, auto-sync feature exposed by
+   *      mdbx_env_set_syncbytes() and mdbx_env_set_syncperiod() functions could
+   *      be very usefull with MDBX_SAFE_NOSYNC flag.
+   *
+   *      The number and volume of of disk IOPS with MDBX_SAFE_NOSYNC flag will
+   *      exactly the as without any no-sync flags. However, you should expect a
+   *      larger process's work set (https://bit.ly/2kA2tFX) and significantly
+   *      worse a locality of reference (https://bit.ly/2mbYq2J), due to the
+   *      more intensive allocation of previously unused pages and increase
+   *      the size of the database.
+   *
+   *      MDBX_SAFE_NOSYNC flag may be changed at any time using
+   *      mdbx_env_set_flags() or by passing to mdbx_txn_begin() for particular
+   *      write transaction.
+   *
+   *
+   * MDBX_MAPASYNC = use asynchronous msync when MDBX_WRITEMAP is used.
+   *
+   *      MDBX_MAPASYNC meaningful and give effect only in conjunction
+   *      with MDBX_WRITEMAP or MDBX_SAFE_NOSYNC:
+   *       - with MDBX_SAFE_NOSYNC actually gives MDBX_UTTERLY_NOSYNC, which
+   *         wipe previous steady commits for reuse pages as described above.
+   *       - with MDBX_WRITEMAP but without MDBX_SAFE_NOSYNC instructs MDBX to
+   *         use asynchronous mmap-flushes to disk as described below.
+   *       - with both MDBX_WRITEMAP and MDBX_SAFE_NOSYNC you get the both
+   *         effects.
+   *
+   *      Asynchronous mmap-flushes means that actually all writes will
+   *      scheduled and performed by operation system on it own manner, i.e.
+   *      unordered. MDBX itself just notify operating system that it would
+   *      be nice to write data to disk, but no more.
+   *
+   *      With MDBX_MAPASYNC flag, but without MDBX_UTTERLY_NOSYNC (i.e. without
+   *      OR'ing with MDBX_SAFE_NOSYNC) MDBX will keeps untouched pages within
+   *      B-tree of the last transaction "steady" which was synced to disk
+   *      completely. So, this makes exactly the same "long-lived" impact and
+   *      the same consequences as described above for MDBX_SAFE_NOSYNC flag.
+   *
+   *      Depending on the platform and hardware, with combination of
+   *      MDBX_WRITEMAP and MDBX_MAPASYNC you may get a multiple increase of
+   *      write performance, even 25 times or more. MDBX_MAPASYNC flag may be
+   *      changed at any time using mdbx_env_set_flags() or by passing
+   *      to mdbx_txn_begin() for particular write transaction.
+   */
 
-/* Don't sync meta-page after commit,
- * see description in the "SYNC MODES" section above. */
-#define MDBX_NOMETASYNC 0x40000u
+  /** Don't sync meta-page after commit,
+   * see description in the "SYNC MODES" section above. */
+  MDBX_NOMETASYNC = UINT32_C(0x40000),
 
-/* Don't sync anything but keep previous steady commits,
- * see description in the "SYNC MODES" section above.
- *
- * (!) don't combine this flag with MDBX_MAPASYNC
- *     since you will got MDBX_UTTERLY_NOSYNC in that way (see below) */
-#define MDBX_SAFE_NOSYNC 0x10000u
+  /** Don't sync anything but keep previous steady commits,
+   * see description in the "SYNC MODES" section above.
+   *
+   * (!) don't combine this flag with MDBX_MAPASYNC
+   *     since you will got MDBX_UTTERLY_NOSYNC in that way (see below) */
+  MDBX_SAFE_NOSYNC = UINT32_C(0x10000),
 
-/* Use asynchronous msync when MDBX_WRITEMAP is used,
- * see description in the "SYNC MODES" section above.
- *
- * (!) don't combine this flag with MDBX_SAFE_NOSYNC
- *     since you will got MDBX_UTTERLY_NOSYNC in that way (see below) */
-#define MDBX_MAPASYNC 0x100000u
+  /** Use asynchronous msync when MDBX_WRITEMAP is used,
+   * see description in the "SYNC MODES" section above.
+   *
+   * (!) don't combine this flag with MDBX_SAFE_NOSYNC
+   *     since you will got MDBX_UTTERLY_NOSYNC in that way (see below) */
+  MDBX_MAPASYNC = UINT32_C(0x100000),
 
-/* Don't sync anything and wipe previous steady commits,
- * see description in the "SYNC MODES" section above. */
-#define MDBX_UTTERLY_NOSYNC (MDBX_SAFE_NOSYNC | MDBX_MAPASYNC)
+  /** Don't sync anything and wipe previous steady commits,
+   * see description in the "SYNC MODES" section above. */
+  MDBX_UTTERLY_NOSYNC = MDBX_SAFE_NOSYNC | MDBX_MAPASYNC,
 
-/**** DATABASE FLAGS **********************************************************/
-/* Use reverse string keys */
-#define MDBX_REVERSEKEY 0x02u
+  /** Do not block when starting a write transaction */
+  MDBX_TRYTXN = UINT32_C(0x10000000),
+};
+#ifndef __cplusplus
+typedef enum MDBX_env_flags_t MDBX_env_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_env_flags_t)
+#endif
 
-/* Use sorted duplicates */
-#define MDBX_DUPSORT 0x04u
+/** DATABASE FLAGS ************************************************************/
+enum MDBX_db_flags_t {
+  MDBX_DB_DEFAULTS = 0,
+  MDBX_REVERSEKEY = UINT32_C(0x02) /** Use reverse string keys */,
+  MDBX_DUPSORT = UINT32_C(0x04) /** Use sorted duplicates */,
+  MDBX_INTEGERKEY = UINT32_C(0x08) /** Numeric keys in native byte order,
+                        either uint32_t or uint64_t.
+                        The keys must all be of the same size and must
+                        be aligned while passing as arguments. */
+  ,
+  MDBX_DUPFIXED = UINT32_C(0x10) /** With MDBX_DUPSORT;
+                                  sorted dup items have fixed size */
+  ,
+  MDBX_INTEGERDUP = UINT32_C(0x20) /** With MDBX_DUPSORT;
+                         dups are MDBX_INTEGERKEY-style integers.
+                         The data values must all be of the same size
+                        and must be aligned while passing as arguments. */
+  ,
+  MDBX_REVERSEDUP = UINT32_C(0x40) /** With MDBX_DUPSORT;
+                                      use reverse string comparison */
+  ,
 
-/* Numeric keys in native byte order, either uint32_t or uint64_t.
- * The keys must all be of the same size and must be aligned while passing as
- * arguments. */
-#define MDBX_INTEGERKEY 0x08u
+  MDBX_CREATE = UINT32_C(0x40000) /** Create DB if not already existing */
+};
+#ifndef __cplusplus
+typedef enum MDBX_db_flags_t MDBX_db_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
+#endif
 
-/* With MDBX_DUPSORT, sorted dup items have fixed size */
-#define MDBX_DUPFIXED 0x10u
+/** DATA UPDATE FLAGS *********************************************************/
+enum MDBX_put_flags_t {
+  MDBX_PUT_DEFAULTS = 0,
+  MDBX_NOOVERWRITE = UINT32_C(0x10) /* For upsertion: Don't write if the key
+                                                      already exists. */
+  ,
+  MDBX_NODUPDATA = UINT32_C(0x20) /* Only for MDBX_DUPSORT.
+                                     For upsertion: don't write if the key/data
+                                                    pair already exist.
+                                     For deletion: remove all duplicate
+                                                          data items. */
+  ,
+  MDBX_CURRENT = UINT32_C(0x40) /* For upsertion: overwrite the current
+                                                  key/data pair.
+                                 MDBX allows this flag for mdbx_put() for
+                                 explicit overwrite/update without insertion. */
+  ,
 
-/* With MDBX_DUPSORT, dups are MDBX_INTEGERKEY-style integers.
- * The data values must all be of the same size and must be aligned while
- * passing as arguments. */
-#define MDBX_INTEGERDUP 0x20u
+  MDBX_RESERVE = UINT32_C(0x10000) /* For upsertion: Just reserve space
+                                      for data, don't copy it. Return a pointer
+                                      to the reserved space. */
+  ,
+  MDBX_APPEND = UINT32_C(0x20000) /* Data is being appended. Don't split full
+                                     pages, continue on a new instead. */
+  ,
+  MDBX_APPENDDUP = UINT32_C(0x40000) /* Duplicate data is being appended.
+                                        Don't split full pages,
+                                        continue on a new instead. */
+  ,
 
-/* With MDBX_DUPSORT, use reverse string dups */
-#define MDBX_REVERSEDUP 0x40u
+  MDBX_MULTIPLE = UINT32_C(0x80000) /* Store multiple data items in one call.
+                                       Only for MDBX_DUPFIXED. */
+  ,
+};
+#ifndef __cplusplus
+typedef enum MDBX_put_flags_t MDBX_put_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags_t)
+#endif
 
-/* Create DB if not already existing */
-#define MDBX_CREATE 0x40000u
+/** ENVIRONMENT COPY FLAGS** **************************************************/
+enum MDBX_copy_flags_t {
+  MDBX_CP_DEFAULTS = 0,
+  /* Copy with compactification: Omit free space from copy and renumber all
+     pages sequentially */
+  MDBX_CP_COMPACT = 1u,
+  MDBX_CP_FORCE_RESIZEABLE = 2u
+};
+#ifndef __cplusplus
+typedef enum MDBX_copy_flags_t MDBX_copy_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags_t)
+#endif
 
-/**** DATA UPDATE FLAGS *******************************************************/
-/* For put: Don't write if the key already exists. */
-#define MDBX_NOOVERWRITE 0x10u
-/* Only for MDBX_DUPSORT
- * For put: don't write if the key and data pair already exist.
- * For mdbx_cursor_del: remove all duplicate data items. */
-#define MDBX_NODUPDATA 0x20u
-/* For mdbx_cursor_put: overwrite the current key/data pair
- * MDBX allows this flag for mdbx_put() for explicit overwrite/update without
- * insertion. */
-#define MDBX_CURRENT 0x40u
-/* For put: Just reserve space for data, don't copy it. Return a
- * pointer to the reserved space. */
-#define MDBX_RESERVE 0x10000u
-/* Data is being appended, don't split full pages. */
-#define MDBX_APPEND 0x20000u
-/* Duplicate data is being appended, don't split full pages. */
-#define MDBX_APPENDDUP 0x40000u
-/* Store multiple data items in one call. Only for MDBX_DUPFIXED. */
-#define MDBX_MULTIPLE 0x80000u
-
-/**** TRANSACTION FLAGS *******************************************************/
-/* Do not block when starting a write transaction */
-#define MDBX_TRYTXN 0x10000000u
-
-/**** ENVIRONMENT COPY FLAGS **************************************************/
-/* Compacting: Omit free space from copy, and renumber all pages sequentially */
-#define MDBX_CP_COMPACT 1u
-#define MDBX_CP_FORCE_RESIZEABLE 2u
-
-/**** CURSOR OPERATIONS ********************************************************
+/** CURSOR OPERATIONS **********************************************************
  *
  * This is the set of all operations for retrieving data
  * using a cursor. */
-typedef enum MDBX_cursor_op {
-  MDBX_FIRST,          /* Position at first key/data item */
-  MDBX_FIRST_DUP,      /* MDBX_DUPSORT-only: Position at first data item
+enum MDBX_cursor_op {
+  MDBX_FIRST,          /** Position at first key/data item */
+  MDBX_FIRST_DUP,      /** MDBX_DUPSORT-only: Position at first data item
                         * of current key. */
-  MDBX_GET_BOTH,       /* MDBX_DUPSORT-only: Position at key/data pair. */
-  MDBX_GET_BOTH_RANGE, /* MDBX_DUPSORT-only: Position at given key and at first
+  MDBX_GET_BOTH,       /** MDBX_DUPSORT-only: Position at key/data pair. */
+  MDBX_GET_BOTH_RANGE, /** MDBX_DUPSORT-only: Position at given key and at first
                         * data greater than or equal to specified data. */
-  MDBX_GET_CURRENT,    /* Return key/data at current cursor position */
-  MDBX_GET_MULTIPLE,   /* MDBX_DUPFIXED-only: Return up to a page of duplicate
+  MDBX_GET_CURRENT,    /** Return key/data at current cursor position */
+  MDBX_GET_MULTIPLE,   /** MDBX_DUPFIXED-only: Return up to a page of duplicate
                         * data items from current cursor position.
                         * Move cursor to prepare for MDBX_NEXT_MULTIPLE. */
-  MDBX_LAST,           /* Position at last key/data item */
-  MDBX_LAST_DUP,       /* MDBX_DUPSORT-only: Position at last data item
+  MDBX_LAST,           /** Position at last key/data item */
+  MDBX_LAST_DUP,       /** MDBX_DUPSORT-only: Position at last data item
                         * of current key. */
-  MDBX_NEXT,           /* Position at next data item */
-  MDBX_NEXT_DUP,       /* MDBX_DUPSORT-only: Position at next data item
+  MDBX_NEXT,           /** Position at next data item */
+  MDBX_NEXT_DUP,       /** MDBX_DUPSORT-only: Position at next data item
                         * of current key. */
-  MDBX_NEXT_MULTIPLE,  /* MDBX_DUPFIXED-only: Return up to a page of
+  MDBX_NEXT_MULTIPLE,  /** MDBX_DUPFIXED-only: Return up to a page of
                         * duplicate data items from next cursor position.
                         * Move cursor to prepare for MDBX_NEXT_MULTIPLE. */
-  MDBX_NEXT_NODUP,     /* Position at first data item of next key */
+  MDBX_NEXT_NODUP,     /** Position at first data item of next key */
   MDBX_PREV,           /* Position at previous data item */
-  MDBX_PREV_DUP,       /* MDBX_DUPSORT-only: Position at previous data item
+  MDBX_PREV_DUP,       /** MDBX_DUPSORT-only: Position at previous data item
                         * of current key. */
-  MDBX_PREV_NODUP,     /* Position at last data item of previous key */
-  MDBX_SET,            /* Position at specified key */
-  MDBX_SET_KEY,        /* Position at specified key, return both key and data */
-  MDBX_SET_RANGE,      /* Position at first key greater than or equal to
-                        * specified key. */
-  MDBX_PREV_MULTIPLE   /* MDBX_DUPFIXED-only: Position at previous page and
-                        * return up to a page of duplicate data items. */
-} MDBX_cursor_op;
+  MDBX_PREV_NODUP,     /** Position at last data item of previous key */
+  MDBX_SET,            /** Position at specified key */
+  MDBX_SET_KEY,      /** Position at specified key, return both key and data */
+  MDBX_SET_RANGE,    /** Position at first key greater than or equal to
+                      * specified key. */
+  MDBX_PREV_MULTIPLE /** MDBX_DUPFIXED-only: Position at previous page and
+                      * return up to a page of duplicate data items. */
+};
+#ifndef __cplusplus
+typedef enum MDBX_cursor_op MDBX_cursor_op;
+#endif
 
 /**** ERRORS & RETURN CODES ****************************************************
  * BerkeleyDB uses -30800 to -30999, we'll go under them */
 
-/* Successful result */
-#define MDBX_SUCCESS 0
-#define MDBX_RESULT_FALSE MDBX_SUCCESS
-/* Successful result with special meaning or a flag */
-#define MDBX_RESULT_TRUE (-1)
+enum MDBX_error_t {
+  /* Successful result */
+  MDBX_SUCCESS = 0,
+  MDBX_RESULT_FALSE = MDBX_SUCCESS,
+  /* Successful result with special meaning or a flag */
+  MDBX_RESULT_TRUE = -1,
 
-/* key/data pair already exists */
-#define MDBX_KEYEXIST (-30799)
+  /* key/data pair already exists */
+  MDBX_KEYEXIST = -30799,
 
-/* key/data pair not found (EOF) */
-#define MDBX_NOTFOUND (-30798)
+  /* key/data pair not found (EOF) */
+  MDBX_NOTFOUND = -30798,
 
-/* Requested page not found - this usually indicates corruption */
-#define MDBX_PAGE_NOTFOUND (-30797)
+  /* Requested page not found - this usually indicates corruption */
+  MDBX_PAGE_NOTFOUND = -30797,
 
-/* Database is corrupted (page was wrong type and so on) */
-#define MDBX_CORRUPTED (-30796)
+  /* Database is corrupted (page was wrong type and so on) */
+  MDBX_CORRUPTED = -30796,
 
-/* Environment had fatal error (i.e. update of meta page failed and so on) */
-#define MDBX_PANIC (-30795)
+  /* Environment had fatal error (i.e. update of meta page failed and so on) */
+  MDBX_PANIC = -30795,
 
-/* DB file version mismatch with libmdbx */
-#define MDBX_VERSION_MISMATCH (-30794)
+  /* DB file version mismatch with libmdbx */
+  MDBX_VERSION_MISMATCH = -30794,
 
-/* File is not a valid MDBX file */
-#define MDBX_INVALID (-30793)
+  /* File is not a valid MDBX file */
+  MDBX_INVALID = -30793,
 
-/* Environment mapsize reached */
-#define MDBX_MAP_FULL (-30792)
+  /* Environment mapsize reached */
+  MDBX_MAP_FULL = -30792,
 
-/* Environment maxdbs reached */
-#define MDBX_DBS_FULL (-30791)
+  /* Environment maxdbs reached */
+  MDBX_DBS_FULL = -30791,
 
-/* Environment maxreaders reached */
-#define MDBX_READERS_FULL (-30790)
+  /* Environment maxreaders reached */
+  MDBX_READERS_FULL = -30790,
 
-/* Transaction has too many dirty pages, i.e transaction too big */
-#define MDBX_TXN_FULL (-30788)
+  /* Transaction has too many dirty pages, i.e transaction too big */
+  MDBX_TXN_FULL = -30788,
 
-/* Cursor stack too deep - this usually indicates corruption,
- * i.e branch-pages loop */
-#define MDBX_CURSOR_FULL (-30787)
+  /* Cursor stack too deep - this usually indicates corruption,
+   * i.e branch-pages loop */
+  MDBX_CURSOR_FULL = -30787,
 
-/* Page has not enough space - internal error */
-#define MDBX_PAGE_FULL (-30786)
+  /* Page has not enough space - internal error */
+  MDBX_PAGE_FULL = -30786,
 
-/* Database engine was unable to extend mapping, e.g. since address space
- * is unavailable or busy. This can mean:
- *  - Database size extended by other process beyond to environment mapsize
- *    and engine was unable to extend mapping while starting read transaction.
- *    Environment should be reopened to continue.
- *  - Engine was unable to extend mapping during write transaction
- *    or explicit call of mdbx_env_set_geometry(). */
-#define MDBX_UNABLE_EXTEND_MAPSIZE (-30785)
+  /* Database engine was unable to extend mapping, e.g. since address space
+   * is unavailable or busy. This can mean:
+   *  - Database size extended by other process beyond to environment mapsize
+   *    and engine was unable to extend mapping while starting read transaction.
+   *    Environment should be reopened to continue.
+   *  - Engine was unable to extend mapping during write transaction
+   *    or explicit call of mdbx_env_set_geometry(). */
+  MDBX_UNABLE_EXTEND_MAPSIZE = -30785,
 
-/* MDBX_MAP_RESIZED is deprecated.
+  /* Environment or database is not compatible with the requested operation
+   * or the specified flags. This can mean:
+   *  - The operation expects an MDBX_DUPSORT / MDBX_DUPFIXED database.
+   *  - Opening a named DB when the unnamed DB has MDBX_DUPSORT/MDBX_INTEGERKEY.
+   *  - Accessing a data record as a database, or vice versa.
+   *  - The database was dropped and recreated with different flags. */
+  MDBX_INCOMPATIBLE = -30784,
+
+  /* Invalid reuse of reader locktable slot,
+   * e.g. read-transaction already run for current thread */
+  MDBX_BAD_RSLOT = -30783,
+
+  /* Transaction is not valid for requested operation,
+   * e.g. had errored and be must aborted, has a child, or is invalid */
+  MDBX_BAD_TXN = -30782,
+
+  /* Invalid size or alignment of key or data for target database,
+   * either invalid subDB name */
+  MDBX_BAD_VALSIZE = -30781,
+
+  /* The specified DBI-handle is invalid
+   * or changed by another thread/transaction */
+  MDBX_BAD_DBI = -30780,
+
+  /* Unexpected internal error, transaction should be aborted */
+  MDBX_PROBLEM = -30779,
+
+  /* The last LMDB-compatible defined error code */
+  MDBX_LAST_LMDB_ERRCODE = MDBX_PROBLEM,
+
+  /* Another write transaction is running or environment is already used while
+   * opening with MDBX_EXCLUSIVE flag */
+  MDBX_BUSY = -30778,
+
+  /* The specified key has more than one associated value */
+  MDBX_EMULTIVAL = -30421,
+
+  /* Bad signature of a runtime object(s), this can mean:
+   *  - memory corruption or double-free;
+   *  - ABI version mismatch (rare case); */
+  MDBX_EBADSIGN = -30420,
+
+  /* Database should be recovered, but this could NOT be done for now
+   * since it opened in read-only mode */
+  MDBX_WANNA_RECOVERY = -30419,
+
+  /* The given key value is mismatched to the current cursor position */
+  MDBX_EKEYMISMATCH = -30418,
+
+  /* Database is too large for current system,
+   * e.g. could NOT be mapped into RAM. */
+  MDBX_TOO_LARGE = -30417,
+
+  /* A thread has attempted to use a not owned object,
+   * e.g. a transaction that started by another thread. */
+  MDBX_THREAD_MISMATCH = -30416,
+
+  /* Overlapping read and write transactions for the current thread */
+  MDBX_TXN_OVERLAPPING = -30415,
+
+#if defined(_WIN32) || defined(_WIN64)
+  MDBX_ENODATA = ERROR_HANDLE_EOF,
+  MDBX_EINVAL = ERROR_INVALID_PARAMETER,
+  MDBX_EACCESS = ERROR_ACCESS_DENIED,
+  MDBX_ENOMEM = ERROR_OUTOFMEMORY,
+  MDBX_EROFS = ERROR_FILE_READ_ONLY,
+  MDBX_ENOSYS = ERROR_NOT_SUPPORTED,
+  MDBX_EIO = ERROR_WRITE_FAULT,
+  MDBX_EPERM = ERROR_INVALID_FUNCTION,
+  MDBX_EINTR = ERROR_CANCELLED,
+  MDBX_ENOFILE = ERROR_FILE_NOT_FOUND,
+  MDBX_EREMOTE = ERROR_REMOTE_STORAGE_MEDIA_ERROR
+#else /* Windows */
+#ifdef ENODATA
+  MDBX_ENODATA = ENODATA,
+#else
+  MDBX_ENODATA = -1,
+#endif /* ENODATA */
+  MDBX_EINVAL = EINVAL,
+  MDBX_EACCESS = EACCES,
+  MDBX_ENOMEM = ENOMEM,
+  MDBX_EROFS = EROFS,
+  MDBX_ENOSYS = ENOSYS,
+  MDBX_EIO = EIO,
+  MDBX_EPERM = EPERM,
+  MDBX_EINTR = EINTR,
+  MDBX_ENOFILE = ENOENT,
+  MDBX_EREMOTE = ENOTBLK
+#endif /* !Windows */
+};
+#ifndef __cplusplus
+typedef enum MDBX_error_t MDBX_error_t;
+#endif
+
+/** MDBX_MAP_RESIZED is deprecated.
  * Please review your code to use MDBX_UNABLE_EXTEND_MAPSIZE instead. */
-MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED() {
+MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED_is_deprecated() {
   return MDBX_UNABLE_EXTEND_MAPSIZE;
 }
-#define MDBX_MAP_RESIZED MDBX_MAP_RESIZED()
-
-/* Environment or database is not compatible with the requested operation
- * or the specified flags. This can mean:
- *  - The operation expects an MDBX_DUPSORT / MDBX_DUPFIXED database.
- *  - Opening a named DB when the unnamed DB has MDBX_DUPSORT/MDBX_INTEGERKEY.
- *  - Accessing a data record as a database, or vice versa.
- *  - The database was dropped and recreated with different flags. */
-#define MDBX_INCOMPATIBLE (-30784)
-
-/* Invalid reuse of reader locktable slot,
- * e.g. read-transaction already run for current thread */
-#define MDBX_BAD_RSLOT (-30783)
-
-/* Transaction is not valid for requested operation,
- * e.g. had errored and be must aborted, has a child, or is invalid */
-#define MDBX_BAD_TXN (-30782)
-
-/* Invalid size or alignment of key or data for target database,
- * either invalid subDB name */
-#define MDBX_BAD_VALSIZE (-30781)
-
-/* The specified DBI-handle is invalid
- * or changed by another thread/transaction */
-#define MDBX_BAD_DBI (-30780)
-
-/* Unexpected internal error, transaction should be aborted */
-#define MDBX_PROBLEM (-30779)
-
-/* The last LMDB-compatible defined error code */
-#define MDBX_LAST_LMDB_ERRCODE MDBX_PROBLEM
-
-/* Another write transaction is running or environment is already used while
- * opening with MDBX_EXCLUSIVE flag */
-#define MDBX_BUSY (-30778)
-
-/* The specified key has more than one associated value */
-#define MDBX_EMULTIVAL (-30421)
-
-/* Bad signature of a runtime object(s), this can mean:
- *  - memory corruption or double-free;
- *  - ABI version mismatch (rare case); */
-#define MDBX_EBADSIGN (-30420)
-
-/* Database should be recovered, but this could NOT be done for now
- * since it opened in read-only mode */
-#define MDBX_WANNA_RECOVERY (-30419)
-
-/* The given key value is mismatched to the current cursor position */
-#define MDBX_EKEYMISMATCH (-30418)
-
-/* Database is too large for current system,
- * e.g. could NOT be mapped into RAM. */
-#define MDBX_TOO_LARGE (-30417)
-
-/* A thread has attempted to use a not owned object,
- * e.g. a transaction that started by another thread. */
-#define MDBX_THREAD_MISMATCH (-30416)
-
-/* Overlapping read and write transactions for the current thread */
-#define MDBX_TXN_OVERLAPPING (-30415)
+#define MDBX_MAP_RESIZED MDBX_MAP_RESIZED_is_deprecated()
 
 /**** FUNCTIONS & RELATED STRUCTURES ******************************************/
 
@@ -2183,11 +2348,9 @@ LIBMDBX_API int mdbx_is_readahead_reasonable(size_t volume,
                                              intptr_t redundancy);
 
 /* The minimal database page size in bytes. */
-#define MDBX_MIN_PAGESIZE 256
 __inline intptr_t mdbx_limits_pgsize_min(void) { return MDBX_MIN_PAGESIZE; }
 
 /* The maximal database page size in bytes. */
-#define MDBX_MAX_PAGESIZE 65536
 __inline intptr_t mdbx_limits_pgsize_max(void) { return MDBX_MAX_PAGESIZE; }
 
 /* Returns minimal database size in bytes for given page size,
@@ -2738,6 +2901,23 @@ LIBMDBX_API int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *stat,
 LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
                                            uint32_t *mask);
 
+/** DBI state bits returted by mdbx_dbi_flags_ex() */
+enum MDBX_dbi_state_t {
+  /** DB was written in this txn */
+  MDBX_DBI_DIRTY = 0x01,
+  /** Named-DB record is older than txnID */
+  MDBX_DBI_STALE = 0x02,
+  /** Named-DB handle opened in this txn */
+  MDBX_DBI_FRESH = 0x04,
+  /** Named-DB handle created in this txn */
+  MDBX_DBI_CREAT = 0x08,
+};
+#ifndef __cplusplus
+typedef enum MDBX_dbi_state_t MDBX_dbi_state_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state_t)
+#endif
+
 /* Retrieve the DB flags and status for a database handle.
  *
  * [in] txn     A transaction handle returned by mdbx_txn_begin().
@@ -2749,10 +2929,6 @@ LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
  * discarding result from the last argument.
  *
  * Returns A non-zero error value on failure and 0 on success. */
-#define MDBX_DBI_DIRTY 0x01 /* DB was written in this txn */
-#define MDBX_DBI_STALE 0x02 /* Named-DB record is older than txnID */
-#define MDBX_DBI_FRESH 0x04 /* Named-DB handle opened in this txn */
-#define MDBX_DBI_CREAT 0x08 /* Named-DB handle created in this txn */
 LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                                   unsigned *state);
 LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
@@ -3530,8 +3706,8 @@ LIBMDBX_API MDBX_oom_func *mdbx_env_get_oomfunc(const MDBX_env *env);
  * This is internal API for mdbx_chk tool. You should avoid to use it, except
  * some extremal special cases. */
 
-/* Page types for traverse the b-tree. */
-typedef enum {
+/** Page types for traverse the b-tree. */
+enum MDBX_page_type_t {
   MDBX_page_void,
   MDBX_page_meta,
   MDBX_page_large,
@@ -3540,7 +3716,10 @@ typedef enum {
   MDBX_page_dupfixed_leaf,
   MDBX_subpage_leaf,
   MDBX_subpage_dupfixed_leaf
-} MDBX_page_type_t;
+};
+#ifndef __cplusplus
+typedef enum MDBX_page_type_t MDBX_page_type_t;
+#endif
 
 #define MDBX_PGWALK_MAIN ((const char *)((ptrdiff_t)0))
 #define MDBX_PGWALK_GC ((const char *)((ptrdiff_t)-1))

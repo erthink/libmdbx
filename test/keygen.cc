@@ -78,11 +78,12 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   assert(mapping.mesh <= mapping.width);
   assert(mapping.rotate <= mapping.width);
   assert(mapping.offset <= mask(mapping.width));
-  assert(
-      !(key_essentials.flags & ~(essentials::prng_fill_flag | MDBX_INTEGERKEY |
-                                 MDBX_REVERSEKEY | MDBX_DUPSORT)));
+  assert(!(key_essentials.flags &
+           ~(essentials::prng_fill_flag |
+             unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT))));
   assert(!(value_essentials.flags &
-           ~(essentials::prng_fill_flag | MDBX_INTEGERDUP | MDBX_REVERSEDUP)));
+           ~(essentials::prng_fill_flag |
+             unsigned(MDBX_INTEGERDUP | MDBX_REVERSEDUP))));
 
   log_trace("keygen-pair: serial %" PRIu64 ", data-age %" PRIu64, serial,
             value_age);
@@ -197,8 +198,17 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
 void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
+#if defined(_MSC_VER) && _MSC_VER < 1900
+  assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
+                  MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX);
+#else
+  static_assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
+                         MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX,
+                "WTF?");
+#endif
   key_essentials.flags =
-      actor.table_flags & (MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
+      actor.table_flags &
+      uint16_t(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
   assert(actor.keylen_min <= UINT16_MAX);
   key_essentials.minlen = (uint16_t)actor.keylen_min;
   assert(actor.keylen_max <= UINT32_MAX);
@@ -207,7 +217,7 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
       (uint32_t)mdbx_limits_keysize_max(actor.pagesize, key_essentials.flags));
 
   value_essentials.flags =
-      actor.table_flags & (MDBX_INTEGERDUP | MDBX_REVERSEDUP);
+      actor.table_flags & uint16_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP);
   assert(actor.datalen_min <= UINT16_MAX);
   value_essentials.minlen = (uint16_t)actor.datalen_min;
   assert(actor.datalen_max <= UINT32_MAX);
@@ -305,10 +315,17 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,
                               result &out) {
-  static_assert((essentials::prng_fill_flag &
-                 (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
-                  MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0,
-                "WTF?");
+#if defined(_MSC_VER) && _MSC_VER < 1900
+  assert((essentials::prng_fill_flag &
+          unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
+                   MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0);
+#else
+  static_assert(
+      (essentials::prng_fill_flag &
+       unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
+                MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0,
+      "WTF?");
+#endif
   out.value.iov_base = out.bytes;
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
@@ -317,7 +334,7 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
       out.u64 = serial;
     else
       out.u32 = (uint32_t)serial;
-  } else if (params.flags & (MDBX_REVERSEKEY | MDBX_REVERSEDUP)) {
+  } else if (params.flags & unsigned(MDBX_REVERSEKEY | MDBX_REVERSEDUP)) {
     if (out.value.iov_len > 8) {
       if (params.flags & essentials::prng_fill_flag) {
         uint64_t state = serial ^ UINT64_C(0x41803711c9b75f19);

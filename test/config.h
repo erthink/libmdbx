@@ -79,8 +79,22 @@ struct option_verb {
   unsigned mask;
 };
 
+template <typename MASK>
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
-                  unsigned &mask, const option_verb *verbs);
+                  MASK &mask, const option_verb *verbs) {
+  static_assert(sizeof(MASK) <= sizeof(unsigned), "WTF?");
+  unsigned u = unsigned(mask);
+  if (parse_option<unsigned>(argc, argv, narg, option, u, verbs)) {
+    mask = MASK(u);
+    return true;
+  }
+  return false;
+}
+
+template <>
+bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
+                            const char *option, unsigned &mask,
+                            const option_verb *verbs);
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,
                   uint64_t &value, const scale_mode scale,
@@ -236,8 +250,8 @@ struct keygen_params_pod {
 };
 
 struct actor_params_pod {
-  unsigned mode_flags{0};
-  unsigned table_flags{0};
+  MDBX_env_flags_t mode_flags{MDBX_ENV_DEFAULTS};
+  MDBX_db_flags_t table_flags{MDBX_DB_DEFAULTS};
   intptr_t size_lower{0};
   intptr_t size_now{0};
   intptr_t size_upper{0};

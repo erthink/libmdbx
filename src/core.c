@@ -9254,7 +9254,7 @@ int __cold mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
 }
 
 int __cold mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
-  if (unlikely(dbs > MAX_DBI))
+  if (unlikely(dbs > MDBX_MAX_DBI))
     return MDBX_EINVAL;
 
   if (unlikely(!env))
@@ -10027,26 +10027,6 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
              ? MDBX_RESULT_FALSE
              : MDBX_RESULT_TRUE;
 }
-
-/* Only a subset of the mdbx_env flags can be changed
- * at runtime. Changing other flags requires closing the
- * environment and re-opening it with the new flags. */
-#define ENV_CHANGEABLE_FLAGS                                                   \
-  (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_MAPASYNC | MDBX_NOMEMINIT |       \
-   MDBX_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE)
-#define ENV_CHANGELESS_FLAGS                                                   \
-  (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOTLS | MDBX_NORDAHEAD | \
-   MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
-#define ENV_USABLE_FLAGS (ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS)
-
-#if ENV_INTERNAL_FLAGS & ENV_USABLE_FLAGS
-#error "Oops, some flags overlapped or wrong"
-#endif
-
-#if (MDBX_ACCEDE | MDBX_CREATE) != ((DB_USABLE_FLAGS | DB_INTERNAL_FLAGS) &    \
-                                    (ENV_USABLE_FLAGS | ENV_INTERNAL_FLAGS))
-#error "Oops, some flags overlapped or wrong"
-#endif
 
 /* Merge flags and avoid false MDBX_UTTERLY_NOSYNC */
 static uint32_t merge_flags(const uint32_t a, const uint32_t b) {

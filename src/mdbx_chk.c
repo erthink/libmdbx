@@ -77,7 +77,8 @@ struct {
   short *pagemap;
   uint64_t total_payload_bytes;
   uint64_t pgcount;
-  walk_dbi_t dbi[MAX_DBI + CORE_DBS + /* account pseudo-entry for meta */ 1];
+  walk_dbi_t
+      dbi[MDBX_MAX_DBI + CORE_DBS + /* account pseudo-entry for meta */ 1];
 } walk;
 
 #define dbi_free walk.dbi[FREE_DBI]
@@ -1032,7 +1033,7 @@ int main(int argc, char *argv[]) {
     return rc < 0 ? EXIT_FAILURE_MDB : EXIT_FAILURE_SYS;
   }
 
-  rc = mdbx_env_set_maxdbs(env, MAX_DBI);
+  rc = mdbx_env_set_maxdbs(env, MDBX_MAX_DBI);
   if (rc) {
     error("mdbx_env_set_maxdbs failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;

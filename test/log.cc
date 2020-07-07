@@ -37,8 +37,8 @@ void __noreturn failure_perror(const char *what, int errnum) {
 
 //-----------------------------------------------------------------------------
 
-static void mdbx_logger(int priority, const char *function, int line,
-                        const char *msg, va_list args) {
+static void mdbx_logger(MDBX_log_level_t priority, const char *function,
+                        int line, const char *msg, va_list args) {
   if (!function)
     function = "unknown";
 
@@ -60,7 +60,7 @@ static FILE *last;
 
 void setlevel(loglevel priority) {
   level = priority;
-  int rc = mdbx_setup_debug(priority,
+  int rc = mdbx_setup_debug(MDBX_log_level_t(priority),
                             MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER,
                             mdbx_logger);
   log_trace("set mdbx debug-opts: 0x%02x", rc);
