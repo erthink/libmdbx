@@ -611,15 +611,17 @@ typedef pthread_t mdbx_tid_t;
 #define __has_attribute(x) (0)
 #endif /* __has_attribute */
 
-#ifndef __deprecated
-#if defined(__GNUC__) || __has_attribute(__deprecated__)
-#define __deprecated __attribute__((__deprecated__))
+#ifndef MDBX_DEPRECATED
+#ifdef __deprecated
+#define MDBX_DEPRECATED __deprecated
+#elif defined(__GNUC__) || __has_attribute(__deprecated__)
+#define MDBX_DEPRECATED __attribute__((__deprecated__))
 #elif defined(_MSC_VER)
-#define __deprecated __declspec(deprecated)
+#define MDBX_DEPRECATED __declspec(deprecated)
 #else
-#define __deprecated
+#define MDBX_DEPRECATED
 #endif
-#endif /* __deprecated */
+#endif /* MDBX_DEPRECATED */
 
 #ifndef __dll_export
 #if defined(_WIN32) || defined(__CYGWIN__)
@@ -1468,7 +1470,7 @@ typedef enum MDBX_cursor_op {
 
 /* MDBX_MAP_RESIZED is deprecated.
  * Please review your code to use MDBX_UNABLE_EXTEND_MAPSIZE instead. */
-static __inline int __deprecated MDBX_MAP_RESIZED() {
+MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED() {
   return MDBX_UNABLE_EXTEND_MAPSIZE;
 }
 #define MDBX_MAP_RESIZED MDBX_MAP_RESIZED()
@@ -1729,8 +1731,8 @@ typedef struct MDBX_stat {
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                                  MDBX_stat *stat, size_t bytes);
-__deprecated LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
-                                           size_t bytes);
+MDBX_DEPRECATED LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
+                                              size_t bytes);
 
 /* Information about the environment */
 typedef struct MDBX_envinfo {
@@ -1803,8 +1805,8 @@ typedef struct MDBX_envinfo {
  * Returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
                                  MDBX_envinfo *info, size_t bytes);
-__deprecated LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
-                                           size_t bytes);
+MDBX_DEPRECATED LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
+                                              size_t bytes);
 
 /* Flush the environment data buffers to disk.
  *
@@ -2163,7 +2165,8 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
                                       intptr_t growth_step,
                                       intptr_t shrink_threshold,
                                       intptr_t pagesize);
-__deprecated LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env, size_t size);
+MDBX_DEPRECATED LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env,
+                                                     size_t size);
 
 /* Find out whether to use readahead or not, based on the given database size
  * and the amount of available memory.
@@ -2266,7 +2269,7 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
  * or -1 if something is wrong. */
 LIBMDBX_API int mdbx_env_get_maxkeysize_ex(const MDBX_env *env, unsigned flags);
 LIBMDBX_API int mdbx_env_get_maxvalsize_ex(const MDBX_env *env, unsigned flags);
-__deprecated LIBMDBX_API int mdbx_env_get_maxkeysize(const MDBX_env *env);
+MDBX_DEPRECATED LIBMDBX_API int mdbx_env_get_maxkeysize(const MDBX_env *env);
 
 /* Set application information associated with the MDBX_env.
  *
@@ -3447,8 +3450,8 @@ LIBMDBX_API int mdbx_reader_check(MDBX_env *env, int *dead);
  *
  * Returns Number of transactions committed after the given was started for
  * read, or negative value on failure. */
-__deprecated LIBMDBX_API int mdbx_txn_straggler(const MDBX_txn *txn,
-                                                int *percent);
+MDBX_DEPRECATED LIBMDBX_API int mdbx_txn_straggler(const MDBX_txn *txn,
+                                                   int *percent);
 
 /* A lack-of-space callback function to resolve issues with a laggard readers.
  *
