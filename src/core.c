@@ -10040,12 +10040,12 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #define ENV_USABLE_FLAGS (ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS)
 
 #if ENV_INTERNAL_FLAGS & ENV_USABLE_FLAGS
-#error "Opps, some flags overlapped or wrong"
+#error "Oops, some flags overlapped or wrong"
 #endif
 
 #if (MDBX_ACCEDE | MDBX_CREATE) != ((DB_USABLE_FLAGS | DB_INTERNAL_FLAGS) &    \
                                     (ENV_USABLE_FLAGS | ENV_INTERNAL_FLAGS))
-#error "Opps, some flags overlapped or wrong"
+#error "Oops, some flags overlapped or wrong"
 #endif
 
 /* Merge flags and avoid false MDBX_UTTERLY_NOSYNC */

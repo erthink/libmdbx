@@ -197,7 +197,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #define CORE_DBS 2
 #define MAX_DBI (INT16_MAX - CORE_DBS)
 #if MAX_DBI != MDBX_MAX_DBI
-#error "Opps, MAX_DBI != MDBX_MAX_DBI"
+#error "Oops, MAX_DBI != MDBX_MAX_DBI"
 #endif
 
 /* Number of meta pages - also hardcoded elsewhere */
@@ -740,7 +740,7 @@ struct MDBX_txn {
 
 #if (TXN_FLAGS & MDBX_TXN_BEGIN_FLAGS) ||                                      \
     ((MDBX_TXN_BEGIN_FLAGS | TXN_FLAGS) & MDBX_SHRINK_ALLOWED)
-#error "Opps, some flags overlapped or wrong"
+#error "Oops, some flags overlapped or wrong"
 #endif
 
   unsigned mt_flags;
@@ -1315,10 +1315,10 @@ typedef struct MDBX_node {
 #define DB_INTERNAL_FLAGS DB_VALID
 
 #if DB_INTERNAL_FLAGS & DB_USABLE_FLAGS
-#error "Opps, some flags overlapped or wrong"
+#error "Oops, some flags overlapped or wrong"
 #endif
 #if DB_PERSISTENT_FLAGS & ~DB_USABLE_FLAGS
-#error "Opps, some flags overlapped or wrong"
+#error "Oops, some flags overlapped or wrong"
 #endif
 
 /* max number of pages to commit in one writev() call */

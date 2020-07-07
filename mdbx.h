@@ -1554,7 +1554,7 @@ MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED() {
  * mdbx_strerror_r()  - is thread-safe since uses user-supplied buffer where
  *                      appropriate. The returned string must NOT be modified
  *                      by the application, since it may be pointer to internal
- *                      constatn string. However, there is no restriction if the
+ *                      constant string. However, there is no restriction if the
  *                      returned string points to the supplied buffer.
  *
  * [in] err  The error code.

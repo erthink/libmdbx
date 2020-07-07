@@ -26,7 +26,7 @@
 #include <atomic>
 
 #ifndef MDBX_LOCKING
-#error "Opps, MDBX_LOCKING is undefined!"
+#error "Oops, MDBX_LOCKING is undefined!"
 #endif
 
 #if defined(__APPLE__) && (MDBX_LOCKING == MDBX_LOCKING_POSIX2001 ||           \
