@@ -2678,9 +2678,9 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  *                         i.e. the passed flags is different with which the
  *                         database was created, or the database was already
  *                         opened with a different comparison function(s). */
-LIBMDBX_API int mdbx_dbi_open_ex(MDBX_txn *txn, const char *name,
-                                 unsigned flags, MDBX_dbi *dbi,
-                                 MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
+MDBX_DEPRECATED LIBMDBX_API int
+mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, unsigned flags, MDBX_dbi *dbi,
+                 MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name, unsigned flags,
                               MDBX_dbi *dbi);
 

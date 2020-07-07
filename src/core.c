@@ -16452,9 +16452,9 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
   return MDBX_SUCCESS;
 }
 
-int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
-                     MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
-                     MDBX_cmp_func *datacmp) {
+static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
+                    MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
+                    MDBX_cmp_func *datacmp) {
   int rc = MDBX_EINVAL;
   if (unlikely(!dbi))
     return rc;
@@ -16673,7 +16673,13 @@ int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name, unsigned user_flags,
 
 int mdbx_dbi_open(MDBX_txn *txn, const char *table_name, unsigned table_flags,
                   MDBX_dbi *dbi) {
-  return mdbx_dbi_open_ex(txn, table_name, table_flags, dbi, nullptr, nullptr);
+  return dbi_open(txn, table_name, table_flags, dbi, nullptr, nullptr);
+}
+
+int mdbx_dbi_open_ex(MDBX_txn *txn, const char *table_name,
+                     unsigned table_flags, MDBX_dbi *dbi, MDBX_cmp_func *keycmp,
+                     MDBX_cmp_func *datacmp) {
+  return dbi_open(txn, table_name, table_flags, dbi, keycmp, datacmp);
 }
 
 int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
