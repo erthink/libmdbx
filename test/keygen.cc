@@ -198,13 +198,13 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
 void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
-#if defined(_MSC_VER) && _MSC_VER < 1900
-  assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
-                  MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX);
-#else
+#if !defined(_MSC_VER) || _MSC_VER > 1900
   static_assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
                          MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX,
                 "WTF?");
+#else
+  assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
+                  MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX);
 #endif
   key_essentials.flags =
       actor.table_flags &
@@ -315,16 +315,16 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,
                               result &out) {
-#if defined(_MSC_VER) && _MSC_VER < 1900
-  assert((essentials::prng_fill_flag &
-          unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
-                   MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0);
-#else
+#if !defined(_MSC_VER) || _MSC_VER > 1900
   static_assert(
       (essentials::prng_fill_flag &
        unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
                 MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0,
       "WTF?");
+#else
+  assert((essentials::prng_fill_flag &
+          unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
+                   MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0);
 #endif
   out.value.iov_base = out.bytes;
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
