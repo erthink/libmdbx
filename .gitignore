@@ -29,7 +29,7 @@ test/tmp.db-lck
 tmp.db
 tmp.db-lck
 valgrind.*
-src/elements/version.c
-src/elements/config.h
+src/version.c
+src/config.h
 dist/
 *.tar*
