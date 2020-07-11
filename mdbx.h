@@ -1,536 +1,538 @@
-/**** BRIEFLY ******************************************************************
- *
- * libmdbx is superior to LMDB (https://bit.ly/26ts7tL) in terms of features
- * and reliability, not inferior in performance. In comparison to LMDB, libmdbx
- * makes many things just work perfectly, not silently and catastrophically
- * break down. libmdbx supports Linux, Windows, MacOS, FreeBSD, DragonFly,
- * Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems
- * compliant with POSIX.1-2008.
- *
- * Look below for API description, for other information (build, embedding and
- * amalgamation, improvements over LMDB, benchmarking, etc) please refer to
- * README.md at https://abf.io/erthink/libmdbx.
- *
- *  ---
- *
- * The next version is under active non-public development and will be released
- * as MithrilDB and libmithrildb for libraries & packages. Admittedly mythical
- * Mithril is resembling silver but being stronger and lighter than steel.
- * Therefore MithrilDB is rightly relevant name.
- *
- * MithrilDB will be radically different from libmdbx by the new database format
- * and API based on C++17, as well as the Apache 2.0 License. The goal of this
- * revolution is to provide a clearer and robust API, add more features and new
- * valuable properties of database.
- *
- * The Future will (be) Positive. Всё будет хорошо.
- *
- *
- **** INTRODUCTION *************************************************************
- *
- *   // For the most part, this section is a copy of the corresponding text
- *   // from LMDB description, but with some edits reflecting the improvements
- *   // and enhancements were made in MDBX.
- *
- * MDBX is a Btree-based database management library modeled loosely on the
- * BerkeleyDB API, but much simplified. The entire database (aka "environment")
- * is exposed in a memory map, and all data fetches return data directly from
- * the mapped memory, so no malloc's or memcpy's occur during data fetches.
- * As such, the library is extremely simple because it requires no page caching
- * layer of its own, and it is extremely high performance and memory-efficient.
- * It is also fully transactional with full ACID semantics, and when the memory
- * map is read-only, the database integrity cannot be corrupted by stray pointer
- * writes from application code.
- *
- * The library is fully thread-aware and supports concurrent read/write access
- * from multiple processes and threads. Data pages use a copy-on-write strategy
- * so no active data pages are ever overwritten, which also provides resistance
- * to corruption and eliminates the need of any special recovery procedures
- * after a system crash. Writes are fully serialized; only one write transaction
- * may be active at a time, which guarantees that writers can never deadlock.
- * The database structure is multi-versioned so readers run with no locks;
- * writers cannot block readers, and readers don't block writers.
- *
- * Unlike other well-known database mechanisms which use either write-ahead
- * transaction logs or append-only data writes, MDBX requires no maintenance
- * during operation. Both write-ahead loggers and append-only databases require
- * periodic checkpointing and/or compaction of their log or database files
- * otherwise they grow without bound. MDBX tracks retired/freed pages within the
- * database and re-uses them for new write operations, so the database size does
- * not grow without bound in normal use. It is worth noting that the "next"
- * version libmdbx (MithrilDB) will solve this problem.
- *
- * The memory map can be used as a read-only or read-write map. It is read-only
- * by default as this provides total immunity to corruption. Using read-write
- * mode offers much higher write performance, but adds the possibility for stray
- * application writes thru pointers to silently corrupt the database.
- * Of course if your application code is known to be bug-free (...) then this is
- * not an issue.
- *
- * If this is your first time using a transactional embedded key-value store,
- * you may find the "GETTING STARTED" section below to be helpful.
- *
- *
- **** GETTING STARTED **********************************************************
- *
- *   // This section is based on Bert Hubert's intro "LMDB Semantics", with
- *   // edits reflecting the improvements and enhancements were made in MDBX.
- *   // See https://bit.ly/2maejGY for Bert Hubert's original.
- *
- * Everything starts with an environment, created by mdbx_env_create().
- * Once created, this environment must also be opened with mdbx_env_open(),
- * and after use be closed by mdbx_env_close(). At that a non-zero value of the
- * last argument "mode" supposes MDBX will create database and directory if ones
- * does not exist. In this case the non-zero "mode" argument specifies the file
- * mode bits be applied when a new files are created by open() function.
- *
- * Within that directory, a lock file (aka LCK-file) and a storage file (aka
- * DXB-file) will be generated. If you don't want to use a directory, you can
- * pass the MDBX_NOSUBDIR option, in which case the path you provided is used
- * directly as the DXB-file, and another file with a "-lck" suffix added
- * will be used for the LCK-file.
- *
- * Once the environment is open, a transaction can be created within it using
- * mdbx_txn_begin(). Transactions may be read-write or read-only, and read-write
- * transactions may be nested. A transaction must only be used by one thread at
- * a time. Transactions are always required, even for read-only access. The
- * transaction provides a consistent view of the data.
- *
- * Once a transaction has been created, a database (i.e. key-value space inside
- * the environment) can be opened within it using mdbx_dbi_open(). If only one
- * database will ever be used in the environment, a NULL can be passed as the
- * database name. For named databases, the MDBX_CREATE flag must be used to
- * create the database if it doesn't already exist. Also, mdbx_env_set_maxdbs()
- * must be called after mdbx_env_create() and before mdbx_env_open() to set the
- * maximum number of named databases you want to support.
- *
- * NOTE: a single transaction can open multiple databases. Generally databases
- *       should only be opened once, by the first transaction in the process.
- *
- * Within a transaction, mdbx_get() and mdbx_put() can store single key-value
- * pairs if that is all you need to do (but see CURSORS below if you want to do
- * more).
- *
- * A key-value pair is expressed as two MDBX_val structures. This struct that is
- * exactly similar to POSIX's struct iovec and has two fields, iov_len and
- * iov_base. The data is a void pointer to an array of iov_len bytes.
- * (!) The notable difference between MDBX and LMDB is that MDBX support zero
- * length keys.
- *
- * Because MDBX is very efficient (and usually zero-copy), the data returned in
- * an MDBX_val structure may be memory-mapped straight from disk. In other words
- * look but do not touch (or free() for that matter). Once a transaction is
- * closed, the values can no longer be used, so make a copy if you need to keep
- * them after that.
- *
- *
- * CURSORS -- To do more powerful things, we must use a cursor.
- *
- * Within the transaction, a cursor can be created with mdbx_cursor_open().
- * With this cursor we can store/retrieve/delete (multiple) values using
- * mdbx_cursor_get(), mdbx_cursor_put(), and mdbx_cursor_del().
- *
- * mdbx_cursor_get() positions itself depending on the cursor operation
- * requested, and for some operations, on the supplied key. For example, to list
- * all key-value pairs in a database, use operation MDBX_FIRST for the first
- * call to mdbx_cursor_get(), and MDBX_NEXT on subsequent calls, until the end
- * is hit.
- *
- * To retrieve all keys starting from a specified key value, use MDBX_SET. For
- * more cursor operations, see the API description below.
- *
- * When using mdbx_cursor_put(), either the function will position the cursor
- * for you based on the key, or you can use operation MDBX_CURRENT to use the
- * current position of the cursor. NOTE that key must then match the current
- * position's key.
- *
- *
- * SUMMARIZING THE OPENING
- *
- * So we have a cursor in a transaction which opened a database in an
- * environment which is opened from a filesystem after it was separately
- * created.
- *
- * Or, we create an environment, open it from a filesystem, create a transaction
- * within it, open a database within that transaction, and create a cursor
- * within all of the above.
- *
- * Got it?
- *
- *
- * THREADS AND PROCESSES
- *
- * Do not have open an database twice in the same process at the same time, MDBX
- * will track and prevent this. Instead, share the MDBX environment that has
- * opened the file across all threads. The reason for this is:
- *  - When the "Open file description" locks (aka OFD-locks) are not available,
- *    MDBX uses POSIX locks on files, and these locks have issues if one process
- *    opens a file multiple times.
- *  - If a single process opens the same environment multiple times, closing it
- *    once will remove all the locks held on it, and the other instances will be
- *    vulnerable to corruption from other processes.
- *  + For compatibility with LMDB which allows multi-opening, MDBX can be
- *    configured at runtime by mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)
- *    prior to calling other MDBX funcitons. In this way MDBX will track
- *    databases opening, detect multi-opening cases and then recover POSIX file
- *    locks as necessary. However, lock recovery can cause unexpected pauses,
- *    such as when another process opened the database in exclusive mode before
- *    the lock was restored - we have to wait until such a process releases the
- *    database, and so on.
- *
- * Do not use opened MDBX environment(s) after fork() in a child process(es),
- * MDBX will check and prevent this at critical points. Instead, ensure there is
- * no open MDBX-instance(s) during fork(), or atleast close it immediately after
- * fork() in the child process and reopen if required - for instance by using
- * pthread_atfork(). The reason for this is:
- *  - For competitive consistent reading, MDBX assigns a slot in the shared
- *    table for each process that interacts with the database. This slot is
- *    populated with process attributes, including the PID.
- *  - After fork(), in order to remain connected to a database, the child
- *    process must have its own such "slot", which can't be assigned in any
- *    simple and robust way another than the regular.
- *  - A write transaction from a parent process cannot continue in a child
- *    process for obvious reasons.
- *  - Moreover, in a multithreaded process at the fork() moment any number of
- *    threads could run in critical and/or intermediate sections of MDBX code
- *    with interaction and/or racing conditions with threads from other
- *    process(es). For instance: shrinking a database or copying it to a pipe,
- *    opening or closing environment, begining or finishing a transaction,
- *    and so on.
- *  = Therefore, any solution other than simply close database (and reopen if
- *    necessary) in a child process would be both extreme complicated and so
- *    fragile.
- *
- * Do not start more than one transaction for a one thread. If you think about
- * this, it's really strange to do something with two data snapshots at once,
- * which may be different. MDBX checks and preventing this by returning
- * corresponding error code (MDBX_TXN_OVERLAPPING, MDBX_BAD_RSLOT, MDBX_BUSY)
- * unless you using MDBX_NOTLS option on the environment. Nonetheless, with the
- * MDBX_NOTLS option, you must know exactly what you are doing, otherwise you
- * will get deadlocks or reading an alien data.
- *
- * Also note that a transaction is tied to one thread by default using Thread
- * Local Storage. If you want to pass read-only transactions across threads,
- * you can use the MDBX_NOTLS option on the environment. Nevertheless, a write
- * transaction entirely should only be used in one thread from start to finish.
- * MDBX checks this in a reasonable manner and return the MDBX_THREAD_MISMATCH
- * error in rules violation.
- *
- *
- * TRANSACTIONS, ROLLBACKS, etc.
- *
- * To actually get anything done, a transaction must be committed using
- * mdbx_txn_commit(). Alternatively, all of a transaction's operations
- * can be discarded using mdbx_txn_abort().
- *
- * (!) An important difference between MDBX and LMDB is that MDBX required that
- * any opened cursors can be reused and must be freed explicitly, regardless
- * ones was opened in a read-only or write transaction. The REASON for this is
- * eliminates ambiguity which helps to avoid errors such as: use-after-free,
- * double-free, i.e. memory corruption and segfaults.
- *
- * For read-only transactions, obviously there is nothing to commit to storage.
- * (!) An another notable difference between MDBX and LMDB is that MDBX make
- * handles opened for existing databases immediately available for other
- * transactions, regardless this transaction will be aborted or reset. The
- * REASON for this is to avoiding the requirement for multiple opening a same
- * handles in concurrent read transactions, and tracking of such open but hidden
- * handles until the completion of read transactions which opened them.
- *
- * In addition, as long as a transaction is open, a consistent view of the
- * database is kept alive, which requires storage. A read-only transaction that
- * no longer requires this consistent view should be terminated (committed or
- * aborted) when the view is no longer needed (but see below for an
- * optimization).
- *
- * There can be multiple simultaneously active read-only transactions but only
- * one that can write. Once a single read-write transaction is opened, all
- * further attempts to begin one will block until the first one is committed or
- * aborted. This has no effect on read-only transactions, however, and they may
- * continue to be opened at any time.
- *
- *
- * DUPLICATE KEYS
- *
- * mdbx_get() and mdbx_put() respectively have no and only some support or
- * multiple key-value pairs with identical keys. If there are multiple values
- * for a key, mdbx_get() will only return the first value.
- *
- * When multiple values for one key are required, pass the MDBX_DUPSORT flag to
- * mdbx_dbi_open(). In an MDBX_DUPSORT database, by default mdbx_put() will not
- * replace the value for a key if the key existed already. Instead it will add
- * the new value to the key. In addition, mdbx_del() will pay attention to the
- * value field too, allowing for specific values of a key to be deleted.
- *
- * Finally, additional cursor operations become available for traversing through
- * and retrieving duplicate values.
- *
- *
- * SOME OPTIMIZATION
- *
- * If you frequently begin and abort read-only transactions, as an optimization,
- * it is possible to only reset and renew a transaction.
- *
- * mdbx_txn_reset() releases any old copies of data kept around for a read-only
- * transaction. To reuse this reset transaction, call mdbx_txn_renew() on it.
- * Any cursors in this transaction can also be renewed using mdbx_cursor_renew()
- * or freed by mdbx_cursor_close().
- *
- * To permanently free a transaction, reset or not, use mdbx_txn_abort().
- *
- *
- * CLEANING UP
- *
- * Any created cursors must be closed using mdbx_cursor_close(). It is advisable
- * to repeat:
- * (!) An important difference between MDBX and LMDB is that MDBX required that
- * any opened cursors can be reused and must be freed explicitly, regardless
- * ones was opened in a read-only or write transaction. The REASON for this is
- * eliminates ambiguity which helps to avoid errors such as: use-after-free,
- * double-free, i.e. memory corruption and segfaults.
- *
- * It is very rarely necessary to close a database handle, and in general they
- * should just be left open. When you close a handle, it immediately becomes
- * unavailable for all transactions in the environment. Therefore, you should
- * avoid closing the handle while at least one transaction is using it.
- *
- *
- * THE FULL API
- *
- *   The full MDBX documentation lists further details below,
- *   like how to:
- *
- *     - configure database size and automatic size management
- *     - drop and clean a database
- *     - detect and report errors
- *     - optimize (bulk) loading speed
- *     - (temporarily) reduce robustness to gain even more speed
- *     - gather statistics about the database
- *     - estimate size of range query result
- *     - double perfomance by LIFO reclaiming on storages with write-back
- *     - use sequences and canary markers
- *     - use lack-of-space callback (aka OOM-KICK)
- *     - use exclusive mode
- *     - define custom sort orders (but this is recommended to be avoided)
- *
- *
- **** RESTRICTIONS & CAVEATS ***************************************************
- *    in addition to those listed for some functions.
- *
- *  - Troubleshooting the LCK-file.
- *      1. A broken LCK-file can cause sync issues, including appearance of
- *         wrong/inconsistent data for readers. When database opened in the
- *         cooperative read-write mode the LCK-file requires to be mapped to
- *         memory in read-write access. In this case it is always possible for
- *         stray/malfunctioned application could writes thru pointers to
- *         silently corrupt the LCK-file.
- *
- *         Unfortunately, there is no any portable way to prevent such
- *         corruption, since the LCK-file is updated concurrently by
- *         multiple processes in a lock-free manner and any locking is
- *         unwise due to a large overhead.
- *
- *         The "next" version of libmdbx (MithrilDB) will solve this issue.
- *
- *         Workaround: Just make all programs using the database close it;
- *                     the LCK-file is always reset on first open.
- *
- *      2. Stale reader transactions left behind by an aborted program cause
- *         further writes to grow the database quickly, and stale locks can
- *         block further operation.
- *         MDBX checks for stale readers while opening environment and before
- *         growth the database. But in some cases, this may not be enough.
- *
- *         Workaround: Check for stale readers periodically, using the
- *                     mdbx_reader_check() function or the mdbx_stat tool.
- *
- *      3. Stale writers will be cleared automatically by MDBX on supprted
- *         platforms. But this is platform-specific, especially of
- *         implementation of shared POSIX-mutexes and support for robust
- *         mutexes. For instance there are no known issues on Linux, OSX,
- *         Windows and FreeBSD.
- *
- *         Workaround: Otherwise just make all programs using the database
- *                     close it; the LCK-file is always reset on first open
- *                     of the environment.
- *
- *  - Do not use MDBX databases on remote filesystems, even between processes
- *    on the same host. This breaks file locks on some platforms, possibly
- *    memory map sync, and certainly sync between programs on different hosts.
- *
- *    On the other hand, MDBX support the exclusive database operation over
- *    a network, and cooperative read-only access to the database placed on
- *    a read-only network shares.
- *
- *  - Do not use opened MDBX_env instance(s) in a child processes after fork().
- *    It would be insane to call fork() and any MDBX-functions simultaneously
- *    from multiple threads. The best way is to prevent the presence of open
- *    MDBX-instances during fork().
- *
- *    The MDBX_TXN_CHECKPID build-time option, which is ON by default on
- *    non-Windows platforms (i.e. where fork() is available), enables PID
- *    checking at a few critical points. But this does not give any guarantees,
- *    but only allows you to detect such errors a little sooner. Depending on
- *    the platform, you should expect an application crash and/or database
- *    corruption in such cases.
- *
- *    On the other hand, MDBX allow calling mdbx_close_env() in such cases to
- *    release resources, but no more and in general this is a wrong way.
- *
- *  - There is no pure read-only mode in a normal explicitly way, since
- *    readers need write access to LCK-file to be ones visible for writer.
- *    MDBX always tries to open/create LCK-file for read-write, but switches
- *    to without-LCK mode on appropriate errors (EROFS, EACCESS, EPERM)
- *    if the read-only mode was requested by the MDBX_RDONLY flag which is
- *    described below.
- *
- *    The "next" version of libmdbx (MithrilDB) will solve this issue.
- *
- *  - A thread can only use one transaction at a time, plus any nested
- *    read-write transactions in the non-writemap mode. Each transaction
- *    belongs to one thread. The MDBX_NOTLS flag changes this for read-only
- *    transactions. See below.
- *
- *    Do not start more than one transaction for a one thread. If you think
- *    about this, it's really strange to do something with two data snapshots
- *    at once, which may be different. MDBX checks and preventing this by
- *    returning corresponding error code (MDBX_TXN_OVERLAPPING, MDBX_BAD_RSLOT,
- *    MDBX_BUSY) unless you using MDBX_NOTLS option on the environment.
- *    Nonetheless, with the MDBX_NOTLS option, you must know exactly what you
- *    are doing, otherwise you will get deadlocks or reading an alien data.
- *
- *  - Do not have open an MDBX database twice in the same process at the same
- *    time. By default MDBX prevent this in most cases by tracking databases
- *    opening and return MDBX_BUSY if anyone LCK-file is already open.
- *
- *    The reason for this is that when the "Open file description" locks (aka
- *    OFD-locks) are not available, MDBX uses POSIX locks on files, and these
- *    locks have issues if one process opens a file multiple times. If a single
- *    process opens the same environment multiple times, closing it once will
- *    remove all the locks held on it, and the other instances will be
- *    vulnerable to corruption from other processes.
- *
- *    For compatibility with LMDB which allows multi-opening, MDBX can be
- *    configured at runtime by mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)
- *    prior to calling other MDBX funcitons. In this way MDBX will track
- *    databases opening, detect multi-opening cases and then recover POSIX file
- *    locks as necessary. However, lock recovery can cause unexpected pauses,
- *    such as when another process opened the database in exclusive mode before
- *    the lock was restored - we have to wait until such a process releases the
- *    database, and so on.
- *
- *  - Avoid long-lived read transactions, especially in the scenarios with a
- *    high rate of write transactions. Long-lived read transactions prevents
- *    recycling pages retired/freed by newer write transactions, thus the
- *    database can grow quickly.
- *
- *    Understanding the problem of long-lived read transactions requires some
- *    explanation, but can be difficult for quick perception. So is is
- *    reasonable to simplify this as follows:
- *      1. Garbage collection problem exists in all databases one way or
- *         another, e.g. VACUUM in PostgreSQL. But in MDBX it's even more
- *         discernible because of high transaction rate and intentional
- *         internals simplification in favor of performance.
- *
- *      2. MDBX employs Multiversion concurrency control on the Copy-on-Write
- *         basis, that allows multiple readers runs in parallel with a write
- *         transaction without blocking. An each write transaction needs free
- *         pages to put the changed data, that pages will be placed in the new
- *         b-tree snapshot at commit. MDBX efficiently recycling pages from
- *         previous created unused snapshots, BUT this is impossible if anyone
- *         a read transaction use such snapshot.
- *
- *      3. Thus massive altering of data during a parallel long read operation
- *         will increase the process's work set and may exhaust entire free
- *         database space.
- *
- *    A good example of long readers is a hot backup to the slow destination
- *    or debugging of a client application while retaining an active read
- *    transaction. LMDB this results in MAP_FULL error and subsequent write
- *    performance degradation.
- *
- *    MDBX mostly solve "long-lived" readers issue by the lack-of-space callback
- *    which allow to aborts long readers, and by the MDBX_LIFORECLAIM mode which
- *    addresses subsequent performance degradation.
- *    The "next" version of libmdbx (MithrilDB) will completely solve this.
- *
- *  - Avoid suspending a process with active transactions. These would then be
- *    "long-lived" as above.
- *
- *    The "next" version of libmdbx (MithrilDB) will solve this issue.
- *
- *  - Avoid aborting a process with an active read-only transaction in scenaries
- *    with high rate of write transactions. The transaction becomes "long-lived"
- *    as above until a check for stale readers is performed or the LCK-file is
- *    reset, since the process may not remove it from the lockfile. This does
- *    not apply to write transactions if the system clears stale writers, see
- *    above.
- *
- *  - An MDBX database configuration will often reserve considerable unused
- *    memory address space and maybe file size for future growth. This does
- *    not use actual memory or disk space, but users may need to understand
- *    the difference so they won't be scared off.
- *
- *  - The Write Amplification Factor.
- *    TBD.
- *
- **** LICENSE AND COPYRUSTING **************************************************
- *
- * Copyright 2015-2020 Leonid Yuriev <leo@yuriev.ru>
- * and other libmdbx authors: please see AUTHORS file.
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- *
- *  ---
- *
- * This code is derived from "LMDB engine" written by
- * Howard Chu (Symas Corporation), which itself derived from btree.c
- * written by Martin Hedenfalk.
- *
- *  ---
- *
- * Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted only as authorized by the OpenLDAP
- * Public License.
- *
- * A copy of this license is available in the file LICENSE in the
- * top-level directory of the distribution or, alternatively, at
- * <http://www.OpenLDAP.org/license.html>.
- *
- *  ---
- *
- * Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
- *
- * Permission to use, copy, modify, and distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- *
- **** ACKNOWLEDGEMENTS *********************************************************
- *
- * Howard Chu (Symas Corporation) - the author of LMDB,
- * from which originated the MDBX in 2015.
- *
- * Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code,
- * which was used for begin development of LMDB.
- *
- ******************************************************************************/
+/*!
+
+\file mdbx.h
+\brief The libmdbx C API header file
+
+\mainpage One of the fastest embeddable key-value ACID database without WAL.
+
+\section overview OVERVIEW
+
+_libmdbx_ is superior to [LMDB](https://bit.ly/26ts7tL) in terms of features
+and reliability, not inferior in performance. In comparison to LMDB, _libmdbx_
+makes many things just work perfectly, not silently and catastrophically
+break down. _libmdbx_ supports Linux, Windows, MacOS, OSX, iOS, Android,
+FreeBSD, DragonFly, Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other
+systems compliant with POSIX.1-2008.
+
+Look below for API description, for other information (build, embedding and
+amalgamation, improvements over LMDB, benchmarking, etc) please refer
+to [README](https://abf.io/erthink/libmdbx/README.md).
+
+
+> The next version is under active non-public development and will be released
+> as _MithrilDB_ and `libmithrildb` for libraries & packages. Admittedly
+> mythical Mithril is resembling silver but being stronger and lighter than
+> steel. Therefore MithrilDB is a rightly relevant name.
+>
+> MithrilDB will be radically different from libmdbx by the new database format
+> and API based on C++17, as well as the Apache 2.0 License. The goal of this
+> revolution is to provide a clearer and robust API, add more features and new
+> valuable properties of database.
+
+\motto The Future will (be) Positive. Всё будет хорошо.
+
+
+\section intro INTRODUCTION
+
+> For the most part, this section is a copy of the corresponding text
+> from LMDB description, but with some edits reflecting the improvements
+> and enhancements were made in MDBX.
+
+MDBX is a Btree-based database management library modeled loosely on the
+BerkeleyDB API, but much simplified. The entire database (aka "environment")
+is exposed in a memory map, and all data fetches return data directly from
+the mapped memory, so no malloc's or memcpy's occur during data fetches.
+As such, the library is extremely simple because it requires no page caching
+layer of its own, and it is extremely high performance and memory-efficient.
+It is also fully transactional with full ACID semantics, and when the memory
+map is read-only, the database integrity cannot be corrupted by stray pointer
+writes from application code.
+
+The library is fully thread-aware and supports concurrent read/write access
+from multiple processes and threads. Data pages use a copy-on-write strategy
+so no active data pages are ever overwritten, which also provides resistance
+to corruption and eliminates the need of any special recovery procedures
+after a system crash. Writes are fully serialized; only one write transaction
+may be active at a time, which guarantees that writers can never deadlock.
+The database structure is multi-versioned so readers run with no locks;
+writers cannot block readers, and readers don't block writers.
+
+Unlike other well-known database mechanisms which use either write-ahead
+transaction logs or append-only data writes, MDBX requires no maintenance
+during operation. Both write-ahead loggers and append-only databases require
+periodic checkpointing and/or compaction of their log or database files
+otherwise they grow without bound. MDBX tracks retired/freed pages within the
+database and re-uses them for new write operations, so the database size does
+not grow without bound in normal use. It is worth noting that the "next"
+version libmdbx (MithrilDB) will solve this problem.
+
+The memory map can be used as a read-only or read-write map. It is read-only
+by default as this provides total immunity to corruption. Using read-write
+mode offers much higher write performance, but adds the possibility for stray
+application writes thru pointers to silently corrupt the database.
+Of course if your application code is known to be bug-free (...) then this is
+not an issue.
+
+If this is your first time using a transactional embedded key-value store,
+you may find the "GETTING STARTED" section below to be helpful.
+
+
+\section start GETTING STARTED
+
+> This section is based on Bert Hubert's intro "LMDB Semantics", with
+> edits reflecting the improvements and enhancements were made in MDBX.
+> See https://bit.ly/2maejGY for Bert Hubert's original.
+
+Everything starts with an environment, created by `mdbx_env_create()`.
+Once created, this environment must also be opened with mdbx_env_open(),
+and after use be closed by `mdbx_env_close()`. At that a non-zero value of the
+last argument "mode" supposes MDBX will create database and directory if ones
+does not exist. In this case the non-zero "mode" argument specifies the file
+mode bits be applied when a new files are created by `open()` function.
+
+Within that directory, a lock file (aka LCK-file) and a storage file (aka
+DXB-file) will be generated. If you don't want to use a directory, you can
+pass the `MDBX_NOSUBDIR` option, in which case the path you provided is used
+directly as the DXB-file, and another file with a "-lck" suffix added
+will be used for the LCK-file.
+
+Once the environment is open, a transaction can be created within it using
+`mdbx_txn_begin()`. Transactions may be read-write or read-only, and read-write
+transactions may be nested. A transaction must only be used by one thread at
+a time. Transactions are always required, even for read-only access. The
+transaction provides a consistent view of the data.
+
+Once a transaction has been created, a database (i.e. key-value space inside
+the environment) can be opened within it using `mdbx_dbi_open()`. If only one
+database will ever be used in the environment, a `NULL` can be passed as the
+database name. For named databases, the `MDBX_CREATE` flag must be used to
+create the database if it doesn't already exist. Also, mdbx_env_set_maxdbs()
+must be called after `mdbx_env_create()` and before `mdbx_env_open()` to set the
+maximum number of named databases you want to support.
+
+\note A single transaction can open multiple databases. Generally databases
+should only be opened once, by the first transaction in the process.
+
+Within a transaction, `mdbx_get()` and `mdbx_put()` can store single key-value
+pairs if that is all you need to do (but see CURSORS below if you want to do
+more).
+
+A key-value pair is expressed as two `MDBX_val` structures. This struct that is
+exactly similar to POSIX's struct iovec and has two fields, iov_len and
+iov_base. The data is a void pointer to an array of iov_len bytes.
+\note The notable difference between MDBX and LMDB is that MDBX support zero
+length keys.
+
+Because MDBX is very efficient (and usually zero-copy), the data returned in
+an MDBX_val structure may be memory-mapped straight from disk. In other words
+look but do not touch (or free() for that matter). Once a transaction is
+closed, the values can no longer be used, so make a copy if you need to keep
+them after that.
+
+\subsection cursors CURSORS
+To do more powerful things, we must use a cursor.
+
+Within the transaction, a cursor can be created with `mdbx_cursor_open()`.
+With this cursor we can store/retrieve/delete (multiple) values using
+`mdbx_cursor_get()`, `mdbx_cursor_put()` and `mdbx_cursor_del()`.
+
+The `mdbx_cursor_get()` positions itself depending on the cursor operation
+requested, and for some operations, on the supplied key. For example, to list
+all key-value pairs in a database, use operation `MDBX_FIRST` for the first
+call to `mdbx_cursor_get()`, and `MDBX_NEXT` on subsequent calls, until the end
+is hit.
+
+To retrieve all keys starting from a specified key value, use `MDBX_SET`. For
+more cursor operations, see the API description below.
+
+When using `mdbx_cursor_put()`, either the function will position the cursor
+for you based on the key, or you can use operation `MDBX_CURRENT` to use the
+current position of the cursor. \note Note that key must then match the current
+position's key.
+
+
+\subsection opening SUMMARIZING THE OPENING
+
+So we have a cursor in a transaction which opened a database in an
+environment which is opened from a filesystem after it was separately
+created.
+
+Or, we create an environment, open it from a filesystem, create a transaction
+within it, open a database within that transaction, and create a cursor
+within all of the above.
+
+Got it?
+
+
+\subsection threads THREADS AND PROCESSES
+
+Do not have open an database twice in the same process at the same time, MDBX
+will track and prevent this. Instead, share the MDBX environment that has
+opened the file across all threads. The reason for this is:
+ - When the "Open file description" locks (aka OFD-locks) are not available,
+   MDBX uses POSIX locks on files, and these locks have issues if one process
+   opens a file multiple times.
+ - If a single process opens the same environment multiple times, closing it
+   once will remove all the locks held on it, and the other instances will be
+   vulnerable to corruption from other processes.
+ + For compatibility with LMDB which allows multi-opening, MDBX can be
+   configured at runtime by `mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)`
+   prior to calling other MDBX funcitons. In this way MDBX will track
+   databases opening, detect multi-opening cases and then recover POSIX file
+   locks as necessary. However, lock recovery can cause unexpected pauses,
+   such as when another process opened the database in exclusive mode before
+   the lock was restored - we have to wait until such a process releases the
+   database, and so on.
+
+Do not use opened MDBX environment(s) after `fork()` in a child process(es),
+MDBX will check and prevent this at critical points. Instead, ensure there is
+no open MDBX-instance(s) during fork(), or atleast close it immediately after
+`fork()` in the child process and reopen if required - for instance by using
+`pthread_atfork()`. The reason for this is:
+ - For competitive consistent reading, MDBX assigns a slot in the shared
+   table for each process that interacts with the database. This slot is
+   populated with process attributes, including the PID.
+ - After `fork()`, in order to remain connected to a database, the child
+   process must have its own such "slot", which can't be assigned in any
+   simple and robust way another than the regular.
+ - A write transaction from a parent process cannot continue in a child
+   process for obvious reasons.
+ - Moreover, in a multithreaded process at the fork() moment any number of
+   threads could run in critical and/or intermediate sections of MDBX code
+   with interaction and/or racing conditions with threads from other
+   process(es). For instance: shrinking a database or copying it to a pipe,
+   opening or closing environment, begining or finishing a transaction,
+   and so on.
+ = Therefore, any solution other than simply close database (and reopen if
+   necessary) in a child process would be both extreme complicated and so
+   fragile.
+
+Do not start more than one transaction for a one thread. If you think about
+this, it's really strange to do something with two data snapshots at once,
+which may be different. MDBX checks and preventing this by returning
+corresponding error code (`MDBX_TXN_OVERLAPPING`, `MDBX_BAD_RSLOT`, `MDBX_BUSY`)
+unless you using `MDBX_NOTLS` option on the environment. Nonetheless, with the
+`MDBX_NOTLS option`, you must know exactly what you are doing, otherwise you
+will get deadlocks or reading an alien data.
+
+Also note that a transaction is tied to one thread by default using Thread
+Local Storage. If you want to pass read-only transactions across threads,
+you can use the MDBX_NOTLS option on the environment. Nevertheless, a write
+transaction entirely should only be used in one thread from start to finish.
+MDBX checks this in a reasonable manner and return the MDBX_THREAD_MISMATCH
+error in rules violation.
+
+
+\subsection transactions TRANSACTIONS, ROLLBACKS, etc.
+
+To actually get anything done, a transaction must be committed using
+`mdbx_txn_commit()`. Alternatively, all of a transaction's operations
+can be discarded using `mdbx_txn_abort()`.
+
+\note An important difference between MDBX and LMDB is that MDBX required that
+any opened cursors can be reused and must be freed explicitly, regardless
+ones was opened in a read-only or write transaction. The REASON for this is
+eliminates ambiguity which helps to avoid errors such as: use-after-free,
+double-free, i.e. memory corruption and segfaults.
+
+For read-only transactions, obviously there is nothing to commit to storage.
+\note An another notable difference between MDBX and LMDB is that MDBX make
+handles opened for existing databases immediately available for other
+transactions, regardless this transaction will be aborted or reset. The
+REASON for this is to avoiding the requirement for multiple opening a same
+handles in concurrent read transactions, and tracking of such open but hidden
+handles until the completion of read transactions which opened them.
+
+In addition, as long as a transaction is open, a consistent view of the
+database is kept alive, which requires storage. A read-only transaction that
+no longer requires this consistent view should be terminated (committed or
+aborted) when the view is no longer needed (but see below for an
+optimization).
+
+There can be multiple simultaneously active read-only transactions but only
+one that can write. Once a single read-write transaction is opened, all
+further attempts to begin one will block until the first one is committed or
+aborted. This has no effect on read-only transactions, however, and they may
+continue to be opened at any time.
+
+
+\subsection dups DUPLICATE KEYS aka MULTI-VALUEs
+
+`mdbx_get()` and `mdbx_put()` respectively have no and only some support or
+multiple key-value pairs with identical keys. If there are multiple values
+for a key, `mdbx_get()` will only return the first value.
+
+When multiple values for one key are required, pass the `MDBX_DUPSORT` flag to
+`mdbx_dbi_open()`. In an `MDBX_DUPSORT` database, by default `mdbx_put()` will
+not replace the value for a key if the key existed already. Instead it will add
+the new value to the key. In addition, `mdbx_del()` will pay attention to the
+value field too, allowing for specific values of a key to be deleted.
+
+Finally, additional cursor operations become available for traversing through
+and retrieving duplicate values.
+
+
+\subsection optimization SOME OPTIMIZATION
+
+If you frequently begin and abort read-only transactions, as an optimization,
+it is possible to only reset and renew a transaction.
+
+`mdbx_txn_reset()` releases any old copies of data kept around for a read-only
+transaction. To reuse this reset transaction, call `mdbx_txn_renew()` on it.
+Any cursors in this transaction can also be renewed using `mdbx_cursor_renew()`
+or freed by `mdbx_cursor_close()`.
+
+To permanently free a transaction, reset or not, use `mdbx_txn_abort()`.
+
+
+\subsection cleanup CLEANING UP
+
+Any created cursors must be closed using `mdbx_cursor_close()`. It is advisable
+to repeat:
+\note An important difference between MDBX and LMDB is that MDBX required that
+any opened cursors can be reused and must be freed explicitly, regardless
+ones was opened in a read-only or write transaction. The REASON for this is
+eliminates ambiguity which helps to avoid errors such as: use-after-free,
+double-free, i.e. memory corruption and segfaults.
+
+It is very rarely necessary to close a database handle, and in general they
+should just be left open. When you close a handle, it immediately becomes
+unavailable for all transactions in the environment. Therefore, you should
+avoid closing the handle while at least one transaction is using it.
+
+
+\subsection api THE FULL API
+
+The full MDBX documentation lists further details below, like how to:
+
+- configure database size and automatic size management
+- drop and clean a database
+- detect and report errors
+- optimize (bulk) loading speed
+- (temporarily) reduce robustness to gain even more speed
+- gather statistics about the database
+- estimate size of range query result
+- double perfomance by LIFO reclaiming on storages with write-back
+- use sequences and canary markers
+- use lack-of-space callback (aka OOM-KICK)
+- use exclusive mode
+- define custom sort orders (but this is recommended to be avoided)
+
+\section restrictions RESTRICTIONS & CAVEATS
+in addition to those listed for some functions.
+
+- Troubleshooting the LCK-file.
+   1. A broken LCK-file can cause sync issues, including appearance of
+      wrong/inconsistent data for readers. When database opened in the
+      cooperative read-write mode the LCK-file requires to be mapped to
+      memory in read-write access. In this case it is always possible for
+      stray/malfunctioned application could writes thru pointers to
+      silently corrupt the LCK-file.
+
+      Unfortunately, there is no any portable way to prevent such
+      corruption, since the LCK-file is updated concurrently by
+      multiple processes in a lock-free manner and any locking is
+      unwise due to a large overhead.
+
+      The "next" version of libmdbx (MithrilDB) will solve this issue.
+
+      Workaround: Just make all programs using the database close it;
+                  the LCK-file is always reset on first open.
+
+   2. Stale reader transactions left behind by an aborted program cause
+      further writes to grow the database quickly, and stale locks can
+      block further operation.
+      MDBX checks for stale readers while opening environment and before
+      growth the database. But in some cases, this may not be enough.
+
+      Workaround: Check for stale readers periodically, using the
+                  `mdbx_reader_check()` function or the mdbx_stat tool.
+
+   3. Stale writers will be cleared automatically by MDBX on supprted
+      platforms. But this is platform-specific, especially of
+      implementation of shared POSIX-mutexes and support for robust
+      mutexes. For instance there are no known issues on Linux, OSX,
+      Windows and FreeBSD.
+
+      Workaround: Otherwise just make all programs using the database
+                  close it; the LCK-file is always reset on first open
+                  of the environment.
+
+- Do not use MDBX databases on remote filesystems, even between processes
+  on the same host. This breaks file locks on some platforms, possibly
+  memory map sync, and certainly sync between programs on different hosts.
+
+  On the other hand, MDBX support the exclusive database operation over
+  a network, and cooperative read-only access to the database placed on
+  a read-only network shares.
+
+- Do not use opened `MDBX_env` instance(s) in a child processes after `fork()`.
+  It would be insane to call fork() and any MDBX-functions simultaneously
+  from multiple threads. The best way is to prevent the presence of open
+  MDBX-instances during `fork()`.
+
+  The `MDBX_TXN_CHECKPID` build-time option, which is ON by default on
+  non-Windows platforms (i.e. where `fork()` is available), enables PID
+  checking at a few critical points. But this does not give any guarantees,
+  but only allows you to detect such errors a little sooner. Depending on
+  the platform, you should expect an application crash and/or database
+  corruption in such cases.
+
+  On the other hand, MDBX allow calling `mdbx_close_env()` in such cases to
+  release resources, but no more and in general this is a wrong way.
+
+- There is no pure read-only mode in a normal explicitly way, since
+  readers need write access to LCK-file to be ones visible for writer.
+  MDBX always tries to open/create LCK-file for read-write, but switches
+  to without-LCK mode on appropriate errors (`EROFS`, `EACCESS`, `EPERM`)
+  if the read-only mode was requested by the `MDBX_RDONLY` flag which is
+  described below.
+
+  The "next" version of libmdbx (MithrilDB) will solve this issue.
+
+- A thread can only use one transaction at a time, plus any nested
+  read-write transactions in the non-writemap mode. Each transaction
+  belongs to one thread. The `MDBX_NOTLS` flag changes this for read-only
+  transactions. See below.
+
+  Do not start more than one transaction for a one thread. If you think
+  about this, it's really strange to do something with two data snapshots
+  at once, which may be different. MDBX checks and preventing this by
+  returning corresponding error code (`MDBX_TXN_OVERLAPPING`, `MDBX_BAD_RSLOT`,
+  `MDBX_BUSY`) unless you using `MDBX_NOTLS` option on the environment.
+  Nonetheless, with the `MDBX_NOTLS` option, you must know exactly what you
+  are doing, otherwise you will get deadlocks or reading an alien data.
+
+- Do not have open an MDBX database twice in the same process at the same
+  time. By default MDBX prevent this in most cases by tracking databases
+  opening and return `MDBX_BUSY` if anyone LCK-file is already open.
+
+  The reason for this is that when the "Open file description" locks (aka
+  OFD-locks) are not available, MDBX uses POSIX locks on files, and these
+  locks have issues if one process opens a file multiple times. If a single
+  process opens the same environment multiple times, closing it once will
+  remove all the locks held on it, and the other instances will be
+  vulnerable to corruption from other processes.
+
+  For compatibility with LMDB which allows multi-opening, MDBX can be
+  configured at runtime by `mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)`
+  prior to calling other MDBX funcitons. In this way MDBX will track
+  databases opening, detect multi-opening cases and then recover POSIX file
+  locks as necessary. However, lock recovery can cause unexpected pauses,
+  such as when another process opened the database in exclusive mode before
+  the lock was restored - we have to wait until such a process releases the
+  database, and so on.
+
+- Avoid long-lived read transactions, especially in the scenarios with a
+  high rate of write transactions. Long-lived read transactions prevents
+  recycling pages retired/freed by newer write transactions, thus the
+  database can grow quickly.
+
+  Understanding the problem of long-lived read transactions requires some
+  explanation, but can be difficult for quick perception. So is is
+  reasonable to simplify this as follows:
+    1. Garbage collection problem exists in all databases one way or
+       another, e.g. VACUUM in PostgreSQL. But in MDBX it's even more
+       discernible because of high transaction rate and intentional
+       internals simplification in favor of performance.
+
+    2. MDBX employs Multiversion concurrency control on the Copy-on-Write
+       basis, that allows multiple readers runs in parallel with a write
+       transaction without blocking. An each write transaction needs free
+       pages to put the changed data, that pages will be placed in the new
+       b-tree snapshot at commit. MDBX efficiently recycling pages from
+       previous created unused snapshots, BUT this is impossible if anyone
+       a read transaction use such snapshot.
+
+    3. Thus massive altering of data during a parallel long read operation
+       will increase the process's work set and may exhaust entire free
+       database space.
+
+  A good example of long readers is a hot backup to the slow destination
+  or debugging of a client application while retaining an active read
+  transaction. LMDB this results in `MDBX_MAP_FULL` error and subsequent write
+  performance degradation.
+
+  MDBX mostly solve "long-lived" readers issue by the lack-of-space callback
+  which allow to aborts long readers, and by the `MDBX_LIFORECLAIM` mode which
+  addresses subsequent performance degradation.
+  The "next" version of libmdbx (MithrilDB) will completely solve this.
+
+- Avoid suspending a process with active transactions. These would then be
+  "long-lived" as above.
+
+  The "next" version of libmdbx (MithrilDB) will solve this issue.
+
+- Avoid aborting a process with an active read-only transaction in scenaries
+  with high rate of write transactions. The transaction becomes "long-lived"
+  as above until a check for stale readers is performed or the LCK-file is
+  reset, since the process may not remove it from the lockfile. This does
+  not apply to write transactions if the system clears stale writers, see
+  above.
+
+- An MDBX database configuration will often reserve considerable unused
+  memory address space and maybe file size for future growth. This does
+  not use actual memory or disk space, but users may need to understand
+  the difference so they won't be scared off.
+
+- \todo The Write Amplification Factor.
+
+
+\section license LICENSE & COPYRIGHT
+
+\authors Copyright 2015-2020 Leonid Yuriev <leo@yuriev.ru>
+and other _libmdbx_ authors: please see AUTHORS file.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+ ---
+
+This code is derived from "LMDB engine" written by
+Howard Chu (Symas Corporation), which itself derived from btree.c
+written by Martin Hedenfalk.
+
+ ---
+
+Portions Copyright 2011-2015 Howard Chu, Symas Corp. All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted only as authorized by the OpenLDAP
+Public License.
+
+A copy of this license is available in the file LICENSE in the
+top-level directory of the distribution or, alternatively, at
+<http://www.OpenLDAP.org/license.html>.
+
+ ---
+
+Portions Copyright (c) 2009, 2010 Martin Hedenfalk <martin@bzero.se>
+
+Permission to use, copy, modify, and distribute this software for any
+purpose with or without fee is hereby granted, provided that the above
+copyright notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+\subsection asknowledgements ACKNOWLEDGEMENTS
+
+Howard Chu (Symas Corporation) - the author of LMDB,
+from which originated the MDBX in 2015.
+
+Martin Hedenfalk <martin@bzero.se> - the author of `btree.c` code,
+which was used for begin development of LMDB.
+
+*******************************************************************************/
 
 #pragma once
 #ifndef LIBMDBX_H
@@ -731,25 +733,25 @@ typedef struct mdbx_version_info {
   uint8_t minor;
   uint16_t release;
   uint32_t revision;
-  struct /* source info from git */ {
-    const char *datetime /* committer date, strict ISO-8601 format */;
-    const char *tree /* commit hash (hexadecimal digits) */;
-    const char *commit /* tree hash, i.e. digest of the source code */;
-    const char *describe /* git-describe string */;
+  struct /** source info from git */ {
+    const char *datetime /** committer date, strict ISO-8601 format */;
+    const char *tree /** commit hash (hexadecimal digits) */;
+    const char *commit /** tree hash, i.e. digest of the source code */;
+    const char *describe /** git-describe string */;
   } git;
-  const char *sourcery /* sourcery anchor for pinning */;
+  const char *sourcery /** sourcery anchor for pinning */;
 } mdbx_version_info;
 extern LIBMDBX_VERINFO_API const mdbx_version_info mdbx_version;
 
-/* MDBX build information.
- * WARNING: Some strings could be NULL in case no corresponding information was
+/** MDBX build information.
+ * \warning Some strings could be NULL in case no corresponding information was
  *          provided at build time (i.e. flags). */
 typedef struct mdbx_build_info {
-  const char *datetime /* build timestamp (ISO-8601 or __DATE__ __TIME__) */;
-  const char *target /* cpu/arch-system-config triplet */;
-  const char *options /* mdbx-related options */;
-  const char *compiler /* compiler */;
-  const char *flags /* CFLAGS */;
+  const char *datetime /** build timestamp (ISO-8601 or __DATE__ __TIME__) */;
+  const char *target /** cpu/arch-system-config triplet */;
+  const char *options /** mdbx-related options */;
+  const char *compiler /** compiler */;
+  const char *flags /** CFLAGS */;
 } mdbx_build_info;
 extern LIBMDBX_VERINFO_API const mdbx_build_info mdbx_build;
 
@@ -804,8 +806,8 @@ void LIBMDBX_API NTAPI mdbx_dll_handler(PVOID module, DWORD reason,
 
 /** Opaque structure for a database environment.
  *
- * An environment supports multiple key-value databases (aka key-value spaces
- * or tables), all residing in the same shared-memory map. */
+ * \details n environment supports multiple key-value databases (aka key-value
+ * spaces or tables), all residing in the same shared-memory map. */
 #ifndef __cplusplus
 typedef struct MDBX_env MDBX_env;
 #else
@@ -814,8 +816,8 @@ struct MDBX_env;
 
 /** Opaque structure for a transaction handle.
  *
- * All database operations require a transaction handle. Transactions may be
- * read-only or read-write. */
+ * \details All database operations require a transaction handle. Transactions
+ * may be read-only or read-write. */
 #ifndef __cplusplus
 typedef struct MDBX_txn MDBX_txn;
 #else
@@ -824,7 +826,7 @@ struct MDBX_txn;
 
 /** A handle for an individual database (key-value spaces) in the environment.
  *
- * Zero handle is used internally (hidden Garbage Collection DB).
+ * \details Zero handle is used internally (hidden Garbage Collection DB).
  * So, any valid DBI-handle great than 0 and less than or equal MDBX_MAX_DBI. */
 typedef uint32_t MDBX_dbi;
 
@@ -910,7 +912,7 @@ typedef enum MDBX_log_level_t MDBX_log_level_t;
 
 /** Runtime debug flags.
  *
- * MDBX_DBG_DUMP and MDBX_DBG_LEGACY_MULTIOPEN always have an effect,
+ * \details MDBX_DBG_DUMP and MDBX_DBG_LEGACY_MULTIOPEN always have an effect,
  * but MDBX_DBG_ASSERT, MDBX_DBG_AUDIT and MDBX_DBG_JITTER only if libmdbx
  * builded with MDBX_DEBUG. */
 enum MDBX_debug_flags_t {

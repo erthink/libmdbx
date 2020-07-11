@@ -48,7 +48,7 @@ LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1
 
-.PHONY: mdbx all install clean test dist check
+.PHONY: mdbx all install clean
 
 all: $(LIBRARIES) $(TOOLS)
 
@@ -98,6 +98,8 @@ mdbx_%:	mdbx_%.c libmdbx.a
 else
 ################################################################################
 # Plain (non-amalgamated) sources with test
+
+.PHONY: test dist check doxygen reformat
 
 define uname2osal
   case "$(UNAME)" in
@@ -239,6 +241,21 @@ mdbx-dylib.o: src/config.h src/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(
 
 mdbx-static.o: src/config.h src/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
+
+docs/Doxyfile: docs/Doxyfile.in src/version.c
+	sed \
+		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
+		-e "s|@MDBX_GIT_TREE@|$(shell git show --no-patch --format=%T HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_COMMIT@|$(shell git show --no-patch --format=%H HEAD || echo 'Please install latest get version')|" \
+		-e "s|@MDBX_GIT_DESCRIBE@|$(MDBX_GIT_DESCRIBE)|" \
+		-e "s|\$${MDBX_VERSION_MAJOR}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 1)|" \
+		-e "s|\$${MDBX_VERSION_MINOR}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 2)|" \
+		-e "s|\$${MDBX_VERSION_RELEASE}|$(shell echo '$(MDBX_GIT_VERSION)' | cut -d . -f 3)|" \
+		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
+	docs/Doxyfile.in > $@
+
+doxygen: docs/Doxyfile mdbx.h LICENSE AUTHORS
+	rm -rf docs/html && mkdir -p docs/html && cp LICENSE AUTHORS docs/html/ && doxygen docs/Doxyfile
 
 .PHONY: dist release-assets
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
