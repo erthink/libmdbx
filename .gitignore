@@ -33,3 +33,5 @@ src/version.c
 src/config.h
 dist/
 *.tar*
+docs/Doxyfile
+docs/html/
