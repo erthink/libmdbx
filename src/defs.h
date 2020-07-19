@@ -89,18 +89,6 @@
 #   endif
 #endif /* __extern_C */
 
-#ifndef __cplusplus
-#   ifndef bool
-#       define bool _Bool
-#   endif
-#   ifndef true
-#       define true (1)
-#   endif
-#   ifndef false
-#       define false (0)
-#   endif
-#endif
-
 #if !defined(nullptr) && !defined(__cplusplus) || (__cplusplus < 201103L && !defined(_MSC_VER))
 #   define nullptr NULL
 #endif

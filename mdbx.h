@@ -181,6 +181,18 @@ typedef pthread_t mdbx_tid_t;
 
 /*----------------------------------------------------------------------------*/
 
+#ifndef __cplusplus
+#ifndef bool
+#define bool _Bool
+#endif
+#ifndef true
+#define true (1)
+#endif
+#ifndef false
+#define false (0)
+#endif
+#endif /* bool without __cplusplus */
+
 #if !defined(cxx11_noexcept)
 #if defined(__cplusplus) && __cplusplus >= 201103L
 #define cxx11_noexcept noexcept
@@ -2358,7 +2370,7 @@ typedef struct MDBX_txn_info MDBX_txn_info;
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info,
-                              int scan_rlt);
+                              bool scan_rlt);
 
 /** Returns the transaction's MDBX_env.
  * \ingroup c_transactions
@@ -2826,7 +2838,7 @@ LIBMDBX_API int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi);
  *                  from the environment and close the DB handle.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del);
+LIBMDBX_API int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del);
 
 /** Get items from a database.
  * \ingroup c_crud

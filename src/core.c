@@ -6408,7 +6408,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   return rc;
 }
 
-int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, int scan_rlt) {
+int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -16842,13 +16842,10 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
   return rc;
 }
 
-int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, int del) {
+int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-
-  if (unlikely(1 < (unsigned)del))
-    return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
     return MDBX_EINVAL;
