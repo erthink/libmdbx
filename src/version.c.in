@@ -22,7 +22,7 @@ __dll_export
     __has_attribute(__externally_visible__)
     __attribute__((__externally_visible__))
 #endif
-    const mdbx_version_info mdbx_version = {
+    const struct MDBX_version_info mdbx_version = {
         ${MDBX_VERSION_MAJOR},
         ${MDBX_VERSION_MINOR},
         ${MDBX_VERSION_RELEASE},

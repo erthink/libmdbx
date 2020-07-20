@@ -254,8 +254,24 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c
 		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
 	docs/Doxyfile.in > $@
 
-doxygen: docs/Doxyfile mdbx.h LICENSE AUTHORS
-	rm -rf docs/html && mkdir -p docs/html && cp LICENSE AUTHORS docs/html/ && doxygen docs/Doxyfile
+define md-extract-section
+docs/__$(1).md: $(2)
+	sed -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $$< > $$@ && test -s $$@
+
+endef
+$(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),README.md)))
+
+docs/overall.md: docs/__overview.md docs/_toc.md docs/__mithril.md docs/__history.md AUTHORS LICENSE
+	echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $?) > $@ && echo -e "\n\n\nLicense\n=======\n" | cat AUTHORS - LICENSE >> $@
+
+docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md docs/_restrictions.md docs/__performance.md
+	cat $? | sed 's/^Performance comparison$$/Performance comparison {#performance}/' > $@
+
+docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
+	echo -e "\\page usage Usage\n\\section getting Getting the libmdbx" | cat - $? | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
+
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h ChangeLog.md
+	rm -rf docs/html && cp mdbx.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile)
 
 .PHONY: dist release-assets
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))

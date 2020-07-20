@@ -18820,7 +18820,7 @@ __dll_export
     __has_attribute(__externally_visible__)
     __attribute__((__externally_visible__))
 #endif
-    const mdbx_build_info mdbx_build = {
+    const struct MDBX_build_info mdbx_build = {
 #ifdef MDBX_BUILD_TIMESTAMP
     MDBX_BUILD_TIMESTAMP
 #else

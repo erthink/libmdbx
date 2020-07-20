@@ -1,13 +1,14 @@
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 
 libmdbx
-=======
+========
 
+<!-- section-begin overview -->
 _libmdbx_ is an extremely fast, compact, powerful, embedded,
-transactional [key-value store](https://en.wikipedia.org/wiki/Key-value_database)
-database, with [permissive license](LICENSE).
+transactional [key-value database](https://en.wikipedia.org/wiki/Key-value_database),
+with [permissive license](./LICENSE).
 _MDBX_ has a specific set of properties and capabilities,
-focused on creating unique lightweight solutions with extraordinary performance.
+focused on creating unique lightweight solutions.
 
 1. Allows **a swarm of multi-threaded processes to
 [ACID]((https://en.wikipedia.org/wiki/ACID))ly read and update** several
@@ -43,13 +44,15 @@ neglected in favour of write performance.
 7. Supports Linux, Windows, MacOS, Android, iOS, FreeBSD, DragonFly, Solaris,
 OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other systems compliant with
 **POSIX.1-2008**.
+<!-- section-end -->
 
 Historically, _MDBX_ is a deeply revised and extended descendant of the amazing
 [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 _MDBX_ inherits all benefits from _LMDB_, but resolves some issues and adds [a set of improvements](#improvements-beyond-lmdb).
 
+<!-- section-begin mithril -->
 The next version is under active non-public development from scratch and will be
-released as **_MithrilDB_** and `libmithrildb` for libraries & packages.
+released as _**MithrilDB**_ and `libmithrildb` for libraries & packages.
 Admittedly mythical [Mithril](https://en.wikipedia.org/wiki/Mithril) is
 resembling silver but being stronger and lighter than steel. Therefore
 _MithrilDB_ is a rightly relevant name.
@@ -58,6 +61,7 @@ _MithrilDB_ is a rightly relevant name.
   > License](https://www.apache.org/licenses/LICENSE-2.0). The goal of this
   > revolution is to provide a clearer and robust API, add more features and
   > new valuable properties of the database.
+<!-- section-end -->
 
 [![https://t.me/libmdbx](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/telegram.png)](https://t.me/libmdbx)
 [![Build Status](https://travis-ci.org/erthink/libmdbx.svg?branch=master)](https://travis-ci.org/erthink/libmdbx)
@@ -71,10 +75,10 @@ _MithrilDB_ is a rightly relevant name.
 -----
 
 ## Table of Contents
-- [Overview](#overview)
+- [Characteristics](#characteristics)
     - [Features](#features)
     - [Limitations](#limitations)
-    - [Caveats & Gotchas](#caveats--gotchas)
+    - [Gotchas](#gotchas)
     - [Comparison with other databases](#comparison-with-other-databases)
     - [Improvements beyond LMDB](#improvements-beyond-lmdb)
     - [History & Acknowledgments](#history)
@@ -90,7 +94,9 @@ _MithrilDB_ is a rightly relevant name.
     - [Async-write mode](#async-write-mode)
     - [Cost comparison](#cost-comparison)
 
-# Overview
+# Characteristics
+
+<!-- section-begin characteristics -->
 
 ## Features
 
@@ -146,7 +152,7 @@ transaction journal. No crash recovery needed. No maintenance is required.
 - **Database size**: up to `2147483648` pages (8 [TiB](https://en.wikipedia.org/wiki/Tebibyte) for default 4K pagesize, 128 [TiB](https://en.wikipedia.org/wiki/Tebibyte) for 64K pagesize).
 - **Maximum sub-databases**: `32765`.
 
-## Caveats & Gotchas
+## Gotchas
 
 1. There cannot be more than one writer at a time, i.e. no more than one write transaction at a time.
 
@@ -165,10 +171,13 @@ so you should reconsider using brute force techniques and double check your code
 On the one hand, in the case of MDBX, a simple linear search may be more profitable than complex indexes.
 On the other hand, if you make something suboptimally, you can notice detrimentally only on sufficiently large data.
 
-### Comparison with other databases
+## Comparison with other databases
 For now please refer to [chapter of "BoltDB comparison with other
 databases"](https://github.com/coreos/bbolt#comparison-with-other-databases)
 which is also (mostly) applicable to _libmdbx_.
+
+<!-- section-end -->
+<!-- section-begin improvements -->
 
 Improvements beyond LMDB
 ========================
@@ -180,7 +189,7 @@ out-of-the-box, not silently and catastrophically break down. The list
 below is pruned down to the improvements most notable and obvious from
 the user's point of view.
 
-### Added Features:
+## Added Features
 
 1. Keys could be more than 2 times longer than _LMDB_.
   > For DB with default page size _libmdbx_ support keys up to 1300 bytes
@@ -230,7 +239,7 @@ and/or optimize query execution plans.
 
 12. Support for opening databases in the exclusive mode, including on a network share.
 
-### Added Abilities:
+## Added Abilities
 
 1. Zero-length for keys and values.
 
@@ -248,7 +257,7 @@ pair, to the first, to the last, or not set to anything.
   > _libmdbx_ allows one _at once_ with getting previous value
   > and addressing the particular item from multi-value with the same key.
 
-### Other fixes and specifics:
+## Other fixes and specifics
 
 1. Fixed more than 10 significant errors, in particular: page leaks, wrong sub-database statistics, segfault in several conditions, nonoptimal page merge strategy, updating an existing record with a change in data size (including for multimap), etc.
 
@@ -282,7 +291,13 @@ against incompetent user actions (aka
 _libmdbx_ may be a little lag in performance tests from LMDB where the
 named mutexes are used.
 
-### History
+<!-- section-end -->
+<!-- section-begin history -->
+
+# History
+
+Historically, _MDBX_ is a deeply revised and extended descendant of the
+[Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 At first the development was carried out within the
 [ReOpenLDAP](https://github.com/erthink/ReOpenLDAP) project. About a
 year later _libmdbx_ was separated into a standalone project, which was
@@ -292,17 +307,25 @@ conference](http://www.highload.ru/2015/abstracts/1831.html).
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/erthink/libfpta),
 and development is funded by [Positive Technologies](https://www.ptsecurity.com).
 
-### Acknowledgments
+## Acknowledgments
 Howard Chu <hyc@openldap.org> is the author of LMDB, from which
 originated the MDBX in 2015.
 
 Martin Hedenfalk <martin@bzero.se> is the author of `btree.c` code, which
 was used to begin development of LMDB.
 
+<!-- section-end -->
+
 --------------------------------------------------------------------------------
 
 Usage
 =====
+
+<!-- section-begin usage -->
+Currently, libmdbx is only available in a
+[source code](https://en.wikipedia.org/wiki/Source_code) form.
+Packages support for common Linux distributions is planned in the future,
+since release the version 1.0.
 
 ## Source code embedding
 
@@ -316,7 +339,7 @@ _libmdbx_ provides two official ways for integration in source code form:
   > This allows you to build as _libmdbx_ and testing tool.
   >  On the other hand, this way requires you to pull git tags, and use C++11 compiler for test tool.
 
-**_Please, avoid using any other techniques._** Otherwise, at least
+_**Please, avoid using any other techniques.**_ Otherwise, at least
 don't ask for support and don't name such chimeras `libmdbx`.
 
 The amalgamated source code could be created from the original clone of git
@@ -434,20 +457,29 @@ To build _libmdbx_ for iOS, we recommend using CMake with the
 "[toolchain file](https://cmake.org/cmake/help/latest/variable/CMAKE_TOOLCHAIN_FILE.html)"
 from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 
+<!-- section-end -->
+
 ## API description
 For more information and API description see the [mdbx.h](mdbx.h) header.
 Please do not hesitate to point out errors in the documentation,
 including creating [PR](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests) with corrections and improvements.
 
-## Bindings
+<!-- section-begin bindings -->
 
-  | Runtime  | GitHub | Author |
-  | -------- | ------ | ------ |
-  | Rust     | [mdbx-rs](https://github.com/Kerollmops/mdbx-rs)   | [@Kerollmops](https://github.com/Kerollmops) |
-  | Java     | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
-  | .NET     | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
+Bindings
+========
+
+| Runtime | GitHub | Author |
+| ------- | ------ | ------ |
+| Rust    | [mdbx-rs](https://github.com/Kerollmops/mdbx-rs)   | [Clément Renault](https://github.com/Kerollmops) |
+| Java    | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
+| .NET    | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
+
+<!-- section-end -->
 
 --------------------------------------------------------------------------------
+
+<!-- section-begin performance -->
 
 Performance comparison
 ======================
@@ -584,6 +616,8 @@ All benchmark data is gathered by
 syscall and by scanning the data directory.
 
 ![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-6.png)
+
+<!-- section-end -->
 
 --------------------------------------------------------------------------------
 
