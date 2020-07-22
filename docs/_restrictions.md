@@ -56,7 +56,7 @@ It would be insane to call fork() and any MDBX-functions simultaneously
 from multiple threads. The best way is to prevent the presence of open
 MDBX-instances during `fork()`.
 
-The `MDBX_TXN_CHECKPID` build-time option, which is ON by default on
+The `MDBX_ENV_CHECKPID` build-time option, which is ON by default on
 non-Windows platforms (i.e. where `fork()` is available), enables PID
 checking at a few critical points. But this does not give any guarantees,
 but only allows you to detect such errors a little sooner. Depending on

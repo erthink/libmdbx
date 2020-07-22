@@ -5714,12 +5714,12 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   return mdbx_env_sync_internal(env, force, nonblock);
 }
@@ -5896,12 +5896,12 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   MDBX_env *env = txn->mt_env;
   int rc;
 
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   STATIC_ASSERT(sizeof(MDBX_reader) == 32);
 #if MDBX_LOCKING > 0
@@ -6264,10 +6264,10 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid()))
     env->me_flags |= MDBX_FATAL_ERROR;
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
@@ -6417,12 +6417,12 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
     return MDBX_EINVAL;
 
   MDBX_env *const env = txn->mt_env;
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   info->txn_id = txn->mt_txnid;
   info->txn_space_used = pgno2bytes(env, txn->mt_geo.next);
@@ -6588,12 +6588,12 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   MDBX_env *env = txn->mt_env;
   static const char *const names[] = MDBX_END_NAMES;
 
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(txn->mt_env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   mdbx_debug("%s txn %" PRIaTXN "%c %p on mdbenv %p, root page %" PRIaPGNO
              "/%" PRIaPGNO,
@@ -7781,12 +7781,12 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   }
 
   MDBX_env *env = txn->mt_env;
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   /* mdbx_txn_end() mode for a commit which writes nothing */
   unsigned end_mode =
@@ -8912,10 +8912,10 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid()))
     env->me_flags |= MDBX_FATAL_ERROR;
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
@@ -10431,14 +10431,14 @@ int __cold mdbx_env_close_ex(MDBX_env *env, int dont_sync) {
   if (unlikely(env->me_signature != MDBX_ME_SIGNATURE))
     return MDBX_EBADSIGN;
 
-#if MDBX_TXN_CHECKPID || !(defined(_WIN32) || defined(_WIN64))
-  /* Check the PID even if MDBX_TXN_CHECKPID=0 on non-Windows
+#if MDBX_ENV_CHECKPID || !(defined(_WIN32) || defined(_WIN64))
+  /* Check the PID even if MDBX_ENV_CHECKPID=0 on non-Windows
    * platforms (i.e. where fork() is available).
    * This is required to legitimize a call after fork()
    * from a child process, that should be allowed to free resources. */
   if (unlikely(env->me_pid != mdbx_getpid()))
     env->me_flags |= MDBX_FATAL_ERROR;
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   if ((env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0 && env->me_txn0) {
     if (env->me_txn0->mt_owner && env->me_txn0->mt_owner != mdbx_thread_self())
@@ -17053,12 +17053,12 @@ int __cold mdbx_reader_check(MDBX_env *env, int *dead) {
 int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked, int *dead) {
   mdbx_assert(env, rdt_locked >= 0);
 
-#if MDBX_TXN_CHECKPID
+#if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
     return MDBX_PANIC;
   }
-#endif /* MDBX_TXN_CHECKPID */
+#endif /* MDBX_ENV_CHECKPID */
 
   MDBX_lockinfo *const lck = env->me_lck;
   if (unlikely(lck == NULL)) {
@@ -18942,7 +18942,7 @@ __dll_export
 #if MDBX_HUGE_TRANSACTIONS
     " MDBX_HUGE_TRANSACTIONS=YES"
 #endif /* MDBX_HUGE_TRANSACTIONS */
-    " MDBX_TXN_CHECKPID=" MDBX_TXN_CHECKPID_CONFIG
+    " MDBX_ENV_CHECKPID=" MDBX_ENV_CHECKPID_CONFIG
     " MDBX_TXN_CHECKOWNER=" MDBX_TXN_CHECKOWNER_CONFIG
     " MDBX_64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
     " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG

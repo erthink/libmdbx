@@ -58,20 +58,20 @@
 #endif /* MDBX_OSX_SPEED_INSTEADOF_DURABILITY */
 
 /** Controls checking PID against reuse DB environment after the fork() */
-#ifndef MDBX_TXN_CHECKPID
+#ifndef MDBX_ENV_CHECKPID
 #if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
 /* PID check could be ommited:
  *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
  *    mapped pages will not be available for child process.
  *  - in Windows where fork() not available. */
-#define MDBX_TXN_CHECKPID 0
+#define MDBX_ENV_CHECKPID 0
 #else
-#define MDBX_TXN_CHECKPID 1
+#define MDBX_ENV_CHECKPID 1
 #endif
-#define MDBX_TXN_CHECKPID_CONFIG "AUTO=" STRINGIFY(MDBX_TXN_CHECKPID)
+#define MDBX_ENV_CHECKPID_CONFIG "AUTO=" STRINGIFY(MDBX_ENV_CHECKPID)
 #else
-#define MDBX_TXN_CHECKPID_CONFIG STRINGIFY(MDBX_TXN_CHECKPID)
-#endif /* MDBX_TXN_CHECKPID */
+#define MDBX_ENV_CHECKPID_CONFIG STRINGIFY(MDBX_ENV_CHECKPID)
+#endif /* MDBX_ENV_CHECKPID */
 
 /** Controls checking transaction owner thread against misuse transactions from
  * other threads. */

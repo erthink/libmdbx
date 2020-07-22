@@ -14,9 +14,9 @@
 /* Common */
 #cmakedefine01 MDBX_HUGE_TRANSACTIONS
 #cmakedefine01 MDBX_TXN_CHECKOWNER
-#cmakedefine MDBX_TXN_CHECKPID_AUTO
-#ifndef MDBX_TXN_CHECKPID_AUTO
-#cmakedefine01 MDBX_TXN_CHECKPID
+#cmakedefine MDBX_ENV_CHECKPID_AUTO
+#ifndef MDBX_ENV_CHECKPID_AUTO
+#cmakedefine01 MDBX_ENV_CHECKPID
 #endif
 #cmakedefine MDBX_LOCKING_AUTO
 #ifndef MDBX_LOCKING_AUTO
