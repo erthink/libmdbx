@@ -1275,7 +1275,9 @@ int main(int argc, char *argv[]) {
     }
 
     saved_list = problems_push();
-    rc = mdbx_env_pgwalk(txn, pgvisitor, nullptr, ignore_wrong_order);
+    rc = mdbx_env_pgwalk(txn, pgvisitor, nullptr,
+                         true /* always skip key ordering checking to avoid
+                               MDBX_CORRUPTED when using custom comparators */);
     traversal_problems = problems_pop(saved_list);
 
     if (rc) {
