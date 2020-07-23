@@ -270,8 +270,8 @@ docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md
 docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	echo -e "\\page usage Usage\n\\section getting Getting the libmdbx" | cat - $? | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h ChangeLog.md
-	rm -rf docs/html && cp mdbx.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile)
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h ChangeLog.md AUTHORS LICENSE
+	rm -rf docs/html && cp mdbx.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
 
 .PHONY: dist release-assets
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))

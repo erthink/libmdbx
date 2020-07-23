@@ -138,7 +138,7 @@ static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
     printf("mapsize=%" PRIu64 "\n", info.mi_geo.upper);
     printf("maxreaders=%u\n", info.mi_maxreaders);
 
-    mdbx_canary canary;
+    MDBX_canary canary;
     rc = mdbx_canary_get(txn, &canary);
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_canary_get", rc);

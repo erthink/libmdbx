@@ -460,9 +460,9 @@ from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 <!-- section-end -->
 
 ## API description
-For more information and API description see the [mdbx.h](mdbx.h) header.
-Please do not hesitate to point out errors in the documentation,
-including creating [PR](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests) with corrections and improvements.
+
+Please refer to the online [_libmdbx_ API reference](https://erthink.github.io/libmdbx/)
+and/or see the [mdbx.h](mdbx.h) header.
 
 <!-- section-begin bindings -->
 

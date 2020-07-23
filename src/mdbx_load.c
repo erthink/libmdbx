@@ -109,7 +109,7 @@ static char *subname = nullptr;
 static int dbi_flags;
 static txnid_t txnid;
 static uint64_t sequence;
-static mdbx_canary canary;
+static MDBX_canary canary;
 static MDBX_envinfo envinfo;
 
 #define PRINT 1

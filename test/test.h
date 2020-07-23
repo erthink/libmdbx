@@ -155,7 +155,7 @@ protected:
   keygen::maker keyvalue_maker;
 
   struct {
-    mdbx_canary canary;
+    MDBX_canary canary;
   } last;
 
   SET speculum{ItemCompare(this)}, speculum_commited{ItemCompare(this)};

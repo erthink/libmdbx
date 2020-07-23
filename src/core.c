@@ -15708,7 +15708,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
   MDBX_meta *const meta = mdbx_init_metas(env, buffer);
   mdbx_meta_set_txnid(env, meta, read_txn->mt_txnid);
 
-  if (flags & MDBX_CP_FORCE_RESIZEABLE)
+  if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     make_sizeable(meta);
 
   /* copy canary sequenses if present */
@@ -15864,7 +15864,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       (MDBX_meta *)(buffer + ((uint8_t *)mdbx_meta_head(env) - env->me_map));
   mdbx_txn_unlock(env);
 
-  if (flags & MDBX_CP_FORCE_RESIZEABLE)
+  if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     make_sizeable(headcopy);
   /* Update signature to steady */
   headcopy->mm_datasync_sign = mdbx_meta_sign(headcopy);
@@ -17666,7 +17666,7 @@ int __cold mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
   return rc;
 }
 
-int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
+int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -17685,7 +17685,7 @@ int mdbx_canary_put(MDBX_txn *txn, const mdbx_canary *canary) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_canary_get(const MDBX_txn *txn, mdbx_canary *canary) {
+int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;

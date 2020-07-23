@@ -411,7 +411,7 @@ bool testcase::should_continue(bool check_timeout_only) const {
 }
 
 void testcase::fetch_canary() {
-  mdbx_canary canary_now;
+  MDBX_canary canary_now;
   log_trace(">> fetch_canary");
 
   int rc = mdbx_canary_get(txn_guard.get(), &canary_now);
@@ -434,7 +434,7 @@ void testcase::fetch_canary() {
 }
 
 void testcase::update_canary(uint64_t increment) {
-  mdbx_canary canary_now = last.canary;
+  MDBX_canary canary_now = last.canary;
 
   log_trace(">> update_canary: sequence %" PRIu64 " += %" PRIu64, canary_now.y,
             increment);
