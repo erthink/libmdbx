@@ -1931,7 +1931,9 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
           (fstatfs(fd, &fs) == 0 && fs.f_type == /* procfs */ 0x9FA0)
               ? read(fd, buf, sizeof(buf))
               : -1;
-      close(fd);
+      const int err = close(fd);
+      assert(err == 0);
+      (void)err;
       if (len > 0 && bootid_parse_uuid(&bin, buf, len))
         return bin;
     }

@@ -201,6 +201,7 @@ static int readhdr(void) {
     str = valstr(dbuf.iov_base, "database");
     if (str) {
       if (*str) {
+        free(subname);
         subname = mdbx_strdup(str);
         if (!subname) {
           perror("strdup()");
@@ -216,6 +217,7 @@ static int readhdr(void) {
         fprintf(stderr,
                 "%s: line %" PRIiSIZE ": unsupported value '%s' for %s\n", prog,
                 lineno, str, "type");
+        free(subname);
         exit(EXIT_FAILURE);
       }
       continue;
@@ -700,18 +702,13 @@ int main(int argc, char *argv[]) {
     int batch = 0;
     prevk.iov_len = 0;
     while (rc == MDBX_SUCCESS) {
-      MDBX_val key;
+      MDBX_val key, data;
       rc = readline(&key, &kbuf);
-      if (rc != MDBX_SUCCESS) /* rc == EOF */
+      if (rc == EOF)
         break;
 
-      if (user_break) {
-        rc = MDBX_EINTR;
-        break;
-      }
-
-      MDBX_val data;
-      rc = readline(&data, &dbuf);
+      if (rc == MDBX_SUCCESS)
+        rc = readline(&data, &dbuf);
       if (rc) {
         fprintf(stderr, "%s: line %" PRIiSIZE ": failed to read key value\n",
                 prog, lineno);
