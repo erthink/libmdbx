@@ -2197,6 +2197,7 @@ LIBMDBX_API int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers);
  * Currently a moderate number of slots are cheap but a huge number gets
  * expensive: 7-120 words per transaction, and every \ref mdbx_dbi_open()
  * does a linear search of the opened slots.
+ * \see mdbx_env_get_maxdbs()
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  * \param [in] dbs   The maximum number of databases.
@@ -2206,6 +2207,18 @@ LIBMDBX_API int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers);
  * \retval MDBX_EINVAL   An invalid parameter was specified.
  * \retval MDBX_EPERM    The environment is already open. */
 LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
+
+/** Get the maximum number of named databases for the environment.
+ * \ingroup c_statinfo
+ * \see mdbx_env_set_maxdbs()
+ *
+ * \param [in] env   An environment handle returned by \ref mdbx_env_create().
+ * \param [out] dbs  Address to store the maximum number of databases.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_EINVAL   An invalid parameter was specified. */
+LIBMDBX_API int mdbx_env_get_maxdbs(MDBX_env *env, MDBX_dbi *dbs);
 
 /** Get the maximum size of keys can write.
  * \ingroup c_statinfo

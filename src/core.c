@@ -9259,6 +9259,18 @@ int __cold mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
   return MDBX_SUCCESS;
 }
 
+int __cold mdbx_env_get_maxdbs(MDBX_env *env, MDBX_dbi *dbs) {
+  int rc = check_env(env);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!dbs))
+    return MDBX_EINVAL;
+
+  *dbs = env->me_maxdbs;
+  return MDBX_SUCCESS;
+}
+
 int __cold mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers) {
   int rc = check_env(env);
   if (unlikely(rc != MDBX_SUCCESS))
