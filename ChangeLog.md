@@ -3,10 +3,10 @@ ChangeLog
 
 ## v0.9.x (in the development):
 - Since v0.9 usage of custom comparators and the `mdbx_dbi_open_ex()` are deprecated.
+- Support for Doxygen & [online API reference](https://erthink.github.io/libmdbx/).
 - TODO: API for explicit threads (de)registration.
 - TODO: Native bindings for C++.
 - TODO: Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
-- TODO: support for Doxygen & online API reference.
 
 ## v0.8.2 2020-07-06:
 - Added support multi-opening the same DB in a process with SysV locking (BSD).

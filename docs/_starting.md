@@ -5,48 +5,48 @@ Getting started {#starting}
 > edits reflecting the improvements and enhancements were made in MDBX.
 > See Bert Hubert's [original](https://github.com/ahupowerdns/ahutils/blob/master/lmdb-semantics.md).
 
-Everything starts with an environment, created by `mdbx_env_create()`.
-Once created, this environment must also be opened with `mdbx_env_open()`,
-and after use be closed by `mdbx_env_close()`. At that a non-zero value of the
-last argument "mode" supposes MDBX will create database and directory if ones
-does not exist. In this case the non-zero "mode" argument specifies the file
-mode bits be applied when a new files are created by `open()` function.
+Everything starts with an environment, created by \ref mdbx_env_create().
+Once created, this environment must also be opened with \ref mdbx_env_open(),
+and after use be closed by \ref mdbx_env_close(). At that a non-zero value
+of the last argument "mode" supposes MDBX will create database and directory
+if ones does not exist. In this case the non-zero "mode" argument specifies
+the file mode bits be applied when a new files are created by `open()` function.
 
 Within that directory, a lock file (aka LCK-file) and a storage file (aka
 DXB-file) will be generated. If you don't want to use a directory, you can
-pass the `MDBX_NOSUBDIR` option, in which case the path you provided is used
+pass the \ref MDBX_NOSUBDIR option, in which case the path you provided is used
 directly as the DXB-file, and another file with a "-lck" suffix added
 will be used for the LCK-file.
 
 Once the environment is open, a transaction can be created within it using
-`mdbx_txn_begin()`. Transactions may be read-write or read-only, and read-write
+\ref mdbx_txn_begin(). Transactions may be read-write or read-only, and read-write
 transactions may be nested. A transaction must only be used by one thread at
 a time. Transactions are always required, even for read-only access. The
 transaction provides a consistent view of the data.
 
 Once a transaction has been created, a database (i.e. key-value space inside
-the environment) can be opened within it using `mdbx_dbi_open()`. If only one
+the environment) can be opened within it using \ref mdbx_dbi_open(). If only one
 database will ever be used in the environment, a `NULL` can be passed as the
-database name. For named databases, the `MDBX_CREATE` flag must be used to
-create the database if it doesn't already exist. Also, `mdbx_env_set_maxdbs()`
-must be called after `mdbx_env_create()` and before `mdbx_env_open()` to set
+database name. For named databases, the \ref MDBX_CREATE flag must be used to
+create the database if it doesn't already exist. Also, \ref mdbx_env_set_maxdbs()
+must be called after \ref mdbx_env_create() and before \ref mdbx_env_open() to set
 the maximum number of named databases you want to support.
 
 \note A single transaction can open multiple databases. Generally databases
 should only be opened once, by the first transaction in the process.
 
-Within a transaction, `mdbx_get()` and `mdbx_put()` can store single key-value
+Within a transaction, \ref mdbx_get() and \ref mdbx_put() can store single key-value
 pairs if that is all you need to do (but see \ref Cursors below if you want to do
 more).
 
-A key-value pair is expressed as two `MDBX_val` structures. This struct that is
+A key-value pair is expressed as two \ref MDBX_val structures. This struct that is
 exactly similar to POSIX's `struct iovec` and has two fields, `iov_len` and
 `iov_base`. The data is a `void` pointer to an array of `iov_len` bytes.
 \note The notable difference between MDBX and LMDB is that MDBX support zero
 length keys.
 
 Because MDBX is very efficient (and usually zero-copy), the data returned in
-an `MDBX_val` structure may be memory-mapped straight from disk. In other words
+an \ref MDBX_val structure may be memory-mapped straight from disk. In other words
 look but do not touch (or `free()` for that matter). Once a transaction is
 closed, the values can no longer be used, so make a copy if you need to keep
 them after that.
@@ -54,21 +54,21 @@ them after that.
 ## Cursors {#Cursors}
 To do more powerful things, we must use a cursor.
 
-Within the transaction, a cursor can be created with `mdbx_cursor_open()`.
+Within the transaction, a cursor can be created with \ref mdbx_cursor_open().
 With this cursor we can store/retrieve/delete (multiple) values using
-`mdbx_cursor_get()`, `mdbx_cursor_put()` and `mdbx_cursor_del()`.
+\ref mdbx_cursor_get(), \ref mdbx_cursor_put() and \ref mdbx_cursor_del().
 
-The `mdbx_cursor_get()` positions itself depending on the cursor operation
+The \ref mdbx_cursor_get() positions itself depending on the cursor operation
 requested, and for some operations, on the supplied key. For example, to list
-all key-value pairs in a database, use operation `MDBX_FIRST` for the first
-call to `mdbx_cursor_get()`, and `MDBX_NEXT` on subsequent calls, until the end
-is hit.
+all key-value pairs in a database, use operation \ref MDBX_FIRST for the first
+call to \ref mdbx_cursor_get(), and \ref MDBX_NEXT on subsequent calls, until
+the end is hit.
 
-To retrieve all keys starting from a specified key value, use `MDBX_SET`. For
-more cursor operations, see the API description below.
+To retrieve all keys starting from a specified key value, use \ref MDBX_SET. For
+more cursor operations, see the \ref c_api reference.
 
-When using `mdbx_cursor_put()`, either the function will position the cursor
-for you based on the key, or you can use operation `MDBX_CURRENT` to use the
+When using \ref mdbx_cursor_put()\ref , either the function will position the cursor
+for you based on the key, or you can use operation \ref MDBX_CURRENT to use the
 current position of the cursor. \note Note that key must then match the current
 position's key.
 
@@ -98,7 +98,7 @@ opened the file across all threads. The reason for this is:
    once will remove all the locks held on it, and the other instances will be
    vulnerable to corruption from other processes.
  + For compatibility with LMDB which allows multi-opening, MDBX can be
-   configured at runtime by `mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)`
+   configured at runtime by \ref mdbx_setup_debug() with \ref MDBX_DBG_LEGACY_MULTIOPEN` option
    prior to calling other MDBX funcitons. In this way MDBX will track
    databases opening, detect multi-opening cases and then recover POSIX file
    locks as necessary. However, lock recovery can cause unexpected pauses,
@@ -132,24 +132,24 @@ no open MDBX-instance(s) during fork(), or atleast close it immediately after
 Do not start more than one transaction for a one thread. If you think about
 this, it's really strange to do something with two data snapshots at once,
 which may be different. MDBX checks and preventing this by returning
-corresponding error code (`MDBX_TXN_OVERLAPPING`, `MDBX_BAD_RSLOT`, `MDBX_BUSY`)
-unless you using `MDBX_NOTLS` option on the environment. Nonetheless, with the
-`MDBX_NOTLS option`, you must know exactly what you are doing, otherwise you
+corresponding error code (\ref MDBX_TXN_OVERLAPPING, \ref MDBX_BAD_RSLOT, \ref MDBX_BUSY)
+unless you using \ref MDBX_NOTLS option on the environment. Nonetheless, with the
+\ref MDBX_NOTLS option, you must know exactly what you are doing, otherwise you
 will get deadlocks or reading an alien data.
 
 Also note that a transaction is tied to one thread by default using Thread
 Local Storage. If you want to pass read-only transactions across threads,
-you can use the MDBX_NOTLS option on the environment. Nevertheless, a write
+you can use the \ref MDBX_NOTLS option on the environment. Nevertheless, a write
 transaction entirely should only be used in one thread from start to finish.
-MDBX checks this in a reasonable manner and return the MDBX_THREAD_MISMATCH
+MDBX checks this in a reasonable manner and return the \ref MDBX_THREAD_MISMATCH
 error in rules violation.
 
 
 ## Transactions, rollbacks etc
 
 To actually get anything done, a transaction must be committed using
-`mdbx_txn_commit()`. Alternatively, all of a transaction's operations
-can be discarded using `mdbx_txn_abort()`.
+\ref mdbx_txn_commit(). Alternatively, all of a transaction's operations
+can be discarded using \ref mdbx_txn_abort().
 
 \attention An important difference between MDBX and LMDB is that MDBX required
 that any opened cursors can be reused and must be freed explicitly, regardless
@@ -180,14 +180,14 @@ continue to be opened at any time.
 
 ## Duplicate keys aka Multi-values
 
-`mdbx_get()` and `mdbx_put()` respectively have no and only some support or
+\ref mdbx_get() and \ref mdbx_put() respectively have no and only some support or
 multiple key-value pairs with identical keys. If there are multiple values
-for a key, `mdbx_get()` will only return the first value.
+for a key, \ref mdbx_get() will only return the first value.
 
-When multiple values for one key are required, pass the `MDBX_DUPSORT` flag to
-`mdbx_dbi_open()`. In an `MDBX_DUPSORT` database, by default `mdbx_put()` will
+When multiple values for one key are required, pass the \ref MDBX_DUPSORT flag to
+\ref mdbx_dbi_open(). In an \ref MDBX_DUPSORT database, by default \ref mdbx_put() will
 not replace the value for a key if the key existed already. Instead it will add
-the new value to the key. In addition, `mdbx_del()` will pay attention to the
+the new value to the key. In addition, \ref mdbx_del() will pay attention to the
 value field too, allowing for specific values of a key to be deleted.
 
 Finally, additional cursor operations become available for traversing through
@@ -199,17 +199,17 @@ and retrieving duplicate values.
 If you frequently begin and abort read-only transactions, as an optimization,
 it is possible to only reset and renew a transaction.
 
-`mdbx_txn_reset()` releases any old copies of data kept around for a read-only
-transaction. To reuse this reset transaction, call `mdbx_txn_renew()` on it.
-Any cursors in this transaction can also be renewed using `mdbx_cursor_renew()`
-or freed by `mdbx_cursor_close()`.
+\ref mdbx_txn_reset() releases any old copies of data kept around for a read-only
+transaction. To reuse this reset transaction, call \ref mdbx_txn_renew() on it.
+Any cursors in this transaction can also be renewed using \ref mdbx_cursor_renew()
+or freed by \ref mdbx_cursor_close().
 
-To permanently free a transaction, reset or not, use `mdbx_txn_abort()`.
+To permanently free a transaction, reset or not, use \ref mdbx_txn_abort().
 
 
 ## Cleaning up
 
-Any created cursors must be closed using `mdbx_cursor_close()`. It is advisable
+Any created cursors must be closed using \ref mdbx_cursor_close(). It is advisable
 to repeat:
 \note An important difference between MDBX and LMDB is that MDBX required that
 any opened cursors can be reused and must be freed explicitly, regardless
@@ -225,17 +225,17 @@ avoid closing the handle while at least one transaction is using it.
 
 ## Now read up on the full API!
 
-The full MDBX documentation lists further details below, like how to:
+The full \ref c_api documentation lists further details below, like how to:
 
-- configure database size and automatic size management
-- drop and clean a database
-- detect and report errors
-- optimize (bulk) loading speed
-- (temporarily) reduce robustness to gain even more speed
-- gather statistics about the database
-- estimate size of range query result
-- double perfomance by LIFO reclaiming on storages with write-back
-- use sequences and canary markers
-- use lack-of-space callback (aka OOM-KICK)
-- use exclusive mode
-- define custom sort orders (but this is recommended to be avoided)
+- Configure database size and automatic size management: \ref mdbx_env_set_geometry().
+- Drop and clean a database: \ref mdbx_drop().
+- Detect and report errors: \ref c_err.
+- Optimize (bulk) loading speed: \ref MDBX_MULTIPLE, \ref MDBX_APPEND.
+- Reduce (temporarily) robustness to gain even more speed: \ref sync_modes.
+- Gather statistics about the database: \ref c_statinfo.
+- Sstimate size of range query result: \ref c_rqest.
+- Double perfomance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
+- Use sequences and canary markers: \ref mdbx_dbi_sequence(), \ref MDBX_canary.
+- Use lack-of-space callback (aka OOM-KICK): \ref mdbx_env_set_oomfunc().
+- Use exclusive mode: \ref MDBX_EXCLUSIVE.
+- Define custom sort orders (but this is recommended to be avoided).

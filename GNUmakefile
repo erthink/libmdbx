@@ -262,16 +262,16 @@ endef
 $(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),README.md)))
 
 docs/overall.md: docs/__overview.md docs/_toc.md docs/__mithril.md docs/__history.md AUTHORS LICENSE
-	echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $?) > $@ && echo -e "\n\n\nLicense\n=======\n" | cat AUTHORS - LICENSE >> $@
+	echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $^) > $@ && echo -e "\n\n\nLicense\n=======\n" | cat AUTHORS - LICENSE >> $@
 
 docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md docs/_restrictions.md docs/__performance.md
-	cat $? | sed 's/^Performance comparison$$/Performance comparison {#performance}/' > $@
+	cat $^ | sed 's/^Performance comparison$$/Performance comparison {#performance}/' > $@
 
 docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
-	echo -e "\\page usage Usage\n\\section getting Getting the libmdbx" | cat - $? | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
+	echo -e "\\page usage Usage\n\\section getting Getting the libmdbx" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h ChangeLog.md AUTHORS LICENSE
-	rm -rf docs/html && cp mdbx.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h src/options.h ChangeLog.md AUTHORS LICENSE
+	rm -rf docs/html && cp mdbx.h src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
 
 .PHONY: dist release-assets
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
