@@ -3605,8 +3605,7 @@ LIBMDBX_API int mdbx_reader_list(const MDBX_env *env,
  * \param [out] dead   Number of stale slots that were cleared.
  *
  * \returns A non-zero error value on failure and 0 on success,
- * or \ref MDBX_RESULT_TRUE if a dead reader(s) found or mutex was recovered.
- */
+ * or \ref MDBX_RESULT_TRUE if a dead reader(s) found or mutex was recovered. */
 LIBMDBX_API int mdbx_reader_check(MDBX_env *env, int *dead);
 
 /** Returns a lag of the reading for the given transaction.
@@ -3623,6 +3622,41 @@ LIBMDBX_API int mdbx_reader_check(MDBX_env *env, int *dead);
  *          read, or negative value on failure. */
 MDBX_DEPRECATED LIBMDBX_API int mdbx_txn_straggler(const MDBX_txn *txn,
                                                    int *percent);
+
+/** Registers the current thread as a reader for the environment.
+ * \ingroup c_extra
+ *
+ * To perform read operations without blocking, a reader slot must be assigned
+ * for each thread. However, this assignment requires a short-term lock
+ * acquisition which is performed automatically. This function allows you to
+ * assign the reader slot in advance and thus avoid capturing the blocker when
+ * the read transaction starts firstly from current thread.
+ * \see mdbx_thread_unregister()
+ *
+ * \note Threads are registered automatically the first time a read transaction
+ *       starts. Therefore, there is no need to use this function, except in
+ *       special cases.
+ *
+ * \param [in] env   An environment handle returned by \ref mdbx_env_create().
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ * or \ref MDBX_RESULT_TRUE if thread is already registered. */
+LIBMDBX_API int mdbx_thread_register(MDBX_env *env);
+
+/** Unregisters the current thread as a reader for the environment.
+ * \ingroup c_extra
+ *
+ * To perform read operations without blocking, a reader slot must be assigned
+ * for each thread. However, the assigned reader slot will remain occupied until
+ * the thread ends or the environment closes. This function allows you to
+ * explicitly release the assigned reader slot.
+ * \see mdbx_thread_register()
+ *
+ * \param [in] env   An environment handle returned by \ref mdbx_env_create().
+ *
+ * \returns A non-zero error value on failure and 0 on success, or
+ * \ref MDBX_RESULT_TRUE if thread is not registered or already undegistered. */
+LIBMDBX_API int mdbx_thread_unregister(MDBX_env *env);
 
 /** A lack-of-space callback function to resolve issues with a laggard readers.
  * \ingroup c_err
