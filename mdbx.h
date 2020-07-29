@@ -399,7 +399,7 @@ struct MDBX_cursor;
  * update operation, or the end of the transaction. Do not modify or
  * free them, they commonly point into the database itself.
  *
- * Key sizes must be between 0 and mdbx_env_get_maxkeysize() inclusive.
+ * Key sizes must be between 0 and \ref mdbx_env_get_maxkeysize() inclusive.
  * The same applies to data sizes in databases with the \ref MDBX_DUPSORT flag.
  * Other data items can in theory be from 0 to \ref MDBX_MAXDATASIZE bytes long.
  *
@@ -490,7 +490,7 @@ enum MDBX_log_level_t {
       and all other log-messages */
   MDBX_LOG_EXTRA = 7,
 
-  /** for mdbx_setup_debug() only: Don't change current settings */
+  /** for \ref mdbx_setup_debug() only: Don't change current settings */
   MDBX_LOG_DONTCHANGE = -1
 };
 #ifndef __cplusplus
@@ -537,7 +537,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
 /** A debug-logger callback function,
  * called before printing the message and aborting.
  *
- * \param [in] env  An environment handle returned by mdbx_env_create().
+ * \param [in] env  An environment handle returned by \ref mdbx_env_create().
  * \param [in] msg  The assertion message, not including newline. */
 typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
                              int line, const char *msg, va_list args);
@@ -571,7 +571,15 @@ typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
 
-/** Dump given MDBX_val to the buffer */
+/** Dump given MDBX_val to the buffer
+ *
+ * Dumps it as string if value is printable (all bytes in the range 0x20..0x7E),
+ * otherwise made hexadecimal dump. Requires at least 4 byte length buffer.
+ *
+ * \returns One of:
+ *  - NULL if given buffer size less than 4 bytes;
+ *  - pointer to constant string if given value NULL or empty;
+ *  - otherwise pointer to given buffer. */
 LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
                                       const size_t bufsize);
 
@@ -596,7 +604,7 @@ enum MDBX_env_flags_t {
    * - without `MDBX_NOSUBDIR` = in a filesystem we have the MDBX-directory with
    *   given pathname, within that a pair of MDBX-files with predefined names.
    *
-   * This flag affects only at new environment creating by mdbx_env_open(),
+   * This flag affects only at new environment creating by \ref mdbx_env_open(),
    * otherwise at opening an existing environment libmdbx will choice this
    * automatically. */
   MDBX_NOSUBDIR = UINT32_C(0x4000),
@@ -681,13 +689,12 @@ enum MDBX_env_flags_t {
    *   by single system call, without any memory management nor copying.
    *
    * - without `MDBX_WRITEMAP` = data will be mapped into memory in the
-   read-only
-   *   mode. This requires stocking all modified database pages in memory and
-   *   then writing them to disk through file operations.
+   *   read-only mode. This requires stocking all modified database pages in
+   *   memory and then writing them to disk through file operations.
    *
    * \warning On the other hand, `MDBX_WRITEMAP` adds the possibility for stray
    * application writes thru pointers to silently corrupt the database.
-
+   *
    * \note The `MDBX_WRITEMAP` mode is incompatible with nested transactions,
    * since this is unreasonable. I.e. nested transactions requires mallocation
    * of database pages and more work for tracking ones, which neuters a
@@ -995,7 +1002,7 @@ enum MDBX_env_flags_t {
    * \ref mdbx_txn_begin() for particular write transaction. \see sync_modes */
   MDBX_UTTERLY_NOSYNC = MDBX_SAFE_NOSYNC | MDBX_MAPASYNC,
 
-  /** @} end of SYNC_MODES */
+  /** @} end of SYNC MODES */
 
   /** Do not block when starting a write transaction */
   MDBX_TRYTXN = UINT32_C(0x10000000),
@@ -1020,16 +1027,16 @@ enum MDBX_db_flags_t {
   MDBX_DUPSORT = UINT32_C(0x04),
 
   /** Numeric keys in native byte order either uint32_t or uint64_t. The keys
-     must all be of the same size and must be aligned while passing as
-     arguments. */
+   * must all be of the same size and must be aligned while passing as
+   * arguments. */
   MDBX_INTEGERKEY = UINT32_C(0x08),
 
   /** With \ref MDBX_DUPSORT; sorted dup items have fixed size */
   MDBX_DUPFIXED = UINT32_C(0x10),
 
   /** With \ref MDBX_DUPSORT; dups are \ref MDBX_INTEGERKEY -style integers. The
-     data values must all be of the same size and must be aligned while passing
-     as arguments. */
+   * data values must all be of the same size and must be aligned while passing
+   * as arguments. */
   MDBX_INTEGERDUP = UINT32_C(0x20),
 
   /** With \ref MDBX_DUPSORT; use reverse string comparison */
@@ -1054,23 +1061,24 @@ enum MDBX_put_flags_t {
   MDBX_NOOVERWRITE = UINT32_C(0x10),
 
   /** Only for \ref MDBX_DUPSORT. For upsertion: don't write if the key/data
-     pair already exist. For deletion: remove all duplicate data items. */
+   * pair already exist. For deletion: remove all duplicate data items. */
   MDBX_NODUPDATA = UINT32_C(0x20),
 
-  /** For upsertion: overwrite the current key/data pair. MDBX allows this flag
-     for mdbx_put() for explicit overwrite/update without insertion. */
+  /** For upsertion: overwrite the current key/data pair.
+   * MDBX allows this flag for \ref mdbx_put() for explicit overwrite/update
+   * without insertion. */
   MDBX_CURRENT = UINT32_C(0x40),
 
-  /** For upsertion: Just reserve space for data, don't copy it. Return a
-     pointer to the reserved space. */
+  /** For upsertion: Just reserve space for data, don't copy it.
+   * Return a pointer to the reserved space. */
   MDBX_RESERVE = UINT32_C(0x10000),
 
-  /** Data is being appended. Don't split full pages, continue on a new instead.
-   */
+  /** Data is being appended.
+   * Don't split full pages, continue on a new instead. */
   MDBX_APPEND = UINT32_C(0x20000),
 
-  /** Duplicate data is being appended. Don't split full pages, continue on a
-     new instead. */
+  /** Duplicate data is being appended.
+   * Don't split full pages, continue on a new instead. */
   MDBX_APPENDDUP = UINT32_C(0x40000),
 
   /** Store multiple data items in one call. Only for \ref MDBX_DUPFIXED. */
@@ -1089,7 +1097,7 @@ enum MDBX_copy_flags_t {
   MDBX_CP_DEFAULTS = 0,
 
   /** Copy with compactification: Omit free space from copy and renumber all
-     pages sequentially */
+   * pages sequentially */
   MDBX_CP_COMPACT = 1u,
 
   /** Force to make resizeable copy, i.e. dynamic size instead of fixed */
@@ -1116,15 +1124,15 @@ enum MDBX_cursor_op {
   MDBX_GET_BOTH,
 
   /** \ref MDBX_DUPSORT -only: Position at given key and at first data greater
-     than or equal to specified data. */
+   * than or equal to specified data. */
   MDBX_GET_BOTH_RANGE,
 
   /** Return key/data at current cursor position */
   MDBX_GET_CURRENT,
 
-  /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items from
-     current cursor position. Move cursor to prepare for \ref
-     MDBX_NEXT_MULTIPLE. */
+  /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items
+   * from current cursor position. Move cursor to prepare
+   * for \ref MDBX_NEXT_MULTIPLE. */
   MDBX_GET_MULTIPLE,
 
   /** Position at last key/data item */
@@ -1139,9 +1147,9 @@ enum MDBX_cursor_op {
   /** \ref MDBX_DUPSORT -only: Position at next data item of current key. */
   MDBX_NEXT_DUP,
 
-  /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items from
-     next cursor position. Move cursor to prepare for \ref MDBX_NEXT_MULTIPLE.
-   */
+  /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items
+   * from next cursor position. Move cursor to prepare
+   * for \ref MDBX_NEXT_MULTIPLE. */
   MDBX_NEXT_MULTIPLE,
 
   /** Position at first data item of next key */
@@ -1165,8 +1173,8 @@ enum MDBX_cursor_op {
   /** Position at first key greater than or equal to specified key. */
   MDBX_SET_RANGE,
 
-  /** \ref MDBX_DUPFIXED -only: Position at previous page and return up to a
-     page of duplicate data items. */
+  /** \ref MDBX_DUPFIXED -only: Position at previous page and return up to
+   * a page of duplicate data items. */
   MDBX_PREV_MULTIPLE
 };
 #ifndef __cplusplus
@@ -1200,8 +1208,8 @@ enum MDBX_error_t {
   /** Database is corrupted (page was wrong type and so on) */
   MDBX_CORRUPTED = -30796,
 
-  /** Environment had fatal error (i.e. update of meta page failed and so on)
-   */
+  /** Environment had fatal error,
+   * i.e. update of meta page failed and so on. */
   MDBX_PANIC = -30795,
 
   /** DB file version mismatch with libmdbx */
@@ -1354,7 +1362,7 @@ MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED_is_deprecated() {
  * returned. See errors for a list of MDBX-specific error codes.
  *
  * `mdbx_strerror()` is NOT thread-safe because may share common internal buffer
- * for system maessages. The returned string must NOT be modified by the
+ * for system messages. The returned string must NOT be modified by the
  * application, but MAY be modified by a subsequent call to
  * \ref mdbx_strerror(), `strerror()` and other related functions.
  * \see mdbx_strerror_r()
@@ -1637,7 +1645,8 @@ struct MDBX_envinfo {
   /** Time since the last readers check in 1/65536 of second,
    * see \ref mdbx_reader_check(). */
   uint32_t mi_since_reader_check_seconds16dot16;
-  /** Current environment mode, the same as mdbx_env_get_flags() returns. */
+  /** Current environment mode.
+   * The same as \ref mdbx_env_get_flags() returns. */
   uint32_t mi_mode;
 };
 #ifndef __cplusplus
@@ -1825,6 +1834,7 @@ LIBMDBX_API int mdbx_env_close(MDBX_env *env);
  *
  * This may be used to set some flags in addition to those from
  * mdbx_env_open(), or to unset these flags.
+ * \see mdbx_env_get_flags()
  *
  * \note In contrast to LMDB, the MDBX serialize threads via mutex while
  * changing the flags. Therefore this function will be blocked while a write
@@ -1843,6 +1853,7 @@ LIBMDBX_API int mdbx_env_set_flags(MDBX_env *env, unsigned flags, int onoff);
 
 /** Get environment flags.
  * \ingroup c_statinfo
+ * \see mdbx_env_set_flags()
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
  * \param [out] flags  The address of an integer to store the flags.
@@ -2137,6 +2148,7 @@ LIBMDBX_API intptr_t mdbx_limits_txnsize_max(intptr_t pagesize);
  * \ref MDBX_txn object until it or the \ref MDBX_env object is destroyed.
  * This function may only be called after \ref mdbx_env_create() and before
  * \ref mdbx_env_open().
+ * \see mdbx_env_get_maxreaders()
  *
  * \param [in] env       An environment handle returned
  *                       by \ref mdbx_env_create().
@@ -2150,6 +2162,7 @@ LIBMDBX_API int mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers);
 
 /** Get the maximum number of threads/reader slots for the environment.
  * \ingroup c_statinfo
+ * \see mdbx_env_set_maxreaders()
  *
  * \param [in] env       An environment handle returned
  *                       by \ref mdbx_env_create().
@@ -2211,6 +2224,7 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_env_get_maxkeysize(const MDBX_env *env);
 
 /** Set application information associated with the \ref MDBX_env.
  * \ingroup c_settings
+ * \see mdbx_env_get_userctx()
  *
  * \param [in] env  An environment handle returned by \ref mdbx_env_create().
  * \param [in] ctx  An arbitrary pointer for whatever the application needs.
@@ -2220,6 +2234,7 @@ LIBMDBX_API int mdbx_env_set_userctx(MDBX_env *env, void *ctx);
 
 /** Get the application information associated with the MDBX_env.
  * \ingroup c_statinfo
+ * \see mdbx_env_set_userctx()
  *
  * \param [in] env An environment handle returned by \ref mdbx_env_create()
  * \returns The pointer set by \ref mdbx_env_set_userctx(). */
@@ -2598,14 +2613,14 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  *      Keys are strings to be compared in reverse order, from the end
  *      of the strings to the beginning. By default, Keys are treated as
  *      strings and compared from beginning to end.
+ *  - \ref MDBX_INTEGERKEY
+ *      Keys are binary integers in native byte order, either uint32_t or
+ *      uint64_t, and will be sorted as such. The keys must all be of the
+ *      same size and must be aligned while passing as arguments.
  *  - \ref MDBX_DUPSORT
  *      Duplicate keys may be used in the database. Or, from another point of
  *      view, keys may have multiple data items, stored in sorted order. By
  *      default keys must be unique and may have only a single data item.
- *  - \ref MDBX_INTEGERKEY
- *      Keys are binary integers in native byte order, either uin32_t or
- *      uint64_t, and will be sorted as such. The keys must all be of the
- *      same size and must be aligned while passing as arguments.
  *  - \ref MDBX_DUPFIXED
  *      This flag may only be used in combination with \ref MDBX_DUPSORT. This
  *      option tells the library that the data items for this database are
@@ -2678,9 +2693,9 @@ mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, unsigned flags, MDBX_dbi *dbi,
  * \see key2value
  * @{
  *
- * The \ref mdbx_key_from_jsonInteger() build key which are comparable with
- * keys created by \ref mdbx_key_from_double(). So this allow mix `int64_t` and
- * IEEE754 `double` values in one index for JSON-numbers with restriction for
+ * The \ref mdbx_key_from_jsonInteger() build a keys which are comparable with
+ * keys created by \ref mdbx_key_from_double(). So this allows mixing `int64_t`
+ * and IEEE754 double values in one index for JSON-numbers with restriction for
  * integer numbers range corresponding to RFC-7159, i.e. \f$[-2^{53}+1,
  * 2^{53}-1]\f$. See bottom of page 6 at https://tools.ietf.org/html/rfc7159 */
 LIBMDBX_API uint64_t mdbx_key_from_jsonInteger(const int64_t json_integer);
