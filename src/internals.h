@@ -88,6 +88,7 @@
 #pragma warning(disable : 4548) /* expression before comma has no effect; expected expression with side - effect */
 #pragma warning(disable : 4366) /* the result of the unary '&' operator may be unaligned */
 #pragma warning(disable : 4200) /* nonstandard extension used: zero-sized array in struct/union */
+#pragma warning(disable : 4204) /* nonstandard extension used: non-constant aggregate initializer */
 #endif                          /* _MSC_VER (warnings) */
 
 #if defined(MDBX_TOOLS)
