@@ -3387,17 +3387,18 @@ const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
                           const size_t bufsize) {
   if (!key)
     return "<null>";
-  if (!buf || bufsize < 4)
-    return nullptr;
   if (!key->iov_len)
     return "<empty>";
+  if (!buf || bufsize < 4)
+    return nullptr;
 
-  const uint8_t *const data = key->iov_base;
   bool is_ascii = true;
-  unsigned i;
-  for (i = 0; is_ascii && i < key->iov_len; i++)
-    if (data[i] < ' ' || data[i] > 127)
+  const uint8_t *const data = key->iov_base;
+  for (unsigned i = 0; i < key->iov_len; i++)
+    if (data[i] < ' ' || data[i] > '~') {
       is_ascii = false;
+      break;
+    }
 
   if (is_ascii) {
     int len =
@@ -3409,7 +3410,7 @@ const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
     char *const detent = buf + bufsize - 2;
     char *ptr = buf;
     *ptr++ = '<';
-    for (i = 0; i < key->iov_len; i++) {
+    for (unsigned i = 0; i < key->iov_len; i++) {
       const ptrdiff_t left = detent - ptr;
       assert(left > 0);
       int len = snprintf(ptr, left, "%02x", data[i]);
