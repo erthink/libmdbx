@@ -298,7 +298,6 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
 const struct option_verb mode_bits[] = {
     {"rdonly", unsigned(MDBX_RDONLY)},
-    {"mapasync", unsigned(MDBX_MAPASYNC)},
     {"nosync-utterly", unsigned(MDBX_UTTERLY_NOSYNC)},
     {"nosubdir", unsigned(MDBX_NOSUBDIR)},
     {"nosync-safe", unsigned(MDBX_SAFE_NOSYNC)},

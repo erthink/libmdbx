@@ -572,13 +572,14 @@ mdbx_thread_create(mdbx_thread_t *thread,
 MDBX_INTERNAL_FUNC int mdbx_thread_join(mdbx_thread_t thread);
 
 enum mdbx_syncmode_bits {
+  MDBX_SYNC_NONE = 0,
   MDBX_SYNC_DATA = 1,
   MDBX_SYNC_SIZE = 2,
   MDBX_SYNC_IODQ = 4
 };
 
-MDBX_INTERNAL_FUNC int mdbx_filesync(mdbx_filehandle_t fd,
-                                     const enum mdbx_syncmode_bits mode_bits);
+MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
+                                  const enum mdbx_syncmode_bits mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length);
 MDBX_INTERNAL_FUNC int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos);
 MDBX_INTERNAL_FUNC int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length);
@@ -635,7 +636,8 @@ MDBX_INTERNAL_FUNC int
 mdbx_resume_threads_after_remap(mdbx_handle_array_t *array);
 #endif /* Windows */
 MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
-                                  size_t length, int async);
+                                  size_t length,
+                                  enum mdbx_syncmode_bits mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
                                             const char *pathname, int err);
 

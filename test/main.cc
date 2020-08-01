@@ -95,7 +95,6 @@ void __noreturn usage(void) {
       "    coalesce       == MDBX_COALESCE\n"
       "    nosync-safe    == MDBX_SAFE_NOSYNC\n"
       "    writemap       == MDBX_WRITEMAP\n"
-      "    mapasync       == MDBX_MAPASYNC\n"
       "    nosync-utterly == MDBX_UTTERLY_NOSYNC\n"
       "    perturb        == MDBX_PAGEPERTURB\n"
       "    notls          == MDBX_NOTLS\n"
@@ -125,8 +124,8 @@ void actor_params::set_defaults(const std::string &tmpdir) {
 #endif
 
   pathname_db = tmpdir + "mdbx-test.db";
-  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_MAPASYNC | MDBX_NOMEMINIT |
-               MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_ACCEDE;
+  mode_flags = MDBX_NOSUBDIR | MDBX_WRITEMAP | MDBX_SAFE_NOSYNC |
+               MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_LIFORECLAIM | MDBX_ACCEDE;
   table_flags = MDBX_DUPSORT;
 
   size_lower = -1;

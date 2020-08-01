@@ -109,8 +109,8 @@ static void db_connect() {
       env, 0, 0, REC_COUNT * sizeof(session_data_t) * 10, -1, -1, -1));
   MDBX_CHECK(mdbx_env_set_maxdbs(env, 30));
   MDBX_CHECK(mdbx_env_open(env, opt_db_path,
-                           MDBX_CREATE | MDBX_WRITEMAP | MDBX_MAPASYNC |
-                               MDBX_SAFE_NOSYNC | MDBX_LIFORECLAIM,
+                           MDBX_CREATE | MDBX_WRITEMAP | MDBX_UTTERLY_NOSYNC |
+                               MDBX_LIFORECLAIM,
                            0664));
   MDBX_txn *txn;
 

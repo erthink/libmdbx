@@ -783,13 +783,12 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_filesync(mdbx_filehandle_t fd,
-                                     enum mdbx_syncmode_bits mode_bits) {
+MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
+                                  enum mdbx_syncmode_bits mode_bits) {
 #if defined(_WIN32) || defined(_WIN64)
-  return ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) == 0 ||
-          FlushFileBuffers(fd))
-             ? MDBX_SUCCESS
-             : GetLastError();
+  if ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) && !FlushFileBuffers(fd))
+    return GetLastError();
+  return MDBX_SUCCESS;
 #else
 
 #if defined(__APPLE__) &&                                                      \
@@ -797,30 +796,37 @@ MDBX_INTERNAL_FUNC int mdbx_filesync(mdbx_filehandle_t fd,
   if (mode_bits & MDBX_SYNC_IODQ)
     return likely(fcntl(fd, F_FULLFSYNC) != -1) ? MDBX_SUCCESS : errno;
 #endif /* MacOS */
-#if defined(__linux__) || defined(__gnu_linux__)
-  if (mode_bits == MDBX_SYNC_SIZE && mdbx_linux_kernel_version >= 0x03060000)
-    return MDBX_SUCCESS;
-#endif /* Linux */
-  int rc;
-  do {
+
+  /* LY: This approach is always safe and without appreciable performance
+   * degradation, even on a kernel with fdatasync's bug.
+   *
+   * For more info about of a corresponding fdatasync() bug
+   * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
+  while (1) {
+    switch (mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_SIZE)) {
+    case MDBX_SYNC_NONE:
+      return MDBX_SUCCESS /* nothing to do */;
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
-    /* LY: This code is always safe and without appreciable performance
-     * degradation, even on a kernel with fdatasync's bug.
-     *
-     * For more info about of a corresponding fdatasync() bug
-     * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
-    if ((mode_bits & MDBX_SYNC_SIZE) == 0) {
+    case MDBX_SYNC_DATA:
       if (fdatasync(fd) == 0)
         return MDBX_SUCCESS;
-    } else
-#else
-    (void)mode_bits;
-#endif
-        if (fsync(fd) == 0)
-      return MDBX_SUCCESS;
-    rc = errno;
-  } while (rc == EINTR);
-  return rc;
+      break /* error */;
+#if defined(__linux__) || defined(__gnu_linux__)
+    case MDBX_SYNC_SIZE:
+      if (mdbx_linux_kernel_version >= 0x03060000)
+        return MDBX_SUCCESS;
+      __fallthrough /* fall through */;
+#endif /* Linux */
+#endif /* _POSIX_SYNCHRONIZED_IO > 0 */
+    default:
+      if (fsync(fd) == 0)
+        return MDBX_SUCCESS;
+    }
+
+    int rc = errno;
+    if (rc != EINTR)
+      return rc;
+  }
 #endif
 }
 
@@ -938,24 +944,24 @@ MDBX_INTERNAL_FUNC int mdbx_thread_join(mdbx_thread_t thread) {
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
-                                  size_t length, int async) {
+                                  size_t length,
+                                  enum mdbx_syncmode_bits mode_bits) {
   uint8_t *ptr = (uint8_t *)map->address + offset;
 #if defined(_WIN32) || defined(_WIN64)
-  if (FlushViewOfFile(ptr, length) && (async || FlushFileBuffers(map->fd)))
-    return MDBX_SUCCESS;
-  return GetLastError();
+  if (!FlushViewOfFile(ptr, length))
+    return GetLastError();
 #else
 #if defined(__linux__) || defined(__gnu_linux__)
-  if (async && mdbx_linux_kernel_version > 0x02061300)
-    /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op,
-       since the kernel properly tracks dirty pages and flushes them to storage
-       as necessary. */
+  if (mode_bits == MDBX_SYNC_NONE && mdbx_linux_kernel_version > 0x02061300)
+    /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op. The kernel properly
+     * tracks dirty pages and flushes them to storage as necessary. */
     return MDBX_SUCCESS;
 #endif /* Linux */
-  const int mode = async ? MS_ASYNC : MS_SYNC;
-  int rc = (msync(ptr, length, mode) == 0) ? MDBX_SUCCESS : errno;
-  return rc;
+  if (msync(ptr, length, (mode_bits & MDBX_SYNC_DATA) ? MS_SYNC : MS_ASYNC))
+    return errno;
+  mode_bits &= ~MDBX_SYNC_DATA;
 #endif
+  return mdbx_fsync(map->fd, mode_bits);
 }
 
 MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,

@@ -227,7 +227,7 @@ the user's point of view.
 7. Fast estimation of range query result volume, i.e. how many items can
 be found between a `KEY1` and a `KEY2`. This is a prerequisite for build
 and/or optimize query execution plans.
-  > _libmdbx_ performs a rough estimate based on common B-tree  pages of the paths from root to corresponding keys.
+  > _libmdbx_ performs a rough estimate based on common B-tree pages of the paths from root to corresponding keys.
 
 8. `mdbx_chk` tool for database integrity check.
 
@@ -259,9 +259,13 @@ pair, to the first, to the last, or not set to anything.
 
 ## Other fixes and specifics
 
-1. Fixed more than 10 significant errors, in particular: page leaks, wrong sub-database statistics, segfault in several conditions, nonoptimal page merge strategy, updating an existing record with a change in data size (including for multimap), etc.
+1. Fixed more than 10 significant errors, in particular: page leaks,
+wrong sub-database statistics, segfault in several conditions,
+nonoptimal page merge strategy, updating an existing record with
+a change in data size (including for multimap), etc.
 
-2. All cursors can be reused and should be closed explicitly, regardless ones were opened within a write or read transaction.
+2. All cursors can be reused and should be closed explicitly,
+regardless ones were opened within a write or read transaction.
 
 3. Opening database handles are spared from race conditions and
 pre-opening is not needed.
@@ -269,10 +273,9 @@ pre-opening is not needed.
 4. Returning `MDBX_EMULTIVAL` error in case of ambiguous update or delete.
 
 5. Guarantee of database integrity even in asynchronous unordered write-to-disk mode.
-  > _libmdbx_ propose additional trade-off by implementing append-like manner for updates
-  > in `MDBX_SAFE_NOSYNC` and `MDBX_WRITEMAP|MDBX_MAPASYNC` modes, that avoid database corruption after a system crash
-  > contrary to LMDB. Nevertheless, the `MDBX_UTTERLY_NOSYNC` mode is available to match LMDB behaviour,
-  > and for special use-cases.
+  > _libmdbx_ propose additional trade-off by `MDBX_SAFE_NOSYNC` with append-like manner for updates,
+  > that avoids database corruption after a system crash contrary to LMDB.
+  > Nevertheless, the `MDBX_UTTERLY_NOSYNC` mode is available to match behaviour of the `MDB_NOSYNC` in LMDB.
 
 6. On **MacOS & iOS** the `fcntl(F_FULLFSYNC)` syscall is used _by
 default_ to synchronize data with the disk, as this is [the only way to
