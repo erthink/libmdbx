@@ -986,15 +986,45 @@ enum MDBX_env_flags_t {
   MDBX_UTTERLY_NOSYNC = MDBX_SAFE_NOSYNC | UINT32_C(0x100000),
 
   /** @} end of SYNC MODES */
-
-  /** Do not block when starting a write transaction */
-  MDBX_TRYTXN = UINT32_C(0x10000000),
 };
 #ifndef __cplusplus
 /** \ingroup c_opening */
 typedef enum MDBX_env_flags_t MDBX_env_flags_t;
 #else
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_env_flags_t)
+#endif
+
+/** Transaction flags
+ * \ingroup c_transactions
+ * \anchor txn_flags */
+enum MDBX_txn_flags_t {
+  /** Start read-write transaction.
+   *
+   * Only one write transaction may be active at a time. Writes are fully
+   * serialized, which guarantees that writers can never deadlock. */
+  MDBX_TXN_READWRITE = 0,
+
+  /** Start read-only transaction.
+   *
+   * There can be multiple read-only transactions simultaneously that do not
+   * block each other and a write transactions. */
+  MDBX_TXN_RDONLY = MDBX_RDONLY,
+
+  /** Do not block when starting a write transaction. */
+  MDBX_TXN_TRY = UINT32_C(0x10000000),
+
+  /** Exactly the same as \ref MDBX_NOMETASYNC,
+   * but for this transaction only */
+  MDBX_TXN_NOMETASYNC = MDBX_NOMETASYNC,
+
+  /** Exactly the same as \ref MDBX_SAFE_NOSYNC,
+   * but for this transaction only */
+  MDBX_TXN_NOSYNC = MDBX_SAFE_NOSYNC
+};
+#ifndef __cplusplus
+typedef enum MDBX_txn_flags_t MDBX_txn_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags_t)
 #endif
 
 /** DATABASE FLAGS
@@ -2261,8 +2291,8 @@ LIBMDBX_API void *mdbx_env_get_userctx(const MDBX_env *env);
  *                      - \ref MDBX_RDONLY   This transaction will not perform
  *                                           any write operations.
  *
- *                      - \ref MDBX_TRYTXN   Do not block when starting
- *                                          a write transaction.
+ *                      - \ref MDBX_TXN_TRY  Do not block when starting
+ *                                           a write transaction.
  *
  *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
  *                        Do not sync data to disk corresponding

@@ -3143,7 +3143,7 @@ static int __must_check_result mdbx_audit_ex(MDBX_txn *txn,
                                              bool dont_filter_gc);
 static __maybe_unused __always_inline int __must_check_result
 mdbx_audit(MDBX_txn *txn) {
-  return mdbx_audit_ex(txn, 0, (txn->mt_flags & MDBX_RDONLY) != 0);
+  return mdbx_audit_ex(txn, 0, (txn->mt_flags & MDBX_TXN_RDONLY) != 0);
 }
 
 static int __must_check_result mdbx_page_check(MDBX_cursor *const mc,
@@ -4477,7 +4477,7 @@ static const char *mdbx_durable_str(const MDBX_meta *const meta) {
 
 /* Find oldest txnid still referenced. */
 static txnid_t mdbx_find_oldest(const MDBX_txn *txn) {
-  mdbx_tassert(txn, (txn->mt_flags & MDBX_RDONLY) == 0);
+  mdbx_tassert(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   MDBX_env *env = txn->mt_env;
   const txnid_t edge = mdbx_recent_steady_txnid(env);
   mdbx_tassert(txn, edge <= txn->mt_txnid);
@@ -6070,9 +6070,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   mdbx_assert(env, (flags & ~(MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS |
                               MDBX_WRITEMAP)) == 0);
   const uintptr_t tid = mdbx_thread_self();
-  if (flags & MDBX_RDONLY) {
+  if (flags & MDBX_TXN_RDONLY) {
     txn->mt_flags =
-        MDBX_RDONLY | (env->me_flags & (MDBX_NOTLS | MDBX_WRITEMAP));
+        MDBX_TXN_RDONLY | (env->me_flags & (MDBX_NOTLS | MDBX_WRITEMAP));
     MDBX_reader *r = txn->to.reader;
     STATIC_ASSERT(sizeof(uintptr_t) == sizeof(r->mr_tid));
     if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
@@ -6166,7 +6166,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
 
     /* Not yet touching txn == env->me_txn0, it may be active */
     mdbx_jitter4testing(false);
-    rc = mdbx_txn_lock(env, F_ISSET(flags, MDBX_TRYTXN));
+    rc = mdbx_txn_lock(env, F_ISSET(flags, MDBX_TXN_TRY));
     if (unlikely(rc))
       return rc;
     if (unlikely(env->me_flags & MDBX_FATAL_ERROR)) {
@@ -6239,11 +6239,11 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       }
       rc = mdbx_mapresize(env, txn->mt_next_pgno, txn->mt_end_pgno,
                           txn->mt_geo.upper,
-                          (txn->mt_flags & MDBX_RDONLY) ? true : false);
+                          (txn->mt_flags & MDBX_TXN_RDONLY) ? true : false);
       if (rc != MDBX_SUCCESS)
         goto bailout;
     }
-    if (txn->mt_flags & MDBX_RDONLY) {
+    if (txn->mt_flags & MDBX_TXN_RDONLY) {
 #if defined(_WIN32) || defined(_WIN64)
       if ((size > env->me_dbgeo.lower && env->me_dbgeo.shrink) ||
           (mdbx_RunningUnderWine() &&
@@ -6303,7 +6303,7 @@ static __always_inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(txn->mt_flags & bad_bits))
     return MDBX_BAD_TXN;
 
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
+  if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
 
 #if MDBX_TXN_CHECKOWNER
@@ -6321,7 +6321,7 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
     return MDBX_EBADSIGN;
 
-  if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0))
+  if (unlikely((txn->mt_flags & MDBX_TXN_RDONLY) == 0))
     return MDBX_EINVAL;
 
   int rc;
@@ -6331,12 +6331,12 @@ int mdbx_txn_renew(MDBX_txn *txn) {
       return rc;
   }
 
-  rc = mdbx_txn_renew0(txn, MDBX_RDONLY);
+  rc = mdbx_txn_renew0(txn, MDBX_TXN_RDONLY);
   if (rc == MDBX_SUCCESS) {
     txn->mt_owner = mdbx_thread_self();
     mdbx_debug("renew txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
                "/%" PRIaPGNO,
-               txn->mt_txnid, (txn->mt_flags & MDBX_RDONLY) ? 'r' : 'w',
+               txn->mt_txnid, (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w',
                (void *)txn, (void *)txn->mt_env, txn->mt_dbs[MAIN_DBI].md_root,
                txn->mt_dbs[FREE_DBI].md_root);
   }
@@ -6374,7 +6374,8 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
 
   if (parent) {
     /* Nested transactions: Max 1 child, write txns only, no writemap */
-    rc = check_txn_rw(parent, MDBX_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
+    rc = check_txn_rw(parent,
+                      MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
@@ -6387,7 +6388,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     /* Child txns save MDBX_pgstate and use own copy of cursors */
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_txn);
-  } else if (flags & MDBX_RDONLY) {
+  } else if (flags & MDBX_TXN_RDONLY) {
     if (env->me_txn0 &&
         unlikely(env->me_txn0->mt_owner == mdbx_thread_self()) &&
         (mdbx_runtime_flags & MDBX_DBG_LEGACY_OVERLAP) == 0)
@@ -6466,7 +6467,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     rc = mdbx_cursor_shadow(parent, txn);
     if (unlikely(rc != MDBX_SUCCESS))
       mdbx_txn_end(txn, MDBX_END_FAIL_BEGINCHILD);
-  } else { /* MDBX_RDONLY */
+  } else { /* MDBX_TXN_RDONLY */
     txn->mt_dbiseqs = env->me_dbiseqs;
   renew:
     rc = mdbx_txn_renew0(txn, flags);
@@ -6477,15 +6478,15 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
       mdbx_free(txn);
   } else {
     mdbx_assert(env,
-                (txn->mt_flags & ~(MDBX_NOTLS | MDBX_RDONLY | MDBX_WRITEMAP |
-                                   MDBX_SHRINK_ALLOWED | MDBX_NOMETASYNC |
-                                   MDBX_SAFE_NOSYNC)) == 0);
+                (txn->mt_flags & ~(MDBX_NOTLS | MDBX_TXN_RDONLY |
+                                   MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
+                                   MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
                "/%" PRIaPGNO,
-               txn->mt_txnid, (flags & MDBX_RDONLY) ? 'r' : 'w', (void *)txn,
-               (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
+               txn->mt_txnid, (flags & MDBX_TXN_RDONLY) ? 'r' : 'w',
+               (void *)txn, (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
                txn->mt_dbs[FREE_DBI].md_root);
   }
 
@@ -6511,7 +6512,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
   info->txn_id = txn->mt_txnid;
   info->txn_space_used = pgno2bytes(env, txn->mt_geo.next);
 
-  if (txn->mt_flags & MDBX_RDONLY) {
+  if (txn->mt_flags & MDBX_TXN_RDONLY) {
     const MDBX_meta *head_meta;
     txnid_t head_txnid;
     uint64_t head_retired;
@@ -6682,7 +6683,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
   mdbx_debug("%s txn %" PRIaTXN "%c %p on mdbenv %p, root page %" PRIaPGNO
              "/%" PRIaPGNO,
              names[mode & MDBX_END_OPMASK], txn->mt_txnid,
-             (txn->mt_flags & MDBX_RDONLY) ? 'r' : 'w', (void *)txn,
+             (txn->mt_flags & MDBX_TXN_RDONLY) ? 'r' : 'w', (void *)txn,
              (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
              txn->mt_dbs[FREE_DBI].md_root);
 
@@ -6690,7 +6691,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
                        /* paranoia is appropriate here */ *env->me_oldest);
 
   int rc = MDBX_SUCCESS;
-  if (F_ISSET(txn->mt_flags, MDBX_RDONLY)) {
+  if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)) {
     if (txn->to.reader) {
       MDBX_reader *slot = txn->to.reader;
       mdbx_assert(env, slot->mr_pid == env->me_pid);
@@ -6721,7 +6722,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
 #endif
     txn->mt_numdbs = 0; /* prevent further DBI activity */
-    txn->mt_flags = MDBX_RDONLY | MDBX_TXN_FINISHED;
+    txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
   } else if (!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED)) {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
@@ -6814,7 +6815,7 @@ int mdbx_txn_reset(MDBX_txn *txn) {
     return rc;
 
   /* This call is only valid for read-only txns */
-  if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0))
+  if (unlikely((txn->mt_flags & MDBX_TXN_RDONLY) == 0))
     return MDBX_EINVAL;
 
   /* LY: don't close DBI-handles */
@@ -6831,7 +6832,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (F_ISSET(txn->mt_flags, MDBX_RDONLY))
+  if (F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY))
     /* LY: don't close DBI-handles */
     return mdbx_txn_end(txn, MDBX_END_ABORT | MDBX_END_UPDATE | MDBX_END_SLOT |
                                  MDBX_END_FREE);
@@ -6848,7 +6849,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
 static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
                                 bool dont_filter_gc) {
   pgno_t pending = 0;
-  if ((txn->mt_flags & MDBX_RDONLY) == 0) {
+  if ((txn->mt_flags & MDBX_TXN_RDONLY) == 0) {
     pending = txn->tw.loose_count + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) +
               (MDBX_PNL_SIZE(txn->tw.retired_pages) - retired_stored) +
               txn->tw.retired2parent_count;
@@ -6909,7 +6910,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
             return MDBX_CORRUPTED;
           MDBX_db db_copy, *db;
           memcpy(db = &db_copy, node_data(node), sizeof(db_copy));
-          if ((txn->mt_flags & MDBX_RDONLY) == 0) {
+          if ((txn->mt_flags & MDBX_TXN_RDONLY) == 0) {
             for (MDBX_dbi k = txn->mt_numdbs; --k > MAIN_DBI;) {
               if ((txn->mt_dbistate[k] & DBI_VALID) &&
                   /* txn->mt_dbxs[k].md_name.iov_len > 0 && */
@@ -6954,7 +6955,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
   if (pending + freecount + count + NUM_METAS == txn->mt_next_pgno)
     return MDBX_SUCCESS;
 
-  if ((txn->mt_flags & MDBX_RDONLY) == 0)
+  if ((txn->mt_flags & MDBX_TXN_RDONLY) == 0)
     mdbx_error("audit @%" PRIaTXN ": %u(pending) = %u(loose-count) + "
                "%u(reclaimed-list) + %u(retired-pending) - %u(retired-stored) "
                "+ %u(retired2parent)",
@@ -7875,7 +7876,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   /* mdbx_txn_end() mode for a commit which writes nothing */
   unsigned end_mode =
       MDBX_END_EMPTY_COMMIT | MDBX_END_UPDATE | MDBX_END_SLOT | MDBX_END_FREE;
-  if (unlikely(F_ISSET(txn->mt_flags, MDBX_RDONLY)))
+  if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     goto done;
 
   if (txn->mt_child) {
@@ -10827,11 +10828,11 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
   MDBX_page *p = NULL;
   int level;
   mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
-  const uint16_t illegal_bits = (txn->mt_flags & MDBX_RDONLY)
+  const uint16_t illegal_bits = (txn->mt_flags & MDBX_TXN_RDONLY)
                                     ? P_LOOSE | P_SUBP | P_META | P_DIRTY
                                     : P_LOOSE | P_SUBP | P_META;
   const uint64_t txnid = txn->mt_txnid;
-  if (unlikely((txn->mt_flags & (MDBX_RDONLY | MDBX_WRITEMAP)) == 0)) {
+  if (unlikely((txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0)) {
     level = 1;
     do {
       /* Spilled pages were dirtied in this txn and flushed
@@ -12073,8 +12074,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   nospill = flags & MDBX_NOSPILL;
   flags &= ~MDBX_NOSPILL;
 
-  if (unlikely(mc->mc_txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
-    return (mc->mc_txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(mc->mc_txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
+    return (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
+                                                    : MDBX_BAD_TXN;
 
   uint64_t aligned_keybytes, aligned_databytes;
   MDBX_val aligned_key, aligned_data;
@@ -13383,7 +13385,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_VALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_RDONLY)))
+  if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
 
   const size_t size = (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT)
@@ -14901,8 +14903,8 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   return mdbx_del0(txn, dbi, key, data, 0);
 }
@@ -15447,8 +15449,8 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
                          MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
   rc = mdbx_cursor_init(&cx.outer, txn, dbi);
@@ -15923,7 +15925,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  rc = mdbx_txn_renew0(read_txn, MDBX_RDONLY);
+  rc = mdbx_txn_renew0(read_txn, MDBX_TXN_RDONLY);
   if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_txn_unlock(env);
     return rc;
@@ -16040,7 +16042,7 @@ int __cold mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
   MDBX_txn *read_txn = NULL;
   /* Do the lock/unlock of the reader mutex before starting the
    * write txn. Otherwise other read txns could block writers. */
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &read_txn);
+  rc = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &read_txn);
   if (unlikely(rc != MDBX_SUCCESS)) {
     mdbx_memalign_free(buffer);
     return rc;
@@ -16371,7 +16373,7 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
       arg->mi_last_pgno = txn->mt_next_pgno - 1;
       arg->mi_geo.current = pgno2bytes(env, txn->mt_end_pgno);
 
-      const txnid_t wanna_meta_txnid = (txn->mt_flags & MDBX_RDONLY)
+      const txnid_t wanna_meta_txnid = (txn->mt_flags & MDBX_TXN_RDONLY)
                                            ? txn->mt_txnid
                                            : txn->mt_txnid - MDBX_TXNID_STEP;
       txn_meta = (arg->mi_meta0_txnid == wanna_meta_txnid) ? meta0 : txn_meta;
@@ -16473,7 +16475,7 @@ static int mdbx_dbi_bind(MDBX_txn *txn, const MDBX_dbi dbi, unsigned user_flags,
        * seems that is case #1 above */
       user_flags = txn->mt_dbs[dbi].md_flags;
     } else if ((user_flags & MDBX_CREATE) && txn->mt_dbs[dbi].md_entries == 0) {
-      if (txn->mt_flags & MDBX_RDONLY)
+      if (txn->mt_flags & MDBX_TXN_RDONLY)
         return /* FIXME: return extended info */ MDBX_EACCESS;
       /* make sure flags changes get committed */
       txn->mt_dbs[dbi].md_flags = user_flags & DB_PERSISTENT_FLAGS;
@@ -16617,7 +16619,7 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     }
   }
 
-  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_RDONLY)) {
+  if (rc != MDBX_SUCCESS && unlikely(txn->mt_flags & MDBX_TXN_RDONLY)) {
     rc = MDBX_EACCESS;
     goto early_bailout;
   }
@@ -17399,7 +17401,7 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
     return (rc > 0) ? -rc : rc;
 
   MDBX_env *env = txn->mt_env;
-  if (unlikely((txn->mt_flags & MDBX_RDONLY) == 0)) {
+  if (unlikely((txn->mt_flags & MDBX_TXN_RDONLY) == 0)) {
     if (percent)
       *percent =
           (int)((txn->mt_next_pgno * UINT64_C(100) + txn->mt_end_pgno / 2) /
@@ -18372,7 +18374,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (txn->mt_flags & MDBX_RDONLY)
+  if (txn->mt_flags & MDBX_TXN_RDONLY)
     return MDBX_RESULT_FALSE;
 
   const MDBX_env *env = txn->mt_env;
@@ -18443,7 +18445,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
     *result = dbs->md_seq;
 
   if (likely(increment > 0)) {
-    if (unlikely(txn->mt_flags & MDBX_RDONLY))
+    if (unlikely(txn->mt_flags & MDBX_TXN_RDONLY))
       return MDBX_EACCESS;
 
     uint64_t new = dbs->md_seq + increment;
@@ -18819,8 +18821,8 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
     return MDBX_EINVAL;
 
-  if (unlikely(txn->mt_flags & (MDBX_RDONLY | MDBX_TXN_BLOCKED)))
-    return (txn->mt_flags & MDBX_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
+  if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
+    return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
 
   MDBX_cursor_couple cx;
   MDBX_val old_data;

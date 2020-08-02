@@ -8,11 +8,11 @@ bool testcase_try::run() {
   MDBX_txn *txn2 = nullptr;
   int rc = mdbx_txn_begin(db_guard.get(), nullptr, 0, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_txn_begin(MDBX_TRYTXN)", rc);
+    failure_perror("mdbx_txn_begin(MDBX_TXN_TRY)", rc);
   else {
-    rc = mdbx_txn_begin(db_guard.get(), nullptr, MDBX_TRYTXN, &txn2);
+    rc = mdbx_txn_begin(db_guard.get(), nullptr, MDBX_TXN_TRY, &txn2);
     if (unlikely(rc != MDBX_BUSY))
-      failure_perror("mdbx_txn_begin(MDBX_TRYTXN)", rc);
+      failure_perror("mdbx_txn_begin(MDBX_TXN_TRY)", rc);
   }
 
   txn_guard.reset(txn);

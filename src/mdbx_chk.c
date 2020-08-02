@@ -1071,7 +1071,7 @@ int main(int argc, char *argv[]) {
     locked = true;
   }
 
-  rc = mdbx_txn_begin(env, nullptr, MDBX_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   if (rc) {
     error("mdbx_txn_begin() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
