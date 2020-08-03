@@ -720,8 +720,9 @@ struct MDBX_txn {
 
   /* Transaction Flags */
   /* mdbx_txn_begin() flags */
-#define MDBX_TXN_BEGIN_FLAGS                                                   \
-  (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_RDONLY | MDBX_TXN_TRY)
+#define MDBX_TXN_RO_BEGIN_FLAGS (MDBX_TXN_RDONLY | MDBX_TXN_RDONLY_PREPARE)
+#define MDBX_TXN_RW_BEGIN_FLAGS                                                \
+  (MDBX_TXN_NOMETASYNC | MDBX_TXN_NOSYNC | MDBX_TXN_TRY)
   /* Additional flag for mdbx_sync_locked() */
 #define MDBX_SHRINK_ALLOWED UINT32_C(0x40000000)
 
@@ -739,8 +740,9 @@ struct MDBX_txn {
   (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS |     \
    MDBX_TXN_HAS_CHILD)
 
-#if (TXN_FLAGS & MDBX_TXN_BEGIN_FLAGS) ||                                      \
-    ((MDBX_TXN_BEGIN_FLAGS | TXN_FLAGS) & MDBX_SHRINK_ALLOWED)
+#if (TXN_FLAGS & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS)) ||       \
+    ((MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS | TXN_FLAGS) &         \
+     MDBX_SHRINK_ALLOWED)
 #error "Oops, some flags overlapped or wrong"
 #endif
 

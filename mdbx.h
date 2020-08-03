@@ -1010,6 +1010,14 @@ enum MDBX_txn_flags_t {
    * block each other and a write transactions. */
   MDBX_TXN_RDONLY = MDBX_RDONLY,
 
+  /** Prepare but not start readonly transaction.
+   *
+   * Transaction will not be started immediately, but created transaction handle
+   * will be ready for use with \ref mdbx_txn_renew(). This flag allows to
+   * preallocate memory and assign a reader slot, thus avoiding these operations
+   * at the next start of the transaction. */
+  MDBX_TXN_RDONLY_PREPARE = MDBX_TXN_RDONLY | MDBX_NOMEMINIT,
+
   /** Do not block when starting a write transaction. */
   MDBX_TXN_TRY = UINT32_C(0x10000000),
 

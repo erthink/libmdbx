@@ -5909,8 +5909,6 @@ typedef struct {
 
 static bind_rslot_result bind_rslot(MDBX_env *env, const uintptr_t tid) {
   mdbx_assert(env, env->me_lck);
-  mdbx_assert(env, (env->me_flags & (MDBX_NOTLS | MDBX_ENV_TXKEY)) ==
-                       MDBX_ENV_TXKEY);
   mdbx_assert(env, env->me_lck->mti_magic_and_version == MDBX_LOCK_MAGIC);
   mdbx_assert(env, env->me_lck->mti_os_and_format == MDBX_LOCK_FORMAT);
 
@@ -6043,7 +6041,7 @@ __cold int mdbx_thread_unregister(MDBX_env *env) {
 }
 
 /* Common code for mdbx_txn_begin() and mdbx_txn_renew(). */
-static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
+static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
   MDBX_env *env = txn->mt_env;
   int rc;
 
@@ -6067,10 +6065,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
   STATIC_ASSERT(offsetof(MDBX_lockinfo, mti_readers) % MDBX_CACHELINE_SIZE ==
                 0);
 
-  mdbx_assert(env, (flags & ~(MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS |
-                              MDBX_WRITEMAP)) == 0);
   const uintptr_t tid = mdbx_thread_self();
   if (flags & MDBX_TXN_RDONLY) {
+    mdbx_assert(env, (flags & ~(MDBX_TXN_RO_BEGIN_FLAGS | MDBX_WRITEMAP)) == 0);
     txn->mt_flags =
         MDBX_TXN_RDONLY | (env->me_flags & (MDBX_NOTLS | MDBX_WRITEMAP));
     MDBX_reader *r = txn->to.reader;
@@ -6095,6 +6092,17 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       if (unlikely(brs.err != MDBX_SUCCESS))
         return brs.err;
       r = brs.rslot;
+    }
+    txn->to.reader = r;
+    if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY)) {
+      mdbx_assert(env, r->mr_txnid.inconsistent >= SAFE64_INVALID_THRESHOLD);
+      mdbx_assert(env, txn->mt_txnid == 0);
+      mdbx_assert(env, txn->mt_owner == 0);
+      mdbx_assert(env, txn->mt_numdbs == 0);
+      mdbx_assert(env, r->mr_snapshot_pages_used == 0);
+      r->mr_snapshot_pages_used = 0;
+      txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
+      return MDBX_SUCCESS;
     }
 
     /* Seek & fetch the last meta */
@@ -6142,12 +6150,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, unsigned flags) {
       goto bailout;
     }
     mdbx_assert(env, txn->mt_txnid >= *env->me_oldest);
-    txn->to.reader = r;
     txn->mt_dbxs = env->me_dbxs; /* mostly static anyway */
     mdbx_ensure(env, txn->mt_txnid >=
                          /* paranoia is appropriate here */ *env->me_oldest);
     txn->mt_numdbs = env->me_numdbs;
   } else {
+    mdbx_assert(env, (flags & ~(MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS |
+                                MDBX_WRITEMAP)) == 0);
     if (unlikely(txn->mt_owner == tid))
       return MDBX_BUSY;
     MDBX_lockinfo *const lck = env->me_lck;
@@ -6352,23 +6361,20 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     return MDBX_EINVAL;
   *ret = NULL;
 
+  if (unlikely((flags & ~MDBX_TXN_RW_BEGIN_FLAGS) &&
+               (flags & ~MDBX_TXN_RO_BEGIN_FLAGS)))
+    return MDBX_EINVAL;
+
   int rc = check_env(env);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-#if !defined(_WIN32) && !defined(_WIN64)
-  /* Don't check env->me_map until lock to
-   * avoid race with re-mapping for shrinking */
-  if (unlikely(!env->me_map))
-    return MDBX_EPERM;
-#endif /* Windows */
-
-  if (unlikely(flags & ~MDBX_TXN_BEGIN_FLAGS))
-    return MDBX_EINVAL;
-
   if (unlikely(env->me_flags & MDBX_RDONLY &
                ~flags)) /* write txn in RDONLY env */
     return MDBX_EACCESS;
+
+  if (unlikely(!env->me_map))
+    return MDBX_EPERM;
 
   flags |= env->me_flags & MDBX_WRITEMAP;
 
@@ -6379,12 +6385,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
-#if defined(_WIN32) || defined(_WIN64)
-    if (unlikely(!env->me_map))
-      return MDBX_EPERM;
-#endif /* Windows */
-
-    flags |= parent->mt_flags & (MDBX_TXN_BEGIN_FLAGS | MDBX_TXN_SPILLS);
+    flags |= parent->mt_flags & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS);
     /* Child txns save MDBX_pgstate and use own copy of cursors */
     size = env->me_maxdbs * (sizeof(MDBX_db) + sizeof(MDBX_cursor *) + 1);
     size += tsize = sizeof(MDBX_txn);
@@ -6477,10 +6478,16 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
     if (txn != env->me_txn0)
       mdbx_free(txn);
   } else {
-    mdbx_assert(env,
-                (txn->mt_flags & ~(MDBX_NOTLS | MDBX_TXN_RDONLY |
-                                   MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
-                                   MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC)) == 0);
+    if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY))
+      mdbx_assert(env, txn->mt_flags == (MDBX_TXN_RDONLY | MDBX_TXN_FINISHED));
+    else if (flags & MDBX_TXN_RDONLY)
+      mdbx_assert(env, (txn->mt_flags &
+                        ~(MDBX_NOTLS | MDBX_TXN_RDONLY | MDBX_WRITEMAP |
+                          /* Win32: SRWL flag */ MDBX_SHRINK_ALLOWED)) == 0);
+    else
+      mdbx_assert(env,
+                  (txn->mt_flags & ~(MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
+                                     MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
