@@ -597,7 +597,7 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 
 /** @} end of logging & debug */
 
-/** ENVIRONMENT FLAGS
+/** Environment flags
  * \ingroup c_opening
  * \anchor env_flags */
 enum MDBX_env_flags_t {
@@ -669,16 +669,15 @@ enum MDBX_env_flags_t {
    */
   MDBX_EXCLUSIVE = UINT32_C(0x400000),
 
-  /** Using database which already opened by another process(es).
+  /** Using database/environment which already opened by another process(es).
    *
-   * The `MDBX_ACCEDE` flag avoid \ref MDBX_INCOMPATIBLE error while opening If
-   * the database is already used by another process(es) and environment
-   * mode/flags isn't compatible. In such cases, when using the `MDBX_ACCEDE`
-   * flag, instead of the specified incompatible options, the mode in which
-   * the database is already opened by other processes will be used, including
-   * \ref MDBX_LIFORECLAIM, \ref MDBX_COALESCE and \ref MDBX_NORDAHEAD. The
-   * `MDBX_ACCEDE` flag is useful to open a database that already used by
-   * another process(es) and used mode/flags isn't known.
+   * The `MDBX_ACCEDE` flag is useful to avoid \ref MDBX_INCOMPATIBLE error
+   * while opening the database/environment which is already used by another
+   * process(es) with unknown mode/flags. In such cases, if there is a
+   * difference in the specified flags (\ref MDBX_NOMETASYNC,
+   * \ref MDBX_SAFE_NOSYNC, \ref MDBX_UTTERLY_NOSYNC, \ref MDBX_LIFORECLAIM,
+   * \ref MDBX_COALESCE and \ref MDBX_NORDAHEAD), instead of returning an error,
+   * the database will be opened in a compatibility with the already used mode.
    *
    * `MDBX_ACCEDE` has no effect if the current process is the only one either
    * opening the DB in read-only mode or other process(es) uses the DB in
@@ -814,7 +813,7 @@ enum MDBX_env_flags_t {
    * \ref MDBX_UTTERLY_NOSYNC. Because MDBX will reused pages only before the
    * last "steady" MVCC-snapshot, i.e. the loop length of database pages
    * circulation will be mostly defined by frequency of calling
-   * `mdbx_env_sync()` rather than LIFO and FIFO difference.
+   * \ref mdbx_env_sync() rather than LIFO and FIFO difference.
    *
    * This flag may be changed at any time using mdbx_env_set_flags(). */
   MDBX_LIFORECLAIM = UINT32_C(0x4000000),
@@ -1035,7 +1034,7 @@ typedef enum MDBX_txn_flags_t MDBX_txn_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags_t)
 #endif
 
-/** DATABASE FLAGS
+/** Database flags
  * \ingroup c_dbi
  * \anchor db_flags */
 enum MDBX_db_flags_t {
@@ -1073,7 +1072,7 @@ typedef enum MDBX_db_flags_t MDBX_db_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
 #endif
 
-/** DATA UPDATE FLAGS
+/** Data changing flags
  * \ingroup c_crud */
 enum MDBX_put_flags_t {
   MDBX_PUT_DEFAULTS = 0,
@@ -1112,7 +1111,7 @@ typedef enum MDBX_put_flags_t MDBX_put_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags_t)
 #endif
 
-/** ENVIRONMENT COPY FLAGS
+/** Environment copy flags
  * \ingroup c_extra */
 enum MDBX_copy_flags_t {
   MDBX_CP_DEFAULTS = 0,
@@ -1131,7 +1130,7 @@ typedef enum MDBX_copy_flags_t MDBX_copy_flags_t;
 DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags_t)
 #endif
 
-/** CURSOR OPERATIONS
+/** Cursor operations
  * \ingroup c_cursors
  * This is the set of all operations for retrieving data using a cursor. */
 enum MDBX_cursor_op {
@@ -1203,7 +1202,7 @@ enum MDBX_cursor_op {
 typedef enum MDBX_cursor_op MDBX_cursor_op;
 #endif
 
-/** ERRORS & RETURN CODES
+/** Errors and return codes
  * \ingroup c_err
  *
  * BerkeleyDB uses -30800 to -30999, we'll go under them */
@@ -1600,7 +1599,7 @@ typedef struct MDBX_stat MDBX_stat;
  * can be returned.
  *
  * Legacy mdbx_env_stat() correspond to calling \ref mdbx_env_stat_ex() with the
- * null txn argument.
+ * null `txn` argument.
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create()
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin()
@@ -1684,8 +1683,8 @@ typedef struct MDBX_envinfo MDBX_envinfo;
  * the last committed write transaction, and at next time, other information
  * can be returned.
  *
- * Legacy \ref mdbx_env_info() correspond to calling mdbx_env_info_ex() with the
- * null txn argument.
+ * Legacy \ref mdbx_env_info() correspond to calling \ref mdbx_env_info_ex()
+ * with the null `txn` argument.
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create()
  * \param [in] txn     A transaction handle returned by \ref mdbx_txn_begin()
@@ -1739,13 +1738,13 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
  * \retval MDBX_EIO      an error occurred during synchronization. */
 LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock);
 
-/** The shortcut to calling mdbx_env_sync_ex() with
- * the force=true and nonblock=false arguments.
+/** The shortcut to calling \ref mdbx_env_sync_ex() with
+ * the `force=true` and `nonblock=false` arguments.
  * \ingroup c_extra */
 LIBMDBX_API int mdbx_env_sync(MDBX_env *env);
 
-/** The shortcut to calling mdbx_env_sync_ex() with
- * the force=false and nonblock=true arguments.
+/** The shortcut to calling \ref mdbx_env_sync_ex() with
+ * the `force=false` and `nonblock=true` arguments.
  * \ingroup c_extra */
 LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
 
@@ -2818,8 +2817,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state_t)
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                                   unsigned *state);
-/** The shortcut to calling mdbx_dbi_flags_ex() with state=NULL for discarding
- * it result.
+/** The shortcut to calling \ref mdbx_dbi_flags_ex() with `state=NULL` for
+ * discarding it result.
  * \ingroup c_statinfo */
 LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
 
