@@ -1063,7 +1063,19 @@ enum MDBX_db_flags_t {
   MDBX_REVERSEDUP = UINT32_C(0x40),
 
   /** Create DB if not already existing */
-  MDBX_CREATE = UINT32_C(0x40000)
+  MDBX_CREATE = UINT32_C(0x40000),
+
+  /** Opens an existing sub-database created with unknown flags.
+   *
+   * The `MDBX_DB_ACCEDE` flag is intend to open a existing sub-database which
+   * was created with unknown flags (\ref MDBX_REVERSEKEY, \ref MDBX_DUPSORT,
+   * \ref MDBX_INTEGERKEY, \ref MDBX_DUPFIXED, \ref MDBX_INTEGERDUP and
+   * \ref MDBX_REVERSEDUP).
+   *
+   * In such cases, instead of returning the \ref MDBX_INCOMPATIBLE error, the
+   * sub-database will be opened with flags which it was created, and then an
+   * application could determine the actual flags by \ref mdbx_dbi_flags(). */
+  MDBX_DB_ACCEDE = MDBX_ACCEDE
 };
 #ifndef __cplusplus
 /** \ingroup c_dbi */
