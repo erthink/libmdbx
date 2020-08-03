@@ -24,9 +24,9 @@ bool testcase_append::run() {
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   /* LY: тест наполнения таблиц в append-режиме,
    * при котором записи добавляются строго в конец (в порядке сортировки) */
-  const unsigned flags = (config.params.table_flags & MDBX_DUPSORT)
-                             ? MDBX_APPEND | MDBX_APPENDDUP
-                             : MDBX_APPEND;
+  const MDBX_put_flags_t flags = (config.params.table_flags & MDBX_DUPSORT)
+                                     ? MDBX_APPEND | MDBX_APPENDDUP
+                                     : MDBX_APPEND;
   keyvalue_maker.make_ordered();
 
   key = keygen::alloc(config.params.keylen_max);

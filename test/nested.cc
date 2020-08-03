@@ -77,7 +77,8 @@ bool testcase_nested::teardown() {
 
 void testcase_nested::push_txn() {
   MDBX_txn *txn;
-  unsigned flags = prng32() & (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC);
+  MDBX_txn_flags_t flags =
+      MDBX_txn_flags_t(prng32() & (MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC));
   int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
@@ -189,9 +190,10 @@ bool testcase_nested::trim_tail(unsigned window_width) {
 }
 
 bool testcase_nested::grow_head(unsigned head_count) {
-  const unsigned insert_flags = (config.params.table_flags & MDBX_DUPSORT)
-                                    ? MDBX_NODUPDATA
-                                    : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+  const MDBX_put_flags_t insert_flags =
+      (config.params.table_flags & MDBX_DUPSORT)
+          ? MDBX_NODUPDATA
+          : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
 retry:
   fifo.push_front(std::make_pair(serial, head_count));
   for (unsigned n = 0; n < head_count; ++n) {

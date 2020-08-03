@@ -52,10 +52,11 @@ bool testcase_hill::run() {
   keygen::buffer b_key = keygen::alloc(config.params.keylen_max);
   keygen::buffer b_data = keygen::alloc(config.params.datalen_max);
 
-  const unsigned insert_flags = (config.params.table_flags & MDBX_DUPSORT)
-                                    ? MDBX_NODUPDATA
-                                    : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
-  const unsigned update_flags =
+  const MDBX_put_flags_t insert_flags =
+      (config.params.table_flags & MDBX_DUPSORT)
+          ? MDBX_NODUPDATA
+          : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+  const MDBX_put_flags_t update_flags =
       (config.params.table_flags & MDBX_DUPSORT)
           ? MDBX_CURRENT | MDBX_NODUPDATA | MDBX_NOOVERWRITE
           : MDBX_NODUPDATA;

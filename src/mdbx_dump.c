@@ -350,13 +350,13 @@ int main(int argc, char *argv[]) {
     goto env_close;
   }
 
-  rc = mdbx_txn_begin(env, nullptr, MDBX_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_txn_begin", rc);
     goto env_close;
   }
 
-  rc = mdbx_dbi_open(txn, subname, MDBX_ACCEDE, &dbi);
+  rc = mdbx_dbi_open(txn, subname, MDBX_DB_ACCEDE, &dbi);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_dbi_open", rc);
     goto txn_abort;
@@ -394,7 +394,7 @@ int main(int argc, char *argv[]) {
       subname[key.iov_len] = '\0';
 
       MDBX_dbi sub_dbi;
-      rc = mdbx_dbi_open_ex(txn, subname, MDBX_ACCEDE, &sub_dbi,
+      rc = mdbx_dbi_open_ex(txn, subname, MDBX_DB_ACCEDE, &sub_dbi,
                             rescue ? equal_or_greater : nullptr,
                             rescue ? equal_or_greater : nullptr);
       if (unlikely(rc != MDBX_SUCCESS)) {

@@ -161,27 +161,28 @@ protected:
   SET speculum{ItemCompare(this)}, speculum_commited{ItemCompare(this)};
   bool speculum_verify();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
-             unsigned flags);
+             MDBX_put_flags_t flags);
   int replace(const keygen::buffer &akey, const keygen::buffer &new_value,
-              const keygen::buffer &old_value, unsigned flags);
+              const keygen::buffer &old_value, MDBX_put_flags_t flags);
   int remove(const keygen::buffer &akey, const keygen::buffer &adata);
 
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                           uint64_t txn, unsigned gap, size_t space, int retry);
 
-  unsigned actual_db_mode{0};
+  MDBX_env_flags_t actual_env_mode{MDBX_ENV_DEFAULTS};
   bool is_nested_txn_available() const {
-    return (actual_db_mode & MDBX_WRITEMAP) == 0;
+    return (actual_env_mode & MDBX_WRITEMAP) == 0;
   }
   void kick_progress(bool active) const;
   void db_prepare();
   void db_open();
   void db_close();
-  void txn_begin(bool readonly, unsigned flags = 0);
+  void txn_begin(bool readonly, MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   int breakable_commit();
   void txn_end(bool abort);
   int breakable_restart();
-  void txn_restart(bool abort, bool readonly, unsigned flags = 0);
+  void txn_restart(bool abort, bool readonly,
+                   MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   void cursor_open(MDBX_dbi handle);
   void cursor_close();
   void txn_inject_writefault(void);

@@ -1526,7 +1526,7 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *                             i.e. 32-bit process tries to open >4Gb database.
  */
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
-                              unsigned flags, mode_t mode);
+                              MDBX_env_flags_t flags, mode_t mode);
 
 /** Copy an MDBX environment to the specified path, with options.
  * \ingroup c_extra
@@ -1556,7 +1556,8 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
  *      Force to make resizeable copy, i.e. dynamic size instead of fixed.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest, unsigned flags);
+LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
+                              MDBX_copy_flags_t flags);
 
 /** Copy an MDBX environment to the specified file descriptor, with options.
  * \ingroup c_extra
@@ -1582,7 +1583,7 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest, unsigned flags);
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
-                                 unsigned flags);
+                                 MDBX_copy_flags_t flags);
 
 /** Statistics for a database in the environment
  * \ingroup c_statinfo */
@@ -1748,7 +1749,7 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
  *                       and `nonblock=true`.
  * \retval MDBX_EINVAL   an invalid parameter was specified.
  * \retval MDBX_EIO      an error occurred during synchronization. */
-LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, int force, int nonblock);
+LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock);
 
 /** The shortcut to calling \ref mdbx_env_sync_ex() with
  * the `force=true` and `nonblock=false` arguments.
@@ -1853,7 +1854,7 @@ LIBMDBX_API int mdbx_env_set_syncperiod(MDBX_env *env,
  *                     proper manner.
  *
  * \retval MDBX_EIO    An error occurred during synchronization. */
-LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, int dont_sync);
+LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, bool dont_sync);
 
 /** The shortcut to calling \ref mdbx_env_close_ex() with
  * the `dont_sync=false` argument.
@@ -1880,7 +1881,8 @@ LIBMDBX_API int mdbx_env_close(MDBX_env *env);
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
-LIBMDBX_API int mdbx_env_set_flags(MDBX_env *env, unsigned flags, int onoff);
+LIBMDBX_API int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
+                                   bool onoff);
 
 /** Get environment flags.
  * \ingroup c_statinfo
@@ -2155,13 +2157,15 @@ LIBMDBX_API intptr_t mdbx_limits_dbsize_max(intptr_t pagesize);
  * and database flags, or -1 if pagesize is invalid.
  * \ingroup c_statinfo
  * \see db_flags */
-LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize, unsigned flags);
+LIBMDBX_API intptr_t mdbx_limits_keysize_max(intptr_t pagesize,
+                                             MDBX_db_flags_t flags);
 
 /** Returns maximal data size in bytes for given page size
  * and database flags, or -1 if pagesize is invalid.
  * \ingroup c_statinfo
  * \see db_flags */
-LIBMDBX_API intptr_t mdbx_limits_valsize_max(intptr_t pagesize, unsigned flags);
+LIBMDBX_API intptr_t mdbx_limits_valsize_max(intptr_t pagesize,
+                                             MDBX_db_flags_t flags);
 
 /** Returns maximal write transaction size (i.e. limit for summary volume of
  * dirty pages) in bytes for given page size, or -1 if pagesize is invalid.
@@ -2248,7 +2252,8 @@ LIBMDBX_API int mdbx_env_get_maxdbs(MDBX_env *env, MDBX_dbi *dbs);
  *
  * \returns The maximum size of a key can write,
  *          or -1 if something is wrong. */
-LIBMDBX_API int mdbx_env_get_maxkeysize_ex(const MDBX_env *env, unsigned flags);
+LIBMDBX_API int mdbx_env_get_maxkeysize_ex(const MDBX_env *env,
+                                           MDBX_db_flags_t flags);
 
 /** Get the maximum size of data we can write.
  * \ingroup c_statinfo
@@ -2259,7 +2264,8 @@ LIBMDBX_API int mdbx_env_get_maxkeysize_ex(const MDBX_env *env, unsigned flags);
  *
  * \returns The maximum size of a data can write,
  *          or -1 if something is wrong. */
-LIBMDBX_API int mdbx_env_get_maxvalsize_ex(const MDBX_env *env, unsigned flags);
+LIBMDBX_API int mdbx_env_get_maxvalsize_ex(const MDBX_env *env,
+                                           MDBX_db_flags_t flags);
 
 /** \deprecated Please use \ref mdbx_env_get_maxkeysize_ex()
  *              and/or \ref mdbx_env_get_maxvalsize_ex()
@@ -2334,8 +2340,8 @@ LIBMDBX_API void *mdbx_env_get_userctx(const MDBX_env *env);
  * \retval MDBX_ENOMEM        Out of memory.
  * \retval MDBX_BUSY          The write transaction is already started by the
  *                            current thread. */
-LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, unsigned flags,
-                               MDBX_txn **txn);
+LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
+                               MDBX_txn_flags_t flags, MDBX_txn **txn);
 
 /** Information about the transaction
  * \ingroup c_statinfo */
@@ -2712,8 +2718,8 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  *                         opened with a different comparison function(s).
  * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
  *                               by current thread. */
-LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name, unsigned flags,
-                              MDBX_dbi *dbi);
+LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name,
+                              MDBX_db_flags_t flags, MDBX_dbi *dbi);
 
 /** \deprecated Please avoid using custom comparators
  *              and use mdbx_dbi_open() instead.
@@ -2729,8 +2735,8 @@ LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name, unsigned flags,
  * \param [out] dbi    Address where the new MDBX_dbi handle will be stored.
  * \returns A non-zero error value on failure and 0 on success. */
 MDBX_DEPRECATED LIBMDBX_API int
-mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, unsigned flags, MDBX_dbi *dbi,
-                 MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
+mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
+                 MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 
 /** \defgroup value2key Value-to-Key functions to avoid custom comparators
  * \see key2value
@@ -3029,7 +3035,7 @@ LIBMDBX_API int mdbx_get_nearest(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
  *                        in a read-only transaction.
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
-                         MDBX_val *data, unsigned flags);
+                         MDBX_val *data, MDBX_put_flags_t flags);
 
 /** Replace items in a database.
  * \ingroup c_crud
@@ -3074,7 +3080,7 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                              MDBX_val *new_data, MDBX_val *old_data,
-                             unsigned flags);
+                             MDBX_put_flags_t flags);
 
 /** Delete items from a database.
  * \ingroup c_crud
@@ -3281,7 +3287,7 @@ LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
  *                            transaction.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key,
-                                MDBX_val *data, unsigned flags);
+                                MDBX_val *data, MDBX_put_flags_t flags);
 
 /** Delete current key/data pair.
  * \ingroup c_crud
@@ -3309,7 +3315,7 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key,
  * \retval MDBX_EACCES        An attempt was made to write in a read-only
  *                            transaction.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
-LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, unsigned flags);
+LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
 
 /** Return count of duplicates for current key.
  * \ingroup c_crud
@@ -3550,7 +3556,7 @@ LIBMDBX_API int mdbx_cmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
 
 /** Returns default internal key's comparator for given database flags.
  * \ingroup c_extra */
-LIBMDBX_API MDBX_cmp_func *mdbx_get_keycmp(unsigned flags);
+LIBMDBX_API MDBX_cmp_func *mdbx_get_keycmp(MDBX_db_flags_t flags);
 
 /** Compare two data items according to a particular database.
  * \ingroup c_crud
@@ -3571,7 +3577,7 @@ LIBMDBX_API int mdbx_dcmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
 
 /** Returns default internal data's comparator for given database flags
  * \ingroup c_extra */
-LIBMDBX_API MDBX_cmp_func *mdbx_get_datacmp(unsigned flags);
+LIBMDBX_API MDBX_cmp_func *mdbx_get_datacmp(MDBX_db_flags_t flags);
 
 /** A callback function used to enumerate the reader lock table.
  * \ingroup c_statinfo
@@ -3797,7 +3803,7 @@ MDBX_pgvisitor_func(const uint64_t pgno, const unsigned number, void *const ctx,
 
 /** B-tree traversal function. */
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
-                                void *ctx, int dont_check_keys_ordering);
+                                void *ctx, bool dont_check_keys_ordering);
 /** @} B-tree Traversal */
 
 /**** Attribute support functions for Nexenta
@@ -3843,7 +3849,7 @@ typedef uint_fast64_t mdbx_attr_t;
  * \retval MDBX_EINVAL    an invalid parameter was specified. */
 LIBMDBX_API int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key,
                                      MDBX_val *data, mdbx_attr_t attr,
-                                     unsigned flags);
+                                     MDBX_put_flags_t flags);
 
 /** Store items and attributes into a database.
  *
@@ -3889,7 +3895,8 @@ LIBMDBX_API int mdbx_cursor_put_attr(MDBX_cursor *cursor, MDBX_val *key,
  *                        in a read-only transaction.
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_put_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
-                              MDBX_val *data, mdbx_attr_t attr, unsigned flags);
+                              MDBX_val *data, mdbx_attr_t attr,
+                              MDBX_put_flags_t flags);
 
 /** Set items attribute from a database.
  *

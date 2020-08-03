@@ -239,7 +239,7 @@ static void get_db_stat(const char *db, int64_t *ms_branch_pages,
   MDBX_stat stat;
   MDBX_dbi dbi;
 
-  MDBX_CHECK(mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn));
+  MDBX_CHECK(mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &txn));
   MDBX_CHECK(mdbx_dbi_open(txn, db, MDBX_CREATE, &dbi));
   MDBX_CHECK(mdbx_dbi_stat(txn, dbi, &stat, sizeof(stat)));
   mdbx_txn_abort(txn);

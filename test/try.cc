@@ -6,7 +6,7 @@ bool testcase_try::run() {
 
   MDBX_txn *txn = nullptr;
   MDBX_txn *txn2 = nullptr;
-  int rc = mdbx_txn_begin(db_guard.get(), nullptr, 0, &txn);
+  int rc = mdbx_txn_begin(db_guard.get(), nullptr, MDBX_TXN_READWRITE, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(MDBX_TXN_TRY)", rc);
   else {

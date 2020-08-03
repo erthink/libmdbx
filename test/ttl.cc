@@ -121,9 +121,10 @@ bool testcase_ttl::run() {
   keyvalue_maker.setup(config.params, config.actor_id, 0 /* thread_number */);
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
-  const unsigned insert_flags = (config.params.table_flags & MDBX_DUPSORT)
-                                    ? MDBX_NODUPDATA
-                                    : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
+  const MDBX_put_flags_t insert_flags =
+      (config.params.table_flags & MDBX_DUPSORT)
+          ? MDBX_NODUPDATA
+          : MDBX_NODUPDATA | MDBX_NOOVERWRITE;
 
   std::deque<std::pair<uint64_t, unsigned>> fifo;
   uint64_t serial = 0;

@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
   }
   txn = NULL;
 
-  rc = mdbx_txn_begin(env, NULL, MDBX_RDONLY, &txn);
+  rc = mdbx_txn_begin(env, NULL, MDBX_TXN_RDONLY, &txn);
   if (rc != MDBX_SUCCESS) {
     fprintf(stderr, "mdbx_txn_begin: (%d) %s\n", rc, mdbx_strerror(rc));
     goto bailout;

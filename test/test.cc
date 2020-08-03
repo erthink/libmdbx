@@ -145,11 +145,11 @@ void testcase::db_open() {
 
   jitter_delay(true);
 
-  unsigned mode = (unsigned)config.params.mode_flags;
+  MDBX_env_flags_t mode = config.params.mode_flags;
   if (config.params.random_writemap && flipcoin())
     mode ^= MDBX_WRITEMAP;
 
-  actual_db_mode = mode;
+  actual_env_mode = mode;
   int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(),
                          mode, 0640);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -166,15 +166,15 @@ void testcase::db_close() {
   log_trace("<< db_close");
 }
 
-void testcase::txn_begin(bool readonly, unsigned flags) {
-  assert((flags & MDBX_RDONLY) == 0);
+void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
+  assert((flags & MDBX_TXN_RDONLY) == 0);
   log_trace(">> txn_begin(%s, 0x%04X)", readonly ? "read-only" : "read-write",
             flags);
   assert(!txn_guard);
 
   MDBX_txn *txn = nullptr;
   int rc = mdbx_txn_begin(db_guard.get(), nullptr,
-                          readonly ? flags | MDBX_RDONLY : flags, &txn);
+                          readonly ? flags | MDBX_TXN_RDONLY : flags, &txn);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin()", rc);
   txn_guard.reset(txn);
@@ -272,11 +272,11 @@ int testcase::breakable_restart() {
     rc = breakable_commit();
   if (cursor_guard)
     cursor_close();
-  txn_begin(false, 0);
+  txn_begin(false, MDBX_TXN_READWRITE);
   return rc;
 }
 
-void testcase::txn_restart(bool abort, bool readonly, unsigned flags) {
+void testcase::txn_restart(bool abort, bool readonly, MDBX_txn_flags_t flags) {
   if (txn_guard)
     txn_end(abort);
   if (cursor_guard)
@@ -485,7 +485,8 @@ MDBX_dbi testcase::db_table_open(bool create) {
 
   MDBX_dbi handle = 0;
   int rc = mdbx_dbi_open(txn_guard.get(), tablename,
-                         (create ? MDBX_CREATE : 0) | config.params.table_flags,
+                         (create ? MDBX_CREATE : MDBX_DB_DEFAULTS) |
+                             config.params.table_flags,
                          &handle);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_dbi_open()", rc);
@@ -625,7 +626,7 @@ bool test_execute(const actor_config &config_const) {
 //-----------------------------------------------------------------------------
 
 int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
-                     unsigned flags) {
+                     MDBX_put_flags_t flags) {
   int err = mdbx_put(txn_guard.get(), dbi, &akey->value, &adata->value, flags);
   if (err == MDBX_SUCCESS && config.params.speculum) {
     const auto S_key = S(akey);
@@ -639,7 +640,7 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
 
 int testcase::replace(const keygen::buffer &akey,
                       const keygen::buffer &new_data,
-                      const keygen::buffer &old_data, unsigned flags) {
+                      const keygen::buffer &old_data, MDBX_put_flags_t flags) {
   if (config.params.speculum) {
     const auto S_key = S(akey);
     const auto S_old = S(old_data);
