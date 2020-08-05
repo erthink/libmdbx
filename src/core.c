@@ -6080,8 +6080,14 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
       mdbx_assert(env, !(env->me_flags & MDBX_NOTLS));
       r = thread_rthc_get(env->me_txkey);
       if (likely(r)) {
-        mdbx_assert(env, r->mr_pid == env->me_pid);
-        mdbx_assert(env, r->mr_tid == mdbx_thread_self());
+        if (unlikely(!r->mr_pid) &&
+            (mdbx_runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN)) {
+          thread_rthc_set(env->me_txkey, nullptr);
+          r = nullptr;
+        } else {
+          mdbx_assert(env, r->mr_pid == env->me_pid);
+          mdbx_assert(env, r->mr_tid == mdbx_thread_self());
+        }
       }
     } else {
       mdbx_assert(env, !env->me_lck || (env->me_flags & MDBX_NOTLS));
