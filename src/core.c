@@ -10307,14 +10307,13 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname,
       rc = errno;
       goto bailout;
     }
-    mode = (/* inherit read permissions for group and others */ st.st_mode &
-            (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
-           /* always add read/write/search for owner */ S_IRUSR | S_IWUSR |
-           ((st.st_mode & S_IRGRP) ? /* +write if readable by group */ S_IWGRP
-                                   : 0) |
-           ((st.st_mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH
-                                   : 0);
+    mode = st.st_mode;
   }
+  mode = (/* inherit read permissions for group and others */ mode &
+          (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
+         /* always add read/write/search for owner */ S_IRUSR | S_IWUSR |
+         ((mode & S_IRGRP) ? /* +write if readable by group */ S_IWGRP : 0) |
+         ((mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH : 0);
 #endif /* !Windows */
   const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
