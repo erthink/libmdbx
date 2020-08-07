@@ -87,7 +87,7 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  \defgroup c_api C API
  @{
  \defgroup c_err Error handling
- \defgroup c_opending Opening & Closing
+ \defgroup c_opening Opening & Closing
  \defgroup c_dbi Databases
  \defgroup c_transactions Transactions
  \defgroup c_cursors Cursors
@@ -1009,7 +1009,7 @@ enum MDBX_txn_flags_t {
    * block each other and a write transactions. */
   MDBX_TXN_RDONLY = MDBX_RDONLY,
 
-  /** Prepare but not start readonly transaction.
+  /** Prepare but not start read-only transaction.
    *
    * Transaction will not be started immediately, but created transaction handle
    * will be ready for use with \ref mdbx_txn_renew(). This flag allows to
@@ -1624,6 +1624,7 @@ typedef struct MDBX_stat MDBX_stat;
 LIBMDBX_API int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                                  MDBX_stat *stat, size_t bytes);
 /** Return statistics about the MDBX environment.
+ * \ingroup c_statinfo
  * \deprecated Please use mdbx_env_stat_ex() instead. */
 MDBX_DEPRECATED LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
                                               size_t bytes);
