@@ -1,12 +1,27 @@
 ChangeLog
 ---------
 
-## v0.9.x (in the development):
-- Since v0.9 usage of custom comparators and the `mdbx_dbi_open_ex()` are deprecated.
-- Support for Doxygen & [online API reference](https://erthink.github.io/libmdbx/).
-- Functions to explicit reader threads (de)registration.
-- TODO: Native bindings for C++.
-- TODO: Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
+## v0.9.0 (in the development):
+
+Added features:
+
+ - [Online API reference](https://erthink.github.io/libmdbx/) by Doxygen.
+ - Functions to explicit reader threads (de)registration.
+ - Separated enums for environment, sub-databases, transactions, copying and data-update flags.
+ - Support for read transactions preparation (`MDBX_TXN_RDONLY_PREPARE` flag).
+
+TODO:
+
+ - Native bindings for C++.
+ - Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
+
+Deprecated functions and flags:
+
+  - Usage of custom comparators and the `mdbx_dbi_open_ex()` are deprecated, since such databases couldn't be checked by the `mdbx_chk` utility.
+    Please use the value-to-key functions to provide keys that are compatible with the built-in libmdbx comparators.
+  - For clarity and API simplification the `MDBX_MAPASYNC` flag is deprecated.
+    Just use `MDBX_SAFE_NOSYNC` or `MDBX_UTTERLY_NOSYNC` instead of it.
+
 
 ## v0.8.2 2020-07-06:
 - Added support multi-opening the same DB in a process with SysV locking (BSD).
@@ -22,6 +37,7 @@ ChangeLog
 - Remapping on-the-fly and of the database file was implemented.
   Now remapping with a change of address is performed automatically if there are no dependent readers in the current process.
 
+
 ## v0.8.1 2020-06-12:
 - Minor change versioning. The last number in the version now means the number of commits since last release/tag.
 - Provide ChangeLog file.
@@ -30,6 +46,7 @@ ChangeLog
 - Add support for huge transactions and `MDBX_HUGE_TRANSACTIONS` build-option (default `OFF`).
 - Refine LTO (link time optimization) for clang.
 - Force enabling exceptions handling for MSVC (`/EHsc` option).
+
 
 ## v0.8.0 2020-06-05:
 - Support for Android/Bionic.
@@ -75,6 +92,7 @@ ChangeLog
 - Minor fix/workaround to avoid UBSAN traps for `memcpy(ptr, NULL, 0)`.
 - Avoid some GCC-analyzer false-positive warnings.
 
+
 ## v0.7.0 2020-03-18:
 - Workarounds for Wine (Windows compatibility layer for Linux).
 - `MDBX_MAP_RESIZED` renamed to `MDBX_UNABLE_EXTEND_MAPSIZE`.
@@ -86,6 +104,7 @@ ChangeLog
 - Refine/clarify error messages.
 - Avoids extra error messages "bad txn" from mdbx_chk when DB is corrupted.
 
+
 ## v0.6.0 2020-01-21:
 - Fix `mdbx_load` utility for custom comparators.
 - Fix checks related to `MDBX_APPEND` flag inside `mdbx_cursor_put()`.
@@ -96,6 +115,7 @@ ChangeLog
 - Fix `mdbx_env_set_geometry()` for large page size.
 - Fix env_set_geometry() for large pagesize.
 - Clarify API description & comments, fix typos.
+
 
 ## v0.5.0 2019-12-31:
 - Fix returning MDBX_RESULT_TRUE from page_alloc().
@@ -110,6 +130,7 @@ ChangeLog
 - Interpret `ERROR_ACCESS_DENIED` from `OpenProcess()` as 'process exists'.
 - Avoid using `FILE_FLAG_NO_BUFFERING` for compatibility with small database pages.
 - Added install section for CMake.
+
 
 ## v0.4.0 2019-12-02:
 - Support for Mac OSX, FreeBSD, NetBSD, OpenBSD, DragonFly BSD, OpenSolaris, OpenIndiana (AIX and HP-UX pending).
