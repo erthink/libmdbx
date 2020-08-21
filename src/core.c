@@ -40,7 +40,7 @@
 /*------------------------------------------------------------------------------
  * Internal inlines */
 
-static __pure_function unsigned log2n(size_t value) {
+__nothrow_const_function static unsigned log2n(size_t value) {
   assert(value > 0 && value < INT32_MAX && is_powerof2(value));
   assert((value & -(int32_t)value) == value);
 #if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
@@ -60,14 +60,14 @@ static __pure_function unsigned log2n(size_t value) {
 /*------------------------------------------------------------------------------
  * Unaligned access */
 
-static __pure_function __maybe_unused __always_inline unsigned
+__nothrow_const_function static __maybe_unused __always_inline unsigned
 field_alignment(unsigned alignment_baseline, size_t field_offset) {
   unsigned merge = alignment_baseline | (unsigned)field_offset;
   return merge & -(int)merge;
 }
 
 /* read-thunk for UB-sanitizer */
-static __pure_function __always_inline uint8_t
+__nothrow_pure_function static __always_inline uint8_t
 peek_u8(const uint8_t *const __restrict ptr) {
   return *ptr;
 }
@@ -78,7 +78,7 @@ static __always_inline void poke_u8(uint8_t *const __restrict ptr,
   *ptr = v;
 }
 
-static __pure_function __always_inline uint16_t
+__nothrow_pure_function static __always_inline uint16_t
 unaligned_peek_u16(const unsigned expected_alignment, const void *const ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint16_t)) == 0)
@@ -100,7 +100,7 @@ unaligned_poke_u16(const unsigned expected_alignment,
     memcpy(ptr, &v, sizeof(v));
 }
 
-static __pure_function __always_inline uint32_t unaligned_peek_u32(
+__nothrow_pure_function static __always_inline uint32_t unaligned_peek_u32(
     const unsigned expected_alignment, const void *const __restrict ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint32_t)) == 0)
@@ -132,7 +132,7 @@ unaligned_poke_u32(const unsigned expected_alignment,
     memcpy(ptr, &v, sizeof(v));
 }
 
-static __pure_function __always_inline uint64_t unaligned_peek_u64(
+__nothrow_pure_function static __always_inline uint64_t unaligned_peek_u64(
     const unsigned expected_alignment, const void *const __restrict ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
   if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint64_t)) == 0)
@@ -185,7 +185,7 @@ unaligned_poke_u64(const unsigned expected_alignment,
   unaligned_poke_u64(1, (char *)(ptr) + offsetof(struct, field), value)
 
 /* Get the page number pointed to by a branch node */
-static __pure_function __always_inline pgno_t
+__nothrow_pure_function static __always_inline pgno_t
 node_pgno(const MDBX_node *const __restrict node) {
   pgno_t pgno = UNALIGNED_PEEK_32(node, MDBX_node, mn_pgno32);
   if (sizeof(pgno) > 4)
@@ -205,7 +205,7 @@ static __always_inline void node_set_pgno(MDBX_node *const __restrict node,
 }
 
 /* Get the size of the data in a leaf node */
-static __pure_function __always_inline size_t
+__nothrow_pure_function static __always_inline size_t
 node_ds(const MDBX_node *const __restrict node) {
   return UNALIGNED_PEEK_32(node, MDBX_node, mn_dsize);
 }
@@ -218,7 +218,7 @@ static __always_inline void node_set_ds(MDBX_node *const __restrict node,
 }
 
 /* The size of a key in a node */
-static __pure_function __always_inline size_t
+__nothrow_pure_function static __always_inline size_t
 node_ks(const MDBX_node *const __restrict node) {
   return UNALIGNED_PEEK_16(node, MDBX_node, mn_ksize);
 }
@@ -230,7 +230,7 @@ static __always_inline void node_set_ks(MDBX_node *const __restrict node,
   UNALIGNED_POKE_16(node, MDBX_node, mn_ksize, (uint16_t)size);
 }
 
-static __pure_function __always_inline uint8_t
+__nothrow_pure_function static __always_inline uint8_t
 node_flags(const MDBX_node *const __restrict node) {
   return UNALIGNED_PEEK_8(node, MDBX_node, mn_flags);
 }
@@ -244,29 +244,29 @@ static __always_inline void node_set_flags(MDBX_node *const __restrict node,
 #define NODESIZE offsetof(MDBX_node, mn_data)
 
 /* Address of the key for the node */
-static __pure_function __always_inline void *
+__nothrow_pure_function static __always_inline void *
 node_key(const MDBX_node *const __restrict node) {
   return (char *)node + NODESIZE;
 }
 
 /* Address of the data for a node */
-static __pure_function __always_inline void *
+__nothrow_pure_function static __always_inline void *
 node_data(const MDBX_node *const __restrict node) {
   return (char *)node_key(node) + node_ks(node);
 }
 
 /* Size of a node in a leaf page with a given key and data.
  * This is node header plus key plus data size. */
-static __pure_function __always_inline size_t
+__nothrow_const_function static __always_inline size_t
 node_size_len(const size_t key_len, const size_t value_len) {
   return NODESIZE + EVEN(key_len + value_len);
 }
-static __pure_function __always_inline size_t node_size(const MDBX_val *key,
-                                                        const MDBX_val *value) {
+__nothrow_pure_function static __always_inline size_t
+node_size(const MDBX_val *key, const MDBX_val *value) {
   return node_size_len(key ? key->iov_len : 0, value ? value->iov_len : 0);
 }
 
-static __pure_function __always_inline pgno_t
+__nothrow_pure_function static __always_inline pgno_t
 peek_pgno(const void *const __restrict ptr) {
   if (sizeof(pgno_t) == sizeof(uint32_t))
     return (pgno_t)unaligned_peek_u32(1, ptr);
@@ -289,7 +289,7 @@ static __always_inline void poke_pgno(void *const __restrict ptr,
     memcpy(ptr, &pgno, sizeof(pgno));
 }
 
-static __pure_function __always_inline pgno_t
+__nothrow_pure_function static __always_inline pgno_t
 node_largedata_pgno(const MDBX_node *const __restrict node) {
   assert(node_flags(node) & F_BIGDATA);
   return peek_pgno(node_data(node));
@@ -411,9 +411,8 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize,
  * size will only include the key and not the data. Sizes are always
  * rounded up to an even number of bytes, to guarantee 2-byte alignment
  * of the MDBX_node headers. */
-static __pure_function __always_inline size_t leaf_size(const MDBX_env *env,
-                                                        const MDBX_val *key,
-                                                        const MDBX_val *data) {
+__nothrow_pure_function static __always_inline size_t
+leaf_size(const MDBX_env *env, const MDBX_val *key, const MDBX_val *data) {
   size_t node_bytes = node_size(key, data);
   /* NOTE: The actual limit is LEAF_NODEMAX(env->me_psize), but it reasonable to
    * use env->me_branch_nodemax (which is 3 times less) as the treshold because:
@@ -455,8 +454,8 @@ static __pure_function __always_inline size_t leaf_size(const MDBX_env *env,
  * [in] key The key for the node.
  *
  * Returns The number of bytes needed to store the node. */
-static __pure_function __always_inline size_t branch_size(const MDBX_env *env,
-                                                          const MDBX_val *key) {
+__nothrow_pure_function static __always_inline size_t
+branch_size(const MDBX_env *env, const MDBX_val *key) {
   /* Size of a node in a branch page with a given key.
    * This is just the node header plus the key, there is no data. */
   size_t node_bytes = node_size(key, nullptr);
@@ -471,7 +470,7 @@ static __pure_function __always_inline size_t branch_size(const MDBX_env *env,
   return node_bytes + sizeof(indx_t);
 }
 
-static __pure_function __always_inline uint16_t
+__nothrow_const_function static __always_inline uint16_t
 flags_db2sub(uint16_t db_flags) {
   uint16_t sub_flags = db_flags & MDBX_DUPFIXED;
 
@@ -492,81 +491,84 @@ flags_db2sub(uint16_t db_flags) {
 
 /*----------------------------------------------------------------------------*/
 
-static __pure_function __always_inline size_t pgno2bytes(const MDBX_env *env,
-                                                         pgno_t pgno) {
+__nothrow_pure_function static __always_inline size_t
+pgno2bytes(const MDBX_env *env, pgno_t pgno) {
   mdbx_assert(env, (1u << env->me_psize2log) == env->me_psize);
   return ((size_t)pgno) << env->me_psize2log;
 }
 
-static __pure_function __always_inline MDBX_page *pgno2page(const MDBX_env *env,
-                                                            pgno_t pgno) {
+__nothrow_pure_function static __always_inline MDBX_page *
+pgno2page(const MDBX_env *env, pgno_t pgno) {
   return (MDBX_page *)(env->me_map + pgno2bytes(env, pgno));
 }
 
-static __pure_function __always_inline pgno_t bytes2pgno(const MDBX_env *env,
-                                                         size_t bytes) {
+__nothrow_pure_function static __always_inline pgno_t
+bytes2pgno(const MDBX_env *env, size_t bytes) {
   mdbx_assert(env, (env->me_psize >> env->me_psize2log) == 1);
   return (pgno_t)(bytes >> env->me_psize2log);
 }
 
-static __pure_function size_t pgno_align2os_bytes(const MDBX_env *env,
-                                                  pgno_t pgno) {
+__nothrow_pure_function static size_t pgno_align2os_bytes(const MDBX_env *env,
+                                                          pgno_t pgno) {
   return ceil_powerof2(pgno2bytes(env, pgno), env->me_os_psize);
 }
 
-static __pure_function pgno_t pgno_align2os_pgno(const MDBX_env *env,
-                                                 pgno_t pgno) {
+__nothrow_pure_function static pgno_t pgno_align2os_pgno(const MDBX_env *env,
+                                                         pgno_t pgno) {
   return bytes2pgno(env, pgno_align2os_bytes(env, pgno));
 }
 
-static __pure_function size_t bytes_align2os_bytes(const MDBX_env *env,
-                                                   size_t bytes) {
+__nothrow_pure_function static size_t bytes_align2os_bytes(const MDBX_env *env,
+                                                           size_t bytes) {
   return ceil_powerof2(ceil_powerof2(bytes, env->me_psize), env->me_os_psize);
 }
 
 /* Address of first usable data byte in a page, after the header */
-static __pure_function __always_inline void *page_data(const MDBX_page *mp) {
+__nothrow_pure_function static __always_inline void *
+page_data(const MDBX_page *mp) {
   return (char *)mp + PAGEHDRSZ;
 }
 
-static __pure_function __always_inline const MDBX_page *
+__nothrow_pure_function static __always_inline const MDBX_page *
 data_page(const void *data) {
   return container_of(data, MDBX_page, mp_ptrs);
 }
 
-static __pure_function __always_inline MDBX_meta *page_meta(MDBX_page *mp) {
+__nothrow_pure_function static __always_inline MDBX_meta *
+page_meta(MDBX_page *mp) {
   return (MDBX_meta *)page_data(mp);
 }
 
 /* Number of nodes on a page */
-static __pure_function __always_inline unsigned
+__nothrow_pure_function static __always_inline unsigned
 page_numkeys(const MDBX_page *mp) {
   return mp->mp_lower >> 1;
 }
 
 /* The amount of space remaining in the page */
-static __pure_function __always_inline unsigned page_room(const MDBX_page *mp) {
+__nothrow_pure_function static __always_inline unsigned
+page_room(const MDBX_page *mp) {
   return mp->mp_upper - mp->mp_lower;
 }
 
-static __pure_function __always_inline unsigned
+__nothrow_pure_function static __always_inline unsigned
 page_space(const MDBX_env *env) {
   STATIC_ASSERT(PAGEHDRSZ % 2 == 0);
   return env->me_psize - PAGEHDRSZ;
 }
 
-static __pure_function __always_inline unsigned page_used(const MDBX_env *env,
-                                                          const MDBX_page *mp) {
+__nothrow_pure_function static __always_inline unsigned
+page_used(const MDBX_env *env, const MDBX_page *mp) {
   return page_space(env) - page_room(mp);
 }
 
 /* The percentage of space used in the page, in a percents. */
-static __pure_function __maybe_unused __inline double
+__nothrow_pure_function static __maybe_unused __inline double
 page_fill(const MDBX_env *env, const MDBX_page *mp) {
   return page_used(env, mp) * 100.0 / page_space(env);
 }
 
-static __pure_function __inline bool
+__nothrow_pure_function static __inline bool
 page_fill_enough(const MDBX_page *mp, unsigned spaceleft_threshold,
                  unsigned minkeys_threshold) {
   return page_room(mp) < spaceleft_threshold &&
@@ -574,14 +576,14 @@ page_fill_enough(const MDBX_page *mp, unsigned spaceleft_threshold,
 }
 
 /* The number of overflow pages needed to store the given size. */
-static __pure_function __always_inline pgno_t
+__nothrow_pure_function static __always_inline pgno_t
 number_of_ovpages(const MDBX_env *env, size_t bytes) {
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;
 }
 
 /* Address of node i in page p */
-static __pure_function __always_inline MDBX_node *page_node(const MDBX_page *mp,
-                                                            unsigned i) {
+__nothrow_pure_function static __always_inline MDBX_node *
+page_node(const MDBX_page *mp, unsigned i) {
   assert((mp->mp_flags & (P_LEAF2 | P_OVERFLOW | P_META)) == 0);
   assert(page_numkeys(mp) > (unsigned)(i));
   assert(mp->mp_ptrs[i] % 2 == 0);
@@ -591,7 +593,7 @@ static __pure_function __always_inline MDBX_node *page_node(const MDBX_page *mp,
 /* The address of a key in a LEAF2 page.
  * LEAF2 pages are used for MDBX_DUPFIXED sorted-duplicate sub-DBs.
  * There are no node headers, keys are stored contiguously. */
-static __pure_function __always_inline void *
+__nothrow_pure_function static __always_inline void *
 page_leaf2key(const MDBX_page *mp, unsigned i, size_t keysize) {
   assert((mp->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_META)) ==
          (P_LEAF | P_LEAF2));
@@ -1362,7 +1364,7 @@ static __inline void lcklist_unlock(void) {
 #endif
 }
 
-static uint64_t rrxmrrxmsx_0(uint64_t v) {
+__nothrow_const_function static uint64_t rrxmrrxmsx_0(uint64_t v) {
   /* Pelle Evensen's mixer, https://bit.ly/2HOfynt */
   v ^= (v << 39 | v >> 25) ^ (v << 14 | v >> 50);
   v *= UINT64_C(0xA24BAED4963EE407);

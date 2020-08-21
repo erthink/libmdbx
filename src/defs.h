@@ -43,32 +43,12 @@
 #   endif
 #endif /* __GLIBC_PREREQ */
 
-#ifndef __has_attribute
-#   define __has_attribute(x) (0)
-#endif
-
-#ifndef __has_feature
-#   define __has_feature(x) (0)
-#endif
-
-#ifndef __has_extension
-#   define __has_extension(x) (0)
-#endif
-
-#ifndef __has_builtin
-#   define __has_builtin(x) (0)
-#endif
-
 #ifndef __has_warning
 #   define __has_warning(x) (0)
 #endif
 
 #ifndef __has_include
 #   define __has_include(x) (0)
-#endif
-
-#ifndef __has_cpp_attribute
-#   define __has_cpp_attribute(x) (0)
 #endif
 
 #if __has_feature(thread_sanitizer)
@@ -195,40 +175,6 @@
 #       define __nothrow
 #   endif
 #endif /* __nothrow */
-
-#ifndef __pure_function
-    /* Many functions have no effects except the return value and their
-     * return value depends only on the parameters and/or global variables.
-     * Such a function can be subject to common subexpression elimination
-     * and loop optimization just as an arithmetic operator would be.
-     * These functions should be declared with the attribute pure. */
-#   if (defined(__GNUC__) || __has_attribute(__pure__)) &&                     \
-        (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */ \
-         || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
-#       define __pure_function __attribute__((__pure__))
-#   else
-#       define __pure_function
-#   endif
-#endif /* __pure_function */
-
-#ifndef __const_function
-    /* Many functions do not examine any values except their arguments,
-     * and have no effects except the return value. Basically this is just
-     * slightly more strict class than the PURE attribute, since function
-     * is not allowed to read global memory.
-     *
-     * Note that a function that has pointer arguments and examines the
-     * data pointed to must not be declared const. Likewise, a function
-     * that calls a non-const function usually must not be const.
-     * It does not make sense for a const function to return void. */
-#   if (defined(__GNUC__) || __has_attribute(__pure__)) &&                     \
-        (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */ \
-         || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
-#       define __const_function __attribute__((__const__))
-#   else
-#       define __const_function
-#   endif
-#endif /* __const_function */
 
 #ifndef __hidden
 #   if defined(__GNUC__) || __has_attribute(__visibility__)
