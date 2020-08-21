@@ -163,6 +163,8 @@ typedef pthread_t mdbx_tid_t;
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
      || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
 #define __pure_function __attribute__((__pure__))
+#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
+#define __pure_function
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::pure) &&                \
     (!defined(__clang__) || !__has_feature(cxx_exceptions))
 #define __pure_function [[gnu::pure]]
@@ -177,6 +179,12 @@ typedef pthread_t mdbx_tid_t;
 #if defined(__GNUC__) ||                                                       \
     (__has_attribute(__pure__) && __has_attribute(__nothrow__))
 #define __nothrow_pure_function __attribute__((__pure__, __nothrow__))
+#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
+#if __has_cpp_attribute(pure)
+#define __nothrow_pure_function [[pure]]
+#else
+#define __nothrow_pure_function
+#endif
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::pure)
 #if __has_cpp_attribute(gnu::nothrow)
 #define __nothrow_pure_function [[gnu::pure, gnu::nothrow]]
@@ -204,6 +212,8 @@ typedef pthread_t mdbx_tid_t;
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
      || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
 #define __const_function __attribute__((__const__))
+#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
+#define __const_function __pure_function
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::const) &&               \
     (!defined(__clang__) || !__has_feature(cxx_exceptions))
 #define __const_function [[gnu::const]]
@@ -218,6 +228,8 @@ typedef pthread_t mdbx_tid_t;
 #if defined(__GNUC__) ||                                                       \
     (__has_attribute(__const__) && __has_attribute(__nothrow__))
 #define __nothrow_const_function __attribute__((__const__, __nothrow__))
+#elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
+#define __nothrow_const_function __nothrow_pure_function
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::const)
 #if __has_cpp_attribute(gnu::nothrow)
 #define __nothrow_pure_function [[gnu::const, gnu::nothrow]]
