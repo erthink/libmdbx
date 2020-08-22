@@ -31,14 +31,15 @@ const char *test_strerror(int errnum) {
   return mdbx_strerror_r(errnum, buf, sizeof(buf));
 }
 
-void __noreturn failure_perror(const char *what, int errnum) {
+__noreturn void failure_perror(const char *what, int errnum) {
   failure("%s failed: %s (%d)\n", what, test_strerror(errnum), errnum);
 }
 
 //-----------------------------------------------------------------------------
 
 static void mdbx_logger(MDBX_log_level_t priority, const char *function,
-                        int line, const char *msg, va_list args) {
+                        int line, const char *msg,
+                        va_list args) cxx17_noexcept {
   if (!function)
     function = "unknown";
 

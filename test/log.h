@@ -17,9 +17,9 @@
 #include "base.h"
 #include "chrono.h"
 
-void __noreturn usage(void);
-void __noreturn __printf_args(1, 2) failure(const char *fmt, ...);
-void __noreturn failure_perror(const char *what, int errnum);
+__noreturn void usage(void);
+__noreturn void __printf_args(1, 2) failure(const char *fmt, ...);
+__noreturn void failure_perror(const char *what, int errnum);
 const char *test_strerror(int errnum);
 
 namespace logging {

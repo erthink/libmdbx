@@ -34,9 +34,11 @@ each of which is divided into several sections.
     - Cleaning up
   - \ref bindings
 
-3. The `C` API manual:
+3. The `C/C++` API manual:
   - The \ref c_api reference
   - The \ref mdbx.h header file reference
+  - The \ref cxx_api reference
+  - The \ref mdbx.h++ header file reference
 
 Please do not hesitate to point out errors in the documentation,
 including creating [PR](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests) with corrections and improvements.

@@ -16,6 +16,7 @@
 
 #if !(defined(_WIN32) || defined(_WIN64))
 
+#include <atomic>
 #include <pthread.h>
 #include <signal.h>
 #include <sys/mman.h>
@@ -309,7 +310,7 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 
 static pid_t overlord_pid;
 
-static std::atomic<int> sigusr1_head, sigusr2_head;
+static std::atomic_int sigusr1_head, sigusr2_head;
 static void handler_SIGUSR(int signum) {
   switch (signum) {
   case SIGUSR1:
@@ -337,7 +338,7 @@ bool osal_progress_push(bool active) {
 
 static std::unordered_map<pid_t, actor_status> childs;
 
-static std::atomic<int> sigalarm_head;
+static std::atomic_int sigalarm_head;
 static void handler_SIGCHLD(int signum) {
   if (signum == SIGALRM)
     ++sigalarm_head;

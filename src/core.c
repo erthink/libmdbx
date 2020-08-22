@@ -3045,11 +3045,9 @@ static __always_inline void mdbx_dpl_clear(MDBX_DPL dl) {
 
 /*----------------------------------------------------------------------------*/
 
-#ifndef MDBX_ALLOY
 uint8_t mdbx_runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
 uint8_t mdbx_loglevel = MDBX_DEBUG;
 MDBX_debug_func *mdbx_debug_logger;
-#endif /* MDBX_ALLOY */
 
 static bool mdbx_refund(MDBX_txn *txn);
 static __must_check_result int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp);
@@ -3199,7 +3197,7 @@ static MDBX_cmp_func cmp_lexical, cmp_reverse, cmp_int_align4, cmp_int_align2,
 static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags);
 static __inline MDBX_cmp_func *get_default_datacmp(unsigned flags);
 
-static const char *__mdbx_strerr(int errnum) {
+__cold const char *mdbx_liberr2str(int errnum) {
   /* Table of descriptions for MDBX errors */
   static const char *const tbl[] = {
       "MDBX_KEYEXIST: Key/data pair already exists",
@@ -3272,14 +3270,14 @@ static const char *__mdbx_strerr(int errnum) {
 }
 
 const char *__cold mdbx_strerror_r(int errnum, char *buf, size_t buflen) {
-  const char *msg = __mdbx_strerr(errnum);
+  const char *msg = mdbx_liberr2str(errnum);
   if (!msg && buflen > 0 && buflen < INT_MAX) {
 #if defined(_WIN32) || defined(_WIN64)
     const DWORD size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
-    return size ? buf : NULL;
+    return size ? buf : "FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM) failed";
 #elif defined(_GNU_SOURCE) && defined(__GLIBC__)
     /* GNU-specific */
     if (errnum > 0)
@@ -3311,7 +3309,7 @@ const char *__cold mdbx_strerror(int errnum) {
   static char buf[1024];
   return mdbx_strerror_r(errnum, buf, sizeof(buf));
 #else
-  const char *msg = __mdbx_strerr(errnum);
+  const char *msg = mdbx_liberr2str(errnum);
   if (!msg) {
     if (errnum > 0)
       msg = strerror(errnum);
@@ -3327,13 +3325,17 @@ const char *__cold mdbx_strerror(int errnum) {
 
 #if defined(_WIN32) || defined(_WIN64) /* Bit of madness for Windows */
 const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf, size_t buflen) {
-  const char *msg = __mdbx_strerr(errnum);
+  const char *msg = mdbx_liberr2str(errnum);
   if (!msg && buflen > 0 && buflen < INT_MAX) {
     const DWORD size = FormatMessageA(
         FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL,
         errnum, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), buf, (DWORD)buflen,
         NULL);
-    if (size && CharToOemBuffA(buf, buf, size))
+    if (!size)
+      msg = "FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM) failed";
+    else if (!CharToOemBuffA(buf, buf, size))
+      msg = "CharToOemBuffA() failed";
+    else
       msg = buf;
   }
   return msg;
@@ -9802,7 +9804,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
 /* Open and/or initialize the lock region for the environment. */
 static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
-                                 mode_t mode) {
+                                 mdbx_mode_t mode) {
   mdbx_assert(env, env->me_lazy_fd != INVALID_HANDLE_VALUE);
   mdbx_assert(env, env->me_lfd == INVALID_HANDLE_VALUE);
 
@@ -10137,7 +10139,7 @@ static uint32_t merge_sync_flags(const uint32_t a, const uint32_t b) {
 }
 
 int __cold mdbx_env_open(MDBX_env *env, const char *pathname,
-                         MDBX_env_flags_t flags, mode_t mode) {
+                         MDBX_env_flags_t flags, mdbx_mode_t mode) {
   int rc = check_env(env);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -10198,7 +10200,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname,
       return rc;
 
     /* auto-create directory if requested */
-    const mode_t dir_mode =
+    const mdbx_mode_t dir_mode =
         (/* inherit read/write permissions for group and others */ mode &
          (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
         /* always add read/write/search for owner */ S_IRWXU |
@@ -11184,7 +11186,7 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   MDBX_cursor_couple cx;
   rc = mdbx_cursor_init(&cx.outer, txn, dbi);
@@ -11195,8 +11197,8 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
   return mdbx_cursor_set(&cx.outer, (MDBX_val *)key, data, MDBX_SET, &exact);
 }
 
-int mdbx_get_nearest(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
-                     MDBX_val *data) {
+int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
+                            MDBX_val *data) {
   DKBUF;
   mdbx_debug("===> get db %u key [%s]", dbi, DKEY(key));
 
@@ -11208,7 +11210,7 @@ int mdbx_get_nearest(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
     return MDBX_BAD_TXN;
@@ -11248,7 +11250,7 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   MDBX_cursor_couple cx;
   rc = mdbx_cursor_init(&cx.outer, txn, dbi);
@@ -13416,7 +13418,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_VALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
@@ -13458,7 +13460,7 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, mc->mc_dbi, DBI_VALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(mc->mc_backup))
     return MDBX_EINVAL;
@@ -14934,7 +14936,7 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
     return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;
@@ -15476,7 +15478,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
                          MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
@@ -16126,7 +16128,7 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *dest_path,
   mdbx_filehandle_t newfd;
   rc = mdbx_openfile(MDBX_OPEN_COPY, env, dest_path, &newfd,
 #if defined(_WIN32) || defined(_WIN64)
-                     (mode_t)-1
+                     (mdbx_mode_t)-1
 #else
                      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
@@ -16308,7 +16310,7 @@ int __cold mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_VALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   MDBX_cursor_couple cx;
   rc = mdbx_cursor_init(&cx.outer, txn, dbi);
@@ -16781,7 +16783,7 @@ int __cold mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_VALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
@@ -16823,7 +16825,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
     return rc;
 
   if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
@@ -16843,7 +16845,7 @@ int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_VALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   *flags = txn->mt_dbs[dbi].md_flags & DB_PERSISTENT_FLAGS;
   *state =
@@ -16955,7 +16957,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
     return MDBX_BAD_DBI;
@@ -16966,7 +16968,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID))) {
-    rc = MDBX_EINVAL;
+    rc = MDBX_BAD_DBI;
     goto bailout;
   }
 
@@ -17024,7 +17026,7 @@ int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   txn->mt_dbxs[dbi].md_cmp = cmp;
   return MDBX_SUCCESS;
@@ -17036,7 +17038,7 @@ int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   txn->mt_dbxs[dbi].md_dcmp = cmp;
   return MDBX_SUCCESS;
@@ -18096,7 +18098,7 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   MDBX_cursor_couple begin;
   /* LY: first, initialize cursor to refresh a DB in case it have DB_STALE */
@@ -18253,24 +18255,27 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
  *  - внешняя аллокация курсоров, в том числе на стеке (без malloc).
  *  - получения статуса страницы по адресу (знать о P_DIRTY).
  */
-int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
-                 MDBX_val *new_data, MDBX_val *old_data,
-                 MDBX_put_flags_t flags) {
+
+int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+                    MDBX_val *new_data, MDBX_val *old_data,
+                    MDBX_put_flags_t flags, MDBX_preserve_func preserver,
+                    void *preserver_context) {
   int rc = check_txn_rw(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!key || !old_data || old_data == new_data))
+  if (unlikely(!key || !old_data || old_data == new_data || !preserver))
     return MDBX_EINVAL;
 
   if (unlikely(old_data->iov_base == NULL && old_data->iov_len))
     return MDBX_EINVAL;
 
-  if (unlikely(new_data == NULL && !(flags & MDBX_CURRENT)))
+  if (unlikely(new_data == NULL &&
+               (flags & (MDBX_CURRENT | MDBX_RESERVE)) != MDBX_CURRENT))
     return MDBX_EINVAL;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(flags & ~(MDBX_NOOVERWRITE | MDBX_NODUPDATA | MDBX_RESERVE |
                          MDBX_APPEND | MDBX_APPENDDUP | MDBX_CURRENT)))
@@ -18360,14 +18365,11 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
       }
 
       if (IS_DIRTY(page)) {
-        if (unlikely(old_data->iov_len < present_data.iov_len)) {
-          old_data->iov_base = NULL;
-          old_data->iov_len = present_data.iov_len;
-          rc = MDBX_RESULT_TRUE;
+        rc = preserver ? preserver(preserver_context, old_data,
+                                   present_data.iov_base, present_data.iov_len)
+                       : MDBX_SUCCESS;
+        if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-        }
-        memcpy(old_data->iov_base, present_data.iov_base, present_data.iov_len);
-        old_data->iov_len = present_data.iov_len;
       } else {
         *old_data = present_data;
       }
@@ -18382,6 +18384,25 @@ int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 bailout:
   txn->mt_cursors[dbi] = cx.outer.mc_next;
   return rc;
+}
+
+static int default_value_preserver(void *context, MDBX_val *target,
+                                   const void *src, size_t bytes) {
+  (void)context;
+  if (unlikely(target->iov_len < bytes)) {
+    target->iov_base = nullptr;
+    target->iov_len = bytes;
+    return MDBX_RESULT_TRUE;
+  }
+  memcpy(target->iov_base, src, target->iov_len = bytes);
+  return MDBX_SUCCESS;
+}
+
+int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+                 MDBX_val *new_data, MDBX_val *old_data,
+                 MDBX_put_flags_t flags) {
+  return mdbx_replace_ex(txn, dbi, key, new_data, old_data, flags,
+                         default_value_preserver, nullptr);
 }
 
 /* Функция сообщает находится ли указанный адрес в "грязной" странице у
@@ -18411,21 +18432,21 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (txn->mt_flags & MDBX_TXN_RDONLY)
-    return MDBX_RESULT_FALSE;
-
   const MDBX_env *env = txn->mt_env;
   const ptrdiff_t offset = (uint8_t *)ptr - env->me_map;
   if (offset >= 0) {
     const pgno_t pgno = bytes2pgno(env, offset);
     if (likely(pgno < txn->mt_next_pgno)) {
+      if (txn->mt_flags & MDBX_TXN_RDONLY)
+        return MDBX_RESULT_FALSE;
+
       const MDBX_page *page = pgno2page(env, pgno);
       if (unlikely(page->mp_pgno != pgno)) {
         /* The ptr pointed into middle of a large page,
          * not to the beginning of a data. */
         return MDBX_EINVAL;
       }
-      if (unlikely(page->mp_flags & (P_DIRTY | P_LOOSE | P_KEEP)))
+      if (unlikely(page->mp_flags & (P_DIRTY | P_LOOSE | P_KEEP | P_META)))
         return MDBX_RESULT_TRUE;
       if (likely(txn->tw.spill_pages == nullptr))
         return MDBX_RESULT_FALSE;
@@ -18435,7 +18456,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
     if ((size_t)offset < env->me_dxb_mmap.limit) {
       /* Указатель адресует что-то в пределах mmap, но за границей
        * распределенных страниц. Такое может случится если mdbx_is_dirty()
-       * вызывает после операции, в ходе которой гразная страница попала
+       * вызывается после операции, в ходе которой грязная страница попала
        * в loose и затем была возвращена в нераспределенное пространство. */
       return MDBX_RESULT_TRUE;
     }
@@ -18445,7 +18466,7 @@ int mdbx_is_dirty(const MDBX_txn *txn, const void *ptr) {
    * передан некорректный адрес, либо адрес в теневой странице, которая была
    * выделена посредством malloc().
    *
-   * Для WRITE_MAP режима такая страница однозначно "не грязная",
+   * Для режима WRITE_MAP режима страница однозначно "не грязная",
    * а для режимов без WRITE_MAP следует просматривать списки dirty
    * и spilled страниц у каких-либо транзакций (в том числе дочерних).
    *
@@ -18466,7 +18487,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
     return rc;
 
   if (unlikely(!mdbx_txn_dbi_exists(txn, dbi, DBI_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
     return MDBX_BAD_DBI;
@@ -18856,7 +18877,7 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
     return MDBX_EBADSIGN;
 
   if (unlikely(!TXN_DBI_EXIST(txn, dbi, DB_USRVALID)))
-    return MDBX_EINVAL;
+    return MDBX_BAD_DBI;
 
   if (unlikely(txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
     return (txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS : MDBX_BAD_TXN;

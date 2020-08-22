@@ -19,7 +19,7 @@
 #include <sys/time.h>
 #endif /* !Windows */
 
-void __noreturn usage(void) {
+__noreturn void usage(void) {
   puts(
       "usage:\n"
       "  --help or -h              Show this text\n"

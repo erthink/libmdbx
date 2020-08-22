@@ -48,7 +48,7 @@
 #endif
 #if MDBX_DISABLE_GNU_SOURCE
 #undef _GNU_SOURCE
-#elif defined(__linux__) || defined(__gnu_linux__)
+#elif (defined(__linux__) || defined(__gnu_linux__)) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif
 
@@ -89,6 +89,7 @@
 #pragma warning(disable : 4366) /* the result of the unary '&' operator may be unaligned */
 #pragma warning(disable : 4200) /* nonstandard extension used: zero-sized array in struct/union */
 #pragma warning(disable : 4204) /* nonstandard extension used: non-constant aggregate initializer */
+#pragma warning(disable : 4505) /* unreferenced local function has been removed */
 #endif                          /* _MSC_VER (warnings) */
 
 #if defined(MDBX_TOOLS)
@@ -127,6 +128,16 @@
 #   warning "libmdbx don't compatible with ThreadSanitizer, you will get a lot of false-positive issues."
 #endif /* __SANITIZE_THREAD__ */
 
+#if __has_warning("-Wnested-anon-types")
+#   if defined(__clang__)
+#       pragma clang diagnostic ignored "-Wnested-anon-types"
+#   elif defined(__GNUC__)
+#       pragma GCC diagnostic ignored "-Wnested-anon-types"
+#   else
+#      pragma warning disable "nested-anon-types"
+#   endif
+#endif /* -Wnested-anon-types */
+
 #if __has_warning("-Wconstant-logical-operand")
 #   if defined(__clang__)
 #       pragma clang diagnostic ignored "-Wconstant-logical-operand"
@@ -154,6 +165,10 @@
 
 /* *INDENT-ON* */
 /* clang-format on */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #include "osal.h"
 
@@ -216,6 +231,7 @@ typedef uint64_t txnid_t;
 #define PRIaTXN PRIi64
 #define MIN_TXNID UINT64_C(1)
 #define MAX_TXNID (SAFE64_INVALID_THRESHOLD - 1)
+#define INITIAL_TXNID (MIN_TXNID + NUM_METAS - 1)
 #define INVALID_TXNID UINT64_MAX
 /* LY: for testing non-atomic 64-bit txnid on 32-bit arches.
  * #define MDBX_TXNID_STEP (UINT32_MAX / 3) */
@@ -1019,14 +1035,9 @@ struct MDBX_env {
 #define MDBX_RUNTIME_FLAGS_INIT                                                \
   ((MDBX_DEBUG) > 0) * MDBX_DBG_ASSERT + ((MDBX_DEBUG) > 1) * MDBX_DBG_AUDIT
 
-#ifdef MDBX_ALLOY
-static uint8_t mdbx_runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
-static uint8_t mdbx_loglevel = MDBX_DEBUG;
-#else
 extern uint8_t mdbx_runtime_flags;
 extern uint8_t mdbx_loglevel;
-#endif /* MDBX_ALLOY */
-MDBX_INTERNAL_VAR MDBX_debug_func *mdbx_debug_logger;
+extern MDBX_debug_func *mdbx_debug_logger;
 
 MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
                                        const char *fmt, ...)
@@ -1067,15 +1078,15 @@ MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
 #define mdbx_panic(fmt, ...)                                                   \
   __android_log_assert("panic", "mdbx", fmt, __VA_ARGS__)
 #else
-MDBX_INTERNAL_FUNC void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
+void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
 #endif
 
 #if !MDBX_DEBUG && defined(__ANDROID_API__)
 #define mdbx_assert_fail(env, msg, func, line)                                 \
   __android_log_assert(msg, "mdbx", "%s:%u", func, line)
 #else
-MDBX_INTERNAL_FUNC void mdbx_assert_fail(const MDBX_env *env, const char *msg,
-                                         const char *func, int line);
+void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
+                      int line);
 #endif
 
 #define mdbx_debug_extra(fmt, ...)                                             \
@@ -1318,7 +1329,7 @@ typedef struct MDBX_node {
    MDBX_INTEGERDUP | MDBX_REVERSEDUP)
 
 /* mdbx_dbi_open() flags */
-#define DB_USABLE_FLAGS (DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_ACCEDE)
+#define DB_USABLE_FLAGS (DB_PERSISTENT_FLAGS | MDBX_CREATE | MDBX_DB_ACCEDE)
 
 #define DB_VALID 0x8000 /* DB handle is valid, for me_dbflags */
 #define DB_INTERNAL_FLAGS DB_VALID
@@ -1402,13 +1413,19 @@ ceil_powerof2(size_t value, size_t granularity) {
    MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
 #define ENV_USABLE_FLAGS (ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS)
 
+#if !(defined(__cplusplus) && defined(_MSC_VER) && _MSC_VER == 1900)
 static __maybe_unused void static_checks(void) {
   STATIC_ASSERT_MSG(INT16_MAX - CORE_DBS == MDBX_MAX_DBI,
                     "Oops, MDBX_MAX_DBI or CORE_DBS?");
-  STATIC_ASSERT_MSG((MDBX_ACCEDE | MDBX_CREATE) ==
+  STATIC_ASSERT_MSG((unsigned)(MDBX_DB_ACCEDE | MDBX_CREATE) ==
                         ((DB_USABLE_FLAGS | DB_INTERNAL_FLAGS) &
                          (ENV_USABLE_FLAGS | ENV_INTERNAL_FLAGS)),
                     "Oops, some flags overlapped or wrong");
   STATIC_ASSERT_MSG((ENV_INTERNAL_FLAGS & ENV_USABLE_FLAGS) == 0,
                     "Oops, some flags overlapped or wrong");
 }
+#endif /* Disabled for MSVC 19.0 (VisualStudio 2015) */
+
+#ifdef __cplusplus
+}
+#endif

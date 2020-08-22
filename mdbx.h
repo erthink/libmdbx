@@ -107,7 +107,9 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 #include <windows.h>
 #include <winnt.h>
 #ifndef __mode_t_defined
-typedef unsigned short mode_t;
+typedef unsigned short mdbx_mode_t;
+#else
+typedef mode_t mdbx_mode_t;
 #endif /* __mode_t_defined */
 typedef HANDLE mdbx_filehandle_t;
 typedef DWORD mdbx_pid_t;
@@ -121,6 +123,7 @@ typedef DWORD mdbx_tid_t;
 typedef int mdbx_filehandle_t;
 typedef pid_t mdbx_pid_t;
 typedef pthread_t mdbx_tid_t;
+typedef mode_t mdbx_mode_t;
 #endif /* !Windows */
 
 #ifdef _MSC_VER
@@ -347,6 +350,18 @@ typedef pthread_t mdbx_tid_t;
 #endif
 #endif /* cxx14_constexpr */
 
+#ifndef __noreturn
+#ifdef _Noreturn
+#define __noreturn _Noreturn
+#elif defined(__GNUC__) || __has_attribute(__noreturn__)
+#define __noreturn __attribute__((__noreturn__))
+#elif defined(_MSC_VER) && !defined(__clang__)
+#define __noreturn __declspec(noreturn)
+#else
+#define __noreturn
+#endif
+#endif /* __noreturn */
+
 #ifndef DEFINE_ENUM_FLAG_OPERATORS
 #if defined(__cplusplus)
 /// Define operator overloads to enable bit operations on enum values that are
@@ -391,6 +406,16 @@ typedef pthread_t mdbx_tid_t;
 /** @} end of Common Macros
  * \addtogroup c_api
  * @{ */
+
+#ifdef __cplusplus
+#if defined(__clang__) || __has_attribute(type_visibility)
+#define LIBMDBX_API_TYPE LIBMDBX_API __attribute__((type_visibility("default")))
+#else
+#define LIBMDBX_API_TYPE LIBMDBX_API
+#endif
+#else
+#define LIBMDBX_API_TYPE
+#endif /* LIBMDBX_API_TYPE */
 
 #ifdef __cplusplus
 extern "C" {
@@ -516,6 +541,7 @@ struct MDBX_cursor;
 #endif
 
 /** Generic structure used for passing keys and data in and out of the database.
+ * \anchor MDBX_val \see slice \see buffer
  *
  * \details Values returned from the database are valid only until a subsequent
  * update operation, or the end of the transaction. Do not modify or
@@ -663,7 +689,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
  * \param [in] env  An environment handle returned by \ref mdbx_env_create().
  * \param [in] msg  The assertion message, not including newline. */
 typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
-                             int line, const char *msg, va_list args);
+                             int line, const char *msg,
+                             va_list args) cxx17_noexcept;
 
 /** The "don't change `logger`" value for mdbx_setup_debug() */
 #define MDBX_LOGGER_DONTCHANGE ((MDBX_debug_func *)(intptr_t)-1)
@@ -682,7 +709,8 @@ LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t log_level,
  * \param [in] env  An environment handle returned by mdbx_env_create().
  * \param [in] msg  The assertion message, not including newline. */
 typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
-                              const char *function, unsigned line);
+                              const char *function,
+                              unsigned line) cxx17_noexcept;
 
 /** Set or reset the assert() callback of the environment.
  *
@@ -1121,13 +1149,17 @@ enum MDBX_txn_flags_t {
    * block each other and a write transactions. */
   MDBX_TXN_RDONLY = MDBX_RDONLY,
 
-  /** Prepare but not start read-only transaction.
-   *
-   * Transaction will not be started immediately, but created transaction handle
-   * will be ready for use with \ref mdbx_txn_renew(). This flag allows to
-   * preallocate memory and assign a reader slot, thus avoiding these operations
-   * at the next start of the transaction. */
-  MDBX_TXN_RDONLY_PREPARE = MDBX_TXN_RDONLY | MDBX_NOMEMINIT,
+/** Prepare but not start read-only transaction.
+ *
+ * Transaction will not be started immediately, but created transaction handle
+ * will be ready for use with \ref mdbx_txn_renew(). This flag allows to
+ * preallocate memory and assign a reader slot, thus avoiding these operations
+ * at the next start of the transaction. */
+#if defined(__cplusplus) && defined(_MSC_VER) && _MSC_VER < 1910
+  MDBX_TXN_RDONLY_PREPARE = uint32_t(MDBX_RDONLY) | uint32_t(MDBX_NOMEMINIT),
+#else
+  MDBX_TXN_RDONLY_PREPARE = MDBX_RDONLY | MDBX_NOMEMINIT,
+#endif
 
   /** Do not block when starting a write transaction. */
   MDBX_TXN_TRY = UINT32_C(0x10000000),
@@ -1297,7 +1329,7 @@ enum MDBX_cursor_op {
 
   /** \ref MDBX_DUPFIXED -only: Return up to a page of duplicate data items
    * from next cursor position. Move cursor to prepare
-   * for \ref MDBX_NEXT_MULTIPLE. */
+   * for `MDBX_NEXT_MULTIPLE`. */
   MDBX_NEXT_MULTIPLE,
 
   /** Position at first data item of next key */
@@ -1347,6 +1379,9 @@ enum MDBX_error_t {
 
   /** key/data pair already exists */
   MDBX_KEYEXIST = -30799,
+
+  /** The first LMDB-compatible defined error code */
+  MDBX_FIRST_LMDB_ERRCODE = MDBX_KEYEXIST,
 
   /** key/data pair not found (EOF) */
   MDBX_NOTFOUND = -30798,
@@ -1431,6 +1466,9 @@ enum MDBX_error_t {
    * opening with \ref MDBX_EXCLUSIVE flag */
   MDBX_BUSY = -30778,
 
+  /** The first of MDBX-added error codes */
+  MDBX_FIRST_ADDED_ERRCODE = MDBX_BUSY,
+
   /** The specified key has more than one associated value */
   MDBX_EMULTIVAL = -30421,
 
@@ -1456,6 +1494,9 @@ enum MDBX_error_t {
 
   /** Overlapping read and write transactions for the current thread */
   MDBX_TXN_OVERLAPPING = -30415,
+
+  /* The last of MDBX-added error codes */
+  MDBX_LAST_ADDED_ERRCODEE = MDBX_TXN_OVERLAPPING,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,
@@ -1536,12 +1577,17 @@ LIBMDBX_API const char *mdbx_strerror(int errnum);
  * restriction if the returned string points to the supplied buffer.
  * \see mdbx_strerror()
  *
+ * mdbx_liberr2str() returns string describing only MDBX error numbers but NULL
+ * for non-MDBX error codes. This function is thread-safe since return pointer
+ * to constant non-localized strings.
+ *
  * \param [in] errnum  The error code.
  * \param [in,out] buf Buffer to store the error message.
  * \param [in] buflen The size of buffer to store the message.
  *
  * \returns "error message" The description of the error. */
 LIBMDBX_API const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
+__nothrow_pure_function LIBMDBX_API const char *mdbx_liberr2str(int errnum);
 
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** Bit of Windows' madness. The similar to \ref mdbx_strerror() but returns
@@ -1645,7 +1691,7 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  *                             i.e. 32-bit process tries to open >4Gb database.
  */
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
-                              MDBX_env_flags_t flags, mode_t mode);
+                              MDBX_env_flags_t flags, mdbx_mode_t mode);
 
 /** Copy an MDBX environment to the specified path, with options.
  * \ingroup c_extra
@@ -2752,7 +2798,7 @@ LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
  * \ingroup c_crud
  * \see mdbx_cmp() \see mdbx_get_keycmp()
  * \see mdbx_get_datacmp \see mdbx_dcmp() */
-typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
+typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b) cxx17_noexcept;
 
 /** Open or Create a database in the environment.
  * \ingroup c_dbi
@@ -3092,12 +3138,12 @@ LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                             MDBX_val *data, size_t *values_count);
 
-/** Get nearest items from a database.
+/** Get equal or great item from a database.
  * \ingroup c_crud
  *
  * Briefly this function does the same as \ref mdbx_get() with a few
  * differences:
- * 1. Return nearest (i.e. equal or great due comparison function) key-value
+ * 1. Return equal or great (due comparison function) key-value
  *    pair, but not only exactly matching with the key.
  * 2. On success return \ref MDBX_SUCCESS if key found exactly,
  *    and \ref MDBX_RESULT_TRUE otherwise. Moreover, for databases with
@@ -3120,8 +3166,8 @@ LIBMDBX_API int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
  *                               by current thread.
  * \retval MDBX_NOTFOUND      The key was not in the database.
  * \retval MDBX_EINVAL        An invalid parameter was specified. */
-LIBMDBX_API int mdbx_get_nearest(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
-                                 MDBX_val *data);
+LIBMDBX_API int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi,
+                                        MDBX_val *key, MDBX_val *data);
 
 /** Store items into a database.
  * \ingroup c_crud
@@ -3215,7 +3261,7 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  *                           by \ref mdbx_txn_begin().
  * \param [in] dbi           A database handle returned by \ref mdbx_dbi_open().
  * \param [in] key           The key to store in the database.
- * \param [in,out] new_data  The data to store, if NULL then deletion will
+ * \param [in] new_data      The data to store, if NULL then deletion will
  *                           be performed.
  * \param [in,out] old_data  The buffer for retrieve previous value as describe
  *                           above.
@@ -3232,6 +3278,14 @@ LIBMDBX_API int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 LIBMDBX_API int mdbx_replace(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                              MDBX_val *new_data, MDBX_val *old_data,
                              MDBX_put_flags_t flags);
+
+typedef int (*MDBX_preserve_func)(void *context, MDBX_val *target,
+                                  const void *src, size_t bytes);
+LIBMDBX_API int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi,
+                                const MDBX_val *key, MDBX_val *new_data,
+                                MDBX_val *old_data, MDBX_put_flags_t flags,
+                                MDBX_preserve_func preserver,
+                                void *preserver_context);
 
 /** Delete items from a database.
  * \ingroup c_crud
@@ -3769,7 +3823,7 @@ mdbx_get_datacmp(MDBX_db_flags_t flags);
 typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,
                                    mdbx_tid_t thread, uint64_t txnid,
                                    uint64_t lag, size_t bytes_used,
-                                   size_t bytes_retained);
+                                   size_t bytes_retained) cxx17_noexcept;
 
 /** Enumarete the entries in the reader lock table.
  * \ingroup c_statinfo
@@ -3903,7 +3957,8 @@ LIBMDBX_API int mdbx_thread_unregister(MDBX_env *env);
  * \see mdbx_env_set_oomfunc() \see mdbx_env_get_oomfunc()
  */
 typedef int(MDBX_oom_func)(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                           uint64_t txn, unsigned gap, size_t space, int retry);
+                           uint64_t txn, unsigned gap, size_t space,
+                           int retry) cxx17_noexcept;
 
 /** Set the OOM callback.
  * \ingroup c_err
@@ -3960,12 +4015,11 @@ typedef enum MDBX_page_type_t MDBX_page_type_t;
 #define MDBX_PGWALK_META ((const char *)((ptrdiff_t)-2))
 
 /** Callback function for traverse the b-tree. \see mdbx_env_pgwalk() */
-typedef int
-MDBX_pgvisitor_func(const uint64_t pgno, const unsigned number, void *const ctx,
-                    const int deep, const char *const dbi,
-                    const size_t page_size, const MDBX_page_type_t type,
-                    const size_t nentries, const size_t payload_bytes,
-                    const size_t header_bytes, const size_t unused_bytes);
+typedef int MDBX_pgvisitor_func(
+    const uint64_t pgno, const unsigned number, void *const ctx, const int deep,
+    const char *const dbi, const size_t page_size, const MDBX_page_type_t type,
+    const size_t nentries, const size_t payload_bytes,
+    const size_t header_bytes, const size_t unused_bytes) cxx17_noexcept;
 
 /** B-tree traversal function. */
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
@@ -3973,7 +4027,7 @@ LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
 /** @} B-tree Traversal */
 
 /**** Attribute support functions for Nexenta
- * *********************************/
+ * *******************************************/
 #if defined(MDBX_NEXENTA_ATTRS) || defined(DOXYGEN)
 /** \defgroup nexenta Attribute support functions for Nexenta
  * \ingroup c_crud
@@ -4154,6 +4208,28 @@ LIBMDBX_API int mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
 LIBMDBX_API size_t mdbx_e2k_strlen_bug_workaround(const char *s);
 LIBMDBX_API size_t mdbx_e2k_strnlen_bug_workaround(const char *s,
                                                    size_t maxlen);
+#ifdef __cplusplus
+namespace std {
+inline int mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
+                                          size_t n) {
+  return ::mdbx_e2k_memcmp_bug_workaround(s1, s2, n);
+}
+inline int mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2) {
+  return ::mdbx_e2k_strcmp_bug_workaround(s1, s2);
+}
+inline int mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
+                                           size_t n) {
+  return ::mdbx_e2k_strncmp_bug_workaround(s1, s2, n);
+}
+inline size_t mdbx_e2k_strlen_bug_workaround(const char *s) {
+  return ::mdbx_e2k_strlen_bug_workaround(s);
+}
+inline size_t mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
+  return ::mdbx_e2k_strnlen_bug_workaround(s, maxlen);
+}
+} // namespace std
+#endif /* __cplusplus */
+
 #include <string.h>
 #include <strings.h>
 #undef memcmp
@@ -4171,7 +4247,7 @@ LIBMDBX_API size_t mdbx_e2k_strnlen_bug_workaround(const char *s,
 #endif /* MDBX_E2K_MLHCPB_WORKAROUND */
 
 #ifdef __cplusplus
-}
+} /* extern "C" */
 #endif
 
 #endif /* LIBMDBX_H */

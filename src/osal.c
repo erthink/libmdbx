@@ -199,9 +199,8 @@ __extern_C void __assert(const char *function, const char *file, int line,
 
 #if !defined(__ANDROID_API__) || MDBX_DEBUG
 
-MDBX_INTERNAL_FUNC void __cold mdbx_assert_fail(const MDBX_env *env,
-                                                const char *msg,
-                                                const char *func, int line) {
+void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
+                             const char *func, int line) {
 #if MDBX_DEBUG
   if (env && env->me_assert_func) {
     env->me_assert_func(env, msg, func, line);
@@ -241,7 +240,7 @@ MDBX_INTERNAL_FUNC void __cold mdbx_assert_fail(const MDBX_env *env,
 
 #if !defined(__ANDROID_API__)
 
-MDBX_INTERNAL_FUNC __cold void mdbx_panic(const char *fmt, ...) {
+__cold void mdbx_panic(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
 
@@ -514,7 +513,7 @@ MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
                                      const MDBX_env *env, const char *pathname,
                                      mdbx_filehandle_t *fd,
-                                     mode_t unix_mode_bits) {
+                                     mdbx_mode_t unix_mode_bits) {
   *fd = INVALID_HANDLE_VALUE;
 
 #if defined(_WIN32) || defined(_WIN64)

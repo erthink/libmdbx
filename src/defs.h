@@ -116,7 +116,8 @@
 #endif /* __noop */
 
 #ifndef __fallthrough
-#  if defined(__cplusplus) && __has_cpp_attribute(fallthrough)
+#  if defined(__cplusplus) && (__has_cpp_attribute(fallthrough) &&             \
+     (!defined(__clang__) || __clang__ > 4)) || __cplusplus >= 201703L
 #    define __fallthrough [[fallthrough]]
 #  elif __GNUC_PREREQ(8, 0) && defined(__cplusplus) && __cplusplus >= 201103L
 #    define __fallthrough [[fallthrough]]
@@ -151,7 +152,9 @@
 #endif /* __prefetch */
 
 #ifndef __noreturn
-#   if defined(__GNUC__) || __has_attribute(__noreturn__)
+#   ifdef _Noreturn
+#      define __noreturn _Noreturn
+#   elif defined(__GNUC__) || __has_attribute(__noreturn__)
 #       define __noreturn __attribute__((__noreturn__))
 #   elif defined(_MSC_VER)
 #       define __noreturn __declspec(noreturn)
