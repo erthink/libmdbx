@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## v0.9.0 (in the development):
+## v0.9.0 (in the development)
 
 Added features:
 
@@ -9,10 +9,11 @@ Added features:
  - Functions to explicit reader threads (de)registration.
  - Separated enums for environment, sub-databases, transactions, copying and data-update flags.
  - Support for read transactions preparation (`MDBX_TXN_RDONLY_PREPARE` flag).
+ - Draft: Native bindings for C++.
 
 TODO:
 
- - Native bindings for C++.
+ - Finalize: Native bindings for C++.
  - Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
 
 Deprecated functions and flags:
@@ -23,7 +24,7 @@ Deprecated functions and flags:
     Just use `MDBX_SAFE_NOSYNC` or `MDBX_UTTERLY_NOSYNC` instead of it.
 
 
-## v0.8.2 2020-07-06:
+## v0.8.2 2020-07-06
 - Added support multi-opening the same DB in a process with SysV locking (BSD).
 - Fixed warnings & minors for LCC compiler (E2K).
 - Enabled to simultaneously open the same database from processes with and without the `MDBX_WRITEMAP` option.
@@ -38,7 +39,7 @@ Deprecated functions and flags:
   Now remapping with a change of address is performed automatically if there are no dependent readers in the current process.
 
 
-## v0.8.1 2020-06-12:
+## v0.8.1 2020-06-12
 - Minor change versioning. The last number in the version now means the number of commits since last release/tag.
 - Provide ChangeLog file.
 - Fix for using libmdbx as a C-only sub-project with CMake.
@@ -48,7 +49,7 @@ Deprecated functions and flags:
 - Force enabling exceptions handling for MSVC (`/EHsc` option).
 
 
-## v0.8.0 2020-06-05:
+## v0.8.0 2020-06-05
 - Support for Android/Bionic.
 - Support for iOS.
 - Auto-handling `MDBX_NOSUBDIR` while opening for any existing database.
@@ -93,7 +94,7 @@ Deprecated functions and flags:
 - Avoid some GCC-analyzer false-positive warnings.
 
 
-## v0.7.0 2020-03-18:
+## v0.7.0 2020-03-18
 - Workarounds for Wine (Windows compatibility layer for Linux).
 - `MDBX_MAP_RESIZED` renamed to `MDBX_UNABLE_EXTEND_MAPSIZE`.
 - Clarify API description, fix typos.
@@ -105,7 +106,7 @@ Deprecated functions and flags:
 - Avoids extra error messages "bad txn" from mdbx_chk when DB is corrupted.
 
 
-## v0.6.0 2020-01-21:
+## v0.6.0 2020-01-21
 - Fix `mdbx_load` utility for custom comparators.
 - Fix checks related to `MDBX_APPEND` flag inside `mdbx_cursor_put()`.
 - Refine/fix dbi_bind() internals.
@@ -117,7 +118,7 @@ Deprecated functions and flags:
 - Clarify API description & comments, fix typos.
 
 
-## v0.5.0 2019-12-31:
+## v0.5.0 2019-12-31
 - Fix returning MDBX_RESULT_TRUE from page_alloc().
 - Fix false-positive ASAN issue.
 - Fix assertion for `MDBX_NOTLS` option.
@@ -132,7 +133,7 @@ Deprecated functions and flags:
 - Added install section for CMake.
 
 
-## v0.4.0 2019-12-02:
+## v0.4.0 2019-12-02
 - Support for Mac OSX, FreeBSD, NetBSD, OpenBSD, DragonFly BSD, OpenSolaris, OpenIndiana (AIX and HP-UX pending).
 - Use bootid for decisions of rollback.
 - Counting retired pages and extended transaction info.

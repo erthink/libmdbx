@@ -62,7 +62,8 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.in" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/version.c.in" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/man1" AND
-    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/mdbx_chk.c")
+    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/mdbx_chk.c" AND
+    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/src/mdbx.c++")
   set(MDBX_AMALGAMATED_SOURCE FALSE)
   find_program(GIT git)
   if(NOT GIT)
@@ -71,6 +72,7 @@ if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git" AND
   set(MDBX_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
 elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c" AND
+    EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx.c++" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/config.h.in" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/man1" AND
     EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/mdbx_chk.c")
@@ -294,13 +296,29 @@ else()
 endif(SUBPROJECT)
 
 list(FIND CMAKE_C_COMPILE_FEATURES c_std_11 HAS_C11)
+list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_11 HAS_CXX11)
+list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_14 HAS_CXX14)
+list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 HAS_CXX17)
+list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_20 HAS_CXX20)
+if(NOT DEFINED MDBX_CXX_STANDARD)
+  if(DEFINED CMAKE_CXX_STANDARD)
+    set(MDBX_CXX_STANDARD ${CMAKE_CXX_STANDARD})
+  elseif(NOT HAS_CXX20 LESS 0)
+    set(MDBX_CXX_STANDARD 20)
+  elseif(NOT HAS_CXX17 LESS 0)
+    set(MDBX_CXX_STANDARD 17)
+  elseif(NOT HAS_CXX14 LESS 0)
+    set(MDBX_CXX_STANDARD 14)
+  elseif(NOT HAS_CXX11 LESS 0)
+    set(MDBX_CXX_STANDARD 11)
+  else()
+    set(MDBX_CXX_STANDARD 98)
+  endif()
+endif()
 if(NOT HAS_C11 LESS 0)
   set(MDBX_C_STANDARD 11)
 else()
   set(MDBX_C_STANDARD 99)
-endif()
-if(MDBX_C_STANDARD)
-  message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx")
 endif()
 
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.def")
@@ -392,7 +410,7 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Darwin" OR IOS)
 endif()
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   if(MDBX_NTDLL_EXTRA_IMPLIB)
-    add_mdbx_option(MDBX_AVOID_CRT "Avoid dependence from MSVC CRT and use ntdll.dll instead" ${NOT_SUBPROJECT})
+    add_mdbx_option(MDBX_AVOID_CRT "Avoid dependence from MSVC CRT and use ntdll.dll instead" OFF)
   endif()
   add_mdbx_option(MDBX_CONFIG_MANUAL_TLS_CALLBACK
     "Provide mdbx_dll_handler() for manual initialization" OFF)
@@ -409,13 +427,28 @@ option(MDBX_FORCE_ASSERTIONS "Force enable assertion checking" OFF)
 
 if(NOT MDBX_AMALGAMATED_SOURCE)
   add_mdbx_option(MDBX_ALLOY_BUILD "Build MDBX library through single/alloyed object file" ON)
-  option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
-endif(NOT MDBX_AMALGAMATED_SOURCE)
+endif()
 
 if((MDBX_BUILD_TOOLS OR MDBX_ENABLE_TESTS) AND MDBX_BUILD_SHARED_LIBRARY)
   add_mdbx_option(MDBX_LINK_TOOLS_NONSTATIC "Link MDBX tools with non-static libmdbx" OFF)
 else()
   unset(MDBX_LINK_TOOLS_NONSTATIC CACHE)
+endif()
+
+if(MDBX_CXX_STANDARD GREATER_EQUAL 11 AND MDBX_CXX_STANDARD LESS 83)
+  if(NOT MDBX_AMALGAMATED_SOURCE)
+    option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
+  endif()
+  if(NOT MDBX_AVOID_CRT
+      AND NOT (CMAKE_COMPILER_IS_GNUCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5)
+      AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 4)
+      AND NOT (MSVC AND MSVC_VERSION LESS 1900))
+    option(MDBX_BUILD_CXX "Build C++ portion" ON)
+  else()
+    set(MDBX_BUILD_CXX FALSE)
+  endif()
+else()
+  set(MDBX_BUILD_CXX FALSE)
 endif()
 
 ################################################################################
@@ -426,7 +459,7 @@ fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" FALSE)
 message(STATUS "libmdbx version is ${MDBX_VERSION}")
 
 # sources list
-set(LIBMDBX_SOURCES mdbx.h "${CMAKE_CURRENT_BINARY_DIR}/config.h")
+set(LIBMDBX_SOURCES mdbx.h "${CMAKE_CURRENT_BINARY_DIR}/config.h" )
 if(MDBX_AMALGAMATED_SOURCE)
   list(APPEND LIBMDBX_SOURCES mdbx.c)
 else()
@@ -438,7 +471,7 @@ else()
   set(MDBX_BUILD_SOURCERY "${MDBX_SOURCERY_DIGEST}_${MDBX_SOURCERY_SUFFIX}")
 
   if(MDBX_ALLOY_BUILD)
-    list(APPEND LIBMDBX_SOURCES ${MDBX_SOURCE_DIR}/alloy.c)
+    list(APPEND LIBMDBX_SOURCES "${MDBX_SOURCE_DIR}/alloy.c")
     include_directories("${MDBX_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
   else()
     list(APPEND LIBMDBX_SOURCES
@@ -450,11 +483,23 @@ else()
     include_directories("${MDBX_SOURCE_DIR}")
   endif()
 endif(MDBX_AMALGAMATED_SOURCE)
+if(MDBX_BUILD_CXX)
+  message(STATUS "Use C${MDBX_C_STANDARD} and C++${MDBX_CXX_STANDARD} for libmdbx")
+  list(APPEND LIBMDBX_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" mdbx.h++)
+else()
+  message(STATUS "Use C${MDBX_C_STANDARD} for libmdbx but C++ portion is disabled")
+endif()
 
 macro(target_setup_options TARGET)
   if(DEFINED INTERPROCEDURAL_OPTIMIZATION)
     set_target_properties(${TARGET} PROPERTIES
       INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
+  endif()
+  set_target_properties(${TARGET} PROPERTIES
+    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+  if(MDBX_BUILD_CXX)
+    set_target_properties(${TARGET} PROPERTIES
+      CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
   endif()
   if(CC_HAS_FASTMATH)
     target_compile_options(${TARGET} PRIVATE "-ffast-math")
@@ -478,6 +523,9 @@ macro(libmdbx_setup_libs TARGET MODE)
     target_link_libraries(${TARGET} ${MODE} kstat)
   elseif(${CMAKE_SYSTEM_NAME} STREQUAL "Android")
     target_link_libraries(${TARGET} ${MODE} log)
+  endif()
+  if(LIBCXX_FILESYSTEM AND MDBX_BUILD_CXX)
+    target_link_libraries(${TARGET} ${MODE} ${LIBCXX_FILESYSTEM})
   endif()
 endmacro()
 
@@ -650,10 +698,16 @@ endif(MDBX_INSTALL_STATIC)
 # collect options & build info
 string(TIMESTAMP MDBX_BUILD_TIMESTAMP UTC)
 set(MDBX_BUILD_FLAGS ${CMAKE_C_FLAGS})
+if(MDBX_BUILD_CXX)
+  set(MDBX_BUILD_FLAGS ${CMAKE_CXX_FLAGS})
+endif()
 
 # append cmake's build-type flags and defines
 if(NOT CMAKE_CONFIGURATION_TYPES)
   list(APPEND MDBX_BUILD_FLAGS ${CMAKE_C_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}})
+  if(MDBX_BUILD_CXX)
+    list(APPEND MDBX_BUILD_FLAGS ${CMAKE_CXX_FLAGS_${CMAKE_BUILD_TYPE_UPPERCASE}})
+  endif()
 endif()
 
 # get definitions

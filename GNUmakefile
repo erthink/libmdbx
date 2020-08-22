@@ -43,7 +43,7 @@ define uname2sosuffix
 endef
 SO_SUFFIX  := $(shell $(uname2sosuffix))
 
-HEADERS    := mdbx.h
+HEADERS    := mdbx.h mdbx.h++
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1
@@ -64,11 +64,11 @@ clean:
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist \
 		config.h src/config.h src/version.c *.tar*
 
-libmdbx.a: mdbx-static.o
+libmdbx.a: mdbx-static.o mdbx++-static.o
 	$(AR) rs $@ $?
 
-libmdbx.$(SO_SUFFIX): mdbx-dylib.o
-	$(CC) $(CFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIBS) -o $@
+libmdbx.$(SO_SUFFIX): mdbx-dylib.o mdbx++-dylib.o
+	$(CXX) $(CXXFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIBS) -o $@
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)
@@ -85,11 +85,17 @@ config.h: mdbx.c $(lastword $(MAKEFILE_LIST))
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	) > $@
 
-mdbx-dylib.o: config.h mdbx.c $(lastword $(MAKEFILE_LIST))
+mdbx-dylib.o: config.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST))
 	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c -o $@
 
-mdbx-static.o: config.h mdbx.c $(lastword $(MAKEFILE_LIST))
+mdbx-static.o: config.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST))
 	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
+
+mdbx++-dylib.o: config.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
+	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c++ -o $@
+
+mdbx++-static.o: config.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
+	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c++ -o $@
 
 mdbx_%:	mdbx_%.c libmdbx.a
 	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
@@ -117,7 +123,7 @@ endef
 
 DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake
-DIST_SRC   := mdbx.h mdbx.c $(addsuffix .c, $(TOOLS))
+DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log.gz
@@ -270,8 +276,14 @@ docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md
 docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	echo -e "\\page usage Usage\n\\section getting Getting the libmdbx" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h src/options.h ChangeLog.md AUTHORS LICENSE
-	rm -rf docs/html && cp mdbx.h src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md AUTHORS LICENSE
+	rm -rf docs/html && cp mdbx.h mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
+
+mdbx++-dylib.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
+	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/mdbx.c++ -o $@
+
+mdbx++-static.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
+	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
 
 .PHONY: dist release-assets
 dist: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
@@ -288,6 +300,9 @@ libmdbx-sources-$(MDBX_VERSION_SUFFIX).zip: $(addprefix dist/, $(DIST_SRC) $(DIS
 dist/mdbx.h: mdbx.h src/version.c $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && cp $< $@
 
+dist/mdbx.h++: mdbx.h++ src/version.c $(lastword $(MAKEFILE_LIST))
+	mkdir -p dist && cp $< $@
+
 dist/@tmp-shared_internals.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && sed \
 		-e 's|#pragma once|#define MDBX_ALLOY 1\n#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)|' \
@@ -301,6 +316,10 @@ dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && (cat dist/@tmp-shared_internals.inc \
 	&& cat src/core.c src/osal.c src/version.c src/lck-windows.c src/lck-posix.c \
 	) | grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|' > $@
+
+dist/mdbx.c++: dist/@tmp-shared_internals.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
+	mkdir -p dist && (cat dist/@tmp-shared_internals.inc && cat src/mdbx.c++) \
+	| grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' > $@
 
 define dist-tool-rule
 dist/$(1).c: src/$(1).c src/wingetopt.h src/wingetopt.c \

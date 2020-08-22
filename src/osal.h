@@ -596,7 +596,7 @@ enum mdbx_openfile_purpose {
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
                                      const MDBX_env *env, const char *pathname,
                                      mdbx_filehandle_t *fd,
-                                     mode_t unix_mode_bits);
+                                     mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname);
 MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
