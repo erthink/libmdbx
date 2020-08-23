@@ -6107,12 +6107,14 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     }
     txn->to.reader = r;
     if (flags & (MDBX_TXN_RDONLY_PREPARE - MDBX_TXN_RDONLY)) {
-      mdbx_assert(env, r->mr_txnid.inconsistent >= SAFE64_INVALID_THRESHOLD);
       mdbx_assert(env, txn->mt_txnid == 0);
       mdbx_assert(env, txn->mt_owner == 0);
       mdbx_assert(env, txn->mt_numdbs == 0);
-      mdbx_assert(env, r->mr_snapshot_pages_used == 0);
-      r->mr_snapshot_pages_used = 0;
+      if (likely(r)) {
+        mdbx_assert(env, r->mr_snapshot_pages_used == 0);
+        mdbx_assert(env, r->mr_txnid.inconsistent >= SAFE64_INVALID_THRESHOLD);
+        r->mr_snapshot_pages_used = 0;
+      }
       txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
       return MDBX_SUCCESS;
     }
