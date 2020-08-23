@@ -88,10 +88,10 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  @{
  \defgroup c_err Error handling
  \defgroup c_opening Opening & Closing
- \defgroup c_dbi Databases
  \defgroup c_transactions Transactions
+ \defgroup c_dbi Databases
+ \defgroup c_crud Create/Read/Update/Delete operations
  \defgroup c_cursors Cursors
- \defgroup c_crud CRUD
  \defgroup c_statinfo Statistics & Information
  \defgroup c_settings Settings
  \defgroup c_debug Logging and runtime debug
@@ -479,7 +479,8 @@ void LIBMDBX_API NTAPI mdbx_dll_handler(PVOID module, DWORD reason,
 
 /** Opaque structure for a database environment.
  * \details An environment supports multiple key-value databases (aka key-value
- * spaces or tables), all residing in the same shared-memory map. */
+ * spaces or tables), all residing in the same shared-memory map.
+ * \see mdbx_env_create() \see mdbx_env_close() */
 #ifndef __cplusplus
 typedef struct MDBX_env MDBX_env;
 #else
@@ -489,7 +490,8 @@ struct MDBX_env;
 /** Opaque structure for a transaction handle.
  * \ingroup c_transactions
  * \details All database operations require a transaction handle. Transactions
- * may be read-only or read-write. */
+ * may be read-only or read-write.
+ * \see mdbx_txn_begin() \see mdbx_txn_commit() \see mdbx_txn_abort() */
 #ifndef __cplusplus
 typedef struct MDBX_txn MDBX_txn;
 #else
@@ -500,11 +502,13 @@ struct MDBX_txn;
  * \ingroup c_dbi
  * \details Zero handle is used internally (hidden Garbage Collection DB).
  * So, any valid DBI-handle great than 0 and less than or equal
- * \ref MDBX_MAX_DBI. */
+ * \ref MDBX_MAX_DBI.
+ * \see mdbx_dbi_open() \see mdbx_dbi_close() */
 typedef uint32_t MDBX_dbi;
 
 /** Opaque structure for navigating through a database
- * \ingroup c_cursors */
+ * \ingroup c_cursors
+ * \see mdbx_cursor_open() \see mdbx_cursor_close() */
 #ifndef __cplusplus
 typedef struct MDBX_cursor MDBX_cursor;
 #else
@@ -654,6 +658,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
 
 /** A debug-logger callback function,
  * called before printing the message and aborting.
+ * \see mdbx_setup_debug()
  *
  * \param [in] env  An environment handle returned by \ref mdbx_env_create().
  * \param [in] msg  The assertion message, not including newline. */
@@ -672,6 +677,7 @@ LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t log_level,
 
 /** A callback function for most MDBX assert() failures,
  * called before printing the message and aborting.
+ * \see mdbx_env_set_assert()
  *
  * \param [in] env  An environment handle returned by mdbx_env_create().
  * \param [in] msg  The assertion message, not including newline. */
@@ -705,7 +711,8 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 
 /** Environment flags
  * \ingroup c_opening
- * \anchor env_flags */
+ * \anchor env_flags
+ * \see mdbx_env_open() \see mdbx_env_set_flags() */
 enum MDBX_env_flags_t {
   MDBX_ENV_DEFAULTS = 0,
 
@@ -965,9 +972,7 @@ enum MDBX_env_flags_t {
    * be written to disk, while the itself B-tree not yet. In that case, the
    * database will be corrupted!
    *
-   * \see MDBX_NOMETASYNC
-   * \see MDBX_SAFE_NOSYNC
-   * \see MDBX_UTTERLY_NOSYNC
+   * \see MDBX_NOMETASYNC \see MDBX_SAFE_NOSYNC \see MDBX_UTTERLY_NOSYNC
    *
    * @{ */
 
@@ -1101,7 +1106,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_env_flags_t)
 
 /** Transaction flags
  * \ingroup c_transactions
- * \anchor txn_flags */
+ * \anchor txn_flags
+ * \see mdbx_txn_begin() \see mdbx_txn_flags() */
 enum MDBX_txn_flags_t {
   /** Start read-write transaction.
    *
@@ -1142,7 +1148,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags_t)
 
 /** Database flags
  * \ingroup c_dbi
- * \anchor db_flags */
+ * \anchor db_flags
+ * \see mdbx_dbi_open() */
 enum MDBX_db_flags_t {
   MDBX_DB_DEFAULTS = 0,
 
@@ -1191,7 +1198,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
 #endif
 
 /** Data changing flags
- * \ingroup c_crud */
+ * \ingroup c_crud
+ * \see mdbx_put() \see mdbx_cursor_put() \see mdbx_replace() */
 enum MDBX_put_flags_t {
   MDBX_PUT_DEFAULTS = 0,
 
@@ -1230,7 +1238,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags_t)
 #endif
 
 /** Environment copy flags
- * \ingroup c_extra */
+ * \ingroup c_extra \see mdbx_env_copy() \see mdbx_env_copy2fd() */
 enum MDBX_copy_flags_t {
   MDBX_CP_DEFAULTS = 0,
 
@@ -1250,7 +1258,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags_t)
 
 /** Cursor operations
  * \ingroup c_cursors
- * This is the set of all operations for retrieving data using a cursor. */
+ * This is the set of all operations for retrieving data using a cursor.
+ * \see mdbx_cursor_set() */
 enum MDBX_cursor_op {
   /** Position at first key/data item */
   MDBX_FIRST,
@@ -1323,7 +1332,8 @@ typedef enum MDBX_cursor_op MDBX_cursor_op;
 /** Errors and return codes
  * \ingroup c_err
  *
- * BerkeleyDB uses -30800 to -30999, we'll go under them */
+ * BerkeleyDB uses -30800 to -30999, we'll go under them
+ * \see mdbx_strerror() \see mdbx_strerror_r() \see mdbx_liberr2str() */
 enum MDBX_error_t {
   /** Successful result */
   MDBX_SUCCESS = 0,
@@ -1692,7 +1702,7 @@ LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
                                  MDBX_copy_flags_t flags);
 
 /** Statistics for a database in the environment
- * \ingroup c_statinfo */
+ * \ingroup c_statinfo \see mdbx_env_stat_ex() \see mdbx_dbi_stat() */
 struct MDBX_stat {
   uint32_t ms_psize; /**< Size of a database page. This is the same for all
                         databases. */
@@ -1736,7 +1746,7 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
                                               size_t bytes);
 
 /** Information about the environment
- * \ingroup c_statinfo */
+ * \ingroup c_statinfo \see mdbx_env_info_ex() */
 struct MDBX_envinfo {
   struct {
     uint64_t lower;   /**< Lower limit for datafile size */
@@ -2460,7 +2470,7 @@ LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
                                MDBX_txn_flags_t flags, MDBX_txn **txn);
 
 /** Information about the transaction
- * \ingroup c_statinfo */
+ * \ingroup c_statinfo \see mdbx_txn_info */
 struct MDBX_txn_info {
   /** The ID of the transaction. For a READ-ONLY transaction, this corresponds
       to the snapshot being read. */
@@ -2687,8 +2697,7 @@ LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
 
 /** The fours integers markers (aka "canary") associated with the environment.
  * \ingroup c_crud
- * \see mdbx_canary_set()
- * \see mdbx_canary_get()
+ * \see mdbx_canary_set() \see mdbx_canary_get()
  *
  * The `x`, `y` and `z` values could be set by \ref mdbx_canary_put(), while the
  * 'v' will be always set to the transaction number. Updated values becomes
@@ -2735,7 +2744,8 @@ LIBMDBX_API int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary);
 LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
 
 /** A callback function used to compare two keys in a database
- * \ingroup c_crud */
+ * \ingroup c_crud \see mdbx_cmp() \see mdbx_get_keycmp()
+ * \see mdbx_get_datacmp \see mdbx_dcmp() */
 typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 
 /** Open or Create a database in the environment.
@@ -2940,7 +2950,7 @@ LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
                                            uint32_t *mask);
 
 /** DBI state bits returted by \ref mdbx_dbi_flags_ex()
- * \ingroup c_statinfo */
+ * \ingroup c_statinfo \see mdbx_dbi_flags_ex() */
 enum MDBX_dbi_state_t {
   /** DB was written in this txn */
   MDBX_DBI_DIRTY = 0x01,
@@ -3748,7 +3758,7 @@ mdbx_get_datacmp(MDBX_db_flags_t flags);
  *                           the Reader releases the MVCC-snapshot
  *                           for reuse by completion read transaction.
  *
- * \returns < 0 on failure, >= 0 on success. */
+ * \returns < 0 on failure, >= 0 on success. \see mdbx_reader_list() */
 typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,
                                    mdbx_tid_t thread, uint64_t txnid,
                                    uint64_t lag, size_t bytes_used,
@@ -3882,6 +3892,8 @@ LIBMDBX_API int mdbx_thread_unregister(MDBX_env *env);
  *
  * \retval 2 or great  The reader process was terminated or killed,
  *                     and libmdbx should entirely reset reader registration.
+ *
+ * \see mdbx_env_set_oomfunc() \see mdbx_env_get_oomfunc()
  */
 typedef int(MDBX_oom_func)(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                            uint64_t txn, unsigned gap, size_t space, int retry);
@@ -3917,7 +3929,8 @@ mdbx_env_get_oomfunc(const MDBX_env *env);
  * \ingroup c_extra
  * @{ */
 
-/** Page types for traverse the b-tree. */
+/** Page types for traverse the b-tree. \see mdbx_env_pgwalk() \see
+ * MDBX_pgvisitor_func */
 enum MDBX_page_type_t {
   MDBX_page_void,
   MDBX_page_meta,
@@ -3939,7 +3952,7 @@ typedef enum MDBX_page_type_t MDBX_page_type_t;
 /** Pseudo-name for MetaPages */
 #define MDBX_PGWALK_META ((const char *)((ptrdiff_t)-2))
 
-/** Callback function for traverse the b-tree. */
+/** Callback function for traverse the b-tree. \see mdbx_env_pgwalk() */
 typedef int
 MDBX_pgvisitor_func(const uint64_t pgno, const unsigned number, void *const ctx,
                     const int deep, const char *const dbi,
