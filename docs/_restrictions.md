@@ -144,7 +144,7 @@ reasonable to simplify this as follows:
 
 A good example of long readers is a hot backup to the slow destination
 or debugging of a client application while retaining an active read
-transaction. LMDB this results in `MDBX_MAP_FULL` error and subsequent write
+transaction. LMDB this results in `MDB_MAP_FULL` error and subsequent write
 performance degradation.
 
 MDBX mostly solve "long-lived" readers issue by the lack-of-space callback
