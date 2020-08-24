@@ -18305,7 +18305,10 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 
     if (new_data) {
       /* обновление конкретного дубликата */
-      if (cx.outer.mc_dbx->md_dcmp(old_data, new_data) == 0)
+      /* (!!!) We can skip update only when a data exactly the same, but user's
+       * md_dcmp() may returns zero even data is NOT matches byte-to-byte.
+       * So to skip update the cmp_len fast() should be used. */
+      if (cmp_lenfast(old_data, new_data) == 0)
         /* если данные совпадают, то ничего делать не надо */
         goto bailout;
     }
@@ -18339,8 +18342,8 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
             }
           }
           /* если данные совпадают, то ничего делать не надо */
-          if (new_data &&
-              cx.outer.mc_dbx->md_dcmp(&present_data, new_data) == 0) {
+          if (new_data && /* the cmp_lenfast() must be used, see above */
+              cmp_lenfast(&present_data, new_data) == 0) {
             *old_data = *new_data;
             goto bailout;
           }
@@ -18356,8 +18359,8 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
         }
       } else {
         /* если данные совпадают, то ничего делать не надо */
-        if (new_data &&
-            cx.outer.mc_dbx->md_dcmp(&present_data, new_data) == 0) {
+        if (new_data && /* the cmp_lenfast() must be used, see comment above */
+            cmp_lenfast(&present_data, new_data) == 0) {
           *old_data = *new_data;
           goto bailout;
         }
