@@ -25,7 +25,6 @@
 #include "internals.h"
 
 #include <atomic>
-#include <sstream>
 #include <system_error>
 
 #if defined(__has_include) && __has_include(<version>)
@@ -150,10 +149,11 @@ __cold std::string format_va(const char *fmt, va_list ap) {
 #endif
   assert(needed >= 0);
   std::string result;
-  result.reserve((size_t)needed + 1);
-  result.resize((size_t)needed, '\0');
-  assert((int)result.capacity() > needed);
-  int actual = vsnprintf((char *)result.data(), result.capacity(), fmt, ones);
+  result.reserve(size_t(needed + 1));
+  result.resize(size_t(needed), '\0');
+  assert(int(result.capacity()) > needed);
+  int actual = vsnprintf(const_cast<char *>(result.data()), result.capacity(),
+                         fmt, ones);
   assert(actual == needed);
   (void)actual;
   va_end(ones);
@@ -273,6 +273,10 @@ namespace mdbx {
 [[noreturn]] __cold void throw_max_length_exceeded() {
   throw std::length_error(
       "mdbx:: exceeded the maximal length of data/slice/buffer");
+}
+
+[[noreturn]] __cold void throw_too_small_target_buffer() {
+  throw std::length_error("mdbx:: the target buffer is too small");
 }
 
 __cold exception::exception(const error &error) noexcept
@@ -430,6 +434,61 @@ __cold void error::throw_exception() const {
 
 //------------------------------------------------------------------------------
 
+char *slice::to_hex(char *dst, size_t dst_size, bool uppercase) const {
+  if (mdbx_unlikely((dst_size >> 1) < length()))
+    throw_too_small_target_buffer();
+  auto src = byte_ptr();
+  const auto end = src + length();
+  const char x0A = (uppercase ? 'A' : 'a') - 10;
+  while (src != end) {
+    const char high = *src >> 4;
+    const char low = *src & 15;
+    dst[0] = (high < 10) ? high + '0' : high + x0A;
+    dst[1] = (low < 10) ? low + '0' : low + x0A;
+    src += 1;
+    dst += 2;
+  }
+  return dst;
+}
+
+char *slice::from_hex(char *dest, size_t dest_size) const {
+  if (length() % 2)
+    throw std::invalid_argument(
+        "mdbx::from_hex:: odd length of hexadecimal string");
+  (void)dest;
+  (void)dest_size;
+  NOT_IMPLEMENTED();
+  return nullptr;
+}
+
+char *slice::to_base58(char *dest, size_t dest_size) const {
+  (void)dest;
+  (void)dest_size;
+  NOT_IMPLEMENTED();
+  return nullptr;
+}
+
+char *slice::from_base58(char *dest, size_t dest_size) const {
+  (void)dest;
+  (void)dest_size;
+  NOT_IMPLEMENTED();
+  return nullptr;
+}
+
+char *slice::to_base64(char *dest, size_t dest_size) const {
+  (void)dest;
+  (void)dest_size;
+  NOT_IMPLEMENTED();
+  return nullptr;
+}
+
+char *slice::from_base64(char *dest, size_t dest_size) const {
+  (void)dest;
+  (void)dest_size;
+  NOT_IMPLEMENTED();
+  return nullptr;
+}
+
 bool slice::is_base64() const noexcept {
   NOT_IMPLEMENTED();
   return true;
@@ -445,149 +504,13 @@ bool slice::is_printable(bool allow_utf8) const noexcept {
   return allow_utf8;
 }
 
-std::string slice::hex_string(bool uppercase) const {
-  std::string result;
-  if (length() > 0) {
-    result.reserve(length() * 2);
-    const uint8_t *ptr = static_cast<const uint8_t *>(data());
-    const uint8_t *const end = ptr + length();
-    const char x0A = (uppercase ? 'A' : 'a') - 10;
-    do {
-      char high = *ptr >> 4;
-      char low = *ptr & 15;
-      result.push_back((high < 10) ? high + '0' : high + x0A);
-      result.push_back((low < 10) ? low + '0' : low + x0A);
-    } while (++ptr < end);
-  }
-  return result;
-}
-
-std::string slice::base64_string() const {
-  std::string result;
-  NOT_IMPLEMENTED();
-  return result;
-}
-
 //------------------------------------------------------------------------------
 
-void buffer::reserve(size_t head_room, size_t tail_room) {
-  if (unlikely(head_room > max_length || tail_room > max_length ||
-               head_room + tail_room > max_length - slice_.length()))
-    throw_max_length_exceeded();
+template class LIBMDBX_API_TYPE buffer<default_allocator>;
 
-  const size_t whole = head_room + slice_.length() + tail_room;
-  if (whole == 0)
-    silo_.clear();
-  else if (is_reference() || slice_.empty()) {
-    silo_.reserve(whole);
-    silo_.append(head_room, '\0');
-    silo_.append(slice_.char_ptr(), slice_.length());
-  } else {
-    std::string buffer;
-    buffer.reserve(whole);
-    buffer.append(head_room, '\0');
-    buffer.append(slice_.char_ptr(), slice_.length());
-    silo_.assign(std::move(buffer));
-  }
-  slice_.iov_base = const_cast<char *>(silo_.data());
-}
-
-void buffer::insulate() {
-  assert(is_reference());
-  silo_.assign(slice_.char_ptr(), slice_.length());
-  slice_.iov_base = const_cast<char *>(silo_.data());
-}
-
-buffer &buffer::assign_reference(const void *ptr, size_t bytes) noexcept {
-  silo_.clear();
-  slice_.assign(ptr, bytes);
-  return *this;
-}
-
-buffer &buffer::assign_freestanding(const void *ptr, size_t bytes) {
-  silo_.assign(static_cast<const char *>(ptr), check_length(bytes));
-  slice_.assign(silo_);
-  return *this;
-}
-
-void buffer::clear() noexcept {
-  slice_.reset();
-  silo_.clear();
-}
-
-void buffer::shrink_to_fit() {
-  if (silo_.capacity() != length()) {
-    if (silo_.length() != length())
-      silo_.assign(char_ptr(), length());
-    silo_.shrink_to_fit();
-    slice_.assign(silo_);
-  }
-}
-
-void buffer::shrink() {
-  if (silo_.length() != length()) {
-    silo_.assign(char_ptr(), length());
-    slice_.assign(silo_);
-  }
-}
-
-int buffer::thunk::cb_copy(void *context, MDBX_val *target, const void *src,
-                           size_t bytes) noexcept {
-  thunk *self = static_cast<thunk *>(context);
-  assert(self->is_clean());
-  try {
-    owner_of(static_cast<slice *>(target), &buffer::slice_)
-        ->assign(src, bytes, false);
-    return MDBX_RESULT_FALSE;
-  } catch (... /* capture any exception to rethrow it over C code */) {
-    self->capture();
-    return MDBX_RESULT_TRUE;
-  }
-}
-
-buffer::buffer(size_t head_room, size_t tail_room) {
-  if (unlikely(head_room > max_length || tail_room > max_length ||
-               head_room + tail_room > max_length))
-    throw_max_length_exceeded();
-  silo_.reserve(head_room + tail_room);
-  silo_.append(head_room, '\0');
-  slice_.iov_base = const_cast<char *>(silo_.data());
-  assert(slice_.iov_len == 0);
-}
-
-buffer::buffer(size_t head_room, const slice &src, size_t tail_room) {
-  if (unlikely(head_room > max_length || tail_room > max_length ||
-               head_room + tail_room > max_length - slice_.length()))
-    throw_max_length_exceeded();
-  silo_.reserve(head_room + src.length() + tail_room);
-  silo_.append(head_room, '\0');
-  silo_.append(src.char_ptr(), src.length());
-  slice_.iov_base = const_cast<char *>(silo_.data());
-  slice_.iov_len = src.length();
-}
-
-buffer::buffer(size_t capacity) {
-  silo_.reserve(check_length(capacity));
-  slice_.iov_base = const_cast<char *>(silo_.data());
-  assert(slice_.iov_len == 0);
-}
-
-buffer::buffer(const txn_ref &txn, const slice &src)
-    : buffer(src, !txn.is_dirty(src.data())) {}
-
-buffer buffer::decode_hex(const slice &hex) {
-  if (hex.length() % 2)
-    throw std::invalid_argument("odd length of hexadecimal string");
-  buffer result(hex.length() / 2);
-  NOT_IMPLEMENTED();
-  return result;
-}
-
-buffer buffer::decode_base64(const slice &base64) {
-  buffer result(base64.length() * 4 / 3);
-  NOT_IMPLEMENTED();
-  return result;
-}
+#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L
+template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;
+#endif /* __cpp_lib_memory_resource >= 201603L */
 
 //------------------------------------------------------------------------------
 
@@ -858,10 +781,6 @@ __cold ::std::ostream &operator<<(::std::ostream &, const pair &) {
   NOT_IMPLEMENTED();
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const buffer &) {
-  NOT_IMPLEMENTED();
-}
-
 __cold ::std::ostream &operator<<(::std::ostream &, const env_ref::geometry &) {
   NOT_IMPLEMENTED();
 }
@@ -949,12 +868,6 @@ __cold string to_string(const ::mdbx::slice &value) {
 }
 
 __cold string to_string(const ::mdbx::pair &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const ::mdbx::buffer &value) {
   ostringstream out;
   out << value;
   return out.str();
