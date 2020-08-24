@@ -12059,10 +12059,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   MDBX_page *sub_root = NULL;
   MDBX_val xdata, *rdata, dkey, olddata;
   MDBX_db nested_dupdb;
-  unsigned mcount = 0, dcount = 0, nospill;
-  size_t nsize;
   int rc2;
-  unsigned nflags;
   DKBUF;
 
   if (unlikely(mc == NULL || key == NULL || data == NULL))
@@ -12078,13 +12075,22 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   env = mc->mc_txn->mt_env;
 
   /* Check this first so counter will always be zero on any early failures. */
+  size_t mcount = 0, dcount = 0;
   if (flags & MDBX_MULTIPLE) {
     if (unlikely(!F_ISSET(mc->mc_db->md_flags, MDBX_DUPFIXED)))
       return MDBX_INCOMPATIBLE;
-    if (unlikely(data[1].iov_len >= INT_MAX))
-      return MDBX_EINVAL;
-    dcount = (unsigned)data[1].iov_len;
-    data[1].iov_len = 0;
+    dcount = data[1].iov_len;
+    if (unlikely(dcount < 2 || data->iov_len == 0))
+      return MDBX_BAD_VALSIZE;
+    if (unlikely(mc->mc_db->md_xsize != data->iov_len) && mc->mc_db->md_xsize)
+      return MDBX_BAD_VALSIZE;
+    if (unlikely(dcount >
+                 MAX_MAPSIZE / 2 / (BRANCH_NODEMAX(MAX_PAGESIZE) - NODESIZE))) {
+      /* checking for multiplication overflow */
+      if (unlikely(dcount > MAX_MAPSIZE / 2 / data->iov_len))
+        return MDBX_TOO_LARGE;
+    }
+    data[1].iov_len = 0 /* reset done item counter */;
   }
 
   if (flags & MDBX_RESERVE) {
@@ -12094,8 +12100,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     data->iov_base = nullptr;
   }
 
-  nospill = flags & MDBX_NOSPILL;
-  flags &= ~MDBX_NOSPILL;
+  const unsigned nospill = flags & MDBX_NOSPILL;
+  flags -= nospill;
 
   if (unlikely(mc->mc_txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
     return (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
@@ -12145,6 +12151,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         return MDBX_BAD_VALSIZE;
       case 4:
         if (unlikely(3 & (uintptr_t)data->iov_base)) {
+          if (unlikely(flags & MDBX_MULTIPLE))
+            return MDBX_BAD_VALSIZE;
           /* copy instead of return error to avoid break compatibility */
           aligned_data.iov_base = memcpy(&aligned_databytes, data->iov_base,
                                          aligned_data.iov_len = 4);
@@ -12153,6 +12161,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         break;
       case 8:
         if (unlikely(7 & (uintptr_t)data->iov_base)) {
+          if (unlikely(flags & MDBX_MULTIPLE))
+            return MDBX_BAD_VALSIZE;
           /* copy instead of return error to avoid break compatibility */
           aligned_data.iov_base = memcpy(&aligned_databytes, data->iov_base,
                                          aligned_data.iov_len = 8);
@@ -12287,12 +12297,12 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     if (mc->mc_db->md_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) {
       assert(data->iov_len >= mc->mc_dbx->md_vlen_min &&
              data->iov_len <= mc->mc_dbx->md_vlen_max);
-      mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max = data->iov_len;
       assert(mc->mc_xcursor != NULL);
       mc->mc_db->md_xsize = mc->mc_xcursor->mx_db.md_xsize =
-          (unsigned)data->iov_len;
-      mc->mc_xcursor->mx_dbx.md_klen_min = mc->mc_xcursor->mx_dbx.md_klen_max =
-          data->iov_len;
+          (unsigned)(mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max =
+                         mc->mc_xcursor->mx_dbx.md_klen_min =
+                             mc->mc_xcursor->mx_dbx.md_klen_max =
+                                 data->iov_len);
     }
     *mc->mc_dbistate |= DBI_DIRTY;
     if ((mc->mc_db->md_flags & (MDBX_DUPSORT | MDBX_DUPFIXED)) == MDBX_DUPFIXED)
@@ -12639,10 +12649,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
 
   rdata = data;
 
-new_sub:
-  nflags = flags & NODE_ADD_FLAGS;
-  nsize = IS_LEAF2(mc->mc_pg[mc->mc_top]) ? key->iov_len
-                                          : leaf_size(env, key, rdata);
+new_sub:;
+  unsigned nflags = flags & NODE_ADD_FLAGS;
+  size_t nsize = IS_LEAF2(mc->mc_pg[mc->mc_top]) ? key->iov_len
+                                                 : leaf_size(env, key, rdata);
   if (page_room(mc->mc_pg[mc->mc_top]) < nsize) {
     if ((flags & (F_DUPDATA | F_SUBDATA)) == F_DUPDATA)
       nflags &= ~MDBX_APPEND; /* sub-page may need room to grow */
