@@ -36,6 +36,7 @@ each of which is divided into several sections.
 
 3. The `C/C++` API manual:
   - The \ref c_api reference
+  - \ref c_crud_hints "Quick reference for Insert/Update/Delete operations"
   - The \ref mdbx.h header file reference
   - The \ref cxx_api reference
   - The \ref mdbx.h++ header file reference
