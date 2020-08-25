@@ -80,6 +80,9 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
                                  * not guaranteed. Specify /EHsc */
 #endif                          /* _MSC_VER (warnings) */
 
+/* *INDENT-OFF* */
+/* clang-format off */
+
 /**
  \file mdbx.h
  \brief The libmdbx C API header file
@@ -90,7 +93,71 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  \defgroup c_opening Opening & Closing
  \defgroup c_transactions Transactions
  \defgroup c_dbi Databases
- \defgroup c_crud Create/Read/Update/Delete operations
+ \defgroup c_crud Create/Read/Update/Delete (see Roadmap in details)
+
+ \details
+ \anchor c_crud_hints
+# Quick reference for Insert/Update/Delete operations
+
+Historically, libmdbx inherits the API basis from LMDB, where it is often
+difficult to select flags/options and functions for the desired operation.
+So it is recommend using this hints.
+
+## Databases with UNIQUE keys
+
+In databases created without the \ref MDBX_DUPSORT option, keys are always
+unique. Thus always a single value corresponds to the each key, and so there
+are only a few cases of changing data.
+
+| Case                                        | Flags to use        | Result                 |
+|---------------------------------------------|---------------------|------------------------|
+| _INSERTING_|||
+|Key is absent → Insertion                    |\ref MDBX_NOOVERWRITE|Insertion               |
+|Key exist → Error since key present          |\ref MDBX_NOOVERWRITE|Error \ref MDBX_KEYEXIST and return Present value|
+| _UPSERTING_|||
+|Key is absent → Insertion                    |\ref MDBX_UPSERT     |Insertion               |
+|Key exist → Update                           |\ref MDBX_UPSERT     |Update                  |
+|  _UPDATING_|||
+|Key is absent → Error since no such key      |\ref MDBX_CURRENT    |Error \ref MDBX_NOTFOUND|
+|Key exist → Update                           |\ref MDBX_CURRENT    |Update value            |
+| _DELETING_|||
+|Key is absent → Error since no such key      |\ref mdbx_del() or \ref mdbx_replace()|Error \ref MDBX_NOTFOUND|
+|Key exist → Delete by key                    |\ref mdbx_del() with the parameter `data = NULL`|Deletion|
+|Key exist → Delete by key with with data matching check|\ref mdbx_del() with the parameter `data` filled with the value which should be match for deletion|Deletion or \ref MDBX_NOTFOUND if the value does not match|
+|Delete at the current cursor position        |\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion|
+|Extract (read & delete) value by the key     |\ref mdbx_replace() with zero flag and parameter `new_data = NULL`|Returning a deleted value|
+
+
+## Databases with NON-UNIQUE keys
+
+In databases created with the \ref MDBX_DUPSORT (Sorted Duplicates) option, keys
+may be non unique. Such non-unique keys in a key-value database may be treated
+as a duplicates or as like a multiple values corresponds to keys.
+
+
+| Case                                        | Flags to use        | Result                 |
+|---------------------------------------------|---------------------|------------------------|
+| _INSERTING_|||
+|Key is absent → Insertion                    |\ref MDBX_NOOVERWRITE|Insertion|
+|Key exist → Needn't to add new values        |\ref MDBX_NOOVERWRITE|Error \ref MDBX_KEYEXIST with returning the first value from those already present|
+| _UPSERTING_|||
+|Key is absent → Insertion                    |\ref MDBX_UPSERT     |Insertion|
+|Key exist → Wanna to add new values          |\ref MDBX_UPSERT     |Add one more value to the key|
+|Key exist → Replace all values with a new one|\ref MDBX_UPSERT + \ref MDBX_ALLDUPS|Overwrite by single new value|
+|  _UPDATING_|||
+|Key is absent → Error since no such key      |\ref MDBX_CURRENT    |Error \ref MDBX_NOTFOUND|
+|Key exist, Single value → Update             |\ref MDBX_CURRENT    |Update single value    |
+|Key exist, Multiple values → Replace all values with a new one|\ref MDBX_CURRENT + \ref MDBX_ALLDUPS|Overwrite by single new value|
+|Key exist, Multiple values → Error since it is unclear which of the values should be updated|\ref mdbx_put() with \ref MDBX_CURRENT|Error \ref MDBX_EMULTIVAL|
+|Key exist, Multiple values → Update particular entry of multi-value|\ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the parameter `old_value` filled with the value that wanna to update|Update one multi-value entry|
+|Key exist, Multiple values → Update the current entry of multi-value|\ref mdbx_cursor_put() with \ref MDBX_CURRENT|Update one multi-value entry|
+| _DELETING_|||
+|Key is absent → Error since no such key      |\ref mdbx_del() or \ref mdbx_replace()|Error \ref MDBX_NOTFOUND|
+|Key exist → Delete all values corresponds given key|\ref mdbx_del() with the parameter `data = NULL`|Deletion|
+|Key exist → Delete particular value corresponds given key|\ref mdbx_del() with the parameter `data` filled with the value that wanna to delete, or \ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the `old_value` parameter filled with the value that wanna to delete and `new_data = NULL`| Deletion or \ref MDBX_NOTFOUND if no such ker-value pair|
+|Delete one value at the current cursor position|\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion only the current entry|
+|Delete all values of key at the current cursor position|\ref mdbx_cursor_del() with with \ref MDBX_ALLDUPS flag|Deletion all duplicates of key (all multi-values) at the current cursor position|
+
  \defgroup c_cursors Cursors
  \defgroup c_statinfo Statistics & Information
  \defgroup c_settings Settings
@@ -98,6 +165,9 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  \defgroup c_rqest Range query estimation
  \defgroup c_extra Extra operations
 */
+
+/* *INDENT-ON* */
+/* clang-format on */
 
 #include <stdarg.h>
 #include <stddef.h>
@@ -1231,6 +1301,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
 
 /** Data changing flags
  * \ingroup c_crud
+ * \see c_crud_hint
  * \see mdbx_put() \see mdbx_cursor_put() \see mdbx_replace() */
 enum MDBX_put_flags_t {
   /** Upsertion by default (without any other flags) */
