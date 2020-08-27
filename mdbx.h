@@ -1233,19 +1233,27 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_db_flags_t)
  * \ingroup c_crud
  * \see mdbx_put() \see mdbx_cursor_put() \see mdbx_replace() */
 enum MDBX_put_flags_t {
-  MDBX_PUT_DEFAULTS = 0,
+  /** Upsertion by default (without any other flags) */
+  MDBX_UPSERT = 0,
 
-  /** For upsertion: Don't write if the key already exists. */
+  /** For insertion: Don't write if the key already exists. */
   MDBX_NOOVERWRITE = UINT32_C(0x10),
 
-  /** Only for \ref MDBX_DUPSORT. For upsertion: don't write if the key/data
-   * pair already exist. For deletion: remove all duplicate data items. */
+  /** Has effect only for \ref MDBX_DUPSORT databases.
+   * For upsertion: don't write if the key-value pair already exist.
+   * For deletion: remove all values for key. */
   MDBX_NODUPDATA = UINT32_C(0x20),
 
   /** For upsertion: overwrite the current key/data pair.
    * MDBX allows this flag for \ref mdbx_put() for explicit overwrite/update
-   * without insertion. */
+   * without insertion.
+   * For deletion: remove only single entry at the current cursor position. */
   MDBX_CURRENT = UINT32_C(0x40),
+
+  /** Has effect only for \ref MDBX_DUPSORT databases.
+   * For deletion: remove all multi-values (aka duplicates) for given key.
+   * For upsertion: replace all multi-values for given key with a new one. */
+  MDBX_ALLDUPS = UINT32_C(0x80),
 
   /** For upsertion: Just reserve space for data, don't copy it.
    * Return a pointer to the reserved space. */
@@ -1255,11 +1263,13 @@ enum MDBX_put_flags_t {
    * Don't split full pages, continue on a new instead. */
   MDBX_APPEND = UINT32_C(0x20000),
 
-  /** Duplicate data is being appended.
+  /** Has effect only for \ref MDBX_DUPSORT databases.
+   * Duplicate data is being appended.
    * Don't split full pages, continue on a new instead. */
   MDBX_APPENDDUP = UINT32_C(0x40000),
 
-  /** Store multiple data items in one call. Only for \ref MDBX_DUPFIXED. */
+  /** Only for \ref MDBX_DUPFIXED.
+   * Store multiple data items in one call. */
   MDBX_MULTIPLE = UINT32_C(0x80000)
 };
 #ifndef __cplusplus
@@ -3186,7 +3196,7 @@ LIBMDBX_API int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi,
  *                        This parameter must be set to 0 or by bitwise OR'ing
  *                        together one or more of the values described here:
  *   - \ref MDBX_NODUPDATA
- *      Enter the new key/data pair only if it does not already appear
+ *      Enter the new key-value pair only if it does not already appear
  *      in the database. This flag may only be specified if the database
  *      was opened with \ref MDBX_DUPSORT. The function will return
  *      \ref MDBX_KEYEXIST if the key/data pair already appears in the database.
@@ -3201,7 +3211,9 @@ LIBMDBX_API int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi,
  *  - \ref MDBX_CURRENT
  *      Update an single existing entry, but not add new ones. The function will
  *      return \ref MDBX_NOTFOUND if the given key not exist in the database.
- *      Or the \ref MDBX_EMULTIVAL in case duplicates for the given key.
+ *      In case multi-values for the given key, with combination of
+ *      the \ref MDBX_ALLDUPS will replace all multi-values,
+ *      otherwise return the \ref MDBX_EMULTIVAL.
  *
  *  - \ref MDBX_RESERVE
  *      Reserve space for data of the given size, but don't copy the given
@@ -3220,6 +3232,21 @@ LIBMDBX_API int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi,
  *
  *  - \ref MDBX_APPENDDUP
  *      As above, but for sorted dup data.
+ *
+ *  - \ref MDBX_MULTIPLE
+ *      Store multiple contiguous data elements in a single request. This flag
+ *      may only be specified if the database was opened with
+ *      \ref MDBX_DUPFIXED. With combination the \ref MDBX_ALLDUPS
+ *      will replace all multi-values.
+ *      The data argument must be an array of two \ref MDBX_val. The `iov_len`
+ *      of the first \ref MDBX_val must be the size of a single data element.
+ *      The `iov_base` of the first \ref MDBX_val must point to the beginning
+ *      of the array of contiguous data elements which must be properly aligned
+ *      in case of database with \ref MDBX_INTEGERDUP flag.
+ *      The `iov_len` of the second \ref MDBX_val must be the count of the
+ *      number of data elements to store. On return this field will be set to
+ *      the count of the number of elements actually written. The `iov_base` of
+ *      the second \ref MDBX_val is unused.
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
@@ -3433,14 +3460,15 @@ LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
  *  - \ref MDBX_CURRENT
  *      Replace the item at the current cursor position. The key parameter
  *      must still be provided, and must match it, otherwise the function
- *      return \ref MDBX_EKEYMISMATCH.
+ *      return \ref MDBX_EKEYMISMATCH. With combination the
+ *      \ref MDBX_ALLDUPS will replace all multi-values.
  *
  *      \note MDBX allows (unlike LMDB) you to change the size of the data and
  *      automatically handles reordering for sorted duplicates
  *      (see \ref MDBX_DUPSORT).
  *
  *  - \ref MDBX_NODUPDATA
- *      Enter the new key/data pair only if it does not already appear in the
+ *      Enter the new key-value pair only if it does not already appear in the
  *      database. This flag may only be specified if the database was opened
  *      with \ref MDBX_DUPSORT. The function will return \ref MDBX_KEYEXIST
  *      if the key/data pair already appears in the database.
@@ -3471,10 +3499,13 @@ LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
  *  - \ref MDBX_MULTIPLE
  *      Store multiple contiguous data elements in a single request. This flag
  *      may only be specified if the database was opened with
- *      \ref MDBX_DUPFIXED. The data argument must be an array of two
- *      \ref MDBX_val. The `iov_len` of the first \ref MDBX_val must be the size
- *      of a single data element. The `iov_base` of the first \ref MDBX_val must
- *      point to the beginning of the array of contiguous data elements.
+ *      \ref MDBX_DUPFIXED. With combination the \ref MDBX_ALLDUPS
+ *      will replace all multi-values.
+ *      The data argument must be an array of two \ref MDBX_val. The `iov_len`
+ *      of the first \ref MDBX_val must be the size of a single data element.
+ *      The `iov_base` of the first \ref MDBX_val must point to the beginning
+ *      of the array of contiguous data elements which must be properly aligned
+ *      in case of database with \ref MDBX_INTEGERDUP flag.
  *      The `iov_len` of the second \ref MDBX_val must be the count of the
  *      number of data elements to store. On return this field will be set to
  *      the count of the number of elements actually written. The `iov_base` of
@@ -3505,9 +3536,11 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key,
  *
  * \param [in] cursor  A cursor handle returned by mdbx_cursor_open().
  * \param [in] flags   Options for this operation. This parameter must be set
- * to 0 or one of the values described here.
+ * to one of the values described here.
  *
- *  - \ref MDBX_NODUPDATA
+ *  - \ref MDBX_CURRENT Delete only single entry at current cursor position.
+ *  - \ref MDBX_ALLDUPS
+ *    or \ref MDBX_NODUPDATA (supported for compatibility)
  *      Delete all of the data items for the current key. This flag has effect
  *      only for database(s) was created with \ref MDBX_DUPSORT.
  *

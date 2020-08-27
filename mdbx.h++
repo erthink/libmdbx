@@ -1172,13 +1172,9 @@ struct LIBMDBX_API_TYPE map_handle {
 };
 
 enum put_mode {
-  insert = MDBX_NOOVERWRITE | MDBX_NODUPDATA,
-#if defined(__cplusplus) && defined(_MSC_VER) && _MSC_VER < 1910
-  update = uint32_t(MDBX_CURRENT) | uint32_t(MDBX_NODUPDATA),
-#else
-  update = MDBX_CURRENT | MDBX_NODUPDATA,
-#endif
-  upsert = MDBX_NODUPDATA
+  insert = MDBX_NOOVERWRITE,
+  upsert = MDBX_UPSERT,
+  update = MDBX_CURRENT,
 };
 
 class LIBMDBX_API_TYPE env_ref {
@@ -2912,9 +2908,8 @@ inline void txn_ref::update(map_handle map, const slice &key,
 
 inline bool txn_ref::try_update(map_handle map, const slice &key,
                                 const slice &value) {
-  const int err =
-      ::mdbx_put(handle_, map.dbi, &key, const_cast<slice *>(&value),
-                 MDBX_CURRENT | MDBX_NODUPDATA);
+  const int err = ::mdbx_put(handle_, map.dbi, &key,
+                             const_cast<slice *>(&value), MDBX_CURRENT);
   switch (err) {
   case MDBX_SUCCESS:
     return true;
