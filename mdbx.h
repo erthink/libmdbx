@@ -1238,7 +1238,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_put_flags_t)
 #endif
 
 /** Environment copy flags
- * \ingroup c_extra \see mdbx_env_copy() \see mdbx_env_copy2fd() */
+ * \ingroup c_extra
+ * \see mdbx_env_copy() \see mdbx_env_copy2fd() */
 enum MDBX_copy_flags_t {
   MDBX_CP_DEFAULTS = 0,
 
@@ -1545,12 +1546,14 @@ LIBMDBX_API const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** Bit of Windows' madness. The similar to \ref mdbx_strerror() but returns
  * Windows error-messages in the OEM-encoding for console utilities.
- * \ingroup c_err \see mdbx_strerror_r_ANSI2OEM(). */
+ * \ingroup c_err
+ * \see mdbx_strerror_r_ANSI2OEM() */
 LIBMDBX_API const char *mdbx_strerror_ANSI2OEM(int errnum);
 
 /** Bit of Windows' madness. The similar to \ref mdbx_strerror_r() but returns
  * Windows error-messages in the OEM-encoding for console utilities.
- * \ingroup c_err \see mdbx_strerror_ANSI2OEM(). */
+ * \ingroup c_err
+ * \see mdbx_strerror_ANSI2OEM() */
 LIBMDBX_API const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf,
                                                  size_t buflen);
 #endif /* Bit of Windows' madness */
@@ -1680,7 +1683,7 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
  *
  * This function may be used to make a backup of an existing environment.
  * No lockfile is created, since it gets recreated at need.
- * \see mdbx_env_copy() for further details.
+ * \see mdbx_env_copy()
  *
  * \note This call can trigger significant file size growth if run in
  *       parallel with write transactions, because it employs a read-only
@@ -1695,14 +1698,14 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
  * \param [in] fd      The file descriptor to write the copy to. It must have
  *                     already been opened for Write access.
  * \param [in] flags   Special options for this operation. \see mdbx_env_copy()
- *                     for options.
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
                                  MDBX_copy_flags_t flags);
 
 /** Statistics for a database in the environment
- * \ingroup c_statinfo \see mdbx_env_stat_ex() \see mdbx_dbi_stat() */
+ * \ingroup c_statinfo
+ * \see mdbx_env_stat_ex() \see mdbx_dbi_stat() */
 struct MDBX_stat {
   uint32_t ms_psize; /**< Size of a database page. This is the same for all
                         databases. */
@@ -1746,7 +1749,8 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
                                               size_t bytes);
 
 /** Information about the environment
- * \ingroup c_statinfo \see mdbx_env_info_ex() */
+ * \ingroup c_statinfo
+ * \see mdbx_env_info_ex() */
 struct MDBX_envinfo {
   struct {
     uint64_t lower;   /**< Lower limit for datafile size */
@@ -2448,7 +2452,7 @@ mdbx_env_get_userctx(const MDBX_env *env);
  *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
  *                        Do not sync data to disk corresponding
  *                        to \ref MDBX_NOMETASYNC or \ref MDBX_SAFE_NOSYNC
- *                        description. \see sync_modes.
+ *                        description. \see sync_modes
  *
  * \param [out] txn    Address where the new MDBX_txn handle will be stored
  *
@@ -2470,7 +2474,8 @@ LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
                                MDBX_txn_flags_t flags, MDBX_txn **txn);
 
 /** Information about the transaction
- * \ingroup c_statinfo \see mdbx_txn_info */
+ * \ingroup c_statinfo
+ * \see mdbx_txn_info */
 struct MDBX_txn_info {
   /** The ID of the transaction. For a READ-ONLY transaction, this corresponds
       to the snapshot being read. */
@@ -2744,7 +2749,8 @@ LIBMDBX_API int mdbx_canary_put(MDBX_txn *txn, const MDBX_canary *canary);
 LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
 
 /** A callback function used to compare two keys in a database
- * \ingroup c_crud \see mdbx_cmp() \see mdbx_get_keycmp()
+ * \ingroup c_crud
+ * \see mdbx_cmp() \see mdbx_get_keycmp()
  * \see mdbx_get_datacmp \see mdbx_dcmp() */
 typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
 
@@ -2837,7 +2843,7 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b);
  * \retval MDBX_NOTFOUND   The specified database doesn't exist in the
  *                         environment and \ref MDBX_CREATE was not specified.
  * \retval MDBX_DBS_FULL   Too many databases have been opened.
- *                         \see mdbx_env_set_maxdbs().
+ *                         \see mdbx_env_set_maxdbs()
  * \retval MDBX_INCOMPATIBLE  Database is incompatible with given flags,
  *                         i.e. the passed flags is different with which the
  *                         database was created, or the database was already
@@ -2950,7 +2956,8 @@ LIBMDBX_API int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
                                            uint32_t *mask);
 
 /** DBI state bits returted by \ref mdbx_dbi_flags_ex()
- * \ingroup c_statinfo \see mdbx_dbi_flags_ex() */
+ * \ingroup c_statinfo
+ * \see mdbx_dbi_flags_ex() */
 enum MDBX_dbi_state_t {
   /** DB was written in this txn */
   MDBX_DBI_DIRTY = 0x01,
@@ -3011,7 +3018,7 @@ LIBMDBX_API int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi);
 /** Empty or delete and close a database.
  * \ingroup c_crud
  *
- * \see mdbx_dbi_close() for restrictions about closing the DB handle.
+ * \see mdbx_dbi_close() \see mdbx_dbi_open()
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] dbi  A database handle returned by \ref mdbx_dbi_open().
@@ -3340,8 +3347,8 @@ LIBMDBX_API MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *cursor);
  * length of the key are returned in the object to which key refers (except
  * for the case of the \ref MDBX_SET option, in which the key object is
  * unchanged), and the address and length of the data are returned in the object
- * to which data refers. \see mdbx_get() for restrictions on using the output
- * values.
+ * to which data refers.
+ * \see mdbx_get()
  *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  * \param [in,out] key   The key for a retrieved item.
@@ -3929,8 +3936,8 @@ mdbx_env_get_oomfunc(const MDBX_env *env);
  * \ingroup c_extra
  * @{ */
 
-/** Page types for traverse the b-tree. \see mdbx_env_pgwalk() \see
- * MDBX_pgvisitor_func */
+/** Page types for traverse the b-tree.
+ * \see mdbx_env_pgwalk() \see MDBX_pgvisitor_func */
 enum MDBX_page_type_t {
   MDBX_page_void,
   MDBX_page_meta,
@@ -4083,8 +4090,8 @@ LIBMDBX_API int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
  * length of the key are returned in the object to which key refers (except
  * for the case of the \ref MDBX_SET option, in which the key object is
  * unchanged), and the address and length of the data are returned in the object
- * to which data refers. \see mdbx_get() for restrictions on using the output
- * values.
+ * to which data refers.
+ * \see mdbx_get()
  *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  * \param [in,out] key   The key for a retrieved item.
