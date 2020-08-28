@@ -2891,7 +2891,7 @@ mdbx_key_from_ptrdouble(const double *const ieee754_64bit);
 __nothrow_const_function LIBMDBX_API uint32_t
 mdbx_key_from_float(const float ieee754_32bit);
 
-__nothrow_const_function LIBMDBX_API uint32_t
+__nothrow_pure_function LIBMDBX_API uint32_t
 mdbx_key_from_ptrfloat(const float *const ieee754_32bit);
 
 __nothrow_const_function __inline uint64_t
