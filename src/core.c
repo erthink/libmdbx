@@ -12886,7 +12886,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     return rc;
 
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
-    return MDBX_EINVAL;
+    return MDBX_ENODATA;
 
   if (unlikely(mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])))
     return MDBX_NOTFOUND;
@@ -12965,10 +12965,8 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     }
   }
   /* MDBX passes F_SUBDATA in 'flags' to delete a DB record */
-  else if (unlikely((node_flags(node) ^ flags) & F_SUBDATA)) {
-    rc = MDBX_INCOMPATIBLE;
-    goto fail;
-  }
+  else if (unlikely((node_flags(node) ^ flags) & F_SUBDATA))
+    return MDBX_INCOMPATIBLE;
 
   /* add overflow pages to free list */
   if (F_ISSET(node_flags(node), F_BIGDATA)) {
