@@ -6850,6 +6850,19 @@ int mdbx_txn_reset(MDBX_txn *txn) {
   return rc;
 }
 
+int mdbx_txn_break(MDBX_txn *txn) {
+  do {
+    int rc = check_txn(txn, 0);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    txn->mt_flags |= MDBX_TXN_ERROR;
+    if (txn->mt_flags & MDBX_TXN_RDONLY)
+      break;
+    txn = txn->mt_child;
+  } while (txn);
+  return MDBX_SUCCESS;
+}
+
 int mdbx_txn_abort(MDBX_txn *txn) {
   int rc = check_txn(txn, 0);
   if (unlikely(rc != MDBX_SUCCESS))

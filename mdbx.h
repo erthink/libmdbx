@@ -2771,6 +2771,19 @@ LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
  * \retval MDBX_EINVAL           Transaction handle is NULL. */
 LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
 
+/** Marks transaction as broken.
+ * \ingroup c_transactions
+ *
+ * Function keeps the transaction handle and corresponding locks, but it
+ * is not possible to perform any operations in a broken transaction.
+ * Broken transaction must then be aborted explicitly later.
+ *
+ * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
+ *
+ * \see mdbx_txn_abort() \see mdbx_txn_reset() \see mdbx_txn_commit()
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_txn_break(MDBX_txn *txn);
+
 /** Reset a read-only transaction.
  * \ingroup c_transactions
  *
