@@ -660,7 +660,7 @@ void env::close(bool dont_sync) {
 __cold void env::setup(unsigned max_maps, unsigned max_readers) {
   if (max_readers > 0)
     error::success_or_throw(::mdbx_env_set_maxreaders(handle_, max_readers));
-  if (max_readers > 0)
+  if (max_maps > 0)
     error::success_or_throw(::mdbx_env_set_maxdbs(handle_, max_maps));
 }
 
