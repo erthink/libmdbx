@@ -18340,7 +18340,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(!key || !old_data || old_data == new_data || !preserver))
+  if (unlikely(!key || !old_data || old_data == new_data))
     return MDBX_EINVAL;
 
   if (unlikely(old_data->iov_base == NULL && old_data->iov_len))
