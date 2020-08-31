@@ -1261,16 +1261,31 @@ public:
   //----------------------------------------------------------------------------
 
   struct LIBMDBX_API_TYPE geometry {
-    enum : intptr_t {
+    enum : int64_t {
       default_value = -1,
       minimal_value = 0,
       maximal_value = INTPTR_MAX,
-      KiB = intptr_t(1) << 10,
-      MiB = intptr_t(1) << 20,
-      /* TODO: enable for 64-bit builds only
-               GiB = intptr_t(1) << 30,
-               TiB = intptr_t(1) << 40, */
+      kB = 1000,       ///< \f$10^{3}\f$ bytes
+      MB = kB * 1000,  ///< \f$10^{6}\f$ bytes
+      GB = MB * 1000,  ///< \f$10^{9}\f$ bytes
+      TB = GB * 1000,  ///< \f$10^{12}\f$ bytes
+      PB = TB * 1000,  ///< \f$10^{15}\f$ bytes
+      EB = PB * 1000,  ///< \f$10^{18}\f$ bytes
+      KiB = 1024,      ///< \f$2^{10}\f$ bytes
+      MiB = KiB << 10, ///< \f$2^{20}\f$ bytes
+      GiB = MiB << 10, ///< \f$2^{30}\f$ bytes
+      TiB = GiB << 10, ///< \f$2^{40}\f$ bytes
+      PiB = TiB << 10, ///< \f$2^{50}\f$ bytes
+      EiB = PiB << 10, ///< \f$2^{60}\f$ bytes
     };
+
+    /// Tagged type for output to std::ostream
+    struct size {
+      intptr_t bytes;
+      constexpr size(intptr_t bytes) noexcept : bytes(bytes) {}
+      operator intptr_t() const noexcept { return bytes; }
+    };
+
     intptr_t size_lower{minimal_value};
     intptr_t size_now{default_value};
     intptr_t size_upper{maximal_value};
@@ -1800,9 +1815,14 @@ LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const ::mdbx::slice &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const ::mdbx::pair &);
 template <class ALLOCATOR>
 inline ::std::ostream &operator<<(::std::ostream &out,
-                                  const ::mdbx::buffer<ALLOCATOR> &) {
-  return out << "FIXME: " << __func__ << ", " __FILE__ ":" << __LINE__;
+                                  const ::mdbx::buffer<ALLOCATOR> &it) {
+  return (it.is_freestanding()
+              ? out << "buf-" << it.headroom() << "." << it.tailroom()
+              : out << "ref-")
+         << it.ref();
 }
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
+                                       const ::mdbx::env_ref::geometry::size &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const ::mdbx::env_ref::geometry &);
 LIBMDBX_API ::std::ostream &
@@ -1822,21 +1842,11 @@ LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const MDBX_log_level_t &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const MDBX_debug_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const MDBX_error_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_env_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_txn_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_db_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_put_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_copy_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_cursor_op &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const MDBX_dbi_state_t &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const ::mdbx::error &);
+inline ::std::ostream &operator<<(::std::ostream &out,
+                                  const MDBX_error_t &errcode) {
+  return out << ::mdbx::error(errcode);
+}
 
 } // namespace mdbx
 
@@ -1872,14 +1882,10 @@ LIBMDBX_API string to_string(const ::mdbx::env_ref::create_parameters &);
 
 LIBMDBX_API string to_string(const ::MDBX_log_level_t &);
 LIBMDBX_API string to_string(const ::MDBX_debug_flags_t &);
-LIBMDBX_API string to_string(const ::MDBX_error_t &);
-LIBMDBX_API string to_string(const ::MDBX_env_flags_t &);
-LIBMDBX_API string to_string(const ::MDBX_txn_flags_t &);
-LIBMDBX_API string to_string(const ::MDBX_db_flags_t &);
-LIBMDBX_API string to_string(const ::MDBX_put_flags_t &);
-LIBMDBX_API string to_string(const ::MDBX_copy_flags_t &);
-LIBMDBX_API string to_string(const ::MDBX_cursor_op &);
-LIBMDBX_API string to_string(const ::MDBX_dbi_state_t &);
+LIBMDBX_API string to_string(const ::mdbx::error &);
+inline string to_string(const ::MDBX_error_t &errcode) {
+  return to_string(::mdbx::error(errcode));
+}
 
 } // namespace std
 

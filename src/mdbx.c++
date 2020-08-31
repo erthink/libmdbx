@@ -140,6 +140,7 @@ public:
 
 //------------------------------------------------------------------------------
 
+#if 0 /* Unused for now */
 __cold std::string format_va(const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
@@ -209,6 +210,8 @@ __cold bug::~bug() noexcept {}
 
 #define NOT_IMPLEMENTED()                                                      \
   RAISE_BUG(__LINE__, "not_implemented", __func__, __FILE__);
+
+#endif /* Unused*/
 
 //------------------------------------------------------------------------------
 
@@ -1269,86 +1272,236 @@ cursor::~cursor() noexcept { ::mdbx_cursor_close(handle_); }
 
 //------------------------------------------------------------------------------
 
-__cold ::std::ostream &operator<<(::std::ostream &, const slice &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
+  out << "{";
+  if (!it.is_valid())
+    out << "INVALID." << it.length();
+  else if (it.is_null())
+    out << "NULL";
+  else if (it.empty())
+    out << "EMPTY->" << it.data();
+  else {
+    const slice root(it.head(std::min(it.length(), size_t(64))));
+    out << it.length() << "->"
+        << (root.is_printable() ? root.string() : root.base58_encode())
+        << ((root == it) ? "" : "...");
+  }
+  return out << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const pair &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out, const pair &it) {
+  return out << "{" << it.key << " => " << it.value << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const env_ref::geometry &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const ::mdbx::env_ref::geometry::size &it) {
+  switch (it.bytes) {
+  case ::mdbx::env_ref::geometry::default_value:
+    return out << "default";
+  case ::mdbx::env_ref::geometry::minimal_value:
+    return out << "minimal";
+  case ::mdbx::env_ref::geometry::maximal_value:
+    return out << "maximal";
+  }
+
+  const auto bytes = (it.bytes < 0) ? out << "-",
+             size_t(-it.bytes) : size_t(it.bytes);
+  struct {
+    size_t one;
+    const char *suffix;
+  } static const scales[] = {
+#if MDBX_WORDBITS > 32
+    {env::geometry::EiB, "EiB"},
+    {env::geometry::EB, "EB"},
+    {env::geometry::PiB, "PiB"},
+    {env::geometry::PB, "PB"},
+    {env::geometry::TiB, "TiB"},
+    {env::geometry::TB, "TB"},
+#endif
+    {env::geometry::GiB, "GiB"},
+    {env::geometry::GB, "GB"},
+    {env::geometry::MiB, "MiB"},
+    {env::geometry::MB, "MB"},
+    {env::geometry::KiB, "KiB"},
+    {env::geometry::kB, "kB"},
+    {1, " bytes"}
+  };
+
+  for (const auto i : scales)
+    if (bytes % i.one == 0)
+      return out << bytes / i.one << i.suffix;
+
+  assert(false);
+  __unreachable();
+  return out;
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &,
-                                  const env_ref::operate_parameters &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::geometry &it) {
+  return                                                                    //
+      out << "\tlower " << env_ref::geometry::size(it.size_lower)           //
+          << ",\n\tnow " << env_ref::geometry::size(it.size_now)            //
+          << ",\n\tupper " << env_ref::geometry::size(it.size_upper)        //
+          << ",\n\tgrowth " << env_ref::geometry::size(it.growth_step)      //
+          << ",\n\tshrink " << env_ref::geometry::size(it.shrink_threshold) //
+          << ",\n\tpagesize " << env_ref::geometry::size(it.pagesize) << "\n";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const env_ref::mode &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::operate_parameters &it) {
+  return out << "{\n"                                 //
+             << "\tmax_maps " << it.max_maps          //
+             << ",\n\tmax_readers " << it.max_readers //
+             << ",\n\tmode " << it.mode               //
+             << ",\n\tdurability " << it.durability   //
+             << ",\n\treclaiming " << it.reclaiming   //
+             << ",\n\toptions " << it.options         //
+             << "\n}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &,
-                                  const env_ref::durability &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::mode &it) {
+  switch (it) {
+  case env_ref::mode::readonly:
+    return out << "readonly";
+  case env_ref::mode::write_file_io:
+    return out << "write_file_io";
+  case env_ref::mode::write_mapped_io:
+    return out << "write_mapped_io";
+  default:
+    return out << "mdbx::env::mode::invalid";
+  }
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &,
-                                  const env_ref::reclaiming_options &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::durability &it) {
+  switch (it) {
+  case env_ref::durability::robust_synchronous:
+    return out << "robust_synchronous";
+  case env_ref::durability::half_synchronous_weak_last:
+    return out << "half_synchronous_weak_last";
+  case env_ref::durability::lazy_weak_tail:
+    return out << "lazy_weak_tail";
+  case env_ref::durability::whole_fragile:
+    return out << "whole_fragile";
+  default:
+    return out << "mdbx::env::durability::invalid";
+  }
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &,
-                                  const env_ref::operate_options &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::reclaiming_options &it) {
+  return out << "{"                                            //
+             << "lifo: " << (it.lifo ? "yes" : "no")           //
+             << ", coalesce: " << (it.coalesce ? "yes" : "no") //
+             << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &,
-                                  const env_ref::create_parameters &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::operate_options &it) {
+  static const char comma[] = ", ";
+  const char *delimiter = "";
+  out << "{";
+  if (it.orphan_read_transactions) {
+    out << delimiter << "orphan_read_transactions";
+    delimiter = comma;
+  }
+  if (it.nested_write_transactions) {
+    out << delimiter << "nested_write_transactions";
+    delimiter = comma;
+  }
+  if (it.exclusive) {
+    out << delimiter << "exclusive";
+    delimiter = comma;
+  }
+  if (it.disable_readahead) {
+    out << delimiter << "disable_readahead";
+    delimiter = comma;
+  }
+  if (it.disable_clear_memory) {
+    out << delimiter << "disable_clear_memory";
+    delimiter = comma;
+  }
+  if (delimiter != comma)
+    out << "default";
+  return out << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_log_level_t &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const env_ref::create_parameters &it) {
+  return out << "{\n"                                                        //
+             << "\tfile_mode " << std::oct << it.file_mode_bits << std::dec  //
+             << ",\n\tsubdirectory " << (it.use_subdirectory ? "yes" : "no") //
+             << ",\n"
+             << it.geometry << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &,
-                                  const MDBX_debug_flags_t &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const MDBX_log_level_t &it) {
+  switch (it) {
+  case MDBX_LOG_FATAL:
+    return out << "LOG_FATAL";
+  case MDBX_LOG_ERROR:
+    return out << "LOG_ERROR";
+  case MDBX_LOG_WARN:
+    return out << "LOG_WARN";
+  case MDBX_LOG_NOTICE:
+    return out << "LOG_NOTICE";
+  case MDBX_LOG_VERBOSE:
+    return out << "LOG_VERBOSE";
+  case MDBX_LOG_DEBUG:
+    return out << "LOG_DEBUG";
+  case MDBX_LOG_TRACE:
+    return out << "LOG_TRACE";
+  case MDBX_LOG_EXTRA:
+    return out << "LOG_EXTRA";
+  case MDBX_LOG_DONTCHANGE:
+    return out << "LOG_DONTCHANGE";
+  default:
+    return out << "mdbx::log_level::invalid";
+  }
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_error_t &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const MDBX_debug_flags_t &it) {
+  if (it == MDBX_DBG_DONTCHANGE)
+    return out << "DBG_DONTCHANGE";
+
+  static const char comma[] = "|";
+  const char *delimiter = "";
+  out << "{";
+  if (it & MDBX_DBG_ASSERT) {
+    out << delimiter << "DBG_ASSERT";
+    delimiter = comma;
+  }
+  if (it & MDBX_DBG_AUDIT) {
+    out << delimiter << "DBG_AUDIT";
+    delimiter = comma;
+  }
+  if (it & MDBX_DBG_JITTER) {
+    out << delimiter << "DBG_JITTER";
+    delimiter = comma;
+  }
+  if (it & MDBX_DBG_DUMP) {
+    out << delimiter << "DBG_DUMP";
+    delimiter = comma;
+  }
+  if (it & MDBX_DBG_LEGACY_MULTIOPEN) {
+    out << delimiter << "DBG_LEGACY_MULTIOPEN";
+    delimiter = comma;
+  }
+  if (it & MDBX_DBG_LEGACY_OVERLAP) {
+    out << delimiter << "DBG_LEGACY_OVERLAP";
+    delimiter = comma;
+  }
+  if (delimiter != comma)
+    out << "DBG_NONE";
+  return out << "}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_env_flags_t &) {
-  NOT_IMPLEMENTED();
-}
-
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_txn_flags_t &) {
-  NOT_IMPLEMENTED();
-}
-
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_db_flags_t &) {
-  NOT_IMPLEMENTED();
-}
-
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_put_flags_t &) {
-  NOT_IMPLEMENTED();
-}
-
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_copy_flags_t &) {
-  NOT_IMPLEMENTED();
-}
-
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_cursor_op &) {
-  NOT_IMPLEMENTED();
-}
-
-__cold ::std::ostream &operator<<(::std::ostream &, const MDBX_dbi_state_t &) {
-  NOT_IMPLEMENTED();
+__cold ::std::ostream &operator<<(::std::ostream &out,
+                                  const ::mdbx::error &err) {
+  return out << err.what() << " (" << long(err.code()) << ")";
 }
 
 } // namespace mdbx
@@ -1423,49 +1576,7 @@ __cold string to_string(const MDBX_debug_flags_t &value) {
   return out.str();
 }
 
-__cold string to_string(const MDBX_error_t &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_env_flags_t &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_txn_flags_t &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_db_flags_t &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_put_flags_t &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_copy_flags_t &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_cursor_op &value) {
-  ostringstream out;
-  out << value;
-  return out.str();
-}
-
-__cold string to_string(const MDBX_dbi_state_t &value) {
+__cold string to_string(const ::mdbx::error &value) {
   ostringstream out;
   out << value;
   return out.str();
