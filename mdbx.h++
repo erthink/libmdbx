@@ -539,7 +539,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   base64_decode(const ALLOCATOR &allocator = ALLOCATOR()) const;
 
   __nothrow_pure_function bool
-  is_printable(bool allow_utf8 = true) const noexcept;
+  is_printable(bool disable_utf8 = false) const noexcept;
   __nothrow_pure_function bool
   is_hex(bool ignore_spaces = false) const noexcept;
   __nothrow_pure_function bool

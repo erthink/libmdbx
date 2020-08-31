@@ -440,15 +440,109 @@ __cold void error::throw_exception() const {
 
 //------------------------------------------------------------------------------
 
-bool slice::is_printable(bool allow_utf8) const noexcept {
-  if (mdbx_unlikely(allow_utf8)) {
-    /* FIXME */ NOT_IMPLEMENTED();
-  }
+bool slice::is_printable(bool disable_utf8) const noexcept {
+  enum : byte {
+    LS = 5,                     // shift for UTF8 sequence length
+    P_ = 1 << (LS - 1),         // printable ASCII flag
+    N_ = 0,                     // non-printable ASCII
+    second_range_mask = P_ - 1, // mask for range flag
+    r80_BF = P_ | 0,            // flag for UTF8 2nd byte range
+    rA0_BF = P_ | 1,            // flag for UTF8 2nd byte range
+    r80_9F = P_ | 2,            // flag for UTF8 2nd byte range
+    r90_BF = P_ | 3,            // flag for UTF8 2nd byte range
+    r80_8F = P_ | 4,            // flag for UTF8 2nd byte range
+
+    // valid utf-8 byte sequences
+    // http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf - page 94
+    //                        Code               | Bytes  |        |        |
+    //                        Points             | 1st    | 2nd    | 3rd    |4th
+    //                       --------------------|--------|--------|--------|---
+    C2 = 2 << LS | r80_BF, // U+000080..U+0007FF | C2..DF | 80..BF |        |
+    E0 = 3 << LS | rA0_BF, // U+000800..U+000FFF | E0     | A0..BF | 80..BF |
+    E1 = 3 << LS | r80_BF, // U+001000..U+00CFFF | E1..EC | 80..BF | 80..BF |
+    ED = 3 << LS | r80_9F, // U+00D000..U+00D7FF | ED     | 80..9F | 80..BF |
+    EE = 3 << LS | r80_BF, // U+00E000..U+00FFFF | EE..EF | 80..BF | 80..BF |
+    F0 = 4 << LS | r90_BF, // U+010000..U+03FFFF | F0     | 90..BF | 80..BF |...
+    F1 = 4 << LS | r80_BF, // U+040000..U+0FFFFF | F1..F3 | 80..BF | 80..BF |...
+    F4 = 4 << LS | r80_BF, // U+100000..U+10FFFF | F4     | 80..8F | 80..BF |...
+  };
+
+  static const byte range_from[] = {0x80, 0xA0, 0x80, 0x90, 0x80};
+  static const byte range_to[] = {0xBF, 0xBF, 0x9F, 0xBF, 0x8F};
+
+  static const byte map[256] = {
+      //  1   2   3   4   5   6   7   8   9   a   b   c   d   e   f
+      N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, // 00
+      N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, N_, // 10
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 20
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 30
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 40
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 50
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // 60
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, N_, // 70
+      N_, N_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, N_, P_, N_, // 80
+      N_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, N_, P_, P_, // 90
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // a0
+      P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, // b0
+      P_, P_, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, // c0
+      C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, C2, // df
+      E0, E1, E1, E1, E1, E1, E1, E1, E1, E1, E1, E1, E1, ED, EE, EE, // e0
+      F0, F1, F1, F1, F4, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_, P_  // f0
+  };
+
+  if (length() < 1)
+    return false;
 
   auto src = byte_ptr();
-  for (const auto end = src + size(); src != end; ++src)
-    if (mdbx_unlikely(!isprint(*src)))
+  const auto end = src + length();
+  if (mdbx_unlikely(disable_utf8)) {
+    do
+      if (mdbx_unlikely((P_ & map[*src]) == 0))
+        return false;
+    while (++src < end);
+    return true;
+  }
+
+  do {
+    const auto bits = map[*src];
+    const auto second_from = range_from[bits & second_range_mask];
+    const auto second_to = range_to[bits & second_range_mask];
+    switch (bits >> LS) {
+    default:
       return false;
+    case 1:
+      src += 1;
+      continue;
+    case 2:
+      if (unlikely(src + 1 >= end))
+        return false;
+      if (unlikely(src[1] < second_from || src[1] > second_to))
+        return false;
+      src += 2;
+      continue;
+    case 3:
+      if (unlikely(src + 3 >= end))
+        return false;
+      if (unlikely(src[1] < second_from || src[1] > second_to))
+        return false;
+      if (unlikely(src[2] < 0x80 || src[2] > 0xBF))
+        return false;
+      src += 3;
+      continue;
+    case 4:
+      if (unlikely(src + 4 >= end))
+        return false;
+      if (unlikely(src[1] < second_from || src[1] > second_to))
+        return false;
+      if (unlikely(src[2] < 0x80 || src[2] > 0xBF))
+        return false;
+      if (unlikely(src[3] < 0x80 || src[3] > 0xBF))
+        return false;
+      src += 4;
+      continue;
+    }
+  } while (src < end);
+
   return true;
 }
 
