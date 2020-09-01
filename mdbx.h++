@@ -304,35 +304,34 @@ public:
 // Base for libmdbx exceptions
 class LIBMDBX_API_TYPE exception : public ::std::runtime_error {
   using base = ::std::runtime_error;
-  error error_;
+  ::mdbx::error error_;
 
 public:
-  exception(const error &) noexcept;
+  exception(const ::mdbx::error &) noexcept;
   exception(const exception &) = default;
   exception(exception &&) = default;
   exception &operator=(const exception &) = default;
   exception &operator=(exception &&) = default;
   virtual ~exception() noexcept;
+  const mdbx::error error() const noexcept { return error_; }
 };
 
 /** Fatal exception that lead termination anyway */
-class LIBMDBX_API_TYPE fatal : public ::std::exception {
-  using base = ::std::exception;
-  error error_;
+class LIBMDBX_API_TYPE fatal : public exception {
+  using base = exception;
 
 public:
-  fatal(const error &) noexcept;
-  fatal(const fatal &) noexcept;
-  fatal(fatal &&) noexcept;
+  fatal(const ::mdbx::error &) noexcept;
+  fatal(const exception &src) noexcept : fatal(src.error()) {}
+  fatal(exception &&src) noexcept : fatal(src.error()) {}
   fatal &operator=(fatal &&) = default;
   fatal &operator=(const fatal &) = default;
-  virtual const char *what() const noexcept;
   virtual ~fatal() noexcept;
 };
 
 #define MDBX_DECLARE_EXCEPTION(NAME)                                           \
   struct LIBMDBX_API_TYPE NAME : public exception {                            \
-    NAME(const error &);                                                       \
+    NAME(const ::mdbx::error &);                                               \
     virtual ~NAME() noexcept;                                                  \
   }
 MDBX_DECLARE_EXCEPTION(bad_map_id);

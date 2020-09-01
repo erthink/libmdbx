@@ -288,22 +288,14 @@ namespace mdbx {
                           "an argument that exceeds the length");
 }
 
-__cold exception::exception(const error &error) noexcept
+__cold exception::exception(const ::mdbx::error &error) noexcept
     : base(error.what()), error_(error) {}
 
 __cold exception::~exception() noexcept {}
 
 static std::atomic_int fatal_countdown;
 
-__cold fatal::fatal(const error &error_) noexcept : error_(error_) {
-  ++fatal_countdown;
-}
-
-__cold fatal::fatal(const fatal &src) noexcept : error_(src.error_) {
-  ++fatal_countdown;
-}
-
-__cold fatal::fatal(fatal &&src) noexcept : error_(src.error_) {
+__cold fatal::fatal(const ::mdbx::error &error) noexcept : base(error) {
   ++fatal_countdown;
 }
 
@@ -312,10 +304,8 @@ __cold fatal::~fatal() noexcept {
     std::terminate();
 }
 
-__cold const char *fatal::what() const noexcept { return error_.what(); }
-
 #define DEFINE_EXCEPTION(NAME)                                                 \
-  __cold NAME::NAME(const error &rc) : exception(rc) {}                        \
+  __cold NAME::NAME(const ::mdbx::error &rc) : exception(rc) {}                \
   __cold NAME::~NAME() noexcept {}
 
 DEFINE_EXCEPTION(bad_map_id)
@@ -383,8 +373,7 @@ __cold std::string error::message() const {
 [[noreturn]] __cold void error::panic(const char *context,
                                       const char *func) const noexcept {
   assert(code() != MDBX_SUCCESS);
-  ::mdbx_panic("mdbx::%s.%s() failed: \"%s\" (%d)", context, func, what(),
-               code());
+  ::mdbx_panic("mdbx::%s.%s(): \"%s\" (%d)", context, func, what(), code());
   std::terminate();
 }
 
