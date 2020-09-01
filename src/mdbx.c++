@@ -1061,7 +1061,8 @@ __cold MDBX_env_flags_t env_ref::operate_parameters::make_flags(
       flags |= MDBX_NOMETASYNC;
       break;
     case env_ref::durability::lazy_weak_tail:
-      flags |= (flags & MDBX_WRITEMAP) ? MDBX_MAPASYNC : MDBX_SAFE_NOSYNC;
+      static_assert(MDBX_MAPASYNC == MDBX_SAFE_NOSYNC, "WTF? Obsolete C API?");
+      flags |= MDBX_SAFE_NOSYNC;
       break;
     case env_ref::durability::whole_fragile:
       flags |= MDBX_UTTERLY_NOSYNC;
