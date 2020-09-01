@@ -10439,7 +10439,8 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname,
 bailout:
   if (rc != MDBX_SUCCESS) {
     rc = mdbx_env_close0(env) ? MDBX_PANIC : rc;
-    env->me_flags = saved_me_flags | MDBX_FATAL_ERROR;
+    env->me_flags =
+        saved_me_flags | ((rc != MDBX_PANIC) ? 0 : MDBX_FATAL_ERROR);
   } else {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     mdbx_txn_valgrind(env, nullptr);
