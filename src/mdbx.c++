@@ -1005,7 +1005,7 @@ bool slice::is_base64(bool ignore_spaces) const noexcept {
 
 //------------------------------------------------------------------------------
 
-template class LIBMDBX_API_TYPE buffer<default_allocator>;
+template class LIBMDBX_API_TYPE buffer<legacy_allocator>;
 
 #if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L
 template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;

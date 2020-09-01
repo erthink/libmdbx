@@ -210,13 +210,13 @@ class txn;
 class cursor_ref;
 class cursor;
 
-using default_allocator = ::std::string::allocator_type;
+using legacy_allocator = ::std::string::allocator_type;
 #if defined(DOXYGEN) ||                                                        \
     defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
 #endif /* __cpp_lib_memory_resource >= 201603L */
 
-template <class ALLOCATOR = default_allocator>
+template <class ALLOCATOR = legacy_allocator>
 using string = ::std::basic_string<char, ::std::char_traits<char>, ALLOCATOR>;
 
 using filehandle = ::mdbx_filehandle_t;
@@ -469,7 +469,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 #endif /* __cpp_lib_string_view >= 201606L */
 
   template <class C = char, class T = ::std::char_traits<C>,
-            class A = default_allocator>
+            class A = legacy_allocator>
   cxx20_constexpr ::std::basic_string<C, T, A>
   string(const A &allocator = A()) const {
     static_assert(sizeof(C) == 1, "Must be single byte characters");
@@ -516,25 +516,25 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
     return (length() + 3) / 4 * 3;
   }
 
-  template <class ALLOCATOR = default_allocator>
+  template <class ALLOCATOR = legacy_allocator>
   inline ::mdbx::string<ALLOCATOR>
   hex_encode(bool uppercase = false,
              const ALLOCATOR &allocator = ALLOCATOR()) const;
-  template <class ALLOCATOR = default_allocator>
+  template <class ALLOCATOR = legacy_allocator>
   inline ::mdbx::string<ALLOCATOR>
   hex_decode(const ALLOCATOR &allocator = ALLOCATOR()) const;
 
-  template <class ALLOCATOR = default_allocator>
+  template <class ALLOCATOR = legacy_allocator>
   inline ::mdbx::string<ALLOCATOR>
   base58_encode(const ALLOCATOR &allocator = ALLOCATOR()) const;
-  template <class ALLOCATOR = default_allocator>
+  template <class ALLOCATOR = legacy_allocator>
   inline ::mdbx::string<ALLOCATOR>
   base58_decode(const ALLOCATOR &allocator = ALLOCATOR()) const;
 
-  template <class ALLOCATOR = default_allocator>
+  template <class ALLOCATOR = legacy_allocator>
   inline ::mdbx::string<ALLOCATOR>
   base64_encode(const ALLOCATOR &allocator = ALLOCATOR()) const;
-  template <class ALLOCATOR = default_allocator>
+  template <class ALLOCATOR = legacy_allocator>
   inline ::mdbx::string<ALLOCATOR>
   base64_decode(const ALLOCATOR &allocator = ALLOCATOR()) const;
 
@@ -627,7 +627,7 @@ protected:
 
 /// Container of a value, which could be stored inside internal silo
 /// or be a reference to an external stored one.
-template <class ALLOCATOR = default_allocator> class buffer {
+template <class ALLOCATOR = legacy_allocator> class buffer {
   friend class txn_ref;
   using silo = ::mdbx::string<ALLOCATOR>;
   silo silo_;
@@ -1043,7 +1043,7 @@ public:
   }
 
   template <class C = char, class T = ::std::char_traits<C>,
-            class A = default_allocator>
+            class A = legacy_allocator>
   cxx20_constexpr ::std::basic_string<C, T, A>
   string(const A &allocator = A()) const {
     return slice_.string<C, T, A>(allocator);
