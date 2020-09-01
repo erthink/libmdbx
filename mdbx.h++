@@ -631,7 +631,7 @@ template <class ALLOCATOR = legacy_allocator> class buffer {
   friend class txn_ref;
   using silo = ::mdbx::string<ALLOCATOR>;
   silo silo_;
-  slice slice_;
+  ::mdbx::slice slice_;
 
   void insulate() {
     assert(is_reference());
@@ -710,7 +710,7 @@ public:
       insulate();
   }
 
-  buffer(const slice &src, bool make_reference,
+  buffer(const ::mdbx::slice &src, bool make_reference,
          const allocator_type &allocator = allocator_type())
       : silo_(allocator), slice_(src) {
     if (!make_reference)
@@ -723,26 +723,26 @@ public:
 
   buffer(const void *ptr, size_t bytes, bool make_reference,
          const allocator_type &allocator = allocator_type())
-      : buffer(slice(ptr, bytes), make_reference, allocator) {}
+      : buffer(::mdbx::slice(ptr, bytes), make_reference, allocator) {}
 
   template <class C, class T, class A>
   buffer(const ::std::basic_string<C, T, A> &str, bool make_reference,
          const allocator_type &allocator = allocator_type())
-      : buffer(slice(str), make_reference, allocator) {}
+      : buffer(::mdbx::slice(str), make_reference, allocator) {}
 
   buffer(const char *c_str, bool make_reference,
          const allocator_type &allocator = allocator_type())
-      : buffer(slice(c_str), make_reference, allocator) {}
+      : buffer(::mdbx::slice(c_str), make_reference, allocator) {}
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   template <class C, class T>
   buffer(const ::std::basic_string_view<C, T> &view, bool make_reference,
          const allocator_type &allocator = allocator_type())
-      : buffer(slice(view), make_reference, allocator) {}
+      : buffer(::mdbx::slice(view), make_reference, allocator) {}
 #endif /* __cpp_lib_string_view >= 201606L */
 
-  cxx20_constexpr buffer(const slice &src,
+  cxx20_constexpr buffer(const ::mdbx::slice &src,
                          const allocator_type &allocator = allocator_type())
       : silo_(src.char_ptr(), src.length(), allocator), slice_(silo_) {}
 
@@ -752,23 +752,23 @@ public:
 
   cxx20_constexpr buffer(const void *ptr, size_t bytes,
                          const allocator_type &allocator = allocator_type())
-      : buffer(slice(ptr, bytes), allocator) {}
+      : buffer(::mdbx::slice(ptr, bytes), allocator) {}
 
   template <class C, class T, class A>
   cxx20_constexpr buffer(const ::std::basic_string<C, T, A> &str,
                          const allocator_type &allocator = allocator_type())
-      : buffer(slice(str), allocator) {}
+      : buffer(::mdbx::slice(str), allocator) {}
 
   cxx20_constexpr buffer(const char *c_str,
                          const allocator_type &allocator = allocator_type())
-      : buffer(slice(c_str), allocator) {}
+      : buffer(::mdbx::slice(c_str), allocator) {}
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   template <class C, class T>
   cxx20_constexpr buffer(const ::std::basic_string_view<C, T> &view,
                          const allocator_type &allocator = allocator_type())
-      : buffer(slice(view), allocator) {}
+      : buffer(::mdbx::slice(view), allocator) {}
 #endif /* __cpp_lib_string_view >= 201606L */
 
   inline buffer(size_t head_room, size_t tail_room,
@@ -777,7 +777,7 @@ public:
   inline buffer(size_t capacity,
                 const allocator_type &allocator = allocator_type());
 
-  inline buffer(size_t head_room, const slice &src, size_t tail_room,
+  inline buffer(size_t head_room, const ::mdbx::slice &src, size_t tail_room,
                 const allocator_type &allocator = allocator_type());
 
   buffer(size_t head_room, const buffer &src, size_t tail_room,
@@ -788,7 +788,7 @@ public:
   buffer(const allocator_type &allocator = allocator_type()) noexcept
       : silo_(allocator) {}
 
-  inline buffer(const txn_ref &txn, const slice &src,
+  inline buffer(const txn_ref &txn, const ::mdbx::slice &src,
                 const allocator_type &allocator = allocator_type());
 
   buffer(buffer &&src) noexcept
@@ -796,14 +796,14 @@ public:
 
   buffer(silo &&str) noexcept : silo_(::std::move(str)), slice_(silo_) {}
 
-  constexpr const slice &ref() const noexcept { return slice_; }
+  constexpr const ::mdbx::slice &slice() const noexcept { return slice_; }
 
-  constexpr operator const slice &() const noexcept { return slice_; }
+  constexpr operator const ::mdbx::slice &() const noexcept { return slice_; }
 
   template <typename POD>
   static buffer wrap(const POD &pod, bool make_reference = false,
                      const allocator_type &allocator = allocator_type()) {
-    return buffer(slice::wrap(pod), make_reference, allocator);
+    return buffer(::mdbx::slice::wrap(pod), make_reference, allocator);
   }
 
   inline void reserve(size_t wanna_headroom, size_t wanna_tailroom,
@@ -882,7 +882,7 @@ public:
                           : assign_freestanding(ptr, bytes);
   }
 
-  buffer &assign(const slice &src, bool make_reference = false) {
+  buffer &assign(const ::mdbx::slice &src, bool make_reference = false) {
     return assign(src.data(), src.length(), make_reference);
   }
 
@@ -890,7 +890,7 @@ public:
     return assign(src.iov_base, src.iov_len, make_reference);
   }
 
-  buffer &assign(slice &&src, bool make_reference = false) {
+  buffer &assign(::mdbx::slice &&src, bool make_reference = false) {
     assign(src.data(), src.length(), make_reference);
     src.deplete();
     return *this;
@@ -942,9 +942,9 @@ public:
 
   buffer &operator=(silo &&src) noexcept { return assign(::std::move(src)); }
 
-  buffer &operator=(const slice &src) { return assign(src); }
+  buffer &operator=(const ::mdbx::slice &src) { return assign(src); }
 
-  buffer &operator=(slice &&src) { return assign(::std::move(src)); }
+  buffer &operator=(::mdbx::slice &&src) { return assign(::std::move(src)); }
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
@@ -964,7 +964,7 @@ public:
   }
 #endif /* __cpp_lib_string_view >= 201606L */
 
-  static buffer decode_hex(const slice &hex,
+  static buffer decode_hex(const ::mdbx::slice &hex,
                            const allocator_type &allocator = allocator_type()) {
 #if __cplusplus >= 201703L
     return buffer(hex.hex_decode(allocator));
@@ -974,7 +974,7 @@ public:
 #endif
   }
 
-  static buffer encode_hex(const slice &data, bool uppercase = false,
+  static buffer encode_hex(const ::mdbx::slice &data, bool uppercase = false,
                            const allocator_type &allocator = allocator_type()) {
 #if __cplusplus >= 201703L
     return buffer(data.hex_encode(uppercase, allocator));
@@ -985,7 +985,7 @@ public:
   }
 
   static buffer
-  decode_base58(const slice &base58,
+  decode_base58(const ::mdbx::slice &base58,
                 const allocator_type &allocator = allocator_type()) {
 #if __cplusplus >= 201703L
     return buffer(base58.base58_decode(allocator));
@@ -996,7 +996,7 @@ public:
   }
 
   static buffer
-  encode_base58(const slice &data,
+  encode_base58(const ::mdbx::slice &data,
                 const allocator_type &allocator = allocator_type()) {
 #if __cplusplus >= 201703L
     return buffer(data.base58_encode(allocator));
@@ -1007,7 +1007,7 @@ public:
   }
 
   static buffer
-  decode_base64(const slice &base64,
+  decode_base64(const ::mdbx::slice &base64,
                 const allocator_type &allocator = allocator_type()) {
 #if __cplusplus >= 201703L
     return buffer(base64.base64_decode(allocator));
@@ -1018,7 +1018,7 @@ public:
   }
 
   static buffer
-  encode_base64(const slice &data,
+  encode_base64(const ::mdbx::slice &data,
                 const allocator_type &allocator = allocator_type()) {
 #if __cplusplus >= 201703L
     return buffer(data.base64_encode(allocator));
@@ -1054,11 +1054,13 @@ public:
     return this->string<C, T, A>();
   }
 
-  __nothrow_pure_function bool starts_with(const slice &prefix) const noexcept {
+  __nothrow_pure_function bool
+  starts_with(const ::mdbx::slice &prefix) const noexcept {
     return slice_.starts_with(prefix);
   }
 
-  __nothrow_pure_function bool ends_with(const slice &suffix) const noexcept {
+  __nothrow_pure_function bool
+  ends_with(const ::mdbx::slice &suffix) const noexcept {
     return slice_.ends_with(suffix);
   }
 
@@ -1077,31 +1079,31 @@ public:
 
   void safe_remove_suffix(size_t n) { slice_.safe_remove_suffix(n); }
 
-  slice head(size_t n) const noexcept { return slice_.head(n); }
+  ::mdbx::slice head(size_t n) const noexcept { return slice_.head(n); }
 
-  slice tail(size_t n) const noexcept { return slice_.tail(n); }
+  ::mdbx::slice tail(size_t n) const noexcept { return slice_.tail(n); }
 
-  slice middle(size_t from, size_t n) const noexcept {
+  ::mdbx::slice middle(size_t from, size_t n) const noexcept {
     return slice_.middle(from, n);
   }
 
-  slice safe_head(size_t n) const { return slice_.safe_head(n); }
+  ::mdbx::slice safe_head(size_t n) const { return slice_.safe_head(n); }
 
-  slice safe_tail(size_t n) const { return slice_.safe_tail(n); }
+  ::mdbx::slice safe_tail(size_t n) const { return slice_.safe_tail(n); }
 
-  slice safe_middle(size_t from, size_t n) const {
+  ::mdbx::slice safe_middle(size_t from, size_t n) const {
     return slice_.safe_middle(from, n);
   }
 
   inline buffer &append(const void *src, size_t bytes);
 
-  inline buffer &append(const slice &chunk) {
+  inline buffer &append(const ::mdbx::slice &chunk) {
     return append(chunk.data(), chunk.size());
   }
 
   inline buffer &add_header(const void *src, size_t bytes);
 
-  inline buffer &add_header(const slice &chunk) {
+  inline buffer &add_header(const ::mdbx::slice &chunk) {
     return add_header(chunk.data(), chunk.size());
   }
 
@@ -1109,7 +1111,7 @@ public:
 
   template <size_t SIZE>
   static buffer key_from(const char (&text)[SIZE], bool make_reference = true) {
-    return buffer(slice(text), make_reference);
+    return buffer(::mdbx::slice(text), make_reference);
   }
 
 #if defined(DOXYGEN) ||                                                        \
@@ -1824,7 +1826,7 @@ inline ::std::ostream &operator<<(::std::ostream &out,
   return (it.is_freestanding()
               ? out << "buf-" << it.headroom() << "." << it.tailroom()
               : out << "ref-")
-         << it.ref();
+         << it.slice();
 }
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const ::mdbx::env_ref::geometry::size &);
@@ -3574,7 +3576,7 @@ inline bool cursor_ref::erase(bool whole_multivalue) {
 //------------------------------------------------------------------------------
 
 template <class ALLOCATOR>
-inline buffer<ALLOCATOR>::buffer(const txn_ref &txn, const slice &src,
+inline buffer<ALLOCATOR>::buffer(const txn_ref &txn, const ::mdbx::slice &src,
                                  const ALLOCATOR &allocator)
     : buffer(src, !txn.is_dirty(src.data()), allocator) {}
 
@@ -3600,7 +3602,7 @@ inline buffer<ALLOCATOR>::buffer(size_t capacity, const ALLOCATOR &allocator)
 }
 
 template <class ALLOCATOR>
-inline buffer<ALLOCATOR>::buffer(size_t head_room, const slice &src,
+inline buffer<ALLOCATOR>::buffer(size_t head_room, const ::mdbx::slice &src,
                                  size_t tail_room, const ALLOCATOR &allocator)
     : silo_(allocator) {
   if (mdbx_unlikely(head_room > max_length || tail_room > max_length ||
@@ -3705,7 +3707,7 @@ inline int buffer<ALLOCATOR>::data_preserver::callback(void *context,
   const auto self = static_cast<data_preserver *>(context);
   assert(self->is_clean());
   try {
-    owner_of(static_cast<slice *>(target), &buffer::slice_)
+    owner_of(static_cast<::mdbx::slice *>(target), &buffer::slice_)
         ->assign(src, bytes, false);
     return MDBX_RESULT_FALSE;
   } catch (... /* capture any exception to rethrow it over C code */) {
