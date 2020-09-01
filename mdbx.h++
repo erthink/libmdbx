@@ -613,6 +613,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   friend inline bool operator>=(const slice &a, const slice &b) noexcept;
   friend inline bool operator!=(const slice &a, const slice &b) noexcept;
 
+  constexpr bool is_valid() const noexcept {
+    return !(iov_base == nullptr && iov_len != 0);
+  }
   constexpr static slice invalid() noexcept { return slice(size_t(-1)); }
 
 protected:
@@ -693,6 +696,8 @@ public:
   constexpr const char *char_ptr() const noexcept { return slice_.char_ptr(); }
 
   constexpr const void *data() const noexcept { return slice_.data(); }
+
+  constexpr void *data() noexcept { return const_cast<void *>(slice_.data()); }
 
   __nothrow_pure_function cxx20_constexpr size_t length() const noexcept {
     return CONSTEXPR_ASSERT(is_reference() ||

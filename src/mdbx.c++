@@ -1072,25 +1072,45 @@ __cold MDBX_env_flags_t env_ref::operate_parameters::make_flags(
 }
 
 env_ref::mode
-env_ref::operate_parameters::mode_from_flags(MDBX_env_flags_t) noexcept {
-  NOT_IMPLEMENTED();
+env_ref::operate_parameters::mode_from_flags(MDBX_env_flags_t flags) noexcept {
+  if (flags & MDBX_RDONLY)
+    return env_ref::mode::readonly;
+  return (flags & MDBX_WRITEMAP) ? env_ref::mode::write_mapped_io
+                                 : env_ref::mode::write_file_io;
 }
 
-env_ref::durability
-env_ref::operate_parameters::durability_from_flags(MDBX_env_flags_t) noexcept {
-  NOT_IMPLEMENTED();
+env_ref::durability env_ref::operate_parameters::durability_from_flags(
+    MDBX_env_flags_t flags) noexcept {
+  if ((flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC)
+    return env_ref::durability::whole_fragile;
+  if (flags & MDBX_SAFE_NOSYNC)
+    return env_ref::durability::lazy_weak_tail;
+  if (flags & MDBX_NOMETASYNC)
+    return env_ref::durability::half_synchronous_weak_last;
+  return env_ref::durability::robust_synchronous;
 }
 
-env_ref::reclaiming_options::reclaiming_options(MDBX_env_flags_t) noexcept {
-  NOT_IMPLEMENTED();
-}
+env_ref::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
+    : lifo((flags & MDBX_LIFORECLAIM) ? true : false),
+      coalesce((flags & MDBX_COALESCE) ? true : false) {}
 
-env_ref::operate_options::operate_options(MDBX_env_flags_t) noexcept {
-  NOT_IMPLEMENTED();
-}
+env_ref::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
+    : orphan_read_transactions(
+          ((flags & (MDBX_NOTLS | MDBX_EXCLUSIVE)) == MDBX_NOTLS) ? true
+                                                                  : false),
+      nested_write_transactions((flags & (MDBX_WRITEMAP | MDBX_RDONLY)) ? false
+                                                                        : true),
+      exclusive((flags & MDBX_EXCLUSIVE) ? true : false),
+      disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
+      disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
 
-env_ref::operate_parameters::operate_parameters(const env_ref &) {
-  NOT_IMPLEMENTED();
+env_ref::operate_parameters::operate_parameters(const env_ref &env)
+    : max_maps(env.max_maps()), max_readers(env.max_readers()) {
+  const auto flags = env.get_flags();
+  mode = mode_from_flags(flags);
+  durability = durability_from_flags(flags);
+  reclaiming = reclaiming_from_flags(flags);
+  options = options_from_flags(flags);
 }
 
 bool env_ref::is_pristine() const {
