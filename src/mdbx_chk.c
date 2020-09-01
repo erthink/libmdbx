@@ -764,7 +764,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     rc = 0;
 
   if (record_count != ms.ms_entries)
-    problem_add("entry", record_count, "differentent number of entries",
+    problem_add("entry", record_count, "different number of entries",
                 "%" PRIu64 " != %" PRIu64, record_count, ms.ms_entries);
 bailout:
   problems_count = problems_pop(saved_list);
