@@ -10915,22 +10915,21 @@ spilled:
 
 dirty:
   if (unlikely(p->mp_pgno != pgno)) {
-    bad_page(p,
-             "mismatch pgno %" PRIaPGNO " (actual) != %" PRIaPGNO " (expected)",
-             p->mp_pgno, pgno);
+    bad_page(
+        p, "mismatch pgno %" PRIaPGNO " (actual) != %" PRIaPGNO " (expected)\n",
+        p->mp_pgno, pgno);
+    goto corrupted;
+  }
+
+  if (unlikely(p->mp_flags & illegal_bits)) {
+    bad_page(p, "invalid page's flags (%u)\n", p->mp_flags);
     goto corrupted;
   }
 
   if (unlikely(p->mp_txnid >
-               ((p->mp_flags & P_DIRTY) ? UINT64_MAX : parentpage_txnid))) {
-    bad_page(p,
-             "invalid page's txnid %" PRIaTXN "> %" PRIaTXN " of parent page",
-             p->mp_txnid, parentpage_txnid);
-    goto corrupted;
-  }
-
-  if (unlikely((p->mp_flags & illegal_bits))) {
-    mdbx_error("invalid page's flags (0x%x)", p->mp_flags);
+               ((p->mp_flags & P_DIRTY) ? UINT64_MAX : pp_txnid))) {
+    bad_page(p, "page mod-txnid (%" PRIaTXN ") > parent (%" PRIaTXN ")\n",
+             p->mp_txnid, pp_txnid);
     goto corrupted;
   }
 
@@ -10938,7 +10937,7 @@ dirty:
                 ((p->mp_lower | p->mp_upper) & 1) != 0 ||
                 PAGEHDRSZ + p->mp_upper > env->me_psize) &&
                !IS_OVERFLOW(p))) {
-    bad_page(p, "invalid page lower(%u)/upper(%u), pg-limit %u", p->mp_lower,
+    bad_page(p, "invalid page lower(%u)/upper(%u), pg-limit %u\n", p->mp_lower,
              p->mp_upper, page_space(env));
     goto corrupted;
   }
@@ -11027,7 +11026,7 @@ __hot static int mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key,
 
   if (unlikely(!IS_LEAF(mp))) {
     mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
-    return bad_page(mp, "index points to a page with 0x%02x flags",
+    return bad_page(mp, "index points to a page with 0x%02x flags\n",
                     mp->mp_flags);
   }
 
@@ -14647,97 +14646,80 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
   MDBX_env *const env = mc->mc_txn->mt_env;
   const unsigned nkeys = page_numkeys(mp);
   char *const end_of_page = (char *)mp + env->me_psize;
-  mdbx_assert(env, mp->mp_pgno >= MIN_PAGENO && mp->mp_pgno <= MAX_PAGENO);
   if (unlikely(mp->mp_pgno < MIN_PAGENO || mp->mp_pgno > MAX_PAGENO))
-    return bad_page(mp, "invalid pgno %u", mp->mp_pgno);
+    return bad_page(mp, "invalid pgno %u\n", mp->mp_pgno);
   if (IS_OVERFLOW(mp)) {
-    mdbx_assert(env, mp->mp_pages >= 1 && mp->mp_pages < MAX_PAGENO / 2);
     if (unlikely(mp->mp_pages < 1 && mp->mp_pages >= MAX_PAGENO / 2))
-      return bad_page(mp, "invalid overflow n-pages %u", mp->mp_pages);
-    mdbx_assert(env, mp->mp_pgno <= MAX_PAGENO - mp->mp_pages);
+      return bad_page(mp, "invalid overflow n-pages %u\n", mp->mp_pages);
     if (unlikely(mp->mp_pgno > mc->mc_txn->mt_next_pgno - mp->mp_pages))
-      return bad_page(mp, "overflow page %u beyond next-pgno",
+      return bad_page(mp, "overflow page %u beyond next-pgno\n",
                       mp->mp_pgno + mp->mp_pages);
     return MDBX_SUCCESS;
   }
-  if ((options & C_UPDATING) == 0 || !IS_DIRTY(mp)) {
-    mdbx_assert(env, nkeys >= 2 || !IS_BRANCH(mp));
-    if (unlikely(nkeys < 2 && IS_BRANCH(mp)))
-      return bad_page(mp, "branch-page %u nkey < 2", nkeys);
-  }
 
   int rc = MDBX_SUCCESS;
+  if ((options & C_UPDATING) == 0 || !IS_DIRTY(mp)) {
+    if (unlikely(nkeys < 2 && IS_BRANCH(mp)))
+      rc = bad_page(mp, "branch-page %u nkey < 2\n", nkeys);
+  }
+
   MDBX_val here, prev = {0, 0};
   for (unsigned i = 0; i < nkeys; ++i) {
     if (IS_LEAF2(mp)) {
       const size_t ksize = mp->mp_leaf2_ksize;
       char *const key = page_leaf2key(mp, i, ksize);
-      mdbx_assert(env, key + ksize <= end_of_page);
       if (unlikely(end_of_page < key + ksize)) {
-        rc = bad_page(mp, "leaf2-key %zu beyond page-end",
+        rc = bad_page(mp, "leaf2-key %zu beyond page-end\n",
                       key + ksize - end_of_page);
         continue;
       }
 
       if ((options & C_COPYING) == 0) {
         if (unlikely(ksize != mc->mc_dbx->md_klen_min)) {
-          mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
-          mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
           if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
-                       ksize > mc->mc_dbx->md_klen_max)) {
-            rc = bad_page(
-                mp, "leaf2-key %zu size < klen_min || size > klen_max", ksize);
-            continue;
-          }
-          mc->mc_dbx->md_klen_min = mc->mc_dbx->md_klen_max = ksize;
+                       ksize > mc->mc_dbx->md_klen_max))
+            rc = bad_page(mp,
+                          "leaf2-key %zu size < klen_min || size > klen_max\n",
+                          ksize);
+          else
+            mc->mc_dbx->md_klen_min = mc->mc_dbx->md_klen_max = ksize;
         }
         if ((options & C_SKIPORD) == 0) {
           here.iov_len = ksize;
           here.iov_base = key;
-          if (prev.iov_base) {
-            mdbx_assert(env, mc->mc_dbx->md_cmp(&here, &prev) > 0);
-            if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
-              rc = bad_page(mp, "leaf2-key #%u wrong order", i);
-          }
+          if (prev.iov_base && unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+            rc = bad_page(mp, "leaf2-key #%u wrong order\n", i);
           prev = here;
         }
       }
     } else {
       const MDBX_node *const node = page_node(mp, i);
       const char *node_end = (char *)node + NODESIZE;
-      mdbx_assert(env, node_end <= end_of_page);
       if (unlikely(node_end > end_of_page)) {
-        rc = bad_page(mp, "node %zu beyond page-end", node_end - end_of_page);
+        rc = bad_page(mp, "node %zu beyond page-end\n", node_end - end_of_page);
         continue;
       }
       if (IS_LEAF(mp) || i > 0) {
         size_t ksize = node_ks(node);
         char *key = node_key(node);
-        mdbx_assert(env, key + ksize <= end_of_page);
         if (unlikely(end_of_page < key + ksize)) {
-          rc = bad_page(mp, "node-key %zu beyond page-end",
+          rc = bad_page(mp, "node-key %zu beyond page-end\n",
                         key + ksize - end_of_page);
           continue;
         }
 
         if ((options & C_COPYING) == 0) {
-          mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
-          mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
           if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
-                       ksize > mc->mc_dbx->md_klen_max)) {
-            rc = bad_page(mp, "node-key %zu size < klen_min || size > klen_max",
-                          ksize);
-            continue;
-          }
+                       ksize > mc->mc_dbx->md_klen_max))
+            rc = bad_page(
+                mp, "node-key %zu size < klen_min || size > klen_max\n", ksize);
 
           if ((options & C_SKIPORD) == 0) {
             here.iov_base = key;
             here.iov_len = ksize;
-            if (prev.iov_base) {
-              mdbx_assert(env, mc->mc_dbx->md_cmp(&here, &prev) > 0);
-              if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
-                rc = bad_page(mp, "node-key #%u wrong order", i);
-            }
+            if (prev.iov_base &&
+                unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+              rc = bad_page(mp, "node-key #%u wrong order\n", i);
             prev = here;
           }
         }
@@ -14745,30 +14727,24 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
       if (IS_BRANCH(mp)) {
         if ((options & C_RETIRING) == 0) {
           const pgno_t ref = node_pgno(node);
-          mdbx_assert(env, ref >= MIN_PAGENO);
-          mdbx_assert(env, ref < mc->mc_txn->mt_next_pgno);
           if (unlikely(ref < MIN_PAGENO || ref >= mc->mc_txn->mt_next_pgno))
-            rc = bad_page(mp, "branch-node wrong pgno %u", ref);
+            rc = bad_page(mp, "branch-node wrong pgno %u\n", ref);
         }
         continue;
       }
 
       switch (node_flags(node)) {
       default:
-        rc = bad_page(mp, "invalid node flags %u", node_flags(node));
+        rc = bad_page(mp, "invalid node flags %u\n", node_flags(node));
         break;
       case F_BIGDATA /* data on large-page */: {
         const size_t dsize = node_ds(node);
         if ((options & C_COPYING) == 0) {
-          mdbx_assert(env, dsize > mc->mc_dbx->md_vlen_min);
-          mdbx_assert(env, dsize <= mc->mc_dbx->md_vlen_max);
           if (unlikely(dsize <= mc->mc_dbx->md_vlen_min ||
-                       dsize > mc->mc_dbx->md_vlen_max)) {
+                       dsize > mc->mc_dbx->md_vlen_max))
             rc = bad_page(
-                mp, "big-node data %zu size <= vlen_min || size >= vlen_max",
+                mp, "big-node data %zu size <= vlen_min || size >= vlen_max\n",
                 dsize);
-            continue;
-          }
         }
         if ((options & C_RETIRING) == 0) {
           MDBX_page *lp;
@@ -14776,17 +14752,15 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                                   pp_txnid4chk(mp, mc->mc_txn));
           if (unlikely(err != MDBX_SUCCESS))
             return err;
-          mdbx_assert(env, IS_OVERFLOW(lp));
-          mdbx_assert(env, number_of_ovpages(env, dsize) == lp->mp_pages);
           if (unlikely(!IS_OVERFLOW(lp))) {
-            rc = bad_page(mp, "big-node refs to non-overflow page %u",
+            rc = bad_page(mp, "big-node refs to non-overflow page %u\n",
                           lp->mp_pgno);
             continue;
           }
           if (unlikely(number_of_ovpages(env, dsize) != lp->mp_pages))
-            rc = bad_page(mp,
-                          "big-node size %zu mismatch overflow npagse size %u",
-                          dsize, lp->mp_pages);
+            rc = bad_page(
+                mp, "big-node size %zu mismatch overflow npagse size %u\n",
+                dsize, lp->mp_pages);
         }
       }
         continue;
@@ -14799,10 +14773,10 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
 
       const size_t dsize = node_ds(node);
       const char *const data = node_data(node);
-      mdbx_assert(env, data + dsize <= end_of_page);
       if (unlikely(end_of_page < data + dsize)) {
-        rc = bad_page(mp, "node-data[%u of %u] %zu beyond page end", i, nkeys,
-                      data + dsize - end_of_page);
+        rc =
+            bad_page(mp, "node-data[%u of %u, %zu bytes] %zu beyond page end\n",
+                     i, nkeys, dsize, data + dsize - end_of_page);
         continue;
       }
 
@@ -14812,35 +14786,30 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
         continue;
       case 0 /* usual */:
         if ((options & C_COPYING) == 0) {
-          mdbx_assert(env, dsize >= mc->mc_dbx->md_vlen_min);
-          mdbx_assert(env, dsize <= mc->mc_dbx->md_vlen_max);
           if (unlikely(dsize < mc->mc_dbx->md_vlen_min ||
                        dsize > mc->mc_dbx->md_vlen_max)) {
-            rc = bad_page(mp,
-                          "node-data %zu size <= vlen_min || size >= vlen_max",
-                          dsize);
+            rc = bad_page(
+                mp, "node-data %zu size <= vlen_min || size >= vlen_max\n",
+                dsize);
             continue;
           }
         }
         break;
       case F_SUBDATA /* sub-db */:
-        mdbx_assert(env, dsize >= sizeof(MDBX_db));
         if (unlikely(dsize < sizeof(MDBX_db))) {
-          rc = bad_page(mp, "invalid sub-db record size %zu", dsize);
+          rc = bad_page(mp, "invalid sub-db record size %zu\n", dsize);
           continue;
         }
         break;
       case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
-        mdbx_assert(env, dsize == sizeof(MDBX_db));
         if (unlikely(dsize != sizeof(MDBX_db))) {
-          rc = bad_page(mp, "invalid nested-db record size %zu", dsize);
+          rc = bad_page(mp, "invalid nested-db record size %zu\n", dsize);
           continue;
         }
         break;
       case F_DUPDATA /* short sub-page */:
-        mdbx_assert(env, dsize > PAGEHDRSZ);
         if (unlikely(dsize <= PAGEHDRSZ)) {
-          rc = bad_page(mp, "invalid nested-page record size %zu", dsize);
+          rc = bad_page(mp, "invalid nested-page record size %zu\n", dsize);
           continue;
         } else {
           const MDBX_page *const sp = (MDBX_page *)data;
@@ -14851,8 +14820,7 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
           case P_LEAF | P_LEAF2 | P_SUBP:
             break;
           default:
-            mdbx_assert(env, false);
-            rc = bad_page(mp, "invalid nested-page flags %u", sp->mp_flags);
+            rc = bad_page(mp, "invalid nested-page flags %uv", sp->mp_flags);
             continue;
           }
 
@@ -14862,23 +14830,20 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
               /* LEAF2 pages have no mp_ptrs[] or node headers */
               size_t sub_ksize = sp->mp_leaf2_ksize;
               char *sub_key = page_leaf2key(sp, j, sub_ksize);
-              mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
               if (unlikely(end_of_subpage < sub_key + sub_ksize)) {
-                rc = bad_page(mp, "nested-leaf2-key %zu beyond nested-page",
+                rc = bad_page(mp, "nested-leaf2-key %zu beyond nested-page\n",
                               sub_key + sub_ksize - end_of_subpage);
                 continue;
               }
 
               if ((options & C_COPYING) == 0) {
                 if (unlikely(sub_ksize != mc->mc_dbx->md_vlen_min)) {
-                  mdbx_assert(env, sub_ksize >= mc->mc_dbx->md_vlen_min);
-                  mdbx_assert(env, sub_ksize <= mc->mc_dbx->md_vlen_max);
                   if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
                                sub_ksize > mc->mc_dbx->md_vlen_max)) {
                     rc = bad_page(
                         mp,
                         "nested-leaf2-key %zu size < vlen_min || size > "
-                        "vlen_max",
+                        "vlen_max\n",
                         sub_ksize);
                     continue;
                   }
@@ -14887,83 +14852,52 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                 if ((options & C_SKIPORD) == 0) {
                   sub_here.iov_len = sub_ksize;
                   sub_here.iov_base = sub_key;
-                  if (sub_prev.iov_base) {
-                    mdbx_assert(env,
-                                mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) < 0);
-                    if (unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >=
-                                 0))
-                      rc = bad_page(mp, "nested-leaf2-key #%u wrong order", j);
-                  }
+                  if (sub_prev.iov_base &&
+                      unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >= 0))
+                    rc = bad_page(mp, "nested-leaf2-key #%u wrong order\n", j);
                   sub_prev = sub_here;
                 }
               }
             } else {
               const MDBX_node *const sub_node = page_node(sp, j);
               const char *sub_node_end = (char *)sub_node + NODESIZE;
-              mdbx_assert(env, sub_node_end <= end_of_subpage);
               if (unlikely(sub_node_end > end_of_subpage)) {
-                rc = bad_page(mp, "nested-node %zu beyond nested-page",
+                rc = bad_page(mp, "nested-node %zu beyond nested-page\n",
                               end_of_subpage - sub_node_end);
                 continue;
               }
-              mdbx_assert(env, node_flags(sub_node) == 0);
-              if (unlikely(node_flags(sub_node) != 0)) {
-                rc = bad_page(mp, "nested-node invalid flags %u",
+              if (unlikely(node_flags(sub_node) != 0))
+                rc = bad_page(mp, "nested-node invalid flags %u\n",
                               node_flags(sub_node));
-                continue;
-              }
 
               size_t sub_ksize = node_ks(sub_node);
               char *sub_key = node_key(sub_node);
               size_t sub_dsize = node_ds(sub_node);
-              char *sub_data = node_data(sub_node);
+              /* char *sub_data = node_data(sub_node); */
 
               if ((options & C_COPYING) == 0) {
-                mdbx_assert(env, sub_ksize >= mc->mc_dbx->md_vlen_min);
-                mdbx_assert(env, sub_ksize <= mc->mc_dbx->md_vlen_max);
                 if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
-                             sub_ksize > mc->mc_dbx->md_vlen_max)) {
-                  rc = bad_page(
-                      mp,
-                      "nested-node-key %zu size < vlen_min || size > vlen_max",
-                      sub_ksize);
-                  continue;
-                }
+                             sub_ksize > mc->mc_dbx->md_vlen_max))
+                  rc = bad_page(mp,
+                                "nested-node-key %zu size < vlen_min || size > "
+                                "vlen_max\n",
+                                sub_ksize);
 
                 if ((options & C_SKIPORD) == 0) {
                   sub_here.iov_len = sub_ksize;
                   sub_here.iov_base = sub_key;
-                  if (sub_prev.iov_base) {
-                    mdbx_assert(env,
-                                mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) < 0);
-                    if (unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >=
-                                 0)) {
-                      rc = bad_page(mp, "nested-node-key #%u wrong order", j);
-                      continue;
-                    }
-                  }
+                  if (sub_prev.iov_base &&
+                      unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >= 0))
+                    rc = bad_page(mp, "nested-node-key #%u wrong order\n", j);
                   sub_prev = sub_here;
                 }
               }
-              mdbx_assert(env, sub_dsize == 0);
-              if (unlikely(sub_dsize != 0)) {
-                rc = bad_page(mp, "nested-node non-empty data size %zu",
+              if (unlikely(sub_dsize != 0))
+                rc = bad_page(mp, "nested-node non-empty data size %zu\n",
                               sub_dsize);
-                continue;
-              }
-
-              mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
-              if (unlikely(end_of_subpage < sub_key + sub_ksize)) {
-                rc = bad_page(mp, "nested-node-key %zu beyond nested-page",
+              if (unlikely(end_of_subpage < sub_key + sub_ksize))
+                rc = bad_page(mp, "nested-node-key %zu beyond nested-page\n",
                               sub_key + sub_ksize - end_of_subpage);
-                continue;
-              }
-              mdbx_assert(env, sub_data + sub_dsize <= end_of_subpage);
-              if (unlikely(end_of_subpage < sub_data + sub_dsize)) {
-                rc = bad_page(mp, "nested-node-data %zu beyond nested-page",
-                              sub_data + sub_dsize - end_of_subpage);
-                continue;
-              }
             }
           }
         }
@@ -15549,7 +15483,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
       rc = mdbx_node_add_leaf2(mc, 0, newkey);
     } break;
     default:
-      rc = bad_page(rp, "wrong page-type %u", PAGETYPE(rp));
+      rc = bad_page(rp, "wrong page-type %u\n", PAGETYPE(rp));
     }
     if (rc)
       goto done;
@@ -15606,7 +15540,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         rc = mdbx_node_add_leaf2(mc, n, &rkey);
       } break; */
       default:
-        rc = bad_page(rp, "wrong page-type %u", PAGETYPE(rp));
+        rc = bad_page(rp, "wrong page-type %u\n", PAGETYPE(rp));
       }
       if (rc)
         goto done;
