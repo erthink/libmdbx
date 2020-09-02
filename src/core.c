@@ -3105,7 +3105,7 @@ static int __must_check_result mdbx_page_get(MDBX_cursor *mc, pgno_t pgno,
                                              const txnid_t pp_txnid);
 static int __must_check_result mdbx_page_search_root(MDBX_cursor *mc,
                                                      const MDBX_val *key,
-                                                     int modify);
+                                                     int flags);
 
 #define MDBX_PS_MODIFY 1
 #define MDBX_PS_ROOTONLY 2
@@ -3202,7 +3202,7 @@ static int __must_check_result mdbx_xcursor_init1(MDBX_cursor *mc,
                                                   const MDBX_page *mp);
 static int __must_check_result mdbx_xcursor_init2(MDBX_cursor *mc,
                                                   MDBX_xcursor *src_mx,
-                                                  int force);
+                                                  bool new_dupdata);
 static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 
 static int __must_check_result mdbx_drop0(MDBX_cursor *mc, int subs);
@@ -11466,6 +11466,9 @@ skip:
              " with %u keys, key index %u",
              mp->mp_pgno, page_numkeys(mp), mc->mc_ki[mc->mc_top]);
 
+  if (unlikely(!IS_LEAF(mp)))
+    return MDBX_CORRUPTED;
+
   if (IS_LEAF2(mp)) {
     if (likely(key)) {
       key->iov_len = mc->mc_db->md_xsize;
@@ -11474,9 +11477,7 @@ skip:
     return MDBX_SUCCESS;
   }
 
-  mdbx_cassert(mc, IS_LEAF(mp));
   node = page_node(mp, mc->mc_ki[mc->mc_top]);
-
   if (F_ISSET(node_flags(node), F_DUPDATA)) {
     rc = mdbx_xcursor_init1(mc, node, mp);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -11849,7 +11850,9 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
-  mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
+
+  if (unlikely(!IS_LEAF(mc->mc_pg[mc->mc_top])))
+    return MDBX_CORRUPTED;
 
   mc->mc_flags |= C_INITIALIZED;
   mc->mc_flags &= ~C_EOF;
@@ -11895,8 +11898,10 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
     }
-    mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
   }
+
+  if (unlikely(!IS_LEAF(mc->mc_pg[mc->mc_top])))
+    return MDBX_CORRUPTED;
 
   mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mc->mc_pg[mc->mc_top]) - 1;
   mc->mc_flags |= C_INITIALIZED | C_EOF;
@@ -13188,7 +13193,7 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
   mdbx_cassert(mc, PAGETYPE(mp) == P_LEAF);
   MDBX_page *largepage = NULL;
 
-  size_t leaf_bytes = 0;
+  size_t leaf_bytes;
   if (unlikely(flags & F_BIGDATA)) {
     /* Data already on overflow page. */
     STATIC_ASSERT(sizeof(pgno_t) % 2 == 0);
@@ -13197,7 +13202,10 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
                       /* See note inside leaf_size() */
                       mc->mc_txn->mt_env->me_branch_nodemax)) {
     /* Put data on overflow page. */
-    mdbx_cassert(mc, !F_ISSET(mc->mc_db->md_flags, MDBX_DUPSORT));
+    mdbx_ensure(mc->mc_txn->mt_env,
+                !F_ISSET(mc->mc_db->md_flags, MDBX_DUPSORT));
+    if (unlikely(flags & (F_DUPDATA | F_SUBDATA)))
+      return MDBX_PROBLEM;
     const pgno_t ovpages = number_of_ovpages(mc->mc_txn->mt_env, data->iov_len);
     int rc = mdbx_page_new(mc, P_OVERFLOW, ovpages, &largepage);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -13426,7 +13434,12 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
     return MDBX_CORRUPTED;
   }
 
-  if (node_flags(node) & F_SUBDATA) {
+  const uint8_t flags = node_flags(node);
+  switch (flags) {
+  default:
+    mdbx_error("invalid node flags %u", flags);
+    return MDBX_CORRUPTED;
+  case F_DUPDATA | F_SUBDATA:
     if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
       mdbx_error("invalid nested-db record size %zu", node_ds(node));
       return MDBX_CORRUPTED;
@@ -13443,7 +13456,8 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
     mx->mx_cursor.mc_snum = 0;
     mx->mx_cursor.mc_top = 0;
     mx->mx_cursor.mc_flags = C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
-  } else {
+    break;
+  case F_DUPDATA:
     if (unlikely(node_ds(node) <= PAGEHDRSZ)) {
       mdbx_error("invalid nested-page size %zu", node_ds(node));
       return MDBX_CORRUPTED;
@@ -13465,6 +13479,7 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
     mx->mx_db.md_flags = flags_db2sub(mc->mc_db->md_flags);
     mx->mx_db.md_xsize =
         (mc->mc_db->md_flags & MDBX_DUPFIXED) ? fp->mp_leaf2_ksize : 0;
+    break;
   }
 
   if (unlikely(mx->mx_db.md_xsize != mc->mc_db->md_xsize)) {
@@ -13504,7 +13519,7 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
  * [in] src_mx The xcursor of an up-to-date cursor.
  * [in] new_dupdata True if converting from a non-F_DUPDATA item. */
 static int mdbx_xcursor_init2(MDBX_cursor *mc, MDBX_xcursor *src_mx,
-                              int new_dupdata) {
+                              bool new_dupdata) {
   MDBX_xcursor *mx = mc->mc_xcursor;
   if (unlikely(mx == nullptr)) {
     mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
