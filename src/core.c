@@ -11004,8 +11004,7 @@ __hot static int mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key,
   }
 
   if (unlikely(!IS_LEAF(mp))) {
-    mdbx_debug("internal error, index points to a page with 0x%02x flags!?",
-               mp->mp_flags);
+    mdbx_error("index points to a page with 0x%02x flags", mp->mp_flags);
     mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
     return MDBX_CORRUPTED;
   }
@@ -11038,8 +11037,11 @@ static int mdbx_setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
 
   if ((db->md_flags & (MDBX_DUPFIXED | MDBX_INTEGERDUP)) != 0 && db->md_xsize) {
     if (unlikely(db->md_xsize < dbx->md_vlen_min ||
-                 db->md_xsize > dbx->md_vlen_max))
+                 db->md_xsize > dbx->md_vlen_max)) {
+      mdbx_error("db->md_xsize (%u) < vlen_min || db->md_xsize > vlen_max",
+                 db->md_xsize);
       return MDBX_CORRUPTED;
+    }
     dbx->md_vlen_min = dbx->md_vlen_max = db->md_xsize;
   }
   return MDBX_SUCCESS;
@@ -11084,8 +11086,11 @@ static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
 
   memcpy(db, data.iov_base, sizeof(MDBX_db));
   mdbx_tassert(txn, txn->mt_txnid >= pp_txnid);
-  if (unlikely(db->md_mod_txnid > pp_txnid))
+  if (unlikely(db->md_mod_txnid > pp_txnid)) {
+    mdbx_error("db.md_mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")",
+               db->md_mod_txnid, pp_txnid);
     return MDBX_CORRUPTED;
+  }
   rc = mdbx_setup_dbx(dbx, db, txn->mt_env->me_psize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -13362,8 +13367,11 @@ static void mdbx_node_shrink(MDBX_page *mp, unsigned indx) {
  * [in] mc The main cursor whose sorted-dups cursor is to be initialized. */
 static int mdbx_xcursor_init0(MDBX_cursor *mc) {
   MDBX_xcursor *mx = mc->mc_xcursor;
-  if (unlikely(mx == nullptr))
+  if (unlikely(mx == nullptr)) {
+    mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
+               mc->mc_dbi);
     return MDBX_CORRUPTED;
+  }
 
   mx->mx_cursor.mc_xcursor = NULL;
   mx->mx_cursor.mc_txn = mc->mc_txn;
@@ -13391,12 +13399,17 @@ static int mdbx_xcursor_init0(MDBX_cursor *mc) {
 static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
                               const MDBX_page *mp) {
   MDBX_xcursor *mx = mc->mc_xcursor;
-  if (unlikely(mx == nullptr))
+  if (unlikely(mx == nullptr)) {
+    mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
+               mc->mc_dbi);
     return MDBX_CORRUPTED;
+  }
 
   if (node_flags(node) & F_SUBDATA) {
-    if (unlikely(node_ds(node) != sizeof(MDBX_db)))
+    if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+      mdbx_error("invalid nested-db record size %zu", node_ds(node));
       return MDBX_CORRUPTED;
+    }
     memcpy(&mx->mx_db, node_data(node), sizeof(MDBX_db));
     const txnid_t pp_txnid = IS_DIRTY(mp) ? mc->mc_txn->mt_txnid : mp->mp_txnid;
     if (unlikely(mx->mx_db.md_mod_txnid > pp_txnid)) {
@@ -13410,8 +13423,10 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
     mx->mx_cursor.mc_top = 0;
     mx->mx_cursor.mc_flags = C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
   } else {
-    if (unlikely(node_ds(node) <= PAGEHDRSZ))
+    if (unlikely(node_ds(node) <= PAGEHDRSZ)) {
+      mdbx_error("invalid nested-page size %zu", node_ds(node));
       return MDBX_CORRUPTED;
+    }
     MDBX_page *fp = node_data(node);
     mx->mx_db.md_depth = 1;
     mx->mx_db.md_branch_pages = 0;
@@ -13432,13 +13447,22 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
   }
 
   if (unlikely(mx->mx_db.md_xsize != mc->mc_db->md_xsize)) {
-    if (unlikely(mc->mc_db->md_xsize != 0))
+    if (unlikely(mc->mc_db->md_xsize != 0)) {
+      mdbx_error("cursor mismatched nested-db md_xsize %u",
+                 mc->mc_db->md_xsize);
       return MDBX_CORRUPTED;
-    if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
+    }
+    if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0)) {
+      mdbx_error("mismatched nested-db md_flags %u", mc->mc_db->md_flags);
       return MDBX_CORRUPTED;
+    }
     if (unlikely(mx->mx_db.md_xsize < mc->mc_dbx->md_vlen_min ||
-                 mx->mx_db.md_xsize > mc->mc_dbx->md_vlen_max))
+                 mx->mx_db.md_xsize > mc->mc_dbx->md_vlen_max)) {
+      mdbx_error("mismatched nested-db %u md_xsize < md_vlen_min || md_xsize > "
+                 "md_vlen_max",
+                 mx->mx_db.md_xsize);
       return MDBX_CORRUPTED;
+    }
     mc->mc_db->md_xsize = mx->mx_db.md_xsize;
     mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max = mx->mx_db.md_xsize;
   }
@@ -13461,8 +13485,11 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
 static int mdbx_xcursor_init2(MDBX_cursor *mc, MDBX_xcursor *src_mx,
                               int new_dupdata) {
   MDBX_xcursor *mx = mc->mc_xcursor;
-  if (unlikely(mx == nullptr))
+  if (unlikely(mx == nullptr)) {
+    mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
+               mc->mc_dbi);
     return MDBX_CORRUPTED;
+  }
 
   if (new_dupdata) {
     mx->mx_cursor.mc_snum = 1;
@@ -14599,21 +14626,30 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
   const unsigned nkeys = page_numkeys(mp);
   char *const end_of_page = (char *)mp + env->me_psize;
   mdbx_assert(env, mp->mp_pgno >= MIN_PAGENO && mp->mp_pgno <= MAX_PAGENO);
-  if (unlikely(mp->mp_pgno < MIN_PAGENO || mp->mp_pgno > MAX_PAGENO))
+  if (unlikely(mp->mp_pgno < MIN_PAGENO || mp->mp_pgno > MAX_PAGENO)) {
+    mdbx_error("invalid pgno %u", mp->mp_pgno);
     return MDBX_CORRUPTED;
+  }
   if (IS_OVERFLOW(mp)) {
     mdbx_assert(env, mp->mp_pages >= 1 && mp->mp_pages < MAX_PAGENO / 2);
-    if (unlikely(mp->mp_pages < 1 && mp->mp_pages >= MAX_PAGENO / 2))
+    if (unlikely(mp->mp_pages < 1 && mp->mp_pages >= MAX_PAGENO / 2)) {
+      mdbx_error("invalid overflow n-pages %u", mp->mp_pages);
       return MDBX_CORRUPTED;
+    }
     mdbx_assert(env, mp->mp_pgno <= MAX_PAGENO - mp->mp_pages);
-    if (unlikely(mp->mp_pgno > MAX_PAGENO - mp->mp_pages))
+    if (unlikely(mp->mp_pgno > mc->mc_txn->mt_next_pgno - mp->mp_pages)) {
+      mdbx_error("overflow page %u beyond next-pgno",
+                 mp->mp_pgno + mp->mp_pages);
       return MDBX_CORRUPTED;
+    }
     return MDBX_SUCCESS;
   }
   if ((options & C_UPDATING) == 0 || !IS_DIRTY(mp)) {
     mdbx_assert(env, nkeys >= 2 || !IS_BRANCH(mp));
-    if (unlikely(nkeys < 2 && IS_BRANCH(mp)))
+    if (unlikely(nkeys < 2 && IS_BRANCH(mp))) {
+      mdbx_error("branch-page %u nkey < 2", nkeys);
       return MDBX_CORRUPTED;
+    }
   }
 
   MDBX_val here, prev = {0, 0};
@@ -14622,16 +14658,21 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
       const size_t ksize = mp->mp_leaf2_ksize;
       char *const key = page_leaf2key(mp, i, ksize);
       mdbx_assert(env, key + ksize <= end_of_page);
-      if (unlikely(end_of_page < key + ksize))
+      if (unlikely(end_of_page < key + ksize)) {
+        mdbx_error("leaf2-key %zu beyond page-end", key + ksize - end_of_page);
         return MDBX_CORRUPTED;
+      }
 
       if ((options & C_COPYING) == 0) {
         if (unlikely(ksize != mc->mc_dbx->md_klen_min)) {
           mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
           mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
           if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
-                       ksize > mc->mc_dbx->md_klen_max))
+                       ksize > mc->mc_dbx->md_klen_max)) {
+            mdbx_error("leaf2-key %zu size < klen_min || size > klen_max",
+                       ksize);
             return MDBX_CORRUPTED;
+          }
           mc->mc_dbx->md_klen_min = mc->mc_dbx->md_klen_max = ksize;
         }
         if ((options & C_SKIPORD) == 0) {
@@ -14639,8 +14680,10 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
           here.iov_base = key;
           if (prev.iov_base) {
             mdbx_assert(env, mc->mc_dbx->md_cmp(&here, &prev) > 0);
-            if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+            if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0)) {
+              mdbx_error("leaf2-key #%u wrong order", i);
               return MDBX_CORRUPTED;
+            }
           }
           prev = here;
         }
@@ -14649,29 +14692,38 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
       const MDBX_node *const node = page_node(mp, i);
       const char *node_end = (char *)node + NODESIZE;
       mdbx_assert(env, node_end <= end_of_page);
-      if (unlikely(node_end > end_of_page))
+      if (unlikely(node_end > end_of_page)) {
+        mdbx_error("node %zu beyond page-end", node_end - end_of_page);
         return MDBX_CORRUPTED;
+      }
       if (IS_LEAF(mp) || i > 0) {
         size_t ksize = node_ks(node);
         char *key = node_key(node);
         mdbx_assert(env, key + ksize <= end_of_page);
-        if (unlikely(end_of_page < key + ksize))
+        if (unlikely(end_of_page < key + ksize)) {
+          mdbx_error("node-key %zu beyond page-end", key + ksize - end_of_page);
           return MDBX_CORRUPTED;
+        }
 
         if ((options & C_COPYING) == 0) {
           mdbx_assert(env, ksize >= mc->mc_dbx->md_klen_min);
           mdbx_assert(env, ksize <= mc->mc_dbx->md_klen_max);
           if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
-                       ksize > mc->mc_dbx->md_klen_max))
+                       ksize > mc->mc_dbx->md_klen_max)) {
+            mdbx_error("node-key %zu size < klen_min || size > klen_max",
+                       ksize);
             return MDBX_CORRUPTED;
+          }
 
           if ((options & C_SKIPORD) == 0) {
             here.iov_base = key;
             here.iov_len = ksize;
             if (prev.iov_base) {
               mdbx_assert(env, mc->mc_dbx->md_cmp(&here, &prev) > 0);
-              if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+              if (unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0)) {
+                mdbx_error("node-key #%u wrong order", i);
                 return MDBX_CORRUPTED;
+              }
             }
             prev = here;
           }
@@ -14682,8 +14734,10 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
           const pgno_t ref = node_pgno(node);
           mdbx_assert(env, ref >= MIN_PAGENO);
           mdbx_assert(env, ref < mc->mc_txn->mt_next_pgno);
-          if (unlikely(ref < MIN_PAGENO || ref >= mc->mc_txn->mt_next_pgno))
+          if (unlikely(ref < MIN_PAGENO || ref >= mc->mc_txn->mt_next_pgno)) {
+            mdbx_error("branch-node wrong pgno %u", ref);
             return MDBX_CORRUPTED;
+          }
         }
         continue;
       }
@@ -14693,8 +14747,11 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
           mdbx_assert(env, dsize > mc->mc_dbx->md_vlen_min);
           mdbx_assert(env, dsize <= mc->mc_dbx->md_vlen_max);
           if (unlikely(dsize <= mc->mc_dbx->md_vlen_min ||
-                       dsize > mc->mc_dbx->md_vlen_max))
+                       dsize > mc->mc_dbx->md_vlen_max)) {
+            mdbx_error("big-node data %zu size <= vlen_min || size >= vlen_max",
+                       dsize);
             return MDBX_CORRUPTED;
+          }
         }
         if ((options & C_RETIRING) == 0) {
           MDBX_page *lp;
@@ -14704,9 +14761,15 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
             return err;
           mdbx_assert(env, IS_OVERFLOW(lp));
           mdbx_assert(env, number_of_ovpages(env, dsize) == lp->mp_pages);
-          if (unlikely(!IS_OVERFLOW(lp) ||
-                       number_of_ovpages(env, dsize) != lp->mp_pages))
+          if (unlikely(!IS_OVERFLOW(lp))) {
+            mdbx_error("big-node refs to non-overflow page %u", lp->mp_pgno);
             return MDBX_CORRUPTED;
+          }
+          if (unlikely(number_of_ovpages(env, dsize) != lp->mp_pages)) {
+            mdbx_error("big-node size %zu mismatch overflow npagse size %u",
+                       dsize, lp->mp_pages);
+            return MDBX_CORRUPTED;
+          }
         }
         continue;
       }
@@ -14714,37 +14777,48 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
       const size_t dsize = node_ds(node);
       const char *const data = node_data(node);
       mdbx_assert(env, data + dsize <= end_of_page);
-      if (unlikely(end_of_page < data + dsize))
+      if (unlikely(end_of_page < data + dsize)) {
+        mdbx_error("node-data %zu beyond page end", data + dsize - end_of_page);
         return MDBX_CORRUPTED;
+      }
 
       switch (node_flags(node)) {
       default:
         mdbx_assert(env, false);
+        mdbx_error("invalid node flags %u", node_flags(node));
         return MDBX_CORRUPTED;
       case 0 /* usual */:
         if ((options & C_COPYING) == 0) {
           mdbx_assert(env, dsize >= mc->mc_dbx->md_vlen_min);
           mdbx_assert(env, dsize <= mc->mc_dbx->md_vlen_max);
           if (unlikely(dsize < mc->mc_dbx->md_vlen_min ||
-                       dsize > mc->mc_dbx->md_vlen_max))
+                       dsize > mc->mc_dbx->md_vlen_max)) {
+            mdbx_error("node-data %zu size <= vlen_min || size >= vlen_max",
+                       dsize);
             return MDBX_CORRUPTED;
+          }
         }
         break;
       case F_SUBDATA /* sub-db */:
         mdbx_assert(env, dsize >= sizeof(MDBX_db));
-        if (unlikely(dsize < sizeof(MDBX_db)))
+        if (unlikely(dsize < sizeof(MDBX_db))) {
+          mdbx_error("invalid sub-db record size %zu", dsize);
           return MDBX_CORRUPTED;
+        }
         break;
       case F_SUBDATA | F_DUPDATA /* dupsorted sub-tree */:
         mdbx_assert(env, dsize == sizeof(MDBX_db));
-        if (unlikely(dsize != sizeof(MDBX_db)))
+        if (unlikely(dsize != sizeof(MDBX_db))) {
+          mdbx_error("invalid nested-db record size %zu", dsize);
           return MDBX_CORRUPTED;
+        }
         break;
       case F_DUPDATA /* short sub-page */:
         mdbx_assert(env, dsize > PAGEHDRSZ);
-        if (unlikely(dsize <= PAGEHDRSZ))
+        if (unlikely(dsize <= PAGEHDRSZ)) {
+          mdbx_error("invalid nested-page record size %zu", dsize);
           return MDBX_CORRUPTED;
-        else {
+        } else {
           const MDBX_page *const sp = (MDBX_page *)data;
           const char *const end_of_subpage = data + dsize;
           const int nsubkeys = page_numkeys(sp);
@@ -14754,29 +14828,34 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
             break;
           default:
             mdbx_assert(env, false);
+            mdbx_error("invalid nested-page flags %u", sp->mp_flags);
             return MDBX_CORRUPTED;
           }
 
           MDBX_val sub_here, sub_prev = {0, 0};
           for (int j = 0; j < nsubkeys; j++) {
-            mdbx_assert(env, IS_LEAF(sp));
-            if (unlikely(!IS_LEAF(sp)))
-              return MDBX_CORRUPTED;
             if (IS_LEAF2(sp)) {
               /* LEAF2 pages have no mp_ptrs[] or node headers */
               size_t sub_ksize = sp->mp_leaf2_ksize;
               char *sub_key = page_leaf2key(sp, j, sub_ksize);
               mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
-              if (unlikely(end_of_subpage < sub_key + sub_ksize))
+              if (unlikely(end_of_subpage < sub_key + sub_ksize)) {
+                mdbx_error("nested-leaf2-key %zu beyond nested-page",
+                           sub_key + sub_ksize - end_of_subpage);
                 return MDBX_CORRUPTED;
+              }
 
               if ((options & C_COPYING) == 0) {
                 if (unlikely(sub_ksize != mc->mc_dbx->md_vlen_min)) {
                   mdbx_assert(env, sub_ksize >= mc->mc_dbx->md_vlen_min);
                   mdbx_assert(env, sub_ksize <= mc->mc_dbx->md_vlen_max);
                   if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
-                               sub_ksize > mc->mc_dbx->md_vlen_max))
+                               sub_ksize > mc->mc_dbx->md_vlen_max)) {
+                    mdbx_error("nested-leaf2-key %zu size < vlen_min || size > "
+                               "vlen_max",
+                               sub_ksize);
                     return MDBX_CORRUPTED;
+                  }
                   mc->mc_dbx->md_vlen_min = mc->mc_dbx->md_vlen_max = sub_ksize;
                 }
                 if ((options & C_SKIPORD) == 0) {
@@ -14786,8 +14865,10 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                     mdbx_assert(env,
                                 mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) < 0);
                     if (unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >=
-                                 0))
+                                 0)) {
+                      mdbx_error("nested-leaf2-key #%u wrong order", j);
                       return MDBX_CORRUPTED;
+                    }
                   }
                   sub_prev = sub_here;
                 }
@@ -14796,11 +14877,17 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
               const MDBX_node *const sub_node = page_node(sp, j);
               const char *sub_node_end = (char *)sub_node + NODESIZE;
               mdbx_assert(env, sub_node_end <= end_of_subpage);
-              if (unlikely(sub_node_end > end_of_subpage))
+              if (unlikely(sub_node_end > end_of_subpage)) {
+                mdbx_error("nested-node %zu beyond nested-page",
+                           end_of_subpage - sub_node_end);
                 return MDBX_CORRUPTED;
+              }
               mdbx_assert(env, node_flags(sub_node) == 0);
-              if (unlikely(node_flags(sub_node) != 0))
+              if (unlikely(node_flags(sub_node) != 0)) {
+                mdbx_error("nested-node invalid flags %u",
+                           node_flags(sub_node));
                 return MDBX_CORRUPTED;
+              }
 
               size_t sub_ksize = node_ks(sub_node);
               char *sub_key = node_key(sub_node);
@@ -14811,8 +14898,12 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                 mdbx_assert(env, sub_ksize >= mc->mc_dbx->md_vlen_min);
                 mdbx_assert(env, sub_ksize <= mc->mc_dbx->md_vlen_max);
                 if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
-                             sub_ksize > mc->mc_dbx->md_vlen_max))
+                             sub_ksize > mc->mc_dbx->md_vlen_max)) {
+                  mdbx_error(
+                      "nested-node-key %zu size < vlen_min || size > vlen_max",
+                      sub_ksize);
                   return MDBX_CORRUPTED;
+                }
 
                 if ((options & C_SKIPORD) == 0) {
                   sub_here.iov_len = sub_ksize;
@@ -14821,22 +14912,32 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                     mdbx_assert(env,
                                 mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) < 0);
                     if (unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >=
-                                 0))
+                                 0)) {
+                      mdbx_error("nested-node-key #%u wrong order", j);
                       return MDBX_CORRUPTED;
+                    }
                   }
                   sub_prev = sub_here;
                 }
               }
               mdbx_assert(env, sub_dsize == 0);
-              if (unlikely(sub_dsize != 0))
+              if (unlikely(sub_dsize != 0)) {
+                mdbx_error("nested-node non-empty data size %zu", sub_dsize);
                 return MDBX_CORRUPTED;
+              }
 
               mdbx_assert(env, sub_key + sub_ksize <= end_of_subpage);
-              if (unlikely(end_of_subpage < sub_key + sub_ksize))
+              if (unlikely(end_of_subpage < sub_key + sub_ksize)) {
+                mdbx_error("nested-node-key %zu beyond nested-page",
+                           sub_key + sub_ksize - end_of_subpage);
                 return MDBX_CORRUPTED;
+              }
               mdbx_assert(env, sub_data + sub_dsize <= end_of_subpage);
-              if (unlikely(end_of_subpage < sub_data + sub_dsize))
+              if (unlikely(end_of_subpage < sub_data + sub_dsize)) {
+                mdbx_error("nested-node-data %zu beyond nested-page",
+                           sub_data + sub_dsize - end_of_subpage);
                 return MDBX_CORRUPTED;
+              }
             }
           }
         }
@@ -15422,6 +15523,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
       rc = mdbx_node_add_leaf2(mc, 0, newkey);
     } break;
     default:
+      mdbx_error("wrong page-type %u", PAGETYPE(rp));
       rc = MDBX_CORRUPTED;
     }
     if (rc)
@@ -15479,6 +15581,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
         rc = mdbx_node_add_leaf2(mc, n, &rkey);
       } break; */
       default:
+        mdbx_error("wrong page-type %u", PAGETYPE(rp));
         rc = MDBX_CORRUPTED;
       }
       if (rc)
@@ -16473,6 +16576,7 @@ int __cold mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
       *mask |= 1 << unaligned_peek_u16(1, &db->md_depth);
       break;
     default:
+      mdbx_error("wrong node-flags %u", flags);
       return MDBX_CORRUPTED;
     }
     rc = mdbx_cursor_next(&cx.outer, &key, &data, MDBX_NEXT_NODUP);
