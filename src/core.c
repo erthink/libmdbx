@@ -8918,15 +8918,6 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   mdbx_ensure(env, branch_nodemax > 42 && branch_nodemax < (int)UINT16_MAX &&
                        branch_nodemax % 2 == 0);
   env->me_branch_nodemax = (unsigned)branch_nodemax;
-  env->me_maxkey_nd = (uint16_t)mdbx_limits_keysize_max(pagesize, 0);
-  env->me_maxkey_ds = (uint16_t)mdbx_limits_keysize_max(pagesize, MDBX_DUPSORT);
-  env->me_maxval_nd = (unsigned)mdbx_limits_valsize_max(pagesize, 0);
-  env->me_maxval_ds = (unsigned)mdbx_limits_valsize_max(pagesize, MDBX_DUPSORT);
-  mdbx_ensure(env, env->me_maxkey_nd ==
-                       env->me_branch_nodemax - NODESIZE - sizeof(pgno_t));
-  mdbx_ensure(env, env->me_maxkey_ds ==
-                       env->me_branch_nodemax - NODESIZE - sizeof(MDBX_db));
-
   env->me_psize2log = log2n(pagesize);
   mdbx_assert(env, pgno2bytes(env, 1) == pagesize);
   mdbx_assert(env, bytes2pgno(env, pagesize + pagesize) == 2);
