@@ -4098,14 +4098,15 @@ mdbx_env_get_oomfunc(const MDBX_env *env);
 /** Page types for traverse the b-tree.
  * \see mdbx_env_pgwalk() \see MDBX_pgvisitor_func */
 enum MDBX_page_type_t {
-  MDBX_page_void,
+  MDBX_page_broken,
   MDBX_page_meta,
   MDBX_page_large,
   MDBX_page_branch,
   MDBX_page_leaf,
   MDBX_page_dupfixed_leaf,
   MDBX_subpage_leaf,
-  MDBX_subpage_dupfixed_leaf
+  MDBX_subpage_dupfixed_leaf,
+  MDBX_subpage_broken,
 };
 #ifndef __cplusplus
 typedef enum MDBX_page_type_t MDBX_page_type_t;
@@ -4122,7 +4123,7 @@ typedef enum MDBX_page_type_t MDBX_page_type_t;
 typedef int MDBX_pgvisitor_func(
     const uint64_t pgno, const unsigned number, void *const ctx, const int deep,
     const char *const dbi, const size_t page_size, const MDBX_page_type_t type,
-    const size_t nentries, const size_t payload_bytes,
+    const MDBX_error_t err, const size_t nentries, const size_t payload_bytes,
     const size_t header_bytes, const size_t unused_bytes) cxx17_noexcept;
 
 /** B-tree traversal function. */

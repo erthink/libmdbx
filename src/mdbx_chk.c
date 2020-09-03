@@ -58,7 +58,7 @@ static void signal_handler(int sig) {
 
 #define EXIT_INTERRUPTED (EXIT_FAILURE + 4)
 #define EXIT_FAILURE_SYS (EXIT_FAILURE + 3)
-#define EXIT_FAILURE_MDB (EXIT_FAILURE + 2)
+#define EXIT_FAILURE_MDBX (EXIT_FAILURE + 2)
 #define EXIT_FAILURE_CHECK_MAJOR (EXIT_FAILURE + 1)
 #define EXIT_FAILURE_CHECK_MINOR EXIT_FAILURE
 
@@ -117,19 +117,47 @@ static void __printf_args(1, 2) print(const char *msg, ...) {
   }
 }
 
-static void __printf_args(1, 2) error(const char *msg, ...) {
-  total_problems++;
+static void va_log(MDBX_log_level_t level, const char *msg, va_list args) {
+  static const char *const prefixes[] = {
+      "!!!fatal: ",       " ! " /* error */,     " ! " /* warning */,
+      "   " /* notice */, "   //" /* verbose */, "   ///" /* debug */,
+      "   ////" /* trace */
+  };
 
-  if (!quiet) {
-    va_list args;
+  FILE *out = stdout;
+  if (level <= MDBX_LOG_ERROR) {
+    total_problems++;
+    out = stderr;
+  }
 
+  if (!quiet && verbose + 1 >= (unsigned)level) {
     fflush(nullptr);
-    va_start(args, msg);
-    fputs(" ! ", stderr);
-    vfprintf(stderr, msg, args);
-    va_end(args);
+    fputs(prefixes[level], out);
+    vfprintf(out, msg, args);
+    if (msg[strlen(msg) - 1] != '\n')
+      fputc('\n', out);
     fflush(nullptr);
   }
+
+  if (level == MDBX_LOG_FATAL) {
+    exit(EXIT_FAILURE_MDBX);
+    abort();
+  }
+}
+
+static void __printf_args(1, 2) error(const char *msg, ...) {
+  va_list args;
+  va_start(args, msg);
+  va_log(MDBX_LOG_ERROR, msg, args);
+  va_end(args);
+}
+
+static void logger(MDBX_log_level_t level, const char *function, int line,
+                   const char *msg, va_list args) {
+  (void)line;
+  (void)function;
+  if (level < MDBX_LOG_EXTRA)
+    va_log(level, msg, args);
 }
 
 static int check_user_break(void) {
@@ -260,17 +288,14 @@ static size_t problems_pop(struct problem *list) {
 static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
                      void *const ctx, const int deep,
                      const char *const dbi_name_or_tag, const size_t page_size,
-                     const MDBX_page_type_t pagetype, const size_t nentries,
-                     const size_t payload_bytes, const size_t header_bytes,
-                     const size_t unused_bytes) {
+                     const MDBX_page_type_t pagetype, const MDBX_error_t err,
+                     const size_t nentries, const size_t payload_bytes,
+                     const size_t header_bytes, const size_t unused_bytes) {
   (void)ctx;
   if (deep > 42) {
     problem_add("deep", deep, "too large", nullptr);
     return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
   }
-
-  if (pagetype == MDBX_page_void)
-    return MDBX_SUCCESS;
 
   walk_dbi_t *dbi = pagemap_lookup_dbi(dbi_name_or_tag, false);
   if (!dbi)
@@ -287,6 +312,13 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
                 (unsigned)pagetype, deep);
     pagetype_caption = "unknown";
     dbi->pages.other += pgnumber;
+    break;
+  case MDBX_page_broken:
+    pagetype_caption = "broken";
+    dbi->pages.other += pgnumber;
+    break;
+  case MDBX_subpage_broken:
+    pagetype_caption = "broken-subpage";
     break;
   case MDBX_page_meta:
     pagetype_caption = "meta";
@@ -356,47 +388,51 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
                     : MDBX_SUCCESS;
   }
 
-  if (unused_bytes > page_size)
-    problem_add("page", pgno, "illegal unused-bytes",
-                "%s-page: %u < %" PRIuPTR " < %u", pagetype_caption, 0,
-                unused_bytes, envstat.ms_psize);
+  if (MDBX_IS_ERROR(err)) {
+    problem_add("page", pgno, "invalid/corrupted", "%s-page", pagetype_caption);
+  } else {
+    if (unused_bytes > page_size)
+      problem_add("page", pgno, "illegal unused-bytes",
+                  "%s-page: %u < %" PRIuPTR " < %u", pagetype_caption, 0,
+                  unused_bytes, envstat.ms_psize);
 
-  if (header_bytes < (int)sizeof(long) ||
-      (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
-    problem_add("page", pgno, "illegal header-length",
-                "%s-page: %" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR,
-                pagetype_caption, sizeof(long), header_bytes,
-                envstat.ms_psize - sizeof(long));
-  if (payload_bytes < 1) {
-    if (nentries > 1) {
-      problem_add("page", pgno, "zero size-of-entry",
-                  "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
-                  pagetype_caption, payload_bytes, nentries);
-      /* if ((size_t)header_bytes + unused_bytes < page_size) {
-        // LY: hush a misuse error
-        page_bytes = page_size;
-      } */
-    } else {
-      problem_add("page", pgno, "empty",
-                  "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
-                  " entries, deep %i",
-                  pagetype_caption, payload_bytes, nentries, deep);
-      dbi->pages.empty += 1;
+    if (header_bytes < (int)sizeof(long) ||
+        (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
+      problem_add("page", pgno, "illegal header-length",
+                  "%s-page: %" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR,
+                  pagetype_caption, sizeof(long), header_bytes,
+                  envstat.ms_psize - sizeof(long));
+    if (payload_bytes < 1) {
+      if (nentries > 1) {
+        problem_add("page", pgno, "zero size-of-entry",
+                    "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR " entries",
+                    pagetype_caption, payload_bytes, nentries);
+        /* if ((size_t)header_bytes + unused_bytes < page_size) {
+          // LY: hush a misuse error
+          page_bytes = page_size;
+        } */
+      } else {
+        problem_add("page", pgno, "empty",
+                    "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
+                    " entries, deep %i",
+                    pagetype_caption, payload_bytes, nentries, deep);
+        dbi->pages.empty += 1;
+      }
     }
-  }
 
-  if (pgnumber) {
-    if (page_bytes != page_size) {
-      problem_add("page", pgno, "misused",
-                  "%s-page: %" PRIuPTR " != %" PRIuPTR " (%" PRIuPTR
-                  "h + %" PRIuPTR "p + %" PRIuPTR "u), deep %i",
-                  pagetype_caption, page_size, page_bytes, header_bytes,
-                  payload_bytes, unused_bytes, deep);
-      if (page_size > page_bytes)
-        dbi->lost_bytes += page_size - page_bytes;
-    } else {
-      dbi->payload_bytes += payload_bytes + header_bytes;
-      walk.total_payload_bytes += payload_bytes + header_bytes;
+    if (pgnumber) {
+      if (page_bytes != page_size) {
+        problem_add("page", pgno, "misused",
+                    "%s-page: %" PRIuPTR " != %" PRIuPTR " (%" PRIuPTR
+                    "h + %" PRIuPTR "p + %" PRIuPTR "u), deep %i",
+                    pagetype_caption, page_size, page_bytes, header_bytes,
+                    payload_bytes, unused_bytes, deep);
+        if (page_size > page_bytes)
+          dbi->lost_bytes += page_size - page_bytes;
+      } else {
+        dbi->payload_bytes += payload_bytes + header_bytes;
+        walk.total_payload_bytes += payload_bytes + header_bytes;
+      }
     }
   }
 
@@ -1026,11 +1062,15 @@ int main(int argc, char *argv[]) {
         mdbx_version.git.tree, envname,
         (envflags & MDBX_RDONLY) ? "only" : "write");
   fflush(nullptr);
+  mdbx_setup_debug((verbose < MDBX_LOG_TRACE - 1)
+                       ? (MDBX_log_level_t)(verbose + 1)
+                       : MDBX_LOG_TRACE,
+                   MDBX_DBG_LEGACY_OVERLAP, logger);
 
   rc = mdbx_env_create(&env);
   if (rc) {
     error("mdbx_env_create failed, error %d %s\n", rc, mdbx_strerror(rc));
-    return rc < 0 ? EXIT_FAILURE_MDB : EXIT_FAILURE_SYS;
+    return rc < 0 ? EXIT_FAILURE_MDBX : EXIT_FAILURE_SYS;
   }
 
   rc = mdbx_env_set_maxdbs(env, MDBX_MAX_DBI);
@@ -1460,7 +1500,7 @@ bailout:
   if (rc) {
     if (rc < 0)
       return user_break ? EXIT_INTERRUPTED : EXIT_FAILURE_SYS;
-    return EXIT_FAILURE_MDB;
+    return EXIT_FAILURE_MDBX;
   }
 
 #if defined(_WIN32) || defined(_WIN64)

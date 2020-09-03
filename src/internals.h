@@ -1037,9 +1037,9 @@ extern uint8_t mdbx_runtime_flags;
 extern uint8_t mdbx_loglevel;
 extern MDBX_debug_func *mdbx_debug_logger;
 
-MDBX_INTERNAL_FUNC void mdbx_debug_log(int level, const char *function,
-                                       int line, const char *fmt, ...)
-    __printf_args(4, 5);
+MDBX_INTERNAL_FUNC void __printf_args(4, 5)
+    mdbx_debug_log(int level, const char *function, int line, const char *fmt,
+                   ...) __printf_args(4, 5);
 MDBX_INTERNAL_FUNC void mdbx_debug_log_va(int level, const char *function,
                                           int line, const char *fmt,
                                           va_list args);
