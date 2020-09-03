@@ -10882,11 +10882,14 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
   MDBX_txn *txn = mc->mc_txn;
   if (unlikely(pgno >= txn->mt_next_pgno)) {
     mdbx_error("page %" PRIaPGNO " beyond next-pgno", pgno);
-    goto corrupted;
+  notfound:
+    *ret = nullptr;
+    txn->mt_flags |= MDBX_TXN_ERROR;
+    return MDBX_PAGE_NOTFOUND;
   }
 
   MDBX_env *const env = txn->mt_env;
-  MDBX_page *p = NULL;
+  MDBX_page *p = nullptr;
   mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
   mdbx_assert(env, pp_txnid >= MIN_TXNID && pp_txnid <= txn->mt_txnid);
   const uint16_t illegal_bits = (txn->mt_flags & MDBX_TXN_RDONLY)
@@ -10914,11 +10917,14 @@ spilled:
   p = pgno2page(env, pgno);
 
 dirty:
+  *(lvl ? lvl : &level) = level;
+  *ret = p;
+
   if (unlikely(p->mp_pgno != pgno)) {
     bad_page(
         p, "mismatch pgno %" PRIaPGNO " (actual) != %" PRIaPGNO " (expected)\n",
         p->mp_pgno, pgno);
-    goto corrupted;
+    goto notfound;
   }
 
   if (unlikely(p->mp_flags & illegal_bits)) {
@@ -10942,14 +10948,9 @@ dirty:
     goto corrupted;
   }
 
-  if (mdbx_audit_enabled()) {
-    int err = mdbx_page_check(mc, p, C_UPDATING);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-  }
+  if (mdbx_audit_enabled())
+    return mdbx_page_check(mc, p, C_UPDATING);
 
-  *(lvl ? lvl : &level) = level;
-  *ret = p;
   return MDBX_SUCCESS;
 
 corrupted:
