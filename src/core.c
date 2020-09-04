@@ -10911,7 +10911,7 @@ dirty:
   return MDBX_SUCCESS;
 
 corrupted:
-  txn->mt_flags |= MDBX_TXN_ERROR;
+  mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
   return MDBX_CORRUPTED;
 }
 
