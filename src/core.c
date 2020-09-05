@@ -9709,8 +9709,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                  env->me_dxb_mmap.current);
       return MDBX_PROBLEM;
     }
-    if (env->me_dxb_mmap.current != env->me_dbgeo.now &&
-        (env->me_flags & MDBX_RDONLY) == 0) {
+    if (env->me_dxb_mmap.current != env->me_dbgeo.now) {
       meta.mm_geo.now = bytes2pgno(env, env->me_dxb_mmap.current);
       mdbx_verbose("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
                    " pages",
@@ -9718,32 +9717,44 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     }
 
     if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
-      const txnid_t txnid = mdbx_meta_txnid_stable(env, head);
-      const txnid_t next_txnid = safe64_txnid_next(txnid);
-      mdbx_verbose("updating meta.geo: "
-                   "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
-                   "/s%u-g%u (txn#%" PRIaTXN "), "
-                   "to l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
-                   "/s%u-g%u (txn#%" PRIaTXN ")",
-                   head->mm_geo.lower, head->mm_geo.now, head->mm_geo.upper,
-                   head->mm_geo.shrink, head->mm_geo.grow, txnid,
-                   meta.mm_geo.lower, meta.mm_geo.now, meta.mm_geo.upper,
-                   meta.mm_geo.shrink, meta.mm_geo.grow, next_txnid);
+      if (env->me_flags & MDBX_RDONLY) {
+        mdbx_warning(
+            "skipped update meta.geo in read-only mode: from l%" PRIaPGNO
+            "-n%" PRIaPGNO "-u%" PRIaPGNO "/s%u-g%u, to l%" PRIaPGNO
+            "-n%" PRIaPGNO "-u%" PRIaPGNO "/s%u-g%u",
+            head->mm_geo.lower, head->mm_geo.now, head->mm_geo.upper,
+            head->mm_geo.shrink, head->mm_geo.grow, meta.mm_geo.lower,
+            meta.mm_geo.now, meta.mm_geo.upper, meta.mm_geo.shrink,
+            meta.mm_geo.grow);
+      } else {
+        const txnid_t txnid = mdbx_meta_txnid_stable(env, head);
+        const txnid_t next_txnid = safe64_txnid_next(txnid);
+        mdbx_notice("updating meta.geo: "
+                    "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
+                    "/s%u-g%u (txn#%" PRIaTXN "), "
+                    "to l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
+                    "/s%u-g%u (txn#%" PRIaTXN ")",
+                    head->mm_geo.lower, head->mm_geo.now, head->mm_geo.upper,
+                    head->mm_geo.shrink, head->mm_geo.grow, txnid,
+                    meta.mm_geo.lower, meta.mm_geo.now, meta.mm_geo.upper,
+                    meta.mm_geo.shrink, meta.mm_geo.grow, next_txnid);
 
-      mdbx_ensure(env, mdbx_meta_eq(env, &meta, head));
-      mdbx_meta_set_txnid(env, &meta, next_txnid);
-      err = mdbx_sync_locked(env, env->me_flags | MDBX_SHRINK_ALLOWED, &meta);
-      if (err) {
-        mdbx_error("error %d, while updating meta.geo: "
-                   "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
-                   "/s%u-g%u (txn#%" PRIaTXN "), "
-                   "to l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
-                   "/s%u-g%u (txn#%" PRIaTXN ")",
-                   err, head->mm_geo.lower, head->mm_geo.now,
-                   head->mm_geo.upper, head->mm_geo.shrink, head->mm_geo.grow,
-                   txnid, meta.mm_geo.lower, meta.mm_geo.now, meta.mm_geo.upper,
-                   meta.mm_geo.shrink, meta.mm_geo.grow, next_txnid);
-        return err;
+        mdbx_ensure(env, mdbx_meta_eq(env, &meta, head));
+        mdbx_meta_set_txnid(env, &meta, next_txnid);
+        err = mdbx_sync_locked(env, env->me_flags | MDBX_SHRINK_ALLOWED, &meta);
+        if (err) {
+          mdbx_error("error %d, while updating meta.geo: "
+                     "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
+                     "/s%u-g%u (txn#%" PRIaTXN "), "
+                     "to l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
+                     "/s%u-g%u (txn#%" PRIaTXN ")",
+                     err, head->mm_geo.lower, head->mm_geo.now,
+                     head->mm_geo.upper, head->mm_geo.shrink, head->mm_geo.grow,
+                     txnid, meta.mm_geo.lower, meta.mm_geo.now,
+                     meta.mm_geo.upper, meta.mm_geo.shrink, meta.mm_geo.grow,
+                     next_txnid);
+          return err;
+        }
       }
     }
   }
