@@ -64,8 +64,8 @@
 #endif
 
 #ifdef _MSC_VER
-#   if _MSC_VER < 1400
-#       error "Microsoft Visual C++ 8.0 (Visual Studio 2005) or later version is required"
+#   if _MSC_FULL_VER < 190024234
+#       error "At least \"Microsoft C/C++ Compiler\" version 19.00.24234 (Visual Studio 2015 Update 3) is required."
 #   endif
 #   ifndef _CRT_SECURE_NO_WARNINGS
 #       define _CRT_SECURE_NO_WARNINGS
@@ -975,10 +975,8 @@ struct MDBX_env {
   /* Number of freelist items that can fit in a single overflow page */
   unsigned me_maxgc_ov1page;
   unsigned me_branch_nodemax; /* max size of a branch-node */
-  uint16_t me_maxkey_nd, me_maxkey_ds;
-  unsigned me_maxval_nd, me_maxval_ds;
-  uint32_t me_live_reader; /* have liveness lock in reader table */
-  void *me_userctx;        /* User-settable context */
+  uint32_t me_live_reader;    /* have liveness lock in reader table */
+  void *me_userctx;           /* User-settable context */
   volatile uint64_t *me_sync_timestamp;
   volatile uint64_t *me_autosync_period;
   volatile pgno_t *me_unsynced_pages;
@@ -1039,22 +1037,20 @@ extern uint8_t mdbx_runtime_flags;
 extern uint8_t mdbx_loglevel;
 extern MDBX_debug_func *mdbx_debug_logger;
 
-MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
-                                       const char *fmt, ...)
-    __printf_args(4, 5);
+MDBX_INTERNAL_FUNC void __printf_args(4, 5)
+    mdbx_debug_log(int level, const char *function, int line, const char *fmt,
+                   ...) __printf_args(4, 5);
+MDBX_INTERNAL_FUNC void mdbx_debug_log_va(int level, const char *function,
+                                          int line, const char *fmt,
+                                          va_list args);
+
+#define mdbx_log_enabled(msg) unlikely(msg <= mdbx_loglevel)
 
 #if MDBX_DEBUG
 
 #define mdbx_assert_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_ASSERT)
 
 #define mdbx_audit_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_AUDIT)
-
-#ifdef MDBX_LOGLEVEL_BUILD
-#define mdbx_log_enabled(msg)                                                  \
-  (msg <= MDBX_LOGLEVEL_BUILD && unlikely(msg <= mdbx_loglevel))
-#else
-#define mdbx_log_enabled(msg) unlikely(msg <= mdbx_loglevel)
-#endif /* MDBX_LOGLEVEL_BUILD */
 
 #else /* MDBX_DEBUG */
 
@@ -1065,12 +1061,6 @@ MDBX_INTERNAL_FUNC void mdbx_debug_log(int type, const char *function, int line,
 #else
 #define mdbx_assert_enabled() (0)
 #endif /* NDEBUG */
-
-#ifdef MDBX_LOGLEVEL_BUILD
-#define mdbx_log_enabled(msg) (msg <= MDBX_LOGLEVEL_BUILD)
-#else
-#define mdbx_log_enabled(msg) (0)
-#endif /* MDBX_LOGLEVEL_BUILD */
 
 #endif /* MDBX_DEBUG */
 
@@ -1091,33 +1081,33 @@ void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
 
 #define mdbx_debug_extra(fmt, ...)                                             \
   do {                                                                         \
-    if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
+    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_EXTRA))                        \
       mdbx_debug_log(MDBX_LOG_EXTRA, __func__, __LINE__, fmt, __VA_ARGS__);    \
   } while (0)
 
 #define mdbx_debug_extra_print(fmt, ...)                                       \
   do {                                                                         \
-    if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
+    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_EXTRA))                        \
       mdbx_debug_log(MDBX_LOG_EXTRA, NULL, 0, fmt, __VA_ARGS__);               \
   } while (0)
 
 #define mdbx_trace(fmt, ...)                                                   \
   do {                                                                         \
-    if (mdbx_log_enabled(MDBX_LOG_TRACE))                                      \
+    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_TRACE))                        \
       mdbx_debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n",             \
                      __VA_ARGS__);                                             \
   } while (0)
 
 #define mdbx_debug(fmt, ...)                                                   \
   do {                                                                         \
-    if (mdbx_log_enabled(MDBX_LOG_DEBUG))                                      \
+    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_DEBUG))                        \
       mdbx_debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n",             \
                      __VA_ARGS__);                                             \
   } while (0)
 
 #define mdbx_verbose(fmt, ...)                                                 \
   do {                                                                         \
-    if (mdbx_log_enabled(MDBX_LOG_VERBOSE))                                    \
+    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_VERBOSE))                      \
       mdbx_debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n",           \
                      __VA_ARGS__);                                             \
   } while (0)

@@ -699,8 +699,8 @@ static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
         rc = MDBX_PANIC;
       }
     }
-    mdbx_notice("%clock owner died, %s", (rlocked ? 'r' : 'w'),
-                (rc ? "this process' env is hosed" : "recovering"));
+    mdbx_warning("%clock owner died, %s", (rlocked ? 'r' : 'w'),
+                 (rc ? "this process' env is hosed" : "recovering"));
 
     int check_rc = mdbx_reader_check0(env, rlocked, NULL);
     check_rc = (check_rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : check_rc;
