@@ -3822,8 +3822,8 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
         most -= 1;
       }
       const unsigned refunded = txn->mt_next_pgno - most;
-      mdbx_verbose("refund-suitable %u pages %" PRIaPGNO " -> %" PRIaPGNO,
-                   refunded, most, txn->mt_next_pgno);
+      mdbx_debug("refund-suitable %u pages %" PRIaPGNO " -> %" PRIaPGNO,
+                 refunded, most, txn->mt_next_pgno);
       txn->tw.loose_count -= refunded;
       txn->tw.dirtyroom += refunded;
       txn->mt_next_pgno = most;
@@ -3862,7 +3862,7 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
     while (dl->length && dl[dl->length].pgno == txn->mt_next_pgno - 1 &&
            dl[dl->length].ptr->mp_flags == (P_LOOSE | P_DIRTY)) {
       MDBX_page *dp = dl[dl->length].ptr;
-      mdbx_verbose("refund-sorted page %" PRIaPGNO, dp->mp_pgno);
+      mdbx_debug("refund-sorted page %" PRIaPGNO, dp->mp_pgno);
       mdbx_tassert(txn, dp->mp_pgno == dl[dl->length].pgno);
       dl->length -= 1;
     }
@@ -9655,18 +9655,18 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
             bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map), nullptr,
             env->me_psize);
         if (err == MDBX_SUCCESS) {
-          mdbx_notice("opening after an unclean shutdown, "
-                      "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
-                      "rollback NOT needed",
-                      bootid.x, bootid.y);
+          mdbx_warning("opening after an unclean shutdown, "
+                       "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
+                       "rollback NOT needed",
+                       bootid.x, bootid.y);
           meta = clone;
           *env->me_unsynced_pages = meta.mm_geo.next;
           break;
         }
-        mdbx_notice("opening after an unclean shutdown, "
-                    "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
-                    "but last meta not valid, rollback needed",
-                    bootid.x, bootid.y);
+        mdbx_warning("opening after an unclean shutdown, "
+                     "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
+                     "but last meta not valid, rollback needed",
+                     bootid.x, bootid.y);
       }
 
       const MDBX_meta *const meta0 = METAPAGE(env, 0);
@@ -9685,8 +9685,8 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       }
 
       /* LY: rollback weak checkpoint */
-      mdbx_trace("rollback: from %" PRIaTXN ", to %" PRIaTXN " as %" PRIaTXN,
-                 head_txnid, steady_txnid, undo_txnid);
+      mdbx_notice("rollback: from %" PRIaTXN ", to %" PRIaTXN " as %" PRIaTXN,
+                  head_txnid, steady_txnid, undo_txnid);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
 
       if (env->me_flags & MDBX_WRITEMAP) {
@@ -9746,9 +9746,9 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     if (env->me_dxb_mmap.current != env->me_dbgeo.now &&
         (env->me_flags & MDBX_RDONLY) == 0) {
       meta.mm_geo.now = bytes2pgno(env, env->me_dxb_mmap.current);
-      mdbx_verbose("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
-                   " pages",
-                   env->me_dxb_mmap.current, meta.mm_geo.now);
+      mdbx_notice("update meta-geo to filesize %" PRIuPTR " bytes, %" PRIaPGNO
+                  " pages",
+                  env->me_dxb_mmap.current, meta.mm_geo.now);
     }
 
     if (memcmp(&meta.mm_geo, &head->mm_geo, sizeof(meta.mm_geo))) {
