@@ -324,6 +324,8 @@ public:
   fatal(const ::mdbx::error &) noexcept;
   fatal(const exception &src) noexcept : fatal(src.error()) {}
   fatal(exception &&src) noexcept : fatal(src.error()) {}
+  fatal(const fatal &src) noexcept : fatal(src.error()) {}
+  fatal(fatal &&src) noexcept : fatal(src.error()) {}
   fatal &operator=(fatal &&) = default;
   fatal &operator=(const fatal &) = default;
   virtual ~fatal() noexcept;
