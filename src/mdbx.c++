@@ -1184,7 +1184,7 @@ __cold env::env(const path &pathname, const operate_parameters &op, bool accede)
   //    error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
-__cold env::env(const path &pathname, const env_ref::create_parameters &cp,
+__cold env::env(const path &pathname, const env::create_parameters &cp,
                 const env_ref::operate_parameters &op, bool accede)
     : env(create_env()) {
   setup(op.max_maps, op.max_readers);
@@ -1438,7 +1438,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::create_parameters &it) {
+                                  const env::create_parameters &it) {
   return out << "{\n"                                                        //
              << "\tfile_mode " << std::oct << it.file_mode_bits << std::dec  //
              << ",\n\tsubdirectory " << (it.use_subdirectory ? "yes" : "no") //
@@ -1568,7 +1568,7 @@ __cold string to_string(const ::mdbx::env_ref::operate_options &value) {
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::create_parameters &value) {
+__cold string to_string(const ::mdbx::env::create_parameters &value) {
   ostringstream out;
   out << value;
   return out.str();
