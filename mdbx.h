@@ -2172,7 +2172,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  * \param [in] env         An environment handle returned
  *                         by \ref mdbx_env_create()
  *
- * \param [in] size_lower  The lower bound of database sive in bytes.
+ * \param [in] size_lower  The lower bound of database size in bytes.
  *                         Zero value means "minimal acceptable",
  *                         and negative means "keep current or use default".
  *
@@ -2182,16 +2182,16 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *                         it is recommended always pass -1 in this argument
  *                         except some special cases.
  *
- * \param [in] size_upper The upper bound of database sive in bytes.
+ * \param [in] size_upper The upper bound of database size in bytes.
  *                        Zero value means "minimal acceptable",
  *                        and negative means "keep current or use default".
  *                        It is recommended to avoid change upper bound while
  *                        database is used by other processes or threaded
  *                        (i.e. just pass -1 in this argument except absolutely
- *                        necessity). Otherwise you must be ready for
+ *                        necessary). Otherwise you must be ready for
  *                        \ref MDBX_UNABLE_EXTEND_MAPSIZE error(s), unexpected
  *                        pauses during remapping and/or system errors like
- *                        "addtress busy", and so on. In other words, there
+ *                        "address busy", and so on. In other words, there
  *                        is no way to handle a growth of the upper bound
  *                        robustly because there may be a lack of appropriate
  *                        system resources (which are extremely volatile in
@@ -2209,7 +2209,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  * \param [in] pagesize          The database page size for new database
  *                               creation or -1 otherwise. Must be power of 2
  *                               in the range between \ref MDBX_MIN_PAGESIZE and
- *                               \ref MDBX_MAX_PAGESIZE.  Zero value means
+ *                               \ref MDBX_MAX_PAGESIZE. Zero value means
  *                               "minimal acceptable", and negative means
  *                               "keep current or use default".
  *
