@@ -213,12 +213,12 @@ static constexpr CONTAINER *owner_of(MEMBER *ptr,
 static cxx17_constexpr size_t strlen(const char *c_str) noexcept;
 
 struct slice;
-class env_ref;
 class env;
-class txn_ref;
+class env_managed;
 class txn;
-class cursor_ref;
+class txn_managed;
 class cursor;
+class cursor_managed;
 
 /// \brief Legacy default allocator
 /// but it is recommended to use \ref polymorphic_allocator.
@@ -807,6 +807,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   constexpr bool is_valid() const noexcept {
     return !(iov_base == nullptr && iov_len != 0);
   }
+
   /// \brief Build an invalid slice which non-zero length and refers to null
   /// address.
   constexpr static slice invalid() noexcept { return slice(size_t(-1)); }
@@ -820,7 +821,7 @@ protected:
 
 /// \brief The chunk of data stored inside the buffer or located outside it.
 template <class ALLOCATOR = legacy_allocator> class buffer {
-  friend class txn_ref;
+  friend class txn;
   using silo = ::mdbx::string<ALLOCATOR>;
   silo silo_;
   ::mdbx::slice slice_;
@@ -1017,7 +1018,7 @@ public:
   buffer(const allocator_type &allocator = allocator_type()) noexcept
       : silo_(allocator) {}
 
-  inline buffer(const txn_ref &txn, const ::mdbx::slice &src,
+  inline buffer(const txn &txn, const ::mdbx::slice &src,
                 const allocator_type &allocator = allocator_type());
 
   buffer(buffer &&src) noexcept
@@ -1475,6 +1476,10 @@ public:
 struct value_result {
   slice value;
   bool done;
+  value_result(const slice &value, bool done) noexcept
+      : value(value), done(done) {}
+  value_result(const value_result &) noexcept = default;
+  value_result &operator=(const value_result &) noexcept = default;
   constexpr operator bool() const noexcept {
     assert(!done || bool(value));
     return done;
@@ -1484,8 +1489,11 @@ struct value_result {
 /// \brief Combines pair of slices for key and value to represent result of
 /// certain operations.
 struct pair {
-  slice key;
-  slice value;
+  slice key, value;
+  pair(const slice &key, const slice &value) noexcept
+      : key(key), value(value) {}
+  pair(const pair &) noexcept = default;
+  pair &operator=(const pair &) noexcept = default;
   constexpr operator bool() const noexcept {
     assert(bool(key) == bool(value));
     return key;
@@ -1496,6 +1504,10 @@ struct pair {
 /// represent result of certain operations.
 struct pair_result : public pair {
   bool done;
+  pair_result(const slice &key, const slice &value, bool done) noexcept
+      : pair(key, value), done(done) {}
+  pair_result(const pair_result &) noexcept = default;
+  pair_result &operator=(const pair_result &) noexcept = default;
   constexpr operator bool() const noexcept {
     assert(!done || (bool(key) && bool(value)));
     return done;
@@ -1504,10 +1516,11 @@ struct pair_result : public pair {
 
 //------------------------------------------------------------------------------
 
-/// Loop control constants for readers enumeration functor.
-enum enumeration_loop_control { continue_loop = 0, exit_loop = INT32_MIN };
+/// \brief Loop control constants for readers enumeration functor and other
+/// cases. \see env::enumerate_readers()
+enum loop_control { continue_loop = 0, exit_loop = INT32_MIN };
 
-/// Kinds of the keys and corresponding modes of comparing it.
+/// \brief Kinds of the keys and corresponding modes of comparing it.
 enum class key_mode {
   usual = MDBX_DB_DEFAULTS,  ///< Usual variable length keys with byte-by-byte
                              ///< lexicographic comparison like `std::memcmp()`.
@@ -1524,7 +1537,8 @@ enum class key_mode {
                ///< \note Not yet implemented and PRs are welcome.
 };
 
-/// Kind of the values and sorted multi-values with corresponding comparison.
+/// \brief Kind of the values and sorted multi-values with corresponding
+/// comparison.
 enum class value_mode {
   single = MDBX_DB_DEFAULTS, ///< Usual single value for each key. In terms of
                              ///< keys, they are unique.
@@ -1594,11 +1608,11 @@ enum class value_mode {
 
 /// \brief A handle for an individual database (key-value spaces) in the
 /// environment.
-/// \see txn_ref::open_map() \see txn_ref::create_map()
-/// \see txn_ref::clear_map() \see txn_ref::drop_map()
-/// \see txn_ref::get_handle_info() \see txn_ref::get_map_stat()
-/// \see env_ref::close_amp()
-/// \see cursor_ref::map()
+/// \see txn::open_map() \see txn::create_map()
+/// \see txn::clear_map() \see txn::drop_map()
+/// \see txn::get_handle_info() \see txn::get_map_stat()
+/// \see env::close_amp()
+/// \see cursor::map()
 struct LIBMDBX_API_TYPE map_handle {
   MDBX_dbi dbi{0};
   constexpr map_handle() noexcept {}
@@ -1620,39 +1634,40 @@ struct LIBMDBX_API_TYPE map_handle {
   };
 };
 
+/// \brief Key-value pairs put mode.
 enum put_mode {
-  insert = MDBX_NOOVERWRITE,
-  upsert = MDBX_UPSERT,
-  update = MDBX_CURRENT,
+  insert = MDBX_NOOVERWRITE, ///< Insert only unique keys.
+  upsert = MDBX_UPSERT,      ///< Insert or update.
+  update = MDBX_CURRENT,     ///< Update existing, don't insert new.
 };
 
 /// \brief Unmanaged database environment.
 ///
-/// Like other unmanaged classes, `env_ref` allows copying and assignment for
+/// Like other unmanaged classes, `env` allows copying and assignment for
 /// instances, but does not destroys the represented underlying object from the
 /// own class destructor.
 ///
-/// An environment supports multiple key-value databases (aka key-value spaces
-/// or tables), all residing in the same shared-memory map.
-class LIBMDBX_API_TYPE env_ref {
-  friend class txn_ref;
+/// An environment supports multiple key-value sub-databases (aka key-value
+/// spaces or tables), all residing in the same shared-memory map.
+class LIBMDBX_API_TYPE env {
+  friend class txn;
 
 protected:
   MDBX_env *handle_{nullptr};
-  constexpr env_ref(MDBX_env *ptr) noexcept;
+  constexpr env(MDBX_env *ptr) noexcept;
 
 public:
-  constexpr env_ref() noexcept = default;
-  env_ref(const env_ref &) noexcept = default;
-  inline env_ref &operator=(env_ref &&other) noexcept;
-  inline env_ref(env_ref &&other) noexcept;
-  inline ~env_ref() noexcept;
+  constexpr env() noexcept = default;
+  env(const env &) noexcept = default;
+  inline env &operator=(env &&other) noexcept;
+  inline env(env &&other) noexcept;
+  inline ~env() noexcept;
 
   constexpr operator bool() const noexcept;
   constexpr operator const MDBX_env *() const;
   inline operator MDBX_env *();
-  friend constexpr bool operator==(const env_ref &a, const env_ref &b) noexcept;
-  friend constexpr bool operator!=(const env_ref &a, const env_ref &b) noexcept;
+  friend constexpr bool operator==(const env &a, const env &b) noexcept;
+  friend constexpr bool operator!=(const env &a, const env &b) noexcept;
 
   //----------------------------------------------------------------------------
 
@@ -1722,14 +1737,14 @@ public:
                                   intptr_t upper = maximal_value) noexcept;
   };
 
-  /// Operation mode.
+  /// \brief Operation mode.
   enum mode {
     readonly,       ///< \copydoc MDBX_RDONLY
     write_file_io,  // don't available on OpenBSD
     write_mapped_io ///< \copydoc MDBX_WRITEMAP
   };
 
-  /// Durability level.
+  /// \brief Durability level.
   enum durability {
     robust_synchronous,         ///< \copydoc MDBX_SYNC_DURABLE
     half_synchronous_weak_last, ///< \copydoc MDBX_NOMETASYNC
@@ -1737,7 +1752,7 @@ public:
     whole_fragile               ///< \copydoc MDBX_UTTERLY_NOSYNC
   };
 
-  /// Garbage reclaiming options.
+  /// \brief Garbage reclaiming options.
   struct LIBMDBX_API_TYPE reclaiming_options {
     /// \copydoc MDBX_LIFORECLAIM
     bool lifo{false};
@@ -1747,7 +1762,7 @@ public:
     reclaiming_options(MDBX_env_flags_t) noexcept;
   };
 
-  /// Operate options.
+  /// \brief Operate options.
   struct LIBMDBX_API_TYPE operate_options {
     /// \copydoc MDBX_NOTLS
     bool orphan_read_transactions{false};
@@ -1762,195 +1777,451 @@ public:
     operate_options(MDBX_env_flags_t) noexcept;
   };
 
+  /// \brief Operate parameters.
   struct LIBMDBX_API_TYPE operate_parameters {
+    /// \brief The maximum number of named databases for the environment.
+    /// Zero means default value.
     unsigned max_maps{0};
+    /// \brief The maximum number of threads/reader slots for the environment.
+    /// Zero means default value.
     unsigned max_readers{0};
-    env_ref::mode mode{write_mapped_io};
-    env_ref::durability durability{robust_synchronous};
-    env_ref::reclaiming_options reclaiming;
-    env_ref::operate_options options;
+    env::mode mode{write_mapped_io};
+    env::durability durability{robust_synchronous};
+    env::reclaiming_options reclaiming;
+    env::operate_options options;
 
     constexpr operate_parameters() noexcept {}
     MDBX_env_flags_t make_flags(bool accede = true, ///< \copydoc MDBX_ACCEDE
                                 bool use_subdirectory = false) const;
-    static env_ref::mode mode_from_flags(MDBX_env_flags_t) noexcept;
-    static env_ref::durability durability_from_flags(MDBX_env_flags_t) noexcept;
-    inline static env_ref::reclaiming_options
+    static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
+    static env::durability durability_from_flags(MDBX_env_flags_t) noexcept;
+    inline static env::reclaiming_options
     reclaiming_from_flags(MDBX_env_flags_t flags) noexcept;
-    inline static env_ref::operate_options
+    inline static env::operate_options
     options_from_flags(MDBX_env_flags_t flags) noexcept;
-    operate_parameters(const env_ref &);
+    operate_parameters(const env &);
   };
 
-  inline env_ref::operate_parameters get_operation_parameters() const;
-  inline env_ref::mode get_mode() const;
-  inline env_ref::durability get_durability() const;
-  inline env_ref::reclaiming_options get_reclaiming() const;
-  inline env_ref::operate_options get_options() const;
+  /// \brief Returns current operation parameters.
+  inline env::operate_parameters get_operation_parameters() const;
+  /// \brief Returns current operation mode.
+  inline env::mode get_mode() const;
+  /// \brief Returns current durability mode.
+  inline env::durability get_durability() const;
+  /// \brief Returns current reclaiming options.
+  inline env::reclaiming_options get_reclaiming() const;
+  /// \brief Returns current operate options.
+  inline env::operate_options get_options() const;
 
-  /// \brief Returns true for a freshly created database,
-  /// but false if at least one transaction was committed.
+  /// \brief Returns `true` for a freshly created database,
+  /// but `false` if at least one transaction was committed.
   bool is_pristine() const;
 
-  /// \brief Returns true for an empty database.
+  /// \brief Checks whether the database is empty.
   bool is_empty() const;
 
+  /// \brief Returns default page size for current system/platform.
   static size_t default_pagesize() noexcept;
+
   struct limits {
     limits() = delete;
+    /// \brief Returns the minimal database page size in bytes.
     static inline size_t pagesize_min() noexcept;
+    /// \brief Returns the maximal database page size in bytes.
     static inline size_t pagesize_max() noexcept;
+    /// \brief Returns the minimal database size in bytes for specified page
+    /// size.
     static inline size_t dbsize_min(intptr_t pagesize);
+    /// \brief Returns the maximal database size in bytes for specified page
+    /// size.
     static inline size_t dbsize_max(intptr_t pagesize);
+    /// \brief Returns the minimal key size in bytes for specified database
+    /// flags.
     static inline size_t key_min(MDBX_db_flags_t flags) noexcept;
+    /// \brief Returns the minimal key size in bytes for specified keys mode.
     static inline size_t key_min(key_mode mode) noexcept;
+    /// \brief Returns the maximal key size in bytes for specified page size and
+    /// database flags.
     static inline size_t key_max(intptr_t pagesize, MDBX_db_flags_t flags);
+    /// \brief Returns the maximal key size in bytes for specified page size and
+    /// keys mode.
     static inline size_t key_max(intptr_t pagesize, key_mode mode);
-    static inline size_t key_max(const env_ref &, MDBX_db_flags_t flags);
-    static inline size_t key_max(const env_ref &, key_mode mode);
+    /// \brief Returns the maximal key size in bytes for given environment and
+    /// database flags.
+    static inline size_t key_max(const env &, MDBX_db_flags_t flags);
+    /// \brief Returns the maximal key size in bytes for given environment and
+    /// keys mode.
+    static inline size_t key_max(const env &, key_mode mode);
+    /// \brief Returns the minimal values size in bytes for specified database
+    /// flags.
     static inline size_t value_min(MDBX_db_flags_t flags) noexcept;
-    static inline size_t value_min(key_mode) noexcept;
+    /// \brief Returns the minimal values size in bytes for specified values
+    /// mode.
+    static inline size_t value_min(value_mode) noexcept;
+    /// \brief Returns the maximal value size in bytes for specified page size
+    /// and database flags.
     static inline size_t value_max(intptr_t pagesize, MDBX_db_flags_t flags);
-    static inline size_t value_max(intptr_t pagesize, key_mode);
-    static inline size_t value_max(const env_ref &, MDBX_db_flags_t flags);
-    static inline size_t value_max(const env_ref &, key_mode);
+    /// \brief Returns the maximal value size in bytes for specified page size
+    /// and values mode.
+    static inline size_t value_max(intptr_t pagesize, value_mode);
+    /// \brief Returns the maximal value size in bytes for given environment and
+    /// database flags.
+    static inline size_t value_max(const env &, MDBX_db_flags_t flags);
+    /// \brief Returns the maximal value size in bytes for specified page size
+    /// and values mode.
+    static inline size_t value_max(const env &, value_mode);
+    /// \brief Returns the maximal write transaction size (i.e. limit for
+    /// summary volume of dirty pages) in bytes for specified page size.
     static inline size_t transaction_size_max(intptr_t pagesize);
   };
 
-  env_ref &copy(const path &destination, bool compactify,
-                bool force_dynamic_size = false);
-  env_ref &copy(filehandle fd, bool compactify,
-                bool force_dynamic_size = false);
+  /// \brief Returns the minimal database size in bytes for the environment.
+  size_t dbsize_min() const { return limits::dbsize_min(this->get_pagesize()); }
+  /// \brief Returns the maximal database size in bytes for the environment.
+  size_t dbsize_max() const { return limits::dbsize_max(this->get_pagesize()); }
+  /// \brief Returns the minimal key size in bytes for specified keys mode.
+  size_t key_min(key_mode mode) const noexcept { return limits::key_min(mode); }
+  /// \brief Returns the maximal key size in bytes for specified keys mode.
+  size_t key_max(key_mode mode) const { return limits::key_max(*this, mode); }
+  /// \brief Returns the minimal value size in bytes for specified values mode.
+  size_t value_min(value_mode mode) const noexcept {
+    return limits::value_min(mode);
+  }
+  /// \brief Returns the maximal value size in bytes for specified values mode.
+  size_t value_max(value_mode mode) const {
+    return limits::value_max(*this, mode);
+  }
+  /// \brief Returns the maximal write transaction size (i.e. limit for summary
+  /// volume of dirty pages) in bytes.
+  size_t transaction_size_max() const {
+    return limits::transaction_size_max(this->get_pagesize());
+  }
 
+  /// \brief Make a copy (backup) of an existing environment to the specified
+  /// path.
+  env &copy(const path &destination, bool compactify,
+            bool force_dynamic_size = false);
+
+  /// \brief Copy an environment to the specified file descriptor.
+  env &copy(filehandle fd, bool compactify, bool force_dynamic_size = false);
+
+  /// \brief Statistics for a database in the MDBX environment.
   using stat = ::MDBX_stat;
+
+  /// \brief Information about the environment.
   using info = ::MDBX_envinfo;
+
+  /// \brief Returns snapshot statistics about the MDBX environment.
   inline stat get_stat() const;
+
+  /// \brief Returns pagesize of this MDBX environment.
+  size_t get_pagesize() const { return get_stat().ms_psize; }
+
+  /// \brief Return snapshot information about the MDBX environment.
   inline info get_info() const;
-  inline stat get_stat(const txn_ref &) const;
-  inline info get_info(const txn_ref &) const;
+
+  /// \brief Return statistics about the MDBX environment accordingly to the
+  /// specified transaction.
+  inline stat get_stat(const txn &) const;
+
+  /// \brief Return information about the MDBX environment accordingly to the
+  /// specified transaction.
+  inline info get_info(const txn &) const;
+
+  /// \brief Returns the file descriptor for the DXB file of MDBX environment.
   inline filehandle get_filehandle() const;
+
+  /// \brief Return the path that was used for opening the environment.
   path get_path() const;
+
+  /// Returns environment flags.
   inline MDBX_env_flags_t get_flags() const;
+
+  /// \brief Returns the maximum number of threads/reader slots for the
+  /// environment.
   inline unsigned max_readers() const;
+
+  /// \brief Returns the maximum number of named databases for the environment.
   inline unsigned max_maps() const;
+
+  /// \brief Returns the application context associated with the environment.
   inline void *get_context() const noexcept;
-  inline env_ref &set_context(void *);
-  inline env_ref &set_sync_threshold(size_t bytes);
-  inline env_ref &set_sync_period(unsigned seconds_16dot16);
-  inline env_ref &set_sync_period(double seconds);
-  inline env_ref &alter_flags(MDBX_env_flags_t flags, bool on_off);
-  inline env_ref &set_geometry(const geometry &size);
-  inline env_ref &set_max_maps(unsigned maps);
-  inline env_ref &sync_to_disk();
-  inline env_ref &sync_to_disk(bool force, bool nonblock);
-  inline bool poll_sync_to_disk();
-  inline void close_map(const map_handle &handle_);
+
+  /// \brief Sets the application context associated with the environment.
+  inline env &set_context(void *);
+
+  /// \brief Sets threshold to force flush the data buffers to disk, for
+  /// non-sync durability modes.
+  ///
+  /// The threshold value affects all processes which operates with given
+  /// environment until the last process close environment or a new value will
+  /// be settled.
+  /// Data is always written to disk when \ref txn_managed::commit() is called,
+  /// but the operating system may keep it buffered. MDBX always flushes the OS
+  /// buffers upon commit as well, unless the environment was opened with \ref
+  /// whole_fragile, \ref lazy_weak_tail or in part \ref
+  /// half_synchronous_weak_last. The default is 0, than mean no any threshold
+  /// checked, and no additional flush will be made.
+  ///
+  inline env &set_sync_threshold(size_t bytes);
+
+  /// \brief Sets relative period since the last unsteay commit to force flush
+  /// the data buffers to disk, for non-sync durability modes.
+  ///
+  /// The relative period value affects all processes which operates with given
+  /// environment until the last process close environment or a new value will
+  /// be settled.
+  /// Data is always written to disk when \ref txn_managed::commit() is called,
+  /// but the operating system may keep it buffered. MDBX always flushes the OS
+  /// buffers upon commit as well, unless the environment was opened with \ref
+  /// whole_fragile, \ref lazy_weak_tail or in part \ref
+  /// half_synchronous_weak_last. Settled period don't checked asynchronously,
+  /// but only by the \ref txn_managed::commit() and \ref env::sync_to_disk()
+  /// functions. Therefore, in cases where transactions are committed
+  /// infrequently and/or irregularly, polling by \ref env::poll_sync_to_disk()
+  /// may be a reasonable solution to timeout enforcement. The default is 0,
+  /// than mean no any timeout checked, and no additional flush will be made.
+  ///
+  /// \param [in] seconds_16dot16  The period in 1/65536 of second when a
+  /// synchronous flush would be made since the last unsteay commit.
+  inline env &set_sync_period(unsigned seconds_16dot16);
+
+  /// \brief Sets relative period since the last unsteay commit to force flush
+  /// the data buffers to disk, for non-sync durability modes.
+  ///
+  /// The relative period value affects all processes which operates with given
+  /// environment until the last process close environment or a new value will
+  /// be settled.
+  /// Data is always written to disk when \ref txn_managed::commit() is called,
+  /// but the operating system may keep it buffered. MDBX always flushes the OS
+  /// buffers upon commit as well, unless the environment was opened with \ref
+  /// whole_fragile, \ref lazy_weak_tail or in part \ref
+  /// half_synchronous_weak_last. Settled period don't checked asynchronously,
+  /// but only by the \ref txn_managed::commit() and \ref env::sync_to_disk()
+  /// functions. Therefore, in cases where transactions are committed
+  /// infrequently and/or irregularly, polling by \ref env::poll_sync_to_disk()
+  /// may be a reasonable solution to timeout enforcement. The default is 0,
+  /// than mean no any timeout checked, and no additional flush will be made.
+  ///
+  /// \param [in] seconds  The period in second when a synchronous flush would
+  /// be made since the last unsteay commit.
+  inline env &set_sync_period(double seconds);
+
+  /// \brief Alter environment flags.
+  inline env &alter_flags(MDBX_env_flags_t flags, bool on_off);
+
+  /// \brief Set all size-related parameters of environment.
+  inline env &set_geometry(const geometry &size);
+
+  /// \brief Flush the environment data buffers.
+  /// \return `True` if sync done or no data to sync, or `false` if the
+  /// environment is busy by other thread or none of the thresholds are reached.
+  inline bool sync_to_disk(bool force = true, bool nonblock = false);
+
+  /// \brief Performs non-blocking polling of sync-to-disk thresholds.
+  /// \return `True` if sync done or no data to sync, or `false` if the
+  /// environment is busy by other thread or none of the thresholds are reached.
+  bool poll_sync_to_disk() { return sync_to_disk(false, true); }
+
+  /// \brief Close a key-value map (aka sub-database) handle. Normally
+  /// unnecessary.
+  ///
+  /// Closing a database handle is not necessary, but lets \ref txn::open_map()
+  /// reuse the handle value. Usually it's better to set a bigger
+  /// \ref env::operate_parameters::max_maps, unless that value would be
+  /// large.
+  ///
+  /// \note Use with care.
+  /// This call is synchronized via mutex with other calls \ref close_map(), but
+  /// NOT with other transactions running by other threads. The "next" version
+  /// of libmdbx (MithrilDB) will solve this issue.
+  ///
+  /// Handles should only be closed if no other threads are going to reference
+  /// the database handle or one of its cursors any further. Do not close a
+  /// handle if an existing transaction has modified its database. Doing so can
+  /// cause misbehavior from database corruption to errors like
+  /// \ref MDBX_BAD_DBI (since the DB name is gone).
+  inline void close_map(const map_handle &);
 
   /// \brief Readed information
   struct reader_info {
-    int slot;                ///< Reader Table Slot
-    mdbx_pid_t pid;          ///< Reader Process ID
-    mdbx_tid_t thread;       ///< Reader thread ID
-    uint64_t transaction_id; ///<
-    uint64_t transaction_lag;
-    size_t bytes_used;
-    size_t bytes_retained;
+    int slot;                 ///< The reader lock table slot number.
+    mdbx_pid_t pid;           ///< The reader process ID.
+    mdbx_tid_t thread;        ///< The reader thread ID.
+    uint64_t transaction_id;  ///< The ID of the transaction being read,
+                              ///< i.e. the MVCC-snaphot number.
+    uint64_t transaction_lag; ///< The lag from a recent MVCC-snapshot,
+                              ///< i.e. the number of committed write
+                              /// transactions since the current read
+                              /// transaction started.
+    size_t bytes_used; ///< The number of last used page in the MVCC-snapshot
+                       ///< which being read, i.e. database file can't shrinked
+                       ///< beyond this.
+    size_t bytes_retained; ///< The total size of the database pages that
+                           ///< were retired by committed write transactions
+                           ///< after the reader's MVCC-snapshot, i.e. the space
+                           ///< which would be freed after the Reader releases
+                           ///< the MVCC-snapshot for reuse by completion read
+                           ///< transaction.
+
     constexpr reader_info(int slot, mdbx_pid_t pid, mdbx_tid_t thread,
                           uint64_t txnid, uint64_t lag, size_t used,
                           size_t retained) noexcept;
   };
 
-  /// Enumerate readers
-  /// through visitor.operator(const reader_info&, int number)
+  /// \brief Enumerate readers.
+  ///
+  /// The VISITOR class must have `int operator(const reader_info&, int serial)`
+  /// which should return \ref continue_loop (zero) to continue enumeration,
+  /// or any non-zero value to exit.
+  ///
+  /// \returns The last value returned from visitor' functor.
   template <typename VISITOR> inline int enumerate_readers(VISITOR &visitor);
 
-  /// Checks for stale readers in the lock tablea and
+  /// \brief Checks for stale readers in the lock tablea and
   /// return number of cleared slots.
   inline unsigned check_readers();
 
-  inline env_ref &set_OutOfSpace_callback(MDBX_oom_func *);
+  /// \brief Sets the out-of-space callback.
+  ///
+  /// Such callback will be triggered in a case where there is not enough free
+  /// space in the database due to long read transaction(s) which impedes
+  /// reusing the pages of an old MVCC shapshot(s).
+  ///
+  /// Using this callback you can choose how to get out of the situation:
+  ///  - abort the record transaction with an error;
+  ///  - wait for the read transaction(s) to complete;
+  ///  - notify a thread performing a long-lived read transaction
+  ///    and wait for an effect;
+  ///  - kill the thread or whole process that performs the long-lived read
+  ///    transaction;
+  ///
+  /// \see long-lived-read
+  inline env &set_OutOfSpace_callback(MDBX_oom_func *);
+  /// \brief Returns the current out-of-space callback.
+  /// \see set_OutOfSpace_callback()
   inline MDBX_oom_func *get_OutOfSpace_callback() const noexcept;
-  inline txn start_read() const;
-  inline txn prepare_read() const;
-  inline txn start_write(bool dont_wait = false);
-  inline txn try_start_write();
+
+  /// \brief Starts read (read-only) transaction.
+  inline txn_managed start_read() const;
+  /// \brief Creates but not start read transaction.
+  inline txn_managed prepare_read() const;
+  /// \brief Starts write (read-write) transaction.
+  inline txn_managed start_write(bool dont_wait = false);
+  /// \brief Tries to start write (read-write) transaction without blocking.
+  inline txn_managed try_start_write();
 };
 
 /// \brief Managed database environment.
 ///
-/// As other managed classes, `env` destroys the represented underlying object
-/// from the own class destructor, but disallows copying and assignment for
-/// instances.
+/// As other managed classes, `env_managed` destroys the represented underlying
+/// object from the own class destructor, but disallows copying and assignment
+/// for instances.
 ///
 /// An environment supports multiple key-value databases (aka key-value spaces
 /// or tables), all residing in the same shared-memory map.
-class LIBMDBX_API_TYPE env : public env_ref {
-  using inherited = env_ref;
+class LIBMDBX_API_TYPE env_managed : public env {
+  using inherited = env;
   /// delegated constructor for RAII
-  constexpr env(MDBX_env *ptr) noexcept : inherited(ptr) {}
+  constexpr env_managed(MDBX_env *ptr) noexcept : inherited(ptr) {}
   void setup(unsigned max_maps, unsigned max_readers = 0);
 
 public:
-  constexpr env() noexcept = default;
+  constexpr env_managed() noexcept = default;
 
   /// \brief Open existing database.
-  env(const path &, const operate_parameters &, bool accede = true);
+  env_managed(const path &, const operate_parameters &, bool accede = true);
 
-  /// Additional parameters for creating a new database.
+  /// \brief Additional parameters for creating a new database.
   struct create_parameters {
-    env_ref::geometry geometry;
+    env::geometry geometry;
     mdbx_mode_t file_mode_bits{0640};
     bool use_subdirectory{false};
   };
 
   /// \brief Create new or open existing database.
-  env(const path &, const create_parameters &, const operate_parameters &,
-      bool accede = true);
+  env_managed(const path &, const create_parameters &,
+              const operate_parameters &, bool accede = true);
 
-  /// \brief Closes environment explicitly.
+  /// \brief Explicitly closes the environment and release the memory map.
+  ///
+  /// Only a single thread may call this function. All transactions, databases,
+  /// and cursors must already be closed before calling this function. Attempts
+  /// to use any such handles after calling this function will cause a
+  /// `SIGSEGV`. The environment handle will be freed and must not be used again
+  /// after this call.
+  ///
+  /// \param [in] dont_sync  A dont'sync flag, if non-zero the last checkpoint
+  /// will be kept "as is" and may be still "weak" in the \ref lazy_weak_tail
+  /// or \ref whole_fragile modes. Such "weak" checkpoint will be ignored
+  /// on opening next time, and transactions since the last non-weak checkpoint
+  /// (meta-page update) will rolledback for consistency guarantee.
   void close(bool dont_sync = false);
 
-  env(env &&) = default;
-  env &operator=(env &&) = default;
-  env(const env &) = delete;
-  env &operator=(const env &) = delete;
-  virtual ~env() noexcept;
+  env_managed(env_managed &&) = default;
+  env_managed &operator=(env_managed &&) = default;
+  env_managed(const env_managed &) = delete;
+  env_managed &operator=(const env_managed &) = delete;
+  virtual ~env_managed() noexcept;
 };
 
 /// \brief Unmanaged database transaction.
 ///
-/// Like other unmanaged classes, `txn_ref` allows copying and assignment for
+/// Like other unmanaged classes, `txn` allows copying and assignment for
 /// instances, but does not destroys the represented underlying object from the
 /// own class destructor.
 ///
 /// All database operations require a transaction handle. Transactions may be
 /// read-only or read-write.
-class LIBMDBX_API_TYPE txn_ref {
+class LIBMDBX_API_TYPE txn {
 protected:
-  friend class cursor_ref;
+  friend class cursor;
   MDBX_txn *handle_{nullptr};
-  constexpr txn_ref(MDBX_txn *ptr) noexcept;
+  constexpr txn(MDBX_txn *ptr) noexcept;
 
 public:
-  constexpr txn_ref() noexcept = default;
-  txn_ref(const txn_ref &) noexcept = default;
-  inline txn_ref &operator=(txn_ref &&other) noexcept;
-  inline txn_ref(txn_ref &&other) noexcept;
-  inline ~txn_ref() noexcept;
+  constexpr txn() noexcept = default;
+  txn(const txn &) noexcept = default;
+  inline txn &operator=(txn &&other) noexcept;
+  inline txn(txn &&other) noexcept;
+  inline ~txn() noexcept;
 
   constexpr operator bool() const noexcept;
   constexpr operator const MDBX_txn *() const;
   inline operator MDBX_txn *();
-  friend constexpr bool operator==(const txn_ref &a, const txn_ref &b) noexcept;
-  friend constexpr bool operator!=(const txn_ref &a, const txn_ref &b) noexcept;
+  friend constexpr bool operator==(const txn &a, const txn &b) noexcept;
+  friend constexpr bool operator!=(const txn &a, const txn &b) noexcept;
 
-  inline ::mdbx::env_ref env() const noexcept;
+  /// \brief Returns the transaction's environment.
+  inline ::mdbx::env env() const noexcept;
+  /// \brief Returns transaction's flags.
   inline MDBX_txn_flags_t flags() const;
+  /// \brief Return the transaction's ID.
   inline uint64_t id() const;
+
+  /// \brief Checks whether the given data is on a dirty page.
   inline bool is_dirty(const void *ptr) const;
 
+  /// \brief Checks whether the transaction is read-only.
+  bool is_readonly() const { return (flags() & MDBX_TXN_RDONLY) != 0; }
+
+  /// \brief Checks whether the transaction is read-write.
+  bool is_readwrite() const { return (flags() & MDBX_TXN_RDONLY) == 0; }
+
   using info = ::MDBX_txn_info;
+  /// \brief Returns information about the MDBX transaction.
   inline info get_info(bool scan_reader_lock_table = false) const;
+
+  /// \brief Returns maximal write transaction size (i.e. limit for summary
+  /// volume of dirty pages) in bytes.
+  size_t size_max() const { return env().transaction_size_max(); }
+
+  /// \brief Returns current write transaction size (i.e.summary volume of dirty
+  /// pages) in bytes.
+  size_t size_current() const {
+    assert(is_readwrite());
+    return get_info().txn_space_dirty;
+  }
 
   //----------------------------------------------------------------------------
 
@@ -1961,15 +2232,16 @@ public:
   inline void renew_reading();
 
   /// \brief Start nested write transaction.
-  txn start_nested();
+  txn_managed start_nested();
 
-  inline cursor create_cursor(map_handle map);
+  inline cursor_managed create_cursor(map_handle map);
 
   /// \brief Open existing key-value map.
   inline map_handle open_map(
       const char *name,
       const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
       const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single) const;
+  /// \brief Open existing key-value map.
   inline map_handle open_map(
       const ::std::string &name,
       const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
@@ -1980,54 +2252,100 @@ public:
   create_map(const char *name,
              const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
              const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
+  /// \brief Create new or open existing key-value map.
   inline map_handle
   create_map(const ::std::string &name,
              const ::mdbx::key_mode key_mode = ::mdbx::key_mode::usual,
              const ::mdbx::value_mode value_mode = ::mdbx::value_mode::single);
 
-  /// \brief Drop key-value map.
+  /// \brief Drops key-value map using handle.
   inline void drop_map(map_handle map);
-  bool drop_map(const char *name, bool ignore_nonexists = true);
-  inline bool drop_map(const ::std::string &name, bool ignore_nonexists = true);
+  /// \brief Drops key-value map using name.
+  /// \return `True` if the key-value map existed and was deleted, either
+  /// `false` if the key-value map did not exist and there is nothing to delete.
+  bool drop_map(const char *name, bool throw_if_absent = false);
+  /// \brief Drop key-value map.
+  /// \return `True` if the key-value map existed and was deleted, either
+  /// `false` if the key-value map did not exist and there is nothing to delete.
+  inline bool drop_map(const ::std::string &name, bool throw_if_absent = false);
 
   /// \brief Clear key-value map.
   inline void clear_map(map_handle map);
-  bool clear_map(const char *name, bool ignore_nonexists = true);
+  /// \return `True` if the key-value map existed and was cleared, either
+  /// `false` if the key-value map did not exist and there is nothing to clear.
+  bool clear_map(const char *name, bool throw_if_absent = false);
+  /// \return `True` if the key-value map existed and was cleared, either
+  /// `false` if the key-value map did not exist and there is nothing to clear.
   inline bool clear_map(const ::std::string &name,
-                        bool ignore_nonexists = true);
+                        bool throw_if_absent = false);
 
   using map_stat = ::MDBX_stat;
+  /// \brief Returns statistics for a sub-database.
   inline map_stat get_map_stat(map_handle map) const;
+  /// \brief Returns depth (bitmask) information of nested dupsort (multi-value)
+  /// B+trees for given database.
   inline uint32_t get_tree_deepmask(map_handle map) const;
+  /// \brief Returns information about key-value map (aka sub-database) handle.
   inline map_handle::info get_handle_info(map_handle map) const;
 
   using canary = ::MDBX_canary;
-  inline txn_ref &put_canary(const canary &);
+  /// \brief Set integers markers (aka "canary") associated with the
+  /// environment.
+  inline txn &put_canary(const canary &);
+  /// \brief Returns fours integers markers (aka "canary") associated with the
+  /// environment.
   inline canary get_canary() const;
+
+  /// Reads sequence generator associated with a key-value map (aka
+  /// sub-database).
   inline uint64_t sequence(map_handle map) const;
+  /// \brief Reads and increment sequence generator associated with a key-value
+  /// map (aka sub-database).
   inline uint64_t sequence(map_handle map, uint64_t increment);
 
+  /// \brief Compare two keys according to a particular key-value map (aka
+  /// sub-database).
   inline int compare_keys(map_handle map, const slice &a,
                           const slice &b) const noexcept;
+  /// \brief Compare two values according to a particular key-value map (aka
+  /// sub-database).
   inline int compare_values(map_handle map, const slice &a,
                             const slice &b) const noexcept;
+  /// \brief Compare keys of two pairs according to a particular key-value map
+  /// (aka sub-database).
   inline int compare_keys(map_handle map, const pair &a,
                           const pair &b) const noexcept;
+  /// \brief Compare values of two pairs according to a particular key-value map
+  /// (aka sub-database).
   inline int compare_values(map_handle map, const pair &a,
                             const pair &b) const noexcept;
 
+  /// \brief Get value by key from a key-value map (aka sub-database).
   inline slice get(map_handle map, const slice &key) const;
+  /// \brief Get first of multi-value and values count by key from a key-value
+  /// multimap (aka sub-database).
   inline slice get(map_handle map, slice key, size_t &values_count) const;
+  /// \brief Get value by key from a key-value map (aka sub-database).
   inline slice get(map_handle map, const slice &key,
-                   const slice &if_not_exists) const;
+                   const slice &value_at_absence) const;
+  /// \brief Get first of multi-value and values count by key from a key-value
+  /// multimap (aka sub-database).
   inline slice get(map_handle map, slice key, size_t &values_count,
-                   const slice &if_not_exists) const;
-  inline pair get_equal_or_great(map_handle map, const slice &key) const;
-  inline pair get_equal_or_great(map_handle map, const slice &key,
-                                 const slice &if_not_exists) const;
+                   const slice &value_at_absence) const;
+  /// \brief Get value for equal or great key from a database.
+  /// \return Bundle of key-value pair and boolean flag,
+  /// which will be `true` if the exact key was found and `false` otherwise.
+  inline pair_result get_equal_or_great(map_handle map, const slice &key) const;
+  /// \brief Get value for equal or great key from a database.
+  /// \return Bundle of key-value pair and boolean flag,
+  /// which will be `true` if the exact key was found and `false` otherwise.
+  inline pair_result get_equal_or_great(map_handle map, const slice &key,
+                                        const slice &value_at_absence) const;
 
   inline MDBX_error_t put(map_handle map, const slice &key, slice *value,
                           MDBX_put_flags_t flags) noexcept;
+  inline void put(map_handle map, const slice &key, slice value,
+                  put_mode mode) noexcept;
   inline void insert(map_handle map, const slice &key, slice value);
   inline value_result try_insert(map_handle map, const slice &key, slice value);
   inline slice insert_reserve(map_handle map, const slice &key,
@@ -2106,61 +2424,60 @@ public:
 
 /// \brief Managed database transaction.
 ///
-/// As other managed classes, `txn` destroys the represented underlying object
-/// from the own class destructor, but disallows copying and assignment for
-/// instances.
+/// As other managed classes, `txn_managed` destroys the represented underlying
+/// object from the own class destructor, but disallows copying and assignment
+/// for instances.
 ///
 /// All database operations require a transaction handle. Transactions may be
 /// read-only or read-write.
-class LIBMDBX_API_TYPE txn : public txn_ref {
-  using inherited = txn_ref;
-  friend class env_ref;
-  friend class txn_ref;
+class LIBMDBX_API_TYPE txn_managed : public txn {
+  using inherited = txn;
+  friend class env;
+  friend class txn;
   /// delegated constructor for RAII
-  constexpr txn(MDBX_txn *ptr) noexcept : inherited(ptr) {}
+  constexpr txn_managed(MDBX_txn *ptr) noexcept : inherited(ptr) {}
 
 public:
-  constexpr txn() noexcept = default;
-  txn(txn &&) = default;
-  txn &operator=(txn &&) = default;
-  txn(const txn &) = delete;
-  txn &operator=(const txn &) = delete;
-  virtual ~txn() noexcept;
+  constexpr txn_managed() noexcept = default;
+  txn_managed(txn_managed &&) = default;
+  txn_managed &operator=(txn_managed &&) = default;
+  txn_managed(const txn_managed &) = delete;
+  txn_managed &operator=(const txn_managed &) = delete;
+  ~txn_managed() noexcept;
 
   //----------------------------------------------------------------------------
 
-  /// \brief Abort write transaction or read-only transaction.
+  /// \brief Abandon all the operations of the transaction instead of saving
+  /// them.
   void abort();
 
-  /// \brief Commit write transaction.
+  /// \brief Commit all the operations of a transaction into the database.
   void commit();
 };
 
 /// \brief Unmanaged cursor.
 ///
-/// Like other unmanaged classes, `cursor_ref` allows copying and assignment for
+/// Like other unmanaged classes, `cursor` allows copying and assignment for
 /// instances, but does not destroys the represented underlying object from the
 /// own class destructor.
 ///
 /// \copydetails MDBX_cursor
-class LIBMDBX_API_TYPE cursor_ref {
+class LIBMDBX_API_TYPE cursor {
 protected:
   MDBX_cursor *handle_{nullptr};
-  constexpr cursor_ref(MDBX_cursor *ptr) noexcept;
+  constexpr cursor(MDBX_cursor *ptr) noexcept;
 
 public:
-  constexpr cursor_ref() noexcept = default;
-  cursor_ref(const cursor_ref &) noexcept = default;
-  inline cursor_ref &operator=(cursor_ref &&other) noexcept;
-  inline cursor_ref(cursor_ref &&other) noexcept;
-  inline ~cursor_ref() noexcept;
+  constexpr cursor() noexcept = default;
+  cursor(const cursor &) noexcept = default;
+  inline cursor &operator=(cursor &&other) noexcept;
+  inline cursor(cursor &&other) noexcept;
+  inline ~cursor() noexcept;
   constexpr operator bool() const noexcept;
   constexpr operator const MDBX_cursor *() const;
   inline operator MDBX_cursor *();
-  friend constexpr bool operator==(const cursor_ref &a,
-                                   const cursor_ref &b) noexcept;
-  friend constexpr bool operator!=(const cursor_ref &a,
-                                   const cursor_ref &b) noexcept;
+  friend constexpr bool operator==(const cursor &a, const cursor &b) noexcept;
+  friend constexpr bool operator!=(const cursor &a, const cursor &b) noexcept;
 
   enum move_operation {
     first = MDBX_FIRST,
@@ -2185,12 +2502,12 @@ public:
   };
 
   struct move_result : public pair_result {
-    inline move_result(const cursor_ref &cursor, bool throw_notfound);
-    inline move_result(cursor_ref &cursor, move_operation operation,
+    inline move_result(const cursor &cursor, bool throw_notfound);
+    inline move_result(cursor &cursor, move_operation operation,
                        bool throw_notfound);
-    inline move_result(cursor_ref &cursor, move_operation operation,
+    inline move_result(cursor &cursor, move_operation operation,
                        const slice &key, bool throw_notfound);
-    inline move_result(cursor_ref &cursor, move_operation operation,
+    inline move_result(cursor &cursor, move_operation operation,
                        const slice &key, const slice &value,
                        bool throw_notfound);
     move_result(const move_result &) noexcept = default;
@@ -2233,6 +2550,7 @@ public:
   inline bool seek(const slice &key);
   inline bool move(move_operation operation, slice &key, slice &value,
                    bool throw_notfound);
+
   /// \brief Return count of duplicates for current key.
   inline size_t count_multivalue() const;
 
@@ -2245,11 +2563,12 @@ public:
 
   //----------------------------------------------------------------------------
 
-  inline void renew(::mdbx::txn_ref &txn);
-  inline ::mdbx::txn_ref txn() const;
+  inline void renew(::mdbx::txn &txn);
+  /// Return the cursor's transaction.
+  inline ::mdbx::txn txn() const;
   inline map_handle map() const;
 
-  inline operator ::mdbx::txn_ref() const { return txn(); }
+  inline operator ::mdbx::txn() const { return txn(); }
   inline operator ::mdbx::map_handle() const { return map(); }
 
   inline MDBX_error_t put(const slice &key, slice *value,
@@ -2272,26 +2591,28 @@ public:
 
 /// \brief Managed cursor.
 ///
-/// As other managed classes, `cursor` destroys the represented underlying
-/// object from the own class destructor, but disallows copying and assignment
-/// for instances.
+/// As other managed classes, `cursor_managed` destroys the represented
+/// underlying object from the own class destructor, but disallows copying and
+/// assignment for instances.
 ///
 /// \copydetails MDBX_cursor
-class LIBMDBX_API_TYPE cursor : public cursor_ref {
-  using inherited = cursor_ref;
-  friend class txn_ref;
+class LIBMDBX_API_TYPE cursor_managed : public cursor {
+  using inherited = cursor;
+  friend class txn;
   /// delegated constructor for RAII
-  constexpr cursor(MDBX_cursor *ptr) noexcept : inherited(ptr) {}
+  constexpr cursor_managed(MDBX_cursor *ptr) noexcept : inherited(ptr) {}
 
 public:
-  constexpr cursor() noexcept = default;
+  constexpr cursor_managed() noexcept = default;
+
+  /// Explicitly closes the cursor.
   void close();
 
-  cursor(cursor &&) = default;
-  cursor &operator=(cursor &&) = default;
-  cursor(const cursor &) = delete;
-  cursor &operator=(const cursor &) = delete;
-  virtual ~cursor() noexcept;
+  cursor_managed(cursor_managed &&) = default;
+  cursor_managed &operator=(cursor_managed &&) = default;
+  cursor_managed(const cursor_managed &) = delete;
+  cursor_managed &operator=(const cursor_managed &) = delete;
+  ~cursor_managed() noexcept { ::mdbx_cursor_close(handle_); }
 };
 
 //------------------------------------------------------------------------------
@@ -2307,21 +2628,21 @@ inline ::std::ostream &operator<<(::std::ostream &out,
          << it.slice();
 }
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env_ref::geometry::size &);
+                                       const ::mdbx::env::geometry::size &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env_ref::geometry &);
+                                       const ::mdbx::env::geometry &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
+                                       const ::mdbx::env::operate_parameters &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
+                                       const ::mdbx::env::mode &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
+                                       const ::mdbx::env::durability &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
+                                       const ::mdbx::env::reclaiming_options &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
+                                       const ::mdbx::env::operate_options &);
 LIBMDBX_API ::std::ostream &
-operator<<(::std::ostream &, const ::mdbx::env_ref::operate_parameters &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env_ref::mode &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env_ref::durability &);
-LIBMDBX_API ::std::ostream &
-operator<<(::std::ostream &, const ::mdbx::env_ref::reclaiming_options &);
-LIBMDBX_API ::std::ostream &
-operator<<(::std::ostream &, const ::mdbx::env_ref::operate_options &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::create_parameters &);
+operator<<(::std::ostream &, const ::mdbx::env_managed::create_parameters &);
 
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const MDBX_log_level_t &);
@@ -2357,13 +2678,13 @@ inline string to_string(const ::mdbx::buffer<ALLOCATOR> &buffer) {
   return out.str();
 }
 
-LIBMDBX_API string to_string(const ::mdbx::env_ref::geometry &);
-LIBMDBX_API string to_string(const ::mdbx::env_ref::operate_parameters &);
-LIBMDBX_API string to_string(const ::mdbx::env_ref::mode &);
-LIBMDBX_API string to_string(const ::mdbx::env_ref::durability &);
-LIBMDBX_API string to_string(const ::mdbx::env_ref::reclaiming_options &);
-LIBMDBX_API string to_string(const ::mdbx::env_ref::operate_options &);
-LIBMDBX_API string to_string(const ::mdbx::env::create_parameters &);
+LIBMDBX_API string to_string(const ::mdbx::env::geometry &);
+LIBMDBX_API string to_string(const ::mdbx::env::operate_parameters &);
+LIBMDBX_API string to_string(const ::mdbx::env::mode &);
+LIBMDBX_API string to_string(const ::mdbx::env::durability &);
+LIBMDBX_API string to_string(const ::mdbx::env::reclaiming_options &);
+LIBMDBX_API string to_string(const ::mdbx::env::operate_options &);
+LIBMDBX_API string to_string(const ::mdbx::env_managed::create_parameters &);
 
 LIBMDBX_API string to_string(const ::MDBX_log_level_t &);
 LIBMDBX_API string to_string(const ::MDBX_debug_flags_t &);
@@ -2873,292 +3194,276 @@ constexpr ::mdbx::value_mode map_handle::info::value_mode() const noexcept {
 
 //------------------------------------------------------------------------------
 
-constexpr env_ref::env_ref(MDBX_env *ptr) noexcept : handle_(ptr) {}
+constexpr env::env(MDBX_env *ptr) noexcept : handle_(ptr) {}
 
-inline env_ref &env_ref::operator=(env_ref &&other) noexcept {
+inline env &env::operator=(env &&other) noexcept {
   handle_ = other.handle_;
   other.handle_ = nullptr;
   return *this;
 }
 
-inline env_ref::env_ref(env_ref &&other) noexcept : handle_(other.handle_) {
+inline env::env(env &&other) noexcept : handle_(other.handle_) {
   other.handle_ = nullptr;
 }
 
-inline env_ref::~env_ref() noexcept {
+inline env::~env() noexcept {
 #ifndef NDEBUG
   handle_ = reinterpret_cast<MDBX_env *>(uintptr_t(0xDeadBeef));
 #endif
 }
 
-constexpr env_ref::operator bool() const noexcept { return handle_ != nullptr; }
+constexpr env::operator bool() const noexcept { return handle_ != nullptr; }
 
-constexpr env_ref::operator const MDBX_env *() const { return handle_; }
+constexpr env::operator const MDBX_env *() const { return handle_; }
 
-inline env_ref::operator MDBX_env *() { return handle_; }
+inline env::operator MDBX_env *() { return handle_; }
 
-constexpr bool operator==(const env_ref &a, const env_ref &b) noexcept {
+constexpr bool operator==(const env &a, const env &b) noexcept {
   return a.handle_ == b.handle_;
 }
 
-constexpr bool operator!=(const env_ref &a, const env_ref &b) noexcept {
+constexpr bool operator!=(const env &a, const env &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
-inline env_ref::geometry &
-env_ref::geometry::make_fixed(intptr_t size) noexcept {
+inline env::geometry &env::geometry::make_fixed(intptr_t size) noexcept {
   size_lower = size_now = size_upper = size;
   growth_step = shrink_threshold = 0;
   return *this;
 }
 
-inline env_ref::geometry &
-env_ref::geometry::make_dynamic(intptr_t lower, intptr_t upper) noexcept {
+inline env::geometry &env::geometry::make_dynamic(intptr_t lower,
+                                                  intptr_t upper) noexcept {
   size_now = size_lower = lower;
   size_upper = upper;
   growth_step = shrink_threshold = default_value;
   return *this;
 }
 
-inline env_ref::reclaiming_options
-env_ref::operate_parameters::reclaiming_from_flags(
+inline env::reclaiming_options env::operate_parameters::reclaiming_from_flags(
     MDBX_env_flags_t flags) noexcept {
   return reclaiming_options(flags);
 }
 
-inline env_ref::operate_options env_ref::operate_parameters::options_from_flags(
-    MDBX_env_flags_t flags) noexcept {
+inline env::operate_options
+env::operate_parameters::options_from_flags(MDBX_env_flags_t flags) noexcept {
   return operate_options(flags);
 }
 
-inline size_t env_ref::limits::pagesize_min() noexcept {
-  return MDBX_MIN_PAGESIZE;
-}
+inline size_t env::limits::pagesize_min() noexcept { return MDBX_MIN_PAGESIZE; }
 
-inline size_t env_ref::limits::pagesize_max() noexcept {
-  return MDBX_MAX_PAGESIZE;
-}
+inline size_t env::limits::pagesize_max() noexcept { return MDBX_MAX_PAGESIZE; }
 
-inline size_t env_ref::limits::dbsize_min(intptr_t pagesize) {
+inline size_t env::limits::dbsize_min(intptr_t pagesize) {
   const intptr_t result = mdbx_limits_dbsize_min(pagesize);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline size_t env_ref::limits::dbsize_max(intptr_t pagesize) {
+inline size_t env::limits::dbsize_max(intptr_t pagesize) {
   const intptr_t result = mdbx_limits_dbsize_max(pagesize);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline size_t env_ref::limits::key_min(MDBX_db_flags_t flags) noexcept {
+inline size_t env::limits::key_min(MDBX_db_flags_t flags) noexcept {
   return (flags & MDBX_INTEGERKEY) ? 4 : 0;
 }
 
-inline size_t env_ref::limits::key_min(key_mode mode) noexcept {
+inline size_t env::limits::key_min(key_mode mode) noexcept {
   return key_min(MDBX_db_flags_t(mode));
 }
 
-inline size_t env_ref::limits::key_max(intptr_t pagesize,
-                                       MDBX_db_flags_t flags) {
+inline size_t env::limits::key_max(intptr_t pagesize, MDBX_db_flags_t flags) {
   const intptr_t result = mdbx_limits_keysize_max(pagesize, flags);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline size_t env_ref::limits::key_max(intptr_t pagesize, key_mode mode) {
+inline size_t env::limits::key_max(intptr_t pagesize, key_mode mode) {
   return key_max(pagesize, MDBX_db_flags_t(mode));
 }
 
-inline size_t env_ref::limits::key_max(const env_ref &env,
-                                       MDBX_db_flags_t flags) {
+inline size_t env::limits::key_max(const env &env, MDBX_db_flags_t flags) {
   const intptr_t result = mdbx_env_get_maxkeysize_ex(env, flags);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline size_t env_ref::limits::key_max(const env_ref &env, key_mode mode) {
+inline size_t env::limits::key_max(const env &env, key_mode mode) {
   return key_max(env, MDBX_db_flags_t(mode));
 }
 
-inline size_t env_ref::limits::value_min(MDBX_db_flags_t flags) noexcept {
+inline size_t env::limits::value_min(MDBX_db_flags_t flags) noexcept {
   return (flags & MDBX_INTEGERDUP) ? 4 : 0;
 }
 
-inline size_t env_ref::limits::value_min(key_mode mode) noexcept {
+inline size_t env::limits::value_min(value_mode mode) noexcept {
   return value_min(MDBX_db_flags_t(mode));
 }
 
-inline size_t env_ref::limits::value_max(intptr_t pagesize,
-                                         MDBX_db_flags_t flags) {
+inline size_t env::limits::value_max(intptr_t pagesize, MDBX_db_flags_t flags) {
   const intptr_t result = mdbx_limits_valsize_max(pagesize, flags);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline size_t env_ref::limits::value_max(intptr_t pagesize, key_mode mode) {
+inline size_t env::limits::value_max(intptr_t pagesize, value_mode mode) {
   return value_max(pagesize, MDBX_db_flags_t(mode));
 }
 
-inline size_t env_ref::limits::value_max(const env_ref &env,
-                                         MDBX_db_flags_t flags) {
+inline size_t env::limits::value_max(const env &env, MDBX_db_flags_t flags) {
   const intptr_t result = mdbx_env_get_maxvalsize_ex(env, flags);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline size_t env_ref::limits::value_max(const env_ref &env, key_mode mode) {
+inline size_t env::limits::value_max(const env &env, value_mode mode) {
   return value_max(env, MDBX_db_flags_t(mode));
 }
 
-inline size_t env_ref::limits::transaction_size_max(intptr_t pagesize) {
+inline size_t env::limits::transaction_size_max(intptr_t pagesize) {
   const intptr_t result = mdbx_limits_txnsize_max(pagesize);
   if (result < 0)
     cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   return static_cast<size_t>(result);
 }
 
-inline env_ref::operate_parameters env_ref::get_operation_parameters() const {
-  return env_ref::operate_parameters(*this);
+inline env::operate_parameters env::get_operation_parameters() const {
+  return env::operate_parameters(*this);
 }
 
-inline env_ref::mode env_ref::get_mode() const {
+inline env::mode env::get_mode() const {
   return operate_parameters::mode_from_flags(get_flags());
 }
 
-inline env_ref::durability env_ref::get_durability() const {
-  return env_ref::operate_parameters::durability_from_flags(get_flags());
+inline env::durability env::get_durability() const {
+  return env::operate_parameters::durability_from_flags(get_flags());
 }
 
-inline env_ref::reclaiming_options env_ref::get_reclaiming() const {
-  return env_ref::operate_parameters::reclaiming_from_flags(get_flags());
+inline env::reclaiming_options env::get_reclaiming() const {
+  return env::operate_parameters::reclaiming_from_flags(get_flags());
 }
 
-inline env_ref::operate_options env_ref::get_options() const {
-  return env_ref::operate_parameters::options_from_flags(get_flags());
+inline env::operate_options env::get_options() const {
+  return env::operate_parameters::options_from_flags(get_flags());
 }
 
-inline env_ref::stat env_ref::get_stat() const {
-  env_ref::stat r;
+inline env::stat env::get_stat() const {
+  env::stat r;
   error::success_or_throw(::mdbx_env_stat_ex(handle_, nullptr, &r, sizeof(r)));
   return r;
 }
 
-inline env_ref::stat env_ref::get_stat(const txn_ref &txn) const {
-  env_ref::stat r;
+inline env::stat env::get_stat(const txn &txn) const {
+  env::stat r;
   error::success_or_throw(::mdbx_env_stat_ex(handle_, txn, &r, sizeof(r)));
   return r;
 }
 
-inline env_ref::info env_ref::get_info() const {
-  env_ref::info r;
+inline env::info env::get_info() const {
+  env::info r;
   error::success_or_throw(::mdbx_env_info_ex(handle_, nullptr, &r, sizeof(r)));
   return r;
 }
 
-inline env_ref::info env_ref::get_info(const txn_ref &txn) const {
-  env_ref::info r;
+inline env::info env::get_info(const txn &txn) const {
+  env::info r;
   error::success_or_throw(::mdbx_env_info_ex(handle_, txn, &r, sizeof(r)));
   return r;
 }
 
-inline filehandle env_ref::get_filehandle() const {
+inline filehandle env::get_filehandle() const {
   filehandle fd;
   error::success_or_throw(::mdbx_env_get_fd(handle_, &fd));
   return fd;
 }
 
-inline MDBX_env_flags_t env_ref::get_flags() const {
+inline MDBX_env_flags_t env::get_flags() const {
   unsigned bits;
   error::success_or_throw(::mdbx_env_get_flags(handle_, &bits));
   return MDBX_env_flags_t(bits);
 }
 
-inline unsigned env_ref::max_readers() const {
+inline unsigned env::max_readers() const {
   unsigned r;
   error::success_or_throw(::mdbx_env_get_maxreaders(handle_, &r));
   return r;
 }
 
-inline unsigned env_ref::max_maps() const {
+inline unsigned env::max_maps() const {
   unsigned r;
   error::success_or_throw(::mdbx_env_get_maxdbs(handle_, &r));
   return r;
 }
 
-inline void *env_ref::get_context() const noexcept {
+inline void *env::get_context() const noexcept {
   return mdbx_env_get_userctx(handle_);
 }
 
-inline env_ref &env_ref::set_context(void *ptr) {
+inline env &env::set_context(void *ptr) {
   error::success_or_throw(::mdbx_env_set_userctx(handle_, ptr));
   return *this;
 }
 
-inline env_ref &env_ref::set_sync_threshold(size_t bytes) {
+inline env &env::set_sync_threshold(size_t bytes) {
   error::success_or_throw(::mdbx_env_set_syncbytes(handle_, bytes));
   return *this;
 }
 
-inline env_ref &env_ref::set_sync_period(unsigned seconds_16dot16) {
+inline env &env::set_sync_period(unsigned seconds_16dot16) {
   error::success_or_throw(::mdbx_env_set_syncperiod(handle_, seconds_16dot16));
   return *this;
 }
 
-inline env_ref &env_ref::set_sync_period(double seconds) {
+inline env &env::set_sync_period(double seconds) {
   return set_sync_period(unsigned(seconds * 65536));
 }
 
-inline env_ref &env_ref::alter_flags(MDBX_env_flags_t flags, bool on_off) {
+inline env &env::alter_flags(MDBX_env_flags_t flags, bool on_off) {
   error::success_or_throw(::mdbx_env_set_flags(handle_, flags, on_off));
   return *this;
 }
 
-inline env_ref &env_ref::set_geometry(const geometry &geo) {
+inline env &env::set_geometry(const geometry &geo) {
   error::success_or_throw(::mdbx_env_set_geometry(
       handle_, geo.size_lower, geo.size_now, geo.size_upper, geo.growth_step,
       geo.shrink_threshold, geo.pagesize));
   return *this;
 }
 
-inline env_ref &env_ref::set_max_maps(unsigned maps) {
-  error::success_or_throw(::mdbx_env_set_maxdbs(handle_, maps));
-  return *this;
+inline bool env::sync_to_disk(bool force, bool nonblock) {
+  const int err = ::mdbx_env_sync_ex(handle_, force, nonblock);
+  switch (err) {
+  case MDBX_SUCCESS /* flush done */:
+  case MDBX_RESULT_TRUE /* no data pending for flush to disk */:
+    return true;
+  case MDBX_BUSY /* the environment is used by other thread */:
+    return false;
+  default:
+    cxx20_attribute_unlikely error::throw_exception(err);
+  }
 }
 
-inline env_ref &env_ref::sync_to_disk() {
-  error::success_or_throw(::mdbx_env_sync(handle_));
-  return *this;
+inline void env::close_map(const map_handle &handle) {
+  error::success_or_throw(::mdbx_dbi_close(*this, handle.dbi));
 }
 
-inline env_ref &env_ref::sync_to_disk(bool force, bool nonblock) {
-  error::success_or_throw(::mdbx_env_sync_ex(handle_, force, nonblock));
-  return *this;
-}
-
-inline bool env_ref::poll_sync_to_disk() {
-  return error::boolean_or_throw(::mdbx_env_sync_poll(handle_));
-}
-
-inline void env_ref::close_map(const map_handle &handle) {
-  error::success_or_throw(::mdbx_dbi_close(handle_, handle.dbi));
-}
-
-constexpr env_ref::reader_info::reader_info(int slot, mdbx_pid_t pid,
-                                            mdbx_tid_t thread, uint64_t txnid,
-                                            uint64_t lag, size_t used,
-                                            size_t retained) noexcept
+constexpr env::reader_info::reader_info(int slot, mdbx_pid_t pid,
+                                        mdbx_tid_t thread, uint64_t txnid,
+                                        uint64_t lag, size_t used,
+                                        size_t retained) noexcept
     : slot(slot), pid(pid), thread(thread), transaction_id(txnid),
       transaction_lag(lag), bytes_used(used), bytes_retained(retained) {}
 
 template <typename VISITOR>
-inline int env_ref::enumerate_readers(VISITOR &visitor) {
+inline int env::enumerate_readers(VISITOR &visitor) {
   struct reader_visitor_thunk : public exception_thunk {
     VISITOR &visitor_;
     static int cb(void *ctx, int number, int slot, mdbx_pid_t pid,
@@ -3168,10 +3473,10 @@ inline int env_ref::enumerate_readers(VISITOR &visitor) {
       assert(thunk->is_clean());
       try {
         const reader_info info(slot, pid, thread, txnid, lag, used, retained);
-        return enumeration_loop_control(thunk->visitor_(info, number));
+        return loop_control(thunk->visitor_(info, number));
       } catch (... /* capture any exception to rethrow it over C code */) {
         thunk->capture();
-        return enumeration_loop_control::exit_loop;
+        return loop_control::exit_loop;
       }
     }
     constexpr reader_visitor_thunk(VISITOR &visitor) noexcept
@@ -3183,83 +3488,83 @@ inline int env_ref::enumerate_readers(VISITOR &visitor) {
   return rc;
 }
 
-inline unsigned env_ref::check_readers() {
+inline unsigned env::check_readers() {
   int dead_count;
   error::throw_on_failure(::mdbx_reader_check(*this, &dead_count));
   assert(dead_count >= 0);
   return static_cast<unsigned>(dead_count);
 }
 
-inline env_ref &env_ref::set_OutOfSpace_callback(MDBX_oom_func *cb) {
+inline env &env::set_OutOfSpace_callback(MDBX_oom_func *cb) {
   error::success_or_throw(::mdbx_env_set_oomfunc(handle_, cb));
   return *this;
 }
 
-inline MDBX_oom_func *env_ref::get_OutOfSpace_callback() const noexcept {
+inline MDBX_oom_func *env::get_OutOfSpace_callback() const noexcept {
   return ::mdbx_env_get_oomfunc(handle_);
 }
 
-inline txn env_ref::start_read() const {
+inline txn_managed env::start_read() const {
   ::MDBX_txn *ptr;
   error::success_or_throw(
       ::mdbx_txn_begin(handle_, nullptr, MDBX_TXN_RDONLY, &ptr));
   assert(ptr != nullptr);
-  return txn(ptr);
+  return txn_managed(ptr);
 }
 
-inline txn env_ref::prepare_read() const {
+inline txn_managed env::prepare_read() const {
   ::MDBX_txn *ptr;
   error::success_or_throw(
       ::mdbx_txn_begin(handle_, nullptr, MDBX_TXN_RDONLY_PREPARE, &ptr));
   assert(ptr != nullptr);
-  return txn(ptr);
+  return txn_managed(ptr);
 }
 
-inline txn env_ref::start_write(bool dont_wait) {
+inline txn_managed env::start_write(bool dont_wait) {
   ::MDBX_txn *ptr;
   error::success_or_throw(::mdbx_txn_begin(
       handle_, nullptr, dont_wait ? MDBX_TXN_TRY : MDBX_TXN_READWRITE, &ptr));
   assert(ptr != nullptr);
-  return txn(ptr);
+  return txn_managed(ptr);
 }
 
-inline txn env_ref::try_start_write() { return start_write(true); }
+inline txn_managed env::try_start_write() { return start_write(true); }
 
 //------------------------------------------------------------------------------
 
-constexpr txn_ref::txn_ref(MDBX_txn *ptr) noexcept : handle_(ptr) {}
+constexpr txn::txn(MDBX_txn *ptr) noexcept : handle_(ptr) {}
 
-inline txn_ref &txn_ref::operator=(txn_ref &&other) noexcept {
+inline txn &txn::operator=(txn &&other) noexcept {
   handle_ = other.handle_;
   other.handle_ = nullptr;
   return *this;
 }
 
-inline txn_ref::txn_ref(txn_ref &&other) noexcept : handle_(other.handle_) {
+inline txn::txn(txn &&other) noexcept : handle_(other.handle_) {
   other.handle_ = nullptr;
 }
 
-inline txn_ref::~txn_ref() noexcept {
+inline txn::~txn() noexcept {
 #ifndef NDEBUG
   handle_ = reinterpret_cast<MDBX_txn *>(uintptr_t(0xDeadBeef));
 #endif
 }
 
-constexpr txn_ref::operator bool() const noexcept { return handle_ != nullptr; }
+constexpr txn::operator bool() const noexcept { return handle_ != nullptr; }
 
-constexpr txn_ref::operator const MDBX_txn *() const { return handle_; }
+constexpr txn::operator const MDBX_txn *() const { return handle_; }
 
-inline txn_ref::operator MDBX_txn *() { return handle_; }
+inline txn::operator MDBX_txn *() { return handle_; }
 
-constexpr bool operator==(const txn_ref &a, const txn_ref &b) noexcept {
+constexpr bool operator==(const txn &a, const txn &b) noexcept {
   return a.handle_ == b.handle_;
 }
 
-constexpr bool operator!=(const txn_ref &a, const txn_ref &b) noexcept {
+constexpr bool operator!=(const txn &a, const txn &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
-inline bool txn_ref::is_dirty(const void *ptr) const {
+inline bool txn::is_dirty(const void *ptr) const {
   int err = ::mdbx_is_dirty(handle_, ptr);
   switch (err) {
   default:
@@ -3271,45 +3576,43 @@ inline bool txn_ref::is_dirty(const void *ptr) const {
   }
 }
 
-inline ::mdbx::env_ref txn_ref::env() const noexcept {
-  return ::mdbx_txn_env(handle_);
-}
+inline ::mdbx::env txn::env() const noexcept { return ::mdbx_txn_env(handle_); }
 
-inline MDBX_txn_flags_t txn_ref::flags() const {
+inline MDBX_txn_flags_t txn::flags() const {
   const int bits = mdbx_txn_flags(handle_);
   error::throw_on_failure((bits != -1) ? MDBX_SUCCESS : MDBX_BAD_TXN);
   return static_cast<MDBX_txn_flags_t>(bits);
 }
 
-inline uint64_t txn_ref::id() const {
+inline uint64_t txn::id() const {
   const uint64_t txnid = mdbx_txn_id(handle_);
   error::throw_on_failure(txnid ? MDBX_SUCCESS : MDBX_BAD_TXN);
   return txnid;
 }
 
-inline void txn_ref::reset_reading() {
+inline void txn::reset_reading() {
   error::success_or_throw(::mdbx_txn_reset(handle_));
 }
 
-inline void txn_ref::renew_reading() {
+inline void txn::renew_reading() {
   error::success_or_throw(::mdbx_txn_renew(handle_));
 }
 
-inline txn_ref::info txn_ref::get_info(bool scan_reader_lock_table) const {
-  txn_ref::info r;
+inline txn::info txn::get_info(bool scan_reader_lock_table) const {
+  txn::info r;
   error::success_or_throw(::mdbx_txn_info(handle_, &r, scan_reader_lock_table));
   return r;
 }
 
-inline cursor txn_ref::create_cursor(map_handle map) {
+inline cursor_managed txn::create_cursor(map_handle map) {
   MDBX_cursor *ptr;
   error::success_or_throw(::mdbx_cursor_open(handle_, map.dbi, &ptr));
-  return cursor(ptr);
+  return cursor_managed(ptr);
 }
 
 inline ::mdbx::map_handle
-txn_ref::open_map(const char *name, const ::mdbx::key_mode key_mode,
-                  const ::mdbx::value_mode value_mode) const {
+txn::open_map(const char *name, const ::mdbx::key_mode key_mode,
+              const ::mdbx::value_mode value_mode) const {
   ::mdbx::map_handle map;
   error::success_or_throw(::mdbx_dbi_open(
       handle_, name, MDBX_db_flags_t(key_mode) | MDBX_db_flags_t(value_mode),
@@ -3319,14 +3622,14 @@ txn_ref::open_map(const char *name, const ::mdbx::key_mode key_mode,
 }
 
 inline ::mdbx::map_handle
-txn_ref::open_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
-                  const ::mdbx::value_mode value_mode) const {
+txn::open_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
+              const ::mdbx::value_mode value_mode) const {
   return open_map(name.c_str(), key_mode, value_mode);
 }
 
-inline ::mdbx::map_handle
-txn_ref::create_map(const char *name, const ::mdbx::key_mode key_mode,
-                    const ::mdbx::value_mode value_mode) {
+inline ::mdbx::map_handle txn::create_map(const char *name,
+                                          const ::mdbx::key_mode key_mode,
+                                          const ::mdbx::value_mode value_mode) {
   ::mdbx::map_handle map;
   error::success_or_throw(::mdbx_dbi_open(
       handle_, name,
@@ -3336,171 +3639,176 @@ txn_ref::create_map(const char *name, const ::mdbx::key_mode key_mode,
   return map;
 }
 
-inline ::mdbx::map_handle
-txn_ref::create_map(const ::std::string &name, const ::mdbx::key_mode key_mode,
-                    const ::mdbx::value_mode value_mode) {
+inline ::mdbx::map_handle txn::create_map(const ::std::string &name,
+                                          const ::mdbx::key_mode key_mode,
+                                          const ::mdbx::value_mode value_mode) {
   return create_map(name.c_str(), key_mode, value_mode);
 }
 
-inline void txn_ref::drop_map(map_handle map) {
+inline void txn::drop_map(map_handle map) {
   error::success_or_throw(::mdbx_drop(handle_, map.dbi, true));
 }
 
-inline bool txn_ref::drop_map(const ::std::string &name,
-                              bool ignore_nonexists) {
-  return drop_map(name.c_str(), ignore_nonexists);
+inline bool txn::drop_map(const ::std::string &name, bool throw_if_absent) {
+  return drop_map(name.c_str(), throw_if_absent);
 }
 
-inline void txn_ref::clear_map(map_handle map) {
+inline void txn::clear_map(map_handle map) {
   error::success_or_throw(::mdbx_drop(handle_, map.dbi, false));
 }
 
-inline bool txn_ref::clear_map(const ::std::string &name,
-                               bool ignore_nonexists) {
-  return clear_map(name.c_str(), ignore_nonexists);
+inline bool txn::clear_map(const ::std::string &name, bool throw_if_absent) {
+  return clear_map(name.c_str(), throw_if_absent);
 }
 
-inline txn_ref::map_stat txn_ref::get_map_stat(map_handle map) const {
-  txn_ref::map_stat r;
+inline txn::map_stat txn::get_map_stat(map_handle map) const {
+  txn::map_stat r;
   error::success_or_throw(::mdbx_dbi_stat(handle_, map.dbi, &r, sizeof(r)));
   return r;
 }
 
-inline uint32_t txn_ref::get_tree_deepmask(map_handle map) const {
+inline uint32_t txn::get_tree_deepmask(map_handle map) const {
   uint32_t r;
   error::success_or_throw(::mdbx_dbi_dupsort_depthmask(handle_, map.dbi, &r));
   return r;
 }
 
-inline map_handle::info txn_ref::get_handle_info(map_handle map) const {
+inline map_handle::info txn::get_handle_info(map_handle map) const {
   unsigned flags, state;
   error::success_or_throw(
       ::mdbx_dbi_flags_ex(handle_, map.dbi, &flags, &state));
   return map_handle::info(MDBX_db_flags_t(flags), MDBX_dbi_state_t(state));
 }
 
-inline txn_ref &txn_ref::put_canary(const txn_ref::canary &canary) {
+inline txn &txn::put_canary(const txn::canary &canary) {
   error::success_or_throw(::mdbx_canary_put(handle_, &canary));
   return *this;
 }
 
-inline txn_ref::canary txn_ref::get_canary() const {
-  txn_ref::canary r;
+inline txn::canary txn::get_canary() const {
+  txn::canary r;
   error::success_or_throw(::mdbx_canary_get(handle_, &r));
   return r;
 }
 
-inline uint64_t txn_ref::sequence(map_handle map) const {
+inline uint64_t txn::sequence(map_handle map) const {
   uint64_t result;
   error::success_or_throw(::mdbx_dbi_sequence(handle_, map.dbi, &result, 0));
   return result;
 }
 
-inline uint64_t txn_ref::sequence(map_handle map, uint64_t increment) {
+inline uint64_t txn::sequence(map_handle map, uint64_t increment) {
   uint64_t result;
   error::success_or_throw(
       ::mdbx_dbi_sequence(handle_, map.dbi, &result, increment));
   return result;
 }
 
-inline int txn_ref::compare_keys(map_handle map, const slice &a,
-                                 const slice &b) const noexcept {
+inline int txn::compare_keys(map_handle map, const slice &a,
+                             const slice &b) const noexcept {
   return ::mdbx_cmp(handle_, map.dbi, &a, &b);
 }
 
-inline int txn_ref::compare_values(map_handle map, const slice &a,
-                                   const slice &b) const noexcept {
+inline int txn::compare_values(map_handle map, const slice &a,
+                               const slice &b) const noexcept {
   return ::mdbx_dcmp(handle_, map.dbi, &a, &b);
 }
 
-inline int txn_ref::compare_keys(map_handle map, const pair &a,
-                                 const pair &b) const noexcept {
+inline int txn::compare_keys(map_handle map, const pair &a,
+                             const pair &b) const noexcept {
   return compare_keys(map, a.key, b.key);
 }
 
-inline int txn_ref::compare_values(map_handle map, const pair &a,
-                                   const pair &b) const noexcept {
+inline int txn::compare_values(map_handle map, const pair &a,
+                               const pair &b) const noexcept {
   return compare_values(map, a.value, b.value);
 }
 
-inline slice txn_ref::get(map_handle map, const slice &key) const {
+inline slice txn::get(map_handle map, const slice &key) const {
   slice result;
   error::success_or_throw(::mdbx_get(handle_, map.dbi, &key, &result));
   return result;
 }
 
-inline slice txn_ref::get(map_handle map, slice key,
-                          size_t &values_count) const {
+inline slice txn::get(map_handle map, slice key, size_t &values_count) const {
   slice result;
   error::success_or_throw(
       ::mdbx_get_ex(handle_, map.dbi, &key, &result, &values_count));
   return result;
 }
 
-inline slice txn_ref::get(map_handle map, const slice &key,
-                          const slice &if_not_exists) const {
+inline slice txn::get(map_handle map, const slice &key,
+                      const slice &value_at_absence) const {
   slice result;
   const int err = ::mdbx_get(handle_, map.dbi, &key, &result);
   switch (err) {
   case MDBX_SUCCESS:
     return result;
   case MDBX_NOTFOUND:
-    return if_not_exists;
+    return value_at_absence;
   default:
     cxx20_attribute_unlikely error::throw_exception(err);
   }
 }
 
-inline slice txn_ref::get(map_handle map, slice key, size_t &values_count,
-                          const slice &if_not_exists) const {
+inline slice txn::get(map_handle map, slice key, size_t &values_count,
+                      const slice &value_at_absence) const {
   slice result;
   const int err = ::mdbx_get_ex(handle_, map.dbi, &key, &result, &values_count);
   switch (err) {
   case MDBX_SUCCESS:
     return result;
   case MDBX_NOTFOUND:
-    return if_not_exists;
+    return value_at_absence;
   default:
     cxx20_attribute_unlikely error::throw_exception(err);
   }
 }
 
-inline pair txn_ref::get_equal_or_great(map_handle map,
-                                        const slice &key) const {
-  pair result{key, slice()};
-  error::success_or_throw(
+inline pair_result txn::get_equal_or_great(map_handle map,
+                                           const slice &key) const {
+  pair result(key, slice());
+  bool exact = !error::boolean_or_throw(
       ::mdbx_get_equal_or_great(handle_, map.dbi, &result.key, &result.value));
-  return result;
+  return pair_result(result.key, result.value, exact);
 }
 
-inline pair txn_ref::get_equal_or_great(map_handle map, const slice &key,
-                                        const slice &if_not_exists) const {
+inline pair_result
+txn::get_equal_or_great(map_handle map, const slice &key,
+                        const slice &value_at_absence) const {
   pair result{key, slice()};
   const int err =
       ::mdbx_get_equal_or_great(handle_, map.dbi, &result.key, &result.value);
   switch (err) {
   case MDBX_SUCCESS:
-    return result;
+    return pair_result{result.key, result.value, true};
+  case MDBX_RESULT_TRUE:
+    return pair_result{result.key, result.value, false};
   case MDBX_NOTFOUND:
-    return pair{key, if_not_exists};
+    return pair_result{key, value_at_absence, false};
   default:
     cxx20_attribute_unlikely error::throw_exception(err);
   }
 }
 
-inline MDBX_error_t txn_ref::put(map_handle map, const slice &key, slice *value,
-                                 MDBX_put_flags_t flags) noexcept {
+inline MDBX_error_t txn::put(map_handle map, const slice &key, slice *value,
+                             MDBX_put_flags_t flags) noexcept {
   return MDBX_error_t(::mdbx_put(handle_, map.dbi, &key, value, flags));
 }
 
-inline void txn_ref::insert(map_handle map, const slice &key, slice value) {
+inline void txn::put(map_handle map, const slice &key, slice value,
+                     put_mode mode) noexcept {
+  error::success_or_throw(put(map, key, &value, MDBX_put_flags_t(mode)));
+}
+
+inline void txn::insert(map_handle map, const slice &key, slice value) {
   error::success_or_throw(
       put(map, key, &value /* takes the present value in case MDBX_KEYEXIST */,
           MDBX_put_flags_t(put_mode::insert)));
 }
 
-inline value_result txn_ref::try_insert(map_handle map, const slice &key,
-                                        slice value) {
+inline value_result txn::try_insert(map_handle map, const slice &key,
+                                    slice value) {
   const int err =
       put(map, key, &value /* takes the present value in case MDBX_KEYEXIST */,
           MDBX_put_flags_t(put_mode::insert));
@@ -3514,8 +3822,8 @@ inline value_result txn_ref::try_insert(map_handle map, const slice &key,
   }
 }
 
-inline slice txn_ref::insert_reserve(map_handle map, const slice &key,
-                                     size_t value_length) {
+inline slice txn::insert_reserve(map_handle map, const slice &key,
+                                 size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(
       put(map, key, &result /* takes the present value in case MDBX_KEYEXIST */,
@@ -3523,9 +3831,8 @@ inline slice txn_ref::insert_reserve(map_handle map, const slice &key,
   return result;
 }
 
-inline value_result txn_ref::try_insert_reserve(map_handle map,
-                                                const slice &key,
-                                                size_t value_length) {
+inline value_result txn::try_insert_reserve(map_handle map, const slice &key,
+                                            size_t value_length) {
   slice result(nullptr, value_length);
   const int err =
       put(map, key, &result /* takes the present value in case MDBX_KEYEXIST */,
@@ -3540,28 +3847,26 @@ inline value_result txn_ref::try_insert_reserve(map_handle map,
   }
 }
 
-inline void txn_ref::upsert(map_handle map, const slice &key,
-                            const slice &value) {
+inline void txn::upsert(map_handle map, const slice &key, const slice &value) {
   error::success_or_throw(put(map, key, const_cast<slice *>(&value),
                               MDBX_put_flags_t(put_mode::upsert)));
 }
 
-inline slice txn_ref::upsert_reserve(map_handle map, const slice &key,
-                                     size_t value_length) {
+inline slice txn::upsert_reserve(map_handle map, const slice &key,
+                                 size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(put(
       map, key, &result, MDBX_put_flags_t(put_mode::upsert) | MDBX_RESERVE));
   return result;
 }
 
-inline void txn_ref::update(map_handle map, const slice &key,
-                            const slice &value) {
+inline void txn::update(map_handle map, const slice &key, const slice &value) {
   error::success_or_throw(put(map, key, const_cast<slice *>(&value),
                               MDBX_put_flags_t(put_mode::update)));
 }
 
-inline bool txn_ref::try_update(map_handle map, const slice &key,
-                                const slice &value) {
+inline bool txn::try_update(map_handle map, const slice &key,
+                            const slice &value) {
   const int err = put(map, key, const_cast<slice *>(&value),
                       MDBX_put_flags_t(put_mode::update));
   switch (err) {
@@ -3574,17 +3879,16 @@ inline bool txn_ref::try_update(map_handle map, const slice &key,
   }
 }
 
-inline slice txn_ref::update_reserve(map_handle map, const slice &key,
-                                     size_t value_length) {
+inline slice txn::update_reserve(map_handle map, const slice &key,
+                                 size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(put(
       map, key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE));
   return result;
 }
 
-inline value_result txn_ref::try_update_reserve(map_handle map,
-                                                const slice &key,
-                                                size_t value_length) {
+inline value_result txn::try_update_reserve(map_handle map, const slice &key,
+                                            size_t value_length) {
   slice result(nullptr, value_length);
   const int err =
       put(map, key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE);
@@ -3598,7 +3902,7 @@ inline value_result txn_ref::try_update_reserve(map_handle map,
   }
 }
 
-inline bool txn_ref::erase(map_handle map, const slice &key) {
+inline bool txn::erase(map_handle map, const slice &key) {
   const int err = ::mdbx_del(handle_, map.dbi, &key, nullptr);
   switch (err) {
   case MDBX_SUCCESS:
@@ -3610,8 +3914,7 @@ inline bool txn_ref::erase(map_handle map, const slice &key) {
   }
 }
 
-inline bool txn_ref::erase(map_handle map, const slice &key,
-                           const slice &value) {
+inline bool txn::erase(map_handle map, const slice &key, const slice &value) {
   const int err = ::mdbx_del(handle_, map.dbi, &key, &value);
   switch (err) {
   case MDBX_SUCCESS:
@@ -3623,16 +3926,16 @@ inline bool txn_ref::erase(map_handle map, const slice &key,
   }
 }
 
-inline void txn_ref::replace(map_handle map, const slice &key, slice old_value,
-                             const slice &new_value) {
+inline void txn::replace(map_handle map, const slice &key, slice old_value,
+                         const slice &new_value) {
   error::success_or_throw(::mdbx_replace_ex(
       handle_, map.dbi, &key, const_cast<slice *>(&new_value), &old_value,
       MDBX_CURRENT | MDBX_NOOVERWRITE, nullptr, nullptr));
 }
 
 template <class ALLOCATOR>
-inline buffer<ALLOCATOR> txn_ref::extract(map_handle map, const slice &key,
-                                          const ALLOCATOR &allocator) {
+inline buffer<ALLOCATOR> txn::extract(map_handle map, const slice &key,
+                                      const ALLOCATOR &allocator) {
   buffer<ALLOCATOR> result(allocator);
   typename buffer<ALLOCATOR>::data_preserver thunk;
   error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, nullptr,
@@ -3643,9 +3946,9 @@ inline buffer<ALLOCATOR> txn_ref::extract(map_handle map, const slice &key,
 }
 
 template <class ALLOCATOR>
-inline buffer<ALLOCATOR> txn_ref::replace(map_handle map, const slice &key,
-                                          const slice &new_value,
-                                          const ALLOCATOR &allocator) {
+inline buffer<ALLOCATOR> txn::replace(map_handle map, const slice &key,
+                                      const slice &new_value,
+                                      const ALLOCATOR &allocator) {
   buffer<ALLOCATOR> result(allocator);
   typename buffer<ALLOCATOR>::data_preserver thunk;
   error::success_or_throw(
@@ -3656,9 +3959,9 @@ inline buffer<ALLOCATOR> txn_ref::replace(map_handle map, const slice &key,
 }
 
 template <class ALLOCATOR>
-inline buffer<ALLOCATOR>
-txn_ref::replace_reserve(map_handle map, const slice &key, slice &new_value,
-                         const ALLOCATOR &allocator) {
+inline buffer<ALLOCATOR> txn::replace_reserve(map_handle map, const slice &key,
+                                              slice &new_value,
+                                              const ALLOCATOR &allocator) {
   buffer<ALLOCATOR> result(allocator);
   typename buffer<ALLOCATOR>::data_preserver thunk;
   error::success_or_throw(
@@ -3668,20 +3971,18 @@ txn_ref::replace_reserve(map_handle map, const slice &key, slice &new_value,
   return result;
 }
 
-inline void txn_ref::append(map_handle map, const slice &key,
-                            const slice &value,
-                            bool multivalue_order_preserved) {
+inline void txn::append(map_handle map, const slice &key, const slice &value,
+                        bool multivalue_order_preserved) {
   error::success_or_throw(::mdbx_put(
       handle_, map.dbi, const_cast<slice *>(&key), const_cast<slice *>(&value),
       multivalue_order_preserved ? (MDBX_APPEND | MDBX_APPENDDUP)
                                  : MDBX_APPEND));
 }
 
-inline size_t txn_ref::put_multiple(map_handle map, const slice &key,
-                                    const size_t value_length,
-                                    const void *values_array,
-                                    size_t values_count, put_mode mode,
-                                    bool allow_partial) {
+inline size_t txn::put_multiple(map_handle map, const slice &key,
+                                const size_t value_length,
+                                const void *values_array, size_t values_count,
+                                put_mode mode, bool allow_partial) {
   MDBX_val args[2] = {{const_cast<void *>(values_array), value_length},
                       {nullptr, values_count}};
   const int err = ::mdbx_put(handle_, map.dbi, const_cast<slice *>(&key), args,
@@ -3699,28 +4000,28 @@ inline size_t txn_ref::put_multiple(map_handle map, const slice &key,
   return args[1].iov_len /* done item count */;
 }
 
-inline ptrdiff_t txn_ref::estimate(map_handle map, pair from, pair to) const {
+inline ptrdiff_t txn::estimate(map_handle map, pair from, pair to) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(
       handle_, map.dbi, &from.key, &from.value, &to.key, &to.value, &result));
   return result;
 }
 
-inline ptrdiff_t txn_ref::estimate(map_handle map, slice from, slice to) const {
+inline ptrdiff_t txn::estimate(map_handle map, slice from, slice to) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(handle_, map.dbi, &from, nullptr,
                                               &to, nullptr, &result));
   return result;
 }
 
-inline ptrdiff_t txn_ref::estimate_from_first(map_handle map, slice to) const {
+inline ptrdiff_t txn::estimate_from_first(map_handle map, slice to) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(handle_, map.dbi, nullptr,
                                               nullptr, &to, nullptr, &result));
   return result;
 }
 
-inline ptrdiff_t txn_ref::estimate_to_last(map_handle map, slice from) const {
+inline ptrdiff_t txn::estimate_to_last(map_handle map, slice from) const {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_range(handle_, map.dbi, &from, nullptr,
                                               nullptr, nullptr, &result));
@@ -3729,72 +4030,68 @@ inline ptrdiff_t txn_ref::estimate_to_last(map_handle map, slice from) const {
 
 //------------------------------------------------------------------------------
 
-constexpr cursor_ref::cursor_ref(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
+constexpr cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
 
-inline cursor_ref &cursor_ref::operator=(cursor_ref &&other) noexcept {
+inline cursor &cursor::operator=(cursor &&other) noexcept {
   handle_ = other.handle_;
   other.handle_ = nullptr;
   return *this;
 }
 
-inline cursor_ref::cursor_ref(cursor_ref &&other) noexcept
-    : handle_(other.handle_) {
+inline cursor::cursor(cursor &&other) noexcept : handle_(other.handle_) {
   other.handle_ = nullptr;
 }
 
-inline cursor_ref::~cursor_ref() noexcept {
+inline cursor::~cursor() noexcept {
 #ifndef NDEBUG
   handle_ = reinterpret_cast<MDBX_cursor *>(uintptr_t(0xDeadBeef));
 #endif
 }
 
-constexpr cursor_ref::operator bool() const noexcept {
-  return handle_ != nullptr;
-}
+constexpr cursor::operator bool() const noexcept { return handle_ != nullptr; }
 
-constexpr cursor_ref::operator const MDBX_cursor *() const { return handle_; }
+constexpr cursor::operator const MDBX_cursor *() const { return handle_; }
 
-inline cursor_ref::operator MDBX_cursor *() { return handle_; }
+inline cursor::operator MDBX_cursor *() { return handle_; }
 
-constexpr bool operator==(const cursor_ref &a, const cursor_ref &b) noexcept {
+constexpr bool operator==(const cursor &a, const cursor &b) noexcept {
   return a.handle_ == b.handle_;
 }
 
-constexpr bool operator!=(const cursor_ref &a, const cursor_ref &b) noexcept {
+constexpr bool operator!=(const cursor &a, const cursor &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
-inline cursor_ref::move_result::move_result(const cursor_ref &cursor,
-                                            bool throw_notfound) {
+inline cursor::move_result::move_result(const cursor &cursor,
+                                        bool throw_notfound)
+    : pair_result(key, value, false) {
   done = cursor.move(get_current, &key, &value, throw_notfound);
 }
 
-inline cursor_ref::move_result::move_result(cursor_ref &cursor,
-                                            move_operation operation,
-                                            bool throw_notfound) {
+inline cursor::move_result::move_result(cursor &cursor,
+                                        move_operation operation,
+                                        bool throw_notfound)
+    : pair_result(key, value, false) {
   done = cursor.move(operation, &key, &value, throw_notfound);
 }
 
-inline cursor_ref::move_result::move_result(cursor_ref &cursor,
-                                            move_operation operation,
-                                            const slice &key,
-                                            bool throw_notfound) {
-  this->key = key;
+inline cursor::move_result::move_result(cursor &cursor,
+                                        move_operation operation,
+                                        const slice &key, bool throw_notfound)
+    : pair_result(key, slice(), false) {
   this->done = cursor.move(operation, &this->key, &this->value, throw_notfound);
 }
 
-inline cursor_ref::move_result::move_result(cursor_ref &cursor,
-                                            move_operation operation,
-                                            const slice &key,
-                                            const slice &value,
-                                            bool throw_notfound) {
-  this->key = key;
-  this->value = value;
+inline cursor::move_result::move_result(cursor &cursor,
+                                        move_operation operation,
+                                        const slice &key, const slice &value,
+                                        bool throw_notfound)
+    : pair_result(key, value, false) {
   this->done = cursor.move(operation, &this->key, &this->value, throw_notfound);
 }
 
-inline bool cursor_ref::move(move_operation operation, MDBX_val *key,
-                             MDBX_val *value, bool throw_notfound) const {
+inline bool cursor::move(move_operation operation, MDBX_val *key,
+                         MDBX_val *value, bool throw_notfound) const {
   const int err =
       ::mdbx_cursor_get(handle_, key, value, MDBX_cursor_op(operation));
   switch (err) {
@@ -3809,179 +4106,170 @@ inline bool cursor_ref::move(move_operation operation, MDBX_val *key,
   }
 }
 
-inline ptrdiff_t cursor_ref::estimate(move_operation operation, MDBX_val *key,
-                                      MDBX_val *value) const {
+inline ptrdiff_t cursor::estimate(move_operation operation, MDBX_val *key,
+                                  MDBX_val *value) const {
   ptrdiff_t result;
   error::success_or_throw(::mdbx_estimate_move(
       *this, key, value, MDBX_cursor_op(operation), &result));
   return result;
 }
 
-inline ptrdiff_t estimate(const cursor_ref &from, const cursor_ref &to) {
+inline ptrdiff_t estimate(const cursor &from, const cursor &to) {
   ptrdiff_t result;
   error::success_or_throw(mdbx_estimate_distance(from, to, &result));
   return result;
 }
 
-inline cursor_ref::move_result cursor_ref::move(move_operation operation,
-                                                bool throw_notfound) {
+inline cursor::move_result cursor::move(move_operation operation,
+                                        bool throw_notfound) {
   return move_result(*this, operation, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::to_first(bool throw_notfound) {
+inline cursor::move_result cursor::to_first(bool throw_notfound) {
   return move(first, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::to_previous(bool throw_notfound) {
+inline cursor::move_result cursor::to_previous(bool throw_notfound) {
   return move(previous, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::to_previous_last_multi(bool throw_notfound) {
+inline cursor::move_result cursor::to_previous_last_multi(bool throw_notfound) {
   return move(multi_prevkey_lastvalue, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::to_current_first_multi(bool throw_notfound) {
+inline cursor::move_result cursor::to_current_first_multi(bool throw_notfound) {
   return move(multi_currentkey_firstvalue, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::to_current_prev_multi(bool throw_notfound) {
+inline cursor::move_result cursor::to_current_prev_multi(bool throw_notfound) {
   return move(multi_currentkey_prevvalue, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::current(bool throw_notfound) const {
+inline cursor::move_result cursor::current(bool throw_notfound) const {
   return move_result(*this, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::to_current_next_multi(bool throw_notfound) {
+inline cursor::move_result cursor::to_current_next_multi(bool throw_notfound) {
   return move(multi_currentkey_nextvalue, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::to_current_last_multi(bool throw_notfound) {
+inline cursor::move_result cursor::to_current_last_multi(bool throw_notfound) {
   return move(multi_currentkey_lastvalue, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::to_next_first_multi(bool throw_notfound) {
+inline cursor::move_result cursor::to_next_first_multi(bool throw_notfound) {
   return move(multi_nextkey_firstvalue, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::to_next(bool throw_notfound) {
+inline cursor::move_result cursor::to_next(bool throw_notfound) {
   return move(next, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::to_last(bool throw_notfound) {
+inline cursor::move_result cursor::to_last(bool throw_notfound) {
   return move(last, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::move(move_operation operation,
-                                                const slice &key,
-                                                bool throw_notfound) {
+inline cursor::move_result cursor::move(move_operation operation,
+                                        const slice &key, bool throw_notfound) {
   return move_result(*this, operation, key, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::find(const slice &key,
-                                                bool throw_notfound) {
+inline cursor::move_result cursor::find(const slice &key, bool throw_notfound) {
   return move(key_exact, key, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::lower_bound(const slice &key,
-                                                       bool throw_notfound) {
+inline cursor::move_result cursor::lower_bound(const slice &key,
+                                               bool throw_notfound) {
   return move(key_lowerbound, key, throw_notfound);
 }
 
-inline cursor_ref::move_result cursor_ref::move(move_operation operation,
-                                                const slice &key,
-                                                const slice &value,
-                                                bool throw_notfound) {
+inline cursor::move_result cursor::move(move_operation operation,
+                                        const slice &key, const slice &value,
+                                        bool throw_notfound) {
   return move_result(*this, operation, key, value, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::find_multivalue(const slice &key, const slice &value,
-                            bool throw_notfound) {
+inline cursor::move_result cursor::find_multivalue(const slice &key,
+                                                   const slice &value,
+                                                   bool throw_notfound) {
   return move(key_exact, key, value, throw_notfound);
 }
 
-inline cursor_ref::move_result
-cursor_ref::lower_bound_multivalue(const slice &key, const slice &value,
-                                   bool throw_notfound) {
+inline cursor::move_result cursor::lower_bound_multivalue(const slice &key,
+                                                          const slice &value,
+                                                          bool throw_notfound) {
   return move(multi_exactkey_lowerboundvalue, key, value, throw_notfound);
 }
 
-inline bool cursor_ref::seek(const slice &key) {
+inline bool cursor::seek(const slice &key) {
   return move(find_key, const_cast<slice *>(&key), nullptr, false);
 }
 
-inline bool cursor_ref::move(move_operation operation, slice &key, slice &value,
-                             bool throw_notfound) {
+inline bool cursor::move(move_operation operation, slice &key, slice &value,
+                         bool throw_notfound) {
   return move(operation, &key, &value, throw_notfound);
 }
 
-inline size_t cursor_ref::count_multivalue() const {
+inline size_t cursor::count_multivalue() const {
   size_t result;
   error::success_or_throw(::mdbx_cursor_count(*this, &result));
   return result;
 }
 
-inline bool cursor_ref::eof() const {
+inline bool cursor::eof() const {
   return error::boolean_or_throw(::mdbx_cursor_eof(*this));
 }
 
-inline bool cursor_ref::on_first() const {
+inline bool cursor::on_first() const {
   return error::boolean_or_throw(::mdbx_cursor_on_first(*this));
 }
 
-inline bool cursor_ref::on_last() const {
+inline bool cursor::on_last() const {
   return error::boolean_or_throw(::mdbx_cursor_on_last(*this));
 }
 
-inline ptrdiff_t cursor_ref::estimate(slice key, slice value) const {
+inline ptrdiff_t cursor::estimate(slice key, slice value) const {
   return estimate(multi_exactkey_lowerboundvalue, &key, &value);
 }
 
-inline ptrdiff_t cursor_ref::estimate(slice key) const {
+inline ptrdiff_t cursor::estimate(slice key) const {
   return estimate(key_lowerbound, &key, nullptr);
 }
 
-inline ptrdiff_t cursor_ref::estimate(move_operation operation) const {
+inline ptrdiff_t cursor::estimate(move_operation operation) const {
   slice unused_key;
   return estimate(operation, &unused_key, nullptr);
 }
 
-inline void cursor_ref::renew(::mdbx::txn_ref &txn) {
+inline void cursor::renew(::mdbx::txn &txn) {
   error::success_or_throw(::mdbx_cursor_renew(txn, handle_));
 }
 
-inline txn_ref cursor_ref::txn() const {
+inline txn cursor::txn() const {
   MDBX_txn *txn = ::mdbx_cursor_txn(handle_);
   error::throw_on_nullptr(txn, MDBX_EINVAL);
-  return ::mdbx::txn_ref(txn);
+  return ::mdbx::txn(txn);
 }
 
-inline map_handle cursor_ref::map() const {
+inline map_handle cursor::map() const {
   const MDBX_dbi dbi = ::mdbx_cursor_dbi(handle_);
   if (mdbx_unlikely(dbi > MDBX_MAX_DBI))
     error::throw_exception(MDBX_EINVAL);
   return map_handle(dbi);
 }
 
-inline MDBX_error_t cursor_ref::put(const slice &key, slice *value,
-                                    MDBX_put_flags_t flags) noexcept {
+inline MDBX_error_t cursor::put(const slice &key, slice *value,
+                                MDBX_put_flags_t flags) noexcept {
   return MDBX_error_t(::mdbx_cursor_put(handle_, &key, value, flags));
 }
 
-inline void cursor_ref::insert(const slice &key, slice value) {
+inline void cursor::insert(const slice &key, slice value) {
   error::success_or_throw(
       put(key, &value /* takes the present value in case MDBX_KEYEXIST */,
           MDBX_put_flags_t(put_mode::insert)));
 }
 
-inline value_result cursor_ref::try_insert(const slice &key, slice value) {
+inline value_result cursor::try_insert(const slice &key, slice value) {
   const int err =
       put(key, &value /* takes the present value in case MDBX_KEYEXIST */,
           MDBX_put_flags_t(put_mode::insert));
@@ -3995,7 +4283,7 @@ inline value_result cursor_ref::try_insert(const slice &key, slice value) {
   }
 }
 
-inline slice cursor_ref::insert_reserve(const slice &key, size_t value_length) {
+inline slice cursor::insert_reserve(const slice &key, size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(
       put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
@@ -4003,8 +4291,8 @@ inline slice cursor_ref::insert_reserve(const slice &key, size_t value_length) {
   return result;
 }
 
-inline value_result cursor_ref::try_insert_reserve(const slice &key,
-                                                   size_t value_length) {
+inline value_result cursor::try_insert_reserve(const slice &key,
+                                               size_t value_length) {
   slice result(nullptr, value_length);
   const int err =
       put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
@@ -4019,24 +4307,24 @@ inline value_result cursor_ref::try_insert_reserve(const slice &key,
   }
 }
 
-inline void cursor_ref::upsert(const slice &key, const slice &value) {
+inline void cursor::upsert(const slice &key, const slice &value) {
   error::success_or_throw(put(key, const_cast<slice *>(&value),
                               MDBX_put_flags_t(put_mode::upsert)));
 }
 
-inline slice cursor_ref::upsert_reserve(const slice &key, size_t value_length) {
+inline slice cursor::upsert_reserve(const slice &key, size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(
       put(key, &result, MDBX_put_flags_t(put_mode::upsert) | MDBX_RESERVE));
   return result;
 }
 
-inline void cursor_ref::update(const slice &key, const slice &value) {
+inline void cursor::update(const slice &key, const slice &value) {
   error::success_or_throw(put(key, const_cast<slice *>(&value),
                               MDBX_put_flags_t(put_mode::update)));
 }
 
-inline bool cursor_ref::try_update(const slice &key, const slice &value) {
+inline bool cursor::try_update(const slice &key, const slice &value) {
   const int err =
       put(key, const_cast<slice *>(&value), MDBX_put_flags_t(put_mode::update));
   switch (err) {
@@ -4049,15 +4337,15 @@ inline bool cursor_ref::try_update(const slice &key, const slice &value) {
   }
 }
 
-inline slice cursor_ref::update_reserve(const slice &key, size_t value_length) {
+inline slice cursor::update_reserve(const slice &key, size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(
       put(key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE));
   return result;
 }
 
-inline value_result cursor_ref::try_update_reserve(const slice &key,
-                                                   size_t value_length) {
+inline value_result cursor::try_update_reserve(const slice &key,
+                                               size_t value_length) {
   slice result(nullptr, value_length);
   const int err =
       put(key, &result, MDBX_put_flags_t(put_mode::update) | MDBX_RESERVE);
@@ -4071,7 +4359,7 @@ inline value_result cursor_ref::try_update_reserve(const slice &key,
   }
 }
 
-inline bool cursor_ref::erase(bool whole_multivalue) {
+inline bool cursor::erase(bool whole_multivalue) {
   const int err = ::mdbx_cursor_del(handle_, whole_multivalue ? MDBX_ALLDUPS
                                                               : MDBX_CURRENT);
   switch (err) {
@@ -4087,7 +4375,7 @@ inline bool cursor_ref::erase(bool whole_multivalue) {
 //------------------------------------------------------------------------------
 
 template <class ALLOCATOR>
-inline buffer<ALLOCATOR>::buffer(const txn_ref &txn, const ::mdbx::slice &src,
+inline buffer<ALLOCATOR>::buffer(const txn &txn, const ::mdbx::slice &src,
                                  const ALLOCATOR &allocator)
     : buffer(src, !txn.is_dirty(src.data()), allocator) {}
 

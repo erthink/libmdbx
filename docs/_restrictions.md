@@ -116,7 +116,7 @@ the lock was restored - we have to wait until such a process releases the
 database, and so on.
 
 
-## Long-lived read transactions
+## Long-lived read transactions {#long-lived-read}
 Avoid long-lived read transactions, especially in the scenarios with a
 high rate of write transactions. Long-lived read transactions prevents
 recycling pages retired/freed by newer write transactions, thus the

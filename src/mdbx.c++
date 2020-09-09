@@ -1002,23 +1002,23 @@ template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;
 
 //------------------------------------------------------------------------------
 
-size_t env_ref::default_pagesize() noexcept { return ::mdbx_syspagesize(); }
+size_t env::default_pagesize() noexcept { return ::mdbx_syspagesize(); }
 
-static inline MDBX_env_flags_t mode2flags(env_ref::mode mode) {
+static inline MDBX_env_flags_t mode2flags(env::mode mode) {
   switch (mode) {
   default:
     cxx20_attribute_unlikely throw std::invalid_argument("db::mode is invalid");
-  case env_ref::mode::readonly:
+  case env::mode::readonly:
     return MDBX_RDONLY;
-  case env_ref::mode::write_file_io:
+  case env::mode::write_file_io:
     return MDBX_ENV_DEFAULTS;
-  case env_ref::mode::write_mapped_io:
+  case env::mode::write_mapped_io:
     return MDBX_WRITEMAP;
   }
 }
 
-__cold MDBX_env_flags_t env_ref::operate_parameters::make_flags(
-    bool accede, bool use_subdirectory) const {
+__cold MDBX_env_flags_t
+env::operate_parameters::make_flags(bool accede, bool use_subdirectory) const {
   MDBX_env_flags_t flags = mode2flags(mode);
   if (accede)
     flags |= MDBX_ACCEDE;
@@ -1044,16 +1044,16 @@ __cold MDBX_env_flags_t env_ref::operate_parameters::make_flags(
     default:
       cxx20_attribute_unlikely throw std::invalid_argument(
           "db::durability is invalid");
-    case env_ref::durability::robust_synchronous:
+    case env::durability::robust_synchronous:
       break;
-    case env_ref::durability::half_synchronous_weak_last:
+    case env::durability::half_synchronous_weak_last:
       flags |= MDBX_NOMETASYNC;
       break;
-    case env_ref::durability::lazy_weak_tail:
+    case env::durability::lazy_weak_tail:
       static_assert(MDBX_MAPASYNC == MDBX_SAFE_NOSYNC, "WTF? Obsolete C API?");
       flags |= MDBX_SAFE_NOSYNC;
       break;
-    case env_ref::durability::whole_fragile:
+    case env::durability::whole_fragile:
       flags |= MDBX_UTTERLY_NOSYNC;
       break;
     }
@@ -1061,30 +1061,30 @@ __cold MDBX_env_flags_t env_ref::operate_parameters::make_flags(
   return flags;
 }
 
-env_ref::mode
-env_ref::operate_parameters::mode_from_flags(MDBX_env_flags_t flags) noexcept {
+env::mode
+env::operate_parameters::mode_from_flags(MDBX_env_flags_t flags) noexcept {
   if (flags & MDBX_RDONLY)
-    return env_ref::mode::readonly;
-  return (flags & MDBX_WRITEMAP) ? env_ref::mode::write_mapped_io
-                                 : env_ref::mode::write_file_io;
+    return env::mode::readonly;
+  return (flags & MDBX_WRITEMAP) ? env::mode::write_mapped_io
+                                 : env::mode::write_file_io;
 }
 
-env_ref::durability env_ref::operate_parameters::durability_from_flags(
+env::durability env::operate_parameters::durability_from_flags(
     MDBX_env_flags_t flags) noexcept {
   if ((flags & MDBX_UTTERLY_NOSYNC) == MDBX_UTTERLY_NOSYNC)
-    return env_ref::durability::whole_fragile;
+    return env::durability::whole_fragile;
   if (flags & MDBX_SAFE_NOSYNC)
-    return env_ref::durability::lazy_weak_tail;
+    return env::durability::lazy_weak_tail;
   if (flags & MDBX_NOMETASYNC)
-    return env_ref::durability::half_synchronous_weak_last;
-  return env_ref::durability::robust_synchronous;
+    return env::durability::half_synchronous_weak_last;
+  return env::durability::robust_synchronous;
 }
 
-env_ref::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
+env::reclaiming_options::reclaiming_options(MDBX_env_flags_t flags) noexcept
     : lifo((flags & MDBX_LIFORECLAIM) ? true : false),
       coalesce((flags & MDBX_COALESCE) ? true : false) {}
 
-env_ref::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
+env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
     : orphan_read_transactions(
           ((flags & (MDBX_NOTLS | MDBX_EXCLUSIVE)) == MDBX_NOTLS) ? true
                                                                   : false),
@@ -1094,7 +1094,7 @@ env_ref::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
       disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
       disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
 
-env_ref::operate_parameters::operate_parameters(const env_ref &env)
+env::operate_parameters::operate_parameters(const env &env)
     : max_maps(env.max_maps()), max_readers(env.max_readers()) {
   const auto flags = env.get_flags();
   mode = mode_from_flags(flags);
@@ -1103,15 +1103,15 @@ env_ref::operate_parameters::operate_parameters(const env_ref &env)
   options = options_from_flags(flags);
 }
 
-bool env_ref::is_pristine() const {
+bool env::is_pristine() const {
   return get_stat().ms_mod_txnid == 0 &&
          get_info().mi_recent_txnid == INITIAL_TXNID;
 }
 
-bool env_ref::is_empty() const { return get_stat().ms_branch_pages == 0; }
+bool env::is_empty() const { return get_stat().ms_branch_pages == 0; }
 
-env_ref &env_ref::copy(const path &destination, bool compactify,
-                       bool force_dynamic_size) {
+env &env::copy(const path &destination, bool compactify,
+               bool force_dynamic_size) {
   const path_to_pchar<path> utf8(destination);
   error::success_or_throw(
       ::mdbx_env_copy(handle_, utf8,
@@ -1121,8 +1121,7 @@ env_ref &env_ref::copy(const path &destination, bool compactify,
   return *this;
 }
 
-env_ref &env_ref::copy(filehandle fd, bool compactify,
-                       bool force_dynamic_size) {
+env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
   error::success_or_throw(
       ::mdbx_env_copy2fd(handle_, fd,
                          (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1131,7 +1130,7 @@ env_ref &env_ref::copy(filehandle fd, bool compactify,
   return *this;
 }
 
-path env_ref::get_path() const {
+path env::get_path() const {
   const char *c_str;
   error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
   return pchar_to_path<path>(c_str);
@@ -1146,13 +1145,13 @@ static inline MDBX_env *create_env() {
   return ptr;
 }
 
-env::~env() noexcept {
+env_managed::~env_managed() noexcept {
   if (handle_)
     error::success_or_panic(::mdbx_env_close(handle_), "mdbx::~env()",
                             "mdbx_env_close");
 }
 
-void env::close(bool dont_sync) {
+void env_managed::close(bool dont_sync) {
   const error rc =
       static_cast<MDBX_error_t>(::mdbx_env_close_ex(handle_, dont_sync));
   switch (rc.code()) {
@@ -1166,27 +1165,30 @@ void env::close(bool dont_sync) {
   }
 }
 
-__cold void env::setup(unsigned max_maps, unsigned max_readers) {
+__cold void env_managed::setup(unsigned max_maps, unsigned max_readers) {
   if (max_readers > 0)
     error::success_or_throw(::mdbx_env_set_maxreaders(handle_, max_readers));
   if (max_maps > 0)
     error::success_or_throw(::mdbx_env_set_maxdbs(handle_, max_maps));
 }
 
-__cold env::env(const path &pathname, const operate_parameters &op, bool accede)
-    : env(create_env()) {
+__cold env_managed::env_managed(const path &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
   const path_to_pchar<path> utf8(pathname);
   error::success_or_throw(
       ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
 
-  //  if (po.options.nested_write_transactions && (flags() & MDBX_WRITEMAP))
-  //    error::throw_exception(MDBX_INCOMPATIBLE);
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
-__cold env::env(const path &pathname, const env::create_parameters &cp,
-                const env_ref::operate_parameters &op, bool accede)
-    : env(create_env()) {
+__cold env_managed::env_managed(const path &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
   const path_to_pchar<path> utf8(pathname);
   set_geometry(cp.geometry);
@@ -1194,28 +1196,29 @@ __cold env::env(const path &pathname, const env::create_parameters &cp,
       ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),
                       cp.file_mode_bits));
 
-  //  if (po.options.nested_write_transactions && (flags() & MDBX_WRITEMAP))
-  //    error::throw_exception(MDBX_INCOMPATIBLE);
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
 //------------------------------------------------------------------------------
 
-txn txn_ref::start_nested() {
+txn_managed txn::start_nested() {
   MDBX_txn *nested;
   error::throw_on_nullptr(handle_, MDBX_BAD_TXN);
   error::success_or_throw(::mdbx_txn_begin(mdbx_txn_env(handle_), handle_,
                                            MDBX_TXN_READWRITE, &nested));
   assert(nested != nullptr);
-  return txn(nested);
+  return txn_managed(nested);
 }
 
-txn::~txn() noexcept {
+txn_managed::~txn_managed() noexcept {
   if (handle_)
     error::success_or_panic(::mdbx_txn_abort(handle_), "mdbx::~txn",
                             "mdbx_txn_abort");
 }
 
-void txn::abort() {
+void txn_managed::abort() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort(handle_));
   if (mdbx_unlikely(err.code() != MDBX_SUCCESS)) {
     if (err.code() != MDBX_THREAD_MISMATCH)
@@ -1224,7 +1227,7 @@ void txn::abort() {
   }
 }
 
-void txn::commit() {
+void txn_managed::commit() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
   if (mdbx_unlikely(err.code() != MDBX_SUCCESS)) {
     if (err.code() != MDBX_THREAD_MISMATCH)
@@ -1235,7 +1238,7 @@ void txn::commit() {
 
 //------------------------------------------------------------------------------
 
-bool txn_ref::drop_map(const char *name, bool ignore_nonexists) {
+bool txn::drop_map(const char *name, bool throw_if_absent) {
   map_handle map;
   const int err = ::mdbx_dbi_open(handle_, name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
@@ -1244,7 +1247,7 @@ bool txn_ref::drop_map(const char *name, bool ignore_nonexists) {
     return true;
   case MDBX_NOTFOUND:
   case MDBX_BAD_DBI:
-    if (ignore_nonexists)
+    if (!throw_if_absent)
       return false;
     cxx17_attribute_fallthrough /* fallthrough */;
   default:
@@ -1252,7 +1255,7 @@ bool txn_ref::drop_map(const char *name, bool ignore_nonexists) {
   }
 }
 
-bool txn_ref::clear_map(const char *name, bool ignore_nonexists) {
+bool txn::clear_map(const char *name, bool throw_if_absent) {
   map_handle map;
   const int err = ::mdbx_dbi_open(handle_, name, MDBX_DB_ACCEDE, &map.dbi);
   switch (err) {
@@ -1261,7 +1264,7 @@ bool txn_ref::clear_map(const char *name, bool ignore_nonexists) {
     return true;
   case MDBX_NOTFOUND:
   case MDBX_BAD_DBI:
-    if (ignore_nonexists)
+    if (!throw_if_absent)
       return false;
     cxx17_attribute_fallthrough /* fallthrough */;
   default:
@@ -1271,14 +1274,12 @@ bool txn_ref::clear_map(const char *name, bool ignore_nonexists) {
 
 //------------------------------------------------------------------------------
 
-void cursor::close() {
+void cursor_managed::close() {
   if (mdbx_unlikely(!handle_))
-    error::throw_exception(MDBX_EINVAL);
+    cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
   ::mdbx_cursor_close(handle_);
   handle_ = nullptr;
 }
-
-cursor::~cursor() noexcept { ::mdbx_cursor_close(handle_); }
 
 //------------------------------------------------------------------------------
 
@@ -1304,13 +1305,13 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const pair &it) {
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const ::mdbx::env_ref::geometry::size &it) {
+                                  const ::mdbx::env::geometry::size &it) {
   switch (it.bytes) {
-  case ::mdbx::env_ref::geometry::default_value:
+  case ::mdbx::env::geometry::default_value:
     return out << "default";
-  case ::mdbx::env_ref::geometry::minimal_value:
+  case ::mdbx::env::geometry::minimal_value:
     return out << "minimal";
-  case ::mdbx::env_ref::geometry::maximal_value:
+  case ::mdbx::env::geometry::maximal_value:
     return out << "maximal";
   }
 
@@ -1321,19 +1322,19 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
     const char *suffix;
   } static const scales[] = {
 #if MDBX_WORDBITS > 32
-    {env::geometry::EiB, "EiB"},
-    {env::geometry::EB, "EB"},
-    {env::geometry::PiB, "PiB"},
-    {env::geometry::PB, "PB"},
-    {env::geometry::TiB, "TiB"},
-    {env::geometry::TB, "TB"},
+    {env_managed::geometry::EiB, "EiB"},
+    {env_managed::geometry::EB, "EB"},
+    {env_managed::geometry::PiB, "PiB"},
+    {env_managed::geometry::PB, "PB"},
+    {env_managed::geometry::TiB, "TiB"},
+    {env_managed::geometry::TB, "TB"},
 #endif
-    {env::geometry::GiB, "GiB"},
-    {env::geometry::GB, "GB"},
-    {env::geometry::MiB, "MiB"},
-    {env::geometry::MB, "MB"},
-    {env::geometry::KiB, "KiB"},
-    {env::geometry::kB, "kB"},
+    {env_managed::geometry::GiB, "GiB"},
+    {env_managed::geometry::GB, "GB"},
+    {env_managed::geometry::MiB, "MiB"},
+    {env_managed::geometry::MB, "MB"},
+    {env_managed::geometry::KiB, "KiB"},
+    {env_managed::geometry::kB, "kB"},
     {1, " bytes"}
   };
 
@@ -1347,18 +1348,18 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::geometry &it) {
-  return                                                                    //
-      out << "\tlower " << env_ref::geometry::size(it.size_lower)           //
-          << ",\n\tnow " << env_ref::geometry::size(it.size_now)            //
-          << ",\n\tupper " << env_ref::geometry::size(it.size_upper)        //
-          << ",\n\tgrowth " << env_ref::geometry::size(it.growth_step)      //
-          << ",\n\tshrink " << env_ref::geometry::size(it.shrink_threshold) //
-          << ",\n\tpagesize " << env_ref::geometry::size(it.pagesize) << "\n";
+                                  const env::geometry &it) {
+  return                                                                //
+      out << "\tlower " << env::geometry::size(it.size_lower)           //
+          << ",\n\tnow " << env::geometry::size(it.size_now)            //
+          << ",\n\tupper " << env::geometry::size(it.size_upper)        //
+          << ",\n\tgrowth " << env::geometry::size(it.growth_step)      //
+          << ",\n\tshrink " << env::geometry::size(it.shrink_threshold) //
+          << ",\n\tpagesize " << env::geometry::size(it.pagesize) << "\n";
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::operate_parameters &it) {
+                                  const env::operate_parameters &it) {
   return out << "{\n"                                 //
              << "\tmax_maps " << it.max_maps          //
              << ",\n\tmax_readers " << it.max_readers //
@@ -1369,14 +1370,13 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
              << "\n}";
 }
 
-__cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::mode &it) {
+__cold ::std::ostream &operator<<(::std::ostream &out, const env::mode &it) {
   switch (it) {
-  case env_ref::mode::readonly:
+  case env::mode::readonly:
     return out << "readonly";
-  case env_ref::mode::write_file_io:
+  case env::mode::write_file_io:
     return out << "write_file_io";
-  case env_ref::mode::write_mapped_io:
+  case env::mode::write_mapped_io:
     return out << "write_mapped_io";
   default:
     return out << "mdbx::env::mode::invalid";
@@ -1384,15 +1384,15 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::durability &it) {
+                                  const env::durability &it) {
   switch (it) {
-  case env_ref::durability::robust_synchronous:
+  case env::durability::robust_synchronous:
     return out << "robust_synchronous";
-  case env_ref::durability::half_synchronous_weak_last:
+  case env::durability::half_synchronous_weak_last:
     return out << "half_synchronous_weak_last";
-  case env_ref::durability::lazy_weak_tail:
+  case env::durability::lazy_weak_tail:
     return out << "lazy_weak_tail";
-  case env_ref::durability::whole_fragile:
+  case env::durability::whole_fragile:
     return out << "whole_fragile";
   default:
     return out << "mdbx::env::durability::invalid";
@@ -1400,7 +1400,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::reclaiming_options &it) {
+                                  const env::reclaiming_options &it) {
   return out << "{"                                            //
              << "lifo: " << (it.lifo ? "yes" : "no")           //
              << ", coalesce: " << (it.coalesce ? "yes" : "no") //
@@ -1408,7 +1408,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env_ref::operate_options &it) {
+                                  const env::operate_options &it) {
   static const char comma[] = ", ";
   const char *delimiter = "";
   out << "{";
@@ -1438,7 +1438,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
 }
 
 __cold ::std::ostream &operator<<(::std::ostream &out,
-                                  const env::create_parameters &it) {
+                                  const env_managed::create_parameters &it) {
   return out << "{\n"                                                        //
              << "\tfile_mode " << std::oct << it.file_mode_bits << std::dec  //
              << ",\n\tsubdirectory " << (it.use_subdirectory ? "yes" : "no") //
@@ -1532,43 +1532,43 @@ __cold string to_string(const ::mdbx::pair &value) {
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::geometry &value) {
+__cold string to_string(const ::mdbx::env::geometry &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::operate_parameters &value) {
+__cold string to_string(const ::mdbx::env::operate_parameters &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::mode &value) {
+__cold string to_string(const ::mdbx::env::mode &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::durability &value) {
+__cold string to_string(const ::mdbx::env::durability &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::reclaiming_options &value) {
+__cold string to_string(const ::mdbx::env::reclaiming_options &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env_ref::operate_options &value) {
+__cold string to_string(const ::mdbx::env::operate_options &value) {
   ostringstream out;
   out << value;
   return out.str();
 }
 
-__cold string to_string(const ::mdbx::env::create_parameters &value) {
+__cold string to_string(const ::mdbx::env_managed::create_parameters &value) {
   ostringstream out;
   out << value;
   return out.str();

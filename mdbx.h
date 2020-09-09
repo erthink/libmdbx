@@ -574,8 +574,8 @@ void LIBMDBX_API NTAPI mdbx_dll_handler(PVOID module, DWORD reason,
 /* OPACITY STRUCTURES *********************************************************/
 
 /** \brief Opaque structure for a database environment.
- * \details An environment supports multiple key-value databases (aka key-value
- * spaces or tables), all residing in the same shared-memory map.
+ * \details An environment supports multiple key-value sub-databases (aka
+ * key-value spaces or tables), all residing in the same shared-memory map.
  * \see mdbx_env_create() \see mdbx_env_close() */
 #ifndef __cplusplus
 typedef struct MDBX_env MDBX_env;
@@ -1812,7 +1812,7 @@ LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
 LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
                               MDBX_copy_flags_t flags);
 
-/** \brief Copy an MDBX environment to the specified file descriptor, with
+/** \brief Copy an environment to the specified file descriptor, with
  * options. \ingroup c_extra
  *
  * This function may be used to make a backup of an existing environment.
@@ -3137,6 +3137,10 @@ LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
 /** \brief Close a database handle. Normally unnecessary.
  * \ingroup c_dbi
  *
+ * Closing a database handle is not necessary, but lets \ref mdbx_dbi_open()
+ * reuse the handle value. Usually it's better to set a bigger
+ * \ref mdbx_env_set_maxdbs(), unless that value would be large.
+ *
  * \note Use with care.
  * This call is synchronized via mutex with \ref mdbx_dbi_close(), but NOT with
  * other transactions running by other threads. The "next" version of libmdbx
@@ -3145,12 +3149,8 @@ LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
  * Handles should only be closed if no other threads are going to reference
  * the database handle or one of its cursors any further. Do not close a handle
  * if an existing transaction has modified its database. Doing so can cause
- * misbehavior from database corruption to errors like \ref MDBX_BAD_VALSIZE
+ * misbehavior from database corruption to errors like \ref MDBX_BAD_DBI
  * (since the DB name is gone).
- *
- * Closing a database handle is not necessary, but lets \ref mdbx_dbi_open()
- * reuse the handle value. Usually it's better to set a bigger
- * \ref mdbx_env_set_maxdbs(), unless that value would be large.
  *
  * \param [in] env  An environment handle returned by \ref mdbx_env_create().
  * \param [in] dbi  A database handle returned by \ref mdbx_dbi_open().
@@ -3865,7 +3865,7 @@ __nothrow_pure_function LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn,
 LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
                                   uint64_t increment);
 
-/** \brief Compare two data items according to a particular database.
+/** \brief Compare two keys according to a particular database.
  * \ingroup c_crud
  *
  * This returns a comparison as if the two data items were keys in the
@@ -3999,7 +3999,7 @@ MDBX_DEPRECATED LIBMDBX_API int mdbx_txn_straggler(const MDBX_txn *txn,
  *
  * \returns A non-zero error value on failure and 0 on success,
  * or \ref MDBX_RESULT_TRUE if thread is already registered. */
-LIBMDBX_API int mdbx_thread_register(MDBX_env *env);
+LIBMDBX_API int mdbx_thread_register(const MDBX_env *env);
 
 /** \brief Unregisters the current thread as a reader for the environment.
  * \ingroup c_extra
@@ -4014,7 +4014,7 @@ LIBMDBX_API int mdbx_thread_register(MDBX_env *env);
  *
  * \returns A non-zero error value on failure and 0 on success, or
  * \ref MDBX_RESULT_TRUE if thread is not registered or already undegistered. */
-LIBMDBX_API int mdbx_thread_unregister(MDBX_env *env);
+LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
 
 /** \brief A lack-of-space callback function to resolve issues with a laggard
  * readers. \ingroup c_err

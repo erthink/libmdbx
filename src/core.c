@@ -6025,7 +6025,7 @@ static bind_rslot_result bind_rslot(MDBX_env *env, const uintptr_t tid) {
   return result;
 }
 
-__cold int mdbx_thread_register(MDBX_env *env) {
+__cold int mdbx_thread_register(const MDBX_env *env) {
   int rc = check_env(env);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -6052,10 +6052,10 @@ __cold int mdbx_thread_register(MDBX_env *env) {
   const uintptr_t tid = mdbx_thread_self();
   if (env->me_txn0 && unlikely(env->me_txn0->mt_owner == tid))
     return MDBX_TXN_OVERLAPPING;
-  return bind_rslot(env, tid).err;
+  return bind_rslot((MDBX_env *)env, tid).err;
 }
 
-__cold int mdbx_thread_unregister(MDBX_env *env) {
+__cold int mdbx_thread_unregister(const MDBX_env *env) {
   int rc = check_env(env);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
