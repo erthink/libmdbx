@@ -8,30 +8,11 @@ each of which is divided into several sections.
 
 1. The \ref intro
   - \ref characteristics
-    - Preface
-    - Features
-    - Limitations
-    - Gotchas
-    - Comparison with other databases
   - \ref restrictions
   - \ref performance
-    - Integral performance
-    - Read Scalability
-    - Sync-write mode
-    - Lazy-write mode
-    - Async-write mode
-    - Cost comparison
 2. \ref usage
   - \ref getting
-    - Embedding
-    - Building
   - \ref starting
-    - Opening
-    - Cursors
-    - Threads and processes
-    - Transactions
-    - Duplicate keys aka Multi-values
-    - Cleaning up
   - \ref bindings
 
 3. The `C/C++` API manual:

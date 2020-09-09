@@ -1070,15 +1070,20 @@ enum MDBX_env_flags_t {
    * be written to disk, while the itself B-tree not yet. In that case, the
    * database will be corrupted!
    *
-   * \see MDBX_NOMETASYNC \see MDBX_SAFE_NOSYNC \see MDBX_UTTERLY_NOSYNC
+   * \see MDBX_SYNC_DURABLE \see MDBX_NOMETASYNC \see MDBX_SAFE_NOSYNC
+   * \see MDBX_UTTERLY_NOSYNC
    *
    * @{ */
 
   /** Default robust and durable sync mode.
    *
-   * Metadata is written and flushed to disk after data is written and flushed,
-   * which guarantees the integrity of the database in the event of a crash at
-   * any time. */
+   * Metadata is written and flushed to disk after a data is written and
+   * flushed, which guarantees the integrity of the database in the event
+   * of a crash at any time.
+   *
+   * \attention Please do not use other modes until you have studied all the
+   * details and are sure. Otherwise, you may lose your users' data, as happens
+   * in [Miranda NG](https://www.miranda-ng.org/) messenger. */
   MDBX_SYNC_DURABLE = 0,
 
   /** Don't sync the meta-page after commit.

@@ -274,7 +274,7 @@ docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md
 	cat $^ | sed 's/^Performance comparison$$/Performance comparison {#performance}/' > $@
 
 docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
-	echo -e "\\page usage Usage\n\\section getting Getting the libmdbx" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
+	echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
 
 doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md AUTHORS LICENSE
 	rm -rf docs/html && cp mdbx.h mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/

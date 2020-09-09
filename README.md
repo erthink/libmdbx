@@ -3,6 +3,11 @@
 libmdbx
 ========
 
+> Please refer to the online [documentation](https://erthink.github.io/libmdbx/)
+> with [`C` API description](https://erthink.github.io/libmdbx/group__c__api.html)
+> and pay attention to the preliminary [`C++` API](https://github.com/erthink/libmdbx/blob/c%2B%2B/mdbx.h%2B%2B).
+> Questions, feedback and suggestions are welcome to the [Telergam' group](https://t.me/libmdbx).
+
 <!-- section-begin overview -->
 _libmdbx_ is an extremely fast, compact, powerful, embedded,
 transactional [key-value database](https://en.wikipedia.org/wiki/Key-value_database),
