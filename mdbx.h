@@ -814,6 +814,9 @@ LIBMDBX_API int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func);
 LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
                                       const size_t bufsize);
 
+/** \brief Panics with message and causes abnormal process termination. */
+LIBMDBX_API void mdbx_panic(const char *fmt, ...) mdbx_printf_args(1, 2);
+
 /** @} end of logging & debug */
 
 /** \brief Environment flags

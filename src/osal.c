@@ -238,8 +238,6 @@ void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
 
 #endif /* __ANDROID_API__ || MDBX_DEBUG */
 
-#if !defined(__ANDROID_API__)
-
 __cold void mdbx_panic(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
@@ -258,12 +256,14 @@ __cold void mdbx_panic(const char *fmt, ...) {
     DebugBreak();
   FatalExit(ERROR_UNHANDLED_ERROR);
 #else
+#if defined(__ANDROID_API__)
+  __android_log_assert("panic", "mdbx", "%s", const_message);
+#else
   __assert_fail(const_message, "mdbx", 0, "panic");
+#endif /* __ANDROID_API__ */
   abort();
 #endif
 }
-
-#endif /* !  __ANDROID_API__ */
 
 /*----------------------------------------------------------------------------*/
 

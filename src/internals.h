@@ -1064,13 +1064,6 @@ MDBX_INTERNAL_FUNC void mdbx_debug_log_va(int level, const char *function,
 
 #endif /* MDBX_DEBUG */
 
-#if defined(__ANDROID_API__)
-#define mdbx_panic(fmt, ...)                                                   \
-  __android_log_assert("panic", "mdbx", fmt, __VA_ARGS__)
-#else
-void mdbx_panic(const char *fmt, ...) __printf_args(1, 2);
-#endif
-
 #if !MDBX_DEBUG && defined(__ANDROID_API__)
 #define mdbx_assert_fail(env, msg, func, line)                                 \
   __android_log_assert(msg, "mdbx", "%s:%u", func, line)
