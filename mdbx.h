@@ -432,6 +432,15 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* __noreturn */
 
+#ifndef mdbx_printf_args
+#if defined(__GNUC__) || __has_attribute(__format__)
+#define mdbx_printf_args(format_index, first_arg)                              \
+  __attribute__((__format__(__printf__, format_index, first_arg)))
+#else
+#define mdbx_printf_args(format_index, first_arg)
+#endif
+#endif /* mdbx_printf_args */
+
 #ifndef DEFINE_ENUM_FLAG_OPERATORS
 #if defined(__cplusplus)
 /// Define operator overloads to enable bit operations on enum values that are

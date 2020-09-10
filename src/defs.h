@@ -259,15 +259,6 @@
 #   endif
 #endif /* unlikely */
 
-#ifndef __printf_args
-#   if defined(__GNUC__) || __has_attribute(__format__)
-#       define __printf_args(format_index, first_arg)                          \
-            __attribute__((__format__(__printf__, format_index, first_arg)))
-#   else
-#       define __printf_args(format_index, first_arg)
-#   endif
-#endif /* __printf_args */
-
 #ifndef __anonymous_struct_extension__
 #   if defined(__GNUC__)
 #       define __anonymous_struct_extension__ __extension__

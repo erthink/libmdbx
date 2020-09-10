@@ -581,7 +581,7 @@ number_of_ovpages(const MDBX_env *env, size_t bytes) {
   return bytes2pgno(env, PAGEHDRSZ - 1 + bytes) + 1;
 }
 
-__cold static int __printf_args(2, 3)
+__cold static int mdbx_printf_args(2, 3)
     bad_page(const MDBX_page *mp, const char *fmt, ...) {
   if (mdbx_log_enabled(MDBX_LOG_ERROR)) {
     static const MDBX_page *prev;

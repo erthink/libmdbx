@@ -487,7 +487,7 @@ static __maybe_unused __inline void mdbx_memory_barrier(void) {
 #define mdbx_asprintf asprintf
 #define mdbx_vasprintf vasprintf
 #else
-MDBX_INTERNAL_FUNC __printf_args(2, 3) int __maybe_unused
+MDBX_INTERNAL_FUNC mdbx_printf_args(2, 3) int __maybe_unused
     mdbx_asprintf(char **strp, const char *fmt, ...);
 MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
