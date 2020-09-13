@@ -33,7 +33,6 @@
 #include <cassert>     // for assert()
 #include <cstring>     // for std::strlen, str:memcmp
 #include <exception>   // for std::exception_ptr
-#include <memory>      // for std::uniq_ptr
 #include <ostream>     // for std::ostream
 #include <sstream>     // for std::ostringstream
 #include <stdexcept>   // for std::invalid_argument
@@ -2220,7 +2219,7 @@ public:
   /// pages) in bytes.
   size_t size_current() const {
     assert(is_readwrite());
-    return get_info().txn_space_dirty;
+    return size_t(get_info().txn_space_dirty);
   }
 
   //----------------------------------------------------------------------------

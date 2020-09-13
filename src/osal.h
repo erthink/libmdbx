@@ -409,6 +409,55 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #endif
 #endif /* __BYTE_ORDER__ || __ORDER_LITTLE_ENDIAN__ || __ORDER_BIG_ENDIAN__ */
 
+/* Get the size of a memory page for the system.
+ * This is the basic size that the platform's memory manager uses, and is
+ * fundamental to the use of memory-mapped files. */
+__nothrow_const_function static __maybe_unused __inline size_t
+mdbx_syspagesize(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  return si.dwPageSize;
+#else
+  return sysconf(_SC_PAGE_SIZE);
+#endif
+}
+
+typedef struct mdbx_mmap_param {
+  union {
+    void *address;
+    uint8_t *dxb;
+    struct MDBX_lockinfo *lck;
+  };
+  mdbx_filehandle_t fd;
+  size_t limit;   /* mapping length, but NOT a size of file nor DB */
+  size_t current; /* mapped region size, i.e. the size of file and DB */
+#if defined(_WIN32) || defined(_WIN64)
+  uint64_t filesize /* in-process cache of a file size. */;
+#endif
+#ifdef MDBX_OSAL_SECTION
+  MDBX_OSAL_SECTION section;
+#endif
+} mdbx_mmap_t;
+
+typedef union bin128 {
+  __anonymous_struct_extension__ struct { uint64_t x, y; };
+  __anonymous_struct_extension__ struct { uint32_t a, b, c, d; };
+} bin128_t;
+
+#if defined(_WIN32) || defined(_WIN64)
+typedef union MDBX_srwlock {
+  struct {
+    long volatile readerCount;
+    long volatile writerCount;
+  };
+  RTL_SRWLOCK native;
+} MDBX_srwlock;
+#endif /* Windows */
+
+#ifdef __cplusplus
+extern void mdbx_osal_jitter(bool tiny);
+#else
 /*----------------------------------------------------------------------------*/
 /* Memory/Compiler barriers, cache coherence */
 
@@ -508,20 +557,6 @@ MDBX_INTERNAL_VAR bool
     mdbx_RunningOnWSL /* Windows Subsystem for Linux is mad and trouble-full */;
 #endif /* Linux */
 
-/* Get the size of a memory page for the system.
- * This is the basic size that the platform's memory manager uses, and is
- * fundamental to the use of memory-mapped files. */
-__nothrow_const_function static __maybe_unused __inline size_t
-mdbx_syspagesize(void) {
-#if defined(_WIN32) || defined(_WIN64)
-  SYSTEM_INFO si;
-  GetSystemInfo(&si);
-  return si.dwPageSize;
-#else
-  return sysconf(_SC_PAGE_SIZE);
-#endif
-}
-
 #ifndef mdbx_strdup
 LIBMDBX_API char *mdbx_strdup(const char *str);
 #endif
@@ -601,23 +636,6 @@ MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname);
 MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
 
-typedef struct mdbx_mmap_param {
-  union {
-    void *address;
-    uint8_t *dxb;
-    struct MDBX_lockinfo *lck;
-  };
-  mdbx_filehandle_t fd;
-  size_t limit;   /* mapping length, but NOT a size of file nor DB */
-  size_t current; /* mapped region size, i.e. the size of file and DB */
-#if defined(_WIN32) || defined(_WIN64)
-  uint64_t filesize /* in-process cache of a file size. */;
-#endif
-#ifdef MDBX_OSAL_SECTION
-  MDBX_OSAL_SECTION section;
-#endif
-} mdbx_mmap_t;
-
 #define MMAP_OPTION_TRUNCATE 1
 #define MMAP_OPTION_SEMAPHORE 2
 MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
@@ -667,11 +685,6 @@ MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t
 mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime);
-
-typedef union bin128 {
-  __anonymous_struct_extension__ struct { uint64_t x, y; };
-  __anonymous_struct_extension__ struct { uint32_t a, b, c, d; };
-} bin128_t;
 
 MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void);
 /*----------------------------------------------------------------------------*/
@@ -781,14 +794,6 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
 MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid);
 
 #if defined(_WIN32) || defined(_WIN64)
-
-typedef union MDBX_srwlock {
-  struct {
-    long volatile readerCount;
-    long volatile writerCount;
-  };
-  RTL_SRWLOCK native;
-} MDBX_srwlock;
 
 typedef void(WINAPI *MDBX_srwlock_function)(MDBX_srwlock *);
 MDBX_INTERNAL_VAR MDBX_srwlock_function mdbx_srwlock_Init,
@@ -908,6 +913,8 @@ static __inline bool mdbx_RunningUnderWine(void) {
 #else
 #error FIXME atomic-ops
 #endif
+
+#endif /* !__cplusplus */
 
 /*----------------------------------------------------------------------------*/
 

@@ -24,6 +24,9 @@ LD      ?= ld
 MDBX_OPTIONS ?= -DNDEBUG=1
 CFLAGS  ?= -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes $(CFLAGS_EXTRA)
 # -Wno-tautological-compare
+CXX     ?= g++
+CXXSTD  ?= $(shell PROBE=$$([ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++); for std in gnu++20 c++20 gnu++2a c++2a gnu++17 c++17 gnu++14 c++14 gnu+11 c++11; do $(CXX) -std=$${std} -c $${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "-std=$${std}" && exit; done)
+CXXFLAGS:= $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 
 # HINT: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old.
 LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt") $(shell uname | grep -qi Windows && echo "-lntdll")
@@ -132,9 +135,6 @@ TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
 TEST_INC   := $(wildcard test/*.h)
 TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
-CXX        ?= g++
-CXXSTD     ?= $(shell $(CXX) -std=c++17 -c test/test.cc -o /dev/null 2>/dev/null && echo -std=c++17 || echo -std=c++11)
-CXXFLAGS   := $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 TAR        ?= $(shell which gnu-tar || echo tar)
 ZIP        ?= $(shell which zip || echo "echo 'Please install zip'")
 CLANG_FORMAT ?= $(shell (which clang-format-12 || which clang-format-11 || which clang-format-10 || which clang-format) 2>/dev/null)

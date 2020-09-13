@@ -422,7 +422,7 @@ typedef sem_t mdbx_ipclock_t;
 #error "FIXME"
 #endif /* MDBX_LOCKING */
 
-#if MDBX_LOCKING > MDBX_LOCKING_SYSV
+#if MDBX_LOCKING > MDBX_LOCKING_SYSV && !defined(__cplusplus)
 MDBX_INTERNAL_FUNC int mdbx_ipclock_stub(mdbx_ipclock_t *ipc);
 MDBX_INTERNAL_FUNC int mdbx_ipclock_destroy(mdbx_ipclock_t *ipc);
 #endif /* MDBX_LOCKING */
@@ -1027,6 +1027,7 @@ struct MDBX_env {
 #endif
 };
 
+#ifndef __cplusplus
 /*----------------------------------------------------------------------------*/
 /* Debug and Logging stuff */
 
@@ -1206,6 +1207,17 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_global_init(void);
 MDBX_INTERNAL_FUNC void mdbx_rthc_global_dtor(void);
 MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 
+static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
+#if MDBX_DEBUG
+  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
+    mdbx_osal_jitter(tiny);
+#else
+  (void)tiny;
+#endif
+}
+
+#endif /* !__cplusplus */
+
 #define MDBX_IS_ERROR(rc)                                                      \
   ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
 
@@ -1358,15 +1370,6 @@ __nothrow_const_function static __maybe_unused __inline pgno_t
 pgno_sub(pgno_t base, pgno_t subtrahend) {
   assert(base >= MIN_PAGENO);
   return (subtrahend < base - MIN_PAGENO) ? base - subtrahend : MIN_PAGENO;
-}
-
-static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
-#if MDBX_DEBUG
-  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
-    mdbx_osal_jitter(tiny);
-#else
-  (void)tiny;
-#endif
 }
 
 __nothrow_const_function static __always_inline __maybe_unused bool

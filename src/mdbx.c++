@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 //
-// Non-inline part of the libmdbx C++ API (preliminary draft)
+// Non-inline part of the libmdbx C++ API (preliminary)
 //
 
 #ifdef _MSC_VER
@@ -25,7 +25,7 @@
 #include "internals.h"
 
 #include <atomic>
-#include <cctype> // for isxdigit()
+#include <cctype> // for isxdigit(), etc
 #include <system_error>
 
 #if defined(__has_include) && __has_include(<version>)
