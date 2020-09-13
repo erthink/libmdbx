@@ -1,7 +1,11 @@
 ﻿//
 // The libmdbx C++ API (preliminary)
 //
-// Reguires GNU C++ >= 4.8, clang >= 4.0, MSVC >= 19.0 (Visual Studio 2015).
+// Tested with:
+//   LCC >= 1.23 (http://www.mcst.ru/lcc),
+//   GNU C++ >= 4.8,
+//   clang >= 4.0,
+//   MSVC >= 19.0 (Visual Studio 2015), but 19.2x could hang due optimizer bug.
 
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file
