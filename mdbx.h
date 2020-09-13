@@ -396,8 +396,8 @@ typedef mode_t mdbx_mode_t;
 #define cxx07_constexpr_var const
 #elif !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                \
     (defined(__LCC__) && __LCC__ < 124) ||                                     \
-    (defined(__GNUC__) && __GNUC__ < 5 && !defined(__clang__) &&               \
-     !defined(__LCC__)) ||                                                     \
+    (defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ < 407) &&           \
+     !defined(__clang__) && !defined(__LCC__)) ||                              \
     (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
     (defined(__clang__) && __clang_major__ < 4)
 #define cxx07_constexpr inline
@@ -1272,7 +1272,7 @@ enum MDBX_txn_flags_t {
  * will be ready for use with \ref mdbx_txn_renew(). This flag allows to
  * preallocate memory and assign a reader slot, thus avoiding these operations
  * at the next start of the transaction. */
-#if defined(__cplusplus) && defined(_MSC_VER) && _MSC_VER < 1910
+#if defined(__cplusplus) && !defined(__cpp_constexpr) && !defined(DOXYGEN)
   MDBX_TXN_RDONLY_PREPARE = uint32_t(MDBX_RDONLY) | uint32_t(MDBX_NOMEMINIT),
 #else
   MDBX_TXN_RDONLY_PREPARE = MDBX_RDONLY | MDBX_NOMEMINIT,

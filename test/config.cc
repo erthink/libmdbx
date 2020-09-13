@@ -475,14 +475,24 @@ const std::string actor_config::serialize(const char *prefix) const {
   result.append(params.pathname_log);
   result.push_back('|');
 
+#if __cplusplus > 201400
   static_assert(std::is_trivially_copyable<actor_params_pod>::value,
                 "actor_params_pod should by POD");
+#else
+  static_assert(std::is_standard_layout<actor_params_pod>::value,
+                "actor_params_pod should by POD");
+#endif
   result.append(data2hex(static_cast<const actor_params_pod *>(&params),
                          sizeof(actor_params_pod), checksum));
   result.push_back('|');
 
+#if __cplusplus > 201400
   static_assert(std::is_trivially_copyable<actor_config_pod>::value,
                 "actor_config_pod should by POD");
+#else
+  static_assert(std::is_standard_layout<actor_config_pod>::value,
+                "actor_config_pod should by POD");
+#endif
   result.append(data2hex(static_cast<const actor_config_pod *>(this),
                          sizeof(actor_config_pod), checksum));
   result.push_back('|');
@@ -527,8 +537,13 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-3\n");
     return false;
   }
+#if __cplusplus > 201400
   static_assert(std::is_trivially_copyable<actor_params_pod>::value,
                 "actor_params_pod should by POD");
+#else
+  static_assert(std::is_standard_layout<actor_params_pod>::value,
+                "actor_params_pod should by POD");
+#endif
   if (!hex2data(str, slash, static_cast<actor_params_pod *>(&config.params),
                 sizeof(actor_params_pod), checksum)) {
     TRACE("<< actor_config::deserialize: actor_params_pod(%.*s)\n",
@@ -542,8 +557,13 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-4\n");
     return false;
   }
+#if __cplusplus > 201400
   static_assert(std::is_trivially_copyable<actor_config_pod>::value,
                 "actor_config_pod should by POD");
+#else
+  static_assert(std::is_standard_layout<actor_config_pod>::value,
+                "actor_config_pod should by POD");
+#endif
   if (!hex2data(str, slash, static_cast<actor_config_pod *>(&config),
                 sizeof(actor_config_pod), checksum)) {
     TRACE("<< actor_config::deserialize: actor_config_pod(%.*s)\n",
