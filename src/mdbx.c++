@@ -38,6 +38,8 @@
 
 namespace {
 
+#if 0 /* Unused for now */
+
 class trouble_location {
 
 #ifndef TROUBLE_PROVIDE_LINENO
@@ -140,7 +142,6 @@ public:
 
 //------------------------------------------------------------------------------
 
-#if 0 /* Unused for now */
 __cold std::string format_va(const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
