@@ -1,7 +1,7 @@
 ﻿//
 // The libmdbx C++ API (preliminary)
 //
-// Reguires GNU C++ >= 5.1, clang >= 4.0, MSVC >= 19.0 (Visual Studio 2015).
+// Reguires GNU C++ >= 4.8, clang >= 4.0, MSVC >= 19.0 (Visual Studio 2015).
 
 /// \file mdbx.h++
 /// \brief The libmdbx C++ API header file
@@ -9,7 +9,9 @@
 #pragma once
 
 #if (!defined(__cplusplus) || __cplusplus < 201103L) &&                        \
-    !(defined(_MSC_VER) && _MSC_VER == 1900)
+    !(defined(                                                                 \
+          _MSC_VER) /* MSVC is mad and don't define __cplusplus properly */    \
+      && _MSC_VER == 1900)
 #error "C++11 or better is required"
 #endif
 
@@ -57,15 +59,6 @@
 #endif
 
 #include "mdbx.h"
-
-/* Workaround for old compilers without properly support for constexpr. */
-#if !defined(DOXYGEN) && !defined(__cpp_constexpr) ||                          \
-    __cpp_constexpr < 201304L ||                                               \
-    (defined(__GNUC__) && __GNUC__ < 6 && !defined(__clang__)) ||              \
-    (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
-    (defined(__clang__) && __clang_major__ < 4)
-#define constexpr inline
-#endif /* __cpp_constexpr < 201304 */
 
 #if !defined(cxx17_constexpr)
 #if defined(DOXYGEN) ||                                                        \
@@ -175,15 +168,16 @@ using byte = unsigned char;
 /// \copydoc MDBX_version_info
 using version_info = ::MDBX_version_info;
 /// \brief Returns libmdbx version information.
-constexpr const version_info &get_version() noexcept;
+cxx11_constexpr const version_info &get_version() noexcept;
 /// \copydoc MDBX_build_info
 using build_info = ::MDBX_build_info;
 /// \brief Resutrns libmdbx build information.
-constexpr const build_info &get_build() noexcept;
+cxx11_constexpr const build_info &get_build() noexcept;
 
 /// \brief Returns field offset in the container class.
 template <class CONTAINER, class MEMBER>
-static constexpr ptrdiff_t offset_of(const MEMBER CONTAINER::*const member) {
+static cxx11_constexpr ptrdiff_t
+offset_of(const MEMBER CONTAINER::*const member) {
   return static_cast<const char *>(static_cast<const void *>(
              &(static_cast<const CONTAINER *>(nullptr)->*member))) -
          static_cast<const char *>(nullptr);
@@ -192,8 +186,8 @@ static constexpr ptrdiff_t offset_of(const MEMBER CONTAINER::*const member) {
 /// \brief Returns const pointer to container class instance
 /// by const pointer to the member field.
 template <class CONTAINER, class MEMBER>
-static constexpr const CONTAINER *owner_of(const MEMBER *ptr,
-                                           const MEMBER CONTAINER::*member) {
+static cxx11_constexpr const CONTAINER *
+owner_of(const MEMBER *ptr, const MEMBER CONTAINER::*member) {
   return static_cast<const CONTAINER *>(static_cast<const void *>(
       static_cast<const char *>(static_cast<const void *>(ptr)) -
       offset_of(member)));
@@ -202,8 +196,8 @@ static constexpr const CONTAINER *owner_of(const MEMBER *ptr,
 /// \brief Returns non-const pointer to container class instance
 /// by non-const pointer to the member field.
 template <class CONTAINER, class MEMBER>
-static constexpr CONTAINER *owner_of(MEMBER *ptr,
-                                     const MEMBER CONTAINER::*member) {
+static cxx11_constexpr CONTAINER *owner_of(MEMBER *ptr,
+                                           const MEMBER CONTAINER::*member) {
   return static_cast<CONTAINER *>(static_cast<void *>(
       static_cast<char *>(static_cast<void *>(ptr)) - offset_of(member)));
 }
@@ -269,22 +263,24 @@ class LIBMDBX_API_TYPE error {
   inline error &operator=(MDBX_error_t error_code) noexcept;
 
 public:
-  constexpr error(MDBX_error_t error_code) noexcept;
+  cxx11_constexpr error(MDBX_error_t error_code) noexcept;
   error(const error &) = default;
   error(error &&) = default;
   error &operator=(const error &) = default;
   error &operator=(error &&) = default;
 
-  constexpr friend bool operator==(const error &a, const error &b) noexcept;
-  constexpr friend bool operator!=(const error &a, const error &b) noexcept;
+  cxx11_constexpr friend bool operator==(const error &a,
+                                         const error &b) noexcept;
+  cxx11_constexpr friend bool operator!=(const error &a,
+                                         const error &b) noexcept;
 
-  constexpr bool is_success() const noexcept;
-  constexpr bool is_result_true() const noexcept;
-  constexpr bool is_result_false() const noexcept;
-  constexpr bool is_failure() const noexcept;
+  cxx11_constexpr bool is_success() const noexcept;
+  cxx11_constexpr bool is_result_true() const noexcept;
+  cxx11_constexpr bool is_result_false() const noexcept;
+  cxx11_constexpr bool is_failure() const noexcept;
 
   /// \brief Returns error code.
-  constexpr MDBX_error_t code() const noexcept;
+  cxx11_constexpr MDBX_error_t code() const noexcept;
 
   /// \brief Returns message for MDBX's errors only and "SYSTEM" for others.
   const char *what() const noexcept;
@@ -293,7 +289,7 @@ public:
   ::std::string message() const;
 
   /// \brief Returns true for MDBX's errors.
-  constexpr bool is_mdbx_error() const noexcept;
+  cxx11_constexpr bool is_mdbx_error() const noexcept;
   [[noreturn]] void panic(const char *context_where,
                           const char *func_who) const noexcept;
   [[noreturn]] void throw_exception() const;
@@ -410,7 +406,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   enum { max_length = MDBX_MAXDATASIZE };
 
   /// \brief Create an empty slice.
-  constexpr slice() noexcept;
+  cxx11_constexpr slice() noexcept;
 
   /// \brief Create a slice that refers to [0,bytes-1] of memory bytes pointed
   /// by ptr.
@@ -436,7 +432,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
       : slice(str.data(), str.length() * sizeof(C)) {}
 
   cxx14_constexpr slice(const MDBX_val &src);
-  constexpr slice(const slice &) noexcept = default;
+  cxx11_constexpr slice(const slice &) noexcept = default;
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   /// \brief Create a slice that refers to the same contents as "sv"
@@ -527,7 +523,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns the buffer size in bytes needed for hexadecimal data dump
   /// of slice content.
-  constexpr size_t to_hex_bytes(unsigned wrap_width = 0) const noexcept {
+  cxx11_constexpr size_t to_hex_bytes(unsigned wrap_width = 0) const noexcept {
     const size_t bytes = length() << 1;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
@@ -540,7 +536,9 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns the buffer size in bytes needed for conversion
   /// hexadecimal dump from slice content to data.
-  constexpr size_t from_hex_bytes() const noexcept { return length() >> 1; }
+  cxx11_constexpr size_t from_hex_bytes() const noexcept {
+    return length() >> 1;
+  }
 
   /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58)
   /// data dump of slice content.
@@ -549,7 +547,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns the buffer size in bytes needed for
   /// [Base58](https://en.wikipedia.org/wiki/Base58) data dump of slice content.
-  constexpr size_t to_base58_bytes(unsigned wrap_width = 0) const noexcept {
+  cxx11_constexpr size_t
+  to_base58_bytes(unsigned wrap_width = 0) const noexcept {
     const size_t bytes = length() / 8 * 11 + (length() % 8 * 43 + 31) / 32;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
@@ -562,7 +561,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// vReturns the buffer size in bytes needed for conversion
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump to data.
-  constexpr size_t from_base58_bytes() const noexcept {
+  cxx11_constexpr size_t from_base58_bytes() const noexcept {
     return length() / 11 * 8 + length() % 11 * 32 / 43;
   }
 
@@ -573,7 +572,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns the buffer size in bytes needed for
   /// [Base64](https://en.wikipedia.org/wiki/Base64) data dump.
-  constexpr size_t to_base64_bytes(unsigned wrap_width = 0) const noexcept {
+  cxx11_constexpr size_t
+  to_base64_bytes(unsigned wrap_width = 0) const noexcept {
     const size_t bytes = (length() + 2) / 3 * 4;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
@@ -586,7 +586,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 
   /// \brief Returns the buffer size in bytes needed for conversion
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump to data.
-  constexpr size_t from_base64_bytes() const noexcept {
+  cxx11_constexpr size_t from_base64_bytes() const noexcept {
     return (length() + 3) / 4 * 3;
   }
 
@@ -661,14 +661,15 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
     (defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L)
   /// \brief Return a string_view that references the same data as this slice.
   template <class C, class T>
-  constexpr explicit operator ::std::basic_string_view<C, T>() const noexcept {
+  cxx11_constexpr explicit
+  operator ::std::basic_string_view<C, T>() const noexcept {
     static_assert(sizeof(C) == 1, "Must be single byte characters");
     return ::std::basic_string_view<C, T>(char_ptr(), length());
   }
 
   /// \brief Return a string_view that references the same data as this slice.
   template <class C = char, class T = ::std::char_traits<C>>
-  constexpr ::std::basic_string_view<C, T> string_view() const noexcept {
+  cxx11_constexpr ::std::basic_string_view<C, T> string_view() const noexcept {
     static_assert(sizeof(C) == 1, "Must be single byte characters");
     return ::std::basic_string_view<C, T>(char_ptr(), length());
   }
@@ -687,28 +688,28 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
 #endif /* __cpp_lib_string_view >= 201606L */
 
   /// \brief Returns casted to pointer to byte an address of data.
-  constexpr const byte *byte_ptr() const noexcept;
+  cxx11_constexpr const byte *byte_ptr() const noexcept;
 
   /// \brief Returns casted to pointer to char an address of data.
-  constexpr const char *char_ptr() const noexcept;
+  cxx11_constexpr const char *char_ptr() const noexcept;
 
   /// \brief Return a pointer to the beginning of the referenced data.
-  constexpr const void *data() const noexcept;
+  cxx11_constexpr const void *data() const noexcept;
 
   /// \brief Returns the number of bytes.
-  constexpr size_t length() const noexcept;
+  cxx11_constexpr size_t length() const noexcept;
 
   /// \brief Checks whether the slice is empty.
-  constexpr bool empty() const noexcept;
+  cxx11_constexpr bool empty() const noexcept;
 
   /// \brief Checks whether the slice data pointer is nullptr.
-  constexpr bool is_null() const noexcept;
+  cxx11_constexpr bool is_null() const noexcept;
 
   /// \brief Returns the number of bytes.
-  constexpr size_t size() const noexcept;
+  cxx11_constexpr size_t size() const noexcept;
 
   /// \brief Returns true if slice is not empty.
-  constexpr operator bool() const noexcept;
+  cxx11_constexpr operator bool() const noexcept;
 
   /// \brief Depletes content of slice and make it invalid.
   inline void invalidate() noexcept;
@@ -803,16 +804,16 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   friend inline bool operator!=(const slice &a, const slice &b) noexcept;
 
   /// \brief Checks the slice is not refers to null address or has zero length.
-  constexpr bool is_valid() const noexcept {
+  cxx11_constexpr bool is_valid() const noexcept {
     return !(iov_base == nullptr && iov_len != 0);
   }
 
   /// \brief Build an invalid slice which non-zero length and refers to null
   /// address.
-  constexpr static slice invalid() noexcept { return slice(size_t(-1)); }
+  cxx11_constexpr static slice invalid() noexcept { return slice(size_t(-1)); }
 
 protected:
-  constexpr slice(size_t invalid_lenght) noexcept
+  cxx11_constexpr slice(size_t invalid_lenght) noexcept
       : ::MDBX_val({nullptr, invalid_lenght}) {}
 };
 
@@ -844,7 +845,9 @@ template <class ALLOCATOR = legacy_allocator> class buffer {
   struct data_preserver : public exception_thunk {
     static int callback(void *context, MDBX_val *target, const void *src,
                         size_t bytes) noexcept;
-    constexpr operator MDBX_preserve_func() const noexcept { return callback; }
+    cxx11_constexpr operator MDBX_preserve_func() const noexcept {
+      return callback;
+    }
   };
 
 public:
@@ -895,34 +898,38 @@ public:
   }
 
   /// \brief Returns casted to const pointer to byte an address of data.
-  constexpr const byte *byte_ptr() const noexcept { return slice_.byte_ptr(); }
+  cxx11_constexpr const byte *byte_ptr() const noexcept {
+    return slice_.byte_ptr();
+  }
 
   /// \brief Returns casted to pointer to byte an address of data.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
   /// an external one.
-  constexpr byte *byte_ptr() noexcept {
+  cxx11_constexpr byte *byte_ptr() noexcept {
     assert(is_freestanding());
     return const_cast<byte *>(slice_.byte_ptr());
   }
 
   /// \brief Returns casted to const pointer to char an address of data.
-  constexpr const char *char_ptr() const noexcept { return slice_.char_ptr(); }
+  cxx11_constexpr const char *char_ptr() const noexcept {
+    return slice_.char_ptr();
+  }
 
   /// \brief Returns casted to pointer to char an address of data.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
   /// an external one.
-  constexpr char *char_ptr() noexcept {
+  cxx11_constexpr char *char_ptr() noexcept {
     assert(is_freestanding());
     return const_cast<char *>(slice_.char_ptr());
   }
 
   /// \brief Return a const pointer to the beginning of the referenced data.
-  constexpr const void *data() const noexcept { return slice_.data(); }
+  cxx11_constexpr const void *data() const noexcept { return slice_.data(); }
 
   /// \brief Return a pointer to the beginning of the referenced data.
   /// \pre REQUIRES: The buffer should store data chunk, but not referenced to
   /// an external one.
-  constexpr void *data() noexcept {
+  cxx11_constexpr void *data() noexcept {
     assert(is_freestanding());
     return const_cast<void *>(slice_.data());
   }
@@ -1025,9 +1032,11 @@ public:
 
   buffer(silo &&str) noexcept : silo_(::std::move(str)), slice_(silo_) {}
 
-  constexpr const ::mdbx::slice &slice() const noexcept { return slice_; }
+  cxx11_constexpr const ::mdbx::slice &slice() const noexcept { return slice_; }
 
-  constexpr operator const ::mdbx::slice &() const noexcept { return slice_; }
+  cxx11_constexpr operator const ::mdbx::slice &() const noexcept {
+    return slice_;
+  }
 
   template <typename POD>
   static buffer wrap(const POD &pod, bool make_reference = false,
@@ -1276,7 +1285,7 @@ public:
   }
 
   /// \brief Checks whether the data pointer of the buffer is nullptr.
-  constexpr bool is_null() const noexcept { return data() == nullptr; }
+  cxx11_constexpr bool is_null() const noexcept { return data() == nullptr; }
 
   /// \brief Returns the number of bytes.
   __nothrow_pure_function cxx20_constexpr size_t size() const noexcept {
@@ -1479,7 +1488,7 @@ struct value_result {
       : value(value), done(done) {}
   value_result(const value_result &) noexcept = default;
   value_result &operator=(const value_result &) noexcept = default;
-  constexpr operator bool() const noexcept {
+  cxx14_constexpr operator bool() const noexcept {
     assert(!done || bool(value));
     return done;
   }
@@ -1493,7 +1502,7 @@ struct pair {
       : key(key), value(value) {}
   pair(const pair &) noexcept = default;
   pair &operator=(const pair &) noexcept = default;
-  constexpr operator bool() const noexcept {
+  cxx14_constexpr operator bool() const noexcept {
     assert(bool(key) == bool(value));
     return key;
   }
@@ -1507,7 +1516,7 @@ struct pair_result : public pair {
       : pair(key, value), done(done) {}
   pair_result(const pair_result &) noexcept = default;
   pair_result &operator=(const pair_result &) noexcept = default;
-  constexpr operator bool() const noexcept {
+  cxx14_constexpr operator bool() const noexcept {
     assert(!done || (bool(key) && bool(value)));
     return done;
   }
@@ -1548,7 +1557,7 @@ enum class value_mode {
                     ///< lexicographic comparison like `std::memcmp()`.
                     ///< In terms of keys, they are not unique, i.e. has
                     ///< duplicates which are sorted by associated data values.
-#if defined(__cplusplus) && defined(_MSC_VER) && _MSC_VER < 1910
+#if !defined(__cpp_constexpr) && !defined(DOXYGEN)
   multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
   multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
   multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
@@ -1614,8 +1623,8 @@ enum class value_mode {
 /// \see cursor::map()
 struct LIBMDBX_API_TYPE map_handle {
   MDBX_dbi dbi{0};
-  constexpr map_handle() noexcept {}
-  constexpr map_handle(MDBX_dbi dbi) noexcept : dbi(dbi) {}
+  cxx11_constexpr map_handle() noexcept {}
+  cxx11_constexpr map_handle(MDBX_dbi dbi) noexcept : dbi(dbi) {}
   map_handle(const map_handle &) noexcept = default;
   map_handle &operator=(const map_handle &) noexcept = default;
   operator bool() const noexcept { return dbi != 0; }
@@ -1625,11 +1634,12 @@ struct LIBMDBX_API_TYPE map_handle {
   struct LIBMDBX_API_TYPE info {
     map_handle::flags flags;
     map_handle::state state;
-    constexpr info(map_handle::flags flags, map_handle::state state) noexcept;
+    cxx11_constexpr info(map_handle::flags flags,
+                         map_handle::state state) noexcept;
     info(const info &) noexcept = default;
     info &operator=(const info &) noexcept = default;
-    constexpr ::mdbx::key_mode key_mode() const noexcept;
-    constexpr ::mdbx::value_mode value_mode() const noexcept;
+    cxx11_constexpr ::mdbx::key_mode key_mode() const noexcept;
+    cxx11_constexpr ::mdbx::value_mode value_mode() const noexcept;
   };
 };
 
@@ -1653,20 +1663,20 @@ class LIBMDBX_API_TYPE env {
 
 protected:
   MDBX_env *handle_{nullptr};
-  constexpr env(MDBX_env *ptr) noexcept;
+  cxx11_constexpr env(MDBX_env *ptr) noexcept;
 
 public:
-  constexpr env() noexcept = default;
+  cxx11_constexpr env() noexcept = default;
   env(const env &) noexcept = default;
   inline env &operator=(env &&other) noexcept;
   inline env(env &&other) noexcept;
   inline ~env() noexcept;
 
-  constexpr operator bool() const noexcept;
-  constexpr operator const MDBX_env *() const;
-  inline operator MDBX_env *();
-  friend constexpr bool operator==(const env &a, const env &b) noexcept;
-  friend constexpr bool operator!=(const env &a, const env &b) noexcept;
+  cxx14_constexpr operator bool() const noexcept;
+  cxx14_constexpr operator const MDBX_env *() const;
+  cxx14_constexpr operator MDBX_env *();
+  friend cxx11_constexpr bool operator==(const env &a, const env &b) noexcept;
+  friend cxx11_constexpr bool operator!=(const env &a, const env &b) noexcept;
 
   //----------------------------------------------------------------------------
 
@@ -1693,8 +1703,8 @@ public:
     /// \brief Tagged type for output to std::ostream
     struct size {
       intptr_t bytes;
-      constexpr size(intptr_t bytes) noexcept : bytes(bytes) {}
-      operator intptr_t() const noexcept { return bytes; }
+      cxx11_constexpr size(intptr_t bytes) noexcept : bytes(bytes) {}
+      cxx11_constexpr operator intptr_t() const noexcept { return bytes; }
     };
 
     /// \brief The lower bound of database size in bytes.
@@ -1757,7 +1767,7 @@ public:
     bool lifo{false};
     /// \copydoc MDBX_COALESCE
     bool coalesce{false};
-    constexpr reclaiming_options() noexcept {}
+    cxx11_constexpr reclaiming_options() noexcept {}
     reclaiming_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -1772,7 +1782,7 @@ public:
     bool disable_readahead{false};
     /// \copydoc MDBX_NOMEMINIT
     bool disable_clear_memory{false};
-    constexpr operate_options() noexcept {}
+    cxx11_constexpr operate_options() noexcept {}
     operate_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -1789,7 +1799,7 @@ public:
     env::reclaiming_options reclaiming;
     env::operate_options options;
 
-    constexpr operate_parameters() noexcept {}
+    cxx11_constexpr operate_parameters() noexcept {}
     MDBX_env_flags_t make_flags(bool accede = true, ///< \copydoc MDBX_ACCEDE
                                 bool use_subdirectory = false) const;
     static env::mode mode_from_flags(MDBX_env_flags_t) noexcept;
@@ -2063,9 +2073,9 @@ public:
                            ///< the MVCC-snapshot for reuse by completion read
                            ///< transaction.
 
-    constexpr reader_info(int slot, mdbx_pid_t pid, mdbx_tid_t thread,
-                          uint64_t txnid, uint64_t lag, size_t used,
-                          size_t retained) noexcept;
+    cxx11_constexpr reader_info(int slot, mdbx_pid_t pid, mdbx_tid_t thread,
+                                uint64_t txnid, uint64_t lag, size_t used,
+                                size_t retained) noexcept;
   };
 
   /// \brief Enumerate readers.
@@ -2122,11 +2132,11 @@ public:
 class LIBMDBX_API_TYPE env_managed : public env {
   using inherited = env;
   /// delegated constructor for RAII
-  constexpr env_managed(MDBX_env *ptr) noexcept : inherited(ptr) {}
+  cxx11_constexpr env_managed(MDBX_env *ptr) noexcept : inherited(ptr) {}
   void setup(unsigned max_maps, unsigned max_readers = 0);
 
 public:
-  constexpr env_managed() noexcept = default;
+  cxx11_constexpr env_managed() noexcept = default;
 
   /// \brief Open existing database.
   env_managed(const path &, const operate_parameters &, bool accede = true);
@@ -2176,20 +2186,20 @@ class LIBMDBX_API_TYPE txn {
 protected:
   friend class cursor;
   MDBX_txn *handle_{nullptr};
-  constexpr txn(MDBX_txn *ptr) noexcept;
+  cxx11_constexpr txn(MDBX_txn *ptr) noexcept;
 
 public:
-  constexpr txn() noexcept = default;
+  cxx11_constexpr txn() noexcept = default;
   txn(const txn &) noexcept = default;
   inline txn &operator=(txn &&other) noexcept;
   inline txn(txn &&other) noexcept;
   inline ~txn() noexcept;
 
-  constexpr operator bool() const noexcept;
-  constexpr operator const MDBX_txn *() const;
-  inline operator MDBX_txn *();
-  friend constexpr bool operator==(const txn &a, const txn &b) noexcept;
-  friend constexpr bool operator!=(const txn &a, const txn &b) noexcept;
+  cxx14_constexpr operator bool() const noexcept;
+  cxx14_constexpr operator const MDBX_txn *() const;
+  cxx14_constexpr operator MDBX_txn *();
+  friend cxx11_constexpr bool operator==(const txn &a, const txn &b) noexcept;
+  friend cxx11_constexpr bool operator!=(const txn &a, const txn &b) noexcept;
 
   /// \brief Returns the transaction's environment.
   inline ::mdbx::env env() const noexcept;
@@ -2434,10 +2444,10 @@ class LIBMDBX_API_TYPE txn_managed : public txn {
   friend class env;
   friend class txn;
   /// delegated constructor for RAII
-  constexpr txn_managed(MDBX_txn *ptr) noexcept : inherited(ptr) {}
+  cxx11_constexpr txn_managed(MDBX_txn *ptr) noexcept : inherited(ptr) {}
 
 public:
-  constexpr txn_managed() noexcept = default;
+  cxx11_constexpr txn_managed() noexcept = default;
   txn_managed(txn_managed &&) = default;
   txn_managed &operator=(txn_managed &&) = default;
   txn_managed(const txn_managed &) = delete;
@@ -2464,19 +2474,21 @@ public:
 class LIBMDBX_API_TYPE cursor {
 protected:
   MDBX_cursor *handle_{nullptr};
-  constexpr cursor(MDBX_cursor *ptr) noexcept;
+  cxx11_constexpr cursor(MDBX_cursor *ptr) noexcept;
 
 public:
-  constexpr cursor() noexcept = default;
+  cxx11_constexpr cursor() noexcept = default;
   cursor(const cursor &) noexcept = default;
   inline cursor &operator=(cursor &&other) noexcept;
   inline cursor(cursor &&other) noexcept;
   inline ~cursor() noexcept;
-  constexpr operator bool() const noexcept;
-  constexpr operator const MDBX_cursor *() const;
-  inline operator MDBX_cursor *();
-  friend constexpr bool operator==(const cursor &a, const cursor &b) noexcept;
-  friend constexpr bool operator!=(const cursor &a, const cursor &b) noexcept;
+  cxx14_constexpr operator bool() const noexcept;
+  cxx14_constexpr operator const MDBX_cursor *() const;
+  cxx14_constexpr operator MDBX_cursor *();
+  friend cxx11_constexpr bool operator==(const cursor &a,
+                                         const cursor &b) noexcept;
+  friend cxx11_constexpr bool operator!=(const cursor &a,
+                                         const cursor &b) noexcept;
 
   enum move_operation {
     first = MDBX_FIRST,
@@ -2599,10 +2611,10 @@ class LIBMDBX_API_TYPE cursor_managed : public cursor {
   using inherited = cursor;
   friend class txn;
   /// delegated constructor for RAII
-  constexpr cursor_managed(MDBX_cursor *ptr) noexcept : inherited(ptr) {}
+  cxx11_constexpr cursor_managed(MDBX_cursor *ptr) noexcept : inherited(ptr) {}
 
 public:
-  constexpr cursor_managed() noexcept = default;
+  cxx11_constexpr cursor_managed() noexcept = default;
 
   /// Explicitly closes the cursor.
   void close();
@@ -2701,8 +2713,10 @@ inline string to_string(const ::MDBX_error_t &errcode) {
 
 namespace mdbx {
 
-constexpr const version_info &get_version() noexcept { return ::mdbx_version; }
-constexpr const build_info &get_build() noexcept { return ::mdbx_build; }
+cxx11_constexpr const version_info &get_version() noexcept {
+  return ::mdbx_version;
+}
+cxx11_constexpr const build_info &get_build() noexcept { return ::mdbx_build; }
 
 static cxx17_constexpr size_t strlen(const char *c_str) noexcept {
 #if defined(__cpp_lib_is_constant_evaluated) &&                                \
@@ -2741,40 +2755,41 @@ inline void exception_thunk::rethrow_captured() const {
 
 //------------------------------------------------------------------------------
 
-constexpr error::error(MDBX_error_t error_code) noexcept : code_(error_code) {}
+cxx11_constexpr error::error(MDBX_error_t error_code) noexcept
+    : code_(error_code) {}
 
 inline error &error::operator=(MDBX_error_t error_code) noexcept {
   code_ = error_code;
   return *this;
 }
 
-constexpr bool operator==(const error &a, const error &b) noexcept {
+cxx11_constexpr bool operator==(const error &a, const error &b) noexcept {
   return a.code_ == b.code_;
 }
 
-constexpr bool operator!=(const error &a, const error &b) noexcept {
+cxx11_constexpr bool operator!=(const error &a, const error &b) noexcept {
   return !(a == b);
 }
 
-constexpr bool error::is_success() const noexcept {
+cxx11_constexpr bool error::is_success() const noexcept {
   return code_ == MDBX_SUCCESS;
 }
 
-constexpr bool error::is_result_true() const noexcept {
+cxx11_constexpr bool error::is_result_true() const noexcept {
   return code_ == MDBX_RESULT_FALSE;
 }
 
-constexpr bool error::is_result_false() const noexcept {
+cxx11_constexpr bool error::is_result_false() const noexcept {
   return code_ == MDBX_RESULT_TRUE;
 }
 
-constexpr bool error::is_failure() const noexcept {
+cxx11_constexpr bool error::is_failure() const noexcept {
   return code_ != MDBX_SUCCESS && code_ != MDBX_RESULT_TRUE;
 }
 
-constexpr MDBX_error_t error::code() const noexcept { return code_; }
+cxx11_constexpr MDBX_error_t error::code() const noexcept { return code_; }
 
-constexpr bool error::is_mdbx_error() const noexcept {
+cxx11_constexpr bool error::is_mdbx_error() const noexcept {
   return (code() >= MDBX_FIRST_LMDB_ERRCODE &&
           code() <= MDBX_LAST_LMDB_ERRCODE) ||
          (code() >= MDBX_FIRST_ADDED_ERRCODE &&
@@ -2862,7 +2877,7 @@ inline void error::success_or_panic(int error_code, const char *context_where,
 
 //------------------------------------------------------------------------------
 
-constexpr slice::slice() noexcept : ::MDBX_val({nullptr, 0}) {}
+cxx11_constexpr slice::slice() noexcept : ::MDBX_val({nullptr, 0}) {}
 
 cxx14_constexpr slice::slice(const void *ptr, size_t bytes)
     : ::MDBX_val({const_cast<void *>(ptr), check_length(bytes)}) {}
@@ -2932,25 +2947,27 @@ inline void slice::swap(slice &other) noexcept {
   other = temp;
 }
 
-constexpr const mdbx::byte *slice::byte_ptr() const noexcept {
+cxx11_constexpr const mdbx::byte *slice::byte_ptr() const noexcept {
   return static_cast<const byte *>(iov_base);
 }
 
-constexpr const char *slice::char_ptr() const noexcept {
+cxx11_constexpr const char *slice::char_ptr() const noexcept {
   return static_cast<const char *>(iov_base);
 }
 
-constexpr const void *slice::data() const noexcept { return iov_base; }
+cxx11_constexpr const void *slice::data() const noexcept { return iov_base; }
 
-constexpr size_t slice::length() const noexcept { return iov_len; }
+cxx11_constexpr size_t slice::length() const noexcept { return iov_len; }
 
-constexpr bool slice::empty() const noexcept { return length() == 0; }
+cxx11_constexpr bool slice::empty() const noexcept { return length() == 0; }
 
-constexpr bool slice::is_null() const noexcept { return data() == nullptr; }
+cxx11_constexpr bool slice::is_null() const noexcept {
+  return data() == nullptr;
+}
 
-constexpr size_t slice::size() const noexcept { return length(); }
+cxx11_constexpr size_t slice::size() const noexcept { return length(); }
 
-constexpr slice::operator bool() const noexcept { return !is_null(); }
+cxx11_constexpr slice::operator bool() const noexcept { return !is_null(); }
 
 inline void slice::invalidate() noexcept { iov_base = nullptr; }
 
@@ -3178,22 +3195,23 @@ slice::base64_decode(const ALLOCATOR &allocator) const {
 
 //------------------------------------------------------------------------------
 
-constexpr map_handle::info::info(map_handle::flags flags,
-                                 map_handle::state state) noexcept
+cxx11_constexpr map_handle::info::info(map_handle::flags flags,
+                                       map_handle::state state) noexcept
     : flags(flags), state(state) {}
 
-constexpr ::mdbx::key_mode map_handle::info::key_mode() const noexcept {
+cxx11_constexpr ::mdbx::key_mode map_handle::info::key_mode() const noexcept {
   return ::mdbx::key_mode(flags & (MDBX_REVERSEKEY | MDBX_INTEGERKEY));
 }
 
-constexpr ::mdbx::value_mode map_handle::info::value_mode() const noexcept {
+cxx11_constexpr ::mdbx::value_mode
+map_handle::info::value_mode() const noexcept {
   return ::mdbx::value_mode(flags & (MDBX_DUPSORT | MDBX_REVERSEDUP |
                                      MDBX_DUPFIXED | MDBX_INTEGERDUP));
 }
 
 //------------------------------------------------------------------------------
 
-constexpr env::env(MDBX_env *ptr) noexcept : handle_(ptr) {}
+cxx11_constexpr env::env(MDBX_env *ptr) noexcept : handle_(ptr) {}
 
 inline env &env::operator=(env &&other) noexcept {
   handle_ = other.handle_;
@@ -3211,17 +3229,19 @@ inline env::~env() noexcept {
 #endif
 }
 
-constexpr env::operator bool() const noexcept { return handle_ != nullptr; }
+cxx14_constexpr env::operator bool() const noexcept {
+  return handle_ != nullptr;
+}
 
-constexpr env::operator const MDBX_env *() const { return handle_; }
+cxx14_constexpr env::operator const MDBX_env *() const { return handle_; }
 
-inline env::operator MDBX_env *() { return handle_; }
+cxx14_constexpr env::operator MDBX_env *() { return handle_; }
 
-constexpr bool operator==(const env &a, const env &b) noexcept {
+cxx11_constexpr bool operator==(const env &a, const env &b) noexcept {
   return a.handle_ == b.handle_;
 }
 
-constexpr bool operator!=(const env &a, const env &b) noexcept {
+cxx11_constexpr bool operator!=(const env &a, const env &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
@@ -3454,10 +3474,10 @@ inline void env::close_map(const map_handle &handle) {
   error::success_or_throw(::mdbx_dbi_close(*this, handle.dbi));
 }
 
-constexpr env::reader_info::reader_info(int slot, mdbx_pid_t pid,
-                                        mdbx_tid_t thread, uint64_t txnid,
-                                        uint64_t lag, size_t used,
-                                        size_t retained) noexcept
+cxx11_constexpr env::reader_info::reader_info(int slot, mdbx_pid_t pid,
+                                              mdbx_tid_t thread, uint64_t txnid,
+                                              uint64_t lag, size_t used,
+                                              size_t retained) noexcept
     : slot(slot), pid(pid), thread(thread), transaction_id(txnid),
       transaction_lag(lag), bytes_used(used), bytes_retained(retained) {}
 
@@ -3478,7 +3498,7 @@ inline int env::enumerate_readers(VISITOR &visitor) {
         return loop_control::exit_loop;
       }
     }
-    constexpr reader_visitor_thunk(VISITOR &visitor) noexcept
+    cxx11_constexpr reader_visitor_thunk(VISITOR &visitor) noexcept
         : visitor_(visitor) {}
   };
   reader_visitor_thunk thunk(visitor);
@@ -3531,7 +3551,7 @@ inline txn_managed env::try_start_write() { return start_write(true); }
 
 //------------------------------------------------------------------------------
 
-constexpr txn::txn(MDBX_txn *ptr) noexcept : handle_(ptr) {}
+cxx11_constexpr txn::txn(MDBX_txn *ptr) noexcept : handle_(ptr) {}
 
 inline txn &txn::operator=(txn &&other) noexcept {
   handle_ = other.handle_;
@@ -3549,17 +3569,19 @@ inline txn::~txn() noexcept {
 #endif
 }
 
-constexpr txn::operator bool() const noexcept { return handle_ != nullptr; }
+cxx14_constexpr txn::operator bool() const noexcept {
+  return handle_ != nullptr;
+}
 
-constexpr txn::operator const MDBX_txn *() const { return handle_; }
+cxx14_constexpr txn::operator const MDBX_txn *() const { return handle_; }
 
-inline txn::operator MDBX_txn *() { return handle_; }
+cxx14_constexpr txn::operator MDBX_txn *() { return handle_; }
 
-constexpr bool operator==(const txn &a, const txn &b) noexcept {
+cxx11_constexpr bool operator==(const txn &a, const txn &b) noexcept {
   return a.handle_ == b.handle_;
 }
 
-constexpr bool operator!=(const txn &a, const txn &b) noexcept {
+cxx11_constexpr bool operator!=(const txn &a, const txn &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
@@ -4029,7 +4051,7 @@ inline ptrdiff_t txn::estimate_to_last(map_handle map, slice from) const {
 
 //------------------------------------------------------------------------------
 
-constexpr cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
+cxx11_constexpr cursor::cursor(MDBX_cursor *ptr) noexcept : handle_(ptr) {}
 
 inline cursor &cursor::operator=(cursor &&other) noexcept {
   handle_ = other.handle_;
@@ -4047,17 +4069,19 @@ inline cursor::~cursor() noexcept {
 #endif
 }
 
-constexpr cursor::operator bool() const noexcept { return handle_ != nullptr; }
+cxx14_constexpr cursor::operator bool() const noexcept {
+  return handle_ != nullptr;
+}
 
-constexpr cursor::operator const MDBX_cursor *() const { return handle_; }
+cxx14_constexpr cursor::operator const MDBX_cursor *() const { return handle_; }
 
-inline cursor::operator MDBX_cursor *() { return handle_; }
+cxx14_constexpr cursor::operator MDBX_cursor *() { return handle_; }
 
-constexpr bool operator==(const cursor &a, const cursor &b) noexcept {
+cxx11_constexpr bool operator==(const cursor &a, const cursor &b) noexcept {
   return a.handle_ == b.handle_;
 }
 
-constexpr bool operator!=(const cursor &a, const cursor &b) noexcept {
+cxx11_constexpr bool operator!=(const cursor &a, const cursor &b) noexcept {
   return a.handle_ != b.handle_;
 }
 
@@ -4515,11 +4539,6 @@ inline int buffer<ALLOCATOR>::data_preserver::callback(void *context,
 }
 
 } // namespace mdbx
-
-/* Undo workaround for old compilers without properly support for constexpr. */
-#ifdef constexpr
-#undef constexpr
-#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)

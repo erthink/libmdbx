@@ -389,12 +389,35 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* cxx17_noexcept */
 
+/* Workaround for old compilers without properly support for constexpr. */
+#if !defined(cxx07_constexpr)
+#if !defined(__cplusplus)
+#define cxx07_constexpr __inline
+#define cxx07_constexpr_var const
+#elif !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                \
+    (defined(__LCC__) && __LCC__ < 124) ||                                     \
+    (defined(__GNUC__) && __GNUC__ < 5 && !defined(__clang__) &&               \
+     !defined(__LCC__)) ||                                                     \
+    (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
+    (defined(__clang__) && __clang_major__ < 4)
+#define cxx07_constexpr inline
+#define cxx07_constexpr_var const
+#else
+#define cxx07_constexpr constexpr
+#define cxx07_constexpr_var constexpr
+#endif
+#endif /* cxx07_constexpr */
+
 #if !defined(cxx11_constexpr)
 #if !defined(__cplusplus)
 #define cxx11_constexpr __inline
 #define cxx11_constexpr_var const
-#elif !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                \
-    (defined(__LCC__) && __LCC__ < 124)
+#elif !defined(__cpp_constexpr) || __cpp_constexpr < 201304 ||                 \
+    (defined(__LCC__) && __LCC__ < 124) ||                                     \
+    (defined(__GNUC__) && __GNUC__ < 6 && !defined(__clang__) &&               \
+     !defined(__LCC__)) ||                                                     \
+    (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
+    (defined(__clang__) && __clang_major__ < 5)
 #define cxx11_constexpr inline
 #define cxx11_constexpr_var const
 #else
@@ -447,16 +470,16 @@ typedef mode_t mdbx_mode_t;
 /// used to define flags (based on Microsoft's DEFINE_ENUM_FLAG_OPERATORS).
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUM)                                       \
   extern "C++" {                                                               \
-  cxx11_constexpr ENUM operator|(ENUM a, ENUM b) {                             \
+  cxx07_constexpr ENUM operator|(ENUM a, ENUM b) {                             \
     return ENUM(std::size_t(a) | std::size_t(b));                              \
   }                                                                            \
   cxx14_constexpr ENUM &operator|=(ENUM &a, ENUM b) { return a = a | b; }      \
-  cxx11_constexpr ENUM operator&(ENUM a, ENUM b) {                             \
+  cxx07_constexpr ENUM operator&(ENUM a, ENUM b) {                             \
     return ENUM(std::size_t(a) & std::size_t(b));                              \
   }                                                                            \
   cxx14_constexpr ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; }      \
-  cxx11_constexpr ENUM operator~(ENUM a) { return ENUM(~std::size_t(a)); }     \
-  cxx11_constexpr ENUM operator^(ENUM a, ENUM b) {                             \
+  cxx07_constexpr ENUM operator~(ENUM a) { return ENUM(~std::size_t(a)); }     \
+  cxx07_constexpr ENUM operator^(ENUM a, ENUM b) {                             \
     return ENUM(std::size_t(a) ^ std::size_t(b));                              \
   }                                                                            \
   cxx14_constexpr ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; }      \
