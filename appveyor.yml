@@ -35,7 +35,11 @@ branches:
 
 configuration:
 - Debug
-- Release
+# MSVC-2019 hangs during code generation/optimization due to its own internal errors.
+# I have found out that the problem occurs because of the /Ob2 option (see https://github.com/erthink/libmdbx/issues/116).
+# So the simplest workaround is to using RelWithDebiInfo configuration for testing (cmake will uses /Ob1 option), instead of Release.
+# - Release
+- RelWithDebInfo
 
 platform:
 - Win32
@@ -76,9 +80,9 @@ build_script:
         if ($env:PLATFORM -eq "x64") {
             $generator = "$generator Win64"
         }
-        & cmake -G "$generator" -D CMAKE_CONFIGURATION_TYPES="Debug;Release" -D MDBX_AVOID_CRT:BOOL=$env:MDBX_AVOID_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
+        & cmake -G "$generator" -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -D MDBX_AVOID_CRT:BOOL=$env:MDBX_AVOID_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
     } else {
-        & cmake -G "$generator" -A $env:PLATFORM -D CMAKE_CONFIGURATION_TYPES="Debug;Release" -DMDBX_AVOID_CRT:BOOL=$env:MDBX_AVOID_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
+        & cmake -G "$generator" -A $env:PLATFORM -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -DMDBX_AVOID_CRT:BOOL=$env:MDBX_AVOID_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
     }
     if ($LastExitCode -ne 0) {
         throw "Exec: $ErrorMessage"
