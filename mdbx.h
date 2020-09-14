@@ -19,10 +19,10 @@ _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет 
 
 \section copyright LICENSE & COPYRIGHT
 
-\authors Copyright 2015-2020 Leonid Yuriev <leo@yuriev.ru>
+\authors Copyright (c) 2015-2020, Leonid Yuriev <leo@yuriev.ru>
 and other _libmdbx_ authors: please see [AUTHORS](./AUTHORS) file.
 
-Redistribution and use in source and binary forms, with or without
+\copyright Redistribution and use in source and binary forms, with or without
 modification, are permitted only as authorized by the OpenLDAP Public License.
 
 A copy of this license is available in the file LICENSE in the
