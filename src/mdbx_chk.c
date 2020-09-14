@@ -106,7 +106,7 @@ struct problem {
 struct problem *problems_list;
 uint64_t total_problems;
 
-static void mdbx_printf_args(1, 2) print(const char *msg, ...) {
+static void MDBX_PRINTF_ARGS(1, 2) print(const char *msg, ...) {
   if (!quiet) {
     va_list args;
 
@@ -145,7 +145,7 @@ static void va_log(MDBX_log_level_t level, const char *msg, va_list args) {
   }
 }
 
-static void mdbx_printf_args(1, 2) error(const char *msg, ...) {
+static void MDBX_PRINTF_ARGS(1, 2) error(const char *msg, ...) {
   va_list args;
   va_start(args, msg);
   va_log(MDBX_LOG_ERROR, msg, args);
@@ -216,7 +216,7 @@ static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
   return last = dbi;
 }
 
-static void mdbx_printf_args(4, 5)
+static void MDBX_PRINTF_ARGS(4, 5)
 
     problem_add(const char *object, uint64_t entry_number, const char *msg,
                 const char *extra, ...) {

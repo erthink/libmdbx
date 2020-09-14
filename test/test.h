@@ -168,7 +168,7 @@ protected:
 
   static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                           uint64_t txn, unsigned gap, size_t space,
-                          int retry) cxx17_noexcept;
+                          int retry) MDBX_CXX17_NOEXCEPT;
 
   MDBX_env_flags_t actual_env_mode{MDBX_ENV_DEFAULTS};
   bool is_nested_txn_available() const {

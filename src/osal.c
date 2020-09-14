@@ -145,7 +145,7 @@ __extern_C void __assert_fail(const char *assertion, const char *file,
 #else
     __nothrow
 #endif /* __THROW */
-    __noreturn;
+    MDBX_NORETURN;
 
 #elif defined(__APPLE__) || defined(__MACH__)
 __extern_C void __assert_rtn(const char *function, const char *file, int line,
@@ -153,7 +153,7 @@ __extern_C void __assert_rtn(const char *function, const char *file, int line,
 #ifdef __dead2
     __dead2
 #else
-    __noreturn
+    MDBX_NORETURN
 #endif /* __dead2 */
 #ifdef __disable_tail_calls
     __disable_tail_calls
@@ -164,7 +164,7 @@ __extern_C void __assert_rtn(const char *function, const char *file, int line,
   __assert_rtn(function, file, line, assertion)
 #elif defined(__sun) || defined(__SVR4) || defined(__svr4__)
 __extern_C void __assert_c99(const char *assection, const char *file, int line,
-                             const char *function) __noreturn;
+                             const char *function) MDBX_NORETURN;
 #define __assert_fail(assertion, file, line, function)                         \
   __assert_c99(assertion, file, line, function)
 #elif defined(__OpenBSD__)
@@ -186,7 +186,7 @@ __extern_C void __assert(const char *function, const char *file, int line,
 #ifdef __dead2
     __dead2
 #else
-    __noreturn
+    MDBX_NORETURN
 #endif /* __dead2 */
 #ifdef __disable_tail_calls
     __disable_tail_calls

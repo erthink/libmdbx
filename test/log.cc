@@ -31,7 +31,7 @@ const char *test_strerror(int errnum) {
   return mdbx_strerror_r(errnum, buf, sizeof(buf));
 }
 
-__noreturn void failure_perror(const char *what, int errnum) {
+MDBX_NORETURN void failure_perror(const char *what, int errnum) {
   failure("%s failed: %s (%d)\n", what, test_strerror(errnum), errnum);
 }
 
@@ -39,7 +39,7 @@ __noreturn void failure_perror(const char *what, int errnum) {
 
 static void mdbx_logger(MDBX_log_level_t priority, const char *function,
                         int line, const char *msg,
-                        va_list args) cxx17_noexcept {
+                        va_list args) MDBX_CXX17_NOEXCEPT {
   if (!function)
     function = "unknown";
 

@@ -80,7 +80,7 @@ const char *keygencase2str(const keygen_case keycase) {
 
 int testcase::oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                            uint64_t txn, unsigned gap, size_t space,
-                           int retry) cxx17_noexcept {
+                           int retry) MDBX_CXX17_NOEXCEPT {
 
   testcase *self = (testcase *)mdbx_env_get_userctx(env);
 

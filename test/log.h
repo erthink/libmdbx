@@ -17,9 +17,9 @@
 #include "base.h"
 #include "chrono.h"
 
-__noreturn void usage(void);
-__noreturn void mdbx_printf_args(1, 2) failure(const char *fmt, ...);
-__noreturn void failure_perror(const char *what, int errnum);
+MDBX_NORETURN void usage(void);
+MDBX_NORETURN void MDBX_PRINTF_ARGS(1, 2) failure(const char *fmt, ...);
+MDBX_NORETURN void failure_perror(const char *what, int errnum);
 const char *test_strerror(int errnum);
 
 namespace logging {
@@ -51,12 +51,12 @@ void setlevel(loglevel priority);
 
 void output_nocheckloglevel_ap(const loglevel priority, const char *format,
                                va_list ap);
-bool mdbx_printf_args(2, 3)
+bool MDBX_PRINTF_ARGS(2, 3)
     output(const loglevel priority, const char *format, ...);
 bool feed_ap(const char *format, va_list ap);
-bool mdbx_printf_args(1, 2) feed(const char *format, ...);
+bool MDBX_PRINTF_ARGS(1, 2) feed(const char *format, ...);
 
-void inline mdbx_printf_args(2, 3)
+void inline MDBX_PRINTF_ARGS(2, 3)
     output_nocheckloglevel(const loglevel priority, const char *format, ...) {
   va_list ap;
   va_start(ap, format);
@@ -85,13 +85,13 @@ public:
 
 } // namespace logging
 
-void mdbx_printf_args(1, 2) log_extra(const char *msg, ...);
-void mdbx_printf_args(1, 2) log_trace(const char *msg, ...);
-void mdbx_printf_args(1, 2) log_debug(const char *msg, ...);
-void mdbx_printf_args(1, 2) log_verbose(const char *msg, ...);
-void mdbx_printf_args(1, 2) log_notice(const char *msg, ...);
-void mdbx_printf_args(1, 2) log_warning(const char *msg, ...);
-void mdbx_printf_args(1, 2) log_error(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_extra(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_trace(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_debug(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_verbose(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_notice(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_warning(const char *msg, ...);
+void MDBX_PRINTF_ARGS(1, 2) log_error(const char *msg, ...);
 
 void log_trouble(const char *where, const char *what, int errnum);
 void log_flush(void);

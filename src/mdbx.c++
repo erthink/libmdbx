@@ -28,14 +28,6 @@
 #include <cctype> // for isxdigit(), etc
 #include <system_error>
 
-#if defined(__has_include) && __has_include(<version>)
-#include <version>
-#endif
-
-#if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
-#include <filesystem>
-#endif /* __cpp_lib_filesystem >= 201703L */
-
 namespace {
 
 #if 0 /* Unused for now */
@@ -72,7 +64,7 @@ class trouble_location {
 #endif
 
 public:
-  cxx11_constexpr trouble_location(unsigned line, const char *condition,
+  MDBX_CXX11_CONSTEXPR trouble_location(unsigned line, const char *condition,
                                    const char *function, const char *filename)
       :
 #if TROUBLE_PROVIDE_LINENO
@@ -198,14 +190,14 @@ __cold bug::~bug() noexcept {}
 
 #define RAISE_BUG(line, condition, function, file)                             \
   do {                                                                         \
-    static cxx11_constexpr_var trouble_location bug(line, condition, function, \
-                                                    file);                     \
+    static MDBX_CXX11_CONSTEXPR_VAR trouble_location bug(line, condition,      \
+                                                         function, file);      \
     raise_bug(bug);                                                            \
   } while (0)
 
 #define ENSURE(condition)                                                      \
   do                                                                           \
-    if (mdbx_unlikely(!(condition)))                                           \
+    if (MDBX_UNLIKELY(!(condition)))                                           \
       RAISE_BUG(__LINE__, #condition, __func__, __FILE__);                     \
   while (0)
 
@@ -488,9 +480,9 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
 
   auto src = byte_ptr();
   const auto end = src + length();
-  if (mdbx_unlikely(disable_utf8)) {
+  if (MDBX_UNLIKELY(disable_utf8)) {
     do
-      if (mdbx_unlikely((P_ & map[*src]) == 0))
+      if (MDBX_UNLIKELY((P_ & map[*src]) == 0))
         return false;
     while (++src < end);
     return true;
@@ -543,7 +535,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
 
 char *slice::to_hex(char *__restrict dest, size_t dest_size, bool uppercase,
                     unsigned wrap_width) const {
-  if (mdbx_unlikely(to_hex_bytes(wrap_width) > dest_size))
+  if (MDBX_UNLIKELY(to_hex_bytes(wrap_width) > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -565,22 +557,22 @@ char *slice::to_hex(char *__restrict dest, size_t dest_size, bool uppercase,
 
 byte *slice::from_hex(byte *__restrict dest, size_t dest_size,
                       bool ignore_spaces) const {
-  if (mdbx_unlikely(length() % 2 && !ignore_spaces))
+  if (MDBX_UNLIKELY(length() % 2 && !ignore_spaces))
     throw std::domain_error(
         "mdbx::from_hex:: odd length of hexadecimal string");
-  if (mdbx_unlikely(from_hex_bytes() > dest_size))
+  if (MDBX_UNLIKELY(from_hex_bytes() > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
   for (auto left = length(); left > 0;) {
-    if (mdbx_unlikely(*src <= ' ') &&
-        mdbx_likely(ignore_spaces && isspace(*src))) {
+    if (MDBX_UNLIKELY(*src <= ' ') &&
+        MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
       --left;
       continue;
     }
 
-    if (mdbx_unlikely(left < 1 || !isxdigit(src[0]) || !isxdigit(src[1])))
+    if (MDBX_UNLIKELY(left < 1 || !isxdigit(src[0]) || !isxdigit(src[1])))
       throw std::domain_error("mdbx::from_hex:: invalid hexadecimal string");
 
     int8_t hi = src[0];
@@ -599,20 +591,20 @@ byte *slice::from_hex(byte *__restrict dest, size_t dest_size,
 }
 
 bool slice::is_hex(bool ignore_spaces) const noexcept {
-  if (mdbx_unlikely(length() % 2 && !ignore_spaces))
+  if (MDBX_UNLIKELY(length() % 2 && !ignore_spaces))
     return false;
 
   bool got = false;
   auto src = byte_ptr();
   for (auto left = length(); left > 0;) {
-    if (mdbx_unlikely(*src <= ' ') &&
-        mdbx_likely(ignore_spaces && isspace(*src))) {
+    if (MDBX_UNLIKELY(*src <= ' ') &&
+        MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
       --left;
       continue;
     }
 
-    if (mdbx_unlikely(left < 1 || !isxdigit(src[0]) || !isxdigit(src[1])))
+    if (MDBX_UNLIKELY(left < 1 || !isxdigit(src[0]) || !isxdigit(src[1])))
       return false;
 
     got = true;
@@ -669,13 +661,13 @@ static inline char b58_8to11(uint64_t &v) noexcept {
 
 char *slice::to_base58(char *__restrict dest, size_t dest_size,
                        unsigned wrap_width) const {
-  if (mdbx_unlikely(to_base58_bytes(wrap_width) > dest_size))
+  if (MDBX_UNLIKELY(to_base58_bytes(wrap_width) > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
   size_t left = length();
   auto line = dest;
-  while (mdbx_likely(left > 7)) {
+  while (MDBX_LIKELY(left > 7)) {
     left -= 8;
     uint64_t v;
     std::memcpy(&v, src, 8);
@@ -752,20 +744,20 @@ static inline signed char b58_11to8(uint64_t &v, const byte c) noexcept {
 
 byte *slice::from_base58(byte *__restrict dest, size_t dest_size,
                          bool ignore_spaces) const {
-  if (mdbx_unlikely(from_base58_bytes() > dest_size))
+  if (MDBX_UNLIKELY(from_base58_bytes() > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
   for (auto left = length(); left > 0;) {
-    if (mdbx_unlikely(isspace(*src)) && ignore_spaces) {
+    if (MDBX_UNLIKELY(isspace(*src)) && ignore_spaces) {
       ++src;
       --left;
       continue;
     }
 
-    if (mdbx_likely(left > 10)) {
+    if (MDBX_LIKELY(left > 10)) {
       uint64_t v = 0;
-      if (mdbx_unlikely((b58_11to8(v, src[0]) | b58_11to8(v, src[1]) |
+      if (MDBX_UNLIKELY((b58_11to8(v, src[0]) | b58_11to8(v, src[1]) |
                          b58_11to8(v, src[2]) | b58_11to8(v, src[3]) |
                          b58_11to8(v, src[4]) | b58_11to8(v, src[5]) |
                          b58_11to8(v, src[6]) | b58_11to8(v, src[7]) |
@@ -792,7 +784,7 @@ byte *slice::from_base58(byte *__restrict dest, size_t dest_size,
     uint64_t v = 1;
     unsigned parrots = 0;
     do {
-      if (mdbx_unlikely(b58_11to8(v, *src++) < 0))
+      if (MDBX_UNLIKELY(b58_11to8(v, *src++) < 0))
         goto bailout;
       parrots += 32;
     } while (--left);
@@ -814,15 +806,15 @@ bool slice::is_base58(bool ignore_spaces) const noexcept {
   bool got = false;
   auto src = byte_ptr();
   for (auto left = length(); left > 0;) {
-    if (mdbx_unlikely(*src <= ' ') &&
-        mdbx_likely(ignore_spaces && isspace(*src))) {
+    if (MDBX_UNLIKELY(*src <= ' ') &&
+        MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
       --left;
       continue;
     }
 
-    if (mdbx_likely(left > 10)) {
-      if (mdbx_unlikely((b58_map[src[0]] | b58_map[src[1]] | b58_map[src[2]] |
+    if (MDBX_LIKELY(left > 10)) {
+      if (MDBX_UNLIKELY((b58_map[src[0]] | b58_map[src[1]] | b58_map[src[2]] |
                          b58_map[src[3]] | b58_map[src[4]] | b58_map[src[5]] |
                          b58_map[src[6]] | b58_map[src[7]] | b58_map[src[8]] |
                          b58_map[src[9]] | b58_map[src[10]]) < 0))
@@ -838,7 +830,7 @@ bool slice::is_base58(bool ignore_spaces) const noexcept {
       return false;
 
     do
-      if (mdbx_unlikely(b58_map[*src++] < 0))
+      if (MDBX_UNLIKELY(b58_map[*src++] < 0))
         return false;
     while (--left);
     got = true;
@@ -865,7 +857,7 @@ static inline void b64_3to4(const byte x, const byte y, const byte z,
 
 char *slice::to_base64(char *__restrict dest, size_t dest_size,
                        unsigned wrap_width) const {
-  if (mdbx_unlikely(to_base64_bytes(wrap_width) > dest_size))
+  if (MDBX_UNLIKELY(to_base64_bytes(wrap_width) > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -874,7 +866,7 @@ char *slice::to_base64(char *__restrict dest, size_t dest_size,
   while (true) {
     switch (left) {
     default:
-      cxx20_attribute_likely left -= 3;
+      MDBX_CXX20_LIKELY left -= 3;
       b64_3to4(src[0], src[1], src[2], dest);
       dest += 4;
       src += 3;
@@ -928,27 +920,27 @@ static inline signed char b64_4to3(signed char a, signed char b, signed char c,
 
 byte *slice::from_base64(byte *__restrict dest, size_t dest_size,
                          bool ignore_spaces) const {
-  if (mdbx_unlikely(length() % 4 && !ignore_spaces))
+  if (MDBX_UNLIKELY(length() % 4 && !ignore_spaces))
     throw std::domain_error("mdbx::from_base64:: odd length of base64 string");
-  if (mdbx_unlikely(from_base64_bytes() > dest_size))
+  if (MDBX_UNLIKELY(from_base64_bytes() > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
   for (auto left = length(); left > 0;) {
-    if (mdbx_unlikely(*src <= ' ') &&
-        mdbx_likely(ignore_spaces && isspace(*src))) {
+    if (MDBX_UNLIKELY(*src <= ' ') &&
+        MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
       --left;
       continue;
     }
 
-    if (mdbx_unlikely(left < 3)) {
+    if (MDBX_UNLIKELY(left < 3)) {
     bailout:
       throw std::domain_error("mdbx::from_base64:: invalid base64 string");
     }
     const signed char a = b64_map[src[0]], b = b64_map[src[1]],
                       c = b64_map[src[2]], d = b64_map[src[3]];
-    if (mdbx_unlikely(b64_4to3(a, b, c, d, dest) < 0)) {
+    if (MDBX_UNLIKELY(b64_4to3(a, b, c, d, dest) < 0)) {
       if (left == 4 && (a | b) >= 0 && d == EQ) {
         if (c >= 0)
           return dest + 2;
@@ -964,24 +956,24 @@ byte *slice::from_base64(byte *__restrict dest, size_t dest_size,
 }
 
 bool slice::is_base64(bool ignore_spaces) const noexcept {
-  if (mdbx_unlikely(length() % 4 && !ignore_spaces))
+  if (MDBX_UNLIKELY(length() % 4 && !ignore_spaces))
     return false;
 
   bool got = false;
   auto src = byte_ptr();
   for (auto left = length(); left > 0;) {
-    if (mdbx_unlikely(*src <= ' ') &&
-        mdbx_likely(ignore_spaces && isspace(*src))) {
+    if (MDBX_UNLIKELY(*src <= ' ') &&
+        MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
       --left;
       continue;
     }
 
-    if (mdbx_unlikely(left < 3))
+    if (MDBX_UNLIKELY(left < 3))
       return false;
     const signed char a = b64_map[src[0]], b = b64_map[src[1]],
                       c = b64_map[src[2]], d = b64_map[src[3]];
-    if (mdbx_unlikely((a | b | c | d) < 0)) {
+    if (MDBX_UNLIKELY((a | b | c | d) < 0)) {
       if (left == 4 && (a | b) >= 0 && d == EQ && (c >= 0 || c == d))
         return true;
       return false;
@@ -1008,7 +1000,7 @@ size_t env::default_pagesize() noexcept { return ::mdbx_syspagesize(); }
 static inline MDBX_env_flags_t mode2flags(env::mode mode) {
   switch (mode) {
   default:
-    cxx20_attribute_unlikely throw std::invalid_argument("db::mode is invalid");
+    MDBX_CXX20_UNLIKELY throw std::invalid_argument("db::mode is invalid");
   case env::mode::readonly:
     return MDBX_RDONLY;
   case env::mode::write_file_io:
@@ -1043,7 +1035,7 @@ env::operate_parameters::make_flags(bool accede, bool use_subdirectory) const {
       flags |= MDBX_LIFORECLAIM;
     switch (durability) {
     default:
-      cxx20_attribute_unlikely throw std::invalid_argument(
+      MDBX_CXX20_UNLIKELY throw std::invalid_argument(
           "db::durability is invalid");
     case env::durability::robust_synchronous:
       break;
@@ -1221,7 +1213,7 @@ txn_managed::~txn_managed() noexcept {
 
 void txn_managed::abort() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort(handle_));
-  if (mdbx_unlikely(err.code() != MDBX_SUCCESS)) {
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS)) {
     if (err.code() != MDBX_THREAD_MISMATCH)
       handle_ = nullptr;
     err.throw_exception();
@@ -1230,7 +1222,7 @@ void txn_managed::abort() {
 
 void txn_managed::commit() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
-  if (mdbx_unlikely(err.code() != MDBX_SUCCESS)) {
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS)) {
     if (err.code() != MDBX_THREAD_MISMATCH)
       handle_ = nullptr;
     err.throw_exception();
@@ -1250,9 +1242,9 @@ bool txn::drop_map(const char *name, bool throw_if_absent) {
   case MDBX_BAD_DBI:
     if (!throw_if_absent)
       return false;
-    cxx17_attribute_fallthrough /* fallthrough */;
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
   default:
-    cxx20_attribute_unlikely error::throw_exception(err);
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
 }
 
@@ -1267,17 +1259,17 @@ bool txn::clear_map(const char *name, bool throw_if_absent) {
   case MDBX_BAD_DBI:
     if (!throw_if_absent)
       return false;
-    cxx17_attribute_fallthrough /* fallthrough */;
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
   default:
-    cxx20_attribute_unlikely error::throw_exception(err);
+    MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
 }
 
 //------------------------------------------------------------------------------
 
 void cursor_managed::close() {
-  if (mdbx_unlikely(!handle_))
-    cxx20_attribute_unlikely error::throw_exception(MDBX_EINVAL);
+  if (MDBX_UNLIKELY(!handle_))
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_EINVAL);
   ::mdbx_cursor_close(handle_);
   handle_ = nullptr;
 }

@@ -226,7 +226,6 @@ typedef mode_t mdbx_mode_t;
 #define __has_builtin(x) (0)
 #endif /* __has_builtin */
 
-#ifndef __pure_function
 /** Many functions have no effects except the return value and their
  * return value depends only on the parameters and/or global variables.
  * Such a function can be subject to common subexpression elimination
@@ -235,43 +234,39 @@ typedef mode_t mdbx_mode_t;
 #if (defined(__GNUC__) || __has_attribute(__pure__)) &&                        \
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
      || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
-#define __pure_function __attribute__((__pure__))
+#define MDBX_PURE_FUNCTION __attribute__((__pure__))
 #elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#define __pure_function
+#define MDBX_PURE_FUNCTION
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::pure) &&                \
     (!defined(__clang__) || !__has_feature(cxx_exceptions))
-#define __pure_function [[gnu::pure]]
+#define MDBX_PURE_FUNCTION [[gnu::pure]]
 #else
-#define __pure_function
-#endif
-#endif /* __pure_function */
+#define MDBX_PURE_FUNCTION
+#endif /* MDBX_PURE_FUNCTION */
 
-#ifndef __nothrow_pure_function
-/** Like \ref __pure_function with addition `noexcept` restriction
+/** Like \ref MDBX_PURE_FUNCTION with addition `noexcept` restriction
  * that is compatible to CLANG and proposed [[pure]]. */
 #if defined(__GNUC__) ||                                                       \
     (__has_attribute(__pure__) && __has_attribute(__nothrow__))
-#define __nothrow_pure_function __attribute__((__pure__, __nothrow__))
+#define MDBX_NOTHROW_PURE_FUNCTION __attribute__((__pure__, __nothrow__))
 #elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
 #if __has_cpp_attribute(pure)
-#define __nothrow_pure_function [[pure]]
+#define MDBX_NOTHROW_PURE_FUNCTION [[pure]]
 #else
-#define __nothrow_pure_function
+#define MDBX_NOTHROW_PURE_FUNCTION
 #endif
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::pure)
 #if __has_cpp_attribute(gnu::nothrow)
-#define __nothrow_pure_function [[gnu::pure, gnu::nothrow]]
+#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::pure, gnu::nothrow]]
 #else
-#define __nothrow_pure_function [[gnu::pure]]
+#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::pure]]
 #endif
 #elif defined(__cplusplus) && __has_cpp_attribute(pure)
-#define __nothrow_pure_function [[pure]]
+#define MDBX_NOTHROW_PURE_FUNCTION [[pure]]
 #else
-#define __nothrow_pure_function
-#endif
-#endif /* __nothrow_pure_function */
+#define MDBX_NOTHROW_PURE_FUNCTION
+#endif /* MDBX_NOTHROW_PURE_FUNCTION */
 
-#ifndef __const_function
 /** Many functions do not examine any values except their arguments,
  * and have no effects except the return value. Basically this is just
  * slightly more strict class than the PURE attribute, since function
@@ -284,39 +279,36 @@ typedef mode_t mdbx_mode_t;
 #if (defined(__GNUC__) || __has_attribute(__pure__)) &&                        \
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
      || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
-#define __const_function __attribute__((__const__))
+#define MDBX_CONST_FUNCTION __attribute__((__const__))
 #elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#define __const_function __pure_function
+#define MDBX_CONST_FUNCTION MDBX_PURE_FUNCTION
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::const) &&               \
     (!defined(__clang__) || !__has_feature(cxx_exceptions))
-#define __const_function [[gnu::const]]
+#define MDBX_CONST_FUNCTION [[gnu::const]]
 #else
-#define __const_function __pure_function
-#endif
-#endif /* __const_function */
+#define MDBX_CONST_FUNCTION MDBX_PURE_FUNCTION
+#endif /* MDBX_CONST_FUNCTION */
 
-#ifndef __nothrow_const_function
-/** Like \ref __const_function with addition `noexcept` restriction
+/** Like \ref MDBX_CONST_FUNCTION with addition `noexcept` restriction
  * that is compatible to CLANG and future [[const]]. */
 #if defined(__GNUC__) ||                                                       \
     (__has_attribute(__const__) && __has_attribute(__nothrow__))
-#define __nothrow_const_function __attribute__((__const__, __nothrow__))
+#define MDBX_NOTHROW_CONST_FUNCTION __attribute__((__const__, __nothrow__))
 #elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
-#define __nothrow_const_function __nothrow_pure_function
+#define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
 #elif defined(__cplusplus) && __has_cpp_attribute(gnu::const)
 #if __has_cpp_attribute(gnu::nothrow)
-#define __nothrow_pure_function [[gnu::const, gnu::nothrow]]
+#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::const, gnu::nothrow]]
 #else
-#define __nothrow_pure_function [[gnu::const]]
+#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::const]]
 #endif
 #elif defined(__cplusplus) && __has_cpp_attribute(const)
-#define __nothrow_const_function [[const]]
+#define MDBX_NOTHROW_CONST_FUNCTION [[const]]
 #else
-#define __nothrow_const_function __nothrow_pure_function
-#endif
-#endif /* __nothrow_pure_function */
+#define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
+#endif /* MDBX_NOTHROW_PURE_FUNCTION */
 
-#ifndef MDBX_DEPRECATED
+#ifndef MDBX_DEPRECATED /* may be predefined to avoid warnings "deprecated" */
 #ifdef __deprecated
 #define MDBX_DEPRECATED __deprecated
 #elif defined(__GNUC__) || __has_attribute(__deprecated__)
@@ -372,97 +364,81 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* bool without __cplusplus */
 
-#if !defined(cxx11_noexcept)
-#if defined(__cplusplus) && __cplusplus >= 201103L
-#define cxx11_noexcept noexcept
-#else
-#define cxx11_noexcept
-#endif
-#endif /* cxx11_noexcept */
-
-#if !defined(cxx17_noexcept)
 #if !defined(__cpp_noexcept_function_type) ||                                  \
     __cpp_noexcept_function_type < 201510L
-#define cxx17_noexcept
+#define MDBX_CXX17_NOEXCEPT
 #else
-#define cxx17_noexcept noexcept
-#endif
-#endif /* cxx17_noexcept */
+#define MDBX_CXX17_NOEXCEPT noexcept
+#endif /* MDBX_CXX17_NOEXCEPT */
 
 /* Workaround for old compilers without properly support for constexpr. */
-#if !defined(cxx07_constexpr)
 #if !defined(__cplusplus)
-#define cxx07_constexpr __inline
-#define cxx07_constexpr_var const
+#define MDBX_CXX01_CONSTEXPR __inline
+#define MDBX_CXX01_CONSTEXPR_VAR const
 #elif !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                \
     (defined(__LCC__) && __LCC__ < 124) ||                                     \
     (defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ < 407) &&           \
      !defined(__clang__) && !defined(__LCC__)) ||                              \
     (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
     (defined(__clang__) && __clang_major__ < 4)
-#define cxx07_constexpr inline
-#define cxx07_constexpr_var const
+#define MDBX_CXX01_CONSTEXPR inline
+#define MDBX_CXX01_CONSTEXPR_VAR const
 #else
-#define cxx07_constexpr constexpr
-#define cxx07_constexpr_var constexpr
-#endif
-#endif /* cxx07_constexpr */
+#define MDBX_CXX01_CONSTEXPR constexpr
+#define MDBX_CXX01_CONSTEXPR_VAR constexpr
+#endif /* MDBX_CXX01_CONSTEXPR */
 
-#if !defined(cxx11_constexpr)
 #if !defined(__cplusplus)
-#define cxx11_constexpr __inline
-#define cxx11_constexpr_var const
+#define MDBX_CXX11_CONSTEXPR __inline
+#define MDBX_CXX11_CONSTEXPR_VAR const
 #elif !defined(__cpp_constexpr) || __cpp_constexpr < 201304 ||                 \
     (defined(__LCC__) && __LCC__ < 124) ||                                     \
     (defined(__GNUC__) && __GNUC__ < 6 && !defined(__clang__) &&               \
      !defined(__LCC__)) ||                                                     \
     (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
     (defined(__clang__) && __clang_major__ < 5)
-#define cxx11_constexpr inline
-#define cxx11_constexpr_var const
+#define MDBX_CXX11_CONSTEXPR inline
+#define MDBX_CXX11_CONSTEXPR_VAR const
 #else
-#define cxx11_constexpr constexpr
-#define cxx11_constexpr_var constexpr
-#endif
-#endif /* cxx11_constexpr */
+#define MDBX_CXX11_CONSTEXPR constexpr
+#define MDBX_CXX11_CONSTEXPR_VAR constexpr
+#endif /* MDBX_CXX11_CONSTEXPR */
 
-#if !defined(cxx14_constexpr)
 #if !defined(__cplusplus)
-#define cxx14_constexpr __inline
-#define cxx14_constexpr_var const
+#define MDBX_CXX14_CONSTEXPR __inline
+#define MDBX_CXX14_CONSTEXPR_VAR const
 #elif defined(__cpp_constexpr) && __cpp_constexpr >= 201304L &&                \
     ((defined(_MSC_VER) && _MSC_VER >= 1910) ||                                \
      (defined(__clang__) && __clang_major__ > 4) ||                            \
      (defined(__GNUC__) && __GNUC__ > 6) ||                                    \
      (!defined(__GNUC__) && !defined(__clang__) && !defined(_MSC_VER)))
-#define cxx14_constexpr constexpr
-#define cxx14_constexpr_var constexpr
+#define MDBX_CXX14_CONSTEXPR constexpr
+#define MDBX_CXX14_CONSTEXPR_VAR constexpr
 #else
-#define cxx14_constexpr inline
-#define cxx14_constexpr_var const
-#endif
-#endif /* cxx14_constexpr */
+#define MDBX_CXX14_CONSTEXPR inline
+#define MDBX_CXX14_CONSTEXPR_VAR const
+#endif /* MDBX_CXX14_CONSTEXPR */
 
-#ifndef __noreturn
-#ifdef _Noreturn
-#define __noreturn _Noreturn
+#if defined(__noreturn)
+#define MDBX_NORETURN __noreturn
+#elif defined(_Noreturn)
+#define MDBX_NORETURN _Noreturn
 #elif defined(__GNUC__) || __has_attribute(__noreturn__)
-#define __noreturn __attribute__((__noreturn__))
+#define MDBX_NORETURN __attribute__((__noreturn__))
 #elif defined(_MSC_VER) && !defined(__clang__)
-#define __noreturn __declspec(noreturn)
+#define MDBX_NORETURN __declspec(noreturn)
 #else
-#define __noreturn
-#endif
-#endif /* __noreturn */
+#define MDBX_NORETURN
+#endif /* MDBX_NORETURN */
 
-#ifndef mdbx_printf_args
+#ifndef MDBX_PRINTF_ARGS
 #if defined(__GNUC__) || __has_attribute(__format__)
-#define mdbx_printf_args(format_index, first_arg)                              \
+#define MDBX_PRINTF_ARGS(format_index, first_arg)                              \
   __attribute__((__format__(__printf__, format_index, first_arg)))
 #else
-#define mdbx_printf_args(format_index, first_arg)
+#define MDBX_PRINTF_ARGS(format_index, first_arg)
 #endif
-#endif /* mdbx_printf_args */
+#endif /* MDBX_PRINTF_ARGS */
 
 #ifndef DEFINE_ENUM_FLAG_OPERATORS
 #if defined(__cplusplus)
@@ -470,19 +446,21 @@ typedef mode_t mdbx_mode_t;
 /// used to define flags (based on Microsoft's DEFINE_ENUM_FLAG_OPERATORS).
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUM)                                       \
   extern "C++" {                                                               \
-  cxx07_constexpr ENUM operator|(ENUM a, ENUM b) {                             \
+  MDBX_CXX01_CONSTEXPR ENUM operator|(ENUM a, ENUM b) {                        \
     return ENUM(std::size_t(a) | std::size_t(b));                              \
   }                                                                            \
-  cxx14_constexpr ENUM &operator|=(ENUM &a, ENUM b) { return a = a | b; }      \
-  cxx07_constexpr ENUM operator&(ENUM a, ENUM b) {                             \
+  MDBX_CXX14_CONSTEXPR ENUM &operator|=(ENUM &a, ENUM b) { return a = a | b; } \
+  MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, ENUM b) {                        \
     return ENUM(std::size_t(a) & std::size_t(b));                              \
   }                                                                            \
-  cxx14_constexpr ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; }      \
-  cxx07_constexpr ENUM operator~(ENUM a) { return ENUM(~std::size_t(a)); }     \
-  cxx07_constexpr ENUM operator^(ENUM a, ENUM b) {                             \
+  MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; } \
+  MDBX_CXX01_CONSTEXPR ENUM operator~(ENUM a) {                                \
+    return ENUM(~std::size_t(a));                                              \
+  }                                                                            \
+  MDBX_CXX01_CONSTEXPR ENUM operator^(ENUM a, ENUM b) {                        \
     return ENUM(std::size_t(a) ^ std::size_t(b));                              \
   }                                                                            \
-  cxx14_constexpr ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; }      \
+  MDBX_CXX14_CONSTEXPR ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; } \
   }
 #else                                    /* __cplusplus */
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUM) /* nope, C allows these operators */
@@ -792,7 +770,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
  * \param [in] msg  The assertion message, not including newline. */
 typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
                              int line, const char *msg,
-                             va_list args) cxx17_noexcept;
+                             va_list args) MDBX_CXX17_NOEXCEPT;
 
 /** \brief The "don't change `logger`" value for mdbx_setup_debug() */
 #define MDBX_LOGGER_DONTCHANGE ((MDBX_debug_func *)(intptr_t)-1)
@@ -812,7 +790,7 @@ LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t log_level,
  * \param [in] msg  The assertion message, not including newline. */
 typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
                               const char *function,
-                              unsigned line) cxx17_noexcept;
+                              unsigned line) MDBX_CXX17_NOEXCEPT;
 
 /** \brief Set or reset the assert() callback of the environment.
  *
@@ -838,7 +816,7 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
                                       const size_t bufsize);
 
 /** \brief Panics with message and causes abnormal process termination. */
-LIBMDBX_API void mdbx_panic(const char *fmt, ...) mdbx_printf_args(1, 2);
+LIBMDBX_API void mdbx_panic(const char *fmt, ...) MDBX_PRINTF_ARGS(1, 2);
 
 /** @} end of logging & debug */
 
@@ -1715,7 +1693,7 @@ LIBMDBX_API const char *mdbx_strerror(int errnum);
  *
  * \returns "error message" The description of the error. */
 LIBMDBX_API const char *mdbx_strerror_r(int errnum, char *buf, size_t buflen);
-__nothrow_pure_function LIBMDBX_API const char *mdbx_liberr2str(int errnum);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API const char *mdbx_liberr2str(int errnum);
 
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
 /** Bit of Windows' madness. The similar to \ref mdbx_strerror() but returns
@@ -2430,46 +2408,46 @@ LIBMDBX_API int mdbx_is_readahead_reasonable(size_t volume,
 
 /** \brief Returns the minimal database page size in bytes.
  * \ingroup c_statinfo */
-__nothrow_const_function __inline intptr_t mdbx_limits_pgsize_min(void) {
+MDBX_NOTHROW_CONST_FUNCTION __inline intptr_t mdbx_limits_pgsize_min(void) {
   return MDBX_MIN_PAGESIZE;
 }
 
 /** \brief Returns the maximal database page size in bytes.
  * \ingroup c_statinfo */
-__nothrow_const_function __inline intptr_t mdbx_limits_pgsize_max(void) {
+MDBX_NOTHROW_CONST_FUNCTION __inline intptr_t mdbx_limits_pgsize_max(void) {
   return MDBX_MAX_PAGESIZE;
 }
 
 /** \brief Returns minimal database size in bytes for given page size,
  * or -1 if pagesize is invalid.
  * \ingroup c_statinfo */
-__nothrow_const_function LIBMDBX_API intptr_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_dbsize_min(intptr_t pagesize);
 
 /** \brief Returns maximal database size in bytes for given page size,
  * or -1 if pagesize is invalid.
  * \ingroup c_statinfo */
-__nothrow_const_function LIBMDBX_API intptr_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_dbsize_max(intptr_t pagesize);
 
 /** \brief Returns maximal key size in bytes for given page size
  * and database flags, or -1 if pagesize is invalid.
  * \ingroup c_statinfo
  * \see db_flags */
-__nothrow_const_function LIBMDBX_API intptr_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_keysize_max(intptr_t pagesize, MDBX_db_flags_t flags);
 
 /** \brief Returns maximal data size in bytes for given page size
  * and database flags, or -1 if pagesize is invalid.
  * \ingroup c_statinfo
  * \see db_flags */
-__nothrow_const_function LIBMDBX_API intptr_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_valsize_max(intptr_t pagesize, MDBX_db_flags_t flags);
 
 /** \brief Returns maximal write transaction size (i.e. limit for summary volume
  * of dirty pages) in bytes for given page size, or -1 if pagesize is invalid.
  * \ingroup c_statinfo */
-__nothrow_const_function LIBMDBX_API intptr_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /** \brief Set the maximum number of threads/reader slots for the environment.
@@ -2552,7 +2530,7 @@ LIBMDBX_API int mdbx_env_get_maxdbs(MDBX_env *env, MDBX_dbi *dbs);
  *
  * \returns The maximum size of a key can write,
  *          or -1 if something is wrong. */
-__nothrow_pure_function LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_env_get_maxkeysize_ex(const MDBX_env *env, MDBX_db_flags_t flags);
 
 /** \brief Get the maximum size of data we can write.
@@ -2564,13 +2542,13 @@ mdbx_env_get_maxkeysize_ex(const MDBX_env *env, MDBX_db_flags_t flags);
  *
  * \returns The maximum size of a data can write,
  *          or -1 if something is wrong. */
-__nothrow_pure_function LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_env_get_maxvalsize_ex(const MDBX_env *env, MDBX_db_flags_t flags);
 
 /** \deprecated Please use \ref mdbx_env_get_maxkeysize_ex()
  *              and/or \ref mdbx_env_get_maxvalsize_ex()
  * \ingroup c_statinfo */
-__nothrow_pure_function MDBX_DEPRECATED LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION MDBX_DEPRECATED LIBMDBX_API int
 mdbx_env_get_maxkeysize(const MDBX_env *env);
 
 /** \brief Set application information associated with the \ref MDBX_env.
@@ -2589,7 +2567,7 @@ LIBMDBX_API int mdbx_env_set_userctx(MDBX_env *env, void *ctx);
  *
  * \param [in] env An environment handle returned by \ref mdbx_env_create()
  * \returns The pointer set by \ref mdbx_env_set_userctx(). */
-__nothrow_pure_function LIBMDBX_API void *
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *
 mdbx_env_get_userctx(const MDBX_env *env);
 
 /** \brief Create a transaction for use with the environment.
@@ -2716,7 +2694,8 @@ LIBMDBX_API int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info,
  * \ingroup c_transactions
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin() */
-__nothrow_pure_function LIBMDBX_API MDBX_env *mdbx_txn_env(const MDBX_txn *txn);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_env *
+mdbx_txn_env(const MDBX_txn *txn);
 
 /** \brief Return the transaction's flags.
  * \ingroup c_transactions
@@ -2727,7 +2706,7 @@ __nothrow_pure_function LIBMDBX_API MDBX_env *mdbx_txn_env(const MDBX_txn *txn);
  *
  * \returns A transaction flags, valid if input is an valid transaction,
  *          otherwise -1. */
-__nothrow_pure_function LIBMDBX_API int mdbx_txn_flags(const MDBX_txn *txn);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_txn_flags(const MDBX_txn *txn);
 
 /** \brief Return the transaction's ID.
  * \ingroup c_statinfo
@@ -2740,7 +2719,8 @@ __nothrow_pure_function LIBMDBX_API int mdbx_txn_flags(const MDBX_txn *txn);
  *
  * \returns A transaction ID, valid if input is an active transaction,
  *          otherwise 0. */
-__nothrow_pure_function LIBMDBX_API uint64_t mdbx_txn_id(const MDBX_txn *txn);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint64_t
+mdbx_txn_id(const MDBX_txn *txn);
 
 /** \brief Commit all the operations of a transaction into the database.
  * \ingroup c_transactions
@@ -2936,7 +2916,8 @@ LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
  * \ingroup c_crud
  * \see mdbx_cmp() \see mdbx_get_keycmp()
  * \see mdbx_get_datacmp \see mdbx_dcmp() */
-typedef int(MDBX_cmp_func)(const MDBX_val *a, const MDBX_val *b) cxx17_noexcept;
+typedef int(MDBX_cmp_func)(const MDBX_val *a,
+                           const MDBX_val *b) MDBX_CXX17_NOEXCEPT;
 
 /** \brief Open or Create a database in the environment.
  * \ingroup c_dbi
@@ -3063,27 +3044,27 @@ mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
  * and IEEE754 double values in one index for JSON-numbers with restriction for
  * integer numbers range corresponding to RFC-7159, i.e. \f$[-2^{53}+1,
  * 2^{53}-1]\f$. See bottom of page 6 at https://tools.ietf.org/html/rfc7159 */
-__nothrow_const_function LIBMDBX_API uint64_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API uint64_t
 mdbx_key_from_jsonInteger(const int64_t json_integer);
 
-__nothrow_const_function LIBMDBX_API uint64_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API uint64_t
 mdbx_key_from_double(const double ieee754_64bit);
 
-__nothrow_pure_function LIBMDBX_API uint64_t
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint64_t
 mdbx_key_from_ptrdouble(const double *const ieee754_64bit);
 
-__nothrow_const_function LIBMDBX_API uint32_t
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API uint32_t
 mdbx_key_from_float(const float ieee754_32bit);
 
-__nothrow_pure_function LIBMDBX_API uint32_t
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint32_t
 mdbx_key_from_ptrfloat(const float *const ieee754_32bit);
 
-__nothrow_const_function __inline uint64_t
+MDBX_NOTHROW_CONST_FUNCTION __inline uint64_t
 mdbx_key_from_int64(const int64_t i64) {
   return UINT64_C(0x8000000000000000) + i64;
 }
 
-__nothrow_const_function __inline uint32_t
+MDBX_NOTHROW_CONST_FUNCTION __inline uint32_t
 mdbx_key_from_int32(const int32_t i32) {
   return UINT32_C(0x80000000) + i32;
 }
@@ -3092,16 +3073,20 @@ mdbx_key_from_int32(const int32_t i32) {
 /** \defgroup key2value Key-to-Value functions to avoid custom comparators
  * \see value2key
  * @{ */
-__nothrow_pure_function LIBMDBX_API int64_t
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t
 mdbx_jsonInteger_from_key(const MDBX_val);
 
-__nothrow_pure_function LIBMDBX_API double mdbx_double_from_key(const MDBX_val);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API double
+mdbx_double_from_key(const MDBX_val);
 
-__nothrow_pure_function LIBMDBX_API float mdbx_float_from_key(const MDBX_val);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API float
+mdbx_float_from_key(const MDBX_val);
 
-__nothrow_pure_function LIBMDBX_API int32_t mdbx_int32_from_key(const MDBX_val);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int32_t
+mdbx_int32_from_key(const MDBX_val);
 
-__nothrow_pure_function LIBMDBX_API int64_t mdbx_int64_from_key(const MDBX_val);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t
+mdbx_int64_from_key(const MDBX_val);
 /** @} */
 
 /** \brief Retrieve statistics for a database.
@@ -3539,7 +3524,7 @@ LIBMDBX_API int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *cursor);
  * \ingroup c_cursors
  *
  * \param [in] cursor A cursor handle returned by \ref mdbx_cursor_open(). */
-__nothrow_pure_function LIBMDBX_API MDBX_txn *
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_txn *
 mdbx_cursor_txn(const MDBX_cursor *cursor);
 
 /** \brief Return the cursor's database handle.
@@ -3712,7 +3697,7 @@ LIBMDBX_API int mdbx_cursor_count(const MDBX_cursor *cursor, size_t *pcount);
  *                             positioned
  * \retval MDBX_RESULT_FALSE   A data is available
  * \retval Otherwise the error code */
-__nothrow_pure_function LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_eof(const MDBX_cursor *cursor);
 
 /** \brief Determines whether the cursor is pointed to the first key-value pair
@@ -3725,7 +3710,7 @@ mdbx_cursor_eof(const MDBX_cursor *cursor);
  * \retval MDBX_RESULT_TRUE   Cursor positioned to the first key-value pair
  * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the first key-value
  * pair \retval Otherwise the error code */
-__nothrow_pure_function LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_first(const MDBX_cursor *cursor);
 
 /** \brief Determines whether the cursor is pointed to the last key-value pair
@@ -3738,7 +3723,7 @@ mdbx_cursor_on_first(const MDBX_cursor *cursor);
  * \retval MDBX_RESULT_TRUE   Cursor positioned to the last key-value pair
  * \retval MDBX_RESULT_FALSE  Cursor NOT positioned to the last key-value pair
  * \retval Otherwise the error code */
-__nothrow_pure_function LIBMDBX_API int
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_last(const MDBX_cursor *cursor);
 
 /** \addtogroup c_rqest
@@ -3878,8 +3863,8 @@ LIBMDBX_API int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi,
  * \retval MDBX_RESULT_TRUE    Given address is on the dirty page.
  * \retval MDBX_RESULT_FALSE   Given address is NOT on the dirty page.
  * \retval Otherwise the error code. */
-__nothrow_pure_function LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn,
-                                                      const void *ptr);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_is_dirty(const MDBX_txn *txn,
+                                                         const void *ptr);
 
 /** \brief Sequence generation for a database.
  * \ingroup c_crud
@@ -3919,14 +3904,14 @@ LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
  * \param [in] b     The second item to compare.
  *
  * \returns < 0 if a < b, 0 if a == b, > 0 if a > b */
-__nothrow_pure_function LIBMDBX_API int mdbx_cmp(const MDBX_txn *txn,
-                                                 MDBX_dbi dbi,
-                                                 const MDBX_val *a,
-                                                 const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_cmp(const MDBX_txn *txn,
+                                                    MDBX_dbi dbi,
+                                                    const MDBX_val *a,
+                                                    const MDBX_val *b);
 
 /** \brief Returns default internal key's comparator for given database flags.
  * \ingroup c_extra */
-__nothrow_const_function LIBMDBX_API MDBX_cmp_func *
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API MDBX_cmp_func *
 mdbx_get_keycmp(MDBX_db_flags_t flags);
 
 /** \brief Compare two data items according to a particular database.
@@ -3943,14 +3928,14 @@ mdbx_get_keycmp(MDBX_db_flags_t flags);
  * \param [in] b     The second item to compare.
  *
  * \returns < 0 if a < b, 0 if a == b, > 0 if a > b */
-__nothrow_pure_function LIBMDBX_API int mdbx_dcmp(const MDBX_txn *txn,
-                                                  MDBX_dbi dbi,
-                                                  const MDBX_val *a,
-                                                  const MDBX_val *b);
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_dcmp(const MDBX_txn *txn,
+                                                     MDBX_dbi dbi,
+                                                     const MDBX_val *a,
+                                                     const MDBX_val *b);
 
 /** \brief Returns default internal data's comparator for given database flags
  * \ingroup c_extra */
-__nothrow_const_function LIBMDBX_API MDBX_cmp_func *
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API MDBX_cmp_func *
 mdbx_get_datacmp(MDBX_db_flags_t flags);
 
 /** \brief A callback function used to enumerate the reader lock table.
@@ -3981,7 +3966,7 @@ mdbx_get_datacmp(MDBX_db_flags_t flags);
 typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,
                                    mdbx_tid_t thread, uint64_t txnid,
                                    uint64_t lag, size_t bytes_used,
-                                   size_t bytes_retained) cxx17_noexcept;
+                                   size_t bytes_retained) MDBX_CXX17_NOEXCEPT;
 
 /** \brief Enumarete the entries in the reader lock table.
  * \ingroup c_statinfo
@@ -4116,7 +4101,7 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  */
 typedef int(MDBX_oom_func)(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
                            uint64_t txn, unsigned gap, size_t space,
-                           int retry) cxx17_noexcept;
+                           int retry) MDBX_CXX17_NOEXCEPT;
 
 /** \brief Set the OOM callback.
  * \ingroup c_err
@@ -4140,7 +4125,7 @@ LIBMDBX_API int mdbx_env_set_oomfunc(MDBX_env *env, MDBX_oom_func *oom_func);
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
  * \returns A MDBX_oom_func function or NULL if disabled. */
-__nothrow_pure_function LIBMDBX_API MDBX_oom_func *
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_oom_func *
 mdbx_env_get_oomfunc(const MDBX_env *env);
 
 /** \defgroup btree_traversal B-tree Traversal
@@ -4178,7 +4163,7 @@ typedef int MDBX_pgvisitor_func(
     const uint64_t pgno, const unsigned number, void *const ctx, const int deep,
     const char *const dbi, const size_t page_size, const MDBX_page_type_t type,
     const MDBX_error_t err, const size_t nentries, const size_t payload_bytes,
-    const size_t header_bytes, const size_t unused_bytes) cxx17_noexcept;
+    const size_t header_bytes, const size_t unused_bytes) MDBX_CXX17_NOEXCEPT;
 
 /** \brief B-tree traversal function. */
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,

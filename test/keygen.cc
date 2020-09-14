@@ -16,7 +16,7 @@
 
 namespace keygen {
 
-static inline __pure_function serial_t mask(unsigned bits) {
+static inline MDBX_PURE_FUNCTION serial_t mask(unsigned bits) {
   assert(bits > 0 && bits <= serial_maxwith);
   return serial_allones >> (serial_maxwith - bits);
 }

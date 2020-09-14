@@ -151,18 +151,6 @@
 #   endif
 #endif /* __prefetch */
 
-#ifndef __noreturn
-#   ifdef _Noreturn
-#      define __noreturn _Noreturn
-#   elif defined(__GNUC__) || __has_attribute(__noreturn__)
-#       define __noreturn __attribute__((__noreturn__))
-#   elif defined(_MSC_VER)
-#       define __noreturn __declspec(noreturn)
-#   else
-#       define __noreturn
-#   endif
-#endif /* __noreturn */
-
 #ifndef __nothrow
 #   if defined(__cplusplus)
 #       if __cplusplus < 201703L
@@ -268,7 +256,7 @@
 #endif /* __anonymous_struct_extension__ */
 
 #ifndef __Wpedantic_format_voidptr
-    static __inline __maybe_unused const void* __pure_function
+    static __inline __maybe_unused const void* MDBX_PURE_FUNCTION
         __Wpedantic_format_voidptr(const void* ptr) {return ptr;}
 #   define __Wpedantic_format_voidptr(ARG) __Wpedantic_format_voidptr(ARG)
 #endif /* __Wpedantic_format_voidptr */

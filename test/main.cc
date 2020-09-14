@@ -19,7 +19,7 @@
 #include <sys/time.h>
 #endif /* !Windows */
 
-__noreturn void usage(void) {
+MDBX_NORETURN void usage(void) {
   puts(
       "usage:\n"
       "  --help or -h              Show this text\n"
