@@ -2273,7 +2273,8 @@ public:
   /// \brief Start nested write transaction.
   txn_managed start_nested();
 
-  inline cursor_managed create_cursor(map_handle map);
+  /// \brief Opens cursor for specified key-value map handle.
+  inline cursor_managed open_cursor(map_handle map);
 
   /// \brief Open existing key-value map.
   inline map_handle open_map(
@@ -2604,8 +2605,15 @@ public:
 
   //----------------------------------------------------------------------------
 
+  /// \brief Renew/bind a cursor with a new transaction and previously used
+  /// key-value map handle.
   inline void renew(::mdbx::txn &txn);
-  /// Return the cursor's transaction.
+
+  /// \brief Bind/renew a cursor with a new transaction and specified key-value
+  /// map handle.
+  inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
+
+  /// \brief Return the cursor's transaction.
   inline ::mdbx::txn txn() const;
   inline map_handle map() const;
 
@@ -2645,9 +2653,10 @@ class LIBMDBX_API_TYPE cursor_managed : public cursor {
       : inherited(ptr) {}
 
 public:
-  MDBX_CXX11_CONSTEXPR cursor_managed() noexcept = default;
+  /// \brief Creates a new managed cursor with underlying object.
+  inline cursor_managed();
 
-  /// Explicitly closes the cursor.
+  /// \brief Explicitly closes the cursor.
   void close();
 
   cursor_managed(cursor_managed &&) = default;
@@ -3620,7 +3629,7 @@ inline txn::info txn::get_info(bool scan_reader_lock_table) const {
   return r;
 }
 
-inline cursor_managed txn::create_cursor(map_handle map) {
+inline cursor_managed txn::open_cursor(map_handle map) {
   MDBX_cursor *ptr;
   error::success_or_throw(::mdbx_cursor_open(handle_, map.dbi, &ptr));
   return cursor_managed(ptr);
@@ -4267,6 +4276,10 @@ inline void cursor::renew(::mdbx::txn &txn) {
   error::success_or_throw(::mdbx_cursor_renew(txn, handle_));
 }
 
+inline void cursor::bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle) {
+  error::success_or_throw(::mdbx_cursor_bind(txn, handle_, map_handle.dbi));
+}
+
 inline txn cursor::txn() const {
   MDBX_txn *txn = ::mdbx_cursor_txn(handle_);
   error::throw_on_nullptr(txn, MDBX_EINVAL);
@@ -4392,6 +4405,14 @@ inline bool cursor::erase(bool whole_multivalue) {
   default:
     MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
+}
+
+//------------------------------------------------------------------------------
+
+inline cursor_managed::cursor_managed()
+    : cursor_managed(::mdbx_cursor_create()) {
+  if (MDBX_UNLIKELY(!handle_))
+    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_ENOMEM);
 }
 
 //------------------------------------------------------------------------------
