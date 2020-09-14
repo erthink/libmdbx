@@ -612,7 +612,8 @@ typedef uint32_t MDBX_dbi;
 
 /** \brief Opaque structure for navigating through a database
  * \ingroup c_cursors
- * \see mdbx_cursor_open() \see mdbx_cursor_close() */
+ * \see mdbx_cursor_create() \see mdbx_cursor_bind() \see mdbx_cursor_close()
+ */
 #ifndef __cplusplus
 typedef struct MDBX_cursor MDBX_cursor;
 #else
@@ -3452,17 +3453,76 @@ LIBMDBX_API int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi,
 LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                          const MDBX_val *data);
 
-/** \brief Create a cursor handle.
+/** \brief Create a cursor handle but not bind it to transaction nor DBI handle.
  * \ingroup c_cursors
  *
- * A cursor is associated with a specific transaction and database. A cursor
- * cannot be used when its database handle is closed. Nor when its transaction
- * has ended, except with \ref mdbx_cursor_renew(). Also it can be discarded
- * with \ref mdbx_cursor_close().
+ * An capable of operation cursor is associated with a specific transaction and
+ * database. A cursor cannot be used when its database handle is closed. Nor
+ * when its transaction has ended, except with \ref mdbx_cursor_bind() and
+ * \ref mdbx_cursor_renew().
+ * Also it can be discarded with \ref mdbx_cursor_close().
  *
  * A cursor must be closed explicitly always, before or after its transaction
- * ends. It can be reused with \ref mdbx_cursor_renew() before finally closing
- * it.
+ * ends. It can be reused with \ref mdbx_cursor_bind()
+ * or \ref mdbx_cursor_renew() before finally closing it.
+ *
+ * \note In contrast to LMDB, the MDBX required that any opened cursors can be
+ * reused and must be freed explicitly, regardless ones was opened in a
+ * read-only or write transaction. The REASON for this is eliminates ambiguity
+ * which helps to avoid errors such as: use-after-free, double-free, i.e.
+ * memory corruption and segfaults.
+ *
+ * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] dbi      A database handle returned by \ref mdbx_dbi_open().
+ * \param [out] cursor  Address where the new \ref MDBX_cursor handle will be
+ *                      stored.
+ *
+ * \returns Created cursor handle or NULL in case out of memory. */
+LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void);
+
+/** \brief Bind cursor to specified transaction and DBI handle.
+ * \ingroup c_cursors
+ *
+ * Using of the `mdbx_cursor_bind()` is equivalent to calling
+ * \ref mdbx_cursor_renew() but with specifying an arbitrary dbi handle.
+ *
+ * An capable of operation cursor is associated with a specific transaction and
+ * database. The cursor may be associated with a new transaction,
+ * and referencing a new or the same database handle as it was created with.
+ * This may be done whether the previous transaction is live or dead.
+ *
+ * \note In contrast to LMDB, the MDBX required that any opened cursors can be
+ * reused and must be freed explicitly, regardless ones was opened in a
+ * read-only or write transaction. The REASON for this is eliminates ambiguity
+ * which helps to avoid errors such as: use-after-free, double-free, i.e.
+ * memory corruption and segfaults.
+ *
+ * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
+ * \param [in] dbi      A database handle returned by \ref mdbx_dbi_open().
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_EINVAL  An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *cursor,
+                                 MDBX_dbi dbi);
+
+/** \brief Create a cursor handle for the specified transaction and DBI handle.
+ * \ingroup c_cursors
+ *
+ * Using of the `mdbx_cursor_open()` is equivalent to calling
+ * \ref mdbx_cursor_create() and then \ref mdbx_cursor_bind() functions.
+ *
+ * An capable of operation cursor is associated with a specific transaction and
+ * database. A cursor cannot be used when its database handle is closed. Nor
+ * when its transaction has ended, except with \ref mdbx_cursor_bind() and
+ * \ref mdbx_cursor_renew().
+ * Also it can be discarded with \ref mdbx_cursor_close().
+ *
+ * A cursor must be closed explicitly always, before or after its transaction
+ * ends. It can be reused with \ref mdbx_cursor_bind()
+ * or \ref mdbx_cursor_renew() before finally closing it.
  *
  * \note In contrast to LMDB, the MDBX required that any opened cursors can be
  * reused and must be freed explicitly, regardless ones was opened in a
@@ -3501,10 +3561,14 @@ LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
 /** \brief Renew a cursor handle.
  * \ingroup c_cursors
  *
- * A cursor is associated with a specific transaction and database. The cursor
- * may be associated with a new transaction, and referencing the same database
- * handle as it was created with. This may be done whether the previous
- * transaction is live or dead.
+ * An capable of operation cursor is associated with a specific transaction and
+ * database. The cursor may be associated with a new transaction,
+ * and referencing a new or the same database handle as it was created with.
+ * This may be done whether the previous transaction is live or dead.
+ *
+ * Using of the `mdbx_cursor_renew()` is equivalent to calling
+ * \ref mdbx_cursor_bind() with the DBI handle that previously
+ * the cursor was used with.
  *
  * \note In contrast to LMDB, the MDBX allow any cursor to be re-used by using
  * \ref mdbx_cursor_renew(), to avoid unnecessary malloc/free overhead until it

@@ -5842,9 +5842,9 @@ static void mdbx_cursors_eot(MDBX_txn *txn, unsigned merge) {
     for (mc = cursors[i]; mc; mc = next) {
       unsigned stage = mc->mc_signature;
       mdbx_ensure(txn->mt_env,
-                  stage == MDBX_MC_SIGNATURE || stage == MDBX_MC_WAIT4EOT);
+                  stage == MDBX_MC_LIVE || stage == MDBX_MC_WAIT4EOT);
       next = mc->mc_next;
-      mdbx_tassert(txn, !next || next->mc_signature == MDBX_MC_SIGNATURE ||
+      mdbx_tassert(txn, !next || next->mc_signature == MDBX_MC_LIVE ||
                             next->mc_signature == MDBX_MC_WAIT4EOT);
       if ((bk = mc->mc_backup) != NULL) {
         if (merge) {
@@ -11967,7 +11967,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
@@ -12177,7 +12177,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   if (unlikely(mc == NULL || key == NULL || data == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   int rc = check_txn_rw(mc->mc_txn, MDBX_TXN_BLOCKED);
@@ -12974,7 +12974,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(!mc))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   int rc = check_txn_rw(mc->mc_txn, MDBX_TXN_BLOCKED);
@@ -13577,7 +13577,7 @@ static __inline int mdbx_couple_init(MDBX_cursor_couple *couple,
                                      const MDBX_dbi dbi, MDBX_txn *const txn,
                                      MDBX_db *const db, MDBX_dbx *const dbx,
                                      uint8_t *const dbstate) {
-  couple->outer.mc_signature = MDBX_MC_SIGNATURE;
+  couple->outer.mc_signature = MDBX_MC_LIVE;
   couple->outer.mc_next = NULL;
   couple->outer.mc_backup = NULL;
   couple->outer.mc_dbi = dbi;
@@ -13602,7 +13602,7 @@ static __inline int mdbx_couple_init(MDBX_cursor_couple *couple,
   }
 
   if (couple->outer.mc_db->md_flags & MDBX_DUPSORT) {
-    couple->inner.mx_cursor.mc_signature = MDBX_MC_SIGNATURE;
+    couple->inner.mx_cursor.mc_signature = MDBX_MC_LIVE;
     couple->outer.mc_xcursor = &couple->inner;
     rc = mdbx_xcursor_init0(&couple->outer);
     if (unlikely(rc != MDBX_SUCCESS))
@@ -13621,10 +13621,40 @@ static int mdbx_cursor_init(MDBX_cursor *mc, MDBX_txn *txn, MDBX_dbi dbi) {
                           &txn->mt_dbistate[dbi]);
 }
 
-int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
-  if (unlikely(!ret))
+MDBX_cursor *mdbx_cursor_create(void) {
+  MDBX_cursor_couple *couple = mdbx_calloc(1, sizeof(MDBX_cursor_couple));
+  if (unlikely(!couple))
+    return nullptr;
+
+  couple->outer.mc_signature = MDBX_MC_READY4CLOSE;
+  couple->outer.mc_dbi = UINT_MAX;
+  return &couple->outer;
+}
+
+int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
+  if (unlikely(!mc))
     return MDBX_EINVAL;
-  *ret = NULL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_READY4CLOSE)) {
+    if (unlikely(mc->mc_signature != MDBX_MC_LIVE || mc->mc_backup))
+      return MDBX_EINVAL;
+    if (unlikely(!mc->mc_txn || mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE))
+      return MDBX_PROBLEM;
+    if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
+      MDBX_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
+      while (*prev && *prev != mc)
+        prev = &(*prev)->mc_next;
+      if (*prev == mc)
+        *prev = mc->mc_next;
+    }
+    mc->mc_signature = MDBX_MC_READY4CLOSE;
+    mc->mc_flags = 0;
+    mc->mc_dbi = UINT_MAX;
+  }
+
+  assert(!mc->mc_backup && !mc->mc_flags);
+  if (unlikely(mc->mc_backup || mc->mc_flags))
+    return MDBX_PROBLEM;
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -13636,24 +13666,32 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
   if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
 
-  const size_t size = (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT)
-                          ? sizeof(MDBX_cursor_couple)
-                          : sizeof(MDBX_cursor);
+  rc = mdbx_cursor_init(mc, txn, dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
-  MDBX_cursor *mc;
-  if (likely((mc = mdbx_malloc(size)) != NULL)) {
-    rc = mdbx_cursor_init(mc, txn, dbi);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      mdbx_free(mc);
-      return rc;
-    }
-    if (txn->mt_cursors) {
-      mc->mc_next = txn->mt_cursors[dbi];
-      txn->mt_cursors[dbi] = mc;
-      mc->mc_flags |= C_UNTRACK;
-    }
-  } else {
+  if (txn->mt_cursors) {
+    mc->mc_next = txn->mt_cursors[dbi];
+    txn->mt_cursors[dbi] = mc;
+    mc->mc_flags |= C_UNTRACK;
+  }
+
+  return MDBX_SUCCESS;
+}
+
+int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
+  if (unlikely(!ret))
+    return MDBX_EINVAL;
+  *ret = NULL;
+
+  MDBX_cursor *const mc = mdbx_cursor_create();
+  if (unlikely(!mc))
     return MDBX_ENOMEM;
+
+  int rc = mdbx_cursor_bind(txn, mc, dbi);
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    mdbx_cursor_close(mc);
+    return rc;
   }
 
   *ret = mc;
@@ -13661,36 +13699,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
 }
 
 int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
-  if (unlikely(!mc))
-    return MDBX_EINVAL;
-
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE &&
-               mc->mc_signature != MDBX_MC_READY4CLOSE))
-    return MDBX_EINVAL;
-
-  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!mdbx_txn_dbi_exists(txn, mc->mc_dbi, DBI_VALID)))
-    return MDBX_BAD_DBI;
-
-  if (unlikely(mc->mc_backup))
-    return MDBX_EINVAL;
-
-  if (unlikely((mc->mc_flags & C_UNTRACK) || txn->mt_cursors)) {
-    MDBX_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
-    while (*prev && *prev != mc)
-      prev = &(*prev)->mc_next;
-    if (*prev == mc)
-      *prev = mc->mc_next;
-    mc->mc_signature = MDBX_MC_READY4CLOSE;
-  }
-
-  if (unlikely(txn->mt_flags & MDBX_TXN_BLOCKED))
-    return MDBX_BAD_TXN;
-
-  return mdbx_cursor_init(mc, txn, mc->mc_dbi);
+  return likely(mc) ? mdbx_cursor_bind(txn, mc, mc->mc_dbi) : MDBX_EINVAL;
 }
 
 /* Return the count of duplicate data items for the current key */
@@ -13698,7 +13707,7 @@ int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
@@ -13735,7 +13744,7 @@ int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
 
 void mdbx_cursor_close(MDBX_cursor *mc) {
   if (mc) {
-    mdbx_ensure(NULL, mc->mc_signature == MDBX_MC_SIGNATURE ||
+    mdbx_ensure(NULL, mc->mc_signature == MDBX_MC_LIVE ||
                           mc->mc_signature == MDBX_MC_READY4CLOSE);
     if (!mc->mc_backup) {
       /* Remove from txn, if tracked.
@@ -13752,14 +13761,14 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
       mdbx_free(mc);
     } else {
       /* cursor closed before nested txn ends */
-      mdbx_cassert(mc, mc->mc_signature == MDBX_MC_SIGNATURE);
+      mdbx_cassert(mc, mc->mc_signature == MDBX_MC_LIVE);
       mc->mc_signature = MDBX_MC_WAIT4EOT;
     }
   }
 }
 
 MDBX_txn *mdbx_cursor_txn(const MDBX_cursor *mc) {
-  if (unlikely(!mc || mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(!mc || mc->mc_signature != MDBX_MC_LIVE))
     return NULL;
   MDBX_txn *txn = mc->mc_txn;
   if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
@@ -13770,7 +13779,7 @@ MDBX_txn *mdbx_cursor_txn(const MDBX_cursor *mc) {
 }
 
 MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *mc) {
-  if (unlikely(!mc || mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(!mc || mc->mc_signature != MDBX_MC_LIVE))
     return UINT_MAX;
   return mc->mc_dbi;
 }
@@ -18045,7 +18054,7 @@ int mdbx_cursor_on_first(const MDBX_cursor *mc) {
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
@@ -18063,7 +18072,7 @@ int mdbx_cursor_on_last(const MDBX_cursor *mc) {
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
@@ -18082,7 +18091,7 @@ int mdbx_cursor_eof(const MDBX_cursor *mc) {
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   if ((mc->mc_flags & C_INITIALIZED) == 0)
@@ -18114,8 +18123,8 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x,
   r->level = 0;
   r->root_nkeys = 0;
 
-  if (unlikely(y->mc_signature != MDBX_MC_SIGNATURE ||
-               x->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(y->mc_signature != MDBX_MC_LIVE ||
+               x->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   int rc = check_txn(x->mc_txn, MDBX_TXN_BLOCKED);
@@ -18281,7 +18290,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
                move_op == MDBX_GET_CURRENT || move_op == MDBX_GET_MULTIPLE))
     return MDBX_EINVAL;
 
-  if (unlikely(cursor->mc_signature != MDBX_MC_SIGNATURE))
+  if (unlikely(cursor->mc_signature != MDBX_MC_LIVE))
     return MDBX_EBADSIGN;
 
   int rc = check_txn(cursor->mc_txn, MDBX_TXN_BLOCKED);
