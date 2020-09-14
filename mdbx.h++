@@ -27,7 +27,7 @@
 #define __has_include(header) (0)
 #endif /* __has_include */
 
-#if defined(__has_include) && __has_include(<version>)
+#if __has_include(<version>)
 #include <version>
 #endif /* <version> */
 
@@ -161,7 +161,7 @@
 
 namespace mdbx {
 
-// Functions whose signature depends on the byte type
+// Functions whose signature depends on the `mdbx::byte` type
 // must be strictly defined as inline!
 #if defined(DOXYGEN) || (defined(__cpp_char8_t) && __cpp_char8_t >= 201811)
 using byte = char8_t;
@@ -862,7 +862,7 @@ public:
   using allocator_type = ALLOCATOR;
   enum : size_t {
     max_length = MDBX_MAXDATASIZE,
-    default_shrink_treshold = 1024
+    default_shrink_threshold = 1024
   };
 
   /// \brief Returns the associated allocator.
@@ -1050,7 +1050,7 @@ public:
 
   /// \brief Reserves storage.
   inline void reserve(size_t wanna_headroom, size_t wanna_tailroom,
-                      size_t shrink_threshold = default_shrink_treshold);
+                      size_t shrink_threshold = default_shrink_threshold);
 
   buffer &assign_reference(const void *ptr, size_t bytes) noexcept {
     silo_.clear();
@@ -2632,90 +2632,45 @@ public:
 
 //------------------------------------------------------------------------------
 
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const ::mdbx::slice &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const ::mdbx::pair &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair &);
 template <class ALLOCATOR>
 inline ::std::ostream &operator<<(::std::ostream &out,
-                                  const ::mdbx::buffer<ALLOCATOR> &it) {
+                                  const buffer<ALLOCATOR> &it) {
   return (it.is_freestanding()
               ? out << "buf-" << it.headroom() << "." << it.tailroom()
               : out << "ref-")
          << it.slice();
 }
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::geometry::size &);
+                                       const env::geometry::size &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::geometry &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::geometry &);
+                                       const env::operate_parameters &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const env::mode &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::operate_parameters &);
+                                       const env::durability &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::mode &);
+                                       const env::reclaiming_options &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::durability &);
+                                       const env::operate_options &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::reclaiming_options &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
-                                       const ::mdbx::env::operate_options &);
-LIBMDBX_API ::std::ostream &
-operator<<(::std::ostream &, const ::mdbx::env_managed::create_parameters &);
+                                       const env_managed::create_parameters &);
 
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const MDBX_log_level_t &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &,
                                        const MDBX_debug_flags_t &);
-LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const ::mdbx::error &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const error &);
 inline ::std::ostream &operator<<(::std::ostream &out,
                                   const MDBX_error_t &errcode) {
-  return out << ::mdbx::error(errcode);
+  return out << error(errcode);
 }
-
-} // namespace mdbx
-
-//------------------------------------------------------------------------------
-
-namespace std {
-
-#if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
-template <> struct is_convertible<::mdbx::slice, string_view> : true_type {};
-#if __cplusplus >= 202002L
-template <>
-struct is_nothrow_convertible<::mdbx::slice, string_view> : true_type {};
-#endif /* C++20 */
-#endif /* std::string_view */
-
-LIBMDBX_API string to_string(const ::mdbx::slice &);
-LIBMDBX_API string to_string(const ::mdbx::pair &);
-
-template <class ALLOCATOR>
-inline string to_string(const ::mdbx::buffer<ALLOCATOR> &buffer) {
-  ostringstream out;
-  out << buffer;
-  return out.str();
-}
-
-LIBMDBX_API string to_string(const ::mdbx::env::geometry &);
-LIBMDBX_API string to_string(const ::mdbx::env::operate_parameters &);
-LIBMDBX_API string to_string(const ::mdbx::env::mode &);
-LIBMDBX_API string to_string(const ::mdbx::env::durability &);
-LIBMDBX_API string to_string(const ::mdbx::env::reclaiming_options &);
-LIBMDBX_API string to_string(const ::mdbx::env::operate_options &);
-LIBMDBX_API string to_string(const ::mdbx::env_managed::create_parameters &);
-
-LIBMDBX_API string to_string(const ::MDBX_log_level_t &);
-LIBMDBX_API string to_string(const ::MDBX_debug_flags_t &);
-LIBMDBX_API string to_string(const ::mdbx::error &);
-inline string to_string(const ::MDBX_error_t &errcode) {
-  return to_string(::mdbx::error(errcode));
-}
-
-} // namespace std
 
 //==============================================================================
 //
 // Inline body of the libmdbx C++ API (preliminary draft)
 //
-
-namespace mdbx {
 
 cxx11_constexpr const version_info &get_version() noexcept {
   return ::mdbx_version;
@@ -4540,6 +4495,91 @@ inline int buffer<ALLOCATOR>::data_preserver::callback(void *context,
     self->capture();
     return MDBX_RESULT_TRUE;
   }
+}
+
+//------------------------------------------------------------------------------
+
+inline std::string to_string(const slice &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+template <class ALLOCATOR>
+inline std::string to_string(const buffer<ALLOCATOR> &buffer) {
+  std::ostringstream out;
+  out << buffer;
+  return out.str();
+}
+
+inline std::string to_string(const pair &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env::geometry &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env::operate_parameters &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env::mode &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env::durability &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env::reclaiming_options &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env::operate_options &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const env_managed::create_parameters &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const MDBX_log_level_t &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const MDBX_debug_flags_t &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const error &value) {
+  std::ostringstream out;
+  out << value;
+  return out.str();
+}
+
+inline std::string to_string(const ::MDBX_error_t &errcode) {
+  return to_string(error(errcode));
 }
 
 } // namespace mdbx
