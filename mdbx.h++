@@ -161,8 +161,11 @@ namespace mdbx {
 // Functions whose signature depends on the `mdbx::byte` type
 // must be strictly defined as inline!
 #if defined(DOXYGEN) || (defined(__cpp_char8_t) && __cpp_char8_t >= 201811)
+// Wanna using a non-aliasing type to release more power of an optimizer.
 using byte = char8_t;
 #else
+// Wanna not using std::byte since it doesn't add features,
+// but add inconvenient restrictions.
 using byte = unsigned char;
 #endif /* __cpp_char8_t >= 201811*/
 
@@ -2613,7 +2616,7 @@ public:
   /// map handle.
   inline void bind(::mdbx::txn &txn, ::mdbx::map_handle map_handle);
 
-  /// \brief Return the cursor's transaction.
+  /// \brief Returns the cursor's transaction.
   inline ::mdbx::txn txn() const;
   inline map_handle map() const;
 
