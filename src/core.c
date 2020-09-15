@@ -19116,7 +19116,11 @@ __dll_export
 #endif /* MDBX_BUILD_FLAGS */
 #if !(defined(MDBX_BUILD_FLAGS_CONFIG) || defined(MDBX_BUILD_FLAGS))
     "undefined (please use correct build script)"
+#ifdef _MSC_VER
+#pragma message("warning: Build flags undefined. Please use correct build script")
+#else
 #warning "Build flags undefined. Please use correct build script"
+#endif // _MSC_VER
 #endif
 };
 
