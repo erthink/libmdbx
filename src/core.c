@@ -6295,7 +6295,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     mdbx_warning("%s", "environment had fatal error, must shutdown!");
     rc = MDBX_PANIC;
   } else {
-    const size_t size = pgno2bytes(env, txn->mt_end_pgno);
+    const size_t size =
+        pgno2bytes(env, (txn->mt_flags & MDBX_TXN_RDONLY) ? txn->mt_next_pgno
+                                                          : txn->mt_end_pgno);
     if (unlikely(size > env->me_dxb_mmap.limit)) {
       if (txn->mt_geo.upper > MAX_PAGENO ||
           bytes2pgno(env, pgno2bytes(env, txn->mt_geo.upper)) !=
