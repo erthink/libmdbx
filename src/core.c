@@ -8409,15 +8409,30 @@ static int __cold mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
       return MDBX_CORRUPTED;
     }
   }
+  if (meta->mm_geo.next - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE) {
+    mdbx_warning("meta[%u] has too large used-space (%" PRIu64 "), skip it",
+                 meta_number, used_bytes);
+    return MDBX_TOO_LARGE;
+  }
 
   /* LY: check mapsize limits */
   const uint64_t mapsize_min = meta->mm_geo.lower * (uint64_t)meta->mm_psize;
   STATIC_ASSERT(MAX_MAPSIZE < PTRDIFF_MAX - MAX_PAGESIZE);
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
   if (mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE) {
-    mdbx_warning("meta[%u] has invalid min-mapsize (%" PRIu64 "), skip it",
-                 meta_number, mapsize_min);
-    return MDBX_VERSION_MISMATCH;
+    if (MAX_MAPSIZE != MAX_MAPSIZE64 && mapsize_min > MAX_MAPSIZE &&
+        mapsize_min <= MAX_MAPSIZE64) {
+      mdbx_assert(env, meta->mm_geo.next - 1 <= MAX_PAGENO &&
+                           used_bytes <= MAX_MAPSIZE);
+      mdbx_warning("meta[%u] has too large min-mapsize (%" PRIu64 "), "
+                   "but size of used space still acceptable (%" PRIu64 ")",
+                   meta_number, mapsize_min, used_bytes);
+      meta->mm_geo.lower = (pgno_t)(MAX_MAPSIZE / meta->mm_psize);
+    } else {
+      mdbx_warning("meta[%u] has invalid min-mapsize (%" PRIu64 "), skip it",
+                   meta_number, mapsize_min);
+      return MDBX_VERSION_MISMATCH;
+    }
   }
 
   const uint64_t mapsize_max = meta->mm_geo.upper * (uint64_t)meta->mm_psize;
@@ -8425,13 +8440,9 @@ static int __cold mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
   if (mapsize_max > MAX_MAPSIZE ||
       MAX_PAGENO < ceil_powerof2((size_t)mapsize_max, env->me_os_psize) /
                        (size_t)meta->mm_psize) {
-    if (meta->mm_geo.next - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE) {
-      mdbx_warning("meta[%u] has too large max-mapsize (%" PRIu64 "), skip it",
-                   meta_number, mapsize_max);
-      return MDBX_TOO_LARGE;
-    }
-
     /* allow to open large DB from a 32-bit environment */
+    mdbx_assert(env, meta->mm_geo.next - 1 <= MAX_PAGENO &&
+                         used_bytes <= MAX_MAPSIZE);
     mdbx_warning("meta[%u] has too large max-mapsize (%" PRIu64 "), "
                  "but size of used space still acceptable (%" PRIu64 ")",
                  meta_number, mapsize_max, used_bytes);
