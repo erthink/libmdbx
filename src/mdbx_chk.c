@@ -96,6 +96,7 @@ uint64_t total_unused_bytes, reclaimable_pages, gc_pages, alloc_pages,
 unsigned verbose;
 bool ignore_wrong_order, quiet, dont_traversal;
 const char *only_subdb;
+int stuck_meta = -1;
 
 struct problem {
   struct problem *pr_next;
@@ -119,7 +120,7 @@ static void MDBX_PRINTF_ARGS(1, 2) print(const char *msg, ...) {
 
 static void va_log(MDBX_log_level_t level, const char *msg, va_list args) {
   static const char *const prefixes[] = {
-      "!!!fatal: ",       " ! " /* error */,     " ! " /* warning */,
+      "!!!fatal: ",       " ! " /* error */,     " ~ " /* warning */,
       "   " /* notice */, "   //" /* verbose */, "   ///" /* debug */,
       "   ////" /* trace */
   };
@@ -701,14 +702,14 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     error("mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc;
   }
-  /* if (ignore_wrong_order) {
+
+  if (ignore_wrong_order) { /* for debugging with enabled assertions */
     mc->mc_flags |= C_SKIPORD;
     if (mc->mc_xcursor)
       mc->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
-  } */
+  }
 
   const size_t maxkeysize = mdbx_env_get_maxkeysize_ex(env, flags);
-
   saved_list = problems_push();
   prev_key.iov_base = nullptr;
   prev_key.iov_len = 0;
@@ -818,11 +819,13 @@ bailout:
 
 static void usage(char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-v] [-q] [-c] [-w] [-d] [-i] [-s subdb] dbpath\n"
+          "usage: %s [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] "
+          "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -v\t\tmore verbose, could be used multiple times\n"
           "  -q\t\tbe quiet\n"
           "  -c\t\tforce cooperative mode (don't try exclusive)\n"
+          "  -0|1|2\tforce using specific meta-page 0..2 for checking\n"
           "  -w\t\tlock DB for writing while checking\n"
           "  -d\t\tdisable page-by-page traversal of B-tree\n"
           "  -i\t\tignore wrong order errors (for custom comparators case)\n"
@@ -932,8 +935,11 @@ void verbose_meta(int num, txnid_t txnid, uint64_t sign, uint64_t bootid_h,
   if (stay)
     print(", stay");
 
-  if (txnid > envinfo.mi_recent_txnid &&
-      (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE)
+  if (stuck_meta >= 0) {
+    if (num == stuck_meta)
+      print(", forced for checking");
+  } else if (txnid > envinfo.mi_recent_txnid &&
+             (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) == MDBX_EXCLUSIVE)
     print(", rolled-back %" PRIu64 " (%" PRIu64 " >>> %" PRIu64 ")",
           txnid - envinfo.mi_recent_txnid, txnid, envinfo.mi_recent_txnid);
   print("\n");
@@ -993,7 +999,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  for (int i; (i = getopt(argc, argv, "Vvqnwcdis:")) != EOF;) {
+  for (int i; (i = getopt(argc, argv, "Vvqnwc012dis:")) != EOF;) {
     switch (i) {
     case 'V':
       printf("mdbx_chk version %d.%d.%d.%d\n"
@@ -1011,6 +1017,15 @@ int main(int argc, char *argv[]) {
       return EXIT_SUCCESS;
     case 'v':
       verbose++;
+      break;
+    case '0':
+      stuck_meta = 0;
+      break;
+    case '1':
+      stuck_meta = 1;
+      break;
+    case '2':
+      stuck_meta = 2;
       break;
     case 'q':
       quiet = true;
@@ -1042,6 +1057,15 @@ int main(int argc, char *argv[]) {
 
   if (optind != argc - 1)
     usage(prog);
+
+  if (stuck_meta >= 0) {
+    if ((envflags & MDBX_EXCLUSIVE) == 0) {
+      error("exclusive mode is required to using specific meta-page(%d) for "
+            "checking.\n",
+            stuck_meta);
+      exit(EXIT_INTERRUPTED);
+    }
+  }
 
 #if defined(_WIN32) || defined(_WIN64)
   SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
@@ -1079,17 +1103,22 @@ int main(int argc, char *argv[]) {
     goto bailout;
   }
 
-  rc = mdbx_env_open(env, envname, envflags, 0);
-  if ((envflags & MDBX_EXCLUSIVE) &&
-      (rc == MDBX_BUSY ||
+  if (stuck_meta >= 0) {
+    rc = mdbx_env_open_for_recovery(env, envname, stuck_meta,
+                                    (envflags & MDBX_RDONLY) ? false : true);
+  } else {
+    rc = mdbx_env_open(env, envname, envflags, 0);
+    if ((envflags & MDBX_EXCLUSIVE) &&
+        (rc == MDBX_BUSY ||
 #if defined(_WIN32) || defined(_WIN64)
-       rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION
+         rc == ERROR_LOCK_VIOLATION || rc == ERROR_SHARING_VIOLATION
 #else
-       rc == EBUSY || rc == EAGAIN
+         rc == EBUSY || rc == EAGAIN
 #endif
-       )) {
-    envflags &= ~MDBX_EXCLUSIVE;
-    rc = mdbx_env_open(env, envname, envflags | MDBX_ACCEDE, 0);
+         )) {
+      envflags &= ~MDBX_EXCLUSIVE;
+      rc = mdbx_env_open(env, envname, envflags | MDBX_ACCEDE, 0);
+    }
   }
 
   if (rc) {
@@ -1466,7 +1495,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (rc == 0 && total_problems == 1 && problems_meta == 1 && !dont_traversal &&
-      (envflags & MDBX_RDONLY) == 0 && !only_subdb &&
+      (envflags & MDBX_RDONLY) == 0 && !only_subdb && stuck_meta < 0 &&
       steady_meta_txnid < envinfo.mi_recent_txnid) {
     print("Perform sync-to-disk for make steady checkpoint at txn-id #%" PRIi64
           "\n",
