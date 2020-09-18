@@ -4232,6 +4232,15 @@ typedef int MDBX_pgvisitor_func(
 /** \brief B-tree traversal function. */
 LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
                                 void *ctx, bool dont_check_keys_ordering);
+
+/** \brief Open an environment instance using specific meta-page
+ * for checking and recovery.
+ *
+ * This function mostly of internal API for `mdbx_chk` utility. */
+LIBMDBX_API int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
+                                           unsigned target_meta,
+                                           bool writeable);
+
 /** @} B-tree Traversal */
 
 /**** Attribute support functions for Nexenta

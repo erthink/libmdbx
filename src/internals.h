@@ -929,17 +929,18 @@ struct MDBX_env {
 #define MDBX_DEPRECATED_MAPASYNC UINT32_C(0x100000)
 #define ENV_INTERNAL_FLAGS (MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE | MDBX_ENV_TXKEY)
   uint32_t me_flags;
-  mdbx_mmap_t me_dxb_mmap; /*  The main data file */
+  mdbx_mmap_t me_dxb_mmap; /* The main data file */
 #define me_map me_dxb_mmap.dxb
 #define me_lazy_fd me_dxb_mmap.fd
   mdbx_filehandle_t me_dsync_fd;
-  mdbx_mmap_t me_lck_mmap; /*  The lock file */
+  mdbx_mmap_t me_lck_mmap; /* The lock file */
 #define me_lfd me_lck_mmap.fd
 #define me_lck me_lck_mmap.lck
 
-  unsigned me_psize;      /* DB page size, inited from me_os_psize */
-  unsigned me_psize2log;  /* log2 of DB page size */
-  unsigned me_os_psize;   /* OS page size, from mdbx_syspagesize() */
+  unsigned me_psize;    /* DB page size, inited from me_os_psize */
+  uint8_t me_psize2log; /* log2 of DB page size */
+  int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
+  unsigned me_os_psize; /* OS page size, from mdbx_syspagesize() */
   unsigned me_maxreaders; /* size of the reader table */
   mdbx_fastmutex_t me_dbi_lock;
   MDBX_dbi me_numdbs;         /* number of DBs opened */
