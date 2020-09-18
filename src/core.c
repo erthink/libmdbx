@@ -17750,12 +17750,12 @@ static MDBX_page_type_t walk_page_type(const MDBX_page *mp) {
 }
 
 /* Depth-first tree traversal. */
-static int __cold mdbx_walk_tree(mdbx_walk_ctx_t *ctx, pgno_t pgno,
+static int __cold mdbx_walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
                                  const char *name, int deep,
                                  txnid_t parent_txnid) {
   assert(pgno != P_INVALID);
   MDBX_page *mp = nullptr;
-  int err = mdbx_page_get(ctx->mw_cursor, pgno, &mp, NULL, parent_txnid);
+  int rc, err = mdbx_page_get(ctx->mw_cursor, pgno, &mp, NULL, parent_txnid);
   if (err == MDBX_SUCCESS)
     err = mdbx_page_check(ctx->mw_cursor, mp, 0);
 
@@ -17772,19 +17772,21 @@ static int __cold mdbx_walk_tree(mdbx_walk_ctx_t *ctx, pgno_t pgno,
       payload_size;
   size_t align_bytes = 0;
 
-  /* LY: Don't use mask here, e.g bitwise
-   * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
-   * Pages should not me marked dirty/loose or otherwise. */
-  switch (mp->mp_flags) {
-  default:
-    err = MDBX_CORRUPTED;
-    break;
-  case P_BRANCH:
-    if (unlikely(nentries < 2))
+  if (err == MDBX_SUCCESS) {
+    /* LY: Don't use mask here, e.g bitwise
+     * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
+     * Pages should not me marked dirty/loose or otherwise. */
+    switch (mp->mp_flags) {
+    default:
       err = MDBX_CORRUPTED;
-  case P_LEAF:
-  case P_LEAF | P_LEAF2:
-    break;
+      break;
+    case P_BRANCH:
+      if (unlikely(nentries < 2))
+        err = MDBX_CORRUPTED;
+    case P_LEAF:
+    case P_LEAF | P_LEAF2:
+      break;
+    }
   }
 
   for (int i = 0; err == MDBX_SUCCESS && i < nentries;
@@ -17833,9 +17835,11 @@ static int __cold mdbx_walk_tree(mdbx_walk_ctx_t *ctx, pgno_t pgno,
 
       pagesize = pgno2bytes(ctx->mw_txn->mt_env, npages);
       const size_t over_unused = pagesize - over_payload - over_header;
-      err = ctx->mw_visitor(large_pgno, npages, ctx->mw_user, deep, name,
-                            pagesize, MDBX_page_large, err, 1, over_payload,
-                            over_header, over_unused);
+      rc = ctx->mw_visitor(large_pgno, npages, ctx->mw_user, deep, name,
+                           pagesize, MDBX_page_large, err, 1, over_payload,
+                           over_header, over_unused);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
     } break;
 
     case F_SUBDATA /* sub-db */: {
@@ -17893,10 +17897,11 @@ static int __cold mdbx_walk_tree(mdbx_walk_ctx_t *ctx, pgno_t pgno,
         }
       }
 
-      err =
-          ctx->mw_visitor(pgno, 0, ctx->mw_user, deep + 1, name, node_ds(node),
-                          subtype, err, nsubkeys, subpayload_size,
-                          subheader_size, subunused_size + subalign_bytes);
+      rc = ctx->mw_visitor(pgno, 0, ctx->mw_user, deep + 1, name, node_ds(node),
+                           subtype, err, nsubkeys, subpayload_size,
+                           subheader_size, subunused_size + subalign_bytes);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
       header_size += subheader_size;
       unused_size += subunused_size;
       payload_size += subpayload_size;
@@ -17908,12 +17913,11 @@ static int __cold mdbx_walk_tree(mdbx_walk_ctx_t *ctx, pgno_t pgno,
     }
   }
 
-  err = ctx->mw_visitor(mp->mp_pgno, 1, ctx->mw_user, deep, name,
-                        ctx->mw_txn->mt_env->me_psize, type, err, nentries,
-                        payload_size, header_size, unused_size + align_bytes);
-
-  if (unlikely(err != MDBX_SUCCESS))
-    return (err == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : err;
+  rc = ctx->mw_visitor(pgno, 1, ctx->mw_user, deep, name,
+                       ctx->mw_txn->mt_env->me_psize, type, err, nentries,
+                       payload_size, header_size, unused_size + align_bytes);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return (rc == MDBX_RESULT_TRUE) ? MDBX_SUCCESS : rc;
 
   for (int i = 0; err == MDBX_SUCCESS && i < nentries; i++) {
     if (type == MDBX_page_dupfixed_leaf)
