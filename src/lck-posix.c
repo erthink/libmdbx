@@ -733,7 +733,11 @@ static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
 #elif MDBX_LOCKING == MDBX_LOCKING_POSIX1988
   (void)ipc;
 #elif MDBX_LOCKING == MDBX_LOCKING_FUTEX
+#ifdef _MSC_VER
+#pragma message("warning: TODO")
+#else
 #warning "TODO"
+#endif
   (void)ipc;
 #else
 #error "FIXME"
