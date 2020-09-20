@@ -66,10 +66,11 @@ script: |
   if [ ! -s ./coverity_scan.sh ]; then
     make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
   else
+    COVERITY_UNSUPPORTED_COMPILER_INVOCATION=1 \
     COVERITY_SCAN_PROJECT_NAME="ReOpen/libmdbx" \
     COVERITY_SCAN_NOTIFICATION_EMAIL="leo@yuriev.ru" \
     COVERITY_SCAN_BUILD_COMMAND_PREPEND="" \
-    COVERITY_SCAN_BUILD_COMMAND="make MDBX_OPTIONS=-DMDBX_DEBUG=2 build-test" \
+    COVERITY_SCAN_BUILD_COMMAND="make MDBX_OPTIONS=-DMDBX_DEBUG=2 CXXSTD=-std=gnu++17 build-test" \
     COVERITY_SCAN_BRANCH_PATTERN="$TRAVIS_BRANCH" \
       bash ./coverity_scan.sh || cat cov-int/scm_log.txt
   fi
