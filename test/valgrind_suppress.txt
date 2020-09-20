@@ -14,6 +14,14 @@
    ...
    fun:mdbx_env_sync_internal
 }
+{
+   msync-whole-mmap-3
+   Memcheck:Param
+   msync(start)
+   fun:msync
+   ...
+   fun:mdbx_mapresize
+}
 
 # single-page flush by pwrite()
 {
