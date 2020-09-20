@@ -16315,30 +16315,36 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
 #if MDBX_USE_SENDFILE
-    if (dest_is_pipe) {
+    static bool sendfile_unavailable;
+    if (dest_is_pipe && likely(!sendfile_unavailable)) {
       off_t in_offset = offset;
-      const intptr_t written =
+      const ssize_t written =
           sendfile(fd, env->me_lazy_fd, &in_offset, used_size - offset);
-      if (unlikely(written <= 0)) {
-        rc = written ? errno : MDBX_ENODATA;
-        break;
+      if (likely(written > 0)) {
+        offset = in_offset;
+        continue;
       }
-      offset = in_offset;
-      continue;
+      rc = MDBX_ENODATA;
+      if (written == 0 || ignore_enosys(rc = errno) != MDBX_RESULT_TRUE)
+        break;
+      sendfile_unavailable = true;
     }
 #endif /* MDBX_USE_SENDFILE */
 
 #if MDBX_USE_COPYFILERANGE
-    if (!dest_is_pipe) {
+    static bool copyfilerange_unavailable;
+    if (!dest_is_pipe && likely(!copyfilerange_unavailable)) {
       off_t in_offset = offset, out_offset = offset;
       ssize_t bytes_copied = copy_file_range(
           env->me_lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
-      if (unlikely(bytes_copied <= 0)) {
-        rc = bytes_copied ? errno : MDBX_ENODATA;
-        break;
+      if (likely(bytes_copied > 0)) {
+        offset = in_offset;
+        continue;
       }
-      offset = in_offset;
-      continue;
+      rc = MDBX_ENODATA;
+      if (bytes_copied == 0 || ignore_enosys(rc = errno) != MDBX_RESULT_TRUE)
+        break;
+      copyfilerange_unavailable = true;
     }
 #endif /* MDBX_USE_COPYFILERANGE */
 
