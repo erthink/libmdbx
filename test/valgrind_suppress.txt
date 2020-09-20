@@ -15,11 +15,29 @@
    fun:mdbx_env_sync_internal
 }
 
-# modern Valgrind don't support the `vector[...]` pattern
-# for((i=0;i<64;++i)); do echo -e "{\n   pwrite-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:mdbx_page_flush\n}"; done >> valgrind_suppress.txt
-
+# single-page flush by pwrite()
 {
    pwrite-page-flush
+   Memcheck:Param
+   pwrite(buf)
+   fun:pwrite
+   ...
+   fun:mdbx_page_flush
+}
+{
+   pwrite64-page-flush
+   Memcheck:Param
+   pwrite64(buf)
+   fun:pwrite
+   ...
+   fun:mdbx_page_flush
+}
+
+# modern Valgrind don't support the `vector[...]` pattern
+# for((i=0;i<64;++i)); do echo -e "{\n   pwritev-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:mdbx_page_flush\n}"; done >> valgrind_suppress.txt
+
+{
+   pwritev-page-flush
    Memcheck:Param
    pwritev(vector[...])
    fun:pwritev
@@ -27,7 +45,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-0
+   pwritev-page-flush-0
    Memcheck:Param
    pwritev(vector[0])
    fun:pwritev
@@ -35,7 +53,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-1
+   pwritev-page-flush-1
    Memcheck:Param
    pwritev(vector[1])
    fun:pwritev
@@ -43,7 +61,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-2
+   pwritev-page-flush-2
    Memcheck:Param
    pwritev(vector[2])
    fun:pwritev
@@ -51,7 +69,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-3
+   pwritev-page-flush-3
    Memcheck:Param
    pwritev(vector[3])
    fun:pwritev
@@ -59,7 +77,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-4
+   pwritev-page-flush-4
    Memcheck:Param
    pwritev(vector[4])
    fun:pwritev
@@ -67,7 +85,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-5
+   pwritev-page-flush-5
    Memcheck:Param
    pwritev(vector[5])
    fun:pwritev
@@ -75,7 +93,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-6
+   pwritev-page-flush-6
    Memcheck:Param
    pwritev(vector[6])
    fun:pwritev
@@ -83,7 +101,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-7
+   pwritev-page-flush-7
    Memcheck:Param
    pwritev(vector[7])
    fun:pwritev
@@ -91,7 +109,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-8
+   pwritev-page-flush-8
    Memcheck:Param
    pwritev(vector[8])
    fun:pwritev
@@ -99,7 +117,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-9
+   pwritev-page-flush-9
    Memcheck:Param
    pwritev(vector[9])
    fun:pwritev
@@ -107,7 +125,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-10
+   pwritev-page-flush-10
    Memcheck:Param
    pwritev(vector[10])
    fun:pwritev
@@ -115,7 +133,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-11
+   pwritev-page-flush-11
    Memcheck:Param
    pwritev(vector[11])
    fun:pwritev
@@ -123,7 +141,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-12
+   pwritev-page-flush-12
    Memcheck:Param
    pwritev(vector[12])
    fun:pwritev
@@ -131,7 +149,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-13
+   pwritev-page-flush-13
    Memcheck:Param
    pwritev(vector[13])
    fun:pwritev
@@ -139,7 +157,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-14
+   pwritev-page-flush-14
    Memcheck:Param
    pwritev(vector[14])
    fun:pwritev
@@ -147,7 +165,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-15
+   pwritev-page-flush-15
    Memcheck:Param
    pwritev(vector[15])
    fun:pwritev
@@ -155,7 +173,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-16
+   pwritev-page-flush-16
    Memcheck:Param
    pwritev(vector[16])
    fun:pwritev
@@ -163,7 +181,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-17
+   pwritev-page-flush-17
    Memcheck:Param
    pwritev(vector[17])
    fun:pwritev
@@ -171,7 +189,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-18
+   pwritev-page-flush-18
    Memcheck:Param
    pwritev(vector[18])
    fun:pwritev
@@ -179,7 +197,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-19
+   pwritev-page-flush-19
    Memcheck:Param
    pwritev(vector[19])
    fun:pwritev
@@ -187,7 +205,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-20
+   pwritev-page-flush-20
    Memcheck:Param
    pwritev(vector[20])
    fun:pwritev
@@ -195,7 +213,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-21
+   pwritev-page-flush-21
    Memcheck:Param
    pwritev(vector[21])
    fun:pwritev
@@ -203,7 +221,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-22
+   pwritev-page-flush-22
    Memcheck:Param
    pwritev(vector[22])
    fun:pwritev
@@ -211,7 +229,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-23
+   pwritev-page-flush-23
    Memcheck:Param
    pwritev(vector[23])
    fun:pwritev
@@ -219,7 +237,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-24
+   pwritev-page-flush-24
    Memcheck:Param
    pwritev(vector[24])
    fun:pwritev
@@ -227,7 +245,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-25
+   pwritev-page-flush-25
    Memcheck:Param
    pwritev(vector[25])
    fun:pwritev
@@ -235,7 +253,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-26
+   pwritev-page-flush-26
    Memcheck:Param
    pwritev(vector[26])
    fun:pwritev
@@ -243,7 +261,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-27
+   pwritev-page-flush-27
    Memcheck:Param
    pwritev(vector[27])
    fun:pwritev
@@ -251,7 +269,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-28
+   pwritev-page-flush-28
    Memcheck:Param
    pwritev(vector[28])
    fun:pwritev
@@ -259,7 +277,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-29
+   pwritev-page-flush-29
    Memcheck:Param
    pwritev(vector[29])
    fun:pwritev
@@ -267,7 +285,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-30
+   pwritev-page-flush-30
    Memcheck:Param
    pwritev(vector[30])
    fun:pwritev
@@ -275,7 +293,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-31
+   pwritev-page-flush-31
    Memcheck:Param
    pwritev(vector[31])
    fun:pwritev
@@ -283,7 +301,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-32
+   pwritev-page-flush-32
    Memcheck:Param
    pwritev(vector[32])
    fun:pwritev
@@ -291,7 +309,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-33
+   pwritev-page-flush-33
    Memcheck:Param
    pwritev(vector[33])
    fun:pwritev
@@ -299,7 +317,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-34
+   pwritev-page-flush-34
    Memcheck:Param
    pwritev(vector[34])
    fun:pwritev
@@ -307,7 +325,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-35
+   pwritev-page-flush-35
    Memcheck:Param
    pwritev(vector[35])
    fun:pwritev
@@ -315,7 +333,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-36
+   pwritev-page-flush-36
    Memcheck:Param
    pwritev(vector[36])
    fun:pwritev
@@ -323,7 +341,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-37
+   pwritev-page-flush-37
    Memcheck:Param
    pwritev(vector[37])
    fun:pwritev
@@ -331,7 +349,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-38
+   pwritev-page-flush-38
    Memcheck:Param
    pwritev(vector[38])
    fun:pwritev
@@ -339,7 +357,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-39
+   pwritev-page-flush-39
    Memcheck:Param
    pwritev(vector[39])
    fun:pwritev
@@ -347,7 +365,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-40
+   pwritev-page-flush-40
    Memcheck:Param
    pwritev(vector[40])
    fun:pwritev
@@ -355,7 +373,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-41
+   pwritev-page-flush-41
    Memcheck:Param
    pwritev(vector[41])
    fun:pwritev
@@ -363,7 +381,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-42
+   pwritev-page-flush-42
    Memcheck:Param
    pwritev(vector[42])
    fun:pwritev
@@ -371,7 +389,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-43
+   pwritev-page-flush-43
    Memcheck:Param
    pwritev(vector[43])
    fun:pwritev
@@ -379,7 +397,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-44
+   pwritev-page-flush-44
    Memcheck:Param
    pwritev(vector[44])
    fun:pwritev
@@ -387,7 +405,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-45
+   pwritev-page-flush-45
    Memcheck:Param
    pwritev(vector[45])
    fun:pwritev
@@ -395,7 +413,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-46
+   pwritev-page-flush-46
    Memcheck:Param
    pwritev(vector[46])
    fun:pwritev
@@ -403,7 +421,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-47
+   pwritev-page-flush-47
    Memcheck:Param
    pwritev(vector[47])
    fun:pwritev
@@ -411,7 +429,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-48
+   pwritev-page-flush-48
    Memcheck:Param
    pwritev(vector[48])
    fun:pwritev
@@ -419,7 +437,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-49
+   pwritev-page-flush-49
    Memcheck:Param
    pwritev(vector[49])
    fun:pwritev
@@ -427,7 +445,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-50
+   pwritev-page-flush-50
    Memcheck:Param
    pwritev(vector[50])
    fun:pwritev
@@ -435,7 +453,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-51
+   pwritev-page-flush-51
    Memcheck:Param
    pwritev(vector[51])
    fun:pwritev
@@ -443,7 +461,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-52
+   pwritev-page-flush-52
    Memcheck:Param
    pwritev(vector[52])
    fun:pwritev
@@ -451,7 +469,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-53
+   pwritev-page-flush-53
    Memcheck:Param
    pwritev(vector[53])
    fun:pwritev
@@ -459,7 +477,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-54
+   pwritev-page-flush-54
    Memcheck:Param
    pwritev(vector[54])
    fun:pwritev
@@ -467,7 +485,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-55
+   pwritev-page-flush-55
    Memcheck:Param
    pwritev(vector[55])
    fun:pwritev
@@ -475,7 +493,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-56
+   pwritev-page-flush-56
    Memcheck:Param
    pwritev(vector[56])
    fun:pwritev
@@ -483,7 +501,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-57
+   pwritev-page-flush-57
    Memcheck:Param
    pwritev(vector[57])
    fun:pwritev
@@ -491,7 +509,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-58
+   pwritev-page-flush-58
    Memcheck:Param
    pwritev(vector[58])
    fun:pwritev
@@ -499,7 +517,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-59
+   pwritev-page-flush-59
    Memcheck:Param
    pwritev(vector[59])
    fun:pwritev
@@ -507,7 +525,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-60
+   pwritev-page-flush-60
    Memcheck:Param
    pwritev(vector[60])
    fun:pwritev
@@ -515,7 +533,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-61
+   pwritev-page-flush-61
    Memcheck:Param
    pwritev(vector[61])
    fun:pwritev
@@ -523,7 +541,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-62
+   pwritev-page-flush-62
    Memcheck:Param
    pwritev(vector[62])
    fun:pwritev
@@ -531,7 +549,7 @@
    fun:mdbx_page_flush
 }
 {
-   pwrite-page-flush-63
+   pwritev-page-flush-63
    Memcheck:Param
    pwritev(vector[63])
    fun:pwritev
