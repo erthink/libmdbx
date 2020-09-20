@@ -160,7 +160,9 @@ rm -f ${TESTDB_DIR}/*
 function join { local IFS="$1"; shift; echo "$*"; }
 function bit2option { local -n arr=$1; (( ($2&(1<<$3)) != 0 )) && echo -n '+' || echo -n '-'; echo "${arr[$3]}"; }
 
-options=(writemap coalesce lifo notls)
+syncmodes=("" ,+nosync-safe ,+nosync-utterly)
+
+options=(writemap coalesce lifo notls perturb)
 
 function bits2list {
   local -n arr=$1
@@ -176,7 +178,7 @@ function probe {
   echo "----------------------------------------------- $(date)"
   echo "${caption}: $*"
   rm -f ${TESTDB_DIR}/* \
-    && ${VALGRIND} ./mdbx_test ${speculum} --ignore-dbfull --repeat=3 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
+    && ${VALGRIND} ./mdbx_test ${speculum} --ignore-dbfull --repeat=5 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
       | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
     && ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
     && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
@@ -201,65 +203,65 @@ for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
       split=30
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
 
       split=24
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
 
       split=16
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
 
       split=4
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
       caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
-        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits) \
+        --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
         --keygen.seed=${seed} basic
     done # options
     cases="${subcase}"
