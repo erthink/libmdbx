@@ -370,15 +370,15 @@ endif
 CROSS_LIST = mips-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
 	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc \
-	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc
+	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc \
+	hppa-linux-gnu-gcc s390x-linux-gnu-gcc
 
-# hppa-linux-gnu-gcc          - don't supported by current qemu release
-# s390x-linux-gnu-gcc         - qemu troubles (hang/abort)
-# sparc64-linux-gnu-gcc       - qemu troubles (fcntl for F_SETLK/F_GETLK)
-# alpha-linux-gnu-gcc         - qemu (or gcc) troubles (coredump)
-
-CROSS_LIST_NOQEMU = hppa-linux-gnu-gcc s390x-linux-gnu-gcc \
-	sparc64-linux-gnu-gcc alpha-linux-gnu-gcc
+##  On Ubuntu Focal (20.04) with QEMU 4.2 (1:4.2-3ubuntu6.6) & GCC 9.3 (9.3.0-17ubuntu1~20.04)
+# hppa-linux-gnu-gcc          - works (previously: don't supported by qemu)
+# s390x-linux-gnu-gcc         - works (previously: qemu hang/abort)
+# sparc64-linux-gnu-gcc       - coredump (qemu or gcc troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
+# alpha-linux-gnu-gcc         - coredump (qemu or gcc troubles)
+CROSS_LIST_NOQEMU = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc
 
 cross-gcc:
 	@echo "CORRESPONDING CROSS-COMPILERs ARE REQUIRED."
