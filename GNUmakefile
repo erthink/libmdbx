@@ -1,11 +1,19 @@
-# This makefile is for GNU Make, and nowadays provided
+# This makefile is for GNU Make 3.80 or above, and nowadays provided
 # just for compatibility and preservation of traditions.
-# Please use CMake in case of any difficulties or problems.
 #
-# Preprocessor macros (for MDBX_OPTIONS) of interest...
+# Please use CMake in case of any difficulties or
+# problems with this old-school's magic.
+#
+################################################################################
+#
+# Preprocessor macros (for MDBX_OPTIONS) of interest.
+#
 # Note that the defaults should already be correct for most platforms;
 # you should not need to change any of these. Read their descriptions
-# in README and source code if you do. There may be other macros of interest.
+# in README and source code (see src/options.h) if you do.
+# There may be other macros of interest.
+#
+
 SHELL   := env bash
 
 # install sandbox
@@ -25,8 +33,9 @@ MDBX_OPTIONS ?= -DNDEBUG=1
 CFLAGS  ?= -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes $(CFLAGS_EXTRA)
 # -Wno-tautological-compare
 CXX     ?= g++
-CXXSTD  ?= $(shell PROBE=$$([ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++); for std in gnu++20 c++20 gnu++2a c++2a gnu++17 c++17 gnu++14 c++14 gnu+11 c++11; do $(CXX) -std=$${std} -c $${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "-std=$${std}" && exit; done)
-CXXFLAGS:= $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
+# choicing C++ standard with deferred simple variable expansion trick
+CXXSTD  ?= $(eval CXXSTD := $$(shell PROBE=$$$$([ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++); for std in gnu++20 c++20 gnu++2a c++2a gnu++17 c++17 gnu++14 c++14 gnu+11 c++11; do $(CXX) -std=$$$${std} -c $$$${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "-std=$$$${std}" && exit; done))$(CXXSTD)
+CXXFLAGS = $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 
 # HINT: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old.
 LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt") $(shell uname | grep -qi Windows && echo "-lntdll")
@@ -209,7 +218,7 @@ build-test: all mdbx_example mdbx_test
 
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
-	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) -c $(1) -o $$@
+	$$(CXX) $$(CXXFLAGS) $$(MDBX_OPTIONS) -c $(1) -o $$@
 
 endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
