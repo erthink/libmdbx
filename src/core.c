@@ -16314,10 +16314,8 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   uint8_t *const data_buffer =
       buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
+#if MDBX_USE_SENDFILE
     if (dest_is_pipe) {
-#if (defined(__linux__) || defined(__gnu_linux__)) &&                          \
-    (!defined(__ANDROID_API__) || __ANDROID_API__ >= 21) &&                    \
-    !defined(MDBX_SAFE4QEMU)
       off_t in_offset = offset;
       const intptr_t written =
           sendfile(fd, env->me_lazy_fd, &in_offset, used_size - offset);
@@ -16327,9 +16325,11 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       }
       offset = in_offset;
       continue;
-#endif
-    } else {
-#if __GLIBC_PREREQ(2, 27) && defined(_GNU_SOURCE) && !defined(MDBX_SAFE4QEMU)
+    }
+#endif /* MDBX_USE_SENDFILE */
+
+#if MDBX_USE_COPYFILERANGE
+    if (!dest_is_pipe) {
       off_t in_offset = offset, out_offset = offset;
       ssize_t bytes_copied = copy_file_range(
           env->me_lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
@@ -16339,8 +16339,8 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       }
       offset = in_offset;
       continue;
-#endif
     }
+#endif /* MDBX_USE_COPYFILERANGE */
 
     /* fallback to portable */
     const size_t chunk =
