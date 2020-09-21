@@ -165,25 +165,28 @@ MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | 
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) CXXSTD= -s src/version.c && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
 MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_SUFFIX)
 
+# Extra options mdbx_test utility
+MDBX_TEST_EXTRA ?=
+
 check: test dist
 
 test: build-test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
-		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after basic && \
-		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after basic) \
+		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
+		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic) \
 		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 test-singleprocess: all mdbx_test
 	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
-		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --hill && \
+		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after --nested) \
+		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --nested) \
 		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 test-fault: all mdbx_test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after basic \
+	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_TEST_EXTRA) basic \
 		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
@@ -191,9 +194,9 @@ VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=f
 memcheck test-valgrind:
 	$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -DMDBX_USE_VALGRIND" build-test && \
 	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ( \
-		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
+		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after basic && \
+		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
 	) | tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42)
@@ -367,7 +370,7 @@ endif
 ################################################################################
 # Cross-compilation simple test
 
-CROSS_LIST = mips-linux-gnu-gcc \
+CROSS_LIST = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc mips-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
 	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc \
 	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc \
@@ -376,9 +379,9 @@ CROSS_LIST = mips-linux-gnu-gcc \
 ##  On Ubuntu Focal (20.04) with QEMU 4.2 (1:4.2-3ubuntu6.6) & GCC 9.3 (9.3.0-17ubuntu1~20.04)
 # hppa-linux-gnu-gcc          - works (previously: don't supported by qemu)
 # s390x-linux-gnu-gcc         - works (previously: qemu hang/abort)
-# sparc64-linux-gnu-gcc       - coredump (qemu or gcc troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
-# alpha-linux-gnu-gcc         - coredump (qemu or gcc troubles)
-CROSS_LIST_NOQEMU = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc
+# sparc64-linux-gnu-gcc       - coredump (qemu mmap-troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
+# alpha-linux-gnu-gcc         - coredump (qemu mmap-troubles)
+CROSS_LIST_NOQEMU =
 
 cross-gcc:
 	@echo "CORRESPONDING CROSS-COMPILERs ARE REQUIRED."
@@ -398,6 +401,7 @@ cross-qemu:
 	@for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) CXXSTD= clean && \
+			MDBX_TEST_EXTRA="$(MDBX_TEST_EXTRA)$$(echo $$CC | grep -q -e alpha -e sparc && echo ' --size-upper=64M --size-lower=64M')" \
 			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_OPTIONS)" \
 			$(MAKE) test-singleprocess || exit $$?; \
 	done
