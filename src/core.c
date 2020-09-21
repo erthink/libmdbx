@@ -4949,9 +4949,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   } else {
-#if (defined(__linux__) || defined(__gnu_linux__)) &&                          \
-    (!defined(__ANDROID_API__) || __ANDROID_API__ >= 26) &&                    \
-    defined(_GNU_SOURCE) && !defined(MDBX_SAFE4QEMU)
+#if MDBX_USE_SYNCFILERANGE
     if (sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
                         SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
       err = errno;
