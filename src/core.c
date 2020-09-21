@@ -4950,14 +4950,24 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
       return err;
   } else {
 #if MDBX_USE_SYNCFILERANGE
-    if (sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
-                        SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER))
+    static bool syncfilerange_unavailable;
+    if (likely(!syncfilerange_unavailable)) {
+      if (likely(!sync_file_range(
+              env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
+              SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER)))
+        goto done_filesync;
       err = errno;
-#else
+      if (ignore_enosys(err) != MDBX_RESULT_TRUE)
+        return err;
+      syncfilerange_unavailable = true;
+    }
+#endif /* MDBX_USE_SYNCFILERANGE */
     err = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA);
-#endif
     if (unlikely(err != MDBX_SUCCESS))
       return err;
+#if MDBX_USE_SYNCFILERANGE
+  done_filesync:
+#endif /* MDBX_USE_SYNCFILERANGE */
     mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
                                env->me_os_psize);
   }

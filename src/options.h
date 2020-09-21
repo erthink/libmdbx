@@ -184,9 +184,9 @@
 
 /** Advanced: Using sync_file_range() syscall (autodetection by default). */
 #ifndef MDBX_USE_SYNCFILERANGE
-#if (defined(__linux__) || defined(__gnu_linux__)) &&                          \
-    (!defined(__ANDROID_API__) || __ANDROID_API__ >= 26) &&                    \
-    defined(_GNU_SOURCE) && !defined(MDBX_SAFE4QEMU)
+#if ((defined(__linux__) || defined(__gnu_linux__)) && __GLIBC_PREREQ(2, 6) && \
+     defined(_GNU_SOURCE)) ||                                                  \
+    (defined(__ANDROID_API__) && __ANDROID_API__ >= 26)
 #define MDBX_USE_SYNCFILERANGE 1
 #else
 #define MDBX_USE_SYNCFILERANGE 0
