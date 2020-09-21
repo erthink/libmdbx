@@ -1,27 +1,64 @@
 ChangeLog
 ---------
 
-## v0.9.0 (in the development)
-
-Added features:
-
- - [Online API reference](https://erthink.github.io/libmdbx/) by Doxygen.
- - Functions to explicit reader threads (de)registration.
- - Separated enums for environment, sub-databases, transactions, copying and data-update flags.
- - Support for read transactions preparation (`MDBX_TXN_RDONLY_PREPARE` flag).
- - Draft: Native bindings for C++.
+## v0.9.2 (in development)
 
 TODO:
 
- - Finalize: Native bindings for C++.
- - Packages for AltLinux, Fedora/RHEL, Debian/Ubuntu.
+ - Finalize C++ API (few typos and trivia bugs are likely for now).
+ - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
+
+
+## v0.9.1 2020-09-24 (scheduled, pre-release)
+
+Added features:
+
+ - Preliminary C++ API with support for C++17 polymorphic allocators.
+ - [Online C++ API reference](https://erthink.github.io/libmdbx/) by Doxygen.
+ - Quick reference for Insert/Update/Delete operations.
+ - Explicit `MDBX_SYNC_DURABLE` to sync modes for API clarity.
+ - Explicit `MDBX_ALLDUPS` and `MDBX_UPSERT` for API clarity.
+ - Support for read transactions preparation (`MDBX_TXN_RDONLY_PREPARE` flag).
+ - Support for cursor preparation/preallocation and reusing (`mdbx_cursor_create()` and `mdbx_cursor_bind()` functions).
+ - Support for checking database using specified meta-page (see `mdbx_chk -h`).
+ - Support for explicit reader threads (de)registration.
+ - The `mdbx_txn_break()` function to explicitly mark a transaction as broken.
+ - Improved handling of corrupted databases by `mdbx_chk` utility and `mdbx_walk_tree()` function.
+ - Improved DB corruption detection by checking parent-page-txnid.
+ - Improved opening large DB (> 4Gb) from 32-bit code.
+ - Provided `pure-function` and `const-function` attributes to C API.
 
 Deprecated functions and flags:
 
-  - Usage of custom comparators and the `mdbx_dbi_open_ex()` are deprecated, since such databases couldn't be checked by the `mdbx_chk` utility.
-    Please use the value-to-key functions to provide keys that are compatible with the built-in libmdbx comparators.
-  - For clarity and API simplification the `MDBX_MAPASYNC` flag is deprecated.
-    Just use `MDBX_SAFE_NOSYNC` or `MDBX_UTTERLY_NOSYNC` instead of it.
+ - For clarity and API simplification the `MDBX_MAPASYNC` flag is deprecated.
+   Just use `MDBX_SAFE_NOSYNC` or `MDBX_UTTERLY_NOSYNC` instead of it.
+
+Fixes:
+
+ - Fix `mdbx_strerror()` for `MDBX_BUSY` error (no error description is returned).
+ - Fix update internal meta-geo information in read-only mode (`EACCESS` or `EBADF` error).
+ - Fix `mdbx_page_get()` null-defer when DB corrupted (crash by `SIGSEGV`).
+ - Fix `mdbx_env_open()` for re-opening after non-fatal errors (`mdbx_chk` unexpected failures).
+ - Workaround for MSVC 19.27 `static_assert()` bug.
+ - Doxygen descriptions and refinement.
+ - Update Valgrind's suppressions.
+ - Workaround to avoid infinite loop of 'nested' testcase on MIPS under QEMU.
+ - Fixed a lot of typos.
+ - Fix MSVC compiler version requirements.
+ - Workarounds for QEMU's bugs to run tests for cross-builded library under QEMU.
+
+
+## v0.9.0 2020-07-31 (not a release, but API changes)
+
+Added features:
+
+ - [Online C API reference](https://erthink.github.io/libmdbx/) by Doxygen.
+ - Separated enums for environment, sub-databases, transactions, copying and data-update flags.
+
+Deprecated functions and flags:
+
+ - Usage of custom comparators and the `mdbx_dbi_open_ex()` are deprecated, since such databases couldn't be checked by the `mdbx_chk` utility.
+   Please use the value-to-key functions to provide keys that are compatible with the built-in libmdbx comparators.
 
 
 ## v0.8.2 2020-07-06
