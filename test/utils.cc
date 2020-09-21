@@ -222,12 +222,16 @@ uint64_t entropy_ticks(void) {
     return pmccntr;
 #endif
   }
-#elif defined(__mips__) || defined(__mips) || defined(_R4000)
+#elif ((defined(_MIPS_ISA) && defined(_MIPS_ISA_MIPS2) &&                      \
+        _MIPS_ISA >= _MIPS_ISA_MIPS2) ||                                       \
+       (defined(__mips) && __mips >= 2) || defined(_R4000)) &&                 \
+    !defined(MDBX_SAFE4QEMU) /* QEMU may not emulate the CC register           \
+                               (High-resolution cycle counter) */
   unsigned count;
   __asm __volatile("rdhwr %0, $2" : "=r"(count));
   return count;
-#endif /* arch selector */
-#endif /* __GNUC__ || __clang__ */
+#endif                       /* arch selector */
+#endif                       /* __GNUC__ || __clang__ */
 
 #if defined(__e2k__) || defined(__ia32__)
   return __rdtsc();
