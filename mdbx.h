@@ -757,7 +757,7 @@ enum MDBX_env_flags_t {
    * `MDBX_EXCLUSIVE` flag can be used as a replacement for `MDB_NOLOCK`,
    * which don't supported by MDBX.
    * In this way, you can get the minimal overhead, but with the correct
-   * multi-process and mutli-thread locking.
+   * multi-process and multi-thread locking.
    *
    * - with `MDBX_EXCLUSIVE` = open environment in exclusive/monopolistic mode
    *   or return \ref MDBX_BUSY if environment already used by other process.
