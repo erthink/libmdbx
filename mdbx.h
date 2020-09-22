@@ -2609,7 +2609,7 @@ __nothrow_pure_function LIBMDBX_API uint64_t mdbx_txn_id(const MDBX_txn *txn);
  *                               be aborted due to previous errors.
  * \retval MDBX_PANIC            A fatal error occurred earlier
  *                               and the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -2647,7 +2647,7 @@ LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -2681,7 +2681,7 @@ LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -2703,7 +2703,7 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
