@@ -285,7 +285,7 @@ Environment:
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
   if (children.size() == MAXIMUM_WAIT_OBJECTS)
-    failure("Could't manage more that %u actors on Windows\n",
+    failure("Couldn't manage more that %u actors on Windows\n",
             MAXIMUM_WAIT_OBJECTS);
 
   _flushall();

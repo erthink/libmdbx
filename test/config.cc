@@ -74,7 +74,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return false;
 
   if (!allow_empty && strlen(value_cstr) == 0)
-    failure("Value for option '--%s' could't be empty\n", option);
+    failure("Value for option '--%s' couldn't be empty\n", option);
 
   value = value_cstr;
   return true;

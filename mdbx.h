@@ -2046,7 +2046,7 @@ LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
  * \ingroup c_statinfo
  *
  * \note All MDBX file descriptors have `FD_CLOEXEC` and
- *       could't be used after exec() and or `fork()`.
+ *       couldn't be used after exec() and or `fork()`.
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  * \param [out] fd   Address of a int to contain the descriptor.
