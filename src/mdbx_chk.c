@@ -663,6 +663,8 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
           print(" %s", dbflags[i].name);
     }
     print(" (0x%02X)\n", flags);
+    if (ms.ms_mod_txnid)
+      print(" - last modification txn#%" PRIu64 "\n", ms.ms_mod_txnid);
     if (verbose > 1) {
       print(" - page size %u, entries %" PRIu64 "\n", ms.ms_psize,
             ms.ms_entries);
