@@ -319,7 +319,7 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  *    leaf-page, since dupsort value couldn't be placed on a large/overflow
  *    page.
  *
- * - So, the simpliest solution is to use half of branch.maxkey as
+ * - So, the simplest solution is to use half of branch.maxkey as
  *   a common maxkey value. Nevertheless, the actual values of maxkey are:
  *     nondupsort.maxkey = even_floor(pageroom / 3)
  *                           - sizeof(indx_t) - node_hdr_len;
