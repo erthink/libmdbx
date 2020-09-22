@@ -103,7 +103,7 @@ time now_realtime() {
 #endif
 }
 
-time now_motonic() {
+time now_monotonic() {
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   static uint64_t reciprocal;
   static LARGE_INTEGER Frequency;

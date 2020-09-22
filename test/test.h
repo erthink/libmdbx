@@ -56,8 +56,8 @@ extern std::unordered_map<unsigned, actor_config *> events;
 extern std::unordered_map<mdbx_pid_t, actor_config *> pid2actor;
 extern std::set<std::string> databases;
 extern unsigned nactors;
-extern chrono::time start_motonic;
-extern chrono::time deadline_motonic;
+extern chrono::time start_monotonic;
+extern chrono::time deadline_monotonic;
 extern bool singlemode;
 
 namespace config {

@@ -94,6 +94,6 @@ inline time from_timeval(const struct timeval &tv) {
 #endif /* HAVE_TIMEVAL_TV_USEC */
 
 time now_realtime();
-time now_motonic();
+time now_monotonic();
 
 } /* namespace chrono */

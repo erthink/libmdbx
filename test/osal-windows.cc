@@ -419,7 +419,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 void osal_yield(void) { SwitchToThread(); }
 
 void osal_udelay(unsigned us) {
-  chrono::time until, now = chrono::now_motonic();
+  chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
 
   static unsigned threshold_us;
@@ -440,7 +440,7 @@ void osal_udelay(unsigned us) {
     }
 
     YieldProcessor();
-    now = chrono::now_motonic();
+    now = chrono::now_monotonic();
   } while (now.fixedpoint < until.fixedpoint);
 }
 

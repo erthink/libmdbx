@@ -239,7 +239,7 @@ local_suffix::~local_suffix() { suffix.erase(trim_pos); }
 
 void progress_canary(bool active) {
   static chrono::time progress_timestamp;
-  chrono::time now = chrono::now_motonic();
+  chrono::time now = chrono::now_monotonic();
 
   if (now.fixedpoint - progress_timestamp.fixedpoint <
       chrono::from_ms(42).fixedpoint)

@@ -462,7 +462,7 @@ void osal_yield(void) {
 }
 
 void osal_udelay(unsigned us) {
-  chrono::time until, now = chrono::now_motonic();
+  chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
   struct timespec ts;
 
@@ -505,7 +505,7 @@ void osal_udelay(unsigned us) {
     }
     cpu_relax();
 
-    now = chrono::now_motonic();
+    now = chrono::now_monotonic();
   } while (until.fixedpoint > now.fixedpoint);
 }
 
