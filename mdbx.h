@@ -116,7 +116,7 @@ typedef DWORD mdbx_tid_t;
 #include <errno.h>     /* for error codes */
 #include <pthread.h>   /* for pthread_t */
 #include <sys/types.h> /* for pid_t */
-#include <sys/uio.h>   /* for truct iovec */
+#include <sys/uio.h>   /* for struct iovec */
 #define HAVE_STRUCT_IOVEC 1
 typedef int mdbx_filehandle_t;
 typedef pid_t mdbx_pid_t;
@@ -537,7 +537,7 @@ struct iovec {
 
 #if defined(__sun) || defined(__SVR4) || defined(__svr4__)
 /* The `iov_len` is signed on Sun/Solaris.
- * So define custom MDBX_val to avoid a lot of warings. */
+ * So define custom MDBX_val to avoid a lot of warnings. */
 struct MDBX_val {
   void *iov_base; /**< pointer to some data */
   size_t iov_len; /**< the length of data in bytes */
@@ -757,7 +757,7 @@ enum MDBX_env_flags_t {
    * `MDBX_EXCLUSIVE` flag can be used as a replacement for `MDB_NOLOCK`,
    * which don't supported by MDBX.
    * In this way, you can get the minimal overhead, but with the correct
-   * multi-process and mutli-thread locking.
+   * multi-process and multi-thread locking.
    *
    * - with `MDBX_EXCLUSIVE` = open environment in exclusive/monopolistic mode
    *   or return \ref MDBX_BUSY if environment already used by other process.
@@ -1043,7 +1043,7 @@ enum MDBX_env_flags_t {
    * \ref mdbx_env_sync() as alternatively for batch committing or nested
    * transaction (in some cases). As well, auto-sync feature exposed by
    * \ref mdbx_env_set_syncbytes() and \ref mdbx_env_set_syncperiod() functions
-   * could be very usefull with `MDBX_SAFE_NOSYNC` flag.
+   * could be very useful with `MDBX_SAFE_NOSYNC` flag.
    *
    * The number and volume of of disk IOPs with MDBX_SAFE_NOSYNC flag will
    * exactly the as without any no-sync flags. However, you should expect a
@@ -1090,7 +1090,7 @@ enum MDBX_env_flags_t {
    *  - a system crash immediately after commit the write transaction
    *    high likely lead to database corruption.
    *  - successful completion of mdbx_env_sync(force = true) after one or
-   *    more commited transactions guarantees consystency and durability.
+   *    more commited transactions guarantees consistency and durability.
    *  - BUT by committing two or more transactions you back database into
    *    a weak state, in which a system crash may lead to database corruption!
    *    In case single transaction after mdbx_env_sync, you may lose transaction
@@ -1918,7 +1918,7 @@ LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
 
-/** Sets relative period since the last unsteay commit to force flush the data
+/** Sets relative period since the last unsteady commit to force flush the data
  * buffers to disk, even of \ref MDBX_SAFE_NOSYNC flag in the environment.
  * \ingroup c_settings
  *
@@ -1943,7 +1943,7 @@ LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  * \param [in] seconds_16dot16  The period in 1/65536 of second when
  *                              a synchronous flush would be made since
- *                              the last unsteay commit.
+ *                              the last unsteady commit.
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncperiod(MDBX_env *env,
@@ -2046,7 +2046,7 @@ LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
  * \ingroup c_statinfo
  *
  * \note All MDBX file descriptors have `FD_CLOEXEC` and
- *       could't be used after exec() and or `fork()`.
+ *       couldn't be used after exec() and or `fork()`.
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  * \param [out] fd   Address of a int to contain the descriptor.
@@ -2076,7 +2076,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *  - In case \ref mdbx_env_info_ex() or legacy \ref mdbx_env_info() was called
  *    BEFORE \ref mdbx_env_open(), i.e. for closed environment, then the
  *    specified parameters will be used for new database creation, or will be
- *    appliend during openeing if database exists and no other process using it.
+ *    applied during opening if database exists and no other process using it.
  *
  *    If the database is already exist, opened with \ref MDBX_EXCLUSIVE or not
  *    used by any other process, and parameters specified by
@@ -2091,7 +2091,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *
  *  - In case \ref mdbx_env_info_ex() or legacy \ref mdbx_env_info() was called
  *    after \ref mdbx_env_open() WITHIN the write transaction running by current
- *    thread, then specified parameters will be appliad as a part of write
+ *    thread, then specified parameters will be applied as a part of write
  *    transaction, i.e. will not be visible to any others processes until the
  *    current write transaction has been committed by the current process.
  *    However, if transaction will be aborted, then the database file will be
@@ -2102,7 +2102,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *    after \ref mdbx_env_open() but OUTSIDE a write transaction, then MDBX will
  *    execute internal pseudo-transaction to apply new parameters (but only if
  *    anything has been changed), and changes be visible to any others processes
- *    immediatelly after succesfull competeion of function.
+ *    immediately after succesful completion of function.
  *
  * Essentially a concept of "automatic size management" is simple and useful:
  *  - There are the lower and upper bound of the database file size;
@@ -2496,7 +2496,7 @@ struct MDBX_txn_info {
   /** For READ-ONLY transaction: the lag from a recent  MVCC-snapshot, i.e. the
      number of committed transaction since read transaction started. For WRITE
      transaction (provided if `scan_rlt=true`): the lag of the oldest reader
-     from current transaction (i.e. atleast 1 if any reader running). */
+     from current transaction (i.e. at least 1 if any reader running). */
   uint64_t txn_reader_lag;
 
   /** Used space by this transaction, i.e. corresponding to the last used
@@ -2507,7 +2507,7 @@ struct MDBX_txn_info {
   uint64_t txn_space_limit_soft;
 
   /** Upper bound for size the database file, i.e. the value `size_upper`
-     argument of the approriate call of \ref mdbx_env_set_geometry(). */
+     argument of the appropriate call of \ref mdbx_env_set_geometry(). */
   uint64_t txn_space_limit_hard;
 
   /** For READ-ONLY transaction: The total size of the database pages that were
@@ -2609,7 +2609,7 @@ __nothrow_pure_function LIBMDBX_API uint64_t mdbx_txn_id(const MDBX_txn *txn);
  *                               be aborted due to previous errors.
  * \retval MDBX_PANIC            A fatal error occurred earlier
  *                               and the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -2647,7 +2647,7 @@ LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -2681,7 +2681,7 @@ LIBMDBX_API int mdbx_txn_abort(MDBX_txn *txn);
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -2703,7 +2703,7 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
  *          some possible errors are:
  * \retval MDBX_PANIC            A fatal error occurred earlier and
  *                               the environment must be shut down.
- * \retval MDBX_BAD_TXN          Transaction is already fihished or never began.
+ * \retval MDBX_BAD_TXN          Transaction is already finished or never began.
  * \retval MDBX_EBADSIGN         Transaction object has invalid signature,
  *                               e.g. transaction was already terminated
  *                               or memory was corrupted.
@@ -3073,7 +3073,7 @@ LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                          MDBX_val *data);
 
 /** Get items from a database
- * and optionaly number of data items for a given key.
+ * and optionally number of data items for a given key.
  * \ingroup c_crud
  *
  * Briefly this function does the same as \ref mdbx_get() with a few
@@ -3761,7 +3761,7 @@ mdbx_get_datacmp(MDBX_db_flags_t flags);
  *                           starting from 1.
  * \param [in] slot          The reader lock table slot number.
  * \param [in] txnid         The ID of the transaction being read,
- *                           i.e. the MVCC-snaphot number.
+ *                           i.e. the MVCC-snapshot number.
  * \param [in] lag           The lag from a recent MVCC-snapshot,
  *                           i.e. the number of committed write transactions
  *                           since the current read transaction started.
@@ -3783,7 +3783,7 @@ typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,
                                    uint64_t lag, size_t bytes_used,
                                    size_t bytes_retained);
 
-/** Enumarete the entries in the reader lock table.
+/** Enumerate the entries in the reader lock table.
  * \ingroup c_statinfo
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
@@ -3853,7 +3853,7 @@ LIBMDBX_API int mdbx_thread_register(MDBX_env *env);
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
  * \returns A non-zero error value on failure and 0 on success, or
- * \ref MDBX_RESULT_TRUE if thread is not registered or already undegistered. */
+ * \ref MDBX_RESULT_TRUE if thread is not registered or already unregistered. */
 LIBMDBX_API int mdbx_thread_unregister(MDBX_env *env);
 
 /** A lack-of-space callback function to resolve issues with a laggard readers.

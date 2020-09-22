@@ -84,7 +84,7 @@
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
 #pragma warning(disable : 4310) /* cast truncates constant value */
-#pragma warning(disable : 4820) /* bytes padding added after data member for aligment */
+#pragma warning(disable : 4820) /* bytes padding added after data member for alignment */
 #pragma warning(disable : 4548) /* expression before comma has no effect; expected expression with side - effect */
 #pragma warning(disable : 4366) /* the result of the unary '&' operator may be unaligned */
 #pragma warning(disable : 4200) /* nonstandard extension used: zero-sized array in struct/union */
@@ -100,7 +100,7 @@
 #include "defs.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4,2)
-    /* Actualy libmdbx was not tested with compilers older than GCC from RHEL6.
+    /* Actually libmdbx was not tested with compilers older than GCC from RHEL6.
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old compilers.
      */
@@ -108,7 +108,7 @@
 #endif
 
 #if defined(__clang__) && !__CLANG_PREREQ(3,8)
-    /* Actualy libmdbx was not tested with CLANG older than 3.8.
+    /* Actually libmdbx was not tested with CLANG older than 3.8.
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old compilers.
      */
@@ -116,7 +116,7 @@
 #endif
 
 #if defined(__GLIBC__) && !__GLIBC_PREREQ(2,12)
-    /* Actualy libmdbx was not tested with something older than glibc 2.12 (from RHEL6).
+    /* Actually libmdbx was not tested with something older than glibc 2.12 (from RHEL6).
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old systems.
      */
@@ -520,7 +520,7 @@ typedef struct MDBX_lockinfo {
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
-  /* Write transation lock. */
+  /* Write transaction lock. */
 #if MDBX_LOCKING > 0
       mdbx_ipclock_t mti_wlock;
 #endif /* MDBX_LOCKING > 0 */
@@ -868,7 +868,7 @@ struct MDBX_cursor {
 #define C_RECLAIMING 0x20  /* GC lookup is prohibited */
 #define C_GCFREEZE 0x40    /* reclaimed_pglist must not be updated */
 
-  /* Cursor checing flags. */
+  /* Cursor checking flags. */
 #define C_COPYING 0x100  /* skip key-value length check (copying simplify) */
 #define C_UPDATING 0x200 /* update/rebalance pending */
 #define C_RETIRING 0x400 /* refs to child pages may be invalid */

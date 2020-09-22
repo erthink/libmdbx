@@ -319,7 +319,7 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  *    leaf-page, since dupsort value couldn't be placed on a large/overflow
  *    page.
  *
- * - So, the simpliest solution is to use half of branch.maxkey as
+ * - So, the simplest solution is to use half of branch.maxkey as
  *   a common maxkey value. Nevertheless, the actual values of maxkey are:
  *     nondupsort.maxkey = even_floor(pageroom / 3)
  *                           - sizeof(indx_t) - node_hdr_len;
@@ -415,7 +415,8 @@ __nothrow_pure_function static __always_inline size_t
 leaf_size(const MDBX_env *env, const MDBX_val *key, const MDBX_val *data) {
   size_t node_bytes = node_size(key, data);
   /* NOTE: The actual limit is LEAF_NODEMAX(env->me_psize), but it reasonable to
-   * use env->me_branch_nodemax (which is 3 times less) as the treshold because:
+   * use env->me_branch_nodemax (which is 3 times less) as the threshold
+   * because:
    *  - Large threshold implies that any insertion/update could result split
    *    a single leaf page to THREE, which requires TWO insertion into parent
    *    branch page, then could leads to split parent page and so on up to
@@ -997,7 +998,7 @@ static void __cold workaround_glibc_bug21031(void) {
   /* Workaround for https://sourceware.org/bugzilla/show_bug.cgi?id=21031
    *
    * Due race between pthread_key_delete() and __nptl_deallocate_tsd()
-   * The destructor(s) of thread-local-storate object(s) may be running
+   * The destructor(s) of thread-local-storage object(s) may be running
    * in another thread(s) and be blocked or not finished yet.
    * In such case we get a SEGFAULT after unload this library DSO.
    *
@@ -1065,11 +1066,11 @@ static void thread_rthc_set(mdbx_thread_key_t key, const void *value) {
   mdbx_ensure(nullptr, TlsSetValue(key, (void *)value));
 #else
 #define MDBX_THREAD_RTHC_ZERO 0
-#define MDBX_THREAD_RTHC_REGISTERD 1
+#define MDBX_THREAD_RTHC_REGISTERED 1
 #define MDBX_THREAD_RTHC_COUNTED 2
   static __thread uint32_t thread_registration_state;
   if (value && unlikely(thread_registration_state == MDBX_THREAD_RTHC_ZERO)) {
-    thread_registration_state = MDBX_THREAD_RTHC_REGISTERD;
+    thread_registration_state = MDBX_THREAD_RTHC_REGISTERED;
     mdbx_trace("thread registered 0x%" PRIxPTR, mdbx_thread_self());
     if (&__cxa_thread_atexit_impl == nullptr ||
         __cxa_thread_atexit_impl(mdbx_rthc_thread_dtor,
@@ -4286,10 +4287,10 @@ static __always_inline bool meta_bootid_match(const MDBX_meta *meta) {
 }
 
 static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
-                                 const int lck_exlusive) {
-  return lck_exlusive ? /* exclusive lock */ meta_bootid_match(meta)
-                      : /* db already opened */ env->me_lck &&
-                            (env->me_lck->mti_envmode & MDBX_RDONLY) == 0;
+                                 const int lck_exclusive) {
+  return lck_exclusive ? /* exclusive lock */ meta_bootid_match(meta)
+                       : /* db already opened */ env->me_lck &&
+                             (env->me_lck->mti_envmode & MDBX_RDONLY) == 0;
 }
 
 #define METAPAGE(env, n) page_meta(pgno2page(env, n))
@@ -4702,7 +4703,7 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     goto bailout;
 
   /* 1) Windows allows only extending a read-write section, but not a
-   *    corresponing mapped view. Therefore in other cases we must suspend
+   *    corresponding mapped view. Therefore in other cases we must suspend
    *    the local threads for safe remap.
    * 2) At least on Windows 10 1803 the entire mapped section is unavailable
    *    for short time during NtExtendSection() or VirtualAlloc() execution.
@@ -5296,7 +5297,7 @@ skip_cache:
             ((autosync_threshold | autosync_period) == 0 ||
              next >= steady->mm_geo.now)) {
           /* wipe steady checkpoint in MDBX_UTTERLY_NOSYNC mode
-           * without any auto-sync treshold(s). */
+           * without any auto-sync threshold(s). */
           rc = mdbx_wipe_steady(env, oldest);
           mdbx_debug("gc-wipe-steady, rc %d", rc);
           mdbx_assert(env, steady != mdbx_meta_steady(env));
@@ -6445,7 +6446,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
            MDBX_PNL_SIZEOF(parent->tw.reclaimed_pglist));
     mdbx_assert(env, mdbx_pnl_check4assert(
                          txn->tw.reclaimed_pglist,
-                         (txn->mt_next_pgno /* LY: intentional assigment here,
+                         (txn->mt_next_pgno /* LY: intentional assignment here,
                                                    only for assertion */
                           = parent->mt_next_pgno)));
 
@@ -7303,7 +7304,7 @@ retry_noaccount:
       continue;
     }
 
-    /* handle reclaimed and loost pages - merge and store both into gc */
+    /* handle reclaimed and lost pages - merge and store both into gc */
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
     mdbx_tassert(txn, txn->tw.loose_count == 0);
@@ -8579,7 +8580,7 @@ static MDBX_page *__cold mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
 }
 
 /* Fill in most of the zeroed meta-pages for an empty database environment.
- * Return pointer to recenly (head) meta-page. */
+ * Return pointer to recently (head) meta-page. */
 static MDBX_meta *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   MDBX_page *page0 = (MDBX_page *)buffer;
   MDBX_page *page1 = mdbx_meta_model(env, page0, 0);
@@ -8635,20 +8636,20 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #if defined(MADV_DONTNEED)
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
     /* threshold to avoid unreasonable frequent madvise() calls */
-    const size_t madvise_treshold = (largest_bytes < 65536 * 256)
-                                        ? 65536
-                                        : (largest_bytes > MEGABYTE * 4 * 256)
-                                              ? MEGABYTE * 4
-                                              : largest_bytes >> 10;
+    const size_t madvise_threshold = (largest_bytes < 65536 * 256)
+                                         ? 65536
+                                         : (largest_bytes > MEGABYTE * 4 * 256)
+                                               ? MEGABYTE * 4
+                                               : largest_bytes >> 10;
     const size_t discard_edge_bytes = bytes_align2os_bytes(
         env, ((MDBX_RDONLY &
                (env->me_lck ? env->me_lck->mti_envmode : env->me_flags))
                   ? largest_bytes
-                  : largest_bytes + madvise_treshold));
+                  : largest_bytes + madvise_threshold));
     const pgno_t discard_edge_pgno = bytes2pgno(env, discard_edge_bytes);
     const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
     if (prev_discarded_pgno >=
-        discard_edge_pgno + bytes2pgno(env, madvise_treshold)) {
+        discard_edge_pgno + bytes2pgno(env, madvise_threshold)) {
       mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
                   largest_pgno);
       *env->me_discarded_tail = discard_edge_pgno;
@@ -9688,7 +9689,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     }
 
     if (!env->me_lck) {
-      /* LY: without-lck (read-only) mode, so it is imposible that other
+      /* LY: without-lck (read-only) mode, so it is impossible that other
        * process made weak checkpoint. */
       mdbx_error("%s", "without-lck, unable recovery/rollback");
       return MDBX_WANNA_RECOVERY;
@@ -9952,7 +9953,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
   struct MDBX_lockinfo *const lck = env->me_lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    /* LY: exlcusive mode, check and reset lck content */
+    /* LY: exclusive mode, check and reset lck content */
     memset(lck, 0, (size_t)size);
     mdbx_jitter4testing(false);
     lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
@@ -10405,7 +10406,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname,
                                      sizeof(unsigned) + 1);
     rc = mdbx_memalign_alloc(
         env->me_os_psize,
-        env->me_psize * (1 /* page buffer */ + 1 /* page killer bufer */),
+        env->me_psize * (1 /* page buffer */ + 1 /* page killer buffer */),
         &env->me_pbuf);
     if (rc == MDBX_SUCCESS) {
       memset(env->me_pbuf, -1, env->me_psize * 2);
@@ -15821,7 +15822,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     make_sizeable(meta);
 
-  /* copy canary sequenses if present */
+  /* copy canary sequences if present */
   if (read_txn->mt_canary.v) {
     meta->mm_canary = read_txn->mt_canary;
     meta->mm_canary.v = mdbx_meta_txnid_stable(env, meta);
@@ -15935,7 +15936,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
     for (size_t offset = used_size; offset < whole_size;) {
       const size_t chunk =
           (MDBX_WBUF < whole_size - offset) ? MDBX_WBUF : whole_size - offset;
-      /* copy to avoit EFAULT in case swapped-out */
+      /* copy to avoid EFAULT in case swapped-out */
       int rc = mdbx_write(fd, data_buffer, chunk);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -15970,7 +15971,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   /* Make a snapshot of meta-pages,
    * but writing ones after the data was flushed */
   memcpy(buffer, env->me_map, meta_bytes);
-  MDBX_meta *const headcopy = /* LY: get pointer to the spanshot copy */
+  MDBX_meta *const headcopy = /* LY: get pointer to the snapshot copy */
       (MDBX_meta *)(buffer + ((uint8_t *)mdbx_meta_head(env) - env->me_map));
   mdbx_txn_unlock(env);
 
@@ -16021,7 +16022,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     /* fallback to portable */
     const size_t chunk =
         (MDBX_WBUF < used_size - offset) ? MDBX_WBUF : used_size - offset;
-    /* copy to avoit EFAULT in case swapped-out */
+    /* copy to avoid EFAULT in case swapped-out */
     memcpy(data_buffer, env->me_map + offset, chunk);
     rc = mdbx_write(fd, data_buffer, chunk);
     offset += chunk;
@@ -16037,7 +16038,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
            rc == MDBX_SUCCESS && offset < whole_size;) {
         const size_t chunk =
             (MDBX_WBUF < whole_size - offset) ? MDBX_WBUF : whole_size - offset;
-        /* copy to avoit EFAULT in case swapped-out */
+        /* copy to avoid EFAULT in case swapped-out */
         rc = mdbx_write(fd, data_buffer, chunk);
         offset += chunk;
       }

@@ -1,4 +1,4 @@
-/* MDBX usage examle
+/* MDBX usage example
  *
  * Do a line-by-line comparison of this and sample-bdb.txt
  */

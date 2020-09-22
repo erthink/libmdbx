@@ -186,10 +186,10 @@ bool actor_config::osal_deserialize(const char *str, const char *end,
 //-----------------------------------------------------------------------------
 
 typedef std::pair<HANDLE, actor_status> child;
-static std::unordered_map<mdbx_pid_t, child> childs;
+static std::unordered_map<mdbx_pid_t, child> children;
 
 bool osal_progress_push(bool active) {
-  if (!childs.empty()) {
+  if (!children.empty()) {
     if (!SetEvent(active ? hProgressActiveEvent : hProgressPassiveEvent))
       failure_perror("osal_progress_push: SetEvent(overlord.progress)",
                      GetLastError());
@@ -284,8 +284,8 @@ Environment:
 }
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
-  if (childs.size() == MAXIMUM_WAIT_OBJECTS)
-    failure("Could't manage more that %u actors on Windows\n",
+  if (children.size() == MAXIMUM_WAIT_OBJECTS)
+    failure("Couldn't manage more that %u actors on Windows\n",
             MAXIMUM_WAIT_OBJECTS);
 
   _flushall();
@@ -324,17 +324,17 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
 
   CloseHandle(ProcessInformation.hThread);
   pid = ProcessInformation.dwProcessId;
-  childs[pid] = std::make_pair(ProcessInformation.hProcess, as_running);
+  children[pid] = std::make_pair(ProcessInformation.hProcess, as_running);
   return 0;
 }
 
 actor_status osal_actor_info(const mdbx_pid_t pid) {
-  actor_status status = childs.at(pid).second;
+  actor_status status = children.at(pid).second;
   if (status > as_running)
     return status;
 
   DWORD ExitCode;
-  if (!GetExitCodeProcess(childs.at(pid).first, &ExitCode))
+  if (!GetExitCodeProcess(children.at(pid).first, &ExitCode))
     failure_perror("GetExitCodeProcess()", GetLastError());
 
   switch (ExitCode) {
@@ -364,21 +364,21 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
     break;
   }
 
-  childs.at(pid).second = status;
+  children.at(pid).second = status;
   return status;
 }
 
 void osal_killall_actors(void) {
-  for (auto &pair : childs)
+  for (auto &pair : children)
     TerminateProcess(pair.second.first, STATUS_CONTROL_C_EXIT);
 }
 
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   std::vector<HANDLE> handles;
-  handles.reserve(childs.size() + 2);
+  handles.reserve(children.size() + 2);
   handles.push_back(hProgressActiveEvent);
   handles.push_back(hProgressPassiveEvent);
-  for (const auto &pair : childs)
+  for (const auto &pair : children)
     if (pair.second.second <= as_running)
       handles.push_back(pair.second.first);
 
@@ -399,7 +399,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
     if (rc >= WAIT_OBJECT_0 + 2 && rc < WAIT_OBJECT_0 + handles.size()) {
       pid = 0;
-      for (const auto &pair : childs)
+      for (const auto &pair : children)
         if (pair.second.first == handles[rc - WAIT_OBJECT_0]) {
           pid = pair.first;
           break;
@@ -419,7 +419,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 void osal_yield(void) { SwitchToThread(); }
 
 void osal_udelay(unsigned us) {
-  chrono::time until, now = chrono::now_motonic();
+  chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
 
   static unsigned threshold_us;
@@ -440,7 +440,7 @@ void osal_udelay(unsigned us) {
     }
 
     YieldProcessor();
-    now = chrono::now_motonic();
+    now = chrono::now_monotonic();
   } while (now.fixedpoint < until.fixedpoint);
 }
 

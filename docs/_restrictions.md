@@ -29,7 +29,7 @@ In addition to those listed for some functions.
   \note Workaround: Check for stale readers periodically, using the
               `mdbx_reader_check()` function or the mdbx_stat tool.
 
-3. Stale writers will be cleared automatically by MDBX on supprted
+3. Stale writers will be cleared automatically by MDBX on supported
   platforms. But this is platform-specific, especially of
   implementation of shared POSIX-mutexes and support for robust
   mutexes. For instance there are no known issues on Linux, OSX,
@@ -108,7 +108,7 @@ vulnerable to corruption from other processes.
 
 For compatibility with LMDB which allows multi-opening, MDBX can be
 configured at runtime by `mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)`
-prior to calling other MDBX funcitons. In this way MDBX will track
+prior to calling other MDBX functions. In this way MDBX will track
 databases opening, detect multi-opening cases and then recover POSIX file
 locks as necessary. However, lock recovery can cause unexpected pauses,
 such as when another process opened the database in exclusive mode before
@@ -157,7 +157,7 @@ The "next" version of libmdbx (MithrilDB) will completely solve this.
 
   The "next" version of libmdbx (MithrilDB) will solve this issue.
 
-- Avoid aborting a process with an active read-only transaction in scenaries
+- Avoid aborting a process with an active read-only transaction in scenarios
   with high rate of write transactions. The transaction becomes "long-lived"
   as above until a check for stale readers is performed or the LCK-file is
   reset, since the process may not remove it from the lockfile. This does

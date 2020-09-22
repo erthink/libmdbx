@@ -335,7 +335,7 @@ bool osal_progress_push(bool active) {
 
 //-----------------------------------------------------------------------------
 
-static std::unordered_map<pid_t, actor_status> childs;
+static std::unordered_map<pid_t, actor_status> children;
 
 static std::atomic<int> sigalarm_head;
 static void handler_SIGCHLD(int signum) {
@@ -348,7 +348,7 @@ mdbx_pid_t osal_getpid(void) { return getpid(); }
 int osal_delay(unsigned seconds) { return sleep(seconds) ? errno : 0; }
 
 int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
-  if (childs.empty()) {
+  if (children.empty()) {
     struct sigaction act;
     memset(&act, 0, sizeof(act));
     act.sa_handler = handler_SIGCHLD;
@@ -379,14 +379,14 @@ int osal_actor_start(const actor_config &config, mdbx_pid_t &pid) {
 
   log_trace("osal_actor_start: fork pid %ld for %u", (long)pid,
             config.actor_id);
-  childs[pid] = as_running;
+  children[pid] = as_running;
   return 0;
 }
 
-actor_status osal_actor_info(const mdbx_pid_t pid) { return childs.at(pid); }
+actor_status osal_actor_info(const mdbx_pid_t pid) { return children.at(pid); }
 
 void osal_killall_actors(void) {
-  for (auto &pair : childs) {
+  for (auto &pair : children) {
     kill(pair.first, SIGKILL);
     pair.second = as_killed;
   }
@@ -416,16 +416,16 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
     if (pid > 0) {
       if (WIFEXITED(status))
-        childs[pid] =
+        children[pid] =
             (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
       else if (WCOREDUMP(status))
-        childs[pid] = as_coredump;
+        children[pid] = as_coredump;
       else if (WIFSIGNALED(status))
-        childs[pid] = as_killed;
+        children[pid] = as_killed;
       else if (WIFSTOPPED(status))
-        childs[pid] = as_debugging;
+        children[pid] = as_debugging;
       else if (WIFCONTINUED(status))
-        childs[pid] = as_running;
+        children[pid] = as_running;
       else {
         assert(false);
       }
@@ -462,7 +462,7 @@ void osal_yield(void) {
 }
 
 void osal_udelay(unsigned us) {
-  chrono::time until, now = chrono::now_motonic();
+  chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
   struct timespec ts;
 
@@ -505,7 +505,7 @@ void osal_udelay(unsigned us) {
     }
     cpu_relax();
 
-    now = chrono::now_motonic();
+    now = chrono::now_monotonic();
   } while (until.fixedpoint > now.fixedpoint);
 }
 

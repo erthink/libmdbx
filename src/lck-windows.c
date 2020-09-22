@@ -183,7 +183,8 @@ MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
   if (env->me_lfd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
-  /* transite from S-? (used) to S-E (locked), e.g. exclusive lock upper-part */
+  /* transition from S-? (used) to S-E (locked),
+   * e.g. exclusive lock upper-part */
   if ((env->me_flags & MDBX_EXCLUSIVE) ||
       flock(env->me_lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER))
     return MDBX_SUCCESS;
@@ -195,7 +196,7 @@ MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
 
 MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
-    /* transite from S-E (locked) to S-? (used), e.g. unlock upper-part */
+    /* transition from S-E (locked) to S-? (used), e.g. unlock upper-part */
     if ((env->me_flags & MDBX_EXCLUSIVE) == 0 &&
         !funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s failed: err %u", __func__, GetLastError());
@@ -277,7 +278,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
     }
   } else {
     /* Without LCK (i.e. read-only mode).
-     * Walk thougth a snapshot of all running threads */
+     * Walk through a snapshot of all running threads */
     mdbx_assert(env,
                 env->me_txn0 == NULL || (env->me_flags & MDBX_EXCLUSIVE) != 0);
     const HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
@@ -336,7 +337,7 @@ mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
 /* global `initial` lock for lockfile initialization,
  * exclusive/shared locking first cacheline */
 
-/* Briefly descritpion of locking schema/algorithm:
+/* Briefly description of locking schema/algorithm:
  *  - Windows does not support upgrading or downgrading for file locking.
  *  - Therefore upgrading/downgrading is emulated by shared and exclusive
  *    locking of upper and lower halves.
@@ -411,7 +412,7 @@ static void lck_unlock(MDBX_env *env) {
 
 /* Seize state as 'exclusive-write' (E-E and returns MDBX_RESULT_TRUE)
  * or as 'used' (S-? and returns MDBX_RESULT_FALSE).
- * Oherwise returns an error. */
+ * Otherwise returns an error. */
 static int internal_seize_lck(HANDLE lfd) {
   int rc;
   assert(lfd != INVALID_HANDLE_VALUE);
@@ -450,7 +451,7 @@ static int internal_seize_lck(HANDLE lfd) {
     mdbx_error("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
 
   /* 8) now on S-E (locked) or still on ?-E (middle),
-   *    transite to S-? (used) or ?-? (free) */
+   *    transition to S-? (used) or ?-? (free) */
   if (!funlock(lfd, LCK_UPPER))
     mdbx_panic("%s(%s) failed: err %u", __func__,
                "X-E(locked/middle) >> X-?(used/free)", GetLastError());
@@ -512,12 +513,12 @@ MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
   if (env->me_flags & MDBX_EXCLUSIVE)
     return MDBX_SUCCESS /* nope since files were must be opened non-shareable */
         ;
-  /* 1) now at E-E (exclusive-write), transite to ?_E (middle) */
+  /* 1) now at E-E (exclusive-write), transition to ?_E (middle) */
   if (!funlock(env->me_lfd, LCK_LOWER))
     mdbx_panic("%s(%s) failed: err %u", __func__,
                "E-E(exclusive-write) >> ?-E(middle)", GetLastError());
 
-  /* 2) now at ?-E (middle), transite to S-E (locked) */
+  /* 2) now at ?-E (middle), transition to S-E (locked) */
   if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
     int rc = GetLastError() /* 3) something went wrong, give up */;
     mdbx_error("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
@@ -549,7 +550,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_upgrade(MDBX_env *env) {
     return rc;
   }
 
-  /* 3) now on S-E (locked), transite to ?-E (middle) */
+  /* 3) now on S-E (locked), transition to ?-E (middle) */
   if (!funlock(env->me_lfd, LCK_LOWER))
     mdbx_panic("%s(%s) failed: err %u", __func__, "S-E(locked) >> ?-E(middle)",
                GetLastError());
@@ -666,7 +667,7 @@ static void WINAPI stub_srwlock_AcquireShared(MDBX_srwlock *srwl) {
     //  Add to the readers list
     _InterlockedIncrement(&srwl->readerCount);
 
-    // Check for writers again (we may have been pre-empted). If
+    // Check for writers again (we may have been preempted). If
     // there are no writers writing or waiting, then we're done.
     if (srwl->writerCount == 0)
       break;

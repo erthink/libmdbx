@@ -31,7 +31,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   if (!value) {
     if (current[optlen + 2] == '=')
-      failure("Option '--%s' doen't accept any value\n", option);
+      failure("Option '--%s' doesn't accept any value\n", option);
     return true;
   }
 
@@ -45,7 +45,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     *value = argv[narg + 1];
     if (strcmp(*value, "default") == 0) {
       if (!default_value)
-        failure("Option '--%s' doen't accept default value\n", option);
+        failure("Option '--%s' doesn't accept default value\n", option);
       *value = default_value;
     }
     ++narg;
@@ -74,7 +74,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return false;
 
   if (!allow_empty && strlen(value_cstr) == 0)
-    failure("Value for option '--%s' could't be empty\n", option);
+    failure("Value for option '--%s' couldn't be empty\n", option);
 
   value = value_cstr;
   return true;
@@ -157,34 +157,34 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     failure("Option '--%s' expects a numeric value (%s)\n", option,
             test_strerror(errno));
 
-  uint64_t multipler = 1;
+  uint64_t multiplier = 1;
   if (suffix && *suffix) {
     if (scale == no_scale)
-      failure("Option '--%s' doen't accepts suffixes, so '%s' is unexpected\n",
+      failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n",
               option, suffix);
     if (strcmp(suffix, "K") == 0 || strcasecmp(suffix, "Kilo") == 0)
-      multipler = (scale == decimal) ? UINT64_C(1000) : UINT64_C(1024);
+      multiplier = (scale == decimal) ? UINT64_C(1000) : UINT64_C(1024);
     else if (strcmp(suffix, "M") == 0 || strcasecmp(suffix, "Mega") == 0)
-      multipler =
+      multiplier =
           (scale == decimal) ? UINT64_C(1000) * 1000 : UINT64_C(1024) * 1024;
     else if (strcmp(suffix, "G") == 0 || strcasecmp(suffix, "Giga") == 0)
-      multipler = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000
-                                     : UINT64_C(1024) * 1024 * 1024;
+      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000
+                                      : UINT64_C(1024) * 1024 * 1024;
     else if (strcmp(suffix, "T") == 0 || strcasecmp(suffix, "Tera") == 0)
-      multipler = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 * 1000
-                                     : UINT64_C(1024) * 1024 * 1024 * 1024;
+      multiplier = (scale == decimal) ? UINT64_C(1000) * 1000 * 1000 * 1000
+                                      : UINT64_C(1024) * 1024 * 1024 * 1024;
     else if (scale == duration &&
              (strcmp(suffix, "s") == 0 || strcasecmp(suffix, "Seconds") == 0))
-      multipler = 1;
+      multiplier = 1;
     else if (scale == duration &&
              (strcmp(suffix, "m") == 0 || strcasecmp(suffix, "Minutes") == 0))
-      multipler = 60;
+      multiplier = 60;
     else if (scale == duration &&
              (strcmp(suffix, "h") == 0 || strcasecmp(suffix, "Hours") == 0))
-      multipler = 3600;
+      multiplier = 3600;
     else if (scale == duration &&
              (strcmp(suffix, "d") == 0 || strcasecmp(suffix, "Days") == 0))
-      multipler = 3600 * 24;
+      multiplier = 3600 * 24;
     else
       failure(
           "Option '--%s' expects a numeric value with Kilo/Mega/Giga/Tera %s"
@@ -193,10 +193,10 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
           suffix);
   }
 
-  if (raw >= UINT64_MAX / multipler)
+  if (raw >= UINT64_MAX / multiplier)
     failure("The value for option '--%s' is too huge\n", option);
 
-  value = raw * multipler;
+  value = raw * multiplier;
   if (maxval && value > maxval)
     failure("The maximal value for option '--%s' is %" PRIu64 "\n", option,
             maxval);
