@@ -459,7 +459,7 @@ static void usage(void) {
           "  -s name\tload into named subDB\n"
           "  -N\t\tuse NOOVERWRITE on puts\n"
           "  -T\t\tread plaintext\n"
-          "  -r\t\trescure mode (ignore errors to load corrupted DB dump)\n",
+          "  -r\t\trescue mode (ignore errors to load corrupted DB dump)\n",
           prog);
   exit(EXIT_FAILURE);
 }
