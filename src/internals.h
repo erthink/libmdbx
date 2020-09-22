@@ -100,7 +100,7 @@
 #include "defs.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4,2)
-    /* Actualy libmdbx was not tested with compilers older than GCC from RHEL6.
+    /* Actually libmdbx was not tested with compilers older than GCC from RHEL6.
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old compilers.
      */
@@ -108,7 +108,7 @@
 #endif
 
 #if defined(__clang__) && !__CLANG_PREREQ(3,8)
-    /* Actualy libmdbx was not tested with CLANG older than 3.8.
+    /* Actually libmdbx was not tested with CLANG older than 3.8.
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old compilers.
      */
@@ -116,7 +116,7 @@
 #endif
 
 #if defined(__GLIBC__) && !__GLIBC_PREREQ(2,12)
-    /* Actualy libmdbx was not tested with something older than glibc 2.12 (from RHEL6).
+    /* Actually libmdbx was not tested with something older than glibc 2.12 (from RHEL6).
      * But you could remove this #error and try to continue at your own risk.
      * In such case please don't rise up an issues related ONLY to old systems.
      */
