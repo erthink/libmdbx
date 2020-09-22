@@ -1589,45 +1589,87 @@ retry_mapview:;
     map->current = size;
   }
 
-  if (limit != map->limit) {
+  if (limit == map->limit)
+    return MDBX_SUCCESS;
+
+  if (limit < map->limit) {
+    /* unmap an excess at end of mapping. */
+    if (unlikely(munmap(map->dxb + limit, map->limit - limit)))
+      return errno;
+    map->limit = limit;
+    return MDBX_SUCCESS;
+  }
+
+  assert(limit > map->limit);
+  uint8_t *ptr = MAP_FAILED;
+
 #if defined(MREMAP_MAYMOVE)
-    void *ptr =
-        mremap(map->address, map->limit, limit, may_move ? MREMAP_MAYMOVE : 0);
-    if (ptr == MAP_FAILED) {
-      rc = errno;
-      switch (rc) {
+  ptr = mremap(map->address, map->limit, limit, may_move ? MREMAP_MAYMOVE : 0);
+  if (ptr == MAP_FAILED) {
+    const int err = errno;
+    switch (err) {
+    default:
+      return err;
+    case EAGAIN:
+    case ENOMEM:
+      return MDBX_UNABLE_EXTEND_MAPSIZE;
+    case EFAULT /* MADV_DODUMP / MADV_DONTDUMP are mixed for mmap-range */:
+      break;
+    }
+  }
+#endif /* MREMAP_MAYMOVE */
+
+  const unsigned mmap_flags =
+      MAP_CONCEAL | MAP_SHARED | MAP_FILE |
+      (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0);
+  const unsigned mmap_prot =
+      (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ;
+
+  if (ptr == MAP_FAILED) {
+    /* Try to mmap additional space beyond the end of mapping. */
+    ptr = mmap(map->dxb + map->limit, limit - map->limit, mmap_prot,
+               mmap_flags
+#if defined(MAP_FIXED_NOREPLACE)
+                   | MAP_FIXED_NOREPLACE
+#endif /* MAP_FIXED_NOREPLACE */
+               ,
+               map->fd, map->limit);
+    if (ptr == map->dxb + map->limit)
+      ptr = map->dxb;
+    else if (ptr != MAP_FAILED) {
+      /* the desired address is busy, unmap unsuitable one */
+      if (unlikely(munmap(ptr, limit - map->limit)))
+        return errno;
+      ptr = MAP_FAILED;
+    } else {
+      const int err = errno;
+      switch (err) {
+      default:
+        return err;
       case EAGAIN:
       case ENOMEM:
-      case EFAULT /* MADV_DODUMP / MADV_DONTDUMP are mixed for mmap-range */:
-        rc = MDBX_UNABLE_EXTEND_MAPSIZE;
+        return MDBX_UNABLE_EXTEND_MAPSIZE;
+      case EEXIST: /* address busy */
+      case EINVAL: /* kernel don't support MAP_FIXED_NOREPLACE */
+        break;
       }
-      return rc;
     }
-#else
-    if (!may_move)
+  }
+
+  if (ptr == MAP_FAILED) {
+    /* unmap and map again whole region */
+    if (!may_move) {
       /* TODO: Perhaps here it is worth to implement suspend/resume threads
-       *       and perform unmap/map as like for Windows. */
+       * and perform unmap/map as like for Windows. */
       return MDBX_UNABLE_EXTEND_MAPSIZE;
+    }
 
     if (unlikely(munmap(map->address, map->limit)))
       return errno;
 
-    unsigned mmap_flags =
-        MAP_CONCEAL | MAP_SHARED | MAP_FILE |
-        (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0);
-#ifdef MAP_FIXED
-    if (!may_move)
-      mmap_flags |= MAP_FIXED;
-#endif
-
-    void *ptr =
-        mmap(map->address, limit,
-             (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
-             mmap_flags, map->fd, 0);
+    ptr = mmap(map->address, limit, mmap_prot, mmap_flags, map->fd, 0);
     if (unlikely(ptr == MAP_FAILED)) {
-      ptr = mmap(map->address, map->limit,
-                 (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
-                 mmap_flags, map->fd, 0);
+      ptr = mmap(map->address, map->limit, mmap_prot, mmap_flags, map->fd, 0);
       if (unlikely(ptr == MAP_FAILED)) {
         VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
         /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
@@ -1640,34 +1682,36 @@ retry_mapview:;
         map->address = nullptr;
         return errno;
       }
-      return MDBX_UNABLE_EXTEND_MAPSIZE;
+      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
+      limit = map->limit;
     }
-#endif /* !MREMAP_MAYMOVE */
+  }
 
-    if (map->address != ptr) {
-      VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
-      /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
-       * when this memory will re-used by malloc or another mmaping.
-       * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
-       */
-      ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
+  assert(ptr && ptr != MAP_FAILED);
+  if (map->address != ptr) {
+    VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+    /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
+     * when this memory will re-used by malloc or another mmaping.
+     * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
+     */
+    ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
 
-      VALGRIND_MAKE_MEM_DEFINED(ptr, map->current);
-      ASAN_UNPOISON_MEMORY_REGION(ptr, map->current);
-      map->address = ptr;
-    }
-    map->limit = limit;
+    VALGRIND_MAKE_MEM_DEFINED(ptr, map->current);
+    ASAN_UNPOISON_MEMORY_REGION(ptr, map->current);
+    map->address = ptr;
+  }
+  map->limit = limit;
 
 #ifdef MADV_DONTFORK
-    if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
-      return errno;
+  if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
+    return errno;
 #endif /* MADV_DONTFORK */
 
 #ifdef MADV_NOHUGEPAGE
-    (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
+  (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
-  }
-#endif
+
+#endif /* POSIX / Windows */
 
   return rc;
 }
