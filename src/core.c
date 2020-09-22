@@ -7303,7 +7303,7 @@ retry_noaccount:
       continue;
     }
 
-    /* handle reclaimed and loost pages - merge and store both into gc */
+    /* handle reclaimed and lost pages - merge and store both into gc */
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
     mdbx_tassert(txn, txn->tw.loose_count == 0);
