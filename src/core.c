@@ -6286,7 +6286,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     const txnid_t snap = mdbx_meta_txnid_stable(env, meta);
     txn->mt_txnid = safe64_txnid_next(snap);
     if (unlikely(txn->mt_txnid > MAX_TXNID)) {
-      mdbx_debug("%s", "txnid overflow!");
+      mdbx_error("%s", "txnid overflow!");
       rc = MDBX_TXN_FULL;
       goto bailout;
     }
@@ -10270,6 +10270,62 @@ static uint32_t merge_sync_flags(const uint32_t a, const uint32_t b) {
            !F_ISSET(a, MDBX_UTTERLY_NOSYNC) &&
            !F_ISSET(b, MDBX_UTTERLY_NOSYNC)));
   return r;
+}
+
+__cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta) {
+  if (unlikely(target_meta >= NUM_METAS))
+    return MDBX_EINVAL;
+  int rc = check_env(env);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if ((env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_EXCLUSIVE)
+    return MDBX_EPERM;
+
+  MDBX_page *page =
+      (env->me_flags & MDBX_WRITEMAP)
+          ? pgno2page(env, target_meta)
+          : memcpy(env->me_pbuf, pgno2page(env, target_meta), env->me_psize);
+  page->mp_pgno = target_meta;
+  page->mp_flags = P_META;
+
+  MDBX_meta *meta = page_meta(page);
+  meta->mm_magic_and_version = MDBX_DATA_MAGIC;
+  meta->mm_psize = env->me_psize;
+  txnid_t txnid = mdbx_meta_txnid_stable(env, meta);
+  const txnid_t txnid0 = mdbx_meta_txnid_stable(env, METAPAGE(env, 0));
+  if (target_meta != 0 && txnid <= txnid0)
+    txnid = safe64_txnid_next(txnid0);
+  const txnid_t txnid1 = mdbx_meta_txnid_stable(env, METAPAGE(env, 1));
+  if (target_meta != 1 && txnid <= txnid1)
+    txnid = safe64_txnid_next(txnid1);
+  const txnid_t txnid2 = mdbx_meta_txnid_stable(env, METAPAGE(env, 2));
+  if (target_meta != 2 && txnid <= txnid2)
+    txnid = safe64_txnid_next(txnid2);
+
+  if (!META_IS_STEADY(meta) || mdbx_recent_committed_txnid(env) != txnid) {
+    if (unlikely(txnid > MAX_TXNID)) {
+      mdbx_error("%s", "txnid overflow!");
+      return MDBX_TXN_FULL;
+    }
+    mdbx_meta_set_txnid(env, meta, txnid);
+    meta->mm_datasync_sign = mdbx_meta_sign(meta);
+  }
+
+  if (env->me_flags & MDBX_WRITEMAP) {
+    mdbx_flush_incoherent_cpu_writeback();
+    rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, target_meta),
+                    MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+  } else {
+    const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
+                                     ? env->me_dsync_fd
+                                     : env->me_lazy_fd;
+    rc = mdbx_pwrite(fd, page, env->me_psize, pgno2bytes(env, target_meta));
+    if (rc == MDBX_SUCCESS && fd == env->me_lazy_fd)
+      rc = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+  }
+
+  return rc;
 }
 
 __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,

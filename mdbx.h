@@ -4236,10 +4236,19 @@ LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
 /** \brief Open an environment instance using specific meta-page
  * for checking and recovery.
  *
- * This function mostly of internal API for `mdbx_chk` utility. */
+ * This function mostly of internal API for `mdbx_chk` utility and subject to
+ * change at any time. Do not use this function to avoid shooting your own
+ * leg(s). */
 LIBMDBX_API int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                            unsigned target_meta,
                                            bool writeable);
+
+/** \brief Turn database to the specified meta-page.
+ *
+ * This function mostly of internal API for `mdbx_chk` utility and subject to
+ * change at any time. Do not use this function to avoid shooting your own
+ * leg(s). */
+LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
 /** @} B-tree Traversal */
 
