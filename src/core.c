@@ -4702,7 +4702,7 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     goto bailout;
 
   /* 1) Windows allows only extending a read-write section, but not a
-   *    corresponing mapped view. Therefore in other cases we must suspend
+   *    corresponding mapped view. Therefore in other cases we must suspend
    *    the local threads for safe remap.
    * 2) At least on Windows 10 1803 the entire mapped section is unavailable
    *    for short time during NtExtendSection() or VirtualAlloc() execution.
