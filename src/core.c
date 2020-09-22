@@ -16470,6 +16470,32 @@ int __cold mdbx_env_copy(MDBX_env *env, const char *dest_path,
                      S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP
 #endif
   );
+
+  if (rc == MDBX_SUCCESS) {
+#if defined(_WIN32) || defined(_WIN64)
+    OVERLAPPED ov;
+    memset(&ov, 0, sizeof(ov));
+    if (!LockFileEx(newfd, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
+                    0, 0, INT32_MAX, &ov))
+      rc = GetLastError();
+#else
+    struct flock lock_op;
+    memset(&lock_op, 0, sizeof(lock_op));
+    lock_op.l_type = F_WRLCK;
+    lock_op.l_whence = SEEK_SET;
+    lock_op.l_start = 0;
+    lock_op.l_len =
+        (sizeof(lock_op.l_len) > 4 ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff;
+    if (fcntl(newfd, F_SETLK, &lock_op)
+#if (defined(__linux__) || defined(__gnu_linux__)) && defined(LOCK_EX) &&      \
+    (!defined(__ANDROID_API__) || __ANDROID_API__ >= 24)
+        || flock(newfd, LOCK_EX | LOCK_NB)
+#endif /* Linux */
+    )
+      rc = errno;
+#endif /* Windows / POSIX */
+  }
+
   if (rc == MDBX_SUCCESS)
     rc = mdbx_env_copy2fd(env, newfd, flags);
 
