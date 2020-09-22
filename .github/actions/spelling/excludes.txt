@@ -1,0 +1,3 @@
+^\.github/actions/spelling/
+^\.travis\.yml$
+\.def$

@@ -1,0 +1,6 @@
+# numbers
+(?:[\\0][xX]|[uU]\+|#)[0-9a-fA-FgGrR]{2,}[uU]?[lL]{0,2}\b
+# avoid false positive
+ -force$
+# flags
+(?!\w)-[fDW]
