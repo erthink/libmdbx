@@ -666,7 +666,7 @@ static void WINAPI stub_srwlock_AcquireShared(MDBX_srwlock *srwl) {
     //  Add to the readers list
     _InterlockedIncrement(&srwl->readerCount);
 
-    // Check for writers again (we may have been pre-empted). If
+    // Check for writers again (we may have been preempted). If
     // there are no writers writing or waiting, then we're done.
     if (srwl->writerCount == 0)
       break;
