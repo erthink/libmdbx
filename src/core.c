@@ -1065,11 +1065,11 @@ static void thread_rthc_set(mdbx_thread_key_t key, const void *value) {
   mdbx_ensure(nullptr, TlsSetValue(key, (void *)value));
 #else
 #define MDBX_THREAD_RTHC_ZERO 0
-#define MDBX_THREAD_RTHC_REGISTERD 1
+#define MDBX_THREAD_RTHC_REGISTERED 1
 #define MDBX_THREAD_RTHC_COUNTED 2
   static __thread uint32_t thread_registration_state;
   if (value && unlikely(thread_registration_state == MDBX_THREAD_RTHC_ZERO)) {
-    thread_registration_state = MDBX_THREAD_RTHC_REGISTERD;
+    thread_registration_state = MDBX_THREAD_RTHC_REGISTERED;
     mdbx_trace("thread registered 0x%" PRIxPTR, mdbx_thread_self());
     if (&__cxa_thread_atexit_impl == nullptr ||
         __cxa_thread_atexit_impl(mdbx_rthc_thread_dtor,
