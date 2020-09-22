@@ -868,7 +868,7 @@ struct MDBX_cursor {
 #define C_RECLAIMING 0x20  /* GC lookup is prohibited */
 #define C_GCFREEZE 0x40    /* reclaimed_pglist must not be updated */
 
-  /* Cursor checing flags. */
+  /* Cursor checking flags. */
 #define C_COPYING 0x100  /* skip key-value length check (copying simplify) */
 #define C_UPDATING 0x200 /* update/rebalance pending */
 #define C_RETIRING 0x400 /* refs to child pages may be invalid */
