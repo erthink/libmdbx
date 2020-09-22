@@ -157,7 +157,7 @@ The "next" version of libmdbx (MithrilDB) will completely solve this.
 
   The "next" version of libmdbx (MithrilDB) will solve this issue.
 
-- Avoid aborting a process with an active read-only transaction in scenaries
+- Avoid aborting a process with an active read-only transaction in scenarios
   with high rate of write transactions. The transaction becomes "long-lived"
   as above until a check for stale readers is performed or the LCK-file is
   reset, since the process may not remove it from the lockfile. This does
