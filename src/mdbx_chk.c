@@ -442,7 +442,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
                     (number + 1) * sizeof(pgno_t), data->iov_len);
         number = data->iov_len / sizeof(pgno_t) - 1;
       } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
-                 /* LY: allow gap upto one page. it is ok
+                 /* LY: allow gap up to one page. it is ok
                   * and better than shink-and-retry inside mdbx_update_gc() */
                  envstat.ms_psize)
         problem_add("entry", txnid, "extra idl space",
