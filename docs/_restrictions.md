@@ -108,7 +108,7 @@ vulnerable to corruption from other processes.
 
 For compatibility with LMDB which allows multi-opening, MDBX can be
 configured at runtime by `mdbx_setup_debug(MDBX_DBG_LEGACY_MULTIOPEN, ...)`
-prior to calling other MDBX funcitons. In this way MDBX will track
+prior to calling other MDBX functions. In this way MDBX will track
 databases opening, detect multi-opening cases and then recover POSIX file
 locks as necessary. However, lock recovery can cause unexpected pauses,
 such as when another process opened the database in exclusive mode before
