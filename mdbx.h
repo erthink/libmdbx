@@ -2102,7 +2102,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *    after \ref mdbx_env_open() but OUTSIDE a write transaction, then MDBX will
  *    execute internal pseudo-transaction to apply new parameters (but only if
  *    anything has been changed), and changes be visible to any others processes
- *    immediately after succesfull completion of function.
+ *    immediately after succesful completion of function.
  *
  * Essentially a concept of "automatic size management" is simple and useful:
  *  - There are the lower and upper bound of the database file size;
