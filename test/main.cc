@@ -26,7 +26,7 @@ void __noreturn usage(void) {
       "Common parameters:\n"
       "  --pathname=...            Path and/or name of database files\n"
       "  --repeat=N                Set repeat counter\n"
-      "  --threads=N               Number of thread (unsunpported for now)\n"
+      "  --threads=N               Number of thread (unsupported for now)\n"
       "  --timeout=N[s|m|h|d]      Set timeout in seconds/minutes/hours/days\n"
       "  --failfast[=YES/no]       Lill all actors on first failure/error\n"
       "  --max-readers=N           See mdbx_env_set_maxreaders() description\n"
