@@ -123,7 +123,7 @@ no open MDBX-instance(s) during fork(), or at least close it immediately after
    threads could run in critical and/or intermediate sections of MDBX code
    with interaction and/or racing conditions with threads from other
    process(es). For instance: shrinking a database or copying it to a pipe,
-   opening or closing environment, begining or finishing a transaction,
+   opening or closing environment, beginning or finishing a transaction,
    and so on.
  = Therefore, any solution other than simply close database (and reopen if
    necessary) in a child process would be both extreme complicated and so
