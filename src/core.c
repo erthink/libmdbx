@@ -10405,7 +10405,7 @@ int __cold mdbx_env_open(MDBX_env *env, const char *pathname,
                                      sizeof(unsigned) + 1);
     rc = mdbx_memalign_alloc(
         env->me_os_psize,
-        env->me_psize * (1 /* page buffer */ + 1 /* page killer bufer */),
+        env->me_psize * (1 /* page buffer */ + 1 /* page killer buffer */),
         &env->me_pbuf);
     if (rc == MDBX_SUCCESS) {
       memset(env->me_pbuf, -1, env->me_psize * 2);
