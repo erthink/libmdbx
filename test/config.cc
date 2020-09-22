@@ -31,7 +31,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
 
   if (!value) {
     if (current[optlen + 2] == '=')
-      failure("Option '--%s' doen't accept any value\n", option);
+      failure("Option '--%s' doesn't accept any value\n", option);
     return true;
   }
 
@@ -45,7 +45,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     *value = argv[narg + 1];
     if (strcmp(*value, "default") == 0) {
       if (!default_value)
-        failure("Option '--%s' doen't accept default value\n", option);
+        failure("Option '--%s' doesn't accept default value\n", option);
       *value = default_value;
     }
     ++narg;
@@ -160,7 +160,7 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
   uint64_t multipler = 1;
   if (suffix && *suffix) {
     if (scale == no_scale)
-      failure("Option '--%s' doen't accepts suffixes, so '%s' is unexpected\n",
+      failure("Option '--%s' doesn't accepts suffixes, so '%s' is unexpected\n",
               option, suffix);
     if (strcmp(suffix, "K") == 0 || strcasecmp(suffix, "Kilo") == 0)
       multipler = (scale == decimal) ? UINT64_C(1000) : UINT64_C(1024);
