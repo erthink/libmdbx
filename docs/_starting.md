@@ -234,7 +234,7 @@ The full \ref c_api documentation lists further details below, like how to:
 - Reduce (temporarily) robustness to gain even more speed: \ref sync_modes.
 - Gather statistics about the database: \ref c_statinfo.
 - Sstimate size of range query result: \ref c_rqest.
-- Double perfomance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
+- Double performance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
 - Use sequences and canary markers: \ref mdbx_dbi_sequence(), \ref MDBX_canary.
 - Use lack-of-space callback (aka OOM-KICK): \ref mdbx_env_set_oomfunc().
 - Use exclusive mode: \ref MDBX_EXCLUSIVE.
