@@ -6445,7 +6445,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
            MDBX_PNL_SIZEOF(parent->tw.reclaimed_pglist));
     mdbx_assert(env, mdbx_pnl_check4assert(
                          txn->tw.reclaimed_pglist,
-                         (txn->mt_next_pgno /* LY: intentional assigment here,
+                         (txn->mt_next_pgno /* LY: intentional assignment here,
                                                    only for assertion */
                           = parent->mt_next_pgno)));
 
