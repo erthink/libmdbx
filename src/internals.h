@@ -84,7 +84,7 @@
 #pragma warning(disable : 4127) /* conditional expression is constant */
 #pragma warning(disable : 4324) /* 'xyz': structure was padded due to alignment specifier */
 #pragma warning(disable : 4310) /* cast truncates constant value */
-#pragma warning(disable : 4820) /* bytes padding added after data member for aligment */
+#pragma warning(disable : 4820) /* bytes padding added after data member for alignment */
 #pragma warning(disable : 4548) /* expression before comma has no effect; expected expression with side - effect */
 #pragma warning(disable : 4366) /* the result of the unary '&' operator may be unaligned */
 #pragma warning(disable : 4200) /* nonstandard extension used: zero-sized array in struct/union */
