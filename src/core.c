@@ -4286,8 +4286,8 @@ static __always_inline bool meta_bootid_match(const MDBX_meta *meta) {
 }
 
 static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
-                                 const int lck_exlusive) {
-  return lck_exlusive ? /* exclusive lock */ meta_bootid_match(meta)
+                                 const int lck_exclusive) {
+  return lck_exclusive ? /* exclusive lock */ meta_bootid_match(meta)
                       : /* db already opened */ env->me_lck &&
                             (env->me_lck->mti_envmode & MDBX_RDONLY) == 0;
 }
@@ -9952,7 +9952,7 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
   struct MDBX_lockinfo *const lck = env->me_lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
-    /* LY: exlcusive mode, check and reset lck content */
+    /* LY: exclusive mode, check and reset lck content */
     memset(lck, 0, (size_t)size);
     mdbx_jitter4testing(false);
     lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
