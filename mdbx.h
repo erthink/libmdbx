@@ -2076,7 +2076,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *  - In case \ref mdbx_env_info_ex() or legacy \ref mdbx_env_info() was called
  *    BEFORE \ref mdbx_env_open(), i.e. for closed environment, then the
  *    specified parameters will be used for new database creation, or will be
- *    appliend during openeing if database exists and no other process using it.
+ *    applied during opening if database exists and no other process using it.
  *
  *    If the database is already exist, opened with \ref MDBX_EXCLUSIVE or not
  *    used by any other process, and parameters specified by
@@ -2091,7 +2091,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *
  *  - In case \ref mdbx_env_info_ex() or legacy \ref mdbx_env_info() was called
  *    after \ref mdbx_env_open() WITHIN the write transaction running by current
- *    thread, then specified parameters will be appliad as a part of write
+ *    thread, then specified parameters will be applied as a part of write
  *    transaction, i.e. will not be visible to any others processes until the
  *    current write transaction has been committed by the current process.
  *    However, if transaction will be aborted, then the database file will be
