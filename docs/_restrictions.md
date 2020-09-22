@@ -29,7 +29,7 @@ In addition to those listed for some functions.
   \note Workaround: Check for stale readers periodically, using the
               `mdbx_reader_check()` function or the mdbx_stat tool.
 
-3. Stale writers will be cleared automatically by MDBX on supprted
+3. Stale writers will be cleared automatically by MDBX on supported
   platforms. But this is platform-specific, especially of
   implementation of shared POSIX-mutexes and support for robust
   mutexes. For instance there are no known issues on Linux, OSX,
