@@ -218,7 +218,6 @@ static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
 }
 
 static void MDBX_PRINTF_ARGS(4, 5)
-
     problem_add(const char *object, uint64_t entry_number, const char *msg,
                 const char *extra, ...) {
   total_problems++;
@@ -883,11 +882,13 @@ static void usage(char *prog) {
           "  -v\t\tmore verbose, could be used multiple times\n"
           "  -q\t\tbe quiet\n"
           "  -c\t\tforce cooperative mode (don't try exclusive)\n"
-          "  -0|1|2\tforce using specific meta-page 0..2 for checking\n"
-          "  -w\t\tlock DB for writing while checking\n"
+          "  -w\t\twrite-mode checking\n"
           "  -d\t\tdisable page-by-page traversal of B-tree\n"
           "  -i\t\tignore wrong order errors (for custom comparators case)\n"
-          "  -s subdb\tprocess a specific subdatabase only\n",
+          "  -s subdb\tprocess a specific subdatabase only\n"
+          "  -0|1|2\tforce using specific meta-page 0, or 2 for checking\n"
+          "  -t\t\tturn to a specified meta-page on successful check\n"
+          "  -T\t\tturn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!\n",
           prog);
   exit(EXIT_INTERRUPTED);
 }
@@ -1034,7 +1035,9 @@ int main(int argc, char *argv[]) {
   char *prog = argv[0];
   char *envname;
   int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
-  bool locked = false;
+  bool write_locked = false;
+  bool turn_meta = false;
+  bool force_turn_meta = false;
 
   double elapsed;
 #if defined(_WIN32) || defined(_WIN64)
@@ -1057,7 +1060,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  for (int i; (i = getopt(argc, argv, "Vvqnwc012dis:")) != EOF;) {
+  for (int i; (i = getopt(argc, argv, "Vvqnwc012tTdis:")) != EOF;) {
     switch (i) {
     case 'V':
       printf("mdbx_chk version %d.%d.%d.%d\n"
@@ -1085,6 +1088,15 @@ int main(int argc, char *argv[]) {
     case '2':
       stuck_meta = 2;
       break;
+    case 't':
+      turn_meta = true;
+      break;
+    case 'T':
+      turn_meta = force_turn_meta = true;
+      quiet = false;
+      if (verbose < 2)
+        verbose = 2;
+      break;
     case 'q':
       quiet = true;
       break;
@@ -1093,6 +1105,11 @@ int main(int argc, char *argv[]) {
       break;
     case 'w':
       envflags &= ~MDBX_RDONLY;
+#if MDBX_MMAP_INCOHERENT_FILE_WRITE
+      /* Temporary `workaround` for OpenBSD kernel's flaw.
+       * See https://github.com/erthink/libmdbx/issues/67 */
+      envflags |= MDBX_WRITEMAP;
+#endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
       break;
     case 'c':
       envflags = (envflags & ~MDBX_EXCLUSIVE) | MDBX_ACCEDE;
@@ -1116,14 +1133,31 @@ int main(int argc, char *argv[]) {
   if (optind != argc - 1)
     usage(prog);
 
-  if (stuck_meta >= 0) {
-    if ((envflags & MDBX_EXCLUSIVE) == 0) {
-      error("exclusive mode is required to using specific meta-page(%d) for "
-            "checking.\n",
-            stuck_meta);
-      exit(EXIT_INTERRUPTED);
+  rc = MDBX_SUCCESS;
+  if (stuck_meta >= 0 && (envflags & MDBX_EXCLUSIVE) == 0) {
+    error("exclusive mode is required to using specific meta-page(%d) for "
+          "checking.\n",
+          stuck_meta);
+    rc = EXIT_INTERRUPTED;
+  }
+  if (turn_meta) {
+    if (stuck_meta < 0) {
+      error("meta-page must be specified (by -0, -1 or -2 options) to turn to "
+            "it.\n");
+      rc = EXIT_INTERRUPTED;
+    }
+    if (envflags & MDBX_RDONLY) {
+      error("write-mode must be enabled to turn to the specified meta-page.\n");
+      rc = EXIT_INTERRUPTED;
+    }
+    if (only_subdb || dont_traversal) {
+      error("whole database checking with tree-traversal are required to turn "
+            "to the specified meta-page.\n");
+      rc = EXIT_INTERRUPTED;
     }
   }
+  if (rc)
+    exit(rc);
 
 #if defined(_WIN32) || defined(_WIN64)
   SetConsoleCtrlHandler(ConsoleBreakHandlerRoutine, true);
@@ -1189,13 +1223,13 @@ int main(int argc, char *argv[]) {
     print(" - %s mode\n",
           (envflags & MDBX_EXCLUSIVE) ? "monopolistic" : "cooperative");
 
-  if ((envflags & MDBX_RDONLY) == 0) {
+  if ((envflags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == 0) {
     rc = mdbx_txn_lock(env, false);
     if (rc != MDBX_SUCCESS) {
       error("mdbx_txn_lock failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto bailout;
     }
-    locked = true;
+    write_locked = true;
   }
 
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
@@ -1372,7 +1406,7 @@ int main(int argc, char *argv[]) {
             steady_meta_id, steady_meta_txnid, envinfo.mi_recent_txnid);
       ++problems_meta;
     }
-  } else if (locked) {
+  } else if (write_locked) {
     if (verbose > 1)
       print(" - performs lite check recent-txn-id with meta-pages (not a "
             "monopolistic mode)\n");
@@ -1560,9 +1594,9 @@ int main(int argc, char *argv[]) {
           "\n",
           envinfo.mi_recent_txnid);
     fflush(nullptr);
-    if (locked) {
+    if (write_locked) {
       mdbx_txn_unlock(env);
-      locked = false;
+      write_locked = false;
     }
     rc = mdbx_env_sync_ex(env, true, false);
     if (rc != MDBX_SUCCESS)
@@ -1573,12 +1607,32 @@ int main(int argc, char *argv[]) {
     }
   }
 
+  if (turn_meta && stuck_meta >= 0 && !dont_traversal && !only_subdb &&
+      (envflags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == MDBX_EXCLUSIVE) {
+    const bool successful_check = (rc | total_problems | problems_meta) == 0;
+    if (successful_check || force_turn_meta) {
+      fflush(nullptr);
+      print(" = Performing turn to the specified meta-page (%d) due to %s!\n",
+            stuck_meta,
+            successful_check ? "successful check" : "the -T option was given");
+      fflush(nullptr);
+      rc = mdbx_env_turn_for_recovery(env, stuck_meta);
+      if (rc != MDBX_SUCCESS)
+        error("mdbx_env_turn_for_recovery failed, error %d %s\n", rc,
+              mdbx_strerror(rc));
+    } else {
+      print(" = Skipping turn to the specified meta-page (%d) due to "
+            "unsuccessful check!\n",
+            stuck_meta);
+    }
+  }
+
 bailout:
   if (txn)
     mdbx_txn_abort(txn);
-  if (locked) {
+  if (write_locked) {
     mdbx_txn_unlock(env);
-    locked = false;
+    write_locked = false;
   }
   if (env) {
     const bool dont_sync = rc != 0 || total_problems;
