@@ -415,7 +415,8 @@ __nothrow_pure_function static __always_inline size_t
 leaf_size(const MDBX_env *env, const MDBX_val *key, const MDBX_val *data) {
   size_t node_bytes = node_size(key, data);
   /* NOTE: The actual limit is LEAF_NODEMAX(env->me_psize), but it reasonable to
-   * use env->me_branch_nodemax (which is 3 times less) as the treshold because:
+   * use env->me_branch_nodemax (which is 3 times less) as the threshold
+   * because:
    *  - Large threshold implies that any insertion/update could result split
    *    a single leaf page to THREE, which requires TWO insertion into parent
    *    branch page, then could leads to split parent page and so on up to
@@ -4288,8 +4289,8 @@ static __always_inline bool meta_bootid_match(const MDBX_meta *meta) {
 static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
                                  const int lck_exclusive) {
   return lck_exclusive ? /* exclusive lock */ meta_bootid_match(meta)
-                      : /* db already opened */ env->me_lck &&
-                            (env->me_lck->mti_envmode & MDBX_RDONLY) == 0;
+                       : /* db already opened */ env->me_lck &&
+                             (env->me_lck->mti_envmode & MDBX_RDONLY) == 0;
 }
 
 #define METAPAGE(env, n) page_meta(pgno2page(env, n))
@@ -5296,7 +5297,7 @@ skip_cache:
             ((autosync_threshold | autosync_period) == 0 ||
              next >= steady->mm_geo.now)) {
           /* wipe steady checkpoint in MDBX_UTTERLY_NOSYNC mode
-           * without any auto-sync treshold(s). */
+           * without any auto-sync threshold(s). */
           rc = mdbx_wipe_steady(env, oldest);
           mdbx_debug("gc-wipe-steady, rc %d", rc);
           mdbx_assert(env, steady != mdbx_meta_steady(env));
@@ -8635,20 +8636,20 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #if defined(MADV_DONTNEED)
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
     /* threshold to avoid unreasonable frequent madvise() calls */
-    const size_t madvise_treshold = (largest_bytes < 65536 * 256)
-                                        ? 65536
-                                        : (largest_bytes > MEGABYTE * 4 * 256)
-                                              ? MEGABYTE * 4
-                                              : largest_bytes >> 10;
+    const size_t madvise_threshold = (largest_bytes < 65536 * 256)
+                                         ? 65536
+                                         : (largest_bytes > MEGABYTE * 4 * 256)
+                                               ? MEGABYTE * 4
+                                               : largest_bytes >> 10;
     const size_t discard_edge_bytes = bytes_align2os_bytes(
         env, ((MDBX_RDONLY &
                (env->me_lck ? env->me_lck->mti_envmode : env->me_flags))
                   ? largest_bytes
-                  : largest_bytes + madvise_treshold));
+                  : largest_bytes + madvise_threshold));
     const pgno_t discard_edge_pgno = bytes2pgno(env, discard_edge_bytes);
     const pgno_t prev_discarded_pgno = *env->me_discarded_tail;
     if (prev_discarded_pgno >=
-        discard_edge_pgno + bytes2pgno(env, madvise_treshold)) {
+        discard_edge_pgno + bytes2pgno(env, madvise_threshold)) {
       mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", *env->me_discarded_tail,
                   largest_pgno);
       *env->me_discarded_tail = discard_edge_pgno;
