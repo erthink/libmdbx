@@ -43,7 +43,7 @@ void __noreturn usage(void) {
       "  --size                    Initial size in Kb/Mb/Gb/Tb\n"
       "  --shrink-threshold        Shrink threshold in Kb/Mb/Gb/Tb\n"
       "  --growth-step             Grow step in Kb/Mb/Gb/Tb\n"
-      "Predefined complext scenarios/cases:\n"
+      "Predefined complex scenarios/cases:\n"
       "  --case=...   Only `basic` scenario implemented for now\n"
       "    basic == Simultaneous multi-process execution\n"
       "             of test-actors: nested,hill,ttl,copy,append,jitter,try\n"
