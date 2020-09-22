@@ -3853,7 +3853,7 @@ LIBMDBX_API int mdbx_thread_register(MDBX_env *env);
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
  * \returns A non-zero error value on failure and 0 on success, or
- * \ref MDBX_RESULT_TRUE if thread is not registered or already undegistered. */
+ * \ref MDBX_RESULT_TRUE if thread is not registered or already unregistered. */
 LIBMDBX_API int mdbx_thread_unregister(MDBX_env *env);
 
 /** A lack-of-space callback function to resolve issues with a laggard readers.
