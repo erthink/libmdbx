@@ -116,7 +116,7 @@ typedef DWORD mdbx_tid_t;
 #include <errno.h>     /* for error codes */
 #include <pthread.h>   /* for pthread_t */
 #include <sys/types.h> /* for pid_t */
-#include <sys/uio.h>   /* for truct iovec */
+#include <sys/uio.h>   /* for struct iovec */
 #define HAVE_STRUCT_IOVEC 1
 typedef int mdbx_filehandle_t;
 typedef pid_t mdbx_pid_t;
