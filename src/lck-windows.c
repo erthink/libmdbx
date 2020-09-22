@@ -336,7 +336,7 @@ mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
 /* global `initial` lock for lockfile initialization,
  * exclusive/shared locking first cacheline */
 
-/* Briefly descritpion of locking schema/algorithm:
+/* Briefly description of locking schema/algorithm:
  *  - Windows does not support upgrading or downgrading for file locking.
  *  - Therefore upgrading/downgrading is emulated by shared and exclusive
  *    locking of upper and lower halves.
