@@ -2496,7 +2496,7 @@ struct MDBX_txn_info {
   /** For READ-ONLY transaction: the lag from a recent  MVCC-snapshot, i.e. the
      number of committed transaction since read transaction started. For WRITE
      transaction (provided if `scan_rlt=true`): the lag of the oldest reader
-     from current transaction (i.e. atleast 1 if any reader running). */
+     from current transaction (i.e. at least 1 if any reader running). */
   uint64_t txn_reader_lag;
 
   /** Used space by this transaction, i.e. corresponding to the last used

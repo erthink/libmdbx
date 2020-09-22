@@ -108,7 +108,7 @@ opened the file across all threads. The reason for this is:
 
 Do not use opened MDBX environment(s) after `fork()` in a child process(es),
 MDBX will check and prevent this at critical points. Instead, ensure there is
-no open MDBX-instance(s) during fork(), or atleast close it immediately after
+no open MDBX-instance(s) during fork(), or at least close it immediately after
 `fork()` in the child process and reopen if required - for instance by using
 `pthread_atfork()`. The reason for this is:
  - For competitive consistent reading, MDBX assigns a slot in the shared
