@@ -733,7 +733,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env);
 ///      if (env->me_flags & MDBX_EXCLUSIVE) != 0, then other processes
 ///      should be made aware that access is unavailable rather than
 ///      wait for it.
-///    - freeing locks that interfere file operation (expecially for Windows)
+///    - freeing locks that interfere file operation (especially for Windows)
 ///   (env->me_flags & MDBX_EXCLUSIVE) == 0 - downgrade to shared lock.
 ///   (env->me_flags & MDBX_EXCLUSIVE) != 0 - downgrade to exclusive
 ///   operational lock.
