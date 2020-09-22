@@ -8579,7 +8579,7 @@ static MDBX_page *__cold mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
 }
 
 /* Fill in most of the zeroed meta-pages for an empty database environment.
- * Return pointer to recenly (head) meta-page. */
+ * Return pointer to recently (head) meta-page. */
 static MDBX_meta *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   MDBX_page *page0 = (MDBX_page *)buffer;
   MDBX_page *page1 = mdbx_meta_model(env, page0, 0);
