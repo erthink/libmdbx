@@ -3761,7 +3761,7 @@ mdbx_get_datacmp(MDBX_db_flags_t flags);
  *                           starting from 1.
  * \param [in] slot          The reader lock table slot number.
  * \param [in] txnid         The ID of the transaction being read,
- *                           i.e. the MVCC-snaphot number.
+ *                           i.e. the MVCC-snapshot number.
  * \param [in] lag           The lag from a recent MVCC-snapshot,
  *                           i.e. the number of committed write transactions
  *                           since the current read transaction started.

@@ -15970,7 +15970,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
   /* Make a snapshot of meta-pages,
    * but writing ones after the data was flushed */
   memcpy(buffer, env->me_map, meta_bytes);
-  MDBX_meta *const headcopy = /* LY: get pointer to the spanshot copy */
+  MDBX_meta *const headcopy = /* LY: get pointer to the snapshot copy */
       (MDBX_meta *)(buffer + ((uint8_t *)mdbx_meta_head(env) - env->me_map));
   mdbx_txn_unlock(env);
 
