@@ -1918,7 +1918,7 @@ LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
 
-/** Sets relative period since the last unsteay commit to force flush the data
+/** Sets relative period since the last unsteady commit to force flush the data
  * buffers to disk, even of \ref MDBX_SAFE_NOSYNC flag in the environment.
  * \ingroup c_settings
  *
@@ -1943,7 +1943,7 @@ LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  * \param [in] seconds_16dot16  The period in 1/65536 of second when
  *                              a synchronous flush would be made since
- *                              the last unsteay commit.
+ *                              the last unsteady commit.
  *
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_syncperiod(MDBX_env *env,
