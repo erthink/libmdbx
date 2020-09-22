@@ -9688,7 +9688,7 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
     }
 
     if (!env->me_lck) {
-      /* LY: without-lck (read-only) mode, so it is imposible that other
+      /* LY: without-lck (read-only) mode, so it is impossible that other
        * process made weak checkpoint. */
       mdbx_error("%s", "without-lck, unable recovery/rollback");
       return MDBX_WANNA_RECOVERY;
