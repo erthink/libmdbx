@@ -537,7 +537,7 @@ struct iovec {
 
 #if defined(__sun) || defined(__SVR4) || defined(__svr4__)
 /* The `iov_len` is signed on Sun/Solaris.
- * So define custom MDBX_val to avoid a lot of warings. */
+ * So define custom MDBX_val to avoid a lot of warnings. */
 struct MDBX_val {
   void *iov_base; /**< pointer to some data */
   size_t iov_len; /**< the length of data in bytes */
