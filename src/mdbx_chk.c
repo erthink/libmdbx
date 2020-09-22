@@ -590,6 +590,56 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   return handle_userdb(record_number, key, data);
 }
 
+static const char *db_flags2keymode(unsigned flags) {
+  flags &= (MDBX_REVERSEKEY | MDBX_INTEGERKEY);
+  switch (flags) {
+  case 0:
+    return "usual";
+  case MDBX_REVERSEKEY:
+    return "reserve";
+  case MDBX_INTEGERKEY:
+    return "ordinal";
+  case MDBX_REVERSEKEY | MDBX_INTEGERKEY:
+    return "msgpack";
+  default:
+    assert(false);
+    __unreachable();
+  }
+}
+
+static const char *db_flags2valuemode(unsigned flags) {
+  flags &= (MDBX_DUPSORT | MDBX_REVERSEDUP | MDBX_DUPFIXED | MDBX_INTEGERDUP);
+  switch (flags) {
+  case 0:
+    return "single";
+  case MDBX_DUPSORT:
+    return "multi";
+  case MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_REVERSEDUP:
+    return "multi-reverse";
+  case MDBX_DUPFIXED:
+  case MDBX_DUPSORT | MDBX_DUPFIXED:
+    return "multi-samelength";
+  case MDBX_DUPFIXED | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_REVERSEDUP:
+    return "multi-reverse-samelength";
+  case MDBX_INTEGERDUP:
+  case MDBX_DUPSORT | MDBX_INTEGERDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP:
+  case MDBX_DUPFIXED | MDBX_INTEGERDUP:
+    return "multi-ordinal";
+  case MDBX_INTEGERDUP | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_INTEGERDUP | MDBX_REVERSEDUP:
+    return "multi-msgpack";
+  case MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP:
+  case MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP:
+    return "reserved";
+  default:
+    assert(false);
+    __unreachable();
+  }
+}
+
 static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
                       bool silent) {
   MDBX_cursor *mc;
@@ -654,15 +704,21 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   }
 
   if (!silent && verbose) {
-    print(" - dbi-id %d, flags:", dbi_handle);
-    if (!flags)
-      print(" none");
-    else {
-      for (i = 0; dbflags[i].bit; i++)
-        if (flags & dbflags[i].bit)
-          print(" %s", dbflags[i].name);
+    print(" - kind: %s => %s", db_flags2keymode(flags),
+          db_flags2valuemode(flags));
+    if (verbose > 1) {
+      print(", flags:");
+      if (!flags)
+        print(" none");
+      else {
+        for (i = 0; dbflags[i].bit; i++)
+          if (flags & dbflags[i].bit)
+            print(" %s", dbflags[i].name);
+      }
+      if (verbose > 2)
+        print(" (0x%02X), dbi-id %d", flags, dbi_handle);
     }
-    print(" (0x%02X)\n", flags);
+    print("\n");
     if (ms.ms_mod_txnid)
       print(" - last modification txn#%" PRIu64 "\n", ms.ms_mod_txnid);
     if (verbose > 1) {
