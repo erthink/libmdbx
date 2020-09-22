@@ -3994,7 +3994,8 @@ static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
 
   mdbx_debug("loosen page %" PRIaPGNO, pgno);
   const bool is_dirty = IS_DIRTY(mp);
-  if (MDBX_DEBUG || unlikely((txn->mt_env->me_flags & MDBX_PAGEPERTURB) != 0)) {
+  if (MDBX_DEBUG != 0 ||
+      unlikely((txn->mt_env->me_flags & MDBX_PAGEPERTURB) != 0)) {
     mdbx_kill_page(txn->mt_env, mp, pgno, npages);
     VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
   }
