@@ -3073,7 +3073,7 @@ LIBMDBX_API int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
                          MDBX_val *data);
 
 /** Get items from a database
- * and optionaly number of data items for a given key.
+ * and optionally number of data items for a given key.
  * \ingroup c_crud
  *
  * Briefly this function does the same as \ref mdbx_get() with a few
