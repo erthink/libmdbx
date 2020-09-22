@@ -1043,7 +1043,7 @@ enum MDBX_env_flags_t {
    * \ref mdbx_env_sync() as alternatively for batch committing or nested
    * transaction (in some cases). As well, auto-sync feature exposed by
    * \ref mdbx_env_set_syncbytes() and \ref mdbx_env_set_syncperiod() functions
-   * could be very usefull with `MDBX_SAFE_NOSYNC` flag.
+   * could be very useful with `MDBX_SAFE_NOSYNC` flag.
    *
    * The number and volume of of disk IOPs with MDBX_SAFE_NOSYNC flag will
    * exactly the as without any no-sync flags. However, you should expect a
