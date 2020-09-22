@@ -15821,7 +15821,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
   if (flags & MDBX_CP_FORCE_DYNAMIC_SIZE)
     make_sizeable(meta);
 
-  /* copy canary sequenses if present */
+  /* copy canary sequences if present */
   if (read_txn->mt_canary.v) {
     meta->mm_canary = read_txn->mt_canary;
     meta->mm_canary.v = mdbx_meta_txnid_stable(env, meta);
