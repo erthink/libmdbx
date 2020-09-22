@@ -997,7 +997,7 @@ static void __cold workaround_glibc_bug21031(void) {
   /* Workaround for https://sourceware.org/bugzilla/show_bug.cgi?id=21031
    *
    * Due race between pthread_key_delete() and __nptl_deallocate_tsd()
-   * The destructor(s) of thread-local-storate object(s) may be running
+   * The destructor(s) of thread-local-storage object(s) may be running
    * in another thread(s) and be blocked or not finished yet.
    * In such case we get a SEGFAULT after unload this library DSO.
    *
