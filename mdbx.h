@@ -3783,7 +3783,7 @@ typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,
                                    uint64_t lag, size_t bytes_used,
                                    size_t bytes_retained);
 
-/** Enumarete the entries in the reader lock table.
+/** Enumerate the entries in the reader lock table.
  * \ingroup c_statinfo
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
