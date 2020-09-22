@@ -15935,7 +15935,7 @@ static int __cold mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
     for (size_t offset = used_size; offset < whole_size;) {
       const size_t chunk =
           (MDBX_WBUF < whole_size - offset) ? MDBX_WBUF : whole_size - offset;
-      /* copy to avoit EFAULT in case swapped-out */
+      /* copy to avoid EFAULT in case swapped-out */
       int rc = mdbx_write(fd, data_buffer, chunk);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -16021,7 +16021,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     /* fallback to portable */
     const size_t chunk =
         (MDBX_WBUF < used_size - offset) ? MDBX_WBUF : used_size - offset;
-    /* copy to avoit EFAULT in case swapped-out */
+    /* copy to avoid EFAULT in case swapped-out */
     memcpy(data_buffer, env->me_map + offset, chunk);
     rc = mdbx_write(fd, data_buffer, chunk);
     offset += chunk;
@@ -16037,7 +16037,7 @@ static int __cold mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
            rc == MDBX_SUCCESS && offset < whole_size;) {
         const size_t chunk =
             (MDBX_WBUF < whole_size - offset) ? MDBX_WBUF : whole_size - offset;
-        /* copy to avoit EFAULT in case swapped-out */
+        /* copy to avoid EFAULT in case swapped-out */
         rc = mdbx_write(fd, data_buffer, chunk);
         offset += chunk;
       }
