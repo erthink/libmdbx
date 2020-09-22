@@ -411,7 +411,7 @@ static void lck_unlock(MDBX_env *env) {
 
 /* Seize state as 'exclusive-write' (E-E and returns MDBX_RESULT_TRUE)
  * or as 'used' (S-? and returns MDBX_RESULT_FALSE).
- * Oherwise returns an error. */
+ * Otherwise returns an error. */
 static int internal_seize_lck(HANDLE lfd) {
   int rc;
   assert(lfd != INVALID_HANDLE_VALUE);
