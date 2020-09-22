@@ -2507,7 +2507,7 @@ struct MDBX_txn_info {
   uint64_t txn_space_limit_soft;
 
   /** Upper bound for size the database file, i.e. the value `size_upper`
-     argument of the approriate call of \ref mdbx_env_set_geometry(). */
+     argument of the appropriate call of \ref mdbx_env_set_geometry(). */
   uint64_t txn_space_limit_hard;
 
   /** For READ-ONLY transaction: The total size of the database pages that were
