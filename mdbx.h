@@ -1090,7 +1090,7 @@ enum MDBX_env_flags_t {
    *  - a system crash immediately after commit the write transaction
    *    high likely lead to database corruption.
    *  - successful completion of mdbx_env_sync(force = true) after one or
-   *    more commited transactions guarantees consystency and durability.
+   *    more commited transactions guarantees consistency and durability.
    *  - BUT by committing two or more transactions you back database into
    *    a weak state, in which a system crash may lead to database corruption!
    *    In case single transaction after mdbx_env_sync, you may lose transaction
