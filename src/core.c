@@ -8704,6 +8704,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   MDBX_meta *const meta1 = METAPAGE(env, 1);
   MDBX_meta *const meta2 = METAPAGE(env, 2);
   MDBX_meta *const head = mdbx_meta_head(env);
+  int rc;
 
   mdbx_assert(env, mdbx_meta_eq_mask(env) == 0);
   mdbx_assert(env,
@@ -8797,18 +8798,24 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
             flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED;
           shrink = pending->mm_geo.now - bottom;
           pending->mm_geo.now = bottom;
-          if (mdbx_meta_txnid_stable(env, head) ==
-              pending->mm_txnid_a.inconsistent)
-            mdbx_meta_set_txnid(
-                env, pending,
-                safe64_txnid_next(pending->mm_txnid_a.inconsistent));
+          if (unlikely(mdbx_meta_txnid_stable(env, head) ==
+                       pending->mm_txnid_a.inconsistent)) {
+            const txnid_t txnid =
+                safe64_txnid_next(pending->mm_txnid_a.inconsistent);
+            if (unlikely(txnid > MAX_TXNID)) {
+              mdbx_error("%s", "txnid overflow!");
+              rc = MDBX_TXN_FULL;
+              goto fail;
+            }
+            mdbx_meta_set_txnid(env, pending, txnid);
+          }
         }
       }
     }
   }
 
   /* LY: step#1 - sync previously written/updated data-pages */
-  int rc = MDBX_RESULT_FALSE /* carry steady */;
+  rc = MDBX_RESULT_FALSE /* carry steady */;
   if (*env->me_unsynced_pages) {
     mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     enum mdbx_syncmode_bits mode_bits = MDBX_SYNC_NONE;
@@ -9407,8 +9414,14 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
         env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
       } else {
         meta.mm_geo = new_geo;
-        mdbx_meta_set_txnid(
-            env, &meta, safe64_txnid_next(mdbx_meta_txnid_stable(env, head)));
+        const txnid_t txnid =
+            safe64_txnid_next(mdbx_meta_txnid_stable(env, head));
+        if (unlikely(txnid > MAX_TXNID)) {
+          mdbx_error("%s", "txnid overflow!");
+          rc = MDBX_TXN_FULL;
+          goto bailout;
+        }
+        mdbx_meta_set_txnid(env, &meta, txnid);
         rc = mdbx_sync_locked(env, env->me_flags, &meta);
       }
     }
@@ -9835,6 +9848,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       } else {
         const txnid_t txnid = mdbx_meta_txnid_stable(env, head);
         const txnid_t next_txnid = safe64_txnid_next(txnid);
+        if (unlikely(txnid > MAX_TXNID)) {
+          mdbx_error("%s", "txnid overflow!");
+          return MDBX_TXN_FULL;
+        }
         mdbx_notice("updating meta.geo: "
                     "from l%" PRIaPGNO "-n%" PRIaPGNO "-u%" PRIaPGNO
                     "/s%u-g%u (txn#%" PRIaTXN "), "
