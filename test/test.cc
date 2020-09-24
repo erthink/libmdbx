@@ -376,7 +376,7 @@ bool testcase::setup() {
   if (!wait4start())
     return false;
 
-  start_timestamp = chrono::now_motonic();
+  start_timestamp = chrono::now_monotonic();
   nops_completed = 0;
   return true;
 }
@@ -395,7 +395,7 @@ bool testcase::should_continue(bool check_timeout_only) const {
   if (config.params.test_duration) {
     chrono::time since;
     since.fixedpoint =
-        chrono::now_motonic().fixedpoint - start_timestamp.fixedpoint;
+        chrono::now_monotonic().fixedpoint - start_timestamp.fixedpoint;
     if (since.seconds() >= config.params.test_duration)
       result = false;
   }

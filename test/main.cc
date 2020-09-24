@@ -26,7 +26,7 @@ MDBX_NORETURN void usage(void) {
       "Common parameters:\n"
       "  --pathname=...            Path and/or name of database files\n"
       "  --repeat=N                Set repeat counter\n"
-      "  --threads=N               Number of thread (unsunpported for now)\n"
+      "  --threads=N               Number of thread (unsupported for now)\n"
       "  --timeout=N[s|m|h|d]      Set timeout in seconds/minutes/hours/days\n"
       "  --failfast[=YES/no]       Lill all actors on first failure/error\n"
       "  --max-readers=N           See mdbx_env_set_maxreaders() description\n"
@@ -43,7 +43,7 @@ MDBX_NORETURN void usage(void) {
       "  --size                    Initial size in Kb/Mb/Gb/Tb\n"
       "  --shrink-threshold        Shrink threshold in Kb/Mb/Gb/Tb\n"
       "  --growth-step             Grow step in Kb/Mb/Gb/Tb\n"
-      "Predefined complext scenarios/cases:\n"
+      "Predefined complex scenarios/cases:\n"
       "  --case=...   Only `basic` scenario implemented for now\n"
       "    basic == Simultaneous multi-process execution\n"
       "             of test-actors: nested,hill,ttl,copy,append,jitter,try\n"
@@ -186,8 +186,8 @@ std::unordered_map<unsigned, actor_config *> events;
 std::unordered_map<mdbx_pid_t, actor_config *> pid2actor;
 std::set<std::string> databases;
 unsigned nactors;
-chrono::time start_motonic;
-chrono::time deadline_motonic;
+chrono::time start_monotonic;
+chrono::time deadline_monotonic;
 bool singlemode;
 
 namespace config {
@@ -504,11 +504,11 @@ int main(int argc, char *const argv[]) {
   }
 
   bool failed = false;
-  global::start_motonic = chrono::now_motonic();
-  global::deadline_motonic.fixedpoint =
+  global::start_monotonic = chrono::now_monotonic();
+  global::deadline_monotonic.fixedpoint =
       (global::config::timeout_duration_seconds == 0)
           ? chrono::infinite().fixedpoint
-          : global::start_motonic.fixedpoint +
+          : global::start_monotonic.fixedpoint +
                 chrono::from_seconds(global::config::timeout_duration_seconds)
                     .fixedpoint;
 
@@ -557,14 +557,14 @@ int main(int argc, char *const argv[]) {
     log_trace("=== polling...");
     while (left > 0) {
       unsigned timeout_seconds_left = INT_MAX;
-      chrono::time now_motonic = chrono::now_motonic();
-      if (now_motonic.fixedpoint >= global::deadline_motonic.fixedpoint)
+      chrono::time now_monotonic = chrono::now_monotonic();
+      if (now_monotonic.fixedpoint >= global::deadline_monotonic.fixedpoint)
         timeout_seconds_left = 0;
       else {
-        chrono::time left_motonic;
-        left_motonic.fixedpoint =
-            global::deadline_motonic.fixedpoint - now_motonic.fixedpoint;
-        timeout_seconds_left = left_motonic.seconds();
+        chrono::time left_monotonic;
+        left_monotonic.fixedpoint =
+            global::deadline_monotonic.fixedpoint - now_monotonic.fixedpoint;
+        timeout_seconds_left = left_monotonic.seconds();
       }
 
       mdbx_pid_t pid;

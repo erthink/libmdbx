@@ -99,7 +99,7 @@ opened the file across all threads. The reason for this is:
    vulnerable to corruption from other processes.
  + For compatibility with LMDB which allows multi-opening, MDBX can be
    configured at runtime by \ref mdbx_setup_debug() with \ref MDBX_DBG_LEGACY_MULTIOPEN` option
-   prior to calling other MDBX funcitons. In this way MDBX will track
+   prior to calling other MDBX functions. In this way MDBX will track
    databases opening, detect multi-opening cases and then recover POSIX file
    locks as necessary. However, lock recovery can cause unexpected pauses,
    such as when another process opened the database in exclusive mode before
@@ -108,7 +108,7 @@ opened the file across all threads. The reason for this is:
 
 Do not use opened MDBX environment(s) after `fork()` in a child process(es),
 MDBX will check and prevent this at critical points. Instead, ensure there is
-no open MDBX-instance(s) during fork(), or atleast close it immediately after
+no open MDBX-instance(s) during fork(), or at least close it immediately after
 `fork()` in the child process and reopen if required - for instance by using
 `pthread_atfork()`. The reason for this is:
  - For competitive consistent reading, MDBX assigns a slot in the shared
@@ -123,7 +123,7 @@ no open MDBX-instance(s) during fork(), or atleast close it immediately after
    threads could run in critical and/or intermediate sections of MDBX code
    with interaction and/or racing conditions with threads from other
    process(es). For instance: shrinking a database or copying it to a pipe,
-   opening or closing environment, begining or finishing a transaction,
+   opening or closing environment, beginning or finishing a transaction,
    and so on.
  = Therefore, any solution other than simply close database (and reopen if
    necessary) in a child process would be both extreme complicated and so
@@ -234,7 +234,7 @@ The full \ref c_api documentation lists further details below, like how to:
 - Reduce (temporarily) robustness to gain even more speed: \ref sync_modes.
 - Gather statistics about the database: \ref c_statinfo.
 - Sstimate size of range query result: \ref c_rqest.
-- Double perfomance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
+- Double performance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
 - Use sequences and canary markers: \ref mdbx_dbi_sequence(), \ref MDBX_canary.
 - Use lack-of-space callback (aka OOM-KICK): \ref mdbx_env_set_oomfunc().
 - Use exclusive mode: \ref MDBX_EXCLUSIVE.

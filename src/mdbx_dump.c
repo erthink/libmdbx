@@ -224,7 +224,7 @@ static void usage(void) {
           "  -a\t\tdump main DB and all subDBs,\n"
           "    \t\tby default dump only the main DB\n"
           "  -s\t\tdump only the named subDB\n"
-          "  -r\t\trescure mode (ignore errors to dump corrupted DB)\n",
+          "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n",
           prog);
   exit(EXIT_FAILURE);
 }

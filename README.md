@@ -6,7 +6,7 @@ libmdbx
 > Please refer to the online [documentation](https://erthink.github.io/libmdbx/)
 > with [`C` API description](https://erthink.github.io/libmdbx/group__c__api.html)
 > and pay attention to the preliminary [`C++` API](https://github.com/erthink/libmdbx/blob/c%2B%2B/mdbx.h%2B%2B).
-> Questions, feedback and suggestions are welcome to the [Telergam' group](https://t.me/libmdbx).
+> Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
 
 <!-- section-begin overview -->
 _libmdbx_ is an extremely fast, compact, powerful, embedded,
@@ -224,7 +224,7 @@ the user's point of view.
   > _libmdbx_ database format depends only on the [endianness](https://en.wikipedia.org/wiki/Endianness) but not on the [bitness](https://en.wiktionary.org/wiki/bitness).
 
 6. LIFO policy for Garbage Collection recycling. This can significantly increase write performance due write-back disk cache up to several times in a best case scenario.
-  > LIFO means that for reuse will be taken the latest becames unused pages.
+  > LIFO means that for reuse will be taken the latest becomes unused pages.
   > Therefore the loop of database pages circulation becomes as short as possible.
   > In other words, the set of pages, that are (over)written in memory and on disk during a series of write transactions, will be as small as possible.
   > Thus creates ideal conditions for the battery-backed or flash-backed disk cache efficiency.

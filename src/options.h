@@ -60,7 +60,7 @@
 /** Controls checking PID against reuse DB environment after the fork() */
 #ifndef MDBX_ENV_CHECKPID
 #if defined(MADV_DONTFORK) || defined(_WIN32) || defined(_WIN64)
-/* PID check could be ommited:
+/* PID check could be omitted:
  *  - on Linux when madvise(MADV_DONTFORK) is available. i.e. after the fork()
  *    mapped pages will not be available for child process.
  *  - in Windows where fork() not available. */
