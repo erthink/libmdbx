@@ -40,14 +40,6 @@
 #define EOF (-1)
 #endif
 
-#define ERR(s, c)                                                              \
-  if (opterr) {                                                                \
-    fputs(argv[0], stderr);                                                    \
-    fputs(s, stderr);                                                          \
-    fputc(c, stderr);                                                          \
-  }
-
-int opterr = 1;
 int optind = 1;
 int optopt;
 char *optarg;
@@ -67,7 +59,7 @@ int getopt(int argc, char *const argv[], const char *opts) {
   }
   optopt = c = argv[optind][sp];
   if (c == ':' || (cp = strchr(opts, c)) == NULL) {
-    ERR(": illegal option -- ", c);
+    fprintf(stderr, "%s: %s -- %c\n", argv[0], "illegal option", c);
     if (argv[optind][++sp] == '\0') {
       optind++;
       sp = 1;
@@ -78,7 +70,8 @@ int getopt(int argc, char *const argv[], const char *opts) {
     if (argv[optind][sp + 1] != '\0')
       optarg = &argv[optind++][sp + 1];
     else if (++optind >= argc) {
-      ERR(": option requires an argument -- ", c);
+      fprintf(stderr, "%s: %s -- %c\n", argv[0], "option requires an argument",
+              c);
       sp = 1;
       return '?';
     } else
