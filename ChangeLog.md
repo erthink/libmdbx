@@ -9,7 +9,7 @@ TODO:
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
 
-## v0.9.1 2020-09-24 (scheduled, pre-release)
+## v0.9.1 2020-09-30 (scheduled, pre-release)
 
 Added features:
 
@@ -21,6 +21,7 @@ Added features:
  - Support for read transactions preparation (`MDBX_TXN_RDONLY_PREPARE` flag).
  - Support for cursor preparation/preallocation and reusing (`mdbx_cursor_create()` and `mdbx_cursor_bind()` functions).
  - Support for checking database using specified meta-page (see `mdbx_chk -h`).
+ - Support for turn to the specific meta-page after checking (see `mdbx_chk -h`).
  - Support for explicit reader threads (de)registration.
  - The `mdbx_txn_break()` function to explicitly mark a transaction as broken.
  - Improved handling of corrupted databases by `mdbx_chk` utility and `mdbx_walk_tree()` function.
@@ -43,8 +44,9 @@ Fixes:
  - Doxygen descriptions and refinement.
  - Update Valgrind's suppressions.
  - Workaround to avoid infinite loop of 'nested' testcase on MIPS under QEMU.
- - Fixed a lot of typos.
- - Fix MSVC compiler version requirements.
+ - Fix a lot of typos & spelling (Thanks to Josh Soref for PR).
+ - Fix `getopt()` messages for Windows (Thanks to Andrey Sporaw for reporting).
+ - Fix MSVC compiler version requirements (Thanks to Andrey Sporaw for reporting).
  - Workarounds for QEMU's bugs to run tests for cross-builded library under QEMU.
 
 
