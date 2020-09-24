@@ -15926,7 +15926,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
 #ifndef MDBX_WBUF
 #define MDBX_WBUF ((size_t)1024 * 1024)
 #endif
-#define MDBX_EOF 0x10 /* mdbx_env_copyfd1() is done reading */
+#define MDBX_EOF 0x10 /* mdbx_env_copythr() is done reading */
 
 /* State needed for a double-buffering compacting copy. */
 typedef struct mdbx_copy {
@@ -17551,7 +17551,7 @@ int __cold mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
 
 /* Insert pid into list if not already present.
  * return -1 if already present. */
-static int __cold mdbx_pid_insert(uint32_t *ids, uint32_t pid) {
+static bool __cold mdbx_pid_insert(uint32_t *ids, uint32_t pid) {
   /* binary search of pid in list */
   unsigned base = 0;
   unsigned cursor = 1;
@@ -17570,7 +17570,7 @@ static int __cold mdbx_pid_insert(uint32_t *ids, uint32_t pid) {
       n -= pivot + 1;
     } else {
       /* found, so it's a duplicate */
-      return -1;
+      return false;
     }
   }
 
@@ -17581,7 +17581,7 @@ static int __cold mdbx_pid_insert(uint32_t *ids, uint32_t pid) {
   for (n = ids[0]; n > cursor; n--)
     ids[n] = ids[n - 1];
   ids[n] = pid;
-  return 0;
+  return true;
 }
 
 int __cold mdbx_reader_check(MDBX_env *env, int *dead) {
@@ -17627,7 +17627,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_reader_check0(MDBX_env *env, int rdt_locked,
       continue /* skip empty */;
     if (pid == env->me_pid)
       continue /* skip self */;
-    if (mdbx_pid_insert(pids, pid) != 0)
+    if (!mdbx_pid_insert(pids, pid))
       continue /* such pid already processed */;
 
     int err = mdbx_rpid_check(env, pid);

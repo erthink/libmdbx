@@ -703,7 +703,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   }
 
   if (!silent && verbose) {
-    print(" - kind: %s => %s", db_flags2keymode(flags),
+    print(" - key-value kind: %s => %s", db_flags2keymode(flags),
           db_flags2valuemode(flags));
     if (verbose > 1) {
       print(", flags:");

@@ -384,7 +384,7 @@ int main(int argc, char *argv[]) {
       printf("  GC: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = pages - reclaimable;
-      printf("  Detained: %" PRIu64 " %.1f%%\n", value, value / percent);
+      printf("  Retained: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = reclaimable;
       printf("  Reclaimable: %" PRIu64 " %.1f%%\n", value, value / percent);
