@@ -1,6 +1,6 @@
 .\" Copyright 2015-2020 Leonid Yuriev <leo@yuriev.ru>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_CHK 1 "2020-07-31" "MDBX 0.9.x"
+.TH MDBX_CHK 1 "2020-09-25" "MDBX 0.9.1"
 .SH NAME
 mdbx_chk \- MDBX checking tool
 .SH SYNOPSIS
@@ -44,9 +44,6 @@ during B-tree traversal and basic info of each GC record.
 If \fB\-vvvvv\fP is given, turn maximal verbosity, display the full list
 of page IDs in the GC records and size of each key-value pair of database(s).
 .TP
-.BR \-n
-Open MDBX environment(s) which do not use subdirectories.
-.TP
 .BR \-q
 Be quiet; do not output anything even if an error was detected.
 .TP
@@ -74,6 +71,19 @@ comparator(s) was used.
 .TP
 .BR \-s \ subdb
 Verify and show info only for a specific subdatabase.
+.TP
+.BR \-0 | \-1 | \-2
+Using specific meta-page 0, or 2 for checking.
+.TP
+.BR \-t
+Turn to a specified meta-page on successful check.
+.TP
+.BR \-T
+Turn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!
+.TP
+.BR \-n
+Open MDBX environment(s) which do not use subdirectories.
+This is legacy option. For now MDBX handles this automatically.
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur. Errors result in a non-zero exit status
 and a diagnostic message being written to standard error

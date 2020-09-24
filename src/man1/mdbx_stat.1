@@ -2,7 +2,7 @@
 .\" Copyright 2012-2015 Howard Chu, Symas Corp. All Rights Reserved.
 .\" Copyright 2015,2016 Peter-Service R&D LLC <http://billing.ru/>.
 .\" Copying restrictions apply.  See COPYRIGHT/LICENSE.
-.TH MDBX_STAT 1 "2020-07-31" "MDBX 0.9.x"
+.TH MDBX_STAT 1 "2020-09-25" "MDBX 0.9.1"
 .SH NAME
 mdbx_stat \- MDBX environment status tool
 .SH SYNOPSIS
@@ -61,6 +61,7 @@ Display the status of a specific subdatabase.
 .TP
 .BR \-n
 Display the status of an MDBX database which does not use subdirectories.
+This is legacy option. For now MDBX handles this automatically.
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur.
 Errors result in a non-zero exit status and
