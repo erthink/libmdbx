@@ -5,7 +5,7 @@ libmdbx
 
 > Please refer to the online [documentation](https://erthink.github.io/libmdbx/)
 > with [`C` API description](https://erthink.github.io/libmdbx/group__c__api.html)
-> and pay attention to the preliminary [`C++` API](https://github.com/erthink/libmdbx/blob/c%2B%2B/mdbx.h%2B%2B).
+> and pay attention to the preliminary [`C++` API](https://github.com/erthink/libmdbx/blob/devel/mdbx.h%2B%2B).
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
 
 <!-- section-begin overview -->
@@ -234,7 +234,8 @@ be found between a `KEY1` and a `KEY2`. This is a prerequisite for build
 and/or optimize query execution plans.
   > _libmdbx_ performs a rough estimate based on common B-tree pages of the paths from root to corresponding keys.
 
-8. `mdbx_chk` tool for database integrity check.
+8. `mdbx_chk` utility for database integrity check.
+Since version 0.9.1, the utility supports checking the database using any of the three meta pages and the ability to switch to it.
 
 9. Automated steady sync-to-disk upon several thresholds and/or timeout via cheap polling.
 
