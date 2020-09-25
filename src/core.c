@@ -16834,12 +16834,12 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_meta2_txnid = mdbx_meta_txnid_fluid(env, meta2);
     arg->mi_meta2_sign = meta2->mm_datasync_sign;
     if (likely(bytes > size_before_bootid)) {
-      arg->mi_bootid.meta0.l = meta0->mm_bootid.x;
-      arg->mi_bootid.meta1.l = meta0->mm_bootid.x;
-      arg->mi_bootid.meta2.l = meta0->mm_bootid.x;
-      arg->mi_bootid.meta0.h = meta0->mm_bootid.y;
-      arg->mi_bootid.meta1.h = meta0->mm_bootid.y;
-      arg->mi_bootid.meta2.h = meta0->mm_bootid.y;
+      arg->mi_bootid.meta0.x = meta0->mm_bootid.x;
+      arg->mi_bootid.meta1.x = meta0->mm_bootid.x;
+      arg->mi_bootid.meta2.x = meta0->mm_bootid.x;
+      arg->mi_bootid.meta0.y = meta0->mm_bootid.y;
+      arg->mi_bootid.meta1.y = meta0->mm_bootid.y;
+      arg->mi_bootid.meta2.y = meta0->mm_bootid.y;
     }
 
     const MDBX_meta *txn_meta = recent_meta;
@@ -16894,8 +16894,8 @@ int __cold mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_autosync_threshold = pgno2bytes(env, *env->me_autosync_threshold);
     arg->mi_autosync_period_seconds16dot16 =
         mdbx_osal_monotime_to_16dot16(*env->me_autosync_period);
-    arg->mi_bootid.current.l = bootid.x;
-    arg->mi_bootid.current.h = bootid.y;
+    arg->mi_bootid.current.x = bootid.x;
+    arg->mi_bootid.current.y = bootid.y;
     arg->mi_mode = lck ? lck->mti_envmode : env->me_flags;
   }
 

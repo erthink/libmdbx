@@ -967,13 +967,13 @@ static int meta_steady(void) { return meta_recent(true); }
 
 static int meta_head(void) { return meta_recent(false); }
 
-void verbose_meta(int num, txnid_t txnid, uint64_t sign, uint64_t bootid_h,
-                  uint64_t bootid_l) {
+void verbose_meta(int num, txnid_t txnid, uint64_t sign, uint64_t bootid_x,
+                  uint64_t bootid_y) {
   print(" - meta-%d: %s %" PRIu64, num, meta_synctype(sign), txnid);
   bool stay = true;
-  const bool bootid_match = bootid_h == envinfo.mi_bootid.current.h &&
-                            bootid_l == envinfo.mi_bootid.current.l &&
-                            (bootid_h | bootid_l) != 0;
+  const bool bootid_match = bootid_x == envinfo.mi_bootid.current.x &&
+                            bootid_y == envinfo.mi_bootid.current.y &&
+                            (bootid_x | bootid_y) != 0;
 
   const int steady = meta_steady();
   const int head = meta_head();
@@ -1368,11 +1368,11 @@ int main(int argc, char *argv[]) {
           envinfo.mi_recent_txnid - envinfo.mi_latter_reader_txnid);
 
     verbose_meta(0, envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
-                 envinfo.mi_bootid.meta0.h, envinfo.mi_bootid.meta0.l);
+                 envinfo.mi_bootid.meta0.x, envinfo.mi_bootid.meta0.y);
     verbose_meta(1, envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
-                 envinfo.mi_bootid.meta1.h, envinfo.mi_bootid.meta1.l);
+                 envinfo.mi_bootid.meta1.x, envinfo.mi_bootid.meta1.y);
     verbose_meta(2, envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign,
-                 envinfo.mi_bootid.meta2.h, envinfo.mi_bootid.meta2.l);
+                 envinfo.mi_bootid.meta2.x, envinfo.mi_bootid.meta2.y);
   }
 
   if (verbose > 1)

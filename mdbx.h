@@ -1936,7 +1936,7 @@ struct MDBX_envinfo {
    relevant information is available from the system. */
   struct {
     struct {
-      uint64_t l, h;
+      uint64_t x, y;
     } current, meta0, meta1, meta2;
   } mi_bootid;
 
