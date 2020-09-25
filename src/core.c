@@ -9725,13 +9725,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
       mdbx_assert(env, META_IS_STEADY(&meta) && !META_IS_STEADY(head));
-      if (env->me_flags & MDBX_RDONLY) {
-        mdbx_error("rollback needed: (from head %" PRIaTXN
-                   " to steady %" PRIaTXN "), but unable in read-only mode",
-                   head_txnid, steady_txnid);
-        return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
-      }
-
       if (meta_bootid_match(head)) {
         MDBX_meta clone = *head;
         uint64_t filesize = env->me_dbgeo.now;
@@ -9740,10 +9733,15 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
             bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map), nullptr,
             env->me_psize);
         if (err == MDBX_SUCCESS) {
-          mdbx_warning("opening after an unclean shutdown, "
-                       "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
-                       "rollback NOT needed",
-                       bootid.x, bootid.y);
+          mdbx_warning(
+              "opening after an unclean shutdown, but boot-id(%016" PRIx64
+              "-%016" PRIx64
+              ") is MATCH: rollback NOT needed, steady-sync NEEDED%s",
+              bootid.x, bootid.y,
+              (env->me_flags & MDBX_RDONLY) ? ", but unable in read-only mode"
+                                            : "");
+          if (env->me_flags & MDBX_RDONLY)
+            return MDBX_WANNA_RECOVERY /* LY: could not recovery/sync */;
           meta = clone;
           *env->me_unsynced_pages = meta.mm_geo.next;
           break;
@@ -9752,6 +9750,12 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                      "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
                      "but last meta not valid, rollback needed",
                      bootid.x, bootid.y);
+      }
+      if (env->me_flags & MDBX_RDONLY) {
+        mdbx_error("rollback needed: (from head %" PRIaTXN
+                   " to steady %" PRIaTXN "), but unable in read-only mode",
+                   head_txnid, steady_txnid);
+        return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
       }
 
       const MDBX_meta *const meta0 = METAPAGE(env, 0);
