@@ -120,9 +120,9 @@ static void MDBX_PRINTF_ARGS(1, 2) print(const char *msg, ...) {
 
 static void va_log(MDBX_log_level_t level, const char *msg, va_list args) {
   static const char *const prefixes[] = {
-      "!!!fatal: ",       " ! " /* error */,     " ~ " /* warning */,
-      "   " /* notice */, "   //" /* verbose */, "   ///" /* debug */,
-      "   ////" /* trace */
+      "!!!fatal: ",       " ! " /* error */,      " ~ " /* warning */,
+      "   " /* notice */, "   // " /* verbose */, "   //// " /* debug */,
+      "   ////// " /* trace */
   };
 
   FILE *out = stdout;
@@ -703,7 +703,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   }
 
   if (!silent && verbose) {
-    print(" - key-value kind: %s => %s", db_flags2keymode(flags),
+    print(" - key-value kind: %s-key => %s-value", db_flags2keymode(flags),
           db_flags2valuemode(flags));
     if (verbose > 1) {
       print(", flags:");
@@ -893,23 +893,12 @@ static void usage(char *prog) {
   exit(EXIT_INTERRUPTED);
 }
 
-const char *meta_synctype(uint64_t sign) {
-  switch (sign) {
-  case MDBX_DATASIGN_NONE:
-    return "no-sync/legacy";
-  case MDBX_DATASIGN_WEAK:
-    return "weak";
-  default:
-    return "steady";
-  }
-}
-
 static __inline bool meta_ot(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
-                             uint64_t sign_b, const bool roolback2steady) {
+                             uint64_t sign_b, const bool wanna_steady) {
   if (txn_a == txn_b)
     return SIGN_IS_STEADY(sign_b);
 
-  if (roolback2steady && SIGN_IS_STEADY(sign_a) != SIGN_IS_STEADY(sign_b))
+  if (wanna_steady && SIGN_IS_STEADY(sign_a) != SIGN_IS_STEADY(sign_b))
     return SIGN_IS_STEADY(sign_b);
 
   return txn_a < txn_b;
@@ -926,72 +915,73 @@ static __inline bool meta_eq(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
   return true;
 }
 
-static __inline int meta_recent(const bool roolback2steady) {
-
+static __inline int meta_recent(const bool wanna_steady) {
   if (meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
-              envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign, roolback2steady))
+              envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign, wanna_steady))
     return meta_ot(envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign,
-                   envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
-                   roolback2steady)
+                   envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign, wanna_steady)
                ? 1
                : 2;
-
-  return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
-                 envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, roolback2steady)
-             ? 2
-             : 0;
+  else
+    return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
+                   envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, wanna_steady)
+               ? 2
+               : 0;
 }
 
 static __inline int meta_tail(int head) {
-
-  if (head == 0)
+  switch (head) {
+  case 0:
     return meta_ot(envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign,
                    envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, true)
                ? 1
                : 2;
-  if (head == 1)
+  case 1:
     return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
                    envinfo.mi_meta2_txnid, envinfo.mi_meta2_sign, true)
                ? 0
                : 2;
-  if (head == 2)
+  case 2:
     return meta_ot(envinfo.mi_meta0_txnid, envinfo.mi_meta0_sign,
                    envinfo.mi_meta1_txnid, envinfo.mi_meta1_sign, true)
                ? 0
                : 1;
-  assert(false);
-  return -1;
+  default:
+    assert(false);
+    return -1;
+  }
 }
-
-static int meta_steady(void) { return meta_recent(true); }
 
 static int meta_head(void) { return meta_recent(false); }
 
 void verbose_meta(int num, txnid_t txnid, uint64_t sign, uint64_t bootid_x,
                   uint64_t bootid_y) {
-  print(" - meta-%d: %s %" PRIu64, num, meta_synctype(sign), txnid);
-  bool stay = true;
+  const bool have_bootid = (bootid_x | bootid_y) != 0;
   const bool bootid_match = bootid_x == envinfo.mi_bootid.current.x &&
-                            bootid_y == envinfo.mi_bootid.current.y &&
-                            (bootid_x | bootid_y) != 0;
+                            bootid_y == envinfo.mi_bootid.current.y;
 
-  const int steady = meta_steady();
+  print(" - meta-%d: ", num);
+  switch (sign) {
+  case MDBX_DATASIGN_NONE:
+    print("no-sync/legacy");
+    break;
+  case MDBX_DATASIGN_WEAK:
+    print("weak-%s", bootid_match ? (have_bootid ? "intact (same boot-id)"
+                                                 : "unknown (no boot-id")
+                                  : "dead");
+    break;
+  default:
+    print("steady");
+    break;
+  }
+  print(" txn#%" PRIu64, txnid);
+
   const int head = meta_head();
-  if (num == steady && num == head) {
+  if (num == head)
     print(", head");
-    stay = false;
-  } else if (num == steady) {
-    print(", head-steady");
-    stay = false;
-  } else if (num == head) {
-    print(", head-weak%s", bootid_match ? "-intact (same boot-id)" : "");
-    stay = false;
-  }
-  if (num == meta_tail(head)) {
+  else if (num == meta_tail(head))
     print(", tail");
-    stay = false;
-  }
-  if (stay)
+  else
     print(", stay");
 
   if (stuck_meta >= 0) {
@@ -1242,6 +1232,14 @@ int main(int argc, char *argv[]) {
   if (rc) {
     error("mdbx_env_info failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
+  }
+  if (verbose) {
+    print(" - current boot-id ");
+    if (envinfo.mi_bootid.current.x | envinfo.mi_bootid.current.y)
+      print("%016" PRIx64 "-%016" PRIx64 "\n", envinfo.mi_bootid.current.x,
+            envinfo.mi_bootid.current.y);
+    else
+      print("unavailable\n");
   }
 
   rc = mdbx_env_stat_ex(env, txn, &envstat, sizeof(envstat));
