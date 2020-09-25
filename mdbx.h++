@@ -178,34 +178,6 @@ using build_info = ::MDBX_build_info;
 /// \brief Resutrns libmdbx build information.
 MDBX_CXX11_CONSTEXPR const build_info &get_build() noexcept;
 
-/// \brief Returns field offset in the container class.
-template <class CONTAINER, class MEMBER>
-static MDBX_CXX11_CONSTEXPR ptrdiff_t
-offset_of(const MEMBER CONTAINER::*const member) {
-  return static_cast<const char *>(static_cast<const void *>(
-             &(static_cast<const CONTAINER *>(nullptr)->*member))) -
-         static_cast<const char *>(nullptr);
-}
-
-/// \brief Returns const pointer to container class instance
-/// by const pointer to the member field.
-template <class CONTAINER, class MEMBER>
-static MDBX_CXX11_CONSTEXPR const CONTAINER *
-owner_of(const MEMBER *ptr, const MEMBER CONTAINER::*member) {
-  return static_cast<const CONTAINER *>(static_cast<const void *>(
-      static_cast<const char *>(static_cast<const void *>(ptr)) -
-      offset_of(member)));
-}
-
-/// \brief Returns non-const pointer to container class instance
-/// by non-const pointer to the member field.
-template <class CONTAINER, class MEMBER>
-static MDBX_CXX11_CONSTEXPR CONTAINER *
-owner_of(MEMBER *ptr, const MEMBER CONTAINER::*member) {
-  return static_cast<CONTAINER *>(static_cast<void *>(
-      static_cast<char *>(static_cast<void *>(ptr)) - offset_of(member)));
-}
-
 /// \brief constexpr-compatible strlen().
 static MDBX_CXX17_CONSTEXPR size_t strlen(const char *c_str) noexcept;
 
