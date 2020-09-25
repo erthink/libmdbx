@@ -854,11 +854,17 @@ template <class ALLOCATOR = legacy_allocator> class buffer {
   }
 
   struct data_preserver : public exception_thunk {
+    buffer data;
+    data_preserver(ALLOCATOR &allocator) : data(allocator) {}
     static int callback(void *context, MDBX_val *target, const void *src,
                         size_t bytes) noexcept;
     MDBX_CXX11_CONSTEXPR operator MDBX_preserve_func() const noexcept {
       return callback;
     }
+    MDBX_CXX11_CONSTEXPR operator const buffer &() const noexcept {
+      return data;
+    }
+    MDBX_CXX11_CONSTEXPR operator buffer &() noexcept { return data; }
   };
 
 public:
@@ -3964,12 +3970,11 @@ inline void txn::replace(map_handle map, const slice &key, slice old_value,
 template <class ALLOCATOR>
 inline buffer<ALLOCATOR> txn::extract(map_handle map, const slice &key,
                                       const ALLOCATOR &allocator) {
-  buffer<ALLOCATOR> result(allocator);
-  typename buffer<ALLOCATOR>::data_preserver thunk;
+  typename buffer<ALLOCATOR>::data_preserver result(allocator);
   error::success_or_throw(::mdbx_replace_ex(handle_, map.dbi, &key, nullptr,
-                                            &result.slice_, MDBX_CURRENT, thunk,
-                                            &thunk),
-                          thunk);
+                                            &result.slice_, MDBX_CURRENT,
+                                            result, &result),
+                          result);
   return result;
 }
 
@@ -3977,12 +3982,11 @@ template <class ALLOCATOR>
 inline buffer<ALLOCATOR> txn::replace(map_handle map, const slice &key,
                                       const slice &new_value,
                                       const ALLOCATOR &allocator) {
-  buffer<ALLOCATOR> result(allocator);
-  typename buffer<ALLOCATOR>::data_preserver thunk;
+  typename buffer<ALLOCATOR>::data_preserver result(allocator);
   error::success_or_throw(
       ::mdbx_replace_ex(handle_, map.dbi, &key, const_cast<slice *>(&new_value),
-                        &result.slice_, MDBX_CURRENT, thunk, &thunk),
-      thunk);
+                        &result.slice_, MDBX_CURRENT, result, &result),
+      result);
   return result;
 }
 
@@ -3990,12 +3994,11 @@ template <class ALLOCATOR>
 inline buffer<ALLOCATOR> txn::replace_reserve(map_handle map, const slice &key,
                                               slice &new_value,
                                               const ALLOCATOR &allocator) {
-  buffer<ALLOCATOR> result(allocator);
-  typename buffer<ALLOCATOR>::data_preserver thunk;
+  typename buffer<ALLOCATOR>::data_preserver result(allocator);
   error::success_or_throw(
       ::mdbx_replace_ex(handle_, map.dbi, &key, &new_value, &result.slice_,
-                        MDBX_CURRENT | MDBX_RESERVE, thunk, &thunk),
-      thunk);
+                        MDBX_CURRENT | MDBX_RESERVE, result, &result),
+      result);
   return result;
 }
 
@@ -4549,11 +4552,12 @@ inline int buffer<ALLOCATOR>::data_preserver::callback(void *context,
                                                        MDBX_val *target,
                                                        const void *src,
                                                        size_t bytes) noexcept {
-  const auto self = static_cast<data_preserver *>(context);
+  auto self = static_cast<data_preserver *>(context);
   assert(self->is_clean());
+  assert(&self->data.slice_ == target);
+  (void)target;
   try {
-    owner_of(static_cast<::mdbx::slice *>(target), &buffer::slice_)
-        ->assign(src, bytes, false);
+    self->data.assign(src, bytes, false);
     return MDBX_RESULT_FALSE;
   } catch (... /* capture any exception to rethrow it over C code */) {
     self->capture();
