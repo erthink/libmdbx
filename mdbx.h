@@ -93,11 +93,11 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  \defgroup c_opening Opening & Closing
  \defgroup c_transactions Transactions
  \defgroup c_dbi Databases
- \defgroup c_crud Create/Read/Update/Delete (see Roadmap in details)
+ \defgroup c_crud Create/Read/Update/Delete (see Quick Reference in details)
 
  \details
  \anchor c_crud_hints
-# Quick reference for Insert/Update/Delete operations
+# Quick Reference for Insert/Update/Delete operations
 
 Historically, libmdbx inherits the API basis from LMDB, where it is often
 difficult to select flags/options and functions for the desired operation.
@@ -154,7 +154,7 @@ as a duplicates or as like a multiple values corresponds to keys.
 | _DELETING_|||
 |Key is absent → Error since no such key      |\ref mdbx_del() or \ref mdbx_replace()|Error \ref MDBX_NOTFOUND|
 |Key exist → Delete all values corresponds given key|\ref mdbx_del() with the parameter `data = NULL`|Deletion|
-|Key exist → Delete particular value corresponds given key|\ref mdbx_del() with the parameter `data` filled with the value that wanna to delete, or \ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the `old_value` parameter filled with the value that wanna to delete and `new_data = NULL`| Deletion or \ref MDBX_NOTFOUND if no such ker-value pair|
+|Key exist → Delete particular value corresponds given key|\ref mdbx_del() with the parameter `data` filled with the value that wanna to delete, or \ref mdbx_replace() with \ref MDBX_CURRENT + \ref MDBX_NOOVERWRITE and the `old_value` parameter filled with the value that wanna to delete and `new_data = NULL`| Deletion or \ref MDBX_NOTFOUND if no such key-value pair|
 |Delete one value at the current cursor position|\ref mdbx_cursor_del() with \ref MDBX_CURRENT flag|Deletion only the current entry|
 |Delete all values of key at the current cursor position|\ref mdbx_cursor_del() with with \ref MDBX_ALLDUPS flag|Deletion all duplicates of key (all multi-values) at the current cursor position|
 
@@ -1603,7 +1603,7 @@ enum MDBX_error_t {
   MDBX_TXN_OVERLAPPING = -30415,
 
   /* The last of MDBX-added error codes */
-  MDBX_LAST_ADDED_ERRCODEE = MDBX_TXN_OVERLAPPING,
+  MDBX_LAST_ADDED_ERRCODE = MDBX_TXN_OVERLAPPING,
 
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_ENODATA = ERROR_HANDLE_EOF,

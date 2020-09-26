@@ -14981,9 +14981,9 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
             continue;
           }
           if (unlikely(number_of_ovpages(env, dsize) != lp->mp_pages))
-            rc = bad_page(
-                mp, "big-node size (%zu) mismatch overflow npagse size (%u)\n",
-                dsize, lp->mp_pages);
+            rc =
+                bad_page(mp, "big-node size (%zu) mismatch n-pages size (%u)\n",
+                         dsize, lp->mp_pages);
         }
         continue;
       }

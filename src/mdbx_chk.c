@@ -1050,7 +1050,7 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  for (int i; (i = getopt(argc, argv, "Vvqnwc012tTdis:")) != EOF;) {
+  for (int i; (i = getopt(argc, argv, "012TVvqnwctdis:")) != EOF;) {
     switch (i) {
     case 'V':
       printf("mdbx_chk version %d.%d.%d.%d\n"

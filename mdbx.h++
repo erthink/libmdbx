@@ -148,7 +148,7 @@
                                    base for dll-interface 'mdbx::BAR' */
 /* MSVC is mad and can generate this warning for its own intermediate
  * automatically generated code, which becomes unreachable after some kinds of
- * optimization (copy ellision, etc). */
+ * optimization (copy elision, etc). */
 #pragma warning(disable : 4702) /* unreachable code */
 #endif                          /* _MSC_VER (warnings) */
 
@@ -175,7 +175,7 @@ using version_info = ::MDBX_version_info;
 MDBX_CXX11_CONSTEXPR const version_info &get_version() noexcept;
 /// \copydoc MDBX_build_info
 using build_info = ::MDBX_build_info;
-/// \brief Resutrns libmdbx build information.
+/// \brief Returns libmdbx build information.
 MDBX_CXX11_CONSTEXPR const build_info &get_build() noexcept;
 
 /// \brief constexpr-compatible strlen().
@@ -351,7 +351,7 @@ MDBX_DECLARE_EXCEPTION(max_readers_reached);
 MDBX_DECLARE_EXCEPTION(multivalue);
 MDBX_DECLARE_EXCEPTION(no_data);
 MDBX_DECLARE_EXCEPTION(not_found);
-MDBX_DECLARE_EXCEPTION(operation_not_permited);
+MDBX_DECLARE_EXCEPTION(operation_not_permitted);
 MDBX_DECLARE_EXCEPTION(permission_denied_or_not_writeable);
 MDBX_DECLARE_EXCEPTION(reader_slot_busy);
 MDBX_DECLARE_EXCEPTION(remote_media);
@@ -796,8 +796,8 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   }
 
 protected:
-  MDBX_CXX11_CONSTEXPR slice(size_t invalid_lenght) noexcept
-      : ::MDBX_val({nullptr, invalid_lenght}) {}
+  MDBX_CXX11_CONSTEXPR slice(size_t invalid_length) noexcept
+      : ::MDBX_val({nullptr, invalid_length}) {}
 };
 
 //------------------------------------------------------------------------------
@@ -841,7 +841,7 @@ template <class ALLOCATOR = legacy_allocator> class buffer {
 
 public:
   /// \todo buffer& operator<<(buffer&, ...) for writing
-  /// \todo buffer& operator>>(buffer&, ...) for reading (deletages to slice)
+  /// \todo buffer& operator>>(buffer&, ...) for reading (delegated to slice)
   /// \todo template<class X> key(X) for encoding keys while writing
 
   using allocator_type = ALLOCATOR;
@@ -877,14 +877,14 @@ public:
   }
 
   /// \brief Returns the number of bytes that available in currently allocated
-  /// storage ahead of the currently beginning of data.
+  /// storage ahead the currently beginning of data.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR size_t
   headroom() const noexcept {
     return is_freestanding() ? slice_.byte_ptr() - silo_begin() : 0;
   }
 
   /// \brief Returns the number of bytes that available in currently allocated
-  /// storage afther of the currently data end.
+  /// storage after the currently data end.
   MDBX_NOTHROW_PURE_FUNCTION MDBX_CXX20_CONSTEXPR size_t
   tailroom() const noexcept {
     return is_freestanding() ? capacity() - headroom() - slice_.length() : 0;
@@ -1693,7 +1693,7 @@ public:
     enum : int64_t {
       default_value = -1,         ///< Means "keep current or use default"
       minimal_value = 0,          ///< Means "minimal acceptable"
-      maximal_value = INTPTR_MAX, ///< Means "miximal acceptable"
+      maximal_value = INTPTR_MAX, ///< Means "maximal acceptable"
       kB = 1000,                  ///< \f$10^{3}\f$ bytes
       MB = kB * 1000,             ///< \f$10^{6}\f$ bytes
       GB = MB * 1000,             ///< \f$10^{9}\f$ bytes
@@ -1982,7 +1982,7 @@ public:
   ///
   inline env &set_sync_threshold(size_t bytes);
 
-  /// \brief Sets relative period since the last unsteay commit to force flush
+  /// \brief Sets relative period since the last unsteady commit to force flush
   /// the data buffers to disk, for non-sync durability modes.
   ///
   /// The relative period value affects all processes which operates with given
@@ -2000,10 +2000,10 @@ public:
   /// than mean no any timeout checked, and no additional flush will be made.
   ///
   /// \param [in] seconds_16dot16  The period in 1/65536 of second when a
-  /// synchronous flush would be made since the last unsteay commit.
+  /// synchronous flush would be made since the last unsteady commit.
   inline env &set_sync_period(unsigned seconds_16dot16);
 
-  /// \brief Sets relative period since the last unsteay commit to force flush
+  /// \brief Sets relative period since the last unsteady commit to force flush
   /// the data buffers to disk, for non-sync durability modes.
   ///
   /// The relative period value affects all processes which operates with given
@@ -2021,7 +2021,7 @@ public:
   /// than mean no any timeout checked, and no additional flush will be made.
   ///
   /// \param [in] seconds  The period in second when a synchronous flush would
-  /// be made since the last unsteay commit.
+  /// be made since the last unsteady commit.
   inline env &set_sync_period(double seconds);
 
   /// \brief Alter environment flags.
@@ -2066,7 +2066,7 @@ public:
     mdbx_pid_t pid;           ///< The reader process ID.
     mdbx_tid_t thread;        ///< The reader thread ID.
     uint64_t transaction_id;  ///< The ID of the transaction being read,
-                              ///< i.e. the MVCC-snaphot number.
+                              ///< i.e. the MVCC-snapshot number.
     uint64_t transaction_lag; ///< The lag from a recent MVCC-snapshot,
                               ///< i.e. the number of committed write
                               /// transactions since the current read
@@ -2096,7 +2096,7 @@ public:
   /// \returns The last value returned from visitor' functor.
   template <typename VISITOR> inline int enumerate_readers(VISITOR &visitor);
 
-  /// \brief Checks for stale readers in the lock tablea and
+  /// \brief Checks for stale readers in the lock table and
   /// return number of cleared slots.
   inline unsigned check_readers();
 
@@ -2104,7 +2104,7 @@ public:
   ///
   /// Such callback will be triggered in a case where there is not enough free
   /// space in the database due to long read transaction(s) which impedes
-  /// reusing the pages of an old MVCC shapshot(s).
+  /// reusing the pages of an old MVCC snapshot(s).
   ///
   /// Using this callback you can choose how to get out of the situation:
   ///  - abort the record transaction with an error;
@@ -2771,7 +2771,7 @@ MDBX_CXX11_CONSTEXPR bool error::is_mdbx_error() const noexcept {
   return (code() >= MDBX_FIRST_LMDB_ERRCODE &&
           code() <= MDBX_LAST_LMDB_ERRCODE) ||
          (code() >= MDBX_FIRST_ADDED_ERRCODE &&
-          code() <= MDBX_LAST_ADDED_ERRCODEE);
+          code() <= MDBX_LAST_ADDED_ERRCODE);
 }
 
 inline void error::throw_exception(int error_code) {
@@ -3488,7 +3488,7 @@ inline int env::enumerate_readers(VISITOR &visitor) {
   };
   reader_visitor_thunk thunk(visitor);
   const auto rc = ::mdbx_reader_list(*this, thunk.cb, &thunk);
-  thunk.rethow_catched();
+  thunk.rethrow_captured();
   return rc;
 }
 

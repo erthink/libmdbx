@@ -19,7 +19,7 @@ Added features:
  - Explicit `MDBX_SYNC_DURABLE` to sync modes for API clarity.
  - Explicit `MDBX_ALLDUPS` and `MDBX_UPSERT` for API clarity.
  - Support for read transactions preparation (`MDBX_TXN_RDONLY_PREPARE` flag).
- - Support for cursor preparation/preallocation and reusing (`mdbx_cursor_create()` and `mdbx_cursor_bind()` functions).
+ - Support for cursor preparation/(pre)allocation and reusing (`mdbx_cursor_create()` and `mdbx_cursor_bind()` functions).
  - Support for checking database using specified meta-page (see `mdbx_chk -h`).
  - Support for turn to the specific meta-page after checking (see `mdbx_chk -h`).
  - Support for explicit reader threads (de)registration.
@@ -37,7 +37,7 @@ Deprecated functions and flags:
 Fixes:
 
  - Fix `mdbx_strerror()` for `MDBX_BUSY` error (no error description is returned).
- - Fix update internal meta-geo information in read-only mode (`EACCESS` or `EBADF` error).
+ - Fix update internal meta-geo information in read-only mode (`EACCESS` or `EBADFD` error).
  - Fix `mdbx_page_get()` null-defer when DB corrupted (crash by `SIGSEGV`).
  - Fix `mdbx_env_open()` for re-opening after non-fatal errors (`mdbx_chk` unexpected failures).
  - Workaround for MSVC 19.27 `static_assert()` bug.

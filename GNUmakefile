@@ -33,7 +33,7 @@ MDBX_OPTIONS ?= -DNDEBUG=1
 CFLAGS  ?= -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes $(CFLAGS_EXTRA)
 # -Wno-tautological-compare
 CXX     ?= g++
-# choicing C++ standard with deferred simple variable expansion trick
+# Choosing C++ standard with deferred simple variable expansion trick
 CXXSTD  ?= $(eval CXXSTD := $$(shell PROBE=$$$$([ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++); for std in gnu++20 c++20 gnu++2a c++2a gnu++17 c++17 gnu++14 c++14 gnu+11 c++11; do $(CXX) -std=$$$${std} -c $$$${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "-std=$$$${std}" && exit; done))$(CXXSTD)
 CXXFLAGS = $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 

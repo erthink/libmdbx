@@ -159,7 +159,7 @@ class bug : public std::runtime_error {
 public:
   bug(const trouble_location &) noexcept;
   /* temporary workaround for "private field 'FOO' is not used" from CLANG
-   * and for "function 'BAR' was declared but never referenced" fomr LCC. */
+   * and for "function 'BAR' was declared but never referenced" from LCC. */
 #ifndef __LCC__
   const trouble_location &location() const noexcept { return location_; }
 #endif
@@ -311,7 +311,7 @@ DEFINE_EXCEPTION(max_readers_reached)
 DEFINE_EXCEPTION(multivalue)
 DEFINE_EXCEPTION(no_data)
 DEFINE_EXCEPTION(not_found)
-DEFINE_EXCEPTION(operation_not_permited)
+DEFINE_EXCEPTION(operation_not_permitted)
 DEFINE_EXCEPTION(permission_denied_or_not_writeable)
 DEFINE_EXCEPTION(reader_slot_busy)
 DEFINE_EXCEPTION(remote_media)
@@ -397,7 +397,7 @@ __cold void error::throw_exception() const {
     CASE_EXCEPTION(multivalue, MDBX_EMULTIVAL);
     CASE_EXCEPTION(no_data, MDBX_ENODATA);
     CASE_EXCEPTION(not_found, MDBX_NOTFOUND);
-    CASE_EXCEPTION(operation_not_permited, MDBX_EPERM);
+    CASE_EXCEPTION(operation_not_permitted, MDBX_EPERM);
     CASE_EXCEPTION(permission_denied_or_not_writeable, MDBX_EACCESS);
     CASE_EXCEPTION(reader_slot_busy, MDBX_BAD_RSLOT);
     CASE_EXCEPTION(remote_media, MDBX_EREMOTE);

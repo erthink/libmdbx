@@ -19,6 +19,7 @@ alevel
 alexey
 alignas
 alldbs
+ALLDUPS
 ALLEXTERNALS
 ALLINPUT
 allleaf
@@ -28,6 +29,7 @@ ALLOCLEN
 allones
 ALLPOSTMESSAGE
 allthrough
+alphabase
 AMAX
 amd
 amsmath
@@ -55,6 +57,7 @@ asm
 asprintf
 aspx
 assection
+atal
 atexit
 atfork
 attr
@@ -68,6 +71,7 @@ autosync
 avalue
 AVPHYS
 badend
+badpage
 bak
 bareos
 barrierattr
@@ -134,6 +138,7 @@ cattr
 cbegin
 cch
 CCompiler
+cctype
 cdefs
 cdnjs
 cdst
@@ -177,7 +182,10 @@ condpair
 config
 constexpr
 copyable
+copydetails
+copydoc
 copyfd
+copyfilerange
 copythr
 coredump
 coreos
@@ -201,6 +209,7 @@ cstdarg
 cstddef
 cstdint
 cstr
+cstring
 ctags
 ctest
 cthr
@@ -210,6 +219,7 @@ ctx
 ctype
 ctz
 ctzl
+currentkey
 cwalk
 cx
 cxa
@@ -269,6 +279,7 @@ Desh
 dest
 DESTDIR
 devtoolset
+df
 dgst
 DHTML
 diafile
@@ -351,6 +362,7 @@ EFAULT
 EHa
 EHc
 EHsc
+Ei
 EIDRM
 EINTR
 EINVAL
@@ -420,6 +432,7 @@ Evensen's
 ewcommand
 EWOULDBLOCK
 Exa
+exactkey
 exactp
 exe
 exename
@@ -452,10 +465,12 @@ FILELIST
 fileno
 FILEPATH
 filesize
+filesync
 filesystem
 filetime
 fillfactor
 Firefox
+firstvalue
 fixedpoint
 FIXME
 flagbit
@@ -584,6 +599,7 @@ HOSTUUID
 hpp
 hppa
 hpux
+hrows
 htags
 htm
 html
@@ -603,6 +619,7 @@ idx
 ieeetr
 ield
 ietf
+iex
 IFBLK
 IFCHR
 ifdef
@@ -668,6 +685,7 @@ isode
 isprint
 ISREG
 ISSET
+isspace
 issuecomment
 istty
 isxdigit
@@ -701,6 +719,7 @@ KEYEXIST
 keygen
 keygencase
 keylen
+keymode
 keyptr
 keysize
 keyspace
@@ -719,6 +738,7 @@ kval
 largedata
 largepage
 lastest
+lastvalue
 lastword
 Launay
 lcc
@@ -775,6 +795,8 @@ locktable
 LOGFILE
 loglevel
 LONGLONG
+lowerbound
+lowerboundvalue
 LPCSTR
 LPDWORD
 LPFILETIME
@@ -839,6 +861,7 @@ MAYMOVE
 mbarrier
 mbstowcs
 mcount
+mcst
 mday
 MDB
 mdbenv
@@ -919,6 +942,7 @@ MRX
 msc
 mscfile
 msdn
+msgpack
 msize
 mst
 msvc
@@ -931,6 +955,7 @@ multiarch
 MULTILINE
 multimap
 MULTIOPEN
+multivalue
 munmap
 Mup
 musl
@@ -967,8 +992,11 @@ newindx
 newkey
 newpgno
 nexenta
+nextkey
+nextvalue
 nf
 nflags
+nkey
 nkeys
 nlink
 nn
@@ -1003,11 +1031,13 @@ NOOVERWRITE
 nops
 NOQEMU
 nordahead
+NOREPLACE
 noreturn
 nospill
 nosubdir
 nosync
 NOTFOUND
+notfound
 nothrow
 notls
 notracking
@@ -1080,6 +1110,8 @@ osal
 osf
 oskari
 OSs
+ostream
+ostringstream
 osubgrouping
 osx
 ote
@@ -1110,6 +1142,7 @@ pb
 pbuf
 PBYTE
 pcb
+pchar
 pcount
 pcrf
 PDB
@@ -1150,6 +1183,7 @@ pmax
 pmccntr
 pmcntenset
 pmedvedev
+pmr
 pmuseren
 pmwkaa
 pn
@@ -1174,6 +1208,8 @@ PREREQ
 prerequirements
 PRESORTED
 prevk
+prevkey
+prevvalue
 PRIa
 PRId
 PRIi
@@ -1193,6 +1229,7 @@ projectnumber
 propget
 propput
 PROT
+prot
 PSECTION
 pshared
 psrc
@@ -1232,6 +1269,7 @@ quicksort
 Quinteiro
 qwest
 radvisory
+RAII
 ramdev
 ramdisk
 ramfs
@@ -1244,6 +1282,7 @@ rdata
 rdhwr
 RDLCK
 rdonly
+rdp
 rdpmccntr
 rdrinfo
 rdt
@@ -1259,6 +1298,7 @@ readlink
 README
 readonly
 READWRITE
+readwrite
 realloc
 REALMEM
 REALPATH
@@ -1321,6 +1361,7 @@ ru
 rusage
 rw
 samedata
+samelength
 SAMSUNG
 savailable
 scalability
@@ -1389,6 +1430,7 @@ SNAPTHREAD
 SNC
 snprintf
 Solaris
+Soref
 sosuffix
 sourceforge
 sourcery
@@ -1398,7 +1440,9 @@ spaceleft
 spage
 spanpgno
 sparc
+SPDX
 spinics
+Sporaw
 sprintf
 sqlite
 src
@@ -1414,6 +1458,7 @@ SSDs
 sshfs
 ssize
 Sstimate
+sstream
 Ssymbols
 standalone
 startuml
@@ -1428,6 +1473,7 @@ stdatomic
 stdc
 stddef
 stderr
+stdexcept
 STDGNU
 stdin
 stdint
@@ -1487,6 +1533,7 @@ swait
 symas
 SYMLINKS
 syncbytes
+syncfilerange
 syncmode
 syncperiod
 synctype
@@ -1504,6 +1551,7 @@ sz
 tablename
 tagfile
 tagname
+tailroom
 tarantool
 tarball
 tasklist
@@ -1557,6 +1605,7 @@ tsd
 tsize
 ttf
 ttl
+TVvqnwctdis
 tw
 twistylittlepassagesallalike
 txkey
@@ -1606,6 +1655,8 @@ unregister
 unspill
 unsync
 UNTRACK
+upsert
+UPSERTING
 upsertion
 url
 usec
@@ -1634,6 +1685,7 @@ validator
 valnum
 valsize
 valstr
+valuemode
 vasprintf
 vedisdb
 VERINFO
@@ -1657,7 +1709,6 @@ vscprintf
 vsnprintf
 vvn
 vvnw
-Vvqnwcdis
 vvv
 vvvv
 vvvvv
@@ -1674,6 +1725,7 @@ WCOREDUMP
 wcsnicmp
 wdm
 webassembly
+webclient
 WERROR
 WEXITSTATUS
 WEXTRA
@@ -1712,6 +1764,8 @@ WRLCK
 WRONLY
 wsize
 WSL
+wstr
+wstring
 WUNTRACED
 www
 WX
