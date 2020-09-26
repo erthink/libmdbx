@@ -367,6 +367,7 @@ EIDRM
 EINTR
 EINVAL
 EIO
+EISDIR
 ejdb
 EKEYMISMATCH
 elbrus
@@ -1315,6 +1316,7 @@ rej
 relpath
 relro
 RELWITHDEBINFO
+removedirectory
 removefile
 Rescure
 resizable
@@ -1333,6 +1335,7 @@ riverbankcomputing
 rkey
 rlock
 rlt
+rmdir
 RMID
 rocksdb
 rolledback

@@ -456,4 +456,8 @@ int osal_removefile(const std::string &pathname) {
   return DeleteFileA(pathname.c_str()) ? MDBX_SUCCESS : GetLastError();
 }
 
+int osal_removedirectory(const std::string &pathname) {
+  return RemoveDirectoryA(pathname.c_str()) ? MDBX_SUCCESS : GetLastError();
+}
+
 #endif /* Windows */

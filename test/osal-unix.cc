@@ -535,4 +535,8 @@ int osal_removefile(const std::string &pathname) {
   return unlink(pathname.c_str()) ? errno : MDBX_SUCCESS;
 }
 
+int osal_removedirectory(const std::string &pathname) {
+  return rmdir(pathname.c_str()) ? errno : MDBX_SUCCESS;
+}
+
 #endif /* !Windows */
