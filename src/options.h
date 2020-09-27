@@ -165,7 +165,7 @@
 /** Advanced: Using sendfile() syscall (autodetection by default). */
 #ifndef MDBX_USE_SENDFILE
 #if ((defined(__linux__) || defined(__gnu_linux__)) &&                         \
-     __GLIBC_PREREQ(2, 3)) ||                                                  \
+     !defined(__ANDROID_API__)) ||                                             \
     (defined(__ANDROID_API__) && __ANDROID_API__ >= 21)
 #define MDBX_USE_SENDFILE 1
 #else
@@ -184,8 +184,8 @@
 
 /** Advanced: Using sync_file_range() syscall (autodetection by default). */
 #ifndef MDBX_USE_SYNCFILERANGE
-#if ((defined(__linux__) || defined(__gnu_linux__)) && __GLIBC_PREREQ(2, 6) && \
-     defined(_GNU_SOURCE)) ||                                                  \
+#if ((defined(__linux__) || defined(__gnu_linux__)) &&                         \
+     defined(SYNC_FILE_RANGE_WRITE) && !defined(__ANDROID_API__)) ||           \
     (defined(__ANDROID_API__) && __ANDROID_API__ >= 26)
 #define MDBX_USE_SYNCFILERANGE 1
 #else

@@ -134,7 +134,18 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 
 /*----------------------------------------------------------------------------*/
 
-#if _POSIX_C_SOURCE > 200212 &&                                                \
+#if defined(__UCLIBC__)
+__extern_C void __assert(const char *, const char *, unsigned int, const char *)
+#ifdef __THROW
+    __THROW
+#else
+    __nothrow
+#endif /* __THROW */
+    __noreturn;
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert(assertion, file, line, function)
+
+#elif _POSIX_C_SOURCE > 200212 &&                                              \
     /* workaround for avoid musl libc wrong prototype */ (                     \
         defined(__GLIBC__) || defined(__GNU_LIBRARY__))
 /* Prototype should match libc runtime. ISO POSIX (2003) & LSB 1.x-3.x */
