@@ -88,10 +88,11 @@ if(DEFINED PROJECT_NAME)
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT DEFINED BUILD_TESTING)
     set(BUILD_TESTING OFF)
   endif()
+  enable_language(C)
 else()
   set(SUBPROJECT OFF)
   set(NOT_SUBPROJECT ON)
-  project(libmdbx C CXX)
+  project(libmdbx C)
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT DEFINED BUILD_TESTING)
     set(BUILD_TESTING ON)
   endif()
@@ -100,6 +101,20 @@ endif()
 if(MDBX_AMALGAMATED_SOURCE AND DEFINED MDBX_ENABLE_TESTS AND MDBX_ENABLE_TESTS)
   message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But amalgamated source code don't includes tests.")
   set(MDBX_ENABLE_TESTS OFF)
+endif()
+
+# Try to find a C++ compiler unless sure that this is unnecessary.
+if (NOT CMAKE_CXX_COMPILER)
+  include(CheckLanguage)
+  if(NOT DEFINED MDBX_BUILD_CXX OR MDBX_BUILD_CXX
+      OR (NOT MDBX_AMALGAMATED_SOURCE AND (NOT DEFINED MDBX_ENABLE_TESTS OR MDBX_ENABLE_TESTS)))
+    check_language(CXX)
+    if(CMAKE_CXX_COMPILER)
+      enable_language(CXX)
+    endif()
+  endif()
+else()
+  enable_language(CXX)
 endif()
 
 if(NOT CMAKE_BUILD_TYPE)
@@ -441,7 +456,7 @@ else()
   unset(MDBX_LINK_TOOLS_NONSTATIC CACHE)
 endif()
 
-if(MDBX_CXX_STANDARD GREATER_EQUAL 11 AND MDBX_CXX_STANDARD LESS 83)
+if(CMAKE_CXX_COMPILER AND MDBX_CXX_STANDARD GREATER_EQUAL 11 AND MDBX_CXX_STANDARD LESS 83)
   if(NOT MDBX_AMALGAMATED_SOURCE)
     option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
   endif()
@@ -460,6 +475,10 @@ endif()
 
 ################################################################################
 ################################################################################
+
+if(MDBX_BUILD_CXX AND NOT CMAKE_CXX_COMPILER)
+  message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ compiler is required to build the C++API.")
+endif()
 
 # Get version
 fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" FALSE)
@@ -799,6 +818,9 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config.h")
 ################################################################################
 
 if(NOT MDBX_AMALGAMATED_SOURCE AND MDBX_ENABLE_TESTS)
+  if(NOT CMAKE_CXX_COMPILER)
+    message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ compiler is required to build the tests.")
+  endif()
   add_subdirectory(test)
 endif()
 

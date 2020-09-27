@@ -1,3 +1,6 @@
+enable_language(CXX)
+include(../cmake/compiler.cmake)
+
 add_executable(mdbx_test
   base.h
   cases.cc
