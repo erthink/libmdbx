@@ -396,6 +396,7 @@ set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
 add_mdbx_option(MDBX_INSTALL_STATIC "Build and install libmdbx for static linking" OFF)
 add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
 add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)" ${MDBX_BUILD_TOOLS_DEFAULT})
+CMAKE_DEPENDENT_OPTION(MDBX_INSTALL_MANPAGES "Install man-pages for MDBX tools (mdbx_chk/stat/dump/load/copy)" ON MDBX_BUILD_TOOLS OFF)
 add_mdbx_option(MDBX_TXN_CHECKOWNER "Checking transaction matches the calling thread inside libmdbx's API" ON)
 add_mdbx_option(MDBX_ENV_CHECKPID "Paranoid checking PID inside libmdbx's API" AUTO)
 add_mdbx_option(MDBX_HUGE_TRANSACTIONS "Support for huge write-transactions" OFF)
@@ -627,19 +628,24 @@ endif()
 ################################################################################
 
 # mdbx-shared-lib installation
+if(NOT DEFINED MDBX_DLL_INSTALL_DESTINATION)
+  if(WIN32)
+    set(MDBX_DLL_INSTALL_DESTINATION bin)
+  else()
+    set(MDBX_DLL_INSTALL_DESTINATION lib)
+  endif()
+endif()
 if(MDBX_BUILD_SHARED_LIBRARY)
   if(CMAKE_VERSION VERSION_LESS 3.12)
     install(TARGETS mdbx EXPORT libmdbx
-      RUNTIME DESTINATION bin COMPONENT runtime
-      LIBRARY DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION ${MDBX_DLL_INSTALL_DESTINATION} COMPONENT runtime
       OBJECTS DESTINATION lib COMPONENT devel
       ARCHIVE DESTINATION lib COMPONENT devel
       PUBLIC_HEADER DESTINATION include COMPONENT devel
       INCLUDES DESTINATION include COMPONENT devel)
   else()
     install(TARGETS mdbx EXPORT libmdbx
-      RUNTIME DESTINATION bin COMPONENT runtime
-      LIBRARY DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION ${MDBX_DLL_INSTALL_DESTINATION} COMPONENT runtime
       NAMELINK_COMPONENT devel
       OBJECTS DESTINATION lib COMPONENT devel
       ARCHIVE DESTINATION lib COMPONENT devel
@@ -650,6 +656,9 @@ endif(MDBX_BUILD_SHARED_LIBRARY)
 
 # mdbx-tools installation
 if(MDBX_BUILD_TOOLS)
+  if(NOT DEFINED MDBX_TOOLS_INSTALL_DESTINATION)
+    set(MDBX_TOOLS_INSTALL_DESTINATION bin)
+  endif()
   install(
     TARGETS
     mdbx_chk
@@ -658,33 +667,36 @@ if(MDBX_BUILD_TOOLS)
     mdbx_dump
     mdbx_load
     RUNTIME
-    DESTINATION bin
+    DESTINATION ${MDBX_TOOLS_INSTALL_DESTINATION}
     COMPONENT runtime)
-  install(
-    FILES
-    "${MDBX_SOURCE_DIR}/man1/mdbx_chk.1"
-    "${MDBX_SOURCE_DIR}/man1/mdbx_stat.1"
-    "${MDBX_SOURCE_DIR}/man1/mdbx_copy.1"
-    "${MDBX_SOURCE_DIR}/man1/mdbx_dump.1"
-    "${MDBX_SOURCE_DIR}/man1/mdbx_load.1"
-    DESTINATION man/man1
-    COMPONENT doc)
+  if(MDBX_INSTALL_MANPAGES)
+    if(NOT DEFINED MDBX_MAN_INSTALL_DESTINATION)
+      set(MDBX_MAN_INSTALL_DESTINATION man/man1)
+    endif()
+    install(
+      FILES
+      "${MDBX_SOURCE_DIR}/man1/mdbx_chk.1"
+      "${MDBX_SOURCE_DIR}/man1/mdbx_stat.1"
+      "${MDBX_SOURCE_DIR}/man1/mdbx_copy.1"
+      "${MDBX_SOURCE_DIR}/man1/mdbx_dump.1"
+      "${MDBX_SOURCE_DIR}/man1/mdbx_load.1"
+      DESTINATION ${MDBX_MAN_INSTALL_DESTINATION}
+      COMPONENT doc)
+  endif()
 endif(MDBX_BUILD_TOOLS)
 
 # mdbx-static-lib installation
 if(MDBX_INSTALL_STATIC)
   if(CMAKE_VERSION VERSION_LESS 3.12)
     install(TARGETS mdbx-static EXPORT libmdbx
-      RUNTIME DESTINATION bin COMPONENT runtime
-      LIBRARY DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION lib COMPONENT devel
       OBJECTS DESTINATION lib COMPONENT devel
       ARCHIVE DESTINATION lib COMPONENT devel
       PUBLIC_HEADER DESTINATION include COMPONENT devel
       INCLUDES DESTINATION include COMPONENT devel)
   else()
     install(TARGETS mdbx-static EXPORT libmdbx
-      RUNTIME DESTINATION bin COMPONENT runtime
-      LIBRARY DESTINATION bin COMPONENT runtime
+      LIBRARY DESTINATION lib COMPONENT devel
       NAMELINK_COMPONENT devel
       OBJECTS DESTINATION lib COMPONENT devel
       ARCHIVE DESTINATION lib COMPONENT devel
