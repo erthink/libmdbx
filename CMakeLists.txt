@@ -97,6 +97,11 @@ else()
   endif()
 endif()
 
+if(MDBX_AMALGAMATED_SOURCE AND DEFINED MDBX_ENABLE_TESTS AND MDBX_ENABLE_TESTS)
+  message(WARNING "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: But amalgamated source code don't includes tests.")
+  set(MDBX_ENABLE_TESTS OFF)
+endif()
+
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE MinSizeRel CACHE STRING
     "Choose the type of build, options are: Debug Release RelWithDebInfo MinSizeRel."
@@ -105,16 +110,6 @@ endif()
 
 if(NOT_SUBPROJECT AND (CMAKE_CROSSCOMPILING OR IOS))
   set(CMAKE_TRY_COMPILE_TARGET_TYPE STATIC_LIBRARY)
-endif()
-
-if(IOS)
-  set(MDBX_BUILD_TOOLS_DEFAULT OFF)
-  if(NOT_SUBPROJECT)
-    cmake_policy(SET CMP0006 OLD)
-    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
-  endif()
-else()
-  set(MDBX_BUILD_TOOLS_DEFAULT ON)
 endif()
 
 if(NOT "$ENV{TEAMCITY_PROCESS_FLOW_ID}" STREQUAL "")
@@ -372,15 +367,6 @@ if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows" AND EXISTS "${MDBX_SOURCE_DIR}/ntdll.
   endif()
 endif()
 
-macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
-  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
-  if(NOT ${DEFAULT} STREQUAL "AUTO")
-    option(${NAME} "${DESCRIPTION}" ${DEFAULT})
-  elseif(NOT DEFINED ${NAME})
-    set(${NAME}_AUTO ON)
-  endif()
-endmacro()
-
 ################################################################################
 ################################################################################
 #
@@ -393,6 +379,25 @@ endmacro()
 #
 
 set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
+macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
+  list(APPEND MDBX_BUILD_OPTIONS ${NAME})
+  if(NOT ${DEFAULT} STREQUAL "AUTO")
+    option(${NAME} "${DESCRIPTION}" ${DEFAULT})
+  elseif(NOT DEFINED ${NAME})
+    set(${NAME}_AUTO ON)
+  endif()
+endmacro()
+
+if(IOS)
+  set(MDBX_BUILD_TOOLS_DEFAULT OFF)
+  if(NOT_SUBPROJECT)
+    cmake_policy(SET CMP0006 OLD)
+    set(CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
+  endif()
+else()
+  set(MDBX_BUILD_TOOLS_DEFAULT ON)
+endif()
+
 add_mdbx_option(MDBX_INSTALL_STATIC "Build and install libmdbx for static linking" OFF)
 add_mdbx_option(MDBX_BUILD_SHARED_LIBRARY "Build libmdbx as shared library (DLL)" ${BUILD_SHARED_LIBS})
 add_mdbx_option(MDBX_BUILD_TOOLS "Build MDBX tools (mdbx_chk/stat/dump/load/copy)" ${MDBX_BUILD_TOOLS_DEFAULT})
@@ -450,6 +455,7 @@ if(MDBX_CXX_STANDARD GREATER_EQUAL 11 AND MDBX_CXX_STANDARD LESS 83)
   endif()
 else()
   set(MDBX_BUILD_CXX FALSE)
+  set(MDBX_ENABLE_TESTS FALSE)
 endif()
 
 ################################################################################
@@ -795,6 +801,8 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config.h")
 if(NOT MDBX_AMALGAMATED_SOURCE AND MDBX_ENABLE_TESTS)
   add_subdirectory(test)
 endif()
+
+################################################################################
 
 set(PACKAGE "libmdbx")
 set(CPACK_PACKAGE_VERSION_MAJOR ${MDBX_VERSION_MAJOR})
