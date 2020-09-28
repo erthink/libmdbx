@@ -4537,94 +4537,95 @@ inline int buffer<ALLOCATOR>::data_preserver::callback(void *context,
   }
 }
 
+} // namespace mdbx
+
 //------------------------------------------------------------------------------
 
-inline std::string to_string(const slice &value) {
-  std::ostringstream out;
+namespace std {
+
+inline string to_string(const mdbx::slice &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
 template <class ALLOCATOR>
-inline std::string to_string(const buffer<ALLOCATOR> &buffer) {
-  std::ostringstream out;
+inline string to_string(const mdbx::buffer<ALLOCATOR> &buffer) {
+  ostringstream out;
   out << buffer;
   return out.str();
 }
 
-inline std::string to_string(const pair &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::pair &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env::geometry &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env::geometry &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env::operate_parameters &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env::operate_parameters &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env::mode &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env::mode &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env::durability &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env::durability &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env::reclaiming_options &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env::reclaiming_options &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env::operate_options &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env::operate_options &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const env_managed::create_parameters &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::env_managed::create_parameters &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const MDBX_log_level_t &value) {
-  std::ostringstream out;
+inline string to_string(const ::MDBX_log_level_t &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const MDBX_debug_flags_t &value) {
-  std::ostringstream out;
+inline string to_string(const ::MDBX_debug_flags_t &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const error &value) {
-  std::ostringstream out;
+inline string to_string(const mdbx::error &value) {
+  ostringstream out;
   out << value;
   return out.str();
 }
 
-inline std::string to_string(const ::MDBX_error_t &errcode) {
-  return to_string(error(errcode));
+inline string to_string(const ::MDBX_error_t &errcode) {
+  return to_string(mdbx::error(errcode));
 }
 
-} // namespace mdbx
-
-namespace std {
 template <> struct hash<mdbx::slice> {
   MDBX_CXX14_CONSTEXPR size_t
   operator()(mdbx::slice const &slice) const noexcept {
