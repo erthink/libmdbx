@@ -61,7 +61,9 @@ Display the status of a specific subdatabase.
 .TP
 .BR \-n
 Display the status of an MDBX database which does not use subdirectories.
-This is legacy option. For now MDBX handles this automatically.
+This is legacy option. For now MDBX handles this automatically
+for existing databases, but may be required while creating new.
+
 .SH DIAGNOSTICS
 Exit status is zero if no errors occur.
 Errors result in a non-zero exit status and
