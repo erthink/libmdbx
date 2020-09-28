@@ -5,11 +5,12 @@ ChangeLog
 
 TODO:
 
+ - Rework/speedup the implementation of the dirty page list (lazy compactification, lazy sorting via merge).
  - Finalize C++ API (few typos and trivia bugs are likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
 
-## v0.9.1 2020-09-30 (scheduled, pre-release)
+## v0.9.1 2020-09-30 (scheduled)
 
 Added features:
 
@@ -48,6 +49,7 @@ Fixes:
  - Fix `getopt()` messages for Windows (Thanks to Andrey Sporaw for reporting).
  - Fix MSVC compiler version requirements (Thanks to Andrey Sporaw for reporting).
  - Workarounds for QEMU's bugs to run tests for cross-builded library under QEMU.
+ - Now C++ compiler optional for building by CMake.
 
 
 ## v0.9.0 2020-07-31 (not a release, but API changes)
