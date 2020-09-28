@@ -104,7 +104,7 @@ if(MDBX_AMALGAMATED_SOURCE AND DEFINED MDBX_ENABLE_TESTS AND MDBX_ENABLE_TESTS)
 endif()
 
 # Try to find a C++ compiler unless sure that this is unnecessary.
-if (NOT CMAKE_CXX_COMPILER)
+if (NOT CMAKE_CXX_COMPILER_LOADED)
   include(CheckLanguage)
   if(NOT DEFINED MDBX_BUILD_CXX OR MDBX_BUILD_CXX
       OR (NOT MDBX_AMALGAMATED_SOURCE AND (NOT DEFINED MDBX_ENABLE_TESTS OR MDBX_ENABLE_TESTS)))
@@ -456,7 +456,7 @@ else()
   unset(MDBX_LINK_TOOLS_NONSTATIC CACHE)
 endif()
 
-if(CMAKE_CXX_COMPILER AND MDBX_CXX_STANDARD GREATER_EQUAL 11 AND MDBX_CXX_STANDARD LESS 83)
+if(CMAKE_CXX_COMPILER_LOADED AND MDBX_CXX_STANDARD GREATER_EQUAL 11 AND MDBX_CXX_STANDARD LESS 83)
   if(NOT MDBX_AMALGAMATED_SOURCE)
     option(MDBX_ENABLE_TESTS "Build MDBX tests" ${BUILD_TESTING})
   endif()
@@ -476,7 +476,7 @@ endif()
 ################################################################################
 ################################################################################
 
-if(MDBX_BUILD_CXX AND NOT CMAKE_CXX_COMPILER)
+if(MDBX_BUILD_CXX AND NOT CMAKE_CXX_COMPILER_LOADED)
   message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ compiler is required to build the C++API.")
 endif()
 
@@ -788,13 +788,14 @@ endif()
 
 # provide build-type
 if(CMAKE_CONFIGURATION_TYPES)
+  # via per-configuration define
   add_definitions(-DMDBX_BUILD_TYPE="$<CONFIG>")
 else()
   set(MDBX_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 endif()
 
 # options
-set(options VERSION C_COMPILER CXX_COMPILER)
+set(options VERSION C_COMPILER CXX_COMPILER MDBX_BUILD_TARGET MDBX_BUILD_TYPE)
 foreach(item IN LISTS options)
   if(DEFINED ${item})
     set(value "${${item}}")
@@ -818,7 +819,7 @@ add_definitions(-DMDBX_CONFIG_H="${CMAKE_CURRENT_BINARY_DIR}/config.h")
 ################################################################################
 
 if(NOT MDBX_AMALGAMATED_SOURCE AND MDBX_ENABLE_TESTS)
-  if(NOT CMAKE_CXX_COMPILER)
+  if(NOT CMAKE_CXX_COMPILER_LOADED)
     message(FATAL_ERROR "MDBX_ENABLE_TESTS=${MDBX_ENABLE_TESTS}: The C++ compiler is required to build the tests.")
   endif()
   add_subdirectory(test)
