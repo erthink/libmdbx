@@ -9030,7 +9030,7 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   mdbx_ensure(env, branch_nodemax > 42 && branch_nodemax < (int)UINT16_MAX &&
                        branch_nodemax % 2 == 0);
   env->me_branch_nodemax = (unsigned)branch_nodemax;
-  env->me_psize2log = log2n(pagesize);
+  env->me_psize2log = (uint8_t)log2n(pagesize);
   mdbx_assert(env, pgno2bytes(env, 1) == pagesize);
   mdbx_assert(env, bytes2pgno(env, pagesize + pagesize) == 2);
 }
