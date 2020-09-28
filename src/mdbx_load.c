@@ -449,7 +449,7 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] "
+          "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] [-n]"
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
@@ -457,9 +457,12 @@ static void usage(void) {
           "comparators)\n"
           "  -f file\tread from file instead of stdin\n"
           "  -s name\tload into named subDB\n"
-          "  -N\t\tuse NOOVERWRITE on puts\n"
+          "  -N\t\tdon't overwrite existing records when loading (), just skip "
+          "them\n"
           "  -T\t\tread plaintext\n"
-          "  -r\t\trescue mode (ignore errors to load corrupted DB dump)\n",
+          "  -r\t\trescue mode (ignore errors to load corrupted DB dump)\n"
+          "  -n\t\tdon't use subdirectory for newly created database "
+          "(MDBX_NOSUBDIR)\n",
           prog);
   exit(EXIT_FAILURE);
 }
