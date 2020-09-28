@@ -4624,6 +4624,15 @@ inline std::string to_string(const ::MDBX_error_t &errcode) {
 
 } // namespace mdbx
 
+namespace std {
+template <> struct hash<mdbx::slice> {
+  MDBX_CXX14_CONSTEXPR size_t
+  operator()(mdbx::slice const &slice) const noexcept {
+    return slice.hash_value();
+  }
+};
+} // namespace std
+
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
