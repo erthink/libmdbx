@@ -166,8 +166,9 @@ protected:
               const keygen::buffer &old_value, MDBX_put_flags_t flags);
   int remove(const keygen::buffer &akey, const keygen::buffer &adata);
 
-  static int oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                          uint64_t txn, unsigned gap, size_t space,
+  static int hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
+                          mdbx_pid_t pid, mdbx_tid_t tid, uint64_t laggard,
+                          unsigned gap, size_t space,
                           int retry) MDBX_CXX17_NOEXCEPT;
 
   MDBX_env_flags_t actual_env_mode{MDBX_ENV_DEFAULTS};

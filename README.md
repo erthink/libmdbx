@@ -241,7 +241,7 @@ Since version 0.9.1, the utility supports checking the database using any of the
 
 10. Sequence generation and three persistent 64-bit markers.
 
-11. Callback for lack-of-space condition of database that allows you to control and/or resolve such situations.
+11. Handle-Slow-Readers callback to resolve a database full/overflow issues due to long-lived read transaction(s).
 
 12. Support for opening databases in the exclusive mode, including on a network share.
 

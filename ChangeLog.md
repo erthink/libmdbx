@@ -30,11 +30,14 @@ Added features:
  - Improved opening large DB (> 4Gb) from 32-bit code.
  - Provided `pure-function` and `const-function` attributes to C API.
  - Support for user-settable transaction context.
+ - Revised API and documentation related to Handle-Slow-Readers callback feature.
 
 Deprecated functions and flags:
 
  - For clarity and API simplification the `MDBX_MAPASYNC` flag is deprecated.
    Just use `MDBX_SAFE_NOSYNC` or `MDBX_UTTERLY_NOSYNC` instead of it.
+ - `MDBX_oom_func`, `mdbx_env_set_oomfunc()` and `mdbx_env_get_oomfunc()`
+   replaced with `MDBX_hsr_func`, `mdbx_env_get_hsr` and `mdbx_env_get_hsr()`.
 
 Fixes:
 

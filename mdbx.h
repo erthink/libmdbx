@@ -2721,7 +2721,7 @@ struct MDBX_txn_info {
       to the snapshot being read. */
   uint64_t txn_id;
 
-  /** For READ-ONLY transaction: the lag from a recent  MVCC-snapshot, i.e. the
+  /** For READ-ONLY transaction: the lag from a recent MVCC-snapshot, i.e. the
      number of committed transaction since read transaction started. For WRITE
      transaction (provided if `scan_rlt=true`): the lag of the oldest reader
      from current transaction (i.e. at least 1 if any reader running). */
@@ -2747,9 +2747,9 @@ struct MDBX_txn_info {
   uint64_t txn_space_retired;
 
   /** For READ-ONLY transaction: the space available for writer(s) and that
-     must be exhausted for reason to call the OOM-killer for this read
-     transaction. For WRITE transaction: the space inside transaction that left
-     to `MDBX_TXN_FULL` error. */
+     must be exhausted for reason to call the Handle-Slow-Readers callback for
+     this read transaction. For WRITE transaction: the space inside transaction
+     that left to `MDBX_TXN_FULL` error. */
   uint64_t txn_space_leftover;
 
   /** For READ-ONLY transaction (provided if `scan_rlt=true`): The space that
@@ -4196,14 +4196,25 @@ LIBMDBX_API int mdbx_thread_register(const MDBX_env *env);
  * \ref MDBX_RESULT_TRUE if thread is not registered or already unregistered. */
 LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
 
-/** \brief A lack-of-space callback function to resolve issues with a laggard
- * readers. \ingroup c_err
+/** \brief A Handle-Slow-Readers callback function to resolve database
+ * full/overflow issue due to a reader(s) which prevents the old data from being
+ * recycled.
+ * \ingroup c_err
  *
  * Read transactions prevent reuse of pages freed by newer write transactions,
  * thus the database can grow quickly. This callback will be called when there
- * is not enough space in the database (ie. before increasing the database size
+ * is not enough space in the database (i.e. before increasing the database size
  * or before \ref MDBX_MAP_FULL error) and thus can be used to resolve issues
  * with a "long-lived" read transactions.
+ * \see long-lived-read
+ *
+ * Using this callback you can choose how to resolve the situation:
+ *   - abort the write transaction with an error;
+ *   - wait for the read transaction(s) to complete;
+ *   - notify a thread performing a long-lived read transaction
+ *     and wait for an effect;
+ *   - kill the thread or whole process that performs the long-lived read
+ *     transaction;
  *
  * Depending on the arguments and needs, your implementation may wait,
  * terminate a process or thread that is performing a long read, or perform
@@ -4211,9 +4222,11 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * corresponds to the performed action.
  *
  * \param [in] env     An environment handle returned by \ref mdbx_env_create().
+ * \param [in] txn     The current write transaction which internally at
+ *                     the \ref MDBX_MAP_FULL condition.
  * \param [in] pid     A pid of the reader process.
  * \param [in] tid     A thread_id of the reader thread.
- * \param [in] txn     A transaction number on which stalled.
+ * \param [in] laggard An oldest read transaction number on which stalled.
  * \param [in] gap     A lag from the last commited txn.
  * \param [in] space   A space that actually become available for reuse after
  *                     this reader finished. The callback function can take
@@ -4221,9 +4234,9 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  *                     a long-running transaction has.
  * \param [in] retry   A retry number starting from 0.
  *                     If callback has returned 0 at least once, then at end
- *                     of current OOM-handler loop callback will be called
- *                     additionally with negative value to notify about the
- *                     end of loop. The callback function can use this value
+ *                     of current handling loop the callback function will be
+ *                     called additionally with negative value to notify about
+ *                     the end of loop. The callback function can use this value
  *                     to implement timeout logic while waiting for readers.
  *
  * \returns The RETURN CODE determines the further actions libmdbx and must
@@ -4252,36 +4265,42 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * \retval 2 or great  The reader process was terminated or killed,
  *                     and libmdbx should entirely reset reader registration.
  *
- * \see mdbx_env_set_oomfunc() \see mdbx_env_get_oomfunc()
+ * \see mdbx_env_set_hsr() \see mdbx_env_get_hsr()
  */
-typedef int(MDBX_oom_func)(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                           uint64_t txn, unsigned gap, size_t space,
+typedef int(MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
+                           mdbx_pid_t pid, mdbx_tid_t tid, uint64_t laggard,
+                           unsigned gap, size_t space,
                            int retry) MDBX_CXX17_NOEXCEPT;
 
-/** \brief Set the OOM callback.
+/** \brief Sets a Handle-Slow-Readers callback to resolve database full/overflow
+ * issue due to a reader(s) which prevents the old data from being recycled.
  * \ingroup c_err
  *
- * The callback will only be triggered on lack of space to resolve issues with
- * lagging reader(s) (i.e. to kill it) for resume reuse pages from the garbage
- * collector.
- * \see mdbx_env_get_oomfunc()
+ * The callback will only be triggered when the database is full due to a
+ * reader(s) prevents the old data from being recycled.
  *
- * \param [in] env        An environment handle returned
- *                        by \ref mdbx_env_create().
- * \param [in] oom_func   A \ref MDBX_oom_func function or NULL to disable.
+ * \see mdbx_env_get_hsr()
+ * \see long-lived-read
+ *
+ * \param [in] env             An environment handle returned
+ *                             by \ref mdbx_env_create().
+ * \param [in] hsr_callback    A \ref MDBX_hsr_func function
+ *                             or NULL to disable.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_set_oomfunc(MDBX_env *env, MDBX_oom_func *oom_func);
+LIBMDBX_API int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr_callback);
 
-/** \brief Get the current oom_func callback.
- * \ingroup c_settings
- * \see mdbx_env_set_oomfunc()
+/** \brief Gets current Handle-Slow-Readers callback used to resolve database
+ * full/overflow issue due to a reader(s) which prevents the old data from being
+ * recycled.
+ * \see mdbx_env_set_hsr()
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
- * \returns A MDBX_oom_func function or NULL if disabled. */
-MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_oom_func *
-mdbx_env_get_oomfunc(const MDBX_env *env);
+ * \returns A MDBX_hsr_func function or NULL if disabled
+ *          or something wrong. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API MDBX_hsr_func *
+mdbx_env_get_hsr(const MDBX_env *env);
 
 /** \defgroup btree_traversal B-tree Traversal
  * This is internal API for mdbx_chk tool. You should avoid to use it, except

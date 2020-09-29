@@ -236,6 +236,7 @@ The full \ref c_api documentation lists further details below, like how to:
 - Sstimate size of range query result: \ref c_rqest.
 - Double performance by LIFO reclaiming on storages with write-back: \ref MDBX_LIFORECLAIM.
 - Use sequences and canary markers: \ref mdbx_dbi_sequence(), \ref MDBX_canary.
-- Use lack-of-space callback (aka OOM-KICK): \ref mdbx_env_set_oomfunc().
+- Use Handle-Slow-Readers callback to resolve a database full/overflow issues
+  due to long-lived read transactions: \ref mdbx_env_set_hsr().
 - Use exclusive mode: \ref MDBX_EXCLUSIVE.
 - Define custom sort orders (but this is recommended to be avoided).

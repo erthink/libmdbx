@@ -2100,14 +2100,16 @@ public:
   /// return number of cleared slots.
   inline unsigned check_readers();
 
-  /// \brief Sets the out-of-space callback.
+  /// \brief Sets a Handle-Slow-Readers callback to resolve database
+  /// full/overflow issue due to a reader(s) which prevents the old data from
+  /// being recycled.
   ///
   /// Such callback will be triggered in a case where there is not enough free
   /// space in the database due to long read transaction(s) which impedes
   /// reusing the pages of an old MVCC snapshot(s).
   ///
-  /// Using this callback you can choose how to get out of the situation:
-  ///  - abort the record transaction with an error;
+  /// Using this callback you can choose how to resolve the situation:
+  ///  - abort the write transaction with an error;
   ///  - wait for the read transaction(s) to complete;
   ///  - notify a thread performing a long-lived read transaction
   ///    and wait for an effect;
@@ -2115,10 +2117,13 @@ public:
   ///    transaction;
   ///
   /// \see long-lived-read
-  inline env &set_OutOfSpace_callback(MDBX_oom_func *);
-  /// \brief Returns the current out-of-space callback.
-  /// \see set_OutOfSpace_callback()
-  inline MDBX_oom_func *get_OutOfSpace_callback() const noexcept;
+  inline env &set_HandleSlowReaders(MDBX_hsr_func *);
+
+  /// \brief Returns the current Handle-Slow-Readers callback used to resolve
+  /// database full/overflow issue due to a reader(s) which prevents the old
+  /// data from being recycled.
+  /// \see set_HandleSlowReaders()
+  inline MDBX_hsr_func *get_HandleSlowReaders() const noexcept;
 
   /// \brief Starts read (read-only) transaction.
   inline txn_managed start_read() const;
@@ -3499,13 +3504,13 @@ inline unsigned env::check_readers() {
   return static_cast<unsigned>(dead_count);
 }
 
-inline env &env::set_OutOfSpace_callback(MDBX_oom_func *cb) {
-  error::success_or_throw(::mdbx_env_set_oomfunc(handle_, cb));
+inline env &env::set_HandleSlowReaders(MDBX_hsr_func *cb) {
+  error::success_or_throw(::mdbx_env_set_hsr(handle_, cb));
   return *this;
 }
 
-inline MDBX_oom_func *env::get_OutOfSpace_callback() const noexcept {
-  return ::mdbx_env_get_oomfunc(handle_);
+inline MDBX_hsr_func *env::get_HandleSlowReaders() const noexcept {
+  return ::mdbx_env_get_hsr(handle_);
 }
 
 inline txn_managed env::start_read() const {

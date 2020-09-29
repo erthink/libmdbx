@@ -78,16 +78,17 @@ const char *keygencase2str(const keygen_case keycase) {
 
 //-----------------------------------------------------------------------------
 
-int testcase::oom_callback(MDBX_env *env, mdbx_pid_t pid, mdbx_tid_t tid,
-                           uint64_t txn, unsigned gap, size_t space,
+int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
+                           mdbx_pid_t pid, mdbx_tid_t tid, uint64_t laggard,
+                           unsigned gap, size_t space,
                            int retry) MDBX_CXX17_NOEXCEPT {
-
+  (void)txn;
   testcase *self = (testcase *)mdbx_env_get_userctx(env);
 
   if (retry == 0)
-    log_notice("oom_callback: waitfor pid %lu, thread %" PRIuPTR
+    log_notice("hsr_callback: waitfor pid %lu, thread %" PRIuPTR
                ", txn #%" PRIu64 ", gap %d, scape %zu",
-               (long)pid, (size_t)tid, txn, gap, space);
+               (long)pid, (size_t)tid, laggard, gap, space);
 
   if (self->should_continue(true)) {
     osal_yield();
@@ -123,9 +124,9 @@ void testcase::db_prepare() {
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_set_maxdbs()", rc);
 
-  rc = mdbx_env_set_oomfunc(env, testcase::oom_callback);
+  rc = mdbx_env_set_hsr(env, testcase::hsr_callback);
   if (unlikely(rc != MDBX_SUCCESS))
-    failure_perror("mdbx_env_set_oomfunc()", rc);
+    failure_perror("mdbx_env_set_hsr()", rc);
 
   rc = mdbx_env_set_geometry(
       env, config.params.size_lower, config.params.size_now,

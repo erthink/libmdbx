@@ -989,7 +989,7 @@ struct MDBX_env {
   volatile pgno_t *me_autosync_threshold;
   volatile pgno_t *me_discarded_tail;
   volatile uint32_t *me_meta_sync_txnid;
-  MDBX_oom_func *me_oom_func; /* Callback for kicking laggard readers */
+  MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
   struct {
 #if MDBX_LOCKING > 0
     mdbx_ipclock_t wlock;
@@ -1203,8 +1203,8 @@ mdbx_flush_incoherent_mmap(void *addr, size_t nbytes, const intptr_t pagesize) {
 /*----------------------------------------------------------------------------*/
 /* Internal prototypes */
 
-MDBX_INTERNAL_FUNC int mdbx_reader_check0(MDBX_env *env, int rlocked,
-                                          int *dead);
+MDBX_INTERNAL_FUNC int mdbx_cleanup_dead_readers(MDBX_env *env, int rlocked,
+                                                 int *dead);
 MDBX_INTERNAL_FUNC int mdbx_rthc_alloc(mdbx_thread_key_t *key,
                                        MDBX_reader *begin, MDBX_reader *end);
 MDBX_INTERNAL_FUNC void mdbx_rthc_remove(const mdbx_thread_key_t key);

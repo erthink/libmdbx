@@ -702,7 +702,7 @@ static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
     mdbx_warning("%clock owner died, %s", (rlocked ? 'r' : 'w'),
                  (rc ? "this process' env is hosed" : "recovering"));
 
-    int check_rc = mdbx_reader_check0(env, rlocked, NULL);
+    int check_rc = mdbx_cleanup_dead_readers(env, rlocked, NULL);
     check_rc = (check_rc == MDBX_SUCCESS) ? MDBX_RESULT_TRUE : check_rc;
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV

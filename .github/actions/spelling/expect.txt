@@ -601,6 +601,7 @@ hpp
 hppa
 hpux
 hrows
+hsr
 htags
 htm
 html
@@ -795,6 +796,7 @@ LOCKNAME
 locktable
 LOGFILE
 loglevel
+longlived
 LONGLONG
 lowerbound
 lowerboundvalue
@@ -1090,7 +1092,6 @@ onstack
 onstask
 oom
 oomfunc
-oomkick
 openfile
 openldap
 openmp
