@@ -29,6 +29,7 @@ Added features:
  - Improved DB corruption detection by checking parent-page-txnid.
  - Improved opening large DB (> 4Gb) from 32-bit code.
  - Provided `pure-function` and `const-function` attributes to C API.
+ - Support for user-settable transaction context.
 
 Deprecated functions and flags:
 

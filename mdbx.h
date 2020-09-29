@@ -2569,7 +2569,8 @@ LIBMDBX_API int mdbx_env_set_userctx(MDBX_env *env, void *ctx);
  * \see mdbx_env_set_userctx()
  *
  * \param [in] env An environment handle returned by \ref mdbx_env_create()
- * \returns The pointer set by \ref mdbx_env_set_userctx(). */
+ * \returns The pointer set by \ref mdbx_env_set_userctx()
+ *          or `NULL` if something wrong. */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *
 mdbx_env_get_userctx(const MDBX_env *env);
 
@@ -2578,6 +2579,7 @@ mdbx_env_get_userctx(const MDBX_env *env);
  *
  * The transaction handle may be discarded using \ref mdbx_txn_abort()
  * or \ref mdbx_txn_commit().
+ * \see mdbx_txn_begin_ex()
  *
  * \note A transaction and its cursors must only be used by a single thread,
  * and a thread may only have a single transaction at a time. If \ref MDBX_NOTLS
@@ -2607,7 +2609,7 @@ mdbx_env_get_userctx(const MDBX_env *env);
  *                        to \ref MDBX_NOMETASYNC or \ref MDBX_SAFE_NOSYNC
  *                        description. \see sync_modes
  *
- * \param [out] txn    Address where the new MDBX_txn handle will be stored
+ * \param [out] txn    Address where the new MDBX_txn handle will be stored.
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
@@ -2625,6 +2627,91 @@ mdbx_env_get_userctx(const MDBX_env *env);
  *                            current thread. */
 LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
                                MDBX_txn_flags_t flags, MDBX_txn **txn);
+
+/** \brief Create a transaction with a user provided context pointer
+ * for use with the environment.
+ * \ingroup c_transactions
+ *
+ * The transaction handle may be discarded using \ref mdbx_txn_abort()
+ * or \ref mdbx_txn_commit().
+ * \see mdbx_txn_begin()
+ *
+ * \note A transaction and its cursors must only be used by a single thread,
+ * and a thread may only have a single transaction at a time. If \ref MDBX_NOTLS
+ * is in use, this does not apply to read-only transactions.
+ *
+ * \note Cursors may not span transactions.
+ *
+ * \param [in] env     An environment handle returned by \ref mdbx_env_create().
+ *
+ * \param [in] parent  If this parameter is non-NULL, the new transaction will
+ *                     be a nested transaction, with the transaction indicated
+ *                     by parent as its parent. Transactions may be nested
+ *                     to any level. A parent transaction and its cursors may
+ *                     not issue any other operations than mdbx_txn_commit and
+ *                     \ref mdbx_txn_abort() while it has active child
+ *                     transactions.
+ *
+ * \param [in] flags   Special options for this transaction. This parameter
+ *                     must be set to 0 or by bitwise OR'ing together one
+ *                     or more of the values described here:
+ *                      - \ref MDBX_RDONLY   This transaction will not perform
+ *                                           any write operations.
+ *
+ *                      - \ref MDBX_TXN_TRY  Do not block when starting
+ *                                           a write transaction.
+ *
+ *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
+ *                        Do not sync data to disk corresponding
+ *                        to \ref MDBX_NOMETASYNC or \ref MDBX_SAFE_NOSYNC
+ *                        description. \see sync_modes
+ *
+ * \param [out] txn    Address where the new MDBX_txn handle will be stored.
+ *
+ * \param [in] context A pointer to application context to be associated with
+ *                     created transaction and could be retrieved by
+ *                     \ref mdbx_txn_get_userctx() until transaction finished.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_PANIC         A fatal error occurred earlier and the
+ *                            environment must be shut down.
+ * \retval MDBX_UNABLE_EXTEND_MAPSIZE  Another process wrote data beyond
+ *                                     this MDBX_env's mapsize and this
+ *                                     environment map must be resized as well.
+ *                                     See \ref mdbx_env_set_mapsize().
+ * \retval MDBX_READERS_FULL  A read-only transaction was requested and
+ *                            the reader lock table is full.
+ *                            See \ref mdbx_env_set_maxreaders().
+ * \retval MDBX_ENOMEM        Out of memory.
+ * \retval MDBX_BUSY          The write transaction is already started by the
+ *                            current thread. */
+LIBMDBX_API int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent,
+                                  MDBX_txn_flags_t flags, MDBX_txn **txn,
+                                  void *context);
+
+/** \brief Set application information associated with the \ref MDBX_txn.
+ * \ingroup c_transactions
+ * \see mdbx_txn_get_userctx()
+ *
+ * \param [in] txn  An transaction handle returned by \ref mdbx_txn_begin_ex()
+ *                  or \ref mdbx_txn_begin().
+ * \param [in] ctx  An arbitrary pointer for whatever the application needs.
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx);
+
+/** \brief Get the application information associated with the MDBX_txn.
+ * \ingroup c_transactions
+ * \see mdbx_txn_set_userctx()
+ *
+ * \param [in] txn  An transaction handle returned by \ref mdbx_txn_begin_ex()
+ *                  or \ref mdbx_txn_begin().
+ * \returns The pointer which was passed via the `context` parameter
+ *          of `mdbx_txn_begin_ex()` or set by \ref mdbx_txn_set_userctx(),
+ *          or `NULL` if something wrong. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *
+mdbx_txn_get_userctx(const MDBX_txn *txn);
 
 /** \brief Information about the transaction
  * \ingroup c_statinfo

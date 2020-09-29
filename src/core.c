@@ -6447,6 +6447,26 @@ int mdbx_txn_renew(MDBX_txn *txn) {
 
 int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                    MDBX_txn **ret) {
+  return mdbx_txn_begin_ex(env, parent, flags, ret, nullptr);
+}
+
+int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  txn->mt_userctx = ctx;
+  return MDBX_SUCCESS;
+}
+
+void *mdbx_txn_get_userctx(const MDBX_txn *txn) {
+  return check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD)
+             ? nullptr
+             : txn->mt_userctx;
+}
+
+int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
+                      MDBX_txn **ret, void *context) {
   MDBX_txn *txn;
   unsigned size, tsize;
 
@@ -6582,6 +6602,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                   (txn->mt_flags & ~(MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
                                      MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
+    txn->mt_userctx = context;
     *ret = txn;
     mdbx_debug("begin txn %" PRIaTXN "%c %p on env %p, root page %" PRIaPGNO
                "/%" PRIaPGNO,

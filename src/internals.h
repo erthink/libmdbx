@@ -798,6 +798,7 @@ struct MDBX_txn {
   MDBX_dbi mt_numdbs;
   size_t mt_owner; /* thread ID that owns this transaction */
   MDBX_canary mt_canary;
+  void *mt_userctx; /* User-settable context */
 
   union {
     struct {
