@@ -2051,7 +2051,7 @@ public:
   /// \note Use with care.
   /// This call is synchronized via mutex with other calls \ref close_map(), but
   /// NOT with other transactions running by other threads. The "next" version
-  /// of libmdbx (MithrilDB) will solve this issue.
+  /// of libmdbx (\ref MithrilDB) will solve this issue.
   ///
   /// Handles should only be closed if no other threads are going to reference
   /// the database handle or one of its cursors any further. Do not close a
@@ -2127,10 +2127,13 @@ public:
 
   /// \brief Starts read (read-only) transaction.
   inline txn_managed start_read() const;
+
   /// \brief Creates but not start read transaction.
   inline txn_managed prepare_read() const;
+
   /// \brief Starts write (read-write) transaction.
   inline txn_managed start_write(bool dont_wait = false);
+
   /// \brief Tries to start write (read-write) transaction without blocking.
   inline txn_managed try_start_write();
 };

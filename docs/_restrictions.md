@@ -15,10 +15,10 @@ In addition to those listed for some functions.
   multiple processes in a lock-free manner and any locking is
   unwise due to a large overhead.
 
-  The "next" version of libmdbx (MithrilDB) will solve this issue.
+  The "next" version of libmdbx (\ref MithrilDB) will solve this issue.
 
   \note Workaround: Just make all programs using the database close it;
-              the LCK-file is always reset on first open.
+  the LCK-file is always reset on first open.
 
 2. Stale reader transactions left behind by an aborted program cause
   further writes to grow the database quickly, and stale locks can
@@ -27,7 +27,7 @@ In addition to those listed for some functions.
   growth the database. But in some cases, this may not be enough.
 
   \note Workaround: Check for stale readers periodically, using the
-              `mdbx_reader_check()` function or the mdbx_stat tool.
+  \ref mdbx_reader_check() function or the mdbx_stat tool.
 
 3. Stale writers will be cleared automatically by MDBX on supported
   platforms. But this is platform-specific, especially of
@@ -36,8 +36,7 @@ In addition to those listed for some functions.
   Windows and FreeBSD.
 
   \note Workaround: Otherwise just make all programs using the database
-              close it; the LCK-file is always reset on first open
-              of the environment.
+  close it; the LCK-file is always reset on first open of the environment.
 
 
 ## Remote filesystems
@@ -51,19 +50,19 @@ a read-only network shares.
 
 
 ## Child processes
-Do not use opened `MDBX_env` instance(s) in a child processes after `fork()`.
+Do not use opened \ref MDBX_env instance(s) in a child processes after `fork()`.
 It would be insane to call fork() and any MDBX-functions simultaneously
 from multiple threads. The best way is to prevent the presence of open
 MDBX-instances during `fork()`.
 
-The `MDBX_ENV_CHECKPID` build-time option, which is ON by default on
+The \ref MDBX_ENV_CHECKPID build-time option, which is ON by default on
 non-Windows platforms (i.e. where `fork()` is available), enables PID
 checking at a few critical points. But this does not give any guarantees,
 but only allows you to detect such errors a little sooner. Depending on
 the platform, you should expect an application crash and/or database
 corruption in such cases.
 
-On the other hand, MDBX allow calling `mdbx_close_env()` in such cases to
+On the other hand, MDBX allow calling \ref mdbx_env_close() in such cases to
 release resources, but no more and in general this is a wrong way.
 
 ## Read-only mode
@@ -72,24 +71,24 @@ readers need write access to LCK-file to be ones visible for writer.
 
 So MDBX always tries to open/create LCK-file for read-write, but switches
 to without-LCK mode on appropriate errors (`EROFS`, `EACCESS`, `EPERM`)
-if the read-only mode was requested by the `MDBX_RDONLY` flag which is
+if the read-only mode was requested by the \ref MDBX_RDONLY flag which is
 described below.
 
-The "next" version of libmdbx (MithrilDB) will solve this issue for the "many
+The "next" version of libmdbx (\ref MithrilDB) will solve this issue for the "many
 readers without writer" case.
 
 
 ## One thread - One transaction
   A thread can only use one transaction at a time, plus any nested
   read-write transactions in the non-writemap mode. Each transaction
-  belongs to one thread. The `MDBX_NOTLS` flag changes this for read-only
+  belongs to one thread. The \ref MDBX_NOTLS flag changes this for read-only
   transactions. See below.
 
   Do not start more than one transaction for a one thread. If you think
   about this, it's really strange to do something with two data snapshots
   at once, which may be different. MDBX checks and preventing this by
-  returning corresponding error code (`MDBX_TXN_OVERLAPPING`, `MDBX_BAD_RSLOT`,
-  `MDBX_BUSY`) unless you using `MDBX_NOTLS` option on the environment.
+  returning corresponding error code (\ref MDBX_TXN_OVERLAPPING, \ref MDBX_BAD_RSLOT,
+  \ref MDBX_BUSY) unless you using \ref MDBX_NOTLS option on the environment.
   Nonetheless, with the `MDBX_NOTLS` option, you must know exactly what you
   are doing, otherwise you will get deadlocks or reading an alien data.
 
@@ -97,7 +96,7 @@ readers without writer" case.
 ## Do not open twice
 Do not have open an MDBX database twice in the same process at the same
 time. By default MDBX prevent this in most cases by tracking databases
-opening and return `MDBX_BUSY` if anyone LCK-file is already open.
+opening and return \ref MDBX_BUSY if anyone LCK-file is already open.
 
 The reason for this is that when the "Open file description" locks (aka
 OFD-locks) are not available, MDBX uses POSIX locks on files, and these
@@ -130,7 +129,8 @@ reasonable to simplify this as follows:
      discernible because of high transaction rate and intentional
      internals simplification in favor of performance.
 
-  2. MDBX employs Multiversion concurrency control on the Copy-on-Write
+  2. MDBX employs [Multiversion concurrency control](https://en.wikipedia.org/wiki/Multiversion_concurrency_control)
+     on the [Copy-on-Write](https://en.wikipedia.org/wiki/Copy-on-write)
      basis, that allows multiple readers runs in parallel with a write
      transaction without blocking. An each write transaction needs free
      pages to put the changed data, that pages will be placed in the new
@@ -150,12 +150,10 @@ performance degradation.
 MDBX mostly solve "long-lived" readers issue by using the Handle-Slow-Readers
 \ref MDBX_hsr_func callback which allows to abort long-lived read transactions,
 and using the \ref MDBX_LIFORECLAIM mode which addresses subsequent performance degradation.
-The "next" version of libmdbx (MithrilDB) will completely solve this.
+The "next" version of libmdbx (\ref MithrilDB) will completely solve this.
 
 - Avoid suspending a process with active transactions. These would then be
   "long-lived" as above.
-
-  The "next" version of libmdbx (MithrilDB) will solve this issue.
 
 - Avoid aborting a process with an active read-only transaction in scenarios
   with high rate of write transactions. The transaction becomes "long-lived"

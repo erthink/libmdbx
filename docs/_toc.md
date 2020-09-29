@@ -27,4 +27,4 @@ including creating [PR](https://help.github.com/en/github/collaborating-with-iss
 
 ---
 
-\section mithril Mithril DB
+\section MithrilDB MithrilDB

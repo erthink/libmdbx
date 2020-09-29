@@ -34,7 +34,7 @@ periodic checkpointing and/or compaction of their log or database files
 otherwise they grow without bound. MDBX tracks retired/freed pages within the
 database and re-uses them for new write operations, so the database size does
 not grow without bound in normal use. It is worth noting that the "next"
-version libmdbx (MithrilDB) will solve this problem.
+version libmdbx (\ref MithrilDB) will solve this problem.
 
 The memory map can be used as a read-only or read-write map. It is read-only
 by default as this provides total immunity to corruption. Using read-write

@@ -3259,7 +3259,7 @@ LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
  * \note Use with care.
  * This call is synchronized via mutex with \ref mdbx_dbi_close(), but NOT with
  * other transactions running by other threads. The "next" version of libmdbx
- * (MithrilDB) will solve this issue.
+ * (\ref MithrilDB) will solve this issue.
  *
  * Handles should only be closed if no other threads are going to reference
  * the database handle or one of its cursors any further. Do not close a handle
@@ -3562,11 +3562,6 @@ LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  * which helps to avoid errors such as: use-after-free, double-free, i.e.
  * memory corruption and segfaults.
  *
- * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
- * \param [in] dbi      A database handle returned by \ref mdbx_dbi_open().
- * \param [out] cursor  Address where the new \ref MDBX_cursor handle will be
- *                      stored.
- *
  * \returns Created cursor handle or NULL in case out of memory. */
 LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void);
 
@@ -3589,6 +3584,7 @@ LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void);
  *
  * \param [in] txn      A transaction handle returned by \ref mdbx_txn_begin().
  * \param [in] dbi      A database handle returned by \ref mdbx_dbi_open().
+ * \param [out] cursor  A cursor handle returned by \ref mdbx_cursor_create().
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
@@ -3645,7 +3641,8 @@ LIBMDBX_API int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi,
  * which helps to avoid errors such as: use-after-free, double-free, i.e.
  * memory corruption and segfaults.
  *
- * \param [in] cursor  A cursor handle returned by mdbx_cursor_open(). */
+ * \param [in] cursor  A cursor handle returned by \ref mdbx_cursor_open()
+ *                     or \ref mdbx_cursor_create(). */
 LIBMDBX_API void mdbx_cursor_close(MDBX_cursor *cursor);
 
 /** \brief Renew a cursor handle.
