@@ -4396,7 +4396,7 @@ inline bool cursor::erase(bool whole_multivalue) {
 //------------------------------------------------------------------------------
 
 inline cursor_managed::cursor_managed()
-    : cursor_managed(::mdbx_cursor_create()) {
+    : cursor_managed(::mdbx_cursor_create(nullptr)) {
   if (MDBX_UNLIKELY(!handle_))
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_ENOMEM);
 }

@@ -13805,14 +13805,40 @@ static int mdbx_cursor_init(MDBX_cursor *mc, MDBX_txn *txn, MDBX_dbi dbi) {
                           &txn->mt_dbistate[dbi]);
 }
 
-MDBX_cursor *mdbx_cursor_create(void) {
+MDBX_cursor *mdbx_cursor_create(void *context) {
   MDBX_cursor_couple *couple = mdbx_calloc(1, sizeof(MDBX_cursor_couple));
   if (unlikely(!couple))
     return nullptr;
 
   couple->outer.mc_signature = MDBX_MC_READY4CLOSE;
   couple->outer.mc_dbi = UINT_MAX;
+  couple->mc_userctx = context;
   return &couple->outer;
+}
+
+int mdbx_cursor_set_userctx(MDBX_cursor *mc, void *ctx) {
+  if (unlikely(!mc))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_READY4CLOSE &&
+               mc->mc_signature != MDBX_MC_LIVE))
+    return MDBX_EINVAL;
+
+  MDBX_cursor_couple *couple = container_of(mc, MDBX_cursor_couple, outer);
+  couple->mc_userctx = ctx;
+  return MDBX_SUCCESS;
+}
+
+void *mdbx_cursor_get_userctx(const MDBX_cursor *mc) {
+  if (unlikely(!mc))
+    return nullptr;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_READY4CLOSE &&
+               mc->mc_signature != MDBX_MC_LIVE))
+    return nullptr;
+
+  MDBX_cursor_couple *couple = container_of(mc, MDBX_cursor_couple, outer);
+  return couple->mc_userctx;
 }
 
 int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
@@ -13868,7 +13894,7 @@ int mdbx_cursor_open(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cursor **ret) {
     return MDBX_EINVAL;
   *ret = NULL;
 
-  MDBX_cursor *const mc = mdbx_cursor_create();
+  MDBX_cursor *const mc = mdbx_cursor_create(nullptr);
   if (unlikely(!mc))
     return MDBX_ENOMEM;
 

@@ -3562,8 +3562,35 @@ LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
  * which helps to avoid errors such as: use-after-free, double-free, i.e.
  * memory corruption and segfaults.
  *
+ * \param [in] context A pointer to application context to be associated with
+ *                     created cursor and could be retrieved by
+ *                     \ref mdbx_cursor_get_userctx() until cursor closed.
+ *
  * \returns Created cursor handle or NULL in case out of memory. */
-LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void);
+LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void *context);
+
+/** \brief Set application information associated with the \ref MDBX_cursor.
+ * \ingroup c_crud
+ * \see mdbx_cursor_get_userctx()
+ *
+ * \param [in] cursor  An cursor handle returned by \ref mdbx_cursor_create()
+ *                     or \ref mdbx_cursor_open().
+ * \param [in] ctx     An arbitrary pointer for whatever the application needs.
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_cursor_set_userctx(MDBX_cursor *cursor, void *ctx);
+
+/** \brief Get the application information associated with the MDBX_cursor.
+ * \ingroup c_crud
+ * \see mdbx_cursor_set_userctx()
+ *
+ * \param [in] cursor  An cursor handle returned by \ref mdbx_cursor_create()
+ *                     or \ref mdbx_cursor_open().
+ * \returns The pointer which was passed via the `context` parameter
+ *          of `mdbx_cursor_create()` or set by \ref mdbx_cursor_set_userctx(),
+ *          or `NULL` if something wrong. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *
+mdbx_cursor_get_userctx(const MDBX_cursor *cursor);
 
 /** \brief Bind cursor to specified transaction and DBI handle.
  * \ingroup c_cursors

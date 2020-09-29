@@ -917,6 +917,7 @@ typedef struct MDBX_xcursor {
 
 typedef struct MDBX_cursor_couple {
   MDBX_cursor outer;
+  void *mc_userctx; /* User-settable context */
   MDBX_xcursor inner;
 } MDBX_cursor_couple;
 
