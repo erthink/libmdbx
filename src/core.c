@@ -10286,7 +10286,8 @@ static uint32_t merge_sync_flags(const uint32_t a, const uint32_t b) {
 
   /* convert MDBX_DEPRECATED_MAPASYNC to MDBX_SAFE_NOSYNC */
   if ((r & (MDBX_WRITEMAP | MDBX_DEPRECATED_MAPASYNC)) ==
-      (MDBX_WRITEMAP | MDBX_DEPRECATED_MAPASYNC))
+          (MDBX_WRITEMAP | MDBX_DEPRECATED_MAPASYNC) &&
+      !F_ISSET(r, MDBX_UTTERLY_NOSYNC))
     r = (r - MDBX_DEPRECATED_MAPASYNC) | MDBX_SAFE_NOSYNC;
 
   /* force MDBX_NOMETASYNC if MDBX_SAFE_NOSYNC enabled */
