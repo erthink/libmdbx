@@ -473,5 +473,6 @@ bench: bench-mdbx_$(NN).txt
 bench-debug: bench-debug_10.txt
 
 bench-quartet: bench-mdbx_$(NN).txt bench-lmdb_$(NN).txt bench-rocksdb_$(NN).txt bench-wiredtiger_$(NN).txt
+bench-triplet: bench-mdbx_$(NN).txt bench-lmdb_$(NN).txt bench-sqlite3_$(NN).txt
 
 endif
