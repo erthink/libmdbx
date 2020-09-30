@@ -24,6 +24,8 @@ jobs:
         run: |
           echo "::set-output name=tarball::$(ls *.tar.gz)"
           echo "::set-output name=zip::$(ls *.zip)"
+          echo "::set-output name=suffix_unix::$(sed 's|^\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\.\(.*\)$|\1|' dist/VERSION)"
+          echo "::set-output name=suffix_dos::$(sed 's|^\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\.\(.*\)$|\1|' dist/VERSION | tr . _)"
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
@@ -41,7 +43,7 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ steps.name.outputs.tarball }}
-          asset_name: amalgamated.tar.gz
+          asset_name: libmdbx-amalgamated-${{ steps.name.outputs.suffix_unix }}.tar.gz
           # asset_label: Amalgamated source tarball
           asset_content_type: application/tar+gzip
       - name: Upload zip
@@ -51,6 +53,6 @@ jobs:
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
           asset_path: ${{ steps.name.outputs.zip }}
-          asset_name: amalgamated.zip
+          asset_name: libmdbx-amalgamated-${{ steps.name.outputs.suffix_dos }}.zip
           # asset_label: Amalgamated source zip-archive
           asset_content_type: application/zip
