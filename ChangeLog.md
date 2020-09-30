@@ -10,7 +10,7 @@ TODO:
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
 
-## v0.9.1 2020-09-30 (scheduled)
+## v0.9.1 2020-09-30
 
 Added features:
 
