@@ -90,14 +90,22 @@ int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
                ", txn #%" PRIu64 ", gap %d, scape %zu",
                (long)pid, (size_t)tid, laggard, gap, space);
 
-  if (self->should_continue(true)) {
+  MDBX_envinfo info;
+  int rc = mdbx_env_info_ex(env, txn, &info, sizeof(info));
+  if (rc != MDBX_SUCCESS)
+    return rc;
+
+  if (self->should_continue(true) &&
+      (space > size_t(info.mi_geo.grow) * 2 ||
+       info.mi_geo.current >= info.mi_geo.upper)) {
     osal_yield();
     if (retry > 0)
       osal_udelay(retry * 100);
-    return 0 /* always retry */;
+    return MDBX_RESULT_FALSE /* retry / wait until reader done */;
   }
 
-  return -1;
+  /* allow growth or MDBX_MAP_FULL */
+  return MDBX_RESULT_TRUE;
 }
 
 void testcase::db_prepare() {
