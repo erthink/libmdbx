@@ -790,6 +790,7 @@ endif()
 if(CMAKE_CONFIGURATION_TYPES)
   # via per-configuration define
   add_definitions(-DMDBX_BUILD_TYPE="$<CONFIG>")
+  set(MDBX_BUILD_TYPE "<CONFIGURATION DEPENDENT>")
 else()
   set(MDBX_BUILD_TYPE ${CMAKE_BUILD_TYPE})
 endif()
