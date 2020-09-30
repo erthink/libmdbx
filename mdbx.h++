@@ -538,7 +538,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   byte *from_base58(byte *dest, size_t dest_size,
                     bool ignore_spaces = false) const;
 
-  /// vReturns the buffer size in bytes needed for conversion
+  /// \brief Returns the buffer size in bytes needed for conversion
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump to data.
   MDBX_CXX11_CONSTEXPR size_t from_base58_bytes() const noexcept {
     return length() / 11 * 8 + length() % 11 * 32 / 43;
