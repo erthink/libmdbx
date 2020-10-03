@@ -141,7 +141,7 @@ __extern_C void __assert(const char *, const char *, unsigned int, const char *)
 #else
     __nothrow
 #endif /* __THROW */
-    __noreturn;
+    MDBX_NORETURN;
 #define __assert_fail(assertion, file, line, function)                         \
   __assert(assertion, file, line, function)
 
