@@ -763,7 +763,8 @@ static __always_inline void atomic_yield(void) {
 #else
   __asm__ __volatile__("hint @pause");
 #endif
-#elif defined(__arm__) || defined(__aarch64__)
+#elif defined(__aarch64__) || (defined(__ARM_ARCH) && __ARM_ARCH > 6) ||       \
+    defined(__ARM_ARCH_6K__)
 #ifdef __CC_ARM
   __yield();
 #else
