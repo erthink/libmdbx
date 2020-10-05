@@ -173,9 +173,26 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 string(TOUPPER ${CMAKE_BUILD_TYPE} CMAKE_BUILD_TYPE_UPPERCASE)
 
+set(CMAKE_THREAD_PREFER_PTHREAD TRUE)
+set(THREADS_PREFER_PTHREAD_FLAG TRUE)
+find_package(Threads REQUIRED)
+
 include(cmake/utils.cmake)
 include(cmake/compiler.cmake)
 include(cmake/profile.cmake)
+
+# Workaround for `-pthread` toolchain/cmake bug
+if(NOT APPLE AND NOT MSVC
+    AND CMAKE_USE_PTHREADS_INIT AND NOT CMAKE_THREAD_LIBS_INIT
+    AND (CMAKE_COMPILER_IS_GNUCC OR CMAKE_COMPILER_IS_CLANG))
+  check_compiler_flag("-pthread" CC_HAS_PTHREAD)
+  if(CC_HAS_PTHREAD AND NOT CMAKE_EXE_LINKER_FLAGS MATCHES "-pthread")
+    message(STATUS "Force add -pthread for linker flags to avoid troubles")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -pthread")
+    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -pthread")
+    set(CMAKE_MODULE_LINKER_FLAGS "${CMAKE_MODULE_LINKER_FLAGS} -pthread")
+  endif()
+endif()
 
 CHECK_FUNCTION_EXISTS(pow NOT_NEED_LIBM)
 if(NOT_NEED_LIBM)
@@ -189,8 +206,6 @@ else()
     message(FATAL_ERROR "No libm found for math support")
   endif()
 endif()
-
-find_package(Threads REQUIRED)
 
 if(SUBPROJECT)
   if(NOT DEFINED BUILD_SHARED_LIBS)
@@ -541,7 +556,7 @@ macro(target_setup_options TARGET)
 endmacro()
 
 macro(libmdbx_setup_libs TARGET MODE)
-  target_link_libraries(${TARGET} ${MODE} ${CMAKE_THREAD_LIBS_INIT})
+  target_link_libraries(${TARGET} ${MODE} Threads::Threads)
   if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
     target_link_libraries(${TARGET} ${MODE} ntdll.lib)
     if(MDBX_NTDLL_EXTRA_IMPLIB AND MDBX_AVOID_CRT)
