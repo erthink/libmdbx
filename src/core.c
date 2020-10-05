@@ -777,7 +777,9 @@ static __always_inline void atomic_yield(void) {
     defined(__mips64__) || defined(_M_MRX000) || defined(_MIPS_) ||            \
     defined(__MWERKS__) || defined(__sgi)
   __asm__ __volatile__(".word 0x00000140");
-#else
+#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
+  sched_yield();
+#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
   pthread_yield();
 #endif
 }
