@@ -318,7 +318,7 @@ static int readhdr(void) {
     }
 
     for (int i = 0; dbflags[i].bit; i++) {
-      bool value;
+      bool value = false;
       if (valbool(dbuf.iov_base, dbflags[i].name, &value)) {
         if (value)
           dbi_flags |= dbflags[i].bit;
