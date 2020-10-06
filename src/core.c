@@ -18521,7 +18521,7 @@ int mdbx_estimate_distance(const MDBX_cursor *first, const MDBX_cursor *last,
     return rc;
 
   if (unlikely(dr.diff == 0) &&
-      F_ISSET(first->mc_db->md_flags & first->mc_db->md_flags,
+      F_ISSET(first->mc_db->md_flags & last->mc_db->md_flags,
               MDBX_DUPSORT | C_INITIALIZED)) {
     first = &first->mc_xcursor->mx_cursor;
     last = &last->mc_xcursor->mx_cursor;
