@@ -3567,17 +3567,18 @@ static __maybe_unused void mdbx_page_list(MDBX_page *mp) {
   do {                                                                         \
     mdbx_cassert(&(mn),                                                        \
                  mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
-    MDBX_cursor mc_dummy, **tp = &(mn).mc_txn->mt_cursors[mn.mc_dbi];          \
+    MDBX_cursor mc_dummy;                                                      \
+    MDBX_cursor **tracking_head = &(mn).mc_txn->mt_cursors[mn.mc_dbi];         \
     MDBX_cursor *tracked = &(mn);                                              \
     if ((mn).mc_flags & C_SUB) {                                               \
       mc_dummy.mc_flags = C_INITIALIZED;                                       \
       mc_dummy.mc_xcursor = (MDBX_xcursor *)&(mn);                             \
       tracked = &mc_dummy;                                                     \
     }                                                                          \
-    tracked->mc_next = *tp;                                                    \
-    *tp = tracked;                                                             \
+    tracked->mc_next = *tracking_head;                                         \
+    *tracking_head = tracked;                                                  \
     { act; }                                                                   \
-    *tp = tracked->mc_next;                                                    \
+    *tracking_head = tracked->mc_next;                                         \
   } while (0)
 
 int mdbx_cmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
