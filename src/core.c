@@ -569,13 +569,6 @@ page_fill(const MDBX_env *env, const MDBX_page *mp) {
   return page_used(env, mp) * 100.0 / page_space(env);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static __inline bool
-page_fill_enough(const MDBX_page *mp, unsigned spaceleft_threshold,
-                 unsigned minkeys_threshold) {
-  return page_room(mp) < spaceleft_threshold &&
-         page_numkeys(mp) >= minkeys_threshold;
-}
-
 /* The number of overflow pages needed to store the given size. */
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline pgno_t
 number_of_ovpages(const MDBX_env *env, size_t bytes) {
@@ -14645,40 +14638,45 @@ static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
  * [in] mc Cursor pointing to the page where rebalancing should begin.
  * Returns 0 on success, non-zero on failure. */
 static int mdbx_rebalance(MDBX_cursor *mc) {
-  int rc;
-
   mdbx_cassert(mc, mc->mc_snum > 0);
   mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
                        IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
   const int pagetype = PAGETYPE(mc->mc_pg[mc->mc_top]);
 
-  const unsigned minkeys = (P_BRANCH == 1) ? (pagetype & P_BRANCH) + 1
-                                           : (pagetype & P_BRANCH) ? 2 : 1;
+  STATIC_ASSERT(P_BRANCH == 1);
+  const unsigned minkeys = (pagetype & P_BRANCH) + 1;
 
   /* The threshold of minimum page fill factor, in form of a negative binary
-   * exponent, i.e. 2 means 1/(2**3) == 1/4 == 25%. Pages emptier than this
-   * are candidates for merging. */
+   * exponent, i.e. X = 2 means 1/(2**X) == 1/(2**2) == 1/4 == 25%.
+   * Pages emptier than this are candidates for merging. */
   const unsigned threshold_fill_exp2 = 2;
 
   /* The threshold of minimum page fill factor, as a number of free bytes on a
    * page. Pages emptier than this are candidates for merging. */
-  const unsigned spaceleft_threshold =
+  const unsigned room_threshold =
       page_space(mc->mc_txn->mt_env) -
       (page_space(mc->mc_txn->mt_env) >> threshold_fill_exp2);
 
+  const MDBX_page *const tp = mc->mc_pg[mc->mc_top];
   mdbx_debug("rebalancing %s page %" PRIaPGNO " (has %u keys, %.1f%% full)",
-             (pagetype & P_LEAF) ? "leaf" : "branch",
-             mc->mc_pg[mc->mc_top]->mp_pgno,
-             page_numkeys(mc->mc_pg[mc->mc_top]),
-             page_fill(mc->mc_txn->mt_env, mc->mc_pg[mc->mc_top]));
+             (pagetype & P_LEAF) ? "leaf" : "branch", tp->mp_pgno,
+             page_numkeys(tp), page_fill(mc->mc_txn->mt_env, tp));
 
-  if (page_fill_enough(mc->mc_pg[mc->mc_top], spaceleft_threshold, minkeys)) {
-    mdbx_debug("no need to rebalance page %" PRIaPGNO ", above fill threshold",
-               mc->mc_pg[mc->mc_top]->mp_pgno);
+  if (unlikely(page_numkeys(tp) < minkeys)) {
+    mdbx_debug("page %" PRIaPGNO " must be merged due keys < %u threshold",
+               tp->mp_pgno, minkeys);
+  } else if (unlikely(page_room(tp) > room_threshold)) {
+    mdbx_debug("page %" PRIaPGNO " should be merged due room %u > %u threshold",
+               tp->mp_pgno, page_room(tp), room_threshold);
+  } else {
+    mdbx_debug("no need to rebalance page %" PRIaPGNO
+               ", room %u < %u threshold",
+               tp->mp_pgno, page_room(tp), room_threshold);
     mdbx_cassert(mc, mc->mc_db->md_entries > 0);
     return MDBX_SUCCESS;
   }
 
+  int rc;
   if (mc->mc_snum < 2) {
     MDBX_page *const mp = mc->mc_pg[0];
     const unsigned nkeys = page_numkeys(mp);
@@ -14800,7 +14798,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
   const indx_t ki_top = mc->mc_ki[mc->mc_top];
   const indx_t ki_pre_top = mn.mc_ki[pre_top];
   const indx_t nkeys = (indx_t)page_numkeys(mn.mc_pg[mn.mc_top]);
-  if (left && page_room(left) > spaceleft_threshold &&
+  if (left && page_room(left) > room_threshold &&
       (!right || page_room(right) < page_room(left))) {
     /* try merge with left */
     mdbx_cassert(mc, page_numkeys(left) >= minkeys);
@@ -14819,7 +14817,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       return rc;
     }
   }
-  if (right && page_room(right) > spaceleft_threshold) {
+  if (right && page_room(right) > room_threshold) {
     /* try merge with right */
     mdbx_cassert(mc, page_numkeys(right) >= minkeys);
     mn.mc_pg[mn.mc_top] = right;
