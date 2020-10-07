@@ -46,6 +46,14 @@ static BOOL WINAPI ConsoleBreakHandlerRoutine(DWORD dwCtrlType) {
   return true;
 }
 
+static uint64_t GetMilliseconds(void) {
+  LARGE_INTEGER Counter, Frequency;
+  return (QueryPerformanceFrequency(&Frequency) &&
+          QueryPerformanceCounter(&Counter))
+             ? Counter.QuadPart * 1000ul / Frequency.QuadPart
+             : 0;
+}
+
 #else /* WINDOWS */
 
 static volatile sig_atomic_t user_break;
@@ -1032,7 +1040,7 @@ int main(int argc, char *argv[]) {
   double elapsed;
 #if defined(_WIN32) || defined(_WIN64)
   uint64_t timestamp_start, timestamp_finish;
-  timestamp_start = GetTickCount64();
+  timestamp_start = GetMilliseconds();
 #else
   struct timespec timestamp_start, timestamp_finish;
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_start)) {
@@ -1644,7 +1652,7 @@ bailout:
   }
 
 #if defined(_WIN32) || defined(_WIN64)
-  timestamp_finish = GetTickCount64();
+  timestamp_finish = GetMilliseconds();
   elapsed = (timestamp_finish - timestamp_start) * 1e-3;
 #else
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_finish)) {
