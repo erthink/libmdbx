@@ -119,6 +119,7 @@ bufsize
 BUGLIST
 bugzilla
 buildpack
+buildroot
 builtins
 burtleburtle
 byteorder

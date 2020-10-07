@@ -9,6 +9,18 @@ TODO:
  - Finalize C++ API (few typos and trivia bugs are likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
+Fixes:
+
+ - Fixed missing installation of `mdbx.h++`.
+ - Fixed use of obsolete `__noreturn`.
+ - Fixed use of `yield` instruction on ARM if unsupported.
+ - Added pthread workaround for buggy toolchain/cmake/buildroot.
+ - Fixed use of `pthread_yield()` for non-GLIBC.
+ - Fixed use of `RegGetValueA()` on Windows 2000/XP.
+ - Fixed use of `GetTickCount64()` on Windows 2000/XP.
+ - Fixed opening DB on a network shares (in the exclusive mode).
+ - Fixed copy&paste typos.
+ - Fixed minor false-positive GCC warning.
 
 ## v0.9.1 2020-09-30
 
