@@ -10079,7 +10079,8 @@ static int __cold mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   }
   env->me_maxreaders = (unsigned)maxreaders;
 
-  err = mdbx_mmap(MDBX_WRITEMAP, &env->me_lck_mmap, (size_t)size, (size_t)size,
+  err = mdbx_mmap((env->me_flags & MDBX_EXCLUSIVE) | MDBX_WRITEMAP,
+                  &env->me_lck_mmap, (size_t)size, (size_t)size,
                   lck_seize_rc ? MMAP_OPTION_TRUNCATE | MMAP_OPTION_SEMAPHORE
                                : MMAP_OPTION_SEMAPHORE);
   if (unlikely(err != MDBX_SUCCESS))
