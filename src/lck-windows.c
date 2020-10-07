@@ -747,6 +747,7 @@ MDBX_SetFileInformationByHandle mdbx_SetFileInformationByHandle;
 MDBX_NtFsControlFile mdbx_NtFsControlFile;
 MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 MDBX_GetTickCount64 mdbx_GetTickCount64;
+MDBX_RegGetValueA mdbx_RegGetValueA;
 #if 0  /* LY: unused for now */
 MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
@@ -779,6 +780,9 @@ static void mdbx_winnt_import(void) {
     GET_PROC_ADDR(hKernel32dll, GetFinalPathNameByHandleW);
     GET_PROC_ADDR(hKernel32dll, PrefetchVirtualMemory);
   }
+
+  const HINSTANCE hAdvapi32dll = GetModuleHandleA("advapi32.dll");
+  GET_PROC_ADDR(hAdvapi32dll, RegGetValueA);
 
 #if 0  /* LY: unused for now */
   if (!mdbx_RunningUnderWine()) {

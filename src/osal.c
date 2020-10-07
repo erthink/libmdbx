@@ -1916,22 +1916,33 @@ static uint64_t windows_bootime(void) {
   return 0;
 }
 
-static LSTATUS mdbx_RegGetValue(HKEY hkey, LPCSTR lpSubKey, LPCSTR lpValue,
-                                DWORD dwFlags, LPDWORD pdwType, PVOID pvData,
-                                LPDWORD pcbData) {
-  LSTATUS rc =
-      RegGetValueA(hkey, lpSubKey, lpValue, dwFlags, pdwType, pvData, pcbData);
+static LSTATUS mdbx_RegGetValue(HKEY hKey, LPCSTR lpSubKey, LPCSTR lpValue,
+                                PVOID pvData, LPDWORD pcbData) {
+  LSTATUS rc;
+  if (!mdbx_RegGetValueA) {
+    /* an old Windows 2000/XP */
+    HKEY hSubKey;
+    rc = RegOpenKeyA(hKey, lpSubKey, &hSubKey);
+    if (rc == ERROR_SUCCESS) {
+      rc = RegQueryValueExA(hSubKey, lpValue, NULL, NULL, pvData, pcbData);
+      RegCloseKey(hSubKey);
+    }
+    return rc;
+  }
+
+  rc = mdbx_RegGetValueA(hKey, lpSubKey, lpValue, RRF_RT_ANY, NULL, pvData,
+                         pcbData);
   if (rc != ERROR_FILE_NOT_FOUND)
     return rc;
 
-  rc = RegGetValueA(hkey, lpSubKey, lpValue,
-                    dwFlags | 0x00010000 /* RRF_SUBKEY_WOW6464KEY */, pdwType,
-                    pvData, pcbData);
+  rc = mdbx_RegGetValueA(hKey, lpSubKey, lpValue,
+                         RRF_RT_ANY | 0x00010000 /* RRF_SUBKEY_WOW6464KEY */,
+                         NULL, pvData, pcbData);
   if (rc != ERROR_FILE_NOT_FOUND)
     return rc;
-  return RegGetValueA(hkey, lpSubKey, lpValue,
-                      dwFlags | 0x00020000 /* RRF_SUBKEY_WOW6432KEY */, pdwType,
-                      pvData, pcbData);
+  return mdbx_RegGetValueA(hKey, lpSubKey, lpValue,
+                           RRF_RT_ANY | 0x00020000 /* RRF_SUBKEY_WOW6432KEY */,
+                           NULL, pvData, pcbData);
 }
 #endif
 
@@ -2049,7 +2060,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
     DWORD len = sizeof(buf);
     /* Windows is madness and must die */
     if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_MicrosoftCryptography,
-                         "MachineGuid", RRF_RT_ANY, NULL, &buf.MachineGuid,
+                         "MachineGuid", &buf.MachineGuid,
                          &len) == ERROR_SUCCESS &&
         len > 42 && len < sizeof(buf))
       got_machineid = bootid_parse_uuid(&bin, &buf.MachineGuid, len);
@@ -2067,24 +2078,24 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
 
       len = sizeof(buf);
       if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT,
-                           "DigitalProductId", RRF_RT_ANY, NULL,
-                           &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
+                           "DigitalProductId", &buf.DigitalProductId,
+                           &len) == ERROR_SUCCESS &&
           len > 42 && len < sizeof(buf)) {
         bootid_collect(&bin, &buf.DigitalProductId, len);
         got_machineid = true;
       }
       len = sizeof(buf);
       if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT_DPK,
-                           "DigitalProductId", RRF_RT_ANY, NULL,
-                           &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
+                           "DigitalProductId", &buf.DigitalProductId,
+                           &len) == ERROR_SUCCESS &&
           len > 42 && len < sizeof(buf)) {
         bootid_collect(&bin, &buf.DigitalProductId, len);
         got_machineid = true;
       }
       len = sizeof(buf);
       if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_WindowsNT_DPK2,
-                           "DigitalProductId", RRF_RT_ANY, NULL,
-                           &buf.DigitalProductId, &len) == ERROR_SUCCESS &&
+                           "DigitalProductId", &buf.DigitalProductId,
+                           &len) == ERROR_SUCCESS &&
           len > 42 && len < sizeof(buf)) {
         bootid_collect(&bin, &buf.DigitalProductId, len);
         got_machineid = true;
@@ -2096,8 +2107,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
         "Management\\PrefetchParameters";
     len = sizeof(buf);
     if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, "BootId",
-                         RRF_RT_DWORD, NULL, &buf.BootId,
-                         &len) == ERROR_SUCCESS &&
+                         &buf.BootId, &len) == ERROR_SUCCESS &&
         len > 1 && len < sizeof(buf)) {
       bootid_collect(&bin, &buf.BootId, len);
       got_bootseq = true;
@@ -2105,8 +2115,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
 
     len = sizeof(buf);
     if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_PrefetcherParams, "BaseTime",
-                         RRF_RT_DWORD, NULL, &buf.BaseTime,
-                         &len) == ERROR_SUCCESS &&
+                         &buf.BaseTime, &len) == ERROR_SUCCESS &&
         len >= sizeof(buf.BaseTime) && buf.BaseTime) {
       bootid_collect(&bin, &buf.BaseTime, len);
       got_boottime = true;

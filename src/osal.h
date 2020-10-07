@@ -887,6 +887,12 @@ static __inline bool mdbx_RunningUnderWine(void) {
   return !mdbx_NtExtendSection;
 }
 
+typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
+                                           LPCSTR lpValue, DWORD dwFlags,
+                                           LPDWORD pdwType, PVOID pvData,
+                                           LPDWORD pcbData);
+MDBX_INTERNAL_VAR MDBX_RegGetValueA mdbx_RegGetValueA;
+
 #endif /* Windows */
 
 /*----------------------------------------------------------------------------*/
