@@ -1,3 +1,4 @@
 ^\.github/actions/spelling/
 ^\.travis\.yml$
 \.def$
+^packages/buildroot/

@@ -9,6 +9,9 @@ TODO:
  - Finalize C++ API (few typos and trivia bugs are likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
+Added features:
+ - Provided package for [buildroot](https://buildroot.org/).
+
 Fixes:
 
  - Fixed missing installation of `mdbx.h++`.
