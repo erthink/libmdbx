@@ -619,7 +619,7 @@ typedef struct MDBX_lockinfo {
 #if defined(_WIN32) || defined(_WIN64)
 #define MAX_MAPSIZE32 UINT32_C(0x38000000)
 #else
-#define MAX_MAPSIZE32 UINT32_C(0x7ff80000)
+#define MAX_MAPSIZE32 UINT32_C(0x7f000000)
 #endif
 #define MAX_MAPSIZE64 (MAX_PAGENO * (uint64_t)MAX_PAGESIZE)
 
