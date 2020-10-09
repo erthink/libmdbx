@@ -452,12 +452,4 @@ std::string osal_tempdir(void) {
   return std::string(buf, len);
 }
 
-int osal_removefile(const std::string &pathname) {
-  return DeleteFileA(pathname.c_str()) ? MDBX_SUCCESS : GetLastError();
-}
-
-int osal_removedirectory(const std::string &pathname) {
-  return RemoveDirectoryA(pathname.c_str()) ? MDBX_SUCCESS : GetLastError();
-}
-
 #endif /* Windows */
