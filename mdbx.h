@@ -1737,8 +1737,9 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
  * \param [in] env       An environment handle returned
  *                       by \ref mdbx_env_create()
  *
- * \param [in] pathname  The directory in which the database files reside.
- *                       This directory must already exist and be writable.
+ * \param [in] pathname  The pathname for the database or the directory in which
+ *                       the database files reside. In the case of directory it
+ *                       must already exist and be writable.
  *
  * \param [in] flags     Special options for this environment. This parameter
  *                       must be set to 0 or by bitwise OR'ing together one
