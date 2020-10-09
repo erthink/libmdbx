@@ -204,6 +204,15 @@ MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
   mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
 }
 
+MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait) {
+  return flock(fd,
+               wait ? LCK_EXCLUSIVE | LCK_WAITFOR
+                    : LCK_EXCLUSIVE | LCK_DONTWAIT,
+               0, LCK_MAXLEN)
+             ? MDBX_SUCCESS
+             : GetLastError();
+}
+
 static int suspend_and_append(mdbx_handle_array_t **array,
                               const DWORD ThreadId) {
   const unsigned limit = (*array)->limit;

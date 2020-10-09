@@ -626,7 +626,8 @@ enum mdbx_openfile_purpose {
   MDBX_OPEN_DXB_LAZY = 1,
   MDBX_OPEN_DXB_DSYNC = 2,
   MDBX_OPEN_LCK = 3,
-  MDBX_OPEN_COPY = 4
+  MDBX_OPEN_COPY = 4,
+  MDBX_OPEN_DELETE = 5
 };
 
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
@@ -635,7 +636,9 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
                                      mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname);
+MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname);
 MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
+MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait);
 
 #define MMAP_OPTION_TRUNCATE 1
 #define MMAP_OPTION_SEMAPHORE 2

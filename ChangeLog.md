@@ -11,6 +11,7 @@ TODO:
 
 Added features:
  - Provided package for [buildroot](https://buildroot.org/).
+ - Added `mdbx_env_delete()` for deletion an environment files in a proper and multiprocess-safe way.
 
 Fixes:
 

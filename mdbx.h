@@ -1801,6 +1801,48 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
                               MDBX_env_flags_t flags, mdbx_mode_t mode);
 
+/** \brief Deletion modes for \ref mdbx_env_delete()
+ * \ingroup c_extra
+ * \see mdbx_env_delete() */
+enum MDBX_env_delete_mode_t {
+  /** \brief Just delete the environment's files and directory if any.
+   * \note On POSIX systems, processes already working with the database will
+   * continue to work without interference until it close the environment.
+   * \note On Windows, the behavior of `MDB_ENV_JUST_DELETE` is different
+   * because the system does not support deleting files that are currently
+   * memory mapped. */
+  MDBX_ENV_JUST_DELETE = 0,
+  /** Make sure that the environment is not being used by other processes,
+   * or return an error otherwise. */
+  MDBX_ENV_ENSURE_UNUSED = 1,
+  /** Wait until other processes closes the environment before deletion. */
+  MDBX_ENV_WAIT_FOR_UNUSED = 2,
+};
+#ifndef __cplusplus
+/** \c_extra c_statinfo */
+typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
+#endif
+
+/** \brief Delete the environment files in a proper and multiprocess-safe way.
+ * \ingroup c_extra
+ *
+ * \param [in] pathname  The pathname for the database or the directory in which
+ *                       the database files reside.
+ *
+ * \param [in] mode      Special deletion mode for the environment. This
+ *                       parameter must be set to one of the values described
+ *                       above in the \ref MDBX_env_delete_mode_t section.
+ *
+ * \note The \ref MDBX_ENV_JUST_DELETE don't supported on Windows since system
+ * unable to delete a memory-mapped files.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_RESULT_TRUE   No corresponding files or directories were found,
+ *                            so no deletion was performed. */
+LIBMDBX_API int mdbx_env_delete(const char *pathname,
+                                MDBX_env_delete_mode_t mode);
+
 /** \brief Copy an MDBX environment to the specified path, with options.
  * \ingroup c_extra
  *

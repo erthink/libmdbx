@@ -10467,6 +10467,81 @@ __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *result,
   return MDBX_SUCCESS;
 }
 
+__cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
+  switch (mode) {
+  default:
+    return MDBX_EINVAL;
+  case MDBX_ENV_JUST_DELETE:
+  case MDBX_ENV_ENSURE_UNUSED:
+  case MDBX_ENV_WAIT_FOR_UNUSED:
+    break;
+  }
+
+  MDBX_env dummy_env;
+  memset(&dummy_env, 0, sizeof(dummy_env));
+  dummy_env.me_flags =
+      (mode == MDBX_ENV_ENSURE_UNUSED) ? MDBX_EXCLUSIVE : MDBX_ENV_DEFAULTS;
+  dummy_env.me_psize = dummy_env.me_os_psize = (unsigned)mdbx_syspagesize();
+  dummy_env.me_path = (char *)pathname;
+
+  MDBX_handle_env_pathname env_pathname;
+  STATIC_ASSERT(sizeof(dummy_env.me_flags) == sizeof(MDBX_env_flags_t));
+  int rc = MDBX_RESULT_TRUE,
+      err = mdbx_handle_env_pathname(
+          &env_pathname, pathname, (MDBX_env_flags_t *)&dummy_env.me_flags, 0);
+  if (likely(err == MDBX_SUCCESS)) {
+    mdbx_filehandle_t clk_handle = INVALID_HANDLE_VALUE,
+                      dxb_handle = INVALID_HANDLE_VALUE;
+    if (mode > MDBX_ENV_JUST_DELETE) {
+      err = mdbx_openfile(MDBX_OPEN_DELETE, &dummy_env, env_pathname.dxb,
+                          &dxb_handle, 0);
+      err = (err == MDBX_ENOFILE) ? MDBX_SUCCESS : err;
+      if (err == MDBX_SUCCESS) {
+        err = mdbx_openfile(MDBX_OPEN_DELETE, &dummy_env, env_pathname.lck,
+                            &clk_handle, 0);
+        err = (err == MDBX_ENOFILE) ? MDBX_SUCCESS : err;
+      }
+      if (err == MDBX_SUCCESS && clk_handle != INVALID_HANDLE_VALUE)
+        err = mdbx_lockfile(clk_handle, mode == MDBX_ENV_WAIT_FOR_UNUSED);
+      if (err == MDBX_SUCCESS && dxb_handle != INVALID_HANDLE_VALUE)
+        err = mdbx_lockfile(dxb_handle, mode == MDBX_ENV_WAIT_FOR_UNUSED);
+    }
+
+    if (err == MDBX_SUCCESS) {
+      err = mdbx_removefile(env_pathname.dxb);
+      if (err == MDBX_SUCCESS)
+        rc = MDBX_SUCCESS;
+      else if (err == MDBX_ENOFILE)
+        err = MDBX_SUCCESS;
+    }
+
+    if (err == MDBX_SUCCESS) {
+      err = mdbx_removefile(env_pathname.lck);
+      if (err == MDBX_SUCCESS)
+        rc = MDBX_SUCCESS;
+      else if (err == MDBX_ENOFILE)
+        err = MDBX_SUCCESS;
+    }
+
+    if (err == MDBX_SUCCESS && !(dummy_env.me_flags & MDBX_NOSUBDIR)) {
+      err = mdbx_removedirectory(pathname);
+      if (err == MDBX_SUCCESS)
+        rc = MDBX_SUCCESS;
+      else if (err == MDBX_ENOFILE)
+        err = MDBX_SUCCESS;
+    }
+
+    if (dxb_handle != INVALID_HANDLE_VALUE)
+      mdbx_closefile(dxb_handle);
+    if (clk_handle != INVALID_HANDLE_VALUE)
+      mdbx_closefile(clk_handle);
+  } else if (err == MDBX_ENOFILE)
+    err = MDBX_SUCCESS;
+
+  mdbx_free(env_pathname.buffer_for_free);
+  return (err == MDBX_SUCCESS) ? rc : err;
+}
+
 __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
   int rc = check_env(env);
