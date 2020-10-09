@@ -10368,21 +10368,19 @@ __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
       0);
 }
 
-__cold int mdbx_env_open(MDBX_env *env, const char *pathname,
-                         MDBX_env_flags_t flags, mdbx_mode_t mode) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+typedef struct {
+  void *buffer_for_free;
+  char *lck, *dxb;
+} MDBX_handle_env_pathname;
 
+__cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *result,
+                                           const char *pathname,
+                                           MDBX_env_flags_t *flags,
+                                           const mdbx_mode_t mode) {
+  int rc;
+  memset(result, 0, sizeof(*result));
   if (unlikely(!pathname))
     return MDBX_EINVAL;
-
-  if (flags & ~ENV_USABLE_FLAGS)
-    return MDBX_EINVAL;
-
-  if (env->me_lazy_fd != INVALID_HANDLE_VALUE ||
-      (env->me_flags & MDBX_ENV_ACTIVE) != 0)
-    return MDBX_EPERM;
 
 #if defined(_WIN32) || defined(_WIN64)
   const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
@@ -10391,33 +10389,28 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
   if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
     return ERROR_INVALID_NAME;
-#endif /* Windows */
 
-  /* pickup previously mdbx_env_set_flags(),
-   * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
-  flags = merge_sync_flags(flags, env->me_flags);
-
-#if defined(_WIN32) || defined(_WIN64)
   const DWORD dwAttrib = GetFileAttributesW(pathnameW);
   if (dwAttrib == INVALID_FILE_ATTRIBUTES) {
     rc = GetLastError();
     if (rc != MDBX_ENOFILE)
       return rc;
-    if (mode == 0 || (flags & MDBX_RDONLY) != 0)
+    if (mode == 0 || (*flags & MDBX_RDONLY) != 0)
       /* can't open existing */
       return rc;
 
     /* auto-create directory if requested */
-    if ((flags & MDBX_NOSUBDIR) == 0 && !CreateDirectoryW(pathnameW, nullptr)) {
+    if ((*flags & MDBX_NOSUBDIR) == 0 &&
+        !CreateDirectoryW(pathnameW, nullptr)) {
       rc = GetLastError();
       if (rc != ERROR_ALREADY_EXISTS)
         return rc;
     }
   } else {
     /* ignore passed MDBX_NOSUBDIR flag and set it automatically */
-    flags |= MDBX_NOSUBDIR;
+    *flags |= MDBX_NOSUBDIR;
     if (dwAttrib & FILE_ATTRIBUTE_DIRECTORY)
-      flags -= MDBX_NOSUBDIR;
+      *flags -= MDBX_NOSUBDIR;
   }
 #else
   struct stat st;
@@ -10425,7 +10418,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     rc = errno;
     if (rc != MDBX_ENOFILE)
       return rc;
-    if (mode == 0 || (flags & MDBX_RDONLY) != 0)
+    if (mode == 0 || (*flags & MDBX_RDONLY) != 0)
       /* can't open existing */
       return rc;
 
@@ -10436,41 +10429,67 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
         /* always add read/write/search for owner */ S_IRWXU |
         ((mode & S_IRGRP) ? /* +search if readable by group */ S_IXGRP : 0) |
         ((mode & S_IROTH) ? /* +search if readable by others */ S_IXOTH : 0);
-    if ((flags & MDBX_NOSUBDIR) == 0 && mkdir(pathname, dir_mode)) {
+    if ((*flags & MDBX_NOSUBDIR) == 0 && mkdir(pathname, dir_mode)) {
       rc = errno;
       if (rc != EEXIST)
         return rc;
     }
   } else {
     /* ignore passed MDBX_NOSUBDIR flag and set it automatically */
-    flags |= MDBX_NOSUBDIR;
+    *flags |= MDBX_NOSUBDIR;
     if (S_ISDIR(st.st_mode))
-      flags -= MDBX_NOSUBDIR;
+      *flags -= MDBX_NOSUBDIR;
   }
 #endif
 
   size_t len_full, len = strlen(pathname);
-  if (flags & MDBX_NOSUBDIR) {
+  if (*flags & MDBX_NOSUBDIR) {
     len_full = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
   } else {
     len_full = len + sizeof(MDBX_LOCKNAME) + len + sizeof(MDBX_DATANAME);
   }
-  char *lck_pathname = mdbx_malloc(len_full);
-  if (!lck_pathname)
+
+  result->buffer_for_free = mdbx_malloc(len_full);
+  if (!result->buffer_for_free)
     return MDBX_ENOMEM;
 
-  char *dxb_pathname;
-  if (flags & MDBX_NOSUBDIR) {
-    dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCK_SUFFIX);
-    sprintf(lck_pathname, "%s" MDBX_LOCK_SUFFIX, pathname);
-    strcpy(dxb_pathname, pathname);
+  result->lck = result->buffer_for_free;
+  if (*flags & MDBX_NOSUBDIR) {
+    result->dxb = result->lck + len + sizeof(MDBX_LOCK_SUFFIX);
+    sprintf(result->lck, "%s" MDBX_LOCK_SUFFIX, pathname);
+    strcpy(result->dxb, pathname);
   } else {
-    dxb_pathname = lck_pathname + len + sizeof(MDBX_LOCKNAME);
-    sprintf(lck_pathname, "%s" MDBX_LOCKNAME, pathname);
-    sprintf(dxb_pathname, "%s" MDBX_DATANAME, pathname);
+    result->dxb = result->lck + len + sizeof(MDBX_LOCKNAME);
+    sprintf(result->lck, "%s" MDBX_LOCKNAME, pathname);
+    sprintf(result->dxb, "%s" MDBX_DATANAME, pathname);
   }
 
-  rc = MDBX_SUCCESS;
+  return MDBX_SUCCESS;
+}
+
+__cold int mdbx_env_open(MDBX_env *env, const char *pathname,
+                         MDBX_env_flags_t flags, mdbx_mode_t mode) {
+  int rc = check_env(env);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (flags & ~ENV_USABLE_FLAGS)
+    return MDBX_EINVAL;
+
+  if (env->me_lazy_fd != INVALID_HANDLE_VALUE ||
+      (env->me_flags & MDBX_ENV_ACTIVE) != 0)
+    return MDBX_EPERM;
+
+  /* pickup previously mdbx_env_set_flags(),
+   * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
+  const uint32_t saved_me_flags = env->me_flags;
+  flags = merge_sync_flags(flags, env->me_flags);
+
+  MDBX_handle_env_pathname env_pathname;
+  rc = mdbx_handle_env_pathname(&env_pathname, pathname, &flags, mode);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
+
   if (flags & MDBX_RDONLY) {
     /* LY: silently ignore irrelevant flags when
      * we're only getting read access */
@@ -10498,9 +10517,8 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
       rc = MDBX_ENOMEM;
   }
 
-  const uint32_t saved_me_flags = env->me_flags;
   env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
-  if (rc)
+  if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
   env->me_path = mdbx_strdup(pathname);
@@ -10516,20 +10534,20 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
 
   rc = mdbx_openfile(F_ISSET(flags, MDBX_RDONLY) ? MDBX_OPEN_DXB_READ
                                                  : MDBX_OPEN_DXB_LAZY,
-                     env, dxb_pathname, &env->me_lazy_fd, mode);
+                     env, env_pathname.dxb, &env->me_lazy_fd, mode);
   if (rc != MDBX_SUCCESS)
     goto bailout;
 
   mdbx_assert(env, env->me_dsync_fd == INVALID_HANDLE_VALUE);
   if ((flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) == 0) {
-    rc = mdbx_openfile(MDBX_OPEN_DXB_DSYNC, env, dxb_pathname,
+    rc = mdbx_openfile(MDBX_OPEN_DXB_DSYNC, env, env_pathname.dxb,
                        &env->me_dsync_fd, 0);
     mdbx_ensure(env, (rc != MDBX_SUCCESS) ==
                          (env->me_dsync_fd == INVALID_HANDLE_VALUE));
   }
 
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  env->me_sysv_ipc.key = ftok(dxb_pathname, 42);
+  env->me_sysv_ipc.key = ftok(env_pathname.dxb, 42);
   if (env->me_sysv_ipc.key == -1) {
     rc = errno;
     goto bailout;
@@ -10539,6 +10557,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
 #if !(defined(_WIN32) || defined(_WIN64))
   if (mode == 0) {
     /* pickup mode for lck-file */
+    struct stat st;
     if (fstat(env->me_lazy_fd, &st)) {
       rc = errno;
       goto bailout;
@@ -10551,7 +10570,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
          ((mode & S_IRGRP) ? /* +write if readable by group */ S_IWGRP : 0) |
          ((mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH : 0);
 #endif /* !Windows */
-  const int lck_rc = mdbx_setup_lck(env, lck_pathname, mode);
+  const int lck_rc = mdbx_setup_lck(env, env_pathname.lck, mode);
   if (MDBX_IS_ERROR(lck_rc)) {
     rc = lck_rc;
     goto bailout;
@@ -10686,7 +10705,7 @@ bailout:
     mdbx_txn_valgrind(env, nullptr);
 #endif
   }
-  mdbx_free(lck_pathname);
+  mdbx_free(env_pathname.buffer_for_free);
   return rc;
 }
 
