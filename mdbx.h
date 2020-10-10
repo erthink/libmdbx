@@ -1801,7 +1801,7 @@ LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
                               MDBX_env_flags_t flags, mdbx_mode_t mode);
 
-/** \brief Deletion modes for \ref mdbx_env_delete()
+/** \brief Deletion modes for \ref mdbx_env_delete().
  * \ingroup c_extra
  * \see mdbx_env_delete() */
 enum MDBX_env_delete_mode_t {
@@ -1812,10 +1812,11 @@ enum MDBX_env_delete_mode_t {
    * because the system does not support deleting files that are currently
    * memory mapped. */
   MDBX_ENV_JUST_DELETE = 0,
-  /** Make sure that the environment is not being used by other processes,
-   * or return an error otherwise. */
+  /** \brief Make sure that the environment is not being used by other
+   * processes, or return an error otherwise. */
   MDBX_ENV_ENSURE_UNUSED = 1,
-  /** Wait until other processes closes the environment before deletion. */
+  /** \brief Wait until other processes closes the environment before deletion.
+   */
   MDBX_ENV_WAIT_FOR_UNUSED = 2,
 };
 #ifndef __cplusplus
@@ -1823,7 +1824,7 @@ enum MDBX_env_delete_mode_t {
 typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
 #endif
 
-/** \brief Delete the environment files in a proper and multiprocess-safe way.
+/** \brief Delete the environment's files in a proper and multiprocess-safe way.
  * \ingroup c_extra
  *
  * \param [in] pathname  The pathname for the database or the directory in which
