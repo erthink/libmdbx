@@ -4820,7 +4820,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
   rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes,
                     mapping_can_be_moved);
   if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_NORDAHEAD) == 0) {
-    const int readahead = mdbx_is_readahead_reasonable(size_bytes, 0);
+    const int readahead =
+        mdbx_is_readahead_reasonable(size_bytes, -(intptr_t)prev_size);
     if (readahead == MDBX_RESULT_FALSE)
       rc = mdbx_set_readahead(
           env, 0, (size_bytes > prev_size) ? size_bytes : prev_size, false);
@@ -9685,6 +9686,10 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   mdbx_verbose("current boot-id %" PRIx64 "-%" PRIx64 " (%savailable)",
                bootid.x, bootid.y, (bootid.x | bootid.y) ? "" : "not-");
 
+  /* calculate readahead hint before mmap with zero redundant pages */
+  const bool readahead =
+      (env->me_flags & MDBX_NORDAHEAD) == 0 &&
+      mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
   err = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
                   env->me_dbgeo.upper, lck_rc ? MMAP_OPTION_TRUNCATE : 0);
   if (unlikely(err != MDBX_SUCCESS))
@@ -9948,9 +9953,6 @@ static int __cold mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 #endif /* MADV_DONTNEED */
   }
 
-  const bool readahead = (env->me_flags & MDBX_NORDAHEAD) == 0 &&
-                         mdbx_is_readahead_reasonable(env->me_dxb_mmap.current,
-                                                      0) == MDBX_RESULT_TRUE;
   err = mdbx_set_readahead(env, 0, used_bytes, readahead);
   if (err != MDBX_SUCCESS && lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE)
     return err;
