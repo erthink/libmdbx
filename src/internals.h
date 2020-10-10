@@ -953,7 +953,7 @@ struct MDBX_env {
   MDBX_dbi me_maxdbs;         /* size of the DB table */
   uint32_t me_pid;            /* process ID of this env */
   mdbx_thread_key_t me_txkey; /* thread-key for readers */
-  char *me_path;              /* path to the DB files */
+  char *me_pathname;          /* path to the DB files */
   void *me_pbuf;              /* scratch area for DUPSORT put() */
   MDBX_txn *me_txn;           /* current write transaction */
   MDBX_txn *me_txn0;          /* prealloc'd write transaction */

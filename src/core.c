@@ -10371,14 +10371,15 @@ __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
 typedef struct {
   void *buffer_for_free;
   char *lck, *dxb;
+  size_t ent_len;
 } MDBX_handle_env_pathname;
 
-__cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *result,
+__cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *ctx,
                                            const char *pathname,
                                            MDBX_env_flags_t *flags,
                                            const mdbx_mode_t mode) {
   int rc;
-  memset(result, 0, sizeof(*result));
+  memset(ctx, 0, sizeof(*ctx));
   if (unlikely(!pathname))
     return MDBX_EINVAL;
 
@@ -10442,26 +10443,35 @@ __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *result,
   }
 #endif
 
-  size_t len_full, len = strlen(pathname);
-  if (*flags & MDBX_NOSUBDIR) {
-    len_full = len + sizeof(MDBX_LOCK_SUFFIX) + len + 1;
-  } else {
-    len_full = len + sizeof(MDBX_LOCKNAME) + len + sizeof(MDBX_DATANAME);
+  static const char dxb_name[] = MDBX_DATANAME;
+  static const size_t dxb_name_len = sizeof(dxb_name) - 1;
+  static const char lck_name[] = MDBX_LOCKNAME;
+  static const char lock_suffix[] = MDBX_LOCK_SUFFIX;
+
+  ctx->ent_len = strlen(pathname);
+  if ((*flags & MDBX_NOSUBDIR) && ctx->ent_len >= dxb_name_len &&
+      !memcmp(dxb_name, pathname + ctx->ent_len - dxb_name_len, dxb_name_len)) {
+    *flags -= MDBX_NOSUBDIR;
+    ctx->ent_len -= dxb_name_len;
   }
 
-  result->buffer_for_free = mdbx_malloc(len_full);
-  if (!result->buffer_for_free)
+  const size_t bytes_needed =
+      ctx->ent_len * 2 + ((*flags & MDBX_NOSUBDIR)
+                              ? sizeof(lock_suffix) + 1
+                              : sizeof(lck_name) + sizeof(dxb_name));
+  ctx->buffer_for_free = mdbx_malloc(bytes_needed);
+  if (!ctx->buffer_for_free)
     return MDBX_ENOMEM;
 
-  result->lck = result->buffer_for_free;
+  ctx->lck = ctx->buffer_for_free;
   if (*flags & MDBX_NOSUBDIR) {
-    result->dxb = result->lck + len + sizeof(MDBX_LOCK_SUFFIX);
-    sprintf(result->lck, "%s" MDBX_LOCK_SUFFIX, pathname);
-    strcpy(result->dxb, pathname);
+    ctx->dxb = ctx->lck + ctx->ent_len + sizeof(lock_suffix);
+    sprintf(ctx->lck, "%s%s", pathname, lock_suffix);
+    strcpy(ctx->dxb, pathname);
   } else {
-    result->dxb = result->lck + len + sizeof(MDBX_LOCKNAME);
-    sprintf(result->lck, "%s" MDBX_LOCKNAME, pathname);
-    sprintf(result->dxb, "%s" MDBX_DATANAME, pathname);
+    ctx->dxb = ctx->lck + ctx->ent_len + sizeof(lck_name);
+    sprintf(ctx->lck, "%.*s%s", (int)ctx->ent_len, pathname, lck_name);
+    sprintf(ctx->dxb, "%.*s%s", (int)ctx->ent_len, pathname, dxb_name);
   }
 
   return MDBX_SUCCESS;
@@ -10482,7 +10492,7 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
   dummy_env.me_flags =
       (mode == MDBX_ENV_ENSURE_UNUSED) ? MDBX_EXCLUSIVE : MDBX_ENV_DEFAULTS;
   dummy_env.me_psize = dummy_env.me_os_psize = (unsigned)mdbx_syspagesize();
-  dummy_env.me_path = (char *)pathname;
+  dummy_env.me_pathname = (char *)pathname;
 
   MDBX_handle_env_pathname env_pathname;
   STATIC_ASSERT(sizeof(dummy_env.me_flags) == sizeof(MDBX_env_flags_t));
@@ -10596,14 +10606,16 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
-  env->me_path = mdbx_strdup(pathname);
+  env->me_pathname = mdbx_calloc(env_pathname.ent_len + 1, 1);
   env->me_dbxs = mdbx_calloc(env->me_maxdbs, sizeof(MDBX_dbx));
   env->me_dbflags = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbflags[0]));
   env->me_dbiseqs = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbiseqs[0]));
-  if (!(env->me_dbxs && env->me_path && env->me_dbflags && env->me_dbiseqs)) {
+  if (!(env->me_dbxs && env->me_pathname && env->me_dbflags &&
+        env->me_dbiseqs)) {
     rc = MDBX_ENOMEM;
     goto bailout;
   }
+  memcpy(env->me_pathname, env_pathname.dxb, env_pathname.ent_len);
   env->me_dbxs[FREE_DBI].md_cmp = cmp_int_align4; /* aligned MDBX_INTEGERKEY */
   env->me_dbxs[FREE_DBI].md_dcmp = cmp_lenfast;
 
@@ -10841,7 +10853,7 @@ static int __cold mdbx_env_close0(MDBX_env *env) {
   mdbx_memalign_free(env->me_pbuf);
   mdbx_free(env->me_dbiseqs);
   mdbx_free(env->me_dbflags);
-  mdbx_free(env->me_path);
+  mdbx_free(env->me_pathname);
   mdbx_free(env->me_dirtylist);
   if (env->me_txn0) {
     mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
@@ -16812,7 +16824,7 @@ int __cold mdbx_env_get_path(const MDBX_env *env, const char **arg) {
   if (unlikely(!arg))
     return MDBX_EINVAL;
 
-  *arg = env->me_path;
+  *arg = env->me_pathname;
   return MDBX_SUCCESS;
 }
 
