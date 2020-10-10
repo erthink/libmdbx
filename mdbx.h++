@@ -1563,14 +1563,7 @@ enum class value_mode {
                     ///< lexicographic comparison like `std::memcmp()`.
                     ///< In terms of keys, they are not unique, i.e. has
                     ///< duplicates which are sorted by associated data values.
-#if !defined(__cpp_constexpr) && !defined(DOXYGEN)
-  multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
-  multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
-  multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
-                  uint32_t(MDBX_INTEGERDUP),
-  multi_reverse_samelength = uint32_t(MDBX_DUPSORT) |
-                             uint32_t(MDBX_REVERSEDUP) | uint32_t(MDBX_DUPFIXED)
-#else
+#if CONSTEXPR_ENUM_FLAGS_OPERATIONS || defined(DOXYGEN)
   multi_reverse =
       MDBX_DUPSORT |
       MDBX_REVERSEDUP, ///< A more than one data value could be associated with
@@ -1617,6 +1610,13 @@ enum class value_mode {
                ///< In terms of keys, they are not unique, i.e. has duplicates
                ///< which are sorted by associated data values.
                ///< \note Not yet implemented and PRs are welcome.
+#else
+  multi_reverse = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_REVERSEDUP),
+  multi_samelength = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED),
+  multi_ordinal = uint32_t(MDBX_DUPSORT) | uint32_t(MDBX_DUPFIXED) |
+                  uint32_t(MDBX_INTEGERDUP),
+  multi_reverse_samelength = uint32_t(MDBX_DUPSORT) |
+                             uint32_t(MDBX_REVERSEDUP) | uint32_t(MDBX_DUPFIXED)
 #endif
 };
 

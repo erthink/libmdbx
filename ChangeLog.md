@@ -25,6 +25,7 @@ Fixes:
  - Fixed opening DB on a network shares (in the exclusive mode).
  - Fixed copy&paste typos.
  - Fixed minor false-positive GCC warning.
+ - Added workaround for broken `DEFINE_ENUM_FLAG_OPERATORS` from Windows SDK.
 
 ## v0.9.1 2020-09-30
 

@@ -440,8 +440,27 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* MDBX_PRINTF_ARGS */
 
+/* Oh, below are some songs and dances since:
+ *  - C++ requires explicit definition of the necessary operators.
+ *  - the proper implementation of DEFINE_ENUM_FLAG_OPERATORS for C++ required
+ *    the constexpr feature which is broken in most old compilers;
+ *  - DEFINE_ENUM_FLAG_OPERATORS may be defined broken as in the Windows SDK. */
 #ifndef DEFINE_ENUM_FLAG_OPERATORS
-#if defined(__cplusplus)
+
+#ifdef __cplusplus
+#if !defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                  \
+    (defined(__LCC__) && __LCC__ < 124) ||                                     \
+    (defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ < 407) &&           \
+     !defined(__clang__) && !defined(__LCC__)) ||                              \
+    (defined(_MSC_VER) && _MSC_VER < 1910) ||                                  \
+    (defined(__clang__) && __clang_major__ < 4)
+/* The constexpr feature is not available or (may be) broken */
+#define CONSTEXPR_ENUM_FLAGS_OPERATIONS 0
+#else
+/* C always allows these operators for enums */
+#define CONSTEXPR_ENUM_FLAGS_OPERATIONS 1
+#endif /* __cpp_constexpr */
+
 /// Define operator overloads to enable bit operations on enum values that are
 /// used to define flags (based on Microsoft's DEFINE_ENUM_FLAG_OPERATORS).
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUM)                                       \
@@ -462,10 +481,23 @@ typedef mode_t mdbx_mode_t;
   }                                                                            \
   MDBX_CXX14_CONSTEXPR ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; } \
   }
-#else                                    /* __cplusplus */
-#define DEFINE_ENUM_FLAG_OPERATORS(ENUM) /* nope, C allows these operators */
-#endif                                   /* !__cplusplus */
-#endif                                   /* DEFINE_ENUM_FLAG_OPERATORS */
+#else /* __cplusplus */
+/* nope for C since it always allows these operators for enums */
+#define DEFINE_ENUM_FLAG_OPERATORS(ENUM)
+#define CONSTEXPR_ENUM_FLAGS_OPERATIONS 1
+#endif /* !__cplusplus */
+
+#elif !defined(CONSTEXPR_ENUM_FLAGS_OPERATIONS)
+
+#ifdef __cplusplus
+/* DEFINE_ENUM_FLAG_OPERATORS may be defined broken as in the Windows SDK */
+#define CONSTEXPR_ENUM_FLAGS_OPERATIONS 0
+#else
+/* C always allows these operators for enums */
+#define CONSTEXPR_ENUM_FLAGS_OPERATIONS 1
+#endif
+
+#endif /* DEFINE_ENUM_FLAG_OPERATORS */
 
 /** @} end of Common Macros */
 
@@ -1251,10 +1283,10 @@ enum MDBX_txn_flags_t {
  * will be ready for use with \ref mdbx_txn_renew(). This flag allows to
  * preallocate memory and assign a reader slot, thus avoiding these operations
  * at the next start of the transaction. */
-#if defined(__cplusplus) && !defined(__cpp_constexpr) && !defined(DOXYGEN)
-  MDBX_TXN_RDONLY_PREPARE = uint32_t(MDBX_RDONLY) | uint32_t(MDBX_NOMEMINIT),
-#else
+#if CONSTEXPR_ENUM_FLAGS_OPERATIONS || defined(DOXYGEN)
   MDBX_TXN_RDONLY_PREPARE = MDBX_RDONLY | MDBX_NOMEMINIT,
+#else
+  MDBX_TXN_RDONLY_PREPARE = uint32_t(MDBX_RDONLY) | uint32_t(MDBX_NOMEMINIT),
 #endif
 
   /** Do not block when starting a write transaction. */
