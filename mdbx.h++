@@ -1922,6 +1922,27 @@ public:
   /// \brief Copy an environment to the specified file descriptor.
   env &copy(filehandle fd, bool compactify, bool force_dynamic_size = false);
 
+  /// \brief Deletion modes for \ref remove().
+  enum remove_mode {
+    /// \brief Just delete the environment's files and directory if any.
+    /// \note On POSIX systems, processes already working with the database will
+    /// continue to work without interference until it close the environment.
+    /// \note On Windows, the behavior of `just_remove` is different
+    /// because the system does not support deleting files that are currently
+    /// memory mapped.
+    just_remove = MDBX_ENV_JUST_DELETE,
+    /// \brief Make sure that the environment is not being used by other
+    /// processes, or return an error otherwise.
+    ensure_unused = MDBX_ENV_ENSURE_UNUSED,
+    /// \brief Wait until other processes closes the environment before
+    /// deletion.
+    wait_for_unused = MDBX_ENV_WAIT_FOR_UNUSED
+  };
+
+  /// \brief Removes the environment's files in a proper and multiprocess-safe
+  /// way.
+  static bool remove(const path &, const remove_mode mode = just_remove);
+
   /// \brief Statistics for a database in the MDBX environment.
   using stat = ::MDBX_stat;
 

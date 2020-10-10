@@ -1119,6 +1119,12 @@ path env::get_path() const {
   return pchar_to_path<path>(c_str);
 }
 
+bool env::remove(const path &pathname, const remove_mode mode) {
+  const path_to_pchar<path> utf8(pathname);
+  return error::boolean_or_throw(
+      ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
+}
+
 //------------------------------------------------------------------------------
 
 static inline MDBX_env *create_env() {
