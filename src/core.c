@@ -5253,7 +5253,7 @@ skip_cache:
         }
       }
 
-      /* Append PNL from GC record to me_reclaimed_pglist */
+      /* Append PNL from GC record to tw.reclaimed_pglist */
       mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
       pgno_t *gc_pnl = (pgno_t *)data.iov_base;
       mdbx_tassert(txn, data.iov_len >= MDBX_PNL_SIZEOF(gc_pnl));
@@ -5485,7 +5485,7 @@ done:
     mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
     mdbx_tassert(txn, pgno < txn->mt_next_pgno);
     mdbx_tassert(txn, pgno == re_list[range_begin]);
-    /* Cutoff allocated pages from me_reclaimed_pglist */
+    /* Cutoff allocated pages from tw.reclaimed_pglist */
 #if MDBX_PNL_ASCENDING
     for (unsigned i = range_begin + num; i <= re_len;)
       re_list[range_begin++] = re_list[i++];
@@ -7244,8 +7244,10 @@ retry_noaccount:
 
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                             txn->mt_next_pgno));
-    if (txn->tw.lifo_reclaimed) {
-      if (cleaned_gc_slot < MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)) {
+    if (lifo) {
+      if (cleaned_gc_slot < (txn->tw.lifo_reclaimed
+                                 ? MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)
+                                 : 0)) {
         settled = 0;
         cleaned_gc_slot = 0;
         reused_gc_slot = 0;
@@ -7276,7 +7278,7 @@ retry_noaccount:
       }
     } else {
       /* If using records from GC which we have not yet deleted,
-       * now delete them and any we reserved for me_reclaimed_pglist. */
+       * now delete them and any we reserved for tw.reclaimed_pglist. */
       while (cleaned_gc_id <= txn->tw.last_reclaimed) {
         gc_rid = cleaned_gc_id;
         settled = 0;
@@ -7336,13 +7338,13 @@ retry_noaccount:
 
     /* handle loose pages - put ones into the reclaimed- or retired-list */
     if (txn->tw.loose_pages) {
-      /* Return loose page numbers to me_reclaimed_pglist,
+      /* Return loose page numbers to tw.reclaimed_pglist,
        * though usually none are left at this point.
        * The pages themselves remain in dirtylist. */
       if (unlikely(!txn->tw.lifo_reclaimed && txn->tw.last_reclaimed < 1)) {
         if (txn->tw.loose_count > 0) {
           /* Put loose page numbers in tw.retired_pages,
-           * since unable to return them to me_reclaimed_pglist. */
+           * since unable to return them to tw.reclaimed_pglist. */
           if (unlikely((rc = mdbx_pnl_need(&txn->tw.retired_pages,
                                            txn->tw.loose_count)) != 0))
             goto bailout;
@@ -7520,6 +7522,8 @@ retry_noaccount:
           gc_rid = MDBX_PNL_LAST(txn->tw.lifo_reclaimed);
         } else {
           mdbx_tassert(txn, txn->tw.last_reclaimed == 0);
+          /* no reclaimable GC entries,
+           * therefore no entries with ID < mdbx_find_oldest(txn) */
           txn->tw.last_reclaimed = gc_rid = mdbx_find_oldest(txn) - 1;
           mdbx_trace("%s: none recycled yet, set rid to @%" PRIaTXN,
                      dbg_prefix_mode, gc_rid);
