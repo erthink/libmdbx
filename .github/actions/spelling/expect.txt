@@ -208,6 +208,7 @@ csrc
 CSRSS
 css
 cstdarg
+cstdatomic
 cstddef
 cstdint
 cstr
