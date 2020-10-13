@@ -3214,8 +3214,9 @@ static int __must_check_result mdbx_cursor_del0(MDBX_cursor *mc);
 static int __must_check_result mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi,
                                          const MDBX_val *key,
                                          const MDBX_val *data, unsigned flags);
-static int __must_check_result mdbx_cursor_sibling(MDBX_cursor *mc,
-                                                   int move_right);
+#define SIBLING_LEFT 0
+#define SIBLING_RIGHT 2
+static int __must_check_result mdbx_cursor_sibling(MDBX_cursor *mc, int dir);
 static int __must_check_result mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key,
                                                 MDBX_val *data,
                                                 MDBX_cursor_op op);
@@ -7099,7 +7100,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
               db->md_branch_pages + db->md_leaf_pages + db->md_overflow_pages;
         }
       }
-      rc = mdbx_cursor_sibling(&cx.outer, 1);
+      rc = mdbx_cursor_sibling(&cx.outer, SIBLING_RIGHT);
     }
     mdbx_tassert(txn, rc == MDBX_NOTFOUND);
   }
@@ -11706,15 +11707,15 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
  * Replaces the page at the top of the cursor's stack with the specified
  * sibling, if one exists.
  *
- * [in] mc          The cursor for this operation.
- * [in] move_right  Non-zero if the right sibling is requested,
- *                  otherwise the left sibling.
+ * [in] mc    The cursor for this operation.
+ * [in] dir   SIBLING_LEFT or SIBLING_RIGHT.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_cursor_sibling(MDBX_cursor *mc, int move_right) {
+static int mdbx_cursor_sibling(MDBX_cursor *mc, int dir) {
   int rc;
-  MDBX_node *indx;
+  MDBX_node *node;
   MDBX_page *mp;
+  assert(dir == SIBLING_LEFT || dir == SIBLING_RIGHT);
 
   if (unlikely(mc->mc_snum < 2))
     return MDBX_NOTFOUND; /* root has no siblings */
@@ -11723,29 +11724,28 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int move_right) {
   mdbx_debug("parent page is page %" PRIaPGNO ", index %u",
              mc->mc_pg[mc->mc_top]->mp_pgno, mc->mc_ki[mc->mc_top]);
 
-  if (move_right
+  if ((dir == SIBLING_RIGHT)
           ? (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mc->mc_pg[mc->mc_top]))
           : (mc->mc_ki[mc->mc_top] == 0)) {
     mdbx_debug("no more keys left, moving to %s sibling",
-               move_right ? "right" : "left");
-    if (unlikely((rc = mdbx_cursor_sibling(mc, move_right)) != MDBX_SUCCESS)) {
+               dir ? "right" : "left");
+    if (unlikely((rc = mdbx_cursor_sibling(mc, dir)) != MDBX_SUCCESS)) {
       /* undo cursor_pop before returning */
       mc->mc_top++;
       mc->mc_snum++;
       return rc;
     }
   } else {
-    if (move_right)
-      mc->mc_ki[mc->mc_top]++;
-    else
-      mc->mc_ki[mc->mc_top]--;
-    mdbx_debug("just moving to %s index key %u", move_right ? "right" : "left",
+    assert((dir - 1) == -1 || (dir - 1) == 1);
+    mc->mc_ki[mc->mc_top] += dir - 1;
+    mdbx_debug("just moving to %s index key %u",
+               (dir == SIBLING_RIGHT) ? "right" : "left",
                mc->mc_ki[mc->mc_top]);
   }
   mdbx_cassert(mc, IS_BRANCH(mc->mc_pg[mc->mc_top]));
 
-  indx = page_node(mp = mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
-  if (unlikely((rc = mdbx_page_get(mc, node_pgno(indx), &mp, NULL,
+  node = page_node(mp = mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
+  if (unlikely((rc = mdbx_page_get(mc, node_pgno(node), &mp, NULL,
                                    pp_txnid4chk(mp, mc->mc_txn))) != 0)) {
     /* mc will be inconsistent if caller does mc_snum++ as above */
     mc->mc_flags &= ~(C_INITIALIZED | C_EOF);
@@ -11755,7 +11755,7 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int move_right) {
   rc = mdbx_cursor_push(mc, mp);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  if (!move_right)
+  if (dir == SIBLING_LEFT)
     mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mp) - 1;
 
   return MDBX_SUCCESS;
@@ -11809,7 +11809,8 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   if (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mp)) {
     mdbx_debug("%s", "=====> move to next sibling page");
-    if (unlikely((rc = mdbx_cursor_sibling(mc, 1)) != MDBX_SUCCESS)) {
+    if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
+                 MDBX_SUCCESS)) {
       mc->mc_flags |= C_EOF;
       return rc;
     }
@@ -11905,7 +11906,7 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   if (mc->mc_ki[mc->mc_top] == 0) {
     mdbx_debug("%s", "=====> move to prev sibling page");
-    if ((rc = mdbx_cursor_sibling(mc, 0)) != MDBX_SUCCESS) {
+    if ((rc = mdbx_cursor_sibling(mc, SIBLING_LEFT)) != MDBX_SUCCESS) {
       return rc;
     }
     mp = mc->mc_pg[mc->mc_top];
@@ -12100,7 +12101,8 @@ set2:
 
   if (node == NULL) {
     mdbx_debug("%s", "===> inexact leaf not found, goto sibling");
-    if (unlikely((rc = mdbx_cursor_sibling(mc, 1)) != MDBX_SUCCESS)) {
+    if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
+                 MDBX_SUCCESS)) {
       mc->mc_flags |= C_EOF;
       return rc; /* no entries matched */
     }
@@ -12405,7 +12407,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (rc == MDBX_SUCCESS) {
       MDBX_cursor *mx = &mc->mc_xcursor->mx_cursor;
       if (mx->mc_flags & C_INITIALIZED) {
-        rc = mdbx_cursor_sibling(mx, 0);
+        rc = mdbx_cursor_sibling(mx, SIBLING_LEFT);
         if (rc == MDBX_SUCCESS)
           goto fetchm;
       } else {
@@ -12692,7 +12694,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           mc->mc_ki[mc->mc_top]++; /* step forward for appending */
           rc = MDBX_NOTFOUND;
         } else {
-          if (unlikely(rc != 0 || !(flags & MDBX_APPENDDUP)))
+          if (unlikely(rc != MDBX_SUCCESS || !(flags & MDBX_APPENDDUP)))
             /* new-key < last-key
              * or new-key == last-key without MDBX_APPENDDUP */
             return MDBX_EKEYMISMATCH;
@@ -15463,7 +15465,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
       if (m3->mc_pg[mc->mc_top] == mp) {
         /* if m3 points past last node in page, find next sibling */
         if (m3->mc_ki[mc->mc_top] >= nkeys) {
-          rc = mdbx_cursor_sibling(m3, true);
+          rc = mdbx_cursor_sibling(m3, SIBLING_RIGHT);
           if (rc == MDBX_NOTFOUND) {
             m3->mc_flags |= C_EOF;
             rc = MDBX_SUCCESS;
@@ -15496,11 +15498,11 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
       }
     }
 
-    if (mc->mc_ki[mc->mc_top] >= nkeys) {
-      rc = mdbx_cursor_sibling(mc, true);
-      if (rc == MDBX_NOTFOUND) {
+    if (unlikely(mc->mc_ki[mc->mc_top] >= nkeys)) {
+      rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT);
+      if (unlikely(rc == MDBX_NOTFOUND)) {
         mc->mc_flags |= C_EOF;
-        rc = MDBX_SUCCESS;
+        return MDBX_SUCCESS;
       }
     }
     if ((mc->mc_db->md_flags & MDBX_DUPSORT) != 0 &&
@@ -15866,7 +15868,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
       } else {
         /* find right page's left sibling */
         mc->mc_ki[ptop] = mn.mc_ki[ptop];
-        rc = mdbx_cursor_sibling(mc, false);
+        rc = mdbx_cursor_sibling(mc, SIBLING_LEFT);
       }
     }
   } else {
@@ -17568,7 +17570,7 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
         break;
       mdbx_cassert(mc, i <= UINT16_MAX);
       mc->mc_ki[mc->mc_top] = (indx_t)i;
-      rc = mdbx_cursor_sibling(mc, 1);
+      rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT);
       if (rc) {
         if (unlikely(rc != MDBX_NOTFOUND))
           goto done;
