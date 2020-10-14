@@ -16,6 +16,11 @@
 #include MDBX_CONFIG_H
 #endif
 
+#define LIBMDBX_INTERNALS
+#ifdef MDBX_TOOLS
+#define MDBX_DEPRECATED
+#endif /* MDBX_TOOLS */
+
 /* *INDENT-OFF* */
 /* clang-format off */
 
@@ -95,11 +100,6 @@
 #pragma warning(disable : 4204) /* nonstandard extension used: non-constant aggregate initializer */
 #pragma warning(disable : 4505) /* unreferenced local function has been removed */
 #endif                          /* _MSC_VER (warnings) */
-
-#if defined(MDBX_TOOLS)
-#undef MDBX_DEPRECATED
-#define MDBX_DEPRECATED
-#endif /* MDBX_TOOLS */
 
 #include "../mdbx.h"
 #include "defs.h"

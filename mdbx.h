@@ -350,6 +350,17 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* __dll_import */
 
+/** \brief Auxiliary macro for robustly define the both inline version of API
+ * function and non-inline fallback dll-exported version for applications linked
+ * with old version of libmdbx, with a strictly ODR-common implementation. */
+#if !defined(LIBMDBX_INTERNALS) || defined(DOXYGEN)
+#define LIBMDBX_INLINE_API(TYPE, NAME, ARGS) static __inline TYPE NAME ARGS
+#else
+#define LIBMDBX_INLINE_API(TYPE, NAME, ARGS)                                   \
+  /* proto of exported which uses common impl */ LIBMDBX_API TYPE NAME ARGS;   \
+  /* definition of common impl */ static __inline TYPE __inline_##NAME ARGS
+#endif /* LIBMDBX_INLINE_API */
+
 /*----------------------------------------------------------------------------*/
 
 #ifndef __cplusplus
@@ -1971,11 +1982,15 @@ typedef struct MDBX_stat MDBX_stat;
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                                  MDBX_stat *stat, size_t bytes);
+
 /** \brief Return statistics about the MDBX environment.
  * \ingroup c_statinfo
  * \deprecated Please use mdbx_env_stat_ex() instead. */
-MDBX_DEPRECATED LIBMDBX_API int mdbx_env_stat(MDBX_env *env, MDBX_stat *stat,
-                                              size_t bytes);
+MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_stat,
+                                   (const MDBX_env *env, MDBX_stat *stat,
+                                    size_t bytes)) {
+  return mdbx_env_stat_ex(env, NULL, stat, bytes);
+}
 
 /** \brief Information about the environment
  * \ingroup c_statinfo
@@ -2061,8 +2076,11 @@ LIBMDBX_API int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
 /** \brief Return information about the MDBX environment.
  * \ingroup c_statinfo
  * \deprecated Please use mdbx_env_info_ex() instead. */
-MDBX_DEPRECATED LIBMDBX_API int mdbx_env_info(MDBX_env *env, MDBX_envinfo *info,
-                                              size_t bytes);
+MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_info,
+                                   (const MDBX_env *env, MDBX_envinfo *info,
+                                    size_t bytes)) {
+  return mdbx_env_info_ex(env, NULL, info, bytes);
+}
 
 /** \brief Flush the environment data buffers to disk.
  * \ingroup c_extra
@@ -2104,12 +2122,16 @@ LIBMDBX_API int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock);
 /** \brief The shortcut to calling \ref mdbx_env_sync_ex() with
  * the `force=true` and `nonblock=false` arguments.
  * \ingroup c_extra */
-LIBMDBX_API int mdbx_env_sync(MDBX_env *env);
+LIBMDBX_INLINE_API(int, mdbx_env_sync, (MDBX_env * env)) {
+  return mdbx_env_sync_ex(env, true, false);
+}
 
 /** \brief The shortcut to calling \ref mdbx_env_sync_ex() with
  * the `force=false` and `nonblock=true` arguments.
  * \ingroup c_extra */
-LIBMDBX_API int mdbx_env_sync_poll(MDBX_env *env);
+LIBMDBX_INLINE_API(int, mdbx_env_sync_poll, (MDBX_env * env)) {
+  return mdbx_env_sync_ex(env, false, true);
+}
 
 /** \brief Sets threshold to force flush the data buffers to disk, even any of
  * \ref MDBX_SAFE_NOSYNC flag in the environment.
@@ -2211,7 +2233,9 @@ LIBMDBX_API int mdbx_env_close_ex(MDBX_env *env, bool dont_sync);
 /** \brief The shortcut to calling \ref mdbx_env_close_ex() with
  * the `dont_sync=false` argument.
  * \ingroup c_opening */
-LIBMDBX_API int mdbx_env_close(MDBX_env *env);
+LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) {
+  return mdbx_env_close_ex(env, false);
+}
 
 /** \brief Set environment flags.
  * \ingroup c_settings
@@ -2465,8 +2489,10 @@ LIBMDBX_API int mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower,
 
 /** \deprecated Please use \ref mdbx_env_set_geometry() instead.
  * \ingroup c_settings */
-MDBX_DEPRECATED LIBMDBX_API int mdbx_env_set_mapsize(MDBX_env *env,
-                                                     size_t size);
+MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_set_mapsize,
+                                   (MDBX_env * env, size_t size)) {
+  return mdbx_env_set_geometry(env, size, size, size, -1, -1, -1);
+}
 
 /** \brief Find out whether to use readahead or not, based on the given database
  * size and the amount of available memory. \ingroup c_extra
@@ -2487,13 +2513,15 @@ LIBMDBX_API int mdbx_is_readahead_reasonable(size_t volume,
 
 /** \brief Returns the minimal database page size in bytes.
  * \ingroup c_statinfo */
-MDBX_NOTHROW_CONST_FUNCTION __inline intptr_t mdbx_limits_pgsize_min(void) {
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(intptr_t, mdbx_limits_pgsize_min,
+                                               (void)) {
   return MDBX_MIN_PAGESIZE;
 }
 
 /** \brief Returns the maximal database page size in bytes.
  * \ingroup c_statinfo */
-MDBX_NOTHROW_CONST_FUNCTION __inline intptr_t mdbx_limits_pgsize_max(void) {
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(intptr_t, mdbx_limits_pgsize_max,
+                                               (void)) {
   return MDBX_MAX_PAGESIZE;
 }
 
@@ -2650,60 +2678,6 @@ LIBMDBX_API int mdbx_env_set_userctx(MDBX_env *env, void *ctx);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API void *
 mdbx_env_get_userctx(const MDBX_env *env);
 
-/** \brief Create a transaction for use with the environment.
- * \ingroup c_transactions
- *
- * The transaction handle may be discarded using \ref mdbx_txn_abort()
- * or \ref mdbx_txn_commit().
- * \see mdbx_txn_begin_ex()
- *
- * \note A transaction and its cursors must only be used by a single thread,
- * and a thread may only have a single transaction at a time. If \ref MDBX_NOTLS
- * is in use, this does not apply to read-only transactions.
- *
- * \note Cursors may not span transactions.
- *
- * \param [in] env     An environment handle returned by \ref mdbx_env_create()
- * \param [in] parent  If this parameter is non-NULL, the new transaction will
- *                     be a nested transaction, with the transaction indicated
- *                     by parent as its parent. Transactions may be nested
- *                     to any level. A parent transaction and its cursors may
- *                     not issue any other operations than mdbx_txn_commit and
- *                     \ref mdbx_txn_abort() while it has active child
- *                     transactions.
- * \param [in] flags   Special options for this transaction. This parameter
- *                     must be set to 0 or by bitwise OR'ing together one
- *                     or more of the values described here:
- *                      - \ref MDBX_RDONLY   This transaction will not perform
- *                                           any write operations.
- *
- *                      - \ref MDBX_TXN_TRY  Do not block when starting
- *                                           a write transaction.
- *
- *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
- *                        Do not sync data to disk corresponding
- *                        to \ref MDBX_NOMETASYNC or \ref MDBX_SAFE_NOSYNC
- *                        description. \see sync_modes
- *
- * \param [out] txn    Address where the new MDBX_txn handle will be stored.
- *
- * \returns A non-zero error value on failure and 0 on success,
- *          some possible errors are:
- * \retval MDBX_PANIC         A fatal error occurred earlier and the
- *                            environment must be shut down.
- * \retval MDBX_UNABLE_EXTEND_MAPSIZE  Another process wrote data beyond
- *                                     this MDBX_env's mapsize and this
- *                                     environment map must be resized as well.
- *                                     See \ref mdbx_env_set_mapsize().
- * \retval MDBX_READERS_FULL  A read-only transaction was requested and
- *                            the reader lock table is full.
- *                            See \ref mdbx_env_set_maxreaders().
- * \retval MDBX_ENOMEM        Out of memory.
- * \retval MDBX_BUSY          The write transaction is already started by the
- *                            current thread. */
-LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
-                               MDBX_txn_flags_t flags, MDBX_txn **txn);
-
 /** \brief Create a transaction with a user provided context pointer
  * for use with the environment.
  * \ingroup c_transactions
@@ -2765,6 +2739,65 @@ LIBMDBX_API int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent,
 LIBMDBX_API int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent,
                                   MDBX_txn_flags_t flags, MDBX_txn **txn,
                                   void *context);
+
+/** \brief Create a transaction for use with the environment.
+ * \ingroup c_transactions
+ *
+ * The transaction handle may be discarded using \ref mdbx_txn_abort()
+ * or \ref mdbx_txn_commit().
+ * \see mdbx_txn_begin_ex()
+ *
+ * \note A transaction and its cursors must only be used by a single thread,
+ * and a thread may only have a single transaction at a time. If \ref MDBX_NOTLS
+ * is in use, this does not apply to read-only transactions.
+ *
+ * \note Cursors may not span transactions.
+ *
+ * \param [in] env     An environment handle returned by \ref mdbx_env_create().
+ *
+ * \param [in] parent  If this parameter is non-NULL, the new transaction will
+ *                     be a nested transaction, with the transaction indicated
+ *                     by parent as its parent. Transactions may be nested
+ *                     to any level. A parent transaction and its cursors may
+ *                     not issue any other operations than mdbx_txn_commit and
+ *                     \ref mdbx_txn_abort() while it has active child
+ *                     transactions.
+ *
+ * \param [in] flags   Special options for this transaction. This parameter
+ *                     must be set to 0 or by bitwise OR'ing together one
+ *                     or more of the values described here:
+ *                      - \ref MDBX_RDONLY   This transaction will not perform
+ *                                           any write operations.
+ *
+ *                      - \ref MDBX_TXN_TRY  Do not block when starting
+ *                                           a write transaction.
+ *
+ *                      - \ref MDBX_SAFE_NOSYNC, \ref MDBX_NOMETASYNC.
+ *                        Do not sync data to disk corresponding
+ *                        to \ref MDBX_NOMETASYNC or \ref MDBX_SAFE_NOSYNC
+ *                        description. \see sync_modes
+ *
+ * \param [out] txn    Address where the new MDBX_txn handle will be stored.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_PANIC         A fatal error occurred earlier and the
+ *                            environment must be shut down.
+ * \retval MDBX_UNABLE_EXTEND_MAPSIZE  Another process wrote data beyond
+ *                                     this MDBX_env's mapsize and this
+ *                                     environment map must be resized as well.
+ *                                     See \ref mdbx_env_set_mapsize().
+ * \retval MDBX_READERS_FULL  A read-only transaction was requested and
+ *                            the reader lock table is full.
+ *                            See \ref mdbx_env_set_maxreaders().
+ * \retval MDBX_ENOMEM        Out of memory.
+ * \retval MDBX_BUSY          The write transaction is already started by the
+ *                            current thread. */
+LIBMDBX_INLINE_API(int, mdbx_txn_begin,
+                   (MDBX_env * env, MDBX_txn *parent, MDBX_txn_flags_t flags,
+                    MDBX_txn **txn)) {
+  return mdbx_txn_begin_ex(env, parent, flags, txn, NULL);
+}
 
 /** \brief Set application information associated with the \ref MDBX_txn.
  * \ingroup c_transactions
@@ -3225,13 +3258,13 @@ mdbx_key_from_float(const float ieee754_32bit);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint32_t
 mdbx_key_from_ptrfloat(const float *const ieee754_32bit);
 
-MDBX_NOTHROW_CONST_FUNCTION __inline uint64_t
-mdbx_key_from_int64(const int64_t i64) {
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint64_t, mdbx_key_from_int64,
+                                               (const int64_t i64)) {
   return UINT64_C(0x8000000000000000) + i64;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION __inline uint32_t
-mdbx_key_from_int32(const int32_t i32) {
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32,
+                                               (const int32_t i32)) {
   return UINT32_C(0x80000000) + i32;
 }
 /** @} */
@@ -3323,7 +3356,11 @@ LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                                   unsigned *state);
 /** \brief The shortcut to calling \ref mdbx_dbi_flags_ex() with `state=NULL`
  * for discarding it result. \ingroup c_statinfo */
-LIBMDBX_API int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags);
+LIBMDBX_INLINE_API(int, mdbx_dbi_flags,
+                   (MDBX_txn * txn, MDBX_dbi dbi, unsigned *flags)) {
+  unsigned state;
+  return mdbx_dbi_flags_ex(txn, dbi, flags, &state);
+}
 
 /** \brief Close a database handle. Normally unnecessary.
  * \ingroup c_dbi
