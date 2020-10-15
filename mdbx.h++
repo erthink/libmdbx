@@ -17,7 +17,7 @@
 #if (!defined(__cplusplus) || __cplusplus < 201103L) &&                        \
     !(defined(                                                                 \
           _MSC_VER) /* MSVC is mad and don't define __cplusplus properly */    \
-      && _MSC_VER == 1900)
+      && _MSC_VER >= 1900)
 #error "C++11 or better is required"
 #endif
 
