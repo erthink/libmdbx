@@ -8025,12 +8025,18 @@ static __always_inline bool mdbx_txn_dbi_exists(MDBX_txn *txn, MDBX_dbi dbi,
   return mdbx_txn_import_dbi(txn, dbi);
 }
 
-int mdbx_txn_commit(MDBX_txn *txn) {
+int mdbx_txn_commit(MDBX_txn *txn) { return __inline_mdbx_txn_commit(txn); }
+
+int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED ==
                 MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR);
+  const uint64_t ts_0 = latency ? mdbx_osal_monotime() : 0;
+  uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0;
+  uint32_t audit_duration = 0;
+
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+    goto provide_latency;
 
   if (unlikely(txn->mt_flags & MDBX_TXN_ERROR)) {
     rc = MDBX_RESULT_TRUE;
@@ -8041,7 +8047,8 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 #if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != mdbx_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
-    return MDBX_PANIC;
+    rc = MDBX_PANIC;
+    goto provide_latency;
   }
 #endif /* MDBX_ENV_CHECKPID */
 
@@ -8052,7 +8059,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     goto done;
 
   if (txn->mt_child) {
-    rc = mdbx_txn_commit(txn->mt_child);
+    rc = mdbx_txn_commit_ex(txn->mt_child, NULL);
     mdbx_tassert(txn, txn->mt_child == NULL);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
@@ -8107,6 +8114,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
       parent->mt_dbistate[i] = txn->mt_dbistate[i] | (parent->mt_dbistate[i] &
                                                       (DBI_CREAT | DBI_FRESH));
     }
+    ts_1 = latency ? mdbx_osal_monotime() : 0;
 
     /* Remove refunded pages from parent's dirty & spill lists */
     MDBX_DPL dst = mdbx_dpl_sort(parent->tw.dirtylist);
@@ -8278,6 +8286,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
         parent->mt_flags |= MDBX_TXN_SPILLS;
     }
 
+    ts_2 = latency ? mdbx_osal_monotime() : 0;
     /* Append our loose page list to parent's */
     if (txn->tw.loose_pages) {
       MDBX_page **lp = &parent->tw.loose_pages;
@@ -8299,8 +8308,6 @@ int mdbx_txn_commit(MDBX_txn *txn) {
 
     env->me_txn = parent;
     parent->mt_child = NULL;
-    txn->mt_signature = 0;
-    mdbx_free(txn);
     mdbx_tassert(parent, mdbx_dirtylist_check(parent));
 
     /* Scan parent's loose page for suitable for refund */
@@ -8310,8 +8317,13 @@ int mdbx_txn_commit(MDBX_txn *txn) {
         break;
       }
     }
+
+    ts_4 = ts_3 = latency ? mdbx_osal_monotime() : 0;
+    txn->mt_signature = 0;
+    mdbx_free(txn);
     mdbx_tassert(parent, mdbx_dirtylist_check(parent));
-    return MDBX_SUCCESS;
+    rc = MDBX_SUCCESS;
+    goto provide_latency;
   }
 
   mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
@@ -8360,17 +8372,23 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     }
   }
 
+  ts_1 = latency ? mdbx_osal_monotime() : 0;
   rc = mdbx_update_gc(txn);
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
 
+  ts_2 = latency ? mdbx_osal_monotime() : 0;
   if (mdbx_audit_enabled()) {
     rc = mdbx_audit_ex(txn, MDBX_PNL_SIZE(txn->tw.retired_pages), true);
+    const uint64_t audit_end = mdbx_osal_monotime();
+    audit_duration = mdbx_osal_monotime_to_16dot16(audit_end - ts_2);
+    ts_2 = audit_end;
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }
 
   rc = mdbx_page_flush(txn, 0);
+  ts_3 = latency ? mdbx_osal_monotime() : 0;
   if (likely(rc == MDBX_SUCCESS)) {
     if (txn->mt_dbs[MAIN_DBI].md_flags & DBI_DIRTY)
       txn->mt_dbs[MAIN_DBI].md_mod_txnid = pp_txnid2chk(txn);
@@ -8392,6 +8410,7 @@ int mdbx_txn_commit(MDBX_txn *txn) {
     rc = mdbx_sync_locked(
         env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED, &meta);
   }
+  ts_4 = latency ? mdbx_osal_monotime() : 0;
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->me_flags |= MDBX_FATAL_ERROR;
     goto fail;
@@ -8400,11 +8419,28 @@ int mdbx_txn_commit(MDBX_txn *txn) {
   end_mode = MDBX_END_COMMITTED | MDBX_END_UPDATE | MDBX_END_EOTDONE;
 
 done:
-  return mdbx_txn_end(txn, end_mode);
+  rc = mdbx_txn_end(txn, end_mode);
+
+provide_latency:
+  if (latency) {
+    latency->audit = audit_duration;
+    latency->preparation =
+        ts_1 ? mdbx_osal_monotime_to_16dot16(ts_1 - ts_0) : 0;
+    latency->gc =
+        (ts_1 && ts_2) ? mdbx_osal_monotime_to_16dot16(ts_2 - ts_1) : 0;
+    latency->write =
+        (ts_2 && ts_3) ? mdbx_osal_monotime_to_16dot16(ts_3 - ts_2) : 0;
+    latency->sync =
+        (ts_3 && ts_4) ? mdbx_osal_monotime_to_16dot16(ts_4 - ts_3) : 0;
+    const uint64_t ts_5 = mdbx_osal_monotime();
+    latency->ending = ts_4 ? mdbx_osal_monotime_to_16dot16(ts_5 - ts_4) : 0;
+    latency->whole = mdbx_osal_monotime_to_16dot16(ts_5 - ts_0);
+  }
+  return rc;
 
 fail:
   mdbx_txn_abort(txn);
-  return rc;
+  goto provide_latency;
 }
 
 static __cold int

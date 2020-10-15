@@ -2921,6 +2921,38 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int mdbx_txn_flags(const MDBX_txn *txn);
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API uint64_t
 mdbx_txn_id(const MDBX_txn *txn);
 
+/** \brief Latency of commit stages in 1/65536 of seconds units.
+ * \warning This structure may be changed in future releases.
+ * \see mdbx_txn_commit_ex() */
+struct MDBX_commit_latency {
+  /** \brief Duration of preparation (commit child transactions, update
+   * sub-databases records and cursors destroying). */
+  uint32_t preparation;
+  /** \brief Duration of GC/freeDB handling & updation. */
+  uint32_t gc;
+  /** \brief Duration of internal audit if enabled. */
+  uint32_t audit;
+  /** \brief Duration of writing dirty/modified data pages. */
+  uint32_t write;
+  /** \brief Duration of syncing written data to the dist/storage. */
+  uint32_t sync;
+  /** \brief Duration of transaction ending (releasing resources). */
+  uint32_t ending;
+  /** \brief The total duration of a commit. */
+  uint32_t whole;
+};
+#ifndef __cplusplus
+/** \ingroup c_statinfo */
+typedef struct MDBX_commit_latency MDBX_commit_latency;
+#endif
+
+/** \brief Commit all the operations of a transaction into the database and
+ * collect latency information.
+ * \see mdbx_txn_commit()
+ * \ingroup c_statinfo
+ * \warning This function may be changed in future releases. */
+LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
+
 /** \brief Commit all the operations of a transaction into the database.
  * \ingroup c_transactions
  *
@@ -2958,7 +2990,9 @@ mdbx_txn_id(const MDBX_txn *txn);
  * \retval MDBX_ENOSPC           No more disk space.
  * \retval MDBX_EIO              A system-level I/O error occurred.
  * \retval MDBX_ENOMEM           Out of memory. */
-LIBMDBX_API int mdbx_txn_commit(MDBX_txn *txn);
+LIBMDBX_INLINE_API(int, mdbx_txn_commit, (MDBX_txn * txn)) {
+  return mdbx_txn_commit_ex(txn, NULL);
+}
 
 /** \brief Abandon all the operations of the transaction instead of saving them.
  * \ingroup c_transactions
