@@ -212,24 +212,9 @@ std::string thunk_param(const actor_config &config) {
 
 void cleanup() {
   log_trace(">> cleanup");
-  const int is_dir =
-#if defined(_WIN32) || defined(_WIN64)
-      ERROR_ACCESS_DENIED /* Windows API is mad */;
-#else
-      EISDIR;
-#endif
   for (const auto &db_path : global::databases) {
-    int err = osal_removefile(db_path);
-    if (err == is_dir) {
-      err = osal_removefile(db_path + MDBX_LOCKNAME);
-      if (err == MDBX_SUCCESS || err == MDBX_ENOFILE)
-        err = osal_removefile(db_path + MDBX_DATANAME);
-      if (err == MDBX_SUCCESS || err == MDBX_ENOFILE)
-        err = osal_removedirectory(db_path);
-    } else if (err == MDBX_SUCCESS || err == MDBX_ENOFILE)
-      err = osal_removefile(db_path + MDBX_LOCK_SUFFIX);
-
-    if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+    int err = mdbx_env_delete(db_path.c_str(), MDBX_ENV_JUST_DELETE);
+    if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
       failure_perror(db_path.c_str(), err);
   }
   log_trace("<< cleanup");

@@ -34,8 +34,6 @@ void osal_udelay(unsigned us);
 void osal_yield(void);
 bool osal_istty(int fd);
 std::string osal_tempdir(void);
-int osal_removefile(const std::string &pathname);
-int osal_removedirectory(const std::string &pathname);
 
 #ifdef _MSC_VER
 #ifndef STDIN_FILENO

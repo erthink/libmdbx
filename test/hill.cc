@@ -21,7 +21,7 @@ bool testcase_hill::run() {
     return false;
   }
   speculum.clear();
-  speculum_commited.clear();
+  speculum_committed.clear();
 
   /* LY: тест "холмиком":
    *  - сначала наполняем таблицу циклическими CRUD-манипуляциями,
@@ -62,7 +62,7 @@ bool testcase_hill::run() {
           : MDBX_NODUPDATA;
 
   uint64_t serial_count = 0;
-  uint64_t commited_serial = serial_count;
+  uint64_t committed_serial = serial_count;
   unsigned txn_nops = 0;
 
   bool rc = false;
@@ -87,8 +87,8 @@ bool testcase_hill::run() {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
         log_notice("uphill: bailout at insert-a due '%s'", mdbx_strerror(err));
         txn_restart(true, false);
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_put(insert-a.1)", err);
@@ -102,12 +102,12 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
-      commited_serial = a_serial;
+      speculum_committed = speculum;
+      committed_serial = a_serial;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("uphill: bailout after insert-a, after commit");
@@ -123,8 +123,8 @@ bool testcase_hill::run() {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
         log_notice("uphill: bailout at insert-b due '%s'", mdbx_strerror(err));
         txn_restart(true, false);
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_put(insert-b)", err);
@@ -138,12 +138,12 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
-      commited_serial = a_serial;
+      speculum_committed = speculum;
+      committed_serial = a_serial;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("uphill: bailout after insert-b, after commit");
@@ -161,8 +161,8 @@ bool testcase_hill::run() {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
         log_notice("uphill: bailout at update-a due '%s'", mdbx_strerror(err));
         txn_restart(true, false);
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_replace(update-a: 1->0)", err);
@@ -176,12 +176,12 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
-      commited_serial = a_serial;
+      speculum_committed = speculum;
+      committed_serial = a_serial;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("uphill: bailout after update-a, after commit");
@@ -197,8 +197,8 @@ bool testcase_hill::run() {
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
         log_notice("uphill: bailout at delete-b due '%s'", mdbx_strerror(err));
         txn_restart(true, false);
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_del(b)", err);
@@ -212,12 +212,12 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("uphill: bailout at commit due '%s'", mdbx_strerror(err));
-        serial_count = commited_serial;
-        speculum = speculum_commited;
+        serial_count = committed_serial;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
-      commited_serial = a_serial;
+      speculum_committed = speculum;
+      committed_serial = a_serial;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("uphill: bailout after delete-b, after commit");
@@ -296,7 +296,7 @@ bool testcase_hill::run() {
         log_notice("downhill: bailout at update-a due '%s'",
                    mdbx_strerror(err));
         txn_end(true);
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_put(update-a: 0->1)", err);
@@ -310,10 +310,10 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
+      speculum_committed = speculum;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("downhill: bailout after update-a, after commit");
@@ -330,7 +330,7 @@ bool testcase_hill::run() {
         log_notice("downhill: bailout at insert-a due '%s'",
                    mdbx_strerror(err));
         txn_end(true);
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_put(insert-b)", err);
@@ -344,10 +344,10 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
+      speculum_committed = speculum;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("downhill: bailout after insert-b, after commit");
@@ -365,7 +365,7 @@ bool testcase_hill::run() {
         log_notice("downhill: bailout at delete-a due '%s'",
                    mdbx_strerror(err));
         txn_end(true);
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_del(a)", err);
@@ -379,10 +379,10 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
+      speculum_committed = speculum;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("downhill: bailout after delete-a, after commit");
@@ -399,7 +399,7 @@ bool testcase_hill::run() {
         log_notice("downhill: bailout at delete-b due '%s'",
                    mdbx_strerror(err));
         txn_end(true);
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
       failure_perror("mdbx_del(b)", err);
@@ -413,10 +413,10 @@ bool testcase_hill::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("downhill: bailout at commit due '%s'", mdbx_strerror(err));
-        speculum = speculum_commited;
+        speculum = speculum_committed;
         break;
       }
-      speculum_commited = speculum;
+      speculum_committed = speculum;
       txn_nops = 0;
       if (!speculum_verify()) {
         log_notice("downhill: bailout after delete-b, after commit");

@@ -16,6 +16,11 @@
 #include MDBX_CONFIG_H
 #endif
 
+#define LIBMDBX_INTERNALS
+#ifdef MDBX_TOOLS
+#define MDBX_DEPRECATED
+#endif /* MDBX_TOOLS */
+
 /* *INDENT-OFF* */
 /* clang-format off */
 
@@ -95,11 +100,6 @@
 #pragma warning(disable : 4204) /* nonstandard extension used: non-constant aggregate initializer */
 #pragma warning(disable : 4505) /* unreferenced local function has been removed */
 #endif                          /* _MSC_VER (warnings) */
-
-#if defined(MDBX_TOOLS)
-#undef MDBX_DEPRECATED
-#define MDBX_DEPRECATED
-#endif /* MDBX_TOOLS */
 
 #include "../mdbx.h"
 #include "defs.h"
@@ -287,7 +287,7 @@ typedef struct MDBX_db {
   pgno_t md_overflow_pages; /* number of overflow pages */
   uint64_t md_seq;          /* table sequence counter */
   uint64_t md_entries;      /* number of data items */
-  uint64_t md_mod_txnid;    /* txnid of last commited modification */
+  uint64_t md_mod_txnid;    /* txnid of last committed modification */
 } MDBX_db;
 
 /* database size-related parameters */
@@ -619,7 +619,7 @@ typedef struct MDBX_lockinfo {
 #if defined(_WIN32) || defined(_WIN64)
 #define MAX_MAPSIZE32 UINT32_C(0x38000000)
 #else
-#define MAX_MAPSIZE32 UINT32_C(0x7ff80000)
+#define MAX_MAPSIZE32 UINT32_C(0x7f000000)
 #endif
 #define MAX_MAPSIZE64 (MAX_PAGENO * (uint64_t)MAX_PAGESIZE)
 
@@ -943,7 +943,7 @@ struct MDBX_env {
 #define me_lfd me_lck_mmap.fd
 #define me_lck me_lck_mmap.lck
 
-  unsigned me_psize;    /* DB page size, inited from me_os_psize */
+  unsigned me_psize;    /* DB page size, initialized from me_os_psize */
   uint8_t me_psize2log; /* log2 of DB page size */
   int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
   unsigned me_os_psize; /* OS page size, from mdbx_syspagesize() */
@@ -953,7 +953,7 @@ struct MDBX_env {
   MDBX_dbi me_maxdbs;         /* size of the DB table */
   uint32_t me_pid;            /* process ID of this env */
   mdbx_thread_key_t me_txkey; /* thread-key for readers */
-  char *me_path;              /* path to the DB files */
+  char *me_pathname;          /* path to the DB files */
   void *me_pbuf;              /* scratch area for DUPSORT put() */
   MDBX_txn *me_txn;           /* current write transaction */
   MDBX_txn *me_txn0;          /* prealloc'd write transaction */

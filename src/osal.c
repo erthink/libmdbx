@@ -521,6 +521,20 @@ MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
 #endif
 }
 
+MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname) {
+#if defined(_WIN32) || defined(_WIN64)
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
+  return RemoveDirectoryW(pathnameW) ? MDBX_SUCCESS : GetLastError();
+#else
+  return rmdir(pathname) ? errno : MDBX_SUCCESS;
+#endif
+}
+
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
                                      const MDBX_env *env, const char *pathname,
                                      mdbx_filehandle_t *fd,
@@ -571,6 +585,12 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
     FlagsAndAttributes |=
         (env->me_psize < env->me_os_psize) ? 0 : FILE_FLAG_NO_BUFFERING;
     break;
+  case MDBX_OPEN_DELETE:
+    CreationDisposition = OPEN_EXISTING;
+    ShareMode |= FILE_SHARE_DELETE;
+    DesiredAccess =
+        FILE_READ_ATTRIBUTES | FILE_WRITE_ATTRIBUTES | DELETE | SYNCHRONIZE;
+    break;
   }
 
   *fd = CreateFileW(pathnameW, DesiredAccess, ShareMode, NULL,
@@ -618,6 +638,9 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
 #elif defined(O_FSYNC)
     flags |= O_FSYNC;
 #endif
+    break;
+  case MDBX_OPEN_DELETE:
+    flags = O_RDWR;
     break;
   }
 

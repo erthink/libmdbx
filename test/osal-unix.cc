@@ -164,7 +164,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
       ,
       -1, 0);
   if (MAP_FAILED == (void *)shared)
-    failure_perror("mmap(shared_conds)", errno);
+    failure_perror("mmap(shared)", errno);
 
   shared->count = actors.size() + 1;
 
@@ -529,14 +529,6 @@ std::string osal_tempdir(void) {
   if (access("/dev/shm/", R_OK | W_OK | X_OK) == 0)
     return "/dev/shm/";
   return "";
-}
-
-int osal_removefile(const std::string &pathname) {
-  return unlink(pathname.c_str()) ? errno : MDBX_SUCCESS;
-}
-
-int osal_removedirectory(const std::string &pathname) {
-  return rmdir(pathname.c_str()) ? errno : MDBX_SUCCESS;
 }
 
 #endif /* !Windows */

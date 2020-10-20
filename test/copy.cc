@@ -1,8 +1,8 @@
 #include "test.h"
 
 void testcase_copy::copy_db(const bool with_compaction) {
-  int err = osal_removefile(copy_pathname);
-  if (err != MDBX_SUCCESS && err != MDBX_ENOFILE)
+  int err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
+  if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
     failure_perror("mdbx_removefile()", err);
 
   err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),

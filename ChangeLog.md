@@ -9,6 +9,11 @@ TODO:
  - Finalize C++ API (few typos and trivia bugs are likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
+Added features:
+ - Provided package for [buildroot](https://buildroot.org/).
+ - Added `mdbx_env_delete()` for deletion an environment files in a proper and multiprocess-safe way.
+ - Added `mdbx_txn_commit_ex()` with collecting latency information.
+
 Fixes:
 
  - Fixed missing installation of `mdbx.h++`.
@@ -21,6 +26,7 @@ Fixes:
  - Fixed opening DB on a network shares (in the exclusive mode).
  - Fixed copy&paste typos.
  - Fixed minor false-positive GCC warning.
+ - Added workaround for broken `DEFINE_ENUM_FLAG_OPERATORS` from Windows SDK.
 
 ## v0.9.1 2020-09-30
 

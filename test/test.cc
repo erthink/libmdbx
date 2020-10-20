@@ -207,9 +207,9 @@ int testcase::breakable_commit() {
   if (need_speculum_assign) {
     need_speculum_assign = false;
     if (unlikely(rc != MDBX_SUCCESS))
-      speculum = speculum_commited;
+      speculum = speculum_committed;
     else
-      speculum_commited = speculum;
+      speculum_committed = speculum;
   }
 
   log_trace("<< txn_commit: %s", rc ? "failed" : "Ok");
@@ -240,14 +240,14 @@ void testcase::txn_end(bool abort) {
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);
     if (need_speculum_assign)
-      speculum = speculum_commited;
+      speculum = speculum_committed;
   } else {
     txn_inject_writefault(txn);
     int err = mdbx_txn_commit(txn);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_commit()", err);
     if (need_speculum_assign)
-      speculum_commited = speculum;
+      speculum_committed = speculum;
   }
 
   log_trace("<< txn_end(%s)", abort ? "abort" : "commit");
@@ -615,13 +615,13 @@ bool test_execute(const actor_config &config_const) {
       }
 
       if (config.params.nrepeat == 1)
-        log_verbose("test successed");
+        log_verbose("test successfully");
       else {
         if (config.params.nrepeat)
-          log_verbose("test successed (iteration %zi of %zi)", iter,
+          log_verbose("test successfully (iteration %zi of %zi)", iter,
                       size_t(config.params.nrepeat));
         else
-          log_verbose("test successed (iteration %zi)", iter);
+          log_verbose("test successfully (iteration %zi)", iter);
         config.params.keygen.seed += INT32_C(0xA4F4D37B);
       }
 

@@ -2,3 +2,4 @@
 ^\.github/FUNDING\.yml
 ^\.travis\.yml$
 \.def$
+^packages/buildroot/

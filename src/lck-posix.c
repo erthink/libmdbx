@@ -190,6 +190,14 @@ static int lck_op(mdbx_filehandle_t fd, int cmd, int lck, off_t offset,
   }
 }
 
+MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait) {
+#if MDBX_USE_OFDLOCKS
+  if (unlikely(op_setlk == 0))
+    choice_fcntl();
+#endif /* MDBX_USE_OFDLOCKS */
+  return lck_op(fd, wait ? op_setlkw : op_setlk, F_WRLCK, 0, OFF_T_MAX);
+}
+
 MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env) {
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
   assert(env->me_pid > 0);

@@ -158,7 +158,7 @@ protected:
     MDBX_canary canary;
   } last;
 
-  SET speculum{ItemCompare(this)}, speculum_commited{ItemCompare(this)};
+  SET speculum{ItemCompare(this)}, speculum_committed{ItemCompare(this)};
   bool speculum_verify();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              MDBX_put_flags_t flags);

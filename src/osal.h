@@ -283,7 +283,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
     defined(__amd64__) || defined(__amd64) || defined(_M_X64) ||               \
     defined(_M_AMD64) || defined(__IA32__) || defined(__INTEL__)
 #ifndef __ia32__
-/* LY: define neutral __ia32__ for x86 and x86-64 archs */
+/* LY: define neutral __ia32__ for x86 and x86-64 */
 #define __ia32__ 1
 #endif /* __ia32__ */
 #if !defined(__amd64__) && (defined(__x86_64) || defined(__x86_64__) ||        \
@@ -459,6 +459,35 @@ typedef union MDBX_srwlock {
 #ifdef __cplusplus
 extern void mdbx_osal_jitter(bool tiny);
 #else
+
+/*----------------------------------------------------------------------------*/
+/* Atomics */
+
+#if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && __has_include(<cstdatomic>)
+#include <cstdatomic>
+#elif !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L) &&                \
+    !defined(__STDC_NO_ATOMICS__) &&                                           \
+    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
+     !(defined(__GNUC__) || defined(__clang__)))
+#include <stdatomic.h>
+#elif defined(__GNUC__) || defined(__clang__)
+/* LY: nothing required */
+#elif defined(_MSC_VER)
+#pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
+#pragma warning(disable : 4133) /* 'function': incompatible types - from       \
+                                   'size_t' to 'LONGLONG' */
+#pragma warning(disable : 4244) /* 'return': conversion from 'LONGLONG' to     \
+                                   'std::size_t', possible loss of data */
+#pragma warning(disable : 4267) /* 'function': conversion from 'size_t' to     \
+                                   'long', possible loss of data */
+#pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
+#pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
+#elif defined(__APPLE__)
+#include <libkern/OSAtomic.h>
+#else
+#error FIXME atomic-ops
+#endif
+
 /*----------------------------------------------------------------------------*/
 /* Memory/Compiler barriers, cache coherence */
 
@@ -500,8 +529,8 @@ static __maybe_unused __inline void mdbx_compiler_barrier(void) {
 }
 
 static __maybe_unused __inline void mdbx_memory_barrier(void) {
-#if __has_extension(c_atomic) || __has_extension(cxx_atomic)
-  __c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
+#if __has_extension(c_atomic) && !defined(__STDC_NO_ATOMICS__)
+  atomic_thread_fence(__ATOMIC_SEQ_CST);
 #elif defined(__ATOMIC_SEQ_CST)
   __atomic_thread_fence(__ATOMIC_SEQ_CST);
 #elif defined(__clang__) || defined(__GNUC__)
@@ -626,7 +655,8 @@ enum mdbx_openfile_purpose {
   MDBX_OPEN_DXB_LAZY = 1,
   MDBX_OPEN_DXB_DSYNC = 2,
   MDBX_OPEN_LCK = 3,
-  MDBX_OPEN_COPY = 4
+  MDBX_OPEN_COPY = 4,
+  MDBX_OPEN_DELETE = 5
 };
 
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
@@ -635,7 +665,9 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
                                      mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname);
+MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname);
 MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
+MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait);
 
 #define MMAP_OPTION_TRUNCATE 1
 #define MMAP_OPTION_SEMAPHORE 2
@@ -894,32 +926,6 @@ typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
 MDBX_INTERNAL_VAR MDBX_RegGetValueA mdbx_RegGetValueA;
 
 #endif /* Windows */
-
-/*----------------------------------------------------------------------------*/
-/* Atomics */
-
-#if !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L) &&                  \
-    !defined(__STDC_NO_ATOMICS__) &&                                           \
-    (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
-     !(defined(__GNUC__) || defined(__clang__)))
-#include <stdatomic.h>
-#elif defined(__GNUC__) || defined(__clang__)
-/* LY: nothing required */
-#elif defined(_MSC_VER)
-#pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
-#pragma warning(disable : 4133) /* 'function': incompatible types - from       \
-                                   'size_t' to 'LONGLONG' */
-#pragma warning(disable : 4244) /* 'return': conversion from 'LONGLONG' to     \
-                                   'std::size_t', possible loss of data */
-#pragma warning(disable : 4267) /* 'function': conversion from 'size_t' to     \
-                                   'long', possible loss of data */
-#pragma intrinsic(_InterlockedExchangeAdd, _InterlockedCompareExchange)
-#pragma intrinsic(_InterlockedExchangeAdd64, _InterlockedCompareExchange64)
-#elif defined(__APPLE__)
-#include <libkern/OSAtomic.h>
-#else
-#error FIXME atomic-ops
-#endif
 
 #endif /* !__cplusplus */
 
