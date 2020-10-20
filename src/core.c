@@ -6606,7 +6606,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     memcpy(txn->mt_dbs, parent->mt_dbs, txn->mt_numdbs * sizeof(MDBX_db));
     /* Copy parent's mt_dbistate, but clear DB_NEW */
     for (unsigned i = 0; i < txn->mt_numdbs; i++)
-      txn->mt_dbistate[i] = parent->mt_dbistate[i] & ~(DBI_FRESH | DBI_CREAT);
+      txn->mt_dbistate[i] =
+          parent->mt_dbistate[i] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
     mdbx_tassert(parent,
                  parent->mt_parent ||
                      parent->tw.dirtyroom + parent->tw.dirtylist->length ==
@@ -8073,6 +8074,26 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   if (txn->mt_parent) {
     MDBX_txn *const parent = txn->mt_parent;
     mdbx_tassert(txn, mdbx_dirtylist_check(txn));
+
+    if (txn->tw.dirtylist->length == 0 &&
+        (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
+      for (int i = txn->mt_numdbs; --i >= 0;) {
+        mdbx_tassert(txn, (txn->mt_dbistate[i] & DBI_DIRTY) == 0);
+        if ((txn->mt_dbistate[i] & DBI_STALE) &&
+            !(parent->mt_dbistate[i] & DBI_STALE))
+          mdbx_tassert(txn, memcmp(&parent->mt_dbs[i], &txn->mt_dbs[i],
+                                   sizeof(MDBX_db)) == 0);
+      }
+
+      mdbx_tassert(txn, memcmp(&parent->mt_geo, &txn->mt_geo,
+                               sizeof(parent->mt_geo)) == 0);
+      mdbx_tassert(txn, memcmp(&parent->mt_canary, &txn->mt_canary,
+                               sizeof(parent->mt_canary)) == 0);
+      mdbx_tassert(txn, parent->mt_numdbs == txn->mt_numdbs);
+
+      end_mode = MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE;
+      goto done;
+    }
 
     /* Preserve space for spill list to avoid parent's state corruption
      * if allocation fails. */
@@ -12512,6 +12533,7 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
     if (unlikely(rc))
       return rc;
     *mc->mc_dbistate |= DBI_DIRTY;
+    mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
   }
   mc->mc_top = 0;
   if (mc->mc_snum) {
@@ -12816,6 +12838,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
                                  data->iov_len);
     }
     *mc->mc_dbistate |= DBI_DIRTY;
+    mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
     if ((mc->mc_db->md_flags & (MDBX_DUPSORT | MDBX_DUPFIXED)) == MDBX_DUPFIXED)
       np->mp_flags |= P_LEAF2;
     mc->mc_flags |= C_INITIALIZED;
@@ -17413,6 +17436,7 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
       goto later_bailout;
 
     dbiflags |= DBI_DIRTY | DBI_CREAT;
+    txn->mt_flags |= MDBX_TXN_DIRTY;
   }
 
   /* Got info, register DBI in this txn */
