@@ -38,7 +38,7 @@
 #include "internals.h"
 
 /*------------------------------------------------------------------------------
- * Internal inlines */
+ * Internal inline functions */
 
 MDBX_NOTHROW_CONST_FUNCTION static unsigned log2n(size_t value) {
   assert(value > 0 && value < INT32_MAX && is_powerof2(value));
@@ -3584,7 +3584,7 @@ static __maybe_unused void mdbx_page_list(MDBX_page *mp) {
 
 /*----------------------------------------------------------------------------*/
 
-/* Check if there is an inited xcursor, so XCURSOR_REFRESH() is proper */
+/* Check if there is an initialized xcursor, so XCURSOR_REFRESH() is proper */
 #define XCURSOR_INITED(mc)                                                     \
   ((mc)->mc_xcursor && ((mc)->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED))
 
@@ -11057,7 +11057,7 @@ static int __hot cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
   }
 }
 
-/* Compare two items pointing at unsigneds of unknown alignment.
+/* Compare two items pointing at unsigned values with unknown alignment.
  *
  * This is also set as MDBX_INTEGERDUP|MDBX_DUPFIXED's MDBX_dbx.md_dcmp. */
 static int __hot cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
@@ -14197,8 +14197,8 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
     char kbuf2[DKBUF_MAXKEYSIZE * 2 + 1];
     k2.iov_base = node_key(node);
     k2.iov_len = node_ks(node);
-    mdbx_debug("update key %u (ofs %u) [%s] to [%s] on page %" PRIaPGNO, indx,
-               ptr, mdbx_dump_val(&k2, kbuf2, sizeof(kbuf2)), DKEY(key),
+    mdbx_debug("update key %u (offset %u) [%s] to [%s] on page %" PRIaPGNO,
+               indx, ptr, mdbx_dump_val(&k2, kbuf2, sizeof(kbuf2)), DKEY(key),
                mp->mp_pgno);
   }
 

@@ -133,6 +133,7 @@ cadabra
 callergraph
 callgraph
 calloc
+cas
 casename
 cassert
 castortech
@@ -250,6 +251,7 @@ dbiseqs
 dbistate
 dbm
 dbpath
+dbs
 dbsize
 dbstate
 DBT
@@ -326,6 +328,7 @@ dpage
 DPK
 dpl
 dprefix
+DPs
 dqiqg
 dreamsxin
 dsize
@@ -427,6 +430,7 @@ errcode
 errno
 errnum
 ERRORCHECK
+errored
 erthink
 esac
 eturn
@@ -554,6 +558,7 @@ gitdir
 github
 githubusercontent
 glibc
+globals
 gmail
 gmake
 gmx
@@ -649,6 +654,7 @@ indx
 INDXSIZE
 ini
 initd
+INITED
 initialiser
 inl
 inlined
@@ -661,6 +667,7 @@ interprocedural
 intlimits
 intptr
 intrin
+intrinsics
 inttypes
 ioarena
 IODQ
@@ -735,6 +742,7 @@ klen
 KMGTPEZY
 knipp
 kp
+ks
 ksize
 kstat
 kurt
@@ -849,6 +857,7 @@ mathjax
 mattr
 MAXDATASIZE
 maxdbs
+maxed
 maxgc
 maxkey
 maxkeysize
@@ -1386,6 +1395,7 @@ semctl
 semget
 semid
 semop
+sems
 sendfile
 sepkey
 SETALL
@@ -1408,6 +1418,7 @@ Shipitsin
 shm
 showinitializer
 showned
+shrinked
 sideeffect
 sigaction
 sigaddset
@@ -1513,6 +1524,7 @@ strstr
 strtol
 strtoul
 strtoull
+structs
 stylesheet
 subalign
 SUBDATA
@@ -1663,6 +1675,7 @@ unregister
 unspill
 unsync
 UNTRACK
+updation
 upsert
 UPSERTING
 upsertion
@@ -1697,6 +1710,7 @@ valuemode
 vasprintf
 vedisdb
 VERINFO
+versioned
 versioning
 Veyor
 vfprintf
@@ -1745,6 +1759,7 @@ WIFSTOPPED
 wiki
 wikipedia
 wiktionary
+wildcards
 WILLNEED
 WINAPI
 windowsbug

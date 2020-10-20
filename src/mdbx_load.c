@@ -678,7 +678,7 @@ int main(int argc, char *argv[]) {
     if (present_sequence > sequence) {
       fprintf(stderr,
               "present sequence for '%s' value (%" PRIu64
-              ") is greated than loaded (%" PRIu64 ")\n",
+              ") is greater than loaded (%" PRIu64 ")\n",
               dbi_name, present_sequence, sequence);
       rc = MDBX_RESULT_TRUE;
       goto txn_abort;

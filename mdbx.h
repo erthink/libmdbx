@@ -1245,7 +1245,7 @@ enum MDBX_env_flags_t {
    *  - a system crash immediately after commit the write transaction
    *    high likely lead to database corruption.
    *  - successful completion of mdbx_env_sync(force = true) after one or
-   *    more commited transactions guarantees consistency and durability.
+   *    more committed transactions guarantees consistency and durability.
    *  - BUT by committing two or more transactions you back database into
    *    a weak state, in which a system crash may lead to database corruption!
    *    In case single transaction after mdbx_env_sync, you may lose transaction
@@ -1954,7 +1954,7 @@ struct MDBX_stat {
   uint64_t ms_leaf_pages;     /**< Number of leaf pages */
   uint64_t ms_overflow_pages; /**< Number of overflow pages */
   uint64_t ms_entries;        /**< Number of data items */
-  uint64_t ms_mod_txnid; /**< Transaction ID of commited last modification */
+  uint64_t ms_mod_txnid; /**< Transaction ID of committed last modification */
 };
 #ifndef __cplusplus
 /** \ingroup c_statinfo */
@@ -4398,7 +4398,7 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * \param [in] pid     A pid of the reader process.
  * \param [in] tid     A thread_id of the reader thread.
  * \param [in] laggard An oldest read transaction number on which stalled.
- * \param [in] gap     A lag from the last commited txn.
+ * \param [in] gap     A lag from the last committed txn.
  * \param [in] space   A space that actually become available for reuse after
  *                     this reader finished. The callback function can take
  *                     this value into account to evaluate the impact that

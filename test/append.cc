@@ -43,8 +43,8 @@ bool testcase_append::run() {
   uint64_t serial_count = 0;
 
   unsigned txn_nops = 0;
-  uint64_t commited_inserted_number = inserted_number;
-  simple_checksum commited_inserted_checksum = inserted_checksum;
+  uint64_t committed_inserted_number = inserted_number;
+  simple_checksum committed_inserted_checksum = inserted_checksum;
   while (should_continue()) {
     const keygen::serial_t serial = serial_count;
     if (!keyvalue_maker.increment(serial_count, 1)) {
@@ -64,8 +64,8 @@ bool testcase_append::run() {
     if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
       log_notice("append: bailout-insert due '%s'", mdbx_strerror(err));
       txn_end(true);
-      inserted_number = commited_inserted_number;
-      inserted_checksum = commited_inserted_checksum;
+      inserted_number = committed_inserted_number;
+      inserted_checksum = committed_inserted_checksum;
       break;
     }
 
@@ -89,12 +89,12 @@ bool testcase_append::run() {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("append: bailout-commit due '%s'", mdbx_strerror(err));
-        inserted_number = commited_inserted_number;
-        inserted_checksum = commited_inserted_checksum;
+        inserted_number = committed_inserted_number;
+        inserted_checksum = committed_inserted_checksum;
         break;
       }
-      commited_inserted_number = inserted_number;
-      commited_inserted_checksum = inserted_checksum;
+      committed_inserted_number = inserted_number;
+      committed_inserted_checksum = inserted_checksum;
       txn_nops = 0;
     }
 
@@ -105,8 +105,8 @@ bool testcase_append::run() {
     err = breakable_commit();
     if (unlikely(err != MDBX_SUCCESS)) {
       log_notice("append: bailout-commit due '%s'", mdbx_strerror(err));
-      inserted_number = commited_inserted_number;
-      inserted_checksum = commited_inserted_checksum;
+      inserted_number = committed_inserted_number;
+      inserted_checksum = committed_inserted_checksum;
     }
   }
   //----------------------------------------------------------------------------

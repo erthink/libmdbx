@@ -92,7 +92,7 @@ bool testcase_nested::pop_txn(bool abort) {
   assert(txn_guard && !stack.empty());
   bool should_continue = true;
   MDBX_txn *txn = txn_guard.release();
-  bool commited = false;
+  bool committed = false;
   if (abort) {
     log_verbose(
         "abort level#%zu txn #%" PRIu64 ", undo serial %" PRIu64 " <- %" PRIu64,
@@ -105,7 +105,7 @@ bool testcase_nested::pop_txn(bool abort) {
                 stack.size(), serial, std::get<1>(stack.top()));
     int err = mdbx_txn_commit(txn);
     if (likely(err == MDBX_SUCCESS))
-      commited = true;
+      committed = true;
     else {
       should_continue = false;
       if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
@@ -119,7 +119,7 @@ bool testcase_nested::pop_txn(bool abort) {
   }
 
   std::swap(txn_guard, std::get<0>(stack.top()));
-  if (!commited) {
+  if (!committed) {
     serial = std::get<1>(stack.top());
     std::swap(fifo, std::get<2>(stack.top()));
     std::swap(speculum, std::get<3>(stack.top()));
