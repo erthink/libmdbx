@@ -9625,57 +9625,19 @@ __cold int mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
 }
 
 __cold int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(dbs > MDBX_MAX_DBI))
-    return MDBX_EINVAL;
-
-  if (unlikely(env->me_map))
-    return MDBX_EPERM;
-
-  env->me_maxdbs = dbs + CORE_DBS;
-  return MDBX_SUCCESS;
+  return __inline_mdbx_env_set_maxdbs(env, dbs);
 }
 
-__cold int mdbx_env_get_maxdbs(MDBX_env *env, MDBX_dbi *dbs) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!dbs))
-    return MDBX_EINVAL;
-
-  *dbs = env->me_maxdbs;
-  return MDBX_SUCCESS;
+__cold int mdbx_env_get_maxdbs(const MDBX_env *env, MDBX_dbi *dbs) {
+  return __inline_mdbx_env_get_maxdbs(env, dbs);
 }
 
 __cold int mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(readers < 1 || readers > MDBX_READERS_LIMIT))
-    return MDBX_EINVAL;
-
-  if (unlikely(env->me_map))
-    return MDBX_EPERM;
-
-  env->me_maxreaders = readers;
-  return MDBX_SUCCESS;
+  return __inline_mdbx_env_set_maxreaders(env, readers);
 }
 
 __cold int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(!readers))
-    return MDBX_EINVAL;
-
-  *readers = env->me_maxreaders;
-  return MDBX_SUCCESS;
+  return __inline_mdbx_env_get_maxreaders(env, readers);
 }
 
 /* Further setup required for opening an MDBX environment */
@@ -18256,43 +18218,11 @@ static txnid_t __cold mdbx_kick_longlived_readers(MDBX_env *env,
 }
 
 __cold int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(env->me_flags & MDBX_RDONLY))
-    return MDBX_EACCESS;
-
-  if (unlikely(!env->me_map))
-    return MDBX_EPERM;
-
-  *env->me_autosync_threshold = bytes2pgno(env, threshold + env->me_psize - 1);
-  if (threshold) {
-    rc = mdbx_env_sync_poll(env);
-    if (unlikely(MDBX_IS_ERROR(rc)))
-      return rc;
-  }
-  return MDBX_SUCCESS;
+  return __inline_mdbx_env_set_syncbytes(env, threshold);
 }
 
 __cold int mdbx_env_set_syncperiod(MDBX_env *env, unsigned seconds_16dot16) {
-  int rc = check_env(env);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(env->me_flags & MDBX_RDONLY))
-    return MDBX_EACCESS;
-
-  if (unlikely(!env->me_map))
-    return MDBX_EPERM;
-
-  *env->me_autosync_period = mdbx_osal_16dot16_to_monotime(seconds_16dot16);
-  if (seconds_16dot16) {
-    rc = mdbx_env_sync_poll(env);
-    if (unlikely(MDBX_IS_ERROR(rc)))
-      return rc;
-  }
-  return MDBX_SUCCESS;
+  return __inline_mdbx_env_set_syncperiod(env, seconds_16dot16);
 }
 
 __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
@@ -19694,6 +19624,102 @@ __cold MDBX_cmp_func *mdbx_get_keycmp(unsigned flags) {
 
 __cold MDBX_cmp_func *mdbx_get_datacmp(unsigned flags) {
   return get_default_datacmp(flags);
+}
+
+__cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
+                               const uint64_t value) {
+  int err = check_env(env);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  switch (option) {
+  case MDBX_opt_sync_bytes:
+    if (unlikely(env->me_flags & MDBX_RDONLY))
+      return MDBX_EACCESS;
+    if (unlikely(!env->me_autosync_threshold))
+      return MDBX_EPERM;
+    if (sizeof(value) > sizeof(size_t) && unlikely(value != (size_t)value))
+      return MDBX_TOO_LARGE;
+    if ((*env->me_autosync_threshold =
+             bytes2pgno(env, (size_t)value + env->me_psize - 1)) != 0) {
+      err = mdbx_env_sync_poll(env);
+      if (unlikely(MDBX_IS_ERROR(err)))
+        return err;
+    }
+    break;
+
+  case MDBX_opt_sync_period:
+    if (unlikely(env->me_flags & MDBX_RDONLY))
+      return MDBX_EACCESS;
+    if (unlikely(!env->me_autosync_period))
+      return MDBX_EPERM;
+    if (unlikely(value > UINT32_MAX))
+      return MDBX_TOO_LARGE;
+    if ((*env->me_autosync_period =
+             mdbx_osal_16dot16_to_monotime((uint32_t)value)) != 0) {
+      err = mdbx_env_sync_poll(env);
+      if (unlikely(MDBX_IS_ERROR(err)))
+        return err;
+    }
+    break;
+
+  case MDBX_opt_max_dbx:
+    if (unlikely(value > MDBX_MAX_DBI))
+      return MDBX_EINVAL;
+    if (unlikely(env->me_map))
+      return MDBX_EPERM;
+    env->me_maxdbs = (unsigned)value + CORE_DBS;
+    break;
+
+  case MDBX_opt_max_readers:
+    if (unlikely(value < 1 || value > MDBX_READERS_LIMIT))
+      return MDBX_EINVAL;
+    if (unlikely(env->me_map))
+      return MDBX_EPERM;
+    env->me_maxreaders = (unsigned)value;
+    break;
+
+  default:
+    return MDBX_EINVAL;
+  }
+
+  return err;
+}
+
+__cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
+                               uint64_t *value) {
+  int err = check_env(env);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  if (unlikely(!value))
+    return MDBX_EINVAL;
+
+  switch (option) {
+  case MDBX_opt_sync_bytes:
+    if (unlikely(!env->me_autosync_threshold))
+      return MDBX_EPERM;
+    *value = *env->me_autosync_threshold;
+    break;
+
+  case MDBX_opt_sync_period:
+    if (unlikely(!env->me_autosync_period))
+      return MDBX_EPERM;
+    *value = mdbx_osal_monotime_to_16dot16(*env->me_autosync_period);
+    break;
+
+  case MDBX_opt_max_dbx:
+    *value = env->me_maxdbs - CORE_DBS;
+    break;
+
+  case MDBX_opt_max_readers:
+    *value = env->me_maxreaders;
+    break;
+
+  default:
+    return MDBX_EINVAL;
+  }
+
+  return MDBX_SUCCESS;
 }
 
 /*** Attribute support functions for Nexenta **********************************/

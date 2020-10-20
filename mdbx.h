@@ -1793,6 +1793,24 @@ LIBMDBX_API const char *mdbx_strerror_r_ANSI2OEM(int errnum, char *buf,
  * \returns a non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_create(MDBX_env **penv);
 
+/** \brief MDBX environment options. */
+enum MDBX_option_t {
+  MDBX_opt_sync_bytes,
+  MDBX_opt_sync_period,
+  MDBX_opt_max_dbx,
+  MDBX_opt_max_readers,
+};
+#ifndef __cplusplus
+/** \ingroup c_settings */
+typedef enum MDBX_option_t MDBX_option_t;
+#endif
+
+LIBMDBX_API int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
+                                    const uint64_t value);
+LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
+                                    const MDBX_option_t option,
+                                    uint64_t *value);
+
 /** \brief Open an environment instance.
  * \ingroup c_opening
  *
@@ -2178,7 +2196,10 @@ LIBMDBX_INLINE_API(int, mdbx_env_sync_poll, (MDBX_env * env)) {
  *                         a synchronous flush would be made.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
+LIBMDBX_INLINE_API(int, mdbx_env_set_syncbytes,
+                   (MDBX_env * env, size_t threshold)) {
+  return mdbx_env_set_option(env, MDBX_opt_sync_bytes, threshold);
+}
 
 /** \brief Sets relative period since the last unsteady commit to force flush
  * the data buffers to disk, even of \ref MDBX_SAFE_NOSYNC flag in the
@@ -2210,8 +2231,10 @@ LIBMDBX_API int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold);
  *                              the last unsteady commit.
  *
  * \returns A non-zero error value on failure and 0 on success. */
-LIBMDBX_API int mdbx_env_set_syncperiod(MDBX_env *env,
-                                        unsigned seconds_16dot16);
+LIBMDBX_INLINE_API(int, mdbx_env_set_syncperiod,
+                   (MDBX_env * env, unsigned seconds_16dot16)) {
+  return mdbx_env_set_option(env, MDBX_opt_sync_period, seconds_16dot16);
+}
 
 /** \brief Close the environment and release the memory map.
  * \ingroup c_opening
@@ -2603,7 +2626,10 @@ mdbx_limits_txnsize_max(intptr_t pagesize);
  *          some possible errors are:
  * \retval MDBX_EINVAL   An invalid parameter was specified.
  * \retval MDBX_EPERM    The environment is already open. */
-LIBMDBX_API int mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers);
+LIBMDBX_INLINE_API(int, mdbx_env_set_maxreaders,
+                   (MDBX_env * env, unsigned readers)) {
+  return mdbx_env_set_option(env, MDBX_opt_max_readers, readers);
+}
 
 /** \brief Get the maximum number of threads/reader slots for the environment.
  * \ingroup c_statinfo
@@ -2616,7 +2642,16 @@ LIBMDBX_API int mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers);
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_EINVAL   An invalid parameter was specified. */
-LIBMDBX_API int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers);
+LIBMDBX_INLINE_API(int, mdbx_env_get_maxreaders,
+                   (const MDBX_env *env, unsigned *readers)) {
+  int rc = MDBX_EINVAL;
+  if (readers) {
+    uint64_t proxy = 0;
+    rc = mdbx_env_get_option(env, MDBX_opt_max_readers, &proxy);
+    *readers = (unsigned)proxy;
+  }
+  return rc;
+}
 
 /** \brief Set the maximum number of named databases for the environment.
  * \ingroup c_settings
@@ -2639,7 +2674,9 @@ LIBMDBX_API int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers);
  *          some possible errors are:
  * \retval MDBX_EINVAL   An invalid parameter was specified.
  * \retval MDBX_EPERM    The environment is already open. */
-LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
+LIBMDBX_INLINE_API(int, mdbx_env_set_maxdbs, (MDBX_env * env, MDBX_dbi dbs)) {
+  return mdbx_env_set_option(env, MDBX_opt_max_dbx, dbs);
+}
 
 /** \brief Get the maximum number of named databases for the environment.
  * \ingroup c_statinfo
@@ -2651,7 +2688,16 @@ LIBMDBX_API int mdbx_env_set_maxdbs(MDBX_env *env, MDBX_dbi dbs);
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_EINVAL   An invalid parameter was specified. */
-LIBMDBX_API int mdbx_env_get_maxdbs(MDBX_env *env, MDBX_dbi *dbs);
+LIBMDBX_INLINE_API(int, mdbx_env_get_maxdbs,
+                   (const MDBX_env *env, MDBX_dbi *dbs)) {
+  int rc = MDBX_EINVAL;
+  if (dbs) {
+    uint64_t proxy = 0;
+    rc = mdbx_env_get_option(env, MDBX_opt_max_dbx, &proxy);
+    *dbs = (MDBX_dbi)proxy;
+  }
+  return rc;
+}
 
 /** \brief Get the maximum size of keys can write.
  * \ingroup c_statinfo
