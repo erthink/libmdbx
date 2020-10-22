@@ -2456,9 +2456,11 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *                          means "keep current or use default".
  *
  * \param [in] shrink_threshold  The shrink threshold in bytes, must be greater
- *                               than zero to allow the database to shrink.
+ *                               than zero to allow the database to shrink and
+ *                               greater than growth_step to avoid shrinking
+ *                               right after grow.
  *                               Negative value means "keep current
- *                               or use default".
+ *                               or use default". Default is 2*growth_step.
  *
  * \param [in] pagesize          The database page size for new database
  *                               creation or -1 otherwise. Must be power of 2
