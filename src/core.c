@@ -4166,7 +4166,7 @@ static int mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, bool all) {
   MDBX_txn *txn = mc->mc_txn;
   MDBX_cursor *m3, *m0 = mc;
   MDBX_xcursor *mx;
-  MDBX_page *dp, *mp;
+  MDBX_page *mp;
   unsigned i, j;
   int rc = MDBX_SUCCESS;
 
@@ -4204,11 +4204,8 @@ mark_done:
         pgno_t pgno = txn->mt_dbs[i].md_root;
         if (pgno == P_INVALID)
           continue;
-        int level;
-        if (unlikely((rc = mdbx_page_get(m0, pgno, &dp, &level,
-                                         txn->mt_txnid)) != MDBX_SUCCESS))
-          break;
-        if ((dp->mp_flags & Mask) == pflags && level <= 1)
+        MDBX_page *dp = mdbx_dpl_find(txn->tw.dirtylist, pgno);
+        if (dp && (dp->mp_flags & Mask) == pflags)
           dp->mp_flags ^= P_KEEP;
       }
     }
