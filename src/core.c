@@ -5108,12 +5108,6 @@ skip_cache:
   const unsigned wanna_range = num - 1;
 
   while (true) { /* hsr-kick retry loop */
-    /* If our dirty list is already full, we can't do anything */
-    if (unlikely(txn->tw.dirtyroom == 0)) {
-      rc = MDBX_TXN_FULL;
-      goto fail;
-    }
-
     MDBX_cursor_couple recur;
     for (MDBX_cursor_op op = MDBX_FIRST;;
          op = (flags & MDBX_LIFORECLAIM) ? MDBX_PREV : MDBX_NEXT) {
@@ -5154,6 +5148,11 @@ skip_cache:
       }
 
       if (op == MDBX_FIRST) { /* 1st iteration, setup cursor, etc */
+        if (unlikely(txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth) &&
+            !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY)) {
+          /* If our dirty list is already full, we can't touch GC */
+          flags &= ~MDBX_ALLOC_GC;
+        }
         if (unlikely(!(flags & MDBX_ALLOC_GC)))
           break /* reclaiming is prohibited for now */;
 
@@ -5264,6 +5263,21 @@ skip_cache:
         goto fail;
       }
       const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
+      /* TODO: provide a user-configurable threshold */
+      const unsigned threshold_2_stop_gc_reclaiming = MDBX_PNL_MAX / 2;
+      if (unlikely(gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
+                   threshold_2_stop_gc_reclaiming)) {
+        /* Stop reclaiming to avoid overflow the page list.
+         * This is a rare case while search for a continuously multi-page region
+         * in a large database. https://github.com/erthink/libmdbx/issues/123 */
+        flags -= MDBX_ALLOC_GC;
+        if (unlikely(flags == 0)) {
+          /* Oh, we can't do anything */
+          rc = MDBX_TXN_FULL;
+          goto fail;
+        }
+        break;
+      }
       rc = mdbx_pnl_need(&txn->tw.reclaimed_pglist, gc_len);
       if (unlikely(rc != MDBX_SUCCESS))
         goto fail;
