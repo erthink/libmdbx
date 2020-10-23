@@ -15,7 +15,15 @@
 #include "test.h"
 
 void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
-                     const char *space_id_cstr, const actor_params &params) {
+                     const char *space_id_cstr, actor_params params) {
+  // silently fix key/data length for fixed-length modes
+  if ((params.table_flags & MDBX_INTEGERKEY) &&
+      params.keylen_min != params.keylen_max)
+    params.keylen_min = params.keylen_max;
+  if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
+      params.datalen_min != params.datalen_max)
+    params.datalen_min = params.datalen_max;
+
   unsigned wait4id = 0;
   if (params.waitfor_nops) {
     for (auto i = global::actors.rbegin(); i != global::actors.rend(); ++i) {
@@ -56,7 +64,7 @@ void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
   global::databases.insert(params.pathname_db);
 }
 
-void testcase_setup(const char *casename, actor_params &params,
+void testcase_setup(const char *casename, const actor_params &params,
                     unsigned &last_space_id) {
   if (strcmp(casename, "basic") == 0) {
     log_notice(">>> testcase_setup(%s)", casename);

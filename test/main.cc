@@ -270,6 +270,27 @@ int main(int argc, char *const argv[]) {
       if ((params.table_flags & MDBX_DUPSORT) == 0)
         params.table_flags &=
             ~(MDBX_DUPFIXED | MDBX_REVERSEDUP | MDBX_INTEGERDUP);
+      const unsigned keylen_max = params.mdbx_keylen_max();
+      if (params.keylen_min > keylen_max)
+        params.keylen_min = keylen_max;
+      if (params.keylen_max > keylen_max)
+        params.keylen_max = keylen_max;
+      const unsigned keylen_min = params.mdbx_keylen_min();
+      if (params.keylen_min < keylen_min)
+        params.keylen_min = keylen_min;
+      if (params.keylen_max < keylen_min)
+        params.keylen_max = keylen_min;
+
+      const unsigned datalen_max = params.mdbx_datalen_max();
+      if (params.datalen_min > datalen_max)
+        params.datalen_min = datalen_max;
+      if (params.datalen_max > datalen_max)
+        params.datalen_max = datalen_max;
+      const unsigned datalen_min = params.mdbx_datalen_min();
+      if (params.datalen_min < datalen_min)
+        params.datalen_min = datalen_min;
+      if (params.datalen_max < datalen_min)
+        params.datalen_max = datalen_min;
       continue;
     }
 
@@ -371,7 +392,7 @@ int main(int argc, char *const argv[]) {
                              params.datalen_min, config::no_scale,
                              params.mdbx_datalen_min(),
                              params.mdbx_datalen_max())) {
-      if ((params.table_flags & MDBX_DUPFIXED) ||
+      if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) ||
           params.datalen_max < params.datalen_min)
         params.datalen_max = params.datalen_min;
       continue;
@@ -380,7 +401,7 @@ int main(int argc, char *const argv[]) {
                              params.datalen_max, config::no_scale,
                              params.mdbx_datalen_min(),
                              params.mdbx_datalen_max())) {
-      if ((params.table_flags & MDBX_DUPFIXED) ||
+      if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) ||
           params.datalen_min > params.datalen_max)
         params.datalen_min = params.datalen_max;
       continue;

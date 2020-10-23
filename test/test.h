@@ -42,10 +42,10 @@
 
 bool test_execute(const actor_config &config);
 std::string thunk_param(const actor_config &config);
-void testcase_setup(const char *casename, actor_params &params,
+void testcase_setup(const char *casename, const actor_params &params,
                     unsigned &last_space_id);
 void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
-                     const char *space_id_cstr, const actor_params &params);
+                     const char *space_id_cstr, actor_params params);
 void keycase_setup(const char *casename, actor_params &params);
 
 namespace global {
