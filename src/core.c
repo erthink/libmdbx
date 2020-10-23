@@ -12132,7 +12132,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (!mc->mc_top) {
       /* There are no other pages */
       mc->mc_ki[mc->mc_top] = 0;
-      if (op == MDBX_SET_RANGE && exactp == &stub_exactp) {
+      if (op == MDBX_SET_RANGE) {
         rc = 0;
         goto set1;
       } else
@@ -12151,7 +12151,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
 set2:
   node = mdbx_node_search(mc, &aligned_key, exactp);
-  if (exactp != &stub_exactp && !*exactp) {
+  if (!*exactp && !(op == MDBX_SET_RANGE || op == MDBX_GET_BOTH_RANGE)) {
     /* MDBX_SET specified and not an exact match. */
     return MDBX_NOTFOUND;
   }
