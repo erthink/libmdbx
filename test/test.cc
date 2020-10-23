@@ -275,22 +275,31 @@ void testcase::cursor_close() {
   log_trace("<< cursor_close()");
 }
 
+void testcase::cursor_renew() {
+  log_trace(">> cursor_renew()");
+  assert(cursor_guard);
+  int err = mdbx_cursor_renew(txn_guard.get(), cursor_guard.get());
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_cursor_renew()", err);
+  log_trace("<< cursor_renew()");
+}
+
 int testcase::breakable_restart() {
   int rc = MDBX_SUCCESS;
   if (txn_guard)
     rc = breakable_commit();
-  if (cursor_guard)
-    cursor_close();
   txn_begin(false, MDBX_TXN_READWRITE);
+  if (cursor_guard)
+    cursor_renew();
   return rc;
 }
 
 void testcase::txn_restart(bool abort, bool readonly, MDBX_txn_flags_t flags) {
   if (txn_guard)
     txn_end(abort);
-  if (cursor_guard)
-    cursor_close();
   txn_begin(readonly, flags);
+  if (cursor_guard)
+    cursor_renew();
 }
 
 void testcase::txn_inject_writefault(void) {

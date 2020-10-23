@@ -187,6 +187,7 @@ protected:
                    MDBX_txn_flags_t flags = MDBX_TXN_READWRITE);
   void cursor_open(MDBX_dbi handle);
   void cursor_close();
+  void cursor_renew();
   void txn_inject_writefault(void);
   void txn_inject_writefault(MDBX_txn *txn);
   void fetch_canary();
