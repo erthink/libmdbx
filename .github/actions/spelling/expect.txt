@@ -423,6 +423,7 @@ eot
 EOTDONE
 EOWNERDEAD
 EPERM
+EPIPE
 erasevolume
 EREMOTE
 EROFS
@@ -1429,12 +1430,14 @@ sigemptyset
 SIGHUP
 SIGINT
 SIGKILL
+sigmask
 SIGPIPE
 sigprocmask
 SIGSEGV
 sigset
 SIGTERM
 sigusr
+sigwait
 singlemode
 singleprocess
 sizeof

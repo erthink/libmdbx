@@ -16198,6 +16198,13 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   uint8_t *ptr;
   int toggle = 0;
 
+#if defined(EPIPE) && !(defined(_WIN32) || defined(_WIN64))
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGPIPE);
+  my->mc_error = pthread_sigmask(SIG_BLOCK, &sigset, NULL);
+#endif /* EPIPE */
+
   mdbx_condpair_lock(&my->mc_condpair);
   while (!my->mc_error) {
     while (!my->mc_new && !my->mc_error) {
@@ -16215,6 +16222,14 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     if (wsize > 0 && !my->mc_error) {
       int err = mdbx_write(my->mc_fd, ptr, wsize);
       if (err != MDBX_SUCCESS) {
+#if defined(EPIPE) && !(defined(_WIN32) || defined(_WIN64))
+        if (err == EPIPE) {
+          /* Collect the pending SIGPIPE,
+           * otherwise at least OS X gives it to the process on thread-exit. */
+          int unused;
+          sigwait(&sigset, &unused);
+        }
+#endif /* EPIPE */
         my->mc_error = err;
         goto bailout;
       }
