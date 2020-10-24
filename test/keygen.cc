@@ -187,13 +187,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
   mk_continue(key_serial, key_essentials, *key);
   mk_continue(value_serial, value_essentials, *value);
-
-  if (log_enabled(logging::trace)) {
-    char dump_key[4096], dump_value[4096];
-    log_trace("keygen-pair: key %s, value %s",
-              mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
-              mdbx_dump_val(&value->value, dump_value, sizeof(dump_value)));
-  }
+  log_pair(logging::trace, "kv", key, value);
 }
 
 void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
@@ -366,6 +360,17 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
   assert(out.value.iov_base >= out.bytes);
   assert((uint8_t *)out.value.iov_base + out.value.iov_len <=
          out.bytes + out.limit);
+}
+
+void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
+              buffer &value) {
+  if (log_enabled(level)) {
+    char dump_key[4096], dump_value[4096];
+    logging::output(
+        level, "%s-pair: key %s, value %s", prefix,
+        mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
+        mdbx_dump_val(&value->value, dump_value, sizeof(dump_value)));
+  }
 }
 
 } /* namespace keygen */

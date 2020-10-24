@@ -133,4 +133,7 @@ public:
   bool increment(serial_t &serial, int delta) const;
 };
 
+void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
+              buffer &value);
+
 } /* namespace keygen */
