@@ -358,5 +358,6 @@ bool flipcoin();
 bool flipcoin_x2();
 bool flipcoin_x3();
 bool flipcoin_x4();
+bool flipcoin_n(unsigned n);
 bool jitter(unsigned probability_percent);
 void jitter_delay(bool extra = false);
