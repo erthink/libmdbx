@@ -632,6 +632,7 @@ bool test_execute(const actor_config &config_const) {
         else
           log_verbose("test successfully (iteration %zi)", iter);
         config.params.keygen.seed += INT32_C(0xA4F4D37B);
+        log_verbose("turn keygen to %u", config.params.keygen.seed);
       }
 
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);

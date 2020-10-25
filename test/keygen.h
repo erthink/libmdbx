@@ -127,10 +127,16 @@ public:
             serial_t value_age, const bool keylen_changeable);
   void setup(const config::actor_params_pod &actor, unsigned actor_id,
              unsigned thread_number);
-  void make_ordered();
+  void make_linear();
   bool is_unordered() const;
 
   bool increment(serial_t &serial, int delta) const;
+  bool increment_key_part(serial_t &serial, int delta,
+                          bool reset_value_part = true) const {
+    if (reset_value_part)
+      serial &= ~((serial_t(1) << mapping.split) - 1);
+    return increment(serial, delta << mapping.split);
+  }
 };
 
 void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
