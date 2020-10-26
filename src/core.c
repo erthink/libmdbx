@@ -7503,9 +7503,12 @@ retry_noaccount:
                      env->me_maxgc_ov1page) {
 
         /* LY: need just a txn-id for save page list. */
-        couple.outer.mc_flags &= ~C_RECLAIMING;
         bool need_cleanup = false;
+        txnid_t snap_oldest;
+      retry_rid:
+        couple.outer.mc_flags &= ~C_RECLAIMING;
         do {
+          snap_oldest = mdbx_find_oldest(txn);
           rc = mdbx_page_alloc(&couple.outer, 0, NULL, MDBX_ALLOC_GC);
           if (likely(rc == MDBX_SUCCESS)) {
             mdbx_trace("%s: took @%" PRIaTXN " from GC", dbg_prefix_mode,
@@ -7533,9 +7536,13 @@ retry_noaccount:
           gc_rid = MDBX_PNL_LAST(txn->tw.lifo_reclaimed);
         } else {
           mdbx_tassert(txn, txn->tw.last_reclaimed == 0);
+          if (unlikely(mdbx_find_oldest(txn) != snap_oldest))
+            /* should retry mdbx_page_alloc(MDBX_ALLOC_GC)
+             * if the oldest reader changes since the last attempt */
+            goto retry_rid;
           /* no reclaimable GC entries,
            * therefore no entries with ID < mdbx_find_oldest(txn) */
-          txn->tw.last_reclaimed = gc_rid = mdbx_find_oldest(txn) - 1;
+          txn->tw.last_reclaimed = gc_rid = snap_oldest - 1;
           mdbx_trace("%s: none recycled yet, set rid to @%" PRIaTXN,
                      dbg_prefix_mode, gc_rid);
         }
