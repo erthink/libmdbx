@@ -87,7 +87,7 @@ int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
 
   if (retry == 0)
     log_notice("hsr_callback: waitfor pid %lu, thread %" PRIuPTR
-               ", txn #%" PRIu64 ", gap %d, scape %zu",
+               ", txn #%" PRIu64 ", gap %d, space %zu",
                (long)pid, (size_t)tid, laggard, gap, space);
 
   MDBX_envinfo info;
