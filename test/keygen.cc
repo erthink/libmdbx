@@ -25,7 +25,7 @@ static inline MDBX_PURE_FUNCTION serial_t mask(unsigned bits) {
 serial_t injective(const serial_t serial,
                    const unsigned bits /* at least serial_minwith (8) */,
                    const serial_t salt) {
-  assert(bits > serial_minwith && bits <= serial_maxwith);
+  assert(bits >= serial_minwith && bits <= serial_maxwith);
 
   /* LY: All these "magic" prime numbers were found
    *     and verified with a bit of brute force. */
@@ -124,7 +124,8 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
        * Поэтому key_serial не трогаем, а в value_serial нелинейно вмешиваем
        * запрошенное количество бит из serial */
       value_serial +=
-          (serial ^ (serial >> mapping.split)) & mask(mapping.split);
+          (serial ^ (serial >> mapping.split) * UINT64_C(57035339200100753)) &
+          mask(mapping.split);
     }
 
     value_serial |= value_age << mapping.split;
@@ -187,13 +188,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
   mk_continue(key_serial, key_essentials, *key);
   mk_continue(value_serial, value_essentials, *value);
-
-  if (log_enabled(logging::trace)) {
-    char dump_key[4096], dump_value[4096];
-    log_trace("keygen-pair: key %s, value %s",
-              mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
-              mdbx_dump_val(&value->value, dump_value, sizeof(dump_value)));
-  }
+  log_pair(logging::trace, "kv", key, value);
 }
 
 void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
@@ -213,9 +208,9 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   key_essentials.minlen = (uint16_t)actor.keylen_min;
   assert(actor.keylen_max <= UINT32_MAX);
   key_essentials.maxlen =
-      std::min((uint32_t)actor.keylen_max,
-               (uint32_t)mdbx_limits_keysize_max(
-                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags)));
+      std::min(uint32_t(actor.keylen_max),
+               uint32_t(mdbx_limits_keysize_max(
+                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
 
   value_essentials.flags =
       actor.table_flags & uint16_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP);
@@ -223,9 +218,9 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   value_essentials.minlen = (uint16_t)actor.datalen_min;
   assert(actor.datalen_max <= UINT32_MAX);
   value_essentials.maxlen =
-      std::min((uint32_t)actor.datalen_max,
-               (uint32_t)mdbx_limits_valsize_max(
-                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags)));
+      std::min(uint32_t(actor.datalen_max),
+               uint32_t(mdbx_limits_valsize_max(
+                   actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
 
   if (!actor.keygen.zero_fill) {
     key_essentials.flags |= essentials::prng_fill_flag;
@@ -240,13 +235,45 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   base = 0;
 }
 
-void maker::make_ordered() {
-  mapping.mesh = 0;
+void maker::make_linear() {
+  mapping.mesh = (key_essentials.flags & MDBX_DUPSORT) ? 0 : mapping.split;
   mapping.rotate = 0;
+  mapping.offset = 0;
+  const auto max_serial = mask(mapping.width) + base;
+  const auto max_key_serial =
+      (mapping.split && (key_essentials.flags & MDBX_DUPSORT))
+          ? max_serial >> mapping.split
+          : max_serial;
+  const auto max_value_serial =
+      (mapping.split && (key_essentials.flags & MDBX_DUPSORT))
+          ? mask(mapping.split)
+          : 0;
+
+  while (key_essentials.minlen < 8 &&
+         (key_essentials.minlen == 0 ||
+          mask(key_essentials.minlen * 8) < max_key_serial)) {
+    key_essentials.minlen +=
+        (key_essentials.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
+    if (key_essentials.maxlen < key_essentials.minlen)
+      key_essentials.maxlen = key_essentials.minlen;
+  }
+
+  if ((key_essentials.flags | value_essentials.flags) & MDBX_DUPSORT)
+    while (value_essentials.minlen < 8 &&
+           (value_essentials.minlen == 0 ||
+            mask(value_essentials.minlen * 8) < max_value_serial)) {
+      value_essentials.minlen +=
+          (value_essentials.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4
+                                                                         : 1;
+      if (value_essentials.maxlen < value_essentials.minlen)
+        value_essentials.maxlen = value_essentials.minlen;
+    }
 }
 
 bool maker::is_unordered() const {
-  return (mapping.mesh >= serial_minwith || mapping.rotate) != 0;
+  return mapping.rotate ||
+         mapping.mesh >
+             ((key_essentials.flags & MDBX_DUPSORT) ? 0 : mapping.split);
 }
 
 bool maker::increment(serial_t &serial, int delta) const {
@@ -272,8 +299,9 @@ bool maker::increment(serial_t &serial, int delta) const {
 
 //-----------------------------------------------------------------------------
 
-static size_t length(serial_t serial) {
-  size_t n = 0;
+MDBX_NOTHROW_PURE_FUNCTION static inline unsigned length(serial_t serial) {
+#if defined(__clang__) && __clang__ > 8
+  unsigned n = 0;
   if (serial > UINT32_MAX) {
     n = 4;
     serial >>= 32;
@@ -286,16 +314,26 @@ static size_t length(serial_t serial) {
     n += 1;
     serial >>= 8;
   }
-  return (serial > 0) ? n + 1 : n;
+#else
+  unsigned n = (serial > UINT32_MAX) ? 4 : 0;
+  serial = (serial > UINT32_MAX) ? serial >> 32 : serial;
+
+  n += (serial > UINT16_MAX) ? 2 : 0;
+  serial = (serial > UINT16_MAX) ? serial >> 16 : serial;
+
+  n += (serial > UINT8_MAX);
+  serial = (serial > UINT8_MAX) ? serial >> 8 : serial;
+#endif
+  return n + (serial > 0);
 }
 
 buffer alloc(size_t limit) {
-  result *ptr = (result *)malloc(sizeof(result) + limit);
+  result *ptr = (result *)malloc(sizeof(result) + limit + 8);
   if (unlikely(ptr == nullptr))
     failure_perror("malloc(keyvalue_buffer)", errno);
   ptr->value.iov_base = ptr->bytes;
   ptr->value.iov_len = 0;
-  ptr->limit = limit;
+  ptr->limit = limit + 8;
   return buffer(ptr);
 }
 
@@ -305,14 +343,20 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
   assert(params.maxlen >= params.minlen);
   assert(params.maxlen >= length(serial));
 
-  out.value.iov_len =
-      (params.maxlen > params.minlen)
-          ? params.minlen + serial % (params.maxlen - params.minlen)
-          : params.minlen;
+  out.value.iov_len = std::max(unsigned(params.minlen), length(serial));
+  const auto variation = params.maxlen - params.minlen;
+  if (variation) {
+    if (serial % (variation + 1)) {
+      auto refix = serial * UINT64_C(48835288005252737);
+      refix ^= refix >> 32;
+      out.value.iov_len = std::max(
+          out.value.iov_len, params.minlen + 1 + size_t(refix) % variation);
+    }
+  }
 
-  if ((params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) == 0 &&
-      out.value.iov_len < 8)
-    out.value.iov_len = std::max(length(serial), out.value.iov_len);
+  assert(length(serial) <= out.value.iov_len);
+  assert(out.value.iov_len >= params.minlen);
+  assert(out.value.iov_len <= params.maxlen);
 }
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,
@@ -328,36 +372,30 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
           unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |
                    MDBX_INTEGERDUP | MDBX_REVERSEKEY | MDBX_REVERSEDUP)) == 0);
 #endif
+  assert(length(serial) <= out.value.iov_len);
   out.value.iov_base = out.bytes;
   if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
-    assert(params.minlen == 4 || params.minlen == 8);
-    if (is_byteorder_le() || params.minlen == 8)
-      out.u64 = serial;
-    else
-      out.u32 = (uint32_t)serial;
-  } else if (params.flags & unsigned(MDBX_REVERSEKEY | MDBX_REVERSEDUP)) {
-    if (out.value.iov_len > 8) {
-      if (params.flags & essentials::prng_fill_flag) {
-        uint64_t state = serial ^ UINT64_C(0x41803711c9b75f19);
-        prng_fill(state, out.bytes, out.value.iov_len - 8);
-      } else
-        memset(out.bytes, '\0', out.value.iov_len - 8);
-      unaligned::store(out.bytes + out.value.iov_len - 8, htobe64(serial));
-    } else {
-      out.u64 = htobe64(serial);
-      if (out.value.iov_len < 8)
-        out.value.iov_base = out.bytes + 8 - out.value.iov_len;
-    }
+    if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
+      assert(params.minlen == 4 || params.minlen == 8);
+    out.u64 = serial;
+    if (!is_byteorder_le() && out.value.iov_len != 8)
+      out.u32 = uint32_t(serial);
   } else {
-    out.u64 = htole64(serial);
-    if (out.value.iov_len > 8) {
+    const auto prefix =
+        std::max(std::min(unsigned(params.minlen), 8u), length(serial));
+    out.u64 = htobe64(serial);
+    out.value.iov_base = out.bytes + 8 - prefix;
+    if (out.value.iov_len > prefix) {
       if (params.flags & essentials::prng_fill_flag) {
         uint64_t state = serial ^ UINT64_C(0x923ab47b7ee6f6e4);
-        prng_fill(state, out.bytes + 8, out.value.iov_len - 8);
+        prng_fill(state, out.bytes + 8, out.value.iov_len - prefix);
       } else
-        memset(out.bytes + 8, '\0', out.value.iov_len - 8);
+        memset(out.bytes + 8, '\0', out.value.iov_len - prefix);
     }
+    if (unlikely(params.flags & (MDBX_REVERSEKEY | MDBX_REVERSEDUP)))
+      std::reverse((char *)out.value.iov_base,
+                   (char *)out.value.iov_base + out.value.iov_len);
   }
 
   assert(out.value.iov_len >= params.minlen);
@@ -366,6 +404,17 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
   assert(out.value.iov_base >= out.bytes);
   assert((uint8_t *)out.value.iov_base + out.value.iov_len <=
          out.bytes + out.limit);
+}
+
+void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
+              buffer &value) {
+  if (log_enabled(level)) {
+    char dump_key[4096], dump_value[4096];
+    logging::output(
+        level, "%s-pair: key %s, value %s", prefix,
+        mdbx_dump_val(&key->value, dump_key, sizeof(dump_key)),
+        mdbx_dump_val(&value->value, dump_value, sizeof(dump_value)));
+  }
 }
 
 } /* namespace keygen */

@@ -68,8 +68,11 @@ bool testcase_nested::teardown() {
         log_notice("nested: bailout-clean due '%s'", mdbx_strerror(err));
         ok = false;
       }
-    } else
+    } else {
+      if (txn_guard)
+        txn_end(false);
       db_table_close(dbi);
+    }
     dbi = 0;
   }
   return inherited::teardown() && ok;

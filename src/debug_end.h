@@ -5,3 +5,5 @@
 #pragma pop_macro("mdbx_warning")
 #pragma pop_macro("mdbx_error")
 #pragma pop_macro("mdbx_assert")
+
+#pragma GCC reset_options

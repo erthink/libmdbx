@@ -32,3 +32,5 @@
 
 #undef mdbx_assert
 #define mdbx_assert(env, expr) mdbx_ensure(env, expr)
+
+#pragma GCC optimize("-O0")

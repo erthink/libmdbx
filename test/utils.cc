@@ -326,8 +326,8 @@ double double_from_upper(uint64_t salt) {
   r.ieee.negative = 0;
   r.ieee.exponent = IEEE754_DOUBLE_BIAS;
   salt >>= 64 - DBL_MANT_DIG;
-  r.ieee.mantissa0 = (unsigned)(salt >> 32);
-  r.ieee.mantissa1 = (unsigned)salt;
+  r.ieee.mantissa0 = unsigned(salt >> 32);
+  r.ieee.mantissa1 = unsigned(salt);
   return r.d;
 #else
   const uint64_t top = (UINT64_C(1) << DBL_MANT_DIG) - 1;
@@ -340,6 +340,9 @@ bool flipcoin() { return bleach32((uint32_t)entropy_ticks()) & 1; }
 bool flipcoin_x2() { return (bleach32((uint32_t)entropy_ticks()) & 3) == 0; }
 bool flipcoin_x3() { return (bleach32((uint32_t)entropy_ticks()) & 7) == 0; }
 bool flipcoin_x4() { return (bleach32((uint32_t)entropy_ticks()) & 15) == 0; }
+bool flipcoin_n(unsigned n) {
+  return (bleach64(entropy_ticks()) & ((UINT64_C(1) << n) - 1)) == 0;
+}
 
 bool jitter(unsigned probability_percent) {
   const uint32_t top = UINT32_MAX - UINT32_MAX % 100;

@@ -87,7 +87,7 @@ int testcase::hsr_callback(const MDBX_env *env, const MDBX_txn *txn,
 
   if (retry == 0)
     log_notice("hsr_callback: waitfor pid %lu, thread %" PRIuPTR
-               ", txn #%" PRIu64 ", gap %d, scape %zu",
+               ", txn #%" PRIu64 ", gap %d, space %zu",
                (long)pid, (size_t)tid, laggard, gap, space);
 
   MDBX_envinfo info;
@@ -275,22 +275,31 @@ void testcase::cursor_close() {
   log_trace("<< cursor_close()");
 }
 
+void testcase::cursor_renew() {
+  log_trace(">> cursor_renew()");
+  assert(cursor_guard);
+  int err = mdbx_cursor_renew(txn_guard.get(), cursor_guard.get());
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_cursor_renew()", err);
+  log_trace("<< cursor_renew()");
+}
+
 int testcase::breakable_restart() {
   int rc = MDBX_SUCCESS;
   if (txn_guard)
     rc = breakable_commit();
-  if (cursor_guard)
-    cursor_close();
   txn_begin(false, MDBX_TXN_READWRITE);
+  if (cursor_guard)
+    cursor_renew();
   return rc;
 }
 
 void testcase::txn_restart(bool abort, bool readonly, MDBX_txn_flags_t flags) {
   if (txn_guard)
     txn_end(abort);
-  if (cursor_guard)
-    cursor_close();
   txn_begin(readonly, flags);
+  if (cursor_guard)
+    cursor_renew();
 }
 
 void testcase::txn_inject_writefault(void) {
@@ -623,6 +632,7 @@ bool test_execute(const actor_config &config_const) {
         else
           log_verbose("test successfully (iteration %zi)", iter);
         config.params.keygen.seed += INT32_C(0xA4F4D37B);
+        log_verbose("turn keygen to %u", config.params.keygen.seed);
       }
 
     } while (config.params.nrepeat == 0 || iter < config.params.nrepeat);
