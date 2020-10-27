@@ -1163,7 +1163,7 @@ enum MDBX_env_flags_t {
 
   /** Don't sync anything but keep previous steady commits.
    *
-   * Like \ref MDBX_UTTERLY_NOSYNC the `MDBX_SAFE_NOSYNC` flag similarly disable
+   * Like \ref MDBX_UTTERLY_NOSYNC the `MDBX_SAFE_NOSYNC` flag disable similarly
    * flush system buffers to disk when committing a transaction. But there is a
    * huge difference in how are recycled the MVCC snapshots corresponding to
    * previous "steady" transactions (see below).
