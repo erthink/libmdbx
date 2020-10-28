@@ -15534,8 +15534,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
       }
       if (m3->mc_ki[mc->mc_top] >= ki ||
           /* moved to right sibling */ m3->mc_pg[mc->mc_top] != mp) {
-        mdbx_cassert(m3, (m3->mc_flags & C_EOF) == 0);
-        if (m3->mc_xcursor) {
+        if (m3->mc_xcursor && !(m3->mc_flags & C_EOF)) {
           MDBX_node *node =
               page_node(m3->mc_pg[m3->mc_top], m3->mc_ki[m3->mc_top]);
           /* If this node has dupdata, it may need to be reinited
