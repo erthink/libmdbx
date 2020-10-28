@@ -1,7 +1,7 @@
 N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NODE    | PAGE     |
 --|---------|-----------|--------------|----------|-----------|------------|---------|----------|
 0 |0000 0001|ALLOC_CACHE|TXN_FINISHED  |          |           |DBI_DIRTY   |F_BIGDATA|P_BRANCH
-1 |0000 0002|ALLOC_GC   |TXN_ERROR     |REVERSEKEY|           |DBI_STALE   |F_SUBDATA|P_LEAF
+1 |0000 0002|ALLOC_GC   |TXN_ERROR     |REVERSEKEY|F_SUBDATA  |DBI_STALE   |F_SUBDATA|P_LEAF
 2 |0000 0004|ALLOC_NEW  |TXN_DIRTY     |DUPSORT   |           |DBI_FRESH   |F_DUPDATA|P_OVERFLOW
 3 |0000 0008|           |TXN_SPILLS    |INTEGERKEY|           |DBI_CREAT   |         |P_META
 4 |0000 0010|           |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_DIRTY
