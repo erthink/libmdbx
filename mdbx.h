@@ -353,7 +353,7 @@ typedef mode_t mdbx_mode_t;
 /** \brief Auxiliary macro for robustly define the both inline version of API
  * function and non-inline fallback dll-exported version for applications linked
  * with old version of libmdbx, with a strictly ODR-common implementation. */
-#if !defined(LIBMDBX_INTERNALS) || defined(DOXYGEN)
+#if !defined(LIBMDBX_INTERNALS)
 #define LIBMDBX_INLINE_API(TYPE, NAME, ARGS) static __inline TYPE NAME ARGS
 #else
 #define LIBMDBX_INLINE_API(TYPE, NAME, ARGS)                                   \
@@ -1863,7 +1863,7 @@ enum MDBX_env_delete_mode_t {
   MDBX_ENV_WAIT_FOR_UNUSED = 2,
 };
 #ifndef __cplusplus
-/** \c_extra c_statinfo */
+/** \ingroup c_extra */
 typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
 #endif
 
