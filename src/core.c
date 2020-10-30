@@ -3138,7 +3138,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode);
 
 static int __must_check_result mdbx_page_get(MDBX_cursor *mc, pgno_t pgno,
                                              MDBX_page **mp, int *lvl,
-                                             const txnid_t pp_txnid);
+                                             txnid_t pp_txnid);
 static int __must_check_result mdbx_page_search_root(MDBX_cursor *mc,
                                                      const MDBX_val *key,
                                                      int flags);
@@ -11306,7 +11306,7 @@ static int mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp) {
  *
  * Returns 0 on success, non-zero on failure. */
 __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
-                               int *lvl, const txnid_t pp_txnid) {
+                               int *lvl, txnid_t pp_txnid) {
   MDBX_txn *txn = mc->mc_txn;
   if (unlikely(pgno >= txn->mt_next_pgno)) {
     mdbx_error("page #%" PRIaPGNO " beyond next-pgno", pgno);
@@ -11331,8 +11331,11 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
        * because the dirty list got full. Bring this page
        * back in from the map (but don't unspill it here,
        * leave that unless page_touch happens again). */
-      if (txn->tw.spill_pages && mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1))
+      if (txn->tw.spill_pages &&
+          mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1)) {
+        pp_txnid = txn->mt_txnid;
         goto spilled;
+      }
       p = mdbx_dpl_find(txn->tw.dirtylist, pgno);
       if (p)
         goto dirty;
