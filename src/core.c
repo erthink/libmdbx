@@ -5261,9 +5261,12 @@ skip_cache:
       }
       const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
       /* TODO: provide a user-configurable threshold */
-      const unsigned threshold_2_stop_gc_reclaiming = MDBX_PNL_MAX / 2;
+      const unsigned threshold_2_stop_gc_reclaiming = MDBX_PNL_MAX / 4;
       if (unlikely(gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
-                   threshold_2_stop_gc_reclaiming)) {
+                   threshold_2_stop_gc_reclaiming) &&
+          (pgno_add(txn->mt_next_pgno, num) <= txn->mt_geo.upper ||
+           gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >=
+               MDBX_PNL_MAX / 16 * 15)) {
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
