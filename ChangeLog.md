@@ -1,18 +1,23 @@
 ChangeLog
 ---------
 
-## v0.9.2 (in development)
+## v0.9.3 (in development)
 
 TODO:
 
  - Rework/speedup the implementation of the dirty page list (lazy compactification, lazy sorting via merge).
+ - Resolve few TODOs (https://github.com/erthink/libmdbx/issues/128).
  - Finalize C++ API (few typos and trivia bugs are likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
+
+## v0.9.2 2020-10-30
 
 Added features:
  - Provided package for [buildroot](https://buildroot.org/).
  - Added `mdbx_env_delete()` for deletion an environment files in a proper and multiprocess-safe way.
  - Added `mdbx_txn_commit_ex()` with collecting latency information.
+ - Fast completion pure nested transactions.
+ - Added `LIBMDBX_INLINE_API` macro and inline versions of some API functions.
 
 Fixes:
 
@@ -29,6 +34,8 @@ Fixes:
  - Added workaround for broken `DEFINE_ENUM_FLAG_OPERATORS` from Windows SDK.
  - Fixed cursor state after multimap/dupsort repeated deletes (https://github.com/erthink/libmdbx/issues/121).
  - Added `SIGPIPE` suppression for internal thread during `mdbx_env_copy()`.
+ - Fixed extra-rare `MDBX_KEY_EXIST` error during `mdbx_commit()`.
+ - Fixed spilled pages checking (https://github.com/erthink/libmdbx/issues/126).
 
 ## v0.9.1 2020-09-30
 
