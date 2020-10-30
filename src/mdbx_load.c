@@ -742,9 +742,7 @@ int main(int argc, char *argv[]) {
         goto txn_abort;
       }
 
-      if (batch == 10000 || txn_info.txn_space_dirty > MEGABYTE * 16) {
-        mdbx_cursor_close(mc);
-        mc = nullptr;
+      if (batch == 10000 || txn_info.txn_space_dirty > MEGABYTE * 256) {
         rc = mdbx_txn_commit(txn);
         if (unlikely(rc != MDBX_SUCCESS)) {
           error("mdbx_txn_commit", rc);
@@ -757,9 +755,9 @@ int main(int argc, char *argv[]) {
           error("mdbx_txn_begin", rc);
           goto env_close;
         }
-        rc = mdbx_cursor_open(txn, dbi, &mc);
+        rc = mdbx_cursor_bind(txn, mc, dbi);
         if (unlikely(rc != MDBX_SUCCESS)) {
-          error("mdbx_cursor_open", rc);
+          error("mdbx_cursor_bind", rc);
           goto txn_abort;
         }
       }
