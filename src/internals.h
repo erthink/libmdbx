@@ -1229,7 +1229,7 @@ static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
   ((rc) != MDBX_RESULT_TRUE && (rc) != MDBX_RESULT_FALSE)
 
 /* Internal error codes, not exposed outside libmdbx */
-#define MDBX_NO_ROOT (MDBX_LAST_LMDB_ERRCODE + 10)
+#define MDBX_NO_ROOT (MDBX_LAST_ADDED_ERRCODE + 10)
 
 /* Debugging output value of a cursor DBI: Negative in a sub-cursor. */
 #define DDBI(mc)                                                               \
