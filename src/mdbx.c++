@@ -1297,6 +1297,11 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const pair &it) {
   return out << "{" << it.key << " => " << it.value << "}";
 }
 
+__cold ::std::ostream &operator<<(::std::ostream &out, const pair_result &it) {
+  return out << "{" << (it.done ? "done: " : "non-done: ") << it.key << " => "
+             << it.value << "}";
+}
+
 __cold ::std::ostream &operator<<(::std::ostream &out,
                                   const ::mdbx::env::geometry::size &it) {
   switch (it.bytes) {

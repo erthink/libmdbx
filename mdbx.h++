@@ -2679,6 +2679,7 @@ public:
 
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const slice &);
 LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair &);
+LIBMDBX_API ::std::ostream &operator<<(::std::ostream &, const pair_result &);
 template <class ALLOCATOR>
 inline ::std::ostream &operator<<(::std::ostream &out,
                                   const buffer<ALLOCATOR> &it) {
