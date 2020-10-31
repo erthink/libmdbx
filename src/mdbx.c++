@@ -1282,9 +1282,13 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
     out << "EMPTY->" << it.data();
   else {
     const slice root(it.head(std::min(it.length(), size_t(64))));
-    out << it.length() << "->"
-        << (root.is_printable() ? root.string() : root.base58_encode())
-        << ((root == it) ? "" : "...");
+    out << it.length() << ".";
+    if (root.is_printable())
+      (out << "\"").write(root.char_ptr(), root.length()) << "\"";
+    else
+      out << root.base58_encode();
+    if (root.length() < it.length())
+      out << "...";
   }
   return out << "}";
 }
