@@ -289,7 +289,9 @@ docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' > $@
 
 doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md AUTHORS LICENSE
-	rm -rf docs/html && cp mdbx.h mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
+	rm -rf docs/html && \
+	cat mdbx.h | tr '\n' '\r' | sed -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' > docs/mdbx.h && \
+	cp mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
 
 mdbx++-dylib.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
 	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/mdbx.c++ -o $@
