@@ -1650,9 +1650,9 @@ struct LIBMDBX_API_TYPE map_handle {
 
 /// \brief Key-value pairs put mode.
 enum put_mode {
-  insert = MDBX_NOOVERWRITE, ///< Insert only unique keys.
-  upsert = MDBX_UPSERT,      ///< Insert or update.
-  update = MDBX_CURRENT,     ///< Update existing, don't insert new.
+  insert_unique = MDBX_NOOVERWRITE, ///< Insert only unique keys.
+  upsert = MDBX_UPSERT,             ///< Insert or update.
+  update = MDBX_CURRENT,            ///< Update existing, don't insert new.
 };
 
 /// \brief Unmanaged database environment.
@@ -3838,14 +3838,14 @@ inline void txn::put(map_handle map, const slice &key, slice value,
 inline void txn::insert(map_handle map, const slice &key, slice value) {
   error::success_or_throw(
       put(map, key, &value /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert)));
+          MDBX_put_flags_t(put_mode::insert_unique)));
 }
 
 inline value_result txn::try_insert(map_handle map, const slice &key,
                                     slice value) {
   const int err =
       put(map, key, &value /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert));
+          MDBX_put_flags_t(put_mode::insert_unique));
   switch (err) {
   case MDBX_SUCCESS:
     return value_result{slice(), true};
@@ -3861,7 +3861,7 @@ inline slice txn::insert_reserve(map_handle map, const slice &key,
   slice result(nullptr, value_length);
   error::success_or_throw(
       put(map, key, &result /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert) | MDBX_RESERVE));
+          MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE));
   return result;
 }
 
@@ -3870,7 +3870,7 @@ inline value_result txn::try_insert_reserve(map_handle map, const slice &key,
   slice result(nullptr, value_length);
   const int err =
       put(map, key, &result /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert) | MDBX_RESERVE);
+          MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE);
   switch (err) {
   case MDBX_SUCCESS:
     return value_result{result, true};
@@ -4307,13 +4307,13 @@ inline MDBX_error_t cursor::put(const slice &key, slice *value,
 inline void cursor::insert(const slice &key, slice value) {
   error::success_or_throw(
       put(key, &value /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert)));
+          MDBX_put_flags_t(put_mode::insert_unique)));
 }
 
 inline value_result cursor::try_insert(const slice &key, slice value) {
   const int err =
       put(key, &value /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert));
+          MDBX_put_flags_t(put_mode::insert_unique));
   switch (err) {
   case MDBX_SUCCESS:
     return value_result{slice(), true};
@@ -4328,7 +4328,7 @@ inline slice cursor::insert_reserve(const slice &key, size_t value_length) {
   slice result(nullptr, value_length);
   error::success_or_throw(
       put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert) | MDBX_RESERVE));
+          MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE));
   return result;
 }
 
@@ -4337,7 +4337,7 @@ inline value_result cursor::try_insert_reserve(const slice &key,
   slice result(nullptr, value_length);
   const int err =
       put(key, &result /* takes the present value in case MDBX_KEYEXIST */,
-          MDBX_put_flags_t(put_mode::insert) | MDBX_RESERVE);
+          MDBX_put_flags_t(put_mode::insert_unique) | MDBX_RESERVE);
   switch (err) {
   case MDBX_SUCCESS:
     return value_result{result, true};
