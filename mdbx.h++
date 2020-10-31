@@ -3127,7 +3127,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::hex_encode(bool uppercase, const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.reserve(to_hex_bytes());
+    result.resize(to_hex_bytes());
     result.resize(to_hex(const_cast<char *>(result.data()), result.capacity()) -
                       result.data(),
                   uppercase);
@@ -3140,7 +3140,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::hex_decode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.reserve(from_hex_bytes());
+    result.resize(from_hex_bytes());
     result.resize(
         from_hex(static_cast<byte *>(
                      static_cast<void *>(const_cast<char *>(result.data()))),
@@ -3155,7 +3155,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base58_encode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.reserve(to_base58_bytes());
+    result.resize(to_base58_bytes());
     result.resize(
         to_base58(const_cast<char *>(result.data()), result.capacity()) -
         result.data());
@@ -3168,7 +3168,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base58_decode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.reserve(from_base58_bytes());
+    result.resize(from_base58_bytes());
     result.resize(
         from_base58(static_cast<byte *>(
                         static_cast<void *>(const_cast<char *>(result.data()))),
@@ -3183,7 +3183,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base64_encode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.reserve(to_base64_bytes());
+    result.resize(to_base64_bytes());
     result.resize(
         to_base64(const_cast<char *>(result.data()), result.capacity()) -
         result.data());
@@ -3196,7 +3196,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base64_decode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.reserve(from_base64_bytes());
+    result.resize(from_base64_bytes());
     result.resize(
         from_base64(static_cast<byte *>(
                         static_cast<void *>(const_cast<char *>(result.data()))),
