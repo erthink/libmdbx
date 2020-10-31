@@ -11712,13 +11712,19 @@ int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  MDBX_val save_data = *data;
   int exact = 0;
-  rc = mdbx_cursor_set(
-      &cx.outer, key, data,
-      cx.outer.mc_xcursor ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE, &exact);
+  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_RANGE, &exact);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (exact && (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) != 0) {
+    *data = save_data;
+    exact = 0;
+    rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_GET_BOTH_RANGE, &exact);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
   return exact ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
 }
 
@@ -12154,7 +12160,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
 set2:
   node = mdbx_node_search(mc, &aligned_key, exactp);
-  if (!*exactp && !(op == MDBX_SET_RANGE || op == MDBX_GET_BOTH_RANGE)) {
+  if (!*exactp && op != MDBX_SET_RANGE) {
     /* MDBX_SET specified and not an exact match. */
     return MDBX_NOTFOUND;
   }
@@ -12190,10 +12196,8 @@ set1:
     if (op == MDBX_SET || op == MDBX_SET_KEY || op == MDBX_SET_RANGE) {
       rc = mdbx_cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
     } else {
-      int dummy = 0;
       rc = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
-                           MDBX_SET_RANGE,
-                           (op == MDBX_GET_BOTH_RANGE) ? exactp : &dummy);
+                           MDBX_SET_RANGE, NULL);
     }
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
