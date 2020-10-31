@@ -396,8 +396,7 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   template <size_t SIZE>
   MDBX_CXX14_CONSTEXPR slice(const char (&text)[SIZE]) noexcept
       : slice(text, SIZE - 1) {
-    static_assert(SIZE > 0 && text[SIZE - 1] == '\0',
-                  "Must be a null-terminated C-string");
+    MDBX_CONSTEXPR_ASSERT(SIZE > 0 && text[SIZE - 1] == '\0');
   }
   /// \brief Create a slice that refers to c_str[0,strlen(c_str)-1].
   explicit MDBX_CXX17_CONSTEXPR slice(const char *c_str);
