@@ -1093,9 +1093,35 @@ bool env::is_pristine() const {
 
 bool env::is_empty() const { return get_stat().ms_branch_pages == 0; }
 
-env &env::copy(const path &destination, bool compactify,
+#ifdef MDBX_STD_FILESYSTEM_PATH
+env &env::copy(const ::std::filesystem::path &destination, bool compactify,
                bool force_dynamic_size) {
-  const path_to_pchar<path> utf8(destination);
+  const path_to_pchar<::std::filesystem::path> utf8(destination);
+  error::success_or_throw(
+      ::mdbx_env_copy(handle_, utf8,
+                      (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                          (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
+                                              : MDBX_CP_DEFAULTS)));
+  return *this;
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+env &env::copy(const ::std::wstring &destination, bool compactify,
+               bool force_dynamic_size) {
+  const path_to_pchar<::std::wstring> utf8(destination);
+  error::success_or_throw(
+      ::mdbx_env_copy(handle_, utf8,
+                      (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                          (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
+                                              : MDBX_CP_DEFAULTS)));
+  return *this;
+}
+#endif /* Windows */
+
+env &env::copy(const ::std::string &destination, bool compactify,
+               bool force_dynamic_size) {
+  const path_to_pchar<::std::string> utf8(destination);
   error::success_or_throw(
       ::mdbx_env_copy(handle_, utf8,
                       (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1119,8 +1145,25 @@ path env::get_path() const {
   return pchar_to_path<path>(c_str);
 }
 
-bool env::remove(const path &pathname, const remove_mode mode) {
-  const path_to_pchar<path> utf8(pathname);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+bool env::remove(const ::std::filesystem::path &pathname,
+                 const remove_mode mode) {
+  const path_to_pchar<::std::filesystem::path> utf8(pathname);
+  return error::boolean_or_throw(
+      ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
+  const path_to_pchar<::std::wstring> utf8(pathname);
+  return error::boolean_or_throw(
+      ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
+}
+#endif /* Windows */
+
+bool env::remove(const ::std::string &pathname, const remove_mode mode) {
+  const path_to_pchar<::std::string> utf8(pathname);
   return error::boolean_or_throw(
       ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
 }
@@ -1161,11 +1204,12 @@ __cold void env_managed::setup(unsigned max_maps, unsigned max_readers) {
     error::success_or_throw(::mdbx_env_set_maxdbs(handle_, max_maps));
 }
 
-__cold env_managed::env_managed(const path &pathname,
+#ifdef MDBX_STD_FILESYSTEM_PATH
+__cold env_managed::env_managed(const ::std::filesystem::path &pathname,
                                 const operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
-  const path_to_pchar<path> utf8(pathname);
+  const path_to_pchar<::std::filesystem::path> utf8(pathname);
   error::success_or_throw(
       ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
 
@@ -1174,12 +1218,73 @@ __cold env_managed::env_managed(const path &pathname,
     error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
-__cold env_managed::env_managed(const path &pathname,
+__cold env_managed::env_managed(const ::std::filesystem::path &pathname,
                                 const env_managed::create_parameters &cp,
                                 const env::operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
-  const path_to_pchar<path> utf8(pathname);
+  const path_to_pchar<::std::filesystem::path> utf8(pathname);
+  set_geometry(cp.geometry);
+  error::success_or_throw(
+      ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),
+                      cp.file_mode_bits));
+
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    error::throw_exception(MDBX_INCOMPATIBLE);
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+__cold env_managed::env_managed(const ::std::wstring &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
+  setup(op.max_maps, op.max_readers);
+  const path_to_pchar<::std::wstring> utf8(pathname);
+  error::success_or_throw(
+      ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
+
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    error::throw_exception(MDBX_INCOMPATIBLE);
+}
+
+__cold env_managed::env_managed(const ::std::wstring &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
+  setup(op.max_maps, op.max_readers);
+  const path_to_pchar<::std::wstring> utf8(pathname);
+  set_geometry(cp.geometry);
+  error::success_or_throw(
+      ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),
+                      cp.file_mode_bits));
+
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    error::throw_exception(MDBX_INCOMPATIBLE);
+}
+#endif /* Windows */
+
+__cold env_managed::env_managed(const ::std::string &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
+  setup(op.max_maps, op.max_readers);
+  const path_to_pchar<::std::string> utf8(pathname);
+  error::success_or_throw(
+      ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
+
+  if (op.options.nested_write_transactions &&
+      !get_options().nested_write_transactions)
+    error::throw_exception(MDBX_INCOMPATIBLE);
+}
+
+__cold env_managed::env_managed(const ::std::string &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(create_env()) {
+  setup(op.max_maps, op.max_readers);
+  const path_to_pchar<::std::string> utf8(pathname);
   set_geometry(cp.geometry);
   error::success_or_throw(
       ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),

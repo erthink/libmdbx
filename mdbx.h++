@@ -208,7 +208,8 @@ using filehandle = ::mdbx_filehandle_t;
     (defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L &&       \
      (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) ||                             \
       __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500))
-using path = std::filesystem::path;
+#define MDBX_STD_FILESYSTEM_PATH
+using path = ::std::filesystem::path;
 #elif defined(_WIN32) || defined(_WIN64)
 using path = ::std::wstring;
 #else
@@ -1915,7 +1916,15 @@ public:
 
   /// \brief Make a copy (backup) of an existing environment to the specified
   /// path.
-  env &copy(const path &destination, bool compactify,
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  env &copy(const ::std::filesystem::path &destination, bool compactify,
+            bool force_dynamic_size = false);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64)
+  env &copy(const ::std::wstring &destination, bool compactify,
+            bool force_dynamic_size = false);
+#endif /* Windows */
+  env &copy(const ::std::string &destination, bool compactify,
             bool force_dynamic_size = false);
 
   /// \brief Copy an environment to the specified file descriptor.
@@ -1940,7 +1949,16 @@ public:
 
   /// \brief Removes the environment's files in a proper and multiprocess-safe
   /// way.
-  static bool remove(const path &, const remove_mode mode = just_remove);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  static bool remove(const ::std::filesystem::path &,
+                     const remove_mode mode = just_remove);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64)
+  static bool remove(const ::std::wstring &,
+                     const remove_mode mode = just_remove);
+#endif /* Windows */
+  static bool remove(const ::std::string &,
+                     const remove_mode mode = just_remove);
 
   /// \brief Statistics for a database in the MDBX environment.
   using stat = ::MDBX_stat;
@@ -2176,7 +2194,16 @@ public:
   MDBX_CXX11_CONSTEXPR env_managed() noexcept = default;
 
   /// \brief Open existing database.
-  env_managed(const path &, const operate_parameters &, bool accede = true);
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  env_managed(const ::std::filesystem::path &, const operate_parameters &,
+              bool accede = true);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64)
+  env_managed(const ::std::wstring &, const operate_parameters &,
+              bool accede = true);
+#endif /* Windows */
+  env_managed(const ::std::string &, const operate_parameters &,
+              bool accede = true);
 
   /// \brief Additional parameters for creating a new database.
   struct create_parameters {
@@ -2186,7 +2213,15 @@ public:
   };
 
   /// \brief Create new or open existing database.
-  env_managed(const path &, const create_parameters &,
+#ifdef MDBX_STD_FILESYSTEM_PATH
+  env_managed(const ::std::filesystem::path &, const create_parameters &,
+              const operate_parameters &, bool accede = true);
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+#if defined(_WIN32) || defined(_WIN64)
+  env_managed(const ::std::wstring &, const create_parameters &,
+              const operate_parameters &, bool accede = true);
+#endif /* Windows */
+  env_managed(const ::std::string &, const create_parameters &,
               const operate_parameters &, bool accede = true);
 
   /// \brief Explicitly closes the environment and release the memory map.
