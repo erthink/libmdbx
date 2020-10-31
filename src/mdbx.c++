@@ -417,15 +417,15 @@ __cold void error::throw_exception() const {
 
 bool slice::is_printable(bool disable_utf8) const noexcept {
   enum : byte {
-    LS = 5,                     // shift for UTF8 sequence length
-    P_ = 1 << (LS - 1),         // printable ASCII flag
+    LS = 4,                     // shift for UTF8 sequence length
+    P_ = 1 << LS,               // printable ASCII flag
     N_ = 0,                     // non-printable ASCII
     second_range_mask = P_ - 1, // mask for range flag
-    r80_BF = P_ | 0,            // flag for UTF8 2nd byte range
-    rA0_BF = P_ | 1,            // flag for UTF8 2nd byte range
-    r80_9F = P_ | 2,            // flag for UTF8 2nd byte range
-    r90_BF = P_ | 3,            // flag for UTF8 2nd byte range
-    r80_8F = P_ | 4,            // flag for UTF8 2nd byte range
+    r80_BF = 0,                 // flag for UTF8 2nd byte range
+    rA0_BF = 1,                 // flag for UTF8 2nd byte range
+    r80_9F = 2,                 // flag for UTF8 2nd byte range
+    r90_BF = 3,                 // flag for UTF8 2nd byte range
+    r80_8F = 4,                 // flag for UTF8 2nd byte range
 
     // valid utf-8 byte sequences
     // http://www.unicode.org/versions/Unicode6.0.0/ch03.pdf - page 94
