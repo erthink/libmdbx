@@ -5063,7 +5063,7 @@ __hot static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
     if (unlikely(mc->mc_flags & C_RECLAIMING)) {
       /* If mc is updating the GC, then the retired-list cannot play
        * catch-up with itself by growing while trying to save it. */
-      flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE | MDBX_LIFORECLAIM);
+      flags &= ~MDBX_ALLOC_GC;
     } else if (unlikely(txn->mt_dbs[FREE_DBI].md_entries == 0)) {
       /* avoid (recursive) search inside empty tree and while tree is updating,
        * https://github.com/erthink/libmdbx/issues/31 */
@@ -5270,8 +5270,8 @@ skip_cache:
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
-        flags -= MDBX_ALLOC_GC;
-        if (unlikely(flags == 0)) {
+        flags &= ~MDBX_ALLOC_GC;
+        if (unlikely((flags & MDBX_ALLOC_ALL) == 0)) {
           /* Oh, we can't do anything */
           rc = MDBX_TXN_FULL;
           goto fail;
