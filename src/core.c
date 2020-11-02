@@ -3618,6 +3618,7 @@ static __maybe_unused bool cursor_is_tracked(const MDBX_cursor *mc) {
     MDBX_cursor *tracked = &(mn);                                              \
     if ((mn).mc_flags & C_SUB) {                                               \
       mc_dummy.mc_flags = C_INITIALIZED;                                       \
+      mc_dummy.mc_top = 0;                                                     \
       mc_dummy.mc_xcursor = (MDBX_xcursor *)&(mn);                             \
       tracked = &mc_dummy;                                                     \
     }                                                                          \
