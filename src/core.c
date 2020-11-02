@@ -3599,11 +3599,20 @@ static __maybe_unused void mdbx_page_list(MDBX_page *mp) {
       (mc)->mc_xcursor->mx_cursor.mc_pg[0] = node_data(xr_node);               \
   } while (0)
 
+static __maybe_unused bool cursor_is_tracked(const MDBX_cursor *mc) {
+  for (MDBX_cursor *scan = mc->mc_txn->mt_cursors[mc->mc_dbi]; scan;
+       scan = scan->mc_next)
+    if (mc == ((mc->mc_flags & C_SUB) ? &scan->mc_xcursor->mx_cursor : scan))
+      return true;
+  return false;
+}
+
 /* Perform act while tracking temporary cursor mn */
 #define WITH_CURSOR_TRACKING(mn, act)                                          \
   do {                                                                         \
     mdbx_cassert(&(mn),                                                        \
                  mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
+    mdbx_cassert(&(mn), !cursor_is_tracked(&(mn)));                            \
     MDBX_cursor mc_dummy;                                                      \
     MDBX_cursor **tracking_head = &(mn).mc_txn->mt_cursors[mn.mc_dbi];         \
     MDBX_cursor *tracked = &(mn);                                              \
@@ -12583,6 +12592,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  mdbx_cassert(mc, cursor_is_tracked(mc));
   env = mc->mc_txn->mt_env;
 
   /* Check this first so counter will always be zero on any early failures. */
@@ -15472,6 +15482,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
   unsigned nkeys;
   MDBX_dbi dbi = mc->mc_dbi;
 
+  mdbx_cassert(mc, cursor_is_tracked(mc));
   mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
   ki = mc->mc_ki[mc->mc_top];
   mp = mc->mc_pg[mc->mc_top];
