@@ -14236,6 +14236,7 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   int ptr, i, nkeys, indx;
   DKBUF;
 
+  mdbx_cassert(mc, cursor_is_tracked(mc));
   indx = mc->mc_ki[mc->mc_top];
   mp = mc->mc_pg[mc->mc_top];
   node = page_node(mp, indx);
@@ -14393,7 +14394,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
       psrc = csrc->mc_pg[csrc->mc_top];
       pdst = cdst->mc_pg[cdst->mc_top];
 
-      rc = mdbx_update_key(&mn, &key);
+      WITH_CURSOR_TRACKING(mn, rc = mdbx_update_key(&mn, &key));
       if (unlikely(rc))
         return rc;
     } else {
@@ -14608,6 +14609,8 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   int rc;
 
   mdbx_cassert(csrc, csrc != cdst);
+  mdbx_cassert(csrc, cursor_is_tracked(csrc));
+  mdbx_cassert(cdst, cursor_is_tracked(cdst));
   const MDBX_page *const psrc = csrc->mc_pg[csrc->mc_top];
   MDBX_page *pdst = cdst->mc_pg[cdst->mc_top];
   mdbx_debug("merging page %" PRIaPGNO " into %" PRIaPGNO, psrc->mp_pgno,
@@ -14869,6 +14872,7 @@ static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
  * [in] mc Cursor pointing to the page where rebalancing should begin.
  * Returns 0 on success, non-zero on failure. */
 static int mdbx_rebalance(MDBX_cursor *mc) {
+  mdbx_cassert(mc, cursor_is_tracked(mc));
   mdbx_cassert(mc, mc->mc_snum > 0);
   mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
                        IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
@@ -15054,7 +15058,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     mn.mc_ki[mn.mc_top - 1] = ki_pre_top + 1;
     mn.mc_ki[mn.mc_top] = 0;
     mc->mc_ki[mc->mc_top] = nkeys;
-    rc = mdbx_page_merge(&mn, mc);
+    WITH_CURSOR_TRACKING(mn, rc = mdbx_page_merge(&mn, mc));
     if (likely(rc != MDBX_RESULT_TRUE)) {
       mc->mc_ki[mc->mc_top] = ki_top;
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
@@ -15069,7 +15073,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     mn.mc_ki[mn.mc_top - 1] = ki_pre_top - 1;
     mn.mc_ki[mn.mc_top] = (indx_t)(page_numkeys(left) - 1);
     mc->mc_ki[mc->mc_top] = 0;
-    rc = mdbx_node_move(&mn, mc, true);
+    WITH_CURSOR_TRACKING(mn, rc = mdbx_node_move(&mn, mc, true));
     if (likely(rc != MDBX_RESULT_TRUE)) {
       mc->mc_ki[mc->mc_top] = ki_top + 1;
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
@@ -15082,7 +15086,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     mn.mc_ki[mn.mc_top - 1] = ki_pre_top + 1;
     mn.mc_ki[mn.mc_top] = 0;
     mc->mc_ki[mc->mc_top] = nkeys;
-    rc = mdbx_node_move(&mn, mc, false);
+    WITH_CURSOR_TRACKING(mn, rc = mdbx_node_move(&mn, mc, false));
     if (likely(rc != MDBX_RESULT_TRUE)) {
       mc->mc_ki[mc->mc_top] = ki_top;
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
@@ -15123,7 +15127,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     mn.mc_ki[mn.mc_top - 1] = ki_pre_top + 1;
     mn.mc_ki[mn.mc_top] = 0;
     mc->mc_ki[mc->mc_top] = nkeys;
-    rc = mdbx_page_merge(&mn, mc);
+    WITH_CURSOR_TRACKING(mn, rc = mdbx_page_merge(&mn, mc));
     if (likely(rc != MDBX_RESULT_TRUE)) {
       mc->mc_ki[mc->mc_top] = ki_top;
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
