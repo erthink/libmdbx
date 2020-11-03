@@ -651,9 +651,12 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
   if (err == MDBX_SUCCESS && config.params.speculum) {
     const auto S_key = S(akey);
     const auto S_data = S(adata);
-    const bool inserted = speculum.emplace(S_key, S_data).second;
-    assert(inserted);
-    (void)inserted;
+    if (unlikely(!speculum.emplace(S_key, S_data).second)) {
+      char dump_key[128], dump_value[128];
+      log_error("speculum-insert: pair not inserted {%s, %s}",
+                mdbx_dump_val(&akey->value, dump_key, sizeof(dump_key)),
+                mdbx_dump_val(&adata->value, dump_value, sizeof(dump_value)));
+    }
   }
   return err;
 }
@@ -666,11 +669,21 @@ int testcase::replace(const keygen::buffer &akey,
     const auto S_old = S(old_data);
     const auto S_new = S(new_data);
     const auto removed = speculum.erase(SET::key_type(S_key, S_old));
-    assert(removed == 1);
-    (void)removed;
-    const bool inserted = speculum.emplace(S_key, S_new).second;
-    assert(inserted);
-    (void)inserted;
+    if (unlikely(removed != 1)) {
+      char dump_key[128], dump_value[128];
+      log_error(
+          "speculum-%s: %s old value {%s, %s}", "replace",
+          (removed > 1) ? "multi" : "no",
+          mdbx_dump_val(&akey->value, dump_key, sizeof(dump_key)),
+          mdbx_dump_val(&old_data->value, dump_value, sizeof(dump_value)));
+    }
+    if (unlikely(!speculum.emplace(S_key, S_new).second)) {
+      char dump_key[128], dump_value[128];
+      log_error(
+          "speculum-replace: new pair not inserted {%s, %s}",
+          mdbx_dump_val(&akey->value, dump_key, sizeof(dump_key)),
+          mdbx_dump_val(&new_data->value, dump_value, sizeof(dump_value)));
+    }
   }
   return mdbx_replace(txn_guard.get(), dbi, &akey->value, &new_data->value,
                       &old_data->value, flags);
@@ -681,8 +694,13 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
     const auto S_key = S(akey);
     const auto S_data = S(adata);
     const auto removed = speculum.erase(SET::key_type(S_key, S_data));
-    assert(removed == 1);
-    (void)removed;
+    if (unlikely(removed != 1)) {
+      char dump_key[128], dump_value[128];
+      log_error("speculum-%s: %s old value {%s, %s}", "remove",
+                (removed > 1) ? "multi" : "no",
+                mdbx_dump_val(&akey->value, dump_key, sizeof(dump_key)),
+                mdbx_dump_val(&adata->value, dump_value, sizeof(dump_value)));
+    }
   }
   return mdbx_del(txn_guard.get(), dbi, &akey->value, &adata->value);
 }
