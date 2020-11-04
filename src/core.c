@@ -3240,7 +3240,7 @@ static int __must_check_result mdbx_xcursor_init1(MDBX_cursor *mc,
 static int __must_check_result mdbx_xcursor_init2(MDBX_cursor *mc,
                                                   MDBX_xcursor *src_mx,
                                                   bool new_dupdata);
-static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst);
+static void cursor_copy_internal(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 
 static int __must_check_result mdbx_drop0(MDBX_cursor *mc, int subs);
 static int __must_check_result mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi);
@@ -14355,7 +14355,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
       const unsigned snum = cdst->mc_snum;
       mdbx_cassert(csrc, snum > 0);
       MDBX_cursor mn;
-      mdbx_cursor_copy(cdst, &mn);
+      cursor_copy_internal(cdst, &mn);
       mn.mc_xcursor = NULL;
       /* must find the lowest key below dst */
       rc = mdbx_page_search_lowest(&mn);
@@ -14537,7 +14537,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
       mdbx_debug("update separator for source page %" PRIaPGNO " to [%s]",
                  psrc->mp_pgno, DKEY(&key));
       MDBX_cursor mn;
-      mdbx_cursor_copy(csrc, &mn);
+      cursor_copy_internal(csrc, &mn);
       mn.mc_xcursor = NULL;
       mdbx_cassert(csrc, mn.mc_snum > 0);
       mn.mc_snum--;
@@ -14572,7 +14572,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
       mdbx_debug("update separator for destination page %" PRIaPGNO " to [%s]",
                  pdst->mp_pgno, DKEY(&key));
       MDBX_cursor mn;
-      mdbx_cursor_copy(cdst, &mn);
+      cursor_copy_internal(cdst, &mn);
       mn.mc_xcursor = NULL;
       mdbx_cassert(cdst, mn.mc_snum > 0);
       mn.mc_snum--;
@@ -14655,7 +14655,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
       key.iov_base = node_key(srcnode);
       if (pagetype & P_BRANCH) {
         MDBX_cursor mn;
-        mdbx_cursor_copy(csrc, &mn);
+        cursor_copy_internal(csrc, &mn);
         mn.mc_xcursor = NULL;
         /* must find the lowest key below src */
         rc = mdbx_page_search_lowest(&mn);
@@ -14851,7 +14851,7 @@ bailout:
 /* Copy the contents of a cursor.
  * [in] csrc The cursor to copy from.
  * [out] cdst The cursor to copy to. */
-static void mdbx_cursor_copy(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
+static void cursor_copy_internal(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_cassert(csrc,
                csrc->mc_txn->mt_txnid >= *csrc->mc_txn->mt_env->me_oldest);
   cdst->mc_txn = csrc->mc_txn;
@@ -15008,7 +15008,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
 
   /* Find neighbors. */
   MDBX_cursor mn;
-  mdbx_cursor_copy(mc, &mn);
+  cursor_copy_internal(mc, &mn);
   mn.mc_xcursor = NULL;
 
   MDBX_page *left = nullptr, *right = nullptr;
@@ -15045,7 +15045,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     /* We want mdbx_rebalance to find mn when doing fixups */
     WITH_CURSOR_TRACKING(mn, rc = mdbx_page_merge(mc, &mn));
     if (likely(rc != MDBX_RESULT_TRUE)) {
-      mdbx_cursor_copy(&mn, mc);
+      cursor_copy_internal(&mn, mc);
       mc->mc_ki[mc->mc_top] = new_ki;
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
       return rc;
@@ -15114,7 +15114,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     /* We want mdbx_rebalance to find mn when doing fixups */
     WITH_CURSOR_TRACKING(mn, rc = mdbx_page_merge(mc, &mn));
     if (likely(rc != MDBX_RESULT_TRUE)) {
-      mdbx_cursor_copy(&mn, mc);
+      cursor_copy_internal(&mn, mc);
       mc->mc_ki[mc->mc_top] = new_ki;
       mdbx_cassert(mc, rc || page_numkeys(mc->mc_pg[mc->mc_top]) >= minkeys);
       return rc;
@@ -15738,7 +15738,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     mdbx_debug("parent branch page is %" PRIaPGNO, mc->mc_pg[ptop]->mp_pgno);
   }
 
-  mdbx_cursor_copy(mc, &mn);
+  cursor_copy_internal(mc, &mn);
   mn.mc_xcursor = NULL;
   mn.mc_pg[mn.mc_top] = rp;
   mn.mc_ki[mn.mc_top] = 0;
@@ -17607,7 +17607,7 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
     if (unlikely(rc))
       goto done;
 
-    mdbx_cursor_copy(mc, &mx);
+    cursor_copy_internal(mc, &mx);
     while (mc->mc_snum > 0) {
       MDBX_page *mp = mc->mc_pg[mc->mc_top];
       unsigned n = page_numkeys(mp);
@@ -18781,7 +18781,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
     return MDBX_ENODATA;
 
   MDBX_cursor_couple next;
-  mdbx_cursor_copy(cursor, &next.outer);
+  cursor_copy_internal(cursor, &next.outer);
   next.outer.mc_xcursor = NULL;
   if (cursor->mc_db->md_flags & MDBX_DUPSORT) {
     next.outer.mc_xcursor = &next.inner;
@@ -18789,7 +18789,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     MDBX_xcursor *mx = &container_of(cursor, MDBX_cursor_couple, outer)->inner;
-    mdbx_cursor_copy(&mx->mx_cursor, &next.inner.mx_cursor);
+    cursor_copy_internal(&mx->mx_cursor, &next.inner.mx_cursor);
   }
 
   MDBX_val stub = {0, 0};
