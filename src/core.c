@@ -14140,6 +14140,34 @@ int mdbx_cursor_renew(MDBX_txn *txn, MDBX_cursor *mc) {
   return likely(mc) ? mdbx_cursor_bind(txn, mc, mc->mc_dbi) : MDBX_EINVAL;
 }
 
+int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest) {
+  if (unlikely(!src))
+    return MDBX_EINVAL;
+  if (unlikely(src->mc_signature != MDBX_MC_LIVE))
+    return MDBX_EBADSIGN;
+
+  int rc = mdbx_cursor_bind(src->mc_txn, dest, src->mc_dbi);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+again:
+  dest->mc_flags ^= (dest->mc_flags ^ src->mc_flags) & ~C_UNTRACK;
+  dest->mc_top = src->mc_top;
+  dest->mc_snum = src->mc_snum;
+  for (unsigned i = 0; i < src->mc_snum; ++i) {
+    dest->mc_ki[i] = src->mc_ki[i];
+    dest->mc_pg[i] = src->mc_pg[i];
+  }
+
+  if (src->mc_xcursor) {
+    src = &src->mc_xcursor->mx_cursor;
+    dest = &dest->mc_xcursor->mx_cursor;
+    goto again;
+  }
+
+  return MDBX_SUCCESS;
+}
+
 /* Return the count of duplicate data items for the current key */
 int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
   if (unlikely(mc == NULL))
