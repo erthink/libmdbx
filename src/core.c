@@ -11889,7 +11889,7 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     goto skip;
   }
 
-  if (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mp)) {
+  if (++mc->mc_ki[mc->mc_top] >= page_numkeys(mp)) {
     mdbx_debug("%s", "=====> move to next sibling page");
     if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
                  MDBX_SUCCESS)) {
@@ -11899,8 +11899,7 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     mp = mc->mc_pg[mc->mc_top];
     mdbx_debug("next page is %" PRIaPGNO ", key index %u", mp->mp_pgno,
                mc->mc_ki[mc->mc_top]);
-  } else
-    mc->mc_ki[mc->mc_top]++;
+  }
 
 skip:
   mdbx_debug("==> cursor points to page %" PRIaPGNO
@@ -11984,9 +11983,8 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   if (mc->mc_ki[mc->mc_top] == 0) {
     mdbx_debug("%s", "=====> move to prev sibling page");
-    if ((rc = mdbx_cursor_sibling(mc, SIBLING_LEFT)) != MDBX_SUCCESS) {
+    if ((rc = mdbx_cursor_sibling(mc, SIBLING_LEFT)) != MDBX_SUCCESS)
       return rc;
-    }
     mp = mc->mc_pg[mc->mc_top];
     mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mp) - 1;
     mdbx_debug("prev page is %" PRIaPGNO ", key index %u", mp->mp_pgno,
@@ -13254,18 +13252,17 @@ new_sub:;
       rc = mdbx_node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, nflags);
     if (likely(rc == 0)) {
       /* Adjust other cursors pointing to mp */
-      MDBX_cursor *m2, *m3;
-      MDBX_dbi dbi = mc->mc_dbi;
-      unsigned i = mc->mc_top;
-      MDBX_page *mp = mc->mc_pg[i];
-
-      for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
-        m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
+      const MDBX_dbi dbi = mc->mc_dbi;
+      const unsigned i = mc->mc_top;
+      MDBX_page *const mp = mc->mc_pg[i];
+      for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[dbi]; m2;
+           m2 = m2->mc_next) {
+        MDBX_cursor *m3 =
+            (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
         if (m3 == mc || m3->mc_snum < mc->mc_snum || m3->mc_pg[i] != mp)
           continue;
-        if (m3->mc_ki[i] >= mc->mc_ki[i] && insert_key) {
-          m3->mc_ki[i]++;
-        }
+        if (m3->mc_ki[i] >= mc->mc_ki[i])
+          m3->mc_ki[i] += insert_key;
         if (XCURSOR_INITED(m3))
           XCURSOR_REFRESH(m3, mp, m3->mc_ki[i]);
       }
