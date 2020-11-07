@@ -12384,7 +12384,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   switch (op) {
   case MDBX_GET_CURRENT: {
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
-      return MDBX_EINVAL;
+      return MDBX_ENODATA;
     MDBX_page *mp = mc->mc_pg[mc->mc_top];
     const unsigned nkeys = page_numkeys(mp);
     if (mc->mc_ki[mc->mc_top] >= nkeys) {
