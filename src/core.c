@@ -11274,13 +11274,11 @@ static void mdbx_cursor_adjust(MDBX_cursor *mc, func) {
 #endif
 
 /* Pop a page off the top of the cursor's stack. */
-static void mdbx_cursor_pop(MDBX_cursor *mc) {
+static __inline void mdbx_cursor_pop(MDBX_cursor *mc) {
   if (mc->mc_snum) {
     mdbx_debug("popped page %" PRIaPGNO " off db %d cursor %p",
                mc->mc_pg[mc->mc_top]->mp_pgno, DDBI(mc), (void *)mc);
-
-    mc->mc_snum--;
-    if (mc->mc_snum) {
+    if (--mc->mc_snum) {
       mc->mc_top--;
     } else {
       mc->mc_flags &= ~C_INITIALIZED;
@@ -11290,7 +11288,7 @@ static void mdbx_cursor_pop(MDBX_cursor *mc) {
 
 /* Push a page onto the top of the cursor's stack.
  * Set MDBX_TXN_ERROR on failure. */
-static int mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp) {
+static __inline int mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp) {
   mdbx_debug("pushing page %" PRIaPGNO " on db %d cursor %p", mp->mp_pgno,
              DDBI(mc), (void *)mc);
 
@@ -11809,7 +11807,7 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int dir) {
   if ((dir == SIBLING_RIGHT)
           ? (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mc->mc_pg[mc->mc_top]))
           : (mc->mc_ki[mc->mc_top] == 0)) {
-    mdbx_debug("no more keys left, moving to %s sibling",
+    mdbx_debug("no more keys aside, moving to next %s sibling",
                dir ? "right" : "left");
     if (unlikely((rc = mdbx_cursor_sibling(mc, dir)) != MDBX_SUCCESS)) {
       /* undo cursor_pop before returning */
@@ -11837,9 +11835,9 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int dir) {
   rc = mdbx_cursor_push(mc, mp);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  if (dir == SIBLING_LEFT)
-    mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mp) - 1;
 
+  mc->mc_ki[mc->mc_top] =
+      (indx_t)((dir == SIBLING_LEFT) ? page_numkeys(mp) - 1 : 0);
   return MDBX_SUCCESS;
 }
 
@@ -11889,8 +11887,12 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     goto skip;
   }
 
-  if (++mc->mc_ki[mc->mc_top] >= page_numkeys(mp)) {
+  int ki = mc->mc_ki[mc->mc_top];
+  mc->mc_ki[mc->mc_top] = (indx_t)++ki;
+  const int numkeys = page_numkeys(mp);
+  if (unlikely(ki >= numkeys)) {
     mdbx_debug("%s", "=====> move to next sibling page");
+    mc->mc_ki[mc->mc_top] = numkeys - 1;
     if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
                  MDBX_SUCCESS)) {
       mc->mc_flags |= C_EOF;
@@ -11981,17 +11983,17 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   mc->mc_flags &= ~(C_EOF | C_DEL);
 
-  if (mc->mc_ki[mc->mc_top] == 0) {
+  int ki = mc->mc_ki[mc->mc_top];
+  mc->mc_ki[mc->mc_top] = (indx_t)--ki;
+  if (unlikely(ki < 0)) {
+    mc->mc_ki[mc->mc_top] = 0;
     mdbx_debug("%s", "=====> move to prev sibling page");
     if ((rc = mdbx_cursor_sibling(mc, SIBLING_LEFT)) != MDBX_SUCCESS)
       return rc;
     mp = mc->mc_pg[mc->mc_top];
-    mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mp) - 1;
     mdbx_debug("prev page is %" PRIaPGNO ", key index %u", mp->mp_pgno,
                mc->mc_ki[mc->mc_top]);
-  } else
-    mc->mc_ki[mc->mc_top]--;
-
+  }
   mdbx_debug("==> cursor points to page %" PRIaPGNO
              " with %u keys, key index %u",
              mp->mp_pgno, page_numkeys(mp), mc->mc_ki[mc->mc_top]);
