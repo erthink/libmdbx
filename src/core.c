@@ -3600,7 +3600,7 @@ static __maybe_unused void mdbx_page_list(MDBX_page *mp) {
   } while (0)
 
 static __maybe_unused bool cursor_is_tracked(const MDBX_cursor *mc) {
-  for (MDBX_cursor *scan = mc->mc_txn->mt_cursors[mc->mc_dbi]; scan;
+  for (MDBX_cursor *scan = mc->mc_txn->tw.cursors[mc->mc_dbi]; scan;
        scan = scan->mc_next)
     if (mc == ((mc->mc_flags & C_SUB) ? &scan->mc_xcursor->mx_cursor : scan))
       return true;
@@ -3611,10 +3611,10 @@ static __maybe_unused bool cursor_is_tracked(const MDBX_cursor *mc) {
 #define WITH_CURSOR_TRACKING(mn, act)                                          \
   do {                                                                         \
     mdbx_cassert(&(mn),                                                        \
-                 mn.mc_txn->mt_cursors != NULL /* must be not rdonly txt */);  \
+                 mn.mc_txn->tw.cursors != NULL /* must be not rdonly txt */);  \
     mdbx_cassert(&(mn), !cursor_is_tracked(&(mn)));                            \
     MDBX_cursor mc_dummy;                                                      \
-    MDBX_cursor **tracking_head = &(mn).mc_txn->mt_cursors[mn.mc_dbi];         \
+    MDBX_cursor **tracking_head = &(mn).mc_txn->tw.cursors[mn.mc_dbi];         \
     MDBX_cursor *tracked = &(mn);                                              \
     if ((mn).mc_flags & C_SUB) {                                               \
       mc_dummy.mc_flags = C_INITIALIZED;                                       \
@@ -4201,7 +4201,7 @@ static int mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, bool all) {
       }
     }
     mc = mc->mc_next;
-    for (; !mc || mc == m0; mc = txn->mt_cursors[--i])
+    for (; !mc || mc == m0; mc = txn->tw.cursors[--i])
       if (i == 0)
         goto mark_done;
   }
@@ -5702,7 +5702,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
 done:
   /* Adjust cursors pointing to mp */
   mc->mc_pg[mc->mc_top] = np;
-  m2 = txn->mt_cursors[mc->mc_dbi];
+  m2 = txn->tw.cursors[mc->mc_dbi];
   if (mc->mc_flags & C_SUB) {
     for (; m2; m2 = m2->mc_next) {
       m3 = &m2->mc_xcursor->mx_cursor;
@@ -5866,8 +5866,8 @@ static int mdbx_cursor_shadow(MDBX_txn *src, MDBX_txn *dst) {
   MDBX_xcursor *mx;
 
   for (int i = src->mt_numdbs; --i >= 0;) {
-    dst->mt_cursors[i] = NULL;
-    if ((mc = src->mt_cursors[i]) != NULL) {
+    dst->tw.cursors[i] = NULL;
+    if ((mc = src->tw.cursors[i]) != NULL) {
       size_t size = sizeof(MDBX_cursor);
       if (mc->mc_xcursor)
         size += sizeof(MDBX_xcursor);
@@ -5887,8 +5887,8 @@ static int mdbx_cursor_shadow(MDBX_txn *src, MDBX_txn *dst) {
           *(MDBX_xcursor *)(bk + 1) = *mx;
           mx->mx_cursor.mc_txn = dst;
         }
-        mc->mc_next = dst->mt_cursors[i];
-        dst->mt_cursors[i] = mc;
+        mc->mc_next = dst->tw.cursors[i];
+        dst->tw.cursors[i] = mc;
       }
     }
   }
@@ -5902,7 +5902,7 @@ static int mdbx_cursor_shadow(MDBX_txn *src, MDBX_txn *dst) {
  *
  * Returns 0 on success, non-zero on failure. */
 static void mdbx_cursors_eot(MDBX_txn *txn, unsigned merge) {
-  MDBX_cursor **cursors = txn->mt_cursors, *mc, *next, *bk;
+  MDBX_cursor **cursors = txn->tw.cursors, *mc, *next, *bk;
   MDBX_xcursor *mx;
   int i;
 
@@ -6586,7 +6586,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
 
   if (parent) {
     mdbx_tassert(txn, mdbx_dirtylist_check(parent));
-    txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
+    txn->tw.cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
     txn->mt_dbiseqs = parent->mt_dbiseqs;
     txn->tw.dirtylist = mdbx_malloc(sizeof(MDBX_DP) * (MDBX_DPL_TXNFULL + 1));
     txn->tw.reclaimed_pglist =
@@ -7235,8 +7235,8 @@ static int mdbx_update_gc(MDBX_txn *txn) {
     goto bailout_notracking;
 
   couple.outer.mc_flags |= C_RECLAIMING;
-  couple.outer.mc_next = txn->mt_cursors[FREE_DBI];
-  txn->mt_cursors[FREE_DBI] = &couple.outer;
+  couple.outer.mc_next = txn->tw.cursors[FREE_DBI];
+  txn->tw.cursors[FREE_DBI] = &couple.outer;
 
 retry:
   ++loop;
@@ -7888,7 +7888,7 @@ retry_noaccount:
                    cleaned_gc_slot == MDBX_PNL_SIZE(txn->tw.lifo_reclaimed));
 
 bailout:
-  txn->mt_cursors[FREE_DBI] = couple.outer.mc_next;
+  txn->tw.cursors[FREE_DBI] = couple.outer.mc_next;
 
 bailout_notracking:
   MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) = 0;
@@ -10873,8 +10873,8 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
       MDBX_txn *txn = mdbx_calloc(1, size);
       if (txn) {
         txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
-        txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
-        txn->mt_dbiseqs = (unsigned *)(txn->mt_cursors + env->me_maxdbs);
+        txn->tw.cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
+        txn->mt_dbiseqs = (unsigned *)(txn->tw.cursors + env->me_maxdbs);
         txn->mt_dbistate = (uint8_t *)(txn->mt_dbiseqs + env->me_maxdbs);
         txn->mt_env = env;
         txn->mt_dbxs = env->me_dbxs;
@@ -11265,7 +11265,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
 static void mdbx_cursor_adjust(MDBX_cursor *mc, func) {
   MDBX_cursor *m2;
 
-  for (m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
+  for (m2 = mc->mc_txn->tw.cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
     if (m2->mc_pg[m2->mc_top] == mc->mc_pg[mc->mc_top]) {
       func(mc, m2);
     }
@@ -13257,7 +13257,7 @@ new_sub:;
       const MDBX_dbi dbi = mc->mc_dbi;
       const unsigned i = mc->mc_top;
       MDBX_page *const mp = mc->mc_pg[i];
-      for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[dbi]; m2;
+      for (MDBX_cursor *m2 = mc->mc_txn->tw.cursors[dbi]; m2;
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
@@ -13314,7 +13314,7 @@ new_sub:;
         MDBX_page *mp = mc->mc_pg[i];
         const int nkeys = page_numkeys(mp);
 
-        for (m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
+        for (m2 = mc->mc_txn->tw.cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
           if (m2 == mc || m2->mc_snum < mc->mc_snum)
             continue;
           if (!(m2->mc_flags & C_INITIALIZED))
@@ -13440,7 +13440,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
           node = page_node(mp, mc->mc_ki[mc->mc_top]);
           mc->mc_xcursor->mx_cursor.mc_pg[0] = node_data(node);
           /* fix other sub-DB cursors pointed at fake pages on this page */
-          for (m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
+          for (m2 = mc->mc_txn->tw.cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
             if (m2 == mc || m2->mc_snum < mc->mc_snum)
               continue;
             if (!(m2->mc_flags & C_INITIALIZED))
@@ -14082,8 +14082,8 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
       return MDBX_EINVAL;
     if (unlikely(!mc->mc_txn || mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE))
       return MDBX_PROBLEM;
-    if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
-      MDBX_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
+    if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->tw.cursors) {
+      MDBX_cursor **prev = &mc->mc_txn->tw.cursors[mc->mc_dbi];
       while (*prev && *prev != mc)
         prev = &(*prev)->mc_next;
       if (*prev == mc)
@@ -14112,9 +14112,9 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (txn->mt_cursors) {
-    mc->mc_next = txn->mt_cursors[dbi];
-    txn->mt_cursors[dbi] = mc;
+  if (!(txn->mt_flags & MDBX_TXN_RDONLY)) {
+    mc->mc_next = txn->tw.cursors[dbi];
+    txn->tw.cursors[dbi] = mc;
     mc->mc_flags |= C_UNTRACK;
   }
 
@@ -14222,17 +14222,19 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
       /* Remove from txn, if tracked.
        * A read-only txn (!C_UNTRACK) may have been freed already,
        * so do not peek inside it.  Only write txns track cursors. */
-      if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->mt_cursors) {
-        MDBX_cursor **prev = &mc->mc_txn->mt_cursors[mc->mc_dbi];
+      if (mc->mc_flags & C_UNTRACK) {
+        mdbx_cassert(mc, !(mc->mc_txn->mt_flags & MDBX_TXN_RDONLY));
+        MDBX_cursor **prev = &mc->mc_txn->tw.cursors[mc->mc_dbi];
         while (*prev && *prev != mc)
           prev = &(*prev)->mc_next;
-        if (*prev == mc)
-          *prev = mc->mc_next;
+        mdbx_cassert(mc, *prev == mc);
+        *prev = mc->mc_next;
       }
       mc->mc_signature = 0;
+      mc->mc_next = mc;
       mdbx_free(mc);
     } else {
-      /* cursor closed before nested txn ends */
+      /* Cursor closed before nested txn ends */
       mdbx_cassert(mc, mc->mc_signature == MDBX_MC_LIVE);
       mc->mc_signature = MDBX_MC_WAIT4EOT;
     }
@@ -14512,7 +14514,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
     mdbx_cassert(csrc, csrc->mc_top == cdst->mc_top);
     if (fromleft) {
       /* If we're adding on the left, bump others up */
-      for (m2 = csrc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+      for (m2 = csrc->mc_txn->tw.cursors[dbi]; m2; m2 = m2->mc_next) {
         m3 = (csrc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
         if (!(m3->mc_flags & C_INITIALIZED) || m3->mc_top < csrc->mc_top)
           continue;
@@ -14532,7 +14534,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
       }
     } else {
       /* Adding on the right, bump others down */
-      for (m2 = csrc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+      for (m2 = csrc->mc_txn->tw.cursors[dbi]; m2; m2 = m2->mc_next) {
         m3 = (csrc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
         if (m3 == csrc)
           continue;
@@ -14774,7 +14776,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     const MDBX_dbi dbi = csrc->mc_dbi;
     const unsigned top = csrc->mc_top;
 
-    for (m2 = csrc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+    for (m2 = csrc->mc_txn->tw.cursors[dbi]; m2; m2 = m2->mc_next) {
       m3 = (csrc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
       if (m3 == csrc || top >= m3->mc_snum)
         continue;
@@ -14964,7 +14966,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
                            mc->mc_db->md_overflow_pages == 0 &&
                            mc->mc_db->md_leaf_pages == 1);
       /* Adjust cursors pointing to mp */
-      for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2;
+      for (MDBX_cursor *m2 = mc->mc_txn->tw.cursors[mc->mc_dbi]; m2;
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
@@ -14998,7 +15000,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       }
 
       /* Adjust other cursors pointing to mp */
-      for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[mc->mc_dbi]; m2;
+      for (MDBX_cursor *m2 = mc->mc_txn->tw.cursors[mc->mc_dbi]; m2;
            m2 = m2->mc_next) {
         MDBX_cursor *m3 =
             (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
@@ -15529,7 +15531,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
   mc->mc_db->md_entries--;
 
   /* Adjust other cursors pointing to mp */
-  for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+  for (MDBX_cursor *m2 = mc->mc_txn->tw.cursors[dbi]; m2; m2 = m2->mc_next) {
     MDBX_cursor *m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
     if (m3 == mc || !(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
       continue;
@@ -15574,7 +15576,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
                         nkeys == 0));
 
   /* Adjust this and other cursors pointing to mp */
-  for (MDBX_cursor *m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+  for (MDBX_cursor *m2 = mc->mc_txn->tw.cursors[dbi]; m2; m2 = m2->mc_next) {
     MDBX_cursor *m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
     if (!(m2->mc_flags & m3->mc_flags & C_INITIALIZED))
       continue;
@@ -15682,10 +15684,10 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
      * is larger than the current one, the parent page may
      * run out of space, triggering a split. We need this
      * cursor to be consistent until the end of the rebalance. */
-    cx.outer.mc_next = txn->mt_cursors[dbi];
-    txn->mt_cursors[dbi] = &cx.outer;
+    cx.outer.mc_next = txn->tw.cursors[dbi];
+    txn->tw.cursors[dbi] = &cx.outer;
     rc = mdbx_cursor_del(&cx.outer, flags);
-    txn->mt_cursors[dbi] = cx.outer.mc_next;
+    txn->tw.cursors[dbi] = cx.outer.mc_next;
   }
   return rc;
 }
@@ -16121,7 +16123,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *newkey,
     MDBX_dbi dbi = mc->mc_dbi;
     nkeys = page_numkeys(mp);
 
-    for (m2 = mc->mc_txn->mt_cursors[dbi]; m2; m2 = m2->mc_next) {
+    for (m2 = mc->mc_txn->tw.cursors[dbi]; m2; m2 = m2->mc_next) {
       m3 = (mc->mc_flags & C_SUB) ? &m2->mc_xcursor->mx_cursor : m2;
       if (m3 == mc)
         continue;
@@ -16197,8 +16199,8 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
   rc = mdbx_cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  cx.outer.mc_next = txn->mt_cursors[dbi];
-  txn->mt_cursors[dbi] = &cx.outer;
+  cx.outer.mc_next = txn->tw.cursors[dbi];
+  txn->tw.cursors[dbi] = &cx.outer;
 
   /* LY: support for update (explicit overwrite) */
   if (flags & MDBX_CURRENT) {
@@ -16219,7 +16221,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
 
   if (likely(rc == MDBX_SUCCESS))
     rc = mdbx_cursor_put(&cx.outer, key, data, flags);
-  txn->mt_cursors[dbi] = cx.outer.mc_next;
+  txn->tw.cursors[dbi] = cx.outer.mc_next;
 
   return rc;
 }
@@ -17504,6 +17506,8 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     txn->mt_dbistate[slot] = (uint8_t)dbiflags;
     txn->mt_dbxs[slot].md_name.iov_base = namedup;
     txn->mt_dbxs[slot].md_name.iov_len = len;
+    if ((txn->mt_flags & MDBX_TXN_RDONLY) == 0)
+      txn->tw.cursors[slot] = NULL;
     txn->mt_numdbs += (slot == txn->mt_numdbs);
     if ((dbiflags & DBI_CREAT) == 0) {
       env->me_dbflags[slot] = txn->mt_dbs[slot].md_flags | DB_VALID;
@@ -17738,7 +17742,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
 
   rc = mdbx_drop0(mc, mc->mc_db->md_flags & MDBX_DUPSORT);
   /* Invalidate the dropped DB's cursors */
-  for (MDBX_cursor *m2 = txn->mt_cursors[dbi]; m2; m2 = m2->mc_next)
+  for (MDBX_cursor *m2 = txn->tw.cursors[dbi]; m2; m2 = m2->mc_next)
     m2->mc_flags &= ~(C_INITIALIZED | C_EOF);
   if (unlikely(rc))
     goto bailout;
@@ -19068,8 +19072,8 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   rc = mdbx_cursor_init(&cx.outer, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
-  cx.outer.mc_next = txn->mt_cursors[dbi];
-  txn->mt_cursors[dbi] = &cx.outer;
+  cx.outer.mc_next = txn->tw.cursors[dbi];
+  txn->tw.cursors[dbi] = &cx.outer;
 
   MDBX_val present_key = *key;
   if (F_ISSET(flags, MDBX_CURRENT | MDBX_NOOVERWRITE)) {
@@ -19145,7 +19149,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
     rc = mdbx_cursor_del(&cx.outer, flags & MDBX_ALLDUPS);
 
 bailout:
-  txn->mt_cursors[dbi] = cx.outer.mc_next;
+  txn->tw.cursors[dbi] = cx.outer.mc_next;
   return rc;
 }
 
@@ -19669,10 +19673,10 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   rc = mdbx_cursor_set(&cx.outer, key, &old_data, MDBX_SET, NULL);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc == MDBX_NOTFOUND && data) {
-      cx.outer.mc_next = txn->mt_cursors[dbi];
-      txn->mt_cursors[dbi] = &cx.outer;
+      cx.outer.mc_next = txn->tw.cursors[dbi];
+      txn->tw.cursors[dbi] = &cx.outer;
       rc = mdbx_cursor_put_attr(&cx.outer, key, data, attr, 0);
-      txn->mt_cursors[dbi] = cx.outer.mc_next;
+      txn->tw.cursors[dbi] = cx.outer.mc_next;
     }
     return rc;
   }
@@ -19687,11 +19691,11 @@ int mdbx_set_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
                                             old_data.iov_len) == 0)))
     return MDBX_SUCCESS;
 
-  cx.outer.mc_next = txn->mt_cursors[dbi];
-  txn->mt_cursors[dbi] = &cx.outer;
+  cx.outer.mc_next = txn->tw.cursors[dbi];
+  txn->tw.cursors[dbi] = &cx.outer;
   rc = mdbx_cursor_put_attr(&cx.outer, key, data ? data : &old_data, attr,
                             MDBX_CURRENT);
-  txn->mt_cursors[dbi] = cx.outer.mc_next;
+  txn->tw.cursors[dbi] = cx.outer.mc_next;
   return rc;
 }
 #endif /* MDBX_NEXENTA_ATTRS */
