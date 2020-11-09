@@ -14173,47 +14173,6 @@ again:
   return MDBX_SUCCESS;
 }
 
-/* Return the count of duplicate data items for the current key */
-int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
-  if (unlikely(mc == NULL))
-    return MDBX_EINVAL;
-
-  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
-    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
-                                                     : MDBX_EBADSIGN;
-
-  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (unlikely(countp == NULL || !(mc->mc_flags & C_INITIALIZED)))
-    return MDBX_EINVAL;
-
-  if (!mc->mc_snum) {
-    *countp = 0;
-    return MDBX_NOTFOUND;
-  }
-
-  MDBX_page *mp = mc->mc_pg[mc->mc_top];
-  if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= page_numkeys(mp)) {
-    *countp = 0;
-    return MDBX_NOTFOUND;
-  }
-
-  *countp = 1;
-  if (mc->mc_xcursor != NULL) {
-    MDBX_node *node = page_node(mp, mc->mc_ki[mc->mc_top]);
-    if (F_ISSET(node_flags(node), F_DUPDATA)) {
-      mdbx_cassert(mc, mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags &
-                                          C_INITIALIZED));
-      *countp = unlikely(mc->mc_xcursor->mx_db.md_entries > PTRDIFF_MAX)
-                    ? PTRDIFF_MAX
-                    : (size_t)mc->mc_xcursor->mx_db.md_entries;
-    }
-  }
-  return MDBX_SUCCESS;
-}
-
 void mdbx_cursor_close(MDBX_cursor *mc) {
   if (mc) {
     mdbx_ensure(NULL, mc->mc_signature == MDBX_MC_LIVE ||
@@ -14256,6 +14215,47 @@ MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *mc) {
   if (unlikely(!mc || mc->mc_signature != MDBX_MC_LIVE))
     return UINT_MAX;
   return mc->mc_dbi;
+}
+
+/* Return the count of duplicate data items for the current key */
+int mdbx_cursor_count(const MDBX_cursor *mc, size_t *countp) {
+  if (unlikely(mc == NULL))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
+    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
+                                                     : MDBX_EBADSIGN;
+
+  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(countp == NULL || !(mc->mc_flags & C_INITIALIZED)))
+    return MDBX_EINVAL;
+
+  if (!mc->mc_snum) {
+    *countp = 0;
+    return MDBX_NOTFOUND;
+  }
+
+  MDBX_page *mp = mc->mc_pg[mc->mc_top];
+  if ((mc->mc_flags & C_EOF) && mc->mc_ki[mc->mc_top] >= page_numkeys(mp)) {
+    *countp = 0;
+    return MDBX_NOTFOUND;
+  }
+
+  *countp = 1;
+  if (mc->mc_xcursor != NULL) {
+    MDBX_node *node = page_node(mp, mc->mc_ki[mc->mc_top]);
+    if (F_ISSET(node_flags(node), F_DUPDATA)) {
+      mdbx_cassert(mc, mc->mc_xcursor && (mc->mc_xcursor->mx_cursor.mc_flags &
+                                          C_INITIALIZED));
+      *countp = unlikely(mc->mc_xcursor->mx_db.md_entries > PTRDIFF_MAX)
+                    ? PTRDIFF_MAX
+                    : (size_t)mc->mc_xcursor->mx_db.md_entries;
+    }
+  }
+  return MDBX_SUCCESS;
 }
 
 /* Replace the key for a branch node with a new key.
