@@ -5861,34 +5861,35 @@ __cold int mdbx_env_sync_poll(MDBX_env *env) {
 }
 
 /* Back up parent txn's cursors, then grab the originals for tracking */
-static int mdbx_cursor_shadow(MDBX_txn *src, MDBX_txn *dst) {
-  MDBX_cursor *mc, *bk;
-  MDBX_xcursor *mx;
-
-  for (int i = src->mt_numdbs; --i >= 0;) {
-    dst->tw.cursors[i] = NULL;
-    if ((mc = src->tw.cursors[i]) != NULL) {
-      size_t size = sizeof(MDBX_cursor);
-      if (mc->mc_xcursor)
-        size += sizeof(MDBX_xcursor);
-      for (; mc; mc = bk->mc_next) {
+static int mdbx_cursor_shadow(MDBX_txn *parent, MDBX_txn *nested) {
+  for (int i = parent->mt_numdbs; --i >= 0;) {
+    nested->tw.cursors[i] = NULL;
+    MDBX_cursor *mc = parent->tw.cursors[i];
+    if (mc != NULL) {
+      size_t size = mc->mc_xcursor ? sizeof(MDBX_cursor) + sizeof(MDBX_xcursor)
+                                   : sizeof(MDBX_cursor);
+      for (MDBX_cursor *bk; mc; mc = bk->mc_next) {
+        bk = mc;
+        if (mc->mc_signature != MDBX_MC_LIVE)
+          continue;
         bk = mdbx_malloc(size);
         if (unlikely(!bk))
           return MDBX_ENOMEM;
         *bk = *mc;
         mc->mc_backup = bk;
-        mc->mc_db = &dst->mt_dbs[i];
         /* Kill pointers into src to reduce abuse: The
          * user may not use mc until dst ends. But we need a valid
          * txn pointer here for cursor fixups to keep working. */
-        mc->mc_txn = dst;
-        mc->mc_dbistate = &dst->mt_dbistate[i];
-        if ((mx = mc->mc_xcursor) != NULL) {
+        mc->mc_txn = nested;
+        mc->mc_db = &nested->mt_dbs[i];
+        mc->mc_dbistate = &nested->mt_dbistate[i];
+        MDBX_xcursor *mx = mc->mc_xcursor;
+        if (mx != NULL) {
           *(MDBX_xcursor *)(bk + 1) = *mx;
-          mx->mx_cursor.mc_txn = dst;
+          mx->mx_cursor.mc_txn = nested;
         }
-        mc->mc_next = dst->tw.cursors[i];
-        dst->tw.cursors[i] = mc;
+        mc->mc_next = nested->tw.cursors[i];
+        nested->tw.cursors[i] = mc;
       }
     }
   }
@@ -5901,47 +5902,56 @@ static int mdbx_cursor_shadow(MDBX_txn *src, MDBX_txn *dst) {
  * [in] merge   true to keep changes to parent cursors, false to revert.
  *
  * Returns 0 on success, non-zero on failure. */
-static void mdbx_cursors_eot(MDBX_txn *txn, unsigned merge) {
-  MDBX_cursor **cursors = txn->tw.cursors, *mc, *next, *bk;
-  MDBX_xcursor *mx;
-  int i;
-
-  for (i = txn->mt_numdbs; --i >= 0;) {
-    for (mc = cursors[i]; mc; mc = next) {
-      unsigned stage = mc->mc_signature;
-      mdbx_ensure(txn->mt_env,
-                  stage == MDBX_MC_LIVE || stage == MDBX_MC_WAIT4EOT);
+static void mdbx_cursors_eot(MDBX_txn *txn, const bool merge) {
+  for (int i = txn->mt_numdbs; --i >= 0;) {
+    MDBX_cursor *next, *mc = txn->tw.cursors[i];
+    if (!mc)
+      continue;
+    txn->tw.cursors[i] = NULL;
+    do {
+      const unsigned stage = mc->mc_signature;
+      MDBX_cursor *bk = mc->mc_backup;
       next = mc->mc_next;
-      mdbx_tassert(txn, !next || next->mc_signature == MDBX_MC_LIVE ||
-                            next->mc_signature == MDBX_MC_WAIT4EOT);
-      if ((bk = mc->mc_backup) != NULL) {
-        if (merge) {
-          /* Commit changes to parent txn */
+      mdbx_ensure(txn->mt_env,
+                  stage == MDBX_MC_LIVE || (stage == MDBX_MC_WAIT4EOT && bk));
+      mdbx_cassert(mc, mc->mc_dbi == (unsigned)i);
+      if (bk) {
+        MDBX_xcursor *mx = mc->mc_xcursor;
+        mdbx_cassert(mc, mx == bk->mc_xcursor);
+        mdbx_tassert(txn, txn->mt_parent != NULL);
+        mdbx_ensure(txn->mt_env, bk->mc_signature == MDBX_MC_LIVE);
+        if (stage == MDBX_MC_WAIT4EOT /* Cursor was closed by user */)
+          mc->mc_signature = stage /* Promote closed state to parent txn */;
+        else if (merge) {
+          /* Preserve changes from nested to parent txn */
           mc->mc_next = bk->mc_next;
           mc->mc_backup = bk->mc_backup;
           mc->mc_txn = bk->mc_txn;
+          *bk->mc_db = *mc->mc_db;
           mc->mc_db = bk->mc_db;
+          *bk->mc_dbistate = *mc->mc_dbistate;
           mc->mc_dbistate = bk->mc_dbistate;
-          if ((mx = mc->mc_xcursor) != NULL)
+          if (mx) {
+            if (mx != bk->mc_xcursor) {
+              *bk->mc_xcursor = *mx;
+              mx = bk->mc_xcursor;
+            }
             mx->mx_cursor.mc_txn = bk->mc_txn;
+          }
         } else {
-          /* Abort nested txn */
+          /* Restore from backup, i.e. rollback/abort nested txn */
           *mc = *bk;
-          if ((mx = mc->mc_xcursor) != NULL)
+          if (mx)
             *mx = *(MDBX_xcursor *)(bk + 1);
         }
         bk->mc_signature = 0;
         mdbx_free(bk);
-      }
-      if (stage == MDBX_MC_WAIT4EOT) {
-        mc->mc_signature = 0;
-        mdbx_free(mc);
       } else {
-        mc->mc_signature = MDBX_MC_READY4CLOSE;
+        mdbx_ensure(txn->mt_env, stage == MDBX_MC_LIVE);
+        mc->mc_signature = MDBX_MC_READY4CLOSE /* Cursor may be reused */;
         mc->mc_flags = 0 /* reset C_UNTRACK */;
       }
-    }
-    cursors[i] = NULL;
+    } while ((mc = next) != NULL);
   }
 }
 
@@ -6912,7 +6922,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     /* Export or close DBI handles created in this txn */
     mdbx_dbis_update(txn, mode & MDBX_END_UPDATE);
     if (!(mode & MDBX_END_EOTDONE)) /* !(already closed cursors) */
-      mdbx_cursors_eot(txn, 0);
+      mdbx_cursors_eot(txn, false);
     if (!(env->me_flags & MDBX_WRITEMAP))
       mdbx_dlist_free(txn);
 
@@ -8153,7 +8163,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     parent->mt_flags |= txn->mt_flags & MDBX_TXN_DIRTY;
 
     /* Merge our cursors into parent's and close them */
-    mdbx_cursors_eot(txn, 1);
+    mdbx_cursors_eot(txn, true);
+    end_mode |= MDBX_END_EOTDONE;
 
     /* Update parent's DB table. */
     memcpy(parent->mt_dbs, txn->mt_dbs, txn->mt_numdbs * sizeof(MDBX_db));
@@ -8379,7 +8390,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                         MDBX_DPL_TXNFULL);
-  mdbx_cursors_eot(txn, 0);
+  mdbx_cursors_eot(txn, false);
   end_mode |= MDBX_END_EOTDONE;
 
   if (txn->tw.dirtylist->length == 0 &&
@@ -14075,28 +14086,9 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   if (unlikely(!mc))
     return MDBX_EINVAL;
 
-  if (unlikely(mc->mc_signature != MDBX_MC_READY4CLOSE)) {
-    if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
-      return MDBX_EBADSIGN;
-    if (unlikely(mc->mc_backup))
-      return MDBX_EINVAL;
-    if (unlikely(!mc->mc_txn || mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE))
-      return MDBX_PROBLEM;
-    if ((mc->mc_flags & C_UNTRACK) && mc->mc_txn->tw.cursors) {
-      MDBX_cursor **prev = &mc->mc_txn->tw.cursors[mc->mc_dbi];
-      while (*prev && *prev != mc)
-        prev = &(*prev)->mc_next;
-      if (*prev == mc)
-        *prev = mc->mc_next;
-    }
-    mc->mc_signature = MDBX_MC_READY4CLOSE;
-    mc->mc_flags = 0;
-    mc->mc_dbi = UINT_MAX;
-  }
-
-  assert(!mc->mc_backup && !mc->mc_flags);
-  if (unlikely(mc->mc_backup || mc->mc_flags))
-    return MDBX_PROBLEM;
+  if (unlikely(mc->mc_signature != MDBX_MC_READY4CLOSE &&
+               mc->mc_signature != MDBX_MC_LIVE))
+    return MDBX_EBADSIGN;
 
   int rc = check_txn(txn, MDBX_TXN_BLOCKED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -14107,6 +14099,45 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
 
   if (unlikely(dbi == FREE_DBI && !F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
+
+  if (unlikely(mc->mc_backup)) /* Cursor from parent transaction */ {
+    mdbx_cassert(mc, mc->mc_signature == MDBX_MC_LIVE);
+    if (unlikely(mc->mc_dbi != dbi ||
+                 /* paranoia */ mc->mc_signature != MDBX_MC_LIVE ||
+                 mc->mc_txn != txn))
+      return MDBX_EINVAL;
+
+    assert(mc->mc_db == &txn->mt_dbs[dbi]);
+    assert(mc->mc_dbx == &txn->mt_dbxs[dbi]);
+    assert(mc->mc_dbi == dbi);
+    assert(mc->mc_dbistate == &txn->mt_dbistate[dbi]);
+    return likely(mc->mc_dbi == dbi &&
+                  /* paranoia */ mc->mc_signature == MDBX_MC_LIVE &&
+                  mc->mc_txn == txn)
+               ? MDBX_SUCCESS
+               : MDBX_EINVAL /* Disallow change DBI in nested transactions */;
+  }
+
+  if (mc->mc_signature == MDBX_MC_LIVE) {
+    if (unlikely(!mc->mc_txn || mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE))
+      return MDBX_PROBLEM;
+    if (mc->mc_flags & C_UNTRACK) {
+      mdbx_cassert(mc, !(mc->mc_txn->mt_flags & MDBX_TXN_RDONLY));
+      MDBX_cursor **prev = &mc->mc_txn->tw.cursors[mc->mc_dbi];
+      while (*prev && *prev != mc)
+        prev = &(*prev)->mc_next;
+      mdbx_cassert(mc, *prev == mc);
+      *prev = mc->mc_next;
+    }
+    mc->mc_signature = MDBX_MC_READY4CLOSE;
+    mc->mc_flags = 0;
+    mc->mc_dbi = UINT_MAX;
+    mc->mc_next = NULL;
+    mc->mc_db = NULL;
+    mc->mc_dbx = NULL;
+    mc->mc_dbistate = NULL;
+  }
+  mdbx_cassert(mc, !(mc->mc_flags & C_UNTRACK));
 
   rc = mdbx_cursor_init(mc, txn, dbi);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -14155,7 +14186,12 @@ int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  assert(dest->mc_db == src->mc_db);
+  assert(dest->mc_dbi == src->mc_dbi);
+  assert(dest->mc_dbx == src->mc_dbx);
+  assert(dest->mc_dbistate == src->mc_dbistate);
 again:
+  assert(dest->mc_txn == src->mc_txn);
   dest->mc_flags ^= (dest->mc_flags ^ src->mc_flags) & ~C_UNTRACK;
   dest->mc_top = src->mc_top;
   dest->mc_snum = src->mc_snum;
@@ -14165,6 +14201,8 @@ again:
   }
 
   if (src->mc_xcursor) {
+    dest->mc_xcursor->mx_db = src->mc_xcursor->mx_db;
+    dest->mc_xcursor->mx_dbx = src->mc_xcursor->mx_dbx;
     src = &src->mc_xcursor->mx_cursor;
     dest = &dest->mc_xcursor->mx_cursor;
     goto again;
