@@ -18615,7 +18615,7 @@ int mdbx_cursor_on_first(const MDBX_cursor *mc) {
                                                      : MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
-    return MDBX_RESULT_FALSE;
+    return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
 
   for (unsigned i = 0; i < mc->mc_snum; ++i) {
     if (mc->mc_ki[i])
@@ -18634,7 +18634,7 @@ int mdbx_cursor_on_last(const MDBX_cursor *mc) {
                                                      : MDBX_EBADSIGN;
 
   if (!(mc->mc_flags & C_INITIALIZED))
-    return MDBX_RESULT_FALSE;
+    return mc->mc_db->md_entries ? MDBX_RESULT_FALSE : MDBX_RESULT_TRUE;
 
   for (unsigned i = 0; i < mc->mc_snum; ++i) {
     unsigned nkeys = page_numkeys(mc->mc_pg[i]);
