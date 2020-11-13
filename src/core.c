@@ -12088,8 +12088,9 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
     mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
     mp = mc->mc_pg[mc->mc_top];
-    if (!page_numkeys(mp)) {
+    if (unlikely(!page_numkeys(mp))) {
       mc->mc_ki[mc->mc_top] = 0;
+      mc->mc_flags |= C_EOF;
       return MDBX_NOTFOUND;
     }
     if (IS_LEAF2(mp)) {
@@ -12105,6 +12106,9 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
        * was the one we wanted. */
       mc->mc_ki[mc->mc_top] = 0;
       *exactp = 1;
+      mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
+                               page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                           (mc->mc_flags & C_EOF));
       goto set1;
     }
     if (rc > 0) {
@@ -12123,6 +12127,9 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           mdbx_cassert(mc, nkeys >= 1 && nkeys <= UINT16_MAX + 1);
           mc->mc_ki[mc->mc_top] = (indx_t)(nkeys - 1);
           *exactp = 1;
+          mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
+                                   page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                               (mc->mc_flags & C_EOF));
           goto set1;
         }
         if (rc < 0) {
@@ -12139,6 +12146,9 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             if (rc == 0) {
               /* current node was the one we wanted */
               *exactp = 1;
+              mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
+                                       page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                                   (mc->mc_flags & C_EOF));
               goto set1;
             }
           }
@@ -12156,6 +12166,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
         /* There are no other pages */
         mdbx_cassert(mc, nkeys <= UINT16_MAX);
         mc->mc_ki[mc->mc_top] = (uint16_t)nkeys;
+        mc->mc_flags |= C_EOF;
         return MDBX_NOTFOUND;
       }
     }
@@ -12165,8 +12176,12 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       if (op == MDBX_SET_RANGE) {
         rc = 0;
         goto set1;
-      } else
+      } else {
+        mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
+                                 page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                             (mc->mc_flags & C_EOF));
         return MDBX_NOTFOUND;
+      }
     }
   } else {
     mc->mc_pg[0] = 0;
@@ -12183,6 +12198,8 @@ set2:
   node = mdbx_node_search(mc, &aligned_key, exactp);
   if (!*exactp && op != MDBX_SET_RANGE) {
     /* MDBX_SET specified and not an exact match. */
+    if (unlikely(mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])))
+      mc->mc_flags |= C_EOF;
     return MDBX_NOTFOUND;
   }
 
@@ -12197,6 +12214,9 @@ set2:
     mdbx_cassert(mc, IS_LEAF(mp));
     node = page_node(mp, 0);
   }
+  mdbx_cassert(mc,
+               mc->mc_ki[mc->mc_top] < page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                   (mc->mc_flags & C_EOF));
 
 set1:
   mc->mc_flags |= C_INITIALIZED;
@@ -12258,6 +12278,9 @@ set1:
         return rc;
       rc = mc->mc_dbx->md_dcmp(&aligned_data, &olddata);
       if (rc) {
+        mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
+                                 page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                             (mc->mc_flags & C_EOF));
         if (op != MDBX_GET_BOTH_RANGE || rc > 0)
           return MDBX_NOTFOUND;
         *exactp = 0;
@@ -12403,6 +12426,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (mc->mc_ki[mc->mc_top] >= nkeys) {
       mdbx_cassert(mc, nkeys <= UINT16_MAX);
       mc->mc_ki[mc->mc_top] = (uint16_t)nkeys;
+      mc->mc_flags |= C_EOF;
       return MDBX_NOTFOUND;
     }
     mdbx_cassert(mc, nkeys > 0);
@@ -12452,6 +12476,12 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (unlikely(key == NULL))
       return MDBX_EINVAL;
     rc = mdbx_cursor_set(mc, key, data, op, &exact);
+    if (mc->mc_flags & C_INITIALIZED) {
+      mdbx_cassert(mc, mc->mc_snum > 0 && mc->mc_top < mc->mc_snum);
+      mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
+                               page_numkeys(mc->mc_pg[mc->mc_top]) ||
+                           (mc->mc_flags & C_EOF));
+    }
     break;
   case MDBX_GET_MULTIPLE:
     if (unlikely(data == NULL || !(mc->mc_flags & C_INITIALIZED)))
@@ -12524,6 +12554,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       return MDBX_INCOMPATIBLE;
     if (mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])) {
       mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mc->mc_pg[mc->mc_top]);
+      mc->mc_flags |= C_EOF;
       return MDBX_NOTFOUND;
     }
     {
