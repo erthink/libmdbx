@@ -12212,7 +12212,8 @@ set2:
     }
     mp = mc->mc_pg[mc->mc_top];
     mdbx_cassert(mc, IS_LEAF(mp));
-    node = page_node(mp, 0);
+    if (!IS_LEAF2(mp))
+      node = page_node(mp, 0);
   }
   mdbx_cassert(mc,
                mc->mc_ki[mc->mc_top] < page_numkeys(mc->mc_pg[mc->mc_top]) ||
