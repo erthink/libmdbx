@@ -771,10 +771,15 @@ int main(int argc, char *argv[]) {
       error("mdbx_txn_commit", rc);
       goto env_close;
     }
-    rc = mdbx_dbi_close(env, dbi);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_dbi_close", rc);
-      goto env_close;
+    if (subname) {
+      assert(dbi != MAIN_DBI);
+      rc = mdbx_dbi_close(env, dbi);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        error("mdbx_dbi_close", rc);
+        goto env_close;
+      }
+    } else {
+      assert(dbi == MAIN_DBI);
     }
 
     /* try read next header */
