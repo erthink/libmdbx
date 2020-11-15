@@ -594,7 +594,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (envinfo.mi_mapsize) {
+  if (envinfo.mi_geo.current | envinfo.mi_mapsize) {
     if (envinfo.mi_geo.current) {
       rc = mdbx_env_set_geometry(
           env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
