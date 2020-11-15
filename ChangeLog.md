@@ -10,9 +10,10 @@ TODO:
  - Finalize C++ API (few typos and trivia bugs are likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
-## v0.9.2 2020-10-30
+## v0.9.2 (delayed until https://github.com/erthink/libmdbx/issues/131)
 
 Added features:
+
  - Provided package for [buildroot](https://buildroot.org/).
  - Added `mdbx_env_delete()` for deletion an environment files in a proper and multiprocess-safe way.
  - Added `mdbx_txn_commit_ex()` with collecting latency information.
@@ -36,6 +37,7 @@ Fixes:
  - Added `SIGPIPE` suppression for internal thread during `mdbx_env_copy()`.
  - Fixed extra-rare `MDBX_KEY_EXIST` error during `mdbx_commit()`.
  - Fixed spilled pages checking (https://github.com/erthink/libmdbx/issues/126).
+ - Fixed `mdbx_load` for 'plain text' and without `-s name` cases (https://github.com/erthink/libmdbx/issues/136).
 
 ## v0.9.1 2020-09-30
 
