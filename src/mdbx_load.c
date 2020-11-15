@@ -780,6 +780,8 @@ int main(int argc, char *argv[]) {
     /* try read next header */
     if (!(mode & NOHDR))
       rc = readhdr();
+    else if (ferror(stdin) || feof(stdin))
+      break;
   }
 
   switch (rc) {
