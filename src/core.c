@@ -5903,6 +5903,7 @@ static int mdbx_cursor_shadow(MDBX_txn *parent, MDBX_txn *nested) {
  *
  * Returns 0 on success, non-zero on failure. */
 static void mdbx_cursors_eot(MDBX_txn *txn, const bool merge) {
+  mdbx_tassert(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   for (int i = txn->mt_numdbs; --i >= 0;) {
     MDBX_cursor *next, *mc = txn->tw.cursors[i];
     if (!mc)
@@ -6818,6 +6819,7 @@ int mdbx_txn_flags(const MDBX_txn *txn) {
 
 /* Export or close DBI handles opened in this txn. */
 static void mdbx_dbis_update(MDBX_txn *txn, int keep) {
+  mdbx_tassert(txn, !txn->mt_parent && txn == txn->mt_env->me_txn0);
   MDBX_dbi n = txn->mt_numdbs;
   if (n) {
     bool locked = false;
@@ -6919,8 +6921,6 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     if (txn == env->me_txn0)
       mdbx_txn_valgrind(env, nullptr);
 #endif
-    /* Export or close DBI handles created in this txn */
-    mdbx_dbis_update(txn, mode & MDBX_END_UPDATE);
     if (!(mode & MDBX_END_EOTDONE)) /* !(already closed cursors) */
       mdbx_cursors_eot(txn, false);
     if (!(env->me_flags & MDBX_WRITEMAP))
@@ -6931,6 +6931,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
     env->me_txn = txn->mt_parent;
     if (txn == env->me_txn0) {
       mdbx_assert(env, txn->mt_parent == NULL);
+      /* Export or close DBI handles created in this txn */
+      mdbx_dbis_update(txn, mode & MDBX_END_UPDATE);
       mdbx_pnl_shrink(&txn->tw.retired_pages);
       mdbx_pnl_shrink(&txn->tw.reclaimed_pglist);
       /* The writer mutex was locked in mdbx_txn_begin. */
