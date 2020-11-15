@@ -463,6 +463,8 @@ fd
 fdatasync
 featuredarticles
 FEEDNAME
+feof
+ferror
 fetchm
 FEXCEPTIONS
 fflush
