@@ -778,8 +778,6 @@ struct MDBX_txn {
   MDBX_db *mt_dbs;
   /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
-  /* In write txns, array of cursors for each DB */
-  MDBX_cursor **mt_cursors;
 
   /* Transaction DBI Flags */
 #define DBI_DIRTY MDBX_DBI_DIRTY /* DB was written in this txn */
@@ -806,6 +804,8 @@ struct MDBX_txn {
       MDBX_reader *reader;
     } to;
     struct {
+      /* In write txns, array of cursors for each DB */
+      MDBX_cursor **cursors;
       pgno_t *reclaimed_pglist; /* Reclaimed GC pages */
       txnid_t last_reclaimed;   /* ID of last used record */
       pgno_t loose_refund_wl /* FIXME: describe */;

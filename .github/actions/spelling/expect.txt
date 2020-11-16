@@ -238,6 +238,7 @@ datalen
 DATANAME
 DATASIGN
 datasync
+dataview
 datetime
 DBC
 dbenv

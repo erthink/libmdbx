@@ -3861,6 +3861,18 @@ mdbx_cursor_txn(const MDBX_cursor *cursor);
  * \param [in] cursor  A cursor handle returned by \ref mdbx_cursor_open(). */
 LIBMDBX_API MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *cursor);
 
+/** \brief Copy cursor position and state.
+ * \ingroup c_cursors
+ *
+ * \param [in] src       A source cursor handle returned
+ * by \ref mdbx_cursor_create() or \ref mdbx_cursor_open().
+ *
+ * \param [in,out] dest  A destination cursor handle returned
+ * by \ref mdbx_cursor_create() or \ref mdbx_cursor_open().
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest);
+
 /** \brief Retrieve by cursor.
  * \ingroup c_crud
  *
