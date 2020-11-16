@@ -103,31 +103,33 @@ protected:
 #else
   using data_view = std::string;
 #endif
-  static inline data_view S(const MDBX_val &v) {
+  static inline data_view iov2dataview(const MDBX_val &v) {
     return (v.iov_base && v.iov_len)
                ? data_view(static_cast<const char *>(v.iov_base), v.iov_len)
                : data_view();
   }
-  static inline data_view S(const keygen::buffer &b) { return S(b->value); }
+  static inline data_view iov2dataview(const keygen::buffer &b) {
+    return iov2dataview(b->value);
+  }
 
   using Item = std::pair<std::string, std::string>;
+  static MDBX_val dataview2iov(const data_view &v) {
+    MDBX_val r;
+    r.iov_base = (void *)v.data();
+    r.iov_len = v.size();
+    return r;
+  }
   struct ItemCompare {
     const testcase *context;
     ItemCompare(const testcase *owner) : context(owner) {}
 
     bool operator()(const Item &a, const Item &b) const {
-      MDBX_val va, vb;
-      va.iov_base = (void *)a.first.data();
-      va.iov_len = a.first.size();
-      vb.iov_base = (void *)b.first.data();
-      vb.iov_len = b.first.size();
+      MDBX_val va = dataview2iov(a.first), vb = dataview2iov(b.first);
       int cmp = mdbx_cmp(context->txn_guard.get(), context->dbi, &va, &vb);
       if (cmp == 0 &&
           (context->config.params.table_flags & MDBX_DUPSORT) != 0) {
-        va.iov_base = (void *)a.second.data();
-        va.iov_len = a.second.size();
-        vb.iov_base = (void *)b.second.data();
-        vb.iov_len = b.second.size();
+        va = dataview2iov(a.second);
+        vb = dataview2iov(b.second);
         cmp = mdbx_dcmp(context->txn_guard.get(), context->dbi, &va, &vb);
       }
       return cmp < 0;
@@ -159,6 +161,29 @@ protected:
   } last;
 
   SET speculum{ItemCompare(this)}, speculum_committed{ItemCompare(this)};
+  scoped_cursor_guard speculum_cursors[5];
+  void speculum_prepare_cursors(const Item &item);
+  void speculum_check_iterator(const char *where, const char *stage,
+                               const testcase::SET::const_iterator &it,
+                               const MDBX_val &key, const MDBX_val &data) const;
+  void speculum_check_cursor(const char *where, const char *stage,
+                             const testcase::SET::const_iterator &it,
+                             int cursor_err, const MDBX_val &cursor_key,
+                             const MDBX_val &cursor_data) const;
+  void speculum_check_cursor(const char *where, const char *stage,
+                             const testcase::SET::const_iterator &it,
+                             MDBX_cursor *cursor,
+                             const MDBX_cursor_op op) const;
+
+  void verbose(const char *where, const char *stage,
+               const testcase::SET::const_iterator &it) const;
+  void verbose(const char *where, const char *stage, const MDBX_val &key,
+               const MDBX_val &data, int err = MDBX_SUCCESS) const;
+
+  bool is_same(const Item &a, const Item &b) const;
+  bool is_same(const SET::const_iterator &it, const MDBX_val &k,
+               const MDBX_val &v) const;
+
   bool speculum_verify();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              MDBX_put_flags_t flags);

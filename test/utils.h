@@ -287,6 +287,9 @@ std::string data2hex(const void *ptr, size_t bytes, simple_checksum &checksum);
 bool hex2data(const char *hex_begin, const char *hex_end, void *ptr,
               size_t bytes, simple_checksum &checksum);
 bool is_samedata(const MDBX_val *a, const MDBX_val *b);
+inline bool is_samedata(const MDBX_val &a, const MDBX_val &b) {
+  return is_samedata(&a, &b);
+}
 std::string format(const char *fmt, ...);
 
 uint64_t entropy_ticks(void);
