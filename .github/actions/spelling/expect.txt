@@ -18,6 +18,7 @@ ailfast
 Aleksey
 alevel
 alexey
+Alfke
 alignas
 alldbs
 ALLDUPS
@@ -1014,6 +1015,7 @@ nextkey
 nextvalue
 nf
 nflags
+nimdbx
 nkey
 nkeys
 nlink
@@ -1451,6 +1453,7 @@ Smath
 smbfs
 SNAPTHREAD
 SNC
+snej
 snprintf
 Solaris
 Soref
