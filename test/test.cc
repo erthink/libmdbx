@@ -310,7 +310,7 @@ void testcase::txn_inject_writefault(void) {
 void testcase::txn_inject_writefault(MDBX_txn *txn) {
   if (config.params.inject_writefaultn && txn) {
     if (config.params.inject_writefaultn <= nops_completed &&
-        (mdbx_txn_flags(txn) & MDBX_RDONLY) == 0) {
+        (MDBX_txn_flags_t(mdbx_txn_flags(txn)) & MDBX_TXN_RDONLY) == 0) {
       log_verbose(
           "== txn_inject_writefault(): got %u nops or more, inject FAULT",
           config.params.inject_writefaultn);
