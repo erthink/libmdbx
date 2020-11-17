@@ -756,14 +756,21 @@ if(NOT CMAKE_CONFIGURATION_TYPES)
   endif()
 endif()
 
+# choice target to fetch definitions and options
+if(MDBX_BUILD_SHARED_LIBRARY)
+  set(target4fetch mdbx)
+else()
+  set(target4fetch mdbx-static)
+endif()
+
 # get definitions
-get_target_property(defs_list mdbx-static COMPILE_DEFINITIONS)
+get_target_property(defs_list ${target4fetch} COMPILE_DEFINITIONS)
 if(defs_list)
   list(APPEND MDBX_BUILD_FLAGS ${defs_list})
 endif()
 
 # get target compile options
-get_target_property(options_list mdbx-static COMPILE_OPTIONS)
+get_target_property(options_list ${target4fetch} COMPILE_OPTIONS)
 if(options_list)
   list(APPEND MDBX_BUILD_FLAGS ${options_list})
 endif()
