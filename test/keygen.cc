@@ -115,7 +115,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   serial_t key_serial = serial;
   serial_t value_serial = value_age << mapping.split;
   if (mapping.split) {
-    if (key_essentials.flags & MDBX_DUPSORT) {
+    if (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT) {
       key_serial >>= mapping.split;
       value_serial += serial & mask(mapping.split);
     } else {
@@ -203,7 +203,7 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
 #endif
   key_essentials.flags =
       actor.table_flags &
-      uint16_t(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
+      MDBX_db_flags_t(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
   assert(actor.keylen_min <= UINT16_MAX);
   key_essentials.minlen = (uint16_t)actor.keylen_min;
   assert(actor.keylen_max <= UINT32_MAX);
@@ -213,7 +213,7 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                    actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
 
   value_essentials.flags =
-      actor.table_flags & uint16_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP);
+      actor.table_flags & MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP);
   assert(actor.datalen_min <= UINT16_MAX);
   value_essentials.minlen = (uint16_t)actor.datalen_min;
   assert(actor.datalen_max <= UINT32_MAX);
@@ -236,35 +236,41 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
 }
 
 void maker::make_linear() {
-  mapping.mesh = (key_essentials.flags & MDBX_DUPSORT) ? 0 : mapping.split;
+  mapping.mesh = (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT)
+                     ? 0
+                     : mapping.split;
   mapping.rotate = 0;
   mapping.offset = 0;
   const auto max_serial = mask(mapping.width) + base;
   const auto max_key_serial =
-      (mapping.split && (key_essentials.flags & MDBX_DUPSORT))
+      (mapping.split && (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT))
           ? max_serial >> mapping.split
           : max_serial;
   const auto max_value_serial =
-      (mapping.split && (key_essentials.flags & MDBX_DUPSORT))
+      (mapping.split && (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT))
           ? mask(mapping.split)
           : 0;
 
   while (key_essentials.minlen < 8 &&
          (key_essentials.minlen == 0 ||
           mask(key_essentials.minlen * 8) < max_key_serial)) {
-    key_essentials.minlen +=
-        (key_essentials.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
+    key_essentials.minlen += (MDBX_db_flags_t(key_essentials.flags) &
+                              (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
+                                 ? 4
+                                 : 1;
     if (key_essentials.maxlen < key_essentials.minlen)
       key_essentials.maxlen = key_essentials.minlen;
   }
 
-  if ((key_essentials.flags | value_essentials.flags) & MDBX_DUPSORT)
+  if (MDBX_db_flags_t(key_essentials.flags | value_essentials.flags) &
+      MDBX_DUPSORT)
     while (value_essentials.minlen < 8 &&
            (value_essentials.minlen == 0 ||
             mask(value_essentials.minlen * 8) < max_value_serial)) {
-      value_essentials.minlen +=
-          (value_essentials.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4
-                                                                         : 1;
+      value_essentials.minlen += (MDBX_db_flags_t(value_essentials.flags) &
+                                  (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
+                                     ? 4
+                                     : 1;
       if (value_essentials.maxlen < value_essentials.minlen)
         value_essentials.maxlen = value_essentials.minlen;
     }
@@ -272,8 +278,9 @@ void maker::make_linear() {
 
 bool maker::is_unordered() const {
   return mapping.rotate ||
-         mapping.mesh >
-             ((key_essentials.flags & MDBX_DUPSORT) ? 0 : mapping.split);
+         mapping.mesh > ((MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT)
+                             ? 0
+                             : mapping.split);
 }
 
 bool maker::increment(serial_t &serial, int delta) const {
@@ -374,9 +381,9 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
 #endif
   assert(length(serial) <= out.value.iov_len);
   out.value.iov_base = out.bytes;
-  if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
+  if (MDBX_db_flags_t(params.flags) & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) {
     assert(params.maxlen == params.minlen);
-    if (params.flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
+    if (MDBX_db_flags_t(params.flags) & (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
       assert(params.minlen == 4 || params.minlen == 8);
     out.u64 = serial;
     if (!is_byteorder_le() && out.value.iov_len != 8)
@@ -393,7 +400,8 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
       } else
         memset(out.bytes + 8, '\0', out.value.iov_len - prefix);
     }
-    if (unlikely(params.flags & (MDBX_REVERSEKEY | MDBX_REVERSEDUP)))
+    if (unlikely(MDBX_db_flags_t(params.flags) &
+                 (MDBX_REVERSEKEY | MDBX_REVERSEDUP)))
       std::reverse((char *)out.value.iov_base,
                    (char *)out.value.iov_base + out.value.iov_len);
   }

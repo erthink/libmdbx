@@ -483,9 +483,18 @@ typedef mode_t mdbx_mode_t;
   MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, ENUM b) {                        \
     return ENUM(std::size_t(a) & std::size_t(b));                              \
   }                                                                            \
+  MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, size_t b) {                      \
+    return ENUM(std::size_t(a) & b);                                           \
+  }                                                                            \
+  MDBX_CXX01_CONSTEXPR ENUM operator&(size_t a, ENUM b) {                      \
+    return ENUM(a & std::size_t(b));                                           \
+  }                                                                            \
   MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; } \
-  MDBX_CXX01_CONSTEXPR ENUM operator~(ENUM a) {                                \
-    return ENUM(~std::size_t(a));                                              \
+  MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, size_t b) {                   \
+    return a = a & b;                                                          \
+  }                                                                            \
+  MDBX_CXX01_CONSTEXPR std::size_t operator~(ENUM a) {                         \
+    return ~std::size_t(a);                                                    \
   }                                                                            \
   MDBX_CXX01_CONSTEXPR ENUM operator^(ENUM a, ENUM b) {                        \
     return ENUM(std::size_t(a) ^ std::size_t(b));                              \
@@ -1505,7 +1514,20 @@ enum MDBX_cursor_op {
 
   /** \ref MDBX_DUPFIXED -only: Position at previous page and return up to
    * a page of duplicate data items. */
-  MDBX_PREV_MULTIPLE
+  MDBX_PREV_MULTIPLE,
+
+  /** Position at first key-value pair greater than or equal to specified,
+   * return both key and data, and the return code depends on a exact match.
+   *
+   * For non DUPSORT-ed collections this work the same to \ref MDBX_SET_RANGE,
+   * but returns \ref MDBX_SUCCESS if key found exactly and
+   * \ref MDBX_RESULT_TRUE if greater key was found.
+   *
+   * For DUPSORT-ed a data value is taken into account for duplicates,
+   * i.e. for a pairs/tuples of a key and an each data value of duplicates.
+   * Returns \ref MDBX_SUCCESS if key-value pair found exactly and
+   * \ref MDBX_RESULT_TRUE if the next pair was returned. */
+  MDBX_SET_LOWERBOUND
 };
 #ifndef __cplusplus
 /** \ingroup c_cursors */
@@ -3860,6 +3882,18 @@ mdbx_cursor_txn(const MDBX_cursor *cursor);
  *
  * \param [in] cursor  A cursor handle returned by \ref mdbx_cursor_open(). */
 LIBMDBX_API MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *cursor);
+
+/** \brief Copy cursor position and state.
+ * \ingroup c_cursors
+ *
+ * \param [in] src       A source cursor handle returned
+ * by \ref mdbx_cursor_create() or \ref mdbx_cursor_open().
+ *
+ * \param [in,out] dest  A destination cursor handle returned
+ * by \ref mdbx_cursor_create() or \ref mdbx_cursor_open().
+ *
+ * \returns A non-zero error value on failure and 0 on success. */
+LIBMDBX_API int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest);
 
 /** \brief Retrieve by cursor.
  * \ingroup c_crud
