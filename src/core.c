@@ -11733,20 +11733,7 @@ int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  MDBX_val save_data = *data;
-  int exact = 0;
-  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_RANGE, &exact);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
-  if (exact && (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) != 0) {
-    *data = save_data;
-    exact = 0;
-    rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_GET_BOTH_RANGE, &exact);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
-  }
-  return exact ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
+  return mdbx_cursor_get(&cx.outer, key, data, MDBX_SET_LOWERBOUND);
 }
 
 int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
