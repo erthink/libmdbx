@@ -1505,7 +1505,20 @@ enum MDBX_cursor_op {
 
   /** \ref MDBX_DUPFIXED -only: Position at previous page and return up to
    * a page of duplicate data items. */
-  MDBX_PREV_MULTIPLE
+  MDBX_PREV_MULTIPLE,
+
+  /** Position at first key-value pair greater than or equal to specified,
+   * return both key and data, and the return code depends on a exact match.
+   *
+   * For non DUPSORT-ed collections this work the same to \ref MDBX_SET_RANGE,
+   * but returns \ref MDBX_SUCCESS if key found exactly and
+   * \ref MDBX_RESULT_TRUE if greater key was found.
+   *
+   * For DUPSORT-ed a data value is taken into account for duplicates,
+   * i.e. for a pairs/tuples of a key and an each data value of duplicates.
+   * Returns \ref MDBX_SUCCESS if key-value pair found exactly and
+   * \ref MDBX_RESULT_TRUE if the next pair was returned. */
+  MDBX_SET_LOWERBOUND
 };
 #ifndef __cplusplus
 /** \ingroup c_cursors */

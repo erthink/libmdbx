@@ -12575,6 +12575,33 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   case MDBX_LAST_DUP:
     mfunc = mdbx_cursor_last;
     goto mmove;
+  case MDBX_SET_LOWERBOUND: {
+    if (unlikely(key == NULL || data == NULL))
+      return MDBX_EINVAL;
+    MDBX_val save_data = *data;
+    rc = mdbx_cursor_set(mc, key, data, MDBX_SET_RANGE, &exact);
+    if (rc == MDBX_SUCCESS && exact && mc->mc_xcursor) {
+      mc->mc_flags &= ~C_DEL;
+      if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+        *data = save_data;
+        exact = 0;
+        rc = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
+                             MDBX_SET_RANGE, &exact);
+        if (rc == MDBX_NOTFOUND) {
+          mdbx_cassert(mc, !exact);
+          rc = mdbx_cursor_next(mc, key, data, MDBX_NEXT_NODUP);
+        }
+      } else {
+        int cmp = mc->mc_dbx->md_dcmp(&save_data, data);
+        exact = (cmp == 0);
+        if (cmp > 0)
+          rc = mdbx_cursor_next(mc, key, data, MDBX_NEXT_NODUP);
+      }
+    }
+    if (rc == MDBX_SUCCESS && !exact)
+      rc = MDBX_RESULT_TRUE;
+    break;
+  }
   default:
     mdbx_debug("unhandled/unimplemented cursor operation %u", op);
     return MDBX_EINVAL;
