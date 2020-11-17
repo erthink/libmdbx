@@ -687,7 +687,7 @@ void testcase::verbose(const char *where, const char *stage,
                        const MDBX_val &key, const MDBX_val &data,
                        int err) const {
   char dump_key[32], dump_value[32];
-  if (err != MDBX_SUCCESS)
+  if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
     log_verbose("speculum-%s: %s cursor {%d, %s}", where, stage, err,
                 mdbx_strerror(err));
   else
@@ -722,7 +722,8 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const MDBX_val &cursor_data) const {
   // verbose(where, stage, cursor_key, cursor_data, cursor_err);
   // verbose(where, stage, it);
-  if (cursor_err != MDBX_SUCCESS && cursor_err != MDBX_NOTFOUND)
+  if (cursor_err != MDBX_SUCCESS && cursor_err != MDBX_NOTFOUND &&
+      cursor_err != MDBX_RESULT_TRUE)
     failure("speculum-%s: %s %s %d %s", where, stage, "cursor-get", cursor_err,
             mdbx_strerror(cursor_err));
 
@@ -737,7 +738,7 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
     failure("speculum-%s: %s lack pair {%s, %s}", where, stage,
             mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
             mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
-  } else if (cursor_err == MDBX_SUCCESS)
+  } else if (cursor_err == MDBX_SUCCESS || cursor_err == MDBX_RESULT_TRUE)
     speculum_check_iterator(where, stage, it, cursor_key, cursor_data);
 }
 
@@ -787,19 +788,14 @@ void testcase::speculum_prepare_cursors(const Item &item) {
   MDBX_val lowerbound_data = item_data;
   // verbose("prepare-cursors", "item", item_key, item_data);
   err = mdbx_cursor_get(cursor_lowerbound, &lowerbound_key, &lowerbound_data,
-                        MDBX_SET_RANGE);
-  if (err == MDBX_SUCCESS && (config.params.table_flags & MDBX_DUPSORT) &&
-      mdbx_cmp(txn_guard.get(), dbi, &lowerbound_key, &item_key) == 0) {
-    lowerbound_data = item_data;
-    err = mdbx_cursor_get(cursor_lowerbound, &lowerbound_key, &lowerbound_data,
-                          MDBX_GET_BOTH_RANGE);
-    if (err == MDBX_NOTFOUND)
-      err = mdbx_cursor_get(cursor_lowerbound, &lowerbound_key,
-                            &lowerbound_data, MDBX_NEXT_NODUP);
-  }
-
+                        MDBX_SET_LOWERBOUND);
   // verbose("prepare-cursors", "lowerbound", lowerbound_key, lowerbound_data,
   //         err);
+  if (unlikely(err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE &&
+               err != MDBX_NOTFOUND))
+    failure("speculum-%s: %s %s %d %s", "prepare-cursors", "lowerbound",
+            "cursor-get", err, mdbx_strerror(err));
+
   auto it_lowerbound = speculum.lower_bound(item);
   // verbose("prepare-cursors", "lowerbound", it_lowerbound);
   speculum_check_cursor("prepare-cursors", "lowerbound", it_lowerbound, err,
