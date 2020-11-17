@@ -414,6 +414,7 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   while (sigalarm_tail == sigalarm_head) {
     int status;
     pid = waitpid(0, &status, options);
+    const int err = errno;
 
     if (pid > 0) {
       if (WIFEXITED(status))
@@ -437,20 +438,19 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
     if (sigusr1_tail != sigusr1_head) {
       sigusr1_tail = sigusr1_head;
       logging::progress_canary(true);
-      if (pid < 0 && errno == EINTR)
+      if (pid < 0 && err == EINTR)
         continue;
     }
     if (sigusr2_tail != sigusr2_head) {
       sigusr2_tail = sigusr2_head;
       logging::progress_canary(false);
-      if (pid < 0 && errno == EINTR)
+      if (pid < 0 && err == EINTR)
         continue;
     }
 
     if (pid == 0)
       break;
 
-    int err = errno;
     if (err != EINTR)
       return err;
   }
