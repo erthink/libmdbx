@@ -12290,15 +12290,11 @@ set1:
         rc = 0;
       }
       *data = olddata;
-    } else {
-      if (mc->mc_xcursor)
-        mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED | C_EOF);
-      if (unlikely((rc = mdbx_node_read(
-                        mc, node, data,
-                        pp_txnid4chk(mc->mc_pg[mc->mc_top], mc->mc_txn))) !=
-                   MDBX_SUCCESS))
-        return rc;
-    }
+    } else if (unlikely((rc = mdbx_node_read(mc, node, data,
+                                             pp_txnid4chk(mc->mc_pg[mc->mc_top],
+                                                          mc->mc_txn))) !=
+                        MDBX_SUCCESS))
+      return rc;
   }
 
   /* The key already matches in all other cases */
