@@ -26,13 +26,17 @@
 
 #ifndef MDBX_ALLOY
 uint32_t mdbx_linux_kernel_version;
-bool mdbx_RunningOnWSL;
+bool mdbx_RunningOnWSL1;
 #endif /* MDBX_ALLOY */
 
-static __cold bool probe_for_WSL(const char *tag) {
-  /* "Official" way of detecting WSL but not WSL2
-   * https://github.com/Microsoft/WSL/issues/423#issuecomment-221627364 */
-  return strstr(tag, "Microsoft") || strstr(tag, "WSL");
+static __cold uint8_t probe_for_WSL(const char *tag) {
+  const char *const WSL = strstr(tag, "WSL");
+  if (WSL && WSL[3] >= '2' && WSL[3] <= '9')
+    return WSL[3] - '0';
+  const char *const wsl = strstr(tag, "wsl");
+  if (wsl && wsl[3] >= '2' && wsl[3] <= '9')
+    return wsl[3] - '0';
+  return (WSL || wsl || strcasestr(tag, "Microsoft")) ? 1 : 0;
 }
 
 #endif /* Linux */
@@ -42,9 +46,16 @@ mdbx_global_constructor(void) {
 #if defined(__linux__) || defined(__gnu_linux__)
   struct utsname buffer;
   if (uname(&buffer) == 0) {
-    mdbx_RunningOnWSL = probe_for_WSL(buffer.version) ||
-                        probe_for_WSL(buffer.sysname) ||
-                        probe_for_WSL(buffer.release);
+    /* "Official" way of detecting WSL1 but not WSL2
+     * https://github.com/Microsoft/WSL/issues/423#issuecomment-221627364
+     *
+     * WARNING: False negative detection of WSL1 will result in DATA LOSS!
+     * So, the REQUIREMENTS for this code:
+     *  1. MUST detect WSL1 without false-negatives.
+     *  2. DESIRABLE detect WSL2 but without the risk of violating the first. */
+    mdbx_RunningOnWSL1 = probe_for_WSL(buffer.version) == 1 ||
+                         probe_for_WSL(buffer.sysname) == 1 ||
+                         probe_for_WSL(buffer.release) == 1;
     int i = 0;
     char *p = buffer.release;
     while (*p && i < 4) {
@@ -314,10 +325,10 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
 
   int rc = MDBX_SUCCESS;
 #if defined(__linux__) || defined(__gnu_linux__)
-  if (unlikely(mdbx_RunningOnWSL)) {
+  if (unlikely(mdbx_RunningOnWSL1)) {
     rc = ENOLCK /* No record locks available */;
     mdbx_error("%s, err %u",
-               "WSL (Windows Subsystem for Linux) is mad and trouble-full, "
+               "WSL1 (Windows Subsystem for Linux) is mad and trouble-full, "
                "injecting failure to avoid data loss",
                rc);
     return rc;
