@@ -193,6 +193,7 @@ copyfilerange
 copythr
 coredump
 coreos
+couchbase
 countp
 coverity
 cpack
@@ -436,6 +437,7 @@ ERRORCHECK
 errored
 erthink
 esac
+ethereum
 eturn
 etval
 euo
@@ -892,6 +894,8 @@ mdx
 Medvedev
 Mega
 mei
+Meili
+meilisearch
 memalign
 MEMB
 memcheck
@@ -1418,6 +1422,7 @@ settype
 setutxent
 SETVAL
 sgi
+Sharov
 shasum
 shink
 Shipitsin
