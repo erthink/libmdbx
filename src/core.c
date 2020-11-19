@@ -6939,11 +6939,12 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       mdbx_txn_unlock(env);
     } else {
       mdbx_assert(env, txn->mt_parent != NULL);
+      MDBX_txn *const parent = txn->mt_parent;
+      mdbx_assert(env, parent->mt_signature == MDBX_MT_SIGNATURE);
+      mdbx_assert(env, parent->mt_child == txn &&
+                           (parent->mt_flags & MDBX_TXN_HAS_CHILD) != 0);
       mdbx_assert(env, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                              txn->mt_next_pgno));
-      MDBX_txn *const parent = txn->mt_parent;
-      env->me_txn->mt_child = NULL;
-      env->me_txn->mt_flags &= ~MDBX_TXN_HAS_CHILD;
       mdbx_pnl_free(txn->tw.reclaimed_pglist);
       mdbx_pnl_free(txn->tw.spill_pages);
 
@@ -6964,6 +6965,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       }
 
       mdbx_free(txn->tw.dirtylist);
+      parent->mt_child = NULL;
+      parent->mt_flags &= ~MDBX_TXN_HAS_CHILD;
 
       if (parent->mt_geo.upper != txn->mt_geo.upper ||
           parent->mt_geo.now != txn->mt_geo.now) {
@@ -8115,11 +8118,16 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   if (txn->mt_parent) {
+    mdbx_assert(env, txn != env->me_txn0);
     MDBX_txn *const parent = txn->mt_parent;
-    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
+    mdbx_assert(env, parent->mt_signature == MDBX_MT_SIGNATURE);
+    mdbx_assert(env, parent->mt_child == txn &&
+                         (parent->mt_flags & MDBX_TXN_HAS_CHILD) != 0);
+    mdbx_assert(env, mdbx_dirtylist_check(txn));
 
     if (txn->tw.dirtylist->length == 0 &&
-        (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
+        (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0 &&
+        parent->mt_numdbs == txn->mt_numdbs) {
       for (int i = txn->mt_numdbs; --i >= 0;) {
         mdbx_tassert(txn, (txn->mt_dbistate[i] & DBI_DIRTY) == 0);
         if ((txn->mt_dbistate[i] & DBI_STALE) &&
@@ -8132,7 +8140,6 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
                                sizeof(parent->mt_geo)) == 0);
       mdbx_tassert(txn, memcmp(&parent->mt_canary, &txn->mt_canary,
                                sizeof(parent->mt_canary)) == 0);
-      mdbx_tassert(txn, parent->mt_numdbs == txn->mt_numdbs);
 
       end_mode = MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE;
       goto done;
