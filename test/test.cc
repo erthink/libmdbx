@@ -749,8 +749,8 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
   MDBX_val cursor_key = {};
   MDBX_val cursor_data = {};
   int err;
-  if (std::next(it) == speculum.end() && op == MDBX_PREV &&
-      (config.params.table_flags & MDBX_DUPSORT)) {
+  if (it != speculum.end() && std::next(it) == speculum.end() &&
+      op == MDBX_PREV && (config.params.table_flags & MDBX_DUPSORT)) {
     /* Workaround for MDBX/LMDB flaw */
     err = mdbx_cursor_get(cursor, &cursor_key, &cursor_data, MDBX_LAST);
     if (err == MDBX_SUCCESS)
