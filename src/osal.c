@@ -1511,6 +1511,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     return err;
   }
 
+retry_file_and_section:
   /* resizing of the file may take a while,
    * therefore we reserve address space to avoid occupy it by other threads */
   ReservedAddress = map->address;
@@ -1526,7 +1527,6 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
       map->address = NULL;
   }
 
-retry_file_and_section:
   err = mdbx_filesize(map->fd, &map->filesize);
   if (err != MDBX_SUCCESS)
     goto bailout;
@@ -1593,7 +1593,7 @@ retry_mapview:;
        * but will return MDBX_UNABLE_EXTEND_MAPSIZE on success */
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
       size = map->current;
-      limit = map->limit;
+      ReservedSize = limit = map->limit;
       goto retry_file_and_section;
     }
 
