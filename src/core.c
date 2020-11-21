@@ -3647,13 +3647,15 @@ int mdbx_dcmp(const MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *a,
  * Set MDBX_TXN_ERROR on failure. */
 static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
   MDBX_env *env = txn->mt_env;
-  MDBX_page *np = env->me_dpages;
+  MDBX_page *np = env->me_dp_reserve;
   size_t size = env->me_psize;
   if (likely(num == 1 && np)) {
+    mdbx_assert(env, env->me_dp_reserve_len > 0);
     ASAN_UNPOISON_MEMORY_REGION(np, size);
     VALGRIND_MEMPOOL_ALLOC(env, np, size);
     VALGRIND_MAKE_MEM_DEFINED(&np->mp_next, sizeof(np->mp_next));
-    env->me_dpages = np->mp_next;
+    env->me_dp_reserve = np->mp_next;
+    env->me_dp_reserve_len -= 1;
   } else {
     size = pgno2bytes(env, num);
     np = mdbx_malloc(size);
@@ -3687,10 +3689,11 @@ static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned pages) {
 #if MDBX_DEBUG
   dp->mp_pgno = MAX_PAGENO + 1;
 #endif
-  if (pages == 1) {
-    dp->mp_next = env->me_dpages;
+  if (pages == 1 && env->me_dp_reserve_len < env->me_options.dp_reserve_limit) {
+    dp->mp_next = env->me_dp_reserve;
     VALGRIND_MEMPOOL_FREE(env, dp);
-    env->me_dpages = dp;
+    env->me_dp_reserve = dp;
+    env->me_dp_reserve_len += 1;
   } else {
     /* large pages just get freed directly */
     VALGRIND_MEMPOOL_FREE(env, dp);
@@ -9230,6 +9233,8 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_pid = mdbx_getpid();
   env->me_stuck_meta = -1;
 
+  env->me_options.dp_reserve_limit = 1024;
+
   int rc;
   const size_t os_psize = mdbx_syspagesize();
   if (unlikely(!is_powerof2(os_psize) || os_psize < MIN_PAGESIZE)) {
@@ -11070,10 +11075,10 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   mdbx_ensure(env, mdbx_ipclock_destroy(&env->me_lckless_stub.wlock) == 0);
 #endif /* MDBX_LOCKING */
 
-  while ((dp = env->me_dpages) != NULL) {
+  while ((dp = env->me_dp_reserve) != NULL) {
     ASAN_UNPOISON_MEMORY_REGION(&dp->mp_next, sizeof(dp->mp_next));
     VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
-    env->me_dpages = dp->mp_next;
+    env->me_dp_reserve = dp->mp_next;
     mdbx_free(dp);
   }
   VALGRIND_DESTROY_MEMPOOL(env);

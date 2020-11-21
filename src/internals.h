@@ -975,7 +975,7 @@ struct MDBX_env {
   uint16_t *me_dbflags;        /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;        /* array of dbi sequence numbers */
   volatile txnid_t *me_oldest; /* ID of oldest reader last time we looked */
-  MDBX_page *me_dpages;        /* list of malloc'd blocks for re-use */
+  MDBX_page *me_dp_reserve;    /* list of malloc'd blocks for re-use */
   /* PNL of pages that became unused in a write txn */
   MDBX_PNL me_retired_pages;
   /* MDBX_DP of pages written during a write txn. */
@@ -992,6 +992,10 @@ struct MDBX_env {
   volatile pgno_t *me_discarded_tail;
   volatile uint32_t *me_meta_sync_txnid;
   MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
+  unsigned me_dp_reserve_len;
+  struct {
+    unsigned dp_reserve_limit;
+  } me_options;
   struct {
 #if MDBX_LOCKING > 0
     mdbx_ipclock_t wlock;
