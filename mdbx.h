@@ -1799,6 +1799,9 @@ enum MDBX_option_t {
   MDBX_opt_sync_period,
   MDBX_opt_max_dbx,
   MDBX_opt_max_readers,
+
+  /** \brief The limit to grow a list of pre-allocated dirty pages. */
+  MDBX_opt_dp_reserve_limit,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

@@ -19637,6 +19637,9 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
+  const bool lock_needed = (env->me_map && env->me_txn0 &&
+                            env->me_txn0->mt_owner != mdbx_thread_self());
+  bool should_unlock = false;
   switch (option) {
   case MDBX_opt_sync_bytes:
     if (unlikely(env->me_flags & MDBX_RDONLY))
@@ -19684,10 +19687,35 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     env->me_maxreaders = (unsigned)value;
     break;
 
+  case MDBX_opt_dp_reserve_limit:
+    if (unlikely(value > INT_MAX))
+      return MDBX_EINVAL;
+    if (env->me_options.dp_reserve_limit != (unsigned)value) {
+      if (lock_needed) {
+        err = mdbx_txn_lock(env, false);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
+        should_unlock = true;
+      }
+      env->me_options.dp_reserve_limit = (unsigned)value;
+      while (env->me_dp_reserve_len > env->me_options.dp_reserve_limit) {
+        mdbx_assert(env, env->me_dp_reserve != NULL);
+        MDBX_page *mp = env->me_dp_reserve;
+        ASAN_UNPOISON_MEMORY_REGION(&mp->mp_next, sizeof(mp->mp_next));
+        VALGRIND_MAKE_MEM_DEFINED(&mp->mp_next, sizeof(mp->mp_next));
+        env->me_dp_reserve = mp->mp_next;
+        mdbx_free(mp);
+        env->me_dp_reserve_len -= 1;
+      }
+    }
+    break;
+
   default:
     return MDBX_EINVAL;
   }
 
+  if (should_unlock)
+    mdbx_txn_unlock(env);
   return err;
 }
 
@@ -19718,6 +19746,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_max_readers:
     *value = env->me_maxreaders;
+    break;
+
+  case MDBX_opt_dp_reserve_limit:
+    *value = env->me_options.dp_reserve_limit;
     break;
 
   default:
