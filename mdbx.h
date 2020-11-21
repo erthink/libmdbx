@@ -1802,6 +1802,10 @@ enum MDBX_option_t {
 
   /** \brief The limit to grow a list of pre-allocated dirty pages. */
   MDBX_opt_dp_reserve_limit,
+
+  /** \brief The limit to grow a list of reclaimed pages
+   * for finding a sequence of contiguous pages. */
+  MDBX_opt_rp_augment_limit,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

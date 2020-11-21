@@ -995,6 +995,7 @@ struct MDBX_env {
   unsigned me_dp_reserve_len;
   struct {
     unsigned dp_reserve_limit;
+    unsigned rp_augment_limit;
   } me_options;
   struct {
 #if MDBX_LOCKING > 0
