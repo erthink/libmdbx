@@ -120,6 +120,9 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 #ifndef STATUS_INVALID_DEVICE_REQUEST
 #define STATUS_INVALID_DEVICE_REQUEST ((NTSTATUS)0xC0000010L)
 #endif
+#ifndef STATUS_NOT_SUPPORTED
+#define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BBL)
+#endif
 
 #ifndef FILE_DEVICE_FILE_SYSTEM
 #define FILE_DEVICE_FILE_SYSTEM 0x00000009
@@ -1067,7 +1070,8 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
       if (!(flags & MDBX_EXCLUSIVE))
         return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
     } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED &&
-               rc != STATUS_INVALID_DEVICE_REQUEST)
+               rc != STATUS_INVALID_DEVICE_REQUEST &&
+               rc != STATUS_NOT_SUPPORTED)
       return ntstatus2errcode(rc);
   }
 

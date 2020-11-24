@@ -10118,7 +10118,9 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
     /* ensure the file system is read-only */
     err = mdbx_check_fs_rdonly(env->me_lazy_fd, lck_pathname, err);
-    if (err != MDBX_SUCCESS)
+    if (err != MDBX_SUCCESS &&
+        /* ignore ERROR_NOT_SUPPORTED for exclusive mode */
+        !(err == MDBX_ENOSYS && (env->me_flags & MDBX_EXCLUSIVE)))
       return err;
 
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
