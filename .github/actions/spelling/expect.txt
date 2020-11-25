@@ -447,6 +447,7 @@ EWOULDBLOCK
 Exa
 exactkey
 exactp
+excpt
 exe
 exename
 exherbo

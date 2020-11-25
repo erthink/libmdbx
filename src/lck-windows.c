@@ -144,7 +144,15 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     if (!TryEnterCriticalSection(&env->me_windowsbug_lock))
       return MDBX_BUSY;
   } else {
-    EnterCriticalSection(&env->me_windowsbug_lock);
+    __try {
+      EnterCriticalSection(&env->me_windowsbug_lock);
+    }
+    __except ((GetExceptionCode() ==
+                 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+                    ? EXCEPTION_EXECUTE_HANDLER
+                    : EXCEPTION_CONTINUE_SEARCH) {
+      return ERROR_POSSIBLE_DEADLOCK;
+    }
   }
 
   if ((env->me_flags & MDBX_EXCLUSIVE) ||

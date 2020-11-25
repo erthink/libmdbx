@@ -492,7 +492,15 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
 
 MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
-  EnterCriticalSection(fastmutex);
+  __try {
+    EnterCriticalSection(fastmutex);
+  } __except (
+      (GetExceptionCode() ==
+       0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+          ? EXCEPTION_EXECUTE_HANDLER
+          : EXCEPTION_CONTINUE_SEARCH) {
+    return ERROR_POSSIBLE_DEADLOCK;
+  }
   return MDBX_SUCCESS;
 #else
   return pthread_mutex_lock(fastmutex);
