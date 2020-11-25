@@ -4803,9 +4803,11 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     goto bailout;
 
   if (limit_bytes != env->me_dxb_mmap.limit && env->me_lck && !implicit) {
-    rc = mdbx_rdt_lock(env) /* lock readers table until remap done */;
-    if (unlikely(rc != MDBX_SUCCESS))
+    int err = mdbx_rdt_lock(env) /* lock readers table until remap done */;
+    if (unlikely(MDBX_IS_ERROR(err))) {
+      rc = err;
       goto bailout;
+    }
 
     /* looking for readers from this process */
     MDBX_lockinfo *const lck = env->me_lck;
@@ -9538,9 +9540,11 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
           rc = MDBX_EPERM;
           goto bailout;
         }
-        rc = mdbx_rdt_lock(env);
-        if (unlikely(rc != MDBX_SUCCESS))
+        int err = mdbx_rdt_lock(env);
+        if (unlikely(MDBX_IS_ERROR(err))) {
+          rc = err;
           goto bailout;
+        }
 
         /* Check if there are any reading threads that do not use the SRWL */
         const size_t CurrentTid = GetCurrentThreadId();
