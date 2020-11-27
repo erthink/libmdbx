@@ -11,7 +11,7 @@ ChangeLog
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
-## v0.9.2 (scheduled at 2020-11-26)
+## v0.9.2 scheduled at 2020-11-27
 
 Acknowledgements:
 
