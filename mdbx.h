@@ -480,27 +480,25 @@ typedef mode_t mdbx_mode_t;
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUM)                                       \
   extern "C++" {                                                               \
   MDBX_CXX01_CONSTEXPR ENUM operator|(ENUM a, ENUM b) {                        \
-    return ENUM(std::size_t(a) | std::size_t(b));                              \
+    return ENUM(unsigned(a) | unsigned(b));                                    \
   }                                                                            \
   MDBX_CXX14_CONSTEXPR ENUM &operator|=(ENUM &a, ENUM b) { return a = a | b; } \
   MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, ENUM b) {                        \
-    return ENUM(std::size_t(a) & std::size_t(b));                              \
+    return ENUM(unsigned(a) & unsigned(b));                                    \
   }                                                                            \
-  MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, size_t b) {                      \
-    return ENUM(std::size_t(a) & b);                                           \
+  MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, unsigned b) {                    \
+    return ENUM(unsigned(a) & b);                                              \
   }                                                                            \
-  MDBX_CXX01_CONSTEXPR ENUM operator&(size_t a, ENUM b) {                      \
-    return ENUM(a & std::size_t(b));                                           \
+  MDBX_CXX01_CONSTEXPR ENUM operator&(unsigned a, ENUM b) {                    \
+    return ENUM(a & unsigned(b));                                              \
   }                                                                            \
   MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; } \
-  MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, size_t b) {                   \
+  MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, unsigned b) {                 \
     return a = a & b;                                                          \
   }                                                                            \
-  MDBX_CXX01_CONSTEXPR std::size_t operator~(ENUM a) {                         \
-    return ~std::size_t(a);                                                    \
-  }                                                                            \
+  MDBX_CXX01_CONSTEXPR unsigned operator~(ENUM a) { return ~unsigned(a); }     \
   MDBX_CXX01_CONSTEXPR ENUM operator^(ENUM a, ENUM b) {                        \
-    return ENUM(std::size_t(a) ^ std::size_t(b));                              \
+    return ENUM(unsigned(a) ^ unsigned(b));                                    \
   }                                                                            \
   MDBX_CXX14_CONSTEXPR ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; } \
   }
