@@ -11834,7 +11834,7 @@ static int mdbx_cursor_sibling(MDBX_cursor *mc, int dir) {
     }
   } else {
     assert((dir - 1) == -1 || (dir - 1) == 1);
-    mc->mc_ki[mc->mc_top] += dir - 1;
+    mc->mc_ki[mc->mc_top] += (indx_t)(dir - 1);
     mdbx_debug("just moving to %s index key %u",
                (dir == SIBLING_RIGHT) ? "right" : "left",
                mc->mc_ki[mc->mc_top]);
@@ -11909,7 +11909,7 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   const int numkeys = page_numkeys(mp);
   if (unlikely(ki >= numkeys)) {
     mdbx_debug("%s", "=====> move to next sibling page");
-    mc->mc_ki[mc->mc_top] = numkeys - 1;
+    mc->mc_ki[mc->mc_top] = (indx_t)(numkeys - 1);
     if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
                  MDBX_SUCCESS)) {
       mc->mc_flags |= C_EOF;
