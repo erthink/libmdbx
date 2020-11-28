@@ -1,32 +1,11 @@
 From 0bf9d06e8b090e2d9783d03074f3752ed708f6cf Mon Sep 17 00:00:00 2001
-In-Reply-To: <CAO2+NUDJUL_FYfQ3E_cmmu20F3VOagxDpy_243a6mU3oAeASNA@mail.gmail.com>
-References: <CAO2+NUDJUL_FYfQ3E_cmmu20F3VOagxDpy_243a6mU3oAeASNA@mail.gmail.com>
 From: Leonid Yuriev <leo@yuriev.ru>
-Date: Tue, 6 Oct 2020 22:19:56 +0300
+Date: Fri, 27 Nov 2020 16:31:12 +0300
 Cc: Heiko Thiery <heiko.thiery@gmail.com>
-Subject: [PATCH v4 0/1] package/libmdbx: new package (library/database)
+Cc: Thomas Petazzoni <thomas.petazzoni@bootlin.com>
+Subject: [PATCH v5 0/1] cover letter for package/libmdbx: new package (library/database)
 
-This patch adds libmdbx v0.9.1 and below is a brief overview of libmdbx.
-
-Changes v1 -> v2:
-  - libmdbx version v0.8.2 -> v0.9.1 (released 2020-09-30)
-
-Changes v2 -> v3:
-  - removed outcommented stuff (suggested by Heiko Thiery).
-  - cleaned up and simplified the makefile (suggested by Heiko Thiery).
-  - added patch for C++ header installation.
-  - added patch with fix minor copy&paste typo.
-  - added patch with pthread workaround for buggy toolchain/cmake/buildroot.
-  - added patch for `pthread_yield()`.
-  - passed `utils/check-package package/libmdbx/*` (suggested by Heiko Thiery).
-  - passed `utils/test-pkg -a -p libmdbx` (suggested by Heiko Thiery).
-
-Changes v3 -> v4:
-  - fix passing BR2_PACKAGE_LIBMDBX_TOOLS option to cmake.
-  - fix using `depend on` instead of `select`,
-    and add `comment` for C++ toolchain (suggested by Heiko Thiery).
-  - fix minor help typo.
-
+This patch adds libmdbx v0.9.2 and below is a brief overview of libmdbx.
 Please merge.
 
 Regards,
@@ -226,30 +205,15 @@ Gotchas
 Leonid Yuriev (1):
   package/libmdbx: new package (library/database).
 
- DEVELOPERS                                    |  3 +
- package/Config.in                             |  1 +
- .../0001-mdbx-fix-minor-copy-paste-typo.patch | 27 ++++++++
- ...e-fix-missing-installation-of-mdbx.h.patch | 54 +++++++++++++++
- .../0003-mdbx-fix-obsolete-__noreturn.patch   | 27 ++++++++
- ...ield-instruction-on-ARM-if-unsupport.patch | 28 ++++++++
- ...fix-minor-false-positive-GCC-warning.patch | 27 ++++++++
- ...ad-workaround-for-buggy-toolchain-cm.patch | 65 +++++++++++++++++++
- ...mdbx-fix-pthread_yield-for-non-GLIBC.patch | 42 ++++++++++++
- package/libmdbx/Config.in                     | 42 ++++++++++++
- package/libmdbx/libmdbx.hash                  |  2 +
- package/libmdbx/libmdbx.mk                    | 24 +++++++
- 12 files changed, 342 insertions(+)
- create mode 100644 package/libmdbx/0001-mdbx-fix-minor-copy-paste-typo.patch
- create mode 100644 package/libmdbx/0002-mdbx-cmake-fix-missing-installation-of-mdbx.h.patch
- create mode 100644 package/libmdbx/0003-mdbx-fix-obsolete-__noreturn.patch
- create mode 100644 package/libmdbx/0004-mdbx-don-t-use-yield-instruction-on-ARM-if-unsupport.patch
- create mode 100644 package/libmdbx/0005-mdbx-load-fix-minor-false-positive-GCC-warning.patch
- create mode 100644 package/libmdbx/0006-mdbx-cmake-pthread-workaround-for-buggy-toolchain-cm.patch
- create mode 100644 package/libmdbx/0007-mdbx-fix-pthread_yield-for-non-GLIBC.patch
+ DEVELOPERS                   |  3 +++
+ package/Config.in            |  1 +
+ package/libmdbx/Config.in    | 45 ++++++++++++++++++++++++++++++++++++
+ package/libmdbx/libmdbx.hash |  5 ++++
+ package/libmdbx/libmdbx.mk   | 33 ++++++++++++++++++++++++++
+ 5 files changed, 87 insertions(+)
  create mode 100644 package/libmdbx/Config.in
  create mode 100644 package/libmdbx/libmdbx.hash
  create mode 100644 package/libmdbx/libmdbx.mk
 
 -- 
-2.28.0
-
+2.29.2
