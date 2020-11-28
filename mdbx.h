@@ -306,7 +306,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NOTHROW_CONST_FUNCTION [[const]]
 #else
 #define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
-#endif /* MDBX_NOTHROW_PURE_FUNCTION */
+#endif /* MDBX_NOTHROW_CONST_FUNCTION */
 
 #ifndef MDBX_DEPRECATED /* may be predefined to avoid warnings "deprecated" */
 #ifdef __deprecated
