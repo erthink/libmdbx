@@ -6374,7 +6374,6 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     txn->tw.loose_pages = NULL;
     txn->tw.loose_count = 0;
     txn->tw.dirtyroom = MDBX_DPL_TXNFULL;
-    txn->tw.dirtylist = env->me_dirtylist;
     mdbx_dpl_clear(txn->tw.dirtylist);
     MDBX_PNL_SIZE(txn->tw.retired_pages) = 0;
     txn->tw.spill_pages = NULL;
@@ -10733,9 +10732,6 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
       }
     }
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
-    env->me_dirtylist = mdbx_calloc(MDBX_DPL_TXNFULL + 1, sizeof(MDBX_DP));
-    if (!env->me_dirtylist)
-      rc = MDBX_ENOMEM;
   }
 
   env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
@@ -10899,7 +10895,9 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
         env->me_txn0 = txn;
         txn->tw.retired_pages = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
         txn->tw.reclaimed_pglist = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
-        if (!txn->tw.retired_pages || !txn->tw.reclaimed_pglist)
+        txn->tw.dirtylist = mdbx_malloc(sizeof(MDBX_DP) * (MDBX_DPL_TXNFULL + 1));
+        if (!txn->tw.retired_pages || !txn->tw.reclaimed_pglist ||
+            !txn->tw.dirtylist)
           rc = MDBX_ENOMEM;
       } else
         rc = MDBX_ENOMEM;
@@ -10998,8 +10996,8 @@ static __cold int mdbx_env_close0(MDBX_env *env) {
   mdbx_free(env->me_dbiseqs);
   mdbx_free(env->me_dbflags);
   mdbx_free(env->me_pathname);
-  mdbx_free(env->me_dirtylist);
   if (env->me_txn0) {
+    mdbx_free(env->me_txn0->tw.dirtylist);
     mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
     mdbx_pnl_free(env->me_txn0->tw.retired_pages);
     mdbx_pnl_free(env->me_txn0->tw.spill_pages);
