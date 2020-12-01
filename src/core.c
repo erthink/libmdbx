@@ -2977,6 +2977,35 @@ static int __must_check_result mdbx_txl_append(MDBX_TXL *ptl, txnid_t id) {
 
 /*----------------------------------------------------------------------------*/
 
+static __always_inline size_t dpl2bytes(const ptrdiff_t size) {
+  assert(size > 0 && size <= MDBX_PGL_LIMIT);
+  return (size + 1) * sizeof(MDBX_DP);
+}
+
+static __always_inline void mdbx_dpl_clear(MDBX_DPL dl) {
+  dl->sorted = dl->length = 0;
+}
+
+static void mdbx_dpl_free(MDBX_txn *txn) {
+  if (likely(txn->tw.dirtylist)) {
+    mdbx_free(txn->tw.dirtylist);
+    txn->tw.dirtylist = NULL;
+  }
+}
+
+static int mdbx_dpl_alloc(MDBX_txn *txn) {
+  mdbx_tassert(txn,
+               (txn->mt_flags & MDBX_TXN_RDONLY) == 0 && !txn->tw.dirtylist);
+  unsigned limit = /* TODO */ MDBX_DPL_TXNFULL;
+  size_t bytes = dpl2bytes(limit);
+  MDBX_DPL dl = mdbx_malloc(bytes);
+  if (unlikely(!dl))
+    return MDBX_ENOMEM;
+  mdbx_dpl_clear(dl);
+  txn->tw.dirtylist = dl;
+  return MDBX_SUCCESS;
+}
+
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, MDBX_DP, DP_SORT_CMP)
 static __always_inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
@@ -3071,7 +3100,8 @@ static __hot MDBX_page *mdbx_dpl_remove(MDBX_DPL dl, pgno_t prno) {
 }
 
 static __always_inline int __must_check_result
-mdbx_dpl_append(MDBX_DPL dl, pgno_t pgno, MDBX_page *page) {
+mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
+  MDBX_DPL dl = txn->tw.dirtylist;
   assert(dl->length <= MDBX_PGL_LIMIT);
   if (mdbx_audit_enabled()) {
     for (unsigned i = dl->length; i > 0; --i) {
@@ -3092,10 +3122,6 @@ mdbx_dpl_append(MDBX_DPL dl, pgno_t pgno, MDBX_page *page) {
   dl[n].pgno = pgno;
   dl[n].ptr = page;
   return MDBX_SUCCESS;
-}
-
-static __always_inline void mdbx_dpl_clear(MDBX_DPL dl) {
-  dl->sorted = dl->length = 0;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -4638,7 +4664,7 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
 static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp) {
   mp->mp_txnid = INVALID_TXNID;
   mp->mp_flags |= P_DIRTY;
-  const int rc = mdbx_dpl_append(txn->tw.dirtylist, mp->mp_pgno, mp);
+  const int rc = mdbx_dpl_append(txn, mp->mp_pgno, mp);
   if (unlikely(rc != MDBX_SUCCESS)) {
     txn->mt_flags |= MDBX_TXN_ERROR;
     return rc;
@@ -5691,7 +5717,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
       rc = MDBX_ENOMEM;
       goto fail;
     }
-    rc = mdbx_dpl_append(txn->tw.dirtylist, pgno, np);
+    rc = mdbx_dpl_append(txn, pgno, np);
     if (unlikely(rc)) {
       mdbx_dpage_free(txn->mt_env, np, 1);
       goto fail;
@@ -6606,16 +6632,20 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     mdbx_tassert(txn, mdbx_dirtylist_check(parent));
     txn->tw.cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
     txn->mt_dbiseqs = parent->mt_dbiseqs;
-    txn->tw.dirtylist = mdbx_malloc(sizeof(MDBX_DP) * (MDBX_DPL_TXNFULL + 1));
-    txn->tw.reclaimed_pglist =
-        mdbx_pnl_alloc(MDBX_PNL_ALLOCLEN(parent->tw.reclaimed_pglist));
-    if (!txn->tw.dirtylist || !txn->tw.reclaimed_pglist) {
-      mdbx_pnl_free(txn->tw.reclaimed_pglist);
-      mdbx_free(txn->tw.dirtylist);
-      mdbx_free(txn);
-      return MDBX_ENOMEM;
+    rc = mdbx_dpl_alloc(txn);
+    if (likely(rc == MDBX_SUCCESS)) {
+      txn->tw.reclaimed_pglist =
+          mdbx_pnl_alloc(MDBX_PNL_ALLOCLEN(parent->tw.reclaimed_pglist));
+      if (unlikely(!txn->tw.reclaimed_pglist))
+        rc = MDBX_ENOMEM;
     }
-    mdbx_dpl_clear(txn->tw.dirtylist);
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      mdbx_pnl_free(txn->tw.reclaimed_pglist);
+      mdbx_dpl_free(txn);
+      mdbx_free(txn);
+      return rc;
+    }
+
     memcpy(txn->tw.reclaimed_pglist, parent->tw.reclaimed_pglist,
            MDBX_PNL_SIZEOF(parent->tw.reclaimed_pglist));
     mdbx_assert(env, mdbx_pnl_check4assert(
@@ -6971,7 +7001,7 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
         parent->tw.retired_pages = txn->tw.retired_pages;
       }
 
-      mdbx_free(txn->tw.dirtylist);
+      mdbx_dpl_free(txn);
       parent->mt_child = NULL;
       parent->mt_flags &= ~MDBX_TXN_HAS_CHILD;
 
@@ -8336,8 +8366,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
     assert(l == 0);
     dst->length = dst->sorted;
-    mdbx_free(txn->tw.dirtylist);
-    txn->tw.dirtylist = nullptr;
+    mdbx_dpl_free(txn);
     mdbx_tassert(parent,
                  parent->mt_parent ||
                      parent->tw.dirtyroom + parent->tw.dirtylist->length ==
@@ -10893,12 +10922,13 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
         txn->mt_dbxs = env->me_dbxs;
         txn->mt_flags = MDBX_TXN_FINISHED;
         env->me_txn0 = txn;
-        txn->tw.retired_pages = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
-        txn->tw.reclaimed_pglist = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
-        txn->tw.dirtylist = mdbx_malloc(sizeof(MDBX_DP) * (MDBX_DPL_TXNFULL + 1));
-        if (!txn->tw.retired_pages || !txn->tw.reclaimed_pglist ||
-            !txn->tw.dirtylist)
-          rc = MDBX_ENOMEM;
+        rc = mdbx_dpl_alloc(txn);
+        if (likely(rc == MDBX_SUCCESS)) {
+          txn->tw.retired_pages = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
+          txn->tw.reclaimed_pglist = mdbx_pnl_alloc(MDBX_PNL_INITIAL);
+          if (unlikely(!txn->tw.retired_pages || !txn->tw.reclaimed_pglist))
+            rc = MDBX_ENOMEM;
+        }
       } else
         rc = MDBX_ENOMEM;
     }
@@ -10997,7 +11027,7 @@ static __cold int mdbx_env_close0(MDBX_env *env) {
   mdbx_free(env->me_dbflags);
   mdbx_free(env->me_pathname);
   if (env->me_txn0) {
-    mdbx_free(env->me_txn0->tw.dirtylist);
+    mdbx_dpl_free(env->me_txn0);
     mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
     mdbx_pnl_free(env->me_txn0->tw.retired_pages);
     mdbx_pnl_free(env->me_txn0->tw.spill_pages);
@@ -13044,7 +13074,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
             if (unlikely(!np))
               return MDBX_ENOMEM;
             /* Note - this page is already counted in parent's dirtyroom */
-            rc2 = mdbx_dpl_append(mc->mc_txn->tw.dirtylist, pg, np);
+            rc2 = mdbx_dpl_append(mc->mc_txn, pg, np);
             if (unlikely(rc2 != MDBX_SUCCESS)) {
               rc = rc2;
               mdbx_dpage_free(env, np, ovpages);
