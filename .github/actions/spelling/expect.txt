@@ -1183,6 +1183,7 @@ perror
 PFILE
 pflags
 pgcount
+PGL
 pglist
 pgno
 pgnumber

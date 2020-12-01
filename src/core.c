@@ -398,10 +398,11 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize,
   const unsigned page_ln2 = log2n(pagesize);
   const size_t hard = 0x7FF00000ul;
   const size_t hard_pages = hard >> page_ln2;
-  const size_t limit = (hard_pages < MDBX_DPL_TXNFULL / 3)
-                           ? hard
-                           : ((size_t)MDBX_DPL_TXNFULL / 3 << page_ln2);
-  return (limit < MAX_MAPSIZE) ? limit / 2 : MAX_MAPSIZE / 2;
+  STATIC_ASSERT(MDBX_PGL_LIMIT <= MAX_PAGENO);
+  const size_t pages_limit = MDBX_PGL_LIMIT / 4;
+  const size_t limit =
+      (hard_pages < pages_limit) ? hard : (pages_limit << page_ln2);
+  return (limit < MAX_MAPSIZE / 2) ? limit : MAX_MAPSIZE / 2;
 }
 
 /* Calculate the size of a leaf node.
@@ -2613,7 +2614,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
 /*----------------------------------------------------------------------------*/
 
 static __always_inline size_t pnl2bytes(const size_t size) {
-  assert(size > 0 && size <= MDBX_PNL_MAX * 2);
+  assert(size > 0 && size <= MDBX_PGL_LIMIT);
   size_t bytes =
       ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(pgno_t) * (size + 2),
                     MDBX_PNL_GRANULATE * sizeof(pgno_t)) -
@@ -2623,7 +2624,7 @@ static __always_inline size_t pnl2bytes(const size_t size) {
 
 static __always_inline pgno_t bytes2pnl(const size_t bytes) {
   size_t size = bytes / sizeof(pgno_t);
-  assert(size > 2 && size <= MDBX_PNL_MAX * 2);
+  assert(size > 2 && size <= MDBX_PGL_LIMIT);
   return (pgno_t)size - 2;
 }
 
@@ -2650,7 +2651,7 @@ static void mdbx_pnl_free(MDBX_PNL pl) {
 /* Shrink the PNL to the default size if it has grown larger */
 static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
   assert(bytes2pnl(pnl2bytes(MDBX_PNL_INITIAL)) == MDBX_PNL_INITIAL);
-  assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PNL_MAX &&
+  assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PGL_LIMIT &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_SIZE(*ppl));
   MDBX_PNL_SIZE(*ppl) = 0;
   if (unlikely(MDBX_PNL_ALLOCLEN(*ppl) >
@@ -2670,17 +2671,17 @@ static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
 /* Grow the PNL to the size growed to at least given size */
 static int mdbx_pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
   const size_t allocated = MDBX_PNL_ALLOCLEN(*ppl);
-  assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PNL_MAX &&
+  assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PGL_LIMIT &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_SIZE(*ppl));
   if (likely(allocated >= wanna))
     return MDBX_SUCCESS;
 
-  if (unlikely(wanna > /* paranoia */ MDBX_PNL_MAX))
+  if (unlikely(wanna > /* paranoia */ MDBX_PGL_LIMIT))
     return MDBX_TXN_FULL;
 
-  const size_t size = (wanna + wanna - allocated < MDBX_PNL_MAX)
+  const size_t size = (wanna + wanna - allocated < MDBX_PGL_LIMIT)
                           ? wanna + wanna - allocated
-                          : MDBX_PNL_MAX;
+                          : MDBX_PGL_LIMIT;
   size_t bytes = pnl2bytes(size);
   MDBX_PNL pl = mdbx_realloc(*ppl - 1, bytes);
   if (likely(pl)) {
@@ -2698,9 +2699,9 @@ static int mdbx_pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
 /* Make room for num additional elements in an PNL */
 static __always_inline int __must_check_result mdbx_pnl_need(MDBX_PNL *ppl,
                                                              size_t num) {
-  assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PNL_MAX &&
+  assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PGL_LIMIT &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_SIZE(*ppl));
-  assert(num <= MDBX_PNL_MAX);
+  assert(num <= MDBX_PGL_LIMIT);
   const size_t wanna = MDBX_PNL_SIZE(*ppl) + num;
   return likely(MDBX_PNL_ALLOCLEN(*ppl) >= wanna)
              ? MDBX_SUCCESS
@@ -2802,8 +2803,8 @@ static bool mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
   if (likely(MDBX_PNL_SIZE(pl))) {
     assert(MDBX_PNL_LEAST(pl) >= MIN_PAGENO);
     assert(MDBX_PNL_MOST(pl) < limit);
-    assert(MDBX_PNL_SIZE(pl) <= MDBX_PNL_MAX);
-    if (unlikely(MDBX_PNL_SIZE(pl) > MDBX_PNL_MAX * 3 / 2))
+    assert(MDBX_PNL_SIZE(pl) <= MDBX_PGL_LIMIT);
+    if (unlikely(MDBX_PNL_SIZE(pl) > MDBX_PGL_LIMIT))
       return false;
     if (unlikely(MDBX_PNL_LEAST(pl) < MIN_PAGENO))
       return false;
@@ -2945,7 +2946,7 @@ static __always_inline int __must_check_result mdbx_txl_need(MDBX_TXL *ptl,
                                                              size_t num) {
   assert(MDBX_PNL_SIZE(*ptl) <= MDBX_TXL_MAX &&
          MDBX_PNL_ALLOCLEN(*ptl) >= MDBX_PNL_SIZE(*ptl));
-  assert(num <= MDBX_PNL_MAX);
+  assert(num <= MDBX_PGL_LIMIT);
   const size_t wanna = (size_t)MDBX_PNL_SIZE(*ptl) + num;
   return likely(MDBX_PNL_ALLOCLEN(*ptl) >= wanna)
              ? MDBX_SUCCESS
@@ -2979,7 +2980,7 @@ static int __must_check_result mdbx_txl_append(MDBX_TXL *ptl, txnid_t id) {
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, MDBX_DP, DP_SORT_CMP)
 static __always_inline MDBX_DPL mdbx_dpl_sort(MDBX_DPL dl) {
-  assert(dl->length <= MDBX_DPL_TXNFULL);
+  assert(dl->length <= MDBX_PGL_LIMIT);
   assert(dl->sorted <= dl->length);
   if (dl->sorted != dl->length) {
     dl->sorted = dl->length;
@@ -3071,7 +3072,7 @@ static __hot MDBX_page *mdbx_dpl_remove(MDBX_DPL dl, pgno_t prno) {
 
 static __always_inline int __must_check_result
 mdbx_dpl_append(MDBX_DPL dl, pgno_t pgno, MDBX_page *page) {
-  assert(dl->length <= MDBX_DPL_TXNFULL);
+  assert(dl->length <= MDBX_PGL_LIMIT);
   if (mdbx_audit_enabled()) {
     for (unsigned i = dl->length; i > 0; --i) {
       assert(dl[i].pgno != pgno);
@@ -5277,12 +5278,11 @@ skip_cache:
         goto fail;
       }
       const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
-      /* TODO: provide a user-configurable threshold */
       if (unlikely(gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
                    env->me_options.rp_augment_limit) &&
           (pgno_add(txn->mt_next_pgno, num) <= txn->mt_geo.upper ||
            gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >=
-               MDBX_PNL_MAX / 16 * 15)) {
+               MDBX_PGL_LIMIT / 16 * 15)) {
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
@@ -19711,7 +19711,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_rp_augment_limit:
-    if (unlikely(value > MDBX_PNL_MAX))
+    if (unlikely(value > MDBX_PGL_LIMIT))
       return MDBX_EINVAL;
     env->me_options.rp_augment_limit = (unsigned)value;
     break;
