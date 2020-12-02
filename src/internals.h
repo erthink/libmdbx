@@ -667,7 +667,6 @@ typedef struct MDBX_dpl {
   unsigned sorted;
   unsigned length;
   unsigned allocated;
-  unsigned limit;
 #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) ||              \
     (!defined(__cplusplus) && defined(_MSC_VER))
   MDBX_dp items[] /* dynamic size with holes at zero and after the last */;
@@ -678,12 +677,6 @@ typedef struct MDBX_dpl {
 #define MDBX_PNL_GRANULATE 1024
 #define MDBX_PNL_INITIAL                                                       \
   (MDBX_PNL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
-
-#if MDBX_HUGE_TRANSACTIONS
-#define MDBX_DPL_TXNFULL (MDBX_PGL_LIMIT / 8)
-#else
-#define MDBX_DPL_TXNFULL (MDBX_PGL_LIMIT / 256)
-#endif /* MDBX_HUGE_TRANSACTIONS */
 
 #define MDBX_TXL_GRANULATE 32
 #define MDBX_TXL_INITIAL                                                       \
@@ -993,6 +986,8 @@ struct MDBX_env {
   struct {
     unsigned dp_reserve_limit;
     unsigned rp_augment_limit;
+    unsigned dp_limit;
+    unsigned dp_initial;
   } me_options;
   struct {
 #if MDBX_LOCKING > 0
