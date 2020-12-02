@@ -19787,6 +19787,47 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     env->me_options.rp_augment_limit = (unsigned)value;
     break;
 
+  case MDBX_opt_txn_dp_limit:
+  case MDBX_opt_txn_dp_initial:
+    if (unlikely(value > MDBX_PGL_LIMIT))
+      return MDBX_EINVAL;
+    if (unlikely(env->me_txn0 == NULL))
+      return MDBX_EACCESS;
+    if (lock_needed) {
+      err = mdbx_txn_lock(env, false);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      should_unlock = true;
+    }
+    if (env->me_txn)
+      err = MDBX_EPERM /* unable change during transaction */;
+    else {
+      mdbx_dpl_clear(env->me_txn0->tw.dirtylist);
+      const unsigned value32 = (unsigned)value;
+      if (option == MDBX_opt_txn_dp_initial &&
+          env->me_options.dp_initial != value32) {
+        if (env->me_options.dp_limit < value32)
+          env->me_options.dp_limit = value32;
+        if (env->me_txn0->tw.dirtylist->allocated < value32 &&
+            !mdbx_dpl_reserve(env->me_txn0, value32))
+          err = MDBX_ENOMEM;
+        else
+          env->me_options.dp_initial = value32;
+      }
+      if (option == MDBX_opt_txn_dp_limit &&
+          env->me_options.dp_limit != value32) {
+        if (env->me_txn0->tw.dirtylist->allocated > value32 &&
+            !mdbx_dpl_reserve(env->me_txn0, value32))
+          err = MDBX_ENOMEM;
+        else {
+          if (env->me_options.dp_initial > value32)
+            env->me_options.dp_initial = value32;
+          env->me_options.dp_limit = value32;
+        }
+      }
+    }
+    break;
+
   default:
     return MDBX_EINVAL;
   }
@@ -19831,6 +19872,13 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_rp_augment_limit:
     *value = env->me_options.rp_augment_limit;
+    break;
+
+  case MDBX_opt_txn_dp_limit:
+    *value = env->me_options.dp_limit;
+    break;
+  case MDBX_opt_txn_dp_initial:
+    *value = env->me_options.dp_initial;
     break;
 
   default:

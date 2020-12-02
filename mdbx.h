@@ -1806,6 +1806,12 @@ enum MDBX_option_t {
   /** \brief The limit to grow a list of reclaimed pages
    * for finding a sequence of contiguous pages. */
   MDBX_opt_rp_augment_limit,
+
+  /** \brief The limit of dirty pages for a write transaction. */
+  MDBX_opt_txn_dp_limit,
+  /** \brief The initial allocation size for dirty pages list
+   * of a write transaction. */
+  MDBX_opt_txn_dp_initial,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */
