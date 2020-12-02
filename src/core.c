@@ -3050,16 +3050,10 @@ static unsigned __hot mdbx_dpl_search(MDBX_dpl *dl, pgno_t pgno) {
     /* sort a whole */
     dl->sorted = dl->length;
     dp_sort(dl->items + 1, dl->items + dl->length + 1);
-    __fallthrough; /* fall through */
+    break;
   case 0:
     /* whole sorted cases */
-    if (mdbx_audit_enabled()) {
-      for (const MDBX_dp *ptr = dl->items + dl->length; --ptr > dl->items;) {
-        assert(ptr[0].pgno < ptr[1].pgno);
-        assert(ptr[0].pgno >= NUM_METAS);
-      }
-    }
-    return (unsigned)(dp_bsearch(dl->items + 1, dl->length, pgno) - dl->items);
+    break;
 
 #define LINEAR_SEARCH_CASE(N)                                                  \
   case N:                                                                      \
@@ -3087,8 +3081,9 @@ static unsigned __hot mdbx_dpl_search(MDBX_dpl *dl, pgno_t pgno) {
     if (dl->items[dl->length].pgno == pgno)
       return dl->length;
     /* continue bsearch on the sorted part */
-    return (unsigned)(dp_bsearch(dl->items + 1, dl->sorted, pgno) - dl->items);
+    break;
   }
+  return (unsigned)(dp_bsearch(dl->items + 1, dl->sorted, pgno) - dl->items);
 }
 
 static __always_inline MDBX_page *mdbx_dpl_find(MDBX_dpl *dl, pgno_t pgno) {
