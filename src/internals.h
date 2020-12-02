@@ -657,21 +657,22 @@ typedef pgno_t *MDBX_PNL;
 typedef txnid_t *MDBX_TXL;
 
 /* An Dirty-Page list item is an pgno/pointer pair. */
-typedef union MDBX_DP {
-  __anonymous_struct_extension__ struct {
-    pgno_t pgno;
-    MDBX_page *ptr;
-  };
-  __anonymous_struct_extension__ struct {
-    unsigned sorted;
-    unsigned length;
-  };
-} MDBX_DP;
+typedef struct MDBX_dp {
+  pgno_t pgno;
+  MDBX_page *ptr;
+} MDBX_dp;
 
-/* An DPL (dirty-page list) is a sorted array of MDBX_DPs.
- * The first element's length member is a count of how many actual
- * elements are in the array. */
-typedef MDBX_DP *MDBX_DPL;
+/* An DPL (dirty-page list) is a sorted array of MDBX_DPs. */
+typedef struct MDBX_dpl {
+  unsigned sorted;
+  unsigned length;
+  unsigned allocated;
+  unsigned limit;
+#if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) ||              \
+    (!defined(__cplusplus) && defined(_MSC_VER))
+  MDBX_dp items[] /* dynamic size with holes at zero and after the last */;
+#endif
+} MDBX_dpl;
 
 /* PNL sizes */
 #define MDBX_PNL_GRANULATE 1024
@@ -814,7 +815,7 @@ struct MDBX_txn {
        * dirtylist into mt_parent after freeing hidden mt_parent pages. */
       unsigned dirtyroom;
       /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
-      MDBX_DPL dirtylist;
+      MDBX_dpl *dirtylist;
       /* The list of reclaimed txns from GC */
       MDBX_TXL lifo_reclaimed;
       /* The list of pages that became unused during this transaction. */
