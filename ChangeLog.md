@@ -11,6 +11,12 @@ ChangeLog
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
 
+
+Removed options and features:
+
+  - Drop `MDBX_HUGE_TRANSACTIONS` build-option (now no longer required).
+
+
 ## v0.9.2 scheduled at 2020-11-27
 
 Acknowledgements:
