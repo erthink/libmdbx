@@ -3,6 +3,7 @@ ChangeLog
 
 ## v0.9.3 (in development)
 
+TODO:
  - Engage new terminology (https://github.com/erthink/libmdbx/issues/137).
  - Rework/speedup the implementation of the dirty page list (lazy compactification, lazy sorting via merge).
  - Resolve few TODOs (https://github.com/erthink/libmdbx/issues/123, https://github.com/erthink/libmdbx/issues/124,
@@ -10,6 +11,17 @@ ChangeLog
    https://github.com/erthink/libmdbx/issues/132, https://github.com/erthink/libmdbx/issues/115).
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
  - Packages for ROSA Linux, ALT Linux, Fedora/RHEL, Debian/Ubuntu.
+
+Acknowledgements:
+ - Mahlon E. Smith (http://www.martini.nu/) for FreeBSD port of libmdbx.
+ - 장세연 (http://www.castis.com) for bug fixing and PR.
+
+Added features:
+ - Package for FreeBSD is available now by Mahlon E. Smith.
+
+Fixes:
+ - Fixed missing cleanup (null assigned) in the C++ commit/abort (https://github.com/erthink/libmdbx/pull/143).
+
 
 ## v0.9.2 scheduled at 2020-11-27
 
