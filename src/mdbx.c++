@@ -1319,6 +1319,7 @@ void txn_managed::abort() {
       handle_ = nullptr;
     err.throw_exception();
   }
+  handle_ = nullptr;
 }
 
 void txn_managed::commit() {
@@ -1328,6 +1329,7 @@ void txn_managed::commit() {
       handle_ = nullptr;
     err.throw_exception();
   }
+  handle_ = nullptr;
 }
 
 //------------------------------------------------------------------------------
