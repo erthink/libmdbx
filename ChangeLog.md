@@ -21,11 +21,12 @@ Removed options and features:
 
  - Drop `MDBX_HUGE_TRANSACTIONS` build-option (now no longer required).
 
-Added features:
+New features:
 
  - Package for FreeBSD is available now by Mahlon E. Smith.
  - New API functions to get/set various options (https://github.com/erthink/libmdbx/issues/128).
  - Unlimited/Dynamic size of retired and dirty page lists (https://github.com/erthink/libmdbx/issues/123).
+ - Added `-p` option (purge subDB before loading) to `mdbx_load` tool.
 
 Fixes:
 

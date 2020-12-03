@@ -448,16 +448,17 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] [-n]"
-          " dbpath\n"
+          "usage: %s "
+          "[-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -a\t\tappend records in input order (required for custom "
           "comparators)\n"
           "  -f file\tread from file instead of stdin\n"
           "  -s name\tload into named subDB\n"
-          "  -N\t\tdon't overwrite existing records when loading (), just skip "
-          "them\n"
+          "  -N\t\tdon't overwrite existing records when loading, just skip "
+          "ones\n"
+          "  -p\t\tpurge subDB before loading\n"
           "  -T\t\tread plaintext\n"
           "  -r\t\trescue mode (ignore errors to load corrupted DB dump)\n"
           "  -n\t\tdon't use subdirectory for newly created database "
@@ -483,12 +484,13 @@ int main(int argc, char *argv[]) {
   int envflags = MDBX_SAFE_NOSYNC | MDBX_ACCEDE, putflags = MDBX_UPSERT;
   bool quiet = false;
   bool rescue = false;
+  bool purge = false;
 
   prog = argv[0];
   if (argc < 2)
     usage();
 
-  while ((i = getopt(argc, argv, "af:ns:NTVrq")) != EOF) {
+  while ((i = getopt(argc, argv, "af:ns:NpTVrq")) != EOF) {
     switch (i) {
     case 'V':
       printf("mdbx_load version %d.%d.%d.%d\n"
@@ -522,6 +524,9 @@ int main(int argc, char *argv[]) {
       break;
     case 'N':
       putflags |= MDBX_NOOVERWRITE | MDBX_NODUPDATA;
+      break;
+    case 'p':
+      purge = true;
       break;
     case 'T':
       mode |= NOHDR | PRINT;
@@ -692,6 +697,14 @@ int main(int argc, char *argv[]) {
       rc = mdbx_dbi_sequence(txn, dbi, nullptr, sequence - present_sequence);
       if (unlikely(rc != MDBX_SUCCESS)) {
         error("mdbx_dbi_sequence", rc);
+        goto txn_abort;
+      }
+    }
+
+    if (purge) {
+      rc = mdbx_drop(txn, dbi, false);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        error("mdbx_drop", rc);
         goto txn_abort;
       }
     }
