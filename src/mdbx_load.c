@@ -480,7 +480,7 @@ int main(int argc, char *argv[]) {
   MDBX_cursor *mc = nullptr;
   MDBX_dbi dbi;
   char *envname = nullptr;
-  int envflags = MDBX_UTTERLY_NOSYNC, putflags = MDBX_UPSERT;
+  int envflags = MDBX_SAFE_NOSYNC | MDBX_ACCEDE, putflags = MDBX_UPSERT;
   bool quiet = false;
   bool rescue = false;
 
