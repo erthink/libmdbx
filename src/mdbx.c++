@@ -1314,20 +1314,18 @@ txn_managed::~txn_managed() noexcept {
 
 void txn_managed::abort() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_abort(handle_));
-  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS)) {
-    if (err.code() != MDBX_THREAD_MISMATCH)
-      handle_ = nullptr;
+  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    handle_ = nullptr;
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     err.throw_exception();
-  }
 }
 
 void txn_managed::commit() {
   const error err = static_cast<MDBX_error_t>(::mdbx_txn_commit(handle_));
-  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS)) {
-    if (err.code() != MDBX_THREAD_MISMATCH)
-      handle_ = nullptr;
+  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    handle_ = nullptr;
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
     err.throw_exception();
-  }
 }
 
 //------------------------------------------------------------------------------
