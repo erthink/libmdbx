@@ -137,6 +137,7 @@ calloc
 cas
 casename
 cassert
+castis
 castortech
 cattr
 cbegin
@@ -1390,6 +1391,7 @@ rw
 samedata
 samelength
 SAMSUNG
+sasgas
 savailable
 scalability
 sched
