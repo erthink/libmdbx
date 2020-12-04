@@ -2831,6 +2831,22 @@ static void __hot mdbx_pnl_xmerge(MDBX_PNL dst, const MDBX_PNL src) {
   assert(mdbx_pnl_check4assert(dst, MAX_PAGENO + 1));
 }
 
+static void mdbx_pnl_purge_odd(MDBX_PNL sl, const size_t from) {
+  const size_t len = MDBX_PNL_SIZE(sl);
+  assert(from > 0 && from <= len);
+  for (size_t r = from; r <= len; ++r) {
+    if (sl[r] & 1) {
+      size_t w = r;
+      while (++r <= len) {
+        sl[w] = sl[r];
+        w += 1 - (sl[r] & 1);
+      }
+      MDBX_PNL_SIZE(sl) = (unsigned)w - 1;
+      return;
+    }
+  }
+}
+
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
 static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
   pgno_sort(MDBX_PNL_BEGIN(pnl), MDBX_PNL_END(pnl));
@@ -4338,13 +4354,7 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
       return MDBX_ENOMEM;
   } else {
     /* purge deleted slots */
-    MDBX_PNL sl = txn->tw.spill_pages;
-    pgno_t num = MDBX_PNL_SIZE(sl), j = 0;
-    for (i = 1; i <= num; i++) {
-      if ((sl[i] & 1) == 0)
-        sl[++j] = sl[i];
-    }
-    MDBX_PNL_SIZE(sl) = j;
+    mdbx_pnl_purge_odd(txn->tw.spill_pages, 1);
   }
 
   /* Preserve pages which may soon be dirtied again */
@@ -8284,19 +8294,16 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     MDBX_dpl *const src = mdbx_dpl_sort(txn->tw.dirtylist);
     if (likely(src->length > 0) && parent->tw.spill_pages &&
         MDBX_PNL_SIZE(parent->tw.spill_pages) > 0) {
-      MDBX_PNL sp = parent->tw.spill_pages;
+      const MDBX_PNL sp = parent->tw.spill_pages;
       assert(mdbx_pnl_check4assert(sp, txn->mt_next_pgno));
 
-      const unsigned len = MDBX_PNL_SIZE(parent->tw.spill_pages);
-      MDBX_PNL_SIZE(sp) = ~(pgno_t)0;
-
       /* Mark our dirty pages as deleted in parent spill list */
-      unsigned r, w, i = 1;
-      w = r = len;
+      size_t r, w, i = 1;
+      w = r = MDBX_PNL_SIZE(sp);
       do {
         pgno_t pn = src->items[i].pgno << 1;
         while (pn > sp[r])
-          r--;
+          --r;
         if (pn == sp[r]) {
           sp[r] = 1;
           w = --r;
@@ -8304,10 +8311,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       } while (++i <= src->length);
 
       /* Squash deleted pagenums if we deleted any */
-      for (r = w; ++r <= len;)
-        if ((sp[r] & 1) == 0)
-          sp[++w] = sp[r];
-      MDBX_PNL_SIZE(sp) = w;
+      mdbx_pnl_purge_odd(sp, w + 1);
       assert(mdbx_pnl_check4assert(sp, txn->mt_next_pgno << 1));
     }
 
