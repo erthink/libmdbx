@@ -2731,25 +2731,6 @@ static __hot int __must_check_result mdbx_pnl_append(MDBX_PNL *ppl,
   return MDBX_SUCCESS;
 }
 
-/* Append an PNL onto an unsorted PNL */
-static int __must_check_result mdbx_pnl_append_list(MDBX_PNL *ppl,
-                                                    MDBX_PNL append) {
-  const unsigned len = MDBX_PNL_SIZE(append);
-  if (likely(len)) {
-    int rc = mdbx_pnl_need(ppl, MDBX_PNL_SIZE(append));
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
-
-    const MDBX_PNL pnl = *ppl;
-    unsigned w = MDBX_PNL_SIZE(pnl), r = 1;
-    do
-      pnl[++w] = append[r];
-    while (++r <= len);
-    MDBX_PNL_SIZE(pnl) = w;
-  }
-  return MDBX_SUCCESS;
-}
-
 /* Append an pgno range onto an unsorted PNL */
 static __hot int __must_check_result mdbx_pnl_append_range(MDBX_PNL *ppl,
                                                            pgno_t pgno,
@@ -3015,8 +2996,7 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
     bytes = malloc_usable_size(dl);
 #endif /* malloc_usable_size */
     dl->allocated = bytes2dpl(bytes);
-    mdbx_tassert(txn, txn->tw.dirtylist == NULL ||
-                          dl->length <= dl->allocated);
+    mdbx_tassert(txn, txn->tw.dirtylist == NULL || dl->length <= dl->allocated);
     txn->tw.dirtylist = dl;
   }
   return dl;
@@ -8416,11 +8396,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     if (txn->tw.spill_pages) {
       if (parent->tw.spill_pages) {
         /* Must not fail since space was preserved above. */
-        rc = mdbx_pnl_append_list(&parent->tw.spill_pages, txn->tw.spill_pages);
-        mdbx_assert(env, rc == MDBX_SUCCESS);
-        (void)rc;
+        mdbx_pnl_xmerge(parent->tw.spill_pages, txn->tw.spill_pages);
         mdbx_pnl_free(txn->tw.spill_pages);
-        mdbx_pnl_sort(parent->tw.spill_pages);
       } else {
         parent->tw.spill_pages = txn->tw.spill_pages;
       }
