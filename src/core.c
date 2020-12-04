@@ -3209,7 +3209,7 @@ static int __must_check_result mdbx_page_search(MDBX_cursor *mc,
 static int __must_check_result mdbx_page_merge(MDBX_cursor *csrc,
                                                MDBX_cursor *cdst);
 static int __must_check_result mdbx_page_flush(MDBX_txn *txn,
-                                               const unsigned keep);
+                                               const size_t keep);
 
 #define MDBX_SPLIT_REPLACE MDBX_APPENDDUP /* newkey is not new */
 static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
@@ -7992,18 +7992,16 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
  * [in] txn   the transaction that's being committed
  * [in] keep  number of initial pages in dirtylist to keep dirty.
  * Returns 0 on success, non-zero on failure. */
-__hot static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
+__hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
   struct iovec iov[MDBX_COMMIT_PAGES];
-  MDBX_dpl *const dl = (keep || txn->tw.loose_count > 1)
-                           ? mdbx_dpl_sort(txn->tw.dirtylist)
-                           : txn->tw.dirtylist;
+  MDBX_dpl *const dl = mdbx_dpl_sort(txn->tw.dirtylist);
   MDBX_env *const env = txn->mt_env;
   pgno_t flush_begin = MAX_PAGENO;
   pgno_t flush_end = MIN_PAGENO;
   unsigned iov_items = 0;
   size_t iov_bytes = 0;
   size_t iov_off = 0;
-  unsigned r, w;
+  size_t r, w;
   for (r = w = keep; ++r <= dl->length;) {
     MDBX_page *dp = dl->items[r].ptr;
     mdbx_tassert(txn,
@@ -8078,8 +8076,8 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
   (void)flush_begin;
   (void)flush_end;
 
-  txn->tw.dirtyroom += r - 1 - w;
-  dl->length = w;
+  txn->tw.dirtyroom += (unsigned)(r - 1 - w);
+  dl->length = (unsigned)w;
   mdbx_tassert(txn, txn->mt_parent ||
                         txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                             txn->mt_env->me_options.dp_limit);
