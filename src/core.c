@@ -4317,51 +4317,58 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
                            const MDBX_val *data) {
   if (mc->mc_flags & C_SUB)
     return MDBX_SUCCESS;
-
   MDBX_txn *txn = mc->mc_txn;
-  MDBX_dpl *const dl = txn->tw.dirtylist;
-
-  /* Estimate how much space this op will take */
-  pgno_t i = mc->mc_db->md_depth;
-  /* Named DBs also dirty the main DB */
-  if (mc->mc_dbi >= CORE_DBS)
-    i += txn->mt_dbs[MAIN_DBI].md_depth;
-  /* For puts, roughly factor in the key+data size */
-  if (key)
-    i += bytes2pgno(txn->mt_env, node_size(key, data) + txn->mt_env->me_psize);
-  i += i; /* double it for good measure */
-  pgno_t need = i;
-
-  if (txn->tw.dirtyroom > i)
+  if (txn->mt_flags & MDBX_WRITEMAP)
     return MDBX_SUCCESS;
 
-  /* Less aggressive spill - we originally spilled the entire dirty list,
-   * with a few exceptions for cursor pages and DB root pages. But this
-   * turns out to be a lot of wasted effort because in a large txn many
-   * of those pages will need to be used again. So now we spill only 1/8th
-   * of the dirty pages. Testing revealed this to be a good tradeoff,
-   * better than 1/2, 1/4, or 1/10. */
-  if (need < txn->mt_env->me_options.dp_limit / 8)
-    need = txn->mt_env->me_options.dp_limit / 8;
+  /* Estimate how much space this op will take: */
+  /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
+  size_t need = CURSOR_STACK + 3;
+  /* 2) GC/FreeDB for any payload */
+  if (mc->mc_dbi > FREE_DBI) {
+    need += txn->mt_dbs[FREE_DBI].md_depth + 3;
+    /* 3) Named DBs also dirty the main DB */
+    if (mc->mc_dbi > MAIN_DBI)
+      need += txn->mt_dbs[MAIN_DBI].md_depth + 3;
+  }
+  /* 4) Roughly factor in the key+data size */
+  need += bytes2pgno(txn->mt_env, node_size(key, data)) + 1;
+  /* 5) Double it for safety enough reserve */
+  need += need;
+  if (likely(txn->tw.dirtyroom > need))
+    return MDBX_SUCCESS;
 
+  const size_t spill_min = (txn->tw.dirtylist->length / /* TODO: options */ 8);
+  const size_t spill_max = (txn->tw.dirtylist->length / /* TODO: options */ 2);
+  size_t spill = need - txn->tw.dirtyroom;
+  spill = (spill < spill_max) ? spill : spill_max;
+  spill = (spill > spill_min) ? spill : spill_min;
+
+  int rc;
   if (!txn->tw.spill_pages) {
-    txn->tw.spill_pages = mdbx_pnl_alloc(need);
-    if (unlikely(!txn->tw.spill_pages))
-      return MDBX_ENOMEM;
+    txn->tw.spill_pages = mdbx_pnl_alloc(spill);
+    if (unlikely(!txn->tw.spill_pages)) {
+      rc = MDBX_ENOMEM;
+      goto bailout;
+    }
   } else {
     /* purge deleted slots */
     mdbx_pnl_purge_odd(txn->tw.spill_pages, 1);
+    mdbx_pnl_reserve(&txn->tw.spill_pages, spill);
   }
+  mdbx_notice("spilling %zu pages (have %u dirty-room, need %zu)", spill,
+              txn->tw.dirtyroom, need);
 
   /* Preserve pages which may soon be dirtied again */
   mdbx_pages_xkeep(mc, P_DIRTY, true);
 
+  MDBX_dpl *const dl = mdbx_dpl_sort(txn->tw.dirtylist);
   /* Save the page IDs of all the pages we're flushing */
   /* flush from the tail forward, this saves a lot of shifting later on. */
-  int rc;
-  for (i = dl->length; i && need; i--) {
-    pgno_t pn = dl->items[i].pgno << 1;
-    MDBX_page *dp = dl->items[i].ptr;
+  size_t keep = dl->length;
+  for (; keep && spill; keep--) {
+    pgno_t pn = dl->items[keep].pgno << 1;
+    MDBX_page *dp = dl->items[keep].ptr;
     if (dp->mp_flags & (P_LOOSE | P_KEEP))
       continue;
     /* Can't spill twice,
@@ -4381,17 +4388,17 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
     rc = mdbx_pnl_append(&txn->tw.spill_pages, pn);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
-    need--;
+    spill--;
   }
   mdbx_pnl_sort(txn->tw.spill_pages);
 
   /* Flush the spilled part of dirty list */
-  rc = mdbx_page_flush(txn, i);
+  rc = mdbx_page_flush(txn, keep);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
   /* Reset any dirty pages we kept that page_flush didn't see */
-  mdbx_pages_xkeep(mc, P_DIRTY | P_KEEP, i != 0);
+  mdbx_pages_xkeep(mc, P_DIRTY | P_KEEP, keep > 0);
 
 bailout:
   txn->mt_flags |= rc ? MDBX_TXN_ERROR : MDBX_TXN_SPILLS;
