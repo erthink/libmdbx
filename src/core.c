@@ -4221,7 +4221,7 @@ mdbx_retire_pgno(MDBX_cursor *mc, const pgno_t pgno) {
   return rc;
 }
 
-/* Set or clear P_KEEP in dirty, non-overflow, non-sub pages watched by txn.
+/* Toggle P_KEEP in dirty, non-overflow, non-sub pages watched by txn.
  *
  * [in] mc      A cursor handle for the current operation.
  * [in] pflags  Flags of the pages to update:
@@ -4230,57 +4230,53 @@ mdbx_retire_pgno(MDBX_cursor *mc, const pgno_t pgno) {
  * [in] all     No shortcuts. Needed except after a full mdbx_page_flush().
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, bool all) {
-  const unsigned Mask = P_SUBP | P_DIRTY | P_LOOSE | P_KEEP;
+static void mdbx_pages_xkeep(MDBX_cursor *mc, unsigned pflags, bool all) {
+  const unsigned mask = P_SUBP | P_DIRTY | P_LOOSE | P_KEEP;
   MDBX_txn *txn = mc->mc_txn;
-  MDBX_cursor *m3, *m0 = mc;
-  MDBX_xcursor *mx;
-  MDBX_page *mp;
-  unsigned i, j;
-  int rc = MDBX_SUCCESS;
+  MDBX_cursor *m0 = mc;
 
-  /* Mark pages seen by cursors: First m0, then tracked cursors */
-  for (i = txn->mt_numdbs;;) {
+  /* Mark pages seen by cursors: First mc, then tracked cursors */
+  for (unsigned i = txn->mt_numdbs;;) {
     if (mc->mc_flags & C_INITIALIZED) {
-      for (m3 = mc;; m3 = &mx->mx_cursor) {
-        mp = NULL;
-        for (j = 0; j < m3->mc_snum; j++) {
+      MDBX_cursor *m3 = mc;
+      for (;;) {
+        MDBX_page *mp = NULL;
+        for (unsigned j = 0; j < m3->mc_snum; j++) {
           mp = m3->mc_pg[j];
-          if ((mp->mp_flags & Mask) == pflags)
+          if ((mp->mp_flags & mask) == pflags)
             mp->mp_flags ^= P_KEEP;
         }
-        mx = m3->mc_xcursor;
-        /* Proceed to mx if it is at a sub-database */
-        if (!(mx && (mx->mx_cursor.mc_flags & C_INITIALIZED)))
-          break;
         if (!(mp && IS_LEAF(mp)))
           break;
-        if (!(node_flags(page_node(mp, m3->mc_ki[j - 1])) & F_SUBDATA))
+        /* Proceed to mx if it is at a sub-database */
+        MDBX_xcursor *mx = m3->mc_xcursor;
+        if (!(mx && (mx->mx_cursor.mc_flags & C_INITIALIZED)))
           break;
+        if (!(node_flags(page_node(mp, m3->mc_ki[m3->mc_top])) & F_SUBDATA))
+          break;
+        m3 = &mx->mx_cursor;
       }
     }
     mc = mc->mc_next;
     for (; !mc || mc == m0; mc = txn->tw.cursors[--i])
-      if (i == 0)
+      if (i == FREE_DBI)
         goto mark_done;
   }
 
 mark_done:
   if (all) {
     /* Mark dirty root pages */
-    for (i = 0; i < txn->mt_numdbs; i++) {
+    for (unsigned i = 0; i < txn->mt_numdbs; i++) {
       if (txn->mt_dbistate[i] & DBI_DIRTY) {
         pgno_t pgno = txn->mt_dbs[i].md_root;
         if (pgno == P_INVALID)
           continue;
         MDBX_page *dp = mdbx_dpl_find(txn->tw.dirtylist, pgno);
-        if (dp && (dp->mp_flags & Mask) == pflags)
+        if (dp && (dp->mp_flags & mask) == pflags)
           dp->mp_flags ^= P_KEEP;
       }
     }
   }
-
-  return rc;
 }
 
 /* Spill pages from the dirty list back to disk.
@@ -4358,12 +4354,11 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
   }
 
   /* Preserve pages which may soon be dirtied again */
-  int rc = mdbx_pages_xkeep(mc, P_DIRTY, true);
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
+  mdbx_pages_xkeep(mc, P_DIRTY, true);
 
   /* Save the page IDs of all the pages we're flushing */
   /* flush from the tail forward, this saves a lot of shifting later on. */
+  int rc;
   for (i = dl->length; i && need; i--) {
     pgno_t pn = dl->items[i].pgno << 1;
     MDBX_page *dp = dl->items[i].ptr;
@@ -4396,7 +4391,7 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
     goto bailout;
 
   /* Reset any dirty pages we kept that page_flush didn't see */
-  rc = mdbx_pages_xkeep(mc, P_DIRTY | P_KEEP, i != 0);
+  mdbx_pages_xkeep(mc, P_DIRTY | P_KEEP, i != 0);
 
 bailout:
   txn->mt_flags |= rc ? MDBX_TXN_ERROR : MDBX_TXN_SPILLS;
