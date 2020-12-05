@@ -21,6 +21,7 @@ Added features:
 
 Fixes:
  - Fixed missing cleanup (null assigned) in the C++ commit/abort (https://github.com/erthink/libmdbx/pull/143).
+ - Fixed `mdbx_realloc()` for case of nullptr and `MDBX_AVOID_CRT=ON` for Windows.
 
 
 ## v0.9.2 scheduled at 2020-11-27
