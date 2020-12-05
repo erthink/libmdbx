@@ -360,6 +360,7 @@ eacces
 EAFNOSUPPORT
 EAGAIN
 EB
+EBADF
 EBADFD
 EBADSIGN
 EBUSY
@@ -1033,6 +1034,7 @@ nocache
 NOCANDO
 nocheckloglevel
 NOCORE
+NOCTTY
 nodedata
 NODEFAULTLIB
 nodekey

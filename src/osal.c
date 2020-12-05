@@ -532,6 +532,10 @@ MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
 #endif
 }
 
+#if !(defined(_WIN32) || defined(_WIN64))
+static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
+#endif /*! Windows */
+
 MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
   const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
@@ -670,6 +674,20 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   flags |= O_CLOEXEC;
 #endif /* O_CLOEXEC */
 
+  /* Safeguard for https://github.com/erthink/libmdbx/issues/144 */
+#if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
+  int stub_fd0 = -1, stub_fd1 = -1, stub_fd2 = -1;
+  static const char dev_null[] = "/dev/null";
+  if (!is_valid_fd(STDIN_FILENO))
+    stub_fd0 = open(dev_null, O_RDONLY | O_NOCTTY);
+  if (!is_valid_fd(STDOUT_FILENO))
+    stub_fd1 = open(dev_null, O_WRONLY | O_NOCTTY);
+  if (!is_valid_fd(STDERR_FILENO))
+    stub_fd2 = open(dev_null, O_WRONLY | O_NOCTTY);
+#else
+#error "Unexpected or unsupported UNIX or POSIX system"
+#endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
+
   *fd = open(pathname, flags, unix_mode_bits);
 #if defined(O_DIRECT)
   if (*fd < 0 && (flags & O_DIRECT) &&
@@ -678,6 +696,35 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
     *fd = open(pathname, flags, unix_mode_bits);
   }
 #endif /* O_DIRECT */
+
+  /* Safeguard for https://github.com/erthink/libmdbx/issues/144 */
+#if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
+  if (*fd == STDIN_FILENO) {
+    assert(stub_fd0 == -1);
+    *fd = dup(stub_fd0 = *fd);
+  }
+  if (*fd == STDOUT_FILENO) {
+    assert(stub_fd1 == -1);
+    *fd = dup(stub_fd1 = *fd);
+  }
+  if (*fd == STDERR_FILENO) {
+    assert(stub_fd2 == -1);
+    *fd = dup(stub_fd2 = *fd);
+  }
+  if (stub_fd0 != -1)
+    close(stub_fd0);
+  if (stub_fd1 != -1)
+    close(stub_fd1);
+  if (stub_fd2 != -1)
+    close(stub_fd2);
+  if (*fd >= STDIN_FILENO && *fd <= STDERR_FILENO) {
+    close(*fd);
+    return EBADF;
+  }
+#else
+#error "Unexpected or unsupported UNIX or POSIX system"
+#endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
+
   if (*fd < 0)
     return errno;
 
@@ -701,6 +748,7 @@ MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd) {
 #if defined(_WIN32) || defined(_WIN64)
   return CloseHandle(fd) ? MDBX_SUCCESS : GetLastError();
 #else
+  assert(fd > STDERR_FILENO);
   return (close(fd) == 0) ? MDBX_SUCCESS : errno;
 #endif
 }
