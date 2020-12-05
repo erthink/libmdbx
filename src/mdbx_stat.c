@@ -107,7 +107,14 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage(prog);
 
-  while ((o = getopt(argc, argv, "Vaefnrs:")) != EOF) {
+  while ((o = getopt(argc, argv,
+                     "V"
+                     "a"
+                     "e"
+                     "f"
+                     "n"
+                     "r"
+                     "s:")) != EOF) {
     switch (o) {
     case 'V':
       printf("mdbx_stat version %d.%d.%d.%d\n"

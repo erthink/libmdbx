@@ -490,7 +490,17 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage();
 
-  while ((i = getopt(argc, argv, "af:ns:NpTVrq")) != EOF) {
+  while ((i = getopt(argc, argv,
+                     "a"
+                     "f:"
+                     "n"
+                     "s:"
+                     "N"
+                     "p"
+                     "T"
+                     "V"
+                     "r"
+                     "q")) != EOF) {
     switch (i) {
     case 'V':
       printf("mdbx_load version %d.%d.%d.%d\n"
