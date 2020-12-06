@@ -2676,8 +2676,10 @@ static int mdbx_pnl_reserve(MDBX_PNL *ppl, const size_t wanna) {
   if (likely(allocated >= wanna))
     return MDBX_SUCCESS;
 
-  if (unlikely(wanna > /* paranoia */ MDBX_PGL_LIMIT))
+  if (unlikely(wanna > /* paranoia */ MDBX_PGL_LIMIT)) {
+    mdbx_error("PNL too long (%zu > %zu)", wanna, (size_t)MDBX_PGL_LIMIT);
     return MDBX_TXN_FULL;
+  }
 
   const size_t size = (wanna + wanna - allocated < MDBX_PGL_LIMIT)
                           ? wanna + wanna - allocated
@@ -2919,8 +2921,10 @@ static int mdbx_txl_reserve(MDBX_TXL *ptl, const size_t wanna) {
   if (likely(allocated >= wanna))
     return MDBX_SUCCESS;
 
-  if (unlikely(wanna > /* paranoia */ MDBX_TXL_MAX))
+  if (unlikely(wanna > /* paranoia */ MDBX_TXL_MAX)) {
+    mdbx_error("TXL too long (%zu > %zu)", wanna, (size_t)MDBX_TXL_MAX);
     return MDBX_TXN_FULL;
+  }
 
   const size_t size = (wanna + wanna - allocated < MDBX_TXL_MAX)
                           ? wanna + wanna - allocated
@@ -3131,8 +3135,10 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
   }
 
   if (unlikely(dl->length == dl->allocated)) {
-    if (unlikely(dl->allocated == txn->mt_env->me_options.dp_limit))
+    if (unlikely(dl->allocated == txn->mt_env->me_options.dp_limit)) {
+      mdbx_error("DPL is full (%u)", txn->mt_env->me_options.dp_limit);
       return MDBX_TXN_FULL;
+    }
     const size_t size = (dl->allocated < MDBX_PNL_INITIAL * 42)
                             ? dl->allocated + dl->allocated
                             : dl->allocated + dl->allocated / 2;
@@ -4354,7 +4360,10 @@ static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
   } else {
     /* purge deleted slots */
     mdbx_pnl_purge_odd(txn->tw.spill_pages, 1);
-    mdbx_pnl_reserve(&txn->tw.spill_pages, spill);
+    rc = mdbx_pnl_reserve(&txn->tw.spill_pages, spill);
+    (void)rc /* ignore since the resulting list may be shorter
+     and mdbx_pnl_append() will increase pnl on demand */
+        ;
   }
   mdbx_notice("spilling %zu pages (have %u dirty-room, need %zu)", spill,
               txn->tw.dirtyroom, need);
@@ -5327,7 +5336,8 @@ skip_cache:
         goto fail;
       }
       const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
-      if (unlikely(gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
+      if (flags != MDBX_ALLOC_GC &&
+          unlikely(gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
                    env->me_options.rp_augment_limit) &&
           (pgno_add(txn->mt_next_pgno, num) <= txn->mt_geo.upper ||
            gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >=
@@ -5336,11 +5346,6 @@ skip_cache:
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
         flags &= ~MDBX_ALLOC_GC;
-        if (unlikely((flags & MDBX_ALLOC_ALL) == 0)) {
-          /* Oh, we can't do anything */
-          rc = MDBX_TXN_FULL;
-          goto fail;
-        }
         break;
       }
       rc = mdbx_pnl_need(&txn->tw.reclaimed_pglist, gc_len);
@@ -5360,8 +5365,7 @@ skip_cache:
         mdbx_debug_extra("PNL read txn %" PRIaTXN " root %" PRIaPGNO
                          " num %u, PNL",
                          last, txn->mt_dbs[FREE_DBI].md_root, gc_len);
-        unsigned i;
-        for (i = gc_len; i; i--)
+        for (unsigned i = gc_len; i; i--)
           mdbx_debug_extra_print(" %" PRIaPGNO, gc_pnl[i]);
         mdbx_debug_extra_print("%s", "\n");
       }
@@ -5639,8 +5643,11 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
     unsigned i = mdbx_pnl_exist(tx2->tw.spill_pages, pn);
     if (!i)
       continue;
-    if (txn->tw.dirtyroom == 0)
+    if (txn->tw.dirtyroom == 0) {
+      mdbx_error("Dirtyroom is depleted, DPL length %u",
+                 txn->tw.dirtylist->length);
       return MDBX_TXN_FULL;
+    }
     unsigned num = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
     MDBX_page *np = mp;
     if ((env->me_flags & MDBX_WRITEMAP) == 0) {
@@ -6412,8 +6419,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     const txnid_t snap = mdbx_meta_txnid_stable(env, meta);
     txn->mt_txnid = safe64_txnid_next(snap);
     if (unlikely(txn->mt_txnid > MAX_TXNID)) {
-      mdbx_error("%s", "txnid overflow!");
       rc = MDBX_TXN_FULL;
+      mdbx_error("txnid overflow, raise %d", rc);
       goto bailout;
     }
 
@@ -9032,8 +9039,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
             const txnid_t txnid =
                 safe64_txnid_next(unaligned_peek_u64(4, pending->mm_txnid_a));
             if (unlikely(txnid > MAX_TXNID)) {
-              mdbx_error("%s", "txnid overflow!");
               rc = MDBX_TXN_FULL;
+              mdbx_error("txnid overflow, raise %d", rc);
               goto fail;
             }
             mdbx_meta_set_txnid(env, pending, txnid);
@@ -9659,8 +9666,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
         const txnid_t txnid =
             safe64_txnid_next(mdbx_meta_txnid_stable(env, head));
         if (unlikely(txnid > MAX_TXNID)) {
-          mdbx_error("%s", "txnid overflow!");
           rc = MDBX_TXN_FULL;
+          mdbx_error("txnid overflow, raise %d", rc);
           goto bailout;
         }
         mdbx_meta_set_txnid(env, &meta, txnid);
@@ -10062,7 +10069,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         const txnid_t txnid = mdbx_meta_txnid_stable(env, head);
         const txnid_t next_txnid = safe64_txnid_next(txnid);
         if (unlikely(txnid > MAX_TXNID)) {
-          mdbx_error("%s", "txnid overflow!");
+          mdbx_error("txnid overflow, raise %d", MDBX_TXN_FULL);
           return MDBX_TXN_FULL;
         }
         mdbx_notice("updating meta.geo: "
@@ -10519,7 +10526,7 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta) {
 
   if (!META_IS_STEADY(meta) || mdbx_recent_committed_txnid(env) != txnid) {
     if (unlikely(txnid > MAX_TXNID)) {
-      mdbx_error("%s", "txnid overflow!");
+      mdbx_error("txnid overflow, raise %d", MDBX_TXN_FULL);
       return MDBX_TXN_FULL;
     }
     mdbx_meta_set_txnid(env, meta, txnid);
