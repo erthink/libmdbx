@@ -3007,9 +3007,7 @@ static void mdbx_dpl_free(MDBX_txn *txn) {
 static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
   mdbx_tassert(txn,
                txn->tw.dirtylist == NULL || txn->tw.dirtylist->length <= size);
-  size_t bytes = dpl2bytes((size < txn->mt_env->me_options.dp_limit)
-                               ? size
-                               : txn->mt_env->me_options.dp_limit);
+  size_t bytes = dpl2bytes((size < MDBX_PGL_LIMIT) ? size : MDBX_PGL_LIMIT);
   MDBX_dpl *const dl = mdbx_realloc(txn->tw.dirtylist, bytes);
   if (likely(dl)) {
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -3125,7 +3123,7 @@ static __hot MDBX_page *mdbx_dpl_remove(MDBX_dpl *dl, pgno_t prno) {
 static __always_inline int __must_check_result
 mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
   MDBX_dpl *dl = txn->tw.dirtylist;
-  assert(dl->length <= MDBX_PGL_LIMIT);
+  assert(dl->length <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
   if (mdbx_audit_enabled()) {
     for (unsigned i = dl->length; i > 0; --i) {
       assert(dl->items[i].pgno != pgno);
@@ -3135,8 +3133,8 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
   }
 
   if (unlikely(dl->length == dl->allocated)) {
-    if (unlikely(dl->allocated == txn->mt_env->me_options.dp_limit)) {
-      mdbx_error("DPL is full (%u)", txn->mt_env->me_options.dp_limit);
+    if (unlikely(dl->allocated >= MDBX_PGL_LIMIT)) {
+      mdbx_error("DPL is full (MDBX_PGL_LIMIT %u)", MDBX_PGL_LIMIT);
       return MDBX_TXN_FULL;
     }
     const size_t size = (dl->allocated < MDBX_PNL_INITIAL * 42)
@@ -5738,8 +5736,8 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     }
 
     mdbx_debug("clone db %d page %" PRIaPGNO, DDBI(mc), mp->mp_pgno);
-    mdbx_cassert(mc,
-                 txn->tw.dirtylist->length <= txn->mt_env->me_options.dp_limit);
+    mdbx_cassert(mc, txn->tw.dirtylist->length <=
+                         MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
     /* No - copy it */
     np = mdbx_page_malloc(txn, 1);
     if (unlikely(!np)) {
@@ -9291,7 +9289,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
   env->me_options.dp_reserve_limit = 1024;
   env->me_options.rp_augment_limit = 1024 * 1024;
-  env->me_options.dp_limit = MDBX_PGL_LIMIT;
+  env->me_options.dp_limit = MDBX_PGL_LIMIT / 42;
   env->me_options.dp_initial = MDBX_PNL_INITIAL;
 
   int rc;
