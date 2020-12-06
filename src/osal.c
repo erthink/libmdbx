@@ -678,12 +678,21 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   int stub_fd0 = -1, stub_fd1 = -1, stub_fd2 = -1;
   static const char dev_null[] = "/dev/null";
-  if (!is_valid_fd(STDIN_FILENO))
+  if (!is_valid_fd(STDIN_FILENO)) {
+    mdbx_warning("STD%s_FILENO/%d is invalid, open %s for temporary stub", "IN",
+                 STDIN_FILENO, dev_null);
     stub_fd0 = open(dev_null, O_RDONLY | O_NOCTTY);
-  if (!is_valid_fd(STDOUT_FILENO))
+  }
+  if (!is_valid_fd(STDOUT_FILENO)) {
+    mdbx_warning("STD%s_FILENO/%d is invalid, open %s for temporary stub",
+                 "OUT", STDOUT_FILENO, dev_null);
     stub_fd1 = open(dev_null, O_WRONLY | O_NOCTTY);
-  if (!is_valid_fd(STDERR_FILENO))
+  }
+  if (!is_valid_fd(STDERR_FILENO)) {
+    mdbx_warning("STD%s_FILENO/%d is invalid, open %s for temporary stub",
+                 "ERR", STDERR_FILENO, dev_null);
     stub_fd2 = open(dev_null, O_WRONLY | O_NOCTTY);
+  }
 #else
 #error "Unexpected or unsupported UNIX or POSIX system"
 #endif /* STDIN_FILENO == 0 && STDERR_FILENO == 2 */
@@ -700,14 +709,20 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   /* Safeguard for https://github.com/erthink/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   if (*fd == STDIN_FILENO) {
+    mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN",
+                 STDIN_FILENO);
     assert(stub_fd0 == -1);
     *fd = dup(stub_fd0 = *fd);
   }
   if (*fd == STDOUT_FILENO) {
+    mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "OUT",
+                 STDOUT_FILENO);
     assert(stub_fd1 == -1);
     *fd = dup(stub_fd1 = *fd);
   }
   if (*fd == STDERR_FILENO) {
+    mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "ERR",
+                 STDERR_FILENO);
     assert(stub_fd2 == -1);
     *fd = dup(stub_fd2 = *fd);
   }
@@ -718,6 +733,10 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   if (stub_fd2 != -1)
     close(stub_fd2);
   if (*fd >= STDIN_FILENO && *fd <= STDERR_FILENO) {
+    mdbx_error(
+        "Rejecting the use of a FD in the range "
+        "STDIN_FILENO/%d..STDERR_FILENO/%d to prevent database corruption",
+        STDIN_FILENO, STDERR_FILENO);
     close(*fd);
     return EBADF;
   }
