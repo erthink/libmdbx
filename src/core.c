@@ -3183,7 +3183,7 @@ static int mdbx_cursor_touch(MDBX_cursor *mc);
 enum {
   /* mdbx_txn_end operation number, for logging */
   MDBX_END_COMMITTED,
-  MDBX_END_EMPTY_COMMIT,
+  MDBX_END_PURE_COMMIT,
   MDBX_END_ABORT,
   MDBX_END_RESET,
   MDBX_END_RESET_TMP,
@@ -3195,7 +3195,7 @@ enum {
 #define MDBX_END_FREE 0x20    /* free txn unless it is MDBX_env.me_txn0 */
 #define MDBX_END_EOTDONE 0x40 /* txn's cursors already closed */
 #define MDBX_END_SLOT 0x80    /* release any reader slot if MDBX_NOTLS */
-static int mdbx_txn_end(MDBX_txn *txn, unsigned mode);
+static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode);
 
 static int __must_check_result mdbx_page_get(MDBX_cursor *mc, pgno_t pgno,
                                              MDBX_page **mp, int *lvl,
@@ -6975,7 +6975,7 @@ static void dbi_update(MDBX_txn *txn, int keep) {
  * May be called twice for readonly txns: First reset it, then abort.
  * [in] txn   the transaction handle to end
  * [in] mode  why and how to end the transaction */
-static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
+static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
   MDBX_env *env = txn->mt_env;
   static const char *const names[] = MDBX_END_NAMES;
 
@@ -8184,7 +8184,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   /* mdbx_txn_end() mode for a commit which writes nothing */
   unsigned end_mode =
-      MDBX_END_EMPTY_COMMIT | MDBX_END_UPDATE | MDBX_END_SLOT | MDBX_END_FREE;
+      MDBX_END_PURE_COMMIT | MDBX_END_UPDATE | MDBX_END_SLOT | MDBX_END_FREE;
   if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     goto done;
 
@@ -8225,7 +8225,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       mdbx_tassert(txn, memcmp(&parent->mt_canary, &txn->mt_canary,
                                sizeof(parent->mt_canary)) == 0);
 
-      end_mode = MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE;
+      end_mode = MDBX_END_PURE_COMMIT | MDBX_END_SLOT | MDBX_END_FREE;
       goto done;
     }
 
