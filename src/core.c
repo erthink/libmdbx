@@ -9310,7 +9310,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
   env->me_options.dp_reserve_limit = 1024;
   env->me_options.rp_augment_limit = 1024 * 1024;
-  env->me_options.dp_limit = MDBX_PGL_LIMIT / 42;
+  env->me_options.dp_limit = 1024 * 1024;
   env->me_options.dp_initial = MDBX_PNL_INITIAL;
 
   int rc;
@@ -19756,7 +19756,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     }
     break;
 
-  case MDBX_opt_max_dbx:
+  case MDBX_opt_max_db:
     if (unlikely(value > MDBX_MAX_DBI))
       return MDBX_EINVAL;
     if (unlikely(env->me_map))
@@ -19872,7 +19872,7 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
     *value = mdbx_osal_monotime_to_16dot16(*env->me_autosync_period);
     break;
 
-  case MDBX_opt_max_dbx:
+  case MDBX_opt_max_db:
     *value = env->me_maxdbs - CORE_DBS;
     break;
 
