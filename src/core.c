@@ -15363,7 +15363,7 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
   if (IS_OVERFLOW(mp)) {
     if (unlikely(mp->mp_pages < 1 && mp->mp_pages >= MAX_PAGENO / 2))
       return bad_page(mp, "invalid overflow n-pages (%u)\n", mp->mp_pages);
-    if (unlikely(mp->mp_pgno > mc->mc_txn->mt_next_pgno - mp->mp_pages))
+    if (unlikely(mp->mp_pgno + mp->mp_pages > mc->mc_txn->mt_next_pgno))
       return bad_page(mp, "overflow page beyond (%u) next-pgno\n",
                       mp->mp_pgno + mp->mp_pages);
     return MDBX_SUCCESS;
