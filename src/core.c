@@ -3014,6 +3014,8 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
     bytes = malloc_usable_size(dl);
 #endif /* malloc_usable_size */
     dl->allocated = bytes2dpl(bytes);
+    dl->items[0].pgno = 0;
+    dl->items[0].ptr = nullptr;
     mdbx_tassert(txn, txn->tw.dirtylist == NULL || dl->length <= dl->allocated);
     txn->tw.dirtylist = dl;
   }
