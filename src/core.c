@@ -2564,14 +2564,14 @@ static int lcklist_detach_locked(MDBX_env *env) {
  * LY: Binary search */
 
 #define SEARCH_IMPL(NAME, TYPE_LIST, TYPE_ARG, CMP)                            \
-  static __always_inline TYPE_LIST *NAME(TYPE_LIST *first, unsigned length,    \
-                                         const TYPE_ARG item) {                \
-    TYPE_LIST *const begin = first, *const end = begin + length;               \
+  static __always_inline const TYPE_LIST *NAME(                                \
+      const TYPE_LIST *first, unsigned length, const TYPE_ARG item) {          \
+    const TYPE_LIST *const begin = first, *const end = begin + length;         \
                                                                                \
     while (length > 3) {                                                       \
       const unsigned whole = length;                                           \
       length >>= 1;                                                            \
-      TYPE_LIST *const middle = first + length;                                \
+      const TYPE_LIST *const middle = first + length;                          \
       if (CMP(*middle, item)) {                                                \
         first = middle + 1;                                                    \
         length = whole - length - 1;                                           \
@@ -2601,9 +2601,9 @@ static int lcklist_detach_locked(MDBX_env *env) {
     }                                                                          \
                                                                                \
     if (mdbx_audit_enabled()) {                                                \
-      for (TYPE_LIST *scan = begin; scan < first; ++scan)                      \
+      for (const TYPE_LIST *scan = begin; scan < first; ++scan)                \
         assert(CMP(*scan, item));                                              \
-      for (TYPE_LIST *scan = first; scan < end; ++scan)                        \
+      for (const TYPE_LIST *scan = first; scan < end; ++scan)                  \
         assert(!CMP(*scan, item));                                             \
       (void)begin, (void)end;                                                  \
     }                                                                          \
@@ -2859,11 +2859,11 @@ static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
  * Returns The index of the first item greater than or equal to pgno. */
 SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
 
-static __hot unsigned mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
+static __hot unsigned mdbx_pnl_search(const MDBX_PNL pnl, pgno_t id) {
   assert(mdbx_pnl_check4assert(pnl, MAX_PAGENO + 1));
-  pgno_t *begin = MDBX_PNL_BEGIN(pnl);
-  pgno_t *it = pgno_bsearch(begin, MDBX_PNL_SIZE(pnl), id);
-  pgno_t *end = begin + MDBX_PNL_SIZE(pnl);
+  const pgno_t *begin = MDBX_PNL_BEGIN(pnl);
+  const pgno_t *it = pgno_bsearch(begin, MDBX_PNL_SIZE(pnl), id);
+  const pgno_t *end = begin + MDBX_PNL_SIZE(pnl);
   assert(it >= begin && it <= end);
   if (it != begin)
     assert(MDBX_PNL_ORDERED(it[-1], id));
@@ -2872,7 +2872,7 @@ static __hot unsigned mdbx_pnl_search(MDBX_PNL pnl, pgno_t id) {
   return (unsigned)(it - begin + 1);
 }
 
-static __hot unsigned mdbx_pnl_exist(MDBX_PNL pnl, pgno_t id) {
+static __hot unsigned mdbx_pnl_exist(const MDBX_PNL pnl, pgno_t id) {
   unsigned n = mdbx_pnl_search(pnl, id);
   return (n <= MDBX_PNL_SIZE(pnl) && pnl[n] == id) ? n : 0;
 }
