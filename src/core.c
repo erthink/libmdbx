@@ -3263,10 +3263,6 @@ static int __must_check_result mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 static int __must_check_result mdbx_audit_ex(MDBX_txn *txn,
                                              unsigned retired_stored,
                                              bool dont_filter_gc);
-static __maybe_unused __always_inline int __must_check_result
-mdbx_audit(MDBX_txn *txn) {
-  return mdbx_audit_ex(txn, 0, (txn->mt_flags & MDBX_TXN_RDONLY) != 0);
-}
 
 static int __must_check_result mdbx_page_check(MDBX_cursor *const mc,
                                                const MDBX_page *const mp,
