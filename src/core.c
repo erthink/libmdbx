@@ -4035,6 +4035,8 @@ static bool mdbx_refund(MDBX_txn *txn) {
 
 static __cold void mdbx_kill_page(MDBX_env *env, MDBX_page *mp, pgno_t pgno,
                                   unsigned npages) {
+  mdbx_debug("kill%s %u page %" PRIaPGNO, IS_DIRTY(mp) ? " dirty" : "", npages,
+             pgno);
   mdbx_assert(env, pgno >= NUM_METAS && npages);
   if (IS_DIRTY(mp) || (env->me_flags & MDBX_WRITEMAP)) {
     const size_t bytes = pgno2bytes(env, npages);
