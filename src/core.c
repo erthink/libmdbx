@@ -4317,8 +4317,8 @@ mark_done:
  * [in] data  For a put operation, the data being stored.
  *
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_page_spill(MDBX_cursor *mc, const MDBX_val *key,
-                           const MDBX_val *data) {
+static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
+                             const MDBX_val *data) {
   if (mc->mc_flags & C_SUB)
     return MDBX_SUCCESS;
   MDBX_txn *txn = mc->mc_txn;
@@ -12980,7 +12980,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     } else {
       rdata = data;
     }
-    if (unlikely(rc2 = mdbx_page_spill(mc, key, rdata)))
+    if (unlikely(rc2 = mdbx_cursor_spill(mc, key, rdata)))
       return rc2;
   }
 
@@ -13546,7 +13546,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     return MDBX_NOTFOUND;
 
   if (unlikely(!(flags & MDBX_NOSPILL) &&
-               (rc = mdbx_page_spill(mc, NULL, NULL))))
+               (rc = mdbx_cursor_spill(mc, NULL, NULL))))
     return rc;
 
   rc = mdbx_cursor_touch(mc);
