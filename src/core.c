@@ -6859,7 +6859,7 @@ static void dbi_update(MDBX_txn *txn, int keep) {
   MDBX_dbi n = txn->mt_numdbs;
   if (n) {
     bool locked = false;
-    MDBX_env *env = txn->mt_env;
+    MDBX_env *const env = txn->mt_env;
 
     for (unsigned i = n; --i >= CORE_DBS;) {
       if (likely((txn->mt_dbistate[i] & DBI_CREAT) == 0))
@@ -6869,11 +6869,10 @@ static void dbi_update(MDBX_txn *txn, int keep) {
                     mdbx_fastmutex_acquire(&env->me_dbi_lock) == MDBX_SUCCESS);
         locked = true;
       }
+      if (env->me_numdbs <= i || txn->mt_dbiseqs[i] != env->me_dbiseqs[i])
+        continue /* dbi explicitly closed and/or then re-opened by other txn */;
       if (keep) {
         env->me_dbflags[i] = txn->mt_dbs[i].md_flags | DB_VALID;
-        mdbx_compiler_barrier();
-        if (env->me_numdbs <= i)
-          env->me_numdbs = i + 1;
       } else {
         char *ptr = env->me_dbxs[i].md_name.iov_base;
         if (ptr) {
@@ -6885,6 +6884,20 @@ static void dbi_update(MDBX_txn *txn, int keep) {
           mdbx_free(ptr);
         }
       }
+    }
+
+    n = env->me_numdbs;
+    if (n > CORE_DBS && unlikely(!(env->me_dbflags[n - 1] & DB_VALID))) {
+      if (!locked) {
+        mdbx_ensure(env,
+                    mdbx_fastmutex_acquire(&env->me_dbi_lock) == MDBX_SUCCESS);
+        locked = true;
+      }
+
+      n = env->me_numdbs;
+      while (n > CORE_DBS && !(env->me_dbflags[n - 1] & DB_VALID))
+        --n;
+      env->me_numdbs = n;
     }
 
     if (unlikely(locked))
@@ -17669,10 +17682,15 @@ static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
     return MDBX_BAD_DBI;
 
   env->me_dbflags[dbi] = 0;
+  env->me_dbiseqs[dbi]++;
   env->me_dbxs[dbi].md_name.iov_len = 0;
   mdbx_compiler_barrier();
   env->me_dbxs[dbi].md_name.iov_base = NULL;
   mdbx_free(ptr);
+
+  if (env->me_numdbs == dbi + 1)
+    env->me_numdbs = dbi;
+
   return MDBX_SUCCESS;
 }
 
@@ -17686,7 +17704,9 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
 
   rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
   if (likely(rc == MDBX_SUCCESS)) {
-    rc = mdbx_dbi_close_locked(env, dbi);
+    rc = (dbi < env->me_maxdbs && (env->me_dbflags[dbi] & DB_VALID))
+             ? mdbx_dbi_close_locked(env, dbi)
+             : MDBX_BAD_DBI;
     mdbx_ensure(env, mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
   }
   return rc;
@@ -17852,7 +17872,6 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
         txn->mt_flags |= MDBX_TXN_ERROR;
         goto bailout;
       }
-      env->me_dbiseqs[dbi]++;
       mdbx_dbi_close_locked(env, dbi);
       mdbx_ensure(env,
                   mdbx_fastmutex_release(&env->me_dbi_lock) == MDBX_SUCCESS);
