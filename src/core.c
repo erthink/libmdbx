@@ -12688,6 +12688,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+    return MDBX_BAD_DBI;
+
   mdbx_cassert(mc, cursor_is_tracked(mc));
   env = mc->mc_txn->mt_env;
 
@@ -13487,6 +13490,9 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+    return MDBX_BAD_DBI;
+
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
     return MDBX_ENODATA;
 
@@ -14123,6 +14129,9 @@ static __inline int mdbx_couple_init(MDBX_cursor_couple *couple,
 /* Initialize a cursor for a given transaction and database. */
 static int mdbx_cursor_init(MDBX_cursor *mc, MDBX_txn *txn, MDBX_dbi dbi) {
   STATIC_ASSERT(offsetof(MDBX_cursor_couple, outer) == 0);
+  if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
+    return MDBX_BAD_DBI;
+
   return mdbx_couple_init(container_of(mc, MDBX_cursor_couple, outer), dbi, txn,
                           &txn->mt_dbs[dbi], &txn->mt_dbxs[dbi],
                           &txn->mt_dbistate[dbi]);
