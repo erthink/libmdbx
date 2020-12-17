@@ -32,6 +32,8 @@ Fixes:
 
  - Fixed 4-byte aligned access to 64-bit integers.
  - Fixed missing cleanup (null assigned) in the C++ commit/abort (https://github.com/erthink/libmdbx/pull/143).
+ - Fixed `mdbx_realloc()` for case of nullptr and `MDBX_AVOID_CRT=ON` for Windows.
+ - Fixed the possibility to use invalid and renewed (closed & re-opened, dropped & re-created) DBI-handles (https://github.com/erthink/libmdbx/issues/146).
 
 
 ## v0.9.2 scheduled at 2020-11-27

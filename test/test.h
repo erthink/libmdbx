@@ -287,6 +287,9 @@ public:
 };
 
 class testcase_jitter : public testcase {
+protected:
+  void check_dbi_error(int expect, const char *stage);
+
 public:
   testcase_jitter(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
