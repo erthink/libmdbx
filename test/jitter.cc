@@ -14,6 +14,14 @@
 
 #include "test.h"
 
+void testcase_jitter::check_dbi_error(int expect, const char *stage) {
+  MDBX_stat stat;
+  int err = mdbx_dbi_stat(txn_guard.get(), dbi, &stat, sizeof(stat));
+  if (err != expect)
+    failure("unexpected result for %s dbi-handle: expect %d, got %d", stage,
+            expect, err);
+}
+
 bool testcase_jitter::run() {
   int err;
   size_t upper_limit = config.params.size_upper;
@@ -23,6 +31,47 @@ bool testcase_jitter::run() {
   while (should_continue()) {
     jitter_delay();
     db_open();
+
+    if (!dbi && !mode_readonly()) {
+      // create table
+      txn_begin(false);
+      dbi = db_table_open(true);
+      check_dbi_error(MDBX_SUCCESS, "created-uncommitted");
+      // note: here and below the 4-byte length keys and value are used
+      //       to be compatible with any Db-flags given from command line.
+      MDBX_val key = {(void *)"k000", 4}, value = {(void *)"v001", 4};
+      err = mdbx_put(txn_guard.get(), dbi, &key, &value, MDBX_UPSERT);
+      if (err != MDBX_SUCCESS)
+        failure_perror("jitter.put-1", err);
+      txn_end(false);
+
+      // drop & re-create table, but abort txn
+      txn_begin(false);
+      check_dbi_error(MDBX_SUCCESS, "created-committed");
+      err = mdbx_drop(txn_guard.get(), dbi, true);
+      if (unlikely(err != MDBX_SUCCESS))
+        failure_perror("mdbx_drop(delete=true)", err);
+      check_dbi_error(MDBX_BAD_DBI, "dropped-uncommitted");
+      dbi = db_table_open(true);
+      check_dbi_error(MDBX_SUCCESS, "recreated-uncommitted");
+      txn_end(true);
+
+      // check after aborted txn
+      txn_begin(false);
+      value = {(void *)"v002", 4};
+      err = mdbx_put(txn_guard.get(), dbi, &key, &value, MDBX_UPSERT);
+      if (err != MDBX_BAD_DBI)
+        failure_perror("jitter.put-2", err);
+      check_dbi_error(MDBX_BAD_DBI, "dropped-recreated-aborted");
+      // restore DBI
+      dbi = db_table_open(false);
+      check_dbi_error(MDBX_SUCCESS, "dropped-recreated-aborted+reopened");
+      value = {(void *)"v003", 4};
+      err = mdbx_put(txn_guard.get(), dbi, &key, &value, MDBX_UPSERT);
+      if (err != MDBX_SUCCESS)
+        failure_perror("jitter.put-3", err);
+      txn_end(false);
+    }
 
     if (upper_limit < 1) {
       MDBX_envinfo info;
