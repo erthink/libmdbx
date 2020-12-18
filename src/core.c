@@ -5662,9 +5662,10 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
       /* If in current txn, this page is no longer spilled.
        * If it happens to be the last page, truncate the spill list.
        * Otherwise mark it as deleted by setting the LSB. */
-      txn->tw.spill_pages[i] |= 1;
       if (i == MDBX_PNL_SIZE(txn->tw.spill_pages))
         MDBX_PNL_SIZE(txn->tw.spill_pages) -= 1;
+      else
+        txn->tw.spill_pages[i] |= 1;
     } /* otherwise, if belonging to a parent txn, the
        * page remains spilled until child commits */
 
