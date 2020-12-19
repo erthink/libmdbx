@@ -4186,7 +4186,7 @@ static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
 
   if (txn->tw.spill_pages) {
     const unsigned i = mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1);
-    if (i) {
+    if (unlikely(i)) {
       /* This page is no longer spilled */
 #if MDBX_PNL_ASCENDING
       mdbx_tassert(txn, i == MDBX_PNL_SIZE(txn->tw.spill_pages) ||
@@ -4195,9 +4195,10 @@ static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
       mdbx_tassert(txn, i == 1 || txn->tw.spill_pages[i - 1] >= (pgno + npages)
                                                                     << 1);
 #endif
-      txn->tw.spill_pages[i] |= 1;
       if (i == MDBX_PNL_SIZE(txn->tw.spill_pages))
         MDBX_PNL_SIZE(txn->tw.spill_pages) -= 1;
+      else
+        txn->tw.spill_pages[i] |= 1;
       int rc = mdbx_page_loose(txn, mp);
       if (unlikely(rc != MDBX_SUCCESS))
         mc->mc_flags &= ~(C_INITIALIZED | C_EOF);
