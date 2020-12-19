@@ -4188,8 +4188,13 @@ static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
     const unsigned i = mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1);
     if (i) {
       /* This page is no longer spilled */
+#if MDBX_PNL_ASCENDING
       mdbx_tassert(txn, i == MDBX_PNL_SIZE(txn->tw.spill_pages) ||
                             txn->tw.spill_pages[i + 1] >= (pgno + npages) << 1);
+#else
+      mdbx_tassert(txn, i == 1 || txn->tw.spill_pages[i - 1] >= (pgno + npages)
+                                                                    << 1);
+#endif
       txn->tw.spill_pages[i] |= 1;
       if (i == MDBX_PNL_SIZE(txn->tw.spill_pages))
         MDBX_PNL_SIZE(txn->tw.spill_pages) -= 1;
