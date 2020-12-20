@@ -5652,7 +5652,7 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
                  txn->tw.dirtylist->length);
       return MDBX_TXN_FULL;
     }
-    unsigned num = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
+    const unsigned num = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
     MDBX_page *np = mp;
     if ((env->me_flags & MDBX_WRITEMAP) == 0) {
       np = mdbx_page_malloc(txn, num);
@@ -5676,9 +5676,12 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
        * page remains spilled until child commits */
 
     int rc = mdbx_page_dirty(txn, np);
-    if (likely(rc == MDBX_SUCCESS))
-      *ret = np;
-    return rc;
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      if ((env->me_flags & MDBX_WRITEMAP) == 0)
+        mdbx_dpage_free(env, np, num);
+      return rc;
+    }
+    *ret = np;
   }
   return MDBX_SUCCESS;
 }
