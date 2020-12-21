@@ -8149,7 +8149,7 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
   (void)flush_end;
 
   txn->tw.dirtyroom += (unsigned)(r - 1 - w);
-  dl->length = (unsigned)w;
+  dl->sorted = dl->length = (unsigned)w;
   mdbx_tassert(txn, txn->mt_parent ||
                         txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                             txn->mt_env->me_options.dp_limit);
