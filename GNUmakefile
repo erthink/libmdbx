@@ -138,7 +138,7 @@ DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(TOOLS))
 
 TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.db
-TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log.gz
+TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
 TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
@@ -171,35 +171,35 @@ MDBX_TEST_EXTRA ?=
 check: test dist
 
 test: build-test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
+	rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic) \
-		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
+		| tee >(gzip --stdout > $(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 test-singleprocess: all mdbx_test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; \
+	rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --nested) \
-		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
+		| tee >(gzip --stdout > $(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 test-fault: all mdbx_test
-	rm -f $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_TEST_EXTRA) basic \
-		| tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42) \
+	rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_TEST_EXTRA) basic \
+		| tee >(gzip --stdout > $(TEST_LOG).gz) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
 VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
 memcheck test-valgrind:
 	$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -DMDBX_USE_VALGRIND" build-test && \
-	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG) && (set -o pipefail; ( \
+	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
 		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
-	) | tee >(gzip --stdout > $(TEST_LOG)) | tail -n 42)
+	) | tee >(gzip --stdout > $(TEST_LOG).gz) | tail -n 42)
 
 gcc-analyzer:
 	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
