@@ -8331,7 +8331,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     if (likely(src->length > 0) && parent->tw.spill_pages &&
         MDBX_PNL_SIZE(parent->tw.spill_pages) > 0) {
       const MDBX_PNL sp = parent->tw.spill_pages;
-      assert(mdbx_pnl_check4assert(sp, txn->mt_next_pgno));
+      mdbx_tassert(txn, mdbx_pnl_check4assert(sp, txn->mt_next_pgno << 1 | 1));
 
       /* Mark our dirty pages as deleted in parent spill list */
       size_t r, w, i = 1;
