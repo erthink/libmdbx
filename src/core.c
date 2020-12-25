@@ -6742,9 +6742,9 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                         ~(MDBX_NOTLS | MDBX_TXN_RDONLY | MDBX_WRITEMAP |
                           /* Win32: SRWL flag */ MDBX_SHRINK_ALLOWED)) == 0);
     else
-      mdbx_assert(env,
-                  (txn->mt_flags & ~(MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
-                                     MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC)) == 0);
+      mdbx_assert(env, (txn->mt_flags & ~(MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED |
+                                          MDBX_NOMETASYNC | MDBX_SAFE_NOSYNC |
+                                          MDBX_TXN_SPILLS)) == 0);
     txn->mt_signature = MDBX_MT_SIGNATURE;
     txn->mt_userctx = context;
     *ret = txn;
