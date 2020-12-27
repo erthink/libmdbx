@@ -3877,14 +3877,11 @@ static void mdbx_refund_reclaimed(MDBX_txn *txn) {
 }
 
 static void mdbx_refund_loose(MDBX_txn *txn) {
-  mdbx_tassert(txn, mdbx_dirtylist_check(txn));
   mdbx_tassert(txn, txn->tw.loose_pages != nullptr);
   mdbx_tassert(txn, txn->tw.loose_count > 0);
 
   MDBX_dpl *const dl = txn->tw.dirtylist;
   mdbx_tassert(txn, dl->length >= txn->tw.loose_count);
-  mdbx_tassert(txn, txn->tw.spill_pages == nullptr ||
-                        dl->length >= MDBX_PNL_SIZE(txn->tw.spill_pages));
 
   pgno_t onstack[MDBX_CACHELINE_SIZE * 8 / sizeof(pgno_t)];
   MDBX_PNL suitable = onstack;
