@@ -4030,7 +4030,14 @@ static bool mdbx_refund(MDBX_txn *txn) {
       break;
   }
 
-  return before != txn->mt_next_pgno;
+  if (before == txn->mt_next_pgno)
+    return false;
+
+  if (txn->tw.spill_pages)
+    /* Squash deleted pagenums if we refunded any */
+    mdbx_pnl_purge_odd(txn->tw.spill_pages, 1);
+
+  return true;
 }
 
 static __cold void mdbx_kill_page(MDBX_env *env, MDBX_page *mp, pgno_t pgno,
