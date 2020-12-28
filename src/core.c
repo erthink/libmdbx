@@ -2833,19 +2833,32 @@ static void __hot mdbx_pnl_xmerge(MDBX_PNL dst, const MDBX_PNL src) {
   assert(mdbx_pnl_check4assert(dst, MAX_PAGENO + 1));
 }
 
-static void mdbx_pnl_purge_odd(MDBX_PNL sl, const size_t from) {
-  const size_t len = MDBX_PNL_SIZE(sl);
-  assert(from > 0 && from <= len);
-  for (size_t r = from; r <= len; ++r) {
-    if (sl[r] & 1) {
-      size_t w = r;
-      while (++r <= len) {
-        sl[w] = sl[r];
-        w += 1 - (sl[r] & 1);
-      }
-      MDBX_PNL_SIZE(sl) = (unsigned)w - 1;
-      return;
+static void mdbx_spill_remove(MDBX_txn *txn, unsigned idx) {
+  mdbx_tassert(txn, idx <= MDBX_PNL_SIZE(txn->tw.spill_pages) &&
+                        txn->tw.spill_least_removed > 0);
+  txn->tw.spill_least_removed =
+      (txn->tw.spill_least_removed > idx) ? idx : txn->tw.spill_least_removed;
+  txn->tw.spill_pages[idx] |= 1;
+  MDBX_PNL_SIZE(txn->tw.spill_pages) -=
+      (idx == MDBX_PNL_SIZE(txn->tw.spill_pages));
+}
+
+static void mdbx_spill_purge(MDBX_txn *txn) {
+  mdbx_tassert(txn, txn->tw.spill_least_removed > 0);
+  const MDBX_PNL sl = txn->tw.spill_pages;
+  if (txn->tw.spill_least_removed != INT_MAX) {
+    unsigned len = MDBX_PNL_SIZE(sl), r, w;
+    for (w = r = txn->tw.spill_least_removed; r <= len; ++r) {
+      sl[w] = sl[r];
+      w += 1 - (sl[r] & 1);
     }
+    for (size_t r = 1; r < w; ++r)
+      mdbx_tassert(txn, (sl[r] & 1) == 0);
+    MDBX_PNL_SIZE(sl) = w - 1;
+    txn->tw.spill_least_removed = INT_MAX;
+  } else {
+    for (size_t i = 1; i <= MDBX_PNL_SIZE(sl); ++i)
+      mdbx_tassert(txn, (sl[i] & 1) == 0);
   }
 }
 
@@ -4032,7 +4045,7 @@ static bool mdbx_refund(MDBX_txn *txn) {
 
   if (txn->tw.spill_pages)
     /* Squash deleted pagenums if we refunded any */
-    mdbx_pnl_purge_odd(txn->tw.spill_pages, 1);
+    mdbx_spill_purge(txn);
 
   return true;
 }
@@ -4199,10 +4212,7 @@ static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
       mdbx_tassert(txn, i == 1 || txn->tw.spill_pages[i - 1] >= (pgno + npages)
                                                                     << 1);
 #endif
-      if (i == MDBX_PNL_SIZE(txn->tw.spill_pages))
-        MDBX_PNL_SIZE(txn->tw.spill_pages) -= 1;
-      else
-        txn->tw.spill_pages[i] |= 1;
+      mdbx_spill_remove(txn, i);
       int rc = mdbx_page_loose(txn, mp);
       if (unlikely(rc != MDBX_SUCCESS))
         mc->mc_flags &= ~(C_INITIALIZED | C_EOF);
@@ -4360,6 +4370,7 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
 
   int rc;
   if (!txn->tw.spill_pages) {
+    txn->tw.spill_least_removed = INT_MAX;
     txn->tw.spill_pages = mdbx_pnl_alloc(spill);
     if (unlikely(!txn->tw.spill_pages)) {
       rc = MDBX_ENOMEM;
@@ -4367,7 +4378,7 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
     }
   } else {
     /* purge deleted slots */
-    mdbx_pnl_purge_odd(txn->tw.spill_pages, 1);
+    mdbx_spill_purge(txn);
     rc = mdbx_pnl_reserve(&txn->tw.spill_pages, spill);
     (void)rc /* ignore since the resulting list may be shorter
      and mdbx_pnl_append() will increase pnl on demand */
@@ -5672,10 +5683,7 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
       /* If in current txn, this page is no longer spilled.
        * If it happens to be the last page, truncate the spill list.
        * Otherwise mark it as deleted by setting the LSB. */
-      if (i == MDBX_PNL_SIZE(txn->tw.spill_pages))
-        MDBX_PNL_SIZE(txn->tw.spill_pages) -= 1;
-      else
-        txn->tw.spill_pages[i] |= 1;
+      mdbx_spill_remove(txn, i);
     } /* otherwise, if belonging to a parent txn, the
        * page remains spilled until child commits */
 
@@ -8334,29 +8342,28 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     MDBX_dpl *const src = mdbx_dpl_sort(txn->tw.dirtylist);
     if (likely(src->length > 0) && parent->tw.spill_pages &&
         MDBX_PNL_SIZE(parent->tw.spill_pages) > 0) {
-      const MDBX_PNL sp = parent->tw.spill_pages;
-      mdbx_tassert(txn, mdbx_pnl_check4assert(sp, txn->mt_next_pgno << 1 | 1));
+      mdbx_tassert(txn, mdbx_pnl_check4assert(parent->tw.spill_pages,
+                                              txn->mt_next_pgno << 1 | 1));
 
       /* Mark our dirty pages as deleted in parent spill list */
-      size_t r, w, i = 1;
-      w = r = MDBX_PNL_SIZE(sp);
+      size_t pi = MDBX_PNL_SIZE(parent->tw.spill_pages), si = 1;
       do {
-        pgno_t pn = src->items[i].pgno << 1;
-        while (pn > sp[r])
-          --r;
-        if (pn == sp[r]) {
-          sp[r] = 1;
-          w = --r;
-        }
-      } while (++i <= src->length);
+        pgno_t pgno = src->items[si].pgno << 1;
+        while (pgno > parent->tw.spill_pages[pi])
+          --pi;
+        if (pgno == parent->tw.spill_pages[pi])
+          mdbx_spill_remove(parent, pi);
+      } while (++si <= src->length);
 
       /* Squash deleted pagenums if we deleted any */
-      mdbx_pnl_purge_odd(sp, w + 1);
-      assert(mdbx_pnl_check4assert(sp, txn->mt_next_pgno << 1));
+      mdbx_spill_purge(parent);
+      assert(mdbx_pnl_check4assert(parent->tw.spill_pages,
+                                   txn->mt_next_pgno << 1));
     }
 
     /* Remove anything in our spill list from parent's dirty list */
     if (txn->tw.spill_pages && MDBX_PNL_SIZE(txn->tw.spill_pages) > 0) {
+      mdbx_spill_purge(txn);
       const MDBX_PNL sp = txn->tw.spill_pages;
       mdbx_pnl_sort(sp);
       /* Scanning in ascend order */
@@ -8444,6 +8451,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
         mdbx_pnl_free(txn->tw.spill_pages);
       } else {
         parent->tw.spill_pages = txn->tw.spill_pages;
+        parent->tw.spill_least_removed = txn->tw.spill_least_removed;
       }
     }
 

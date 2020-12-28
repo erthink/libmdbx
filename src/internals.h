@@ -827,6 +827,7 @@ struct MDBX_txn {
        * because the dirty list was full. page numbers in here are
        * shifted left by 1, deleted slots have the LSB set. */
       MDBX_PNL spill_pages;
+      unsigned spill_least_removed;
     } tw;
   };
 };
