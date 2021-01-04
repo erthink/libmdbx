@@ -6005,13 +6005,11 @@ static void mdbx_cursors_eot(MDBX_txn *txn, const bool merge) {
         if (stage == MDBX_MC_WAIT4EOT /* Cursor was closed by user */)
           mc->mc_signature = stage /* Promote closed state to parent txn */;
         else if (merge) {
-          /* Preserve changes from nested to parent txn */
+          /* Restore pointers to parent txn */
           mc->mc_next = bk->mc_next;
           mc->mc_backup = bk->mc_backup;
           mc->mc_txn = bk->mc_txn;
-          *bk->mc_db = *mc->mc_db;
           mc->mc_db = bk->mc_db;
-          *bk->mc_dbistate = *mc->mc_dbistate;
           mc->mc_dbistate = bk->mc_dbistate;
           if (mx) {
             if (mx != bk->mc_xcursor) {
