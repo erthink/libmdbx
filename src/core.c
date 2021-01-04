@@ -8229,8 +8229,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
                          (parent->mt_flags & MDBX_TXN_HAS_CHILD) != 0);
     mdbx_assert(env, mdbx_dirtylist_check(txn));
 
-    if (txn->tw.dirtylist->length == 0 &&
-        (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0 &&
+    if (txn->tw.dirtylist->length == 0 && !(txn->mt_flags & MDBX_TXN_DIRTY) &&
         parent->mt_numdbs == txn->mt_numdbs) {
       for (int i = txn->mt_numdbs; --i >= 0;) {
         mdbx_tassert(txn, (txn->mt_dbistate[i] & DBI_DIRTY) == 0);
@@ -8244,6 +8243,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
                                sizeof(parent->mt_geo)) == 0);
       mdbx_tassert(txn, memcmp(&parent->mt_canary, &txn->mt_canary,
                                sizeof(parent->mt_canary)) == 0);
+      mdbx_tassert(txn, !txn->tw.spill_pages ||
+                            MDBX_PNL_SIZE(txn->tw.spill_pages) == 0);
+      mdbx_tassert(txn, txn->tw.loose_count == 0);
 
       end_mode = MDBX_END_PURE_COMMIT | MDBX_END_SLOT | MDBX_END_FREE;
       goto done;
