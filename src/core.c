@@ -8092,7 +8092,7 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
 
     /* Don't flush this page yet */
     if (dp->mp_flags & P_KEEP) {
-      dp->mp_flags &= ~P_KEEP;
+      dp->mp_flags -= P_KEEP;
       dl->items[++w] = dl->items[r];
       continue;
     }
@@ -8106,7 +8106,7 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
     flush_end =
         (flush_end > dp->mp_pgno + npages) ? flush_end : dp->mp_pgno + npages;
     *env->me_unsynced_pages += npages;
-    dp->mp_flags &= ~P_DIRTY;
+    dp->mp_flags -= P_DIRTY;
     dp->mp_txnid = pp_txnid2chk(txn);
 
     if ((env->me_flags & MDBX_WRITEMAP) == 0) {
