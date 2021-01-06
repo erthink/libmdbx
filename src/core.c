@@ -8295,9 +8295,14 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     parent->mt_dbistate[FREE_DBI] = txn->mt_dbistate[FREE_DBI];
     parent->mt_dbistate[MAIN_DBI] = txn->mt_dbistate[MAIN_DBI];
     for (unsigned i = CORE_DBS; i < txn->mt_numdbs; i++) {
-      /* preserve parent's DB_NEW status */
-      parent->mt_dbistate[i] = txn->mt_dbistate[i] | (parent->mt_dbistate[i] &
-                                                      (DBI_CREAT | DBI_FRESH));
+      /* preserve parent's status */
+      const uint8_t state =
+          txn->mt_dbistate[i] |
+          (parent->mt_dbistate[i] & (DBI_CREAT | DBI_FRESH | DBI_DIRTY));
+      mdbx_debug("db %u dbi-state %s 0x%02x -> 0x%02x", i,
+                 (parent->mt_dbistate[i] != state) ? "update" : "still",
+                 parent->mt_dbistate[i], state);
+      parent->mt_dbistate[i] = state;
     }
     ts_1 = latency ? mdbx_osal_monotime() : 0;
 
@@ -8537,6 +8542,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
           goto fail;
         }
         MDBX_db *db = &txn->mt_dbs[i];
+        mdbx_debug("update main's entry for sub-db %u, mod_txnid %" PRIaTXN
+                   " -> %" PRIaTXN,
+                   i, pp_txnid2chk(txn), db->md_mod_txnid);
         db->md_mod_txnid = pp_txnid2chk(txn);
         data.iov_base = db;
         WITH_CURSOR_TRACKING(couple.outer,
