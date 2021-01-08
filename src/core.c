@@ -7615,7 +7615,7 @@ retry_noaccount:
                          txn->mt_txnid, txn->mt_dbs[FREE_DBI].md_root, i);
         for (; i; i--)
           mdbx_debug_extra_print(" %" PRIaPGNO, txn->tw.retired_pages[i]);
-        mdbx_debug_extra_print("%s", "\n");
+        mdbx_debug_extra_print("%s\n", ".");
       }
       if (unlikely(amount != MDBX_PNL_SIZE(txn->tw.reclaimed_pglist))) {
         mdbx_trace("%s.reclaimed-list changed %u -> %u, retry", dbg_prefix_mode,
@@ -7986,6 +7986,13 @@ retry_noaccount:
                        ? cleaned_gc_slot < MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)
                        : cleaned_gc_id < txn->tw.last_reclaimed)) {
         mdbx_notice("%s", "** restart: reclaimed-slots changed");
+        goto retry;
+      }
+      if (unlikely(retired_stored != MDBX_PNL_SIZE(txn->tw.retired_pages))) {
+        mdbx_tassert(txn,
+                     retired_stored < MDBX_PNL_SIZE(txn->tw.retired_pages));
+        mdbx_notice("** restart: retired-list growth (%u -> %u)",
+                    retired_stored, MDBX_PNL_SIZE(txn->tw.retired_pages));
         goto retry;
       }
 
