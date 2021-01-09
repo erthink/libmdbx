@@ -8066,10 +8066,8 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
     rc = mdbx_pwritev(env->me_lazy_fd, iov, iov_items, iov_off, iov_bytes);
   }
 
-  if (unlikely(rc != MDBX_SUCCESS)) {
+  if (unlikely(rc != MDBX_SUCCESS))
     mdbx_error("Write error: %s", mdbx_strerror(rc));
-    txn->mt_flags |= MDBX_TXN_ERROR;
-  }
 
   for (unsigned i = 0; i < iov_items; i++)
     mdbx_dpage_free(env, (MDBX_page *)iov[i].iov_base,
@@ -8087,9 +8085,11 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
   MDBX_env *const env = txn->mt_env;
   pgno_t flush_begin = MAX_PAGENO;
   pgno_t flush_end = MIN_PAGENO;
+  int rc = MDBX_SUCCESS;
   unsigned iov_items = 0;
   size_t iov_bytes = 0;
   size_t iov_off = 0;
+
   size_t r, w;
   for (r = w = keep; ++r <= dl->length;) {
     MDBX_page *dp = dl->items[r].ptr;
@@ -8121,9 +8121,7 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
       if (iov_off + iov_bytes != pgno2bytes(env, dp->mp_pgno) ||
           iov_items == ARRAY_LENGTH(iov) || iov_bytes + size > MAX_WRITE) {
         if (iov_items) {
-          int rc = mdbx_flush_iov(txn, iov, iov_items, iov_off, iov_bytes);
-          if (unlikely(rc != MDBX_SUCCESS))
-            return rc;
+          rc = mdbx_flush_iov(txn, iov, iov_items, iov_off, iov_bytes);
 #if defined(__linux__) || defined(__gnu_linux__)
           if (mdbx_linux_kernel_version >= 0x02060b00)
           /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
@@ -8134,6 +8132,12 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
                                        env->me_os_psize);
           iov_items = 0;
           iov_bytes = 0;
+          if (unlikely(rc != MDBX_SUCCESS)) {
+            do
+              dl->items[++w] = dl->items[r];
+            while (++r <= dl->length);
+            break;
+          }
         }
         iov_off = pgno2bytes(env, dp->mp_pgno);
       }
@@ -8144,10 +8148,20 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
     }
   }
 
-  if (iov_items) {
-    int rc = mdbx_flush_iov(txn, iov, iov_items, iov_off, iov_bytes);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+  mdbx_tassert(txn, dl->sorted == dl->length && r == dl->length + 1);
+  txn->tw.dirtyroom += dl->length - (unsigned)w;
+  assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
+  dl->sorted = dl->length = (unsigned)w;
+  mdbx_tassert(txn, txn->mt_parent ||
+                        txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                            txn->mt_env->me_options.dp_limit);
+
+  if (iov_items)
+    rc = mdbx_flush_iov(txn, iov, iov_items, iov_off, iov_bytes);
+
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    txn->mt_flags |= MDBX_TXN_ERROR;
+    return rc;
   }
 
 #if defined(__linux__) || defined(__gnu_linux__)
@@ -8164,12 +8178,6 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
   /* TODO: use flush_begin & flush_end for msync() & sync_file_range(). */
   (void)flush_begin;
   (void)flush_end;
-
-  txn->tw.dirtyroom += (unsigned)(r - 1 - w);
-  dl->sorted = dl->length = (unsigned)w;
-  mdbx_tassert(txn, txn->mt_parent ||
-                        txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                            txn->mt_env->me_options.dp_limit);
   return MDBX_SUCCESS;
 }
 
