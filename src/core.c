@@ -13704,8 +13704,8 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
   if (unlikely((rc = mdbx_page_alloc(mc, num, &np, MDBX_ALLOC_ALL))))
     return rc;
   *mp = np;
-  mdbx_debug("db %u allocated new page #%" PRIaPGNO ", size %u", mc->mc_dbi,
-             np->mp_pgno, mc->mc_txn->mt_env->me_psize);
+  mdbx_debug("db %u allocated new page %" PRIaPGNO ", num %u", mc->mc_dbi,
+             np->mp_pgno, num);
   np->mp_flags = (uint16_t)(flags | P_DIRTY);
   np->mp_txnid = INVALID_TXNID;
   np->mp_lower = 0;
