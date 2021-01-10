@@ -583,7 +583,7 @@ __cold static int MDBX_PRINTF_ARGS(2, 3)
     if (prev != mp) {
       prev = mp;
       mdbx_debug_log(MDBX_LOG_ERROR, "badpage", 0,
-                     "corrupted page #%u, mod-txnid %" PRIaTXN " \n",
+                     "corrupted page #%u, mod-txnid %" PRIaTXN "\n",
                      mp->mp_pgno, mp->mp_txnid);
     }
 
