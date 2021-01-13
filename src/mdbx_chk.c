@@ -1593,7 +1593,7 @@ int main(int argc, char *argv[]) {
               walk.pgcount, alloc_pages - gc_pages);
       }
       if (unused_pages != gc_pages) {
-        error("gc pages mismatch (%" PRIu64 "(walked) != %" PRIu64 "(GC))\n",
+        error("gc pages mismatch (%" PRIu64 "(expected) != %" PRIu64 "(GC))\n",
               unused_pages, gc_pages);
       }
     } else if (verbose) {
