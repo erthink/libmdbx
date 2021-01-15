@@ -5149,21 +5149,27 @@ static __inline txnid_t pp_txnid2chk(const MDBX_txn *txn) {
 __hot static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
                                  MDBX_page **const mp, int flags) {
   int rc;
-  MDBX_txn *txn = mc->mc_txn;
-  MDBX_env *env = txn->mt_env;
+  MDBX_txn *const txn = mc->mc_txn;
+  MDBX_env *const env = txn->mt_env;
   MDBX_page *np;
 
+  const unsigned coalesce_threshold =
+      env->me_maxgc_ov1page - env->me_maxgc_ov1page / 4;
   if (likely(flags & MDBX_ALLOC_GC)) {
     flags |= env->me_flags & (MDBX_COALESCE | MDBX_LIFORECLAIM);
-    if (unlikely(mc->mc_flags & C_RECLAIMING)) {
-      /* If mc is updating the GC, then the retired-list cannot play
-       * catch-up with itself by growing while trying to save it. */
-      flags &= ~MDBX_ALLOC_GC;
-    } else if (unlikely(txn->mt_dbs[FREE_DBI].md_entries == 0)) {
-      /* avoid (recursive) search inside empty tree and while tree is updating,
-       * https://github.com/erthink/libmdbx/issues/31 */
-      flags &= ~MDBX_ALLOC_GC;
-    }
+    if (MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) > coalesce_threshold)
+      flags &= ~MDBX_COALESCE;
+    if (unlikely(
+            /* If mc is updating the GC, then the retired-list cannot play
+               catch-up with itself by growing while trying to save it. */
+            (mc->mc_flags & C_RECLAIMING) ||
+            /* avoid (recursive) search inside empty tree and while tree is
+               updating, https://github.com/erthink/libmdbx/issues/31 */
+            txn->mt_dbs[FREE_DBI].md_entries == 0 ||
+            /* If our dirty list is already full, we can't touch GC */
+            (txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth &&
+             !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY))))
+      flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
   }
 
   if (likely(num == 1 && (flags & MDBX_ALLOC_CACHE) != 0)) {
@@ -5209,8 +5215,8 @@ skip_cache:
        * Prefer pages with lower pgno. */
       mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                               txn->mt_next_pgno));
-      if (likely(flags & MDBX_ALLOC_CACHE) && re_len > wanna_range &&
-          (!(flags & MDBX_COALESCE) || op == MDBX_FIRST)) {
+      if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) == MDBX_ALLOC_CACHE &&
+          re_len > wanna_range) {
         mdbx_tassert(txn, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
                               MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
         range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
@@ -5240,11 +5246,6 @@ skip_cache:
       }
 
       if (op == MDBX_FIRST) { /* 1st iteration, setup cursor, etc */
-        if (unlikely(txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth) &&
-            !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY)) {
-          /* If our dirty list is already full, we can't touch GC */
-          flags &= ~MDBX_ALLOC_GC;
-        }
         if (unlikely(!(flags & MDBX_ALLOC_GC)))
           break /* reclaiming is prohibited for now */;
 
@@ -5364,7 +5365,7 @@ skip_cache:
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
-        flags &= ~MDBX_ALLOC_GC;
+        flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
         break;
       }
       rc = mdbx_pnl_need(&txn->tw.reclaimed_pglist, gc_len);
@@ -5397,6 +5398,7 @@ skip_cache:
         rc = MDBX_CORRUPTED;
         goto fail;
       }
+      mdbx_tassert(txn, mdbx_dirtylist_check(txn));
 
       re_len = MDBX_PNL_SIZE(re_list);
       mdbx_tassert(txn, re_len == 0 || re_list[re_len] < txn->mt_next_pgno);
@@ -5407,44 +5409,20 @@ skip_cache:
         re_len = MDBX_PNL_SIZE(re_list);
       }
 
-      if (unlikely((flags & MDBX_ALLOC_CACHE) == 0)) {
-        /* Done for a kick-reclaim mode, actually no page needed */
+      /* Done for a kick-reclaim mode, actually no page needed */
+      if (unlikely((flags & MDBX_ALLOC_CACHE) == 0))
         return MDBX_SUCCESS;
-      }
 
       /* Don't try to coalesce too much. */
-      if (re_len /* current size */ >= env->me_maxgc_ov1page ||
+      if (re_len /* current size */ > coalesce_threshold ||
           (re_len > prev_re_len && re_len - prev_re_len /* delta from prev */ >=
-                                       env->me_maxgc_ov1page / 2))
+                                       coalesce_threshold / 2))
         flags &= ~MDBX_COALESCE;
     }
 
-    if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) == MDBX_ALLOC_CACHE &&
-        re_len > wanna_range) {
-      range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
-      pgno = MDBX_PNL_LEAST(re_list);
-      if (likely(wanna_range == 0))
-        goto done;
-#if MDBX_PNL_ASCENDING
-      mdbx_tassert(txn, pgno == re_list[1] && range_begin == 1);
-      while (true) {
-        unsigned range_end = range_begin + wanna_range;
-        if (re_list[range_end] - pgno == wanna_range)
-          goto done;
-        if (range_end == re_len)
-          break;
-        pgno = re_list[++range_begin];
-      }
-#else
-      mdbx_tassert(txn, pgno == re_list[re_len] && range_begin == re_len);
-      while (true) {
-        if (re_list[range_begin - wanna_range] - pgno == wanna_range)
-          goto done;
-        if (range_begin == wanna_range)
-          break;
-        pgno = re_list[--range_begin];
-      }
-#endif /* MDBX_PNL sort-order */
+    if (F_ISSET(flags, MDBX_COALESCE | MDBX_ALLOC_CACHE)) {
+      flags -= MDBX_COALESCE;
+      continue;
     }
 
     /* There is no suitable pages in the GC and to be able to allocate
@@ -5572,7 +5550,7 @@ done:
   mdbx_ensure(env, pgno >= NUM_METAS);
   if (env->me_flags & MDBX_WRITEMAP) {
     np = pgno2page(env, pgno);
-    /* LY: reset no-access flag from mdbx_loose_page() */
+    /* LY: reset no-access flag from mdbx_page_loose() */
     VALGRIND_MAKE_MEM_UNDEFINED(np, pgno2bytes(env, num));
     ASAN_UNPOISON_MEMORY_REGION(np, pgno2bytes(env, num));
   } else {
