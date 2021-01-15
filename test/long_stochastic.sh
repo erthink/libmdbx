@@ -22,6 +22,7 @@ if [[ -v VALGRIND && ! -z "$VALGRIND" ]]; then
   rm -f valgrind-*.log
 else
   VALGRIND=time
+  export MALLOC_CHECK_=7 MALLOC_PERTURB_=42
 fi
 
 WANNA_MOUNT=0
