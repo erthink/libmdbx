@@ -5683,14 +5683,31 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *txn, MDBX_page *mp,
  *
  * Returns 0 on success, non-zero on failure. */
 __hot static int mdbx_page_touch(MDBX_cursor *mc) {
-  MDBX_page *mp = mc->mc_pg[mc->mc_top], *np;
+  MDBX_page *const mp = mc->mc_pg[mc->mc_top], *np;
   MDBX_txn *txn = mc->mc_txn;
   MDBX_cursor *m2, *m3;
   pgno_t pgno;
   int rc;
 
-  mdbx_cassert(mc, !IS_OVERFLOW(mp));
-  if (!F_ISSET(mp->mp_flags, P_DIRTY)) {
+  if (mdbx_assert_enabled()) {
+    if (mc->mc_dbi >= CORE_DBS) {
+      if (mc->mc_flags & C_SUB) {
+        MDBX_xcursor *mx = container_of(mc->mc_db, MDBX_xcursor, mx_db);
+        MDBX_cursor_couple *couple =
+            container_of(mx, MDBX_cursor_couple, inner);
+        mdbx_cassert(mc, mc->mc_db == &couple->outer.mc_xcursor->mx_db);
+        mdbx_cassert(mc, mc->mc_dbx == &couple->outer.mc_xcursor->mx_dbx);
+        mdbx_cassert(mc, *couple->outer.mc_dbistate & DBI_DIRTY);
+      } else {
+        mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
+      }
+      mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
+    }
+    mdbx_cassert(mc, !IS_OVERFLOW(mp));
+    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
+  }
+
+  if (!IS_DIRTY(mp)) {
     if (txn->mt_flags & MDBX_TXN_SPILLS) {
       np = NULL;
       rc = mdbx_page_unspill(txn, mp, &np);
@@ -5703,12 +5720,12 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     if (unlikely((rc = mdbx_pnl_need(&txn->tw.retired_pages, 1)) ||
                  (rc = mdbx_page_alloc(mc, 1, &np, MDBX_ALLOC_ALL))))
       goto fail;
+
     pgno = np->mp_pgno;
     mdbx_debug("touched db %d page %" PRIaPGNO " -> %" PRIaPGNO, DDBI(mc),
                mp->mp_pgno, pgno);
     mdbx_cassert(mc, mp->mp_pgno != pgno);
     mdbx_pnl_xappend(txn->tw.retired_pages, mp->mp_pgno);
-    mdbx_tassert(txn, mdbx_dpl_find(txn->tw.dirtylist, mp->mp_pgno) == nullptr);
     /* Update the parent page, if any, to point to the new page */
     if (mc->mc_top) {
       MDBX_page *parent = mc->mc_pg[mc->mc_top - 1];
@@ -5749,6 +5766,11 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
       mdbx_dpage_free(txn->mt_env, np, 1);
       goto fail;
     }
+
+    np->mp_pgno = pgno;
+    np->mp_txnid = INVALID_TXNID;
+    np->mp_flags |= P_DIRTY;
+    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
   } else {
     return MDBX_SUCCESS;
   }
@@ -12721,11 +12743,11 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
     rc = mdbx_cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
+    *mc->mc_dbistate |= DBI_DIRTY;
+    mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
     rc = mdbx_page_search(&cx.outer, &mc->mc_dbx->md_name, MDBX_PS_MODIFY);
     if (unlikely(rc))
       return rc;
-    *mc->mc_dbistate |= DBI_DIRTY;
-    mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
   }
   mc->mc_top = 0;
   if (mc->mc_snum) {
@@ -13034,8 +13056,6 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
                              mc->mc_xcursor->mx_dbx.md_klen_max =
                                  data->iov_len);
     }
-    *mc->mc_dbistate |= DBI_DIRTY;
-    mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
     if ((mc->mc_db->md_flags & (MDBX_DUPSORT | MDBX_DUPFIXED)) == MDBX_DUPFIXED)
       np->mp_flags |= P_LEAF2;
     mc->mc_flags |= C_INITIALIZED;
@@ -13689,6 +13709,8 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
   np->mp_lower = 0;
   np->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
 
+  *mc->mc_dbistate |= DBI_DIRTY;
+  mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
   mc->mc_db->md_branch_pages += IS_BRANCH(np);
   mc->mc_db->md_leaf_pages += IS_LEAF(np);
   if (unlikely(IS_OVERFLOW(np))) {
@@ -15099,6 +15121,7 @@ static void cursor_copy_internal(const MDBX_cursor *csrc, MDBX_cursor *cdst) {
   cdst->mc_snum = csrc->mc_snum;
   cdst->mc_top = csrc->mc_top;
   cdst->mc_flags = csrc->mc_flags;
+  cdst->mc_dbistate = csrc->mc_dbistate;
 
   for (unsigned i = 0; i < csrc->mc_snum; i++) {
     cdst->mc_pg[i] = csrc->mc_pg[i];
