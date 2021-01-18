@@ -3177,7 +3177,6 @@ uint8_t mdbx_runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
 uint8_t mdbx_loglevel = MDBX_LOG_FATAL;
 MDBX_debug_func *mdbx_debug_logger;
 
-static bool mdbx_refund(MDBX_txn *txn);
 static __must_check_result int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp);
 static __must_check_result int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp);
 static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
@@ -3861,6 +3860,7 @@ static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
   return true;
 }
 
+#if MDBX_ENABLE_REFUND
 static void mdbx_refund_reclaimed(MDBX_txn *txn) {
   /* Scanning in descend order */
   pgno_t next_pgno = txn->mt_next_pgno;
@@ -4049,6 +4049,13 @@ static bool mdbx_refund(MDBX_txn *txn) {
 
   return true;
 }
+#else  /* MDBX_ENABLE_REFUND */
+static __inline bool mdbx_refund(MDBX_txn *txn) {
+  (void)txn;
+  /* No online auto-compactification. */
+  return false;
+}
+#endif /* MDBX_ENABLE_REFUND */
 
 static __cold void mdbx_kill_page(MDBX_env *env, MDBX_page *mp, pgno_t pgno,
                                   unsigned npages) {
@@ -5176,11 +5183,13 @@ __hot static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
     /* If there are any loose pages, just use them */
     mdbx_assert(env, mp && num);
     if (likely(txn->tw.loose_pages)) {
+#if MDBX_ENABLE_REFUND
       if (txn->tw.loose_refund_wl > txn->mt_next_pgno) {
         mdbx_refund(txn);
         if (unlikely(!txn->tw.loose_pages))
-          goto skip_cache;
+          goto no_loose;
       }
+#endif /* MDBX_ENABLE_REFUND */
 
       np = txn->tw.loose_pages;
       txn->tw.loose_pages = np->mp_next;
@@ -5196,7 +5205,9 @@ __hot static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
       return MDBX_SUCCESS;
     }
   }
-skip_cache:
+#if MDBX_ENABLE_REFUND
+no_loose:
+#endif /* MDBX_ENABLE_REFUND */
 
   mdbx_tassert(
       txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist, txn->mt_next_pgno));
@@ -5402,7 +5413,8 @@ skip_cache:
 
       re_len = MDBX_PNL_SIZE(re_list);
       mdbx_tassert(txn, re_len == 0 || re_list[re_len] < txn->mt_next_pgno);
-      if (re_len && unlikely(MDBX_PNL_MOST(re_list) == txn->mt_next_pgno - 1)) {
+      if (MDBX_ENABLE_REFUND && re_len &&
+          unlikely(MDBX_PNL_MOST(re_list) == txn->mt_next_pgno - 1)) {
         /* Refund suitable pages into "unallocated" space */
         mdbx_refund(txn);
         re_list = txn->tw.reclaimed_pglist;
@@ -6460,7 +6472,9 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
     /* Moved to here to avoid a data race in read TXNs */
     txn->mt_geo = meta->mm_geo;
+#if MDBX_ENABLE_REFUND
     txn->tw.loose_refund_wl = txn->mt_next_pgno;
+#endif /* MDBX_ENABLE_REFUND */
   }
 
   /* Setup db info */
@@ -6715,7 +6729,9 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     txn->mt_txnid = parent->mt_txnid;
     txn->tw.dirtyroom = parent->tw.dirtyroom;
     txn->mt_geo = parent->mt_geo;
+#if MDBX_ENABLE_REFUND
     txn->tw.loose_refund_wl = parent->tw.loose_refund_wl;
+#endif
     txn->mt_canary = parent->mt_canary;
     parent->mt_flags |= MDBX_TXN_HAS_CHILD;
     parent->mt_child = txn;
@@ -8321,9 +8337,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
     ts_1 = latency ? mdbx_osal_monotime() : 0;
 
-    /* Remove refunded pages from parent's dirty & spill lists */
-    MDBX_dpl *const dst = mdbx_dpl_sort(parent->tw.dirtylist);
-    while (dst->length &&
+    /* Remove refunded pages from parent's dirty list */
+    MDBX_dpl *dst = mdbx_dpl_sort(parent->tw.dirtylist);
+    while (MDBX_ENABLE_REFUND && dst->length &&
            dst->items[dst->length].pgno >= parent->mt_next_pgno) {
       MDBX_page *mp = dst->items[dst->length].ptr;
       if (mp && (txn->mt_env->me_flags & MDBX_WRITEMAP) == 0)
@@ -8340,22 +8356,26 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     if (parent->tw.spill_pages && MDBX_PNL_SIZE(parent->tw.spill_pages) > 0 &&
         MDBX_PNL_MOST(parent->tw.spill_pages) >= parent->mt_next_pgno << 1) {
       const MDBX_PNL ps = parent->tw.spill_pages;
+      /* Remove refunded pages from parent's spill list */
+      if (MDBX_ENABLE_REFUND && MDBX_PNL_MOST(parent->tw.spill_pages) >=
+                                    (parent->mt_next_pgno << 1)) {
 #if MDBX_PNL_ASCENDING
-      unsigned i = MDBX_PNL_SIZE(ps);
-      assert(MDBX_PNL_MOST(ps) == MDBX_PNL_LAST(ps));
-      do
-        i -= 1;
-      while (i && ps[i] >= parent->mt_next_pgno << 1);
-      MDBX_PNL_SIZE(ps) = i;
+        unsigned i = MDBX_PNL_SIZE(ps);
+        assert(MDBX_PNL_MOST(ps) == MDBX_PNL_LAST(ps));
+        do
+          i -= 1;
+        while (i && ps[i] >= parent->mt_next_pgno << 1);
+        MDBX_PNL_SIZE(ps) = i;
 #else
-      assert(MDBX_PNL_MOST(ps) == MDBX_PNL_FIRST(ps));
-      unsigned i = 1, len = MDBX_PNL_SIZE(ps);
-      while (i < len && ps[i + 1] >= parent->mt_next_pgno << 1)
-        ++i;
-      MDBX_PNL_SIZE(ps) = len -= i;
-      for (unsigned k = 1; k <= len; ++k)
-        ps[k] = ps[k + i];
+        assert(MDBX_PNL_MOST(ps) == MDBX_PNL_FIRST(ps));
+        unsigned i = 1, len = MDBX_PNL_SIZE(ps);
+        while (i < len && ps[i + 1] >= parent->mt_next_pgno << 1)
+          ++i;
+        MDBX_PNL_SIZE(ps) = len -= i;
+        for (unsigned k = 1; k <= len; ++k)
+          ps[k] = ps[k + i];
 #endif
+      }
     }
 
     /* Remove anything in our dirty list from parent's spill list */
@@ -8507,12 +8527,10 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     parent->mt_child = NULL;
     mdbx_tassert(parent, mdbx_dirtylist_check(parent));
 
-    /* Scan parent's loose page for suitable for refund */
-    for (MDBX_page *mp = parent->tw.loose_pages; mp; mp = mp->mp_next) {
-      if (mp->mp_pgno == parent->mt_next_pgno - 1) {
-        mdbx_refund(parent);
-        break;
-      }
+    if (MDBX_ENABLE_REFUND && mdbx_audit_enabled()) {
+      /* Check parent's loose page not suitable for refund */
+      for (MDBX_page *lp = parent->tw.loose_pages; lp; lp = lp->mp_next)
+        mdbx_tassert(parent, lp->mp_pgno < parent->mt_next_pgno);
     }
 
     ts_4 = ts_3 = latency ? mdbx_osal_monotime() : 0;
@@ -20212,6 +20230,7 @@ __dll_export
     " MDBX_64BIT_ATOMIC=" MDBX_64BIT_ATOMIC_CONFIG
     " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
     " MDBX_TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
+    " MDBX_ENABLE_REFUND=" STRINGIFY(MDBX_ENABLE_REFUND)
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */
