@@ -820,11 +820,6 @@ struct MDBX_txn {
       MDBX_page *loose_pages;
       /* Number of loose pages (tw.loose_pages) */
       unsigned loose_count;
-      /* Number of retired to parent pages (tw.retired2parent_pages) */
-      unsigned retired2parent_count;
-      /* The list of parent's txn dirty pages that retired (became unused)
-       * in this transaction, linked through `mp_next`. */
-      MDBX_page *retired2parent_pages;
       /* The sorted list of dirty pages we temporarily wrote to disk
        * because the dirty list was full. page numbers in here are
        * shifted left by 1, deleted slots have the LSB set. */
