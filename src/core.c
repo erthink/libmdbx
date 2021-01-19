@@ -9871,6 +9871,12 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   env->me_psize2log = (uint8_t)log2n(pagesize);
   mdbx_assert(env, pgno2bytes(env, 1) == pagesize);
   mdbx_assert(env, bytes2pgno(env, pagesize + pagesize) == 2);
+
+  const pgno_t max_pgno = bytes2pgno(env, MAX_MAPSIZE);
+  if (env->me_options.dp_limit > max_pgno - NUM_METAS)
+    env->me_options.dp_limit = max_pgno - NUM_METAS;
+  if (env->me_options.dp_initial > env->me_options.dp_limit)
+    env->me_options.dp_initial = env->me_options.dp_limit;
 }
 
 __cold int mdbx_env_create(MDBX_env **penv) {
@@ -9889,7 +9895,11 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_options.dp_reserve_limit = 1024;
   env->me_options.rp_augment_limit = 1024 * 1024;
   env->me_options.dp_limit = 1024 * 1024;
+  if (env->me_options.dp_limit > MAX_PAGENO - NUM_METAS)
+    env->me_options.dp_limit = MAX_PAGENO - NUM_METAS;
   env->me_options.dp_initial = MDBX_PNL_INITIAL;
+  if (env->me_options.dp_initial > env->me_options.dp_limit)
+    env->me_options.dp_initial = env->me_options.dp_limit;
 
   int rc;
   const size_t os_psize = mdbx_syspagesize();
@@ -20381,7 +20391,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_txn_dp_limit:
   case MDBX_opt_txn_dp_initial:
-    if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4))
+    if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4 ||
+                 value > bytes2pgno(env, env->me_dbgeo.upper) - NUM_METAS))
       return MDBX_EINVAL;
     if (unlikely(env->me_txn0 == NULL))
       return MDBX_EACCESS;
