@@ -3303,7 +3303,7 @@ static int __must_check_result mdbx_page_search(MDBX_cursor *mc,
 static int __must_check_result mdbx_page_merge(MDBX_cursor *csrc,
                                                MDBX_cursor *cdst);
 static int __must_check_result mdbx_page_flush(MDBX_txn *txn,
-                                               const size_t keep);
+                                               const unsigned keep);
 
 #define MDBX_SPLIT_REPLACE MDBX_APPENDDUP /* newkey is not new */
 static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
@@ -4531,8 +4531,10 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
   if (likely(txn->tw.dirtyroom > need))
     return MDBX_SUCCESS;
 
-  const size_t spill_min = (txn->tw.dirtylist->length / /* TODO: options */ 8);
-  const size_t spill_max = (txn->tw.dirtylist->length / /* TODO: options */ 1);
+  const unsigned spill_min =
+      (txn->tw.dirtylist->length / /* TODO: options */ 8);
+  const unsigned spill_max =
+      (txn->tw.dirtylist->length / /* TODO: options */ 1);
   unsigned spill = need - txn->tw.dirtyroom;
   spill = (spill < spill_max) ? spill : spill_max;
   spill = (spill > spill_min) ? spill : spill_min;
@@ -4566,7 +4568,7 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
   /* flush from the tail forward, this saves a lot of shifting later on. */
   const unsigned dl_len_before = dl->length;
   unsigned spilled = 0;
-  size_t keep = dl_len_before;
+  unsigned keep = dl_len_before;
   for (; keep && spill; keep--) {
     const pgno_t pgno = dl->items[keep].pgno;
     MDBX_page *dp = dl->items[keep].ptr;
@@ -4626,7 +4628,7 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
 
   /* Estimate how much space this operation will take: */
   /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
-  size_t need = CURSOR_STACK + 3;
+  unsigned need = CURSOR_STACK + 3;
   /* 2) GC/FreeDB for any payload */
   if (mc->mc_dbi > FREE_DBI) {
     need += txn->mt_dbs[FREE_DBI].md_depth + 3;
@@ -8421,7 +8423,7 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
  * [in] txn   the transaction that's being committed
  * [in] keep  number of initial pages in dirtylist to keep dirty.
  * Returns 0 on success, non-zero on failure. */
-__hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
+__hot static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
   struct iovec iov[MDBX_COMMIT_PAGES];
   MDBX_dpl *const dl = mdbx_dpl_sort(txn->tw.dirtylist);
   MDBX_env *const env = txn->mt_env;
@@ -8432,7 +8434,7 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
   size_t iov_bytes = 0;
   size_t iov_off = 0;
 
-  size_t r, w;
+  unsigned r, w;
   for (r = w = keep; ++r <= dl->length;) {
     MDBX_page *dp = dl->items[r].ptr;
     mdbx_tassert(txn,
@@ -8491,9 +8493,9 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const size_t keep) {
   }
 
   mdbx_tassert(txn, dl->sorted == dl->length && r == dl->length + 1);
-  txn->tw.dirtyroom += dl->length - (unsigned)w;
+  txn->tw.dirtyroom += dl->length - w;
   assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
-  dl->sorted = dl->length = (unsigned)w;
+  dl->sorted = dl->length = w;
   mdbx_tassert(txn, txn->mt_parent ||
                         txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                             txn->mt_env->me_options.dp_limit);
