@@ -6875,6 +6875,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                       MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
+    mdbx_tassert(parent, mdbx_audit_ex(parent, 0, false) == 0);
 
     flags |= parent->mt_flags & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS);
     /* Child txns save MDBX_pgstate and use own copy of cursors */
@@ -7526,8 +7527,6 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
   if ((txn->mt_flags & MDBX_TXN_RDONLY) == 0) {
     pending = txn->tw.loose_count + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) +
               (MDBX_PNL_SIZE(txn->tw.retired_pages) - retired_stored);
-    for (MDBX_txn *parent = txn->mt_parent; parent; parent = parent->mt_parent)
-      pending += parent->tw.loose_count;
   }
 
   MDBX_cursor_couple cx;
@@ -7591,10 +7590,8 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
                   memcmp(node_key(node), txn->mt_dbxs[k].md_name.iov_base,
                          node_ks(node)) == 0) {
                 txn->mt_dbistate[k] |= DBI_AUDITED;
-                if (txn->mt_dbistate[k] & DBI_DIRTY) {
-                  mdbx_tassert(txn, (txn->mt_dbistate[k] & DBI_STALE) == 0);
+                if (!(txn->mt_dbistate[k] & MDBX_DBI_STALE))
                   db = txn->mt_dbs + k;
-                }
                 break;
               }
             }
@@ -7612,10 +7609,14 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
     if ((txn->mt_dbistate[i] & (DBI_VALID | DBI_AUDITED | DBI_STALE)) !=
         DBI_VALID)
       continue;
-    if (F_ISSET(txn->mt_dbistate[i], DBI_DIRTY | DBI_CREAT)) {
-      count += txn->mt_dbs[i].md_branch_pages + txn->mt_dbs[i].md_leaf_pages +
-               txn->mt_dbs[i].md_overflow_pages;
-    } else {
+    for (MDBX_txn *t = txn; t; t = t->mt_parent)
+      if (F_ISSET(t->mt_dbistate[i], DBI_DIRTY | DBI_CREAT)) {
+        count += t->mt_dbs[i].md_branch_pages + t->mt_dbs[i].md_leaf_pages +
+                 t->mt_dbs[i].md_overflow_pages;
+        txn->mt_dbistate[i] |= DBI_AUDITED;
+        break;
+      }
+    if (!(txn->mt_dbistate[i] & DBI_AUDITED)) {
       mdbx_warning("audit %s@%" PRIaTXN
                    ": unable account dbi %d / \"%*s\", state 0x%02x",
                    txn->mt_parent ? "nested-" : "", txn->mt_txnid, i,
@@ -8917,6 +8918,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   if (txn->mt_parent) {
+    mdbx_tassert(txn, mdbx_audit_ex(txn, 0, false) == 0);
     mdbx_assert(env, txn != env->me_txn0);
     MDBX_txn *const parent = txn->mt_parent;
     mdbx_assert(env, parent->mt_signature == MDBX_MT_SIGNATURE);
@@ -9047,7 +9049,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     ts_4 = ts_3 = latency ? mdbx_osal_monotime() : 0;
     txn->mt_signature = 0;
     mdbx_free(txn);
-    mdbx_tassert(parent, mdbx_dirtylist_check(parent));
+    mdbx_tassert(parent, mdbx_audit_ex(parent, 0, false) == 0);
     rc = MDBX_SUCCESS;
     goto provide_latency;
   }
