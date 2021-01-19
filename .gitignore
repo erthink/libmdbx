@@ -8,6 +8,9 @@
 *.orig
 *.rej
 *.so
+*.dll
+*.dylib
+*.dSYM
 *[~#]
 .idea
 .le.ini

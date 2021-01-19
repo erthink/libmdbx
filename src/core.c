@@ -4415,7 +4415,7 @@ bailout:
 /*----------------------------------------------------------------------------*/
 
 static __always_inline bool meta_bootid_match(const MDBX_meta *meta) {
-  return meta->mm_bootid.x == bootid.x && meta->mm_bootid.y == bootid.y &&
+  return memcmp(&meta->mm_bootid, &bootid, 16) == 0 &&
          (bootid.x | bootid.y) != 0;
 }
 
@@ -4467,7 +4467,7 @@ static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
   mdbx_assert(env, unaligned_peek_u64(4, meta->mm_txnid_b) < txnid);
   (void)env;
   mdbx_jitter4testing(true);
-  meta->mm_bootid = bootid;
+  memcpy(&meta->mm_bootid, &bootid, 16);
   unaligned_poke_u64(4, meta->mm_txnid_b, txnid);
 }
 
@@ -4477,7 +4477,7 @@ static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
   (void)env;
   /* update inconsistent since this function used ONLY for filling meta-image
    * for writing, but not the actual meta-page */
-  meta->mm_bootid = bootid;
+  memcpy(&meta->mm_bootid, &bootid, 16);
   unaligned_poke_u64(4, meta->mm_txnid_a, txnid);
   unaligned_poke_u64(4, meta->mm_txnid_b, txnid);
 }
@@ -17328,12 +17328,9 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     arg->mi_meta2_txnid = mdbx_meta_txnid_fluid(env, meta2);
     arg->mi_meta2_sign = unaligned_peek_u64(4, meta2->mm_datasync_sign);
     if (likely(bytes > size_before_bootid)) {
-      arg->mi_bootid.meta0.x = meta0->mm_bootid.x;
-      arg->mi_bootid.meta1.x = meta0->mm_bootid.x;
-      arg->mi_bootid.meta2.x = meta0->mm_bootid.x;
-      arg->mi_bootid.meta0.y = meta0->mm_bootid.y;
-      arg->mi_bootid.meta1.y = meta0->mm_bootid.y;
-      arg->mi_bootid.meta2.y = meta0->mm_bootid.y;
+      memcpy(&arg->mi_bootid.meta0, &meta0->mm_bootid, 16);
+      memcpy(&arg->mi_bootid.meta1, &meta1->mm_bootid, 16);
+      memcpy(&arg->mi_bootid.meta2, &meta2->mm_bootid, 16);
     }
 
     const MDBX_meta *txn_meta = recent_meta;

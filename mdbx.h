@@ -823,7 +823,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
  * \param [in] env  An environment handle returned by \ref mdbx_env_create().
  * \param [in] msg  The assertion message, not including newline. */
 typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
-                             int line, const char *msg,
+                             int line, const char *fmt,
                              va_list args) MDBX_CXX17_NOEXCEPT;
 
 /** \brief The "don't change `logger`" value for mdbx_setup_debug() */
