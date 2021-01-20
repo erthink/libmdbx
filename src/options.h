@@ -98,6 +98,16 @@
 #error MDBX_ENABLE_REFUND must be defined as 0 or 1
 #endif /* MDBX_ENABLE_REFUND */
 
+/** Controls sort order of internal page number lists.
+ * The database format depend on this option and libmdbx builded with different
+ * option value are incompatible. */
+#ifndef MDBX_PNL_ASCENDING
+#define MDBX_PNL_ASCENDING 0
+#endif
+#if !(MDBX_PNL_ASCENDING == 0 || MDBX_PNL_ASCENDING == 1)
+#error MDBX_PNL_ASCENDING must be defined as 0 or 1
+#endif /* MDBX_PNL_ASCENDING */
+
 //------------------------------------------------------------------------------
 
 /** Win32 File Locking API for \ref MDBX_LOCKING */

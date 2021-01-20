@@ -590,7 +590,8 @@ typedef struct MDBX_lockinfo {
    (unsigned)offsetof(MDBX_lockinfo, mti_numreaders) * 37 +                    \
    (unsigned)offsetof(MDBX_lockinfo, mti_readers) * 29)
 
-#define MDBX_DATA_MAGIC ((MDBX_MAGIC << 8) + MDBX_DATA_VERSION)
+#define MDBX_DATA_MAGIC                                                        \
+  ((MDBX_MAGIC << 8) + MDBX_PNL_ASCENDING * 64 + MDBX_DATA_VERSION)
 #define MDBX_DATA_MAGIC_DEVEL ((MDBX_MAGIC << 8) + 255)
 
 #define MDBX_LOCK_MAGIC ((MDBX_MAGIC << 8) + MDBX_LOCK_VERSION)
@@ -636,13 +637,12 @@ typedef struct MDBX_lockinfo {
 #endif /* MDBX_WORDBITS */
 
 /*----------------------------------------------------------------------------*/
-/* Two kind lists of pages (aka PNL) */
 
-/* An PNL is an Page Number List, a sorted array of IDs. The first element of
- * the array is a counter for how many actual page-numbers are in the list.
- * PNLs are sorted in descending order, this allow cut off a page with lowest
- * pgno (at the tail) just truncating the list */
-#define MDBX_PNL_ASCENDING 0
+/* An PNL is an Page Number List, a sorted array of IDs.
+ * The first element of the array is a counter for how many actual page-numbers
+ * are in the list. By default PNLs are sorted in descending order, this allow
+ * cut off a page with lowest pgno (at the tail) just truncating the list. The
+ * sort order of PNLs is controlled by the MDBX_PNL_ASCENDING build option. */
 typedef pgno_t *MDBX_PNL;
 
 #if MDBX_PNL_ASCENDING
