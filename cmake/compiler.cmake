@@ -653,7 +653,7 @@ macro(setup_compile_flags)
   endif()
 
   if(ENABLE_UBSAN)
-    add_compile_flags("C;CXX" "-fsanitize=undefined")
+    add_compile_flags("C;CXX" "-fsanitize=undefined" "-fsanitize-undefined-trap-on-error")
   endif()
 
   if(ENABLE_GCOV)
