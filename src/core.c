@@ -2858,8 +2858,8 @@ static MDBX_PNL mdbx_spill_purge(MDBX_txn *txn) {
       sl[w] = sl[r];
       w += 1 - (sl[r] & 1);
     }
-    for (size_t r = 1; r < w; ++r)
-      mdbx_tassert(txn, (sl[r] & 1) == 0);
+    for (size_t i = 1; i < w; ++i)
+      mdbx_tassert(txn, (sl[i] & 1) == 0);
     MDBX_PNL_SIZE(sl) = w - 1;
     txn->tw.spill_least_removed = INT_MAX;
   } else {
@@ -8761,7 +8761,6 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
     /* from end to begin with dst extending */
     for (l = dst->sorted, s = src->length, d = dst->length; s > 0 && d > 0;) {
       if (unlikely(l <= d)) {
-        unsigned r, w;
         /* squash to get a gap of free space for merge */
         for (r = w = 1; r <= d; ++r)
           if (dst->items[r].ptr) {
@@ -8804,7 +8803,6 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
     /* from begin to end with dst shrinking (a lot of new overflow pages) */
     for (l = s = d = 1; s <= src->length && d <= dst->length;) {
       if (unlikely(l >= d)) {
-        unsigned r, w;
         /* squash to get a gap of free space for merge */
         for (r = w = dst->length; r >= d; --r)
           if (dst->items[r].ptr) {
