@@ -14940,14 +14940,13 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
     mdbx_ensure(NULL, mc->mc_signature == MDBX_MC_LIVE ||
                           mc->mc_signature == MDBX_MC_READY4CLOSE);
     MDBX_txn *const txn = mc->mc_txn;
-    MDBX_env *const env = txn ? txn->mt_env : NULL;
     if (!mc->mc_backup) {
       mc->mc_txn = NULL;
       /* Remove from txn, if tracked.
        * A read-only txn (!C_UNTRACK) may have been freed already,
        * so do not peek inside it.  Only write txns track cursors. */
       if (mc->mc_flags & C_UNTRACK) {
-        mdbx_ensure(env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
+        mdbx_ensure(txn->mt_env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
         MDBX_cursor **prev = &txn->tw.cursors[mc->mc_dbi];
         while (*prev && *prev != mc)
           prev = &(*prev)->mc_next;
@@ -14960,7 +14959,7 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
     } else {
       /* Cursor closed before nested txn ends */
       mdbx_cassert(mc, mc->mc_signature == MDBX_MC_LIVE);
-      mdbx_ensure(env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
+      mdbx_ensure(txn->mt_env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
       mc->mc_signature = MDBX_MC_WAIT4EOT;
     }
   }
