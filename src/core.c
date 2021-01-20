@@ -4701,7 +4701,8 @@ static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
 
 static __inline void mdbx_meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
                                          txnid_t txnid) {
-  mdbx_assert(env, meta < METAPAGE(env, 0) || meta > METAPAGE_END(env));
+  mdbx_assert(env, !env->me_map || meta < METAPAGE(env, 0) ||
+                       meta >= METAPAGE_END(env));
   (void)env;
   /* update inconsistent since this function used ONLY for filling meta-image
    * for writing, but not the actual meta-page */

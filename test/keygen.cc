@@ -410,8 +410,8 @@ void __hot maker::mk_continue(const serial_t serial, const essentials &params,
   assert(out.value.iov_len <= params.maxlen);
   assert(out.value.iov_len >= length(serial));
   assert(out.value.iov_base >= out.bytes);
-  assert((uint8_t *)out.value.iov_base + out.value.iov_len <=
-         out.bytes + out.limit);
+  assert((char *)out.value.iov_base + out.value.iov_len <=
+         (char *)&out.bytes + out.limit);
 }
 
 void log_pair(logging::loglevel level, const char *prefix, const buffer &key,
