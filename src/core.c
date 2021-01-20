@@ -4660,7 +4660,6 @@ static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
 
 static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
                                    const bool allow_volatile) {
-  mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
   txnid_t a = unaligned_peek_u64(4, &meta->mm_txnid_a);
   txnid_t b = unaligned_peek_u64(4, &meta->mm_txnid_b);
   if (allow_volatile)
@@ -4681,7 +4680,7 @@ static __inline txnid_t mdbx_meta_txnid_fluid(const MDBX_env *env,
 
 static __inline void mdbx_meta_update_begin(const MDBX_env *env,
                                             MDBX_meta *meta, txnid_t txnid) {
-  mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
+  mdbx_assert(env, meta >= METAPAGE(env, 0) && meta < METAPAGE_END(env));
   mdbx_assert(env, unaligned_peek_u64(4, meta->mm_txnid_a) < txnid &&
                        unaligned_peek_u64(4, meta->mm_txnid_b) < txnid);
   (void)env;
@@ -4691,7 +4690,7 @@ static __inline void mdbx_meta_update_begin(const MDBX_env *env,
 
 static __inline void mdbx_meta_update_end(const MDBX_env *env, MDBX_meta *meta,
                                           txnid_t txnid) {
-  mdbx_assert(env, meta >= METAPAGE(env, 0) || meta < METAPAGE_END(env));
+  mdbx_assert(env, meta >= METAPAGE(env, 0) && meta < METAPAGE_END(env));
   mdbx_assert(env, unaligned_peek_u64(4, meta->mm_txnid_a) == txnid);
   mdbx_assert(env, unaligned_peek_u64(4, meta->mm_txnid_b) < txnid);
   (void)env;
