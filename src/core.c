@@ -8554,9 +8554,10 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   MDBX_dpl *const dst = mdbx_dpl_sort(parent->tw.dirtylist);
   while (MDBX_ENABLE_REFUND && dst->length &&
          dst->items[dst->length].pgno >= parent->mt_next_pgno) {
-    MDBX_page *mp = dst->items[dst->length].ptr;
-    if (mp && (txn->mt_env->me_flags & MDBX_WRITEMAP) == 0)
-      mdbx_dpage_free(txn->mt_env, mp, IS_OVERFLOW(mp) ? mp->mp_pages : 1);
+    if (!(txn->mt_env->me_flags & MDBX_WRITEMAP)) {
+      MDBX_page *dp = dst->items[dst->length].ptr;
+      mdbx_dpage_free(txn->mt_env, dp, IS_OVERFLOW(dp) ? dp->mp_pages : 1);
+    }
     dst->length -= 1;
   }
   parent->tw.dirtyroom += dst->sorted - dst->length;
