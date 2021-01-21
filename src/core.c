@@ -3831,10 +3831,14 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
 
 /* Free a shadow dirty page */
 static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned npages) {
+  VALGRIND_MAKE_MEM_UNDEFINED(dp, pgno2bytes(env, npages));
+  ASAN_UNPOISON_MEMORY_REGION(dp, pgno2bytes(env, npages));
   if (MDBX_DEBUG || unlikely(env->me_flags & MDBX_PAGEPERTURB))
     memset(dp, -1, pgno2bytes(env, npages));
   if (npages == 1 &&
       env->me_dp_reserve_len < env->me_options.dp_reserve_limit) {
+    ASAN_POISON_MEMORY_REGION((char *)dp + sizeof(dp->mp_next),
+                              pgno2bytes(env, npages) - sizeof(dp->mp_next));
     dp->mp_next = env->me_dp_reserve;
     VALGRIND_MEMPOOL_FREE(env, dp);
     env->me_dp_reserve = dp;
@@ -4324,7 +4328,7 @@ static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
             goto skip_invalidate;
         }
 
-#if !MDBX_DEBUG && defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
+#if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
         if (MDBX_DEBUG || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
 #endif
           mdbx_kill_page(txn->mt_env, mp, pgno, npages);
@@ -8413,6 +8417,10 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
 
   if (unlikely(rc != MDBX_SUCCESS))
     mdbx_error("Write error: %s", mdbx_strerror(rc));
+  else {
+    VALGRIND_MAKE_MEM_DEFINED(txn->mt_env->me_map + iov_off, iov_bytes);
+    ASAN_UNPOISON_MEMORY_REGION(txn->mt_env->me_map + iov_off, iov_bytes);
+  }
 
   for (unsigned i = 0; i < iov_items; i++)
     mdbx_dpage_free(env, (MDBX_page *)iov[i].iov_base,
