@@ -7390,6 +7390,8 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
     txn->mt_flags = MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
     env->me_txn = txn->mt_parent;
+    mdbx_pnl_free(txn->tw.spill_pages);
+    txn->tw.spill_pages = nullptr;
     if (txn == env->me_txn0) {
       mdbx_assert(env, txn->mt_parent == NULL);
       /* Export or close DBI handles created in this txn */
@@ -7434,7 +7436,6 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
         mdbx_dlist_free(txn);
       mdbx_dpl_free(txn);
       mdbx_pnl_free(txn->tw.reclaimed_pglist);
-      mdbx_pnl_free(txn->tw.spill_pages);
 
       if (parent->mt_geo.upper != txn->mt_geo.upper ||
           parent->mt_geo.now != txn->mt_geo.now) {
