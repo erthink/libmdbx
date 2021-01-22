@@ -1917,6 +1917,29 @@ enum MDBX_option_t {
    * bottom. Default is 8, i.e. at least the 1/8 of the current dirty pages
    * should be spilled when reached the condition described above. */
   MDBX_opt_spill_min_denominator,
+
+  /** \brief Controls the in-process how part of the parent transaction dirty
+   * pages will be spilled while start each child transaction.
+   *
+   * \details The `MDBX_opt_spill_parent4child_denominator` defines the
+   * denominator to determine how part of parent transaction dirty pages will be
+   * spilled explicitly while start each child transaction.
+   * Exactly `pages_to_spill = dirty_pages / N`,
+   * where `N` is the value set by `MDBX_opt_spill_parent4child_denominator`.
+   *
+   * For a stack of nested transactions each dirty page could be spilled only
+   * once, and parent's dirty pages couldn't be spilled while child
+   * transaction(s) are running. Therefore a child transaction could reach
+   * \ref MDBX_TXN_FULL when parent(s) transaction has  spilled too less (and
+   * child reach the limit of dirty pages), either when parent(s) has spilled
+   * too more (since child can't spill already spilled pages). So there is no
+   * universal golden ratio.
+   *
+   * Should be in the range 0..255, where zero means no explicit spilling will
+   * be performed during starting nested transactions.
+   * Default is 0, i.e. by default no spilling performed during starting nested
+   * transactions, that correspond historically behaviour. */
+  MDBX_opt_spill_parent4child_denominator,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

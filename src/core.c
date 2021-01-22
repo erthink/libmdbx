@@ -6893,6 +6893,15 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                       MDBX_TXN_RDONLY | MDBX_WRITEMAP | MDBX_TXN_BLOCKED);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
+
+    if (env->me_options.spill_parent4child_denominator) {
+      /* Spill dirty-pages of parent to provide dirtyroom for child txn */
+      rc = mdbx_txn_spill(parent, nullptr,
+                          parent->tw.dirtylist->length /
+                              env->me_options.spill_parent4child_denominator);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+    }
     mdbx_tassert(parent, mdbx_audit_ex(parent, 0, false) == 0);
 
     flags |= parent->mt_flags & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_SPILLS);
@@ -9922,6 +9931,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     env->me_options.dp_initial = env->me_options.dp_limit;
   env->me_options.spill_max_denominator = 8;
   env->me_options.spill_min_denominator = 8;
+  env->me_options.spill_parent4child_denominator = 0;
 
   int rc;
   const size_t os_psize = mdbx_syspagesize();
@@ -20462,6 +20472,11 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_EINVAL;
     env->me_options.spill_min_denominator = (uint8_t)value;
     break;
+  case MDBX_opt_spill_parent4child_denominator:
+    if (unlikely(value > 255))
+      return MDBX_EINVAL;
+    env->me_options.spill_parent4child_denominator = (uint8_t)value;
+    break;
 
   default:
     return MDBX_EINVAL;
@@ -20521,6 +20536,9 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
     break;
   case MDBX_opt_spill_min_denominator:
     *value = env->me_options.spill_min_denominator;
+    break;
+  case MDBX_opt_spill_parent4child_denominator:
+    *value = env->me_options.spill_parent4child_denominator;
     break;
 
   default:

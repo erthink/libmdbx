@@ -985,6 +985,7 @@ struct MDBX_env {
     unsigned dp_initial;
     uint8_t spill_max_denominator;
     uint8_t spill_min_denominator;
+    uint8_t spill_parent4child_denominator;
   } me_options;
   struct {
 #if MDBX_LOCKING > 0
