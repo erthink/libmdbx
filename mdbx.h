@@ -1849,8 +1849,7 @@ enum MDBX_option_t {
    * growth, or/and to the inability of put long values.
    *
    * The `MDBX_opt_rp_augment_limit` controls described limit for the current
-   * process. Default is 1048576, i.e. 2**20. This is sure enough for databases
-   * up to 4Gb with 4K page size. */
+   * process. Default is 262144, it is usually enough for most cases. */
   MDBX_opt_rp_augment_limit,
 
   /** \brief Controls the in-process limit to grow a list of
@@ -1878,8 +1877,7 @@ enum MDBX_option_t {
    * spill to disk instead.
    *
    * The `MDBX_opt_txn_dp_limit` controls described threshold for the current
-   * process. Default is 1048576, i.e. 2**20. This is sure enough for databases
-   * up to 4Gb with 4K page size. */
+   * process. Default is 65536, it is usually enough for most cases. */
   MDBX_opt_txn_dp_limit,
 
   /** \brief Controls the in-process initial allocation size for dirty pages

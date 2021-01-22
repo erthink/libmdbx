@@ -9922,8 +9922,8 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_stuck_meta = -1;
 
   env->me_options.dp_reserve_limit = 1024;
-  env->me_options.rp_augment_limit = 1024 * 1024;
-  env->me_options.dp_limit = 1024 * 1024;
+  env->me_options.rp_augment_limit = 256 * 1024;
+  env->me_options.dp_limit = 64 * 1024;
   if (env->me_options.dp_limit > MAX_PAGENO - NUM_METAS)
     env->me_options.dp_limit = MAX_PAGENO - NUM_METAS;
   env->me_options.dp_initial = MDBX_PNL_INITIAL;
