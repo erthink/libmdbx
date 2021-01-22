@@ -1885,6 +1885,38 @@ enum MDBX_option_t {
   /** \brief Controls the in-process initial allocation size for dirty pages
    * list of a write transaction. Default is 1024. */
   MDBX_opt_txn_dp_initial,
+
+  /** \brief Controls the in-process how maximal part of the dirty pages may be
+   * spilled when necessary.
+   *
+   * \details The `MDBX_opt_spill_max_denominator` defines the denominator for
+   * limiting from the top for part of the current dirty pages may be spilled
+   * when the free room for a new dirty pages (i.e. distance to the
+   * `MDBX_opt_txn_dp_limit` threshold) is not enough to perform requested
+   * operation.
+   * Exactly `max_pages_to_spill = dirty_pages - dirty_pages / N`,
+   * where `N` is the value set by `MDBX_opt_spill_max_denominator`.
+   *
+   * Should be in the range 0..255, where zero means no limit, i.e. all dirty
+   * pages could be spilled. Default is 8, i.e. no more than 7/8 of the current
+   * dirty pages may be spilled when reached the condition described above. */
+  MDBX_opt_spill_max_denominator,
+
+  /** \brief Controls the in-process how minimal part of the dirty pages should
+   * be spilled when necessary.
+   *
+   * \details The `MDBX_opt_spill_min_denominator` defines the denominator for
+   * limiting from the bottom for part of the current dirty pages should be
+   * spilled when the free room for a new dirty pages (i.e. distance to the
+   * `MDBX_opt_txn_dp_limit` threshold) is not enough to perform requested
+   * operation.
+   * Exactly `min_pages_to_spill = dirty_pages / N`,
+   * where `N` is the value set by `MDBX_opt_spill_min_denominator`.
+   *
+   * Should be in the range 0..255, where zero means no restriction at the
+   * bottom. Default is 8, i.e. at least the 1/8 of the current dirty pages
+   * should be spilled when reached the condition described above. */
+  MDBX_opt_spill_min_denominator,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

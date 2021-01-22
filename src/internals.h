@@ -983,6 +983,8 @@ struct MDBX_env {
     unsigned rp_augment_limit;
     unsigned dp_limit;
     unsigned dp_initial;
+    uint8_t spill_max_denominator;
+    uint8_t spill_min_denominator;
   } me_options;
   struct {
 #if MDBX_LOCKING > 0

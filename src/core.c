@@ -4532,21 +4532,33 @@ static void mdbx_txn_xkeep(MDBX_txn *txn, MDBX_cursor *m0,
  * the child hasn't committed yet, and we'd have no way to undo it if
  * the child aborted. */
 static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
+#ifndef MDBX_DEBUG_SPILLING
   if (likely(txn->tw.dirtyroom > need))
     return MDBX_SUCCESS;
-
-  const unsigned spill_min =
-      (txn->tw.dirtylist->length / /* TODO: options */ 8);
-  const unsigned spill_max =
-      (txn->tw.dirtylist->length / /* TODO: options */ 1);
   unsigned spill = need - txn->tw.dirtyroom;
-  spill = (spill < spill_max) ? spill : spill_max;
+#else
+  /* spill at least one page if defined MDBX_DEBUG_SPILLING */
+  unsigned spill = (need > txn->tw.dirtyroom) ? need - txn->tw.dirtyroom : 1;
+#endif /* MDBX_DEBUG_SPILLING */
+
+  const unsigned dirty = txn->tw.dirtylist->length;
+  const unsigned spill_min =
+      txn->mt_env->me_options.spill_min_denominator
+          ? dirty / txn->mt_env->me_options.spill_min_denominator
+          : 0;
+  const unsigned spill_max =
+      dirty - (txn->mt_env->me_options.spill_max_denominator
+                   ? dirty / txn->mt_env->me_options.spill_max_denominator
+                   : 0);
   spill = (spill > spill_min) ? spill : spill_min;
+  spill = (spill < spill_max) ? spill : spill_max;
   if (!spill)
     return MDBX_SUCCESS;
 
   mdbx_notice("spilling %u dirty-entries (have %u dirty-room, need %u)", spill,
               txn->tw.dirtyroom, need);
+  mdbx_tassert(txn, txn->tw.dirtylist->length >= spill);
+
   int rc;
   if (!txn->tw.spill_pages) {
     txn->tw.spill_least_removed = INT_MAX;
@@ -9908,6 +9920,8 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_options.dp_initial = MDBX_PNL_INITIAL;
   if (env->me_options.dp_initial > env->me_options.dp_limit)
     env->me_options.dp_initial = env->me_options.dp_limit;
+  env->me_options.spill_max_denominator = 8;
+  env->me_options.spill_min_denominator = 8;
 
   int rc;
   const size_t os_psize = mdbx_syspagesize();
@@ -20438,6 +20452,17 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     }
     break;
 
+  case MDBX_opt_spill_max_denominator:
+    if (unlikely(value > 255))
+      return MDBX_EINVAL;
+    env->me_options.spill_max_denominator = (uint8_t)value;
+    break;
+  case MDBX_opt_spill_min_denominator:
+    if (unlikely(value > 255))
+      return MDBX_EINVAL;
+    env->me_options.spill_min_denominator = (uint8_t)value;
+    break;
+
   default:
     return MDBX_EINVAL;
   }
@@ -20489,6 +20514,13 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
     break;
   case MDBX_opt_txn_dp_initial:
     *value = env->me_options.dp_initial;
+    break;
+
+  case MDBX_opt_spill_max_denominator:
+    *value = env->me_options.spill_max_denominator;
+    break;
+  case MDBX_opt_spill_min_denominator:
+    *value = env->me_options.spill_min_denominator;
     break;
 
   default:
