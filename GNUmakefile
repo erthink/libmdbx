@@ -300,18 +300,23 @@ mdbx++-static.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE
 	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
 
 .PHONY: dist release-assets tags
-dist: tags libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
+dist: tags dist-checked.tag libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
 tags:
 	git fetch --tags
 
 release-assets: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz libmdbx-sources-$(MDBX_VERSION_SUFFIX).zip
 
-libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
+dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
+	rm -rf $@ && echo "Check amalgamated sources..." \
+	&& rm -rf dist-check && cp -r -p dist dist-check && $(MAKE) -C dist-check \
+	&& touch $@
+
+libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist-checked.tag
 	$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 > $@ \
 	&& rm dist/@tmp-shared_internals.inc
 
-libmdbx-sources-$(MDBX_VERSION_SUFFIX).zip: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
+libmdbx-sources-$(MDBX_VERSION_SUFFIX).zip: dist-checked.tag
 	rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA)) || rm -rf $@
 
 dist/mdbx.h: mdbx.h src/version.c $(lastword $(MAKEFILE_LIST))
