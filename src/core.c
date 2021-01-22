@@ -11434,9 +11434,6 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   }
 
   env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
-
   env->me_pathname = mdbx_calloc(env_pathname.ent_len + 1, 1);
   env->me_dbxs = mdbx_calloc(env->me_maxdbs, sizeof(MDBX_dbx));
   env->me_dbflags = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbflags[0]));
@@ -14984,7 +14981,7 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
         MDBX_cursor **prev = &txn->tw.cursors[mc->mc_dbi];
         while (*prev && *prev != mc)
           prev = &(*prev)->mc_next;
-        mdbx_cassert(mc, *prev == mc);
+        mdbx_tassert(txn, *prev == mc);
         *prev = mc->mc_next;
       }
       mc->mc_signature = 0;
@@ -14992,7 +14989,7 @@ void mdbx_cursor_close(MDBX_cursor *mc) {
       mdbx_free(mc);
     } else {
       /* Cursor closed before nested txn ends */
-      mdbx_cassert(mc, mc->mc_signature == MDBX_MC_LIVE);
+      mdbx_tassert(txn, mc->mc_signature == MDBX_MC_LIVE);
       mdbx_ensure(txn->mt_env, check_txn_rw(txn, 0) == MDBX_SUCCESS);
       mc->mc_signature = MDBX_MC_WAIT4EOT;
     }

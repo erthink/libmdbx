@@ -235,7 +235,7 @@
 #   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #       define likely(cond) __builtin_expect(!!(cond), 1)
 #   else
-#       define likely(x) (x)
+#       define likely(x) (!!(x))
 #   endif
 #endif /* likely */
 
@@ -243,7 +243,7 @@
 #   if (defined(__GNUC__) || __has_builtin(__builtin_expect)) && !defined(__COVERITY__)
 #       define unlikely(cond) __builtin_expect(!!(cond), 0)
 #   else
-#       define unlikely(x) (x)
+#       define unlikely(x) (!!(x))
 #   endif
 #endif /* unlikely */
 
