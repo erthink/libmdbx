@@ -1852,18 +1852,31 @@ enum MDBX_option_t {
    * process. Default is 262144, it is usually enough for most cases. */
   MDBX_opt_rp_augment_limit,
 
-  /** \brief Controls the in-process limit to grow a list of
-   * pre-allocated/reserved dirty pages.
+  /** \brief Controls the in-process limit to grow a cache of dirty
+   * pages for reuse in the current transaction.
+   *
+   * \details A 'dirty page' refers to a page that has been updated in memory
+   * only, the changes to a dirty page are not yet stored on disk.
+   * To reduce overhead, it is reasonable to release not all such pages
+   * immediately, but to leave some ones in cache for reuse in the current
+   * transaction.
+   *
+   * The `MDBX_opt_loose_limit` allows you to set a limit for such cache inside
+   * the current process. Should be in the range 0..255, default is 64. */
+  MDBX_opt_loose_limit,
+
+  /** \brief Controls the in-process limit of a pre-allocated memory items
+   * for dirty pages.
    *
    * \details A 'dirty page' refers to a page that has been updated in memory
    * only, the changes to a dirty page are not yet stored on disk.
    * Without \ref MDBX_WRITEMAP dirty pages are allocated from memory and
    * released when a transaction is committed. To reduce overhead, it is
-   * reasonable to release not all pages, but to leave some ones in reserve for
-   * reuse in the next transaction.
+   * reasonable to release not all ones, but to leave some allocations in
+   * reserve for reuse in the next transaction(s).
    *
-   * The `MDBX_opt_dp_reserve_limit` allows you to set a limit for such a
-   * reserve inside the current process. Default is 1024. */
+   * The `MDBX_opt_dp_reserve_limit` allows you to set a limit for such reserve
+   * inside the current process. Default is 1024. */
   MDBX_opt_dp_reserve_limit,
 
   /** \brief Controls the in-process limit of dirty pages

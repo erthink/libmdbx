@@ -4287,9 +4287,14 @@ static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
         goto wrong_dirty;
 
       /* If suitable we can reuse it through loose list */
-      if (likely(npages == 1 &&
-                 txn->tw.loose_count < 9 /* TODO: options.threshold */
-                 /* && txn->mt_next_pgno > pgno + TODO: txn->tw.loose_gap */)) {
+      if (likely(
+              npages == 1 &&
+              txn->tw.loose_count < txn->mt_env->me_options.dp_loose_limit &&
+              (!MDBX_ENABLE_REFUND ||
+               /* skip pages near to the end in favor of compactification */
+               txn->mt_next_pgno >
+                   pgno + txn->mt_env->me_options.dp_loose_limit ||
+               txn->mt_next_pgno <= txn->mt_env->me_options.dp_loose_limit))) {
         mdbx_debug("loosen dirty page %" PRIaPGNO, pgno);
         mp->mp_flags = P_LOOSE | P_DIRTY;
         mp->mp_next = txn->tw.loose_pages;
@@ -9932,6 +9937,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_options.spill_max_denominator = 8;
   env->me_options.spill_min_denominator = 8;
   env->me_options.spill_parent4child_denominator = 0;
+  env->me_options.dp_loose_limit = 64;
 
   int rc;
   const size_t os_psize = mdbx_syspagesize();
@@ -20475,6 +20481,12 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     env->me_options.spill_parent4child_denominator = (uint8_t)value;
     break;
 
+  case MDBX_opt_loose_limit:
+    if (unlikely(value > 255))
+      return MDBX_EINVAL;
+    env->me_options.dp_loose_limit = (uint8_t)value;
+    break;
+
   default:
     return MDBX_EINVAL;
   }
@@ -20536,6 +20548,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
     break;
   case MDBX_opt_spill_parent4child_denominator:
     *value = env->me_options.spill_parent4child_denominator;
+    break;
+
+  case MDBX_opt_loose_limit:
+    *value = env->me_options.dp_loose_limit;
     break;
 
   default:
