@@ -1929,11 +1929,11 @@ enum MDBX_option_t {
    * should be spilled when reached the condition described above. */
   MDBX_opt_spill_min_denominator,
 
-  /** \brief Controls the in-process how part of the parent transaction dirty
+  /** \brief Controls the in-process how much of the parent transaction dirty
    * pages will be spilled while start each child transaction.
    *
    * \details The `MDBX_opt_spill_parent4child_denominator` defines the
-   * denominator to determine how part of parent transaction dirty pages will be
+   * denominator to determine how much of parent transaction dirty pages will be
    * spilled explicitly while start each child transaction.
    * Exactly `pages_to_spill = dirty_pages / N`,
    * where `N` is the value set by `MDBX_opt_spill_parent4child_denominator`.
