@@ -6943,8 +6943,10 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     txn->mt_dbiseqs = parent->mt_dbiseqs;
     rc = mdbx_dpl_alloc(txn);
     if (likely(rc == MDBX_SUCCESS)) {
+      const unsigned len =
+          MDBX_PNL_SIZE(parent->tw.reclaimed_pglist) + parent->tw.loose_count;
       txn->tw.reclaimed_pglist =
-          mdbx_pnl_alloc(MDBX_PNL_ALLOCLEN(parent->tw.reclaimed_pglist));
+          mdbx_pnl_alloc((len > MDBX_PNL_INITIAL) ? len : MDBX_PNL_INITIAL);
       if (unlikely(!txn->tw.reclaimed_pglist))
         rc = MDBX_ENOMEM;
     }
@@ -6983,6 +6985,8 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     if (parent->tw.spill_pages)
       mdbx_spill_purge(parent);
 
+    mdbx_tassert(txn, MDBX_PNL_ALLOCLEN(txn->tw.reclaimed_pglist) >=
+                          MDBX_PNL_SIZE(parent->tw.reclaimed_pglist));
     memcpy(txn->tw.reclaimed_pglist, parent->tw.reclaimed_pglist,
            MDBX_PNL_SIZEOF(parent->tw.reclaimed_pglist));
     mdbx_assert(env, mdbx_pnl_check4assert(
