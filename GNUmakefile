@@ -325,9 +325,15 @@ dist/mdbx.h: mdbx.h src/version.c $(lastword $(MAKEFILE_LIST))
 dist/mdbx.h++: mdbx.h++ src/version.c $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && cp $< $@
 
+# Macro with the new line (i.e. \n) for sed's pattern as the workaround for BSD's sed limitations
+define NL
+
+
+endef
+
 dist/@tmp-shared_internals.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && sed \
-		-e 's|#pragma once|#define MDBX_ALLOY 1\n#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)|' \
+		-e 's|#pragma once|#define MDBX_ALLOY 1\$(NL)#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)|' \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#include "defs.h"/r src/defs.h' \
 		-e '/#include "osal.h"/r src/osal.h' \
