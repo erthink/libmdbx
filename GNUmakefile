@@ -308,9 +308,10 @@ tags:
 release-assets: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz libmdbx-sources-$(MDBX_VERSION_SUFFIX).zip
 
 dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
-	rm -rf $@ && echo "Check amalgamated sources..." \
-	&& rm -rf dist-check && cp -r -p dist dist-check && $(MAKE) -C dist-check \
-	&& touch $@
+	@rm -rf $@ && echo -n "Verify amalgamated sources..." \
+	&& if grep -R "define MDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
+	&& rm -rf dist-check && cp -r -p dist dist-check && $(MAKE) -C dist-check > dist-check/build.log 2> dist-check/build.err \
+	&& touch $@ || (echo " FAILED! See dist-check/build.err" >&2; exit 2) && echo " Ok"
 
 libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist-checked.tag
 	$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 > $@ \
