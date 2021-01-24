@@ -1567,7 +1567,7 @@ int main(int argc, char *argv[]) {
       value = envinfo.mi_mapsize / envstat.ms_psize - alloc_pages;
       print(", remained %" PRIu64 " (%.1f%%)", value, value / percent);
 
-      value = alloc_pages - gc_pages;
+      value = dont_traversal ? alloc_pages - gc_pages : walk.pgcount;
       print(", used %" PRIu64 " (%.1f%%)", value, value / percent);
 
       print(", gc %" PRIu64 " (%.1f%%)", gc_pages, gc_pages / percent);
