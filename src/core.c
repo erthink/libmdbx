@@ -3854,9 +3854,9 @@ static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned npages) {
 static void mdbx_dlist_free(MDBX_txn *txn) {
   MDBX_env *env = txn->mt_env;
   MDBX_dpl *const dl = txn->tw.dirtylist;
-  const size_t n = dl->length;
+  const size_t len = dl->length;
 
-  for (size_t i = 1; i <= n; i++) {
+  for (size_t i = 1; i <= len; i++) {
     MDBX_page *dp = dl->items[i].ptr;
     mdbx_dpage_free(env, dp, IS_OVERFLOW(dp) ? dp->mp_pages : 1);
   }
@@ -11781,7 +11781,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 #endif /* MDBX_LOCKING */
 
   while ((dp = env->me_dp_reserve) != NULL) {
-    ASAN_UNPOISON_MEMORY_REGION(&dp->mp_next, sizeof(dp->mp_next));
+    ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
     VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
     env->me_dp_reserve = dp->mp_next;
     mdbx_free(dp);
@@ -20411,11 +20411,12 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       env->me_options.dp_reserve_limit = (unsigned)value;
       while (env->me_dp_reserve_len > env->me_options.dp_reserve_limit) {
         mdbx_assert(env, env->me_dp_reserve != NULL);
-        MDBX_page *mp = env->me_dp_reserve;
-        ASAN_UNPOISON_MEMORY_REGION(&mp->mp_next, sizeof(mp->mp_next));
-        VALGRIND_MAKE_MEM_DEFINED(&mp->mp_next, sizeof(mp->mp_next));
-        env->me_dp_reserve = mp->mp_next;
-        mdbx_free(mp);
+        MDBX_page *dp = env->me_dp_reserve;
+        ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
+        VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
+        env->me_dp_reserve = dp->mp_next;
+        VALGRIND_MEMPOOL_FREE(env, dp);
+        mdbx_free(dp);
         env->me_dp_reserve_len -= 1;
       }
     }
