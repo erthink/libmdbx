@@ -311,14 +311,14 @@ dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@rm -rf $@ && echo -n "Verify amalgamated sources..." \
 	&& if grep -R "define MDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
 	&& rm -rf dist-check && cp -r -p dist dist-check && $(MAKE) -C dist-check > dist-check/build.log 2> dist-check/build.err \
-	&& touch $@ || (echo " FAILED! See dist-check/build.err" >&2; exit 2) && echo " Ok"
-
-libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist-checked.tag
-	$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 > $@ \
+	&& touch $@ || (echo " FAILED! See dist-check/build.err" >&2; exit 2) && echo " Ok" \
 	&& rm dist/@tmp-shared_internals.inc
 
+libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist-checked.tag
+	$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 > $@
+
 libmdbx-sources-$(MDBX_VERSION_SUFFIX).zip: dist-checked.tag
-	rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA)) || rm -rf $@
+	rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA))
 
 dist/mdbx.h: mdbx.h src/version.c $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && cp $< $@
@@ -326,20 +326,17 @@ dist/mdbx.h: mdbx.h src/version.c $(lastword $(MAKEFILE_LIST))
 dist/mdbx.h++: mdbx.h++ src/version.c $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && cp $< $@
 
-# Macro with the new line (i.e. \n) for sed's pattern as the workaround for BSD's sed limitations
-define NL
-
-
-endef
-
 dist/@tmp-shared_internals.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	mkdir -p dist && sed \
-		-e 's|#pragma once|#define MDBX_ALLOY 1\$(NL)#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)|' \
+	mkdir -p dist \
+	&& echo '#define MDBX_ALLOY 1' > dist/@tmp-sed.inc && echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' >> dist/@tmp-sed.inc \
+	&& sed \
+		-e '/#pragma once/r dist/@tmp-sed.inc' \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
 		-e '/#include "defs.h"/r src/defs.h' \
 		-e '/#include "osal.h"/r src/osal.h' \
 		-e '/#include "options.h"/r src/options.h' \
-		src/internals.h > $@
+		src/internals.h > $@ \
+	&& rm -rf dist/@tmp-sed.inc
 
 dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	mkdir -p dist && (cat dist/@tmp-shared_internals.inc \
