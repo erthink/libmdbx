@@ -181,6 +181,7 @@ cntvct
 CODEFILE
 COLORSTYLE
 colorwheel
+compactified
 compat
 CONCAT
 condattr
