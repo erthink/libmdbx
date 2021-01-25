@@ -4,10 +4,9 @@ on:
 
 jobs:
   build:
-    name: Spell checking
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2.0.0
+    - uses: actions/checkout@v2
       with:
         fetch-depth: 5
     - uses: check-spelling/check-spelling@prerelease

@@ -844,6 +844,7 @@ lyuryev
 lz
 machdep
 machineid
+macos
 MACROFILE
 MADV
 madvise
@@ -1695,6 +1696,7 @@ unmap
 unmapping
 Unpoisoning
 unregister
+unshallow
 unspill
 unspilling
 unsync

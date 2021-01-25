@@ -1,0 +1,18 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+#, windows-latest
+        os: [ubuntu-latest, macos-latest, ubuntu-16.04]
+    steps:
+    - uses: actions/checkout@v2
+    - name: fetch tags
+      run: git fetch --unshallow --tags --prune
+    - name: make check
+      run: make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
+      shell: bash
