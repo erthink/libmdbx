@@ -5597,15 +5597,24 @@ no_loose:
         goto fail;
       }
       const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
-      if (flags != MDBX_ALLOC_GC &&
-          unlikely(gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
+      if (unlikely(/* resulting list is tool long */ gc_len +
+                       MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
                    env->me_options.rp_augment_limit) &&
-          (pgno_add(txn->mt_next_pgno, num) <= txn->mt_geo.upper ||
+          (((/* not a slot-request from gc-update */
+             mp || (flags & MDBX_LIFORECLAIM) == 0 ||
+             (txn->tw.lifo_reclaimed &&
+              MDBX_PNL_SIZE(txn->tw.lifo_reclaimed))) &&
+            /* have enough unallocated space */ pgno_add(
+                txn->mt_next_pgno, num) <= txn->mt_geo.upper) ||
            gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >=
                MDBX_PGL_LIMIT / 16 * 15)) {
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
+        mdbx_debug("stop reclaiming to avoid PNL overflow: %u (curent) + %u "
+                   "(chunk) -> %u",
+                   MDBX_PNL_SIZE(txn->tw.reclaimed_pglist), gc_len,
+                   gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
         flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
         break;
       }
@@ -8105,7 +8114,39 @@ retry_noaccount:
           }
 
           mdbx_tassert(txn, gc_rid >= MIN_TXNID && gc_rid <= MAX_TXNID);
-          rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, --gc_rid);
+          --gc_rid;
+          key.iov_base = &gc_rid;
+          key.iov_len = sizeof(gc_rid);
+          rc = mdbx_cursor_get(&couple.outer, &key, &data, MDBX_SET_KEY);
+          if (unlikely(rc == MDBX_SUCCESS)) {
+            mdbx_debug("%s: GC's id %" PRIaTXN
+                       " is used, continue bottom-up search",
+                       dbg_prefix_mode, gc_rid);
+            ++gc_rid;
+            rc = mdbx_cursor_get(&couple.outer, &key, &data, MDBX_FIRST);
+            if (rc == MDBX_NOTFOUND) {
+              mdbx_debug("%s: GC is empty", dbg_prefix_mode);
+              break;
+            }
+            if (unlikely(rc != MDBX_SUCCESS ||
+                         key.iov_len != sizeof(mdbx_tid_t))) {
+              rc = MDBX_CORRUPTED;
+              goto bailout;
+            }
+            txnid_t gc_first = unaligned_peek_u64(4, key.iov_base);
+            if (unlikely(gc_first < MIN_TXNID || gc_first > MAX_TXNID)) {
+              rc = MDBX_CORRUPTED;
+              goto bailout;
+            }
+            if (gc_first < 2) {
+              mdbx_debug("%s: no free GC's id(s) less than %" PRIaTXN,
+                         dbg_prefix_mode, gc_rid);
+              break;
+            }
+            gc_rid = gc_first - 1;
+          }
+
+          rc = mdbx_txl_append(&txn->tw.lifo_reclaimed, gc_rid);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
 
@@ -8216,7 +8257,7 @@ retry_noaccount:
     }
     mdbx_tassert(txn, chunk > 0);
 
-    mdbx_trace("%s: rc_rid %" PRIaTXN ", reused_gc_slot %u, reservation-id "
+    mdbx_trace("%s: gc_rid %" PRIaTXN ", reused_gc_slot %u, reservation-id "
                "%" PRIaTXN,
                dbg_prefix_mode, gc_rid, reused_gc_slot, reservation_gc_id);
 
