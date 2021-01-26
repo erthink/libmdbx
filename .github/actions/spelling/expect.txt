@@ -32,6 +32,7 @@ allones
 ALLPOSTMESSAGE
 allthrough
 alphabase
+altlinux
 AMAX
 amd
 amsmath
@@ -1372,6 +1373,7 @@ rocksdb
 rolledback
 roolback
 ROOTONLY
+rosalinux
 rotr
 rouzier
 rp
@@ -1571,6 +1573,7 @@ SUNPRO
 superfences
 sval
 svg
+svnweb
 svr
 swait
 symas
