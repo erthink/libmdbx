@@ -1,5 +1,5 @@
 //
-// Copyright (c) 2020, Leonid Yuriev <leo@yuriev.ru>.
+// Copyright (c) 2020-2021, Leonid Yuriev <leo@yuriev.ru>.
 // SPDX-License-Identifier: Apache-2.0
 //
 // Non-inline part of the libmdbx C++ API (preliminary)
