@@ -3948,7 +3948,7 @@ LIBMDBX_API int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
 LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void *context);
 
 /** \brief Set application information associated with the \ref MDBX_cursor.
- * \ingroup c_crud
+ * \ingroup c_cursors
  * \see mdbx_cursor_get_userctx()
  *
  * \param [in] cursor  An cursor handle returned by \ref mdbx_cursor_create()
@@ -3959,7 +3959,7 @@ LIBMDBX_API MDBX_cursor *mdbx_cursor_create(void *context);
 LIBMDBX_API int mdbx_cursor_set_userctx(MDBX_cursor *cursor, void *ctx);
 
 /** \brief Get the application information associated with the MDBX_cursor.
- * \ingroup c_crud
+ * \ingroup c_cursors
  * \see mdbx_cursor_set_userctx()
  *
  * \param [in] cursor  An cursor handle returned by \ref mdbx_cursor_create()
@@ -4102,7 +4102,7 @@ LIBMDBX_API MDBX_dbi mdbx_cursor_dbi(const MDBX_cursor *cursor);
 LIBMDBX_API int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest);
 
 /** \brief Retrieve by cursor.
- * \ingroup c_crud
+ * \ingroup c_cursors c_crud
  *
  * This function retrieves key/data pairs from the database. The address and
  * length of the key are returned in the object to which key refers (except
@@ -4126,7 +4126,7 @@ LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
                                 MDBX_val *data, MDBX_cursor_op op);
 
 /** \brief Store by cursor.
- * \ingroup c_crud
+ * \ingroup c_cursors c_crud
  *
  * This function stores key/data pairs into the database. The cursor is
  * positioned at the new item, or on failure usually near it.
@@ -4209,7 +4209,7 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key,
                                 MDBX_val *data, MDBX_put_flags_t flags);
 
 /** \brief Delete current key/data pair.
- * \ingroup c_crud
+ * \ingroup c_cursors c_crud
  *
  * This function deletes the key/data pair to which the cursor refers. This
  * does not invalidate the cursor, so operations such as \ref MDBX_NEXT can
@@ -4241,7 +4241,7 @@ LIBMDBX_API int mdbx_cursor_put(MDBX_cursor *cursor, const MDBX_val *key,
 LIBMDBX_API int mdbx_cursor_del(MDBX_cursor *cursor, MDBX_put_flags_t flags);
 
 /** \brief Return count of duplicates for current key.
- * \ingroup c_crud
+ * \ingroup c_cursors c_crud
  *
  * This call is valid for all databases, but reasonable only for that support
  * sorted duplicate data items \ref MDBX_DUPSORT.
