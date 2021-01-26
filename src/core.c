@@ -8080,8 +8080,10 @@ retry_noaccount:
           goto bailout;
 
         if (MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)) {
-          if (need_cleanup)
+          if (need_cleanup) {
             mdbx_txl_sort(txn->tw.lifo_reclaimed);
+            cleaned_gc_slot = 0;
+          }
           gc_rid = MDBX_PNL_LAST(txn->tw.lifo_reclaimed);
         } else {
           mdbx_tassert(txn, txn->tw.last_reclaimed == 0);
