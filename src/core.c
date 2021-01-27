@@ -9525,10 +9525,12 @@ static __cold int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
       continue;
 
     if ((env->me_stuck_meta < 0)
-            ? mdbx_meta_ot(prefer_steady, env, dest, meta)
+            ? mdbx_meta_ot(meta_bootid_match(meta) ? prefer_last
+                                                   : prefer_steady,
+                           env, dest, meta)
             : (meta_number == (unsigned)env->me_stuck_meta)) {
       *dest = *meta;
-      if (!META_IS_STEADY(dest))
+      if (!lck_exclusive && !META_IS_STEADY(dest))
         loop_limit += 1; /* LY: should re-read to hush race with update */
       mdbx_verbose("latch meta[%u]", meta_number);
     }
@@ -10631,7 +10633,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       break;
 
     if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
-      mdbx_assert(env, META_IS_STEADY(&meta) && !META_IS_STEADY(head));
+      mdbx_assert(env, META_IS_STEADY(steady) && !META_IS_STEADY(head));
       if (meta_bootid_match(head)) {
         MDBX_meta clone = *head;
         uint64_t filesize = env->me_dbgeo.now;
