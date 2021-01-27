@@ -3027,7 +3027,7 @@ static int __must_check_result mdbx_txl_append(MDBX_TXL *ptl, txnid_t id) {
 /*----------------------------------------------------------------------------*/
 
 static __always_inline size_t dpl2bytes(const ptrdiff_t size) {
-  assert(size > 2 && size <= MDBX_PGL_LIMIT);
+  assert(size > 2 && (size_t)size <= MDBX_PGL_LIMIT);
   size_t bytes = ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(MDBX_dpl) +
                                    (size + 2) * sizeof(MDBX_dp),
                                MDBX_PNL_GRANULATE * sizeof(void *) * 2) -
