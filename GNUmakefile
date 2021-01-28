@@ -310,7 +310,7 @@ release-assets: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz libmdbx-sources-$(
 dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@rm -rf $@ && echo -n "Verify amalgamated sources..." \
 	&& if grep -R "define MDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf dist-check && cp -r -p dist dist-check && $(MAKE) -C dist-check > dist-check/build.log 2> dist-check/build.err \
+	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) -C dist-check > dist-check/build.log 2> dist-check/build.err || (cat dist-check/build.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See dist-check/build.err" >&2; exit 2) && echo " Ok" \
 	&& rm dist/@tmp-shared_internals.inc
 
