@@ -48,6 +48,7 @@ New features:
     - more effective refunding/compactification especially for the loosed page cache.
  - Added `MDBX_ENABLE_REFUND` and `MDBX_PNL_ASCENDING` internal/advanced build options.
  - Added `mdbx_default_pagesize()` function.
+ - Better support architectures with a weak/relaxed memory consistency model (ARM, AARCH64, PPC, MIPS, RISC-V, etc) by means [C11 atomics](https://en.cppreference.com/w/c/atomic).
 
 Fixes:
 

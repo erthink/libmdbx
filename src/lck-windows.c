@@ -265,23 +265,25 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   if (env->me_lck) {
     /* Scan LCK for threads of the current process */
     const MDBX_reader *const begin = env->me_lck->mti_readers;
-    const MDBX_reader *const end = begin + env->me_lck->mti_numreaders;
+    const MDBX_reader *const end =
+        begin + atomic_load32(&env->me_lck->mti_numreaders, mo_AcquireRelease);
     const uintptr_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
     for (const MDBX_reader *reader = begin; reader < end; ++reader) {
-      if (reader->mr_pid != env->me_pid || !reader->mr_tid) {
+      if (reader->mr_pid.weak != env->me_pid || !reader->mr_tid.weak) {
       skip_lck:
         continue;
       }
-      if (reader->mr_tid == CurrentTid || reader->mr_tid == WriteTxnOwner)
+      if (reader->mr_tid.weak == CurrentTid ||
+          reader->mr_tid.weak == WriteTxnOwner)
         goto skip_lck;
       if (env->me_flags & MDBX_NOTLS) {
         /* Skip duplicates in no-tls mode */
         for (const MDBX_reader *scan = reader; --scan >= begin;)
-          if (scan->mr_tid == reader->mr_tid)
+          if (scan->mr_tid.weak == reader->mr_tid.weak)
             goto skip_lck;
       }
 
-      rc = suspend_and_append(array, (mdbx_tid_t)reader->mr_tid);
+      rc = suspend_and_append(array, (mdbx_tid_t)reader->mr_tid.weak);
       if (rc != MDBX_SUCCESS) {
       bailout_lck:
         (void)mdbx_resume_threads_after_remap(*array);
@@ -599,7 +601,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
   if (env->me_map)
     mdbx_munmap(&env->me_dxb_mmap);
   if (env->me_lck) {
-    const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages == 0;
+    const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages.weak == 0;
     mdbx_munmap(&env->me_lck_mmap);
     if (synced && !inprocess_neighbor && env->me_lfd != INVALID_HANDLE_VALUE &&
         mdbx_lck_upgrade(env) == MDBX_SUCCESS)

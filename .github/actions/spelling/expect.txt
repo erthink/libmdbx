@@ -205,6 +205,7 @@ cpflags
 cplus
 cplusplus
 cpp
+cppreference
 cpuid
 CROSSCOMPILING
 crtdbg

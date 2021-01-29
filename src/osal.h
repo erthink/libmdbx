@@ -465,15 +465,17 @@ extern void mdbx_osal_jitter(bool tiny);
 /*----------------------------------------------------------------------------*/
 /* Atomics */
 
-#if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && __has_include(<cstdatomic>)
+#if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && (__has_include(<cstdatomic>) || __has_extension(cxx_atomic))
 #include <cstdatomic>
-#elif !defined(__cplusplus) && (__STDC_VERSION__ >= 201112L) &&                \
+#define MDBX_HAVE_C11ATOMICS
+#elif !defined(__cplusplus) &&                                                 \
+    (__STDC_VERSION__ >= 201112L || __has_extension(c_atomic)) &&              \
     !defined(__STDC_NO_ATOMICS__) &&                                           \
     (__GNUC_PREREQ(4, 9) || __CLANG_PREREQ(3, 8) ||                            \
      !(defined(__GNUC__) || defined(__clang__)))
 #include <stdatomic.h>
+#define MDBX_HAVE_C11ATOMICS
 #elif defined(__GNUC__) || defined(__clang__)
-/* LY: nothing required */
 #elif defined(_MSC_VER)
 #pragma warning(disable : 4163) /* 'xyz': not available as an intrinsic */
 #pragma warning(disable : 4133) /* 'function': incompatible types - from       \
@@ -509,14 +511,6 @@ static __maybe_unused __inline void mdbx_compiler_barrier(void) {
   _ReadWriteBarrier();
 #elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
   __memory_barrier();
-  if (type > MDBX_BARRIER_COMPILER)
-#if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
-    __mf();
-#elif defined(__i386__) || defined(__x86_64__)
-    _mm_mfence();
-#else
-#error "Unknown target for Intel Compiler, please report to us."
-#endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
   __compiler_barrier();
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
@@ -531,21 +525,23 @@ static __maybe_unused __inline void mdbx_compiler_barrier(void) {
 }
 
 static __maybe_unused __inline void mdbx_memory_barrier(void) {
-#if __has_extension(c_atomic) && !defined(__STDC_NO_ATOMICS__)
-  atomic_thread_fence(__ATOMIC_SEQ_CST);
+#ifdef MDBX_HAVE_C11ATOMICS
+  atomic_thread_fence(memory_order_seq_cst);
 #elif defined(__ATOMIC_SEQ_CST)
+#ifdef __clang__
+  __c11_atomic_thread_fence(__ATOMIC_SEQ_CST);
+#else
   __atomic_thread_fence(__ATOMIC_SEQ_CST);
+#endif
 #elif defined(__clang__) || defined(__GNUC__)
   __sync_synchronize();
-#elif defined(_MSC_VER)
+#elif defined(_WIN32) || defined(_WIN64)
   MemoryBarrier();
 #elif defined(__INTEL_COMPILER) /* LY: Intel Compiler may mimic GCC and MSC */
-#if defined(__ia64__) || defined(__ia64) || defined(_M_IA64)
-  __mf();
-#elif defined(__i386__) || defined(__x86_64__)
+#if defined(__ia32__)
   _mm_mfence();
 #else
-#error "Unknown target for Intel Compiler, please report to us."
+  __mf();
 #endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
   __machine_rw_barrier();
