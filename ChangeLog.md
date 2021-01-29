@@ -46,6 +46,7 @@ New features:
     - a spilled pages, including overflow/large pages, now can be reused and refunded/compactified in nested transactions;
     - more effective refunding/compactification especially for the loosed page cache.
  - Added `MDBX_ENABLE_REFUND` and `MDBX_PNL_ASCENDING` internal/advanced build options.
+ - Added `mdbx_default_pagesize()` function.
 
 Fixes:
 
@@ -58,6 +59,7 @@ Fixes:
  - Fixed page leak in extra rare case the list of retired pages changed during update GC on transaction commit.
  - Fixed assertions to avoid false-positive UB detection by CLANG/LLVM (https://github.com/erthink/libmdbx/issues/153).
  - Fixed `MDBX_TXN_FULL` and regressive `MDBX_KEYEXIST` during large transaction commit with `MDBX_LIFORECLAIM` (https://github.com/erthink/libmdbx/issues/123).
+ - Fixed operation on systems with unusual small/large page size, including PowerPC (https://github.com/erthink/libmdbx/issues/157).
 
 
 ## v0.9.2 at 2020-11-27

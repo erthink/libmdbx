@@ -628,7 +628,7 @@ typedef struct MDBX_lockinfo {
 #if MDBX_WORDBITS >= 64
 #define MAX_MAPSIZE MAX_MAPSIZE64
 #define MDBX_READERS_LIMIT                                                     \
-  ((65536 - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader))
+  ((MAX_PAGESIZE - sizeof(MDBX_lockinfo)) / sizeof(MDBX_reader))
 #define MDBX_PGL_LIMIT MAX_PAGENO
 #else
 #define MDBX_READERS_LIMIT 1024

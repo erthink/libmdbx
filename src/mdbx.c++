@@ -985,8 +985,6 @@ template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;
 
 //------------------------------------------------------------------------------
 
-size_t env::default_pagesize() noexcept { return ::mdbx_syspagesize(); }
-
 static inline MDBX_env_flags_t mode2flags(env::mode mode) {
   switch (mode) {
   default:
