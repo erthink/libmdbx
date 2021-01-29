@@ -17,6 +17,7 @@ Acknowledgements:
  - [장세연](http://www.castis.com) for bug fixing and PR.
  - [Clément Renault](https://github.com/Kerollmops/heed) for [Heed](https://github.com/Kerollmops/heed) fully typed Rust wrapper.
  - [Alex Sharov](https://github.com/AskAlexSharov) for bug reporting.
+ - [Noel Kuntze](https://github.com/Thermi) for bug reporting.
 
 Removed options and features:
 
@@ -59,6 +60,7 @@ Fixes:
  - Fixed page leak in extra rare case the list of retired pages changed during update GC on transaction commit.
  - Fixed assertions to avoid false-positive UB detection by CLANG/LLVM (https://github.com/erthink/libmdbx/issues/153).
  - Fixed `MDBX_TXN_FULL` and regressive `MDBX_KEYEXIST` during large transaction commit with `MDBX_LIFORECLAIM` (https://github.com/erthink/libmdbx/issues/123).
+ - Fixed auto-recovery (`weak->steady` with the same boot-id) when Database size at last weak checkpoint is large than at last steady checkpoint.
  - Fixed operation on systems with unusual small/large page size, including PowerPC (https://github.com/erthink/libmdbx/issues/157).
 
 

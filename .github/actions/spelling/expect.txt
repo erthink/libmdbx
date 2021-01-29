@@ -758,6 +758,7 @@ kp
 ks
 ksize
 kstat
+Kuntze
 kurt
 kuznik
 kval
@@ -1611,6 +1612,7 @@ testcase
 testdb
 TESTLIST
 TESTLOG
+Thermi
 thr
 THREADENTRY
 THUMBEB
