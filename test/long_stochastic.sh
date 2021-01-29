@@ -179,7 +179,7 @@ function probe {
   echo "----------------------------------------------- $(date)"
   echo "${caption}: $*"
   rm -f ${TESTDB_DIR}/* \
-    && ${VALGRIND} ./mdbx_test ${speculum} --ignore-dbfull --repeat=5 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
+    && ${VALGRIND} ./mdbx_test ${speculum} --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
       | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
     && ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
     && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
@@ -190,9 +190,9 @@ function probe {
 
 count=0
 cases='?'
-for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
+for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10000000 33333333 100000000 333333333 1000000000; do
   echo "======================================================================="
-  wbatch=$((nops / 10 + 1))
+  wbatch=$((nops / 7 + 1))
   speculum=$([ $nops -le 1000 ] && echo '--speculum' || true)
   while true; do
     echo "======================================================================="
@@ -266,7 +266,7 @@ for nops in 10 100 1000 10000 100000 1000000 10000000 100000000 1000000000; do
         --keygen.seed=${seed} basic
     done # options
     cases="${subcase}"
-    wbatch=$(((wbatch > 9) ? wbatch / 10 : 1))
+    wbatch=$(((wbatch > 7) ? wbatch / 7 : 1))
     if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
   done # batch (write-ops per txn)
 done # n-ops
