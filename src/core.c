@@ -9613,6 +9613,18 @@ static MDBX_meta *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   return page_meta(page2);
 }
 
+static size_t mdbx_madvise_threshold(const MDBX_env *env,
+                                     const size_t largest_bytes) {
+  /* TODO: use options */
+  const unsigned factor = 9;
+  const size_t threshold = (largest_bytes < (65536ul << factor))
+                               ? 65536 /* minimal threshold */
+                               : (largest_bytes > (MEGABYTE * 4 << factor))
+                                     ? MEGABYTE * 4 /* maximal threshold */
+                                     : largest_bytes >> factor;
+  return bytes_align2os_bytes(env, threshold);
+}
+
 static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                             MDBX_meta *const pending) {
   mdbx_assert(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
@@ -9658,11 +9670,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
 #if defined(MADV_DONTNEED)
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
     /* threshold to avoid unreasonable frequent madvise() calls */
-    const size_t madvise_threshold = (largest_bytes < 65536 * 256)
-                                         ? 65536
-                                         : (largest_bytes > MEGABYTE * 4 * 256)
-                                               ? MEGABYTE * 4
-                                               : largest_bytes >> 10;
+    const size_t madvise_threshold = mdbx_madvise_threshold(env, largest_bytes);
     const size_t discard_edge_bytes = bytes_align2os_bytes(
         env, ((MDBX_RDONLY &
                (env->me_lck ? env->me_lck->mti_envmode : env->me_flags))
