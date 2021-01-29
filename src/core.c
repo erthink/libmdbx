@@ -20566,7 +20566,7 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
   case MDBX_opt_sync_bytes:
     if (unlikely(!env->me_autosync_threshold))
       return MDBX_EPERM;
-    *value = *env->me_autosync_threshold;
+    *value = pgno2bytes(env, *env->me_autosync_threshold);
     break;
 
   case MDBX_opt_sync_period:
