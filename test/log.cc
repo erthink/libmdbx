@@ -38,18 +38,17 @@ MDBX_NORETURN void failure_perror(const char *what, int errnum) {
 //-----------------------------------------------------------------------------
 
 static void mdbx_logger(MDBX_log_level_t priority, const char *function,
-                        int line, const char *msg,
+                        int line, const char *fmt,
                         va_list args) MDBX_CXX17_NOEXCEPT {
-  if (!function)
-    function = "unknown";
-
-  if (priority == MDBX_LOG_FATAL)
-    log_error("mdbx: fatal failure: %s, %d", function, line);
-
-  logging::output_nocheckloglevel(
-      logging::loglevel(priority),
-      strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function);
-  logging::feed_ap(msg, args);
+  if (function) {
+    if (priority == MDBX_LOG_FATAL)
+      log_error("mdbx: fatal failure: %s, %d", function, line);
+    logging::output_nocheckloglevel(
+        logging::loglevel(priority),
+        strncmp(function, "mdbx_", 5) == 0 ? "%s: " : "mdbx %s: ", function);
+    logging::feed_ap(fmt, args);
+  } else
+    logging::feed_ap(fmt, args);
 }
 
 namespace logging {
