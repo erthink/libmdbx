@@ -7211,6 +7211,10 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
     env->me_txn = txn;
     rc = mdbx_cursor_shadow(parent, txn);
+    if (mdbx_audit_enabled() && mdbx_assert_enabled()) {
+      txn->mt_signature = MDBX_MT_SIGNATURE;
+      mdbx_tassert(txn, mdbx_audit_ex(txn, 0, false) == 0);
+    }
     if (unlikely(rc != MDBX_SUCCESS))
       mdbx_txn_end(txn, MDBX_END_FAIL_BEGINCHILD);
   } else { /* MDBX_TXN_RDONLY */
