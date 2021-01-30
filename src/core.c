@@ -3175,8 +3175,24 @@ static __always_inline unsigned bytes2dpl(const ptrdiff_t bytes) {
   return (unsigned)size - MDBX_DPL_RESERVE_GAP;
 }
 
+static __always_inline unsigned mdbx_dpl_setlen(MDBX_dpl *dl, unsigned len) {
+  static const MDBX_page dpl_stub_pageE = {
+      {0}, 0, P_BAD, {0}, /* pgno */ ~(pgno_t)0};
+  assert(dpl_stub_pageE.mp_flags == P_BAD &&
+         dpl_stub_pageE.mp_pgno == P_INVALID);
+  dl->length = len;
+  dl->items[len + 1].pgno = P_INVALID;
+  dl->items[len + 1].ptr = (MDBX_page *)&dpl_stub_pageE;
+  return len;
+}
+
 static __always_inline void mdbx_dpl_clear(MDBX_dpl *dl) {
-  dl->sorted = dl->length = 0;
+  static const MDBX_page dpl_stub_pageB = {{0}, 0, P_BAD, {0}, /* pgno */ 0};
+  assert(dpl_stub_pageB.mp_flags == P_BAD && dpl_stub_pageB.mp_pgno == 0);
+  dl->sorted = mdbx_dpl_setlen(dl, 0);
+  dl->items[0].pgno = 0;
+  dl->items[0].ptr = (MDBX_page *)&dpl_stub_pageB;
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
 }
 
 static void mdbx_dpl_free(MDBX_txn *txn) {
@@ -3196,8 +3212,6 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
     bytes = malloc_usable_size(dl);
 #endif /* malloc_usable_size */
     dl->detent = bytes2dpl(bytes);
-    dl->items[0].pgno = 0;
-    dl->items[0].ptr = nullptr;
     mdbx_tassert(txn, txn->tw.dirtylist == NULL || dl->length <= dl->detent);
     txn->tw.dirtylist = dl;
   }
@@ -3220,6 +3234,7 @@ SORT_IMPL(dp_sort, false, MDBX_dp, DP_SORT_CMP)
 static __always_inline MDBX_dpl *mdbx_dpl_sort(MDBX_dpl *dl) {
   assert(dl->length <= MDBX_PGL_LIMIT);
   assert(dl->sorted <= dl->length);
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   if (dl->sorted != dl->length) {
     dl->sorted = dl->length;
     dp_sort(dl->items + 1, dl->items + dl->length + 1);
@@ -3233,6 +3248,7 @@ static __always_inline MDBX_dpl *mdbx_dpl_sort(MDBX_dpl *dl) {
 SEARCH_IMPL(dp_bsearch, MDBX_dp, pgno_t, DP_SEARCH_CMP)
 
 static unsigned __hot mdbx_dpl_search(MDBX_dpl *dl, pgno_t pgno) {
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   if (mdbx_audit_enabled()) {
     for (const MDBX_dp *ptr = dl->items + dl->sorted; --ptr > dl->items;) {
       assert(ptr[0].pgno < ptr[1].pgno);
@@ -3284,15 +3300,15 @@ static unsigned __hot mdbx_dpl_search(MDBX_dpl *dl, pgno_t pgno) {
 static __inline bool mdbx_dpl_intersect(MDBX_dpl *dl, pgno_t pgno,
                                         unsigned npages) {
   assert(dl->sorted == dl->length);
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   unsigned const n = mdbx_dpl_search(dl, pgno);
   assert(n >= 1 && n <= dl->length + 1);
-  assert(n > dl->length || pgno <= dl->items[n].pgno);
-  assert(n == 1 || pgno > dl->items[n - 1].pgno);
+  assert(pgno <= dl->items[n].pgno);
+  assert(pgno > dl->items[n - 1].pgno);
   const MDBX_page *const prev = dl->items[n - 1].ptr;
   const bool rc =
-      (/* intersection with founded */ n <= dl->length &&
-       pgno + npages > dl->items[n].pgno) ||
-      (/* intersection with prev */ n > 1 && unlikely(IS_OVERFLOW(prev)) &&
+      /* intersection with founded */ pgno + npages > dl->items[n].pgno ||
+      (/* intersection with prev */ unlikely(IS_OVERFLOW(prev)) &&
        prev->mp_pgno + prev->mp_pages > pgno);
   if (mdbx_assert_enabled()) {
     bool check = false;
@@ -3311,18 +3327,18 @@ static __inline bool mdbx_dpl_intersect(MDBX_dpl *dl, pgno_t pgno,
 static __always_inline unsigned mdbx_dpl_exist(MDBX_dpl *dl, pgno_t pgno) {
   unsigned i = mdbx_dpl_search(dl, pgno);
   assert((int)i > 0);
-  return (i <= dl->length && dl->items[i].pgno == pgno) ? i : 0;
+  return (dl->items[i].pgno == pgno) ? i : 0;
 }
 
 static __always_inline MDBX_page *mdbx_dpl_find(MDBX_dpl *dl, pgno_t pgno) {
   const unsigned i = mdbx_dpl_search(dl, pgno);
   assert((int)i > 0);
-  return (i <= dl->length && dl->items[i].pgno == pgno) ? dl->items[i].ptr
-                                                        : nullptr;
+  return (dl->items[i].pgno == pgno) ? dl->items[i].ptr : nullptr;
 }
 
 static __maybe_unused const MDBX_page *debug_dpl_find(const MDBX_dpl *dl,
                                                       const pgno_t pgno) {
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   for (unsigned i = dl->length; i > dl->sorted; --i)
     if (dl->items[i].pgno == pgno)
       return dl->items[i].ptr;
@@ -3330,7 +3346,7 @@ static __maybe_unused const MDBX_page *debug_dpl_find(const MDBX_dpl *dl,
   if (dl->sorted) {
     const unsigned i =
         (unsigned)(dp_bsearch(dl->items + 1, dl->sorted, pgno) - dl->items);
-    if (i <= dl->sorted && dl->items[i].pgno == pgno)
+    if (dl->items[i].pgno == pgno)
       return dl->items[i].ptr;
   }
   return nullptr;
@@ -3338,17 +3354,19 @@ static __maybe_unused const MDBX_page *debug_dpl_find(const MDBX_dpl *dl,
 
 static void mdbx_dpl_remove(MDBX_dpl *dl, unsigned i) {
   assert((int)i > 0 && i <= dl->length);
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   dl->sorted -= dl->sorted >= i;
   dl->length -= 1;
-  if (dl->length >= i)
-    memmove(dl->items + i, dl->items + i + 1,
-            (dl->length - i + 1) * sizeof(dl->items[0]));
+  memmove(dl->items + i, dl->items + i + 1,
+          (dl->length - i + 2) * sizeof(dl->items[0]));
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
 }
 
 static __always_inline int __must_check_result
 mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
   MDBX_dpl *dl = txn->tw.dirtylist;
   assert(dl->length <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   if (mdbx_audit_enabled()) {
     for (unsigned i = dl->length; i > 0; --i) {
       assert(dl->items[i].pgno != pgno);
@@ -3356,6 +3374,12 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
         return MDBX_PROBLEM;
     }
   }
+
+  const unsigned length = dl->length + 1;
+  const unsigned sorted =
+      (dl->sorted == dl->length && dl->items[dl->length].pgno < pgno)
+          ? length
+          : dl->sorted;
 
   if (unlikely(dl->length == dl->detent)) {
     if (unlikely(dl->detent >= MDBX_PGL_LIMIT)) {
@@ -3371,13 +3395,14 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
     mdbx_tassert(txn, dl->length < dl->detent);
   }
 
+  /* copy the stub beyond the end */
+  dl->items[length + 1] = dl->items[length];
   /* append page */
-  const unsigned n = dl->length + 1;
-  if (n == 1 || (dl->sorted >= dl->length && dl->items[n - 1].pgno < pgno))
-    dl->sorted = n;
-  dl->length = n;
-  dl->items[n].pgno = pgno;
-  dl->items[n].ptr = page;
+  dl->items[length].pgno = pgno;
+  dl->items[length].ptr = page;
+  dl->length = length;
+  dl->sorted = sorted;
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   return MDBX_SUCCESS;
 }
 
@@ -4008,10 +4033,11 @@ static __always_inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
 }
 
 static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
+  const MDBX_dpl *const dl = txn->tw.dirtylist;
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   if (!mdbx_audit_enabled())
     return true;
 
-  const MDBX_dpl *const dl = txn->tw.dirtylist;
   unsigned loose = 0;
   for (unsigned i = dl->length; i > 0; --i) {
     const MDBX_page *const dp = dl->items[i].ptr;
@@ -4178,7 +4204,7 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
             dl->items[w] = dl->items[r];
         }
       }
-      dl->length = w;
+      mdbx_dpl_setlen(dl, w);
       mdbx_tassert(txn, txn->mt_parent || txn->tw.dirtyroom + dl->length ==
                                               txn->mt_env->me_options.dp_limit);
       goto unlink_loose;
@@ -4191,14 +4217,17 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
     mdbx_tassert(txn, dl->sorted == dl->length);
 
     /* Scan dirtylist tail-forward and cutoff suitable pages. */
-    while (dl->length && dl->items[dl->length].pgno == txn->mt_next_pgno - 1 &&
-           dl->items[dl->length].ptr->mp_flags == (P_LOOSE | P_DIRTY)) {
-      MDBX_page *dp = dl->items[dl->length].ptr;
+    unsigned n;
+    for (n = dl->length; dl->items[n].pgno == txn->mt_next_pgno - 1 &&
+                         dl->items[n].ptr->mp_flags == (P_LOOSE | P_DIRTY);
+         --n) {
+      mdbx_tassert(txn, n > 0);
+      MDBX_page *dp = dl->items[n].ptr;
       mdbx_debug("refund-sorted page %" PRIaPGNO, dp->mp_pgno);
-      mdbx_tassert(txn, dp->mp_pgno == dl->items[dl->length].pgno);
+      mdbx_tassert(txn, dp->mp_pgno == dl->items[n].pgno);
       txn->mt_next_pgno -= 1;
-      dl->length -= 1;
     }
+    mdbx_dpl_setlen(dl, n);
 
     if (dl->sorted != dl->length) {
       const unsigned refunded = dl->sorted - dl->length;
@@ -7539,7 +7568,7 @@ static void mdbx_dpl_sift(MDBX_txn *const txn, MDBX_PNL pl,
             goto remove_dl;
         }
       }
-      dl->sorted = dl->length = w - 1;
+      dl->sorted = mdbx_dpl_setlen(dl, w - 1);
       txn->tw.dirtyroom += r - w;
       assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
       return;
@@ -8133,7 +8162,7 @@ retry_noaccount:
       mdbx_trace("%s: filtered-out loose-pages from %u -> %u dirty-pages",
                  dbg_prefix_mode, dl->length, w);
       mdbx_tassert(txn, txn->tw.loose_count == dl->length - w);
-      dl->length = w;
+      mdbx_dpl_setlen(dl, w);
       dl->sorted = 0;
       txn->tw.dirtyroom += txn->tw.loose_count;
       assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
@@ -8761,7 +8790,7 @@ __hot static int mdbx_page_flush(MDBX_txn *txn, const unsigned keep) {
   mdbx_tassert(txn, dl->sorted == dl->length && r == dl->length + 1);
   txn->tw.dirtyroom += dl->length - w;
   assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
-  dl->sorted = dl->length = w;
+  dl->sorted = mdbx_dpl_setlen(dl, w);
   mdbx_tassert(txn, txn->mt_parent ||
                         txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                             txn->mt_env->me_options.dp_limit);
@@ -8809,21 +8838,23 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
 
   /* Remove refunded pages from parent's dirty list */
   MDBX_dpl *const dst = mdbx_dpl_sort(parent->tw.dirtylist);
-  while (MDBX_ENABLE_REFUND && dst->length &&
-         dst->items[dst->length].pgno >= parent->mt_next_pgno) {
-    if (!(txn->mt_env->me_flags & MDBX_WRITEMAP)) {
-      MDBX_page *dp = dst->items[dst->length].ptr;
-      mdbx_dpage_free(txn->mt_env, dp, IS_OVERFLOW(dp) ? dp->mp_pages : 1);
+  if (MDBX_ENABLE_REFUND) {
+    unsigned n = dst->length;
+    while (n && dst->items[n].pgno >= parent->mt_next_pgno) {
+      if (!(txn->mt_env->me_flags & MDBX_WRITEMAP)) {
+        MDBX_page *dp = dst->items[n].ptr;
+        mdbx_dpage_free(txn->mt_env, dp, IS_OVERFLOW(dp) ? dp->mp_pages : 1);
+      }
+      --n;
     }
-    dst->length -= 1;
+    parent->tw.dirtyroom += dst->sorted - n;
+    assert(parent->tw.dirtyroom <= parent->mt_env->me_options.dp_limit);
+    dst->sorted = mdbx_dpl_setlen(dst, n);
+    mdbx_tassert(parent,
+                 parent->mt_parent ||
+                     parent->tw.dirtyroom + parent->tw.dirtylist->length ==
+                         parent->mt_env->me_options.dp_limit);
   }
-  parent->tw.dirtyroom += dst->sorted - dst->length;
-  assert(parent->tw.dirtyroom <= parent->mt_env->me_options.dp_limit);
-  dst->sorted = dst->length;
-  mdbx_tassert(parent,
-               parent->mt_parent ||
-                   parent->tw.dirtyroom + parent->tw.dirtylist->length ==
-                       parent->mt_env->me_options.dp_limit);
 
   /* Remove reclaimed pages from parent's dirty list */
   const MDBX_PNL reclaimed_list = parent->tw.reclaimed_pglist;
@@ -9111,7 +9142,7 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   }
   parent->tw.dirtyroom -= dst->sorted - dst->length;
   assert(parent->tw.dirtyroom <= parent->mt_env->me_options.dp_limit);
-  dst->length = dst->sorted;
+  mdbx_dpl_setlen(dst, dst->sorted);
   mdbx_tassert(parent,
                parent->mt_parent ||
                    parent->tw.dirtyroom + parent->tw.dirtylist->length ==

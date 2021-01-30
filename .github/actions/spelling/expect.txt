@@ -1424,6 +1424,7 @@ sendfile
 sepkey
 SETALL
 SETFD
+setlen
 setlevel
 setlk
 setlkw

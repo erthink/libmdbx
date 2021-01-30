@@ -380,8 +380,8 @@ typedef struct MDBX_meta {
  * in the snapshot: Either used by a database or listed in a GC record. */
 typedef struct MDBX_page {
   union {
-    struct MDBX_page *mp_next; /* for in-memory list of freed pages */
     uint64_t mp_txnid;         /* txnid that committed this page */
+    struct MDBX_page *mp_next; /* for in-memory list of freed pages */
   };
   uint16_t mp_leaf2_ksize; /* key size if this is a LEAF2 page */
 #define P_BRANCH 0x01      /* branch page */
@@ -391,15 +391,16 @@ typedef struct MDBX_page {
 #define P_DIRTY 0x10       /* dirty page, also set for P_SUBP pages */
 #define P_LEAF2 0x20       /* for MDBX_DUPFIXED records */
 #define P_SUBP 0x40        /* for MDBX_DUPSORT sub-pages */
+#define P_BAD 0x80         /* explicit flag for invalid/bad page */
 #define P_LOOSE 0x4000     /* page was dirtied then freed, can be reused */
 #define P_KEEP 0x8000      /* leave this page alone during spill */
   uint16_t mp_flags;
   union {
+    uint32_t mp_pages; /* number of overflow pages */
     __anonymous_struct_extension__ struct {
       indx_t mp_lower; /* lower bound of free space */
       indx_t mp_upper; /* upper bound of free space */
     };
-    uint32_t mp_pages; /* number of overflow pages */
   };
   pgno_t mp_pgno; /* page number */
 
