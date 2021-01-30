@@ -670,7 +670,7 @@ typedef struct MDBX_dp {
 typedef struct MDBX_dpl {
   unsigned sorted;
   unsigned length;
-  unsigned allocated;
+  unsigned detent; /* allocated size excluding the MDBX_DPL_RESERVE_GAP */
 #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) ||              \
     (!defined(__cplusplus) && defined(_MSC_VER))
   MDBX_dp items[] /* dynamic size with holes at zero and after the last */;

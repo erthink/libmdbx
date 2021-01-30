@@ -917,6 +917,7 @@ MEMORYSTATUSEX
 MEMPOOL
 memset
 MEMSIZE
+MERGESORT
 metacharacter
 metadata
 metapage

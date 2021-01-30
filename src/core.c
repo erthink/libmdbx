@@ -3152,19 +3152,27 @@ static int __must_check_result mdbx_txl_append(MDBX_TXL *ptl, txnid_t id) {
 
 /*----------------------------------------------------------------------------*/
 
+#define MDBX_DPL_UNSORTED_BACKLOG 16
+#define MDBX_DPL_GAP_FOR_MERGESORT MDBX_DPL_UNSORTED_BACKLOG
+#define MDBX_DPL_GAP_FOR_EDGING 2
+#define MDBX_DPL_RESERVE_GAP                                                   \
+  (MDBX_DPL_GAP_FOR_MERGESORT + MDBX_DPL_GAP_FOR_EDGING)
+
 static __always_inline size_t dpl2bytes(const ptrdiff_t size) {
-  assert(size > 2 && (size_t)size <= MDBX_PGL_LIMIT);
-  size_t bytes = ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(MDBX_dpl) +
-                                   (size + 2) * sizeof(MDBX_dp),
-                               MDBX_PNL_GRANULATE * sizeof(void *) * 2) -
-                 MDBX_ASSUME_MALLOC_OVERHEAD;
+  assert(size > CURSOR_STACK && (size_t)size <= MDBX_PGL_LIMIT);
+  size_t bytes =
+      ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(MDBX_dpl) +
+                        (size + MDBX_DPL_RESERVE_GAP) * sizeof(MDBX_dp),
+                    MDBX_PNL_GRANULATE * sizeof(void *) * 2) -
+      MDBX_ASSUME_MALLOC_OVERHEAD;
   return bytes;
 }
 
 static __always_inline unsigned bytes2dpl(const ptrdiff_t bytes) {
   size_t size = (bytes - sizeof(MDBX_dpl)) / sizeof(MDBX_dp);
-  assert(size > 4 && size <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
-  return (unsigned)size - 2;
+  assert(size > CURSOR_STACK + MDBX_DPL_RESERVE_GAP &&
+         size <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
+  return (unsigned)size - MDBX_DPL_RESERVE_GAP;
 }
 
 static __always_inline void mdbx_dpl_clear(MDBX_dpl *dl) {
@@ -3187,10 +3195,10 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
     bytes = malloc_usable_size(dl);
 #endif /* malloc_usable_size */
-    dl->allocated = bytes2dpl(bytes);
+    dl->detent = bytes2dpl(bytes);
     dl->items[0].pgno = 0;
     dl->items[0].ptr = nullptr;
-    mdbx_tassert(txn, txn->tw.dirtylist == NULL || dl->length <= dl->allocated);
+    mdbx_tassert(txn, txn->tw.dirtylist == NULL || dl->length <= dl->detent);
     txn->tw.dirtylist = dl;
   }
   return dl;
@@ -3349,18 +3357,18 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
     }
   }
 
-  if (unlikely(dl->length == dl->allocated)) {
-    if (unlikely(dl->allocated >= MDBX_PGL_LIMIT)) {
+  if (unlikely(dl->length == dl->detent)) {
+    if (unlikely(dl->detent >= MDBX_PGL_LIMIT)) {
       mdbx_error("DPL is full (MDBX_PGL_LIMIT %u)", MDBX_PGL_LIMIT);
       return MDBX_TXN_FULL;
     }
-    const size_t size = (dl->allocated < MDBX_PNL_INITIAL * 42)
-                            ? dl->allocated + dl->allocated
-                            : dl->allocated + dl->allocated / 2;
+    const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42)
+                            ? dl->detent + dl->detent
+                            : dl->detent + dl->detent / 2;
     dl = mdbx_dpl_reserve(txn, size);
     if (unlikely(!dl))
       return MDBX_ENOMEM;
-    mdbx_tassert(txn, dl->length < dl->allocated);
+    mdbx_tassert(txn, dl->length < dl->detent);
   }
 
   /* append page */
@@ -9008,7 +9016,7 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
     }
   }
   assert(dst->sorted == dst->length);
-  mdbx_tassert(parent, dst->allocated >= l + d + s);
+  mdbx_tassert(parent, dst->detent >= l + d + s);
   dst->sorted = l + d + s; /* the merged length */
 
   /* Merge our dirty list into parent's, i.e. merge(dst, src) -> dst */
@@ -9229,7 +9237,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
 
     if (unlikely(txn->tw.dirtylist->length + parent->tw.dirtylist->length >
-                     parent->tw.dirtylist->allocated &&
+                     parent->tw.dirtylist->detent &&
                  !mdbx_dpl_reserve(parent, txn->tw.dirtylist->length +
                                                parent->tw.dirtylist->length))) {
       rc = MDBX_ENOMEM;
@@ -20710,7 +20718,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
           env->me_options.dp_initial != value32) {
         if (env->me_options.dp_limit < value32)
           env->me_options.dp_limit = value32;
-        if (env->me_txn0->tw.dirtylist->allocated < value32 &&
+        if (env->me_txn0->tw.dirtylist->detent < value32 &&
             !mdbx_dpl_reserve(env->me_txn0, value32))
           err = MDBX_ENOMEM;
         else
@@ -20718,7 +20726,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       }
       if (option == MDBX_opt_txn_dp_limit &&
           env->me_options.dp_limit != value32) {
-        if (env->me_txn0->tw.dirtylist->allocated > value32 &&
+        if (env->me_txn0->tw.dirtylist->detent > value32 &&
             !mdbx_dpl_reserve(env->me_txn0, value32))
           err = MDBX_ENOMEM;
         else {
