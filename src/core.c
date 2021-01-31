@@ -6974,7 +6974,6 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
       mdbx_free(txn);
       return rc;
     }
-    txn->tw.dirtyroom = parent->tw.dirtyroom;
 
     /* Move loose pages to reclaimed list */
     if (parent->tw.loose_count) {
@@ -6997,6 +6996,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
 #endif /* MDBX_ENABLE_REFUND */
       mdbx_tassert(parent, mdbx_dirtylist_check(parent));
     }
+    txn->tw.dirtyroom = parent->tw.dirtyroom;
 
     mdbx_dpl_sort(parent->tw.dirtylist);
     if (parent->tw.spill_pages)
