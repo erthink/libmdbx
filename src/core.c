@@ -2698,10 +2698,10 @@ static int lcklist_detach_locked(MDBX_env *env) {
       const unsigned whole = length;                                           \
       length >>= 1;                                                            \
       const TYPE_LIST *const middle = first + length;                          \
-      if (CMP(*middle, item)) {                                                \
-        first = middle + 1;                                                    \
-        length = whole - length - 1;                                           \
-      }                                                                        \
+      const unsigned left = whole - length - 1;                                \
+      const bool cmp = CMP(*middle, item);                                     \
+      length = cmp ? left : length;                                            \
+      first = cmp ? middle + 1 : first;                                        \
     }                                                                          \
                                                                                \
     switch (length) {                                                          \
