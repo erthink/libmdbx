@@ -3231,15 +3231,49 @@ static int mdbx_dpl_alloc(MDBX_txn *txn) {
 
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, MDBX_dp, DP_SORT_CMP)
+
+__hot static MDBX_dpl *mdbx_dpl_sort_slowpath(MDBX_dpl *dl) {
+  const unsigned unsorted = dl->length - dl->sorted;
+  if (dl->sorted > unsorted / 4 + 4 &&
+      dl->length + unsorted < dl->detent + MDBX_DPL_GAP_FOR_MERGESORT) {
+    MDBX_dp *const sorted_begin = dl->items + 1;
+    MDBX_dp *const sorted_end = sorted_begin + dl->sorted;
+    MDBX_dp *const end = dl->items + dl->detent + MDBX_DPL_RESERVE_GAP;
+    MDBX_dp *const tmp = end - unsorted;
+    assert(dl->items + dl->length + 1 < tmp);
+    /* copy unsorted to the end of allocated space and sort it */
+    memcpy(tmp, sorted_end, unsorted * sizeof(MDBX_dp));
+    dp_sort(tmp, tmp + unsorted);
+    /* merge two parts from end to begin */
+    MDBX_dp *w = dl->items + dl->length;
+    MDBX_dp *l = dl->items + dl->sorted;
+    MDBX_dp *r = end - 1;
+    do {
+      const bool cmp = l->pgno > r->pgno;
+      *w = cmp ? *l : *r;
+      l -= cmp;
+      r -= !cmp;
+    } while (likely(--w > l));
+    assert(r == tmp - 1);
+    assert(dl->items[0].pgno == 0 &&
+           dl->items[dl->length + 1].pgno == P_INVALID);
+    if (mdbx_assert_enabled())
+      for (unsigned i = 0; i <= dl->length; ++i)
+        assert(dl->items[i].pgno < dl->items[i + 1].pgno);
+  } else {
+    dp_sort(dl->items + 1, dl->items + dl->length + 1);
+    assert(dl->items[0].pgno == 0 &&
+           dl->items[dl->length + 1].pgno == P_INVALID);
+  }
+  dl->sorted = dl->length;
+  return dl;
+}
+
 static __always_inline MDBX_dpl *mdbx_dpl_sort(MDBX_dpl *dl) {
   assert(dl->length <= MDBX_PGL_LIMIT);
   assert(dl->sorted <= dl->length);
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
-  if (dl->sorted != dl->length) {
-    dl->sorted = dl->length;
-    dp_sort(dl->items + 1, dl->items + dl->length + 1);
-  }
-  return dl;
+  return likely(dl->sorted == dl->length) ? dl : mdbx_dpl_sort_slowpath(dl);
 }
 
 /* Returns the index of the first dirty-page whose pgno
@@ -3259,8 +3293,7 @@ static unsigned __hot mdbx_dpl_search(MDBX_dpl *dl, pgno_t pgno) {
   switch (dl->length - dl->sorted) {
   default:
     /* sort a whole */
-    dl->sorted = dl->length;
-    dp_sort(dl->items + 1, dl->items + dl->length + 1);
+    mdbx_dpl_sort_slowpath(dl);
     break;
   case 0:
     /* whole sorted cases */

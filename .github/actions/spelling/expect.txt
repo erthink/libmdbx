@@ -1469,6 +1469,7 @@ sizeof
 skeeto
 SKIPORD
 slaunay
+slowpath
 smallprng
 Smath
 smbfs
