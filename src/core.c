@@ -2687,6 +2687,68 @@ static int lcklist_detach_locked(MDBX_env *env) {
   }
 
 /*------------------------------------------------------------------------------
+ * LY: radix sort for large chunks */
+
+#define RADIXSORT_IMPL(NAME, TYPE, EXTRACT_KEY)                                \
+                                                                               \
+  __hot static bool NAME##_radixsort(TYPE *const begin,                        \
+                                     const unsigned length) {                  \
+    TYPE *tmp = mdbx_malloc(sizeof(TYPE) * length);                            \
+    if (unlikely(!tmp))                                                        \
+      return false;                                                            \
+                                                                               \
+    unsigned key_shift = 0, key_diff_mask;                                     \
+    do {                                                                       \
+      struct {                                                                 \
+        unsigned a[256], b[256];                                               \
+      } counters;                                                              \
+      memset(&counters, 0, sizeof(counters));                                  \
+                                                                               \
+      key_diff_mask = 0;                                                       \
+      unsigned prev_key = EXTRACT_KEY(begin) >> key_shift;                     \
+      TYPE *r = begin, *end = begin + length;                                  \
+      do {                                                                     \
+        const unsigned key = EXTRACT_KEY(r) >> key_shift;                      \
+        counters.a[key & 255]++;                                               \
+        counters.b[(key >> 8) & 255]++;                                        \
+        key_diff_mask |= prev_key ^ key;                                       \
+        prev_key = key;                                                        \
+      } while (++r != end);                                                    \
+                                                                               \
+      unsigned ta = 0, tb = 0;                                                 \
+      for (unsigned i = 0; i < 256; ++i) {                                     \
+        const unsigned ia = counters.a[i];                                     \
+        counters.a[i] = ta;                                                    \
+        ta += ia;                                                              \
+        const unsigned ib = counters.b[i];                                     \
+        counters.b[i] = tb;                                                    \
+        tb += ib;                                                              \
+      }                                                                        \
+                                                                               \
+      r = begin;                                                               \
+      do {                                                                     \
+        const unsigned key = EXTRACT_KEY(r) >> key_shift;                      \
+        tmp[counters.a[key & 255]++] = *r;                                     \
+      } while (++r != end);                                                    \
+                                                                               \
+      if (unlikely(key_diff_mask < 256)) {                                     \
+        memcpy(begin, tmp, (char *)end - (char *)begin);                       \
+        break;                                                                 \
+      }                                                                        \
+      end = (r = tmp) + length;                                                \
+      do {                                                                     \
+        const unsigned key = EXTRACT_KEY(r) >> key_shift;                      \
+        begin[counters.b[(key >> 8) & 255]++] = *r;                            \
+      } while (++r != end);                                                    \
+                                                                               \
+      key_shift += 16;                                                         \
+    } while (key_diff_mask >> 16);                                             \
+                                                                               \
+    mdbx_free(tmp);                                                            \
+    return true;                                                               \
+  }
+
+/*------------------------------------------------------------------------------
  * LY: Binary search */
 
 #define SEARCH_IMPL(NAME, TYPE_LIST, TYPE_ARG, CMP)                            \
@@ -2995,9 +3057,18 @@ static MDBX_PNL mdbx_spill_purge(MDBX_txn *txn) {
   return sl;
 }
 
+#if MDBX_PNL_ASCENDING
+#define MDBX_PNL_EXTRACT_KEY(ptr) (*(ptr))
+#else
+#define MDBX_PNL_EXTRACT_KEY(ptr) (P_INVALID - *(ptr))
+#endif
+RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY)
+
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
 static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
-  pgno_sort(MDBX_PNL_BEGIN(pnl), MDBX_PNL_END(pnl));
+  if (likely(MDBX_PNL_SIZE(pnl) < MDBX_PNL_RADIXSORT_THRESHOLD) ||
+      !pgno_radixsort(&MDBX_PNL_FIRST(pnl), MDBX_PNL_SIZE(pnl)))
+    pgno_sort(MDBX_PNL_BEGIN(pnl), MDBX_PNL_END(pnl));
   assert(mdbx_pnl_check(pnl, MAX_PAGENO + 1));
 }
 
@@ -3229,41 +3300,47 @@ static int mdbx_dpl_alloc(MDBX_txn *txn) {
   return MDBX_SUCCESS;
 }
 
+#define MDBX_DPL_EXTRACT_KEY(ptr) ((ptr)->pgno)
+RADIXSORT_IMPL(dpl, MDBX_dp, MDBX_DPL_EXTRACT_KEY)
+
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, MDBX_dp, DP_SORT_CMP)
 
 __hot static MDBX_dpl *mdbx_dpl_sort_slowpath(MDBX_dpl *dl) {
   const unsigned unsorted = dl->length - dl->sorted;
-  if (dl->sorted > unsorted / 4 + 4 &&
-      dl->length + unsorted < dl->detent + MDBX_DPL_GAP_FOR_MERGESORT) {
-    MDBX_dp *const sorted_begin = dl->items + 1;
-    MDBX_dp *const sorted_end = sorted_begin + dl->sorted;
-    MDBX_dp *const end = dl->items + dl->detent + MDBX_DPL_RESERVE_GAP;
-    MDBX_dp *const tmp = end - unsorted;
-    assert(dl->items + dl->length + 1 < tmp);
-    /* copy unsorted to the end of allocated space and sort it */
-    memcpy(tmp, sorted_end, unsorted * sizeof(MDBX_dp));
-    dp_sort(tmp, tmp + unsorted);
-    /* merge two parts from end to begin */
-    MDBX_dp *w = dl->items + dl->length;
-    MDBX_dp *l = dl->items + dl->sorted;
-    MDBX_dp *r = end - 1;
-    do {
-      const bool cmp = l->pgno > r->pgno;
-      *w = cmp ? *l : *r;
-      l -= cmp;
-      r -= !cmp;
-    } while (likely(--w > l));
-    assert(r == tmp - 1);
-    assert(dl->items[0].pgno == 0 &&
-           dl->items[dl->length + 1].pgno == P_INVALID);
-    if (mdbx_assert_enabled())
-      for (unsigned i = 0; i <= dl->length; ++i)
-        assert(dl->items[i].pgno < dl->items[i + 1].pgno);
-  } else {
-    dp_sort(dl->items + 1, dl->items + dl->length + 1);
-    assert(dl->items[0].pgno == 0 &&
-           dl->items[dl->length + 1].pgno == P_INVALID);
+  if (likely(unsorted < MDBX_PNL_RADIXSORT_THRESHOLD) ||
+      !dpl_radixsort(dl->items + 1, dl->length)) {
+    if (dl->sorted > unsorted / 4 + 4 &&
+        dl->length + unsorted < dl->detent + MDBX_DPL_GAP_FOR_MERGESORT) {
+      MDBX_dp *const sorted_begin = dl->items + 1;
+      MDBX_dp *const sorted_end = sorted_begin + dl->sorted;
+      MDBX_dp *const end = dl->items + dl->detent + MDBX_DPL_RESERVE_GAP;
+      MDBX_dp *const tmp = end - unsorted;
+      assert(dl->items + dl->length + 1 < tmp);
+      /* copy unsorted to the end of allocated space and sort it */
+      memcpy(tmp, sorted_end, unsorted * sizeof(MDBX_dp));
+      dp_sort(tmp, tmp + unsorted);
+      /* merge two parts from end to begin */
+      MDBX_dp *w = dl->items + dl->length;
+      MDBX_dp *l = dl->items + dl->sorted;
+      MDBX_dp *r = end - 1;
+      do {
+        const bool cmp = l->pgno > r->pgno;
+        *w = cmp ? *l : *r;
+        l -= cmp;
+        r -= !cmp;
+      } while (likely(--w > l));
+      assert(r == tmp - 1);
+      assert(dl->items[0].pgno == 0 &&
+             dl->items[dl->length + 1].pgno == P_INVALID);
+      if (mdbx_assert_enabled())
+        for (unsigned i = 0; i <= dl->length; ++i)
+          assert(dl->items[i].pgno < dl->items[i + 1].pgno);
+    } else {
+      dp_sort(dl->items + 1, dl->items + dl->length + 1);
+      assert(dl->items[0].pgno == 0 &&
+             dl->items[dl->length + 1].pgno == P_INVALID);
+    }
   }
   dl->sorted = dl->length;
   return dl;

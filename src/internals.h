@@ -680,6 +680,7 @@ typedef struct MDBX_dpl {
 
 /* PNL sizes */
 #define MDBX_PNL_GRANULATE 1024
+#define MDBX_PNL_RADIXSORT_THRESHOLD 1024
 #define MDBX_PNL_INITIAL                                                       \
   (MDBX_PNL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
 
