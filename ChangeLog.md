@@ -49,6 +49,7 @@ New features:
  - Added `mdbx_default_pagesize()` function.
  - Better support architectures with a weak/relaxed memory consistency model (ARM, AARCH64, PPC, MIPS, RISC-V, etc) by means [C11 atomics](https://en.cppreference.com/w/c/atomic).
  - Speed up page number lists and dirty page lists (https://github.com/erthink/libmdbx/issues/132).
+ - Added `LIBMDBX_NO_EXPORTS_LEGACY_API` build option.
 
 Fixes:
 

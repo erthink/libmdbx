@@ -6494,11 +6494,13 @@ __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
   return mdbx_env_sync_internal(env, force, nonblock);
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_sync(MDBX_env *env) { return __inline_mdbx_env_sync(env); }
 
 __cold int mdbx_env_sync_poll(MDBX_env *env) {
   return __inline_mdbx_env_sync_poll(env);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Back up parent txn's cursors, then grab the originals for tracking */
 static int mdbx_cursor_shadow(MDBX_txn *parent, MDBX_txn *nested) {
@@ -7169,10 +7171,12 @@ int mdbx_txn_renew(MDBX_txn *txn) {
   return rc;
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                    MDBX_txn **ret) {
   return __inline_mdbx_txn_begin(env, parent, flags, ret);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
   int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
@@ -8942,7 +8946,9 @@ static __always_inline bool mdbx_txn_dbi_exists(MDBX_txn *txn, MDBX_dbi dbi,
   return dbi_import(txn, dbi);
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 int mdbx_txn_commit(MDBX_txn *txn) { return __inline_mdbx_txn_commit(txn); }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Merge child txn into parent */
 static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
@@ -10725,6 +10731,7 @@ bailout:
   return rc;
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_set_mapsize(MDBX_env *env, size_t size) {
   return __inline_mdbx_env_set_mapsize(env, size);
 }
@@ -10744,6 +10751,7 @@ __cold int mdbx_env_set_maxreaders(MDBX_env *env, unsigned readers) {
 __cold int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers) {
   return __inline_mdbx_env_get_maxreaders(env, readers);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Further setup required for opening an MDBX environment */
 static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
@@ -12192,9 +12200,11 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
   return rc;
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_close(MDBX_env *env) {
   return __inline_mdbx_env_close(env);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Compare two items pointing at aligned unsigned int's. */
 static int __hot cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
@@ -18216,9 +18226,11 @@ static void mdbx_stat0(const MDBX_env *env, const MDBX_db *db, MDBX_stat *dest,
     dest->ms_mod_txnid = db->md_mod_txnid;
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_stat(const MDBX_env *env, MDBX_stat *stat, size_t bytes) {
   return __inline_mdbx_env_stat(env, stat, bytes);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                             MDBX_stat *dest, size_t bytes) {
@@ -18309,10 +18321,12 @@ __cold int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
   return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_info(const MDBX_env *env, MDBX_envinfo *info,
                          size_t bytes) {
   return __inline_mdbx_env_info(env, info, bytes);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
                             MDBX_envinfo *arg, size_t bytes) {
@@ -18818,9 +18832,11 @@ int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
   return MDBX_SUCCESS;
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
   return __inline_mdbx_dbi_flags(txn, dbi, flags);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Add all the DB's pages to the free list.
  * [in] mc Cursor on the DB to free.
@@ -19347,6 +19363,7 @@ static txnid_t __cold mdbx_kick_longlived_readers(MDBX_env *env,
   return mdbx_find_oldest(env->me_txn);
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold) {
   return __inline_mdbx_env_set_syncbytes(env, threshold);
 }
@@ -19354,6 +19371,7 @@ __cold int mdbx_env_set_syncbytes(MDBX_env *env, size_t threshold) {
 __cold int mdbx_env_set_syncperiod(MDBX_env *env, unsigned seconds_16dot16) {
   return __inline_mdbx_env_set_syncperiod(env, seconds_16dot16);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
   int rc = check_env(env);
@@ -20470,6 +20488,7 @@ int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 
 /*----------------------------------------------------------------------------*/
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold MDBX_NOTHROW_CONST_FUNCTION intptr_t mdbx_limits_pgsize_min(void) {
   return __inline_mdbx_limits_pgsize_min();
 }
@@ -20477,6 +20496,7 @@ __cold MDBX_NOTHROW_CONST_FUNCTION intptr_t mdbx_limits_pgsize_min(void) {
 __cold MDBX_NOTHROW_CONST_FUNCTION intptr_t mdbx_limits_pgsize_max(void) {
   return __inline_mdbx_limits_pgsize_max();
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold intptr_t mdbx_limits_dbsize_min(intptr_t pagesize) {
   if (pagesize < 1)
@@ -20581,6 +20601,7 @@ uint32_t mdbx_key_from_ptrfloat(const float *const ieee754_32bit) {
   return float2key(ieee754_32bit);
 }
 
+#ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 MDBX_NOTHROW_CONST_FUNCTION uint64_t mdbx_key_from_int64(const int64_t i64) {
   return __inline_mdbx_key_from_int64(i64);
 }
@@ -20588,6 +20609,7 @@ MDBX_NOTHROW_CONST_FUNCTION uint64_t mdbx_key_from_int64(const int64_t i64) {
 MDBX_NOTHROW_CONST_FUNCTION uint32_t mdbx_key_from_int32(const int32_t i32) {
   return __inline_mdbx_key_from_int32(i32);
 }
+#endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 #define IEEE754_DOUBLE_MANTISSA_SIZE 52
 #define IEEE754_DOUBLE_EXPONENTA_BIAS 0x3FF
