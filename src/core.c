@@ -762,12 +762,17 @@ enum MDBX_memory_order {
 
 #ifdef MDBX_HAVE_C11ATOMICS
 
-#if defined(__clang__) && __clang__ < 8
-#define MDBX_WORKAROUND_CLANG_C11ATOMICS_BUG(type, ptr)                        \
-  ((volatile _Atomic(type) *)(ptr))
+/* Crutches for C11 atomic compiler's bugs */
+#if defined(__e2k__) && defined(__LCC__) && __LCC__ < /* FIXME */ 127
+#define MDBX_c11a_ro(type, ptr) (&(ptr)->weak)
+#define MDBX_c11a_rw(type, ptr) (&(ptr)->weak)
+#elif defined(__clang__) && __clang__ < 8
+#define MDBX_c11a_ro(type, ptr) ((volatile _Atomic(type) *)&(ptr)->c11a)
+#define MDBX_c11a_rw(type, ptr) (&(ptr)->c11a)
 #else
-#define MDBX_WORKAROUND_CLANG_C11ATOMICS_BUG(type, ptr) (ptr)
-#endif /* __clang__ < 8.x */
+#define MDBX_c11a_ro(type, ptr) (&(ptr)->c11a)
+#define MDBX_c11a_rw(type, ptr) (&(ptr)->c11a)
+#endif /* Crutches for C11 atomic compiler's bugs */
 
 static __always_inline memory_order mo_c11_store(enum MDBX_memory_order fence) {
   switch (fence) {
@@ -812,16 +817,16 @@ static __maybe_unused __always_inline void mdbx_memory_fence(bool checkpoint,
 }
 
 static __maybe_unused __always_inline uint32_t
-atomic_store32(MDBX_atomic_uint32_t *ptr, const uint32_t value,
+atomic_store32(MDBX_atomic_uint32_t *p, const uint32_t value,
                enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint32_t) == 4);
 #ifdef MDBX_HAVE_C11ATOMICS
-  assert(atomic_is_lock_free(&ptr->c11a));
-  atomic_store_explicit(&ptr->c11a, value, mo_c11_store(order));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
+  atomic_store_explicit(MDBX_c11a_rw(uint32_t, p), value, mo_c11_store(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
   if (order != mo_Relaxed)
     mdbx_compiler_barrier();
-  ptr->weak = value;
+  p->weak = value;
   if (order != mo_Relaxed)
     mdbx_memory_fence(order == mo_SequentialConsistency, true);
 #endif /* MDBX_HAVE_C11ATOMICS */
@@ -829,76 +834,72 @@ atomic_store32(MDBX_atomic_uint32_t *ptr, const uint32_t value,
 }
 
 static __maybe_unused __always_inline uint32_t
-atomic_load32(const MDBX_atomic_uint32_t *ptr, enum MDBX_memory_order order) {
+atomic_load32(const MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint32_t) == 4);
 #ifdef MDBX_HAVE_C11ATOMICS
-  assert(atomic_is_lock_free(&ptr->c11a));
-  return atomic_load_explicit(
-      MDBX_WORKAROUND_CLANG_C11ATOMICS_BUG(uint32_t, &ptr->c11a),
-      mo_c11_load(order));
+  assert(atomic_is_lock_free(MDBX_c11a_ro(uint32_t, p)));
+  return atomic_load_explicit(MDBX_c11a_ro(uint32_t, p), mo_c11_load(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
   if (order != mo_Relaxed)
     mdbx_memory_fence(order == mo_SequentialConsistency, false);
-  const uint32_t value = ptr->weak;
+  const uint32_t value = p->weak;
   if (order != mo_Relaxed)
     mdbx_compiler_barrier();
   return value;
 #endif /* MDBX_HAVE_C11ATOMICS */
 }
 
-static __always_inline uint64_t atomic_store64(MDBX_atomic_uint64_t *ptr,
+static __always_inline uint64_t atomic_store64(MDBX_atomic_uint64_t *p,
                                                const uint64_t value,
                                                enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint64_t) == 8);
 #if MDBX_64BIT_ATOMIC
 #ifdef MDBX_HAVE_C11ATOMICS
-  assert(atomic_is_lock_free(&ptr->c11a));
-  atomic_store_explicit(&ptr->c11a, value, mo_c11_store(order));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
+  atomic_store_explicit(MDBX_c11a_rw(uint64_t, p), value, mo_c11_store(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
   if (order != mo_Relaxed)
     mdbx_compiler_barrier();
-  ptr->weak = value;
+  p->weak = value;
   if (order != mo_Relaxed)
     mdbx_memory_fence(order == mo_SequentialConsistency, true);
 #endif /* MDBX_HAVE_C11ATOMICS */
 #else  /* !MDBX_64BIT_ATOMIC */
-  atomic_store32(&ptr->low, (uint32_t)value,
+  atomic_store32(&p->low, (uint32_t)value,
                  (order == mo_Relaxed) ? mo_Relaxed : mo_AcquireRelease);
   mdbx_jitter4testing(true);
-  atomic_store32(&ptr->high, (uint32_t)(value >> 32), order);
+  atomic_store32(&p->high, (uint32_t)(value >> 32), order);
   mdbx_jitter4testing(true);
 #endif /* !MDBX_64BIT_ATOMIC */
   return value;
 }
 
-static __always_inline uint64_t atomic_load64(const MDBX_atomic_uint64_t *ptr,
+static __always_inline uint64_t atomic_load64(const MDBX_atomic_uint64_t *p,
                                               enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint64_t) == 8);
 #if MDBX_64BIT_ATOMIC
 #ifdef MDBX_HAVE_C11ATOMICS
-  assert(atomic_is_lock_free(&ptr->c11a));
-  return atomic_load_explicit(
-      MDBX_WORKAROUND_CLANG_C11ATOMICS_BUG(uint64_t, &ptr->c11a),
-      mo_c11_load(order));
+  assert(atomic_is_lock_free(MDBX_c11a_ro(uint64_t, p)));
+  return atomic_load_explicit(MDBX_c11a_ro(uint64_t, p), mo_c11_load(order));
 #else  /* MDBX_HAVE_C11ATOMICS */
   if (order != mo_Relaxed)
     mdbx_memory_fence(order == mo_SequentialConsistency, false);
-  const uint64_t value = ptr->weak;
+  const uint64_t value = p->weak;
   if (order != mo_Relaxed)
     mdbx_compiler_barrier();
   return value;
 #endif /* MDBX_HAVE_C11ATOMICS */
 #else  /* !MDBX_64BIT_ATOMIC */
-  uint64_t value = (uint64_t)atomic_load32(&ptr->high, order) << 32;
+  uint64_t value = (uint64_t)atomic_load32(&p->high, order) << 32;
   mdbx_jitter4testing(true);
-  value |= atomic_load32(&ptr->low, (order == mo_Relaxed) ? mo_Relaxed
-                                                          : mo_AcquireRelease);
+  value |= atomic_load32(&p->low, (order == mo_Relaxed) ? mo_Relaxed
+                                                        : mo_AcquireRelease);
   mdbx_jitter4testing(true);
   for (;;) {
-    uint64_t again = (uint64_t)atomic_load32(&ptr->high, order) << 32;
+    uint64_t again = (uint64_t)atomic_load32(&p->high, order) << 32;
     mdbx_jitter4testing(true);
-    again |= atomic_load32(
-        &ptr->low, (order == mo_Relaxed) ? mo_Relaxed : mo_AcquireRelease);
+    again |= atomic_load32(&p->low, (order == mo_Relaxed) ? mo_Relaxed
+                                                          : mo_AcquireRelease);
     mdbx_jitter4testing(true);
     if (likely(value == again))
       return value;
@@ -947,16 +948,17 @@ static __always_inline bool atomic_cas64(MDBX_atomic_uint64_t *p, uint64_t c,
 #ifdef ATOMIC_LLONG_LOCK_FREE
   STATIC_ASSERT(ATOMIC_LLONG_LOCK_FREE > 0);
 #if ATOMIC_LLONG_LOCK_FREE < 2
-  assert(atomic_is_lock_free(&p->c11a));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
 #endif /* ATOMIC_LLONG_LOCK_FREE < 2 */
 #else  /* defined(ATOMIC_LLONG_LOCK_FREE) */
-  assert(atomic_is_lock_free(&p->c11a));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
 #endif
-  return atomic_compare_exchange_strong(&p->c11a, &c, v);
+  return atomic_compare_exchange_strong(MDBX_c11a_rw(uint64_t, p), &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
 #elif defined(_MSC_VER)
-  return c == (uint64_t)_InterlockedCompareExchange64(&p->weak, v, c);
+  return c == (uint64_t)_InterlockedCompareExchange64(
+                  (volatile __int64 *)&p->weak, v, c);
 #elif defined(__APPLE__)
   return OSAtomicCompareAndSwap64Barrier(c, v, &p->weak);
 #else
@@ -972,17 +974,18 @@ static __always_inline bool atomic_cas32(MDBX_atomic_uint32_t *p, uint32_t c,
 #ifdef ATOMIC_INT_LOCK_FREE
   STATIC_ASSERT(ATOMIC_INT_LOCK_FREE > 0);
 #if ATOMIC_INT_LOCK_FREE < 2
-  assert(atomic_is_lock_free(&p->c11a));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
 #endif
 #else
-  assert(atomic_is_lock_free(&p->c11a));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
 #endif
-  return atomic_compare_exchange_strong(&p->c11a, &c, v);
+  return atomic_compare_exchange_strong(MDBX_c11a_rw(uint32_t, p), &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
 #elif defined(_MSC_VER)
   STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile uint32_t));
-  return c == (uint32_t)_InterlockedCompareExchange(&p->weak, v, c);
+  return c ==
+         (uint32_t)_InterlockedCompareExchange((volatile long *)&p->weak, v, c);
 #elif defined(__APPLE__)
   return OSAtomicCompareAndSwap32Barrier(c, v, &p->weak);
 #else
@@ -997,17 +1000,17 @@ static __always_inline uint32_t atomic_add32(MDBX_atomic_uint32_t *p,
 #ifdef ATOMIC_INT_LOCK_FREE
   STATIC_ASSERT(ATOMIC_INT_LOCK_FREE > 0);
 #if ATOMIC_INT_LOCK_FREE < 2
-  assert(atomic_is_lock_free(&p->c11a));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
 #endif
 #else
-  assert(atomic_is_lock_free(&p->c11a));
+  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
 #endif
-  return atomic_fetch_add(&p->c11a, v);
+  return atomic_fetch_add(MDBX_c11a_rw(uint32_t, p), v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(&p->weak, v);
 #elif defined(_MSC_VER)
   STATIC_ASSERT(sizeof(volatile long) == sizeof(volatile uint32_t));
-  return _InterlockedExchangeAdd(&p->weak, v);
+  return (uint32_t)_InterlockedExchangeAdd((volatile long *)&p->weak, v);
 #elif defined(__APPLE__)
   return OSAtomicAdd32Barrier(v, &p->weak);
 #else
@@ -1026,33 +1029,33 @@ static __always_inline uint64_t safe64_txnid_next(uint64_t txnid) {
   return txnid;
 }
 
-static __always_inline void safe64_reset(MDBX_atomic_uint64_t *ptr,
+static __always_inline void safe64_reset(MDBX_atomic_uint64_t *p,
                                          bool single_writer) {
 #if !MDBX_64BIT_CAS
   if (!single_writer) {
     STATIC_ASSERT(MDBX_TXNID_STEP > 1);
     /* it is safe to increment low-part to avoid ABA, since MDBX_TXNID_STEP > 1
      * and overflow was preserved in safe64_txnid_next() */
-    atomic_add32(&ptr->low, 1) /* avoid ABA in safe64_reset_compare() */;
+    atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
     atomic_store32(
-        &ptr->high, UINT32_MAX,
+        &p->high, UINT32_MAX,
         mo_AcquireRelease) /* atomically make >= SAFE64_INVALID_THRESHOLD */;
-    atomic_add32(&ptr->low, 1) /* avoid ABA in safe64_reset_compare() */;
+    atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
   } else
 #elif MDBX_64BIT_ATOMIC
   /* atomically make value >= SAFE64_INVALID_THRESHOLD by 64-bit operation */
-  atomic_store64(ptr, UINT64_MAX,
+  atomic_store64(p, UINT64_MAX,
                  single_writer ? mo_AcquireRelease : mo_SequentialConsistency);
 #else
   /* atomically make value >= SAFE64_INVALID_THRESHOLD by 32-bit operation */
-  atomic_store32(&ptr->high, UINT32_MAX,
+  atomic_store32(&p->high, UINT32_MAX,
                  single_writer ? mo_AcquireRelease : mo_SequentialConsistency);
 #endif /* MDBX_64BIT_ATOMIC */
-    assert(ptr->weak >= SAFE64_INVALID_THRESHOLD);
+    assert(p->weak >= SAFE64_INVALID_THRESHOLD);
   mdbx_jitter4testing(true);
 }
 
-static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *ptr,
+static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *p,
                                                  txnid_t compare) {
   /* LY: This function is used to reset `mr_txnid` from hsr-handler in case
    *     the asynchronously cancellation of read transaction. Therefore,
@@ -1061,17 +1064,17 @@ static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *ptr,
    *     in another proces/thread. In general we MUST NOT reset the `mr_txnid`
    *     if a new transaction was started (i.e. if `mr_txnid` was changed). */
 #if MDBX_64BIT_CAS
-  bool rc = atomic_cas64(ptr, compare, UINT64_MAX);
+  bool rc = atomic_cas64(p, compare, UINT64_MAX);
 #else
   /* LY: There is no gold ratio here since shared mutex is too costly,
    *     in such way we must acquire/release it for every update of mr_txnid,
    *     i.e. twice for each read transaction). */
   bool rc = false;
-  if (likely(atomic_load32(&ptr->low, mo_AcquireRelease) == (uint32_t)compare &&
-             atomic_cas32(&ptr->high, (uint32_t)(compare >> 32), UINT32_MAX))) {
-    if (unlikely(atomic_load32(&ptr->low, mo_AcquireRelease) !=
+  if (likely(atomic_load32(&p->low, mo_AcquireRelease) == (uint32_t)compare &&
+             atomic_cas32(&p->high, (uint32_t)(compare >> 32), UINT32_MAX))) {
+    if (unlikely(atomic_load32(&p->low, mo_AcquireRelease) !=
                  (uint32_t)compare))
-      atomic_cas32(&ptr->high, UINT32_MAX, (uint32_t)(compare >> 32));
+      atomic_cas32(&p->high, UINT32_MAX, (uint32_t)(compare >> 32));
     else
       rc = true;
   }
@@ -1080,26 +1083,26 @@ static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *ptr,
   return rc;
 }
 
-static __always_inline void safe64_write(MDBX_atomic_uint64_t *ptr,
+static __always_inline void safe64_write(MDBX_atomic_uint64_t *p,
                                          const uint64_t v) {
-  assert(ptr->weak >= SAFE64_INVALID_THRESHOLD);
+  assert(p->weak >= SAFE64_INVALID_THRESHOLD);
 #if MDBX_64BIT_ATOMIC
-  atomic_store64(ptr, v, mo_AcquireRelease);
+  atomic_store64(p, v, mo_AcquireRelease);
 #else  /* MDBX_64BIT_ATOMIC */
   /* update low-part but still value >= SAFE64_INVALID_THRESHOLD */
-  atomic_store32(&ptr->low, (uint32_t)v, mo_AcquireRelease);
-  assert(ptr->weak >= SAFE64_INVALID_THRESHOLD);
+  atomic_store32(&p->low, (uint32_t)v, mo_AcquireRelease);
+  assert(p->weak >= SAFE64_INVALID_THRESHOLD);
   mdbx_jitter4testing(true);
   /* update high-part from SAFE64_INVALID_THRESHOLD to actual value */
-  atomic_store32(&ptr->high, (uint32_t)(v >> 32), mo_AcquireRelease);
+  atomic_store32(&p->high, (uint32_t)(v >> 32), mo_AcquireRelease);
 #endif /* MDBX_64BIT_ATOMIC */
-  assert(ptr->weak == v);
+  assert(p->weak == v);
   mdbx_jitter4testing(true);
 }
 
-static __always_inline uint64_t safe64_read(const MDBX_atomic_uint64_t *ptr) {
+static __always_inline uint64_t safe64_read(const MDBX_atomic_uint64_t *p) {
   mdbx_jitter4testing(true);
-  uint64_t v = atomic_load64(ptr, mo_AcquireRelease);
+  uint64_t v = atomic_load64(p, mo_AcquireRelease);
   mdbx_jitter4testing(true);
   return v;
 }
@@ -1114,20 +1117,20 @@ static __always_inline uint64_t safe64_read(const MDBX_atomic_uint64_t *ptr) {
 }
 
  static __maybe_unused __always_inline bool
- safe64_is_valid_ptr(const MDBX_atomic_uint64_t *ptr) {
+ safe64_is_valid_ptr(const MDBX_atomic_uint64_t *p) {
 #if MDBX_64BIT_ATOMIC
-  return atomic_load64(ptr, mo_AcquireRelease) < SAFE64_INVALID_THRESHOLD;
+  return atomic_load64(p, mo_AcquireRelease) < SAFE64_INVALID_THRESHOLD;
 #else
-  return atomic_load32(&ptr->high, mo_AcquireRelease) != UINT32_MAX;
+  return atomic_load32(&p->high, mo_AcquireRelease) != UINT32_MAX;
 #endif /* MDBX_64BIT_ATOMIC */
 }
 
-static __always_inline void safe64_update(MDBX_atomic_uint64_t *ptr,
+static __always_inline void safe64_update(MDBX_atomic_uint64_t *p,
                                           const uint64_t v) {
 #if MDBX_64BIT_ATOMIC
-  safe64_reset(ptr, true);
+  safe64_reset(p, true);
 #endif /* MDBX_64BIT_ATOMIC */
-  safe64_write(ptr, v);
+  safe64_write(p, v);
 }
 #endif /* unused for now */
 
