@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## v0.9.3 (in development) scheduled at 2021-02-23
+## v0.9.4 (in development) scheduled at 2021-02-23
 
 TODO:
  - Engage new terminology (https://github.com/erthink/libmdbx/issues/137).
@@ -9,6 +9,8 @@ TODO:
    https://github.com/erthink/libmdbx/issues/115).
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
  - Packages for [ROSA Linux](https://www.rosalinux.ru/), [ALT Linux](https://www.altlinux.org/), Fedora/RHEL, Debian/Ubuntu.
+
+## v0.9.3 at 2021-02-02
 
 Acknowledgements:
 
