@@ -17629,7 +17629,7 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
               toggle = my->mc_head & 1;
             }
           } else if (node_flags(node) & F_SUBDATA) {
-            if (node_ds(node) != sizeof(MDBX_db)) {
+            if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
               rc = MDBX_CORRUPTED;
               goto done;
             }
@@ -17833,7 +17833,7 @@ static __cold int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
       return ctx.mc_error;
 
     if (dest_is_pipe) {
-      if (root != new_root) {
+      if (unlikely(root != new_root)) {
         mdbx_error("post-compactification root %" PRIaPGNO
                    " NE expected %" PRIaPGNO
                    " (source DB corrupted or has a page leak(s))",
@@ -17841,13 +17841,13 @@ static __cold int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
         return MDBX_CORRUPTED; /* page leak or corrupt DB */
       }
     } else {
-      if (root > new_root) {
+      if (unlikely(root > new_root)) {
         mdbx_error("post-compactification root %" PRIaPGNO
                    " GT expected %" PRIaPGNO " (source DB corrupted)",
                    root, new_root);
         return MDBX_CORRUPTED; /* page leak or corrupt DB */
       }
-      if (root < new_root) {
+      if (unlikely(root < new_root)) {
         mdbx_warning("post-compactification root %" PRIaPGNO
                      " LT expected %" PRIaPGNO " (page leak(s) in source DB)",
                      root, new_root);
@@ -19526,7 +19526,7 @@ static __cold int mdbx_walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
         /* LY: Don't use mask here, e.g bitwise
          * (P_BRANCH|P_LEAF|P_LEAF2|P_META|P_OVERFLOW|P_SUBP).
          * Pages should not me marked dirty/loose or otherwise. */
-        if (P_OVERFLOW != op->mp_flags)
+        if (unlikely(P_OVERFLOW != op->mp_flags))
           err = bad_page(mp, "wrong page type %d for large data", op->mp_flags);
         else
           npages = op->mp_pages;
