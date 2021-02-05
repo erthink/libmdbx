@@ -12353,9 +12353,9 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
                : /* There is no entry larger or equal to the key. */ NULL;
   }
 
-  if (cmp == cmp_int_align2 && IS_BRANCH(mp))
+  if (IS_BRANCH(mp) && cmp == cmp_int_align2)
     /* Branch pages have no data, so if using integer keys,
-     * alignment is guaranteed. Use faster mdbx_cmp_int_align4(). */
+     * alignment is guaranteed. Use faster cmp_int_align4(). */
     cmp = cmp_int_align4;
 
   MDBX_node *node;
