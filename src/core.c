@@ -4814,7 +4814,7 @@ static void mdbx_txn_xkeep(MDBX_txn *txn, MDBX_cursor *m0,
  * the child aborted. */
 static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
 #ifndef MDBX_DEBUG_SPILLING
-  if (likely(txn->tw.dirtyroom > need))
+  if (likely(txn->tw.dirtyroom >= need))
     return MDBX_SUCCESS;
   unsigned spill = need - txn->tw.dirtyroom;
 #else
