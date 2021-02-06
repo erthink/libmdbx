@@ -12,7 +12,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: fetch tags
-      run: git fetch --unshallow --tags --prune || true
+      run: git fetch --unshallow --tags --prune --force
     - name: make check
       run: make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
       shell: bash
