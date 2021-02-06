@@ -3557,9 +3557,19 @@ enum {
 #define MDBX_END_SLOT 0x80    /* release any reader slot if MDBX_NOTLS */
 static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode);
 
+#if MDBX_DISABLE_PAGECHECKS
+static int __must_check_result __mdbx_page_get(MDBX_cursor *mc, pgno_t pgno,
+                                               MDBX_page **mp, int *lvl);
+static __always_inline int __must_check_result mdbx_page_get(
+    MDBX_cursor *mc, pgno_t pgno, MDBX_page **mp, int *lvl, txnid_t pp_txnid) {
+  (void)pp_txnid;
+  return __mdbx_page_get(mc, pgno, mp, lvl);
+}
+#else
 static int __must_check_result mdbx_page_get(MDBX_cursor *mc, pgno_t pgno,
                                              MDBX_page **mp, int *lvl,
                                              txnid_t pp_txnid);
+#endif /* MDBX_DISABLE_PAGECHECKS */
 static int __must_check_result mdbx_page_search_root(MDBX_cursor *mc,
                                                      const MDBX_val *key,
                                                      int flags);
@@ -5630,10 +5640,16 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 }
 
 static __inline txnid_t pp_txnid4chk(const MDBX_page *mp, const MDBX_txn *txn) {
+#if MDBX_DISABLE_PAGECHECKS
+  (void)mp;
+  (void)txn;
+  return 0;
+#else
   return IS_DIRTY(mp)
              ? txn->mt_txnid - 1
              : (/* maybe zero in legacy DB */ mp->mp_txnid ? mp->mp_txnid
                                                            : MIN_TXNID);
+#endif /* !MDBX_DISABLE_PAGECHECKS */
 }
 
 static __inline txnid_t pp_txnid2chk(const MDBX_txn *txn) {
@@ -5827,12 +5843,14 @@ no_loose:
         goto fail;
       }
 
-      if (unlikely(key.iov_len != sizeof(txnid_t))) {
+      if (!MDBX_DISABLE_PAGECHECKS &&
+          unlikely(key.iov_len != sizeof(txnid_t))) {
         rc = MDBX_CORRUPTED;
         goto fail;
       }
       last = unaligned_peek_u64(4, key.iov_base);
-      if (unlikely(last < MIN_TXNID || last > MAX_TXNID)) {
+      if (!MDBX_DISABLE_PAGECHECKS &&
+          unlikely(last < MIN_TXNID || last > MAX_TXNID)) {
         rc = MDBX_CORRUPTED;
         goto fail;
       }
@@ -5930,7 +5948,8 @@ no_loose:
       const unsigned prev_re_len = MDBX_PNL_SIZE(re_list);
       mdbx_pnl_xmerge(re_list, gc_pnl);
       /* re-check to avoid duplicates */
-      if (unlikely(!mdbx_pnl_check(re_list, txn->mt_next_pgno))) {
+      if (!MDBX_DISABLE_PAGECHECKS &&
+          unlikely(!mdbx_pnl_check(re_list, txn->mt_next_pgno))) {
         rc = MDBX_CORRUPTED;
         goto fail;
       }
@@ -8165,12 +8184,14 @@ retry_noaccount:
             break;
           goto bailout;
         }
-        if (unlikely(key.iov_len != sizeof(txnid_t))) {
+        if (!MDBX_DISABLE_PAGECHECKS &&
+            unlikely(key.iov_len != sizeof(txnid_t))) {
           rc = MDBX_CORRUPTED;
           goto bailout;
         }
         cleaned_gc_id = unaligned_peek_u64(4, key.iov_base);
-        if (unlikely(cleaned_gc_id < MIN_TXNID || cleaned_gc_id > MAX_TXNID)) {
+        if (!MDBX_DISABLE_PAGECHECKS &&
+            unlikely(cleaned_gc_id < MIN_TXNID || cleaned_gc_id > MAX_TXNID)) {
           rc = MDBX_CORRUPTED;
           goto bailout;
         }
@@ -8461,7 +8482,8 @@ retry_noaccount:
               goto bailout;
             }
             txnid_t gc_first = unaligned_peek_u64(4, key.iov_base);
-            if (unlikely(gc_first < MIN_TXNID || gc_first > MAX_TXNID)) {
+            if (!MDBX_DISABLE_PAGECHECKS &&
+                unlikely(gc_first < MIN_TXNID || gc_first > MAX_TXNID)) {
               rc = MDBX_CORRUPTED;
               goto bailout;
             }
@@ -8510,12 +8532,14 @@ retry_noaccount:
         gc_rid = mdbx_find_oldest(txn) - 1;
         rc = mdbx_cursor_get(&couple.outer, &key, NULL, MDBX_FIRST);
         if (rc == MDBX_SUCCESS) {
-          if (unlikely(key.iov_len != sizeof(txnid_t))) {
+          if (!MDBX_DISABLE_PAGECHECKS &&
+              unlikely(key.iov_len != sizeof(txnid_t))) {
             rc = MDBX_CORRUPTED;
             goto bailout;
           }
           txnid_t gc_first = unaligned_peek_u64(4, key.iov_base);
-          if (unlikely(gc_first < MIN_TXNID || gc_first > MAX_TXNID)) {
+          if (!MDBX_DISABLE_PAGECHECKS &&
+              unlikely(gc_first < MIN_TXNID || gc_first > MAX_TXNID)) {
             rc = MDBX_CORRUPTED;
             goto bailout;
           }
@@ -12441,22 +12465,33 @@ static __inline int mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp) {
  *            0=mapped page.
  *
  * Returns 0 on success, non-zero on failure. */
+#if MDBX_DISABLE_PAGECHECKS
+__hot static int __mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
+                                 int *lvl)
+#else
 __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
-                               int *lvl, txnid_t pp_txnid) {
+                               int *lvl, txnid_t pp_txnid)
+#endif /* MDBX_DISABLE_PAGECHECKS */
+{
   MDBX_txn *txn = mc->mc_txn;
   if (unlikely(pgno >= txn->mt_next_pgno)) {
     mdbx_error("page #%" PRIaPGNO " beyond next-pgno", pgno);
     *ret = nullptr;
-    goto corrupted;
+  corrupted:
+    mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
+    return MDBX_PAGE_NOTFOUND;
   }
 
-  MDBX_env *const env = txn->mt_env;
-  mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
-  mdbx_assert(env, pp_txnid >= MIN_TXNID && pp_txnid <= txn->mt_txnid);
+#if !MDBX_DISABLE_PAGECHECKS
+  mdbx_tassert(txn, pp_txnid >= MIN_TXNID && pp_txnid <= txn->mt_txnid);
   const uint16_t illegal_bits =
       (txn->mt_flags & MDBX_TXN_RDONLY)
           ? ~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW)
           : ~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_DIRTY);
+#endif /* !MDBX_DISABLE_PAGECHECKS */
+
+  MDBX_env *const env = txn->mt_env;
+  mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
   MDBX_page *p;
   int level;
   if (unlikely((txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0)) {
@@ -12468,7 +12503,9 @@ __hot static int mdbx_page_get(MDBX_cursor *mc, pgno_t pgno, MDBX_page **ret,
        * leave that unless page_touch happens again). */
       if (unlikely(txn->mt_flags & MDBX_TXN_SPILLS) && txn->tw.spill_pages &&
           mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1)) {
+#if !MDBX_DISABLE_PAGECHECKS
         pp_txnid = txn->mt_txnid;
+#endif /* !MDBX_DISABLE_PAGECHECKS */
         goto spilled;
       }
       p = mdbx_dpl_find(txn->tw.dirtylist, pgno);
@@ -12493,6 +12530,7 @@ dirty:
     goto corrupted;
   }
 
+#if !MDBX_DISABLE_PAGECHECKS
   if (unlikely(p->mp_flags & illegal_bits)) {
     bad_page(p, "invalid page's flags (%u)\n", p->mp_flags);
     goto corrupted;
@@ -12513,15 +12551,12 @@ dirty:
              p->mp_lower, p->mp_upper, page_space(env));
     goto corrupted;
   }
+#endif /* !MDBX_DISABLE_PAGECHECKS */
 
   if (mdbx_audit_enabled())
     return mdbx_page_check(mc, p, C_UPDATING);
 
   return MDBX_SUCCESS;
-
-corrupted:
-  mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
-  return MDBX_PAGE_NOTFOUND;
 }
 
 /* Finish mdbx_page_search() / mdbx_page_search_lowest().
@@ -12624,8 +12659,8 @@ static int mdbx_setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
   assert(dbx->md_vlen_max != (unsigned)-1);
 
   if ((db->md_flags & (MDBX_DUPFIXED | MDBX_INTEGERDUP)) != 0 && db->md_xsize) {
-    if (unlikely(db->md_xsize < dbx->md_vlen_min ||
-                 db->md_xsize > dbx->md_vlen_max)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely(db->md_xsize < dbx->md_vlen_min ||
+                                             db->md_xsize > dbx->md_vlen_max)) {
       mdbx_error("db.md_xsize (%u) <> min/max value-length (%zu/%zu)",
                  db->md_xsize, dbx->md_vlen_min, dbx->md_vlen_max);
       return MDBX_CORRUPTED;
@@ -12673,12 +12708,14 @@ static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
     return MDBX_INCOMPATIBLE;
 
   memcpy(db, data.iov_base, sizeof(MDBX_db));
+#if !MDBX_DISABLE_PAGECHECKS
   mdbx_tassert(txn, txn->mt_txnid >= pp_txnid);
   if (unlikely(db->md_mod_txnid > pp_txnid)) {
     mdbx_error("db.md_mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")",
                db->md_mod_txnid, pp_txnid);
     return MDBX_CORRUPTED;
   }
+#endif /* !MDBX_DISABLE_PAGECHECKS */
   rc = mdbx_setup_dbx(dbx, db, txn->mt_env->me_psize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -13019,7 +13056,7 @@ skip:
              " with %u keys, key index %u",
              mp->mp_pgno, page_numkeys(mp), mc->mc_ki[mc->mc_top]);
 
-  if (unlikely(!IS_LEAF(mp)))
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(!IS_LEAF(mp)))
     return MDBX_CORRUPTED;
 
   if (IS_LEAF2(mp)) {
@@ -13109,7 +13146,7 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
              " with %u keys, key index %u",
              mp->mp_pgno, page_numkeys(mp), mc->mc_ki[mc->mc_top]);
 
-  if (unlikely(!IS_LEAF(mp)))
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(!IS_LEAF(mp)))
     return MDBX_CORRUPTED;
 
   if (IS_LEAF2(mp)) {
@@ -13416,7 +13453,7 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
       return rc;
   }
 
-  if (unlikely(!IS_LEAF(mc->mc_pg[mc->mc_top])))
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(!IS_LEAF(mc->mc_pg[mc->mc_top])))
     return MDBX_CORRUPTED;
 
   mc->mc_flags |= C_INITIALIZED;
@@ -13464,7 +13501,7 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
       return rc;
   }
 
-  if (unlikely(!IS_LEAF(mc->mc_pg[mc->mc_top])))
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(!IS_LEAF(mc->mc_pg[mc->mc_top])))
     return MDBX_CORRUPTED;
 
   mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mc->mc_pg[mc->mc_top]) - 1;
@@ -14580,7 +14617,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     return rc;
 
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
-  if (unlikely(!IS_LEAF(mp)))
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(!IS_LEAF(mp)))
     return MDBX_CORRUPTED;
   if (IS_LEAF2(mp))
     goto del_key;
@@ -15008,7 +15045,7 @@ static void mdbx_node_shrink(MDBX_page *mp, unsigned indx) {
  * [in] mc The main cursor whose sorted-dups cursor is to be initialized. */
 static int mdbx_xcursor_init0(MDBX_cursor *mc) {
   MDBX_xcursor *mx = mc->mc_xcursor;
-  if (unlikely(mx == nullptr)) {
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(mx == nullptr)) {
     mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
                mc->mc_dbi);
     return MDBX_CORRUPTED;
@@ -15040,7 +15077,7 @@ static int mdbx_xcursor_init0(MDBX_cursor *mc) {
 static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
                               const MDBX_page *mp) {
   MDBX_xcursor *mx = mc->mc_xcursor;
-  if (unlikely(mx == nullptr)) {
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(mx == nullptr)) {
     mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
                mc->mc_dbi);
     return MDBX_CORRUPTED;
@@ -15052,13 +15089,15 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
     mdbx_error("invalid node flags %u", flags);
     return MDBX_CORRUPTED;
   case F_DUPDATA | F_SUBDATA:
-    if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+    if (!MDBX_DISABLE_PAGECHECKS &&
+        unlikely(node_ds(node) != sizeof(MDBX_db))) {
       mdbx_error("invalid nested-db record size %zu", node_ds(node));
       return MDBX_CORRUPTED;
     }
     memcpy(&mx->mx_db, node_data(node), sizeof(MDBX_db));
     const txnid_t pp_txnid = IS_DIRTY(mp) ? mc->mc_txn->mt_txnid : mp->mp_txnid;
-    if (unlikely(mx->mx_db.md_mod_txnid > pp_txnid)) {
+    if (!MDBX_DISABLE_PAGECHECKS &&
+        unlikely(mx->mx_db.md_mod_txnid > pp_txnid)) {
       mdbx_error("nested-db.md_mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN
                  ")",
                  mx->mx_db.md_mod_txnid, pp_txnid);
@@ -15070,7 +15109,7 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
     mx->mx_cursor.mc_flags = C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
     break;
   case F_DUPDATA:
-    if (unlikely(node_ds(node) <= PAGEHDRSZ)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely(node_ds(node) <= PAGEHDRSZ)) {
       mdbx_error("invalid nested-page size %zu", node_ds(node));
       return MDBX_CORRUPTED;
     }
@@ -15095,16 +15134,18 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
   }
 
   if (unlikely(mx->mx_db.md_xsize != mc->mc_db->md_xsize)) {
-    if (unlikely(mc->mc_db->md_xsize != 0)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely(mc->mc_db->md_xsize != 0)) {
       mdbx_error("cursor mismatched nested-db md_xsize %u",
                  mc->mc_db->md_xsize);
       return MDBX_CORRUPTED;
     }
-    if (unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0)) {
+    if (!MDBX_DISABLE_PAGECHECKS &&
+        unlikely((mc->mc_db->md_flags & MDBX_DUPFIXED) == 0)) {
       mdbx_error("mismatched nested-db md_flags %u", mc->mc_db->md_flags);
       return MDBX_CORRUPTED;
     }
-    if (unlikely(mx->mx_db.md_xsize < mc->mc_dbx->md_vlen_min ||
+    if (!MDBX_DISABLE_PAGECHECKS &&
+        unlikely(mx->mx_db.md_xsize < mc->mc_dbx->md_vlen_min ||
                  mx->mx_db.md_xsize > mc->mc_dbx->md_vlen_max)) {
       mdbx_error("mismatched nested-db.md_xsize (%u) <> min/max value-length "
                  "(%zu/%zu)",
@@ -15134,7 +15175,7 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
 static int mdbx_xcursor_init2(MDBX_cursor *mc, MDBX_xcursor *src_mx,
                               bool new_dupdata) {
   MDBX_xcursor *mx = mc->mc_xcursor;
-  if (unlikely(mx == nullptr)) {
+  if (!MDBX_DISABLE_PAGECHECKS && unlikely(mx == nullptr)) {
     mdbx_error("unexpected dupsort-page for non-dupsort db/cursor (dbi %u)",
                mc->mc_dbi);
     return MDBX_CORRUPTED;
@@ -17623,7 +17664,8 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
               toggle = my->mc_head & 1;
             }
           } else if (node_flags(node) & F_SUBDATA) {
-            if (unlikely(node_ds(node) != sizeof(MDBX_db))) {
+            if (!MDBX_DISABLE_PAGECHECKS &&
+                unlikely(node_ds(node) != sizeof(MDBX_db))) {
               rc = MDBX_CORRUPTED;
               goto done;
             }
@@ -18622,7 +18664,7 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
       rc = MDBX_INCOMPATIBLE;
       goto early_bailout;
     }
-    if (unlikely(data.iov_len != sizeof(MDBX_db))) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely(data.iov_len != sizeof(MDBX_db))) {
       rc = MDBX_CORRUPTED;
       goto early_bailout;
     }
@@ -21265,6 +21307,9 @@ __dll_export
     " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
     " MDBX_TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
     " MDBX_ENABLE_REFUND=" STRINGIFY(MDBX_ENABLE_REFUND)
+#if MDBX_DISABLE_PAGECHECKS
+    " MDBX_DISABLE_PAGECHECKS=YES"
+#endif /* MDBX_DISABLE_PAGECHECKS */
 #ifdef __SANITIZE_ADDRESS__
     " SANITIZE_ADDRESS=YES"
 #endif /* __SANITIZE_ADDRESS__ */

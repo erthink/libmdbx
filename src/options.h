@@ -98,6 +98,15 @@
 #error MDBX_ENABLE_REFUND must be defined as 0 or 1
 #endif /* MDBX_ENABLE_REFUND */
 
+/** Disable some checks to reduce an overhead and detection probability of
+ * database corruption to a values closer to the LMDB. */
+#ifndef MDBX_DISABLE_PAGECHECKS
+#define MDBX_DISABLE_PAGECHECKS 0
+#endif
+#if !(MDBX_DISABLE_PAGECHECKS == 0 || MDBX_DISABLE_PAGECHECKS == 1)
+#error MDBX_DISABLE_PAGECHECKS must be defined as 0 or 1
+#endif /* MDBX_DISABLE_PAGECHECKS */
+
 /** Controls sort order of internal page number lists.
  * The database format depend on this option and libmdbx builded with different
  * option value are incompatible. */

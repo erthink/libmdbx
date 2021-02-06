@@ -1157,6 +1157,7 @@ overf
 ovpage
 pageable
 pagecache
+PAGECHECKS
 pagehdr
 PAGEHDRSZ
 pagemap
