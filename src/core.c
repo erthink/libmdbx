@@ -14608,8 +14608,8 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])))
     return MDBX_NOTFOUND;
 
-  if (unlikely(!(flags & MDBX_NOSPILL) &&
-               (rc = mdbx_cursor_spill(mc, NULL, NULL))))
+  if (likely((flags & MDBX_NOSPILL) == 0) &&
+      unlikely(rc = mdbx_cursor_spill(mc, NULL, NULL)))
     return rc;
 
   rc = mdbx_cursor_touch(mc);
