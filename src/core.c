@@ -3293,8 +3293,10 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
 static int mdbx_dpl_alloc(MDBX_txn *txn) {
   mdbx_tassert(txn,
                (txn->mt_flags & MDBX_TXN_RDONLY) == 0 && !txn->tw.dirtylist);
-  MDBX_dpl *const dl =
-      mdbx_dpl_reserve(txn, txn->mt_env->me_options.dp_initial);
+  const size_t len = (txn->mt_env->me_options.dp_initial < txn->mt_geo.upper)
+                         ? txn->mt_env->me_options.dp_initial
+                         : txn->mt_geo.upper;
+  MDBX_dpl *const dl = mdbx_dpl_reserve(txn, len);
   if (unlikely(!dl))
     return MDBX_ENOMEM;
   mdbx_dpl_clear(dl);
