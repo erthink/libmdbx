@@ -20902,8 +20902,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_txn_dp_limit:
   case MDBX_opt_txn_dp_initial:
-    if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4 ||
-                 value > bytes2pgno(env, env->me_dbgeo.upper) - NUM_METAS))
+    if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4))
       return MDBX_EINVAL;
     if (unlikely(env->me_txn0 == NULL))
       return MDBX_EACCESS;
