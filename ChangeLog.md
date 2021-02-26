@@ -30,6 +30,7 @@ New features:
    of the range (i.e. 32769..65533) are used for the new representation.
  - Added the `mdbx_drop` similar to LMDB command-line tool to purge or delete (sub)database(s).
  - [Ruby bindings](https://rubygems.org/gems/mdbx/) is available now by [Mahlon E. Smith](https://github.com/mahlonsmith).
+ - Added `MDBX_ENABLE_MADVISE` build option which controls the use of POSIX `madvise()` hints and friends.
 
 Fixes:
 

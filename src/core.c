@@ -5355,6 +5355,7 @@ static __always_inline __maybe_unused int ignore_enosys(int err) {
 }
 #endif /* defined(_WIN32) || defined(_WIN64) */
 
+#if MDBX_ENABLE_MADVISE
 /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
 static __cold int mdbx_set_readahead(MDBX_env *env, const size_t offset,
                                      const size_t length, const bool enable) {
@@ -5420,6 +5421,7 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const size_t offset,
   }
   return MDBX_SUCCESS;
 }
+#endif /* MDBX_ENABLE_MADVISE */
 
 static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                                  const pgno_t size_pgno,
@@ -5435,7 +5437,9 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
   const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
   const size_t prev_size = env->me_dxb_mmap.current;
   const size_t prev_limit = env->me_dxb_mmap.limit;
+#if MDBX_ENABLE_MADVISE || defined(MDBX_USE_VALGRIND)
   const void *const prev_addr = env->me_map;
+#endif /* MDBX_ENABLE_MADVISE || MDBX_USE_VALGRIND */
 
   mdbx_verbose("resize datafile/mapping: "
                "present %" PRIuPTR " -> %" PRIuPTR ", "
@@ -5514,6 +5518,7 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
 
 #endif /* ! Windows */
 
+#if MDBX_ENABLE_MADVISE
   if (size_bytes < prev_size) {
     mdbx_notice("resize-MADV_%s %u..%u",
                 (env->me_flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED",
@@ -5548,9 +5553,12 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     if (env->me_discarded_tail->weak > size_pgno)
       env->me_discarded_tail->weak = size_pgno;
   }
+#endif /* MDBX_ENABLE_MADVISE */
 
   rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes,
                     mapping_can_be_moved);
+
+#if MDBX_ENABLE_MADVISE
   if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_NORDAHEAD) == 0) {
     const int readahead =
         mdbx_is_readahead_reasonable(size_bytes, -(intptr_t)prev_size);
@@ -5574,6 +5582,7 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
       }
     }
   }
+#endif /* MDBX_ENABLE_MADVISE */
 
 bailout:
   if (rc == MDBX_SUCCESS) {
@@ -10035,6 +10044,7 @@ static MDBX_meta *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   return page_meta(page2);
 }
 
+#if MDBX_ENABLE_MADVISE
 static size_t mdbx_madvise_threshold(const MDBX_env *env,
                                      const size_t largest_bytes) {
   /* TODO: use options */
@@ -10046,6 +10056,7 @@ static size_t mdbx_madvise_threshold(const MDBX_env *env,
                                      : largest_bytes >> factor;
   return bytes_align2os_bytes(env, threshold);
 }
+#endif /* MDBX_ENABLE_MADVISE */
 
 static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                             MDBX_meta *const pending) {
@@ -10095,7 +10106,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                 pgno2bytes(env, edge - largest_pgno));
     }
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
-#if defined(MADV_DONTNEED)
+#if MDBX_ENABLE_MADVISE && defined(MADV_DONTNEED)
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
     /* threshold to avoid unreasonable frequent madvise() calls */
     const size_t madvise_threshold = mdbx_madvise_threshold(env, largest_bytes);
@@ -10129,7 +10140,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
     }
-#endif /* MADV_FREE || MADV_DONTNEED */
+#endif /* MDBX_ENABLE_MADVISE && MADV_DONTNEED */
 
     /* LY: check conditions to shrink datafile */
     const pgno_t backlog_gap = 3 + pending->mm_dbs[FREE_DBI].md_depth * 3;
@@ -11028,15 +11039,19 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   mdbx_verbose("current boot-id %" PRIx64 "-%" PRIx64 " (%savailable)",
                bootid.x, bootid.y, (bootid.x | bootid.y) ? "" : "not-");
 
+#if MDBX_ENABLE_MADVISE
   /* calculate readahead hint before mmap with zero redundant pages */
   const bool readahead =
       (env->me_flags & MDBX_NORDAHEAD) == 0 &&
       mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
+#endif /* MDBX_ENABLE_MADVISE */
+
   err = mdbx_mmap(env->me_flags, &env->me_dxb_mmap, env->me_dbgeo.now,
                   env->me_dbgeo.upper, lck_rc ? MMAP_OPTION_TRUNCATE : 0);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
+#if MDBX_ENABLE_MADVISE
 #if defined(MADV_DONTDUMP)
   err = madvise(env->me_map, env->me_dxb_mmap.limit, MADV_DONTDUMP)
             ? ignore_enosys(errno)
@@ -11054,6 +11069,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       return err;
   }
 #endif /* MADV_DODUMP */
+#endif /* MDBX_ENABLE_MADVISE */
 
 #ifdef MDBX_USE_VALGRIND
   env->me_valgrind_handle =
@@ -11259,6 +11275,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 
   atomic_store32(env->me_discarded_tail, bytes2pgno(env, used_aligned2os_bytes),
                  mo_Relaxed);
+#if MDBX_ENABLE_MADVISE
   if (used_aligned2os_bytes < env->me_dxb_mmap.current) {
 #if defined(MADV_REMOVE)
     if (lck_rc && (env->me_flags & MDBX_WRITEMAP) != 0 &&
@@ -11303,6 +11320,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   err = mdbx_set_readahead(env, 0, used_bytes, readahead);
   if (err != MDBX_SUCCESS && lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE)
     return err;
+#endif /* MDBX_ENABLE_MADVISE */
 
   return rc;
 }
@@ -11439,6 +11457,7 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   if (unlikely(err != MDBX_SUCCESS))
     goto bailout;
 
+#if MDBX_ENABLE_MADVISE
 #ifdef MADV_DODUMP
   err = madvise(env->me_lck, size, MADV_DODUMP) ? ignore_enosys(errno)
                                                 : MDBX_SUCCESS;
@@ -11452,6 +11471,7 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   if (unlikely(MDBX_IS_ERROR(err)))
     goto bailout;
 #endif /* MADV_WILLNEED */
+#endif /* MDBX_ENABLE_MADVISE */
 
   struct MDBX_lockinfo *const lck = env->me_lck;
   if (lck_seize_rc == MDBX_RESULT_TRUE) {
@@ -21421,6 +21441,7 @@ __dll_export
     " MDBX_64BIT_CAS=" MDBX_64BIT_CAS_CONFIG
     " MDBX_TRUST_RTC=" MDBX_TRUST_RTC_CONFIG
     " MDBX_ENABLE_REFUND=" STRINGIFY(MDBX_ENABLE_REFUND)
+    " MDBX_ENABLE_MADVISE=" STRINGIFY(MDBX_ENABLE_MADVISE)
 #if MDBX_DISABLE_PAGECHECKS
     " MDBX_DISABLE_PAGECHECKS=YES"
 #endif /* MDBX_DISABLE_PAGECHECKS */

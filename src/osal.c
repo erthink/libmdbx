@@ -1396,7 +1396,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     map->filesize = size;
 #else
     map->current = size;
-#endif
+#endif /* ! Windows */
   } else {
     uint64_t filesize = 0;
     err = mdbx_filesize(map->fd, &filesize);
@@ -1406,7 +1406,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     map->filesize = filesize;
 #else
     map->current = (filesize > limit) ? limit : (size_t)filesize;
-#endif
+#endif /* ! Windows */
   }
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -1448,7 +1448,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   map->current = (size_t)SectionSize.QuadPart;
   map->limit = ViewSize;
 
-#else
+#else /* Windows */
 
 #ifndef MAP_TRYFIXED
 #define MAP_TRYFIXED 0
@@ -1482,15 +1482,17 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   }
   map->limit = limit;
 
+#if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
     return errno;
-#endif
+#endif /* MADV_DONTFORK */
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
-#endif
+#endif /* MADV_NOHUGEPAGE */
+#endif /* MDBX_ENABLE_MADVISE */
 
-#endif
+#endif /* ! Windows */
 
   VALGRIND_MAKE_MEM_DEFINED(map->address, map->current);
   ASAN_UNPOISON_MEMORY_REGION(map->address, map->current);
@@ -1512,7 +1514,7 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
 #else
   if (unlikely(munmap(map->address, map->limit)))
     return errno;
-#endif
+#endif /* ! Windows */
 
   map->limit = 0;
   map->current = 0;
@@ -1683,7 +1685,7 @@ retry_mapview:;
   map->current = (size_t)SectionSize.QuadPart;
   map->limit = ViewSize;
 
-#else
+#else /* Windows */
 
   uint64_t filesize = 0;
   int rc = mdbx_filesize(map->fd, &filesize);
@@ -1814,14 +1816,15 @@ retry_mapview:;
   }
   map->limit = limit;
 
+#if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
   if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
     return errno;
 #endif /* MADV_DONTFORK */
-
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
+#endif /* MDBX_ENABLE_MADVISE */
 
 #endif /* POSIX / Windows */
 
