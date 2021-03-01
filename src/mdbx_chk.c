@@ -1497,8 +1497,8 @@ int main(int argc, char *argv[]) {
           if (all_leaf) {
             print(", leaf %" PRIu64, all_leaf);
             if (verbose > 2 &&
-                (dbi->pages.leaf_dupfixed | dbi->pages.subleaf_dupsort |
-                 dbi->pages.subleaf_dupsort))
+                (dbi->pages.subleaf_dupsort | dbi->pages.leaf_dupfixed |
+                 dbi->pages.subleaf_dupfixed))
               print(" (usual %" PRIu64 ", sub-dupsort %" PRIu64
                     ", dupfixed %" PRIu64 ", sub-dupfixed %" PRIu64 ")",
                     dbi->pages.leaf, dbi->pages.subleaf_dupsort,
