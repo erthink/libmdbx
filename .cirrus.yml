@@ -3,4 +3,4 @@ freebsd_instance:
 
 task:
   install_script: pkg install -y gmake bash git
-  script: git fetch --tags && gmake check
+  script: git fetch --tags --force && gmake check

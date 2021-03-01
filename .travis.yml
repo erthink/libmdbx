@@ -62,7 +62,7 @@ before_script: |
 script: |
   ${CC} --version
   ${CXX} --version
-  git fetch --unshallow --tags --prune || exit 1
+  git fetch --unshallow --tags --prune --force || exit 1
   if [ ! -s ./coverity_scan.sh ]; then
     make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
   else
