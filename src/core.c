@@ -3293,8 +3293,10 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
 static int mdbx_dpl_alloc(MDBX_txn *txn) {
   mdbx_tassert(txn,
                (txn->mt_flags & MDBX_TXN_RDONLY) == 0 && !txn->tw.dirtylist);
-  MDBX_dpl *const dl =
-      mdbx_dpl_reserve(txn, txn->mt_env->me_options.dp_initial);
+  const size_t len = (txn->mt_env->me_options.dp_initial < txn->mt_geo.upper)
+                         ? txn->mt_env->me_options.dp_initial
+                         : txn->mt_geo.upper;
+  MDBX_dpl *const dl = mdbx_dpl_reserve(txn, len);
   if (unlikely(!dl))
     return MDBX_ENOMEM;
   mdbx_dpl_clear(dl);
@@ -14608,8 +14610,8 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])))
     return MDBX_NOTFOUND;
 
-  if (unlikely(!(flags & MDBX_NOSPILL) &&
-               (rc = mdbx_cursor_spill(mc, NULL, NULL))))
+  if (likely((flags & MDBX_NOSPILL) == 0) &&
+      unlikely(rc = mdbx_cursor_spill(mc, NULL, NULL)))
     return rc;
 
   rc = mdbx_cursor_touch(mc);
@@ -20902,8 +20904,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_txn_dp_limit:
   case MDBX_opt_txn_dp_initial:
-    if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4 ||
-                 value > bytes2pgno(env, env->me_dbgeo.upper) - NUM_METAS))
+    if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4))
       return MDBX_EINVAL;
     if (unlikely(env->me_txn0 == NULL))
       return MDBX_EACCESS;
