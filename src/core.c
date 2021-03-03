@@ -3293,13 +3293,16 @@ static int mdbx_dpl_alloc(MDBX_txn *txn) {
   const int wanna = (txn->mt_env->me_options.dp_initial < txn->mt_geo.upper)
                         ? txn->mt_env->me_options.dp_initial
                         : txn->mt_geo.upper;
-  const int realloc_threshold = 64;
-  if (!txn->tw.dirtylist ||
-      (int)txn->tw.dirtylist->detent - wanna > realloc_threshold ||
-      (int)txn->tw.dirtylist->detent - wanna < -realloc_threshold) {
-    if (unlikely(!mdbx_dpl_reserve(txn, wanna)))
-      return MDBX_ENOMEM;
+  if (txn->tw.dirtylist) {
+    mdbx_dpl_clear(txn->tw.dirtylist);
+    const int realloc_threshold = 64;
+    if (likely(
+            !((int)(txn->tw.dirtylist->detent - wanna) > realloc_threshold ||
+              (int)(txn->tw.dirtylist->detent - wanna) < -realloc_threshold)))
+      return MDBX_SUCCESS;
   }
+  if (unlikely(!mdbx_dpl_reserve(txn, wanna)))
+    return MDBX_ENOMEM;
   mdbx_dpl_clear(txn->tw.dirtylist);
   return MDBX_SUCCESS;
 }
