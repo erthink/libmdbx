@@ -18809,8 +18809,13 @@ static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
   env->me_dbxs[dbi].md_name.iov_base = NULL;
   mdbx_free(ptr);
 
-  if (env->me_numdbs == dbi + 1)
-    env->me_numdbs = dbi;
+  if (env->me_numdbs == dbi + 1) {
+    unsigned i = env->me_numdbs;
+    do
+      --i;
+    while (i > CORE_DBS && !env->me_dbxs[i - 1].md_name.iov_base);
+    env->me_numdbs = i;
+  }
 
   return MDBX_SUCCESS;
 }
