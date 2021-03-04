@@ -21243,7 +21243,7 @@ __dll_export
     "ARM"
   #elif defined(__mips64) || defined(__mips64__) || (defined(__mips) && (__mips >= 64))
     "MIPS64"
-  #elif if defined(__mips__) || defined(__mips) || defined(_R4000) || defined(__MIPS__)
+  #elif defined(__mips__) || defined(__mips) || defined(_R4000) || defined(__MIPS__)
     "MIPS"
   #elif defined(__hppa64__) || defined(__HPPA64__) || defined(__hppa64)
     "PARISC64"
