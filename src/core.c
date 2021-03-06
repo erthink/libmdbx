@@ -13757,22 +13757,22 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
  * [in] mc The cursor to operate on. */
 static int mdbx_cursor_touch(MDBX_cursor *mc) {
   int rc = MDBX_SUCCESS;
-
-  if (mc->mc_dbi >= CORE_DBS &&
-      (*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0) {
-    mdbx_cassert(mc, (mc->mc_flags & C_RECLAIMING) == 0);
-    /* Touch DB record of named DB */
-    MDBX_cursor_couple cx;
-    if (TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi))
-      return MDBX_BAD_DBI;
-    rc = mdbx_cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+  if (unlikely((*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0)) {
     *mc->mc_dbistate |= DBI_DIRTY;
     mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
-    rc = mdbx_page_search(&cx.outer, &mc->mc_dbx->md_name, MDBX_PS_MODIFY);
-    if (unlikely(rc))
-      return rc;
+    if (mc->mc_dbi >= CORE_DBS) {
+      mdbx_cassert(mc, (mc->mc_flags & C_RECLAIMING) == 0);
+      /* Touch DB record of named DB */
+      MDBX_cursor_couple cx;
+      if (TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi))
+        return MDBX_BAD_DBI;
+      rc = mdbx_cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+      rc = mdbx_page_search(&cx.outer, &mc->mc_dbx->md_name, MDBX_PS_MODIFY);
+      if (unlikely(rc))
+        return rc;
+    }
   }
   mc->mc_top = 0;
   if (mc->mc_snum) {
@@ -18993,6 +18993,8 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   if (del && dbi >= CORE_DBS) {
     rc = mdbx_del0(txn, MAIN_DBI, &mc->mc_dbx->md_name, NULL, F_SUBDATA);
     if (likely(rc == MDBX_SUCCESS)) {
+      mdbx_tassert(txn, txn->mt_dbistate[MAIN_DBI] & DBI_DIRTY);
+      mdbx_tassert(txn, txn->mt_flags & MDBX_TXN_DIRTY);
       txn->mt_dbistate[dbi] = DBI_STALE;
       MDBX_env *env = txn->mt_env;
       rc = mdbx_fastmutex_acquire(&env->me_dbi_lock);
