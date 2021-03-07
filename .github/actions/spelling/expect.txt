@@ -54,6 +54,7 @@ argv
 ARMEB
 ARMEL
 ARMT
+Artem
 asan
 asis
 asm
@@ -1763,6 +1764,8 @@ vmmeter
 vmstat
 vmtotal
 voidptr
+vorot
+Vorotnikov
 vromanov
 Vrq
 vscprintf

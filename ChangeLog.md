@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## v0.9.4 (in development) scheduled at 2021-02-23
+## v0.9.4 (in development) scheduled at 2021-03-18
 
 TODO:
 
@@ -13,7 +13,8 @@ TODO:
 
 Acknowledgements:
 
- - [Alex Sharov](https://github.com/AskAlexSharov) for [mdbx-go](https://github.com/torquem-ch/mdbx-go).
+ - [Alex Sharov](https://github.com/AskAlexSharov) for [mdbx-go](https://github.com/torquem-ch/mdbx-go) and for bug reporting.
+ - [Artem Vorotnikov](https://github.com/vorot93) for bug reporting.
 
 New features:
 
@@ -26,6 +27,7 @@ New features:
 Fixes:
 
  - Fixed performance regression due non-optimal C11 atomics usage (https://github.com/erthink/libmdbx/issues/160).
+ - Fixed "reincarnation" of subDB after it deletion (https://github.com/erthink/libmdbx/issues/168).
 
 
 ## v0.9.3 at 2021-02-02
