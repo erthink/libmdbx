@@ -23,6 +23,10 @@ New features:
    The `MDBX_DISABLE_PAGECHECKS=1` provides a performance boost of about 10% in CRUD scenarios,
    and conjointly with the `MDBX_ENV_CHECKPID=0` and `MDBX_TXN_CHECKOWNER=0` options can yield
    up to 30% more performance compared to LMDB.
+ - Using float point (exponential quantized) representation for internal 16-bit values
+   of grow step and shrink threshold when huge ones (https://github.com/erthink/libmdbx/issues/166).
+   To minimize the impact on compatibility, only the odd values inside the upper half
+   of the range (i.e. 32769..65533) are used for the new representation.
 
 Fixes:
 
