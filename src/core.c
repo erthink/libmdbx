@@ -10663,12 +10663,12 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
 
   if (growth_step < 0) {
     growth_step = ((size_t)(size_upper - size_lower)) / 42;
-    if (growth_step > size_lower)
+    if (growth_step > size_lower && size_lower < (intptr_t)MEGABYTE)
       growth_step = size_lower;
     if (growth_step < 65536)
       growth_step = 65536;
-    if ((size_t)growth_step > MEGABYTE * 16)
-      growth_step = MEGABYTE * 16;
+    if ((size_t)growth_step > MAX_MAPSIZE / 64)
+      growth_step = MAX_MAPSIZE / 64;
   }
   if (growth_step == 0 && shrink_threshold > 0)
     growth_step = 1;
