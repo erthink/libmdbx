@@ -68,7 +68,7 @@ MDBX_NOTHROW_CONST_FUNCTION static __inline uint16_t v2me(size_t v,
                                                           unsigned e) {
   assert(v > (e ? me2v(2047, e - 1) : 32768));
   assert(v <= me2v(2047, e));
-  size_t m = (v - 32768 + (1 << (e + 5)) - 1) >> (e + 5);
+  size_t m = (v - 32768 + ((size_t)1 << (e + 5)) - 1) >> (e + 5);
   m -= m > 0;
   assert(m < 2048 && e < 8);
   // f e d c b a 9 8 7 6 5 4 3 2 1 0
