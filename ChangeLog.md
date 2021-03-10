@@ -27,6 +27,7 @@ New features:
    of grow step and shrink threshold when huge ones (https://github.com/erthink/libmdbx/issues/166).
    To minimize the impact on compatibility, only the odd values inside the upper half
    of the range (i.e. 32769..65533) are used for the new representation.
+ - Added the `mdbx_drop` similar to LMDB command-line tool to purge or delete (sub)database(s).
 
 Fixes:
 
