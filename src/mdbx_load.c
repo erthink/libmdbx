@@ -375,7 +375,7 @@ static int badend(void) {
   return errno ? errno : MDBX_ENODATA;
 }
 
-static int unhex(unsigned char *c2) {
+static __inline int unhex(unsigned char *c2) {
   int x, c;
   x = *c2++ & 0x4f;
   if (x & 0x40)
@@ -388,7 +388,7 @@ static int unhex(unsigned char *c2) {
   return c;
 }
 
-static int readline(MDBX_val *out, MDBX_val *buf) {
+__hot static int readline(MDBX_val *out, MDBX_val *buf) {
   unsigned char *c1, *c2, *end;
   size_t len, l2;
   int c;
