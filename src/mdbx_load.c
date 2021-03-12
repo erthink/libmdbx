@@ -130,17 +130,17 @@ static MDBX_val kbuf, dbuf;
 
 typedef struct flagbit {
   unsigned bit;
-  char *name;
   unsigned len;
+  char *name;
 } flagbit;
 
-#define S(s) s, STRLENOF(s)
+#define S(s) STRLENOF(s), s
 
 flagbit dbflags[] = {
     {MDBX_REVERSEKEY, S("reversekey")}, {MDBX_DUPSORT, S("duplicates")},
     {MDBX_DUPSORT, S("dupsort")},       {MDBX_INTEGERKEY, S("integerkey")},
     {MDBX_DUPFIXED, S("dupfixed")},     {MDBX_INTEGERDUP, S("integerdup")},
-    {MDBX_REVERSEDUP, S("reversedup")}, {0, nullptr, 0}};
+    {MDBX_REVERSEDUP, S("reversedup")}, {0, 0, nullptr}};
 
 static int readhdr(void) {
   /* reset parameters */
