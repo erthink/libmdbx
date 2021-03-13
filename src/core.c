@@ -6456,9 +6456,6 @@ __cold static int mdbx_env_sync_internal(MDBX_env *env, bool force,
   if (unlikely(flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)))
     return MDBX_EACCESS;
 
-  if (unlikely(!env->me_map))
-    return MDBX_EPERM;
-
   int rc = MDBX_RESULT_TRUE /* means "nothing to sync" */;
   bool need_unlock = false;
   if (nonblock && atomic_load32(env->me_unsynced_pages, mo_AcquireRelease) == 0)
@@ -6551,7 +6548,7 @@ fastpath:
   return rc;
 }
 
-static __inline int check_env(const MDBX_env *env) {
+static __inline int check_env(const MDBX_env *env, const bool wanna_active) {
   if (unlikely(!env))
     return MDBX_EINVAL;
 
@@ -6568,11 +6565,16 @@ static __inline int check_env(const MDBX_env *env) {
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
+  if (wanna_active && unlikely((env->me_flags & MDBX_ENV_ACTIVE) == 0)) {
+    mdbx_assert(env, env->me_map != nullptr);
+    return MDBX_EPERM;
+  }
+
   return MDBX_SUCCESS;
 }
 
 __cold int mdbx_env_sync_ex(MDBX_env *env, bool force, bool nonblock) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -6838,7 +6840,7 @@ static bind_rslot_result bind_rslot(MDBX_env *env, const uintptr_t tid) {
 }
 
 __cold int mdbx_thread_register(const MDBX_env *env) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -6868,7 +6870,7 @@ __cold int mdbx_thread_register(const MDBX_env *env) {
 }
 
 __cold int mdbx_thread_unregister(const MDBX_env *env) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -7201,6 +7203,9 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(txn->mt_flags & bad_bits))
     return MDBX_BAD_TXN;
 
+  if (unlikely(!txn->mt_env->me_map))
+    return MDBX_EPERM;
+
 #if MDBX_TXN_CHECKOWNER
   if ((txn->mt_flags & MDBX_NOTLS) == 0 &&
       unlikely(txn->mt_owner != mdbx_thread_self()))
@@ -7219,6 +7224,9 @@ static __always_inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
 
   if (unlikely(txn->mt_flags & bad_bits))
     return MDBX_BAD_TXN;
+
+  if (unlikely(!txn->mt_env->me_map))
+    return MDBX_EPERM;
 
   if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
@@ -7295,16 +7303,13 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
                (flags & ~MDBX_TXN_RO_BEGIN_FLAGS)))
     return MDBX_EINVAL;
 
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   if (unlikely(env->me_flags & MDBX_RDONLY &
                ~flags)) /* write txn in RDONLY env */
     return MDBX_EACCESS;
-
-  if (unlikely(!env->me_map))
-    return MDBX_EPERM;
 
   flags |= env->me_flags & MDBX_WRITEMAP;
 
@@ -10485,7 +10490,7 @@ __cold LIBMDBX_API int
 mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
                       intptr_t size_upper, intptr_t growth_step,
                       intptr_t shrink_threshold, intptr_t pagesize) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -11647,11 +11652,12 @@ static uint32_t merge_sync_flags(const uint32_t a, const uint32_t b) {
 __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta) {
   if (unlikely(target_meta >= NUM_METAS))
     return MDBX_EINVAL;
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if ((env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_EXCLUSIVE)
+  if (unlikely((env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) !=
+               MDBX_EXCLUSIVE))
     return MDBX_EPERM;
 
   MDBX_page *page =
@@ -11704,9 +11710,11 @@ __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                       unsigned target_meta, bool writeable) {
   if (unlikely(target_meta >= NUM_METAS))
     return MDBX_EINVAL;
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
+  if (unlikely(env->me_map))
+    return MDBX_EPERM;
 
   env->me_stuck_meta = (int8_t)target_meta;
   return mdbx_env_open(
@@ -11901,7 +11909,7 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
 
 __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -11909,7 +11917,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     return MDBX_EINVAL;
 
   if (env->me_lazy_fd != INVALID_HANDLE_VALUE ||
-      (env->me_flags & MDBX_ENV_ACTIVE) != 0)
+      (env->me_flags & MDBX_ENV_ACTIVE) != 0 || env->me_map)
     return MDBX_EPERM;
 
   /* pickup previously mdbx_env_set_flags(),
@@ -12236,7 +12244,8 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
     env->me_flags |= MDBX_FATAL_ERROR;
 #endif /* MDBX_ENV_CHECKPID */
 
-  if ((env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0 && env->me_txn0) {
+  if (env->me_map && (env->me_flags & (MDBX_RDONLY | MDBX_FATAL_ERROR)) == 0 &&
+      env->me_txn0) {
     if (env->me_txn0->mt_owner && env->me_txn0->mt_owner != mdbx_thread_self())
       return MDBX_BUSY;
   } else
@@ -18084,7 +18093,7 @@ static __cold int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 
 __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
                             unsigned flags) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18149,7 +18158,7 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 
 __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
                          MDBX_copy_flags_t flags) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18211,11 +18220,13 @@ __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
 
 __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
                               bool onoff) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(flags & ~ENV_CHANGEABLE_FLAGS))
+  if (unlikely(flags &
+               ((env->me_flags & MDBX_ENV_ACTIVE) ? ~ENV_CHANGEABLE_FLAGS
+                                                  : ~ENV_USABLE_FLAGS)))
     return MDBX_EPERM;
 
   if (unlikely(env->me_flags & MDBX_RDONLY))
@@ -18224,21 +18235,28 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
   if (unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
     return MDBX_BUSY;
 
-  rc = mdbx_txn_lock(env, false);
-  if (unlikely(rc))
-    return rc;
+  const bool lock_needed = (env->me_map && env->me_txn0 &&
+                            env->me_txn0->mt_owner != mdbx_thread_self());
+  bool should_unlock = false;
+  if (lock_needed) {
+    rc = mdbx_txn_lock(env, false);
+    if (unlikely(rc))
+      return rc;
+    should_unlock = true;
+  }
 
   if (onoff)
     env->me_flags = merge_sync_flags(env->me_flags, flags);
   else
     env->me_flags &= ~flags;
 
-  mdbx_txn_unlock(env);
+  if (should_unlock)
+    mdbx_txn_unlock(env);
   return MDBX_SUCCESS;
 }
 
 __cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *arg) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18250,7 +18268,7 @@ __cold int mdbx_env_get_flags(const MDBX_env *env, unsigned *arg) {
 }
 
 __cold int mdbx_env_set_userctx(MDBX_env *env, void *ctx) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18263,7 +18281,7 @@ void *__cold mdbx_env_get_userctx(const MDBX_env *env) {
 }
 
 __cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18277,7 +18295,7 @@ __cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func) {
 }
 
 __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18289,7 +18307,7 @@ __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
 }
 
 __cold int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *arg) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -18335,7 +18353,7 @@ __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
       return err;
   }
   if (env) {
-    int err = check_env(env);
+    int err = check_env(env, true);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     if (txn && unlikely(txn->mt_env != env))
@@ -18431,7 +18449,7 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
       return err;
   }
   if (env) {
-    int err = check_env(env);
+    int err = check_env(env, false);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     if (txn && unlikely(txn->mt_env != env))
@@ -18918,7 +18936,7 @@ static int mdbx_dbi_close_locked(MDBX_env *env, MDBX_dbi dbi) {
 }
 
 int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -19154,7 +19172,7 @@ int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
 
 __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
                             void *ctx) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -19273,7 +19291,7 @@ __cold int mdbx_reader_check(MDBX_env *env, int *dead) {
  *  Otherwise errcode. */
 MDBX_INTERNAL_FUNC __cold int
 mdbx_cleanup_dead_readers(MDBX_env *env, int rdt_locked, int *dead) {
-  int rc = check_env(env);
+  int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -19503,7 +19521,7 @@ __cold int mdbx_env_set_syncperiod(MDBX_env *env, unsigned seconds_16dot16) {
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 __cold int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr) {
-  int rc = check_env(env);
+  int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -20909,7 +20927,7 @@ __cold MDBX_cmp_func *mdbx_get_datacmp(unsigned flags) {
 
 __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
                                const uint64_t value) {
-  int err = check_env(env);
+  int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -21069,7 +21087,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 
 __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
                                uint64_t *value) {
-  int err = check_env(env);
+  int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
   if (unlikely(!value))
