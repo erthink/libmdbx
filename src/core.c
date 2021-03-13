@@ -6565,9 +6565,10 @@ static __inline int check_env(const MDBX_env *env, const bool wanna_active) {
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
-  if (wanna_active && unlikely((env->me_flags & MDBX_ENV_ACTIVE) == 0)) {
+  if (wanna_active) {
+    if (unlikely((env->me_flags & MDBX_ENV_ACTIVE) == 0))
+      return MDBX_EPERM;
     mdbx_assert(env, env->me_map != nullptr);
-    return MDBX_EPERM;
   }
 
   return MDBX_SUCCESS;
