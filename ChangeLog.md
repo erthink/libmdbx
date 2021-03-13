@@ -35,6 +35,7 @@ Fixes:
  - Fixed "reincarnation" of subDB after it deletion (https://github.com/erthink/libmdbx/issues/168).
  - Fixed (disallowing) implicit subDB deletion via operations on `@MAIN`'s DBI-handle.
  - Fixed a crash of `mdbx_env_info_ex()` in case of a call for a non-open environment (https://github.com/erthink/libmdbx/issues/171).
+ - Fixed the selecting/adjustment values inside `mdbx_env_set_geometry()` for implicit out-of-range cases (https://github.com/erthink/libmdbx/issues/170).
 
 
 ## v0.9.3 at 2021-02-02

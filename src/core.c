@@ -10594,8 +10594,11 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (MIN_MAPSIZE / pagesize < MIN_PAGENO)
       size_lower = MIN_PAGENO * pagesize;
   }
-  if (size_lower == INTPTR_MAX)
+  if (size_lower >= INTPTR_MAX) {
     size_lower = MAX_MAPSIZE;
+    if ((size_t)size_lower / pagesize > MAX_PAGENO)
+      size_lower = pagesize * MAX_PAGENO;
+  }
 
   if (size_now <= 0) {
     size_now = DEFAULT_MAPSIZE;
@@ -10604,8 +10607,11 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (size_upper >= size_lower && size_now > size_upper)
       size_now = size_upper;
   }
-  if (size_now == INTPTR_MAX)
+  if (size_now >= INTPTR_MAX) {
     size_now = MAX_MAPSIZE;
+    if ((size_t)size_now / pagesize > MAX_PAGENO)
+      size_now = pagesize * MAX_PAGENO;
+  }
 
   if (size_upper <= 0) {
     if ((size_t)size_now >= MAX_MAPSIZE / 2)
@@ -10619,6 +10625,10 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       if ((size_t)size_upper < DEFAULT_MAPSIZE * 2)
         size_upper = DEFAULT_MAPSIZE * 2;
     }
+    if ((size_t)size_upper / pagesize > MAX_PAGENO)
+      size_upper = pagesize * MAX_PAGENO;
+  } else if (size_upper >= INTPTR_MAX) {
+    size_upper = MAX_MAPSIZE;
     if ((size_t)size_upper / pagesize > MAX_PAGENO)
       size_upper = pagesize * MAX_PAGENO;
   }
