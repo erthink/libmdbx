@@ -18444,6 +18444,31 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid)
     return MDBX_EINVAL;
 
+  /* is the environment open? (https://github.com/erthink/libmdbx/issues/171) */
+  if (unlikely(!env->me_map)) {
+    /* environment not yet opened */
+#if 1
+    /* default behavior: returns the available info but zeroed the rest */
+    memset(arg, 0, bytes);
+    arg->mi_geo.lower = env->me_dbgeo.lower;
+    arg->mi_geo.upper = env->me_dbgeo.upper;
+    arg->mi_geo.shrink = env->me_dbgeo.shrink;
+    arg->mi_geo.grow = env->me_dbgeo.grow;
+    arg->mi_geo.current = env->me_dbgeo.now;
+    arg->mi_maxreaders = env->me_maxreaders;
+    arg->mi_dxb_pagesize = env->me_psize;
+    arg->mi_sys_pagesize = env->me_os_psize;
+    if (likely(bytes > size_before_bootid)) {
+      arg->mi_bootid.current.x = bootid.x;
+      arg->mi_bootid.current.y = bootid.y;
+    }
+    return MDBX_SUCCESS;
+#else
+    /* some users may prefer this behavior: return appropriate error */
+    return MDBX_EPERM;
+#endif
+  }
+
   const MDBX_meta *const meta0 = METAPAGE(env, 0);
   const MDBX_meta *const meta1 = METAPAGE(env, 1);
   const MDBX_meta *const meta2 = METAPAGE(env, 2);
