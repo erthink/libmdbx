@@ -3739,7 +3739,7 @@ static int __must_check_result mdbx_xcursor_init2(MDBX_cursor *mc,
                                                   bool new_dupdata);
 static void cursor_copy_internal(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 
-static int __must_check_result mdbx_drop0(MDBX_cursor *mc, int subs);
+static int __must_check_result mdbx_drop0(MDBX_cursor *mc, bool subs);
 static int __must_check_result mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi);
 static int __must_check_result mdbx_setup_dbx(MDBX_dbx *const dbx,
                                               const MDBX_db *const db,
@@ -14756,7 +14756,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
 
     if (node_flags(node) & F_SUBDATA) {
       /* add all the child DB's pages to the free list */
-      rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, 0);
+      rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, false);
       if (unlikely(rc))
         goto fail;
     }
@@ -18939,7 +18939,7 @@ int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
  * [in] mc Cursor on the DB to free.
  * [in] subs non-Zero to check for sub-DBs in this DB.
  * Returns 0 on success, non-zero on failure. */
-static int mdbx_drop0(MDBX_cursor *mc, int subs) {
+static int mdbx_drop0(MDBX_cursor *mc, bool subs) {
   int rc = mdbx_page_search(mc, NULL, MDBX_PS_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
     MDBX_txn *txn = mc->mc_txn;
@@ -18979,10 +18979,14 @@ static int mdbx_drop0(MDBX_cursor *mc, int subs) {
             if (!mc->mc_db->md_overflow_pages && !subs)
               break;
           } else if (subs && (node_flags(node) & F_SUBDATA)) {
+            if (unlikely((node_flags(node) & F_DUPDATA) == 0)) {
+              rc = /* disallowing implicit subDB deletion */ MDBX_INCOMPATIBLE;
+              goto done;
+            }
             rc = mdbx_xcursor_init1(mc, node, mp);
             if (unlikely(rc != MDBX_SUCCESS))
               goto done;
-            rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, 0);
+            rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, false);
             if (unlikely(rc))
               goto done;
           }
@@ -19054,7 +19058,8 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
     goto bailout;
   }
 
-  rc = mdbx_drop0(mc, mc->mc_db->md_flags & MDBX_DUPSORT);
+  rc = mdbx_drop0(mc,
+                  dbi == MAIN_DBI || (mc->mc_db->md_flags & MDBX_DUPSORT) != 0);
   /* Invalidate the dropped DB's cursors */
   for (MDBX_cursor *m2 = txn->tw.cursors[dbi]; m2; m2 = m2->mc_next)
     m2->mc_flags &= ~(C_INITIALIZED | C_EOF);

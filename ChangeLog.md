@@ -33,6 +33,7 @@ Fixes:
 
  - Fixed performance regression due non-optimal C11 atomics usage (https://github.com/erthink/libmdbx/issues/160).
  - Fixed "reincarnation" of subDB after it deletion (https://github.com/erthink/libmdbx/issues/168).
+ - Fixed (disallowing) implicit subDB deletion via operations on `@MAIN`'s DBI-handle.
 
 
 ## v0.9.3 at 2021-02-02
