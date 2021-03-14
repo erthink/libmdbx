@@ -194,7 +194,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0664);
+  rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_env_open", rc);
     goto env_close;

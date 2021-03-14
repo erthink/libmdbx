@@ -117,9 +117,9 @@ int main(int argc, char *argv[]) {
 
   act = "opening environment";
   rc = mdbx_env_create(&env);
-  if (rc == MDBX_SUCCESS) {
-    rc = mdbx_env_open(env, argv[1], flags, 0640);
-  }
+  if (rc == MDBX_SUCCESS)
+    rc = mdbx_env_open(env, argv[1], flags, 0);
+
   if (rc == MDBX_SUCCESS) {
     act = "copying";
     if (argc == 2) {
