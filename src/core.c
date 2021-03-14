@@ -7204,38 +7204,25 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(txn->mt_flags & bad_bits))
     return MDBX_BAD_TXN;
 
-  if (unlikely(!txn->mt_env->me_map))
-    return MDBX_EPERM;
-
 #if MDBX_TXN_CHECKOWNER
   if ((txn->mt_flags & MDBX_NOTLS) == 0 &&
       unlikely(txn->mt_owner != mdbx_thread_self()))
     return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
+  if (unlikely(!txn->mt_env->me_map))
+    return MDBX_EPERM;
+
   return MDBX_SUCCESS;
 }
 
 static __always_inline int check_txn_rw(const MDBX_txn *txn, int bad_bits) {
-  if (unlikely(!txn))
-    return MDBX_EINVAL;
-
-  if (unlikely(txn->mt_signature != MDBX_MT_SIGNATURE))
-    return MDBX_EBADSIGN;
-
-  if (unlikely(txn->mt_flags & bad_bits))
-    return MDBX_BAD_TXN;
-
-  if (unlikely(!txn->mt_env->me_map))
-    return MDBX_EPERM;
+  int err = check_txn(txn, bad_bits);
+  if (unlikely(err))
+    return err;
 
   if (unlikely(F_ISSET(txn->mt_flags, MDBX_TXN_RDONLY)))
     return MDBX_EACCESS;
-
-#if MDBX_TXN_CHECKOWNER
-  if (unlikely(txn->mt_owner != mdbx_thread_self()))
-    return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
-#endif /* MDBX_TXN_CHECKOWNER */
 
   return MDBX_SUCCESS;
 }
