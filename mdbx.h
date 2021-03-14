@@ -1452,7 +1452,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_copy_flags_t)
 /** \brief Cursor operations
  * \ingroup c_cursors
  * This is the set of all operations for retrieving data using a cursor.
- * \see mdbx_cursor_set() */
+ * \see mdbx_cursor_get() */
 enum MDBX_cursor_op {
   /** Position at first key/data item */
   MDBX_FIRST,
