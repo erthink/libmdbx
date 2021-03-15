@@ -102,7 +102,7 @@ class registry {
   struct record {
     actor_testcase id;
     std::string name;
-    bool (*review_config)(actor_config &);
+    bool (*review_params)(actor_params &);
     testcase *(*constructor)(const actor_config &, const mdbx_pid_t);
   };
   std::unordered_map<std::string, const record *> name2id;
@@ -115,7 +115,7 @@ public:
     factory(const actor_testcase id, const char *name) {
       this->id = id;
       this->name = name;
-      review_config = TESTCASE::review;
+      review_params = TESTCASE::review_params;
       constructor = [](const actor_config &config,
                        const mdbx_pid_t pid) -> testcase * {
         return new TESTCASE(config, pid);
@@ -123,7 +123,8 @@ public:
       add(this);
     }
   };
-  static bool review_actor_config(actor_config &config);
+  static bool review_actor_params(const actor_testcase id,
+                                  actor_params &params);
   static testcase *create_actor(const actor_config &config,
                                 const mdbx_pid_t pid);
 };
@@ -288,8 +289,14 @@ public:
     memset(&last, 0, sizeof(last));
   }
 
-  static bool review(actor_config &config) {
-    (void)config;
+  static bool review_params(actor_params &params) {
+    // silently fix key/data length for fixed-length modes
+    if ((params.table_flags & MDBX_INTEGERKEY) &&
+        params.keylen_min != params.keylen_max)
+      params.keylen_min = params.keylen_max;
+    if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
+        params.datalen_min != params.datalen_max)
+      params.datalen_min = params.datalen_max;
     return true;
   }
 

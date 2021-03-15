@@ -19,6 +19,10 @@ public:
   testcase_append(const actor_config &config, const mdbx_pid_t pid)
       : testcase(config, pid) {}
   bool run() override;
+
+  static bool review_params(actor_params &params) {
+    return testcase::review_params(params);
+  }
 };
 REGISTER_TESTCASE(append);
 

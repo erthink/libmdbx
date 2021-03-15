@@ -40,22 +40,15 @@ testcase *registry::create_actor(const actor_config &config,
   return instance()->id2record.at(config.testcase)->constructor(config, pid);
 }
 
-bool registry::review_actor_config(actor_config &config) {
-  return instance()->id2record.at(config.testcase)->review_config(config);
+bool registry::review_actor_params(const actor_testcase id,
+                                   actor_params &params) {
+  return instance()->id2record.at(id)->review_params(params);
 }
 
 //-----------------------------------------------------------------------------
 
 void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
                      const char *space_id_cstr, actor_params params) {
-  // silently fix key/data length for fixed-length modes
-  if ((params.table_flags & MDBX_INTEGERKEY) &&
-      params.keylen_min != params.keylen_max)
-    params.keylen_min = params.keylen_max;
-  if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
-      params.datalen_min != params.datalen_max)
-    params.datalen_min = params.datalen_max;
-
   unsigned wait4id = 0;
   if (params.waitfor_nops) {
     for (auto i = global::actors.rbegin(); i != global::actors.rend(); ++i) {
@@ -84,6 +77,9 @@ void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
     if (end && *end)
       failure("The '%s' is unexpected for space-id\n", end);
   }
+
+  if (!registry::review_actor_params(testcase, params))
+    failure("Actor config-review failed for space-id %u\n", space_id);
 
   if (space_id > ACTOR_ID_MAX)
     failure("Invalid space-id %u\n", space_id);
