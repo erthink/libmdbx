@@ -16,11 +16,6 @@
 
 namespace keygen {
 
-static inline MDBX_PURE_FUNCTION serial_t mask(unsigned bits) {
-  assert(bits > 0 && bits <= serial_maxwith);
-  return serial_allones >> (serial_maxwith - bits);
-}
-
 /* LY: https://en.wikipedia.org/wiki/Injective_function */
 serial_t injective(const serial_t serial,
                    const unsigned bits /* at least serial_minwith (8) */,
@@ -59,12 +54,13 @@ serial_t injective(const serial_t serial,
   if (salt) {
     const unsigned left = bits / 2;
     const unsigned right = bits - left;
-    result = (result << left) | ((result & mask(bits)) >> right);
+    result = (result << left) |
+             ((result & actor_params::serial_mask(bits)) >> right);
     result = (result ^ salt) * mult;
   }
 
   result ^= result << shift;
-  result &= mask(bits);
+  result &= actor_params::serial_mask(bits);
   log_trace("keygen-injective: serial %" PRIu64 "/%u @%" PRIx64 ",%u,%" PRIu64
             " => %" PRIu64 "/%u",
             serial, bits, mult, shift, salt, result, bits);
@@ -77,7 +73,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   assert(mapping.split <= mapping.width);
   assert(mapping.mesh <= mapping.width);
   assert(mapping.rotate <= mapping.width);
-  assert(mapping.offset <= mask(mapping.width));
+  assert(mapping.offset <= actor_params::serial_mask(mapping.width));
   assert(!(key_essentials.flags &
            ~(essentials::prng_fill_flag |
              unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT))));
@@ -89,21 +85,23 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
             value_age);
 
   if (mapping.mesh >= serial_minwith) {
-    serial =
-        (serial & ~mask(mapping.mesh)) | injective(serial, mapping.mesh, salt);
+    serial = (serial & ~actor_params::serial_mask(mapping.mesh)) |
+             injective(serial, mapping.mesh, salt);
     log_trace("keygen-pair: mesh@%u => %" PRIu64, mapping.mesh, serial);
   }
 
   if (mapping.rotate) {
     const unsigned right = mapping.rotate;
     const unsigned left = mapping.width - right;
-    serial = (serial << left) | ((serial & mask(mapping.width)) >> right);
+    serial = (serial << left) |
+             ((serial & actor_params::serial_mask(mapping.width)) >> right);
     log_trace("keygen-pair: rotate@%u => %" PRIu64 ", 0x%" PRIx64,
               mapping.rotate, serial, serial);
   }
 
   if (mapping.offset) {
-    serial = (serial + mapping.offset) & mask(mapping.width);
+    serial =
+        (serial + mapping.offset) & actor_params::serial_mask(mapping.width);
     log_trace("keygen-pair: offset@%" PRIu64 " => %" PRIu64, mapping.offset,
               serial);
   }
@@ -117,7 +115,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
   if (mapping.split) {
     if (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT) {
       key_serial >>= mapping.split;
-      value_serial += serial & mask(mapping.split);
+      value_serial += serial & actor_params::serial_mask(mapping.split);
     } else {
       /* Без MDBX_DUPSORT требуется уникальность ключей, а для этого нельзя
        * отбрасывать какие-либо биты serial после инъективного преобразования.
@@ -125,7 +123,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
        * запрошенное количество бит из serial */
       value_serial +=
           (serial ^ (serial >> mapping.split) * UINT64_C(57035339200100753)) &
-          mask(mapping.split);
+          actor_params::serial_mask(mapping.split);
     }
 
     value_serial |= value_age << mapping.split;
@@ -231,49 +229,7 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   mapping = actor.keygen;
   salt = (actor.keygen.seed + actor_id) * UINT64_C(14653293970879851569);
 
-  // FIXME: TODO
-  base = 0;
-}
-
-void maker::make_linear() {
-  mapping.mesh = (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT)
-                     ? 0
-                     : mapping.split;
-  mapping.rotate = 0;
-  mapping.offset = 0;
-  const auto max_serial = mask(mapping.width) + base;
-  const auto max_key_serial =
-      (mapping.split && (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT))
-          ? max_serial >> mapping.split
-          : max_serial;
-  const auto max_value_serial =
-      (mapping.split && (MDBX_db_flags_t(key_essentials.flags) & MDBX_DUPSORT))
-          ? mask(mapping.split)
-          : 0;
-
-  while (key_essentials.minlen < 8 &&
-         (key_essentials.minlen == 0 ||
-          mask(key_essentials.minlen * 8) < max_key_serial)) {
-    key_essentials.minlen += (MDBX_db_flags_t(key_essentials.flags) &
-                              (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
-                                 ? 4
-                                 : 1;
-    if (key_essentials.maxlen < key_essentials.minlen)
-      key_essentials.maxlen = key_essentials.minlen;
-  }
-
-  if (MDBX_db_flags_t(key_essentials.flags | value_essentials.flags) &
-      MDBX_DUPSORT)
-    while (value_essentials.minlen < 8 &&
-           (value_essentials.minlen == 0 ||
-            mask(value_essentials.minlen * 8) < max_value_serial)) {
-      value_essentials.minlen += (MDBX_db_flags_t(value_essentials.flags) &
-                                  (MDBX_INTEGERKEY | MDBX_INTEGERDUP))
-                                     ? 4
-                                     : 1;
-      if (value_essentials.maxlen < value_essentials.minlen)
-        value_essentials.maxlen = value_essentials.minlen;
-    }
+  base = actor.serial_base();
 }
 
 bool maker::is_unordered() const {
@@ -284,14 +240,14 @@ bool maker::is_unordered() const {
 }
 
 bool maker::increment(serial_t &serial, int delta) const {
-  if (serial > mask(mapping.width)) {
+  if (serial > actor_params::serial_mask(mapping.width)) {
     log_extra("keygen-increment: %" PRIu64 " > %" PRIu64 ", overflow", serial,
-              mask(mapping.width));
+              actor_params::serial_mask(mapping.width));
     return false;
   }
 
   serial_t target = serial + (int64_t)delta;
-  if (target > mask(mapping.width) ||
+  if (target > actor_params::serial_mask(mapping.width) ||
       ((delta > 0) ? target < serial : target > serial)) {
     log_extra("keygen-increment: %" PRIu64 "%-d => %" PRIu64 ", overflow",
               serial, delta, target);

@@ -283,6 +283,15 @@ struct actor_params_pod {
   bool ignore_dbfull{false};
   bool speculum{false};
   bool random_writemap{true};
+
+  uint64_t serial_base() const {
+    // FIXME: TODO
+    return 0;
+  }
+  static MDBX_PURE_FUNCTION uint64_t serial_mask(unsigned bits) {
+    assert(bits > 0 && bits <= 64);
+    return (~(uint64_t)0u) >> (64 - bits);
+  }
 };
 
 struct actor_config_pod {
@@ -312,6 +321,7 @@ struct actor_params : public config::actor_params_pod {
   actor_params() = default;
 
   void set_defaults(const std::string &tmpdir);
+  bool make_keygen_linear();
   unsigned mdbx_keylen_min() const;
   unsigned mdbx_keylen_max() const;
   unsigned mdbx_datalen_min() const;

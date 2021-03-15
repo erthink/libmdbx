@@ -623,3 +623,36 @@ unsigned actor_params::mdbx_datalen_max() const {
   return std::min(unsigned(UINT16_MAX),
                   unsigned(mdbx_limits_valsize_max(pagesize, table_flags)));
 }
+
+bool actor_params::make_keygen_linear() {
+  const auto base = serial_base();
+  keygen.mesh = (table_flags & MDBX_DUPSORT) ? 0 : keygen.split;
+  keygen.rotate = 0;
+  keygen.offset = 0;
+  const auto max_serial = serial_mask(keygen.width) + base;
+  const auto max_key_serial = (keygen.split && (table_flags & MDBX_DUPSORT))
+                                  ? max_serial >> keygen.split
+                                  : max_serial;
+  const auto max_value_serial = (keygen.split && (table_flags & MDBX_DUPSORT))
+                                    ? serial_mask(keygen.split)
+                                    : 0;
+
+  while (keylen_min < 8 &&
+         (keylen_min == 0 || serial_mask(keylen_min * 8) < max_key_serial)) {
+    keylen_min += (table_flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
+    if (keylen_max < keylen_min)
+      keylen_max = keylen_min;
+  }
+
+  if (table_flags & MDBX_DUPSORT)
+    while (
+        datalen_min < 8 &&
+        (datalen_min == 0 || serial_mask(datalen_min * 8) < max_value_serial)) {
+      datalen_min +=
+          (table_flags & (MDBX_INTEGERKEY | MDBX_INTEGERDUP)) ? 4 : 1;
+      if (datalen_max < datalen_min)
+        datalen_max = datalen_min;
+    }
+
+  return true;
+}

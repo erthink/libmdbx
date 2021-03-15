@@ -21,7 +21,7 @@ public:
   bool run() override;
 
   static bool review_params(actor_params &params) {
-    return testcase::review_params(params);
+    return testcase::review_params(params) && params.make_keygen_linear();
   }
 };
 REGISTER_TESTCASE(append);
@@ -41,7 +41,6 @@ bool testcase_append::run() {
       (config.params.table_flags & MDBX_DUPSORT)
           ? (flipcoin() ? MDBX_APPEND | MDBX_APPENDDUP : MDBX_APPENDDUP)
           : MDBX_APPEND;
-  keyvalue_maker.make_linear();
 
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
