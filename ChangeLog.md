@@ -13,6 +13,7 @@ TODO:
 
 Acknowledgements:
 
+ - [Mahlon E. Smith](https://github.com/mahlonsmith) for [Ruby bindings](https://rubygems.org/gems/mdbx/).
  - [Alex Sharov](https://github.com/AskAlexSharov) for [mdbx-go](https://github.com/torquem-ch/mdbx-go) and for bug reporting.
  - [Artem Vorotnikov](https://github.com/vorot93) for bug reporting.
 
@@ -28,6 +29,7 @@ New features:
    To minimize the impact on compatibility, only the odd values inside the upper half
    of the range (i.e. 32769..65533) are used for the new representation.
  - Added the `mdbx_drop` similar to LMDB command-line tool to purge or delete (sub)database(s).
+ - [Ruby bindings](https://rubygems.org/gems/mdbx/) is available now by [Mahlon E. Smith](https://github.com/mahlonsmith).
 
 Fixes:
 

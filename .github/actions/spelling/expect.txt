@@ -852,6 +852,7 @@ macos
 MACROFILE
 MADV
 madvise
+mahlonsmith
 maindb
 mainpage
 maj
@@ -1400,6 +1401,7 @@ rthc
 rtn
 rtti
 ru
+rubygems
 rusage
 rw
 samedata
