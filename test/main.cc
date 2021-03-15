@@ -76,8 +76,10 @@ MDBX_NORETURN void usage(void) {
       "Keys and Value:\n"
       "  --keylen.min=N                Minimal keys length\n"
       "  --keylen.max=N                Miximal keys length\n"
+      "  --keylen=N                    Set both min/max for keys length\n"
       "  --datalen.min=N               Minimal data length\n"
       "  --datalen.max=N               Miximal data length\n"
+      "  --datalen=N                   Set both min/max for data length\n"
       "  --keygen.width=N              TBD (see the source code)\n"
       "  --keygen.mesh=N               TBD (see the source code)\n"
       "  --keygen.seed=N               TBD (see the source code)\n"
@@ -388,6 +390,12 @@ int main(int argc, char *const argv[]) {
         params.keylen_min = params.keylen_max;
       continue;
     }
+    if (config::parse_option(argc, argv, narg, "keylen", params.keylen_min,
+                             config::no_scale, params.mdbx_keylen_min(),
+                             params.mdbx_keylen_max())) {
+      params.keylen_max = params.keylen_min;
+      continue;
+    }
     if (config::parse_option(argc, argv, narg, "datalen.min",
                              params.datalen_min, config::no_scale,
                              params.mdbx_datalen_min(),
@@ -404,6 +412,12 @@ int main(int argc, char *const argv[]) {
       if ((params.table_flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) ||
           params.datalen_min > params.datalen_max)
         params.datalen_min = params.datalen_max;
+      continue;
+    }
+    if (config::parse_option(argc, argv, narg, "datalen", params.datalen_min,
+                             config::no_scale, params.mdbx_datalen_min(),
+                             params.mdbx_datalen_max())) {
+      params.datalen_max = params.datalen_min;
       continue;
     }
     if (config::parse_option(argc, argv, narg, "batch.read", params.batch_read,
