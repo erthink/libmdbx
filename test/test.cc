@@ -573,40 +573,7 @@ bool test_execute(const actor_config &config_const) {
   }
 
   try {
-    std::unique_ptr<testcase> test;
-    switch (config.testcase) {
-    case ac_hill:
-      test.reset(new testcase_hill(config, pid));
-      break;
-    case ac_deadread:
-      test.reset(new testcase_deadread(config, pid));
-      break;
-    case ac_deadwrite:
-      test.reset(new testcase_deadwrite(config, pid));
-      break;
-    case ac_jitter:
-      test.reset(new testcase_jitter(config, pid));
-      break;
-    case ac_try:
-      test.reset(new testcase_try(config, pid));
-      break;
-    case ac_copy:
-      test.reset(new testcase_copy(config, pid));
-      break;
-    case ac_append:
-      test.reset(new testcase_append(config, pid));
-      break;
-    case ac_ttl:
-      test.reset(new testcase_ttl(config, pid));
-      break;
-    case ac_nested:
-      test.reset(new testcase_nested(config, pid));
-      break;
-    default:
-      test.reset(new testcase(config, pid));
-      break;
-    }
-
+    std::unique_ptr<testcase> test(registry::create_actor(config, pid));
     size_t iter = 0;
     do {
       iter++;

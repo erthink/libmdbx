@@ -14,6 +14,17 @@
 
 #include "test.h"
 
+class testcase_jitter : public testcase {
+protected:
+  void check_dbi_error(int expect, const char *stage);
+
+public:
+  testcase_jitter(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool run() override;
+};
+REGISTER_TESTCASE(jitter);
+
 void testcase_jitter::check_dbi_error(int expect, const char *stage) {
   MDBX_stat stat;
   int err = mdbx_dbi_stat(txn_guard.get(), dbi, &stat, sizeof(stat));

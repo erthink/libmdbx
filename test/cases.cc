@@ -14,6 +14,38 @@
 
 #include "test.h"
 
+registry *registry::instance() {
+  static registry *singleton;
+  if (!singleton)
+    singleton = new registry();
+  return singleton;
+}
+
+bool registry::add(const record *item) {
+  auto const singleton = instance();
+  assert(singleton->name2id.count(std::string(item->name)) == 0);
+  assert(singleton->id2record.count(item->id) == 0);
+  if (singleton->name2id.count(std::string(item->name)) +
+          singleton->id2record.count(item->id) ==
+      0) {
+    singleton->name2id[std::string(item->name)] = item;
+    singleton->id2record[item->id] = item;
+    return true;
+  }
+  return false;
+}
+
+testcase *registry::create_actor(const actor_config &config,
+                                 const mdbx_pid_t pid) {
+  return instance()->id2record.at(config.testcase)->constructor(config, pid);
+}
+
+bool registry::review_actor_config(actor_config &config) {
+  return instance()->id2record.at(config.testcase)->review_config(config);
+}
+
+//-----------------------------------------------------------------------------
+
 void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
                      const char *space_id_cstr, actor_params params) {
   // silently fix key/data length for fixed-length modes

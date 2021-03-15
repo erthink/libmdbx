@@ -34,6 +34,37 @@
  *  Таким образом имитируется поведение таблицы с TTL: записи стохастически
  *  добавляются и удаляются, и изредка происходят массивные удаления. */
 
+class testcase_nested : public testcase_ttl {
+  using inherited = testcase_ttl;
+  using FIFO = std::deque<std::pair<uint64_t, unsigned>>;
+
+  uint64_t serial{0};
+  unsigned clear_wholetable_passed{0};
+  unsigned clear_stepbystep_passed{0};
+  unsigned dbfull_passed{0};
+  bool keyspace_overflow{false};
+  FIFO fifo;
+  std::stack<std::tuple<scoped_txn_guard, uint64_t, FIFO, SET>> stack;
+
+  bool trim_tail(unsigned window_width);
+  bool grow_head(unsigned head_count);
+  bool pop_txn(bool abort);
+  bool pop_txn() {
+    return pop_txn(inherited::is_nested_txn_available() ? flipcoin_x3()
+                                                        : flipcoin_x2());
+  }
+  void push_txn();
+  bool stochastic_breakable_restart_with_nested(bool force_restart = false);
+
+public:
+  testcase_nested(const actor_config &config, const mdbx_pid_t pid)
+      : inherited(config, pid) {}
+  bool setup() override;
+  bool run() override;
+  bool teardown() override;
+};
+REGISTER_TESTCASE(nested);
+
 bool testcase_nested::setup() {
   if (!inherited::setup())
     return false;

@@ -14,6 +14,14 @@
 
 #include "test.h"
 
+class testcase_append : public testcase {
+public:
+  testcase_append(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid) {}
+  bool run() override;
+};
+REGISTER_TESTCASE(append);
+
 bool testcase_append::run() {
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {

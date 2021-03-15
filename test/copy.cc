@@ -1,5 +1,17 @@
 #include "test.h"
 
+class testcase_copy : public testcase {
+  const std::string copy_pathname;
+  void copy_db(const bool with_compaction);
+
+public:
+  testcase_copy(const actor_config &config, const mdbx_pid_t pid)
+      : testcase(config, pid),
+        copy_pathname(config.params.pathname_db + "-copy") {}
+  bool run() override;
+};
+REGISTER_TESTCASE(copy);
+
 void testcase_copy::copy_db(const bool with_compaction) {
   int err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
   if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)

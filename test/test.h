@@ -90,11 +90,47 @@ struct cursor_deleter /* : public std::unary_function<void, MDBX_cursor *> */ {
   void operator()(MDBX_cursor *cursor) const { mdbx_cursor_close(cursor); }
 };
 
-typedef std::unique_ptr<MDBX_env, db_deleter> scoped_db_guard;
-typedef std::unique_ptr<MDBX_txn, txn_deleter> scoped_txn_guard;
-typedef std::unique_ptr<MDBX_cursor, cursor_deleter> scoped_cursor_guard;
+using scoped_db_guard = std::unique_ptr<MDBX_env, db_deleter>;
+using scoped_txn_guard = std::unique_ptr<MDBX_txn, txn_deleter>;
+using scoped_cursor_guard = std::unique_ptr<MDBX_cursor, cursor_deleter>;
 
 //-----------------------------------------------------------------------------
+
+class testcase;
+
+class registry {
+  struct record {
+    actor_testcase id;
+    std::string name;
+    bool (*review_config)(actor_config &);
+    testcase *(*constructor)(const actor_config &, const mdbx_pid_t);
+  };
+  std::unordered_map<std::string, const record *> name2id;
+  std::unordered_map<int, const record *> id2record;
+  static bool add(const record *item);
+  static registry *instance();
+
+public:
+  template <class TESTCASE> struct factory : public record {
+    factory(const actor_testcase id, const char *name) {
+      this->id = id;
+      this->name = name;
+      review_config = TESTCASE::review;
+      constructor = [](const actor_config &config,
+                       const mdbx_pid_t pid) -> testcase * {
+        return new TESTCASE(config, pid);
+      };
+      add(this);
+    }
+  };
+  static bool review_actor_config(actor_config &config);
+  static testcase *create_actor(const actor_config &config,
+                                const mdbx_pid_t pid);
+};
+
+#define REGISTER_TESTCASE(NAME)                                                \
+  static registry::factory<testcase_##NAME> gRegister_##NAME(ac_##NAME,        \
+                                                             STRINGIFY(NAME))
 
 class testcase {
 protected:
@@ -252,67 +288,18 @@ public:
     memset(&last, 0, sizeof(last));
   }
 
+  static bool review(actor_config &config) {
+    (void)config;
+    return true;
+  }
+
   virtual bool setup();
   virtual bool run() { return true; }
   virtual bool teardown();
   virtual ~testcase() {}
 };
 
-class testcase_hill : public testcase {
-public:
-  testcase_hill(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
-class testcase_append : public testcase {
-public:
-  testcase_append(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
-class testcase_deadread : public testcase {
-public:
-  testcase_deadread(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
-class testcase_deadwrite : public testcase {
-public:
-  testcase_deadwrite(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
-class testcase_jitter : public testcase {
-protected:
-  void check_dbi_error(int expect, const char *stage);
-
-public:
-  testcase_jitter(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
-class testcase_try : public testcase {
-public:
-  testcase_try(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid) {}
-  bool run() override;
-};
-
-class testcase_copy : public testcase {
-  const std::string copy_pathname;
-  void copy_db(const bool with_compaction);
-
-public:
-  testcase_copy(const actor_config &config, const mdbx_pid_t pid)
-      : testcase(config, pid),
-        copy_pathname(config.params.pathname_db + "-copy") {}
-  bool run() override;
-};
+//-----------------------------------------------------------------------------
 
 class testcase_ttl : public testcase {
   using inherited = testcase;
@@ -330,34 +317,4 @@ public:
       : inherited(config, pid) {}
   bool setup() override;
   bool run() override;
-};
-
-class testcase_nested : public testcase_ttl {
-  using inherited = testcase_ttl;
-  using FIFO = std::deque<std::pair<uint64_t, unsigned>>;
-
-  uint64_t serial{0};
-  unsigned clear_wholetable_passed{0};
-  unsigned clear_stepbystep_passed{0};
-  unsigned dbfull_passed{0};
-  bool keyspace_overflow{false};
-  FIFO fifo;
-  std::stack<std::tuple<scoped_txn_guard, uint64_t, FIFO, SET>> stack;
-
-  bool trim_tail(unsigned window_width);
-  bool grow_head(unsigned head_count);
-  bool pop_txn(bool abort);
-  bool pop_txn() {
-    return pop_txn(inherited::is_nested_txn_available() ? flipcoin_x3()
-                                                        : flipcoin_x2());
-  }
-  void push_txn();
-  bool stochastic_breakable_restart_with_nested(bool force_restart = false);
-
-public:
-  testcase_nested(const actor_config &config, const mdbx_pid_t pid)
-      : inherited(config, pid) {}
-  bool setup() override;
-  bool run() override;
-  bool teardown() override;
 };

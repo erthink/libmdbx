@@ -31,6 +31,7 @@
  *  Таким образом имитируется поведение таблицы с TTL: записи стохастически
  *  добавляются и удаляются, но изредка происходит массивное удаление.
  */
+REGISTER_TESTCASE(ttl);
 
 unsigned testcase_ttl::edge2count(uint64_t edge) {
   const double rnd = u64_to_double1(prng64_map1_white(edge));
