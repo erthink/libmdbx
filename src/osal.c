@@ -1466,6 +1466,10 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 #define MAP_NOSYNC 0
 #endif
 
+#ifndef MAP_FIXED_NOREPLACE
+#define MAP_FIXED_NOREPLACE 0
+#endif
+
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
       MAP_SHARED | MAP_FILE |
@@ -1742,12 +1746,7 @@ retry_mapview:;
   if (ptr == MAP_FAILED) {
     /* Try to mmap additional space beyond the end of mapping. */
     ptr = mmap(map->dxb + map->limit, limit - map->limit, mmap_prot,
-               mmap_flags
-#if defined(MAP_FIXED_NOREPLACE)
-                   | MAP_FIXED_NOREPLACE
-#endif /* MAP_FIXED_NOREPLACE */
-               ,
-               map->fd, map->limit);
+               mmap_flags | MAP_FIXED_NOREPLACE, map->fd, map->limit);
     if (ptr == map->dxb + map->limit)
       ptr = map->dxb;
     else if (ptr != MAP_FAILED) {
