@@ -19,6 +19,8 @@
  */
 
 #include "mdbx.h"
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -33,6 +35,53 @@ int main(int argc, char *argv[]) {
   MDBX_txn *txn = NULL;
   MDBX_cursor *cursor = NULL;
   char sval[32];
+
+  printf("MDBX limits:\n");
+#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
+  const double scale_factor = 1099511627776.0;
+  const char *const scale_unit = "TiB";
+#else
+  const double scale_factor = 1073741824.0;
+  const char *const scale_unit = "GiB";
+#endif
+  const size_t pagesize_min = mdbx_limits_pgsize_min();
+  const size_t pagesize_max = mdbx_limits_pgsize_max();
+  const size_t pagesize_default = mdbx_default_pagesize();
+
+  printf("\tPage size: a power of 2, minimum %zu, maximum %zu bytes,"
+         " default %zu bytes.\n",
+         pagesize_min, pagesize_max, pagesize_default);
+  printf("\tKey size: minimum %zu, maximum ≈¼ pagesize (%zu bytes for default"
+         " %zuK pagesize, %zu bytes for %zuK pagesize).\n",
+         (size_t)0, mdbx_limits_keysize_max(-1, MDBX_DB_DEFAULTS),
+         pagesize_default / 1024,
+         mdbx_limits_keysize_max(pagesize_max, MDBX_DB_DEFAULTS),
+         pagesize_max / 1024);
+  printf("\tValue size: minimum %zu, maximum %zu (0x%08zX) bytes for maps,"
+         " ≈¼ pagesize for multimaps (%zu bytes for default %zuK pagesize,"
+         " %zu bytes for %zuK pagesize).\n",
+         (size_t)0, mdbx_limits_valsize_max(pagesize_min, MDBX_DB_DEFAULTS),
+         mdbx_limits_valsize_max(pagesize_min, MDBX_DB_DEFAULTS),
+         mdbx_limits_valsize_max(-1, MDBX_DUPSORT), pagesize_default / 1024,
+         mdbx_limits_valsize_max(pagesize_max, MDBX_DUPSORT),
+         pagesize_max / 1024);
+  printf("\tWrite transaction size: up to %zu (0x%zX) pages (%f %s for default "
+         "%zuK pagesize, %f %s for %zuK pagesize).\n",
+         mdbx_limits_txnsize_max(pagesize_min) / pagesize_min,
+         mdbx_limits_txnsize_max(pagesize_min) / pagesize_min,
+         mdbx_limits_txnsize_max(-1) / scale_factor, scale_unit,
+         pagesize_default / 1024,
+         mdbx_limits_txnsize_max(pagesize_max) / scale_factor, scale_unit,
+         pagesize_max / 1024);
+  printf("\tDatabase size: up to %zu pages (%f %s for default %zuK "
+         "pagesize, %f %s for %zuK pagesize).\n",
+         mdbx_limits_dbsize_max(pagesize_min) / pagesize_min,
+         mdbx_limits_dbsize_max(-1) / scale_factor, scale_unit,
+         pagesize_default / 1024,
+         mdbx_limits_dbsize_max(pagesize_max) / scale_factor, scale_unit,
+         pagesize_max / 1024);
+  printf("\tMaximum sub-databases: %u.\n", MDBX_MAX_DBI);
+  printf("-----\n");
 
   rc = mdbx_env_create(&env);
   if (rc != MDBX_SUCCESS) {
