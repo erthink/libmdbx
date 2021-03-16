@@ -1470,9 +1470,13 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 #define MAP_FIXED_NOREPLACE 0
 #endif
 
+#ifndef MAP_NORESERVE
+#define MAP_NORESERVE 0
+#endif
+
   map->address = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
-      MAP_SHARED | MAP_FILE |
+      MAP_SHARED | MAP_FILE | MAP_NORESERVE |
           (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0) |
           ((options & MMAP_OPTION_SEMAPHORE) ? MAP_HASSEMAPHORE | MAP_NOSYNC
                                              : MAP_CONCEAL),
@@ -1738,7 +1742,7 @@ retry_mapview:;
 #endif /* MREMAP_MAYMOVE */
 
   const unsigned mmap_flags =
-      MAP_CONCEAL | MAP_SHARED | MAP_FILE |
+      MAP_CONCEAL | MAP_SHARED | MAP_FILE | MAP_NORESERVE |
       (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0);
   const unsigned mmap_prot =
       (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ;
