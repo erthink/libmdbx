@@ -12946,8 +12946,7 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  int exact = 0;
-  return mdbx_cursor_set(&cx.outer, (MDBX_val *)key, data, MDBX_SET, &exact);
+  return mdbx_cursor_set(&cx.outer, (MDBX_val *)key, data, MDBX_SET, NULL);
 }
 
 int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
@@ -12993,8 +12992,7 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  int exact = 0;
-  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_KEY, &exact);
+  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_KEY, NULL);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc == MDBX_NOTFOUND && values_count)
       *values_count = 0;
@@ -13638,7 +13636,6 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  int exact = 0;
   int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
   switch (op) {
   case MDBX_GET_CURRENT: {
@@ -13698,7 +13695,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   case MDBX_SET_RANGE:
     if (unlikely(key == NULL))
       return MDBX_EINVAL;
-    rc = mdbx_cursor_set(mc, key, data, op, &exact);
+    rc = mdbx_cursor_set(mc, key, data, op, NULL);
     if (mc->mc_flags & C_INITIALIZED) {
       mdbx_cassert(mc, mc->mc_snum > 0 && mc->mc_top < mc->mc_snum);
       mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
@@ -13803,6 +13800,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (unlikely(key == NULL || data == NULL))
       return MDBX_EINVAL;
     MDBX_val save_data = *data;
+    int exact = 0;
     rc = mdbx_cursor_set(mc, key, data, MDBX_SET_RANGE, &exact);
     if (rc == MDBX_SUCCESS && exact && mc->mc_xcursor) {
       mc->mc_flags &= ~C_DEL;
@@ -16973,7 +16971,7 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   MDBX_cursor_couple cx;
   MDBX_cursor_op op;
   MDBX_val rdata;
-  int rc, exact = 0;
+  int rc = 0;
   DKBUF;
 
   mdbx_debug("====> delete db %u key [%s], data [%s]", dbi, DKEY(key),
@@ -16991,8 +16989,7 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
     op = MDBX_SET;
     flags |= MDBX_ALLDUPS;
   }
-  rc =
-      mdbx_cursor_set(&cx.outer, (MDBX_val *)key, (MDBX_val *)data, op, &exact);
+  rc = mdbx_cursor_set(&cx.outer, (MDBX_val *)key, (MDBX_val *)data, op, NULL);
   if (likely(rc == MDBX_SUCCESS)) {
     /* let mdbx_page_split know about this cursor if needed:
      * delete will trigger a rebalance; if it needs to move
