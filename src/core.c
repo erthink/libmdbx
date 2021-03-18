@@ -3667,7 +3667,7 @@ static int __must_check_result mdbx_sync_locked(MDBX_env *env, unsigned flags,
 static int mdbx_env_close0(MDBX_env *env);
 
 static MDBX_node *mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
-                                   int *exactp);
+                                   bool *exactp);
 
 static int __must_check_result mdbx_node_add_branch(MDBX_cursor *mc,
                                                     unsigned indx,
@@ -3718,9 +3718,17 @@ static int __must_check_result mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key,
 static int __must_check_result mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key,
                                                 MDBX_val *data,
                                                 MDBX_cursor_op op);
-static int __must_check_result mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key,
-                                               MDBX_val *data,
-                                               MDBX_cursor_op op, int *exactp);
+static int __must_check_result mdbx_cursor_set_ex(MDBX_cursor *mc,
+                                                  MDBX_val *key, MDBX_val *data,
+                                                  MDBX_cursor_op op,
+                                                  bool *exactp);
+static __inline int __must_check_result mdbx_cursor_set(MDBX_cursor *mc,
+                                                        MDBX_val *key,
+                                                        MDBX_val *data,
+                                                        MDBX_cursor_op op) {
+  bool unused_exact;
+  return mdbx_cursor_set_ex(mc, key, data, op, &unused_exact);
+}
 static int __must_check_result mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key,
                                                  MDBX_val *data);
 static int __must_check_result mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key,
@@ -12437,7 +12445,7 @@ static bool unsure_equal(MDBX_cmp_func cmp, const MDBX_val *a,
  * Updates the cursor index with the index of the found entry.
  * If no entry larger or equal to the key is found, returns NULL. */
 static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
-                                         int *exactp) {
+                                         bool *exactp) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   const int nkeys = page_numkeys(mp);
   DKBUF;
@@ -12448,7 +12456,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
 
   int low = IS_LEAF(mp) ? 0 : 1;
   int high = nkeys - 1;
-  *exactp = 0;
+  *exactp = false;
   if (unlikely(high < low)) {
     mc->mc_ki[mc->mc_top] = 0;
     return NULL;
@@ -12468,7 +12476,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
       rc = cmp(key, &nodekey);
       mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY(&nodekey), rc);
       if (unlikely(rc == 0)) {
-        *exactp = 1;
+        *exactp = true;
         break;
       }
       low = (rc < 0) ? low : i + 1;
@@ -12508,7 +12516,7 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
       mdbx_debug("found branch index %u [%s -> %" PRIaPGNO "], rc = %i", i,
                  DKEY(&nodekey), node_pgno(node), rc);
     if (unlikely(rc == 0)) {
-      *exactp = 1;
+      *exactp = true;
       break;
     }
     low = (rc < 0) ? low : i + 1;
@@ -12708,7 +12716,7 @@ __hot static int mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key,
         }
       }
     } else {
-      int exact;
+      bool exact;
       node = mdbx_node_search(mc, key, &exact);
       if (node == NULL)
         i = page_numkeys(mp) - 1;
@@ -12799,7 +12807,7 @@ static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
     return (rc == MDBX_NOTFOUND) ? MDBX_BAD_DBI : rc;
 
   MDBX_val data;
-  int exact = 0;
+  bool exact;
   MDBX_node *node = mdbx_node_search(&couple.outer, &dbx->md_name, &exact);
   if (unlikely(!exact))
     return MDBX_BAD_DBI;
@@ -12972,8 +12980,7 @@ int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  int exact = 0;
-  return mdbx_cursor_set(&cx.outer, (MDBX_val *)key, data, MDBX_SET, &exact);
+  return mdbx_cursor_set(&cx.outer, (MDBX_val *)key, data, MDBX_SET);
 }
 
 int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
@@ -13019,8 +13026,7 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  int exact = 0;
-  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_KEY, &exact);
+  rc = mdbx_cursor_set(&cx.outer, key, data, MDBX_SET_KEY);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc == MDBX_NOTFOUND && values_count)
       *values_count = 0;
@@ -13293,15 +13299,12 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 }
 
 /* Set the cursor on a specific data item. */
-static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                           MDBX_cursor_op op, int *exactp) {
+static int mdbx_cursor_set_ex(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                              MDBX_cursor_op op, bool *exactp) {
   int rc;
   MDBX_page *mp;
   MDBX_node *node = NULL;
-  int stub_exactp;
   DKBUF;
-
-  exactp = exactp ? exactp : &stub_exactp;
 
   if (unlikely(key->iov_len < mc->mc_dbx->md_klen_min ||
                key->iov_len > mc->mc_dbx->md_klen_max)) {
@@ -13331,6 +13334,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     }
   }
 
+  *exactp = false;
   if (mc->mc_xcursor)
     mc->mc_xcursor->mx_cursor.mc_flags &= ~(C_INITIALIZED | C_EOF);
 
@@ -13357,7 +13361,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       /* Probably happens rarely, but first node on the page
        * was the one we wanted. */
       mc->mc_ki[mc->mc_top] = 0;
-      *exactp = 1;
+      *exactp = true;
       mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
                                page_numkeys(mc->mc_pg[mc->mc_top]) ||
                            (mc->mc_flags & C_EOF));
@@ -13378,7 +13382,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
           /* last node was the one we wanted */
           mdbx_cassert(mc, nkeys >= 1 && nkeys <= UINT16_MAX + 1);
           mc->mc_ki[mc->mc_top] = (indx_t)(nkeys - 1);
-          *exactp = 1;
+          *exactp = true;
           mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
                                    page_numkeys(mc->mc_pg[mc->mc_top]) ||
                                (mc->mc_flags & C_EOF));
@@ -13397,7 +13401,7 @@ static int mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             rc = mc->mc_dbx->md_cmp(&aligned_key, &nodekey);
             if (rc == 0) {
               /* current node was the one we wanted */
-              *exactp = 1;
+              *exactp = true;
               mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
                                        page_numkeys(mc->mc_pg[mc->mc_top]) ||
                                    (mc->mc_flags & C_EOF));
@@ -13491,7 +13495,7 @@ set1:
       rc = mdbx_cursor_first(&mc->mc_xcursor->mx_cursor, data, NULL);
     } else {
       rc = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
-                           MDBX_SET_RANGE, NULL);
+                           MDBX_SET_RANGE);
     }
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
@@ -13536,7 +13540,7 @@ set1:
                              (mc->mc_flags & C_EOF));
         if (op != MDBX_GET_BOTH_RANGE || rc > 0)
           return MDBX_NOTFOUND;
-        *exactp = 0;
+        *exactp = false;
         rc = 0;
       }
       *data = olddata;
@@ -13664,7 +13668,6 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  int exact = 0;
   int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
   switch (op) {
   case MDBX_GET_CURRENT: {
@@ -13724,7 +13727,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   case MDBX_SET_RANGE:
     if (unlikely(key == NULL))
       return MDBX_EINVAL;
-    rc = mdbx_cursor_set(mc, key, data, op, &exact);
+    rc = mdbx_cursor_set(mc, key, data, op);
     if (mc->mc_flags & C_INITIALIZED) {
       mdbx_cassert(mc, mc->mc_snum > 0 && mc->mc_top < mc->mc_snum);
       mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
@@ -13829,14 +13832,15 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (unlikely(key == NULL || data == NULL))
       return MDBX_EINVAL;
     MDBX_val save_data = *data;
-    rc = mdbx_cursor_set(mc, key, data, MDBX_SET_RANGE, &exact);
+    bool exact;
+    rc = mdbx_cursor_set_ex(mc, key, data, MDBX_SET_RANGE, &exact);
     if (rc == MDBX_SUCCESS && exact && mc->mc_xcursor) {
       mc->mc_flags &= ~C_DEL;
       if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
         *data = save_data;
-        exact = 0;
-        rc = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
-                             MDBX_SET_RANGE, &exact);
+        exact = false;
+        rc = mdbx_cursor_set_ex(&mc->mc_xcursor->mx_cursor, data, NULL,
+                                MDBX_SET_RANGE, &exact);
         if (rc == MDBX_NOTFOUND) {
           mdbx_cassert(mc, !exact);
           rc = mdbx_cursor_next(mc, key, data, MDBX_NEXT_NODUP);
@@ -14083,7 +14087,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     mc->mc_flags &= ~C_INITIALIZED;
     rc = MDBX_NO_ROOT;
   } else if ((flags & MDBX_CURRENT) == 0) {
-    int exact = false;
+    bool exact = false;
     if ((flags & MDBX_APPEND) && mc->mc_db->md_entries > 0) {
       rc = mdbx_cursor_last(mc, &dkey, &olddata);
       if (likely(rc == MDBX_SUCCESS)) {
@@ -14100,7 +14104,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         }
       }
     } else {
-      rc = mdbx_cursor_set(mc, (MDBX_val *)key, &olddata, MDBX_SET, &exact);
+      rc = mdbx_cursor_set_ex(mc, (MDBX_val *)key, &olddata, MDBX_SET, &exact);
     }
     if (likely(rc == MDBX_SUCCESS)) {
       if (exact) {
@@ -16990,7 +16994,7 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   MDBX_cursor_couple cx;
   MDBX_cursor_op op;
   MDBX_val rdata;
-  int rc, exact = 0;
+  int rc;
   DKBUF;
 
   mdbx_debug("====> delete db %u key [%s], data [%s]", dbi, DKEY(key),
@@ -17008,8 +17012,7 @@ static int mdbx_del0(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
     op = MDBX_SET;
     flags |= MDBX_ALLDUPS;
   }
-  rc =
-      mdbx_cursor_set(&cx.outer, (MDBX_val *)key, (MDBX_val *)data, op, &exact);
+  rc = mdbx_cursor_set(&cx.outer, (MDBX_val *)key, (MDBX_val *)data, op);
   if (likely(rc == MDBX_SUCCESS)) {
     /* let mdbx_page_split know about this cursor if needed:
      * delete will trigger a rebalance; if it needs to move
@@ -18766,7 +18769,6 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   }
 
   /* Find the DB info */
-  int exact = 0;
   MDBX_val key, data;
   key.iov_len = len;
   key.iov_base = (void *)table_name;
@@ -18774,7 +18776,7 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
   rc = mdbx_cursor_init(&couple.outer, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
     goto early_bailout;
-  rc = mdbx_cursor_set(&couple.outer, &key, &data, MDBX_SET, &exact);
+  rc = mdbx_cursor_set(&couple.outer, &key, &data, MDBX_SET);
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_NOTFOUND || !(user_flags & MDBX_CREATE))
       goto early_bailout;
@@ -20285,8 +20287,7 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
         (begin_key == end_key ||
          begin.outer.mc_dbx->md_cmp(begin_key, end_key) == 0)) {
       /* LY: single key case */
-      int exact = 0;
-      rc = mdbx_cursor_set(&begin.outer, begin_key, NULL, MDBX_SET, &exact);
+      rc = mdbx_cursor_set(&begin.outer, begin_key, NULL, MDBX_SET);
       if (unlikely(rc != MDBX_SUCCESS)) {
         *size_items = 0;
         return (rc == MDBX_NOTFOUND) ? MDBX_SUCCESS : rc;
@@ -20310,8 +20311,7 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
       return MDBX_SUCCESS;
     } else {
       rc = mdbx_cursor_set(&begin.outer, begin_key, begin_data,
-                           begin_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE,
-                           NULL);
+                           begin_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE);
     }
   }
 
@@ -20329,7 +20329,7 @@ int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *begin_key,
     rc = mdbx_cursor_last(&end.outer, &stub, &stub);
   } else {
     rc = mdbx_cursor_set(&end.outer, end_key, end_data,
-                         end_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE, NULL);
+                         end_data ? MDBX_GET_BOTH_RANGE : MDBX_SET_RANGE);
   }
   if (unlikely(rc != MDBX_SUCCESS)) {
     if (rc != MDBX_NOTFOUND || !(end.outer.mc_flags & C_INITIALIZED))
