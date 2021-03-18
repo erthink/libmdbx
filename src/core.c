@@ -12454,7 +12454,8 @@ static MDBX_node *__hot mdbx_node_search(MDBX_cursor *mc, const MDBX_val *key,
              IS_LEAF(mp) ? "leaf" : "branch", IS_SUBP(mp) ? "sub-" : "",
              mp->mp_pgno);
 
-  int low = IS_LEAF(mp) ? 0 : 1;
+  STATIC_ASSERT(P_BRANCH == 1);
+  int low = mp->mp_flags & P_BRANCH;
   int high = nkeys - 1;
   *exactp = false;
   if (unlikely(high < low)) {
