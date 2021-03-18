@@ -448,7 +448,7 @@ ethereum
 eturn
 etval
 euo
-Evensen's
+Evensen
 ewcommand
 EWOULDBLOCK
 Exa
@@ -1119,7 +1119,7 @@ oksize
 olddata
 olen
 Olog
-OMG's
+OMG
 ominimal
 omp
 ondrej
