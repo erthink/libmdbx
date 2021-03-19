@@ -366,9 +366,11 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
         print("     %s-page %" PRIu64, pagetype_caption, pgno);
       else
         print("     %s-span %" PRIu64 "[%u]", pagetype_caption, pgno, pgnumber);
-      print(" of %s: header %" PRIiPTR ", payload %" PRIiPTR
+      print(" of %s: header %" PRIiPTR ", %s %" PRIiPTR ", payload %" PRIiPTR
             ", unused %" PRIiPTR ", deep %i\n",
-            dbi->name, header_bytes, payload_bytes, unused_bytes, deep);
+            dbi->name, header_bytes,
+            (pagetype == MDBX_page_branch) ? "keys" : "entries", nentries,
+            payload_bytes, unused_bytes, deep);
     }
 
     bool already_used = false;
