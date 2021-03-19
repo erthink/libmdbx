@@ -15,7 +15,7 @@ Acknowledgements:
 
  - [Mahlon E. Smith](https://github.com/mahlonsmith) for [Ruby bindings](https://rubygems.org/gems/mdbx/).
  - [Alex Sharov](https://github.com/AskAlexSharov) for [mdbx-go](https://github.com/torquem-ch/mdbx-go) and for bug reporting.
- - [Artem Vorotnikov](https://github.com/vorot93) for bug reporting.
+ - [Artem Vorotnikov](https://github.com/vorot93) for bug reporting and PR.
 
 New features:
 
@@ -31,6 +31,7 @@ New features:
  - Added the `mdbx_drop` similar to LMDB command-line tool to purge or delete (sub)database(s).
  - [Ruby bindings](https://rubygems.org/gems/mdbx/) is available now by [Mahlon E. Smith](https://github.com/mahlonsmith).
  - Added `MDBX_ENABLE_MADVISE` build option which controls the use of POSIX `madvise()` hints and friends.
+ - The internal node sizes were refined, resulting in a reduction in large/overflow pages in some use cases and a slight increase in limits for a keys size.
 
 Fixes:
 
