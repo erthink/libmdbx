@@ -299,6 +299,7 @@ DHTML
 diafile
 dirname
 DIRS
+dirs
 dirtylist
 dirtyroom
 diskutil
@@ -670,6 +671,7 @@ INDXSIZE
 ini
 initd
 INITED
+inited
 initialiser
 inl
 inlined
@@ -1832,6 +1834,7 @@ WRLCK
 WRONLY
 wsize
 WSL
+wsl
 wstr
 wstring
 WUNTRACED
