@@ -20684,7 +20684,7 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
   STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t pgl_limit =
       pagesize * (uint64_t)(MDBX_PGL_LIMIT / 1.6180339887498948482);
-  const uint64_t map_limit = MAX_MAPSIZE / 1.6180339887498948482;
+  const uint64_t map_limit = (uint64_t)(MAX_MAPSIZE / 1.6180339887498948482);
   return (pgl_limit < map_limit) ? (intptr_t)pgl_limit : (intptr_t)map_limit;
 }
 
