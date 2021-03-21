@@ -641,8 +641,32 @@ __cold static int MDBX_PRINTF_ARGS(2, 3)
     static const MDBX_page *prev;
     if (prev != mp) {
       prev = mp;
+      const char *type;
+      switch (mp->mp_flags & (P_BRANCH | P_LEAF | P_OVERFLOW | P_META |
+                              P_LEAF2 | P_BAD | P_SUBP)) {
+      case P_BRANCH:
+        type = "branch";
+        break;
+      case P_LEAF:
+        type = "leaf";
+        break;
+      case P_LEAF | P_SUBP:
+        type = "subleaf";
+        break;
+      case P_LEAF | P_LEAF2:
+        type = "dupfixed-leaf";
+        break;
+      case P_LEAF | P_LEAF2 | P_SUBP:
+        type = "dupfixed-subleaf";
+        break;
+      case P_OVERFLOW:
+        type = "large";
+        break;
+      default:
+        type = "broken";
+      }
       mdbx_debug_log(MDBX_LOG_ERROR, "badpage", 0,
-                     "corrupted page #%u, mod-txnid %" PRIaTXN "\n",
+                     "corrupted %s-page #%u, mod-txnid %" PRIaTXN "\n", type,
                      mp->mp_pgno, mp->mp_txnid);
     }
 
