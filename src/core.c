@@ -3709,7 +3709,7 @@ static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
 static void mdbx_node_del(MDBX_cursor *mc, size_t ksize);
 static void mdbx_node_shrink(MDBX_page *mp, unsigned indx);
 static int __must_check_result mdbx_node_move(MDBX_cursor *csrc,
-                                              MDBX_cursor *cdst, int fromleft);
+                                              MDBX_cursor *cdst, bool fromleft);
 static int __must_check_result mdbx_node_read(MDBX_cursor *mc, MDBX_node *leaf,
                                               MDBX_val *data,
                                               const txnid_t pp_txnid);
@@ -15714,7 +15714,7 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
 }
 
 /* Move a node from csrc to cdst. */
-static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, int fromleft) {
+static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
   int rc;
   DKBUF;
 
@@ -16451,6 +16451,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
       return rc;
     mdbx_cassert(mc, PAGETYPE(right) == PAGETYPE(mc->mc_pg[mc->mc_top]));
   }
+  mdbx_cassert(mc, left || right);
 
   const unsigned ki_top = mc->mc_ki[mc->mc_top];
   const unsigned ki_pre_top = mn.mc_ki[pre_top];
@@ -16458,15 +16459,17 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
 
   const unsigned left_room = left ? page_room(left) : 0;
   const unsigned right_room = right ? page_room(right) : 0;
+  const unsigned left_nkeys = left ? page_numkeys(left) : 0;
+  const unsigned right_nkeys = right ? page_numkeys(right) : 0;
 retry:
   if (left_room > room_threshold && left_room >= right_room) {
     /* try merge with left */
-    mdbx_cassert(mc, page_numkeys(left) >= minkeys);
+    mdbx_cassert(mc, left_nkeys >= minkeys);
     mn.mc_pg[mn.mc_top] = left;
     mn.mc_ki[mn.mc_top - 1] = (indx_t)(ki_pre_top - 1);
-    mn.mc_ki[mn.mc_top] = (indx_t)(page_numkeys(left) - 1);
+    mn.mc_ki[mn.mc_top] = (indx_t)(left_nkeys - 1);
     mc->mc_ki[mc->mc_top] = 0;
-    const unsigned new_ki = ki_top + page_numkeys(left);
+    const unsigned new_ki = ki_top + left_nkeys;
     mn.mc_ki[mn.mc_top] += mc->mc_ki[mn.mc_top] + 1;
     /* We want mdbx_rebalance to find mn when doing fixups */
     WITH_CURSOR_TRACKING(mn, rc = mdbx_page_merge(mc, &mn));
@@ -16479,7 +16482,7 @@ retry:
   }
   if (right_room > room_threshold) {
     /* try merge with right */
-    mdbx_cassert(mc, page_numkeys(right) >= minkeys);
+    mdbx_cassert(mc, right_nkeys >= minkeys);
     mn.mc_pg[mn.mc_top] = right;
     mn.mc_ki[mn.mc_top - 1] = (indx_t)(ki_pre_top + 1);
     mn.mc_ki[mn.mc_top] = 0;
@@ -16492,14 +16495,12 @@ retry:
     }
   }
 
-  const unsigned left_nkeys = left ? page_numkeys(left) : 0;
-  const unsigned right_nkeys = right ? page_numkeys(right) : 0;
   if (left_nkeys > minkeys &&
       (right_nkeys <= left_nkeys || right_room >= left_room)) {
     /* try move from left */
     mn.mc_pg[mn.mc_top] = left;
     mn.mc_ki[mn.mc_top - 1] = (indx_t)(ki_pre_top - 1);
-    mn.mc_ki[mn.mc_top] = (indx_t)(page_numkeys(left) - 1);
+    mn.mc_ki[mn.mc_top] = (indx_t)(left_nkeys - 1);
     mc->mc_ki[mc->mc_top] = 0;
     WITH_CURSOR_TRACKING(mn, rc = mdbx_node_move(&mn, mc, true));
     if (likely(rc != MDBX_RESULT_TRUE)) {
