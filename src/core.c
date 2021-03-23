@@ -15081,6 +15081,7 @@ static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
   }
 
   node = page_node(mp, indx);
+  mdbx_cassert(mc, !IS_BRANCH(mp) || indx || node_ks(node) == 0);
   size_t sz = NODESIZE + node_ks(node);
   if (IS_LEAF(mp)) {
     if (F_ISSET(node_flags(node), F_BIGDATA))
@@ -16593,48 +16594,49 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
       const MDBX_node *const node = page_node(mp, i);
       const char *node_end = (char *)node + NODESIZE;
       if (unlikely(node_end > end_of_page)) {
-        rc = bad_page(mp, "node (%zu) beyond page-end\n",
+        rc = bad_page(mp, "node[%u] (%zu) beyond page-end\n", i,
                       node_end - end_of_page);
         continue;
       }
-      if (IS_LEAF(mp) || i > 0) {
-        size_t ksize = node_ks(node);
-        char *key = node_key(node);
-        if (unlikely(end_of_page < key + ksize)) {
-          rc = bad_page(mp, "node-key (%zu) beyond page-end\n",
-                        key + ksize - end_of_page);
-          continue;
-        }
-
-        if ((options & C_COPYING) == 0) {
-          if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
-                       ksize > mc->mc_dbx->md_klen_max))
-            rc = bad_page(
-                mp, "node-key size (%zu) <> min/max key-length (%zu/%zu)\n",
-                ksize, mc->mc_dbx->md_klen_min, mc->mc_dbx->md_klen_max);
-
-          if ((options & C_SKIPORD) == 0) {
-            here.iov_base = key;
-            here.iov_len = ksize;
-            if (prev.iov_base &&
-                unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
-              rc = bad_page(mp, "node-key #%u wrong order\n", i);
-            prev = here;
-          }
+      size_t ksize = node_ks(node);
+      char *key = node_key(node);
+      if (unlikely(end_of_page < key + ksize)) {
+        rc = bad_page(mp, "node[%u] key (%zu) beyond page-end\n", i,
+                      key + ksize - end_of_page);
+        continue;
+      }
+      if ((IS_LEAF(mp) || i > 0) && (options & C_COPYING) == 0) {
+        if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
+                     ksize > mc->mc_dbx->md_klen_max))
+          rc = bad_page(
+              mp, "node[%u] key size (%zu) <> min/max key-length (%zu/%zu)\n",
+              i, ksize, mc->mc_dbx->md_klen_min, mc->mc_dbx->md_klen_max);
+        if ((options & C_SKIPORD) == 0) {
+          here.iov_base = key;
+          here.iov_len = ksize;
+          if (prev.iov_base && unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
+            rc = bad_page(mp, "node[%u] key wrong order\n", i);
+          prev = here;
         }
       }
       if (IS_BRANCH(mp)) {
+        if ((options & C_UPDATING) == 0 && i == 0 && unlikely(ksize != 0))
+          rc = bad_page(mp, "branch-node[%u] wrong 0-node key-length (%zu)\n",
+                        i, ksize);
         if ((options & C_RETIRING) == 0) {
           const pgno_t ref = node_pgno(node);
           if (unlikely(ref < MIN_PAGENO || ref >= mc->mc_txn->mt_next_pgno))
-            rc = bad_page(mp, "branch-node wrong pgno (%u)\n", ref);
+            rc = bad_page(mp, "branch-node[%u] wrong pgno (%u)\n", i, ref);
         }
+        if (unlikely(node_flags(node)))
+          rc = bad_page(mp, "branch-node[%u] wrong flags (%u)\n", i,
+                        node_flags(node));
         continue;
       }
 
       switch (node_flags(node)) {
       default:
-        rc = bad_page(mp, "invalid node flags (%u)\n", node_flags(node));
+        rc = bad_page(mp, "invalid node[%u] flags (%u)\n", i, node_flags(node));
         break;
       case F_BIGDATA /* data on large-page */:
       case 0 /* usual */:
