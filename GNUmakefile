@@ -422,8 +422,8 @@ cross-qemu:
 
 #< dist-cutoff-end
 install: $(LIBRARIES) $(TOOLS) $(HEADERS)
-	install -D -p -s -t $(DESTDIR)$(prefix)/bin$(suffix) $(TOOLS) && \
-	install -D -p -s -t $(DESTDIR)$(prefix)/lib$(suffix) $(filter-out libmdbx.a,$(LIBRARIES)) && \
+	install -D -p -t $(DESTDIR)$(prefix)/bin$(suffix) $(TOOLS) && \
+	install -D -p -t $(DESTDIR)$(prefix)/lib$(suffix) $(filter-out libmdbx.a,$(LIBRARIES)) && \
 	install -D -p -t $(DESTDIR)$(prefix)/lib$(suffix) libmdbx.a && \
 	install -D -p -m 444 -t $(DESTDIR)$(prefix)/include $(HEADERS) && \
 	install -D -p -m 444 -t $(DESTDIR)$(mandir)/man1 $(addprefix $(MAN_SRCDIR), $(MANPAGES))
