@@ -354,10 +354,13 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  * BRANCH_NODE_MAX
  *   Branch-page must contain at least two nodes, within each a key and a child
  *   page number. But page can't be splitted if it contains less that 4 keys,
- *   i.e. a page should not overflow before adding the fourth key.
- *   Therefore, at least 3 branch-node should fit in the single branch-page:
+ *   i.e. a page should not overflow before adding the fourth key. Therefore,
+ *   at least 3 branch-node should fit in the single branch-page. Further, the
+ *   first node of a branch-page doesn't contain a key, i.e. the first node
+ *   is always require space just for itself. Thus:
  *       PAGEROOM = pagesize - page_hdr_len;
- *       BRANCH_NODE_MAX = even_floor(PAGEROOM / 3 - sizeof(indx_t));
+ *       BRANCH_NODE_MAX = even_floor(
+ *         (PAGEROOM - sizeof(indx_t) - NODESIZE) / (3 - 1) - sizeof(indx_t));
  *       KEYLEN_MAX = BRANCH_NODE_MAX - node_hdr_len;
  *
  * LEAF_NODE_MAX
@@ -386,7 +389,8 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
 #define PAGEROOM(pagesize) ((pagesize)-PAGEHDRSZ)
 #define EVEN_FLOOR(n) ((n) & ~(size_t)1)
 #define BRANCH_NODE_MAX(pagesize)                                              \
-  (EVEN_FLOOR(PAGEROOM(pagesize) / 3) - sizeof(indx_t))
+  (EVEN_FLOOR((PAGEROOM(pagesize) - sizeof(indx_t) - NODESIZE) / (3 - 1) -     \
+              sizeof(indx_t)))
 #define LEAF_NODE_MAX(pagesize)                                                \
   (EVEN_FLOOR(PAGEROOM(pagesize) / 2) - sizeof(indx_t))
 #define MAX_GC1OVPAGE(pagesize) (PAGEROOM(pagesize) / sizeof(pgno_t) - 1)
@@ -10428,7 +10432,7 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
 
   STATIC_ASSERT(LEAF_NODE_MAX(MIN_PAGESIZE) > sizeof(MDBX_db) + NODESIZE + 42);
   STATIC_ASSERT(LEAF_NODE_MAX(MAX_PAGESIZE) < UINT16_MAX);
-  STATIC_ASSERT(LEAF_NODE_MAX(MIN_PAGESIZE) > BRANCH_NODE_MAX(MIN_PAGESIZE));
+  STATIC_ASSERT(LEAF_NODE_MAX(MIN_PAGESIZE) >= BRANCH_NODE_MAX(MIN_PAGESIZE));
   STATIC_ASSERT(BRANCH_NODE_MAX(MAX_PAGESIZE) > NODESIZE + 42);
   STATIC_ASSERT(BRANCH_NODE_MAX(MAX_PAGESIZE) < UINT16_MAX);
   const intptr_t branch_nodemax = BRANCH_NODE_MAX(pagesize);
@@ -10437,7 +10441,7 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
               branch_nodemax > (intptr_t)(NODESIZE + 42) &&
                   branch_nodemax % 2 == 0 &&
                   leaf_nodemax > (intptr_t)(sizeof(MDBX_db) + NODESIZE + 42) &&
-                  leaf_nodemax > branch_nodemax &&
+                  leaf_nodemax >= branch_nodemax &&
                   leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
   env->me_leaf_nodemax = (unsigned)leaf_nodemax;
   env->me_psize2log = (uint8_t)log2n(pagesize);
