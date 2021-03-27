@@ -1229,15 +1229,18 @@ static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
 
 /* Key size which fits in a DKBUF (debug key buffer). */
 #define DKBUF_MAX 511
-
-#if MDBX_DEBUG
 #define DKBUF char _kbuf[DKBUF_MAX * 4 + 2]
 #define DKEY(x) mdbx_dump_val(x, _kbuf, DKBUF_MAX * 2 + 1)
 #define DVAL(x) mdbx_dump_val(x, _kbuf + DKBUF_MAX * 2 + 1, DKBUF_MAX * 2 + 1)
+
+#if MDBX_DEBUG
+#define DKBUF_DEBUG DKBUF
+#define DKEY_DEBUG(x) DKEY(x)
+#define DVAL_DEBUG(x) DVAL(x)
 #else
-#define DKBUF ((void)(0))
-#define DKEY(x) ("-")
-#define DVAL(x) ("-")
+#define DKBUF_DEBUG ((void)(0))
+#define DKEY_DEBUG(x) ("-")
+#define DVAL_DEBUG(x) ("-")
 #endif
 
 /* An invalid page number.
