@@ -239,6 +239,10 @@ bool maker::is_unordered() const {
                              : mapping.split);
 }
 
+void maker::seek2end(serial_t &serial) const {
+  serial = actor_params::serial_mask(mapping.width) - 1;
+}
+
 bool maker::increment(serial_t &serial, int delta) const {
   if (serial > actor_params::serial_mask(mapping.width)) {
     log_extra("keygen-increment: %" PRIu64 " > %" PRIu64 ", overflow", serial,

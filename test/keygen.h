@@ -128,12 +128,17 @@ public:
   void setup(const config::actor_params_pod &actor, unsigned actor_id,
              unsigned thread_number);
   bool is_unordered() const;
+  void seek2end(serial_t &serial) const;
 
   bool increment(serial_t &serial, int delta) const;
   bool increment_key_part(serial_t &serial, int delta,
                           bool reset_value_part = true) const {
-    if (reset_value_part)
-      serial &= ~((serial_t(1) << mapping.split) - 1);
+    if (reset_value_part) {
+      serial_t value_part_bits = ((serial_t(1) << mapping.split) - 1);
+      serial |= value_part_bits;
+      if (delta >= 0)
+        serial &= ~value_part_bits;
+    }
     return increment(serial, delta << mapping.split);
   }
 };

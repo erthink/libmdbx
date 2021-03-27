@@ -27,9 +27,13 @@ public:
 REGISTER_TESTCASE(append);
 
 bool testcase_append::run() {
+  const bool reverse = flipcoin();
+  const char *const caption = reverse ? "ahead" : "append";
+  log_notice("the '%s' scenario is selected", caption);
+
   int err = db_open__begin__table_create_open_clean(dbi);
   if (unlikely(err != MDBX_SUCCESS)) {
-    log_notice("append: bailout-prepare due '%s'", mdbx_strerror(err));
+    log_notice("%s: bailout-prepare due '%s'", caption, mdbx_strerror(err));
     return true;
   }
 
@@ -38,9 +42,12 @@ bool testcase_append::run() {
   /* LY: тест наполнения таблиц в append-режиме,
    * при котором записи добавляются строго в конец (в порядке сортировки) */
   const MDBX_put_flags_t flags =
-      (config.params.table_flags & MDBX_DUPSORT)
-          ? (flipcoin() ? MDBX_APPEND | MDBX_APPENDDUP : MDBX_APPENDDUP)
-          : MDBX_APPEND;
+      reverse
+          ? ((config.params.table_flags & MDBX_DUPSORT) ? MDBX_UPSERT
+                                                        : MDBX_NOOVERWRITE)
+          : ((config.params.table_flags & MDBX_DUPSORT)
+                 ? (flipcoin() ? MDBX_APPEND | MDBX_APPENDDUP : MDBX_APPENDDUP)
+                 : MDBX_APPEND);
 
   key = keygen::alloc(config.params.keylen_max);
   data = keygen::alloc(config.params.datalen_max);
@@ -48,6 +55,8 @@ bool testcase_append::run() {
   simple_checksum inserted_checksum;
   uint64_t inserted_number = 0;
   uint64_t serial_count = 0;
+  if (reverse)
+    keyvalue_maker.seek2end(serial_count);
 
   unsigned txn_nops = 0;
   uint64_t committed_inserted_number = inserted_number;
@@ -56,78 +65,81 @@ bool testcase_append::run() {
     const keygen::serial_t serial = serial_count;
     const bool turn_key = (config.params.table_flags & MDBX_DUPSORT) == 0 ||
                           flipcoin_n(config.params.keygen.split);
-    if (turn_key ? !keyvalue_maker.increment_key_part(serial_count, 1)
-                 : !keyvalue_maker.increment(serial_count, 1)) {
+    if (turn_key
+            ? !keyvalue_maker.increment_key_part(serial_count, reverse ? -1 : 1)
+            : !keyvalue_maker.increment(serial_count, reverse ? -1 : 1)) {
       // дошли до границы пространства ключей
       break;
     }
 
-    log_trace("append: append-a %" PRIu64, serial);
+    log_trace("%s: insert-a %" PRIu64, caption, serial);
     generate_pair(serial);
     // keygen::log_pair(logging::verbose, "append.", key, data);
 
-    MDBX_val ge_key = key->value;
-    MDBX_val ge_data = data->value;
-    err = mdbx_get_equal_or_great(txn_guard.get(), dbi, &ge_key, &ge_data);
+    bool expect_key_mismatch = false;
+    if (flags & (MDBX_APPEND | MDBX_APPENDDUP)) {
+      MDBX_val ge_key = key->value;
+      MDBX_val ge_data = data->value;
+      err = mdbx_get_equal_or_great(txn_guard.get(), dbi, &ge_key, &ge_data);
 
-    bool expect_key_mismatch;
-    if (err == MDBX_SUCCESS /* exact match */) {
-      expect_key_mismatch = true;
-      assert(inserted_number > 0);
-      assert(mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0);
-      assert((config.params.table_flags & MDBX_DUPSORT) == 0 ||
-             mdbx_dcmp(txn_guard.get(), dbi, &data->value, &ge_data) == 0);
-      assert(inserted_number > 0);
-    } else if (err == MDBX_RESULT_TRUE /* have key-value pair great than */) {
-      assert(mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) < 0 ||
-             ((config.params.table_flags & MDBX_DUPSORT) &&
-              mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0 &&
-              mdbx_dcmp(txn_guard.get(), dbi, &data->value, &ge_data) < 0));
-      switch (int(flags)) {
-      default:
-        abort();
-#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
-      case MDBX_APPEND | MDBX_APPENDDUP:
-#else
-      case int(MDBX_APPEND) | int(MDBX_APPENDDUP):
-#endif
-        assert((config.params.table_flags & MDBX_DUPSORT) != 0);
-        __fallthrough;
-        // fall through
-      case MDBX_APPEND:
+      if (err == MDBX_SUCCESS /* exact match */) {
         expect_key_mismatch = true;
-        break;
-      case MDBX_APPENDDUP:
-        assert((config.params.table_flags & MDBX_DUPSORT) != 0);
-        expect_key_mismatch =
-            mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0;
-        break;
-      }
-    } else if (err == MDBX_NOTFOUND /* all pair are less than */) {
-      switch (int(flags)) {
-      default:
-        abort();
-      case MDBX_APPENDDUP:
+        assert(inserted_number > 0);
+        assert(mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0);
+        assert((config.params.table_flags & MDBX_DUPSORT) == 0 ||
+               mdbx_dcmp(txn_guard.get(), dbi, &data->value, &ge_data) == 0);
+        assert(inserted_number > 0);
+      } else if (err == MDBX_RESULT_TRUE /* have key-value pair great than */) {
+        assert(mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) < 0 ||
+               ((config.params.table_flags & MDBX_DUPSORT) &&
+                mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0 &&
+                mdbx_dcmp(txn_guard.get(), dbi, &data->value, &ge_data) < 0));
+        switch (int(flags)) {
+        default:
+          abort();
 #if CONSTEXPR_ENUM_FLAGS_OPERATIONS
-      case MDBX_APPEND | MDBX_APPENDDUP:
+        case MDBX_APPEND | MDBX_APPENDDUP:
 #else
-      case int(MDBX_APPEND) | int(MDBX_APPENDDUP):
+        case int(MDBX_APPEND) | int(MDBX_APPENDDUP):
 #endif
-        assert((config.params.table_flags & MDBX_DUPSORT) != 0);
-        __fallthrough;
-        // fall through
-      case MDBX_APPEND:
-        expect_key_mismatch = false;
-        break;
-      }
-    } else
-      failure_perror("mdbx_get_equal_or_great()", err);
+          assert((config.params.table_flags & MDBX_DUPSORT) != 0);
+          __fallthrough;
+          // fall through
+        case MDBX_APPEND:
+          expect_key_mismatch = true;
+          break;
+        case MDBX_APPENDDUP:
+          assert((config.params.table_flags & MDBX_DUPSORT) != 0);
+          expect_key_mismatch =
+              mdbx_cmp(txn_guard.get(), dbi, &key->value, &ge_key) == 0;
+          break;
+        }
+      } else if (err == MDBX_NOTFOUND /* all pair are less than */) {
+        switch (int(flags)) {
+        default:
+          abort();
+        case MDBX_APPENDDUP:
+#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
+        case MDBX_APPEND | MDBX_APPENDDUP:
+#else
+        case int(MDBX_APPEND) | int(MDBX_APPENDDUP):
+#endif
+          assert((config.params.table_flags & MDBX_DUPSORT) != 0);
+          __fallthrough;
+          // fall through
+        case MDBX_APPEND:
+          expect_key_mismatch = false;
+          break;
+        }
+      } else
+        failure_perror("mdbx_get_equal_or_great()", err);
 
-    assert(!expect_key_mismatch);
+      assert(!expect_key_mismatch);
+    }
 
     err = mdbx_cursor_put(cursor_guard.get(), &key->value, &data->value, flags);
     if (err == MDBX_MAP_FULL && config.params.ignore_dbfull) {
-      log_notice("append: bailout-insert due '%s'", mdbx_strerror(err));
+      log_notice("%s: bailout-insert due '%s'", caption, mdbx_strerror(err));
       txn_end(true);
       inserted_number = committed_inserted_number;
       inserted_checksum = committed_inserted_checksum;
@@ -136,17 +148,17 @@ bool testcase_append::run() {
 
     if (!expect_key_mismatch) {
       if (unlikely(err != MDBX_SUCCESS))
-        failure_perror("mdbx_cursor_put(appenda-a)", err);
+        failure_perror("mdbx_cursor_put(insert-a)", err);
       ++inserted_number;
       inserted_checksum.push((uint32_t)inserted_number, key->value);
       inserted_checksum.push(10639, data->value);
     } else if (unlikely(err != MDBX_EKEYMISMATCH))
-      failure_perror("mdbx_cursor_put(appenda-a) != MDBX_EKEYMISMATCH", err);
+      failure_perror("mdbx_cursor_put(insert-a) != MDBX_EKEYMISMATCH", err);
 
     if (++txn_nops >= config.params.batch_write) {
       err = breakable_restart();
       if (unlikely(err != MDBX_SUCCESS)) {
-        log_notice("append: bailout-commit due '%s'", mdbx_strerror(err));
+        log_notice("%s: bailout-commit due '%s'", caption, mdbx_strerror(err));
         inserted_number = committed_inserted_number;
         inserted_checksum = committed_inserted_checksum;
         break;
@@ -162,7 +174,7 @@ bool testcase_append::run() {
   if (txn_guard) {
     err = breakable_commit();
     if (unlikely(err != MDBX_SUCCESS)) {
-      log_notice("append: bailout-commit due '%s'", mdbx_strerror(err));
+      log_notice("%s: bailout-commit due '%s'", caption, mdbx_strerror(err));
       inserted_number = committed_inserted_number;
       inserted_checksum = committed_inserted_checksum;
     }
@@ -172,8 +184,8 @@ bool testcase_append::run() {
   cursor_renew();
 
   MDBX_val check_key, check_data;
-  err =
-      mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, MDBX_FIRST);
+  err = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data,
+                        reverse ? MDBX_LAST : MDBX_FIRST);
   if (likely(inserted_number)) {
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_cursor_get(MDBX_FIRST)", err);
@@ -186,8 +198,8 @@ bool testcase_append::run() {
     read_checksum.push((uint32_t)read_count, check_key);
     read_checksum.push(10639, check_data);
 
-    err =
-        mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data, MDBX_NEXT);
+    err = mdbx_cursor_get(cursor_guard.get(), &check_key, &check_data,
+                          reverse ? MDBX_PREV : MDBX_NEXT);
   }
 
   if (unlikely(err != MDBX_NOTFOUND))
@@ -212,7 +224,7 @@ bool testcase_append::run() {
       db_table_drop(dbi);
       err = breakable_commit();
       if (unlikely(err != MDBX_SUCCESS)) {
-        log_notice("append: bailout-clean due '%s'", mdbx_strerror(err));
+        log_notice("%s: bailout-clean due '%s'", caption, mdbx_strerror(err));
         return true;
       }
     } else
