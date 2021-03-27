@@ -16545,6 +16545,7 @@ retry:
 
 static __cold int mdbx_page_check(MDBX_cursor *const mc,
                                   const MDBX_page *const mp, unsigned options) {
+  DKBUF;
   options |= mc->mc_flags & (C_COPYING | C_UPDATING | C_RETIRING | C_SKIPORD);
   MDBX_env *const env = mc->mc_txn->mt_env;
   const unsigned nkeys = page_numkeys(mp);
@@ -16590,8 +16591,9 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
         if ((options & C_SKIPORD) == 0) {
           here.iov_len = ksize;
           here.iov_base = key;
-          if (prev.iov_base && unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
-            rc = bad_page(mp, "leaf2-key #%u wrong order\n", i);
+          if (prev.iov_base && unlikely(mc->mc_dbx->md_cmp(&prev, &here) >= 0))
+            rc = bad_page(mp, "leaf2-key #%u wrong order (%s >= %s)\n", i,
+                          DKEY(&prev), DVAL(&here));
           prev = here;
         }
       }
@@ -16619,8 +16621,9 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
         if ((options & C_SKIPORD) == 0) {
           here.iov_base = key;
           here.iov_len = ksize;
-          if (prev.iov_base && unlikely(mc->mc_dbx->md_cmp(&here, &prev) <= 0))
-            rc = bad_page(mp, "node[%u] key wrong order\n", i);
+          if (prev.iov_base && unlikely(mc->mc_dbx->md_cmp(&prev, &here) >= 0))
+            rc = bad_page(mp, "node[%u] key wrong order (%s >= %s)\n", i,
+                          DKEY(&prev), DVAL(&here));
           prev = here;
         }
       }
@@ -16763,7 +16766,9 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                   sub_here.iov_base = sub_key;
                   if (sub_prev.iov_base &&
                       unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >= 0))
-                    rc = bad_page(mp, "nested-leaf2-key #%u wrong order\n", j);
+                    rc = bad_page(
+                        mp, "nested-leaf2-key #%u wrong order (%s >= %s)\n", j,
+                        DKEY(&sub_prev), DVAL(&sub_here));
                   sub_prev = sub_here;
                 }
               }
@@ -16798,7 +16803,9 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
                   sub_here.iov_base = sub_key;
                   if (sub_prev.iov_base &&
                       unlikely(mc->mc_dbx->md_dcmp(&sub_prev, &sub_here) >= 0))
-                    rc = bad_page(mp, "nested-node-key #%u wrong order\n", j);
+                    rc = bad_page(
+                        mp, "nested-node-key #%u wrong order (%s >= %s)\n", j,
+                        DKEY(&sub_prev), DVAL(&sub_here));
                   sub_prev = sub_here;
                 }
               }
