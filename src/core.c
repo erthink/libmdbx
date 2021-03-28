@@ -16830,8 +16830,8 @@ static __cold int mdbx_cursor_check(MDBX_cursor *mc, unsigned options) {
                                mc->mc_txn->tw.dirtyroom +
                                        mc->mc_txn->tw.dirtylist->length ==
                                    mc->mc_txn->mt_env->me_options.dp_limit);
-  mdbx_cassert(mc, mc->mc_top == mc->mc_snum - 1);
-  if (unlikely(mc->mc_top != mc->mc_snum - 1))
+  mdbx_cassert(mc, mc->mc_top == mc->mc_snum - 1 || (options & C_UPDATING));
+  if (unlikely(mc->mc_top != mc->mc_snum - 1) && (options & C_UPDATING) == 0)
     return MDBX_CURSOR_FULL;
   mdbx_cassert(mc, (options & C_UPDATING) ? mc->mc_snum <= mc->mc_db->md_depth
                                           : mc->mc_snum == mc->mc_db->md_depth);
