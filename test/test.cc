@@ -683,6 +683,7 @@ void testcase::speculum_check_iterator(const char *where, const char *stage,
             mdbx_dump_val(&data, dump_value, sizeof(dump_value)));
 }
 
+#if SPECULUM_CURSORS
 void testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const testcase::SET::const_iterator &it,
                                      int cursor_err, const MDBX_val &cursor_key,
@@ -820,6 +821,7 @@ void testcase::speculum_prepare_cursors(const Item &item) {
     failure("speculum-%s: %s on-last %d %s", "prepare-cursors", "next-next",
             err, mdbx_strerror(err));
 }
+#endif /* SPECULUM_CURSORS */
 
 int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
                      MDBX_put_flags_t flags) {
@@ -829,7 +831,9 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
   if (config.params.speculum) {
     item.first = iov2dataview(akey);
     item.second = iov2dataview(adata);
+#if SPECULUM_CURSORS
     speculum_prepare_cursors(item);
+#endif /* SPECULUM_CURSORS */
   }
 
   err = mdbx_put(txn_guard.get(), dbi, &akey->value, &adata->value, flags);
@@ -852,6 +856,7 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
       rc = false;
     }
 
+#if SPECULUM_CURSORS
     if (insertion_result.first != speculum.begin()) {
       const auto cursor_prev = speculum_cursors[prev].get();
       auto it_prev = insertion_result.first;
@@ -885,6 +890,7 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
         }
       }
     }
+#endif /* SPECULUM_CURSORS */
   }
 
   return rc ? MDBX_SUCCESS : MDBX_RESULT_TRUE;
@@ -925,7 +931,9 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
   if (config.params.speculum) {
     item.first = iov2dataview(akey);
     item.second = iov2dataview(adata);
+#if SPECULUM_CURSORS
     speculum_prepare_cursors(item);
+#endif /* SPECULUM_CURSORS */
   }
 
   err = mdbx_del(txn_guard.get(), dbi, &akey->value, &adata->value);
@@ -950,6 +958,7 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
         rc = false;
       }
 
+#if SPECULUM_CURSORS
       if (it_found != speculum.begin()) {
         const auto cursor_prev = speculum_cursors[prev].get();
         auto it_prev = it_found;
@@ -989,6 +998,7 @@ int testcase::remove(const keygen::buffer &akey, const keygen::buffer &adata) {
           failure("speculum-%s: %s on-last %d %s", "after-remove", "lowerbound",
                   err, mdbx_strerror(err));
       }
+#endif /* SPECULUM_CURSORS */
 
       speculum.erase(it_found);
     }

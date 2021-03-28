@@ -198,11 +198,12 @@ protected:
   } last;
 
   SET speculum{ItemCompare(this)}, speculum_committed{ItemCompare(this)};
+#ifndef SPECULUM_CURSORS
+#define SPECULUM_CURSORS 1
+#endif /* SPECULUM_CURSORS */
+#if SPECULUM_CURSORS
   scoped_cursor_guard speculum_cursors[5];
   void speculum_prepare_cursors(const Item &item);
-  void speculum_check_iterator(const char *where, const char *stage,
-                               const testcase::SET::const_iterator &it,
-                               const MDBX_val &key, const MDBX_val &data) const;
   void speculum_check_cursor(const char *where, const char *stage,
                              const testcase::SET::const_iterator &it,
                              int cursor_err, const MDBX_val &cursor_key,
@@ -211,6 +212,10 @@ protected:
                              const testcase::SET::const_iterator &it,
                              MDBX_cursor *cursor,
                              const MDBX_cursor_op op) const;
+#endif /* SPECULUM_CURSORS */
+  void speculum_check_iterator(const char *where, const char *stage,
+                               const testcase::SET::const_iterator &it,
+                               const MDBX_val &key, const MDBX_val &data) const;
 
   void verbose(const char *where, const char *stage,
                const testcase::SET::const_iterator &it) const;
