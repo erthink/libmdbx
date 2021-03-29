@@ -12481,6 +12481,8 @@ static int __hot cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
 
 static bool unsure_equal(MDBX_cmp_func cmp, const MDBX_val *a,
                          const MDBX_val *b) {
+  /* checking for the use of a known good comparator
+   * or/otherwise for a full byte-to-byte match */
   return cmp == cmp_lenfast || cmp == cmp_lexical || cmp == cmp_reverse ||
          cmp == cmp_int_unaligned || cmp_lenfast(a, b) == 0;
 }
