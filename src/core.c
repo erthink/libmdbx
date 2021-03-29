@@ -14322,10 +14322,10 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
 
       /* Is the ov page large enough? */
       if (unlikely(mc->mc_flags & C_GCFREEZE)
-              ? ovpages >= dpages
-              : ovpages ==
-                    /* LY: add configurable threshold to keep reserve space */
-                    dpages) {
+              ? (ovpages >= dpages)
+              : (ovpages ==
+                 /* TODO: add configurable threshold to keep reserve space */
+                 dpages)) {
         if (!IS_DIRTY(omp) && (level || (env->me_flags & MDBX_WRITEMAP))) {
           rc2 = mdbx_page_unspill(mc->mc_txn, omp, &omp);
           if (unlikely(rc2))
