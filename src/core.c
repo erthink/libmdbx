@@ -12101,8 +12101,20 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     while (atomic_load32(&env->me_lck->mti_envmode, mo_AcquireRelease) ==
            MDBX_RDONLY) {
       if (atomic_cas32(&env->me_lck->mti_envmode, MDBX_RDONLY,
-                       env->me_flags & mode_flags))
+                       env->me_flags & mode_flags)) {
+        /* The case:
+         *  - let's assume that for some reason the DB file is smaller
+         *    than it should be according to the geometry,
+         *    but not smaller than the last page used;
+         *  - the first process that opens the database (lc_rc = true)
+         *    does this in readonly mode and therefore cannot bring
+         *    the file size back to normal;
+         *  - some next process (lc_rc = false) opens the DB in read-write
+         *    mode and now is here.
+         *
+         * FIXME: Should we re-check and set the size of DB-file right here? */
         break;
+      }
       atomic_yield();
     }
 
