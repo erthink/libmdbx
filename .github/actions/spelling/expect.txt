@@ -200,6 +200,7 @@ coredump
 coreos
 couchbase
 countp
+cout
 coverity
 cpack
 cpflags
@@ -403,6 +404,7 @@ endforeach
 endian
 endianness
 endif
+endl
 endmacro
 endmntent
 endutxent
@@ -689,6 +691,7 @@ inttypes
 ioarena
 IODQ
 iops
+iostream
 iov
 iovcnt
 iovec
@@ -887,6 +890,7 @@ maxnode
 maxpg
 maxreaders
 maxrss
+maxsize
 maxspan
 MAXSSIZE
 maxval
@@ -1605,6 +1609,7 @@ sysctl
 sysctlbyname
 sysname
 syspagesize
+sysraminfo
 systemtime
 sysv
 sz
