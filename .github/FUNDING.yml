@@ -9,4 +9,4 @@ community_bridge: # Replace with a single Community Bridge project-name e.g., cl
 liberapay: # Replace with a single Liberapay username
 issuehunt: # Replace with a single IssueHunt username
 otechie: # Replace with a single Otechie username
-custom: ['https://sobe.ru/na/libmdbx', 'https://paypal.me/erthink']
+custom: ['https://sobe.ru/na/libmdbx', 'https://paypal.me/erthink', 'https://etherscan.io/address/0xe8a741a2a0a4850c5bdbb415aaaaf8fb46f06fb7']

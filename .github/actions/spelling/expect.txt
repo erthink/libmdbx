@@ -1034,6 +1034,7 @@ nextkey
 nextvalue
 nf
 nflags
+nfs
 nimdbx
 nkey
 nkeys
@@ -1640,6 +1641,7 @@ timeval
 timperi
 tl
 tlhelp
+tls
 Tme
 tmp
 tmpdir
