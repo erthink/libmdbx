@@ -17405,7 +17405,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       for (i = 0; i < mc->mc_top; i++)
         mc->mc_ki[i] = mn.mc_ki[i];
     } else if (mc->mc_ki[mc->mc_top - 1] == 0) {
-      for (unsigned i = 2; i <= mc->mc_top; ++i)
+      for (i = 2; i <= mc->mc_top; ++i)
         if (mc->mc_ki[mc->mc_top - i]) {
           get_key(
               page_node(mc->mc_pg[mc->mc_top - i], mc->mc_ki[mc->mc_top - i]),
