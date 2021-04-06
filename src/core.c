@@ -40,23 +40,6 @@
 /*------------------------------------------------------------------------------
  * Internal inline functions */
 
-MDBX_NOTHROW_CONST_FUNCTION static unsigned log2n(size_t value) {
-  assert(value > 0 && value < INT32_MAX && is_powerof2(value));
-  assert((value & -(int32_t)value) == value);
-#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
-  return __builtin_ctzl(value);
-#elif defined(_MSC_VER)
-  unsigned long index;
-  _BitScanForward(&index, (unsigned long)value);
-  return index;
-#else
-  static const uint8_t debruijn_ctz32[32] = {
-      0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
-      31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
-  return debruijn_ctz32[(uint32_t)(value * 0x077CB531u) >> 27];
-#endif
-}
-
 MDBX_NOTHROW_CONST_FUNCTION static unsigned branchless_abs(int value) {
   assert(value > INT_MIN);
   const unsigned expanded_sign =
@@ -11584,61 +11567,12 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
   if (volume <= 1024 * 1024 * 4ul)
     return MDBX_RESULT_TRUE;
 
-  const intptr_t pagesize = mdbx_syspagesize();
-  if (unlikely(pagesize < MIN_PAGESIZE || !is_powerof2(pagesize)))
-    return MDBX_INCOMPATIBLE;
+  intptr_t pagesize, total_ram_pages;
+  int err = mdbx_get_sysraminfo(&pagesize, &total_ram_pages, nullptr);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
-#if defined(_WIN32) || defined(_WIN64)
-  MEMORYSTATUSEX info;
-  memset(&info, 0, sizeof(info));
-  info.dwLength = sizeof(info);
-  if (!GlobalMemoryStatusEx(&info))
-    return GetLastError();
-#endif
   const int log2page = log2n(pagesize);
-
-#if defined(_WIN32) || defined(_WIN64)
-  const intptr_t total_ram_pages = (intptr_t)(info.ullTotalPhys >> log2page);
-#elif defined(_SC_PHYS_PAGES)
-  const intptr_t total_ram_pages = sysconf(_SC_PHYS_PAGES);
-  if (total_ram_pages == -1)
-    return errno;
-#elif defined(_SC_AIX_REALMEM)
-  const intptr_t total_ram_Kb = sysconf(_SC_AIX_REALMEM);
-  if (total_ram_Kb == -1)
-    return errno;
-  const intptr_t total_ram_pages = (total_ram_Kb << 10) >> log2page;
-#elif defined(HW_USERMEM) || defined(HW_PHYSMEM64) || defined(HW_MEMSIZE) ||   \
-    defined(HW_PHYSMEM)
-  size_t ram, len = sizeof(ram);
-  static const int mib[] = {
-    CTL_HW,
-#if defined(HW_USERMEM)
-    HW_USERMEM
-#elif defined(HW_PHYSMEM64)
-    HW_PHYSMEM64
-#elif defined(HW_MEMSIZE)
-    HW_MEMSIZE
-#else
-    HW_PHYSMEM
-#endif
-  };
-  if (sysctl(
-#ifdef SYSCTL_LEGACY_NONCONST_MIB
-          (int *)
-#endif
-              mib,
-          ARRAY_LENGTH(mib), &ram, &len, NULL, 0) != 0)
-    return errno;
-  if (len != sizeof(ram))
-    return MDBX_ENOSYS;
-  const intptr_t total_ram_pages = (intptr_t)(ram >> log2page);
-#else
-#error "FIXME: Get User-accessible or physical RAM"
-#endif
-  if (total_ram_pages < 1)
-    return MDBX_ENOSYS;
-
   const intptr_t volume_pages = (volume + pagesize - 1) >> log2page;
   const intptr_t redundancy_pages =
       (redundancy < 0) ? -(intptr_t)((-redundancy + pagesize - 1) >> log2page)
@@ -11647,48 +11581,10 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
       volume_pages + redundancy_pages >= total_ram_pages)
     return MDBX_RESULT_FALSE;
 
-#if defined(_WIN32) || defined(_WIN64)
-  const intptr_t avail_ram_pages = (intptr_t)(info.ullAvailPhys >> log2page);
-#elif defined(_SC_AVPHYS_PAGES)
-  const intptr_t avail_ram_pages = sysconf(_SC_AVPHYS_PAGES);
-  if (avail_ram_pages == -1)
-    return errno;
-#elif defined(__MACH__)
-  mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
-  vm_statistics_data_t vmstat;
-  mach_port_t mport = mach_host_self();
-  kern_return_t kerr = host_statistics(mach_host_self(), HOST_VM_INFO,
-                                       (host_info_t)&vmstat, &count);
-  mach_port_deallocate(mach_task_self(), mport);
-  if (unlikely(kerr != KERN_SUCCESS))
-    return MDBX_ENOSYS;
-  const intptr_t avail_ram_pages = vmstat.free_count;
-#elif defined(VM_TOTAL) || defined(VM_METER)
-  struct vmtotal info;
-  size_t len = sizeof(info);
-  static const int mib[] = {
-    CTL_VM,
-#if defined(VM_TOTAL)
-    VM_TOTAL
-#elif defined(VM_METER)
-    VM_METER
-#endif
-  };
-  if (sysctl(
-#ifdef SYSCTL_LEGACY_NONCONST_MIB
-          (int *)
-#endif
-              mib,
-          ARRAY_LENGTH(mib), &info, &len, NULL, 0) != 0)
-    return errno;
-  if (len != sizeof(info))
-    return MDBX_ENOSYS;
-  const intptr_t avail_ram_pages = info.t_free;
-#else
-#error "FIXME: Get Available RAM"
-#endif
-  if (avail_ram_pages < 1)
-    return MDBX_ENOSYS;
+  intptr_t avail_ram_pages;
+  err = mdbx_get_sysraminfo(nullptr, nullptr, &avail_ram_pages);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
   return (volume_pages + redundancy_pages >= avail_ram_pages)
              ? MDBX_RESULT_FALSE

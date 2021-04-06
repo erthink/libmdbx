@@ -2393,3 +2393,124 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
 
   return bin;
 }
+
+__cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
+                               intptr_t *avail_pages) {
+  if (!page_size && !total_pages && !avail_pages)
+    return MDBX_EINVAL;
+  if (total_pages)
+    *total_pages = -1;
+  if (avail_pages)
+    *avail_pages = -1;
+
+  const intptr_t pagesize = mdbx_syspagesize();
+  if (page_size)
+    *page_size = pagesize;
+  if (unlikely(pagesize < MIN_PAGESIZE || !is_powerof2(pagesize)))
+    return MDBX_INCOMPATIBLE;
+
+  __maybe_unused const int log2page = log2n(pagesize);
+  assert(pagesize == (INT64_C(1) << log2page));
+  (void)log2page;
+
+#if defined(_WIN32) || defined(_WIN64)
+  MEMORYSTATUSEX info;
+  memset(&info, 0, sizeof(info));
+  info.dwLength = sizeof(info);
+  if (!GlobalMemoryStatusEx(&info))
+    return GetLastError();
+#endif
+
+  if (total_pages) {
+#if defined(_WIN32) || defined(_WIN64)
+    const intptr_t total_ram_pages = (intptr_t)(info.ullTotalPhys >> log2page);
+#elif defined(_SC_PHYS_PAGES)
+    const intptr_t total_ram_pages = sysconf(_SC_PHYS_PAGES);
+    if (total_ram_pages == -1)
+      return errno;
+#elif defined(_SC_AIX_REALMEM)
+    const intptr_t total_ram_Kb = sysconf(_SC_AIX_REALMEM);
+    if (total_ram_Kb == -1)
+      return errno;
+    const intptr_t total_ram_pages = (total_ram_Kb << 10) >> log2page;
+#elif defined(HW_USERMEM) || defined(HW_PHYSMEM64) || defined(HW_MEMSIZE) ||   \
+    defined(HW_PHYSMEM)
+    size_t ram, len = sizeof(ram);
+    static const int mib[] = {
+      CTL_HW,
+#if defined(HW_USERMEM)
+      HW_USERMEM
+#elif defined(HW_PHYSMEM64)
+      HW_PHYSMEM64
+#elif defined(HW_MEMSIZE)
+      HW_MEMSIZE
+#else
+      HW_PHYSMEM
+#endif
+    };
+    if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+            (int *)
+#endif
+                mib,
+            ARRAY_LENGTH(mib), &ram, &len, NULL, 0) != 0)
+      return errno;
+    if (len != sizeof(ram))
+      return MDBX_ENOSYS;
+    const intptr_t total_ram_pages = (intptr_t)(ram >> log2page);
+#else
+#error "FIXME: Get User-accessible or physical RAM"
+#endif
+    *total_pages = total_ram_pages;
+    if (total_ram_pages < 1)
+      return MDBX_ENOSYS;
+  }
+
+  if (avail_pages) {
+#if defined(_WIN32) || defined(_WIN64)
+    const intptr_t avail_ram_pages = (intptr_t)(info.ullAvailPhys >> log2page);
+#elif defined(_SC_AVPHYS_PAGES)
+    const intptr_t avail_ram_pages = sysconf(_SC_AVPHYS_PAGES);
+    if (avail_ram_pages == -1)
+      return errno;
+#elif defined(__MACH__)
+    mach_msg_type_number_t count = HOST_VM_INFO_COUNT;
+    vm_statistics_data_t vmstat;
+    mach_port_t mport = mach_host_self();
+    kern_return_t kerr = host_statistics(mach_host_self(), HOST_VM_INFO,
+                                         (host_info_t)&vmstat, &count);
+    mach_port_deallocate(mach_task_self(), mport);
+    if (unlikely(kerr != KERN_SUCCESS))
+      return MDBX_ENOSYS;
+    const intptr_t avail_ram_pages = vmstat.free_count;
+#elif defined(VM_TOTAL) || defined(VM_METER)
+    struct vmtotal info;
+    size_t len = sizeof(info);
+    static const int mib[] = {
+      CTL_VM,
+#if defined(VM_TOTAL)
+      VM_TOTAL
+#elif defined(VM_METER)
+      VM_METER
+#endif
+    };
+    if (sysctl(
+#ifdef SYSCTL_LEGACY_NONCONST_MIB
+            (int *)
+#endif
+                mib,
+            ARRAY_LENGTH(mib), &info, &len, NULL, 0) != 0)
+      return errno;
+    if (len != sizeof(info))
+      return MDBX_ENOSYS;
+    const intptr_t avail_ram_pages = info.t_free;
+#else
+#error "FIXME: Get Available RAM"
+#endif
+    *avail_pages = avail_ram_pages;
+    if (avail_ram_pages < 1)
+      return MDBX_ENOSYS;
+  }
+
+  return MDBX_SUCCESS;
+}
