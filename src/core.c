@@ -10517,6 +10517,41 @@ bailout:
   return rc;
 }
 
+__cold static intptr_t get_reasonable_db_maxsize(intptr_t *cached_result) {
+  if (*cached_result == 0) {
+    intptr_t pagesize, total_ram_pages;
+    if (unlikely(mdbx_get_sysraminfo(&pagesize, &total_ram_pages, nullptr) !=
+                 MDBX_SUCCESS))
+      return MAX_MAPSIZE32 /* the 32-bit limit is good enough for fallback */;
+
+    if (unlikely((size_t)total_ram_pages * 2 > MAX_MAPSIZE / (size_t)pagesize))
+      return MAX_MAPSIZE;
+    assert(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
+
+    /* Suggesting should not be more than golden ratio of the size of RAM. */
+    *cached_result =
+        (intptr_t)(total_ram_pages * pagesize * 1.6180339887498948482);
+
+    /* Round to the nearest human-readable granulation. */
+    for (int i = 10; i < MDBX_WORDBITS - 1; i += 10) {
+      const size_t unit = (size_t)1 << i;
+      const size_t floor = floor_powerof2(*cached_result, unit);
+      const size_t ceil = ceil_powerof2(*cached_result, unit);
+      if (*cached_result - floor < ceil - *cached_result ||
+          ceil > MAX_MAPSIZE) {
+        if (*cached_result - floor > (size_t)*cached_result / 16)
+          break;
+        *cached_result = floor;
+      } else {
+        if (ceil - *cached_result > (size_t)*cached_result / 16)
+          break;
+        *cached_result = ceil;
+      }
+    }
+  }
+  return *cached_result;
+}
+
 __cold LIBMDBX_API int
 mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
                       intptr_t size_upper, intptr_t growth_step,
@@ -10535,6 +10570,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     shrink_threshold = 1;
 #endif
 
+  intptr_t reasonable_maxsize = 0;
   bool need_unlock = false;
   if (env->me_map) {
     /* env already mapped */
@@ -10604,7 +10640,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       else if (max_size == 0 /* minimal */)
         max_size = MIN_MAPSIZE;
       else if (max_size >= (intptr_t)MAX_MAPSIZE /* maximal */)
-        max_size = MAX_MAPSIZE;
+        max_size = get_reasonable_db_maxsize(&reasonable_maxsize);
 
       while (max_size > pagesize * (int64_t)MAX_PAGENO &&
              pagesize < MAX_PAGESIZE)
@@ -10624,7 +10660,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       size_lower = MIN_PAGENO * pagesize;
   }
   if (size_lower >= INTPTR_MAX) {
-    size_lower = MAX_MAPSIZE;
+    size_lower = get_reasonable_db_maxsize(&reasonable_maxsize);
     if ((size_t)size_lower / pagesize > MAX_PAGENO)
       size_lower = pagesize * MAX_PAGENO;
   }
@@ -10635,14 +10671,14 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       size_now = size_upper;
   }
   if (size_now >= INTPTR_MAX) {
-    size_now = MAX_MAPSIZE;
+    size_now = get_reasonable_db_maxsize(&reasonable_maxsize);
     if ((size_t)size_now / pagesize > MAX_PAGENO)
       size_now = pagesize * MAX_PAGENO;
   }
 
   if (size_upper <= 0) {
-    if ((size_t)size_now >= MAX_MAPSIZE / 2)
-      size_upper = MAX_MAPSIZE;
+    if (size_now >= get_reasonable_db_maxsize(&reasonable_maxsize) / 2)
+      size_upper = get_reasonable_db_maxsize(&reasonable_maxsize);
     else if (MAX_MAPSIZE != MAX_MAPSIZE32 &&
              (size_t)size_now >= MAX_MAPSIZE32 / 2 &&
              (size_t)size_now <= MAX_MAPSIZE32 / 4 * 3)
@@ -10655,7 +10691,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if ((size_t)size_upper / pagesize > MAX_PAGENO)
       size_upper = pagesize * MAX_PAGENO;
   } else if (size_upper >= INTPTR_MAX) {
-    size_upper = MAX_MAPSIZE;
+    size_upper = get_reasonable_db_maxsize(&reasonable_maxsize);
     if ((size_t)size_upper / pagesize > MAX_PAGENO)
       size_upper = pagesize * MAX_PAGENO;
   }
