@@ -10532,20 +10532,15 @@ __cold static intptr_t get_reasonable_db_maxsize(intptr_t *cached_result) {
     *cached_result = (intptr_t)((size_t)total_ram_pages * 207 >> 7) * pagesize;
 
     /* Round to the nearest human-readable granulation. */
-    for (int i = 10; i < MDBX_WORDBITS - 1; i += 10) {
-      const size_t unit = (size_t)1 << i;
+    for (size_t unit = MEGABYTE; unit; unit <<= 5) {
       const size_t floor = floor_powerof2(*cached_result, unit);
       const size_t ceil = ceil_powerof2(*cached_result, unit);
-      if (*cached_result - floor < ceil - *cached_result ||
-          ceil > MAX_MAPSIZE) {
-        if (*cached_result - floor > (size_t)*cached_result / 16)
-          break;
-        *cached_result = floor;
-      } else {
-        if (ceil - *cached_result > (size_t)*cached_result / 16)
-          break;
-        *cached_result = ceil;
-      }
+      const size_t threshold = (size_t)*cached_result >> 4;
+      const bool down =
+          *cached_result - floor < ceil - *cached_result || ceil > MAX_MAPSIZE;
+      if (threshold < (down ? *cached_result - floor : ceil - *cached_result))
+        break;
+      *cached_result = down ? floor : ceil;
     }
   }
   return *cached_result;
