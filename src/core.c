@@ -10529,8 +10529,7 @@ __cold static intptr_t get_reasonable_db_maxsize(intptr_t *cached_result) {
     assert(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
 
     /* Suggesting should not be more than golden ratio of the size of RAM. */
-    *cached_result =
-        (intptr_t)(total_ram_pages * pagesize * 1.6180339887498948482);
+    *cached_result = (intptr_t)((size_t)total_ram_pages * 207 >> 7) * pagesize;
 
     /* Round to the nearest human-readable granulation. */
     for (int i = 10; i < MDBX_WORDBITS - 1; i += 10) {
