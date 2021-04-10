@@ -3610,7 +3610,6 @@ uint8_t mdbx_loglevel = MDBX_LOG_FATAL;
 MDBX_debug_func *mdbx_debug_logger;
 
 static __must_check_result int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp);
-static __must_check_result int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp);
 static int mdbx_page_alloc(MDBX_cursor *mc, const unsigned num,
                            MDBX_page **const mp, int flags);
 static txnid_t mdbx_kick_longlived_readers(MDBX_env *env,
@@ -4579,11 +4578,33 @@ static __inline void mdbx_page_wash(MDBX_txn *txn, const unsigned di,
  *
  * If the page wasn't dirtied in this txn, just add it
  * to this txn's free list. */
-static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
-  const unsigned npages = IS_OVERFLOW(mp) ? mp->mp_pages : 1;
+static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
+  int rc;
+  MDBX_txn *const txn = mc->mc_txn;
+  const int pagetype = PAGETYPE(mp);
   const pgno_t pgno = mp->mp_pgno;
-  const bool is_dirty = IS_DIRTY(mp);
+  unsigned npages = 1;
+  if (likely((pagetype & P_OVERFLOW) == 0)) {
+    STATIC_ASSERT(P_BRANCH == 1);
+    const bool is_branch = pagetype & P_BRANCH;
+    if (unlikely(mc->mc_flags & C_SUB)) {
+      MDBX_db *outer = mdbx_outer_db(mc);
+      mdbx_cassert(mc, !is_branch || outer->md_branch_pages > 0);
+      outer->md_branch_pages -= is_branch;
+      mdbx_cassert(mc, is_branch || outer->md_leaf_pages > 0);
+      outer->md_leaf_pages -= 1 - is_branch;
+    }
+    mdbx_cassert(mc, !is_branch || mc->mc_db->md_branch_pages > 0);
+    mc->mc_db->md_branch_pages -= is_branch;
+    mdbx_cassert(mc, (pagetype & P_LEAF) == 0 || mc->mc_db->md_leaf_pages > 0);
+    mc->mc_db->md_leaf_pages -= (pagetype & P_LEAF) != 0;
+  } else {
+    npages = mp->mp_pages;
+    mdbx_cassert(mc, mc->mc_db->md_overflow_pages >= npages);
+    mc->mc_db->md_overflow_pages -= npages;
+  }
 
+  const bool is_dirty = IS_DIRTY(mp);
   if (is_dirty) {
     mdbx_tassert(txn, !txn->tw.spill_pages ||
                           !mdbx_pnl_exist(txn->tw.spill_pages, pgno << 1));
@@ -4745,7 +4766,7 @@ static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
 
   reclaim:
     mdbx_debug("reclaim %u %s page %" PRIaPGNO, npages, "dirty", pgno);
-    int rc = mdbx_pnl_insert_range(&txn->tw.reclaimed_pglist, pgno, npages);
+    rc = mdbx_pnl_insert_range(&txn->tw.reclaimed_pglist, pgno, npages);
     mdbx_tassert(txn,
                  mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                        txn->mt_next_pgno - MDBX_ENABLE_REFUND));
@@ -4779,46 +4800,8 @@ static int mdbx_page_loose(MDBX_txn *txn, MDBX_page *mp) {
 
 retire:
   mdbx_debug("retire %u page %" PRIaPGNO, npages, pgno);
-  int rc = mdbx_pnl_append_range(false, &txn->tw.retired_pages, pgno, npages);
+  rc = mdbx_pnl_append_range(false, &txn->tw.retired_pages, pgno, npages);
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-  return rc;
-}
-
-static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
-  if (unlikely(mc->mc_flags & C_SUB)) {
-    MDBX_db *outer = mdbx_outer_db(mc);
-    mdbx_cassert(mc, !IS_BRANCH(mp) || outer->md_branch_pages > 0);
-    outer->md_branch_pages -= IS_BRANCH(mp);
-    mdbx_cassert(mc, !IS_LEAF(mp) || outer->md_leaf_pages > 0);
-    outer->md_leaf_pages -= IS_LEAF(mp);
-    mdbx_cassert(mc, !IS_OVERFLOW(mp));
-  }
-  mdbx_cassert(mc, !IS_BRANCH(mp) || mc->mc_db->md_branch_pages > 0);
-  mc->mc_db->md_branch_pages -= IS_BRANCH(mp);
-  mdbx_cassert(mc, !IS_LEAF(mp) || mc->mc_db->md_leaf_pages > 0);
-  mc->mc_db->md_leaf_pages -= IS_LEAF(mp);
-  mdbx_cassert(mc, !IS_OVERFLOW(mp) ||
-                       mc->mc_db->md_overflow_pages >= mp->mp_pages);
-  mc->mc_db->md_overflow_pages -= IS_OVERFLOW(mp) ? mp->mp_pages : 0;
-  return mdbx_page_loose(mc->mc_txn, mp);
-}
-
-static __must_check_result __always_inline int
-mdbx_retire_pgno(MDBX_cursor *mc, const pgno_t pgno) {
-  MDBX_page *mp;
-  int rc;
-  if (mdbx_audit_enabled()) {
-    const unsigned save_flags = mc->mc_flags;
-    mc->mc_flags |= C_RETIRING;
-    rc = mdbx_page_get(mc, pgno, &mp, NULL, mc->mc_txn->mt_txnid);
-    if (likely(rc == MDBX_SUCCESS))
-      rc = mdbx_page_retire(mc, mp);
-    mc->mc_flags = (mc->mc_flags & ~C_RETIRING) | (save_flags & C_RETIRING);
-  } else {
-    rc = mdbx_page_get(mc, pgno, &mp, NULL, mc->mc_txn->mt_txnid);
-    if (likely(rc == MDBX_SUCCESS))
-      rc = mdbx_page_retire(mc, mp);
-  }
   return rc;
 }
 
@@ -19113,6 +19096,25 @@ int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
   return __inline_mdbx_dbi_flags(txn, dbi, flags);
 }
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
+
+static __must_check_result __always_inline int
+mdbx_retire_pgno(MDBX_cursor *mc, const pgno_t pgno) {
+  MDBX_page *mp;
+  int rc;
+  if (mdbx_audit_enabled()) {
+    const unsigned save_flags = mc->mc_flags;
+    mc->mc_flags |= C_RETIRING;
+    rc = mdbx_page_get(mc, pgno, &mp, NULL, mc->mc_txn->mt_txnid);
+    if (likely(rc == MDBX_SUCCESS))
+      rc = mdbx_page_retire(mc, mp);
+    mc->mc_flags = (mc->mc_flags & ~C_RETIRING) | (save_flags & C_RETIRING);
+  } else {
+    rc = mdbx_page_get(mc, pgno, &mp, NULL, mc->mc_txn->mt_txnid);
+    if (likely(rc == MDBX_SUCCESS))
+      rc = mdbx_page_retire(mc, mp);
+  }
+  return rc;
+}
 
 /* Add all the DB's pages to the free list.
  * [in] mc Cursor on the DB to free.
