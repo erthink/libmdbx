@@ -3762,7 +3762,8 @@ static int __must_check_result mdbx_xcursor_init2(MDBX_cursor *mc,
                                                   bool new_dupdata);
 static void cursor_copy_internal(const MDBX_cursor *csrc, MDBX_cursor *cdst);
 
-static int __must_check_result mdbx_drop0(MDBX_cursor *mc, bool subs);
+static int __must_check_result mdbx_drop_tree(MDBX_cursor *mc,
+                                              const bool may_have_subDBs);
 static int __must_check_result mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi);
 static int __must_check_result mdbx_setup_dbx(MDBX_dbx *const dbx,
                                               const MDBX_db *const db,
@@ -14747,7 +14748,7 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
 
     if (node_flags(node) & F_SUBDATA) {
       /* add all the child DB's pages to the free list */
-      rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, false);
+      rc = mdbx_drop_tree(&mc->mc_xcursor->mx_cursor, false);
       if (unlikely(rc))
         goto fail;
     }
@@ -19097,30 +19098,7 @@ int mdbx_dbi_flags(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags) {
 }
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
-static __must_check_result __always_inline int
-mdbx_retire_pgno(MDBX_cursor *mc, const pgno_t pgno) {
-  MDBX_page *mp;
-  int rc;
-  if (mdbx_audit_enabled()) {
-    const unsigned save_flags = mc->mc_flags;
-    mc->mc_flags |= C_RETIRING;
-    rc = mdbx_page_get(mc, pgno, &mp, NULL, mc->mc_txn->mt_txnid);
-    if (likely(rc == MDBX_SUCCESS))
-      rc = mdbx_page_retire(mc, mp);
-    mc->mc_flags = (mc->mc_flags & ~C_RETIRING) | (save_flags & C_RETIRING);
-  } else {
-    rc = mdbx_page_get(mc, pgno, &mp, NULL, mc->mc_txn->mt_txnid);
-    if (likely(rc == MDBX_SUCCESS))
-      rc = mdbx_page_retire(mc, mp);
-  }
-  return rc;
-}
-
-/* Add all the DB's pages to the free list.
- * [in] mc Cursor on the DB to free.
- * [in] subs non-Zero to check for sub-DBs in this DB.
- * Returns 0 on success, non-zero on failure. */
-static int mdbx_drop0(MDBX_cursor *mc, bool subs) {
+static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
   int rc = mdbx_page_search(mc, NULL, MDBX_PS_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
     MDBX_txn *txn = mc->mc_txn;
@@ -19131,19 +19109,20 @@ static int mdbx_drop0(MDBX_cursor *mc, bool subs) {
      * This also avoids any P_LEAF2 pages, which have no nodes.
      * Also if the DB doesn't have sub-DBs and has no overflow
      * pages, omit scanning leaves. */
-    if ((mc->mc_flags & C_SUB) || (subs | mc->mc_db->md_overflow_pages) == 0)
+    if ((mc->mc_flags & C_SUB) ||
+        !(may_have_subDBs | mc->mc_db->md_overflow_pages))
       mdbx_cursor_pop(mc);
 
     rc = mdbx_pnl_need(&txn->tw.retired_pages,
                        mc->mc_db->md_branch_pages + mc->mc_db->md_leaf_pages +
                            mc->mc_db->md_overflow_pages);
-    if (unlikely(rc))
-      goto done;
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
 
     cursor_copy_internal(mc, &mx);
     while (mc->mc_snum > 0) {
-      MDBX_page *mp = mc->mc_pg[mc->mc_top];
-      unsigned n = page_numkeys(mp);
+      MDBX_page *const mp = mc->mc_pg[mc->mc_top];
+      const unsigned n = page_numkeys(mp);
       if (IS_LEAF(mp)) {
         for (i = 0; i < n; i++) {
           MDBX_node *node = page_node(mp, i);
@@ -19151,45 +19130,52 @@ static int mdbx_drop0(MDBX_cursor *mc, bool subs) {
             MDBX_page *omp;
             rc = mdbx_page_get(mc, node_largedata_pgno(node), &omp, NULL,
                                pp_txnid4chk(mp, mc->mc_txn));
-            if (unlikely(rc))
-              goto done;
+            if (unlikely(rc != MDBX_SUCCESS))
+              goto bailout;
             mdbx_cassert(mc, IS_OVERFLOW(omp));
             rc = mdbx_page_retire(mc, omp);
-            if (unlikely(rc))
-              goto done;
-            if (!mc->mc_db->md_overflow_pages && !subs)
-              break;
-          } else if (subs && (node_flags(node) & F_SUBDATA)) {
+            if (unlikely(rc != MDBX_SUCCESS))
+              goto bailout;
+            if (!(may_have_subDBs | mc->mc_db->md_overflow_pages))
+              goto pop;
+          } else if (node_flags(node) & F_SUBDATA) {
             if (unlikely((node_flags(node) & F_DUPDATA) == 0)) {
               rc = /* disallowing implicit subDB deletion */ MDBX_INCOMPATIBLE;
-              goto done;
+              goto bailout;
             }
             rc = mdbx_xcursor_init1(mc, node, mp);
             if (unlikely(rc != MDBX_SUCCESS))
-              goto done;
-            rc = mdbx_drop0(&mc->mc_xcursor->mx_cursor, false);
-            if (unlikely(rc))
-              goto done;
+              goto bailout;
+            rc = mdbx_drop_tree(&mc->mc_xcursor->mx_cursor, false);
+            if (unlikely(rc != MDBX_SUCCESS))
+              goto bailout;
           }
         }
-        if (!subs && !mc->mc_db->md_overflow_pages)
-          goto pop;
       } else {
+        if (mdbx_audit_enabled())
+          mc->mc_flags |= C_RETIRING;
         for (i = 0; i < n; i++) {
-          /* free it */
-          rc = mdbx_retire_pgno(mc, node_pgno(page_node(mp, i)));
-          if (unlikely(rc))
-            goto done;
+          MDBX_page *np;
+          rc = mdbx_page_get(mc, node_pgno(page_node(mp, i)), &np, NULL,
+                             pp_txnid4chk(mp, mc->mc_txn));
+          /* TODO: strive to use here only the pgno for retiring, i.e. try to
+           * avoid read leaf pages without sub-trees nor overflow nodes. */
+          if (likely(rc == MDBX_SUCCESS))
+            rc = mdbx_page_retire(mc, np);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
         }
+        if (mdbx_audit_enabled())
+          mc->mc_flags -= C_RETIRING;
       }
       if (!mc->mc_top)
         break;
       mdbx_cassert(mc, i <= UINT16_MAX);
       mc->mc_ki[mc->mc_top] = (indx_t)i;
       rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT);
-      if (rc) {
+      if (unlikely(rc != MDBX_SUCCESS)) {
         if (unlikely(rc != MDBX_NOTFOUND))
-          goto done;
+          goto bailout;
       /* no more siblings, go back to beginning
        * of previous level. */
       pop:
@@ -19201,10 +19187,9 @@ static int mdbx_drop0(MDBX_cursor *mc, bool subs) {
         }
       }
     }
-    /* free it */
-    rc = mdbx_retire_pgno(mc, mc->mc_db->md_root);
-  done:
-    if (unlikely(rc))
+    rc = mdbx_page_retire(mc, mc->mc_pg[0]);
+  bailout:
+    if (unlikely(rc != MDBX_SUCCESS))
       txn->mt_flags |= MDBX_TXN_ERROR;
   } else if (rc == MDBX_NOTFOUND) {
     rc = MDBX_SUCCESS;
@@ -19223,8 +19208,8 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  rc = mdbx_drop0(mc,
-                  dbi == MAIN_DBI || (mc->mc_db->md_flags & MDBX_DUPSORT) != 0);
+  rc = mdbx_drop_tree(mc, dbi == MAIN_DBI ||
+                              (mc->mc_db->md_flags & MDBX_DUPSORT) != 0);
   /* Invalidate the dropped DB's cursors */
   for (MDBX_cursor *m2 = txn->tw.cursors[dbi]; m2; m2 = m2->mc_next)
     m2->mc_flags &= ~(C_INITIALIZED | C_EOF);
