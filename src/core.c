@@ -14796,21 +14796,23 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
              np->mp_pgno, num);
   np->mp_flags = (uint16_t)(flags | P_DIRTY);
   np->mp_txnid = INVALID_TXNID;
-  np->mp_lower = 0;
-  np->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
-
   *mc->mc_dbistate |= DBI_DIRTY;
   mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
-  mc->mc_db->md_branch_pages += IS_BRANCH(np);
-  mc->mc_db->md_leaf_pages += IS_LEAF(np);
-  if (unlikely(IS_OVERFLOW(np))) {
+
+  if (likely(!IS_OVERFLOW(np))) {
+    np->mp_lower = 0;
+    np->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
+    mc->mc_db->md_branch_pages += IS_BRANCH(np);
+    mc->mc_db->md_leaf_pages += IS_LEAF(np);
+    if (unlikely(mc->mc_flags & C_SUB)) {
+      MDBX_db *outer = mdbx_outer_db(mc);
+      outer->md_branch_pages += IS_BRANCH(np);
+      outer->md_leaf_pages += IS_LEAF(np);
+    }
+  } else {
     mc->mc_db->md_overflow_pages += num;
     np->mp_pages = num;
     mdbx_cassert(mc, !(mc->mc_flags & C_SUB));
-  } else if (unlikely(mc->mc_flags & C_SUB)) {
-    MDBX_db *outer = mdbx_outer_db(mc);
-    outer->md_branch_pages += IS_BRANCH(np);
-    outer->md_leaf_pages += IS_LEAF(np);
   }
 
   return MDBX_SUCCESS;
