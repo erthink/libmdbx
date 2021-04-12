@@ -13840,8 +13840,6 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
       mdbx_cassert(mc, (mc->mc_flags & C_RECLAIMING) == 0);
       /* Touch DB record of named DB */
       MDBX_cursor_couple cx;
-      if (TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi))
-        return MDBX_BAD_DBI;
       rc = mdbx_cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
