@@ -3619,6 +3619,7 @@ static int mdbx_page_new(MDBX_cursor *mc, uint32_t flags, unsigned num,
                          MDBX_page **mp);
 static int mdbx_page_touch(MDBX_cursor *mc);
 static int mdbx_cursor_touch(MDBX_cursor *mc);
+static int mdbx_touch_dbi(MDBX_cursor *mc);
 
 #define MDBX_END_NAMES                                                         \
   {                                                                            \
@@ -6344,20 +6345,17 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
   int rc;
 
   if (mdbx_assert_enabled()) {
-    if (mc->mc_dbi >= CORE_DBS) {
-      if (mc->mc_flags & C_SUB) {
-        MDBX_xcursor *mx = container_of(mc->mc_db, MDBX_xcursor, mx_db);
-        MDBX_cursor_couple *couple =
-            container_of(mx, MDBX_cursor_couple, inner);
-        mdbx_cassert(mc, mc->mc_db == &couple->outer.mc_xcursor->mx_db);
-        mdbx_cassert(mc, mc->mc_dbx == &couple->outer.mc_xcursor->mx_dbx);
-        mdbx_cassert(mc, *couple->outer.mc_dbistate & DBI_DIRTY);
-      } else {
-        mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
-      }
-      mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
+    if (mc->mc_flags & C_SUB) {
+      MDBX_xcursor *mx = container_of(mc->mc_db, MDBX_xcursor, mx_db);
+      MDBX_cursor_couple *couple = container_of(mx, MDBX_cursor_couple, inner);
+      mdbx_tassert(txn, mc->mc_db == &couple->outer.mc_xcursor->mx_db);
+      mdbx_tassert(txn, mc->mc_dbx == &couple->outer.mc_xcursor->mx_dbx);
+      mdbx_tassert(txn, *couple->outer.mc_dbistate & DBI_DIRTY);
+    } else {
+      mdbx_tassert(txn, *mc->mc_dbistate & DBI_DIRTY);
     }
-    mdbx_cassert(mc, !IS_OVERFLOW(mp));
+    mdbx_tassert(txn, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
+    mdbx_tassert(txn, !IS_OVERFLOW(mp));
     mdbx_tassert(txn, mdbx_dirtylist_check(txn));
   }
 
@@ -12887,6 +12885,8 @@ __hot static int mdbx_page_search(MDBX_cursor *mc, const MDBX_val *key,
              mc->mc_pg[0]->mp_flags);
 
   if (flags & MDBX_PS_MODIFY) {
+    if (!(*mc->mc_dbistate & DBI_DIRTY) && unlikely(rc = mdbx_touch_dbi(mc)))
+      return rc;
     if (unlikely(rc = mdbx_page_touch(mc)))
       return rc;
   }
@@ -13828,28 +13828,37 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   return rc;
 }
 
+static int mdbx_touch_dbi(MDBX_cursor *mc) {
+  mdbx_cassert(mc, (*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0);
+  *mc->mc_dbistate |= DBI_DIRTY;
+  mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
+  if (mc->mc_dbi >= CORE_DBS) {
+    mdbx_cassert(mc, (mc->mc_flags & C_RECLAIMING) == 0);
+    /* Touch DB record of named DB */
+    MDBX_cursor_couple cx;
+    int rc = mdbx_cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    mc->mc_txn->mt_dbistate[MAIN_DBI] |= DBI_DIRTY;
+    rc = mdbx_page_search(&cx.outer, &mc->mc_dbx->md_name, MDBX_PS_MODIFY);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+  }
+  return MDBX_SUCCESS;
+}
+
 /* Touch all the pages in the cursor stack. Set mc_top.
  * Makes sure all the pages are writable, before attempting a write operation.
  * [in] mc The cursor to operate on. */
 static int mdbx_cursor_touch(MDBX_cursor *mc) {
   int rc = MDBX_SUCCESS;
   if (unlikely((*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0)) {
-    *mc->mc_dbistate |= DBI_DIRTY;
-    mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
-    if (mc->mc_dbi >= CORE_DBS) {
-      mdbx_cassert(mc, (mc->mc_flags & C_RECLAIMING) == 0);
-      /* Touch DB record of named DB */
-      MDBX_cursor_couple cx;
-      rc = mdbx_cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
-      if (unlikely(rc != MDBX_SUCCESS))
-        return rc;
-      rc = mdbx_page_search(&cx.outer, &mc->mc_dbx->md_name, MDBX_PS_MODIFY);
-      if (unlikely(rc))
-        return rc;
-    }
+    rc = mdbx_touch_dbi(mc);
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
   }
-  mc->mc_top = 0;
-  if (mc->mc_snum) {
+  if (likely(mc->mc_snum)) {
+    mc->mc_top = 0;
     do {
       rc = mdbx_page_touch(mc);
     } while (!rc && ++(mc->mc_top) < mc->mc_snum);
@@ -14130,9 +14139,14 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     MDBX_page *np;
     /* new database, write a root leaf page */
     mdbx_debug("%s", "allocating new root leaf page");
-    if (unlikely(rc2 = mdbx_page_new(mc, P_LEAF, 1, &np))) {
-      return rc2;
+    if (unlikely((*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0)) {
+      rc2 = mdbx_touch_dbi(mc);
+      if (unlikely(rc2 != MDBX_SUCCESS))
+        return rc2;
     }
+    rc2 = mdbx_page_new(mc, P_LEAF, 1, &np);
+    if (unlikely(rc2 != MDBX_SUCCESS))
+      return rc;
     rc2 = mdbx_cursor_push(mc, np);
     if (unlikely(rc2 != MDBX_SUCCESS))
       return rc2;
@@ -14794,8 +14808,8 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
              np->mp_pgno, num);
   np->mp_flags = (uint16_t)(flags | P_DIRTY);
   np->mp_txnid = INVALID_TXNID;
-  *mc->mc_dbistate |= DBI_DIRTY;
-  mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
+  mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
+  mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
 
   if (likely(!IS_OVERFLOW(np))) {
     np->mp_lower = 0;
