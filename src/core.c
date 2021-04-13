@@ -13829,7 +13829,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 }
 
 static int mdbx_touch_dbi(MDBX_cursor *mc) {
-  mdbx_cassert(mc, (*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0);
+  mdbx_cassert(mc, (*mc->mc_dbistate & DBI_DIRTY) == 0);
   *mc->mc_dbistate |= DBI_DIRTY;
   mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
   if (mc->mc_dbi >= CORE_DBS) {
@@ -13852,7 +13852,7 @@ static int mdbx_touch_dbi(MDBX_cursor *mc) {
  * [in] mc The cursor to operate on. */
 static int mdbx_cursor_touch(MDBX_cursor *mc) {
   int rc = MDBX_SUCCESS;
-  if (unlikely((*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0)) {
+  if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
     rc = mdbx_touch_dbi(mc);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
@@ -14139,7 +14139,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     MDBX_page *np;
     /* new database, write a root leaf page */
     mdbx_debug("%s", "allocating new root leaf page");
-    if (unlikely((*mc->mc_dbistate & (DBI_DIRTY | DBI_DUPDATA)) == 0)) {
+    if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
       rc2 = mdbx_touch_dbi(mc);
       if (unlikely(rc2 != MDBX_SUCCESS))
         return rc2;
@@ -15139,11 +15139,12 @@ static int mdbx_xcursor_init0(MDBX_cursor *mc) {
   }
 
   mx->mx_cursor.mc_xcursor = NULL;
+  mx->mx_cursor.mc_next = NULL;
   mx->mx_cursor.mc_txn = mc->mc_txn;
   mx->mx_cursor.mc_db = &mx->mx_db;
   mx->mx_cursor.mc_dbx = &mx->mx_dbx;
   mx->mx_cursor.mc_dbi = mc->mc_dbi;
-  mx->mx_cursor.mc_dbistate = &mx->mx_dbistate;
+  mx->mx_cursor.mc_dbistate = mc->mc_dbistate;
   mx->mx_cursor.mc_snum = 0;
   mx->mx_cursor.mc_top = 0;
   mx->mx_cursor.mc_flags = C_SUB | (mc->mc_flags & (C_COPYING | C_SKIPORD));
@@ -15248,7 +15249,6 @@ static int mdbx_xcursor_init1(MDBX_cursor *mc, MDBX_node *node,
 
   mdbx_debug("Sub-db -%u root page %" PRIaPGNO, mx->mx_cursor.mc_dbi,
              mx->mx_db.md_root);
-  mx->mx_dbistate = DBI_VALID | DBI_USRVALID | DBI_DUPDATA;
   return MDBX_SUCCESS;
 }
 
@@ -15273,7 +15273,6 @@ static int mdbx_xcursor_init2(MDBX_cursor *mc, MDBX_xcursor *src_mx,
     mx->mx_cursor.mc_top = 0;
     mx->mx_cursor.mc_flags |= C_INITIALIZED;
     mx->mx_cursor.mc_ki[0] = 0;
-    mx->mx_dbistate = DBI_VALID | DBI_USRVALID | DBI_DUPDATA;
   }
 
   mx->mx_dbx.md_klen_min = src_mx->mx_dbx.md_klen_min;
