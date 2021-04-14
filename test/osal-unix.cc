@@ -393,6 +393,110 @@ void osal_killall_actors(void) {
   }
 }
 
+static const char *signal_name(const int sig) {
+  if (sig == SIGHUP)
+    return "HUP";
+  if (sig == SIGINT)
+    return "INT";
+  if (sig == SIGQUIT)
+    return "QUIT";
+  if (sig == SIGILL)
+    return "ILL";
+  if (sig == SIGTRAP)
+    return "TRAP";
+  if (sig == SIGABRT)
+    return "ABRT";
+  if (sig == SIGBUS)
+    return "BUS";
+  if (sig == SIGKILL)
+    return "KILL";
+  if (sig == SIGUSR1)
+    return "USR1";
+  if (sig == SIGSEGV)
+    return "SEGV";
+  if (sig == SIGUSR2)
+    return "USR2";
+  if (sig == SIGPIPE)
+    return "PIPE";
+  if (sig == SIGALRM)
+    return "ALRM";
+  if (sig == SIGTERM)
+    return "TERM";
+  if (sig == SIGCHLD)
+    return "CHLD";
+  if (sig == SIGCONT)
+    return "CONT";
+  if (sig == SIGSTOP)
+    return "STOP";
+#ifdef SIGPOLL
+  if (sig == SIGPOLL)
+    return "POLL";
+#endif
+#ifdef SIGFPE
+  if (sig == SIGFPE)
+    return "FPE";
+#endif
+#ifdef SIGEMT
+  if (sig == SIGEMT)
+    return "EMT";
+#endif
+#ifdef SIGSTKFLT
+  if (sig == SIGSTKFLT)
+    return "STKFLT";
+#endif
+#ifdef SIGTSTP
+  if (sig == SIGTSTP)
+    return "TSTP";
+#endif
+#ifdef SIGTTIN
+  if (sig == SIGTTIN)
+    return "TTIN";
+#endif
+#ifdef SIGTTOU
+  if (sig == SIGTTOU)
+    return "TTOU";
+#endif
+#ifdef SIGURG
+  if (sig == SIGURG)
+    return "URG";
+#endif
+#ifdef SIGXCPU
+  if (sig == SIGXCPU)
+    return "XCPU";
+#endif
+#ifdef SIGXFSZ
+  if (sig == SIGXFSZ)
+    return "XFSZ";
+#endif
+#ifdef SIGVTALRM
+  if (sig == SIGVTALRM)
+    return "VTALRM";
+#endif
+#ifdef SIGPROF
+  if (sig == SIGPROF)
+    return "PROF";
+#endif
+#ifdef SIGWINCH
+  if (sig == SIGWINCH)
+    return "WINCH";
+#endif
+#ifdef SIGIO
+  if (sig == SIGIO)
+    return "IO";
+#endif
+#ifdef SIGPWR
+  if (sig == SIGPWR)
+    return "PWR";
+#endif
+#ifdef SIGSYS
+  if (sig == SIGSYS)
+    return "SYS";
+#endif
+  static char buf[32];
+  snprintf(buf, sizeof(buf), "%u", sig);
+  return buf;
+}
+
 int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
   static sig_atomic_t sigalarm_tail;
   alarm(0) /* cancel prev timeout */;
@@ -420,11 +524,28 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
       if (WIFEXITED(status))
         children[pid] =
             (WEXITSTATUS(status) == EXIT_SUCCESS) ? as_successful : as_failed;
-      else if (WCOREDUMP(status))
-        children[pid] = as_coredump;
-      else if (WIFSIGNALED(status))
-        children[pid] = as_killed;
-      else if (WIFSTOPPED(status))
+      else if (WIFSIGNALED(status)) {
+#ifdef WCOREDUMP
+        if (WCOREDUMP(status))
+          children[pid] = as_coredump;
+        else
+#endif /* WCOREDUMP */
+          switch (WTERMSIG(status)) {
+          case SIGABRT:
+          case SIGBUS:
+          case SIGFPE:
+          case SIGILL:
+          case SIGSEGV:
+            log_notice("child pid %u terminated by SIG%s", pid,
+                       signal_name(WTERMSIG(status)));
+            children[pid] = as_coredump;
+            break;
+          default:
+            log_notice("child pid %u killed by SIG%s", pid,
+                       signal_name(WTERMSIG(status)));
+            children[pid] = as_killed;
+          }
+      } else if (WIFSTOPPED(status))
         children[pid] = as_debugging;
       else if (WIFCONTINUED(status))
         children[pid] = as_running;
