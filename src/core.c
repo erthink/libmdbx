@@ -5434,69 +5434,130 @@ static __always_inline __maybe_unused int ignore_enosys(int err) {
 
 #if MDBX_ENABLE_MADVISE
 /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
-static __cold int mdbx_set_readahead(MDBX_env *env, const size_t offset,
-                                     const size_t length, const bool enable) {
-  assert(length > 0);
+static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
+                                     const bool enable,
+                                     const bool force_whole) {
+  mdbx_assert(env, edge >= NUM_METAS && edge <= MAX_PAGENO);
+  mdbx_assert(env, (enable & 1) == (enable != 0));
+  const bool toggle = force_whole ||
+                      ((enable ^ *env->me_readahead_anchor) & 1) ||
+                      !*env->me_readahead_anchor;
+  const pgno_t prev_edge = *env->me_readahead_anchor >> 1;
+  const size_t limit = env->me_dxb_mmap.limit;
+  size_t offset =
+      toggle ? 0
+             : pgno_align2os_bytes(env, (prev_edge < edge) ? prev_edge : edge);
+  offset = (offset < limit) ? offset : limit;
+
+  size_t length =
+      pgno_align2os_bytes(env, (prev_edge < edge) ? edge : prev_edge);
+  length = (length < limit) ? length : limit;
+  length -= offset;
+
+  mdbx_assert(env, 0 <= (intptr_t)length);
+  if (length == 0)
+    return MDBX_SUCCESS;
+
+  int err;
   mdbx_notice("readahead %s %u..%u", enable ? "ON" : "OFF",
               bytes2pgno(env, offset), bytes2pgno(env, offset + length));
 
 #if defined(F_RDAHEAD)
-  if (unlikely(fcntl(env->me_lazy_fd, F_RDAHEAD, enable) == -1))
-    return errno;
+  if (toggle && unlikely(fcntl(env->me_lazy_fd, F_RDAHEAD, enable) == -1)) {
+    err = errno;
+    goto bailout;
+  }
 #endif /* F_RDAHEAD */
 
   if (enable) {
-#if defined(F_RDADVISE)
-    struct radvisory hint;
-    hint.ra_offset = offset;
-    hint.ra_count = length;
-    (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
-        env->me_lazy_fd, F_RDADVISE, &hint);
-#endif /* F_RDADVISE */
-#if defined(MADV_WILLNEED)
-    int err = madvise(env->me_map + offset, length, MADV_WILLNEED)
-                  ? ignore_enosys(errno)
-                  : MDBX_SUCCESS;
+#if defined(MADV_NORMAL)
+    err = madvise(env->me_map + offset, length, MADV_NORMAL)
+              ? ignore_enosys(errno)
+              : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
-#elif defined(POSIX_MADV_WILLNEED)
-    int err = ignore_enosys(
-        posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED));
+      goto bailout;
+#elif defined(POSIX_MADV_NORMAL)
+    err = ignore_enosys(
+        posix_madvise(env->me_map + offset, length, POSIX_MADV_NORMAL));
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      goto bailout;
+#elif defined(POSIX_FADV_NORMAL) && defined(POSIX_FADV_WILLNEED)
+    err = ignore_enosys(
+        posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_NORMAL));
+    if (unlikely(MDBX_IS_ERROR(err)))
+      goto bailout;
 #elif defined(_WIN32) || defined(_WIN64)
-    if (mdbx_PrefetchVirtualMemory) {
-      WIN32_MEMORY_RANGE_ENTRY hint;
-      hint.VirtualAddress = env->me_map + offset;
-      hint.NumberOfBytes = length;
-      (void)mdbx_PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0);
-    }
+    /* no madvise on Windows */
+#else
+#warning "FIXME"
+#endif
+    if (toggle) {
+      /* NOTE: Seems there is a bug in the Mach/Darwin/OSX kernel,
+       * because MADV_WILLNEED with offset != 0 may cause SIGBUS
+       * on following access to the hinted region.
+       * 19.6.0 Darwin Kernel Version 19.6.0: Tue Jan 12 22:13:05 PST 2021;
+       * root:xnu-6153.141.16~1/RELEASE_X86_64 x86_64 */
+#if defined(F_RDADVISE)
+      struct radvisory hint;
+      hint.ra_offset = offset;
+      hint.ra_count = length;
+      (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
+          env->me_lazy_fd, F_RDADVISE, &hint);
+#elif defined(MADV_WILLNEED)
+      err = madvise(env->me_map + offset, length, MADV_WILLNEED)
+                ? ignore_enosys(errno)
+                : MDBX_SUCCESS;
+      if (unlikely(MDBX_IS_ERROR(err)))
+        goto bailout;
+#elif defined(POSIX_MADV_WILLNEED)
+      err = ignore_enosys(
+          posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED));
+      if (unlikely(MDBX_IS_ERROR(err)))
+        goto bailout;
+#elif defined(_WIN32) || defined(_WIN64)
+      if (mdbx_PrefetchVirtualMemory) {
+        WIN32_MEMORY_RANGE_ENTRY hint;
+        hint.VirtualAddress = env->me_map + offset;
+        hint.NumberOfBytes = length;
+        (void)mdbx_PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0);
+      }
 #elif defined(POSIX_FADV_WILLNEED)
-    int err = ignore_enosys(
-        posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_WILLNEED));
-    if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
-#endif /* MADV_WILLNEED */
+      err = ignore_enosys(
+          posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_WILLNEED));
+      if (unlikely(MDBX_IS_ERROR(err)))
+        goto bailout;
+#else
+#warning "FIXME"
+#endif
+    }
   } else {
 #if defined(MADV_RANDOM)
-    int err = madvise(env->me_map + offset, length, MADV_RANDOM)
-                  ? ignore_enosys(errno)
-                  : MDBX_SUCCESS;
+    err = madvise(env->me_map + offset, length, MADV_RANDOM)
+              ? ignore_enosys(errno)
+              : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      goto bailout;
 #elif defined(POSIX_MADV_RANDOM)
-    int err = ignore_enosys(
+    err = ignore_enosys(
         posix_madvise(env->me_map + offset, length, POSIX_MADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      goto bailout;
 #elif defined(POSIX_FADV_RANDOM)
-    int err = ignore_enosys(
+    err = ignore_enosys(
         posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
-      return err;
+      goto bailout;
+#elif defined(_WIN32) || defined(_WIN64)
+    /* no madvise on Windows */
+#else
+#warning "FIXME"
 #endif /* MADV_RANDOM */
   }
-  return MDBX_SUCCESS;
+
+  *env->me_readahead_anchor = (enable & 1) + (edge << 1);
+  err = MDBX_SUCCESS;
+bailout:
+  return err;
 }
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -5636,28 +5697,18 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                     mapping_can_be_moved);
 
 #if MDBX_ENABLE_MADVISE
-  if (rc == MDBX_SUCCESS && (env->me_flags & MDBX_NORDAHEAD) == 0) {
-    const int readahead =
+  if (rc == MDBX_SUCCESS) {
+    env->me_discarded_tail->weak = size_pgno;
+    const bool readahead =
+        !(env->me_flags & MDBX_NORDAHEAD) &&
         mdbx_is_readahead_reasonable(size_bytes, -(intptr_t)prev_size);
-    if (readahead == MDBX_RESULT_FALSE)
-      rc = mdbx_set_readahead(
-          env, 0, (size_bytes > prev_size) ? size_bytes : prev_size, false);
-    else if (readahead == MDBX_RESULT_TRUE) {
-      const size_t readahead_pivot =
-          (limit_bytes != prev_limit || env->me_dxb_mmap.address != prev_addr
+    const bool force = limit_bytes != prev_limit ||
+                       env->me_dxb_mmap.address != prev_addr
 #if defined(_WIN32) || defined(_WIN64)
-           || prev_size > size_bytes
+                       || prev_size > size_bytes
 #endif /* Windows */
-           )
-              ? 0 /* reassign readahead to the entire map
-                     because it was remapped */
-              : prev_size;
-      if (size_bytes > readahead_pivot) {
-        env->me_discarded_tail->weak = size_pgno;
-        rc = mdbx_set_readahead(env, readahead_pivot,
-                                size_bytes - readahead_pivot, true);
-      }
-    }
+        ;
+    rc = mdbx_set_readahead(env, size_pgno, readahead, force);
   }
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -11141,7 +11192,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 #if MDBX_ENABLE_MADVISE
   /* calculate readahead hint before mmap with zero redundant pages */
   const bool readahead =
-      (env->me_flags & MDBX_NORDAHEAD) == 0 &&
+      !(env->me_flags & MDBX_NORDAHEAD) &&
       mdbx_is_readahead_reasonable(used_bytes, 0) == MDBX_RESULT_TRUE;
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -11375,9 +11426,9 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   atomic_store32(env->me_discarded_tail, bytes2pgno(env, used_aligned2os_bytes),
                  mo_Relaxed);
 #if MDBX_ENABLE_MADVISE
-  if (used_aligned2os_bytes < env->me_dxb_mmap.current) {
+  if (lck_rc && used_aligned2os_bytes < env->me_dxb_mmap.current) {
 #if defined(MADV_REMOVE)
-    if (lck_rc && (env->me_flags & MDBX_WRITEMAP) != 0 &&
+    if ((env->me_flags & MDBX_WRITEMAP) != 0 &&
         /* not recovery mode */ env->me_stuck_meta < 0) {
       mdbx_notice("open-MADV_%s %u..%u", "REMOVE (deallocate file space)",
                   env->me_discarded_tail->weak,
@@ -11416,8 +11467,8 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
 #endif /* MADV_DONTNEED */
   }
 
-  err = mdbx_set_readahead(env, 0, used_bytes, readahead);
-  if (err != MDBX_SUCCESS && lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE)
+  err = mdbx_set_readahead(env, bytes2pgno(env, used_bytes), readahead, true);
+  if (unlikely(err != MDBX_SUCCESS))
     return err;
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -11470,6 +11521,7 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     env->me_unsynced_pages = &env->me_lckless_stub.autosync_pending;
     env->me_autosync_threshold = &env->me_lckless_stub.autosync_threshold;
     env->me_discarded_tail = &env->me_lckless_stub.discarded_tail;
+    env->me_readahead_anchor = &env->me_lckless_stub.readahead_anchor;
     env->me_meta_sync_txnid = &env->me_lckless_stub.meta_sync_txnid;
     env->me_maxreaders = UINT_MAX;
 #if MDBX_LOCKING > 0
@@ -11569,6 +11621,10 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
                                                   : MDBX_SUCCESS;
   if (unlikely(MDBX_IS_ERROR(err)))
     goto bailout;
+#elif defined(POSIX_MADV_WILLNEED)
+  err = ignore_enosys(posix_madvise(env->me_lck, size, POSIX_MADV_WILLNEED));
+  if (unlikely(MDBX_IS_ERROR(err)))
+    goto bailout;
 #endif /* MADV_WILLNEED */
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -11623,6 +11679,7 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
   env->me_unsynced_pages = &lck->mti_unsynced_pages;
   env->me_autosync_threshold = &lck->mti_autosync_threshold;
   env->me_discarded_tail = &lck->mti_discarded_tail;
+  env->me_readahead_anchor = &lck->mti_readahead_anchor;
   env->me_meta_sync_txnid = &lck->mti_meta_sync_txnid;
 #if MDBX_LOCKING > 0
   env->me_wlock = &lck->mti_wlock;
@@ -12216,6 +12273,7 @@ static __cold int mdbx_env_close0(MDBX_env *env) {
   env->me_unsynced_pages = nullptr;
   env->me_autosync_threshold = nullptr;
   env->me_discarded_tail = nullptr;
+  env->me_readahead_anchor = nullptr;
   env->me_meta_sync_txnid = nullptr;
   if (env->me_flags & MDBX_ENV_TXKEY)
     mdbx_rthc_remove(env->me_txkey);

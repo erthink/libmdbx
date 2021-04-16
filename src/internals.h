@@ -536,7 +536,7 @@ typedef struct MDBX_lockinfo {
    * Zero means timed auto-sync is disabled. */
   MDBX_atomic_uint64_t mti_autosync_period;
 
-  /* Marker to distinguish uniqueness of DB/CLK.*/
+  /* Marker to distinguish uniqueness of DB/CLK. */
   MDBX_atomic_uint64_t mti_bait_uniqueness;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
@@ -561,6 +561,9 @@ typedef struct MDBX_lockinfo {
 
   /* Timestamp of the last readers check. */
   MDBX_atomic_uint64_t mti_reader_check_timestamp;
+
+  /* Shared anchor for tracking readahead edge and enabled/disabled status. */
+  pgno_t mti_readahead_anchor;
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
@@ -975,6 +978,7 @@ struct MDBX_env {
   atomic_pgno_t *me_unsynced_pages;
   atomic_pgno_t *me_autosync_threshold;
   atomic_pgno_t *me_discarded_tail;
+  pgno_t *me_readahead_anchor;
   MDBX_atomic_uint32_t *me_meta_sync_txnid;
   MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
   unsigned me_dp_reserve_len;
@@ -998,6 +1002,7 @@ struct MDBX_env {
     atomic_pgno_t autosync_pending;
     atomic_pgno_t autosync_threshold;
     atomic_pgno_t discarded_tail;
+    pgno_t readahead_anchor;
     MDBX_atomic_uint32_t meta_sync_txnid;
   } me_lckless_stub;
 #if MDBX_DEBUG
