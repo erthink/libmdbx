@@ -5458,34 +5458,32 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
   if (length == 0)
     return MDBX_SUCCESS;
 
-  int err;
   mdbx_notice("readahead %s %u..%u", enable ? "ON" : "OFF",
               bytes2pgno(env, offset), bytes2pgno(env, offset + length));
 
 #if defined(F_RDAHEAD)
-  if (toggle && unlikely(fcntl(env->me_lazy_fd, F_RDAHEAD, enable) == -1)) {
-    err = errno;
-    goto bailout;
-  }
+  if (toggle && unlikely(fcntl(env->me_lazy_fd, F_RDAHEAD, enable) == -1))
+    return errno;
 #endif /* F_RDAHEAD */
 
+  int err;
   if (enable) {
 #if defined(MADV_NORMAL)
     err = madvise(env->me_map + offset, length, MADV_NORMAL)
               ? ignore_enosys(errno)
               : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
-      goto bailout;
+      return err;
 #elif defined(POSIX_MADV_NORMAL)
     err = ignore_enosys(
         posix_madvise(env->me_map + offset, length, POSIX_MADV_NORMAL));
     if (unlikely(MDBX_IS_ERROR(err)))
-      goto bailout;
+      return err;
 #elif defined(POSIX_FADV_NORMAL) && defined(POSIX_FADV_WILLNEED)
     err = ignore_enosys(
         posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_NORMAL));
     if (unlikely(MDBX_IS_ERROR(err)))
-      goto bailout;
+      return err;
 #elif defined(_WIN32) || defined(_WIN64)
     /* no madvise on Windows */
 #else
@@ -5508,12 +5506,12 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
                 ? ignore_enosys(errno)
                 : MDBX_SUCCESS;
       if (unlikely(MDBX_IS_ERROR(err)))
-        goto bailout;
+        return err;
 #elif defined(POSIX_MADV_WILLNEED)
       err = ignore_enosys(
           posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED));
       if (unlikely(MDBX_IS_ERROR(err)))
-        goto bailout;
+        return err;
 #elif defined(_WIN32) || defined(_WIN64)
       if (mdbx_PrefetchVirtualMemory) {
         WIN32_MEMORY_RANGE_ENTRY hint;
@@ -5525,7 +5523,7 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
       err = ignore_enosys(
           posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_WILLNEED));
       if (unlikely(MDBX_IS_ERROR(err)))
-        goto bailout;
+        return err;
 #else
 #warning "FIXME"
 #endif
@@ -5536,17 +5534,17 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
               ? ignore_enosys(errno)
               : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
-      goto bailout;
+      return err;
 #elif defined(POSIX_MADV_RANDOM)
     err = ignore_enosys(
         posix_madvise(env->me_map + offset, length, POSIX_MADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
-      goto bailout;
+      return err;
 #elif defined(POSIX_FADV_RANDOM)
     err = ignore_enosys(
         posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
-      goto bailout;
+      return err;
 #elif defined(_WIN32) || defined(_WIN64)
     /* no madvise on Windows */
 #else
@@ -5556,7 +5554,6 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
 
   *env->me_readahead_anchor = (enable & 1) + (edge << 1);
   err = MDBX_SUCCESS;
-bailout:
   return err;
 }
 #endif /* MDBX_ENABLE_MADVISE */
