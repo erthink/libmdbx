@@ -14891,15 +14891,17 @@ static int mdbx_page_new(MDBX_cursor *mc, unsigned flags, unsigned num,
   mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
   mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
 
-  if (likely(!IS_OVERFLOW(np))) {
+  if (likely((flags & P_OVERFLOW) == 0)) {
+    STATIC_ASSERT(P_BRANCH == 1);
+    const bool is_branch = flags & P_BRANCH;
     np->mp_lower = 0;
     np->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
-    mc->mc_db->md_branch_pages += IS_BRANCH(np);
-    mc->mc_db->md_leaf_pages += IS_LEAF(np);
+    mc->mc_db->md_branch_pages += is_branch;
+    mc->mc_db->md_leaf_pages += 1 - is_branch;
     if (unlikely(mc->mc_flags & C_SUB)) {
       MDBX_db *outer = mdbx_outer_db(mc);
-      outer->md_branch_pages += IS_BRANCH(np);
-      outer->md_leaf_pages += IS_LEAF(np);
+      outer->md_branch_pages += is_branch;
+      outer->md_leaf_pages += 1 - is_branch;
     }
   } else {
     mc->mc_db->md_overflow_pages += num;
