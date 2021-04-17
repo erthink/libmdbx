@@ -6354,7 +6354,7 @@ done:
 __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
   STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 4);
-  if (!IS_LEAF2(src)) {
+  if ((src->mp_flags & (P_LEAF2 | P_OVERFLOW)) == 0) {
     size_t upper = src->mp_upper, lower = src->mp_lower, unused = upper - lower;
 
     /* If page isn't full, just copy the used portion. Adjust
