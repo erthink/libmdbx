@@ -13504,24 +13504,27 @@ static int mdbx_cursor_set_ex(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
 set2:
   node = mdbx_node_search(mc, &aligned_key, exactp);
-  if (!*exactp && op != MDBX_SET_RANGE) {
-    /* MDBX_SET specified and not an exact match. */
-    if (unlikely(mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])))
-      mc->mc_flags |= C_EOF;
-    return MDBX_NOTFOUND;
-  }
-
-  if (node == NULL) {
-    mdbx_debug("%s", "===> inexact leaf not found, goto sibling");
-    if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
-                 MDBX_SUCCESS)) {
-      mc->mc_flags |= C_EOF;
-      return rc; /* no entries matched */
+  if (!*exactp) {
+    if (op != MDBX_SET_RANGE) {
+      /* MDBX_SET specified and not an exact match. */
+      if (unlikely(mc->mc_ki[mc->mc_top] >=
+                   page_numkeys(mc->mc_pg[mc->mc_top])))
+        mc->mc_flags |= C_EOF;
+      return MDBX_NOTFOUND;
     }
-    mp = mc->mc_pg[mc->mc_top];
-    mdbx_cassert(mc, IS_LEAF(mp));
-    if (!IS_LEAF2(mp))
-      node = page_node(mp, 0);
+
+    if (node == NULL) {
+      mdbx_debug("%s", "===> inexact leaf not found, goto sibling");
+      if (unlikely((rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT)) !=
+                   MDBX_SUCCESS)) {
+        mc->mc_flags |= C_EOF;
+        return rc; /* no entries matched */
+      }
+      mp = mc->mc_pg[mc->mc_top];
+      mdbx_cassert(mc, IS_LEAF(mp));
+      if (!IS_LEAF2(mp))
+        node = page_node(mp, 0);
+    }
   }
   mdbx_cassert(mc,
                mc->mc_ki[mc->mc_top] < page_numkeys(mc->mc_pg[mc->mc_top]) ||
