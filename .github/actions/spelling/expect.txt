@@ -1093,6 +1093,7 @@ notracking
 NOWAIT
 npages
 npos
+npr
 nptl
 nreaders
 nrepeat
@@ -1211,6 +1212,7 @@ PGL
 pglist
 pgno
 pgnumber
+pgr
 pgsize
 pgstate
 pgvisitor
