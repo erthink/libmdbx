@@ -217,6 +217,7 @@ crtdbg
 csa
 Csharp
 CSource
+csr
 csrc
 CSRSS
 css
