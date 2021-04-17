@@ -6398,10 +6398,7 @@ static int __must_check_result mdbx_page_unspill(MDBX_txn *const txn,
     MDBX_page *np = mdbx_page_malloc(txn, npages);
     if (unlikely(!np))
       return MDBX_ENOMEM;
-    if (likely(npages == 1))
-      mdbx_page_copy(np, mp, txn->mt_env->me_psize);
-    else
-      memcpy(np, mp, pgno2bytes(txn->mt_env, npages));
+    mdbx_page_copy(np, mp, pgno2bytes(txn->mt_env, npages));
     mdbx_debug("unspill page %" PRIaPGNO, mp->mp_pgno);
     if (scan == txn) {
       /* If in current txn, this page is no longer spilled.
