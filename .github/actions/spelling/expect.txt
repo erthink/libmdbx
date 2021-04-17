@@ -1099,6 +1099,7 @@ nreaders
 nrepeat
 nsize
 NSPACES
+nsr
 nsubkeys
 nswap
 NTAPI
