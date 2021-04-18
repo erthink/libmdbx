@@ -678,7 +678,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       if (!dbi_name ||
           rc !=
               MDBX_INCOMPATIBLE) /* LY: mainDB's record is not a user's DB. */ {
-        error("mdbx_open '%s' failed, error %d %s\n",
+        error("mdbx_dbi_open '%s' failed, error %d %s\n",
               dbi_name ? dbi_name : "main", rc, mdbx_strerror(rc));
       }
       return rc;

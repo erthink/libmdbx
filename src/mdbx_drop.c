@@ -167,7 +167,7 @@ int main(int argc, char *argv[]) {
 
   rc = mdbx_dbi_open(txn, subname, MDBX_DB_ACCEDE, &dbi);
   if (unlikely(rc != MDBX_SUCCESS)) {
-    error("mdbx_open", rc);
+    error("mdbx_dbi_open", rc);
     goto txn_abort;
   }
 
