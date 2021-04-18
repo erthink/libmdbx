@@ -50,11 +50,8 @@ static void signal_handler(int sig) {
 static char *prog;
 bool quiet = false;
 static void usage(void) {
-  fprintf(stderr, "usage: %s [-V] [-q] [-d] [-s name] dbpath\n", prog);
-  exit(EXIT_FAILURE);
   fprintf(stderr,
-          "usage: %s "
-          "[-V] [-q] [-a] [-f file] [-s name] [-N] [-p] [-T] [-r] [-n] dbpath\n"
+          "usage: %s [-V] [-q] [-d] [-s name] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -d\t\tdelete the specified database, don't just empty it\n",
