@@ -456,6 +456,7 @@ eturn
 etval
 euo
 Evensen
+Evensen's
 ewcommand
 EWOULDBLOCK
 Exa
@@ -579,6 +580,7 @@ Gibibyte
 gitdir
 github
 githubusercontent
+gitignore
 glibc
 globals
 gmail
@@ -1133,6 +1135,7 @@ olddata
 olen
 Olog
 OMG
+OMG's
 ominimal
 omp
 ondrej
