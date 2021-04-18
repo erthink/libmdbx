@@ -1,6 +1,23 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  pull_request:
+  push:
+    paths-ignore:
+    - '.circleci/**'
+    - '.github/actions/spelling/**'
+    - 'docs/**'
+    - 'packages**'
+    - .cirrus.yml
+    - .clang-format
+    - .gitignore
+    - .travis.yml
+    - AUTHORS
+    - COPYRIGHT
+    - ChangeLog.md
+    - LICENSE
+    - README.md
+    - appveyor.yml
 
 jobs:
   build:
