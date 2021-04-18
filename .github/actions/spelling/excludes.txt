@@ -3,3 +3,5 @@
 ^\.travis\.yml$
 \.def$
 ^packages/buildroot/
+^\.gitignore
+^AUTHORS
