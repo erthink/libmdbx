@@ -3609,7 +3609,8 @@ uint8_t mdbx_runtime_flags = MDBX_RUNTIME_FLAGS_INIT;
 uint8_t mdbx_loglevel = MDBX_LOG_FATAL;
 MDBX_debug_func *mdbx_debug_logger;
 
-static __must_check_result int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp);
+static __must_check_result __inline int mdbx_page_retire(MDBX_cursor *mc,
+                                                         MDBX_page *mp);
 
 struct page_result {
   MDBX_page *page;
@@ -4611,7 +4612,27 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
   unsigned di = 0, si = 0, npages = 1;
   bool is_frozen = false, is_spilled = false, is_shadowed = false;
   if (unlikely(!mp)) {
-    if ((pagetype & P_LEAF) && txn->tw.dirtylist) {
+    if (mdbx_assert_enabled() && pagetype) {
+      MDBX_page *check;
+      rc = mdbx_page_get(mc, pgno, &check, txn->mt_front);
+      if (unlikely(rc != MDBX_SUCCESS))
+        return rc;
+      mdbx_tassert(txn, (PAGETYPE(check) & ~P_LEAF2) == (pagetype & ~P_FROZEN));
+      mdbx_tassert(txn, !(pagetype & P_FROZEN) || IS_FROZEN(txn, check));
+    }
+    if (pagetype & P_FROZEN) {
+      is_frozen = true;
+      if (mdbx_assert_enabled()) {
+        for (MDBX_txn *scan = txn; scan; scan = scan->mt_parent) {
+          mdbx_tassert(txn,
+                       !scan->tw.spill_pages ||
+                           !mdbx_pnl_exist(scan->tw.spill_pages, pgno << 1));
+          mdbx_tassert(txn, !scan->tw.dirtylist ||
+                                !debug_dpl_find(scan->tw.dirtylist, pgno));
+        }
+      }
+      goto status_done;
+    } else if (pagetype && txn->tw.dirtylist) {
       if ((di = mdbx_dpl_exist(txn->tw.dirtylist, pgno)) != 0) {
         mp = txn->tw.dirtylist->items[di].ptr;
         mdbx_tassert(txn, IS_MODIFIABLE(txn, mp));
@@ -4638,9 +4659,10 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
       goto status_done;
     }
 
-    rc = mdbx_page_get(mc, pgno, &mp, pp_txnid4chk(mp, mc->mc_txn));
+    rc = mdbx_page_get(mc, pgno, &mp, txn->mt_front);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
+    mdbx_tassert(txn, !pagetype || PAGETYPE(mp) == pagetype);
     pagetype = PAGETYPE(mp);
   }
 
@@ -4722,7 +4744,7 @@ status_done:
        * из родительских транзакций.
        * Её МОЖНО вытолкнуть в нераспределенный хвост. */
       kind = "parent's";
-      if (mdbx_assert_enabled()) {
+      if (mdbx_assert_enabled() && mp) {
         kind = nullptr;
         for (MDBX_txn *parent = txn->mt_parent; parent;
              parent = parent->mt_parent) {
@@ -4740,7 +4762,8 @@ status_done:
         }
         mdbx_tassert(txn, kind != nullptr);
       }
-      mdbx_tassert(txn, is_spilled || IS_SHADOWED(txn, mp));
+      mdbx_tassert(txn,
+                   is_spilled || is_shadowed || (mp && IS_SHADOWED(txn, mp)));
     }
     mdbx_debug("refunded %u %s page %" PRIaPGNO, npages, kind, pgno);
     txn->mt_next_pgno = pgno;
@@ -4867,7 +4890,7 @@ status_done:
   goto retire;
 }
 
-static int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
+static __inline int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
   return mdbx_page_retire_ex(mc, mp->mp_pgno, mp, PAGETYPE(mp));
 }
 
@@ -19229,15 +19252,12 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
   int rc = mdbx_page_search(mc, NULL, MDBX_PS_FIRST);
   if (likely(rc == MDBX_SUCCESS)) {
     MDBX_txn *txn = mc->mc_txn;
-    MDBX_cursor mx;
-    unsigned i;
 
     /* DUPSORT sub-DBs have no ovpages/DBs. Omit scanning leaves.
      * This also avoids any P_LEAF2 pages, which have no nodes.
      * Also if the DB doesn't have sub-DBs and has no overflow
      * pages, omit scanning leaves. */
-    if ((mc->mc_flags & C_SUB) ||
-        !(may_have_subDBs | mc->mc_db->md_overflow_pages))
+    if (!(may_have_subDBs | mc->mc_db->md_overflow_pages))
       mdbx_cursor_pop(mc);
 
     rc = mdbx_pnl_need(&txn->tw.retired_pages,
@@ -19246,21 +19266,17 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
+    MDBX_cursor mx;
     cursor_copy_internal(mc, &mx);
     while (mc->mc_snum > 0) {
       MDBX_page *const mp = mc->mc_pg[mc->mc_top];
-      const unsigned n = page_numkeys(mp);
+      const unsigned nkeys = page_numkeys(mp);
       if (IS_LEAF(mp)) {
-        for (i = 0; i < n; i++) {
+        mdbx_cassert(mc, mc->mc_snum == mc->mc_db->md_depth);
+        for (unsigned i = 0; i < nkeys; i++) {
           MDBX_node *node = page_node(mp, i);
           if (node_flags(node) & F_BIGDATA) {
-            MDBX_page *omp;
-            rc = mdbx_page_get(mc, node_largedata_pgno(node), &omp,
-                               pp_txnid4chk(mp, mc->mc_txn));
-            if (unlikely(rc != MDBX_SUCCESS))
-              goto bailout;
-            mdbx_cassert(mc, IS_OVERFLOW(omp));
-            rc = mdbx_page_retire(mc, omp);
+            rc = mdbx_page_retire_ex(mc, node_largedata_pgno(node), NULL, 0);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
             if (!(may_have_subDBs | mc->mc_db->md_overflow_pages))
@@ -19279,16 +19295,18 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
           }
         }
       } else {
+        mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth);
         if (mdbx_audit_enabled())
           mc->mc_flags |= C_RETIRING;
-        for (i = 0; i < n; i++) {
-          MDBX_page *np;
-          rc = mdbx_page_get(mc, node_pgno(page_node(mp, i)), &np,
-                             pp_txnid4chk(mp, mc->mc_txn));
-          /* TODO: strive to use here only the pgno for retiring, i.e. try to
-           * avoid read leaf pages without sub-trees nor overflow nodes. */
-          if (likely(rc == MDBX_SUCCESS))
-            rc = mdbx_page_retire(mc, np);
+        const int pagetype =
+            (IS_FROZEN(txn, mp) ? P_FROZEN : 0) +
+            ((mc->mc_snum + 1 == mc->mc_db->md_depth) ? P_LEAF : P_BRANCH);
+        for (unsigned i = 0; i < nkeys; i++) {
+          MDBX_node *node = page_node(mp, i);
+          mdbx_tassert(txn, (node_flags(node) &
+                             (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
+          const pgno_t pgno = node_pgno(node);
+          rc = mdbx_page_retire_ex(mc, pgno, NULL, pagetype);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
         }
@@ -19297,8 +19315,8 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
       }
       if (!mc->mc_top)
         break;
-      mdbx_cassert(mc, i <= UINT16_MAX);
-      mc->mc_ki[mc->mc_top] = (indx_t)i;
+      mdbx_cassert(mc, nkeys > 0);
+      mc->mc_ki[mc->mc_top] = (indx_t)nkeys;
       rc = mdbx_cursor_sibling(mc, SIBLING_RIGHT);
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (unlikely(rc != MDBX_NOTFOUND))
@@ -19308,7 +19326,7 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
       pop:
         mdbx_cursor_pop(mc);
         mc->mc_ki[0] = 0;
-        for (i = 1; i < mc->mc_snum; i++) {
+        for (unsigned i = 1; i < mc->mc_snum; i++) {
           mc->mc_ki[i] = 0;
           mc->mc_pg[i] = mx.mc_pg[i];
         }

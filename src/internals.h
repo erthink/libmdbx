@@ -388,6 +388,7 @@ typedef struct MDBX_page {
 #define P_BAD 0x80         /* explicit flag for invalid/bad page */
 #define P_LOOSE 0x4000     /* page was dirtied then freed, can be reused */
 #define P_KEEP 0x8000      /* leave this page alone during spill */
+#define P_FROZEN 0x10000   /* used for retire page with known status */
 #define P_ILL_BITS (~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
   uint16_t mp_flags;
   union {
