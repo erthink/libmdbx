@@ -536,12 +536,12 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
           case SIGFPE:
           case SIGILL:
           case SIGSEGV:
-            log_notice("child pid %u terminated by SIG%s", pid,
+            log_notice("child pid %lu terminated by SIG%s", (long)pid,
                        signal_name(WTERMSIG(status)));
             children[pid] = as_coredump;
             break;
           default:
-            log_notice("child pid %u killed by SIG%s", pid,
+            log_notice("child pid %lu killed by SIG%s", (long)pid,
                        signal_name(WTERMSIG(status)));
             children[pid] = as_killed;
           }
