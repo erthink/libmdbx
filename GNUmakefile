@@ -349,7 +349,7 @@ mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 build-test: all mdbx_example mdbx_test
 
 define test-rule
-$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
+$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $$@'
 	$(QUIET)$$(CXX) $$(CXXFLAGS) $$(MDBX_BUILD_OPTIONS) -c $(1) -o $$@
 

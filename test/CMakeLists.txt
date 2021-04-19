@@ -1,7 +1,7 @@
 enable_language(CXX)
 include(../cmake/compiler.cmake)
 
-add_executable(mdbx_test
+set(LIBMDBX_TEST_SOURCES
   base.h
   cases.cc
   chrono.cc
@@ -29,6 +29,12 @@ add_executable(mdbx_test
   ttl.cc
   nested.cc
   )
+
+if(NOT MDBX_BUILD_CXX)
+  list(APPEND LIBMDBX_TEST_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" ../mdbx.h++)
+endif()
+
+add_executable(mdbx_test ${LIBMDBX_TEST_SOURCES})
 
 if(MDBX_CXX_STANDARD)
   set_target_properties(mdbx_test PROPERTIES

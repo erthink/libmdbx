@@ -135,11 +135,7 @@ public:
 
 class testcase {
 protected:
-#if HAVE_cxx17_std_string_view
-  using data_view = std::string_view;
-#else
-  using data_view = std::string;
-#endif
+  using data_view = mdbx::slice;
   static inline data_view iov2dataview(const MDBX_val &v) {
     return (v.iov_base && v.iov_len)
                ? data_view(static_cast<const char *>(v.iov_base), v.iov_len)
@@ -149,7 +145,8 @@ protected:
     return iov2dataview(b->value);
   }
 
-  using Item = std::pair<std::string, std::string>;
+  using Item = std::pair<::mdbx::buffer<>, ::mdbx::buffer<>>;
+
   static MDBX_val dataview2iov(const data_view &v) {
     MDBX_val r;
     r.iov_base = (void *)v.data();
@@ -158,10 +155,13 @@ protected:
   }
   struct ItemCompare {
     const testcase *context;
-    ItemCompare(const testcase *owner) : context(owner) {}
+    ItemCompare(const testcase *owner) : context(owner) {
+      /* The context->txn_guard may be empty/null here */
+    }
 
     bool operator()(const Item &a, const Item &b) const {
       MDBX_val va = dataview2iov(a.first), vb = dataview2iov(b.first);
+      assert(context->txn_guard.get() != nullptr);
       int cmp = mdbx_cmp(context->txn_guard.get(), context->dbi, &va, &vb);
       if (cmp == 0 &&
           (context->config.params.table_flags & MDBX_DUPSORT) != 0) {

@@ -1058,10 +1058,8 @@ bool testcase::speculum_verify() {
     const auto S_key = iov2dataview(akey);
     const auto S_data = iov2dataview(avalue);
     if (it != speculum.cend()) {
-      mkey.iov_base = (void *)it->first.c_str();
-      mkey.iov_len = it->first.size();
-      mvalue.iov_base = (void *)it->second.c_str();
-      mvalue.iov_len = it->second.size();
+      mkey = it->first;
+      mvalue = it->second;
     }
     if (err == MDBX_SUCCESS && it != speculum.cend() && S_key == it->first &&
         S_data == it->second) {
