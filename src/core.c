@@ -8933,7 +8933,7 @@ static int mdbx_flush_iov(MDBX_txn *const txn, struct iovec *iov,
   mdbx_assert(env, iov_items > 0);
   int rc;
   if (likely(iov_items == 1)) {
-    mdbx_assert(env, iov->iov_len == iov_bytes);
+    mdbx_assert(env, iov_bytes == (size_t)iov->iov_len);
     rc = mdbx_pwrite(env->me_lazy_fd, iov->iov_base, iov_bytes, iov_off);
   } else {
     rc = mdbx_pwritev(env->me_lazy_fd, iov, iov_items, iov_off, iov_bytes);
