@@ -10133,7 +10133,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                 pgno2bytes(env, edge - largest_pgno));
     }
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
-#if MDBX_ENABLE_MADVISE && defined(MADV_DONTNEED)
+#if MDBX_ENABLE_MADVISE &&                                                     \
+    (defined(MADV_DONTNEED) || defined(POSIX_MADV_DONTNEED))
     const size_t largest_bytes = pgno2bytes(env, largest_pgno);
     /* threshold to avoid unreasonable frequent madvise() calls */
     const size_t madvise_threshold = mdbx_madvise_threshold(env, largest_bytes);
@@ -10153,6 +10154,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       const size_t prev_discarded_bytes =
           ceil_powerof2(pgno2bytes(env, prev_discarded_pgno), env->me_os_psize);
       mdbx_ensure(env, prev_discarded_bytes > discard_edge_bytes);
+#if defined(MADV_DONTNEED)
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
     0 /* MADV_FREE works for only anonymous vma at the moment */
@@ -10164,10 +10166,15 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                         prev_discarded_bytes - discard_edge_bytes, advise)
                     ? ignore_enosys(errno)
                     : MDBX_SUCCESS;
+#else
+      int err = ignore_enosys(posix_madvise(
+          env->me_map + discard_edge_bytes,
+          prev_discarded_bytes - discard_edge_bytes, POSIX_MADV_DONTNEED));
+#endif
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
     }
-#endif /* MDBX_ENABLE_MADVISE && MADV_DONTNEED */
+#endif /* MDBX_ENABLE_MADVISE && (MADV_DONTNEED || POSIX_MADV_DONTNEED) */
 
     /* LY: check conditions to shrink datafile */
     const pgno_t backlog_gap = 3 + pending->mm_dbs[FREE_DBI].md_depth * 3;
