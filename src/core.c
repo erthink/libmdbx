@@ -2619,13 +2619,19 @@ static int lcklist_detach_locked(MDBX_env *env) {
 /*------------------------------------------------------------------------------
  * LY: radix sort for large chunks */
 
-#define RADIXSORT_IMPL(NAME, TYPE, EXTRACT_KEY)                                \
+#define RADIXSORT_IMPL(NAME, TYPE, EXTRACT_KEY, BUFFER_PREALLOCATED, END_GAP)  \
                                                                                \
   __hot static bool NAME##_radixsort(TYPE *const begin,                        \
                                      const unsigned length) {                  \
-    TYPE *tmp = mdbx_malloc(sizeof(TYPE) * length);                            \
-    if (unlikely(!tmp))                                                        \
-      return false;                                                            \
+    TYPE *tmp;                                                                 \
+    if (BUFFER_PREALLOCATED) {                                                 \
+      tmp = begin + length + END_GAP;                                          \
+      /* memset(tmp, 0xDeadBeef, sizeof(TYPE) * length); */                    \
+    } else {                                                                   \
+      tmp = mdbx_malloc(sizeof(TYPE) * length);                                \
+      if (unlikely(!tmp))                                                      \
+        return false;                                                          \
+    }                                                                          \
                                                                                \
     unsigned key_shift = 0, key_diff_mask;                                     \
     do {                                                                       \
@@ -2674,7 +2680,8 @@ static int lcklist_detach_locked(MDBX_env *env) {
       key_shift += 16;                                                         \
     } while (key_diff_mask >> 16);                                             \
                                                                                \
-    mdbx_free(tmp);                                                            \
+    if (!(BUFFER_PREALLOCATED))                                                \
+      mdbx_free(tmp);                                                          \
     return true;                                                               \
   }
 
@@ -2731,8 +2738,16 @@ static int lcklist_detach_locked(MDBX_env *env) {
 
 /*----------------------------------------------------------------------------*/
 
-static __always_inline size_t pnl2bytes(const size_t size) {
+static __always_inline size_t pnl2bytes(size_t size) {
   assert(size > 0 && size <= MDBX_PGL_LIMIT);
+#if MDBX_PNL_PREALLOC_FOR_RADIXSORT
+  size += size;
+#endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
+  STATIC_ASSERT(MDBX_ASSUME_MALLOC_OVERHEAD +
+                    (MDBX_PGL_LIMIT * (MDBX_PNL_PREALLOC_FOR_RADIXSORT + 1) +
+                     MDBX_PNL_GRANULATE + 2) *
+                        sizeof(pgno_t) <
+                SIZE_MAX / 4 * 3);
   size_t bytes =
       ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(pgno_t) * (size + 2),
                     MDBX_PNL_GRANULATE * sizeof(pgno_t)) -
@@ -2743,7 +2758,11 @@ static __always_inline size_t pnl2bytes(const size_t size) {
 static __always_inline pgno_t bytes2pnl(const size_t bytes) {
   size_t size = bytes / sizeof(pgno_t);
   assert(size > 2 && size <= MDBX_PGL_LIMIT);
-  return (pgno_t)size - 2;
+  size -= 2;
+#if MDBX_PNL_PREALLOC_FOR_RADIXSORT
+  size >>= 1;
+#endif /* MDBX_PNL_PREALLOC_FOR_RADIXSORT */
+  return (pgno_t)size;
 }
 
 static MDBX_PNL mdbx_pnl_alloc(size_t size) {
@@ -2768,7 +2787,8 @@ static void mdbx_pnl_free(MDBX_PNL pl) {
 
 /* Shrink the PNL to the default size if it has grown larger */
 static void mdbx_pnl_shrink(MDBX_PNL *ppl) {
-  assert(bytes2pnl(pnl2bytes(MDBX_PNL_INITIAL)) == MDBX_PNL_INITIAL);
+  assert(bytes2pnl(pnl2bytes(MDBX_PNL_INITIAL)) >= MDBX_PNL_INITIAL &&
+         bytes2pnl(pnl2bytes(MDBX_PNL_INITIAL)) < MDBX_PNL_INITIAL * 3 / 2);
   assert(MDBX_PNL_SIZE(*ppl) <= MDBX_PGL_LIMIT &&
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_SIZE(*ppl));
   MDBX_PNL_SIZE(*ppl) = 0;
@@ -2992,7 +3012,8 @@ static MDBX_PNL mdbx_spill_purge(MDBX_txn *txn) {
 #else
 #define MDBX_PNL_EXTRACT_KEY(ptr) (P_INVALID - *(ptr))
 #endif
-RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY)
+RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY,
+               MDBX_PNL_PREALLOC_FOR_RADIXSORT, 0)
 
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
 static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
@@ -3159,11 +3180,20 @@ static int __must_check_result mdbx_txl_append(MDBX_TXL *ptl, txnid_t id) {
 #define MDBX_DPL_RESERVE_GAP                                                   \
   (MDBX_DPL_GAP_FOR_MERGESORT + MDBX_DPL_GAP_FOR_EDGING)
 
-static __always_inline size_t dpl2bytes(const ptrdiff_t size) {
+static __always_inline size_t dpl2bytes(ptrdiff_t size) {
   assert(size > CURSOR_STACK && (size_t)size <= MDBX_PGL_LIMIT);
+#if MDBX_DPL_PREALLOC_FOR_RADIXSORT
+  size += size;
+#endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
+  STATIC_ASSERT(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(MDBX_dpl) +
+                    (MDBX_PGL_LIMIT * (MDBX_DPL_PREALLOC_FOR_RADIXSORT + 1) +
+                     MDBX_DPL_RESERVE_GAP) *
+                        sizeof(MDBX_dp) +
+                    MDBX_PNL_GRANULATE * sizeof(void *) * 2 <
+                SIZE_MAX / 4 * 3);
   size_t bytes =
       ceil_powerof2(MDBX_ASSUME_MALLOC_OVERHEAD + sizeof(MDBX_dpl) +
-                        (size + MDBX_DPL_RESERVE_GAP) * sizeof(MDBX_dp),
+                        ((size_t)size + MDBX_DPL_RESERVE_GAP) * sizeof(MDBX_dp),
                     MDBX_PNL_GRANULATE * sizeof(void *) * 2) -
       MDBX_ASSUME_MALLOC_OVERHEAD;
   return bytes;
@@ -3173,7 +3203,11 @@ static __always_inline unsigned bytes2dpl(const ptrdiff_t bytes) {
   size_t size = (bytes - sizeof(MDBX_dpl)) / sizeof(MDBX_dp);
   assert(size > CURSOR_STACK + MDBX_DPL_RESERVE_GAP &&
          size <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
-  return (unsigned)size - MDBX_DPL_RESERVE_GAP;
+  size -= MDBX_DPL_RESERVE_GAP;
+#if MDBX_DPL_PREALLOC_FOR_RADIXSORT
+  size >>= 1;
+#endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
+  return (unsigned)size;
 }
 
 static __always_inline unsigned mdbx_dpl_setlen(MDBX_dpl *dl, unsigned len) {
@@ -3237,20 +3271,26 @@ static int mdbx_dpl_alloc(MDBX_txn *txn) {
 }
 
 #define MDBX_DPL_EXTRACT_KEY(ptr) ((ptr)->pgno)
-RADIXSORT_IMPL(dpl, MDBX_dp, MDBX_DPL_EXTRACT_KEY)
+RADIXSORT_IMPL(dpl, MDBX_dp, MDBX_DPL_EXTRACT_KEY,
+               MDBX_DPL_PREALLOC_FOR_RADIXSORT, 1)
 
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, MDBX_dp, DP_SORT_CMP)
 
 __hot static MDBX_dpl *mdbx_dpl_sort_slowpath(MDBX_dpl *dl) {
+  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   const unsigned unsorted = dl->length - dl->sorted;
   if (likely(unsorted < MDBX_PNL_RADIXSORT_THRESHOLD) ||
       !dpl_radixsort(dl->items + 1, dl->length)) {
     if (dl->sorted > unsorted / 4 + 4 &&
-        dl->length + unsorted < dl->detent + MDBX_DPL_GAP_FOR_MERGESORT) {
+        (MDBX_DPL_PREALLOC_FOR_RADIXSORT ||
+         dl->length + unsorted < dl->detent + MDBX_DPL_GAP_FOR_MERGESORT)) {
       MDBX_dp *const sorted_begin = dl->items + 1;
       MDBX_dp *const sorted_end = sorted_begin + dl->sorted;
-      MDBX_dp *const end = dl->items + dl->detent + MDBX_DPL_RESERVE_GAP;
+      MDBX_dp *const end =
+          dl->items + (MDBX_DPL_PREALLOC_FOR_RADIXSORT
+                           ? dl->length + dl->length + 1
+                           : dl->detent + MDBX_DPL_RESERVE_GAP);
       MDBX_dp *const tmp = end - unsorted;
       assert(dl->items + dl->length + 1 < tmp);
       /* copy unsorted to the end of allocated space and sort it */
@@ -3264,7 +3304,7 @@ __hot static MDBX_dpl *mdbx_dpl_sort_slowpath(MDBX_dpl *dl) {
         const bool cmp = l->pgno > r->pgno;
         *w = cmp ? *l : *r;
         l -= cmp;
-        r -= !cmp;
+        r += cmp - 1;
       } while (likely(--w > l));
       assert(r == tmp - 1);
       assert(dl->items[0].pgno == 0 &&
@@ -3277,6 +3317,9 @@ __hot static MDBX_dpl *mdbx_dpl_sort_slowpath(MDBX_dpl *dl) {
       assert(dl->items[0].pgno == 0 &&
              dl->items[dl->length + 1].pgno == P_INVALID);
     }
+  } else {
+    assert(dl->items[0].pgno == 0 &&
+           dl->items[dl->length + 1].pgno == P_INVALID);
   }
   dl->sorted = dl->length;
   return dl;
@@ -3429,7 +3472,7 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page) {
 
   if (unlikely(dl->length == dl->detent)) {
     if (unlikely(dl->detent >= MDBX_PGL_LIMIT)) {
-      mdbx_error("DPL is full (MDBX_PGL_LIMIT %u)", MDBX_PGL_LIMIT);
+      mdbx_error("DPL is full (MDBX_PGL_LIMIT %zu)", MDBX_PGL_LIMIT);
       return MDBX_TXN_FULL;
     }
     const size_t size = (dl->detent < MDBX_PNL_INITIAL * 42)
