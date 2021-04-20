@@ -3017,8 +3017,8 @@ RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY,
 
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
 static __hot void mdbx_pnl_sort(MDBX_PNL pnl) {
-  if (likely(MDBX_PNL_SIZE(pnl) < MDBX_PNL_RADIXSORT_THRESHOLD) ||
-      !pgno_radixsort(&MDBX_PNL_FIRST(pnl), MDBX_PNL_SIZE(pnl)))
+  if (likely(MDBX_PNL_SIZE(pnl) < MDBX_RADIXSORT_THRESHOLD) ||
+      unlikely(!pgno_radixsort(&MDBX_PNL_FIRST(pnl), MDBX_PNL_SIZE(pnl))))
     pgno_sort(MDBX_PNL_BEGIN(pnl), MDBX_PNL_END(pnl));
   assert(mdbx_pnl_check(pnl, MAX_PAGENO + 1));
 }
@@ -3280,8 +3280,8 @@ SORT_IMPL(dp_sort, false, MDBX_dp, DP_SORT_CMP)
 __hot static MDBX_dpl *mdbx_dpl_sort_slowpath(MDBX_dpl *dl) {
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   const unsigned unsorted = dl->length - dl->sorted;
-  if (likely(unsorted < MDBX_PNL_RADIXSORT_THRESHOLD) ||
-      !dpl_radixsort(dl->items + 1, dl->length)) {
+  if (likely(unsorted < MDBX_RADIXSORT_THRESHOLD) ||
+      unlikely(!dpl_radixsort(dl->items + 1, dl->length))) {
     if (dl->sorted > unsorted / 4 + 4 &&
         (MDBX_DPL_PREALLOC_FOR_RADIXSORT ||
          dl->length + unsorted < dl->detent + MDBX_DPL_GAP_FOR_MERGESORT)) {
