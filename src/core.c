@@ -6216,6 +6216,8 @@ done:
   }
 
   if (unlikely(txn->tw.dirtyroom < 1)) {
+    mdbx_error("Dirtyroom is depleted, DPL length %u",
+               txn->tw.dirtylist->length);
     ret.err = MDBX_TXN_FULL;
     return ret;
   }
