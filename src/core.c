@@ -6061,8 +6061,11 @@ no_loose:
 done:
   if (unlikely(mp == nullptr))
     return MDBX_SUCCESS;
-  if (unlikely(txn->tw.dirtyroom < 1))
+  if (unlikely(txn->tw.dirtyroom < 1)) {
+    mdbx_error("Dirtyroom is depleted, DPL length %u",
+               txn->tw.dirtylist->length);
     return MDBX_TXN_FULL;
+  }
   mdbx_ensure(env, pgno >= NUM_METAS);
   if (env->me_flags & MDBX_WRITEMAP) {
     np = pgno2page(env, pgno);
