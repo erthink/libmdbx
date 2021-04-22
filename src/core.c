@@ -4164,6 +4164,7 @@ static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
       return false;
 
     mdbx_tassert(txn, dp->mp_flags == P_LOOSE || IS_MODIFIABLE(txn, dp));
+    mdbx_tassert(txn, (dp->mp_flags & P_KEEP) == 0);
     if (dp->mp_flags == P_LOOSE) {
       loose += 1;
     } else if (unlikely(!IS_MODIFIABLE(txn, dp)))
@@ -4800,11 +4801,8 @@ static void mdbx_cursor_xkeep(MDBX_cursor *mc, unsigned pflags) {
       MDBX_page *mp = NULL;
       for (unsigned j = 0; j < m3->mc_snum; j++) {
         mp = m3->mc_pg[j];
-        if ((mp->mp_flags & mask) == pflags &&
-            (pflags || IS_MODIFIABLE(mc->mc_txn, mp))) {
-          mdbx_cassert(mc, IS_MODIFIABLE(mc->mc_txn, mp));
+        if (IS_MODIFIABLE(mc->mc_txn, mp) && (mp->mp_flags & mask) == pflags)
           mp->mp_flags ^= P_KEEP;
-        }
       }
       if (!(mp && IS_LEAF(mp)))
         break;
@@ -4847,10 +4845,8 @@ static void mdbx_txn_xkeep(MDBX_txn *txn, MDBX_cursor *m0,
         if (pgno == P_INVALID)
           continue;
         MDBX_page *dp = mdbx_dpl_find(txn->tw.dirtylist, pgno);
-        if (dp && (dp->mp_flags & mask) == pflags) {
-          mdbx_tassert(txn, IS_MODIFIABLE(txn, dp));
+        if (dp && (dp->mp_flags & mask) == pflags)
           dp->mp_flags ^= P_KEEP;
-        }
       }
     }
   }
@@ -4984,6 +4980,9 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
   mdbx_txn_xkeep(txn, m0, P_KEEP, keep > 0);
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
 
+  mdbx_notice("spilled %u dirty-entries, now have %u dirty-room", spilled,
+              txn->tw.dirtyroom);
+
 bailout:
   txn->mt_flags |= rc ? MDBX_TXN_ERROR : MDBX_TXN_SPILLS;
   return rc;
@@ -4991,8 +4990,6 @@ bailout:
 
 static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
                              const MDBX_val *data) {
-  if (mc->mc_flags & C_SUB)
-    return MDBX_SUCCESS;
   MDBX_txn *txn = mc->mc_txn;
   if (txn->mt_flags & MDBX_WRITEMAP)
     return MDBX_SUCCESS;
@@ -6304,6 +6301,7 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
  * it back and make it dirty/writable again. */
 static struct page_result __must_check_result
 mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
+  mdbx_notice("unspill page %" PRIaPGNO, mp->mp_pgno);
   mdbx_tassert(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0);
   mdbx_tassert(txn, IS_SPILLED(txn, mp));
   const pgno_t spilled_pgno = mp->mp_pgno << 1;
@@ -6323,7 +6321,6 @@ mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
       return ret;
     }
     mdbx_page_copy(ret.page, mp, pgno2bytes(txn->mt_env, npages));
-    mdbx_debug("unspill page %" PRIaPGNO, mp->mp_pgno);
     if (scan == txn) {
       /* If in current txn, this page is no longer spilled.
        * If it happens to be the last page, truncate the spill list.
@@ -6436,7 +6433,6 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
       mdbx_tassert(txn, np != nullptr);
       goto done;
     }
-    mdbx_tassert(txn, np == nullptr);
     goto fail;
   }
 
