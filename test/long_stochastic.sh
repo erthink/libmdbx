@@ -180,7 +180,7 @@ function probe {
   echo "----------------------------------------------- $(date)"
   echo "${caption}: $*"
   rm -f ${TESTDB_DIR}/* \
-    && ${VALGRIND} ./mdbx_test ${speculum} --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
+    && ${VALGRIND} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
       | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
     && ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
     && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
