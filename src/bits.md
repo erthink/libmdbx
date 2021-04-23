@@ -4,10 +4,10 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 1 |0000 0002|ALLOC_GC   |TXN_ERROR     |REVERSEKEY|F_SUBDATA  |DBI_STALE   |F_SUBDATA|P_LEAF
 2 |0000 0004|ALLOC_NEW  |TXN_DIRTY     |DUPSORT   |           |DBI_FRESH   |F_DUPDATA|P_OVERFLOW
 3 |0000 0008|ALLOC_SLOT |TXN_SPILLS    |INTEGERKEY|           |DBI_CREAT   |         |P_META
-4 |0000 0010|           |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_DIRTY
+4 |0000 0010|           |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_SPILLED
 5 |0000 0020|           |              |INTEGERDUP|NODUPDATA  |DBI_USRVALID|         |P_LEAF2
 6 |0000 0040|           |              |REVERSEDUP|CURRENT    |DBI_DUPDATA |         |P_SUBP
-7 |0000 0080|           |              |          |ALLDUPS    |DBI_AUDITED |         |
+7 |0000 0080|           |              |          |ALLDUPS    |DBI_AUDITED |         |P_BAD
 8 |0000 0100|           |              |          |           |            |         |
 9 |0000 0200|           |              |          |           |            |         |
 10|0000 0400|           |              |          |           |            |         |
@@ -15,8 +15,8 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 12|0000 1000|           |              |          |           |            |         |
 13|0000 2000|           |              |          |           |            |         |
 14|0000 4000|NOSUBDIR   |              |          |           |            |         |P_LOOSE
-15|0000 8000|           |              |DB_VALID  |           |            |         |P_KEEP
-16|0001 0000|SAFE_NOSYNC|TXN_NOSYNC    |          |RESERVE    |            |RESERVE  |
+15|0000 8000|           |              |DB_VALID  |NOSPILL    |            |         |P_KEEP
+16|0001 0000|SAFE_NOSYNC|TXN_NOSYNC    |          |RESERVE    |            |RESERVE  |P_FROZEN
 17|0002 0000|RDONLY     |TXN_RDONLY    |          |APPEND     |            |APPEND   |
 18|0004 0000|NOMETASYNC |TXN_NOMETASYNC|CREATE    |APPENDDUP
 19|0008 0000|WRITEMAP   |<=            |          |MULTIPLE
