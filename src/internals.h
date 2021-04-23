@@ -824,8 +824,15 @@ typedef txnid_t *MDBX_TXL;
 
 /* An Dirty-Page list item is an pgno/pointer pair. */
 typedef struct MDBX_dp {
-  pgno_t pgno;
   MDBX_page *ptr;
+  pgno_t pgno;
+  union {
+    unsigned extra;
+    __anonymous_struct_extension__ struct {
+      unsigned multi : 1;
+      unsigned lru : 31;
+    };
+  };
 } MDBX_dp;
 
 /* An DPL (dirty-page list) is a sorted array of MDBX_DPs. */
@@ -976,6 +983,8 @@ struct MDBX_txn {
        * dirty/spilled pages. Thus commit(nested txn) has room to merge
        * dirtylist into mt_parent after freeing hidden mt_parent pages. */
       unsigned dirtyroom;
+      /* a sequence to spilling dirty page with LRU policy */
+      unsigned dirtylru;
       /* For write txns: Modified pages. Sorted when not MDBX_WRITEMAP. */
       MDBX_dpl *dirtylist;
       /* The list of reclaimed txns from GC */

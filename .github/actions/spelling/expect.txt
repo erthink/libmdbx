@@ -306,6 +306,7 @@ dirname
 DIRS
 dirs
 dirtylist
+dirtylru
 dirtyroom
 diskutil
 distclean
@@ -411,6 +412,7 @@ endif
 endl
 endmacro
 endmntent
+endpgno
 endutxent
 enewcommand
 ENODATA
@@ -846,6 +848,7 @@ LPVOID
 LPWSTR
 lrint
 lrt
+lru
 lsb
 lseek
 lsize
