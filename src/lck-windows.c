@@ -298,8 +298,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   } else {
     /* Without LCK (i.e. read-only mode).
      * Walk through a snapshot of all running threads */
-    mdbx_assert(env,
-                env->me_txn0 == NULL || (env->me_flags & MDBX_EXCLUSIVE) != 0);
+    mdbx_assert(env, env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY));
     const HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
       return GetLastError();
