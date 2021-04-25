@@ -4174,6 +4174,10 @@ static __always_inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
 static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
   const MDBX_dpl *const dl = txn->tw.dirtylist;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
+  mdbx_tassert(txn, txn->tw.dirtyroom + dl->length ==
+                        (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                        : txn->mt_env->me_options.dp_limit));
+
   if (!mdbx_audit_enabled())
     return true;
 
@@ -4341,8 +4345,11 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
         }
       }
       dpl_setlen(dl, w);
-      mdbx_tassert(txn, txn->mt_parent || txn->tw.dirtyroom + dl->length ==
-                                              txn->mt_env->me_options.dp_limit);
+      mdbx_tassert(txn,
+                   txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                       (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                       : txn->mt_env->me_options.dp_limit));
+
       goto unlink_loose;
     }
   } else {
@@ -4370,9 +4377,10 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
       dl->sorted = dl->length;
       txn->tw.loose_count -= refunded;
       txn->tw.dirtyroom += refunded;
-      mdbx_tassert(txn, txn->mt_parent || txn->tw.dirtyroom + dl->length ==
-                                              txn->mt_env->me_options.dp_limit);
-      assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
+      mdbx_tassert(txn,
+                   txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                       (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                       : txn->mt_env->me_options.dp_limit));
 
       /* Filter-out loose chain & dispose refunded pages. */
     unlink_loose:
@@ -4391,8 +4399,6 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
   }
 
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-  mdbx_tassert(txn, txn->mt_parent || txn->tw.dirtyroom + dl->length ==
-                                          txn->mt_env->me_options.dp_limit);
   if (suitable != onstack)
     mdbx_pnl_free(suitable);
   txn->tw.loose_refund_wl = txn->mt_next_pgno;
@@ -4474,10 +4480,9 @@ static __inline void mdbx_page_wash(MDBX_txn *txn, const unsigned di,
                         txn->tw.dirtylist->items[di].ptr == mp);
   mdbx_dpl_remove(txn, di);
   txn->tw.dirtyroom++;
-  assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
-  mdbx_tassert(txn, txn->mt_parent ||
-                        txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                            txn->mt_env->me_options.dp_limit);
+  mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                        (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                        : txn->mt_env->me_options.dp_limit));
   mp->mp_txnid = INVALID_TXNID;
   mp->mp_flags = 0xFFFF;
   VALGRIND_MAKE_MEM_UNDEFINED(mp, PAGEHDRSZ);
@@ -5339,10 +5344,6 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp,
     return rc;
   }
   txn->tw.dirtyroom--;
-  assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
-  mdbx_tassert(txn, txn->mt_parent ||
-                        txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                            txn->mt_env->me_options.dp_limit);
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
   return MDBX_SUCCESS;
 }
@@ -6372,7 +6373,6 @@ mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
 __hot static int mdbx_page_touch(MDBX_cursor *mc) {
   MDBX_page *const mp = mc->mc_pg[mc->mc_top], *np;
   MDBX_txn *txn = mc->mc_txn;
-  pgno_t pgno;
   int rc;
 
   if (mdbx_assert_enabled()) {
@@ -6404,7 +6404,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
 
-    pgno = np->mp_pgno;
+    const pgno_t pgno = np->mp_pgno;
     mdbx_debug("touched db %d page %" PRIaPGNO " -> %" PRIaPGNO, DDBI(mc),
                mp->mp_pgno, pgno);
     mdbx_tassert(txn, mp->mp_pgno != pgno);
@@ -6417,7 +6417,20 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     } else {
       mc->mc_db->md_root = pgno;
     }
-  } else if (IS_SHADOWED(txn, mp)) {
+
+    mdbx_page_copy(np, mp, txn->mt_env->me_psize);
+    np->mp_pgno = pgno;
+    np->mp_txnid = txn->mt_front;
+  } else if (!IS_SHADOWED(txn, mp)) {
+    struct page_result pur = mdbx_page_unspill(txn, mp);
+    np = pur.page;
+    rc = pur.err;
+    if (likely(rc == MDBX_SUCCESS)) {
+      mdbx_tassert(txn, np != nullptr);
+      goto done;
+    }
+    goto fail;
+  } else {
     if (unlikely(!txn->mt_parent)) {
       rc = MDBX_PROBLEM;
       goto fail;
@@ -6432,33 +6445,13 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
       rc = MDBX_ENOMEM;
       goto fail;
     }
+    mdbx_page_copy(np, mp, txn->mt_env->me_psize);
+
     /* insert a clone of parent's dirty page, so don't touch dirtyroom */
-    pgno = mp->mp_pgno;
-    if (mdbx_assert_enabled()) {
-      np->mp_pgno = pgno;
-      np->mp_txnid = txn->mt_front;
-    }
-    rc = mdbx_dpl_append(txn, pgno, np, 1);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      mdbx_dpage_free(txn->mt_env, np, 1);
+    rc = mdbx_page_dirty(txn, np, 1);
+    if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
-    }
-
-    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-  } else {
-    struct page_result pur = mdbx_page_unspill(txn, mp);
-    np = pur.page;
-    rc = pur.err;
-    if (likely(rc == MDBX_SUCCESS)) {
-      mdbx_tassert(txn, np != nullptr);
-      goto done;
-    }
-    goto fail;
   }
-
-  mdbx_page_copy(np, mp, txn->mt_env->me_psize);
-  np->mp_pgno = pgno;
-  np->mp_txnid = txn->mt_front;
 
 done:
   /* Adjust cursors pointing to mp */
@@ -7480,10 +7473,12 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
       txn->mt_dbistate[i] =
           parent->mt_dbistate[i] & ~(DBI_FRESH | DBI_CREAT | DBI_DIRTY);
     mdbx_tassert(parent,
-                 parent->mt_parent ||
-                     parent->tw.dirtyroom + parent->tw.dirtylist->length ==
-                         env->me_options.dp_limit);
-    assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
+                 parent->tw.dirtyroom + parent->tw.dirtylist->length ==
+                     (parent->mt_parent ? parent->mt_parent->tw.dirtyroom
+                                        : parent->mt_env->me_options.dp_limit));
+    mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                          (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                          : txn->mt_env->me_options.dp_limit));
     env->me_txn = txn;
     rc = mdbx_cursor_shadow(parent, txn);
     if (mdbx_audit_enabled() && mdbx_assert_enabled()) {
@@ -7817,7 +7812,10 @@ static void mdbx_dpl_sift(MDBX_txn *const txn, MDBX_PNL pl,
       }
       dl->sorted = dpl_setlen(dl, w - 1);
       txn->tw.dirtyroom += r - w;
-      assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
+      mdbx_tassert(txn,
+                   txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                       (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                       : txn->mt_env->me_options.dp_limit));
       return;
     }
   }
@@ -8232,8 +8230,6 @@ retry_noaccount:
                mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-  mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                        txn->mt_env->me_options.dp_limit);
   if (unlikely(/* paranoia */ loop > ((MDBX_DEBUG > 0) ? 9 : 99))) {
     mdbx_error("too more loops %u, bailout", loop);
     rc = MDBX_PROBLEM;
@@ -8334,8 +8330,6 @@ retry_noaccount:
                  mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                        txn->mt_next_pgno - MDBX_ENABLE_REFUND));
     mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-    mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                          txn->mt_env->me_options.dp_limit);
     if (mdbx_audit_enabled()) {
       rc = mdbx_audit_ex(txn, retired_stored, false);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -8415,7 +8409,10 @@ retry_noaccount:
       dpl_setlen(dl, w);
       dl->sorted = 0;
       txn->tw.dirtyroom += txn->tw.loose_count;
-      assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
+      mdbx_tassert(txn,
+                   txn->tw.dirtyroom + txn->tw.dirtylist->length ==
+                       (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                       : txn->mt_env->me_options.dp_limit));
       txn->tw.loose_pages = NULL;
       txn->tw.loose_count = 0;
 #if MDBX_ENABLE_REFUND
@@ -9107,11 +9104,11 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
       --n;
     }
     parent->tw.dirtyroom += dst->sorted - n;
-    assert(parent->tw.dirtyroom <= parent->mt_env->me_options.dp_limit);
     dst->sorted = dpl_setlen(dst, n);
     mdbx_tassert(parent,
-                 parent->mt_parent || parent->tw.dirtyroom + dst->length ==
-                                          parent->mt_env->me_options.dp_limit);
+                 parent->tw.dirtyroom + parent->tw.dirtylist->length ==
+                     (parent->mt_parent ? parent->mt_parent->tw.dirtyroom
+                                        : parent->mt_env->me_options.dp_limit));
   }
 
   /* Remove reclaimed pages from parent's dirty list */
@@ -9274,8 +9271,9 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
                                             parent->mt_next_pgno << 1));
     mdbx_dpl_sift(parent, txn->tw.spill_pages, true);
     mdbx_tassert(parent,
-                 parent->mt_parent || parent->tw.dirtyroom + dst->length ==
-                                          parent->mt_env->me_options.dp_limit);
+                 parent->tw.dirtyroom + parent->tw.dirtylist->length ==
+                     (parent->mt_parent ? parent->mt_parent->tw.dirtyroom
+                                        : parent->mt_env->me_options.dp_limit));
   }
 
   /* Find length of merging our dirty list with parent's and release
@@ -9415,9 +9413,6 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   parent->tw.dirtyroom -= dst->sorted - dst->length;
   assert(parent->tw.dirtyroom <= parent->mt_env->me_options.dp_limit);
   dpl_setlen(dst, dst->sorted);
-  mdbx_tassert(parent,
-               parent->mt_parent || parent->tw.dirtyroom + dst->length ==
-                                        parent->mt_env->me_options.dp_limit);
   parent->tw.dirtylru = txn->tw.dirtylru;
   mdbx_tassert(parent, mdbx_dirtylist_check(parent));
   mdbx_dpl_free(txn);
@@ -9625,7 +9620,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   mdbx_tassert(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
-                        txn->mt_env->me_options.dp_limit);
+                        (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
+                                        : txn->mt_env->me_options.dp_limit));
   mdbx_cursors_eot(txn, false);
   end_mode |= MDBX_END_EOTDONE;
 
@@ -16827,10 +16823,11 @@ static __cold int mdbx_page_check(MDBX_cursor *const mc,
 }
 
 static __cold int mdbx_cursor_check(MDBX_cursor *mc, unsigned options) {
-  mdbx_tassert(mc->mc_txn, mc->mc_txn->mt_parent ||
-                               mc->mc_txn->tw.dirtyroom +
-                                       mc->mc_txn->tw.dirtylist->length ==
-                                   mc->mc_txn->mt_env->me_options.dp_limit);
+  mdbx_cassert(mc,
+               mc->mc_txn->tw.dirtyroom + mc->mc_txn->tw.dirtylist->length ==
+                   (mc->mc_txn->mt_parent
+                        ? mc->mc_txn->mt_parent->tw.dirtyroom
+                        : mc->mc_txn->mt_env->me_options.dp_limit));
   mdbx_cassert(mc, mc->mc_top == mc->mc_snum - 1 || (options & C_UPDATING));
   if (unlikely(mc->mc_top != mc->mc_snum - 1) && (options & C_UPDATING) == 0)
     return MDBX_CURSOR_FULL;
