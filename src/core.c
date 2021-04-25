@@ -21175,7 +21175,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
   case MDBX_opt_txn_dp_initial:
     if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4))
       return MDBX_EINVAL;
-    if (unlikely(env->me_txn0 == NULL))
+    if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
     if (lock_needed) {
       err = mdbx_txn_lock(env, false);
