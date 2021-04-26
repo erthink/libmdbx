@@ -4152,9 +4152,8 @@ static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned npages) {
 static void mdbx_dlist_free(MDBX_txn *txn) {
   MDBX_env *env = txn->mt_env;
   MDBX_dpl *const dl = txn->tw.dirtylist;
-  const size_t len = dl->length;
 
-  for (size_t i = 1; i <= len; i++) {
+  for (unsigned i = 1; i <= dl->length; i++) {
     MDBX_page *dp = dl->items[i].ptr;
     mdbx_dpage_free(env, dp, dpl_npages(dl, i));
   }
