@@ -1085,6 +1085,7 @@ typedef struct MDBX_cursor_couple {
 
 /* The database environment. */
 struct MDBX_env {
+  /* ----------------------------------------------------- mostly static part */
 #define MDBX_ME_SIGNATURE UINT32_C(0x9A899641)
   MDBX_atomic_uint32_t me_signature;
   /* Failed to update the meta page. Probably an I/O error. */
@@ -1110,36 +1111,18 @@ struct MDBX_env {
   uint8_t me_psize2log;     /* log2 of DB page size */
   int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
   unsigned me_os_psize; /* OS page size, from mdbx_syspagesize() */
-  unsigned me_maxreaders; /* size of the reader table */
-  mdbx_fastmutex_t me_dbi_lock;
-  MDBX_dbi me_numdbs;         /* number of DBs opened */
+  unsigned me_maxreaders;     /* size of the reader table */
   MDBX_dbi me_maxdbs;         /* size of the DB table */
   uint32_t me_pid;            /* process ID of this env */
   mdbx_thread_key_t me_txkey; /* thread-key for readers */
   char *me_pathname;          /* path to the DB files */
   void *me_pbuf;              /* scratch area for DUPSORT put() */
-  MDBX_txn *me_txn;           /* current write transaction */
   MDBX_txn *me_txn0;          /* prealloc'd write transaction */
-
-  /* write-txn lock */
-#if MDBX_LOCKING == MDBX_LOCKING_SYSV
-  union {
-    key_t key;
-    int semid;
-  } me_sysv_ipc;
-#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
-
-#if MDBX_LOCKING > 0
-  mdbx_ipclock_t *me_wlock;
-#endif /* MDBX_LOCKING > 0 */
 
   MDBX_dbx *me_dbxs;         /* array of static DB info */
   uint16_t *me_dbflags;      /* array of flags from MDBX_db.md_flags */
   unsigned *me_dbiseqs;      /* array of dbi sequence numbers */
   atomic_txnid_t *me_oldest; /* ID of oldest reader last time we looked */
-  MDBX_page *me_dp_reserve;  /* list of malloc'ed blocks for re-use */
-  /* PNL of pages that became unused in a write txn */
-  MDBX_PNL me_retired_pages;
   /* Number of freelist items that can fit in a single overflow page */
   unsigned me_maxgc_ov1page;
   uint32_t me_live_reader; /* have liveness lock in reader table */
@@ -1152,7 +1135,6 @@ struct MDBX_env {
   pgno_t *me_readahead_anchor;
   MDBX_atomic_uint32_t *me_meta_sync_txnid;
   MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
-  unsigned me_dp_reserve_len;
   struct {
     unsigned dp_reserve_limit;
     unsigned rp_augment_limit;
@@ -1163,6 +1145,51 @@ struct MDBX_env {
     uint8_t spill_min_denominator;
     uint8_t spill_parent4child_denominator;
   } me_options;
+
+  /* struct me_dbgeo used for accepting db-geo params from user for the new
+   * database creation, i.e. when mdbx_env_set_geometry() was called before
+   * mdbx_env_open(). */
+  struct {
+    size_t lower;  /* minimal size of datafile */
+    size_t upper;  /* maximal size of datafile */
+    size_t now;    /* current size of datafile */
+    size_t grow;   /* step to grow datafile */
+    size_t shrink; /* threshold to shrink datafile */
+  } me_dbgeo;
+
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
+  union {
+    key_t key;
+    int semid;
+  } me_sysv_ipc;
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
+
+  MDBX_env *me_lcklist_next;
+
+  /* --------------------------------------------------- mostly volatile part */
+
+  MDBX_txn *me_txn; /* current write transaction */
+  mdbx_fastmutex_t me_dbi_lock;
+  MDBX_dbi me_numdbs; /* number of DBs opened */
+
+  MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */
+  unsigned me_dp_reserve_len;
+  /* PNL of pages that became unused in a write txn */
+  MDBX_PNL me_retired_pages;
+
+  /* write-txn lock */
+#if MDBX_LOCKING > 0
+  mdbx_ipclock_t *me_wlock;
+#endif /* MDBX_LOCKING > 0 */
+
+#if defined(_WIN32) || defined(_WIN64)
+  MDBX_srwlock me_remap_guard;
+  /* Workaround for LockFileEx and WriteFile multithread bug */
+  CRITICAL_SECTION me_windowsbug_lock;
+#else
+  mdbx_fastmutex_t me_remap_guard;
+#endif
+
   struct {
 #if MDBX_LOCKING > 0
     mdbx_ipclock_t wlock;
@@ -1176,6 +1203,9 @@ struct MDBX_env {
     pgno_t readahead_anchor;
     MDBX_atomic_uint32_t meta_sync_txnid;
   } me_lckless_stub;
+
+  /* -------------------------------------------------------------- debugging */
+
 #if MDBX_DEBUG
   MDBX_assert_func *me_assert_func; /*  Callback for assertion failures */
 #endif
@@ -1185,26 +1215,6 @@ struct MDBX_env {
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
   pgno_t me_poison_edge;
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
-  MDBX_env *me_lcklist_next;
-
-  /* struct me_dbgeo used for accepting db-geo params from user for the new
-   * database creation, i.e. when mdbx_env_set_geometry() was called before
-   * mdbx_env_open(). */
-  struct {
-    size_t lower;  /* minimal size of datafile */
-    size_t upper;  /* maximal size of datafile */
-    size_t now;    /* current size of datafile */
-    size_t grow;   /* step to grow datafile */
-    size_t shrink; /* threshold to shrink datafile */
-  } me_dbgeo;
-
-#if defined(_WIN32) || defined(_WIN64)
-  MDBX_srwlock me_remap_guard;
-  /* Workaround for LockFileEx and WriteFile multithread bug */
-  CRITICAL_SECTION me_windowsbug_lock;
-#else
-  mdbx_fastmutex_t me_remap_guard;
-#endif
 };
 
 #ifndef __cplusplus
