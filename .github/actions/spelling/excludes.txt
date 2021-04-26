@@ -1,7 +1,10 @@
-^\.github/actions/spelling/
-^\.github/FUNDING\.yml
-^\.travis\.yml$
 \.def$
+^AUTHORS$
+^\.github/FUNDING\.yml$
+^\.github/actions/spelling/
+^\.github/workflows/ci\.yml$
+^\.github/workflows/coverity\.yml$
+^\.github/workflows/doxygen-github-pages\.yml$
+^\.gitignore$
+^\.travis\.yml$
 ^packages/buildroot/
-^\.gitignore
-^AUTHORS
