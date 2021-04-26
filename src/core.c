@@ -5109,9 +5109,6 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
   int rc = MDBX_SUCCESS;
   if (txn->mt_flags & MDBX_WRITEMAP) {
     MDBX_dpl *const dl = txn->tw.dirtylist;
-#ifndef MDBX_FAKE_SPILL_WRITEMAP
-#define MDBX_FAKE_SPILL_WRITEMAP 1
-#endif
     const unsigned span = dl->length - txn->tw.loose_count;
     txn->tw.dirtyroom += span;
     if (MDBX_FAKE_SPILL_WRITEMAP) {
