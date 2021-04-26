@@ -6649,6 +6649,7 @@ mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
   } while ((scan = scan->mt_parent) != nullptr &&
            (scan->mt_flags & MDBX_TXN_SPILLS) != 0);
   ret.err = MDBX_PROBLEM;
+  ret.page = NULL;
   return ret;
 }
 
@@ -18620,11 +18621,12 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
   if (unlikely(env->me_flags & MDBX_RDONLY))
     return MDBX_EACCESS;
 
-  if (unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
+  if ((env->me_flags & MDBX_ENV_ACTIVE) &&
+      unlikely(env->me_txn0->mt_owner == mdbx_thread_self()))
     return MDBX_BUSY;
 
-  const bool lock_needed = (env->me_map && env->me_txn0 &&
-                            env->me_txn0->mt_owner != mdbx_thread_self());
+  const bool lock_needed = (env->me_flags & MDBX_ENV_ACTIVE) &&
+                           env->me_txn0->mt_owner != mdbx_thread_self();
   bool should_unlock = false;
   if (lock_needed) {
     rc = mdbx_txn_lock(env, false);
@@ -20575,6 +20577,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
     key = &stub;
   }
 
+  next.outer.mc_signature = MDBX_MC_LIVE;
   rc = mdbx_cursor_get(&next.outer, key, data, move_op);
   if (unlikely(rc != MDBX_SUCCESS &&
                (rc != MDBX_NOTFOUND || !(next.outer.mc_flags & C_INITIALIZED))))
@@ -21288,7 +21291,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
-  const bool lock_needed = (env->me_map && env->me_txn0 &&
+  const bool lock_needed = ((env->me_flags & MDBX_ENV_ACTIVE) && env->me_txn0 &&
                             env->me_txn0->mt_owner != mdbx_thread_self());
   bool should_unlock = false;
   switch (option) {
@@ -21301,7 +21304,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_TOO_LARGE;
     if (atomic_store32(env->me_autosync_threshold,
                        bytes2pgno(env, (size_t)value + env->me_psize - 1),
-                       mo_Relaxed) != 0) {
+                       mo_Relaxed) != 0 &&
+        (env->me_flags & MDBX_ENV_ACTIVE)) {
       err = mdbx_env_sync_poll(env);
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
@@ -21317,7 +21321,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_TOO_LARGE;
     if (atomic_store64(env->me_autosync_period,
                        mdbx_osal_16dot16_to_monotime((uint32_t)value),
-                       mo_Relaxed) != 0) {
+                       mo_Relaxed) != 0 &&
+        (env->me_flags & MDBX_ENV_ACTIVE)) {
       err = mdbx_env_sync_poll(env);
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
