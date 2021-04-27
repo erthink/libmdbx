@@ -4194,12 +4194,11 @@ static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
     if (unlikely(dp->mp_pgno != dl->items[i].pgno))
       return false;
 
-    mdbx_tassert(txn, txn->tw.dirtylru > dl->items[i].lru);
-    if (unlikely(txn->tw.dirtylru <= dl->items[i].lru))
+    mdbx_tassert(txn, txn->tw.dirtylru >= dl->items[i].lru);
+    if (unlikely(txn->tw.dirtylru < dl->items[i].lru))
       return false;
 
     mdbx_tassert(txn, dp->mp_flags == P_LOOSE || IS_MODIFIABLE(txn, dp));
-    mdbx_tassert(txn, (dp->mp_flags & P_KEEP) == 0);
     if (dp->mp_flags == P_LOOSE) {
       loose += 1;
     } else if (unlikely(!IS_MODIFIABLE(txn, dp)))
@@ -4826,58 +4825,53 @@ static __inline int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
 }
 
 /* Set P_KEEP in dirty, non-overflow, non-sub pages watched by txn. */
-static void mdbx_cursor_keep(MDBX_cursor *mc) {
-  const unsigned mask = P_SUBP | P_LOOSE | P_KEEP | P_SPILLED;
-  if (mc->mc_flags & C_INITIALIZED) {
-    MDBX_cursor *m3 = mc;
-    for (;;) {
-      MDBX_page *mp = NULL;
-      for (unsigned j = 0; j < m3->mc_snum; j++) {
-        mp = m3->mc_pg[j];
-        if (IS_MODIFIABLE(mc->mc_txn, mp) && !(mp->mp_flags & mask))
-          mp->mp_flags |= P_KEEP;
-      }
-      if (!(mp && IS_LEAF(mp)))
-        break;
-      /* Proceed to mx if it is at a sub-database */
-      MDBX_xcursor *mx = m3->mc_xcursor;
-      if (!(mx && (mx->mx_cursor.mc_flags & C_INITIALIZED)))
-        break;
-      const unsigned nkeys = page_numkeys(mp);
-      unsigned ki = m3->mc_ki[m3->mc_top];
-      mdbx_cassert(mc, nkeys > 0 &&
-                           (ki < nkeys ||
-                            (ki == nkeys && (mx->mx_cursor.mc_flags & C_EOF))));
-      ki -= ki >= nkeys;
-      if (!(node_flags(page_node(mp, ki)) & F_SUBDATA))
-        break;
-      m3 = &mx->mx_cursor;
+static void mdbx_cursor_keep(MDBX_txn *txn, MDBX_cursor *mc) {
+  if (!(mc->mc_flags & C_INITIALIZED))
+    return;
+
+loop:;
+  const MDBX_page *mp = NULL;
+  for (unsigned i = 0; i < mc->mc_snum; i++) {
+    mp = mc->mc_pg[i];
+    if (IS_MODIFIABLE(txn, mp) && mp->mp_flags < P_SUBP) {
+      unsigned const n = mdbx_dpl_search(txn, mp->mp_pgno);
+      if (txn->tw.dirtylist->items[n].pgno == mp->mp_pgno)
+        txn->tw.dirtylist->items[n].lru = txn->tw.dirtylru;
     }
+  }
+  if (!(mp && IS_LEAF(mp)))
+    return;
+
+  /* Proceed to mx if it is at a sub-database */
+  MDBX_xcursor *mx = mc->mc_xcursor;
+  if (!(mx && (mx->mx_cursor.mc_flags & C_INITIALIZED)))
+    return;
+
+  const unsigned nkeys = page_numkeys(mp);
+  unsigned ki = mc->mc_ki[mc->mc_top];
+  mdbx_cassert(mc, nkeys > 0 &&
+                       (ki < nkeys ||
+                        (ki == nkeys && (mx->mx_cursor.mc_flags & C_EOF))));
+  ki -= ki >= nkeys;
+  if ((node_flags(page_node(mp, ki)) & F_SUBDATA)) {
+    mc = &mx->mx_cursor;
+    goto loop;
   }
 }
 
 static void mdbx_txn_keep(MDBX_txn *txn, MDBX_cursor *m0) {
   if (m0)
-    mdbx_cursor_keep(m0);
+    mdbx_cursor_keep(txn, m0);
 
-  for (unsigned i = FREE_DBI; i < txn->mt_numdbs; ++i)
-    if (txn->mt_dbistate[i] & DBI_DIRTY)
-      for (MDBX_cursor *mc = txn->tw.cursors[i]; mc; mc = mc->mc_next)
-        if (mc != m0)
-          mdbx_cursor_keep(mc);
-
-  /* Mark dirty root pages */
-  const unsigned mask = P_SUBP | P_LOOSE | P_KEEP | P_SPILLED;
-  for (unsigned i = 0; i < txn->mt_numdbs; i++) {
-    if (txn->mt_dbistate[i] & DBI_DIRTY) {
-      pgno_t pgno = txn->mt_dbs[i].md_root;
-      if (pgno == P_INVALID)
-        continue;
-      unsigned di = mdbx_dpl_exist(txn, pgno);
-      if (di) {
-        MDBX_page *dp = txn->tw.dirtylist->items[di].ptr;
-        if (!(dp->mp_flags & mask))
-          dp->mp_flags |= P_KEEP;
+  for (unsigned i = FREE_DBI; i < txn->mt_numdbs; ++i) {
+    const pgno_t pgno = txn->mt_dbs[i].md_root;
+    if ((txn->mt_dbistate[i] & DBI_DIRTY) && pgno != P_INVALID) {
+      unsigned const n = mdbx_dpl_search(txn, pgno);
+      if (likely(txn->tw.dirtylist->items[n].pgno == pgno)) {
+        txn->tw.dirtylist->items[n].lru = txn->tw.dirtylru;
+        for (MDBX_cursor *mc = txn->tw.cursors[i]; mc; mc = mc->mc_next)
+          if (mc != m0)
+            mdbx_cursor_keep(txn, mc);
       }
     }
   }
@@ -4890,18 +4884,20 @@ static void mdbx_txn_keep(MDBX_txn *txn, MDBX_cursor *m0) {
 static unsigned spill_prio(const MDBX_txn *txn, const unsigned i,
                            const unsigned lru_min, const unsigned reciprocal) {
   MDBX_dpl *const dl = txn->tw.dirtylist;
-  const pgno_t pgno = dl->items[i].pgno;
-  MDBX_page *const dp = dl->items[i].ptr;
   const unsigned lru = dl->items[i].lru;
   const unsigned npages = dpl_npages(dl, i);
-  if (dp->mp_flags & (P_LOOSE | P_KEEP | P_SPILLED)) {
+  const pgno_t pgno = dl->items[i].pgno;
+  if (lru == txn->tw.dirtylru) {
+    mdbx_debug("skip %s %u page %" PRIaPGNO, "keep", npages, pgno);
+    return 256;
+  }
+
+  MDBX_page *const dp = dl->items[i].ptr;
+  if (dp->mp_flags & (P_LOOSE | P_SPILLED)) {
     mdbx_debug("skip %s %u page %" PRIaPGNO,
                (dp->mp_flags & P_LOOSE)
                    ? "loose"
-                   : (dp->mp_flags & P_LOOSE)
-                         ? "loose"
-                         : (dp->mp_flags & P_SPILLED) ? "parent-spilled"
-                                                      : "keep",
+                   : (dp->mp_flags & P_LOOSE) ? "loose" : "parent-spilled",
                npages, pgno);
     return 256;
   }
@@ -5296,19 +5292,11 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
         continue;
       }
     }
-    if (unlikely(prio > 255 && (dp->mp_flags & P_KEEP)))
-      /* Reset any dirty pages we kept that page_flush didn't see */
-      dp->mp_flags -= P_KEEP;
     dl->items[++w] = dl->items[r];
   }
 
-  while (r <= dl->length) {
-    MDBX_page *const dp = dl->items[r].ptr;
-    if (unlikely(dp->mp_flags & P_KEEP))
-      /* Reset any dirty pages we kept that page_flush didn't see */
-      dp->mp_flags -= P_KEEP;
+  while (r <= dl->length)
     dl->items[++w] = dl->items[r++];
-  }
   mdbx_tassert(txn, r - 1 - w == spilled);
   if (unlikely(spilled == 0)) {
     mdbx_tassert(txn, ctx.iov_items == 0 && rc == MDBX_SUCCESS);
