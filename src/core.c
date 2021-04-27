@@ -5326,7 +5326,10 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
     if (mc->mc_dbi > MAIN_DBI)
       need += txn->mt_dbs[MAIN_DBI].md_depth + 3;
   }
-  /* 4) Factor the key+data which to be put in */
+  /* 4) Double the page chain estimation
+   * for extensively splitting, rebalance and merging */
+  need += need;
+  /* 5) Factor the key+data which to be put in */
   need += bytes2pgno(txn->mt_env, node_size(key, data)) + 1;
   return mdbx_txn_spill(txn, mc, need);
 }
