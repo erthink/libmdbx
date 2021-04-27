@@ -98,6 +98,14 @@
 #error MDBX_ENABLE_REFUND must be defined as 0 or 1
 #endif /* MDBX_ENABLE_REFUND */
 
+/** Controls gathering statistics for page operations. */
+#ifndef MDBX_ENABLE_PGOP_STAT
+#define MDBX_ENABLE_PGOP_STAT 1
+#endif
+#if !(MDBX_ENABLE_PGOP_STAT == 0 || MDBX_ENABLE_PGOP_STAT == 1)
+#error MDBX_ENABLE_PGOP_STAT must be defined as 0 or 1
+#endif /* MDBX_ENABLE_PGOP_STAT */
+
 /** Controls use of POSIX madvise() hints and friends. */
 #ifndef MDBX_ENABLE_MADVISE
 #define MDBX_ENABLE_MADVISE 1

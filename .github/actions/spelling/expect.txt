@@ -1221,6 +1221,7 @@ PGL
 pglist
 pgno
 pgnumber
+pgop
 pgr
 pgsize
 pgstate

@@ -331,8 +331,13 @@ atomic_store64(MDBX_atomic_uint64_t *p, const uint64_t value,
   return value;
 }
 
-static __maybe_unused __always_inline uint64_t
-atomic_load64(const MDBX_atomic_uint64_t *p, enum MDBX_memory_order order) {
+static __maybe_unused
+#if MDBX_64BIT_ATOMIC
+    __always_inline
+#endif /* MDBX_64BIT_ATOMIC */
+        uint64_t
+        atomic_load64(const MDBX_atomic_uint64_t *p,
+                      enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint64_t) == 8);
 #if MDBX_64BIT_ATOMIC
 #ifdef MDBX_HAVE_C11ATOMICS
@@ -376,10 +381,10 @@ atomic_load64(const MDBX_atomic_uint64_t *p, enum MDBX_memory_order order) {
  * recognizable, and it will reflect any byte order mismatches. */
 #define MDBX_MAGIC UINT64_C(/* 56-bit prime */ 0x59659DBDEF4C11)
 
-/* The version number for a database's datafile format. */
+/* FROZEN: The version number for a database's datafile format. */
 #define MDBX_DATA_VERSION 2
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION 3
+#define MDBX_LOCK_VERSION 4
 
 /* handle for the DB used to track free pages. */
 #define FREE_DBI 0
@@ -571,6 +576,23 @@ typedef struct MDBX_page {
 
 #pragma pack(pop)
 
+#if MDBX_ENABLE_PGOP_STAT
+/* Statistics of page operations overall of all (running, completed and aborted)
+ * transactions */
+typedef struct {
+  MDBX_atomic_uint64_t newly;   /* Quantity of a new pages added */
+  MDBX_atomic_uint64_t cow;     /* Quantity of pages copied for update */
+  MDBX_atomic_uint64_t clone;   /* Quantity of parent's dirty pages clones
+                                   for nested transactions */
+  MDBX_atomic_uint64_t split;   /* Page splits */
+  MDBX_atomic_uint64_t merge;   /* Page merges */
+  MDBX_atomic_uint64_t spill;   /* Quantity of spilled dirty pages */
+  MDBX_atomic_uint64_t unspill; /* Quantity of unspilled/reloaded pages */
+  MDBX_atomic_uint64_t
+      wops; /* Number of explicit write operations (not a pages) to a disk */
+} MDBX_pgop_stat_t;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+
 #if MDBX_LOCKING == MDBX_LOCKING_WIN32FILES
 #define MDBX_CLOCK_SIGN UINT32_C(0xF10C)
 typedef void mdbx_ipclock_t;
@@ -699,6 +721,14 @@ typedef struct MDBX_lockinfo {
 
   /* Marker to distinguish uniqueness of DB/CLK. */
   MDBX_atomic_uint64_t mti_bait_uniqueness;
+
+  alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
+
+#if MDBX_ENABLE_PGOP_STAT
+      /* Statistics of costly ops of all (running, completed and aborted)
+       * transactions */
+      MDBX_pgop_stat_t mti_pgop_stat;
+#endif /* MDBX_ENABLE_PGOP_STAT*/
 
   alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
 
@@ -1134,6 +1164,9 @@ struct MDBX_env {
   atomic_pgno_t *me_discarded_tail;
   pgno_t *me_readahead_anchor;
   MDBX_atomic_uint32_t *me_meta_sync_txnid;
+#if MDBX_ENABLE_PGOP_STAT
+  MDBX_pgop_stat_t *me_pgop_stat;
+#endif                            /* MDBX_ENABLE_PGOP_STAT*/
   MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
   struct {
     unsigned dp_reserve_limit;
@@ -1202,6 +1235,9 @@ struct MDBX_env {
     atomic_pgno_t discarded_tail;
     pgno_t readahead_anchor;
     MDBX_atomic_uint32_t meta_sync_txnid;
+#if MDBX_ENABLE_PGOP_STAT
+    MDBX_pgop_stat_t pgop_stat;
+#endif /* MDBX_ENABLE_PGOP_STAT*/
   } me_lckless_stub;
 
   /* -------------------------------------------------------------- debugging */
