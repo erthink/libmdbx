@@ -3533,6 +3533,8 @@ MDBX_debug_func *mdbx_debug_logger;
 static __must_check_result __inline int mdbx_page_retire(MDBX_cursor *mc,
                                                          MDBX_page *mp);
 
+static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp,
+                                               unsigned npages);
 struct page_result {
   MDBX_page *page;
   int err;
@@ -5130,32 +5132,23 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
     MDBX_dpl *const dl = txn->tw.dirtylist;
     const unsigned span = dl->length - txn->tw.loose_count;
     txn->tw.dirtyroom += span;
-    if (MDBX_FAKE_SPILL_WRITEMAP) {
-      txn->mt_env->me_unsynced_pages->weak += span;
-      dpl_clear(dl);
-      for (MDBX_page *loose = txn->tw.loose_pages; loose;
-           loose = loose->mp_next) {
-        rc = mdbx_dpl_append(txn, loose->mp_pgno, loose, 1);
+    unsigned r, w;
+    for (w = 0, r = 1; r <= dl->length; ++r) {
+      MDBX_page *dp = dl->items[r].ptr;
+      if (dp->mp_flags & P_LOOSE)
+        dl->items[++w] = dl->items[r];
+      else if (!MDBX_FAKE_SPILL_WRITEMAP) {
+        rc = iov_page(txn, &ctx, dp, dpl_npages(dl, r));
         mdbx_tassert(txn, rc == MDBX_SUCCESS);
       }
-      mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-    } else {
-      unsigned r, w;
-      for (w = 0, r = 1; r <= dl->length; ++r) {
-        MDBX_page *dp = dl->items[r].ptr;
-        if (dp->mp_flags & P_LOOSE)
-          dl->items[++w] = dl->items[r];
-        else {
-          rc = iov_page(txn, &ctx, dp, dpl_npages(dl, r));
-          mdbx_tassert(txn, rc == MDBX_SUCCESS);
-        }
-      }
+    }
 
-      mdbx_tassert(txn, span == r - 1 - w && w == txn->tw.loose_count);
-      dl->sorted = (dl->sorted == dl->length) ? w : 0;
-      dpl_setlen(dl, w);
-      mdbx_tassert(txn, mdbx_dirtylist_check(txn));
+    mdbx_tassert(txn, span == r - 1 - w && w == txn->tw.loose_count);
+    dl->sorted = (dl->sorted == dl->length) ? w : 0;
+    dpl_setlen(dl, w);
+    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
 
+    if (!MDBX_FAKE_SPILL_WRITEMAP && ctx.flush_end > ctx.flush_begin) {
       MDBX_env *const env = txn->mt_env;
       rc = mdbx_msync(&env->me_dxb_mmap,
                       pgno_align2os_bytes(env, ctx.flush_begin),
@@ -14600,19 +14593,14 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
             if (unlikely(!np))
               return MDBX_ENOMEM;
 
-            /* Note - this page is already counted in parent's dirtyroom */
-            rc2 = mdbx_dpl_append(mc->mc_txn, pgno, np, ovpages);
-            if (unlikely(rc2 != MDBX_SUCCESS)) {
-              rc = rc2;
-              mdbx_dpage_free(env, np, ovpages);
-              goto fail;
-            }
+            memcpy(np, pgr.page, PAGEHDRSZ); /* Copy header of page */
+            rc2 = mdbx_page_dirty(mc->mc_txn, pgr.page = np, ovpages);
+            if (unlikely(rc2 != MDBX_SUCCESS))
+              return rc2;
 
 #if MDBX_ENABLE_PGOP_STAT
             safe64_inc(&mc->mc_txn->mt_env->me_pgop_stat->clone, ovpages);
-#endif                                       /* MDBX_ENABLE_PGOP_STAT */
-            memcpy(np, pgr.page, PAGEHDRSZ); /* Copy header of page */
-            pgr.page = np;
+#endif /* MDBX_ENABLE_PGOP_STAT */
             mdbx_cassert(mc, mdbx_dirtylist_check(mc->mc_txn));
           }
         }
@@ -14979,7 +14967,6 @@ new_sub:;
     /* should not happen, we deleted that item */
     rc = MDBX_PROBLEM;
   }
-fail:
   mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
   return rc;
 }
