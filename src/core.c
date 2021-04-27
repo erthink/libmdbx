@@ -1054,7 +1054,7 @@ static __always_inline void safe64_update(MDBX_atomic_uint64_t *p,
 }
 
 /* non-atomic increment with safety for reading a half-updated value */
-static
+static __maybe_unused
 #if MDBX_64BIT_ATOMIC
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
@@ -6044,9 +6044,13 @@ static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
                  data_page(meta)->mp_pgno);
     if (env->me_flags & MDBX_WRITEMAP)
       unaligned_poke_u64(4, meta->mm_datasync_sign, wipe);
-    else
+    else {
+#if MDBX_ENABLE_PGOP_STAT
+      safe64_inc(&env->me_pgop_stat->wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
       return mdbx_pwrite(env->me_lazy_fd, &wipe, sizeof(meta->mm_datasync_sign),
                          (uint8_t *)&meta->mm_datasync_sign - env->me_map);
+    }
   }
   return MDBX_SUCCESS;
 }
@@ -10623,6 +10627,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
                                      ? env->me_dsync_fd
                                      : env->me_lazy_fd;
+#if MDBX_ENABLE_PGOP_STAT
+    safe64_inc(&env->me_pgop_stat->wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_pwrite(fd, pending, sizeof(MDBX_meta),
                      (uint8_t *)target - env->me_map);
     if (unlikely(rc != MDBX_SUCCESS)) {
@@ -11971,6 +11978,9 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta) {
     const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
                                      ? env->me_dsync_fd
                                      : env->me_lazy_fd;
+#if MDBX_ENABLE_PGOP_STAT
+    safe64_inc(&env->me_pgop_stat->wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_pwrite(fd, page, env->me_psize, pgno2bytes(env, target_meta));
     if (rc == MDBX_SUCCESS && fd == env->me_lazy_fd)
       rc = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
