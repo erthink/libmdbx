@@ -14185,7 +14185,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   MDBX_page *sub_root = NULL;
   MDBX_val xdata, *rdata, dkey, olddata;
   MDBX_db nested_dupdb;
-  int rc2;
+  int err;
   DKBUF_DEBUG;
 
   if (unlikely(mc == NULL || key == NULL || data == NULL))
@@ -14440,23 +14440,22 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
 
   /* Cursor is positioned, check for room in the dirty list */
   if (!nospill) {
+    rdata = data;
     if (unlikely(flags & MDBX_MULTIPLE)) {
       rdata = &xdata;
       xdata.iov_len = data->iov_len * dcount;
-    } else {
-      rdata = data;
     }
-    if (unlikely(rc2 = mdbx_cursor_spill(mc, key, rdata)))
-      return rc2;
+    if (unlikely(err = mdbx_cursor_spill(mc, key, rdata)))
+      return err;
   }
 
   if (unlikely(rc == MDBX_NO_ROOT)) {
     /* new database, write a root leaf page */
     mdbx_debug("%s", "allocating new root leaf page");
     if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
-      rc2 = mdbx_touch_dbi(mc);
-      if (unlikely(rc2 != MDBX_SUCCESS))
-        return rc2;
+      err = mdbx_touch_dbi(mc);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
     }
     struct page_result npr = mdbx_page_new(mc, P_LEAF, 1);
     if (unlikely(npr.err != MDBX_SUCCESS))
@@ -14486,9 +14485,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     mc->mc_flags |= C_INITIALIZED;
   } else {
     /* make sure all cursor pages are writable */
-    rc2 = mdbx_cursor_touch(mc);
-    if (unlikely(rc2))
-      return rc2;
+    err = mdbx_cursor_touch(mc);
+    if (unlikely(err))
+      return err;
   }
 
   bool insert_key, insert_data, do_sub = false;
@@ -14529,13 +14528,13 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           mc->mc_top--;
           dtop++;
         }
-        rc2 = MDBX_SUCCESS;
+        err = MDBX_SUCCESS;
         if (mc->mc_ki[mc->mc_top])
-          rc2 = mdbx_update_key(mc, key);
+          err = mdbx_update_key(mc, key);
         mdbx_cassert(mc, mc->mc_top + dtop < UINT16_MAX);
         mc->mc_top += (uint16_t)dtop;
-        if (unlikely(rc2 != MDBX_SUCCESS))
-          return rc2;
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
       }
 
       if (mdbx_audit_enabled()) {
@@ -14594,9 +14593,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
               return MDBX_ENOMEM;
 
             memcpy(np, pgr.page, PAGEHDRSZ); /* Copy header of page */
-            rc2 = mdbx_page_dirty(mc->mc_txn, pgr.page = np, ovpages);
-            if (unlikely(rc2 != MDBX_SUCCESS))
-              return rc2;
+            err = mdbx_page_dirty(mc->mc_txn, pgr.page = np, ovpages);
+            if (unlikely(err != MDBX_SUCCESS))
+              return err;
 
 #if MDBX_ENABLE_PGOP_STAT
             safe64_inc(&mc->mc_txn->mt_env->me_pgop_stat->clone, ovpages);
@@ -14618,8 +14617,8 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         return MDBX_SUCCESS;
       }
 
-      if ((rc2 = mdbx_page_retire(mc, pgr.page)) != MDBX_SUCCESS)
-        return rc2;
+      if ((err = mdbx_page_retire(mc, pgr.page)) != MDBX_SUCCESS)
+        return err;
     } else {
       olddata.iov_len = node_ds(node);
       olddata.iov_base = node_data(node);
@@ -14882,9 +14881,9 @@ new_sub:;
                 SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE);
       if ((flags & MDBX_CURRENT) == 0) {
         xflags -= MDBX_CURRENT;
-        rc2 = mdbx_xcursor_init1(mc, node, mc->mc_pg[mc->mc_top]);
-        if (unlikely(rc2 != MDBX_SUCCESS))
-          return rc2;
+        err = mdbx_xcursor_init1(mc, node, mc->mc_pg[mc->mc_top]);
+        if (unlikely(err != MDBX_SUCCESS))
+          return err;
       }
       if (sub_root)
         mc->mc_xcursor->mx_cursor.mc_pg[0] = sub_root;
@@ -14911,9 +14910,9 @@ new_sub:;
             continue;
           if (m2->mc_pg[i] == mp) {
             if (m2->mc_ki[i] == mc->mc_ki[i]) {
-              rc2 = mdbx_xcursor_init2(m2, mx, dupdata_flag);
-              if (unlikely(rc2 != MDBX_SUCCESS))
-                return rc2;
+              err = mdbx_xcursor_init2(m2, mx, dupdata_flag);
+              if (unlikely(err != MDBX_SUCCESS))
+                return err;
             } else if (!insert_key && m2->mc_ki[i] < nkeys) {
               XCURSOR_REFRESH(m2, mp, m2->mc_ki[i]);
             }
