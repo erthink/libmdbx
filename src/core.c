@@ -8479,8 +8479,16 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
              pnl_bytes, backlog_size(txn), linear4list, backlog4cow,
              backlog4rebalance);
 
+  MDBX_val fake_key, fake_val;
+  fake_key.iov_base = fake_val.iov_base = nullptr;
+  fake_key.iov_len = sizeof(txnid_t);
+  fake_val.iov_len = pnl_bytes;
+  int err = mdbx_cursor_spill(gc_cursor, &fake_key, &fake_val);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
   gc_cursor->mc_flags &= ~C_RECLAIMING;
-  int err = mdbx_cursor_touch(gc_cursor);
+  err = mdbx_cursor_touch(gc_cursor);
   mdbx_trace("== after-touch, backlog %u, err %d", backlog_size(txn), err);
 
   if (linear4list > 1 && err == MDBX_SUCCESS) {
