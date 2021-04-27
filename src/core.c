@@ -6612,7 +6612,7 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
  * it back and make it dirty/writable again. */
 static struct page_result __must_check_result
 mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
-  mdbx_notice("unspill page %" PRIaPGNO, mp->mp_pgno);
+  mdbx_verbose("unspill page %" PRIaPGNO, mp->mp_pgno);
   mdbx_tassert(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0);
   mdbx_tassert(txn, IS_SPILLED(txn, mp));
   const pgno_t spilled_pgno = mp->mp_pgno << 1;
