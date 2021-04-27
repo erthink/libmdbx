@@ -10698,6 +10698,28 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   mdbx_assert(env, bytes2pgno(env, pagesize + pagesize) == 2);
 
   const pgno_t max_pgno = bytes2pgno(env, MAX_MAPSIZE);
+  if (!env->me_options.flags.non_auto.dp_limit) {
+    /* auto-setup dp_limit by "The42" ;-) */
+    intptr_t total_ram_pages, avail_ram_pages;
+    int err = mdbx_get_sysraminfo(nullptr, &total_ram_pages, &avail_ram_pages);
+    if (unlikely(err != MDBX_SUCCESS))
+      mdbx_error("mdbx_get_sysraminfo(), rc %d", err);
+    else {
+      size_t reasonable_dpl_limit =
+          (size_t)(total_ram_pages + avail_ram_pages) / 42;
+      if (pagesize > env->me_os_psize)
+        reasonable_dpl_limit /= pagesize / env->me_os_psize;
+      else if (pagesize < env->me_os_psize)
+        reasonable_dpl_limit *= env->me_os_psize / pagesize;
+      reasonable_dpl_limit = (reasonable_dpl_limit < MDBX_PGL_LIMIT)
+                                 ? reasonable_dpl_limit
+                                 : MDBX_PGL_LIMIT;
+      reasonable_dpl_limit = (reasonable_dpl_limit > CURSOR_STACK * 4)
+                                 ? reasonable_dpl_limit
+                                 : CURSOR_STACK * 4;
+      env->me_options.dp_limit = (unsigned)reasonable_dpl_limit;
+    }
+  }
   if (env->me_options.dp_limit > max_pgno - NUM_METAS)
     env->me_options.dp_limit = max_pgno - NUM_METAS;
   if (env->me_options.dp_initial > env->me_options.dp_limit)
@@ -21471,12 +21493,15 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       if (option == MDBX_opt_txn_dp_initial &&
           env->me_options.dp_initial != value32) {
         env->me_options.dp_initial = value32;
-        if (env->me_options.dp_limit < value32)
+        if (env->me_options.dp_limit < value32) {
           env->me_options.dp_limit = value32;
+          env->me_options.flags.non_auto.dp_limit = 1;
+        }
       }
       if (option == MDBX_opt_txn_dp_limit &&
           env->me_options.dp_limit != value32) {
         env->me_options.dp_limit = value32;
+        env->me_options.flags.non_auto.dp_limit = 1;
         if (env->me_options.dp_initial > value32)
           env->me_options.dp_initial = value32;
       }
