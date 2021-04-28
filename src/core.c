@@ -4881,61 +4881,6 @@ static void mdbx_txn_keep(MDBX_txn *txn, MDBX_cursor *m0) {
   }
 }
 
-/* Returns the spilling priority (0..255) for a dirty page:
- *      0 = should be spilled;
- *    ...
- *  > 255 = must not be spilled. */
-static unsigned spill_prio(const MDBX_txn *txn, const unsigned i,
-                           const unsigned lru_min, const unsigned reciprocal) {
-  MDBX_dpl *const dl = txn->tw.dirtylist;
-  const unsigned lru = dl->items[i].lru;
-  const unsigned npages = dpl_npages(dl, i);
-  const pgno_t pgno = dl->items[i].pgno;
-  if (lru == txn->tw.dirtylru) {
-    mdbx_debug("skip %s %u page %" PRIaPGNO, "keep", npages, pgno);
-    return 256;
-  }
-
-  MDBX_page *const dp = dl->items[i].ptr;
-  if (dp->mp_flags & (P_LOOSE | P_SPILLED)) {
-    mdbx_debug("skip %s %u page %" PRIaPGNO,
-               (dp->mp_flags & P_LOOSE)
-                   ? "loose"
-                   : (dp->mp_flags & P_LOOSE) ? "loose" : "parent-spilled",
-               npages, pgno);
-    return 256;
-  }
-
-  /* Can't spill twice,
-   * make sure it's not already in a parent's spill list(s). */
-  MDBX_txn *parent = txn->mt_parent;
-  if (parent && (parent->mt_flags & MDBX_TXN_SPILLS)) {
-    do
-      if (parent->tw.spill_pages &&
-          mdbx_pnl_intersect(parent->tw.spill_pages, pgno << 1, npages << 1)) {
-        mdbx_debug("skip-2 parent-spilled %u page %" PRIaPGNO, npages, pgno);
-        dp->mp_flags |= P_SPILLED;
-        return 256;
-      }
-    while ((parent = parent->mt_parent) != nullptr);
-  }
-
-  unsigned prio = 1 + ((lru - lru_min) * reciprocal >> 8);
-  mdbx_tassert(txn, prio > 0 && prio < 256);
-  if (npages > 1) {
-    /* makes a large/overflow pages be likely to spill */
-    uint32_t x = npages | npages >> 16;
-    x |= x >> 8;
-    x |= x >> 4;
-    x |= x >> 2;
-    x |= x >> 1;
-    prio = (255 - prio) * log2n_powerof2(x + 1) + 157;
-    prio = (prio < 256) ? 255 - prio : 0;
-    mdbx_tassert(txn, prio < 256);
-  }
-  return prio;
-}
-
 struct mdbx_iov_ctx {
   unsigned iov_items;
   size_t iov_bytes;
@@ -5069,6 +5014,62 @@ static int spill_page(MDBX_txn *txn, struct mdbx_iov_ctx *ctx, MDBX_page *dp,
 #endif /* MDBX_ENABLE_PGOP_STAT */
   }
   return err;
+}
+
+/* Returns the spilling priority (0..255) for a dirty page:
+ *      0 = should be spilled;
+ *    ...
+ *  > 255 = must not be spilled. */
+static unsigned spill_prio(const MDBX_txn *txn, const unsigned i,
+                           const unsigned lru_min, const unsigned reciprocal) {
+  MDBX_dpl *const dl = txn->tw.dirtylist;
+  const unsigned lru = dl->items[i].lru;
+  const unsigned npages = dpl_npages(dl, i);
+  const pgno_t pgno = dl->items[i].pgno;
+  if (lru == txn->tw.dirtylru) {
+    mdbx_debug("skip %s %u page %" PRIaPGNO, "keep", npages, pgno);
+    return 256;
+  }
+
+  MDBX_page *const dp = dl->items[i].ptr;
+  if (dp->mp_flags & (P_LOOSE | P_SPILLED)) {
+    mdbx_debug("skip %s %u page %" PRIaPGNO,
+               (dp->mp_flags & P_LOOSE)
+                   ? "loose"
+                   : (dp->mp_flags & P_LOOSE) ? "loose" : "parent-spilled",
+               npages, pgno);
+    return 256;
+  }
+
+  /* Can't spill twice,
+   * make sure it's not already in a parent's spill list(s). */
+  MDBX_txn *parent = txn->mt_parent;
+  if (parent && (parent->mt_flags & MDBX_TXN_SPILLS)) {
+    do
+      if (parent->tw.spill_pages &&
+          mdbx_pnl_intersect(parent->tw.spill_pages, pgno << 1, npages << 1)) {
+        mdbx_debug("skip-2 parent-spilled %u page %" PRIaPGNO, npages, pgno);
+        dp->mp_flags |= P_SPILLED;
+        return 256;
+      }
+    while ((parent = parent->mt_parent) != nullptr);
+  }
+
+  unsigned prio = 1 + ((lru - lru_min) * reciprocal >> 8);
+  mdbx_tassert(txn, prio > 0 && prio < 256);
+  if (likely(npages == 1))
+    return prio;
+
+  /* make a large/overflow pages be likely to spill */
+  uint32_t x = npages | npages >> 1;
+  x |= x >> 2;
+  x |= x >> 4;
+  x |= x >> 8;
+  x |= x >> 16;
+  x = (255 - prio) * log2n_powerof2(x + 1) + /* golden ratio factor */ 157;
+  x = (x < 256) ? 255 - x : 0;
+  mdbx_tassert(txn, x < 256 && x < prio);
+  return prio = x;
 }
 
 /* Spill pages from the dirty list back to disk.
@@ -5216,6 +5217,9 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     lru_max = (lru_max > dl->items[i].lru) ? lru_max : dl->items[i].lru;
   }
 
+  mdbx_verbose("lru-head %u, lru-min %u, lru-max %u", txn->tw.dirtylru, lru_min,
+               lru_max);
+
   /* half of 8-bit radix-sort */
   unsigned radix_counters[256], spillable = 0, spilled = 0;
   memset(&radix_counters, 0, sizeof(radix_counters));
@@ -5321,6 +5325,14 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     mdbx_iov_done(txn, &ctx);
   } else {
     mdbx_tassert(txn, ctx.iov_items == 0 && rc == MDBX_SUCCESS);
+    for (unsigned i = 1; i <= dl->length; ++i) {
+      MDBX_page *dp = dl->items[i].ptr;
+      mdbx_notice(
+          "dirtylist[%u]: pgno %u, npages %u, flags 0x%04X, lru %u, prio %u", i,
+          dp->mp_pgno, dpl_npages(dl, i), dp->mp_flags,
+          txn->tw.dirtylru - dl->items[i].lru,
+          spill_prio(txn, i, lru_min, reciprocal));
+    }
   }
 
   return likely(txn->tw.loose_count + txn->tw.dirtyroom > need / 2)
