@@ -5098,7 +5098,8 @@ static int spill_page(MDBX_txn *txn, struct mdbx_iov_ctx *ctx, MDBX_page *dp,
  * parent txn. That would alter the parent txns' data even though
  * the child hasn't committed yet, and we'd have no way to undo it if
  * the child aborted. */
-static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
+static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
+                          const unsigned need) {
 #ifndef MDBX_DEBUG_SPILLING
   if (likely(txn->tw.dirtyroom >= need))
     return MDBX_SUCCESS;
@@ -5293,26 +5294,28 @@ static int mdbx_txn_spill(MDBX_txn *txn, MDBX_cursor *m0, unsigned need) {
   while (r <= dl->length)
     dl->items[++w] = dl->items[r++];
   mdbx_tassert(txn, r - 1 - w == spilled);
-  if (unlikely(spilled == 0)) {
+
+  if (likely(spilled > 0)) {
+    dl->sorted = dpl_setlen(dl, w);
+    txn->tw.dirtyroom += spilled;
+    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
+
+    if (ctx.iov_items)
+      rc = mdbx_iov_write(txn, &ctx);
+
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+
+    mdbx_pnl_sort(txn->tw.spill_pages);
+    txn->mt_flags |= MDBX_TXN_SPILLS;
+    mdbx_notice("spilled %u dirty-entries, now have %u dirty-room", spilled,
+                txn->tw.dirtyroom);
+    mdbx_iov_done(txn, &ctx);
+  } else {
     mdbx_tassert(txn, ctx.iov_items == 0 && rc == MDBX_SUCCESS);
-    return MDBX_SUCCESS;
   }
-  dl->sorted = dpl_setlen(dl, w);
-  txn->tw.dirtyroom += spilled;
-  mdbx_tassert(txn, mdbx_dirtylist_check(txn));
 
-  if (ctx.iov_items)
-    rc = mdbx_iov_write(txn, &ctx);
-
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
-
-  mdbx_pnl_sort(txn->tw.spill_pages);
-  txn->mt_flags |= MDBX_TXN_SPILLS;
-  mdbx_notice("spilled %u dirty-entries, now have %u dirty-room", spilled,
-              txn->tw.dirtyroom);
-  mdbx_iov_done(txn, &ctx);
-  return MDBX_SUCCESS;
+  return likely(txn->tw.dirtyroom > need / 2) ? MDBX_SUCCESS : MDBX_TXN_FULL;
 }
 
 static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
