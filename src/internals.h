@@ -1226,6 +1226,13 @@ struct MDBX_env {
   pgno_t me_poison_edge;
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
+#ifndef MDBX_DEBUG_SPILLING
+#define MDBX_DEBUG_SPILLING 0
+#endif
+#if MDBX_DEBUG_SPILLING == 2
+  unsigned debug_dirtied_est, debug_dirtied_act;
+#endif /* MDBX_DEBUG_SPILLING */
+
   /* ------------------------------------------------- stub for lck-less mode */
   alignas(MDBX_CACHELINE_SIZE) uint64_t
       me_lckless_stub[((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &

@@ -5101,12 +5101,13 @@ static unsigned spill_prio(const MDBX_txn *txn, const unsigned i,
  * the child aborted. */
 static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
                           const unsigned need) {
-#ifndef MDBX_DEBUG_SPILLING
+#if MDBX_DEBUG_SPILLING != 1
+  /* production mode */
   if (likely(txn->tw.dirtyroom + txn->tw.loose_count >= need))
     return MDBX_SUCCESS;
   unsigned wanna_spill = need - txn->tw.dirtyroom;
 #else
-  /* spill at least one page if defined MDBX_DEBUG_SPILLING */
+  /* debug mode: spill at least one page if MDBX_DEBUG_SPILLING == 1 */
   unsigned wanna_spill =
       (need > txn->tw.dirtyroom) ? need - txn->tw.dirtyroom : 1;
 #endif /* MDBX_DEBUG_SPILLING */
@@ -5335,6 +5336,20 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     }
   }
 
+#if MDBX_DEBUG_SPILLING == 2
+  if (txn->tw.loose_count + txn->tw.dirtyroom <= need / 2 + 1)
+    mdbx_error("dirty-list length: before %u, after %u, parent %i, loose %u; "
+               "needed %u, spillable %u; "
+               "spilled %u dirty-entries, now have %u dirty-room",
+               dl->length + spilled, dl->length,
+               (txn->mt_parent && txn->mt_parent->tw.dirtylist)
+                   ? (int)txn->mt_parent->tw.dirtylist->length
+                   : -1,
+               txn->tw.loose_count, need, spillable, spilled,
+               txn->tw.dirtyroom);
+  mdbx_ensure(txn->mt_env, txn->tw.loose_count + txn->tw.dirtyroom > need / 2);
+#endif /* MDBX_DEBUG_SPILLING */
+
   return likely(txn->tw.loose_count + txn->tw.dirtyroom > need / 2)
              ? MDBX_SUCCESS
              : MDBX_TXN_FULL;
@@ -5353,11 +5368,21 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
     if (mc->mc_dbi > MAIN_DBI)
       need += txn->mt_dbs[MAIN_DBI].md_depth + 3;
   }
+#if MDBX_DEBUG_SPILLING != 2
+  /* production mode */
   /* 4) Double the page chain estimation
    * for extensively splitting, rebalance and merging */
   need += need;
   /* 5) Factor the key+data which to be put in */
   need += bytes2pgno(txn->mt_env, node_size(key, data)) + 1;
+#else
+  /* debug mode */
+  (void)key;
+  (void)data;
+  mc->mc_txn->mt_env->debug_dirtied_est = ++need;
+  mc->mc_txn->mt_env->debug_dirtied_act = 0;
+#endif /* MDBX_DEBUG_SPILLING == 2 */
+
   return mdbx_txn_spill(txn, mc, need);
 }
 
@@ -5653,6 +5678,13 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
 /* Add a page to the txn's dirty list */
 static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp,
                                                unsigned npages) {
+#if MDBX_DEBUG_SPILLING == 2
+  txn->mt_env->debug_dirtied_act += 1;
+  mdbx_ensure(txn->mt_env,
+              txn->mt_env->debug_dirtied_act < txn->mt_env->debug_dirtied_est);
+  mdbx_ensure(txn->mt_env, txn->tw.dirtyroom + txn->tw.loose_count > 0);
+#endif /* MDBX_DEBUG_SPILLING == 2 */
+
   int rc;
   mp->mp_txnid = txn->mt_front;
   if (unlikely(txn->tw.dirtyroom == 0)) {
