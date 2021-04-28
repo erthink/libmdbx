@@ -4837,7 +4837,7 @@ loop:;
   const MDBX_page *mp = NULL;
   for (unsigned i = 0; i < mc->mc_snum; i++) {
     mp = mc->mc_pg[i];
-    if (IS_MODIFIABLE(txn, mp) && mp->mp_flags < P_SUBP) {
+    if (IS_MODIFIABLE(txn, mp)) {
       unsigned const n = mdbx_dpl_search(txn, mp->mp_pgno);
       if (txn->tw.dirtylist->items[n].pgno == mp->mp_pgno)
         txn->tw.dirtylist->items[n].lru = txn->tw.dirtylru;
@@ -5229,11 +5229,11 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   }
 
   if (likely(spillable > 0)) {
-    unsigned prio2spill = 0, prio2adjacent = 127, amount = radix_counters[0];
+    unsigned prio2spill = 0, prio2adjacent = 128, amount = radix_counters[0];
     for (unsigned i = 1; i < 256; i++) {
       if (amount < wanna_spill) {
         prio2spill = i;
-        prio2adjacent = i + (255 - i) / 2;
+        prio2adjacent = i + (257 - i) / 2;
         amount += radix_counters[i];
       } else if (amount + amount < spillable + wanna_spill
                  /* РАВНОЗНАЧНО: amount - wanna_spill < spillable - amount */) {
@@ -5242,6 +5242,11 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
       } else
         break;
     }
+
+    mdbx_verbose("prio2spill %u, prio2adjacent %u, amount %u, spillable %u, "
+                 "wanna_spill %u",
+                 prio2spill, prio2adjacent, amount, spillable, wanna_spill);
+    mdbx_tassert(txn, prio2spill < prio2adjacent && prio2adjacent <= 256);
 
     unsigned prev_prio = 256;
     unsigned r, w, prio;
@@ -5292,6 +5297,8 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
       }
       dl->items[++w] = dl->items[r];
     }
+
+    mdbx_tassert(txn, spillable == 0 || spilled > 0);
 
     while (r <= dl->length)
       dl->items[++w] = dl->items[r++];
