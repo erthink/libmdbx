@@ -474,8 +474,8 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
 
   int rc = MDBX_SUCCESS;
   struct stat lck_info;
-  if (env->me_lfd != INVALID_HANDLE_VALUE && !inprocess_neighbor &&
-      env->me_lck &&
+  MDBX_lockinfo *lck = env->me_lck_mmap.lck;
+  if (env->me_lfd != INVALID_HANDLE_VALUE && !inprocess_neighbor && lck &&
       /* try get exclusive access */
       lck_op(env->me_lfd, op_setlk, F_WRLCK, 0, OFF_T_MAX) == 0 &&
       /* if LCK was not removed */
@@ -489,14 +489,14 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
     if (env->me_sysv_ipc.semid != -1)
       rc = semctl(env->me_sysv_ipc.semid, 2, IPC_RMID) ? errno : 0;
 #else
-    rc = mdbx_ipclock_destroy(&env->me_lck->mti_rlock);
+    rc = mdbx_ipclock_destroy(&lck->mti_rlock);
     if (rc == 0)
-      rc = mdbx_ipclock_destroy(&env->me_lck->mti_wlock);
+      rc = mdbx_ipclock_destroy(&lck->mti_wlock);
 #endif /* MDBX_LOCKING */
 
     mdbx_assert(env, rc == 0);
     if (rc == 0) {
-      const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages.weak == 0;
+      const bool synced = lck->mti_unsynced_pages.weak == 0;
       mdbx_munmap(&env->me_lck_mmap);
       if (synced)
         rc = ftruncate(env->me_lfd, 0) ? errno : 0;
@@ -617,9 +617,9 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
   /* don't initialize semaphores twice */
   (void)inprocess_neighbor;
   if (global_uniqueness_flag == MDBX_RESULT_TRUE) {
-    if (sem_init(&env->me_lck->mti_rlock, true, 1))
+    if (sem_init(&env->me_lck_mmap.lck->mti_rlock, true, 1))
       return errno;
-    if (sem_init(&env->me_lck->mti_wlock, true, 1))
+    if (sem_init(&env->me_lck_mmap.lck->mti_wlock, true, 1))
       return errno;
   }
   return MDBX_SUCCESS;
@@ -688,10 +688,10 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
   if (rc && rc != ENOTSUP)
     goto bailout;
 
-  rc = pthread_mutex_init(&env->me_lck->mti_rlock, &ma);
+  rc = pthread_mutex_init(&env->me_lck_mmap.lck->mti_rlock, &ma);
   if (rc)
     goto bailout;
-  rc = pthread_mutex_init(&env->me_lck->mti_wlock, &ma);
+  rc = pthread_mutex_init(&env->me_lck_mmap.lck->mti_wlock, &ma);
 
 bailout:
   pthread_mutexattr_destroy(&ma);
@@ -708,7 +708,7 @@ static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
   if (err == EOWNERDEAD) {
     /* We own the mutex. Clean up after dead previous owner. */
 
-    const bool rlocked = (env->me_lck && ipc == &env->me_lck->mti_rlock);
+    const bool rlocked = ipc == &env->me_lck->mti_rlock;
     rc = MDBX_SUCCESS;
     if (!rlocked) {
       if (unlikely(env->me_txn)) {
@@ -785,7 +785,7 @@ static int mdbx_ipclock_lock(MDBX_env *env, mdbx_ipclock_t *ipc,
   } else if (sem_wait(ipc))
     rc = errno;
 #elif MDBX_LOCKING == MDBX_LOCKING_SYSV
-  struct sembuf op = {.sem_num = (ipc != env->me_wlock),
+  struct sembuf op = {.sem_num = (ipc != &env->me_lck->mti_wlock),
                       .sem_op = -1,
                       .sem_flg = dont_wait ? IPC_NOWAIT | SEM_UNDO : SEM_UNDO};
   int rc;
@@ -818,8 +818,9 @@ static int mdbx_ipclock_unlock(MDBX_env *env, mdbx_ipclock_t *ipc) {
   if (unlikely(*ipc != (pid_t)env->me_pid))
     return EPERM;
   *ipc = 0;
-  struct sembuf op = {
-      .sem_num = (ipc != env->me_wlock), .sem_op = 1, .sem_flg = SEM_UNDO};
+  struct sembuf op = {.sem_num = (ipc != &env->me_lck->mti_wlock),
+                      .sem_op = 1,
+                      .sem_flg = SEM_UNDO};
   int rc = semop(env->me_sysv_ipc.semid, &op, 1) ? errno : MDBX_SUCCESS;
 #else
 #error "FIXME"
@@ -847,14 +848,14 @@ MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
 int mdbx_txn_lock(MDBX_env *env, bool dont_wait) {
   mdbx_trace("%swait %s", dont_wait ? "dont-" : "", ">>");
   mdbx_jitter4testing(true);
-  int rc = mdbx_ipclock_lock(env, env->me_wlock, dont_wait);
+  int rc = mdbx_ipclock_lock(env, &env->me_lck->mti_wlock, dont_wait);
   mdbx_trace("<< rc %d", rc);
   return MDBX_IS_ERROR(rc) ? rc : MDBX_SUCCESS;
 }
 
 void mdbx_txn_unlock(MDBX_env *env) {
   mdbx_trace("%s", ">>");
-  int rc = mdbx_ipclock_unlock(env, env->me_wlock);
+  int rc = mdbx_ipclock_unlock(env, &env->me_lck->mti_wlock);
   mdbx_trace("<< rc %d", rc);
   if (unlikely(rc != MDBX_SUCCESS))
     mdbx_panic("%s() failed: err %d\n", __func__, rc);

@@ -262,11 +262,12 @@ MDBX_INTERNAL_FUNC int
 mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
-  if (env->me_lck) {
+  if (env->me_lck_mmap.lck) {
     /* Scan LCK for threads of the current process */
-    const MDBX_reader *const begin = env->me_lck->mti_readers;
+    const MDBX_reader *const begin = env->me_lck_mmap.lck->mti_readers;
     const MDBX_reader *const end =
-        begin + atomic_load32(&env->me_lck->mti_numreaders, mo_AcquireRelease);
+        begin +
+        atomic_load32(&env->me_lck_mmap.lck->mti_numreaders, mo_AcquireRelease);
     const uintptr_t WriteTxnOwner = env->me_txn0 ? env->me_txn0->mt_owner : 0;
     for (const MDBX_reader *reader = begin; reader < end; ++reader) {
       if (reader->mr_pid.weak != env->me_pid || !reader->mr_tid.weak) {
@@ -599,7 +600,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
   if (env->me_map)
     mdbx_munmap(&env->me_dxb_mmap);
-  if (env->me_lck) {
+  if (env->me_lck_mmap.lck) {
     const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages.weak == 0;
     mdbx_munmap(&env->me_lck_mmap);
     if (synced && !inprocess_neighbor && env->me_lfd != INVALID_HANDLE_VALUE &&
