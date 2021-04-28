@@ -5101,7 +5101,7 @@ static int spill_page(MDBX_txn *txn, struct mdbx_iov_ctx *ctx, MDBX_page *dp,
 static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
                           const unsigned need) {
 #ifndef MDBX_DEBUG_SPILLING
-  if (likely(txn->tw.dirtyroom >= need))
+  if (likely(txn->tw.dirtyroom + txn->tw.loose_count >= need))
     return MDBX_SUCCESS;
   unsigned wanna_spill = need - txn->tw.dirtyroom;
 #else
@@ -5217,7 +5217,7 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   }
 
   /* half of 8-bit radix-sort */
-  unsigned radix_counters[256], spillable = 0;
+  unsigned radix_counters[256], spillable = 0, spilled = 0;
   memset(&radix_counters, 0, sizeof(radix_counters));
   unsigned const reciprocal = 255 * 256 / (lru_max - lru_min + 1);
   for (unsigned i = 1; i <= dl->length; ++i) {
@@ -5228,74 +5228,75 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     }
   }
 
-  unsigned prio2spill = 0, prio2adjacent = 127, amount = radix_counters[0];
-  for (unsigned i = 1; i < 256; i++) {
-    if (amount < wanna_spill) {
-      prio2spill = i;
-      prio2adjacent = i + (255 - i) / 2;
-      amount += radix_counters[i];
-    } else if (amount + amount < spillable + wanna_spill
-               /* РАВНОЗНАЧНО: amount - wanna_spill < spillable - amount */) {
-      prio2adjacent = i;
-      amount += radix_counters[i];
-    } else
-      break;
-  }
+  if (likely(spillable > 0)) {
+    unsigned prio2spill = 0, prio2adjacent = 127, amount = radix_counters[0];
+    for (unsigned i = 1; i < 256; i++) {
+      if (amount < wanna_spill) {
+        prio2spill = i;
+        prio2adjacent = i + (255 - i) / 2;
+        amount += radix_counters[i];
+      } else if (amount + amount < spillable + wanna_spill
+                 /* РАВНОЗНАЧНО: amount - wanna_spill < spillable - amount */) {
+        prio2adjacent = i;
+        amount += radix_counters[i];
+      } else
+        break;
+    }
 
-  unsigned prev_prio = 256, spilled = 0;
-  unsigned r, w, prio;
-  for (w = 0, r = 1; r <= dl->length && spilled < wanna_spill;
-       prev_prio = prio, ++r) {
-    prio = spill_prio(txn, r, lru_min, reciprocal);
-    MDBX_page *const dp = dl->items[r].ptr;
-    if (prio < prio2adjacent) {
-      const pgno_t pgno = dl->items[r].pgno;
-      const unsigned npages = dpl_npages(dl, r);
-      if (prio <= prio2spill) {
-        if (prev_prio < prio2adjacent && prev_prio > prio2spill &&
-            dpl_endpgno(dl, r - 1) == pgno) {
-          mdbx_debug("co-spill %u prev-adjacent page %" PRIaPGNO
-                     " (lru-dist %d, prio %u)",
-                     dpl_npages(dl, w), dl->items[r - 1].pgno,
-                     txn->tw.dirtylru - dl->items[r - 1].lru, prev_prio);
-          --w;
-          rc = spill_page(txn, &ctx, dl->items[r - 1].ptr,
-                          dpl_npages(dl, r - 1));
+    unsigned prev_prio = 256;
+    unsigned r, w, prio;
+    for (w = 0, r = 1; r <= dl->length && spilled < wanna_spill;
+         prev_prio = prio, ++r) {
+      prio = spill_prio(txn, r, lru_min, reciprocal);
+      MDBX_page *const dp = dl->items[r].ptr;
+      if (prio < prio2adjacent) {
+        const pgno_t pgno = dl->items[r].pgno;
+        const unsigned npages = dpl_npages(dl, r);
+        if (prio <= prio2spill) {
+          if (prev_prio < prio2adjacent && prev_prio > prio2spill &&
+              dpl_endpgno(dl, r - 1) == pgno) {
+            mdbx_debug("co-spill %u prev-adjacent page %" PRIaPGNO
+                       " (lru-dist %d, prio %u)",
+                       dpl_npages(dl, w), dl->items[r - 1].pgno,
+                       txn->tw.dirtylru - dl->items[r - 1].lru, prev_prio);
+            --w;
+            rc = spill_page(txn, &ctx, dl->items[r - 1].ptr,
+                            dpl_npages(dl, r - 1));
+            if (unlikely(rc != MDBX_SUCCESS))
+              break;
+            ++spilled;
+          }
+
+          mdbx_debug("spill %u page %" PRIaPGNO " (lru-dist %d, prio %u)",
+                     npages, dp->mp_pgno, txn->tw.dirtylru - dl->items[r].lru,
+                     prio);
+          rc = spill_page(txn, &ctx, dp, npages);
           if (unlikely(rc != MDBX_SUCCESS))
             break;
           ++spilled;
+          continue;
         }
 
-        mdbx_debug("spill %u page %" PRIaPGNO " (lru-dist %d, prio %u)", npages,
-                   dp->mp_pgno, txn->tw.dirtylru - dl->items[r].lru, prio);
-        rc = spill_page(txn, &ctx, dp, npages);
-        if (unlikely(rc != MDBX_SUCCESS))
-          break;
-        ++spilled;
-        continue;
+        if (prev_prio <= prio2spill && dpl_endpgno(dl, r - 1) == pgno) {
+          mdbx_debug("co-spill %u next-adjacent page %" PRIaPGNO
+                     " (lru-dist %d, prio %u)",
+                     npages, dp->mp_pgno, txn->tw.dirtylru - dl->items[r].lru,
+                     prio);
+          rc = spill_page(txn, &ctx, dp, npages);
+          if (unlikely(rc != MDBX_SUCCESS))
+            break;
+          prio = prev_prio /* to continue co-spilling next adjacent pages */;
+          ++spilled;
+          continue;
+        }
       }
-
-      if (prev_prio <= prio2spill && dpl_endpgno(dl, r - 1) == pgno) {
-        mdbx_debug("co-spill %u next-adjacent page %" PRIaPGNO
-                   " (lru-dist %d, prio %u)",
-                   npages, dp->mp_pgno, txn->tw.dirtylru - dl->items[r].lru,
-                   prio);
-        rc = spill_page(txn, &ctx, dp, npages);
-        if (unlikely(rc != MDBX_SUCCESS))
-          break;
-        prio = prev_prio /* to continue co-spilling next adjacent pages */;
-        ++spilled;
-        continue;
-      }
+      dl->items[++w] = dl->items[r];
     }
-    dl->items[++w] = dl->items[r];
-  }
 
-  while (r <= dl->length)
-    dl->items[++w] = dl->items[r++];
-  mdbx_tassert(txn, r - 1 - w == spilled);
+    while (r <= dl->length)
+      dl->items[++w] = dl->items[r++];
+    mdbx_tassert(txn, r - 1 - w == spilled);
 
-  if (likely(spilled > 0)) {
     dl->sorted = dpl_setlen(dl, w);
     txn->tw.dirtyroom += spilled;
     mdbx_tassert(txn, mdbx_dirtylist_check(txn));
@@ -5315,7 +5316,9 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     mdbx_tassert(txn, ctx.iov_items == 0 && rc == MDBX_SUCCESS);
   }
 
-  return likely(txn->tw.dirtyroom > need / 2) ? MDBX_SUCCESS : MDBX_TXN_FULL;
+  return likely(txn->tw.loose_count + txn->tw.dirtyroom > need / 2)
+             ? MDBX_SUCCESS
+             : MDBX_TXN_FULL;
 }
 
 static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
@@ -5631,16 +5634,35 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
 /* Add a page to the txn's dirty list */
 static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp,
                                                unsigned npages) {
+  int rc;
   mp->mp_txnid = txn->mt_front;
   if (unlikely(txn->tw.dirtyroom == 0)) {
-    mdbx_error("Dirtyroom is depleted, DPL length %u",
-               txn->tw.dirtylist->length);
-    if (!(txn->mt_flags & MDBX_WRITEMAP))
-      mdbx_dpage_free(txn->mt_env, mp, npages);
-    return MDBX_TXN_FULL;
+    if (txn->tw.loose_count) {
+      MDBX_page *loose = txn->tw.loose_pages;
+      mdbx_debug("purge-and-reclaim loose page %" PRIaPGNO, loose->mp_pgno);
+      rc = mdbx_pnl_insert_range(&txn->tw.reclaimed_pglist, loose->mp_pgno, 1);
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto bailout;
+      unsigned di = mdbx_dpl_search(txn, loose->mp_pgno);
+      mdbx_tassert(txn, txn->tw.dirtylist->items[di].ptr == loose);
+      mdbx_dpl_remove(txn, di);
+      txn->tw.loose_pages = loose->mp_next;
+      txn->tw.loose_count--;
+      txn->tw.dirtyroom++;
+      if (!(txn->mt_flags & MDBX_WRITEMAP))
+        mdbx_dpage_free(txn->mt_env, loose, 1);
+    } else {
+      mdbx_error("Dirtyroom is depleted, DPL length %u",
+                 txn->tw.dirtylist->length);
+      if (!(txn->mt_flags & MDBX_WRITEMAP))
+        mdbx_dpage_free(txn->mt_env, mp, npages);
+      return MDBX_TXN_FULL;
+    }
   }
-  const int rc = mdbx_dpl_append(txn, mp->mp_pgno, mp, npages);
+
+  rc = mdbx_dpl_append(txn, mp->mp_pgno, mp, npages);
   if (unlikely(rc != MDBX_SUCCESS)) {
+  bailout:
     txn->mt_flags |= MDBX_TXN_ERROR;
     return rc;
   }
