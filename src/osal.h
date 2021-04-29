@@ -166,34 +166,40 @@ typedef struct {
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
 
 #if MDBX_WITHOUT_MSVC_CRT
+
 #ifndef mdbx_malloc
 static inline void *mdbx_malloc(size_t bytes) {
-  return LocalAlloc(LMEM_FIXED, bytes);
+  return HeapAlloc(GetProcessHeap(), 0, bytes);
 }
 #endif /* mdbx_malloc */
 
 #ifndef mdbx_calloc
 static inline void *mdbx_calloc(size_t nelem, size_t size) {
-  return LocalAlloc(LMEM_FIXED | LMEM_ZEROINIT, nelem * size);
+  return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nelem * size);
 }
 #endif /* mdbx_calloc */
 
 #ifndef mdbx_realloc
 static inline void *mdbx_realloc(void *ptr, size_t bytes) {
-  return ptr ? LocalReAlloc(ptr, bytes, LMEM_MOVEABLE)
-             : LocalAlloc(LMEM_FIXED, bytes);
+  return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes)
+             : HeapAlloc(GetProcessHeap(), 0, bytes);
 }
 #endif /* mdbx_realloc */
 
 #ifndef mdbx_free
-#define mdbx_free LocalFree
+static inline void mdbx_free(void *ptr) {
+  return HeapFree(GetProcessHeap(), 0, ptr);
+}
 #endif /* mdbx_free */
-#else
+
+#else /* MDBX_WITHOUT_MSVC_CRT */
+
 #define mdbx_malloc malloc
 #define mdbx_calloc calloc
 #define mdbx_realloc realloc
 #define mdbx_free free
 #define mdbx_strdup _strdup
+
 #endif /* MDBX_WITHOUT_MSVC_CRT */
 
 #ifndef snprintf
