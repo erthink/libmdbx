@@ -757,7 +757,7 @@ static uint64_t WINAPI stub_GetTickCount64(void) {
 }
 
 /*----------------------------------------------------------------------------*/
-#ifndef MDBX_ALLOY
+#ifndef xMDBX_ALLOY
 MDBX_NtExtendSection mdbx_NtExtendSection;
 MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
 MDBX_GetVolumeInformationByHandleW mdbx_GetVolumeInformationByHandleW;
@@ -772,7 +772,7 @@ MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
 MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
 MDBX_ReclaimVirtualMemory mdbx_ReclaimVirtualMemory;
 #endif /* unused for now */
-#endif /* MDBX_ALLOY */
+#endif /* xMDBX_ALLOY */
 
 static void mdbx_winnt_import(void) {
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");

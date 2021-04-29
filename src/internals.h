@@ -17,9 +17,9 @@
 #endif
 
 #define LIBMDBX_INTERNALS
-#ifdef MDBX_TOOLS
+#ifdef xMDBX_TOOLS
 #define MDBX_DEPRECATED
-#endif /* MDBX_TOOLS */
+#endif /* xMDBX_TOOLS */
 
 /* *INDENT-OFF* */
 /* clang-format off */
@@ -38,7 +38,7 @@
 #   undef NDEBUG
 #endif
 
-#ifdef MDBX_ALLOY
+#ifdef xMDBX_ALLOY
 /* Amalgamated build */
 #   define MDBX_INTERNAL_FUNC static
 #   define MDBX_INTERNAL_VAR static
@@ -46,7 +46,7 @@
 /* Non-amalgamated build */
 #   define MDBX_INTERNAL_FUNC
 #   define MDBX_INTERNAL_VAR extern
-#endif /* MDBX_ALLOY */
+#endif /* xMDBX_ALLOY */
 
 #ifndef MDBX_DISABLE_GNU_SOURCE
 #define MDBX_DISABLE_GNU_SOURCE 0
@@ -177,7 +177,7 @@ extern "C" {
 #include "osal.h"
 
 #define mdbx_sourcery_anchor XCONCAT(mdbx_sourcery_, MDBX_BUILD_SOURCERY)
-#if defined(MDBX_TOOLS)
+#if defined(xMDBX_TOOLS)
 extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 #endif
 
@@ -417,14 +417,14 @@ typedef MDBX_atomic_uint64_t atomic_txnid_t;
 #define INITIAL_TXNID (MIN_TXNID + NUM_METAS - 1)
 #define INVALID_TXNID UINT64_MAX
 /* LY: for testing non-atomic 64-bit txnid on 32-bit arches.
- * #define MDBX_TXNID_STEP (UINT32_MAX / 3) */
-#ifndef MDBX_TXNID_STEP
+ * #define xMDBX_TXNID_STEP (UINT32_MAX / 3) */
+#ifndef xMDBX_TXNID_STEP
 #if MDBX_64BIT_CAS
-#define MDBX_TXNID_STEP 1u
+#define xMDBX_TXNID_STEP 1u
 #else
-#define MDBX_TXNID_STEP 2u
+#define xMDBX_TXNID_STEP 2u
 #endif
-#endif /* MDBX_TXNID_STEP */
+#endif /* xMDBX_TXNID_STEP */
 
 /* Used for offsets within a single page.
  * Since memory pages are typically 4 or 8KB in size, 12-13 bits,
@@ -1226,12 +1226,12 @@ struct MDBX_env {
   pgno_t me_poison_edge;
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
-#ifndef MDBX_DEBUG_SPILLING
-#define MDBX_DEBUG_SPILLING 0
+#ifndef xMDBX_DEBUG_SPILLING
+#define xMDBX_DEBUG_SPILLING 0
 #endif
-#if MDBX_DEBUG_SPILLING == 2
+#if xMDBX_DEBUG_SPILLING == 2
   unsigned debug_dirtied_est, debug_dirtied_act;
-#endif /* MDBX_DEBUG_SPILLING */
+#endif /* xMDBX_DEBUG_SPILLING */
 
   /* ------------------------------------------------- stub for lck-less mode */
   alignas(MDBX_CACHELINE_SIZE) uint64_t
@@ -1364,7 +1364,7 @@ void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
 /* assert(3) variant in transaction context */
 #define mdbx_tassert(txn, expr) mdbx_assert((txn)->mt_env, expr)
 
-#ifndef MDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#ifndef xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
 #undef assert
 #define assert(expr) mdbx_assert(NULL, expr)
 #endif

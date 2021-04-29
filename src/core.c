@@ -936,7 +936,7 @@ static __always_inline uint32_t atomic_add32(MDBX_atomic_uint32_t *p,
 #define atomic_sub32(p, v) atomic_add32(p, 0 - (v))
 
 static __always_inline uint64_t safe64_txnid_next(uint64_t txnid) {
-  txnid += MDBX_TXNID_STEP;
+  txnid += xMDBX_TXNID_STEP;
 #if !MDBX_64BIT_CAS
   /* avoid overflow of low-part in safe64_reset() */
   txnid += (UINT32_MAX == (uint32_t)txnid);
@@ -948,8 +948,8 @@ static __always_inline void safe64_reset(MDBX_atomic_uint64_t *p,
                                          bool single_writer) {
 #if !MDBX_64BIT_CAS
   if (!single_writer) {
-    STATIC_ASSERT(MDBX_TXNID_STEP > 1);
-    /* it is safe to increment low-part to avoid ABA, since MDBX_TXNID_STEP > 1
+    STATIC_ASSERT(xMDBX_TXNID_STEP > 1);
+    /* it is safe to increment low-part to avoid ABA, since xMDBX_TXNID_STEP > 1
      * and overflow was preserved in safe64_txnid_next() */
     atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
     atomic_store32(
@@ -5107,16 +5107,16 @@ static unsigned spill_prio(const MDBX_txn *txn, const unsigned i,
  * the child aborted. */
 static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
                           const unsigned need) {
-#if MDBX_DEBUG_SPILLING != 1
+#if xMDBX_DEBUG_SPILLING != 1
   /* production mode */
   if (likely(txn->tw.dirtyroom + txn->tw.loose_count >= need))
     return MDBX_SUCCESS;
   unsigned wanna_spill = need - txn->tw.dirtyroom;
 #else
-  /* debug mode: spill at least one page if MDBX_DEBUG_SPILLING == 1 */
+  /* debug mode: spill at least one page if xMDBX_DEBUG_SPILLING == 1 */
   unsigned wanna_spill =
       (need > txn->tw.dirtyroom) ? need - txn->tw.dirtyroom : 1;
-#endif /* MDBX_DEBUG_SPILLING */
+#endif /* xMDBX_DEBUG_SPILLING */
 
   const unsigned dirty = txn->tw.dirtylist->length;
   const unsigned spill_min =
@@ -5194,10 +5194,10 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   /* Preserve pages which may soon be dirtied again */
   const unsigned unspillable = mdbx_txn_keep(txn, m0);
   if (unspillable + txn->tw.loose_count >= dl->length) {
-#if MDBX_DEBUG_SPILLING == 1 /* avoid false failure in debug mode  */
+#if xMDBX_DEBUG_SPILLING == 1 /* avoid false failure in debug mode  */
     if (likely(txn->tw.dirtyroom + txn->tw.loose_count >= need))
       return MDBX_SUCCESS;
-#endif /* MDBX_DEBUG_SPILLING */
+#endif /* xMDBX_DEBUG_SPILLING */
     mdbx_error("all %u dirty pages are unspillable  since referenced "
                "by a cursor(s), use fewer cursors or increase "
                "MDBX_opt_txn_dp_limit",
@@ -5353,7 +5353,7 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     }
   }
 
-#if MDBX_DEBUG_SPILLING == 2
+#if xMDBX_DEBUG_SPILLING == 2
   if (txn->tw.loose_count + txn->tw.dirtyroom <= need / 2 + 1)
     mdbx_error("dirty-list length: before %u, after %u, parent %i, loose %u; "
                "needed %u, spillable %u; "
@@ -5365,7 +5365,7 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
                txn->tw.loose_count, need, spillable, spilled,
                txn->tw.dirtyroom);
   mdbx_ensure(txn->mt_env, txn->tw.loose_count + txn->tw.dirtyroom > need / 2);
-#endif /* MDBX_DEBUG_SPILLING */
+#endif /* xMDBX_DEBUG_SPILLING */
 
   return likely(txn->tw.loose_count + txn->tw.dirtyroom > need / 2)
              ? MDBX_SUCCESS
@@ -5385,7 +5385,7 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
     if (mc->mc_dbi > MAIN_DBI)
       need += txn->mt_dbs[MAIN_DBI].md_depth + 3;
   }
-#if MDBX_DEBUG_SPILLING != 2
+#if xMDBX_DEBUG_SPILLING != 2
   /* production mode */
   /* 4) Double the page chain estimation
    * for extensively splitting, rebalance and merging */
@@ -5398,7 +5398,7 @@ static int mdbx_cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
   (void)data;
   mc->mc_txn->mt_env->debug_dirtied_est = ++need;
   mc->mc_txn->mt_env->debug_dirtied_act = 0;
-#endif /* MDBX_DEBUG_SPILLING == 2 */
+#endif /* xMDBX_DEBUG_SPILLING == 2 */
 
   return mdbx_txn_spill(txn, mc, need);
 }
@@ -5695,12 +5695,12 @@ static __cold pgno_t mdbx_find_largest(MDBX_env *env, pgno_t largest) {
 /* Add a page to the txn's dirty list */
 static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp,
                                                unsigned npages) {
-#if MDBX_DEBUG_SPILLING == 2
+#if xMDBX_DEBUG_SPILLING == 2
   txn->mt_env->debug_dirtied_act += 1;
   mdbx_ensure(txn->mt_env,
               txn->mt_env->debug_dirtied_act < txn->mt_env->debug_dirtied_est);
   mdbx_ensure(txn->mt_env, txn->tw.dirtyroom + txn->tw.loose_count > 0);
-#endif /* MDBX_DEBUG_SPILLING == 2 */
+#endif /* xMDBX_DEBUG_SPILLING == 2 */
 
   int rc;
   mp->mp_txnid = txn->mt_front;
@@ -6574,7 +6574,7 @@ no_loose:
             continue;
           /* it is reasonable check/kick lagging reader(s) here,
            * since we made a new steady point or wipe the last. */
-          if (oldest < txn->mt_txnid - MDBX_TXNID_STEP &&
+          if (oldest < txn->mt_txnid - xMDBX_TXNID_STEP &&
               mdbx_kick_longlived_readers(env, oldest) > oldest)
             continue;
         } else if (unlikely(ret.err != MDBX_RESULT_TRUE))
@@ -6586,7 +6586,7 @@ no_loose:
      * at the end of database file. */
     if ((flags & MDBX_ALLOC_NEW) && next <= txn->mt_end_pgno)
       goto done;
-    if ((flags & MDBX_ALLOC_GC) && oldest < txn->mt_txnid - MDBX_TXNID_STEP &&
+    if ((flags & MDBX_ALLOC_GC) && oldest < txn->mt_txnid - xMDBX_TXNID_STEP &&
         mdbx_kick_longlived_readers(env, oldest) > oldest)
       continue;
 
@@ -19063,7 +19063,7 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
 
       const txnid_t wanna_meta_txnid = (txn->mt_flags & MDBX_TXN_RDONLY)
                                            ? txn->mt_txnid
-                                           : txn->mt_txnid - MDBX_TXNID_STEP;
+                                           : txn->mt_txnid - xMDBX_TXNID_STEP;
       txn_meta = (arg->mi_meta0_txnid == wanna_meta_txnid) ? meta0 : txn_meta;
       txn_meta = (arg->mi_meta1_txnid == wanna_meta_txnid) ? meta1 : txn_meta;
       txn_meta = (arg->mi_meta2_txnid == wanna_meta_txnid) ? meta2 : txn_meta;
@@ -19781,7 +19781,7 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
             head_txnid != mdbx_meta_txnid_fluid(env, recent_meta))
           goto retry_header;
 
-        lag = (head_txnid - txnid) / MDBX_TXNID_STEP;
+        lag = (head_txnid - txnid) / xMDBX_TXNID_STEP;
         bytes_used = pgno2bytes(env, pages_used);
         bytes_retained = (head_pages_retired > reader_pages_retired)
                              ? pgno2bytes(env, (pgno_t)(head_pages_retired -
@@ -20032,7 +20032,7 @@ static txnid_t __cold mdbx_kick_longlived_readers(MDBX_env *env,
 
     const MDBX_meta *head_meta = mdbx_meta_head(env);
     const txnid_t gap =
-        (mdbx_meta_txnid_stable(env, head_meta) - laggard) / MDBX_TXNID_STEP;
+        (mdbx_meta_txnid_stable(env, head_meta) - laggard) / xMDBX_TXNID_STEP;
     const uint64_t head_retired =
         unaligned_peek_u64(4, head_meta->mm_pages_retired);
     const size_t space =
@@ -20119,7 +20119,7 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
     }
   } while (unlikely(recent != mdbx_meta_txnid_fluid(env, meta)));
 
-  txnid_t lag = (recent - txn->mt_txnid) / MDBX_TXNID_STEP;
+  txnid_t lag = (recent - txn->mt_txnid) / xMDBX_TXNID_STEP;
   return (lag > INT_MAX) ? INT_MAX : (int)lag;
 }
 

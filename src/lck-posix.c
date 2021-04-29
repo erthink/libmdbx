@@ -24,10 +24,10 @@
 
 #include <sys/utsname.h>
 
-#ifndef MDBX_ALLOY
+#ifndef xMDBX_ALLOY
 uint32_t mdbx_linux_kernel_version;
 bool mdbx_RunningOnWSL1;
-#endif /* MDBX_ALLOY */
+#endif /* xMDBX_ALLOY */
 
 static __cold uint8_t probe_for_WSL(const char *tag) {
   const char *const WSL = strstr(tag, "WSL");
