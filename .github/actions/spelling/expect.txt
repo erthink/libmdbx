@@ -431,6 +431,7 @@ ENOTTY
 ent
 entbuf
 enum
+ENVCOPY
 envflags
 envinfo
 ENVLIST
@@ -1878,6 +1879,7 @@ workaround
 workflow
 Wpedantic
 writeback
+WRITEBUF
 writefault
 writefaultn
 writemap

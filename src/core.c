@@ -18085,10 +18085,6 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
 
 /**** COPYING *****************************************************************/
 
-#ifndef MDBX_WBUF
-#define MDBX_WBUF ((size_t)1024 * 1024)
-#endif
-
 /* State needed for a double-buffering compacting copy. */
 typedef struct mdbx_copy {
   MDBX_env *mc_env;
@@ -18253,7 +18249,8 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             if (unlikely(rc != MDBX_SUCCESS))
               goto done;
             unsigned toggle = my->mc_head & 1;
-            if (my->mc_wlen[toggle] + my->mc_env->me_psize > MDBX_WBUF) {
+            if (my->mc_wlen[toggle] + my->mc_env->me_psize >
+                ((size_t)(MDBX_ENVCOPY_WRITEBUF))) {
               rc = mdbx_env_cthr_toggle(my);
               if (unlikely(rc != MDBX_SUCCESS))
                 goto done;
@@ -18321,7 +18318,8 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
       }
     }
     unsigned toggle = my->mc_head & 1;
-    if (my->mc_wlen[toggle] + my->mc_wlen[toggle] > MDBX_WBUF) {
+    if (my->mc_wlen[toggle] + my->mc_wlen[toggle] >
+        ((size_t)(MDBX_ENVCOPY_WRITEBUF))) {
       rc = mdbx_env_cthr_toggle(my);
       if (unlikely(rc != MDBX_SUCCESS))
         goto done;
@@ -18445,9 +18443,9 @@ static __cold int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
 
-    memset(data_buffer, 0, MDBX_WBUF * 2);
+    memset(data_buffer, 0, ((size_t)(MDBX_ENVCOPY_WRITEBUF)) * 2);
     ctx.mc_wbuf[0] = data_buffer;
-    ctx.mc_wbuf[1] = data_buffer + MDBX_WBUF;
+    ctx.mc_wbuf[1] = data_buffer + ((size_t)(MDBX_ENVCOPY_WRITEBUF));
     ctx.mc_next_pgno = NUM_METAS;
     ctx.mc_env = env;
     ctx.mc_fd = fd;
@@ -18511,10 +18509,12 @@ static __cold int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
       return mdbx_ftruncate(fd, whole_size);
 
     const size_t used_size = pgno2bytes(env, meta->mm_geo.next);
-    memset(data_buffer, 0, MDBX_WBUF);
+    memset(data_buffer, 0, ((size_t)(MDBX_ENVCOPY_WRITEBUF)));
     for (size_t offset = used_size; offset < whole_size;) {
       const size_t chunk =
-          (MDBX_WBUF < whole_size - offset) ? MDBX_WBUF : whole_size - offset;
+          (((size_t)(MDBX_ENVCOPY_WRITEBUF)) < whole_size - offset)
+              ? ((size_t)(MDBX_ENVCOPY_WRITEBUF))
+              : whole_size - offset;
       /* copy to avoid EFAULT in case swapped-out */
       int rc = mdbx_write(fd, data_buffer, chunk);
       if (unlikely(rc != MDBX_SUCCESS))
@@ -18606,7 +18606,9 @@ static __cold int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 
     /* fallback to portable */
     const size_t chunk =
-        (MDBX_WBUF < used_size - offset) ? MDBX_WBUF : used_size - offset;
+        (((size_t)(MDBX_ENVCOPY_WRITEBUF)) < used_size - offset)
+            ? ((size_t)(MDBX_ENVCOPY_WRITEBUF))
+            : used_size - offset;
     /* copy to avoid EFAULT in case swapped-out */
     memcpy(data_buffer, env->me_map + offset, chunk);
     rc = mdbx_write(fd, data_buffer, chunk);
@@ -18618,11 +18620,13 @@ static __cold int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
     if (!dest_is_pipe)
       rc = mdbx_ftruncate(fd, whole_size);
     else {
-      memset(data_buffer, 0, MDBX_WBUF);
+      memset(data_buffer, 0, ((size_t)(MDBX_ENVCOPY_WRITEBUF)));
       for (size_t offset = used_size;
            rc == MDBX_SUCCESS && offset < whole_size;) {
         const size_t chunk =
-            (MDBX_WBUF < whole_size - offset) ? MDBX_WBUF : whole_size - offset;
+            (((size_t)(MDBX_ENVCOPY_WRITEBUF)) < whole_size - offset)
+                ? ((size_t)(MDBX_ENVCOPY_WRITEBUF))
+                : whole_size - offset;
         /* copy to avoid EFAULT in case swapped-out */
         rc = mdbx_write(fd, data_buffer, chunk);
         offset += chunk;
@@ -18651,7 +18655,9 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 
   const size_t buffer_size =
       pgno_align2os_bytes(env, NUM_METAS) +
-      ceil_powerof2(((flags & MDBX_CP_COMPACT) ? MDBX_WBUF * 2 : MDBX_WBUF),
+      ceil_powerof2(((flags & MDBX_CP_COMPACT)
+                         ? ((size_t)(MDBX_ENVCOPY_WRITEBUF)) * 2
+                         : ((size_t)(MDBX_ENVCOPY_WRITEBUF))),
                     env->me_os_psize);
 
   uint8_t *buffer = NULL;
@@ -21963,7 +21969,7 @@ __dll_export
 #ifdef MDBX_USE_VALGRIND
     " MDBX_USE_VALGRIND=YES"
 #endif /* MDBX_USE_VALGRIND */
-#ifdef MDBX_FORCE_ASSERTIONS
+#if MDBX_FORCE_ASSERTIONS
     " MDBX_FORCE_ASSERTIONS=YES"
 #endif /* MDBX_FORCE_ASSERTIONS */
 #ifdef _GNU_SOURCE

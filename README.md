@@ -431,10 +431,10 @@ recommended. Otherwise do not forget to add `ntdll.lib` to linking.
 
 Building by MinGW, MSYS or Cygwin is potentially possible. However,
 these scripts are not tested and will probably require you to modify the
-CMakeLists.txt or Makefile respectively.
+`CMakeLists.txt` or `Makefile` respectively.
 
 It should be noted that in _libmdbx_ was efforts to resolve
-runtime dependencies from CRT and other libraries Visual Studio.
+runtime dependencies from CRT and other MSVC libraries.
 For this is enough to define the `MDBX_WITHOUT_MSVC_CRT` during build.
 
 An example of running a basic test script can be found in the
