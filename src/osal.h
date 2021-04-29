@@ -35,7 +35,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #endif
 #if !defined(_NO_CRT_STDIO_INLINE) && MDBX_BUILD_SHARED_LIBRARY &&             \
-    !defined(MDBX_TOOLS) && MDBX_AVOID_CRT
+    !defined(MDBX_TOOLS) && MDBX_WITHOUT_MSVC_CRT
 #define _NO_CRT_STDIO_INLINE
 #endif
 #elif !defined(_POSIX_C_SOURCE)
@@ -166,7 +166,7 @@ typedef struct {
 } mdbx_condpair_t;
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
 
-#if MDBX_AVOID_CRT
+#if MDBX_WITHOUT_MSVC_CRT
 #ifndef mdbx_malloc
 static inline void *mdbx_malloc(size_t bytes) {
   return LocalAlloc(LMEM_FIXED, bytes);
@@ -195,7 +195,7 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
 #define mdbx_realloc realloc
 #define mdbx_free free
 #define mdbx_strdup _strdup
-#endif /* MDBX_AVOID_CRT */
+#endif /* MDBX_WITHOUT_MSVC_CRT */
 
 #ifndef snprintf
 #define snprintf _snprintf /* ntdll */
@@ -243,7 +243,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 /* malloc_usable_size() already provided */
 #elif defined(__APPLE__)
 #define malloc_usable_size(ptr) malloc_size(ptr)
-#elif defined(_MSC_VER) && !MDBX_AVOID_CRT
+#elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
 #define malloc_usable_size(ptr) _msize(ptr)
 #endif /* malloc_usable_size */
 

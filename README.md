@@ -435,7 +435,7 @@ CMakeLists.txt or Makefile respectively.
 
 It should be noted that in _libmdbx_ was efforts to resolve
 runtime dependencies from CRT and other libraries Visual Studio.
-For this is enough to define the `MDBX_AVOID_CRT` during build.
+For this is enough to define the `MDBX_WITHOUT_MSVC_CRT` during build.
 
 An example of running a basic test script can be found in the
 [CI-script](appveyor.yml) for [AppVeyor](https://www.appveyor.com/). To

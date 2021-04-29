@@ -33,6 +33,10 @@ New features:
  - Added `MDBX_ENABLE_MADVISE` build option which controls the use of POSIX `madvise()` hints and friends.
  - The internal node sizes were refined, resulting in a reduction in large/overflow pages in some use cases and a slight increase in limits for a keys size.
 
+Backward compatibility break:
+
+ - The `MDBX_AVOID_CRT` build option was renamed to `MDBX_WITHOUT_MSVC_CRT`.
+
 Fixes:
 
  - Fixed performance regression due non-optimal C11 atomics usage (https://github.com/erthink/libmdbx/issues/160).
@@ -88,7 +92,7 @@ New features:
 Fixes:
 
  - Fixed missing cleanup (null assigned) in the C++ commit/abort (https://github.com/erthink/libmdbx/pull/143).
- - Fixed `mdbx_realloc()` for case of nullptr and `MDBX_AVOID_CRT=ON` for Windows.
+ - Fixed `mdbx_realloc()` for case of nullptr and `MDBX_WITHOUT_MSVC_CRT=ON` for Windows.
  - Fixed the possibility to use invalid and renewed (closed & re-opened, dropped & re-created) DBI-handles (https://github.com/erthink/libmdbx/issues/146).
  - Fixed 4-byte aligned access to 64-bit integers, including access to the `bootid` meta-page's field (https://github.com/erthink/libmdbx/issues/153).
  - Fixed minor/potential memory leak during page flushing and unspilling.
@@ -245,7 +249,7 @@ Deprecated functions and flags:
 - Fix missing comma in array of error messages.
 - Fix div-by-zero while copy-with-compaction for non-resizable environments.
 - Fixes & enhancements for custom-comparators.
-- Fix `MDBX_AVOID_CRT` option and missing `ntdll.def`.
+- Fix `MDBX_WITHOUT_MSVC_CRT` option and missing `ntdll.def`.
 - Fix `mdbx_env_close()` to work correctly called concurrently from several threads.
 - Fix null-deref in an ASAN-enabled builds while opening the environment with error and/or read-only.
 - Fix AddressSanitizer errors after closing the environment.

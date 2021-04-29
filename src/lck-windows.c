@@ -25,15 +25,15 @@
 static void mdbx_winnt_import(void);
 
 #if MDBX_BUILD_SHARED_LIBRARY
-#if MDBX_AVOID_CRT && defined(NDEBUG)
+#if MDBX_WITHOUT_MSVC_CRT && defined(NDEBUG)
 /* DEBUG/CHECKED builds still require MSVC's CRT for runtime checks.
  *
  * Define dll's entry point only for Release build when NDEBUG is defined and
- * MDBX_AVOID_CRT=ON. if the entry point isn't defined then MSVC's will
+ * MDBX_WITHOUT_MSVC_CRT=ON. if the entry point isn't defined then MSVC's will
  * automatically use DllMainCRTStartup() from CRT library, which also
  * automatically call DllMain() from our mdbx.dll */
 #pragma comment(linker, "/ENTRY:DllMain")
-#endif /* MDBX_AVOID_CRT */
+#endif /* MDBX_WITHOUT_MSVC_CRT */
 
 BOOL APIENTRY DllMain(HANDLE module, DWORD reason, LPVOID reserved)
 #else
