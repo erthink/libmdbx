@@ -45,14 +45,65 @@ EXE_LDFLAGS ?= -pthread
 
 ################################################################################
 
-.PHONY: mdbx all install install-strip install-no-strip clean options
+UNAME      := $(shell uname -s 2>/dev/null || echo Unknown)
+define uname2sosuffix
+  case "$(UNAME)" in
+    Darwin*|Mach*) echo dylib;;
+    CYGWIN*|MINGW*|MSYS*|Windows*) echo dll;;
+    *) echo so;;
+  esac
+endef
 SO_SUFFIX  := $(shell $(uname2sosuffix))
 HEADERS    := mdbx.h mdbx.h++
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 
+.PHONY: all help options lib tools clean install uninstall
+.PHONY: install-strip install-no-strip strip libmdbx mdbx
+
 all: options $(LIBRARIES) $(TOOLS)
+
+help:
+	@echo "  make all                 - build libraries and tools"
+	@echo "  make help                - print this help"
+	@echo "  make options             - list build options"
+	@echo "  make lib                 - build libraries"
+	@echo "  make tools               - built tools"
+	@echo "  make clean               "
+	@echo "  make install             "
+	@echo "  make uninstall           "
+	@echo ""
+	@echo "  make strip               - strip debug symbols from binaries"
+	@echo "  make install-no-strip    - install explicitly without strip"
+	@echo "  make install-strip       - install explicitly with strip"
+	@echo ""
+	@echo "  make bench               - run ioarena-benchmark"
+	@echo "  make bench-couple        - run ioarena-benchmark for mdbx and lmdb"
+	@echo "  make bench-triplet       - run ioarena-benchmark for mdbx, lmdb, sqlite3"
+	@echo "  make bench-quartet       - run ioarena-benchmark for mdbx, lmdb, rocksdb, wiredtiger"
+	@echo "  make bench-clean         - remove temp database(s) after benchmark"
+#> dist-cutoff-begin
+	@echo ""
+	@echo "  make test                - basic test"
+	@echo "  make check               - basic test"
+	@echo "  make memcheck            - build with Valgrind's and test with memcheck tool"
+	@echo "  make test-valgrind       - build with Valgrind's and test with memcheck tool"
+	@echo "  make test-asan           - build with AddressSanitizer and test"
+	@echo "  make test-leak           - build with LeakSanitizer and test"
+	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and test"
+	@echo "  make cross-gcc           - run cross-compilation testset"
+	@echo "  make cross-qemu          - run cross-compilation and execution testset with QEMU"
+	@echo "  make gcc-analyzer        - run gcc-analyzer (mostly useless for now)"
+	@echo "  make build-test          - build test executable(s)"
+	@echo "  make test-fault          - run transaction owner failure testcase"
+	@echo "  make test-singleprocess  - run single-process test (used by make cross-qemu)"
+	@echo ""
+	@echo "  make dist                - build amalgamated source code"
+	@echo "  make doxygen             - build HTML documentation"
+	@echo "  make release-assets      - build release assets"
+	@echo "  make reformat            - reformat source code with clang-format"
+#< dist-cutoff-end
 
 options:
 	@echo "  INSTALL      =$(INSTALL)"
@@ -90,16 +141,7 @@ else
 endif
 #< dist-cutoff-end
 
-UNAME      := $(shell uname -s 2>/dev/null || echo Unknown)
-define uname2sosuffix
-  case "$(UNAME)" in
-    Darwin*|Mach*) echo dylib;;
-    CYGWIN*|MINGW*|MSYS*|Windows*) echo dll;;
-    *) echo so;;
-  esac
-endef
-
-mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
+lib libmdbx mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
 
 tools: $(TOOLS)
 
@@ -152,7 +194,9 @@ else
 ################################################################################
 # Plain (non-amalgamated) sources with test
 
-.PHONY: test dist check doxygen reformat
+.PHONY: build-test check cross-gcc cross-qemu dist doxygen gcc-analyzer
+.PHONY: reformat release-assets tags test test-asan test-fault test-leak
+.PHONY: test-singleprocess test-ubsan test-valgrind memcheck
 
 define uname2osal
   case "$(UNAME)" in
@@ -334,7 +378,6 @@ mdbx++-dylib.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_
 mdbx++-static.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
 	$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
 
-.PHONY: dist release-assets tags
 dist: tags dist-checked.tag libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
 
 tags:
@@ -488,12 +531,12 @@ BENCH_CRUD_MODE ?= nosync
 
 ifneq ($(wildcard $(IOARENA)),)
 
-.PHONY: bench clean-bench re-bench
+.PHONY: bench bench-clean bench-couple re-bench bench-quartet bench-triplet
 
-clean-bench:
+bench-clean:
 	rm -rf bench-*.txt _ioarena/*
 
-re-bench: clean-bench bench
+re-bench: bench-clean bench
 
 define bench-rule
 bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
@@ -520,17 +563,13 @@ $(eval $(call bench-rule,sqlite3,$(NN)))
 $(eval $(call bench-rule,ejdb,$(NN)))
 $(eval $(call bench-rule,vedisdb,$(NN)))
 $(eval $(call bench-rule,dummy,$(NN)))
-
-$(eval $(call bench-rule,debug,10))
-
 bench: bench-mdbx_$(NN).txt
-
-.PHONY: bench-debug
-
-bench-debug: bench-debug_10.txt
-
 bench-quartet: bench-mdbx_$(NN).txt bench-lmdb_$(NN).txt bench-rocksdb_$(NN).txt bench-wiredtiger_$(NN).txt
 bench-triplet: bench-mdbx_$(NN).txt bench-lmdb_$(NN).txt bench-sqlite3_$(NN).txt
 bench-couple: bench-mdbx_$(NN).txt bench-lmdb_$(NN).txt
+
+# $(eval $(call bench-rule,debug,10))
+# .PHONY: bench-debug
+# bench-debug: bench-debug_10.txt
 
 endif

@@ -1671,6 +1671,7 @@ testcase
 testdb
 TESTLIST
 TESTLOG
+testset
 Thermi
 thr
 THREADENTRY

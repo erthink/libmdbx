@@ -372,7 +372,9 @@ are completely traditional and have minimal prerequirements like
 `build-essential`, i.e. the non-obsolete C/C++ compiler and a
 [SDK](https://en.wikipedia.org/wiki/Software_development_kit) for the
 target platform. Obviously you need building tools itself, i.e. `git`,
-`cmake` or GNU `make` with `bash`.
+`cmake` or GNU `make` with `bash`. For your convenience, `make help`
+and `make options` are also available for listing existing targets
+and build options respectively.
 
 So just using CMake or GNU Make in your habitual manner and feel free to
 fill an issue or make pull request in the case something will be
