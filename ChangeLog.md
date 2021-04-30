@@ -32,6 +32,7 @@ New features:
  - [Ruby bindings](https://rubygems.org/gems/mdbx/) is available now by [Mahlon E. Smith](https://github.com/mahlonsmith).
  - Added `MDBX_ENABLE_MADVISE` build option which controls the use of POSIX `madvise()` hints and friends.
  - The internal node sizes were refined, resulting in a reduction in large/overflow pages in some use cases and a slight increase in limits for a keys size.
+ - Support `make options` to list available build options.
 
 Backward compatibility break:
 

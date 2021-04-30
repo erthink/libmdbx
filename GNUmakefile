@@ -6,12 +6,11 @@
 #
 ################################################################################
 #
-# Preprocessor macros (for MDBX_OPTIONS) of interest.
+# Use `make options` to list the available libmdbx build options.
 #
 # Note that the defaults should already be correct for most platforms;
 # you should not need to change any of these. Read their descriptions
 # in README and source code (see src/options.h) if you do.
-# There may be other macros of interest.
 #
 
 SHELL   := env bash
@@ -30,7 +29,7 @@ INSTALL ?= install
 CC      ?= gcc
 CFLAGS_EXTRA ?=
 LD      ?= ld
-MDBX_OPTIONS ?= -DNDEBUG=1
+MDBX_BUILD_OPTIONS ?= -DNDEBUG=1
 CFLAGS  ?= -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -std=gnu11 -pthread -Wno-error=attributes $(CFLAGS_EXTRA)
 # -Wno-tautological-compare
 CXX     ?= g++
@@ -46,6 +45,51 @@ EXE_LDFLAGS ?= -pthread
 
 ################################################################################
 
+.PHONY: mdbx all install install-strip install-no-strip clean options
+SO_SUFFIX  := $(shell $(uname2sosuffix))
+HEADERS    := mdbx.h mdbx.h++
+LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
+TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
+MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
+
+all: options $(LIBRARIES) $(TOOLS)
+
+options:
+	@echo "  INSTALL      =$(INSTALL)"
+	@echo "  DESTDIR      =$(DESTDIR)"
+	@echo "  prefix       =$(prefix)"
+	@echo "  mandir       =$(mandir)"
+	@echo "  suffix       =$(suffix)"
+	@echo ""
+	@echo "  CC           =$(CC)"
+	@echo "  CFLAGS_EXTRA =$(CFLAGS_EXTRA)"
+	@echo "  CFLAGS       =$(CFLAGS)"
+	@echo "  CXX          =$(CXX)"
+	@echo "  CXXSTD       =$(CXXSTD)"
+	@echo "  CXXFLAGS     =$(CXXFLAGS)"
+	@echo ""
+	@echo "  LD           =$(LD)"
+	@echo "  LDFLAGS      =$(LDFLAGS)"
+	@echo "  EXE_LDFLAGS  =$(EXE_LDFLAGS)"
+	@echo "  LIBS         =$(LIBS)"
+	@echo ""
+	@echo "  MDBX_BUILD_OPTIONS =$(MDBX_BUILD_OPTIONS)"
+	@echo ""
+	@echo "Assortment items for MDBX_BUILD_OPTIONS:"
+	@echo "  # Note that the defaults should already be correct for most platforms;"
+	@echo "  # you should not need to change any of these. Read their descriptions"
+#> dist-cutoff-begin
+ifeq ($(wildcard mdbx.c),mdbx.c)
+#< dist-cutoff-end
+	@echo "  # in README and source code (see mdbx.c) if you do."
+	@grep -h '#ifndef MDBX_' mdbx.c | grep -v BUILD | uniq | sed 's/#ifndef /  /'
+#> dist-cutoff-begin
+else
+	@echo "  # in README and source code (see src/options.h) if you do."
+	@grep -h '#ifndef MDBX_' src/internals.h src/options.h | grep -v BUILD | uniq | sed 's/#ifndef /  /'
+endif
+#< dist-cutoff-end
+
 UNAME      := $(shell uname -s 2>/dev/null || echo Unknown)
 define uname2sosuffix
   case "$(UNAME)" in
@@ -54,16 +98,6 @@ define uname2sosuffix
     *) echo so;;
   esac
 endef
-SO_SUFFIX  := $(shell $(uname2sosuffix))
-
-HEADERS    := mdbx.h mdbx.h++
-LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
-TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
-MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
-
-.PHONY: mdbx all install install-strip install-no-strip clean
-
-all: $(LIBRARIES) $(TOOLS)
 
 mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
 
@@ -99,19 +133,19 @@ config.h: mdbx.c $(lastword $(MAKEFILE_LIST))
 	) > $@
 
 mdbx-dylib.o: config.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c -o $@
 
 mdbx-static.o: config.h mdbx.c mdbx.h $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c -o $@
 
 mdbx++-dylib.o: config.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
-	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c++ -o $@
+	$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c mdbx.c++ -o $@
 
 mdbx++-static.o: config.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
-	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c++ -o $@
+	$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c++ -o $@
 
 mdbx_%:	mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
 
 #> dist-cutoff-begin
 else
@@ -222,13 +256,13 @@ build-test: all mdbx_example mdbx_test
 
 define test-rule
 $(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) mdbx.h $(lastword $(MAKEFILE_LIST))
-	$$(CXX) $$(CXXFLAGS) $$(MDBX_OPTIONS) -c $(1) -o $$@
+	$$(CXX) $$(CXXFLAGS) $$(MDBX_BUILD_OPTIONS) -c $(1) -o $$@
 
 endef
 $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 
 mdbx_%:	src/mdbx_%.c libmdbx.a
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
+	$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
@@ -256,10 +290,10 @@ src/config.h: src/version.c $(lastword $(MAKEFILE_LIST))
 	) > $@
 
 mdbx-dylib.o: src/config.h src/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/alloy.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/alloy.c -o $@
 
 mdbx-static.o: src/config.h src/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $(MAKEFILE_LIST))
-	$(CC) $(CFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
+	$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
 
 docs/Doxyfile: docs/Doxyfile.in src/version.c
 	sed \
@@ -295,10 +329,10 @@ doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h
 	cp mdbx.h++ src/options.h ChangeLog.md docs/ && (cd docs && doxygen Doxyfile) && cp AUTHORS LICENSE docs/html/
 
 mdbx++-dylib.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
-	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/mdbx.c++ -o $@
+	$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -DLIBMDBX_EXPORTS=1 -c src/mdbx.c++ -o $@
 
 mdbx++-static.o: src/config.h src/mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
-	$(CXX) $(CXXFLAGS) $(MDBX_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
+	$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/mdbx.c++ -o $@
 
 .PHONY: dist release-assets tags
 dist: tags dist-checked.tag libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz $(lastword $(MAKEFILE_LIST))
@@ -417,7 +451,7 @@ cross-qemu:
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) CXXSTD= clean && \
 			MDBX_TEST_EXTRA="$(MDBX_TEST_EXTRA)$$(echo $$CC | grep -q -e alpha -e sparc && echo ' --size-upper=64M --size-lower=64M')" \
-			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_OPTIONS)" \
+			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
 			$(MAKE) test-singleprocess || exit $$?; \
 	done
 
