@@ -1341,6 +1341,7 @@ ramfs
 ranf
 ranlib
 rbegin
+rcs
 RDADVISE
 RDAHEAD
 rdata
@@ -1759,6 +1760,7 @@ UNDOC
 unicode
 UNIFORUM
 uninstall
+UNINSTALLING
 uniq
 unistd
 UNLCK
