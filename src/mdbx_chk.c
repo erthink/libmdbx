@@ -678,7 +678,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       if (!dbi_name ||
           rc !=
               MDBX_INCOMPATIBLE) /* LY: mainDB's record is not a user's DB. */ {
-        error("mdbx_dbi_open '%s' failed, error %d %s\n",
+        error("mdbx_dbi_open('%s') failed, error %d %s\n",
               dbi_name ? dbi_name : "main", rc, mdbx_strerror(rc));
       }
       return rc;
@@ -702,13 +702,13 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
 
   rc = mdbx_dbi_flags(txn, dbi_handle, &flags);
   if (rc) {
-    error("mdbx_dbi_flags failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_dbi_flags() failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc;
   }
 
   rc = mdbx_dbi_stat(txn, dbi_handle, &ms, sizeof(ms));
   if (rc) {
-    error("mdbx_dbi_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_dbi_stat() failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc;
   }
 
@@ -766,7 +766,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   }
   rc = mdbx_cursor_open(txn, dbi_handle, &mc);
   if (rc) {
-    error("mdbx_cursor_open failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_cursor_open() failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc;
   }
 
@@ -863,7 +863,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT);
   }
   if (rc != MDBX_NOTFOUND)
-    error("mdbx_cursor_get failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_cursor_get() failed, error %d %s\n", rc, mdbx_strerror(rc));
   else
     rc = 0;
 
@@ -1047,7 +1047,7 @@ int main(int argc, char *argv[]) {
   struct timespec timestamp_start, timestamp_finish;
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_start)) {
     rc = errno;
-    error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("clock_gettime() failed, error %d %s\n", rc, mdbx_strerror(rc));
     return EXIT_FAILURE_SYS;
   }
 #endif
@@ -1199,13 +1199,13 @@ int main(int argc, char *argv[]) {
 
   rc = mdbx_env_create(&env);
   if (rc) {
-    error("mdbx_env_create failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_env_create() failed, error %d %s\n", rc, mdbx_strerror(rc));
     return rc < 0 ? EXIT_FAILURE_MDBX : EXIT_FAILURE_SYS;
   }
 
   rc = mdbx_env_set_maxdbs(env, MDBX_MAX_DBI);
   if (rc) {
-    error("mdbx_env_set_maxdbs failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_env_set_maxdbs() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
@@ -1228,7 +1228,7 @@ int main(int argc, char *argv[]) {
   }
 
   if (rc) {
-    error("mdbx_env_open failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_env_open() failed, error %d %s\n", rc, mdbx_strerror(rc));
     if (rc == MDBX_WANNA_RECOVERY && (envflags & MDBX_RDONLY))
       print("Please run %s in the read-write mode (with '-w' option).\n", prog);
     goto bailout;
@@ -1240,7 +1240,7 @@ int main(int argc, char *argv[]) {
   if ((envflags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == 0) {
     rc = mdbx_txn_lock(env, false);
     if (rc != MDBX_SUCCESS) {
-      error("mdbx_txn_lock failed, error %d %s\n", rc, mdbx_strerror(rc));
+      error("mdbx_txn_lock() failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto bailout;
     }
     write_locked = true;
@@ -1254,7 +1254,7 @@ int main(int argc, char *argv[]) {
 
   rc = mdbx_env_info_ex(env, txn, &envinfo, sizeof(envinfo));
   if (rc) {
-    error("mdbx_env_info failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_env_info_ex() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
   if (verbose) {
@@ -1268,14 +1268,14 @@ int main(int argc, char *argv[]) {
 
   rc = mdbx_env_stat_ex(env, txn, &envstat, sizeof(envstat));
   if (rc) {
-    error("mdbx_env_stat failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_env_stat_ex() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
   mdbx_filehandle_t dxb_fd;
   rc = mdbx_env_get_fd(env, &dxb_fd);
   if (rc) {
-    error("mdbx_env_get_fd failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_env_get_fd() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
@@ -1300,7 +1300,7 @@ int main(int argc, char *argv[]) {
   }
 #endif
   if (rc) {
-    error("mdbx_filesize failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("mdbx_filesize() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
@@ -1454,7 +1454,7 @@ int main(int argc, char *argv[]) {
     walk.pagemap = mdbx_calloc((size_t)backed_pages, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
       rc = errno ? errno : MDBX_ENOMEM;
-      error("calloc failed, error %d %s\n", rc, mdbx_strerror(rc));
+      error("calloc() failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto bailout;
     }
 
@@ -1466,7 +1466,7 @@ int main(int argc, char *argv[]) {
 
     if (rc) {
       if (rc != MDBX_EINTR || !check_user_break())
-        error("mdbx_env_pgwalk failed, error %d %s\n", rc, mdbx_strerror(rc));
+        error("mdbx_env_pgwalk() failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto bailout;
     }
 
@@ -1622,7 +1622,7 @@ int main(int argc, char *argv[]) {
     }
     rc = mdbx_env_sync_ex(env, true, false);
     if (rc != MDBX_SUCCESS)
-      error("mdbx_env_pgwalk failed, error %d %s\n", rc, mdbx_strerror(rc));
+      error("mdbx_env_pgwalk() failed, error %d %s\n", rc, mdbx_strerror(rc));
     else {
       total_problems -= 1;
       problems_meta -= 1;
@@ -1640,7 +1640,7 @@ int main(int argc, char *argv[]) {
       fflush(nullptr);
       rc = mdbx_env_turn_for_recovery(env, stuck_meta);
       if (rc != MDBX_SUCCESS)
-        error("mdbx_env_turn_for_recovery failed, error %d %s\n", rc,
+        error("mdbx_env_turn_for_recovery() failed, error %d %s\n", rc,
               mdbx_strerror(rc));
     } else {
       print(" = Skipping turn to the specified meta-page (%d) due to "
@@ -1673,7 +1673,7 @@ bailout:
 #else
   if (clock_gettime(CLOCK_MONOTONIC, &timestamp_finish)) {
     rc = errno;
-    error("clock_gettime failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("clock_gettime() failed, error %d %s\n", rc, mdbx_strerror(rc));
     return EXIT_FAILURE_SYS;
   }
   elapsed = timestamp_finish.tv_sec - timestamp_start.tv_sec +
