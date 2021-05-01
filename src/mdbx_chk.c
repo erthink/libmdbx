@@ -97,7 +97,6 @@ int envflags = MDBX_RDONLY | MDBX_EXCLUSIVE;
 MDBX_env *env;
 MDBX_txn *txn;
 MDBX_envinfo envinfo;
-MDBX_stat envstat;
 size_t userdb_count, skipped_subdb;
 uint64_t total_unused_bytes, reclaimable_pages, gc_pages, alloc_pages,
     unused_pages, backed_pages;
@@ -404,14 +403,14 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
     if (unused_bytes > page_size)
       problem_add("page", pgno, "illegal unused-bytes",
                   "%s-page: %u < %" PRIuPTR " < %u", pagetype_caption, 0,
-                  unused_bytes, envstat.ms_psize);
+                  unused_bytes, envinfo.mi_dxb_pagesize);
 
     if (header_bytes < (int)sizeof(long) ||
-        (size_t)header_bytes >= envstat.ms_psize - sizeof(long))
+        (size_t)header_bytes >= envinfo.mi_dxb_pagesize - sizeof(long))
       problem_add("page", pgno, "illegal header-length",
                   "%s-page: %" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR,
                   pagetype_caption, sizeof(long), header_bytes,
-                  envstat.ms_psize - sizeof(long));
+                  envinfo.mi_dxb_pagesize - sizeof(long));
     if (payload_bytes < 1) {
       if (nentries > 1) {
         problem_add("page", pgno, "zero size-of-entry",
@@ -490,7 +489,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
       } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
                  /* LY: allow gap up to one page. it is ok
                   * and better than shink-and-retry inside mdbx_update_gc() */
-                 envstat.ms_psize)
+                 envinfo.mi_dxb_pagesize)
         problem_add("entry", txnid, "extra idl space",
                     "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
                     (number + 1) * sizeof(pgno_t), data->iov_len);
@@ -1266,12 +1265,6 @@ int main(int argc, char *argv[]) {
       print("unavailable\n");
   }
 
-  rc = mdbx_env_stat_ex(env, txn, &envstat, sizeof(envstat));
-  if (rc) {
-    error("mdbx_env_stat_ex() failed, error %d %s\n", rc, mdbx_strerror(rc));
-    goto bailout;
-  }
-
   mdbx_filehandle_t dxb_fd;
   rc = mdbx_env_get_fd(env, &dxb_fd);
   if (rc) {
@@ -1482,7 +1475,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (verbose) {
-      uint64_t total_page_bytes = walk.pgcount * envstat.ms_psize;
+      uint64_t total_page_bytes = walk.pgcount * envinfo.mi_dxb_pagesize;
       print(" - pages: walked %" PRIu64 ", left/unused %" PRIu64 "\n",
             walk.pgcount, unused_pages);
       if (verbose > 1) {
@@ -1523,7 +1516,7 @@ int main(int argc, char *argv[]) {
         for (walk_dbi_t *dbi = walk.dbi; dbi < ARRAY_END(walk.dbi) && dbi->name;
              ++dbi)
           if (dbi->pages.total) {
-            uint64_t dbi_bytes = dbi->pages.total * envstat.ms_psize;
+            uint64_t dbi_bytes = dbi->pages.total * envinfo.mi_dxb_pagesize;
             print("     %s: subtotal %" PRIu64 " bytes (%.1f%%),"
                   " payload %" PRIu64 " (%.1f%%), unused %" PRIu64 " (%.1f%%)",
                   dbi->name, dbi_bytes, dbi_bytes * 100.0 / total_page_bytes,
@@ -1557,7 +1550,7 @@ int main(int argc, char *argv[]) {
   problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb, false);
 
   if (verbose) {
-    uint64_t value = envinfo.mi_mapsize / envstat.ms_psize;
+    uint64_t value = envinfo.mi_mapsize / envinfo.mi_dxb_pagesize;
     double percent = value / 100.0;
     print(" - space: %" PRIu64 " total pages", value);
     print(", backed %" PRIu64 " (%.1f%%)", backed_pages,
@@ -1566,7 +1559,7 @@ int main(int argc, char *argv[]) {
           alloc_pages / percent);
 
     if (verbose > 1) {
-      value = envinfo.mi_mapsize / envstat.ms_psize - alloc_pages;
+      value = envinfo.mi_mapsize / envinfo.mi_dxb_pagesize - alloc_pages;
       print(", remained %" PRIu64 " (%.1f%%)", value, value / percent);
 
       value = dont_traversal ? alloc_pages - gc_pages : walk.pgcount;
@@ -1581,8 +1574,8 @@ int main(int argc, char *argv[]) {
             reclaimable_pages / percent);
     }
 
-    value =
-        envinfo.mi_mapsize / envstat.ms_psize - alloc_pages + reclaimable_pages;
+    value = envinfo.mi_mapsize / envinfo.mi_dxb_pagesize - alloc_pages +
+            reclaimable_pages;
     print(", available %" PRIu64 " (%.1f%%)\n", value, value / percent);
   }
 

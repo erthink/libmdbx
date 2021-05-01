@@ -97,7 +97,6 @@ int main(int argc, char *argv[]) {
   MDBX_env *env;
   MDBX_txn *txn;
   MDBX_dbi dbi;
-  MDBX_stat mst;
   MDBX_envinfo mei;
   prog = argv[0];
   char *envname;
@@ -218,25 +217,21 @@ int main(int argc, char *argv[]) {
   }
 
   if (envinfo) {
-    rc = mdbx_env_stat_ex(env, txn, &mst, sizeof(mst));
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_env_stat_ex", rc);
-      goto txn_abort;
-    }
     printf("Environment Info\n");
-    printf("  Pagesize: %u\n", mst.ms_psize);
+    printf("  Pagesize: %u\n", mei.mi_dxb_pagesize);
     if (mei.mi_geo.lower != mei.mi_geo.upper) {
       printf("  Dynamic datafile: %" PRIu64 "..%" PRIu64 " bytes (+%" PRIu64
              "/-%" PRIu64 "), %" PRIu64 "..%" PRIu64 " pages (+%" PRIu64
              "/-%" PRIu64 ")\n",
              mei.mi_geo.lower, mei.mi_geo.upper, mei.mi_geo.grow,
-             mei.mi_geo.shrink, mei.mi_geo.lower / mst.ms_psize,
-             mei.mi_geo.upper / mst.ms_psize, mei.mi_geo.grow / mst.ms_psize,
-             mei.mi_geo.shrink / mst.ms_psize);
+             mei.mi_geo.shrink, mei.mi_geo.lower / mei.mi_dxb_pagesize,
+             mei.mi_geo.upper / mei.mi_dxb_pagesize,
+             mei.mi_geo.grow / mei.mi_dxb_pagesize,
+             mei.mi_geo.shrink / mei.mi_dxb_pagesize);
       printf("  Current mapsize: %" PRIu64 " bytes, %" PRIu64 " pages \n",
-             mei.mi_mapsize, mei.mi_mapsize / mst.ms_psize);
+             mei.mi_mapsize, mei.mi_mapsize / mei.mi_dxb_pagesize);
       printf("  Current datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
-             mei.mi_geo.current, mei.mi_geo.current / mst.ms_psize);
+             mei.mi_geo.current, mei.mi_geo.current / mei.mi_dxb_pagesize);
 #if defined(_WIN32) || defined(_WIN64)
       if (mei.mi_geo.shrink && mei.mi_geo.current != mei.mi_geo.upper)
         printf("                    WARNING: Due Windows system limitations a "
@@ -247,7 +242,7 @@ int main(int argc, char *argv[]) {
 #endif
     } else {
       printf("  Fixed datafile: %" PRIu64 " bytes, %" PRIu64 " pages\n",
-             mei.mi_geo.current, mei.mi_geo.current / mst.ms_psize);
+             mei.mi_geo.current, mei.mi_geo.current / mei.mi_dxb_pagesize);
     }
     printf("  Last transaction ID: %" PRIu64 "\n", mei.mi_recent_txnid);
     printf("  Latter reader transaction ID: %" PRIu64 " (%" PRIi64 ")\n",
@@ -255,9 +250,6 @@ int main(int argc, char *argv[]) {
            mei.mi_latter_reader_txnid - mei.mi_recent_txnid);
     printf("  Max readers: %u\n", mei.mi_maxreaders);
     printf("  Number of reader slots uses: %u\n", mei.mi_numreaders);
-  } else {
-    /* LY: zap warnings from gcc */
-    memset(&mst, 0, sizeof(mst));
   }
 
   if (rdrinfo) {
@@ -296,6 +288,8 @@ int main(int argc, char *argv[]) {
       error("mdbx_cursor_open", rc);
       goto txn_abort;
     }
+
+    MDBX_stat mst;
     rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_dbi_stat", rc);
@@ -370,18 +364,18 @@ int main(int argc, char *argv[]) {
     }
 
     if (envinfo) {
-      uint64_t value = mei.mi_mapsize / mst.ms_psize;
+      uint64_t value = mei.mi_mapsize / mei.mi_dxb_pagesize;
       double percent = value / 100.0;
       printf("Page Usage\n");
       printf("  Total: %" PRIu64 " 100%%\n", value);
 
-      value = mei.mi_geo.current / mst.ms_psize;
+      value = mei.mi_geo.current / mei.mi_dxb_pagesize;
       printf("  Backed: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = mei.mi_last_pgno + 1;
       printf("  Allocated: %" PRIu64 " %.1f%%\n", value, value / percent);
 
-      value = mei.mi_mapsize / mst.ms_psize - (mei.mi_last_pgno + 1);
+      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1);
       printf("  Remained: %" PRIu64 " %.1f%%\n", value, value / percent);
 
       value = mei.mi_last_pgno + 1 - pages;
@@ -396,8 +390,8 @@ int main(int argc, char *argv[]) {
       value = reclaimable;
       printf("  Reclaimable: %" PRIu64 " %.1f%%\n", value, value / percent);
 
-      value =
-          mei.mi_mapsize / mst.ms_psize - (mei.mi_last_pgno + 1) + reclaimable;
+      value = mei.mi_mapsize / mei.mi_dxb_pagesize - (mei.mi_last_pgno + 1) +
+              reclaimable;
       printf("  Available: %" PRIu64 " %.1f%%\n", value, value / percent);
     } else
       printf("  GC: %" PRIaPGNO " pages\n", pages);
@@ -408,6 +402,8 @@ int main(int argc, char *argv[]) {
     error("mdbx_dbi_open", rc);
     goto txn_abort;
   }
+
+  MDBX_stat mst;
   rc = mdbx_dbi_stat(txn, dbi, &mst, sizeof(mst));
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_dbi_stat", rc);
