@@ -8437,9 +8437,8 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   return mdbx_txn_end(txn, MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE);
 }
 
-/* Count all the pages in each DB and in the freelist and make sure
- * it matches the actual number of pages being used.
- * All named DBs must be open for a correct count. */
+/* Count all the pages in each DB and in the GC and make sure
+ * it matches the actual number of pages being used. */
 static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
                                 bool dont_filter_gc) {
   pgno_t pending = 0;
@@ -8453,7 +8452,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  pgno_t freecount = 0;
+  pgno_t gc = 0;
   MDBX_val key, data;
   while ((rc = mdbx_cursor_get(&cx.outer, &key, &data, MDBX_NEXT)) == 0) {
     if (!dont_filter_gc) {
@@ -8468,7 +8467,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
         goto skip;
     }
 
-    freecount += *(pgno_t *)data.iov_base;
+    gc += *(pgno_t *)data.iov_base;
   skip:;
   }
   mdbx_tassert(txn, rc == MDBX_NOTFOUND);
@@ -8476,7 +8475,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
   for (MDBX_dbi i = FREE_DBI; i < txn->mt_numdbs; i++)
     txn->mt_dbistate[i] &= ~DBI_AUDITED;
 
-  pgno_t count = 0;
+  pgno_t used = NUM_METAS;
   for (MDBX_dbi i = FREE_DBI; i <= MAIN_DBI; i++) {
     if (!(txn->mt_dbistate[i] & DBI_VALID))
       continue;
@@ -8486,8 +8485,8 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
     txn->mt_dbistate[i] |= DBI_AUDITED;
     if (txn->mt_dbs[i].md_root == P_INVALID)
       continue;
-    count += txn->mt_dbs[i].md_branch_pages + txn->mt_dbs[i].md_leaf_pages +
-             txn->mt_dbs[i].md_overflow_pages;
+    used += txn->mt_dbs[i].md_branch_pages + txn->mt_dbs[i].md_leaf_pages +
+            txn->mt_dbs[i].md_overflow_pages;
 
     if (i != MAIN_DBI)
       continue;
@@ -8515,7 +8514,7 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
               }
             }
           }
-          count +=
+          used +=
               db->md_branch_pages + db->md_leaf_pages + db->md_overflow_pages;
         }
       }
@@ -8530,8 +8529,8 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
       continue;
     for (MDBX_txn *t = txn; t; t = t->mt_parent)
       if (F_ISSET(t->mt_dbistate[i], DBI_DIRTY | DBI_CREAT)) {
-        count += t->mt_dbs[i].md_branch_pages + t->mt_dbs[i].md_leaf_pages +
-                 t->mt_dbs[i].md_overflow_pages;
+        used += t->mt_dbs[i].md_branch_pages + t->mt_dbs[i].md_leaf_pages +
+                t->mt_dbs[i].md_overflow_pages;
         txn->mt_dbistate[i] |= DBI_AUDITED;
         break;
       }
@@ -8545,21 +8544,21 @@ static __cold int mdbx_audit_ex(MDBX_txn *txn, unsigned retired_stored,
     }
   }
 
-  if (pending + freecount + count + NUM_METAS == txn->mt_next_pgno)
+  if (pending + gc + used == txn->mt_next_pgno)
     return MDBX_SUCCESS;
 
   if ((txn->mt_flags & MDBX_TXN_RDONLY) == 0)
-    mdbx_error("audit @%" PRIaTXN ": %u(pending) = %u(loose-count) + "
-               "%u(reclaimed-list) + %u(retired-pending) - %u(retired-stored)",
+    mdbx_error("audit @%" PRIaTXN ": %u(pending) = %u(loose) + "
+               "%u(reclaimed) + %u(retired-pending) - %u(retired-stored)",
                txn->mt_txnid, pending, txn->tw.loose_count,
                MDBX_PNL_SIZE(txn->tw.reclaimed_pglist),
                txn->tw.retired_pages ? MDBX_PNL_SIZE(txn->tw.retired_pages) : 0,
                retired_stored);
   mdbx_error("audit @%" PRIaTXN ": %" PRIaPGNO "(pending) + %" PRIaPGNO
-             "(free) + %" PRIaPGNO "(count) = %" PRIaPGNO
-             "(total) <> %" PRIaPGNO "(next-pgno)",
-             txn->mt_txnid, pending, freecount, count + NUM_METAS,
-             pending + freecount + count + NUM_METAS, txn->mt_next_pgno);
+             "(gc) + %" PRIaPGNO "(count) = %" PRIaPGNO "(total) <> %" PRIaPGNO
+             "(allocated)",
+             txn->mt_txnid, pending, gc, used, pending + gc + used,
+             txn->mt_next_pgno);
   return MDBX_PROBLEM;
 }
 
