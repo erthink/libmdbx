@@ -18866,66 +18866,130 @@ __cold int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *arg) {
   return MDBX_SUCCESS;
 }
 
-/* Common code for mdbx_dbi_stat() and mdbx_env_stat().
- * [in] env the environment to operate in.
- * [in] db the MDBX_db record containing the stats to return.
- * [out] arg the address of an MDBX_stat structure to receive the stats.
- * Returns 0, this function always succeeds. */
-static void mdbx_stat0(const MDBX_env *env, const MDBX_db *db, MDBX_stat *dest,
-                       size_t bytes) {
-  dest->ms_psize = env->me_psize;
-  dest->ms_depth = db->md_depth;
-  dest->ms_branch_pages = db->md_branch_pages;
-  dest->ms_leaf_pages = db->md_leaf_pages;
-  dest->ms_overflow_pages = db->md_overflow_pages;
-  dest->ms_entries = db->md_entries;
-  if (likely(bytes >=
-             offsetof(MDBX_stat, ms_mod_txnid) + sizeof(dest->ms_mod_txnid)))
-    dest->ms_mod_txnid = db->md_mod_txnid;
-}
-
 #ifndef LIBMDBX_NO_EXPORTS_LEGACY_API
 __cold int mdbx_env_stat(const MDBX_env *env, MDBX_stat *stat, size_t bytes) {
   return __inline_mdbx_env_stat(env, stat, bytes);
 }
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
+static void stat_get(const MDBX_db *db, MDBX_stat *st, size_t bytes) {
+  st->ms_depth = db->md_depth;
+  st->ms_branch_pages = db->md_branch_pages;
+  st->ms_leaf_pages = db->md_leaf_pages;
+  st->ms_overflow_pages = db->md_overflow_pages;
+  st->ms_entries = db->md_entries;
+  if (likely(bytes >=
+             offsetof(MDBX_stat, ms_mod_txnid) + sizeof(st->ms_mod_txnid)))
+    st->ms_mod_txnid = db->md_mod_txnid;
+}
+
+static void stat_add(const MDBX_db *db, MDBX_stat *const st,
+                     const size_t bytes) {
+  st->ms_depth += db->md_depth;
+  st->ms_branch_pages += db->md_branch_pages;
+  st->ms_leaf_pages += db->md_leaf_pages;
+  st->ms_overflow_pages += db->md_overflow_pages;
+  st->ms_entries += db->md_entries;
+  if (likely(bytes >=
+             offsetof(MDBX_stat, ms_mod_txnid) + sizeof(st->ms_mod_txnid)))
+    st->ms_mod_txnid = (st->ms_mod_txnid > db->md_mod_txnid) ? st->ms_mod_txnid
+                                                             : db->md_mod_txnid;
+}
+
+static __cold int stat_acc(const MDBX_txn *txn, MDBX_stat *st, size_t bytes) {
+  int err = check_txn(txn, MDBX_TXN_BLOCKED);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  st->ms_psize = txn->mt_env->me_psize;
+#if 1
+  /* assuming GC is internal and not subject for accounting */
+  stat_get(&txn->mt_dbs[MAIN_DBI], st, bytes);
+#else
+  stat_get(&txn->mt_dbs[FREE_DBI], st, bytes);
+  stat_add(&txn->mt_dbs[MAIN_DBI], st, bytes);
+#endif
+
+  /* account opened named subDBs */
+  for (MDBX_dbi dbi = CORE_DBS; dbi < txn->mt_numdbs; dbi++)
+    if ((txn->mt_dbistate[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID)
+      stat_add(txn->mt_dbs + dbi, st, bytes);
+
+  if (!(txn->mt_dbs[MAIN_DBI].md_flags & (MDBX_DUPSORT | MDBX_INTEGERKEY)) &&
+      txn->mt_dbs[MAIN_DBI].md_entries /* TODO: use `md_subs` field */) {
+    MDBX_cursor_couple cx;
+    err = mdbx_cursor_init(&cx.outer, (MDBX_txn *)txn, MAIN_DBI);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
+    /* scan and account not opened named subDBs */
+    err = mdbx_page_search(&cx.outer, NULL, MDBX_PS_FIRST);
+    while (err == MDBX_SUCCESS) {
+      const MDBX_page *mp = cx.outer.mc_pg[cx.outer.mc_top];
+      for (unsigned i = 0; i < page_numkeys(mp); i++) {
+        const MDBX_node *node = page_node(mp, i);
+        if (node_flags(node) != F_SUBDATA)
+          continue;
+        if (unlikely(node_ds(node) != sizeof(MDBX_db)))
+          return MDBX_CORRUPTED;
+
+        /* skip opened and already accounted */
+        for (MDBX_dbi dbi = CORE_DBS; dbi < txn->mt_numdbs; dbi++)
+          if ((txn->mt_dbistate[dbi] & (DBI_VALID | DBI_STALE)) == DBI_VALID &&
+              node_ks(node) == txn->mt_dbxs[dbi].md_name.iov_len &&
+              memcmp(node_key(node), txn->mt_dbxs[dbi].md_name.iov_base,
+                     node_ks(node)) == 0) {
+            node = NULL;
+            break;
+          }
+
+        if (node) {
+          MDBX_db db;
+          memcpy(&db, node_data(node), sizeof(db));
+          stat_add(&db, st, bytes);
+        }
+      }
+      err = mdbx_cursor_sibling(&cx.outer, SIBLING_RIGHT);
+    }
+    if (unlikely(err != MDBX_NOTFOUND))
+      return err;
+  }
+
+  return MDBX_SUCCESS;
+}
+
 __cold int mdbx_env_stat_ex(const MDBX_env *env, const MDBX_txn *txn,
                             MDBX_stat *dest, size_t bytes) {
-  if (unlikely((env == NULL && txn == NULL) || dest == NULL))
+  if (unlikely(!dest))
     return MDBX_EINVAL;
-
-  if (txn) {
-    int err = check_txn(txn, MDBX_TXN_BLOCKED);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-  }
-  if (env) {
-    int err = check_env(env, true);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-    if (txn && unlikely(txn->mt_env != env))
-      return MDBX_EINVAL;
-  }
-
   const size_t size_before_modtxnid = offsetof(MDBX_stat, ms_mod_txnid);
   if (unlikely(bytes != sizeof(MDBX_stat)) && bytes != size_before_modtxnid)
     return MDBX_EINVAL;
 
-  if (txn) {
-    mdbx_stat0(txn->mt_env, &txn->mt_dbs[MAIN_DBI], dest, bytes);
-    return MDBX_SUCCESS;
+  if (likely(txn)) {
+    if (env && unlikely(txn->mt_env != env))
+      return MDBX_EINVAL;
+    return stat_acc(txn, dest, bytes);
   }
 
-  while (1) {
-    const MDBX_meta *const recent_meta = mdbx_meta_head(env);
-    const txnid_t txnid = mdbx_meta_txnid_fluid(env, recent_meta);
-    mdbx_stat0(env, &recent_meta->mm_dbs[MAIN_DBI], dest, bytes);
-    mdbx_compiler_barrier();
-    if (likely(txnid == mdbx_meta_txnid_fluid(env, recent_meta) &&
-               recent_meta == mdbx_meta_head(env)))
-      return MDBX_SUCCESS;
-  }
+  int err = check_env(env, true);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  if (env->me_txn0 && env->me_txn0->mt_owner == mdbx_thread_self())
+    /* inside write-txn */
+    return stat_acc(env->me_txn, dest, bytes);
+
+  MDBX_txn *tmp_txn;
+  err = mdbx_txn_begin((MDBX_env *)env, NULL, MDBX_TXN_RDONLY, &tmp_txn);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  const int rc = stat_acc(tmp_txn, dest, bytes);
+  err = mdbx_txn_abort(tmp_txn);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  return rc;
 }
 
 __cold int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
@@ -19479,7 +19543,9 @@ __cold int mdbx_dbi_stat(MDBX_txn *txn, MDBX_dbi dbi, MDBX_stat *dest,
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
-  mdbx_stat0(txn->mt_env, &txn->mt_dbs[dbi], dest, bytes);
+
+  dest->ms_psize = txn->mt_env->me_psize;
+  stat_get(&txn->mt_dbs[dbi], dest, bytes);
   return MDBX_SUCCESS;
 }
 
