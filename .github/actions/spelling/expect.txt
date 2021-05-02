@@ -16,6 +16,7 @@ Affero
 ahupowerdns
 ahutils
 ailfast
+Akhunov
 Aleksey
 alevel
 alexey
@@ -63,6 +64,7 @@ asm
 asprintf
 aspx
 assection
+AstraLinux
 atal
 atexit
 atfork
@@ -274,6 +276,7 @@ dbx
 dcache
 dcmp
 dcount
+dda
 DDBI
 ddfd
 ddl
@@ -1278,6 +1281,7 @@ PRIa
 PRId
 PRIi
 printf
+Prioritization
 PRIu
 prng
 prno
@@ -1369,6 +1373,7 @@ realloc
 REALMEM
 REALPATH
 realtime
+Rebuffo
 RECO
 redis
 reedom
