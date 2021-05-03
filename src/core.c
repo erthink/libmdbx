@@ -21691,63 +21691,63 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 }
 
 __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
-                               uint64_t *value) {
+                               uint64_t *pvalue) {
   int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  if (unlikely(!value))
+  if (unlikely(!pvalue))
     return MDBX_EINVAL;
 
   switch (option) {
   case MDBX_opt_sync_bytes:
     if (unlikely(!(env->me_flags & MDBX_ENV_ACTIVE)))
       return MDBX_EPERM;
-    *value = pgno2bytes(
+    *pvalue = pgno2bytes(
         env, atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed));
     break;
 
   case MDBX_opt_sync_period:
     if (unlikely(!(env->me_flags & MDBX_ENV_ACTIVE)))
       return MDBX_EPERM;
-    *value = mdbx_osal_monotime_to_16dot16(
+    *pvalue = mdbx_osal_monotime_to_16dot16(
         atomic_load64(&env->me_lck->mti_autosync_period, mo_Relaxed));
     break;
 
   case MDBX_opt_max_db:
-    *value = env->me_maxdbs - CORE_DBS;
+    *pvalue = env->me_maxdbs - CORE_DBS;
     break;
 
   case MDBX_opt_max_readers:
-    *value = env->me_maxreaders;
+    *pvalue = env->me_maxreaders;
     break;
 
   case MDBX_opt_dp_reserve_limit:
-    *value = env->me_options.dp_reserve_limit;
+    *pvalue = env->me_options.dp_reserve_limit;
     break;
 
   case MDBX_opt_rp_augment_limit:
-    *value = env->me_options.rp_augment_limit;
+    *pvalue = env->me_options.rp_augment_limit;
     break;
 
   case MDBX_opt_txn_dp_limit:
-    *value = env->me_options.dp_limit;
+    *pvalue = env->me_options.dp_limit;
     break;
   case MDBX_opt_txn_dp_initial:
-    *value = env->me_options.dp_initial;
+    *pvalue = env->me_options.dp_initial;
     break;
 
   case MDBX_opt_spill_max_denominator:
-    *value = env->me_options.spill_max_denominator;
+    *pvalue = env->me_options.spill_max_denominator;
     break;
   case MDBX_opt_spill_min_denominator:
-    *value = env->me_options.spill_min_denominator;
+    *pvalue = env->me_options.spill_min_denominator;
     break;
   case MDBX_opt_spill_parent4child_denominator:
-    *value = env->me_options.spill_parent4child_denominator;
+    *pvalue = env->me_options.spill_parent4child_denominator;
     break;
 
   case MDBX_opt_loose_limit:
-    *value = env->me_options.dp_loose_limit;
+    *pvalue = env->me_options.dp_loose_limit;
     break;
 
   default:

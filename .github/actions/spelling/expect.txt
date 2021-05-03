@@ -1315,6 +1315,7 @@ putc
 putchar
 putflags
 pv
+pvalue
 PVOID
 PWIM
 PWIN
