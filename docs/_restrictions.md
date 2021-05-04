@@ -162,6 +162,34 @@ The "next" version of libmdbx (\ref MithrilDB) will completely solve this.
   not apply to write transactions if the system clears stale writers, see
   above.
 
+## Large data items and huge transactions
+
+MDBX allows you to store values up to 1 gigabyte in size, but this is
+not the main functionality for a key-value storage, but an additional
+feature that should not be abused. Such long values are stored in
+consecutive/adjacent DB pages, which has both pros and cons. This allows
+you to read long values directly without copying and without any
+overhead from a linear section of memory.
+
+On the other hand, when putting such values in the database, it is
+required to find a sufficient number of free consecutive/adjacent
+database pages, which can be very difficult and expensive, moreover
+sometimes impossible since b-tree tends to fragmentation. So, when
+placing very long values, the engine may need to process the entire GC,
+and in the absence of a sufficient sequence of free pages, increase the
+DB file. Thus, for long values, MDBX provides maximum read performance
+at the expense of write performance.
+
+A similar situation can be with huge transactions, in which a lot of
+database pages are retired. The retired pages should be put into GC as a
+list of page numbers for future reuse. But in huge transactions, such a
+list of retired page numbers can also be huge, i.e. it is a very long
+value and requires a long sequence of free pages to be saved. Thus, if
+you delete large amounts of information from the database in a single
+transaction, MDBX may need to increase the database file to save the
+list of pages to be retired.
+
+Both of these issues will be addressed in MithrilDB.
 
 ## Space reservation
 An MDBX database configuration will often reserve considerable unused
