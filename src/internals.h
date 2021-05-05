@@ -1137,7 +1137,10 @@ struct MDBX_env {
   unsigned me_leaf_nodemax; /* max size of a leaf-node */
   uint8_t me_psize2log;     /* log2 of DB page size */
   int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
-  unsigned me_os_psize; /* OS page size, from mdbx_syspagesize() */
+  uint16_t me_merge_threshold,
+      me_merge_threshold_gc;  /* pages emptier than this are candidates for
+                                 merging */
+  unsigned me_os_psize;       /* OS page size, from mdbx_syspagesize() */
   unsigned me_maxreaders;     /* size of the reader table */
   MDBX_dbi me_maxdbs;         /* size of the DB table */
   uint32_t me_pid;            /* process ID of this env */
@@ -1164,6 +1167,7 @@ struct MDBX_env {
     uint8_t spill_max_denominator;
     uint8_t spill_min_denominator;
     uint8_t spill_parent4child_denominator;
+    unsigned merge_threshold_16dot16_percent;
     union {
       unsigned all;
       /* tracks options with non-auto values but tuned by user */

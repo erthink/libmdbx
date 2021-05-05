@@ -1951,6 +1951,17 @@ enum MDBX_option_t {
    * Default is 0, i.e. by default no spilling performed during starting nested
    * transactions, that correspond historically behaviour. */
   MDBX_opt_spill_parent4child_denominator,
+
+  /** \brief Controls the in-process threshold of semi-empty pages merge.
+   * \warning This is experimental option and subject for change or removal.
+   * \details This option controls the in-process threshold of minimum page
+   * fill, as used space of percentage of a page. Neighbour pages emptier than
+   * this value are candidates for merging. The threshold value is specified
+   * in 1/65536 of percent, which is equivalent to the 16-dot-16 fixed point
+   * format. The specified value must be in the range from 12.5% (almost empty)
+   * to 50% (half empty) which corresponds to the range from 8192 and to 32768
+   * in units respectively. */
+  MDBX_opt_merge_threshold_16dot16_percent,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */
