@@ -154,7 +154,7 @@
 
 /** Forces assertion checking */
 #ifndef MDBX_FORCE_ASSERTIONS
-#define MDBX_FORCE_ASSERTIONS 1
+#define MDBX_FORCE_ASSERTIONS 0
 #elif !(MDBX_FORCE_ASSERTIONS == 0 || MDBX_FORCE_ASSERTIONS == 1)
 #error MDBX_FORCE_ASSERTIONS must be defined as 0 or 1
 #endif /* MDBX_FORCE_ASSERTIONS */
