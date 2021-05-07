@@ -310,7 +310,7 @@ test-fault: all mdbx_test
 
 VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
 memcheck test-valgrind:
-	@echo '  RUNNING `mdbx_test basic` under Valgrind\'s memcheck...'
+	@echo "  RUNNING \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -DMDBX_USE_VALGRIND" build-test && \
 	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
 		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
