@@ -208,7 +208,9 @@ using filehandle = ::mdbx_filehandle_t;
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L &&       \
      (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) ||                             \
-      __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500))
+      __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) &&                            \
+     (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) ||                            \
+      __IPHONE_OS_VERSION_MIN_REQUIRED >= 130100))
 #define MDBX_STD_FILESYSTEM_PATH
 using path = ::std::filesystem::path;
 #elif defined(_WIN32) || defined(_WIN64)
