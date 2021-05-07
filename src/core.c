@@ -12240,28 +12240,32 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
     break;
   }
 
-  MDBX_env dummy_env;
-  memset(&dummy_env, 0, sizeof(dummy_env));
-  dummy_env.me_flags =
+#ifdef __e2k__ /* https://bugs.mcst.ru/bugzilla/show_bug.cgi?id=6011 */
+  MDBX_env *const dummy_env = alloca(sizeof(MDBX_env));
+#else
+  MDBX_env dummy_env_silo, *const dummy_env = &dummy_env_silo;
+#endif
+  memset(dummy_env, 0, sizeof(*dummy_env));
+  dummy_env->me_flags =
       (mode == MDBX_ENV_ENSURE_UNUSED) ? MDBX_EXCLUSIVE : MDBX_ENV_DEFAULTS;
-  dummy_env.me_os_psize = (unsigned)mdbx_syspagesize();
-  dummy_env.me_psize = (unsigned)mdbx_default_pagesize();
-  dummy_env.me_pathname = (char *)pathname;
+  dummy_env->me_os_psize = (unsigned)mdbx_syspagesize();
+  dummy_env->me_psize = (unsigned)mdbx_default_pagesize();
+  dummy_env->me_pathname = (char *)pathname;
 
   MDBX_handle_env_pathname env_pathname;
-  STATIC_ASSERT(sizeof(dummy_env.me_flags) == sizeof(MDBX_env_flags_t));
+  STATIC_ASSERT(sizeof(dummy_env->me_flags) == sizeof(MDBX_env_flags_t));
   int rc = MDBX_RESULT_TRUE,
       err = mdbx_handle_env_pathname(
-          &env_pathname, pathname, (MDBX_env_flags_t *)&dummy_env.me_flags, 0);
+          &env_pathname, pathname, (MDBX_env_flags_t *)&dummy_env->me_flags, 0);
   if (likely(err == MDBX_SUCCESS)) {
     mdbx_filehandle_t clk_handle = INVALID_HANDLE_VALUE,
                       dxb_handle = INVALID_HANDLE_VALUE;
     if (mode > MDBX_ENV_JUST_DELETE) {
-      err = mdbx_openfile(MDBX_OPEN_DELETE, &dummy_env, env_pathname.dxb,
+      err = mdbx_openfile(MDBX_OPEN_DELETE, dummy_env, env_pathname.dxb,
                           &dxb_handle, 0);
       err = (err == MDBX_ENOFILE) ? MDBX_SUCCESS : err;
       if (err == MDBX_SUCCESS) {
-        err = mdbx_openfile(MDBX_OPEN_DELETE, &dummy_env, env_pathname.lck,
+        err = mdbx_openfile(MDBX_OPEN_DELETE, dummy_env, env_pathname.lck,
                             &clk_handle, 0);
         err = (err == MDBX_ENOFILE) ? MDBX_SUCCESS : err;
       }
@@ -12287,7 +12291,7 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
         err = MDBX_SUCCESS;
     }
 
-    if (err == MDBX_SUCCESS && !(dummy_env.me_flags & MDBX_NOSUBDIR)) {
+    if (err == MDBX_SUCCESS && !(dummy_env->me_flags & MDBX_NOSUBDIR)) {
       err = mdbx_removedirectory(pathname);
       if (err == MDBX_SUCCESS)
         rc = MDBX_SUCCESS;
