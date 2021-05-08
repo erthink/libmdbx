@@ -531,9 +531,9 @@ typedef mode_t mdbx_mode_t;
 extern "C" {
 #endif
 
-/* MDBX version 0.9.x */
+/* MDBX version 0.10.x */
 #define MDBX_VERSION_MAJOR 0
-#define MDBX_VERSION_MINOR 9
+#define MDBX_VERSION_MINOR 10
 
 #ifndef LIBMDBX_API
 #if defined(LIBMDBX_EXPORTS)
