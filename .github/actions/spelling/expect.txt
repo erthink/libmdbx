@@ -877,6 +877,7 @@ maindb
 mainpage
 maj
 majflt
+Makefiles
 MAKEFLAGS
 makeindex
 MAKELANGID
@@ -1324,6 +1325,7 @@ PWIN
 PWOF
 pwrite
 pwritev
+pwsh
 py
 pymdownx
 pyw
