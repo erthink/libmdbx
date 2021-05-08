@@ -12913,18 +12913,6 @@ static struct node_result __hot mdbx_node_search(MDBX_cursor *mc,
   return ret;
 }
 
-#if 0 /* unused for now */
-static void mdbx_cursor_adjust(MDBX_cursor *mc, func) {
-  MDBX_cursor *m2;
-
-  for (m2 = mc->mc_txn->tw.cursors[mc->mc_dbi]; m2; m2 = m2->mc_next) {
-    if (m2->mc_pg[m2->mc_top] == mc->mc_pg[mc->mc_top]) {
-      func(mc, m2);
-    }
-  }
-}
-#endif
-
 /* Pop a page off the top of the cursor's stack. */
 static __inline void mdbx_cursor_pop(MDBX_cursor *mc) {
   if (mc->mc_snum) {

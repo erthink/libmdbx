@@ -733,17 +733,6 @@ static void WINAPI stub_srwlock_ReleaseExclusive(MDBX_srwlock *srwl) {
   srwl->writerCount = 0;
 }
 
-/*----------------------------------------------------------------------------*/
-
-#if 0  /* LY: unused for now */
-static DWORD WINAPI stub_DiscardVirtualMemory(PVOID VirtualAddress,
-                                              SIZE_T Size) {
-  return VirtualAlloc(VirtualAddress, Size, MEM_RESET, PAGE_NOACCESS)
-             ? ERROR_SUCCESS
-	  : (int)GetLastError();
-}
-#endif /* unused for now */
-
 static uint64_t WINAPI stub_GetTickCount64(void) {
   LARGE_INTEGER Counter, Frequency;
   return (QueryPerformanceFrequency(&Frequency) &&
@@ -753,6 +742,7 @@ static uint64_t WINAPI stub_GetTickCount64(void) {
 }
 
 /*----------------------------------------------------------------------------*/
+
 #ifndef xMDBX_ALLOY
 MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
     mdbx_srwlock_ReleaseShared, mdbx_srwlock_AcquireExclusive,
@@ -767,11 +757,6 @@ MDBX_NtFsControlFile mdbx_NtFsControlFile;
 MDBX_PrefetchVirtualMemory mdbx_PrefetchVirtualMemory;
 MDBX_GetTickCount64 mdbx_GetTickCount64;
 MDBX_RegGetValueA mdbx_RegGetValueA;
-#if 0  /* LY: unused for now */
-MDBX_DiscardVirtualMemory mdbx_DiscardVirtualMemory;
-MDBX_OfferVirtualMemory mdbx_OfferVirtualMemory;
-MDBX_ReclaimVirtualMemory mdbx_ReclaimVirtualMemory;
-#endif /* unused for now */
 #endif /* xMDBX_ALLOY */
 
 static void mdbx_winnt_import(void) {
@@ -802,21 +787,6 @@ static void mdbx_winnt_import(void) {
 
   const HINSTANCE hAdvapi32dll = GetModuleHandleA("advapi32.dll");
   GET_PROC_ADDR(hAdvapi32dll, RegGetValueA);
-
-#if 0  /* LY: unused for now */
-  if (!mdbx_RunningUnderWine()) {
-    GET_PROC_ADDR(hKernel32dll, DiscardVirtualMemory);
-    GET_PROC_ADDR(hKernel32dll, OfferVirtualMemory);
-    GET_PROC_ADDR(hKernel32dll, ReclaimVirtualMemory);
-  }
-  if (!mdbx_DiscardVirtualMemory)
-    mdbx_DiscardVirtualMemory = stub_DiscardVirtualMemory;
-  if (!mdbx_OfferVirtualMemory)
-    mdbx_OfferVirtualMemory = stub_OfferVirtualMemory;
-  if (!mdbx_ReclaimVirtualMemory)
-    mdbx_ReclaimVirtualMemory = stub_ReclaimVirtualMemory;
-#endif /* unused for now */
-
 #undef GET_PROC_ADDR
 
   const MDBX_srwlock_function init =
