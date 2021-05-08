@@ -616,7 +616,12 @@ extern LIBMDBX_VERINFO_API const struct MDBX_build_info {
  * So, if you doubt, just build MDBX as the separate DLL and don't worry. */
 
 #ifndef MDBX_CONFIG_MANUAL_TLS_CALLBACK
-#if defined(_WIN32_WINNT_VISTA) && WINVER >= _WIN32_WINNT_VISTA
+#ifndef _WIN32_WINNT
+#error Non-dll build libmdbx requires target Windows version \
+  to be explicitly defined via _WIN32_WINNT for properly \
+  handling thread local storage destructors.
+#endif
+#if _WIN32_WINNT >= 0x0600 /* Windows Vista */
 /* As described above mdbx_dll_handler() is NOT needed forWindows Vista
  * and later. */
 #define MDBX_CONFIG_MANUAL_TLS_CALLBACK 0
