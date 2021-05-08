@@ -1236,10 +1236,9 @@ struct MDBX_env {
 #endif /* xMDBX_DEBUG_SPILLING */
 
   /* ------------------------------------------------- stub for lck-less mode */
-  alignas(MDBX_CACHELINE_SIZE) uint64_t
-      me_lckless_stub[((sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) &
-                       ~(MDBX_CACHELINE_SIZE - 1)) /
-                      8];
+  MDBX_atomic_uint64_t
+      x_lckless_stub[(sizeof(MDBX_lockinfo) + MDBX_CACHELINE_SIZE - 1) /
+                     sizeof(MDBX_atomic_uint64_t)];
 };
 
 #ifndef __cplusplus

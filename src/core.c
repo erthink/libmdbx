@@ -10852,6 +10852,14 @@ static void __cold mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
     env->me_options.dp_initial = env->me_options.dp_limit;
 }
 
+static __inline MDBX_CONST_FUNCTION MDBX_lockinfo *
+lckless_stub(const MDBX_env *env) {
+  uintptr_t stub = (uintptr_t)&env->x_lckless_stub;
+  /* align to avoid false-positive alarm from UndefinedBehaviorSanitizer */
+  stub = (stub + MDBX_CACHELINE_SIZE - 1) & ~(MDBX_CACHELINE_SIZE - 1);
+  return (MDBX_lockinfo *)stub;
+}
+
 __cold int mdbx_env_create(MDBX_env **penv) {
   MDBX_env *env = mdbx_calloc(1, sizeof(MDBX_env));
   if (unlikely(!env))
@@ -10905,7 +10913,7 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   }
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
-  MDBX_lockinfo *const stub = (MDBX_lockinfo *)&env->me_lckless_stub;
+  MDBX_lockinfo *const stub = lckless_stub(env);
   rc = mdbx_ipclock_stub(&stub->mti_wlock);
 #endif /* MDBX_LOCKING */
   if (unlikely(rc != MDBX_SUCCESS)) {
@@ -11838,7 +11846,7 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     lcklist_unlock();
     /* end of a locked section ---------------------------------------------- */
 
-    env->me_lck = (MDBX_lockinfo *)&env->me_lckless_stub;
+    env->me_lck = lckless_stub(env);
     env->me_maxreaders = UINT_MAX;
     mdbx_debug("lck-setup:%s%s%s", " lck-less",
                (env->me_flags & MDBX_RDONLY) ? " readonly" : "",
@@ -12695,7 +12703,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 #endif /* Windows */
 
 #if MDBX_LOCKING > MDBX_LOCKING_SYSV
-  MDBX_lockinfo *const stub = (MDBX_lockinfo *)&env->me_lckless_stub;
+  MDBX_lockinfo *const stub = lckless_stub(env);
   mdbx_ensure(env, mdbx_ipclock_destroy(&stub->mti_wlock) == 0);
 #endif /* MDBX_LOCKING */
 
