@@ -832,6 +832,7 @@ LMEM
 LNK
 lnps
 lntdll
+LOBYTE
 localtime
 lockf
 lockfile
@@ -844,6 +845,7 @@ longlived
 LONGLONG
 lowerbound
 lowerboundvalue
+LOWORD
 LPCSTR
 LPDWORD
 LPFILETIME

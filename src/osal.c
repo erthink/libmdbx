@@ -133,6 +133,10 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
   CTL_CODE(FILE_DEVICE_FILE_SYSTEM, 196, METHOD_BUFFERED, FILE_ANY_ACCESS)
 #endif
 
+#ifndef ERROR_NOT_CAPABLE
+#define ERROR_NOT_CAPABLE 775L
+#endif
+
 #endif /* _WIN32 || _WIN64 */
 
 /*----------------------------------------------------------------------------*/

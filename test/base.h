@@ -19,6 +19,9 @@
 #endif
 
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601 /* Windows 7 */
+#endif
 #ifdef _MSC_VER
 #define _CRT_SECURE_NO_WARNINGS
 #pragma warning(push, 1)

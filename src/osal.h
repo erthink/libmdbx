@@ -145,7 +145,7 @@ __extern_C key_t ftok(const char *, int);
 #if defined(_WIN32) || defined(_WIN64)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
-#endif
+#endif /* WIN32_LEAN_AND_MEAN */
 #include <excpt.h>
 #include <tlhelp32.h>
 #include <windows.h>
@@ -836,6 +836,52 @@ typedef void(WINAPI *MDBX_srwlock_function)(MDBX_srwlock *);
 MDBX_INTERNAL_VAR MDBX_srwlock_function mdbx_srwlock_Init,
     mdbx_srwlock_AcquireShared, mdbx_srwlock_ReleaseShared,
     mdbx_srwlock_AcquireExclusive, mdbx_srwlock_ReleaseExclusive;
+
+#if _WIN32_WINNT < 0x0600 /* prior to Windows Vista */
+typedef enum _FILE_INFO_BY_HANDLE_CLASS {
+  FileBasicInfo,
+  FileStandardInfo,
+  FileNameInfo,
+  FileRenameInfo,
+  FileDispositionInfo,
+  FileAllocationInfo,
+  FileEndOfFileInfo,
+  FileStreamInfo,
+  FileCompressionInfo,
+  FileAttributeTagInfo,
+  FileIdBothDirectoryInfo,
+  FileIdBothDirectoryRestartInfo,
+  FileIoPriorityHintInfo,
+  FileRemoteProtocolInfo,
+  MaximumFileInfoByHandleClass
+} FILE_INFO_BY_HANDLE_CLASS,
+    *PFILE_INFO_BY_HANDLE_CLASS;
+
+typedef struct _FILE_END_OF_FILE_INFO {
+  LARGE_INTEGER EndOfFile;
+} FILE_END_OF_FILE_INFO, *PFILE_END_OF_FILE_INFO;
+
+#define REMOTE_PROTOCOL_INFO_FLAG_LOOPBACK 0x00000001
+#define REMOTE_PROTOCOL_INFO_FLAG_OFFLINE 0x00000002
+
+typedef struct _FILE_REMOTE_PROTOCOL_INFO {
+  USHORT StructureVersion;
+  USHORT StructureSize;
+  DWORD Protocol;
+  USHORT ProtocolMajorVersion;
+  USHORT ProtocolMinorVersion;
+  USHORT ProtocolRevision;
+  USHORT Reserved;
+  DWORD Flags;
+  struct {
+    DWORD Reserved[8];
+  } GenericReserved;
+  struct {
+    DWORD Reserved[16];
+  } ProtocolSpecificReserved;
+} FILE_REMOTE_PROTOCOL_INFO, *PFILE_REMOTE_PROTOCOL_INFO;
+
+#endif /* _WIN32_WINNT < 0x0600 (prior to Windows Vista) */
 
 typedef BOOL(WINAPI *MDBX_GetFileInformationByHandleEx)(
     _In_ HANDLE hFile, _In_ FILE_INFO_BY_HANDLE_CLASS FileInformationClass,

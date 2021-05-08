@@ -216,6 +216,13 @@ template <> struct path_to_pchar<std::string> {
 
 #if defined(_WIN32) || defined(_WIN64)
 
+#ifndef WC_ERR_INVALID_CHARS
+static const DWORD WC_ERR_INVALID_CHARS =
+    (6 /* Windows Vista */ <= /* MajorVersion */ LOBYTE(LOWORD(GetVersion())))
+        ? 0x00000080
+        : 0;
+#endif /* WC_ERR_INVALID_CHARS */
+
 template <> struct path_to_pchar<std::wstring> {
   std::string str;
   path_to_pchar(const std::wstring &path) {
