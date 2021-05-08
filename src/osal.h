@@ -205,9 +205,7 @@ static inline void *mdbx_realloc(void *ptr, size_t bytes) {
 #endif /* mdbx_realloc */
 
 #ifndef mdbx_free
-static inline void mdbx_free(void *ptr) {
-  return HeapFree(GetProcessHeap(), 0, ptr);
-}
+static inline void mdbx_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #endif /* mdbx_free */
 
 #else /* MDBX_WITHOUT_MSVC_CRT */
