@@ -10431,7 +10431,7 @@ static MDBX_meta *__cold mdbx_init_metas(const MDBX_env *env, void *buffer) {
   return page_meta(page2);
 }
 
-#if MDBX_ENABLE_MADVISE
+#if MDBX_ENABLE_MADVISE && !(defined(_WIN32) || defined(_WIN64))
 static size_t mdbx_madvise_threshold(const MDBX_env *env,
                                      const size_t largest_bytes) {
   /* TODO: use options */

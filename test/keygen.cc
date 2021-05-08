@@ -191,7 +191,7 @@ void __hot maker::pair(serial_t serial, const buffer &key, buffer &value,
 
 void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
                   unsigned thread_number) {
-#if defined(__cpp_constexpr)
+#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
   static_assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
                          MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX,
                 "WTF?");
@@ -328,7 +328,7 @@ void __hot maker::mk_begin(const serial_t serial, const essentials &params,
 
 void __hot maker::mk_continue(const serial_t serial, const essentials &params,
                               result &out) {
-#if defined(__cpp_constexpr)
+#if CONSTEXPR_ENUM_FLAGS_OPERATIONS
   static_assert(
       (essentials::prng_fill_flag &
        unsigned(MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERKEY |

@@ -148,6 +148,10 @@ __extern_C key_t ftok(const char *, int);
 #elif _WIN32_WINNT < 0x0500
 #error At least 'Windows 2000' API is required for libmdbx.
 #endif /* _WIN32_WINNT */
+#if (defined(__MINGW32__) || defined(__MINGW64__)) &&                          \
+    !defined(__USE_MINGW_ANSI_STDIO)
+#define __USE_MINGW_ANSI_STDIO 1
+#endif /* MinGW */
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif /* WIN32_LEAN_AND_MEAN */
@@ -169,6 +173,15 @@ typedef struct {
   HANDLE event[2];
 } mdbx_condpair_t;
 typedef CRITICAL_SECTION mdbx_fastmutex_t;
+
+#if !defined(_MSC_VER) && !defined(__try)
+/* *INDENT-OFF* */
+/* clang-format off */
+#define __try
+#define __except(COND) if(false)
+/* *INDENT-ON* */
+/* clang-format on */
+#endif /* stub for MSVC's __try/__except */
 
 #if MDBX_WITHOUT_MSVC_CRT
 

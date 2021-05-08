@@ -123,6 +123,9 @@ void output_nocheckloglevel_ap(const logging::loglevel priority,
   struct tm tm;
 #ifdef _MSC_VER
   int rc = _localtime32_s(&tm, (const __time32_t *)&now.utc);
+#elif defined(_WIN32) || defined(_WIN64)
+  const time_t time_proxy = now.utc;
+  int rc = localtime_s(&tm, &time_proxy);
 #else
   time_t time = now.utc;
   int rc = localtime_r(&time, &tm) ? MDBX_SUCCESS : errno;

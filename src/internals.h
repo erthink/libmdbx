@@ -1632,7 +1632,7 @@ log2n_powerof2(size_t value) {
    MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
 #define ENV_USABLE_FLAGS (ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS)
 
-#if !defined(__cplusplus) || defined(__cpp_constexpr)
+#if !defined(__cplusplus) || CONSTEXPR_ENUM_FLAGS_OPERATIONS
 static __maybe_unused void static_checks(void) {
   STATIC_ASSERT_MSG(INT16_MAX - CORE_DBS == MDBX_MAX_DBI,
                     "Oops, MDBX_MAX_DBI or CORE_DBS?");

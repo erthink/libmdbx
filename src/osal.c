@@ -25,7 +25,7 @@ static int waitstatus2errcode(DWORD result) {
   case WAIT_OBJECT_0:
     return MDBX_SUCCESS;
   case WAIT_FAILED:
-    return GetLastError();
+    return (int)GetLastError();
   case WAIT_ABANDONED:
     return ERROR_ABANDONED_WAIT_0;
   case WAIT_IO_COMPLETION:
@@ -44,7 +44,7 @@ static int ntstatus2errcode(NTSTATUS status) {
   memset(&ov, 0, sizeof(ov));
   ov.Internal = status;
   return GetOverlappedResult(NULL, &ov, &dummy, FALSE) ? MDBX_SUCCESS
-                                                       : GetLastError();
+                                                       : (int)GetLastError();
 }
 
 /* We use native NT APIs to setup the memory map, so that we can
@@ -384,17 +384,17 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_init(mdbx_condpair_t *condpair) {
   memset(condpair, 0, sizeof(mdbx_condpair_t));
 #if defined(_WIN32) || defined(_WIN64)
   if ((condpair->mutex = CreateMutexW(NULL, FALSE, NULL)) == NULL) {
-    rc = GetLastError();
+    rc = (int)GetLastError();
     goto bailout_mutex;
   }
   if ((condpair->event[0] = CreateEventW(NULL, FALSE, FALSE, NULL)) == NULL) {
-    rc = GetLastError();
+    rc = (int)GetLastError();
     goto bailout_event;
   }
   if ((condpair->event[1] = CreateEventW(NULL, FALSE, FALSE, NULL)) != NULL)
     return MDBX_SUCCESS;
 
-  rc = GetLastError();
+  rc = (int)GetLastError();
   (void)CloseHandle(condpair->event[0]);
 bailout_event:
   (void)CloseHandle(condpair->mutex);
@@ -420,9 +420,9 @@ bailout_mutex:
 
 MDBX_INTERNAL_FUNC int mdbx_condpair_destroy(mdbx_condpair_t *condpair) {
 #if defined(_WIN32) || defined(_WIN64)
-  int rc = CloseHandle(condpair->mutex) ? MDBX_SUCCESS : GetLastError();
-  rc = CloseHandle(condpair->event[0]) ? rc : GetLastError();
-  rc = CloseHandle(condpair->event[1]) ? rc : GetLastError();
+  int rc = CloseHandle(condpair->mutex) ? MDBX_SUCCESS : (int)GetLastError();
+  rc = CloseHandle(condpair->event[0]) ? rc : (int)GetLastError();
+  rc = CloseHandle(condpair->event[1]) ? rc : (int)GetLastError();
 #else
   int err, rc = pthread_mutex_destroy(&condpair->mutex);
   rc = (err = pthread_cond_destroy(&condpair->cond[0])) ? err : rc;
@@ -443,7 +443,7 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_lock(mdbx_condpair_t *condpair) {
 
 MDBX_INTERNAL_FUNC int mdbx_condpair_unlock(mdbx_condpair_t *condpair) {
 #if defined(_WIN32) || defined(_WIN64)
-  return ReleaseMutex(condpair->mutex) ? MDBX_SUCCESS : GetLastError();
+  return ReleaseMutex(condpair->mutex) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return pthread_mutex_unlock(&condpair->mutex);
 #endif
@@ -452,7 +452,7 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_unlock(mdbx_condpair_t *condpair) {
 MDBX_INTERNAL_FUNC int mdbx_condpair_signal(mdbx_condpair_t *condpair,
                                             bool part) {
 #if defined(_WIN32) || defined(_WIN64)
-  return SetEvent(condpair->event[part]) ? MDBX_SUCCESS : GetLastError();
+  return SetEvent(condpair->event[part]) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return pthread_cond_signal(&condpair->cond[part]);
 #endif
@@ -530,7 +530,7 @@ MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
   wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
   if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
     return ERROR_INVALID_NAME;
-  return DeleteFileW(pathnameW) ? MDBX_SUCCESS : GetLastError();
+  return DeleteFileW(pathnameW) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return unlink(pathname) ? errno : MDBX_SUCCESS;
 #endif
@@ -548,7 +548,7 @@ MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname) {
   wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
   if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
     return ERROR_INVALID_NAME;
-  return RemoveDirectoryW(pathnameW) ? MDBX_SUCCESS : GetLastError();
+  return RemoveDirectoryW(pathnameW) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return rmdir(pathname) ? errno : MDBX_SUCCESS;
 #endif
@@ -615,11 +615,11 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   *fd = CreateFileW(pathnameW, DesiredAccess, ShareMode, NULL,
                     CreationDisposition, FlagsAndAttributes, NULL);
   if (*fd == INVALID_HANDLE_VALUE)
-    return GetLastError();
+    return (int)GetLastError();
 
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(*fd, &info)) {
-    int err = GetLastError();
+    int err = (int)GetLastError();
     CloseHandle(*fd);
     *fd = INVALID_HANDLE_VALUE;
     return err;
@@ -769,7 +769,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
 
 MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd) {
 #if defined(_WIN32) || defined(_WIN64)
-  return CloseHandle(fd) ? MDBX_SUCCESS : GetLastError();
+  return CloseHandle(fd) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   assert(fd > STDERR_FILENO);
   return (close(fd) == 0) ? MDBX_SUCCESS : errno;
@@ -788,7 +788,7 @@ MDBX_INTERNAL_FUNC int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes,
 
   DWORD read = 0;
   if (unlikely(!ReadFile(fd, buf, (DWORD)bytes, &read, &ov))) {
-    int rc = GetLastError();
+    int rc = (int)GetLastError();
     return (rc == MDBX_SUCCESS) ? /* paranoia */ ERROR_READ_FAULT : rc;
   }
 #else
@@ -816,7 +816,7 @@ MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
     if (unlikely(!WriteFile(
             fd, buf, likely(bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE,
             &written, &ov)))
-      return GetLastError();
+      return (int)GetLastError();
     if (likely(bytes == written))
       return MDBX_SUCCESS;
 #else
@@ -847,7 +847,7 @@ MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
     if (unlikely(!WriteFile(
             fd, buf, likely(bytes <= MAX_WRITE) ? (DWORD)bytes : MAX_WRITE,
             &written, nullptr)))
-      return GetLastError();
+      return (int)GetLastError();
     if (likely(bytes == written))
       return MDBX_SUCCESS;
 #else
@@ -902,7 +902,7 @@ MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
                                   enum mdbx_syncmode_bits mode_bits) {
 #if defined(_WIN32) || defined(_WIN64)
   if ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) && !FlushFileBuffers(fd))
-    return GetLastError();
+    return (int)GetLastError();
   return MDBX_SUCCESS;
 #else
 
@@ -949,7 +949,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 #if defined(_WIN32) || defined(_WIN64)
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(fd, &info))
-    return GetLastError();
+    return (int)GetLastError();
   *length = info.nFileSizeLow | (uint64_t)info.nFileSizeHigh << 32;
 #else
   struct stat st;
@@ -973,7 +973,7 @@ MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd) {
   case FILE_TYPE_PIPE:
     return MDBX_RESULT_TRUE;
   default:
-    return GetLastError();
+    return (int)GetLastError();
   }
 #else
   struct stat info;
@@ -1004,13 +1004,13 @@ MDBX_INTERNAL_FUNC int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
                                            &EndOfFileInfo,
                                            sizeof(FILE_END_OF_FILE_INFO))
                ? MDBX_SUCCESS
-               : GetLastError();
+               : (int)GetLastError();
   } else {
     LARGE_INTEGER li;
     li.QuadPart = length;
     return (SetFilePointerEx(fd, li, NULL, FILE_BEGIN) && SetEndOfFile(fd))
                ? MDBX_SUCCESS
-               : GetLastError();
+               : (int)GetLastError();
   }
 #else
   STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
@@ -1024,7 +1024,7 @@ MDBX_INTERNAL_FUNC int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos) {
   LARGE_INTEGER li;
   li.QuadPart = pos;
   return SetFilePointerEx(fd, li, NULL, FILE_BEGIN) ? MDBX_SUCCESS
-                                                    : GetLastError();
+                                                    : (int)GetLastError();
 #else
   STATIC_ASSERT_MSG(sizeof(off_t) >= sizeof(size_t),
                     "libmdbx requires 64-bit file I/O on 64-bit systems");
@@ -1040,7 +1040,7 @@ mdbx_thread_create(mdbx_thread_t *thread,
                    void *arg) {
 #if defined(_WIN32) || defined(_WIN64)
   *thread = CreateThread(NULL, 0, start_routine, arg, 0, NULL);
-  return *thread ? MDBX_SUCCESS : GetLastError();
+  return *thread ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return pthread_create(thread, NULL, start_routine, arg);
 #endif
@@ -1064,7 +1064,7 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
   uint8_t *ptr = (uint8_t *)map->address + offset;
 #if defined(_WIN32) || defined(_WIN64)
   if (!FlushViewOfFile(ptr, length))
-    return GetLastError();
+    return (int)GetLastError();
 #else
 #if defined(__linux__) || defined(__gnu_linux__)
   if (mode_bits == MDBX_SYNC_NONE && mdbx_linux_kernel_version > 0x02061300)
@@ -1089,7 +1089,7 @@ MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
   DWORD unused, flags;
   if (!mdbx_GetVolumeInformationByHandleW(handle, nullptr, 0, nullptr, &unused,
                                           &flags, nullptr, 0))
-    return GetLastError();
+    return (int)GetLastError();
   if ((flags & FILE_READ_ONLY_VOLUME) == 0)
     return MDBX_EACCESS;
 #else
@@ -1164,7 +1164,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     if (!mdbx_GetVolumeInformationByHandleW(handle, PathBuffer, INT16_MAX,
                                             &VolumeSerialNumber, NULL,
                                             &FileSystemFlags, NULL, 0)) {
-      rc = GetLastError();
+      rc = (int)GetLastError();
       goto bailout;
     }
 
@@ -1180,7 +1180,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     if (!mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
                                         FILE_NAME_NORMALIZED |
                                             VOLUME_NAME_NT)) {
-      rc = GetLastError();
+      rc = (int)GetLastError();
       goto bailout;
     }
 
@@ -1563,7 +1563,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     SIZE_T RegionSize = limit - map->limit;
     status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
                                      &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
-    if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
+    if (status == (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     if (!NT_SUCCESS(status))
       return ntstatus2errcode(status);
@@ -1611,7 +1611,7 @@ retry_file_and_section:
                                    &ReservedSize, MEM_RESERVE, PAGE_NOACCESS);
   if (!NT_SUCCESS(status)) {
     ReservedAddress = NULL;
-    if (status != /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
+    if (status != (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       goto bailout_ntstatus /* no way to recovery */;
 
     if (may_move)
@@ -1671,7 +1671,7 @@ retry_mapview:;
       (flags & MDBX_WRITEMAP) ? PAGE_READWRITE : PAGE_READONLY);
 
   if (!NT_SUCCESS(status)) {
-    if (status == /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
+    if (status == (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
         map->address && may_move) {
       /* try remap at another base address */
       map->address = NULL;
@@ -2422,7 +2422,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
   memset(&info, 0, sizeof(info));
   info.dwLength = sizeof(info);
   if (!GlobalMemoryStatusEx(&info))
-    return GetLastError();
+    return (int)GetLastError();
 #endif
 
   if (total_pages) {
