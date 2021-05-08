@@ -37,11 +37,11 @@ static void mdbx_winnt_import(void);
 
 BOOL APIENTRY DllMain(HANDLE module, DWORD reason, LPVOID reserved)
 #else
-#if !MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#if !MDBX_MANUAL_MODULE_HANDLER
 static
-#endif /* !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+#endif /* !MDBX_MANUAL_MODULE_HANDLER */
     void NTAPI
-    mdbx_dll_handler(PVOID module, DWORD reason, PVOID reserved)
+    mdbx_module_handler(PVOID module, DWORD reason, PVOID reserved)
 #endif /* MDBX_BUILD_SHARED_LIBRARY */
 {
   (void)reserved;
@@ -65,7 +65,7 @@ static
 #endif
 }
 
-#if !MDBX_BUILD_SHARED_LIBRARY && !MDBX_CONFIG_MANUAL_TLS_CALLBACK
+#if !MDBX_BUILD_SHARED_LIBRARY && !MDBX_MANUAL_MODULE_HANDLER
 /* *INDENT-OFF* */
 /* clang-format off */
 #if defined(_MSC_VER)
@@ -89,7 +89,7 @@ static
 #    pragma data_seg(".CRT$XLB")
 #  endif
 
-   __declspec(allocate(".CRT$XLB")) PIMAGE_TLS_CALLBACK mdbx_tls_anchor = mdbx_dll_handler;
+   __declspec(allocate(".CRT$XLB")) PIMAGE_TLS_CALLBACK mdbx_tls_anchor = mdbx_module_handler;
 #  pragma data_seg(pop)
 #  pragma const_seg(pop)
 
@@ -97,13 +97,13 @@ static
 #  ifdef _WIN64
      const
 #  endif
-   PIMAGE_TLS_CALLBACK mdbx_tls_anchor __attribute__((__section__(".CRT$XLB"), used)) = mdbx_dll_handler;
+   PIMAGE_TLS_CALLBACK mdbx_tls_anchor __attribute__((__section__(".CRT$XLB"), used)) = mdbx_module_handler;
 #else
 #  error FIXME
 #endif
 /* *INDENT-ON* */
 /* clang-format on */
-#endif /* !MDBX_BUILD_SHARED_LIBRARY && !MDBX_CONFIG_MANUAL_TLS_CALLBACK */
+#endif /* !MDBX_BUILD_SHARED_LIBRARY && !MDBX_MANUAL_MODULE_HANDLER */
 
 /*----------------------------------------------------------------------------*/
 
