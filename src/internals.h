@@ -921,15 +921,7 @@ typedef struct MDBX_dbx {
  * Every operation requires a transaction handle. */
 struct MDBX_txn {
 #define MDBX_MT_SIGNATURE UINT32_C(0x93D53A31)
-  size_t mt_signature;
-  MDBX_txn *mt_parent; /* parent of a nested txn */
-  /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
-  MDBX_txn *mt_child;
-  MDBX_geo mt_geo;
-  /* next unallocated page */
-#define mt_next_pgno mt_geo.next
-  /* corresponding to the current size of datafile */
-#define mt_end_pgno mt_geo.now
+  uint32_t mt_signature;
 
   /* Transaction Flags */
   /* mdbx_txn_begin() flags */
@@ -958,8 +950,17 @@ struct MDBX_txn {
      MDBX_SHRINK_ALLOWED)
 #error "Oops, some flags overlapped or wrong"
 #endif
+  uint32_t mt_flags;
 
-  unsigned mt_flags;
+  MDBX_txn *mt_parent; /* parent of a nested txn */
+  /* Nested txn under this txn, set together with flag MDBX_TXN_HAS_CHILD */
+  MDBX_txn *mt_child;
+  MDBX_geo mt_geo;
+  /* next unallocated page */
+#define mt_next_pgno mt_geo.next
+  /* corresponding to the current size of datafile */
+#define mt_end_pgno mt_geo.now
+
   /* The ID of this transaction. IDs are integers incrementing from 1.
    * Only committed write transactions increment the ID. If a transaction
    * aborts, the ID may be re-used by the next writer. */
