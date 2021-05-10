@@ -17826,9 +17826,9 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     }
   } else if (unlikely(pure_left)) {
     MDBX_page *ptop_page = mc->mc_pg[ptop];
-    mdbx_notice("adding to parent page %u node[%u] left-leaf page #%u key %s",
-                ptop_page->mp_pgno, mc->mc_ki[ptop], sister->mp_pgno,
-                DKEY(mc->mc_ki[ptop] ? newkey : NULL));
+    mdbx_debug("adding to parent page %u node[%u] left-leaf page #%u key %s",
+               ptop_page->mp_pgno, mc->mc_ki[ptop], sister->mp_pgno,
+               DKEY(mc->mc_ki[ptop] ? newkey : NULL));
     mc->mc_top--;
     rc = mdbx_node_add_branch(mc, mc->mc_ki[ptop],
                               mc->mc_ki[ptop] ? newkey : NULL, sister->mp_pgno);
@@ -17836,7 +17836,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
                          newindx == mc->mc_ki[ptop + 1] && ptop == mc->mc_top);
 
     if (likely(rc == MDBX_SUCCESS) && mc->mc_ki[ptop] == 0) {
-      mdbx_notice("update prev-first key on parent %s", DKEY(&sepkey));
+      mdbx_debug("update prev-first key on parent %s", DKEY(&sepkey));
       MDBX_node *node = page_node(mc->mc_pg[ptop], 1);
       mdbx_cassert(mc, node_ks(node) == 0 && node_pgno(node) == mp->mp_pgno);
       mdbx_cassert(mc, mc->mc_top == ptop && mc->mc_ki[ptop] == 0);
@@ -17895,9 +17895,9 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
               &sepkey);
           if (mc->mc_dbx->md_cmp(newkey, &sepkey) < 0) {
             mc->mc_top -= i;
-            mdbx_notice("update new-first on parent [%i] page %u key %s",
-                        mc->mc_ki[mc->mc_top], mc->mc_pg[mc->mc_top]->mp_pgno,
-                        DKEY(newkey));
+            mdbx_debug("update new-first on parent [%i] page %u key %s",
+                       mc->mc_ki[mc->mc_top], mc->mc_pg[mc->mc_top]->mp_pgno,
+                       DKEY(newkey));
             rc = mdbx_update_key(mc, newkey);
             mc->mc_top += i;
             if (unlikely(rc != MDBX_SUCCESS))
