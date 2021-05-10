@@ -15066,10 +15066,11 @@ new_sub:;
       rc = mdbx_cursor_check(mc, 0);
     return rc;
   bad_sub:
-    if (unlikely(rc == MDBX_KEYEXIST))
+    if (unlikely(rc == MDBX_KEYEXIST)) {
       mdbx_error("unexpected %s", "MDBX_KEYEXIST");
-    /* should not happen, we deleted that item */
-    rc = MDBX_PROBLEM;
+      /* should not happen, we deleted that item */
+      rc = MDBX_PROBLEM;
+    }
   }
   mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
   return rc;
