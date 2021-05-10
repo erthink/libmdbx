@@ -3488,8 +3488,10 @@ mdbx_dpl_append(MDBX_txn *txn, pgno_t pgno, MDBX_page *page, unsigned npages) {
   if (mdbx_audit_enabled()) {
     for (unsigned i = dl->length; i > 0; --i) {
       assert(dl->items[i].pgno != pgno);
-      if (unlikely(dl->items[i].pgno == pgno))
+      if (unlikely(dl->items[i].pgno == pgno)) {
+        mdbx_error("Page %u already exist in the DPL at %u", pgno, i);
         return MDBX_PROBLEM;
+      }
     }
   }
 
@@ -6760,8 +6762,13 @@ mdbx_page_unspill(MDBX_txn *const txn, const MDBX_page *const mp) {
     ret.page->mp_flags |= (scan == txn) ? 0 : P_SPILLED;
     ret.err = MDBX_SUCCESS;
     return ret;
-  } while ((scan = scan->mt_parent) != nullptr &&
-           (scan->mt_flags & MDBX_TXN_SPILLS) != 0);
+  } while (likely((scan = scan->mt_parent) != nullptr &&
+                  (scan->mt_flags & MDBX_TXN_SPILLS) != 0));
+  mdbx_error("Page %" PRIaPGNO " mod-txnid %" PRIaTXN
+             " not found in the spill-list(s), current txn %" PRIaTXN
+             " front %" PRIaTXN ", root txn %" PRIaTXN " front %" PRIaTXN,
+             mp->mp_pgno, mp->mp_txnid, txn->mt_txnid, txn->mt_front,
+             txn->mt_env->me_txn0->mt_txnid, txn->mt_env->me_txn0->mt_front);
   ret.err = MDBX_PROBLEM;
   ret.page = NULL;
   return ret;
@@ -6828,7 +6835,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     mdbx_page_copy(np, mp, txn->mt_env->me_psize);
     np->mp_pgno = pgno;
     np->mp_txnid = txn->mt_front;
-  } else if (!IS_SHADOWED(txn, mp)) {
+  } else if (IS_SPILLED(txn, mp)) {
     struct page_result pur = mdbx_page_unspill(txn, mp);
     np = pur.page;
     rc = pur.err;
@@ -6839,6 +6846,12 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     goto fail;
   } else {
     if (unlikely(!txn->mt_parent)) {
+      mdbx_error("Unexpected not frozen/modifiable/spilled but shadowed %s "
+                 "page %" PRIaPGNO " mod-txnid %" PRIaTXN ","
+                 " without parent transaction, current txn %" PRIaTXN
+                 " front %" PRIaTXN,
+                 IS_BRANCH(mp) ? "branch" : "leaf", mp->mp_pgno, mp->mp_txnid,
+                 mc->mc_txn->mt_txnid, mc->mc_txn->mt_front);
       rc = MDBX_PROBLEM;
       goto fail;
     }
@@ -9162,7 +9175,8 @@ retry_noaccount:
             reservation_gc_id < 1 ||
             reservation_gc_id >=
                 atomic_load64(&env->me_lck->mti_oldest_reader, mo_Relaxed))) {
-      mdbx_error("%s", "** internal error (reservation_gc_id)");
+      mdbx_error("** internal error (reservation_gc_id %" PRIaTXN ")",
+                 reservation_gc_id);
       rc = MDBX_PROBLEM;
       goto bailout;
     }
@@ -14688,8 +14702,16 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
             if (unlikely(pgr.err))
               return pgr.err;
           } else {
-            if (unlikely(!mc->mc_txn->mt_parent))
+            if (unlikely(!mc->mc_txn->mt_parent)) {
+              mdbx_error(
+                  "Unexpected not frozen/modifiable/spilled but shadowed %s "
+                  "page %" PRIaPGNO " mod-txnid %" PRIaTXN ","
+                  " without parent transaction, current txn %" PRIaTXN
+                  " front %" PRIaTXN,
+                  "overflow/large", pgno, pgr.page->mp_txnid,
+                  mc->mc_txn->mt_txnid, mc->mc_txn->mt_front);
               return MDBX_PROBLEM;
+            }
 
             /* It is writable only in a parent txn */
             MDBX_page *np = mdbx_page_malloc(mc->mc_txn, ovpages);
@@ -15067,8 +15089,8 @@ new_sub:;
     return rc;
   bad_sub:
     if (unlikely(rc == MDBX_KEYEXIST)) {
-      mdbx_error("unexpected %s", "MDBX_KEYEXIST");
       /* should not happen, we deleted that item */
+      mdbx_error("Unexpected %i error while put to nested dupsort's hive", rc);
       rc = MDBX_PROBLEM;
     }
   }
@@ -15346,10 +15368,16 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
   } else if (unlikely(node_size(key, data) >
                       mc->mc_txn->mt_env->me_leaf_nodemax)) {
     /* Put data on overflow page. */
-    mdbx_ensure(mc->mc_txn->mt_env,
-                !F_ISSET(mc->mc_db->md_flags, MDBX_DUPSORT));
-    if (unlikely(flags & (F_DUPDATA | F_SUBDATA)))
+    if (unlikely(mc->mc_db->md_flags & MDBX_DUPSORT)) {
+      mdbx_error("Unexpected target %s flags 0x%x for large data-item",
+                 "dupsort-db", mc->mc_db->md_flags);
       return MDBX_PROBLEM;
+    }
+    if (unlikely(flags & (F_DUPDATA | F_SUBDATA))) {
+      mdbx_error("Unexpected target %s flags 0x%x for large data-item", "node",
+                 flags);
+      return MDBX_PROBLEM;
+    }
     const pgno_t ovpages = number_of_ovpages(mc->mc_txn->mt_env, data->iov_len);
     const struct page_result npr = mdbx_page_new(mc, P_OVERFLOW, ovpages);
     if (unlikely(npr.err != MDBX_SUCCESS))
@@ -15822,8 +15850,13 @@ int mdbx_cursor_bind(MDBX_txn *txn, MDBX_cursor *mc, MDBX_dbi dbi) {
   }
 
   if (mc->mc_signature == MDBX_MC_LIVE) {
-    if (unlikely(!mc->mc_txn || mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE))
+    if (unlikely(!mc->mc_txn ||
+                 mc->mc_txn->mt_signature != MDBX_MT_SIGNATURE)) {
+      mdbx_error("Wrong cursor's transaction %p 0x%x",
+                 __Wpedantic_format_voidptr(mc->mc_txn),
+                 mc->mc_txn ? mc->mc_txn->mt_signature : 0);
       return MDBX_PROBLEM;
+    }
     if (mc->mc_flags & C_UNTRACK) {
       mdbx_cassert(mc, !(mc->mc_txn->mt_flags & MDBX_TXN_RDONLY));
       MDBX_cursor **prev = &mc->mc_txn->tw.cursors[mc->mc_dbi];
@@ -16084,6 +16117,8 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
   mdbx_cassert(csrc, csrc->mc_top == cdst->mc_top);
   if (unlikely(PAGETYPE(psrc) != PAGETYPE(pdst))) {
   bailout:
+    mdbx_error("Wrong or mismatch pages's types (src %d, dst %d) to move node",
+               PAGETYPE(psrc), PAGETYPE(pdst));
     csrc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
     return MDBX_PROBLEM;
   }
@@ -16898,6 +16933,11 @@ retry:
     room_threshold = 0;
     goto retry;
   }
+  mdbx_error("Unable to merge/rebalance %s page %" PRIaPGNO
+             " (has %u keys, full %.1f%%, used %u, room %u bytes )",
+             (pagetype & P_LEAF) ? "leaf" : "branch", tp->mp_pgno, numkeys,
+             page_fill(mc->mc_txn->mt_env, tp),
+             page_used(mc->mc_txn->mt_env, tp), room);
   return MDBX_PROBLEM;
 }
 
@@ -17777,7 +17817,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         rc = mdbx_cursor_sibling(mc, SIBLING_LEFT);
         if (unlikely(rc != MDBX_SUCCESS)) {
           if (rc == MDBX_NOTFOUND) /* improper mdbx_cursor_sibling() result */ {
-            mdbx_error("unexpected %s", "MDBX_NOTFOUND");
+            mdbx_error("unexpected %i error going left sibling", rc);
             rc = MDBX_PROBLEM;
           }
           goto done;
@@ -20647,8 +20687,10 @@ __hot static int cursor_diff(const MDBX_cursor *const __restrict x,
     return MDBX_ENODATA;
 
   while (likely(r->level < y->mc_snum && r->level < x->mc_snum)) {
-    if (unlikely(y->mc_pg[r->level] != x->mc_pg[r->level]))
+    if (unlikely(y->mc_pg[r->level] != x->mc_pg[r->level])) {
+      mdbx_error("Mismatch cursors's pages at %u level", r->level);
       return MDBX_PROBLEM;
+    }
 
     int nkeys = page_numkeys(y->mc_pg[r->level]);
     assert(nkeys > 0);
