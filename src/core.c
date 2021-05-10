@@ -6696,7 +6696,8 @@ done:
 }
 
 /* Copy the used portions of a non-overflow page. */
-__hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
+__hot static void mdbx_page_copy(MDBX_page *dst, const MDBX_page *src,
+                                 size_t psize) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
   STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 4);
   if ((src->mp_flags & (P_LEAF2 | P_OVERFLOW)) == 0) {
@@ -6721,7 +6722,7 @@ __hot static void mdbx_page_copy(MDBX_page *dst, MDBX_page *src, size_t psize) {
  * If a page being referenced was spilled to disk in this txn, bring
  * it back and make it dirty/writable again. */
 static struct page_result __must_check_result
-mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
+mdbx_page_unspill(MDBX_txn *const txn, const MDBX_page *const mp) {
   mdbx_verbose("unspill page %" PRIaPGNO, mp->mp_pgno);
   mdbx_tassert(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0);
   mdbx_tassert(txn, IS_SPILLED(txn, mp));
@@ -6773,7 +6774,8 @@ mdbx_page_unspill(MDBX_txn *const txn, MDBX_page *mp) {
  *
  * Returns 0 on success, non-zero on failure. */
 __hot static int mdbx_page_touch(MDBX_cursor *mc) {
-  MDBX_page *const mp = mc->mc_pg[mc->mc_top], *np;
+  const MDBX_page *const mp = mc->mc_pg[mc->mc_top];
+  MDBX_page *np;
   MDBX_txn *txn = mc->mc_txn;
   int rc;
 
