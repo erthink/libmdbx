@@ -5201,7 +5201,7 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
                "by a cursor(s), use fewer cursors or increase "
                "MDBX_opt_txn_dp_limit",
                unspillable);
-    return MDBX_TXN_FULL;
+    goto done;
   }
 
   /* Подзадача: Вытолкнуть часть страниц на диск в соответствии с LRU,
@@ -5362,7 +5362,9 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   mdbx_ensure(txn->mt_env, txn->tw.loose_count + txn->tw.dirtyroom > need / 2);
 #endif /* xMDBX_DEBUG_SPILLING */
 
-  return likely(txn->tw.loose_count + txn->tw.dirtyroom > need / 2)
+done:
+  return likely(txn->tw.dirtyroom + txn->tw.loose_count >
+                ((need > CURSOR_STACK) ? CURSOR_STACK : need))
              ? MDBX_SUCCESS
              : MDBX_TXN_FULL;
 }
