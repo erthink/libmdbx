@@ -45,11 +45,11 @@
 
 #if __cplusplus >= 201103L
 #include <atomic>
-static __inline __maybe_unused int atomic_decrement(std::atomic_int *p) {
+MDBX_MAYBE_UNUSED static __inline int atomic_decrement(std::atomic_int *p) {
   return std::atomic_fetch_sub(p, 1) - 1;
 }
 #else
-static __inline __maybe_unused int atomic_decrement(volatile int *p) {
+MDBX_MAYBE_UNUSED static __inline int atomic_decrement(volatile int *p) {
 #if defined(__GNUC__) || defined(__clang__)
   return __sync_sub_and_fetch(p, 1);
 #elif defined(_MSC_VER)

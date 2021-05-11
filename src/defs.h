@@ -103,14 +103,6 @@
 #   endif
 #endif /* __must_check_result */
 
-#ifndef __maybe_unused
-#   if defined(__GNUC__) || __has_attribute(__unused__)
-#       define __maybe_unused __attribute__((__unused__))
-#   else
-#       define __maybe_unused
-#   endif
-#endif /* __maybe_unused */
-
 #if !defined(__noop) && !defined(_MSC_VER)
 #   define __noop(...) do {} while(0)
 #endif /* __noop */
@@ -256,7 +248,7 @@
 #endif /* __anonymous_struct_extension__ */
 
 #ifndef __Wpedantic_format_voidptr
-    static __inline __maybe_unused const void* MDBX_PURE_FUNCTION
+    MDBX_MAYBE_UNUSED MDBX_PURE_FUNCTION static __inline  const void*
         __Wpedantic_format_voidptr(const void* ptr) {return ptr;}
 #   define __Wpedantic_format_voidptr(ARG) __Wpedantic_format_voidptr(ARG)
 #endif /* __Wpedantic_format_voidptr */

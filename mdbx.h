@@ -454,6 +454,14 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* MDBX_PRINTF_ARGS */
 
+#if defined(DOXYGEN) || __has_cpp_attribute(maybe_unused)
+#define MDBX_MAYBE_UNUSED [[maybe_unused]]
+#elif defined(__GNUC__) || __has_attribute(__unused__)
+#define MDBX_MAYBE_UNUSED __attribute__((__unused__))
+#else
+#define MDBX_MAYBE_UNUSED
+#endif /* MDBX_MAYBE_UNUSED */
+
 /* Oh, below are some songs and dances since:
  *  - C++ requires explicit definition of the necessary operators.
  *  - the proper implementation of DEFINE_ENUM_FLAG_OPERATORS for C++ required

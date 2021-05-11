@@ -2057,8 +2057,8 @@ static LSTATUS mdbx_RegGetValue(HKEY hKey, LPCSTR lpSubKey, LPCSTR lpValue,
 }
 #endif
 
-static __cold __maybe_unused bool bootid_parse_uuid(bin128_t *s, const void *p,
-                                                    const size_t n) {
+MDBX_MAYBE_UNUSED static __cold bool
+bootid_parse_uuid(bin128_t *s, const void *p, const size_t n) {
   if (n > 31) {
     unsigned bits = 0;
     for (unsigned i = 0; i < n; ++i) /* try parse an UUID in text form */ {
@@ -2413,7 +2413,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
   if (unlikely(pagesize < MIN_PAGESIZE || !is_powerof2(pagesize)))
     return MDBX_INCOMPATIBLE;
 
-  __maybe_unused const int log2page = log2n_powerof2(pagesize);
+  MDBX_MAYBE_UNUSED const int log2page = log2n_powerof2(pagesize);
   assert(pagesize == (INT64_C(1) << log2page));
   (void)log2page;
 

@@ -103,7 +103,7 @@ MDBX_NOTHROW_CONST_FUNCTION static uint16_t pages2pv(size_t pages) {
 /*------------------------------------------------------------------------------
  * Unaligned access */
 
-MDBX_NOTHROW_CONST_FUNCTION static __maybe_unused __always_inline unsigned
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __always_inline unsigned
 field_alignment(unsigned alignment_baseline, size_t field_offset) {
   unsigned merge = alignment_baseline | (unsigned)field_offset;
   return merge & -(int)merge;
@@ -618,7 +618,7 @@ page_used(const MDBX_env *env, const MDBX_page *mp) {
 }
 
 /* The percentage of space used in the page, in a percents. */
-MDBX_NOTHROW_PURE_FUNCTION static __maybe_unused __inline double
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_PURE_FUNCTION static __inline double
 page_fill(const MDBX_env *env, const MDBX_page *mp) {
   return page_used(env, mp) * 100.0 / page_space(env);
 }
@@ -1024,7 +1024,7 @@ static __always_inline uint64_t safe64_read(const MDBX_atomic_uint64_t *p) {
 }
 
 #if 0 /* unused for now */
- static __maybe_unused __always_inline bool safe64_is_valid(uint64_t v) {
+MDBX_MAYBE_UNUSED static __always_inline bool safe64_is_valid(uint64_t v) {
 #if MDBX_WORDBITS >= 64
   return v < SAFE64_INVALID_THRESHOLD;
 #else
@@ -1032,7 +1032,7 @@ static __always_inline uint64_t safe64_read(const MDBX_atomic_uint64_t *p) {
 #endif /* MDBX_WORDBITS */
 }
 
- static __maybe_unused __always_inline bool
+MDBX_MAYBE_UNUSED static __always_inline bool
  safe64_is_valid_ptr(const MDBX_atomic_uint64_t *p) {
 #if MDBX_64BIT_ATOMIC
   return atomic_load64(p, mo_AcquireRelease) < SAFE64_INVALID_THRESHOLD;
@@ -1054,7 +1054,7 @@ static __always_inline void safe64_update(MDBX_atomic_uint64_t *p,
 }
 
 /* non-atomic increment with safety for reading a half-updated value */
-static __maybe_unused
+MDBX_MAYBE_UNUSED static
 #if MDBX_64BIT_ATOMIC
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
@@ -3452,8 +3452,8 @@ static __always_inline unsigned mdbx_dpl_exist(MDBX_txn *txn, pgno_t pgno) {
   return (dl->items[i].pgno == pgno) ? i : 0;
 }
 
-static __maybe_unused const MDBX_page *debug_dpl_find(const MDBX_txn *txn,
-                                                      const pgno_t pgno) {
+MDBX_MAYBE_UNUSED static const MDBX_page *debug_dpl_find(const MDBX_txn *txn,
+                                                         const pgno_t pgno) {
   const MDBX_dpl *dl = txn->tw.dirtylist;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   for (unsigned i = dl->length; i > dl->sorted; --i)
@@ -3963,7 +3963,7 @@ static const char *mdbx_leafnode_type(MDBX_node *n) {
 }
 
 /* Display all the keys in the page. */
-static __maybe_unused void mdbx_page_list(MDBX_page *mp) {
+MDBX_MAYBE_UNUSED static void mdbx_page_list(MDBX_page *mp) {
   pgno_t pgno = mp->mp_pgno;
   const char *type;
   MDBX_node *node;
@@ -4053,7 +4053,7 @@ static __maybe_unused void mdbx_page_list(MDBX_page *mp) {
       (mc)->mc_xcursor->mx_cursor.mc_pg[0] = node_data(xr_node);               \
   } while (0)
 
-static __maybe_unused bool cursor_is_tracked(const MDBX_cursor *mc) {
+MDBX_MAYBE_UNUSED static bool cursor_is_tracked(const MDBX_cursor *mc) {
   for (MDBX_cursor *scan = mc->mc_txn->tw.cursors[mc->mc_dbi]; scan;
        scan = scan->mc_next)
     if (mc == ((mc->mc_flags & C_SUB) ? &scan->mc_xcursor->mx_cursor : scan))
@@ -4180,7 +4180,7 @@ static __always_inline MDBX_db *mdbx_outer_db(MDBX_cursor *mc) {
   return couple->outer.mc_db;
 }
 
-static __cold __maybe_unused bool mdbx_dirtylist_check(MDBX_txn *txn) {
+MDBX_MAYBE_UNUSED __cold static bool mdbx_dirtylist_check(MDBX_txn *txn) {
   const MDBX_dpl *const dl = txn->tw.dirtylist;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   mdbx_tassert(txn, txn->tw.dirtyroom + dl->length ==
@@ -5742,7 +5742,7 @@ static int __must_check_result mdbx_page_dirty(MDBX_txn *txn, MDBX_page *mp,
 }
 
 #if !(defined(_WIN32) || defined(_WIN64))
-static __always_inline __maybe_unused int ignore_enosys(int err) {
+MDBX_MAYBE_UNUSED static __always_inline int ignore_enosys(int err) {
 #ifdef ENOSYS
   if (err == ENOSYS)
     return MDBX_RESULT_TRUE;

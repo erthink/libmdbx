@@ -440,7 +440,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 /* Get the size of a memory page for the system.
  * This is the basic size that the platform's memory manager uses, and is
  * fundamental to the use of memory-mapped files. */
-MDBX_NOTHROW_CONST_FUNCTION static __maybe_unused __inline size_t
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline size_t
 mdbx_syspagesize(void) {
 #if defined(_WIN32) || defined(_WIN64)
   SYSTEM_INFO si;
@@ -527,7 +527,7 @@ extern void mdbx_osal_jitter(bool tiny);
 #include <sys/cachectl.h>
 #endif
 
-static __maybe_unused __inline void mdbx_compiler_barrier(void) {
+MDBX_MAYBE_UNUSED static __inline void mdbx_compiler_barrier(void) {
 #if defined(__clang__) || defined(__GNUC__)
   __asm__ __volatile__("" ::: "memory");
 #elif defined(_MSC_VER)
@@ -547,7 +547,7 @@ static __maybe_unused __inline void mdbx_compiler_barrier(void) {
 #endif
 }
 
-static __maybe_unused __inline void mdbx_memory_barrier(void) {
+MDBX_MAYBE_UNUSED static __inline void mdbx_memory_barrier(void) {
 #ifdef MDBX_HAVE_C11ATOMICS
   atomic_thread_fence(memory_order_seq_cst);
 #elif defined(__ATOMIC_SEQ_CST)
@@ -587,8 +587,8 @@ static __maybe_unused __inline void mdbx_memory_barrier(void) {
 #define mdbx_asprintf asprintf
 #define mdbx_vasprintf vasprintf
 #else
-MDBX_INTERNAL_FUNC MDBX_PRINTF_ARGS(2, 3) int __maybe_unused
-    mdbx_asprintf(char **strp, const char *fmt, ...);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC
+    MDBX_PRINTF_ARGS(2, 3) int mdbx_asprintf(char **strp, const char *fmt, ...);
 MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
 
@@ -611,7 +611,7 @@ MDBX_INTERNAL_VAR bool mdbx_RunningOnWSL1 /* Windows Subsystem 1 for Linux */;
 LIBMDBX_API char *mdbx_strdup(const char *str);
 #endif
 
-static __maybe_unused __inline int mdbx_get_errno(void) {
+MDBX_MAYBE_UNUSED static __inline int mdbx_get_errno(void) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD rc = GetLastError();
 #else
@@ -713,7 +713,7 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
 MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
                                             const char *pathname, int err);
 
-static __maybe_unused __inline uint32_t mdbx_getpid(void) {
+MDBX_MAYBE_UNUSED static __inline uint32_t mdbx_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
@@ -722,7 +722,7 @@ static __maybe_unused __inline uint32_t mdbx_getpid(void) {
 #endif
 }
 
-static __maybe_unused __inline uintptr_t mdbx_thread_self(void) {
+MDBX_MAYBE_UNUSED static __inline uintptr_t mdbx_thread_self(void) {
   mdbx_tid_t thunk;
   STATIC_ASSERT(sizeof(uintptr_t) >= sizeof(thunk));
 #if defined(_WIN32) || defined(_WIN64)
@@ -733,7 +733,7 @@ static __maybe_unused __inline uintptr_t mdbx_thread_self(void) {
   return (uintptr_t)thunk;
 }
 
-MDBX_INTERNAL_FUNC void __maybe_unused mdbx_osal_jitter(bool tiny);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t
 mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);

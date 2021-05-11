@@ -266,7 +266,7 @@ static __always_inline memory_order mo_c11_load(enum MDBX_memory_order fence) {
 
 static __inline void mdbx_jitter4testing(bool tiny);
 
-static __maybe_unused __always_inline void
+MDBX_MAYBE_UNUSED static __always_inline void
 mdbx_memory_fence(enum MDBX_memory_order order, bool write) {
 #ifdef MDBX_HAVE_C11ATOMICS
   atomic_thread_fence(write ? mo_c11_store(order) : mo_c11_load(order));
@@ -278,7 +278,7 @@ mdbx_memory_fence(enum MDBX_memory_order order, bool write) {
 #endif /* MDBX_HAVE_C11ATOMICS */
 }
 
-static __maybe_unused __always_inline uint32_t
+MDBX_MAYBE_UNUSED static __always_inline uint32_t
 atomic_store32(MDBX_atomic_uint32_t *p, const uint32_t value,
                enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint32_t) == 4);
@@ -294,7 +294,7 @@ atomic_store32(MDBX_atomic_uint32_t *p, const uint32_t value,
   return value;
 }
 
-static __maybe_unused __always_inline uint32_t
+MDBX_MAYBE_UNUSED static __always_inline uint32_t
 atomic_load32(const MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint32_t) == 4);
 #ifdef MDBX_HAVE_C11ATOMICS
@@ -309,7 +309,7 @@ atomic_load32(const MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
 #endif /* MDBX_HAVE_C11ATOMICS */
 }
 
-static __maybe_unused __always_inline uint64_t
+MDBX_MAYBE_UNUSED static __always_inline uint64_t
 atomic_store64(MDBX_atomic_uint64_t *p, const uint64_t value,
                enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint64_t) == 8);
@@ -333,7 +333,7 @@ atomic_store64(MDBX_atomic_uint64_t *p, const uint64_t value,
   return value;
 }
 
-static __maybe_unused
+MDBX_MAYBE_UNUSED static
 #if MDBX_64BIT_ATOMIC
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
@@ -1380,7 +1380,7 @@ void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
 #define mdbx_flush_incoherent_cpu_writeback() mdbx_compiler_barrier()
 #endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
-static __maybe_unused __inline void
+MDBX_MAYBE_UNUSED static __inline void
 mdbx_flush_incoherent_mmap(void *addr, size_t nbytes, const intptr_t pagesize) {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
   char *const begin = (char *)(-pagesize & (intptr_t)addr);
@@ -1422,7 +1422,7 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_global_init(void);
 MDBX_INTERNAL_FUNC void mdbx_rthc_global_dtor(void);
 MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 
-static __maybe_unused __inline void mdbx_jitter4testing(bool tiny) {
+MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny) {
 #if MDBX_DEBUG
   if (MDBX_DBG_JITTER & mdbx_runtime_flags)
     mdbx_osal_jitter(tiny);
@@ -1575,35 +1575,35 @@ typedef struct MDBX_node {
 /* Do not spill pages to disk if txn is getting full, may fail instead */
 #define MDBX_NOSPILL 0x8000
 
-MDBX_NOTHROW_CONST_FUNCTION static __maybe_unused __inline pgno_t
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline pgno_t
 pgno_add(pgno_t base, pgno_t augend) {
   assert(base <= MAX_PAGENO);
   return (augend < MAX_PAGENO - base) ? base + augend : MAX_PAGENO;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static __maybe_unused __inline pgno_t
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline pgno_t
 pgno_sub(pgno_t base, pgno_t subtrahend) {
   assert(base >= MIN_PAGENO);
   return (subtrahend < base - MIN_PAGENO) ? base - subtrahend : MIN_PAGENO;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static __always_inline __maybe_unused bool
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __always_inline bool
 is_powerof2(size_t x) {
   return (x & (x - 1)) == 0;
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static __always_inline __maybe_unused size_t
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __always_inline size_t
 floor_powerof2(size_t value, size_t granularity) {
   assert(is_powerof2(granularity));
   return value & ~(granularity - 1);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static __always_inline __maybe_unused size_t
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __always_inline size_t
 ceil_powerof2(size_t value, size_t granularity) {
   return floor_powerof2(value + granularity - 1, granularity);
 }
 
-MDBX_NOTHROW_CONST_FUNCTION static __maybe_unused unsigned
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static unsigned
 log2n_powerof2(size_t value) {
   assert(value > 0 && value < INT32_MAX && is_powerof2(value));
   assert((value & -(int32_t)value) == value);
@@ -1633,7 +1633,7 @@ log2n_powerof2(size_t value) {
 #define ENV_USABLE_FLAGS (ENV_CHANGEABLE_FLAGS | ENV_CHANGELESS_FLAGS)
 
 #if !defined(__cplusplus) || CONSTEXPR_ENUM_FLAGS_OPERATIONS
-static __maybe_unused void static_checks(void) {
+MDBX_MAYBE_UNUSED static void static_checks(void) {
   STATIC_ASSERT_MSG(INT16_MAX - CORE_DBS == MDBX_MAX_DBI,
                     "Oops, MDBX_MAX_DBI or CORE_DBS?");
   STATIC_ASSERT_MSG((unsigned)(MDBX_DB_ACCEDE | MDBX_CREATE) ==
