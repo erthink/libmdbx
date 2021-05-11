@@ -204,7 +204,7 @@ template <typename PATH> struct path_to_pchar {
   operator const char *() const { return str.c_str(); }
 };
 
-template <typename PATH> PATH pchar_to_path(const char *c_str) {
+template <typename PATH>[[maybe_unused]] PATH pchar_to_path(const char *c_str) {
   return PATH(c_str);
 }
 
@@ -241,7 +241,8 @@ template <> struct path_to_pchar<std::wstring> {
   operator const char *() const { return str.c_str(); }
 };
 
-template <> std::wstring pchar_to_path<std::wstring>(const char *c_str) {
+template <>
+[[maybe_unused]] std::wstring pchar_to_path<std::wstring>(const char *c_str) {
   std::wstring wstr;
   if (c_str && *c_str) {
     const int chars = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, c_str,
