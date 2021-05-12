@@ -19258,20 +19258,19 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   if (likely(bytes > size_before_bootid)) {
     arg->mi_unsync_volume = pgno2bytes(env, unsynced_pages);
     const uint64_t monotime_now = mdbx_osal_monotime();
-    arg->mi_since_sync_seconds16dot16 = mdbx_osal_monotime_to_16dot16(
-        monotime_now - atomic_load64(&lck->mti_sync_timestamp, mo_Relaxed));
+    uint64_t ts = atomic_load64(&lck->mti_sync_timestamp, mo_Relaxed);
+    arg->mi_since_sync_seconds16dot16 =
+        ts ? mdbx_osal_monotime_to_16dot16(monotime_now - ts) : 0;
+    ts = atomic_load64(&lck->mti_reader_check_timestamp, mo_Relaxed);
     arg->mi_since_reader_check_seconds16dot16 =
-        lck ? mdbx_osal_monotime_to_16dot16(
-                  monotime_now -
-                  atomic_load64(&lck->mti_reader_check_timestamp, mo_Relaxed))
-            : 0;
+        ts ? mdbx_osal_monotime_to_16dot16(monotime_now - ts) : 0;
     arg->mi_autosync_threshold = pgno2bytes(
         env, atomic_load32(&lck->mti_autosync_threshold, mo_Relaxed));
     arg->mi_autosync_period_seconds16dot16 = mdbx_osal_monotime_to_16dot16(
         atomic_load64(&lck->mti_autosync_period, mo_Relaxed));
     arg->mi_bootid.current.x = bootid.x;
     arg->mi_bootid.current.y = bootid.y;
-    arg->mi_mode = lck ? lck->mti_envmode.weak : env->me_flags;
+    arg->mi_mode = env->me_lck_mmap.lck ? lck->mti_envmode.weak : env->me_flags;
   }
 
   if (likely(bytes > size_before_pgop_stat)) {
