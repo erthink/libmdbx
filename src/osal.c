@@ -1908,7 +1908,8 @@ mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
 #else
   const uint64_t ratio = UINT64_C(1000000000);
 #endif
-  return (ratio * seconds_16dot16 + 32768) >> 16;
+  const uint64_t ret = (ratio * seconds_16dot16 + 32768) >> 16;
+  return likely(ret || seconds_16dot16 == 0) ? ret : /* fix underflow */ 1;
 }
 
 MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
@@ -1920,13 +1921,15 @@ MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
     if (monotime > limit)
       return UINT32_MAX;
   }
+  const uint32_t ret =
 #if defined(_WIN32) || defined(_WIN64)
-  return (uint32_t)((monotime << 16) / performance_frequency.QuadPart);
+      (uint32_t)((monotime << 16) / performance_frequency.QuadPart);
 #elif defined(__APPLE__) || defined(__MACH__)
-  return (uint32_t)((monotime << 16) / ratio_16dot16_to_monotine);
+      (uint32_t)((monotime << 16) / ratio_16dot16_to_monotine);
 #else
-  return (uint32_t)(monotime * 128 / 1953125);
+      (uint32_t)(monotime * 128 / 1953125);
 #endif
+  return likely(ret || monotime == 0) ? ret : /* fix underflow */ 1;
 }
 
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void) {
