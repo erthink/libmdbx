@@ -2284,7 +2284,8 @@ struct MDBX_envinfo {
   /** Statistics of page operations.
    * \details Overall statistics of page operations of all (running, completed
    * and aborted) transactions in the current multi-process session (since the
-   * first process opened the database). */
+   * first process opened the database after everyone had previously closed it).
+   */
   struct {
     uint64_t newly;   /**< Quantity of a new pages added */
     uint64_t cow;     /**< Quantity of pages copied for update */

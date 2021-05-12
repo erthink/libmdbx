@@ -57,6 +57,7 @@ static void usage(const char *prog) {
           "usage: %s [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
+          "  -p\t\tshow statistics of page operations for current session\n"
           "  -e\t\tshow whole DB info\n"
           "  -f\t\tshow GC info\n"
           "  -r\t\tshow readers\n"
@@ -97,7 +98,7 @@ static void error(const char *func, int rc) {
 }
 
 int main(int argc, char *argv[]) {
-  int o, rc;
+  int opt, rc;
   MDBX_env *env;
   MDBX_txn *txn;
   MDBX_dbi dbi;
@@ -105,21 +106,23 @@ int main(int argc, char *argv[]) {
   prog = argv[0];
   char *envname;
   char *subname = nullptr;
-  int alldbs = 0, envinfo = 0, envflags = 0, freinfo = 0, rdrinfo = 0;
+  bool alldbs = false, envinfo = false, envflags = false, pgop = false;
+  int freinfo = 0, rdrinfo = 0;
 
   if (argc < 2)
     usage(prog);
 
-  while ((o = getopt(argc, argv,
-                     "V"
-                     "q"
-                     "a"
-                     "e"
-                     "f"
-                     "n"
-                     "r"
-                     "s:")) != EOF) {
-    switch (o) {
+  while ((opt = getopt(argc, argv,
+                       "V"
+                       "q"
+                       "p"
+                       "a"
+                       "e"
+                       "f"
+                       "n"
+                       "r"
+                       "s:")) != EOF) {
+    switch (opt) {
     case 'V':
       printf("mdbx_stat version %d.%d.%d.%d\n"
              " - source: %s %s, commit %s, tree %s\n"
@@ -137,22 +140,25 @@ int main(int argc, char *argv[]) {
     case 'q':
       quiet = true;
       break;
+    case 'p':
+      pgop = true;
+      break;
     case 'a':
       if (subname)
         usage(prog);
-      alldbs++;
+      alldbs = true;
       break;
     case 'e':
-      envinfo++;
+      envinfo = true;
       break;
     case 'f':
-      freinfo++;
+      freinfo += 1;
       break;
     case 'n':
       envflags |= MDBX_NOSUBDIR;
       break;
     case 'r':
-      rdrinfo++;
+      rdrinfo += 1;
       break;
     case 's':
       if (alldbs)
@@ -215,7 +221,7 @@ int main(int argc, char *argv[]) {
     goto txn_abort;
   }
 
-  if (envinfo || freinfo) {
+  if (envinfo || freinfo || pgop) {
     rc = mdbx_env_info_ex(env, txn, &mei, sizeof(mei));
     if (unlikely(rc != MDBX_SUCCESS)) {
       error("mdbx_env_info_ex", rc);
@@ -224,6 +230,33 @@ int main(int argc, char *argv[]) {
   } else {
     /* LY: zap warnings from gcc */
     memset(&mei, 0, sizeof(mei));
+  }
+
+  if (pgop) {
+    printf("Page Operations (for current session):\n");
+    printf("      New: %8" PRIu64 "\t// quantity of a new pages added\n",
+           mei.mi_pgop_stat.newly);
+    printf("      CoW: %8" PRIu64
+           "\t// quantity of pages copied for altering\n",
+           mei.mi_pgop_stat.cow);
+    printf("    Clone: %8" PRIu64 "\t// quantity of parent's dirty pages "
+           "clones for nested transactions\n",
+           mei.mi_pgop_stat.clone);
+    printf("    Split: %8" PRIu64
+           "\t// page splits during insertions or updates\n",
+           mei.mi_pgop_stat.split);
+    printf("    Merge: %8" PRIu64
+           "\t// page merges during deletions or updates\n",
+           mei.mi_pgop_stat.merge);
+    printf("    Spill: %8" PRIu64 "\t// quantity of spilled/ousted `dirty` "
+           "pages during large transactions\n",
+           mei.mi_pgop_stat.spill);
+    printf("  Unspill: %8" PRIu64 "\t// quantity of unspilled/redone `dirty` "
+           "pages during large transactions\n",
+           mei.mi_pgop_stat.unspill);
+    printf("      WOP: %8" PRIu64
+           "\t// number of explicit write operations (not a pages) to a disk\n",
+           mei.mi_pgop_stat.wops);
   }
 
   if (envinfo) {
