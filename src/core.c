@@ -1506,6 +1506,9 @@ static int uniq_peek(const mdbx_mmap_t *pending, mdbx_mmap_t *scan) {
     rc = MDBX_SUCCESS;
   } else {
     bait = 0 /* hush MSVC warning */;
+#if MDBX_ENABLE_PGOP_STAT
+    safe64_inc(&scan_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_msync(scan, 0, sizeof(MDBX_lockinfo), MDBX_SYNC_DATA);
     if (rc == MDBX_SUCCESS)
       rc = mdbx_pread(pending->fd, &bait, sizeof(scan_lck->mti_bait_uniqueness),
@@ -1562,6 +1565,9 @@ __cold static int uniq_check(const mdbx_mmap_t *pending, MDBX_env **found) {
     if (err == MDBX_RESULT_TRUE)
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     if (err == MDBX_RESULT_TRUE) {
+#if MDBX_ENABLE_PGOP_STAT
+      safe64_inc(&scan->me_lck_mmap.lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
       (void)mdbx_msync(&scan->me_lck_mmap, 0, sizeof(MDBX_lockinfo),
                        MDBX_SYNC_NONE);
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
@@ -5164,6 +5170,9 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
 
     if (!MDBX_FAKE_SPILL_WRITEMAP && ctx.flush_end > ctx.flush_begin) {
       MDBX_env *const env = txn->mt_env;
+#if MDBX_ENABLE_PGOP_STAT
+      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
       rc = mdbx_msync(&env->me_dxb_mmap,
                       pgno_align2os_bytes(env, ctx.flush_begin),
                       pgno_align2os_bytes(env, ctx.flush_end - ctx.flush_begin),
@@ -5900,6 +5909,9 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                                  const pgno_t size_pgno,
                                  const pgno_t limit_pgno, const bool implicit) {
   if ((env->me_flags & MDBX_WRITEMAP) && env->me_lck->mti_unsynced_pages.weak) {
+#if MDBX_ENABLE_PGOP_STAT
+    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
     int err = mdbx_msync(&env->me_dxb_mmap, 0,
                          pgno_align2os_bytes(env, used_pgno), MDBX_SYNC_NONE);
     if (unlikely(err != MDBX_SUCCESS))
@@ -6948,6 +6960,9 @@ __cold static int mdbx_env_sync_internal(MDBX_env *env, bool force,
         mdbx_assert(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
         const size_t usedbytes = pgno_align2os_bytes(env, head->mm_geo.next);
 
+#if MDBX_ENABLE_PGOP_STAT
+        safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
         mdbx_txn_unlock(env);
 
         /* LY: pre-sync without holding lock to reduce latency for writer(s) */
@@ -6995,6 +7010,9 @@ fastpath:
     const txnid_t head_txnid = mdbx_recent_committed_txnid(env);
     if (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
         (uint32_t)head_txnid) {
+#if MDBX_ENABLE_PGOP_STAT
+      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
       rc = (flags & MDBX_WRITEMAP)
                ? mdbx_msync(&env->me_dxb_mmap, 0,
                             pgno_align2os_bytes(env, NUM_METAS),
@@ -10606,6 +10624,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       if (flags & MDBX_NOMETASYNC)
         mode_bits |= MDBX_SYNC_IODQ;
     }
+#if MDBX_ENABLE_PGOP_STAT
+    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
     if (flags & MDBX_WRITEMAP)
       rc =
           mdbx_msync(&env->me_dxb_mmap, 0,
@@ -10689,6 +10710,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
   mdbx_ensure(env,
               target == head || mdbx_meta_txnid_stable(env, target) <
                                     unaligned_peek_u64(4, pending->mm_txnid_a));
+#if MDBX_ENABLE_PGOP_STAT
+  safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
   if (flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
     if (likely(target != head)) {
@@ -11656,6 +11680,9 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
                   head_txnid, steady_txnid, undo_txnid);
       mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
 
+#if MDBX_ENABLE_PGOP_STAT
+      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
       if (env->me_flags & MDBX_WRITEMAP) {
         /* It is possible to update txnid without safe64_write(),
          * since DB opened exclusive for now */
@@ -11980,6 +12007,9 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     mdbx_jitter4testing(false);
     lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
     lck->mti_os_and_format = MDBX_LOCK_FORMAT;
+#if MDBX_ENABLE_PGOP_STAT
+    lck->mti_pgop_stat.wops.weak = 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
     err = mdbx_msync(&env->me_lck_mmap, 0, (size_t)size, MDBX_SYNC_NONE);
     if (unlikely(err != MDBX_SUCCESS)) {
       mdbx_error("initial-%s for lck-file failed", "msync");
@@ -12116,6 +12146,9 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta) {
     unaligned_poke_u64(4, meta->mm_datasync_sign, mdbx_meta_sign(meta));
   }
 
+#if MDBX_ENABLE_PGOP_STAT
+  safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_flush_incoherent_cpu_writeback();
     rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, target_meta),
@@ -12124,9 +12157,6 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta) {
     const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
                                      ? env->me_dsync_fd
                                      : env->me_lazy_fd;
-#if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
-#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_pwrite(fd, page, env->me_psize, pgno2bytes(env, target_meta));
     if (rc == MDBX_SUCCESS && fd == env->me_lazy_fd)
       rc = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
