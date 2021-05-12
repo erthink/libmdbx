@@ -1506,7 +1506,7 @@ static int uniq_peek(const mdbx_mmap_t *pending, mdbx_mmap_t *scan) {
     rc = MDBX_SUCCESS;
   } else {
     bait = 0 /* hush MSVC warning */;
-    rc = mdbx_msync(scan, 0, sizeof(MDBX_lockinfo), true);
+    rc = mdbx_msync(scan, 0, sizeof(MDBX_lockinfo), MDBX_SYNC_DATA);
     if (rc == MDBX_SUCCESS)
       rc = mdbx_pread(pending->fd, &bait, sizeof(scan_lck->mti_bait_uniqueness),
                       offsetof(MDBX_lockinfo, mti_bait_uniqueness));
@@ -1562,7 +1562,8 @@ __cold static int uniq_check(const mdbx_mmap_t *pending, MDBX_env **found) {
     if (err == MDBX_RESULT_TRUE)
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     if (err == MDBX_RESULT_TRUE) {
-      (void)mdbx_msync(&scan->me_lck_mmap, 0, sizeof(MDBX_lockinfo), false);
+      (void)mdbx_msync(&scan->me_lck_mmap, 0, sizeof(MDBX_lockinfo),
+                       MDBX_SYNC_NONE);
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     }
     if (err == MDBX_RESULT_TRUE) {
@@ -5900,7 +5901,7 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                                  const pgno_t limit_pgno, const bool implicit) {
   if ((env->me_flags & MDBX_WRITEMAP) && env->me_lck->mti_unsynced_pages.weak) {
     int err = mdbx_msync(&env->me_dxb_mmap, 0,
-                         pgno_align2os_bytes(env, used_pgno), true);
+                         pgno_align2os_bytes(env, used_pgno), MDBX_SYNC_NONE);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   }
@@ -6151,7 +6152,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
   if (env->me_flags & MDBX_WRITEMAP) {
     mdbx_flush_incoherent_cpu_writeback();
     err = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
-                     false);
+                     MDBX_SYNC_DATA);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   } else {
@@ -6953,9 +6954,10 @@ __cold static int mdbx_env_sync_internal(MDBX_env *env, bool force,
         mdbx_txn_unlock(env);
 
         /* LY: pre-sync without holding lock to reduce latency for writer(s) */
-        int err = (flags & MDBX_WRITEMAP)
-                      ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, false)
-                      : mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA);
+        int err =
+            (flags & MDBX_WRITEMAP)
+                ? mdbx_msync(&env->me_dxb_mmap, 0, usedbytes, MDBX_SYNC_DATA)
+                : mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA);
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
@@ -6998,7 +7000,8 @@ fastpath:
         (uint32_t)head_txnid) {
       rc = (flags & MDBX_WRITEMAP)
                ? mdbx_msync(&env->me_dxb_mmap, 0,
-                            pgno_align2os_bytes(env, NUM_METAS), false)
+                            pgno_align2os_bytes(env, NUM_METAS),
+                            MDBX_SYNC_DATA | MDBX_SYNC_IODQ)
                : mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       if (likely(rc == MDBX_SUCCESS))
         atomic_store32(&env->me_lck->mti_meta_sync_txnid, (uint32_t)head_txnid,
@@ -11666,7 +11669,8 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         const size_t paged_offset = floor_powerof2(offset, env->me_os_psize);
         const size_t paged_length = ceil_powerof2(
             env->me_psize + offset - paged_offset, env->me_os_psize);
-        err = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length, false);
+        err = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length,
+                         MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       } else {
         MDBX_meta rollback = *head;
         mdbx_meta_set_txnid(env, &rollback, undo_txnid);
@@ -11974,7 +11978,7 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     mdbx_jitter4testing(false);
     lck->mti_magic_and_version = MDBX_LOCK_MAGIC;
     lck->mti_os_and_format = MDBX_LOCK_FORMAT;
-    err = mdbx_msync(&env->me_lck_mmap, 0, (size_t)size, false);
+    err = mdbx_msync(&env->me_lck_mmap, 0, (size_t)size, MDBX_SYNC_NONE);
     if (unlikely(err != MDBX_SUCCESS)) {
       mdbx_error("initial-%s for lck-file failed", "msync");
       goto bailout;
