@@ -101,7 +101,9 @@ static void dumpval(MDBX_val *v) {
 bool quiet = false, rescue = false;
 const char *prog;
 static void error(const char *func, int rc) {
-  fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
+  if (!quiet)
+    fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc,
+            mdbx_strerror(rc));
 }
 
 /* Dump in BDB-compatible format */
@@ -216,7 +218,7 @@ static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 
 static void usage(void) {
   fprintf(stderr,
-          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-a|-s subdb] [-r] "
+          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] "
           "dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
@@ -431,8 +433,9 @@ int main(int argc, char *argv[]) {
           if (unlikely(rc != MDBX_SUCCESS)) {
             if (!rescue)
               break;
-            fprintf(stderr, "%s: %s: ignore %s for `%s` and continue\n", prog,
-                    envname, mdbx_strerror(rc), subname);
+            if (!quiet)
+              fprintf(stderr, "%s: %s: ignore %s for `%s` and continue\n", prog,
+                      envname, mdbx_strerror(rc), subname);
             /* Here is a hack for rescue mode, don't do that:
              *  - we should restart transaction in case error due
              *    database corruption;
@@ -466,8 +469,9 @@ int main(int argc, char *argv[]) {
     if (have_raw && (!count /* || rescue */))
       rc = dump_sdb(txn, MAIN_DBI, nullptr);
     else if (!count) {
-      fprintf(stderr, "%s: %s does not contain multiple databases\n", prog,
-              envname);
+      if (!quiet)
+        fprintf(stderr, "%s: %s does not contain multiple databases\n", prog,
+                envname);
       rc = MDBX_NOTFOUND;
     }
   } else {
@@ -480,7 +484,8 @@ int main(int argc, char *argv[]) {
   case MDBX_SUCCESS:
     break;
   case MDBX_EINTR:
-    fprintf(stderr, "Interrupted by signal/user\n");
+    if (!quiet)
+      fprintf(stderr, "Interrupted by signal/user\n");
     break;
   default:
     if (unlikely(rc != MDBX_SUCCESS))

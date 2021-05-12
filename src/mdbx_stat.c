@@ -54,8 +54,9 @@ static void print_stat(MDBX_stat *ms) {
 
 static void usage(const char *prog) {
   fprintf(stderr,
-          "usage: %s [-V] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath\n"
+          "usage: %s [-V] [-q] [-e] [-f[f[f]]] [-r[r]] [-a|-s name] dbpath\n"
           "  -V\t\tprint version and exit\n"
+          "  -q\t\tbe quiet\n"
           "  -e\t\tshow whole DB info\n"
           "  -f\t\tshow GC info\n"
           "  -r\t\tshow readers\n"
@@ -88,8 +89,11 @@ static int reader_list_func(void *ctx, int num, int slot, mdbx_pid_t pid,
 }
 
 const char *prog;
+bool quiet = false;
 static void error(const char *func, int rc) {
-  fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc, mdbx_strerror(rc));
+  if (!quiet)
+    fprintf(stderr, "%s: %s() error %d %s\n", prog, func, rc,
+            mdbx_strerror(rc));
 }
 
 int main(int argc, char *argv[]) {
@@ -108,6 +112,7 @@ int main(int argc, char *argv[]) {
 
   while ((o = getopt(argc, argv,
                      "V"
+                     "q"
                      "a"
                      "e"
                      "f"
@@ -129,6 +134,9 @@ int main(int argc, char *argv[]) {
              mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
              mdbx_build.options);
       return EXIT_SUCCESS;
+    case 'q':
+      quiet = true;
+      break;
     case 'a':
       if (subname)
         usage(prog);
@@ -174,10 +182,12 @@ int main(int argc, char *argv[]) {
 
   envname = argv[optind];
   envname = argv[optind];
-  printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n",
-         mdbx_version.git.describe, mdbx_version.git.datetime,
-         mdbx_version.git.tree, envname);
-  fflush(nullptr);
+  if (!quiet) {
+    printf("mdbx_stat %s (%s, T-%s)\nRunning for %s...\n",
+           mdbx_version.git.describe, mdbx_version.git.datetime,
+           mdbx_version.git.tree, envname);
+    fflush(nullptr);
+  }
 
   rc = mdbx_env_create(&env);
   if (unlikely(rc != MDBX_SUCCESS)) {
@@ -356,7 +366,8 @@ int main(int argc, char *argv[]) {
     case MDBX_NOTFOUND:
       break;
     case MDBX_EINTR:
-      fprintf(stderr, "Interrupted by signal/user\n");
+      if (!quiet)
+        fprintf(stderr, "Interrupted by signal/user\n");
       goto txn_abort;
     default:
       error("mdbx_cursor_get", rc);
@@ -462,7 +473,8 @@ int main(int argc, char *argv[]) {
   case MDBX_NOTFOUND:
     break;
   case MDBX_EINTR:
-    fprintf(stderr, "Interrupted by signal/user\n");
+    if (!quiet)
+      fprintf(stderr, "Interrupted by signal/user\n");
     break;
   default:
     if (unlikely(rc != MDBX_SUCCESS))

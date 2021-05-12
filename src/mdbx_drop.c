@@ -79,11 +79,12 @@ int main(int argc, char *argv[]) {
   if (argc < 2)
     usage();
 
-  /* -d: delete the db, don't just empty it
-   * -s: drop the named subDB
-   * -V: print version and exit
-   * (default) empty the main DB */
-  while ((i = getopt(argc, argv, "ds:nV")) != EOF) {
+  while ((i = getopt(argc, argv,
+                     "d"
+                     "s:"
+                     "n"
+                     "q"
+                     "V")) != EOF) {
     switch (i) {
     case 'V':
       printf("mdbx_drop version %d.%d.%d.%d\n"
@@ -99,6 +100,9 @@ int main(int argc, char *argv[]) {
              mdbx_build.target, mdbx_build.compiler, mdbx_build.flags,
              mdbx_build.options);
       return EXIT_SUCCESS;
+    case 'q':
+      quiet = true;
+      break;
     case 'd':
       delete = true;
       break;
@@ -130,11 +134,12 @@ int main(int argc, char *argv[]) {
 #endif /* !WINDOWS */
 
   envname = argv[optind];
-  if (!quiet)
+  if (!quiet) {
     printf("mdbx_drop %s (%s, T-%s)\nRunning for %s/%s...\n",
            mdbx_version.git.describe, mdbx_version.git.datetime,
            mdbx_version.git.tree, envname, subname ? subname : "@MAIN");
-  fflush(nullptr);
+    fflush(nullptr);
+  }
 
   rc = mdbx_env_create(&env);
   if (unlikely(rc != MDBX_SUCCESS)) {
