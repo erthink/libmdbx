@@ -15107,8 +15107,8 @@ new_sub:;
        * make sure the cursor is marked valid. */
       mc->mc_flags |= C_INITIALIZED;
     }
-    if (flags & MDBX_MULTIPLE) {
-      if (!rc) {
+    if (unlikely(flags & MDBX_MULTIPLE)) {
+      if (likely(rc == MDBX_SUCCESS)) {
       continue_multiple:
         mcount++;
         /* let caller know how many succeeded, if any */
