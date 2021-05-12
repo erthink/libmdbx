@@ -6119,7 +6119,7 @@ static __cold int mdbx_mapresize_implicit(MDBX_env *env, const pgno_t used_pgno,
 }
 
 static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
-                              MDBX_meta *const meta) {
+                              MDBX_meta *const meta, mdbx_filehandle_t fd) {
   const uint64_t wipe = MDBX_DATASIGN_NONE;
   if (unlikely(META_IS_STEADY(meta)) &&
       mdbx_meta_txnid_stable(env, meta) <= last_steady) {
@@ -6127,25 +6127,27 @@ static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
                  data_page(meta)->mp_pgno);
     if (env->me_flags & MDBX_WRITEMAP)
       unaligned_poke_u64(4, meta->mm_datasync_sign, wipe);
-    else {
-#if MDBX_ENABLE_PGOP_STAT
-      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
-#endif /* MDBX_ENABLE_PGOP_STAT */
-      return mdbx_pwrite(env->me_lazy_fd, &wipe, sizeof(meta->mm_datasync_sign),
+    else
+      return mdbx_pwrite(fd, &wipe, sizeof(meta->mm_datasync_sign),
                          (uint8_t *)&meta->mm_datasync_sign - env->me_map);
-    }
   }
   return MDBX_SUCCESS;
 }
 
 __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
-  int err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 0));
+#if MDBX_ENABLE_PGOP_STAT
+  safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
+                                   ? env->me_dsync_fd
+                                   : env->me_lazy_fd;
+  int err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 0), fd);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 1));
+  err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 1), fd);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
-  err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 2));
+  err = mdbx_meta_unsteady(env, last_steady, METAPAGE(env, 2), fd);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -6156,33 +6158,28 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   } else {
+    if (fd == env->me_lazy_fd) {
 #if MDBX_USE_SYNCFILERANGE
-    static bool syncfilerange_unavailable;
-    if (likely(!syncfilerange_unavailable)) {
-      if (likely(!sync_file_range(
-              env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
-              SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER)))
-        goto done_filesync;
-      err = errno;
-      if (ignore_enosys(err) != MDBX_RESULT_TRUE)
+      static bool syncfilerange_unavailable;
+      if (!syncfilerange_unavailable &&
+          sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
+                          SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER)) {
+        err = errno;
+        if (ignore_enosys(err) == MDBX_RESULT_TRUE)
+          syncfilerange_unavailable = true;
+      }
+      if (syncfilerange_unavailable)
+#endif /* MDBX_USE_SYNCFILERANGE */
+        err = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA);
+      if (unlikely(err != MDBX_SUCCESS))
         return err;
-      syncfilerange_unavailable = true;
     }
-#endif /* MDBX_USE_SYNCFILERANGE */
-    err = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-#if MDBX_USE_SYNCFILERANGE
-  done_filesync:
-#endif /* MDBX_USE_SYNCFILERANGE */
     mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
                                env->me_os_psize);
   }
 
-  MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
-  if (likely(lck))
-    /* force oldest refresh */
-    atomic_store32(&lck->mti_readers_refresh_flag, true, mo_Relaxed);
+  /* force oldest refresh */
+  atomic_store32(&env->me_lck->mti_readers_refresh_flag, true, mo_Relaxed);
   return MDBX_SUCCESS;
 }
 
