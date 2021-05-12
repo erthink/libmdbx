@@ -54,7 +54,9 @@ static void usage(void) {
           "usage: %s [-V] [-q] [-d] [-s name] dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
-          "  -d\t\tdelete the specified database, don't just empty it\n",
+          "  -d\t\tdelete the specified database, don't just empty it\n"
+          "  -s name\tdrop the specified named subDB\n"
+          "  \t\tby default empty the main DB\n",
           prog);
   exit(EXIT_FAILURE);
 }

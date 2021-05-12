@@ -61,8 +61,8 @@ static void usage(const char *prog) {
           "  -f\t\tshow GC info\n"
           "  -r\t\tshow readers\n"
           "  -a\t\tprint stat of main DB and all subDBs\n"
-          "  \t\t(default) print stat of only the main DB\n"
-          "  -s name\tprint stat of only the named subDB\n",
+          "  -s name\tprint stat of only the specified named subDB\n"
+          "  \t\tby default print stat of only the main DB\n",
           prog);
   exit(EXIT_FAILURE);
 }

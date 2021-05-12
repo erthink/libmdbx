@@ -225,10 +225,10 @@ static void usage(void) {
           "  -f\t\twrite to file instead of stdout\n"
           "  -l\t\tlist subDBs and exit\n"
           "  -p\t\tuse printable characters\n"
-          "  -a\t\tdump main DB and all subDBs,\n"
-          "    \t\tby default dump only the main DB\n"
-          "  -s\t\tdump only the named subDB\n"
-          "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n",
+          "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n"
+          "  -a\t\tdump main DB and all subDBs\n"
+          "  -s name\tdump only the specified named subDB\n"
+          "  \t\tby default dump only the main DB\n",
           prog);
   exit(EXIT_FAILURE);
 }

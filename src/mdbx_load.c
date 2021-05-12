@@ -485,7 +485,7 @@ static void usage(void) {
           "  -a\t\tappend records in input order (required for custom "
           "comparators)\n"
           "  -f file\tread from file instead of stdin\n"
-          "  -s name\tload into named subDB\n"
+          "  -s name\tload into specified named subDB\n"
           "  -N\t\tdon't overwrite existing records when loading, just skip "
           "ones\n"
           "  -p\t\tpurge subDB before loading\n"
