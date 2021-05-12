@@ -11672,8 +11672,13 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
         MDBX_meta rollback = *head;
         mdbx_meta_set_txnid(env, &rollback, undo_txnid);
         unaligned_poke_u64(4, rollback.mm_datasync_sign, MDBX_DATASIGN_WEAK);
-        err = mdbx_pwrite(env->me_lazy_fd, &rollback, sizeof(MDBX_meta),
+        const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
+                                         ? env->me_dsync_fd
+                                         : env->me_lazy_fd;
+        err = mdbx_pwrite(fd, &rollback, sizeof(MDBX_meta),
                           (uint8_t *)head - (uint8_t *)env->me_map);
+        if (err == MDBX_SUCCESS && fd == env->me_lazy_fd)
+          err = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       }
       if (err) {
         mdbx_error("error %d rollback from %" PRIaTXN ", to %" PRIaTXN
