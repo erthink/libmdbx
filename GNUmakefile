@@ -37,7 +37,7 @@ CXX     ?= g++
 CXXSTD  ?= $(eval CXXSTD := $$(shell PROBE=$$$$([ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++); for std in gnu++20 c++20 gnu++2a c++2a gnu++17 c++17 gnu++14 c++14 gnu+11 c++11; do $(CXX) -std=$$$${std} -c $$$${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "-std=$$$${std}" && exit; done))$(CXXSTD)
 CXXFLAGS = $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 
-# HINT: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then run with the old.
+# TIP: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then use with the old.
 LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt") $(shell uname | grep -qi Windows && echo "-lntdll")
 
 LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
@@ -272,12 +272,13 @@ reformat:
 
 MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(wildcard src/*)
-MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
-MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list --count HEAD ^`git tag --sort=-version:refname | sed -n '/^\(v[0-9]\+\.[0-9]\+\.[0-9]\+\)*/p;q' || echo 'failed_git_tag_with_sort'` || echo 'Please use non-obsolete git version')
-MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD || echo 'Please install latest get version')
-MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty || echo 'Please fetch tags and/or install non-obsolete git version')
+git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
+MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags 2>&- | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
+MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list --count HEAD ^`git tag --sort=-version:refname 2>&- | sed -n '/^\(v[0-9]\+\.[0-9]\+\.[0-9]\+\)*/p;q' || echo 'git_tag_with_sort_was_failed'` 2>&- || echo 'Please use non-obsolete git version')
+MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
+MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
-MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) CXXSTD= -s src/version.c >/dev/null && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || echo 'Please install openssl or sha256sum or shasum')_$(MDBX_VERSION_SUFFIX)
+MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) CXXSTD= -s src/version.c >/dev/null && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || (echo 'Please install openssl or sha256sum or shasum' >&2 && echo sha256sum_is_no_available))_$(MDBX_VERSION_SUFFIX)
 MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_SUFFIX)
 
 # Extra options mdbx_test utility
@@ -359,7 +360,18 @@ mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	@echo '  LD $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(TEST_OBJ) -Wl,-rpath . -L . -l mdbx $(EXE_LDFLAGS) $(LIBS) -o $@
 
-git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo "Please use libmdbx as a git-submodule or the amalgamated source code" >&2 && echo git_directory; fi)
+$(git_DIR)/HEAD $(git_DIR)/index $(git_DIR)/refs/tags:
+	@echo '*** ' >&2
+	@echo '*** Please don''t use tarballs nor zips which are automatically provided by Github !' >&2
+	@echo '*** These archives do not contain version information and thus are unfit to build libmdbx.' >&2
+	@echo '*** You can vote for ability of disabling auto-creation such unsuitable archives at https://github.community/t/disable-tarball' >&2
+	@echo '*** ' >&2
+	@echo '*** Instead of above, just clone the git repository, either download a tarball or zip with the properly amalgamated source core.' >&2
+	@echo '*** For embedding libmdbx use a git-submodule or the amalgamated source code.' >&2
+	@echo '*** ' >&2
+	@echo '*** Please, avoid using any other techniques.' >&2
+	@echo '*** ' >&2
+	@false
 
 src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(git_DIR)/HEAD $(git_DIR)/index $(git_DIR)/refs/tags
 	@echo '  MAKE $@'
@@ -606,7 +618,8 @@ uninstall:
 IOARENA ?= $(shell \
   (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
   (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
-  (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena)
+  (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena 2>&- || \
+  echo '\#\# TIP: Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2)
 NN	?= 25000000
 BENCH_CRUD_MODE ?= nosync
 
