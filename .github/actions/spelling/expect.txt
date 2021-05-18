@@ -401,7 +401,6 @@ ELBRUSC
 ELBRUSCXX
 elif
 elseif
-elsif
 emoji
 emscripten
 EMULTIVAL

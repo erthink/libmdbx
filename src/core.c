@@ -22165,7 +22165,7 @@ __dll_export
 #else
   #ifdef __INTEL_COMPILER
     "Intel C/C++ " STRINGIFY(__INTEL_COMPILER)
-  #elsif defined(__apple_build_version__)
+  #elif defined(__apple_build_version__)
     "Apple clang " STRINGIFY(__apple_build_version__)
   #elif defined(__ibmxl__)
     "IBM clang C " STRINGIFY(__ibmxl_version__) "." STRINGIFY(__ibmxl_release__)
