@@ -36,7 +36,11 @@ static __cold uint8_t probe_for_WSL(const char *tag) {
   const char *const wsl = strstr(tag, "wsl");
   if (wsl && wsl[3] >= '2' && wsl[3] <= '9')
     return wsl[3] - '0';
-  return (WSL || wsl || strcasestr(tag, "Microsoft")) ? 1 : 0;
+  if (WSL || wsl || strcasestr(tag, "Microsoft"))
+    /* Expecting no new kernel within WSL1, either it will explicitly
+     * marked by an appropriate WSL-version hint. */
+    return (mdbx_linux_kernel_version < /* 4.19.x */ 0x04130000) ? 1 : 2;
+  return 0;
 }
 
 #endif /* Linux */
@@ -46,16 +50,6 @@ mdbx_global_constructor(void) {
 #if defined(__linux__) || defined(__gnu_linux__)
   struct utsname buffer;
   if (uname(&buffer) == 0) {
-    /* "Official" way of detecting WSL1 but not WSL2
-     * https://github.com/Microsoft/WSL/issues/423#issuecomment-221627364
-     *
-     * WARNING: False negative detection of WSL1 will result in DATA LOSS!
-     * So, the REQUIREMENTS for this code:
-     *  1. MUST detect WSL1 without false-negatives.
-     *  2. DESIRABLE detect WSL2 but without the risk of violating the first. */
-    mdbx_RunningOnWSL1 = probe_for_WSL(buffer.version) == 1 ||
-                         probe_for_WSL(buffer.sysname) == 1 ||
-                         probe_for_WSL(buffer.release) == 1;
     int i = 0;
     char *p = buffer.release;
     while (*p && i < 4) {
@@ -71,6 +65,16 @@ mdbx_global_constructor(void) {
         ++p;
       }
     }
+    /* "Official" way of detecting WSL1 but not WSL2
+     * https://github.com/Microsoft/WSL/issues/423#issuecomment-221627364
+     *
+     * WARNING: False negative detection of WSL1 will result in DATA LOSS!
+     * So, the REQUIREMENTS for this code:
+     *  1. MUST detect WSL1 without false-negatives.
+     *  2. DESIRABLE detect WSL2 but without the risk of violating the first. */
+    mdbx_RunningOnWSL1 = probe_for_WSL(buffer.version) == 1 ||
+                         probe_for_WSL(buffer.sysname) == 1 ||
+                         probe_for_WSL(buffer.release) == 1;
   }
 #endif /* Linux */
 
