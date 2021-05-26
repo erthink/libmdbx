@@ -198,6 +198,22 @@ static int lck_op(mdbx_filehandle_t fd, int cmd, int lck, off_t offset,
       return MDBX_SUCCESS;
     }
     rc = errno;
+#if MDBX_USE_OFDLOCKS
+    if (rc == EINVAL &&
+        (cmd == F_OFD_SETLK || cmd == F_OFD_SETLKW || cmd == F_OFD_GETLK)) {
+      /* fallback to non-OFD locks */
+      if (cmd == F_OFD_SETLK)
+        cmd = F_SETLK;
+      else if (cmd == F_OFD_SETLKW)
+        cmd = F_SETLKW;
+      else
+        cmd = F_GETLK;
+      op_setlk = F_SETLK;
+      op_setlkw = F_SETLKW;
+      op_getlk = F_GETLK;
+      continue;
+    }
+#endif /* MDBX_USE_OFDLOCKS */
     if (rc != EINTR || cmd == op_setlkw) {
       mdbx_assert(nullptr, MDBX_IS_ERROR(rc));
       return rc;
