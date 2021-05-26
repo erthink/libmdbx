@@ -1329,13 +1329,13 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
          strncasecmp("cifs", name, name_len) == 0 ||
          strncasecmp("ncpfs", name, name_len) == 0 ||
          strncasecmp("smbfs", name, name_len) == 0 ||
+         strcasecmp("9P" /* WSL2 */, name) == 0 ||
          ((name_len > 3 && strncasecmp("fuse", name, 4) == 0) &&
           strncasecmp("fuseblk", name, name_len) != 0)) &&
         !(flags & MDBX_EXCLUSIVE))
       return MDBX_EREMOTE;
     if (strcasecmp("ftp", name) == 0 || strcasecmp("http", name) == 0 ||
-        strcasecmp("sshfs", name) == 0 ||
-        strcasecmp("9P" /* WSL2 */, name) == 0)
+        strcasecmp("sshfs", name) == 0)
       return MDBX_EREMOTE;
   }
 
