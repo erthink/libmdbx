@@ -1334,7 +1334,8 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
         !(flags & MDBX_EXCLUSIVE))
       return MDBX_EREMOTE;
     if (strcasecmp("ftp", name) == 0 || strcasecmp("http", name) == 0 ||
-        strcasecmp("sshfs", name) == 0)
+        strcasecmp("sshfs", name) == 0 ||
+        strcasecmp("9P" /* WSL2 */, name) == 0)
       return MDBX_EREMOTE;
   }
 
