@@ -4155,7 +4155,7 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
 static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned npages) {
   VALGRIND_MAKE_MEM_UNDEFINED(dp, pgno2bytes(env, npages));
   ASAN_UNPOISON_MEMORY_REGION(dp, pgno2bytes(env, npages));
-  if (MDBX_DEBUG || unlikely(env->me_flags & MDBX_PAGEPERTURB))
+  if (MDBX_DEBUG != 0 || unlikely(env->me_flags & MDBX_PAGEPERTURB))
     memset(dp, -1, pgno2bytes(env, npages));
   if (npages == 1 &&
       env->me_dp_reserve_len < env->me_options.dp_reserve_limit) {
@@ -4742,7 +4742,7 @@ status_done:
                                     ? pgno + 2
                                     : txn->tw.loose_refund_wl;
 #endif /* MDBX_ENABLE_REFUND */
-      if (MDBX_DEBUG || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+      if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
         memset(page_data(mp), -1, txn->mt_env->me_psize - PAGEHDRSZ);
       VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
                                  txn->mt_env->me_psize - PAGEHDRSZ);
@@ -4770,7 +4770,7 @@ status_done:
       }
 
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-      if (MDBX_DEBUG || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+      if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
 #endif
         mdbx_kill_page(txn, mp, pgno, npages);
       if (!(txn->mt_flags & MDBX_WRITEMAP)) {
