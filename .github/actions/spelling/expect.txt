@@ -350,6 +350,8 @@ dprefix
 DPs
 dqiqg
 dreamsxin
+drv
+drvfs
 dsize
 dso
 dst
@@ -780,6 +782,7 @@ Kuntze
 kurt
 kuznik
 kval
+Lanfranchi
 largedata
 largepage
 lastest
@@ -1862,6 +1865,7 @@ webclient
 WERROR
 WEXITSTATUS
 WEXTRA
+whitelist
 wholetable
 WIFCONTINUED
 WIFEXITED
