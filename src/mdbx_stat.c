@@ -106,7 +106,7 @@ int main(int argc, char *argv[]) {
   prog = argv[0];
   char *envname;
   char *subname = nullptr;
-  bool alldbs = false, envinfo = false, envflags = false, pgop = false;
+  bool alldbs = false, envinfo = false, pgop = false;
   int freinfo = 0, rdrinfo = 0;
 
   if (argc < 2)
@@ -155,7 +155,6 @@ int main(int argc, char *argv[]) {
       freinfo += 1;
       break;
     case 'n':
-      envflags |= MDBX_NOSUBDIR;
       break;
     case 'r':
       rdrinfo += 1;
@@ -209,7 +208,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  rc = mdbx_env_open(env, envname, envflags | MDBX_RDONLY, 0);
+  rc = mdbx_env_open(env, envname, MDBX_RDONLY, 0);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_env_open", rc);
     goto env_close;

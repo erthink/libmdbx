@@ -109,7 +109,6 @@ int main(int argc, char *argv[]) {
       delete = true;
       break;
     case 'n':
-      envflags |= MDBX_NOSUBDIR;
       break;
     case 's':
       subname = optarg;

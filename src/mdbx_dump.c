@@ -296,7 +296,6 @@ int main(int argc, char *argv[]) {
       }
       break;
     case 'n':
-      envflags |= MDBX_NOSUBDIR;
       break;
     case 'p':
       mode |= PRINT;

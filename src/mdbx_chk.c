@@ -1114,7 +1114,6 @@ int main(int argc, char *argv[]) {
       quiet = true;
       break;
     case 'n':
-      envflags |= MDBX_NOSUBDIR;
       break;
     case 'w':
       envflags &= ~MDBX_RDONLY;
