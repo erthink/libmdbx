@@ -21978,7 +21978,7 @@ __dll_export
 #ifdef MDBX_BUILD_TIMESTAMP
     MDBX_BUILD_TIMESTAMP
 #else
-    __DATE__ " " __TIME__
+    "\"" __DATE__ " " __TIME__ "\""
 #endif /* MDBX_BUILD_TIMESTAMP */
 
     ,
