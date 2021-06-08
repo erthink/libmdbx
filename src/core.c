@@ -11583,18 +11583,18 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
   env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
-  const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
-  if (unlikely(meta_clash_mask)) {
-    if (/* not recovery mode */ env->me_stuck_meta < 0) {
-      mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
-      return MDBX_CORRUPTED;
-    } else {
-      mdbx_warning("ignore meta-pages clashing (mask 0x%d) in recovery mode",
-                   meta_clash_mask);
-    }
-  }
-
   while (likely(/* not recovery mode */ env->me_stuck_meta < 0)) {
+    const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
+    if (unlikely(meta_clash_mask)) {
+      if (/* not recovery mode */ env->me_stuck_meta < 0) {
+        mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
+        return MDBX_CORRUPTED;
+      } else {
+        mdbx_warning("ignore meta-pages clashing (mask 0x%d) in recovery mode",
+                     meta_clash_mask);
+      }
+    }
+
     MDBX_meta *const head = mdbx_meta_head(env);
     const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
     MDBX_meta *const steady = mdbx_meta_steady(env);
