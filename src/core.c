@@ -5888,16 +5888,6 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
 static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
                                  const pgno_t size_pgno,
                                  const pgno_t limit_pgno, const bool implicit) {
-  if ((env->me_flags & MDBX_WRITEMAP) && env->me_lck->mti_unsynced_pages.weak) {
-#if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    int err = mdbx_msync(&env->me_dxb_mmap, 0,
-                         pgno_align2os_bytes(env, used_pgno), MDBX_SYNC_NONE);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-  }
-
   const size_t limit_bytes = pgno_align2os_bytes(env, limit_pgno);
   const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
   const size_t prev_size = env->me_dxb_mmap.current;
@@ -5915,6 +5905,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
   mdbx_assert(env, bytes2pgno(env, size_bytes) >= size_pgno);
   mdbx_assert(env, bytes2pgno(env, limit_bytes) >= limit_pgno);
 
+  unsigned mresize_flags =
+      env->me_flags & (MDBX_RDONLY | MDBX_WRITEMAP | MDBX_UTTERLY_NOSYNC);
 #if defined(_WIN32) || defined(_WIN64)
   /* Acquire guard in exclusive mode for:
    *   - to avoid collision between read and write txns around env->me_dbgeo;
@@ -5928,28 +5920,30 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
       size_bytes == env->me_dxb_mmap.filesize)
     goto bailout;
 
-  /* 1) Windows allows only extending a read-write section, but not a
-   *    corresponding mapped view. Therefore in other cases we must suspend
-   *    the local threads for safe remap.
-   * 2) At least on Windows 10 1803 the entire mapped section is unavailable
-   *    for short time during NtExtendSection() or VirtualAlloc() execution.
-   * 3) Under Wine runtime environment on Linux a section extending is not
-   *    supported. Therefore thread suspending is always required.
-   *
-   * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED! */
-  array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
-  array_onstack.count = 0;
-  suspended = &array_onstack;
-  rc = mdbx_suspend_threads_before_remap(env, &suspended);
-  if (rc != MDBX_SUCCESS) {
-    mdbx_error("failed suspend-for-remap: errcode %d", rc);
-    goto bailout;
+  if ((env->me_flags & MDBX_NOTLS) == 0) {
+    /* 1) Windows allows only extending a read-write section, but not a
+     *    corresponding mapped view. Therefore in other cases we must suspend
+     *    the local threads for safe remap.
+     * 2) At least on Windows 10 1803 the entire mapped section is unavailable
+     *    for short time during NtExtendSection() or VirtualAlloc() execution.
+     * 3) Under Wine runtime environment on Linux a section extending is not
+     *    supported.
+     *
+     * THEREFORE LOCAL THREADS SUSPENDING IS ALWAYS REQUIRED! */
+    array_onstack.limit = ARRAY_LENGTH(array_onstack.handles);
+    array_onstack.count = 0;
+    suspended = &array_onstack;
+    rc = mdbx_suspend_threads_before_remap(env, &suspended);
+    if (rc != MDBX_SUCCESS) {
+      mdbx_error("failed suspend-for-remap: errcode %d", rc);
+      goto bailout;
+    }
+    mresize_flags |= implicit ? MDBX_MRESIZE_MAY_UNMAP
+                              : MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
   }
-  const bool mapping_can_be_moved = !implicit;
-#else /* Windows */
+#else  /* Windows */
   /* Acquire guard to avoid collision between read and write txns
    * around env->me_dbgeo */
-  bool mapping_can_be_moved = false;
   int rc = mdbx_fastmutex_acquire(&env->me_remap_guard);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -5958,7 +5952,8 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     goto bailout;
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
-  if (limit_bytes != env->me_dxb_mmap.limit && lck && !implicit) {
+  if (limit_bytes != env->me_dxb_mmap.limit && !(env->me_flags & MDBX_NOTLS) &&
+      lck && !implicit) {
     int err = mdbx_rdt_lock(env) /* lock readers table until remap done */;
     if (unlikely(MDBX_IS_ERROR(err))) {
       rc = err;
@@ -5968,20 +5963,30 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     /* looking for readers from this process */
     const unsigned snap_nreaders =
         atomic_load32(&lck->mti_numreaders, mo_AcquireRelease);
-    mapping_can_be_moved = true;
+    mresize_flags |= implicit ? MDBX_MRESIZE_MAY_UNMAP
+                              : MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
     for (unsigned i = 0; i < snap_nreaders; ++i) {
       if (lck->mti_readers[i].mr_pid.weak == env->me_pid &&
           lck->mti_readers[i].mr_tid.weak != mdbx_thread_self()) {
         /* the base address of the mapping can't be changed since
          * the other reader thread from this process exists. */
         mdbx_rdt_unlock(env);
-        mapping_can_be_moved = false;
+        mresize_flags &= ~(MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE);
         break;
       }
     }
   }
-
 #endif /* ! Windows */
+
+  if ((env->me_flags & MDBX_WRITEMAP) && env->me_lck->mti_unsynced_pages.weak) {
+#if MDBX_ENABLE_PGOP_STAT
+    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+#endif /* MDBX_ENABLE_PGOP_STAT */
+    rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, used_pgno),
+                    MDBX_SYNC_NONE);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+  }
 
 #if MDBX_ENABLE_MADVISE
   if (size_bytes < prev_size) {
@@ -6020,8 +6025,7 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
   }
 #endif /* MDBX_ENABLE_MADVISE */
 
-  rc = mdbx_mresize(env->me_flags, &env->me_dxb_mmap, size_bytes, limit_bytes,
-                    mapping_can_be_moved);
+  rc = mdbx_mresize(mresize_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
 
 #if MDBX_ENABLE_MADVISE
   if (rc == MDBX_SUCCESS) {
@@ -6056,7 +6060,7 @@ bailout:
     }
 #endif /* MDBX_USE_VALGRIND */
   } else {
-    if (rc != MDBX_UNABLE_EXTEND_MAPSIZE) {
+    if (rc != MDBX_UNABLE_EXTEND_MAPSIZE && rc != MDBX_RESULT_TRUE) {
       mdbx_error("failed resize datafile/mapping: "
                  "present %" PRIuPTR " -> %" PRIuPTR ", "
                  "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
@@ -6084,7 +6088,8 @@ bailout:
       mdbx_free(suspended);
   }
 #else
-  if (env->me_lck_mmap.lck && mapping_can_be_moved)
+  if (env->me_lck_mmap.lck &&
+      (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE)) != 0)
     mdbx_rdt_unlock(env);
   int err = mdbx_fastmutex_release(&env->me_remap_guard);
 #endif /* Windows */
@@ -7629,12 +7634,13 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     }
     if (txn->mt_flags & MDBX_TXN_RDONLY) {
 #if defined(_WIN32) || defined(_WIN64)
-      if ((size > env->me_dbgeo.lower && env->me_dbgeo.shrink) ||
-          (mdbx_RunningUnderWine() &&
-           /* under Wine acquisition of remap_guard is always required,
-            * since Wine don't support section extending,
-            * i.e. in both cases unmap+map are required. */
-           size < env->me_dbgeo.upper && env->me_dbgeo.grow)) {
+      if (((size > env->me_dbgeo.lower && env->me_dbgeo.shrink) ||
+           (mdbx_RunningUnderWine() &&
+            /* under Wine acquisition of remap_guard is always required,
+             * since Wine don't support section extending,
+             * i.e. in both cases unmap+map are required. */
+            size < env->me_dbgeo.upper && env->me_dbgeo.grow)) &&
+          /* avoid recursive use SRW */ (txn->mt_flags & MDBX_NOTLS) == 0) {
         txn->mt_flags |= MDBX_SHRINK_ALLOWED;
         mdbx_srwlock_AcquireShared(&env->me_remap_guard);
       }

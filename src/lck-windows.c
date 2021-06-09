@@ -260,6 +260,7 @@ static int suspend_and_append(mdbx_handle_array_t **array,
 
 MDBX_INTERNAL_FUNC int
 mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
+  mdbx_assert(env, (env->me_flags & MDBX_NOTLS) == 0);
   const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->me_lck_mmap.lck) {
@@ -277,12 +278,6 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
       if (reader->mr_tid.weak == CurrentTid ||
           reader->mr_tid.weak == WriteTxnOwner)
         goto skip_lck;
-      if (env->me_flags & MDBX_NOTLS) {
-        /* Skip duplicates in no-tls mode */
-        for (const MDBX_reader *scan = reader; --scan >= begin;)
-          if (scan->mr_tid.weak == reader->mr_tid.weak)
-            goto skip_lck;
-      }
 
       rc = suspend_and_append(array, (mdbx_tid_t)reader->mr_tid.weak);
       if (rc != MDBX_SUCCESS) {

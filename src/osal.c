@@ -1535,8 +1535,8 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
-                                    size_t limit, const bool may_move) {
+MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
+                                    size_t size, size_t limit) {
   assert(size <= limit);
 #if defined(_WIN32) || defined(_WIN64)
   assert(size != map->current || limit != map->limit || size < map->filesize);
@@ -1580,6 +1580,9 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
    *  - change size of mapped view;
    *  - extend read-only mapping;
    * Therefore we should unmap/map entire section. */
+  if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0)
+    return MDBX_RESULT_TRUE;
+
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
   if (!NT_SUCCESS(status))
     return ntstatus2errcode(status);
@@ -1615,7 +1618,7 @@ retry_file_and_section:
     if (status != (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018)
       goto bailout_ntstatus /* no way to recovery */;
 
-    if (may_move)
+    if (flags & MDBX_MRESIZE_MAY_MOVE)
       /* the base address could be changed */
       map->address = NULL;
   }
@@ -1673,7 +1676,7 @@ retry_mapview:;
 
   if (!NT_SUCCESS(status)) {
     if (status == (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
-        map->address && may_move) {
+        map->address && (flags & MDBX_MRESIZE_MAY_MOVE) != 0) {
       /* try remap at another base address */
       map->address = NULL;
       goto retry_mapview;
@@ -1684,7 +1687,7 @@ retry_mapview:;
     if (map->address && (size != map->current || limit != map->limit)) {
       /* try remap with previously size and limit,
        * but will return MDBX_UNABLE_EXTEND_MAPSIZE on success */
-      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
+      rc = (limit > map->limit) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_RESULT_TRUE;
       size = map->current;
       ReservedSize = limit = map->limit;
       goto retry_file_and_section;
@@ -1708,7 +1711,8 @@ retry_mapview:;
   if (flags & MDBX_RDONLY) {
     map->current = (filesize > limit) ? limit : (size_t)filesize;
     if (map->current != size)
-      rc = MDBX_UNABLE_EXTEND_MAPSIZE;
+      rc =
+          (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_RESULT_TRUE;
   } else if (filesize != size) {
     rc = mdbx_ftruncate(map->fd, size);
     if (rc != MDBX_SUCCESS)
@@ -1731,7 +1735,8 @@ retry_mapview:;
   uint8_t *ptr = MAP_FAILED;
 
 #if defined(MREMAP_MAYMOVE)
-  ptr = mremap(map->address, map->limit, limit, may_move ? MREMAP_MAYMOVE : 0);
+  ptr = mremap(map->address, map->limit, limit,
+               (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE : 0);
   if (ptr == MAP_FAILED) {
     const int err = errno;
     switch (err) {
@@ -1780,7 +1785,7 @@ retry_mapview:;
 
   if (ptr == MAP_FAILED) {
     /* unmap and map again whole region */
-    if (!may_move) {
+    if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0) {
       /* TODO: Perhaps here it is worth to implement suspend/resume threads
        * and perform unmap/map as like for Windows. */
       return MDBX_UNABLE_EXTEND_MAPSIZE;
@@ -1789,9 +1794,31 @@ retry_mapview:;
     if (unlikely(munmap(map->address, map->limit)))
       return errno;
 
-    ptr = mmap(map->address, limit, mmap_prot, mmap_flags, map->fd, 0);
+    ptr = mmap(map->address, limit, mmap_prot,
+               (flags & MDBX_MRESIZE_MAY_MOVE)
+                   ? mmap_flags
+                   : mmap_flags | (MAP_FIXED_NOREPLACE ? MAP_FIXED_NOREPLACE
+                                                       : MAP_FIXED),
+               map->fd, 0);
+    if (MAP_FIXED_NOREPLACE != 0 && MAP_FIXED_NOREPLACE != MAP_FIXED &&
+        unlikely(ptr == MAP_FAILED) && !(flags & MDBX_MRESIZE_MAY_MOVE) &&
+        errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
+      ptr = mmap(map->address, limit, mmap_prot, mmap_flags | MAP_FIXED,
+                 map->fd, 0);
+
     if (unlikely(ptr == MAP_FAILED)) {
-      ptr = mmap(map->address, map->limit, mmap_prot, mmap_flags, map->fd, 0);
+      /* try to restore prev mapping */
+      ptr = mmap(map->address, map->limit, mmap_prot,
+                 (flags & MDBX_MRESIZE_MAY_MOVE)
+                     ? mmap_flags
+                     : mmap_flags | (MAP_FIXED_NOREPLACE ? MAP_FIXED_NOREPLACE
+                                                         : MAP_FIXED),
+                 map->fd, 0);
+      if (MAP_FIXED_NOREPLACE != 0 && MAP_FIXED_NOREPLACE != MAP_FIXED &&
+          unlikely(ptr == MAP_FAILED) && !(flags & MDBX_MRESIZE_MAY_MOVE) &&
+          errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
+        ptr = mmap(map->address, map->limit, mmap_prot, mmap_flags | MAP_FIXED,
+                   map->fd, 0);
       if (unlikely(ptr == MAP_FAILED)) {
         VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
         /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
