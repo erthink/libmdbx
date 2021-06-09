@@ -5,6 +5,8 @@ ChangeLog
 
 ### TODO
 
+ - [Move most of `mdbx_chk` functional to the library API](https://github.com/erthink/libmdbx/issues/204).
+ - [Fix recursive use of SRW-lock on Windows cause by `MDBX_NOTLS` option.](https://github.com/erthink/libmdbx/issues/203).
  - [More flexible support of asynchronous runtime/framework(s)](https://github.com/erthink/libmdbx/issues/200).
  - [Migration guide from LMDB to MDBX](https://github.com/erthink/libmdbx/issues/199).
  - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://github.com/erthink/libmdbx/issues/193).
