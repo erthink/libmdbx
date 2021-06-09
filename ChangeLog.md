@@ -25,6 +25,10 @@ New features:
 
  - Allow to predefine/override `MDBX_BUILD_TIMESTAMP` for builds reproducibility (https://github.com/erthink/libmdbx/issues/201).
 
+Fixes:
+
+ - Fixed excess meta-pageы checks in case `mdbx_chk` is called to check the DB for a specific meta page and thus could prevent switching to the selected meta page, even if the check passed without errors.
+
 
 ## v0.10.1 at 2021-06-01
 
