@@ -39,3 +39,10 @@ dist/
 *.tar*
 docs/Doxyfile
 docs/html/
+python/libmdbx/tests/MDBX_TEST
+python/libmdbx/mdbx.py
+python/build
+python/dist
+*.egg-info
+*__pycache__*
+*.pyc
