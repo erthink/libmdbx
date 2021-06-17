@@ -15,6 +15,9 @@
 
 SHELL   := env bash
 
+mkfile_path := $(abspath $(lastword $(MAKEFILE_LIST)))
+current_dir := $(notdir $(patsubst %/,%,$(dir $(mkfile_path))))
+
 # install sandbox
 DESTDIR ?=
 
@@ -43,6 +46,8 @@ LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | gre
 
 LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
 EXE_LDFLAGS ?= -pthread
+
+
 
 ################################################################################
 
