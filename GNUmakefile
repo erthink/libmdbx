@@ -287,7 +287,8 @@ MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_SUFFIX)
 # Extra options mdbx_test utility
 MDBX_TEST_EXTRA ?=
 
-check: test dist
+check: DESTDIR = $(shell pwd)/@check-install
+check: test dist install
 
 test: build-test
 	@echo '  RUNNING `mdbx_test basic`...'
