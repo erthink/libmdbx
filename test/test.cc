@@ -714,8 +714,8 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
                                      const testcase::SET::const_iterator &it,
                                      MDBX_cursor *cursor,
                                      const MDBX_cursor_op op) const {
-  MDBX_val cursor_key = {};
-  MDBX_val cursor_data = {};
+  MDBX_val cursor_key = {0, 0};
+  MDBX_val cursor_data = {0, 0};
   int err;
   if (it != speculum.end() && std::next(it) == speculum.end() &&
       op == MDBX_PREV && (config.params.table_flags & MDBX_DUPSORT)) {
