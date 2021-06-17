@@ -862,6 +862,84 @@ endif()
 
 ################################################################################
 
+option(MDBX_PYTHON_BINDINGS "Build the Python 3 bindings" OFF)
+if(MDBX_PYTHON_BINDINGS)
+  if (NOT PYTEST)
+    find_program(PYTEST pytest)
+    #message(FATAL_ERROR "PYTEST: ${PYTEST}")
+    if (PYTEST-NOTFOUND)
+      find_program(PYTEST pytest-3)
+      if(NOT PYTEST)
+        set(
+          PYTEST
+          python3 -m pytest
+        )
+      endif()
+    endif()
+  endif()
+
+  set(MDBX_BUILD_DIR_LIB_LOCATION
+    $<TARGET_FILE:mdbx>
+    )
+
+  add_custom_target(
+    python-prep
+    COMMAND sed 's|@LIBLOCATION@|${CMAKE_INSTALL_PREFIX}/${MDBX_DLL_INSTALL_DESTINATION}/${mdbx}|' python/libmdbx/mdbx.py.in > python/libmdbx/mdbx.py
+    COMMAND sed 's|@MDBX_VERSION@|${MDBX_VERSION}|' python/libmdbx/setup.py.in > python/libmdbx/setup.py
+    COMMENT Prepare python bindings
+  )
+
+  add_custom_target(
+    python-test-prep
+    COMMAND sed 's|@LIBLOCATION@|${MDBX_BUILD_DIR_LIB_LOCATION}|' python/libmdbx/mdbx.py.in > python/libmdbx/mdbx.py
+    COMMENT set the DLL path to the built dll in the build dir
+    DEPENDS mdbx
+  )
+
+  add_custom_target(
+    python-test
+    COMMAND ${PYTEST}
+    COMMENT test python bindings
+    WORKING_DIRECTORY python
+    DEPENDS python-test-prep
+  )
+
+  add_custom_target(
+    python-install
+    COMMAND python setup.py install --root="$CMAKE_INSTALL_PREFIX"
+    COMMENT package python bindings
+    WORKING_DIRECTORY python
+  )
+
+  add_custom_target(
+    python-wheel
+    COMMAND python3 -m build
+    COMMENT build python wheel of the bindings
+    WORKING_DIRECTORY python
+  )
+
+  add_custom_target(
+    python-clean
+    COMMAND python3 setup.py clean --all
+    WORKING_DIRECTORY python
+  )
+
+  add_custom_target(
+    python
+  )
+
+  add_dependencies(
+    distclean
+    python-clean
+  )
+
+  add_dependencies(
+    python
+    python-test
+    python-wheel
+  )
+endif()
+
 set(PACKAGE "libmdbx")
 set(CPACK_PACKAGE_VERSION_MAJOR ${MDBX_VERSION_MAJOR})
 set(CPACK_PACKAGE_VERSION_MINOR ${MDBX_VERSION_MINOR})
