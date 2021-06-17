@@ -596,11 +596,16 @@ cross-qemu:
 
 install: $(LIBRARIES) $(TOOLS) $(HEADERS)
 	@echo '  INSTALLING...'
-	$(INSTALL) -D -p $(EXE_INSTALL_FLAGS) -t $(DESTDIR)$(prefix)/bin$(suffix) $(TOOLS) && \
-	$(INSTALL) -D -p $(EXE_INSTALL_FLAGS) -t $(DESTDIR)$(prefix)/lib$(suffix) $(filter-out libmdbx.a,$(LIBRARIES)) && \
-	$(INSTALL) -D -p -t $(DESTDIR)$(prefix)/lib$(suffix) libmdbx.a && \
-	$(INSTALL) -D -p -m 444 -t $(DESTDIR)$(prefix)/include $(HEADERS) && \
-	$(INSTALL) -D -p -m 444 -t $(DESTDIR)$(mandir)/man1 $(addprefix $(MAN_SRCDIR), $(MANPAGES))
+	$(QUIET)mkdir -p $(DESTDIR)$(prefix)/bin$(suffix) && \
+		$(INSTALL) -p $(EXE_INSTALL_FLAGS) $(TOOLS) $(DESTDIR)$(prefix)/bin$(suffix)/ && \
+	mkdir -p $(DESTDIR)$(prefix)/lib$(suffix)/ && \
+		$(INSTALL) -p $(EXE_INSTALL_FLAGS) $(filter-out libmdbx.a,$(LIBRARIES)) $(DESTDIR)$(prefix)/lib$(suffix)/ && \
+	mkdir -p $(DESTDIR)$(prefix)/lib$(suffix)/ && \
+		$(INSTALL) -p libmdbx.a $(DESTDIR)$(prefix)/lib$(suffix)/ && \
+	mkdir -p $(DESTDIR)$(prefix)/include/ && \
+		$(INSTALL) -p -m 444 $(HEADERS) $(DESTDIR)$(prefix)/include/ && \
+	mkdir -p $(DESTDIR)$(mandir)/man1/ && \
+		$(INSTALL) -p -m 444 $(addprefix $(MAN_SRCDIR), $(MANPAGES)) $(DESTDIR)$(mandir)/man1/
 
 install-strip: EXE_INSTALL_FLAGS = -s
 install-strip: install
