@@ -20661,7 +20661,7 @@ int mdbx_cursor_eof(const MDBX_cursor *mc) {
   if (mc->mc_snum == 0)
     return MDBX_RESULT_TRUE;
 
-  if ((mc->mc_flags & C_EOF) &&
+  if ((mc->mc_flags & C_EOF) ||
       mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top]))
     return MDBX_RESULT_TRUE;
 
