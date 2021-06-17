@@ -47,7 +47,7 @@ LIBS    ?= $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | gre
 LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
 EXE_LDFLAGS ?= -pthread
 
-
+PYTEST ?= $(shell if command -v pytest >/dev/null ; then echo pytest ; elif command -v pytest-3 >/dev/null; then echo pytest-3 ; else echo python3 -m pytest ; fi)
 
 ################################################################################
 
@@ -64,8 +64,9 @@ HEADERS    := mdbx.h mdbx.h++
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
+BINDINGS   := python
 
-.PHONY: all help options lib tools clean install uninstall
+.PHONY: all help options lib tools clean install uninstall python
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options
 
 ifeq ("$(origin V)", "command line")
@@ -106,6 +107,7 @@ help:
 	@echo "  make bench-triplet       - run ioarena-benchmark for mdbx, lmdb, sqlite3"
 	@echo "  make bench-quartet       - run ioarena-benchmark for mdbx, lmdb, rocksdb, wiredtiger"
 	@echo "  make bench-clean         - remove temp database(s) after benchmark"
+	@echo "  make python              - Generate python bindings"
 #> dist-cutoff-begin
 	@echo ""
 	@echo "  make test                - basic test"
@@ -555,6 +557,39 @@ dist/man1/mdbx_%.1: src/man1/mdbx_%.1
 	$(QUIET)mkdir -p dist/man1/ && cp $< $@
 
 endif
+
+python: python-test python-wheel
+
+# Python bindings generation
+python/libmdbx/mdbx.py:
+	@echo '  GENERATING PYTHON BINDINGS'
+	$(QUIET)sed 's|@LIBLOCATION@|$(prefix)/libmdbx.$(SO_SUFFIX)|' python/libmdbx/mdbx.py.in > python/libmdbx/mdbx.py
+
+python-test-prep:
+	@echo '  PREPARING PYTHON BINDINGS FOR TEST'
+	$(QUIET)sed 's|@LIBLOCATION@|$(abspath .)/libmdbx.$(SO_SUFFIX)|' python/libmdbx/mdbx.py.in > python/libmdbx/mdbx.py
+
+python-test: python-test-prep libmdbx.$(SO_SUFFIX)
+	@echo ' TESTING PYTHON BINDINGS'
+	cd python/libmdbx &&	$(PYTEST)
+
+python-prep-setup:
+	@echo ' SETTING WHEEL VERSION'
+	$(QUIET)sed 's|@MDBX_VERSION@|${MDBX_GIT_VERSION}|' python/libmdbx/setup.py.in > python/libmdbx/setup.py
+
+python-wheel: python/libmdbx/mdbx.py python-prep-setup
+	@echo ' GENERATING PYTHON WHEEL'
+	cd python/libmdbx && python3 -m build
+
+python-clean: python-prep-setup
+	@echo 'CLEANING PYTHON DIRECTORY'
+	cd python/libmdbx && python3 setup.py clean --all
+
+python-install: python/libmdbx/mdbx.py python-prep-setup
+	@echo 'INSTALLING PYTHON BINDINGS'
+	cd python/libmdbx && python3 setup.py install --root="$(DESTDIR)"
+
+.PHONY: python-test python-test-prep python python/libmdbx/mdbx.py python-prep-setup
 
 ################################################################################
 # Cross-compilation simple test
