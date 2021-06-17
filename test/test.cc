@@ -1018,7 +1018,7 @@ bool testcase::speculum_verify() {
   char dump_mkey[128], dump_mvalue[128];
 
   MDBX_cursor *cursor;
-  int err = mdbx_cursor_open(txn_guard.get(), dbi, &cursor);
+  int eof, err = mdbx_cursor_open(txn_guard.get(), dbi, &cursor);
   if (err != MDBX_SUCCESS)
     failure_perror("mdbx_cursor_open()", err);
 
@@ -1034,6 +1034,14 @@ bool testcase::speculum_verify() {
     if (err != MDBX_SUCCESS) {
       akey.iov_len = avalue.iov_len = 0;
       akey.iov_base = avalue.iov_base = nullptr;
+    } else {
+      eof = mdbx_cursor_eof(cursor);
+      if (eof != MDBX_RESULT_FALSE) {
+        log_error("false-positive cursor-eof %u/%u: db{%s, %s}, rc %i", n,
+                  extra, mdbx_dump_val(&akey, dump_key, sizeof(dump_key)),
+                  mdbx_dump_val(&avalue, dump_value, sizeof(dump_value)), eof);
+        rc = false;
+      }
     }
     const auto S_key = iov2dataview(akey);
     const auto S_data = iov2dataview(avalue);
@@ -1091,6 +1099,14 @@ bool testcase::speculum_verify() {
     n += 1;
   }
 
+  if (err == MDBX_NOTFOUND) {
+    eof = mdbx_cursor_eof(cursor);
+    if (eof != MDBX_RESULT_TRUE) {
+      eof = mdbx_cursor_eof(cursor);
+      log_error("false-negative cursor-eof: %u, rc %i", n, eof);
+      rc = false;
+    }
+  }
   mdbx_cursor_close(cursor);
   return rc;
 }
