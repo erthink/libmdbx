@@ -3624,7 +3624,8 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
 
 static int __must_check_result mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                                                 uint64_t *filesize,
-                                                const int lck_exclusive);
+                                                const int lck_exclusive,
+                                                const mdbx_mode_t mode_bits);
 static int __must_check_result mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                                 MDBX_meta *const pending);
 static int mdbx_env_close0(MDBX_env *env);
@@ -10293,8 +10294,8 @@ mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta, uint64_t *filesize,
 /* Read the environment parameters of a DB environment
  * before mapping it into memory. */
 static __cold int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
-                                   uint64_t *filesize,
-                                   const int lck_exclusive) {
+                                   uint64_t *filesize, const int lck_exclusive,
+                                   const mdbx_mode_t mode_bits) {
   int rc = mdbx_filesize(env->me_lazy_fd, filesize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -10324,9 +10325,9 @@ static __cold int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
       int err = mdbx_pread(env->me_lazy_fd, buffer, MIN_PAGESIZE, offset);
       if (err != MDBX_SUCCESS) {
         if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 &&
-            *filesize == 0 && (env->me_flags & MDBX_RDONLY) == 0)
-          mdbx_warning("read meta: empty file (%d, %s)", err,
-                       mdbx_strerror(err));
+            *filesize == 0 && mode_bits /* non-zero for DB creation */ != 0)
+          mdbx_notice("read meta: empty file (%d, %s)", err,
+                      mdbx_strerror(err));
         else
           mdbx_error("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
                      mdbx_strerror(err));
@@ -11369,11 +11370,12 @@ __cold int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers) {
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Further setup required for opening an MDBX environment */
-static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
+static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
+                                 const mdbx_mode_t mode_bits) {
   uint64_t filesize_before;
   MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
-  int err = mdbx_read_header(env, &meta, &filesize_before, lck_rc);
+  int err = mdbx_read_header(env, &meta, &filesize_before, lck_rc, mode_bits);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
         (env->me_flags & MDBX_RDONLY) != 0 ||
@@ -11405,7 +11407,7 @@ static __cold int mdbx_setup_dxb(MDBX_env *env, const int lck_rc) {
       return err;
 
 #ifndef NDEBUG /* just for checking */
-    err = mdbx_read_header(env, &meta, &filesize_before, lck_rc);
+    err = mdbx_read_header(env, &meta, &filesize_before, lck_rc, mode_bits);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 #endif
@@ -12360,8 +12362,11 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (flags & ~ENV_USABLE_FLAGS)
+  if (unlikely(flags & ~ENV_USABLE_FLAGS))
     return MDBX_EINVAL;
+
+  if (flags & MDBX_RDONLY)
+    mode = 0;
 
   if (env->me_lazy_fd != INVALID_HANDLE_VALUE ||
       (env->me_flags & MDBX_ENV_ACTIVE) != 0 || env->me_map)
@@ -12510,7 +12515,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     }
   }
 
-  const int dxb_rc = mdbx_setup_dxb(env, lck_rc);
+  const int dxb_rc = mdbx_setup_dxb(env, lck_rc, mode);
   if (MDBX_IS_ERROR(dxb_rc)) {
     rc = dxb_rc;
     goto bailout;
