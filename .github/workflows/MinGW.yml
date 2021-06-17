@@ -62,3 +62,7 @@ jobs:
         } else {
             ./mdbx_chk -nvv test.db | Tee-Object -file chk.log | Select-Object -last 42
         }
+    - name: python-test
+      run: cmake --build . -DMDBX_PYTHON_BINDINGS:bool=true --target python-test
+    - name: python-wheel
+      run: cmake --build . -DMDBX_PYTHON_BINDINGS:bool=true --target python-wheel
