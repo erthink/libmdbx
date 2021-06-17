@@ -20660,17 +20660,11 @@ int mdbx_cursor_eof(const MDBX_cursor *mc) {
     return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
                                                      : MDBX_EBADSIGN;
 
-  if ((mc->mc_flags & C_INITIALIZED) == 0)
-    return MDBX_RESULT_TRUE;
-
-  if (mc->mc_snum == 0)
-    return MDBX_RESULT_TRUE;
-
-  if ((mc->mc_flags & C_EOF) ||
-      mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top]))
-    return MDBX_RESULT_TRUE;
-
-  return MDBX_RESULT_FALSE;
+  return ((mc->mc_flags & (C_INITIALIZED | C_EOF)) == C_INITIALIZED &&
+          mc->mc_snum &&
+          mc->mc_ki[mc->mc_top] < page_numkeys(mc->mc_pg[mc->mc_top]))
+             ? MDBX_RESULT_FALSE
+             : MDBX_RESULT_TRUE;
 }
 
 //------------------------------------------------------------------------------
