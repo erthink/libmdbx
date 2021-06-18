@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
 #, windows-latest
-        os: [ubuntu-latest, macos-latest, ubuntu-16.04]
+        os: [ubuntu-latest]
     steps:
     - uses: actions/checkout@v2
     - name: fetch tags
@@ -35,3 +35,44 @@ jobs:
     - name: make check
       run: make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
       shell: bash
+    - name: install python dependencies
+      run: sudo apt install python3-setuptools python3-pytest && sudo python3 -m pip install --upgrade build
+    - name: check and make python bindings
+      run: make python-test
+    - name: build python bindings
+      run: make python-wheel
+  build_1604:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+#, windows-latest
+        os: [ubuntu-16.04]
+    steps:
+    - uses: actions/checkout@v2
+    - name: fetch tags
+      run: git fetch --unshallow --tags --prune --force
+    - name: make check
+      run: make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
+      shell: bash
+
+  build_macos:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest]
+    steps:
+    - uses: actions/checkout@v2
+    - name: fetch tags
+      run: git fetch --unshallow --tags --prune --force
+    - name: make check
+      run: make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
+      shell: bash
+    - name: install python dependencies
+      run: |
+        brew update
+        brew install python
+        pip3 install --upgrade setuptools pytest build
+    - name: check and make python bindings
+      run: make python-test
+    - name: build python bindings
+      run: make python-wheel
