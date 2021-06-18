@@ -80,9 +80,9 @@ build_script:
         if ($env:PLATFORM -eq "x64") {
             $generator = "$generator Win64"
         }
-        & cmake -G "$generator" -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -D MDBX_WITHOUT_MSVC_CRT:BOOL=$env:MDBX_WITHOUT_MSVC_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
+        & cmake -G "$generator" -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -D MDBX_WITHOUT_MSVC_CRT:BOOL=$env:MDBX_WITHOUT_MSVC_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY -D MDBX_PYTHON_BINDINGS:BOOL=ON ..
     } else {
-        & cmake -G "$generator" -A $env:PLATFORM -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -DMDBX_WITHOUT_MSVC_CRT:BOOL=$env:MDBX_WITHOUT_MSVC_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY ..
+        & cmake -G "$generator" -A $env:PLATFORM -D CMAKE_CONFIGURATION_TYPES="Debug;Release;RelWithDebInfo" -DMDBX_WITHOUT_MSVC_CRT:BOOL=$env:MDBX_WITHOUT_MSVC_CRT -D MDBX_BUILD_SHARED_LIBRARY:BOOL=$env:MDBX_BUILD_SHARED_LIBRARY -D MDBX_PYTHON_BINDINGS:BOOL=ON ..
     }
     if ($LastExitCode -ne 0) {
         throw "Exec: $ErrorMessage"

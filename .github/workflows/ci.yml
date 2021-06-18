@@ -20,6 +20,7 @@ on:
     - LICENSE
     - README.md
     - appveyor.yml
+    - python/TODO.md
 
 jobs:
   build:

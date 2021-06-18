@@ -18,6 +18,7 @@ on:
     - LICENSE
     - README.md
     - appveyor.yml
+    - python/TODO.md
 
 env:
   COVERITY_SCAN_PROJECT_NAME: 'ReOpen/libmdbx'
