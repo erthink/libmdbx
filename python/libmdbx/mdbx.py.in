@@ -20,6 +20,7 @@ from __future__ import annotations
 import ctypes
 import dataclasses
 import enum
+import errno
 import os
 
 # init lib
@@ -967,17 +968,17 @@ class MDBXError(enum.IntFlag):
     # The last of MDBX-added error codes
     MDBX_LAST_ADDED_ERRCODE = MDBX_TXN_OVERLAPPING
 
-    MDBX_ENODATA = 61
-    MDBX_EINVAL = 22
-    MDBX_EACCESS = 13
-    MDBX_ENOMEM = 12
-    MDBX_EROFS = 30
-    MDBX_ENOSYS = 38
-    MDBX_EIO = 5
-    MDBX_EPERM = 1
-    MDBX_EINTR = 4
-    MDBX_ENOFILE = 2
-    MDBX_EREMOTE = 15
+    MDBX_ENODATA = errno.ENODATA
+    MDBX_EINVAL = errno.EINVAL
+    MDBX_EACCES = errno.EACCES
+    MDBX_ENOMEM = errno.ENOMEM
+    MDBX_EROFS = errno.EROFS
+    MDBX_ENOSYS = errno.ENOSYS
+    MDBX_EIO = errno.EIO
+    MDBX_EPERM = errno.EPERM
+    MDBX_EINTR = errno.EINTR
+    MDBX_ENOFILE = errno.ENOENT
+    MDBX_EREMOTE = errno.ENOTBLK
 
 class MDBXMode(enum.IntEnum):
 
