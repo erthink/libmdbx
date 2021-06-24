@@ -173,7 +173,10 @@ macro(fetch_version name source_root_directory parent_scope)
     set(${name}_GIT_REVISION 0)
 
     # Try to get version from VERSION file
-    set(version_file "${source_root_directory}/VERSION")
+    set(version_file "${source_root_directory}/VERSION.txt")
+    if(NOT EXISTS "${version_file}")
+      set(version_file "${source_root_directory}/VERSION")
+    endif()
     if(EXISTS "${version_file}")
       file(STRINGS "${version_file}" ${name}_VERSION LIMIT_COUNT 1 LIMIT_INPUT 42)
     endif()

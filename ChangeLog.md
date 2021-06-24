@@ -28,6 +28,10 @@ New features:
 
  - [Allow to predefine/override `MDBX_BUILD_TIMESTAMP` for builds reproducibility](https://github.com/erthink/libmdbx/issues/201).
 
+Backward compatibility break:
+
+ - Use file `VERSION.txt` for version information instead of `VERSION` to avoid collision with `#include <version>`.
+
 Fixes:
 
  - Fixed excess meta-pages checks in case `mdbx_chk` is called to check the DB for a specific meta page and thus could prevent switching to the selected meta page, even if the check passed without errors.

@@ -250,7 +250,7 @@ define uname2titer
   esac
 endef
 
-DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION config.h.in ntdll.def \
+DIST_EXTRA := LICENSE README.md CMakeLists.txt GNUmakefile Makefile ChangeLog.md VERSION.txt config.h.in ntdll.def \
 	$(addprefix man1/, $(MANPAGES)) cmake/compiler.cmake cmake/profile.cmake cmake/utils.cmake
 DIST_SRC   := mdbx.h mdbx.h++ mdbx.c mdbx.c++ $(addsuffix .c, $(TOOLS))
 
@@ -532,9 +532,9 @@ dist/$(1): $(1)
 	$(QUIET)mkdir -p $$(dir $$@) && sed -e '/^#> dist-cutoff-begin/,/^#< dist-cutoff-end/d' $$< > $$@
 
 endef
-$(foreach file,$(filter-out man1/% VERSION %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
+$(foreach file,$(filter-out man1/% VERSION.txt %.in ntdll.def,$(DIST_EXTRA)),$(eval $(call dist-extra-rule,$(file))))
 
-dist/VERSION: src/version.c
+dist/VERSION.txt: src/version.c
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p dist/ && echo "$(MDBX_GIT_VERSION).$(MDBX_GIT_REVISION)" > $@
 

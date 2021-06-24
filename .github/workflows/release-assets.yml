@@ -24,8 +24,8 @@ jobs:
         run: |
           echo "::set-output name=tarball::$(ls *.tar.gz)"
           echo "::set-output name=zip::$(ls *.zip)"
-          echo "::set-output name=suffix_unix::$(sed 's|^\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\.\(.*\)$|\1|' dist/VERSION)"
-          echo "::set-output name=suffix_dos::$(sed 's|^\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\.\(.*\)$|\1|' dist/VERSION | tr . _)"
+          echo "::set-output name=suffix_unix::$(sed 's|^\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\.\(.*\)$|\1|' dist/VERSION.txt)"
+          echo "::set-output name=suffix_dos::$(sed 's|^\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\.\(.*\)$|\1|' dist/VERSION.txt | tr . _)"
       - name: Create Release
         id: create_release
         uses: actions/create-release@v1
