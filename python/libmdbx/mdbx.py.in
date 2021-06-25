@@ -1510,20 +1510,15 @@ class MDBXErrorExc(BaseException):
     Exception for MDBX errors.
     Its message parameter is set to the OS or MDBX error text.
     """
-    def __init__(self, errnum: int):
+    def __init__(self, errnum: int, errmsg: str):
         """
-        :param errnum: OS or MDBX errnum
+        :param errnum: MDBX error number
         :type errnum: int
-
+        :param errmsg: text error message message from mdbx_liberr2str
+        :type errmsg: str
         """
-        # Sorry, needed to use strerror because mdbx_strerror_r didn't return anything for non-mdbx error codes
-        err = _lib.mdbx_liberr2str(errnum)
-        self.message = None
-        self.errnum = errnum
-        if err:
-            self.message = str(err, "utf-8")
-        else:
-            self.message = os.strerror(errnum)
+        self.errnum = errnum        
+        self.message = errmsg
         super().__init__(self.message)
 
 class TXN:
@@ -1533,6 +1528,8 @@ class TXN:
 
     def __init__(self, env: Env, parent: TXN=None, flags: MDBXTXNFlags=0, context=None):
         """
+
+        Raises MDBXErrorExc or OSError
         :param env: Environment for which this Transaction is valid for
         :type env: Env
         :param parent: Parent exception
@@ -1548,7 +1545,7 @@ class TXN:
         self._dependents = []
         ret=_lib.mdbx_txn_begin_ex(env._env, parent, flags, ctypes.pointer(self._txn), context)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
     def __del__(self):
         # don't rely on order of deletion
@@ -1580,20 +1577,20 @@ class TXN:
         """
         Thin wrapper around mdbx_txn_break
 
-        Raises MDBXErrorExc in case mdbx returns an error
+        Raises MDBXErrorExc or OSError
         :returns: True
         :rtype: bool
         """
         ret=_lib.mdbx_txn_break(self._txn)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
         return True
 
     def commit(self):
         """
         Thin wrapper around mdbx_txn_commit
 
-        Raises MDBXErrorExc in case mdbx returns an error
+        Raises MDBXErrorExc or OSError
 
         Also calls self._invalidate if self._txn was still valid
         :returns: True
@@ -1603,14 +1600,14 @@ class TXN:
             ret=_lib.mdbx_txn_commit(self._txn)
             self._invalidate()
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
         return True
 
     def commit_ex(self) -> MDBXCommitLatency:
         """
         Thin wrapper around mdbx_txn_commit_ex
 
-        Raises MDBXErrorExc in case mdbx returns an error
+        Raises MDBXErrorExc or OSError
         :returns ctypes struct of MDBX_commit_latency
         :rtype MDBXCommitLatency
         """
@@ -1618,7 +1615,7 @@ class TXN:
             commit_latency=MDBXCommitLatency()
             ret=_lib.mdbx_txn_commit_ex(self._txn, ctypes.byref(commit_latency))
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             return commit_latency
 
     def id(self) -> int :
@@ -1693,14 +1690,14 @@ class TXN:
         Thin wrapper around mdbx_txn_renew
         Renews the TXN
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns: boolean indicating success or failure (if TXN was invalidated)
         :rtype bool
         """
         if self._txn:
             ret=_lib.mdbx_txn_renew(self._txn)
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             return True
         return False
 
@@ -1709,14 +1706,14 @@ class TXN:
         Thin wrapper around mdbx_txn_reset
         Resets the TXN
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns: boolean indicating success or failure (if TXN was invalidated)
         :rtype bool
         """
         if self._txn:
             ret=_lib.mdbx_txn_reset(self._txn)
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             return True
         return False
 
@@ -1727,7 +1724,7 @@ class TXN:
         Aborts the TXN
 
         Invalidates the TXN
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns: boolean indicating success or failure (if TXN was invalid)
         :rtype bool
         """
@@ -1735,7 +1732,7 @@ class TXN:
             ret=_lib.mdbx_txn_abort(self._txn)
             self._invalidate()
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             return True
         return False
 
@@ -1743,7 +1740,7 @@ class TXN:
         """
         Wrapper around mdbx_dbi_open
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSerror
         :param name: DBI name or None, if default DB is to be opened
         :type name: str
         :param flags: Combination of MDBXDBFlags, passed to mdbx_dbi_open
@@ -1760,7 +1757,7 @@ class TXN:
                 name=ctypes.c_char_p(name)
             ret=_lib.mdbx_dbi_open(self._txn, name, flags, ctypes.pointer(dbi))
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             ret=DBI(self._env, MDBXDBI(dbi))
             return ret
         return False
@@ -1770,7 +1767,7 @@ class TXN:
         """
         Thin wrapper around mdbx_txn_info
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSerror
         :param scan_rlt: passed to scan_rlt
         :param scan_rlt: bool
         :returns MDBXTXNInfo containing all information
@@ -1780,7 +1777,7 @@ class TXN:
         if self._txn:
             ret=_lib.mdbx_txn_info(self._txn, ctypes.c_void_p(info), scan_rlt)
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             return info
         return None
 
@@ -1788,27 +1785,27 @@ class TXN:
         """
         Thin wrapper around mdbx_canary_get
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns canary
         :rtype MDBXCanary
         """
         canary=MDBXCanary()
         ret=_lib.mdbx_canary_get(self._txn, ctypes.byref(canary))
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
         return canary
 
     def put_canary(self, canary: MDBXCanary):
         """
         Thin wrapper around mdbx_canary_put
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param canary: Canary to put
         :type MDBXCanary
         """
         ret=_lib.mdbx_canary_get(self._txn, ctypes.byref(canary))
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
 @dataclasses.dataclass
 class Geometry:
@@ -1826,7 +1823,7 @@ class EnvIterator():
     """
     Iterator object for iterating over DB contents
 
-    Raises MDBXErrorExc with returned error in case of failure
+    Raises MDBXErrorExc or OSError
     :param env: Environment this iterator belongs to
     :type env: Env
     :param dbname: Name of the DB to be iterated over
@@ -1841,11 +1838,11 @@ class EnvIterator():
         self._cursor=ctypes.POINTER(MDBXCursor)()
         ret=_lib.mdbx_cursor_open(self._txn._txn, self._db._dbi, ctypes.pointer(self._cursor))
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
     def __next__(self):
         """
         Get next database key and value pair
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         """
         val=Iovec(bytes())
         key=Iovec(bytes())
@@ -1857,9 +1854,8 @@ class EnvIterator():
 
         if ret != MDBXError.MDBX_SUCCESS.value:
             if _lib.mdbx_cursor_eof(self._cursor) or ret == MDBXError.MDBX_NOTFOUND.value:
-
                 raise StopIteration
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
         val=bytes(ctypes.cast(val.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:val.iov_len])
         key=bytes(ctypes.cast(key.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:key.iov_len])
         return key, val
@@ -1871,7 +1867,7 @@ class Env(object):
     """
     Thin wrapper around mdbx_env
 
-    Raises MDBXErrorExc with returned error in case of failure
+    Raises MDBXErrorExc or OSError
     :param path: default environment name, defaults to "default_db"
     :type path: str
     :param flags: Combination of MDBXEnvFlags
@@ -1889,31 +1885,31 @@ class Env(object):
     def __init__(self, path: str="default_db", flags: MDBXEnvFlags=0, mode: MDBXMode=0o755, geometry: Geometry=None,
         maxreaders: int=1, maxdbs: int=1):
         self._env = ctypes.pointer(MDBXEnv())
-        err=_lib.mdbx_env_create(ctypes.byref(self._env))
+        ret=_lib.mdbx_env_create(ctypes.byref(self._env))
         self._default_db=None
         self._current_txn=None
         self._dependents=[]
         self._ctx=None
-        if err != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(err)
+        if ret != MDBXError.MDBX_SUCCESS.value:
+            raise make_exception(ret)
         if geometry:
-            err= _lib.mdbx_env_set_geometry(self._env, geometry.size_lower,
+            ret = _lib.mdbx_env_set_geometry(self._env, geometry.size_lower,
                                             geometry.size_now, geometry.size_upper,
                                             geometry.growth_step, geometry.shrink_threshold,
                                             geometry.pagesize)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
         if maxreaders > 0:
-            err=_lib.mdbx_env_set_maxreaders(self._env, maxreaders)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_set_maxreaders(self._env, maxreaders)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
         if maxdbs > 0:
-            err=_lib.mdbx_env_set_maxdbs(self._env, maxdbs)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
-        err=_lib.mdbx_env_open(self._env, ctypes.c_char_p(bytes(path, "utf-8")), flags, mode)
-        if err != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_set_maxdbs(self._env, maxdbs)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
+        ret=_lib.mdbx_env_open(self._env, ctypes.c_char_p(bytes(path, "utf-8")), flags, mode)
+        if ret != MDBXError.MDBX_SUCCESS.value:
+            raise make_exception(ret)
 
     def __del__(self):
         self.close()
@@ -1929,7 +1925,7 @@ class Env(object):
         Gets item from currently set default database
         Opens a read only transaction, gets the object, aborts the transaction
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc, OSError, or KeyError
         :param key: Key
         :type key: str or bytes
         :returns: bytes in case object is found, or None if no object is found, or Null is stored for it
@@ -1953,7 +1949,7 @@ class Env(object):
         Sets the given key and val in the current default database
         if key or val are strings, they are converted into bytes using utf-8 encoding
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc, OSError, or KeyError
         :param key: Key to be used
         :type key: str or bytes
         :param val: Value to store
@@ -1992,7 +1988,7 @@ class Env(object):
         Closes or aborts all TXNs or DBIs belonging to this Env
         Invalidates the reference to the Env
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         """
         if self._env:
             for i in self._dependents:
@@ -2004,11 +2000,11 @@ class Env(object):
                     i.close()
                 except:
                     pass
-            err=_lib.mdbx_env_close(self._env)
-            if err != MDBXError.MDBX_BUSY.value:
+            ret_lib.mdbx_env_close(self._env)
+            if ret != MDBXError.MDBX_BUSY.value:
                 self._env = None
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def items(self):
         """
@@ -2040,7 +2036,7 @@ class Env(object):
         """
         Starts a transaction on the given Env
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param flags: Combination of MDBXTXNFlags
         :type flags: MDBXTXNFlags
         :param parent_txn: Parent transaction, defaults to None
@@ -2058,15 +2054,15 @@ class Env(object):
         """
         Thin wrapper around mdbx_env_get_path
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSErro
         :returns: path to the directory of the Env
         :rtype: str
         """
         if self._env:
             ptr=ctypes.c_char_p()
-            err=_lib.mdbx_env_get_path(self._env, ctypes.byref(ptr))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_get_path(self._env, ctypes.byref(ptr))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
             return ptr.value.decode("utf-8")
 
     def set_user_ctx(self, val):
@@ -2095,14 +2091,14 @@ class Env(object):
         Thin wrapper around mdbx_env_set_userctx
         Store val in self._ctx
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param val: Context to set
         :type val: ctypes.c_void_p
         """
         if self._env:
-            err=_lib.mdbx_env_set_userctx(self._env, val)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_set_userctx(self._env, val)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def get_user_ctx_int(self) -> ctypes.c_void_p:
         """
@@ -2118,8 +2114,8 @@ class Env(object):
     def get_info(self, txn: TXN) -> MDBXEnvinfo:
         """
         Thin wrapper around mdbx_env_info_ex
-        Raises MDBXErrorExc with returned error in case of failure
 
+        Raises MDBXErrorExc or OSError
         :param txn: transaction to use while getting info
         :type txn: TXN
         :returns information about environment
@@ -2127,44 +2123,44 @@ class Env(object):
         """
         if self._env:
             info=MDBXEnvinfo()
-            err=_lib.mdbx_env_info_ex(self._env, txn._txn, ctypes.byref(info), ctypes.sizeof(info))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_info_ex(self._env, txn._txn, ctypes.byref(info), ctypes.sizeof(info))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
             return info
 
     def get_stat(self, txn: TXN) -> MDBXStat:
         """
         Thin wrapper around mdbx_env_stat_ex
-        Raises MDBXErrorExc with returned error in case of failure
 
+        Raises MDBXErrorExc or OSError
         :returns stats
         :rtype MDBXStat
         """
         if self._env:
             stats=MDBXStat()
-            err=_lib.mdbx_env_stat_ex(self._env, txn._txn, ctypes.byref(stats), ctypes.sizeof(stats))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_stat_ex(self._env, txn._txn, ctypes.byref(stats), ctypes.sizeof(stats))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
             return stats
 
     def copy(self, destination: str, flags: MDBXCopyMode=MDBXCopyMode.MDBX_CP_DEFAULTS):
         """
         Thin wrapper around mdbx_env_copy
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param destination: Path to the new Env
         :type destination: str
         """
         if self._env:
-            err=_lib.mdbx_env_copy(self._env, destination, flags)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_copy(self._env, destination, flags)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def copy2fd(self, fd: int, flags: MDBXCopyMode=MDBXCopyMode.MDBX_CP_DEFAULTS):
         """
         Thin wrapper around mdbx_env_copy2fd
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param fd: File descriptor to the parent directory for the new Env
         :type fd: int
         :param flag: Combination of MDBXCopyMode flags
@@ -2174,53 +2170,53 @@ class Env(object):
             if hasattr(fd, "fileno"):
                 fd=fd.fileno()
 
-            err=_lib.mdbx_env_copy2fd(self._env, ctypes.c_int(fd), ctypes.c_int(flags))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_copy2fd(self._env, ctypes.c_int(fd), ctypes.c_int(flags))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def register_thread(self):
         """
         Thin wrapper around mdbx_thread_register
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSerror
         """
         if self._env:
-            err=_lib.mdbx_thread_register(self._env)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_thread_register(self._env)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def unregister_thread(self):
         """
         Thin wrapper around mdbx_unregister_thread
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         """
         if self._env:
-            err=_lib.mdbx_thread_unregister(self._env)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_thread_unregister(self._env)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def set_geometry(self, geometry: Geometry):
         """
         Thin wrapper around mdbx_env_set_geometry
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param geometry: Geometry type object holding all parameters for the geometry
         :type geometry: Geometry
         """
         if self._env:
-            err=_lib.mdbx_env_set_geometry(self._env, geometry.size_lower,
+            ret=_lib.mdbx_env_set_geometry(self._env, geometry.size_lower,
                                             geometry.size_now, geometry.size_upper,
                                             geometry.growth_step, geometry.shrink_threshold,
                                             geometry.pagesize)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def set_option(self, option: int, value: int) -> bool:
         """
         Thin wrapper around mdbx_env_set_option
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param option: ORed combination of mdbx environment options
         :type option: int
         :param value: Value to set
@@ -2228,15 +2224,15 @@ class Env(object):
         """
         if self._env:
             val=ctypes.c_uint64(value)
-            err=_lib.mdbx_env_set_option(self._env, option, val)
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_set_option(self._env, option, val)
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def get_option(self, option: int) -> int:
         """
         Thin wrapper around mdbx_env_get_option
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param option: Option to get
         :type option: int
         :returns value of the option
@@ -2244,24 +2240,24 @@ class Env(object):
         """
         if self._env:
             val=ctypes.c_uint64()
-            err=_lib.mdbx_env_get_option(self._env, option, ctypes.byref(val))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_get_option(self._env, option, ctypes.byref(val))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
             return val.value
 
     def get_fd(self) -> int:
         """
         Thin wrapper around mdbx_env_get_fd
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns fd for the Env
         :rtype int
         """
         if self._env:
             fd=ctypes.c_uint()
-            err=_lib.mdbx_env_get_fd(self._env, ctypes.byref(fd))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_get_fd(self._env, ctypes.byref(fd))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
             return fd.value
 
 
@@ -2269,15 +2265,15 @@ class Env(object):
         """
         Thin wrapper around mdbx_env_get_maxdbs
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns maxdbs value
         :rtype int
         """
         if self._env:
             val=ctypes.c_uint64()
-            err=_lib.mdbx_env_get_maxdbs(self._env, ctypes.byref(val))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_get_maxdbs(self._env, ctypes.byref(val))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
             return val.value
 
     def get_maxkeysize(self, flags: int=0):
@@ -2306,16 +2302,16 @@ class Env(object):
         """
         Thin wrapper around mdbx_env_sync_ex
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param force: Force flag
         :type force: bool
         :param nonblock: nonblock flag
         :type nonblock: bool
         """
         if self._env:
-            err=_lib.mdbx_env_sync_ex(self._env, ctypes.c_bool(force), ctypes.c_bool(nonblock))
-            if err != MDBXError.MDBX_RESULT_TRUE.value and err != 0:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_sync_ex(self._env, ctypes.c_bool(force), ctypes.c_bool(nonblock))
+            if ret != MDBXError.MDBX_RESULT_TRUE.value and ret != 0:
+                raise make_exception(ret)
 
     def get_db_names(self):
         """
@@ -2323,7 +2319,7 @@ class Env(object):
 
         Internally uses a read only TXN and iterates over all keys and values in database NULL
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns list of all databases
         :rtype list
         """
@@ -2345,7 +2341,7 @@ class Env(object):
 
         Deletes the environment under the given path
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param path: Path to the Environment
         :type path: str
         :param mode: Mode for the environment
@@ -2354,22 +2350,23 @@ class Env(object):
         :rtype bool
         """
         arr=path.encode("utf-8")
-        err=_lib.mdbx_env_delete(ctypes.string_at(arr, len(arr)), mode)
-        if err != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(err)
+        ret=_lib.mdbx_env_delete(ctypes.string_at(arr, len(arr)), mode)
+        if ret != MDBXError.MDBX_SUCCESS.value:
+            raise make_exception(ret)
         return True
 
     def set_hsr(self, hsr: _lib.MDBX_hsr_func):
         """
         Thin wrapper around mdbx_env_set_hsr
 
+        Raises MDBXErrorExc or OSError
         :param hsr: HSR type function
         :type hsr: _lib.HDBX_hsr_func
         """
         if self._env:
-            err=_lib.mdbx_env_set_hsr(self._env, ctypes.byref(hsr))
-            if err != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(err)
+            ret=_lib.mdbx_env_set_hsr(self._env, ctypes.byref(hsr))
+            if ret != MDBXError.MDBX_SUCCESS.value:
+                raise make_exception(ret)
 
     def get_hsr(self) -> _lib.MDBX_hsr_func:
         """
@@ -2427,13 +2424,13 @@ class DBI:
 
         Not valid for DBI 0
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
 
         """
         self._invalidate()
         err=_lib.mdbx_dbi_close(self._env._env, self._dbi)
         if err != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(err)
+            raise OSError(err)
 
     def get(self, txn: TXN, key: bytes) -> bytes:
         """
@@ -2441,7 +2438,7 @@ class DBI:
 
         Uses the TXN to get the value stored under the key
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param txn: Transaction to use
         :type txn: TXN
         :param key: Key to lookup
@@ -2453,7 +2450,7 @@ class DBI:
         if ret == MDBXError.MDBX_NOTFOUND:
             return None
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
         return bytes(ctypes.cast(data.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:data.iov_len])
 
@@ -2461,7 +2458,7 @@ class DBI:
         """
         Thin wrapper around mdbx_put
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param txn: Transaction to use
         :type txn: TXN
         :param key: key to store value under
@@ -2476,13 +2473,13 @@ class DBI:
         value_iov=Iovec(value, len(value))
         ret=_lib.mdbx_put(txn._txn, self._dbi, ctypes.c_void_p(ctypes.addressof(key_iov)), ctypes.c_void_p(ctypes.addressof(value_iov)), flags)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
     def drop(self, txn: TXN, delete: bool=False):
         """
         Thin wrapper around mdbx_drop
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param txn: Transaction to use
         :type txn: TXN
         :param delete: delete flag to mdbx_drop, defaults to False
@@ -2490,14 +2487,14 @@ class DBI:
         """
         ret=_lib.mdbx_drop(txn._txn, self._dbi, delete)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
 
     def replace(self, txn: TXN, key: bytes, new_data: bytes, flags: MDBXPutFlags=0):
         """
         Thin wrapper around mdbx_replace
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param txn: Transaction to use
         :type txn: TXN
         :param key: Key whose value is to be replaced
@@ -2514,7 +2511,7 @@ class DBI:
         new_iovec=Iovec(new_data)
         ret=_lib.mdbx_replace(txn._txn, self._dbi, ctypes.byref(key_iovec), ctypes.byref(new_iovec), ctypes.byref(old_data), flags)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
         return bytes(ctypes.cast(old_data.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:old_data.iov_len])
 
 
@@ -2522,7 +2519,7 @@ class DBI:
         """
         Thin wrapper around mdbx_del
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param txn: Transaction to use
         :type txn: TXN
         :param key: Key whose value is to be deleted
@@ -2534,7 +2531,7 @@ class DBI:
         key_iovec=Iovec(key)
         ret=_lib.mdbx_del(txn._txn, self._dbi, ctypes.byref(key_iovec), ctypes.byref(key_iovec), Iovec(value) if value else None)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
 class Cursor():
     """
@@ -2546,7 +2543,7 @@ class Cursor():
         """
         Thin wrapper around either mdbx_cursor_open or mdbx_cursor_create
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc, OSError, ValueError, or MemoryError
         :param db: Database this cursor is bound to
         :type db: DBI
         :param txn: Transaction in which this cursor is valid
@@ -2567,13 +2564,13 @@ class Cursor():
         if db and txn:
             ret=_lib.mdbx_cursor_open(txn._txn, db._dbi, ctypes.pointer(self._cursor))
         if not ctypes.cast(self._cursor, ctypes.c_void_p):
-            raise ValueError
+            raise ValueError()
         if ret and ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
         else:
             self._cursor.value=_lib.mdbx_cursor_create(ctypes.c_void_p())
             if not self._cursor.value:
-                raise MemoryErrors()
+                raise MemoryError()
 
     def dbi(self):
         """
@@ -2586,7 +2583,7 @@ class Cursor():
         """
         Thin wrapper around mdbx_cursor_bind
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param txn: transaction to bind to
         :type txn: TXN
         :param db: database to bind to
@@ -2594,7 +2591,7 @@ class Cursor():
         """
         ret=_lib.mdbx_cursor_bind(txn._txn, self._cursor, db._dbi if db else self._db)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
     def __del__(self):
         self.close()
@@ -2611,7 +2608,7 @@ class Cursor():
         """
         Wrapper around mdbx_cursor_get and mdbx_Cursor_eof
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         Raises StopIteration if the cursor can not be moved further (last item returned was the last item stored under this key)
         """
         if self._cursor:
@@ -2626,7 +2623,7 @@ class Cursor():
             if ret != MDBXError.MDBX_SUCCESS.value:
                 if _lib.mdbx_cursor_eof(self._cursor) or ret == MDBXError.MDBX_NOTFOUND:
                     raise StopIteration
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             val=bytes(ctypes.cast(val.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:val.iov_len])
             key=bytes(ctypes.cast(key.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:key.iov_len])
             return key, val
@@ -2658,14 +2655,14 @@ class Cursor():
         """
         Thin wrapper around mdbx_cursor_set_userctx
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param ptr: pointer to object
         :type ptr: ctypes.c_void_p
         """
         if self._cursor:
             ret=_lib.mdbx_cursor_set_userctx(self._cursor, ptr)
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
 
     def get_user_ctx_int(self) -> ctypes.c_void_p:
         """
@@ -2698,20 +2695,20 @@ class Cursor():
         Thin wrapper around mdbx_cursor_copy
         Copies this cursor's state to the given Cursor
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param dest: Cursor to which this cursor's state is copied to
         :type dest: Cursor
         """
         if self._cursor:
             ret=_lib.mdbx_cursor_copy(self._cursor, dest._cursor)
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
 
     def get(self, key: bytes, cursor_op: MDBXCursorOp=MDBXCursorOp.MDBX_FIRST) -> bytes:
         """
         Wrapper around mdbx_cursor_get
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param key: Key to retrieve data from
         :type key: bytes
         :param cursor_op: Operation parameter for mdbx_cursor_get
@@ -2727,7 +2724,7 @@ class Cursor():
             if ret == MDBXError.MDBX_NOTFOUND:
                 return None
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
 
             return bytes(ctypes.cast(data.iov_base, ctypes.POINTER(ctypes.c_ubyte))[:data.iov_len])
 
@@ -2735,7 +2732,7 @@ class Cursor():
         """
         Thin wrapper around mdbx_cursor_put
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param key: Key to store data at
         :type key: bytes
         :param val: value to store
@@ -2749,25 +2746,25 @@ class Cursor():
 
             ret=_lib.mdbx_cursor_put(self._cursor, ctypes.byref(key_iovec), ctypes.byref(value_iovec), flags)
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
 
     def delete(self, cursor_op: MDBXCursorOp=MDBXCursorOp.MDBX_FIRST):
         """
         Thin wrapper around mdbx_cursor_del
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :param cursor_op: op parameter to mdbx_cursor_delete
         :type cursor_op: MDBXCursorOP
         """
         ret=_lib.mdbx_cursor_del(self._cursor, cursor_op)
         if ret != MDBXError.MDBX_SUCCESS.value:
-            raise MDBXErrorExc(ret)
+            raise make_exception(ret)
 
     def count(self) -> int:
         """
         Thin wrapper around mdbx_cursor_count
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns count of duplicates for current key
         :rtype int
         """
@@ -2775,14 +2772,14 @@ class Cursor():
             count=ctypes.c_size_t()
             ret=_lib.mdbx_cursor_count(self._cursor, ctypes.byref(count))
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
             return int(value)
 
     def eof(self) -> bool:
         """
         Thin wrapper around mdbx_cursor_eof
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns whether cursor is at a key-value pair or not
         :rtype bool
         """
@@ -2794,13 +2791,13 @@ class Cursor():
             if ret == MDBXError.MDBX_RESULT_FALSE:
                 return False
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
 
     def on_first(self) -> bool:
         """
         Thin wrapper around mdbx_cursor_on_first
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns Whether cursor is on first key-value pair or not
         :rtype bool
         """
@@ -2811,14 +2808,14 @@ class Cursor():
             if ret == MDBXError.MDBX_RESULT_FALSE:
                 return False
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
         return False
 
     def on_last(self) -> bool:
         """
         Thin wrapper around mdbx_cursor_on_last
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns whether cursor is on last key-value pair or not
         :rtype bool
         """
@@ -2829,14 +2826,14 @@ class Cursor():
             if ret == MDBXError.MDBX_RESULT_FALSE:
                 return False
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
         return False
 
     def renew(self, txn: TXN):
         """
         Thin wrapper around mdbx_cursor_renew
 
-        Raises MDBXErrorExc with returned error in case of failure
+        Raises MDBXErrorExc or OSError
         :returns bool indicating success
         :rtype bool
         """
@@ -2845,22 +2842,31 @@ class Cursor():
             if ret == MDBXError.MDBX_RESULT_TRUE:
                 return True
             if ret != MDBXError.MDBX_SUCCESS.value:
-                raise MDBXErrorExc(ret)
+                raise make_exception(ret)
         return False
 
 def get_build_info():
     """
-    :returns Return mdbx_build struct embedded in lib
+    :returns mdbx_build struct embedded in lib
     :rtype MDBXBuildInfo
     """
     return MDBXBuildInfo.in_dll(_lib, "mdbx_build")
+
 def get_version_info():
     """
-
-    :returns Return mdbx_version struct embedded in lib
+    :returns mdbx_version struct embedded in lib
     :rtype MDBXVersionInfo
     """
     return MDBXVersionInfo.in_dll(_lib, "mdbx_version")
+
+def make_exception(errno: int):
+    """
+    Construct an exception as correct
+    """
+    err = _lib.mdbx_liberr2str(errnum)
+    if err:
+        return MDBXErrorExc(errnum, err)
+    return OSError(errnum, os.strerror(err))
 
 _lib.mdbx_strerror_r.argtypes = [ ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t ]
 _lib.mdbx_strerror_r.restype = ctypes.c_char_p
