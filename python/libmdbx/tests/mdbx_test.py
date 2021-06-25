@@ -98,7 +98,7 @@ class TestMdbx(unittest.TestCase):
         opened_map=txn.open_map(MDBX_TEST_DB_NAME)
         with self.assertRaises(libmdbx.MDBXErrorExc) as cm:
             opened_map.close()
-        self.assertEqual(cm.exception.errnum, libmdbx.MDBXError.MDBX_BAD_DBI.value)
+        self.assertEqual(cm.exception.errno, libmdbx.MDBXError.MDBX_BAD_DBI.value)
         db.close()
 
     def test_success_close_written_map(self):
@@ -381,7 +381,7 @@ class TestMdbx(unittest.TestCase):
         cursor.get(MDBX_TEST_KEY, libmdbx.MDBXCursorOp.MDBX_NEXT)
 
         cursor.get(MDBX_TEST_KEY, libmdbx.MDBXCursorOp.MDBX_NEXT)
-        self.assertFalse(cursor.eof())
+        self.assertTrue(cursor.eof())
         cursor.get(MDBX_TEST_KEY, libmdbx.MDBXCursorOp.MDBX_FIRST)
         self.assertTrue(cursor.on_first())
         self.assertFalse(cursor.on_last())
