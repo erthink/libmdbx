@@ -1510,14 +1510,14 @@ class MDBXErrorExc(BaseException):
     Exception for MDBX errors.
     Its message parameter is set to the OS or MDBX error text.
     """
-    def __init__(self, errnum: int, errmsg: str):
+    def __init__(self, errno: int, errmsg: str):
         """
         :param errnum: MDBX error number
         :type errnum: int
         :param errmsg: text error message message from mdbx_liberr2str
         :type errmsg: str
         """
-        self.errnum = errnum        
+        self.errno = errno        
         self.message = errmsg
         super().__init__(self.message)
 
@@ -2000,7 +2000,7 @@ class Env(object):
                     i.close()
                 except:
                     pass
-            ret_lib.mdbx_env_close(self._env)
+            ret=_lib.mdbx_env_close(self._env)
             if ret != MDBXError.MDBX_BUSY.value:
                 self._env = None
             if ret != MDBXError.MDBX_SUCCESS.value:
@@ -2428,9 +2428,9 @@ class DBI:
 
         """
         self._invalidate()
-        err=_lib.mdbx_dbi_close(self._env._env, self._dbi)
-        if err != MDBXError.MDBX_SUCCESS.value:
-            raise OSError(err)
+        ret=_lib.mdbx_dbi_close(self._env._env, self._dbi)
+        if ret != MDBXError.MDBX_SUCCESS.value:
+            raise make_exception(ret)
 
     def get(self, txn: TXN, key: bytes) -> bytes:
         """
@@ -2863,10 +2863,10 @@ def make_exception(errno: int):
     """
     Construct an exception as correct
     """
-    err = _lib.mdbx_liberr2str(errnum)
-    if err:
-        return MDBXErrorExc(errnum, err)
-    return OSError(errnum, os.strerror(err))
+    err = _lib.mdbx_liberr2str(errno)
+    if err != None:
+        return MDBXErrorExc(errno, err)
+    return OSError(errno, os.strerror(err))
 
 _lib.mdbx_strerror_r.argtypes = [ ctypes.c_int, ctypes.c_char_p, ctypes.c_size_t ]
 _lib.mdbx_strerror_r.restype = ctypes.c_char_p
