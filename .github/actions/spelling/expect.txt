@@ -1273,7 +1273,6 @@ ppc
 pragma
 pread
 prealloc
-prealloc'd
 PREDEF
 prefetch
 Prefetcher

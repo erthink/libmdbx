@@ -1148,7 +1148,7 @@ struct MDBX_env {
   mdbx_thread_key_t me_txkey; /* thread-key for readers */
   char *me_pathname;          /* path to the DB files */
   void *me_pbuf;              /* scratch area for DUPSORT put() */
-  MDBX_txn *me_txn0;          /* prealloc'd write transaction */
+  MDBX_txn *me_txn0;          /* preallocated write transaction */
 
   MDBX_dbx *me_dbxs;    /* array of static DB info */
   uint16_t *me_dbflags; /* array of flags from MDBX_db.md_flags */
