@@ -22,6 +22,7 @@ alevel
 alexey
 Alfke
 alignas
+alignof
 alldbs
 ALLDUPS
 ALLEXTERNALS
@@ -1286,7 +1287,7 @@ PRIa
 PRId
 PRIi
 printf
-Prioritization
+prioritization
 PRIu
 prng
 prno
