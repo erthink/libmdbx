@@ -124,7 +124,7 @@ public:
 
 //------------------------------------------------------------------------------
 
-__cold std::string format_va(const char *fmt, va_list ap) {
+__cold  std::string format_va(const char *fmt, va_list ap) {
   va_list ones;
   va_copy(ones, ap);
 #ifdef _MSC_VER
@@ -145,7 +145,7 @@ __cold std::string format_va(const char *fmt, va_list ap) {
   return result;
 }
 
-__cold std::string format(const char *fmt, ...) {
+__cold  std::string format(const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
   std::string result = format_va(fmt, ap);
@@ -166,15 +166,15 @@ public:
   virtual ~bug() noexcept;
 };
 
-__cold bug::bug(const trouble_location &location) noexcept
+__cold  bug::bug(const trouble_location &location) noexcept
     : std::runtime_error(format("mdbx.bug: %s.%s at %s:%u", location.function(),
                                 location.condition(), location.filename(),
                                 location.line())),
       location_(location) {}
 
-__cold bug::~bug() noexcept {}
+__cold  bug::~bug() noexcept {}
 
-[[noreturn]] __cold void raise_bug(const trouble_location &what_and_where) {
+[[noreturn]] __cold  void raise_bug(const trouble_location &what_and_where) {
   throw bug(what_and_where);
 }
 

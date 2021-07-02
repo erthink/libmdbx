@@ -29,7 +29,7 @@ uint32_t mdbx_linux_kernel_version;
 bool mdbx_RunningOnWSL1;
 #endif /* xMDBX_ALLOY */
 
-static __cold uint8_t probe_for_WSL(const char *tag) {
+__cold static uint8_t probe_for_WSL(const char *tag) {
   const char *const WSL = strstr(tag, "WSL");
   if (WSL && WSL[3] >= '2' && WSL[3] <= '9')
     return WSL[3] - '0';
@@ -45,7 +45,7 @@ static __cold uint8_t probe_for_WSL(const char *tag) {
 
 #endif /* Linux */
 
-static __cold __attribute__((__constructor__)) void
+__cold static __attribute__((__constructor__)) void
 mdbx_global_constructor(void) {
 #if defined(__linux__) || defined(__gnu_linux__)
   struct utsname buffer;
@@ -81,7 +81,7 @@ mdbx_global_constructor(void) {
   mdbx_rthc_global_init();
 }
 
-static __cold __attribute__((__destructor__)) void
+__cold static __attribute__((__destructor__)) void
 mdbx_global_destructor(void) {
   mdbx_rthc_global_dtor();
 }
@@ -145,7 +145,7 @@ mdbx_global_destructor(void) {
 
 #if MDBX_USE_OFDLOCKS
 static int op_setlk, op_setlkw, op_getlk;
-static void __cold choice_fcntl() {
+__cold static void choice_fcntl() {
   assert(!op_setlk && !op_setlkw && !op_getlk);
   if ((mdbx_runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0
 #if defined(__linux__) || defined(__gnu_linux__)
@@ -334,7 +334,7 @@ static int check_fstat(MDBX_env *env) {
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int __cold mdbx_lck_seize(MDBX_env *env) {
+__cold MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
   assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
   if (unlikely(mdbx_getpid() != env->me_pid))
     return MDBX_PANIC;
@@ -487,7 +487,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
+__cold MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
                                                MDBX_env *inprocess_neighbor) {
   if (unlikely(mdbx_getpid() != env->me_pid))
     return MDBX_PANIC;
@@ -574,7 +574,7 @@ MDBX_INTERNAL_FUNC int __cold mdbx_lck_destroy(MDBX_env *env,
 
 /*---------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC int __cold mdbx_lck_init(MDBX_env *env,
+__cold MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
                                             MDBX_env *inprocess_neighbor,
                                             int global_uniqueness_flag) {
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
@@ -721,7 +721,7 @@ bailout:
 #endif /* MDBX_LOCKING > 0 */
 }
 
-static int __cold mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
+__cold static int mdbx_ipclock_failed(MDBX_env *env, mdbx_ipclock_t *ipc,
                                       const int err) {
   int rc = err;
 #if MDBX_LOCKING == MDBX_LOCKING_POSIX2008 || MDBX_LOCKING == MDBX_LOCKING_SYSV

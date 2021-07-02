@@ -190,7 +190,7 @@
 #       elif defined(__GNUC__) || __has_attribute(__hot__)
 #           define __hot __attribute__((__hot__)) __optimize("O3")
 #       else
-#           define __hot  __optimize("O3")
+#           define __hot __optimize("O3")
 #       endif
 #   else
 #       define __hot

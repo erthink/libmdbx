@@ -217,7 +217,7 @@ __extern_C void __assert(const char *function, const char *file, int line,
 
 #if !defined(__ANDROID_API__) || MDBX_DEBUG
 
-void __cold mdbx_assert_fail(const MDBX_env *env, const char *msg,
+__cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
                              const char *func, int line) {
 #if MDBX_DEBUG
   if (env && env->me_assert_func) {
@@ -1868,7 +1868,7 @@ retry_mapview:;
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC __cold void mdbx_osal_jitter(bool tiny) {
+__cold MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny) {
   for (;;) {
 #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) ||                \
     defined(__x86_64__)
@@ -1896,7 +1896,7 @@ MDBX_INTERNAL_FUNC __cold void mdbx_osal_jitter(bool tiny) {
 #elif defined(__APPLE__) || defined(__MACH__)
 #include <mach/mach_time.h>
 #elif defined(__linux__) || defined(__gnu_linux__)
-static __cold clockid_t choice_monoclock(void) {
+__cold static clockid_t choice_monoclock(void) {
   struct timespec probe;
 #if defined(CLOCK_BOOTTIME)
   if (clock_gettime(CLOCK_BOOTTIME, &probe) == 0)
@@ -2088,7 +2088,7 @@ static LSTATUS mdbx_RegGetValue(HKEY hKey, LPCSTR lpSubKey, LPCSTR lpValue,
 }
 #endif
 
-MDBX_MAYBE_UNUSED static __cold bool
+__cold MDBX_MAYBE_UNUSED static bool
 bootid_parse_uuid(bin128_t *s, const void *p, const size_t n) {
   if (n > 31) {
     unsigned bits = 0;
