@@ -534,7 +534,7 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
 
 char *slice::to_hex(char *__restrict dest, size_t dest_size, bool uppercase,
                     unsigned wrap_width) const {
-  if (MDBX_UNLIKELY(to_hex_bytes(wrap_width) > dest_size))
+  if (MDBX_UNLIKELY(envisage_to_hex_length(wrap_width) > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -559,7 +559,7 @@ byte *slice::from_hex(byte *__restrict dest, size_t dest_size,
   if (MDBX_UNLIKELY(length() % 2 && !ignore_spaces))
     throw std::domain_error(
         "mdbx::from_hex:: odd length of hexadecimal string");
-  if (MDBX_UNLIKELY(from_hex_bytes() > dest_size))
+  if (MDBX_UNLIKELY(envisage_from_hex_length() > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -660,7 +660,7 @@ static inline char b58_8to11(uint64_t &v) noexcept {
 
 char *slice::to_base58(char *__restrict dest, size_t dest_size,
                        unsigned wrap_width) const {
-  if (MDBX_UNLIKELY(to_base58_bytes(wrap_width) > dest_size))
+  if (MDBX_UNLIKELY(envisage_to_base58_length(wrap_width) > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -743,7 +743,7 @@ static inline signed char b58_11to8(uint64_t &v, const byte c) noexcept {
 
 byte *slice::from_base58(byte *__restrict dest, size_t dest_size,
                          bool ignore_spaces) const {
-  if (MDBX_UNLIKELY(from_base58_bytes() > dest_size))
+  if (MDBX_UNLIKELY(envisage_from_base58_length() > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -856,7 +856,7 @@ static inline void b64_3to4(const byte x, const byte y, const byte z,
 
 char *slice::to_base64(char *__restrict dest, size_t dest_size,
                        unsigned wrap_width) const {
-  if (MDBX_UNLIKELY(to_base64_bytes(wrap_width) > dest_size))
+  if (MDBX_UNLIKELY(envisage_to_base64_length(wrap_width) > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();
@@ -921,7 +921,7 @@ byte *slice::from_base64(byte *__restrict dest, size_t dest_size,
                          bool ignore_spaces) const {
   if (MDBX_UNLIKELY(length() % 4 && !ignore_spaces))
     throw std::domain_error("mdbx::from_base64:: odd length of base64 string");
-  if (MDBX_UNLIKELY(from_base64_bytes() > dest_size))
+  if (MDBX_UNLIKELY(envisage_from_base64_length() > dest_size))
     throw_too_small_target_buffer();
 
   auto src = byte_ptr();

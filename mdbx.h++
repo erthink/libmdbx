@@ -499,78 +499,78 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
     return this->string<C, T, A>();
   }
 
-  /// \brief Fills the buffer by hexadecimal data dump of slice content.
+  /// \brief Fills the destination by hexadecimal data dump of slice content.
   /// \throws std::length_error if given buffer is too small.
   char *to_hex(char *dest, size_t dest_size, bool uppercase = false,
                unsigned wrap_width = 0) const;
 
-  /// \brief Returns the buffer size in bytes needed for hexadecimal data dump
+  /// \brief Returns the number of bytes needed for hexadecimal data dump
   /// of slice content.
   MDBX_CXX11_CONSTEXPR size_t
-  to_hex_bytes(unsigned wrap_width = 0) const noexcept {
+  envisage_to_hex_length(unsigned wrap_width = 0) const noexcept {
     const size_t bytes = length() << 1;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
 
-  /// \brief Fills the buffer with data converted from hexadecimal dump
+  /// \brief Fills the destination with data converted from hexadecimal dump
   /// from slice content.
   /// \throws std::length_error if given buffer is too small.
   byte *from_hex(byte *dest, size_t dest_size,
                  bool ignore_spaces = false) const;
 
-  /// \brief Returns the buffer size in bytes needed for conversion
+  /// \brief Returns the number of bytes needed for conversion
   /// hexadecimal dump from slice content to data.
-  MDBX_CXX11_CONSTEXPR size_t from_hex_bytes() const noexcept {
+  MDBX_CXX11_CONSTEXPR size_t envisage_from_hex_length() const noexcept {
     return length() >> 1;
   }
 
-  /// \brief Fills the buffer by [Base58](https://en.wikipedia.org/wiki/Base58)
-  /// data dump of slice content.
+  /// \brief Fills the destination by
+  /// [Base58](https://en.wikipedia.org/wiki/Base58) data dump of slice content.
   /// \throws std::length_error if given buffer is too small.
   char *to_base58(char *dest, size_t dest_size, unsigned wrap_width = 0) const;
 
-  /// \brief Returns the buffer size in bytes needed for
+  /// \brief Returns the number of bytes needed for
   /// [Base58](https://en.wikipedia.org/wiki/Base58) data dump of slice content.
   MDBX_CXX11_CONSTEXPR size_t
-  to_base58_bytes(unsigned wrap_width = 0) const noexcept {
+  envisage_to_base58_length(unsigned wrap_width = 0) const noexcept {
     const size_t bytes = length() / 8 * 11 + (length() % 8 * 43 + 31) / 32;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
 
-  /// \brief Fills the buffer with data converted from
+  /// \brief Fills the destination with data converted from
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump from slice content.
   /// \throws std::length_error if given buffer is too small.
   byte *from_base58(byte *dest, size_t dest_size,
                     bool ignore_spaces = false) const;
 
-  /// \brief Returns the buffer size in bytes needed for conversion
+  /// \brief Returns the number of bytes needed for conversion
   /// [Base58](https://en.wikipedia.org/wiki/Base58) dump to data.
-  MDBX_CXX11_CONSTEXPR size_t from_base58_bytes() const noexcept {
+  MDBX_CXX11_CONSTEXPR size_t envisage_from_base58_length() const noexcept {
     return length() / 11 * 8 + length() % 11 * 32 / 43;
   }
 
-  /// \brief Fills the buffer by [Base64](https://en.wikipedia.org/wiki/Base64)
-  /// data dump.
-  /// \throws std::length_error if given buffer is too small.
+  /// \brief Fills the destination by
+  /// [Base64](https://en.wikipedia.org/wiki/Base64) data dump. \throws
+  /// std::length_error if given buffer is too small.
   char *to_base64(char *dest, size_t dest_size, unsigned wrap_width = 0) const;
 
-  /// \brief Returns the buffer size in bytes needed for
+  /// \brief Returns the number of bytes needed for
   /// [Base64](https://en.wikipedia.org/wiki/Base64) data dump.
   MDBX_CXX11_CONSTEXPR size_t
-  to_base64_bytes(unsigned wrap_width = 0) const noexcept {
+  envisage_to_base64_length(unsigned wrap_width = 0) const noexcept {
     const size_t bytes = (length() + 2) / 3 * 4;
     return wrap_width ? bytes + bytes / wrap_width : bytes;
   }
 
-  /// \brief Fills the buffer with data converted from
+  /// \brief Fills the destination with data converted from
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump.
   /// \throws std::length_error if given buffer is too small.
   byte *from_base64(byte *dest, size_t dest_size,
                     bool ignore_spaces = false) const;
 
-  /// \brief Returns the buffer size in bytes needed for conversion
+  /// \brief Returns the number of bytes needed for conversion
   /// [Base64](https://en.wikipedia.org/wiki/Base64) dump to data.
-  MDBX_CXX11_CONSTEXPR size_t from_base64_bytes() const noexcept {
+  MDBX_CXX11_CONSTEXPR size_t envisage_from_base64_length() const noexcept {
     return (length() + 3) / 4 * 3;
   }
 
@@ -3190,7 +3190,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::hex_encode(bool uppercase, const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.resize(to_hex_bytes());
+    result.resize(envisage_to_hex_length());
     result.resize(to_hex(const_cast<char *>(result.data()), result.capacity()) -
                       result.data(),
                   uppercase);
@@ -3203,7 +3203,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::hex_decode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.resize(from_hex_bytes());
+    result.resize(envisage_from_hex_length());
     result.resize(
         from_hex(static_cast<byte *>(
                      static_cast<void *>(const_cast<char *>(result.data()))),
@@ -3218,7 +3218,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base58_encode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.resize(to_base58_bytes());
+    result.resize(envisage_to_base58_length());
     result.resize(
         to_base58(const_cast<char *>(result.data()), result.capacity()) -
         result.data());
@@ -3231,7 +3231,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base58_decode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.resize(from_base58_bytes());
+    result.resize(envisage_from_base58_length());
     result.resize(
         from_base58(static_cast<byte *>(
                         static_cast<void *>(const_cast<char *>(result.data()))),
@@ -3246,7 +3246,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base64_encode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.resize(to_base64_bytes());
+    result.resize(envisage_to_base64_length());
     result.resize(
         to_base64(const_cast<char *>(result.data()), result.capacity()) -
         result.data());
@@ -3259,7 +3259,7 @@ inline ::mdbx::string<ALLOCATOR>
 slice::base64_decode(const ALLOCATOR &allocator) const {
   ::mdbx::string<ALLOCATOR> result(allocator);
   if (MDBX_LIKELY(length() > 0)) {
-    result.resize(from_base64_bytes());
+    result.resize(envisage_from_base64_length());
     result.resize(
         from_base64(static_cast<byte *>(
                         static_cast<void *>(const_cast<char *>(result.data()))),
