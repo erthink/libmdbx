@@ -59,6 +59,7 @@ HEADERS    := mdbx.h mdbx.h++
 LIBRARIES  := libmdbx.a libmdbx.$(SO_SUFFIX)
 TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
+TIP        := // TIP:
 
 .PHONY: all help options lib tools clean install uninstall
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options
@@ -73,11 +74,11 @@ endif
 ifeq ($(MDBX_BUILD_VERBOSE),1)
   QUIET :=
   HUSH :=
-  $(info ## TIP: Use `make V=0` for quiet.)
+  $(info $(TIP) Use `make V=0` for quiet.)
 else
   QUIET := @
   HUSH := >/dev/null
-  $(info ## TIP: Use `make V=1` for verbose.)
+  $(info $(TIP) Use `make V=1` for verbose.)
 endif
 
 all: show-options $(LIBRARIES) $(TOOLS)
@@ -126,11 +127,11 @@ help:
 show-options:
 	@echo "  MDBX_BUILD_OPTIONS   = $(MDBX_BUILD_OPTIONS)"
 	@echo "  MDBX_BUILD_TIMESTAMP = $(MDBX_BUILD_TIMESTAMP)"
-	@echo '## TIP: Use `make options` to listing available build options.'
+	@echo '$(TIP) Use `make options` to listing available build options.'
 	@echo "  CFLAGS   =$(CFLAGS)"
 	@echo "  CXXFLAGS =$(CXXFLAGS)"
 	@echo "  LDFLAGS  =$(LDFLAGS) $(LIBS) $(EXE_LDFLAGS)"
-	@echo '## TIP: Use `make help` to listing available targets.'
+	@echo '$(TIP) Use `make help` to listing available targets.'
 
 options:
 	@echo "  INSTALL      =$(INSTALL)"
@@ -628,7 +629,7 @@ IOARENA ?= $(shell \
   (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
   (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
   (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena 2>&- || \
-  echo '\#\# TIP: Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2)
+  echo '$(TIP) Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2)
 NN	?= 25000000
 BENCH_CRUD_MODE ?= nosync
 
