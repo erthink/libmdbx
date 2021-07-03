@@ -197,6 +197,18 @@ int testcase::breakable_commit() {
   log_trace(">> txn_commit");
   assert(txn_guard);
 
+  /* CLANG/LLVM C++ library could stupidly copy std::set<> item-by-item,
+   * i.e. with insertion(s) & comparison(s), which will cause null dereference
+   * during call mdbx_cmp() with zero txn. So it is the workaround for this:
+   *  - explicitly make copies of the `speculums`;
+   *  - explicitly move relevant copy after transaction commit. */
+  SET speculum_committed_copy(ItemCompare(this)),
+      speculum_copy(ItemCompare(this));
+  if (need_speculum_assign) {
+    speculum_committed_copy = speculum_committed;
+    speculum_copy = speculum;
+  }
+
   MDBX_txn *txn = txn_guard.release();
   txn_inject_writefault(txn);
   int rc = mdbx_txn_commit(txn);
@@ -207,9 +219,9 @@ int testcase::breakable_commit() {
   if (need_speculum_assign) {
     need_speculum_assign = false;
     if (unlikely(rc != MDBX_SUCCESS))
-      speculum = speculum_committed;
+      speculum = std::move(speculum_committed_copy);
     else
-      speculum_committed = speculum;
+      speculum_committed = std::move(speculum_copy);
   }
 
   log_trace("<< txn_commit: %s", rc ? "failed" : "Ok");

@@ -110,16 +110,24 @@ bool testcase_nested::teardown() {
 }
 
 void testcase_nested::push_txn() {
-  MDBX_txn *txn;
+  MDBX_txn *nested_txn;
   MDBX_txn_flags_t flags = MDBX_txn_flags_t(
       prng32() & uint32_t(MDBX_TXN_NOSYNC | MDBX_TXN_NOMETASYNC));
-  int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &txn);
+  int err = mdbx_txn_begin(db_guard.get(), txn_guard.get(), flags, &nested_txn);
   if (unlikely(err != MDBX_SUCCESS))
     failure_perror("mdbx_txn_begin(nested)", err);
-  stack.emplace(scoped_txn_guard(txn), serial, fifo, speculum);
-  std::swap(txn_guard, std::get<0>(stack.top()));
+  /* CLANG/LLVM C++ library could stupidly copy std::set<> item-by-item,
+   * i.e. with insertion(s) & comparison(s), which will cause null dereference
+   * during call mdbx_cmp() with zero txn. So it is the workaround for this:
+   *  - explicitly set txn_guard with the new nested txn;
+   *  - explicitly copy the `speculum` (an instance of std::set<>). */
+  scoped_txn_guard nested_txn_guard(nested_txn);
+  txn_guard.swap(nested_txn_guard);
+  SET speculum_snapshot(speculum);
+  stack.emplace(std::move(nested_txn_guard), serial, fifo,
+                std::move(speculum_snapshot));
   log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
-              stack.size(), mdbx_txn_id(txn), flags, serial);
+              stack.size(), mdbx_txn_id(nested_txn), flags, serial);
 }
 
 bool testcase_nested::pop_txn(bool abort) {
