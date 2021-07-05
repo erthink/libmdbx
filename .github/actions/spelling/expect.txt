@@ -1796,6 +1796,7 @@ updation
 upsert
 UPSERTING
 upsertion
+upto
 URG
 url
 usec

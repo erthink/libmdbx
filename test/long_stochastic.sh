@@ -1,27 +1,102 @@
 #!/usr/bin/env bash
-if ! which make cc c++ tee lz4 >/dev/null; then
-  echo "Please install the following prerequisites: make cc c++ tee lz4 banner" >&2
+if ! which make cc c++ tee >/dev/null; then
+  echo "Please install the following prerequisites: make cc c++ tee banner" >&2
   exit 1
 fi
 
+LIST=basic
+FROM=1
+UPTO=9999999
+MONITOR=
+LOOPS=
+SKIP_MAKE=no
 BANNER="$(which banner 2>/dev/null | echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
+
+while [ -n "$1" ]
+do
+  case "$1" in
+  --help)
+    echo "--multi"
+    echo "--single"
+    echo "--with-valgrind"
+    echo "--skip-make"
+    echo "--from NN"
+    echo "--upto NN"
+    echo "--loops NN"
+    echo "--dir PATH"
+  ;;
+  --multi)
+    LIST=basic
+  ;;
+  --single)
+    LIST="--nested --hill --append --ttl --copy"
+  ;;
+  --with-valgrind)
+    echo " NOTE: Valgrind could produce some false-positive warnings"
+    echo "       in multi-process environment with shared memory."
+    echo "       For instance, when the process 'A' explicitly marks a memory"
+    echo "       region as 'undefined', the process 'B' fill it,"
+    echo "       and after this process 'A' read such region, etc."
+    MONITOR="valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt"
+    rm -f valgrind-*.log
+  ;;
+  --skip-make)
+    SKIP_MAKE=yes
+  ;;
+  --from)
+    FROM="$2"
+    if [ -z "$FROM" -o "$FROM" -lt 1 ]; then
+      echo "Invalid value '$FROM' for --from option"
+      exit -2
+    fi
+    shift
+  ;;
+  --upto)
+    UPTO="$2"
+    if [ -z "$UPTO" -o "$UPTO" -lt 1 ]; then
+      echo "Invalid value '$UPTO' for --upto option"
+      exit -2
+    fi
+    shift
+  ;;
+  --loops)
+    LOOPS="$2"
+    if [ -z "$LOOPS" -o "$LOOPS" -lt 1 -o "$LOOPS" -gt 99 ]; then
+      echo "Invalid value '$LOOPS' for --loops option"
+      exit -2
+    fi
+    shift
+  ;;
+  --dir)
+    TESTDB_DIR="$2"
+    if [ -z "$TESTDB_DIR" ]; then
+      echo "Invalid value '$TESTDB_DIR' for --dir option"
+      exit -2
+    fi
+    shift
+  ;;
+  *)
+    echo "Unknown option '$1'"
+    exit -2
+  ;;
+  esac
+ shift
+done
+
 set -euo pipefail
 
-## NOTE: Valgrind could produce some false-positive warnings
-##       in multi-process environment with shared memory.
-##       For instance, when the process "A" explicitly marks a memory
-##       region as "undefined", the process "B" fill it,
-##       and after this process "A" read such region, etc.
-#VALGRIND="valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt"
 
 ###############################################################################
 # 1. clean data from prev runs and examine available RAM
 
-if [[ -v VALGRIND && ! -z "$VALGRIND" ]]; then
-  rm -f valgrind-*.log
-else
-  VALGRIND=time
+if [ -z "$MONITOR" ]; then
+  if which time 2>/dev/null; then
+    MONITOR=$(which time)
+    if $MONITOR -o true >/dev/null 2>/dev/null; then
+      MONITOR="$(which time) -o /dev/stdout"
+    fi
+  fi
   export MALLOC_CHECK_=7 MALLOC_PERTURB_=42
 fi
 
@@ -56,7 +131,6 @@ case ${UNAME} in
     else
       mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
     fi
-
     ram_avail_mb=$(($(LC_ALL=C vmstat -s | grep -ie '[0-9] pages free$' | cut -d p -f 1) * ($(LC_ALL=C vmstat -s | grep -ie '[0-9] bytes per page$' | cut -d b -f 1) / 1024) / 1024))
   ;;
 
@@ -74,12 +148,10 @@ case ${UNAME} in
     else
       mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
     fi
-
     pagesize=$(($(LC_ALL=C vm_stat | grep -o 'page size of [0-9]\+ bytes' | cut -d' ' -f 4) / 1024))
     freepages=$(LC_ALL=C vm_stat | grep '^Pages free:' | grep -o '[0-9]\+\.$' | cut -d'.' -f 1)
     ram_avail_mb=$((pagesize * freepages / 1024))
     echo "pagesize ${pagesize}K, freepages ${freepages}, ram_avail_mb ${ram_avail_mb}"
-
   ;;
 
   *)
@@ -150,11 +222,11 @@ case ${UNAME} in
 esac
 
 ###############################################################################
-# 4. Run basic test, i.e. `make check`
+# 4. build the test executables
 
-${MAKE} -j2 all mdbx_test
-#${MAKE} TEST_DB=${TESTDB_DIR}/smoke.db TEST_LOG=${TESTDB_DIR}/smoke.log check
-rm -f ${TESTDB_DIR}/*
+if [ "$SKIP_MAKE" != "yes" ]; then
+  ${MAKE} -j$(which nproc  >/dev/null 2>/dev/null && nproc || echo 2) build-test
+fi
 
 ###############################################################################
 # 5. run stochastic iterations
@@ -176,22 +248,42 @@ function bits2list {
   join , "${list[@]}"
 }
 
+function failed {
+  echo "FAILED" >&2
+  exit 1
+}
+
+function check_deep {
+  if [ "$case" = "basic" -o "$case" = "--hill" ]; then
+    tee >(logger) | grep -e reach -e achieve
+  else
+    logger
+  fi
+}
+
 function probe {
   echo "----------------------------------------------- $(date)"
-  echo "${caption}: $*"
-  rm -f ${TESTDB_DIR}/* \
-    && ${VALGRIND} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" \
-      | tee >(lz4 > ${TESTDB_DIR}/long.log.lz4) | grep -e reach -e achieve \
-    && ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
-    && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${VALGRIND} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
-    || (echo "FAILED"; exit 1)
+  echo "${caption}"
+  rm -f ${TESTDB_DIR}/* || failed
+  for case in $LIST
+  do
+    echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no $@ $case"
+    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" $case | check_deep \
+      && ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
+      && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
+      || failed
+   done
 }
 
 #------------------------------------------------------------------------------
 
 count=0
+loop=0
 cases='?'
 for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10000000 33333333 100000000 333333333 1000000000; do
+  if [ $nops -lt $FROM ]; then continue; fi
+  if [ $nops -gt $UPTO ]; then echo "The '--upto $UPTO' limit reached"; break; fi
+  if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then echo "The '--loops $LOOPS' limit reached"; break; fi
   echo "======================================================================="
   wbatch=$((nops / 7 + 1))
   speculum=$([ $nops -le 1000 ] && echo '--speculum' || true)
@@ -206,66 +298,68 @@ for nops in 10 33 100 333 1000 3333 10000 33333 100000 333333 1000000 3333333 10
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
 
       split=24
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
 
       split=16
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) int-key,with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) with-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
 
       split=4
       caption="Probe #$((++count)) int-key,w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) int-key,int-data, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=+key.integer,+data.integer --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=max \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
       caption="Probe #$((++count)) w/o-dups, split=${split}, case $((++subcase)) of ${cases}" probe \
         --pagesize=min --size-upper=${db_size_mb}M --table=-data.dups --keygen.split=${split} --keylen.min=min --keylen.max=max --datalen.min=min --datalen.max=1111 \
         --nops=$nops --batch.write=$wbatch --mode=$(bits2list options $bits)${syncmodes[count%3]} \
-        --keygen.seed=${seed} basic
+        --keygen.seed=${seed}
     done # options
+    loop=$((loop + 1))
+    if [ -n "$LOOPS" ] && [ $loop -ge "$LOOPS" ]; then break; fi
     cases="${subcase}"
     wbatch=$(((wbatch > 7) ? wbatch / 7 : 1))
     if [ $wbatch -eq 1 -o $((nops / wbatch)) -gt 1000 ]; then break; fi
