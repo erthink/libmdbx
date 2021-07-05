@@ -3848,18 +3848,23 @@ inline slice slice::safe_middle(size_t from, size_t n) const {
 }
 
 inline intptr_t slice::compare_fast(const slice &a, const slice &b) noexcept {
-  const intptr_t diff = a.length() - b.length();
+  const intptr_t diff = intptr_t(a.length()) - intptr_t(b.length());
   return diff ? diff
-              : (a.data() == b.data())
+              : MDBX_UNLIKELY(a.length() == 0 || a.data() == b.data())
                     ? 0
                     : ::std::memcmp(a.data(), b.data(), a.length());
 }
 
 inline intptr_t slice::compare_lexicographically(const slice &a,
                                                  const slice &b) noexcept {
-  const intptr_t diff =
-      ::std::memcmp(a.data(), b.data(), ::std::min(a.length(), b.length()));
-  return diff ? diff : intptr_t(a.length() - b.length());
+  const size_t shortest = ::std::min(a.length(), b.length());
+  if (MDBX_LIKELY(shortest > 0))
+    MDBX_CXX20_LIKELY {
+      const intptr_t diff = ::std::memcmp(a.data(), b.data(), shortest);
+      if (MDBX_LIKELY(diff != 0))
+        MDBX_CXX20_LIKELY return diff;
+    }
+  return intptr_t(a.length()) - intptr_t(b.length());
 }
 
 MDBX_NOTHROW_PURE_FUNCTION inline bool operator==(const slice &a,
