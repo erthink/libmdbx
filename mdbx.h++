@@ -1172,6 +1172,9 @@ private:
           /* properly destroy allocator::pointer */
           allocated_.~allocated();
         }
+        if (::std::is_trivial<allocator_pointer>::value)
+          /* workaround for "uninitialized" warning from some compilers */
+          ::std::memset(&allocated_.ptr_, 0, sizeof(allocated_.ptr_));
         lastbyte() = inplace_lastbyte_mask();
         MDBX_CONSTEXPR_ASSERT(is_inplace() && address() == inplace_ &&
                               is_suitable_for_inplace(capacity()));
