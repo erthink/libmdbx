@@ -129,6 +129,7 @@ buflen
 bufsize
 BUGLIST
 bugzilla
+buildflags
 buildpack
 buildroot
 builtins

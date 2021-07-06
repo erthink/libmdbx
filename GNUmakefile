@@ -39,9 +39,9 @@ CXXSTD  ?= $(eval CXXSTD := $$(shell PROBE=$$$$([ -f mdbx.c++ ] && echo mdbx.c++
 CXXFLAGS = $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS))
 
 # TIP: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then use with the old.
-LIBS    ?= -lm $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt") $(shell uname | grep -qi Windows && echo "-lntdll")
+LIBS    ?= $(strip -lm $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt") $(shell uname | grep -qi Windows && echo "-lntdll"))
 
-LDFLAGS ?= $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip')
+LDFLAGS ?= $(strip $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip'))
 EXE_LDFLAGS ?= -pthread
 
 ################################################################################
@@ -61,7 +61,7 @@ TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
 
-.PHONY: all help options lib tools clean install uninstall
+.PHONY: all help options lib tools clean install uninstall check_buildflags_tag
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options
 
 ifeq ("$(origin V)", "command line")
@@ -104,19 +104,21 @@ help:
 	@echo "  make bench-clean         - remove temp database(s) after benchmark"
 #> dist-cutoff-begin
 	@echo ""
+	@echo "  make smoke               - fast smoke test"
 	@echo "  make test                - basic test"
-	@echo "  make check               - basic test"
-	@echo "  make memcheck            - build with Valgrind's and test with memcheck tool"
-	@echo "  make test-valgrind       - build with Valgrind's and test with memcheck tool"
-	@echo "  make test-asan           - build with AddressSanitizer and test"
-	@echo "  make test-leak           - build with LeakSanitizer and test"
-	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and test"
-	@echo "  make cross-gcc           - run cross-compilation testset"
-	@echo "  make cross-qemu          - run cross-compilation and execution testset with QEMU"
+	@echo "  make check               - smoke test with amalgamation and installation checking"
+	@echo "  make memcheck            - build with Valgrind's and smoke test with memcheck tool"
+	@echo "  make test-valgrind       - build with Valgrind's and basic test with memcheck tool"
+	@echo "  make test-asan           - build with AddressSanitizer and basic test"
+	@echo "  make test-leak           - build with LeakSanitizer and basic test"
+	@echo "  make test-ubsan          - build with UndefinedBehaviourSanitizer and basic test"
+	@echo "  make cross-gcc           - check cross-compilation without test execution"
+	@echo "  make cross-qemu          - run cross-compilation and execution basic test with QEMU"
 	@echo "  make gcc-analyzer        - run gcc-analyzer (mostly useless for now)"
 	@echo "  make build-test          - build test executable(s)"
-	@echo "  make test-fault          - run transaction owner failure testcase"
-	@echo "  make test-singleprocess  - run single-process test (used by make cross-qemu)"
+	@echo "  make smoke-fault         - execute transaction owner failure smoke testcase"
+	@echo "  make smoke-singleprocess - execute single-process smoke test"
+	@echo "  make test-singleprocess  - execute single-process basic test (also used by make cross-qemu)"
 	@echo ""
 	@echo "  make dist                - build amalgamated source code"
 	@echo "  make doxygen             - build HTML documentation"
@@ -182,7 +184,17 @@ clean:
 	@echo '  REMOVE ...'
 	$(QUIET)rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist \
-		config.h src/config.h src/version.c *.tar*
+		config.h src/config.h src/version.c *.tar* buildflags_tag
+
+MDBX_BUILD_FLAGS =$(strip $(MDBX_BUILD_OPTIONS) $(CXXSTD) $(CFLAGS) $(LDFLAGS) $(LIBS))
+check_buildflags_tag:
+	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat buildflags_tag 2>&1)" ]; then \
+		echo -n "  CLEAN for build with specified flags..." && \
+		$(MAKE) -s clean >/dev/null && echo " Ok" && \
+		echo '$(MDBX_BUILD_FLAGS)' > buildflags_tag; \
+	fi
+
+buildflags_tag: check_buildflags_tag
 
 libmdbx.a: mdbx-static.o mdbx++-static.o
 	@echo '  AR $@'
@@ -200,10 +212,10 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 # Amalgamated source code, i.e. distributed after `make dist`
 MAN_SRCDIR := man1/
 
-config.h: mdbx.c $(lastword $(MAKEFILE_LIST))
+config.h: buildflags_tag mdbx.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
-	&& echo '#define MDBX_BUILD_FLAGS "$(CXXSTD) $(CFLAGS) $(LDFLAGS) $(LIBS)"' \
+	&& echo '#define MDBX_BUILD_FLAGS "$$(cat buildflags_tag)"' \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell (LC_ALL=C $(CC) --version || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	) >$@
@@ -233,9 +245,9 @@ else
 ################################################################################
 # Plain (non-amalgamated) sources with test
 
-.PHONY: build-test check cross-gcc cross-qemu dist doxygen gcc-analyzer
-.PHONY: reformat release-assets tags test test-asan test-fault test-leak
-.PHONY: test-singleprocess test-ubsan test-valgrind memcheck
+.PHONY: build-test build-test-with-valgrind check cross-gcc cross-qemu dist doxygen gcc-analyzer long-test
+.PHONY: reformat release-assets tags smoke test test-asan smoke-fault test-leak
+.PHONY: smoke-singleprocess test-singleprocess test-ubsan test-valgrind memcheck
 
 define uname2osal
   case "$(UNAME)" in
@@ -291,16 +303,16 @@ MDBX_TEST_EXTRA ?=
 check: DESTDIR = $(shell pwd)/@check-install
 check: test dist install
 
-test: build-test
-	@echo '  RUNNING `mdbx_test basic`...'
+smoke: build-test
+	@echo '  SMOKE `mdbx_test basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic) \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-test-singleprocess: all mdbx_test
-	@echo '  RUNNING `mdbx_test --nested`...'
+smoke-singleprocess: build-test
+	@echo '  SMOKE `mdbx_test --nested`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
@@ -308,17 +320,34 @@ test-singleprocess: all mdbx_test
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
-test-fault: all mdbx_test
-	@echo '  RUNNING `mdbx_test --inject-writefault=42 basic`...'
+smoke-fault: build-test
+	@echo '  SMOKE `mdbx_test --inject-writefault=42 basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_TEST_EXTRA) basic \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
-VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
-memcheck test-valgrind:
-	@echo "  RUNNING \`mdbx_test basic\` under Valgrind's memcheck..."
-	$(QUIET)$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -DMDBX_USE_VALGRIND" build-test && \
-	rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
+test: build-test
+	@echo '  RUNNING `test/long_stochastic.sh --loops 2`...'
+	$(QUIET)test/long_stochastic.sh --loops 2 --skip-make >$(TEST_LOG)
+
+long-test: build-test
+	@echo '  RUNNING `test/long_stochastic.sh --loops 42`...'
+	$(QUIET)test/long_stochastic.sh --loops 42 --skip-make
+
+test-singleprocess: build-test
+	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
+	$(QUIET)test/long_stochastic.sh --single --loops 2 --skip-make >$(TEST_LOG)
+
+test-valgrind: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
+test-valgrind: build-test
+	@echo '  RUNNING `test/long_stochastic.sh --with-valgrind --loops 2`...'
+	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --skip-make >$(TEST_LOG)
+
+memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
+memcheck: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
+memcheck: build-test
+	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
+	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
 		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
 		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
@@ -329,19 +358,19 @@ memcheck test-valgrind:
 gcc-analyzer:
 	@echo '  RE-BUILD with `-fanalyzer` option...'
 	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
-	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) --always-make CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
+	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
 
 test-ubsan:
-	@echo '  RE-CHECK with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" check
+	@echo '  RE-TEST with `-fsanitize=undefined` option...'
+	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
 
 test-asan:
-	@echo '  RE-CHECK with `-fsanitize=address` option...'
-	$(QUIET)$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" check
+	@echo '  RE-TEST with `-fsanitize=address` option...'
+	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test
 
 test-leak:
-	@echo '  RE-CHECK with `-fsanitize=leak` option...'
-	$(QUIET)$(MAKE) CXXSTD= clean && $(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" check
+	@echo '  RE-TEST with `-fsanitize=leak` option...'
+	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
 
 mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
@@ -391,10 +420,10 @@ src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(git_DIR)/HEAD $(g
 		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
 	src/version.c.in >$@
 
-src/config.h: src/version.c $(lastword $(MAKEFILE_LIST))
+src/config.h: buildflags_tag src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
-	&& echo '#define MDBX_BUILD_FLAGS "$(CXXSTD) $(CFLAGS) $(LDFLAGS) $(LIBS)"' \
+	&& echo '#define MDBX_BUILD_FLAGS "$$(cat buildflags_tag)"' \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell (LC_ALL=C $(CC) --version || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \
