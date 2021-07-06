@@ -476,6 +476,7 @@ exactkey
 exactp
 excpt
 exe
+executables
 exename
 exherbo
 exitcode
@@ -1116,6 +1117,7 @@ NOWAIT
 npages
 npos
 npr
+nproc
 nptl
 nreaders
 nrepeat
