@@ -22,6 +22,14 @@
    ...
    fun:mdbx_mapresize
 }
+{
+   msync-wipe-steady
+   Memcheck:Param
+   msync(start)
+   fun:msync
+   ...
+   fun:mdbx_wipe_steady
+}
 
 # single-page flush by pwrite()
 {
