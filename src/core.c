@@ -10095,51 +10095,52 @@ fail:
 
 static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
                               const MDBX_page *const page,
-                              const unsigned meta_number, MDBX_meta *dest,
-                              const unsigned guess_pagesize) {
+                              const unsigned meta_number,
+                              unsigned *guess_pagesize) {
   const uint64_t magic_and_version =
       unaligned_peek_u64(4, &meta->mm_magic_and_version);
-  if (magic_and_version != MDBX_DATA_MAGIC &&
-      magic_and_version != MDBX_DATA_MAGIC_DEVEL) {
+  if (unlikely(magic_and_version != MDBX_DATA_MAGIC &&
+               magic_and_version != MDBX_DATA_MAGIC_DEVEL)) {
     mdbx_error("meta[%u] has invalid magic/version %" PRIx64, meta_number,
                magic_and_version);
     return ((magic_and_version >> 8) != MDBX_MAGIC) ? MDBX_INVALID
                                                     : MDBX_VERSION_MISMATCH;
   }
 
-  if (page->mp_pgno != meta_number) {
+  if (unlikely(page->mp_pgno != meta_number)) {
     mdbx_error("meta[%u] has invalid pageno %" PRIaPGNO, meta_number,
                page->mp_pgno);
     return MDBX_INVALID;
   }
 
-  if (page->mp_flags != P_META) {
+  if (unlikely(page->mp_flags != P_META)) {
     mdbx_error("page #%u not a meta-page", meta_number);
     return MDBX_INVALID;
   }
 
   /* LY: check pagesize */
-  if (!is_powerof2(meta->mm_psize) || meta->mm_psize < MIN_PAGESIZE ||
-      meta->mm_psize > MAX_PAGESIZE) {
+  if (unlikely(!is_powerof2(meta->mm_psize) || meta->mm_psize < MIN_PAGESIZE ||
+               meta->mm_psize > MAX_PAGESIZE)) {
     mdbx_warning("meta[%u] has invalid pagesize (%u), skip it", meta_number,
                  meta->mm_psize);
     return is_powerof2(meta->mm_psize) ? MDBX_VERSION_MISMATCH : MDBX_INVALID;
   }
 
-  if (dest && meta_number == 0 && guess_pagesize != meta->mm_psize) {
-    dest->mm_psize = meta->mm_psize;
+  if (guess_pagesize && *guess_pagesize != meta->mm_psize) {
+    *guess_pagesize = meta->mm_psize;
     mdbx_verbose("meta[%u] took pagesize %u", meta_number, meta->mm_psize);
   }
 
-  if (unaligned_peek_u64(4, &meta->mm_txnid_a) !=
-      unaligned_peek_u64(4, &meta->mm_txnid_b)) {
+  const txnid_t txnid = unaligned_peek_u64(4, &meta->mm_txnid_a);
+  if (unlikely(txnid != unaligned_peek_u64(4, &meta->mm_txnid_b))) {
     mdbx_warning("meta[%u] not completely updated, skip it", meta_number);
     return MDBX_RESULT_TRUE;
   }
 
   /* LY: check signature as a checksum */
   if (META_IS_STEADY(meta) &&
-      unaligned_peek_u64(4, &meta->mm_datasync_sign) != mdbx_meta_sign(meta)) {
+      unlikely(unaligned_peek_u64(4, &meta->mm_datasync_sign) !=
+               mdbx_meta_sign(meta))) {
     mdbx_warning("meta[%u] has invalid steady-checksum (0x%" PRIx64
                  " != 0x%" PRIx64 "), skip it",
                  meta_number, unaligned_peek_u64(4, &meta->mm_datasync_sign),
@@ -10147,32 +10148,41 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
     return MDBX_RESULT_TRUE;
   }
 
-  mdbx_debug("read meta%" PRIaPGNO " = root %" PRIaPGNO "/%" PRIaPGNO
+  mdbx_debug("checking meta%" PRIaPGNO " = root %" PRIaPGNO "/%" PRIaPGNO
              ", geo %" PRIaPGNO "/%" PRIaPGNO "-%" PRIaPGNO "/%" PRIaPGNO
              " +%u -%u, txn_id %" PRIaTXN ", %s",
              page->mp_pgno, meta->mm_dbs[MAIN_DBI].md_root,
              meta->mm_dbs[FREE_DBI].md_root, meta->mm_geo.lower,
              meta->mm_geo.next, meta->mm_geo.now, meta->mm_geo.upper,
              pv2pages(meta->mm_geo.grow_pv), pv2pages(meta->mm_geo.shrink_pv),
-             unaligned_peek_u64(4, meta->mm_txnid_a), mdbx_durable_str(meta));
+             txnid, mdbx_durable_str(meta));
+
+  if (unlikely(txnid < MIN_TXNID || txnid > MAX_TXNID)) {
+    mdbx_warning("meta[%u] has invalid txnid %" PRIaTXN ", skip it",
+                 meta_number, txnid);
+    return MDBX_RESULT_TRUE;
+  }
 
   /* LY: check min-pages value */
-  if (meta->mm_geo.lower < MIN_PAGENO || meta->mm_geo.lower > MAX_PAGENO) {
+  if (unlikely(meta->mm_geo.lower < MIN_PAGENO ||
+               meta->mm_geo.lower > MAX_PAGENO)) {
     mdbx_warning("meta[%u] has invalid min-pages (%" PRIaPGNO "), skip it",
                  meta_number, meta->mm_geo.lower);
     return MDBX_INVALID;
   }
 
   /* LY: check max-pages value */
-  if (meta->mm_geo.upper < MIN_PAGENO || meta->mm_geo.upper > MAX_PAGENO ||
-      meta->mm_geo.upper < meta->mm_geo.lower) {
+  if (unlikely(meta->mm_geo.upper < MIN_PAGENO ||
+               meta->mm_geo.upper > MAX_PAGENO ||
+               meta->mm_geo.upper < meta->mm_geo.lower)) {
     mdbx_warning("meta[%u] has invalid max-pages (%" PRIaPGNO "), skip it",
                  meta_number, meta->mm_geo.upper);
     return MDBX_INVALID;
   }
 
   /* LY: check last_pgno */
-  if (meta->mm_geo.next < MIN_PAGENO || meta->mm_geo.next - 1 > MAX_PAGENO) {
+  if (unlikely(meta->mm_geo.next < MIN_PAGENO ||
+               meta->mm_geo.next - 1 > MAX_PAGENO)) {
     mdbx_warning("meta[%u] has invalid next-pageno (%" PRIaPGNO "), skip it",
                  meta_number, meta->mm_geo.next);
     return MDBX_CORRUPTED;
@@ -10192,17 +10202,19 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
       return MDBX_CORRUPTED;
     }
   }
-  if (meta->mm_geo.next - 1 > MAX_PAGENO || used_bytes > MAX_MAPSIZE) {
+  if (unlikely(meta->mm_geo.next - 1 > MAX_PAGENO ||
+               used_bytes > MAX_MAPSIZE)) {
     mdbx_warning("meta[%u] has too large used-space (%" PRIu64 "), skip it",
                  meta_number, used_bytes);
     return MDBX_TOO_LARGE;
   }
 
   /* LY: check mapsize limits */
-  const uint64_t mapsize_min = meta->mm_geo.lower * (uint64_t)meta->mm_psize;
+  pgno_t geo_lower = meta->mm_geo.lower;
+  uint64_t mapsize_min = geo_lower * (uint64_t)meta->mm_psize;
   STATIC_ASSERT(MAX_MAPSIZE < PTRDIFF_MAX - MAX_PAGESIZE);
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
-  if (mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE) {
+  if (unlikely(mapsize_min < MIN_MAPSIZE || mapsize_min > MAX_MAPSIZE)) {
     if (MAX_MAPSIZE != MAX_MAPSIZE64 && mapsize_min > MAX_MAPSIZE &&
         mapsize_min <= MAX_MAPSIZE64) {
       mdbx_assert(env, meta->mm_geo.next - 1 <= MAX_PAGENO &&
@@ -10210,7 +10222,12 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
       mdbx_warning("meta[%u] has too large min-mapsize (%" PRIu64 "), "
                    "but size of used space still acceptable (%" PRIu64 ")",
                    meta_number, mapsize_min, used_bytes);
-      meta->mm_geo.lower = (pgno_t)(MAX_MAPSIZE / meta->mm_psize);
+      geo_lower = (pgno_t)(mapsize_min = MAX_MAPSIZE / meta->mm_psize);
+      mdbx_warning("meta[%u] consider get-%s pageno is %" PRIaPGNO
+                   " instead of wrong %" PRIaPGNO
+                   ", will be corrected on next commit(s)",
+                   meta_number, "lower", geo_lower, meta->mm_geo.lower);
+      meta->mm_geo.lower = geo_lower;
     } else {
       mdbx_warning("meta[%u] has invalid min-mapsize (%" PRIu64 "), skip it",
                    meta_number, mapsize_min);
@@ -10218,18 +10235,30 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
     }
   }
 
-  const uint64_t mapsize_max = meta->mm_geo.upper * (uint64_t)meta->mm_psize;
+  pgno_t geo_upper = meta->mm_geo.upper;
+  uint64_t mapsize_max = geo_upper * (uint64_t)meta->mm_psize;
   STATIC_ASSERT(MIN_MAPSIZE < MAX_MAPSIZE);
-  if (mapsize_max > MAX_MAPSIZE ||
-      MAX_PAGENO < ceil_powerof2((size_t)mapsize_max, env->me_os_psize) /
-                       (size_t)meta->mm_psize) {
+  if (unlikely(mapsize_max > MAX_MAPSIZE ||
+               MAX_PAGENO <
+                   ceil_powerof2((size_t)mapsize_max, env->me_os_psize) /
+                       (size_t)meta->mm_psize)) {
+    if (mapsize_max > MAX_MAPSIZE64) {
+      mdbx_warning("meta[%u] has invalid max-mapsize (%" PRIu64 "), skip it",
+                   meta_number, mapsize_max);
+      return MDBX_VERSION_MISMATCH;
+    }
     /* allow to open large DB from a 32-bit environment */
     mdbx_assert(env, meta->mm_geo.next - 1 <= MAX_PAGENO &&
                          used_bytes <= MAX_MAPSIZE);
     mdbx_warning("meta[%u] has too large max-mapsize (%" PRIu64 "), "
                  "but size of used space still acceptable (%" PRIu64 ")",
                  meta_number, mapsize_max, used_bytes);
-    meta->mm_geo.upper = (pgno_t)(MAX_MAPSIZE / meta->mm_psize);
+    geo_upper = (pgno_t)(mapsize_max = MAX_MAPSIZE / meta->mm_psize);
+    mdbx_warning("meta[%u] consider get-%s pageno is %" PRIaPGNO
+                 " instead of wrong %" PRIaPGNO
+                 ", will be corrected on next commit(s)",
+                 meta_number, "upper", geo_upper, meta->mm_geo.upper);
+    meta->mm_geo.upper = geo_upper;
   }
 
   /* LY: check and silently put mm_geo.now into [geo.lower...geo.upper].
@@ -10239,52 +10268,56 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
    * at all. This is not a problem as there is no damage or loss of data.
    * Therefore it is better not to consider such situation as an error, but
    * silently correct it. */
-  if (meta->mm_geo.now < meta->mm_geo.lower)
-    meta->mm_geo.now = meta->mm_geo.lower;
-  if (meta->mm_geo.now > meta->mm_geo.upper &&
-      meta->mm_geo.next <= meta->mm_geo.upper)
-    meta->mm_geo.now = meta->mm_geo.upper;
+  pgno_t geo_now = meta->mm_geo.now;
+  if (geo_now < geo_lower)
+    geo_now = geo_lower;
+  if (geo_now > geo_upper && meta->mm_geo.next <= geo_upper)
+    geo_now = geo_upper;
 
-  if (meta->mm_geo.next > meta->mm_geo.now) {
+  if (unlikely(meta->mm_geo.next > geo_now)) {
     mdbx_warning("meta[%u] next-pageno (%" PRIaPGNO
                  ") is beyond end-pgno (%" PRIaPGNO "), skip it",
-                 meta_number, meta->mm_geo.next, meta->mm_geo.now);
+                 meta_number, meta->mm_geo.next, geo_now);
     return MDBX_CORRUPTED;
   }
+  if (meta->mm_geo.now != geo_now) {
+    mdbx_warning("meta[%u] consider geo-%s pageno is %" PRIaPGNO
+                 " instead of wrong %" PRIaPGNO
+                 ", will be corrected on next commit(s)",
+                 meta_number, "now", geo_now, meta->mm_geo.now);
+    meta->mm_geo.now = geo_now;
+  }
 
-  /* LY: GC root */
+  /* GC */
   if (meta->mm_dbs[FREE_DBI].md_root == P_INVALID) {
-    if (meta->mm_dbs[FREE_DBI].md_branch_pages ||
-        meta->mm_dbs[FREE_DBI].md_depth || meta->mm_dbs[FREE_DBI].md_entries ||
-        meta->mm_dbs[FREE_DBI].md_leaf_pages ||
-        meta->mm_dbs[FREE_DBI].md_overflow_pages) {
+    if (unlikely(meta->mm_dbs[FREE_DBI].md_branch_pages ||
+                 meta->mm_dbs[FREE_DBI].md_depth ||
+                 meta->mm_dbs[FREE_DBI].md_entries ||
+                 meta->mm_dbs[FREE_DBI].md_leaf_pages ||
+                 meta->mm_dbs[FREE_DBI].md_overflow_pages)) {
       mdbx_warning("meta[%u] has false-empty GC, skip it", meta_number);
       return MDBX_CORRUPTED;
     }
-  } else if (meta->mm_dbs[FREE_DBI].md_root >= meta->mm_geo.next) {
+  } else if (unlikely(meta->mm_dbs[FREE_DBI].md_root >= meta->mm_geo.next)) {
     mdbx_warning("meta[%u] has invalid GC-root %" PRIaPGNO ", skip it",
                  meta_number, meta->mm_dbs[FREE_DBI].md_root);
     return MDBX_CORRUPTED;
   }
 
-  /* LY: MainDB root */
+  /* MainDB */
   if (meta->mm_dbs[MAIN_DBI].md_root == P_INVALID) {
-    if (meta->mm_dbs[MAIN_DBI].md_branch_pages ||
-        meta->mm_dbs[MAIN_DBI].md_depth || meta->mm_dbs[MAIN_DBI].md_entries ||
-        meta->mm_dbs[MAIN_DBI].md_leaf_pages ||
-        meta->mm_dbs[MAIN_DBI].md_overflow_pages) {
+    if (unlikely(meta->mm_dbs[MAIN_DBI].md_branch_pages ||
+                 meta->mm_dbs[MAIN_DBI].md_depth ||
+                 meta->mm_dbs[MAIN_DBI].md_entries ||
+                 meta->mm_dbs[MAIN_DBI].md_leaf_pages ||
+                 meta->mm_dbs[MAIN_DBI].md_overflow_pages)) {
       mdbx_warning("meta[%u] has false-empty maindb", meta_number);
       return MDBX_CORRUPTED;
     }
-  } else if (meta->mm_dbs[MAIN_DBI].md_root >= meta->mm_geo.next) {
+  } else if (unlikely(meta->mm_dbs[MAIN_DBI].md_root >= meta->mm_geo.next)) {
     mdbx_warning("meta[%u] has invalid maindb-root %" PRIaPGNO ", skip it",
                  meta_number, meta->mm_dbs[MAIN_DBI].md_root);
     return MDBX_CORRUPTED;
-  }
-
-  if (unaligned_peek_u64(4, &meta->mm_txnid_a) == 0) {
-    mdbx_warning("meta[%u] has zero txnid, skip it", meta_number);
-    return MDBX_RESULT_TRUE;
   }
 
   return MDBX_SUCCESS;
@@ -10305,16 +10338,15 @@ __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
 
   /* Read twice all meta pages so we can find the latest one. */
   unsigned loop_limit = NUM_METAS * 2;
+  /* We don't know the page size on first time. So, just guess it. */
+  unsigned guess_pagesize = 0;
   for (unsigned loop_count = 0; loop_count < loop_limit; ++loop_count) {
-    /* We don't know the page size on first time.
-     * So, just guess it. */
-    unsigned guess_pagesize = dest->mm_psize;
-    if (guess_pagesize == 0)
-      guess_pagesize =
-          (loop_count > NUM_METAS) ? env->me_psize : env->me_os_psize;
-
     const unsigned meta_number = loop_count % NUM_METAS;
-    const unsigned offset = guess_pagesize * meta_number;
+    const unsigned offset =
+        (guess_pagesize
+             ? guess_pagesize
+             : (loop_count > NUM_METAS) ? env->me_psize : env->me_os_psize) *
+        meta_number;
 
     char buffer[MIN_PAGESIZE];
     unsigned retryleft = 42;
@@ -10355,7 +10387,7 @@ __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
 
     MDBX_page *const page = (MDBX_page *)buffer;
     MDBX_meta *const meta = page_meta(page);
-    rc = mdbx_validate_meta(env, meta, page, meta_number, dest, guess_pagesize);
+    rc = mdbx_validate_meta(env, meta, page, meta_number, &guess_pagesize);
     if (rc != MDBX_SUCCESS)
       continue;
 
@@ -11616,8 +11648,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
         MDBX_meta clone = *head;
         err = mdbx_validate_meta(
             env, &clone, data_page(head),
-            bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map), nullptr,
-            env->me_psize);
+            bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map), nullptr);
         if (err == MDBX_SUCCESS) {
           mdbx_warning(
               "opening after an unclean shutdown, but boot-id(%016" PRIx64
