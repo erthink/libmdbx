@@ -3625,7 +3625,6 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
                                                pgno_t newpgno, unsigned nflags);
 
 static int __must_check_result mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
-                                                uint64_t *filesize,
                                                 const int lck_exclusive,
                                                 const mdbx_mode_t mode_bits);
 static int __must_check_result mdbx_sync_locked(MDBX_env *env, unsigned flags,
@@ -6050,11 +6049,9 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
 
 bailout:
   if (rc == MDBX_SUCCESS) {
-#if defined(_WIN32) || defined(_WIN64)
     mdbx_assert(env, size_bytes == env->me_dxb_mmap.current);
     mdbx_assert(env, size_bytes <= env->me_dxb_mmap.filesize);
     mdbx_assert(env, limit_bytes == env->me_dxb_mmap.limit);
-#endif /* Windows */
 #ifdef MDBX_USE_VALGRIND
     if (prev_limit != env->me_dxb_mmap.limit || prev_addr != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -7652,10 +7649,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
 #endif /* Windows */
     } else {
       env->me_dxb_mmap.current = size;
-#if defined(_WIN32) || defined(_WIN64)
       env->me_dxb_mmap.filesize =
           (env->me_dxb_mmap.filesize < size) ? size : env->me_dxb_mmap.filesize;
-#endif /* Windows */
     }
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     mdbx_txn_valgrind(env, txn);
@@ -10098,10 +10093,10 @@ fail:
   goto provide_latency;
 }
 
-__cold static int
-mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta, uint64_t *filesize,
-                   const MDBX_page *const page, const unsigned meta_number,
-                   MDBX_meta *dest, const unsigned guess_pagesize) {
+static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
+                              const MDBX_page *const page,
+                              const unsigned meta_number, MDBX_meta *dest,
+                              const unsigned guess_pagesize) {
   const uint64_t magic_and_version =
       unaligned_peek_u64(4, &meta->mm_magic_and_version);
   if (magic_and_version != MDBX_DATA_MAGIC &&
@@ -10185,15 +10180,15 @@ mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta, uint64_t *filesize,
 
   /* LY: check filesize & used_bytes */
   const uint64_t used_bytes = meta->mm_geo.next * (uint64_t)meta->mm_psize;
-  if (used_bytes > *filesize) {
+  if (unlikely(used_bytes > env->me_dxb_mmap.filesize)) {
     /* Here could be a race with DB-shrinking performed by other process */
-    int err = mdbx_filesize(env->me_lazy_fd, filesize);
+    int err = mdbx_filesize(env->me_lazy_fd, &env->me_dxb_mmap.filesize);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    if (used_bytes > *filesize) {
+    if (unlikely(used_bytes > env->me_dxb_mmap.filesize)) {
       mdbx_warning("meta[%u] used-bytes (%" PRIu64 ") beyond filesize (%" PRIu64
                    "), skip it",
-                   meta_number, used_bytes, *filesize);
+                   meta_number, used_bytes, env->me_dxb_mmap.filesize);
       return MDBX_CORRUPTED;
     }
   }
@@ -10298,9 +10293,9 @@ mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta, uint64_t *filesize,
 /* Read the environment parameters of a DB environment
  * before mapping it into memory. */
 __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
-                                   uint64_t *filesize, const int lck_exclusive,
+                                   const int lck_exclusive,
                                    const mdbx_mode_t mode_bits) {
-  int rc = mdbx_filesize(env->me_lazy_fd, filesize);
+  int rc = mdbx_filesize(env->me_lazy_fd, &env->me_dxb_mmap.filesize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -10329,7 +10324,8 @@ __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
       int err = mdbx_pread(env->me_lazy_fd, buffer, MIN_PAGESIZE, offset);
       if (err != MDBX_SUCCESS) {
         if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 &&
-            *filesize == 0 && mode_bits /* non-zero for DB creation */ != 0)
+            env->me_dxb_mmap.filesize == 0 &&
+            mode_bits /* non-zero for DB creation */ != 0)
           mdbx_notice("read meta: empty file (%d, %s)", err,
                       mdbx_strerror(err));
         else
@@ -10359,8 +10355,7 @@ __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
 
     MDBX_page *const page = (MDBX_page *)buffer;
     MDBX_meta *const meta = page_meta(page);
-    rc = mdbx_validate_meta(env, meta, filesize, page, meta_number, dest,
-                            guess_pagesize);
+    rc = mdbx_validate_meta(env, meta, page, meta_number, dest, guess_pagesize);
     if (rc != MDBX_SUCCESS)
       continue;
 
@@ -11376,10 +11371,9 @@ __cold int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers) {
 /* Further setup required for opening an MDBX environment */
 __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
                                  const mdbx_mode_t mode_bits) {
-  uint64_t filesize_before;
   MDBX_meta meta;
   int rc = MDBX_RESULT_FALSE;
-  int err = mdbx_read_header(env, &meta, &filesize_before, lck_rc, mode_bits);
+  int err = mdbx_read_header(env, &meta, lck_rc, mode_bits);
   if (unlikely(err != MDBX_SUCCESS)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE || err != MDBX_ENODATA ||
         (env->me_flags & MDBX_RDONLY) != 0 ||
@@ -11406,12 +11400,13 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
-    err = mdbx_ftruncate(env->me_lazy_fd, filesize_before = env->me_dbgeo.now);
+    err = mdbx_ftruncate(env->me_lazy_fd,
+                         env->me_dxb_mmap.filesize = env->me_dbgeo.now);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
 #ifndef NDEBUG /* just for checking */
-    err = mdbx_read_header(env, &meta, &filesize_before, lck_rc, mode_bits);
+    err = mdbx_read_header(env, &meta, lck_rc, mode_bits);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 #endif
@@ -11512,6 +11507,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
   mdbx_ensure(env,
               pgno_align2os_bytes(env, meta.mm_geo.now) == env->me_dbgeo.now);
   mdbx_ensure(env, env->me_dbgeo.now >= used_bytes);
+  const uint64_t filesize_before = env->me_dxb_mmap.filesize;
   if (unlikely(filesize_before != env->me_dbgeo.now)) {
     if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
       mdbx_verbose("filesize mismatch (expect %" PRIuPTR "b/%" PRIaPGNO
@@ -11618,9 +11614,8 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       mdbx_assert(env, META_IS_STEADY(steady) && !META_IS_STEADY(head));
       if (meta_bootid_match(head)) {
         MDBX_meta clone = *head;
-        uint64_t filesize = env->me_dbgeo.now;
         err = mdbx_validate_meta(
-            env, &clone, &filesize, data_page(head),
+            env, &clone, data_page(head),
             bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map), nullptr,
             env->me_psize);
         if (err == MDBX_SUCCESS) {
