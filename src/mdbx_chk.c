@@ -915,7 +915,7 @@ static __inline bool meta_ot(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
 
 static __inline bool meta_eq(txnid_t txn_a, uint64_t sign_a, txnid_t txn_b,
                              uint64_t sign_b) {
-  if (txn_a != txn_b)
+  if (!txn_a || txn_a != txn_b)
     return false;
 
   if (SIGN_IS_STEADY(sign_a) != SIGN_IS_STEADY(sign_b))
