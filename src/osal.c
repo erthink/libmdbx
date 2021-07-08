@@ -1384,9 +1384,9 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   map->limit = 0;
   map->current = 0;
   map->address = nullptr;
+  map->filesize = 0;
 #if defined(_WIN32) || defined(_WIN64)
   map->section = NULL;
-  map->filesize = 0;
 #endif /* Windows */
 
   int err = mdbx_check_fs_local(map->fd, flags);
@@ -1397,21 +1397,17 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     err = mdbx_ftruncate(map->fd, size);
     if (err != MDBX_SUCCESS)
       return err;
-#if defined(_WIN32) || defined(_WIN64)
     map->filesize = size;
-#else
+#if !(defined(_WIN32) || defined(_WIN64))
     map->current = size;
-#endif /* ! Windows */
+#endif /* !Windows */
   } else {
-    uint64_t filesize = 0;
-    err = mdbx_filesize(map->fd, &filesize);
+    err = mdbx_filesize(map->fd, &map->filesize);
     if (err != MDBX_SUCCESS)
       return err;
-#if defined(_WIN32) || defined(_WIN64)
-    map->filesize = filesize;
-#else
-    map->current = (filesize > limit) ? limit : (size_t)filesize;
-#endif /* ! Windows */
+#if !(defined(_WIN32) || defined(_WIN64))
+    map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
+#endif /* !Windows */
   }
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -1703,20 +1699,21 @@ retry_mapview:;
 
 #else /* Windows */
 
-  uint64_t filesize = 0;
-  int rc = mdbx_filesize(map->fd, &filesize);
+  map->filesize = 0;
+  int rc = mdbx_filesize(map->fd, &map->filesize);
   if (rc != MDBX_SUCCESS)
     return rc;
 
   if (flags & MDBX_RDONLY) {
-    map->current = (filesize > limit) ? limit : (size_t)filesize;
+    map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
     if (map->current != size)
       rc =
           (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_RESULT_TRUE;
-  } else if (filesize != size) {
+  } else if (map->filesize != size) {
     rc = mdbx_ftruncate(map->fd, size);
     if (rc != MDBX_SUCCESS)
       return rc;
+    map->filesize = size;
     map->current = size;
   }
 
