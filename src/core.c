@@ -3624,6 +3624,9 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
                                                MDBX_val *const newdata,
                                                pgno_t newpgno, unsigned nflags);
 
+static int __must_check_result mdbx_validate_meta_copy(MDBX_env *env,
+                                                       const MDBX_meta *meta,
+                                                       MDBX_meta *dest);
 static int __must_check_result mdbx_read_header(MDBX_env *env, MDBX_meta *meta,
                                                 const int lck_exclusive,
                                                 const mdbx_mode_t mode_bits);
@@ -10323,6 +10326,14 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
   return MDBX_SUCCESS;
 }
 
+static int mdbx_validate_meta_copy(MDBX_env *env, const MDBX_meta *meta,
+                                   MDBX_meta *dest) {
+  *dest = *meta;
+  return mdbx_validate_meta(env, dest, data_page(meta),
+                            bytes2pgno(env, (uint8_t *)meta - env->me_map),
+                            nullptr);
+}
+
 /* Read the environment parameters of a DB environment
  * before mapping it into memory. */
 __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
@@ -11623,26 +11634,77 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
   env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
-  while (likely(/* not recovery mode */ env->me_stuck_meta < 0)) {
-    const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
-    if (unlikely(meta_clash_mask)) {
-      if (/* not recovery mode */ env->me_stuck_meta < 0) {
+  if (unlikely(env->me_stuck_meta >= 0)) {
+    /* recovery mode */
+    MDBX_meta clone;
+    MDBX_meta const *const target = METAPAGE(env, env->me_stuck_meta);
+    err = mdbx_validate_meta_copy(env, target, &clone);
+    if (unlikely(err != MDBX_SUCCESS)) {
+      mdbx_error("target meta[%u] is corrupted",
+                 bytes2pgno(env, (uint8_t *)data_page(target) - env->me_map));
+      return MDBX_CORRUPTED;
+    }
+  } else /* not recovery mode */
+    while (1) {
+      const unsigned meta_clash_mask = mdbx_meta_eq_mask(env);
+      if (unlikely(meta_clash_mask)) {
         mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
         return MDBX_CORRUPTED;
-      } else {
-        mdbx_warning("ignore meta-pages clashing (mask 0x%d) in recovery mode",
-                     meta_clash_mask);
       }
-    }
 
-    MDBX_meta *const head = mdbx_meta_head(env);
-    const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
-    MDBX_meta *const steady = mdbx_meta_steady(env);
-    const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
-    if (head_txnid == steady_txnid)
-      break;
+      if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
+        /* non-exclusive mode */
+        MDBX_meta *const head = mdbx_meta_head(env);
+        MDBX_meta *const steady = mdbx_meta_steady(env);
+        const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
+        const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
+        if (head_txnid == steady_txnid)
+          break;
 
-    if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
+        if (!env->me_lck_mmap.lck) {
+          /* LY: without-lck (read-only) mode, so it is impossible that other
+           * process made weak checkpoint. */
+          mdbx_error("%s", "without-lck, unable recovery/rollback");
+          return MDBX_WANNA_RECOVERY;
+        }
+
+        /* LY: assume just have a collision with other running process,
+         *     or someone make a weak checkpoint */
+        mdbx_verbose("%s", "assume collision or online weak checkpoint");
+        break;
+      }
+      mdbx_assert(env, lck_rc == MDBX_RESULT_TRUE);
+      /* exclusive mode */
+
+      MDBX_meta head_clone;
+      MDBX_meta const *const head = mdbx_meta_head(env);
+      err = mdbx_validate_meta_copy(env, head, &head_clone);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        mdbx_error("meta[%u] with %s txnid is corrupted",
+                   bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map),
+                   "last");
+        return MDBX_CORRUPTED;
+      }
+
+      MDBX_meta steady_clone;
+      MDBX_meta const *const steady = mdbx_meta_steady(env);
+      if (steady == head)
+        break;
+
+      err = mdbx_validate_meta_copy(env, steady, &steady_clone);
+      if (unlikely(err != MDBX_SUCCESS)) {
+        mdbx_error("meta[%u] with %s txnid is corrupted",
+                   bytes2pgno(env, (uint8_t *)data_page(steady) - env->me_map),
+                   "steady");
+        return MDBX_CORRUPTED;
+      }
+
+      const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
+      const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
+      mdbx_assert(env, head_txnid != head_txnid);
+      if (head_txnid == steady_txnid)
+        break;
+
       mdbx_assert(env, META_IS_STEADY(steady) && !META_IS_STEADY(head));
       if (meta_bootid_match(head)) {
         MDBX_meta clone = *head;
@@ -11702,9 +11764,10 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       if (env->me_flags & MDBX_WRITEMAP) {
         /* It is possible to update txnid without safe64_write(),
          * since DB opened exclusive for now */
-        unaligned_poke_u64(4, head->mm_txnid_a, undo_txnid);
-        unaligned_poke_u64(4, head->mm_datasync_sign, MDBX_DATASIGN_WEAK);
-        unaligned_poke_u64(4, head->mm_txnid_b, undo_txnid);
+        unaligned_poke_u64(4, (MDBX_meta *)head->mm_txnid_a, undo_txnid);
+        unaligned_poke_u64(4, (MDBX_meta *)head->mm_datasync_sign,
+                           MDBX_DATASIGN_WEAK);
+        unaligned_poke_u64(4, (MDBX_meta *)head->mm_txnid_b, undo_txnid);
         const size_t offset = (uint8_t *)data_page(head) - env->me_dxb_mmap.dxb;
         const size_t paged_offset = floor_powerof2(offset, env->me_os_psize);
         const size_t paged_length = ceil_powerof2(
@@ -11734,21 +11797,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
                                  env->me_os_psize);
       mdbx_ensure(env, undo_txnid == mdbx_meta_txnid_fluid(env, head));
       mdbx_ensure(env, 0 == mdbx_meta_eq_mask(env));
-      continue;
     }
-
-    if (!env->me_lck_mmap.lck) {
-      /* LY: without-lck (read-only) mode, so it is impossible that other
-       * process made weak checkpoint. */
-      mdbx_error("%s", "without-lck, unable recovery/rollback");
-      return MDBX_WANNA_RECOVERY;
-    }
-
-    /* LY: assume just have a collision with other running process,
-     *     or someone make a weak checkpoint */
-    mdbx_verbose("%s", "assume collision or online weak checkpoint");
-    break;
-  }
 
   const MDBX_meta *head = mdbx_meta_head(env);
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
