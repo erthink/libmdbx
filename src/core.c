@@ -11637,6 +11637,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
   env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
+  //----------------------------------------- validate head & steady meta-pages
   if (unlikely(env->me_stuck_meta >= 0)) {
     /* recovery mode */
     MDBX_meta clone;
@@ -11656,7 +11657,8 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       }
 
       if (lck_rc != /* lck exclusive */ MDBX_RESULT_TRUE) {
-        /* non-exclusive mode */
+        /* non-exclusive mode,
+         * meta-pages should be validated by a first process opened the DB */
         MDBX_meta *const head = mdbx_meta_head(env);
         MDBX_meta *const steady = mdbx_meta_steady(env);
         const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
@@ -11679,129 +11681,77 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       mdbx_assert(env, lck_rc == MDBX_RESULT_TRUE);
       /* exclusive mode */
 
-      MDBX_meta head_clone;
-      MDBX_meta const *const head = mdbx_meta_head(env);
-      err = mdbx_validate_meta_copy(env, head, &head_clone);
+      MDBX_meta const *const steady = mdbx_meta_steady(env);
+      const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
+      MDBX_meta steady_clone;
+      err = mdbx_validate_meta_copy(env, steady, &steady_clone);
       if (unlikely(err != MDBX_SUCCESS)) {
-        mdbx_error("meta[%u] with %s txnid is corrupted",
-                   bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map),
-                   "last");
+        mdbx_error("meta[%u] with %s txnid %" PRIaTXN
+                   " is corrupted, %s needed",
+                   bytes2pgno(env, (uint8_t *)steady - env->me_map), "steady",
+                   steady_txnid, "manual recovery");
         return MDBX_CORRUPTED;
       }
 
-      MDBX_meta steady_clone;
-      MDBX_meta const *const steady = mdbx_meta_steady(env);
+      MDBX_meta const *const head = mdbx_meta_head(env);
       if (steady == head)
         break;
 
-      err = mdbx_validate_meta_copy(env, steady, &steady_clone);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        mdbx_error("meta[%u] with %s txnid is corrupted",
-                   bytes2pgno(env, (uint8_t *)data_page(steady) - env->me_map),
-                   "steady");
-        return MDBX_CORRUPTED;
+      const pgno_t pgno = bytes2pgno(env, (uint8_t *)head - env->me_map);
+      const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
+      MDBX_meta head_clone;
+      const bool head_valid =
+          mdbx_validate_meta_copy(env, head, &head_clone) == MDBX_SUCCESS;
+      if (unlikely(!head_valid)) {
+        mdbx_error("meta[%u] with %s txnid %" PRIaTXN
+                   " is corrupted, %s needed",
+                   pgno, "last", head_txnid, "rollback");
+        goto purge_meta_head;
       }
 
-      const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
-      const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
       mdbx_assert(env, head_txnid != head_txnid);
       if (head_txnid == steady_txnid)
         break;
 
       mdbx_assert(env, META_IS_STEADY(steady) && !META_IS_STEADY(head));
       if (meta_bootid_match(head)) {
-        MDBX_meta clone = *head;
-        err = mdbx_validate_meta(
-            env, &clone, data_page(head),
-            bytes2pgno(env, (uint8_t *)data_page(head) - env->me_map), nullptr);
-        if (err == MDBX_SUCCESS) {
-          mdbx_warning(
-              "opening after an unclean shutdown, but boot-id(%016" PRIx64
-              "-%016" PRIx64
-              ") is MATCH: rollback NOT needed, steady-sync NEEDED%s",
-              bootid.x, bootid.y,
-              (env->me_flags & MDBX_RDONLY) ? ", but unable in read-only mode"
-                                            : "");
-          if (env->me_flags & MDBX_RDONLY)
-            return MDBX_WANNA_RECOVERY /* LY: could not recovery/sync */;
-          meta = clone;
-          atomic_store32(&env->me_lck->mti_unsynced_pages, meta.mm_geo.next,
-                         mo_Relaxed);
-          break;
-        }
-        mdbx_warning("opening after an unclean shutdown, "
-                     "but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH, "
-                     "but last meta not valid, rollback needed",
-                     bootid.x, bootid.y);
+        mdbx_warning(
+            "opening after an unclean shutdown, but boot-id(%016" PRIx64
+            "-%016" PRIx64
+            ") is MATCH: rollback NOT needed, steady-sync NEEDED%s",
+            bootid.x, bootid.y,
+            (env->me_flags & MDBX_RDONLY) ? ", but unable in read-only mode"
+                                          : "");
+        if (env->me_flags & MDBX_RDONLY)
+          return MDBX_WANNA_RECOVERY;
+        meta = head_clone;
+        atomic_store32(&env->me_lck->mti_unsynced_pages, meta.mm_geo.next,
+                       mo_Relaxed);
+        break;
       }
       if (env->me_flags & MDBX_RDONLY) {
         mdbx_error("rollback needed: (from head %" PRIaTXN
                    " to steady %" PRIaTXN "), but unable in read-only mode",
                    head_txnid, steady_txnid);
-        return MDBX_WANNA_RECOVERY /* LY: could not recovery/rollback */;
+        return MDBX_WANNA_RECOVERY;
       }
 
-      const MDBX_meta *const meta0 = METAPAGE(env, 0);
-      const MDBX_meta *const meta1 = METAPAGE(env, 1);
-      const MDBX_meta *const meta2 = METAPAGE(env, 2);
-      txnid_t undo_txnid = 0 /* zero means undo is unneeded */;
-      while (
-          (head != meta0 && mdbx_meta_txnid_fluid(env, meta0) == undo_txnid) ||
-          (head != meta1 && mdbx_meta_txnid_fluid(env, meta1) == undo_txnid) ||
-          (head != meta2 && mdbx_meta_txnid_fluid(env, meta2) == undo_txnid))
-        undo_txnid = safe64_txnid_next(undo_txnid);
-      if (unlikely(undo_txnid >= steady_txnid)) {
-        mdbx_fatal("rollback failed: no suitable txnid (0,1,2) < %" PRIaTXN,
-                   steady_txnid);
-        return MDBX_PANIC /* LY: could not recovery/rollback */;
-      }
-
-      /* LY: rollback weak checkpoint */
-      mdbx_notice("rollback: from %" PRIaTXN ", to %" PRIaTXN " as %" PRIaTXN,
-                  head_txnid, steady_txnid, undo_txnid);
-      mdbx_ensure(env, head_txnid == mdbx_meta_txnid_stable(env, head));
-
-#if MDBX_ENABLE_PGOP_STAT
-      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
-#endif /* MDBX_ENABLE_PGOP_STAT */
-      if (env->me_flags & MDBX_WRITEMAP) {
-        /* It is possible to update txnid without safe64_write(),
-         * since DB opened exclusive for now */
-        unaligned_poke_u64(4, (MDBX_meta *)head->mm_txnid_a, undo_txnid);
-        unaligned_poke_u64(4, (MDBX_meta *)head->mm_datasync_sign,
-                           MDBX_DATASIGN_WEAK);
-        unaligned_poke_u64(4, (MDBX_meta *)head->mm_txnid_b, undo_txnid);
-        const size_t offset = (uint8_t *)data_page(head) - env->me_dxb_mmap.dxb;
-        const size_t paged_offset = floor_powerof2(offset, env->me_os_psize);
-        const size_t paged_length = ceil_powerof2(
-            env->me_psize + offset - paged_offset, env->me_os_psize);
-        err = mdbx_msync(&env->me_dxb_mmap, paged_offset, paged_length,
-                         MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-      } else {
-        MDBX_meta rollback = *head;
-        mdbx_meta_set_txnid(env, &rollback, undo_txnid);
-        unaligned_poke_u64(4, rollback.mm_datasync_sign, MDBX_DATASIGN_WEAK);
-        const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
-                                         ? env->me_dsync_fd
-                                         : env->me_lazy_fd;
-        err = mdbx_pwrite(fd, &rollback, sizeof(MDBX_meta),
-                          (uint8_t *)head - (uint8_t *)env->me_map);
-        if (err == MDBX_SUCCESS && fd == env->me_lazy_fd)
-          err = mdbx_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-      }
+    purge_meta_head:
+      mdbx_notice("rollback: purge%s meta[%u] with%s txnid %" PRIaTXN,
+                  head_valid ? "" : " invalid", pgno, head_valid ? " weak" : "",
+                  head_txnid);
+      err = mdbx_override_meta(env, pgno, 0, head_valid ? head : steady);
       if (err) {
-        mdbx_error("error %d rollback from %" PRIaTXN ", to %" PRIaTXN
-                   " as %" PRIaTXN,
-                   err, head_txnid, steady_txnid, undo_txnid);
+        mdbx_error("rollback: overwrite meta[%u] with txnid %" PRIaTXN
+                   ", error %d",
+                   pgno, head_txnid, err);
         return err;
       }
-
-      mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
-                                 env->me_os_psize);
-      mdbx_ensure(env, undo_txnid == mdbx_meta_txnid_fluid(env, head));
+      mdbx_ensure(env, 0 == mdbx_meta_txnid_fluid(env, head));
       mdbx_ensure(env, 0 == mdbx_meta_eq_mask(env));
     }
 
+  //---------------------------------------------------- shrink DB & update geo
   const MDBX_meta *head = mdbx_meta_head(env);
   if (lck_rc == /* lck exclusive */ MDBX_RESULT_TRUE) {
     /* re-check size after mmap */
@@ -11870,6 +11820,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
     }
   }
 
+  //--------------------------------------------------- setup madvise/readahead
   atomic_store32(&env->me_lck->mti_discarded_tail,
                  bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
 #if MDBX_ENABLE_MADVISE
