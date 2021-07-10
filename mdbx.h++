@@ -1785,7 +1785,7 @@ public:
   /// \brief Reserves space after the payload.
   void reserve_tailroom(size_t wanna_tailroom) { reserve(0, wanna_tailroom); }
 
-  buffer &assign_reference(const void *ptr, size_t bytes) noexcept {
+  buffer &assign_reference(const void *ptr, size_t bytes) {
     silo_.clear();
     slice_.assign(ptr, bytes);
     return *this;
