@@ -1547,7 +1547,10 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
    * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
-  ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
+  ASAN_UNPOISON_MEMORY_REGION(map->address,
+                              (map->filesize && map->filesize < map->limit)
+                                  ? map->filesize
+                                  : map->limit);
 #if defined(_WIN32) || defined(_WIN64)
   if (map->section)
     NtClose(map->section);
@@ -1617,6 +1620,10 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
   if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0)
     return MDBX_RESULT_TRUE;
 
+  /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
+   * when this memory will re-used by malloc or another mmapping.
+   * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
+  ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
   if (!NT_SUCCESS(status))
     return ntstatus2errcode(status);
@@ -1747,11 +1754,25 @@ retry_mapview:;
     if (map->current != size)
       rc =
           (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_RESULT_TRUE;
-  } else if (map->filesize != size) {
-    rc = mdbx_ftruncate(map->fd, size);
-    if (rc != MDBX_SUCCESS)
-      return rc;
-    map->filesize = size;
+  } else {
+    if (map->filesize != size) {
+      rc = mdbx_ftruncate(map->fd, size);
+      if (rc != MDBX_SUCCESS)
+        return rc;
+      map->filesize = size;
+    }
+
+    if (map->current > size) {
+      /* Clearing asan's bitmask for the region which released in shrinking,
+       * since:
+       *  - after the shrinking we will get an exception when accessing
+       *    this region and (therefore) do not need the help of ASAN.
+       *  - this allows us to clear the mask only within the file size
+       *    when closing the mapping. */
+      ASAN_UNPOISON_MEMORY_REGION(
+          (char *)map->address + size,
+          ((map->current < map->limit) ? map->current : map->limit) - size);
+    }
     map->current = size;
   }
 
@@ -1864,7 +1885,9 @@ retry_mapview:;
          * when this memory will re-used by malloc or another mmapping.
          * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
          */
-        ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
+        ASAN_UNPOISON_MEMORY_REGION(map->address, (map->current < map->limit)
+                                                      ? map->current
+                                                      : map->limit);
         map->limit = 0;
         map->current = 0;
         map->address = nullptr;
@@ -1880,9 +1903,9 @@ retry_mapview:;
     VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
     /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
      * when this memory will re-used by malloc or another mmapping.
-     * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
-     */
-    ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
+     * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
+    ASAN_UNPOISON_MEMORY_REGION(
+        map->address, (map->current < map->limit) ? map->current : map->limit);
 
     VALGRIND_MAKE_MEM_DEFINED(ptr, map->current);
     ASAN_UNPOISON_MEMORY_REGION(ptr, map->current);

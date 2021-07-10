@@ -11630,11 +11630,13 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
   mdbx_assert(env, used_bytes >= pgno2bytes(env, NUM_METAS) &&
                        used_bytes <= env->me_dxb_mmap.limit);
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
-  VALGRIND_MAKE_MEM_NOACCESS(env->me_map + used_bytes,
-                             env->me_dxb_mmap.limit - used_bytes);
-  ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
-                            env->me_dxb_mmap.limit - used_bytes);
-  env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.limit);
+  if (env->me_dxb_mmap.filesize > used_bytes) {
+    VALGRIND_MAKE_MEM_NOACCESS(env->me_map + used_bytes,
+                               env->me_dxb_mmap.filesize - used_bytes);
+    ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
+                              env->me_dxb_mmap.filesize - used_bytes);
+  }
+  env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.filesize);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
   //----------------------------------------- validate head & steady meta-pages
