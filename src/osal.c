@@ -1377,6 +1377,36 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
   return MDBX_SUCCESS;
 }
 
+static int check_mmap_limit(const size_t limit) {
+  const bool should_check =
+#if defined(__SANITIZE_ADDRESS__)
+      true;
+#else
+      RUNNING_ON_VALGRIND;
+#endif /* __SANITIZE_ADDRESS__ */
+
+  if (should_check) {
+    intptr_t pagesize, total_ram_pages, avail_ram_pages;
+    int err =
+        mdbx_get_sysraminfo(&pagesize, &total_ram_pages, &avail_ram_pages);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
+    const int log2page = log2n_powerof2(pagesize);
+    if ((limit >> (log2page + 7)) > (size_t)total_ram_pages ||
+        (limit >> (log2page + 6)) > (size_t)avail_ram_pages) {
+      mdbx_error(
+          "%s (%zu pages) is too large for available (%zu pages) or total "
+          "(%zu pages) system RAM",
+          "database upper size limit", limit >> log2page, avail_ram_pages,
+          total_ram_pages);
+      return MDBX_TOO_LARGE;
+    }
+  }
+
+  return MDBX_SUCCESS;
+}
+
 MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
                                  const size_t size, const size_t limit,
                                  const unsigned options) {
@@ -1390,6 +1420,10 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
 #endif /* Windows */
 
   int err = mdbx_check_fs_local(map->fd, flags);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+
+  err = check_mmap_limit(limit);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -1555,6 +1589,10 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
   }
 
   if (limit > map->limit) {
+    err = check_mmap_limit(limit);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+
     /* check ability of address space for growth before unmap */
     PVOID BaseAddress = (PBYTE)map->address + map->limit;
     SIZE_T RegionSize = limit - map->limit;
@@ -1727,6 +1765,10 @@ retry_mapview:;
     map->limit = limit;
     return MDBX_SUCCESS;
   }
+
+  rc = check_mmap_limit(limit);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
 
   assert(limit > map->limit);
   uint8_t *ptr = MAP_FAILED;
