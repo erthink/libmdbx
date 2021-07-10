@@ -1777,19 +1777,19 @@ retry_mapview:;
   }
 
   if (limit == map->limit)
-    return MDBX_SUCCESS;
+    return rc;
 
   if (limit < map->limit) {
     /* unmap an excess at end of mapping. */
     if (unlikely(munmap(map->dxb + limit, map->limit - limit)))
       return errno;
     map->limit = limit;
-    return MDBX_SUCCESS;
+    return rc;
   }
 
-  rc = check_mmap_limit(limit);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
+  int err = check_mmap_limit(limit);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
 
   assert(limit > map->limit);
   uint8_t *ptr = MAP_FAILED;
@@ -1798,7 +1798,7 @@ retry_mapview:;
   ptr = mremap(map->address, map->limit, limit,
                (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE : 0);
   if (ptr == MAP_FAILED) {
-    const int err = errno;
+    err = errno;
     switch (err) {
     default:
       return err;
@@ -1829,7 +1829,7 @@ retry_mapview:;
         return errno;
       ptr = MAP_FAILED;
     } else {
-      const int err = errno;
+      err = errno;
       switch (err) {
       default:
         return err;
