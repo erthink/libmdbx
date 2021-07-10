@@ -1180,7 +1180,7 @@ static void thread_rthc_set(mdbx_thread_key_t key, const void *value) {
 #define MDBX_THREAD_RTHC_ZERO 0
 #define MDBX_THREAD_RTHC_REGISTERED 1
 #define MDBX_THREAD_RTHC_COUNTED 2
-  static __thread uint32_t thread_registration_state;
+  static __thread char thread_registration_state;
   if (value && unlikely(thread_registration_state == MDBX_THREAD_RTHC_ZERO)) {
     thread_registration_state = MDBX_THREAD_RTHC_REGISTERED;
     mdbx_trace("thread registered 0x%" PRIxPTR, mdbx_thread_self());
@@ -1284,8 +1284,8 @@ __cold void mdbx_rthc_thread_dtor(void *ptr) {
   mdbx_trace("<< thread 0x%" PRIxPTR ", rthc %p", mdbx_thread_self(), ptr);
   rthc_unlock();
 #else
-  const char self_registration = *(char *)ptr;
-  *(char *)ptr = MDBX_THREAD_RTHC_ZERO;
+  const char self_registration = *(volatile char *)ptr;
+  *(volatile char *)ptr = MDBX_THREAD_RTHC_ZERO;
   mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %d",
              mdbx_thread_self(), ptr, mdbx_getpid(), self_registration);
   if (self_registration == MDBX_THREAD_RTHC_COUNTED)
@@ -1311,12 +1311,13 @@ __cold void mdbx_rthc_global_dtor(void) {
 
   rthc_lock();
 #if !defined(_WIN32) && !defined(_WIN64)
-  char *rthc = (char *)pthread_getspecific(rthc_key);
-  mdbx_trace("== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %d",
-             mdbx_thread_self(), __Wpedantic_format_voidptr(rthc),
-             mdbx_getpid(), rthc ? *rthc : -1);
+  char *rthc = pthread_getspecific(rthc_key);
+  mdbx_trace(
+      "== thread 0x%" PRIxPTR ", rthc %p, pid %d, self-status %d, left %d",
+      mdbx_thread_self(), __Wpedantic_format_voidptr(rthc), mdbx_getpid(),
+      rthc ? *rthc : -1, atomic_load32(&rthc_pending, mo_Relaxed));
   if (rthc) {
-    const char self_registration = *(char *)rthc;
+    const char self_registration = *rthc;
     *rthc = MDBX_THREAD_RTHC_ZERO;
     if (self_registration == MDBX_THREAD_RTHC_COUNTED)
       mdbx_ensure(nullptr, atomic_sub32(&rthc_pending, 1) > 0);
