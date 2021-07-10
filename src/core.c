@@ -5974,8 +5974,8 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     /* looking for readers from this process */
     const unsigned snap_nreaders =
         atomic_load32(&lck->mti_numreaders, mo_AcquireRelease);
-    mresize_flags |= implicit ? MDBX_MRESIZE_MAY_UNMAP
-                              : MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
+    mdbx_assert(env, !implicit);
+    mresize_flags |= MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE;
     for (unsigned i = 0; i < snap_nreaders; ++i) {
       if (lck->mti_readers[i].mr_pid.weak == env->me_pid &&
           lck->mti_readers[i].mr_tid.weak != mdbx_thread_self()) {
