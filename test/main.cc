@@ -327,6 +327,15 @@ int main(int argc, char *const argv[]) {
                                     mdbx_limits_dbsize_min(params.pagesize),
                                     mdbx_limits_dbsize_max(params.pagesize)))
       continue;
+    int64_t i64 = params.size_upper;
+    if (config::parse_option(argc, argv, narg, "size-upper-upto", i64,
+                             int64_t(mdbx_limits_dbsize_min(params.pagesize)),
+                             INT64_MAX, -1)) {
+      if (i64 > mdbx_limits_dbsize_max(params.pagesize))
+        i64 = mdbx_limits_dbsize_max(params.pagesize);
+      params.size_upper = intptr_t(i64);
+      continue;
+    }
     if (config::parse_option_intptr(argc, argv, narg, "size-upper",
                                     params.size_upper,
                                     mdbx_limits_dbsize_min(params.pagesize),
