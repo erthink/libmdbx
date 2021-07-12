@@ -298,7 +298,7 @@ MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) CXXSTD= -s src/version.c 
 MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_SUFFIX)
 
 # Extra options mdbx_test utility
-MDBX_TEST_EXTRA ?=
+MDBX_SMOKE_EXTRA ?=
 
 check: DESTDIR = $(shell pwd)/@check-install
 check: test dist install
@@ -306,23 +306,23 @@ check: test dist install
 smoke: build-test
 	@echo '  SMOKE `mdbx_test basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
-		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
-		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic) \
+		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
+		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic) \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 smoke-singleprocess: build-test
 	@echo '  SMOKE `mdbx_test --nested`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
-		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --hill && \
+		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --hill && \
 		./mdbx_test --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) --nested) \
+		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=42 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) --nested) \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
 smoke-fault: build-test
 	@echo '  SMOKE `mdbx_test --inject-writefault=42 basic`...'
-	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_TEST_EXTRA) basic \
+	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --inject-writefault=42 --dump-config --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	; ./mdbx_chk -vvnw $(TEST_DB) && ([ ! -e $(TEST_DB)-copy ] || ./mdbx_chk -vvn $(TEST_DB)-copy)
 
@@ -348,9 +348,9 @@ memcheck: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
 memcheck: build-test
 	@echo "  SMOKE \`mdbx_test basic\` under Valgrind's memcheck..."
 	$(QUIET)rm -f valgrind-*.log $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; ( \
-		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
+		$(VALGRIND) ./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=2 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_test --progress --console=no --pathname=$(TEST_DB) --dont-cleanup-before --dont-cleanup-after --copy && \
-		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_TEST_EXTRA) basic && \
+		$(VALGRIND) ./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=4 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB) && \
 		$(VALGRIND) ./mdbx_chk -vvn $(TEST_DB)-copy \
 	) | tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42)
@@ -618,7 +618,7 @@ cross-qemu:
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) CXXSTD= clean && \
-			MDBX_TEST_EXTRA="$(MDBX_TEST_EXTRA)$$(echo $$CC | grep -q -e alpha -e sparc && echo ' --size-upper=64M --size-lower=64M')" \
+			MDBX_SMOKE_EXTRA="$(MDBX_SMOKE_EXTRA)$$(echo $$CC | grep -q -e alpha -e sparc && echo ' --size-upper=64M --size-lower=64M')" \
 			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
 			$(MAKE) test-singleprocess || exit $$?; \
 	done
