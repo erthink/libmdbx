@@ -12,6 +12,7 @@ LOOPS=
 SKIP_MAKE=no
 BANNER="$(which banner 2>/dev/null | echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
+DB_UPTO_MB=17408
 
 while [ -n "$1" ]
 do
@@ -25,6 +26,7 @@ do
     echo "--upto NN"
     echo "--loops NN"
     echo "--dir PATH"
+    echo "--db-upto-mb NN"
   ;;
   --multi)
     LIST=basic
@@ -72,6 +74,14 @@ do
     TESTDB_DIR="$2"
     if [ -z "$TESTDB_DIR" ]; then
       echo "Invalid value '$TESTDB_DIR' for --dir option"
+      exit -2
+    fi
+    shift
+  ;;
+  --db-upto-mb)
+    DB_UPTO_MB="$2"
+    if [ -z "$DB_UPTO_MB" -o "$DB_UPTO_MB" -lt 1 -o "$DB_UPTO_MB" -gt 4194304 ]; then
+      echo "Invalid value '$DB_UPTO_MB' for --db-upto-mb option"
       exit -2
     fi
     shift
@@ -189,8 +199,8 @@ fi
 # system immediately, as well some space is required for logs.
 #
 db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
-if [ $db_size_mb -gt 17408 ]; then
-  db_size_mb=17408
+if [ $db_size_mb -gt $DB_UPTO_MB ]; then
+  db_size_mb=$DB_UPTO_MB
 fi
 echo "=== use ${db_size_mb}M for DB"
 
