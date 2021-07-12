@@ -328,20 +328,20 @@ smoke-fault: build-test
 
 test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --loops 2 --skip-make >$(TEST_LOG)
+	$(QUIET)test/long_stochastic.sh --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG)
 
 long-test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 42`...'
-	$(QUIET)test/long_stochastic.sh --loops 42 --skip-make
+	$(QUIET)test/long_stochastic.sh --loops 42 --db-upto-mb 1024 --skip-make
 
 test-singleprocess: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --single --loops 2 --skip-make >$(TEST_LOG)
+	$(QUIET)test/long_stochastic.sh --single --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG)
 
 test-valgrind: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
 test-valgrind: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --with-valgrind --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --skip-make >$(TEST_LOG)
+	$(QUIET)test/long_stochastic.sh --with-valgrind --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG)
 
 memcheck: VALGRIND=valgrind --trace-children=yes --log-file=valgrind-%p.log --leak-check=full --track-origins=yes --error-exitcode=42 --suppressions=test/valgrind_suppress.txt
 memcheck: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
