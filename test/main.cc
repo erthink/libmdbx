@@ -222,6 +222,43 @@ void cleanup() {
   log_trace("<< cleanup");
 }
 
+static void fixup4qemu(actor_params &params) {
+#ifdef MDBX_SAFE4QEMU
+#if MDBX_WORDBITS == 32
+  intptr_t safe4qemu_limit = size_t(512) << 20 /* 512 megabytes */;
+#if defined(__SANITIZE_ADDRESS__)
+  safe4qemu_limit >>= 1;
+#else
+  if (RUNNING_ON_VALGRIND)
+    safe4qemu_limit >>= 1;
+#endif /* __SANITIZE_ADDRESS__ */
+
+  if (params.size_lower > safe4qemu_limit ||
+      params.size_now > safe4qemu_limit ||
+      params.size_upper > safe4qemu_limit) {
+    params.size_upper = std::min(params.size_upper, safe4qemu_limit);
+    params.size_now = std::min(params.size_now, params.size_upper);
+    params.size_lower = std::min(params.size_lower, params.size_now);
+    log_notice("workaround: for conformance 32-bit build with "
+               "QEMU/ASAN/Valgrind database size reduced to %zu megabytes",
+               safe4qemu_limit >> 20);
+  }
+#endif /* MDBX_WORDBITS == 32 */
+
+#if defined(__alpha__) || defined(__alpha) || defined(__sparc__) ||            \
+    defined(__sparc) || defined(__sparc64__) || defined(__sparc64)
+  if (params.size_lower != params.size_upper) {
+    log_notice(
+        "workaround: for conformance Alpha/Sparc build with QEMU/ASAN/Valgrind "
+        "enforce fixed database size %zu megabytes",
+        params.size_upper >> 20);
+    params.size_lower = params.size_now = params.size_upper;
+  }
+#endif /* Alpha || Sparc */
+#endif /* MDBX_SAFE4QEMU */
+  (void)params;
+}
+
 int main(int argc, char *const argv[]) {
 
 #ifdef _DEBUG
@@ -254,6 +291,7 @@ int main(int argc, char *const argv[]) {
     const char *value = nullptr;
 
     if (config::parse_option(argc, argv, narg, "case", &value)) {
+      fixup4qemu(params);
       testcase_setup(value, params, last_space_id);
       continue;
     }
@@ -486,38 +524,47 @@ int main(int argc, char *const argv[]) {
       continue;
     }
     if (config::parse_option(argc, argv, narg, "hill", &value, "auto")) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_hill, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "jitter", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_jitter, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "dead.reader", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_deadread, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "dead.writer", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_deadwrite, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "try", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_try, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "copy", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_copy, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "append", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_append, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "ttl", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_ttl, value, params);
       continue;
     }
     if (config::parse_option(argc, argv, narg, "nested", nullptr)) {
+      fixup4qemu(params);
       configure_actor(last_space_id, ac_nested, value, params);
       continue;
     }
@@ -531,9 +578,10 @@ int main(int argc, char *const argv[]) {
                              global::config::console_mode))
       continue;
 
-    if (*argv[narg] != '-')
+    if (*argv[narg] != '-') {
+      fixup4qemu(params);
       testcase_setup(argv[narg], params, last_space_id);
-    else
+    } else
       failure("Unknown option '%s'. Try --help\n", argv[narg]);
   }
 

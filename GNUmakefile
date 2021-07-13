@@ -618,7 +618,6 @@ cross-qemu:
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) CXXSTD= clean && \
-			MDBX_SMOKE_EXTRA="$(MDBX_SMOKE_EXTRA)$$(echo $$CC | grep -q -e alpha -e sparc && echo ' --size-upper=64M --size-lower=64M')" \
 			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
 			$(MAKE) test-singleprocess || exit $$?; \
 	done

@@ -129,7 +129,7 @@ uint64_t entropy_ticks(void) {
   uint64_t ticks;
   __asm __volatile("stck 0(%0)" : : "a"(&(ticks)) : "memory", "cc");
   return ticks;
-#elif defined(__alpha__)
+#elif defined(__alpha__) || defined(__alpha)
   uint64_t ticks;
   __asm __volatile("rpcc %0" : "=r"(ticks));
   return ticks;
