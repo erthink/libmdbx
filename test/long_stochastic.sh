@@ -47,7 +47,7 @@ do
     SKIP_MAKE=yes
   ;;
   --from)
-    FROM="$2"
+    FROM=$(($2))
     if [ -z "$FROM" -o "$FROM" -lt 1 ]; then
       echo "Invalid value '$FROM' for --from option"
       exit -2
@@ -55,7 +55,7 @@ do
     shift
   ;;
   --upto)
-    UPTO="$2"
+    UPTO=$(($2))
     if [ -z "$UPTO" -o "$UPTO" -lt 1 ]; then
       echo "Invalid value '$UPTO' for --upto option"
       exit -2
@@ -63,7 +63,7 @@ do
     shift
   ;;
   --loops)
-    LOOPS="$2"
+    LOOPS=$(($2))
     if [ -z "$LOOPS" -o "$LOOPS" -lt 1 -o "$LOOPS" -gt 99 ]; then
       echo "Invalid value '$LOOPS' for --loops option"
       exit -2
@@ -79,7 +79,7 @@ do
     shift
   ;;
   --db-upto-mb)
-    DB_UPTO_MB="$2"
+    DB_UPTO_MB=$(($2))
     if [ -z "$DB_UPTO_MB" -o "$DB_UPTO_MB" -lt 1 -o "$DB_UPTO_MB" -gt 4194304 ]; then
       echo "Invalid value '$DB_UPTO_MB' for --db-upto-mb option"
       exit -2
