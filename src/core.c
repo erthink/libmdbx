@@ -11415,6 +11415,13 @@ __cold int mdbx_env_get_maxreaders(const MDBX_env *env, unsigned *readers) {
 }
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
+__cold static int alloc_page_buf(MDBX_env *env) {
+  return env->me_pbuf
+             ? MDBX_SUCCESS
+             : mdbx_memalign_alloc(env->me_os_psize, env->me_psize * NUM_METAS,
+                                   &env->me_pbuf);
+}
+
 /* Further setup required for opening an MDBX environment */
 __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
                                  const mdbx_mode_t mode_bits) {
@@ -11437,13 +11444,13 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
         return err;
     }
 
-    void *buffer = mdbx_calloc(NUM_METAS, env->me_psize);
-    if (!buffer)
-      return MDBX_ENOMEM;
+    err = alloc_page_buf(env);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
 
-    meta = *mdbx_init_metas(env, buffer);
-    err = mdbx_pwrite(env->me_lazy_fd, buffer, env->me_psize * NUM_METAS, 0);
-    mdbx_free(buffer);
+    meta = *mdbx_init_metas(env, env->me_pbuf);
+    err = mdbx_pwrite(env->me_lazy_fd, env->me_pbuf, env->me_psize * NUM_METAS,
+                      0);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
 
@@ -12129,6 +12136,9 @@ static uint32_t merge_sync_flags(const uint32_t a, const uint32_t b) {
 
 __cold static int __must_check_result mdbx_override_meta(
     MDBX_env *env, unsigned target, txnid_t txnid, const MDBX_meta *shape) {
+  int rc = alloc_page_buf(env);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
   MDBX_page *const page = env->me_pbuf;
   mdbx_meta_model(env, page, target);
   MDBX_meta *const model = page_meta(page);
@@ -12144,7 +12154,7 @@ __cold static int __must_check_result mdbx_override_meta(
            sizeof(model->mm_pages_retired));
   }
   unaligned_poke_u64(4, model->mm_datasync_sign, mdbx_meta_sign(model));
-  int rc = mdbx_validate_meta(env, model, page, target, nullptr);
+  rc = mdbx_validate_meta(env, model, page, target, nullptr);
   if (unlikely(MDBX_IS_ERROR(rc)))
     return MDBX_PROBLEM;
 
@@ -12625,10 +12635,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
                  size = tsize + env->me_maxdbs *
                                     (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
                                      sizeof(unsigned) + 1);
-    rc = mdbx_memalign_alloc(
-        env->me_os_psize,
-        env->me_psize * (1 /* page buffer */ + 1 /* page killer buffer */),
-        &env->me_pbuf);
+    rc = alloc_page_buf(env);
     if (rc == MDBX_SUCCESS) {
       memset(env->me_pbuf, -1, env->me_psize * 2);
       MDBX_txn *txn = mdbx_calloc(1, size);
