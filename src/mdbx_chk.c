@@ -112,7 +112,7 @@ struct problem {
 };
 
 struct problem *problems_list;
-uint64_t total_problems, data_tree_problems, gc_tree_problems;
+unsigned total_problems, data_tree_problems, gc_tree_problems;
 
 static void MDBX_PRINTF_ARGS(1, 2) print(const char *msg, ...) {
   if (!quiet) {
@@ -1063,7 +1063,7 @@ int main(int argc, char *argv[]) {
   int rc;
   char *prog = argv[0];
   char *envname;
-  int problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
+  unsigned problems_maindb = 0, problems_freedb = 0, problems_meta = 0;
   bool write_locked = false;
   bool turn_meta = false;
   bool force_turn_meta = false;
@@ -1589,15 +1589,15 @@ int main(int argc, char *argv[]) {
   if (!verbose)
     print("Iterating DBIs...\n");
   if (data_tree_problems) {
-    print("Skip processing %s since tree is corrupted (%" PRIu64 " problems)\n",
-          "@MAIN", data_tree_problems);
+    print("Skip processing %s since tree is corrupted (%u problems)\n", "@MAIN",
+          data_tree_problems);
     problems_maindb = data_tree_problems;
   } else
     problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
 
   if (gc_tree_problems) {
-    print("Skip processing %s since tree is corrupted (%" PRIu64 " problems)\n",
-          "@GC", gc_tree_problems);
+    print("Skip processing %s since tree is corrupted (%u problems)\n", "@GC",
+          gc_tree_problems);
     problems_freedb = gc_tree_problems;
   } else
     problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb, false);
@@ -1727,8 +1727,8 @@ bailout:
 #endif /* !WINDOWS */
 
   if (total_problems) {
-    print("Total %" PRIu64 " error%s detected, elapsed %.3f seconds.\n",
-          total_problems, (total_problems > 1) ? "s are" : " is", elapsed);
+    print("Total %u error%s detected, elapsed %.3f seconds.\n", total_problems,
+          (total_problems > 1) ? "s are" : " is", elapsed);
     if (problems_meta || problems_maindb || problems_freedb)
       return EXIT_FAILURE_CHECK_MAJOR;
     return EXIT_FAILURE_CHECK_MINOR;
