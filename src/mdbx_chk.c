@@ -112,7 +112,7 @@ struct problem {
 };
 
 struct problem *problems_list;
-uint64_t total_problems;
+uint64_t total_problems, data_tree_problems, gc_tree_problems;
 
 static void MDBX_PRINTF_ARGS(1, 2) print(const char *msg, ...) {
   if (!quiet) {
@@ -299,14 +299,20 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
                      const size_t nentries, const size_t payload_bytes,
                      const size_t header_bytes, const size_t unused_bytes) {
   (void)ctx;
+  const bool is_gc_tree = dbi_name_or_tag == MDBX_PGWALK_GC;
   if (deep > 42) {
     problem_add("deep", deep, "too large", nullptr);
+    data_tree_problems += !is_gc_tree;
+    gc_tree_problems += is_gc_tree;
     return MDBX_CORRUPTED /* avoid infinite loop/recursion */;
   }
 
   walk_dbi_t *dbi = pagemap_lookup_dbi(dbi_name_or_tag, false);
-  if (!dbi)
+  if (!dbi) {
+    data_tree_problems += !is_gc_tree;
+    gc_tree_problems += is_gc_tree;
     return MDBX_ENOMEM;
+  }
 
   const size_t page_bytes = payload_bytes + header_bytes + unused_bytes;
   walk.pgcount += pgnumber;
@@ -319,13 +325,19 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
                 (unsigned)pagetype, deep);
     pagetype_caption = "unknown";
     dbi->pages.other += pgnumber;
+    data_tree_problems += !is_gc_tree;
+    gc_tree_problems += is_gc_tree;
     break;
   case MDBX_page_broken:
     pagetype_caption = "broken";
     dbi->pages.other += pgnumber;
+    data_tree_problems += !is_gc_tree;
+    gc_tree_problems += is_gc_tree;
     break;
   case MDBX_subpage_broken:
     pagetype_caption = "broken-subpage";
+    data_tree_problems += !is_gc_tree;
+    gc_tree_problems += is_gc_tree;
     break;
   case MDBX_page_meta:
     pagetype_caption = "meta";
@@ -375,17 +387,21 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
     bool already_used = false;
     for (unsigned n = 0; n < pgnumber; ++n) {
       uint64_t spanpgno = pgno + n;
-      if (spanpgno >= alloc_pages)
+      if (spanpgno >= alloc_pages) {
         problem_add("page", spanpgno, "wrong page-no",
                     "%s-page: %" PRIu64 " > %" PRIu64 ", deep %i",
                     pagetype_caption, spanpgno, alloc_pages, deep);
-      else if (walk.pagemap[spanpgno]) {
+        data_tree_problems += !is_gc_tree;
+        gc_tree_problems += is_gc_tree;
+      } else if (walk.pagemap[spanpgno]) {
         walk_dbi_t *coll_dbi = &walk.dbi[walk.pagemap[spanpgno] - 1];
         problem_add("page", spanpgno,
                     (branch && coll_dbi == dbi) ? "loop" : "already used",
                     "%s-page: by %s, deep %i", pagetype_caption, coll_dbi->name,
                     deep);
         already_used = true;
+        data_tree_problems += !is_gc_tree;
+        gc_tree_problems += is_gc_tree;
       } else {
         walk.pagemap[spanpgno] = (short)(dbi - walk.dbi + 1);
         dbi->pages.total += 1;
@@ -399,18 +415,26 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
 
   if (MDBX_IS_ERROR(err)) {
     problem_add("page", pgno, "invalid/corrupted", "%s-page", pagetype_caption);
+    data_tree_problems += !is_gc_tree;
+    gc_tree_problems += is_gc_tree;
   } else {
-    if (unused_bytes > page_size)
+    if (unused_bytes > page_size) {
       problem_add("page", pgno, "illegal unused-bytes",
                   "%s-page: %u < %" PRIuPTR " < %u", pagetype_caption, 0,
                   unused_bytes, envinfo.mi_dxb_pagesize);
+      data_tree_problems += !is_gc_tree;
+      gc_tree_problems += is_gc_tree;
+    }
 
     if (header_bytes < (int)sizeof(long) ||
-        (size_t)header_bytes >= envinfo.mi_dxb_pagesize - sizeof(long))
+        (size_t)header_bytes >= envinfo.mi_dxb_pagesize - sizeof(long)) {
       problem_add("page", pgno, "illegal header-length",
                   "%s-page: %" PRIuPTR " < %" PRIuPTR " < %" PRIuPTR,
                   pagetype_caption, sizeof(long), header_bytes,
                   envinfo.mi_dxb_pagesize - sizeof(long));
+      data_tree_problems += !is_gc_tree;
+      gc_tree_problems += is_gc_tree;
+    }
     if (payload_bytes < 1) {
       if (nentries > 1) {
         problem_add("page", pgno, "zero size-of-entry",
@@ -420,12 +444,16 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
           // LY: hush a misuse error
           page_bytes = page_size;
         } */
+        data_tree_problems += !is_gc_tree;
+        gc_tree_problems += is_gc_tree;
       } else {
         problem_add("page", pgno, "empty",
                     "%s-page: payload %" PRIuPTR " bytes, %" PRIuPTR
                     " entries, deep %i",
                     pagetype_caption, payload_bytes, nentries, deep);
         dbi->pages.empty += 1;
+        data_tree_problems += !is_gc_tree;
+        gc_tree_problems += is_gc_tree;
       }
     }
 
@@ -438,6 +466,8 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
                     payload_bytes, unused_bytes, deep);
         if (page_size > page_bytes)
           dbi->lost_bytes += page_size - page_bytes;
+        data_tree_problems += !is_gc_tree;
+        gc_tree_problems += is_gc_tree;
       } else {
         dbi->payload_bytes += payload_bytes + header_bytes;
         walk.total_payload_bytes += payload_bytes + header_bytes;
@@ -1558,8 +1588,19 @@ int main(int argc, char *argv[]) {
 
   if (!verbose)
     print("Iterating DBIs...\n");
-  problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
-  problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb, false);
+  if (data_tree_problems) {
+    print("Skip processing %s since tree is corrupted (%" PRIu64 " problems)\n",
+          "@MAIN", data_tree_problems);
+    problems_maindb = data_tree_problems;
+  } else
+    problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
+
+  if (gc_tree_problems) {
+    print("Skip processing %s since tree is corrupted (%" PRIu64 " problems)\n",
+          "@GC", gc_tree_problems);
+    problems_freedb = gc_tree_problems;
+  } else
+    problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb, false);
 
   if (verbose) {
     uint64_t value = envinfo.mi_mapsize / envinfo.mi_dxb_pagesize;
