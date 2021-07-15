@@ -184,17 +184,17 @@ clean:
 	@echo '  REMOVE ...'
 	$(QUIET)rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist \
-		config.h src/config.h src/version.c *.tar* buildflags_tag
+		config.h src/config.h src/version.c *.tar* buildflags.tag
 
 MDBX_BUILD_FLAGS =$(strip $(MDBX_BUILD_OPTIONS) $(CXXSTD) $(CFLAGS) $(LDFLAGS) $(LIBS))
 check_buildflags_tag:
-	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat buildflags_tag 2>&1)" ]; then \
+	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat buildflags.tag 2>&1)" ]; then \
 		echo -n "  CLEAN for build with specified flags..." && \
 		$(MAKE) -s clean >/dev/null && echo " Ok" && \
-		echo '$(MDBX_BUILD_FLAGS)' > buildflags_tag; \
+		echo '$(MDBX_BUILD_FLAGS)' > buildflags.tag; \
 	fi
 
-buildflags_tag: check_buildflags_tag
+buildflags.tag: check_buildflags_tag
 
 libmdbx.a: mdbx-static.o mdbx++-static.o
 	@echo '  AR $@'
@@ -212,10 +212,10 @@ ifeq ($(wildcard mdbx.c),mdbx.c)
 # Amalgamated source code, i.e. distributed after `make dist`
 MAN_SRCDIR := man1/
 
-config.h: buildflags_tag mdbx.c $(lastword $(MAKEFILE_LIST))
+config.h: buildflags.tag mdbx.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
-	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat buildflags_tag)\"" \
+	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat buildflags.tag)\"" \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell (LC_ALL=C $(CC) --version || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	) >$@
@@ -420,10 +420,10 @@ src/version.c: src/version.c.in $(lastword $(MAKEFILE_LIST)) $(git_DIR)/HEAD $(g
 		-e "s|\$${MDBX_VERSION_REVISION}|$(MDBX_GIT_REVISION)|" \
 	src/version.c.in >$@
 
-src/config.h: buildflags_tag src/version.c $(lastword $(MAKEFILE_LIST))
+src/config.h: buildflags.tag src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)(echo '#define MDBX_BUILD_TIMESTAMP "$(MDBX_BUILD_TIMESTAMP)"' \
-	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat buildflags_tag)\"" \
+	&& echo "#define MDBX_BUILD_FLAGS \"$$(cat buildflags.tag)\"" \
 	&& echo '#define MDBX_BUILD_COMPILER "$(shell (LC_ALL=C $(CC) --version || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_TARGET "$(shell set -o pipefail; (LC_ALL=C $(CC) -v 2>&1 | grep -i '^Target:' | cut -d ' ' -f 2- || (LC_ALL=C $(CC) --version | grep -qi e2k && echo E2K) || echo 'Please use GCC or CLANG compatible compiler') | head -1)"' \
 	&& echo '#define MDBX_BUILD_SOURCERY $(MDBX_BUILD_SOURCERY)' \

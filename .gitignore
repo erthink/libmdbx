@@ -39,4 +39,4 @@ dist/
 *.tar*
 docs/Doxyfile
 docs/html/
-buildflags_tag
+buildflags.tag
