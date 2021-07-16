@@ -20,6 +20,7 @@ cmake-build-*
 core
 mdbx_example
 libmdbx.creator.user
+CMakeLists.txt.user
 mdbx_chk
 mdbx_copy
 mdbx_drop
@@ -36,6 +37,8 @@ valgrind.*
 src/version.c
 src/config.h
 dist/
+dist-check/
+dist-checked.tag
 *.tar*
 docs/Doxyfile
 docs/html/
