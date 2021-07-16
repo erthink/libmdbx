@@ -4128,7 +4128,7 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
   size_t size = env->me_psize;
   if (likely(num == 1 && np)) {
     mdbx_assert(env, env->me_dp_reserve_len > 0);
-    ASAN_UNPOISON_MEMORY_REGION(np, size);
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(np, size);
     VALGRIND_MEMPOOL_ALLOC(env, np, size);
     VALGRIND_MAKE_MEM_DEFINED(&np->mp_next, sizeof(np->mp_next));
     env->me_dp_reserve = np->mp_next;
@@ -4164,13 +4164,14 @@ static MDBX_page *mdbx_page_malloc(MDBX_txn *txn, unsigned num) {
 /* Free a shadow dirty page */
 static void mdbx_dpage_free(MDBX_env *env, MDBX_page *dp, unsigned npages) {
   VALGRIND_MAKE_MEM_UNDEFINED(dp, pgno2bytes(env, npages));
-  ASAN_UNPOISON_MEMORY_REGION(dp, pgno2bytes(env, npages));
+  MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, pgno2bytes(env, npages));
   if (MDBX_DEBUG != 0 || unlikely(env->me_flags & MDBX_PAGEPERTURB))
     memset(dp, -1, pgno2bytes(env, npages));
   if (npages == 1 &&
       env->me_dp_reserve_len < env->me_options.dp_reserve_limit) {
-    ASAN_POISON_MEMORY_REGION((char *)dp + sizeof(dp->mp_next),
-                              pgno2bytes(env, npages) - sizeof(dp->mp_next));
+    MDBX_ASAN_POISON_MEMORY_REGION((char *)dp + sizeof(dp->mp_next),
+                                   pgno2bytes(env, npages) -
+                                       sizeof(dp->mp_next));
     dp->mp_next = env->me_dp_reserve;
     VALGRIND_MEMPOOL_FREE(env, dp);
     env->me_dp_reserve = dp;
@@ -4526,8 +4527,8 @@ static __inline void mdbx_page_wash(MDBX_txn *txn, const unsigned di,
   if (txn->mt_flags & MDBX_WRITEMAP) {
     VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
                                pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
-    ASAN_POISON_MEMORY_REGION(page_data(mp),
-                              pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
+    MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
+                                   pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
   } else
     mdbx_dpage_free(txn->mt_env, mp, npages);
 }
@@ -4756,8 +4757,8 @@ status_done:
         memset(page_data(mp), -1, txn->mt_env->me_psize - PAGEHDRSZ);
       VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
                                  txn->mt_env->me_psize - PAGEHDRSZ);
-      ASAN_POISON_MEMORY_REGION(page_data(mp),
-                                txn->mt_env->me_psize - PAGEHDRSZ);
+      MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
+                                     txn->mt_env->me_psize - PAGEHDRSZ);
       return MDBX_SUCCESS;
     }
 
@@ -4786,8 +4787,9 @@ status_done:
       if (!(txn->mt_flags & MDBX_WRITEMAP)) {
         VALGRIND_MAKE_MEM_NOACCESS(page_data(pgno2page(txn->mt_env, pgno)),
                                    pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
-        ASAN_POISON_MEMORY_REGION(page_data(pgno2page(txn->mt_env, pgno)),
-                                  pgno2bytes(txn->mt_env, npages) - PAGEHDRSZ);
+        MDBX_ASAN_POISON_MEMORY_REGION(page_data(pgno2page(txn->mt_env, pgno)),
+                                       pgno2bytes(txn->mt_env, npages) -
+                                           PAGEHDRSZ);
       }
     }
   skip_invalidate:
@@ -4910,8 +4912,8 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
   else {
     VALGRIND_MAKE_MEM_DEFINED(txn->mt_env->me_map + ctx->iov_off,
                               ctx->iov_bytes);
-    ASAN_UNPOISON_MEMORY_REGION(txn->mt_env->me_map + ctx->iov_off,
-                                ctx->iov_bytes);
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(txn->mt_env->me_map + ctx->iov_off,
+                                     ctx->iov_bytes);
   }
 
   for (unsigned i = 0; i < ctx->iov_items; i++)
@@ -6257,7 +6259,8 @@ __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
       mdbx_tassert(txn, ret.page->mp_pgno < txn->mt_next_pgno);
       mdbx_ensure(env, ret.page->mp_pgno >= NUM_METAS);
       VALGRIND_MAKE_MEM_UNDEFINED(page_data(ret.page), page_space(txn->mt_env));
-      ASAN_UNPOISON_MEMORY_REGION(page_data(ret.page), page_space(txn->mt_env));
+      MDBX_ASAN_UNPOISON_MEMORY_REGION(page_data(ret.page),
+                                       page_space(txn->mt_env));
       ret.page->mp_txnid = txn->mt_front;
       ret.err = MDBX_SUCCESS;
       return ret;
@@ -6651,7 +6654,7 @@ done:
     ret.page = pgno2page(env, pgno);
     /* LY: reset no-access flag from mdbx_page_loose() */
     VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
-    ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
   } else {
     if (unlikely(!(ret.page = mdbx_page_malloc(txn, num)))) {
       ret.err = MDBX_ENOMEM;
@@ -7201,8 +7204,8 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
     if (env->me_poison_edge < txn->mt_next_pgno)
       env->me_poison_edge = txn->mt_next_pgno;
     VALGRIND_MAKE_MEM_DEFINED(env->me_map, pgno2bytes(env, txn->mt_next_pgno));
-    ASAN_UNPOISON_MEMORY_REGION(env->me_map,
-                                pgno2bytes(env, txn->mt_next_pgno));
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(env->me_map,
+                                     pgno2bytes(env, txn->mt_next_pgno));
     /* don't touch more, it should be already poisoned */
   } else { /* transaction end */
     bool should_unlock = false;
@@ -7230,8 +7233,8 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
       env->me_poison_edge = last;
       VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, last),
                                  pgno2bytes(env, edge - last));
-      ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, last),
-                                pgno2bytes(env, edge - last));
+      MDBX_ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, last),
+                                     pgno2bytes(env, edge - last));
     }
     if (should_unlock)
       mdbx_txn_unlock(env);
@@ -10554,8 +10557,9 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       env->me_poison_edge = largest_pgno;
       VALGRIND_MAKE_MEM_NOACCESS(env->me_map + pgno2bytes(env, largest_pgno),
                                  pgno2bytes(env, edge - largest_pgno));
-      ASAN_POISON_MEMORY_REGION(env->me_map + pgno2bytes(env, largest_pgno),
-                                pgno2bytes(env, edge - largest_pgno));
+      MDBX_ASAN_POISON_MEMORY_REGION(env->me_map +
+                                         pgno2bytes(env, largest_pgno),
+                                     pgno2bytes(env, edge - largest_pgno));
     }
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 #if MDBX_ENABLE_MADVISE &&                                                     \
@@ -11641,8 +11645,8 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
   if (env->me_dxb_mmap.filesize > used_bytes) {
     VALGRIND_MAKE_MEM_NOACCESS(env->me_map + used_bytes,
                                env->me_dxb_mmap.filesize - used_bytes);
-    ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
-                              env->me_dxb_mmap.filesize - used_bytes);
+    MDBX_ASAN_POISON_MEMORY_REGION(env->me_map + used_bytes,
+                                   env->me_dxb_mmap.filesize - used_bytes);
   }
   env->me_poison_edge = bytes2pgno(env, env->me_dxb_mmap.filesize);
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
@@ -12825,7 +12829,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 #endif /* MDBX_LOCKING */
 
   while ((dp = env->me_dp_reserve) != NULL) {
-    ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
     VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
     env->me_dp_reserve = dp->mp_next;
     mdbx_free(dp);
@@ -21759,7 +21763,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       while (env->me_dp_reserve_len > env->me_options.dp_reserve_limit) {
         mdbx_assert(env, env->me_dp_reserve != NULL);
         MDBX_page *dp = env->me_dp_reserve;
-        ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
+        MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
         VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
         env->me_dp_reserve = dp->mp_next;
         VALGRIND_MEMPOOL_FREE(env, dp);

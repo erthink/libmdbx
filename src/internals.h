@@ -1646,3 +1646,17 @@ MDBX_MAYBE_UNUSED static void static_checks(void) {
 #ifdef __cplusplus
 }
 #endif
+
+#define MDBX_ASAN_POISON_MEMORY_REGION(addr, size)                             \
+  do {                                                                         \
+    mdbx_trace("POISON_MEMORY_REGION(%p, %zu) at %u", (void *)(addr),          \
+               (size_t)(size), __LINE__);                                      \
+    ASAN_POISON_MEMORY_REGION(addr, size);                                     \
+  } while (0)
+
+#define MDBX_ASAN_UNPOISON_MEMORY_REGION(addr, size)                           \
+  do {                                                                         \
+    mdbx_trace("UNPOISON_MEMORY_REGION(%p, %zu) at %u", (void *)(addr),        \
+               (size_t)(size), __LINE__);                                      \
+    ASAN_UNPOISON_MEMORY_REGION(addr, size);                                   \
+  } while (0)
