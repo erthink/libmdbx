@@ -22283,9 +22283,11 @@ __dll_export
 #ifdef __SANITIZE_ADDRESS__
 LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {
   return "symbolize=1:allow_addr2line=1:"
-#ifdef _DEBUG
+#if MDBX_DEBUG
          "debug=1:"
-#endif /* _DEBUG */
+         "verbosity=2:"
+#endif /* MDBX_DEBUG */
+         "log_threads=1:"
          "report_globals=1:"
          "replace_str=1:replace_intrin=1:"
          "malloc_context_size=9:"
