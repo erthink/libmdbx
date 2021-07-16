@@ -17151,8 +17151,15 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
         break;
       }
 
+      const size_t dsize = node_ds(node);
+      const char *const data = node_data(node);
       if (node_flags(node) & F_BIGDATA) {
-        const size_t dsize = node_ds(node);
+        if (unlikely(end_of_page < data + sizeof(pgno_t))) {
+          rc = bad_page(
+              mp, "node-%s(%u of %u, %zu bytes) beyond (%zu) page-end\n",
+              "bigdata-pgno", i, nkeys, dsize, data + dsize - end_of_page);
+          continue;
+        }
         if ((options & C_COPYING) == 0) {
           if (unlikely(dsize <= mc->mc_dbx->md_vlen_min ||
                        dsize > mc->mc_dbx->md_vlen_max))
@@ -17180,12 +17187,10 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
         continue;
       }
 
-      const size_t dsize = node_ds(node);
-      const char *const data = node_data(node);
       if (unlikely(end_of_page < data + dsize)) {
-        rc = bad_page(mp,
-                      "node-data(%u of %u, %zu bytes) beyond (%zu) page-end\n",
-                      i, nkeys, dsize, data + dsize - end_of_page);
+        rc =
+            bad_page(mp, "node-%s(%u of %u, %zu bytes) beyond (%zu) page-end\n",
+                     "data", i, nkeys, dsize, data + dsize - end_of_page);
         continue;
       }
 
