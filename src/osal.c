@@ -2330,12 +2330,16 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
         0x03 /* SystemTmeOfDayInformation */, &buf.SysTimeOfDayInfo,
         sizeof(buf.SysTimeOfDayInfo), &len);
     if (NT_SUCCESS(status) &&
-        len >= offsetof(union buf, SysTimeOfDayInfoHacked.BootTime) +
-                   sizeof(buf.SysTimeOfDayInfoHacked.BootTime) &&
+        len >= offsetof(union buf, SysTimeOfDayInfoHacked.BootTimeBias) +
+                   sizeof(buf.SysTimeOfDayInfoHacked.BootTimeBias) &&
         buf.SysTimeOfDayInfoHacked.BootTime.QuadPart) {
-      bootid_collect(&bin, &buf.SysTimeOfDayInfoHacked.BootTime,
-                     sizeof(buf.SysTimeOfDayInfoHacked.BootTime));
-      got_boottime = true;
+      const uint64_t UnbiasedBootTime =
+          buf.SysTimeOfDayInfoHacked.BootTime.QuadPart -
+          buf.SysTimeOfDayInfoHacked.BootTimeBias;
+      if (UnbiasedBootTime) {
+        bootid_collect(&bin, &UnbiasedBootTime, sizeof(UnbiasedBootTime));
+        got_boottime = true;
+      }
     }
 
     if (!got_boottime) {
