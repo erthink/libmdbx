@@ -837,8 +837,9 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       bad_data = true;
     }
 
-    if (prev_key.iov_base && !bad_data) {
-      if ((flags & MDBX_DUPFIXED) && prev_data.iov_len != data.iov_len) {
+    if (prev_key.iov_base) {
+      if (prev_data.iov_base && !bad_data && (flags & MDBX_DUPFIXED) &&
+          prev_data.iov_len != data.iov_len) {
         problem_add("entry", record_count, "different data length",
                     "%" PRIuPTR " != %" PRIuPTR, prev_data.iov_len,
                     data.iov_len);
@@ -851,11 +852,11 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
           ++dups;
           if ((flags & MDBX_DUPSORT) == 0) {
             problem_add("entry", record_count, "duplicated entries", nullptr);
-            if (data.iov_len == prev_data.iov_len &&
+            if (prev_data.iov_base && data.iov_len == prev_data.iov_len &&
                 memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0) {
               problem_add("entry", record_count, "complete duplicate", nullptr);
             }
-          } else if (!bad_data) {
+          } else if (!bad_data && prev_data.iov_base) {
             cmp = mdbx_dcmp(txn, dbi_handle, &data, &prev_data);
             if (cmp == 0) {
               problem_add("entry", record_count, "complete duplicate", nullptr);
@@ -868,11 +869,6 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
           problem_add("entry", record_count, "wrong order of entries", nullptr);
         }
       }
-    } else if (verbose) {
-      if (flags & MDBX_INTEGERKEY)
-        print(" - fixed key-size %" PRIuPTR "\n", key.iov_len);
-      if (flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED))
-        print(" - fixed data-size %" PRIuPTR "\n", data.iov_len);
     }
 
     if (handler) {
@@ -885,10 +881,17 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     key_bytes += key.iov_len;
     data_bytes += data.iov_len;
 
-    if (!bad_key)
+    if (!bad_key) {
+      if (verbose && (flags & MDBX_INTEGERKEY) && !prev_key.iov_base)
+        print(" - fixed key-size %" PRIuPTR "\n", key.iov_len);
       prev_key = key;
-    if (!bad_data)
+    }
+    if (!bad_data) {
+      if (verbose && (flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
+          !prev_data.iov_base)
+        print(" - fixed data-size %" PRIuPTR "\n", data.iov_len);
       prev_data = data;
+    }
     rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT);
   }
   if (rc != MDBX_NOTFOUND)
