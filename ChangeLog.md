@@ -11,7 +11,6 @@ ChangeLog
  - [Migration guide from LMDB to MDBX](https://github.com/erthink/libmdbx/issues/199).
  - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://github.com/erthink/libmdbx/issues/193).
  - [Large/Overflow pages accounting for dirty-room](https://github.com/erthink/libmdbx/issues/192).
- - [C++ Buffer issue](https://github.com/erthink/libmdbx/issues/191).
  - [Support for RAW devices](https://github.com/erthink/libmdbx/issues/124).
  - [Test framework issue](https://github.com/erthink/libmdbx/issues/127).
  - [Support MessagePack for Keys & Values](https://github.com/erthink/libmdbx/issues/115).
@@ -23,14 +22,25 @@ Acknowledgements:
 
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for reporting bugs.
+ - [Lionel Debroux](https://github.com/debrouxl) for fuzzing tests and reporting bugs.
 
-New features:
+New features, extensions and improvements:
 
  - [Allow to predefine/override `MDBX_BUILD_TIMESTAMP` for builds reproducibility](https://github.com/erthink/libmdbx/issues/201).
+ - Added options support for `long-stochastic` script.
+ - Avoided `MDBX_TXN_FULL` error for large transactions when possible.
+ - The `MDBX_READERS_LIMIT` increased to `32767`.
+ - Raise `MDBX_TOO_LARGE` under Valgrind/ASAN if being opened DB is 100 larger than RAM (to avoid hangs and OOM).
+ - Minimized the size of poisoned/unpoisoned regions to avoid Valgrind/ASAN stuck.
+ - Added more workarounds for QEMU for testing builds for 32-bit platforms, Alpha and Sparc architectures.
+ - `mdbx_chk` now skips iteration & checking of DB' records if corresponding page-tree is corrupted (to avoid `SIGSEGV`, ASAN failures, etc).
+ - Added more checks for [rare/fuzzing corruption cases](https://github.com/erthink/libmdbx/issues/217).
 
 Backward compatibility break:
 
  - Use file `VERSION.txt` for version information instead of `VERSION` to avoid collision with `#include <version>`.
+ - Rename `slice::from/to_FOO_bytes()` to `slice::envisage_from/to_FOO_length()'.
+ - Rename `MDBX_TEST_EXTRA` make's variable to `MDBX_SMOKE_EXTRA`.
 
 Fixes:
 
@@ -40,6 +50,12 @@ Fixes:
  - Fixed [false-negative `mdbx_cursor_eof()` result](https://github.com/erthink/libmdbx/issues/207).
  - Fixed [`make install` with non-GNU `install` utility (OSX, BSD)](https://github.com/erthink/libmdbx/issues/208).
  - Fixed [installation by `CMake` in special cases by complete use `GNUInstallDirs`'s variables](https://github.com/erthink/libmdbx/issues/209).
+ - Fixed [C++ Buffer issue with `std::string` and alignment](https://github.com/erthink/libmdbx/issues/191).
+ - Fixed `safe64_reset()` for platforms without atomic 64-bit compare-and-swap.
+ - Fixed hang/shutdown on big-endian platforms without `__cxa_thread_atexit()`.
+ - Fixed [using bad meta-pages if DB was partially/recoverable corrupted](https://github.com/erthink/libmdbx/issues/217).
+ - Fixed extra `noexcept` for `buffer::&assign_reference()`.
+ - Fixed `bootid` generation on Windows for case of change system' time.
 
 
 ## v0.10.1 at 2021-06-01

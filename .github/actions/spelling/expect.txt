@@ -288,6 +288,8 @@ ddl
 deadread
 deadwrite
 debian
+Debroux
+debrouxl
 debruijn
 DECC
 declspec
