@@ -13666,7 +13666,11 @@ skip:
     return MDBX_CORRUPTED;
 
   if (IS_LEAF2(mp)) {
-    if (likely(key)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+      mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                 mp->mp_pgno);
+      return MDBX_CORRUPTED;
+    } else if (likely(key)) {
       key->iov_len = mc->mc_db->md_xsize;
       key->iov_base = page_leaf2key(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     }
@@ -13756,7 +13760,11 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     return MDBX_CORRUPTED;
 
   if (IS_LEAF2(mp)) {
-    if (likely(key)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+      mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                 mp->mp_pgno);
+      return MDBX_CORRUPTED;
+    } else if (likely(key)) {
       key->iov_len = mc->mc_db->md_xsize;
       key->iov_base = page_leaf2key(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     }
@@ -13974,11 +13982,17 @@ got_node:
   mc->mc_flags &= ~C_EOF;
 
   if (IS_LEAF2(mp)) {
-    if (op == MDBX_SET_RANGE || op == MDBX_SET_KEY) {
-      key->iov_len = mc->mc_db->md_xsize;
-      key->iov_base = page_leaf2key(mp, mc->mc_ki[mc->mc_top], key->iov_len);
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+      mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                 mp->mp_pgno);
+      ret.err = MDBX_CORRUPTED;
+    } else {
+      if (op == MDBX_SET_RANGE || op == MDBX_SET_KEY) {
+        key->iov_len = mc->mc_db->md_xsize;
+        key->iov_base = page_leaf2key(mp, mc->mc_ki[mc->mc_top], key->iov_len);
+      }
+      ret.err = MDBX_SUCCESS;
     }
-    ret.err = MDBX_SUCCESS;
     return ret;
   }
 
@@ -14081,7 +14095,11 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   mc->mc_ki[mc->mc_top] = 0;
 
   if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-    if (likely(key)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+      mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                 mc->mc_pg[mc->mc_top]->mp_pgno);
+      return MDBX_CORRUPTED;
+    } else if (likely(key)) {
       key->iov_len = mc->mc_db->md_xsize;
       key->iov_base = page_leaf2key(mc->mc_pg[mc->mc_top], 0, key->iov_len);
     }
@@ -14128,7 +14146,11 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   mc->mc_flags |= C_INITIALIZED | C_EOF;
 
   if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
-    if (likely(key)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+      mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                 mc->mc_pg[mc->mc_top]->mp_pgno);
+      return MDBX_CORRUPTED;
+    } else if (likely(key)) {
       key->iov_len = mc->mc_db->md_xsize;
       key->iov_base = page_leaf2key(mc->mc_pg[mc->mc_top],
                                     mc->mc_ki[mc->mc_top], key->iov_len);
@@ -14186,6 +14208,11 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
     rc = MDBX_SUCCESS;
     if (IS_LEAF2(mp)) {
+      if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+        mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                   mp->mp_pgno);
+        return MDBX_CORRUPTED;
+      }
       key->iov_len = mc->mc_db->md_xsize;
       key->iov_base = page_leaf2key(mp, mc->mc_ki[mc->mc_top], key->iov_len);
     } else {
@@ -15239,8 +15266,14 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   if (!MDBX_DISABLE_PAGECHECKS && unlikely(!IS_LEAF(mp)))
     return MDBX_CORRUPTED;
-  if (IS_LEAF2(mp))
+  if (IS_LEAF2(mp)) {
+    if (!MDBX_DISABLE_PAGECHECKS && unlikely((mc->mc_flags & C_SUB) == 0)) {
+      mdbx_error("unexpected LEAF2-page %" PRIaPGNO "for non-dupsort cursor",
+                 mp->mp_pgno);
+      return MDBX_CORRUPTED;
+    }
     goto del_key;
+  }
 
   MDBX_node *node = page_node(mp, mc->mc_ki[mc->mc_top]);
   if (F_ISSET(node_flags(node), F_DUPDATA)) {
@@ -17065,6 +17098,10 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
     if (unlikely(mp->mp_pgno + mp->mp_pages > mc->mc_txn->mt_next_pgno))
       return bad_page(mp, "overflow page beyond (%u) next-pgno\n",
                       mp->mp_pgno + mp->mp_pages);
+    if (unlikely(mc->mc_db->md_flags & MDBX_DUPSORT))
+      return bad_page(mp,
+                      "unexpected overflow-page for dupsort db (flags 0x%x)\n",
+                      mc->mc_db->md_flags);
     return MDBX_SUCCESS;
   }
 
@@ -17073,6 +17110,9 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
     if (unlikely(nkeys < 2 && IS_BRANCH(mp)))
       rc = bad_page(mp, "branch-page nkey (%u) < 2\n", nkeys);
   }
+  if (IS_LEAF2(mp) && unlikely((mc->mc_flags & C_SUB) == 0))
+    rc = bad_page(mp, "unexpected leaf2-page (db flags 0x%x)\n",
+                  mc->mc_db->md_flags);
 
   MDBX_val here, prev = {0, 0};
   for (unsigned i = 0; i < nkeys; ++i) {
