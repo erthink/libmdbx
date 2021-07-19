@@ -3461,7 +3461,19 @@ LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
 /** \brief A callback function used to compare two keys in a database
  * \ingroup c_crud
  * \see mdbx_cmp() \see mdbx_get_keycmp()
- * \see mdbx_get_datacmp \see mdbx_dcmp() */
+ * \see mdbx_get_datacmp \see mdbx_dcmp()
+ *
+ * \anchor avoid_custom_comparators
+ * It is recommend not using custom comparison functions, but instead
+ * converting the keys to one of the forms that are suitable for built-in
+ * comparators (for instance take look to the \ref value2key).
+ * The reasons to not using custom comparators are:
+ *   - The order of records could not be validated without your code.
+ *     So `mdbx_chk` utility will reports "wrong order" errors
+ *     and the `-i` option is required to ignore ones.
+ *   - A records could not be ordered or sorted without your code.
+ *     So mdbx_load utility should be used with `-a` option to preserve
+ *     input data order. */
 typedef int(MDBX_cmp_func)(const MDBX_val *a,
                            const MDBX_val *b) MDBX_CXX17_NOEXCEPT;
 
@@ -3538,16 +3550,7 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a,
  *
  * For \ref mdbx_dbi_open_ex() additional arguments allow you to set custom
  * comparison functions for keys and values (for multimaps).
- * However, I recommend not using custom comparison functions, but instead
- * converting the keys to one of the forms that are suitable for built-in
- * comparators (for instance take look to the \ref value2key).
- * The reasons to not using custom comparators are:
- *   - The order of records could not be validated without your code.
- *     So `mdbx_chk` utility will reports "wrong order" errors
- *     and the `-i` option is required to ignore ones.
- *   - A records could not be ordered or sorted without your code.
- *     So mdbx_load utility should be used with `-a` option to preserve
- *     input data order.
+ * \see avoid_custom_comparators
  *
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
@@ -3564,8 +3567,10 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a,
 LIBMDBX_API int mdbx_dbi_open(MDBX_txn *txn, const char *name,
                               MDBX_db_flags_t flags, MDBX_dbi *dbi);
 
-/** \deprecated Please avoid using custom comparators
- *              and use mdbx_dbi_open() instead.
+/** \deprecated Please
+ * \ref avoid_custom_comparators "avoid using custom comparators" and use
+ * \ref mdbx_dbi_open() instead.
+ *
  * \ingroup c_dbi
  *
  * \param [in] txn    transaction handle returned by \ref mdbx_txn_begin().
@@ -3581,7 +3586,9 @@ MDBX_DEPRECATED LIBMDBX_API int
 mdbx_dbi_open_ex(MDBX_txn *txn, const char *name, MDBX_db_flags_t flags,
                  MDBX_dbi *dbi, MDBX_cmp_func *keycmp, MDBX_cmp_func *datacmp);
 
-/** \defgroup value2key Value-to-Key functions to avoid custom comparators
+/** \defgroup value2key Value-to-Key functions
+ * \brief Value-to-Key functions to
+ * \ref avoid_custom_comparators "avoid using custom comparators"
  * \see key2value
  * @{
  *
@@ -3616,7 +3623,9 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32,
 }
 /** @} */
 
-/** \defgroup key2value Key-to-Value functions to avoid custom comparators
+/** \defgroup key2value Key-to-Value functions
+ * \brief Key-to-Value functions to
+ * \ref avoid_custom_comparators "avoid using custom comparators"
  * \see value2key
  * @{ */
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t
@@ -4552,6 +4561,7 @@ LIBMDBX_API int mdbx_dbi_sequence(MDBX_txn *txn, MDBX_dbi dbi, uint64_t *result,
 
 /** \brief Compare two keys according to a particular database.
  * \ingroup c_crud
+ * \see MDBX_cmp_func
  *
  * This returns a comparison as if the two data items were keys in the
  * specified database.
@@ -4576,6 +4586,7 @@ mdbx_get_keycmp(MDBX_db_flags_t flags);
 
 /** \brief Compare two data items according to a particular database.
  * \ingroup c_crud
+ * \see MDBX_cmp_func
  *
  * This returns a comparison as if the two items were data items of the
  * specified database.
