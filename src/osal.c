@@ -2266,7 +2266,7 @@ __cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
     if (mdbx_RegGetValue(HKEY_LOCAL_MACHINE, HKLM_MicrosoftCryptography,
                          "MachineGuid", &buf.MachineGuid,
                          &len) == ERROR_SUCCESS &&
-        len > 42 && len < sizeof(buf))
+        len < sizeof(buf))
       got_machineid = bootid_parse_uuid(&bin, &buf.MachineGuid, len);
 
     if (!got_machineid) {
