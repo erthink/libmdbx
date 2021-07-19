@@ -18,15 +18,17 @@ while [ -n "$1" ]
 do
   case "$1" in
   --help)
-    echo "--multi"
-    echo "--single"
-    echo "--with-valgrind"
-    echo "--skip-make"
-    echo "--from NN"
-    echo "--upto NN"
-    echo "--loops NN"
-    echo "--dir PATH"
-    echo "--db-upto-mb NN"
+    echo "--multi                Engage multi-process test scenario (default)"
+    echo "--single               Execute series of single-process tests (for QEMU, etc)"
+    echo "--with-valgrind        Run tests under Valgrind's memcheck tool"
+    echo "--skip-make            Don't (re)build libmdbx and test's executable"
+    echo "--from NN              Start iterating from the NN ops per test case"
+    echo "--upto NN              Don't run tests with more than NN ops per test case"
+    echo "--loops NN             Stop after the NN loops"
+    echo "--dir PATH             Specifies directory for test DB and other files (it will be cleared)"
+    echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
+    echo "--help                 Print this usage help and exit"
+    exit -2
   ;;
   --multi)
     LIST=basic
