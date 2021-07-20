@@ -310,6 +310,7 @@ const struct option_verb mode_bits[] = {
     {"lifo", unsigned(MDBX_LIFORECLAIM)},
     {"perturb", unsigned(MDBX_PAGEPERTURB)},
     {"accede", unsigned(MDBX_ACCEDE)},
+    {"exclusive", unsigned(MDBX_EXCLUSIVE)},
     {nullptr, 0}};
 
 const struct option_verb table_bits[] = {

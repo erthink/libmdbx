@@ -92,6 +92,8 @@ MDBX_NORETURN void usage(void) {
       "  --mode={[+-]FLAG}[,[+-]FLAG]...\n"
       "    nosubdir       == MDBX_NOSUBDIR\n"
       "    rdonly         == MDBX_RDONLY\n"
+      "    exclusive      == MDBX_EXCLUSIVE\n"
+      "    accede         == MDBX_ACCEDE\n"
       "    nometasync     == MDBX_NOMETASYNC\n"
       "    lifo           == MDBX_LIFORECLAIM\n"
       "    coalesce       == MDBX_COALESCE\n"
