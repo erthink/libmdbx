@@ -107,6 +107,7 @@ help:
 	@echo "  make smoke               - fast smoke test"
 	@echo "  make test                - basic test"
 	@echo "  make check               - smoke test with amalgamation and installation checking"
+	@echo "  make long-test           - execute long test which runs for several weeks, or until you interrupt it"
 	@echo "  make memcheck            - build with Valgrind's and smoke test with memcheck tool"
 	@echo "  make test-valgrind       - build with Valgrind's and basic test with memcheck tool"
 	@echo "  make test-asan           - build with AddressSanitizer and basic test"
