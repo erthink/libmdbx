@@ -91,7 +91,7 @@ _MithrilDB_ is a rightly relevant name.
     - [Improvements beyond LMDB](#improvements-beyond-lmdb)
     - [History & Acknowledgments](#history)
 - [Usage](#usage)
-    - [Building](#building)
+    - [Building and Testing](#building-and-testing)
     - [API description](#api-description)
     - [Bindings](#bindings)
 - [Performance comparison](#performance-comparison)
@@ -371,7 +371,7 @@ The amalgamated source code could be created from the original clone of git
 repository on Linux by executing `make dist`. As a result, the desired
 set of files will be formed in the `dist` subdirectory.
 
-## Building
+## Building and Testing
 
 Both amalgamated and original source code provides build through the use
 [CMake](https://cmake.org/) or [GNU
@@ -388,6 +388,36 @@ and build options respectively.
 So just using CMake or GNU Make in your habitual manner and feel free to
 fill an issue or make pull request in the case something will be
 unexpected or broken down.
+
+### Testing
+The amalgamated source code does not contain any tests for or several reasons.
+Please read [the explanation](https://github.com/erthink/libmdbx/issues/214#issuecomment-870717981) and don't ask to alter this.
+So for testing _libmdbx_ itself you need a full source code, i.e. the clone of a git repository, there is no option.
+
+The full source code of _libmdbx_ has a [`test` subdirectory](https://github.com/erthink/libmdbx/tree/master/test) with minimalistic test "framework".
+Actually yonder is a source code of the `mdbx_test` – console utility which has a set of command-line options that allow construct and run a reasonable enough test scenarios.
+This test utility is intended for _libmdbx_'s developers for testing library itself, but not for use by users.
+Therefore, only basic information is provided:
+
+   - There are few CRUD-based test cases (hill, TTL, nested, append, jitter, etc),
+     which can be combined to test the concurrent operations within shared database in a multi-processes environment.
+     This is the `basic` test scenario.
+   - The `Makefile` provide several self-described targets for testing: `smoke`, `test`, `check`, `memcheck`, `test-valgrind`,
+     `test-asan`, `test-leak`, `test-ubsan`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `smoke-fault`, `smoke-singleprocess`,
+     `test-singleprocess`, 'long-test'. Please run `make --help` if doubt.
+   - In addition to the `mdbx_test` utility, there is the script [`long_stochastic.sh`](https://github.com/erthink/libmdbx/blob/master/test/long_stochastic.sh),
+     which calls `mdbx_test` by going through set of modes and options, with gradually increasing the number of operations and the size of transactions.
+     This script is used for mostly of all automatic testing, including `Makefile` targets and Continuous Integration.
+   - Brief information of available command-line options is available by `--help`.
+     However, you should dive into source code to get all, there is no option.
+
+Anyway, no matter how thoroughly the _libmdbx_ is tested, you should rely only on your own tests for a few reasons:
+
+1. Mostly of all use cases are unique.
+   So it is no warranty that your use case was properly tested, even the _libmdbx_'s tests engages stochastic approach.
+2. If there are problems, then your test on the one hand will help to verify whether you are using _libmdbx_ correctly,
+   on the other hand it will allow to reproduce the problem and insure against regression in a future.
+3. Actually you should rely on than you checked by yourself or take a risk.
 
 ### Common important details
 
