@@ -167,9 +167,11 @@ transaction journal. No crash recovery needed. No maintenance is required.
 2. _libmdbx_ is based on [B+ tree](https://en.wikipedia.org/wiki/B%2B_tree), so access to database pages is mostly random.
 Thus SSDs provide a significant performance boost over spinning disks for large databases.
 
-3. _libmdbx_ uses [shadow paging](https://en.wikipedia.org/wiki/Shadow_paging) instead of [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging). Thus syncing data to disk might be a bottleneck for write intensive workload.
+3. _libmdbx_ uses [shadow paging](https://en.wikipedia.org/wiki/Shadow_paging) instead of [WAL](https://en.wikipedia.org/wiki/Write-ahead_logging).
+Thus syncing data to disk might be a bottleneck for write intensive workload.
 
-4. _libmdbx_ uses [copy-on-write](https://en.wikipedia.org/wiki/Copy-on-write) for [snapshot isolation](https://en.wikipedia.org/wiki/Snapshot_isolation) during updates, but read transactions prevents recycling an old retired/freed pages, since it read ones. Thus altering of data during a parallel
+4. _libmdbx_ uses [copy-on-write](https://en.wikipedia.org/wiki/Copy-on-write) for [snapshot isolation](https://en.wikipedia.org/wiki/Snapshot_isolation) during updates,
+but read transactions prevents recycling an old retired/freed pages, since it read ones. Thus altering of data during a parallel
 long-lived read operation will increase the process work set, may exhaust entire free database space,
 the database can grow quickly, and result in performance degradation.
 Try to avoid long running read transactions.
@@ -391,13 +393,31 @@ unexpected or broken down.
 
 #### Build reproducibility
 By default _libmdbx_ track build time via `MDBX_BUILD_TIMESTAMP` build option and macro.
-So for a [reproducible builds](https://en.wikipedia.org/wiki/Reproducible_builds) you should predefine/override it to known fixed string value. For instance:
+So for a [reproducible builds](https://en.wikipedia.org/wiki/Reproducible_builds) you should predefine/override it to known fixed string value.
+For instance:
 
  - for reproducible build with make: `make MDBX_BUILD_TIMESTAMP=unknown ` ...
  - or during configure by CMake: `cmake -DMDBX_BUILD_TIMESTAMP:STRING=unknown ` ...
 
 Of course, in addition to this, your toolchain must ensure the reproducibility of builds.
 For more information please refer to [reproducible-builds.org](https://reproducible-builds.org/).
+
+#### Containers
+There are no special traits nor quirks if you use libmdbx ONLY inside the single container.
+But in a cross-container cases or with a host-container(s) mix the two major things MUST be
+guaranteed:
+
+1. Coherence of memory mapping content and unified page cache inside OS kernel for host and all container(s) operated with a some DB.
+Basically this means must be only a single physical copy of each memory mapped DB' page in the system memory.
+
+2. Uniqueness of PID values and/or a common space for ones:
+    - for POSIX systems: PID uniqueness for all processes operated with a DB.
+      I.e. the `--pid=host` is required for run DB-aware processes inside Docker,
+      either without host interaction a `--pid=container:<name|id>` with the same name/id.
+    - for non-POSIX (i.e. Windows) systems: inter-visibility of processes handles.
+      I.e. the `OpenProcess(SYNCHRONIZE, ..., PID)` must return reasonable error,
+      including `ERROR_ACCESS_DENIED`,
+      but not the `ERROR_INVALID_PARAMETER` as for an invalid/non-existent PID.
 
 #### DSO/DLL unloading and destructors of Thread-Local-Storage objects
 When building _libmdbx_ as a shared library or use static _libmdbx_ as a
@@ -622,7 +642,9 @@ records.
  execution time of transactions. Each interval shows minimal and maximum
  execution time, cross marks standard deviation.
 
-**1,000,000 transactions in async-write mode**. In case of a crash all data is consistent and conforms to the one of last successful transactions, but lost transaction count is much higher than in
+**1,000,000 transactions in async-write mode**.
+In case of a crash all data is consistent and conforms to the one of last successful transactions,
+but lost transaction count is much higher than in
 lazy-write mode. All DB engines in this mode do as little writes as
 possible on persistent storage. _libmdbx_ uses
 [msync(MS_ASYNC)](https://linux.die.net/man/2/msync) in this mode.
