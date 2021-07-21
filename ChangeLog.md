@@ -5,6 +5,8 @@ ChangeLog
 
 ### TODO
 
+ - [Engage an "overlapped I/O" on Windows](https://github.com/erthink/libmdbx/issues/224).
+ - [Simple careful mode for working with corrupted DB](https://github.com/erthink/libmdbx/issues/223).
  - [Move most of `mdbx_chk` functional to the library API](https://github.com/erthink/libmdbx/issues/204).
  - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOTLS` option](https://github.com/erthink/libmdbx/issues/210).
  - [More flexible support of asynchronous runtime/framework(s)](https://github.com/erthink/libmdbx/issues/200).
