@@ -497,6 +497,7 @@ FCXX
 fd
 fdatasync
 featuredarticles
+fedotov
 FEEDNAME
 feof
 ferror
@@ -784,6 +785,7 @@ klen
 KMGTPEZY
 knipp
 kp
+kriszyp
 ks
 ksize
 kstat
@@ -840,6 +842,7 @@ LLV
 llvm
 lmb
 lmdb
+lmdbx
 LMEM
 LNK
 lnps
@@ -885,6 +888,7 @@ MACROFILE
 MADV
 madvise
 mahlonsmith
+mailto
 maindb
 mainpage
 maj
@@ -1118,6 +1122,7 @@ notls
 notracking
 NOWAIT
 npages
+npmjs
 npos
 npr
 nproc
@@ -1478,6 +1483,7 @@ semop
 sems
 sendfile
 sepkey
+sergey
 SETALL
 SETFD
 setlen
@@ -1962,3 +1968,4 @@ zi
 ZLIB
 zu
 zx
+Zyp

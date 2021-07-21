@@ -25,6 +25,9 @@ Acknowledgements:
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
  - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for reporting bugs.
  - [Lionel Debroux](https://github.com/debrouxl) for fuzzing tests and reporting bugs.
+ - [Sergey Fedotov](https://github.com/SergeyFromHell/) for [`node-mdbx` NodeJS bindings](https://www.npmjs.com/package/node-mdbx).
+ - [Kris Zyp](https://github.com/kriszyp) for [`lmdbx-store` NodeJS bindings](https://github.com/kriszyp/lmdbx-store).
+ - [Noel Kuntze](https://github.com/Thermi) for [draft Python bindings](https://github.com/erthink/libmdbx/commits/python-bindings).
 
 New features, extensions and improvements:
 
