@@ -17086,7 +17086,7 @@ retry:
 __cold static int mdbx_page_check(MDBX_cursor *const mc,
                                   const MDBX_page *const mp, unsigned options) {
   DKBUF;
-  options |= mc->mc_flags & (C_COPYING | C_UPDATING | C_RETIRING | C_SKIPORD);
+  options |= mc->mc_flags;
   MDBX_env *const env = mc->mc_txn->mt_env;
   const unsigned nkeys = page_numkeys(mp);
   char *const end_of_page = (char *)mp + env->me_psize;
@@ -17098,7 +17098,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
     if (unlikely(mp->mp_pgno + mp->mp_pages > mc->mc_txn->mt_next_pgno))
       return bad_page(mp, "overflow page beyond (%u) next-pgno\n",
                       mp->mp_pgno + mp->mp_pages);
-    if (unlikely(mc->mc_db->md_flags & MDBX_DUPSORT))
+    if (unlikely((options & (C_SUB | C_COPYING)) == C_SUB))
       return bad_page(mp,
                       "unexpected overflow-page for dupsort db (flags 0x%x)\n",
                       mc->mc_db->md_flags);
@@ -17110,7 +17110,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
     if (unlikely(nkeys < 2 && IS_BRANCH(mp)))
       rc = bad_page(mp, "branch-page nkey (%u) < 2\n", nkeys);
   }
-  if (IS_LEAF2(mp) && unlikely((mc->mc_flags & C_SUB) == 0))
+  if (IS_LEAF2(mp) && unlikely((options & (C_SUB | C_COPYING)) == 0))
     rc = bad_page(mp, "unexpected leaf2-page (db flags 0x%x)\n",
                   mc->mc_db->md_flags);
 
