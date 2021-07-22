@@ -243,23 +243,25 @@ void maker::seek2end(serial_t &serial) const {
   serial = actor_params::serial_mask(mapping.width) - 1;
 }
 
-bool maker::increment(serial_t &serial, int delta) const {
+bool maker::increment(serial_t &serial, int64_t delta) const {
   if (serial > actor_params::serial_mask(mapping.width)) {
     log_extra("keygen-increment: %" PRIu64 " > %" PRIu64 ", overflow", serial,
               actor_params::serial_mask(mapping.width));
     return false;
   }
 
-  serial_t target = serial + (int64_t)delta;
+  serial_t target = serial + delta;
   if (target > actor_params::serial_mask(mapping.width) ||
       ((delta > 0) ? target < serial : target > serial)) {
-    log_extra("keygen-increment: %" PRIu64 "%-d => %" PRIu64 ", overflow",
+    log_extra("keygen-increment: %" PRIu64 "%-" PRId64 " => %" PRIu64
+              ", overflow",
               serial, delta, target);
     return false;
   }
 
-  log_extra("keygen-increment: %" PRIu64 "%-d => %" PRIu64 ", continue", serial,
-            delta, target);
+  log_extra("keygen-increment: %" PRIu64 "%-" PRId64 " => %" PRIu64
+            ", continue",
+            serial, delta, target);
   serial = target;
   return true;
 }

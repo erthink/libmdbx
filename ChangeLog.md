@@ -14,7 +14,6 @@ ChangeLog
  - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://github.com/erthink/libmdbx/issues/193).
  - [Large/Overflow pages accounting for dirty-room](https://github.com/erthink/libmdbx/issues/192).
  - [Support for RAW devices](https://github.com/erthink/libmdbx/issues/124).
- - [Test framework issue](https://github.com/erthink/libmdbx/issues/127).
  - [Support MessagePack for Keys & Values](https://github.com/erthink/libmdbx/issues/115).
  - [Engage new terminology](https://github.com/erthink/libmdbx/issues/137).
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
@@ -61,6 +60,7 @@ Fixes:
  - Fixed [using bad meta-pages if DB was partially/recoverable corrupted](https://github.com/erthink/libmdbx/issues/217).
  - Fixed extra `noexcept` for `buffer::&assign_reference()`.
  - Fixed `bootid` generation on Windows for case of change system' time.
+ - Fixed [test framework keygen-related issue](https://github.com/erthink/libmdbx/issues/127).
 
 
 ## v0.10.1 at 2021-06-01

@@ -130,8 +130,8 @@ public:
   bool is_unordered() const;
   void seek2end(serial_t &serial) const;
 
-  bool increment(serial_t &serial, int delta) const;
-  bool increment_key_part(serial_t &serial, int delta,
+  bool increment(serial_t &serial, int64_t delta) const;
+  bool increment_key_part(serial_t &serial, int64_t delta,
                           bool reset_value_part = true) const {
     if (reset_value_part) {
       serial_t value_part_bits = ((serial_t(1) << mapping.split) - 1);
@@ -139,7 +139,7 @@ public:
       if (delta >= 0)
         serial &= ~value_part_bits;
     }
-    return increment(serial, delta << mapping.split);
+    return increment(serial, int64_t(uint64_t(delta) << mapping.split));
   }
 };
 
