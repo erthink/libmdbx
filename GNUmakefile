@@ -191,7 +191,7 @@ MDBX_BUILD_FLAGS =$(strip $(MDBX_BUILD_OPTIONS) $(CXXSTD) $(CFLAGS) $(LDFLAGS) $
 check_buildflags_tag:
 	$(QUIET)if [ "$(MDBX_BUILD_FLAGS)" != "$$(cat buildflags.tag 2>&1)" ]; then \
 		echo -n "  CLEAN for build with specified flags..." && \
-		$(MAKE) -s clean >/dev/null && echo " Ok" && \
+		$(MAKE) IOARENA=false CXXSTD= -s clean >/dev/null && echo " Ok" && \
 		echo '$(MDBX_BUILD_FLAGS)' > buildflags.tag; \
 	fi
 
@@ -295,7 +295,7 @@ MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list --count HEAD ^`git tag
 MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
 MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
-MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) CXXSTD= -s src/version.c >/dev/null && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || (echo 'Please install openssl or sha256sum or shasum' >&2 && echo sha256sum_is_no_available))_$(MDBX_VERSION_SUFFIX)
+MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) IOARENA=false CXXSTD= -s src/version.c >/dev/null && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || (echo 'Please install openssl or sha256sum or shasum' >&2 && echo sha256sum_is_no_available))_$(MDBX_VERSION_SUFFIX)
 MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_SUFFIX)
 
 # Extra options mdbx_test utility
@@ -359,19 +359,19 @@ memcheck: build-test
 gcc-analyzer:
 	@echo '  RE-BUILD with `-fanalyzer` option...'
 	@echo "NOTE: There a lot of false-positive warnings at 2020-05-01 by pre-release GCC-10 (20200328, Red Hat 10.0.1-0.11)"
-	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Og -fanalyzer -Wno-error" build-test
 
 test-ubsan:
 	@echo '  RE-TEST with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
 
 test-asan:
 	@echo '  RE-TEST with `-fsanitize=address` option...'
-	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Os -fsanitize=address" test
 
 test-leak:
 	@echo '  RE-TEST with `-fsanitize=leak` option...'
-	$(QUIET)$(MAKE) CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-fsanitize=leak" test
 
 mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 	@echo '  CC+LD $@'
@@ -499,7 +499,7 @@ dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
 	$(QUIET)rm -rf $@ \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) -C dist-check >dist-check.log 2>dist-check.err || (cat dist-check.err && exit 1)) \
+	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) IOARENA=false CXXSTD= -C dist-check >dist-check.log 2>dist-check.err || (cat dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See dist-check.log and dist-check.err" >&2; exit 2) && echo " Ok" \
 	&& rm dist/@tmp-shared_internals.inc
 
@@ -605,7 +605,7 @@ cross-gcc:
 	@echo "FOR INSTANCE: apt install g++-aarch64-linux-gnu g++-alpha-linux-gnu g++-arm-linux-gnueabihf g++-hppa-linux-gnu g++-mips-linux-gnu g++-mips64-linux-gnuabi64 g++-powerpc-linux-gnu g++-powerpc64-linux-gnu g++-s390x-linux-gnu g++-sh4-linux-gnu g++-sparc64-linux-gnu"
 	$(QUIET)for CC in $(CROSS_LIST_NOQEMU) $(CROSS_LIST); do \
 		echo "===================== $$CC"; \
-		$(MAKE) CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) all || exit $$?; \
+		$(MAKE) IOARENA=false CXXSTD= clean && CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static $(MAKE) IOARENA=false all || exit $$?; \
 	done
 
 # Unfortunately qemu don't provide robust support for futexes.
@@ -618,9 +618,9 @@ cross-qemu:
 	@echo "	2) apt install binfmt-support qemu-user-static qemu-user qemu-system-arm qemu-system-mips qemu-system-misc qemu-system-ppc qemu-system-sparc"
 	$(QUIET)for CC in $(CROSS_LIST); do \
 		echo "===================== $$CC + qemu"; \
-		$(MAKE) CXXSTD= clean && \
+		$(MAKE) IOARENA=false CXXSTD= clean && \
 			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
-			$(MAKE) test-singleprocess || exit $$?; \
+			$(MAKE) IOARENA=false test-singleprocess || exit $$?; \
 	done
 
 #< dist-cutoff-end
@@ -654,15 +654,17 @@ uninstall:
 ################################################################################
 # Benchmarking by ioarena
 
-IOARENA ?= $(shell \
+ifeq ($(origin IOARENA),undefined)
+IOARENA := $(shell \
   (test -x ../ioarena/@BUILD/src/ioarena && echo ../ioarena/@BUILD/src/ioarena) || \
   (test -x ../../@BUILD/src/ioarena && echo ../../@BUILD/src/ioarena) || \
   (test -x ../../src/ioarena && echo ../../src/ioarena) || which ioarena 2>&- || \
-  echo '$(TIP) Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2)
+  (echo false && echo '$(TIP) Clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring directory for availability of benchmarking.' >&2))
+endif
 NN	?= 25000000
 BENCH_CRUD_MODE ?= nosync
 
-ifneq ($(wildcard $(IOARENA)),)
+ifneq ($(wildcard $(IOARENA)),false)
 
 .PHONY: bench bench-clean bench-couple re-bench bench-quartet bench-triplet
 
