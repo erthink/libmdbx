@@ -361,6 +361,12 @@ typedef mode_t mdbx_mode_t;
 #define LIBMDBX_INLINE_API(TYPE, NAME, ARGS) static __inline TYPE NAME ARGS
 #endif /* LIBMDBX_INLINE_API */
 
+/** \brief Converts a macro argument into a string constant. */
+#ifndef MDBX_STRINGIFY
+#define MDBX_STRINGIFY_HELPER(x) #x
+#define MDBX_STRINGIFY(x) MDBX_STRINGIFY_HELPER(x)
+#endif /* MDBX_STRINGIFY */
+
 /*----------------------------------------------------------------------------*/
 
 #ifndef __cplusplus

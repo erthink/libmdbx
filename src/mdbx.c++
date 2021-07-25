@@ -344,7 +344,7 @@ __cold const char *error::what() const noexcept {
   switch (code()) {
 #define ERROR_CASE(CODE)                                                       \
   case CODE:                                                                   \
-    return STRINGIFY(CODE)
+    return MDBX_STRINGIFY(CODE)
     ERROR_CASE(MDBX_ENODATA);
     ERROR_CASE(MDBX_EINVAL);
     ERROR_CASE(MDBX_EACCESS);

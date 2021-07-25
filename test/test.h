@@ -130,8 +130,8 @@ public:
 };
 
 #define REGISTER_TESTCASE(NAME)                                                \
-  static registry::factory<testcase_##NAME> gRegister_##NAME(ac_##NAME,        \
-                                                             STRINGIFY(NAME))
+  static registry::factory<testcase_##NAME> gRegister_##NAME(                  \
+      ac_##NAME, MDBX_STRINGIFY(NAME))
 
 class testcase {
 protected:

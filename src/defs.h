@@ -304,11 +304,6 @@
 #   define ARRAY_END(array) (&array[ARRAY_LENGTH(array)])
 #endif /* ARRAY_END */
 
-#ifndef STRINGIFY
-#   define STRINGIFY_HELPER(x) #x
-#   define STRINGIFY(x) STRINGIFY_HELPER(x)
-#endif /* STRINGIFY */
-
 #define CONCAT(a,b) a##b
 #define XCONCAT(a,b) CONCAT(a,b)
 
@@ -326,7 +321,7 @@
 
 #define MDBX_STRING_TETRAD(str) MDBX_TETRAD(str[0], str[1], str[2], str[3])
 
-#define FIXME "FIXME: " __FILE__ ", " STRINGIFY(__LINE__)
+#define FIXME "FIXME: " __FILE__ ", " MDBX_STRINGIFY(__LINE__)
 
 #ifndef STATIC_ASSERT_MSG
 #   if defined(static_assert)
