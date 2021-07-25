@@ -289,7 +289,7 @@ reformat:
 	fi
 
 MAN_SRCDIR := src/man1/
-ALLOY_DEPS := $(wildcard src/*)
+ALLOY_DEPS := $(shell git ls-files src/)
 git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
 MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags 2>&- | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list --count HEAD ^`git tag --sort=-version:refname 2>&- | sed -n '/^\(v[0-9]\+\.[0-9]\+\.[0-9]\+\)*/p;q' || echo 'git_tag_with_sort_was_failed'` 2>&- || echo 'Please use non-obsolete git version')
@@ -498,11 +498,10 @@ release-assets: libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz libmdbx-sources-$(
 
 dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
-	$(QUIET)rm -rf $@ \
+	$(QUIET)rm -rf $@ dist/@tmp-shared_internals.inc \
 	&& if grep -R "define xMDBX_ALLOY" dist | grep -q MDBX_BUILD_SOURCERY; then echo "sed output is WRONG!" >&2; exit 2; fi \
-	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) IOARENA=false CXXSTD= -C dist-check >dist-check.log 2>dist-check.err || (cat dist-check.err && exit 1)) \
-	&& touch $@ || (echo " FAILED! See dist-check.log and dist-check.err" >&2; exit 2) && echo " Ok" \
-	&& rm dist/@tmp-shared_internals.inc
+	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) IOARENA=false CXXSTD=$(CXXSTD) -C dist-check >dist-check.log 2>dist-check.err || (cat dist-check.err && exit 1)) \
+	&& touch $@ || (echo " FAILED! See dist-check.log and dist-check.err" >&2; exit 2) && echo " Ok"
 
 libmdbx-sources-$(MDBX_VERSION_SUFFIX).tar.gz: dist-checked.tag
 	@echo '  CREATE $@'
