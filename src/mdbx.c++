@@ -538,15 +538,14 @@ bool slice::is_printable(bool disable_utf8) const noexcept {
 
 //------------------------------------------------------------------------------
 
-char *slice::to_hex(char *__restrict dest, size_t dest_size, bool uppercase,
-                    unsigned wrap_width) const {
-  if (MDBX_UNLIKELY(envisage_to_hex_length(wrap_width) > dest_size))
+char *to_hex::write_bytes(char *__restrict dest, size_t dest_size) const {
+  if (MDBX_UNLIKELY(envisage_result_length() > dest_size))
     MDBX_CXX20_UNLIKELY throw_too_small_target_buffer();
 
-  auto src = byte_ptr();
+  auto src = source.byte_ptr();
   const char alphabase = (uppercase ? 'A' : 'a') - 10;
   auto line = dest;
-  for (const auto end = src + length(); src != end; ++src) {
+  for (const auto end = source.end_byte_ptr(); src != end; ++src) {
     const int8_t hi = *src >> 4;
     const int8_t lo = *src & 15;
     dest[0] = char(alphabase + hi + (((hi - 10) >> 7) & -7));
@@ -560,16 +559,15 @@ char *slice::to_hex(char *__restrict dest, size_t dest_size, bool uppercase,
   return dest;
 }
 
-byte *slice::from_hex(byte *__restrict dest, size_t dest_size,
-                      bool ignore_spaces) const {
-  if (MDBX_UNLIKELY(length() % 2 && !ignore_spaces))
+char *from_hex::write_bytes(char *__restrict dest, size_t dest_size) const {
+  if (MDBX_UNLIKELY(source.length() % 2 && !ignore_spaces))
     MDBX_CXX20_UNLIKELY throw std::domain_error(
         "mdbx::from_hex:: odd length of hexadecimal string");
-  if (MDBX_UNLIKELY(envisage_from_hex_length() > dest_size))
+  if (MDBX_UNLIKELY(envisage_result_length() > dest_size))
     MDBX_CXX20_UNLIKELY throw_too_small_target_buffer();
 
-  auto src = byte_ptr();
-  for (auto left = length(); left > 0;) {
+  auto src = source.byte_ptr();
+  for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') &&
         MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
@@ -596,13 +594,13 @@ byte *slice::from_hex(byte *__restrict dest, size_t dest_size,
   return dest;
 }
 
-bool slice::is_hex(bool ignore_spaces) const noexcept {
-  if (MDBX_UNLIKELY(length() % 2 && !ignore_spaces))
-    MDBX_CXX20_UNLIKELY return false;
+bool from_hex::is_erroneous() const noexcept {
+  if (MDBX_UNLIKELY(source.length() % 2 && !ignore_spaces))
+    MDBX_CXX20_UNLIKELY return true;
 
   bool got = false;
-  auto src = byte_ptr();
-  for (auto left = length(); left > 0;) {
+  auto src = source.byte_ptr();
+  for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') &&
         MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
@@ -611,13 +609,13 @@ bool slice::is_hex(bool ignore_spaces) const noexcept {
     }
 
     if (MDBX_UNLIKELY(left < 1 || !isxdigit(src[0]) || !isxdigit(src[1])))
-      MDBX_CXX20_UNLIKELY return false;
+      MDBX_CXX20_UNLIKELY return true;
 
     got = true;
     src += 2;
     left -= 2;
   }
-  return got;
+  return !got;
 }
 
 //------------------------------------------------------------------------------
@@ -665,13 +663,12 @@ static inline char b58_8to11(uint64_t &v) noexcept {
   return b58_alphabet[i];
 }
 
-char *slice::to_base58(char *__restrict dest, size_t dest_size,
-                       unsigned wrap_width) const {
-  if (MDBX_UNLIKELY(envisage_to_base58_length(wrap_width) > dest_size))
+char *to_base58::write_bytes(char *__restrict dest, size_t dest_size) const {
+  if (MDBX_UNLIKELY(envisage_result_length() > dest_size))
     MDBX_CXX20_UNLIKELY throw_too_small_target_buffer();
 
-  auto src = byte_ptr();
-  size_t left = length();
+  auto src = source.byte_ptr();
+  size_t left = source.length();
   auto line = dest;
   while (MDBX_LIKELY(left > 7)) {
     left -= 8;
@@ -748,13 +745,12 @@ static inline signed char b58_11to8(uint64_t &v, const byte c) noexcept {
   return m;
 }
 
-byte *slice::from_base58(byte *__restrict dest, size_t dest_size,
-                         bool ignore_spaces) const {
-  if (MDBX_UNLIKELY(envisage_from_base58_length() > dest_size))
+char *from_base58::write_bytes(char *__restrict dest, size_t dest_size) const {
+  if (MDBX_UNLIKELY(envisage_result_length() > dest_size))
     MDBX_CXX20_UNLIKELY throw_too_small_target_buffer();
 
-  auto src = byte_ptr();
-  for (auto left = length(); left > 0;) {
+  auto src = source.byte_ptr();
+  for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(isspace(*src)) && ignore_spaces) {
       ++src;
       --left;
@@ -808,10 +804,10 @@ bailout:
   throw std::domain_error("mdbx::from_base58:: invalid base58 string");
 }
 
-bool slice::is_base58(bool ignore_spaces) const noexcept {
+bool from_base58::is_erroneous() const noexcept {
   bool got = false;
-  auto src = byte_ptr();
-  for (auto left = length(); left > 0;) {
+  auto src = source.byte_ptr();
+  for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') &&
         MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
@@ -824,7 +820,7 @@ bool slice::is_base58(bool ignore_spaces) const noexcept {
                          b58_map[src[3]] | b58_map[src[4]] | b58_map[src[5]] |
                          b58_map[src[6]] | b58_map[src[7]] | b58_map[src[8]] |
                          b58_map[src[9]] | b58_map[src[10]]) < 0))
-        return false;
+        MDBX_CXX20_UNLIKELY return true;
       src += 11;
       left -= 11;
       got = true;
@@ -837,12 +833,12 @@ bool slice::is_base58(bool ignore_spaces) const noexcept {
 
     do
       if (MDBX_UNLIKELY(b58_map[*src++] < 0))
-        MDBX_CXX20_UNLIKELY return false;
+        MDBX_CXX20_UNLIKELY return true;
     while (--left);
     got = true;
     break;
   }
-  return got;
+  return !got;
 }
 
 //------------------------------------------------------------------------------
@@ -861,13 +857,12 @@ static inline void b64_3to4(const byte x, const byte y, const byte z,
   dest[3] = alphabet[z & 0x3f];
 }
 
-char *slice::to_base64(char *__restrict dest, size_t dest_size,
-                       unsigned wrap_width) const {
-  if (MDBX_UNLIKELY(envisage_to_base64_length(wrap_width) > dest_size))
+char *to_base64::write_bytes(char *__restrict dest, size_t dest_size) const {
+  if (MDBX_UNLIKELY(envisage_result_length() > dest_size))
     MDBX_CXX20_UNLIKELY throw_too_small_target_buffer();
 
-  auto src = byte_ptr();
-  size_t left = length();
+  auto src = source.byte_ptr();
+  size_t left = source.length();
   auto line = dest;
   while (true) {
     switch (left) {
@@ -917,23 +912,22 @@ static const signed char b64_map[256] = {
 
 static inline signed char b64_4to3(signed char a, signed char b, signed char c,
                                    signed char d,
-                                   byte *__restrict dest) noexcept {
+                                   char *__restrict dest) noexcept {
   dest[0] = byte((a << 2) + ((b & 0x30) >> 4));
   dest[1] = byte(((b & 0xf) << 4) + ((c & 0x3c) >> 2));
   dest[2] = byte(((c & 0x3) << 6) + d);
   return a | b | c | d;
 }
 
-byte *slice::from_base64(byte *__restrict dest, size_t dest_size,
-                         bool ignore_spaces) const {
-  if (MDBX_UNLIKELY(length() % 4 && !ignore_spaces))
+char *from_base64::write_bytes(char *__restrict dest, size_t dest_size) const {
+  if (MDBX_UNLIKELY(source.length() % 4 && !ignore_spaces))
     MDBX_CXX20_UNLIKELY throw std::domain_error(
         "mdbx::from_base64:: odd length of base64 string");
-  if (MDBX_UNLIKELY(envisage_from_base64_length() > dest_size))
+  if (MDBX_UNLIKELY(envisage_result_length() > dest_size))
     MDBX_CXX20_UNLIKELY throw_too_small_target_buffer();
 
-  auto src = byte_ptr();
-  for (auto left = length(); left > 0;) {
+  auto src = source.byte_ptr();
+  for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') &&
         MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
@@ -963,13 +957,13 @@ byte *slice::from_base64(byte *__restrict dest, size_t dest_size,
   return dest;
 }
 
-bool slice::is_base64(bool ignore_spaces) const noexcept {
-  if (MDBX_UNLIKELY(length() % 4 && !ignore_spaces))
-    MDBX_CXX20_UNLIKELY return false;
+bool from_base64::is_erroneous() const noexcept {
+  if (MDBX_UNLIKELY(source.length() % 4 && !ignore_spaces))
+    MDBX_CXX20_UNLIKELY return true;
 
   bool got = false;
-  auto src = byte_ptr();
-  for (auto left = length(); left > 0;) {
+  auto src = source.byte_ptr();
+  for (auto left = source.length(); left > 0;) {
     if (MDBX_UNLIKELY(*src <= ' ') &&
         MDBX_LIKELY(ignore_spaces && isspace(*src))) {
       ++src;
@@ -984,14 +978,14 @@ bool slice::is_base64(bool ignore_spaces) const noexcept {
     if (MDBX_UNLIKELY((a | b | c | d) < 0))
       MDBX_CXX20_UNLIKELY {
         if (left == 4 && (a | b) >= 0 && d == EQ && (c >= 0 || c == d))
-          return true;
-        return false;
+          return false;
+        return true;
       }
     got = true;
     src += 4;
     left -= 4;
   }
-  return got;
+  return !got;
 }
 
 //------------------------------------------------------------------------------
@@ -1406,7 +1400,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out, const slice &it) {
     if (root.is_printable())
       (out << "\"").write(root.char_ptr(), root.length()) << "\"";
     else
-      out << root.base58_encode();
+      out << root.encode_base58();
     if (root.length() < it.length())
       out << "...";
   }
