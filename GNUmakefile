@@ -131,6 +131,7 @@ show-options:
 	@echo "  MDBX_BUILD_OPTIONS   = $(MDBX_BUILD_OPTIONS)"
 	@echo "  MDBX_BUILD_TIMESTAMP = $(MDBX_BUILD_TIMESTAMP)"
 	@echo '$(TIP) Use `make options` to listing available build options.'
+	@echo "  CC       =`which $(CC)` | `$(CC) --version | head -1`"
 	@echo "  CFLAGS   =$(CFLAGS)"
 	@echo "  CXXFLAGS =$(CXXFLAGS)"
 	@echo "  LDFLAGS  =$(LDFLAGS) $(LIBS) $(EXE_LDFLAGS)"
