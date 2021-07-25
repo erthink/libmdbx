@@ -460,8 +460,11 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* MDBX_PRINTF_ARGS */
 
-#if defined(DOXYGEN) || (__has_cpp_attribute(maybe_unused) &&                  \
-                         (defined(__cplusplus) || __STDC_VERSION__ > 202005L))
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cplusplus) && __has_cpp_attribute(maybe_unused) &&              \
+     __has_cpp_attribute(maybe_unused) >= 201603) ||                           \
+    (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                     \
+     __STDC_VERSION__ > 202005L)
 #define MDBX_MAYBE_UNUSED [[maybe_unused]]
 #elif defined(__GNUC__) || __has_attribute(__unused__)
 #define MDBX_MAYBE_UNUSED __attribute__((__unused__))
