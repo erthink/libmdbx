@@ -664,15 +664,21 @@ endif
 NN	?= 25000000
 BENCH_CRUD_MODE ?= nosync
 
-ifneq ($(wildcard $(IOARENA)),false)
-
-.PHONY: bench bench-clean bench-couple re-bench bench-quartet bench-triplet
-
 bench-clean:
 	@echo '  REMOVE bench-*.txt _ioarena/*'
 	$(QUIET)rm -rf bench-*.txt _ioarena/*
 
 re-bench: bench-clean bench
+
+ifeq ($(or $(IOARENA),false),false)
+bench bench-quartet bench-triplet bench-couple:
+	$(QUIET)echo 'The `ioarena` benchmark is required.' >&2 && \
+	echo 'Please clone and build the https://github.com/pmwkaa/ioarena.git within a neighbouring `ioarena` directory.' >&2 && \
+	false
+
+else
+
+.PHONY: bench bench-clean bench-couple re-bench bench-quartet bench-triplet
 
 define bench-rule
 bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
