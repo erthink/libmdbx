@@ -3858,7 +3858,14 @@ public:
   inline slice update_reserve(const slice &key, size_t value_length);
   inline value_result try_update_reserve(const slice &key, size_t value_length);
 
+  /// \brief Deletes data at current cursor position
   inline bool erase(bool whole_multivalue = false);
+
+  /// \brief Deletes data if provided key is found
+  inline bool erase(const slice &key, bool whole_multivalue = false);
+
+  /// \brief Deletes multivalue data if provided key / value is found
+  inline bool erase(const slice &key, const slice &value);
 };
 
 /// \brief Managed cursor.
@@ -4387,9 +4394,9 @@ MDBX_CXX14_CONSTEXPR intptr_t slice::compare_fast(const slice &a,
                                                   const slice &b) noexcept {
   const intptr_t diff = intptr_t(a.length()) - intptr_t(b.length());
   return diff ? diff
-              : MDBX_UNLIKELY(a.length() == 0 || a.data() == b.data())
-                    ? 0
-                    : memcmp(a.data(), b.data(), a.length());
+         : MDBX_UNLIKELY(a.length() == 0 || a.data() == b.data())
+             ? 0
+             : memcmp(a.data(), b.data(), a.length());
 }
 
 MDBX_CXX14_CONSTEXPR intptr_t
@@ -5732,6 +5739,16 @@ inline bool cursor::erase(bool whole_multivalue) {
   default:
     MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
+}
+
+inline bool cursor::erase(const slice &key, bool whole_multivalue) {
+  bool found = seek(key);
+  return found ? erase(whole_multivalue) : found;
+}
+
+inline bool cursor::erase(const slice &key, const slice &value) {
+  move_result data = find_multivalue(key, value, false);
+  return data.done ? erase() : data.done;
 }
 
 } // namespace mdbx
