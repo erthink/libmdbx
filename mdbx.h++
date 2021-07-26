@@ -3626,6 +3626,7 @@ public:
   inline value_result try_update_reserve(map_handle map, const slice &key,
                                          size_t value_length);
 
+  /// \brief Removes all values for given key.
   inline bool erase(map_handle map, const slice &key);
 
   /// \brief Removes the particular multi-value entry of the key.
@@ -3864,7 +3865,18 @@ public:
   inline slice update_reserve(const slice &key, size_t value_length);
   inline value_result try_update_reserve(const slice &key, size_t value_length);
 
+  /// \brief Removes single key-value pair or all multi-values at the current
+  /// cursor position.
   inline bool erase(bool whole_multivalue = false);
+
+  /// \brief Seeks and removes first value or whole multi-value of the given
+  /// key.
+  /// \return `True` if the key is found and a value(s) is removed.
+  inline bool erase(const slice &key, bool whole_multivalue = true);
+
+  /// \brief Seeks and removes the particular multi-value entry of the key.
+  /// \return `True` if the given key-value pair is found and removed.
+  inline bool erase(const slice &key, const slice &value);
 };
 
 /// \brief Managed cursor.
@@ -5738,6 +5750,16 @@ inline bool cursor::erase(bool whole_multivalue) {
   default:
     MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
+}
+
+inline bool cursor::erase(const slice &key, bool whole_multivalue) {
+  bool found = seek(key);
+  return found ? erase(whole_multivalue) : found;
+}
+
+inline bool cursor::erase(const slice &key, const slice &value) {
+  move_result data = find_multivalue(key, value, false);
+  return data.done ? erase() : data.done;
 }
 
 } // namespace mdbx
