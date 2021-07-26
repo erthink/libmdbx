@@ -192,7 +192,9 @@
 #endif /* MDBX_CXX20_UNLIKELY */
 
 #ifndef MDBX_CXX20_CONCEPT
-#if defined(DOXYGEN) || (defined(__cpp_concepts) && __cpp_concepts >= 201907L)
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
+     (!defined(__clang__) || __clang_major__ >= 12))
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) CONCEPT NAME
 #else
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) typename NAME
@@ -200,7 +202,9 @@
 #endif /* MDBX_CXX20_CONCEPT */
 
 #ifndef MDBX_ASSERT_CXX20_CONCEPT_SATISFIED
-#if defined(DOXYGEN) || (defined(__cpp_concepts) && __cpp_concepts >= 201907L)
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
+     (!defined(__clang__) || __clang_major__ >= 12))
 #define MDBX_ASSERT_CXX20_CONCEPT_SATISFIED(CONCEPT, TYPE)                     \
   static_assert(CONCEPT<TYPE>)
 #else
@@ -466,7 +470,9 @@ static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
                                          size_t bytes) noexcept;
 //------------------------------------------------------------------------------
 
-#if defined(DOXYGEN) || (defined(__cpp_concepts) && __cpp_concepts >= 201907L)
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
+     (!defined(__clang__) || __clang_major__ >= 12))
 
 template <typename T>
 concept MutableByteProducer = requires(T a, char array[42]) {
