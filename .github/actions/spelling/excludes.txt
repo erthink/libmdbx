@@ -8,3 +8,4 @@
 ^\.gitignore$
 ^\.travis\.yml$
 ^packages/buildroot/
+^CMakeSettings\.json$
