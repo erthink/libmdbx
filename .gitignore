@@ -15,6 +15,7 @@
 .idea
 .le.ini
 .vs/
+.vscode/
 cmake-build-*
 @*
 core
