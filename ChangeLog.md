@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## v0.10.2 (in development)
+## v0.10.3 (in development)
 
 ### TODO
 
@@ -18,6 +18,9 @@ ChangeLog
  - [Engage new terminology](https://github.com/erthink/libmdbx/issues/137).
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
+
+
+## v0.10.2 at 2021-07-26
 
 Acknowledgements:
 
@@ -45,6 +48,7 @@ Backward compatibility break:
  - Use file `VERSION.txt` for version information instead of `VERSION` to avoid collision with `#include <version>`.
  - Rename `slice::from/to_FOO_bytes()` to `slice::envisage_from/to_FOO_length()'.
  - Rename `MDBX_TEST_EXTRA` make's variable to `MDBX_SMOKE_EXTRA`.
+ - Some details of the C++ API have been changed for subsequent freezing.
 
 Fixes:
 

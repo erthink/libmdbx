@@ -192,7 +192,9 @@
 #endif /* MDBX_CXX20_UNLIKELY */
 
 #ifndef MDBX_CXX20_CONCEPT
-#if defined(DOXYGEN) || (defined(__cpp_concepts) && __cpp_concepts >= 201907L)
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
+     (!defined(__clang__) || __clang_major__ >= 12))
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) CONCEPT NAME
 #else
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) typename NAME
@@ -200,7 +202,9 @@
 #endif /* MDBX_CXX20_CONCEPT */
 
 #ifndef MDBX_ASSERT_CXX20_CONCEPT_SATISFIED
-#if defined(DOXYGEN) || (defined(__cpp_concepts) && __cpp_concepts >= 201907L)
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
+     (!defined(__clang__) || __clang_major__ >= 12))
 #define MDBX_ASSERT_CXX20_CONCEPT_SATISFIED(CONCEPT, TYPE)                     \
   static_assert(CONCEPT<TYPE>)
 #else
@@ -466,7 +470,9 @@ static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
                                          size_t bytes) noexcept;
 //------------------------------------------------------------------------------
 
-#if defined(DOXYGEN) || (defined(__cpp_concepts) && __cpp_concepts >= 201907L)
+#if defined(DOXYGEN) ||                                                        \
+    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
+     (!defined(__clang__) || __clang_major__ >= 12))
 
 template <typename T>
 concept MutableByteProducer = requires(T a, char array[42]) {
@@ -3620,6 +3626,7 @@ public:
   inline value_result try_update_reserve(map_handle map, const slice &key,
                                          size_t value_length);
 
+  /// \brief Removes all values for given key.
   inline bool erase(map_handle map, const slice &key);
 
   /// \brief Removes the particular multi-value entry of the key.
@@ -3858,13 +3865,17 @@ public:
   inline slice update_reserve(const slice &key, size_t value_length);
   inline value_result try_update_reserve(const slice &key, size_t value_length);
 
-  /// \brief Deletes data at current cursor position
+  /// \brief Removes single key-value pair or all multi-values at the current
+  /// cursor position.
   inline bool erase(bool whole_multivalue = false);
 
-  /// \brief Deletes data if provided key is found
-  inline bool erase(const slice &key, bool whole_multivalue = false);
+  /// \brief Seeks and removes first value or whole multi-value of the given
+  /// key.
+  /// \return `True` if the key is found and a value(s) is removed.
+  inline bool erase(const slice &key, bool whole_multivalue = true);
 
-  /// \brief Deletes multivalue data if provided key / value is found
+  /// \brief Seeks and removes the particular multi-value entry of the key.
+  /// \return `True` if the given key-value pair is found and removed.
   inline bool erase(const slice &key, const slice &value);
 };
 
