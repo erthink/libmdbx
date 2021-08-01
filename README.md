@@ -385,6 +385,12 @@ target platform. Obviously you need building tools itself, i.e. `git`,
 and `make options` are also available for listing existing targets
 and build options respectively.
 
+The only significant specificity is that git' tags are required
+to build from complete (not amalgamated) source codes.
+Executing **`git fetch --tags --force --prune`** is enough to get ones,
+or `git fetch --unshallow --tags --prune --force` after the Github's
+[`actions/checkout@v2`](https://github.com/actions/checkout) either set **`fetch-depth: 0`** for it.
+
 So just using CMake or GNU Make in your habitual manner and feel free to
 fill an issue or make pull request in the case something will be
 unexpected or broken down.
