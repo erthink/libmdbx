@@ -1,10 +1,9 @@
-From 7834ae8fc834f5f7b98d45703079cd94e5402ed6 Mon Sep 17 00:00:00 2001
+From 0c0df833879b3f815959c8bd9b6cc27cb9d71b9e Mon Sep 17 00:00:00 2001
 From: Leonid Yuriev <leo@yuriev.ru>
-Date: Fri, 27 Nov 2020 16:31:12 +0300
-Cc: Heiko Thiery <heiko.thiery@gmail.com>, Thomas Petazzoni <thomas.petazzoni@bootlin.com>, Leonid Yuriev <leo@yuriev.ru
-Subject: [PATCH v5 1/1] package/libmdbx: new package (library/database).
+Date: Tue, 3 Aug 2021 00:55:27 +0300
+Subject: [PATCH] package/libmdbx: new package (library/database).
 
-This patch adds libmdbx v0.9.2:
+This patch adds libmdbx v0.10.2:
  - libmdbx is one of the fastest compact embeddable key-value ACID database.
  - libmdbx has a specific set of properties and capabilities,
    focused on creating unique lightweight solutions.
@@ -13,44 +12,14 @@ This patch adds libmdbx v0.9.2:
  - https://github.com/erthink/libmdbx
 
 Signed-off-by: Leonid Yuriev <leo@yuriev.ru>
-
----
-Changes v1 -> v2:
-  - libmdbx version v0.8.2 -> v0.9.1 (released 2020-09-30)
-
-Changes v2 -> v3:
-  - removed outcommented stuff (suggested by Heiko Thiery).
-  - cleaned up and simplified the makefile (suggested by Heiko Thiery).
-  - added patch for C++ header installation.
-  - added patch with fix minor copy&paste typo.
-  - added patch with pthread workaround for buggy toolchain/cmake/buildroot.
-  - added patch for `pthread_yield()`.
-  - passed `utils/check-package package/libmdbx/*` (suggested by Heiko Thiery)
-  - passed `utils/test-pkg -a -p libmdbx`,
-    except w/o threads & w/o MMU (suggested by Heiko Thiery).
-
-Changes v3 -> v4:
-  - fix passing BR2_PACKAGE_LIBMDBX_TOOLS option to cmake.
-  - fix using `depend on` instead of `select`,
-    and add `comment` for C++ toolchain (suggested by Heiko Thiery).
-  - fix minor help typo.
-
-Changes v4 -> v5:
-  - libmdbx version v0.9.1 -> v0.9.2 (released 2020-11-27)
-  - dropped all patch since not needed.
-  - cosmetic changes (suggested by Thomas Petazzoni <thomas.petazzoni@bootlin.com>).
-  - added dependence of BR2_TOOLCHAIN_HAS_SYNC_4 (suggested by Thomas Petazzoni <thomas.petazzoni@bootlin.com>).
-  - added dependence of !BR2_TOOLCHAIN_HAS_GCC_BUG_64735 (suggested by Thomas Petazzoni <thomas.petazzoni@bootlin.com>).
-  - take in account the BR2_SHARED_STATIC_LIBS (suggested by Thomas Petazzoni <thomas.petazzoni@bootlin.com>).
-
-Signed-off-by: Leonid Yuriev <leo@yuriev.ru>
+Signed-off-by: Yann E. MORIN <yann.morin.1998@free.fr>
 ---
  DEVELOPERS                   |  3 +++
  package/Config.in            |  1 +
  package/libmdbx/Config.in    | 45 ++++++++++++++++++++++++++++++++++++
  package/libmdbx/libmdbx.hash |  5 ++++
- package/libmdbx/libmdbx.mk   | 33 ++++++++++++++++++++++++++
- 5 files changed, 87 insertions(+)
+ package/libmdbx/libmdbx.mk   | 42 +++++++++++++++++++++++++++++++++
+ 5 files changed, 96 insertions(+)
  create mode 100644 package/libmdbx/Config.in
  create mode 100644 package/libmdbx/libmdbx.hash
  create mode 100644 package/libmdbx/libmdbx.mk
@@ -134,28 +103,28 @@ index 0000000000..d13f73938f
 +		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
 new file mode 100644
-index 0000000000..0d3501f1d9
+index 0000000000..c8a28ada34
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,5 @@
 +# Hashes from: https://github.com/erthink/libmdbx/releases/
-+sha256  c35cc53d66d74ebfc86e39441ba26276541ac7892bf91dba1e70c83665a02767  libmdbx-amalgamated-0.9.2.tar.gz
++sha256  745555704df76626a6612ad0c6bc6b1a66bfab98b9245b07dfb82640aa46d6fa  libmdbx-amalgamated-0.10.2.tar.gz
 +
 +# Locally calculated
 +sha256  310fe25c858a9515fc8c8d7d1f24a67c9496f84a91e0a0e41ea9975b1371e569  LICENSE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
 new file mode 100644
-index 0000000000..f3720130ec
+index 0000000000..60c5148625
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.mk
-@@ -0,0 +1,33 @@
+@@ -0,0 +1,42 @@
 +################################################################################
 +#
 +# libmdbx
 +#
 +################################################################################
 +
-+LIBMDBX_VERSION = 0.9.2
++LIBMDBX_VERSION = 0.10.2
 +LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.gz
 +LIBMDBX_SITE = https://github.com/erthink/libmdbx/releases/download/v$(LIBMDBX_VERSION)
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
@@ -165,7 +134,12 @@ index 0000000000..f3720130ec
 +LIBMDBX_STRIP_COMPONENTS = 0
 +LIBMDBX_INSTALL_STAGING = YES
 +
-+LIBMDBX_CONF_OPTS = -DMDBX_INSTALL_MANPAGES=OFF -DBUILD_FOR_NATIVE_CPU=OFF \
++# Set CMAKE_BUILD_TYPE to Release to remove -Werror and avoid a build failure
++# with glibc < 2.12
++LIBMDBX_CONF_OPTS = \
++	-DCMAKE_BUILD_TYPE=Release \
++	-DMDBX_INSTALL_MANPAGES=OFF \
++	-DBUILD_FOR_NATIVE_CPU=OFF \
 +	-DMDBX_BUILD_CXX=$(if $(BR2_PACKAGE_LIBMDBX_CXX),ON,OFF) \
 +	-DMDBX_BUILD_TOOLS=$(if $(BR2_PACKAGE_LIBMDBX_TOOLS),ON,OFF)
 +
@@ -176,12 +150,16 @@ index 0000000000..f3720130ec
 +endif
 +
 +ifeq ($(BR2_SHARED_LIBS)$(BR2_SHARED_STATIC_LIBS),y)
-+LIBMDBX_CONF_OPTS += -DMDBX_BUILD_SHARED_LIBRARY=ON -DMDBX_LINK_TOOLS_NONSTATIC=ON
++LIBMDBX_CONF_OPTS += \
++	-DMDBX_BUILD_SHARED_LIBRARY=ON \
++	-DMDBX_LINK_TOOLS_NONSTATIC=ON
 +else
-+LIBMDBX_CONF_OPTS += -DMDBX_BUILD_SHARED_LIBRARY=OFF -DMDBX_LINK_TOOLS_NONSTATIC=OFF
++LIBMDBX_CONF_OPTS += \
++	-DMDBX_BUILD_SHARED_LIBRARY=OFF \
++	-DMDBX_LINK_TOOLS_NONSTATIC=OFF
 +endif
 +
 +$(eval $(cmake-package))
 -- 
-2.29.2
+2.32.0
 
