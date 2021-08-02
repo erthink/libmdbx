@@ -564,6 +564,7 @@ Bindings
 
 | Runtime |  Repo  | Author |
 | ------- | ------ | ------ |
+| Haskell | [libmdbx-hs](https://hackage.haskell.org/package/libmdbx) | [Francisco Vallarino](https://github.com/fjvallarino) |
 | Python (draft) | [python-bindings](https://github.com/erthink/libmdbx/commits/python-bindings) branch | [Noel Kuntze](https://github.com/Thermi)
 | NodeJS  | [lmdbx-store](https://github.com/kriszyp/lmdbx-store) | [Kris Zyp](https://github.com/kriszyp/)
 | NodeJS  | [node-mdbx](https://www.npmjs.com/package/node-mdbx/) | [Сергей Федотов](mailto:sergey.fedotov@corp.mail.ru) |

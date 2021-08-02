@@ -19,6 +19,10 @@ ChangeLog
  - Finalize C++ API (few typos and trivia bugs are still likely for now).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
+Acknowledgements:
+
+ - [Francisco Vallarino](https://github.com/fjvallarino) for [Haskell bindings for libmdbx](https://hackage.haskell.org/package/libmdbx).
+
 
 ## v0.10.2 at 2021-07-26
 

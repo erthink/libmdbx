@@ -520,6 +520,7 @@ Firefox
 firstvalue
 fixedpoint
 FIXME
+fjvallarino
 flagbit
 flg
 flipcoin
@@ -617,9 +618,11 @@ grep
 gtags
 gz
 gzip
+hackage
 HAGL
 hallvard
 hardcoded
+haskell
 HASSEMAPHORE
 hdiutil
 hdr
@@ -1835,6 +1838,7 @@ Vaefnrs
 valbool
 valgrind
 validator
+Vallarino
 valnum
 valsize
 valstr
