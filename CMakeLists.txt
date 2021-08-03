@@ -34,10 +34,14 @@
 ##  The Future will (be) Positive. Всё будет хорошо.
 ##
 
-cmake_minimum_required(VERSION 3.8.2)
+if(CMAKE_VERSION VERSION_LESS 3.12)
+  cmake_minimum_required(VERSION 3.8.2)
+else()
+  cmake_minimum_required(VERSION 3.12)
+endif()
 
 cmake_policy(PUSH)
-cmake_policy(VERSION 3.8.2)
+cmake_policy(VERSION ${CMAKE_MINIMUM_REQUIRED_VERSION})
 if(NOT CMAKE_VERSION VERSION_LESS 3.15)
   cmake_policy(SET CMP0091 NEW)
 endif()
