@@ -461,7 +461,8 @@ typedef mode_t mdbx_mode_t;
 #endif /* MDBX_PRINTF_ARGS */
 
 #if defined(DOXYGEN) ||                                                        \
-    (defined(__cplusplus) && __has_cpp_attribute(maybe_unused) &&              \
+    (defined(__cplusplus) && __cplusplus >= 201603 &&                          \
+     __has_cpp_attribute(maybe_unused) &&                                      \
      __has_cpp_attribute(maybe_unused) >= 201603) ||                           \
     (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                     \
      __STDC_VERSION__ > 202005L)
