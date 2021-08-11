@@ -17273,18 +17273,20 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
         break;
       case F_DUPDATA /* short sub-page */:
         if (unlikely(dsize <= PAGEHDRSZ)) {
-          rc = bad_page(mp, "invalid nested-page record size (%zu)\n", dsize);
+          rc = bad_page(mp, "invalid nested/sub-page record size (%zu)\n",
+                        dsize);
           continue;
         } else {
           const MDBX_page *const sp = (MDBX_page *)data;
           const char *const end_of_subpage = data + dsize;
           const int nsubkeys = page_numkeys(sp);
-          switch (sp->mp_flags) {
+          switch (sp->mp_flags & /* ignore legacy P_DIRTY flag */ ~0x10) {
           case P_LEAF | P_SUBP:
           case P_LEAF | P_LEAF2 | P_SUBP:
             break;
           default:
-            rc = bad_page(mp, "invalid nested-page flags (%u)\n", sp->mp_flags);
+            rc = bad_page(mp, "invalid nested/sub-page flags (0x%02x)\n",
+                          sp->mp_flags);
             continue;
           }
 
@@ -20545,7 +20547,7 @@ __cold static int mdbx_walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       size_t subalign_bytes = 0;
       MDBX_page_type_t subtype;
 
-      switch (sp->mp_flags) {
+      switch (sp->mp_flags & /* ignore legacy P_DIRTY flag */ ~0x10) {
       case P_LEAF | P_SUBP:
         subtype = MDBX_subpage_leaf;
         break;
