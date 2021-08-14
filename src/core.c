@@ -12908,25 +12908,26 @@ static int __hot cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
 /* Compare two items lexically */
 static int __hot cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
   if (a->iov_len == b->iov_len)
-    return memcmp(a->iov_base, b->iov_base, a->iov_len);
+    return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
 
   const int diff_len = (a->iov_len < b->iov_len) ? -1 : 1;
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-  int diff_data = memcmp(a->iov_base, b->iov_base, shortest);
+  int diff_data = shortest ? memcmp(a->iov_base, b->iov_base, shortest) : 0;
   return likely(diff_data) ? diff_data : diff_len;
 }
 
 /* Compare two items in reverse byte order */
 static int __hot cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
-  const uint8_t *pa = (const uint8_t *)a->iov_base + a->iov_len;
-  const uint8_t *pb = (const uint8_t *)b->iov_base + b->iov_len;
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
-
-  const uint8_t *const end = pa - shortest;
-  while (pa != end) {
-    int diff = *--pa - *--pb;
-    if (likely(diff))
-      return diff;
+  if (likely(shortest)) {
+    const uint8_t *pa = (const uint8_t *)a->iov_base + a->iov_len;
+    const uint8_t *pb = (const uint8_t *)b->iov_base + b->iov_len;
+    const uint8_t *const end = pa - shortest;
+    do {
+      int diff = *--pa - *--pb;
+      if (likely(diff))
+        return diff;
+    } while (pa != end);
   }
   return CMP2INT(a->iov_len, b->iov_len);
 }
@@ -12934,7 +12935,9 @@ static int __hot cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
 /* Fast non-lexically comparator */
 static int __hot cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
   int diff = CMP2INT(a->iov_len, b->iov_len);
-  return likely(diff) ? diff : memcmp(a->iov_base, b->iov_base, a->iov_len);
+  return likely(diff || a->iov_len == 0)
+             ? diff
+             : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
 
 static bool unsure_equal(MDBX_cmp_func cmp, const MDBX_val *a,
