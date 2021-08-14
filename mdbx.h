@@ -473,6 +473,12 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_MAYBE_UNUSED
 #endif /* MDBX_MAYBE_UNUSED */
 
+#if __has_attribute(no_sanitize)
+#define MDBX_NOSANITIZE_ENUM __attribute((__no_sanitize__("enum")))
+#else
+#define MDBX_NOSANITIZE_ENUM
+#endif /* MDBX_NOSANITIZE_ENUM */
+
 /* Oh, below are some songs and dances since:
  *  - C++ requires explicit definition of the necessary operators.
  *  - the proper implementation of DEFINE_ENUM_FLAG_OPERATORS for C++ required
@@ -498,28 +504,40 @@ typedef mode_t mdbx_mode_t;
 /// used to define flags (based on Microsoft's DEFINE_ENUM_FLAG_OPERATORS).
 #define DEFINE_ENUM_FLAG_OPERATORS(ENUM)                                       \
   extern "C++" {                                                               \
-  MDBX_CXX01_CONSTEXPR ENUM operator|(ENUM a, ENUM b) {                        \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX01_CONSTEXPR ENUM operator|(ENUM a, ENUM b) {   \
     return ENUM(unsigned(a) | unsigned(b));                                    \
   }                                                                            \
-  MDBX_CXX14_CONSTEXPR ENUM &operator|=(ENUM &a, ENUM b) { return a = a | b; } \
-  MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, ENUM b) {                        \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX14_CONSTEXPR ENUM &operator|=(ENUM &a,          \
+                                                             ENUM b) {         \
+    return a = a | b;                                                          \
+  }                                                                            \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, ENUM b) {   \
     return ENUM(unsigned(a) & unsigned(b));                                    \
   }                                                                            \
-  MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a, unsigned b) {                    \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX01_CONSTEXPR ENUM operator&(ENUM a,             \
+                                                           unsigned b) {       \
     return ENUM(unsigned(a) & b);                                              \
   }                                                                            \
-  MDBX_CXX01_CONSTEXPR ENUM operator&(unsigned a, ENUM b) {                    \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX01_CONSTEXPR ENUM operator&(unsigned a,         \
+                                                           ENUM b) {           \
     return ENUM(a & unsigned(b));                                              \
   }                                                                            \
-  MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, ENUM b) { return a = a & b; } \
-  MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a, unsigned b) {                 \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a,          \
+                                                             ENUM b) {         \
+    return a = a & b;                                                          \
+  }                                                                            \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX14_CONSTEXPR ENUM &operator&=(ENUM &a,          \
+                                                             unsigned b) {     \
     return a = a & b;                                                          \
   }                                                                            \
   MDBX_CXX01_CONSTEXPR unsigned operator~(ENUM a) { return ~unsigned(a); }     \
-  MDBX_CXX01_CONSTEXPR ENUM operator^(ENUM a, ENUM b) {                        \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX01_CONSTEXPR ENUM operator^(ENUM a, ENUM b) {   \
     return ENUM(unsigned(a) ^ unsigned(b));                                    \
   }                                                                            \
-  MDBX_CXX14_CONSTEXPR ENUM &operator^=(ENUM &a, ENUM b) { return a = a ^ b; } \
+  MDBX_NOSANITIZE_ENUM MDBX_CXX14_CONSTEXPR ENUM &operator^=(ENUM &a,          \
+                                                             ENUM b) {         \
+    return a = a ^ b;                                                          \
+  }                                                                            \
   }
 #else /* __cplusplus */
 /* nope for C since it always allows these operators for enums */
