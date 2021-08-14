@@ -809,6 +809,10 @@ enum MDBX_log_level_t {
       and all other log-messages */
   MDBX_LOG_EXTRA = 7,
 
+#ifdef ENABLE_UBSAN
+  MDBX_LOG_MAX = 7 /* avoid UBSAN false-positive trap by a tests */,
+#endif /* ENABLE_UBSAN */
+
   /** for \ref mdbx_setup_debug() only: Don't change current settings */
   MDBX_LOG_DONTCHANGE = -1
 };
@@ -822,6 +826,8 @@ typedef enum MDBX_log_level_t MDBX_log_level_t;
  * effect, but `MDBX_DBG_ASSERT`, `MDBX_DBG_AUDIT` and `MDBX_DBG_JITTER` only if
  * libmdbx builded with \ref MDBX_DEBUG. */
 enum MDBX_debug_flags_t {
+  MDBX_DBG_NONE = 0,
+
   /** Enable assertion checks.
    * Requires build with \ref MDBX_DEBUG > 0 */
   MDBX_DBG_ASSERT = 1,
@@ -843,6 +849,11 @@ enum MDBX_debug_flags_t {
 
   /** Allow read and write transactions overlapping for the same thread */
   MDBX_DBG_LEGACY_OVERLAP = 32,
+
+#ifdef ENABLE_UBSAN
+  MDBX_DBG_MAX = ((unsigned)MDBX_LOG_MAX) << 16 |
+                 63 /* avoid UBSAN false-positive trap by a tests */,
+#endif /* ENABLE_UBSAN */
 
   /** for mdbx_setup_debug() only: Don't change current settings */
   MDBX_DBG_DONTCHANGE = -1
