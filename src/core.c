@@ -13527,8 +13527,10 @@ int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
       MDBX_node *node = page_node(cx.outer.mc_pg[cx.outer.mc_top],
                                   cx.outer.mc_ki[cx.outer.mc_top]);
       if (F_ISSET(node_flags(node), F_DUPDATA)) {
+        // coverity[uninit_use : FALSE]
         mdbx_tassert(txn, cx.outer.mc_xcursor == &cx.inner &&
                               (cx.inner.mx_cursor.mc_flags & C_INITIALIZED));
+        // coverity[uninit_use : FALSE]
         *values_count =
             (sizeof(*values_count) >= sizeof(cx.inner.mx_db.md_entries) ||
              cx.inner.mx_db.md_entries <= PTRDIFF_MAX)

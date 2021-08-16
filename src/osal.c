@@ -1781,6 +1781,7 @@ retry_mapview:;
 
   if (limit < map->limit) {
     /* unmap an excess at end of mapping. */
+    // coverity[offset_free : FALSE]
     if (unlikely(munmap(map->dxb + limit, map->limit - limit)))
       return errno;
     map->limit = limit;
@@ -1854,6 +1855,7 @@ retry_mapview:;
     if (unlikely(munmap(map->address, map->limit)))
       return errno;
 
+    // coverity[pass_freed_arg : FALSE]
     ptr = mmap(map->address, limit, mmap_prot,
                (flags & MDBX_MRESIZE_MAY_MOVE)
                    ? mmap_flags
@@ -1863,11 +1865,13 @@ retry_mapview:;
     if (MAP_FIXED_NOREPLACE != 0 && MAP_FIXED_NOREPLACE != MAP_FIXED &&
         unlikely(ptr == MAP_FAILED) && !(flags & MDBX_MRESIZE_MAY_MOVE) &&
         errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
+      // coverity[pass_freed_arg : FALSE]
       ptr = mmap(map->address, limit, mmap_prot, mmap_flags | MAP_FIXED,
                  map->fd, 0);
 
     if (unlikely(ptr == MAP_FAILED)) {
       /* try to restore prev mapping */
+      // coverity[pass_freed_arg : FALSE]
       ptr = mmap(map->address, map->limit, mmap_prot,
                  (flags & MDBX_MRESIZE_MAY_MOVE)
                      ? mmap_flags
@@ -1877,6 +1881,7 @@ retry_mapview:;
       if (MAP_FIXED_NOREPLACE != 0 && MAP_FIXED_NOREPLACE != MAP_FIXED &&
           unlikely(ptr == MAP_FAILED) && !(flags & MDBX_MRESIZE_MAY_MOVE) &&
           errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
+        // coverity[pass_freed_arg : FALSE]
         ptr = mmap(map->address, map->limit, mmap_prot, mmap_flags | MAP_FIXED,
                    map->fd, 0);
       if (unlikely(ptr == MAP_FAILED)) {

@@ -1795,6 +1795,7 @@ underfilled
 UNDOC
 unicode
 UNIFORUM
+uninit
 uninstall
 UNINSTALLING
 uniq
