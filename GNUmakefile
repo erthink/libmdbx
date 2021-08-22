@@ -292,7 +292,7 @@ MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(shell git ls-files src/)
 git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
 MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags 2>&- | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
-MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list --count HEAD ^`git tag --sort=-version:refname 2>&- | sed -n '/^\(v[0-9]\+\.[0-9]\+\.[0-9]\+\)*/p;q' || echo 'git_tag_with_sort_was_failed'` 2>&- || echo 'Please use non-obsolete git version')
+MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list `git describe --tags --abbrev=0`..HEAD --count 2>&- || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
 MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
