@@ -586,7 +586,7 @@ endif
 ################################################################################
 # Cross-compilation simple test
 
-CROSS_LIST = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc mips-linux-gnu-gcc \
+CROSS_LIST = mips-linux-gnu-gcc \
 	powerpc64-linux-gnu-gcc powerpc-linux-gnu-gcc \
 	arm-linux-gnueabihf-gcc aarch64-linux-gnu-gcc \
 	sh4-linux-gnu-gcc mips64-linux-gnuabi64-gcc \
@@ -597,7 +597,7 @@ CROSS_LIST = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc mips-linux-gnu-gcc \
 # s390x-linux-gnu-gcc         - works (previously: qemu hang/abort)
 # sparc64-linux-gnu-gcc       - coredump (qemu mmap-troubles, previously: qemu fails fcntl for F_SETLK/F_GETLK)
 # alpha-linux-gnu-gcc         - coredump (qemu mmap-troubles)
-CROSS_LIST_NOQEMU =
+CROSS_LIST_NOQEMU = sparc64-linux-gnu-gcc alpha-linux-gnu-gcc
 
 cross-gcc:
 	@echo '  Re-building by cross-compiler for: $(CROSS_LIST_NOQEMU) $(CROSS_LIST)'
