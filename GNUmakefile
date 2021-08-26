@@ -620,7 +620,7 @@ cross-qemu:
 		echo "===================== $$CC + qemu"; \
 		$(MAKE) IOARENA=false CXXSTD= clean && \
 			CC=$$CC CXX=$$(echo $$CC | sed 's/-gcc/-g++/') EXE_LDFLAGS=-static MDBX_BUILD_OPTIONS="-DMDBX_SAFE4QEMU $(MDBX_BUILD_OPTIONS)" \
-			$(MAKE) IOARENA=false test-singleprocess || exit $$?; \
+			$(MAKE) IOARENA=false smoke-singleprocess test-singleprocess || exit $$?; \
 	done
 
 #< dist-cutoff-end
