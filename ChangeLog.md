@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## v0.10.3 (in development)
+## v0.11.x (in development)
 
 ### TODO
 
@@ -16,12 +16,36 @@ ChangeLog
  - [Support for RAW devices](https://github.com/erthink/libmdbx/issues/124).
  - [Support MessagePack for Keys & Values](https://github.com/erthink/libmdbx/issues/115).
  - [Engage new terminology](https://github.com/erthink/libmdbx/issues/137).
- - Finalize C++ API (few typos and trivia bugs are still likely for now).
+ - Finalize C++ API (few typos and bugs are still maybe for now).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
+
+
+## v0.10.3 at 2021-08-27
 
 Acknowledgements:
 
  - [Francisco Vallarino](https://github.com/fjvallarino) for [Haskell bindings for libmdbx](https://hackage.haskell.org/package/libmdbx).
+ - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
+ - [Andrea Lanfranchi](https://github.com/AndreaLanfranchi) for contributing.
+
+Extensions and improvements:
+
+ - Added `cursor::erase()` overloads for `key` and for `key-value`.
+ - Resolve minor Coverity Scan issues (no fixes but some hint/comment were added).
+ - Resolve minor UndefinedBehaviorSanitizer issues (no fixes but some workaround were added).
+
+Fixes:
+
+ - Always setup `madvise` while opening DB (fixes https://github.com/erthink/libmdbx/issues/231).
+ - Fixed checking legacy `P_DIRTY` flag (`0x10`) for nested/sub-pages.
+
+Minors:
+
+ - Fixed getting revision number from middle of history during amalgamation (GNU Makefile).
+ - Fixed search GCC tools for LTO (CMake scripts).
+ - Fixed/reorder dirs list for search CLANG tools for LTO (CMake scripts).
+ - Fixed/workarounds for CLANG < 9.x
+ - Fixed CMake warning about compatibility with 3.8.2
 
 
 ## v0.10.2 at 2021-07-26
