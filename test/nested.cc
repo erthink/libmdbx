@@ -200,7 +200,7 @@ bool testcase_nested::trim_tail(unsigned window_width) {
     while (fifo.size() > window_width) {
       uint64_t tail_serial = fifo.back().first;
       const unsigned tail_count = fifo.back().second;
-      log_verbose("nested: pop-tail (serial %" PRIu64 ", count %u)",
+      log_verbose("nested: trim-tail (serial %" PRIu64 ", count %u)",
                   tail_serial, tail_count);
       fifo.pop_back();
       for (unsigned n = 0; n < tail_count; ++n) {

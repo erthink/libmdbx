@@ -292,8 +292,6 @@ inline bool is_samedata(const MDBX_val &a, const MDBX_val &b) {
 }
 std::string format(const char *fmt, ...);
 
-uint64_t entropy_ticks(void);
-uint64_t entropy_white(void);
 static inline uint64_t bleach64(uint64_t v) {
   // Tommy Ettinger, https://www.blogger.com/profile/04953541827437796598
   // http://mostlymangling.blogspot.com/2019/01/better-stronger-mixer-and-test-procedure.html

@@ -101,164 +101,6 @@ bool is_samedata(const MDBX_val *a, const MDBX_val *b) {
 
 //-----------------------------------------------------------------------------
 
-/* TODO: replace my 'libmera' from t1ha. */
-uint64_t entropy_ticks(void) {
-#if defined(EMSCRIPTEN)
-  return (uint64_t)emscripten_get_now();
-#endif /* EMSCRIPTEN */
-
-#if defined(__APPLE__) || defined(__MACH__)
-  return mach_absolute_time();
-#endif /* defined(__APPLE__) || defined(__MACH__) */
-
-#if defined(__sun__) || defined(__sun)
-  return gethrtime();
-#endif /* __sun__ */
-
-#if defined(__GNUC__) || defined(__clang__)
-
-#if defined(__ia64__)
-  uint64_t ticks;
-  __asm __volatile("mov %0=ar.itc" : "=r"(ticks));
-  return ticks;
-#elif defined(__hppa__)
-  uint64_t ticks;
-  __asm __volatile("mfctl 16, %0" : "=r"(ticks));
-  return ticks;
-#elif defined(__s390__)
-  uint64_t ticks;
-  __asm __volatile("stck 0(%0)" : : "a"(&(ticks)) : "memory", "cc");
-  return ticks;
-#elif defined(__alpha__) || defined(__alpha)
-  uint64_t ticks;
-  __asm __volatile("rpcc %0" : "=r"(ticks));
-  return ticks;
-#elif defined(__sparc__) || defined(__sparc) || defined(__sparc64__) ||        \
-    defined(__sparc64) || defined(__sparc_v8plus__) ||                         \
-    defined(__sparc_v8plus) || defined(__sparc_v8plusa__) ||                   \
-    defined(__sparc_v8plusa) || defined(__sparc_v9__) || defined(__sparc_v9)
-
-  union {
-    uint64_t u64;
-    struct {
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-      uint32_t h, l;
-#else
-      uint32_t l, h;
-#endif
-    } u32;
-  } cycles;
-
-#if defined(__sparc_v8plus__) || defined(__sparc_v8plusa__) ||                 \
-    defined(__sparc_v9__) || defined(__sparc_v8plus) ||                        \
-    defined(__sparc_v8plusa) || defined(__sparc_v9)
-
-#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul ||                  \
-    defined(__sparc64__) || defined(__sparc64)
-  __asm __volatile("rd %%tick, %0" : "=r"(cycles.u64));
-#else
-  __asm __volatile("rd %%tick, %1; srlx %1, 32, %0"
-                   : "=r"(cycles.u32.h), "=r"(cycles.u32.l));
-#endif /* __sparc64__ */
-
-#else
-  __asm __volatile(".byte 0x83, 0x41, 0x00, 0x00; mov %%g1, %0"
-                   : "=r"(cycles.u64)
-                   :
-                   : "%g1");
-#endif /* __sparc8plus__ || __sparc_v9__ */
-  return cycles.u64;
-
-#elif (defined(__powerpc64__) || defined(__ppc64__) || defined(__ppc64) ||     \
-       defined(__powerpc64))
-  uint64_t ticks;
-  __asm __volatile("mfspr %0, 268" : "=r"(ticks));
-  return ticks;
-#elif (defined(__powerpc__) || defined(__ppc__) || defined(__powerpc) ||       \
-       defined(__ppc))
-#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
-  uint64_t ticks;
-  __asm __volatile("mftb  %0" : "=r"(ticks));
-  *now = ticks;
-#else
-  uint64_t ticks;
-  uint32_t low, high_before, high_after;
-  __asm __volatile("mftbu %0; mftb  %1; mftbu %2"
-                   : "=r"(high_before), "=r"(low), "=r"(high_after));
-  ticks = (uint64_t)high_after << 32;
-  ticks |= low & /* zeroes if high part has changed */
-           ~(high_before - high_after);
-#endif
-#elif (defined(__aarch64__) || (defined(__ARM_ARCH) && __ARM_ARCH > 7)) &&     \
-    !defined(MDBX_SAFE4QEMU)
-  uint64_t virtual_timer;
-  __asm __volatile("mrs %0, cntvct_el0" : "=r"(virtual_timer));
-  return virtual_timer;
-#elif (defined(__ARM_ARCH) && __ARM_ARCH > 5 && __ARM_ARCH < 8) ||             \
-    defined(_M_ARM)
-  static uint32_t pmcntenset = 0x00425B00;
-  if (unlikely(pmcntenset == 0x00425B00)) {
-    uint32_t pmuseren;
-#ifdef _M_ARM
-    pmuseren = _MoveFromCoprocessor(15, 0, 9, 14, 0);
-#else
-    __asm("mrc p15, 0, %0, c9, c14, 0" : "=r"(pmuseren));
-#endif
-    if (1 & pmuseren /* Is it allowed for user mode code? */) {
-#ifdef _M_ARM
-      pmcntenset = _MoveFromCoprocessor(15, 0, 9, 12, 1);
-#else
-      __asm("mrc p15, 0, %0, c9, c12, 1" : "=r"(pmcntenset));
-#endif
-    } else
-      pmcntenset = 0;
-  }
-  if (pmcntenset & 0x80000000ul /* Is it counting? */) {
-#ifdef _M_ARM
-    return __rdpmccntr64();
-#else
-    uint32_t pmccntr;
-    __asm __volatile("mrc p15, 0, %0, c9, c13, 0" : "=r"(pmccntr));
-    return pmccntr;
-#endif
-  }
-#elif ((defined(_MIPS_ISA) && defined(_MIPS_ISA_MIPS2) &&                      \
-        _MIPS_ISA >= _MIPS_ISA_MIPS2) ||                                       \
-       (defined(__mips) && __mips >= 2) || defined(_R4000)) &&                 \
-    !defined(MDBX_SAFE4QEMU) /* QEMU may not emulate the CC register           \
-                               (High-resolution cycle counter) */
-  unsigned count;
-  __asm __volatile("rdhwr %0, $2" : "=r"(count));
-  return count;
-#endif                       /* arch selector */
-#endif                       /* __GNUC__ || __clang__ */
-
-#if defined(__e2k__) || defined(__ia32__)
-  return __rdtsc();
-#elif defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
-  LARGE_INTEGER PerformanceCount;
-  if (QueryPerformanceCounter(&PerformanceCount))
-    return PerformanceCount.QuadPart;
-  return GetTickCount64();
-#else
-  struct timespec ts;
-#if defined(CLOCK_MONOTONIC_COARSE)
-  clockid_t clk_id = CLOCK_MONOTONIC_COARSE;
-#elif defined(CLOCK_MONOTONIC_RAW)
-  clockid_t clk_id = CLOCK_MONOTONIC_RAW;
-#else
-  clockid_t clk_id = CLOCK_MONOTONIC;
-#endif
-  int rc = clock_gettime(clk_id, &ts);
-  if (unlikely(rc))
-    failure_perror("clock_gettime()", rc);
-
-  return (((uint64_t)ts.tv_sec) << 32) + ts.tv_nsec;
-#endif
-}
-
-//-----------------------------------------------------------------------------
-
 uint64_t prng64_white(uint64_t &state) {
   state = prng64_map2_careless(state);
   return bleach64(state);
@@ -303,8 +145,6 @@ uint64_t prng64(void) { return prng64_white(prng_state); }
 
 void prng_fill(void *ptr, size_t bytes) { prng_fill(prng_state, ptr, bytes); }
 
-uint64_t entropy_white() { return bleach64(entropy_ticks()); }
-
 double double_from_lower(uint64_t salt) {
 #ifdef IEEE754_DOUBLE_BIAS
   ieee754_double r;
@@ -336,25 +176,25 @@ double double_from_upper(uint64_t salt) {
 #endif
 }
 
-bool flipcoin() { return bleach32((uint32_t)entropy_ticks()) & 1; }
-bool flipcoin_x2() { return (bleach32((uint32_t)entropy_ticks()) & 3) == 0; }
-bool flipcoin_x3() { return (bleach32((uint32_t)entropy_ticks()) & 7) == 0; }
-bool flipcoin_x4() { return (bleach32((uint32_t)entropy_ticks()) & 15) == 0; }
+bool flipcoin() { return prng32() & 1; }
+bool flipcoin_x2() { return (prng32() & 3) == 0; }
+bool flipcoin_x3() { return (prng32() & 7) == 0; }
+bool flipcoin_x4() { return (prng32() & 15) == 0; }
 bool flipcoin_n(unsigned n) {
-  return (bleach64(entropy_ticks()) & ((UINT64_C(1) << n) - 1)) == 0;
+  return (prng64() & ((UINT64_C(1) << n) - 1)) == 0;
 }
 
 bool jitter(unsigned probability_percent) {
   const uint32_t top = UINT32_MAX - UINT32_MAX % 100;
   uint32_t dice, edge = (top) / 100 * probability_percent;
   do
-    dice = bleach32((uint32_t)entropy_ticks());
+    dice = prng32();
   while (dice >= top);
   return dice < edge;
 }
 
 void jitter_delay(bool extra) {
-  unsigned dice = entropy_white() & 3;
+  unsigned dice = prng32() & 3;
   if (dice == 0) {
     log_trace("== jitter.no-delay");
   } else {
@@ -367,8 +207,8 @@ void jitter_delay(bool extra) {
         osal_yield();
         cpu_relax();
         if (dice > 2) {
-          unsigned us = entropy_white() &
-                        (extra ? 0xffff /* 656 ms */ : 0x3ff /* 1 ms */);
+          unsigned us =
+              prng32() & (extra ? 0xffff /* 656 ms */ : 0x3ff /* 1 ms */);
           log_trace("== jitter.delay: %0.6f", us / 1000000.0);
           osal_udelay(us);
         }
