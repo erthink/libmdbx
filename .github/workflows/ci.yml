@@ -27,7 +27,7 @@ jobs:
     strategy:
       matrix:
 #, windows-latest
-        os: [ubuntu-latest, macos-latest, ubuntu-16.04]
+        os: [ubuntu-latest, macos-latest, ubuntu-18.04]
     steps:
     - uses: actions/checkout@v2
     - name: fetch tags
