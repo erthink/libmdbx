@@ -61,6 +61,7 @@ ARMEL
 ARMT
 Artem
 asan
+Ashikhmin
 asis
 asm
 asprintf
@@ -1962,6 +1963,7 @@ xsize
 yml
 Yota
 Yotta
+yperbasis
 Yq
 yuriev
 Zano

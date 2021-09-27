@@ -19,6 +19,11 @@ ChangeLog
  - Finalize C++ API (few typos and bugs are still maybe for now).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
+Acknowledgements:
+
+ - [Artem Vorotnikov](https://github.com/vorot93) for support [Rust wrapper](https://github.com/vorot93/mdbx-rs).
+ - [Andrew Ashikhmin](https://github.com/yperbasis) for contributing.
+
 
 ## v0.10.3 at 2021-08-27
 
