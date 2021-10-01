@@ -33,5 +33,5 @@ jobs:
     - name: fetch tags
       run: git fetch --unshallow --tags --prune --force
     - name: make check
-      run: make --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make --keep-going check
+      run: make MDBX_BUILD_OPTIONS="-DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1" --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make MDBX_BUILD_OPTIONS="-DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1" --keep-going check
       shell: bash

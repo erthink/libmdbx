@@ -3,4 +3,4 @@ freebsd_instance:
 
 task:
   install_script: pkg install -y gmake bash git
-  script: git fetch --tags --force && gmake check
+  script: git fetch --tags --force && gmake MDBX_BUILD_OPTIONS="-DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1" check
