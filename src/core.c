@@ -8682,7 +8682,7 @@ retry_noaccount:
                mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
   mdbx_tassert(txn, mdbx_dirtylist_check(txn));
-  if (unlikely(/* paranoia */ loop > ((MDBX_DEBUG > 0) ? 9 : 99))) {
+  if (unlikely(/* paranoia */ loop > ((MDBX_DEBUG > 0) ? 12 : 42))) {
     mdbx_error("too more loops %u, bailout", loop);
     rc = MDBX_PROBLEM;
     goto bailout;
@@ -8743,8 +8743,6 @@ retry_noaccount:
       /* If using records from GC which we have not yet deleted,
        * now delete them and any we reserved for tw.reclaimed_pglist. */
       while (cleaned_gc_id <= txn->tw.last_reclaimed) {
-        gc_rid = cleaned_gc_id;
-        settled = 0;
         rc = mdbx_cursor_first(&couple.outer, &key, NULL);
         if (unlikely(rc != MDBX_SUCCESS)) {
           if (rc == MDBX_NOTFOUND)
@@ -8756,6 +8754,9 @@ retry_noaccount:
           rc = MDBX_CORRUPTED;
           goto bailout;
         }
+        gc_rid = cleaned_gc_id;
+        settled = 0;
+        reused_gc_slot = 0;
         cleaned_gc_id = unaligned_peek_u64(4, key.iov_base);
         if (!MDBX_DISABLE_PAGECHECKS &&
             unlikely(cleaned_gc_id < MIN_TXNID || cleaned_gc_id > MAX_TXNID)) {
@@ -9121,6 +9122,7 @@ retry_noaccount:
         } else if (rc != MDBX_NOTFOUND)
           goto bailout;
         txn->tw.last_reclaimed = gc_rid;
+        cleaned_gc_id = gc_rid + 1;
       }
       reservation_gc_id = gc_rid--;
       mdbx_trace("%s: take @%" PRIaTXN " from head-gc-id", dbg_prefix_mode,
@@ -9198,7 +9200,7 @@ retry_noaccount:
     key.iov_len = sizeof(reservation_gc_id);
     key.iov_base = &reservation_gc_id;
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
-    mdbx_trace("%s.reserve: %u [%u...%u] @%" PRIaTXN, dbg_prefix_mode, chunk,
+    mdbx_trace("%s.reserve: %u [%u...%u) @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
     mdbx_prep_backlog(txn, &couple.outer, data.iov_len);
     rc = mdbx_cursor_put(&couple.outer, &key, &data,
@@ -9374,14 +9376,20 @@ retry_noaccount:
   }
 
   mdbx_tassert(txn, rc == MDBX_SUCCESS);
-  if (unlikely(txn->tw.loose_count != 0 ||
-               filled_gc_slot !=
-                   (txn->tw.lifo_reclaimed
-                        ? (unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)
-                        : 0))) {
-    mdbx_notice("** restart: reserve excess (filled-slot %u, loose-count %u)",
-                filled_gc_slot, txn->tw.loose_count);
+  if (unlikely(txn->tw.loose_count != 0)) {
+    mdbx_notice("** restart: got %u loose pages", txn->tw.loose_count);
     goto retry;
+  }
+  if (unlikely(filled_gc_slot !=
+               (txn->tw.lifo_reclaimed
+                    ? (unsigned)MDBX_PNL_SIZE(txn->tw.lifo_reclaimed)
+                    : 0))) {
+
+    const bool will_retry = loop < 9;
+    mdbx_notice("** %s: reserve excess (filled-slot %u, loop %u)",
+                will_retry ? "restart" : "ignore", filled_gc_slot, loop);
+    if (will_retry)
+      goto retry;
   }
 
   mdbx_tassert(txn,
