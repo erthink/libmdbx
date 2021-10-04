@@ -128,6 +128,8 @@ void testcase_nested::push_txn() {
                 std::move(speculum_snapshot));
   log_verbose("begin level#%zu txn #%" PRIu64 ", flags 0x%x, serial %" PRIu64,
               stack.size(), mdbx_txn_id(nested_txn), flags, serial);
+  if (!dbi && stack.size() == 1)
+    dbi = db_table_open(true);
 }
 
 bool testcase_nested::pop_txn(bool abort) {
@@ -139,6 +141,9 @@ bool testcase_nested::pop_txn(bool abort) {
     log_verbose(
         "abort level#%zu txn #%" PRIu64 ", undo serial %" PRIu64 " <- %" PRIu64,
         stack.size(), mdbx_txn_id(txn), serial, std::get<1>(stack.top()));
+    if (dbi > 0 && stack.size() == 1 &&
+        is_handle_created_in_current_txn(dbi, txn))
+      dbi = 0;
     int err = mdbx_txn_abort(txn);
     if (unlikely(err != MDBX_SUCCESS))
       failure_perror("mdbx_txn_abort()", err);

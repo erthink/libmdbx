@@ -268,6 +268,7 @@ protected:
   void db_table_clear(MDBX_dbi handle, MDBX_txn *txn = nullptr);
   void db_table_close(MDBX_dbi handle);
   int db_open__begin__table_create_open_clean(MDBX_dbi &handle);
+  bool is_handle_created_in_current_txn(const MDBX_dbi handle, MDBX_txn *txn);
 
   bool wait4start();
   void report(size_t nops_done);

@@ -477,6 +477,15 @@ void testcase::update_canary(uint64_t increment) {
   log_trace("<< update_canary: sequence = %" PRIu64, canary_now.y);
 }
 
+bool testcase::is_handle_created_in_current_txn(const MDBX_dbi handle,
+                                                MDBX_txn *txn) {
+  unsigned flags, state;
+  int err = mdbx_dbi_flags_ex(txn, handle, &flags, &state);
+  if (unlikely(err != MDBX_SUCCESS))
+    failure_perror("mdbx_dbi_flags_ex()", err);
+  return (state & MDBX_DBI_CREAT) != 0;
+}
+
 int testcase::db_open__begin__table_create_open_clean(MDBX_dbi &handle) {
   db_open();
 
@@ -484,6 +493,9 @@ int testcase::db_open__begin__table_create_open_clean(MDBX_dbi &handle) {
   for (;;) {
     txn_begin(false);
     handle = db_table_open(true);
+
+    if (is_handle_created_in_current_txn(handle, txn_guard.get()))
+      return MDBX_SUCCESS;
     db_table_clear(handle);
     err = breakable_commit();
     if (likely(err == MDBX_SUCCESS)) {
