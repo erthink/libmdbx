@@ -19,10 +19,25 @@ ChangeLog
  - Finalize C++ API (few typos and bugs are still maybe for now).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
+
+## v0.10.4 (scheduled 2021-10-12)
+
 Acknowledgements:
 
  - [Artem Vorotnikov](https://github.com/vorot93) for support [Rust wrapper](https://github.com/vorot93/mdbx-rs).
- - [Andrew Ashikhmin](https://github.com/yperbasis) for contributing.
+ - [Andrew Ashikhmin](https://github.com/yperbasis) for contributing to C++ API.
+
+Fixes:
+
+ - Fixed possibility of looping update GC during transaction commit (no public issue since the problem was discovered inside [Positive Technologies](https://www.ptsecurity.ru).
+ - Fixed `#pragma pack` to avoid provoking some compilers to generate code with [unaligned access](https://github.com/erthink/libmdbx/issues/235).
+ - Fixed `noexcept` for potentially throwing `txn::put()` of C++ API.
+
+Minors:
+
+ - Added stochastic test script for checking small transactions cases.
+ - Removed extra transaction commit/restart inside test framework.
+ - In debugging builds fixed a too small (single page) by default DB shrink threshold.
 
 
 ## v0.10.3 at 2021-08-27
