@@ -135,8 +135,6 @@ inline bool parse_option_intptr(int argc, char *const argv[], int &narg,
 
 //-----------------------------------------------------------------------------
 
-#pragma pack(push, 1)
-
 struct keygen_params_pod {
   /* Параметры генератора пар key-value. Также может быть полезным описание
    * алгоритма генерации в keygen.h
@@ -306,8 +304,6 @@ struct actor_config_pod {
       : actor_id(actor_id), space_id(space_id), testcase(testcase),
         wait4id(wait4id) {}
 };
-
-#pragma pack(pop)
 
 extern const struct option_verb mode_bits[];
 extern const struct option_verb table_bits[];

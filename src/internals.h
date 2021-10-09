@@ -437,7 +437,7 @@ typedef uint16_t indx_t;
 
 /*----------------------------------------------------------------------------*/
 /* Core structures for database and shared memory (i.e. format definition) */
-#pragma pack(push, 1)
+#pragma pack(push, 4)
 
 /* Information about a single database in the environment. */
 typedef struct MDBX_db {

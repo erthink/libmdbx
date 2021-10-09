@@ -19,7 +19,7 @@
 
 namespace chrono {
 
-#pragma pack(push, 1)
+#pragma pack(push, 4)
 
 typedef union time {
   uint64_t fixedpoint;
