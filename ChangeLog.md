@@ -20,7 +20,7 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.10.4 (scheduled 2021-10-12)
+## v0.10.4 at 2021-10-10
 
 Acknowledgements:
 
