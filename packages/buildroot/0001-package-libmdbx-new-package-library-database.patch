@@ -1,9 +1,9 @@
-From 0c0df833879b3f815959c8bd9b6cc27cb9d71b9e Mon Sep 17 00:00:00 2001
+From ce7b70a572cf77d8f37e5047d5d9c8361b2675ae Mon Sep 17 00:00:00 2001
 From: Leonid Yuriev <leo@yuriev.ru>
-Date: Tue, 3 Aug 2021 00:55:27 +0300
+Date: Sun, 10 Oct 2021 15:31:40 +0300
 Subject: [PATCH] package/libmdbx: new package (library/database).
 
-This patch adds libmdbx v0.10.2:
+This patch adds libmdbx v0.10.4:
  - libmdbx is one of the fastest compact embeddable key-value ACID database.
  - libmdbx has a specific set of properties and capabilities,
    focused on creating unique lightweight solutions.
@@ -103,18 +103,18 @@ index 0000000000..d13f73938f
 +		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
 new file mode 100644
-index 0000000000..c8a28ada34
+index 0000000000..326cf57bb6
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,5 @@
 +# Hashes from: https://github.com/erthink/libmdbx/releases/
-+sha256  745555704df76626a6612ad0c6bc6b1a66bfab98b9245b07dfb82640aa46d6fa  libmdbx-amalgamated-0.10.2.tar.gz
++sha256  e11d5339a1e1cc34407898933b62a208936fd761a2cc31e11244d581d1d2b5d0  libmdbx-amalgamated-0.10.4.tar.gz
 +
 +# Locally calculated
 +sha256  310fe25c858a9515fc8c8d7d1f24a67c9496f84a91e0a0e41ea9975b1371e569  LICENSE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
 new file mode 100644
-index 0000000000..60c5148625
+index 0000000000..f38e4a533b
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.mk
 @@ -0,0 +1,42 @@
@@ -124,7 +124,7 @@ index 0000000000..60c5148625
 +#
 +################################################################################
 +
-+LIBMDBX_VERSION = 0.10.2
++LIBMDBX_VERSION = 0.10.4
 +LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.gz
 +LIBMDBX_SITE = https://github.com/erthink/libmdbx/releases/download/v$(LIBMDBX_VERSION)
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
@@ -161,5 +161,5 @@ index 0000000000..60c5148625
 +
 +$(eval $(cmake-package))
 -- 
-2.32.0
+2.33.0
 
