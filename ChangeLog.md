@@ -29,7 +29,7 @@ Acknowledgements:
 
 Fixes:
 
- - Fixed possibility of looping update GC during transaction commit (no public issue since the problem was discovered inside [Positive Technologies](https://www.ptsecurity.ru).
+ - Fixed possibility of looping update GC during transaction commit (no public issue since the problem was discovered inside [Positive Technologies](https://www.ptsecurity.ru)).
  - Fixed `#pragma pack` to avoid provoking some compilers to generate code with [unaligned access](https://github.com/erthink/libmdbx/issues/235).
  - Fixed `noexcept` for potentially throwing `txn::put()` of C++ API.
 
