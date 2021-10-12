@@ -12254,7 +12254,7 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
     } else {
       txnid_t txnid = mdbx_meta_txnid_stable(env, &meta);
       if (new_txnid <= txnid)
-        safe64_txnid_next(new_txnid);
+        new_txnid = safe64_txnid_next(txnid);
     }
   }
 
