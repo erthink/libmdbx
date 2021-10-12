@@ -10487,8 +10487,8 @@ __cold static MDBX_page *mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
                        pages2pv(pv2pages(model_meta->mm_geo.shrink_pv)));
 
   model_meta->mm_psize = env->me_psize;
-  model_meta->mm_flags = (uint16_t)env->me_flags;
-  model_meta->mm_flags |=
+  model_meta->mm_flags = (uint16_t)env->me_flags & DB_PERSISTENT_FLAGS;
+  model_meta->mm_flags =
       MDBX_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
   model_meta->mm_dbs[FREE_DBI].md_root = P_INVALID;
   model_meta->mm_dbs[MAIN_DBI].md_root = P_INVALID;
