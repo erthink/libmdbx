@@ -10436,10 +10436,9 @@ __cold static int mdbx_read_header(MDBX_env *env, MDBX_meta *dest,
   }
 
   if (dest->mm_psize == 0 ||
-      ((env->me_stuck_meta < 0)
-           ? (!META_IS_STEADY(dest) &&
-              !meta_weak_acceptable(env, dest, lck_exclusive))
-           : false)) {
+      (env->me_stuck_meta < 0 &&
+       !(META_IS_STEADY(dest) ||
+         meta_weak_acceptable(env, dest, lck_exclusive)))) {
     mdbx_error("%s", "no usable meta-pages, database is corrupted");
     if (rc == MDBX_SUCCESS) {
       /* TODO: try to restore the database by fully checking b-tree structure
@@ -11713,65 +11712,80 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       mdbx_assert(env, lck_rc == MDBX_RESULT_TRUE);
       /* exclusive mode */
 
+      MDBX_meta clone;
       MDBX_meta const *const steady = mdbx_meta_steady(env);
-      const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
-      MDBX_meta steady_clone;
-      err = mdbx_validate_meta_copy(env, steady, &steady_clone);
-      if (unlikely(err != MDBX_SUCCESS)) {
-        mdbx_error("meta[%u] with %s txnid %" PRIaTXN
-                   " is corrupted, %s needed",
-                   bytes2pgno(env, (uint8_t *)steady - env->me_map), "steady",
-                   steady_txnid, "manual recovery");
-        return MDBX_CORRUPTED;
-      }
-
       MDBX_meta const *const head = mdbx_meta_head(env);
-      if (steady == head)
-        break;
+      const txnid_t steady_txnid = mdbx_meta_txnid_fluid(env, steady);
+      if (META_IS_STEADY(steady)) {
+        err = mdbx_validate_meta_copy(env, steady, &clone);
+        if (unlikely(err != MDBX_SUCCESS)) {
+          mdbx_error("meta[%u] with %s txnid %" PRIaTXN
+                     " is corrupted, %s needed",
+                     bytes2pgno(env, (uint8_t *)steady - env->me_map), "steady",
+                     steady_txnid, "manual recovery");
+          return MDBX_CORRUPTED;
+        }
+        if (steady == head)
+          break;
+      }
 
       const pgno_t pgno = bytes2pgno(env, (uint8_t *)head - env->me_map);
       const txnid_t head_txnid = mdbx_meta_txnid_fluid(env, head);
-      MDBX_meta head_clone;
       const bool head_valid =
-          mdbx_validate_meta_copy(env, head, &head_clone) == MDBX_SUCCESS;
+          mdbx_validate_meta_copy(env, head, &clone) == MDBX_SUCCESS;
+      mdbx_assert(env, !META_IS_STEADY(steady) || head_txnid != steady_txnid);
       if (unlikely(!head_valid)) {
-        mdbx_error("meta[%u] with %s txnid %" PRIaTXN
-                   " is corrupted, %s needed",
-                   pgno, "last", head_txnid, "rollback");
+        if (unlikely(!META_IS_STEADY(steady))) {
+          mdbx_error("%s for open or automatic rollback, %s",
+                     "there are no suitable meta-pages",
+                     "manual recovery is required");
+          return MDBX_CORRUPTED;
+        }
+        mdbx_warning("meta[%u] with last txnid %" PRIaTXN
+                     " is corrupted, rollback needed",
+                     pgno, head_txnid);
         goto purge_meta_head;
       }
 
-      mdbx_assert(env, head_txnid != head_txnid);
-      if (head_txnid == steady_txnid)
-        break;
-
-      mdbx_assert(env, META_IS_STEADY(steady) && !META_IS_STEADY(head));
       if (meta_bootid_match(head)) {
-        mdbx_warning(
-            "opening after an unclean shutdown, but boot-id(%016" PRIx64
-            "-%016" PRIx64
-            ") is MATCH: rollback NOT needed, steady-sync NEEDED%s",
-            bootid.x, bootid.y,
-            (env->me_flags & MDBX_RDONLY) ? ", but unable in read-only mode"
-                                          : "");
-        if (env->me_flags & MDBX_RDONLY)
+        if (env->me_flags & MDBX_RDONLY) {
+          mdbx_error("%s, but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH: "
+                     "rollback NOT needed, steady-sync NEEDED%s",
+                     "opening after an unclean shutdown", bootid.x, bootid.y,
+                     ", but unable in read-only mode");
           return MDBX_WANNA_RECOVERY;
-        meta = head_clone;
+        }
+        mdbx_warning("%s, but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH: "
+                     "rollback NOT needed, steady-sync NEEDED%s",
+                     "opening after an unclean shutdown", bootid.x, bootid.y,
+                     "");
+        meta = clone;
         atomic_store32(&env->me_lck->mti_unsynced_pages, meta.mm_geo.next,
                        mo_Relaxed);
         break;
       }
+      if (unlikely(!META_IS_STEADY(steady))) {
+        mdbx_error("%s, but %s for automatic rollback: %s",
+                   "opening after an unclean shutdown",
+                   "there are no suitable meta-pages",
+                   "manual recovery is required");
+        return MDBX_CORRUPTED;
+      }
       if (env->me_flags & MDBX_RDONLY) {
-        mdbx_error("rollback needed: (from head %" PRIaTXN
-                   " to steady %" PRIaTXN "), but unable in read-only mode",
-                   head_txnid, steady_txnid);
+        mdbx_error("%s and rollback needed: (from head %" PRIaTXN
+                   " to steady %" PRIaTXN ")%s",
+                   "opening after an unclean shutdown", head_txnid,
+                   steady_txnid, ", but unable in read-only mode");
         return MDBX_WANNA_RECOVERY;
       }
 
     purge_meta_head:
-      mdbx_notice("rollback: purge%s meta[%u] with%s txnid %" PRIaTXN,
+      mdbx_notice("%s and doing automatic rollback: "
+                  "purge%s meta[%u] with%s txnid %" PRIaTXN,
+                  "opening after an unclean shutdown",
                   head_valid ? "" : " invalid", pgno, head_valid ? " weak" : "",
                   head_txnid);
+      mdbx_ensure(env, META_IS_STEADY(steady));
       err = mdbx_override_meta(env, pgno, 0, head_valid ? head : steady);
       if (err) {
         mdbx_error("rollback: overwrite meta[%u] with txnid %" PRIaTXN
