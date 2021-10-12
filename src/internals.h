@@ -517,6 +517,8 @@ typedef struct MDBX_meta {
 
 } MDBX_meta;
 
+#pragma pack(1)
+
 /* Common header for all page types. The page type depends on mp_flags.
  *
  * P_BRANCH and P_LEAF pages have unsorted 'MDBX_node's at the end, with

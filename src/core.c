@@ -19249,7 +19249,7 @@ __cold int mdbx_dbi_dupsort_depthmask(MDBX_txn *txn, MDBX_dbi dbi,
       break;
     case F_DUPDATA | F_SUBDATA:
       /* sub-tree */
-      *mask |= 1 << unaligned_peek_u16(1, &db->md_depth);
+      *mask |= 1 << UNALIGNED_PEEK_16(db, MDBX_db, md_depth);
       break;
     default:
       mdbx_error("wrong node-flags %u", flags);
@@ -19695,7 +19695,7 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
 
   /* Got info, register DBI in this txn */
   memset(txn->mt_dbxs + slot, 0, sizeof(MDBX_dbx));
-  txn->mt_dbs[slot] = *(MDBX_db *)data.iov_base;
+  memcpy(&txn->mt_dbs[slot], data.iov_base, sizeof(MDBX_db));
   env->me_dbflags[slot] = 0;
   rc = mdbx_dbi_bind(txn, slot, user_flags, keycmp, datacmp);
   if (unlikely(rc != MDBX_SUCCESS)) {
