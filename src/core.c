@@ -13430,7 +13430,7 @@ __hot static int mdbx_page_search(MDBX_cursor *mc, const MDBX_val *key,
         break;
       }
     while (unlikely((scan = scan->mt_parent) != nullptr));
-    if (unlikely((rc = mdbx_page_get(mc, root, &mc->mc_pg[0], pp_txnid) != 0)))
+    if (unlikely((rc = mdbx_page_get(mc, root, &mc->mc_pg[0], pp_txnid)) != 0))
       return rc;
   }
 
