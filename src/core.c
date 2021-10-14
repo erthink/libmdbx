@@ -13116,10 +13116,11 @@ mdbx_page_get_ex(MDBX_cursor *const mc, const pgno_t pgno,
   mdbx_tassert(txn, front <= txn->mt_front);
   if (unlikely(pgno >= txn->mt_next_pgno)) {
     mdbx_error("page #%" PRIaPGNO " beyond next-pgno", pgno);
+  notfound:
     ret.page = nullptr;
-  corrupted:
-    mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
     ret.err = MDBX_PAGE_NOTFOUND;
+  bailout:
+    mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
     return ret;
   }
 
@@ -13159,33 +13160,36 @@ dirty:
              "mismatch actual pgno (%" PRIaPGNO ") != expected (%" PRIaPGNO
              ")\n",
              ret.page->mp_pgno, pgno);
-    goto corrupted;
+    goto notfound;
   }
 
 #if !MDBX_DISABLE_PAGECHECKS
   if (unlikely(ret.page->mp_flags & P_ILL_BITS)) {
-    bad_page(ret.page, "invalid page's flags (%u)\n", ret.page->mp_flags);
-    goto corrupted;
+    ret.err =
+        bad_page(ret.page, "invalid page's flags (%u)\n", ret.page->mp_flags);
+    goto bailout;
   }
 
   if (unlikely(ret.page->mp_txnid > front) &&
       unlikely(ret.page->mp_txnid > txn->mt_front || front < txn->mt_txnid)) {
-    bad_page(ret.page,
-             "invalid page txnid (%" PRIaTXN ") for %s' txnid (%" PRIaTXN ")\n",
-             ret.page->mp_txnid,
-             (front == txn->mt_front && front != txn->mt_txnid) ? "front-txn"
-                                                                : "parent-page",
-             front);
-    goto corrupted;
+    ret.err = bad_page(
+        ret.page,
+        "invalid page txnid (%" PRIaTXN ") for %s' txnid (%" PRIaTXN ")\n",
+        ret.page->mp_txnid,
+        (front == txn->mt_front && front != txn->mt_txnid) ? "front-txn"
+                                                           : "parent-page",
+        front);
+    goto bailout;
   }
 
   if (unlikely((ret.page->mp_upper < ret.page->mp_lower ||
                 ((ret.page->mp_lower | ret.page->mp_upper) & 1) ||
                 PAGEHDRSZ + ret.page->mp_upper > env->me_psize) &&
                !IS_OVERFLOW(ret.page))) {
-    bad_page(ret.page, "invalid page lower(%u)/upper(%u) with limit (%u)\n",
-             ret.page->mp_lower, ret.page->mp_upper, page_space(env));
-    goto corrupted;
+    ret.err =
+        bad_page(ret.page, "invalid page lower(%u)/upper(%u) with limit (%u)\n",
+                 ret.page->mp_lower, ret.page->mp_upper, page_space(env));
+    goto bailout;
   }
 #endif /* !MDBX_DISABLE_PAGECHECKS */
 
