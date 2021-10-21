@@ -10124,7 +10124,8 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
   const uint64_t magic_and_version =
       unaligned_peek_u64(4, &meta->mm_magic_and_version);
   if (unlikely(magic_and_version != MDBX_DATA_MAGIC &&
-               magic_and_version != MDBX_DATA_MAGIC_DEVEL)) {
+               magic_and_version != MDBX_DATA_MAGIC_LEGACY_COMPAT &&
+               magic_and_version != MDBX_DATA_MAGIC_LEGACY_DEVEL)) {
     mdbx_error("meta[%u] has invalid magic/version %" PRIx64, meta_number,
                magic_and_version);
     return ((magic_and_version >> 8) != MDBX_MAGIC) ? MDBX_INVALID
