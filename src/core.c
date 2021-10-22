@@ -11868,6 +11868,26 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
 
     atomic_store32(&env->me_lck->mti_discarded_tail,
                    bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
+
+    if ((env->me_flags & MDBX_RDONLY) == 0 && env->me_stuck_meta < 0) {
+      for (int n = 0; n < 3; ++n) {
+        MDBX_meta *const meta = METAPAGE(env, n);
+        if (unlikely(unaligned_peek_u64(4, &meta->mm_magic_and_version) !=
+                     MDBX_DATA_MAGIC)) {
+          const txnid_t txnid = mdbx_meta_txnid_fluid(env, meta);
+          mdbx_notice("%s %s"
+                      "meta[%u], txnid %" PRIaTXN,
+                      "updating db-format signature for",
+                      META_IS_STEADY(meta) ? "stead-" : "weak-", n, txnid);
+          err = mdbx_override_meta(env, n, txnid, meta);
+          if (unlikely(err != MDBX_SUCCESS)) {
+            mdbx_error("%s meta[%u], txnid %" PRIaTXN ", error %d",
+                       "updating db-format signature for", n, txnid, err);
+            return err;
+          }
+        }
+      }
+    }
   } /* lck exclusive, lck_rc == MDBX_RESULT_TRUE */
 
   //---------------------------------------------------- setup madvise/readahead
