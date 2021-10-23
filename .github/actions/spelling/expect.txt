@@ -1277,6 +1277,7 @@ pmax
 pmccntr
 pmcntenset
 pmedvedev
+pmeta
 pmr
 pmuseren
 pmwkaa
