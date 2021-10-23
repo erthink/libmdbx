@@ -709,6 +709,7 @@ inprocess
 INSTEADOF
 integerdup
 integerkey
+interoperability
 interprocedural
 intlimits
 intptr

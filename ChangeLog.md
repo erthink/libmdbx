@@ -1,8 +1,6 @@
 ChangeLog
 ---------
 
-## v0.11.x (in development)
-
 ### TODO
 
  - [Engage an "overlapped I/O" on Windows](https://github.com/erthink/libmdbx/issues/224).
@@ -20,7 +18,34 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.10.5 at 2021-10-13
+## v0.11.1 at 2021-10-23
+
+### Backward compatibility break:
+
+The database format signature has been changed to prevent
+forward-interoperability with an previous releases, which may lead to a
+[false positive diagnosis of database corruption](https://github.com/erthink/libmdbx/issues/238)
+due to flaws of an old library versions.
+
+This change is mostly invisible:
+
+ - previously versions are unable to read/write a new DBs;
+ - but the new release is able to handle an old DBs and will silently upgrade ones.
+
+Acknowledgements:
+
+ - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
+
+
+## v0.10.5 at 2021-10-13 (obsolete, please use v0.11.1)
+
+Unfortunately, the `v0.10.5` accidentally comes not full-compatible with previous releases:
+
+ - `v0.10.5` can read/processing DBs created by previous releases, i.e. the backward-compatibility is provided;
+ - however, previous releases may lead to false-corrupted state with DB that was touched by `v0.10.5`, i.e. the forward-compatibility is broken for `v0.10.4` and earlier.
+
+This cannot be fixed, as it requires fixing past versions, which as a result we will just get a current version.
+Therefore, it is recommended to use `v0.11.1` instead of `v0.10.5`.
 
 Acknowledgements:
 
