@@ -393,7 +393,8 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_CXX01_CONSTEXPR __inline
 #define MDBX_CXX01_CONSTEXPR_VAR const
 #elif !defined(DOXYGEN) &&                                                     \
-    (!defined(__cpp_constexpr) || __cpp_constexpr < 200704L ||                 \
+    ((__cplusplus < 201103L && defined(__cpp_constexpr) &&                     \
+      __cpp_constexpr < 200704L) ||                                            \
      (defined(__LCC__) && __LCC__ < 124) ||                                    \
      (defined(__GNUC__) && (__GNUC__ * 100 + __GNUC_MINOR__ < 407) &&          \
       !defined(__clang__) && !defined(__LCC__)) ||                             \
@@ -410,7 +411,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_CXX11_CONSTEXPR __inline
 #define MDBX_CXX11_CONSTEXPR_VAR const
 #elif !defined(DOXYGEN) &&                                                     \
-    (!defined(__cpp_constexpr) || __cpp_constexpr < 201304 ||                  \
+    (!defined(__cpp_constexpr) || __cpp_constexpr < 201304L ||                 \
      (defined(__LCC__) && __LCC__ < 124) ||                                    \
      (defined(__GNUC__) && __GNUC__ < 6 && !defined(__clang__) &&              \
       !defined(__LCC__)) ||                                                    \
