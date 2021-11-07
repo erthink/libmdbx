@@ -19378,31 +19378,11 @@ __cold int mdbx_env_info(const MDBX_env *env, MDBX_envinfo *info,
 }
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
-__cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
-                            MDBX_envinfo *arg, size_t bytes) {
-  if (unlikely((env == NULL && txn == NULL) || arg == NULL))
-    return MDBX_EINVAL;
-
-  if (txn) {
-    int err = check_txn(txn, MDBX_TXN_BLOCKED);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-  }
-  if (env) {
-    int err = check_env(env, false);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-    if (txn && unlikely(txn->mt_env != env))
-      return MDBX_EINVAL;
-  } else {
-    env = txn->mt_env;
-  }
+__cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
+                                   MDBX_envinfo *arg, const size_t bytes) {
 
   const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
-  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
-      bytes != size_before_pgop_stat)
-    return MDBX_EINVAL;
 
   /* is the environment open? (https://github.com/erthink/libmdbx/issues/171) */
   if (unlikely(!env->me_map)) {
@@ -19432,63 +19412,47 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
   const MDBX_meta *const meta0 = METAPAGE(env, 0);
   const MDBX_meta *const meta1 = METAPAGE(env, 1);
   const MDBX_meta *const meta2 = METAPAGE(env, 2);
-  pgno_t unsynced_pages;
-  while (1) {
-    if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
-      return MDBX_PANIC;
+  if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
+    return MDBX_PANIC;
 
-    const MDBX_meta *const recent_meta = mdbx_meta_head(env);
-    arg->mi_recent_txnid = mdbx_meta_txnid_fluid(env, recent_meta);
-    arg->mi_meta0_txnid = mdbx_meta_txnid_fluid(env, meta0);
-    arg->mi_meta0_sign = unaligned_peek_u64(4, meta0->mm_datasync_sign);
-    arg->mi_meta1_txnid = mdbx_meta_txnid_fluid(env, meta1);
-    arg->mi_meta1_sign = unaligned_peek_u64(4, meta1->mm_datasync_sign);
-    arg->mi_meta2_txnid = mdbx_meta_txnid_fluid(env, meta2);
-    arg->mi_meta2_sign = unaligned_peek_u64(4, meta2->mm_datasync_sign);
-    if (likely(bytes > size_before_bootid)) {
-      memcpy(&arg->mi_bootid.meta0, &meta0->mm_bootid, 16);
-      memcpy(&arg->mi_bootid.meta1, &meta1->mm_bootid, 16);
-      memcpy(&arg->mi_bootid.meta2, &meta2->mm_bootid, 16);
-    }
-
-    const MDBX_meta *txn_meta = recent_meta;
-    arg->mi_last_pgno = txn_meta->mm_geo.next - 1;
-    arg->mi_geo.current = pgno2bytes(env, txn_meta->mm_geo.now);
-    if (txn) {
-      arg->mi_last_pgno = txn->mt_next_pgno - 1;
-      arg->mi_geo.current = pgno2bytes(env, txn->mt_end_pgno);
-
-      const txnid_t wanna_meta_txnid = (txn->mt_flags & MDBX_TXN_RDONLY)
-                                           ? txn->mt_txnid
-                                           : txn->mt_txnid - xMDBX_TXNID_STEP;
-      txn_meta = (arg->mi_meta0_txnid == wanna_meta_txnid) ? meta0 : txn_meta;
-      txn_meta = (arg->mi_meta1_txnid == wanna_meta_txnid) ? meta1 : txn_meta;
-      txn_meta = (arg->mi_meta2_txnid == wanna_meta_txnid) ? meta2 : txn_meta;
-    }
-    arg->mi_geo.lower = pgno2bytes(env, txn_meta->mm_geo.lower);
-    arg->mi_geo.upper = pgno2bytes(env, txn_meta->mm_geo.upper);
-    arg->mi_geo.shrink = pgno2bytes(env, pv2pages(txn_meta->mm_geo.shrink_pv));
-    arg->mi_geo.grow = pgno2bytes(env, pv2pages(txn_meta->mm_geo.grow_pv));
-    unsynced_pages =
-        atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed) +
-        (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
-         (uint32_t)arg->mi_last_pgno);
-
-    arg->mi_mapsize = env->me_dxb_mmap.limit;
-    mdbx_compiler_barrier();
-    if (likely(arg->mi_meta0_txnid == mdbx_meta_txnid_fluid(env, meta0) &&
-               arg->mi_meta0_sign ==
-                   unaligned_peek_u64(4, meta0->mm_datasync_sign) &&
-               arg->mi_meta1_txnid == mdbx_meta_txnid_fluid(env, meta1) &&
-               arg->mi_meta1_sign ==
-                   unaligned_peek_u64(4, meta1->mm_datasync_sign) &&
-               arg->mi_meta2_txnid == mdbx_meta_txnid_fluid(env, meta2) &&
-               arg->mi_meta2_sign ==
-                   unaligned_peek_u64(4, meta2->mm_datasync_sign) &&
-               recent_meta == mdbx_meta_head(env) &&
-               arg->mi_recent_txnid == mdbx_meta_txnid_fluid(env, recent_meta)))
-      break;
+  const MDBX_meta *const recent_meta = mdbx_meta_head(env);
+  arg->mi_recent_txnid = mdbx_meta_txnid_fluid(env, recent_meta);
+  arg->mi_meta0_txnid = mdbx_meta_txnid_fluid(env, meta0);
+  arg->mi_meta0_sign = unaligned_peek_u64(4, meta0->mm_datasync_sign);
+  arg->mi_meta1_txnid = mdbx_meta_txnid_fluid(env, meta1);
+  arg->mi_meta1_sign = unaligned_peek_u64(4, meta1->mm_datasync_sign);
+  arg->mi_meta2_txnid = mdbx_meta_txnid_fluid(env, meta2);
+  arg->mi_meta2_sign = unaligned_peek_u64(4, meta2->mm_datasync_sign);
+  if (likely(bytes > size_before_bootid)) {
+    memcpy(&arg->mi_bootid.meta0, &meta0->mm_bootid, 16);
+    memcpy(&arg->mi_bootid.meta1, &meta1->mm_bootid, 16);
+    memcpy(&arg->mi_bootid.meta2, &meta2->mm_bootid, 16);
   }
+
+  const MDBX_meta *txn_meta = recent_meta;
+  arg->mi_last_pgno = txn_meta->mm_geo.next - 1;
+  arg->mi_geo.current = pgno2bytes(env, txn_meta->mm_geo.now);
+  if (txn) {
+    arg->mi_last_pgno = txn->mt_next_pgno - 1;
+    arg->mi_geo.current = pgno2bytes(env, txn->mt_end_pgno);
+
+    const txnid_t wanna_meta_txnid = (txn->mt_flags & MDBX_TXN_RDONLY)
+                                         ? txn->mt_txnid
+                                         : txn->mt_txnid - xMDBX_TXNID_STEP;
+    txn_meta = (arg->mi_meta0_txnid == wanna_meta_txnid) ? meta0 : txn_meta;
+    txn_meta = (arg->mi_meta1_txnid == wanna_meta_txnid) ? meta1 : txn_meta;
+    txn_meta = (arg->mi_meta2_txnid == wanna_meta_txnid) ? meta2 : txn_meta;
+  }
+  arg->mi_geo.lower = pgno2bytes(env, txn_meta->mm_geo.lower);
+  arg->mi_geo.upper = pgno2bytes(env, txn_meta->mm_geo.upper);
+  arg->mi_geo.shrink = pgno2bytes(env, pv2pages(txn_meta->mm_geo.shrink_pv));
+  arg->mi_geo.grow = pgno2bytes(env, pv2pages(txn_meta->mm_geo.grow_pv));
+  const pgno_t unsynced_pages =
+      atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed) +
+      (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
+       (uint32_t)arg->mi_last_pgno);
+
+  arg->mi_mapsize = env->me_dxb_mmap.limit;
 
   const MDBX_lockinfo *const lck = env->me_lck;
   arg->mi_maxreaders = env->me_maxreaders;
@@ -19555,7 +19519,49 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     }
   }
 
+  mdbx_compiler_barrier();
   return MDBX_SUCCESS;
+}
+
+__cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
+                            MDBX_envinfo *arg, size_t bytes) {
+  if (unlikely((env == NULL && txn == NULL) || arg == NULL))
+    return MDBX_EINVAL;
+
+  if (txn) {
+    int err = check_txn(txn, MDBX_TXN_BLOCKED);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
+  if (env) {
+    int err = check_env(env, false);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    if (txn && unlikely(txn->mt_env != env))
+      return MDBX_EINVAL;
+  } else {
+    env = txn->mt_env;
+  }
+
+  const size_t size_before_bootid = offsetof(MDBX_envinfo, mi_bootid);
+  const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
+  if (unlikely(bytes != sizeof(MDBX_envinfo)) && bytes != size_before_bootid &&
+      bytes != size_before_pgop_stat)
+    return MDBX_EINVAL;
+
+  MDBX_envinfo snap;
+  int rc = fetch_envinfo_ex(env, txn, &snap, sizeof(snap));
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  while (1) {
+    rc = fetch_envinfo_ex(env, txn, arg, sizeof(bytes));
+    if (unlikely(rc != MDBX_SUCCESS))
+      return rc;
+    if (likely(memcmp(&snap, arg, bytes) == 0))
+      return MDBX_SUCCESS;
+    memcpy(&snap, arg, bytes);
+  }
 }
 
 static __inline MDBX_cmp_func *get_default_keycmp(unsigned flags) {
