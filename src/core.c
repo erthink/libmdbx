@@ -1573,9 +1573,6 @@ static int uniq_peek(const mdbx_mmap_t *pending, mdbx_mmap_t *scan) {
     rc = MDBX_SUCCESS;
   } else {
     bait = 0 /* hush MSVC warning */;
-#if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&scan_lck->mti_pgop_stat.wops, 1);
-#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_msync(scan, 0, sizeof(MDBX_lockinfo), MDBX_SYNC_DATA);
     if (rc == MDBX_SUCCESS)
       rc = mdbx_pread(pending->fd, &bait, sizeof(scan_lck->mti_bait_uniqueness),
@@ -1632,9 +1629,6 @@ __cold static int uniq_check(const mdbx_mmap_t *pending, MDBX_env **found) {
     if (err == MDBX_RESULT_TRUE)
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     if (err == MDBX_RESULT_TRUE) {
-#if MDBX_ENABLE_PGOP_STAT
-      safe64_inc(&scan->me_lck_mmap.lck->mti_pgop_stat.wops, 1);
-#endif /* MDBX_ENABLE_PGOP_STAT */
       (void)mdbx_msync(&scan->me_lck_mmap, 0, sizeof(MDBX_lockinfo),
                        MDBX_SYNC_NONE);
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
@@ -4985,7 +4979,7 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
                     bytes2pgno(env, ctx->iov[i].iov_len));
 
 #if MDBX_ENABLE_PGOP_STAT
-  safe64_inc(&txn->mt_env->me_lck->mti_pgop_stat.wops, ctx->iov_items);
+  txn->mt_env->me_lck->mti_pgop_stat.wops.weak += ctx->iov_items;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   ctx->iov_items = 0;
   ctx->iov_bytes = 0;
@@ -5050,7 +5044,7 @@ static int spill_page(MDBX_txn *txn, struct mdbx_iov_ctx *ctx, MDBX_page *dp,
     err = mdbx_pnl_append_range(true, &txn->tw.spill_pages, pgno << 1, npages);
 #if MDBX_ENABLE_PGOP_STAT
     if (likely(err == MDBX_SUCCESS))
-      safe64_inc(&txn->mt_env->me_lck->mti_pgop_stat.spill, npages);
+      txn->mt_env->me_lck->mti_pgop_stat.spill.weak += npages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   }
   return err;
@@ -5231,7 +5225,7 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     if (!MDBX_FAKE_SPILL_WRITEMAP && ctx.flush_end > ctx.flush_begin) {
       MDBX_env *const env = txn->mt_env;
 #if MDBX_ENABLE_PGOP_STAT
-      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+      env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = mdbx_msync(&env->me_dxb_mmap,
                       pgno_align2os_bytes(env, ctx.flush_begin),
@@ -6058,7 +6052,7 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
 
   if ((env->me_flags & MDBX_WRITEMAP) && env->me_lck->mti_unsynced_pages.weak) {
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+    env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, used_pgno),
                     MDBX_SYNC_NONE);
@@ -6209,7 +6203,7 @@ static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
 
 __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 #if MDBX_ENABLE_PGOP_STAT
-  safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+  env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
                                    ? env->me_dsync_fd
@@ -6829,7 +6823,7 @@ mdbx_page_unspill(MDBX_txn *const txn, const MDBX_page *const mp) {
     if (unlikely(ret.err != MDBX_SUCCESS))
       return ret;
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&txn->mt_env->me_lck->mti_pgop_stat.unspill, npages);
+    txn->mt_env->me_lck->mti_pgop_stat.unspill.weak += npages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     ret.page->mp_flags |= (scan == txn) ? 0 : P_SPILLED;
     ret.err = MDBX_SUCCESS;
@@ -6902,7 +6896,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     }
 
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&txn->mt_env->me_lck->mti_pgop_stat.cow, 1);
+    txn->mt_env->me_lck->mti_pgop_stat.cow.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     mdbx_page_copy(np, mp, txn->mt_env->me_psize);
     np->mp_pgno = pgno;
@@ -6945,7 +6939,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
       goto fail;
 
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&txn->mt_env->me_lck->mti_pgop_stat.clone, 1);
+    txn->mt_env->me_lck->mti_pgop_stat.clone.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   }
 
@@ -7023,7 +7017,7 @@ __cold static int mdbx_env_sync_internal(MDBX_env *env, bool force,
         const size_t usedbytes = pgno_align2os_bytes(env, head->mm_geo.next);
 
 #if MDBX_ENABLE_PGOP_STAT
-        safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+        env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
         mdbx_txn_unlock(env);
 
@@ -7073,7 +7067,17 @@ fastpath:
     if (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
         (uint32_t)head_txnid) {
 #if MDBX_ENABLE_PGOP_STAT
-      safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+      if (need_unlock)
+        env->me_lck->mti_pgop_stat.wops.weak += 1;
+#if MDBX_64BIT_ATOMIC
+      else {
+        MDBX_atomic_uint64_t *wops = &env->me_lck->mti_pgop_stat.wops;
+        while (unlikely(!atomic_cas64(wops, wops->weak, wops->weak + 1)))
+          atomic_yield();
+      }
+#else
+        /* loose the env->me_lck->mti_pgop_stat.wops.weak increment */
+#endif /* MDBX_64BIT_ATOMIC */
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = (flags & MDBX_WRITEMAP)
                ? mdbx_msync(&env->me_dxb_mmap, 0,
@@ -10737,7 +10741,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         mode_bits |= MDBX_SYNC_IODQ;
     }
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+    env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     if (flags & MDBX_WRITEMAP)
       rc =
@@ -10823,7 +10827,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
               target == head || mdbx_meta_txnid_stable(env, target) <
                                     unaligned_peek_u64(4, pending->mm_txnid_a));
 #if MDBX_ENABLE_PGOP_STAT
-  safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+  env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   if (flags & MDBX_WRITEMAP) {
     mdbx_jitter4testing(true);
@@ -10882,7 +10886,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                      ? env->me_dsync_fd
                                      : env->me_lazy_fd;
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+    env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     rc = mdbx_pwrite(fd, pending, sizeof(MDBX_meta),
                      (uint8_t *)target - env->me_map);
@@ -12281,7 +12285,7 @@ __cold static int __must_check_result mdbx_override_meta(
     return MDBX_PROBLEM;
 
 #if MDBX_ENABLE_PGOP_STAT
-  safe64_inc(&env->me_lck->mti_pgop_stat.wops, 1);
+  env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   if (env->me_flags & MDBX_WRITEMAP) {
     rc = mdbx_msync(&env->me_dxb_mmap, 0,
@@ -14983,8 +14987,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
               return err;
 
 #if MDBX_ENABLE_PGOP_STAT
-            safe64_inc(&mc->mc_txn->mt_env->me_lck->mti_pgop_stat.clone,
-                       ovpages);
+            mc->mc_txn->mt_env->me_lck->mti_pgop_stat.clone.weak += ovpages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
             mdbx_cassert(mc, mdbx_dirtylist_check(mc->mc_txn));
           }
@@ -15503,7 +15506,7 @@ static struct page_result mdbx_page_new(MDBX_cursor *mc, const unsigned flags,
   mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
   mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
 #if MDBX_ENABLE_PGOP_STAT
-  safe64_inc(&mc->mc_txn->mt_env->me_lck->mti_pgop_stat.newly, npages);
+  mc->mc_txn->mt_env->me_lck->mti_pgop_stat.newly.weak += npages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
   if (likely((flags & P_OVERFLOW) == 0)) {
@@ -16855,7 +16858,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_cassert(cdst, cdst->mc_snum == cdst->mc_top + 1);
 
 #if MDBX_ENABLE_PGOP_STAT
-  safe64_inc(&cdst->mc_txn->mt_env->me_lck->mti_pgop_stat.merge, 1);
+  cdst->mc_txn->mt_env->me_lck->mti_pgop_stat.merge.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
   if (IS_LEAF(cdst->mc_pg[cdst->mc_top])) {
@@ -18351,7 +18354,7 @@ done:
         newdata->iov_base = node_data(node);
     }
 #if MDBX_ENABLE_PGOP_STAT
-    safe64_inc(&env->me_lck->mti_pgop_stat.split, 1);
+    env->me_lck->mti_pgop_stat.split.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
   }
 
