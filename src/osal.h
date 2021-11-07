@@ -481,9 +481,18 @@ typedef union MDBX_srwlock {
 } MDBX_srwlock;
 #endif /* Windows */
 
-#ifdef __cplusplus
-extern void mdbx_osal_jitter(bool tiny);
+#ifndef __cplusplus
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
+
+MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny) {
+#if MDBX_DEBUG
+  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
+    mdbx_osal_jitter(tiny);
 #else
+  (void)tiny;
+#endif
+}
 
 /*----------------------------------------------------------------------------*/
 /* Atomics */
@@ -735,7 +744,6 @@ MDBX_MAYBE_UNUSED static __inline uintptr_t mdbx_thread_self(void) {
   return (uintptr_t)thunk;
 }
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t
 mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
