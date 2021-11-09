@@ -10556,9 +10556,7 @@ __cold static MDBX_page *mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
                        pages2pv(pv2pages(model_meta->mm_geo.shrink_pv)));
 
   model_meta->mm_psize = env->me_psize;
-  model_meta->mm_flags = (uint16_t)env->me_flags & DB_PERSISTENT_FLAGS;
-  model_meta->mm_flags =
-      MDBX_INTEGERKEY; /* this is mm_dbs[FREE_DBI].md_flags */
+  model_meta->mm_dbs[FREE_DBI].md_flags = MDBX_INTEGERKEY;
   model_meta->mm_dbs[FREE_DBI].md_root = P_INVALID;
   model_meta->mm_dbs[MAIN_DBI].md_root = P_INVALID;
   mdbx_meta_set_txnid(env, model_meta, MIN_TXNID + num);
@@ -10838,7 +10836,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       unaligned_poke_u64(4, target->mm_datasync_sign, MDBX_DATASIGN_WEAK);
 #ifndef NDEBUG
       /* debug: provoke failure to catch a violators, but don't touch mm_psize
-       * and mm_flags to allow readers catch actual pagesize. */
+       * to allow readers catch actual pagesize. */
       uint8_t *provoke_begin = (uint8_t *)&target->mm_dbs[FREE_DBI].md_root;
       uint8_t *provoke_end = (uint8_t *)&target->mm_datasync_sign;
       memset(provoke_begin, 0xCC, provoke_end - provoke_begin);

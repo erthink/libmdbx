@@ -422,8 +422,6 @@ typedef struct MDBX_meta {
   MDBX_db mm_dbs[CORE_DBS]; /* first is free space, 2nd is main db */
                             /* The size of pages used in this DB */
 #define mm_psize mm_dbs[FREE_DBI].md_xsize
-/* Any persistent environment flags, see mdbx_env */
-#define mm_flags mm_dbs[FREE_DBI].md_flags
   MDBX_canary mm_canary;
 
 #define MDBX_DATASIGN_NONE 0u
