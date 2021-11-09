@@ -27,38 +27,39 @@ jobs:
     - uses: actions/checkout@v2
     - name: fetch tags
       run: git fetch --unshallow --tags --prune --force
+    - name: append PATH
+      run: echo 'C:/ProgramData/chocolatey/lib/mingw/tools/install/mingw64/bin' >> $GITHUB_PATH
     - name: update mingw64
       # wanna version >= 10.2
-      run: choco upgrade mingw -y --no-progress
+      run: choco upgrade mingw -y --no-progress && refreshenv
     - name: configure-dll
-      run: mkdir build-dll && cd build-dll && cmake  -G "MinGW Makefiles" -DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON -DMDBX_INSTALL_STATIC:BOOL=OFF ..
+      shell: bash
+      run: |
+        mkdir build-dll && cd build-dll && \
+        cmake -G "MinGW Makefiles" -DMDBX_BUILD_SHARED_LIBRARY:BOOL=ON -DMDBX_INSTALL_STATIC:BOOL=OFF -DMDBX_ENABLE_TESTS:BOOL=ON ..
     - name: build-dll
+      shell: bash
       run: cd build-dll && cmake --build .
     - name: test-dll
-      shell: pwsh
+      shell: bash
       run: |
-        cd build-dll
-        ls
-        ./mdbx_test --progress --console=no --pathname=test.db --dont-cleanup-after basic > test.log
-        Get-Content test.log | Select-Object -last 42
-        if ($LastExitCode -ne 0) {
-            throw "Exec: $ErrorMessage"
-        } else {
-            ./mdbx_chk -nvv test.db | Tee-Object -file chk.log | Select-Object -last 42
-        }
+        export "PATH=/c/programdata/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH" && \
+        cd build-dll && \
+        ./mdbx_test.exe --progress --console=no --pathname=test.db --dont-cleanup-after basic && \
+        ./mdbx_chk.exe -nvv test.db
     - name: configure-static
-      run: mkdir build-static && cd build-static && cmake  -G "MinGW Makefiles" -DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF -DMDBX_INSTALL_STATIC:BOOL=ON ..
-    - name: build-static
-      run: cd build-static && cmake --build .
-    - name: test-static
-      shell: pwsh
+      shell: bash
       run: |
-        cd build-static
-        ls
-        ./mdbx_test --progress --console=no --pathname=test.db --dont-cleanup-after basic > test.log
-        Get-Content test.log | Select-Object -last 42
-        if ($LastExitCode -ne 0) {
-            throw "Exec: $ErrorMessage"
-        } else {
-            ./mdbx_chk -nvv test.db | Tee-Object -file chk.log | Select-Object -last 42
-        }
+        mkdir build-static && cd build-static && \
+        cmake -G "MinGW Makefiles" -DMDBX_BUILD_SHARED_LIBRARY:BOOL=OFF -DMDBX_INSTALL_STATIC:BOOL=ON -DMDBX_ENABLE_TESTS:BOOL=ON ..
+    - name: build-static
+      shell: bash
+      run: |
+        cd build-static && cmake --build .
+    - name: test-static
+      shell: bash
+      run: |
+        export "PATH=/c/programdata/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH" && \
+        cd build-static && \
+        ./mdbx_test.exe --progress --console=no --pathname=test.db --dont-cleanup-after basic && \
+        ./mdbx_chk.exe -nvv test.db

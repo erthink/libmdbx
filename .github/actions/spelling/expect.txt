@@ -1321,6 +1321,7 @@ proba
 proces
 procfs
 progname
+programdata
 PROGRAMLISTING
 projectbrief
 projectlogo
@@ -1415,6 +1416,7 @@ redis
 reedom
 reefont
 refname
+refreshenv
 REGEX
 regexp
 reinited
