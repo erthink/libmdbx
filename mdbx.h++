@@ -286,7 +286,8 @@ class cursor;
 class cursor_managed;
 
 #if defined(DOXYGEN) ||                                                        \
-    defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L
+    (defined(__cpp_lib_memory_resource) &&                                     \
+     __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI)
 /// \brief Default polymorphic allocator for modern code.
 using polymorphic_allocator = ::std::pmr::string::allocator_type;
 #endif /* __cpp_lib_memory_resource >= 201603L */

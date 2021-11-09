@@ -992,7 +992,8 @@ bool from_base64::is_erroneous() const noexcept {
 
 template class LIBMDBX_API_TYPE buffer<legacy_allocator>;
 
-#if defined(__cpp_lib_memory_resource) && __cpp_lib_memory_resource >= 201603L
+#if defined(__cpp_lib_memory_resource) &&                                      \
+    __cpp_lib_memory_resource >= 201603L && _GLIBCXX_USE_CXX11_ABI
 template class LIBMDBX_API_TYPE buffer<polymorphic_allocator>;
 #endif /* __cpp_lib_memory_resource >= 201603L */
 
