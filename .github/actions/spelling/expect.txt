@@ -68,6 +68,7 @@ asprintf
 aspx
 assection
 AstraLinux
+astralinux
 atal
 atexit
 atfork
@@ -99,6 +100,7 @@ bfin
 biarch
 bibtex
 BIGDATA
+bigdata
 bindir
 binfmt
 binutils
@@ -600,6 +602,7 @@ github
 githubusercontent
 gitignore
 glibc
+GLIBCXX
 globals
 gmail
 gmake
@@ -979,6 +982,7 @@ microsoft
 Mikkelson
 minflt
 MINGW
+mingw
 minimalistic
 minkeys
 minlen
@@ -1405,6 +1409,7 @@ REALMEM
 REALPATH
 realtime
 Rebuffo
+rebuffo
 RECO
 redis
 reedom
