@@ -20,11 +20,16 @@ ChangeLog
 
 ## v0.11.2 (underway)
 
+Acknowledgements:
+
+ - [장세연 (Чан Се Ен)](https://github.com/sasgas) for contributing to C++ API.
+
 Minors:
 
- - Refine/fix `constexpr`-related macros for legacy compilers.
- - Allow to define `CMAKE_CXX_STANDARD` by the environment variable.
- - Simplify collection of page-ops statistic.
+ - Fixed `constexpr`-related macros for legacy compilers.
+ - Allowed to define 'CMAKE_CXX_STANDARD` using an environment variable.
+ - Simplified collection statistics of page operation .
+ - [Fixed](https://github.com/erthink/libmdbx/pull/239) compilation with devtoolset-9 on CentOS/RHEL 7.
 
 
 ## v0.11.1 at 2021-10-23
