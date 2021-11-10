@@ -1501,10 +1501,11 @@ typedef struct MDBX_node {
  *                |  1, a > b
  *                \
  */
-#if 1
+#ifndef __e2k__
 /* LY: fast enough on most systems */
 #define CMP2INT(a, b) (((b) > (a)) ? -1 : (a) > (b))
 #else
+/* LY: more parallelable on VLIW Elbrus */
 #define CMP2INT(a, b) (((a) > (b)) - ((b) > (a)))
 #endif
 
