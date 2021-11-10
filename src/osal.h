@@ -484,15 +484,7 @@ typedef union MDBX_srwlock {
 #ifndef __cplusplus
 
 MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
-
-MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny) {
-#if MDBX_DEBUG
-  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
-    mdbx_osal_jitter(tiny);
-#else
-  (void)tiny;
-#endif
-}
+MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny);
 
 /*----------------------------------------------------------------------------*/
 /* Atomics */

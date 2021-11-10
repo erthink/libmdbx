@@ -1189,6 +1189,15 @@ extern uint8_t mdbx_runtime_flags;
 extern uint8_t mdbx_loglevel;
 extern MDBX_debug_func *mdbx_debug_logger;
 
+MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny) {
+#if MDBX_DEBUG
+  if (MDBX_DBG_JITTER & mdbx_runtime_flags)
+    mdbx_osal_jitter(tiny);
+#else
+  (void)tiny;
+#endif
+}
+
 MDBX_INTERNAL_FUNC void MDBX_PRINTF_ARGS(4, 5)
     mdbx_debug_log(int level, const char *function, int line, const char *fmt,
                    ...) MDBX_PRINTF_ARGS(4, 5);
