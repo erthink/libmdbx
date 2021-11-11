@@ -61,6 +61,19 @@
  * Studio 2015 Update 3). But you could remove this #error and try to continue
  * at your own risk. In such case please don't rise up an issues related ONLY to
  * old compilers.
+ *
+ * NOTE:
+ *   Unfortunately, there are several different builds of "Visual Studio" that
+ *   are called "Visual Studio 2015 Update 3".
+ *
+ *   The 190024234 is used here because it is minimal version of Visual Studio
+ *   that was used for build and testing libmdbx in recent years. Soon this
+ *   value will be increased to 19.0.24241.7, since build and testing using
+ *   "Visual Studio 2015" will be performed only at https://ci.appveyor.com.
+ *
+ *   Please ask Microsoft (but not us) for information about version differences
+ *   and how to and where you can obtain the latest "Visual Studio 2015" build
+ *   with all fixes.
  */
 #error                                                                         \
     "At least \"Microsoft C/C++ Compiler\" version 19.00.24234 (Visual Studio 2015 Update 3) is required."
