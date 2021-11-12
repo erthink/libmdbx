@@ -1383,10 +1383,10 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags_t)
 enum MDBX_db_flags_t {
   MDBX_DB_DEFAULTS = 0,
 
-  /** Use reverse string keys */
+  /** Use reverse string comparison for keys. */
   MDBX_REVERSEKEY = UINT32_C(0x02),
 
-  /** Use sorted duplicates, i.e. allow multi-values */
+  /** Use sorted duplicates, i.e. allow multi-values for a keys. */
   MDBX_DUPSORT = UINT32_C(0x04),
 
   /** Numeric keys in native byte order either uint32_t or uint64_t. The keys
@@ -1394,18 +1394,19 @@ enum MDBX_db_flags_t {
    * arguments. */
   MDBX_INTEGERKEY = UINT32_C(0x08),
 
-  /** With \ref MDBX_DUPSORT; sorted dup items have fixed size */
+  /** With \ref MDBX_DUPSORT; sorted dup items have fixed size. The data values
+   * must all be of the same size. */
   MDBX_DUPFIXED = UINT32_C(0x10),
 
   /** With \ref MDBX_DUPSORT and with \ref MDBX_DUPFIXED; dups are fixed size
-   * \ref MDBX_INTEGERKEY -style integers. The data values must all be of the
-   * same size and must be aligned while passing as arguments. */
+   * like \ref MDBX_INTEGERKEY -style integers. The data values must all be of
+   * the same size and must be aligned while passing as arguments. */
   MDBX_INTEGERDUP = UINT32_C(0x20),
 
-  /** With \ref MDBX_DUPSORT; use reverse string comparison */
+  /** With \ref MDBX_DUPSORT; use reverse string comparison for data values. */
   MDBX_REVERSEDUP = UINT32_C(0x40),
 
-  /** Create DB if not already existing */
+  /** Create DB if not already existing. */
   MDBX_CREATE = UINT32_C(0x40000),
 
   /** Opens an existing sub-database created with unknown flags.
