@@ -93,6 +93,10 @@ else()
 endif()
 
 if(DEFINED PROJECT_NAME)
+  option(MDBX_FORCE_BUILD_AS_MAIN_PROJECT "Force libmdbx to full control build options even it added as a subdirectory to your project." OFF)
+endif()
+
+if(DEFINED PROJECT_NAME AND NOT MDBX_FORCE_BUILD_AS_MAIN_PROJECT)
   set(SUBPROJECT ON)
   set(NOT_SUBPROJECT OFF)
   if(NOT MDBX_AMALGAMATED_SOURCE AND NOT DEFINED BUILD_TESTING)
