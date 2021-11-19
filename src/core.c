@@ -19556,7 +19556,7 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     return rc;
 
   while (1) {
-    rc = fetch_envinfo_ex(env, txn, arg, sizeof(bytes));
+    rc = fetch_envinfo_ex(env, txn, arg, bytes);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     if (likely(memcmp(&snap, arg, bytes) == 0))
