@@ -3286,9 +3286,11 @@ struct MDBX_commit_latency {
   uint32_t gc;
   /** \brief Duration of internal audit if enabled. */
   uint32_t audit;
-  /** \brief Duration of writing dirty/modified data pages. */
+  /** \brief Duration of writing dirty/modified data pages to a filesystem,
+   * i.e. the summary duration of a `write()` syscalls during commit. */
   uint32_t write;
-  /** \brief Duration of syncing written data to the dist/storage. */
+  /** \brief Duration of syncing written data to the disk/storage, i.e.
+   * the duration of a `fdatasync()` or a `msync()` syscall during commit. */
   uint32_t sync;
   /** \brief Duration of transaction ending (releasing resources). */
   uint32_t ending;
