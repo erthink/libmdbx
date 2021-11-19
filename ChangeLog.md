@@ -23,6 +23,7 @@ ChangeLog
 Acknowledgements:
 
  - [장세연 (Чан Се Ен)](https://github.com/sasgas) for contributing to C++ API.
+ - [Alain Picard](https://github.com/castortech) for [Java bindings](https://github.com/castortech/mdbxjni).
 
 Minors:
 
@@ -30,6 +31,7 @@ Minors:
  - Allowed to define 'CMAKE_CXX_STANDARD` using an environment variable.
  - Simplified collection statistics of page operation .
  - [Fixed](https://github.com/erthink/libmdbx/pull/239) compilation with devtoolset-9 on CentOS/RHEL 7.
+ - Added `MDBX_FORCE_BUILD_AS_MAIN_PROJECT` cmake option.
 
 
 ## v0.11.1 at 2021-10-23
