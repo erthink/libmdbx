@@ -11936,7 +11936,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
                    bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
 
     if ((env->me_flags & MDBX_RDONLY) == 0 && env->me_stuck_meta < 0) {
-      for (int n = 0; n < 3; ++n) {
+      for (int n = 0; n < NUM_METAS; ++n) {
         MDBX_meta *const pmeta = METAPAGE(env, n);
         if (unlikely(unaligned_peek_u64(4, &pmeta->mm_magic_and_version) !=
                      MDBX_DATA_MAGIC)) {
@@ -11946,7 +11946,12 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
                       "updating db-format signature for",
                       META_IS_STEADY(pmeta) ? "stead-" : "weak-", n, txnid);
           err = mdbx_override_meta(env, n, txnid, pmeta);
-          if (unlikely(err != MDBX_SUCCESS)) {
+          if (unlikely(err != MDBX_SUCCESS) &&
+              /* Just ignore the MDBX_PROBLEM error, since here it is
+               * returned only in case of the attempt to upgrade an obsolete
+               * meta-page that is invalid for current state of a DB,
+               * e.g. after shrinking DB file */
+                  err != MDBX_PROBLEM) {
             mdbx_error("%s meta[%u], txnid %" PRIaTXN ", error %d",
                        "updating db-format signature for", n, txnid, err);
             return err;
