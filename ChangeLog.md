@@ -24,6 +24,11 @@ Acknowledgements:
 
  - [장세연 (Чан Се Ен)](https://github.com/sasgas) for contributing to C++ API.
  - [Alain Picard](https://github.com/castortech) for [Java bindings](https://github.com/castortech/mdbxjni).
+ - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
+
+Fixes:
+
+  - [Fixed unexpected `MDBX_PROBLEM` error](https://github.com/erthink/libmdbx/issues/242) because of update an obsolete meta-page.
 
 Minors:
 
