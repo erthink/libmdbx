@@ -73,7 +73,12 @@ bool testcase_hill::run() {
   uint64_t committed_serial = serial_count;
   unsigned txn_nops = 0;
 
-  bool rc = false;
+  bool rc = speculum_verify();
+  if (!rc) {
+    log_notice("uphill: bailout before main loop");
+    goto bailout;
+  }
+
   while (should_continue()) {
     const keygen::serial_t a_serial = serial_count;
     if (unlikely(!keyvalue_maker.increment(serial_count, 1))) {

@@ -715,7 +715,7 @@ void testcase::speculum_check_cursor(const char *where, const char *stage,
   // verbose(where, stage, cursor_key, cursor_data, cursor_err);
   // verbose(where, stage, it);
   if (cursor_err != MDBX_SUCCESS && cursor_err != MDBX_NOTFOUND &&
-      cursor_err != MDBX_RESULT_TRUE)
+      cursor_err != MDBX_RESULT_TRUE && cursor_err != MDBX_ENODATA)
     failure("speculum-%s: %s %s %d %s", where, stage, "cursor-get", cursor_err,
             mdbx_strerror(cursor_err));
 
@@ -1050,6 +1050,15 @@ bool testcase::speculum_verify() {
   MDBX_val akey, avalue;
   MDBX_val mkey, mvalue;
   err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_FIRST);
+  if (err == MDBX_NOTFOUND) {
+    err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_GET_CURRENT);
+    if (err == MDBX_ENODATA)
+      err = MDBX_NOTFOUND;
+    else {
+      log_error("unexpected %d for MDBX_GET_CURRENT on empty DB", err);
+      rc = false;
+    }
+  }
 
   unsigned extra = 0, lost = 0, n = 0;
   assert(std::is_sorted(speculum.cbegin(), speculum.cend(), ItemCompare(this)));
@@ -1126,6 +1135,11 @@ bool testcase::speculum_verify() {
     if (eof != MDBX_RESULT_TRUE) {
       eof = mdbx_cursor_eof(cursor);
       log_error("false-negative cursor-eof: %u, rc %i", n, eof);
+      rc = false;
+    }
+    err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_GET_CURRENT);
+    if (err != MDBX_ENODATA) {
+      log_error("unexpected %d for MDBX_GET_CURRENT at EOF", err);
       rc = false;
     }
   }
