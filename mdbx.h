@@ -1737,7 +1737,7 @@ enum MDBX_error_t {
 #ifdef ENODATA
   MDBX_ENODATA = ENODATA,
 #else
-  MDBX_ENODATA = -1,
+  MDBX_ENODATA = 9919 /* for compatibility with LLVM's C++ libraries/headers */,
 #endif /* ENODATA */
   MDBX_EINVAL = EINVAL,
   MDBX_EACCESS = EACCES,
