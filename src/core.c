@@ -11951,7 +11951,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
                * returned only in case of the attempt to upgrade an obsolete
                * meta-page that is invalid for current state of a DB,
                * e.g. after shrinking DB file */
-                  err != MDBX_PROBLEM) {
+              err != MDBX_PROBLEM) {
             mdbx_error("%s meta[%u], txnid %" PRIaTXN ", error %d",
                        "updating db-format signature for", n, txnid, err);
             return err;
