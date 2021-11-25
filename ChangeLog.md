@@ -25,10 +25,12 @@ Acknowledgements:
  - [장세연 (Чан Се Ен)](https://github.com/sasgas) for contributing to C++ API.
  - [Alain Picard](https://github.com/castortech) for [Java bindings](https://github.com/castortech/mdbxjni).
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
+ - [Kris Zyp](https://github.com/kriszyp) for reporting and testing.
 
 Fixes:
 
   - [Fixed unexpected `MDBX_PROBLEM` error](https://github.com/erthink/libmdbx/issues/242) because of update an obsolete meta-page.
+  - [Fixed returning `MDBX_NOTFOUND` error](https://github.com/erthink/libmdbx/issues/243) in case an inexact value found for `MDBX_GET_BOTH` operation.
 
 Minors:
 
