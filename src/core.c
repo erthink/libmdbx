@@ -14139,6 +14139,10 @@ got_node:
                             MDBX_SET_RANGE);
       if (unlikely(ret.err != MDBX_SUCCESS))
         return ret;
+      if (op == MDBX_GET_BOTH && !ret.exact) {
+        ret.err = MDBX_NOTFOUND;
+        return ret;
+      }
     }
   } else if (likely(data)) {
     if (op == MDBX_GET_BOTH || op == MDBX_GET_BOTH_RANGE) {
@@ -14170,12 +14174,12 @@ got_node:
           break;
         }
       }
-      MDBX_val olddata;
-      ret.err = mdbx_node_read(mc, node, &olddata,
+      MDBX_val actual_data;
+      ret.err = mdbx_node_read(mc, node, &actual_data,
                                pp_txnid4chk(mc->mc_pg[mc->mc_top], mc->mc_txn));
       if (unlikely(ret.err != MDBX_SUCCESS))
         return ret;
-      const int cmp = mc->mc_dbx->md_dcmp(&aligned_data, &olddata);
+      const int cmp = mc->mc_dbx->md_dcmp(&aligned_data, &actual_data);
       if (cmp) {
         mdbx_cassert(mc, mc->mc_ki[mc->mc_top] <
                                  page_numkeys(mc->mc_pg[mc->mc_top]) ||
@@ -14185,7 +14189,7 @@ got_node:
           return ret;
         }
       }
-      *data = olddata;
+      *data = actual_data;
     } else {
       ret.err = mdbx_node_read(mc, node, data,
                                pp_txnid4chk(mc->mc_pg[mc->mc_top], mc->mc_txn));
