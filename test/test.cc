@@ -641,7 +641,8 @@ enum speculum_cursors : int {
   prev = 1,
   prev_prev = 2,
   next = 3,
-  next_next = 4
+  next_next = 4,
+  seek_check = 5
 };
 
 bool testcase::is_same(const Item &a, const Item &b) const {
@@ -852,11 +853,26 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
   int err;
   bool rc = true;
   Item item;
+#if SPECULUM_CURSORS
+  MDBX_cursor *check_seek_cursor = nullptr;
+  MDBX_val seek_check_key, seek_check_data;
+  int seek_check_err = 42;
+#endif /* SPECULUM_CURSORS */
   if (config.params.speculum) {
     item.first = iov2dataview(akey);
     item.second = iov2dataview(adata);
 #if SPECULUM_CURSORS
     speculum_prepare_cursors(item);
+    check_seek_cursor = speculum_cursors[seek_check].get();
+    seek_check_key = akey->value;
+    seek_check_data = adata->value;
+    seek_check_err = mdbx_cursor_get(
+        check_seek_cursor, &seek_check_key, &seek_check_data,
+        (config.params.table_flags & MDBX_DUPSORT) ? MDBX_GET_BOTH
+                                                   : MDBX_SET_KEY);
+    if (seek_check_err != MDBX_SUCCESS && seek_check_err != MDBX_NOTFOUND)
+      failure("speculum-%s: %s pre-insert %d %s", "insert", "seek",
+              seek_check_err, mdbx_strerror(seek_check_err));
 #endif /* SPECULUM_CURSORS */
   }
 
@@ -881,6 +897,26 @@ int testcase::insert(const keygen::buffer &akey, const keygen::buffer &adata,
     }
 
 #if SPECULUM_CURSORS
+    if (insertion_result.second) {
+      if (seek_check_err != MDBX_NOTFOUND) {
+        log_error(
+            "speculum.pre-insert-seek: unexpected %d {%s, %s}", seek_check_err,
+            mdbx_dump_val(&seek_check_key, dump_key, sizeof(dump_key)),
+            mdbx_dump_val(&seek_check_data, dump_value, sizeof(dump_value)));
+        rc = false;
+      }
+    } else {
+      if (seek_check_err != MDBX_SUCCESS) {
+        log_error(
+            "speculum.pre-insert-seek: unexpected %d {%s, %s}", seek_check_err,
+            mdbx_dump_val(&seek_check_key, dump_key, sizeof(dump_key)),
+            mdbx_dump_val(&seek_check_data, dump_value, sizeof(dump_value)));
+        speculum_check_iterator("insert", "pre-seek", insertion_result.first,
+                                seek_check_key, seek_check_data);
+        rc = false;
+      }
+    }
+
     if (insertion_result.first != speculum.begin()) {
       const auto cursor_prev = speculum_cursors[prev].get();
       auto it_prev = insertion_result.first;

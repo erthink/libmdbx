@@ -202,7 +202,7 @@ protected:
 #define SPECULUM_CURSORS 1
 #endif /* SPECULUM_CURSORS */
 #if SPECULUM_CURSORS
-  scoped_cursor_guard speculum_cursors[5];
+  scoped_cursor_guard speculum_cursors[5 + 1];
   void speculum_prepare_cursors(const Item &item);
   void speculum_check_cursor(const char *where, const char *stage,
                              const testcase::SET::const_iterator &it,
