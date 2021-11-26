@@ -3513,10 +3513,14 @@ LIBMDBX_API int mdbx_canary_get(const MDBX_txn *txn, MDBX_canary *canary);
  * The reasons to not using custom comparators are:
  *   - The order of records could not be validated without your code.
  *     So `mdbx_chk` utility will reports "wrong order" errors
- *     and the `-i` option is required to ignore ones.
+ *     and the `-i` option is required to suppress ones.
  *   - A records could not be ordered or sorted without your code.
- *     So mdbx_load utility should be used with `-a` option to preserve
- *     input data order. */
+ *     So `mdbx_load` utility should be used with `-a` option to preserve
+ *     input data order.
+ *   - However, the custom comparators feature will never be removed.
+ *     You have been warned but still can use custom comparators knowing
+ *     about the issues noted above. In this case you should ignore `deprecated`
+ *     warnings or define `MDBX_DEPRECATED` macro to empty to avoid ones. */
 typedef int(MDBX_cmp_func)(const MDBX_val *a,
                            const MDBX_val *b) MDBX_CXX17_NOEXCEPT;
 
