@@ -18,7 +18,7 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.2 (underway)
+## v0.11.2 (underway, release scheduled for 2021-12-02)
 
 Acknowledgements:
 
@@ -29,16 +29,18 @@ Acknowledgements:
 
 Fixes:
 
-  - [Fixed unexpected `MDBX_PROBLEM` error](https://github.com/erthink/libmdbx/issues/242) because of update an obsolete meta-page.
-  - [Fixed returning `MDBX_NOTFOUND` error](https://github.com/erthink/libmdbx/issues/243) in case an inexact value found for `MDBX_GET_BOTH` operation.
+ - [Fixed compilation](https://github.com/erthink/libmdbx/pull/239) with `devtoolset-9` on CentOS/RHEL 7.
+ - [Fixed unexpected `MDBX_PROBLEM` error](https://github.com/erthink/libmdbx/issues/242) because of update an obsolete meta-page.
+ - [Fixed returning `MDBX_NOTFOUND` error](https://github.com/erthink/libmdbx/issues/243) in case an inexact value found for `MDBX_GET_BOTH` operation.
+ - [Fixed compilation](https://github.com/erthink/libmdbx/issues/245) without kernel/libc-devel headers.
 
 Minors:
 
  - Fixed `constexpr`-related macros for legacy compilers.
  - Allowed to define 'CMAKE_CXX_STANDARD` using an environment variable.
  - Simplified collection statistics of page operation .
- - [Fixed](https://github.com/erthink/libmdbx/pull/239) compilation with devtoolset-9 on CentOS/RHEL 7.
  - Added `MDBX_FORCE_BUILD_AS_MAIN_PROJECT` cmake option.
+ - Remove unneeded `#undef P_DIRTY`.
 
 
 ## v0.11.1 at 2021-10-23
