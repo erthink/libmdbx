@@ -1174,6 +1174,8 @@ bool testcase::speculum_verify() {
       rc = false;
     }
     err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_GET_CURRENT);
+    if (err == MDBX_SUCCESS)
+      err = mdbx_cursor_get(cursor, &akey, &avalue, MDBX_NEXT);
     if (err != MDBX_ENODATA) {
       log_error("unexpected %d for MDBX_GET_CURRENT at EOF", err);
       rc = false;

@@ -13750,7 +13750,7 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   mp = mc->mc_pg[mc->mc_top];
   if (mc->mc_flags & C_EOF) {
     if (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mp))
-      return MDBX_ENODATA;
+      return (mc->mc_flags & C_SUB) ? MDBX_NOTFOUND : MDBX_ENODATA;
     mc->mc_flags ^= C_EOF;
   }
 
@@ -14337,12 +14337,14 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
   switch (op) {
   case MDBX_GET_CURRENT: {
-    if (unlikely((mc->mc_flags & (C_INITIALIZED | C_EOF)) != C_INITIALIZED))
+    if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
       return MDBX_ENODATA;
     MDBX_page *mp = mc->mc_pg[mc->mc_top];
     const unsigned nkeys = page_numkeys(mp);
     if (mc->mc_ki[mc->mc_top] >= nkeys) {
       mdbx_cassert(mc, nkeys <= UINT16_MAX);
+      if (mc->mc_flags & C_EOF)
+        return MDBX_ENODATA;
       mc->mc_ki[mc->mc_top] = (uint16_t)nkeys;
       mc->mc_flags |= C_EOF;
       return MDBX_NOTFOUND;
