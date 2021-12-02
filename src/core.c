@@ -13741,14 +13741,14 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   MDBX_node *node;
   int rc;
 
-  if ((mc->mc_flags & C_DEL) && op == MDBX_NEXT_DUP)
+  if (unlikely(mc->mc_flags & C_DEL) && op == MDBX_NEXT_DUP)
     return MDBX_NOTFOUND;
 
-  if (!(mc->mc_flags & C_INITIALIZED))
+  if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
     return mdbx_cursor_first(mc, key, data);
 
   mp = mc->mc_pg[mc->mc_top];
-  if (mc->mc_flags & C_EOF) {
+  if (unlikely(mc->mc_flags & C_EOF)) {
     if (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mp))
       return (mc->mc_flags & C_SUB) ? MDBX_NOTFOUND : MDBX_ENODATA;
     mc->mc_flags ^= C_EOF;
@@ -13842,10 +13842,10 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   MDBX_node *node;
   int rc;
 
-  if ((mc->mc_flags & C_DEL) && op == MDBX_PREV_DUP)
+  if (unlikely(mc->mc_flags & C_DEL) && op == MDBX_PREV_DUP)
     return MDBX_NOTFOUND;
 
-  if (!(mc->mc_flags & C_INITIALIZED)) {
+  if (unlikely(!(mc->mc_flags & C_INITIALIZED))) {
     rc = mdbx_cursor_last(mc, key, data);
     if (unlikely(rc))
       return rc;
