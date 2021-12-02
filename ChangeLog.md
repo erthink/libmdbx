@@ -26,6 +26,7 @@ Acknowledgements:
  - [Alain Picard](https://github.com/castortech) for [Java bindings](https://github.com/castortech/mdbxjni).
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting and testing.
  - [Kris Zyp](https://github.com/kriszyp) for reporting and testing.
+ - [Artem Vorotnikov](https://github.com/vorot93) for support [Rust wrapper](https://github.com/vorot93/libmdbx-rs).
 
 Fixes:
 
@@ -92,7 +93,7 @@ Minors:
 
 Acknowledgements:
 
- - [Artem Vorotnikov](https://github.com/vorot93) for support [Rust wrapper](https://github.com/vorot93/mdbx-rs).
+ - [Artem Vorotnikov](https://github.com/vorot93) for support [Rust wrapper](https://github.com/vorot93/libmdbx-rs).
  - [Andrew Ashikhmin](https://github.com/yperbasis) for contributing to C++ API.
 
 Fixes:
