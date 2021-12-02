@@ -477,30 +477,23 @@ static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
 
 template <typename T>
 concept MutableByteProducer = requires(T a, char array[42]) {
-  { a.is_empty() }
-  ->std::same_as<bool>;
-  { a.envisage_result_length() }
-  ->std::same_as<size_t>;
-  { a.write_bytes(&array[0], size_t(42)) }
-  ->std::same_as<char *>;
+  { a.is_empty() } -> std::same_as<bool>;
+  { a.envisage_result_length() } -> std::same_as<size_t>;
+  { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
 };
 
 template <typename T>
 concept ImmutableByteProducer = requires(const T &a, char array[42]) {
-  { a.is_empty() }
-  ->std::same_as<bool>;
-  { a.envisage_result_length() }
-  ->std::same_as<size_t>;
-  { a.write_bytes(&array[0], size_t(42)) }
-  ->std::same_as<char *>;
+  { a.is_empty() } -> std::same_as<bool>;
+  { a.envisage_result_length() } -> std::same_as<size_t>;
+  { a.write_bytes(&array[0], size_t(42)) } -> std::same_as<char *>;
 };
 
 template <typename T>
-concept SliceTranscoder =
-    ImmutableByteProducer<T> &&requires(const slice &source, const T &a) {
+concept SliceTranscoder = ImmutableByteProducer<T> &&
+    requires(const slice &source, const T &a) {
   T(source);
-  { a.is_erroneous() }
-  ->std::same_as<bool>;
+  { a.is_erroneous() } -> std::same_as<bool>;
 };
 
 #endif /* __cpp_concepts >= 201907L*/
@@ -4405,9 +4398,9 @@ MDBX_CXX14_CONSTEXPR intptr_t slice::compare_fast(const slice &a,
                                                   const slice &b) noexcept {
   const intptr_t diff = intptr_t(a.length()) - intptr_t(b.length());
   return diff ? diff
-              : MDBX_UNLIKELY(a.length() == 0 || a.data() == b.data())
-                    ? 0
-                    : memcmp(a.data(), b.data(), a.length());
+         : MDBX_UNLIKELY(a.length() == 0 || a.data() == b.data())
+             ? 0
+             : memcmp(a.data(), b.data(), a.length());
 }
 
 MDBX_CXX14_CONSTEXPR intptr_t

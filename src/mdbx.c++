@@ -1429,7 +1429,7 @@ __cold ::std::ostream &operator<<(::std::ostream &out,
   }
 
   const auto bytes = (it.bytes < 0) ? out << "-",
-             size_t(-it.bytes) : size_t(it.bytes);
+             size_t(-it.bytes)      : size_t(it.bytes);
   struct {
     size_t one;
     const char *suffix;
