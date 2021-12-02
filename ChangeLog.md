@@ -18,7 +18,7 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.2 (underway, release scheduled for 2021-12-02)
+## v0.11.2 at 2021-12-02
 
 Acknowledgements:
 
