@@ -172,6 +172,9 @@ as a duplicates or as like a multiple values corresponds to keys.
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
+#if !defined(NDEBUG) && !defined(assert)
+#include <assert.h>
+#endif /* NDEBUG */
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
@@ -2429,6 +2432,7 @@ LIBMDBX_INLINE_API(int, mdbx_env_sync_poll, (MDBX_env * env)) {
 /** \brief Sets threshold to force flush the data buffers to disk, even any of
  * \ref MDBX_SAFE_NOSYNC flag in the environment.
  * \ingroup c_settings
+ * \see mdbx_env_get_syncbytes \see MDBX_opt_sync_bytes
  *
  * The threshold value affects all processes which operates with given
  * environment until the last process close environment or a new value will be
@@ -2453,11 +2457,39 @@ LIBMDBX_INLINE_API(int, mdbx_env_set_syncbytes,
   return mdbx_env_set_option(env, MDBX_opt_sync_bytes, threshold);
 }
 
+/** \brief Get threshold to force flush the data buffers to disk, even any of
+ * \ref MDBX_SAFE_NOSYNC flag in the environment.
+ * \ingroup c_statinfo
+ * \see mdbx_env_set_syncbytes() \see MDBX_opt_sync_bytes
+ *
+ * \param [in] env       An environment handle returned
+ *                       by \ref mdbx_env_create().
+ * \param [out] threshold  Address of an size_t to store
+ *                         the number of bytes of summary changes when
+ *                         a synchronous flush would be made.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_EINVAL   An invalid parameter was specified. */
+LIBMDBX_INLINE_API(int, mdbx_env_get_syncbytes,
+                   (const MDBX_env *env, size_t *threshold)) {
+  int rc = MDBX_EINVAL;
+  if (threshold) {
+    uint64_t proxy = 0;
+    rc = mdbx_env_get_option(env, MDBX_opt_sync_bytes, &proxy);
+#ifdef assert
+    assert(proxy <= SIZE_MAX);
+#endif /* assert */
+    *threshold = (size_t)proxy;
+  }
+  return rc;
+}
+
 /** \brief Sets relative period since the last unsteady commit to force flush
  * the data buffers to disk, even of \ref MDBX_SAFE_NOSYNC flag in the
  * environment.
- *
  * \ingroup c_settings
+ * \see mdbx_env_get_syncperiod \see MDBX_opt_sync_period
  *
  * The relative period value affects all processes which operates with given
  * environment until the last process close environment or a new value will be
@@ -2486,6 +2518,36 @@ LIBMDBX_INLINE_API(int, mdbx_env_set_syncbytes,
 LIBMDBX_INLINE_API(int, mdbx_env_set_syncperiod,
                    (MDBX_env * env, unsigned seconds_16dot16)) {
   return mdbx_env_set_option(env, MDBX_opt_sync_period, seconds_16dot16);
+}
+
+/** \brief Get relative period since the last unsteady commit to force flush
+ * the data buffers to disk, even of \ref MDBX_SAFE_NOSYNC flag in the
+ * environment.
+ * \ingroup c_statinfo
+ * \see mdbx_env_set_syncperiod() \see MDBX_opt_sync_period
+ *
+ * \param [in] env       An environment handle returned
+ *                       by \ref mdbx_env_create().
+ * \param [out] period_seconds_16dot16  Address of an size_t to store
+ *                                      the period in 1/65536 of second when
+ *                                      a synchronous flush would be made since
+ *                                      the last unsteady commit.
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_EINVAL   An invalid parameter was specified. */
+LIBMDBX_INLINE_API(int, mdbx_env_get_syncperiod,
+                   (const MDBX_env *env, unsigned *period_seconds_16dot16)) {
+  int rc = MDBX_EINVAL;
+  if (period_seconds_16dot16) {
+    uint64_t proxy = 0;
+    rc = mdbx_env_get_option(env, MDBX_opt_sync_period, &proxy);
+#ifdef assert
+    assert(proxy <= UINT32_MAX);
+#endif /* assert */
+    *period_seconds_16dot16 = (unsigned)proxy;
+  }
+  return rc;
 }
 
 /** \brief Close the environment and release the memory map.
