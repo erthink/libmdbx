@@ -1389,8 +1389,10 @@ enum MDBX_db_flags_t {
   /** Use sorted duplicates, i.e. allow multi-values for a keys. */
   MDBX_DUPSORT = UINT32_C(0x04),
 
-  /** Numeric keys in native byte order either uint32_t or uint64_t. The keys
-   * must all be of the same size and must be aligned while passing as
+  /** Numeric keys in native byte order either uint32_t or uint64_t 
+   * (must be one of uint32_t or uint64_t, other integer types , for example, 
+   * signed integer or uint16_t will not work) . 
+   * The keys must all be of the same size and must be aligned while passing as
    * arguments. */
   MDBX_INTEGERKEY = UINT32_C(0x08),
 
