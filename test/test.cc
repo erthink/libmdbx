@@ -164,6 +164,14 @@ void testcase::db_open() {
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_open()", rc);
 
+  rc = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
+  if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
+    failure_perror("mdbx_env_set_syncperiod()", rc);
+
+  rc = mdbx_env_set_syncbytes(db_guard.get(), INT_MAX / 421);
+  if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
+    failure_perror("mdbx_env_set_syncbytes()", rc);
+
   log_trace("<< db_open");
 }
 

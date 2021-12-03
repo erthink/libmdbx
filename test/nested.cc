@@ -189,6 +189,26 @@ bool testcase_nested::stochastic_breakable_restart_with_nested(
          (flipcoin() || txn_underutilization_x256(txn_guard.get()) < 42))
     should_continue &= pop_txn();
 
+  if (flipcoin_x3()) {
+    unsigned period;
+    int err = mdbx_env_get_syncperiod(db_guard.get(), &period);
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_env_get_syncperiod()", err);
+
+    size_t bytes;
+    err = mdbx_env_get_syncbytes(db_guard.get(), &bytes);
+    if (unlikely(err != MDBX_SUCCESS))
+      failure_perror("mdbx_env_get_syncbytes()", err);
+
+    err = mdbx_env_set_syncperiod(db_guard.get(), period ^ 42);
+    if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
+      failure_perror("mdbx_env_set_syncperiod()", err);
+
+    err = mdbx_env_set_syncbytes(db_guard.get(), bytes ^ 42000);
+    if (unlikely(err != MDBX_SUCCESS) && err != MDBX_BUSY)
+      failure_perror("mdbx_env_set_syncbytes()", err);
+  }
+
   if (should_continue)
     while (stack.empty() ||
            (is_nested_txn_available() && flipcoin() && stack.size() < 5))
