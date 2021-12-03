@@ -21900,7 +21900,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_EACCESS;
     if (unlikely(!(env->me_flags & MDBX_ENV_ACTIVE)))
       return MDBX_EPERM;
-    if (sizeof(value) > sizeof(size_t) && unlikely(value != (size_t)value))
+    if (unlikely(value > SIZE_MAX - 65536))
       return MDBX_TOO_LARGE;
     if (atomic_store32(&env->me_lck->mti_autosync_threshold,
                        bytes2pgno(env, (size_t)value + env->me_psize - 1),
