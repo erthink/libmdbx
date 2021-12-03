@@ -21909,6 +21909,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       err = mdbx_env_sync_poll(env);
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
+      err = MDBX_SUCCESS;
     }
     break;
 
@@ -21926,6 +21927,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       err = mdbx_env_sync_poll(env);
       if (unlikely(MDBX_IS_ERROR(err)))
         return err;
+      err = MDBX_SUCCESS;
     }
     break;
 
