@@ -6982,8 +6982,13 @@ __cold static int mdbx_env_sync_internal(MDBX_env *env, bool force,
 
 retry:;
   unsigned flags = env->me_flags & ~MDBX_NOMETASYNC;
-  if (unlikely(flags & (MDBX_RDONLY | MDBX_FATAL_ERROR))) {
+  if (unlikely((flags & (MDBX_RDONLY | MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE)) !=
+               MDBX_ENV_ACTIVE)) {
     rc = MDBX_EACCESS;
+    if (!(flags & MDBX_ENV_ACTIVE))
+      rc = MDBX_EPERM;
+    if (flags & MDBX_FATAL_ERROR)
+      rc = MDBX_PANIC;
     goto bailout;
   }
 
