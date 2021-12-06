@@ -19540,20 +19540,17 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
 #endif /* MDBX_ENABLE_PGOP_STAT*/
   }
 
-  arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid = 0;
-  if (lck) {
-    arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
-        arg->mi_recent_txnid;
-    for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
-      const uint32_t pid =
-          atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease);
-      if (pid) {
-        const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
-        if (arg->mi_latter_reader_txnid > txnid)
-          arg->mi_latter_reader_txnid = txnid;
-        if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
-          arg->mi_self_latter_reader_txnid = txnid;
-      }
+  arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
+      arg->mi_recent_txnid;
+  for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
+    const uint32_t pid =
+        atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease);
+    if (pid) {
+      const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
+      if (arg->mi_latter_reader_txnid > txnid)
+        arg->mi_latter_reader_txnid = txnid;
+      if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
+        arg->mi_self_latter_reader_txnid = txnid;
     }
   }
 
@@ -19596,6 +19593,9 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     rc = fetch_envinfo_ex(env, txn, arg, bytes);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
+    snap.mi_since_sync_seconds16dot16 = arg->mi_since_sync_seconds16dot16;
+    snap.mi_since_reader_check_seconds16dot16 =
+        arg->mi_since_reader_check_seconds16dot16;
     if (likely(memcmp(&snap, arg, bytes) == 0))
       return MDBX_SUCCESS;
     memcpy(&snap, arg, bytes);
