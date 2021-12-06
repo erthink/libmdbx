@@ -14517,7 +14517,12 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     rc = csr.err;
     if (rc == MDBX_SUCCESS && csr.exact && mc->mc_xcursor) {
       mc->mc_flags &= ~C_DEL;
-      if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+      csr.exact = false;
+      if (!save_data.iov_base && (mc->mc_db->md_flags & MDBX_DUPFIXED)) {
+        /* Avoiding search nested dupfixed hive if no data provided.
+         * This is changes the semantic of MDBX_SET_LOWERBOUND but avoid
+         * returning MDBX_BAD_VALSIZE. */
+      } else if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
         *data = save_data;
         csr = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
                               MDBX_SET_RANGE);
