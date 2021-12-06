@@ -14793,6 +14793,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       }
     } else {
       struct cursor_set_result csr =
+          /* olddata may not be updated in case LEAF2-page of dupfixed-subDB */
           mdbx_cursor_set(mc, (MDBX_val *)key, &olddata, MDBX_SET);
       rc = csr.err;
       exact = csr.exact;
@@ -14807,7 +14808,11 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         if (unlikely(mc->mc_flags & C_SUB)) {
           /* nested subtree of DUPSORT-database with the same key,
            * nothing to update */
-          mdbx_assert(env, data->iov_len == 0 && olddata.iov_len == 0);
+          mdbx_assert(env, data->iov_len == 0 &&
+                               (olddata.iov_len == 0 ||
+                                /* olddata may not be updated in case LEAF2-page
+                                   of dupfixed-subDB */
+                                (mc->mc_db->md_flags & MDBX_DUPFIXED)));
           return MDBX_SUCCESS;
         }
         if (unlikely(flags & MDBX_ALLDUPS) && mc->mc_xcursor &&
