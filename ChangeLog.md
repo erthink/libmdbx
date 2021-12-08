@@ -18,6 +18,22 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
+## v0.11.3 (underway)
+
+Acknowledgements:
+
+ - [gcxfd <i@rmw.link>](https://github.com/gcxfd) for reporting, contributing and testing.
+
+Minors:
+
+ - Fixed returning `MDBX_RESULT_TRUE` (-1) from `mdbx_env_set_option()`.
+ - Added `mdbx_env_get_syncbytes()` and `mdbx_env_get_syncperiod()`.
+ - [Clarified](https://github.com/erthink/libmdbx/pull/249) description of `MDBX_INTEGERKEY`.
+ - Reworked/simplified `mdbx_env_sync_internal()`.
+ - [Fixed](https://github.com/erthink/libmdbx/issues/248) extra assertion inside `mdbx_cursor_put()` for `MDBX_DUPFIXED` cases.
+ - Avoiding extra looping inside `mdbx_env_info_ex()`.
+
+
 ## v0.11.2 at 2021-12-02
 
 Acknowledgements:

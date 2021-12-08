@@ -576,6 +576,7 @@ gcda
 GCFREEZE
 gcno
 gcov
+gcxfd
 gdiplus
 getenv
 gethostid
@@ -1445,6 +1446,7 @@ rlock
 rlt
 rmdir
 RMID
+rmw
 rocksdb
 rolledback
 roolback
