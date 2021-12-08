@@ -1,15 +1,16 @@
 ﻿/// \file mdbx.h++
-/// \brief The libmdbx C++ API header file (preliminary).
+/// \brief The libmdbx C++ API header file.
 ///
 /// \author Copyright (c) 2020-2021, Leonid Yuriev <leo@yuriev.ru>.
 /// \copyright SPDX-License-Identifier: Apache-2.0
 ///
 /// Tested with:
-///  - LCC >= 1.23 (http://www.mcst.ru/lcc),
-///  - GNU C++ >= 4.8,
-///  - clang >= 4.0,
-///  - MSVC >= 19.0 (Visual Studio 2015),
-///    but 19.2x could hang due optimizer bug.
+///  - Elbrus LCC >= 1.23 (http://www.mcst.ru/lcc);
+///  - GNU C++ >= 4.8;
+///  - clang >= 3.9;
+///  - MSVC >= 14.0 (Visual Studio 2015),
+///    but 19.2x could hang due optimizer bug;
+///  - AppleClang, but without C++20 concepts.
 ///
 
 #pragma once
@@ -19,7 +20,7 @@
 #error "C++11 compiler or better is required"
 #elif _MSC_VER >= 1910
 #error                                                                         \
-    "Please add ` /Zc:__cplusplus` to MSVC compiler options to enforce it conform ISO C++"
+    "Please add `/Zc:__cplusplus` to MSVC compiler options to enforce it conform ISO C++"
 #endif /* MSVC is mad and don't define __cplusplus properly */
 #endif /* __cplusplus < 201103L */
 
@@ -3949,7 +3950,7 @@ inline ::std::ostream &operator<<(::std::ostream &out,
 
 //==============================================================================
 //
-// Inline body of the libmdbx C++ API (preliminary draft)
+// Inline body of the libmdbx C++ API
 //
 
 MDBX_CXX11_CONSTEXPR const version_info &get_version() noexcept {
