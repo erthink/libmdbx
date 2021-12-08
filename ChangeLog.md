@@ -24,6 +24,10 @@ Acknowledgements:
 
  - [gcxfd <i@rmw.link>](https://github.com/gcxfd) for reporting, contributing and testing.
 
+Fixes:
+
+  - Disabled C++20 concepts for stupid AppleClang 13.x
+
 Minors:
 
  - Fixed returning `MDBX_RESULT_TRUE` (-1) from `mdbx_env_set_option()`.
