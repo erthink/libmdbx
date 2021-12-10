@@ -434,7 +434,7 @@ endif()
 #           ####   #          #       #     ####   #    #   ####
 #
 
-set(MDBX_BUILD_OPTIONS ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
+set(MDBX_BUILD_OPTIONS ENABLE_UBSAN ENABLE_ASAN MDBX_USE_VALGRIND ENABLE_GPROF ENABLE_GCOV)
 macro(add_mdbx_option NAME DESCRIPTION DEFAULT)
   list(APPEND MDBX_BUILD_OPTIONS ${NAME})
   if(NOT ${DEFAULT} STREQUAL "AUTO")
@@ -863,7 +863,7 @@ else()
 endif()
 
 # options
-set(options VERSION C_COMPILER CXX_COMPILER MDBX_BUILD_TARGET MDBX_BUILD_TYPE)
+set(options VERSION C_COMPILER CXX_COMPILER MDBX_BUILD_TARGET MDBX_BUILD_TYPE ${MDBX_BUILD_OPTIONS})
 foreach(item IN LISTS options)
   if(DEFINED ${item})
     set(value "${${item}}")
@@ -874,7 +874,7 @@ foreach(item IN LISTS options)
     set(item CMAKE_${item})
     set(value "${${item}}")
   else()
-    set(value "undefined")
+    set(value "AUTO (not pre-defined explicitly)")
   endif()
   message(STATUS "${item}: ${value}")
 endforeach(item)
