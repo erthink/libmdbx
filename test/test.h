@@ -227,6 +227,7 @@ protected:
                const MDBX_val &v) const;
 
   bool speculum_verify();
+  bool check_batch_get();
   int insert(const keygen::buffer &akey, const keygen::buffer &adata,
              MDBX_put_flags_t flags);
   int replace(const keygen::buffer &akey, const keygen::buffer &new_value,

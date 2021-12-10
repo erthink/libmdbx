@@ -285,6 +285,11 @@ bool testcase_hill::run() {
       log_notice("hill: reached %d tree depth & %s sub-tree depth(s)",
                  stat.ms_depth, str.c_str());
     }
+
+    if ((config.params.table_flags & MDBX_DUPSORT) == 0) {
+      if (!check_batch_get())
+        failure("batch-get verification failed");
+    }
   }
 
   while (serial_count > 1) {

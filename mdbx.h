@@ -4333,6 +4333,43 @@ LIBMDBX_API int mdbx_cursor_copy(const MDBX_cursor *src, MDBX_cursor *dest);
 LIBMDBX_API int mdbx_cursor_get(MDBX_cursor *cursor, MDBX_val *key,
                                 MDBX_val *data, MDBX_cursor_op op);
 
+/** \brief Retrieve multiple non-dupsort key/value pairs by cursor.
+ * \ingroup c_crud
+ *
+ * This function retrieves multiple key/data pairs from the database without
+ * \ref MDBX_DUPSORT option. For `MDBX_DUPSORT` databases please
+ * use \ref MDBX_GET_MULTIPLE and \ref MDBX_NEXT_MULTIPLE.
+ *
+ * The number of key and value items is returned in the `size_t count`
+ * refers. The addresses and lengths of the keys and values are returned in the
+ * array to which `pairs` refers.
+ * \see mdbx_cursor_get()
+ *
+ * \param [in] cursor     A cursor handle returned by \ref mdbx_cursor_open().
+ * \param [out] count     The number of key and value item returned, on success
+ *                        it always be the even because the key-value
+ *                        pairs are returned.
+ * \param [in,out] pairs  A pointer to the array of key value pairs.
+ * \param [in] limit      The size of pairs buffer as the number of items,
+ *                        but not a pairs.
+ * \param [in] op         A cursor operation \ref MDBX_cursor_op (only
+ *                        \ref MDBX_FIRST, \ref MDBX_NEXT, \ref MDBX_GET_CURRENT
+ *                        are supported).
+ *
+ * \returns A non-zero error value on failure and 0 on success,
+ *          some possible errors are:
+ * \retval MDBX_THREAD_MISMATCH  Given transaction is not owned
+ *                               by current thread.
+ * \retval MDBX_NOTFOUND         No more key-value pairs are available.
+ * \retval MDBX_ENODATA          The cursor is already at the end of data.
+ * \retval MDBX_RESULT_TRUE      The specified limit is less than the available
+ *                               key-value pairs on the current page/position
+ *                               that the cursor points to.
+ * \retval MDBX_EINVAL           An invalid parameter was specified. */
+LIBMDBX_API int mdbx_cursor_get_batch(MDBX_cursor *cursor, size_t *count,
+                                      MDBX_val *pairs, size_t limit,
+                                      MDBX_cursor_op op);
+
 /** \brief Store by cursor.
  * \ingroup c_crud
  *

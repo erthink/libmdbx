@@ -1192,3 +1192,69 @@ bool testcase::speculum_verify() {
   mdbx_cursor_close(cursor);
   return rc;
 }
+
+bool testcase::check_batch_get() {
+  char dump_key[128], dump_value[128];
+  char dump_key_batch[128], dump_value_batch[128];
+
+  MDBX_cursor *cursor;
+  int err = mdbx_cursor_open(txn_guard.get(), dbi, &cursor);
+  if (err != MDBX_SUCCESS)
+    failure_perror("mdbx_cursor_open()", err);
+
+  MDBX_cursor *batch_cursor;
+  err = mdbx_cursor_open(txn_guard.get(), dbi, &batch_cursor);
+  if (err != MDBX_SUCCESS)
+    failure_perror("mdbx_cursor_open()", err);
+
+  MDBX_val pairs[42];
+  size_t count = 0xDeadBeef;
+  err = mdbx_cursor_get_batch(batch_cursor, &count, pairs, ARRAY_LENGTH(pairs),
+                              MDBX_FIRST);
+  bool rc = true;
+  size_t i, n = 0;
+  while (err == MDBX_SUCCESS) {
+    for (i = 0; i < count; i += 2) {
+      mdbx::slice key, value;
+      int err2 = mdbx_cursor_get(cursor, &key, &value, MDBX_NEXT);
+      if (err2 != MDBX_SUCCESS)
+        failure_perror("mdbx_cursor_open()", err2);
+      if (key != pairs[i] || value != pairs[i + 1]) {
+        log_error(
+            "batch-get pair mismatch %zu/%zu: sequential{%s, %s} != "
+            "batch{%s, %s}",
+            n + i / 2, i, mdbx_dump_val(&key, dump_key, sizeof(dump_key)),
+            mdbx_dump_val(&value, dump_value, sizeof(dump_value)),
+            mdbx_dump_val(&pairs[i], dump_key_batch, sizeof(dump_key_batch)),
+            mdbx_dump_val(&pairs[i + 1], dump_value_batch,
+                          sizeof(dump_value_batch)));
+        rc = false;
+      }
+    }
+    n += i / 2;
+    err = mdbx_cursor_get_batch(batch_cursor, &count, pairs,
+                                ARRAY_LENGTH(pairs), MDBX_NEXT);
+  }
+  if (err != MDBX_NOTFOUND)
+    failure_perror("mdbx_cursor_get_batch()", err);
+
+  err = mdbx_cursor_eof(batch_cursor);
+  if (err != MDBX_RESULT_TRUE) {
+    log_error("batch-get %s cursor not-eof %d", "batch", err);
+    rc = false;
+  }
+  err = mdbx_cursor_on_last(batch_cursor);
+  if (err != MDBX_RESULT_TRUE) {
+    log_error("batch-get %s cursor not-on-last %d", "batch", err);
+    rc = false;
+  }
+
+  err = mdbx_cursor_on_last(cursor);
+  if (err != MDBX_RESULT_TRUE) {
+    log_error("batch-get %s cursor not-on-last %d", "checked", err);
+    rc = false;
+  }
+  mdbx_cursor_close(cursor);
+  mdbx_cursor_close(batch_cursor);
+  return rc;
+}
