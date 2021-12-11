@@ -14542,6 +14542,50 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       rc = MDBX_RESULT_TRUE;
     break;
   }
+  case MDBX_SET_UPPERBOUND: {
+    if (unlikely(key == NULL || data == NULL))
+      return MDBX_EINVAL;
+    MDBX_val save_data = *data;
+    struct cursor_set_result csr =
+        mdbx_cursor_set(mc, key, data, MDBX_SET_RANGE);
+    rc = csr.err;
+    if (rc == MDBX_NOTFOUND) {
+      rc = mdbx_cursor_last(mc, key, data);
+      if (rc == MDBX_SUCCESS) {
+        rc = MDBX_RESULT_TRUE;
+      }
+    } else if ( rc == MDBX_SUCCESS ){
+      if (csr.exact) {
+        if (mc->mc_xcursor) {
+          mc->mc_flags &= ~C_DEL;
+          csr.exact = false;
+          if (!save_data.iov_base && (mc->mc_db->md_flags & MDBX_DUPFIXED)) {
+            mfunc = mdbx_cursor_last;
+            goto mmove;
+          } else if (mc->mc_xcursor->mx_cursor.mc_flags & C_INITIALIZED) {
+            *data = save_data;
+            csr = mdbx_cursor_set(&mc->mc_xcursor->mx_cursor, data, NULL,
+                                  MDBX_SET_RANGE);
+            rc = csr.err;
+            if (rc == MDBX_NOTFOUND) {
+              mdbx_cassert(mc, !csr.exact);
+              rc = mdbx_cursor_prev(mc, key, data, MDBX_PREV_NODUP);
+            }
+          } else {
+            int cmp = mc->mc_dbx->md_dcmp(&save_data, data);
+            csr.exact = (cmp == 0);
+            if (cmp > 0)
+              rc = mdbx_cursor_prev(mc, key, data, MDBX_PREV_NODUP);
+          }
+      }
+    } else {
+      rc = mdbx_cursor_prev(mc, key, data, MDBX_PREV);
+    }
+    if (rc == MDBX_SUCCESS && !csr.exact)
+      rc = MDBX_RESULT_TRUE;
+  }
+   break;
+ }
   default:
     mdbx_debug("unhandled/unimplemented cursor operation %u", op);
     return MDBX_EINVAL;

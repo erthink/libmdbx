@@ -1583,7 +1583,12 @@ enum MDBX_cursor_op {
    * i.e. for a pairs/tuples of a key and an each data value of duplicates.
    * Returns \ref MDBX_SUCCESS if key-value pair found exactly and
    * \ref MDBX_RESULT_TRUE if the next pair was returned. */
-  MDBX_SET_LOWERBOUND
+  MDBX_SET_LOWERBOUND,
+
+  /** Position at first key-value pair lesser than or equal to specified, 
+   * return same as MDBX_SET_LOWERBOUND 
+  */
+  MDBX_SET_UPPERBOUND
 };
 #ifndef __cplusplus
 /** \ingroup c_cursors */
