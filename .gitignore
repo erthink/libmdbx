@@ -1,4 +1,6 @@
 *.[ao]
+*.err
+*.log
 *.bak
 *.exe
 *.gcda
