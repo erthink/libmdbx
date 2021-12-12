@@ -6982,7 +6982,7 @@ __cold static int mdbx_env_sync_internal(MDBX_env *env, bool force,
   int rc = MDBX_RESULT_TRUE /* means "nothing to sync" */;
 
 retry:;
-  unsigned flags = env->me_flags & ~MDBX_NOMETASYNC;
+  unsigned flags = env->me_flags & ~(MDBX_NOMETASYNC | MDBX_SHRINK_ALLOWED);
   if (unlikely((flags & (MDBX_RDONLY | MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE)) !=
                MDBX_ENV_ACTIVE)) {
     rc = MDBX_EACCESS;
@@ -7066,9 +7066,11 @@ retry:;
     mdbx_assert(env, head_txnid == meta_txnid(env, head, false));
     mdbx_assert(env, head_txnid == mdbx_recent_committed_txnid(env));
     mdbx_find_oldest(env->me_txn0);
+    flags |= MDBX_SHRINK_ALLOWED;
   }
 
   mdbx_assert(env, inside_txn || locked);
+  mdbx_assert(env, !inside_txn || (flags & MDBX_SHRINK_ALLOWED) == 0);
 
   if (!META_IS_STEADY(head) ||
       ((flags & MDBX_SAFE_NOSYNC) == 0 && unsynced_pages)) {
@@ -7076,7 +7078,7 @@ retry:;
                data_page(head)->mp_pgno, mdbx_durable_str(head),
                unsynced_pages);
     MDBX_meta meta = *head;
-    rc = mdbx_sync_locked(env, flags | MDBX_SHRINK_ALLOWED, &meta);
+    rc = mdbx_sync_locked(env, flags, &meta);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
   }
@@ -10724,6 +10726,10 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                        unaligned_peek_u64(4, pending->mm_txnid_a))) {
             const txnid_t txnid =
                 safe64_txnid_next(unaligned_peek_u64(4, pending->mm_txnid_a));
+            mdbx_notice("force-forward pending-txn %" PRIaTXN " -> %" PRIaTXN,
+                        unaligned_peek_u64(4, pending->mm_txnid_a), txnid);
+            mdbx_ensure(env, env->me_txn0->mt_owner != mdbx_thread_self() &&
+                                 !env->me_txn);
             if (unlikely(txnid > MAX_TXNID)) {
               rc = MDBX_TXN_FULL;
               mdbx_error("txnid overflow, raise %d", rc);
