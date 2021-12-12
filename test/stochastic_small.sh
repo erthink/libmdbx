@@ -210,6 +210,11 @@ echo "=== use ${db_size_mb}M for DB"
 # 3. Create test-directory in ramfs/tmpfs, i.e. create/format/mount if required
 case ${UNAME} in
   Linux)
+    ulimit -c unlimited
+    if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%p" ]; then
+      echo "core.%p > /proc/sys/kernel/core_pattern" >&2
+      echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+    fi
   ;;
 
   FreeBSD)
