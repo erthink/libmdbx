@@ -14487,7 +14487,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     break;
   case MDBX_FIRST_DUP:
     mfunc = mdbx_cursor_first;
-  mmove:
+  move:
     if (unlikely(data == NULL || !(mc->mc_flags & C_INITIALIZED)))
       return MDBX_EINVAL;
     if (unlikely(mc->mc_xcursor == NULL))
@@ -14515,7 +14515,8 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     break;
   case MDBX_LAST_DUP:
     mfunc = mdbx_cursor_last;
-    goto mmove;
+    goto move;
+  case MDBX_SET_UPPERBOUND: /* mostly same as MDBX_SET_LOWERBOUND */
   case MDBX_SET_LOWERBOUND: {
     if (unlikely(key == NULL || data == NULL))
       return MDBX_EINVAL;
@@ -14548,6 +14549,15 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     }
     if (rc == MDBX_SUCCESS && !csr.exact)
       rc = MDBX_RESULT_TRUE;
+    if (unlikely(op == MDBX_SET_UPPERBOUND)) {
+      /* minor fixups for MDBX_SET_UPPERBOUND */
+      if (rc == MDBX_RESULT_TRUE)
+        /* already at great-than by MDBX_SET_LOWERBOUND */
+        rc = MDBX_SUCCESS;
+      else if (rc == MDBX_SUCCESS)
+        /* exactly match, going next */
+        rc = mdbx_cursor_next(mc, key, data, MDBX_NEXT);
+    }
     break;
   }
   default:

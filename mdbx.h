@@ -1572,18 +1572,33 @@ enum MDBX_cursor_op {
    * a page of duplicate data items. */
   MDBX_PREV_MULTIPLE,
 
-  /** Position at first key-value pair greater than or equal to specified,
-   * return both key and data, and the return code depends on a exact match.
+  /** Positions cursor at first key-value pair greater than or equal to
+   * specified, return both key and data, and the return code depends on whether
+   * a exact match.
    *
    * For non DUPSORT-ed collections this work the same to \ref MDBX_SET_RANGE,
-   * but returns \ref MDBX_SUCCESS if key found exactly and
+   * but returns \ref MDBX_SUCCESS if key found exactly or
    * \ref MDBX_RESULT_TRUE if greater key was found.
    *
    * For DUPSORT-ed a data value is taken into account for duplicates,
    * i.e. for a pairs/tuples of a key and an each data value of duplicates.
-   * Returns \ref MDBX_SUCCESS if key-value pair found exactly and
+   * Returns \ref MDBX_SUCCESS if key-value pair found exactly or
    * \ref MDBX_RESULT_TRUE if the next pair was returned. */
-  MDBX_SET_LOWERBOUND
+  MDBX_SET_LOWERBOUND,
+
+  /** Positions cursor at first key-value pair greater than specified,
+   * return both key and data, and the return code depends on whether a
+   * upper-bound was found.
+   *
+   * For non DUPSORT-ed collections this work the same to \ref MDBX_SET_RANGE,
+   * but returns \ref MDBX_SUCCESS if the greater key was found or
+   * \ref MDBX_NOTFOUND otherwise.
+   *
+   * For DUPSORT-ed a data value is taken into account for duplicates,
+   * i.e. for a pairs/tuples of a key and an each data value of duplicates.
+   * Returns \ref MDBX_SUCCESS if the greater pair was returned or
+   * \ref MDBX_NOTFOUND otherwise. */
+  MDBX_SET_UPPERBOUND
 };
 #ifndef __cplusplus
 /** \ingroup c_cursors */
