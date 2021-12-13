@@ -23,6 +23,7 @@ ChangeLog
 Acknowledgements:
 
  - [gcxfd <i@rmw.link>](https://github.com/gcxfd) for reporting, contributing and testing.
+ - [장세연 (Чан Се Ен)](https://github.com/sasgas) for reporting and testing.
 
 New features, extensions and improvements:
 
@@ -43,6 +44,7 @@ Minors:
  - [Fixed](https://github.com/erthink/libmdbx/issues/248) extra assertion inside `mdbx_cursor_put()` for `MDBX_DUPFIXED` cases.
  - Avoiding extra looping inside `mdbx_env_info_ex()`.
  - Explicitly enabled core dumps from stochastic tests scripts on Linux.
+ - [Fixed](https://github.com/erthink/libmdbx/issues/253) `mdbx_override_meta()` to avoid false-positive assertions.
 
 
 ## v0.11.2 at 2021-12-02

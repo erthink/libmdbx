@@ -12319,16 +12319,12 @@ __cold static int __must_check_result mdbx_override_meta(
                     MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    MDBX_meta *live = METAPAGE(env, target);
-    mdbx_meta_update_begin(env, live, unaligned_peek_u64(4, model->mm_txnid_a));
+    /* mdbx_override_meta() called only while current process have exclusive
+     * lock of a DB file. So meta-page could be updated directly without
+     * clearing consistency flag by mdbx_meta_update_begin() */
+    memcpy(pgno2page(env, target), page, env->me_psize);
     mdbx_flush_incoherent_cpu_writeback();
-    mdbx_meta_update_begin(env, model,
-                           unaligned_peek_u64(4, model->mm_txnid_a));
-    unaligned_poke_u64(4, model->mm_datasync_sign, MDBX_DATASIGN_WEAK);
-    memcpy((void *)data_page(live), page, env->me_psize);
-    mdbx_meta_update_end(env, live, unaligned_peek_u64(4, model->mm_txnid_b));
-    mdbx_flush_incoherent_cpu_writeback();
-    rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, target),
+    rc = mdbx_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, target + 1),
                     MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
     const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
