@@ -24,18 +24,25 @@ Acknowledgements:
 
  - [gcxfd <i@rmw.link>](https://github.com/gcxfd) for reporting, contributing and testing.
 
+New features, extensions and improvements:
+
+  - [Added](https://github.com/erthink/libmdbx/issues/236) `mdbx_cursor_get_batch()`.
+  - [Added](https://github.com/erthink/libmdbx/issues/250) `MDBX_SET_UPPERBOUND`.
+
 Fixes:
 
   - Disabled C++20 concepts for stupid AppleClang 13.x
+  - Fixed internal collision of `MDBX_SHRINK_ALLOWED` with `MDBX_ACCEDE`.
 
 Minors:
 
- - Fixed returning `MDBX_RESULT_TRUE` (-1) from `mdbx_env_set_option()`.
+ - Fixed returning `MDBX_RESULT_TRUE` (unexpected -1) from `mdbx_env_set_option()`.
  - Added `mdbx_env_get_syncbytes()` and `mdbx_env_get_syncperiod()`.
  - [Clarified](https://github.com/erthink/libmdbx/pull/249) description of `MDBX_INTEGERKEY`.
  - Reworked/simplified `mdbx_env_sync_internal()`.
  - [Fixed](https://github.com/erthink/libmdbx/issues/248) extra assertion inside `mdbx_cursor_put()` for `MDBX_DUPFIXED` cases.
  - Avoiding extra looping inside `mdbx_env_info_ex()`.
+ - Explicitly enabled core dumps from stochastic tests scripts on Linux.
 
 
 ## v0.11.2 at 2021-12-02
@@ -106,7 +113,7 @@ Fixes:
 Minors:
 
  - Refined handling of weak or invalid meta-pages while a DB opening.
- - Refined providing information for the @MAIN and @GC sub-databases of a last committed modification transaction's ID.
+ - Refined providing information for the `@MAIN` and `@GC` sub-databases of a last committed modification transaction's ID.
 
 
 ## v0.10.4 at 2021-10-10
