@@ -27,13 +27,13 @@ Acknowledgements:
 
 New features, extensions and improvements:
 
-  - [Added](https://github.com/erthink/libmdbx/issues/236) `mdbx_cursor_get_batch()`.
-  - [Added](https://github.com/erthink/libmdbx/issues/250) `MDBX_SET_UPPERBOUND`.
+ - [Added](https://github.com/erthink/libmdbx/issues/236) `mdbx_cursor_get_batch()`.
+ - [Added](https://github.com/erthink/libmdbx/issues/250) `MDBX_SET_UPPERBOUND`.
 
 Fixes:
 
-  - Disabled C++20 concepts for stupid AppleClang 13.x
-  - Fixed internal collision of `MDBX_SHRINK_ALLOWED` with `MDBX_ACCEDE`.
+ - Disabled C++20 concepts for stupid AppleClang 13.x
+ - Fixed internal collision of `MDBX_SHRINK_ALLOWED` with `MDBX_ACCEDE`.
 
 Minors:
 
