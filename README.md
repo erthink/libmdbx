@@ -571,7 +571,8 @@ Bindings
 | Ruby    | [ruby-mdbx](https://rubygems.org/gems/mdbx/) | [Mahlon E. Smith](https://github.com/mahlonsmith) |
 | Go      | [mdbx-go](https://github.com/torquem-ch/mdbx-go) | [Alex Sharov](https://github.com/AskAlexSharov) |
 | [Nim](https://en.wikipedia.org/wiki/Nim_(programming_language)) | [NimDBX](https://github.com/snej/nimdbx) | [Jens Alfke](https://github.com/snej)
-| Rust    | [libmdbx-rs](https://github.com/vorot93/libmdbx-rs)   | [Artem Vorotnikov](https://github.com/vorot93) |
+| Rust    | [libmdbx-rs](https://github.com/vorot93/libmdbx-rs)   | [gcxfd](https://github.com/gcxfd) |
+| Rust    | [mdbx](https://crates.io/crates/mdbx)   | [Artem Vorotnikov](https://github.com/vorot93) |
 | Java   | [mdbxjni](https://github.com/castortech/mdbxjni)   | [Castor Technologies](https://castortech.com/) |
 | .NET (obsolete)   | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
 
