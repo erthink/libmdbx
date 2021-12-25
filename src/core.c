@@ -8768,10 +8768,12 @@ retry_noaccount:
     goto bailout;
   }
 
-  rc = mdbx_prep_backlog(txn, &couple.outer,
-                         MDBX_PNL_SIZEOF(txn->tw.retired_pages));
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
+  if (retired_stored < MDBX_PNL_SIZE(txn->tw.retired_pages)) {
+    rc = mdbx_prep_backlog(txn, &couple.outer,
+                           MDBX_PNL_SIZEOF(txn->tw.retired_pages));
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+  }
 
   unsigned settled = 0, cleaned_gc_slot = 0, reused_gc_slot = 0,
            filled_gc_slot = ~0u;
