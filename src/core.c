@@ -8679,7 +8679,7 @@ static __always_inline unsigned backlog_size(MDBX_txn *txn) {
  * while reclaiming is prohibited. It should be enough to prevent search
  * in mdbx_page_alloc() during a deleting, when GC tree is unbalanced. */
 static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
-                             const size_t pnl_bytes) {
+                             const size_t pnl_bytes, unsigned *retired_stored) {
   const unsigned linear4list = number_of_ovpages(txn->mt_env, pnl_bytes);
   const unsigned backlog4cow = txn->mt_dbs[FREE_DBI].md_depth;
   const unsigned backlog4rebalance = backlog4cow + 1;
@@ -8694,19 +8694,34 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
              pnl_bytes, backlog_size(txn), linear4list, backlog4cow,
              backlog4rebalance);
 
-  MDBX_val fake_key, fake_val;
-  fake_key.iov_base = fake_val.iov_base = nullptr;
-  fake_key.iov_len = sizeof(txnid_t);
-  fake_val.iov_len = pnl_bytes;
-  int err = mdbx_cursor_spill(gc_cursor, &fake_key, &fake_val);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
+  MDBX_val gc_key, fake_val;
+  int err;
+  if (linear4list < 2) {
+    gc_key.iov_base = fake_val.iov_base = nullptr;
+    gc_key.iov_len = sizeof(txnid_t);
+    fake_val.iov_len = pnl_bytes;
+    err = mdbx_cursor_spill(gc_cursor, &gc_key, &fake_val);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
 
   gc_cursor->mc_flags &= ~C_RECLAIMING;
   err = mdbx_cursor_touch(gc_cursor);
   mdbx_trace("== after-touch, backlog %u, err %d", backlog_size(txn), err);
 
   if (linear4list > 1 && err == MDBX_SUCCESS) {
+    if (retired_stored) {
+      gc_key.iov_base = &txn->mt_txnid;
+      gc_key.iov_len = sizeof(txn->mt_txnid);
+      const struct cursor_set_result csr =
+          mdbx_cursor_set(gc_cursor, &gc_key, &fake_val, MDBX_SET);
+      if (csr.err == MDBX_SUCCESS && csr.exact) {
+        *retired_stored = 0;
+        err = mdbx_cursor_del(gc_cursor, 0);
+        mdbx_trace("== clear-4linear, backlog %u, err %d", backlog_size(txn),
+                   err);
+      }
+    }
     err = mdbx_page_alloc(gc_cursor, linear4list,
                           MDBX_ALLOC_GC | MDBX_ALLOC_CACHE | MDBX_ALLOC_SLOT)
               .err;
@@ -8768,9 +8783,10 @@ retry_noaccount:
     goto bailout;
   }
 
-  if (retired_stored < MDBX_PNL_SIZE(txn->tw.retired_pages)) {
+  if (retired_stored != MDBX_PNL_SIZE(txn->tw.retired_pages)) {
     rc = mdbx_prep_backlog(txn, &couple.outer,
-                           MDBX_PNL_SIZEOF(txn->tw.retired_pages));
+                           MDBX_PNL_SIZEOF(txn->tw.retired_pages),
+                           &retired_stored);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
   }
@@ -8807,7 +8823,7 @@ retry_noaccount:
             continue;
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
-          rc = mdbx_prep_backlog(txn, &couple.outer, 0);
+          rc = mdbx_prep_backlog(txn, &couple.outer, 0, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
           mdbx_tassert(txn,
@@ -8848,7 +8864,7 @@ retry_noaccount:
         if (cleaned_gc_id > txn->tw.last_reclaimed)
           break;
         if (cleaned_gc_id < txn->tw.last_reclaimed) {
-          rc = mdbx_prep_backlog(txn, &couple.outer, 0);
+          rc = mdbx_prep_backlog(txn, &couple.outer, 0, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
         }
@@ -8974,7 +8990,7 @@ retry_noaccount:
       key.iov_base = &txn->mt_txnid;
       do {
         data.iov_len = MDBX_PNL_SIZEOF(txn->tw.retired_pages);
-        mdbx_prep_backlog(txn, &couple.outer, data.iov_len);
+        mdbx_prep_backlog(txn, &couple.outer, data.iov_len, &retired_stored);
         rc = mdbx_cursor_put(&couple.outer, &key, &data, MDBX_RESERVE);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
@@ -9286,7 +9302,7 @@ retry_noaccount:
     data.iov_len = (chunk + 1) * sizeof(pgno_t);
     mdbx_trace("%s: reserve %u [%u...%u) @%" PRIaTXN, dbg_prefix_mode, chunk,
                settled + 1, settled + chunk + 1, reservation_gc_id);
-    mdbx_prep_backlog(txn, &couple.outer, data.iov_len);
+    mdbx_prep_backlog(txn, &couple.outer, data.iov_len, nullptr);
     rc = mdbx_cursor_put(&couple.outer, &key, &data,
                          MDBX_RESERVE | MDBX_NOOVERWRITE);
     mdbx_tassert(txn,
