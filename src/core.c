@@ -13805,7 +13805,7 @@ static int mdbx_cursor_next(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
   mp = mc->mc_pg[mc->mc_top];
   if (unlikely(mc->mc_flags & C_EOF)) {
     if (mc->mc_ki[mc->mc_top] + 1u >= page_numkeys(mp))
-      return (mc->mc_flags & C_SUB) ? MDBX_NOTFOUND : MDBX_ENODATA;
+      return MDBX_NOTFOUND;
     mc->mc_flags ^= C_EOF;
   }
 
