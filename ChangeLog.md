@@ -14,7 +14,6 @@ ChangeLog
  - [Support for RAW devices](https://github.com/erthink/libmdbx/issues/124).
  - [Support MessagePack for Keys & Values](https://github.com/erthink/libmdbx/issues/115).
  - [Engage new terminology](https://github.com/erthink/libmdbx/issues/137).
- - Finalize C++ API (there is still a small chance for a few typos and bugs).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
@@ -24,11 +23,14 @@ Acknowledgements:
 
  - [gcxfd <i@rmw.link>](https://github.com/gcxfd) for reporting, contributing and testing.
  - [장세연 (Чан Се Ен)](https://github.com/sasgas) for reporting and testing.
+ - [Alex Sharov](https://github.com/AskAlexSharov) for reporting, testing and provide resources for remote debugging/investigation.
 
 New features, extensions and improvements:
 
  - [Added](https://github.com/erthink/libmdbx/issues/236) `mdbx_cursor_get_batch()`.
  - [Added](https://github.com/erthink/libmdbx/issues/250) `MDBX_SET_UPPERBOUND`.
+ - C++ API is finalized now.
+ - The GC update stage has been [significantly speeded](https://github.com/erthink/libmdbx/issues/254) when fixing huge Erigon's transactions (Ethereum ecosystem).
 
 Fixes:
 
@@ -45,6 +47,7 @@ Minors:
  - Avoiding extra looping inside `mdbx_env_info_ex()`.
  - Explicitly enabled core dumps from stochastic tests scripts on Linux.
  - [Fixed](https://github.com/erthink/libmdbx/issues/253) `mdbx_override_meta()` to avoid false-positive assertions.
+ - For compatibility reverted returning `MDBX_ENODATA`for some cases.
 
 
 ## v0.11.2 at 2021-12-02

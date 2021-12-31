@@ -460,6 +460,7 @@ EPERM
 EPIPE
 erasevolume
 EREMOTE
+Erigon
 EROFS
 errcode
 errno
