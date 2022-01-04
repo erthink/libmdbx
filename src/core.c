@@ -10713,8 +10713,8 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
         atomic_load32(&env->me_lck->mti_discarded_tail, mo_Relaxed);
     if (prev_discarded_pgno >=
         discard_edge_pgno + bytes2pgno(env, madvise_threshold)) {
-      mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", prev_discarded_pgno,
-                  largest_pgno);
+      mdbx_notice("open-MADV_%s %u..%u", "DONTNEED", largest_pgno,
+                  prev_discarded_pgno);
       atomic_store32(&env->me_lck->mti_discarded_tail, discard_edge_pgno,
                      mo_Relaxed);
       const size_t prev_discarded_bytes =
