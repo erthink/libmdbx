@@ -1,3 +1,5 @@
+#if defined(__GNUC__) && !defined(__LCC__)
+
 #pragma push_macro("mdbx_trace")
 #pragma push_macro("mdbx_debug")
 #pragma push_macro("mdbx_verbose")
@@ -33,4 +35,8 @@
 #undef mdbx_assert
 #define mdbx_assert(env, expr) mdbx_ensure(env, expr)
 
+#if !defined(__clang__)
 #pragma GCC optimize("-O0")
+#endif
+
+#endif /* GCC only */
