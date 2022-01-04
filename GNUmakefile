@@ -535,7 +535,9 @@ dist/@tmp-shared_internals.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFIL
 dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p dist && (cat dist/@tmp-shared_internals.inc \
-	&& cat src/core.c src/osal.c src/version.c src/lck-windows.c src/lck-posix.c \
+	&& cat src/core.c src/osal.c src/version.c src/lck-windows.c src/lck-posix.c | sed \
+		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
+		-e '/#include "debug_end.h"/r src/debug_end.h' \
 	) | grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|' >$@
 
 dist/mdbx.c++: dist/@tmp-shared_internals.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
