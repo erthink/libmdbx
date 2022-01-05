@@ -2049,7 +2049,7 @@ typedef enum MDBX_option_t MDBX_option_t;
  * \see mdbx_env_get_option()
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
-                                    const uint64_t value);
+                                    uint64_t value);
 
 /** \brief Gets the value of runtime options from an environment.
  * \ingroup c_settings

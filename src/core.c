@@ -22089,7 +22089,7 @@ __cold MDBX_cmp_func *mdbx_get_datacmp(unsigned flags) {
 }
 
 __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
-                               const uint64_t value) {
+                               uint64_t value) {
   int err = check_env(env, false);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
@@ -22099,6 +22099,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
   bool should_unlock = false;
   switch (option) {
   case MDBX_opt_sync_bytes:
+    if (value == UINT64_MAX)
+      value = SIZE_MAX - 65536;
     if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
     if (unlikely(!(env->me_flags & MDBX_ENV_ACTIVE)))
@@ -22117,6 +22119,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_sync_period:
+    if (value == UINT64_MAX)
+      value = UINT32_MAX;
     if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
     if (unlikely(!(env->me_flags & MDBX_ENV_ACTIVE)))
@@ -22135,6 +22139,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_max_db:
+    if (value == UINT64_MAX)
+      value = MDBX_MAX_DBI;
     if (unlikely(value > MDBX_MAX_DBI))
       return MDBX_EINVAL;
     if (unlikely(env->me_map))
@@ -22143,6 +22149,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_max_readers:
+    if (value == UINT64_MAX)
+      value = MDBX_READERS_LIMIT;
     if (unlikely(value < 1 || value > MDBX_READERS_LIMIT))
       return MDBX_EINVAL;
     if (unlikely(env->me_map))
@@ -22151,6 +22159,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_dp_reserve_limit:
+    if (value == UINT64_MAX)
+      value = INT_MAX;
     if (unlikely(value > INT_MAX))
       return MDBX_EINVAL;
     if (env->me_options.dp_reserve_limit != (unsigned)value) {
@@ -22175,6 +22185,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_rp_augment_limit:
+    if (value == UINT64_MAX)
+      value = MDBX_PGL_LIMIT;
     if (unlikely(value > MDBX_PGL_LIMIT))
       return MDBX_EINVAL;
     env->me_options.rp_augment_limit = (unsigned)value;
@@ -22182,6 +22194,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 
   case MDBX_opt_txn_dp_limit:
   case MDBX_opt_txn_dp_initial:
+    if (value == UINT64_MAX)
+      value = MDBX_PGL_LIMIT;
     if (unlikely(value > MDBX_PGL_LIMIT || value < CURSOR_STACK * 4))
       return MDBX_EINVAL;
     if (unlikely(env->me_flags & MDBX_RDONLY))
@@ -22215,6 +22229,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_spill_max_denominator:
+    if (value == UINT64_MAX)
+      value = 255;
     if (unlikely(value > 255))
       return MDBX_EINVAL;
     env->me_options.spill_max_denominator = (uint8_t)value;
@@ -22231,12 +22247,16 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_loose_limit:
+    if (value == UINT64_MAX)
+      value = 255;
     if (unlikely(value > 255))
       return MDBX_EINVAL;
     env->me_options.dp_loose_limit = (uint8_t)value;
     break;
 
   case MDBX_opt_merge_threshold_16dot16_percent:
+    if (value == UINT64_MAX)
+      value = 32768;
     if (unlikely(value < 8192 || value > 32768))
       return MDBX_EINVAL;
     env->me_options.merge_threshold_16dot16_percent = (unsigned)value;
