@@ -6313,8 +6313,8 @@ __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
       ret.page = txn->tw.loose_pages;
       txn->tw.loose_pages = ret.page->mp_next;
       txn->tw.loose_count--;
-      mdbx_debug("db %d use loose page %" PRIaPGNO, DDBI(mc),
-                 ret.page->mp_pgno);
+      mdbx_debug_extra("db %d use loose page %" PRIaPGNO, DDBI(mc),
+                       ret.page->mp_pgno);
       mdbx_tassert(txn, ret.page->mp_pgno < txn->mt_next_pgno);
       mdbx_ensure(env, ret.page->mp_pgno >= NUM_METAS);
       VALGRIND_MAKE_MEM_UNDEFINED(page_data(ret.page), page_space(txn->mt_env));
@@ -6508,10 +6508,10 @@ no_loose:
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
-        mdbx_debug("stop reclaiming to avoid PNL overflow: %u (current) + %u "
-                   "(chunk) -> %u",
-                   MDBX_PNL_SIZE(txn->tw.reclaimed_pglist), gc_len,
-                   gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
+        mdbx_notice("stop reclaiming to avoid PNL overflow: %u (current) + %u "
+                    "(chunk) -> %u",
+                    MDBX_PNL_SIZE(txn->tw.reclaimed_pglist), gc_len,
+                    gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
         flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
         break;
       }
@@ -6560,6 +6560,7 @@ no_loose:
 
       /* Done for a kick-reclaim mode, actually no page needed */
       if (unlikely(num == 0)) {
+        mdbx_debug("early-return NULL-page for %s mode", "MDBX_ALLOC_SLOT");
         mdbx_assert(env, flags & MDBX_ALLOC_SLOT);
         ret.err = MDBX_SUCCESS;
         ret.page = NULL;
@@ -6567,14 +6568,20 @@ no_loose:
       }
 
       /* Don't try to coalesce too much. */
-      if (re_len /* current size */ > coalesce_threshold ||
-          (re_len > prev_re_len && re_len - prev_re_len /* delta from prev */ >=
-                                       coalesce_threshold / 2))
-        flags &= ~MDBX_COALESCE;
+      if (flags & MDBX_COALESCE) {
+        if (re_len /* current size */ > coalesce_threshold ||
+            (re_len > prev_re_len &&
+             re_len - prev_re_len /* delta from prev */ >=
+                 coalesce_threshold / 2)) {
+          mdbx_trace("clear %s %s", "MDBX_COALESCE", "since got threshold");
+          flags &= ~MDBX_COALESCE;
+        }
+      }
     }
 
     if (F_ISSET(flags, MDBX_COALESCE | MDBX_ALLOC_CACHE)) {
-      flags -= MDBX_COALESCE;
+      mdbx_debug_extra("clear %s and continue", "MDBX_COALESCE");
+      flags &= ~MDBX_COALESCE;
       continue;
     }
 
@@ -6698,6 +6705,12 @@ no_loose:
                                        txn->mt_next_pgno - MDBX_ENABLE_REFUND));
     if (likely(!(flags & MDBX_ALLOC_SLOT)))
       txn->mt_flags |= MDBX_TXN_ERROR;
+    if (num != 1 || ret.err != MDBX_NOTFOUND)
+      mdbx_notice("alloc %u pages failed, flags 0x%x, errcode %d", num, flags,
+                  ret.err);
+    else
+      mdbx_trace("alloc %u pages failed, flags 0x%x, errcode %d", num, flags,
+                 ret.err);
     mdbx_assert(env, ret.err != MDBX_SUCCESS);
     ret.page = NULL;
     return ret;
@@ -6706,6 +6719,7 @@ no_loose:
 done:
   ret.page = NULL;
   if (unlikely(flags & MDBX_ALLOC_SLOT)) {
+    mdbx_debug("return NULL-page for %s mode", "MDBX_ALLOC_SLOT");
     ret.err = MDBX_SUCCESS;
     return ret;
   }
@@ -9080,7 +9094,6 @@ retry:
                   reused_gc_slot) *
                      env->me_maxgc_ov1page &&
           !dense_gc) {
-
         /* LY: need just a txn-id for save page list. */
         bool need_cleanup = false;
         txnid_t snap_oldest;
@@ -9159,7 +9172,7 @@ retry:
             ++gc_rid;
             rc = mdbx_cursor_get(&couple.outer, &key, &data, MDBX_FIRST);
             if (rc == MDBX_NOTFOUND) {
-              mdbx_debug("%s: GC is empty", dbg_prefix_mode);
+              mdbx_debug("%s: GC is empty (going dense-mode)", dbg_prefix_mode);
               dense_gc = true;
               break;
             }
@@ -9175,7 +9188,8 @@ retry:
               goto bailout;
             }
             if (gc_first <= MIN_TXNID) {
-              mdbx_debug("%s: no free GC's id(s) less than %" PRIaTXN,
+              mdbx_debug("%s: no free GC's id(s) less than %" PRIaTXN
+                         " (going dense-mode)",
                          dbg_prefix_mode, gc_rid);
               dense_gc = true;
               break;
@@ -9237,7 +9251,7 @@ retry:
           if (gc_rid >= gc_first)
             gc_rid = gc_first - 1;
           if (unlikely(gc_rid == 0)) {
-            mdbx_error("%s", "** no GC tail-space to store");
+            mdbx_error("%s", "** no GC tail-space to store (going dense-mode)");
             dense_gc = true;
             goto retry;
           }
