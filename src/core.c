@@ -6493,18 +6493,15 @@ no_loose:
         goto fail;
       }
       const unsigned gc_len = MDBX_PNL_SIZE(gc_pnl);
-      if (unlikely(/* resulting list is tool long */ gc_len +
-                       MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >
+      if (unlikely(/* list is too long already */ MDBX_PNL_SIZE(
+                       txn->tw.reclaimed_pglist) >=
                    env->me_options.rp_augment_limit) &&
-          (((/* not a slot-request from gc-update */
-             (flags & MDBX_ALLOC_SLOT) == 0 ||
-             (flags & MDBX_LIFORECLAIM) == 0 ||
-             (txn->tw.lifo_reclaimed &&
-              MDBX_PNL_SIZE(txn->tw.lifo_reclaimed))) &&
-            /* have enough unallocated space */ pgno_add(
-                txn->mt_next_pgno, num) <= txn->mt_geo.upper) ||
+          ((/* not a slot-request from gc-update */
+            (flags & MDBX_ALLOC_SLOT) == 0 &&
+            /* have enough unallocated space */ txn->mt_geo.upper >=
+                pgno_add(txn->mt_next_pgno, num)) ||
            gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) >=
-               MDBX_PGL_LIMIT / 16 * 15)) {
+               MDBX_PGL_LIMIT)) {
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database. https://github.com/erthink/libmdbx/issues/123 */
