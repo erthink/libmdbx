@@ -442,14 +442,19 @@ if(CMAKE_COMPILER_IS_CLANG)
     unset(clang_search_dirs)
   endif()
 
-  if (CMAKE_CLANG_AR AND CMAKE_CLANG_NM AND CMAKE_CLANG_RANLIB
+  if(CMAKE_CLANG_AR AND CMAKE_CLANG_NM AND CMAKE_CLANG_RANLIB
       AND ((CLANG_LTO_PLUGIN AND CMAKE_LD_GOLD)
         OR (CMAKE_CLANG_LD
           AND NOT (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux"
             AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
         OR APPLE))
-    set(CLANG_LTO_AVAILABLE TRUE)
-    message(STATUS "Link-Time Optimization by CLANG/LLVM is available")
+    if(ANDROID AND CMAKE_SYSTEM_VERSION VERSION_LESS 22)
+      set(CLANG_LTO_AVAILABLE FALSE)
+      message(STATUS "Link-Time Optimization by CLANG/LLVM is available but unusable due https://reviews.llvm.org/D79919")
+    else()
+      set(CLANG_LTO_AVAILABLE TRUE)
+      message(STATUS "Link-Time Optimization by CLANG/LLVM is available")
+    endif()
   elseif(CMAKE_TOOLCHAIN_FILE AND NOT CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 7.0)
     set(CLANG_LTO_AVAILABLE TRUE)
     if(NOT CMAKE_CLANG_LD)
