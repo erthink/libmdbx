@@ -17,6 +17,27 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
+## v0.11.4 (underway)
+
+Acknowledgements:
+
+ - [Alex Sharov](https://github.com/AskAlexSharov) for reporting, testing and provide resources for remote debugging/investigation.
+
+Fixes:
+
+ - Fixed handling `MDBX_opt_rp_augment_limit` for GC's records from huge transactions (Erigon/Akula/Ethereum).
+ - [Fixed](https://github.com/erthink/libmdbx/issues/258) build on Android (avoid including `sys/sem.h`).
+
+Minors:
+
+ - Added workaround for CLANG bug [D79919/PR42445](https://reviews.llvm.org/D79919).
+ - Fixed build test on Android (using `pthread_barrier_t` stub).
+ - Disabled C++20 concepts for CLANG < 14 on Android.
+ - Fixed minor `unused parameter` warning.
+ - Added CI for Android.
+ - Refine/cleanup internal logging.
+
+
 ## v0.11.3 at 2021-12-31
 
 Acknowledgements:
