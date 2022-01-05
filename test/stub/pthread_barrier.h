@@ -30,8 +30,6 @@
 
 #include <pthread.h>
 
-#ifdef __APPLE__
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -77,7 +75,5 @@ int pthread_barrier_wait(pthread_barrier_t *barrier);
 #ifdef __cplusplus
 }
 #endif
-
-#endif /* __APPLE__ */
 
 #endif /* PTHREAD_BARRIER_H */

@@ -29,8 +29,6 @@
 
 #include <errno.h>
 
-#ifdef __APPLE__
-
 int pthread_barrierattr_init(pthread_barrierattr_t *attr) {
   memset(attr, 0, sizeof(pthread_barrierattr_t));
   int m = pthread_mutexattr_init(&attr->mattr);
@@ -106,5 +104,3 @@ int pthread_barrier_wait(pthread_barrier_t *barrier) {
     return 0;
   }
 }
-
-#endif /* __APPLE__ */
