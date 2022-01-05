@@ -195,7 +195,9 @@
 #ifndef MDBX_CXX20_CONCEPT
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
-     (!defined(__clang__) || (__clang_major__ >= 12 && !defined(__APPLE__)) || \
+     (!defined(__clang__) ||                                                   \
+      (__clang_major__ >= 12 && !defined(__APPLE__) &&                         \
+       !defined(__ANDROID_API__)) ||                                           \
       __clang_major__ >=                                                       \
           /* Hope Apple will fix concepts in AppleClang 14 */ 14))
 #define MDBX_CXX20_CONCEPT(CONCEPT, NAME) CONCEPT NAME
@@ -207,7 +209,9 @@
 #ifndef MDBX_ASSERT_CXX20_CONCEPT_SATISFIED
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
-     (!defined(__clang__) || (__clang_major__ >= 12 && !defined(__APPLE__)) || \
+     (!defined(__clang__) ||                                                   \
+      (__clang_major__ >= 12 && !defined(__APPLE__) &&                         \
+       !defined(__ANDROID_API__)) ||                                           \
       __clang_major__ >=                                                       \
           /* Hope Apple will fix concepts in AppleClang 14 */ 14))
 #define MDBX_ASSERT_CXX20_CONCEPT_SATISFIED(CONCEPT, TYPE)                     \
@@ -478,7 +482,9 @@ static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
 
 #if defined(DOXYGEN) ||                                                        \
     (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
-     (!defined(__clang__) || (__clang_major__ >= 12 && !defined(__APPLE__)) || \
+     (!defined(__clang__) ||                                                   \
+      (__clang_major__ >= 12 && !defined(__APPLE__) &&                         \
+       !defined(__ANDROID_API__)) ||                                           \
       __clang_major__ >=                                                       \
           /* Hope Apple will fix concepts in AppleClang 14 */ 14))
 
