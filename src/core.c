@@ -5494,6 +5494,7 @@ static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
   if (allow_volatile)
     return (a == b) ? a : 0;
   mdbx_assert(env, a == b);
+  (void)env;
   return a;
 }
 
