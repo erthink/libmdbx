@@ -15,7 +15,10 @@
 #if !(defined(_WIN32) || defined(_WIN64)) /* !Windows LCK-implementation */
 
 #include "internals.h"
+
+#if MDBX_LOCKING == MDBX_LOCKING_SYSV
 #include <sys/sem.h>
+#endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
 
 /*----------------------------------------------------------------------------*/
 /* global constructor/destructor */
