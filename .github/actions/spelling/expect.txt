@@ -1069,6 +1069,7 @@ naumov
 nbytes
 ncpfs
 NDEBUG
+ndk
 nelem
 nentries
 nessdb
@@ -1152,6 +1153,7 @@ nthreads
 ntifs
 ntpl
 ntstatus
+nttld
 nullkey
 nullptr
 numdbs
