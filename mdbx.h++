@@ -3789,6 +3789,7 @@ public:
                        const slice &key, const slice &value,
                        bool throw_notfound);
     move_result(const move_result &) noexcept = default;
+    move_result &operator=(const move_result &) noexcept = default;
   };
 
 protected:
