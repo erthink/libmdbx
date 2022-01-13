@@ -1252,14 +1252,14 @@ struct LIBMDBX_API to_base64 {
   bool is_erroneous() const noexcept { return false; }
 };
 
-inline ::std::ostream &operator<<(::std::ostream out, const to_hex &wrapper) {
+inline ::std::ostream &operator<<(::std::ostream &out, const to_hex &wrapper) {
   return out << wrapper.as_string();
 }
-inline ::std::ostream &operator<<(::std::ostream out,
+inline ::std::ostream &operator<<(::std::ostream &out,
                                   const to_base58 &wrapper) {
   return out << wrapper.as_string();
 }
-inline ::std::ostream &operator<<(::std::ostream out,
+inline ::std::ostream &operator<<(::std::ostream &out,
                                   const to_base64 &wrapper) {
   return out << wrapper.as_string();
 }
