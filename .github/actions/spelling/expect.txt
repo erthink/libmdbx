@@ -482,6 +482,7 @@ Exa
 exactkey
 exactp
 excpt
+EXDEV
 exe
 executables
 exename

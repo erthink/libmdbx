@@ -19120,6 +19120,10 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 
   uint8_t *const data_buffer =
       buffer + ceil_powerof2(meta_bytes, env->me_os_psize);
+#if MDBX_USE_COPYFILERANGE
+  static bool copyfilerange_unavailable;
+  bool not_the_same_filesystem = false;
+#endif /* MDBX_USE_COPYFILERANGE */
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
 #if MDBX_USE_SENDFILE
     static bool sendfile_unavailable;
@@ -19139,8 +19143,8 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 #endif /* MDBX_USE_SENDFILE */
 
 #if MDBX_USE_COPYFILERANGE
-    static bool copyfilerange_unavailable;
-    if (!dest_is_pipe && likely(!copyfilerange_unavailable)) {
+    if (!dest_is_pipe && !not_the_same_filesystem &&
+        likely(!copyfilerange_unavailable)) {
       off_t in_offset = offset, out_offset = offset;
       ssize_t bytes_copied = copy_file_range(
           env->me_lazy_fd, &in_offset, fd, &out_offset, used_size - offset, 0);
@@ -19149,9 +19153,15 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
         continue;
       }
       rc = MDBX_ENODATA;
-      if (bytes_copied == 0 || ignore_enosys(rc = errno) != MDBX_RESULT_TRUE)
+      if (bytes_copied == 0)
         break;
-      copyfilerange_unavailable = true;
+      rc = errno;
+      if (rc == EXDEV)
+        not_the_same_filesystem = true;
+      else if (ignore_enosys(rc) == MDBX_RESULT_TRUE)
+        copyfilerange_unavailable = true;
+      else
+        break;
     }
 #endif /* MDBX_USE_COPYFILERANGE */
 
