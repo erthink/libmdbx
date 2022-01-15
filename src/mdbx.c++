@@ -953,6 +953,7 @@ char *from_base64::write_bytes(char *__restrict dest, size_t dest_size) const {
     }
     src += 4;
     left -= 4;
+    dest += 3;
   }
   return dest;
 }
