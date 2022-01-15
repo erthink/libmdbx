@@ -110,6 +110,7 @@ bitmaps
 bitmask
 bitness
 bitops
+BITSIZE
 blogger
 blogs
 blogspot
@@ -842,6 +843,7 @@ libmdbx
 libmera
 libmithrildb
 libpthread
+libstdc
 LIFORECLAIM
 lineno
 linkedin
