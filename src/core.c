@@ -2991,7 +2991,8 @@ static __hot int __must_check_result mdbx_pnl_insert_range(MDBX_PNL *ppl,
   return MDBX_SUCCESS;
 }
 
-static bool mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
+static bool mdbx_pnl_check(const MDBX_PNL pl, const size_t limit) {
+  assert(limit >= MIN_PAGENO - MDBX_ENABLE_REFUND);
   if (likely(MDBX_PNL_SIZE(pl))) {
     assert(MDBX_PNL_LEAST(pl) >= MIN_PAGENO);
     assert(MDBX_PNL_MOST(pl) < limit);
@@ -3014,7 +3015,7 @@ static bool mdbx_pnl_check(const MDBX_PNL pl, const pgno_t limit) {
 }
 
 static __always_inline bool mdbx_pnl_check4assert(const MDBX_PNL pl,
-                                                  const pgno_t limit) {
+                                                  const size_t limit) {
   if (unlikely(pl == nullptr))
     return true;
   assert(MDBX_PNL_ALLOCLEN(pl) >= MDBX_PNL_SIZE(pl));
@@ -8295,7 +8296,8 @@ static void dbi_update(MDBX_txn *txn, int keep) {
 static void mdbx_dpl_sift(MDBX_txn *const txn, MDBX_PNL pl,
                           const bool spilled) {
   if (MDBX_PNL_SIZE(pl) && txn->tw.dirtylist->length) {
-    mdbx_tassert(txn, mdbx_pnl_check4assert(pl, txn->mt_next_pgno << spilled));
+    mdbx_tassert(
+        txn, mdbx_pnl_check4assert(pl, (size_t)txn->mt_next_pgno << spilled));
     MDBX_dpl *dl = mdbx_dpl_sort(txn);
 
     /* Scanning in ascend order */
@@ -9707,7 +9709,8 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
         memmove(sl + 1, sl + 1 + i, len * sizeof(sl[0]));
 #endif
       }
-      mdbx_tassert(txn, mdbx_pnl_check4assert(sl, parent->mt_next_pgno << 1));
+      mdbx_tassert(
+          txn, mdbx_pnl_check4assert(sl, (size_t)parent->mt_next_pgno << 1));
 
       /* Remove reclaimed pages from parent's spill list */
       s = MDBX_PNL_SIZE(sl), r = MDBX_PNL_SIZE(reclaimed_list);
@@ -9769,7 +9772,7 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   /* Remove anything in our spill list from parent's dirty list */
   if (txn->tw.spill_pages) {
     mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.spill_pages,
-                                            parent->mt_next_pgno << 1));
+                                            (size_t)parent->mt_next_pgno << 1));
     mdbx_dpl_sift(parent, txn->tw.spill_pages, true);
     mdbx_tassert(parent,
                  parent->tw.dirtyroom + parent->tw.dirtylist->length ==
@@ -9933,7 +9936,7 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   parent->mt_flags &= ~MDBX_TXN_HAS_CHILD;
   if (parent->tw.spill_pages) {
     assert(mdbx_pnl_check4assert(parent->tw.spill_pages,
-                                 parent->mt_next_pgno << 1));
+                                 (size_t)parent->mt_next_pgno << 1));
     if (MDBX_PNL_SIZE(parent->tw.spill_pages))
       parent->mt_flags |= MDBX_TXN_SPILLS;
   }
