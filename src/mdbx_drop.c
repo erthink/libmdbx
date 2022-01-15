@@ -4,7 +4,7 @@
  * Copyright 2021 Leonid Yuriev <leo@yuriev.ru>
  * and other libmdbx authors: please see AUTHORS file.
  *
- * Copyright 2016-2021 Howard Chu, Symas Corp.
+ * Copyright 2016-2022 Howard Chu, Symas Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
