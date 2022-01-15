@@ -877,12 +877,12 @@ char *to_base64::write_bytes(char *__restrict dest, size_t dest_size) const {
       }
       continue;
     case 2:
-      b64_3to4(src[0], 0, 0, dest);
-      dest[2] = dest[3] = '=';
-      return dest + 4;
-    case 1:
       b64_3to4(src[0], src[1], 0, dest);
       dest[3] = '=';
+      return dest + 4;
+    case 1:
+      b64_3to4(src[0], 0, 0, dest);
+      dest[2] = dest[3] = '=';
       return dest + 4;
     case 0:
       return dest;
