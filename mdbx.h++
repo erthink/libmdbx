@@ -1146,6 +1146,11 @@ struct LIBMDBX_API to_hex {
   /// \throws std::length_error if given buffer is too small.
   char *write_bytes(char *dest, size_t dest_size) const;
 
+  /// \brief Output hexadecimal dump of passed slice to the std::ostream.
+  /// \throws std::ios_base::failure corresponding to std::ostream::write()
+  /// behaviour.
+  ::std::ostream &output(::std::ostream &out) const;
+
   /// \brief Checks whether a passed slice is empty,
   /// and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
@@ -1195,6 +1200,12 @@ struct LIBMDBX_API to_base58 {
   /// \throws std::length_error if given buffer is too small.
   char *write_bytes(char *dest, size_t dest_size) const;
 
+  /// \brief Output [Base58](https://en.wikipedia.org/wiki/Base58)
+  /// dump of passed slice to the std::ostream.
+  /// \throws std::ios_base::failure corresponding to std::ostream::write()
+  /// behaviour.
+  ::std::ostream &output(::std::ostream &out) const;
+
   /// \brief Checks whether a passed slice is empty,
   /// and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
@@ -1243,6 +1254,12 @@ struct LIBMDBX_API to_base64 {
   /// \throws std::length_error if given buffer is too small.
   char *write_bytes(char *dest, size_t dest_size) const;
 
+  /// \brief Output [Base64](https://en.wikipedia.org/wiki/Base64)
+  /// dump of passed slice to the std::ostream.
+  /// \throws std::ios_base::failure corresponding to std::ostream::write()
+  /// behaviour.
+  ::std::ostream &output(::std::ostream &out) const;
+
   /// \brief Checks whether a passed slice is empty,
   /// and therefore there will be no output bytes.
   bool is_empty() const noexcept { return source.empty(); }
@@ -1253,15 +1270,15 @@ struct LIBMDBX_API to_base64 {
 };
 
 inline ::std::ostream &operator<<(::std::ostream &out, const to_hex &wrapper) {
-  return out << wrapper.as_string();
+  return wrapper.output(out);
 }
 inline ::std::ostream &operator<<(::std::ostream &out,
                                   const to_base58 &wrapper) {
-  return out << wrapper.as_string();
+  return wrapper.output(out);
 }
 inline ::std::ostream &operator<<(::std::ostream &out,
                                   const to_base64 &wrapper) {
-  return out << wrapper.as_string();
+  return wrapper.output(out);
 }
 
 /// \brief Hexadecimal decoder which satisfy \ref SliceTranscoder concept.

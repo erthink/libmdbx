@@ -14,6 +14,7 @@
 #include "defs.h"
 #include "internals.h"
 
+#include <array>
 #include <atomic>
 #include <cctype> // for isxdigit(), etc
 #include <system_error>
@@ -559,6 +560,28 @@ char *to_hex::write_bytes(char *__restrict dest, size_t dest_size) const {
   return dest;
 }
 
+::std::ostream &to_hex::output(::std::ostream &out) const {
+  if (MDBX_LIKELY(!is_empty()))
+    MDBX_CXX20_LIKELY {
+      ::std::ostream::sentry sentry(out);
+      auto src = source.byte_ptr();
+      const char alphabase = (uppercase ? 'A' : 'a') - 10;
+      unsigned width = 0;
+      for (const auto end = source.end_byte_ptr(); src != end; ++src) {
+        if (wrap_width && width >= wrap_width) {
+          out << ::std::endl;
+          width = 0;
+        }
+        const int8_t hi = *src >> 4;
+        const int8_t lo = *src & 15;
+        out.put(char(alphabase + hi + (((hi - 10) >> 7) & -7)));
+        out.put(char(alphabase + lo + (((lo - 10) >> 7) & -7)));
+        width += 2;
+      }
+    }
+  return out;
+}
+
 char *from_hex::write_bytes(char *__restrict dest, size_t dest_size) const {
   if (MDBX_UNLIKELY(source.length() % 2 && !ignore_spaces))
     MDBX_CXX20_UNLIKELY throw std::domain_error(
@@ -717,6 +740,65 @@ char *to_base58::write_bytes(char *__restrict dest, size_t dest_size) const {
   }
 
   return dest;
+}
+
+::std::ostream &to_base58::output(::std::ostream &out) const {
+  if (MDBX_LIKELY(!is_empty()))
+    MDBX_CXX20_LIKELY {
+      ::std::ostream::sentry sentry(out);
+      auto src = source.byte_ptr();
+      size_t left = source.length();
+      unsigned width = 0;
+      std::array<char, 11> buf;
+
+      while (MDBX_LIKELY(left > 7)) {
+        uint64_t v;
+        std::memcpy(&v, src, 8);
+        src += 8;
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+        v = bswap64(v);
+#elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#else
+#error "FIXME: Unsupported byte order"
+#endif /* __BYTE_ORDER__ */
+        buf[10] = b58_8to11(v);
+        buf[9] = b58_8to11(v);
+        buf[8] = b58_8to11(v);
+        buf[7] = b58_8to11(v);
+        buf[6] = b58_8to11(v);
+        buf[5] = b58_8to11(v);
+        buf[4] = b58_8to11(v);
+        buf[3] = b58_8to11(v);
+        buf[2] = b58_8to11(v);
+        buf[1] = b58_8to11(v);
+        buf[0] = b58_8to11(v);
+        assert(v == 0);
+        out.write(buf.begin(), 11);
+        left -= 8;
+        if (wrap_width && (width += 11) >= wrap_width && left) {
+          out << ::std::endl;
+          width = 0;
+        }
+      }
+
+      if (left) {
+        uint64_t v = 0;
+        unsigned parrots = 31;
+        do {
+          v = (v << 8) + *src++;
+          parrots += 43;
+        } while (--left);
+
+        auto ptr = buf.end();
+        do {
+          *--ptr = b58_8to11(v);
+          parrots -= 32;
+        } while (parrots > 31);
+        assert(v == 0);
+        out.write(&*ptr, buf.end() - ptr);
+      }
+    }
+  return out;
 }
 
 const signed char b58_map[256] = {
@@ -888,6 +970,43 @@ char *to_base64::write_bytes(char *__restrict dest, size_t dest_size) const {
       return dest;
     }
   }
+}
+
+::std::ostream &to_base64::output(::std::ostream &out) const {
+  if (MDBX_LIKELY(!is_empty()))
+    MDBX_CXX20_LIKELY {
+      ::std::ostream::sentry sentry(out);
+      auto src = source.byte_ptr();
+      size_t left = source.length();
+      unsigned width = 0;
+      std::array<char, 4> buf;
+
+      while (true) {
+        switch (left) {
+        default:
+          MDBX_CXX20_LIKELY left -= 3;
+          b64_3to4(src[0], src[1], src[2], buf.begin());
+          src += 3;
+          out.write(buf.begin(), 4);
+          if (wrap_width && (width += 4) >= wrap_width && left) {
+            out << ::std::endl;
+            width = 0;
+          }
+          continue;
+        case 2:
+          b64_3to4(src[0], src[1], 0, buf.begin());
+          buf[3] = '=';
+          return out.write(buf.begin(), 4);
+        case 1:
+          b64_3to4(src[0], 0, 0, buf.begin());
+          buf[2] = buf[3] = '=';
+          return out.write(buf.begin(), 4);
+        case 0:
+          return out;
+        }
+      }
+    }
+  return out;
 }
 
 static const signed char b64_map[256] = {
