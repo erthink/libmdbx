@@ -546,15 +546,15 @@ char *to_hex::write_bytes(char *__restrict dest, size_t dest_size) const {
   const char alphabase = (uppercase ? 'A' : 'a') - 10;
   auto line = dest;
   for (const auto end = source.end_byte_ptr(); src != end; ++src) {
+    if (wrap_width && size_t(dest - line) >= wrap_width) {
+      *dest = '\n';
+      line = ++dest;
+    }
     const int8_t hi = *src >> 4;
     const int8_t lo = *src & 15;
     dest[0] = char(alphabase + hi + (((hi - 10) >> 7) & -7));
     dest[1] = char(alphabase + lo + (((lo - 10) >> 7) & -7));
     dest += 2;
-    if (wrap_width && size_t(dest - line) >= wrap_width) {
-      *dest = '\n';
-      line = ++dest;
-    }
   }
   return dest;
 }
@@ -671,7 +671,6 @@ char *to_base58::write_bytes(char *__restrict dest, size_t dest_size) const {
   size_t left = source.length();
   auto line = dest;
   while (MDBX_LIKELY(left > 7)) {
-    left -= 8;
     uint64_t v;
     std::memcpy(&v, src, 8);
     src += 8;
@@ -694,7 +693,8 @@ char *to_base58::write_bytes(char *__restrict dest, size_t dest_size) const {
     dest[0] = b58_8to11(v);
     assert(v == 0);
     dest += 11;
-    if (wrap_width && size_t(dest - line) >= wrap_width) {
+    left -= 8;
+    if (wrap_width && size_t(dest - line) >= wrap_width && left) {
       *dest = '\n';
       line = ++dest;
     }
@@ -871,7 +871,7 @@ char *to_base64::write_bytes(char *__restrict dest, size_t dest_size) const {
       b64_3to4(src[0], src[1], src[2], dest);
       dest += 4;
       src += 3;
-      if (wrap_width && size_t(dest - line) >= wrap_width) {
+      if (wrap_width && size_t(dest - line) >= wrap_width && left) {
         *dest = '\n';
         line = ++dest;
       }
