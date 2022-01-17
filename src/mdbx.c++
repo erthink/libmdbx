@@ -683,7 +683,7 @@ static inline uint64_t bswap64(uint64_t v) noexcept {
 #endif
 }
 #endif /* __BYTE_ORDER__ */
-#endif /* ifdef bswap64 */
+#endif /* ifndef bswap64 */
 
 static inline char b58_8to11(uint64_t &v) noexcept {
   const unsigned i = unsigned(v % 58);
