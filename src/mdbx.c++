@@ -782,7 +782,7 @@ char *to_base58::write_bytes(char *__restrict const dest,
         buf[1] = b58_8to11(v);
         buf[0] = b58_8to11(v);
         assert(v == 0);
-        out.write(buf.begin(), 11);
+        out.write(&buf.front(), 11);
         left -= 8;
         if (wrap_width && (width += 11) >= wrap_width && left) {
           out << ::std::endl;
@@ -1003,22 +1003,22 @@ char *to_base64::write_bytes(char *__restrict const dest,
         switch (left) {
         default:
           MDBX_CXX20_LIKELY left -= 3;
-          b64_3to4(src[0], src[1], src[2], buf.begin());
+          b64_3to4(src[0], src[1], src[2], &buf.front());
           src += 3;
-          out.write(buf.begin(), 4);
+          out.write(&buf.front(), 4);
           if (wrap_width && (width += 4) >= wrap_width && left) {
             out << ::std::endl;
             width = 0;
           }
           continue;
         case 2:
-          b64_3to4(src[0], src[1], 0, buf.begin());
+          b64_3to4(src[0], src[1], 0, &buf.front());
           buf[3] = '=';
-          return out.write(buf.begin(), 4);
+          return out.write(&buf.front(), 4);
         case 1:
-          b64_3to4(src[0], 0, 0, buf.begin());
+          b64_3to4(src[0], 0, 0, &buf.front());
           buf[2] = buf[3] = '=';
-          return out.write(buf.begin(), 4);
+          return out.write(&buf.front(), 4);
         case 0:
           return out;
         }
