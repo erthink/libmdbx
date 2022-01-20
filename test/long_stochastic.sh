@@ -10,6 +10,7 @@ UPTO=9999999
 MONITOR=
 LOOPS=
 SKIP_MAKE=no
+GEOMETRY_JITTER=yes
 BANNER="$(which banner 2>/dev/null | echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
 DB_UPTO_MB=17408
@@ -27,6 +28,7 @@ do
     echo "--loops NN             Stop after the NN loops"
     echo "--dir PATH             Specifies directory for test DB and other files (it will be cleared)"
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
+    echo "--no-geometry-jitter   Disable jitter for geometry upper-size"
     echo "--help                 Print this usage help and exit"
     exit -2
   ;;
@@ -87,6 +89,9 @@ do
       exit -2
     fi
     shift
+  ;;
+  --no-geometry-jitter)
+    GEOMETRY_JITTER=no
   ;;
   *)
     echo "Unknown option '$1'"
@@ -296,8 +301,8 @@ function probe {
   rm -f ${TESTDB_DIR}/* || failed
   for case in $LIST
   do
-    echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no $@ $case"
-    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no "$@" $case | check_deep \
+    echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
+    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case | check_deep \
       && ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
       && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
       || failed

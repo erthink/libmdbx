@@ -73,6 +73,7 @@ MDBX_NORETURN void usage(void) {
       "  --ignore-dbfull[=yes|NO]      Ignore MDBX_MAP_FULL error\n"
       "  --speculum[=yes|NO]           Use internal `speculum` to check "
       "dataset\n"
+      "  --geometry-jitter[=YES|no]    Use jitter for geometry upper-limit\n"
       "Keys and Value:\n"
       "  --keylen.min=N                Minimal keys length\n"
       "  --keylen.max=N                Miximal keys length\n"
@@ -181,6 +182,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   global::config::failfast = true;
   global::config::progress_indicator = true;
   global::config::console_mode = osal_istty(STDERR_FILENO);
+  global::config::geometry_jitter = true;
 }
 
 namespace global {
@@ -202,6 +204,7 @@ bool cleanup_after;
 bool failfast;
 bool progress_indicator;
 bool console_mode;
+bool geometry_jitter;
 } /* namespace config */
 
 } /* namespace global */
@@ -290,8 +293,33 @@ int main(int argc, char *const argv[]) {
   unsigned last_space_id = 0;
 
   for (int narg = 1; narg < argc; ++narg) {
-    const char *value = nullptr;
+    if (config::parse_option(argc, argv, narg, "dump-config",
+                             global::config::dump_config))
+      continue;
+    if (config::parse_option(argc, argv, narg, "cleanup-before",
+                             global::config::cleanup_before))
+      continue;
+    if (config::parse_option(argc, argv, narg, "cleanup-after",
+                             global::config::cleanup_after))
+      continue;
+    if (config::parse_option(argc, argv, narg, "failfast",
+                             global::config::failfast))
+      continue;
+    if (config::parse_option(argc, argv, narg, "progress",
+                             global::config::progress_indicator))
+      continue;
+    if (config::parse_option(argc, argv, narg, "console",
+                             global::config::console_mode))
+      continue;
+    if (config::parse_option(argc, argv, narg, "geometry-jitter",
+                             global::config::geometry_jitter))
+      continue;
+    if (config::parse_option(argc, argv, narg, "timeout",
+                             global::config::timeout_duration_seconds,
+                             config::duration, 1))
+      continue;
 
+    const char *value = nullptr;
     if (config::parse_option(argc, argv, narg, "case", &value)) {
       fixup4qemu(params);
       testcase_setup(value, params, last_space_id);
@@ -356,10 +384,6 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "threads", params.nthreads,
                              config::no_scale, 1, 64))
-      continue;
-    if (config::parse_option(argc, argv, narg, "timeout",
-                             global::config::timeout_duration_seconds,
-                             config::duration, 1))
       continue;
 
     if (config::parse_option_intptr(argc, argv, narg, "size-lower",
@@ -491,15 +515,6 @@ int main(int argc, char *const argv[]) {
       continue;
     if (config::parse_option(argc, argv, narg, "speculum", params.speculum))
       continue;
-    if (config::parse_option(argc, argv, narg, "dump-config",
-                             global::config::dump_config))
-      continue;
-    if (config::parse_option(argc, argv, narg, "cleanup-before",
-                             global::config::cleanup_before))
-      continue;
-    if (config::parse_option(argc, argv, narg, "cleanup-after",
-                             global::config::cleanup_after))
-      continue;
     if (config::parse_option(argc, argv, narg, "max-readers",
                              params.max_readers, config::no_scale, 1, 255))
       continue;
@@ -570,15 +585,6 @@ int main(int argc, char *const argv[]) {
       configure_actor(last_space_id, ac_nested, value, params);
       continue;
     }
-    if (config::parse_option(argc, argv, narg, "failfast",
-                             global::config::failfast))
-      continue;
-    if (config::parse_option(argc, argv, narg, "progress",
-                             global::config::progress_indicator))
-      continue;
-    if (config::parse_option(argc, argv, narg, "console",
-                             global::config::console_mode))
-      continue;
 
     if (*argv[narg] != '-') {
       fixup4qemu(params);

@@ -110,21 +110,25 @@ bool testcase_jitter::run() {
     if (!mode_readonly()) {
       fetch_canary();
       update_canary(1);
-      err = mdbx_env_set_geometry(
-          db_guard.get(), -1, -1,
-          coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
-      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
-        failure_perror("mdbx_env_set_geometry-1", err);
+      if (global::config::geometry_jitter) {
+        err = mdbx_env_set_geometry(
+            db_guard.get(), -1, -1,
+            coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
+        if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
+            err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+          failure_perror("mdbx_env_set_geometry-1", err);
+      }
     }
     txn_end(flipcoin());
 
-    err = mdbx_env_set_geometry(
-        db_guard.get(), -1, -1,
-        !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
-    if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-        err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
-      failure_perror("mdbx_env_set_geometry-2", err);
+    if (global::config::geometry_jitter) {
+      err = mdbx_env_set_geometry(
+          db_guard.get(), -1, -1,
+          !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
+      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
+          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+        failure_perror("mdbx_env_set_geometry-2", err);
+    }
 
     if (flipcoin()) {
       jitter_delay();
@@ -133,12 +137,14 @@ bool testcase_jitter::run() {
       txn_end(flipcoin());
     }
 
-    jitter_delay();
-    err =
-        mdbx_env_set_geometry(db_guard.get(), -1, -1, upper_limit, -1, -1, -1);
-    if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-        err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
-      failure_perror("mdbx_env_set_geometry-3", err);
+    if (global::config::geometry_jitter) {
+      jitter_delay();
+      err = mdbx_env_set_geometry(db_guard.get(), -1, -1, upper_limit, -1, -1,
+                                  -1);
+      if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
+          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+        failure_perror("mdbx_env_set_geometry-3", err);
+    }
 
     db_close();
 

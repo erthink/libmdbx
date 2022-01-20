@@ -447,6 +447,8 @@ void dump(const char *title) {
               global::config::progress_indicator ? "Yes" : "No");
   log_verbose("console mode: %s\n",
               global::config::console_mode ? "Yes" : "No");
+  log_verbose("geometry jitter: %s\n",
+              global::config::geometry_jitter ? "Yes" : "No");
 }
 
 } /* namespace config */
@@ -501,6 +503,8 @@ const std::string actor_config::serialize(const char *prefix) const {
   checksum.push(global::config::progress_indicator);
   result.push_back(global::config::console_mode ? 'Y' : 'N');
   checksum.push(global::config::console_mode);
+  result.push_back(global::config::geometry_jitter ? 'Y' : 'N');
+  checksum.push(global::config::geometry_jitter);
   result.push_back('|');
 
   result.append(osal_serialize(checksum));
@@ -578,11 +582,14 @@ bool actor_config::deserialize(const char *str, actor_config &config) {
     TRACE("<< actor_config::deserialize: slash-5\n");
     return false;
   }
-  if ((str[0] == 'Y' || str[0] == 'N') && (str[1] == 'Y' || str[1] == 'N')) {
+  if ((str[0] == 'Y' || str[0] == 'N') && (str[1] == 'Y' || str[1] == 'N') &&
+      (str[2] == 'Y' || str[2] == 'N')) {
     global::config::progress_indicator = str[0] == 'Y';
     checksum.push(global::config::progress_indicator);
     global::config::console_mode = str[1] == 'Y';
     checksum.push(global::config::console_mode);
+    global::config::geometry_jitter = str[2] != 'N';
+    checksum.push(global::config::geometry_jitter);
     str = slash + 1;
 
     slash = strchr(str, '|');

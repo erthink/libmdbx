@@ -68,6 +68,7 @@ extern bool cleanup_after;
 extern bool failfast;
 extern bool progress_indicator;
 extern bool console_mode;
+extern bool geometry_jitter;
 } /* namespace config */
 
 } /* namespace global */
