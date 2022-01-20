@@ -95,7 +95,8 @@ bool testcase_nested::teardown() {
       txn_begin(false);
       db_table_drop(dbi);
       int err = breakable_commit();
-      if (unlikely(err != MDBX_SUCCESS)) {
+      if (unlikely(err != MDBX_SUCCESS) &&
+          (err != MDBX_MAP_FULL || !config.params.ignore_dbfull)) {
         log_notice("nested: bailout-clean due '%s'", mdbx_strerror(err));
         ok = false;
       }

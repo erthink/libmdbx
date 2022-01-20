@@ -247,6 +247,8 @@ bool testcase_ttl::run() {
   }
 
 bailout:
+  if (!rc && err == MDBX_MAP_FULL && config.params.ignore_dbfull)
+    rc = true;
   txn_end(true);
   if (dbi) {
     if (config.params.drop_table && !mode_readonly()) {
@@ -255,7 +257,8 @@ bailout:
       err = breakable_commit();
       if (unlikely(err != MDBX_SUCCESS)) {
         log_notice("ttl: bailout-clean due '%s'", mdbx_strerror(err));
-        return false;
+        if (err != MDBX_MAP_FULL || !config.params.ignore_dbfull)
+          rc = false;
       }
     } else
       db_table_close(dbi);
