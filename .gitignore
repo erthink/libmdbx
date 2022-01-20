@@ -1,6 +1,7 @@
 *.[ao]
 *.bak
 *.exe
+*.err
 *.gcda
 *.gcno
 *.gcov
