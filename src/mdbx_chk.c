@@ -1344,11 +1344,11 @@ int main(int argc, char *argv[]) {
     print(" ! backed-pages %" PRIu64 " < %u\n", backed_pages, NUM_METAS);
   if (backed_pages < NUM_METAS || dxbfile_pages < NUM_METAS)
     goto bailout;
-  if (backed_pages > MAX_PAGENO) {
+  if (backed_pages > MAX_PAGENO + 1) {
     print(" ! backed-pages %" PRIu64 " > max-pages %" PRIaPGNO "\n",
-          backed_pages, MAX_PAGENO);
+          backed_pages, MAX_PAGENO + 1);
     ++problems_meta;
-    backed_pages = MAX_PAGENO;
+    backed_pages = MAX_PAGENO + 1;
   }
 
   if ((envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {

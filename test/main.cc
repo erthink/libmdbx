@@ -136,6 +136,7 @@ void actor_params::set_defaults(const std::string &tmpdir) {
   size_lower = -1;
   size_now =
       intptr_t(1024) * 1024 * ((table_flags & MDBX_DUPSORT) ? 256 : 1024);
+  size_now = std::max(size_now, mdbx_limits_dbsize_max(-1));
   size_upper = -1;
   shrink_threshold = -1;
   growth_step = -1;
