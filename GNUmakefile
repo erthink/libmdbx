@@ -278,14 +278,14 @@ TEST_INC   := $(wildcard test/*.h)
 TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
 TAR        ?= $(shell which gnu-tar || echo tar)
 ZIP        ?= $(shell which zip || echo "echo 'Please install zip'")
-CLANG_FORMAT ?= $(shell (which clang-format-12 || which clang-format-11 || which clang-format-10 || which clang-format) 2>/dev/null)
+CLANG_FORMAT ?= $(shell (which clang-format-14 || which clang-format-13 || which clang-format) 2>/dev/null)
 
 reformat:
 	@echo '  RUNNING clang-format...'
 	$(QUIET)if [ -n "$(CLANG_FORMAT)" ]; then \
 		git ls-files | grep -E '\.(c|cxx|cc|cpp|h|hxx|hpp)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
 	else \
-		echo "clang-format version 8..12 not found for 'reformat'"; \
+		echo "clang-format version 13..14 not found for 'reformat'"; \
 	fi
 
 MAN_SRCDIR := src/man1/
