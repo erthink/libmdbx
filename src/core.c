@@ -7841,7 +7841,7 @@ int mdbx_txn_begin(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
+  int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -7850,9 +7850,7 @@ int mdbx_txn_set_userctx(MDBX_txn *txn, void *ctx) {
 }
 
 void *mdbx_txn_get_userctx(const MDBX_txn *txn) {
-  return check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD)
-             ? nullptr
-             : txn->mt_userctx;
+  return check_txn(txn, MDBX_TXN_FINISHED) ? nullptr : txn->mt_userctx;
 }
 
 int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
@@ -8062,7 +8060,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
 }
 
 int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD);
+  int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -19764,7 +19762,7 @@ __cold int mdbx_env_info_ex(const MDBX_env *env, const MDBX_txn *txn,
     return MDBX_EINVAL;
 
   if (txn) {
-    int err = check_txn(txn, MDBX_TXN_BLOCKED);
+    int err = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
   }
@@ -20168,7 +20166,7 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
 
 int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                       unsigned *state) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED & ~MDBX_TXN_ERROR);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -20342,7 +20340,7 @@ bailout:
 }
 
 int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -20354,7 +20352,7 @@ int mdbx_set_compare(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
 }
 
 int mdbx_set_dupsort(MDBX_txn *txn, MDBX_dbi dbi, MDBX_cmp_func *cmp) {
-  int rc = check_txn(txn, MDBX_TXN_BLOCKED);
+  int rc = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
