@@ -23,10 +23,23 @@ Acknowledgements:
 
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting, testing and provide resources for remote debugging/investigation.
 
+New features, extensions and improvements:
+
+ - Added treating the `UINT64_MAX` value as maximum for given option inside `mdbx_env_set_option()`.
+ - Added `to_hex/to_base58/to_base64::output(std::ostream&)` overloads without using temporary string objects as buffers.
+ - Added `--geometry-jitter=YES|no` option to the test framework.
+
 Fixes:
 
  - Fixed handling `MDBX_opt_rp_augment_limit` for GC's records from huge transactions (Erigon/Akula/Ethereum).
  - [Fixed](https://github.com/erthink/libmdbx/issues/258) build on Android (avoid including `sys/sem.h`).
+ - [Fixed](https://github.com/erthink/libmdbx/pull/261) missing copy assignment operator for `mdbx::move_result`.
+ - Fixed missing `&` for `std::ostream &operator<<()` overloads.
+ - Fixed unexpected `EXDEV` (Cross-device link) error from `mdbx_env_copy()`.
+ - Fixed base64 encoding/decoding bugs in auxillary C++ API.
+ - Fixed overflow of `pgno_t` during checking PNL on 64-bit platforms.
+ - [Fixed](https://github.com/erthink/libmdbx/issues/260) excessive PNL checking after sort for spilling.
+ - Reworked checking `MAX_PAGENO` and DB upper-size geometry limit.
 
 Minors:
 
@@ -36,6 +49,10 @@ Minors:
  - Fixed minor `unused parameter` warning.
  - Added CI for Android.
  - Refine/cleanup internal logging.
+ - Refined line splitting inside hex/base58/base64 encoding to avoid `\n` at the end.
+ - Added workaround for modern libstdc++ with CLANG < 4.x
+ - Relaxed txn-check rules for auxiliary functions.
+ - Clarified a comments and descriptions, etc.
 
 
 ## v0.11.3 at 2021-12-31
