@@ -2840,8 +2840,10 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *                               or use default". Default is 2*growth_step.
  *
  * \param [in] pagesize          The database page size for new database
- *                               creation or -1 otherwise. Must be power of 2
- *                               in the range between \ref MDBX_MIN_PAGESIZE and
+ *                               creation or -1 otherwise. Once the database
+ *                               is created, the page size cannot be changed.
+ *                               Must be power of 2 in the range between
+ *                               \ref MDBX_MIN_PAGESIZE and
  *                               \ref MDBX_MAX_PAGESIZE. Zero value means
  *                               "minimal acceptable", and negative means
  *                               "keep current or use default".
