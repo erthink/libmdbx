@@ -251,11 +251,15 @@ namespace mdbx {
 // Functions whose signature depends on the `mdbx::byte` type
 // must be strictly defined as inline!
 #if defined(DOXYGEN) || (defined(__cpp_char8_t) && __cpp_char8_t >= 201811)
-// Wanna using a non-aliasing type to release more power of an optimizer.
+// To enable all kinds of an compiler optimizations we use a byte-like type
+// that don't presumes aliases for pointers as does the `char` type and its
+// derivatives/typedefs.
+// Please see https://github.com/erthink/libmdbx/issues/263
+// for reasoning of the use of `char8_t` type and switching to `__restrict__`.
 using byte = char8_t;
 #else
-// Wanna not using std::byte since it doesn't add features,
-// but add inconvenient restrictions.
+// Avoid `std::byte` since it doesn't add features but inconvenient
+// restrictions.
 using byte = unsigned char;
 #endif /* __cpp_char8_t >= 201811*/
 
