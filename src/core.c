@@ -10389,7 +10389,7 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
       geo_lower = (pgno_t)((mapsize_min = MAX_MAPSIZE) / meta->mm_psize);
       if (geo_lower > MAX_PAGENO + 1) {
         geo_lower = MAX_PAGENO + 1;
-        mapsize_min = geo_lower * meta->mm_psize;
+        mapsize_min = geo_lower * (uint64_t)meta->mm_psize;
       }
       mdbx_warning("meta[%u] consider get-%s pageno is %" PRIaPGNO
                    " instead of wrong %" PRIaPGNO
@@ -10424,7 +10424,7 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
     geo_upper = (pgno_t)((mapsize_max = MAX_MAPSIZE) / meta->mm_psize);
     if (geo_upper > MAX_PAGENO + 1) {
       geo_upper = MAX_PAGENO + 1;
-      mapsize_max = geo_upper * meta->mm_psize;
+      mapsize_max = geo_upper * (uint64_t)meta->mm_psize;
     }
     mdbx_warning("meta[%u] consider get-%s pageno is %" PRIaPGNO
                  " instead of wrong %" PRIaPGNO
