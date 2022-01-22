@@ -1,12 +1,22 @@
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 
+*The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
+
 > Please refer to the online [documentation](https://erthink.github.io/libmdbx/)
 > with [`C` API description](https://erthink.github.io/libmdbx/group__c__api.html)
 > and pay attention to the [`C++` API](https://github.com/erthink/libmdbx/blob/devel/mdbx.h%2B%2B).
->
+
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
->
+
 > For NEWS take a look to the [ChangeLog](./ChangeLog.md).
+
+[![https://t.me/libmdbx](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/telegram.png)](https://t.me/libmdbx)
+[![Version](https://badge.fury.io/gh/erthink%2Flibmdbx.svg)](https://github.com/erthink/libmdbx/releases)
+[![GithubCI](https://github.com/erthink/libmdbx/workflows/CI/badge.svg)](https://github.com/erthink/libmdbx/actions?query=workflow%3ACI)
+[![AppveyorCI](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
+[![CircleCI](https://circleci.com/gh/erthink/libmdbx/tree/master.svg?style=svg)](https://circleci.com/gh/erthink/libmdbx/tree/master)
+[![CirrusCI](https://api.cirrus-ci.com/github/erthink/libmdbx.svg)](https://cirrus-ci.com/github/erthink/libmdbx)
+[![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
 libmdbx
 ========
@@ -70,15 +80,6 @@ _MithrilDB_ is a rightly relevant name.
   > revolution is to provide a clearer and robust API, add more features and
   > new valuable properties of the database.
 <!-- section-end -->
-
-[![https://t.me/libmdbx](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/telegram.png)](https://t.me/libmdbx)
-[![GithubCI](https://github.com/erthink/libmdbx/workflows/CI/badge.svg)](https://github.com/erthink/libmdbx/actions?query=workflow%3ACI)
-[![AppveyorCI](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
-[![CircleCI](https://circleci.com/gh/erthink/libmdbx/tree/master.svg?style=svg)](https://circleci.com/gh/erthink/libmdbx/tree/master)
-[![CirrusCI](https://api.cirrus-ci.com/github/erthink/libmdbx.svg)](https://cirrus-ci.com/github/erthink/libmdbx)
-[![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
-
-*The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
 
 -----
 
@@ -290,7 +291,7 @@ pre-opening is not needed.
 5. Guarantee of database integrity even in asynchronous unordered write-to-disk mode.
   > _libmdbx_ propose additional trade-off by `MDBX_SAFE_NOSYNC` with append-like manner for updates,
   > that avoids database corruption after a system crash contrary to LMDB.
-  > Nevertheless, the `MDBX_UTTERLY_NOSYNC` mode is available to match behaviour of the `MDB_NOSYNC` in LMDB.
+  > Nevertheless, the `MDBX_UTTERLY_NOSYNC` mode is available to match LMDB's behaviour for `MDB_NOSYNC`.
 
 6. On **MacOS & iOS** the `fcntl(F_FULLFSYNC)` syscall is used _by
 default_ to synchronize data with the disk, as this is [the only way to
@@ -371,6 +372,7 @@ The amalgamated source code could be created from the original clone of git
 repository on Linux by executing `make dist`. As a result, the desired
 set of files will be formed in the `dist` subdirectory.
 
+
 ## Building and Testing
 
 Both amalgamated and original source code provides build through the use
@@ -425,6 +427,7 @@ Anyway, no matter how thoroughly the _libmdbx_ is tested, you should rely only o
    on the other hand it will allow to reproduce the problem and insure against regression in a future.
 3. Actually you should rely on than you checked by yourself or take a risk.
 
+
 ### Common important details
 
 #### Build reproducibility
@@ -443,10 +446,10 @@ There are no special traits nor quirks if you use libmdbx ONLY inside the single
 But in a cross-container cases or with a host-container(s) mix the two major things MUST be
 guaranteed:
 
-1. Coherence of memory mapping content and unified page cache inside OS kernel for host and all container(s) operated with a some DB.
+1. Coherence of memory mapping content and unified page cache inside OS kernel for host and all container(s) operated with a DB.
 Basically this means must be only a single physical copy of each memory mapped DB' page in the system memory.
 
-2. Uniqueness of PID values and/or a common space for ones:
+2. Uniqueness of [PID](https://en.wikipedia.org/wiki/Process_identifier) values and/or a common space for ones:
     - for POSIX systems: PID uniqueness for all processes operated with a DB.
       I.e. the `--pid=host` is required for run DB-aware processes inside Docker,
       either without host interaction a `--pid=container:<name|id>` with the same name/id.
@@ -490,11 +493,10 @@ lot of errors from make when trying to build. In this case, perhaps you
 should use `gmake` instead of `make`, or even `gnu-make`, etc.
 
 ### FreeBSD and related platforms
-As a rule, in such systems, the default is to use Berkeley Make. And GNU
-Make is called by the gmake command or may be missing. In addition,
-[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) may be absent.
+As a rule on BSD and it derivatives the default is to use Berkeley Make and
+[Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)) is not installed.
 
-You need to install the required components: GNU Make, bash, C and C++
+So you need to install the required components: GNU Make, Bash, C and C++
 compilers compatible with GCC or CLANG. After that, to build the
 library, it is enough to execute `gmake all` (or `make all`) in the
 directory with source code, and `gmake check` (or `make check`) to run
@@ -503,15 +505,19 @@ the basic tests.
 ### Windows
 For build _libmdbx_ on Windows the _original_ CMake and [Microsoft Visual
 Studio 2019](https://en.wikipedia.org/wiki/Microsoft_Visual_Studio) are
-recommended. Otherwise do not forget to add `ntdll.lib` to linking.
+recommended.
 
-Building by MinGW, MSYS or Cygwin is potentially possible. However,
-these scripts are not tested and will probably require you to modify the
-`CMakeLists.txt` or `Makefile` respectively.
+For build by MinGW the 10.2 or recent version coupled with a modern CMake are required.
+So it is recommended to use [chocolatey](https://chocolatey.org/) to install and/or update the ones.
+
+Another ways to build is potentially possible but not supported and will not.
+The `CMakeLists.txt` or `GNUMakefile` scripts will probably need to be modified accordingly.
+Using other methods do not forget to add the `ntdll.lib` to linking.
 
 It should be noted that in _libmdbx_ was efforts to resolve
 runtime dependencies from CRT and other MSVC libraries.
-For this is enough to define the `MDBX_WITHOUT_MSVC_CRT` during build.
+For this is enough to pass the `-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON` option
+during configure by CMake.
 
 An example of running a basic test script can be found in the
 [CI-script](appveyor.yml) for [AppVeyor](https://www.appveyor.com/). To
@@ -529,7 +535,7 @@ error when opening the database in a _WSL1_ environment.
 
 ### MacOS
 Current [native build tools](https://en.wikipedia.org/wiki/Xcode) for
-MacOS include GNU Make, CLANG and an outdated version of bash.
+MacOS include GNU Make, CLANG and an outdated version of Bash.
 Therefore, to build the library, it is enough to run `make all` in the
 directory with source code, and run `make check` to execute the base
 tests. If something goes wrong, it is recommended to install
@@ -537,7 +543,7 @@ tests. If something goes wrong, it is recommended to install
 
 To run the [long stochastic test scenario](test/long_stochastic.sh), you
 will need to install the current (not outdated) version of
-[bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, we
+[Bash](https://en.wikipedia.org/wiki/Bash_(Unix_shell)). To do this, we
 recommend that you install [Homebrew](https://brew.sh/) and then execute
 `brew install bash`.
 
@@ -555,7 +561,7 @@ from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 ## API description
 
 Please refer to the online [_libmdbx_ API reference](https://erthink.github.io/libmdbx/)
-and/or see the [mdbx.h](mdbx.h) header.
+and/or see the [mdbx.h++](mdbx.h%2B%2B) and [mdbx.h](mdbx.h) headers.
 
 <!-- section-begin bindings -->
 
