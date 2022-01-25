@@ -21,6 +21,10 @@ do
   --help)
     echo "--multi                Engage multi-process test scenario (default)"
     echo "--single               Execute series of single-process tests (for QEMU, etc)"
+    echo "--nested               Execute only 'nested' testcase"
+    echo "--hill                 Execute only 'hill' testcase"
+    echo "--append               Execute only 'append' testcase"
+    echo "--ttl                  Execute only 'ttl' testcase"
     echo "--with-valgrind        Run tests under Valgrind's memcheck tool"
     echo "--skip-make            Don't (re)build libmdbx and test's executable"
     echo "--from NN              Start iterating from the NN ops per test case"
@@ -37,6 +41,18 @@ do
   ;;
   --single)
     LIST="--nested --hill --append --ttl --copy"
+  ;;
+  --nested)
+    LIST="--nested"
+  ;;
+  --hill)
+    LIST="--hill"
+  ;;
+  --append)
+    LIST="--append"
+  ;;
+  --ttl)
+    LIST="--ttl"
   ;;
   --with-valgrind)
     echo " NOTE: Valgrind could produce some false-positive warnings"
