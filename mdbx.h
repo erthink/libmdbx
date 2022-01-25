@@ -2217,7 +2217,8 @@ LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
                               MDBX_copy_flags_t flags);
 
 /** \brief Copy an environment to the specified file descriptor, with
- * options. \ingroup c_extra
+ * options.
+ * \ingroup c_extra
  *
  * This function may be used to make a backup of an existing environment.
  * No lockfile is created, since it gets recreated at need.
@@ -2680,7 +2681,8 @@ LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
 LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
 
 /** \brief Set all size-related parameters of environment, including page size
- * and the min/max size of the memory map. \ingroup c_settings
+ * and the min/max size of the memory map.
+ * \ingroup c_settings
  *
  * In contrast to LMDB, the MDBX provide automatic size management of an
  * database according the given parameters, including shrinking and resizing
@@ -2879,7 +2881,8 @@ MDBX_DEPRECATED LIBMDBX_INLINE_API(int, mdbx_env_set_mapsize,
 }
 
 /** \brief Find out whether to use readahead or not, based on the given database
- * size and the amount of available memory. \ingroup c_extra
+ * size and the amount of available memory.
+ * \ingroup c_extra
  *
  * \param [in] volume      The expected database size in bytes.
  * \param [in] redundancy  Additional reserve or overload in case of negative
@@ -2942,7 +2945,8 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_txnsize_max(intptr_t pagesize);
 
 /** \brief Set the maximum number of threads/reader slots for for all processes
- * interacts with the database. \ingroup c_settings
+ * interacts with the database.
+ * \ingroup c_settings
  *
  * \details This defines the number of slots in the lock table that is used to
  * track readers in the the environment. The default is about 100 for 4K system
@@ -3539,7 +3543,10 @@ LIBMDBX_API int mdbx_txn_reset(MDBX_txn *txn);
 LIBMDBX_API int mdbx_txn_renew(MDBX_txn *txn);
 
 /** \brief The fours integers markers (aka "canary") associated with the
- * environment. \ingroup c_crud \see mdbx_canary_set() \see mdbx_canary_get()
+ * environment.
+ * \ingroup c_crud
+ * \see mdbx_canary_set()
+ * \see mdbx_canary_get()
  *
  * The `x`, `y` and `z` values could be set by \ref mdbx_canary_put(), while the
  * 'v' will be always set to the transaction number. Updated values becomes
@@ -3842,7 +3849,8 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_dbi_state_t)
 LIBMDBX_API int mdbx_dbi_flags_ex(MDBX_txn *txn, MDBX_dbi dbi, unsigned *flags,
                                   unsigned *state);
 /** \brief The shortcut to calling \ref mdbx_dbi_flags_ex() with `state=NULL`
- * for discarding it result. \ingroup c_statinfo */
+ * for discarding it result.
+ * \ingroup c_statinfo */
 LIBMDBX_INLINE_API(int, mdbx_dbi_flags,
                    (MDBX_txn * txn, MDBX_dbi dbi, unsigned *flags)) {
   unsigned state;
@@ -4532,7 +4540,8 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_eof(const MDBX_cursor *cursor);
 
 /** \brief Determines whether the cursor is pointed to the first key-value pair
- * or not. \ingroup c_cursors
+ * or not.
+ * \ingroup c_cursors
  *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
@@ -4545,7 +4554,8 @@ MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_cursor_on_first(const MDBX_cursor *cursor);
 
 /** \brief Determines whether the cursor is pointed to the last key-value pair
- * or not. \ingroup c_cursors
+ * or not.
+ * \ingroup c_cursors
  *
  * \param [in] cursor    A cursor handle returned by \ref mdbx_cursor_open().
  *
@@ -4663,7 +4673,8 @@ LIBMDBX_API int mdbx_estimate_range(MDBX_txn *txn, MDBX_dbi dbi,
 #define MDBX_EPSILON ((MDBX_val *)((ptrdiff_t)-1))
 
 /** \brief Determines whether the given address is on a dirty database page of
- * the transaction or not. \ingroup c_statinfo
+ * the transaction or not.
+ * \ingroup c_statinfo
  *
  * Ultimately, this allows to avoid copy data from non-dirty pages.
  *
