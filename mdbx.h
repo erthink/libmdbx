@@ -699,9 +699,12 @@ struct MDBX_txn;
 #endif
 
 /** \brief A handle for an individual database (key-value spaces) in the
- * environment. \ingroup c_dbi \details Zero handle is used internally (hidden
- * Garbage Collection DB). So, any valid DBI-handle great than 0 and less than
- * or equal \ref MDBX_MAX_DBI. \see mdbx_dbi_open() \see mdbx_dbi_close() */
+ * environment.
+ * \ingroup c_dbi
+ * \details Zero handle is used internally (hidden Garbage Collection subDB).
+ * So, any valid DBI-handle great than 0 and less than or equal
+ * \ref MDBX_MAX_DBI.
+ * \see mdbx_dbi_open() \see mdbx_dbi_close() */
 typedef uint32_t MDBX_dbi;
 
 /** \brief Opaque structure for navigating through a database
