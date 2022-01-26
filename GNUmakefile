@@ -31,7 +31,7 @@ CFLAGS_EXTRA ?=
 LD      ?= ld
 MDBX_BUILD_OPTIONS ?=-DNDEBUG=1
 MDBX_BUILD_TIMESTAMP ?=$(shell date +%Y-%m-%dT%H:%M:%S%z)
-CFLAGS  ?= $(eval CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -pthread -Wno-error=attributes $$(shell PROBE=$$$$([ -f mdbx.c ] && echo mdbx.c || echo src/core.c); for opt in -fno-semantic-interposition -Wno-tautological-compare; do $(CC) '-DMDBX_BUILD_FLAGS="probe"' $$$${opt} -c $$$${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "$$$${opt} "; done)$(CFLAGS_EXTRA))$(CFLAGS)
+CFLAGS  ?= $(eval CFLAGS := -std=gnu11 -O2 -g -Wall -Werror -Wextra -Wpedantic -ffunction-sections -fPIC -fvisibility=hidden -pthread -Wno-error=attributes $$(shell PROBE=$$$$([ -f mdbx.c ] && echo mdbx.c || echo src/core.c); for opt in -fno-semantic-interposition -Wno-unused-command-line-argument -Wno-tautological-compare; do $(CC) '-DMDBX_BUILD_FLAGS="probe"' $$$${opt} -c $$$${PROBE} -o /dev/null 2>/dev/null >/dev/null && echo "$$$${opt} "; done)$(CFLAGS_EXTRA))$(CFLAGS)
 CXX     ?= g++
 # Choosing C++ standard with deferred simple variable expansion trick
 CXXSTD  ?= $(eval CXXSTD := $$(shell PROBE=$$$$([ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++); for std in gnu++23 c++23 gnu++2b c++2b gnu++20 c++20 gnu++2a c++2a gnu++17 c++17 gnu++1z c++1z gnu++14 c++14 gnu++1y c++1y gnu+11 c++11 gnu++0x c++0x; do $(CXX) -std=$$$${std} -c $$$${PROBE} -o /dev/null 2>std-$$$${std}.err >/dev/null && echo "-std=$$$${std}" && exit; done))$(CXXSTD)
