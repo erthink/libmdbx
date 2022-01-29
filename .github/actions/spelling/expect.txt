@@ -1,3 +1,4 @@
+[200~Alexey
 aarch
 abcdef
 abf
@@ -292,6 +293,7 @@ ddfd
 ddl
 deadread
 deadwrite
+DEBIAN
 debian
 Debroux
 debrouxl
@@ -303,6 +305,7 @@ defgroup
 delaystart
 Demakov
 demangle
+deno
 DEPRECATEDLIST
 deps
 depthmask
@@ -416,6 +419,7 @@ ELBRUSCXX
 elif
 elseif
 emoji
+EMSCRIPTEN
 emscripten
 EMULTIVAL
 emulu
@@ -727,6 +731,7 @@ intrinsics
 inttypes
 ioarena
 IODQ
+IOPs
 iops
 iostream
 iov
@@ -1232,6 +1237,7 @@ pagemap
 pageno
 pagenums
 PAGEPERTURB
+PAGEROOM
 pageroom
 pagetype
 par
@@ -1264,6 +1270,7 @@ PFILE
 pflags
 pgcount
 PGL
+pgl
 pglist
 pgno
 pgnumber
@@ -1309,6 +1316,7 @@ powerpc
 ppc
 pragma
 pread
+PREALLOC
 prealloc
 PREDEF
 prefetch
@@ -1760,6 +1768,7 @@ toolset
 tooltip
 torquem
 TOUPPER
+Transcoder
 transcoder
 transcoding
 treeview
