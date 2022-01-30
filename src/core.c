@@ -8771,9 +8771,15 @@ static __inline void clean_reserved_gc_pnl(MDBX_env *env, MDBX_val pnl) {
     memset(pnl.iov_base, 0, pnl.iov_len);
 }
 
-/* Cleanup reclaimed GC records, than save the retired-list as of this
- * transaction to GC (aka freeDB). This recursive changes the reclaimed-list
- * loose-list and retired-list. Keep trying until it stabilizes. */
+/* Cleanups reclaimed GC (aka freeDB) records, saves the retired-list (aka
+ * freelist) of current transaction to GC, puts back into GC leftover of the
+ * reclaimed pages with chunking. This recursive changes the reclaimed-list,
+ * loose-list and retired-list. Keep trying until it stabilizes.
+ *
+ * NOTE: This code is a consequence of many iterations of adding crutches (aka
+ * "checks and balances") to partially bypass the fundamental design problems
+ * inherited from LMDB. So do not try to understand it completely in order to
+ * avoid your madness. */
 static int mdbx_update_gc(MDBX_txn *txn) {
   /* txn->tw.reclaimed_pglist[] can grow and shrink during this call.
    * txn->tw.last_reclaimed and txn->tw.retired_pages[] can only grow.
