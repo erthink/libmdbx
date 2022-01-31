@@ -674,19 +674,19 @@ typedef struct MDBX_lockinfo {
   /* Marker to distinguish uniqueness of DB/CLK. */
   MDBX_atomic_uint64_t mti_bait_uniqueness;
 
-  alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
+  MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
 
 #if MDBX_ENABLE_PGOP_STAT
-      /* Statistics of costly ops of all (running, completed and aborted)
-       * transactions */
-      MDBX_pgop_stat_t mti_pgop_stat;
+  /* Statistics of costly ops of all (running, completed and aborted)
+   * transactions */
+  MDBX_pgop_stat_t mti_pgop_stat;
 #endif /* MDBX_ENABLE_PGOP_STAT*/
 
-  alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
+  MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
 
   /* Write transaction lock. */
 #if MDBX_LOCKING > 0
-      mdbx_ipclock_t mti_wlock;
+  mdbx_ipclock_t mti_wlock;
 #endif /* MDBX_LOCKING > 0 */
 
   atomic_txnid_t mti_oldest_reader;
@@ -708,11 +708,11 @@ typedef struct MDBX_lockinfo {
   /* Shared anchor for tracking readahead edge and enabled/disabled status. */
   pgno_t mti_readahead_anchor;
 
-  alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
+  MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
 
   /* Readeaders registration lock. */
 #if MDBX_LOCKING > 0
-      mdbx_ipclock_t mti_rlock;
+  mdbx_ipclock_t mti_rlock;
 #endif /* MDBX_LOCKING > 0 */
 
   /* The number of slots that have been used in the reader table.
@@ -723,8 +723,8 @@ typedef struct MDBX_lockinfo {
 
 #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) ||              \
     (!defined(__cplusplus) && defined(_MSC_VER))
-  alignas(MDBX_CACHELINE_SIZE) /* cacheline ---------------------------------*/
-      MDBX_reader mti_readers[] /* dynamic size */;
+  MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
+  MDBX_reader mti_readers[] /* dynamic size */;
 #endif /* C99 */
 } MDBX_lockinfo;
 

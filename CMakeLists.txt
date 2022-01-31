@@ -365,7 +365,11 @@ endif()
 if(NOT DEFINED MDBX_C_STANDARD)
   # MSVC >= 19.28 (Microsoft Visual Studio 16.8) is mad!
   #               It unable process Windows SDK headers in the C11 mode!
-  if(HAS_C11 LESS 0 OR (MSVC AND MSVC_VERSION GREATER 1927))
+  if(MSVC AND MSVC_VERSION GREATER 1927 AND NOT MSVC_VERSION GREATER 1929)
+    set(MDBX_C_STANDARD 99)
+    set(C_FALLBACK_11 OFF)
+    set(C_FALLBACK_GNU11 OFF)
+  elseif(HAS_C11 LESS 0 AND NOT C_FALLBACK_GNU11 AND NOT C_FALLBACK_11)
     set(MDBX_C_STANDARD 99)
   else()
     set(MDBX_C_STANDARD 11)
@@ -573,8 +577,10 @@ macro(target_setup_options TARGET)
     set_target_properties(${TARGET} PROPERTIES
       INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
   endif()
-  set_target_properties(${TARGET} PROPERTIES
-    C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+  if(NOT C_FALLBACK_GNU11 AND NOT C_FALLBACK_11)
+    set_target_properties(${TARGET} PROPERTIES
+      C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
+  endif()
   if(MDBX_BUILD_CXX)
     set_target_properties(${TARGET} PROPERTIES
       CXX_STANDARD ${MDBX_CXX_STANDARD} CXX_STANDARD_REQUIRED ON)
@@ -685,7 +691,7 @@ if(MDBX_BUILD_TOOLS)
 
   foreach(TOOL mdbx_chk mdbx_copy mdbx_stat mdbx_dump mdbx_load mdbx_drop)
     add_executable(${TOOL} mdbx.h ${MDBX_SOURCE_DIR}/${TOOL}.c ${WINGETOPT_SRC})
-    if(MDBX_C_STANDARD)
+    if(NOT C_FALLBACK_GNU11 AND NOT C_FALLBACK_11)
       set_target_properties(${TOOL} PROPERTIES
         C_STANDARD ${MDBX_C_STANDARD} C_STANDARD_REQUIRED ON)
     endif()
