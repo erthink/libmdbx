@@ -22,12 +22,14 @@ ChangeLog
 Acknowledgements:
 
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting, testing and provide resources for remote debugging/investigation.
+ - [Kris Zyp](https://github.com/kriszyp) for [Deno](https://deno.land/) support.
 
 New features, extensions and improvements:
 
  - Added treating the `UINT64_MAX` value as maximum for given option inside `mdbx_env_set_option()`.
  - Added `to_hex/to_base58/to_base64::output(std::ostream&)` overloads without using temporary string objects as buffers.
  - Added `--geometry-jitter=YES|no` option to the test framework.
+ - Added support for [Deno](https://deno.land/) support by [Kris Zyp](https://github.com/kriszyp).
 
 Fixes:
 
