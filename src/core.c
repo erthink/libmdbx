@@ -21861,8 +21861,7 @@ __cold intptr_t mdbx_limits_dbsize_max(intptr_t pagesize) {
 
   STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t limit = (1 + (uint64_t)MAX_PAGENO) * pagesize;
-  return (limit < (intptr_t)MAX_MAPSIZE) ? (intptr_t)limit
-                                         : (intptr_t)MAX_MAPSIZE;
+  return (limit < MAX_MAPSIZE) ? (intptr_t)limit : (intptr_t)MAX_MAPSIZE;
 }
 
 __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
