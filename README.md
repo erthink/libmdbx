@@ -505,7 +505,8 @@ the basic tests.
 ### Windows
 For build _libmdbx_ on Windows the _original_ CMake and [Microsoft Visual
 Studio 2019](https://en.wikipedia.org/wiki/Microsoft_Visual_Studio) are
-recommended.
+recommended. Please use the recent versions of CMake, Visual Studio and Windows
+SDK to avoid troubles with C11 support and `alignas()` feature.
 
 For build by MinGW the 10.2 or recent version coupled with a modern CMake are required.
 So it is recommended to use [chocolatey](https://chocolatey.org/) to install and/or update the ones.
