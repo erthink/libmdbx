@@ -499,7 +499,7 @@ option(ENABLE_BACKTRACE "Enable output of fiber backtrace information in 'show
   is output with resolved function (symbol) names. Otherwise only frame
   addresses are printed." OFF)
 
-set(HAVE_BFD False)
+set(HAVE_BFD FALSE)
 if(ENABLE_BACKTRACE)
   if(NOT (X86_32 OR X86_64) OR NOT CMAKE_COMPILER_IS_GNU${CMAKE_PRIMARY_LANG})
     # We only know this option to work with gcc
@@ -658,6 +658,7 @@ macro(setup_compile_flags)
     if(NOT MSVC_VERSION LESS 1910)
       add_compile_flags("CXX" "/Zc:__cplusplus")
     endif()
+    add_compile_flags("C;CXX" "/W4")
     add_compile_flags("C;CXX" "/utf-8")
   else()
     if(CC_HAS_WALL)
