@@ -17,10 +17,13 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.4 (underway, scheduled for 2022-01-28)
+## v0.11.4 at 2022-02-02
+
+The stable release with fixes for large and huge databases sized of 4..128 TiB.
 
 Acknowledgements:
 
+ - [Ledgerwatch](https://github.com/ledgerwatch), [Binance](https://github.com/binance-chain) and [Positive Technologies](https://www.ptsecurity.com/) teams for reporting, assistance in investigation and testing.
  - [Alex Sharov](https://github.com/AskAlexSharov) for reporting, testing and provide resources for remote debugging/investigation.
  - [Kris Zyp](https://github.com/kriszyp) for [Deno](https://deno.land/) support.
 
@@ -42,6 +45,7 @@ Fixes:
  - Fixed overflow of `pgno_t` during checking PNL on 64-bit platforms.
  - [Fixed](https://github.com/erthink/libmdbx/issues/260) excessive PNL checking after sort for spilling.
  - Reworked checking `MAX_PAGENO` and DB upper-size geometry limit.
+ - [Fixed](https://github.com/erthink/libmdbx/issues/265) build for some combinations of versions of  MSVC and Windows SDK.
 
 Minors:
 
@@ -55,6 +59,7 @@ Minors:
  - Added workaround for modern libstdc++ with CLANG < 4.x
  - Relaxed txn-check rules for auxiliary functions.
  - Clarified a comments and descriptions, etc.
+ - Using the `-fno-semantic interposition` option to reduce the overhead to calling self own public functions.
 
 
 ## v0.11.3 at 2021-12-31
