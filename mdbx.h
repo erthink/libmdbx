@@ -2717,11 +2717,12 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *  - In case \ref mdbx_env_set_geometry() or legacy \ref mdbx_env_set_mapsize()
  *    was called after \ref mdbx_env_open() WITHIN the write transaction running
  *    by current thread, then specified parameters will be applied as a part of
- *    write transaction, i.e. will not be visible to any others processes until
- *    the current write transaction has been committed by the current process.
- *    However, if transaction will be aborted, then the database file will be
- *    reverted to the previous size not immediately, but when a next transaction
- *    will be committed or when the database will be opened next time.
+ *    write transaction, i.e. will not be completely visible to any others
+ *    processes until the current write transaction has been committed by the
+ *    current process. However, if transaction will be aborted, then the
+ *    database file will be reverted to the previous size not immediately, but
+ *    when a next transaction will be committed or when the database will be
+ *    opened next time.
  *
  *  - In case \ref mdbx_env_set_geometry() or legacy \ref mdbx_env_set_mapsize()
  *    was called after \ref mdbx_env_open() but OUTSIDE a write transaction,
@@ -2730,48 +2731,48 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *    others processes immediately after succesful completion of function.
  *
  * Essentially a concept of "automatic size management" is simple and useful:
- *  - There are the lower and upper bound of the database file size;
+ *  - There are the lower and upper bounds of the database file size;
  *  - There is the growth step by which the database file will be increased,
- *    in case of lack of space.
+ *    in case of lack of space;
  *  - There is the threshold for unused space, beyond which the database file
- *    will be shrunk.
- *  - The size of the memory map is also the maximum size of the database.
+ *    will be shrunk;
+ *  - The size of the memory map is also the maximum size of the database;
  *  - MDBX will automatically manage both the size of the database and the size
  *    of memory map, according to the given parameters.
  *
  * So, there some considerations about choosing these parameters:
- *  - The lower bound allows you to prevent database shrinking below some
- *    rational size to avoid unnecessary resizing costs.
- *  - The upper bound allows you to prevent database growth above some rational
- *    size. Besides, the upper bound defines the linear address space
+ *  - The lower bound allows you to prevent database shrinking below certain
+ *    reasonable size to avoid unnecessary resizing costs.
+ *  - The upper bound allows you to prevent database growth above certain
+ *    reasonable size. Besides, the upper bound defines the linear address space
  *    reservation in each process that opens the database. Therefore changing
  *    the upper bound is costly and may be required reopening environment in
  *    case of \ref MDBX_UNABLE_EXTEND_MAPSIZE errors, and so on. Therefore, this
- *    value should be chosen reasonable as large as possible, to accommodate
- *    future growth of the database.
+ *    value should be chosen reasonable large, to accommodate future growth of
+ *    the database.
  *  - The growth step must be greater than zero to allow the database to grow,
  *    but also reasonable not too small, since increasing the size by little
  *    steps will result a large overhead.
  *  - The shrink threshold must be greater than zero to allow the database
  *    to shrink but also reasonable not too small (to avoid extra overhead) and
  *    not less than growth step to avoid up-and-down flouncing.
- *  - The current size (i.e. size_now argument) is an auxiliary parameter for
+ *  - The current size (i.e. `size_now` argument) is an auxiliary parameter for
  *    simulation legacy \ref mdbx_env_set_mapsize() and as workaround Windows
  *    issues (see below).
  *
- * Unfortunately, Windows has is a several issues
+ * Unfortunately, Windows has is a several issue
  * with resizing of memory-mapped file:
  *  - Windows unable shrinking a memory-mapped file (i.e memory-mapped section)
  *    in any way except unmapping file entirely and then map again. Moreover,
- *    it is impossible in any way if a memory-mapped file is used more than
+ *    it is impossible in any way when a memory-mapped file is used more than
  *    one process.
  *  - Windows does not provide the usual API to augment a memory-mapped file
- *    (that is, a memory-mapped partition), but only by using "Native API"
+ *    (i.e. a memory-mapped partition), but only by using "Native API"
  *    in an undocumented way.
  *
  * MDBX bypasses all Windows issues, but at a cost:
  *  - Ability to resize database on the fly requires an additional lock
- *    and release `SlimReadWriteLock during` each read-only transaction.
+ *    and release `SlimReadWriteLock` during each read-only transaction.
  *  - During resize all in-process threads should be paused and then resumed.
  *  - Shrinking of database file is performed only when it used by single
  *    process, i.e. when a database closes by the last process or opened
@@ -2782,7 +2783,7 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *
  * For create a new database with particular parameters, including the page
  * size, \ref mdbx_env_set_geometry() should be called after
- * \ref mdbx_env_create() and before mdbx_env_open(). Once the database is
+ * \ref mdbx_env_create() and before \ref mdbx_env_open(). Once the database is
  * created, the page size cannot be changed. If you do not specify all or some
  * of the parameters, the corresponding default values will be used. For
  * instance, the default for database size is 10485760 bytes.
