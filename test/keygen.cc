@@ -199,21 +199,21 @@ void maker::setup(const config::actor_params_pod &actor, unsigned actor_id,
   assert(unsigned(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT |
                   MDBX_INTEGERDUP | MDBX_REVERSEDUP) < UINT16_MAX);
 #endif
-  key_essentials.flags =
+  key_essentials.flags = uint16_t(
       actor.table_flags &
-      MDBX_db_flags_t(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT);
+      MDBX_db_flags_t(MDBX_INTEGERKEY | MDBX_REVERSEKEY | MDBX_DUPSORT));
   assert(actor.keylen_min <= UINT16_MAX);
-  key_essentials.minlen = (uint16_t)actor.keylen_min;
+  key_essentials.minlen = uint16_t(actor.keylen_min);
   assert(actor.keylen_max <= UINT32_MAX);
   key_essentials.maxlen =
       std::min(uint32_t(actor.keylen_max),
                uint32_t(mdbx_limits_keysize_max(
                    actor.pagesize, MDBX_db_flags_t(key_essentials.flags))));
 
-  value_essentials.flags =
-      actor.table_flags & MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP);
+  value_essentials.flags = uint16_t(
+      actor.table_flags & MDBX_db_flags_t(MDBX_INTEGERDUP | MDBX_REVERSEDUP));
   assert(actor.datalen_min <= UINT16_MAX);
-  value_essentials.minlen = (uint16_t)actor.datalen_min;
+  value_essentials.minlen = uint16_t(actor.datalen_min);
   assert(actor.datalen_max <= UINT32_MAX);
   value_essentials.maxlen =
       std::min(uint32_t(actor.datalen_max),

@@ -683,37 +683,36 @@ void testcase::verbose(const char *where, const char *stage,
   }
 }
 
-void testcase::verbose(const char *where, const char *stage,
-                       const MDBX_val &key, const MDBX_val &data,
-                       int err) const {
+void testcase::verbose(const char *where, const char *stage, const MDBX_val &k,
+                       const MDBX_val &v, int err) const {
   char dump_key[32], dump_value[32];
   if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
     log_verbose("speculum-%s: %s cursor {%d, %s}", where, stage, err,
                 mdbx_strerror(err));
   else
     log_verbose("speculum-%s: %s cursor {%s, %s}", where, stage,
-                mdbx_dump_val(&key, dump_key, sizeof(dump_key)),
-                mdbx_dump_val(&data, dump_value, sizeof(dump_value)));
+                mdbx_dump_val(&k, dump_key, sizeof(dump_key)),
+                mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
 }
 
 void testcase::speculum_check_iterator(const char *where, const char *stage,
                                        const testcase::SET::const_iterator &it,
-                                       const MDBX_val &key,
-                                       const MDBX_val &data) const {
+                                       const MDBX_val &k,
+                                       const MDBX_val &v) const {
   char dump_key[32], dump_value[32];
   MDBX_val it_key = dataview2iov(it->first);
   MDBX_val it_data = dataview2iov(it->second);
   // log_verbose("speculum-%s: %s expect {%s, %s}", where, stage,
   //             mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
   //             mdbx_dump_val(&it_data, dump_value, sizeof(dump_value)));
-  if (!is_samedata(it_key, key))
+  if (!is_samedata(it_key, k))
     failure("speculum-%s: %s key mismatch %s (must) != %s", where, stage,
             mdbx_dump_val(&it_key, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&key, dump_value, sizeof(dump_value)));
-  if (!is_samedata(it_data, data))
+            mdbx_dump_val(&k, dump_value, sizeof(dump_value)));
+  if (!is_samedata(it_data, v))
     failure("speculum-%s: %s data mismatch %s (must) != %s", where, stage,
             mdbx_dump_val(&it_data, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&data, dump_value, sizeof(dump_value)));
+            mdbx_dump_val(&v, dump_value, sizeof(dump_value)));
 }
 
 #if SPECULUM_CURSORS
@@ -1208,16 +1207,16 @@ bool testcase::check_batch_get() {
   size_t i, n = 0;
   while (err == MDBX_SUCCESS) {
     for (i = 0; i < count; i += 2) {
-      mdbx::slice key, value;
-      int err2 = mdbx_cursor_get(cursor, &key, &value, MDBX_NEXT);
+      mdbx::slice k, v;
+      int err2 = mdbx_cursor_get(cursor, &k, &v, MDBX_NEXT);
       if (err2 != MDBX_SUCCESS)
         failure_perror("mdbx_cursor_open()", err2);
-      if (key != pairs[i] || value != pairs[i + 1]) {
+      if (k != pairs[i] || v != pairs[i + 1]) {
         log_error(
             "batch-get pair mismatch %zu/%zu: sequential{%s, %s} != "
             "batch{%s, %s}",
-            n + i / 2, i, mdbx_dump_val(&key, dump_key, sizeof(dump_key)),
-            mdbx_dump_val(&value, dump_value, sizeof(dump_value)),
+            n + i / 2, i, mdbx_dump_val(&k, dump_key, sizeof(dump_key)),
+            mdbx_dump_val(&v, dump_value, sizeof(dump_value)),
             mdbx_dump_val(&pairs[i], dump_key_batch, sizeof(dump_key_batch)),
             mdbx_dump_val(&pairs[i + 1], dump_value_batch,
                           sizeof(dump_value_batch)));

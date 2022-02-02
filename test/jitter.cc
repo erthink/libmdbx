@@ -50,8 +50,8 @@ bool testcase_jitter::run() {
       check_dbi_error(MDBX_SUCCESS, "created-uncommitted");
       // note: here and below the 4-byte length keys and value are used
       //       to be compatible with any Db-flags given from command line.
-      MDBX_val key = {(void *)"k000", 4}, value = {(void *)"v001", 4};
-      err = mdbx_put(txn_guard.get(), dbi, &key, &value, MDBX_UPSERT);
+      MDBX_val k = {(void *)"k000", 4}, v = {(void *)"v001", 4};
+      err = mdbx_put(txn_guard.get(), dbi, &k, &v, MDBX_UPSERT);
       if (err != MDBX_SUCCESS)
         failure_perror("jitter.put-1", err);
       txn_end(false);
@@ -69,16 +69,16 @@ bool testcase_jitter::run() {
 
       // check after aborted txn
       txn_begin(false);
-      value = {(void *)"v002", 4};
-      err = mdbx_put(txn_guard.get(), dbi, &key, &value, MDBX_UPSERT);
+      v = {(void *)"v002", 4};
+      err = mdbx_put(txn_guard.get(), dbi, &k, &v, MDBX_UPSERT);
       if (err != MDBX_BAD_DBI)
         failure_perror("jitter.put-2", err);
       check_dbi_error(MDBX_BAD_DBI, "dropped-recreated-aborted");
       // restore DBI
       dbi = db_table_open(false);
       check_dbi_error(MDBX_SUCCESS, "dropped-recreated-aborted+reopened");
-      value = {(void *)"v003", 4};
-      err = mdbx_put(txn_guard.get(), dbi, &key, &value, MDBX_UPSERT);
+      v = {(void *)"v003", 4};
+      err = mdbx_put(txn_guard.get(), dbi, &k, &v, MDBX_UPSERT);
       if (err != MDBX_SUCCESS)
         failure_perror("jitter.put-3", err);
       txn_end(false);

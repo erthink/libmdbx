@@ -216,12 +216,12 @@ protected:
 #endif /* SPECULUM_CURSORS */
   void speculum_check_iterator(const char *where, const char *stage,
                                const testcase::SET::const_iterator &it,
-                               const MDBX_val &key, const MDBX_val &data) const;
+                               const MDBX_val &k, const MDBX_val &v) const;
 
   void verbose(const char *where, const char *stage,
                const testcase::SET::const_iterator &it) const;
-  void verbose(const char *where, const char *stage, const MDBX_val &key,
-               const MDBX_val &data, int err = MDBX_SUCCESS) const;
+  void verbose(const char *where, const char *stage, const MDBX_val &k,
+               const MDBX_val &v, int err = MDBX_SUCCESS) const;
 
   bool is_same(const Item &a, const Item &b) const;
   bool is_same(const SET::const_iterator &it, const MDBX_val &k,
