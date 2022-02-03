@@ -515,7 +515,7 @@ Another ways to build is potentially possible but not supported and will not.
 The `CMakeLists.txt` or `GNUMakefile` scripts will probably need to be modified accordingly.
 Using other methods do not forget to add the `ntdll.lib` to linking.
 
-It should be noted that in _libmdbx_ was efforts to resolve
+It should be noted that in _libmdbx_ was efforts to avoid
 runtime dependencies from CRT and other MSVC libraries.
 For this is enough to pass the `-DMDBX_WITHOUT_MSVC_CRT:BOOL=ON` option
 during configure by CMake.
