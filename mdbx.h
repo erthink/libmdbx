@@ -4898,7 +4898,9 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * is not enough space in the database (i.e. before increasing the database size
  * or before \ref MDBX_MAP_FULL error) and thus can be used to resolve issues
  * with a "long-lived" read transactions.
- * \see long-lived-read
+ * \see mdbx_env_set_hsr()
+ * \see mdbx_env_get_hsr()
+ * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * Using this callback you can choose how to resolve the situation:
  *   - abort the write transaction with an error;
@@ -4956,8 +4958,6 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  *
  * \retval 2 or great  The reader process was terminated or killed,
  *                     and libmdbx should entirely reset reader registration.
- *
- * \see mdbx_env_set_hsr() \see mdbx_env_get_hsr()
  */
 typedef int(MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
                            mdbx_pid_t pid, mdbx_tid_t tid, uint64_t laggard,
@@ -4971,8 +4971,9 @@ typedef int(MDBX_hsr_func)(const MDBX_env *env, const MDBX_txn *txn,
  * The callback will only be triggered when the database is full due to a
  * reader(s) prevents the old data from being recycled.
  *
+ * \see MDBX_hsr_func
  * \see mdbx_env_get_hsr()
- * \see long-lived-read
+ * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * \param [in] env             An environment handle returned
  *                             by \ref mdbx_env_create().
@@ -4985,7 +4986,9 @@ LIBMDBX_API int mdbx_env_set_hsr(MDBX_env *env, MDBX_hsr_func *hsr_callback);
 /** \brief Gets current Handle-Slow-Readers callback used to resolve database
  * full/overflow issue due to a reader(s) which prevents the old data from being
  * recycled.
+ * \see MDBX_hsr_func
  * \see mdbx_env_set_hsr()
+ * \see <a href="intro.html#long-lived-read">Long-lived read transactions</a>
  *
  * \param [in] env   An environment handle returned by \ref mdbx_env_create().
  *
