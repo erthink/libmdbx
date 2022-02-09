@@ -124,12 +124,17 @@ static __always_inline void poke_u8(uint8_t *const __restrict ptr,
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline uint16_t
 unaligned_peek_u16(const unsigned expected_alignment, const void *const ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
-  if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint16_t)) == 0)
+  if (MDBX_UNALIGNED_OK >= 2 || (expected_alignment % sizeof(uint16_t)) == 0)
     return *(const uint16_t *)ptr;
   else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    return *(const __unaligned uint16_t *)ptr;
+#else
     uint16_t v;
     memcpy(&v, ptr, sizeof(v));
     return v;
+#endif /* _MSC_VER || __unaligned */
   }
 }
 
@@ -137,16 +142,22 @@ static __always_inline void
 unaligned_poke_u16(const unsigned expected_alignment,
                    void *const __restrict ptr, const uint16_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
-  if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
+  if (MDBX_UNALIGNED_OK >= 2 || (expected_alignment % sizeof(v)) == 0)
     *(uint16_t *)ptr = v;
-  else
+  else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    *((uint16_t __unaligned *)ptr) = v;
+#else
     memcpy(ptr, &v, sizeof(v));
+#endif /* _MSC_VER || __unaligned */
+  }
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline uint32_t unaligned_peek_u32(
     const unsigned expected_alignment, const void *const __restrict ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
-  if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint32_t)) == 0)
+  if (MDBX_UNALIGNED_OK >= 4 || (expected_alignment % sizeof(uint32_t)) == 0)
     return *(const uint32_t *)ptr;
   else if ((expected_alignment % sizeof(uint16_t)) == 0) {
     const uint16_t lo =
@@ -155,9 +166,14 @@ MDBX_NOTHROW_PURE_FUNCTION static __always_inline uint32_t unaligned_peek_u32(
         ((const uint16_t *)ptr)[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__];
     return lo | (uint32_t)hi << 16;
   } else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    return *(const __unaligned uint32_t *)ptr;
+#else
     uint32_t v;
     memcpy(&v, ptr, sizeof(v));
     return v;
+#endif /* _MSC_VER || __unaligned */
   }
 }
 
@@ -165,20 +181,26 @@ static __always_inline void
 unaligned_poke_u32(const unsigned expected_alignment,
                    void *const __restrict ptr, const uint32_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
-  if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
+  if (MDBX_UNALIGNED_OK >= 4 || (expected_alignment % sizeof(v)) == 0)
     *(uint32_t *)ptr = v;
   else if ((expected_alignment % sizeof(uint16_t)) == 0) {
     ((uint16_t *)ptr)[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__] = (uint16_t)v;
     ((uint16_t *)ptr)[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__] =
         (uint16_t)(v >> 16);
-  } else
+  } else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    *((uint32_t __unaligned *)ptr) = v;
+#else
     memcpy(ptr, &v, sizeof(v));
+#endif /* _MSC_VER || __unaligned */
+  }
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline uint64_t unaligned_peek_u64(
     const unsigned expected_alignment, const void *const __restrict ptr) {
   assert((uintptr_t)ptr % expected_alignment == 0);
-  if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(uint64_t)) == 0)
+  if (MDBX_UNALIGNED_OK >= 8 || (expected_alignment % sizeof(uint64_t)) == 0)
     return *(const uint64_t *)ptr;
   else if ((expected_alignment % sizeof(uint32_t)) == 0) {
     const uint32_t lo =
@@ -187,9 +209,35 @@ MDBX_NOTHROW_PURE_FUNCTION static __always_inline uint64_t unaligned_peek_u64(
         ((const uint32_t *)ptr)[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__];
     return lo | (uint64_t)hi << 32;
   } else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    return *(const __unaligned uint64_t *)ptr;
+#else
     uint64_t v;
     memcpy(&v, ptr, sizeof(v));
     return v;
+#endif /* _MSC_VER || __unaligned */
+  }
+}
+
+static __always_inline uint64_t
+unaligned_peek_u64_volatile(const unsigned expected_alignment,
+                            const volatile void *const __restrict ptr) {
+  assert((uintptr_t)ptr % expected_alignment == 0);
+  assert(expected_alignment % sizeof(uint32_t) == 0);
+  if (MDBX_UNALIGNED_OK >= 8 || (expected_alignment % sizeof(uint64_t)) == 0)
+    return *(volatile const uint64_t *)ptr;
+  else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    return *(const volatile __unaligned uint64_t *)ptr;
+#else
+    const uint32_t lo = ((const volatile uint32_t *)
+                             ptr)[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__];
+    const uint32_t hi = ((const volatile uint32_t *)
+                             ptr)[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__];
+    return lo | (uint64_t)hi << 32;
+#endif /* _MSC_VER || __unaligned */
   }
 }
 
@@ -197,14 +245,20 @@ static __always_inline void
 unaligned_poke_u64(const unsigned expected_alignment,
                    void *const __restrict ptr, const uint64_t v) {
   assert((uintptr_t)ptr % expected_alignment == 0);
-  if (MDBX_UNALIGNED_OK || (expected_alignment % sizeof(v)) == 0)
+  if (MDBX_UNALIGNED_OK >= 8 || (expected_alignment % sizeof(v)) == 0)
     *(uint64_t *)ptr = v;
   else if ((expected_alignment % sizeof(uint32_t)) == 0) {
     ((uint32_t *)ptr)[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__] = (uint32_t)v;
     ((uint32_t *)ptr)[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__] =
         (uint32_t)(v >> 32);
-  } else
+  } else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    *((uint64_t __unaligned *)ptr) = v;
+#else
     memcpy(ptr, &v, sizeof(v));
+#endif /* _MSC_VER || __unaligned */
+  }
 }
 
 #define UNALIGNED_PEEK_8(ptr, struct, field)                                   \
@@ -5500,26 +5554,23 @@ static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
 #define METAPAGE(env, n) page_meta(pgno2page(env, n))
 #define METAPAGE_END(env) METAPAGE(env, NUM_METAS)
 
-static __inline txnid_t meta_txnid(const MDBX_env *env, const MDBX_meta *meta,
-                                   const bool allow_volatile) {
+static __inline txnid_t mdbx_meta_txnid_stable(const MDBX_env *env,
+                                               const MDBX_meta *meta) {
   mdbx_memory_fence(mo_AcquireRelease, false);
   txnid_t a = unaligned_peek_u64(4, &meta->mm_txnid_a);
   txnid_t b = unaligned_peek_u64(4, &meta->mm_txnid_b);
-  if (allow_volatile)
-    return (a == b) ? a : 0;
   mdbx_assert(env, a == b);
   (void)env;
   return a;
 }
 
-static __inline txnid_t mdbx_meta_txnid_stable(const MDBX_env *env,
-                                               const MDBX_meta *meta) {
-  return meta_txnid(env, meta, false);
-}
-
 static __inline txnid_t mdbx_meta_txnid_fluid(const MDBX_env *env,
-                                              const MDBX_meta *meta) {
-  return meta_txnid(env, meta, true);
+                                              volatile const MDBX_meta *meta) {
+  (void)env;
+  mdbx_memory_fence(mo_AcquireRelease, false);
+  txnid_t a = unaligned_peek_u64_volatile(4, &meta->mm_txnid_a);
+  txnid_t b = unaligned_peek_u64_volatile(4, &meta->mm_txnid_b);
+  return (a == b) ? a : 0;
 }
 
 static __inline void mdbx_meta_update_begin(const MDBX_env *env,
@@ -5662,7 +5713,7 @@ static MDBX_meta *mdbx_meta_head(const MDBX_env *env) {
 
 static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
   while (true) {
-    const MDBX_meta *head = mdbx_meta_head(env);
+    const volatile MDBX_meta *head = mdbx_meta_head(env);
     const txnid_t recent = mdbx_meta_txnid_fluid(env, head);
     mdbx_compiler_barrier();
     if (likely(head == mdbx_meta_head(env) &&
@@ -5673,7 +5724,7 @@ static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
 
 static txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
   while (true) {
-    const MDBX_meta *head = mdbx_meta_steady(env);
+    const volatile MDBX_meta *head = mdbx_meta_steady(env);
     const txnid_t recent = mdbx_meta_txnid_fluid(env, head);
     mdbx_compiler_barrier();
     if (likely(head == mdbx_meta_steady(env) &&
@@ -7087,7 +7138,7 @@ retry:;
       goto retry;
     }
     env->me_txn0->mt_txnid = head_txnid;
-    mdbx_assert(env, head_txnid == meta_txnid(env, head, false));
+    mdbx_assert(env, head_txnid == mdbx_meta_txnid_fluid(env, head));
     mdbx_assert(env, head_txnid == mdbx_recent_committed_txnid(env));
     mdbx_find_oldest(env->me_txn0);
     flags |= MDBX_SHRINK_ALLOWED;
@@ -7563,7 +7614,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     /* Seek & fetch the last meta */
     if (likely(/* not recovery mode */ env->me_stuck_meta < 0)) {
       while (1) {
-        MDBX_meta *const meta = mdbx_meta_head(env);
+        const volatile MDBX_meta *const meta = mdbx_meta_head(env);
         mdbx_jitter4testing(false);
         const txnid_t snap = mdbx_meta_txnid_fluid(env, meta);
         mdbx_jitter4testing(false);
@@ -7572,7 +7623,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
           atomic_store32(&r->mr_snapshot_pages_used, meta->mm_geo.next,
                          mo_Relaxed);
           atomic_store64(&r->mr_snapshot_pages_retired,
-                         unaligned_peek_u64(4, meta->mm_pages_retired),
+                         unaligned_peek_u64_volatile(4, meta->mm_pages_retired),
                          mo_Relaxed);
           safe64_write(&r->mr_txnid, snap);
           mdbx_jitter4testing(false);
@@ -7589,10 +7640,16 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
         /* Snap the state from current meta-head */
         txn->mt_txnid = snap;
         txn->mt_geo = meta->mm_geo;
-        memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
+        STATIC_ASSERT(CORE_DBS == 2);
+        txn->mt_dbs[0] = meta->mm_dbs[0];
+        txn->mt_dbs[1] = meta->mm_dbs[1];
         txn->mt_canary = meta->mm_canary;
 
-        /* LY: Retry on a race, ITS#7970. */
+        /* LY: Retry on a race, ITS#7970.
+         * The barrier is not needed here since C11-atomics are used,
+         * but it is reasonable paranoia to avoid compiler misoptimization
+         * and makes clarity for code readers. */
+        mdbx_compiler_barrier();
         if (likely(meta == mdbx_meta_head(env) &&
                    snap == mdbx_meta_txnid_fluid(env, meta) &&
                    snap >= atomic_load64(&env->me_lck->mti_oldest_reader,
@@ -11253,7 +11310,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     }
     MDBX_meta *head = mdbx_meta_head(env);
     if (!inside_txn) {
-      env->me_txn0->mt_txnid = meta_txnid(env, head, false);
+      env->me_txn0->mt_txnid = mdbx_meta_txnid_stable(env, head);
       mdbx_find_oldest(env->me_txn0);
     }
 

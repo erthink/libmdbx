@@ -148,35 +148,31 @@ static __inline uint16_t bswap16(uint16_t v) { return v << 8 | v >> 8; }
 namespace unaligned {
 
 template <typename T> static __inline T load(const void *ptr) {
-#if defined(_MSC_VER) &&                                                       \
-    (defined(_M_ARM64) || defined(_M_X64) || defined(_M_IA64))
-  return *(const T __unaligned *)ptr;
-#elif MDBX_UNALIGNED_OK
-  return *(const T *)ptr;
+  if (MDBX_UNALIGNED_OK >= sizeof(T))
+    return *(const T *)ptr;
+  else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    return *(const T __unaligned *)ptr;
 #else
-  T local;
-#if defined(__GNUC__) || defined(__clang__)
-  __builtin_memcpy(&local, (const T *)ptr, sizeof(T));
-#else
-  memcpy(&local, (const T *)ptr, sizeof(T));
-#endif /* __GNUC__ || __clang__ */
-  return local;
-#endif /* MDBX_UNALIGNED_OK */
+    T local;
+    memcpy(&local, (const T *)ptr, sizeof(T));
+    return local;
+#endif /* _MSC_VER || __unaligned */
+  }
 }
 
 template <typename T> static __inline void store(void *ptr, const T &value) {
-#if defined(_MSC_VER) &&                                                       \
-    (defined(_M_ARM64) || defined(_M_X64) || defined(_M_IA64))
-  *((T __unaligned *)ptr) = value;
-#elif MDBX_UNALIGNED_OK
-  *(volatile T *)ptr = value;
+  if (MDBX_UNALIGNED_OK >= sizeof(T))
+    *(T *)ptr = value;
+  else {
+#if defined(__unaligned) || defined(_M_ARM) || defined(_M_ARM64) ||            \
+    defined(_M_X64) || defined(_M_IA64)
+    *((T __unaligned *)ptr) = value;
 #else
-#if defined(__GNUC__) || defined(__clang__)
-  __builtin_memcpy(ptr, &value, sizeof(T));
-#else
-  memcpy(ptr, &value, sizeof(T));
-#endif /* __GNUC__ || __clang__ */
-#endif /* MDBX_UNALIGNED_OK */
+    memcpy(ptr, &value, sizeof(T));
+#endif /* _MSC_VER || __unaligned */
+  }
 }
 
 } /* namespace unaligned */
