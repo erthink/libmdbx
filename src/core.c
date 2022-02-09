@@ -5791,7 +5791,8 @@ static txnid_t mdbx_find_oldest(const MDBX_txn *txn) {
   }
 
   if (oldest != last_oldest) {
-    mdbx_notice("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest, oldest);
+    mdbx_verbose("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest,
+                 oldest);
     mdbx_tassert(txn, oldest >= lck->mti_oldest_reader.weak);
     atomic_store64(&lck->mti_oldest_reader, oldest, mo_Relaxed);
   }
