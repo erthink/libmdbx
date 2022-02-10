@@ -3733,10 +3733,10 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode);
 
 __hot static struct page_result __must_check_result
 mdbx_page_get_ex(MDBX_cursor *const mc, const pgno_t pgno, txnid_t front);
-static __inline int __must_check_result mdbx_page_get(MDBX_cursor *mc,
-                                                      pgno_t pgno,
-                                                      MDBX_page **mp,
-                                                      txnid_t front) {
+static __always_inline int __must_check_result mdbx_page_get(MDBX_cursor *mc,
+                                                             pgno_t pgno,
+                                                             MDBX_page **mp,
+                                                             txnid_t front) {
 
   struct page_result ret = mdbx_page_get_ex(mc, pgno, front);
   *mp = ret.page;
