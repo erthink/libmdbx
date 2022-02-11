@@ -10157,9 +10157,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     /* Update parent's DBs array */
     memcpy(parent->mt_dbs, txn->mt_dbs, txn->mt_numdbs * sizeof(MDBX_db));
     parent->mt_numdbs = txn->mt_numdbs;
-    parent->mt_dbistate[FREE_DBI] = txn->mt_dbistate[FREE_DBI];
-    parent->mt_dbistate[MAIN_DBI] = txn->mt_dbistate[MAIN_DBI];
-    for (unsigned i = CORE_DBS; i < txn->mt_numdbs; i++) {
+    for (unsigned i = 0; i < txn->mt_numdbs; i++) {
       /* preserve parent's status */
       const uint8_t state =
           txn->mt_dbistate[i] |
@@ -10254,6 +10252,14 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
 
+  txn->mt_dbs[FREE_DBI].md_mod_txnid = (txn->mt_dbistate[FREE_DBI] & DBI_DIRTY)
+                                           ? txn->mt_txnid
+                                           : txn->mt_dbs[FREE_DBI].md_mod_txnid;
+
+  txn->mt_dbs[MAIN_DBI].md_mod_txnid = (txn->mt_dbistate[MAIN_DBI] & DBI_DIRTY)
+                                           ? txn->mt_txnid
+                                           : txn->mt_dbs[MAIN_DBI].md_mod_txnid;
+
   ts_2 = latency ? mdbx_osal_monotime() : 0;
   if (mdbx_audit_enabled()) {
     rc = mdbx_audit_ex(txn, MDBX_PNL_SIZE(txn->tw.retired_pages), true);
@@ -10273,7 +10279,6 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   ts_3 = latency ? mdbx_osal_monotime() : 0;
 
   if (likely(rc == MDBX_SUCCESS)) {
-
     const MDBX_meta *head = constmeta_prefer_last(env);
     MDBX_meta meta;
     memcpy(meta.mm_magic_and_version, head->mm_magic_and_version, 8);
@@ -10283,18 +10288,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     unaligned_poke_u64(4, meta.mm_pages_retired,
                        unaligned_peek_u64(4, head->mm_pages_retired) +
                            MDBX_PNL_SIZE(txn->tw.retired_pages));
-
     meta.mm_geo = txn->mt_geo;
     meta.mm_dbs[FREE_DBI] = txn->mt_dbs[FREE_DBI];
-    meta.mm_dbs[FREE_DBI].md_mod_txnid =
-        (txn->mt_dbistate[FREE_DBI] & DBI_DIRTY)
-            ? txn->mt_txnid
-            : txn->mt_dbs[FREE_DBI].md_mod_txnid;
     meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
-    meta.mm_dbs[MAIN_DBI].md_mod_txnid =
-        (txn->mt_dbistate[MAIN_DBI] & DBI_DIRTY)
-            ? txn->mt_txnid
-            : txn->mt_dbs[MAIN_DBI].md_mod_txnid;
     meta.mm_canary = txn->mt_canary;
     meta_set_txnid(env, &meta, txn->mt_txnid);
 
