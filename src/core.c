@@ -10542,12 +10542,12 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
                  meta->mm_dbs[FREE_DBI].md_entries ||
                  meta->mm_dbs[FREE_DBI].md_leaf_pages ||
                  meta->mm_dbs[FREE_DBI].md_overflow_pages)) {
-      mdbx_warning("meta[%u] has false-empty GC, skip it", meta_number);
+      mdbx_warning("meta[%u] has false-empty %s, skip it", meta_number, "GC");
       return MDBX_CORRUPTED;
     }
   } else if (unlikely(meta->mm_dbs[FREE_DBI].md_root >= meta->mm_geo.next)) {
-    mdbx_warning("meta[%u] has invalid GC-root %" PRIaPGNO ", skip it",
-                 meta_number, meta->mm_dbs[FREE_DBI].md_root);
+    mdbx_warning("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it",
+                 meta_number, "GC", meta->mm_dbs[FREE_DBI].md_root);
     return MDBX_CORRUPTED;
   }
 
@@ -10558,12 +10558,24 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
                  meta->mm_dbs[MAIN_DBI].md_entries ||
                  meta->mm_dbs[MAIN_DBI].md_leaf_pages ||
                  meta->mm_dbs[MAIN_DBI].md_overflow_pages)) {
-      mdbx_warning("meta[%u] has false-empty maindb", meta_number);
+      mdbx_warning("meta[%u] has false-empty %s", meta_number, "MainDB");
       return MDBX_CORRUPTED;
     }
   } else if (unlikely(meta->mm_dbs[MAIN_DBI].md_root >= meta->mm_geo.next)) {
-    mdbx_warning("meta[%u] has invalid maindb-root %" PRIaPGNO ", skip it",
-                 meta_number, meta->mm_dbs[MAIN_DBI].md_root);
+    mdbx_warning("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it",
+                 meta_number, "MainDB", meta->mm_dbs[MAIN_DBI].md_root);
+    return MDBX_CORRUPTED;
+  }
+
+  if (unlikely(meta->mm_dbs[FREE_DBI].md_mod_txnid > txnid)) {
+    mdbx_warning("meta[%u] has wrong md_mod_txnid %" PRIaTXN " for %s, skip it",
+                 meta_number, meta->mm_dbs[FREE_DBI].md_mod_txnid, "GC");
+    return MDBX_CORRUPTED;
+  }
+
+  if (unlikely(meta->mm_dbs[MAIN_DBI].md_mod_txnid > txnid)) {
+    mdbx_warning("meta[%u] has wrong md_mod_txnid %" PRIaTXN " for %s, skip it",
+                 meta_number, meta->mm_dbs[MAIN_DBI].md_mod_txnid, "MainDB");
     return MDBX_CORRUPTED;
   }
 
