@@ -11536,14 +11536,22 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     /* apply new params to opened environment */
     mdbx_ensure(env, pagesize == (intptr_t)env->me_psize);
     MDBX_meta meta;
-    const MDBX_meta *head = nullptr;
+    memset(&meta, 0, sizeof(meta));
     const MDBX_geo *current_geo;
-    if (inside_txn) {
-      current_geo = &env->me_txn->mt_geo;
-    } else {
-      head = constmeta_prefer_last(env);
+    if (!inside_txn) {
+      mdbx_assert(env, need_unlock);
+      const MDBX_meta *head = constmeta_prefer_last(env);
       meta = *head;
+      const txnid_t txnid = safe64_txnid_next(constmeta_txnid(env, &meta));
+      if (unlikely(txnid > MAX_TXNID)) {
+        rc = MDBX_TXN_FULL;
+        mdbx_error("txnid overflow, raise %d", rc);
+        goto bailout;
+      }
+      meta_set_txnid(env, &meta, txnid);
       current_geo = &meta.mm_geo;
+    } else {
+      current_geo = &env->me_txn->mt_geo;
     }
 
     MDBX_geo new_geo;
@@ -11614,23 +11622,13 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
                             false);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-        mdbx_assert(env, (head == nullptr) == inside_txn);
-        if (head)
-          head = /* base address could be changed */ constmeta_prefer_last(env);
       }
       if (inside_txn) {
         env->me_txn->mt_geo = new_geo;
         env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
       } else {
         meta.mm_geo = new_geo;
-        const txnid_t txnid = safe64_txnid_next(constmeta_txnid(env, head));
-        if (unlikely(txnid > MAX_TXNID)) {
-          rc = MDBX_TXN_FULL;
-          mdbx_error("txnid overflow, raise %d", rc);
-        } else {
-          meta_set_txnid(env, &meta, txnid);
-          rc = mdbx_sync_locked(env, env->me_flags, &meta);
-        }
+        rc = mdbx_sync_locked(env, env->me_flags, &meta);
       }
 
       if (likely(rc == MDBX_SUCCESS)) {
