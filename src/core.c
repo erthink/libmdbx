@@ -11114,6 +11114,10 @@ __cold static void mdbx_setup_pagesize(MDBX_env *env, const size_t pagesize) {
   mdbx_ensure(env, pagesize >= MIN_PAGESIZE);
   mdbx_ensure(env, pagesize <= MAX_PAGESIZE);
   env->me_psize = (unsigned)pagesize;
+  if (env->me_pbuf) {
+    mdbx_memalign_free(env->me_pbuf);
+    env->me_pbuf = nullptr;
+  }
 
   STATIC_ASSERT(MAX_GC1OVPAGE(MIN_PAGESIZE) > 4);
   STATIC_ASSERT(MAX_GC1OVPAGE(MAX_PAGESIZE) < MDBX_PGL_LIMIT);
@@ -11722,7 +11726,8 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       pv2pages(meta.mm_geo.grow_pv), pv2pages(meta.mm_geo.shrink_pv),
       unaligned_peek_u64(4, meta.mm_txnid_a), mdbx_durable_str(&meta));
 
-  mdbx_setup_pagesize(env, meta.mm_psize);
+  if (env->me_psize != meta.mm_psize)
+    mdbx_setup_pagesize(env, meta.mm_psize);
   const size_t used_bytes = pgno2bytes(env, meta.mm_geo.next);
   const size_t used_aligned2os_bytes =
       ceil_powerof2(used_bytes, env->me_os_psize);
