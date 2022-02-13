@@ -12986,16 +12986,18 @@ bailout:
 
 /* Destroy resources from mdbx_env_open(), clear our readers & DBIs */
 __cold static int mdbx_env_close0(MDBX_env *env) {
-  env->me_stuck_meta = -1;
-  if (!(env->me_flags & MDBX_ENV_ACTIVE)) {
+  const unsigned flags = env->me_flags;
+  if (!(flags & MDBX_ENV_ACTIVE)) {
     mdbx_ensure(env, env->me_lcklist_next == nullptr);
     return MDBX_SUCCESS;
   }
 
-  env->me_flags &= ~MDBX_ENV_ACTIVE;
+  env->me_flags &= ~ENV_INTERNAL_FLAGS;
   env->me_lck = nullptr;
-  if (env->me_flags & MDBX_ENV_TXKEY)
+  if (flags & MDBX_ENV_TXKEY) {
     mdbx_rthc_remove(env->me_txkey);
+    env->me_txkey = (mdbx_thread_key_t)0;
+  }
 
   lcklist_lock();
   const int rc = lcklist_detach_locked(env);
@@ -13031,11 +13033,24 @@ __cold static int mdbx_env_close0(MDBX_env *env) {
     for (unsigned i = env->me_numdbs; --i >= CORE_DBS;)
       mdbx_free(env->me_dbxs[i].md_name.iov_base);
     mdbx_free(env->me_dbxs);
+    env->me_dbxs = nullptr;
   }
-  mdbx_memalign_free(env->me_pbuf);
-  mdbx_free(env->me_dbiseqs);
-  mdbx_free(env->me_dbflags);
-  mdbx_free(env->me_pathname);
+  if (env->me_pbuf) {
+    mdbx_memalign_free(env->me_pbuf);
+    env->me_pbuf = nullptr;
+  }
+  if (env->me_dbiseqs) {
+    mdbx_free(env->me_dbiseqs);
+    env->me_dbiseqs = nullptr;
+  }
+  if (env->me_dbflags) {
+    mdbx_free(env->me_dbflags);
+    env->me_dbflags = nullptr;
+  }
+  if (env->me_pathname) {
+    mdbx_free(env->me_pathname);
+    env->me_pathname = nullptr;
+  }
   if (env->me_txn0) {
     mdbx_dpl_free(env->me_txn0);
     mdbx_txl_free(env->me_txn0->tw.lifo_reclaimed);
@@ -13043,8 +13058,9 @@ __cold static int mdbx_env_close0(MDBX_env *env) {
     mdbx_pnl_free(env->me_txn0->tw.spill_pages);
     mdbx_pnl_free(env->me_txn0->tw.reclaimed_pglist);
     mdbx_free(env->me_txn0);
+    env->me_txn0 = nullptr;
   }
-  env->me_flags = 0;
+  env->me_stuck_meta = -1;
   return rc;
 }
 
