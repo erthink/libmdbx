@@ -4,7 +4,7 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 1 |0000 0002|ALLOC_GC   |TXN_ERROR     |REVERSEKEY|F_SUBDATA  |DBI_STALE   |F_SUBDATA|P_LEAF    |         |
 2 |0000 0004|ALLOC_NEW  |TXN_DIRTY     |DUPSORT   |           |DBI_FRESH   |F_DUPDATA|P_OVERFLOW|         |
 3 |0000 0008|ALLOC_SLOT |TXN_SPILLS    |INTEGERKEY|           |DBI_CREAT   |         |P_META    |         |
-4 |0000 0010|           |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_BAD     |         |
+4 |0000 0010|ALLOC_FAKE |TXN_HAS_CHILD |DUPFIXED  |NOOVERWRITE|DBI_VALID   |         |P_BAD     |         |
 5 |0000 0020|           |              |INTEGERDUP|NODUPDATA  |DBI_USRVALID|         |P_LEAF2   |         |
 6 |0000 0040|           |              |REVERSEDUP|CURRENT    |DBI_DUPDATA |         |P_SUBP    |         |
 7 |0000 0080|           |              |          |ALLDUPS    |DBI_AUDITED |         |          |         |

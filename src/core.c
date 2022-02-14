@@ -6343,6 +6343,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 #define MDBX_ALLOC_GC 2
 #define MDBX_ALLOC_NEW 4
 #define MDBX_ALLOC_SLOT 8
+#define MDBX_ALLOC_FAKE 16
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
 __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
@@ -6350,6 +6351,8 @@ __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
   struct page_result ret;
   MDBX_txn *const txn = mc->mc_txn;
   MDBX_env *const env = txn->mt_env;
+  mdbx_assert(env, num == 0 || !(flags & MDBX_ALLOC_SLOT));
+  mdbx_assert(env, num > 0 || !(flags & MDBX_ALLOC_NEW));
 
   const unsigned coalesce_threshold =
       env->me_maxgc_ov1page - env->me_maxgc_ov1page / 4;
@@ -6418,8 +6421,7 @@ no_loose:
        * Prefer pages with lower pgno. */
       mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                               txn->mt_next_pgno));
-      if ((flags & (MDBX_COALESCE | MDBX_ALLOC_CACHE)) == MDBX_ALLOC_CACHE &&
-          re_len >= num) {
+      if (!(flags & (MDBX_COALESCE | MDBX_ALLOC_SLOT)) && re_len >= num) {
         mdbx_tassert(txn, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
                               MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
         range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
@@ -6628,9 +6630,8 @@ no_loose:
       }
 
       /* Done for a kick-reclaim mode, actually no page needed */
-      if (unlikely(num == 0)) {
+      if (unlikely(flags & MDBX_ALLOC_SLOT)) {
         mdbx_debug("early-return NULL-page for %s mode", "MDBX_ALLOC_SLOT");
-        mdbx_assert(env, flags & MDBX_ALLOC_SLOT);
         ret.err = MDBX_SUCCESS;
         ret.page = NULL;
         return ret;
@@ -6648,7 +6649,7 @@ no_loose:
       }
     }
 
-    if (F_ISSET(flags, MDBX_COALESCE | MDBX_ALLOC_CACHE)) {
+    if (F_ISSET(flags, MDBX_COALESCE | MDBX_ALLOC_GC)) {
       mdbx_debug_extra("clear %s and continue", "MDBX_COALESCE");
       flags &= ~MDBX_COALESCE;
       continue;
@@ -6768,10 +6769,10 @@ no_loose:
     }
 
   fail:
-    mdbx_tassert(txn,
-                 mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
-                                       txn->mt_next_pgno - MDBX_ENABLE_REFUND));
-    if (likely(!(flags & MDBX_ALLOC_SLOT)))
+    mdbx_assert(env,
+                mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
+                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
+    if (likely(!(flags & MDBX_ALLOC_FAKE)))
       txn->mt_flags |= MDBX_TXN_ERROR;
     if (num != 1 || ret.err != MDBX_NOTFOUND)
       mdbx_notice("alloc %u pages failed, flags 0x%x, errcode %d", num, flags,
@@ -6785,21 +6786,24 @@ no_loose:
   }
 
 done:
-  ret.page = NULL;
-  if (unlikely(flags & MDBX_ALLOC_SLOT)) {
-    mdbx_debug("return NULL-page for %s mode", "MDBX_ALLOC_SLOT");
+  mdbx_assert(env, !(flags & MDBX_ALLOC_SLOT));
+  mdbx_ensure(env, pgno >= NUM_METAS);
+  if (unlikely(flags & MDBX_ALLOC_FAKE)) {
+    mdbx_debug("return NULL-page for %u pages of %s mode", num,
+               "MDBX_ALLOC_FAKE");
+    ret.page = NULL;
     ret.err = MDBX_SUCCESS;
     return ret;
   }
 
-  mdbx_ensure(env, pgno >= NUM_METAS);
   if (env->me_flags & MDBX_WRITEMAP) {
     ret.page = pgno2page(env, pgno);
     /* LY: reset no-access flag from mdbx_page_loose() */
     VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
     MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
   } else {
-    if (unlikely(!(ret.page = mdbx_page_malloc(txn, num)))) {
+    ret.page = mdbx_page_malloc(txn, num);
+    if (unlikely(!ret.page)) {
       ret.err = MDBX_ENOMEM;
       goto fail;
     }
@@ -8810,7 +8814,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
       }
     }
     err =
-        mdbx_page_alloc(gc_cursor, linear4list, MDBX_ALLOC_GC | MDBX_ALLOC_SLOT)
+        mdbx_page_alloc(gc_cursor, linear4list, MDBX_ALLOC_GC | MDBX_ALLOC_FAKE)
             .err;
     mdbx_trace("== after-4linear, backlog %u, err %d", backlog_size(txn), err);
     mdbx_cassert(gc_cursor,
@@ -8818,7 +8822,9 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
   }
 
   while (backlog_size(txn) < backlog4cow + linear4list && err == MDBX_SUCCESS)
-    err = mdbx_page_alloc(gc_cursor, 1, MDBX_ALLOC_GC | MDBX_ALLOC_SLOT).err;
+    err = mdbx_page_alloc(gc_cursor, 0,
+                          MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE)
+              .err;
 
   gc_cursor->mc_flags |= C_RECLAIMING;
   mdbx_trace("<< backlog %u, err %d", backlog_size(txn), err);
@@ -9179,7 +9185,8 @@ retry:
         do {
           snap_oldest = mdbx_find_oldest(txn);
           rc =
-              mdbx_page_alloc(&couple.outer, 0, MDBX_ALLOC_GC | MDBX_ALLOC_SLOT)
+              mdbx_page_alloc(&couple.outer, 0,
+                              MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE)
                   .err;
           if (likely(rc == MDBX_SUCCESS)) {
             mdbx_trace("%s: took @%" PRIaTXN " from GC", dbg_prefix_mode,
