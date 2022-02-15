@@ -1248,7 +1248,7 @@ bool env::is_pristine() const {
          get_info().mi_recent_txnid == INITIAL_TXNID;
 }
 
-bool env::is_empty() const { return get_stat().ms_branch_pages == 0; }
+bool env::is_empty() const { return get_stat().ms_leaf_pages == 0; }
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
 env &env::copy(const ::std::filesystem::path &destination, bool compactify,
