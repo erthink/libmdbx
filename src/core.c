@@ -6763,8 +6763,8 @@ no_loose:
         mdbx_error("unable growth datafile to %zu pages (+%zu), errcode %d",
                    aligned, aligned - txn->mt_end_pgno, ret.err);
       } else {
-        mdbx_debug("gc-alloc: next %zu > upper %" PRIaPGNO, next,
-                   txn->mt_geo.upper);
+        mdbx_notice("gc-alloc: next %zu > upper %" PRIaPGNO, next,
+                    txn->mt_geo.upper);
       }
     }
 
@@ -8787,7 +8787,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
 
   MDBX_val gc_key, fake_val;
   int err;
-  if (linear4list < 2) {
+  if (unlikely(linear4list > 2)) {
     gc_key.iov_base = fake_val.iov_base = nullptr;
     gc_key.iov_len = sizeof(txnid_t);
     fake_val.iov_len = pnl_bytes;
@@ -8800,7 +8800,7 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
   err = mdbx_cursor_touch(gc_cursor);
   mdbx_trace("== after-touch, backlog %u, err %d", backlog_size(txn), err);
 
-  if (linear4list > 1 && err == MDBX_SUCCESS) {
+  if (unlikely(linear4list > 1) && err == MDBX_SUCCESS) {
     if (retired_stored) {
       gc_key.iov_base = &txn->mt_txnid;
       gc_key.iov_len = sizeof(txn->mt_txnid);
@@ -8975,7 +8975,7 @@ retry:
         }
         if (cleaned_gc_id > txn->tw.last_reclaimed)
           break;
-        if (likely(!dense_gc) && cleaned_gc_id < txn->tw.last_reclaimed) {
+        if (likely(!dense_gc)) {
           rc = mdbx_prep_backlog(txn, &couple.outer, 0, nullptr);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
