@@ -20785,8 +20785,8 @@ __cold static txnid_t mdbx_kick_longlived_readers(MDBX_env *env,
     const uint64_t head_retired =
         unaligned_peek_u64(4, head_meta->mm_pages_retired);
     const size_t space =
-        (oldest_retired > head_retired)
-            ? pgno2bytes(env, (pgno_t)(oldest_retired - head_retired))
+        (head_retired > oldest_retired)
+            ? pgno2bytes(env, (pgno_t)(head_retired - oldest_retired))
             : 0;
     int rc = env->me_hsr_callback(
         env, env->me_txn, pid, (mdbx_tid_t)tid, laggard,
