@@ -1222,25 +1222,21 @@ MDBX_INTERNAL_FUNC void mdbx_debug_log_va(int level, const char *function,
                                           int line, const char *fmt,
                                           va_list args);
 
-#define mdbx_log_enabled(msg) unlikely(msg <= mdbx_loglevel)
-
 #if MDBX_DEBUG
-
-#define mdbx_assert_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_ASSERT)
-
-#define mdbx_audit_enabled() unlikely(mdbx_runtime_flags &MDBX_DBG_AUDIT)
-
+#define mdbx_log_enabled(msg) unlikely(msg <= mdbx_loglevel)
+#define mdbx_audit_enabled() unlikely((mdbx_runtime_flags & MDBX_DBG_AUDIT))
 #else /* MDBX_DEBUG */
-
+#define mdbx_log_enabled(msg) (msg < MDBX_LOG_VERBOSE && msg <= mdbx_loglevel)
 #define mdbx_audit_enabled() (0)
+#endif /* MDBX_DEBUG */
 
-#if !defined(NDEBUG) || MDBX_FORCE_ASSERTIONS
+#if MDBX_FORCE_ASSERTIONS
 #define mdbx_assert_enabled() (1)
+#elif MDBX_DEBUG
+#define mdbx_assert_enabled() likely((mdbx_runtime_flags & MDBX_DBG_ASSERT))
 #else
 #define mdbx_assert_enabled() (0)
-#endif /* NDEBUG */
-
-#endif /* MDBX_DEBUG */
+#endif /* assertions */
 
 #if !MDBX_DEBUG && defined(__ANDROID_API__)
 #define mdbx_assert_fail(env, msg, func, line)                                 \
@@ -1252,33 +1248,33 @@ void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
 
 #define mdbx_debug_extra(fmt, ...)                                             \
   do {                                                                         \
-    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_EXTRA))                        \
+    if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
       mdbx_debug_log(MDBX_LOG_EXTRA, __func__, __LINE__, fmt, __VA_ARGS__);    \
   } while (0)
 
 #define mdbx_debug_extra_print(fmt, ...)                                       \
   do {                                                                         \
-    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_EXTRA))                        \
+    if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \
       mdbx_debug_log(MDBX_LOG_EXTRA, NULL, 0, fmt, __VA_ARGS__);               \
   } while (0)
 
 #define mdbx_trace(fmt, ...)                                                   \
   do {                                                                         \
-    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_TRACE))                        \
+    if (mdbx_log_enabled(MDBX_LOG_TRACE))                                      \
       mdbx_debug_log(MDBX_LOG_TRACE, __func__, __LINE__, fmt "\n",             \
                      __VA_ARGS__);                                             \
   } while (0)
 
 #define mdbx_debug(fmt, ...)                                                   \
   do {                                                                         \
-    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_DEBUG))                        \
+    if (mdbx_log_enabled(MDBX_LOG_DEBUG))                                      \
       mdbx_debug_log(MDBX_LOG_DEBUG, __func__, __LINE__, fmt "\n",             \
                      __VA_ARGS__);                                             \
   } while (0)
 
 #define mdbx_verbose(fmt, ...)                                                 \
   do {                                                                         \
-    if (MDBX_DEBUG && mdbx_log_enabled(MDBX_LOG_VERBOSE))                      \
+    if (mdbx_log_enabled(MDBX_LOG_VERBOSE))                                    \
       mdbx_debug_log(MDBX_LOG_VERBOSE, __func__, __LINE__, fmt "\n",           \
                      __VA_ARGS__);                                             \
   } while (0)

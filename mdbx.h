@@ -784,36 +784,51 @@ enum MDBX_constants {
  * \note Most of debug feature enabled only when libmdbx builded with
  * \ref MDBX_DEBUG build option. @{ */
 
-/** Log level (requires build libmdbx with \ref MDBX_DEBUG option) */
+/** Log level
+ * \note Levels detailed than (great than) \ref MDBX_LOG_NOTICE
+ * requires build libmdbx with \ref MDBX_DEBUG option. */
 enum MDBX_log_level_t {
-  /** Critical conditions, i.e. assertion failures */
+  /** Critical conditions, i.e. assertion failures.
+   * \note libmdbx always produces such messages regardless
+   * of \ref MDBX_DEBUG build option. */
   MDBX_LOG_FATAL = 0,
 
-  /** Enables logging for error conditions and \ref MDBX_LOG_FATAL */
+  /** Enables logging for error conditions
+   * and \ref MDBX_LOG_FATAL.
+   * \note libmdbx always produces such messages regardless
+   * of \ref MDBX_DEBUG build option. */
   MDBX_LOG_ERROR = 1,
 
-  /** Enables logging for warning conditions and \ref MDBX_LOG_ERROR ...
-      \ref MDBX_LOG_FATAL */
+  /** Enables logging for warning conditions
+   * and \ref MDBX_LOG_ERROR ... \ref MDBX_LOG_FATAL.
+   * \note libmdbx always produces such messages regardless
+   * of \ref MDBX_DEBUG build option. */
   MDBX_LOG_WARN = 2,
 
-  /** Enables logging for normal but significant condition and
-      \ref MDBX_LOG_WARN ... \ref MDBX_LOG_FATAL */
+  /** Enables logging for normal but significant condition
+   * and \ref MDBX_LOG_WARN ... \ref MDBX_LOG_FATAL.
+   * \note libmdbx always produces such messages regardless
+   * of \ref MDBX_DEBUG build option. */
   MDBX_LOG_NOTICE = 3,
 
-  /** Enables logging for verbose informational and \ref MDBX_LOG_NOTICE ...
-      \ref MDBX_LOG_FATAL */
+  /** Enables logging for verbose informational
+   * and \ref MDBX_LOG_NOTICE ... \ref MDBX_LOG_FATAL.
+   * \note Requires build libmdbx with \ref MDBX_DEBUG option. */
   MDBX_LOG_VERBOSE = 4,
 
-  /** Enables logging for debug-level messages and \ref MDBX_LOG_VERBOSE ...
-      \ref MDBX_LOG_FATAL */
+  /** Enables logging for debug-level messages
+   * and \ref MDBX_LOG_VERBOSE ... \ref MDBX_LOG_FATAL.
+   * \note Requires build libmdbx with \ref MDBX_DEBUG option. */
   MDBX_LOG_DEBUG = 5,
 
-  /** Enables logging for trace debug-level messages and \ref MDBX_LOG_DEBUG ...
-      \ref MDBX_LOG_FATAL */
+  /** Enables logging for trace debug-level messages
+   * and \ref MDBX_LOG_DEBUG ... \ref MDBX_LOG_FATAL.
+   * \note Requires build libmdbx with \ref MDBX_DEBUG option. */
   MDBX_LOG_TRACE = 6,
 
   /** Enables extra debug-level messages (dump pgno lists)
-      and all other log-messages */
+   * and all other log-messages.
+   * \note Requires build libmdbx with \ref MDBX_DEBUG option. */
   MDBX_LOG_EXTRA = 7,
 
 #ifdef ENABLE_UBSAN
@@ -836,15 +851,16 @@ enum MDBX_debug_flags_t {
   MDBX_DBG_NONE = 0,
 
   /** Enable assertion checks.
-   * Requires build with \ref MDBX_DEBUG > 0 */
+   * \note Always enabled for builds with `MDBX_FORCE_ASSERTIONS` option,
+   * otherwise requires build with \ref MDBX_DEBUG > 0 */
   MDBX_DBG_ASSERT = 1,
 
   /** Enable pages usage audit at commit transactions.
-   * Requires build with \ref MDBX_DEBUG > 0 */
+   * \note Requires build with \ref MDBX_DEBUG > 0 */
   MDBX_DBG_AUDIT = 2,
 
   /** Enable small random delays in critical points.
-   * Requires build with \ref MDBX_DEBUG > 0 */
+   * \note Requires build with \ref MDBX_DEBUG > 0 */
   MDBX_DBG_JITTER = 4,
 
   /** Include or not meta-pages in coredump files.
