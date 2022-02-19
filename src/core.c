@@ -13682,15 +13682,17 @@ __hot static int mdbx_page_search(MDBX_cursor *mc, const MDBX_val *key,
     pp_txnid = /* mc->mc_db->md_mod_txnid maybe zero in a legacy DB */ pp_txnid
                    ? pp_txnid
                    : mc->mc_txn->mt_txnid;
-    MDBX_txn *scan = mc->mc_txn;
-    do
-      if ((scan->mt_flags & MDBX_TXN_DIRTY) &&
-          (mc->mc_dbi == MAIN_DBI ||
-           (scan->mt_dbistate[mc->mc_dbi] & DBI_DIRTY))) {
-        pp_txnid = scan->mt_front;
-        break;
-      }
-    while (unlikely((scan = scan->mt_parent) != nullptr));
+    if ((mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) == 0) {
+      MDBX_txn *scan = mc->mc_txn;
+      do
+        if ((scan->mt_flags & MDBX_TXN_DIRTY) &&
+            (mc->mc_dbi == MAIN_DBI ||
+             (scan->mt_dbistate[mc->mc_dbi] & DBI_DIRTY))) {
+          pp_txnid = scan->mt_front;
+          break;
+        }
+      while (unlikely((scan = scan->mt_parent) != nullptr));
+    }
     if (unlikely((rc = mdbx_page_get(mc, root, &mc->mc_pg[0], pp_txnid)) != 0))
       return rc;
   }
