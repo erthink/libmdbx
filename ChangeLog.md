@@ -17,6 +17,28 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
+## v0.11.5 (underway, scheduled for 2022-03-01)
+
+Acknowledgements:
+
+ - [Simon Leier](https://github.com/leisim) for reporting and testing.
+
+Fixes:
+
+ - Fixed potential `SIGSEGV` while open DB with overrided non-default page size.
+ - Made `mdbx_env_open()` idempotence in failure cases (fixed [issue#267](https://github.com/erthink/libmdbx/issues/267)).
+ - Refined/Fixed pages reservation inside `mdbx_update_gc()` to avoid non-reclamation in a rare cases.
+ - Fixed typo in a retained space calculation for the hsr-callback.
+
+Minors:
+
+ - Reworked functions for meta-pages, split-off non-volatile.
+ - Disentangled C11-atomic fences/barriers and pure-functions (with `__attribute__((__pure__))`) to avoid compiler misoptimization.
+ - Fixed hypotetic unaligned access to 64-bit dwords on ARM with `__ARM_FEATURE_UNALIGNED` defined.
+ - Reasonable paranoia that makes clarity for code readers.
+ - Minor fixes Doxygen references, comments, descriptions, etc.
+
+
 ## v0.11.4 at 2022-02-02
 
 The stable release with fixes for large and huge databases sized of 4..128 TiB.
