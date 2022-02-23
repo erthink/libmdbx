@@ -17,16 +17,23 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.5 (underway, scheduled for 2022-03-01)
+## v0.11.5 at 2022-02-23
+
+The stable release with the hotfix/workaround for a flaw of Linux 4.19 (at least) unified page/buffer cache.
+See [issue#269](https://github.com/erthink/libmdbx/issues/269) for more information.
 
 Acknowledgements:
 
  - [Simon Leier](https://github.com/leisim) for reporting and testing.
+ - [Kai Wetlesen](https://github.com/kaiwetlesen) for [RPMs](http://copr.fedorainfracloud.org/coprs/kwetlesen/libmdbx/).
+ - [Tullio Canepa](https://github.com/canepat) for reporting C++ API issue and contributing.
 
 Fixes:
 
+ - [Added workaround](https://github.com/erthink/libmdbx/issues/269) for a flaw of Linux 4.19 (at least) unified page/buffer cache.
+ - [Fixed/Reworked](https://github.com/erthink/libmdbx/pull/270) move-assignment operators for "managed" classes of C++ API.
  - Fixed potential `SIGSEGV` while open DB with overrided non-default page size.
- - Made `mdbx_env_open()` idempotence in failure cases (fixed [issue#267](https://github.com/erthink/libmdbx/issues/267)).
+ - [Made](https://github.com/erthink/libmdbx/issues/267) `mdbx_env_open()` idempotence in failure cases.
  - Refined/Fixed pages reservation inside `mdbx_update_gc()` to avoid non-reclamation in a rare cases.
  - Fixed typo in a retained space calculation for the hsr-callback.
 

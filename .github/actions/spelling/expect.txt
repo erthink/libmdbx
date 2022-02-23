@@ -209,6 +209,7 @@ condpair
 config
 constexpr
 constmeta
+coprs
 copyable
 copydetails
 copydoc
@@ -512,6 +513,7 @@ FCXX
 fd
 fdatasync
 featuredarticles
+fedorainfracloud
 fedotov
 FEEDNAME
 feof
@@ -666,6 +668,7 @@ hlp
 HOfynt
 hostid
 HOSTUUID
+hotfix
 hpp
 hppa
 hpux
@@ -791,6 +794,7 @@ jgamble
 jmp
 jpg
 json
+kaiwetlesen
 kbuf
 Kerollmops
 kerr
@@ -820,6 +824,7 @@ Kuntze
 kurt
 kuznik
 kval
+kwetlesen
 Lanfranchi
 largedata
 largepage
@@ -1490,6 +1495,7 @@ rpath
 rpb
 rpcc
 rpid
+RPMs
 rqest
 rr
 RRF
@@ -1934,6 +1940,7 @@ wdm
 webassembly
 webclient
 WERROR
+Wetlesen
 WEXITSTATUS
 WEXTRA
 whitelist
