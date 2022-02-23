@@ -3939,7 +3939,12 @@ public:
   void close();
 
   cursor_managed(cursor_managed &&) = default;
-  cursor_managed &operator=(cursor_managed &&) = default;
+  cursor_managed &operator=(cursor_managed && other) noexcept {
+    ::mdbx_cursor_close(handle_);
+    handle_ = other.handle_;
+    other.handle_ = nullptr;
+    return *this;
+  }
   cursor_managed(const cursor_managed &) = delete;
   cursor_managed &operator=(const cursor_managed &) = delete;
   ~cursor_managed() noexcept { ::mdbx_cursor_close(handle_); }
