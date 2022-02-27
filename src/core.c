@@ -7377,7 +7377,7 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
     pgno_t last = MAX_PAGENO + 1;
     if (env->me_txn0 && env->me_txn0->mt_owner == mdbx_thread_self()) {
       /* inside write-txn */
-      MDBX_meta *head = mdbx_meta_head(env);
+      const MDBX_meta *head = constmeta_prefer_last(env);
       last = head->mm_geo.next;
     } else if (env->me_flags & MDBX_RDONLY) {
       /* read-only mode, no write-txn, no wlock mutex */
