@@ -1234,15 +1234,6 @@ env::operate_options::operate_options(MDBX_env_flags_t flags) noexcept
       disable_readahead((flags & MDBX_NORDAHEAD) ? true : false),
       disable_clear_memory((flags & MDBX_NOMEMINIT) ? true : false) {}
 
-env::operate_parameters::operate_parameters(const env &env)
-    : max_maps(env.max_maps()), max_readers(env.max_readers()) {
-  const auto flags = env.get_flags();
-  mode = mode_from_flags(flags);
-  durability = durability_from_flags(flags);
-  reclaiming = reclaiming_from_flags(flags);
-  options = options_from_flags(flags);
-}
-
 bool env::is_pristine() const {
   return get_stat().ms_mod_txnid == 0 &&
          get_info().mi_recent_txnid == INITIAL_TXNID;

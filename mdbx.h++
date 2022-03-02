@@ -2984,6 +2984,8 @@ public:
     /// \copydoc MDBX_COALESCE
     bool coalesce{false};
     MDBX_CXX11_CONSTEXPR reclaiming_options() noexcept {}
+    MDBX_CXX11_CONSTEXPR
+    reclaiming_options(const reclaiming_options &) noexcept = default;
     reclaiming_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -2999,6 +3001,8 @@ public:
     /// \copydoc MDBX_NOMEMINIT
     bool disable_clear_memory{false};
     MDBX_CXX11_CONSTEXPR operate_options() noexcept {}
+    MDBX_CXX11_CONSTEXPR
+    operate_options(const operate_options &) noexcept = default;
     operate_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -3016,6 +3020,17 @@ public:
     env::operate_options options;
 
     MDBX_CXX11_CONSTEXPR operate_parameters() noexcept {}
+    MDBX_CXX11_CONSTEXPR
+    operate_parameters(
+        const unsigned max_maps, const unsigned max_readers = 0,
+        const env::mode mode = env::mode::write_mapped_io,
+        env::durability durability = env::durability::robust_synchronous,
+        const env::reclaiming_options &reclaiming = env::reclaiming_options(),
+        const env::operate_options &options = env::operate_options()) noexcept
+        : max_maps(max_maps), max_readers(max_readers), mode(mode),
+          durability(durability), reclaiming(reclaiming), options(options) {}
+    MDBX_CXX11_CONSTEXPR
+    operate_parameters(const operate_parameters &) noexcept = default;
     MDBX_env_flags_t
     make_flags(bool accede = true, ///< \copydoc MDBX_ACCEDE
                bool use_subdirectory =
@@ -3027,7 +3042,6 @@ public:
     reclaiming_from_flags(MDBX_env_flags_t flags) noexcept;
     inline static env::operate_options
     options_from_flags(MDBX_env_flags_t flags) noexcept;
-    operate_parameters(const env &);
   };
 
   /// \brief Returns current operation parameters.
@@ -3423,6 +3437,8 @@ public:
     env::geometry geometry;
     mdbx_mode_t file_mode_bits{0640};
     bool use_subdirectory{false};
+    MDBX_CXX11_CONSTEXPR create_parameters() noexcept = default;
+    create_parameters(const create_parameters &) noexcept = default;
   };
 
   /// \brief Create new or open existing database.
@@ -4763,7 +4779,12 @@ inline size_t env::limits::transaction_size_max(intptr_t pagesize) {
 }
 
 inline env::operate_parameters env::get_operation_parameters() const {
-  return env::operate_parameters(*this);
+  const auto flags = get_flags();
+  return operate_parameters(max_maps(), max_readers(),
+                            operate_parameters::mode_from_flags(flags),
+                            operate_parameters::durability_from_flags(flags),
+                            operate_parameters::reclaiming_from_flags(flags),
+                            operate_parameters::options_from_flags(flags));
 }
 
 inline env::mode env::get_mode() const {
