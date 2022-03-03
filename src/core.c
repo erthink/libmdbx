@@ -11275,10 +11275,12 @@ __cold static intptr_t get_reasonable_db_maxsize(intptr_t *cached_result) {
     intptr_t pagesize, total_ram_pages;
     if (unlikely(mdbx_get_sysraminfo(&pagesize, &total_ram_pages, nullptr) !=
                  MDBX_SUCCESS))
-      return MAX_MAPSIZE32 /* the 32-bit limit is good enough for fallback */;
+      return *cached_result = MAX_MAPSIZE32 /* the 32-bit limit is good enough
+                                               for fallback */
+          ;
 
     if (unlikely((size_t)total_ram_pages * 2 > MAX_MAPSIZE / (size_t)pagesize))
-      return MAX_MAPSIZE;
+      return *cached_result = MAX_MAPSIZE;
     assert(MAX_MAPSIZE >= (size_t)(total_ram_pages * pagesize * 2));
 
     /* Suggesting should not be more than golden ratio of the size of RAM. */
