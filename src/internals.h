@@ -945,6 +945,7 @@ struct MDBX_txn {
   size_t mt_owner; /* thread ID that owns this transaction */
   MDBX_canary mt_canary;
   void *mt_userctx; /* User-settable context */
+  MDBX_cursor **mt_cursors;
 
   union {
     struct {
@@ -953,7 +954,6 @@ struct MDBX_txn {
     } to;
     struct {
       /* In write txns, array of cursors for each DB */
-      MDBX_cursor **cursors;
       pgno_t *reclaimed_pglist; /* Reclaimed GC pages */
       txnid_t last_reclaimed;   /* ID of last used record */
 #if MDBX_ENABLE_REFUND
