@@ -59,8 +59,8 @@ TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
 
-.PHONY: all help options lib tools clean install uninstall check_buildflags_tag
-.PHONY: install-strip install-no-strip strip libmdbx mdbx show-options
+.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag
+.PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared
 
 ifeq ("$(origin V)", "command line")
   MDBX_BUILD_VERBOSE := $(V)
@@ -85,7 +85,7 @@ help:
 	@echo "  make all                 - build libraries and tools"
 	@echo "  make help                - print this help"
 	@echo "  make options             - list build options"
-	@echo "  make lib                 - build libraries"
+	@echo "  make lib                 - build libraries, also lib-static and lib-shared"
 	@echo "  make tools               - built tools"
 	@echo "  make clean               "
 	@echo "  make install             "
@@ -172,7 +172,7 @@ else
 endif
 #< dist-cutoff-end
 
-lib libmdbx mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
+lib libs libmdbx mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
 
 tools: $(TOOLS)
 
@@ -196,11 +196,11 @@ check_buildflags_tag:
 
 buildflags.tag: check_buildflags_tag
 
-libmdbx.a: mdbx-static.o mdbx++-static.o
+lib-static libmdbx.a: mdbx-static.o mdbx++-static.o
 	@echo '  AR $@'
 	$(QUIET)$(AR) rcs $@ $? $(HUSH)
 
-libmdbx.$(SO_SUFFIX): mdbx-dylib.o mdbx++-dylib.o
+lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o mdbx++-dylib.o
 	@echo '  LD $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIBS) -o $@
 
