@@ -3733,10 +3733,10 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode);
 
 __hot static struct page_result __must_check_result
 mdbx_page_get_ex(MDBX_cursor *const mc, const pgno_t pgno, txnid_t front);
-static __inline int __must_check_result mdbx_page_get(MDBX_cursor *mc,
-                                                      pgno_t pgno,
-                                                      MDBX_page **mp,
-                                                      txnid_t front) {
+static __always_inline int __must_check_result mdbx_page_get(MDBX_cursor *mc,
+                                                             pgno_t pgno,
+                                                             MDBX_page **mp,
+                                                             txnid_t front) {
 
   struct page_result ret = mdbx_page_get_ex(mc, pgno, front);
   *mp = ret.page;
@@ -5791,7 +5791,8 @@ static txnid_t mdbx_find_oldest(const MDBX_txn *txn) {
   }
 
   if (oldest != last_oldest) {
-    mdbx_notice("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest, oldest);
+    mdbx_verbose("update oldest %" PRIaTXN " -> %" PRIaTXN, last_oldest,
+                 oldest);
     mdbx_tassert(txn, oldest >= lck->mti_oldest_reader.weak);
     atomic_store64(&lck->mti_oldest_reader, oldest, mo_Relaxed);
   }
@@ -10161,9 +10162,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     /* Update parent's DBs array */
     memcpy(parent->mt_dbs, txn->mt_dbs, txn->mt_numdbs * sizeof(MDBX_db));
     parent->mt_numdbs = txn->mt_numdbs;
-    parent->mt_dbistate[FREE_DBI] = txn->mt_dbistate[FREE_DBI];
-    parent->mt_dbistate[MAIN_DBI] = txn->mt_dbistate[MAIN_DBI];
-    for (unsigned i = CORE_DBS; i < txn->mt_numdbs; i++) {
+    for (unsigned i = 0; i < txn->mt_numdbs; i++) {
       /* preserve parent's status */
       const uint8_t state =
           txn->mt_dbistate[i] |
@@ -10258,6 +10257,14 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   if (unlikely(rc != MDBX_SUCCESS))
     goto fail;
 
+  txn->mt_dbs[FREE_DBI].md_mod_txnid = (txn->mt_dbistate[FREE_DBI] & DBI_DIRTY)
+                                           ? txn->mt_txnid
+                                           : txn->mt_dbs[FREE_DBI].md_mod_txnid;
+
+  txn->mt_dbs[MAIN_DBI].md_mod_txnid = (txn->mt_dbistate[MAIN_DBI] & DBI_DIRTY)
+                                           ? txn->mt_txnid
+                                           : txn->mt_dbs[MAIN_DBI].md_mod_txnid;
+
   ts_2 = latency ? mdbx_osal_monotime() : 0;
   if (mdbx_audit_enabled()) {
     rc = mdbx_audit_ex(txn, MDBX_PNL_SIZE(txn->tw.retired_pages), true);
@@ -10277,7 +10284,6 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   ts_3 = latency ? mdbx_osal_monotime() : 0;
 
   if (likely(rc == MDBX_SUCCESS)) {
-
     const MDBX_meta *head = constmeta_prefer_last(env);
     MDBX_meta meta;
     memcpy(meta.mm_magic_and_version, head->mm_magic_and_version, 8);
@@ -10287,18 +10293,9 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     unaligned_poke_u64(4, meta.mm_pages_retired,
                        unaligned_peek_u64(4, head->mm_pages_retired) +
                            MDBX_PNL_SIZE(txn->tw.retired_pages));
-
     meta.mm_geo = txn->mt_geo;
     meta.mm_dbs[FREE_DBI] = txn->mt_dbs[FREE_DBI];
-    meta.mm_dbs[FREE_DBI].md_mod_txnid =
-        (txn->mt_dbistate[FREE_DBI] & DBI_DIRTY)
-            ? txn->mt_txnid
-            : txn->mt_dbs[FREE_DBI].md_mod_txnid;
     meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
-    meta.mm_dbs[MAIN_DBI].md_mod_txnid =
-        (txn->mt_dbistate[MAIN_DBI] & DBI_DIRTY)
-            ? txn->mt_txnid
-            : txn->mt_dbs[MAIN_DBI].md_mod_txnid;
     meta.mm_canary = txn->mt_canary;
     meta_set_txnid(env, &meta, txn->mt_txnid);
 
@@ -10550,12 +10547,12 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
                  meta->mm_dbs[FREE_DBI].md_entries ||
                  meta->mm_dbs[FREE_DBI].md_leaf_pages ||
                  meta->mm_dbs[FREE_DBI].md_overflow_pages)) {
-      mdbx_warning("meta[%u] has false-empty GC, skip it", meta_number);
+      mdbx_warning("meta[%u] has false-empty %s, skip it", meta_number, "GC");
       return MDBX_CORRUPTED;
     }
   } else if (unlikely(meta->mm_dbs[FREE_DBI].md_root >= meta->mm_geo.next)) {
-    mdbx_warning("meta[%u] has invalid GC-root %" PRIaPGNO ", skip it",
-                 meta_number, meta->mm_dbs[FREE_DBI].md_root);
+    mdbx_warning("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it",
+                 meta_number, "GC", meta->mm_dbs[FREE_DBI].md_root);
     return MDBX_CORRUPTED;
   }
 
@@ -10566,12 +10563,24 @@ static int mdbx_validate_meta(MDBX_env *env, MDBX_meta *const meta,
                  meta->mm_dbs[MAIN_DBI].md_entries ||
                  meta->mm_dbs[MAIN_DBI].md_leaf_pages ||
                  meta->mm_dbs[MAIN_DBI].md_overflow_pages)) {
-      mdbx_warning("meta[%u] has false-empty maindb", meta_number);
+      mdbx_warning("meta[%u] has false-empty %s", meta_number, "MainDB");
       return MDBX_CORRUPTED;
     }
   } else if (unlikely(meta->mm_dbs[MAIN_DBI].md_root >= meta->mm_geo.next)) {
-    mdbx_warning("meta[%u] has invalid maindb-root %" PRIaPGNO ", skip it",
-                 meta_number, meta->mm_dbs[MAIN_DBI].md_root);
+    mdbx_warning("meta[%u] has invalid %s-root %" PRIaPGNO ", skip it",
+                 meta_number, "MainDB", meta->mm_dbs[MAIN_DBI].md_root);
+    return MDBX_CORRUPTED;
+  }
+
+  if (unlikely(meta->mm_dbs[FREE_DBI].md_mod_txnid > txnid)) {
+    mdbx_warning("meta[%u] has wrong md_mod_txnid %" PRIaTXN " for %s, skip it",
+                 meta_number, meta->mm_dbs[FREE_DBI].md_mod_txnid, "GC");
+    return MDBX_CORRUPTED;
+  }
+
+  if (unlikely(meta->mm_dbs[MAIN_DBI].md_mod_txnid > txnid)) {
+    mdbx_warning("meta[%u] has wrong md_mod_txnid %" PRIaTXN " for %s, skip it",
+                 meta_number, meta->mm_dbs[MAIN_DBI].md_mod_txnid, "MainDB");
     return MDBX_CORRUPTED;
   }
 
@@ -11536,14 +11545,22 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     /* apply new params to opened environment */
     mdbx_ensure(env, pagesize == (intptr_t)env->me_psize);
     MDBX_meta meta;
-    const MDBX_meta *head = nullptr;
+    memset(&meta, 0, sizeof(meta));
     const MDBX_geo *current_geo;
-    if (inside_txn) {
-      current_geo = &env->me_txn->mt_geo;
-    } else {
-      head = constmeta_prefer_last(env);
+    if (!inside_txn) {
+      mdbx_assert(env, need_unlock);
+      const MDBX_meta *head = constmeta_prefer_last(env);
       meta = *head;
+      const txnid_t txnid = safe64_txnid_next(constmeta_txnid(env, &meta));
+      if (unlikely(txnid > MAX_TXNID)) {
+        rc = MDBX_TXN_FULL;
+        mdbx_error("txnid overflow, raise %d", rc);
+        goto bailout;
+      }
+      meta_set_txnid(env, &meta, txnid);
       current_geo = &meta.mm_geo;
+    } else {
+      current_geo = &env->me_txn->mt_geo;
     }
 
     MDBX_geo new_geo;
@@ -11614,23 +11631,13 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
                             false);
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
-        mdbx_assert(env, (head == nullptr) == inside_txn);
-        if (head)
-          head = /* base address could be changed */ constmeta_prefer_last(env);
       }
       if (inside_txn) {
         env->me_txn->mt_geo = new_geo;
         env->me_txn->mt_flags |= MDBX_TXN_DIRTY;
       } else {
         meta.mm_geo = new_geo;
-        const txnid_t txnid = safe64_txnid_next(constmeta_txnid(env, head));
-        if (unlikely(txnid > MAX_TXNID)) {
-          rc = MDBX_TXN_FULL;
-          mdbx_error("txnid overflow, raise %d", rc);
-        } else {
-          meta_set_txnid(env, &meta, txnid);
-          rc = mdbx_sync_locked(env, env->me_flags, &meta);
-        }
+        rc = mdbx_sync_locked(env, env->me_flags, &meta);
       }
 
       if (likely(rc == MDBX_SUCCESS)) {
@@ -13717,15 +13724,17 @@ __hot static int mdbx_page_search(MDBX_cursor *mc, const MDBX_val *key,
     pp_txnid = /* mc->mc_db->md_mod_txnid maybe zero in a legacy DB */ pp_txnid
                    ? pp_txnid
                    : mc->mc_txn->mt_txnid;
-    MDBX_txn *scan = mc->mc_txn;
-    do
-      if ((scan->mt_flags & MDBX_TXN_DIRTY) &&
-          (mc->mc_dbi == MAIN_DBI ||
-           (scan->mt_dbistate[mc->mc_dbi] & DBI_DIRTY))) {
-        pp_txnid = scan->mt_front;
-        break;
-      }
-    while (unlikely((scan = scan->mt_parent) != nullptr));
+    if ((mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) == 0) {
+      MDBX_txn *scan = mc->mc_txn;
+      do
+        if ((scan->mt_flags & MDBX_TXN_DIRTY) &&
+            (mc->mc_dbi == MAIN_DBI ||
+             (scan->mt_dbistate[mc->mc_dbi] & DBI_DIRTY))) {
+          pp_txnid = scan->mt_front;
+          break;
+        }
+      while (unlikely((scan = scan->mt_parent) != nullptr));
+    }
     if (unlikely((rc = mdbx_page_get(mc, root, &mc->mc_pg[0], pp_txnid)) != 0))
       return rc;
   }
