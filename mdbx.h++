@@ -5852,7 +5852,7 @@ inline bool cursor::erase(const slice &key, bool whole_multivalue) {
 
 inline bool cursor::erase(const slice &key, const slice &value) {
   move_result data = find_multivalue(key, value, false);
-  return data.done ? erase() : data.done;
+  return data.done && erase();
 }
 
 } // namespace mdbx
