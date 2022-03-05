@@ -732,4 +732,4 @@ syscall and by scanning the data directory.
 
 --------------------------------------------------------------------------------
 
-#### This is a mirror of the origin repository that was moved to [abf.io](https://abf.io/erthink/) because of discriminatory restrictions for Russian Crimea.
+#### This is a mirror of the origin repository that was moved to [gitflic.ru](https://gitflic.ru/project/erthink/libmdbx) because of discriminatory restrictions for Russian Crimea.
