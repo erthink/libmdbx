@@ -17,6 +17,23 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
+## v0.11.6 (underway)
+
+Acknowledgements:
+
+ - [David Bouyssié](https://github.com/david-bouyssie) for [Scala bindings](https://github.com/david-bouyssie/mdbx4s).
+ - [Michelangelo Riccobene](https://github.com/mriccobene) for reporting and testing.
+
+Fixes:
+
+ - [Fixed](https://github.com/erthink/libmdbx/issues/272) cursor reusing for read-only transactions.
+
+Minors:
+
+ - Minor refine C++ API for convenience.
+ - Minor internals refines.
+ - Added `lib-static` and `lib-shared` targets for make.
+
 ## v0.11.5 at 2022-02-23
 
 The stable release with the hotfix/workaround for a flaw of Linux 4.19 (at least) unified page/buffer cache.
