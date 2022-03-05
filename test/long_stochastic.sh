@@ -144,9 +144,9 @@ case ${UNAME} in
     mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
 
     if LC_ALL=C free | grep -q -i available; then
-      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 7) / 1024))
+      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s '[:blank:]' ' ' | cut -d ' ' -f 7) / 1024))
     else
-      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 4) / 1024))
+      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s '[:blank:]' ' ' | cut -d ' ' -f 4) / 1024))
     fi
   ;;
 
