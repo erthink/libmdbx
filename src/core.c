@@ -12922,22 +12922,6 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
         goto bailout;
       }
     }
-#elif defined(__linux__) || defined(__gnu_linux__)
-    /* Temporary workaround for Linux 4.19 (at least) kernel's flaw.
-     * See https://github.com/erthink/libmdbx/issues/269 */
-    if ((flags & MDBX_WRITEMAP) == 0 &&
-        mdbx_linux_kernel_version < 0x05040000) {
-      if (flags & MDBX_ACCEDE)
-        flags |= MDBX_WRITEMAP;
-      else {
-        mdbx_debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
-                       "Linux prior to 5.4 requires MDBX_WRITEMAP because "
-                       "of a flaw of unified page/buffer cache. "
-                       "See https://github.com/erthink/libmdbx/issues/269\n");
-        rc = ENOPROTOOPT;
-        goto bailout;
-      }
-    }
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
   }
 
