@@ -3762,6 +3762,8 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
                                                MDBX_val *const newdata,
                                                pgno_t newpgno, unsigned nflags);
 
+static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
+                            bool report);
 static int __must_check_result mdbx_validate_meta_copy(MDBX_env *env,
                                                        const MDBX_meta *meta,
                                                        MDBX_meta *dest);
@@ -6271,6 +6273,8 @@ static int mdbx_meta_unsteady(MDBX_env *env, const txnid_t last_steady,
     else
       return mdbx_pwrite(fd, &wipe, sizeof(meta->mm_datasync_sign),
                          (uint8_t *)&meta->mm_datasync_sign - env->me_map);
+    if (constmeta_txnid(env, meta) == last_steady)
+      mdbx_assert(env, meta_checktxnid(env, meta, true));
   }
   return MDBX_SUCCESS;
 }
@@ -7548,6 +7552,102 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
   return MDBX_SUCCESS;
 }
 
+/* check against https://github.com/erthink/libmdbx/issues/269 */
+static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
+                            bool report) {
+  const txnid_t meta_txnid = constmeta_txnid(env, meta);
+  const txnid_t freedb_mod_txnid = meta->mm_dbs[FREE_DBI].md_mod_txnid;
+  const txnid_t maindb_mod_txnid = meta->mm_dbs[MAIN_DBI].md_mod_txnid;
+
+  const pgno_t freedb_root_pgno = meta->mm_dbs[FREE_DBI].md_root;
+  const MDBX_page *freedb_root = (env->me_map && freedb_root_pgno != P_INVALID)
+                                     ? pgno2page(env, freedb_root_pgno)
+                                     : nullptr;
+
+  const pgno_t maindb_root_pgno = meta->mm_dbs[MAIN_DBI].md_root;
+  const MDBX_page *maindb_root = (env->me_map && maindb_root_pgno != P_INVALID)
+                                     ? pgno2page(env, maindb_root_pgno)
+                                     : nullptr;
+
+  const uint64_t magic_and_version =
+      unaligned_peek_u64(4, &meta->mm_magic_and_version);
+  bool ok = true;
+  if (unlikely(meta_txnid < freedb_mod_txnid ||
+               (!freedb_mod_txnid && freedb_root &&
+                likely(magic_and_version == MDBX_DATA_MAGIC)))) {
+    if (report)
+      mdbx_warning(
+          "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          "%s",
+          "free", freedb_mod_txnid, meta_txnid,
+          "(workaround for incoherent flaw of unified page/buffer cache)");
+    ok = false;
+  }
+  if (unlikely(meta_txnid < maindb_mod_txnid ||
+               (!maindb_mod_txnid && maindb_root &&
+                likely(magic_and_version == MDBX_DATA_MAGIC)))) {
+    if (report)
+      mdbx_warning(
+          "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          " %s",
+          "main", maindb_mod_txnid, meta_txnid,
+          "(workaround for incoherent flaw of unified page/buffer cache)");
+    ok = false;
+  }
+  if (likely(freedb_root && freedb_mod_txnid)) {
+    const txnid_t root_txnid = freedb_root->mp_txnid;
+    if (unlikely(root_txnid != freedb_mod_txnid)) {
+      if (report)
+        mdbx_warning(
+            "catch invalid root_page_txnid %" PRIaTXN
+            " for %sdb_mod_txnid %" PRIaTXN " %s",
+            root_txnid, "free", maindb_mod_txnid,
+            "(workaround for incoherent flaw of unified page/buffer cache)");
+      ok = false;
+    }
+  }
+  if (likely(maindb_root && maindb_mod_txnid)) {
+    const txnid_t root_txnid = maindb_root->mp_txnid;
+    if (unlikely(root_txnid != maindb_mod_txnid)) {
+      if (report)
+        mdbx_warning(
+            "catch invalid root_page_txnid %" PRIaTXN
+            " for %sdb_mod_txnid %" PRIaTXN " %s",
+            root_txnid, "main", maindb_mod_txnid,
+            "(workaround for incoherent flaw of unified page/buffer cache)");
+      ok = false;
+    }
+  }
+  return ok;
+}
+
+/* check with timeout as the workaround
+ * for https://github.com/erthink/libmdbx/issues/269 */
+static int meta_waittxnid(const MDBX_env *env, const MDBX_meta *meta,
+                          uint64_t *timestamp) {
+  if (likely(meta_checktxnid(env, (const MDBX_meta *)meta, !*timestamp)))
+    return MDBX_SUCCESS;
+
+  if (!*timestamp)
+    *timestamp = mdbx_osal_monotime();
+  else if (unlikely(mdbx_osal_monotime() - *timestamp > 65536 / 10)) {
+    mdbx_error("bailout waiting for valid snapshot %s",
+               "(workaround for incoherent flaw of unified page/buffer cache)");
+    return MDBX_CORRUPTED;
+  }
+
+#if defined(_WIN32) || defined(_WIN64)
+  SwitchToThread();
+#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
+  sched_yield();
+#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
+  pthread_yield();
+#else
+  usleep(42);
+#endif
+  return MDBX_RESULT_TRUE;
+}
+
 /* Common code for mdbx_txn_begin() and mdbx_txn_renew(). */
 static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
   MDBX_env *env = txn->mt_env;
@@ -7623,6 +7723,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
 
     /* Seek & fetch the last meta */
     if (likely(/* not recovery mode */ env->me_stuck_meta < 0)) {
+      uint64_t timestamp = 0;
       while (1) {
         volatile const MDBX_meta *const meta = meta_prefer_last(env);
         mdbx_jitter4testing(false);
@@ -7644,6 +7745,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
           mdbx_assert(env, r->mr_txnid.weak == snap);
           atomic_store32(&env->me_lck->mti_readers_refresh_flag, true,
                          mo_AcquireRelease);
+        } else {
+          /* exclusive mode without lck */
         }
         mdbx_jitter4testing(true);
 
@@ -7664,8 +7767,14 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
                    snap == meta_txnid(env, meta) &&
                    snap >= atomic_load64(&env->me_lck->mti_oldest_reader,
                                          mo_AcquireRelease))) {
+          /* workaround for https://github.com/erthink/libmdbx/issues/269 */
+          rc = meta_waittxnid(env, (const MDBX_meta *)meta, &timestamp);
           mdbx_jitter4testing(false);
-          break;
+          if (likely(rc == MDBX_SUCCESS))
+            break;
+          if (likely(rc == MDBX_RESULT_TRUE))
+            continue;
+          goto bailout;
         }
       }
     } else {
@@ -7745,6 +7854,14 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
 
     mdbx_jitter4testing(false);
     const MDBX_meta *meta = constmeta_prefer_last(env);
+    uint64_t timestamp = 0;
+    while ("workaround for https://github.com/erthink/libmdbx/issues/269") {
+      rc = meta_waittxnid(env, (const MDBX_meta *)meta, &timestamp);
+      if (likely(rc == MDBX_SUCCESS))
+        break;
+      if (unlikely(rc != MDBX_RESULT_TRUE))
+        goto bailout;
+    }
     mdbx_jitter4testing(false);
     txn->mt_canary = meta->mm_canary;
     const txnid_t snap = constmeta_txnid(env, meta);
@@ -10730,6 +10847,7 @@ __cold static MDBX_page *mdbx_meta_model(const MDBX_env *env, MDBX_page *model,
   model_meta->mm_dbs[MAIN_DBI].md_root = P_INVALID;
   meta_set_txnid(env, model_meta, MIN_TXNID + num);
   unaligned_poke_u64(4, model_meta->mm_datasync_sign, meta_sign(model_meta));
+  mdbx_assert(env, meta_checktxnid(env, model_meta, true));
   return (MDBX_page *)((uint8_t *)model + env->me_psize);
 }
 
@@ -10892,6 +11010,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
               goto fail;
             }
             meta_set_txnid(env, pending, txnid);
+            mdbx_assert(env, meta_checktxnid(env, pending, true));
           }
         }
       }
@@ -10924,6 +11043,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     rc = (flags & MDBX_SAFE_NOSYNC) ? MDBX_RESULT_TRUE /* carry non-steady */
                                     : MDBX_RESULT_FALSE /* carry steady */;
   }
+  mdbx_assert(env, meta_checktxnid(env, pending, true));
 
   /* Steady or Weak */
   if (rc == MDBX_RESULT_FALSE /* carry steady */) {
@@ -11032,6 +11152,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       /* LY: 'commit' the meta */
       meta_update_end(env, target, unaligned_peek_u64(4, pending->mm_txnid_b));
       mdbx_jitter4testing(true);
+      mdbx_assert(env, meta_checktxnid(env, target, true));
     } else {
       /* dangerous case (target == head), only mm_datasync_sign could
        * me updated, check assertions once again */
@@ -11081,6 +11202,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
       if (rc != MDBX_SUCCESS)
         goto undo;
     }
+    mdbx_assert(env, meta_checktxnid(env, target, true));
   }
   env->me_lck->mti_meta_sync_txnid.weak =
       (uint32_t)unaligned_peek_u64(4, pending->mm_txnid_a) -
@@ -11094,6 +11216,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                                  pending->mm_geo.upper);
     if (MDBX_IS_ERROR(rc))
       goto fail;
+    mdbx_assert(env, meta_checktxnid(env, target, true));
   }
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
@@ -11552,7 +11675,16 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (!inside_txn) {
       mdbx_assert(env, need_unlock);
       const MDBX_meta *head = constmeta_prefer_last(env);
-      meta = *head;
+
+      uint64_t timestamp = 0;
+      while ("workaround for https://github.com/erthink/libmdbx/issues/269") {
+        meta = *head;
+        rc = meta_waittxnid(env, &meta, &timestamp);
+        if (likely(rc == MDBX_SUCCESS))
+          break;
+        if (unlikely(rc != MDBX_RESULT_TRUE))
+          goto bailout;
+      }
       const txnid_t txnid = safe64_txnid_next(constmeta_txnid(env, &meta));
       if (unlikely(txnid > MAX_TXNID)) {
         rc = MDBX_TXN_FULL;
@@ -12455,7 +12587,9 @@ __cold static int __must_check_result mdbx_override_meta(
   mdbx_meta_model(env, page, target);
   MDBX_meta *const model = page_meta(page);
   meta_set_txnid(env, model, txnid);
+  mdbx_assert(env, meta_checktxnid(env, model, true));
   if (shape) {
+    mdbx_assert(env, meta_checktxnid(env, shape, true));
     model->mm_extra_flags = shape->mm_extra_flags;
     model->mm_validator_id = shape->mm_validator_id;
     model->mm_extra_pagehdr = shape->mm_extra_pagehdr;
@@ -12464,6 +12598,7 @@ __cold static int __must_check_result mdbx_override_meta(
     memcpy(&model->mm_canary, &shape->mm_canary, sizeof(model->mm_canary));
     memcpy(&model->mm_pages_retired, &shape->mm_pages_retired,
            sizeof(model->mm_pages_retired));
+    mdbx_assert(env, meta_checktxnid(env, model, true));
   }
   unaligned_poke_u64(4, model->mm_datasync_sign, meta_sign(model));
   rc = mdbx_validate_meta(env, model, page, target, nullptr);
@@ -17367,6 +17502,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
     if (nkeys == 0) {
       mdbx_cassert(mc, IS_LEAF(mp));
       mdbx_debug("%s", "tree is completely empty");
+      mdbx_cassert(mc, (*mc->mc_dbistate & DBI_DIRTY) != 0);
       mc->mc_db->md_root = P_INVALID;
       mc->mc_db->md_depth = 0;
       mdbx_cassert(mc, mc->mc_db->md_branch_pages == 0 &&
@@ -20172,6 +20308,7 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
 
     dbiflags |= DBI_DIRTY | DBI_CREAT;
     txn->mt_flags |= MDBX_TXN_DIRTY;
+    mdbx_tassert(txn, (txn->mt_dbistate[MAIN_DBI] & DBI_DIRTY) != 0);
   }
 
   /* Got info, register DBI in this txn */
@@ -20459,6 +20596,7 @@ int mdbx_drop(MDBX_txn *txn, MDBX_dbi dbi, bool del) {
     txn->mt_dbs[dbi].md_entries = 0;
     txn->mt_dbs[dbi].md_root = P_INVALID;
     txn->mt_dbs[dbi].md_seq = 0;
+    /* txn->mt_dbs[dbi].md_mod_txnid = txn->mt_txnid; */
     txn->mt_flags |= MDBX_TXN_DIRTY;
   }
 
