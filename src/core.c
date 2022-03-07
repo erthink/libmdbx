@@ -5046,9 +5046,37 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
                                      ctx->iov_bytes);
   }
 
-  for (unsigned i = 0; i < ctx->iov_items; i++)
-    mdbx_dpage_free(env, (MDBX_page *)ctx->iov[i].iov_base,
-                    bytes2pgno(env, ctx->iov[i].iov_len));
+  uint64_t timestamp = 0;
+  for (unsigned i = 0; i < ctx->iov_items; i++) {
+    MDBX_page *wp = (MDBX_page *)ctx->iov[i].iov_base;
+    const MDBX_page *rp = pgno2page(txn->mt_env, wp->mp_pgno);
+    /* check with timeout as the workaround
+     * for https://github.com/erthink/libmdbx/issues/269 */
+    while (unlikely(memcmp(wp, rp, ctx->iov[i].iov_len) != 0)) {
+      if (!timestamp) {
+        timestamp = mdbx_osal_monotime();
+        mdbx_iov_done(txn, ctx);
+        mdbx_warning(
+            "catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
+            "(workaround for incoherent flaw of unified page/buffer cache)");
+      } else if (unlikely(mdbx_osal_monotime() - timestamp > 65536 / 10)) {
+        mdbx_error(
+            "bailout waiting for %" PRIaPGNO " page arrival %s", wp->mp_pgno,
+            "(workaround for incoherent flaw of unified page/buffer cache)");
+        return MDBX_CORRUPTED;
+      }
+#if defined(_WIN32) || defined(_WIN64)
+      SwitchToThread();
+#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
+      sched_yield();
+#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
+      pthread_yield();
+#else
+      usleep(42);
+#endif
+    }
+    mdbx_dpage_free(env, wp, bytes2pgno(env, ctx->iov[i].iov_len));
+  }
 
 #if MDBX_ENABLE_PGOP_STAT
   txn->mt_env->me_lck->mti_pgop_stat.wops.weak += ctx->iov_items;
