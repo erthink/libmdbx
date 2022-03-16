@@ -7606,7 +7606,7 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
     if (report)
       mdbx_warning(
           "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
-          "%s",
+          " %s",
           "free", freedb_mod_txnid, meta_txnid,
           "(workaround for incoherent flaw of unified page/buffer cache)");
     ok = false;
