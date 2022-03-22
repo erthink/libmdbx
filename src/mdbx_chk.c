@@ -1226,7 +1226,7 @@ int main(int argc, char *argv[]) {
   mdbx_setup_debug((verbose < MDBX_LOG_TRACE - 1)
                        ? (MDBX_log_level_t)(verbose + 1)
                        : MDBX_LOG_TRACE,
-                   MDBX_DBG_LEGACY_OVERLAP, logger);
+                   MDBX_DBG_LEGACY_OVERLAP | MDBX_DBG_DONT_UPGRADE, logger);
 
   rc = mdbx_env_create(&env);
   if (rc) {

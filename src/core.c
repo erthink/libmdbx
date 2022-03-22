@@ -12278,7 +12278,8 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
     atomic_store32(&env->me_lck->mti_discarded_tail,
                    bytes2pgno(env, used_aligned2os_bytes), mo_Relaxed);
 
-    if ((env->me_flags & MDBX_RDONLY) == 0 && env->me_stuck_meta < 0) {
+    if ((env->me_flags & MDBX_RDONLY) == 0 && env->me_stuck_meta < 0 &&
+        (mdbx_runtime_flags & MDBX_DBG_DONT_UPGRADE) == 0) {
       for (int n = 0; n < NUM_METAS; ++n) {
         MDBX_meta *const pmeta = METAPAGE(env, n);
         if (unlikely(unaligned_peek_u64(4, &pmeta->mm_magic_and_version) !=
@@ -12618,7 +12619,8 @@ __cold static int __must_check_result mdbx_override_meta(
   mdbx_assert(env, meta_checktxnid(env, model, true));
   if (shape) {
     mdbx_assert(env, meta_checktxnid(env, shape, true));
-    if (env->me_stuck_meta >= 0)
+    if (env->me_stuck_meta >= 0 ||
+        (mdbx_runtime_flags & MDBX_DBG_DONT_UPGRADE) != 0)
       memcpy(&model->mm_magic_and_version, &shape->mm_magic_and_version,
              sizeof(model->mm_magic_and_version));
     model->mm_extra_flags = shape->mm_extra_flags;
@@ -20877,7 +20879,8 @@ __cold int mdbx_setup_debug(int loglevel, int flags, MDBX_debug_func *logger) {
 #if MDBX_DEBUG
         MDBX_DBG_ASSERT | MDBX_DBG_AUDIT | MDBX_DBG_JITTER |
 #endif
-        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP;
+        MDBX_DBG_DUMP | MDBX_DBG_LEGACY_MULTIOPEN | MDBX_DBG_LEGACY_OVERLAP |
+        MDBX_DBG_DONT_UPGRADE;
     mdbx_runtime_flags = (uint8_t)flags;
   }
 

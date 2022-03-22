@@ -864,18 +864,23 @@ enum MDBX_debug_flags_t {
   MDBX_DBG_JITTER = 4,
 
   /** Include or not meta-pages in coredump files.
-   * May affect performance in \ref MDBX_WRITEMAP mode */
+   * \note May affect performance in \ref MDBX_WRITEMAP mode */
   MDBX_DBG_DUMP = 8,
 
   /** Allow multi-opening environment(s) */
   MDBX_DBG_LEGACY_MULTIOPEN = 16,
 
-  /** Allow read and write transactions overlapping for the same thread */
+  /** Allow read and write transactions overlapping for the same thread. */
   MDBX_DBG_LEGACY_OVERLAP = 32,
+
+  /** Don't auto-upgrade format signature.
+   * \note However a new write transactions will use and store
+   * the last signature regardless this flag */
+  MDBX_DBG_DONT_UPGRADE = 64,
 
 #ifdef ENABLE_UBSAN
   MDBX_DBG_MAX = ((unsigned)MDBX_LOG_MAX) << 16 |
-                 63 /* avoid UBSAN false-positive trap by a tests */,
+                 127 /* avoid UBSAN false-positive trap by a tests */,
 #endif /* ENABLE_UBSAN */
 
   /** for mdbx_setup_debug() only: Don't change current settings */
