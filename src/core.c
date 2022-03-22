@@ -12618,6 +12618,9 @@ __cold static int __must_check_result mdbx_override_meta(
   mdbx_assert(env, meta_checktxnid(env, model, true));
   if (shape) {
     mdbx_assert(env, meta_checktxnid(env, shape, true));
+    if (env->me_stuck_meta >= 0)
+      memcpy(&model->mm_magic_and_version, &shape->mm_magic_and_version,
+             sizeof(model->mm_magic_and_version));
     model->mm_extra_flags = shape->mm_extra_flags;
     model->mm_validator_id = shape->mm_validator_id;
     model->mm_extra_pagehdr = shape->mm_extra_pagehdr;
