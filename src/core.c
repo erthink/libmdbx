@@ -12618,9 +12618,13 @@ __cold static int __must_check_result mdbx_override_meta(
   meta_set_txnid(env, model, txnid);
   mdbx_assert(env, meta_checktxnid(env, model, true));
   if (shape) {
-    mdbx_assert(env, meta_checktxnid(env, shape, true));
-    if (env->me_stuck_meta >= 0 ||
-        (mdbx_runtime_flags & MDBX_DBG_DONT_UPGRADE) != 0)
+    if (txnid && unlikely(!meta_checktxnid(env, shape, false))) {
+      mdbx_error("bailout overriding meta-%u since model failed "
+                 "freedb/maindb %s-check for txnid #%" PRIaTXN,
+                 target, "pre", constmeta_txnid(env, shape));
+      return MDBX_PROBLEM;
+    }
+    if (mdbx_runtime_flags & MDBX_DBG_DONT_UPGRADE)
       memcpy(&model->mm_magic_and_version, &shape->mm_magic_and_version,
              sizeof(model->mm_magic_and_version));
     model->mm_extra_flags = shape->mm_extra_flags;
@@ -12631,12 +12635,28 @@ __cold static int __must_check_result mdbx_override_meta(
     memcpy(&model->mm_canary, &shape->mm_canary, sizeof(model->mm_canary));
     memcpy(&model->mm_pages_retired, &shape->mm_pages_retired,
            sizeof(model->mm_pages_retired));
-    mdbx_assert(env, meta_checktxnid(env, model, true));
+    if (txnid) {
+      if ((!model->mm_dbs[FREE_DBI].md_mod_txnid &&
+           model->mm_dbs[FREE_DBI].md_root != P_INVALID) ||
+          (!model->mm_dbs[MAIN_DBI].md_mod_txnid &&
+           model->mm_dbs[MAIN_DBI].md_root != P_INVALID))
+        memcpy(&model->mm_magic_and_version, &shape->mm_magic_and_version,
+               sizeof(model->mm_magic_and_version));
+      if (unlikely(!meta_checktxnid(env, model, false))) {
+        mdbx_error("bailout overriding meta-%u since model failed "
+                   "freedb/maindb %s-check for txnid #%" PRIaTXN,
+                   target, "post", txnid);
+        return MDBX_PROBLEM;
+      }
+    }
   }
   unaligned_poke_u64(4, model->mm_datasync_sign, meta_sign(model));
   rc = mdbx_validate_meta(env, model, page, target, nullptr);
   if (unlikely(MDBX_IS_ERROR(rc)))
     return MDBX_PROBLEM;
+
+  if (shape && memcmp(model, shape, sizeof(MDBX_meta)) == 0)
+    return MDBX_SUCCESS;
 
 #if MDBX_ENABLE_PGOP_STAT
   env->me_lck->mti_pgop_stat.wops.weak += 1;
