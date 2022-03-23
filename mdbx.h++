@@ -2998,6 +2998,8 @@ public:
     MDBX_CXX11_CONSTEXPR reclaiming_options() noexcept {}
     MDBX_CXX11_CONSTEXPR
     reclaiming_options(const reclaiming_options &) noexcept = default;
+    MDBX_CXX14_CONSTEXPR reclaiming_options &
+    operator=(const reclaiming_options &) noexcept = default;
     reclaiming_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -3015,6 +3017,8 @@ public:
     MDBX_CXX11_CONSTEXPR operate_options() noexcept {}
     MDBX_CXX11_CONSTEXPR
     operate_options(const operate_options &) noexcept = default;
+    MDBX_CXX14_CONSTEXPR operate_options &
+    operator=(const operate_options &) noexcept = default;
     operate_options(MDBX_env_flags_t) noexcept;
   };
 
@@ -3043,6 +3047,8 @@ public:
           durability(durability), reclaiming(reclaiming), options(options) {}
     MDBX_CXX11_CONSTEXPR
     operate_parameters(const operate_parameters &) noexcept = default;
+    MDBX_CXX14_CONSTEXPR operate_parameters &
+    operator=(const operate_parameters &) noexcept = default;
     MDBX_env_flags_t
     make_flags(bool accede = true, ///< \copydoc MDBX_ACCEDE
                bool use_subdirectory =
