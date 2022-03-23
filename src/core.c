@@ -12524,14 +12524,19 @@ __cold static int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
     }
   } else {
     if (lck->mti_magic_and_version != MDBX_LOCK_MAGIC) {
-      mdbx_error("%s", "lock region has invalid magic/version");
-      err = ((lck->mti_magic_and_version >> 8) != MDBX_MAGIC)
-                ? MDBX_INVALID
-                : MDBX_VERSION_MISMATCH;
+      const bool invalid = (lck->mti_magic_and_version >> 8) != MDBX_MAGIC;
+      mdbx_error(
+          "lock region has %s",
+          invalid
+              ? "invalid magic"
+              : "incompatible version (only applications with nearly or the "
+                "same versions of libmdbx can share the same database)");
+      err = invalid ? MDBX_INVALID : MDBX_VERSION_MISMATCH;
       goto bailout;
     }
     if (lck->mti_os_and_format != MDBX_LOCK_FORMAT) {
-      mdbx_error("lock region has os/format 0x%" PRIx32 ", expected 0x%" PRIx32,
+      mdbx_error("lock region has os/format signature 0x%" PRIx32
+                 ", expected 0x%" PRIx32,
                  lck->mti_os_and_format, MDBX_LOCK_FORMAT);
       err = MDBX_VERSION_MISMATCH;
       goto bailout;
