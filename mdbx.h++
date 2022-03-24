@@ -5667,7 +5667,7 @@ inline cursor::move_result cursor::move(move_operation operation,
 inline cursor::move_result cursor::find_multivalue(const slice &key,
                                                    const slice &value,
                                                    bool throw_notfound) {
-  return move(key_exact, key, value, throw_notfound);
+  return move(multi_find_pair, key, value, throw_notfound);
 }
 
 inline cursor::move_result cursor::lower_bound_multivalue(const slice &key,
