@@ -17,7 +17,11 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.6 (underway)
+## v0.11.6 (scheduled for 2022-03-24)
+
+The stable release with the complete workaround for an incoherence flaw of Linux unified page/buffer cache.
+Nonetheless the cause for this trouble may be an issue of Intel CPU cache/MESI.
+See [issue#269](https://github.com/erthink/libmdbx/issues/269) for more information.
 
 Acknowledgements:
 
@@ -26,17 +30,22 @@ Acknowledgements:
 
 Fixes:
 
+ - [Added complete workaround](https://github.com/erthink/libmdbx/issues/269) for an incoherence flaw of Linux unified page/buffer cache.
  - [Fixed](https://github.com/erthink/libmdbx/issues/272) cursor reusing for read-only transactions.
+ - Fixed copy&paste typo inside `mdbx::cursor::find_multivalue()`.
 
 Minors:
 
  - Minor refine C++ API for convenience.
  - Minor internals refines.
  - Added `lib-static` and `lib-shared` targets for make.
+ - Added minor workaround for AppleClang 13.3 bug.
+ - Clarified error messages of a signature/version mismatch.
+
 
 ## v0.11.5 at 2022-02-23
 
-The stable release with the hotfix/workaround for a flaw of Linux 4.19 (at least) unified page/buffer cache.
+The release with the temporary hotfix for a flaw of Linux unified page/buffer cache.
 See [issue#269](https://github.com/erthink/libmdbx/issues/269) for more information.
 
 Acknowledgements:
@@ -47,7 +56,7 @@ Acknowledgements:
 
 Fixes:
 
- - [Added workaround](https://github.com/erthink/libmdbx/issues/269) for a flaw of Linux 4.19 (at least) unified page/buffer cache.
+ - [Added hotfix](https://github.com/erthink/libmdbx/issues/269) for a flaw of Linux unified page/buffer cache.
  - [Fixed/Reworked](https://github.com/erthink/libmdbx/pull/270) move-assignment operators for "managed" classes of C++ API.
  - Fixed potential `SIGSEGV` while open DB with overrided non-default page size.
  - [Made](https://github.com/erthink/libmdbx/issues/267) `mdbx_env_open()` idempotence in failure cases.
