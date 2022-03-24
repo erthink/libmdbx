@@ -7623,6 +7623,8 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
     ok = false;
   }
   if (likely(freedb_root && freedb_mod_txnid)) {
+    VALGRIND_MAKE_MEM_DEFINED(freedb_root, sizeof(freedb_root->mp_txnid));
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(freedb_root, sizeof(freedb_root->mp_txnid));
     const txnid_t root_txnid = freedb_root->mp_txnid;
     if (unlikely(root_txnid != freedb_mod_txnid)) {
       if (report)
@@ -7635,6 +7637,8 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
     }
   }
   if (likely(maindb_root && maindb_mod_txnid)) {
+    VALGRIND_MAKE_MEM_DEFINED(maindb_root, sizeof(maindb_root->mp_txnid));
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(maindb_root, sizeof(maindb_root->mp_txnid));
     const txnid_t root_txnid = maindb_root->mp_txnid;
     if (unlikely(root_txnid != maindb_mod_txnid)) {
       if (report)
