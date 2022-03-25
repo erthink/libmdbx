@@ -7934,6 +7934,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
 
   /* Setup db info */
   mdbx_compiler_barrier();
+  memset(txn->mt_cursors, 0, sizeof(MDBX_cursor *) * txn->mt_numdbs);
   for (unsigned i = CORE_DBS; i < txn->mt_numdbs; i++) {
     const unsigned db_flags = env->me_dbflags[i];
     txn->mt_dbs[i].md_flags = db_flags & DB_PERSISTENT_FLAGS;
@@ -8140,7 +8141,6 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
   txn->mt_dbxs = env->me_dbxs; /* static */
   txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
   txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
-  memset(txn->mt_cursors, 0, sizeof(MDBX_cursor *) * env->me_numdbs);
   txn->mt_dbistate = (uint8_t *)txn + size - env->me_maxdbs;
   txn->mt_flags = flags;
   txn->mt_env = env;
