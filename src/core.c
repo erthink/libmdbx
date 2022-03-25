@@ -7281,6 +7281,10 @@ static int mdbx_cursor_shadow(MDBX_txn *parent, MDBX_txn *nested) {
         bk = mdbx_malloc(size);
         if (unlikely(!bk))
           return MDBX_ENOMEM;
+#if MDBX_DEBUG
+        memset(bk, 0xCD, size);
+        VALGRIND_MAKE_MEM_UNDEFINED(bk, size);
+#endif /* MDBX_DEBUG */
         *bk = *mc;
         mc->mc_backup = bk;
         /* Kill pointers into src to reduce abuse: The
@@ -8137,6 +8141,10 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     mdbx_debug("calloc: %s", "failed");
     return MDBX_ENOMEM;
   }
+#if MDBX_DEBUG
+  memset(txn, 0xCD, size);
+  VALGRIND_MAKE_MEM_UNDEFINED(txn, size);
+#endif /* MDBX_DEBUG */
   memset(txn, 0, tsize);
   txn->mt_dbxs = env->me_dbxs; /* static */
   txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
