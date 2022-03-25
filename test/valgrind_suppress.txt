@@ -36,13 +36,13 @@
    write-page-check-bcmp
    Memcheck:Cond
    fun:bcmp
-   fun:mdbx_iov_write
+   fun:mdbx_iov_write*
 }
 {
    write-page-check-memcmp
    Memcheck:Cond
    fun:memcmp*
-   fun:mdbx_iov_write
+   fun:mdbx_iov_write*
 }
 
 # single-page flush by pwrite()
