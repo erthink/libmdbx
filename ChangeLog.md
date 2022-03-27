@@ -17,6 +17,17 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
+## v0.11.7 (underway)
+
+Fixes:
+
+ - Fixed a race between starting a transaction and creating a DBI descriptor that could lead to SIGSEGV in the cursor tracking code.
+
+Minors:
+
+ - Added the `tools-static` make target to build statically linked MDBX tools.
+
+
 ## v0.11.6 (scheduled for 2022-03-24)
 
 The stable release with the complete workaround for an incoherence flaw of Linux unified page/buffer cache.
