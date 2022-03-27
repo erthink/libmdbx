@@ -59,7 +59,7 @@ TOOLS      := mdbx_stat mdbx_copy mdbx_dump mdbx_load mdbx_chk mdbx_drop
 MANPAGES   := mdbx_stat.1 mdbx_copy.1 mdbx_dump.1 mdbx_load.1 mdbx_chk.1 mdbx_drop.1
 TIP        := // TIP:
 
-.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag
+.PHONY: all help options lib libs tools clean install uninstall check_buildflags_tag tools-static
 .PHONY: install-strip install-no-strip strip libmdbx mdbx show-options lib-static lib-shared
 
 ifeq ("$(origin V)", "command line")
@@ -86,7 +86,8 @@ help:
 	@echo "  make help                - print this help"
 	@echo "  make options             - list build options"
 	@echo "  make lib                 - build libraries, also lib-static and lib-shared"
-	@echo "  make tools               - built tools"
+	@echo "  make tools               - build the tools"
+	@echo "  make tools-static        - build the tools with statically linking with system libraries and compiler runtime"
 	@echo "  make clean               "
 	@echo "  make install             "
 	@echo "  make uninstall           "
@@ -175,6 +176,7 @@ endif
 lib libs libmdbx mdbx: libmdbx.a libmdbx.$(SO_SUFFIX)
 
 tools: $(TOOLS)
+tools-static: $(addsuffix .static,$(TOOLS)) $(addsuffix .static-lto,$(TOOLS))
 
 strip: all
 	@echo '  STRIP libmdbx.$(SO_SUFFIX) $(TOOLS)'
@@ -184,7 +186,8 @@ clean:
 	@echo '  REMOVE ...'
 	$(QUIET)rm -rf $(TOOLS) mdbx_test @* *.[ao] *.[ls]o *.$(SO_SUFFIX) *.dSYM *~ tmp.db/* \
 		*.gcov *.log *.err src/*.o test/*.o mdbx_example dist \
-		config.h src/config.h src/version.c *.tar* buildflags.tag
+		config.h src/config.h src/version.c *.tar* buildflags.tag \
+		mdbx_*.static mdbx_*.static-lto
 
 MDBX_BUILD_FLAGS =$(strip $(MDBX_BUILD_OPTIONS) $(CXXSTD) $(CFLAGS) $(LDFLAGS) $(LIBS))
 check_buildflags_tag:
@@ -236,9 +239,18 @@ mdbx++-static.o: config.h mdbx.c++ mdbx.h mdbx.h++ $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $@'
 	$(QUIET)$(CXX) $(CXXFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c mdbx.c++ -o $@
 
-mdbx_%:	mdbx_%.c libmdbx.a
+mdbx_%:	mdbx_%.c mdbx-static.o
 	@echo '  CC+LD $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
+
+mdbx_%.static: mdbx_%.c mdbx-static.o
+	@echo '  CC+LD $@'
+	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) -static -Wl,--strip-all -o $@
+
+mdbx_%.static-lto: mdbx_%.c config.h mdbx.c mdbx.h
+	@echo '  CC+LD $@'
+	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=__attribute__((__visibility__("hidden")))' '-DMDBX_CONFIG_H="config.h"' \
+		$< mdbx.c $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
 
 #> dist-cutoff-begin
 else
@@ -389,6 +401,15 @@ $(foreach file,$(TEST_SRC),$(eval $(call test-rule,$(file))))
 mdbx_%:	src/mdbx_%.c libmdbx.a
 	@echo '  CC+LD $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -o $@
+
+mdbx_%.static:	src/mdbx_%.c mdbx-static.o
+	@echo '  CC+LD $@'
+	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' $^ $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
+
+mdbx_%.static-lto: src/mdbx_%.c src/config.h src/version.c src/alloy.c $(ALLOY_DEPS)
+	@echo '  CC+LD $@'
+	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=__attribute__((__visibility__("hidden")))' '-DMDBX_CONFIG_H="config.h"' \
+		$< src/alloy.c $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
 	@echo '  LD $@'
