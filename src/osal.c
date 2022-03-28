@@ -1619,7 +1619,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
    *  - extend read-only mapping;
    * Therefore we should unmap/map entire section. */
   if ((flags & MDBX_MRESIZE_MAY_UNMAP) == 0)
-    return MDBX_RESULT_TRUE;
+    return MDBX_EPERM;
 
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
@@ -1729,7 +1729,7 @@ retry_mapview:;
     if (map->address && (size != map->current || limit != map->limit)) {
       /* try remap with previously size and limit,
        * but will return MDBX_UNABLE_EXTEND_MAPSIZE on success */
-      rc = (limit > map->limit) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_RESULT_TRUE;
+      rc = (limit > map->limit) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_EPERM;
       size = map->current;
       ReservedSize = limit = map->limit;
       goto retry_file_and_section;
@@ -1753,8 +1753,7 @@ retry_mapview:;
   if (flags & MDBX_RDONLY) {
     map->current = (map->filesize > limit) ? limit : (size_t)map->filesize;
     if (map->current != size)
-      rc =
-          (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_RESULT_TRUE;
+      rc = (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_EPERM;
   } else {
     if (map->filesize != size) {
       rc = mdbx_ftruncate(map->fd, size);

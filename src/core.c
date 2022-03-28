@@ -6234,7 +6234,7 @@ bailout:
     }
 #endif /* MDBX_USE_VALGRIND */
   } else {
-    if (rc != MDBX_UNABLE_EXTEND_MAPSIZE && rc != MDBX_RESULT_TRUE) {
+    if (rc != MDBX_UNABLE_EXTEND_MAPSIZE && rc != MDBX_EPERM) {
       mdbx_error("failed resize datafile/mapping: "
                  "present %" PRIuPTR " -> %" PRIuPTR ", "
                  "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
@@ -8716,7 +8716,7 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
         /* undo resize performed by child txn */
         rc = mdbx_mapresize_implicit(env, parent->mt_next_pgno,
                                      parent->mt_geo.now, parent->mt_geo.upper);
-        if (rc == MDBX_RESULT_TRUE) {
+        if (rc == MDBX_EPERM) {
           /* unable undo resize (it is regular for Windows),
            * therefore promote size changes from child to the parent txn */
           mdbx_warning("unable undo resize performed by child txn, promote to "
@@ -11256,7 +11256,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
                  pending->mm_geo.now, shrink);
     rc = mdbx_mapresize_implicit(env, pending->mm_geo.next, pending->mm_geo.now,
                                  pending->mm_geo.upper);
-    if (MDBX_IS_ERROR(rc))
+    if (rc != MDBX_SUCCESS && rc != MDBX_EPERM)
       goto fail;
     mdbx_assert(env, meta_checktxnid(env, target, true));
   }

@@ -2880,10 +2880,15 @@ LIBMDBX_API int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *fd);
  *          some possible errors are:
  * \retval MDBX_EINVAL    An invalid parameter was specified,
  *                        or the environment has an active write transaction.
- * \retval MDBX_EPERM     Specific for Windows: Shrinking was disabled before
- *                        and now it wanna be enabled, but there are reading
- *                        threads that don't use the additional `SRWL` (that
- *                        is required to avoid Windows issues).
+ * \retval MDBX_EPERM     Two specific cases for Windows:
+ *                        1) Shrinking was disabled before via geometry settings
+ *                        and now it enabled, but there are reading threads that
+ *                        don't use the additional `SRWL` (which is required to
+ *                        avoid Windows issues).
+ *                        2) Temporary close memory mapped is required to change
+ *                        geometry, but there read transaction(s) is running
+ *                        and no corresponding thread(s) could be suspended
+ *                        since the \ref MDBX_NOTLS mode is used.
  * \retval MDBX_EACCESS   The environment opened in read-only.
  * \retval MDBX_MAP_FULL  Specified size smaller than the space already
  *                        consumed by the environment.
