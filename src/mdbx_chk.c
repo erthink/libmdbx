@@ -138,7 +138,8 @@ static void va_log(MDBX_log_level_t level, const char *msg, va_list args) {
     out = stderr;
   }
 
-  if (!quiet && verbose + 1 >= (unsigned)level) {
+  if (!quiet && verbose + 1 >= (unsigned)level &&
+      (unsigned)level < ARRAY_LENGTH(prefixes)) {
     fflush(nullptr);
     fputs(prefixes[level], out);
     vfprintf(out, msg, args);
