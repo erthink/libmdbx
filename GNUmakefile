@@ -301,10 +301,10 @@ reformat:
 MAN_SRCDIR := src/man1/
 ALLOY_DEPS := $(shell git ls-files src/)
 git_DIR := $(shell if [ -d .git ]; then echo .git; elif [ -s .git -a -f .git ]; then grep '^gitdir: ' .git | cut -d ':' -f 2; else echo git_directory_is_absent; fi)
-MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags 2>&- | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
+MDBX_GIT_VERSION = $(shell set -o pipefail; git describe --tags '--match=v[0-9]*' 2>&- | sed -n 's|^v*\([0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}\)\(.*\)|\1|p' || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_REVISION = $(shell set -o pipefail; git rev-list `git describe --tags --abbrev=0`..HEAD --count 2>&- || echo 'Please fetch tags and/or use non-obsolete git version')
 MDBX_GIT_TIMESTAMP = $(shell git show --no-patch --format=%cI HEAD 2>&- || echo 'Please install latest get version')
-MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
+MDBX_GIT_DESCRIBE = $(shell git describe --tags --long --dirty=-dirty '--match=v[0-9]*' 2>&- || echo 'Please fetch tags and/or install non-obsolete git version')
 MDBX_VERSION_SUFFIX = $(shell set -o pipefail; echo -n '$(MDBX_GIT_DESCRIBE)' | tr -c -s '[a-zA-Z0-9]' _)
 MDBX_BUILD_SOURCERY = $(shell set -o pipefail; $(MAKE) IOARENA=false CXXSTD= -s src/version.c >/dev/null && (openssl dgst -r -sha256 src/version.c || sha256sum src/version.c || shasum -a 256 src/version.c) 2>/dev/null | cut -d ' ' -f 1 || (echo 'Please install openssl or sha256sum or shasum' >&2 && echo sha256sum_is_no_available))_$(MDBX_VERSION_SUFFIX)
 MDBX_DIST_DIR = libmdbx-$(MDBX_VERSION_SUFFIX)
