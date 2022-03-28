@@ -239,6 +239,8 @@ static void MDBX_PRINTF_ARGS(4, 5)
 
     if (!p) {
       p = mdbx_calloc(1, sizeof(*p));
+      if (unlikely(!p))
+        return;
       p->caption = msg;
       p->pr_next = problems_list;
       problems_list = p;
@@ -616,6 +618,8 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   }
 
   name = mdbx_malloc(key->iov_len + 1);
+  if (unlikely(!name))
+    return MDBX_ENOMEM;
   memcpy(name, key->iov_base, key->iov_len);
   name[key->iov_len] = '\0';
   userdb_count++;
