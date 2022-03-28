@@ -115,7 +115,8 @@ bool testcase_jitter::run() {
             db_guard.get(), -1, -1,
             coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
         if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-            err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+            err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE &&
+            err != MDBX_RESULT_TRUE)
           failure_perror("mdbx_env_set_geometry-1", err);
       }
     }
@@ -126,7 +127,8 @@ bool testcase_jitter::run() {
           db_guard.get(), -1, -1,
           !coin4size ? upper_limit * 2 / 3 : upper_limit * 3 / 2, -1, -1, -1);
       if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE &&
+          err != MDBX_RESULT_TRUE)
         failure_perror("mdbx_env_set_geometry-2", err);
     }
 
@@ -142,7 +144,8 @@ bool testcase_jitter::run() {
       err = mdbx_env_set_geometry(db_guard.get(), -1, -1, upper_limit, -1, -1,
                                   -1);
       if (err != MDBX_SUCCESS && err != MDBX_UNABLE_EXTEND_MAPSIZE &&
-          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE)
+          err != MDBX_MAP_FULL && err != MDBX_TOO_LARGE &&
+          err != MDBX_RESULT_TRUE)
         failure_perror("mdbx_env_set_geometry-3", err);
     }
 
