@@ -75,13 +75,13 @@ macro(fetch_version name source_root_directory parent_scope)
   set(${name}_GIT_REVISION 0)
   set(${name}_GIT_VERSION "")
   if(GIT AND EXISTS "${source_root_directory}/.git")
-    execute_process(COMMAND ${GIT} describe --tags --long --dirty=-dirty
+    execute_process(COMMAND ${GIT} describe --tags --long --dirty=-dirty "--match=v[0-9]*"
       OUTPUT_VARIABLE ${name}_GIT_DESCRIBE
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_DESCRIBE" STREQUAL "")
-      message(FATAL_ERROR "Please fetch tags and/or install latest version of git ('describe --tags --long --dirty' failed)")
+      message(FATAL_ERROR "Please fetch tags and/or install latest version of git ('describe --tags --long --dirty --match=v[0-9]*' failed)")
     endif()
 
     execute_process(COMMAND ${GIT} show --no-patch --format=%cI HEAD
