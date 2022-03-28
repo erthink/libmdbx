@@ -88,6 +88,11 @@
 #pragma warning(disable : 5045) /* Compiler will insert Spectre mitigation...  \
                                  */
 #endif
+#if _MSC_VER > 1914
+#pragma warning(                                                               \
+    disable : 5105) /* winbase.h(9531): warning C5105: macro expansion         \
+                       producing 'defined' has undefined behavior */
+#endif
 #pragma warning(disable : 4710) /* 'xyz': function not inlined */
 #pragma warning(disable : 4711) /* function 'xyz' selected for automatic       \
                                    inline expansion */
