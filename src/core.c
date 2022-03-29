@@ -8725,6 +8725,7 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
                        parent->mt_geo.upper);
           parent->mt_geo.now = txn->mt_geo.now;
           parent->mt_geo.upper = txn->mt_geo.upper;
+          parent->mt_flags |= MDBX_TXN_DIRTY;
           rc = MDBX_SUCCESS;
         } else if (unlikely(rc != MDBX_SUCCESS)) {
           mdbx_error("error %d while undo resize performed by child txn, fail "
