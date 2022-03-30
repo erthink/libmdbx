@@ -19,13 +19,24 @@ ChangeLog
 
 ## v0.11.7 (underway)
 
+New:
+
+ - Added the `tools-static` make target to build statically linked MDBX tools.
+ - Support for Microsoft Visual Studio 2022.
+ - Support build by MinGW' make from command line without CMake.
+
 Fixes:
 
- - Fixed a race between starting a transaction and creating a DBI descriptor that could lead to SIGSEGV in the cursor tracking code.
+ - Fixed a race between starting a transaction and creating a DBI descriptor that could lead to `SIGSEGV` in the cursor tracking code.
+ - Clarified description of `MDBX_EPERM` error returned from `mdbx_env_set_geometry()`.
+ - Fixed non-promoting the parent transaction to be dirty in case the undo of the geometry update failed during abortion of a nested transaction.
 
 Minors:
 
- - Added the `tools-static` make target to build statically linked MDBX tools.
+ - Resolve minor MSVC warnings: avoid `/INCREMENTAL[:YES]` with '/LTCG', `/W4` with `/W3`, the `C5105` warning.
+ - Switched to using `MDBX_EPERM` instead of `MDBX_RESULT_TRUE' to indicate that the geometry cannot be updated.
+ - Added `NULL` checking during memory allocation inside `mdbx_chk`.
+ - Resolved all warnings from MinGW while used without CMake.
 
 
 ## v0.11.6 (scheduled for 2022-03-24)
