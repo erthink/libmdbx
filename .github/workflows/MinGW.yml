@@ -32,6 +32,10 @@ jobs:
     - name: update mingw64
       # wanna version >= 10.2
       run: choco upgrade mingw -y --no-progress && refreshenv
+    - name: build-make
+      shell: bash
+      run: |
+        CC=gcc CXX=g++ make MDBX_BUILD_OPTIONS=-DMDBX_DEBUG=1 all build-test tools-static
     - name: configure-dll
       shell: bash
       run: |
@@ -56,7 +60,7 @@ jobs:
       shell: bash
       run: |
         cd build-static && cmake --build .
-    - name: test-static
+    - name: run-test
       shell: bash
       run: |
         export "PATH=/c/programdata/chocolatey/lib/mingw/tools/install/mingw64/bin:$PATH" && \
