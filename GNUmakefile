@@ -37,9 +37,8 @@ CXXSTD  ?= $(eval CXXSTD := $$(shell PROBE=$$$$([ -f mdbx.c++ ] && echo mdbx.c++
 CXXFLAGS = $(strip $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS)))
 
 # TIP: Try append '--no-as-needed,-lrt' for ability to built with modern glibc, but then use with the old.
-LIBS    ?= $(strip -lm $(shell uname | grep -qi SunOS && echo "-lkstat") $(shell uname | grep -qi -e Darwin -e OpenBSD || echo "-lrt") $(shell uname | grep -qi Windows && echo "-lntdll"))
-
-LDFLAGS ?= $(strip $(shell $(LD) --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1')$(shell $(LD) --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip'))
+LIBS    ?= $(shell $(uname2libs))
+LDFLAGS ?= $(shell $(uname2ldflags))
 EXE_LDFLAGS ?= -pthread
 
 ################################################################################
@@ -50,6 +49,33 @@ define uname2sosuffix
     Darwin*|Mach*) echo dylib;;
     CYGWIN*|MINGW*|MSYS*|Windows*) echo dll;;
     *) echo so;;
+  esac
+endef
+define uname2ldflags
+  case "$(UNAME)" in
+    CYGWIN*|MINGW*|MSYS*|Windows*)
+      echo '-Wl,--gc-sections,-O1'
+      ;;
+    *)
+      "$(LD)" --help 2>/dev/null | grep -q -- --gc-sections && echo '-Wl,--gc-sections,-z,relro,-O1'
+      "$(LD)" --help 2>/dev/null | grep -q -- -dead_strip && echo '-Wl,-dead_strip'
+      ;;
+  esac
+endef
+define uname2libs
+  case "$(UNAME)" in
+    CYGWIN*|MINGW*|MSYS*|Windows*)
+      echo '-lm -lntdll -lwinmm'
+      ;;
+    *SunOS*|*Solaris*)
+      echo '-lm -lkstat -lrt'
+      ;;
+    *Darwin*|OpenBSD*)
+      echo '-lm'
+      ;;
+    *)
+      echo '-lm -lrt'
+      ;;
   esac
 endef
 SO_SUFFIX  := $(shell $(uname2sosuffix))
@@ -249,7 +275,7 @@ mdbx_%.static: mdbx_%.c mdbx-static.o
 
 mdbx_%.static-lto: mdbx_%.c config.h mdbx.c mdbx.h
 	@echo '  CC+LD $@'
-	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=__attribute__((__visibility__("hidden")))' '-DMDBX_CONFIG_H="config.h"' \
+	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=' '-DMDBX_CONFIG_H="config.h"' \
 		$< mdbx.c $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
 
 #> dist-cutoff-begin
@@ -408,7 +434,7 @@ mdbx_%.static:	src/mdbx_%.c mdbx-static.o
 
 mdbx_%.static-lto: src/mdbx_%.c src/config.h src/version.c src/alloy.c $(ALLOY_DEPS)
 	@echo '  CC+LD $@'
-	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=__attribute__((__visibility__("hidden")))' '-DMDBX_CONFIG_H="config.h"' \
+	$(QUIET)$(CC) $(CFLAGS) -Os -flto $(MDBX_BUILD_OPTIONS) '-DLIBMDBX_API=' '-DMDBX_CONFIG_H="config.h"' \
 		$< src/alloy.c $(EXE_LDFLAGS) $(LIBS) -static -Wl,--strip-all -o $@
 
 mdbx_test: $(TEST_OBJ) libmdbx.$(SO_SUFFIX)
