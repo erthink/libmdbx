@@ -465,7 +465,7 @@ typedef mode_t mdbx_mode_t;
 #else
 #define MDBX_PRINTF_ARGS(format_index, first_arg)                              \
   __attribute__((__format__(__printf__, format_index, first_arg)))
-#endif /* __MINGW_PRINTF_FORMAT */
+#endif /* MinGW */
 #else
 #define MDBX_PRINTF_ARGS(format_index, first_arg)
 #endif

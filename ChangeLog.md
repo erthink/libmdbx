@@ -33,7 +33,7 @@ Fixes:
 
 Minors:
 
- - Resolve minor MSVC warnings: avoid `/INCREMENTAL[:YES]` with '/LTCG', `/W4` with `/W3`, the `C5105` warning.
+ - Resolve minor MSVC warnings: avoid `/INCREMENTAL[:YES]` with `/LTCG`, `/W4` with `/W3`, the `C5105` warning.
  - Switched to using `MDBX_EPERM` instead of `MDBX_RESULT_TRUE' to indicate that the geometry cannot be updated.
  - Added `NULL` checking during memory allocation inside `mdbx_chk`.
  - Resolved all warnings from MinGW while used without CMake.
