@@ -78,6 +78,12 @@ time from_ms(uint64_t ms) {
   return result;
 }
 
+#if __GNUC_PREREQ(8, 0) &&                                                     \
+    (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif /* GCC/MINGW */
+
 time now_realtime() {
 #if defined(_WIN32) || defined(_WIN64) || defined(_WINDOWS)
   static void(WINAPI * query_time)(LPFILETIME);
@@ -132,5 +138,10 @@ time now_monotonic() {
   return from_timespec(ts);
 #endif
 }
+
+#if __GNUC_PREREQ(8, 0) &&                                                     \
+    (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__))
+#pragma GCC diagnostic pop
+#endif /* GCC/MINGW */
 
 } /* namespace chrono */

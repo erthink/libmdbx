@@ -754,6 +754,11 @@ MDBX_GetTickCount64 mdbx_GetTickCount64;
 MDBX_RegGetValueA mdbx_RegGetValueA;
 #endif /* xMDBX_ALLOY */
 
+#if __GNUC_PREREQ(8, 0)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wcast-function-type"
+#endif /* GCC/MINGW */
+
 static void mdbx_winnt_import(void) {
   const HINSTANCE hNtdll = GetModuleHandleA("ntdll.dll");
 
@@ -804,5 +809,9 @@ static void mdbx_winnt_import(void) {
     mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
 }
+
+#if __GNUC_PREREQ(8, 0)
+#pragma GCC diagnostic pop
+#endif /* GCC/MINGW */
 
 #endif /* Windows LCK-implementation */

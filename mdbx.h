@@ -324,7 +324,8 @@ typedef mode_t mdbx_mode_t;
 #endif /* MDBX_DEPRECATED */
 
 #ifndef __dll_export
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__) ||               \
+    defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)
 #if defined(__GNUC__) || __has_attribute(__dllexport__)
 #define __dll_export __attribute__((__dllexport__))
 #elif defined(_MSC_VER)
@@ -340,7 +341,8 @@ typedef mode_t mdbx_mode_t;
 #endif /* __dll_export */
 
 #ifndef __dll_import
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__) ||               \
+    defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)
 #if defined(__GNUC__) || __has_attribute(__dllimport__)
 #define __dll_import __attribute__((__dllimport__))
 #elif defined(_MSC_VER)
@@ -457,8 +459,13 @@ typedef mode_t mdbx_mode_t;
 
 #ifndef MDBX_PRINTF_ARGS
 #if defined(__GNUC__) || __has_attribute(__format__)
+#if defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)
+#define MDBX_PRINTF_ARGS(format_index, first_arg)                              \
+  __attribute__((__format__(__gnu_printf__, format_index, first_arg)))
+#else
 #define MDBX_PRINTF_ARGS(format_index, first_arg)                              \
   __attribute__((__format__(__printf__, format_index, first_arg)))
+#endif /* __MINGW_PRINTF_FORMAT */
 #else
 #define MDBX_PRINTF_ARGS(format_index, first_arg)
 #endif

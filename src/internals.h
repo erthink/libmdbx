@@ -122,6 +122,11 @@
 #pragma GCC diagnostic ignored "-Wattributes"
 #endif /* GCC < 9 */
 
+#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&    \
+    !defined(__USE_MINGW_ANSI_STDIO)
+#define __USE_MINGW_ANSI_STDIO 1
+#endif /* __USE_MINGW_ANSI_STDIO */
+
 #include "../mdbx.h"
 #include "defs.h"
 

@@ -75,7 +75,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
     if (!hEvent)
       failure_perror("CreateEvent()", GetLastError());
     hEvent = make_inheritable(hEvent);
-    log_trace("osal_setup: event %" PRIuPTR " -> %p", i, hEvent);
+    log_trace("osal_setup: event %u -> %p", i, hEvent);
     events[i] = hEvent;
   }
 

@@ -474,7 +474,7 @@ typedef union bin128 {
 
 #if defined(_WIN32) || defined(_WIN64)
 typedef union MDBX_srwlock {
-  struct {
+  __anonymous_struct_extension__ struct {
     long volatile readerCount;
     long volatile writerCount;
   };

@@ -5463,6 +5463,7 @@ inline size_t txn::put_multiple(map_handle map, const slice &key,
     if (allow_partial)
       break;
     mdbx_txn_break(handle_);
+    MDBX_CXX17_FALLTHROUGH /* fallthrough */;
   default:
     MDBX_CXX20_UNLIKELY error::throw_exception(err);
   }
