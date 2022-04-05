@@ -1247,9 +1247,9 @@ bool env::is_pristine() const {
 bool env::is_empty() const { return get_stat().ms_leaf_pages == 0; }
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
-env &env::copy(const ::std::filesystem::path &destination, bool compactify,
+env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
                bool force_dynamic_size) {
-  const path_to_pchar<::std::filesystem::path> utf8(destination);
+  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(destination);
   error::success_or_throw(
       ::mdbx_env_copy(handle_, utf8,
                       (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
@@ -1299,9 +1299,9 @@ path env::get_path() const {
 }
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
-bool env::remove(const ::std::filesystem::path &pathname,
+bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname,
                  const remove_mode mode) {
-  const path_to_pchar<::std::filesystem::path> utf8(pathname);
+  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(pathname);
   return error::boolean_or_throw(
       ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
 }
@@ -1358,11 +1358,11 @@ __cold void env_managed::setup(unsigned max_maps, unsigned max_readers) {
 }
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
-__cold env_managed::env_managed(const ::std::filesystem::path &pathname,
+__cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
                                 const operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
-  const path_to_pchar<::std::filesystem::path> utf8(pathname);
+  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(pathname);
   error::success_or_throw(
       ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
 
@@ -1371,12 +1371,12 @@ __cold env_managed::env_managed(const ::std::filesystem::path &pathname,
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
-__cold env_managed::env_managed(const ::std::filesystem::path &pathname,
+__cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
                                 const env_managed::create_parameters &cp,
                                 const env::operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
-  const path_to_pchar<::std::filesystem::path> utf8(pathname);
+  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(pathname);
   set_geometry(cp.geometry);
   error::success_or_throw(
       ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),

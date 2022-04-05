@@ -27,6 +27,7 @@ suffix  ?=
 
 INSTALL ?= install
 CC      ?= gcc
+CXX     ?= g++
 CFLAGS_EXTRA ?=
 LD      ?= ld
 MDBX_BUILD_OPTIONS ?=-DNDEBUG=1
@@ -40,6 +41,7 @@ CXXFLAGS = $(strip $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS)))
 LIBS    ?= $(shell $(uname2libs))
 LDFLAGS ?= $(shell $(uname2ldflags))
 EXE_LDFLAGS ?= -pthread
+LIB_STDCXXFS ?= $(eval LIB_STDCXXFS := $$(shell echo 'int main(void) { MDBX_STD_FILESYSTEM_PATH probe; return probe.is_absolute(); }' | cat mdbx.h++ - | sed $$$$'1s/\xef\xbb\xbf//' | $(CXX) -x c++ $(CXXFLAGS) - -Wl,--allow-multiple-definition -lstdc++fs $(LIBS) $(LDFLAGS) $(EXE_LDFLAGS) -o /dev/null 2>probe4lstdfs.err >/dev/null && echo '-Wl,--allow-multiple-definition -lstdc++fs'))$(LIB_STDCXXFS)
 
 ################################################################################
 
@@ -231,7 +233,7 @@ lib-static libmdbx.a: mdbx-static.o mdbx++-static.o
 
 lib-shared libmdbx.$(SO_SUFFIX): mdbx-dylib.o mdbx++-dylib.o
 	@echo '  LD $@'
-	$(QUIET)$(CXX) $(CXXFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIBS) -o $@
+	$(QUIET)$(CXX) $(CXXFLAGS) $^ -pthread -shared $(LDFLAGS) $(LIB_STDCXXFS) $(LIBS) -o $@
 
 #> dist-cutoff-begin
 ifeq ($(wildcard mdbx.c),mdbx.c)

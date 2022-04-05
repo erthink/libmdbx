@@ -72,6 +72,8 @@
 
 #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
 #include <filesystem>
+#elif __has_include(<experimental/filesystem>)
+#include <experimental/filesystem>
 #endif
 
 #include "mdbx.h"
@@ -323,13 +325,19 @@ using filehandle = ::mdbx_filehandle_t;
       __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) &&                            \
      (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) ||                            \
       __IPHONE_OS_VERSION_MIN_REQUIRED >= 130100))
-#define MDBX_STD_FILESYSTEM_PATH
-using path = ::std::filesystem::path;
+#define MDBX_STD_FILESYSTEM_PATH ::std::filesystem::path
+#elif defined(__cpp_lib_experimental_filesystem) &&                            \
+    __cpp_lib_experimental_filesystem >= 201406L
+#define MDBX_STD_FILESYSTEM_PATH ::std::experimental::filesystem::path
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+using path = MDBX_STD_FILESYSTEM_PATH;
 #elif defined(_WIN32) || defined(_WIN64)
 using path = ::std::wstring;
 #else
 using path = ::std::string;
-#endif
+#endif /* mdbx::path */
 
 /// \brief Transfers C++ exceptions thru C callbacks.
 /// \details Implements saving exceptions before returning
@@ -3162,7 +3170,7 @@ public:
   /// \brief Make a copy (backup) of an existing environment to the specified
   /// path.
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  env &copy(const ::std::filesystem::path &destination, bool compactify,
+  env &copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
             bool force_dynamic_size = false);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64)
@@ -3195,7 +3203,7 @@ public:
   /// \brief Removes the environment's files in a proper and multiprocess-safe
   /// way.
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  static bool remove(const ::std::filesystem::path &,
+  static bool remove(const MDBX_STD_FILESYSTEM_PATH &,
                      const remove_mode mode = just_remove);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64)
@@ -3440,7 +3448,7 @@ public:
 
   /// \brief Open existing database.
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  env_managed(const ::std::filesystem::path &, const operate_parameters &,
+  env_managed(const MDBX_STD_FILESYSTEM_PATH &, const operate_parameters &,
               bool accede = true);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64)
@@ -3461,7 +3469,7 @@ public:
 
   /// \brief Create new or open existing database.
 #ifdef MDBX_STD_FILESYSTEM_PATH
-  env_managed(const ::std::filesystem::path &, const create_parameters &,
+  env_managed(const MDBX_STD_FILESYSTEM_PATH &, const create_parameters &,
               const operate_parameters &, bool accede = true);
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64)
