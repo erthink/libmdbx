@@ -45,6 +45,10 @@ set_target_properties(mdbx_test PROPERTIES
   INTERPROCEDURAL_OPTIMIZATION $<BOOL:${INTERPROCEDURAL_OPTIMIZATION}>)
 target_setup_options(mdbx_test)
 
+if(NOT MDBX_BUILD_CXX AND LIBCXX_FILESYSTEM)
+  target_link_libraries(mdbx_test ${LIBCXX_FILESYSTEM})
+endif()
+
 target_link_libraries(mdbx_test ${TOOL_MDBX_LIB} ${LIB_MATH} ${CMAKE_THREAD_LIBS_INIT})
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
   target_link_libraries(mdbx_test winmm.lib)

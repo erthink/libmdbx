@@ -823,9 +823,13 @@ macro(setup_compile_flags)
 endmacro(setup_compile_flags)
 
 if(CMAKE_CXX_COMPILER_LOADED)
-  # determine library for for std::filesystem
+  # determine library for std::filesystem
   set(LIBCXX_FILESYSTEM "")
-  if(CMAKE_COMPILER_IS_CLANG)
+  if(CMAKE_COMPILER_IS_ELBRUSCXX)
+    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.26.0)
+      set(LIBCXX_FILESYSTEM "stdc++fs")
+    endif()
+  elseif(CMAKE_COMPILER_IS_CLANG)
     if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0)
       set(LIBCXX_FILESYSTEM "c++experimental")
     elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
