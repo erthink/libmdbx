@@ -35,3 +35,6 @@ jobs:
     - name: make check
       run: make MDBX_BUILD_OPTIONS="-DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1" --keep-going all && MALLOC_CHECK_=7 MALLOC_PERTURB_=42 make MDBX_BUILD_OPTIONS="-DNDEBUG=1 -DMDBX_FORCE_ASSERTIONS=1" --keep-going check
       shell: bash
+    - name: if_failure
+      if: failure()
+      run: for F in *.err; do echo --- $F; cat $F; done
