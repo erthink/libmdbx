@@ -24,12 +24,16 @@ New:
  - Added the `tools-static` make target to build statically linked MDBX tools.
  - Support for Microsoft Visual Studio 2022.
  - Support build by MinGW' make from command line without CMake.
+ - Added `mdbx::filesystem` C++ API namespace that corresponds to `std::filesystem` or `std::experimental::filesystem`.
 
 Fixes:
 
  - Fixed a race between starting a transaction and creating a DBI descriptor that could lead to `SIGSEGV` in the cursor tracking code.
  - Clarified description of `MDBX_EPERM` error returned from `mdbx_env_set_geometry()`.
  - Fixed non-promoting the parent transaction to be dirty in case the undo of the geometry update failed during abortion of a nested transaction.
+ - Resolved linking issues with `libstdc++fs`/`libc++fs`/`libc++experimental` for C++ `std::filesystem` or `std::experimental::filesystem` for legacy compilers.
+ - Added workaround for GNU Make 3.81 and earlier.
+ - Added workaround for Elbrus/LCC 1.25 compiler bug of class inline `static constexpr` member field.
 
 Minors:
 
