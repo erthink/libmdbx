@@ -325,10 +325,12 @@ using filehandle = ::mdbx_filehandle_t;
       __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) &&                            \
      (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) ||                            \
       __IPHONE_OS_VERSION_MIN_REQUIRED >= 130100))
-#define MDBX_STD_FILESYSTEM_PATH ::std::filesystem::path
+namespace filesystem = ::std::filesystem;
+#define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
 #elif defined(__cpp_lib_experimental_filesystem) &&                            \
     __cpp_lib_experimental_filesystem >= 201406L
-#define MDBX_STD_FILESYSTEM_PATH ::std::experimental::filesystem::path
+namespace filesystem = ::std::experimental::filesystem;
+#define MDBX_STD_FILESYSTEM_PATH ::mdbx::filesystem::path
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
 #ifdef MDBX_STD_FILESYSTEM_PATH
