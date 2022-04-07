@@ -12,13 +12,21 @@ $(info // The GNU Make $(MAKE_VERSION))
 SHELL         := $(shell env bash -c 'echo $$BASH')
 MAKE_VERx3    := $(shell printf "%3s%3s%3s" $(subst ., ,$(MAKE_VERSION)))
 make_lt_3_81  := $(shell expr "$(MAKE_VERx3)" "<" "  3 81")
-ifeq ($(make_lt_3_81),1)
+ifneq ($(make_lt_3_81),0)
 $(error Please use GNU Make 3.81 or above)
 endif
-make_lt_4_1   := $(shell expr "$(MAKE_VERx3)" "<" "  4  1")
+make_ge_4_1   := $(shell expr "$(MAKE_VERx3)" ">=" "  4  1")
 SRC_PROBE_C   := $(shell [ -f mdbx.c ] && echo mdbx.c || echo src/osal.c)
 SRC_PROBE_CXX := $(shell [ -f mdbx.c++ ] && echo mdbx.c++ || echo src/mdbx.c++)
 UNAME         := $(shell uname -s 2>/dev/null || echo Unknown)
+
+define cxx_filesystem_probe
+  int main(int argc, const char*argv[]) {
+    mdbx::filesystem::path probe(argv[0]);
+    if (argc != 1) throw mdbx::filesystem::filesystem_error(std::string("fake"), std::error_code());
+    return mdbx::filesystem::is_directory(probe.relative_path());
+  }
+endef
 #
 ################################################################################
 #
@@ -57,16 +65,16 @@ CXXFLAGS     ?= $(strip $(CXXSTD) $(filter-out -std=gnu11,$(CFLAGS)))
 
 # libraries adn options for linking
 EXE_LDFLAGS  ?= -pthread
-ifeq ($(make_lt_4_1),1)
+ifneq ($(make_ge_4_1),1)
 # don't use variable expansion trick as workaround for bugs of GNU Make before 4.1
 LIBS         ?= $(shell $(uname2libs))
 LDFLAGS      ?= $(shell $(uname2ldflags))
-LIB_STDCXXFS ?= $(shell echo 'int main(void) { MDBX_STD_FILESYSTEM_PATH probe; return probe.is_absolute(); }' | cat mdbx.h++ - | sed $$'1s/\xef\xbb\xbf//' | $(CXX) -x c++ $(CXXFLAGS) -Wno-error - -Wl,--allow-multiple-definition -lstdc++fs $(LIBS) $(LDFLAGS) $(EXE_LDFLAGS) -o /dev/null 2>probe4lstdfs.err >/dev/null && echo '-Wl,--allow-multiple-definition -lstdc++fs')
+LIB_STDCXXFS ?= $(shell echo '$(cxx_filesystem_probe)' | cat mdbx.h++ - | sed $$'1s/\xef\xbb\xbf//' | $(CXX) -x c++ $(CXXFLAGS) -Wno-error - -Wl,--allow-multiple-definition -lstdc++fs $(LIBS) $(LDFLAGS) $(EXE_LDFLAGS) -o /dev/null 2>probe4lstdfs.err >/dev/null && echo '-Wl,--allow-multiple-definition -lstdc++fs')
 else
 # using variable expansion trick to avoid repeaded probes
 LIBS         ?= $(eval LIBS := $$(shell $$(uname2libs)))$(LIBS)
 LDFLAGS      ?= $(eval LDFLAGS := $$(shell $$(uname2ldflags)))$(LDFLAGS)
-LIB_STDCXXFS ?= $(eval LIB_STDCXXFS := $$(shell echo 'int main(void) { MDBX_STD_FILESYSTEM_PATH probe; return probe.is_absolute(); }' | cat mdbx.h++ - | sed $$$$'1s/\xef\xbb\xbf//' | $(CXX) -x c++ $(CXXFLAGS) -Wno-error - -Wl,--allow-multiple-definition -lstdc++fs $(LIBS) $(LDFLAGS) $(EXE_LDFLAGS) -o /dev/null 2>probe4lstdfs.err >/dev/null && echo '-Wl,--allow-multiple-definition -lstdc++fs'))$(LIB_STDCXXFS)
+LIB_STDCXXFS ?= $(eval LIB_STDCXXFS := $$(shell echo '$$(cxx_filesystem_probe)' | cat mdbx.h++ - | sed $$$$'1s/\xef\xbb\xbf//' | $(CXX) -x c++ $(CXXFLAGS) -Wno-error - -Wl,--allow-multiple-definition -lstdc++fs $(LIBS) $(LDFLAGS) $(EXE_LDFLAGS) -o /dev/null 2>probe4lstdfs.err >/dev/null && echo '-Wl,--allow-multiple-definition -lstdc++fs'))$(LIB_STDCXXFS)
 endif
 
 ################################################################################

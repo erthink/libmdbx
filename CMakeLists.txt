@@ -527,6 +527,11 @@ if(MDBX_BUILD_CXX AND NOT CMAKE_CXX_COMPILER_LOADED)
   message(FATAL_ERROR "MDBX_BUILD_CXX=${MDBX_BUILD_CXX}: The C++ compiler is required to build the C++API.")
 endif()
 
+if(MDBX_BUILD_CXX)
+  # determine library for C++ std::filesystem
+  probe_libcxx_filesystem()
+endif()
+
 # Get version
 fetch_version(MDBX "${CMAKE_CURRENT_SOURCE_DIR}" FALSE)
 message(STATUS "libmdbx version is ${MDBX_VERSION}")

@@ -31,6 +31,7 @@ set(LIBMDBX_TEST_SOURCES
   )
 
 if(NOT MDBX_BUILD_CXX)
+  probe_libcxx_filesystem()
   list(APPEND LIBMDBX_TEST_SOURCES "${MDBX_SOURCE_DIR}/mdbx.c++" ../mdbx.h++)
 endif()
 

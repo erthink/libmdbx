@@ -826,24 +826,106 @@ macro(setup_compile_flags)
   unset(MODULE_LINKER_FLAGS)
 endmacro(setup_compile_flags)
 
-if(CMAKE_CXX_COMPILER_LOADED)
-  # determine library for std::filesystem
-  set(LIBCXX_FILESYSTEM "")
-  if(CMAKE_COMPILER_IS_ELBRUSCXX)
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.26.0)
-      set(LIBCXX_FILESYSTEM "stdc++fs")
-    endif()
-  elseif(CMAKE_COMPILER_IS_CLANG)
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.0)
-      set(LIBCXX_FILESYSTEM "c++experimental")
-    elseif(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
-      set(LIBCXX_FILESYSTEM "stdc++fs")
-    endif()
-  elseif(CMAKE_COMPILER_IS_GNUCXX AND NOT MINGW)
-    if(NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.3 AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 9.0)
-      set(LIBCXX_FILESYSTEM "stdc++fs")
+macro(probe_libcxx_filesystem)
+  if(CMAKE_CXX_COMPILER_LOADED AND NOT DEFINED LIBCXX_FILESYSTEM)
+    list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_11 HAS_CXX11)
+    if(NOT HAS_CXX11 LESS 0)
+      include(CMakePushCheckState)
+      include(CheckCXXSourceCompiles)
+      cmake_push_check_state()
+      set(stdfs_probe_save_libraries ${CMAKE_REQUIRED_LIBRARIES})
+      unset(stdfs_probe_clear_cxx_standard)
+      if(NOT DEFINED CMAKE_CXX_STANDARD)
+        list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_14 HAS_CXX14)
+        list(FIND CMAKE_CXX_COMPILE_FEATURES cxx_std_17 HAS_CXX17)
+        if(NOT HAS_CXX17 LESS 0
+            AND NOT (CMAKE_COMPILER_IS_CLANG AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5))
+          set(CMAKE_CXX_STANDARD 17)
+        elseif(NOT HAS_CXX14 LESS 0)
+          set(CMAKE_CXX_STANDARD 14)
+        else()
+          set(CMAKE_CXX_STANDARD 11)
+        endif()
+        set(stdfs_probe_clear_cxx_standard ON)
+      endif()
+
+      set(stdfs_probe_code [[
+        #if defined(__SIZEOF_INT128__) && !defined(__GLIBCXX_TYPE_INT_N_0) && defined(__clang__) && __clang_major__ < 4
+        #define __GLIBCXX_BITSIZE_INT_N_0 128
+        #define __GLIBCXX_TYPE_INT_N_0 __int128
+        #endif
+
+        #ifndef __has_include
+        #define __has_include(header) (0)
+        #endif
+        #if __has_include(<version>)
+        #include <version>
+        #endif
+        #include <cstdlib>
+        #include <string>
+        #if defined(__cpp_lib_string_view) && __cpp_lib_string_view >= 201606L
+        #include <string_view>
+        #endif
+
+        #if defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L
+        #include <filesystem>
+        #else
+        #include <experimental/filesystem>
+        #endif
+
+        #if (defined(__cpp_lib_filesystem) && __cpp_lib_filesystem >= 201703L && (!defined(__MAC_OS_X_VERSION_MIN_REQUIRED) || __MAC_OS_X_VERSION_MIN_REQUIRED >= 101500) && (!defined(__IPHONE_OS_VERSION_MIN_REQUIRED) || __IPHONE_OS_VERSION_MIN_REQUIRED >= 130100))
+        namespace fs = ::std::filesystem;
+        #elif defined(__cpp_lib_experimental_filesystem) && __cpp_lib_experimental_filesystem >= 201406L
+        namespace fs = ::std::experimental::filesystem;
+        #endif
+
+        int main(int argc, const char*argv[]) {
+          fs::path probe(argv[0]);
+          if (argc != 1) throw fs::filesystem_error(std::string("fake"), std::error_code());
+          return fs::is_directory(probe.relative_path());
+        }
+        ]])
+      set(LIBCXX_FILESYSTEM "")
+
+      check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_none)
+      if(LIBCXX_FILESYSTEM_none)
+        message(STATUS "No linking with additional library needed for std::filesystem")
+      else()
+        set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries} "stdc++fs")
+        check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_stdcxxfs)
+        if(LIBCXX_FILESYSTEM_stdcxxfs)
+          set(LIBCXX_FILESYSTEM "stdc++fs")
+          message(STATUS "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem")
+        else()
+          set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries} "c++fs")
+          check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_cxxfs)
+          if(LIBCXX_FILESYSTEM_cxxfs)
+            set(LIBCXX_FILESYSTEM "c++fs")
+            message(STATUS "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem")
+          else()
+            set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries} "c++experimental")
+            check_cxx_source_compiles("${stdfs_probe_code}" LIBCXX_FILESYSTEM_cxxexperimental)
+            if(LIBCXX_FILESYSTEM_cxxexperimental)
+              set(LIBCXX_FILESYSTEM "c++experimental")
+              message(STATUS "Linking with ${LIBCXX_FILESYSTEM} is required for std::filesystem")
+            else()
+              message(STATUS "No support for std::filesystem")
+            endif()
+          endif()
+        endif()
+      endif()
+
+      set(CMAKE_REQUIRED_LIBRARIES ${stdfs_probe_save_libraries})
+      if(stdfs_probe_clear_cxx_standard)
+        unset(CMAKE_CXX_STANDARD)
+      endif()
+      unset(stdfs_probe_clear_cxx_standard)
+      unset(stdfs_probe_save_libraries)
+      unset(stdfs_probe_code)
+      unset(stdfs_probe_rc)
+      cmake_pop_check_state()
     endif()
   endif()
-endif()
+endmacro(probe_libcxx_filesystem)
 
 cmake_policy(POP)
