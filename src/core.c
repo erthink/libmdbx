@@ -5046,13 +5046,21 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
                                      ctx->iov_bytes);
   }
 
+  unsigned iov_items = ctx->iov_items;
+#if MDBX_ENABLE_PGOP_STAT
+  txn->mt_env->me_lck->mti_pgop_stat.wops.weak += iov_items;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  ctx->iov_items = 0;
+  ctx->iov_bytes = 0;
+
   uint64_t timestamp = 0;
-  for (unsigned i = 0; i < ctx->iov_items; i++) {
+  for (unsigned i = 0; i < iov_items; i++) {
     MDBX_page *wp = (MDBX_page *)ctx->iov[i].iov_base;
     const MDBX_page *rp = pgno2page(txn->mt_env, wp->mp_pgno);
     /* check with timeout as the workaround
      * for https://github.com/erthink/libmdbx/issues/269 */
-    while (unlikely(memcmp(wp, rp, ctx->iov[i].iov_len) != 0)) {
+    while (likely(rc == MDBX_SUCCESS) &&
+           unlikely(memcmp(wp, rp, ctx->iov[i].iov_len) != 0)) {
       if (!timestamp) {
         timestamp = mdbx_osal_monotime();
         mdbx_iov_done(txn, ctx);
@@ -5063,7 +5071,7 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
         mdbx_error(
             "bailout waiting for %" PRIaPGNO " page arrival %s", wp->mp_pgno,
             "(workaround for incoherent flaw of unified page/buffer cache)");
-        return MDBX_CORRUPTED;
+        rc = MDBX_CORRUPTED;
       }
 #if defined(_WIN32) || defined(_WIN64)
       SwitchToThread();
@@ -5077,12 +5085,6 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
     }
     mdbx_dpage_free(env, wp, bytes2pgno(env, ctx->iov[i].iov_len));
   }
-
-#if MDBX_ENABLE_PGOP_STAT
-  txn->mt_env->me_lck->mti_pgop_stat.wops.weak += ctx->iov_items;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-  ctx->iov_items = 0;
-  ctx->iov_bytes = 0;
   return rc;
 }
 
