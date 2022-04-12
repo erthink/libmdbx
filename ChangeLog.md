@@ -34,6 +34,7 @@ Fixes:
  - Resolved linking issues with `libstdc++fs`/`libc++fs`/`libc++experimental` for C++ `std::filesystem` or `std::experimental::filesystem` for legacy compilers.
  - Added workaround for GNU Make 3.81 and earlier.
  - Added workaround for Elbrus/LCC 1.25 compiler bug of class inline `static constexpr` member field.
+ - [Fixed](https://github.com/ledgerwatch/erigon/issues/3874) minor assertion regression (only debug builds were affected).
 
 Minors:
 
