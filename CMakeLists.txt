@@ -641,6 +641,7 @@ if(MDBX_BUILD_SHARED_LIBRARY)
 else()
   set_target_properties(mdbx-static PROPERTIES OUTPUT_NAME mdbx)
 endif()
+target_include_directories(mdbx-static INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 
 ################################################################################
 
@@ -662,6 +663,7 @@ if(MDBX_BUILD_SHARED_LIBRARY)
     set_target_properties(mdbx PROPERTIES LINK_FLAGS "-fvisibility=hidden")
   endif()
   list(APPEND MDBX_BUILD_FLAGS ${CMAKE_SHARED_LINKER_FLAGS})
+  target_include_directories(mdbx INTERFACE "${CMAKE_CURRENT_SOURCE_DIR}")
 endif()
 
 if(MDBX_BUILD_SHARED_LIBRARY AND MDBX_LINK_TOOLS_NONSTATIC)
