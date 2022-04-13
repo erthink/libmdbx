@@ -1415,6 +1415,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_txn_flags_t)
  * \anchor db_flags
  * \see mdbx_dbi_open() */
 enum MDBX_db_flags_t {
+  /** Variable length unique keys with usual byte-by-byte string comparison. */
   MDBX_DB_DEFAULTS = 0,
 
   /** Use reverse string comparison for keys. */
@@ -2110,19 +2111,19 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
  *                       the database files reside. In the case of directory it
  *                       must already exist and be writable.
  *
- * \param [in] flags     Special options for this environment. This parameter
- *                       must be set to 0 or by bitwise OR'ing together one
- *                       or more of the values described above in the
- *                       \ref env_flags and \ref sync_modes sections.
+ * \param [in] flags     Specifies options for this environment.
+ *                       This parameter must be bitwise OR'ing together
+ *                       any constants described above in the \ref env_flags
+ *                       and \ref sync_modes sections.
  *
  * Flags set by mdbx_env_set_flags() are also used:
- *  - \ref MDBX_NOSUBDIR, \ref MDBX_RDONLY, \ref MDBX_EXCLUSIVE,
- *    \ref MDBX_WRITEMAP, \ref MDBX_NOTLS, \ref MDBX_NORDAHEAD,
- *    \ref MDBX_NOMEMINIT, \ref MDBX_COALESCE, \ref MDBX_LIFORECLAIM.
- *    See \ref env_flags section.
+ *  - \ref MDBX_ENV_DEFAULTS, \ref MDBX_NOSUBDIR, \ref MDBX_RDONLY,
+ *    \ref MDBX_EXCLUSIVE, \ref MDBX_WRITEMAP, \ref MDBX_NOTLS,
+ *    \ref MDBX_NORDAHEAD, \ref MDBX_NOMEMINIT, \ref MDBX_COALESCE,
+ *    \ref MDBX_LIFORECLAIM. See \ref env_flags section.
  *
- *  - \ref MDBX_NOMETASYNC, \ref MDBX_SAFE_NOSYNC, \ref MDBX_UTTERLY_NOSYNC.
- *    See \ref sync_modes section.
+ *  - \ref MDBX_SYNC_DURABLE, \ref MDBX_NOMETASYNC, \ref MDBX_SAFE_NOSYNC,
+ *    \ref MDBX_UTTERLY_NOSYNC. See \ref sync_modes section.
  *
  * \note `MDB_NOLOCK` flag don't supported by MDBX,
  *       try use \ref MDBX_EXCLUSIVE as a replacement.
@@ -2199,8 +2200,8 @@ typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
  * \param [in] pathname  The pathname for the database or the directory in which
  *                       the database files reside.
  *
- * \param [in] mode      Special deletion mode for the environment. This
- *                       parameter must be set to one of the values described
+ * \param [in] mode      Specifies deletion mode for the environment. This
+ *                       parameter must be set to one of the constants described
  *                       above in the \ref MDBX_env_delete_mode_t section.
  *
  * \note The \ref MDBX_ENV_JUST_DELETE don't supported on Windows since system
@@ -2227,9 +2228,12 @@ LIBMDBX_API int mdbx_env_delete(const char *pathname,
  * \param [in] dest   The pathname of a file in which the copy will reside.
  *                    This file must not be already exist, but parent directory
  *                    must be writable.
- * \param [in] flags  Special options for this operation. This parameter must
- *                    be set to 0 or by bitwise OR'ing together one or more
- *                    of the values described here:
+ * \param [in] flags  Specifies options for this operation. This parameter
+ *                    must be bitwise OR'ing together any of the constants
+ *                    described here:
+ *
+ *  - \ref MDBX_CP_DEFAULTS
+ *      Perform copy as-is without compaction, etc.
  *
  *  - \ref MDBX_CP_COMPACT
  *      Perform compaction while copying: omit free pages and sequentially
@@ -3684,12 +3688,14 @@ typedef int(MDBX_cmp_func)(const MDBX_val *a,
  *                    database is needed in the environment,
  *                    this value may be NULL.
  * \param [in] flags  Special options for this database. This parameter must
- *                    be set to 0 or by bitwise OR'ing together one or more
- *                    of the values described here:
+ *                    be bitwise OR'ing together any of the constants
+ *                    described here:
+ *
+ *  - \ref MDBX_DB_DEFAULTS
+ *      Keys are arbitrary byte strings and compared from beginning to end.
  *  - \ref MDBX_REVERSEKEY
- *      Keys are strings to be compared in reverse order, from the end
- *      of the strings to the beginning. By default, Keys are treated as
- *      strings and compared from beginning to end.
+ *      Keys are arbitrary byte strings to be compared in reverse order,
+ *      from the end of the strings to the beginning.
  *  - \ref MDBX_INTEGERKEY
  *      Keys are binary integers in native byte order, either uint32_t or
  *      uint64_t, and will be sorted as such. The keys must all be of the
