@@ -175,14 +175,28 @@ __cold static void choice_fcntl() {
 
 #ifndef OFF_T_MAX
 #define OFF_T_MAX                                                              \
-  ((sizeof(off_t) > 4 ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff)
+  (((sizeof(off_t) > 4) ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff)
 #endif
 
-static int lck_op(mdbx_filehandle_t fd, int cmd, int lck, off_t offset,
-                  off_t len) {
+static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
+                  const off_t offset, off_t len) {
   mdbx_jitter4testing(true);
+  assert(offset >= 0 && len > 0);
+  assert((uint64_t)offset < (uint64_t)INT64_MAX &&
+         (uint64_t)len < (uint64_t)INT64_MAX &&
+         (uint64_t)(offset + len) > (uint64_t)offset);
+
+  assert((uint64_t)offset < (uint64_t)OFF_T_MAX &&
+         (uint64_t)len <= (uint64_t)OFF_T_MAX &&
+         (uint64_t)(offset + len) <= (uint64_t)OFF_T_MAX);
+
+  assert((uint64_t)((off_t)((uint64_t)offset + (uint64_t)len)) ==
+         ((uint64_t)offset + (uint64_t)len));
   for (;;) {
     struct flock lock_op;
+    STATIC_ASSERT(sizeof(off_t) <= sizeof(lock_op.l_start) &&
+                  sizeof(off_t) <= sizeof(lock_op.l_len) &&
+                  OFF_T_MAX == (off_t)OFF_T_MAX);
     memset(&lock_op, 0, sizeof(lock_op));
     lock_op.l_type = lck;
     lock_op.l_whence = SEEK_SET;
@@ -218,7 +232,7 @@ static int lck_op(mdbx_filehandle_t fd, int cmd, int lck, off_t offset,
     }
 #endif /* MDBX_USE_OFDLOCKS */
     if (rc != EINTR || cmd == op_setlkw) {
-      mdbx_assert(nullptr, MDBX_IS_ERROR(rc));
+      assert(MDBX_IS_ERROR(rc));
       return rc;
     }
   }
