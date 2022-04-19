@@ -47,7 +47,8 @@
 /*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */
-#ifndef _FILE_OFFSET_BITS
+#if !defined(_FILE_OFFSET_BITS) && !defined(__ANDROID_API__) &&                \
+    !defined(ANDROID)
 #define _FILE_OFFSET_BITS 64
 #endif
 

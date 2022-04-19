@@ -180,6 +180,13 @@ __cold static void choice_fcntl() {
 
 static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
                   const off_t offset, off_t len) {
+  STATIC_ASSERT(sizeof(off_t) >= sizeof(void *) &&
+                sizeof(off_t) >= sizeof(size_t));
+#ifdef __ANDROID_API__
+  STATIC_ASSERT_MSG((sizeof(off_t) * 8 == MDBX_WORDBITS),
+                    "The bitness of system `off_t` type is mismatch. Please "
+                    "fix build and/or NDK configuration.");
+#endif /* Android */
   mdbx_jitter4testing(true);
   assert(offset >= 0 && len > 0);
   assert((uint64_t)offset < (uint64_t)INT64_MAX &&

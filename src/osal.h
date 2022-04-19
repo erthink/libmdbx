@@ -332,6 +332,14 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
 #define MDBX_WORDBITS 32
 #endif /* MDBX_WORDBITS */
 
+#if defined(__ANDROID_API__) || defined(ANDROID)
+#if defined(_FILE_OFFSET_BITS) && _FILE_OFFSET_BITS != MDBX_WORDBITS
+#error "_FILE_OFFSET_BITS != MDBX_WORDBITS" (_FILE_OFFSET_BITS != MDBX_WORDBITS)
+#elif defined(__FILE_OFFSET_BITS) && __FILE_OFFSET_BITS != MDBX_WORDBITS
+#error "__FILE_OFFSET_BITS != MDBX_WORDBITS" (__FILE_OFFSET_BITS != MDBX_WORDBITS)
+#endif
+#endif /* Android */
+
 /*----------------------------------------------------------------------------*/
 /* Compiler's includes for builtins/intrinsics */
 
