@@ -1,22 +1,19 @@
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 
-*The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
+### The origin repository of the project has been moved to https://gitflic.ru/project/erthink/libmdbx since on April 15, 2022, the Github administration, without warning and without explanation, deleted libmdbx along with a lot of other projects, simultaneously blocking access to many developers.
+For the same reason Github is blacklisted forever.
 
-> Please refer to the online [documentation](https://erthink.github.io/libmdbx/)
-> with [`C` API description](https://erthink.github.io/libmdbx/group__c__api.html)
-> and pay attention to the [`C++` API](https://github.com/erthink/libmdbx/blob/devel/mdbx.h%2B%2B).
+### Основной репозиторий проекта перемещен на https://gitflic.ru/project/erthink/libmdbx, так как 15 апреля 2022 администрация Github без предупреждения и без объяснения причин удалила libmdbx вместе с массой других проектов, одновременно заблокировав доступ многим разработчикам.
+По той же причине Github навсегда занесен в черный список.
+
+--------------------------------------------------------------------------------
+
+*The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
 
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
 
 > For NEWS take a look to the [ChangeLog](./ChangeLog.md).
 
-[![https://t.me/libmdbx](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/telegram.png)](https://t.me/libmdbx)
-[![Version](https://badge.fury.io/gh/erthink%2Flibmdbx.svg)](https://github.com/erthink/libmdbx/releases)
-[![GithubCI](https://github.com/erthink/libmdbx/workflows/CI/badge.svg)](https://github.com/erthink/libmdbx/actions?query=workflow%3ACI)
-[![AppveyorCI](https://ci.appveyor.com/api/projects/status/ue94mlopn50dqiqg/branch/master?svg=true)](https://ci.appveyor.com/project/leo-yuriev/libmdbx/branch/master)
-[![CircleCI](https://circleci.com/gh/erthink/libmdbx/tree/master.svg?style=svg)](https://circleci.com/gh/erthink/libmdbx/tree/master)
-[![CirrusCI](https://api.cirrus-ci.com/github/erthink/libmdbx.svg)](https://cirrus-ci.com/github/erthink/libmdbx)
-[![Coverity Scan Status](https://scan.coverity.com/projects/12915/badge.svg)](https://scan.coverity.com/projects/reopen-libmdbx)
 
 libmdbx
 ========
@@ -729,7 +726,3 @@ syscall and by scanning the data directory.
 ![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-6.png)
 
 <!-- section-end -->
-
---------------------------------------------------------------------------------
-
-#### This is a mirror of the origin repository that was moved to [gitflic.ru](https://gitflic.ru/project/erthink/libmdbx) because of discriminatory restrictions for Russian Crimea.
