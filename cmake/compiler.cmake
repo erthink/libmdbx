@@ -609,6 +609,9 @@ macro(setup_compile_flags)
       AND CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 9)
     # GCC < 9.x generates false-positive warnings for optimization attributes
     add_compile_flags("C;CXX" "-Wno-attributes")
+    if(LTO_ENABLED)
+      add_compile_flags("C;CXX" "-Wno-lto-type-mismatch")
+    endif()
   endif()
 
   # In C a global variable without a storage specifier (static/extern) and
