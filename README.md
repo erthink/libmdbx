@@ -315,12 +315,12 @@ named mutexes are used.
 Historically, _libmdbx_ is a deeply revised and extended descendant of the
 [Lightning Memory-Mapped Database](https://en.wikipedia.org/wiki/Lightning_Memory-Mapped_Database).
 At first the development was carried out within the
-[ReOpenLDAP](https://github.com/erthink/ReOpenLDAP) project. About a
+[ReOpenLDAP](https://erased_by_github.none/ReOpenLDAP) project. About a
 year later _libmdbx_ was separated into a standalone project, which was
 [presented at Highload++ 2015
 conference](http://www.highload.ru/2015/abstracts/1831.html).
 
-Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://github.com/erthink/libfpta),
+Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://erased_by_github.none/libfpta),
 and development is funded by [Positive Technologies](https://www.ptsecurity.com).
 
 ## Acknowledgments
@@ -396,10 +396,10 @@ unexpected or broken down.
 
 ### Testing
 The amalgamated source code does not contain any tests for or several reasons.
-Please read [the explanation](https://github.com/erthink/libmdbx/issues/214#issuecomment-870717981) and don't ask to alter this.
+Please read [the explanation](https://erased_by_github.none/libmdbx/issues/214#issuecomment-870717981) and don't ask to alter this.
 So for testing _libmdbx_ itself you need a full source code, i.e. the clone of a git repository, there is no option.
 
-The full source code of _libmdbx_ has a [`test` subdirectory](https://github.com/erthink/libmdbx/tree/master/test) with minimalistic test "framework".
+The full source code of _libmdbx_ has a [`test` subdirectory](https://gitflic.ru/project/erthink/libmdbx/tree/master/test) with minimalistic test "framework".
 Actually yonder is a source code of the `mdbx_test` – console utility which has a set of command-line options that allow construct and run a reasonable enough test scenarios.
 This test utility is intended for _libmdbx_'s developers for testing library itself, but not for use by users.
 Therefore, only basic information is provided:
@@ -410,7 +410,7 @@ Therefore, only basic information is provided:
    - The `Makefile` provide several self-described targets for testing: `smoke`, `test`, `check`, `memcheck`, `test-valgrind`,
      `test-asan`, `test-leak`, `test-ubsan`, `cross-gcc`, `cross-qemu`, `gcc-analyzer`, `smoke-fault`, `smoke-singleprocess`,
      `test-singleprocess`, 'long-test'. Please run `make --help` if doubt.
-   - In addition to the `mdbx_test` utility, there is the script [`long_stochastic.sh`](https://github.com/erthink/libmdbx/blob/master/test/long_stochastic.sh),
+   - In addition to the `mdbx_test` utility, there is the script [`long_stochastic.sh`](https://gitflic.ru/project/erthink/libmdbx/blob/master/test/long_stochastic.sh),
      which calls `mdbx_test` by going through set of modes and options, with gradually increasing the number of operations and the size of transactions.
      This script is used for mostly of all automatic testing, including `Makefile` targets and Continuous Integration.
    - Brief information of available command-line options is available by `--help`.
@@ -558,7 +558,7 @@ from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 
 ## API description
 
-Please refer to the online [_libmdbx_ API reference](https://erthink.github.io/libmdbx/)
+Please refer to the online [_libmdbx_ API reference](https://erased_by_github_and_to_be_restored.todo/libmdbx/)
 and/or see the [mdbx.h++](mdbx.h%2B%2B) and [mdbx.h](mdbx.h) headers.
 
 <!-- section-begin bindings -->
@@ -578,7 +578,7 @@ Bindings
 | Rust    | [libmdbx-rs](https://github.com/vorot93/libmdbx-rs)   | [Artem Vorotnikov](https://github.com/vorot93) |
 | Rust    | [mdbx](https://crates.io/crates/mdbx)                 | [gcxfd](https://github.com/gcxfd) |
 | Java    | [mdbxjni](https://github.com/castortech/mdbxjni)      | [Castor Technologies](https://castortech.com/) |
-| Python (draft)  | [python-bindings](https://github.com/erthink/libmdbx/commits/python-bindings) branch | [Noel Kuntze](https://github.com/Thermi)
+| Python (draft)  | [python-bindings](https://erased_by_github.none/libmdbx/commits/python-bindings) branch | [Noel Kuntze](https://github.com/Thermi)
 | .NET (obsolete) | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
 
 <!-- section-end -->
@@ -617,7 +617,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 
   2. Performance gap is too high to compare in any meaningful way.
 
-![Comparison #1: Integral Performance](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-1.png)
+![Comparison #1: Integral Performance](https://erased_by_github_and_to_be_restored.todo/libmdbx/img/perf-slide-1.png)
 
 --------------------------------------------------------------------------------
 
@@ -626,7 +626,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 Summary performance with concurrent read/search queries in 1-2-4-8
 threads on the machine with 4 logical CPUs in HyperThreading mode (i.e. actually 2 physical CPU cores).
 
-![Comparison #2: Read Scalability](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-2.png)
+![Comparison #2: Read Scalability](https://erased_by_github_and_to_be_restored.todo/libmdbx/img/perf-slide-2.png)
 
 --------------------------------------------------------------------------------
 
@@ -648,7 +648,7 @@ In the benchmark each transaction contains combined CRUD operations (2
 inserts, 1 read, 1 update, 1 delete). Benchmark starts on an empty database
 and after full run the database contains 10,000 small key-value records.
 
-![Comparison #3: Sync-write mode](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-3.png)
+![Comparison #3: Sync-write mode](https://erased_by_github_and_to_be_restored.todo/libmdbx/img/perf-slide-3.png)
 
 --------------------------------------------------------------------------------
 
@@ -675,7 +675,7 @@ and after full run the database contains 100,000 small key-value
 records.
 
 
-![Comparison #4: Lazy-write mode](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-4.png)
+![Comparison #4: Lazy-write mode](https://erased_by_github_and_to_be_restored.todo/libmdbx/img/perf-slide-4.png)
 
 --------------------------------------------------------------------------------
 
@@ -699,7 +699,7 @@ In the benchmark each transaction contains combined CRUD operations (2
 inserts, 1 read, 1 update, 1 delete). Benchmark starts on an empty database
 and after full run the database contains 10,000 small key-value records.
 
-![Comparison #5: Async-write mode](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-5.png)
+![Comparison #5: Async-write mode](https://erased_by_github_and_to_be_restored.todo/libmdbx/img/perf-slide-5.png)
 
 --------------------------------------------------------------------------------
 
@@ -723,6 +723,6 @@ All benchmark data is gathered by
 [getrusage()](http://man7.org/linux/man-pages/man2/getrusage.2.html)
 syscall and by scanning the data directory.
 
-![Comparison #6: Cost comparison](https://raw.githubusercontent.com/wiki/erthink/libmdbx/img/perf-slide-6.png)
+![Comparison #6: Cost comparison](https://erased_by_github_and_to_be_restored.todo/libmdbx/img/perf-slide-6.png)
 
 <!-- section-end -->

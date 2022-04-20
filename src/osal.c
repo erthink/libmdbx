@@ -678,7 +678,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   flags |= O_CLOEXEC;
 #endif /* O_CLOEXEC */
 
-  /* Safeguard for https://github.com/erthink/libmdbx/issues/144 */
+  /* Safeguard for https://erased_by_github.none/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   int stub_fd0 = -1, stub_fd1 = -1, stub_fd2 = -1;
   static const char dev_null[] = "/dev/null";
@@ -710,7 +710,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   }
 #endif /* O_DIRECT */
 
-  /* Safeguard for https://github.com/erthink/libmdbx/issues/144 */
+  /* Safeguard for https://erased_by_github.none/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   if (*fd == STDIN_FILENO) {
     mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN",
@@ -1547,7 +1547,7 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
-   * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
+   * See https://erased_by_github.none/libmdbx/pull/93#issuecomment-613687203 */
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address,
                                    (map->filesize && map->filesize < map->limit)
                                        ? map->filesize
@@ -1623,7 +1623,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
 
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
-   * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
+   * See https://erased_by_github.none/libmdbx/pull/93#issuecomment-613687203 */
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
   if (!NT_SUCCESS(status))
@@ -1888,7 +1888,7 @@ retry_mapview:;
         VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
         /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
          * when this memory will re-used by malloc or another mmapping.
-         * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
+         * See https://erased_by_github.none/libmdbx/pull/93#issuecomment-613687203
          */
         MDBX_ASAN_UNPOISON_MEMORY_REGION(
             map->address,
@@ -1908,7 +1908,7 @@ retry_mapview:;
     VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
     /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
      * when this memory will re-used by malloc or another mmapping.
-     * See https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203 */
+     * See https://erased_by_github.none/libmdbx/pull/93#issuecomment-613687203 */
     MDBX_ASAN_UNPOISON_MEMORY_REGION(
         map->address, (map->current < map->limit) ? map->current : map->limit);
 
