@@ -3,21 +3,29 @@ ChangeLog
 
 ### TODO
 
- - [Engage an "overlapped I/O" on Windows](https://erased_by_erased_by_github.none/libmdbx/issues/224).
- - [Simple careful mode for working with corrupted DB](https://erased_by_erased_by_github.none/libmdbx/issues/223).
- - [Move most of `mdbx_chk` functional to the library API](https://erased_by_erased_by_github.none/libmdbx/issues/204).
- - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOTLS` option](https://erased_by_erased_by_github.none/libmdbx/issues/210).
- - [More flexible support of asynchronous runtime/framework(s)](https://erased_by_erased_by_github.none/libmdbx/issues/200).
- - [Migration guide from LMDB to MDBX](https://erased_by_erased_by_github.none/libmdbx/issues/199).
- - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://erased_by_erased_by_github.none/libmdbx/issues/193).
- - [Large/Overflow pages accounting for dirty-room](https://erased_by_erased_by_github.none/libmdbx/issues/192).
- - [Support for RAW devices](https://erased_by_erased_by_github.none/libmdbx/issues/124).
- - [Support MessagePack for Keys & Values](https://erased_by_erased_by_github.none/libmdbx/issues/115).
- - [Engage new terminology](https://erased_by_erased_by_github.none/libmdbx/issues/137).
+ - [Engage an "overlapped I/O" on Windows](https://erased_by_github.none/libmdbx/issues/224).
+ - [Simple careful mode for working with corrupted DB](https://erased_by_github.none/libmdbx/issues/223).
+ - [Move most of `mdbx_chk` functional to the library API](https://erased_by_github.none/libmdbx/issues/204).
+ - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOTLS` option](https://erased_by_github.none/libmdbx/issues/210).
+ - [More flexible support of asynchronous runtime/framework(s)](https://erased_by_github.none/libmdbx/issues/200).
+ - [Migration guide from LMDB to MDBX](https://erased_by_github.none/libmdbx/issues/199).
+ - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://erased_by_github.none/libmdbx/issues/193).
+ - [Large/Overflow pages accounting for dirty-room](https://erased_by_github.none/libmdbx/issues/192).
+ - [Support for RAW devices](https://erased_by_github.none/libmdbx/issues/124).
+ - [Support MessagePack for Keys & Values](https://erased_by_github.none/libmdbx/issues/115).
+ - [Engage new terminology](https://erased_by_github.none/libmdbx/issues/137).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.7 (underway)
+## v0.11.7 (scheduled at 2022-04-22)
+
+Stable release recovery after the Github's intentional malicious disaster.
+
+The origin repository of the project has been migrated
+to [GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on April 15, 2022,
+the Github administration, without any warning not explanation, deleted
+libmdbx along with a lot of other projects, simultaneously blocking
+access to many developers. For the same reason ~~Github~~ is blacklisted forever.
 
 New:
 
@@ -44,7 +52,7 @@ Minors:
  - Resolved all warnings from MinGW while used without CMake.
 
 
-## v0.11.6 (scheduled for 2022-03-24)
+## v0.11.6 at 2022-03-24
 
 The stable release with the complete workaround for an incoherence flaw of Linux unified page/buffer cache.
 Nonetheless the cause for this trouble may be an issue of Intel CPU cache/MESI.

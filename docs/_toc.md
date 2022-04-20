@@ -1,3 +1,8 @@
+The origin repository of the project has been migrated
+to [GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on April 15, 2022,
+the Github administration, without any warning not explanation, deleted
+libmdbx along with a lot of other projects, simultaneously blocking
+access to many developers. For the same reason ~~Github~~ is blacklisted forever.
 
 _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
 
@@ -23,7 +28,7 @@ each of which is divided into several sections.
   - The \ref mdbx.h++ header file reference
 
 Please do not hesitate to point out errors in the documentation,
-including creating [PR](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests) with corrections and improvements.
+including creating [merge-request](https://gitflic.ru/project/erthink/libmdbx/merge-request) with corrections and improvements.
 
 ---
 
