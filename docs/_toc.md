@@ -1,9 +1,3 @@
-The origin repository of the project has been migrated
-to [GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on April 15, 2022,
-the Github administration, without any warning not explanation, deleted
-libmdbx along with a lot of other projects, simultaneously blocking
-access to many developers. For the same reason ~~Github~~ is blacklisted forever.
-
 _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
 
 \section toc Table of Contents

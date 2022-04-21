@@ -21,11 +21,15 @@ ChangeLog
 
 Stable release recovery after the Github's intentional malicious disaster.
 
-The origin repository of the project has been migrated
-to [GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on April 15, 2022,
-the Github administration, without any warning not explanation, deleted
-libmdbx along with a lot of other projects, simultaneously blocking
-access to many developers. For the same reason ~~Github~~ is blacklisted forever.
+#### We have migrated to a reliable trusted infrastructure
+The origin for now is at [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
+since on 2022-04-15 the Github administration, without any warning nor
+explanation, deleted _libmdbx_ along with a lot of other projects,
+simultaneously blocking access for many developers.
+For the same reason ~~Github~~ is blacklisted forever.
+
+GitFlic's developers plan to support other languages,
+including English 和 中文, in the near future.
 
 New:
 

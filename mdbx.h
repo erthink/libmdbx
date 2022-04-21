@@ -14,6 +14,12 @@ break down. _libmdbx_ supports Linux, Windows, MacOS, OSX, iOS, Android,
 FreeBSD, DragonFly, Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other
 systems compliant with POSIX.1-2008.
 
+The origin has been migrated to
+[GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on 2022-04-15
+the Github administration, without any warning nor explanation, deleted libmdbx
+along with a lot of other projects, simultaneously blocking access for many
+developers. For the same reason ~~Github~~ is blacklisted forever.
+
 _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
 
 

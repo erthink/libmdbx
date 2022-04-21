@@ -13,6 +13,14 @@
 ///  - AppleClang, but without C++20 concepts.
 ///
 
+///
+/// The origin has been migrated to https://gitflic.ru/project/erthink/libmdbx
+/// since on 2022-04-15 the Github administration, without any warning nor
+/// explanation, deleted libmdbx along with a lot of other projects,
+/// simultaneously blocking access for many developers.
+/// For the same reason Github is blacklisted forever.
+///
+
 #pragma once
 
 /* Workaround for modern libstdc++ with CLANG < 4.x */

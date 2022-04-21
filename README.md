@@ -1,19 +1,18 @@
 <!-- Required extensions: pymdownx.betterem, pymdownx.tilde, pymdownx.emoji, pymdownx.tasklist, pymdownx.superfences -->
 
-### The origin repository of the project has been migrated
-to [GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on April 15, 2022,
-the Github administration, without any warning not explanation, deleted
-libmdbx along with a lot of other projects, simultaneously blocking
-access to many developers.
-
+### The origin has been migrated to [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
+since on 2022-04-15 the Github administration, without any warning
+nor explanation, deleted _libmdbx_ along with a lot of other projects,
+simultaneously blocking access for many developers.
 For the same reason ~~Github~~ is blacklisted forever.
 
-### Основной репозиторий проекта перемещен
-на [GitFlic](https://gitflic.ru/project/erthink/libmdbx), так как 15 апреля 2022
-администрация Github без предупреждения и объяснения причин удалила
-libmdbx вместе с массой других проектов, одновременно заблокировав
-доступ многим разработчикам.
+GitFlic's developers plan to support other languages,
+including English 和 中文, in the near future.
 
+### Основной репозиторий перемещен на [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
+так как 15 апреля 2022 администрация Github без предупреждения и
+объяснения причин удалила _libmdbx_ вместе с массой других проектов,
+одновременно заблокировав доступ многим разработчикам.
 По этой же причине ~~Github~~ навсегда занесен в черный список.
 
 --------------------------------------------------------------------------------
@@ -352,6 +351,14 @@ conference](http://www.highload.ru/2015/abstracts/1831.html).
 
 Since 2017 _libmdbx_ is used in [Fast Positive Tables](https://gitflic.ru/project/erthink/libfpta),
 and development is funded by [Positive Technologies](https://www.ptsecurity.com).
+
+On 2022-04-15 the Github administration, without any warning nor
+explanation, deleted _libmdbx_ along with a lot of other projects,
+simultaneously blocking access for many developers. Therefore on
+2022-04-21 we have migrated to a reliable trusted infrastructure.
+The origin for now is at [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
+with backup at [ABF by ROSA Лаб](https://abf.io/erthink/libmdbx).
+For the same reason ~~Github~~ is blacklisted forever.
 
 ## Acknowledgments
 Howard Chu <hyc@openldap.org> is the author of LMDB, from which
