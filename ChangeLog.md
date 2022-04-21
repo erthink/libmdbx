@@ -19,7 +19,7 @@ ChangeLog
 
 ## v0.11.7 (scheduled at 2022-04-22)
 
-Stable release recovery after the Github's intentional malicious disaster.
+The stable risen release after the Github's intentional malicious disaster.
 
 #### We have migrated to a reliable trusted infrastructure
 The origin for now is at [GitFlic](https://gitflic.ru/project/erthink/libmdbx)
@@ -37,6 +37,8 @@ New:
  - Support for Microsoft Visual Studio 2022.
  - Support build by MinGW' make from command line without CMake.
  - Added `mdbx::filesystem` C++ API namespace that corresponds to `std::filesystem` or `std::experimental::filesystem`.
+ - Created [website](https://libmdbx.website.yandexcloud.net/) for online auto-generated documentation.
+ - Used `todo4recovery://erased_by_github/` for dead (or temporarily lost) resources deleted by ~~Github~~.
 
 Fixes:
 
