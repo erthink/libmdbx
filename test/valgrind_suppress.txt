@@ -31,7 +31,7 @@
    fun:mdbx_wipe_steady
 }
 
-# memcmp() inside mdbx_iov_write() as workaround for https://github.com/erthink/libmdbx/issues/269
+# memcmp() inside mdbx_iov_write() as workaround for todo4recovery://erased_by_github/libmdbx/issues/269
 {
    write-page-check-bcmp
    Memcheck:Cond

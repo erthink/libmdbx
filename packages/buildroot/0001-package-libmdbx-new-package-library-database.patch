@@ -9,7 +9,7 @@ This patch adds libmdbx v0.11.1:
    focused on creating unique lightweight solutions.
  - libmdbx surpasses the legendary LMDB (Lightning Memory-Mapped Database)
    in terms of reliability, features and performance.
- - https://github.com/erthink/libmdbx
+ - https://gitflic.ru/project/erthink/libmdbx
 
 Signed-off-by: Leonid Yuriev <leo@yuriev.ru>
 Signed-off-by: Yann E. MORIN <yann.morin.1998@free.fr>
@@ -71,7 +71,7 @@ index 0000000000..d13f73938f
 +	  libmdbx surpasses the legendary LMDB in terms of
 +	  reliability, features and performance.
 +
-+	  https://github.com/erthink/libmdbx
++	  https://gitflic.ru/project/erthink/libmdbx
 +
 +if BR2_PACKAGE_LIBMDBX
 +
@@ -107,7 +107,7 @@ index 0000000000..c8b50f9ac3
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,5 @@
-+# Hashes from: https://github.com/erthink/libmdbx/releases/
++# Hashes from: https://gitflic.ru/project/erthink/libmdbx/releases/
 +sha256  f954ba8c9768914a92c2b46aac0d66bec674dbb4d7b0f01e362ea2921746ddaa  libmdbx-amalgamated-0.11.1.tar.gz
 +
 +# Locally calculated
@@ -126,7 +126,7 @@ index 0000000000..02d00b1a5a
 +
 +LIBMDBX_VERSION = 0.11.1
 +LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.gz
-+LIBMDBX_SITE = https://github.com/erthink/libmdbx/releases/download/v$(LIBMDBX_VERSION)
++LIBMDBX_SITE = https://gitflic.ru/project/erthink/libmdbx/releases/download/v$(LIBMDBX_VERSION)
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
 +LIBMDBX_LICENSE = OLDAP-2.8
 +LIBMDBX_LICENSE_FILES = LICENSE

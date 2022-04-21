@@ -14,6 +14,12 @@ break down. _libmdbx_ supports Linux, Windows, MacOS, OSX, iOS, Android,
 FreeBSD, DragonFly, Solaris, OpenSolaris, OpenIndiana, NetBSD, OpenBSD and other
 systems compliant with POSIX.1-2008.
 
+The origin has been migrated to
+[GitFlic](https://gitflic.ru/project/erthink/libmdbx) since on 2022-04-15
+the Github administration, without any warning nor explanation, deleted libmdbx
+along with a lot of other projects, simultaneously blocking access for many
+developers. For the same reason ~~Github~~ is blacklisted forever.
+
 _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
 
 
@@ -4826,26 +4832,26 @@ mdbx_get_datacmp(MDBX_db_flags_t flags);
 /** \brief A callback function used to enumerate the reader lock table.
  * \ingroup c_statinfo
  *
- * \param [in] ctx           An arbitrary context pointer for the callback.
- * \param [in] num           The serial number during enumeration,
- *                           starting from 1.
- * \param [in] slot          The reader lock table slot number.
- * \param [in] txnid         The ID of the transaction being read,
- *                           i.e. the MVCC-snapshot number.
- * \param [in] lag           The lag from a recent MVCC-snapshot,
- *                           i.e. the number of committed write transactions
- *                           since the current read transaction started.
- * \param [in] pid           The reader process ID.
- * \param [in] thread        The reader thread ID.
- * \param [in] bytes_used    The number of last used page in the MVCC-snapshot
- *                           which being read,
- *                           i.e. database file can't shrinked beyond this.
- * \param [in] bytes_retired The total size of the database pages that were
- *                           retired by committed write transactions after
- *                           the reader's MVCC-snapshot,
- *                           i.e. the space which would be freed after
- *                           the Reader releases the MVCC-snapshot
- *                           for reuse by completion read transaction.
+ * \param [in] ctx            An arbitrary context pointer for the callback.
+ * \param [in] num            The serial number during enumeration,
+ *                            starting from 1.
+ * \param [in] slot           The reader lock table slot number.
+ * \param [in] txnid          The ID of the transaction being read,
+ *                            i.e. the MVCC-snapshot number.
+ * \param [in] lag            The lag from a recent MVCC-snapshot,
+ *                            i.e. the number of committed write transactions
+ *                            since the current read transaction started.
+ * \param [in] pid            The reader process ID.
+ * \param [in] thread         The reader thread ID.
+ * \param [in] bytes_used     The number of last used page
+ *                            in the MVCC-snapshot which being read,
+ *                            i.e. database file can't shrinked beyond this.
+ * \param [in] bytes_retained The total size of the database pages that were
+ *                            retired by committed write transactions after
+ *                            the reader's MVCC-snapshot,
+ *                            i.e. the space which would be freed after
+ *                            the Reader releases the MVCC-snapshot
+ *                            for reuse by completion read transaction.
  *
  * \returns < 0 on failure, >= 0 on success. \see mdbx_reader_list() */
 typedef int(MDBX_reader_list_func)(void *ctx, int num, int slot, mdbx_pid_t pid,

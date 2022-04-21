@@ -1,4 +1,3 @@
-
 _The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо._
 
 \section toc Table of Contents
@@ -23,7 +22,7 @@ each of which is divided into several sections.
   - The \ref mdbx.h++ header file reference
 
 Please do not hesitate to point out errors in the documentation,
-including creating [PR](https://help.github.com/en/github/collaborating-with-issues-and-pull-requests/proposing-changes-to-your-work-with-pull-requests) with corrections and improvements.
+including creating [merge-request](https://gitflic.ru/project/erthink/libmdbx/merge-request) with corrections and improvements.
 
 ---
 
