@@ -468,7 +468,7 @@ if(CMAKE_COMPILER_IS_CLANG)
           AND NOT (CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux"
             AND CMAKE_SYSTEM_NAME STREQUAL "Linux"))
         OR APPLE))
-    if(ANDROID AND CMAKE_SYSTEM_VERSION VERSION_LESS 22)
+    if(ANDROID AND CMAKE_${CMAKE_PRIMARY_LANG}_COMPILER_VERSION VERSION_LESS 12)
       set(CLANG_LTO_AVAILABLE FALSE)
       message(STATUS "Link-Time Optimization by CLANG/LLVM is available but unusable due https://reviews.llvm.org/D79919")
     else()
