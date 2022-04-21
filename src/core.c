@@ -1248,7 +1248,7 @@ static __inline void rthc_lock(void) {
 #if defined(_WIN32) || defined(_WIN64)
   EnterCriticalSection(&rthc_critical_section);
 #else
-  mdbx_ensure(nullptr, pthread_mutex_lock(&rthc_mutex) == 0);
+  mdbx_ensure(nullptr, mdbx_pthread_mutex_lock(&rthc_mutex) == 0);
 #endif
 }
 
@@ -1596,7 +1596,7 @@ static __inline void lcklist_lock(void) {
 #if defined(_WIN32) || defined(_WIN64)
   EnterCriticalSection(&lcklist_critical_section);
 #else
-  mdbx_ensure(nullptr, pthread_mutex_lock(&lcklist_mutex) == 0);
+  mdbx_ensure(nullptr, mdbx_pthread_mutex_lock(&lcklist_mutex) == 0);
 #endif
 }
 

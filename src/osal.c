@@ -437,7 +437,7 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_lock(mdbx_condpair_t *condpair) {
   DWORD code = WaitForSingleObject(condpair->mutex, INFINITE);
   return waitstatus2errcode(code);
 #else
-  return pthread_mutex_lock(&condpair->mutex);
+  return mdbx_pthread_mutex_lock(&condpair->mutex);
 #endif
 }
 
@@ -507,7 +507,7 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
   }
   return MDBX_SUCCESS;
 #else
-  return pthread_mutex_lock(fastmutex);
+  return mdbx_pthread_mutex_lock(fastmutex);
 #endif
 }
 

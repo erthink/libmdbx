@@ -730,6 +730,7 @@ MDBX_MAYBE_UNUSED static __inline uint32_t mdbx_getpid(void) {
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
 #else
+  STATIC_ASSERT(sizeof(pid_t) <= sizeof(uint32_t));
   return getpid();
 #endif
 }
@@ -744,6 +745,20 @@ MDBX_MAYBE_UNUSED static __inline uintptr_t mdbx_thread_self(void) {
 #endif
   return (uintptr_t)thunk;
 }
+
+#if !defined(_WIN32) && !defined(_WIN64)
+#if defined(__ANDROID_API__) || defined(ANDROID) || defined(BIONIC)
+MDBX_INTERNAL_FUNC int mdbx_check_tid4bionic(void);
+#else
+static __inline int mdbx_check_tid4bionic(void) { return 0; }
+#endif /* __ANDROID_API__ || ANDROID) || BIONIC */
+
+MDBX_MAYBE_UNUSED static __inline int
+mdbx_pthread_mutex_lock(pthread_mutex_t *mutex) {
+  int err = mdbx_check_tid4bionic();
+  return unlikely(err) ? err : pthread_mutex_lock(mutex);
+}
+#endif /* !Windows */
 
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t
