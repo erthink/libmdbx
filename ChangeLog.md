@@ -3,17 +3,17 @@ ChangeLog
 
 ### TODO
 
- - [Engage an "overlapped I/O" on Windows](https://erased_by_github.none/libmdbx/issues/224).
- - [Simple careful mode for working with corrupted DB](https://erased_by_github.none/libmdbx/issues/223).
- - [Move most of `mdbx_chk` functional to the library API](https://erased_by_github.none/libmdbx/issues/204).
- - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOTLS` option](https://erased_by_github.none/libmdbx/issues/210).
- - [More flexible support of asynchronous runtime/framework(s)](https://erased_by_github.none/libmdbx/issues/200).
- - [Migration guide from LMDB to MDBX](https://erased_by_github.none/libmdbx/issues/199).
- - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](https://erased_by_github.none/libmdbx/issues/193).
- - [Large/Overflow pages accounting for dirty-room](https://erased_by_github.none/libmdbx/issues/192).
- - [Support for RAW devices](https://erased_by_github.none/libmdbx/issues/124).
- - [Support MessagePack for Keys & Values](https://erased_by_github.none/libmdbx/issues/115).
- - [Engage new terminology](https://erased_by_github.none/libmdbx/issues/137).
+ - [Engage an "overlapped I/O" on Windows](todo4recovery://erased_by_github/libmdbx/issues/224).
+ - [Simple careful mode for working with corrupted DB](todo4recovery://erased_by_github/libmdbx/issues/223).
+ - [Move most of `mdbx_chk` functional to the library API](todo4recovery://erased_by_github/libmdbx/issues/204).
+ - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOTLS` option](todo4recovery://erased_by_github/libmdbx/issues/210).
+ - [More flexible support of asynchronous runtime/framework(s)](todo4recovery://erased_by_github/libmdbx/issues/200).
+ - [Migration guide from LMDB to MDBX](todo4recovery://erased_by_github/libmdbx/issues/199).
+ - [Get rid of dirty-pages list in MDBX_WRITEMAP mode](todo4recovery://erased_by_github/libmdbx/issues/193).
+ - [Large/Overflow pages accounting for dirty-room](todo4recovery://erased_by_github/libmdbx/issues/192).
+ - [Support for RAW devices](todo4recovery://erased_by_github/libmdbx/issues/124).
+ - [Support MessagePack for Keys & Values](todo4recovery://erased_by_github/libmdbx/issues/115).
+ - [Engage new terminology](todo4recovery://erased_by_github/libmdbx/issues/137).
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
@@ -56,7 +56,7 @@ Minors:
 
 The stable release with the complete workaround for an incoherence flaw of Linux unified page/buffer cache.
 Nonetheless the cause for this trouble may be an issue of Intel CPU cache/MESI.
-See [issue#269](https://erased_by_github.none/libmdbx/issues/269) for more information.
+See [issue#269](todo4recovery://erased_by_github/libmdbx/issues/269) for more information.
 
 Acknowledgements:
 
@@ -65,8 +65,8 @@ Acknowledgements:
 
 Fixes:
 
- - [Added complete workaround](https://erased_by_github.none/libmdbx/issues/269) for an incoherence flaw of Linux unified page/buffer cache.
- - [Fixed](https://erased_by_github.none/libmdbx/issues/272) cursor reusing for read-only transactions.
+ - [Added complete workaround](todo4recovery://erased_by_github/libmdbx/issues/269) for an incoherence flaw of Linux unified page/buffer cache.
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/issues/272) cursor reusing for read-only transactions.
  - Fixed copy&paste typo inside `mdbx::cursor::find_multivalue()`.
 
 Minors:
@@ -81,7 +81,7 @@ Minors:
 ## v0.11.5 at 2022-02-23
 
 The release with the temporary hotfix for a flaw of Linux unified page/buffer cache.
-See [issue#269](https://erased_by_github.none/libmdbx/issues/269) for more information.
+See [issue#269](todo4recovery://erased_by_github/libmdbx/issues/269) for more information.
 
 Acknowledgements:
 
@@ -91,10 +91,10 @@ Acknowledgements:
 
 Fixes:
 
- - [Added hotfix](https://erased_by_github.none/libmdbx/issues/269) for a flaw of Linux unified page/buffer cache.
- - [Fixed/Reworked](https://erased_by_github.none/libmdbx/pull/270) move-assignment operators for "managed" classes of C++ API.
+ - [Added hotfix](todo4recovery://erased_by_github/libmdbx/issues/269) for a flaw of Linux unified page/buffer cache.
+ - [Fixed/Reworked](todo4recovery://erased_by_github/libmdbx/pull/270) move-assignment operators for "managed" classes of C++ API.
  - Fixed potential `SIGSEGV` while open DB with overrided non-default page size.
- - [Made](https://erased_by_github.none/libmdbx/issues/267) `mdbx_env_open()` idempotence in failure cases.
+ - [Made](todo4recovery://erased_by_github/libmdbx/issues/267) `mdbx_env_open()` idempotence in failure cases.
  - Refined/Fixed pages reservation inside `mdbx_update_gc()` to avoid non-reclamation in a rare cases.
  - Fixed typo in a retained space calculation for the hsr-callback.
 
@@ -127,15 +127,15 @@ New features, extensions and improvements:
 Fixes:
 
  - Fixed handling `MDBX_opt_rp_augment_limit` for GC's records from huge transactions (Erigon/Akula/Ethereum).
- - [Fixed](https://erased_by_github.none/libmdbx/issues/258) build on Android (avoid including `sys/sem.h`).
- - [Fixed](https://erased_by_github.none/libmdbx/pull/261) missing copy assignment operator for `mdbx::move_result`.
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/issues/258) build on Android (avoid including `sys/sem.h`).
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/pull/261) missing copy assignment operator for `mdbx::move_result`.
  - Fixed missing `&` for `std::ostream &operator<<()` overloads.
  - Fixed unexpected `EXDEV` (Cross-device link) error from `mdbx_env_copy()`.
  - Fixed base64 encoding/decoding bugs in auxillary C++ API.
  - Fixed overflow of `pgno_t` during checking PNL on 64-bit platforms.
- - [Fixed](https://erased_by_github.none/libmdbx/issues/260) excessive PNL checking after sort for spilling.
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/issues/260) excessive PNL checking after sort for spilling.
  - Reworked checking `MAX_PAGENO` and DB upper-size geometry limit.
- - [Fixed](https://erased_by_github.none/libmdbx/issues/265) build for some combinations of versions of  MSVC and Windows SDK.
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/issues/265) build for some combinations of versions of  MSVC and Windows SDK.
 
 Minors:
 
@@ -162,10 +162,10 @@ Acknowledgements:
 
 New features, extensions and improvements:
 
- - [Added](https://erased_by_github.none/libmdbx/issues/236) `mdbx_cursor_get_batch()`.
- - [Added](https://erased_by_github.none/libmdbx/issues/250) `MDBX_SET_UPPERBOUND`.
+ - [Added](todo4recovery://erased_by_github/libmdbx/issues/236) `mdbx_cursor_get_batch()`.
+ - [Added](todo4recovery://erased_by_github/libmdbx/issues/250) `MDBX_SET_UPPERBOUND`.
  - C++ API is finalized now.
- - The GC update stage has been [significantly speeded](https://erased_by_github.none/libmdbx/issues/254) when fixing huge Erigon's transactions (Ethereum ecosystem).
+ - The GC update stage has been [significantly speeded](todo4recovery://erased_by_github/libmdbx/issues/254) when fixing huge Erigon's transactions (Ethereum ecosystem).
 
 Fixes:
 
@@ -176,12 +176,12 @@ Minors:
 
  - Fixed returning `MDBX_RESULT_TRUE` (unexpected -1) from `mdbx_env_set_option()`.
  - Added `mdbx_env_get_syncbytes()` and `mdbx_env_get_syncperiod()`.
- - [Clarified](https://erased_by_github.none/libmdbx/pull/249) description of `MDBX_INTEGERKEY`.
+ - [Clarified](todo4recovery://erased_by_github/libmdbx/pull/249) description of `MDBX_INTEGERKEY`.
  - Reworked/simplified `mdbx_env_sync_internal()`.
- - [Fixed](https://erased_by_github.none/libmdbx/issues/248) extra assertion inside `mdbx_cursor_put()` for `MDBX_DUPFIXED` cases.
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/issues/248) extra assertion inside `mdbx_cursor_put()` for `MDBX_DUPFIXED` cases.
  - Avoiding extra looping inside `mdbx_env_info_ex()`.
  - Explicitly enabled core dumps from stochastic tests scripts on Linux.
- - [Fixed](https://erased_by_github.none/libmdbx/issues/253) `mdbx_override_meta()` to avoid false-positive assertions.
+ - [Fixed](todo4recovery://erased_by_github/libmdbx/issues/253) `mdbx_override_meta()` to avoid false-positive assertions.
  - For compatibility reverted returning `MDBX_ENODATA`for some cases.
 
 
@@ -197,10 +197,10 @@ Acknowledgements:
 
 Fixes:
 
- - [Fixed compilation](https://erased_by_github.none/libmdbx/pull/239) with `devtoolset-9` on CentOS/RHEL 7.
- - [Fixed unexpected `MDBX_PROBLEM` error](https://erased_by_github.none/libmdbx/issues/242) because of update an obsolete meta-page.
- - [Fixed returning `MDBX_NOTFOUND` error](https://erased_by_github.none/libmdbx/issues/243) in case an inexact value found for `MDBX_GET_BOTH` operation.
- - [Fixed compilation](https://erased_by_github.none/libmdbx/issues/245) without kernel/libc-devel headers.
+ - [Fixed compilation](todo4recovery://erased_by_github/libmdbx/pull/239) with `devtoolset-9` on CentOS/RHEL 7.
+ - [Fixed unexpected `MDBX_PROBLEM` error](todo4recovery://erased_by_github/libmdbx/issues/242) because of update an obsolete meta-page.
+ - [Fixed returning `MDBX_NOTFOUND` error](todo4recovery://erased_by_github/libmdbx/issues/243) in case an inexact value found for `MDBX_GET_BOTH` operation.
+ - [Fixed compilation](todo4recovery://erased_by_github/libmdbx/issues/245) without kernel/libc-devel headers.
 
 Minors:
 
@@ -217,7 +217,7 @@ Minors:
 
 The database format signature has been changed to prevent
 forward-interoperability with an previous releases, which may lead to a
-[false positive diagnosis of database corruption](https://erased_by_github.none/libmdbx/issues/238)
+[false positive diagnosis of database corruption](todo4recovery://erased_by_github/libmdbx/issues/238)
 due to flaws of an old library versions.
 
 This change is mostly invisible:
@@ -266,7 +266,7 @@ Acknowledgements:
 Fixes:
 
  - Fixed possibility of looping update GC during transaction commit (no public issue since the problem was discovered inside [Positive Technologies](https://www.ptsecurity.ru)).
- - Fixed `#pragma pack` to avoid provoking some compilers to generate code with [unaligned access](https://erased_by_github.none/libmdbx/issues/235).
+ - Fixed `#pragma pack` to avoid provoking some compilers to generate code with [unaligned access](todo4recovery://erased_by_github/libmdbx/issues/235).
  - Fixed `noexcept` for potentially throwing `txn::put()` of C++ API.
 
 Minors:
@@ -292,7 +292,7 @@ Extensions and improvements:
 
 Fixes:
 
- - Always setup `madvise` while opening DB (fixes https://erased_by_github.none/libmdbx/issues/231).
+ - Always setup `madvise` while opening DB (fixes todo4recovery://erased_by_github/libmdbx/issues/231).
  - Fixed checking legacy `P_DIRTY` flag (`0x10`) for nested/sub-pages.
 
 Minors:
@@ -313,11 +313,11 @@ Acknowledgements:
  - [Lionel Debroux](https://github.com/debrouxl) for fuzzing tests and reporting bugs.
  - [Sergey Fedotov](https://github.com/SergeyFromHell/) for [`node-mdbx` NodeJS bindings](https://www.npmjs.com/package/node-mdbx).
  - [Kris Zyp](https://github.com/kriszyp) for [`lmdbx-store` NodeJS bindings](https://github.com/kriszyp/lmdbx-store).
- - [Noel Kuntze](https://github.com/Thermi) for [draft Python bindings](https://erased_by_github.none/libmdbx/commits/python-bindings).
+ - [Noel Kuntze](https://github.com/Thermi) for [draft Python bindings](todo4recovery://erased_by_github/libmdbx/commits/python-bindings).
 
 New features, extensions and improvements:
 
- - [Allow to predefine/override `MDBX_BUILD_TIMESTAMP` for builds reproducibility](https://erased_by_github.none/libmdbx/issues/201).
+ - [Allow to predefine/override `MDBX_BUILD_TIMESTAMP` for builds reproducibility](todo4recovery://erased_by_github/libmdbx/issues/201).
  - Added options support for `long-stochastic` script.
  - Avoided `MDBX_TXN_FULL` error for large transactions when possible.
  - The `MDBX_READERS_LIMIT` increased to `32767`.
@@ -325,7 +325,7 @@ New features, extensions and improvements:
  - Minimized the size of poisoned/unpoisoned regions to avoid Valgrind/ASAN stuck.
  - Added more workarounds for QEMU for testing builds for 32-bit platforms, Alpha and Sparc architectures.
  - `mdbx_chk` now skips iteration & checking of DB' records if corresponding page-tree is corrupted (to avoid `SIGSEGV`, ASAN failures, etc).
- - Added more checks for [rare/fuzzing corruption cases](https://erased_by_github.none/libmdbx/issues/217).
+ - Added more checks for [rare/fuzzing corruption cases](todo4recovery://erased_by_github/libmdbx/issues/217).
 
 Backward compatibility break:
 
@@ -337,18 +337,18 @@ Backward compatibility break:
 Fixes:
 
  - Fixed excess meta-pages checks in case `mdbx_chk` is called to check the DB for a specific meta page and thus could prevent switching to the selected meta page, even if the check passed without errors.
- - Fixed [recursive use of SRW-lock on Windows cause by `MDBX_NOTLS` option](https://erased_by_github.none/libmdbx/issues/203).
- - Fixed [log a warning during a new DB creation](https://erased_by_github.none/libmdbx/issues/205).
- - Fixed [false-negative `mdbx_cursor_eof()` result](https://erased_by_github.none/libmdbx/issues/207).
- - Fixed [`make install` with non-GNU `install` utility (OSX, BSD)](https://erased_by_github.none/libmdbx/issues/208).
- - Fixed [installation by `CMake` in special cases by complete use `GNUInstallDirs`'s variables](https://erased_by_github.none/libmdbx/issues/209).
- - Fixed [C++ Buffer issue with `std::string` and alignment](https://erased_by_github.none/libmdbx/issues/191).
+ - Fixed [recursive use of SRW-lock on Windows cause by `MDBX_NOTLS` option](todo4recovery://erased_by_github/libmdbx/issues/203).
+ - Fixed [log a warning during a new DB creation](todo4recovery://erased_by_github/libmdbx/issues/205).
+ - Fixed [false-negative `mdbx_cursor_eof()` result](todo4recovery://erased_by_github/libmdbx/issues/207).
+ - Fixed [`make install` with non-GNU `install` utility (OSX, BSD)](todo4recovery://erased_by_github/libmdbx/issues/208).
+ - Fixed [installation by `CMake` in special cases by complete use `GNUInstallDirs`'s variables](todo4recovery://erased_by_github/libmdbx/issues/209).
+ - Fixed [C++ Buffer issue with `std::string` and alignment](todo4recovery://erased_by_github/libmdbx/issues/191).
  - Fixed `safe64_reset()` for platforms without atomic 64-bit compare-and-swap.
  - Fixed hang/shutdown on big-endian platforms without `__cxa_thread_atexit()`.
- - Fixed [using bad meta-pages if DB was partially/recoverable corrupted](https://erased_by_github.none/libmdbx/issues/217).
+ - Fixed [using bad meta-pages if DB was partially/recoverable corrupted](todo4recovery://erased_by_github/libmdbx/issues/217).
  - Fixed extra `noexcept` for `buffer::&assign_reference()`.
  - Fixed `bootid` generation on Windows for case of change system' time.
- - Fixed [test framework keygen-related issue](https://erased_by_github.none/libmdbx/issues/127).
+ - Fixed [test framework keygen-related issue](todo4recovery://erased_by_github/libmdbx/issues/127).
 
 
 ## v0.10.1 at 2021-06-01
@@ -369,10 +369,10 @@ New features:
 Fixes:
 
  - Fixed minor "foo not used" warnings from modern C++ compilers when building the C++ part of the library.
- - Fixed confusing/messy errors when build library from unfit github's archives (https://erased_by_github.none/libmdbx/issues/197).
+ - Fixed confusing/messy errors when build library from unfit github's archives (todo4recovery://erased_by_github/libmdbx/issues/197).
  - Fixed `#​e​l​s​i​f` typo.
- - Fixed rare unexpected `MDBX_PROBLEM` error during altering data in huge transactions due to wrong spilling/oust of dirty pages (https://erased_by_github.none/libmdbx/issues/195).
- - Re-Fixed WSL1/WSL2 detection with distinguishing (https://erased_by_github.none/libmdbx/issues/97).
+ - Fixed rare unexpected `MDBX_PROBLEM` error during altering data in huge transactions due to wrong spilling/oust of dirty pages (todo4recovery://erased_by_github/libmdbx/issues/195).
+ - Re-Fixed WSL1/WSL2 detection with distinguishing (todo4recovery://erased_by_github/libmdbx/issues/97).
 
 
 ## v0.10.0 at 2021-05-09
@@ -395,7 +395,7 @@ New features:
    and conjointly with the `MDBX_ENV_CHECKPID=0` and `MDBX_TXN_CHECKOWNER=0` options can yield
    up to 30% more performance compared to LMDB.
  - Using float point (exponential quantized) representation for internal 16-bit values
-   of grow step and shrink threshold when huge ones (https://erased_by_github.none/libmdbx/issues/166).
+   of grow step and shrink threshold when huge ones (todo4recovery://erased_by_github/libmdbx/issues/166).
    To minimize the impact on compatibility, only the odd values inside the upper half
    of the range (i.e. 32769..65533) are used for the new representation.
  - Added the `mdbx_drop` similar to LMDB command-line tool to purge or delete (sub)database(s).
@@ -404,7 +404,7 @@ New features:
  - The internal node sizes were refined, resulting in a reduction in large/overflow pages in some use cases
    and a slight increase in limits for a keys size to ≈½ of page size.
  - Added to `mdbx_chk` output number of keys/items on pages.
- - Added explicit `install-strip` and `install-no-strip` targets to the `Makefile` (https://erased_by_github.none/libmdbx/pull/180).
+ - Added explicit `install-strip` and `install-no-strip` targets to the `Makefile` (todo4recovery://erased_by_github/libmdbx/pull/180).
  - Major rework page splitting (af9b7b560505684249b76730997f9e00614b8113) for
      - An "auto-appending" feature upon insertion for both ascending and
        descending key sequences. As a result, the optimality of page filling
@@ -412,7 +412,7 @@ New features:
        inserting ordered sequences of keys,
      - A "splitting at middle" to make page tree more balanced on average.
  - Added `mdbx_get_sysraminfo()` to the API.
- - Added guessing a reasonable maximum DB size for the default upper limit of geometry (https://erased_by_github.none/libmdbx/issues/183).
+ - Added guessing a reasonable maximum DB size for the default upper limit of geometry (todo4recovery://erased_by_github/libmdbx/issues/183).
  - Major rework internal labeling of a dirty pages (958fd5b9479f52f2124ab7e83c6b18b04b0e7dda) for
    a "transparent spilling" feature with the gist to make a dirty pages
    be ready to spilling (writing to a disk) without further altering ones.
@@ -428,7 +428,7 @@ New features:
  - Support `make help` to list available make targets.
  - Silently `make`'s build by default.
  - Preliminary [Python bindings](https://github.com/Thermi/libmdbx/tree/python-bindings) is available now
-   by [Noel Kuntze](https://github.com/Thermi) (https://erased_by_github.none/libmdbx/issues/147).
+   by [Noel Kuntze](https://github.com/Thermi) (todo4recovery://erased_by_github/libmdbx/issues/147).
 
 Backward compatibility break:
 
@@ -443,22 +443,22 @@ Backward compatibility break:
 
 Fixes:
 
- - Fixed performance regression due non-optimal C11 atomics usage (https://erased_by_github.none/libmdbx/issues/160).
- - Fixed "reincarnation" of subDB after it deletion (https://erased_by_github.none/libmdbx/issues/168).
+ - Fixed performance regression due non-optimal C11 atomics usage (todo4recovery://erased_by_github/libmdbx/issues/160).
+ - Fixed "reincarnation" of subDB after it deletion (todo4recovery://erased_by_github/libmdbx/issues/168).
  - Fixed (disallowing) implicit subDB deletion via operations on `@MAIN`'s DBI-handle.
- - Fixed a crash of `mdbx_env_info_ex()` in case of a call for a non-open environment (https://erased_by_github.none/libmdbx/issues/171).
- - Fixed the selecting/adjustment values inside `mdbx_env_set_geometry()` for implicit out-of-range cases (https://erased_by_github.none/libmdbx/issues/170).
- - Fixed `mdbx_env_set_option()` for set initial and limit size of dirty page list ((https://erased_by_github.none/libmdbx/issues/179).
- - Fixed an unreasonably huge default upper limit for DB geometry (https://erased_by_github.none/libmdbx/issues/183).
+ - Fixed a crash of `mdbx_env_info_ex()` in case of a call for a non-open environment (todo4recovery://erased_by_github/libmdbx/issues/171).
+ - Fixed the selecting/adjustment values inside `mdbx_env_set_geometry()` for implicit out-of-range cases (todo4recovery://erased_by_github/libmdbx/issues/170).
+ - Fixed `mdbx_env_set_option()` for set initial and limit size of dirty page list ((todo4recovery://erased_by_github/libmdbx/issues/179).
+ - Fixed an unreasonably huge default upper limit for DB geometry (todo4recovery://erased_by_github/libmdbx/issues/183).
  - Fixed `constexpr` specifier for the `slice::invalid()`.
- - Fixed (no)readahead auto-handling (https://erased_by_github.none/libmdbx/issues/164).
+ - Fixed (no)readahead auto-handling (todo4recovery://erased_by_github/libmdbx/issues/164).
  - Fixed non-alloy build for Windows.
  - Switched to using Heap-functions instead of LocalAlloc/LocalFree on Windows.
- - Fixed `mdbx_env_stat_ex()` to returning statistics of the whole environment instead of MainDB only (https://erased_by_github.none/libmdbx/issues/190).
+ - Fixed `mdbx_env_stat_ex()` to returning statistics of the whole environment instead of MainDB only (todo4recovery://erased_by_github/libmdbx/issues/190).
  - Fixed building by GCC 4.8.5 (added workaround for a preprocessor's bug).
  - Fixed building C++ part for iOS <= 13.0 (unavailability of  `std::filesystem::path`).
  - Fixed building for Windows target versions prior to Windows Vista (`WIN32_WINNT < 0x0600`).
- - Fixed building by MinGW for Windows (https://erased_by_github.none/libmdbx/issues/155).
+ - Fixed building by MinGW for Windows (todo4recovery://erased_by_github/libmdbx/issues/155).
 
 
 ## v0.9.3 at 2021-02-02
@@ -478,7 +478,7 @@ Removed options and features:
 New features:
 
  - Package for FreeBSD is available now by Mahlon E. Smith.
- - New API functions to get/set various options (https://erased_by_github.none/libmdbx/issues/128):
+ - New API functions to get/set various options (todo4recovery://erased_by_github/libmdbx/issues/128):
     - the maximum number of named databases for the environment;
     - the maximum number of threads/reader slots;
     - threshold (since the last unsteady commit) to force flush the data buffers to disk;
@@ -491,7 +491,7 @@ New features:
     - maximal part of the dirty pages may be spilled when necessary;
     - minimal part of the dirty pages should be spilled when necessary;
     - how much of the parent transaction dirty pages will be spilled while start each child transaction;
- - Unlimited/Dynamic size of retired and dirty page lists (https://erased_by_github.none/libmdbx/issues/123).
+ - Unlimited/Dynamic size of retired and dirty page lists (todo4recovery://erased_by_github/libmdbx/issues/123).
  - Added `-p` option (purge subDB before loading) to `mdbx_load` tool.
  - Reworked spilling of large transaction and committing of nested transactions:
     - page spilling code reworked to avoid the flaws and bugs inherited from LMDB;
@@ -501,22 +501,22 @@ New features:
  - Added `MDBX_ENABLE_REFUND` and `MDBX_PNL_ASCENDING` internal/advanced build options.
  - Added `mdbx_default_pagesize()` function.
  - Better support architectures with a weak/relaxed memory consistency model (ARM, AARCH64, PPC, MIPS, RISC-V, etc) by means [C11 atomics](https://en.cppreference.com/w/c/atomic).
- - Speed up page number lists and dirty page lists (https://erased_by_github.none/libmdbx/issues/132).
+ - Speed up page number lists and dirty page lists (todo4recovery://erased_by_github/libmdbx/issues/132).
  - Added `LIBMDBX_NO_EXPORTS_LEGACY_API` build option.
 
 Fixes:
 
- - Fixed missing cleanup (null assigned) in the C++ commit/abort (https://erased_by_github.none/libmdbx/pull/143).
+ - Fixed missing cleanup (null assigned) in the C++ commit/abort (todo4recovery://erased_by_github/libmdbx/pull/143).
  - Fixed `mdbx_realloc()` for case of nullptr and `MDBX_WITHOUT_MSVC_CRT=ON` for Windows.
- - Fixed the possibility to use invalid and renewed (closed & re-opened, dropped & re-created) DBI-handles (https://erased_by_github.none/libmdbx/issues/146).
- - Fixed 4-byte aligned access to 64-bit integers, including access to the `bootid` meta-page's field (https://erased_by_github.none/libmdbx/issues/153).
+ - Fixed the possibility to use invalid and renewed (closed & re-opened, dropped & re-created) DBI-handles (todo4recovery://erased_by_github/libmdbx/issues/146).
+ - Fixed 4-byte aligned access to 64-bit integers, including access to the `bootid` meta-page's field (todo4recovery://erased_by_github/libmdbx/issues/153).
  - Fixed minor/potential memory leak during page flushing and unspilling.
  - Fixed handling states of cursors's and subDBs's for nested transactions.
  - Fixed page leak in extra rare case the list of retired pages changed during update GC on transaction commit.
- - Fixed assertions to avoid false-positive UB detection by CLANG/LLVM (https://erased_by_github.none/libmdbx/issues/153).
- - Fixed `MDBX_TXN_FULL` and regressive `MDBX_KEYEXIST` during large transaction commit with `MDBX_LIFORECLAIM` (https://erased_by_github.none/libmdbx/issues/123).
+ - Fixed assertions to avoid false-positive UB detection by CLANG/LLVM (todo4recovery://erased_by_github/libmdbx/issues/153).
+ - Fixed `MDBX_TXN_FULL` and regressive `MDBX_KEYEXIST` during large transaction commit with `MDBX_LIFORECLAIM` (todo4recovery://erased_by_github/libmdbx/issues/123).
  - Fixed auto-recovery (`weak->steady` with the same boot-id) when Database size at last weak checkpoint is large than at last steady checkpoint.
- - Fixed operation on systems with unusual small/large page size, including PowerPC (https://erased_by_github.none/libmdbx/issues/157).
+ - Fixed operation on systems with unusual small/large page size, including PowerPC (todo4recovery://erased_by_github/libmdbx/issues/157).
 
 
 ## v0.9.2 at 2020-11-27
@@ -554,11 +554,11 @@ Fixes:
  - Fixed copy&paste typos.
  - Fixed minor false-positive GCC warning.
  - Added workaround for broken `DEFINE_ENUM_FLAG_OPERATORS` from Windows SDK.
- - Fixed cursor state after multimap/dupsort repeated deletes (https://erased_by_github.none/libmdbx/issues/121).
+ - Fixed cursor state after multimap/dupsort repeated deletes (todo4recovery://erased_by_github/libmdbx/issues/121).
  - Added `SIGPIPE` suppression for internal thread during `mdbx_env_copy()`.
- - Fixed extra-rare `MDBX_KEY_EXIST` error during `mdbx_commit()` (https://erased_by_github.none/libmdbx/issues/131).
- - Fixed spilled pages checking (https://erased_by_github.none/libmdbx/issues/126).
- - Fixed `mdbx_load` for 'plain text' and without `-s name` cases (https://erased_by_github.none/libmdbx/issues/136).
+ - Fixed extra-rare `MDBX_KEY_EXIST` error during `mdbx_commit()` (todo4recovery://erased_by_github/libmdbx/issues/131).
+ - Fixed spilled pages checking (todo4recovery://erased_by_github/libmdbx/issues/126).
+ - Fixed `mdbx_load` for 'plain text' and without `-s name` cases (todo4recovery://erased_by_github/libmdbx/issues/136).
  - Fixed save/restore/commit of cursors for nested transactions.
  - Fixed cursors state in rare/special cases (move next beyond end-of-data, after deletion and so on).
  - Added workaround for MSVC 19.28 (Visual Studio 16.8) (but may still hang during compilation).

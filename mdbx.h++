@@ -256,7 +256,7 @@ namespace mdbx {
 // To enable all kinds of an compiler optimizations we use a byte-like type
 // that don't presumes aliases for pointers as does the `char` type and its
 // derivatives/typedefs.
-// Please see https://erased_by_github.none/libmdbx/issues/263
+// Please see todo4recovery://erased_by_github/libmdbx/issues/263
 // for reasoning of the use of `char8_t` type and switching to `__restrict__`.
 using byte = char8_t;
 #else
