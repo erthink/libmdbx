@@ -67,53 +67,61 @@ endif()
 
 ################################################################################
 
-add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
-  --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
-set_tests_properties(smoke PROPERTIES
-  TIMEOUT 600
-  RUN_SERIAL OFF)
-add_test(NAME smoke_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db)
-set_tests_properties(smoke_chk PROPERTIES
-  DEPENDS smoke
-  TIMEOUT 60
-  REQUIRED_FILES smoke.db)
-add_test(NAME smoke_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db-copy)
-set_tests_properties(smoke_chk_copy PROPERTIES
-  DEPENDS smoke
-  TIMEOUT 60
-  REQUIRED_FILES smoke.db-copy)
+if (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
+  message(WARNING "No emulator to run cross-compiled tests")
+  add_test(NAME fake_since_no_crosscompiling_emulator COMMAND ${CMAKE_COMMAND} -E
+    echo "No emulator to run cross-compiled tests")
+else()
 
-add_test(NAME dupsort_writemap COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
-  --loglevel=notice
-  --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
-  --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
-set_tests_properties(dupsort_writemap PROPERTIES
-  TIMEOUT 600
-  RUN_SERIAL OFF)
-add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv dupsort_writemap.db)
-set_tests_properties(dupsort_writemap_chk PROPERTIES
-  DEPENDS dupsort_writemap
-  TIMEOUT 60
-  REQUIRED_FILES dupsort_writemap.db)
-add_test(NAME dupsort_writemap_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv dupsort_writemap.db-copy)
-set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
-  DEPENDS dupsort_writemap
-  TIMEOUT 60
-  REQUIRED_FILES dupsort_writemap.db-copy)
+  add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
+    --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
+  set_tests_properties(smoke PROPERTIES
+    TIMEOUT 600
+    RUN_SERIAL OFF)
+  add_test(NAME smoke_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db)
+  set_tests_properties(smoke_chk PROPERTIES
+    DEPENDS smoke
+    TIMEOUT 60
+    REQUIRED_FILES smoke.db)
+  add_test(NAME smoke_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv smoke.db-copy)
+  set_tests_properties(smoke_chk_copy PROPERTIES
+    DEPENDS smoke
+    TIMEOUT 60
+    REQUIRED_FILES smoke.db-copy)
 
-add_test(NAME uniq_nested COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
-  --loglevel=notice
-  --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=2 --pathname=uniq_nested.db --dont-cleanup-after basic)
-set_tests_properties(uniq_nested PROPERTIES
-  TIMEOUT 1800
-  RUN_SERIAL OFF)
-add_test(NAME uniq_nested_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db)
-set_tests_properties(uniq_nested_chk PROPERTIES
-  DEPENDS uniq_nested
-  TIMEOUT 60
-  REQUIRED_FILES uniq_nested.db)
-add_test(NAME uniq_nested_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db-copy)
-set_tests_properties(uniq_nested_chk_copy PROPERTIES
-  DEPENDS uniq_nested
-  TIMEOUT 60
-  REQUIRED_FILES uniq_nested.db-copy)
+  add_test(NAME dupsort_writemap COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
+    --loglevel=notice
+    --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
+    --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
+  set_tests_properties(dupsort_writemap PROPERTIES
+    TIMEOUT 600
+    RUN_SERIAL OFF)
+  add_test(NAME dupsort_writemap_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv dupsort_writemap.db)
+  set_tests_properties(dupsort_writemap_chk PROPERTIES
+    DEPENDS dupsort_writemap
+    TIMEOUT 60
+    REQUIRED_FILES dupsort_writemap.db)
+  add_test(NAME dupsort_writemap_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv dupsort_writemap.db-copy)
+  set_tests_properties(dupsort_writemap_chk_copy PROPERTIES
+    DEPENDS dupsort_writemap
+    TIMEOUT 60
+    REQUIRED_FILES dupsort_writemap.db-copy)
+
+  add_test(NAME uniq_nested COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
+    --loglevel=notice
+    --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=2 --pathname=uniq_nested.db --dont-cleanup-after basic)
+  set_tests_properties(uniq_nested PROPERTIES
+    TIMEOUT 1800
+    RUN_SERIAL OFF)
+  add_test(NAME uniq_nested_chk COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db)
+  set_tests_properties(uniq_nested_chk PROPERTIES
+    DEPENDS uniq_nested
+    TIMEOUT 60
+    REQUIRED_FILES uniq_nested.db)
+  add_test(NAME uniq_nested_chk_copy COMMAND ${MDBX_OUTPUT_DIR}/mdbx_chk -nvv uniq_nested.db-copy)
+  set_tests_properties(uniq_nested_chk_copy PROPERTIES
+    DEPENDS uniq_nested
+    TIMEOUT 60
+    REQUIRED_FILES uniq_nested.db-copy)
+
+endif()
