@@ -4086,8 +4086,8 @@ static MDBX_CXX17_CONSTEXPR size_t strlen(const char *c_str) noexcept {
 #endif
 }
 
-static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
-                                         size_t bytes) noexcept {
+MDBX_MAYBE_UNUSED static MDBX_CXX20_CONSTEXPR void *
+memcpy(void *dest, const void *src, size_t bytes) noexcept {
 #if defined(__cpp_lib_is_constant_evaluated) &&                                \
     __cpp_lib_is_constant_evaluated >= 201811L
   if (::std::is_constant_evaluated()) {
@@ -4127,8 +4127,8 @@ static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom,
   return check_length(check_length(headroom) + check_length(payload));
 }
 
-static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload,
-                                                size_t tailroom) {
+MDBX_MAYBE_UNUSED static MDBX_CXX14_CONSTEXPR size_t
+check_length(size_t headroom, size_t payload, size_t tailroom) {
   return check_length(check_length(headroom, payload) + check_length(tailroom));
 }
 
