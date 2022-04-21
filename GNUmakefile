@@ -392,7 +392,7 @@ smoke: build-test
 	@echo '  SMOKE `mdbx_test basic`...'
 	$(QUIET)rm -f $(TEST_DB) $(TEST_LOG).gz && (set -o pipefail; \
 		(./mdbx_test --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic && \
-		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=12 --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic) \
+		./mdbx_test --mode=-writemap,-nosync-safe,-lifo --progress --console=no --repeat=$(TEST_ITER) --pathname=$(TEST_DB) --dont-cleanup-after $(MDBX_SMOKE_EXTRA) basic) \
 		| tee >(gzip --stdout >$(TEST_LOG).gz) | tail -n 42) \
 	&& ./mdbx_chk -vvn $(TEST_DB) && ./mdbx_chk -vvn $(TEST_DB)-copy
 
