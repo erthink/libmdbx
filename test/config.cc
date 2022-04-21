@@ -106,7 +106,7 @@ bool parse_option<unsigned>(int argc, char *const argv[], int &narg,
 
     while (true) {
       if (!scan->verb)
-        failure("Unknown verb '%.*s', for option '==%s'\n", (int)len, list,
+        failure("Unknown verb '%.*s', for option '--%s'\n", (int)len, list,
                 option);
       if (strlen(scan->verb) == len && strncmp(list, scan->verb, len) == 0) {
         mask = strikethrough ? mask & ~scan->mask : mask | scan->mask;
@@ -255,6 +255,69 @@ bool parse_option(int argc, char *const argv[], int &narg, const char *option,
     return true;
   }
   return false;
+}
+
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  logging::loglevel &loglevel) {
+  const char *value_cstr;
+  if (!parse_option(argc, argv, narg, option, &value_cstr))
+    return false;
+
+  if (strcmp(value_cstr, "min") == 0 || strcmp(value_cstr, "minimal") == 0 ||
+      strcmp(value_cstr, "fatal") == 0) {
+    loglevel = logging::failure;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "error") == 0 || strcmp(value_cstr, "err") == 0) {
+    loglevel = logging::error;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "warning") == 0 || strcmp(value_cstr, "warn") == 0) {
+    loglevel = logging::error;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "default") == 0 || strcmp(value_cstr, "notice") == 0) {
+    loglevel = logging::notice;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "verbose") == 0) {
+    loglevel = logging::verbose;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "debug") == 0) {
+    loglevel = logging::debug;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "trace") == 0) {
+    loglevel = logging::trace;
+    return true;
+  }
+
+  if (strcmp(value_cstr, "max") == 0 || strcmp(value_cstr, "maximal") == 0 ||
+      strcmp(value_cstr, "extra") == 0) {
+    loglevel = logging::extra;
+    return true;
+  }
+
+  char *suffix = nullptr;
+  unsigned long long raw = strtoull(value_cstr, &suffix, 0);
+  if ((suffix && *suffix) || errno) {
+    suffix = nullptr;
+    errno = 0;
+    raw = strtoull(value_cstr, &suffix, 10);
+  }
+  if ((!suffix || !*suffix) && !errno && raw < 8) {
+    loglevel = static_cast<logging::loglevel>(raw);
+    return true;
+  }
+
+  failure("Unknown log-level '%s', for option '--%s'\n", value_cstr, option);
 }
 
 bool parse_option(int argc, char *const argv[], int &narg, const char *option,

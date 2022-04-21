@@ -133,6 +133,8 @@ inline bool parse_option_intptr(int argc, char *const argv[], int &narg,
                         int32_t(maxval), int32_t(default_value));
 }
 
+bool parse_option(int argc, char *const argv[], int &narg, const char *option,
+                  logging::loglevel &);
 //-----------------------------------------------------------------------------
 
 struct keygen_params_pod {

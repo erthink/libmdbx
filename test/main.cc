@@ -24,6 +24,7 @@ MDBX_NORETURN void usage(void) {
       "usage:\n"
       "  --help or -h              Show this text\n"
       "Common parameters:\n"
+      "  --loglevel=[0-7]|[extra..fatal]"
       "  --pathname=...            Path and/or name of database files\n"
       "  --repeat=N                Set repeat counter\n"
       "  --threads=N               Number of thread (unsupported for now)\n"
@@ -318,6 +319,13 @@ int main(int argc, char *const argv[]) {
                              global::config::timeout_duration_seconds,
                              config::duration, 1))
       continue;
+
+    logging::loglevel loglevel;
+    if (config::parse_option(argc, argv, narg, "loglevel", loglevel)) {
+      logging::setup(loglevel, "main");
+      params.loglevel = static_cast<uint8_t>(loglevel);
+      continue;
+    }
 
     const char *value = nullptr;
     if (config::parse_option(argc, argv, narg, "case", &value)) {
