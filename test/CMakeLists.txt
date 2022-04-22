@@ -73,8 +73,12 @@ if (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
     echo "No emulator to run cross-compiled tests")
 else()
 
+  string(RANDOM LENGTH 9 ALPHABET "1234567890" test_seed)
+  message(STATUS "The ${test_seed} will be used for seeding tests. Re-run cmake to re-seed it.")
+
   add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
     --loglevel=verbose
+    --keygen.seed=${test_seed}
     --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
   set_tests_properties(smoke PROPERTIES
     TIMEOUT 600
@@ -94,6 +98,7 @@ else()
 
   add_test(NAME dupsort_writemap COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
     --loglevel=notice
+    --keygen.seed=${test_seed}
     --table=+data.integer --keygen.split=29 --datalen.min=min --datalen.max=max --progress --console=no
     --repeat=2 --pathname=dupsort_writemap.db --dont-cleanup-after basic)
   set_tests_properties(dupsort_writemap PROPERTIES
