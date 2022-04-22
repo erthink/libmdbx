@@ -72,7 +72,7 @@ static
 #  pragma const_seg(push)
 #  pragma data_seg(push)
 
-#  ifdef _WIN64
+#  ifndef _M_IX86
      /* kick a linker to create the TLS directory if not already done */
 #    pragma comment(linker, "/INCLUDE:_tls_used")
      /* Force some symbol references. */
@@ -94,7 +94,7 @@ static
 #  pragma const_seg(pop)
 
 #elif defined(__GNUC__)
-#  ifdef _WIN64
+#  ifndef _M_IX86
      const
 #  endif
    PIMAGE_TLS_CALLBACK mdbx_tls_anchor __attribute__((__section__(".CRT$XLB"), used)) = mdbx_module_handler;
