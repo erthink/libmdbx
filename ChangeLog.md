@@ -17,7 +17,7 @@ ChangeLog
  - Packages for [Astra Linux](https://astralinux.ru/), [ALT Linux](https://www.altlinux.org/), [ROSA Linux](https://www.rosalinux.ru/), etc.
 
 
-## v0.11.7 (scheduled at 2022-04-22)
+## v0.11.7 at 2022-04-22
 
 The stable risen release after the Github's intentional malicious disaster.
 
