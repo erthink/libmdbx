@@ -991,6 +991,8 @@ typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
                                            LPDWORD pcbData);
 MDBX_INTERNAL_VAR MDBX_RegGetValueA mdbx_RegGetValueA;
 
+NTSYSAPI ULONG RtlRandomEx(PULONG Seed);
+
 #endif /* Windows */
 
 #endif /* !__cplusplus */

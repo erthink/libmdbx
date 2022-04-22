@@ -1945,6 +1945,9 @@ __cold MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny) {
 #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) ||                \
     defined(__x86_64__)
     const unsigned salt = 277u * (unsigned)__rdtsc();
+#elif (defined(_WIN32) || defined(_WIN64)) && MDBX_WITHOUT_MSVC_CRT
+    static ULONG state;
+    const unsigned salt = (unsigned)RtlRandomEx(&state);
 #else
     const unsigned salt = rand();
 #endif
