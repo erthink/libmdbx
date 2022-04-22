@@ -74,6 +74,7 @@ if (CMAKE_CROSSCOMPILING AND NOT CMAKE_CROSSCOMPILING_EMULATOR)
 else()
 
   add_test(NAME smoke COMMAND ${MDBX_OUTPUT_DIR}/mdbx_test
+    --loglevel=verbose
     --progress --console=no --pathname=smoke.db --dont-cleanup-after basic)
   set_tests_properties(smoke PROPERTIES
     TIMEOUT 600
