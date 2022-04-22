@@ -621,7 +621,7 @@ macro(libmdbx_setup_libs TARGET MODE)
     target_link_libraries(${TARGET} ${MODE} log)
   endif()
   if(LIBCXX_FILESYSTEM AND MDBX_BUILD_CXX)
-    if(CMAKE_COMPILER_IS_ELBRUSCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.26.0
+    if(CMAKE_COMPILER_IS_ELBRUSCXX AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS 1.25.23
         AND NOT CMAKE_VERSION VERSION_LESS 3.13)
       target_link_options(${TARGET} PUBLIC "-Wl,--allow-multiple-definition")
     endif()
