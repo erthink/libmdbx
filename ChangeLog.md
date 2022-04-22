@@ -28,8 +28,8 @@ explanation, deleted _libmdbx_ along with a lot of other projects,
 simultaneously blocking access for many developers.
 For the same reason ~~Github~~ is blacklisted forever.
 
-GitFlic's developers plan to support other languages,
-including English 和 中文, in the near future.
+GitFlic already support Russian and English languages, plan to support more,
+including 和 中文. You are welcome!
 
 New:
 
@@ -39,6 +39,8 @@ New:
  - Added `mdbx::filesystem` C++ API namespace that corresponds to `std::filesystem` or `std::experimental::filesystem`.
  - Created [website](https://libmdbx.website.yandexcloud.net/) for online auto-generated documentation.
  - Used `todo4recovery://erased_by_github/` for dead (or temporarily lost) resources deleted by ~~Github~~.
+ - Added `--loglevel=` command-line option to the `mdbx_test` tool.
+ - Added few fast smoke-like tests into CMake builds.
 
 Fixes:
 
@@ -49,6 +51,10 @@ Fixes:
  - Added workaround for GNU Make 3.81 and earlier.
  - Added workaround for Elbrus/LCC 1.25 compiler bug of class inline `static constexpr` member field.
  - [Fixed](https://github.com/ledgerwatch/erigon/issues/3874) minor assertion regression (only debug builds were affected).
+ - Fixed detection of `C++20` concepts accessibility.
+ - Fixed detection of Clang's LTO availability for Android.
+ - Fixed build for ARM/ARM64 by MSVC.
+ - Fixed non-x86 Windows builds with `MDBX_WITHOUT_MSVC_CRT=ON` and `MDBX_BUILD_SHARED_LIBRARY=ON`.
 
 Minors:
 
@@ -56,6 +62,12 @@ Minors:
  - Switched to using `MDBX_EPERM` instead of `MDBX_RESULT_TRUE' to indicate that the geometry cannot be updated.
  - Added `NULL` checking during memory allocation inside `mdbx_chk`.
  - Resolved all warnings from MinGW while used without CMake.
+ - Added inheretable `target_include_directories()` to `CMakeLists.txt` for easy integration.
+ - Added build-time checks and paranoid runtime assertions for the `off_t` arguments of `fcntl()` which are used for locking.
+ - Added `-Wno-lto-type-mismatch` to avoid false-positive warnings from old GCC during LTO-enabled builds.
+ - Added checking for TID (system thread id) to avoid hang on 32-bit Bionic/Android  within `pthread_mutex_lock()`.
+ - Reworked `MDBX_BUILD_TARGET` of CMake builds.
+ - Added `CMAKE_HOST_ARCH` and `CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET`.
 
 
 ## v0.11.6 at 2022-03-24
