@@ -92,15 +92,6 @@ macro(fetch_version name source_root_directory parent_scope)
   set(${name}_GIT_REVISION 0)
   set(${name}_GIT_VERSION "")
   if(GIT AND EXISTS "${source_root_directory}/.git")
-    execute_process(COMMAND ${GIT} describe --tags --long --dirty=-dirty "--match=v[0-9]*"
-      OUTPUT_VARIABLE ${name}_GIT_DESCRIBE
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE rc)
-    if(rc OR "${name}_GIT_DESCRIBE" STREQUAL "")
-      message(FATAL_ERROR "Please fetch tags and/or install latest version of git ('describe --tags --long --dirty --match=v[0-9]*' failed)")
-    endif()
-
     execute_process(COMMAND ${GIT} show --no-patch --format=%cI HEAD
       OUTPUT_VARIABLE ${name}_GIT_TIMESTAMP
       OUTPUT_STRIP_TRAILING_WHITESPACE
@@ -113,7 +104,7 @@ macro(fetch_version name source_root_directory parent_scope)
         WORKING_DIRECTORY ${source_root_directory}
         RESULT_VARIABLE rc)
       if(rc OR "${name}_GIT_TIMESTAMP" STREQUAL "%ci")
-        message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%cI HEAD' failed)")
+        message(FATAL_ERROR "Please install latest version of git (`show --no-patch --format=%cI HEAD` failed)")
       endif()
     endif()
 
@@ -123,7 +114,7 @@ macro(fetch_version name source_root_directory parent_scope)
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_TREE" STREQUAL "")
-      message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%T HEAD' failed)")
+      message(FATAL_ERROR "Please install latest version of git (`show --no-patch --format=%T HEAD` failed)")
     endif()
 
     execute_process(COMMAND ${GIT} show --no-patch --format=%H HEAD
@@ -132,58 +123,110 @@ macro(fetch_version name source_root_directory parent_scope)
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc OR "${name}_GIT_COMMIT" STREQUAL "")
-      message(FATAL_ERROR "Please install latest version of git ('show --no-patch --format=%H HEAD' failed)")
+      message(FATAL_ERROR "Please install latest version of git (`show --no-patch --format=%H HEAD` failed)")
     endif()
 
-    execute_process(COMMAND ${GIT} describe --tags --abbrev=0 "--match=v[0-9]*"
-      OUTPUT_VARIABLE last_release_tag
+    execute_process(COMMAND ${GIT} rev-list --tags --count
+      OUTPUT_VARIABLE tag_count
       OUTPUT_STRIP_TRAILING_WHITESPACE
       WORKING_DIRECTORY ${source_root_directory}
       RESULT_VARIABLE rc)
     if(rc)
-      message(FATAL_ERROR "Please install latest version of git ('describe --tags --abbrev=0 --match=v[0-9]*' failed)")
+      message(FATAL_ERROR "Please install latest version of git (`git rev-list --tags --count` failed)")
     endif()
-    if (last_release_tag)
-      set(git_revlist_arg "${last_release_tag}..HEAD")
-    else()
-      execute_process(COMMAND ${GIT} tag --sort=-version:refname
-        OUTPUT_VARIABLE tag_list
+
+    if(tag_count EQUAL 0)
+      execute_process(COMMAND ${GIT} rev-list --all --count
+        OUTPUT_VARIABLE whole_count
         OUTPUT_STRIP_TRAILING_WHITESPACE
         WORKING_DIRECTORY ${source_root_directory}
         RESULT_VARIABLE rc)
       if(rc)
-        message(FATAL_ERROR "Please install latest version of git ('tag --sort=-version:refname' failed)")
+        message(FATAL_ERROR "Please install latest version of git (`git rev-list --all --count` failed)")
       endif()
-      string(REGEX REPLACE "\n" ";" tag_list "${tag_list}")
-      set(git_revlist_arg "HEAD")
-      foreach(tag IN LISTS tag_list)
-        if(NOT last_release_tag)
-          string(REGEX MATCH "^v[0-9]+(\.[0-9]+)+" last_release_tag "${tag}")
-          set(git_revlist_arg "${tag}..HEAD")
+      if(whole_count GREATER 42)
+        message(FATAL_ERROR "Please fetch tags (no any tags for ${whole_count} commits)")
+      endif()
+      set(${name}_GIT_VERSION "0;0;0")
+      execute_process(COMMAND ${GIT} rev-list --count --all --no-merges
+        OUTPUT_VARIABLE ${name}_GIT_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        WORKING_DIRECTORY ${source_root_directory}
+        RESULT_VARIABLE rc)
+      if(rc OR "${name}_GIT_REVISION" STREQUAL "")
+        message(FATAL_ERROR "Please install latest version of git (`rev-list --count --all --no-merges` failed)")
+      endif()
+    else(tag_count EQUAL 0)
+      execute_process(COMMAND ${GIT} describe --tags --long --dirty=-dirty "--match=v[0-9]*"
+        OUTPUT_VARIABLE ${name}_GIT_DESCRIBE
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        WORKING_DIRECTORY ${source_root_directory}
+        RESULT_VARIABLE rc)
+      if(rc OR "${name}_GIT_DESCRIBE" STREQUAL "")
+        if(_whole_count GREATER 42)
+          message(FATAL_ERROR "Please fetch tags (`describe --tags --long --dirty --match=v[0-9]*` failed)")
+        else()
+          execute_process(COMMAND ${GIT} describe --all --long --dirty=-dirty
+            OUTPUT_VARIABLE ${name}_GIT_DESCRIBE
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            WORKING_DIRECTORY ${source_root_directory}
+            RESULT_VARIABLE rc)
+          if(rc OR "${name}_GIT_DESCRIBE" STREQUAL "")
+            message(FATAL_ERROR "Please install latest version of git (`git rev-list --tags --count` and/or `git rev-list --all --count` failed)")
+          endif()
         endif()
-      endforeach(tag)
-    endif()
-    execute_process(COMMAND ${GIT} rev-list --count "${git_revlist_arg}"
-      OUTPUT_VARIABLE ${name}_GIT_REVISION
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-      WORKING_DIRECTORY ${source_root_directory}
-      RESULT_VARIABLE rc)
-    if(rc OR "${name}_GIT_REVISION" STREQUAL "")
-      message(FATAL_ERROR "Please install latest version of git ('rev-list --count ${git_revlist_arg}' failed)")
-    endif()
-
-    string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" git_version_valid "${${name}_GIT_DESCRIBE}")
-    if(git_version_valid)
-      string(REGEX REPLACE "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" "\\2;\\3;\\4" ${name}_GIT_VERSION ${${name}_GIT_DESCRIBE})
-    else()
-      string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)(.*)?" git_version_valid "${${name}_GIT_DESCRIBE}")
-      if(git_version_valid)
-        string(REGEX REPLACE "^(v)?([0-9]+)\\.([0-9]+)(.*)?" "\\2;\\3;0" ${name}_GIT_VERSION ${${name}_GIT_DESCRIBE})
-      else()
-        message(AUTHOR_WARNING "Bad ${name} version \"${${name}_GIT_DESCRIBE}\"; falling back to 0.0.0 (have you made an initial release?)")
-        set(${name}_GIT_VERSION "0;0;0")
       endif()
-    endif()
+
+      execute_process(COMMAND ${GIT} describe --tags --abbrev=0 "--match=v[0-9]*"
+        OUTPUT_VARIABLE last_release_tag
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        WORKING_DIRECTORY ${source_root_directory}
+        RESULT_VARIABLE rc)
+      if(rc)
+        message(FATAL_ERROR "Please install latest version of git (`describe --tags --abbrev=0 --match=v[0-9]*` failed)")
+      endif()
+      if (last_release_tag)
+        set(git_revlist_arg "${last_release_tag}..HEAD")
+      else()
+        execute_process(COMMAND ${GIT} tag --sort=-version:refname
+          OUTPUT_VARIABLE tag_list
+          OUTPUT_STRIP_TRAILING_WHITESPACE
+          WORKING_DIRECTORY ${source_root_directory}
+          RESULT_VARIABLE rc)
+        if(rc)
+          message(FATAL_ERROR "Please install latest version of git (`tag --sort=-version:refname` failed)")
+        endif()
+        string(REGEX REPLACE "\n" ";" tag_list "${tag_list}")
+        set(git_revlist_arg "HEAD")
+        foreach(tag IN LISTS tag_list)
+          if(NOT last_release_tag)
+            string(REGEX MATCH "^v[0-9]+(\.[0-9]+)+" last_release_tag "${tag}")
+            set(git_revlist_arg "${tag}..HEAD")
+          endif()
+        endforeach(tag)
+      endif()
+      execute_process(COMMAND ${GIT} rev-list --count "${git_revlist_arg}"
+        OUTPUT_VARIABLE ${name}_GIT_REVISION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        WORKING_DIRECTORY ${source_root_directory}
+        RESULT_VARIABLE rc)
+      if(rc OR "${name}_GIT_REVISION" STREQUAL "")
+        message(FATAL_ERROR "Please install latest version of git (`rev-list --count ${git_revlist_arg}` failed)")
+      endif()
+
+      string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" git_version_valid "${${name}_GIT_DESCRIBE}")
+      if(git_version_valid)
+        string(REGEX REPLACE "^(v)?([0-9]+)\\.([0-9]+)\\.([0-9]+)(.*)?" "\\2;\\3;\\4" ${name}_GIT_VERSION ${${name}_GIT_DESCRIBE})
+      else()
+        string(REGEX MATCH "^(v)?([0-9]+)\\.([0-9]+)(.*)?" git_version_valid "${${name}_GIT_DESCRIBE}")
+        if(git_version_valid)
+          string(REGEX REPLACE "^(v)?([0-9]+)\\.([0-9]+)(.*)?" "\\2;\\3;0" ${name}_GIT_VERSION ${${name}_GIT_DESCRIBE})
+        else()
+          message(AUTHOR_WARNING "Bad ${name} version \"${${name}_GIT_DESCRIBE}\"; falling back to 0.0.0 (have you made an initial release?)")
+          set(${name}_GIT_VERSION "0;0;0")
+        endif()
+      endif()
+    endif(tag_count EQUAL 0)
   endif()
 
   if(NOT ${name}_GIT_VERSION OR NOT ${name}_GIT_TIMESTAMP OR ${name}_GIT_REVISION STREQUAL "")
