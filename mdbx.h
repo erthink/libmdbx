@@ -236,12 +236,15 @@ typedef mode_t mdbx_mode_t;
 #define __has_builtin(x) (0)
 #endif /* __has_builtin */
 
-/** Many functions have no effects except the return value and their
+/** \brief The 'pure' function attribute for optimization.
+ * \details Many functions have no effects except the return value and their
  * return value depends only on the parameters and/or global variables.
  * Such a function can be subject to common subexpression elimination
  * and loop optimization just as an arithmetic operator would be.
  * These functions should be declared with the attribute pure. */
-#if (defined(__GNUC__) || __has_attribute(__pure__)) &&                        \
+#if defined(DOXYGEN)
+#define MDBX_PURE_FUNCTION [[gnu::pure]]
+#elif (defined(__GNUC__) || __has_attribute(__pure__)) &&                      \
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
      || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
 #define MDBX_PURE_FUNCTION __attribute__((__pure__))
@@ -254,9 +257,12 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_PURE_FUNCTION
 #endif /* MDBX_PURE_FUNCTION */
 
-/** Like \ref MDBX_PURE_FUNCTION with addition `noexcept` restriction
+/** \brief The 'pure nothrow' function attribute for optimization.
+ * \details Like \ref MDBX_PURE_FUNCTION with addition `noexcept` restriction
  * that is compatible to CLANG and proposed [[pure]]. */
-#if defined(__GNUC__) ||                                                       \
+#if defined(DOXYGEN)
+#define MDBX_NOTHROW_PURE_FUNCTION [[gnu::pure, gnu::nothrow]]
+#elif defined(__GNUC__) ||                                                     \
     (__has_attribute(__pure__) && __has_attribute(__nothrow__))
 #define MDBX_NOTHROW_PURE_FUNCTION __attribute__((__pure__, __nothrow__))
 #elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
@@ -277,7 +283,8 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NOTHROW_PURE_FUNCTION
 #endif /* MDBX_NOTHROW_PURE_FUNCTION */
 
-/** Many functions do not examine any values except their arguments,
+/** \brief The 'const' function attribute for optimization.
+ * \details Many functions do not examine any values except their arguments,
  * and have no effects except the return value. Basically this is just
  * slightly more strict class than the PURE attribute, since function
  * is not allowed to read global memory.
@@ -286,7 +293,9 @@ typedef mode_t mdbx_mode_t;
  * data pointed to must not be declared const. Likewise, a function
  * that calls a non-const function usually must not be const.
  * It does not make sense for a const function to return void. */
-#if (defined(__GNUC__) || __has_attribute(__pure__)) &&                        \
+#if defined(DOXYGEN)
+#define MDBX_CONST_FUNCTION [[gnu::const]]
+#elif (defined(__GNUC__) || __has_attribute(__pure__)) &&                      \
     (!defined(__clang__) /* https://bugs.llvm.org/show_bug.cgi?id=43275 */     \
      || !defined(__cplusplus) || !__has_feature(cxx_exceptions))
 #define MDBX_CONST_FUNCTION __attribute__((__const__))
@@ -299,9 +308,12 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_CONST_FUNCTION MDBX_PURE_FUNCTION
 #endif /* MDBX_CONST_FUNCTION */
 
-/** Like \ref MDBX_CONST_FUNCTION with addition `noexcept` restriction
+/** \brief The 'const nothrow' function attribute for optimization.
+ * \details Like \ref MDBX_CONST_FUNCTION with addition `noexcept` restriction
  * that is compatible to CLANG and future [[const]]. */
-#if defined(__GNUC__) ||                                                       \
+#if defined(DOXYGEN)
+#define MDBX_NOTHROW_CONST_FUNCTION [[gnu::const, gnu::nothrow]]
+#elif defined(__GNUC__) ||                                                     \
     (__has_attribute(__const__) && __has_attribute(__nothrow__))
 #define MDBX_NOTHROW_CONST_FUNCTION __attribute__((__const__, __nothrow__))
 #elif defined(_MSC_VER) && !defined(__clang__) && _MSC_VER >= 1920
@@ -318,9 +330,19 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NOTHROW_CONST_FUNCTION MDBX_NOTHROW_PURE_FUNCTION
 #endif /* MDBX_NOTHROW_CONST_FUNCTION */
 
-#ifndef MDBX_DEPRECATED /* may be predefined to avoid warnings "deprecated" */
+/** \brief The 'deprecated' attribute to produce warnings when used.
+ * \note This macro may be predefined as empty to avoid "deprecated" warnings.
+ */
+#ifndef MDBX_DEPRECATED
 #ifdef __deprecated
 #define MDBX_DEPRECATED __deprecated
+#elif defined(DOXYGEN) ||                                                      \
+    (defined(__cplusplus) && __cplusplus >= 201603L &&                         \
+     __has_cpp_attribute(maybe_unused) &&                                      \
+     __has_cpp_attribute(maybe_unused) >= 201603L) ||                          \
+    (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                     \
+     __STDC_VERSION__ > 202005L)
+#define MDBX_DEPRECATED [[deprecated]]
 #elif defined(__GNUC__) || __has_attribute(__deprecated__)
 #define MDBX_DEPRECATED __attribute__((__deprecated__))
 #elif defined(_MSC_VER)
@@ -393,15 +415,21 @@ typedef mode_t mdbx_mode_t;
 #endif
 #endif /* bool without __cplusplus */
 
-#if !defined(DOXYGEN) && (!defined(__cpp_noexcept_function_type) ||            \
-                          __cpp_noexcept_function_type < 201510L)
+/** Workaround for old compilers without support for C++17 `noexcept`. */
+#if defined(DOXYGEN)
+#define MDBX_CXX17_NOEXCEPT noexcept
+#elif !defined(__cpp_noexcept_function_type) ||                                \
+    __cpp_noexcept_function_type < 201510L
 #define MDBX_CXX17_NOEXCEPT
 #else
 #define MDBX_CXX17_NOEXCEPT noexcept
 #endif /* MDBX_CXX17_NOEXCEPT */
 
-/* Workaround for old compilers without properly support for constexpr. */
-#if !defined(__cplusplus)
+/** Workaround for old compilers without support for any kind of `constexpr`. */
+#if defined(DOXYGEN)
+#define MDBX_CXX01_CONSTEXPR constexpr
+#define MDBX_CXX01_CONSTEXPR_VAR constexpr
+#elif !defined(__cplusplus)
 #define MDBX_CXX01_CONSTEXPR __inline
 #define MDBX_CXX01_CONSTEXPR_VAR const
 #elif !defined(DOXYGEN) &&                                                     \
@@ -419,7 +447,12 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_CXX01_CONSTEXPR_VAR constexpr
 #endif /* MDBX_CXX01_CONSTEXPR */
 
-#if !defined(__cplusplus)
+/** Workaround for old compilers without properly support for C++11 `constexpr`.
+ */
+#if defined(DOXYGEN)
+#define MDBX_CXX11_CONSTEXPR constexpr
+#define MDBX_CXX11_CONSTEXPR_VAR constexpr
+#elif !defined(__cplusplus)
 #define MDBX_CXX11_CONSTEXPR __inline
 #define MDBX_CXX11_CONSTEXPR_VAR const
 #elif !defined(DOXYGEN) &&                                                     \
@@ -436,7 +469,12 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_CXX11_CONSTEXPR_VAR constexpr
 #endif /* MDBX_CXX11_CONSTEXPR */
 
-#if !defined(__cplusplus)
+/** Workaround for old compilers without properly support for C++14 `constexpr`.
+ */
+#if defined(DOXYGEN)
+#define MDBX_CXX14_CONSTEXPR constexpr
+#define MDBX_CXX14_CONSTEXPR_VAR constexpr
+#elif !defined(__cplusplus)
 #define MDBX_CXX14_CONSTEXPR __inline
 #define MDBX_CXX14_CONSTEXPR_VAR const
 #elif defined(DOXYGEN) ||                                                      \
@@ -456,6 +494,10 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_NORETURN __noreturn
 #elif defined(_Noreturn)
 #define MDBX_NORETURN _Noreturn
+#elif defined(DOXYGEN) || (defined(__cplusplus) && __cplusplus >= 201103L) ||  \
+    (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                     \
+     __STDC_VERSION__ > 202005L)
+#define MDBX_NORETURN [[noreturn]]
 #elif defined(__GNUC__) || __has_attribute(__noreturn__)
 #define MDBX_NORETURN __attribute__((__noreturn__))
 #elif defined(_MSC_VER) && !defined(__clang__)
@@ -465,7 +507,7 @@ typedef mode_t mdbx_mode_t;
 #endif /* MDBX_NORETURN */
 
 #ifndef MDBX_PRINTF_ARGS
-#if defined(__GNUC__) || __has_attribute(__format__)
+#if defined(__GNUC__) || __has_attribute(__format__) || defined(DOXYGEN)
 #if defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)
 #define MDBX_PRINTF_ARGS(format_index, first_arg)                              \
   __attribute__((__format__(__gnu_printf__, format_index, first_arg)))
@@ -479,9 +521,9 @@ typedef mode_t mdbx_mode_t;
 #endif /* MDBX_PRINTF_ARGS */
 
 #if defined(DOXYGEN) ||                                                        \
-    (defined(__cplusplus) && __cplusplus >= 201603 &&                          \
+    (defined(__cplusplus) && __cplusplus >= 201603L &&                         \
      __has_cpp_attribute(maybe_unused) &&                                      \
-     __has_cpp_attribute(maybe_unused) >= 201603) ||                           \
+     __has_cpp_attribute(maybe_unused) >= 201603L) ||                          \
     (!defined(__cplusplus) && defined(__STDC_VERSION__) &&                     \
      __STDC_VERSION__ > 202005L)
 #define MDBX_MAYBE_UNUSED [[maybe_unused]]
@@ -491,7 +533,7 @@ typedef mode_t mdbx_mode_t;
 #define MDBX_MAYBE_UNUSED
 #endif /* MDBX_MAYBE_UNUSED */
 
-#if __has_attribute(no_sanitize)
+#if __has_attribute(no_sanitize) || defined(DOXYGEN)
 #define MDBX_NOSANITIZE_ENUM __attribute((__no_sanitize__("enum")))
 #else
 #define MDBX_NOSANITIZE_ENUM
@@ -3136,7 +3178,7 @@ mdbx_env_get_maxvalsize_ex(const MDBX_env *env, MDBX_db_flags_t flags);
 /** \deprecated Please use \ref mdbx_env_get_maxkeysize_ex()
  *              and/or \ref mdbx_env_get_maxvalsize_ex()
  * \ingroup c_statinfo */
-MDBX_NOTHROW_PURE_FUNCTION MDBX_DEPRECATED LIBMDBX_API int
+MDBX_DEPRECATED MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_env_get_maxkeysize(const MDBX_env *env);
 
 /** \brief Sets application information (a context pointer) associated with
