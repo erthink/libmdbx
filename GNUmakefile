@@ -586,8 +586,13 @@ tags:
 	@echo '  FETCH git tags...'
 	$(QUIET)git fetch --tags --force
 
-release-assets: libmdbx-sources-$(MDBX_VERSION_IDENT).tar.gz libmdbx-sources-$(MDBX_VERSION_NODOT).zip
-	@echo '  RELEASE ASSETS are done'
+release-assets: libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.gz libmdbx-amalgamated-$(subst .,_,$(MDBX_GIT_VERSION)).zip
+	$(QUIET)([ \
+		"$$(set -o pipefail; git describe | sed -n '/^v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}$$/p' || echo fail-left)" \
+	== \
+		"$$(git describe --tags --dirty=-dirty || echo fail-right)" ] \
+		|| (echo 'ERROR: Is not a valid release because not in the clean state with a suitable annotated tag!!!' >&2 && false)) \
+	&& echo '  RELEASE ASSETS are done'
 
 dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo -n '  VERIFY amalgamated sources...'
@@ -596,11 +601,11 @@ dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	&& rm -rf dist-check && cp -r -p dist dist-check && ($(MAKE) IOARENA=false CXXSTD=$(CXXSTD) -C dist-check >dist-check.log 2>dist-check.err || (cat dist-check.err && exit 1)) \
 	&& touch $@ || (echo " FAILED! See dist-check.log and dist-check.err" >&2; exit 2) && echo " Ok"
 
-libmdbx-sources-$(MDBX_VERSION_IDENT).tar.gz: dist-checked.tag
+%.tar.gz: dist-checked.tag
 	@echo '  CREATE $@'
 	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 >$@
 
-libmdbx-sources-$(MDBX_VERSION_NODOT).zip: dist-checked.tag
+%.zip: dist-checked.tag
 	@echo '  CREATE $@'
 	$(QUIET)rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA))
 
