@@ -25,7 +25,8 @@ including English 和 中文, in the near future.
 
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
 
-> For NEWS take a look to the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
+> For NEWS take a look to the [ChangeLog](https://gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md)
+> or the [TODO](https://gitflic.ru/project/erthink/libmdbx/blob?file=TODO.md).
 
 
 libmdbx
