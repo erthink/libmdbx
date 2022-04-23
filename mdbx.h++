@@ -256,10 +256,12 @@
 #endif                          /* _MSC_VER (warnings) */
 
 //------------------------------------------------------------------------------
+/// \brief The libmdbx C++ API namespace
+/// \ingroup cxx_api
+namespace mdbx {
+
 /// \defgroup cxx_api C++ API
 /// @{
-
-namespace mdbx {
 
 // Functions whose signature depends on the `mdbx::byte` type
 // must be strictly defined as inline!
@@ -351,6 +353,9 @@ using path = ::std::wstring;
 #else
 using path = ::std::string;
 #endif /* mdbx::path */
+
+/// \defgroup cxx_exceptions exceptions and errors
+/// @{
 
 /// \brief Transfers C++ exceptions thru C callbacks.
 /// \details Implements saving exceptions before returning
@@ -507,10 +512,16 @@ static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom,
                                                 size_t payload);
 static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload,
                                                 size_t tailroom);
+
+/// end of cxx_exceptions @}
+
 static MDBX_CXX17_CONSTEXPR size_t strlen(const char *c_str) noexcept;
 static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
                                          size_t bytes) noexcept;
 //------------------------------------------------------------------------------
+
+/// \defgroup cxx_data slices and buffers
+/// @{
 
 #if MDBX_HAVE_CXX20_CONCEPTS
 
@@ -2740,6 +2751,8 @@ struct pair_result : public pair {
     return done;
   }
 };
+
+/// end of cxx_data @}
 
 //------------------------------------------------------------------------------
 
@@ -5877,11 +5890,17 @@ inline bool cursor::erase(const slice &key, const slice &value) {
   return data.done && erase();
 }
 
+/// end cxx_api @}
 } // namespace mdbx
 
 //------------------------------------------------------------------------------
 
+/// \brief The `std:: namespace part of libmdbx C++ API
+/// \ingroup cxx_api
 namespace std {
+
+/// \defgroup cxx_api C++ API
+/// @{
 
 inline string to_string(const ::mdbx::slice &value) {
   ostringstream out;
@@ -5974,10 +5993,9 @@ template <> struct hash<::mdbx::slice> {
   }
 };
 
+/// end cxx_api @}
 } // namespace std
 
 #ifdef _MSC_VER
 #pragma warning(pop)
 #endif
-
-/// @} end of C++ API

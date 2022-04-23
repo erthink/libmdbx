@@ -209,7 +209,8 @@ typedef mode_t mdbx_mode_t;
 #pragma warning(pop)
 #endif
 
-/** @} close c_api
+/** end of c_api @}
+ *
  * \defgroup api_macros Common Macros
  * @{ */
 
@@ -574,7 +575,7 @@ typedef mode_t mdbx_mode_t;
 
 #endif /* DEFINE_ENUM_FLAG_OPERATORS */
 
-/** @} end of Common Macros */
+/** end of api_macros @} */
 
 /*----------------------------------------------------------------------------*/
 
@@ -961,7 +962,7 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
 /** \brief Panics with message and causes abnormal process termination. */
 LIBMDBX_API void mdbx_panic(const char *fmt, ...) MDBX_PRINTF_ARGS(1, 2);
 
-/** @} end of logging & debug */
+/** end of c_debug @} */
 
 /** \brief Environment flags
  * \ingroup c_opening
@@ -1361,7 +1362,7 @@ enum MDBX_env_flags_t {
    * \ref mdbx_txn_begin() for particular write transaction. \see sync_modes */
   MDBX_UTTERLY_NOSYNC = MDBX_SAFE_NOSYNC | UINT32_C(0x100000),
 
-  /** @} end of SYNC MODES */
+  /** end of sync_modes @} */
 };
 #ifndef __cplusplus
 /** \ingroup c_opening */
@@ -3806,7 +3807,7 @@ MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_INLINE_API(uint32_t, mdbx_key_from_int32,
                                                (const int32_t i32)) {
   return UINT32_C(0x80000000) + i32;
 }
-/** @} */
+/** end of value2key @} */
 
 /** \defgroup key2value Key-to-Value functions
  * \brief Key-to-Value functions to
@@ -3827,7 +3828,7 @@ mdbx_int32_from_key(const MDBX_val);
 
 MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int64_t
 mdbx_int64_from_key(const MDBX_val);
-/** @} */
+/** end of value2key @} */
 
 /** \brief Retrieve statistics for a database.
  * \ingroup c_statinfo
@@ -5100,7 +5101,7 @@ LIBMDBX_API int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
  * leg(s). */
 LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
-/** @} B-tree Traversal */
+/** end of btree_traversal @} */
 
 /**** Attribute support functions for Nexenta (scheduled for removal)
  * *****************************************************************/
@@ -5270,10 +5271,10 @@ LIBMDBX_API int mdbx_cursor_get_attr(MDBX_cursor *cursor, MDBX_val *key,
  * \retval MDBX_EINVAL    An invalid parameter was specified. */
 LIBMDBX_API int mdbx_get_attr(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
                               MDBX_val *data, mdbx_attr_t *pattr);
-/** @} end of Attribute support functions for Nexenta */
+/** end of nexenta @} */
 #endif /* MDBX_NEXENTA_ATTRS */
 
-/** @} end of C API */
+/** end of c_api @} */
 
 /*******************************************************************************
  * Workaround for mmaped-lookahead-cross-page-boundary bug
