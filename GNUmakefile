@@ -586,7 +586,11 @@ tags:
 	@echo '  FETCH git tags...'
 	$(QUIET)git fetch --tags --force
 
-release-assets: libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.gz libmdbx-amalgamated-$(subst .,_,$(MDBX_GIT_VERSION)).zip
+release-assets: libmdbx-amalgamated-$(MDBX_GIT_VERSION).zpaq \
+	libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.xz \
+	libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.bz2 \
+	libmdbx-amalgamated-$(MDBX_GIT_VERSION).tar.gz \
+	libmdbx-amalgamated-$(subst .,_,$(MDBX_GIT_VERSION)).zip
 	$(QUIET)([ \
 		"$$(set -o pipefail; git describe | sed -n '/^v[0-9]\{1,\}\.[0-9]\{1,\}\.[0-9]\{1,\}$$/p' || echo fail-left)" \
 	== \
@@ -605,9 +609,22 @@ dist-checked.tag: $(addprefix dist/, $(DIST_SRC) $(DIST_EXTRA))
 	@echo '  CREATE $@'
 	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | gzip -c -9 >$@
 
+%.tar.xz: dist-checked.tag
+	@echo '  CREATE $@'
+	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | xz -9 -z >$@
+
+%.tar.bz2: dist-checked.tag
+	@echo '  CREATE $@'
+	$(QUIET)$(TAR) -c $(shell LC_ALL=C $(TAR) --help | grep -q -- '--owner' && echo '--owner=0 --group=0') -f - -C dist $(DIST_SRC) $(DIST_EXTRA) | bzip2 -9 -z >$@
+
+
 %.zip: dist-checked.tag
 	@echo '  CREATE $@'
-	$(QUIET)rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA))
+	$(QUIET)rm -rf $@ && (cd dist && $(ZIP) -9 ../$@ $(DIST_SRC) $(DIST_EXTRA)) &>zip.log
+
+%.zpaq: dist-checked.tag
+	@echo '  CREATE $@'
+	$(QUIET)rm -rf $@ && (cd dist && zpaq a ../$@ $(DIST_SRC) $(DIST_EXTRA) -m59) &>zpaq.log
 
 dist/mdbx.h: mdbx.h src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  COPY $@'
