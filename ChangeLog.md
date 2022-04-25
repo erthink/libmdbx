@@ -1,6 +1,13 @@
 ChangeLog
 ---------
 
+## Underway
+
+Acknowledgements:
+
+ - [Masatoshi Fukunaga](https://github.com/mah0x211) for [Lua bindings](https://github.com/mah0x211/lua-libmdbx).
+
+
 ## v0.11.7 at 2022-04-22
 
 The stable risen release after the Github's intentional malicious disaster.
