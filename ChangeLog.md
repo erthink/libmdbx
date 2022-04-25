@@ -28,7 +28,7 @@ New:
  - Support for Microsoft Visual Studio 2022.
  - Support build by MinGW' make from command line without CMake.
  - Added `mdbx::filesystem` C++ API namespace that corresponds to `std::filesystem` or `std::experimental::filesystem`.
- - Created [website](https://libmdbx.website.yandexcloud.net/) for online auto-generated documentation.
+ - Created [website](https://libmdbx.dqdkfa.ru/) for online auto-generated documentation.
  - Used `https://web.archive.org/web/20220414235959/https://github.com/erthink/` for dead (or temporarily lost) resources deleted by ~~Github~~.
  - Added `--loglevel=` command-line option to the `mdbx_test` tool.
  - Added few fast smoke-like tests into CMake builds.
@@ -592,7 +592,7 @@ Fixes:
 Added features:
 
  - Preliminary C++ API with support for C++17 polymorphic allocators.
- - [Online C++ API reference](https://libmdbx.website.yandexcloud.net/) by Doxygen.
+ - [Online C++ API reference](https://libmdbx.dqdkfa.ru/) by Doxygen.
  - Quick reference for Insert/Update/Delete operations.
  - Explicit `MDBX_SYNC_DURABLE` to sync modes for API clarity.
  - Explicit `MDBX_ALLDUPS` and `MDBX_UPSERT` for API clarity.
@@ -637,7 +637,7 @@ Fixes:
 
 Added features:
 
- - [Online C API reference](https://libmdbx.website.yandexcloud.net/) by Doxygen.
+ - [Online C API reference](https://libmdbx.dqdkfa.ru/) by Doxygen.
  - Separated enums for environment, sub-databases, transactions, copying and data-update flags.
 
 Deprecated functions and flags:

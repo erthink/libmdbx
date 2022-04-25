@@ -19,8 +19,8 @@ including English 和 中文, in the near future.
 
 *The Future will (be) [Positive](https://www.ptsecurity.com). Всё будет хорошо.*
 
-> Please refer to the online [documentation](https://libmdbx.website.yandexcloud.net)
-> with [`C` API description](https://libmdbx.website.yandexcloud.net/group__c__api.html)
+> Please refer to the online [documentation](https://libmdbx.dqdkfa.ru)
+> with [`C` API description](https://libmdbx.dqdkfa.ru/group__c__api.html)
 > and pay attention to the [`C++` API](https://gitflic.ru/project/erthink/libmdbx/blob?file=mdbx.h%2B%2B#line-num-1).
 
 > Questions, feedback and suggestions are welcome to the [Telegram' group](https://t.me/libmdbx).
@@ -591,7 +591,7 @@ from the [ios-cmake](https://github.com/leetal/ios-cmake) project.
 
 ## API description
 
-Please refer to the online [_libmdbx_ API reference](https://libmdbx.website.yandexcloud.net/docs)
+Please refer to the online [_libmdbx_ API reference](https://libmdbx.dqdkfa.ru/docs)
 and/or see the [mdbx.h++](mdbx.h%2B%2B) and [mdbx.h](mdbx.h) headers.
 
 <!-- section-begin bindings -->
@@ -651,7 +651,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 
   2. Performance gap is too high to compare in any meaningful way.
 
-![Comparison #1: Integral Performance](https://libmdbx.website.yandexcloud.net/img/perf-slide-1.png)
+![Comparison #1: Integral Performance](https://libmdbx.dqdkfa.ru/img/perf-slide-1.png)
 
 --------------------------------------------------------------------------------
 
@@ -660,7 +660,7 @@ Here showed sum of performance metrics in 3 benchmarks:
 Summary performance with concurrent read/search queries in 1-2-4-8
 threads on the machine with 4 logical CPUs in HyperThreading mode (i.e. actually 2 physical CPU cores).
 
-![Comparison #2: Read Scalability](https://libmdbx.website.yandexcloud.net/img/perf-slide-2.png)
+![Comparison #2: Read Scalability](https://libmdbx.dqdkfa.ru/img/perf-slide-2.png)
 
 --------------------------------------------------------------------------------
 
@@ -682,7 +682,7 @@ In the benchmark each transaction contains combined CRUD operations (2
 inserts, 1 read, 1 update, 1 delete). Benchmark starts on an empty database
 and after full run the database contains 10,000 small key-value records.
 
-![Comparison #3: Sync-write mode](https://libmdbx.website.yandexcloud.net/img/perf-slide-3.png)
+![Comparison #3: Sync-write mode](https://libmdbx.dqdkfa.ru/img/perf-slide-3.png)
 
 --------------------------------------------------------------------------------
 
@@ -709,7 +709,7 @@ and after full run the database contains 100,000 small key-value
 records.
 
 
-![Comparison #4: Lazy-write mode](https://libmdbx.website.yandexcloud.net/img/perf-slide-4.png)
+![Comparison #4: Lazy-write mode](https://libmdbx.dqdkfa.ru/img/perf-slide-4.png)
 
 --------------------------------------------------------------------------------
 
@@ -733,7 +733,7 @@ In the benchmark each transaction contains combined CRUD operations (2
 inserts, 1 read, 1 update, 1 delete). Benchmark starts on an empty database
 and after full run the database contains 10,000 small key-value records.
 
-![Comparison #5: Async-write mode](https://libmdbx.website.yandexcloud.net/img/perf-slide-5.png)
+![Comparison #5: Async-write mode](https://libmdbx.dqdkfa.ru/img/perf-slide-5.png)
 
 --------------------------------------------------------------------------------
 
@@ -757,6 +757,6 @@ All benchmark data is gathered by
 [getrusage()](http://man7.org/linux/man-pages/man2/getrusage.2.html)
 syscall and by scanning the data directory.
 
-![Comparison #6: Cost comparison](https://libmdbx.website.yandexcloud.net/img/perf-slide-6.png)
+![Comparison #6: Cost comparison](https://libmdbx.dqdkfa.ru/img/perf-slide-6.png)
 
 <!-- section-end -->
