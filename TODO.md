@@ -6,7 +6,7 @@ warning nor explanation, deleted _libmdbx_ along with a lot of other
 projects, simultaneously blocking access for many developers. Therefore
 on 2022-04-21 we have migrated to a reliable trusted infrastructure.
 The origin for now is at[GitFlic](https://gitflic.ru/project/erthink/libmdbx)
-with backup at [ABF by ROSA Лаб](https://abf.io/erthink/libmdbx).
+with backup at [ABF by ROSA Лаб](https://abf.rosalinux.ru/erthink/libmdbx).
 For the same reason ~~Github~~ is blacklisted forever.
 
 So currently most of the links are broken due to noted malicious ~~Github~~ sabotage.
