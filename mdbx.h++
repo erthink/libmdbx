@@ -189,7 +189,9 @@
 
 /** Workaround for old compilers without properly support for C++20 `if
  * constexpr`. */
-#if defined(__cpp_if_constexpr) && __cpp_if_constexpr >= 201606L
+#if defined(DOXYGEN)
+#define MDBX_IF_CONSTEXPR constexpr
+#elif defined(__cpp_if_constexpr) && __cpp_if_constexpr >= 201606L
 #define MDBX_IF_CONSTEXPR constexpr
 #else
 #define MDBX_IF_CONSTEXPR
