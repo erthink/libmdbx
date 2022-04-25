@@ -7,6 +7,7 @@ Acknowledgements:
 
  - [Masatoshi Fukunaga](https://github.com/mah0x211) for [Lua bindings](https://github.com/mah0x211/lua-libmdbx).
 
+-------------------------------------------------------------------------------
 
 ## v0.11.7 at 2022-04-22
 
@@ -50,13 +51,13 @@ Fixes:
 Minors:
 
  - Resolve minor MSVC warnings: avoid `/INCREMENTAL[:YES]` with `/LTCG`, `/W4` with `/W3`, the `C5105` warning.
- - Switched to using `MDBX_EPERM` instead of `MDBX_RESULT_TRUE' to indicate that the geometry cannot be updated.
+ - Switched to using `MDBX_EPERM` instead of `MDBX_RESULT_TRUE` to indicate that the geometry cannot be updated.
  - Added `NULL` checking during memory allocation inside `mdbx_chk`.
  - Resolved all warnings from MinGW while used without CMake.
  - Added inheretable `target_include_directories()` to `CMakeLists.txt` for easy integration.
  - Added build-time checks and paranoid runtime assertions for the `off_t` arguments of `fcntl()` which are used for locking.
  - Added `-Wno-lto-type-mismatch` to avoid false-positive warnings from old GCC during LTO-enabled builds.
- - Added checking for TID (system thread id) to avoid hang on 32-bit Bionic/Android  within `pthread_mutex_lock()`.
+ - Added checking for TID (system thread id) to avoid hang on 32-bit Bionic/Android within `pthread_mutex_lock()`.
  - Reworked `MDBX_BUILD_TARGET` of CMake builds.
  - Added `CMAKE_HOST_ARCH` and `CMAKE_HOST_CAN_RUN_EXECUTABLES_BUILT_FOR_TARGET`.
 
