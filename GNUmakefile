@@ -532,7 +532,7 @@ mdbx-static.o: src/config.h src/version.c src/alloy.c $(ALLOY_DEPS) $(lastword $
 	@echo '  CC $@'
 	$(QUIET)$(CC) $(CFLAGS) $(MDBX_BUILD_OPTIONS) '-DMDBX_CONFIG_H="config.h"' -ULIBMDBX_EXPORTS -c src/alloy.c -o $@
 
-docs/Doxyfile: docs/Doxyfile.in src/version.c
+docs/Doxyfile: docs/Doxyfile.in src/version.c $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)sed \
 		-e "s|@MDBX_GIT_TIMESTAMP@|$(MDBX_GIT_TIMESTAMP)|" \
@@ -546,26 +546,26 @@ docs/Doxyfile: docs/Doxyfile.in src/version.c
 	docs/Doxyfile.in >$@
 
 define md-extract-section
-docs/__$(1).md: $(2)
+docs/__$(1).md: $(2) $(lastword $(MAKEFILE_LIST))
 	@echo '  EXTRACT $1'
-	$(QUIET)sed -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $$< >$$@ && test -s $$@
+	$(QUIET)sed -n '/<!-- section-begin $(1) -->/,/<!-- section-end -->/p' $(2) >$$@ && test -s $$@
 
 endef
 $(foreach section,overview mithril characteristics improvements history usage performance bindings,$(eval $(call md-extract-section,$(section),README.md)))
 
-docs/overall.md: docs/__overview.md docs/_toc.md docs/__mithril.md docs/__history.md AUTHORS LICENSE
+docs/overall.md: docs/__overview.md docs/_toc.md docs/__mithril.md docs/__history.md AUTHORS LICENSE $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)echo -e "\\mainpage Overall\n\\section brief Brief" | cat - $(filter %.md, $^) >$@ && echo -e "\n\n\nLicense\n=======\n" | cat AUTHORS - LICENSE >>$@
 
 docs/intro.md: docs/_preface.md docs/__characteristics.md docs/__improvements.md docs/_restrictions.md docs/__performance.md
 	@echo '  MAKE $@'
-	$(QUIET)cat $^ | sed 's/^Performance comparison$$/Performance comparison {#performance}/' >$@
+	$(QUIET)cat $^ | sed 's/^Performance comparison$$/Performance comparison {#performance}/;s/^Improvements beyond LMDB$$/Improvements beyond LMDB {#improvements}/' >$@
 
 docs/usage.md: docs/__usage.md docs/_starting.md docs/__bindings.md
 	@echo '  MAKE $@'
 	$(QUIET)echo -e "\\page usage Usage\n\\section getting Building & Embedding" | cat - $^ | sed 's/^Bindings$$/Bindings {#bindings}/' >$@
 
-doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md AUTHORS LICENSE
+doxygen: docs/Doxyfile docs/overall.md docs/intro.md docs/usage.md mdbx.h mdbx.h++ src/options.h ChangeLog.md AUTHORS LICENSE $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING doxygen...'
 	$(QUIET)rm -rf docs/html && \
 	cat mdbx.h | tr '\n' '\r' | sed -e 's/LIBMDBX_INLINE_API\s*(\s*\([^,]\+\),\s*\([^,]\+\),\s*(\s*\([^)]\+\)\s*)\s*)\s*{/inline \1 \2(\3) {/g' | tr '\r' '\n' >docs/mdbx.h && \
