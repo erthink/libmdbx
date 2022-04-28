@@ -1,18 +1,18 @@
-From f732fc79456f3b296543ab2625d35eeef2655618 Mon Sep 17 00:00:00 2001
-From: Leonid Yuriev <leo@yuriev.ru>
-Date: Sun, 24 Oct 2021 20:13:33 +0300
+From 4c309b57bca0526b0c110990c315682f027ccfad Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?=D0=9B=D0=B5=D0=BE=D0=BD=D0=B8=D0=B4=20=D0=AE=D1=80=D1=8C?=
+ =?UTF-8?q?=D0=B5=D0=B2=20=28Leonid=20Yuriev=29?= <leo@yuriev.ru>
+Date: Thu, 28 Apr 2022 11:02:59 +0300
 Subject: [PATCH] package/libmdbx: new package (library/database).
 
-This patch adds libmdbx v0.11.1:
+This patch adds libmdbx v0.11.7:
  - libmdbx is one of the fastest compact embeddable key-value ACID database.
  - libmdbx has a specific set of properties and capabilities,
    focused on creating unique lightweight solutions.
  - libmdbx surpasses the legendary LMDB (Lightning Memory-Mapped Database)
    in terms of reliability, features and performance.
- - https://gitflic.ru/project/erthink/libmdbx
+ - https://libmdbx.dqdkfa.ru/
 
 Signed-off-by: Leonid Yuriev <leo@yuriev.ru>
-Signed-off-by: Yann E. MORIN <yann.morin.1998@free.fr>
 ---
  DEVELOPERS                   |  3 +++
  package/Config.in            |  1 +
@@ -52,7 +52,7 @@ index 016a99ed1a..a6f95bfaa9 100644
  	source "package/libodb-mysql/Config.in"
 diff --git a/package/libmdbx/Config.in b/package/libmdbx/Config.in
 new file mode 100644
-index 0000000000..d13f73938f
+index 0000000000..ef44a955fe
 --- /dev/null
 +++ b/package/libmdbx/Config.in
 @@ -0,0 +1,45 @@
@@ -71,7 +71,7 @@ index 0000000000..d13f73938f
 +	  libmdbx surpasses the legendary LMDB in terms of
 +	  reliability, features and performance.
 +
-+	  https://gitflic.ru/project/erthink/libmdbx
++	  https://libmdbx.dqdkfa.ru/
 +
 +if BR2_PACKAGE_LIBMDBX
 +
@@ -103,18 +103,18 @@ index 0000000000..d13f73938f
 +		!BR2_TOOLCHAIN_GCC_AT_LEAST_4_4
 diff --git a/package/libmdbx/libmdbx.hash b/package/libmdbx/libmdbx.hash
 new file mode 100644
-index 0000000000..c8b50f9ac3
+index 0000000000..61f800d433
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.hash
 @@ -0,0 +1,5 @@
-+# Hashes from: https://gitflic.ru/project/erthink/libmdbx/releases/
-+sha256  f954ba8c9768914a92c2b46aac0d66bec674dbb4d7b0f01e362ea2921746ddaa  libmdbx-amalgamated-0.11.1.tar.gz
++# Hashes from https://libmdbx.dqdkfa.ru//release/SHA256SUMS
++sha256  3a9fb6a4cd941e646597235518714373fda1ca6d4c5e23669afe70ea87c20940  libmdbx-amalgamated-0.11.7.tar.xz
 +
 +# Locally calculated
 +sha256  310fe25c858a9515fc8c8d7d1f24a67c9496f84a91e0a0e41ea9975b1371e569  LICENSE
 diff --git a/package/libmdbx/libmdbx.mk b/package/libmdbx/libmdbx.mk
 new file mode 100644
-index 0000000000..02d00b1a5a
+index 0000000000..ab279614ab
 --- /dev/null
 +++ b/package/libmdbx/libmdbx.mk
 @@ -0,0 +1,42 @@
@@ -124,9 +124,9 @@ index 0000000000..02d00b1a5a
 +#
 +################################################################################
 +
-+LIBMDBX_VERSION = 0.11.1
-+LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.gz
-+LIBMDBX_SITE = https://gitflic.ru/project/erthink/libmdbx/releases/download/v$(LIBMDBX_VERSION)
++LIBMDBX_VERSION = 0.11.7
++LIBMDBX_SOURCE = libmdbx-amalgamated-$(LIBMDBX_VERSION).tar.xz
++LIBMDBX_SITE = https://libmdbx.dqdkfa.ru/release
 +LIBMDBX_SUPPORTS_IN_SOURCE_BUILD = NO
 +LIBMDBX_LICENSE = OLDAP-2.8
 +LIBMDBX_LICENSE_FILES = LICENSE
@@ -161,5 +161,5 @@ index 0000000000..02d00b1a5a
 +
 +$(eval $(cmake-package))
 -- 
-2.33.1
+2.32.0
 
