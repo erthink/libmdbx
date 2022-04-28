@@ -13807,23 +13807,29 @@ static int mdbx_setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
 
 static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
   MDBX_cursor_couple couple;
-  if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
+  if (unlikely(TXN_DBI_CHANGED(txn, dbi))) {
+    mdbx_notice("dbi %u was changed", dbi);
     return MDBX_BAD_DBI;
+  }
   int rc = mdbx_cursor_init(&couple.outer, txn, MAIN_DBI);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
   MDBX_dbx *const dbx = &txn->mt_dbxs[dbi];
   rc = mdbx_page_search(&couple.outer, &dbx->md_name, 0);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    mdbx_notice("dbi %u refs to inaccessible subDB (err %d)", dbi, rc);
     return (rc == MDBX_NOTFOUND) ? MDBX_BAD_DBI : rc;
+  }
 
   MDBX_val data;
   struct node_result nsr = mdbx_node_search(&couple.outer, &dbx->md_name);
   if (unlikely(!nsr.exact))
     return MDBX_BAD_DBI;
-  if (unlikely((node_flags(nsr.node) & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA))
+  if (unlikely((node_flags(nsr.node) & (F_DUPDATA | F_SUBDATA)) != F_SUBDATA)) {
+    mdbx_notice("dbi %u refs to not a named subDB (%s)", dbi, "wrong flags");
     return MDBX_INCOMPATIBLE; /* not a named DB */
+  }
 
   const txnid_t pp_txnid =
       pp_txnid4chk(couple.outer.mc_pg[couple.outer.mc_top], txn);
@@ -13831,15 +13837,21 @@ static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(data.iov_len != sizeof(MDBX_db)))
+  if (unlikely(data.iov_len != sizeof(MDBX_db))) {
+    mdbx_notice("dbi %u refs to not a named subDB (%s)", dbi, "wrong rec-size");
     return MDBX_INCOMPATIBLE; /* not a named DB */
+  }
 
   uint16_t md_flags = UNALIGNED_PEEK_16(data.iov_base, MDBX_db, md_flags);
   /* The txn may not know this DBI, or another process may
    * have dropped and recreated the DB with other flags. */
   MDBX_db *const db = &txn->mt_dbs[dbi];
-  if (unlikely((db->md_flags & DB_PERSISTENT_FLAGS) != md_flags))
+  if (unlikely((db->md_flags & DB_PERSISTENT_FLAGS) != md_flags)) {
+    mdbx_notice("dbi %u refs to the re-created subDB with different flags "
+                "(present 0x%x != wanna 0x%x)",
+                dbi, db->md_flags & DB_PERSISTENT_FLAGS, md_flags);
     return MDBX_INCOMPATIBLE;
+  }
 
   memcpy(db, data.iov_base, sizeof(MDBX_db));
 #if !MDBX_DISABLE_PAGECHECKS
