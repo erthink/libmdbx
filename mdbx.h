@@ -3453,6 +3453,7 @@ mdbx_txn_id(const MDBX_txn *txn);
 
 /** \brief Latency of commit stages in 1/65536 of seconds units.
  * \warning This structure may be changed in future releases.
+ * \ingroup c_statinfo
  * \see mdbx_txn_commit_ex() */
 struct MDBX_commit_latency {
   /** \brief Duration of preparation (commit child transactions, update
@@ -3481,7 +3482,7 @@ typedef struct MDBX_commit_latency MDBX_commit_latency;
 /** \brief Commit all the operations of a transaction into the database and
  * collect latency information.
  * \see mdbx_txn_commit()
- * \ingroup c_statinfo
+ * \ingroup c_transactions
  * \warning This function may be changed in future releases. */
 LIBMDBX_API int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency);
 
