@@ -1446,12 +1446,49 @@ enum MDBX_txn_flags_t {
   MDBX_TXN_TRY = UINT32_C(0x10000000),
 
   /** Exactly the same as \ref MDBX_NOMETASYNC,
-   * but for this transaction only */
+   * but for this transaction only. */
   MDBX_TXN_NOMETASYNC = MDBX_NOMETASYNC,
 
   /** Exactly the same as \ref MDBX_SAFE_NOSYNC,
-   * but for this transaction only */
-  MDBX_TXN_NOSYNC = MDBX_SAFE_NOSYNC
+   * but for this transaction only. */
+  MDBX_TXN_NOSYNC = MDBX_SAFE_NOSYNC,
+
+  /* Transaction state flags ---------------------------------------------- */
+
+  /** Transaction is invalid.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_INVALID = 0x80000000,
+
+  /** Transaction is finished or never began.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_FINISHED = 0x01,
+
+  /** Transaction is unusable after an error.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_ERROR = 0x02,
+
+  /** Transaction must write, even if dirty list is empty.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_DIRTY = 0x04,
+
+  /** Transaction or a parent has spilled pages.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_SPILLS = 0x08,
+
+  /** Transaction has a nested child transaction.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_HAS_CHILD = 0x10,
+
+  /** Most operations on the transaction are currently illegal.
+   * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
+   * but can't be used with \ref mdbx_txn_begin(). */
+  MDBX_TXN_BLOCKED = MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_HAS_CHILD
 };
 #ifndef __cplusplus
 typedef enum MDBX_txn_flags_t MDBX_txn_flags_t;
@@ -3429,7 +3466,7 @@ mdbx_txn_env(const MDBX_txn *txn);
 /** \brief Return the transaction's flags.
  * \ingroup c_transactions
  *
- * This returns the flags associated with this transaction.
+ * This returns the flags, including internal, associated with this transaction.
  *
  * \param [in] txn  A transaction handle returned by \ref mdbx_txn_begin().
  *

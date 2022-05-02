@@ -8434,8 +8434,11 @@ uint64_t mdbx_txn_id(const MDBX_txn *txn) {
 }
 
 int mdbx_txn_flags(const MDBX_txn *txn) {
-  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE))
+  if (unlikely(!txn || txn->mt_signature != MDBX_MT_SIGNATURE)) {
+    assert((-1 & (int)MDBX_TXN_INVALID) != 0);
     return -1;
+  }
+  assert(0 == (int)(txn->mt_flags & MDBX_TXN_INVALID));
   return txn->mt_flags;
 }
 
