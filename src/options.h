@@ -109,7 +109,7 @@
 #error MDBX_DPL_PREALLOC_FOR_RADIXSORT must be defined as 0 or 1
 #endif /* MDBX_DPL_PREALLOC_FOR_RADIXSORT */
 
-/* Basically, this build-option is for TODO. Guess it should be replaced
+/** Basically, this build-option is for TODO. Guess it should be replaced
  * with MDBX_ENABLE_WRITEMAP_SPILLING with the three variants:
  *  0/OFF = Don't track dirty pages at all and don't spilling ones.
  *          This should be by-default on Linux and may-be other systems
@@ -171,15 +171,6 @@
     MDBX_ASSUME_MALLOC_OVERHEAD % 4
 #error MDBX_ASSUME_MALLOC_OVERHEAD must be defined in range 0..64 and be multiple of 4
 #endif /* MDBX_ASSUME_MALLOC_OVERHEAD */
-
-/** In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
-#ifndef MDBX_DEBUG
-#ifdef NDEBUG
-#define MDBX_DEBUG 0
-#else
-#define MDBX_DEBUG 1
-#endif
-#endif /* MDBX_DEBUG */
 
 /** If defined then enables integration with Valgrind,
  * a memory analyzing tool. */
@@ -400,9 +391,20 @@
  *******************************************************************************
  ******************************************************************************/
 
-#ifdef DOXYGEN
-/* !!! Actually this is a fake definitions     !!!
- * !!! for documentation generation by Doxygen !!! */
+#ifndef DOXYGEN
+
+/* In case the MDBX_DEBUG is undefined set it corresponding to NDEBUG */
+#ifndef MDBX_DEBUG
+#ifdef NDEBUG
+#define MDBX_DEBUG 0
+#else
+#define MDBX_DEBUG 1
+#endif
+#endif /* MDBX_DEBUG */
+
+#else
+
+/* !!! Actually this is a fake definitions for Doxygen !!! */
 
 /** Controls enabling of debugging features.
  *
