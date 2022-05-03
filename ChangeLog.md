@@ -7,6 +7,20 @@ Acknowledgements:
 
  - [Masatoshi Fukunaga](https://github.com/mah0x211) for [Lua bindings](https://github.com/mah0x211/lua-libmdbx).
 
+New:
+
+ - Added most of transactions flags to the public API.
+
+Fixes:
+
+ - A series of fixes and improvements for automatically generated documentation (Doxygen).
+
+Minors:
+
+ - Refined `release-assets` GNU Make target.
+ - Added logging to `mdbx_fetch_sdb()` to help debugging complex DBI-handels use cases.
+
+
 -------------------------------------------------------------------------------
 
 ## v0.11.7 at 2022-04-22
