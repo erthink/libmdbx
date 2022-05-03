@@ -1458,7 +1458,7 @@ enum MDBX_txn_flags_t {
   /** Transaction is invalid.
    * \note Transaction state flag. Returned from \ref mdbx_txn_flags()
    * but can't be used with \ref mdbx_txn_begin(). */
-  MDBX_TXN_INVALID = 0x80000000,
+  MDBX_TXN_INVALID = INT32_MIN,
 
   /** Transaction is finished or never began.
    * \note Transaction state flag. Returned from \ref mdbx_txn_flags()

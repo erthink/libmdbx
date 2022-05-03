@@ -897,7 +897,7 @@ struct MDBX_txn {
 
 #define TXN_FLAGS                                                              \
   (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS |     \
-   MDBX_TXN_HAS_CHILD)
+   MDBX_TXN_HAS_CHILD | MDBX_TXN_INVALID)
 
 #if (TXN_FLAGS & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS)) ||       \
     ((MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS | TXN_FLAGS) &         \
