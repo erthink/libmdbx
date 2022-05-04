@@ -6808,14 +6808,24 @@ no_loose:
     mdbx_assert(env,
                 mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                       txn->mt_next_pgno - MDBX_ENABLE_REFUND));
-    if (likely(!(flags & MDBX_ALLOC_FAKE)))
+    int level;
+    const char *what;
+    if (likely(!(flags & MDBX_ALLOC_FAKE))) {
       txn->mt_flags |= MDBX_TXN_ERROR;
-    if (num != 1 || ret.err != MDBX_NOTFOUND)
-      mdbx_notice("alloc %u pages failed, flags 0x%x, errcode %d", num, flags,
-                  ret.err);
-    else
-      mdbx_trace("alloc %u pages failed, flags 0x%x, errcode %d", num, flags,
-                 ret.err);
+      level = MDBX_LOG_ERROR;
+      what = "pages";
+    } else if (flags & MDBX_ALLOC_SLOT) {
+      level = MDBX_LOG_NOTICE;
+      what = "gc-slot/backlog";
+    } else {
+      level = MDBX_LOG_NOTICE;
+      what = "backlog-pages";
+    }
+    if (mdbx_log_enabled(level))
+      mdbx_debug_log(level, __func__, __LINE__,
+                     "unable alloc %u %s, flags 0x%x, errcode %d\n", num, what,
+                     flags, ret.err);
+
     mdbx_assert(env, ret.err != MDBX_SUCCESS);
     ret.page = NULL;
     return ret;
@@ -6825,8 +6835,8 @@ done:
   mdbx_assert(env, !(flags & MDBX_ALLOC_SLOT));
   mdbx_ensure(env, pgno >= NUM_METAS);
   if (unlikely(flags & MDBX_ALLOC_FAKE)) {
-    mdbx_debug("return NULL-page for %u pages of %s mode", num,
-               "MDBX_ALLOC_FAKE");
+    mdbx_debug("return NULL-page for %u pages %s allocation", num,
+               "gc-slot/backlog");
     ret.page = NULL;
     ret.err = MDBX_SUCCESS;
     return ret;
