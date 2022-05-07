@@ -644,6 +644,7 @@ dist/@tmp-shared_internals.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFIL
 		-e '/#include "defs.h"/r src/defs.h' \
 		-e '/#include "osal.h"/r src/osal.h' \
 		-e '/#include "options.h"/r src/options.h' \
+		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		src/internals.h >$@ \
 	&& rm -rf dist/@tmp-sed.inc
 
@@ -653,12 +654,14 @@ dist/mdbx.c: dist/@tmp-shared_internals.inc $(lastword $(MAKEFILE_LIST))
 	&& cat src/core.c src/osal.c src/version.c src/lck-windows.c src/lck-posix.c | sed \
 		-e '/#include "debug_begin.h"/r src/debug_begin.h' \
 		-e '/#include "debug_end.h"/r src/debug_end.h' \
-	) | grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|' >$@
+	) | sed -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' >$@
 
 dist/mdbx.c++: dist/@tmp-shared_internals.inc src/mdbx.c++ $(lastword $(MAKEFILE_LIST))
 	@echo '  MAKE $@'
 	$(QUIET)mkdir -p dist && (cat dist/@tmp-shared_internals.inc && cat src/mdbx.c++) \
-	| grep -v -e '#include "' -e '#pragma once' | sed 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' >$@
+	| sed -e '/#include "/d;/#pragma once/d' -e 's|@INCLUDE|#include|;s|"mdbx.h"|"mdbx.h++"|' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' >$@
 
 define dist-tool-rule
 dist/$(1).c: src/$(1).c src/wingetopt.h src/wingetopt.c \
@@ -667,9 +670,10 @@ dist/$(1).c: src/$(1).c src/wingetopt.h src/wingetopt.c \
 	$(QUIET)mkdir -p dist && sed \
 		-e '/#include "internals.h"/r dist/@tmp-shared_internals.inc' \
 		-e '/#include "wingetopt.h"/r src/wingetopt.c' \
+		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \
 		src/$(1).c \
-	| grep -v -e '#include "' -e '#pragma once' -e '#define xMDBX_ALLOY' \
-	| sed 's|@INCLUDE|#include|' >$$@
+	| sed -e '/#include "/d;/#pragma once/d;/#define xMDBX_ALLOY/d' -e 's|@INCLUDE|#include|' \
+		-e '/ clang-format o/d;/ \*INDENT-O/d' >$$@
 
 endef
 $(foreach file,$(TOOLS),$(eval $(call dist-tool-rule,$(file))))
