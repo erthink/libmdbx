@@ -5790,8 +5790,10 @@ static txnid_t mdbx_find_oldest(const MDBX_txn *txn) {
   mdbx_tassert(txn, edge <= txn->mt_txnid);
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
-  if (unlikely(lck == NULL /* exclusive mode */))
-    return atomic_store64(&lck->mti_oldest_reader, edge, mo_Relaxed);
+  if (unlikely(lck == NULL /* exclusive mode */)) {
+    mdbx_assert(env, env->me_lck == (void *)&env->x_lckless_stub);
+    return env->me_lck->mti_oldest_reader.weak = edge;
+  }
 
   const txnid_t last_oldest =
       atomic_load64(&lck->mti_oldest_reader, mo_AcquireRelease);
