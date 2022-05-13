@@ -965,6 +965,10 @@ macro(probe_libcxx_filesystem)
         namespace fs = ::std::filesystem;
         #elif defined(__cpp_lib_experimental_filesystem) && __cpp_lib_experimental_filesystem >= 201406L
         namespace fs = ::std::experimental::filesystem;
+        #elif (defined(__MAC_OS_X_VERSION_MIN_REQUIRED) && __MAC_OS_X_VERSION_MIN_REQUIRED < 101500) || (defined(__IPHONE_OS_VERSION_MIN_REQUIRED) && __IPHONE_OS_VERSION_MIN_REQUIRED < 130100)
+        #error "Select a newer target OSX/iOS to support C++17 std::filesystem"
+        #else
+        #error "No support for C++17 std::filesystem"
         #endif
 
         int main(int argc, const char*argv[]) {
