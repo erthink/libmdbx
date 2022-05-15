@@ -6005,7 +6005,10 @@ __cold static int mdbx_set_readahead(MDBX_env *env, const pgno_t edge,
 #if defined(F_RDADVISE)
       struct radvisory hint;
       hint.ra_offset = offset;
-      hint.ra_count = length;
+      hint.ra_count =
+          unlikely(length > INT_MAX && sizeof(length) > sizeof(hint.ra_count))
+              ? INT_MAX
+              : (int)length;
       (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
           env->me_lazy_fd, F_RDADVISE, &hint);
 #elif defined(MADV_WILLNEED)
@@ -16911,7 +16914,7 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   MDBX_node *node;
   char *base;
   size_t len;
-  int delta, ksize, oksize;
+  ptrdiff_t delta, ksize, oksize;
   int ptr, i, nkeys, indx;
   DKBUF_DEBUG;
 
@@ -16937,7 +16940,7 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
   if (delta) {
     if (delta > (int)page_room(mp)) {
       /* not enough space left, do a delete and split */
-      mdbx_debug("Not enough room, delta = %d, splitting...", delta);
+      mdbx_debug("Not enough room, delta = %zd, splitting...", delta);
       pgno_t pgno = node_pgno(node);
       mdbx_node_del(mc, 0);
       int rc = mdbx_page_split(mc, key, NULL, pgno, MDBX_SPLIT_REPLACE);

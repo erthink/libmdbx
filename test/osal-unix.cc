@@ -184,7 +184,8 @@ void osal_setup(const std::vector<actor_config> &actors) {
   if (err)
     failure_perror("pthread_barrierattr_setpshared()", err);
 
-  err = pthread_barrier_init(&shared->barrier, &barrierattr, shared->count);
+  err = pthread_barrier_init(&shared->barrier, &barrierattr,
+                             unsigned(shared->count));
   if (err)
     failure_perror("pthread_barrier_init(shared)", err);
   pthread_barrierattr_destroy(&barrierattr);
@@ -589,12 +590,12 @@ void osal_yield(void) {
     failure_perror("sched_yield()", errno);
 }
 
-void osal_udelay(unsigned us) {
+void osal_udelay(size_t us) {
   chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
   struct timespec ts;
 
-  static unsigned threshold_us;
+  static size_t threshold_us;
   if (threshold_us == 0) {
 #if defined(_POSIX_CPUTIME) && _POSIX_CPUTIME > -1 &&                          \
     defined(CLOCK_PROCESS_CPUTIME_ID)

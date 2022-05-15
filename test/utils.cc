@@ -207,7 +207,7 @@ void jitter_delay(bool extra) {
         osal_yield();
         cpu_relax();
         if (dice > 2) {
-          unsigned us =
+          size_t us =
               prng32() & (extra ? 0xffff /* 656 ms */ : 0x3ff /* 1 ms */);
           log_trace("== jitter.delay: %0.6f", us / 1000000.0);
           osal_udelay(us);

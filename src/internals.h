@@ -1417,7 +1417,7 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 #define F_ISSET(w, f) (((w) & (f)) == (f))
 
 /* Round n up to an even number. */
-#define EVEN(n) (((n) + 1U) & -2) /* sign-extending -2 to match n+1U */
+#define EVEN(n) (((n) + 1UL) & -2L) /* sign-extending -2 to match n+1U */
 
 /* Default size of memory map.
  * This is certainly too small for any actual applications. Apps should

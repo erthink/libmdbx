@@ -418,11 +418,11 @@ int osal_actor_poll(mdbx_pid_t &pid, unsigned timeout) {
 
 void osal_yield(void) { SwitchToThread(); }
 
-void osal_udelay(unsigned us) {
+void osal_udelay(size_t us) {
   chrono::time until, now = chrono::now_monotonic();
   until.fixedpoint = now.fixedpoint + chrono::from_us(us).fixedpoint;
 
-  static unsigned threshold_us;
+  static size_t threshold_us;
   if (threshold_us == 0) {
     unsigned timeslice_ms = 1;
     while (timeBeginPeriod(timeslice_ms) == TIMERR_NOCANDO)
@@ -433,7 +433,7 @@ void osal_udelay(unsigned us) {
 
   do {
     if (us > threshold_us && us > 1000) {
-      DWORD rc = SleepEx(us / 1000, TRUE);
+      DWORD rc = SleepEx(unsigned(us / 1000), TRUE);
       if (rc)
         failure_perror("SleepEx()", waitstatus2errcode(rc));
       us = 0;

@@ -30,7 +30,7 @@ bool osal_progress_push(bool active);
 
 mdbx_pid_t osal_getpid(void);
 int osal_delay(unsigned seconds);
-void osal_udelay(unsigned us);
+void osal_udelay(size_t us);
 void osal_yield(void);
 bool osal_istty(int fd);
 std::string osal_tempdir(void);

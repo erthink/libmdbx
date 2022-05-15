@@ -35,15 +35,17 @@ REGISTER_TESTCASE(ttl);
 
 unsigned testcase_ttl::edge2count(uint64_t edge) {
   const double rnd = u64_to_double1(prng64_map1_white(edge));
-  const unsigned count = std::lrint(std::pow(sliding.max_step_size, rnd));
+  const unsigned count =
+      unsigned(std::lrint(std::pow(sliding.max_step_size, rnd)));
   // average value: (X - 1) / ln(X), where X = sliding.max_step_size
   return count;
 }
 
 unsigned testcase_ttl::edge2window(uint64_t edge) {
   const double rnd = u64_to_double1(bleach64(edge));
-  const unsigned size = sliding.max_window_size -
-                        std::lrint(std::pow(sliding.max_window_size, rnd));
+  const unsigned size =
+      sliding.max_window_size -
+      unsigned(std::lrint(std::pow(sliding.max_window_size, rnd)));
   // average value: Y - (Y - 1) / ln(Y), where Y = sliding.max_window_size
   return size;
 }
@@ -84,10 +86,10 @@ bool testcase_ttl::setup() {
     x = (hi + lo) / 2;
   }
 
-  sliding.max_step_size = std::lrint(x);
+  sliding.max_step_size = unsigned(std::lrint(x));
   if (sliding.max_step_size < count_top_lower)
     sliding.max_step_size = count_top_lower;
-  sliding.max_window_size = std::lrint(x * ratio);
+  sliding.max_window_size = unsigned(std::lrint(x * ratio));
   if (sliding.max_window_size < window_top_lower)
     sliding.max_window_size = window_top_lower;
 
