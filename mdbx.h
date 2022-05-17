@@ -1898,7 +1898,7 @@ typedef enum MDBX_error_t MDBX_error_t;
  * \ingroup c_err
  * \deprecated Please review your code to use MDBX_UNABLE_EXTEND_MAPSIZE
  * instead. */
-MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED_is_deprecated() {
+MDBX_DEPRECATED static __inline int MDBX_MAP_RESIZED_is_deprecated(void) {
   return MDBX_UNABLE_EXTEND_MAPSIZE;
 }
 #define MDBX_MAP_RESIZED MDBX_MAP_RESIZED_is_deprecated()

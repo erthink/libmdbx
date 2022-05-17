@@ -148,7 +148,7 @@ mdbx_global_destructor(void) {
 
 #if MDBX_USE_OFDLOCKS
 static int op_setlk, op_setlkw, op_getlk;
-__cold static void choice_fcntl() {
+__cold static void choice_fcntl(void) {
   assert(!op_setlk && !op_setlkw && !op_getlk);
   if ((mdbx_runtime_flags & MDBX_DBG_LEGACY_MULTIOPEN) == 0
 #if defined(__linux__) || defined(__gnu_linux__)
