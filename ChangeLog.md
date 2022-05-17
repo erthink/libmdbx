@@ -17,6 +17,7 @@ Fixes:
  - A series of fixes and improvements for automatically generated documentation (Doxygen).
  - Fixed copy&paste bug with could lead to `SIGSEGV` (nullptr dereference) in the exclusive/no-lck mode.
  - Fixed minor warnings from modern Apple's CLANG 13.
+ - Fixed minor warnings from CLANG 14 and in-development CLANG 15.
 
 Minors:
 
@@ -63,7 +64,7 @@ Fixes:
  - [Fixed](https://github.com/ledgerwatch/erigon/issues/3874) minor assertion regression (only debug builds were affected).
  - Fixed detection of `C++20` concepts accessibility.
  - Fixed detection of Clang's LTO availability for Android.
- - Fixed extra definition of `_FILE_OFFSET_BITS=64` for Android that is problematic ащк 32-bit Bionic.
+ - Fixed extra definition of `_FILE_OFFSET_BITS=64` for Android that is problematic for 32-bit Bionic.
  - Fixed build for ARM/ARM64 by MSVC.
  - Fixed non-x86 Windows builds with `MDBX_WITHOUT_MSVC_CRT=ON` and `MDBX_BUILD_SHARED_LIBRARY=ON`.
 
