@@ -26,11 +26,11 @@ uint32_t ns2fractional(uint32_t ns) {
    * для ясности кода оставлено как есть (без ручной оптимизации). Так как
    * GCC, Clang и даже MSVC сами давно умеют конвертировать деление на
    * константу в быструю reciprocal-форму. */
-  return ((uint64_t)ns << 32) / NSEC_PER_SEC;
+  return uint32_t((uint64_t(ns) << 32) / NSEC_PER_SEC);
 }
 
 uint32_t fractional2ns(uint32_t fractional) {
-  return (fractional * (uint64_t)NSEC_PER_SEC) >> 32;
+  return uint32_t((fractional * uint64_t(NSEC_PER_SEC)) >> 32);
 }
 
 #ifndef USEC_PER_SEC
@@ -38,11 +38,11 @@ uint32_t fractional2ns(uint32_t fractional) {
 #endif /* USEC_PER_SEC */
 uint32_t us2fractional(uint32_t us) {
   assert(us < USEC_PER_SEC);
-  return ((uint64_t)us << 32) / USEC_PER_SEC;
+  return uint32_t((uint64_t(us) << 32) / USEC_PER_SEC);
 }
 
 uint32_t fractional2us(uint32_t fractional) {
-  return (fractional * (uint64_t)USEC_PER_SEC) >> 32;
+  return uint32_t((fractional * uint64_t(USEC_PER_SEC)) >> 32);
 }
 
 #ifndef MSEC_PER_SEC
@@ -50,31 +50,31 @@ uint32_t fractional2us(uint32_t fractional) {
 #endif /* MSEC_PER_SEC */
 uint32_t ms2fractional(uint32_t ms) {
   assert(ms < MSEC_PER_SEC);
-  return ((uint64_t)ms << 32) / MSEC_PER_SEC;
+  return uint32_t((uint64_t(ms) << 32) / MSEC_PER_SEC);
 }
 
 uint32_t fractional2ms(uint32_t fractional) {
-  return (fractional * (uint64_t)MSEC_PER_SEC) >> 32;
+  return uint32_t((fractional * uint64_t(MSEC_PER_SEC)) >> 32);
 }
 
 time from_ns(uint64_t ns) {
   time result;
-  result.fixedpoint = ((ns / NSEC_PER_SEC) << 32) |
-                      ns2fractional((uint32_t)(ns % NSEC_PER_SEC));
+  result.fixedpoint =
+      ((ns / NSEC_PER_SEC) << 32) | ns2fractional(uint32_t(ns % NSEC_PER_SEC));
   return result;
 }
 
 time from_us(uint64_t us) {
   time result;
-  result.fixedpoint = ((us / USEC_PER_SEC) << 32) |
-                      us2fractional((uint32_t)(us % USEC_PER_SEC));
+  result.fixedpoint =
+      ((us / USEC_PER_SEC) << 32) | us2fractional(uint32_t(us % USEC_PER_SEC));
   return result;
 }
 
 time from_ms(uint64_t ms) {
   time result;
-  result.fixedpoint = ((ms / MSEC_PER_SEC) << 32) |
-                      ms2fractional((uint32_t)(ms % MSEC_PER_SEC));
+  result.fixedpoint =
+      ((ms / MSEC_PER_SEC) << 32) | ms2fractional(uint32_t(ms % MSEC_PER_SEC));
   return result;
 }
 

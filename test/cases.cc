@@ -65,7 +65,7 @@ void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
       failure("No previous waitable actor for %u-ops\n", params.waitfor_nops);
   }
 
-  unsigned space_id = 0;
+  unsigned long space_id = 0;
   if (!space_id_cstr || strcmp(space_id_cstr, "auto") == 0)
     space_id = last_space_id + 1;
   else {
@@ -79,13 +79,13 @@ void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
   }
 
   if (!registry::review_actor_params(testcase, params))
-    failure("Actor config-review failed for space-id %u\n", space_id);
+    failure("Actor config-review failed for space-id %lu\n", space_id);
 
   if (space_id > ACTOR_ID_MAX)
-    failure("Invalid space-id %u\n", space_id);
+    failure("Invalid space-id %lu\n", space_id);
   last_space_id = space_id;
 
-  log_trace("configure_actor: space %u for %s", space_id,
+  log_trace("configure_actor: space %lu for %s", space_id,
             testcase2str(testcase));
   global::actors.emplace_back(
       actor_config(testcase, params, space_id, wait4id));
