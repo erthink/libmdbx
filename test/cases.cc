@@ -83,12 +83,12 @@ void configure_actor(unsigned &last_space_id, const actor_testcase testcase,
 
   if (space_id > ACTOR_ID_MAX)
     failure("Invalid space-id %lu\n", space_id);
-  last_space_id = space_id;
+  last_space_id = unsigned(space_id);
 
   log_trace("configure_actor: space %lu for %s", space_id,
             testcase2str(testcase));
   global::actors.emplace_back(
-      actor_config(testcase, params, space_id, wait4id));
+      actor_config(testcase, params, unsigned(space_id), wait4id));
   global::databases.insert(params.pathname_db);
 }
 
