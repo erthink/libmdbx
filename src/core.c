@@ -6384,6 +6384,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 #define MDBX_ALLOC_NEW 4
 #define MDBX_ALLOC_SLOT 8
 #define MDBX_ALLOC_FAKE 16
+#define MDBX_ALLOC_NOLOG 32
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
 __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
@@ -6819,12 +6820,9 @@ no_loose:
       txn->mt_flags |= MDBX_TXN_ERROR;
       level = MDBX_LOG_ERROR;
       what = "pages";
-    } else if (flags & MDBX_ALLOC_SLOT) {
-      level = MDBX_LOG_NOTICE;
-      what = "gc-slot/backlog";
     } else {
-      level = MDBX_LOG_NOTICE;
-      what = "backlog-pages";
+      level = (flags & MDBX_ALLOC_NOLOG) ? MDBX_LOG_DEBUG : MDBX_LOG_NOTICE;
+      what = (flags & MDBX_ALLOC_SLOT) ? "gc-slot/backlog" : "backlog-pages";
     }
     if (mdbx_log_enabled(level))
       mdbx_debug_log(level, __func__, __LINE__,
@@ -9032,7 +9030,8 @@ static int mdbx_prep_backlog(MDBX_txn *txn, MDBX_cursor *gc_cursor,
 
   while (backlog_size(txn) < backlog4cow + linear4list && err == MDBX_SUCCESS)
     err = mdbx_page_alloc(gc_cursor, 0,
-                          MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE)
+                          MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE |
+                              MDBX_ALLOC_NOLOG)
               .err;
 
   gc_cursor->mc_flags |= C_RECLAIMING;
