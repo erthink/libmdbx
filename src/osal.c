@@ -141,7 +141,13 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 
 /*----------------------------------------------------------------------------*/
 
-#if defined(__UCLIBC__)
+#if defined(__ANDROID_API__)
+__extern_C void __assert2(const char *file, int line, const char *function,
+                          const char *msg) __noreturn;
+#define __assert_fail(assertion, file, line, function)                         \
+  __assert2(file, line, function, assertion)
+
+#elif defined(__UCLIBC__)
 __extern_C void __assert(const char *, const char *, unsigned int, const char *)
 #ifdef __THROW
     __THROW
