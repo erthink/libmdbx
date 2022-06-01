@@ -1239,14 +1239,6 @@ MDBX_INTERNAL_FUNC void mdbx_debug_log_va(int level, const char *function,
 #define mdbx_assert_enabled() (0)
 #endif /* assertions */
 
-#if !MDBX_DEBUG && defined(__ANDROID_API__)
-#define mdbx_assert_fail(env, msg, func, line)                                 \
-  __android_log_assert(msg, "mdbx", "%s:%u", func, line)
-#else
-void mdbx_assert_fail(const MDBX_env *env, const char *msg, const char *func,
-                      int line);
-#endif
-
 #define mdbx_debug_extra(fmt, ...)                                             \
   do {                                                                         \
     if (mdbx_log_enabled(MDBX_LOG_EXTRA))                                      \

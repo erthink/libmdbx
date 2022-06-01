@@ -221,10 +221,8 @@ __extern_C void __assert(const char *function, const char *file, int line,
 
 #endif /* __assert_fail */
 
-#if !defined(__ANDROID_API__) || MDBX_DEBUG
-
 __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
-                             const char *func, int line) {
+                             const char *func, unsigned line) {
 #if MDBX_DEBUG
   if (env && env->me_assert_func) {
     env->me_assert_func(env, msg, func, line);
@@ -246,8 +244,6 @@ __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
     OutputDebugStringA(message);
     if (IsDebuggerPresent())
       DebugBreak();
-#elif defined(__ANDROID_API__)
-    __android_log_assert(msg, "mdbx", "%s:%u", func, line);
 #else
     __assert_fail(msg, "mdbx", line, func);
 #endif
@@ -259,8 +255,6 @@ __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
   abort();
 #endif
 }
-
-#endif /* __ANDROID_API__ || MDBX_DEBUG */
 
 __cold void mdbx_panic(const char *fmt, ...) {
   va_list ap;
@@ -280,11 +274,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
     DebugBreak();
   FatalExit(ERROR_UNHANDLED_ERROR);
 #else
-#if defined(__ANDROID_API__)
-  __android_log_assert("panic", "mdbx", "%s", const_message);
-#else
   __assert_fail(const_message, "mdbx", 0, "panic");
-#endif /* __ANDROID_API__ */
   abort();
 #endif
 }
