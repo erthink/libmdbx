@@ -104,7 +104,7 @@
 #endif /* __must_check_result */
 
 #if !defined(__noop) && !defined(_MSC_VER)
-#   define __noop(...) do {} while(0)
+#   define __noop do {} while(0)
 #endif /* __noop */
 
 #if defined(__fallthrough) &&                                                  \
@@ -136,7 +136,7 @@
 #   elif defined(_MSC_VER)
 #       define __unreachable() __assume(0)
 #   else
-#       define __unreachable() __noop()
+#       define __unreachable() do {} while(1)
 #   endif
 #endif /* __unreachable */
 
@@ -144,7 +144,7 @@
 #   if defined(__GNUC__) || defined(__clang__) || __has_builtin(__builtin_prefetch)
 #       define __prefetch(ptr) __builtin_prefetch(ptr)
 #   else
-#       define __prefetch(ptr) __noop(ptr)
+#       define __prefetch(ptr) do { (void)(ptr); } while(0)
 #   endif
 #endif /* __prefetch */
 

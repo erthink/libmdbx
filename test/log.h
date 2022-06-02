@@ -85,6 +85,9 @@ public:
 
 } // namespace logging
 
+void MDBX_PRINTF_ARGS(1, 2) static inline log_null(const char *msg, ...) {
+  return (void)msg;
+}
 void MDBX_PRINTF_ARGS(1, 2) log_extra(const char *msg, ...);
 void MDBX_PRINTF_ARGS(1, 2) log_trace(const char *msg, ...);
 void MDBX_PRINTF_ARGS(1, 2) log_debug(const char *msg, ...);
@@ -100,5 +103,5 @@ bool log_enabled(const logging::loglevel priority);
 #ifdef _DEBUG
 #define TRACE(...) log_trace(__VA_ARGS__)
 #else
-#define TRACE(...) __noop(__VA_ARGS__)
+#define TRACE(...) log_null(__VA_ARGS__)
 #endif
