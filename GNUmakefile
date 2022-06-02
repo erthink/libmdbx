@@ -645,7 +645,7 @@ dist/@tmp-shared_internals.inc: src/version.c $(ALLOY_DEPS) $(lastword $(MAKEFIL
 	&& sed \
 		-e '/#pragma once/r dist/@tmp-sed.inc' \
 		-e 's|#include "../mdbx.h"|@INCLUDE "mdbx.h"|' \
-		-e '/#include "defs.h"/r src/defs.h' \
+		-e '/#include "base.h"/r src/base.h' \
 		-e '/#include "osal.h"/r src/osal.h' \
 		-e '/#include "options.h"/r src/options.h' \
 		-e '/ clang-format o/d' -e '/ \*INDENT-O/d' \

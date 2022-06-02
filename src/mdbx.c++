@@ -16,7 +16,6 @@
 
 #include "../mdbx.h++"
 
-#include "defs.h"
 #include "internals.h"
 
 #include <array>

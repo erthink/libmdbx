@@ -17,488 +17,9 @@
 #pragma once
 
 /*----------------------------------------------------------------------------*/
-/* Microsoft compiler generates a lot of warning for self includes... */
+/* C11 Atomics */
 
-#ifdef _MSC_VER
-#pragma warning(push, 1)
-#pragma warning(disable : 4548) /* expression before comma has no effect;      \
-                                   expected expression with side - effect */
-#pragma warning(disable : 4530) /* C++ exception handler used, but unwind      \
-                                 * semantics are not enabled. Specify /EHsc */
-#pragma warning(disable : 4577) /* 'noexcept' used with no exception handling  \
-                                 * mode specified; termination on exception is \
-                                 * not guaranteed. Specify /EHsc */
-#endif                          /* _MSC_VER (warnings) */
-
-#if defined(_WIN32) || defined(_WIN64)
-#if !defined(_CRT_SECURE_NO_WARNINGS)
-#define _CRT_SECURE_NO_WARNINGS
-#endif /* _CRT_SECURE_NO_WARNINGS */
-#if !defined(_NO_CRT_STDIO_INLINE) && MDBX_BUILD_SHARED_LIBRARY &&             \
-    !defined(xMDBX_TOOLS) && MDBX_WITHOUT_MSVC_CRT
-#define _NO_CRT_STDIO_INLINE
-#endif
-#elif !defined(_POSIX_C_SOURCE)
-#define _POSIX_C_SOURCE 200809L
-#endif /* Windows */
-
-/*----------------------------------------------------------------------------*/
-/* C99 includes */
-#include <inttypes.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdlib.h>
-
-#include <assert.h>
-#include <fcntl.h>
-#include <limits.h>
-#include <stdio.h>
-#include <string.h>
-#include <time.h>
-
-/* C11' alignas() */
-#if __has_include(<stdalign.h>)
-#include <stdalign.h>
-#endif
-#if defined(alignas) || defined(__cplusplus)
-#define MDBX_ALIGNAS(N) alignas(N)
-#elif defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L
-#define MDBX_ALIGNAS(N) _Alignas(N)
-#elif defined(_MSC_VER)
-#define MDBX_ALIGNAS(N) __declspec(align(N))
-#elif __has_attribute(__aligned__) || defined(__GNUC__)
-#define MDBX_ALIGNAS(N) __attribute__((__aligned__(N)))
-#else
-#error "FIXME: Required alignas() or equivalent."
-#endif /* MDBX_ALIGNAS */
-
-/*----------------------------------------------------------------------------*/
-/* Systems includes */
-
-#ifdef __APPLE__
-#include <TargetConditionals.h>
-#endif /* Apple OSX & iOS */
-
-#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
-    defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
-    defined(__APPLE__) || defined(__MACH__)
-#include <sys/cdefs.h>
-#include <sys/mount.h>
-#include <sys/sysctl.h>
-#include <sys/types.h>
-#if defined(__FreeBSD__) || defined(__DragonFly__)
-#include <vm/vm_param.h>
-#elif defined(__OpenBSD__) || defined(__NetBSD__)
-#include <uvm/uvm_param.h>
-#else
-#define SYSCTL_LEGACY_NONCONST_MIB
-#endif
-#ifndef __MACH__
-#include <sys/vmmeter.h>
-#endif
-#else
-#include <malloc.h>
-#if !(defined(__sun) || defined(__SVR4) || defined(__svr4__) ||                \
-      defined(_WIN32) || defined(_WIN64))
-#include <mntent.h>
-#endif /* !Solaris */
-#endif /* !xBSD */
-
-#if defined(__FreeBSD__) || __has_include(<malloc_np.h>)
-#include <malloc_np.h>
-#endif
-
-#if defined(__APPLE__) || defined(__MACH__) || __has_include(<malloc/malloc.h>)
-#include <malloc/malloc.h>
-#endif /* MacOS */
-
-#if defined(__MACH__)
-#include <mach/host_info.h>
-#include <mach/mach_host.h>
-#include <mach/mach_port.h>
-#include <uuid/uuid.h>
-#endif
-
-#if defined(__linux__) || defined(__gnu_linux__)
-#include <sched.h>
-#include <sys/sendfile.h>
-#include <sys/statfs.h>
-#endif /* Linux */
-
-#ifndef _XOPEN_SOURCE
-#define _XOPEN_SOURCE 0
-#endif
-
-#ifndef _XOPEN_SOURCE_EXTENDED
-#define _XOPEN_SOURCE_EXTENDED 0
-#else
-#include <utmpx.h>
-#endif /* _XOPEN_SOURCE_EXTENDED */
-
-#if defined(__sun) || defined(__SVR4) || defined(__svr4__)
-#include <kstat.h>
-#include <sys/mnttab.h>
-/* On Solaris, it's easier to add a missing prototype rather than find a
- * combination of #defines that break nothing. */
-__extern_C key_t ftok(const char *, int);
-#endif /* SunOS/Solaris */
-
-#if defined(_WIN32) || defined(_WIN64)
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601 /* Windows 7 */
-#elif _WIN32_WINNT < 0x0500
-#error At least 'Windows 2000' API is required for libmdbx.
-#endif /* _WIN32_WINNT */
-#if (defined(__MINGW32__) || defined(__MINGW64__)) &&                          \
-    !defined(__USE_MINGW_ANSI_STDIO)
-#define __USE_MINGW_ANSI_STDIO 1
-#endif /* MinGW */
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif /* WIN32_LEAN_AND_MEAN */
-#include <excpt.h>
-#include <tlhelp32.h>
-#include <windows.h>
-#include <winnt.h>
-#include <winternl.h>
-#define HAVE_SYS_STAT_H
-#define HAVE_SYS_TYPES_H
-typedef HANDLE mdbx_thread_t;
-typedef unsigned mdbx_thread_key_t;
-#define MAP_FAILED NULL
-#define HIGH_DWORD(v) ((DWORD)((sizeof(v) > 4) ? ((uint64_t)(v) >> 32) : 0))
-#define THREAD_CALL WINAPI
-#define THREAD_RESULT DWORD
-typedef struct {
-  HANDLE mutex;
-  HANDLE event[2];
-} mdbx_condpair_t;
-typedef CRITICAL_SECTION mdbx_fastmutex_t;
-
-#if !defined(_MSC_VER) && !defined(__try)
-/* *INDENT-OFF* */
-/* clang-format off */
-#define __try
-#define __except(COND) if(false)
-/* *INDENT-ON* */
-/* clang-format on */
-#endif /* stub for MSVC's __try/__except */
-
-#if MDBX_WITHOUT_MSVC_CRT
-
-#ifndef mdbx_malloc
-static inline void *mdbx_malloc(size_t bytes) {
-  return HeapAlloc(GetProcessHeap(), 0, bytes);
-}
-#endif /* mdbx_malloc */
-
-#ifndef mdbx_calloc
-static inline void *mdbx_calloc(size_t nelem, size_t size) {
-  return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nelem * size);
-}
-#endif /* mdbx_calloc */
-
-#ifndef mdbx_realloc
-static inline void *mdbx_realloc(void *ptr, size_t bytes) {
-  return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes)
-             : HeapAlloc(GetProcessHeap(), 0, bytes);
-}
-#endif /* mdbx_realloc */
-
-#ifndef mdbx_free
-static inline void mdbx_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
-#endif /* mdbx_free */
-
-#else /* MDBX_WITHOUT_MSVC_CRT */
-
-#define mdbx_malloc malloc
-#define mdbx_calloc calloc
-#define mdbx_realloc realloc
-#define mdbx_free free
-#define mdbx_strdup _strdup
-
-#endif /* MDBX_WITHOUT_MSVC_CRT */
-
-#ifndef snprintf
-#define snprintf _snprintf /* ntdll */
-#endif
-
-#ifndef vsnprintf
-#define vsnprintf _vsnprintf /* ntdll */
-#endif
-
-#else /*----------------------------------------------------------------------*/
-
-#include <unistd.h>
-#if !defined(_POSIX_MAPPED_FILES) || _POSIX_MAPPED_FILES < 1
-#error "libmdbx requires the _POSIX_MAPPED_FILES feature"
-#endif /* _POSIX_MAPPED_FILES */
-
-#include <pthread.h>
-#include <semaphore.h>
-#include <signal.h>
-#include <sys/file.h>
-#include <sys/ipc.h>
-#include <sys/mman.h>
-#include <sys/param.h>
-#include <sys/stat.h>
-#include <sys/statvfs.h>
-#include <sys/uio.h>
-typedef pthread_t mdbx_thread_t;
-typedef pthread_key_t mdbx_thread_key_t;
-#define INVALID_HANDLE_VALUE (-1)
-#define THREAD_CALL
-#define THREAD_RESULT void *
-typedef struct {
-  pthread_mutex_t mutex;
-  pthread_cond_t cond[2];
-} mdbx_condpair_t;
-typedef pthread_mutex_t mdbx_fastmutex_t;
-#define mdbx_malloc malloc
-#define mdbx_calloc calloc
-#define mdbx_realloc realloc
-#define mdbx_free free
-#define mdbx_strdup strdup
-#endif /* Platform */
-
-#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
-/* malloc_usable_size() already provided */
-#elif defined(__APPLE__)
-#define malloc_usable_size(ptr) malloc_size(ptr)
-#elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
-#define malloc_usable_size(ptr) _msize(ptr)
-#endif /* malloc_usable_size */
-
-#ifdef __ANDROID_API__
-#include <android/log.h>
-#if __ANDROID_API__ >= 21
-#include <sys/sendfile.h>
-#endif
-#endif /* Android */
-
-/* *INDENT-OFF* */
-/* clang-format off */
-#if defined(HAVE_SYS_STAT_H) || __has_include(<sys/stat.h>)
-#include <sys/stat.h>
-#endif
-#if defined(HAVE_SYS_TYPES_H) || __has_include(<sys/types.h>)
-#include <sys/types.h>
-#endif
-#if defined(HAVE_SYS_FILE_H) || __has_include(<sys/file.h>)
-#include <sys/file.h>
-#endif
-/* *INDENT-ON* */
-/* clang-format on */
-
-#ifndef SSIZE_MAX
-#define SSIZE_MAX INTPTR_MAX
-#endif
-
-#if !defined(MADV_DODUMP) && defined(MADV_CORE)
-#define MADV_DODUMP MADV_CORE
-#endif /* MADV_CORE -> MADV_DODUMP */
-
-#if !defined(MADV_DONTDUMP) && defined(MADV_NOCORE)
-#define MADV_DONTDUMP MADV_NOCORE
-#endif /* MADV_NOCORE -> MADV_DONTDUMP */
-
-#if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
-    defined(i486) || defined(__i486) || defined(__i486__) ||                   \
-    defined(i586) | defined(__i586) || defined(__i586__) || defined(i686) ||   \
-    defined(__i686) || defined(__i686__) || defined(_M_IX86) ||                \
-    defined(_X86_) || defined(__THW_INTEL__) || defined(__I86__) ||            \
-    defined(__INTEL__) || defined(__x86_64) || defined(__x86_64__) ||          \
-    defined(__amd64__) || defined(__amd64) || defined(_M_X64) ||               \
-    defined(_M_AMD64) || defined(__IA32__) || defined(__INTEL__)
-#ifndef __ia32__
-/* LY: define neutral __ia32__ for x86 and x86-64 */
-#define __ia32__ 1
-#endif /* __ia32__ */
-#if !defined(__amd64__) && (defined(__x86_64) || defined(__x86_64__) ||        \
-                            defined(__amd64) || defined(_M_X64))
-/* LY: define trusty __amd64__ for all AMD64/x86-64 arch */
-#define __amd64__ 1
-#endif /* __amd64__ */
-#endif /* all x86 */
-
-#if (-6 & 5) || CHAR_BIT != 8 || UINT_MAX < 0xffffffff || ULONG_MAX % 0xFFFF
-#error                                                                         \
-    "Sanity checking failed: Two's complement, reasonably sized integer types"
-#endif
-
-#if UINTPTR_MAX > 0xffffFFFFul || ULONG_MAX > 0xffffFFFFul
-#define MDBX_WORDBITS 64
-#else
-#define MDBX_WORDBITS 32
-#endif /* MDBX_WORDBITS */
-
-#if defined(__ANDROID_API__) || defined(ANDROID)
-#if defined(_FILE_OFFSET_BITS) && _FILE_OFFSET_BITS != MDBX_WORDBITS
-#error "_FILE_OFFSET_BITS != MDBX_WORDBITS" (_FILE_OFFSET_BITS != MDBX_WORDBITS)
-#elif defined(__FILE_OFFSET_BITS) && __FILE_OFFSET_BITS != MDBX_WORDBITS
-#error "__FILE_OFFSET_BITS != MDBX_WORDBITS" (__FILE_OFFSET_BITS != MDBX_WORDBITS)
-#endif
-#endif /* Android */
-
-/*----------------------------------------------------------------------------*/
-/* Compiler's includes for builtins/intrinsics */
-
-#if defined(_MSC_VER) || defined(__INTEL_COMPILER)
-#include <intrin.h>
-#elif __GNUC_PREREQ(4, 4) || defined(__clang__)
-#if defined(__ia32__) || defined(__e2k__)
-#include <x86intrin.h>
-#endif /* __ia32__ */
-#if defined(__ia32__)
-#include <cpuid.h>
-#endif /* __ia32__ */
-#elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
-#include <mbarrier.h>
-#elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
-    (defined(HP_IA64) || defined(__ia64))
-#include <machine/sys/inline.h>
-#elif defined(__IBMC__) && defined(__powerpc)
-#include <atomic.h>
-#elif defined(_AIX)
-#include <builtins.h>
-#include <sys/atomic_op.h>
-#elif (defined(__osf__) && defined(__DECC)) || defined(__alpha)
-#include <c_asm.h>
-#include <machine/builtins.h>
-#elif defined(__MWERKS__)
-/* CodeWarrior - troubles ? */
-#pragma gcc_extensions
-#elif defined(__SNC__)
-/* Sony PS3 - troubles ? */
-#elif defined(__hppa__) || defined(__hppa)
-#include <machine/inline.h>
-#else
-#error Unsupported C compiler, please use GNU C 4.4 or newer
-#endif /* Compiler */
-
-/*----------------------------------------------------------------------------*/
-/* Byteorder */
-
-#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) ||           \
-    !defined(__ORDER_BIG_ENDIAN__)
-
-/* *INDENT-OFF* */
-/* clang-format off */
-#if defined(__GLIBC__) || defined(__GNU_LIBRARY__) || defined(__ANDROID_API__) ||  \
-    defined(HAVE_ENDIAN_H) || __has_include(<endian.h>)
-#include <endian.h>
-#elif defined(__APPLE__) || defined(__MACH__) || defined(__OpenBSD__) ||       \
-    defined(HAVE_MACHINE_ENDIAN_H) || __has_include(<machine/endian.h>)
-#include <machine/endian.h>
-#elif defined(HAVE_SYS_ISA_DEFS_H) || __has_include(<sys/isa_defs.h>)
-#include <sys/isa_defs.h>
-#elif (defined(HAVE_SYS_TYPES_H) && defined(HAVE_SYS_ENDIAN_H)) ||             \
-    (__has_include(<sys/types.h>) && __has_include(<sys/endian.h>))
-#include <sys/endian.h>
-#include <sys/types.h>
-#elif defined(__bsdi__) || defined(__DragonFly__) || defined(__FreeBSD__) ||   \
-    defined(__NetBSD__) ||                              \
-    defined(HAVE_SYS_PARAM_H) || __has_include(<sys/param.h>)
-#include <sys/param.h>
-#endif /* OS */
-/* *INDENT-ON* */
-/* clang-format on */
-
-#if defined(__BYTE_ORDER) && defined(__LITTLE_ENDIAN) && defined(__BIG_ENDIAN)
-#define __ORDER_LITTLE_ENDIAN__ __LITTLE_ENDIAN
-#define __ORDER_BIG_ENDIAN__ __BIG_ENDIAN
-#define __BYTE_ORDER__ __BYTE_ORDER
-#elif defined(_BYTE_ORDER) && defined(_LITTLE_ENDIAN) && defined(_BIG_ENDIAN)
-#define __ORDER_LITTLE_ENDIAN__ _LITTLE_ENDIAN
-#define __ORDER_BIG_ENDIAN__ _BIG_ENDIAN
-#define __BYTE_ORDER__ _BYTE_ORDER
-#else
-#define __ORDER_LITTLE_ENDIAN__ 1234
-#define __ORDER_BIG_ENDIAN__ 4321
-
-#if defined(__LITTLE_ENDIAN__) ||                                              \
-    (defined(_LITTLE_ENDIAN) && !defined(_BIG_ENDIAN)) ||                      \
-    defined(__ARMEL__) || defined(__THUMBEL__) || defined(__AARCH64EL__) ||    \
-    defined(__MIPSEL__) || defined(_MIPSEL) || defined(__MIPSEL) ||            \
-    defined(_M_ARM) || defined(_M_ARM64) || defined(__e2k__) ||                \
-    defined(__elbrus_4c__) || defined(__elbrus_8c__) || defined(__bfin__) ||   \
-    defined(__BFIN__) || defined(__ia64__) || defined(_IA64) ||                \
-    defined(__IA64__) || defined(__ia64) || defined(_M_IA64) ||                \
-    defined(__itanium__) || defined(__ia32__) || defined(__CYGWIN__) ||        \
-    defined(_WIN64) || defined(_WIN32) || defined(__TOS_WIN__) ||              \
-    defined(__WINDOWS__)
-#define __BYTE_ORDER__ __ORDER_LITTLE_ENDIAN__
-
-#elif defined(__BIG_ENDIAN__) ||                                               \
-    (defined(_BIG_ENDIAN) && !defined(_LITTLE_ENDIAN)) ||                      \
-    defined(__ARMEB__) || defined(__THUMBEB__) || defined(__AARCH64EB__) ||    \
-    defined(__MIPSEB__) || defined(_MIPSEB) || defined(__MIPSEB) ||            \
-    defined(__m68k__) || defined(M68000) || defined(__hppa__) ||               \
-    defined(__hppa) || defined(__HPPA__) || defined(__sparc__) ||              \
-    defined(__sparc) || defined(__370__) || defined(__THW_370__) ||            \
-    defined(__s390__) || defined(__s390x__) || defined(__SYSC_ZARCH__)
-#define __BYTE_ORDER__ __ORDER_BIG_ENDIAN__
-
-#else
-#error __BYTE_ORDER__ should be defined.
-#endif /* Arch */
-
-#endif
-#endif /* __BYTE_ORDER__ || __ORDER_LITTLE_ENDIAN__ || __ORDER_BIG_ENDIAN__ */
-
-/* Get the size of a memory page for the system.
- * This is the basic size that the platform's memory manager uses, and is
- * fundamental to the use of memory-mapped files. */
-MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline size_t
-mdbx_syspagesize(void) {
-#if defined(_WIN32) || defined(_WIN64)
-  SYSTEM_INFO si;
-  GetSystemInfo(&si);
-  return si.dwPageSize;
-#else
-  return sysconf(_SC_PAGE_SIZE);
-#endif
-}
-
-typedef struct mdbx_mmap_param {
-  union {
-    void *address;
-    uint8_t *dxb;
-    struct MDBX_lockinfo *lck;
-  };
-  mdbx_filehandle_t fd;
-  size_t limit;   /* mapping length, but NOT a size of file nor DB */
-  size_t current; /* mapped region size, i.e. the size of file and DB */
-  uint64_t filesize /* in-process cache of a file size */;
-#if defined(_WIN32) || defined(_WIN64)
-  HANDLE section; /* memory-mapped section handle */
-#endif
-} mdbx_mmap_t;
-
-typedef union bin128 {
-  __anonymous_struct_extension__ struct { uint64_t x, y; };
-  __anonymous_struct_extension__ struct { uint32_t a, b, c, d; };
-} bin128_t;
-
-#if defined(_WIN32) || defined(_WIN64)
-typedef union MDBX_srwlock {
-  __anonymous_struct_extension__ struct {
-    long volatile readerCount;
-    long volatile writerCount;
-  };
-  RTL_SRWLOCK native;
-} MDBX_srwlock;
-#endif /* Windows */
-
-#ifndef __cplusplus
-
-MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
-MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny);
-
-/*----------------------------------------------------------------------------*/
-/* Atomics */
-
-#if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && (__has_include(<cstdatomic>) || __has_extension(cxx_atomic))
+#if defined(__cplusplus) && !defined(__STDC_NO_ATOMICS__) && __has_include(<cstdatomic>)
 #include <cstdatomic>
 #define MDBX_HAVE_C11ATOMICS
 #elif !defined(__cplusplus) &&                                                 \
@@ -590,6 +111,152 @@ MDBX_MAYBE_UNUSED static __inline void mdbx_memory_barrier(void) {
 }
 
 /*----------------------------------------------------------------------------*/
+/* system-depended definitions */
+
+#if defined(_WIN32) || defined(_WIN64)
+#define HAVE_SYS_STAT_H
+#define HAVE_SYS_TYPES_H
+typedef HANDLE mdbx_thread_t;
+typedef unsigned mdbx_thread_key_t;
+#define MAP_FAILED NULL
+#define HIGH_DWORD(v) ((DWORD)((sizeof(v) > 4) ? ((uint64_t)(v) >> 32) : 0))
+#define THREAD_CALL WINAPI
+#define THREAD_RESULT DWORD
+typedef struct {
+  HANDLE mutex;
+  HANDLE event[2];
+} mdbx_condpair_t;
+typedef CRITICAL_SECTION mdbx_fastmutex_t;
+
+#if !defined(_MSC_VER) && !defined(__try)
+/* *INDENT-OFF* */
+/* clang-format off */
+#define __try
+#define __except(COND) if (false)
+/* *INDENT-ON* */
+/* clang-format on */
+#endif /* stub for MSVC's __try/__except */
+
+#if MDBX_WITHOUT_MSVC_CRT
+
+#ifndef mdbx_malloc
+static inline void *mdbx_malloc(size_t bytes) {
+  return HeapAlloc(GetProcessHeap(), 0, bytes);
+}
+#endif /* mdbx_malloc */
+
+#ifndef mdbx_calloc
+static inline void *mdbx_calloc(size_t nelem, size_t size) {
+  return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nelem * size);
+}
+#endif /* mdbx_calloc */
+
+#ifndef mdbx_realloc
+static inline void *mdbx_realloc(void *ptr, size_t bytes) {
+  return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes)
+             : HeapAlloc(GetProcessHeap(), 0, bytes);
+}
+#endif /* mdbx_realloc */
+
+#ifndef mdbx_free
+static inline void mdbx_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
+#endif /* mdbx_free */
+
+#else /* MDBX_WITHOUT_MSVC_CRT */
+
+#define mdbx_malloc malloc
+#define mdbx_calloc calloc
+#define mdbx_realloc realloc
+#define mdbx_free free
+#define mdbx_strdup _strdup
+
+#endif /* MDBX_WITHOUT_MSVC_CRT */
+
+#ifndef snprintf
+#define snprintf _snprintf /* ntdll */
+#endif
+
+#ifndef vsnprintf
+#define vsnprintf _vsnprintf /* ntdll */
+#endif
+
+#else /*----------------------------------------------------------------------*/
+
+typedef pthread_t mdbx_thread_t;
+typedef pthread_key_t mdbx_thread_key_t;
+#define INVALID_HANDLE_VALUE (-1)
+#define THREAD_CALL
+#define THREAD_RESULT void *
+typedef struct {
+  pthread_mutex_t mutex;
+  pthread_cond_t cond[2];
+} mdbx_condpair_t;
+typedef pthread_mutex_t mdbx_fastmutex_t;
+#define mdbx_malloc malloc
+#define mdbx_calloc calloc
+#define mdbx_realloc realloc
+#define mdbx_free free
+#define mdbx_strdup strdup
+#endif /* Platform */
+
+#if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
+/* malloc_usable_size() already provided */
+#elif defined(__APPLE__)
+#define malloc_usable_size(ptr) malloc_size(ptr)
+#elif defined(_MSC_VER) && !MDBX_WITHOUT_MSVC_CRT
+#define malloc_usable_size(ptr) _msize(ptr)
+#endif /* malloc_usable_size */
+
+/*----------------------------------------------------------------------------*/
+/* OS abstraction layer stuff */
+
+/* Get the size of a memory page for the system.
+ * This is the basic size that the platform's memory manager uses, and is
+ * fundamental to the use of memory-mapped files. */
+MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline size_t
+mdbx_syspagesize(void) {
+#if defined(_WIN32) || defined(_WIN64)
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  return si.dwPageSize;
+#else
+  return sysconf(_SC_PAGE_SIZE);
+#endif
+}
+
+typedef struct mdbx_mmap_param {
+  union {
+    void *address;
+    uint8_t *dxb;
+    struct MDBX_lockinfo *lck;
+  };
+  mdbx_filehandle_t fd;
+  size_t limit;   /* mapping length, but NOT a size of file nor DB */
+  size_t current; /* mapped region size, i.e. the size of file and DB */
+  uint64_t filesize /* in-process cache of a file size */;
+#if defined(_WIN32) || defined(_WIN64)
+  HANDLE section; /* memory-mapped section handle */
+#endif
+} mdbx_mmap_t;
+
+typedef union bin128 {
+  __anonymous_struct_extension__ struct { uint64_t x, y; };
+  __anonymous_struct_extension__ struct { uint32_t a, b, c, d; };
+} bin128_t;
+
+#if defined(_WIN32) || defined(_WIN64)
+typedef union MDBX_srwlock {
+  __anonymous_struct_extension__ struct {
+    long volatile readerCount;
+    long volatile writerCount;
+  };
+  RTL_SRWLOCK native;
+} MDBX_srwlock;
+#endif /* Windows */
+
+#ifndef __cplusplus
+
+/*----------------------------------------------------------------------------*/
 /* libc compatibility stuff */
 
 #if (!defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) &&                           \
@@ -602,8 +269,16 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC
 MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
 
-/*----------------------------------------------------------------------------*/
-/* OS abstraction layer stuff */
+#if !defined(MADV_DODUMP) && defined(MADV_CORE)
+#define MADV_DODUMP MADV_CORE
+#endif /* MADV_CORE -> MADV_DODUMP */
+
+#if !defined(MADV_DONTDUMP) && defined(MADV_NOCORE)
+#define MADV_DONTDUMP MADV_NOCORE
+#endif /* MADV_NOCORE -> MADV_DONTDUMP */
+
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
+MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny);
 
 /* max bytes to write in one call */
 #if defined(_WIN32) || defined(_WIN64)

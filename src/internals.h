@@ -31,6 +31,8 @@
 #define MDBX_INTERNAL_VAR extern
 #endif /* xMDBX_ALLOY */
 
+/*----------------------------------------------------------------------------*/
+
 /** Disables using GNU/Linux libc extensions.
  * \ingroup build_option
  * \note This option couldn't be moved to the options.h since dependant
@@ -43,8 +45,6 @@
 #elif (defined(__linux__) || defined(__gnu_linux__)) && !defined(_GNU_SOURCE)
 #define _GNU_SOURCE
 #endif /* MDBX_DISABLE_GNU_SOURCE */
-
-/*----------------------------------------------------------------------------*/
 
 /* Should be defined before any includes */
 #if !defined(_FILE_OFFSET_BITS) && !defined(__ANDROID_API__) &&                \
@@ -129,7 +129,7 @@
 #endif /* __USE_MINGW_ANSI_STDIO */
 
 #include "../mdbx.h"
-#include "defs.h"
+#include "base.h"
 
 #if defined(__GNUC__) && !__GNUC_PREREQ(4, 2)
 /* Actually libmdbx was not tested with compilers older than GCC 4.2.

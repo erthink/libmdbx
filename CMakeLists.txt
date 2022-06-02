@@ -566,7 +566,7 @@ else()
   else()
     list(APPEND LIBMDBX_SOURCES
       "${CMAKE_CURRENT_BINARY_DIR}/version.c"
-      "${MDBX_SOURCE_DIR}/options.h" "${MDBX_SOURCE_DIR}/defs.h"
+      "${MDBX_SOURCE_DIR}/options.h" "${MDBX_SOURCE_DIR}/base.h"
       "${MDBX_SOURCE_DIR}/internals.h" "${MDBX_SOURCE_DIR}/osal.h"
       "${MDBX_SOURCE_DIR}/core.c" "${MDBX_SOURCE_DIR}/osal.c"
       "${MDBX_SOURCE_DIR}/lck-posix.c" "${MDBX_SOURCE_DIR}/lck-windows.c")
