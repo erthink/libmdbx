@@ -20144,15 +20144,17 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
 
   arg->mi_self_latter_reader_txnid = arg->mi_latter_reader_txnid =
       arg->mi_recent_txnid;
-  for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
-    const uint32_t pid =
-        atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease);
-    if (pid) {
-      const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
-      if (arg->mi_latter_reader_txnid > txnid)
-        arg->mi_latter_reader_txnid = txnid;
-      if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
-        arg->mi_self_latter_reader_txnid = txnid;
+  if (env->me_lck_mmap.lck) {
+    for (unsigned i = 0; i < arg->mi_numreaders; ++i) {
+      const uint32_t pid =
+          atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease);
+      if (pid) {
+        const txnid_t txnid = safe64_read(&lck->mti_readers[i].mr_txnid);
+        if (arg->mi_latter_reader_txnid > txnid)
+          arg->mi_latter_reader_txnid = txnid;
+        if (pid == env->me_pid && arg->mi_self_latter_reader_txnid > txnid)
+          arg->mi_self_latter_reader_txnid = txnid;
+      }
     }
   }
 
