@@ -610,8 +610,15 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
 
   *fd = CreateFileW(pathnameW, DesiredAccess, ShareMode, NULL,
                     CreationDisposition, FlagsAndAttributes, NULL);
-  if (*fd == INVALID_HANDLE_VALUE)
-    return (int)GetLastError();
+  if (*fd == INVALID_HANDLE_VALUE) {
+    int err = (int)GetLastError();
+    if (err == ERROR_ACCESS_DENIED && purpose == MDBX_OPEN_LCK) {
+      if (GetFileAttributesW(pathnameW) == INVALID_FILE_ATTRIBUTES &&
+          GetLastError() == ERROR_FILE_NOT_FOUND)
+        err = ERROR_FILE_NOT_FOUND;
+    }
+    return err;
+  }
 
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(*fd, &info)) {
@@ -705,6 +712,12 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
     *fd = open(pathname, flags, unix_mode_bits);
   }
 #endif /* O_DIRECT */
+
+  if (*fd < 0 && errno == EACCES && purpose == MDBX_OPEN_LCK) {
+    struct stat unused;
+    if (stat(pathname, &unused) == 0 || errno != ENOENT)
+      errno = EACCES /* restore errno if file exists */;
+  }
 
   /* Safeguard for todo4recovery://erased_by_github/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
@@ -1091,10 +1104,10 @@ MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
 #else
   struct statvfs info;
   if (err != MDBX_ENOFILE) {
-    if (statvfs(pathname, &info))
-      return errno;
-    if ((info.f_flag & ST_RDONLY) == 0)
+    if (statvfs(pathname, &info) == 0 && (info.f_flag & ST_RDONLY) == 0)
       return err;
+    if (errno != MDBX_ENOFILE)
+      return errno;
   }
   if (fstatvfs(handle, &info))
     return errno;

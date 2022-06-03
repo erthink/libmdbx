@@ -12440,17 +12440,29 @@ __cold static int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
   int err = mdbx_openfile(MDBX_OPEN_LCK, env, lck_pathname, &env->me_lfd, mode);
   if (err != MDBX_SUCCESS) {
-    if (!(err == MDBX_ENOFILE && (env->me_flags & MDBX_EXCLUSIVE)) &&
-        !((err == MDBX_EROFS || err == MDBX_EACCESS || err == MDBX_EPERM) &&
-          (env->me_flags & MDBX_RDONLY)))
+    switch (err) {
+    default:
       return err;
+    case MDBX_ENOFILE:
+    case MDBX_EACCESS:
+    case MDBX_EPERM:
+      if (!F_ISSET(env->me_flags, MDBX_RDONLY | MDBX_EXCLUSIVE))
+        return err;
+      break;
+    case MDBX_EROFS:
+      if ((env->me_flags & MDBX_RDONLY) == 0)
+        return err;
+      break;
+    }
 
-    /* ensure the file system is read-only */
-    err = mdbx_check_fs_rdonly(env->me_lazy_fd, lck_pathname, err);
-    if (err != MDBX_SUCCESS &&
-        /* ignore ERROR_NOT_SUPPORTED for exclusive mode */
-        !(err == MDBX_ENOSYS && (env->me_flags & MDBX_EXCLUSIVE)))
-      return err;
+    if (err != MDBX_ENOFILE) {
+      /* ensure the file system is read-only */
+      err = mdbx_check_fs_rdonly(env->me_lazy_fd, lck_pathname, err);
+      if (err != MDBX_SUCCESS &&
+          /* ignore ERROR_NOT_SUPPORTED for exclusive mode */
+          !(err == MDBX_ENOSYS && (env->me_flags & MDBX_EXCLUSIVE)))
+        return err;
+    }
 
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
     /* beginning of a locked section ---------------------------------------- */
