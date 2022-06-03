@@ -13183,6 +13183,9 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   if (lck) {
     if (lck_rc == MDBX_RESULT_TRUE) {
       lck->mti_envmode.weak = env->me_flags & (mode_flags | MDBX_RDONLY);
+      lck->mti_meta_sync_txnid.weak =
+          (uint32_t)mdbx_recent_committed_txnid(env);
+      lck->mti_reader_check_timestamp.weak = mdbx_osal_monotime();
       rc = mdbx_lck_downgrade(env);
       mdbx_debug("lck-downgrade-%s: rc %i",
                  (env->me_flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
@@ -13201,6 +13204,11 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
         goto bailout;
       env->me_flags |= MDBX_ENV_TXKEY;
     }
+  } else {
+    env->me_lck->mti_envmode.weak = env->me_flags & (mode_flags | MDBX_RDONLY);
+    env->me_lck->mti_meta_sync_txnid.weak =
+        (uint32_t)mdbx_recent_committed_txnid(env);
+    env->me_lck->mti_reader_check_timestamp.weak = mdbx_osal_monotime();
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
