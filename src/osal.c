@@ -1186,21 +1186,25 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
       }
     }
 
-    if (!mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
-                                        FILE_NAME_NORMALIZED |
-                                            VOLUME_NAME_NT)) {
-      rc = (int)GetLastError();
+    if (mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
+                                       FILE_NAME_NORMALIZED | VOLUME_NAME_NT)) {
+      if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0) {
+        if (!(flags & MDBX_EXCLUSIVE)) {
+          rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
+          goto bailout;
+        }
+      }
+    }
+
+    if (F_ISSET(flags, MDBX_RDONLY | MDBX_EXCLUSIVE) &&
+        (FileSystemFlags & FILE_READ_ONLY_VOLUME)) {
+      /* without-LCK (exclusive readonly) mode for DB on a read-only volume */
       goto bailout;
     }
 
-    if (_wcsnicmp(PathBuffer, L"\\Device\\Mup\\", 12) == 0) {
-      if (!(flags & MDBX_EXCLUSIVE)) {
-        rc = ERROR_REMOTE_STORAGE_MEDIA_ERROR;
-        goto bailout;
-      }
-    } else if (mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
-                                              FILE_NAME_NORMALIZED |
-                                                  VOLUME_NAME_DOS)) {
+    if (mdbx_GetFinalPathNameByHandleW(handle, PathBuffer, INT16_MAX,
+                                       FILE_NAME_NORMALIZED |
+                                           VOLUME_NAME_DOS)) {
       UINT DriveType = GetDriveTypeW(PathBuffer);
       if (DriveType == DRIVE_NO_ROOT_DIR &&
           _wcsnicmp(PathBuffer, L"\\\\?\\", 4) == 0 &&
@@ -1226,6 +1230,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
         break;
       }
     }
+
   bailout:
     mdbx_free(PathBuffer);
     return rc;
