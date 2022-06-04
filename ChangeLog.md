@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## Underway
+## Underway (scheduled to 2022-06-12)
 
 Acknowledgements:
 
@@ -11,6 +11,9 @@ New:
 
  - Added most of transactions flags to the public API.
  - Added `MDBX_NOSUCCESS_EMPTY_COMMIT` build option to return non-success result (`MDBX_RESULT_TRUE`) on empty commit.
+ - Reworked validation and import of DBI-handles into a transaction.
+   Assumes  these changes will be invisible to most users, but will cause fewer surprises in complex DBI cases.
+ - Added ability to open DB in without-LCK (exclusive read-only) mode in case no permissions to create/write LCK-file.
 
 Fixes:
 
@@ -18,12 +21,16 @@ Fixes:
  - Fixed copy&paste bug with could lead to `SIGSEGV` (nullptr dereference) in the exclusive/no-lck mode.
  - Fixed minor warnings from modern Apple's CLANG 13.
  - Fixed minor warnings from CLANG 14 and in-development CLANG 15.
+ - Fixed `SIGSEGV` regression in without-LCK (exclusive read-only) mode.
+ - Fixed `mdbx_check_fs_local()` for CDROM case on Windows.
 
 Minors:
 
  - Refined `release-assets` GNU Make target.
  - Added logging to `mdbx_fetch_sdb()` to help debugging complex DBI-handels use cases.
  - Added explicit error message from probe of no-support for `std::filesystem`.
+ - Added contributors "score" table by `git fame` to generated docs.
+ - Added `mdbx_assert_fail()` to public API (mostly for backtracing).
 
 
 -------------------------------------------------------------------------------
