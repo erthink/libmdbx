@@ -13116,7 +13116,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   }
   mode = (/* inherit read permissions for group and others */ mode &
           (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) |
-         /* always add read/write/search for owner */ S_IRUSR | S_IWUSR |
+         /* always add read/write for owner */ S_IRUSR | S_IWUSR |
          ((mode & S_IRGRP) ? /* +write if readable by group */ S_IWGRP : 0) |
          ((mode & S_IROTH) ? /* +write if readable by others */ S_IWOTH : 0);
 #endif /* !Windows */
