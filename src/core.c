@@ -6602,6 +6602,9 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
   unsigned re_len = MDBX_PNL_SIZE(re_list);
   pgno_t *range = nullptr;
   txnid_t oldest = 0, last = 0;
+#if MDBX_ENABLE_PGOP_STAT
+  uint64_t timestamp = 0;
+#endif /* MDBX_ENABLE_PGOP_STAT */
 
   while (true) { /* hsr-kick retry loop */
     MDBX_cursor_couple recur;
@@ -6632,6 +6635,10 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
                      ? mdbx_find_oldest(txn)
                      : atomic_load64(&env->me_lck->mti_oldest_reader,
                                      mo_AcquireRelease);
+#if MDBX_ENABLE_PGOP_STAT
+        if (likely(timestamp == 0))
+          timestamp = mdbx_osal_monotime();
+#endif /* MDBX_ENABLE_PGOP_STAT */
         ret.err = mdbx_cursor_init(&recur.outer, txn, FREE_DBI);
         if (unlikely(ret.err != MDBX_SUCCESS))
           goto fail;
@@ -6804,6 +6811,11 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
       /* Done for a kick-reclaim mode, actually no page needed */
       if (unlikely(flags & MDBX_ALLOC_SLOT)) {
         mdbx_debug("early-return NULL-page for %s mode", "MDBX_ALLOC_SLOT");
+#if MDBX_ENABLE_PGOP_STAT
+        mdbx_assert(env, timestamp != 0);
+        env->me_lck->mti_pgop_stat.gcrtime.weak +=
+            mdbx_osal_monotime() - timestamp;
+#endif /* MDBX_ENABLE_PGOP_STAT */
         ret.err = MDBX_SUCCESS;
         ret.page = NULL;
         return ret;
@@ -6942,6 +6954,11 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
     }
 
   fail:
+#if MDBX_ENABLE_PGOP_STAT
+    if (timestamp)
+      env->me_lck->mti_pgop_stat.gcrtime.weak +=
+          mdbx_osal_monotime() - timestamp;
+#endif /* MDBX_ENABLE_PGOP_STAT */
     mdbx_assert(env,
                 mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                       txn->mt_next_pgno - MDBX_ENABLE_REFUND));
@@ -6968,6 +6985,10 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
 done:
   mdbx_assert(env, !(flags & MDBX_ALLOC_SLOT));
   mdbx_ensure(env, pgno >= NUM_METAS);
+#if MDBX_ENABLE_PGOP_STAT
+  if (likely(timestamp))
+    env->me_lck->mti_pgop_stat.gcrtime.weak += mdbx_osal_monotime() - timestamp;
+#endif /* MDBX_ENABLE_PGOP_STAT */
   if (unlikely(flags & MDBX_ALLOC_FAKE)) {
     mdbx_debug("return NULL-page for %u pages %s allocation", num,
                "gc-slot/backlog");
@@ -20410,6 +20431,8 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
         atomic_load64(&lck->mti_pgop_stat.unspill, mo_Relaxed);
     arg->mi_pgop_stat.wops =
         atomic_load64(&lck->mti_pgop_stat.wops, mo_Relaxed);
+    arg->mi_pgop_stat.gcrtime_seconds16dot16 = mdbx_osal_monotime_to_16dot16(
+        atomic_load64(&lck->mti_pgop_stat.gcrtime, mo_Relaxed));
 #else
     memset(&arg->mi_pgop_stat, 0, sizeof(arg->mi_pgop_stat));
 #endif /* MDBX_ENABLE_PGOP_STAT*/

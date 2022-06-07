@@ -561,6 +561,9 @@ typedef struct {
   MDBX_atomic_uint64_t unspill; /* Quantity of unspilled/reloaded pages */
   MDBX_atomic_uint64_t
       wops; /* Number of explicit write operations (not a pages) to a disk */
+  MDBX_atomic_uint64_t
+      gcrtime; /* Time spending for reading/searching GC (aka FreeDB). The
+                  unit/scale is platform-depended, see mdbx_osal_monotime(). */
 } MDBX_pgop_stat_t;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
