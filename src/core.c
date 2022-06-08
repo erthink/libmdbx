@@ -9469,7 +9469,7 @@ retry:
               break;
             }
             if (unlikely(rc != MDBX_SUCCESS ||
-                         key.iov_len != sizeof(mdbx_tid_t))) {
+                         key.iov_len != sizeof(txnid_t))) {
               rc = MDBX_CORRUPTED;
               goto bailout;
             }
