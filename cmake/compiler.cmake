@@ -809,10 +809,12 @@ macro(setup_compile_flags)
 
   if(ENABLE_ASAN)
     add_compile_flags("C;CXX" "-fsanitize=address")
+    add_definitions(-DASAN_ENABLED=1)
   endif()
 
   if(ENABLE_UBSAN)
     add_compile_flags("C;CXX" "-fsanitize=undefined" "-fsanitize-undefined-trap-on-error")
+    add_definitions(-DUBSAN_ENABLED=1)
   endif()
 
   if(ENABLE_GCOV)
