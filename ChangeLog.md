@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## Underway (scheduled to 2022-06-12)
+## Underway v0.11.8 (scheduled to 2022-06-12)
 
 Acknowledgements:
 
@@ -23,6 +23,8 @@ Fixes:
  - Fixed minor warnings from CLANG 14 and in-development CLANG 15.
  - Fixed `SIGSEGV` regression in without-LCK (exclusive read-only) mode.
  - Fixed `mdbx_check_fs_local()` for CDROM case on Windows.
+ - Fixed nasty typo of typename which caused false `MDBX_CORRUPTED` error in a rare execution path,
+   when the size of the thread-ID type not equal to 8.
 
 Minors:
 
