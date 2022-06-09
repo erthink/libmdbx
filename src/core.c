@@ -23147,7 +23147,9 @@ LIBMDBX_API __attribute__((__weak__)) const char *__asan_default_options() {
          "report_globals=1:"
          "replace_str=1:replace_intrin=1:"
          "malloc_context_size=9:"
+#if !defined(__APPLE__)
          "detect_leaks=1:"
+#endif
          "check_printf=1:"
          "detect_deadlocks=1:"
 #ifndef LTO_ENABLED
