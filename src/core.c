@@ -1259,6 +1259,23 @@ static __inline int rthc_atexit(void (*dtor)(void *), void *obj,
                                 void *dso_symbol) {
   int rc = MDBX_ENOSYS;
 
+#if defined(__APPLE__) || defined(_DARWIN_C_SOURCE)
+#if !defined(MAC_OS_X_VERSION_MIN_REQUIRED) || !defined(MAC_OS_X_VERSION_10_7)
+#error                                                                         \
+    "The <AvailabilityMacros.h> should be included and MAC_OS_X_VERSION_MIN_REQUIRED must be defined"
+#elif MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7
+  extern void _tlv_atexit(void (*termfunc)(void *objAddr), void *objAddr)
+      __attribute__((__weak__, __weak_import__));
+  if (rc && &_tlv_atexit) {
+    (void)dso_symbol;
+    _tlv_atexit(dtor, obj);
+    rc = 0;
+  }
+#elif !defined(MDBX_HAVE_CXA_THREAD_ATEXIT)
+#define MDBX_HAVE_CXA_THREAD_ATEXIT 1
+#endif /* MAC_OS_X_VERSION_MIN_REQUIRED */
+#endif /* Apple */
+
 #if defined(MDBX_HAVE_CXA_THREAD_ATEXIT) && MDBX_HAVE_CXA_THREAD_ATEXIT
   extern int __cxa_thread_atexit(void (*dtor)(void *), void *obj,
                                  void *dso_symbol)

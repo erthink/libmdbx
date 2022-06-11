@@ -158,6 +158,9 @@
 #endif
 
 #ifdef __APPLE__
+#ifndef MAC_OS_X_VERSION_MIN_REQUIRED
+#define MAC_OS_X_VERSION_MIN_REQUIRED 1070 /* Mac OS X 10.7, 2011 */
+#endif
 #include <TargetConditionals.h>
 #endif /* Apple OSX & iOS */
 
