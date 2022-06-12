@@ -324,8 +324,15 @@ using build_info = ::MDBX_build_info;
 /// \brief Returns libmdbx build information.
 MDBX_CXX11_CONSTEXPR const build_info &get_build() noexcept;
 
-/// \brief constexpr-compatible strlen().
+/// \brief constexpr-enabled strlen().
 static MDBX_CXX17_CONSTEXPR size_t strlen(const char *c_str) noexcept;
+
+/// \brief constexpr-enabled memcpy().
+static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
+                                         size_t bytes) noexcept;
+/// \brief constexpr-enabled memcmp().
+static MDBX_CXX20_CONSTEXPR int memcmp(const void *a, const void *b,
+                                       size_t bytes) noexcept;
 
 /// \brief Legacy default allocator
 /// but it is recommended to use \ref polymorphic_allocator.
@@ -544,9 +551,6 @@ static MDBX_CXX14_CONSTEXPR size_t check_length(size_t headroom, size_t payload,
 
 /// end of cxx_exceptions @}
 
-static MDBX_CXX17_CONSTEXPR size_t strlen(const char *c_str) noexcept;
-static MDBX_CXX20_CONSTEXPR void *memcpy(void *dest, const void *src,
-                                         size_t bytes) noexcept;
 //------------------------------------------------------------------------------
 
 /// \defgroup cxx_data slices and buffers
