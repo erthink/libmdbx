@@ -1,7 +1,7 @@
 ChangeLog
 ---------
 
-## Underway v0.11.8 (scheduled to 2022-06-12)
+## v0.11.8 at 2022-06-12
 
 Acknowledgements:
 
