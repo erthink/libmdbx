@@ -261,49 +261,54 @@ typedef union {
 #define MDBX_c11a_rw(type, ptr) (&(ptr)->c11a)
 #endif /* Crutches for C11 atomic compiler's bugs */
 
-static __always_inline memory_order mo_c11_store(enum MDBX_memory_order fence) {
-  switch (fence) {
-  default:
-    assert(false);
-    __unreachable();
-  case mo_Relaxed:
-    return memory_order_relaxed;
-  case mo_AcquireRelease:
-    return memory_order_release;
-  case mo_SequentialConsistency:
-    return memory_order_seq_cst;
-  }
-}
+#define mo_c11_store(fence)                                                    \
+  (((fence) == mo_Relaxed)          ? memory_order_relaxed                     \
+   : ((fence) == mo_AcquireRelease) ? memory_order_release                     \
+                                    : memory_order_seq_cst)
+#define mo_c11_load(fence)                                                     \
+  (((fence) == mo_Relaxed)          ? memory_order_relaxed                     \
+   : ((fence) == mo_AcquireRelease) ? memory_order_acquire                     \
+                                    : memory_order_seq_cst)
 
-static __always_inline memory_order mo_c11_load(enum MDBX_memory_order fence) {
-  switch (fence) {
-  default:
-    assert(false);
-    __unreachable();
-  case mo_Relaxed:
-    return memory_order_relaxed;
-  case mo_AcquireRelease:
-    return memory_order_acquire;
-  case mo_SequentialConsistency:
-    return memory_order_seq_cst;
-  }
-}
 #endif /* MDBX_HAVE_C11ATOMICS */
 
 #ifndef __cplusplus
 
-MDBX_MAYBE_UNUSED static __always_inline void
-mdbx_memory_fence(enum MDBX_memory_order order, bool write) {
 #ifdef MDBX_HAVE_C11ATOMICS
-  atomic_thread_fence(write ? mo_c11_store(order) : mo_c11_load(order));
-#else  /* MDBX_HAVE_C11ATOMICS */
-  mdbx_compiler_barrier();
-  if (write &&
-      order > (MDBX_CPU_WRITEBACK_INCOHERENT ? mo_Relaxed : mo_AcquireRelease))
-    mdbx_memory_barrier();
+#define mdbx_memory_fence(order, write)                                        \
+  atomic_thread_fence((write) ? mo_c11_store(order) : mo_c11_load(order))
+#else /* MDBX_HAVE_C11ATOMICS */
+#define mdbx_memory_fence(order, write)                                        \
+  do {                                                                         \
+    mdbx_compiler_barrier();                                                   \
+    if (write && order > (MDBX_CPU_WRITEBACK_INCOHERENT ? mo_Relaxed           \
+                                                        : mo_AcquireRelease))  \
+      mdbx_memory_barrier();                                                   \
+  } while (0)
 #endif /* MDBX_HAVE_C11ATOMICS */
-}
 
+#if defined(MDBX_HAVE_C11ATOMICS) && defined(__LCC__)
+#define atomic_store32(p, value, order)                                        \
+  ({                                                                           \
+    const uint32_t value_to_store = (value);                                   \
+    atomic_store_explicit(MDBX_c11a_rw(uint32_t, p), value_to_store,           \
+                          mo_c11_store(order));                                \
+    value_to_store;                                                            \
+  })
+#define atomic_load32(p, order)                                                \
+  atomic_load_explicit(MDBX_c11a_ro(uint32_t, p), mo_c11_load(order))
+#define atomic_store64(p, value, order)                                        \
+  ({                                                                           \
+    const uint64_t value_to_store = (value);                                   \
+    atomic_store_explicit(MDBX_c11a_rw(uint64_t, p), value_to_store,           \
+                          mo_c11_store(order));                                \
+    value_to_store;                                                            \
+  })
+#define atomic_load64(p, order)                                                \
+  atomic_load_explicit(MDBX_c11a_ro(uint64_t, p), mo_c11_load(order))
+#endif /* LCC && MDBX_HAVE_C11ATOMICS */
+
+#ifndef atomic_store32
 MDBX_MAYBE_UNUSED static __always_inline uint32_t
 atomic_store32(MDBX_atomic_uint32_t *p, const uint32_t value,
                enum MDBX_memory_order order) {
@@ -319,7 +324,9 @@ atomic_store32(MDBX_atomic_uint32_t *p, const uint32_t value,
 #endif /* MDBX_HAVE_C11ATOMICS */
   return value;
 }
+#endif /* atomic_store32 */
 
+#ifndef atomic_load32
 MDBX_MAYBE_UNUSED static __always_inline uint32_t
 atomic_load32(const MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint32_t) == 4);
@@ -334,6 +341,7 @@ atomic_load32(const MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
   return value;
 #endif /* MDBX_HAVE_C11ATOMICS */
 }
+#endif /* atomic_load32 */
 
 #endif /* !__cplusplus */
 

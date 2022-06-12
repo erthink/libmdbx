@@ -877,6 +877,7 @@ size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
 /*------------------------------------------------------------------------------
  * safe read/write volatile 64-bit fields on 32-bit architectures. */
 
+#ifndef atomic_store64
 MDBX_MAYBE_UNUSED static __always_inline uint64_t
 atomic_store64(MDBX_atomic_uint64_t *p, const uint64_t value,
                enum MDBX_memory_order order) {
@@ -900,7 +901,9 @@ atomic_store64(MDBX_atomic_uint64_t *p, const uint64_t value,
 #endif /* !MDBX_64BIT_ATOMIC */
   return value;
 }
+#endif /* atomic_store64 */
 
+#ifndef atomic_load64
 MDBX_MAYBE_UNUSED static
 #if MDBX_64BIT_ATOMIC
     __always_inline
@@ -940,6 +943,7 @@ MDBX_MAYBE_UNUSED static
   }
 #endif /* !MDBX_64BIT_ATOMIC */
 }
+#endif /* atomic_load64 */
 
 static __always_inline void atomic_yield(void) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -1062,6 +1066,12 @@ static __always_inline uint64_t safe64_txnid_next(uint64_t txnid) {
   return txnid;
 }
 
+#if defined(MDBX_HAVE_C11ATOMICS) && defined(__LCC__)
+#define safe64_reset(p, single_writer)                                         \
+  atomic_store64(p, UINT64_MAX,                                                \
+                 (single_writer) ? mo_AcquireRelease                           \
+                                 : mo_SequentialConsistency)
+#else
 static __always_inline void safe64_reset(MDBX_atomic_uint64_t *p,
                                          bool single_writer) {
 #if !MDBX_64BIT_CAS
@@ -1089,6 +1099,7 @@ static __always_inline void safe64_reset(MDBX_atomic_uint64_t *p,
   assert(p->weak >= SAFE64_INVALID_THRESHOLD);
   mdbx_jitter4testing(true);
 }
+#endif /* LCC && MDBX_HAVE_C11ATOMICS */
 
 static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *p,
                                                  txnid_t compare) {
