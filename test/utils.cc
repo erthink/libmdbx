@@ -35,7 +35,8 @@ std::string format(const char *fmt, ...) {
   std::string result;
   result.reserve((size_t)needed + 1);
   result.resize((size_t)needed, '\0');
-  int actual = vsnprintf((char *)result.data(), result.capacity(), fmt, ones);
+  MDBX_MAYBE_UNUSED int actual =
+      vsnprintf((char *)result.data(), result.capacity(), fmt, ones);
   assert(actual == needed);
   (void)actual;
   va_end(ones);
