@@ -224,17 +224,12 @@
 
 #ifndef MDBX_HAVE_CXX20_CONCEPTS
 #if defined(DOXYGEN) ||                                                        \
-    (defined(__cpp_concepts) && __cpp_concepts >= 201907L &&                   \
-     (!defined(__clang__) || __has_include(<concepts>) ||                      \
-  (defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L)))
-#if __has_include(<concepts>) ||                                               \
-  (defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L)
+    (defined(__cpp_lib_concepts) && __cpp_lib_concepts >= 202002L)
 #include <concepts>
-#endif /* <concepts> */
 #define MDBX_HAVE_CXX20_CONCEPTS 1
 #else
 #define MDBX_HAVE_CXX20_CONCEPTS 0
-#endif
+#endif /* <concepts> */
 #endif /* MDBX_HAVE_CXX20_CONCEPTS */
 
 #ifndef MDBX_CXX20_CONCEPT
