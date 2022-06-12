@@ -268,6 +268,16 @@
 #pragma warning(disable : 4702) /* unreachable code */
 #endif                          /* _MSC_VER (warnings) */
 
+#if defined(__LCC__) && __LCC__ >= 126
+#pragma diagnostic push
+#if __LCC__ < 127
+#pragma diag_suppress 3058 /* workaround: call to is_constant_evaluated()      \
+                              appearing in a constant expression `true` */
+#pragma diag_suppress 3060 /* workaround: call to is_constant_evaluated()      \
+                              appearing in a constant expression `false` */
+#endif
+#endif /* E2K LCC (warnings) */
+
 //------------------------------------------------------------------------------
 /// \brief The libmdbx C++ API namespace
 /// \ingroup cxx_api
@@ -6014,6 +6024,10 @@ template <> struct hash<::mdbx::slice> {
 
 /// end cxx_api @}
 } // namespace std
+
+#if defined(__LCC__) && __LCC__ >= 126
+#pragma diagnostic pop
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(pop)
