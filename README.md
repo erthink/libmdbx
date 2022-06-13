@@ -97,6 +97,24 @@ _MithrilDB_ is a rightly relevant name.
 
 <!-- section-end -->
 
+```
+$ objdump -f -h -j .text libmdbx.so
+
+  libmdbx.so:     формат файла elf64-e2k
+  архитектура: elbrus-v6:64, флаги 0x00000150:
+  HAS_SYMS, DYNAMIC, D_PAGED
+  начальный адрес 0x0000000000021680
+
+  Разделы:
+  Idx Name          Разм      VMA               LMA               Фа  смещ.  Выр.
+   10 .text         000ddd28  0000000000021680  0000000000021680  00021680  2**3
+                  CONTENTS, ALLOC, LOAD, READONLY, CODE
+
+$ cc --version
+  lcc:1.26.12:Jun-05-2022:e2k-v6-linux
+  gcc (GCC) 9.3.0 compatible
+```
+
 -----
 
 ## Table of Contents
