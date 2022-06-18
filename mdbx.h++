@@ -965,20 +965,21 @@ struct LIBMDBX_API_TYPE slice : public ::MDBX_val {
   hash_value() const noexcept;
 
   /// \brief Three-way fast non-lexicographically length-based comparison.
-  /// \return value:
-  ///   == 0 if "a" == "b",
-  ///   <  0 if "a" shorter than "b",
-  ///   >  0 if "a" longer than "b",
-  ///   <  0 if "a" length-equal and lexicographically less than "b",
-  ///   >  0 if "a" length-equal and lexicographically great than "b".
+  /// \details Firstly compares length and if it equal then compare content
+  /// lexicographically. \return value:
+  ///  `== 0` if `a` the same as `b`;
+  ///   `< 0` if `a` shorter than `b`,
+  ///             or the same length and lexicographically less than `b`;
+  ///   `> 0` if `a` longer than `b`,
+  ///             or the same length and lexicographically great than `b`.
   MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t
   compare_fast(const slice &a, const slice &b) noexcept;
 
   /// \brief Three-way lexicographically comparison.
   /// \return value:
-  ///   <  0 if "a" <  "b",
-  ///   == 0 if "a" == "b",
-  ///   >  0 if "a" >  "b".
+  ///  `== 0` if `a` lexicographically equal `b`;
+  ///   `< 0` if `a` lexicographically less than `b`;
+  ///   `> 0` if `a` lexicographically great than `b`.
   MDBX_NOTHROW_PURE_FUNCTION static MDBX_CXX14_CONSTEXPR intptr_t
   compare_lexicographically(const slice &a, const slice &b) noexcept;
   friend MDBX_CXX14_CONSTEXPR bool operator==(const slice &a,
