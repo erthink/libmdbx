@@ -1,6 +1,11 @@
 ChangeLog
 ---------
 
+## v0.12.0 at 2022-06-19
+
+Not a release but preparation for changing feature set and API.
+
+
 ## v0.11.8 at 2022-06-12
 
 Acknowledgements:
