@@ -3819,13 +3819,12 @@ struct page_result {
   int err;
 };
 
-static struct page_result mdbx_page_alloc(MDBX_cursor *mc, const pgno_t num,
-                                          int flags);
 static txnid_t mdbx_kick_longlived_readers(MDBX_env *env,
                                            const txnid_t laggard);
 
-static struct page_result mdbx_page_new(MDBX_cursor *mc, const unsigned flags,
-                                        const unsigned npages);
+static struct page_result page_new(MDBX_cursor *mc, const unsigned flags);
+static struct page_result page_new_large(MDBX_cursor *mc,
+                                         const unsigned npages);
 static int mdbx_page_touch(MDBX_cursor *mc);
 static int mdbx_cursor_touch(MDBX_cursor *mc);
 static int mdbx_touch_dbi(MDBX_cursor *mc);
@@ -6508,8 +6507,8 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 #define MDBX_ALLOC_NOLOG 32
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
-__hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
-                                                const pgno_t num, int flags) {
+__cold static struct page_result
+page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
   struct page_result ret;
   MDBX_txn *const txn = mc->mc_txn;
   MDBX_env *const env = txn->mt_env;
@@ -6534,37 +6533,6 @@ __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
              !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY))))
       flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
   }
-
-  if (likely(num == 1 && (flags & MDBX_ALLOC_CACHE) != 0)) {
-    /* If there are any loose pages, just use them */
-    mdbx_assert(env, (flags & MDBX_ALLOC_SLOT) == 0);
-    if (likely(txn->tw.loose_pages)) {
-#if MDBX_ENABLE_REFUND
-      if (txn->tw.loose_refund_wl > txn->mt_next_pgno) {
-        mdbx_refund(txn);
-        if (unlikely(!txn->tw.loose_pages))
-          goto no_loose;
-      }
-#endif /* MDBX_ENABLE_REFUND */
-
-      ret.page = txn->tw.loose_pages;
-      txn->tw.loose_pages = ret.page->mp_next;
-      txn->tw.loose_count--;
-      mdbx_debug_extra("db %d use loose page %" PRIaPGNO, DDBI(mc),
-                       ret.page->mp_pgno);
-      mdbx_tassert(txn, ret.page->mp_pgno < txn->mt_next_pgno);
-      mdbx_ensure(env, ret.page->mp_pgno >= NUM_METAS);
-      VALGRIND_MAKE_MEM_UNDEFINED(page_data(ret.page), page_space(txn->mt_env));
-      MDBX_ASAN_UNPOISON_MEMORY_REGION(page_data(ret.page),
-                                       page_space(txn->mt_env));
-      ret.page->mp_txnid = txn->mt_front;
-      ret.err = MDBX_SUCCESS;
-      return ret;
-    }
-  }
-#if MDBX_ENABLE_REFUND
-no_loose:
-#endif /* MDBX_ENABLE_REFUND */
 
   mdbx_tassert(txn,
                mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
@@ -6968,7 +6936,6 @@ done:
 
   if (env->me_flags & MDBX_WRITEMAP) {
     ret.page = pgno2page(env, pgno);
-    /* LY: reset no-access flag from mdbx_page_loose() */
     VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
     MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
   } else {
@@ -7020,6 +6987,76 @@ done:
                mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
   return ret;
+}
+
+__hot static struct page_result page_alloc(MDBX_cursor *mc) {
+  MDBX_txn *const txn = mc->mc_txn;
+
+  /* If there are any loose pages, just use them */
+  while (likely(txn->tw.loose_pages)) {
+#if MDBX_ENABLE_REFUND
+    if (unlikely(txn->tw.loose_refund_wl > txn->mt_next_pgno)) {
+      mdbx_refund(txn);
+      if (!txn->tw.loose_pages)
+        break;
+    }
+#endif /* MDBX_ENABLE_REFUND */
+
+    MDBX_page *page = txn->tw.loose_pages;
+    txn->tw.loose_pages = page->mp_next;
+    txn->tw.loose_count--;
+    mdbx_debug_extra("db %d use loose page %" PRIaPGNO, DDBI(mc),
+                     page->mp_pgno);
+    mdbx_tassert(txn, page->mp_pgno < txn->mt_next_pgno);
+    mdbx_tassert(txn, page->mp_pgno >= NUM_METAS);
+    VALGRIND_MAKE_MEM_UNDEFINED(page_data(page), page_space(txn->mt_env));
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(page_data(page), page_space(txn->mt_env));
+    page->mp_txnid = txn->mt_front;
+    struct page_result ret = {page, MDBX_SUCCESS};
+    return ret;
+  }
+
+  if (likely(!(mc->mc_flags & C_GCFREEZE))) {
+    MDBX_PNL pnl = txn->tw.reclaimed_pglist;
+    const unsigned len = MDBX_PNL_SIZE(pnl);
+    if (likely(len > 0)) {
+      MDBX_PNL_SIZE(pnl) = len - 1;
+#if MDBX_PNL_ASCENDING
+      const pgno_t pgno = pnl[1];
+      for (unsigned i = 1; i < len; ++i)
+        pnl[i] = pnl[i + 1];
+#else
+      const pgno_t pgno = pnl[len];
+#endif
+
+      MDBX_env *const env = txn->mt_env;
+      struct page_result ret;
+      if (env->me_flags & MDBX_WRITEMAP) {
+        ret.page = pgno2page(env, pgno);
+        MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, env->me_psize);
+      } else {
+        ret.page = mdbx_page_malloc(txn, 1);
+        if (unlikely(!ret.page)) {
+          ret.err = MDBX_ENOMEM;
+          return ret;
+        }
+      }
+
+      VALGRIND_MAKE_MEM_UNDEFINED(ret.page, env->me_psize);
+      ret.page->mp_pgno = pgno;
+      ret.page->mp_leaf2_ksize = 0;
+      ret.page->mp_flags = 0;
+      mdbx_tassert(txn, ret.page->mp_pgno >= NUM_METAS);
+
+      ret.err = mdbx_page_dirty(txn, ret.page, 1);
+      mdbx_tassert(
+          txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
+                                     txn->mt_next_pgno - MDBX_ENABLE_REFUND));
+      return ret;
+    }
+  }
+
+  return page_alloc_slowpath(mc, 1, MDBX_ALLOC_ALL);
 }
 
 /* Copy the used portions of a non-overflow page. */
@@ -7131,7 +7168,7 @@ __hot static int mdbx_page_touch(MDBX_cursor *mc) {
     rc = mdbx_pnl_need(&txn->tw.retired_pages, 1);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
-    const struct page_result par = mdbx_page_alloc(mc, 1, MDBX_ALLOC_ALL);
+    const struct page_result par = page_alloc(mc);
     rc = par.err;
     np = par.page;
     if (unlikely(rc != MDBX_SUCCESS))
@@ -9126,9 +9163,9 @@ static int gcu_clean_stored_retired(MDBX_txn *txn, gcu_context_t *ctx) {
   return err;
 }
 
-/* LY: Prepare a backlog of pages to modify GC itself,
- * while reclaiming is prohibited. It should be enough to prevent search
- * in mdbx_page_alloc() during a deleting, when GC tree is unbalanced. */
+/* Prepare a backlog of pages to modify GC itself, while reclaiming is
+ * prohibited. It should be enough to prevent search in page_alloc_slowpath()
+ * during a deleting, when GC tree is unbalanced. */
 static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
                                const bool reserve4retired) {
   const unsigned pages4retiredlist =
@@ -9171,8 +9208,8 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
     err = gcu_clean_stored_retired(txn, ctx);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    err = mdbx_page_alloc(&ctx->cursor.outer, pages4retiredlist,
-                          MDBX_ALLOC_GC | MDBX_ALLOC_FAKE)
+    err = page_alloc_slowpath(&ctx->cursor.outer, pages4retiredlist,
+                              MDBX_ALLOC_GC | MDBX_ALLOC_FAKE)
               .err;
     mdbx_trace("== after-4linear, backlog %u, err %d", gcu_backlog_size(txn),
                err);
@@ -9183,9 +9220,9 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
 
   while (gcu_backlog_size(txn) < backlog4cow + pages4retiredlist &&
          err == MDBX_SUCCESS)
-    err = mdbx_page_alloc(&ctx->cursor.outer, 0,
-                          MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE |
-                              MDBX_ALLOC_NOLOG)
+    err = page_alloc_slowpath(&ctx->cursor.outer, 0,
+                              MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
+                                  MDBX_ALLOC_FAKE | MDBX_ALLOC_NOLOG)
               .err;
 
   ctx->cursor.outer.mc_flags |= C_RECLAIMING;
@@ -9378,10 +9415,10 @@ retry:
         if (txn->tw.loose_count > 0) {
           mdbx_trace("%s: try allocate gc-slot for %u loose-pages",
                      dbg_prefix_mode, txn->tw.loose_count);
-          rc =
-              mdbx_page_alloc(&ctx->cursor.outer, 0,
-                              MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE)
-                  .err;
+          rc = page_alloc_slowpath(&ctx->cursor.outer, 0,
+                                   MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
+                                       MDBX_ALLOC_FAKE)
+                   .err;
           if (rc == MDBX_SUCCESS) {
             mdbx_trace("%s: retry since gc-slot for %u loose-pages available",
                        dbg_prefix_mode, txn->tw.loose_count);
@@ -9552,10 +9589,10 @@ retry:
         ctx->cursor.outer.mc_flags &= ~C_RECLAIMING;
         do {
           snap_oldest = mdbx_find_oldest(txn);
-          rc =
-              mdbx_page_alloc(&ctx->cursor.outer, 0,
-                              MDBX_ALLOC_GC | MDBX_ALLOC_SLOT | MDBX_ALLOC_FAKE)
-                  .err;
+          rc = page_alloc_slowpath(&ctx->cursor.outer, 0,
+                                   MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
+                                       MDBX_ALLOC_FAKE)
+                   .err;
           if (likely(rc == MDBX_SUCCESS)) {
             mdbx_trace("%s: took @%" PRIaTXN " from GC", dbg_prefix_mode,
                        MDBX_PNL_LAST(txn->tw.lifo_reclaimed));
@@ -9585,7 +9622,7 @@ retry:
         } else {
           mdbx_tassert(txn, txn->tw.last_reclaimed == 0);
           if (unlikely(mdbx_find_oldest(txn) != snap_oldest))
-            /* should retry mdbx_page_alloc(MDBX_ALLOC_GC)
+            /* should retry page_alloc_slowpath(MDBX_ALLOC_GC)
              * if the oldest reader changes since the last attempt */
             goto retry_rid;
           /* no reclaimable GC entries,
@@ -15655,7 +15692,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       if (unlikely(err != MDBX_SUCCESS))
         return err;
     }
-    struct page_result npr = mdbx_page_new(mc, P_LEAF, 1);
+    struct page_result npr = page_new(mc, P_LEAF);
     if (unlikely(npr.err != MDBX_SUCCESS))
       return npr.err;
     npr.err = mdbx_cursor_push(mc, npr.page);
@@ -15945,7 +15982,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           nested_dupdb.md_entries = page_numkeys(fp);
           xdata.iov_len = sizeof(nested_dupdb);
           xdata.iov_base = &nested_dupdb;
-          const struct page_result par = mdbx_page_alloc(mc, 1, MDBX_ALLOC_ALL);
+          const struct page_result par = page_alloc(mc);
           mp = par.page;
           if (unlikely(par.err != MDBX_SUCCESS))
             return par.err;
@@ -16301,24 +16338,49 @@ fail:
 }
 
 /* Allocate and initialize new pages for a database.
- * Set MDBX_TXN_ERROR on failure.
- *
- * [in] mc a  cursor on the database being added to.
- * [in] flags flags defining what type of page is being allocated.
- * [in] num   the number of pages to allocate. This is usually 1,
- *            unless allocating overflow pages for a large record.
- * [out] mp   Address of a page, or NULL on failure.
- *
- * Returns 0 on success, non-zero on failure. */
-static struct page_result mdbx_page_new(MDBX_cursor *mc, const unsigned flags,
-                                        const unsigned npages) {
-  struct page_result ret = mdbx_page_alloc(mc, npages, MDBX_ALLOC_ALL);
+ * Set MDBX_TXN_ERROR on failure. */
+static struct page_result page_new(MDBX_cursor *mc, const unsigned flags) {
+  mdbx_cassert(mc, (flags & P_OVERFLOW) == 0);
+  struct page_result ret = page_alloc(mc);
   if (unlikely(ret.err != MDBX_SUCCESS))
     return ret;
 
-  mdbx_debug("db %u allocated new page %" PRIaPGNO ", num %u", mc->mc_dbi,
-             ret.page->mp_pgno, npages);
+  mdbx_debug("db %u allocated new page %" PRIaPGNO, mc->mc_dbi,
+             ret.page->mp_pgno);
   ret.page->mp_flags = (uint16_t)flags;
+  ret.page->mp_txnid = mc->mc_txn->mt_front;
+  mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
+  mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
+#if MDBX_ENABLE_PGOP_STAT
+  mc->mc_txn->mt_env->me_lck->mti_pgop_stat.newly.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+
+  STATIC_ASSERT(P_BRANCH == 1);
+  const unsigned is_branch = flags & P_BRANCH;
+
+  ret.page->mp_lower = 0;
+  ret.page->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
+  mc->mc_db->md_branch_pages += is_branch;
+  mc->mc_db->md_leaf_pages += 1 - is_branch;
+  if (unlikely(mc->mc_flags & C_SUB)) {
+    MDBX_db *outer = mdbx_outer_db(mc);
+    outer->md_branch_pages += is_branch;
+    outer->md_leaf_pages += 1 - is_branch;
+  }
+  return ret;
+}
+
+static struct page_result page_new_large(MDBX_cursor *mc,
+                                         const unsigned npages) {
+  struct page_result ret =
+      likely(npages == 1) ? page_alloc(mc)
+                          : page_alloc_slowpath(mc, npages, MDBX_ALLOC_ALL);
+  if (unlikely(ret.err != MDBX_SUCCESS))
+    return ret;
+
+  mdbx_debug("db %u allocated new large-page %" PRIaPGNO ", num %u", mc->mc_dbi,
+             ret.page->mp_pgno, npages);
+  ret.page->mp_flags = P_OVERFLOW;
   ret.page->mp_txnid = mc->mc_txn->mt_front;
   mdbx_cassert(mc, *mc->mc_dbistate & DBI_DIRTY);
   mdbx_cassert(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
@@ -16326,24 +16388,9 @@ static struct page_result mdbx_page_new(MDBX_cursor *mc, const unsigned flags,
   mc->mc_txn->mt_env->me_lck->mti_pgop_stat.newly.weak += npages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
-  if (likely((flags & P_OVERFLOW) == 0)) {
-    STATIC_ASSERT(P_BRANCH == 1);
-    const bool is_branch = flags & P_BRANCH;
-    ret.page->mp_lower = 0;
-    ret.page->mp_upper = (indx_t)(mc->mc_txn->mt_env->me_psize - PAGEHDRSZ);
-    mc->mc_db->md_branch_pages += is_branch;
-    mc->mc_db->md_leaf_pages += 1 - is_branch;
-    if (unlikely(mc->mc_flags & C_SUB)) {
-      MDBX_db *outer = mdbx_outer_db(mc);
-      outer->md_branch_pages += is_branch;
-      outer->md_leaf_pages += 1 - is_branch;
-    }
-  } else {
-    mc->mc_db->md_overflow_pages += npages;
-    ret.page->mp_pages = npages;
-    mdbx_cassert(mc, !(mc->mc_flags & C_SUB));
-  }
-
+  mc->mc_db->md_overflow_pages += npages;
+  ret.page->mp_pages = npages;
+  mdbx_cassert(mc, !(mc->mc_flags & C_SUB));
   return ret;
 }
 
@@ -16464,7 +16511,7 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
       return MDBX_PROBLEM;
     }
     const pgno_t ovpages = number_of_ovpages(mc->mc_txn->mt_env, data->iov_len);
-    const struct page_result npr = mdbx_page_new(mc, P_OVERFLOW, ovpages);
+    const struct page_result npr = page_new_large(mc, ovpages);
     if (unlikely(npr.err != MDBX_SUCCESS))
       return npr.err;
     largepage = npr.page;
@@ -18599,7 +18646,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   mdbx_cassert(mc, nkeys + 1 >= minkeys * 2);
 
   /* Create a new sibling page. */
-  struct page_result npr = mdbx_page_new(mc, mp->mp_flags, 1);
+  struct page_result npr = page_new(mc, mp->mp_flags);
   if (unlikely(npr.err != MDBX_SUCCESS))
     return npr.err;
   MDBX_page *const sister = npr.page;
@@ -18611,7 +18658,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
    * the cursor height may be greater because it walks
    * up the stack while finding the branch slot to update. */
   if (mc->mc_top < 1) {
-    npr = mdbx_page_new(mc, P_BRANCH, 1);
+    npr = page_new(mc, P_BRANCH);
     rc = npr.err;
     if (unlikely(rc != MDBX_SUCCESS))
       goto done;
