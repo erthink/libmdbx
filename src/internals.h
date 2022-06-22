@@ -1086,6 +1086,8 @@ struct MDBX_env {
 #define MDBX_ENV_TXKEY UINT32_C(0x10000000)
   /* Legacy MDBX_MAPASYNC (prior v0.9) */
 #define MDBX_DEPRECATED_MAPASYNC UINT32_C(0x100000)
+  /* Legacy MDBX_MAPASYNC (prior v0.12) */
+#define MDBX_DEPRECATED_COALESCE UINT32_C(0x2000000)
 #define ENV_INTERNAL_FLAGS (MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE | MDBX_ENV_TXKEY)
   uint32_t me_flags;
   mdbx_mmap_t me_dxb_mmap; /* The main data file */

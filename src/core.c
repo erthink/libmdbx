@@ -6499,13 +6499,13 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
  *
  * Returns 0 on success, non-zero on failure.*/
 
-#define MDBX_ALLOC_CACHE 1
-#define MDBX_ALLOC_GC 2
-#define MDBX_ALLOC_NEW 4
+#define MDBX_ALLOC_GC 1
+#define MDBX_ALLOC_NEW 2
+#define MDBX_ALLOC_COALESCE 4
 #define MDBX_ALLOC_SLOT 8
 #define MDBX_ALLOC_FAKE 16
 #define MDBX_ALLOC_NOLOG 32
-#define MDBX_ALLOC_ALL (MDBX_ALLOC_CACHE | MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
+#define MDBX_ALLOC_ALL (MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
 __cold static struct page_result
 page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
@@ -6518,9 +6518,9 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
   const unsigned coalesce_threshold =
       env->me_maxgc_ov1page - env->me_maxgc_ov1page / 4;
   if (likely(flags & MDBX_ALLOC_GC)) {
-    flags |= env->me_flags & (MDBX_COALESCE | MDBX_LIFORECLAIM);
-    if (MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) > coalesce_threshold)
-      flags &= ~MDBX_COALESCE;
+    flags |= env->me_flags & MDBX_LIFORECLAIM;
+    if (MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) < coalesce_threshold)
+      flags |= MDBX_ALLOC_COALESCE;
     if (unlikely(
             /* If mc is updating the GC, then the retired-list cannot play
                catch-up with itself by growing while trying to save it. */
@@ -6531,7 +6531,7 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
             /* If our dirty list is already full, we can't touch GC */
             (txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth &&
              !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY))))
-      flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
+      flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_COALESCE);
   }
 
   mdbx_tassert(txn,
@@ -6551,7 +6551,7 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
        * Prefer pages with lower pgno. */
       mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                               txn->mt_next_pgno));
-      if (!(flags & (MDBX_COALESCE | MDBX_ALLOC_SLOT)) && re_len >= num) {
+      if (!(flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_SLOT)) && re_len >= num) {
         mdbx_tassert(txn, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
                               MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
         range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
@@ -6714,7 +6714,7 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
                     "(chunk) -> %u",
                     MDBX_PNL_SIZE(txn->tw.reclaimed_pglist), gc_len,
                     gc_len + MDBX_PNL_SIZE(txn->tw.reclaimed_pglist));
-        flags &= ~(MDBX_ALLOC_GC | MDBX_COALESCE);
+        flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_COALESCE);
         break;
       }
       ret.err = mdbx_pnl_need(&txn->tw.reclaimed_pglist, gc_len);
@@ -6769,20 +6769,21 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
       }
 
       /* Don't try to coalesce too much. */
-      if (flags & MDBX_COALESCE) {
+      if (flags & MDBX_ALLOC_COALESCE) {
         if (re_len /* current size */ > coalesce_threshold ||
             (re_len > prev_re_len &&
              re_len - prev_re_len /* delta from prev */ >=
                  coalesce_threshold / 2)) {
-          mdbx_trace("clear %s %s", "MDBX_COALESCE", "since got threshold");
-          flags &= ~MDBX_COALESCE;
+          mdbx_trace("clear %s %s", "MDBX_ALLOC_COALESCE",
+                     "since got threshold");
+          flags &= ~MDBX_ALLOC_COALESCE;
         }
       }
     }
 
-    if (F_ISSET(flags, MDBX_COALESCE | MDBX_ALLOC_GC)) {
-      mdbx_debug_extra("clear %s and continue", "MDBX_COALESCE");
-      flags &= ~MDBX_COALESCE;
+    if (F_ISSET(flags, MDBX_ALLOC_COALESCE | MDBX_ALLOC_GC)) {
+      mdbx_debug_extra("clear %s and continue", "MDBX_ALLOC_COALESCE");
+      flags &= ~MDBX_ALLOC_COALESCE;
       continue;
     }
 
@@ -13228,29 +13229,21 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   if (unlikely(flags & ~ENV_USABLE_FLAGS))
     return MDBX_EINVAL;
 
-  if (flags & MDBX_RDONLY)
-    mode = 0;
-
-  if (env->me_lazy_fd != INVALID_HANDLE_VALUE ||
-      (env->me_flags & MDBX_ENV_ACTIVE) != 0 || env->me_map)
+  if (unlikely(env->me_lazy_fd != INVALID_HANDLE_VALUE ||
+               (env->me_flags & MDBX_ENV_ACTIVE) != 0 || env->me_map))
     return MDBX_EPERM;
 
-  /* pickup previously mdbx_env_set_flags(),
+  /* Pickup previously mdbx_env_set_flags(),
    * but avoid MDBX_UTTERLY_NOSYNC by disjunction */
   const uint32_t saved_me_flags = env->me_flags;
-  flags = merge_sync_flags(flags, env->me_flags);
-
-  MDBX_handle_env_pathname env_pathname;
-  rc = mdbx_handle_env_pathname(&env_pathname, pathname, &flags, mode);
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto bailout;
+  flags = merge_sync_flags(flags | MDBX_DEPRECATED_COALESCE, env->me_flags);
 
   if (flags & MDBX_RDONLY) {
-    /* LY: silently ignore irrelevant flags when
-     * we're only getting read access */
+    /* Silently ignore irrelevant flags when we're only getting read access */
     flags &= ~(MDBX_WRITEMAP | MDBX_DEPRECATED_MAPASYNC | MDBX_SAFE_NOSYNC |
-               MDBX_NOMETASYNC | MDBX_COALESCE | MDBX_LIFORECLAIM |
+               MDBX_NOMETASYNC | MDBX_DEPRECATED_COALESCE | MDBX_LIFORECLAIM |
                MDBX_NOMEMINIT | MDBX_ACCEDE);
+    mode = 0;
   } else {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
     /* Temporary `workaround` for OpenBSD kernel's flaw.
@@ -13262,12 +13255,16 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
         mdbx_debug_log(MDBX_LOG_ERROR, __func__, __LINE__,
                        "System (i.e. OpenBSD) requires MDBX_WRITEMAP because "
                        "of an internal flaw(s) in a file/buffer/page cache.\n");
-        rc = 42 /* ENOPROTOOPT */;
-        goto bailout;
+        return 42 /* ENOPROTOOPT */;
       }
     }
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
   }
+
+  MDBX_handle_env_pathname env_pathname;
+  rc = mdbx_handle_env_pathname(&env_pathname, pathname, &flags, mode);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto bailout;
 
   env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
   env->me_pathname = mdbx_calloc(env_pathname.ent_len + 1, 1);
@@ -13337,8 +13334,8 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   const MDBX_env_flags_t rigorous_flags =
       MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC;
   const MDBX_env_flags_t mode_flags = rigorous_flags | MDBX_NOMETASYNC |
-                                      MDBX_LIFORECLAIM | MDBX_COALESCE |
-                                      MDBX_NORDAHEAD;
+                                      MDBX_LIFORECLAIM |
+                                      MDBX_DEPRECATED_COALESCE | MDBX_NORDAHEAD;
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
   if (lck && lck_rc != MDBX_RESULT_TRUE && (env->me_flags & MDBX_RDONLY) == 0) {
@@ -13349,11 +13346,11 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
          *  - let's assume that for some reason the DB file is smaller
          *    than it should be according to the geometry,
          *    but not smaller than the last page used;
-         *  - the first process that opens the database (lc_rc = true)
+         *  - the first process that opens the database (lck_rc == RESULT_TRUE)
          *    does this in readonly mode and therefore cannot bring
          *    the file size back to normal;
-         *  - some next process (lc_rc = false) opens the DB in read-write
-         *    mode and now is here.
+         *  - some next process (lck_rc != RESULT_TRUE) opens the DB in
+         *    read-write mode and now is here.
          *
          * FIXME: Should we re-check and set the size of DB-file right here? */
         break;
@@ -13362,8 +13359,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     }
 
     if (env->me_flags & MDBX_ACCEDE) {
-      /* pickup current mode-flags, including MDBX_LIFORECLAIM |
-       * MDBX_COALESCE | MDBX_NORDAHEAD */
+      /* Pickup current mode-flags (MDBX_LIFORECLAIM, MDBX_NORDAHEAD, etc). */
       const unsigned diff =
           (lck->mti_envmode.weak ^ env->me_flags) & mode_flags;
       mdbx_notice("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff, env->me_flags,

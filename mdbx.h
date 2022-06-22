@@ -1087,8 +1087,8 @@ enum MDBX_env_flags_t {
    * while opening the database/environment which is already used by another
    * process(es) with unknown mode/flags. In such cases, if there is a
    * difference in the specified flags (\ref MDBX_NOMETASYNC,
-   * \ref MDBX_SAFE_NOSYNC, \ref MDBX_UTTERLY_NOSYNC, \ref MDBX_LIFORECLAIM,
-   * \ref MDBX_COALESCE and \ref MDBX_NORDAHEAD), instead of returning an error,
+   * \ref MDBX_SAFE_NOSYNC, \ref MDBX_UTTERLY_NOSYNC, \ref MDBX_LIFORECLAIM
+   * and \ref MDBX_NORDAHEAD), instead of returning an error,
    * the database will be opened in a compatibility with the already used mode.
    *
    * `MDBX_ACCEDE` has no effect if the current process is the only one either
@@ -1195,6 +1195,7 @@ enum MDBX_env_flags_t {
   MDBX_NOMEMINIT = UINT32_C(0x1000000),
 
   /** Aims to coalesce a Garbage Collection items.
+   * \note Always enabled since v0.12
    *
    * With `MDBX_COALESCE` flag MDBX will aims to coalesce items while recycling
    * a Garbage Collection. Technically, when possible short lists of pages
