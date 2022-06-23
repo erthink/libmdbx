@@ -98,7 +98,6 @@ MDBX_NORETURN void usage(void) {
       "    accede         == MDBX_ACCEDE\n"
       "    nometasync     == MDBX_NOMETASYNC\n"
       "    lifo           == MDBX_LIFORECLAIM\n"
-      "    coalesce       == MDBX_COALESCE\n"
       "    nosync-safe    == MDBX_SAFE_NOSYNC\n"
       "    writemap       == MDBX_WRITEMAP\n"
       "    nosync-utterly == MDBX_UTTERLY_NOSYNC\n"

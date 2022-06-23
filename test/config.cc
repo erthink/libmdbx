@@ -369,7 +369,6 @@ const struct option_verb mode_bits[] = {
     {"notls", unsigned(MDBX_NOTLS)},
     {"nordahead", unsigned(MDBX_NORDAHEAD)},
     {"nomeminit", unsigned(MDBX_NOMEMINIT)},
-    {"coalesce", unsigned(MDBX_COALESCE)},
     {"lifo", unsigned(MDBX_LIFORECLAIM)},
     {"perturb", unsigned(MDBX_PAGEPERTURB)},
     {"accede", unsigned(MDBX_ACCEDE)},

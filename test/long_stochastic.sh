@@ -284,7 +284,7 @@ else
 fi
 
 syncmodes=("" ,+nosync-safe ,+nosync-utterly)
-options=(writemap coalesce lifo notls perturb)
+options=(writemap lifo notls perturb)
 
 function join { local IFS="$1"; shift; echo "$*"; }
 
