@@ -3203,18 +3203,22 @@ static __always_inline bool mdbx_pnl_check4assert(const MDBX_PNL pl,
 static void __hot mdbx_pnl_xmerge(MDBX_PNL dst, const MDBX_PNL src) {
   assert(mdbx_pnl_check4assert(dst, MAX_PAGENO + 1));
   assert(mdbx_pnl_check(src, MAX_PAGENO + 1));
-  const size_t total = MDBX_PNL_SIZE(dst) + MDBX_PNL_SIZE(src);
-  assert(MDBX_PNL_ALLOCLEN(dst) >= total);
-  pgno_t *w = dst + total;
-  pgno_t *d = dst + MDBX_PNL_SIZE(dst);
-  const pgno_t *s = src + MDBX_PNL_SIZE(src);
-  dst[0] = /* detent for scan below */ (MDBX_PNL_ASCENDING ? 0 : ~(pgno_t)0);
-  while (s > src) {
-    while (MDBX_PNL_ORDERED(*s, *d))
-      *w-- = *d--;
-    *w-- = *s--;
+  if (likely(MDBX_PNL_SIZE(src) > 0)) {
+    const size_t total = MDBX_PNL_SIZE(dst) + MDBX_PNL_SIZE(src);
+    assert(MDBX_PNL_ALLOCLEN(dst) >= total);
+    pgno_t *w = dst + total;
+    pgno_t *d = dst + MDBX_PNL_SIZE(dst);
+    const pgno_t *s = src + MDBX_PNL_SIZE(src);
+    dst[0] = /* detent for scan below */ (MDBX_PNL_ASCENDING ? 0 : ~(pgno_t)0);
+    do {
+      const bool cmp = MDBX_PNL_ORDERED(*s, *d);
+      *w = cmp ? *d : *s;
+      d -= cmp ? 1 : 0;
+      s -= cmp ? 0 : 1;
+      --w;
+    } while (s > src);
+    MDBX_PNL_SIZE(dst) = (pgno_t)total;
   }
-  MDBX_PNL_SIZE(dst) = (pgno_t)total;
   assert(mdbx_pnl_check4assert(dst, MAX_PAGENO + 1));
 }
 
@@ -6483,6 +6487,63 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
   return MDBX_SUCCESS;
 }
 
+__hot static pgno_t *scan4range(const MDBX_PNL pnl, const unsigned len,
+                                const int num) {
+  assert(num > 0 && len >= (unsigned)num && len == MDBX_PNL_SIZE(pnl));
+#if MDBX_PNL_ASCENDING
+  const pgno_t *const detent = pnl + len - num;
+  pgno_t *scan = pnl + 1;
+  while (likely(scan + 7 <= detent)) {
+    if (unlikely(scan[num] == *scan + num))
+      return scan;
+    if (unlikely(scan[num + 1] == scan[1] + num))
+      return scan + 1;
+    if (unlikely(scan[num + 2] == scan[2] + num))
+      return scan + 2;
+    if (unlikely(scan[num + 3] == scan[3] + num))
+      return scan + 3;
+    if (unlikely(scan[num + 4] == scan[4] + num))
+      return scan + 4;
+    if (unlikely(scan[num + 5] == scan[5] + num))
+      return scan + 5;
+    if (unlikely(scan[num + 6] == scan[6] + num))
+      return scan + 6;
+    if (unlikely(scan[num + 7] == scan[7] + num))
+      return scan + 7;
+    scan += 8;
+  }
+  for (; scan <= detent; ++scan)
+    if (scan[num] == *scan + num)
+      return scan;
+#else
+  const pgno_t *const detent = pnl + num;
+  pgno_t *scan = pnl + len;
+  while (likely(scan - 7 >= detent)) {
+    if (unlikely(scan[-num] == *scan + num))
+      return scan;
+    if (unlikely(scan[-num - 1] == scan[-1] + num))
+      return scan - 1;
+    if (unlikely(scan[-num - 2] == scan[-2] + num))
+      return scan - 2;
+    if (unlikely(scan[-num - 3] == scan[-3] + num))
+      return scan - 3;
+    if (unlikely(scan[-num - 4] == scan[-4] + num))
+      return scan - 4;
+    if (unlikely(scan[-num - 5] == scan[-5] + num))
+      return scan - 5;
+    if (unlikely(scan[-num - 6] == scan[-6] + num))
+      return scan - 6;
+    if (unlikely(scan[-num - 7] == scan[-7] + num))
+      return scan - 7;
+    scan -= 8;
+  }
+  for (; scan >= detent; --scan)
+    if (scan[-num] == *scan + num)
+      return scan;
+#endif /* MDBX_PNL sort-order */
+  return nullptr;
+}
+
 /* Allocate page numbers and memory for writing.  Maintain mt_last_reclaimed,
  * mt_reclaimed_pglist and mt_next_pgno.  Set MDBX_TXN_ERROR on failure.
  *
@@ -6534,11 +6595,12 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
       flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_COALESCE);
   }
 
-  mdbx_tassert(txn,
-               mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
-                                     txn->mt_next_pgno - MDBX_ENABLE_REFUND));
+  mdbx_assert(env,
+              mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
+                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
   pgno_t pgno, *re_list = txn->tw.reclaimed_pglist;
-  unsigned range_begin = 0, re_len = MDBX_PNL_SIZE(re_list);
+  unsigned re_len = MDBX_PNL_SIZE(re_list);
+  pgno_t *range = nullptr;
   txnid_t oldest = 0, last = 0;
 
   while (true) { /* hsr-kick retry loop */
@@ -6549,37 +6611,16 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
 
       /* Seek a big enough contiguous page range.
        * Prefer pages with lower pgno. */
-      mdbx_tassert(txn, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
-                                              txn->mt_next_pgno));
+      mdbx_assert(env, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
+                                             txn->mt_next_pgno));
       if (!(flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_SLOT)) && re_len >= num) {
-        mdbx_tassert(txn, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
-                              MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
-        range_begin = MDBX_PNL_ASCENDING ? 1 : re_len;
-        pgno = MDBX_PNL_LEAST(re_list);
-        if (likely(num == 1))
+        mdbx_assert(env, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
+                             MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
+        range = scan4range(re_list, re_len, num);
+        if (likely(range)) {
+          pgno = *range;
           goto done;
-
-        const unsigned wanna_range = num - 1;
-#if MDBX_PNL_ASCENDING
-        mdbx_tassert(txn, pgno == re_list[1] && range_begin == 1);
-        while (true) {
-          unsigned range_end = range_begin + wanna_range;
-          if (re_list[range_end] - pgno == wanna_range)
-            goto done;
-          if (range_end == re_len)
-            break;
-          pgno = re_list[++range_begin];
         }
-#else
-        mdbx_tassert(txn, pgno == re_list[re_len] && range_begin == re_len);
-        while (true) {
-          if (re_list[range_begin - wanna_range] - pgno == wanna_range)
-            goto done;
-          if (range_begin == wanna_range)
-            break;
-          pgno = re_list[--range_begin];
-        }
-#endif /* MDBX_PNL sort-order */
       }
 
       if (op == MDBX_FIRST) { /* 1st iteration, setup cursor, etc */
@@ -6795,7 +6836,7 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
      *  - extend the database file. */
 
     /* Will use new pages from the map if nothing is suitable in the GC. */
-    range_begin = 0;
+    range = nullptr;
     pgno = txn->mt_next_pgno;
     const size_t next = (size_t)pgno + num;
 
@@ -6947,20 +6988,20 @@ done:
     }
   }
 
-  if (range_begin) {
+  if (range) {
     mdbx_cassert(mc, (mc->mc_flags & C_GCFREEZE) == 0);
     mdbx_tassert(txn, pgno < txn->mt_next_pgno);
-    mdbx_tassert(txn, pgno == re_list[range_begin]);
+    mdbx_tassert(txn, pgno == *range);
     /* Cutoff allocated pages from tw.reclaimed_pglist */
 #if MDBX_PNL_ASCENDING
-    for (unsigned i = range_begin + num; i <= re_len;)
-      re_list[range_begin++] = re_list[i++];
-    MDBX_PNL_SIZE(re_list) = re_len = range_begin - 1;
+    for (const pgno_t *const end = re_list + re_len - num; range <= end;
+         ++range)
+      *range = range[num];
 #else
-    MDBX_PNL_SIZE(re_list) = re_len -= num;
-    for (unsigned i = range_begin - num; i < re_len;)
-      re_list[++i] = re_list[++range_begin];
+    for (const pgno_t *const end = re_list + re_len; ++range <= end;)
+      range[-(ptrdiff_t)num] = *range;
 #endif
+    MDBX_PNL_SIZE(re_list) = re_len -= num;
     mdbx_tassert(txn,
                  mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                        txn->mt_next_pgno - MDBX_ENABLE_REFUND));
