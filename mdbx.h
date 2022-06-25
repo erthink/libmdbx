@@ -824,9 +824,11 @@ enum MDBX_constants {
 /* THE FILES *******************************************************************
  * At the file system level, the environment corresponds to a pair of files. */
 
-/** \brief The name of the lock file in the environment */
+/** \brief The name of the lock file in the environment
+ * without using \ref MDBX_NOSUBDIR */
 #define MDBX_LOCKNAME "/mdbx.lck"
-/** \brief The name of the data file in the environment */
+/** \brief The name of the data file in the environment
+ * without using \ref MDBX_NOSUBDIR */
 #define MDBX_DATANAME "/mdbx.dat"
 
 /** \brief The suffix of the lock file when \ref MDBX_NOSUBDIR is used */
