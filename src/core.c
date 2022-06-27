@@ -11796,8 +11796,13 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
   }
 
   if ((uint64_t)size_lower / pagesize < MIN_PAGENO) {
-    rc = MDBX_EINVAL;
-    goto bailout;
+    size_lower = pagesize * MIN_PAGENO;
+    if (unlikely(size_lower > size_upper)) {
+      rc = MDBX_EINVAL;
+      goto bailout;
+    }
+    if (size_now < size_lower)
+      size_now = size_lower;
   }
 
   if (unlikely((size_t)size_upper > MAX_MAPSIZE ||
