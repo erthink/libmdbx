@@ -7803,7 +7803,7 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
 /* check against todo4recovery://erased_by_github/libmdbx/issues/269 */
 static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
                             bool report) {
-  const txnid_t meta_txnid = constmeta_txnid(env, meta);
+  const txnid_t head_txnid = meta_txnid(env, meta);
   const txnid_t freedb_mod_txnid = meta->mm_dbs[FREE_DBI].md_mod_txnid;
   const txnid_t maindb_mod_txnid = meta->mm_dbs[MAIN_DBI].md_mod_txnid;
 
@@ -7820,25 +7820,25 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
   const uint64_t magic_and_version =
       unaligned_peek_u64(4, &meta->mm_magic_and_version);
   bool ok = true;
-  if (unlikely(meta_txnid < freedb_mod_txnid ||
+  if (unlikely(!head_txnid || head_txnid < freedb_mod_txnid ||
                (!freedb_mod_txnid && freedb_root &&
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
       mdbx_warning(
           "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
           " %s",
-          "free", freedb_mod_txnid, meta_txnid,
+          "free", freedb_mod_txnid, head_txnid,
           "(workaround for incoherent flaw of unified page/buffer cache)");
     ok = false;
   }
-  if (unlikely(meta_txnid < maindb_mod_txnid ||
+  if (unlikely(head_txnid < maindb_mod_txnid ||
                (!maindb_mod_txnid && maindb_root &&
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
       mdbx_warning(
           "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
           " %s",
-          "main", maindb_mod_txnid, meta_txnid,
+          "main", maindb_mod_txnid, head_txnid,
           "(workaround for incoherent flaw of unified page/buffer cache)");
     ok = false;
   }
@@ -7879,7 +7879,7 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
  * for todo4recovery://erased_by_github/libmdbx/issues/269 */
 static int meta_waittxnid(const MDBX_env *env, const MDBX_meta *meta,
                           uint64_t *timestamp) {
-  if (likely(meta_checktxnid(env, (const MDBX_meta *)meta, !*timestamp)))
+  if (likely(meta_checktxnid(env, meta, !*timestamp)))
     return MDBX_SUCCESS;
 
   if (!*timestamp)
