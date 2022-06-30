@@ -1023,6 +1023,9 @@ LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 enum MDBX_env_flags_t {
   MDBX_ENV_DEFAULTS = 0,
 
+  /** Extra validation of DB structure and pages content. */
+  MDBX_VALIDATION = UINT32_C(0x00002000),
+
   /** No environment directory.
    *
    * By default, MDBX creates its environment in a directory whose pathname is
@@ -5091,7 +5094,7 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  * \retval 1           Transaction aborted asynchronous and reader slot
  *                     should be cleared immediately, i.e. read transaction
  *                     will not continue but \ref mdbx_txn_abort()
- *                     or \ref mdbx_txn_reset() will be called later.
+ *                     nor \ref mdbx_txn_reset() will be called later.
  *
  * \retval 2 or great  The reader process was terminated or killed,
  *                     and libmdbx should entirely reset reader registration.

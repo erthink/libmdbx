@@ -89,11 +89,11 @@
 
 /** Disable some checks to reduce an overhead and detection probability of
  * database corruption to a values closer to the LMDB. */
-#ifndef MDBX_DISABLE_PAGECHECKS
-#define MDBX_DISABLE_PAGECHECKS 0
-#elif !(MDBX_DISABLE_PAGECHECKS == 0 || MDBX_DISABLE_PAGECHECKS == 1)
-#error MDBX_DISABLE_PAGECHECKS must be defined as 0 or 1
-#endif /* MDBX_DISABLE_PAGECHECKS */
+#ifndef MDBX_DISABLE_VALIDATION
+#define MDBX_DISABLE_VALIDATION 0
+#elif !(MDBX_DISABLE_VALIDATION == 0 || MDBX_DISABLE_VALIDATION == 1)
+#error MDBX_DISABLE_VALIDATION must be defined as 0 or 1
+#endif /* MDBX_DISABLE_VALIDATION */
 
 #ifndef MDBX_PNL_PREALLOC_FOR_RADIXSORT
 #define MDBX_PNL_PREALLOC_FOR_RADIXSORT 1

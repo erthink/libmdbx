@@ -186,10 +186,10 @@ static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
     error("mdbx_cursor_open", rc);
     return rc;
   }
-  if (MDBX_DEBUG > 0 && rescue) {
-    cursor->mc_flags |= C_SKIPORD;
+  if (rescue) {
+    cursor->mc_checking |= CC_SKIPORD;
     if (cursor->mc_xcursor)
-      cursor->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+      cursor->mc_xcursor->mx_cursor.mc_checking |= CC_SKIPORD;
   }
 
   while ((rc = mdbx_cursor_get(cursor, &key, &data, MDBX_NEXT)) ==
@@ -383,10 +383,10 @@ int main(int argc, char *argv[]) {
       error("mdbx_cursor_open", rc);
       goto txn_abort;
     }
-    if (MDBX_DEBUG > 0 && rescue) {
-      cursor->mc_flags |= C_SKIPORD;
+    if (rescue) {
+      cursor->mc_checking |= CC_SKIPORD;
       if (cursor->mc_xcursor)
-        cursor->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+        cursor->mc_xcursor->mx_cursor.mc_checking |= CC_SKIPORD;
     }
 
     bool have_raw = false;

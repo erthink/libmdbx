@@ -805,9 +805,9 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   }
 
   if (ignore_wrong_order) { /* for debugging with enabled assertions */
-    mc->mc_flags |= C_SKIPORD;
+    mc->mc_checking |= CC_SKIPORD;
     if (mc->mc_xcursor)
-      mc->mc_xcursor->mx_cursor.mc_flags |= C_SKIPORD;
+      mc->mc_xcursor->mx_cursor.mc_checking |= CC_SKIPORD;
   }
 
   const size_t maxkeysize = mdbx_env_get_maxkeysize_ex(env, flags);

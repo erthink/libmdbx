@@ -523,9 +523,11 @@ typedef struct MDBX_page {
 #define P_BAD 0x10         /* explicit flag for invalid/bad page */
 #define P_LEAF2 0x20       /* for MDBX_DUPFIXED records */
 #define P_SUBP 0x40        /* for MDBX_DUPSORT sub-pages */
-#define P_SPILLED 0x2000   /* spilled in parent txn */
-#define P_LOOSE 0x4000     /* page was dirtied then freed, can be reused */
-#define P_FROZEN 0x8000    /* used for retire page with known status */
+#define PAGETYPE_EXTRA(p) ((char)(p)->mp_flags)
+#define PAGETYPE(p) (PAGETYPE_EXTRA(p) & ~P_SUBP)
+#define P_SPILLED 0x2000 /* spilled in parent txn */
+#define P_LOOSE 0x4000   /* page was dirtied then freed, can be reused */
+#define P_FROZEN 0x8000  /* used for retire page with known status */
 #define P_ILL_BITS (~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
   uint16_t mp_flags;
   union {
@@ -1032,8 +1034,8 @@ struct MDBX_cursor {
   MDBX_dbx *mc_dbx;
   /* The mt_dbistate for this database */
   uint8_t *mc_dbistate;
-  unsigned mc_snum; /* number of pushed pages */
-  unsigned mc_top;  /* index of top page, normally mc_snum-1 */
+  uint8_t mc_snum; /* number of pushed pages */
+  uint8_t mc_top;  /* index of top page, normally mc_snum-1 */
 
   /* Cursor state flags. */
 #define C_INITIALIZED 0x01 /* cursor has been initialized and is valid */
@@ -1043,17 +1045,26 @@ struct MDBX_cursor {
 #define C_UNTRACK 0x10     /* Un-track cursor when closing */
 #define C_RECLAIMING 0x20  /* GC lookup is prohibited */
 #define C_GCFREEZE 0x40    /* reclaimed_pglist must not be updated */
+  uint8_t mc_flags;        /* see mdbx_cursor */
 
   /* Cursor checking flags. */
-#define C_COPYING 0x100  /* skip key-value length check (copying simplify) */
-#define C_UPDATING 0x200 /* update/rebalance pending */
-#define C_RETIRING 0x400 /* refs to child pages may be invalid */
-#define C_SKIPORD 0x800  /* don't check keys ordering */
+#define CC_BRANCH 0x01    /* same as P_BRANCH for CHECK_LEAF_TYPE() */
+#define CC_LEAF 0x02      /* same as P_LEAF for CHECK_LEAF_TYPE() */
+#define CC_UPDATING 0x04  /* update/rebalance pending */
+#define CC_COPYING 0x08   /* skip key-value length check (copying simplify) */
+#define CC_SKIPORD 0x10   /* don't check keys ordering */
+#define CC_LEAF2 0x20     /* same as P_LEAF2 for CHECK_LEAF_TYPE() */
+#define CC_RETIRING 0x40  /* refs to child pages may be invalid */
+#define CC_PAGECHECK 0x80 /* perform page checking, see MDBX_VALIDATION */
+  uint8_t mc_checking;    /* page checking level */
 
-  unsigned mc_flags;              /* see mdbx_cursor */
   MDBX_page *mc_pg[CURSOR_STACK]; /* stack of pushed pages */
   indx_t mc_ki[CURSOR_STACK];     /* stack of page indices */
 };
+
+#define CHECK_LEAF_TYPE(mc, mp)                                                \
+  (((PAGETYPE_EXTRA(mp) ^ (mc)->mc_checking) &                                 \
+    (CC_BRANCH | CC_LEAF | CC_LEAF2)) == 0)
 
 /* Context for sorted-dup records.
  * We could have gone to a fully recursive design, with arbitrarily
@@ -1444,8 +1455,6 @@ MDBX_INTERNAL_FUNC void mdbx_rthc_thread_dtor(void *ptr);
 /* Test if a page is a sub page */
 #define IS_SUBP(p) (((p)->mp_flags & P_SUBP) != 0)
 
-#define PAGETYPE(p) ((p)->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW))
-
 /* Header for a single key/data pair within a page.
  * Used in pages of type P_BRANCH and P_LEAF without P_LEAF2.
  * We guarantee 2-byte alignment for 'MDBX_node's.
@@ -1588,7 +1597,8 @@ log2n_powerof2(size_t value) {
  * environment and re-opening it with the new flags. */
 #define ENV_CHANGEABLE_FLAGS                                                   \
   (MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC | MDBX_DEPRECATED_MAPASYNC |             \
-   MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE)
+   MDBX_NOMEMINIT | MDBX_COALESCE | MDBX_PAGEPERTURB | MDBX_ACCEDE |           \
+   MDBX_VALIDATION)
 #define ENV_CHANGELESS_FLAGS                                                   \
   (MDBX_NOSUBDIR | MDBX_RDONLY | MDBX_WRITEMAP | MDBX_NOTLS | MDBX_NORDAHEAD | \
    MDBX_LIFORECLAIM | MDBX_EXCLUSIVE)
