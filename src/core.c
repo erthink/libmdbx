@@ -19557,7 +19557,8 @@ __cold static int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
       }
       if (rc == MDBX_SUCCESS)
         rc = mdbx_env_cwalk(&ctx, &root, 0);
-      mdbx_env_cthr_toggle(&ctx);
+      if (ctx.mc_wlen[ctx.mc_head & 1])
+        mdbx_env_cthr_toggle(&ctx);
       mdbx_env_cthr_toggle(&ctx);
       thread_err = mdbx_thread_join(thread);
       mdbx_assert(env, (ctx.mc_tail == ctx.mc_head &&
