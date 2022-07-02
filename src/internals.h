@@ -1169,6 +1169,10 @@ struct MDBX_env {
 
   MDBX_txn *me_txn; /* current write transaction */
   mdbx_fastmutex_t me_dbi_lock;
+#if MDBX_CACHE_METAS
+  volatile const MDBX_meta *cache_last_meta;
+  volatile const MDBX_meta *cache_steady_meta;
+#endif                /* MDBX_CACHE_METAS */
   MDBX_dbi me_numdbs; /* number of DBs opened */
 
   MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */

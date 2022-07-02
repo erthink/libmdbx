@@ -5720,6 +5720,15 @@ constmeta_txnid(const MDBX_env *env, const MDBX_meta *meta) {
   return (a == b) ? a : 0;
 }
 
+static __inline void meta_cache_clear(MDBX_env *env) {
+#if MDBX_CACHE_METAS
+  env->cache_last_meta = nullptr;
+  env->cache_steady_meta = nullptr;
+#else
+  (void)env;
+#endif /* MDBX_CACHE_METAS */
+}
+
 static __inline txnid_t meta_txnid(const MDBX_env *env,
                                    volatile const MDBX_meta *meta) {
   (void)env;
@@ -5856,28 +5865,52 @@ meta_mostrecent(const enum meta_choise_mode mode, const MDBX_env *env) {
 }
 
 static volatile const MDBX_meta *meta_prefer_steady(const MDBX_env *env) {
-  return meta_mostrecent(prefer_steady, env);
+  return
+#if MDBX_CACHE_METAS
+      ((MDBX_env *)env)->cache_steady_meta =
+#endif /* MDBX_CACHE_METAS */
+          meta_mostrecent(prefer_steady, env);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static const MDBX_meta *
 constmeta_prefer_steady(const MDBX_env *env) {
-  return (const MDBX_meta *)meta_mostrecent(prefer_steady, env);
+#if MDBX_CACHE_METAS
+  mdbx_assert(env, !env->cache_steady_meta ||
+                       env->cache_steady_meta ==
+                           meta_mostrecent(prefer_steady, env));
+  return (const MDBX_meta *)(env->cache_steady_meta ? env->cache_steady_meta :
+#else
+  return (const MDBX_meta *)(
+#endif /* MDBX_CACHE_METAS */
+                                                    meta_prefer_steady(env));
 }
 
 static volatile const MDBX_meta *meta_prefer_last(const MDBX_env *env) {
-  return meta_mostrecent(prefer_last, env);
+  return
+#if MDBX_CACHE_METAS
+      ((MDBX_env *)env)->cache_last_meta =
+#endif /* MDBX_CACHE_METAS */
+          meta_mostrecent(prefer_last, env);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static const MDBX_meta *
 constmeta_prefer_last(const MDBX_env *env) {
-  return (const MDBX_meta *)meta_mostrecent(prefer_last, env);
+#if MDBX_CACHE_METAS
+  mdbx_assert(env,
+              !env->cache_last_meta ||
+                  env->cache_last_meta == meta_mostrecent(prefer_last, env));
+  return (const MDBX_meta *)(env->cache_last_meta ? env->cache_last_meta :
+#else
+  return (const MDBX_meta *)(
+#endif /* MDBX_CACHE_METAS */
+                                                  meta_prefer_last(env));
 }
 
 static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
   while (true) {
     volatile const MDBX_meta *head = meta_prefer_last(env);
     const txnid_t recent = meta_txnid(env, head);
-    mdbx_compiler_barrier();
+    mdbx_memory_barrier();
     if (likely(head == meta_prefer_last(env) &&
                recent == meta_txnid(env, head)))
       return recent;
@@ -6328,6 +6361,7 @@ __cold static int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
   }
 #endif /* MDBX_ENABLE_MADVISE */
 
+  meta_cache_clear(env);
   rc = mdbx_mresize(mresize_flags, &env->me_dxb_mmap, size_bytes, limit_bytes);
 
 #if MDBX_ENABLE_MADVISE
@@ -6480,6 +6514,7 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
 
   /* force oldest refresh */
   atomic_store32(&env->me_lck->mti_readers_refresh_flag, true, mo_Relaxed);
+  meta_cache_clear(env);
   return MDBX_SUCCESS;
 }
 
@@ -7409,6 +7444,7 @@ retry:;
 #if MDBX_ENABLE_PGOP_STAT
       env->me_lck->mti_pgop_stat.wops.weak += wops;
 #endif /* MDBX_ENABLE_PGOP_STAT */
+      meta_cache_clear(env);
       goto retry;
     }
     env->me_txn0->mt_txnid = head_txnid;
@@ -7653,6 +7689,7 @@ static void mdbx_txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
       /* no write-txn */
       last = NUM_METAS;
       should_unlock = true;
+      meta_cache_clear(env);
     } else {
       /* write txn is running, therefore shouldn't poison any memory range */
       return;
@@ -7994,6 +8031,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     if (likely(/* not recovery mode */ env->me_stuck_meta < 0)) {
       uint64_t timestamp = 0;
       while (1) {
+        meta_cache_clear(env);
         volatile const MDBX_meta *const meta = meta_prefer_last(env);
         mdbx_jitter4testing(false);
         const txnid_t snap = meta_txnid(env, meta);
@@ -8120,6 +8158,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     }
 #endif /* Windows */
 
+    meta_cache_clear(env);
     mdbx_jitter4testing(false);
     const MDBX_meta *meta = constmeta_prefer_last(env);
     uint64_t timestamp = 0;
@@ -11644,6 +11683,7 @@ static int mdbx_sync_locked(MDBX_env *env, unsigned flags,
     }
   }
 
+  meta_cache_clear(env);
   uint64_t timestamp = 0;
   while ("workaround for todo4recovery://erased_by_github/libmdbx/issues/269") {
     rc = meta_waittxnid(env, target, &timestamp);
@@ -11903,6 +11943,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       if (unlikely(err != MDBX_SUCCESS))
         return err;
       need_unlock = true;
+      meta_cache_clear(env);
     }
     const MDBX_meta *head = constmeta_prefer_last(env);
     if (!inside_txn) {
@@ -13127,6 +13168,7 @@ __cold static int __must_check_result mdbx_override_meta(
   }
   mdbx_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
                              env->me_os_psize);
+  meta_cache_clear(env);
   return rc;
 }
 
@@ -13600,7 +13642,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
 
 #if MDBX_DEBUG
   if (rc == MDBX_SUCCESS) {
-    const MDBX_meta *meta = constmeta_prefer_last(env);
+    const MDBX_meta *meta = (const MDBX_meta *)meta_prefer_last(env);
     const MDBX_db *db = &meta->mm_dbs[MAIN_DBI];
 
     mdbx_debug("opened database version %u, pagesize %u",
@@ -20136,6 +20178,7 @@ __cold int mdbx_env_set_flags(MDBX_env *env, MDBX_env_flags_t flags,
     if (unlikely(rc))
       return rc;
     should_unlock = true;
+    meta_cache_clear(env);
   }
 
   if (onoff)
@@ -22968,6 +23011,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
         if (unlikely(err != MDBX_SUCCESS))
           return err;
         should_unlock = true;
+        meta_cache_clear(env);
       }
       env->me_options.dp_reserve_limit = (unsigned)value;
       while (env->me_dp_reserve_len > env->me_options.dp_reserve_limit) {
@@ -23004,6 +23048,7 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       if (unlikely(err != MDBX_SUCCESS))
         return err;
       should_unlock = true;
+      meta_cache_clear(env);
     }
     if (env->me_txn)
       err = MDBX_EPERM /* unable change during transaction */;
