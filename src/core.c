@@ -5917,17 +5917,6 @@ static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
   }
 }
 
-static txnid_t mdbx_recent_steady_txnid(const MDBX_env *env) {
-  while (true) {
-    volatile const MDBX_meta *head = meta_prefer_steady(env);
-    const txnid_t recent = meta_txnid(env, head);
-    mdbx_compiler_barrier();
-    if (likely(head == meta_prefer_steady(env) &&
-               recent == meta_txnid(env, head)))
-      return recent;
-  }
-}
-
 static const char *mdbx_durable_str(volatile const MDBX_meta *const meta) {
   if (META_IS_STEADY(meta))
     return (unaligned_peek_u64_volatile(4, meta->mm_datasync_sign) ==
@@ -5941,20 +5930,21 @@ static const char *mdbx_durable_str(volatile const MDBX_meta *const meta) {
 
 /* Find oldest txnid still referenced. */
 static txnid_t find_oldest_reader(const MDBX_env *env) {
-  const txnid_t edge = mdbx_recent_steady_txnid(env);
-  mdbx_assert(env, edge <= env->me_txn0->mt_txnid);
+  const txnid_t steady_edge =
+      constmeta_txnid(env, constmeta_prefer_steady(env));
+  mdbx_assert(env, steady_edge <= env->me_txn0->mt_txnid);
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
   if (unlikely(lck == NULL /* exclusive without-lck mode */)) {
     mdbx_assert(env, env->me_lck == (void *)&env->x_lckless_stub);
-    return env->me_lck->mti_oldest_reader.weak = edge;
+    return env->me_lck->mti_oldest_reader.weak = steady_edge;
   }
 
   const txnid_t last_oldest =
       atomic_load64(&lck->mti_oldest_reader, mo_AcquireRelease);
-  mdbx_assert(env, edge >= last_oldest);
-  if (likely(last_oldest == edge))
-    return edge;
+  mdbx_assert(env, steady_edge >= last_oldest);
+  if (likely(last_oldest == steady_edge))
+    return steady_edge;
 
   const uint32_t nothing_changed = MDBX_STRING_TETRAD("None");
   const uint32_t snap_readers_refresh_flag =
@@ -5966,12 +5956,12 @@ static txnid_t find_oldest_reader(const MDBX_env *env) {
   atomic_store32(&lck->mti_readers_refresh_flag, nothing_changed, mo_Relaxed);
   const unsigned snap_nreaders =
       atomic_load32(&lck->mti_numreaders, mo_AcquireRelease);
-  txnid_t oldest = edge;
+  txnid_t oldest = steady_edge;
   for (unsigned i = 0; i < snap_nreaders; ++i) {
     if (atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease)) {
       /* mdbx_jitter4testing(true); */
       const txnid_t snap = safe64_read(&lck->mti_readers[i].mr_txnid);
-      if (oldest > snap && /* ignore pending updates */ snap <= edge) {
+      if (oldest > snap && /* ignore pending updates */ snap <= steady_edge) {
         oldest = snap;
         if (oldest == last_oldest)
           return oldest;
@@ -21442,7 +21432,7 @@ __cold static txnid_t mdbx_kick_longlived_readers(MDBX_env *env,
 
   int retry;
   for (retry = 0; retry < INT_MAX; ++retry) {
-    txnid_t oldest = mdbx_recent_steady_txnid(env);
+    txnid_t oldest = constmeta_txnid(env, constmeta_prefer_steady(env));
     mdbx_assert(env, oldest < env->me_txn0->mt_txnid);
     mdbx_assert(env, oldest >= laggard);
     mdbx_assert(env, oldest >= env->me_lck->mti_oldest_reader.weak);
