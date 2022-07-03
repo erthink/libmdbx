@@ -3926,7 +3926,7 @@ static int __must_check_result mdbx_node_move(MDBX_cursor *csrc,
 static int __must_check_result mdbx_node_read(MDBX_cursor *mc,
                                               const MDBX_node *leaf,
                                               MDBX_val *data,
-                                              const txnid_t front);
+                                              const MDBX_page *mp);
 static int __must_check_result mdbx_rebalance(MDBX_cursor *mc);
 static int __must_check_result mdbx_update_key(MDBX_cursor *mc,
                                                const MDBX_val *key);
@@ -6695,7 +6695,7 @@ page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
       if (unlikely((ret.err = mdbx_node_read(
                         &recur.outer,
                         page_node(mp, recur.outer.mc_ki[recur.outer.mc_top]),
-                        &data, mp->mp_txnid)) != MDBX_SUCCESS))
+                        &data, mp)) != MDBX_SUCCESS))
         goto fail;
 
       if ((flags & MDBX_LIFORECLAIM) && !txn->tw.lifo_reclaimed) {
@@ -14114,8 +14114,8 @@ static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
     return MDBX_INCOMPATIBLE; /* not a named DB */
   }
 
-  const txnid_t pp_txnid = couple.outer.mc_pg[couple.outer.mc_top]->mp_txnid;
-  rc = mdbx_node_read(&couple.outer, nsr.node, &data, pp_txnid);
+  rc = mdbx_node_read(&couple.outer, nsr.node, &data,
+                      couple.outer.mc_pg[couple.outer.mc_top]);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -14142,6 +14142,7 @@ static int mdbx_fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
 
   memcpy(db, data.iov_base, sizeof(MDBX_db));
 #if !MDBX_DISABLE_VALIDATION
+  const txnid_t pp_txnid = couple.outer.mc_pg[couple.outer.mc_top]->mp_txnid;
   mdbx_tassert(txn, txn->mt_front >= pp_txnid);
   if (unlikely(db->md_mod_txnid > pp_txnid)) {
     mdbx_error("db.md_mod_txnid (%" PRIaTXN ") > page-txnid (%" PRIaTXN ")",
@@ -14256,30 +14257,53 @@ __hot static int mdbx_page_search(MDBX_cursor *mc, const MDBX_val *key,
   return mdbx_page_search_root(mc, key, flags);
 }
 
-/* Return the data associated with a given node.
- *
- * [in] mc      The cursor for this operation.
- * [in] leaf    The node being read.
- * [out] data   Updated to point to the node's data.
- *
- * Returns 0 on success, non-zero on failure. */
-static __always_inline int mdbx_node_read(MDBX_cursor *mc,
-                                          const MDBX_node *node, MDBX_val *data,
-                                          const txnid_t front) {
-  data->iov_len = node_ds(node);
-  data->iov_base = node_data(node);
-  if (unlikely(F_ISSET(node_flags(node), F_BIGDATA))) {
-    /* Read overflow data. */
-    MDBX_page *omp; /* overflow page */
-    int rc = mdbx_page_get(mc, node_largedata_pgno(node), &omp, front);
-    if (unlikely((rc != MDBX_SUCCESS))) {
-      mdbx_debug("read overflow page %" PRIaPGNO " failed",
-                 node_largedata_pgno(node));
-      return rc;
-    }
-    data->iov_base = page_data(omp);
+/* Read overflow node data. */
+static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
+                                        MDBX_val *data, const MDBX_page *mp) {
+  mdbx_cassert(mc,
+               node_flags(node) == F_BIGDATA && data->iov_len == node_ds(node));
+
+  struct page_result ret =
+      mdbx_page_get_ex(mc, node_largedata_pgno(node), mp->mp_txnid);
+  if (unlikely((ret.err != MDBX_SUCCESS))) {
+    mdbx_debug("read overflow page %" PRIaPGNO " failed",
+               node_largedata_pgno(node));
+    return ret.err;
+  }
+
+  data->iov_base = page_data(ret.page);
+  if (!MDBX_DISABLE_VALIDATION &&
+      unlikely(PAGETYPE_EXTRA(ret.page) != P_OVERFLOW))
+    return bad_page(ret.page, "invalid page-type 0x%x for bigdata-node",
+                    PAGETYPE_EXTRA(ret.page));
+  if (!MDBX_DISABLE_VALIDATION &&
+      unlikely(node_size_len(node_ks(node), data->iov_len) <=
+               mc->mc_txn->mt_env->me_leaf_nodemax))
+    bad_page(mp, "too small data (%zu bytes) for bigdata-node", data->iov_len);
+  if (!MDBX_DISABLE_VALIDATION &&
+      unlikely(ret.page->mp_pages !=
+               number_of_ovpages(mc->mc_txn->mt_env, data->iov_len))) {
+    if (ret.page->mp_pages <
+        number_of_ovpages(mc->mc_txn->mt_env, data->iov_len))
+      return bad_page(ret.page,
+                      "too less n-pages %u for bigdata-node (%zu bytes)",
+                      ret.page->mp_pages, data->iov_len);
+    else
+      bad_page(ret.page, "extra n-pages %u for bigdata-node (%zu bytes)",
+               ret.page->mp_pages, data->iov_len);
   }
   return MDBX_SUCCESS;
+}
+
+/* Return the data associated with a given node. */
+static __always_inline int mdbx_node_read(MDBX_cursor *mc,
+                                          const MDBX_node *node, MDBX_val *data,
+                                          const MDBX_page *mp) {
+  data->iov_len = node_ds(node);
+  data->iov_base = node_data(node);
+  if (likely(node_flags(node) != F_BIGDATA))
+    return MDBX_SUCCESS;
+  return node_read_bigdata(mc, node, data, mp);
 }
 
 int mdbx_get(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data) {
@@ -14523,7 +14547,7 @@ skip:
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   } else if (likely(data)) {
-    rc = mdbx_node_read(mc, node, data, mp->mp_txnid);
+    rc = mdbx_node_read(mc, node, data, mp);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -14616,7 +14640,7 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   } else if (likely(data)) {
-    rc = mdbx_node_read(mc, node, data, mp->mp_txnid);
+    rc = mdbx_node_read(mc, node, data, mp);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -14880,8 +14904,7 @@ got_node:
         }
       }
       MDBX_val actual_data;
-      ret.err = mdbx_node_read(mc, node, &actual_data,
-                               mc->mc_pg[mc->mc_top]->mp_txnid);
+      ret.err = mdbx_node_read(mc, node, &actual_data, mc->mc_pg[mc->mc_top]);
       if (unlikely(ret.err != MDBX_SUCCESS))
         return ret;
       const int cmp = mc->mc_dbx->md_dcmp(&aligned_data, &actual_data);
@@ -14896,7 +14919,7 @@ got_node:
       }
       *data = actual_data;
     } else {
-      ret.err = mdbx_node_read(mc, node, data, mc->mc_pg[mc->mc_top]->mp_txnid);
+      ret.err = mdbx_node_read(mc, node, data, mc->mc_pg[mc->mc_top]);
       if (unlikely(ret.err != MDBX_SUCCESS))
         return ret;
     }
@@ -14953,7 +14976,7 @@ static int mdbx_cursor_first(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
     if (unlikely(rc))
       return rc;
   } else if (likely(data)) {
-    rc = mdbx_node_read(mc, node, data, mp->mp_txnid);
+    rc = mdbx_node_read(mc, node, data, mp);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -15002,7 +15025,7 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
     if (unlikely(rc))
       return rc;
   } else if (likely(data)) {
-    rc = mdbx_node_read(mc, node, data, mp->mp_txnid);
+    rc = mdbx_node_read(mc, node, data, mp);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
   }
@@ -15069,7 +15092,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
               return rc;
           }
         } else {
-          rc = mdbx_node_read(mc, node, data, mp->mp_txnid);
+          rc = mdbx_node_read(mc, node, data, mp);
           if (unlikely(rc))
             return rc;
         }
@@ -15176,7 +15199,7 @@ int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       MDBX_node *node = page_node(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (!F_ISSET(node_flags(node), F_DUPDATA)) {
         get_key_optional(node, key);
-        rc = mdbx_node_read(mc, node, data, mc->mc_pg[mc->mc_top]->mp_txnid);
+        rc = mdbx_node_read(mc, node, data, mc->mc_pg[mc->mc_top]);
         break;
       }
     }
@@ -15350,7 +15373,6 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
     return MDBX_NOTFOUND;
   }
 
-  const txnid_t pp_txnid = mp->mp_txnid;
   do {
     if (unlikely(n + 2 > limit)) {
       rc = MDBX_RESULT_TRUE;
@@ -15358,7 +15380,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
     }
     const MDBX_node *leaf = page_node(mp, i);
     get_key(leaf, &pairs[n]);
-    rc = mdbx_node_read(mc, leaf, &pairs[n + 1], pp_txnid);
+    rc = mdbx_node_read(mc, leaf, &pairs[n + 1], mp);
     if (unlikely(rc != MDBX_SUCCESS))
       break;
     n += 2;
