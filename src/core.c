@@ -18168,12 +18168,10 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
   const size_t ksize_max = keysize_max(env->me_psize, 0);
   const size_t leaf2_ksize = mp->mp_leaf2_ksize;
   if (IS_LEAF2(mp)) {
-    if ((mc->mc_checking & CC_COPYING) == 0) {
-      if (unlikely((mc->mc_flags & C_SUB) == 0 ||
-                   (mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
-        rc = bad_page(mp, "unexpected leaf2-page (db-flags 0x%x)\n",
-                      mc->mc_db->md_flags);
-    }
+    if (unlikely((mc->mc_flags & C_SUB) == 0 ||
+                 (mc->mc_db->md_flags & MDBX_DUPFIXED) == 0))
+      rc = bad_page(mp, "unexpected leaf2-page (db-flags 0x%x)\n",
+                    mc->mc_db->md_flags);
     if (unlikely(leaf2_ksize < 1 || leaf2_ksize > ksize_max))
       rc = bad_page(mp, "invalid leaf2-key length (%zu)\n", leaf2_ksize);
   }
@@ -18188,8 +18186,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
         continue;
       }
 
-      if ((mc->mc_checking & CC_COPYING) == 0 &&
-          unlikely(leaf2_ksize != mc->mc_dbx->md_klen_min)) {
+      if (unlikely(leaf2_ksize != mc->mc_dbx->md_klen_min)) {
         if (unlikely(leaf2_ksize < mc->mc_dbx->md_klen_min ||
                      leaf2_ksize > mc->mc_dbx->md_klen_max))
           rc = bad_page(
@@ -18224,8 +18221,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
         continue;
       }
       if ((IS_LEAF(mp) || i > 0)) {
-        if ((mc->mc_checking & CC_COPYING) == 0 &&
-            unlikely(ksize < mc->mc_dbx->md_klen_min ||
+        if (unlikely(ksize < mc->mc_dbx->md_klen_min ||
                      ksize > mc->mc_dbx->md_klen_max))
           rc = bad_page(
               mp, "node[%u] key size (%zu) <> min/max key-length (%zu/%zu)\n",
@@ -18276,14 +18272,12 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
               "bigdata-pgno", i, nkeys, dsize, data + dsize - end_of_page);
           continue;
         }
-        if ((mc->mc_checking & CC_COPYING) == 0) {
-          if (unlikely(dsize <= mc->mc_dbx->md_vlen_min ||
-                       dsize > mc->mc_dbx->md_vlen_max))
-            rc = bad_page(
-                mp,
-                "big-node data size (%zu) <> min/max value-length (%zu/%zu)\n",
-                dsize, mc->mc_dbx->md_vlen_min, mc->mc_dbx->md_vlen_max);
-        }
+        if (unlikely(dsize <= mc->mc_dbx->md_vlen_min ||
+                     dsize > mc->mc_dbx->md_vlen_max))
+          rc = bad_page(
+              mp,
+              "big-node data size (%zu) <> min/max value-length (%zu/%zu)\n",
+              dsize, mc->mc_dbx->md_vlen_min, mc->mc_dbx->md_vlen_max);
         if ((mc->mc_checking & CC_RETIRING) == 0) {
           /* Disable full checking to avoid infinite recursion
            * with a corrupted DB */
@@ -18323,14 +18317,12 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
         /* wrong, but already handled */
         continue;
       case 0 /* usual */:
-        if ((mc->mc_checking & CC_COPYING) == 0) {
-          if (unlikely(dsize < mc->mc_dbx->md_vlen_min ||
-                       dsize > mc->mc_dbx->md_vlen_max)) {
-            rc = bad_page(
-                mp, "node-data size (%zu) <> min/max value-length (%zu/%zu)\n",
-                dsize, mc->mc_dbx->md_vlen_min, mc->mc_dbx->md_vlen_max);
-            continue;
-          }
+        if (unlikely(dsize < mc->mc_dbx->md_vlen_min ||
+                     dsize > mc->mc_dbx->md_vlen_max)) {
+          rc = bad_page(
+              mp, "node-data size (%zu) <> min/max value-length (%zu/%zu)\n",
+              dsize, mc->mc_dbx->md_vlen_min, mc->mc_dbx->md_vlen_max);
+          continue;
         }
         break;
       case F_SUBDATA /* sub-db */:
@@ -18376,8 +18368,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
                 continue;
               }
 
-              if ((mc->mc_checking & CC_COPYING) == 0 &&
-                  unlikely(sub_ksize != mc->mc_dbx->md_vlen_min)) {
+              if (unlikely(sub_ksize != mc->mc_dbx->md_vlen_min)) {
                 if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
                              sub_ksize > mc->mc_dbx->md_vlen_max))
                   rc = bad_page(mp,
@@ -18415,15 +18406,13 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
               size_t sub_dsize = node_ds(sub_node);
               /* char *sub_data = node_data(sub_node); */
 
-              if ((mc->mc_checking & CC_COPYING) == 0) {
-                if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
-                             sub_ksize > mc->mc_dbx->md_vlen_max))
-                  rc = bad_page(mp,
-                                "nested-node-key size (%zu) <> min/max "
-                                "value-length (%zu/%zu)\n",
-                                sub_ksize, mc->mc_dbx->md_vlen_min,
-                                mc->mc_dbx->md_vlen_max);
-              }
+              if (unlikely(sub_ksize < mc->mc_dbx->md_vlen_min ||
+                           sub_ksize > mc->mc_dbx->md_vlen_max))
+                rc = bad_page(mp,
+                              "nested-node-key size (%zu) <> min/max "
+                              "value-length (%zu/%zu)\n",
+                              sub_ksize, mc->mc_dbx->md_vlen_min,
+                              mc->mc_dbx->md_vlen_max);
               if ((mc->mc_checking & CC_SKIPORD) == 0) {
                 sub_here.iov_len = sub_ksize;
                 sub_here.iov_base = sub_key;

@@ -1051,7 +1051,6 @@ struct MDBX_cursor {
 #define CC_BRANCH 0x01    /* same as P_BRANCH for CHECK_LEAF_TYPE() */
 #define CC_LEAF 0x02      /* same as P_LEAF for CHECK_LEAF_TYPE() */
 #define CC_UPDATING 0x04  /* update/rebalance pending */
-#define CC_COPYING 0x08   /* skip key-value length check (copying simplify) */
 #define CC_SKIPORD 0x10   /* don't check keys ordering */
 #define CC_LEAF2 0x20     /* same as P_LEAF2 for CHECK_LEAF_TYPE() */
 #define CC_RETIRING 0x40  /* refs to child pages may be invalid */
