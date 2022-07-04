@@ -16899,7 +16899,7 @@ static __inline int mdbx_couple_init(MDBX_cursor_couple *couple,
   couple->outer.mc_pg[0] = 0;
   couple->outer.mc_flags = 0;
   STATIC_ASSERT(CC_BRANCH == P_BRANCH && CC_LEAF == P_LEAF &&
-                CC_LEAF2 == P_LEAF2);
+                CC_OVERFLOW == P_OVERFLOW && CC_LEAF2 == P_LEAF2);
   couple->outer.mc_checking =
       (mdbx_audit_enabled() || (txn->mt_env->me_flags & MDBX_VALIDATION))
           ? CC_PAGECHECK | CC_LEAF

@@ -1050,7 +1050,8 @@ struct MDBX_cursor {
   /* Cursor checking flags. */
 #define CC_BRANCH 0x01    /* same as P_BRANCH for CHECK_LEAF_TYPE() */
 #define CC_LEAF 0x02      /* same as P_LEAF for CHECK_LEAF_TYPE() */
-#define CC_UPDATING 0x04  /* update/rebalance pending */
+#define CC_OVERFLOW 0x04  /* same as P_OVERFLOW for CHECK_LEAF_TYPE() */
+#define CC_UPDATING 0x08  /* update/rebalance pending */
 #define CC_SKIPORD 0x10   /* don't check keys ordering */
 #define CC_LEAF2 0x20     /* same as P_LEAF2 for CHECK_LEAF_TYPE() */
 #define CC_RETIRING 0x40  /* refs to child pages may be invalid */
@@ -1063,7 +1064,7 @@ struct MDBX_cursor {
 
 #define CHECK_LEAF_TYPE(mc, mp)                                                \
   (((PAGETYPE_EXTRA(mp) ^ (mc)->mc_checking) &                                 \
-    (CC_BRANCH | CC_LEAF | CC_LEAF2)) == 0)
+    (CC_BRANCH | CC_LEAF | CC_OVERFLOW | CC_LEAF2)) == 0)
 
 /* Context for sorted-dup records.
  * We could have gone to a fully recursive design, with arbitrarily
