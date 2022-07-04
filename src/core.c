@@ -18240,11 +18240,12 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
             unlikely(ksize != 0))
           rc = bad_page(mp, "branch-node[%u] wrong 0-node key-length (%zu)\n",
                         i, ksize);
-        if ((mc->mc_checking & CC_RETIRING) == 0) {
-          const pgno_t ref = node_pgno(node);
-          if (unlikely(ref < MIN_PAGENO || ref >= mc->mc_txn->mt_next_pgno))
-            rc = bad_page(mp, "branch-node[%u] wrong pgno (%u)\n", i, ref);
-        }
+        const pgno_t ref = node_pgno(node);
+        if (unlikely(ref < MIN_PAGENO) ||
+            (unlikely(ref >= mc->mc_txn->mt_next_pgno) &&
+             (unlikely(ref >= mc->mc_txn->mt_geo.now) ||
+              !(mc->mc_checking & CC_RETIRING))))
+          rc = bad_page(mp, "branch-node[%u] wrong pgno (%u)\n", i, ref);
         if (unlikely(node_flags(node)))
           rc = bad_page(mp, "branch-node[%u] wrong flags (%u)\n", i,
                         node_flags(node));
