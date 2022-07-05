@@ -19368,9 +19368,7 @@ typedef struct mdbx_compacting_ctx {
   MDBX_txn *mc_txn;
   mdbx_condpair_t mc_condpair;
   uint8_t *mc_wbuf[2];
-  uint8_t *mc_over[2];
   size_t mc_wlen[2];
-  size_t mc_olen[2];
   mdbx_filehandle_t mc_fd;
   /* Error code.  Never cleared if set.  Both threads can set nonzero
    * to fail the copy.  Not mutex-protected, MDBX expects atomic int. */
@@ -19408,7 +19406,6 @@ __cold static THREAD_RESULT THREAD_CALL compacting_write_thread(void *arg) {
     }
     ctx->mc_wlen[toggle] = 0;
     uint8_t *ptr = ctx->mc_wbuf[toggle];
-  again:
     if (!ctx->mc_error) {
       int err = mdbx_write(ctx->mc_fd, ptr, wsize);
       if (err != MDBX_SUCCESS) {
@@ -19423,14 +19420,6 @@ __cold static THREAD_RESULT THREAD_CALL compacting_write_thread(void *arg) {
         ctx->mc_error = err;
         goto bailout;
       }
-    }
-
-    /* If there's an overflow page tail, write it too */
-    wsize = ctx->mc_olen[toggle];
-    if (wsize) {
-      ctx->mc_olen[toggle] = 0;
-      ptr = ctx->mc_over[toggle];
-      goto again;
     }
     ctx->mc_tail += 1;
     mdbx_condpair_signal(&ctx->mc_condpair, false);
@@ -19458,6 +19447,69 @@ __cold static int compacting_toggle_write_buffers(mdbx_compacting_ctx *ctx) {
 
 __cold static int compacting_walk_sdb(mdbx_compacting_ctx *ctx, MDBX_db *sdb);
 
+static int compacting_put_bytes(mdbx_compacting_ctx *ctx, const void *src,
+                                size_t bytes, pgno_t pgno, pgno_t npages) {
+  assert(pgno == 0 || bytes > PAGEHDRSZ);
+  while (bytes > 0) {
+    const unsigned side = ctx->mc_head & 1;
+    const size_t left = (size_t)MDBX_ENVCOPY_WRITEBUF - ctx->mc_wlen[side];
+    if (left < (pgno ? PAGEHDRSZ : 1)) {
+      int err = compacting_toggle_write_buffers(ctx);
+      if (unlikely(err != MDBX_SUCCESS))
+        return err;
+      continue;
+    }
+    const size_t chunk = (bytes < left) ? bytes : left;
+    void *const dst = ctx->mc_wbuf[side] + ctx->mc_wlen[side];
+    if (src) {
+      memcpy(dst, src, chunk);
+      if (pgno) {
+        assert(chunk > PAGEHDRSZ);
+        MDBX_page *mp = dst;
+        mp->mp_pgno = pgno;
+        if (mp->mp_flags == P_OVERFLOW) {
+          assert(bytes <= pgno2bytes(ctx->mc_env, npages));
+          mp->mp_pages = npages;
+        }
+        pgno = 0;
+      }
+      src = (const char *)src + chunk;
+    } else
+      memset(dst, 0, chunk);
+    bytes -= chunk;
+    ctx->mc_wlen[side] += chunk;
+  }
+  return MDBX_SUCCESS;
+}
+
+static int compacting_put_page(mdbx_compacting_ctx *ctx, const MDBX_page *mp,
+                               const size_t head_bytes, const size_t tail_bytes,
+                               const pgno_t npages) {
+  if (tail_bytes) {
+    assert(head_bytes + tail_bytes <= ctx->mc_env->me_psize);
+    assert(npages == 1 &&
+           (PAGETYPE_EXTRA(mp) == P_BRANCH || PAGETYPE_EXTRA(mp) == P_LEAF));
+  } else {
+    assert(head_bytes <= pgno2bytes(ctx->mc_env, npages));
+    assert((npages == 1 && PAGETYPE_EXTRA(mp) == (P_LEAF | P_LEAF2)) ||
+           PAGETYPE_EXTRA(mp) == P_OVERFLOW);
+  }
+
+  const pgno_t pgno = ctx->mc_next_pgno;
+  ctx->mc_next_pgno += npages;
+  int err = compacting_put_bytes(ctx, mp, head_bytes, pgno, npages);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  err = compacting_put_bytes(
+      ctx, nullptr, pgno2bytes(ctx->mc_env, npages) - (head_bytes + tail_bytes),
+      0, 0);
+  if (unlikely(err != MDBX_SUCCESS))
+    return err;
+  return compacting_put_bytes(
+      ctx, (const char *)mp + ctx->mc_env->me_psize - tail_bytes, tail_bytes, 0,
+      0);
+}
+
 __cold static int compacting_walk_tree(mdbx_compacting_ctx *ctx,
                                        MDBX_cursor *mc, pgno_t *root,
                                        txnid_t parent_txnid) {
@@ -19481,10 +19533,8 @@ __cold static int compacting_walk_tree(mdbx_compacting_ctx *ctx,
     mc->mc_pg[i] = (MDBX_page *)ptr;
     ptr += ctx->mc_env->me_psize;
   }
-
   /* This is writable space for a leaf page. Usually not needed. */
   MDBX_page *const leaf = (MDBX_page *)ptr;
-  MDBX_page *copy;
 
   while (mc->mc_snum > 0) {
     MDBX_page *mp = mc->mc_pg[mc->mc_top];
@@ -19504,35 +19554,17 @@ __cold static int compacting_walk_tree(mdbx_compacting_ctx *ctx,
               node = page_node(mp, i);
             }
 
-            const pgno_t pgno = node_largedata_pgno(node);
+            const struct page_result lp =
+                mdbx_page_get_ex(mc, node_largedata_pgno(node), mp->mp_txnid);
+            if (unlikely((rc = lp.err) != MDBX_SUCCESS))
+              goto done;
+            const size_t datasize = node_ds(node);
+            const pgno_t npages = number_of_ovpages(ctx->mc_env, datasize);
             poke_pgno(node_data(node), ctx->mc_next_pgno);
-            MDBX_page *osrc;
-            rc = mdbx_page_get(mc, pgno, &osrc, mp->mp_txnid);
+            rc = compacting_put_page(ctx, lp.page, PAGEHDRSZ + datasize, 0,
+                                     npages);
             if (unlikely(rc != MDBX_SUCCESS))
               goto done;
-
-            unsigned side = ctx->mc_head & 1;
-            if (ctx->mc_wlen[side] + ctx->mc_env->me_psize >
-                (size_t)MDBX_ENVCOPY_WRITEBUF) {
-              rc = compacting_toggle_write_buffers(ctx);
-              if (unlikely(rc != MDBX_SUCCESS))
-                goto done;
-              side = ctx->mc_head & 1;
-            }
-            copy = (MDBX_page *)(ctx->mc_wbuf[side] + ctx->mc_wlen[side]);
-            memcpy(copy, osrc, ctx->mc_env->me_psize);
-            copy->mp_pgno = ctx->mc_next_pgno;
-            ctx->mc_next_pgno += osrc->mp_pages;
-            ctx->mc_wlen[side] += ctx->mc_env->me_psize;
-
-            if (osrc->mp_pages > 1) {
-              ctx->mc_olen[side] = pgno2bytes(ctx->mc_env, osrc->mp_pages - 1);
-              ctx->mc_over[side] = (uint8_t *)osrc + ctx->mc_env->me_psize;
-              rc = compacting_toggle_write_buffers(ctx);
-              if (unlikely(rc != MDBX_SUCCESS))
-                goto done;
-              side = ctx->mc_head & 1;
-            }
           } else if (node_flags(node) & F_SUBDATA) {
             if (!MDBX_DISABLE_VALIDATION &&
                 unlikely(node_ds(node) != sizeof(MDBX_db))) {
@@ -19572,54 +19604,47 @@ __cold static int compacting_walk_tree(mdbx_compacting_ctx *ctx,
     } else {
       mc->mc_ki[mc->mc_top]++;
       if (mc->mc_ki[mc->mc_top] < n) {
-      again:;
-        const MDBX_node *node = page_node(mp, mc->mc_ki[mc->mc_top]);
-        if (unlikely(node_flags(node))) {
-          mdbx_error("unexpected type 0x%x of node #%u on page #%" PRIaPGNO,
-                     node_flags(node), mc->mc_ki[mc->mc_top],
-                     mc->mc_pg[mc->mc_top]->mp_pgno);
-          rc = MDBX_CORRUPTED;
-          goto done;
-        }
-        rc = mdbx_page_get(mc, node_pgno(node), &mp, mp->mp_txnid);
-        if (unlikely(rc != MDBX_SUCCESS))
-          goto done;
-        mc->mc_top++;
-        mc->mc_snum++;
-        mc->mc_ki[mc->mc_top] = 0;
-        if (IS_BRANCH(mp)) {
+        while (1) {
+          const MDBX_node *node = page_node(mp, mc->mc_ki[mc->mc_top]);
+          rc = mdbx_page_get(mc, node_pgno(node), &mp, mp->mp_txnid);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto done;
+          mc->mc_top++;
+          mc->mc_snum++;
+          mc->mc_ki[mc->mc_top] = 0;
+          if (!IS_BRANCH(mp)) {
+            mc->mc_pg[mc->mc_top] = mp;
+            break;
+          }
           /* Whenever we advance to a sibling branch page,
            * we must proceed all the way down to its first leaf. */
           mdbx_page_copy(mc->mc_pg[mc->mc_top], mp, ctx->mc_env->me_psize);
-          goto again;
-        } else
-          mc->mc_pg[mc->mc_top] = mp;
+        }
         continue;
       }
     }
 
-    unsigned side = ctx->mc_head & 1;
-    if (ctx->mc_wlen[side] + ctx->mc_env->me_psize >
-        (size_t)MDBX_ENVCOPY_WRITEBUF) {
-      rc = compacting_toggle_write_buffers(ctx);
-      if (unlikely(rc != MDBX_SUCCESS))
-        goto done;
-      side = ctx->mc_head & 1;
+    const pgno_t pgno = ctx->mc_next_pgno;
+    if (likely(!IS_LEAF2(mp))) {
+      rc = compacting_put_page(
+          ctx, mp, PAGEHDRSZ + mp->mp_lower,
+          ctx->mc_env->me_psize - (PAGEHDRSZ + mp->mp_upper), 1);
+    } else {
+      rc = compacting_put_page(
+          ctx, mp, PAGEHDRSZ + page_numkeys(mp) * mp->mp_leaf2_ksize, 0, 1);
     }
-    copy = (MDBX_page *)(ctx->mc_wbuf[side] + ctx->mc_wlen[side]);
-    mdbx_page_copy(copy, mp, ctx->mc_env->me_psize);
-    copy->mp_pgno = ctx->mc_next_pgno++;
-    ctx->mc_wlen[side] += ctx->mc_env->me_psize;
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto done;
 
     if (mc->mc_top) {
       /* Update parent if there is one */
       node_set_pgno(
           page_node(mc->mc_pg[mc->mc_top - 1], mc->mc_ki[mc->mc_top - 1]),
-          copy->mp_pgno);
+          pgno);
       mdbx_cursor_pop(mc);
     } else {
       /* Otherwise we're done */
-      *root = copy->mp_pgno;
+      *root = pgno;
       break;
     }
   }
