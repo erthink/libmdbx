@@ -528,7 +528,8 @@ typedef struct MDBX_page {
 #define P_SPILLED 0x2000 /* spilled in parent txn */
 #define P_LOOSE 0x4000   /* page was dirtied then freed, can be reused */
 #define P_FROZEN 0x8000  /* used for retire page with known status */
-#define P_ILL_BITS (~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
+#define P_ILL_BITS                                                             \
+  ((uint16_t) ~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
   uint16_t mp_flags;
   union {
     uint32_t mp_pages; /* number of overflow pages */
