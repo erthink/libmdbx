@@ -356,7 +356,9 @@ int main(int argc, char *argv[]) {
 
   rc = mdbx_env_open(
       env, envname,
-      envflags | (rescue ? MDBX_RDONLY | MDBX_EXCLUSIVE : MDBX_RDONLY), 0);
+      envflags | (rescue ? MDBX_RDONLY | MDBX_EXCLUSIVE | MDBX_VALIDATION
+                         : MDBX_RDONLY),
+      0);
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_env_open", rc);
     goto env_close;

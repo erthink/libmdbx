@@ -93,7 +93,7 @@ struct {
 #define dbi_main walk.dbi[MAIN_DBI]
 #define dbi_meta walk.dbi[CORE_DBS]
 
-int envflags = MDBX_RDONLY | MDBX_EXCLUSIVE;
+int envflags = MDBX_RDONLY | MDBX_EXCLUSIVE | MDBX_VALIDATION;
 MDBX_env *env;
 MDBX_txn *txn;
 MDBX_envinfo envinfo;
