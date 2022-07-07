@@ -19570,6 +19570,8 @@ static int compacting_put_bytes(mdbx_compacting_ctx *ctx, const void *src,
         assert(chunk > PAGEHDRSZ);
         MDBX_page *mp = dst;
         mp->mp_pgno = pgno;
+        if (mp->mp_txnid == 0)
+          mp->mp_txnid = ctx->mc_txn->mt_txnid;
         if (mp->mp_flags == P_OVERFLOW) {
           assert(bytes <= pgno2bytes(ctx->mc_env, npages));
           mp->mp_pages = npages;
@@ -19769,12 +19771,18 @@ __cold static int compacting_walk_sdb(mdbx_compacting_ctx *ctx, MDBX_db *sdb) {
 
   couple.outer.mc_checking |= CC_SKIPORD | CC_PAGECHECK;
   couple.inner.mx_cursor.mc_checking |= CC_SKIPORD | CC_PAGECHECK;
+  if (!sdb->md_mod_txnid)
+    sdb->md_mod_txnid = ctx->mc_txn->mt_txnid;
   return compacting_walk_tree(ctx, &couple.outer, &sdb->md_root,
-                              sdb->md_mod_txnid ? sdb->md_mod_txnid
-                                                : ctx->mc_txn->mt_txnid);
+                              sdb->md_mod_txnid);
 }
 
 __cold static void compacting_fixup_meta(MDBX_env *env, MDBX_meta *meta) {
+  mdbx_assert(env, meta->mm_dbs[FREE_DBI].md_mod_txnid ||
+                       meta->mm_dbs[FREE_DBI].md_root == P_INVALID);
+  mdbx_assert(env, meta->mm_dbs[MAIN_DBI].md_mod_txnid ||
+                       meta->mm_dbs[MAIN_DBI].md_root == P_INVALID);
+
   /* Calculate filesize taking in account shrink/growing thresholds */
   if (meta->mm_geo.next != meta->mm_geo.now) {
     meta->mm_geo.now = meta->mm_geo.next;
@@ -19884,6 +19892,8 @@ __cold static int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
     int thread_err = mdbx_thread_create(&thread, compacting_write_thread, &ctx);
     if (likely(thread_err == MDBX_SUCCESS)) {
       if (dest_is_pipe) {
+        if (!meta->mm_dbs[MAIN_DBI].md_mod_txnid)
+          meta->mm_dbs[MAIN_DBI].md_mod_txnid = read_txn->mt_txnid;
         compacting_fixup_meta(env, meta);
         rc = mdbx_write(fd, buffer, meta_bytes);
       }
