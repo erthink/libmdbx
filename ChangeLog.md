@@ -19,6 +19,7 @@ Minors:
  - Minor fixes Doxygen references, comments, descriptions, etc.
  - Fixed copy&paste typo inside `meta_checktxnid()`.
  - Minor fix `meta_checktxnid()` to avoid assertion in debug mode.
+ - Minor fix `mdbx_env_set_geometry()` to avoid returning `EINVAL` in particular rare cases.
 
 
 -------------------------------------------------------------------------------
