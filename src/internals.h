@@ -572,6 +572,9 @@ typedef struct {
   MDBX_atomic_uint64_t unspill; /* Quantity of unspilled/reloaded pages */
   MDBX_atomic_uint64_t
       wops; /* Number of explicit write operations (not a pages) to a disk */
+  MDBX_atomic_uint64_t
+      gcrtime; /* Time spending for reading/searching GC (aka FreeDB). The
+                  unit/scale is platform-depended, see mdbx_osal_monotime(). */
 } MDBX_pgop_stat_t;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
@@ -1186,6 +1189,10 @@ struct MDBX_env {
 
   MDBX_txn *me_txn; /* current write transaction */
   mdbx_fastmutex_t me_dbi_lock;
+#if MDBX_CACHE_METAS
+  volatile const MDBX_meta *cache_last_meta;
+  volatile const MDBX_meta *cache_steady_meta;
+#endif                /* MDBX_CACHE_METAS */
   MDBX_dbi me_numdbs; /* number of DBs opened */
 
   MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */

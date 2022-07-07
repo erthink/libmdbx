@@ -80,6 +80,24 @@
 #error MDBX_ENABLE_PGOP_STAT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
+/** Enables chunking long list of retired pages during huge transactions commit
+ * to avoid use sequences of pages. */
+#ifndef MDBX_ENABLE_BIGFOOT
+#if MDBX_WORDBITS >= 64 || defined(DOXYGEN)
+#define MDBX_ENABLE_BIGFOOT 1
+#else
+#define MDBX_ENABLE_BIGFOOT 0
+#endif
+#elif !(MDBX_ENABLE_BIGFOOT == 0 || MDBX_ENABLE_BIGFOOT == 1)
+#error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
+#endif /* MDBX_ENABLE_BIGFOOT */
+
+#ifndef MDBX_CACHE_METAS
+#define MDBX_CACHE_METAS 0
+#elif !(MDBX_CACHE_METAS == 0 || MDBX_CACHE_METAS == 1)
+#error MDBX_CACHE_METAS must be defined as 0 or 1
+#endif /* MDBX_CACHE_METAS */
+
 /** Controls use of POSIX madvise() hints and friends. */
 #ifndef MDBX_ENABLE_MADVISE
 #define MDBX_ENABLE_MADVISE 1
