@@ -7846,7 +7846,7 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
       mdbx_warning(
-          "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          "catch invalid %sdb.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
           " %s",
           "free", freedb_mod_txnid, head_txnid,
           "(workaround for incoherent flaw of unified page/buffer cache)");
@@ -7857,7 +7857,7 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
                 likely(magic_and_version == MDBX_DATA_MAGIC)))) {
     if (report)
       mdbx_warning(
-          "catch invalid %sdb_mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
+          "catch invalid %sdb.mod_txnid %" PRIaTXN " for meta_txnid %" PRIaTXN
           " %s",
           "main", maindb_mod_txnid, head_txnid,
           "(workaround for incoherent flaw of unified page/buffer cache)");
@@ -7872,8 +7872,8 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
       if (report)
         mdbx_warning(
             "catch invalid root_page_txnid %" PRIaTXN
-            " for %sdb_mod_txnid %" PRIaTXN " %s",
-            root_txnid, "free", maindb_mod_txnid,
+            " for %sdb.mod_txnid %" PRIaTXN " %s",
+            root_txnid, "free", freedb_mod_txnid,
             "(workaround for incoherent flaw of unified page/buffer cache)");
       ok = false;
     }
@@ -7887,7 +7887,7 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
       if (report)
         mdbx_warning(
             "catch invalid root_page_txnid %" PRIaTXN
-            " for %sdb_mod_txnid %" PRIaTXN " %s",
+            " for %sdb.mod_txnid %" PRIaTXN " %s",
             root_txnid, "main", maindb_mod_txnid,
             "(workaround for incoherent flaw of unified page/buffer cache)");
       ok = false;
