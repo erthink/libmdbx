@@ -706,7 +706,7 @@ __cold static const char *pagetype_caption(const uint8_t type,
   }
 }
 
-__cold static int MDBX_PRINTF_ARGS(2, 3)
+__cold static __must_check_result int MDBX_PRINTF_ARGS(2, 3)
     bad_page(const MDBX_page *mp, const char *fmt, ...) {
   if (mdbx_log_enabled(MDBX_LOG_ERROR)) {
     static const MDBX_page *prev;
@@ -725,6 +725,26 @@ __cold static int MDBX_PRINTF_ARGS(2, 3)
     va_end(args);
   }
   return MDBX_CORRUPTED;
+}
+
+__cold static void MDBX_PRINTF_ARGS(2, 3)
+    poor_page(const MDBX_page *mp, const char *fmt, ...) {
+  if (mdbx_log_enabled(MDBX_LOG_NOTICE)) {
+    static const MDBX_page *prev;
+    if (prev != mp) {
+      char buf4unknown[16];
+      prev = mp;
+      mdbx_debug_log(MDBX_LOG_NOTICE, "poorpage", 0,
+                     "suboptimal %s-page #%u, mod-txnid %" PRIaTXN "\n",
+                     pagetype_caption(PAGETYPE_WHOLE(mp), buf4unknown),
+                     mp->mp_pgno, mp->mp_txnid);
+    }
+
+    va_list args;
+    va_start(args, fmt);
+    mdbx_debug_log_va(MDBX_LOG_NOTICE, "poorpage", 0, fmt, args);
+    va_end(args);
+  }
 }
 
 /* Address of node i in page p */
@@ -13957,9 +13977,9 @@ __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
   mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
 
   if (unlikely(r.page->mp_pgno != pgno)) {
-    bad_page(r.page,
-             "pgno mismatch (%" PRIaPGNO ") != expected (%" PRIaPGNO ")\n",
-             r.page->mp_pgno, pgno);
+    r.err = bad_page(
+        r.page, "pgno mismatch (%" PRIaPGNO ") != expected (%" PRIaPGNO ")\n",
+        r.page->mp_pgno, pgno);
     goto notfound;
   }
 
@@ -14333,7 +14353,7 @@ static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
     const MDBX_env *env = mc->mc_txn->mt_env;
     const size_t dsize = data->iov_len;
     if (unlikely(node_size_len(node_ks(node), dsize) <= env->me_leaf_nodemax))
-      bad_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
+      poor_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
     const unsigned npages = number_of_ovpages(env, dsize);
     if (unlikely(lp.page->mp_pages != npages)) {
       if (lp.page->mp_pages < npages)
@@ -14341,8 +14361,8 @@ static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
                         "too less n-pages %u for bigdata-node (%zu bytes)",
                         lp.page->mp_pages, dsize);
       else
-        bad_page(lp.page, "extra n-pages %u for bigdata-node (%zu bytes)",
-                 lp.page->mp_pages, dsize);
+        poor_page(lp.page, "extra n-pages %u for bigdata-node (%zu bytes)",
+                  lp.page->mp_pages, dsize);
     }
   }
   return MDBX_SUCCESS;
@@ -18360,7 +18380,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
               dsize, mc->mc_dbx->md_vlen_min, mc->mc_dbx->md_vlen_max);
         if (unlikely(node_size_len(node_ks(node), dsize) <=
                      mc->mc_txn->mt_env->me_leaf_nodemax))
-          bad_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
+          poor_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
 
         if ((mc->mc_checking & CC_RETIRING) == 0) {
           const pgr_t lp =
@@ -18375,8 +18395,9 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
                             "too less n-pages %u for bigdata-node (%zu bytes)",
                             lp.page->mp_pages, dsize);
             else
-              bad_page(lp.page, "extra n-pages %u for bigdata-node (%zu bytes)",
-                       lp.page->mp_pages, dsize);
+              poor_page(lp.page,
+                        "extra n-pages %u for bigdata-node (%zu bytes)",
+                        lp.page->mp_pages, dsize);
           }
         }
         continue;
