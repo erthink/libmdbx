@@ -1,7 +1,31 @@
 ChangeLog
 ---------
 
+## v0.11.9 (scheduled to 2022-08-02)
+
+The stable bugfix release.
+
+New:
+
+ - Ability to customise `MDBX_LOCK_SUFFIX`, `MDBX_DATANAME`, `MDBX_LOCKNAME` just by predefine ones during build.
+
+Fixes:
+
+ - Fixed hang copy-with-compactification of a corrupted DB
+   or in case the volume of output pages is a multiple of `MDBX_ENVCOPY_WRITEBUF`.
+
+Minors:
+
+ - Minor fixes Doxygen references, comments, descriptions, etc.
+ - Fixed copy&paste typo inside `meta_checktxnid()`.
+
+
+-------------------------------------------------------------------------------
+
+
 ## v0.11.8 at 2022-06-12
+
+The stable release with an important fixes and workaround for the critical macOS thread-local-storage issue.
 
 Acknowledgements:
 
@@ -50,6 +74,7 @@ Minors:
 
 
 -------------------------------------------------------------------------------
+
 
 ## v0.11.7 at 2022-04-22
 
