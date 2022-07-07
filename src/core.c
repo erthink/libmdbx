@@ -696,6 +696,8 @@ __cold static const char *pagetype_caption(const uint8_t type,
     return "dupfixed-leaf";
   case P_LEAF | P_LEAF2 | P_SUBP:
     return "dupfixed-subleaf";
+  case P_LEAF | P_LEAF2 | P_SUBP | P_LEGACY_DIRTY:
+    return "dupfixed-subleaf.legacy-dirty";
   case P_OVERFLOW:
     return "large";
   default:
@@ -713,7 +715,7 @@ __cold static int MDBX_PRINTF_ARGS(2, 3)
       prev = mp;
       mdbx_debug_log(MDBX_LOG_ERROR, "badpage", 0,
                      "corrupted %s-page #%u, mod-txnid %" PRIaTXN "\n",
-                     pagetype_caption(PAGETYPE_EXTRA(mp), buf4unknown),
+                     pagetype_caption(PAGETYPE_WHOLE(mp), buf4unknown),
                      mp->mp_pgno, mp->mp_txnid);
     }
 
@@ -728,7 +730,7 @@ __cold static int MDBX_PRINTF_ARGS(2, 3)
 /* Address of node i in page p */
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline MDBX_node *
 page_node(const MDBX_page *mp, unsigned i) {
-  assert(PAGETYPE(mp) == P_LEAF || PAGETYPE(mp) == P_BRANCH);
+  assert(PAGETYPE_COMPAT(mp) == P_LEAF || PAGETYPE_WHOLE(mp) == P_BRANCH);
   assert(page_numkeys(mp) > (unsigned)(i));
   assert(mp->mp_ptrs[i] % 2 == 0);
   return (MDBX_node *)((char *)mp + mp->mp_ptrs[i] + PAGEHDRSZ);
@@ -739,7 +741,7 @@ page_node(const MDBX_page *mp, unsigned i) {
  * There are no node headers, keys are stored contiguously. */
 MDBX_NOTHROW_PURE_FUNCTION static __always_inline void *
 page_leaf2key(const MDBX_page *mp, unsigned i, size_t keysize) {
-  assert(PAGETYPE(mp) == (P_LEAF | P_LEAF2));
+  assert(PAGETYPE_COMPAT(mp) == (P_LEAF | P_LEAF2));
   assert(mp->mp_leaf2_ksize == keysize);
   (void)keysize;
   return (char *)mp + PAGEHDRSZ + (i * mp->mp_leaf2_ksize);
@@ -4273,7 +4275,7 @@ MDBX_MAYBE_UNUSED static void mdbx_page_list(MDBX_page *mp) {
   MDBX_val key;
   DKBUF;
 
-  switch (PAGETYPE_EXTRA(mp)) {
+  switch (PAGETYPE_WHOLE(mp)) {
   case P_BRANCH:
     type = "Branch page";
     break;
@@ -4821,10 +4823,10 @@ static __inline void mdbx_page_wash(MDBX_txn *txn, const unsigned di,
  * to this txn's free list. */
 static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
                                MDBX_page *mp /* maybe null */,
-                               int pagetype /* maybe unknown/zero */) {
+                               unsigned pageflags /* maybe unknown/zero */) {
   int rc;
   MDBX_txn *const txn = mc->mc_txn;
-  mdbx_tassert(txn, !mp || (mp->mp_pgno == pgno && PAGETYPE(mp) == pagetype));
+  mdbx_tassert(txn, !mp || (mp->mp_pgno == pgno && mp->mp_flags == pageflags));
 
   /* During deleting entire subtrees, it is reasonable and possible to avoid
    * reading leaf pages, i.e. significantly reduce hard page-faults & IOPs:
@@ -4840,16 +4842,16 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
   unsigned di = 0, si = 0, npages = 1;
   bool is_frozen = false, is_spilled = false, is_shadowed = false;
   if (unlikely(!mp)) {
-    if (mdbx_assert_enabled() && pagetype) {
+    if (mdbx_assert_enabled() && pageflags) {
       pgr_t check;
       check = page_get_any(mc, pgno, txn->mt_front);
       if (unlikely(check.err != MDBX_SUCCESS))
         return check.err;
-      mdbx_tassert(txn,
-                   (PAGETYPE(check.page) & ~P_LEAF2) == (pagetype & ~P_FROZEN));
-      mdbx_tassert(txn, !(pagetype & P_FROZEN) || IS_FROZEN(txn, check.page));
+      mdbx_tassert(txn, (check.page->mp_flags & ~P_LEAF2) ==
+                            (pageflags & ~P_FROZEN));
+      mdbx_tassert(txn, !(pageflags & P_FROZEN) || IS_FROZEN(txn, check.page));
     }
-    if (pagetype & P_FROZEN) {
+    if (pageflags & P_FROZEN) {
       is_frozen = true;
       if (mdbx_assert_enabled()) {
         for (MDBX_txn *scan = txn; scan; scan = scan->mt_parent) {
@@ -4858,7 +4860,7 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
         }
       }
       goto status_done;
-    } else if (pagetype && txn->tw.dirtylist) {
+    } else if (pageflags && txn->tw.dirtylist) {
       if ((di = mdbx_dpl_exist(txn, pgno)) != 0) {
         mp = txn->tw.dirtylist->items[di].ptr;
         mdbx_tassert(txn, IS_MODIFIABLE(txn, mp));
@@ -4887,8 +4889,8 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
     if (unlikely(pg.err != MDBX_SUCCESS))
       return pg.err;
     mp = pg.page;
-    mdbx_tassert(txn, !pagetype || PAGETYPE(mp) == pagetype);
-    pagetype = PAGETYPE(mp);
+    mdbx_tassert(txn, !pageflags || mp->mp_flags == pageflags);
+    pageflags = mp->mp_flags;
   }
 
   is_frozen = IS_FROZEN(txn, mp);
@@ -4915,9 +4917,9 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
   }
 
 status_done:
-  if (likely((pagetype & P_OVERFLOW) == 0)) {
+  if (likely((pageflags & P_OVERFLOW) == 0)) {
     STATIC_ASSERT(P_BRANCH == 1);
-    const bool is_branch = pagetype & P_BRANCH;
+    const bool is_branch = pageflags & P_BRANCH;
     if (unlikely(mc->mc_flags & C_SUB)) {
       MDBX_db *outer = mdbx_outer_db(mc);
       mdbx_cassert(mc, !is_branch || outer->md_branch_pages > 0);
@@ -4927,8 +4929,8 @@ status_done:
     }
     mdbx_cassert(mc, !is_branch || mc->mc_db->md_branch_pages > 0);
     mc->mc_db->md_branch_pages -= is_branch;
-    mdbx_cassert(mc, (pagetype & P_LEAF) == 0 || mc->mc_db->md_leaf_pages > 0);
-    mc->mc_db->md_leaf_pages -= (pagetype & P_LEAF) != 0;
+    mdbx_cassert(mc, (pageflags & P_LEAF) == 0 || mc->mc_db->md_leaf_pages > 0);
+    mc->mc_db->md_leaf_pages -= (pageflags & P_LEAF) != 0;
   } else {
     npages = mp->mp_pages;
     mdbx_cassert(mc, mc->mc_db->md_overflow_pages >= npages);
@@ -5113,7 +5115,7 @@ status_done:
 }
 
 static __inline int mdbx_page_retire(MDBX_cursor *mc, MDBX_page *mp) {
-  return mdbx_page_retire_ex(mc, mp->mp_pgno, mp, PAGETYPE(mp));
+  return mdbx_page_retire_ex(mc, mp->mp_pgno, mp, mp->mp_flags);
 }
 
 struct mdbx_iov_ctx {
@@ -14325,7 +14327,7 @@ static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
     return lp.err;
   }
 
-  mdbx_cassert(mc, PAGETYPE_EXTRA(lp.page) == P_OVERFLOW);
+  mdbx_cassert(mc, PAGETYPE_WHOLE(lp.page) == P_OVERFLOW);
   data->iov_base = page_data(lp.page);
   if (!MDBX_DISABLE_VALIDATION) {
     const MDBX_env *env = mc->mc_txn->mt_env;
@@ -15870,7 +15872,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       pgr_t lp = page_get_large(mc, pgno, mc->mc_pg[mc->mc_top]->mp_txnid);
       if (unlikely(lp.err != MDBX_SUCCESS))
         return lp.err;
-      mdbx_cassert(mc, PAGETYPE_EXTRA(lp.page) == P_OVERFLOW);
+      mdbx_cassert(mc, PAGETYPE_WHOLE(lp.page) == P_OVERFLOW);
 
       /* Is the ov page from this txn (or a parent) and big enough? */
       int ovpages = lp.page->mp_pages;
@@ -16112,7 +16114,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           memcpy(olddata.iov_base, data->iov_base, data->iov_len);
         else {
           mdbx_cassert(mc, page_numkeys(mc->mc_pg[mc->mc_top]) == 1);
-          mdbx_cassert(mc, PAGETYPE(mc->mc_pg[mc->mc_top]) == P_LEAF);
+          mdbx_cassert(mc, PAGETYPE_COMPAT(mc->mc_pg[mc->mc_top]) == P_LEAF);
           mdbx_cassert(mc, node_ds(node) == 0);
           mdbx_cassert(mc, node_flags(node) == 0);
           mdbx_cassert(mc, key->iov_len < UINT16_MAX);
@@ -16469,7 +16471,7 @@ static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
              key ? key->iov_len : 0, DKEY_DEBUG(key));
 
   mdbx_cassert(mc, key);
-  mdbx_cassert(mc, PAGETYPE(mp) == (P_LEAF | P_LEAF2));
+  mdbx_cassert(mc, PAGETYPE_COMPAT(mp) == (P_LEAF | P_LEAF2));
   const unsigned ksize = mc->mc_db->md_xsize;
   mdbx_cassert(mc, ksize == key->iov_len);
   const unsigned nkeys = page_numkeys(mp);
@@ -16506,7 +16508,7 @@ static int __must_check_result mdbx_node_add_branch(MDBX_cursor *mc,
              IS_SUBP(mp) ? "sub-" : "", mp->mp_pgno, indx, pgno,
              key ? key->iov_len : 0, DKEY_DEBUG(key));
 
-  mdbx_cassert(mc, PAGETYPE(mp) == P_BRANCH);
+  mdbx_cassert(mc, PAGETYPE_WHOLE(mp) == P_BRANCH);
   STATIC_ASSERT(NODESIZE % 2 == 0);
 
   /* Move higher pointers up one slot. */
@@ -16551,7 +16553,7 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
              IS_SUBP(mp) ? "sub-" : "", mp->mp_pgno, indx,
              data ? data->iov_len : 0, key ? key->iov_len : 0, DKEY_DEBUG(key));
   mdbx_cassert(mc, key != NULL && data != NULL);
-  mdbx_cassert(mc, PAGETYPE(mp) == P_LEAF);
+  mdbx_cassert(mc, PAGETYPE_COMPAT(mp) == P_LEAF);
   mdbx_cassert(mc, page_room(mp) >= leaf_size(mc->mc_txn->mt_env, key, data));
   MDBX_page *largepage = NULL;
 
@@ -17312,19 +17314,19 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
 
   MDBX_page *psrc = csrc->mc_pg[csrc->mc_top];
   MDBX_page *pdst = cdst->mc_pg[cdst->mc_top];
-  mdbx_cassert(csrc, PAGETYPE(psrc) == PAGETYPE(pdst));
+  mdbx_cassert(csrc, PAGETYPE_WHOLE(psrc) == PAGETYPE_WHOLE(pdst));
   mdbx_cassert(csrc, csrc->mc_dbi == cdst->mc_dbi);
   mdbx_cassert(csrc, csrc->mc_top == cdst->mc_top);
-  if (unlikely(PAGETYPE(psrc) != PAGETYPE(pdst))) {
+  if (unlikely(PAGETYPE_WHOLE(psrc) != PAGETYPE_WHOLE(pdst))) {
   bailout:
     mdbx_error("Wrong or mismatch pages's types (src %d, dst %d) to move node",
-               PAGETYPE(psrc), PAGETYPE(pdst));
+               PAGETYPE_WHOLE(psrc), PAGETYPE_WHOLE(pdst));
     csrc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
     return MDBX_PROBLEM;
   }
 
   MDBX_val key4move;
-  switch (PAGETYPE(psrc)) {
+  switch (PAGETYPE_WHOLE(psrc)) {
   case P_BRANCH: {
     const MDBX_node *srcnode = page_node(psrc, csrc->mc_ki[csrc->mc_top]);
     mdbx_cassert(csrc, node_flags(srcnode) == 0);
@@ -17481,7 +17483,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
 
   mdbx_cassert(csrc, psrc == csrc->mc_pg[csrc->mc_top]);
   mdbx_cassert(cdst, pdst == cdst->mc_pg[cdst->mc_top]);
-  mdbx_cassert(csrc, PAGETYPE(psrc) == PAGETYPE(pdst));
+  mdbx_cassert(csrc, PAGETYPE_WHOLE(psrc) == PAGETYPE_WHOLE(pdst));
 
   {
     /* Adjust other cursors pointing to mp */
@@ -17626,7 +17628,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_debug("merging page %" PRIaPGNO " into %" PRIaPGNO, psrc->mp_pgno,
              pdst->mp_pgno);
 
-  mdbx_cassert(csrc, PAGETYPE(psrc) == PAGETYPE(pdst));
+  mdbx_cassert(csrc, PAGETYPE_WHOLE(psrc) == PAGETYPE_WHOLE(pdst));
   mdbx_cassert(csrc,
                csrc->mc_dbi == cdst->mc_dbi && csrc->mc_db == cdst->mc_db);
   mdbx_cassert(csrc, csrc->mc_snum > 1); /* can't merge root page */
@@ -17636,7 +17638,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   mdbx_cassert(csrc, csrc->mc_snum < csrc->mc_db->md_depth ||
                          IS_LEAF(csrc->mc_pg[csrc->mc_db->md_depth - 1]));
   mdbx_cassert(cdst, page_room(pdst) >= page_used(cdst->mc_txn->mt_env, psrc));
-  const int pagetype = PAGETYPE(psrc);
+  const int pagetype = PAGETYPE_WHOLE(psrc);
 
   /* Move all nodes from src to dst */
   const unsigned dst_nkeys = page_numkeys(pdst);
@@ -17795,14 +17797,15 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 
   if (IS_LEAF(cdst->mc_pg[cdst->mc_top])) {
     /* LY: don't touch cursor if top-page is a LEAF */
-    mdbx_cassert(cdst, IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
-                           PAGETYPE(cdst->mc_pg[cdst->mc_top]) == pagetype);
+    mdbx_cassert(cdst,
+                 IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
+                     PAGETYPE_WHOLE(cdst->mc_pg[cdst->mc_top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
   mdbx_cassert(cdst, page_numkeys(top_page) == dst_nkeys + src_nkeys);
 
-  if (unlikely(pagetype != PAGETYPE(top_page))) {
+  if (unlikely(pagetype != PAGETYPE_WHOLE(top_page))) {
     /* LY: LEAF-page becomes BRANCH, unable restore cursor's stack */
     goto bailout;
   }
@@ -17810,8 +17813,9 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   if (top_page == cdst->mc_pg[cdst->mc_top]) {
     /* LY: don't touch cursor if prev top-page already on the top */
     mdbx_cassert(cdst, cdst->mc_ki[cdst->mc_top] == top_indx);
-    mdbx_cassert(cdst, IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
-                           PAGETYPE(cdst->mc_pg[cdst->mc_top]) == pagetype);
+    mdbx_cassert(cdst,
+                 IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
+                     PAGETYPE_WHOLE(cdst->mc_pg[cdst->mc_top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
@@ -17828,8 +17832,9 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     cdst->mc_top = (uint16_t)new_snum - 1;
     mdbx_cassert(cdst, cdst->mc_snum < cdst->mc_db->md_depth ||
                            IS_LEAF(cdst->mc_pg[cdst->mc_db->md_depth - 1]));
-    mdbx_cassert(cdst, IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
-                           PAGETYPE(cdst->mc_pg[cdst->mc_top]) == pagetype);
+    mdbx_cassert(cdst,
+                 IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
+                     PAGETYPE_WHOLE(cdst->mc_pg[cdst->mc_top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
@@ -17849,8 +17854,9 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     cdst->mc_top = (uint16_t)new_snum - 1;
     mdbx_cassert(cdst, cdst->mc_snum < cdst->mc_db->md_depth ||
                            IS_LEAF(cdst->mc_pg[cdst->mc_db->md_depth - 1]));
-    mdbx_cassert(cdst, IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
-                           PAGETYPE(cdst->mc_pg[cdst->mc_top]) == pagetype);
+    mdbx_cassert(cdst,
+                 IS_LEAF(cdst->mc_pg[cdst->mc_top]) ||
+                     PAGETYPE_WHOLE(cdst->mc_pg[cdst->mc_top]) == pagetype);
     return MDBX_SUCCESS;
   }
 
@@ -17902,7 +17908,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
   mdbx_cassert(mc, mc->mc_snum > 0);
   mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
                        IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
-  const int pagetype = PAGETYPE(mc->mc_pg[mc->mc_top]);
+  const int pagetype = PAGETYPE_WHOLE(mc->mc_pg[mc->mc_top]);
 
   STATIC_ASSERT(P_BRANCH == 1);
   const unsigned minkeys = (pagetype & P_BRANCH) + 1;
@@ -18004,7 +18010,7 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
         }
       }
       mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]) ||
-                           PAGETYPE(mc->mc_pg[mc->mc_top]) == pagetype);
+                           PAGETYPE_WHOLE(mc->mc_pg[mc->mc_top]) == pagetype);
       mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth ||
                            IS_LEAF(mc->mc_pg[mc->mc_db->md_depth - 1]));
 
@@ -18041,7 +18047,8 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
         &left, mc->mc_pg[mc->mc_top]->mp_txnid);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    mdbx_cassert(mc, PAGETYPE(left) == PAGETYPE(mc->mc_pg[mc->mc_top]));
+    mdbx_cassert(mc,
+                 PAGETYPE_WHOLE(left) == PAGETYPE_WHOLE(mc->mc_pg[mc->mc_top]));
   }
   if (mn.mc_ki[pre_top] + 1u < page_numkeys(mn.mc_pg[pre_top])) {
     rc = page_get(
@@ -18049,7 +18056,8 @@ static int mdbx_rebalance(MDBX_cursor *mc) {
         &right, mc->mc_pg[mc->mc_top]->mp_txnid);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
-    mdbx_cassert(mc, PAGETYPE(right) == PAGETYPE(mc->mc_pg[mc->mc_top]));
+    mdbx_cassert(mc, PAGETYPE_WHOLE(right) ==
+                         PAGETYPE_WHOLE(mc->mc_pg[mc->mc_top]));
   }
   mdbx_cassert(mc, left || right);
 
@@ -18172,7 +18180,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
 
   mdbx_cassert(mc, (mc->mc_checking & CC_LEAF2) == 0 ||
                        (mc->mc_flags & C_SUB) != 0);
-  const uint8_t type = PAGETYPE_EXTRA(mp);
+  const uint8_t type = PAGETYPE_WHOLE(mp);
   switch (type) {
   default:
     return bad_page(mp, "invalid type (%u)\n", type);
@@ -18359,7 +18367,7 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
               page_get_large(mc, node_largedata_pgno(node), mp->mp_txnid);
           if (unlikely(lp.err != MDBX_SUCCESS))
             return lp.err;
-          mdbx_cassert(mc, PAGETYPE_EXTRA(lp.page) == P_OVERFLOW);
+          mdbx_cassert(mc, PAGETYPE_WHOLE(lp.page) == P_OVERFLOW);
           const unsigned npages = number_of_ovpages(env, dsize);
           if (unlikely(lp.page->mp_pages != npages)) {
             if (lp.page->mp_pages < npages)
@@ -18413,7 +18421,8 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
           continue;
         } else {
           const MDBX_page *const sp = (MDBX_page *)data;
-          switch (sp->mp_flags & /* ignore legacy P_DIRTY flag */ ~0x10) {
+          switch (sp->mp_flags &
+                  /* ignore legacy P_DIRTY flag */ ~P_LEGACY_DIRTY) {
           case P_LEAF | P_SUBP:
           case P_LEAF | P_LEAF2 | P_SUBP:
             break;
@@ -19170,7 +19179,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   if (unlikely(pure_left | pure_right)) {
     mc->mc_pg[mc->mc_top] = sister;
     mc->mc_ki[mc->mc_top] = 0;
-    switch (PAGETYPE(sister)) {
+    switch (PAGETYPE_WHOLE(sister)) {
     case P_LEAF: {
       mdbx_cassert(mc, newpgno == 0 || newpgno == P_INVALID);
       rc = mdbx_node_add_leaf(mc, 0, newkey, newdata, nflags);
@@ -19181,7 +19190,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       rc = mdbx_node_add_leaf2(mc, 0, newkey);
     } break;
     default:
-      rc = bad_page(sister, "wrong page-type %u\n", PAGETYPE(sister));
+      rc = bad_page(sister, "wrong page-type %u\n", PAGETYPE_WHOLE(sister));
     }
     if (unlikely(rc != MDBX_SUCCESS))
       goto done;
@@ -19242,7 +19251,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         flags = node_flags(node);
       }
 
-      switch (PAGETYPE(sister)) {
+      switch (PAGETYPE_WHOLE(sister)) {
       case P_BRANCH: {
         mdbx_cassert(mc, 0 == (uint16_t)flags);
         /* First branch index doesn't need key data. */
@@ -19259,7 +19268,7 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
         rc = mdbx_node_add_leaf2(mc, n, &rkey);
       } break; */
       default:
-        rc = bad_page(sister, "wrong page-type %u\n", PAGETYPE(sister));
+        rc = bad_page(sister, "wrong page-type %u\n", PAGETYPE_WHOLE(sister));
       }
       if (unlikely(rc != MDBX_SUCCESS))
         goto done;
@@ -19561,11 +19570,11 @@ static int compacting_put_page(mdbx_compacting_ctx *ctx, const MDBX_page *mp,
   if (tail_bytes) {
     assert(head_bytes + tail_bytes <= ctx->mc_env->me_psize);
     assert(npages == 1 &&
-           (PAGETYPE_EXTRA(mp) == P_BRANCH || PAGETYPE_EXTRA(mp) == P_LEAF));
+           (PAGETYPE_WHOLE(mp) == P_BRANCH || PAGETYPE_WHOLE(mp) == P_LEAF));
   } else {
     assert(head_bytes <= pgno2bytes(ctx->mc_env, npages));
-    assert((npages == 1 && PAGETYPE_EXTRA(mp) == (P_LEAF | P_LEAF2)) ||
-           PAGETYPE_EXTRA(mp) == P_OVERFLOW);
+    assert((npages == 1 && PAGETYPE_WHOLE(mp) == (P_LEAF | P_LEAF2)) ||
+           PAGETYPE_WHOLE(mp) == P_OVERFLOW);
   }
 
   const pgno_t pgno = ctx->mc_next_pgno;
@@ -21068,7 +21077,7 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
         for (unsigned i = 0; i < nkeys; i++) {
           MDBX_node *node = page_node(mp, i);
           if (node_flags(node) & F_BIGDATA) {
-            rc = mdbx_page_retire_ex(mc, node_largedata_pgno(node), NULL, 0);
+            rc = mdbx_page_retire_ex(mc, node_largedata_pgno(node), nullptr, 0);
             if (unlikely(rc != MDBX_SUCCESS))
               goto bailout;
             if (!(may_have_subDBs | mc->mc_db->md_overflow_pages))
@@ -21089,7 +21098,7 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
       } else {
         mdbx_cassert(mc, mc->mc_snum < mc->mc_db->md_depth);
         mc->mc_checking |= CC_RETIRING;
-        const int pagetype =
+        const unsigned pagetype =
             (IS_FROZEN(txn, mp) ? P_FROZEN : 0) +
             ((mc->mc_snum + 1 == mc->mc_db->md_depth) ? P_LEAF : P_BRANCH);
         for (unsigned i = 0; i < nkeys; i++) {
@@ -21097,7 +21106,7 @@ static int mdbx_drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
           mdbx_tassert(txn, (node_flags(node) &
                              (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
           const pgno_t pgno = node_pgno(node);
-          rc = mdbx_page_retire_ex(mc, pgno, NULL, pagetype);
+          rc = mdbx_page_retire_ex(mc, pgno, nullptr, pagetype);
           if (unlikely(rc != MDBX_SUCCESS))
             goto bailout;
         }
@@ -21694,7 +21703,7 @@ __cold static int mdbx_walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       pgr_t lp = page_get_large(ctx->mw_cursor, large_pgno, mp->mp_txnid);
       err = lp.err;
       if (err == MDBX_SUCCESS) {
-        mdbx_cassert(ctx->mw_cursor, PAGETYPE_EXTRA(lp.page) == P_OVERFLOW);
+        mdbx_cassert(ctx->mw_cursor, PAGETYPE_WHOLE(lp.page) == P_OVERFLOW);
         npages = lp.page->mp_pages;
       }
 
@@ -21740,7 +21749,7 @@ __cold static int mdbx_walk_tree(mdbx_walk_ctx_t *ctx, const pgno_t pgno,
       size_t subalign_bytes = 0;
       MDBX_page_type_t subtype;
 
-      switch (sp->mp_flags & /* ignore legacy P_DIRTY flag */ ~0x10) {
+      switch (sp->mp_flags & /* ignore legacy P_DIRTY flag */ ~P_LEGACY_DIRTY) {
       case P_LEAF | P_SUBP:
         subtype = MDBX_subpage_leaf;
         break;
