@@ -1,12 +1,30 @@
 ChangeLog
 ---------
 
+## v0.12.1 (scheduled to 2022-08-24)
+
+The release with set of new features.
+
+New:
+
+ - Added the `Big Foot` feature which significantly reduces GC overhead for processing large lists of retired pages from huge transactions.
+   Now _libmdbx_ avoid creating large chunks of PNLs (page number lists) which required a long sequences of free pages, aka large/overflow pages.
+   Thus avoiding searching, allocating and storing such sequences inside GC.
+ - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
+ - Added the `MDBX_VALIDATION` environment options to extra validation of DB structure and pages content for carefully/safe handling damaged or untrusted DB.
+ - Improved hot/online validation and checking of database pages both for more robustness and performance.
+ - Added optionally cache for pointers to last/steady meta-pages (currently is off by default).
+ - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
+
 ## v0.12.0 at 2022-06-19
 
 Not a release but preparation for changing feature set and API.
 
+-------------------------------------------------------------------------------
+
 
 ## v0.11.8 at 2022-06-12
+
 
 Acknowledgements:
 
@@ -55,6 +73,7 @@ Minors:
 
 
 -------------------------------------------------------------------------------
+
 
 ## v0.11.7 at 2022-04-22
 
