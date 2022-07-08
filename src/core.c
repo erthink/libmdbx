@@ -1146,7 +1146,7 @@ static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *p,
 static __always_inline void safe64_write(MDBX_atomic_uint64_t *p,
                                          const uint64_t v) {
   assert(p->weak >= SAFE64_INVALID_THRESHOLD);
-#if MDBX_64BIT_ATOMIC
+#if MDBX_64BIT_ATOMIC && MDBX_64BIT_CAS
   atomic_store64(p, v, mo_AcquireRelease);
 #else  /* MDBX_64BIT_ATOMIC */
   mdbx_compiler_barrier();
@@ -1163,8 +1163,10 @@ static __always_inline void safe64_write(MDBX_atomic_uint64_t *p,
 
 static __always_inline uint64_t safe64_read(const MDBX_atomic_uint64_t *p) {
   mdbx_jitter4testing(true);
-  uint64_t v = atomic_load64(p, mo_AcquireRelease);
-  mdbx_jitter4testing(true);
+  uint64_t v;
+  do
+    v = atomic_load64(p, mo_AcquireRelease);
+  while (!MDBX_64BIT_ATOMIC && unlikely(v != p->weak));
   return v;
 }
 
@@ -1206,7 +1208,7 @@ MDBX_MAYBE_UNUSED static
     void
     safe64_inc(MDBX_atomic_uint64_t *p, const uint64_t v) {
   assert(v > 0);
-  safe64_update(p, atomic_load64(p, mo_Relaxed) + v);
+  safe64_update(p, safe64_read(p) + v);
 }
 
 /*----------------------------------------------------------------------------*/
