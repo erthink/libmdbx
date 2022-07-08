@@ -1086,40 +1086,34 @@ static __always_inline uint64_t safe64_txnid_next(uint64_t txnid) {
   return txnid;
 }
 
-#if defined(MDBX_HAVE_C11ATOMICS) && defined(__LCC__)
-#define safe64_reset(p, single_writer)                                         \
-  atomic_store64(p, UINT64_MAX,                                                \
-                 (single_writer) ? mo_AcquireRelease                           \
-                                 : mo_SequentialConsistency)
-#else
+/* Atomically make target value >= SAFE64_INVALID_THRESHOLD */
 static __always_inline void safe64_reset(MDBX_atomic_uint64_t *p,
                                          bool single_writer) {
-#if !MDBX_64BIT_CAS
-  if (!single_writer) {
-    STATIC_ASSERT(xMDBX_TXNID_STEP > 1);
+  if (single_writer) {
+#if MDBX_64BIT_ATOMIC && MDBX_WORDBITS >= 64
+    atomic_store64(p, UINT64_MAX, mo_AcquireRelease);
+#else
+    atomic_store32(&p->high, UINT32_MAX, mo_AcquireRelease);
+#endif /* MDBX_64BIT_ATOMIC && MDBX_WORDBITS >= 64 */
+  } else {
+#if MDBX_64BIT_CAS && MDBX_64BIT_ATOMIC
+    /* atomically make value >= SAFE64_INVALID_THRESHOLD by 64-bit operation */
+    atomic_store64(p, UINT64_MAX, mo_SequentialConsistency);
+#elif MDBX_64BIT_CAS
+    /* atomically make value >= SAFE64_INVALID_THRESHOLD by 32-bit operation */
+    atomic_store32(&p->high, UINT32_MAX, mo_SequentialConsistency);
+#else
     /* it is safe to increment low-part to avoid ABA, since xMDBX_TXNID_STEP > 1
      * and overflow was preserved in safe64_txnid_next() */
+    STATIC_ASSERT(xMDBX_TXNID_STEP > 1);
     atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
-    atomic_store32(
-        &p->high, UINT32_MAX,
-        mo_Relaxed) /* atomically make >= SAFE64_INVALID_THRESHOLD */;
+    atomic_store32(&p->high, UINT32_MAX, mo_SequentialConsistency);
     atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
-  } else
-#endif /* !MDBX_64BIT_CAS */
-#if MDBX_64BIT_ATOMIC
-    /* atomically make value >= SAFE64_INVALID_THRESHOLD by 64-bit operation */
-    atomic_store64(p, UINT64_MAX,
-                   single_writer ? mo_AcquireRelease
-                                 : mo_SequentialConsistency);
-#else
-  /* atomically make value >= SAFE64_INVALID_THRESHOLD by 32-bit operation */
-  atomic_store32(&p->high, UINT32_MAX,
-                 single_writer ? mo_AcquireRelease : mo_SequentialConsistency);
-#endif /* MDBX_64BIT_ATOMIC */
+#endif /* MDBX_64BIT_CAS && MDBX_64BIT_ATOMIC */
+  }
   assert(p->weak >= SAFE64_INVALID_THRESHOLD);
   mdbx_jitter4testing(true);
 }
-#endif /* LCC && MDBX_HAVE_C11ATOMICS */
 
 static __always_inline bool safe64_reset_compare(MDBX_atomic_uint64_t *p,
                                                  txnid_t compare) {
