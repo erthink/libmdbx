@@ -7767,10 +7767,10 @@ static bind_rslot_result bind_rslot(MDBX_env *env, const uintptr_t tid) {
   result.err = MDBX_SUCCESS;
   unsigned slot, nreaders;
   while (1) {
-    nreaders = atomic_load32(&env->me_lck->mti_numreaders, mo_Relaxed);
+    nreaders = env->me_lck->mti_numreaders.weak;
     for (slot = 0; slot < nreaders; slot++)
-      if (atomic_load32(&env->me_lck->mti_readers[slot].mr_pid, mo_Relaxed) ==
-          0)
+      if (!atomic_load32(&env->me_lck->mti_readers[slot].mr_pid,
+                         mo_AcquireRelease))
         break;
 
     if (likely(slot < env->me_maxreaders))
@@ -7791,13 +7791,12 @@ static bind_rslot_result bind_rslot(MDBX_env *env, const uintptr_t tid) {
    * slot, next publish it in lck->mti_numreaders.  After
    * that, it is safe for mdbx_env_close() to touch it.
    * When it will be closed, we can finally claim it. */
-  atomic_store32(&result.rslot->mr_pid, 0, mo_Relaxed);
+  atomic_store32(&result.rslot->mr_pid, 0, mo_SequentialConsistency);
   safe64_reset(&result.rslot->mr_txnid, true);
   if (slot == nreaders)
-    atomic_store32(&env->me_lck->mti_numreaders, ++nreaders, mo_Relaxed);
-  atomic_store64(&result.rslot->mr_tid, (env->me_flags & MDBX_NOTLS) ? 0 : tid,
-                 mo_Relaxed);
-  atomic_store32(&result.rslot->mr_pid, env->me_pid, mo_Relaxed);
+    env->me_lck->mti_numreaders.weak = ++nreaders;
+  result.rslot->mr_tid.weak = (env->me_flags & MDBX_NOTLS) ? 0 : tid;
+  atomic_store32(&result.rslot->mr_pid, env->me_pid, mo_AcquireRelease);
   mdbx_rdt_unlock(env);
 
   if (likely(env->me_flags & MDBX_ENV_TXKEY)) {
@@ -7862,6 +7861,7 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
                r->mr_tid.weak != mdbx_thread_self()))
     return MDBX_BAD_RSLOT;
 
+  mdbx_assert(env, r->mr_txnid.weak >= SAFE64_INVALID_THRESHOLD);
   if (unlikely(r->mr_txnid.weak < SAFE64_INVALID_THRESHOLD))
     return MDBX_BUSY /* transaction is still active */;
 
