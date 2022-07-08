@@ -516,17 +516,17 @@ typedef struct MDBX_page {
     struct MDBX_page *mp_next; /* for in-memory list of freed pages */
   };
   uint16_t mp_leaf2_ksize;   /* key size if this is a LEAF2 page */
-#define P_BRANCH 0x01        /* branch page */
-#define P_LEAF 0x02          /* leaf page */
-#define P_OVERFLOW 0x04      /* overflow page */
-#define P_META 0x08          /* meta page */
-#define P_LEGACY_DIRTY 0x10  /* legacy P_DIRTY flag prior to v0.10 958fd5b9 */
+#define P_BRANCH 0x01u       /* branch page */
+#define P_LEAF 0x02u         /* leaf page */
+#define P_OVERFLOW 0x04u     /* overflow page */
+#define P_META 0x08u         /* meta page */
+#define P_LEGACY_DIRTY 0x10u /* legacy P_DIRTY flag prior to v0.10 958fd5b9 */
 #define P_BAD P_LEGACY_DIRTY /* explicit flag for invalid/bad page */
-#define P_LEAF2 0x20         /* for MDBX_DUPFIXED records */
-#define P_SUBP 0x40          /* for MDBX_DUPSORT sub-pages */
-#define P_SPILLED 0x2000     /* spilled in parent txn */
-#define P_LOOSE 0x4000       /* page was dirtied then freed, can be reused */
-#define P_FROZEN 0x8000      /* used for retire page with known status */
+#define P_LEAF2 0x20u        /* for MDBX_DUPFIXED records */
+#define P_SUBP 0x40u         /* for MDBX_DUPSORT sub-pages */
+#define P_SPILLED 0x2000u    /* spilled in parent txn */
+#define P_LOOSE 0x4000u      /* page was dirtied then freed, can be reused */
+#define P_FROZEN 0x8000u     /* used for retire page with known status */
 #define P_ILL_BITS                                                             \
   ((uint16_t) ~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW | P_SPILLED))
   uint16_t mp_flags;
@@ -545,7 +545,7 @@ typedef struct MDBX_page {
 #endif /* C99 */
 } MDBX_page;
 
-#define PAGETYPE_WHOLE(p) ((char)(p)->mp_flags)
+#define PAGETYPE_WHOLE(p) ((uint8_t)(p)->mp_flags)
 
 /* Drop legacy P_DIRTY flag for sub-pages for compatilibity */
 #define PAGETYPE_COMPAT(p)                                                     \
