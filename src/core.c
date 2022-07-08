@@ -3919,7 +3919,7 @@ static int __must_check_result mdbx_page_split(MDBX_cursor *mc,
                                                MDBX_val *const newdata,
                                                pgno_t newpgno, unsigned nflags);
 
-static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
+static bool meta_checktxnid(const MDBX_env *env, const volatile MDBX_meta *meta,
                             bool report);
 static int __must_check_result mdbx_validate_meta_copy(MDBX_env *env,
                                                        const MDBX_meta *meta,
@@ -7860,7 +7860,7 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
 }
 
 /* check against todo4recovery://erased_by_github/libmdbx/issues/269 */
-static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
+static bool meta_checktxnid(const MDBX_env *env, const volatile MDBX_meta *meta,
                             bool report) {
   const txnid_t head_txnid = meta_txnid(env, meta);
   const txnid_t freedb_mod_txnid = meta->mm_dbs[FREE_DBI].md_mod_txnid;
@@ -7875,9 +7875,9 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
   const MDBX_page *maindb_root = (env->me_map && maindb_root_pgno != P_INVALID)
                                      ? pgno2page(env, maindb_root_pgno)
                                      : nullptr;
-
   const uint64_t magic_and_version =
-      unaligned_peek_u64(4, &meta->mm_magic_and_version);
+      unaligned_peek_u64_volatile(4, &meta->mm_magic_and_version);
+
   bool ok = true;
   if (unlikely(!head_txnid || head_txnid < freedb_mod_txnid ||
                (!freedb_mod_txnid && freedb_root &&
@@ -7934,31 +7934,37 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
   return ok;
 }
 
+__cold static bool is_timeout(uint64_t *timestamp) {
+  if (likely(!*timestamp)) {
+    *timestamp = mdbx_osal_monotime();
+    return false;
+  }
+  return mdbx_osal_monotime() - *timestamp > 65536 / 10;
+}
+
 /* check with timeout as the workaround
  * for todo4recovery://erased_by_github/libmdbx/issues/269 */
-static int meta_waittxnid(const MDBX_env *env, const MDBX_meta *meta,
+static int meta_waittxnid(const MDBX_env *env, const volatile MDBX_meta *meta,
                           uint64_t *timestamp) {
   if (likely(meta_checktxnid(env, meta, !*timestamp)))
     return MDBX_SUCCESS;
 
-  if (!*timestamp)
-    *timestamp = mdbx_osal_monotime();
-  else if (unlikely(mdbx_osal_monotime() - *timestamp > 65536 / 10)) {
-    mdbx_error("bailout waiting for valid snapshot %s",
-               "(workaround for incoherent flaw of unified page/buffer cache)");
-    return MDBX_CORRUPTED;
+  if (likely(!is_timeout(timestamp))) {
+#if defined(_WIN32) || defined(_WIN64)
+    SwitchToThread();
+#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
+    sched_yield();
+#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
+    pthread_yield();
+#else
+    usleep(42);
+#endif
+    return MDBX_RESULT_TRUE;
   }
 
-#if defined(_WIN32) || defined(_WIN64)
-  SwitchToThread();
-#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
-  sched_yield();
-#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
-  pthread_yield();
-#else
-  usleep(42);
-#endif
-  return MDBX_RESULT_TRUE;
+  mdbx_error("bailout waiting for valid snapshot (%s)",
+             "workaround for incoherent flaw of unified page/buffer cache");
+  return MDBX_CORRUPTED;
 }
 
 /* Common code for mdbx_txn_begin() and mdbx_txn_renew(). */
@@ -8171,7 +8177,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     uint64_t timestamp = 0;
     while (
         "workaround for todo4recovery://erased_by_github/libmdbx/issues/269") {
-      rc = meta_waittxnid(env, (const MDBX_meta *)meta, &timestamp);
+      rc = meta_waittxnid(env, meta, &timestamp);
       if (likely(rc == MDBX_SUCCESS))
         break;
       if (unlikely(rc != MDBX_RESULT_TRUE))
