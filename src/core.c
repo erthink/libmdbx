@@ -18390,11 +18390,15 @@ __cold static int mdbx_page_check(MDBX_cursor *const mc,
 
   char *const end_of_page = (char *)mp + env->me_psize;
   const unsigned nkeys = page_numkeys(mp);
-  if (unlikely(nkeys <= IS_BRANCH(mp)) &&
-      (!(mc->mc_flags & C_SUB) || mc->mc_db->md_entries) &&
-      ((mc->mc_checking & CC_UPDATING) == 0 || !IS_MODIFIABLE(mc->mc_txn, mp)))
-    rc = bad_page(mp, "%s-page nkeys (%u) < %u\n",
-                  IS_BRANCH(mp) ? "branch" : "leaf", nkeys, 1 + IS_BRANCH(mp));
+  STATIC_ASSERT(P_BRANCH == 1);
+  if (unlikely(nkeys <= (uint8_t)(mp->mp_flags & P_BRANCH))) {
+    if ((!(mc->mc_flags & C_SUB) || mc->mc_db->md_entries) &&
+        (!(mc->mc_checking & CC_UPDATING) ||
+         !(IS_MODIFIABLE(mc->mc_txn, mp) || (mp->mp_flags & P_SUBP))))
+      rc =
+          bad_page(mp, "%s-page nkeys (%u) < %u\n",
+                   IS_BRANCH(mp) ? "branch" : "leaf", nkeys, 1 + IS_BRANCH(mp));
+  }
   if (!IS_LEAF2(mp) && unlikely(PAGEHDRSZ + mp->mp_upper +
                                     nkeys * sizeof(MDBX_node) + nkeys - 1 >
                                 env->me_psize))
