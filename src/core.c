@@ -8054,84 +8054,77 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     }
 
     /* Seek & fetch the last meta */
-    if (likely(/* not recovery mode */ env->me_stuck_meta < 0)) {
-      uint64_t timestamp = 0;
-      while (1) {
-        meta_cache_clear(env);
-        volatile const MDBX_meta *const meta = meta_prefer_last(env);
-        mdbx_jitter4testing(false);
-        const txnid_t snap = meta_txnid(env, meta);
-        mdbx_jitter4testing(false);
-        if (likely(r)) {
-          safe64_reset(&r->mr_txnid, false);
-          atomic_store32(&r->mr_snapshot_pages_used, meta->mm_geo.next,
-                         mo_Relaxed);
-          atomic_store64(&r->mr_snapshot_pages_retired,
-                         unaligned_peek_u64_volatile(4, meta->mm_pages_retired),
-                         mo_Relaxed);
-          safe64_write(&r->mr_txnid, snap);
-          mdbx_jitter4testing(false);
-          mdbx_assert(env, r->mr_pid.weak == mdbx_getpid());
-          mdbx_assert(
-              env, r->mr_tid.weak ==
-                       ((env->me_flags & MDBX_NOTLS) ? 0 : mdbx_thread_self()));
-          mdbx_assert(env, r->mr_txnid.weak == snap);
-          atomic_store32(&env->me_lck->mti_readers_refresh_flag, true,
-                         mo_AcquireRelease);
-        } else {
-          /* exclusive mode without lck */
-        }
-        mdbx_jitter4testing(true);
-
-        /* Snap the state from current meta-head */
-        txn->mt_txnid = snap;
-        txn->mt_geo = meta->mm_geo;
-        STATIC_ASSERT(CORE_DBS == 2);
-        txn->mt_dbs[0] = meta->mm_dbs[0];
-        txn->mt_dbs[1] = meta->mm_dbs[1];
-        txn->mt_canary = meta->mm_canary;
-
-        /* LY: Retry on a race, ITS#7970.
-         * The barrier is not needed here since C11-atomics are used,
-         * but it is reasonable paranoia to avoid compiler misoptimization
-         * and makes clarity for code readers. */
-        mdbx_compiler_barrier();
-        if (likely(meta == meta_prefer_last(env) &&
-                   snap == meta_txnid(env, meta) &&
-                   snap >= atomic_load64(&env->me_lck->mti_oldest_reader,
-                                         mo_AcquireRelease))) {
-          rc = meta_waittxnid(env, (const MDBX_meta *)meta, &timestamp);
-          mdbx_jitter4testing(false);
-          if (likely(rc == MDBX_SUCCESS))
-            break;
-          if (likely(rc == MDBX_RESULT_TRUE))
-            continue;
-          goto bailout;
-        }
-      }
-    } else {
-      /* r/o recovery mode */
-      MDBX_meta *const meta = METAPAGE(env, env->me_stuck_meta);
-      txn->mt_txnid = constmeta_txnid(env, meta);
-      txn->mt_geo = meta->mm_geo;
-      memcpy(txn->mt_dbs, meta->mm_dbs, CORE_DBS * sizeof(MDBX_db));
-      txn->mt_canary = meta->mm_canary;
+    uint64_t timestamp = 0;
+    unsigned loop = 0;
+    while (1) {
+      meta_cache_clear(env);
+      volatile const MDBX_meta *const meta =
+          likely(env->me_stuck_meta < 0)
+              ? /* regular */ meta_prefer_last(env)
+              : /* recovery mode */ METAPAGE(env, env->me_stuck_meta);
+      mdbx_jitter4testing(false);
+      const txnid_t target_txnid = meta_txnid(env, meta);
+      mdbx_jitter4testing(false);
       if (likely(r)) {
+        safe64_reset(&r->mr_txnid, false);
         atomic_store32(&r->mr_snapshot_pages_used, meta->mm_geo.next,
                        mo_Relaxed);
         atomic_store64(&r->mr_snapshot_pages_retired,
-                       unaligned_peek_u64(4, meta->mm_pages_retired),
+                       unaligned_peek_u64_volatile(4, meta->mm_pages_retired),
                        mo_Relaxed);
-        atomic_store64(&r->mr_txnid, txn->mt_txnid, mo_Relaxed);
+        safe64_write(&r->mr_txnid, target_txnid);
         mdbx_jitter4testing(false);
         mdbx_assert(env, r->mr_pid.weak == mdbx_getpid());
         mdbx_assert(
             env, r->mr_tid.weak ==
                      ((env->me_flags & MDBX_NOTLS) ? 0 : mdbx_thread_self()));
-        mdbx_assert(env, r->mr_txnid.weak == txn->mt_txnid);
+        mdbx_assert(env,
+                    r->mr_txnid.weak == target_txnid ||
+                        (r->mr_txnid.weak >= SAFE64_INVALID_THRESHOLD &&
+                         target_txnid < env->me_lck->mti_oldest_reader.weak));
         atomic_store32(&env->me_lck->mti_readers_refresh_flag, true,
-                       mo_Relaxed);
+                       mo_AcquireRelease);
+      } else {
+        /* exclusive mode without lck */
+        mdbx_assert(env, !env->me_lck_mmap.lck &&
+                             env->me_lck == (void *)&env->x_lckless_stub);
       }
+      mdbx_jitter4testing(true);
+
+      /* Snap the state from current meta-head */
+      txn->mt_txnid = target_txnid;
+      txn->mt_geo = meta->mm_geo;
+      STATIC_ASSERT(CORE_DBS == 2);
+      txn->mt_dbs[0] = meta->mm_dbs[0];
+      txn->mt_dbs[1] = meta->mm_dbs[1];
+      txn->mt_canary = meta->mm_canary;
+
+      /* LY: Retry on a race, ITS#7970.
+       * The barrier is not needed here since C11-atomics are used,
+       * but it is reasonable paranoia to avoid compiler misoptimization
+       * and makes clarity for code readers. */
+      mdbx_compiler_barrier();
+      const txnid_t oldest =
+          atomic_load64(&env->me_lck->mti_oldest_reader, mo_AcquireRelease);
+      if (unlikely(target_txnid < oldest ||
+                   (meta != meta_prefer_last(env) && env->me_stuck_meta < 0) ||
+                   target_txnid != meta_txnid(env, meta))) {
+        if (unlikely(++loop > 42)) {
+          mdbx_error("bailout waiting for valid snapshot (%s)",
+                     "metapages are too volatile");
+          rc = MDBX_PROBLEM;
+          goto bailout;
+        }
+        timestamp = 0;
+        continue;
+      }
+
+      rc = meta_waittxnid(env, meta, &timestamp);
+      mdbx_jitter4testing(false);
+      if (likely(rc == MDBX_SUCCESS))
+        break;
+      if (unlikely(rc != MDBX_RESULT_TRUE))
+        goto bailout;
     }
 
     if (unlikely(txn->mt_txnid < MIN_TXNID || txn->mt_txnid > MAX_TXNID)) {
