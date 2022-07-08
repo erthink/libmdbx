@@ -6907,7 +6907,7 @@ __cold static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num,
       if (head != steady && META_IS_STEADY(steady) &&
           detent == constmeta_txnid(env, steady) + 1) {
         mdbx_debug("gc-kick-steady: head %" PRIaTXN "-%s, tail %" PRIaTXN
-                   "-%s, oldest %" PRIaTXN,
+                   "-%s, detent %" PRIaTXN,
                    constmeta_txnid(env, head), mdbx_durable_str(head),
                    constmeta_txnid(env, steady), mdbx_durable_str(steady),
                    detent);
