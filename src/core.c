@@ -15998,7 +15998,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         if (mc->mc_ki[mc->mc_top])
           err = mdbx_update_key(mc, key);
         mdbx_cassert(mc, mc->mc_top + dtop < UINT16_MAX);
-        mc->mc_top += (uint16_t)dtop;
+        mc->mc_top += (uint8_t)dtop;
         if (unlikely(err != MDBX_SUCCESS))
           return err;
       }
@@ -16857,7 +16857,7 @@ static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
 
 #if MDBX_DEBUG > 0
   if (mdbx_audit_enabled()) {
-    const unsigned checking = mc->mc_checking;
+    const uint8_t checking = mc->mc_checking;
     mc->mc_checking |= CC_UPDATING;
     const int page_check_err = mdbx_page_check(mc, mp);
     mc->mc_checking = checking;
@@ -17512,8 +17512,8 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       }
 
       /* restore cursor after mdbx_page_search_lowest() */
-      csrc->mc_snum = snum;
-      csrc->mc_top = snum - 1;
+      csrc->mc_snum = (uint8_t)snum;
+      csrc->mc_top = (uint8_t)snum - 1;
       csrc->mc_ki[csrc->mc_top] = 0;
 
       /* paranoia */
@@ -17547,8 +17547,8 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
       }
 
       /* restore cursor after mdbx_page_search_lowest() */
-      mn.mc_snum = snum;
-      mn.mc_top = snum - 1;
+      mn.mc_snum = (uint8_t)snum;
+      mn.mc_top = (uint8_t)snum - 1;
       mn.mc_ki[mn.mc_top] = 0;
 
       const intptr_t delta =
@@ -17985,8 +17985,8 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
   if (top_page == cdst->mc_pg[new_snum - 1]) {
     mdbx_cassert(cdst, cdst->mc_ki[new_snum - 1] == top_indx);
     /* LY: restore cursor stack */
-    cdst->mc_snum = (uint16_t)new_snum;
-    cdst->mc_top = (uint16_t)new_snum - 1;
+    cdst->mc_snum = (uint8_t)new_snum;
+    cdst->mc_top = (uint8_t)new_snum - 1;
     mdbx_cassert(cdst, cdst->mc_snum < cdst->mc_db->md_depth ||
                            IS_LEAF(cdst->mc_pg[cdst->mc_db->md_depth - 1]));
     mdbx_cassert(cdst,
@@ -18007,8 +18007,8 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
     cdst->mc_ki[new_snum - 1] = top_indx;
     cdst->mc_pg[new_snum] = (MDBX_page *)(~(uintptr_t)cdst->mc_pg[new_snum]);
     cdst->mc_ki[new_snum] = ~cdst->mc_ki[new_snum];
-    cdst->mc_snum = (uint16_t)new_snum;
-    cdst->mc_top = (uint16_t)new_snum - 1;
+    cdst->mc_snum = (uint8_t)new_snum;
+    cdst->mc_top = (uint8_t)new_snum - 1;
     mdbx_cassert(cdst, cdst->mc_snum < cdst->mc_db->md_depth ||
                            IS_LEAF(cdst->mc_pg[cdst->mc_db->md_depth - 1]));
     mdbx_cassert(cdst,
@@ -18757,7 +18757,7 @@ __cold static int mdbx_cursor_check(MDBX_cursor *mc) {
 }
 
 __cold static int mdbx_cursor_check_updating(MDBX_cursor *mc) {
-  const unsigned checking = mc->mc_checking;
+  const uint8_t checking = mc->mc_checking;
   mc->mc_checking |= CC_UPDATING;
   const int rc = mdbx_cursor_check(mc);
   mc->mc_checking = checking;
@@ -19367,12 +19367,12 @@ static int mdbx_page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
               page_node(mc->mc_pg[mc->mc_top - i], mc->mc_ki[mc->mc_top - i]),
               &sepkey);
           if (mc->mc_dbx->md_cmp(newkey, &sepkey) < 0) {
-            mc->mc_top -= i;
+            mc->mc_top -= (uint8_t)i;
             mdbx_debug("update new-first on parent [%i] page %u key %s",
                        mc->mc_ki[mc->mc_top], mc->mc_pg[mc->mc_top]->mp_pgno,
                        DKEY(newkey));
             rc = mdbx_update_key(mc, newkey);
-            mc->mc_top += i;
+            mc->mc_top += (uint8_t)i;
             if (unlikely(rc != MDBX_SUCCESS))
               goto done;
           }
