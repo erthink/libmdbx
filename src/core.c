@@ -16861,7 +16861,6 @@ static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
   mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_upper >= sz);
   mp->mp_upper += (indx_t)sz;
 
-#if MDBX_DEBUG > 0
   if (mdbx_audit_enabled()) {
     const uint8_t checking = mc->mc_checking;
     mc->mc_checking |= CC_UPDATING;
@@ -16869,7 +16868,6 @@ static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
     mc->mc_checking = checking;
     mdbx_cassert(mc, page_check_err == MDBX_SUCCESS);
   }
-#endif /* MDBX_DEBUG > 0 */
 }
 
 /* Compact the main page after deleting a node on a subpage.
