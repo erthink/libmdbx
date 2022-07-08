@@ -5070,11 +5070,12 @@ LIBMDBX_API int mdbx_thread_unregister(const MDBX_env *env);
  *                     this value into account to evaluate the impact that
  *                     a long-running transaction has.
  * \param [in] retry   A retry number starting from 0.
- *                     If callback has returned 0 at least once, then at end
- *                     of current handling loop the callback function will be
- *                     called additionally with negative value to notify about
- *                     the end of loop. The callback function can use this value
- *                     to implement timeout logic while waiting for readers.
+ *                     If callback has returned 0 at least once, then at end of
+ *                     current handling loop the callback function will be
+ *                     called additionally with negative `retry` value to notify
+ *                     about the end of loop. The callback function can use this
+ *                     fact to implement timeout reset logic while waiting for
+ *                     a readers.
  *
  * \returns The RETURN CODE determines the further actions libmdbx and must
  *          match the action which was executed by the callback:
