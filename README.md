@@ -394,20 +394,20 @@ since release the version 1.0.
 
 _libmdbx_ provides two official ways for integration in source code form:
 
-1. Using the amalgamated source code.
-   > The amalgamated source code includes all files required to build and
+1. Using an amalgamated source code which available in the [releases section](https://gitflic.ru/project/erthink/libmdbx/release) on GitFlic.
+   > An amalgamated source code includes all files required to build and
    > use _libmdbx_, but not for testing _libmdbx_ itself.
+   > Beside the releases an amalgamated sources could be created any time from the original clone of git
+   > repository on Linux by executing `make dist`. As a result, the desired
+   > set of files will be formed in the `dist` subdirectory.
 
-2. Adding the complete original source code as a `git submodule`.
+2. Adding the complete source code as a `git submodule` from the [origin git repository](https://gitflic.ru/project/erthink/libmdbx) on GitFlic.
    > This allows you to build as _libmdbx_ and testing tool.
    >  On the other hand, this way requires you to pull git tags, and use C++11 compiler for test tool.
 
 _**Please, avoid using any other techniques.**_ Otherwise, at least
 don't ask for support and don't name such chimeras `libmdbx`.
 
-The amalgamated source code could be created from the original clone of git
-repository on Linux by executing `make dist`. As a result, the desired
-set of files will be formed in the `dist` subdirectory.
 
 
 ## Building and Testing
