@@ -4,7 +4,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_sync_locked
+   fun:mdbx_sync_locked*
 }
 {
    msync-whole-mmap-2
@@ -12,7 +12,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_env_sync_internal
+   fun:mdbx_env_sync_internal*
 }
 {
    msync-whole-mmap-3
@@ -20,7 +20,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_mapresize
+   fun:mdbx_mapresize*
 }
 {
    msync-wipe-steady
@@ -28,7 +28,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_wipe_steady
+   fun:mdbx_wipe_steady*
 }
 
 # memcmp() inside mdbx_iov_write() as workaround for todo4recovery://erased_by_github/libmdbx/issues/269

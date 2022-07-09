@@ -1,19 +1,19 @@
 ChangeLog
 ---------
 
-## v0.12.1 (scheduled to 2022-08-24)
+## v0.12.1 (Positive Proxima) scheduled to 2022-08-24
 
-The release with set of new features.
+The planned frontward release with new superior features on the day of 20 anniversary of [Positive Technologies](https://ptsecurty.com).
 
 New:
 
- - Added the `Big Foot` feature which significantly reduces GC overhead for processing large lists of retired pages from huge transactions.
+ - The `Big Foot` feature which significantly reduces GC overhead for processing large lists of retired pages from huge transactions.
    Now _libmdbx_ avoid creating large chunks of PNLs (page number lists) which required a long sequences of free pages, aka large/overflow pages.
    Thus avoiding searching, allocating and storing such sequences inside GC.
- - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
- - Added the `MDBX_VALIDATION` environment options to extra validation of DB structure and pages content for carefully/safe handling damaged or untrusted DB.
  - Improved hot/online validation and checking of database pages both for more robustness and performance.
- - Added optionally cache for pointers to last/steady meta-pages (currently is off by default).
+ - New `MDBX_VALIDATION` environment options to extra validation of DB structure and pages content for carefully/safe handling damaged or untrusted DB.
+ - Optionally cache for pointers to last/steady meta-pages (currently is off by default).
+ - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
  - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
 
 ## v0.12.0 at 2022-06-19
@@ -24,9 +24,10 @@ Not a release but preparation for changing feature set and API.
 -------------------------------------------------------------------------------
 
 
-## v0.11.9 (scheduled to 2022-08-02)
+## v0.11.9 (Чирчик-1992) scheduled to 2022-08-02
 
 The stable bugfix release.
+It is planned that this will be the last release of the v0.11 branch.
 
 New:
 
@@ -43,12 +44,15 @@ Minors:
  - Fixed copy&paste typo inside `meta_checktxnid()`.
  - Minor fix `meta_checktxnid()` to avoid assertion in debug mode.
  - Minor fix `mdbx_env_set_geometry()` to avoid returning `EINVAL` in particular rare cases.
+ - Minor refine/fix batch-get testcase for large page size.
+ - Added `--pagesize NN` option to long-stotastic test script.
+ - Updated Valgrind-suppressions file for modern GCC.
 
 
 -------------------------------------------------------------------------------
 
 
-## v0.11.8 at 2022-06-12
+## v0.11.8 (Baked Apple) at 2022-06-12
 
 The stable release with an important fixes and workaround for the critical macOS thread-local-storage issue.
 
@@ -74,6 +78,7 @@ Fixes:
  - Fixed `mdbx_check_fs_local()` for CDROM case on Windows.
  - Fixed nasty typo of typename which caused false `MDBX_CORRUPTED` error in a rare execution path,
    when the size of the thread-ID type not equal to 8.
+ - Fixed Elbrus/E2K LCC 1.26 compiler warnings (memory model for atomic operations, etc).
  - Fixed write-after-free memory corruption on latest `macOS` during finalization/cleanup of thread(s) that executed read transaction(s).
    > The issue was suddenly discovered by a [CI](https://en.wikipedia.org/wiki/Continuous_integration)
    > after adding an iteration with macOS 11 "Big Sur", and then reproduced on recent release of macOS 12 "Monterey".
@@ -85,7 +90,6 @@ Fixes:
    > This is unexpected crazy-like behavior since the order of resources releasing/destroying
    > is not the reverse of ones acquiring/construction order. Nonetheless such surprise
    > is now workarounded by using atomic compare-and-swap operations on a 64-bit signatures/cookies.
- - Fixed Elbrus/E2K LCC 1.26 compiler warnings (memory model for atomic operations, etc).
 
 Minors:
 
@@ -101,7 +105,7 @@ Minors:
 -------------------------------------------------------------------------------
 
 
-## v0.11.7 at 2022-04-22
+## v0.11.7 (Resurrected Sarmat) at 2022-04-22
 
 The stable risen release after the Github's intentional malicious disaster.
 
