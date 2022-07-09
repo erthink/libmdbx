@@ -19839,8 +19839,15 @@ __cold static int compacting_walk_tree(mdbx_compacting_ctx *ctx,
                                           &nested->md_root, mp->mp_txnid);
               }
             } else {
+              mdbx_cassert(mc,
+                           (mc->mc_flags & C_SUB) == 0 && mc->mc_xcursor == 0);
               MDBX_cursor_couple *couple =
-                  container_of(mc, MDBX_cursor_couple, inner.mx_cursor);
+                  container_of(mc, MDBX_cursor_couple, outer);
+              mdbx_cassert(mc, couple->inner.mx_cursor.mc_signature ==
+                                       ~MDBX_MC_LIVE &&
+                                   !couple->inner.mx_cursor.mc_flags &&
+                                   !couple->inner.mx_cursor.mc_db &&
+                                   !couple->inner.mx_cursor.mc_dbx);
               nested = &couple->inner.mx_db;
               memcpy(nested, node_data(node), sizeof(MDBX_db));
               rc = compacting_walk_sdb(ctx, nested);
@@ -19908,6 +19915,8 @@ __cold static int compacting_walk_sdb(mdbx_compacting_ctx *ctx, MDBX_db *sdb) {
     return MDBX_SUCCESS; /* empty db */
 
   MDBX_cursor_couple couple;
+  memset(&couple, 0, sizeof(couple));
+  couple.inner.mx_cursor.mc_signature = ~MDBX_MC_LIVE;
   MDBX_dbx dbx = {.md_klen_min = INT_MAX};
   uint8_t dbistate = DBI_VALID | DBI_AUDITED;
   int rc = mdbx_couple_init(&couple, ~0u, ctx->mc_txn, sdb, &dbx, &dbistate);
