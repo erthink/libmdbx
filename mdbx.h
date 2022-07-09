@@ -1023,7 +1023,11 @@ LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 enum MDBX_env_flags_t {
   MDBX_ENV_DEFAULTS = 0,
 
-  /** Extra validation of DB structure and pages content. */
+  /** Extra validation of DB structure and pages content.
+   *
+   * The `MDBX_VALIDATION` enabled the simple safe/careful mode for working
+   * with damaged or untrusted DB. However, a notable performance
+   * degradation should be expected. */
   MDBX_VALIDATION = UINT32_C(0x00002000),
 
   /** No environment directory.
