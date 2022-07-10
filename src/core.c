@@ -5743,12 +5743,12 @@ constmeta_txnid(const MDBX_env *env, const MDBX_meta *meta) {
 }
 
 static __inline void meta_cache_clear(MDBX_env *env) {
-#if MDBX_CACHE_METAS
+#if MDBX_CACHE_METAPTR
   env->cache_last_meta = nullptr;
   env->cache_steady_meta = nullptr;
 #else
   (void)env;
-#endif /* MDBX_CACHE_METAS */
+#endif /* MDBX_CACHE_METAPTR */
 }
 
 static __inline txnid_t meta_txnid(const MDBX_env *env,
@@ -5888,44 +5888,41 @@ meta_mostrecent(const enum meta_choise_mode mode, const MDBX_env *env) {
 
 static volatile const MDBX_meta *meta_prefer_steady(const MDBX_env *env) {
   return
-#if MDBX_CACHE_METAS
+#if MDBX_CACHE_METAPTR
       ((MDBX_env *)env)->cache_steady_meta =
-#endif /* MDBX_CACHE_METAS */
+#endif /* MDBX_CACHE_METAPTR */
           meta_mostrecent(prefer_steady, env);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static const MDBX_meta *
 constmeta_prefer_steady(const MDBX_env *env) {
-#if MDBX_CACHE_METAS
-  mdbx_assert(env, !env->cache_steady_meta ||
-                       env->cache_steady_meta ==
-                           meta_mostrecent(prefer_steady, env));
-  return (const MDBX_meta *)(env->cache_steady_meta ? env->cache_steady_meta :
-#else
-  return (const MDBX_meta *)(
-#endif /* MDBX_CACHE_METAS */
-                                                    meta_prefer_steady(env));
+#if MDBX_CACHE_METAPTR
+  if (likely(env->cache_steady_meta)) {
+    mdbx_assert(env,
+                env->cache_steady_meta == meta_mostrecent(prefer_steady, env));
+    return (const MDBX_meta *)env->cache_steady_meta;
+  }
+#endif /* MDBX_CACHE_METAPTR */
+  return (const MDBX_meta *)meta_prefer_steady(env);
 }
 
 static volatile const MDBX_meta *meta_prefer_last(const MDBX_env *env) {
   return
-#if MDBX_CACHE_METAS
+#if MDBX_CACHE_METAPTR
       ((MDBX_env *)env)->cache_last_meta =
-#endif /* MDBX_CACHE_METAS */
+#endif /* MDBX_CACHE_METAPTR */
           meta_mostrecent(prefer_last, env);
 }
 
 MDBX_NOTHROW_PURE_FUNCTION static const MDBX_meta *
 constmeta_prefer_last(const MDBX_env *env) {
-#if MDBX_CACHE_METAS
-  mdbx_assert(env,
-              !env->cache_last_meta ||
-                  env->cache_last_meta == meta_mostrecent(prefer_last, env));
-  return (const MDBX_meta *)(env->cache_last_meta ? env->cache_last_meta :
-#else
-  return (const MDBX_meta *)(
-#endif /* MDBX_CACHE_METAS */
-                                                  meta_prefer_last(env));
+#if MDBX_CACHE_METAPTR
+  if (likely(env->cache_last_meta)) {
+    mdbx_assert(env, env->cache_last_meta == meta_mostrecent(prefer_last, env));
+    return (const MDBX_meta *)env->cache_last_meta;
+  }
+#endif /* MDBX_CACHE_METAPTR */
+  return (const MDBX_meta *)meta_prefer_last(env);
 }
 
 static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
