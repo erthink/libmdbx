@@ -1099,16 +1099,16 @@ static __always_inline void safe64_reset(MDBX_atomic_uint64_t *p,
   } else {
 #if MDBX_64BIT_CAS && MDBX_64BIT_ATOMIC
     /* atomically make value >= SAFE64_INVALID_THRESHOLD by 64-bit operation */
-    atomic_store64(p, UINT64_MAX, mo_SequentialConsistency);
+    atomic_store64(p, UINT64_MAX, mo_AcquireRelease);
 #elif MDBX_64BIT_CAS
     /* atomically make value >= SAFE64_INVALID_THRESHOLD by 32-bit operation */
-    atomic_store32(&p->high, UINT32_MAX, mo_SequentialConsistency);
+    atomic_store32(&p->high, UINT32_MAX, mo_AcquireRelease);
 #else
     /* it is safe to increment low-part to avoid ABA, since xMDBX_TXNID_STEP > 1
      * and overflow was preserved in safe64_txnid_next() */
     STATIC_ASSERT(xMDBX_TXNID_STEP > 1);
     atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
-    atomic_store32(&p->high, UINT32_MAX, mo_SequentialConsistency);
+    atomic_store32(&p->high, UINT32_MAX, mo_AcquireRelease);
     atomic_add32(&p->low, 1) /* avoid ABA in safe64_reset_compare() */;
 #endif /* MDBX_64BIT_CAS && MDBX_64BIT_ATOMIC */
   }
@@ -1794,8 +1794,7 @@ static int uniq_poke(const mdbx_mmap_t *pending, mdbx_mmap_t *scan,
           << 24 |
       *abra >> 40;
   MDBX_lockinfo *const scan_lck = scan->lck;
-  atomic_store64(&scan_lck->mti_bait_uniqueness, cadabra,
-                 mo_SequentialConsistency);
+  atomic_store64(&scan_lck->mti_bait_uniqueness, cadabra, mo_AcquireRelease);
   *abra = *abra * UINT64_C(6364136223846793005) + 1;
   return uniq_peek(pending, scan);
 }
@@ -7787,7 +7786,7 @@ static bind_rslot_result bind_rslot(MDBX_env *env, const uintptr_t tid) {
    * slot, next publish it in lck->mti_numreaders.  After
    * that, it is safe for mdbx_env_close() to touch it.
    * When it will be closed, we can finally claim it. */
-  atomic_store32(&result.rslot->mr_pid, 0, mo_SequentialConsistency);
+  atomic_store32(&result.rslot->mr_pid, 0, mo_AcquireRelease);
   safe64_reset(&result.rslot->mr_txnid, true);
   if (slot == nreaders)
     env->me_lck->mti_numreaders.weak = ++nreaders;

@@ -218,8 +218,8 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 
 enum MDBX_memory_order {
   mo_Relaxed,
-  mo_AcquireRelease,
-  mo_SequentialConsistency
+  mo_AcquireRelease
+  /* , mo_SequentialConsistency */
 };
 
 typedef union {
