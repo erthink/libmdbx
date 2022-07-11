@@ -5999,13 +5999,13 @@ static txnid_t find_oldest_reader(MDBX_env *env) {
           break;
       }
     }
+  }
 
-    if (new_oldest != prev_oldest) {
-      mdbx_verbose("update oldest %" PRIaTXN " -> %" PRIaTXN, prev_oldest,
-                   new_oldest);
-      mdbx_assert(env, new_oldest >= lck->mti_oldest_reader.weak);
-      atomic_store64(&lck->mti_oldest_reader, new_oldest, mo_Relaxed);
-    }
+  if (new_oldest != prev_oldest) {
+    mdbx_verbose("update oldest %" PRIaTXN " -> %" PRIaTXN, prev_oldest,
+                 new_oldest);
+    mdbx_assert(env, new_oldest >= lck->mti_oldest_reader.weak);
+    atomic_store64(&lck->mti_oldest_reader, new_oldest, mo_Relaxed);
   }
   return new_oldest;
 }
