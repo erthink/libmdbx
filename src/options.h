@@ -370,14 +370,11 @@
 #endif /* MDBX_64BIT_CAS */
 
 #ifndef MDBX_UNALIGNED_OK
-#if defined(__ALIGNED__) || defined(__SANITIZE_UNDEFINED__)
+#if defined(__ALIGNED__) || defined(__SANITIZE_UNDEFINED__) ||                 \
+    defined(ENABLE_UBSAN)
 #define MDBX_UNALIGNED_OK 0 /* no unaligned access allowed */
 #elif defined(__ARM_FEATURE_UNALIGNED)
 #define MDBX_UNALIGNED_OK 4 /* ok unaligned for 32-bit words */
-#elif __CLANG_PREREQ(5, 0) || __GNUC_PREREQ(5, 0)
-/* expecting an optimization will well done, also this
- * hushes false-positives from UBSAN (undefined behaviour sanitizer) */
-#define MDBX_UNALIGNED_OK 0
 #elif defined(__e2k__) || defined(__elbrus__)
 #if __iset__ > 4
 #define MDBX_UNALIGNED_OK 8 /* ok unaligned for 64-bit words */
@@ -386,6 +383,10 @@
 #endif
 #elif defined(__ia32__)
 #define MDBX_UNALIGNED_OK 8 /* ok unaligned for 64-bit words */
+#elif __CLANG_PREREQ(5, 0) || __GNUC_PREREQ(5, 0)
+/* expecting an optimization will well done, also this
+ * hushes false-positives from UBSAN (undefined behaviour sanitizer) */
+#define MDBX_UNALIGNED_OK 0
 #else
 #define MDBX_UNALIGNED_OK 0 /* no unaligned access allowed */
 #endif
