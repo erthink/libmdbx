@@ -548,6 +548,8 @@ __extern_C key_t ftok(const char *, int);
     (defined(__linux__) || defined(__gnu_linux__))
 /* just put frequently used functions in separate section */
 #define __hot __attribute__((__section__("text.hot"))) __optimize("O3")
+#elif defined(__LCC__)
+#define __hot __attribute__((__hot__, __optimize__("Ofast,O4")))
 #elif defined(__GNUC__) || __has_attribute(__hot__)
 #define __hot __attribute__((__hot__)) __optimize("O3")
 #else
@@ -567,6 +569,8 @@ __extern_C key_t ftok(const char *, int);
     (defined(__linux__) || defined(__gnu_linux__))
 /* just put infrequently used functions in separate section */
 #define __cold __attribute__((__section__("text.unlikely"))) __optimize("Os")
+#elif defined(__LCC__)
+#define __hot __attribute__((__cold__, __optimize__("Osize")))
 #elif defined(__GNUC__) || __has_attribute(cold)
 #define __cold __attribute__((__cold__)) __optimize("Os")
 #else
