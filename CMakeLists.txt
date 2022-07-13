@@ -569,7 +569,10 @@ else()
       "${MDBX_SOURCE_DIR}/options.h" "${MDBX_SOURCE_DIR}/base.h"
       "${MDBX_SOURCE_DIR}/internals.h" "${MDBX_SOURCE_DIR}/osal.h"
       "${MDBX_SOURCE_DIR}/core.c" "${MDBX_SOURCE_DIR}/osal.c"
-      "${MDBX_SOURCE_DIR}/lck-posix.c" "${MDBX_SOURCE_DIR}/lck-windows.c")
+      "${MDBX_SOURCE_DIR}/lck-posix.c")
+    if(NOT APPLE)
+      list(APPEND LIBMDBX_SOURCES  "${MDBX_SOURCE_DIR}/lck-windows.c")
+    endif()
     include_directories("${MDBX_SOURCE_DIR}")
   endif()
 endif(MDBX_AMALGAMATED_SOURCE)
