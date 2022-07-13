@@ -214,12 +214,6 @@ MDBX_MAYBE_UNUSED PATH pchar_to_path(const char *c_str) {
   return PATH(c_str);
 }
 
-template <> struct path_to_pchar<std::string> {
-  const char *const ptr;
-  path_to_pchar(const std::string &path) : ptr(path.c_str()) {}
-  operator const char *() const { return ptr; }
-};
-
 #if defined(_WIN32) || defined(_WIN64)
 
 #ifndef WC_ERR_INVALID_CHARS
@@ -1271,15 +1265,19 @@ env &env::copy(const ::std::wstring &destination, bool compactify,
 }
 #endif /* Windows */
 
-env &env::copy(const ::std::string &destination, bool compactify,
+env &env::copy(const char *destination, bool compactify,
                bool force_dynamic_size) {
-  const path_to_pchar<::std::string> utf8(destination);
   error::success_or_throw(
-      ::mdbx_env_copy(handle_, utf8,
+      ::mdbx_env_copy(handle_, destination,
                       (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
                           (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
                                               : MDBX_CP_DEFAULTS)));
   return *this;
+}
+
+env &env::copy(const ::std::string &destination, bool compactify,
+               bool force_dynamic_size) {
+  return copy(destination.c_str(), compactify, force_dynamic_size);
 }
 
 env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
@@ -1314,10 +1312,13 @@ bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
 }
 #endif /* Windows */
 
-bool env::remove(const ::std::string &pathname, const remove_mode mode) {
-  const path_to_pchar<::std::string> utf8(pathname);
+bool env::remove(const char *pathname, const remove_mode mode) {
   return error::boolean_or_throw(
-      ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
+      ::mdbx_env_delete(pathname, MDBX_env_delete_mode_t(mode)));
+}
+
+bool env::remove(const ::std::string &pathname, const remove_mode mode) {
+  return remove(pathname.c_str(), mode);
 }
 
 //------------------------------------------------------------------------------
@@ -1418,34 +1419,41 @@ __cold env_managed::env_managed(const ::std::wstring &pathname,
 }
 #endif /* Windows */
 
-__cold env_managed::env_managed(const ::std::string &pathname,
+__cold env_managed::env_managed(const char *pathname,
                                 const operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
-  const path_to_pchar<::std::string> utf8(pathname);
   error::success_or_throw(
-      ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
+      ::mdbx_env_open(handle_, pathname, op.make_flags(accede), 0));
 
   if (op.options.nested_write_transactions &&
       !get_options().nested_write_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
 
-__cold env_managed::env_managed(const ::std::string &pathname,
+__cold env_managed::env_managed(const char *pathname,
                                 const env_managed::create_parameters &cp,
                                 const env::operate_parameters &op, bool accede)
     : env_managed(create_env()) {
   setup(op.max_maps, op.max_readers);
-  const path_to_pchar<::std::string> utf8(pathname);
   set_geometry(cp.geometry);
-  error::success_or_throw(
-      ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),
-                      cp.file_mode_bits));
+  error::success_or_throw(::mdbx_env_open(
+      handle_, pathname, op.make_flags(accede, cp.use_subdirectory),
+      cp.file_mode_bits));
 
   if (op.options.nested_write_transactions &&
       !get_options().nested_write_transactions)
     MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
 }
+
+__cold env_managed::env_managed(const ::std::string &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(pathname.c_str(), op, accede) {}
+
+__cold env_managed::env_managed(const ::std::string &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(pathname.c_str(), cp, op, accede) {}
 
 //------------------------------------------------------------------------------
 
