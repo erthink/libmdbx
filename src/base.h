@@ -158,6 +158,7 @@
 #endif
 
 #ifdef __APPLE__
+#include <AvailabilityMacros.h>
 #ifndef MAC_OS_X_VERSION_MIN_REQUIRED
 #define MAC_OS_X_VERSION_MIN_REQUIRED 1070 /* Mac OS X 10.7, 2011 */
 #endif
