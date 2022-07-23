@@ -29,14 +29,22 @@ Not a release but preparation for changing feature set and API.
 The stable bugfix release.
 It is planned that this will be the last release of the v0.11 branch.
 
+Acknowledgements:
+
+ - [Alex Sharov](https://github.com/AskAlexSharov) and Erigon team for reporting and testing.
+ - [Andrew Ashikhmin](https://gitflic.ru/user/yperbasis) for contributing.
+
 New:
 
  - Ability to customise `MDBX_LOCK_SUFFIX`, `MDBX_DATANAME`, `MDBX_LOCKNAME` just by predefine ones during build.
+ - Added to [`mdbx::env_managed`](https://libmdbx.dqdkfa.ru/group__cxx__api.html#classmdbx_1_1env__managed)'s methods a few overloads with `const char* pathname` parameter (C++ API).
 
 Fixes:
 
  - Fixed hang copy-with-compactification of a corrupted DB
    or in case the volume of output pages is a multiple of `MDBX_ENVCOPY_WRITEBUF`.
+ - Fixed standalone non-CMake build on MacOS (`#include AvailabilityMacros.h>`).
+ - Fixed unexpected `MDBX_PAGE_FULL` error in rare cases with large database page sizes.
 
 Minors:
 
@@ -47,6 +55,7 @@ Minors:
  - Minor refine/fix batch-get testcase for large page size.
  - Added `--pagesize NN` option to long-stotastic test script.
  - Updated Valgrind-suppressions file for modern GCC.
+ - Fixed `has no symbols` warning from Apple's ranlib.
 
 
 -------------------------------------------------------------------------------
