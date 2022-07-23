@@ -7417,7 +7417,9 @@ retry:;
   if (!inside_txn) {
     if (!locked) {
       int err;
+#if MDBX_ENABLE_PGOP_STAT
       unsigned wops = 0;
+#endif /* MDBX_ENABLE_PGOP_STAT */
       /* pre-sync to avoid latency for writer */
       if (unsynced_pages > /* FIXME: define threshold */ 16 &&
           (flags & MDBX_SAFE_NOSYNC) == 0) {
@@ -7446,8 +7448,10 @@ retry:;
         if (unlikely(err != MDBX_SUCCESS))
           return err;
 
-        /* pre-sync done */
+#if MDBX_ENABLE_PGOP_STAT
         wops = 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+        /* pre-sync done */
         rc = MDBX_SUCCESS /* means "some data was synced" */;
       }
 
