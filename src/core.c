@@ -14181,7 +14181,9 @@ __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
   } else {
     assert(false);
   }
-#endif /* !MDBX_DISABLE_VALIDATION */
+#else
+  (void)ILL;
+#endif /* MDBX_DISABLE_VALIDATION */
 
   if (unlikely(mc->mc_checking & CC_PAGECHECK) &&
       unlikely(MDBX_SUCCESS != (r.err = mdbx_page_check(mc, r.page))))
