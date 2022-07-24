@@ -3215,25 +3215,49 @@ static __always_inline bool mdbx_pnl_check4assert(const MDBX_PNL pl,
   return mdbx_pnl_check(pl, limit);
 }
 
-/* Merge an PNL onto an PNL. The destination PNL must be big enough */
-static void __hot mdbx_pnl_xmerge(MDBX_PNL dst, const MDBX_PNL src) {
+static __always_inline void
+pnl_merge_inner(pgno_t *__restrict dst, const pgno_t *__restrict src_a,
+                const pgno_t *__restrict src_b,
+                const pgno_t *__restrict const src_b_detent) {
+  do {
+#if MDBX_HAVE_CMOV
+    const bool flag = MDBX_PNL_ORDERED(*src_b, *src_a);
+#if defined(__LCC__) || __CLANG_PREREQ(13, 0)
+    // lcc 1.26: 13ШК (подготовка и первая итерация) + 7ШК (цикл), БЕЗ loop-mode
+    // gcc>=7: cmp+jmp с возвратом в тело цикла (WTF?)
+    // gcc<=6: cmov×3
+    // clang<=12: cmov×3
+    // clang>=13: cmov, set+add/sub
+    *dst = flag ? *src_a-- : *src_b--;
+#else
+    // gcc: cmov, cmp+set+add/sub
+    // clang<=5: cmov×2, set+add/sub
+    // clang>=6: cmov, set+add/sub
+    *dst = flag ? *src_a : *src_b;
+    src_b += flag - 1;
+    src_a -= flag;
+#endif
+    --dst;
+#else  /* MDBX_HAVE_CMOV */
+    while (MDBX_PNL_ORDERED(*src_b, *src_a))
+      *dst-- = *src_a--;
+    *dst-- = *src_b--;
+#endif /* !MDBX_HAVE_CMOV */
+  } while (likely(src_b > src_b_detent));
+}
+
+/* Merge a PNL onto a PNL. The destination PNL must be big enough */
+static void __hot pnl_merge(MDBX_PNL dst, const MDBX_PNL src) {
   assert(mdbx_pnl_check4assert(dst, MAX_PAGENO + 1));
   assert(mdbx_pnl_check(src, MAX_PAGENO + 1));
-  if (likely(MDBX_PNL_SIZE(src) > 0)) {
-    const size_t total = MDBX_PNL_SIZE(dst) + MDBX_PNL_SIZE(src);
+  const pgno_t src_len = MDBX_PNL_SIZE(src);
+  const pgno_t dst_len = MDBX_PNL_SIZE(dst);
+  if (likely(src_len > 0)) {
+    const pgno_t total = dst_len + src_len;
     assert(MDBX_PNL_ALLOCLEN(dst) >= total);
-    pgno_t *w = dst + total;
-    pgno_t *d = dst + MDBX_PNL_SIZE(dst);
-    const pgno_t *s = src + MDBX_PNL_SIZE(src);
-    dst[0] = /* detent for scan below */ (MDBX_PNL_ASCENDING ? 0 : ~(pgno_t)0);
-    do {
-      const bool cmp = MDBX_PNL_ORDERED(*s, *d);
-      *w = cmp ? *d : *s;
-      d -= cmp ? 1 : 0;
-      s -= cmp ? 0 : 1;
-      --w;
-    } while (s > src);
-    MDBX_PNL_SIZE(dst) = (pgno_t)total;
+    dst[0] = /* the detent */ (MDBX_PNL_ASCENDING ? 0 : P_INVALID);
+    pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
+    MDBX_PNL_SIZE(dst) = total;
   }
   assert(mdbx_pnl_check4assert(dst, MAX_PAGENO + 1));
 }
@@ -6835,7 +6859,7 @@ __cold static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num,
 
       /* Merge in descending sorted order */
       const unsigned prev_re_len = MDBX_PNL_SIZE(re_list);
-      mdbx_pnl_xmerge(re_list, gc_pnl);
+      pnl_merge(re_list, gc_pnl);
       if (mdbx_audit_enabled() &&
           unlikely(!mdbx_pnl_check(re_list, txn->mt_next_pgno))) {
         ret.err = MDBX_CORRUPTED;
@@ -9574,7 +9598,7 @@ retry:
         mdbx_tassert(txn, count == txn->tw.loose_count);
         MDBX_PNL_SIZE(loose) = count;
         mdbx_pnl_sort(loose, txn->mt_next_pgno);
-        mdbx_pnl_xmerge(txn->tw.reclaimed_pglist, loose);
+        pnl_merge(txn->tw.reclaimed_pglist, loose);
         mdbx_trace("%s: append %u loose-pages to reclaimed-pages",
                    dbg_prefix_mode, txn->tw.loose_count);
       }
@@ -10586,7 +10610,7 @@ static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   if (txn->tw.spill_pages) {
     if (parent->tw.spill_pages) {
       /* Must not fail since space was preserved above. */
-      mdbx_pnl_xmerge(parent->tw.spill_pages, txn->tw.spill_pages);
+      pnl_merge(parent->tw.spill_pages, txn->tw.spill_pages);
       mdbx_pnl_free(txn->tw.spill_pages);
     } else {
       parent->tw.spill_pages = txn->tw.spill_pages;
