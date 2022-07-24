@@ -6645,19 +6645,18 @@ __hot static pgno_t *scan4range(const MDBX_PNL pnl, const unsigned len,
 #define MDBX_ALLOC_NOLOG 32
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
-__cold static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num,
-                                        int flags) {
+static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
   pgr_t ret;
   MDBX_txn *const txn = mc->mc_txn;
   MDBX_env *const env = txn->mt_env;
   mdbx_assert(env, num == 0 || !(flags & MDBX_ALLOC_SLOT));
   mdbx_assert(env, num > 0 || !(flags & MDBX_ALLOC_NEW));
 
-  const unsigned coalesce_threshold =
-      env->me_maxgc_ov1page - env->me_maxgc_ov1page / 4;
+  const unsigned coalesce_threshold = env->me_maxgc_ov1page >> 2;
   if (likely(flags & MDBX_ALLOC_GC)) {
     flags |= env->me_flags & MDBX_LIFORECLAIM;
-    if (MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) < coalesce_threshold)
+    if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
+        MDBX_PNL_SIZE(txn->tw.reclaimed_pglist) < coalesce_threshold)
       flags |= MDBX_ALLOC_COALESCE;
     if (unlikely(
             /* If mc is updating the GC, then the retired-list cannot play
@@ -6858,7 +6857,6 @@ __cold static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num,
       }
 
       /* Merge in descending sorted order */
-      const unsigned prev_re_len = MDBX_PNL_SIZE(re_list);
       pnl_merge(re_list, gc_pnl);
       if (mdbx_audit_enabled() &&
           unlikely(!mdbx_pnl_check(re_list, txn->mt_next_pgno))) {
@@ -6891,15 +6889,11 @@ __cold static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num,
       }
 
       /* Don't try to coalesce too much. */
-      if (flags & MDBX_ALLOC_COALESCE) {
-        if (re_len /* current size */ > coalesce_threshold ||
-            (re_len > prev_re_len &&
-             re_len - prev_re_len /* delta from prev */ >=
-                 coalesce_threshold / 2)) {
+      if (re_len /* current size */ > coalesce_threshold) {
+        if (flags & MDBX_ALLOC_COALESCE)
           mdbx_trace("clear %s %s", "MDBX_ALLOC_COALESCE",
                      "since got threshold");
-          flags &= ~MDBX_ALLOC_COALESCE;
-        }
+        flags &= ~MDBX_ALLOC_COALESCE;
       }
     }
 
