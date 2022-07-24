@@ -376,6 +376,33 @@ __extern_C key_t ftok(const char *, int);
 #endif /* __BYTE_ORDER__ || __ORDER_LITTLE_ENDIAN__ || __ORDER_BIG_ENDIAN__ */
 
 /*----------------------------------------------------------------------------*/
+/* Availability of CMOV or equivalent */
+
+#ifndef MDBX_HAVE_CMOV
+#if defined(__e2k__)
+#define MDBX_HAVE_CMOV 1
+#elif defined(__thumb2__) || defined(__thumb2)
+#define MDBX_HAVE_CMOV 1
+#elif defined(__thumb__) || defined(__thumb) || defined(__TARGET_ARCH_THUMB)
+#define MDBX_HAVE_CMOV 0
+#elif defined(_M_ARM) || defined(_M_ARM64) || defined(__aarch64__) ||          \
+    defined(__aarch64) || defined(__arm__) || defined(__arm) ||                \
+    defined(__CC_ARM)
+#define MDBX_HAVE_CMOV 1
+#elif (defined(__riscv__) || defined(__riscv64)) &&                            \
+    (defined(__riscv_b) || defined(__riscv_bitmanip))
+#define MDBX_HAVE_CMOV 1
+#elif defined(i686) || defined(__i686) || defined(__i686__) ||                 \
+    (defined(_M_IX86) && _M_IX86 > 600) || defined(__x86_64) ||                \
+    defined(__x86_64__) || defined(__amd64__) || defined(__amd64) ||           \
+    defined(_M_X64) || defined(_M_AMD64)
+#define MDBX_HAVE_CMOV 1
+#else
+#define MDBX_HAVE_CMOV 0
+#endif
+#endif /* MDBX_HAVE_CMOV */
+
+/*----------------------------------------------------------------------------*/
 /* Compiler's includes for builtins/intrinsics */
 
 #if defined(_MSC_VER) || defined(__INTEL_COMPILER)
