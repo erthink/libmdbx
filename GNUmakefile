@@ -382,11 +382,11 @@ MDBX_SMOKE_EXTRA ?=
 check: DESTDIR = $(shell pwd)/@check-install
 check: test dist install
 
-smoke-assertion: MDBX_BUILD_OPTIONS=-DMDBX_FORCE_ASSERTIONS=1
+smoke-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1)
 smoke-assertion: smoke
-test-assertion: MDBX_BUILD_OPTIONS=-DMDBX_FORCE_ASSERTIONS=1
+test-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1)
 test-assertion: smoke
-long-test-assertion: MDBX_BUILD_OPTIONS=-DMDBX_FORCE_ASSERTIONS=1
+long-test-assertion: MDBX_BUILD_OPTIONS:=$(strip $(MDBX_BUILD_OPTIONS) -DMDBX_FORCE_ASSERTIONS=1)
 long-test-assertion: smoke
 
 smoke: build-test
