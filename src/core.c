@@ -6562,59 +6562,86 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
   return MDBX_SUCCESS;
 }
 
-__hot static pgno_t *scan4range(const MDBX_PNL pnl, const unsigned len,
-                                const int num) {
-  assert(num > 0 && len >= (unsigned)num && len == MDBX_PNL_SIZE(pnl));
+__hot static pgno_t *scan4seq(pgno_t *range, const size_t len,
+                              const unsigned seq) {
+  assert(seq > 0 && len > seq);
 #if MDBX_PNL_ASCENDING
-  const pgno_t *const detent = pnl + len - num;
-  pgno_t *scan = pnl + 1;
-  while (likely(scan + 7 <= detent)) {
-    if (unlikely(scan[num] == *scan + num))
-      return scan;
-    if (unlikely(scan[num + 1] == scan[1] + num))
-      return scan + 1;
-    if (unlikely(scan[num + 2] == scan[2] + num))
-      return scan + 2;
-    if (unlikely(scan[num + 3] == scan[3] + num))
-      return scan + 3;
-    if (unlikely(scan[num + 4] == scan[4] + num))
-      return scan + 4;
-    if (unlikely(scan[num + 5] == scan[5] + num))
-      return scan + 5;
-    if (unlikely(scan[num + 6] == scan[6] + num))
-      return scan + 6;
-    if (unlikely(scan[num + 7] == scan[7] + num))
-      return scan + 7;
-    scan += 8;
+  assert(range[-1] == len);
+  const pgno_t *const detent = range + len - seq;
+  const ptrdiff_t offset = (ptrdiff_t)seq;
+  const pgno_t target = (pgno_t)offset;
+  if (likely(len > seq + 3)) {
+    do {
+      const pgno_t diff0 = range[offset + 0] - range[0];
+      const pgno_t diff1 = range[offset + 1] - range[1];
+      const pgno_t diff2 = range[offset + 2] - range[2];
+      const pgno_t diff3 = range[offset + 3] - range[3];
+      if (diff0 == target)
+        return range + 0;
+      if (diff1 == target)
+        return range + 1;
+      if (diff2 == target)
+        return range + 2;
+      if (diff3 == target)
+        return range + 3;
+      range += 4;
+    } while (range + 3 < detent);
+    if (range == detent)
+      return nullptr;
   }
-  for (; scan <= detent; ++scan)
-    if (scan[num] == *scan + num)
-      return scan;
+  do
+    if (range[offset] - *range == target)
+      return range;
+  while (++range < detent);
 #else
-  const pgno_t *const detent = pnl + num;
-  pgno_t *scan = pnl + len;
-  while (likely(scan - 7 >= detent)) {
-    if (unlikely(scan[-num] == *scan + num))
-      return scan;
-    if (unlikely(scan[-num - 1] == scan[-1] + num))
-      return scan - 1;
-    if (unlikely(scan[-num - 2] == scan[-2] + num))
-      return scan - 2;
-    if (unlikely(scan[-num - 3] == scan[-3] + num))
-      return scan - 3;
-    if (unlikely(scan[-num - 4] == scan[-4] + num))
-      return scan - 4;
-    if (unlikely(scan[-num - 5] == scan[-5] + num))
-      return scan - 5;
-    if (unlikely(scan[-num - 6] == scan[-6] + num))
-      return scan - 6;
-    if (unlikely(scan[-num - 7] == scan[-7] + num))
-      return scan - 7;
-    scan -= 8;
+  assert(range[-len] == len);
+  const pgno_t *const detent = range - len + seq;
+  const ptrdiff_t offset = -(ptrdiff_t)seq;
+  const pgno_t target = (pgno_t)offset;
+  if (likely(len > seq + 3)) {
+    do {
+      const pgno_t diff0 = range[-0] - range[offset - 0];
+      const pgno_t diff1 = range[-1] - range[offset - 1];
+      const pgno_t diff2 = range[-2] - range[offset - 2];
+      const pgno_t diff3 = range[-3] - range[offset - 3];
+      /* Смысл вычислений до ветвлений в том, чтобы позволить компилятору
+       * загружать и вычислять все значения параллельно. */
+      if (diff0 == target)
+        return range - 0;
+      if (diff1 == target)
+        return range - 1;
+      if (diff2 == target)
+        return range - 2;
+      if (diff3 == target)
+        return range - 3;
+      range -= 4;
+    } while (range > detent + 3);
+    if (range == detent)
+      return nullptr;
   }
-  for (; scan >= detent; --scan)
-    if (scan[-num] == *scan + num)
-      return scan;
+  do
+    if (*range - range[offset] == target)
+      return range;
+  while (--range > detent);
+#endif /* MDBX_PNL sort-order */
+  return nullptr;
+}
+
+MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const MDBX_PNL pnl,
+                                                          const unsigned seq) {
+  size_t begin = MDBX_PNL_ASCENDING ? 1 : MDBX_PNL_SIZE(pnl);
+#if MDBX_PNL_ASCENDING
+  while (seq <= MDBX_PNL_SIZE(pnl) - begin) {
+    if (pnl[begin + seq] - pnl[begin] == seq)
+      return pnl + begin;
+    ++begin;
+  }
+#else
+  while (begin > seq) {
+    if (pnl[begin - seq] - pnl[begin] == seq)
+      return pnl + begin;
+    --begin;
+  }
 #endif /* MDBX_PNL sort-order */
   return nullptr;
 }
@@ -6692,7 +6719,12 @@ static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
       if (!(flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_SLOT)) && re_len >= num) {
         mdbx_assert(env, MDBX_PNL_LAST(re_list) < txn->mt_next_pgno &&
                              MDBX_PNL_FIRST(re_list) < txn->mt_next_pgno);
-        range = scan4range(re_list, re_len, num);
+        range = re_list + (MDBX_PNL_ASCENDING ? 1 : re_len);
+        pgno = *range;
+        if (num == 1)
+          goto done;
+        range = scan4seq(range, re_len, num - 1);
+        mdbx_tassert(txn, range == scan4range_checker(re_list, num - 1));
         if (likely(range)) {
           pgno = *range;
           goto done;
