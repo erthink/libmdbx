@@ -6562,8 +6562,10 @@ __cold static int mdbx_wipe_steady(MDBX_env *env, const txnid_t last_steady) {
   return MDBX_SUCCESS;
 }
 
-__hot static pgno_t *scan4seq(pgno_t *range, const size_t len,
-                              const unsigned seq) {
+//------------------------------------------------------------------------------
+
+MDBX_MAYBE_UNUSED __hot static pgno_t *
+scan4seq_fallback(pgno_t *range, const size_t len, const unsigned seq) {
   assert(seq > 0 && len > seq);
 #if MDBX_PNL_ASCENDING
   assert(range[-1] == len);
@@ -6594,7 +6596,7 @@ __hot static pgno_t *scan4seq(pgno_t *range, const size_t len,
       return range;
   while (++range < detent);
 #else
-  assert(range[-len] == len);
+  assert(range[-(ptrdiff_t)len] == len);
   const pgno_t *const detent = range - len + seq;
   const ptrdiff_t offset = -(ptrdiff_t)seq;
   const pgno_t target = (pgno_t)offset;
@@ -6645,6 +6647,178 @@ MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const MDBX_PNL pnl,
 #endif /* MDBX_PNL sort-order */
   return nullptr;
 }
+
+#if !defined(MDBX_ATTRIBUTE_TARGET) &&                                         \
+    (__has_attribute(__target__) || __GNUC_PREREQ(4, 8))
+#define MDBX_ATTRIBUTE_TARGET(target) __attribute__((__target__(target)))
+#endif /* MDBX_ATTRIBUTE_TARGET */
+
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
+MDBX_MAYBE_UNUSED
+__hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *static pgno_t *
+scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
+  return nullptr;
+}
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
+
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX2
+MDBX_MAYBE_UNUSED
+__hot MDBX_ATTRIBUTE_TARGET_AVX2 static pgno_t *static pgno_t *
+scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
+  return nullptr;
+}
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
+
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX
+MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX static pgno_t *static pgno_t *
+scan4seq_avx(pgno_t *range, const size_t len, const unsigned seq) {
+  return nullptr;
+}
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX */
+
+#if defined(__SSE2__)
+#define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
+#elif (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__amd64__)
+#define __SSE2__
+#define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
+#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__)
+#define MDBX_ATTRIBUTE_TARGET_SSE2 MDBX_ATTRIBUTE_TARGET("sse2")
+#endif
+
+#ifdef MDBX_ATTRIBUTE_TARGET_SSE2
+MDBX_ATTRIBUTE_TARGET_SSE2 static __always_inline unsigned
+diffcmp2mask_sse2(const pgno_t *const ptr, const ptrdiff_t offset,
+                  const __m128i pattern) {
+  const __m128i f = _mm_loadu_si128((const __m128i *)ptr);
+  const __m128i l = _mm_loadu_si128((const __m128i *)(ptr + offset));
+  const __m128i cmp = _mm_cmpeq_epi32(_mm_sub_epi32(f, l), pattern);
+  return _mm_movemask_ps(*(const __m128 *)&cmp);
+}
+
+MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *
+scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
+  assert(seq > 0 && len > seq);
+#if MDBX_PNL_ASCENDING
+#error "FIXME: Not implemented"
+#endif /* MDBX_PNL_ASCENDING */
+  assert(range[-(ptrdiff_t)len] == len);
+  pgno_t *const detent = range - len + seq;
+  const ptrdiff_t offset = -(ptrdiff_t)seq;
+  const pgno_t target = (pgno_t)offset;
+  const __m128i pattern = _mm_set_epi32(target, target, target, target);
+  uint8_t mask;
+  if (likely(len > seq + 3)) {
+    do {
+      mask = (uint8_t)diffcmp2mask_sse2(range - 3, offset, pattern);
+      if (mask)
+        goto found;
+      range -= 4;
+    } while (range > detent + 3);
+    if (range == detent)
+      return nullptr;
+  }
+
+  /* Далее происходит чтение от 4 до 12 лишних байт, которые могут быть не
+   * только за пределами региона выделенного под PNL, но и пересекать границу
+   * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
+   * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
+#ifdef __SANITIZE_ADDRESS__
+  const unsigned on_page_safe_mask = 0;
+#else
+  const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
+#endif
+  if (likely(on_page_safe_mask & (uintptr_t)range)) {
+    const unsigned extra = (unsigned)(detent + 4 - range);
+    assert(extra > 0 && extra < 4);
+    mask = 0xF << extra;
+    mask &= diffcmp2mask_sse2(range - 3, offset, pattern);
+    if (mask) {
+    found:;
+#ifdef _MSC_VER
+      unsigned long index;
+      _BitScanReverse(&index, mask);
+#else
+      const unsigned index = __builtin_clz(mask);
+#endif /* _MSC_VER */
+      range = range + 28 - index;
+      return range;
+    }
+    return nullptr;
+  }
+  do
+    if (*range - range[offset] == target)
+      return range;
+  while (--range != detent);
+  return nullptr;
+}
+#endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
+
+#if defined(__AVX512BW__)
+#define scan4seq_default scan4seq_avx512bw
+#define scan4seq scan4seq_default
+#elif defined(__AVX2__)
+#define scan4seq_default scan4seq_avx2
+#elif defined(__AVX__)
+#define scan4seq_default scan4seq_avx
+#elif defined(__SSE2__)
+#define scan4seq_default scan4seq_sse2
+/* Choosing of another variants should be added here. */
+#endif /* scan4seq_default */
+
+#ifndef scan4seq_default
+#define scan4seq_default scan4seq_fallback
+#endif /* scan4seq_default */
+
+#ifdef scan4seq
+/* The scan4seq() is the best or no alternatives */
+#else
+#if !(__has_builtin(__builtin_cpu_supports) ||                                 \
+      defined(__BUILTIN_CPU_SUPPORTS__) ||                                     \
+      (defined(__ia32__) && __GNUC_PREREQ(4, 8) && __GLIBC_PREREQ(2, 23)))
+/* The scan4seq_default() will be used  since no cpu-features detection support
+ * from compiler. Please don't ask to implement cpuid-based detection and don't
+ * make such PRs. */
+#define scan4seq scan4seq_default
+#else
+/* Selecting the most appropriate implementation at runtime,
+ * depending on the available CPU features. */
+static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
+                                 const unsigned seq);
+static pgno_t *(*scan4seq)(pgno_t *range, const size_t len,
+                           const unsigned seq) = scan4seq_resolver;
+
+static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
+                                 const unsigned seq) {
+  pgno_t *(*choice)(pgno_t * range, const size_t len, const unsigned seq) =
+      nullptr;
+#if __has_builtin(__builtin_cpu_init) || defined(__BUILTIN_CPU_INIT__) ||      \
+    __GNUC_PREREQ(4, 8)
+  __builtin_cpu_init();
+#endif /* __builtin_cpu_init() */
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
+  if (__builtin_cpu_supports("avx512bw"))
+    choice = scan4seq_avx512;
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX2
+  if (__builtin_cpu_supports("avx2"))
+    choice = scan4seq_avx2;
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX
+  if (__builtin_cpu_supports("avx"))
+    choice = scan4seq_avx;
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
+#ifdef MDBX_ATTRIBUTE_TARGET_SSE2
+  if (!choice && __builtin_cpu_supports("sse2"))
+    choice = scan4seq_sse2;
+#endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
+  /* Choosing of another variants should be added here. */
+  scan4seq = choice ? choice : scan4seq_default;
+  return scan4seq(range, len, seq);
+}
+#endif /* __has_builtin(__builtin_cpu_supports */
+#endif /* scan4seq */
+
+//------------------------------------------------------------------------------
 
 /* Allocate page numbers and memory for writing.  Maintain mt_last_reclaimed,
  * mt_reclaimed_pglist and mt_next_pgno.  Set MDBX_TXN_ERROR on failure.

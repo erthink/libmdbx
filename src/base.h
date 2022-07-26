@@ -409,11 +409,13 @@ __extern_C key_t ftok(const char *, int);
 #if defined(_MSC_VER) || defined(__INTEL_COMPILER)
 #include <intrin.h>
 #elif __GNUC_PREREQ(4, 4) || defined(__clang__)
-#if defined(__ia32__) || defined(__e2k__)
+#if defined(__e2k__)
+#include <e2kintrin.h>
 #include <x86intrin.h>
-#endif /* __ia32__ */
+#endif /* __e2k__ */
 #if defined(__ia32__)
 #include <cpuid.h>
+#include <x86intrin.h>
 #endif /* __ia32__ */
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #include <mbarrier.h>
