@@ -306,8 +306,9 @@ __extern_C key_t ftok(const char *, int);
 /* LY: define neutral __ia32__ for x86 and x86-64 */
 #define __ia32__ 1
 #endif /* __ia32__ */
-#if !defined(__amd64__) && (defined(__x86_64) || defined(__x86_64__) ||        \
-                            defined(__amd64) || defined(_M_X64))
+#if !defined(__amd64__) &&                                                     \
+    (defined(__x86_64) || defined(__x86_64__) || defined(__amd64) ||           \
+     defined(_M_X64) || defined(_M_AMD64))
 /* LY: define trusty __amd64__ for all AMD64/x86-64 arch */
 #define __amd64__ 1
 #endif /* __amd64__ */
