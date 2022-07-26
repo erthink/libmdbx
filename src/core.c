@@ -5828,9 +5828,9 @@ static __inline uint64_t meta_sign(const MDBX_meta *meta) {
   return (sign > MDBX_DATASIGN_WEAK) ? sign : ~sign;
 }
 
-enum meta_choise_mode { prefer_last, prefer_steady };
+enum meta_choice_mode { prefer_last, prefer_steady };
 
-static __inline bool meta_ot(const enum meta_choise_mode mode,
+static __inline bool meta_ot(const enum meta_choice_mode mode,
                              const MDBX_env *env, volatile const MDBX_meta *a,
                              volatile const MDBX_meta *b) {
   mdbx_jitter4testing(true);
@@ -5882,7 +5882,7 @@ static int meta_eq_mask(const MDBX_env *env) {
 }
 
 static __always_inline volatile const MDBX_meta *
-meta_recent(const enum meta_choise_mode mode, const MDBX_env *env,
+meta_recent(const enum meta_choice_mode mode, const MDBX_env *env,
             volatile const MDBX_meta *a, volatile const MDBX_meta *b) {
   const bool a_older_that_b = meta_ot(mode, env, a, b);
   mdbx_assert(env, !meta_eq(env, a, b));
@@ -5898,7 +5898,7 @@ static const MDBX_meta *meta_ancient_prefer_weak(const MDBX_env *env,
 }
 
 static __always_inline volatile const MDBX_meta *
-meta_mostrecent(const enum meta_choise_mode mode, const MDBX_env *env) {
+meta_mostrecent(const enum meta_choice_mode mode, const MDBX_env *env) {
   volatile const MDBX_meta *m0 = METAPAGE(env, 0);
   volatile const MDBX_meta *m1 = METAPAGE(env, 1);
   volatile const MDBX_meta *m2 = METAPAGE(env, 2);
