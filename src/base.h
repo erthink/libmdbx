@@ -645,6 +645,16 @@ __extern_C key_t ftok(const char *, int);
 #endif
 #endif /* __anonymous_struct_extension__ */
 
+#ifndef expect_with_probability
+#if defined(__builtin_expect_with_probability) ||                              \
+    __has_builtin(__builtin_expect_with_probability) || __GNUC_PREREQ(9, 0)
+#define expect_with_probability(expr, value, prob)                             \
+  __builtin_expect_with_probability(expr, value, prob)
+#else
+#define expect_with_probability(expr, value, prob) (expr)
+#endif
+#endif /* expect_with_probability */
+
 /*----------------------------------------------------------------------------*/
 
 #if defined(MDBX_USE_VALGRIND)
