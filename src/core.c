@@ -2847,11 +2847,12 @@ static int lcklist_detach_locked(MDBX_env *env) {
     TYPE *lo, *hi;                                                             \
   } NAME##_stack;                                                              \
                                                                                \
-  static __hot void NAME(TYPE *const begin, TYPE *const end) {                 \
-    NAME##_stack stack[sizeof(unsigned) * CHAR_BIT], *top = stack;             \
+  static __hot void NAME(TYPE *const __restrict begin,                         \
+                         TYPE *const __restrict end) {                         \
+    NAME##_stack stack[sizeof(unsigned) * CHAR_BIT], *__restrict top = stack;  \
                                                                                \
-    TYPE *hi = end - 1;                                                        \
-    TYPE *lo = begin;                                                          \
+    TYPE *__restrict hi = end - 1;                                             \
+    TYPE *__restrict lo = begin;                                               \
     while (true) {                                                             \
       const ptrdiff_t len = hi - lo;                                           \
       if (len < 16) {                                                          \
@@ -2862,7 +2863,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
         continue;                                                              \
       }                                                                        \
                                                                                \
-      TYPE *mid = lo + (len >> 1);                                             \
+      TYPE *__restrict mid = lo + (len >> 1);                                  \
       SORT_CMP_SWAP(TYPE, CMP, *lo, *mid);                                     \
       SORT_CMP_SWAP(TYPE, CMP, *mid, *hi);                                     \
       SORT_CMP_SWAP(TYPE, CMP, *lo, *mid);                                     \
