@@ -1872,6 +1872,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
  * and network-sort for small chunks.
  * Thanks to John M. Gamble for the http://pages.ripco.net/~jgamble/nw.html */
 
+#if MDBX_HAVE_CMOV
 #define SORT_CMP_SWAP(TYPE, CMP, a, b)                                         \
   do {                                                                         \
     const TYPE swap_tmp = (a);                                                 \
@@ -1879,6 +1880,16 @@ static int lcklist_detach_locked(MDBX_env *env) {
     (a) = swap_cmp ? swap_tmp : b;                                             \
     (b) = swap_cmp ? b : swap_tmp;                                             \
   } while (0)
+#else
+#define SORT_CMP_SWAP(TYPE, CMP, a, b)                                         \
+  do                                                                           \
+    if (!CMP(a, b)) {                                                          \
+      const TYPE swap_tmp = (a);                                               \
+      (a) = (b);                                                               \
+      (b) = swap_tmp;                                                          \
+    }                                                                          \
+  while (0)
+#endif
 
 //  3 comparators, 3 parallel operations
 //  o-----^--^--o
