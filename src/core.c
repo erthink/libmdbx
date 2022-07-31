@@ -6608,9 +6608,9 @@ no_loose:
         while (true) {
           if (re_list[range_begin - wanna_range] - pgno == wanna_range)
             goto done;
-          if (range_begin == wanna_range)
+          if (--range_begin == wanna_range)
             break;
-          pgno = re_list[--range_begin];
+          pgno = re_list[range_begin];
         }
 #endif /* MDBX_PNL sort-order */
       }
