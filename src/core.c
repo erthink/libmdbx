@@ -2919,7 +2919,7 @@ RADIXSORT_IMPL(dpl, MDBX_dp, MDBX_DPL_EXTRACT_KEY,
 #define DP_SORT_CMP(first, last) ((first).pgno < (last).pgno)
 SORT_IMPL(dp_sort, false, MDBX_dp, DP_SORT_CMP)
 
-__hot __noinline static MDBX_dpl *mdbx_dpl_sort_slowpath(const MDBX_txn *txn) {
+__hot __noinline static MDBX_dpl *dpl_sort_slowpath(const MDBX_txn *txn) {
   MDBX_dpl *dl = txn->tw.dirtylist;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   const unsigned unsorted = dl->length - dl->sorted;
@@ -2940,14 +2940,18 @@ __hot __noinline static MDBX_dpl *mdbx_dpl_sort_slowpath(const MDBX_txn *txn) {
       memcpy(tmp, sorted_end, unsorted * sizeof(MDBX_dp));
       dp_sort(tmp, tmp + unsorted);
       /* merge two parts from end to begin */
-      MDBX_dp *w = dl->items + dl->length;
-      MDBX_dp *l = dl->items + dl->sorted;
-      MDBX_dp *r = end - 1;
+      MDBX_dp *__restrict w = dl->items + dl->length;
+      MDBX_dp *__restrict l = dl->items + dl->sorted;
+      MDBX_dp *__restrict r = end - 1;
       do {
         const bool cmp = expect_with_probability(l->pgno > r->pgno, 0, .5);
+#if defined(__LCC__) || __CLANG_PREREQ(13, 0) || !MDBX_HAVE_CMOV
+        *w = cmp ? *l-- : *r--;
+#else
         *w = cmp ? *l : *r;
         l -= cmp;
         r += cmp - 1;
+#endif
       } while (likely(--w > l));
       assert(r == tmp - 1);
       assert(dl->items[0].pgno == 0 &&
@@ -2968,12 +2972,12 @@ __hot __noinline static MDBX_dpl *mdbx_dpl_sort_slowpath(const MDBX_txn *txn) {
   return dl;
 }
 
-static __always_inline MDBX_dpl *mdbx_dpl_sort(const MDBX_txn *txn) {
+static __always_inline MDBX_dpl *dpl_sort(const MDBX_txn *txn) {
   MDBX_dpl *dl = txn->tw.dirtylist;
   assert(dl->length <= MDBX_PGL_LIMIT);
   assert(dl->sorted <= dl->length);
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
-  return likely(dl->sorted == dl->length) ? dl : mdbx_dpl_sort_slowpath(txn);
+  return likely(dl->sorted == dl->length) ? dl : dpl_sort_slowpath(txn);
 }
 
 /* Returns the index of the first dirty-page whose pgno
@@ -2994,7 +2998,7 @@ static unsigned __hot mdbx_dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   switch (dl->length - dl->sorted) {
   default:
     /* sort a whole */
-    mdbx_dpl_sort_slowpath(txn);
+    dpl_sort_slowpath(txn);
     break;
   case 0:
     /* whole sorted cases */
@@ -4023,7 +4027,7 @@ static void mdbx_refund_loose(MDBX_txn *txn) {
     }
   } else {
     /* Dirtylist is mostly sorted, just refund loose pages at the end. */
-    mdbx_dpl_sort(txn);
+    dpl_sort(txn);
     mdbx_tassert(txn, dl->length < 2 ||
                           dl->items[1].pgno < dl->items[dl->length].pgno);
     mdbx_tassert(txn, dl->sorted == dl->length);
@@ -4838,7 +4842,7 @@ static int mdbx_txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   }
 
   /* Сортируем чтобы запись на диск была полее последовательна */
-  MDBX_dpl *const dl = mdbx_dpl_sort(txn);
+  MDBX_dpl *const dl = dpl_sort(txn);
 
   /* Preserve pages which may soon be dirtied again */
   const unsigned unspillable = mdbx_txn_keep(txn, m0);
@@ -8023,7 +8027,7 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
     txn->tw.dirtyroom = parent->tw.dirtyroom;
     txn->tw.dirtylru = parent->tw.dirtylru;
 
-    mdbx_dpl_sort(parent);
+    dpl_sort(parent);
     if (parent->tw.spill_pages)
       mdbx_spill_purge(parent);
 
@@ -8383,7 +8387,7 @@ static void mdbx_dpl_sift(MDBX_txn *const txn, MDBX_PNL pl,
   if (MDBX_PNL_SIZE(pl) && txn->tw.dirtylist->length) {
     mdbx_tassert(txn,
                  pnl_check_allocated(pl, (size_t)txn->mt_next_pgno << spilled));
-    MDBX_dpl *dl = mdbx_dpl_sort(txn);
+    MDBX_dpl *dl = dpl_sort(txn);
 
     /* Scanning in ascend order */
     const int step = MDBX_PNL_ASCENDING ? 1 : -1;
@@ -9740,7 +9744,7 @@ bailout:
 
 static int mdbx_txn_write(MDBX_txn *txn, struct mdbx_iov_ctx *ctx) {
   MDBX_dpl *const dl =
-      (txn->mt_flags & MDBX_WRITEMAP) ? txn->tw.dirtylist : mdbx_dpl_sort(txn);
+      (txn->mt_flags & MDBX_WRITEMAP) ? txn->tw.dirtylist : dpl_sort(txn);
   int rc = MDBX_SUCCESS;
   unsigned r, w;
   for (w = 0, r = 1; r <= dl->length; ++r) {
@@ -9792,10 +9796,10 @@ int mdbx_txn_commit(MDBX_txn *txn) { return __inline_mdbx_txn_commit(txn); }
 /* Merge child txn into parent */
 static __inline void mdbx_txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
                                     const unsigned parent_retired_len) {
-  MDBX_dpl *const src = mdbx_dpl_sort(txn);
+  MDBX_dpl *const src = dpl_sort(txn);
 
   /* Remove refunded pages from parent's dirty list */
-  MDBX_dpl *const dst = mdbx_dpl_sort(parent);
+  MDBX_dpl *const dst = dpl_sort(parent);
   if (MDBX_ENABLE_REFUND) {
     unsigned n = dst->length;
     while (n && dst->items[n].pgno >= parent->mt_next_pgno) {
