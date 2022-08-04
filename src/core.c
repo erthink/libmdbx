@@ -3273,18 +3273,14 @@ struct node_result {
 static struct node_result mdbx_node_search(MDBX_cursor *mc,
                                            const MDBX_val *key);
 
-static int __must_check_result mdbx_node_add_branch(MDBX_cursor *mc,
-                                                    unsigned indx,
-                                                    const MDBX_val *key,
-                                                    pgno_t pgno);
-static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
-                                                  unsigned indx,
-                                                  const MDBX_val *key,
-                                                  MDBX_val *data,
-                                                  unsigned flags);
-static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
-                                                   unsigned indx,
-                                                   const MDBX_val *key);
+static int __must_check_result node_add_branch(MDBX_cursor *mc, unsigned indx,
+                                               const MDBX_val *key,
+                                               pgno_t pgno);
+static int __must_check_result node_add_leaf(MDBX_cursor *mc, unsigned indx,
+                                             const MDBX_val *key,
+                                             MDBX_val *data, unsigned flags);
+static int __must_check_result node_add_leaf2(MDBX_cursor *mc, unsigned indx,
+                                              const MDBX_val *key);
 
 static void node_del(MDBX_cursor *mc, size_t ksize);
 static void mdbx_node_shrink(MDBX_page *mp, unsigned indx);
@@ -15848,9 +15844,9 @@ new_sub:;
     if (IS_LEAF2(mc->mc_pg[mc->mc_top])) {
       mdbx_cassert(mc, !(naf & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) &&
                            rdata->iov_len == 0);
-      rc = mdbx_node_add_leaf2(mc, mc->mc_ki[mc->mc_top], key);
+      rc = node_add_leaf2(mc, mc->mc_ki[mc->mc_top], key);
     } else
-      rc = mdbx_node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, naf);
+      rc = node_add_leaf(mc, mc->mc_ki[mc->mc_top], key, rdata, naf);
     if (likely(rc == 0)) {
       /* Adjust other cursors pointing to mp */
       const MDBX_dbi dbi = mc->mc_dbi;
@@ -16155,9 +16151,9 @@ static pgr_t page_new_large(MDBX_cursor *mc, const unsigned npages) {
   return ret;
 }
 
-static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
-                                                   unsigned indx,
-                                                   const MDBX_val *key) {
+__hot static int __must_check_result node_add_leaf2(MDBX_cursor *mc,
+                                                    unsigned indx,
+                                                    const MDBX_val *key) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   DKBUF_DEBUG;
   mdbx_debug("add to leaf2-%spage %" PRIaPGNO " index %i, "
@@ -16192,10 +16188,9 @@ static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
   return MDBX_SUCCESS;
 }
 
-static int __must_check_result mdbx_node_add_branch(MDBX_cursor *mc,
-                                                    unsigned indx,
-                                                    const MDBX_val *key,
-                                                    pgno_t pgno) {
+static int __must_check_result node_add_branch(MDBX_cursor *mc, unsigned indx,
+                                               const MDBX_val *key,
+                                               pgno_t pgno) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   DKBUF_DEBUG;
   mdbx_debug("add to branch-%spage %" PRIaPGNO " index %i, node-pgno %" PRIaPGNO
@@ -16236,11 +16231,11 @@ static int __must_check_result mdbx_node_add_branch(MDBX_cursor *mc,
   return MDBX_SUCCESS;
 }
 
-static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
-                                                  unsigned indx,
-                                                  const MDBX_val *key,
-                                                  MDBX_val *data,
-                                                  unsigned flags) {
+__hot static int __must_check_result node_add_leaf(MDBX_cursor *mc,
+                                                   unsigned indx,
+                                                   const MDBX_val *key,
+                                                   MDBX_val *data,
+                                                   unsigned flags) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   DKBUF_DEBUG;
   mdbx_debug("add to leaf-%spage %" PRIaPGNO " index %i, data size %" PRIuPTR
@@ -16313,22 +16308,19 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
 
   void *nodedata = node_data(node);
   if (likely(largepage == NULL)) {
-    if (unlikely(flags & F_BIGDATA))
+    if (unlikely(flags & F_BIGDATA)) {
       memcpy(nodedata, data->iov_base, sizeof(pgno_t));
-    else if (unlikely(flags & MDBX_RESERVE))
-      data->iov_base = nodedata;
-    else if (likely(nodedata != data->iov_base &&
-                    data->iov_len /* to avoid UBSAN traps*/ != 0))
-      memcpy(nodedata, data->iov_base, data->iov_len);
+      return MDBX_SUCCESS;
+    }
   } else {
     poke_pgno(nodedata, largepage->mp_pgno);
     nodedata = page_data(largepage);
-    if (unlikely(flags & MDBX_RESERVE))
-      data->iov_base = nodedata;
-    else if (likely(nodedata != data->iov_base &&
-                    data->iov_len /* to avoid UBSAN traps*/ != 0))
-      memcpy(nodedata, data->iov_base, data->iov_len);
   }
+  if (unlikely(flags & MDBX_RESERVE))
+    data->iov_base = nodedata;
+  else if (likely(nodedata != data->iov_base &&
+                  data->iov_len /* to avoid UBSAN traps*/ != 0))
+    memcpy(nodedata, data->iov_base, data->iov_len);
   return MDBX_SUCCESS;
 }
 
@@ -17112,8 +17104,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
                "branch", csrc->mc_ki[csrc->mc_top], DKEY_DEBUG(&key4move),
                psrc->mp_pgno, cdst->mc_ki[cdst->mc_top], pdst->mp_pgno);
     /* Add the node to the destination page. */
-    rc =
-        mdbx_node_add_branch(cdst, cdst->mc_ki[cdst->mc_top], &key4move, srcpg);
+    rc = node_add_branch(cdst, cdst->mc_ki[cdst->mc_top], &key4move, srcpg);
   } break;
 
   case P_LEAF: {
@@ -17133,8 +17124,8 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
                "leaf", csrc->mc_ki[csrc->mc_top], DKEY_DEBUG(&key4move),
                psrc->mp_pgno, cdst->mc_ki[cdst->mc_top], pdst->mp_pgno);
     /* Add the node to the destination page. */
-    rc = mdbx_node_add_leaf(cdst, cdst->mc_ki[cdst->mc_top], &key4move, &data,
-                            node_flags(srcnode));
+    rc = node_add_leaf(cdst, cdst->mc_ki[cdst->mc_top], &key4move, &data,
+                       node_flags(srcnode));
   } break;
 
   case P_LEAF | P_LEAF2: {
@@ -17151,7 +17142,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
                "leaf2", csrc->mc_ki[csrc->mc_top], DKEY_DEBUG(&key4move),
                psrc->mp_pgno, cdst->mc_ki[cdst->mc_top], pdst->mp_pgno);
     /* Add the node to the destination page. */
-    rc = mdbx_node_add_leaf2(cdst, cdst->mc_ki[cdst->mc_top], &key4move);
+    rc = node_add_leaf2(cdst, cdst->mc_ki[cdst->mc_top], &key4move);
   } break;
 
   default:
@@ -17339,7 +17330,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
       key.iov_base = page_data(psrc);
       unsigned i = 0;
       do {
-        rc = mdbx_node_add_leaf2(cdst, j++, &key);
+        rc = node_add_leaf2(cdst, j++, &key);
         if (unlikely(rc != MDBX_SUCCESS))
           return rc;
         key.iov_base = (char *)key.iov_base + key.iov_len;
@@ -17387,10 +17378,10 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
           MDBX_val data;
           data.iov_len = node_ds(srcnode);
           data.iov_base = node_data(srcnode);
-          rc = mdbx_node_add_leaf(cdst, j++, &key, &data, node_flags(srcnode));
+          rc = node_add_leaf(cdst, j++, &key, &data, node_flags(srcnode));
         } else {
           mdbx_cassert(csrc, node_flags(srcnode) == 0);
-          rc = mdbx_node_add_branch(cdst, j++, &key, node_pgno(srcnode));
+          rc = node_add_branch(cdst, j++, &key, node_pgno(srcnode));
         }
         if (unlikely(rc != MDBX_SUCCESS))
           return rc;
@@ -18541,7 +18532,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     foliage = mc->mc_db->md_depth++;
 
     /* Add left (implicit) pointer. */
-    rc = mdbx_node_add_branch(mc, 0, NULL, mp->mp_pgno);
+    rc = node_add_branch(mc, 0, NULL, mp->mp_pgno);
     if (unlikely(rc != MDBX_SUCCESS)) {
       /* undo the pre-push */
       mc->mc_pg[0] = mc->mc_pg[1];
@@ -18836,8 +18827,8 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
                ptop_page->mp_pgno, mc->mc_ki[ptop], sister->mp_pgno,
                DKEY(mc->mc_ki[ptop] ? newkey : NULL));
     mc->mc_top--;
-    rc = mdbx_node_add_branch(mc, mc->mc_ki[ptop],
-                              mc->mc_ki[ptop] ? newkey : NULL, sister->mp_pgno);
+    rc = node_add_branch(mc, mc->mc_ki[ptop], mc->mc_ki[ptop] ? newkey : NULL,
+                         sister->mp_pgno);
     mdbx_cassert(mc, mp == mc->mc_pg[ptop + 1] &&
                          newindx == mc->mc_ki[ptop + 1] && ptop == mc->mc_top);
 
@@ -18865,7 +18856,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     mn.mc_top--;
     mdbx_trace("add-to-parent the right-entry[%u] for new sibling-page",
                mn.mc_ki[ptop]);
-    rc = mdbx_node_add_branch(&mn, mn.mc_ki[ptop], &sepkey, sister->mp_pgno);
+    rc = node_add_branch(&mn, mn.mc_ki[ptop], &sepkey, sister->mp_pgno);
     mn.mc_top++;
     if (unlikely(rc != MDBX_SUCCESS))
       goto done;
@@ -18877,12 +18868,12 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
     switch (PAGETYPE_WHOLE(sister)) {
     case P_LEAF: {
       mdbx_cassert(mc, newpgno == 0 || newpgno == P_INVALID);
-      rc = mdbx_node_add_leaf(mc, 0, newkey, newdata, naf);
+      rc = node_add_leaf(mc, 0, newkey, newdata, naf);
     } break;
     case P_LEAF | P_LEAF2: {
       mdbx_cassert(mc, (naf & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
       mdbx_cassert(mc, newpgno == 0 || newpgno == P_INVALID);
-      rc = mdbx_node_add_leaf2(mc, 0, newkey);
+      rc = node_add_leaf2(mc, 0, newkey);
     } break;
     default:
       rc = bad_page(sister, "wrong page-type %u\n", PAGETYPE_WHOLE(sister));
@@ -18949,12 +18940,12 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
       case P_BRANCH: {
         mdbx_cassert(mc, 0 == (uint16_t)flags);
         /* First branch index doesn't need key data. */
-        rc = mdbx_node_add_branch(mc, n, n ? &rkey : NULL, pgno);
+        rc = node_add_branch(mc, n, n ? &rkey : NULL, pgno);
       } break;
       case P_LEAF: {
         mdbx_cassert(mc, pgno == 0);
         mdbx_cassert(mc, rdata != NULL);
-        rc = mdbx_node_add_leaf(mc, n, &rkey, rdata, flags);
+        rc = node_add_leaf(mc, n, &rkey, rdata, flags);
       } break;
       /* case P_LEAF | P_LEAF2: {
         mdbx_cassert(mc, (nflags & (F_BIGDATA | F_SUBDATA | F_DUPDATA)) == 0);
