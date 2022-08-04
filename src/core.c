@@ -1878,14 +1878,14 @@ static int lcklist_detach_locked(MDBX_env *env) {
 #define SORT_CMP_SWAP(TYPE, CMP, a, b)                                         \
   do {                                                                         \
     const TYPE swap_tmp = (a);                                                 \
-    const bool swap_cmp = CMP(swap_tmp, b);                                    \
+    const bool swap_cmp = expect_with_probability(CMP(swap_tmp, b), 0, .5);    \
     (a) = swap_cmp ? swap_tmp : b;                                             \
     (b) = swap_cmp ? b : swap_tmp;                                             \
   } while (0)
 #else
 #define SORT_CMP_SWAP(TYPE, CMP, a, b)                                         \
   do                                                                           \
-    if (!CMP(a, b)) {                                                          \
+    if (expect_with_probability(!CMP(a, b), 0, .5)) {                          \
       const TYPE swap_tmp = (a);                                               \
       (a) = (b);                                                               \
       (b) = swap_tmp;                                                          \
@@ -2138,7 +2138,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
                                                                                \
   static __inline bool NAME##_is_sorted(const TYPE *first, const TYPE *last) { \
     while (++first <= last)                                                    \
-      if (CMP(first[0], first[-1]))                                            \
+      if (expect_with_probability(CMP(first[0], first[-1]), 1, .1))            \
         return false;                                                          \
     return true;                                                               \
   }                                                                            \
@@ -2171,9 +2171,9 @@ static int lcklist_detach_locked(MDBX_env *env) {
       TYPE *right = hi - 1;                                                    \
       TYPE *left = lo + 1;                                                     \
       while (1) {                                                              \
-        while (CMP(*left, *mid))                                               \
+        while (expect_with_probability(CMP(*left, *mid), 0, .5))               \
           ++left;                                                              \
-        while (CMP(*mid, *right))                                              \
+        while (expect_with_probability(CMP(*mid, *right), 0, .5))              \
           --right;                                                             \
         if (unlikely(left > right)) {                                          \
           if (EXPECT_LOW_CARDINALITY_OR_PRESORTED) {                           \
@@ -2287,24 +2287,24 @@ static int lcklist_detach_locked(MDBX_env *env) {
       length >>= 1;                                                            \
       const TYPE_LIST *const middle = first + length;                          \
       const unsigned left = whole - length - 1;                                \
-      const bool cmp = CMP(*middle, item);                                     \
+      const bool cmp = expect_with_probability(CMP(*middle, item), 0, .5);     \
       length = cmp ? left : length;                                            \
       first = cmp ? middle + 1 : first;                                        \
     }                                                                          \
                                                                                \
     switch (length) {                                                          \
     case 3:                                                                    \
-      if (!CMP(*first, item))                                                  \
+      if (expect_with_probability(!CMP(*first, item), 0, .5))                  \
         break;                                                                 \
       ++first;                                                                 \
       __fallthrough /* fall through */;                                        \
     case 2:                                                                    \
-      if (!CMP(*first, item))                                                  \
+      if (expect_with_probability(!CMP(*first, item), 0, .5))                  \
         break;                                                                 \
       ++first;                                                                 \
       __fallthrough /* fall through */;                                        \
     case 1:                                                                    \
-      if (!CMP(*first, item))                                                  \
+      if (expect_with_probability(!CMP(*first, item), 0, .5))                  \
         break;                                                                 \
       ++first;                                                                 \
       __fallthrough /* fall through */;                                        \
@@ -2944,7 +2944,7 @@ __hot __noinline static MDBX_dpl *mdbx_dpl_sort_slowpath(const MDBX_txn *txn) {
       MDBX_dp *l = dl->items + dl->sorted;
       MDBX_dp *r = end - 1;
       do {
-        const bool cmp = l->pgno > r->pgno;
+        const bool cmp = expect_with_probability(l->pgno > r->pgno, 0, .5);
         *w = cmp ? *l : *r;
         l -= cmp;
         r += cmp - 1;
