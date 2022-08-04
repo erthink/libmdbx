@@ -32,6 +32,7 @@ uint32_t mdbx_linux_kernel_version;
 bool mdbx_RunningOnWSL1;
 #endif /* xMDBX_ALLOY */
 
+MDBX_EXCLUDE_FOR_GPROF
 __cold static uint8_t probe_for_WSL(const char *tag) {
   const char *const WSL = strstr(tag, "WSL");
   if (WSL && WSL[3] >= '2' && WSL[3] <= '9')
@@ -48,8 +49,22 @@ __cold static uint8_t probe_for_WSL(const char *tag) {
 
 #endif /* Linux */
 
+#ifdef ENABLE_GPROF
+extern void _mcleanup(void);
+extern void monstartup(unsigned long, unsigned long);
+extern void _init(void);
+extern void _fini(void);
+extern void __gmon_start__(void) __attribute__((__weak__));
+#endif /* ENABLE_GPROF */
+
+MDBX_EXCLUDE_FOR_GPROF
 __cold static __attribute__((__constructor__)) void
 mdbx_global_constructor(void) {
+#ifdef ENABLE_GPROF
+  if (!&__gmon_start__)
+    monstartup((uintptr_t)&_init, (uintptr_t)&_fini);
+#endif /* ENABLE_GPROF */
+
 #if defined(__linux__) || defined(__gnu_linux__)
   struct utsname buffer;
   if (uname(&buffer) == 0) {
@@ -84,9 +99,14 @@ mdbx_global_constructor(void) {
   mdbx_rthc_global_init();
 }
 
+MDBX_EXCLUDE_FOR_GPROF
 __cold static __attribute__((__destructor__)) void
 mdbx_global_destructor(void) {
   mdbx_rthc_global_dtor();
+#ifdef ENABLE_GPROF
+  if (!&__gmon_start__)
+    _mcleanup();
+#endif /* ENABLE_GPROF */
 }
 
 /*----------------------------------------------------------------------------*/

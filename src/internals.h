@@ -195,6 +195,16 @@
 #endif
 #endif /* -Walignment-reduction-ignored */
 
+#ifndef MDBX_EXCLUDE_FOR_GPROF
+#ifdef ENABLE_GPROF
+#define MDBX_EXCLUDE_FOR_GPROF                                                 \
+  __attribute__((__no_instrument_function__,                                   \
+                 __no_profile_instrument_function__))
+#else
+#define MDBX_EXCLUDE_FOR_GPROF
+#endif /* ENABLE_GPROF */
+#endif /* MDBX_EXCLUDE_FOR_GPROF */
+
 #ifdef __cplusplus
 extern "C" {
 #endif

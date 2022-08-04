@@ -1459,7 +1459,8 @@ __cold void mdbx_rthc_global_init(void) {
   }
 
   bootid = mdbx_osal_bootid();
-#if 0 /* debug */
+
+#if 0  /* debug */
   for (unsigned i = 0; i < 65536; ++i) {
     size_t pages = pv2pages(i);
     unsigned x = pages2pv(pages);
@@ -1469,7 +1470,7 @@ __cold void mdbx_rthc_global_init(void) {
     assert(pages == xp);
   }
   fflush(stdout);
-#endif
+#endif /* #if 0 */
 }
 
 /* dtor called for thread, i.e. for all mdbx's environment objects */
@@ -1547,6 +1548,7 @@ __cold void mdbx_rthc_thread_dtor(void *rthc) {
 #endif
 }
 
+MDBX_EXCLUDE_FOR_GPROF
 __cold void mdbx_rthc_global_dtor(void) {
   mdbx_trace(">> pid %d", mdbx_getpid());
 
@@ -23877,6 +23879,9 @@ __dll_export
 #endif /* MDBX_BUILD_TYPE */
     ,
     "MDBX_DEBUG=" MDBX_STRINGIFY(MDBX_DEBUG)
+#ifdef ENABLE_GPROF
+    " ENABLE_GPROF"
+#endif /* ENABLE_GPROF */
     " MDBX_WORDBITS=" MDBX_STRINGIFY(MDBX_WORDBITS)
     " BYTE_ORDER="
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
