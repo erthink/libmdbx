@@ -3286,7 +3286,7 @@ static int __must_check_result mdbx_node_add_leaf2(MDBX_cursor *mc,
                                                    unsigned indx,
                                                    const MDBX_val *key);
 
-static void mdbx_node_del(MDBX_cursor *mc, size_t ksize);
+static void node_del(MDBX_cursor *mc, size_t ksize);
 static void mdbx_node_shrink(MDBX_page *mp, unsigned indx);
 static int __must_check_result mdbx_node_move(MDBX_cursor *csrc,
                                               MDBX_cursor *cdst, bool fromleft);
@@ -15790,7 +15790,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         flags |= F_DUPDATA;
         do_sub = true;
         if (!insert_key)
-          mdbx_node_del(mc, 0);
+          node_del(mc, 0);
         goto new_sub;
       }
 
@@ -15829,7 +15829,7 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
         return MDBX_SUCCESS;
       }
     }
-    mdbx_node_del(mc, 0);
+    node_del(mc, 0);
   }
 
   rdata = data;
@@ -16336,22 +16336,19 @@ static int __must_check_result mdbx_node_add_leaf(MDBX_cursor *mc,
  * [in] mc Cursor pointing to the node to delete.
  * [in] ksize The size of a node. Only used if the page is
  * part of a MDBX_DUPFIXED database. */
-static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
+__hot static void node_del(MDBX_cursor *mc, size_t ksize) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
-  int indx = mc->mc_ki[mc->mc_top];
-  int i, j, nkeys, ptr;
-  MDBX_node *node;
-  char *base;
+  const unsigned hole = mc->mc_ki[mc->mc_top];
+  const unsigned nkeys = page_numkeys(mp);
 
-  mdbx_debug("delete node %u on %s page %" PRIaPGNO, indx,
+  mdbx_debug("delete node %u on %s page %" PRIaPGNO, hole,
              IS_LEAF(mp) ? "leaf" : "branch", mp->mp_pgno);
-  nkeys = page_numkeys(mp);
-  mdbx_cassert(mc, indx < nkeys);
+  mdbx_cassert(mc, hole < nkeys);
 
   if (IS_LEAF2(mp)) {
     mdbx_cassert(mc, ksize >= sizeof(indx_t));
-    unsigned diff = nkeys - 1 - indx;
-    base = page_leaf2key(mp, indx, ksize);
+    unsigned diff = nkeys - 1 - hole;
+    char *base = page_leaf2key(mp, hole, ksize);
     if (diff)
       memmove(base, base + ksize, diff * ksize);
     mdbx_cassert(mc, mp->mp_lower >= sizeof(indx_t));
@@ -16362,36 +16359,29 @@ static void mdbx_node_del(MDBX_cursor *mc, size_t ksize) {
     return;
   }
 
-  node = page_node(mp, indx);
-  mdbx_cassert(mc, !IS_BRANCH(mp) || indx || node_ks(node) == 0);
-  size_t sz = NODESIZE + node_ks(node);
-  if (IS_LEAF(mp)) {
-    if (F_ISSET(node_flags(node), F_BIGDATA))
-      sz += sizeof(pgno_t);
-    else
-      sz += node_ds(node);
-  }
-  sz = EVEN(sz);
+  MDBX_node *node = page_node(mp, hole);
+  mdbx_cassert(mc, !IS_BRANCH(mp) || hole || node_ks(node) == 0);
+  size_t hole_size = NODESIZE + node_ks(node);
+  if (IS_LEAF(mp))
+    hole_size +=
+        (node_flags(node) & F_BIGDATA) ? sizeof(pgno_t) : node_ds(node);
+  hole_size = EVEN(hole_size);
 
-  ptr = mp->mp_ptrs[indx];
-  for (i = j = 0; i < nkeys; i++) {
-    if (i != indx) {
-      mp->mp_ptrs[j] = mp->mp_ptrs[i];
-      if (mp->mp_ptrs[i] < ptr) {
-        mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_ptrs[j] >= sz);
-        mp->mp_ptrs[j] += (indx_t)sz;
-      }
-      j++;
-    }
-  }
+  const indx_t hole_offset = mp->mp_ptrs[hole];
+  unsigned r, w;
+  for (r = w = 0; r < nkeys; r++)
+    if (r != hole)
+      mp->mp_ptrs[w++] = (mp->mp_ptrs[r] < hole_offset)
+                             ? mp->mp_ptrs[r] + (indx_t)hole_size
+                             : mp->mp_ptrs[r];
 
-  base = (char *)mp + mp->mp_upper + PAGEHDRSZ;
-  memmove(base + sz, base, ptr - mp->mp_upper);
+  char *base = (char *)mp + mp->mp_upper + PAGEHDRSZ;
+  memmove(base + hole_size, base, hole_offset - mp->mp_upper);
 
   mdbx_cassert(mc, mp->mp_lower >= sizeof(indx_t));
   mp->mp_lower -= sizeof(indx_t);
-  mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_upper >= sz);
-  mp->mp_upper += (indx_t)sz;
+  mdbx_cassert(mc, (size_t)UINT16_MAX - mp->mp_upper >= hole_size);
+  mp->mp_upper += (indx_t)hole_size;
 
   if (mdbx_audit_enabled()) {
     const uint8_t checking = mc->mc_checking;
@@ -16968,7 +16958,7 @@ static int mdbx_update_key(MDBX_cursor *mc, const MDBX_val *key) {
       /* not enough space left, do a delete and split */
       mdbx_debug("Not enough room, delta = %zd, splitting...", delta);
       pgno_t pgno = node_pgno(node);
-      mdbx_node_del(mc, 0);
+      node_del(mc, 0);
       int err = page_split(mc, key, NULL, pgno, MDBX_SPLIT_REPLACE);
       if (err == MDBX_SUCCESS && mdbx_audit_enabled())
         err = mdbx_cursor_check_updating(mc);
@@ -17173,7 +17163,7 @@ static int mdbx_node_move(MDBX_cursor *csrc, MDBX_cursor *cdst, bool fromleft) {
     return rc;
 
   /* Delete the node from the source page. */
-  mdbx_node_del(csrc, key4move.iov_len);
+  node_del(csrc, key4move.iov_len);
 
   mdbx_cassert(csrc, psrc == csrc->mc_pg[csrc->mc_top]);
   mdbx_cassert(cdst, pdst == cdst->mc_pg[cdst->mc_top]);
@@ -17424,7 +17414,7 @@ static int mdbx_page_merge(MDBX_cursor *csrc, MDBX_cursor *cdst) {
 
   /* Unlink the src page from parent and add to free list. */
   csrc->mc_top--;
-  mdbx_node_del(csrc, 0);
+  node_del(csrc, 0);
   if (csrc->mc_ki[csrc->mc_top] == 0) {
     const MDBX_val nullkey = {0, 0};
     rc = mdbx_update_key(csrc, &nullkey);
@@ -18313,7 +18303,7 @@ static int mdbx_cursor_del0(MDBX_cursor *mc) {
   mdbx_cassert(mc, IS_LEAF(mc->mc_pg[mc->mc_top]));
   ki = mc->mc_ki[mc->mc_top];
   mp = mc->mc_pg[mc->mc_top];
-  mdbx_node_del(mc, mc->mc_db->md_xsize);
+  node_del(mc, mc->mc_db->md_xsize);
   mc->mc_db->md_entries--;
 
   /* Adjust other cursors pointing to mp */
