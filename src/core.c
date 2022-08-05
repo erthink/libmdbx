@@ -5061,7 +5061,6 @@ static bool meta_weak_acceptable(const MDBX_env *env, const MDBX_meta *meta,
 
 MDBX_NOTHROW_PURE_FUNCTION static __inline txnid_t
 constmeta_txnid(const MDBX_env *env, const MDBX_meta *meta) {
-  mdbx_memory_fence(mo_AcquireRelease, false);
   txnid_t a = unaligned_peek_u64(4, &meta->mm_txnid_a);
   txnid_t b = unaligned_peek_u64(4, &meta->mm_txnid_b);
   mdbx_assert(env, a == b);
@@ -5081,7 +5080,6 @@ static __inline void meta_cache_clear(MDBX_env *env) {
 static __inline txnid_t meta_txnid(const MDBX_env *env,
                                    volatile const MDBX_meta *meta) {
   (void)env;
-  mdbx_memory_fence(mo_AcquireRelease, false);
   txnid_t a = unaligned_peek_u64_volatile(4, &meta->mm_txnid_a);
   txnid_t b = unaligned_peek_u64_volatile(4, &meta->mm_txnid_b);
   return (a == b) ? a : 0;
@@ -5213,7 +5211,8 @@ meta_mostrecent(const enum meta_choice_mode mode, const MDBX_env *env) {
   return head;
 }
 
-static volatile const MDBX_meta *meta_prefer_steady(const MDBX_env *env) {
+static __noinline volatile const MDBX_meta *
+meta_prefer_steady(const MDBX_env *env) {
   return
 #if MDBX_CACHE_METAPTR
       ((MDBX_env *)env)->cache_steady_meta =
@@ -5221,7 +5220,7 @@ static volatile const MDBX_meta *meta_prefer_steady(const MDBX_env *env) {
           meta_mostrecent(prefer_steady, env);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static const MDBX_meta *
+MDBX_NOTHROW_PURE_FUNCTION static __inline const MDBX_meta *
 constmeta_prefer_steady(const MDBX_env *env) {
 #if MDBX_CACHE_METAPTR
   if (likely(env->cache_steady_meta)) {
@@ -5233,7 +5232,8 @@ constmeta_prefer_steady(const MDBX_env *env) {
   return (const MDBX_meta *)meta_prefer_steady(env);
 }
 
-static volatile const MDBX_meta *meta_prefer_last(const MDBX_env *env) {
+__hot static __noinline volatile const MDBX_meta *
+meta_prefer_last(const MDBX_env *env) {
   return
 #if MDBX_CACHE_METAPTR
       ((MDBX_env *)env)->cache_last_meta =
@@ -5241,7 +5241,7 @@ static volatile const MDBX_meta *meta_prefer_last(const MDBX_env *env) {
           meta_mostrecent(prefer_last, env);
 }
 
-MDBX_NOTHROW_PURE_FUNCTION static const MDBX_meta *
+MDBX_NOTHROW_PURE_FUNCTION static __inline const MDBX_meta *
 constmeta_prefer_last(const MDBX_env *env) {
 #if MDBX_CACHE_METAPTR
   if (likely(env->cache_last_meta)) {
@@ -5252,11 +5252,11 @@ constmeta_prefer_last(const MDBX_env *env) {
   return (const MDBX_meta *)meta_prefer_last(env);
 }
 
-static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
+__cold static txnid_t mdbx_recent_committed_txnid(const MDBX_env *env) {
   while (true) {
     volatile const MDBX_meta *head = meta_prefer_last(env);
     const txnid_t recent = meta_txnid(env, head);
-    mdbx_memory_barrier();
+    mdbx_memory_fence(mo_AcquireRelease, false);
     if (likely(head == meta_prefer_last(env) &&
                recent == meta_txnid(env, head)))
       return recent;
@@ -7488,6 +7488,7 @@ static int meta_waittxnid(const MDBX_env *env, const volatile MDBX_meta *meta,
     return MDBX_SUCCESS;
 
   if (likely(!is_timeout(timestamp))) {
+    mdbx_memory_fence(mo_AcquireRelease, true);
 #if defined(_WIN32) || defined(_WIN64)
     SwitchToThread();
 #elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
@@ -7624,11 +7625,8 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
       txn->mt_dbs[1] = meta->mm_dbs[1];
       txn->mt_canary = meta->mm_canary;
 
-      /* LY: Retry on a race, ITS#7970.
-       * The barrier is not needed here since C11-atomics are used,
-       * but it is reasonable paranoia to avoid compiler misoptimization
-       * and makes clarity for code readers. */
-      mdbx_compiler_barrier();
+      /* LY: Retry on a race, ITS#7970. */
+      mdbx_memory_fence(mo_AcquireRelease, false);
       const txnid_t oldest =
           atomic_load64(&env->me_lck->mti_oldest_reader, mo_AcquireRelease);
       if (unlikely(target_txnid < oldest ||
@@ -8139,7 +8137,7 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
       info->txn_space_limit_hard = pgno2bytes(env, head_meta->mm_geo.upper);
       info->txn_space_leftover =
           pgno2bytes(env, head_meta->mm_geo.now - head_meta->mm_geo.next);
-      mdbx_compiler_barrier();
+      mdbx_memory_fence(mo_AcquireRelease, false);
     } while (unlikely(head_meta != meta_prefer_last(env) ||
                       head_txnid != meta_txnid(env, head_meta)));
 
@@ -12086,6 +12084,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
     }
   } else /* not recovery mode */
     while (1) {
+      mdbx_memory_fence(mo_AcquireRelease, false);
       const unsigned meta_clash_mask = meta_eq_mask(env);
       if (unlikely(meta_clash_mask)) {
         mdbx_error("meta-pages are clashed: mask 0x%d", meta_clash_mask);
@@ -12120,7 +12119,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       MDBX_meta clone;
       const MDBX_meta *const steady = constmeta_prefer_steady(env);
       const MDBX_meta *const head = constmeta_prefer_last(env);
-      const txnid_t steady_txnid = meta_txnid(env, steady);
+      const txnid_t steady_txnid = constmeta_txnid(env, steady);
       if (META_IS_STEADY(steady)) {
         err = mdbx_validate_meta_copy(env, steady, &clone);
         if (unlikely(err != MDBX_SUCCESS)) {
@@ -12135,7 +12134,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       }
 
       const pgno_t pgno = bytes2pgno(env, (uint8_t *)head - env->me_map);
-      const txnid_t head_txnid = meta_txnid(env, head);
+      const txnid_t head_txnid = constmeta_txnid(env, head);
       const bool head_valid =
           mdbx_validate_meta_copy(env, head, &clone) == MDBX_SUCCESS;
       mdbx_assert(env, !META_IS_STEADY(steady) || head_txnid != steady_txnid);
@@ -12279,7 +12278,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
         MDBX_meta *const pmeta = METAPAGE(env, n);
         if (unlikely(unaligned_peek_u64(4, &pmeta->mm_magic_and_version) !=
                      MDBX_DATA_MAGIC)) {
-          const txnid_t txnid = meta_txnid(env, pmeta);
+          const txnid_t txnid = constmeta_txnid(env, pmeta);
           mdbx_notice("%s %s"
                       "meta[%u], txnid %" PRIaTXN,
                       "updating db-format signature for",
@@ -20214,6 +20213,7 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
+  mdbx_memory_fence(mo_AcquireRelease, false);
   volatile const MDBX_meta *const recent_meta = meta_prefer_last(env);
   arg->mi_recent_txnid = meta_txnid(env, recent_meta);
   arg->mi_meta0_txnid = meta_txnid(env, meta0);
@@ -20979,7 +20979,7 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
         const uint64_t head_pages_retired =
             unaligned_peek_u64_volatile(4, recent_meta->mm_pages_retired);
         const txnid_t head_txnid = meta_txnid(env, recent_meta);
-        mdbx_compiler_barrier();
+        mdbx_memory_fence(mo_AcquireRelease, false);
         if (unlikely(recent_meta != meta_prefer_last(env) ||
                      head_pages_retired !=
                          unaligned_peek_u64_volatile(
@@ -21186,6 +21186,7 @@ __cold static txnid_t kick_longlived_readers(MDBX_env *env,
     mdbx_assert(env, oldest >= laggard);
     mdbx_assert(env, oldest >= env->me_lck->mti_oldest_reader.weak);
 
+    mdbx_memory_fence(mo_AcquireRelease, false);
     const txnid_t steady = meta_txnid(env, meta_prefer_steady(env));
     MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
     if (oldest == steady || oldest > laggard || /* without-LCK mode */ !lck)
@@ -21315,6 +21316,7 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
       const pgno_t maxpg = meta->mm_geo.now;
       *percent = (int)((meta->mm_geo.next * UINT64_C(100) + maxpg / 2) / maxpg);
     }
+    mdbx_memory_fence(mo_AcquireRelease, false);
   } while (unlikely(recent != meta_txnid(env, meta)));
 
   txnid_t lag = (recent - txn->mt_txnid) / xMDBX_TXNID_STEP;
