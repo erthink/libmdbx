@@ -1439,7 +1439,7 @@ __cold void mdbx_rthc_global_init(void) {
              __Wpedantic_format_voidptr(&rthc_key), (unsigned)rthc_key);
 #endif
   /* checking time conversion, this also avoids racing on 32-bit architectures
-   * during writing calculated 64-bit ratio(s) into memory. */
+   * during storing calculated 64-bit ratio(s) into memory. */
   uint32_t proba = UINT32_MAX;
   while (true) {
     unsigned time_conversion_checkup =
@@ -13647,7 +13647,7 @@ __hot static int cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
 /* Fast non-lexically comparator */
 __hot static int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
   int diff = CMP2INT(a->iov_len, b->iov_len);
-  return likely(diff || a->iov_len == 0)
+  return likely(diff) || a->iov_len == 0
              ? diff
              : memcmp(a->iov_base, b->iov_base, a->iov_len);
 }
@@ -13685,7 +13685,7 @@ __hot static struct node_result mdbx_node_search(MDBX_cursor *mc,
     return ret;
   }
 
-  int cr = 0, i = 0;
+  int i;
   MDBX_cmp_func *cmp = mc->mc_dbx->md_cmp;
   MDBX_val nodekey;
   if (unlikely(IS_LEAF2(mp))) {
@@ -13696,20 +13696,20 @@ __hot static struct node_result mdbx_node_search(MDBX_cursor *mc,
       nodekey.iov_base = page_leaf2key(mp, i, nodekey.iov_len);
       mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
                            (char *)nodekey.iov_base + nodekey.iov_len);
-      cr = cmp(key, &nodekey);
+      int cr = cmp(key, &nodekey);
       mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY_DEBUG(&nodekey),
                  cr);
-      if (unlikely(cr == 0)) {
+      if (cr > 0)
+        /* Found entry is less than the key. */
+        /* Skip to get the smallest entry larger than key. */
+        low = ++i;
+      else if (cr < 0)
+        high = i - 1;
+      else {
         ret.exact = true;
         break;
       }
-      low = (cr < 0) ? low : i + 1;
-      high = (cr < 0) ? i - 1 : high;
     } while (likely(low <= high));
-
-    /* Found entry is less than the key. */
-    /* Skip to get the smallest entry larger than key. */
-    i += cr > 0;
 
     /* store the key index */
     mc->mc_ki[mc->mc_top] = (indx_t)i;
@@ -13727,31 +13727,29 @@ __hot static struct node_result mdbx_node_search(MDBX_cursor *mc,
   MDBX_node *node;
   do {
     i = (low + high) >> 1;
-
     node = page_node(mp, i);
     nodekey.iov_len = node_ks(node);
     nodekey.iov_base = node_key(node);
     mdbx_cassert(mc, (char *)mp + mc->mc_txn->mt_env->me_psize >=
                          (char *)nodekey.iov_base + nodekey.iov_len);
-
-    cr = cmp(key, &nodekey);
+    int cr = cmp(key, &nodekey);
     if (IS_LEAF(mp))
       mdbx_debug("found leaf index %u [%s], rc = %i", i, DKEY_DEBUG(&nodekey),
                  cr);
     else
       mdbx_debug("found branch index %u [%s -> %" PRIaPGNO "], rc = %i", i,
                  DKEY_DEBUG(&nodekey), node_pgno(node), cr);
-    if (unlikely(cr == 0)) {
+    if (cr > 0)
+      /* Found entry is less than the key. */
+      /* Skip to get the smallest entry larger than key. */
+      low = ++i;
+    else if (cr < 0)
+      high = i - 1;
+    else {
       ret.exact = true;
       break;
     }
-    low = (cr < 0) ? low : i + 1;
-    high = (cr < 0) ? i - 1 : high;
   } while (likely(low <= high));
-
-  /* Found entry is less than the key. */
-  /* Skip to get the smallest entry larger than key. */
-  i += cr > 0;
 
   /* store the key index */
   mc->mc_ki[mc->mc_top] = (indx_t)i;
@@ -13956,7 +13954,7 @@ mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key, int flags) {
       }
     } else {
       const struct node_result nsr = mdbx_node_search(mc, key);
-      if (nsr.node)
+      if (likely(nsr.node))
         i = mc->mc_ki[mc->mc_top] + nsr.exact - 1;
       else
         i = page_numkeys(mp) - 1;

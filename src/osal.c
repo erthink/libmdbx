@@ -2034,10 +2034,10 @@ mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
 MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
   static uint64_t limit;
   if (unlikely(monotime > limit)) {
-    if (limit != 0)
+    if (likely(limit != 0))
       return UINT32_MAX;
     limit = mdbx_osal_16dot16_to_monotime(UINT32_MAX - 1);
-    if (monotime > limit)
+    if (unlikely(monotime > limit))
       return UINT32_MAX;
   }
   const uint32_t ret =
@@ -2048,7 +2048,9 @@ MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
 #else
       (uint32_t)(monotime * 128 / 1953125);
 #endif
-  return likely(ret || monotime == 0) ? ret : /* fix underflow */ 1;
+  if (likely(ret > 0))
+    return ret;
+  return monotime > 0 /* fix underflow */;
 }
 
 MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void) {
@@ -2091,7 +2093,7 @@ static void bootid_shake(bin128_t *p) {
   p->d = e + p->a;
 }
 
-static void bootid_collect(bin128_t *p, const void *s, size_t n) {
+__cold static void bootid_collect(bin128_t *p, const void *s, size_t n) {
   p->y += UINT64_C(64526882297375213);
   bootid_shake(p);
   for (size_t i = 0; i < n; ++i) {
