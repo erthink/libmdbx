@@ -812,13 +812,13 @@ else
 define bench-rule
 bench-$(1)_$(2).txt: $(3) $(IOARENA) $(lastword $(MAKEFILE_LIST))
 	@echo '  RUNNING ioarena for $1/$2...'
-	$(QUIET)LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
+	$(QUIET)(export LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}"; \
+		ldd $(IOARENA) && \
 		$(IOARENA) -D $(1) -B crud -m $(BENCH_CRUD_MODE) -n $(2) \
-		| tee $$@ | grep throughput && \
-	LD_LIBRARY_PATH="./:$$$${LD_LIBRARY_PATH}" \
-		$(IOARENA) -D $(1) -B get,iterate -m $(BENCH_CRUD_MODE) -r 4 -n $(2) \
-		| tee -a $$@ | grep throughput \
-	|| mv -f $$@ $$@.error
+			| tee $$@ | grep throughput && \
+		$(IOARENA) -D $(1) -B iterate,get,iterate,get,iterate -m $(BENCH_CRUD_MODE) -r 4 -n $(2) \
+			| tee -a $$@ | grep throughput \
+	) || mv -f $$@ $$@.error
 
 endef
 

@@ -24,10 +24,15 @@ Not a release but preparation for changing feature set and API.
 -------------------------------------------------------------------------------
 
 
-## v0.11.9 (Чирчик-1992) scheduled to 2022-08-02
+## v0.11.9 (Чирчик-1992) at 2022-08-02
 
 The stable bugfix release.
 It is planned that this will be the last release of the v0.11 branch.
+
+```
+18 files changed, 318 insertions(+), 178 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Acknowledgements:
 

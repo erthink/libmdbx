@@ -7447,9 +7447,9 @@ static bool meta_checktxnid(const MDBX_env *env, const volatile MDBX_meta *meta,
     if (unlikely(root_txnid != freedb_mod_txnid)) {
       if (report)
         mdbx_warning(
-            "catch invalid root_page_txnid %" PRIaTXN
+            "catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
             " for %sdb.mod_txnid %" PRIaTXN " %s",
-            root_txnid, "free", freedb_mod_txnid,
+            freedb_root_pgno, root_txnid, "free", freedb_mod_txnid,
             "(workaround for incoherent flaw of unified page/buffer cache)");
       ok = false;
     }
@@ -7462,9 +7462,9 @@ static bool meta_checktxnid(const MDBX_env *env, const volatile MDBX_meta *meta,
     if (unlikely(root_txnid != maindb_mod_txnid)) {
       if (report)
         mdbx_warning(
-            "catch invalid root_page_txnid %" PRIaTXN
+            "catch invalid root_page %" PRIaPGNO " mod_txnid %" PRIaTXN
             " for %sdb.mod_txnid %" PRIaTXN " %s",
-            root_txnid, "main", maindb_mod_txnid,
+            maindb_root_pgno, root_txnid, "main", maindb_mod_txnid,
             "(workaround for incoherent flaw of unified page/buffer cache)");
       ok = false;
     }
@@ -7824,13 +7824,17 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
   if (unlikely(txn->mt_flags & bad_bits))
     return MDBX_BAD_TXN;
 
+  mdbx_tassert(txn, (txn->mt_flags & MDBX_NOTLS) ==
+                        ((txn->mt_flags & MDBX_TXN_RDONLY)
+                             ? txn->mt_env->me_flags & MDBX_NOTLS
+                             : 0));
 #if MDBX_TXN_CHECKOWNER
-  if ((txn->mt_flags & MDBX_NOTLS) == 0 &&
-      unlikely(txn->mt_owner != mdbx_thread_self()))
+  if (unlikely(txn->mt_owner != mdbx_thread_self()) &&
+      (txn->mt_flags & (MDBX_NOTLS | MDBX_TXN_FINISHED)) == 0)
     return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
-  if (unlikely(!txn->mt_env->me_map))
+  if (bad_bits && unlikely(!txn->mt_env->me_map))
     return MDBX_EPERM;
 
   return MDBX_SUCCESS;
