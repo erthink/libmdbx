@@ -5974,13 +5974,6 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
 }
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
 
-#ifdef MDBX_ATTRIBUTE_TARGET_AVX
-MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX static pgno_t *static pgno_t *
-scan4seq_avx(pgno_t *range, const size_t len, const unsigned seq) {
-  return nullptr;
-}
-#endif /* MDBX_ATTRIBUTE_TARGET_AVX */
-
 #if defined(__SSE2__)
 #define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
 #elif (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__amd64__)
@@ -5988,7 +5981,7 @@ scan4seq_avx(pgno_t *range, const size_t len, const unsigned seq) {
 #define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
 #elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__)
 #define MDBX_ATTRIBUTE_TARGET_SSE2 MDBX_ATTRIBUTE_TARGET("sse2")
-#endif
+#endif /* __SSE2__ */
 
 #ifdef MDBX_ATTRIBUTE_TARGET_SSE2
 MDBX_ATTRIBUTE_TARGET_SSE2 static __always_inline unsigned
@@ -6058,14 +6051,12 @@ scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
 }
 #endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
 
-#if defined(__AVX512BW__)
+#if defined(__AVX512BW__) && defined(MDBX_ATTRIBUTE_TARGET_AVX512)
 #define scan4seq_default scan4seq_avx512bw
 #define scan4seq scan4seq_default
-#elif defined(__AVX2__)
+#elif defined(__AVX2__) && defined(MDBX_ATTRIBUTE_TARGET_AVX2)
 #define scan4seq_default scan4seq_avx2
-#elif defined(__AVX__)
-#define scan4seq_default scan4seq_avx
-#elif defined(__SSE2__)
+#elif defined(__SSE2__) && defined(MDBX_ATTRIBUTE_TARGET_SSE2)
 #define scan4seq_default scan4seq_sse2
 /* Choosing of another variants should be added here. */
 #endif /* scan4seq_default */
@@ -6100,22 +6091,18 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
     __GNUC_PREREQ(4, 8)
   __builtin_cpu_init();
 #endif /* __builtin_cpu_init() */
-#ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
-  if (__builtin_cpu_supports("avx512bw"))
-    choice = scan4seq_avx512;
-#endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
+#ifdef MDBX_ATTRIBUTE_TARGET_SSE2
+  if (__builtin_cpu_supports("sse2"))
+    choice = scan4seq_sse2;
+#endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
 #ifdef MDBX_ATTRIBUTE_TARGET_AVX2
   if (__builtin_cpu_supports("avx2"))
     choice = scan4seq_avx2;
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
-#ifdef MDBX_ATTRIBUTE_TARGET_AVX
-  if (__builtin_cpu_supports("avx"))
-    choice = scan4seq_avx;
-#endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
-#ifdef MDBX_ATTRIBUTE_TARGET_SSE2
-  if (!choice && __builtin_cpu_supports("sse2"))
-    choice = scan4seq_sse2;
-#endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
+  if (__builtin_cpu_supports("avx512bw"))
+    choice = scan4seq_avx512;
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
   /* Choosing of another variants should be added here. */
   scan4seq = choice ? choice : scan4seq_default;
   return scan4seq(range, len, seq);
