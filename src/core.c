@@ -6015,7 +6015,7 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
 #else
   const unsigned on_page_safe_mask = 0xfe0 /* enough for '-31' bytes offset */;
 #endif
-  if (likely(on_page_safe_mask & (uintptr_t)range)) {
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
     const unsigned extra = (unsigned)(detent + 8 - range);
     assert(extra > 0 && extra < 8);
     mask = 0xFF << extra;
@@ -6092,7 +6092,7 @@ scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
 #else
   const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
 #endif
-  if (likely(on_page_safe_mask & (uintptr_t)range)) {
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
     const unsigned extra = (unsigned)(detent + 4 - range);
     assert(extra > 0 && extra < 4);
     mask = 0xF << extra;
