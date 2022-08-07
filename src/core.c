@@ -13595,29 +13595,71 @@ static __inline int mdbx_cursor_push(MDBX_cursor *mc, MDBX_page *mp) {
   return MDBX_SUCCESS;
 }
 
-__hot static __noinline MDBX_page *page_lookup_spilled(MDBX_txn *const txn,
-                                                       const pgno_t pgno) {
-  const MDBX_txn *spiller = txn;
-  do {
-    /* Spilled pages were dirtied in this txn and flushed
-     * because the dirty list got full. Bring this page
-     * back in from the map (but don't unspill it here,
-     * leave that unless page_touch happens again). */
-    if (unlikely(spiller->mt_flags & MDBX_TXN_SPILLS) &&
-        mdbx_search_spilled(spiller, pgno))
-      break;
-
-    const unsigned i = dpl_search(spiller, pgno);
-    mdbx_tassert(txn, (int)i > 0);
-    if (spiller->tw.dirtylist->items[i].pgno == pgno) {
-      spiller->tw.dirtylist->items[i].lru = txn->tw.dirtylru++;
-      return spiller->tw.dirtylist->items[i].ptr;
+__hot static __always_inline int page_get_checker_lite(const uint16_t ILL,
+                                                       const MDBX_page *page,
+                                                       MDBX_txn *const txn,
+                                                       const txnid_t front) {
+  if (unlikely(page->mp_flags & ILL)) {
+    if (ILL == P_ILL_BITS || (page->mp_flags & P_ILL_BITS))
+      return bad_page(page, "invalid page's flags (%u)\n", page->mp_flags);
+    else if (ILL & P_OVERFLOW) {
+      assert((ILL & (P_BRANCH | P_LEAF | P_LEAF2)) == 0);
+      assert(page->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2));
+      return bad_page(page, "unexpected %s instead of %s (%u)\n",
+                      "large/overlow", "branch/leaf/leaf2", page->mp_flags);
+    } else if (ILL & (P_BRANCH | P_LEAF | P_LEAF2)) {
+      assert((ILL & P_BRANCH) && (ILL & P_LEAF) && (ILL & P_LEAF2));
+      assert(page->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2));
+      return bad_page(page, "unexpected %s instead of %s (%u)\n",
+                      "branch/leaf/leaf2", "large/overlow", page->mp_flags);
+    } else {
+      assert(false);
     }
+  }
 
-    spiller = spiller->mt_parent;
-  } while (spiller);
+  if (unlikely(page->mp_txnid > front) &&
+      unlikely(page->mp_txnid > txn->mt_front || front < txn->mt_txnid))
+    return bad_page(
+        page,
+        "invalid page' txnid (%" PRIaTXN ") for %s' txnid (%" PRIaTXN ")\n",
+        page->mp_txnid,
+        (front == txn->mt_front && front != txn->mt_txnid) ? "front-txn"
+                                                           : "parent-page",
+        front);
 
-  return pgno2page(txn->mt_env, pgno);
+  if (((ILL & P_OVERFLOW) || !IS_OVERFLOW(page)) &&
+      (ILL & (P_BRANCH | P_LEAF | P_LEAF2)) == 0) {
+    if (unlikely(page->mp_upper < page->mp_lower ||
+                 ((page->mp_lower | page->mp_upper) & 1) ||
+                 PAGEHDRSZ + page->mp_upper > txn->mt_env->me_psize))
+      return bad_page(page, "invalid page' lower(%u)/upper(%u) with limit %u\n",
+                      page->mp_lower, page->mp_upper, page_space(txn->mt_env));
+
+  } else if ((ILL & P_OVERFLOW) == 0) {
+    const pgno_t npages = page->mp_pages;
+    if (unlikely(npages < 1) || unlikely(npages >= MAX_PAGENO / 2))
+      return bad_page(page, "invalid n-pages (%u) for large-page\n", npages);
+    if (unlikely(page->mp_pgno + npages > txn->mt_next_pgno))
+      return bad_page(
+          page,
+          "end of large-page beyond (%u) allocated space (%u next-pgno)\n",
+          page->mp_pgno + npages, txn->mt_next_pgno);
+  } else {
+    assert(false);
+  }
+  return MDBX_SUCCESS;
+}
+
+__cold static __noinline pgr_t page_get_checker_full(const uint16_t ILL,
+                                                     MDBX_page *page,
+                                                     MDBX_cursor *const mc,
+                                                     const txnid_t front) {
+  pgr_t r = {page, page_get_checker_lite(ILL, page, mc->mc_txn, front)};
+  if (likely(r.err == MDBX_SUCCESS))
+    r.err = mdbx_page_check(mc, page);
+  if (unlikely(r.err != MDBX_SUCCESS))
+    mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
+  return r;
 }
 
 __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
@@ -13630,95 +13672,56 @@ __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
   pgr_t r;
   if (unlikely(pgno >= txn->mt_next_pgno)) {
     mdbx_error("page #%" PRIaPGNO " beyond next-pgno", pgno);
-  notfound:
     r.page = nullptr;
     r.err = MDBX_PAGE_NOTFOUND;
   bailout:
-    mc->mc_txn->mt_flags |= MDBX_TXN_ERROR;
+    txn->mt_flags |= MDBX_TXN_ERROR;
     return r;
   }
 
+  mdbx_assert(txn->mt_env,
+              ((txn->mt_flags ^ txn->mt_env->me_flags) & MDBX_WRITEMAP) == 0);
   r.page = pgno2page(txn->mt_env, pgno);
-  if (unlikely((txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0))
-    r.page = page_lookup_spilled(txn, pgno);
+  if ((txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_WRITEMAP)) == 0) {
+    const MDBX_txn *spiller = txn;
+    do {
+      /* Spilled pages were dirtied in this txn and flushed
+       * because the dirty list got full. Bring this page
+       * back in from the map (but don't unspill it here,
+       * leave that unless page_touch happens again). */
+      if (unlikely(spiller->mt_flags & MDBX_TXN_SPILLS) &&
+          mdbx_search_spilled(spiller, pgno))
+        break;
 
-  MDBX_env *const env = txn->mt_env;
-  mdbx_assert(env, ((txn->mt_flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
+      const unsigned i = dpl_search(spiller, pgno);
+      mdbx_tassert(txn, (int)i > 0);
+      if (spiller->tw.dirtylist->items[i].pgno == pgno) {
+        spiller->tw.dirtylist->items[i].lru = txn->tw.dirtylru++;
+        r.page = spiller->tw.dirtylist->items[i].ptr;
+        break;
+      }
+
+      spiller = spiller->mt_parent;
+    } while (spiller);
+  }
 
   if (unlikely(r.page->mp_pgno != pgno)) {
     r.err = bad_page(
         r.page, "pgno mismatch (%" PRIaPGNO ") != expected (%" PRIaPGNO ")\n",
         r.page->mp_pgno, pgno);
-    goto notfound;
-  }
-
-#if !MDBX_DISABLE_VALIDATION
-  if (unlikely(r.page->mp_flags & ILL)) {
-    if (ILL == P_ILL_BITS || (r.page->mp_flags & P_ILL_BITS))
-      r.err = bad_page(r.page, "invalid page's flags (%u)\n", r.page->mp_flags);
-    else if (ILL & P_OVERFLOW) {
-      assert((ILL & (P_BRANCH | P_LEAF | P_LEAF2)) == 0);
-      assert(r.page->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2));
-      r.err = bad_page(r.page, "unexpected %s instead of %s (%u)\n",
-                       "large/overlow", "branch/leaf/leaf2", r.page->mp_flags);
-    } else if (ILL & (P_BRANCH | P_LEAF | P_LEAF2)) {
-      assert((ILL & P_BRANCH) && (ILL & P_LEAF) && (ILL & P_LEAF2));
-      assert(r.page->mp_flags & (P_BRANCH | P_LEAF | P_LEAF2));
-      r.err = bad_page(r.page, "unexpected %s instead of %s (%u)\n",
-                       "branch/leaf/leaf2", "large/overlow", r.page->mp_flags);
-    } else {
-      assert(false);
-    }
     goto bailout;
   }
 
-  if (unlikely(r.page->mp_txnid > front) &&
-      unlikely(r.page->mp_txnid > txn->mt_front || front < txn->mt_txnid)) {
-    r.err = bad_page(
-        r.page,
-        "invalid page' txnid (%" PRIaTXN ") for %s' txnid (%" PRIaTXN ")\n",
-        r.page->mp_txnid,
-        (front == txn->mt_front && front != txn->mt_txnid) ? "front-txn"
-                                                           : "parent-page",
-        front);
-    goto bailout;
-  }
+  if (unlikely(mc->mc_checking & CC_PAGECHECK))
+    return page_get_checker_full(ILL, r.page, mc, front);
 
-  if (((ILL & P_OVERFLOW) || !IS_OVERFLOW(r.page)) &&
-      (ILL & (P_BRANCH | P_LEAF | P_LEAF2)) == 0) {
-    if (unlikely(r.page->mp_upper < r.page->mp_lower ||
-                 ((r.page->mp_lower | r.page->mp_upper) & 1) ||
-                 PAGEHDRSZ + r.page->mp_upper > env->me_psize)) {
-      r.err =
-          bad_page(r.page, "invalid page' lower(%u)/upper(%u) with limit %u\n",
-                   r.page->mp_lower, r.page->mp_upper, page_space(env));
-      goto bailout;
-    }
-  } else if ((ILL & P_OVERFLOW) == 0) {
-    const pgno_t npages = r.page->mp_pages;
-    if (unlikely(npages < 1 || npages >= MAX_PAGENO / 2)) {
-      r.err = bad_page(r.page, "invalid n-pages (%u) for large-page\n", npages);
-      goto bailout;
-    }
-    if (unlikely(r.page->mp_pgno + npages > txn->mt_next_pgno)) {
-      r.err = bad_page(
-          r.page,
-          "end of large-page beyond (%u) allocated space (%u next-pgno)\n",
-          r.page->mp_pgno + npages, txn->mt_next_pgno);
-      goto bailout;
-    }
-  } else {
-    assert(false);
-  }
-#else
-  (void)ILL;
-#endif /* MDBX_DISABLE_VALIDATION */
-
-  if (unlikely(mc->mc_checking & CC_PAGECHECK) &&
-      unlikely(MDBX_SUCCESS != (r.err = mdbx_page_check(mc, r.page))))
-    goto bailout;
-
+#if MDBX_DISABLE_VALIDATION
   r.err = MDBX_SUCCESS;
+#else
+  r.err = page_get_checker_lite(ILL, r.page, txn, front);
+  if (unlikely(r.err != MDBX_SUCCESS))
+    goto bailout;
+#endif /* MDBX_DISABLE_VALIDATION */
   return r;
 }
 
