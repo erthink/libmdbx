@@ -786,7 +786,7 @@ get_key_optional(const MDBX_node *node, MDBX_val *keyptr /* __may_null */) {
  * in an obsolete versions of Elbrus's libc and kernels. */
 #if defined(__e2k__) && defined(MDBX_E2K_MLHCPB_WORKAROUND) &&                 \
     MDBX_E2K_MLHCPB_WORKAROUND
-int __hot mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
+__hot int mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
                                          size_t n) {
   if (unlikely(n > 42
                /* LY: align followed access if reasonable possible */
@@ -853,7 +853,7 @@ int __hot mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
   return (n & 1) ? *(uint8_t *)s1 - *(uint8_t *)s2 : 0;
 }
 
-int __hot mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2) {
+__hot int mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2) {
   while (true) {
     int diff = *(uint8_t *)s1 - *(uint8_t *)s2;
     if (likely(diff != 0) || *s1 == '\0')
@@ -863,7 +863,7 @@ int __hot mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2) {
   }
 }
 
-int __hot mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
+__hot int mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
                                           size_t n) {
   while (n > 0) {
     int diff = *(uint8_t *)s1 - *(uint8_t *)s2;
@@ -876,7 +876,7 @@ int __hot mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
   return 0;
 }
 
-size_t __hot mdbx_e2k_strlen_bug_workaround(const char *s) {
+__hot size_t mdbx_e2k_strlen_bug_workaround(const char *s) {
   size_t n = 0;
   while (*s) {
     s += 1;
@@ -885,7 +885,7 @@ size_t __hot mdbx_e2k_strlen_bug_workaround(const char *s) {
   return n;
 }
 
-size_t __hot mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
+__hot size_t mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
   size_t n = 0;
   while (maxlen > n && *s) {
     s += 1;
@@ -2142,7 +2142,7 @@ static int lcklist_detach_locked(MDBX_env *env) {
     TYPE *lo, *hi;                                                             \
   } NAME##_stack;                                                              \
                                                                                \
-  static __hot void NAME(TYPE *const __restrict begin,                         \
+  __hot static void NAME(TYPE *const __restrict begin,                         \
                          TYPE *const __restrict end) {                         \
     NAME##_stack stack[sizeof(unsigned) * CHAR_BIT], *__restrict top = stack;  \
                                                                                \
@@ -2492,7 +2492,7 @@ mdbx_pnl_append_range(bool spilled, MDBX_PNL *ppl, pgno_t pgno, unsigned n) {
 }
 
 /* Append an pgno range into the sorted PNL */
-static __hot int __must_check_result mdbx_pnl_insert_range(MDBX_PNL *ppl,
+__hot static int __must_check_result mdbx_pnl_insert_range(MDBX_PNL *ppl,
                                                            pgno_t pgno,
                                                            unsigned n) {
   assert(n > 0);
@@ -2575,7 +2575,7 @@ pnl_merge_inner(pgno_t *__restrict dst, const pgno_t *__restrict src_a,
 }
 
 /* Merge a PNL onto a PNL. The destination PNL must be big enough */
-static void __hot pnl_merge(MDBX_PNL dst, const MDBX_PNL src) {
+__hot static void pnl_merge(MDBX_PNL dst, const MDBX_PNL src) {
   assert(pnl_check_allocated(dst, MAX_PAGENO + 1));
   assert(pnl_check(src, MAX_PAGENO + 1));
   const pgno_t src_len = MDBX_PNL_SIZE(src);
@@ -2649,7 +2649,7 @@ RADIXSORT_IMPL(pgno, pgno_t, MDBX_PNL_EXTRACT_KEY,
 
 SORT_IMPL(pgno_sort, false, pgno_t, MDBX_PNL_ORDERED)
 
-static __hot void mdbx_pnl_sort_nochk(MDBX_PNL pnl) {
+__hot __noinline static void mdbx_pnl_sort_nochk(MDBX_PNL pnl) {
   if (likely(MDBX_PNL_SIZE(pnl) < MDBX_RADIXSORT_THRESHOLD) ||
       unlikely(!pgno_radixsort(&MDBX_PNL_FIRST(pnl), MDBX_PNL_SIZE(pnl))))
     pgno_sort(MDBX_PNL_BEGIN(pnl), MDBX_PNL_END(pnl));
@@ -2665,7 +2665,8 @@ static __inline void mdbx_pnl_sort(MDBX_PNL pnl, size_t limit4check) {
  * Returns The index of the first item greater than or equal to pgno. */
 SEARCH_IMPL(pgno_bsearch, pgno_t, pgno_t, MDBX_PNL_ORDERED)
 
-static __hot unsigned mdbx_pnl_search_nochk(const MDBX_PNL pnl, pgno_t pgno) {
+__hot __noinline static unsigned mdbx_pnl_search_nochk(const MDBX_PNL pnl,
+                                                       pgno_t pgno) {
   const pgno_t *begin = MDBX_PNL_BEGIN(pnl);
   const pgno_t *it = pgno_bsearch(begin, MDBX_PNL_SIZE(pnl), pgno);
   const pgno_t *end = begin + MDBX_PNL_SIZE(pnl);
@@ -3001,7 +3002,7 @@ static __always_inline MDBX_dpl *dpl_sort(const MDBX_txn *txn) {
 #define DP_SEARCH_CMP(dp, id) ((dp).pgno < (id))
 SEARCH_IMPL(dp_bsearch, MDBX_dp, pgno_t, DP_SEARCH_CMP)
 
-__hot static unsigned dpl_search(const MDBX_txn *txn, pgno_t pgno) {
+__hot __noinline static unsigned dpl_search(const MDBX_txn *txn, pgno_t pgno) {
   MDBX_dpl *dl = txn->tw.dirtylist;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   if (mdbx_audit_enabled()) {
@@ -13564,7 +13565,7 @@ __cold int mdbx_env_close(MDBX_env *env) {
 #endif /* LIBMDBX_NO_EXPORTS_LEGACY_API */
 
 /* Compare two items pointing at aligned unsigned int's. */
-static int __hot cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
+__hot static int cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   switch (a->iov_len) {
   case 4:
@@ -13581,7 +13582,7 @@ static int __hot cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Compare two items pointing at 2-byte aligned unsigned int's. */
-static int __hot cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
+__hot static int cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   switch (a->iov_len) {
   case 4:
@@ -13600,7 +13601,7 @@ static int __hot cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
 /* Compare two items pointing at unsigned values with unknown alignment.
  *
  * This is also set as MDBX_INTEGERDUP|MDBX_DUPFIXED's MDBX_dbx.md_dcmp. */
-static int __hot cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
+__hot static int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
   mdbx_assert(NULL, a->iov_len == b->iov_len);
   switch (a->iov_len) {
   case 4:
@@ -13617,7 +13618,7 @@ static int __hot cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Compare two items lexically */
-static int __hot cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
+__hot static int cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
   if (a->iov_len == b->iov_len)
     return a->iov_len ? memcmp(a->iov_base, b->iov_base, a->iov_len) : 0;
 
@@ -13628,7 +13629,7 @@ static int __hot cmp_lexical(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Compare two items in reverse byte order */
-static int __hot cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
+__hot static int cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
   const size_t shortest = (a->iov_len < b->iov_len) ? a->iov_len : b->iov_len;
   if (likely(shortest)) {
     const uint8_t *pa = (const uint8_t *)a->iov_base + a->iov_len;
@@ -13644,7 +13645,7 @@ static int __hot cmp_reverse(const MDBX_val *a, const MDBX_val *b) {
 }
 
 /* Fast non-lexically comparator */
-static int __hot cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
+__hot static int cmp_lenfast(const MDBX_val *a, const MDBX_val *b) {
   int diff = CMP2INT(a->iov_len, b->iov_len);
   return likely(diff || a->iov_len == 0)
              ? diff
@@ -13663,7 +13664,7 @@ static bool unsure_equal(MDBX_cmp_func cmp, const MDBX_val *a,
  * Returns the smallest entry larger or equal to the key.
  * Updates the cursor index with the index of the found entry.
  * If no entry larger or equal to the key is found, returns NULL. */
-static struct node_result __hot mdbx_node_search(MDBX_cursor *mc,
+__hot static struct node_result mdbx_node_search(MDBX_cursor *mc,
                                                  const MDBX_val *key) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   const int nkeys = page_numkeys(mp);
@@ -13922,8 +13923,8 @@ __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
 
 /* Finish mdbx_page_search() / mdbx_page_search_lowest().
  * The cursor is at the root page, set up the rest of it. */
-__hot static int mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key,
-                                       int flags) {
+__hot __noinline static int
+mdbx_page_search_root(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   MDBX_page *mp = mc->mc_pg[mc->mc_top];
   int rc;
   DKBUF_DEBUG;
@@ -14592,9 +14593,10 @@ static int mdbx_cursor_prev(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 }
 
 /* Set the cursor on a specific data item. */
-static struct cursor_set_result mdbx_cursor_set(MDBX_cursor *mc, MDBX_val *key,
-                                                MDBX_val *data,
-                                                MDBX_cursor_op op) {
+__hot static struct cursor_set_result mdbx_cursor_set(MDBX_cursor *mc,
+                                                      MDBX_val *key,
+                                                      MDBX_val *data,
+                                                      MDBX_cursor_op op) {
   MDBX_page *mp;
   MDBX_node *node = NULL;
   DKBUF_DEBUG;
@@ -14976,8 +14978,8 @@ static int mdbx_cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   return MDBX_SUCCESS;
 }
 
-int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                    MDBX_cursor_op op) {
+__hot int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                          MDBX_cursor_op op) {
   if (unlikely(mc == NULL))
     return MDBX_EINVAL;
 
@@ -15372,8 +15374,8 @@ static int mdbx_cursor_touch(MDBX_cursor *mc) {
   return rc;
 }
 
-int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
-                    unsigned flags) {
+__hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
+                          unsigned flags) {
   MDBX_env *env;
   MDBX_page *sub_root = NULL;
   MDBX_val xdata, *rdata, dkey, olddata;
@@ -16174,7 +16176,7 @@ new_sub:;
   return rc;
 }
 
-int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
+__hot int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(!mc))
     return MDBX_EINVAL;
 
