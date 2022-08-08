@@ -2277,52 +2277,73 @@ static int lcklist_detach_locked(MDBX_env *env) {
 /*------------------------------------------------------------------------------
  * LY: Binary search */
 
+#if defined(__clang__) && __clang_major__ > 4 && defined(__ia32__)
+#define WORKAROUND_FOR_CLANG_OPTIMIZER_BUG(size, flag)                         \
+  do                                                                           \
+    __asm __volatile(""                                                        \
+                     : "+r"(size)                                              \
+                     : "r" /* the `b` constraint is more suitable here, but    \
+                              cause CLANG to allocate and push/pop an one more \
+                              register, so using the `r` which avoids this. */ \
+                     (flag));                                                  \
+  while (0)
+#else
+#define WORKAROUND_FOR_CLANG_OPTIMIZER_BUG(size, flag)                         \
+  do {                                                                         \
+    /* nope for non-clang or non-x86 */;                                       \
+  } while (0)
+#endif /* Workaround for CLANG */
+
+#define BINARY_SEARCH_STEP(TYPE_LIST, CMP, it, size, key)                      \
+  do {                                                                         \
+  } while (0)
+
 #define SEARCH_IMPL(NAME, TYPE_LIST, TYPE_ARG, CMP)                            \
   static __always_inline const TYPE_LIST *NAME(                                \
-      const TYPE_LIST *first, unsigned length, const TYPE_ARG item) {          \
-    const TYPE_LIST *const begin = first, *const end = begin + length;         \
+      const TYPE_LIST *it, unsigned length, const TYPE_ARG item) {             \
+    const TYPE_LIST *const begin = it, *const end = begin + length;            \
                                                                                \
-    while (length > 3) {                                                       \
-      const unsigned whole = length;                                           \
-      length >>= 1;                                                            \
-      const TYPE_LIST *const middle = first + length;                          \
-      const unsigned left = whole - length - 1;                                \
-      const bool cmp = expect_with_probability(CMP(*middle, item), 0, .5);     \
-      length = cmp ? left : length;                                            \
-      first = cmp ? middle + 1 : first;                                        \
-    }                                                                          \
-                                                                               \
-    switch (length) {                                                          \
-    case 3:                                                                    \
-      if (expect_with_probability(!CMP(*first, item), 0, .5))                  \
-        break;                                                                 \
-      ++first;                                                                 \
-      __fallthrough /* fall through */;                                        \
-    case 2:                                                                    \
-      if (expect_with_probability(!CMP(*first, item), 0, .5))                  \
-        break;                                                                 \
-      ++first;                                                                 \
-      __fallthrough /* fall through */;                                        \
-    case 1:                                                                    \
-      if (expect_with_probability(!CMP(*first, item), 0, .5))                  \
-        break;                                                                 \
-      ++first;                                                                 \
-      __fallthrough /* fall through */;                                        \
-    case 0:                                                                    \
-      break;                                                                   \
-    default:                                                                   \
-      __unreachable();                                                         \
-    }                                                                          \
+    if (MDBX_HAVE_CMOV)                                                        \
+      do {                                                                     \
+        /* Адаптивно-упрощенный шаг двоичного поиска:                          \
+         *  - без переходов при наличии cmov или аналога;                      \
+         *  - допускает лишние итерации;                                       \
+         *  - но ищет пока size > 2, что требует дозавершения поиска           \
+         *    среди остающихся 0-1-2 элементов. */                             \
+        const TYPE_LIST *const middle = it + (length >> 1);                    \
+        length = (length + 1) >> 1;                                            \
+        const bool flag = expect_with_probability(CMP(*middle, item), 0, .5);  \
+        WORKAROUND_FOR_CLANG_OPTIMIZER_BUG(length, flag);                      \
+        it = flag ? middle : it;                                               \
+      } while (length > 2);                                                    \
+    else                                                                       \
+      while (length > 2) {                                                     \
+        /* Вариант с использованием условного перехода. Основное отличие в     \
+         * том, что при "не равно" (true от компаратора) переход делается на 1 \
+         * ближе к концу массива. Алгоритмически это верно и обеспечивает      \
+         * чуть-чуть более быструю сходимость, но зато требует больше          \
+         * вычислений при true от компаратора. Также ВАЖНО(!) не допускается   \
+         * спекулятивное выполнение при size == 0. */                          \
+        const TYPE_LIST *const middle = it + (length >> 1);                    \
+        length = (length + 1) >> 1;                                            \
+        const bool flag = expect_with_probability(CMP(*middle, item), 0, .5);  \
+        if (flag) {                                                            \
+          it = middle + 1;                                                     \
+          length -= 1;                                                         \
+        }                                                                      \
+      }                                                                        \
+    it += length > 1 && expect_with_probability(CMP(*it, item), 0, .5);        \
+    it += length > 0 && expect_with_probability(CMP(*it, item), 0, .5);        \
                                                                                \
     if (mdbx_audit_enabled()) {                                                \
-      for (const TYPE_LIST *scan = begin; scan < first; ++scan)                \
+      for (const TYPE_LIST *scan = begin; scan < it; ++scan)                   \
         assert(CMP(*scan, item));                                              \
-      for (const TYPE_LIST *scan = first; scan < end; ++scan)                  \
+      for (const TYPE_LIST *scan = it; scan < end; ++scan)                     \
         assert(!CMP(*scan, item));                                             \
       (void)begin, (void)end;                                                  \
     }                                                                          \
                                                                                \
-    return first;                                                              \
+    return it;                                                                 \
   }
 
 /*----------------------------------------------------------------------------*/
