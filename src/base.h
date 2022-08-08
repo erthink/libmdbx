@@ -611,6 +611,19 @@ __extern_C key_t ftok(const char *, int);
 #endif
 #endif /* __anonymous_struct_extension__ */
 
+#ifndef MDBX_WEAK_IMPORT_ATTRIBUTE
+#ifdef WEAK_IMPORT_ATTRIBUTE
+#define MDBX_WEAK_IMPORT_ATTRIBUTE WEAK_IMPORT_ATTRIBUTE
+#elif __has_attribute(__weak__) && __has_attribute(__weak_import__)
+#define MDBX_WEAK_IMPORT_ATTRIBUTE __attribute__((__weak__, __weak_import__))
+#elif __has_attribute(__weak__) ||                                             \
+    (defined(__GNUC__) && __GNUC__ >= 4 && defined(__ELF__))
+#define MDBX_WEAK_IMPORT_ATTRIBUTE __attribute__((__weak__))
+#else
+#define MDBX_WEAK_IMPORT_ATTRIBUTE
+#endif
+#endif /* MDBX_WEAK_IMPORT_ATTRIBUTE */
+
 /*----------------------------------------------------------------------------*/
 
 #if defined(MDBX_USE_VALGRIND)
