@@ -1285,55 +1285,50 @@ rthc_compare_and_clean(const void *rthc, const uint64_t signature) {
 
 static __inline int rthc_atexit(void (*dtor)(void *), void *obj,
                                 void *dso_symbol) {
-  int rc = MDBX_ENOSYS;
+#ifndef MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL
+#if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT_IMPL) ||                           \
+    defined(HAVE___CXA_THREAD_ATEXIT_IMPL) || __GLIBC_PREREQ(2, 18) ||         \
+    defined(ANDROID)
+#define MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL 1
+#else
+#define MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL 0
+#endif
+#endif /* MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL */
 
-#if defined(__APPLE__) || defined(_DARWIN_C_SOURCE)
-#if !defined(MAC_OS_X_VERSION_MIN_REQUIRED) || !defined(MAC_OS_X_VERSION_10_7)
-#error                                                                         \
-    "The <AvailabilityMacros.h> should be included and MAC_OS_X_VERSION_MIN_REQUIRED must be defined"
-#elif MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_7
+#ifndef MDBX_HAVE_CXA_THREAD_ATEXIT
+#if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT) ||                                \
+    defined(HAVE___CXA_THREAD_ATEXIT)
+#define MDBX_HAVE_CXA_THREAD_ATEXIT 1
+#elif !MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL &&                                     \
+    (defined(__linux__) || defined(__gnu_linux__))
+#define MDBX_HAVE_CXA_THREAD_ATEXIT 1
+#else
+#define MDBX_HAVE_CXA_THREAD_ATEXIT 0
+#endif
+#endif /* MDBX_HAVE_CXA_THREAD_ATEXIT */
+
+  int rc = MDBX_ENOSYS;
+#if MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL && !MDBX_HAVE_CXA_THREAD_ATEXIT
+#define __cxa_thread_atexit __cxa_thread_atexit_impl
+#endif
+#if MDBX_HAVE_CXA_THREAD_ATEXIT || defined(__cxa_thread_atexit)
+  extern int __cxa_thread_atexit(void (*dtor)(void *), void *obj,
+                                 void *dso_symbol) MDBX_WEAK_IMPORT_ATTRIBUTE;
+  if (&__cxa_thread_atexit)
+    rc = __cxa_thread_atexit(dtor, obj, dso_symbol);
+#elif defined(__APPLE__) || defined(_DARWIN_C_SOURCE)
   extern void _tlv_atexit(void (*termfunc)(void *objAddr), void *objAddr)
-      __attribute__((__weak__, __weak_import__));
-  if (rc && &_tlv_atexit) {
+      MDBX_WEAK_IMPORT_ATTRIBUTE;
+  if (&_tlv_atexit) {
     (void)dso_symbol;
     _tlv_atexit(dtor, obj);
     rc = 0;
   }
-#elif !defined(MDBX_HAVE_CXA_THREAD_ATEXIT)
-#define MDBX_HAVE_CXA_THREAD_ATEXIT 1
-#endif /* MAC_OS_X_VERSION_MIN_REQUIRED */
-#endif /* Apple */
-
-#if defined(MDBX_HAVE_CXA_THREAD_ATEXIT) && MDBX_HAVE_CXA_THREAD_ATEXIT
-  extern int __cxa_thread_atexit(void (*dtor)(void *), void *obj,
-                                 void *dso_symbol)
-#ifdef WEAK_IMPORT_ATTRIBUTE
-      WEAK_IMPORT_ATTRIBUTE
-#elif defined(MAC_OS_X_VERSION_MIN_REQUIRED) &&                                \
-    MAC_OS_X_VERSION_MIN_REQUIRED >= 1020 &&                                   \
-    ((__has_attribute(__weak__) && __has_attribute(__weak_import__)) ||        \
-     (defined(__GNUC__) && __GNUC__ >= 4))
-      __attribute__((__weak__, __weak_import__))
-#elif (__has_attribute(__weak__) || (defined(__GNUC__) && __GNUC__ >= 4)) &&   \
-    !defined(MAC_OS_X_VERSION_MIN_REQUIRED)
-      __attribute__((__weak__))
-#endif
-      ;
-  if (rc && &__cxa_thread_atexit)
-    rc = __cxa_thread_atexit(dtor, obj, dso_symbol);
-#elif __GLIBC_PREREQ(2, 18) || defined(ANDROID) || defined(__linux__) ||       \
-    defined(__gnu_linux__)
-  extern int __cxa_thread_atexit_impl(void (*dtor)(void *), void *obj,
-                                      void *dso_symbol)
-      __attribute__((__weak__));
-  if (rc && &__cxa_thread_atexit_impl)
-    rc = __cxa_thread_atexit_impl(dtor, obj, dso_symbol);
 #else
   (void)dtor;
   (void)obj;
   (void)dso_symbol;
 #endif
-
   return rc;
 }
 
@@ -12817,13 +12812,8 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
 __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                       unsigned target_meta, bool writeable) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
   return mdbx_env_open_for_recoveryW(env, pathnameW, target_meta, writeable);
 }
 
@@ -12979,13 +12969,8 @@ __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *ctx,
 
 __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
   return mdbx_env_deleteW(pathnameW, mode);
 }
 
@@ -13075,13 +13060,8 @@ __cold int mdbx_env_deleteW(const wchar_t *pathname,
 __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
   return mdbx_env_openW(env, pathnameW, flags, mode);
 }
 
@@ -19981,13 +19961,8 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
                          MDBX_copy_flags_t flags) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, dest_path, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const dest_pathW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(dest_pathW, dest_path, wlen + 1))
-    return ERROR_INVALID_NAME;
-
+  const wchar_t *dest_pathW = nullptr;
+  MUSTDIE_MB2WIDE(dest_path, dest_pathW);
   return mdbx_env_copyW(env, dest_pathW, flags);
 }
 

@@ -157,12 +157,12 @@
 #define nullptr NULL
 #endif
 
-#ifdef __APPLE__
+#if defined(__APPLE__) || defined(_DARWIN_C_SOURCE)
 #include <AvailabilityMacros.h>
+#include <TargetConditionals.h>
 #ifndef MAC_OS_X_VERSION_MIN_REQUIRED
 #define MAC_OS_X_VERSION_MIN_REQUIRED 1070 /* Mac OS X 10.7, 2011 */
 #endif
-#include <TargetConditionals.h>
 #endif /* Apple OSX & iOS */
 
 #if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
@@ -654,6 +654,19 @@ __extern_C key_t ftok(const char *, int);
 #define expect_with_probability(expr, value, prob) (expr)
 #endif
 #endif /* expect_with_probability */
+
+#ifndef MDBX_WEAK_IMPORT_ATTRIBUTE
+#ifdef WEAK_IMPORT_ATTRIBUTE
+#define MDBX_WEAK_IMPORT_ATTRIBUTE WEAK_IMPORT_ATTRIBUTE
+#elif __has_attribute(__weak__) && __has_attribute(__weak_import__)
+#define MDBX_WEAK_IMPORT_ATTRIBUTE __attribute__((__weak__, __weak_import__))
+#elif __has_attribute(__weak__) ||                                             \
+    (defined(__GNUC__) && __GNUC__ >= 4 && defined(__ELF__))
+#define MDBX_WEAK_IMPORT_ATTRIBUTE __attribute__((__weak__))
+#else
+#define MDBX_WEAK_IMPORT_ATTRIBUTE
+#endif
+#endif /* MDBX_WEAK_IMPORT_ATTRIBUTE */
 
 /*----------------------------------------------------------------------------*/
 

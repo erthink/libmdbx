@@ -518,6 +518,25 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 
 /*----------------------------------------------------------------------------*/
 
+#if defined(_WIN32) || defined(_WIN64)
+
+#ifndef WC_ERR_INVALID_CHARS
+static const DWORD WC_ERR_INVALID_CHARS =
+    (6 /* Windows Vista */ <= /* MajorVersion */ LOBYTE(LOWORD(GetVersion())))
+        ? 0x00000080
+        : 0;
+#endif /* WC_ERR_INVALID_CHARS */
+
+MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
+                                    size_t src_n) {
+  return MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src,
+                             (int)src_n, dst, (int)dst_n);
+}
+
+#endif /* Windows */
+
+/*----------------------------------------------------------------------------*/
+
 MDBX_INTERNAL_FUNC int mdbx_removefile(const pathchar_t *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
   return DeleteFileW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
