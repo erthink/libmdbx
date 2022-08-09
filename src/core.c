@@ -5969,18 +5969,28 @@ MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const MDBX_PNL pnl,
   return nullptr;
 }
 
+#if defined(_MSC_VER) && !defined(__builtin_clz) &&                            \
+    !__has_builtin(__builtin_clz)
+MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(unsigned value) {
+  unsigned long index;
+  _BitScanReverse(&index, value);
+  return index;
+}
+#endif /* _MSC_VER */
+
 #if !defined(MDBX_ATTRIBUTE_TARGET) &&                                         \
     (__has_attribute(__target__) || __GNUC_PREREQ(5, 0))
 #define MDBX_ATTRIBUTE_TARGET(target) __attribute__((__target__(target)))
 #endif /* MDBX_ATTRIBUTE_TARGET */
 
-#ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
-MDBX_MAYBE_UNUSED
-__hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *static pgno_t *
-scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
-  return nullptr;
-}
-#endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
+#if defined(__SSE2__)
+#define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
+#elif (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__amd64__)
+#define __SSE2__
+#define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
+#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__)
+#define MDBX_ATTRIBUTE_TARGET_SSE2 MDBX_ATTRIBUTE_TARGET("sse2")
+#endif /* __SSE2__ */
 
 #if defined(__AVX2__)
 #define MDBX_ATTRIBUTE_TARGET_AVX2 /* nope */
@@ -5988,8 +5998,66 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
 #define MDBX_ATTRIBUTE_TARGET_AVX2 MDBX_ATTRIBUTE_TARGET("avx2")
 #endif /* __AVX2__ */
 
-#ifdef MDBX_ATTRIBUTE_TARGET_AVX2
+#ifdef MDBX_ATTRIBUTE_TARGET_SSE2
+MDBX_ATTRIBUTE_TARGET_SSE2 static __always_inline unsigned
+diffcmp2mask_sse2(const pgno_t *const ptr, const ptrdiff_t offset,
+                  const __m128i pattern) {
+  const __m128i f = _mm_loadu_si128((const __m128i *)ptr);
+  const __m128i l = _mm_loadu_si128((const __m128i *)(ptr + offset));
+  const __m128i cmp = _mm_cmpeq_epi32(_mm_sub_epi32(f, l), pattern);
+  return _mm_movemask_ps(*(const __m128 *)&cmp);
+}
 
+MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *
+scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
+  assert(seq > 0 && len > seq);
+#if MDBX_PNL_ASCENDING
+#error "FIXME: Not implemented"
+#endif /* MDBX_PNL_ASCENDING */
+  assert(range[-(ptrdiff_t)len] == len);
+  pgno_t *const detent = range - len + seq;
+  const ptrdiff_t offset = -(ptrdiff_t)seq;
+  const pgno_t target = (pgno_t)offset;
+  const __m128i pattern = _mm_set1_epi32(target);
+  uint8_t mask;
+  if (likely(len > seq + 3)) {
+    do {
+      mask = (uint8_t)diffcmp2mask_sse2(range - 3, offset, pattern);
+      if (mask) {
+      found:
+        return range + 28 - __builtin_clz(mask);
+      }
+      range -= 4;
+    } while (range > detent + 3);
+    if (range == detent)
+      return nullptr;
+  }
+
+  /* Далее происходит чтение от 4 до 12 лишних байт, которые могут быть не
+   * только за пределами региона выделенного под PNL, но и пересекать границу
+   * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
+   * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
+#ifndef __SANITIZE_ADDRESS__
+  const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
+    const unsigned extra = (unsigned)(detent + 4 - range);
+    assert(extra > 0 && extra < 4);
+    mask = 0xF << extra;
+    mask &= diffcmp2mask_sse2(range - 3, offset, pattern);
+    if (mask)
+      goto found;
+    return nullptr;
+  }
+#endif /* __SANITIZE_ADDRESS__ */
+  do
+    if (*range - range[offset] == target)
+      return range;
+  while (--range != detent);
+  return nullptr;
+}
+#endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
+
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX2
 MDBX_ATTRIBUTE_TARGET_AVX2 static __always_inline unsigned
 diffcmp2mask_avx2(const pgno_t *const ptr, const ptrdiff_t offset,
                   const __m256i pattern) {
@@ -6014,8 +6082,10 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
   if (likely(len > seq + 7)) {
     do {
       mask = (uint8_t)diffcmp2mask_avx2(range - 7, offset, pattern);
-      if (mask)
-        goto found;
+      if (mask) {
+      found:
+        return range + 24 - __builtin_clz(mask);
+      }
       range -= 8;
     } while (range > detent + 7);
     if (range == detent)
@@ -6026,115 +6096,41 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
    * только за пределами региона выделенного под PNL, но и пересекать границу
    * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
-#ifdef __SANITIZE_ADDRESS__
-  const unsigned on_page_safe_mask = 0;
-#else
+#ifndef __SANITIZE_ADDRESS__
   const unsigned on_page_safe_mask = 0xfe0 /* enough for '-31' bytes offset */;
-#endif
   if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
     const unsigned extra = (unsigned)(detent + 8 - range);
     assert(extra > 0 && extra < 8);
     mask = 0xFF << extra;
     mask &= diffcmp2mask_avx2(range - 7, offset, pattern);
-    if (mask) {
-    found:;
-#ifdef _MSC_VER
-      unsigned long index;
-      _BitScanReverse(&index, mask);
-#else
-      const unsigned index = __builtin_clz(mask);
-#endif /* _MSC_VER */
-      range = range + 24 - index;
-      return range;
-    }
+    if (mask)
+      goto found;
     return nullptr;
   }
-  do
+#endif /* __SANITIZE_ADDRESS__ */
+  if (range - 3 > detent) {
+    mask = diffcmp2mask_sse2(range - 3, offset, *(const __m128i *)&pattern);
+    if (mask)
+      return range + 28 - __builtin_clz(mask);
+    range -= 4;
+  }
+  while (range > detent) {
     if (*range - range[offset] == target)
       return range;
-  while (--range != detent);
+    --range;
+  }
   return nullptr;
 }
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
 
-#if defined(__SSE2__)
-#define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
-#elif (defined(_M_IX86_FP) && _M_IX86_FP >= 2) || defined(__amd64__)
-#define __SSE2__
-#define MDBX_ATTRIBUTE_TARGET_SSE2 /* nope */
-#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__)
-#define MDBX_ATTRIBUTE_TARGET_SSE2 MDBX_ATTRIBUTE_TARGET("sse2")
-#endif /* __SSE2__ */
-
-#ifdef MDBX_ATTRIBUTE_TARGET_SSE2
-MDBX_ATTRIBUTE_TARGET_SSE2 static __always_inline unsigned
-diffcmp2mask_sse2(const pgno_t *const ptr, const ptrdiff_t offset,
-                  const __m128i pattern) {
-  const __m128i f = _mm_loadu_si128((const __m128i *)ptr);
-  const __m128i l = _mm_loadu_si128((const __m128i *)(ptr + offset));
-  const __m128i cmp = _mm_cmpeq_epi32(_mm_sub_epi32(f, l), pattern);
-  return _mm_movemask_ps(*(const __m128 *)&cmp);
-}
-
-MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_SSE2 static pgno_t *
-scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
-  assert(seq > 0 && len > seq);
-#if MDBX_PNL_ASCENDING
-#error "FIXME: Not implemented"
-#endif /* MDBX_PNL_ASCENDING */
-  assert(range[-(ptrdiff_t)len] == len);
-  pgno_t *const detent = range - len + seq;
-  const ptrdiff_t offset = -(ptrdiff_t)seq;
-  const pgno_t target = (pgno_t)offset;
-  const __m128i pattern = _mm_set_epi32(target, target, target, target);
-  uint8_t mask;
-  if (likely(len > seq + 3)) {
-    do {
-      mask = (uint8_t)diffcmp2mask_sse2(range - 3, offset, pattern);
-      if (mask)
-        goto found;
-      range -= 4;
-    } while (range > detent + 3);
-    if (range == detent)
-      return nullptr;
-  }
-
-  /* Далее происходит чтение от 4 до 12 лишних байт, которые могут быть не
-   * только за пределами региона выделенного под PNL, но и пересекать границу
-   * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
-   * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
-#ifdef __SANITIZE_ADDRESS__
-  const unsigned on_page_safe_mask = 0;
-#else
-  const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
-#endif
-  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
-    const unsigned extra = (unsigned)(detent + 4 - range);
-    assert(extra > 0 && extra < 4);
-    mask = 0xF << extra;
-    mask &= diffcmp2mask_sse2(range - 3, offset, pattern);
-    if (mask) {
-    found:;
-#ifdef _MSC_VER
-      unsigned long index;
-      _BitScanReverse(&index, mask);
-#else
-      const unsigned index = __builtin_clz(mask);
-#endif /* _MSC_VER */
-      range = range + 28 - index;
-      return range;
-    }
-    return nullptr;
-  }
-  do
-    if (*range - range[offset] == target)
-      return range;
-  while (--range != detent);
+#ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
+MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *
+scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
   return nullptr;
 }
-#endif /* MDBX_ATTRIBUTE_TARGET_SSE2 */
+#endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
 
-#if defined(__AVX512BW__) && defined(MDBX_ATTRIBUTE_TARGET_AVX512)
+#if defined(__AVX512BW__) && defined(MDBX_ATTRIBUTE_TARGET_AVX512BW)
 #define scan4seq_default scan4seq_avx512bw
 #define scan4seq scan4seq_default
 #elif defined(__AVX2__) && defined(MDBX_ATTRIBUTE_TARGET_AVX2)
@@ -6184,7 +6180,7 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
 #ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
   if (__builtin_cpu_supports("avx512bw"))
-    choice = scan4seq_avx512;
+    choice = scan4seq_avx512bw;
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
   /* Choosing of another variants should be added here. */
   scan4seq = choice ? choice : scan4seq_default;
