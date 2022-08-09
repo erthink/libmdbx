@@ -518,15 +518,9 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
+MDBX_INTERNAL_FUNC int mdbx_removefile(const pathchar_t *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-  return DeleteFileW(pathnameW) ? MDBX_SUCCESS : (int)GetLastError();
+  return DeleteFileW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return unlink(pathname) ? errno : MDBX_SUCCESS;
 #endif
@@ -536,34 +530,22 @@ MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
 static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 #endif /*! Windows */
 
-MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname) {
+MDBX_INTERNAL_FUNC int mdbx_removedirectory(const pathchar_t *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-  return RemoveDirectoryW(pathnameW) ? MDBX_SUCCESS : (int)GetLastError();
+  return RemoveDirectoryW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return rmdir(pathname) ? errno : MDBX_SUCCESS;
 #endif
 }
 
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
-                                     const MDBX_env *env, const char *pathname,
+                                     const MDBX_env *env,
+                                     const pathchar_t *pathname,
                                      mdbx_filehandle_t *fd,
                                      mdbx_mode_t unix_mode_bits) {
   *fd = INVALID_HANDLE_VALUE;
 
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-
   DWORD CreationDisposition = unix_mode_bits ? OPEN_ALWAYS : OPEN_EXISTING;
   DWORD FlagsAndAttributes =
       FILE_FLAG_POSIX_SEMANTICS | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED;
@@ -608,12 +590,12 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
     break;
   }
 
-  *fd = CreateFileW(pathnameW, DesiredAccess, ShareMode, NULL,
+  *fd = CreateFileW(pathname, DesiredAccess, ShareMode, NULL,
                     CreationDisposition, FlagsAndAttributes, NULL);
   if (*fd == INVALID_HANDLE_VALUE) {
     int err = (int)GetLastError();
     if (err == ERROR_ACCESS_DENIED && purpose == MDBX_OPEN_LCK) {
-      if (GetFileAttributesW(pathnameW) == INVALID_FILE_ATTRIBUTES &&
+      if (GetFileAttributesW(pathname) == INVALID_FILE_ATTRIBUTES &&
           GetLastError() == ERROR_FILE_NOT_FOUND)
         err = ERROR_FILE_NOT_FOUND;
     }
@@ -632,7 +614,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
       (FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_NOT_CONTENT_INDEXED |
        FILE_ATTRIBUTE_TEMPORARY | FILE_ATTRIBUTE_COMPRESSED);
   if (AttributesDiff)
-    (void)SetFileAttributesW(pathnameW, info.dwFileAttributes ^ AttributesDiff);
+    (void)SetFileAttributesW(pathname, info.dwFileAttributes ^ AttributesDiff);
 
 #else
   int flags = unix_mode_bits ? O_CREAT : 0;
@@ -1089,7 +1071,8 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
 }
 
 MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
-                                            const char *pathname, int err) {
+                                            const pathchar_t *pathname,
+                                            int err) {
 #if defined(_WIN32) || defined(_WIN64)
   (void)pathname;
   (void)err;

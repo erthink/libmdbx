@@ -12433,7 +12433,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
 /******************************************************************************/
 
 /* Open and/or initialize the lock region for the environment. */
-__cold static int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
+__cold static int mdbx_setup_lck(MDBX_env *env, pathchar_t *lck_pathname,
                                  mdbx_mode_t mode) {
   mdbx_assert(env, env->me_lazy_fd != INVALID_HANDLE_VALUE);
   mdbx_assert(env, env->me_lfd == INVALID_HANDLE_VALUE);
@@ -12816,6 +12816,21 @@ __cold int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target) {
 
 __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                       unsigned target_meta, bool writeable) {
+#if defined(_WIN32) || defined(_WIN64)
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
+
+  return mdbx_env_open_for_recoveryW(env, pathnameW, target_meta, writeable);
+}
+
+__cold int mdbx_env_open_for_recoveryW(MDBX_env *env, const wchar_t *pathname,
+                                       unsigned target_meta, bool writeable) {
+#endif /* Windows */
+
   if (unlikely(target_meta >= NUM_METAS))
     return MDBX_EINVAL;
   int rc = check_env(env, false);
@@ -12825,35 +12840,49 @@ __cold int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
     return MDBX_EPERM;
 
   env->me_stuck_meta = (int8_t)target_meta;
-  return mdbx_env_open(
-      env, pathname, writeable ? MDBX_EXCLUSIVE : MDBX_EXCLUSIVE | MDBX_RDONLY,
-      0);
+  return
+#if defined(_WIN32) || defined(_WIN64)
+      mdbx_env_openW
+#else
+      mdbx_env_open
+#endif /* Windows */
+      (env, pathname, writeable ? MDBX_EXCLUSIVE : MDBX_EXCLUSIVE | MDBX_RDONLY,
+       0);
 }
 
 typedef struct {
   void *buffer_for_free;
-  char *lck, *dxb;
+  pathchar_t *lck, *dxb;
   size_t ent_len;
 } MDBX_handle_env_pathname;
 
+static bool path_equal(const pathchar_t *l, const pathchar_t *r, size_t len) {
+#if defined(_WIN32) || defined(_WIN64)
+  while (len > 0) {
+    pathchar_t a = *l++;
+    pathchar_t b = *r++;
+    a = (a == '\\') ? '/' : a;
+    b = (b == '\\') ? '/' : b;
+    if (a != b)
+      return false;
+  }
+  return true;
+#else
+  return memcmp(l, r, len * sizeof(pathchar_t)) == 0;
+#endif
+}
+
 __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *ctx,
-                                           const char *pathname,
+                                           const pathchar_t *pathname,
                                            MDBX_env_flags_t *flags,
                                            const mdbx_mode_t mode) {
-  int rc;
   memset(ctx, 0, sizeof(*ctx));
-  if (unlikely(!pathname))
+  if (unlikely(!pathname || !*pathname))
     return MDBX_EINVAL;
 
+  int rc;
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
-
-  const DWORD dwAttrib = GetFileAttributesW(pathnameW);
+  const DWORD dwAttrib = GetFileAttributesW(pathname);
   if (dwAttrib == INVALID_FILE_ATTRIBUTES) {
     rc = GetLastError();
     if (rc != MDBX_ENOFILE)
@@ -12863,8 +12892,7 @@ __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *ctx,
       return rc;
 
     /* auto-create directory if requested */
-    if ((*flags & MDBX_NOSUBDIR) == 0 &&
-        !CreateDirectoryW(pathnameW, nullptr)) {
+    if ((*flags & MDBX_NOSUBDIR) == 0 && !CreateDirectoryW(pathname, nullptr)) {
       rc = GetLastError();
       if (rc != ERROR_ALREADY_EXISTS)
         return rc;
@@ -12905,41 +12933,66 @@ __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *ctx,
   }
 #endif
 
-  static const char dxb_name[] = MDBX_DATANAME;
-  static const size_t dxb_name_len = sizeof(dxb_name) - 1;
-  static const char lck_name[] = MDBX_LOCKNAME;
-  static const char lock_suffix[] = MDBX_LOCK_SUFFIX;
+  static const pathchar_t dxb_name[] = MDBX_DATANAME;
+  static const pathchar_t lck_name[] = MDBX_LOCKNAME;
+  static const pathchar_t lock_suffix[] = MDBX_LOCK_SUFFIX;
 
-  ctx->ent_len = strlen(pathname);
-  if ((*flags & MDBX_NOSUBDIR) && ctx->ent_len >= dxb_name_len &&
-      !memcmp(dxb_name, pathname + ctx->ent_len - dxb_name_len, dxb_name_len)) {
+#if defined(_WIN32) || defined(_WIN64)
+  assert(dxb_name[0] == '\\' && lck_name[0] == '\\');
+  const size_t pathname_len = wcslen(pathname);
+#else
+  assert(dxb_name[0] == '/' && lck_name[0] == '/');
+  const size_t pathname_len = strlen(pathname);
+#endif
+  assert(lock_suffix[0] != '\\' && lock_suffix[0] != '/');
+  ctx->ent_len = pathname_len;
+  static const size_t dxb_name_len = ARRAY_LENGTH(dxb_name) - 1;
+  if ((*flags & MDBX_NOSUBDIR) && ctx->ent_len > dxb_name_len &&
+      path_equal(pathname + ctx->ent_len - dxb_name_len, dxb_name,
+                 dxb_name_len)) {
     *flags -= MDBX_NOSUBDIR;
     ctx->ent_len -= dxb_name_len;
   }
 
   const size_t bytes_needed =
-      ctx->ent_len * 2 + ((*flags & MDBX_NOSUBDIR)
-                              ? sizeof(lock_suffix) + 1
-                              : sizeof(lck_name) + sizeof(dxb_name));
+      sizeof(pathchar_t) * ctx->ent_len * 2 +
+      ((*flags & MDBX_NOSUBDIR) ? sizeof(lock_suffix) + sizeof(pathchar_t)
+                                : sizeof(lck_name) + sizeof(dxb_name));
   ctx->buffer_for_free = mdbx_malloc(bytes_needed);
   if (!ctx->buffer_for_free)
     return MDBX_ENOMEM;
 
-  ctx->lck = ctx->buffer_for_free;
+  ctx->dxb = ctx->buffer_for_free;
+  ctx->lck = ctx->dxb + ctx->ent_len + 1;
+  memcpy(ctx->dxb, pathname, sizeof(pathchar_t) * (ctx->ent_len + 1));
   if (*flags & MDBX_NOSUBDIR) {
-    ctx->dxb = ctx->lck + ctx->ent_len + sizeof(lock_suffix);
-    sprintf(ctx->lck, "%s%s", pathname, lock_suffix);
-    strcpy(ctx->dxb, pathname);
+    memcpy(ctx->lck + ctx->ent_len, lock_suffix, sizeof(lock_suffix));
   } else {
-    ctx->dxb = ctx->lck + ctx->ent_len + sizeof(lck_name);
-    sprintf(ctx->lck, "%.*s%s", (int)ctx->ent_len, pathname, lck_name);
-    sprintf(ctx->dxb, "%.*s%s", (int)ctx->ent_len, pathname, dxb_name);
+    ctx->lck += dxb_name_len;
+    memcpy(ctx->lck + ctx->ent_len, lck_name, sizeof(lck_name));
+    memcpy(ctx->dxb + ctx->ent_len, dxb_name, sizeof(dxb_name));
   }
+  memcpy(ctx->lck, pathname, sizeof(pathchar_t) * ctx->ent_len);
 
   return MDBX_SUCCESS;
 }
 
 __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
+#if defined(_WIN32) || defined(_WIN64)
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
+
+  return mdbx_env_deleteW(pathnameW, mode);
+}
+
+__cold int mdbx_env_deleteW(const wchar_t *pathname,
+                            MDBX_env_delete_mode_t mode) {
+#endif /* Windows */
+
   switch (mode) {
   default:
     return MDBX_EINVAL;
@@ -12959,7 +13012,7 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
       (mode == MDBX_ENV_ENSURE_UNUSED) ? MDBX_EXCLUSIVE : MDBX_ENV_DEFAULTS;
   dummy_env->me_os_psize = (unsigned)mdbx_syspagesize();
   dummy_env->me_psize = (unsigned)mdbx_default_pagesize();
-  dummy_env->me_pathname = (char *)pathname;
+  dummy_env->me_pathname = (pathchar_t *)pathname;
 
   MDBX_handle_env_pathname env_pathname;
   STATIC_ASSERT(sizeof(dummy_env->me_flags) == sizeof(MDBX_env_flags_t));
@@ -13021,6 +13074,21 @@ __cold int mdbx_env_delete(const char *pathname, MDBX_env_delete_mode_t mode) {
 
 __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
+#if defined(_WIN32) || defined(_WIN64)
+  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
+    return ERROR_INVALID_NAME;
+
+  return mdbx_env_openW(env, pathnameW, flags, mode);
+}
+
+__cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
+                          MDBX_env_flags_t flags, mdbx_mode_t mode) {
+#endif /* Windows */
+
   int rc = check_env(env, false);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -13066,7 +13134,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     goto bailout;
 
   env->me_flags = (flags & ~MDBX_FATAL_ERROR) | MDBX_ENV_ACTIVE;
-  env->me_pathname = mdbx_calloc(env_pathname.ent_len + 1, 1);
+  env->me_pathname = mdbx_calloc(env_pathname.ent_len + 1, sizeof(pathchar_t));
   env->me_dbxs = mdbx_calloc(env->me_maxdbs, sizeof(MDBX_dbx));
   env->me_dbflags = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbflags[0]));
   env->me_dbiseqs = mdbx_calloc(env->me_maxdbs, sizeof(env->me_dbiseqs[0]));
@@ -13075,7 +13143,8 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     rc = MDBX_ENOMEM;
     goto bailout;
   }
-  memcpy(env->me_pathname, env_pathname.dxb, env_pathname.ent_len);
+  memcpy(env->me_pathname, env_pathname.dxb,
+         env_pathname.ent_len * sizeof(pathchar_t));
   env->me_dbxs[FREE_DBI].md_cmp = cmp_int_align4; /* aligned MDBX_INTEGERKEY */
   env->me_dbxs[FREE_DBI].md_dcmp = cmp_lenfast;
 
@@ -19911,6 +19980,21 @@ __cold int mdbx_env_copy2fd(MDBX_env *env, mdbx_filehandle_t fd,
 
 __cold int mdbx_env_copy(MDBX_env *env, const char *dest_path,
                          MDBX_copy_flags_t flags) {
+#if defined(_WIN32) || defined(_WIN64)
+  const size_t wlen = mbstowcs(nullptr, dest_path, INT_MAX);
+  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
+    return ERROR_INVALID_NAME;
+  wchar_t *const dest_pathW = _alloca((wlen + 1) * sizeof(wchar_t));
+  if (wlen != mbstowcs(dest_pathW, dest_path, wlen + 1))
+    return ERROR_INVALID_NAME;
+
+  return mdbx_env_copyW(env, dest_pathW, flags);
+}
+
+LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
+                               MDBX_copy_flags_t flags) {
+#endif /* Windows */
+
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
@@ -20049,6 +20133,7 @@ __cold int mdbx_env_set_assert(MDBX_env *env, MDBX_assert_func *func) {
 #endif
 }
 
+#if !(defined(_WIN32) || defined(_WIN64))
 __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
   int rc = check_env(env, true);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -20060,6 +20145,19 @@ __cold int mdbx_env_get_path(const MDBX_env *env, const char **arg) {
   *arg = env->me_pathname;
   return MDBX_SUCCESS;
 }
+#else
+__cold int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **arg) {
+  int rc = check_env(env, true);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  if (unlikely(!arg))
+    return MDBX_EINVAL;
+
+  *arg = env->me_pathname;
+  return MDBX_SUCCESS;
+}
+#endif /* Windows */
 
 __cold int mdbx_env_get_fd(const MDBX_env *env, mdbx_filehandle_t *arg) {
   int rc = check_env(env, true);

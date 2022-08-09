@@ -3225,6 +3225,8 @@ public:
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
   env &copy(const ::std::wstring &destination, bool compactify,
             bool force_dynamic_size = false);
+  env &copy(const wchar_t *destination, bool compactify,
+            bool force_dynamic_size = false);
 #endif /* Windows */
   env &copy(const ::std::string &destination, bool compactify,
             bool force_dynamic_size = false);
@@ -3259,6 +3261,8 @@ public:
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
   static bool remove(const ::std::wstring &pathname,
+                     const remove_mode mode = just_remove);
+  static bool remove(const wchar_t *pathname,
                      const remove_mode mode = just_remove);
 #endif /* Windows */
   static bool remove(const ::std::string &pathname,
@@ -3507,6 +3511,8 @@ public:
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
   env_managed(const ::std::wstring &pathname, const operate_parameters &,
               bool accede = true);
+  explicit env_managed(const wchar_t *pathname, const operate_parameters &,
+                       bool accede = true);
 #endif /* Windows */
   env_managed(const ::std::string &pathname, const operate_parameters &,
               bool accede = true);
@@ -3531,6 +3537,8 @@ public:
 #if defined(_WIN32) || defined(_WIN64) || defined(DOXYGEN)
   env_managed(const ::std::wstring &pathname, const create_parameters &,
               const operate_parameters &, bool accede = true);
+  explicit env_managed(const wchar_t *pathname, const create_parameters &,
+                       const operate_parameters &, bool accede = true);
 #endif /* Windows */
   env_managed(const ::std::string &pathname, const create_parameters &,
               const operate_parameters &, bool accede = true);

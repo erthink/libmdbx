@@ -827,18 +827,30 @@ enum MDBX_constants {
 #ifndef MDBX_LOCKNAME
 /** \brief The name of the lock file in the environment
  * without using \ref MDBX_NOSUBDIR */
+#if !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_LOCKNAME "/mdbx.lck"
+#else
+#define MDBX_LOCKNAME L"\\mdbx.lck"
 #endif
+#endif /* MDBX_LOCKNAME */
 #ifndef MDBX_DATANAME
 /** \brief The name of the data file in the environment
  * without using \ref MDBX_NOSUBDIR */
+#if !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_DATANAME "/mdbx.dat"
+#else
+#define MDBX_DATANAME L"\\mdbx.dat"
 #endif
+#endif /* MDBX_DATANAME */
 
 #ifndef MDBX_LOCK_SUFFIX
 /** \brief The suffix of the lock file when \ref MDBX_NOSUBDIR is used */
+#if !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_LOCK_SUFFIX "-lck"
+#else
+#define MDBX_LOCK_SUFFIX L"-lck"
 #endif
+#endif /* MDBX_LOCK_SUFFIX */
 
 /* DEBUG & LOGGING ************************************************************/
 
@@ -2275,6 +2287,11 @@ LIBMDBX_API int mdbx_env_get_option(const MDBX_env *env,
 LIBMDBX_API int mdbx_env_open(MDBX_env *env, const char *pathname,
                               MDBX_env_flags_t flags, mdbx_mode_t mode);
 
+#if defined(_WIN32) || defined(_WIN64)
+LIBMDBX_API int mdbx_env_openW(MDBX_env *env, const wchar_t *pathnameW,
+                               MDBX_env_flags_t flags, mdbx_mode_t mode);
+#endif /* Windows */
+
 /** \brief Deletion modes for \ref mdbx_env_delete().
  * \ingroup c_extra
  * \see mdbx_env_delete() */
@@ -2317,6 +2334,10 @@ typedef enum MDBX_env_delete_mode_t MDBX_env_delete_mode_t;
  *                            so no deletion was performed. */
 LIBMDBX_API int mdbx_env_delete(const char *pathname,
                                 MDBX_env_delete_mode_t mode);
+#if defined(_WIN32) || defined(_WIN64)
+LIBMDBX_API int mdbx_env_deleteW(const wchar_t *pathnameW,
+                                 MDBX_env_delete_mode_t mode);
+#endif /* Windows */
 
 /** \brief Copy an MDBX environment to the specified path, with options.
  * \ingroup c_extra
@@ -2351,6 +2372,10 @@ LIBMDBX_API int mdbx_env_delete(const char *pathname,
  * \returns A non-zero error value on failure and 0 on success. */
 LIBMDBX_API int mdbx_env_copy(MDBX_env *env, const char *dest,
                               MDBX_copy_flags_t flags);
+#if defined(_WIN32) || defined(_WIN64)
+LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest,
+                               MDBX_copy_flags_t flags);
+#endif /* Windows */
 
 /** \brief Copy an environment to the specified file descriptor, with
  * options.
@@ -2803,7 +2828,11 @@ LIBMDBX_API int mdbx_env_get_flags(const MDBX_env *env, unsigned *flags);
  * \returns A non-zero error value on failure and 0 on success,
  *          some possible errors are:
  * \retval MDBX_EINVAL  An invalid parameter was specified. */
+#if !(defined(_WIN32) || defined(_WIN64))
 LIBMDBX_API int mdbx_env_get_path(const MDBX_env *env, const char **dest);
+#else
+LIBMDBX_API int mdbx_env_get_pathW(const MDBX_env *env, const wchar_t **dest);
+#endif /* Windows */
 
 /** \brief Return the file descriptor for the given environment.
  * \ingroup c_statinfo
@@ -5195,6 +5224,12 @@ LIBMDBX_API int mdbx_env_pgwalk(MDBX_txn *txn, MDBX_pgvisitor_func *visitor,
 LIBMDBX_API int mdbx_env_open_for_recovery(MDBX_env *env, const char *pathname,
                                            unsigned target_meta,
                                            bool writeable);
+#if defined(_WIN32) || defined(_WIN64)
+LIBMDBX_API int mdbx_env_open_for_recoveryW(MDBX_env *env,
+                                            const wchar_t *pathnameW,
+                                            unsigned target_meta,
+                                            bool writeable);
+#endif /* Windows */
 
 /** \brief Turn database to the specified meta-page.
  *

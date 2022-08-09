@@ -224,6 +224,12 @@ mdbx_syspagesize(void) {
 #endif
 }
 
+#if defined(_WIN32) || defined(_WIN64)
+typedef wchar_t pathchar_t;
+#else
+typedef char pathchar_t;
+#endif
+
 typedef struct mdbx_mmap_param {
   union {
     void *address;
@@ -365,12 +371,13 @@ enum mdbx_openfile_purpose {
 };
 
 MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
-                                     const MDBX_env *env, const char *pathname,
+                                     const MDBX_env *env,
+                                     const pathchar_t *pathname,
                                      mdbx_filehandle_t *fd,
                                      mdbx_mode_t unix_mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
-MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname);
-MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname);
+MDBX_INTERNAL_FUNC int mdbx_removefile(const pathchar_t *pathname);
+MDBX_INTERNAL_FUNC int mdbx_removedirectory(const pathchar_t *pathname);
 MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait);
 
@@ -398,7 +405,8 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
                                   size_t length,
                                   enum mdbx_syncmode_bits mode_bits);
 MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
-                                            const char *pathname, int err);
+                                            const pathchar_t *pathname,
+                                            int err);
 
 MDBX_MAYBE_UNUSED static __inline uint32_t mdbx_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
