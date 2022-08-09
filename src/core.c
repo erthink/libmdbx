@@ -5998,6 +5998,13 @@ MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(unsigned value) {
 #define MDBX_ATTRIBUTE_TARGET_AVX2 MDBX_ATTRIBUTE_TARGET("avx2")
 #endif /* __AVX2__ */
 
+#if defined(__AVX512BW__)
+#define MDBX_ATTRIBUTE_TARGET_AVX512BW /* nope */
+#elif defined(MDBX_ATTRIBUTE_TARGET) && defined(__ia32__) &&                   \
+    (__GNUC_PREREQ(6, 0) || __CLANG_PREREQ(5, 0))
+#define MDBX_ATTRIBUTE_TARGET_AVX512BW MDBX_ATTRIBUTE_TARGET("avx512bw")
+#endif /* __AVX512BW__ */
+
 #ifdef MDBX_ATTRIBUTE_TARGET_SSE2
 MDBX_ATTRIBUTE_TARGET_SSE2 static __always_inline unsigned
 diffcmp2mask_sse2(const pgno_t *const ptr, const ptrdiff_t offset,
@@ -6124,8 +6131,72 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX2 */
 
 #ifdef MDBX_ATTRIBUTE_TARGET_AVX512BW
+MDBX_ATTRIBUTE_TARGET_AVX512BW static __always_inline unsigned
+diffcmp2mask_avx512bw(const pgno_t *const ptr, const ptrdiff_t offset,
+                      const __m512i pattern) {
+  const __m512i f = _mm512_loadu_si512((const __m512i *)ptr);
+  const __m512i l = _mm512_loadu_si512((const __m512i *)(ptr + offset));
+  return _mm512_cmpeq_epi32_mask(_mm512_sub_epi32(f, l), pattern);
+}
+
 MDBX_MAYBE_UNUSED __hot MDBX_ATTRIBUTE_TARGET_AVX512BW static pgno_t *
 scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
+  assert(seq > 0 && len > seq);
+#if MDBX_PNL_ASCENDING
+#error "FIXME: Not implemented"
+#endif /* MDBX_PNL_ASCENDING */
+  assert(range[-(ptrdiff_t)len] == len);
+  pgno_t *const detent = range - len + seq;
+  const ptrdiff_t offset = -(ptrdiff_t)seq;
+  const pgno_t target = (pgno_t)offset;
+  const __m512i pattern = _mm512_set1_epi32(target);
+  unsigned mask;
+  if (likely(len > seq + 15)) {
+    do {
+      mask = diffcmp2mask_avx512bw(range - 15, offset, pattern);
+      if (mask) {
+      found:
+        return range + 16 - __builtin_clz(mask);
+      }
+      range -= 16;
+    } while (range > detent + 15);
+    if (range == detent)
+      return nullptr;
+  }
+
+  /* Далее происходит чтение от 4 до 60 лишних байт, которые могут быть не
+   * только за пределами региона выделенного под PNL, но и пересекать границу
+   * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
+   * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
+#ifndef __SANITIZE_ADDRESS__
+  const unsigned on_page_safe_mask = 0xfc0 /* enough for '-63' bytes offset */;
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
+    const unsigned extra = (unsigned)(detent + 16 - range);
+    assert(extra > 0 && extra < 16);
+    mask = 0xFFFF << extra;
+    mask &= diffcmp2mask_avx512bw(range - 15, offset, pattern);
+    if (mask)
+      goto found;
+    return nullptr;
+  }
+#endif /* __SANITIZE_ADDRESS__ */
+  if (range - 7 > detent) {
+    mask = diffcmp2mask_avx2(range - 7, offset, *(const __m256i *)&pattern);
+    if (mask)
+      return range + 24 - __builtin_clz(mask);
+    range -= 8;
+  }
+  if (range - 3 > detent) {
+    mask = diffcmp2mask_sse2(range - 3, offset, *(const __m128i *)&pattern);
+    if (mask)
+      return range + 28 - __builtin_clz(mask);
+    range -= 4;
+  }
+  while (range > detent) {
+    if (*range - range[offset] == target)
+      return range;
+    --range;
+  }
   return nullptr;
 }
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
