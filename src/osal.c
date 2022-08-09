@@ -518,14 +518,35 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
 
 /*----------------------------------------------------------------------------*/
 
+#if defined(_WIN32) || defined(_WIN64)
+
+#ifndef WC_ERR_INVALID_CHARS
+static const DWORD WC_ERR_INVALID_CHARS =
+    (6 /* Windows Vista */ <= /* MajorVersion */ LOBYTE(LOWORD(GetVersion())))
+        ? 0x00000080
+        : 0;
+#endif /* WC_ERR_INVALID_CHARS */
+
+MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
+                                    size_t src_n) {
+  return MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src,
+                             (int)src_n, dst, (int)dst_n);
+}
+
+MDBX_INTERNAL_FUNC size_t mdbx_w2mb(char *dst, size_t dst_n, const wchar_t *src,
+                                    size_t src_n) {
+  return WideCharToMultiByte(CP_THREAD_ACP, WC_ERR_INVALID_CHARS, src,
+                             (int)src_n, dst, (int)dst_n, nullptr, nullptr);
+}
+
+#endif /* Windows */
+
+/*----------------------------------------------------------------------------*/
+
 MDBX_INTERNAL_FUNC int mdbx_removefile(const char *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
   return DeleteFileW(pathnameW) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return unlink(pathname) ? errno : MDBX_SUCCESS;
@@ -538,12 +559,8 @@ static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 
 MDBX_INTERNAL_FUNC int mdbx_removedirectory(const char *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
   return RemoveDirectoryW(pathnameW) ? MDBX_SUCCESS : (int)GetLastError();
 #else
   return rmdir(pathname) ? errno : MDBX_SUCCESS;
@@ -557,12 +574,8 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   *fd = INVALID_HANDLE_VALUE;
 
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
 
   DWORD CreationDisposition = unix_mode_bits ? OPEN_ALWAYS : OPEN_EXISTING;
   DWORD FlagsAndAttributes =

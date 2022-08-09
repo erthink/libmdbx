@@ -12971,12 +12971,8 @@ __cold static int mdbx_handle_env_pathname(MDBX_handle_env_pathname *ctx,
     return MDBX_EINVAL;
 
 #if defined(_WIN32) || defined(_WIN64)
-  const size_t wlen = mbstowcs(nullptr, pathname, INT_MAX);
-  if (wlen < 1 || wlen > /* MAX_PATH */ INT16_MAX)
-    return ERROR_INVALID_NAME;
-  wchar_t *const pathnameW = _alloca((wlen + 1) * sizeof(wchar_t));
-  if (wlen != mbstowcs(pathnameW, pathname, wlen + 1))
-    return ERROR_INVALID_NAME;
+  const wchar_t *pathnameW = nullptr;
+  MUSTDIE_MB2WIDE(pathname, pathnameW);
 
   const DWORD dwAttrib = GetFileAttributesW(pathnameW);
   if (dwAttrib == INVALID_FILE_ATTRIBUTES) {

@@ -216,26 +216,17 @@ MDBX_MAYBE_UNUSED PATH pchar_to_path(const char *c_str) {
 
 #if defined(_WIN32) || defined(_WIN64)
 
-#ifndef WC_ERR_INVALID_CHARS
-static const DWORD WC_ERR_INVALID_CHARS =
-    (6 /* Windows Vista */ <= /* MajorVersion */ LOBYTE(LOWORD(GetVersion())))
-        ? 0x00000080
-        : 0;
-#endif /* WC_ERR_INVALID_CHARS */
-
 template <> struct path_to_pchar<std::wstring> {
   std::string str;
   path_to_pchar(const std::wstring &path) {
     if (!path.empty()) {
-      const int chars =
-          WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path.data(),
-                              int(path.size()), nullptr, 0, nullptr, nullptr);
-      if (chars == 0)
+      const auto chars = mdbx_w2mb(nullptr, 0, path.data(), path.size());
+      if (chars < 1)
         mdbx::error::throw_exception(GetLastError());
       str.append(chars, '\0');
-      WideCharToMultiByte(CP_UTF8, WC_ERR_INVALID_CHARS, path.data(),
-                          int(path.size()), const_cast<char *>(str.data()),
-                          chars, nullptr, nullptr);
+      if (!mdbx_w2mb(const_cast<char *>(str.data()), chars, path.data(),
+                     path.size()))
+        mdbx::error::throw_exception(GetLastError());
     }
   }
   operator const char *() const { return str.c_str(); }
@@ -245,14 +236,14 @@ template <>
 MDBX_MAYBE_UNUSED std::wstring pchar_to_path<std::wstring>(const char *c_str) {
   std::wstring wstr;
   if (c_str && *c_str) {
-    const int chars = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, c_str,
-                                          int(strlen(c_str)), nullptr, 0);
-    if (chars == 0)
+    const auto c_str_len = strlen(c_str);
+    const auto wchars = mdbx_mb2w(nullptr, 0, c_str, c_str_len);
+    if (wchars < 1)
       mdbx::error::throw_exception(GetLastError());
-    wstr.append(chars, '\0');
-    MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, c_str,
-                        int(strlen(c_str)), const_cast<wchar_t *>(wstr.data()),
-                        chars);
+    wstr.append(wchars, '\0');
+    if (!mdbx_mb2w(const_cast<wchar_t *>(wstr.data()), wchars, c_str,
+                   c_str_len))
+      mdbx::error::throw_exception(GetLastError());
   }
   return wstr;
 }
