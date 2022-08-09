@@ -203,49 +203,35 @@ __cold  bug::~bug() noexcept {}
 
 //------------------------------------------------------------------------------
 
-template <typename PATH> struct path_to_pchar {
-  const std::string str;
-  path_to_pchar(const PATH &path) : str(path.generic_string()) {}
-  operator const char *() const { return str.c_str(); }
-};
-
-template <typename PATH>
-MDBX_MAYBE_UNUSED PATH pchar_to_path(const char *c_str) {
-  return PATH(c_str);
-}
-
 #if defined(_WIN32) || defined(_WIN64)
 
-template <> struct path_to_pchar<std::wstring> {
-  std::string str;
-  path_to_pchar(const std::wstring &path) {
-    if (!path.empty()) {
-      const auto chars = mdbx_w2mb(nullptr, 0, path.data(), path.size());
-      if (chars < 1)
-        mdbx::error::throw_exception(GetLastError());
-      str.append(chars, '\0');
-      if (!mdbx_w2mb(const_cast<char *>(str.data()), chars, path.data(),
-                     path.size()))
-        mdbx::error::throw_exception(GetLastError());
-    }
+std::string w2mb(const std::wstring &in) {
+  std::string out;
+  if (!in.empty()) {
+    const auto out_len = mdbx_w2mb(nullptr, 0, in.data(), in.size());
+    if (out_len < 1)
+      mdbx::error::throw_exception(GetLastError());
+    out.append(out_len, '\0');
+    if (out_len != mdbx_w2mb(const_cast<char *>(out.data()), out_len, in.data(),
+                             in.size()))
+      mdbx::error::throw_exception(GetLastError());
   }
-  operator const char *() const { return str.c_str(); }
-};
+  return out;
+}
 
-template <>
-MDBX_MAYBE_UNUSED std::wstring pchar_to_path<std::wstring>(const char *c_str) {
-  std::wstring wstr;
-  if (c_str && *c_str) {
-    const auto c_str_len = strlen(c_str);
-    const auto wchars = mdbx_mb2w(nullptr, 0, c_str, c_str_len);
-    if (wchars < 1)
+std::wstring mb2w(const char *in) {
+  std::wstring out;
+  if (in && *in) {
+    const auto in_len = strlen(in);
+    const auto out_len = mdbx_mb2w(nullptr, 0, in, in_len);
+    if (out_len < 1)
       mdbx::error::throw_exception(GetLastError());
-    wstr.append(wchars, '\0');
-    if (!mdbx_mb2w(const_cast<wchar_t *>(wstr.data()), wchars, c_str,
-                   c_str_len))
+    out.append(out_len, '\0');
+    if (out_len !=
+        mdbx_mb2w(const_cast<wchar_t *>(out.data()), out_len, in, in_len))
       mdbx::error::throw_exception(GetLastError());
   }
-  return wstr;
+  return out;
 }
 
 #endif /* Windows */
@@ -1230,31 +1216,14 @@ bool env::is_pristine() const {
 
 bool env::is_empty() const { return get_stat().ms_leaf_pages == 0; }
 
-#ifdef MDBX_STD_FILESYSTEM_PATH
-env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
-               bool force_dynamic_size) {
-  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(destination);
+env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
   error::success_or_throw(
-      ::mdbx_env_copy(handle_, utf8,
-                      (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                          (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
-                                              : MDBX_CP_DEFAULTS)));
+      ::mdbx_env_copy2fd(handle_, fd,
+                         (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
+                             (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
+                                                 : MDBX_CP_DEFAULTS)));
   return *this;
 }
-#endif /* MDBX_STD_FILESYSTEM_PATH */
-
-#if defined(_WIN32) || defined(_WIN64)
-env &env::copy(const ::std::wstring &destination, bool compactify,
-               bool force_dynamic_size) {
-  const path_to_pchar<::std::wstring> utf8(destination);
-  error::success_or_throw(
-      ::mdbx_env_copy(handle_, utf8,
-                      (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                          (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
-                                              : MDBX_CP_DEFAULTS)));
-  return *this;
-}
-#endif /* Windows */
 
 env &env::copy(const char *destination, bool compactify,
                bool force_dynamic_size) {
@@ -1271,37 +1240,31 @@ env &env::copy(const ::std::string &destination, bool compactify,
   return copy(destination.c_str(), compactify, force_dynamic_size);
 }
 
-env &env::copy(filehandle fd, bool compactify, bool force_dynamic_size) {
-  error::success_or_throw(
-      ::mdbx_env_copy2fd(handle_, fd,
-                         (compactify ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS) |
-                             (force_dynamic_size ? MDBX_CP_FORCE_DYNAMIC_SIZE
-                                                 : MDBX_CP_DEFAULTS)));
-  return *this;
-}
-
-path env::get_path() const {
-  const char *c_str;
-  error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
-  return pchar_to_path<path>(c_str);
-}
-
 #ifdef MDBX_STD_FILESYSTEM_PATH
-bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname,
-                 const remove_mode mode) {
-  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(pathname);
-  return error::boolean_or_throw(
-      ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
+env &env::copy(const MDBX_STD_FILESYSTEM_PATH &destination, bool compactify,
+               bool force_dynamic_size) {
+  return copy(destination.native(), compactify, force_dynamic_size);
 }
 #endif /* MDBX_STD_FILESYSTEM_PATH */
 
 #if defined(_WIN32) || defined(_WIN64)
-bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
-  const path_to_pchar<::std::wstring> utf8(pathname);
-  return error::boolean_or_throw(
-      ::mdbx_env_delete(utf8, MDBX_env_delete_mode_t(mode)));
+env &env::copy(const ::std::wstring &destination, bool compactify,
+               bool force_dynamic_size) {
+  return copy(w2mb(destination), compactify, force_dynamic_size);
 }
 #endif /* Windows */
+
+path env::get_path() const {
+  const char *c_str;
+  error::success_or_throw(::mdbx_env_get_path(handle_, &c_str));
+#if defined(_WIN32) || defined(_WIN64)
+  static_assert(sizeof(path::value_type) == sizeof(wchar_t), "Oops");
+  return path(mb2w(c_str));
+#else
+  static_assert(sizeof(path::value_type) == sizeof(char), "Oops");
+  return path(c_str);
+#endif
+}
 
 bool env::remove(const char *pathname, const remove_mode mode) {
   return error::boolean_or_throw(
@@ -1311,6 +1274,19 @@ bool env::remove(const char *pathname, const remove_mode mode) {
 bool env::remove(const ::std::string &pathname, const remove_mode mode) {
   return remove(pathname.c_str(), mode);
 }
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+bool env::remove(const MDBX_STD_FILESYSTEM_PATH &pathname,
+                 const remove_mode mode) {
+  return remove(pathname.native(), mode);
+}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+bool env::remove(const ::std::wstring &pathname, const remove_mode mode) {
+  return remove(w2mb(pathname), mode);
+}
+#endif /* Windows */
 
 //------------------------------------------------------------------------------
 
@@ -1348,68 +1324,6 @@ __cold void env_managed::setup(unsigned max_maps, unsigned max_readers) {
     error::success_or_throw(::mdbx_env_set_maxdbs(handle_, max_maps));
 }
 
-#ifdef MDBX_STD_FILESYSTEM_PATH
-__cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
-                                const operate_parameters &op, bool accede)
-    : env_managed(create_env()) {
-  setup(op.max_maps, op.max_readers);
-  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(pathname);
-  error::success_or_throw(
-      ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
-
-  if (op.options.nested_write_transactions &&
-      !get_options().nested_write_transactions)
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
-}
-
-__cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
-                                const env_managed::create_parameters &cp,
-                                const env::operate_parameters &op, bool accede)
-    : env_managed(create_env()) {
-  setup(op.max_maps, op.max_readers);
-  const path_to_pchar<MDBX_STD_FILESYSTEM_PATH> utf8(pathname);
-  set_geometry(cp.geometry);
-  error::success_or_throw(
-      ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),
-                      cp.file_mode_bits));
-
-  if (op.options.nested_write_transactions &&
-      !get_options().nested_write_transactions)
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
-}
-#endif /* MDBX_STD_FILESYSTEM_PATH */
-
-#if defined(_WIN32) || defined(_WIN64)
-__cold env_managed::env_managed(const ::std::wstring &pathname,
-                                const operate_parameters &op, bool accede)
-    : env_managed(create_env()) {
-  setup(op.max_maps, op.max_readers);
-  const path_to_pchar<::std::wstring> utf8(pathname);
-  error::success_or_throw(
-      ::mdbx_env_open(handle_, utf8, op.make_flags(accede), 0));
-
-  if (op.options.nested_write_transactions &&
-      !get_options().nested_write_transactions)
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
-}
-
-__cold env_managed::env_managed(const ::std::wstring &pathname,
-                                const env_managed::create_parameters &cp,
-                                const env::operate_parameters &op, bool accede)
-    : env_managed(create_env()) {
-  setup(op.max_maps, op.max_readers);
-  const path_to_pchar<::std::wstring> utf8(pathname);
-  set_geometry(cp.geometry);
-  error::success_or_throw(
-      ::mdbx_env_open(handle_, utf8, op.make_flags(accede, cp.use_subdirectory),
-                      cp.file_mode_bits));
-
-  if (op.options.nested_write_transactions &&
-      !get_options().nested_write_transactions)
-    MDBX_CXX20_UNLIKELY error::throw_exception(MDBX_INCOMPATIBLE);
-}
-#endif /* Windows */
-
 __cold env_managed::env_managed(const char *pathname,
                                 const operate_parameters &op, bool accede)
     : env_managed(create_env()) {
@@ -1445,6 +1359,28 @@ __cold env_managed::env_managed(const ::std::string &pathname,
                                 const env_managed::create_parameters &cp,
                                 const env::operate_parameters &op, bool accede)
     : env_managed(pathname.c_str(), cp, op, accede) {}
+
+#ifdef MDBX_STD_FILESYSTEM_PATH
+__cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(pathname.native(), op, accede) {}
+
+__cold env_managed::env_managed(const MDBX_STD_FILESYSTEM_PATH &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(pathname.native(), cp, op, accede) {}
+#endif /* MDBX_STD_FILESYSTEM_PATH */
+
+#if defined(_WIN32) || defined(_WIN64)
+__cold env_managed::env_managed(const ::std::wstring &pathname,
+                                const operate_parameters &op, bool accede)
+    : env_managed(w2mb(pathname), op, accede) {}
+
+__cold env_managed::env_managed(const ::std::wstring &pathname,
+                                const env_managed::create_parameters &cp,
+                                const env::operate_parameters &op, bool accede)
+    : env_managed(w2mb(pathname), cp, op, accede) {}
+#endif /* Windows */
 
 //------------------------------------------------------------------------------
 
