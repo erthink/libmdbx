@@ -5999,7 +5999,9 @@ scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
     do {
       mask = (uint8_t)diffcmp2mask_sse2(range - 3, offset, pattern);
       if (mask) {
+#ifndef __SANITIZE_ADDRESS__
       found:
+#endif /* __SANITIZE_ADDRESS__ */
         return range + 28 - __builtin_clz(mask);
       }
       range -= 4;
@@ -6058,7 +6060,9 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
     do {
       mask = (uint8_t)diffcmp2mask_avx2(range - 7, offset, pattern);
       if (mask) {
+#ifndef __SANITIZE_ADDRESS__
       found:
+#endif /* __SANITIZE_ADDRESS__ */
         return range + 24 - __builtin_clz(mask);
       }
       range -= 8;
@@ -6123,7 +6127,9 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
     do {
       mask = diffcmp2mask_avx512bw(range - 15, offset, pattern);
       if (mask) {
+#ifndef __SANITIZE_ADDRESS__
       found:
+#endif /* __SANITIZE_ADDRESS__ */
         return range + 16 - __builtin_clz(mask);
       }
       range -= 16;
