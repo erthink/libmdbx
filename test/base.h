@@ -94,7 +94,7 @@
 
 #define MDBX_INTERNAL_FUNC
 #define MDBX_INTERNAL_VAR extern
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "../mdbx.h++"
 #include "../src/base.h"
 #include "../src/osal.h"

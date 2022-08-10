@@ -22,7 +22,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 #include <ctype.h>

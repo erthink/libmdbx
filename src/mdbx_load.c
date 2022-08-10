@@ -20,7 +20,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 #include <ctype.h>
@@ -213,7 +213,7 @@ static int readhdr(void) {
     if (str) {
       if (*str) {
         free(subname);
-        subname = mdbx_strdup(str);
+        subname = osal_strdup(str);
         if (!subname) {
           if (!quiet)
             perror("strdup()");
@@ -421,7 +421,7 @@ __hot static int readline(MDBX_val *out, MDBX_val *buf) {
 
   /* Is buffer too short? */
   while (c1[len - 1] != '\n') {
-    buf->iov_base = mdbx_realloc(buf->iov_base, buf->iov_len * 2);
+    buf->iov_base = osal_realloc(buf->iov_base, buf->iov_len * 2);
     if (!buf->iov_base) {
       if (!quiet)
         fprintf(stderr,
@@ -560,7 +560,7 @@ int main(int argc, char *argv[]) {
       envflags |= MDBX_NOSUBDIR;
       break;
     case 's':
-      subname = mdbx_strdup(optarg);
+      subname = osal_strdup(optarg);
       break;
     case 'N':
       putflags |= MDBX_NOOVERWRITE | MDBX_NODUPDATA;
@@ -606,7 +606,7 @@ int main(int argc, char *argv[]) {
   fflush(nullptr);
 
   dbuf.iov_len = 4096;
-  dbuf.iov_base = mdbx_malloc(dbuf.iov_len);
+  dbuf.iov_base = osal_malloc(dbuf.iov_len);
   if (!dbuf.iov_base) {
     rc = MDBX_ENOMEM;
     error("value-buffer", rc);

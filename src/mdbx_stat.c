@@ -20,7 +20,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -469,13 +469,13 @@ int main(int argc, char *argv[]) {
       MDBX_dbi subdbi;
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      subname = mdbx_malloc(key.iov_len + 1);
+      subname = osal_malloc(key.iov_len + 1);
       memcpy(subname, key.iov_base, key.iov_len);
       subname[key.iov_len] = '\0';
       rc = mdbx_dbi_open(txn, subname, MDBX_DB_ACCEDE, &subdbi);
       if (rc == MDBX_SUCCESS)
         printf("Status of %s\n", subname);
-      mdbx_free(subname);
+      osal_free(subname);
       if (unlikely(rc != MDBX_SUCCESS)) {
         if (rc == MDBX_INCOMPATIBLE)
           continue;

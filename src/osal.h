@@ -58,7 +58,7 @@
 #include <sys/cachectl.h>
 #endif
 
-MDBX_MAYBE_UNUSED static __inline void mdbx_compiler_barrier(void) {
+MDBX_MAYBE_UNUSED static __inline void osal_compiler_barrier(void) {
 #if defined(__clang__) || defined(__GNUC__)
   __asm__ __volatile__("" ::: "memory");
 #elif defined(_MSC_VER)
@@ -78,7 +78,7 @@ MDBX_MAYBE_UNUSED static __inline void mdbx_compiler_barrier(void) {
 #endif
 }
 
-MDBX_MAYBE_UNUSED static __inline void mdbx_memory_barrier(void) {
+MDBX_MAYBE_UNUSED static __inline void osal_memory_barrier(void) {
 #ifdef MDBX_HAVE_C11ATOMICS
   atomic_thread_fence(memory_order_seq_cst);
 #elif defined(__ATOMIC_SEQ_CST)
@@ -116,8 +116,8 @@ MDBX_MAYBE_UNUSED static __inline void mdbx_memory_barrier(void) {
 #if defined(_WIN32) || defined(_WIN64)
 #define HAVE_SYS_STAT_H
 #define HAVE_SYS_TYPES_H
-typedef HANDLE mdbx_thread_t;
-typedef unsigned mdbx_thread_key_t;
+typedef HANDLE osal_thread_t;
+typedef unsigned osal_thread_key_t;
 #define MAP_FAILED NULL
 #define HIGH_DWORD(v) ((DWORD)((sizeof(v) > 4) ? ((uint64_t)(v) >> 32) : 0))
 #define THREAD_CALL WINAPI
@@ -125,8 +125,8 @@ typedef unsigned mdbx_thread_key_t;
 typedef struct {
   HANDLE mutex;
   HANDLE event[2];
-} mdbx_condpair_t;
-typedef CRITICAL_SECTION mdbx_fastmutex_t;
+} osal_condpair_t;
+typedef CRITICAL_SECTION osal_fastmutex_t;
 
 #if !defined(_MSC_VER) && !defined(__try)
 /* *INDENT-OFF* */
@@ -139,36 +139,36 @@ typedef CRITICAL_SECTION mdbx_fastmutex_t;
 
 #if MDBX_WITHOUT_MSVC_CRT
 
-#ifndef mdbx_malloc
-static inline void *mdbx_malloc(size_t bytes) {
+#ifndef osal_malloc
+static inline void *osal_malloc(size_t bytes) {
   return HeapAlloc(GetProcessHeap(), 0, bytes);
 }
-#endif /* mdbx_malloc */
+#endif /* osal_malloc */
 
-#ifndef mdbx_calloc
-static inline void *mdbx_calloc(size_t nelem, size_t size) {
+#ifndef osal_calloc
+static inline void *osal_calloc(size_t nelem, size_t size) {
   return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, nelem * size);
 }
-#endif /* mdbx_calloc */
+#endif /* osal_calloc */
 
-#ifndef mdbx_realloc
-static inline void *mdbx_realloc(void *ptr, size_t bytes) {
+#ifndef osal_realloc
+static inline void *osal_realloc(void *ptr, size_t bytes) {
   return ptr ? HeapReAlloc(GetProcessHeap(), 0, ptr, bytes)
              : HeapAlloc(GetProcessHeap(), 0, bytes);
 }
-#endif /* mdbx_realloc */
+#endif /* osal_realloc */
 
-#ifndef mdbx_free
-static inline void mdbx_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
-#endif /* mdbx_free */
+#ifndef osal_free
+static inline void osal_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
+#endif /* osal_free */
 
 #else /* MDBX_WITHOUT_MSVC_CRT */
 
-#define mdbx_malloc malloc
-#define mdbx_calloc calloc
-#define mdbx_realloc realloc
-#define mdbx_free free
-#define mdbx_strdup _strdup
+#define osal_malloc malloc
+#define osal_calloc calloc
+#define osal_realloc realloc
+#define osal_free free
+#define osal_strdup _strdup
 
 #endif /* MDBX_WITHOUT_MSVC_CRT */
 
@@ -180,26 +180,26 @@ static inline void mdbx_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #define vsnprintf _vsnprintf /* ntdll */
 #endif
 
-MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
+MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst, size_t dst_n, const char *src,
                                     size_t src_n);
 
 #else /*----------------------------------------------------------------------*/
 
-typedef pthread_t mdbx_thread_t;
-typedef pthread_key_t mdbx_thread_key_t;
+typedef pthread_t osal_thread_t;
+typedef pthread_key_t osal_thread_key_t;
 #define INVALID_HANDLE_VALUE (-1)
 #define THREAD_CALL
 #define THREAD_RESULT void *
 typedef struct {
   pthread_mutex_t mutex;
   pthread_cond_t cond[2];
-} mdbx_condpair_t;
-typedef pthread_mutex_t mdbx_fastmutex_t;
-#define mdbx_malloc malloc
-#define mdbx_calloc calloc
-#define mdbx_realloc realloc
-#define mdbx_free free
-#define mdbx_strdup strdup
+} osal_condpair_t;
+typedef pthread_mutex_t osal_fastmutex_t;
+#define osal_malloc malloc
+#define osal_calloc calloc
+#define osal_realloc realloc
+#define osal_free free
+#define osal_strdup strdup
 #endif /* Platform */
 
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -217,7 +217,7 @@ typedef pthread_mutex_t mdbx_fastmutex_t;
  * This is the basic size that the platform's memory manager uses, and is
  * fundamental to the use of memory-mapped files. */
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline size_t
-mdbx_syspagesize(void) {
+osal_syspagesize(void) {
 #if defined(_WIN32) || defined(_WIN64)
   SYSTEM_INFO si;
   GetSystemInfo(&si);
@@ -233,7 +233,7 @@ typedef wchar_t pathchar_t;
 typedef char pathchar_t;
 #endif
 
-typedef struct mdbx_mmap_param {
+typedef struct osal_mmap_param {
   union {
     void *address;
     uint8_t *dxb;
@@ -246,7 +246,7 @@ typedef struct mdbx_mmap_param {
 #if defined(_WIN32) || defined(_WIN64)
   HANDLE section; /* memory-mapped section handle */
 #endif
-} mdbx_mmap_t;
+} osal_mmap_t;
 
 typedef union bin128 {
   __anonymous_struct_extension__ struct { uint64_t x, y; };
@@ -254,13 +254,13 @@ typedef union bin128 {
 } bin128_t;
 
 #if defined(_WIN32) || defined(_WIN64)
-typedef union MDBX_srwlock {
+typedef union osal_srwlock {
   __anonymous_struct_extension__ struct {
     long volatile readerCount;
     long volatile writerCount;
   };
   RTL_SRWLOCK native;
-} MDBX_srwlock;
+} osal_srwlock_t;
 #endif /* Windows */
 
 #ifndef __cplusplus
@@ -270,12 +270,12 @@ typedef union MDBX_srwlock {
 
 #if (!defined(__GLIBC__) && __GLIBC_PREREQ(2, 1)) &&                           \
     (defined(_GNU_SOURCE) || defined(_BSD_SOURCE))
-#define mdbx_asprintf asprintf
-#define mdbx_vasprintf vasprintf
+#define osal_asprintf asprintf
+#define osal_vasprintf vasprintf
 #else
 MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC
-    MDBX_PRINTF_ARGS(2, 3) int mdbx_asprintf(char **strp, const char *fmt, ...);
-MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
+    MDBX_PRINTF_ARGS(2, 3) int osal_asprintf(char **strp, const char *fmt, ...);
+MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt, va_list ap);
 #endif
 
 #if !defined(MADV_DODUMP) && defined(MADV_CORE)
@@ -286,8 +286,8 @@ MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 #define MADV_DONTDUMP MADV_NOCORE
 #endif /* MADV_NOCORE -> MADV_DONTDUMP */
 
-MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny);
-MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny);
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void osal_jitter(bool tiny);
+MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny);
 
 /* max bytes to write in one call */
 #if defined(_WIN32) || defined(_WIN64)
@@ -297,15 +297,15 @@ MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny);
 #endif
 
 #if defined(__linux__) || defined(__gnu_linux__)
-MDBX_INTERNAL_VAR uint32_t mdbx_linux_kernel_version;
+MDBX_INTERNAL_VAR uint32_t linux_kernel_version;
 MDBX_INTERNAL_VAR bool mdbx_RunningOnWSL1 /* Windows Subsystem 1 for Linux */;
 #endif /* Linux */
 
-#ifndef mdbx_strdup
-LIBMDBX_API char *mdbx_strdup(const char *str);
+#ifndef osal_strdup
+LIBMDBX_API char *osal_strdup(const char *str);
 #endif
 
-MDBX_MAYBE_UNUSED static __inline int mdbx_get_errno(void) {
+MDBX_MAYBE_UNUSED static __inline int osal_get_errno(void) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD rc = GetLastError();
 #else
@@ -314,57 +314,57 @@ MDBX_MAYBE_UNUSED static __inline int mdbx_get_errno(void) {
   return rc;
 }
 
-#ifndef mdbx_memalign_alloc
-MDBX_INTERNAL_FUNC int mdbx_memalign_alloc(size_t alignment, size_t bytes,
+#ifndef osal_memalign_alloc
+MDBX_INTERNAL_FUNC int osal_memalign_alloc(size_t alignment, size_t bytes,
                                            void **result);
 #endif
-#ifndef mdbx_memalign_free
-MDBX_INTERNAL_FUNC void mdbx_memalign_free(void *ptr);
+#ifndef osal_memalign_free
+MDBX_INTERNAL_FUNC void osal_memalign_free(void *ptr);
 #endif
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_init(mdbx_condpair_t *condpair);
-MDBX_INTERNAL_FUNC int mdbx_condpair_lock(mdbx_condpair_t *condpair);
-MDBX_INTERNAL_FUNC int mdbx_condpair_unlock(mdbx_condpair_t *condpair);
-MDBX_INTERNAL_FUNC int mdbx_condpair_signal(mdbx_condpair_t *condpair,
+MDBX_INTERNAL_FUNC int osal_condpair_init(osal_condpair_t *condpair);
+MDBX_INTERNAL_FUNC int osal_condpair_lock(osal_condpair_t *condpair);
+MDBX_INTERNAL_FUNC int osal_condpair_unlock(osal_condpair_t *condpair);
+MDBX_INTERNAL_FUNC int osal_condpair_signal(osal_condpair_t *condpair,
                                             bool part);
-MDBX_INTERNAL_FUNC int mdbx_condpair_wait(mdbx_condpair_t *condpair, bool part);
-MDBX_INTERNAL_FUNC int mdbx_condpair_destroy(mdbx_condpair_t *condpair);
+MDBX_INTERNAL_FUNC int osal_condpair_wait(osal_condpair_t *condpair, bool part);
+MDBX_INTERNAL_FUNC int osal_condpair_destroy(osal_condpair_t *condpair);
 
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex);
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex);
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex);
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex);
+MDBX_INTERNAL_FUNC int osal_fastmutex_init(osal_fastmutex_t *fastmutex);
+MDBX_INTERNAL_FUNC int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex);
+MDBX_INTERNAL_FUNC int osal_fastmutex_release(osal_fastmutex_t *fastmutex);
+MDBX_INTERNAL_FUNC int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex);
 
-MDBX_INTERNAL_FUNC int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov,
+MDBX_INTERNAL_FUNC int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov,
                                     int iovcnt, uint64_t offset,
                                     size_t expected_written);
-MDBX_INTERNAL_FUNC int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t count,
+MDBX_INTERNAL_FUNC int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count,
                                   uint64_t offset);
-MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
+MDBX_INTERNAL_FUNC int osal_pwrite(mdbx_filehandle_t fd, const void *buf,
                                    size_t count, uint64_t offset);
-MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
+MDBX_INTERNAL_FUNC int osal_write(mdbx_filehandle_t fd, const void *buf,
                                   size_t count);
 
 MDBX_INTERNAL_FUNC int
-mdbx_thread_create(mdbx_thread_t *thread,
+osal_thread_create(osal_thread_t *thread,
                    THREAD_RESULT(THREAD_CALL *start_routine)(void *),
                    void *arg);
-MDBX_INTERNAL_FUNC int mdbx_thread_join(mdbx_thread_t thread);
+MDBX_INTERNAL_FUNC int osal_thread_join(osal_thread_t thread);
 
-enum mdbx_syncmode_bits {
+enum osal_syncmode_bits {
   MDBX_SYNC_NONE = 0,
   MDBX_SYNC_DATA = 1,
   MDBX_SYNC_SIZE = 2,
   MDBX_SYNC_IODQ = 4
 };
 
-MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
-                                  const enum mdbx_syncmode_bits mode_bits);
-MDBX_INTERNAL_FUNC int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length);
-MDBX_INTERNAL_FUNC int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos);
-MDBX_INTERNAL_FUNC int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length);
+MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,
+                                  const enum osal_syncmode_bits mode_bits);
+MDBX_INTERNAL_FUNC int osal_ftruncate(mdbx_filehandle_t fd, uint64_t length);
+MDBX_INTERNAL_FUNC int osal_fseek(mdbx_filehandle_t fd, uint64_t pos);
+MDBX_INTERNAL_FUNC int osal_filesize(mdbx_filehandle_t fd, uint64_t *length);
 
-enum mdbx_openfile_purpose {
+enum osal_openfile_purpose {
   MDBX_OPEN_DXB_READ = 0,
   MDBX_OPEN_DXB_LAZY = 1,
   MDBX_OPEN_DXB_DSYNC = 2,
@@ -373,26 +373,26 @@ enum mdbx_openfile_purpose {
   MDBX_OPEN_DELETE = 5
 };
 
-MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
+MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
                                      const MDBX_env *env,
                                      const pathchar_t *pathname,
                                      mdbx_filehandle_t *fd,
                                      mdbx_mode_t unix_mode_bits);
-MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd);
-MDBX_INTERNAL_FUNC int mdbx_removefile(const pathchar_t *pathname);
-MDBX_INTERNAL_FUNC int mdbx_removedirectory(const pathchar_t *pathname);
-MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd);
-MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait);
+MDBX_INTERNAL_FUNC int osal_closefile(mdbx_filehandle_t fd);
+MDBX_INTERNAL_FUNC int osal_removefile(const pathchar_t *pathname);
+MDBX_INTERNAL_FUNC int osal_removedirectory(const pathchar_t *pathname);
+MDBX_INTERNAL_FUNC int osal_is_pipe(mdbx_filehandle_t fd);
+MDBX_INTERNAL_FUNC int osal_lockfile(mdbx_filehandle_t fd, bool wait);
 
 #define MMAP_OPTION_TRUNCATE 1
 #define MMAP_OPTION_SEMAPHORE 2
-MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
+MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
                                  const size_t must, const size_t limit,
                                  const unsigned options);
-MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map);
+MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map);
 #define MDBX_MRESIZE_MAY_MOVE 0x00000100
 #define MDBX_MRESIZE_MAY_UNMAP 0x00000200
-MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
+MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
                                     size_t size, size_t limit);
 #if defined(_WIN32) || defined(_WIN64)
 typedef struct {
@@ -400,18 +400,18 @@ typedef struct {
   HANDLE handles[31];
 } mdbx_handle_array_t;
 MDBX_INTERNAL_FUNC int
-mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array);
+osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array);
 MDBX_INTERNAL_FUNC int
-mdbx_resume_threads_after_remap(mdbx_handle_array_t *array);
+osal_resume_threads_after_remap(mdbx_handle_array_t *array);
 #endif /* Windows */
-MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
+MDBX_INTERNAL_FUNC int osal_msync(osal_mmap_t *map, size_t offset,
                                   size_t length,
-                                  enum mdbx_syncmode_bits mode_bits);
-MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
+                                  enum osal_syncmode_bits mode_bits);
+MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
                                             const pathchar_t *pathname,
                                             int err);
 
-MDBX_MAYBE_UNUSED static __inline uint32_t mdbx_getpid(void) {
+MDBX_MAYBE_UNUSED static __inline uint32_t osal_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
 #if defined(_WIN32) || defined(_WIN64)
   return GetCurrentProcessId();
@@ -421,7 +421,7 @@ MDBX_MAYBE_UNUSED static __inline uint32_t mdbx_getpid(void) {
 #endif
 }
 
-MDBX_MAYBE_UNUSED static __inline uintptr_t mdbx_thread_self(void) {
+MDBX_MAYBE_UNUSED static __inline uintptr_t osal_thread_self(void) {
   mdbx_tid_t thunk;
   STATIC_ASSERT(sizeof(uintptr_t) >= sizeof(thunk));
 #if defined(_WIN32) || defined(_WIN64)
@@ -434,24 +434,23 @@ MDBX_MAYBE_UNUSED static __inline uintptr_t mdbx_thread_self(void) {
 
 #if !defined(_WIN32) && !defined(_WIN64)
 #if defined(__ANDROID_API__) || defined(ANDROID) || defined(BIONIC)
-MDBX_INTERNAL_FUNC int mdbx_check_tid4bionic(void);
+MDBX_INTERNAL_FUNC int osal_check_tid4bionic(void);
 #else
-static __inline int mdbx_check_tid4bionic(void) { return 0; }
+static __inline int osal_check_tid4bionic(void) { return 0; }
 #endif /* __ANDROID_API__ || ANDROID) || BIONIC */
 
 MDBX_MAYBE_UNUSED static __inline int
-mdbx_pthread_mutex_lock(pthread_mutex_t *mutex) {
-  int err = mdbx_check_tid4bionic();
+osal_pthread_mutex_lock(pthread_mutex_t *mutex) {
+  int err = osal_check_tid4bionic();
   return unlikely(err) ? err : pthread_mutex_lock(mutex);
 }
 #endif /* !Windows */
 
-MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void);
-MDBX_INTERNAL_FUNC uint64_t
-mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16);
-MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime);
+MDBX_INTERNAL_FUNC uint64_t osal_monotime(void);
+MDBX_INTERNAL_FUNC uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16);
+MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime);
 
-MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void);
+MDBX_INTERNAL_FUNC bin128_t osal_bootid(void);
 /*----------------------------------------------------------------------------*/
 /* lck stuff */
 
@@ -467,7 +466,7 @@ MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void);
 ///     MUST NOT initialize shared synchronization objects in memory-mapped
 ///     LCK-file that are already in use.
 /// \return Error code or zero on success.
-MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
+MDBX_INTERNAL_FUNC int osal_lck_init(MDBX_env *env,
                                      MDBX_env *inprocess_neighbor,
                                      int global_uniqueness_flag);
 
@@ -488,7 +487,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
 ///     of other instances of MDBX_env within the current process, e.g.
 ///     restore POSIX-fcntl locks after the closing of file descriptors.
 /// \return Error code (MDBX_PANIC) or zero on success.
-MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
+MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
                                         MDBX_env *inprocess_neighbor);
 
 /// \brief Connects to shared interprocess locking objects and tries to acquire
@@ -496,14 +495,14 @@ MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
 ///   Depending on implementation or/and platform (Windows) this function may
 ///   acquire the non-OS super-level lock (e.g. for shared synchronization
 ///   objects initialization), which will be downgraded to OS-exclusive or
-///   shared via explicit calling of mdbx_lck_downgrade().
+///   shared via explicit calling of osal_lck_downgrade().
 /// \return
 ///   MDBX_RESULT_TRUE (-1) - if an exclusive lock was acquired and thus
 ///     the current process is the first and only after the last use of DB.
 ///   MDBX_RESULT_FALSE (0) - if a shared lock was acquired and thus
 ///     DB has already been opened and now is used by other processes.
 ///   Otherwise (not 0 and not -1) - error code.
-MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env);
+MDBX_INTERNAL_FUNC int osal_lck_seize(MDBX_env *env);
 
 /// \brief Downgrades the level of initially acquired lock to
 ///   operational level specified by argument. The reson for such downgrade:
@@ -516,14 +515,14 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env);
 ///   (env->me_flags & MDBX_EXCLUSIVE) != 0 - downgrade to exclusive
 ///   operational lock.
 /// \return Error code or zero on success
-MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env);
+MDBX_INTERNAL_FUNC int osal_lck_downgrade(MDBX_env *env);
 
 /// \brief Locks LCK-file or/and table of readers for (de)registering.
 /// \return Error code or zero on success
-MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env);
+MDBX_INTERNAL_FUNC int osal_rdt_lock(MDBX_env *env);
 
 /// \brief Unlocks LCK-file or/and table of readers after (de)registering.
-MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env);
+MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env);
 
 /// \brief Acquires lock for DB change (on writing transaction start)
 ///   Reading transactions will not be blocked.
@@ -538,15 +537,15 @@ LIBMDBX_API void mdbx_txn_unlock(MDBX_env *env);
 
 /// \brief Sets alive-flag of reader presence (indicative lock) for PID of
 ///   the current process. The function does no more than needed for
-///   the correct working of mdbx_rpid_check() in other processes.
+///   the correct working of osal_rpid_check() in other processes.
 /// \return Error code or zero on success
-MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env);
+MDBX_INTERNAL_FUNC int osal_rpid_set(MDBX_env *env);
 
 /// \brief Resets alive-flag of reader presence (indicative lock)
 ///   for PID of the current process. The function does no more than needed
-///   for the correct working of mdbx_rpid_check() in other processes.
+///   for the correct working of osal_rpid_check() in other processes.
 /// \return Error code or zero on success
-MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
+MDBX_INTERNAL_FUNC int osal_rpid_clear(MDBX_env *env);
 
 /// \brief Checks for reading process status with the given pid with help of
 ///   alive-flag of presence (indicative lock) or using another way.
@@ -556,28 +555,28 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env);
 ///   MDBX_RESULT_FALSE (0) - if the reader process with the given PID is absent
 ///     or not working with DB (indicative lock is not present).
 ///   Otherwise (not 0 and not -1) - error code.
-MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid);
+MDBX_INTERNAL_FUNC int osal_rpid_check(MDBX_env *env, uint32_t pid);
 
 #if defined(_WIN32) || defined(_WIN64)
 
-#define MUSTDIE_MB2WIDE(FROM, TO)                                              \
+#define OSAL_MB2WIDE(FROM, TO)                                                 \
   do {                                                                         \
     const char *const from_tmp = (FROM);                                       \
     const size_t from_mblen = strlen(from_tmp);                                \
-    const size_t to_wlen = mdbx_mb2w(nullptr, 0, from_tmp, from_mblen);        \
+    const size_t to_wlen = osal_mb2w(nullptr, 0, from_tmp, from_mblen);        \
     if (to_wlen < 1 || to_wlen > /* MAX_PATH */ INT16_MAX)                     \
       return ERROR_INVALID_NAME;                                               \
     wchar_t *const to_tmp = _alloca((to_wlen + 1) * sizeof(wchar_t));          \
     if (to_wlen + 1 !=                                                         \
-        mdbx_mb2w(to_tmp, to_wlen + 1, from_tmp, from_mblen + 1))              \
+        osal_mb2w(to_tmp, to_wlen + 1, from_tmp, from_mblen + 1))              \
       return ERROR_INVALID_NAME;                                               \
     (TO) = to_tmp;                                                             \
   } while (0)
 
-typedef void(WINAPI *MDBX_srwlock_function)(MDBX_srwlock *);
-MDBX_INTERNAL_VAR MDBX_srwlock_function mdbx_srwlock_Init,
-    mdbx_srwlock_AcquireShared, mdbx_srwlock_ReleaseShared,
-    mdbx_srwlock_AcquireExclusive, mdbx_srwlock_ReleaseExclusive;
+typedef void(WINAPI *osal_srwlock_t_function)(osal_srwlock_t *);
+MDBX_INTERNAL_VAR osal_srwlock_t_function osal_srwlock_Init,
+    osal_srwlock_AcquireShared, osal_srwlock_ReleaseShared,
+    osal_srwlock_AcquireExclusive, osal_srwlock_ReleaseExclusive;
 
 #if _WIN32_WINNT < 0x0600 /* prior to Windows Vista */
 typedef enum _FILE_INFO_BY_HANDLE_CLASS {

@@ -20,7 +20,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 #include <ctype.h>
@@ -403,7 +403,7 @@ int main(int argc, char *argv[]) {
 
       if (memchr(key.iov_base, '\0', key.iov_len))
         continue;
-      subname = mdbx_realloc(buf4free, key.iov_len + 1);
+      subname = osal_realloc(buf4free, key.iov_len + 1);
       if (!subname) {
         rc = MDBX_ENOMEM;
         break;

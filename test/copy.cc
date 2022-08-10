@@ -15,7 +15,7 @@ REGISTER_TESTCASE(copy);
 void testcase_copy::copy_db(const bool with_compaction) {
   int err = mdbx_env_delete(copy_pathname.c_str(), MDBX_ENV_JUST_DELETE);
   if (err != MDBX_SUCCESS && err != MDBX_RESULT_TRUE)
-    failure_perror("mdbx_removefile()", err);
+    failure_perror("osal_removefile()", err);
 
   err = mdbx_env_copy(db_guard.get(), copy_pathname.c_str(),
                       with_compaction ? MDBX_CP_COMPACT : MDBX_CP_DEFAULTS);

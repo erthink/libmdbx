@@ -4,7 +4,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_sync_locked*
+   fun:sync_locked*
 }
 {
    msync-whole-mmap-2
@@ -12,7 +12,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_env_sync_internal*
+   fun:env_sync*
 }
 {
    msync-whole-mmap-3
@@ -20,7 +20,7 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_mapresize*
+   fun:map_resize*
 }
 {
    msync-wipe-steady
@@ -28,21 +28,21 @@
    msync(start)
    fun:msync
    ...
-   fun:mdbx_wipe_steady*
+   fun:wipe_steady*
 }
 
-# memcmp() inside mdbx_iov_write() as workaround for todo4recovery://erased_by_github/libmdbx/issues/269
+# memcmp() inside iov_write() as workaround for todo4recovery://erased_by_github/libmdbx/issues/269
 {
    write-page-check-bcmp
    Memcheck:Cond
    fun:bcmp
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    write-page-check-memcmp
    Memcheck:Cond
    fun:memcmp*
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 
 # single-page flush by pwrite()
@@ -52,7 +52,7 @@
    pwrite(buf)
    fun:pwrite
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwrite64-page-flush
@@ -60,7 +60,7 @@
    pwrite64(buf)
    fun:pwrite
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 
 # modern Valgrind don't support the `vector[...]` pattern
@@ -70,16 +70,16 @@
 #   pwritev(vector[...])
 #   fun:pwritev
 #   ...
-#   fun:mdbx_iov_write*
+#   fun:iov_write*
 #}
-# for((i=0;i<64;++i)); do echo -e "{\n   pwritev-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:mdbx_iov_write*\n}"; done >> valgrind_suppress.txt
+# for((i=0;i<64;++i)); do echo -e "{\n   pwritev-page-flush-$i\n   Memcheck:Param\n   pwritev(vector[$i])\n   fun:pwritev\n   ...\n   fun:iov_write*\n}"; done >> valgrind_suppress.txt
 {
    pwritev-page-flush-0
    Memcheck:Param
    pwritev(vector[0])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-1
@@ -87,7 +87,7 @@
    pwritev(vector[1])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-2
@@ -95,7 +95,7 @@
    pwritev(vector[2])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-3
@@ -103,7 +103,7 @@
    pwritev(vector[3])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-4
@@ -111,7 +111,7 @@
    pwritev(vector[4])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-5
@@ -119,7 +119,7 @@
    pwritev(vector[5])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-6
@@ -127,7 +127,7 @@
    pwritev(vector[6])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-7
@@ -135,7 +135,7 @@
    pwritev(vector[7])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-8
@@ -143,7 +143,7 @@
    pwritev(vector[8])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-9
@@ -151,7 +151,7 @@
    pwritev(vector[9])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-10
@@ -159,7 +159,7 @@
    pwritev(vector[10])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-11
@@ -167,7 +167,7 @@
    pwritev(vector[11])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-12
@@ -175,7 +175,7 @@
    pwritev(vector[12])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-13
@@ -183,7 +183,7 @@
    pwritev(vector[13])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-14
@@ -191,7 +191,7 @@
    pwritev(vector[14])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-15
@@ -199,7 +199,7 @@
    pwritev(vector[15])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-16
@@ -207,7 +207,7 @@
    pwritev(vector[16])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-17
@@ -215,7 +215,7 @@
    pwritev(vector[17])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-18
@@ -223,7 +223,7 @@
    pwritev(vector[18])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-19
@@ -231,7 +231,7 @@
    pwritev(vector[19])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-20
@@ -239,7 +239,7 @@
    pwritev(vector[20])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-21
@@ -247,7 +247,7 @@
    pwritev(vector[21])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-22
@@ -255,7 +255,7 @@
    pwritev(vector[22])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-23
@@ -263,7 +263,7 @@
    pwritev(vector[23])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-24
@@ -271,7 +271,7 @@
    pwritev(vector[24])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-25
@@ -279,7 +279,7 @@
    pwritev(vector[25])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-26
@@ -287,7 +287,7 @@
    pwritev(vector[26])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-27
@@ -295,7 +295,7 @@
    pwritev(vector[27])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-28
@@ -303,7 +303,7 @@
    pwritev(vector[28])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-29
@@ -311,7 +311,7 @@
    pwritev(vector[29])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-30
@@ -319,7 +319,7 @@
    pwritev(vector[30])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-31
@@ -327,7 +327,7 @@
    pwritev(vector[31])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-32
@@ -335,7 +335,7 @@
    pwritev(vector[32])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-33
@@ -343,7 +343,7 @@
    pwritev(vector[33])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-34
@@ -351,7 +351,7 @@
    pwritev(vector[34])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-35
@@ -359,7 +359,7 @@
    pwritev(vector[35])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-36
@@ -367,7 +367,7 @@
    pwritev(vector[36])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-37
@@ -375,7 +375,7 @@
    pwritev(vector[37])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-38
@@ -383,7 +383,7 @@
    pwritev(vector[38])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-39
@@ -391,7 +391,7 @@
    pwritev(vector[39])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-40
@@ -399,7 +399,7 @@
    pwritev(vector[40])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-41
@@ -407,7 +407,7 @@
    pwritev(vector[41])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-42
@@ -415,7 +415,7 @@
    pwritev(vector[42])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-43
@@ -423,7 +423,7 @@
    pwritev(vector[43])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-44
@@ -431,7 +431,7 @@
    pwritev(vector[44])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-45
@@ -439,7 +439,7 @@
    pwritev(vector[45])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-46
@@ -447,7 +447,7 @@
    pwritev(vector[46])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-47
@@ -455,7 +455,7 @@
    pwritev(vector[47])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-48
@@ -463,7 +463,7 @@
    pwritev(vector[48])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-49
@@ -471,7 +471,7 @@
    pwritev(vector[49])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-50
@@ -479,7 +479,7 @@
    pwritev(vector[50])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-51
@@ -487,7 +487,7 @@
    pwritev(vector[51])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-52
@@ -495,7 +495,7 @@
    pwritev(vector[52])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-53
@@ -503,7 +503,7 @@
    pwritev(vector[53])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-54
@@ -511,7 +511,7 @@
    pwritev(vector[54])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-55
@@ -519,7 +519,7 @@
    pwritev(vector[55])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-56
@@ -527,7 +527,7 @@
    pwritev(vector[56])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-57
@@ -535,7 +535,7 @@
    pwritev(vector[57])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-58
@@ -543,7 +543,7 @@
    pwritev(vector[58])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-59
@@ -551,7 +551,7 @@
    pwritev(vector[59])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-60
@@ -559,7 +559,7 @@
    pwritev(vector[60])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-61
@@ -567,7 +567,7 @@
    pwritev(vector[61])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-62
@@ -575,7 +575,7 @@
    pwritev(vector[62])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }
 {
    pwritev-page-flush-63
@@ -583,5 +583,5 @@
    pwritev(vector[63])
    fun:pwritev
    ...
-   fun:mdbx_iov_write*
+   fun:iov_write*
 }

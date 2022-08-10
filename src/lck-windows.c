@@ -48,16 +48,16 @@ static
   switch (reason) {
   case DLL_PROCESS_ATTACH:
     mdbx_winnt_import();
-    mdbx_rthc_global_init();
+    global_ctor();
     break;
   case DLL_PROCESS_DETACH:
-    mdbx_rthc_global_dtor();
+    global_dtor();
     break;
 
   case DLL_THREAD_ATTACH:
     break;
   case DLL_THREAD_DETACH:
-    mdbx_rthc_thread_dtor(module);
+    thread_dtor(module);
     break;
   }
 #if MDBX_BUILD_SHARED_LIBRARY
@@ -186,8 +186,8 @@ void mdbx_txn_unlock(MDBX_env *env) {
 #define LCK_LOWER LCK_LO_OFFSET, LCK_LO_LEN
 #define LCK_UPPER LCK_UP_OFFSET, LCK_UP_LEN
 
-MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
-  mdbx_srwlock_AcquireShared(&env->me_remap_guard);
+MDBX_INTERNAL_FUNC int osal_rdt_lock(MDBX_env *env) {
+  osal_srwlock_AcquireShared(&env->me_remap_guard);
   if (env->me_lfd == INVALID_HANDLE_VALUE)
     return MDBX_SUCCESS; /* readonly database in readonly filesystem */
 
@@ -198,21 +198,21 @@ MDBX_INTERNAL_FUNC int mdbx_rdt_lock(MDBX_env *env) {
     return MDBX_SUCCESS;
 
   int rc = (int)GetLastError();
-  mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
+  osal_srwlock_ReleaseShared(&env->me_remap_guard);
   return rc;
 }
 
-MDBX_INTERNAL_FUNC void mdbx_rdt_unlock(MDBX_env *env) {
+MDBX_INTERNAL_FUNC void osal_rdt_unlock(MDBX_env *env) {
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     /* transition from S-E (locked) to S-? (used), e.g. unlock upper-part */
     if ((env->me_flags & MDBX_EXCLUSIVE) == 0 &&
         !funlock(env->me_lfd, LCK_UPPER))
       mdbx_panic("%s failed: err %u", __func__, (int)GetLastError());
   }
-  mdbx_srwlock_ReleaseShared(&env->me_remap_guard);
+  osal_srwlock_ReleaseShared(&env->me_remap_guard);
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lockfile(mdbx_filehandle_t fd, bool wait) {
+MDBX_INTERNAL_FUNC int osal_lockfile(mdbx_filehandle_t fd, bool wait) {
   return flock(fd,
                wait ? LCK_EXCLUSIVE | LCK_WAITFOR
                     : LCK_EXCLUSIVE | LCK_DONTWAIT,
@@ -225,7 +225,7 @@ static int suspend_and_append(mdbx_handle_array_t **array,
                               const DWORD ThreadId) {
   const unsigned limit = (*array)->limit;
   if ((*array)->count == limit) {
-    void *ptr = mdbx_realloc(
+    void *ptr = osal_realloc(
         (limit > ARRAY_LENGTH((*array)->handles))
             ? *array
             : /* don't free initial array on the stack */ NULL,
@@ -259,8 +259,8 @@ static int suspend_and_append(mdbx_handle_array_t **array,
 }
 
 MDBX_INTERNAL_FUNC int
-mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
-  mdbx_assert(env, (env->me_flags & MDBX_NOTLS) == 0);
+osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
+  eASSERT(env, (env->me_flags & MDBX_NOTLS) == 0);
   const uintptr_t CurrentTid = GetCurrentThreadId();
   int rc;
   if (env->me_lck_mmap.lck) {
@@ -282,7 +282,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
       rc = suspend_and_append(array, (mdbx_tid_t)reader->mr_tid.weak);
       if (rc != MDBX_SUCCESS) {
       bailout_lck:
-        (void)mdbx_resume_threads_after_remap(*array);
+        (void)osal_resume_threads_after_remap(*array);
         return rc;
       }
     }
@@ -294,7 +294,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
   } else {
     /* Without LCK (i.e. read-only mode).
      * Walk through a snapshot of all running threads */
-    mdbx_assert(env, env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY));
+    eASSERT(env, env->me_flags & (MDBX_EXCLUSIVE | MDBX_RDONLY));
     const HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE)
       return (int)GetLastError();
@@ -306,7 +306,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
       rc = (int)GetLastError();
     bailout_toolhelp:
       CloseHandle(hSnapshot);
-      (void)mdbx_resume_threads_after_remap(*array);
+      (void)osal_resume_threads_after_remap(*array);
       return rc;
     }
 
@@ -331,7 +331,7 @@ mdbx_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array) {
 }
 
 MDBX_INTERNAL_FUNC int
-mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
+osal_resume_threads_after_remap(mdbx_handle_array_t *array) {
   int rc = MDBX_SUCCESS;
   for (unsigned i = 0; i < array->count; ++i) {
     const HANDLE hThread = array->handles[i];
@@ -370,11 +370,11 @@ mdbx_resume_threads_after_remap(mdbx_handle_array_t *array) {
  *   E-S
  *   E-E  = exclusive-write, i.e. exclusive due (re)initialization
  *
- *  The mdbx_lck_seize() moves the locking-FSM from the initial free/unlocked
+ *  The osal_lck_seize() moves the locking-FSM from the initial free/unlocked
  *  state to the "exclusive write" (and returns MDBX_RESULT_TRUE) if possible,
  *  or to the "used" (and returns MDBX_RESULT_FALSE).
  *
- *  The mdbx_lck_downgrade() moves the locking-FSM from "exclusive write"
+ *  The osal_lck_downgrade() moves the locking-FSM from "exclusive write"
  *  state to the "used" (i.e. shared) state.
  *
  *  The mdbx_lck_upgrade() moves the locking-FSM from "used" (i.e. shared)
@@ -432,21 +432,21 @@ static int internal_seize_lck(HANDLE lfd) {
   assert(lfd != INVALID_HANDLE_VALUE);
 
   /* 1) now on ?-? (free), get ?-E (middle) */
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (!flock(lfd, LCK_EXCLUSIVE | LCK_WAITFOR, LCK_UPPER)) {
     rc = (int)GetLastError() /* 2) something went wrong, give up */;
-    mdbx_error("%s, err %u", "?-?(free) >> ?-E(middle)", rc);
+    ERROR("%s, err %u", "?-?(free) >> ?-E(middle)", rc);
     return rc;
   }
 
   /* 3) now on ?-E (middle), try E-E (exclusive-write) */
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (flock(lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER))
     return MDBX_RESULT_TRUE /* 4) got E-E (exclusive-write), done */;
 
   /* 5) still on ?-E (middle) */
   rc = (int)GetLastError();
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (rc != ERROR_SHARING_VIOLATION && rc != ERROR_LOCK_VIOLATION) {
     /* 6) something went wrong, give up */
     if (!funlock(lfd, LCK_UPPER))
@@ -456,13 +456,13 @@ static int internal_seize_lck(HANDLE lfd) {
   }
 
   /* 7) still on ?-E (middle), try S-E (locked) */
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   rc = flock(lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER) ? MDBX_RESULT_FALSE
                                                         : (int)GetLastError();
 
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (rc != MDBX_RESULT_FALSE)
-    mdbx_error("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
+    ERROR("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
 
   /* 8) now on S-E (locked) or still on ?-E (middle),
    *    transition to S-? (used) or ?-? (free) */
@@ -474,7 +474,7 @@ static int internal_seize_lck(HANDLE lfd) {
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int osal_lck_seize(MDBX_env *env) {
   int rc;
 
   assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
@@ -485,17 +485,17 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
 
   if (env->me_lfd == INVALID_HANDLE_VALUE) {
     /* LY: without-lck mode (e.g. on read-only filesystem) */
-    mdbx_jitter4testing(false);
+    jitter4testing(false);
     if (!flock(env->me_lazy_fd, LCK_SHARED | LCK_DONTWAIT, LCK_WHOLE)) {
       rc = (int)GetLastError();
-      mdbx_error("%s, err %u", "without-lck", rc);
+      ERROR("%s, err %u", "without-lck", rc);
       return rc;
     }
     return MDBX_RESULT_FALSE;
   }
 
   rc = internal_seize_lck(env->me_lfd);
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (rc == MDBX_RESULT_TRUE && (env->me_flags & MDBX_RDONLY) == 0) {
     /* Check that another process don't operates in without-lck mode.
      * Doing such check by exclusive locking the body-part of db. Should be
@@ -505,11 +505,11 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
      *    while opening db in valid (non-conflict) mode. */
     if (!flock(env->me_lazy_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY)) {
       rc = (int)GetLastError();
-      mdbx_error("%s, err %u", "lock-against-without-lck", rc);
-      mdbx_jitter4testing(false);
+      ERROR("%s, err %u", "lock-against-without-lck", rc);
+      jitter4testing(false);
       lck_unlock(env);
     } else {
-      mdbx_jitter4testing(false);
+      jitter4testing(false);
       if (!funlock(env->me_lazy_fd, LCK_BODY))
         mdbx_panic("%s(%s) failed: err %u", __func__,
                    "unlock-against-without-lck", (int)GetLastError());
@@ -519,7 +519,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_seize(MDBX_env *env) {
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int osal_lck_downgrade(MDBX_env *env) {
   /* Transite from exclusive-write state (E-E) to used (S-?) */
   assert(env->me_lazy_fd != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
@@ -535,7 +535,7 @@ MDBX_INTERNAL_FUNC int mdbx_lck_downgrade(MDBX_env *env) {
   /* 2) now at ?-E (middle), transition to S-E (locked) */
   if (!flock(env->me_lfd, LCK_SHARED | LCK_DONTWAIT, LCK_LOWER)) {
     int rc = (int)GetLastError() /* 3) something went wrong, give up */;
-    mdbx_error("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
+    ERROR("%s, err %u", "?-E(middle) >> S-E(locked)", rc);
     return rc;
   }
 
@@ -557,10 +557,10 @@ MDBX_INTERNAL_FUNC int mdbx_lck_upgrade(MDBX_env *env) {
 
   int rc;
   /* 1) now on S-? (used), try S-E (locked) */
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (!flock(env->me_lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_UPPER)) {
     rc = (int)GetLastError() /* 2) something went wrong, give up */;
-    mdbx_verbose("%s, err %u", "S-?(used) >> S-E(locked)", rc);
+    VERBOSE("%s, err %u", "S-?(used) >> S-E(locked)", rc);
     return rc;
   }
 
@@ -570,17 +570,17 @@ MDBX_INTERNAL_FUNC int mdbx_lck_upgrade(MDBX_env *env) {
                (int)GetLastError());
 
   /* 4) now on ?-E (middle), try E-E (exclusive-write) */
-  mdbx_jitter4testing(false);
+  jitter4testing(false);
   if (!flock(env->me_lfd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_LOWER)) {
     rc = (int)GetLastError() /* 5) something went wrong, give up */;
-    mdbx_verbose("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
+    VERBOSE("%s, err %u", "?-E(middle) >> E-E(exclusive-write)", rc);
     return rc;
   }
 
   return MDBX_SUCCESS /* 6) now at E-E (exclusive-write), done */;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
+MDBX_INTERNAL_FUNC int osal_lck_init(MDBX_env *env,
                                      MDBX_env *inprocess_neighbor,
                                      int global_uniqueness_flag) {
   (void)env;
@@ -589,19 +589,19 @@ MDBX_INTERNAL_FUNC int mdbx_lck_init(MDBX_env *env,
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
+MDBX_INTERNAL_FUNC int osal_lck_destroy(MDBX_env *env,
                                         MDBX_env *inprocess_neighbor) {
   /* LY: should unmap before releasing the locks to avoid race condition and
    * STATUS_USER_MAPPED_FILE/ERROR_USER_MAPPED_FILE */
   if (env->me_map)
-    mdbx_munmap(&env->me_dxb_mmap);
+    osal_munmap(&env->me_dxb_mmap);
   if (env->me_lck_mmap.lck) {
     const bool synced = env->me_lck_mmap.lck->mti_unsynced_pages.weak == 0;
-    mdbx_munmap(&env->me_lck_mmap);
+    osal_munmap(&env->me_lck_mmap);
     if (synced && !inprocess_neighbor && env->me_lfd != INVALID_HANDLE_VALUE &&
         mdbx_lck_upgrade(env) == MDBX_SUCCESS)
       /* this will fail if LCK is used/mmapped by other process(es) */
-      mdbx_ftruncate(env->me_lfd, 0);
+      osal_ftruncate(env->me_lfd, 0);
   }
   lck_unlock(env);
   return MDBX_SUCCESS;
@@ -610,12 +610,12 @@ MDBX_INTERNAL_FUNC int mdbx_lck_destroy(MDBX_env *env,
 /*----------------------------------------------------------------------------*/
 /* reader checking (by pid) */
 
-MDBX_INTERNAL_FUNC int mdbx_rpid_set(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int osal_rpid_set(MDBX_env *env) {
   (void)env;
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
+MDBX_INTERNAL_FUNC int osal_rpid_clear(MDBX_env *env) {
   (void)env;
   return MDBX_SUCCESS;
 }
@@ -626,7 +626,7 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_clear(MDBX_env *env) {
  *   MDBX_RESULT_TRUE, if pid is live (unable to acquire lock)
  *   MDBX_RESULT_FALSE, if pid is dead (lock acquired)
  *   or otherwise the errcode. */
-MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid) {
+MDBX_INTERNAL_FUNC int osal_rpid_check(MDBX_env *env, uint32_t pid) {
   (void)env;
   HANDLE hProcess = OpenProcess(SYNCHRONIZE, FALSE, pid);
   int rc;
@@ -663,11 +663,11 @@ MDBX_INTERNAL_FUNC int mdbx_rpid_check(MDBX_env *env, uint32_t pid) {
 // Stub for slim read-write lock
 // Copyright (C) 1995-2002 Brad Wilson
 
-static void WINAPI stub_srwlock_Init(MDBX_srwlock *srwl) {
+static void WINAPI stub_srwlock_Init(osal_srwlock_t *srwl) {
   srwl->readerCount = srwl->writerCount = 0;
 }
 
-static void WINAPI stub_srwlock_AcquireShared(MDBX_srwlock *srwl) {
+static void WINAPI stub_srwlock_AcquireShared(osal_srwlock_t *srwl) {
   while (true) {
     assert(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
@@ -692,12 +692,12 @@ static void WINAPI stub_srwlock_AcquireShared(MDBX_srwlock *srwl) {
   }
 }
 
-static void WINAPI stub_srwlock_ReleaseShared(MDBX_srwlock *srwl) {
+static void WINAPI stub_srwlock_ReleaseShared(osal_srwlock_t *srwl) {
   assert(srwl->readerCount > 0);
   _InterlockedDecrement(&srwl->readerCount);
 }
 
-static void WINAPI stub_srwlock_AcquireExclusive(MDBX_srwlock *srwl) {
+static void WINAPI stub_srwlock_AcquireExclusive(osal_srwlock_t *srwl) {
   while (true) {
     assert(srwl->writerCount >= 0 && srwl->readerCount >= 0);
 
@@ -723,7 +723,7 @@ static void WINAPI stub_srwlock_AcquireExclusive(MDBX_srwlock *srwl) {
   }
 }
 
-static void WINAPI stub_srwlock_ReleaseExclusive(MDBX_srwlock *srwl) {
+static void WINAPI stub_srwlock_ReleaseExclusive(osal_srwlock_t *srwl) {
   assert(srwl->writerCount == 1 && srwl->readerCount >= 0);
   srwl->writerCount = 0;
 }
@@ -739,9 +739,9 @@ static uint64_t WINAPI stub_GetTickCount64(void) {
 /*----------------------------------------------------------------------------*/
 
 #ifndef xMDBX_ALLOY
-MDBX_srwlock_function mdbx_srwlock_Init, mdbx_srwlock_AcquireShared,
-    mdbx_srwlock_ReleaseShared, mdbx_srwlock_AcquireExclusive,
-    mdbx_srwlock_ReleaseExclusive;
+osal_srwlock_t_function osal_srwlock_Init, osal_srwlock_AcquireShared,
+    osal_srwlock_ReleaseShared, osal_srwlock_AcquireExclusive,
+    osal_srwlock_ReleaseExclusive;
 
 MDBX_NtExtendSection mdbx_NtExtendSection;
 MDBX_GetFileInformationByHandleEx mdbx_GetFileInformationByHandleEx;
@@ -789,24 +789,24 @@ static void mdbx_winnt_import(void) {
   GET_PROC_ADDR(hAdvapi32dll, RegGetValueA);
 #undef GET_PROC_ADDR
 
-  const MDBX_srwlock_function init =
-      (MDBX_srwlock_function)GetProcAddress(hKernel32dll, "InitializeSRWLock");
+  const osal_srwlock_t_function init = (osal_srwlock_t_function)GetProcAddress(
+      hKernel32dll, "InitializeSRWLock");
   if (init != NULL) {
-    mdbx_srwlock_Init = init;
-    mdbx_srwlock_AcquireShared = (MDBX_srwlock_function)GetProcAddress(
+    osal_srwlock_Init = init;
+    osal_srwlock_AcquireShared = (osal_srwlock_t_function)GetProcAddress(
         hKernel32dll, "AcquireSRWLockShared");
-    mdbx_srwlock_ReleaseShared = (MDBX_srwlock_function)GetProcAddress(
+    osal_srwlock_ReleaseShared = (osal_srwlock_t_function)GetProcAddress(
         hKernel32dll, "ReleaseSRWLockShared");
-    mdbx_srwlock_AcquireExclusive = (MDBX_srwlock_function)GetProcAddress(
+    osal_srwlock_AcquireExclusive = (osal_srwlock_t_function)GetProcAddress(
         hKernel32dll, "AcquireSRWLockExclusive");
-    mdbx_srwlock_ReleaseExclusive = (MDBX_srwlock_function)GetProcAddress(
+    osal_srwlock_ReleaseExclusive = (osal_srwlock_t_function)GetProcAddress(
         hKernel32dll, "ReleaseSRWLockExclusive");
   } else {
-    mdbx_srwlock_Init = stub_srwlock_Init;
-    mdbx_srwlock_AcquireShared = stub_srwlock_AcquireShared;
-    mdbx_srwlock_ReleaseShared = stub_srwlock_ReleaseShared;
-    mdbx_srwlock_AcquireExclusive = stub_srwlock_AcquireExclusive;
-    mdbx_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
+    osal_srwlock_Init = stub_srwlock_Init;
+    osal_srwlock_AcquireShared = stub_srwlock_AcquireShared;
+    osal_srwlock_ReleaseShared = stub_srwlock_ReleaseShared;
+    osal_srwlock_AcquireExclusive = stub_srwlock_AcquireExclusive;
+    osal_srwlock_ReleaseExclusive = stub_srwlock_ReleaseExclusive;
   }
 }
 

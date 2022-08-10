@@ -20,7 +20,7 @@
 #pragma warning(disable : 4996) /* The POSIX name is deprecated... */
 #endif                          /* _MSC_VER (warnings) */
 
-#define xMDBX_TOOLS /* Avoid using internal mdbx_assert() */
+#define xMDBX_TOOLS /* Avoid using internal eASSERT() */
 #include "internals.h"
 
 typedef struct flagbit {
@@ -193,12 +193,12 @@ static void pagemap_cleanup(void) {
   for (size_t i = CORE_DBS + /* account pseudo-entry for meta */ 1;
        i < ARRAY_LENGTH(walk.dbi); ++i) {
     if (walk.dbi[i].name) {
-      mdbx_free((void *)walk.dbi[i].name);
+      osal_free((void *)walk.dbi[i].name);
       walk.dbi[i].name = nullptr;
     }
   }
 
-  mdbx_free(walk.pagemap);
+  osal_free(walk.pagemap);
   walk.pagemap = nullptr;
 }
 
@@ -229,7 +229,7 @@ static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
   if (dbi == ARRAY_END(walk.dbi))
     return nullptr;
 
-  dbi->name = mdbx_strdup(dbi_name);
+  dbi->name = osal_strdup(dbi_name);
   return last = dbi;
 }
 
@@ -247,7 +247,7 @@ static void MDBX_PRINTF_ARGS(4, 5)
         break;
 
     if (!p) {
-      p = mdbx_calloc(1, sizeof(*p));
+      p = osal_calloc(1, sizeof(*p));
       if (unlikely(!p))
         return;
       p->caption = msg;
@@ -292,7 +292,7 @@ static size_t problems_pop(struct problem *list) {
       count += problems_list->count;
       print("%s%s (%" PRIuPTR ")", i ? ", " : "", problems_list->caption,
             problems_list->count);
-      mdbx_free(problems_list);
+      osal_free(problems_list);
       problems_list = p;
     }
     print("\n");
@@ -529,7 +529,7 @@ static int handle_freedb(const uint64_t record_number, const MDBX_val *key,
         number = data->iov_len / sizeof(pgno_t) - 1;
       } else if (data->iov_len - (number + 1) * sizeof(pgno_t) >=
                  /* LY: allow gap up to one page. it is ok
-                  * and better than shink-and-retry inside mdbx_update_gc() */
+                  * and better than shink-and-retry inside update_gc() */
                  envinfo.mi_dxb_pagesize)
         problem_add("entry", txnid, "extra idl space",
                     "%" PRIuSIZE " < %" PRIuSIZE " (minor, not a trouble)",
@@ -626,7 +626,7 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
       return handle_userdb(record_number, key, data);
   }
 
-  name = mdbx_malloc(key->iov_len + 1);
+  name = osal_malloc(key->iov_len + 1);
   if (unlikely(!name))
     return MDBX_ENOMEM;
   memcpy(name, key->iov_base, key->iov_len);
@@ -634,7 +634,7 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   userdb_count++;
 
   rc = process_db(~0u, name, handle_userdb, false);
-  mdbx_free(name);
+  osal_free(name);
   if (rc != MDBX_INCOMPATIBLE)
     return rc;
 
@@ -1340,7 +1340,7 @@ int main(int argc, char *argv[]) {
   }
 #endif
   if (rc) {
-    error("mdbx_filesize() failed, error %d %s\n", rc, mdbx_strerror(rc));
+    error("osal_filesize() failed, error %d %s\n", rc, mdbx_strerror(rc));
     goto bailout;
   }
 
@@ -1504,7 +1504,7 @@ int main(int argc, char *argv[]) {
 
     print("Traversal b-tree by txn#%" PRIaTXN "...\n", txn->mt_txnid);
     fflush(nullptr);
-    walk.pagemap = mdbx_calloc((size_t)backed_pages, sizeof(*walk.pagemap));
+    walk.pagemap = osal_calloc((size_t)backed_pages, sizeof(*walk.pagemap));
     if (!walk.pagemap) {
       rc = errno ? errno : MDBX_ENOMEM;
       error("calloc() failed, error %d %s\n", rc, mdbx_strerror(rc));

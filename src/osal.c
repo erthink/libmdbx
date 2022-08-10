@@ -232,12 +232,12 @@ __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
   (void)env;
 #endif /* MDBX_DEBUG */
 
-  if (mdbx_debug_logger)
-    mdbx_debug_log(MDBX_LOG_FATAL, func, line, "assert: %s\n", msg);
+  if (debug_logger)
+    debug_log(MDBX_LOG_FATAL, func, line, "assert: %s\n", msg);
   else {
 #if defined(_WIN32) || defined(_WIN64)
     char *message = nullptr;
-    const int num = mdbx_asprintf(&message, "\r\nMDBX-ASSERTION: %s, %s:%u",
+    const int num = osal_asprintf(&message, "\r\nMDBX-ASSERTION: %s, %s:%u",
                                   msg, func ? func : "unknown", line);
     if (num < 1 || !message)
       message = "<troubles with assertion-message preparation>";
@@ -261,7 +261,7 @@ __cold void mdbx_panic(const char *fmt, ...) {
   va_start(ap, fmt);
 
   char *message = nullptr;
-  const int num = mdbx_vasprintf(&message, fmt, ap);
+  const int num = osal_vasprintf(&message, fmt, ap);
   va_end(ap);
   const char *const const_message =
       (num < 1 || !message) ? "<troubles with panic-message preparation>"
@@ -281,8 +281,8 @@ __cold void mdbx_panic(const char *fmt, ...) {
 
 /*----------------------------------------------------------------------------*/
 
-#ifndef mdbx_vasprintf
-MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt,
+#ifndef osal_vasprintf
+MDBX_INTERNAL_FUNC int osal_vasprintf(char **strp, const char *fmt,
                                       va_list ap) {
   va_list ones;
   va_copy(ones, ap);
@@ -294,7 +294,7 @@ MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt,
     return needed;
   }
 
-  *strp = mdbx_malloc(needed + 1);
+  *strp = osal_malloc(needed + 1);
   if (unlikely(*strp == nullptr)) {
     va_end(ones);
 #if defined(_WIN32) || defined(_WIN64)
@@ -310,25 +310,25 @@ MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt,
 
   assert(actual == needed);
   if (unlikely(actual < 0)) {
-    mdbx_free(*strp);
+    osal_free(*strp);
     *strp = nullptr;
   }
   return actual;
 }
-#endif /* mdbx_vasprintf */
+#endif /* osal_vasprintf */
 
-#ifndef mdbx_asprintf
-MDBX_INTERNAL_FUNC int mdbx_asprintf(char **strp, const char *fmt, ...) {
+#ifndef osal_asprintf
+MDBX_INTERNAL_FUNC int osal_asprintf(char **strp, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  int rc = mdbx_vasprintf(strp, fmt, ap);
+  int rc = osal_vasprintf(strp, fmt, ap);
   va_end(ap);
   return rc;
 }
-#endif /* mdbx_asprintf */
+#endif /* osal_asprintf */
 
-#ifndef mdbx_memalign_alloc
-MDBX_INTERNAL_FUNC int mdbx_memalign_alloc(size_t alignment, size_t bytes,
+#ifndef osal_memalign_alloc
+MDBX_INTERNAL_FUNC int osal_memalign_alloc(size_t alignment, size_t bytes,
                                            void **result) {
   assert(is_powerof2(alignment) && alignment >= sizeof(void *));
 #if defined(_WIN32) || defined(_WIN64)
@@ -349,35 +349,35 @@ MDBX_INTERNAL_FUNC int mdbx_memalign_alloc(size_t alignment, size_t bytes,
 #error FIXME
 #endif
 }
-#endif /* mdbx_memalign_alloc */
+#endif /* osal_memalign_alloc */
 
-#ifndef mdbx_memalign_free
-MDBX_INTERNAL_FUNC void mdbx_memalign_free(void *ptr) {
+#ifndef osal_memalign_free
+MDBX_INTERNAL_FUNC void osal_memalign_free(void *ptr) {
 #if defined(_WIN32) || defined(_WIN64)
   VirtualFree(ptr, 0, MEM_RELEASE);
 #else
-  mdbx_free(ptr);
+  osal_free(ptr);
 #endif
 }
-#endif /* mdbx_memalign_free */
+#endif /* osal_memalign_free */
 
-#ifndef mdbx_strdup
-char *mdbx_strdup(const char *str) {
+#ifndef osal_strdup
+char *osal_strdup(const char *str) {
   if (!str)
     return NULL;
   size_t bytes = strlen(str) + 1;
-  char *dup = mdbx_malloc(bytes);
+  char *dup = osal_malloc(bytes);
   if (dup)
     memcpy(dup, str, bytes);
   return dup;
 }
-#endif /* mdbx_strdup */
+#endif /* osal_strdup */
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_init(mdbx_condpair_t *condpair) {
+MDBX_INTERNAL_FUNC int osal_condpair_init(osal_condpair_t *condpair) {
   int rc;
-  memset(condpair, 0, sizeof(mdbx_condpair_t));
+  memset(condpair, 0, sizeof(osal_condpair_t));
 #if defined(_WIN32) || defined(_WIN64)
   if ((condpair->mutex = CreateMutexW(NULL, FALSE, NULL)) == NULL) {
     rc = (int)GetLastError();
@@ -410,11 +410,11 @@ bailout_cond:
   (void)pthread_mutex_destroy(&condpair->mutex);
 #endif
 bailout_mutex:
-  memset(condpair, 0, sizeof(mdbx_condpair_t));
+  memset(condpair, 0, sizeof(osal_condpair_t));
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_destroy(mdbx_condpair_t *condpair) {
+MDBX_INTERNAL_FUNC int osal_condpair_destroy(osal_condpair_t *condpair) {
 #if defined(_WIN32) || defined(_WIN64)
   int rc = CloseHandle(condpair->mutex) ? MDBX_SUCCESS : (int)GetLastError();
   rc = CloseHandle(condpair->event[0]) ? rc : (int)GetLastError();
@@ -424,20 +424,20 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_destroy(mdbx_condpair_t *condpair) {
   rc = (err = pthread_cond_destroy(&condpair->cond[0])) ? err : rc;
   rc = (err = pthread_cond_destroy(&condpair->cond[1])) ? err : rc;
 #endif
-  memset(condpair, 0, sizeof(mdbx_condpair_t));
+  memset(condpair, 0, sizeof(osal_condpair_t));
   return rc;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_lock(mdbx_condpair_t *condpair) {
+MDBX_INTERNAL_FUNC int osal_condpair_lock(osal_condpair_t *condpair) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = WaitForSingleObject(condpair->mutex, INFINITE);
   return waitstatus2errcode(code);
 #else
-  return mdbx_pthread_mutex_lock(&condpair->mutex);
+  return osal_pthread_mutex_lock(&condpair->mutex);
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_unlock(mdbx_condpair_t *condpair) {
+MDBX_INTERNAL_FUNC int osal_condpair_unlock(osal_condpair_t *condpair) {
 #if defined(_WIN32) || defined(_WIN64)
   return ReleaseMutex(condpair->mutex) ? MDBX_SUCCESS : (int)GetLastError();
 #else
@@ -445,7 +445,7 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_unlock(mdbx_condpair_t *condpair) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_signal(mdbx_condpair_t *condpair,
+MDBX_INTERNAL_FUNC int osal_condpair_signal(osal_condpair_t *condpair,
                                             bool part) {
 #if defined(_WIN32) || defined(_WIN64)
   return SetEvent(condpair->event[part]) ? MDBX_SUCCESS : (int)GetLastError();
@@ -454,7 +454,7 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_signal(mdbx_condpair_t *condpair,
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_condpair_wait(mdbx_condpair_t *condpair,
+MDBX_INTERNAL_FUNC int osal_condpair_wait(osal_condpair_t *condpair,
                                           bool part) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = SignalObjectAndWait(condpair->mutex, condpair->event[part],
@@ -472,7 +472,7 @@ MDBX_INTERNAL_FUNC int mdbx_condpair_wait(mdbx_condpair_t *condpair,
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex) {
+MDBX_INTERNAL_FUNC int osal_fastmutex_init(osal_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   InitializeCriticalSection(fastmutex);
   return MDBX_SUCCESS;
@@ -481,7 +481,7 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_init(mdbx_fastmutex_t *fastmutex) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
+MDBX_INTERNAL_FUNC int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   DeleteCriticalSection(fastmutex);
   return MDBX_SUCCESS;
@@ -490,7 +490,7 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
+MDBX_INTERNAL_FUNC int osal_fastmutex_acquire(osal_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   __try {
     EnterCriticalSection(fastmutex);
@@ -503,11 +503,11 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
   }
   return MDBX_SUCCESS;
 #else
-  return mdbx_pthread_mutex_lock(fastmutex);
+  return osal_pthread_mutex_lock(fastmutex);
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_fastmutex_release(mdbx_fastmutex_t *fastmutex) {
+MDBX_INTERNAL_FUNC int osal_fastmutex_release(osal_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   LeaveCriticalSection(fastmutex);
   return MDBX_SUCCESS;
@@ -527,7 +527,7 @@ static const DWORD WC_ERR_INVALID_CHARS =
         : 0;
 #endif /* WC_ERR_INVALID_CHARS */
 
-MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
+MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst, size_t dst_n, const char *src,
                                     size_t src_n) {
   return MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src,
                              (int)src_n, dst, (int)dst_n);
@@ -537,7 +537,7 @@ MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC int mdbx_removefile(const pathchar_t *pathname) {
+MDBX_INTERNAL_FUNC int osal_removefile(const pathchar_t *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
   return DeleteFileW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 #else
@@ -549,7 +549,7 @@ MDBX_INTERNAL_FUNC int mdbx_removefile(const pathchar_t *pathname) {
 static bool is_valid_fd(int fd) { return !(isatty(fd) < 0 && errno == EBADF); }
 #endif /*! Windows */
 
-MDBX_INTERNAL_FUNC int mdbx_removedirectory(const pathchar_t *pathname) {
+MDBX_INTERNAL_FUNC int osal_removedirectory(const pathchar_t *pathname) {
 #if defined(_WIN32) || defined(_WIN64)
   return RemoveDirectoryW(pathname) ? MDBX_SUCCESS : (int)GetLastError();
 #else
@@ -557,7 +557,7 @@ MDBX_INTERNAL_FUNC int mdbx_removedirectory(const pathchar_t *pathname) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
+MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
                                      const MDBX_env *env,
                                      const pathchar_t *pathname,
                                      mdbx_filehandle_t *fd,
@@ -687,18 +687,18 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   int stub_fd0 = -1, stub_fd1 = -1, stub_fd2 = -1;
   static const char dev_null[] = "/dev/null";
   if (!is_valid_fd(STDIN_FILENO)) {
-    mdbx_warning("STD%s_FILENO/%d is invalid, open %s for temporary stub", "IN",
-                 STDIN_FILENO, dev_null);
+    WARNING("STD%s_FILENO/%d is invalid, open %s for temporary stub", "IN",
+            STDIN_FILENO, dev_null);
     stub_fd0 = open(dev_null, O_RDONLY | O_NOCTTY);
   }
   if (!is_valid_fd(STDOUT_FILENO)) {
-    mdbx_warning("STD%s_FILENO/%d is invalid, open %s for temporary stub",
-                 "OUT", STDOUT_FILENO, dev_null);
+    WARNING("STD%s_FILENO/%d is invalid, open %s for temporary stub", "OUT",
+            STDOUT_FILENO, dev_null);
     stub_fd1 = open(dev_null, O_WRONLY | O_NOCTTY);
   }
   if (!is_valid_fd(STDERR_FILENO)) {
-    mdbx_warning("STD%s_FILENO/%d is invalid, open %s for temporary stub",
-                 "ERR", STDERR_FILENO, dev_null);
+    WARNING("STD%s_FILENO/%d is invalid, open %s for temporary stub", "ERR",
+            STDERR_FILENO, dev_null);
     stub_fd2 = open(dev_null, O_WRONLY | O_NOCTTY);
   }
 #else
@@ -723,20 +723,20 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   /* Safeguard for todo4recovery://erased_by_github/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   if (*fd == STDIN_FILENO) {
-    mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN",
-                 STDIN_FILENO);
+    WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN",
+            STDIN_FILENO);
     assert(stub_fd0 == -1);
     *fd = dup(stub_fd0 = *fd);
   }
   if (*fd == STDOUT_FILENO) {
-    mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "OUT",
-                 STDOUT_FILENO);
+    WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "OUT",
+            STDOUT_FILENO);
     assert(stub_fd1 == -1);
     *fd = dup(stub_fd1 = *fd);
   }
   if (*fd == STDERR_FILENO) {
-    mdbx_warning("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "ERR",
-                 STDERR_FILENO);
+    WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "ERR",
+            STDERR_FILENO);
     assert(stub_fd2 == -1);
     *fd = dup(stub_fd2 = *fd);
   }
@@ -747,10 +747,9 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   if (stub_fd2 != -1)
     close(stub_fd2);
   if (*fd >= STDIN_FILENO && *fd <= STDERR_FILENO) {
-    mdbx_error(
-        "Rejecting the use of a FD in the range "
-        "STDIN_FILENO/%d..STDERR_FILENO/%d to prevent database corruption",
-        STDIN_FILENO, STDERR_FILENO);
+    ERROR("Rejecting the use of a FD in the range "
+          "STDIN_FILENO/%d..STDERR_FILENO/%d to prevent database corruption",
+          STDIN_FILENO, STDERR_FILENO);
     close(*fd);
     return EBADF;
   }
@@ -777,7 +776,7 @@ MDBX_INTERNAL_FUNC int mdbx_openfile(const enum mdbx_openfile_purpose purpose,
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd) {
+MDBX_INTERNAL_FUNC int osal_closefile(mdbx_filehandle_t fd) {
 #if defined(_WIN32) || defined(_WIN64)
   return CloseHandle(fd) ? MDBX_SUCCESS : (int)GetLastError();
 #else
@@ -786,7 +785,7 @@ MDBX_INTERNAL_FUNC int mdbx_closefile(mdbx_filehandle_t fd) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes,
+MDBX_INTERNAL_FUNC int osal_pread(mdbx_filehandle_t fd, void *buf, size_t bytes,
                                   uint64_t offset) {
   if (bytes > MAX_WRITE)
     return MDBX_EINVAL;
@@ -813,7 +812,7 @@ MDBX_INTERNAL_FUNC int mdbx_pread(mdbx_filehandle_t fd, void *buf, size_t bytes,
   return (bytes == (size_t)read) ? MDBX_SUCCESS : MDBX_ENODATA;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
+MDBX_INTERNAL_FUNC int osal_pwrite(mdbx_filehandle_t fd, const void *buf,
                                    size_t bytes, uint64_t offset) {
   while (true) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -849,7 +848,7 @@ MDBX_INTERNAL_FUNC int mdbx_pwrite(mdbx_filehandle_t fd, const void *buf,
   }
 }
 
-MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
+MDBX_INTERNAL_FUNC int osal_write(mdbx_filehandle_t fd, const void *buf,
                                   size_t bytes) {
   while (true) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -879,13 +878,13 @@ MDBX_INTERNAL_FUNC int mdbx_write(mdbx_filehandle_t fd, const void *buf,
   }
 }
 
-int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
+int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
                  uint64_t offset, size_t expected_written) {
 #if defined(_WIN32) || defined(_WIN64) || defined(__APPLE__) ||                \
     (defined(__ANDROID_API__) && __ANDROID_API__ < 24)
   size_t written = 0;
   for (int i = 0; i < iovcnt; ++i) {
-    int rc = mdbx_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
+    int rc = osal_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
     written += iov[i].iov_len;
@@ -908,8 +907,8 @@ int mdbx_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int iovcnt,
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
-                                  enum mdbx_syncmode_bits mode_bits) {
+MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,
+                                  enum osal_syncmode_bits mode_bits) {
 #if defined(_WIN32) || defined(_WIN64)
   if ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) && !FlushFileBuffers(fd))
     return (int)GetLastError();
@@ -938,7 +937,7 @@ MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
       break /* error */;
 #if defined(__linux__) || defined(__gnu_linux__)
     case MDBX_SYNC_SIZE:
-      if (mdbx_linux_kernel_version >= 0x03060000)
+      if (linux_kernel_version >= 0x03060000)
         return MDBX_SUCCESS;
       __fallthrough /* fall through */;
 #endif /* Linux */
@@ -955,7 +954,7 @@ MDBX_INTERNAL_FUNC int mdbx_fsync(mdbx_filehandle_t fd,
 #endif
 }
 
-int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
+int osal_filesize(mdbx_filehandle_t fd, uint64_t *length) {
 #if defined(_WIN32) || defined(_WIN64)
   BY_HANDLE_FILE_INFORMATION info;
   if (!GetFileInformationByHandle(fd, &info))
@@ -974,7 +973,7 @@ int mdbx_filesize(mdbx_filehandle_t fd, uint64_t *length) {
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd) {
+MDBX_INTERNAL_FUNC int osal_is_pipe(mdbx_filehandle_t fd) {
 #if defined(_WIN32) || defined(_WIN64)
   switch (GetFileType(fd)) {
   case FILE_TYPE_DISK:
@@ -1005,7 +1004,7 @@ MDBX_INTERNAL_FUNC int mdbx_is_pipe(mdbx_filehandle_t fd) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
+MDBX_INTERNAL_FUNC int osal_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
 #if defined(_WIN32) || defined(_WIN64)
   if (mdbx_SetFileInformationByHandle) {
     FILE_END_OF_FILE_INFO EndOfFileInfo;
@@ -1029,7 +1028,7 @@ MDBX_INTERNAL_FUNC int mdbx_ftruncate(mdbx_filehandle_t fd, uint64_t length) {
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos) {
+MDBX_INTERNAL_FUNC int osal_fseek(mdbx_filehandle_t fd, uint64_t pos) {
 #if defined(_WIN32) || defined(_WIN64)
   LARGE_INTEGER li;
   li.QuadPart = pos;
@@ -1045,7 +1044,7 @@ MDBX_INTERNAL_FUNC int mdbx_fseek(mdbx_filehandle_t fd, uint64_t pos) {
 /*----------------------------------------------------------------------------*/
 
 MDBX_INTERNAL_FUNC int
-mdbx_thread_create(mdbx_thread_t *thread,
+osal_thread_create(osal_thread_t *thread,
                    THREAD_RESULT(THREAD_CALL *start_routine)(void *),
                    void *arg) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -1056,7 +1055,7 @@ mdbx_thread_create(mdbx_thread_t *thread,
 #endif
 }
 
-MDBX_INTERNAL_FUNC int mdbx_thread_join(mdbx_thread_t thread) {
+MDBX_INTERNAL_FUNC int osal_thread_join(osal_thread_t thread) {
 #if defined(_WIN32) || defined(_WIN64)
   DWORD code = WaitForSingleObject(thread, INFINITE);
   return waitstatus2errcode(code);
@@ -1068,16 +1067,16 @@ MDBX_INTERNAL_FUNC int mdbx_thread_join(mdbx_thread_t thread) {
 
 /*----------------------------------------------------------------------------*/
 
-MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
+MDBX_INTERNAL_FUNC int osal_msync(osal_mmap_t *map, size_t offset,
                                   size_t length,
-                                  enum mdbx_syncmode_bits mode_bits) {
+                                  enum osal_syncmode_bits mode_bits) {
   uint8_t *ptr = (uint8_t *)map->address + offset;
 #if defined(_WIN32) || defined(_WIN64)
   if (!FlushViewOfFile(ptr, length))
     return (int)GetLastError();
 #else
 #if defined(__linux__) || defined(__gnu_linux__)
-  if (mode_bits == MDBX_SYNC_NONE && mdbx_linux_kernel_version > 0x02061300)
+  if (mode_bits == MDBX_SYNC_NONE && linux_kernel_version > 0x02061300)
     /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op. The kernel properly
      * tracks dirty pages and flushes them to storage as necessary. */
     return MDBX_SUCCESS;
@@ -1086,10 +1085,10 @@ MDBX_INTERNAL_FUNC int mdbx_msync(mdbx_mmap_t *map, size_t offset,
     return errno;
   mode_bits &= ~MDBX_SYNC_DATA;
 #endif
-  return mdbx_fsync(map->fd, mode_bits);
+  return osal_fsync(map->fd, mode_bits);
 }
 
-MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
+MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
                                             const pathchar_t *pathname,
                                             int err) {
 #if defined(_WIN32) || defined(_WIN64)
@@ -1119,7 +1118,7 @@ MDBX_INTERNAL_FUNC int mdbx_check_fs_rdonly(mdbx_filehandle_t handle,
   return MDBX_SUCCESS;
 }
 
-static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
+static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #if defined(_WIN32) || defined(_WIN64)
   if (mdbx_RunningUnderWine() && !(flags & MDBX_EXCLUSIVE))
     return ERROR_NOT_CAPABLE /* workaround for Wine */;
@@ -1166,7 +1165,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
   }
 
   if (mdbx_GetVolumeInformationByHandleW && mdbx_GetFinalPathNameByHandleW) {
-    WCHAR *PathBuffer = mdbx_malloc(sizeof(WCHAR) * INT16_MAX);
+    WCHAR *PathBuffer = osal_malloc(sizeof(WCHAR) * INT16_MAX);
     if (!PathBuffer)
       return MDBX_ENOMEM;
 
@@ -1234,7 +1233,7 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
     }
 
   bailout:
-    mdbx_free(PathBuffer);
+    osal_free(PathBuffer);
     return rc;
   }
 
@@ -1411,11 +1410,10 @@ static int check_mmap_limit(const size_t limit) {
     const int log2page = log2n_powerof2(pagesize);
     if ((limit >> (log2page + 7)) > (size_t)total_ram_pages ||
         (limit >> (log2page + 6)) > (size_t)avail_ram_pages) {
-      mdbx_error(
-          "%s (%zu pages) is too large for available (%zu pages) or total "
-          "(%zu pages) system RAM",
-          "database upper size limit", limit >> log2page, avail_ram_pages,
-          total_ram_pages);
+      ERROR("%s (%zu pages) is too large for available (%zu pages) or total "
+            "(%zu pages) system RAM",
+            "database upper size limit", limit >> log2page, avail_ram_pages,
+            total_ram_pages);
       return MDBX_TOO_LARGE;
     }
   }
@@ -1423,7 +1421,7 @@ static int check_mmap_limit(const size_t limit) {
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
+MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
                                  const size_t size, const size_t limit,
                                  const unsigned options) {
   assert(size <= limit);
@@ -1435,7 +1433,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   map->section = NULL;
 #endif /* Windows */
 
-  int err = mdbx_check_fs_local(map->fd, flags);
+  int err = osal_check_fs_local(map->fd, flags);
   if (unlikely(err != MDBX_SUCCESS))
     return err;
 
@@ -1444,7 +1442,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     return err;
 
   if ((flags & MDBX_RDONLY) == 0 && (options & MMAP_OPTION_TRUNCATE) != 0) {
-    err = mdbx_ftruncate(map->fd, size);
+    err = osal_ftruncate(map->fd, size);
     if (err != MDBX_SUCCESS)
       return err;
     map->filesize = size;
@@ -1452,7 +1450,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     map->current = size;
 #endif /* !Windows */
   } else {
-    err = mdbx_filesize(map->fd, &map->filesize);
+    err = osal_filesize(map->fd, &map->filesize);
     if (err != MDBX_SUCCESS)
       return err;
 #if !(defined(_WIN32) || defined(_WIN64))
@@ -1559,7 +1557,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
+MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
@@ -1586,7 +1584,7 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   return MDBX_SUCCESS;
 }
 
-MDBX_INTERNAL_FUNC int mdbx_mresize(const int flags, mdbx_mmap_t *map,
+MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
                                     size_t size, size_t limit) {
   assert(size <= limit);
 #if defined(_WIN32) || defined(_WIN64)
@@ -1683,12 +1681,12 @@ retry_file_and_section:
       map->address = NULL;
   }
 
-  err = mdbx_filesize(map->fd, &map->filesize);
+  err = osal_filesize(map->fd, &map->filesize);
   if (err != MDBX_SUCCESS)
     goto bailout;
 
   if ((flags & MDBX_RDONLY) == 0 && map->filesize != size) {
-    err = mdbx_ftruncate(map->fd, size);
+    err = osal_ftruncate(map->fd, size);
     if (err == MDBX_SUCCESS)
       map->filesize = size;
     /* ignore error, because Windows unable shrink file
@@ -1764,7 +1762,7 @@ retry_mapview:;
 #else /* Windows */
 
   map->filesize = 0;
-  int rc = mdbx_filesize(map->fd, &map->filesize);
+  int rc = osal_filesize(map->fd, &map->filesize);
   if (rc != MDBX_SUCCESS)
     return rc;
 
@@ -1774,7 +1772,7 @@ retry_mapview:;
       rc = (size > map->current) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_EPERM;
   } else {
     if (map->filesize != size) {
-      rc = mdbx_ftruncate(map->fd, size);
+      rc = osal_ftruncate(map->fd, size);
       if (rc != MDBX_SUCCESS)
         return rc;
       map->filesize = size;
@@ -1956,7 +1954,7 @@ retry_mapview:;
 
 /*----------------------------------------------------------------------------*/
 
-__cold MDBX_INTERNAL_FUNC void mdbx_osal_jitter(bool tiny) {
+__cold MDBX_INTERNAL_FUNC void osal_jitter(bool tiny) {
   for (;;) {
 #if defined(_M_IX86) || defined(_M_X64) || defined(__i386__) ||                \
     defined(__x86_64__)
@@ -2011,8 +2009,7 @@ static LARGE_INTEGER performance_frequency;
 static uint64_t ratio_16dot16_to_monotine;
 #endif
 
-MDBX_INTERNAL_FUNC uint64_t
-mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
+MDBX_INTERNAL_FUNC uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
 #if defined(_WIN32) || defined(_WIN64)
   if (unlikely(performance_frequency.QuadPart == 0))
     QueryPerformanceFrequency(&performance_frequency);
@@ -2031,12 +2028,12 @@ mdbx_osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
   return likely(ret || seconds_16dot16 == 0) ? ret : /* fix underflow */ 1;
 }
 
-MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
+MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
   static uint64_t limit;
   if (unlikely(monotime > limit)) {
     if (likely(limit != 0))
       return UINT32_MAX;
-    limit = mdbx_osal_16dot16_to_monotime(UINT32_MAX - 1);
+    limit = osal_16dot16_to_monotime(UINT32_MAX - 1);
     if (unlikely(monotime > limit))
       return UINT32_MAX;
   }
@@ -2053,7 +2050,7 @@ MDBX_INTERNAL_FUNC uint32_t mdbx_osal_monotime_to_16dot16(uint64_t monotime) {
   return monotime > 0 /* fix underflow */;
 }
 
-MDBX_INTERNAL_FUNC uint64_t mdbx_osal_monotime(void) {
+MDBX_INTERNAL_FUNC uint64_t osal_monotime(void) {
 #if defined(_WIN32) || defined(_WIN64)
   LARGE_INTEGER counter;
   counter.QuadPart = 0;
@@ -2222,7 +2219,7 @@ bootid_parse_uuid(bin128_t *s, const void *p, const size_t n) {
   return false;
 }
 
-__cold MDBX_INTERNAL_FUNC bin128_t mdbx_osal_bootid(void) {
+__cold MDBX_INTERNAL_FUNC bin128_t osal_bootid(void) {
   bin128_t bin = {{0, 0}};
   bool got_machineid = false, got_boottime = false, got_bootseq = false;
 
@@ -2535,7 +2532,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
   if (avail_pages)
     *avail_pages = -1;
 
-  const intptr_t pagesize = mdbx_syspagesize();
+  const intptr_t pagesize = osal_syspagesize();
   if (page_size)
     *page_size = pagesize;
   if (unlikely(pagesize < MIN_PAGESIZE || !is_powerof2(pagesize)))
