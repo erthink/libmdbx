@@ -6016,7 +6016,8 @@ scan4seq_sse2(pgno_t *range, const size_t len, const unsigned seq) {
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
 #ifndef __SANITIZE_ADDRESS__
   const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
-  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
+      !RUNNING_ON_VALGRIND) {
     const unsigned extra = (unsigned)(detent + 4 - range);
     assert(extra > 0 && extra < 4);
     mask = 0xF << extra;
@@ -6077,7 +6078,8 @@ scan4seq_avx2(pgno_t *range, const size_t len, const unsigned seq) {
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
 #ifndef __SANITIZE_ADDRESS__
   const unsigned on_page_safe_mask = 0xfe0 /* enough for '-31' bytes offset */;
-  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
+      !RUNNING_ON_VALGRIND) {
     const unsigned extra = (unsigned)(detent + 8 - range);
     assert(extra > 0 && extra < 8);
     mask = 0xFF << extra;
@@ -6144,7 +6146,8 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
    * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
 #ifndef __SANITIZE_ADDRESS__
   const unsigned on_page_safe_mask = 0xfc0 /* enough for '-63' bytes offset */;
-  if (likely(on_page_safe_mask & (uintptr_t)(range + offset))) {
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
+      !RUNNING_ON_VALGRIND) {
     const unsigned extra = (unsigned)(detent + 16 - range);
     assert(extra > 0 && extra < 16);
     mask = 0xFFFF << extra;
