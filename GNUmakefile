@@ -452,7 +452,7 @@ gcc-analyzer:
 
 test-ubsan:
 	@echo '  RE-TEST with `-fsanitize=undefined` option...'
-	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
+	$(QUIET)$(MAKE) IOARENA=false CXXSTD=$(CXXSTD) CFLAGS_EXTRA="-DENABLE_UBSAN -Ofast -fsanitize=undefined -fsanitize-undefined-trap-on-error" test
 
 test-asan:
 	@echo '  RE-TEST with `-fsanitize=address` option...'
