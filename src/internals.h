@@ -337,8 +337,8 @@ atomic_store32(MDBX_atomic_uint32_t *p, const uint32_t value,
 #endif /* atomic_store32 */
 
 #ifndef atomic_load32
-MDBX_MAYBE_UNUSED static __always_inline uint32_t
-atomic_load32(const MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
+MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_load32(
+    const volatile MDBX_atomic_uint32_t *p, enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint32_t) == 4);
 #ifdef MDBX_HAVE_C11ATOMICS
   assert(atomic_is_lock_free(MDBX_c11a_ro(uint32_t, p)));
@@ -455,7 +455,7 @@ typedef struct MDBX_meta {
   uint32_t mm_magic_and_version[2];
 
   /* txnid that committed this page, the first of a two-phase-update pair */
-  uint32_t mm_txnid_a[2];
+  MDBX_atomic_uint32_t mm_txnid_a[2];
 
   uint16_t mm_extra_flags;  /* extra DB flags, zero (nothing) for now */
   uint8_t mm_validator_id;  /* ID of checksum and page validation method,
@@ -478,7 +478,7 @@ typedef struct MDBX_meta {
   uint32_t mm_datasync_sign[2];
 
   /* txnid that committed this page, the second of a two-phase-update pair */
-  uint32_t mm_txnid_b[2];
+  MDBX_atomic_uint32_t mm_txnid_b[2];
 
   /* Number of non-meta pages which were put in GC after COW. May be 0 in case
    * DB was previously handled by libmdbx without corresponding feature.
@@ -959,7 +959,7 @@ struct MDBX_txn {
   /* Array of MDBX_db records for each known DB */
   MDBX_db *mt_dbs;
   /* Array of sequence numbers for each DB handle */
-  unsigned *mt_dbiseqs;
+  MDBX_atomic_uint32_t *mt_dbiseqs;
 
   /* Transaction DBI Flags */
 #define DBI_DIRTY MDBX_DBI_DIRTY /* DB was written in this txn */
@@ -1147,9 +1147,9 @@ struct MDBX_env {
   void *me_pbuf;              /* scratch area for DUPSORT put() */
   MDBX_txn *me_txn0;          /* preallocated write transaction */
 
-  MDBX_dbx *me_dbxs;    /* array of static DB info */
-  uint16_t *me_dbflags; /* array of flags from MDBX_db.md_flags */
-  unsigned *me_dbiseqs; /* array of dbi sequence numbers */
+  MDBX_dbx *me_dbxs;                /* array of static DB info */
+  uint16_t *me_dbflags;             /* array of flags from MDBX_db.md_flags */
+  MDBX_atomic_uint32_t *me_dbiseqs; /* array of dbi sequence numbers */
   unsigned
       me_maxgc_ov1page;    /* Number of pgno_t fit in a single overflow page */
   uint32_t me_live_reader; /* have liveness lock in reader table */

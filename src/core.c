@@ -930,7 +930,7 @@ MDBX_MAYBE_UNUSED static
     __always_inline
 #endif /* MDBX_64BIT_ATOMIC */
         uint64_t
-        atomic_load64(const MDBX_atomic_uint64_t *p,
+        atomic_load64(const volatile MDBX_atomic_uint64_t *p,
                       enum MDBX_memory_order order) {
   STATIC_ASSERT(sizeof(MDBX_atomic_uint64_t) == 8);
 #if MDBX_64BIT_ATOMIC
@@ -5068,9 +5068,35 @@ static __inline void meta_cache_clear(MDBX_env *env) {
 static __inline txnid_t meta_txnid(const MDBX_env *env,
                                    volatile const MDBX_meta *meta) {
   (void)env;
-  txnid_t a = unaligned_peek_u64_volatile(4, &meta->mm_txnid_a);
-  txnid_t b = unaligned_peek_u64_volatile(4, &meta->mm_txnid_b);
-  return (a == b) ? a : 0;
+#if defined(__amd64__) && !defined(ENABLE_UBSAN) && MDBX_UNALIGNED_OK >= 8
+  const uint64_t id =
+      atomic_load64((const volatile MDBX_atomic_uint64_t *)&meta->mm_txnid_a,
+                    mo_AcquireRelease);
+  if (unlikely(id !=
+               atomic_load64(
+                   (const volatile MDBX_atomic_uint64_t *)&meta->mm_txnid_b,
+                   mo_AcquireRelease)))
+    return 0;
+  return id;
+#else
+  const uint32_t l = atomic_load32(
+      &meta->mm_txnid_a[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__],
+      mo_AcquireRelease);
+  if (unlikely(l !=
+               atomic_load32(
+                   &meta->mm_txnid_b[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__],
+                   mo_AcquireRelease)))
+    return 0;
+  const uint32_t h = atomic_load32(
+      &meta->mm_txnid_a[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__],
+      mo_AcquireRelease);
+  if (unlikely(h !=
+               atomic_load32(
+                   &meta->mm_txnid_b[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__],
+                   mo_AcquireRelease)))
+    return 0;
+  return l | (uint64_t)h << 32;
+#endif
 }
 
 static __inline void meta_update_begin(const MDBX_env *env, MDBX_meta *meta,
@@ -5079,9 +5105,21 @@ static __inline void meta_update_begin(const MDBX_env *env, MDBX_meta *meta,
   eASSERT(env, unaligned_peek_u64(4, meta->mm_txnid_a) < txnid &&
                    unaligned_peek_u64(4, meta->mm_txnid_b) < txnid);
   (void)env;
-  unaligned_poke_u64(4, meta->mm_txnid_b, 0);
-  osal_memory_fence(mo_AcquireRelease, true);
-  unaligned_poke_u64(4, meta->mm_txnid_a, txnid);
+#if defined(__amd64__) && !defined(ENABLE_UBSAN) && MDBX_UNALIGNED_OK >= 8
+  atomic_store64((MDBX_atomic_uint64_t *)&meta->mm_txnid_b, 0,
+                 mo_AcquireRelease);
+  atomic_store64((MDBX_atomic_uint64_t *)&meta->mm_txnid_a, txnid,
+                 mo_AcquireRelease);
+#else
+  atomic_store32(&meta->mm_txnid_b[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__],
+                 0, mo_AcquireRelease);
+  atomic_store32(&meta->mm_txnid_b[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__],
+                 0, mo_AcquireRelease);
+  atomic_store32(&meta->mm_txnid_a[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__],
+                 (uint32_t)txnid, mo_AcquireRelease);
+  atomic_store32(&meta->mm_txnid_a[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__],
+                 (uint32_t)(txnid >> 32), mo_AcquireRelease);
+#endif
 }
 
 static __inline void meta_update_end(const MDBX_env *env, MDBX_meta *meta,
@@ -5092,8 +5130,15 @@ static __inline void meta_update_end(const MDBX_env *env, MDBX_meta *meta,
   (void)env;
   jitter4testing(true);
   memcpy(&meta->mm_bootid, &bootid, 16);
-  unaligned_poke_u64(4, meta->mm_txnid_b, txnid);
-  osal_memory_fence(mo_AcquireRelease, true);
+#if defined(__amd64__) && !defined(ENABLE_UBSAN) && MDBX_UNALIGNED_OK >= 8
+  atomic_store64((MDBX_atomic_uint64_t *)&meta->mm_txnid_b, txnid,
+                 mo_AcquireRelease);
+#else
+  atomic_store32(&meta->mm_txnid_b[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__],
+                 (uint32_t)txnid, mo_AcquireRelease);
+  atomic_store32(&meta->mm_txnid_b[__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__],
+                 (uint32_t)(txnid >> 32), mo_AcquireRelease);
+#endif
 }
 
 static __inline void meta_set_txnid(const MDBX_env *env, MDBX_meta *meta,
@@ -5243,7 +5288,6 @@ __cold static txnid_t recent_committed_txnid(const MDBX_env *env) {
   while (true) {
     volatile const MDBX_meta *head = meta_prefer_last(env);
     const txnid_t recent = meta_txnid(env, head);
-    osal_memory_fence(mo_AcquireRelease, false);
     if (likely(head == meta_prefer_last(env) &&
                recent == meta_txnid(env, head)))
       return recent;
@@ -7725,7 +7769,6 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
       txn->mt_canary = meta->mm_canary;
 
       /* LY: Retry on a race, ITS#7970. */
-      osal_memory_fence(mo_AcquireRelease, false);
       const txnid_t oldest =
           atomic_load64(&env->me_lck->mti_oldest_reader, mo_AcquireRelease);
       if (unlikely(target_txnid < oldest ||
@@ -8239,7 +8282,6 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
       info->txn_space_limit_hard = pgno2bytes(env, head_meta->mm_geo.upper);
       info->txn_space_leftover =
           pgno2bytes(env, head_meta->mm_geo.now - head_meta->mm_geo.next);
-      osal_memory_fence(mo_AcquireRelease, false);
     } while (unlikely(head_meta != meta_prefer_last(env) ||
                       head_txnid != meta_txnid(env, head_meta)));
 
@@ -8352,11 +8394,19 @@ int mdbx_txn_flags(const MDBX_txn *txn) {
 }
 
 /* Check for misused dbi handles */
-#define TXN_DBI_CHANGED(txn, dbi)                                              \
-  ((txn)->mt_dbiseqs[dbi] != (txn)->mt_env->me_dbiseqs[dbi])
+static __inline bool dbi_changed(MDBX_txn *txn, MDBX_dbi dbi) {
+  if (txn->mt_dbiseqs == txn->mt_env->me_dbiseqs)
+    return false;
+  if (likely(
+          txn->mt_dbiseqs[dbi].weak ==
+          atomic_load32((MDBX_atomic_uint32_t *)&txn->mt_env->me_dbiseqs[dbi],
+                        mo_AcquireRelease)))
+    return false;
+  return true;
+}
 
 static __inline unsigned dbi_seq(const MDBX_env *const env, unsigned slot) {
-  unsigned v = env->me_dbiseqs[slot] + 1;
+  unsigned v = env->me_dbiseqs[slot].weak + 1;
   return v + (v == 0);
 }
 
@@ -8367,10 +8417,10 @@ static void dbi_import_locked(MDBX_txn *txn) {
     if (i >= txn->mt_numdbs) {
       txn->mt_cursors[i] = NULL;
       if (txn->mt_dbiseqs != env->me_dbiseqs)
-        txn->mt_dbiseqs[i] = 0;
+        txn->mt_dbiseqs[i].weak = 0;
       txn->mt_dbistate[i] = 0;
     }
-    if ((TXN_DBI_CHANGED(txn, i) &&
+    if ((dbi_changed(txn, i) &&
          (txn->mt_dbistate[i] & (DBI_CREAT | DBI_DIRTY | DBI_FRESH)) == 0) ||
         ((env->me_dbflags[i] & DB_VALID) &&
          !(txn->mt_dbistate[i] & DBI_VALID))) {
@@ -8393,7 +8443,7 @@ static void dbi_import_locked(MDBX_txn *txn) {
     else {
       if ((txn->mt_dbistate[n] & DBI_USRVALID) == 0) {
         if (txn->mt_dbiseqs != env->me_dbiseqs)
-          txn->mt_dbiseqs[n] = 0;
+          txn->mt_dbiseqs[n].weak = 0;
         txn->mt_dbistate[n] = 0;
       }
       ++n;
@@ -8430,7 +8480,8 @@ static void dbi_update(MDBX_txn *txn, int keep) {
         ENSURE(env, osal_fastmutex_acquire(&env->me_dbi_lock) == MDBX_SUCCESS);
         locked = true;
       }
-      if (env->me_numdbs <= i || txn->mt_dbiseqs[i] != env->me_dbiseqs[i])
+      if (env->me_numdbs <= i ||
+          txn->mt_dbiseqs[i].weak != env->me_dbiseqs[i].weak)
         continue /* dbi explicitly closed and/or then re-opened by other txn */;
       if (keep) {
         env->me_dbflags[i] = txn->mt_dbs[i].md_flags | DB_VALID;
@@ -8438,9 +8489,9 @@ static void dbi_update(MDBX_txn *txn, int keep) {
         char *ptr = env->me_dbxs[i].md_name.iov_base;
         if (ptr) {
           env->me_dbxs[i].md_name.iov_len = 0;
-          osal_memory_fence(mo_AcquireRelease, true);
           eASSERT(env, env->me_dbflags[i] == 0);
-          env->me_dbiseqs[i] = dbi_seq(env, i);
+          atomic_store32(&env->me_dbiseqs[i], dbi_seq(env, i),
+                         mo_AcquireRelease);
           env->me_dbxs[i].md_name.iov_base = NULL;
           osal_free(ptr);
         }
@@ -9835,8 +9886,7 @@ static int txn_write(MDBX_txn *txn, struct iov_ctx *ctx) {
 static __always_inline bool check_dbi(MDBX_txn *txn, MDBX_dbi dbi,
                                       unsigned validity) {
   if (likely(dbi < txn->mt_numdbs)) {
-    osal_memory_fence(mo_AcquireRelease, false);
-    if (likely(!TXN_DBI_CHANGED(txn, dbi))) {
+    if (likely(!dbi_changed(txn, dbi))) {
       if (likely(txn->mt_dbistate[dbi] & validity))
         return true;
       if (likely(dbi < CORE_DBS ||
@@ -11157,19 +11207,19 @@ static int sync_locked(MDBX_env *env, unsigned flags,
         (meta0 == head)     ? "head"
         : (meta0 == target) ? "tail"
                             : "stay",
-        durable_caption(meta0), meta_txnid(env, meta0),
+        durable_caption(meta0), constmeta_txnid(env, meta0),
         meta0->mm_dbs[MAIN_DBI].md_root, meta0->mm_dbs[FREE_DBI].md_root);
   DEBUG("meta1: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO "/%" PRIaPGNO,
         (meta1 == head)     ? "head"
         : (meta1 == target) ? "tail"
                             : "stay",
-        durable_caption(meta1), meta_txnid(env, meta1),
+        durable_caption(meta1), constmeta_txnid(env, meta1),
         meta1->mm_dbs[MAIN_DBI].md_root, meta1->mm_dbs[FREE_DBI].md_root);
   DEBUG("meta2: %s, %s, txn_id %" PRIaTXN ", root %" PRIaPGNO "/%" PRIaPGNO,
         (meta2 == head)     ? "head"
         : (meta2 == target) ? "tail"
                             : "stay",
-        durable_caption(meta2), meta_txnid(env, meta2),
+        durable_caption(meta2), constmeta_txnid(env, meta2),
         meta2->mm_dbs[MAIN_DBI].md_root, meta2->mm_dbs[FREE_DBI].md_root);
 
   eASSERT(env, !meta_eq(env, pending, meta0));
@@ -12129,7 +12179,6 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
     }
   } else /* not recovery mode */
     while (1) {
-      osal_memory_fence(mo_AcquireRelease, false);
       const unsigned meta_clash_mask = meta_eq_mask(env);
       if (unlikely(meta_clash_mask)) {
         ERROR("meta-pages are clashed: mask 0x%d", meta_clash_mask);
@@ -13237,7 +13286,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     const size_t tsize = sizeof(MDBX_txn),
                  size = tsize + env->me_maxdbs *
                                     (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
-                                     sizeof(unsigned) + 1);
+                                     sizeof(MDBX_atomic_uint32_t) + 1);
     rc = alloc_page_buf(env);
     if (rc == MDBX_SUCCESS) {
       memset(env->me_pbuf, -1, env->me_psize * 2);
@@ -13245,7 +13294,8 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
       if (txn) {
         txn->mt_dbs = (MDBX_db *)((char *)txn + tsize);
         txn->mt_cursors = (MDBX_cursor **)(txn->mt_dbs + env->me_maxdbs);
-        txn->mt_dbiseqs = (unsigned *)(txn->mt_cursors + env->me_maxdbs);
+        txn->mt_dbiseqs =
+            (MDBX_atomic_uint32_t *)(txn->mt_cursors + env->me_maxdbs);
         txn->mt_dbistate = (uint8_t *)(txn->mt_dbiseqs + env->me_maxdbs);
         txn->mt_env = env;
         txn->mt_dbxs = env->me_dbxs;
@@ -13269,7 +13319,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
           (uint8_t)unaligned_peek_u64(4, meta->mm_magic_and_version),
           env->me_psize);
     DEBUG("using meta page %" PRIaPGNO ", txn %" PRIaTXN,
-          data_page(meta)->mp_pgno, meta_txnid(env, meta));
+          data_page(meta)->mp_pgno, constmeta_txnid(env, meta));
     DEBUG("depth: %u", db->md_depth);
     DEBUG("entries: %" PRIu64, db->md_entries);
     DEBUG("branch pages: %" PRIaPGNO, db->md_branch_pages);
@@ -13920,7 +13970,7 @@ static int setup_dbx(MDBX_dbx *const dbx, const MDBX_db *const db,
 
 static int fetch_sdb(MDBX_txn *txn, MDBX_dbi dbi) {
   MDBX_cursor_couple couple;
-  if (unlikely(TXN_DBI_CHANGED(txn, dbi))) {
+  if (unlikely(dbi_changed(txn, dbi))) {
     NOTICE("dbi %u was changed for txn %" PRIaTXN, dbi, txn->mt_txnid);
     return MDBX_BAD_DBI;
   }
@@ -15267,7 +15317,7 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+  if (unlikely(dbi_changed(mc->mc_txn, mc->mc_dbi)))
     return MDBX_BAD_DBI;
 
   cASSERT(mc, cursor_is_tracked(mc));
@@ -16058,7 +16108,7 @@ __hot int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+  if (unlikely(dbi_changed(mc->mc_txn, mc->mc_dbi)))
     return MDBX_BAD_DBI;
 
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
@@ -20279,7 +20329,6 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
   if (unlikely(env->me_flags & MDBX_FATAL_ERROR))
     return MDBX_PANIC;
 
-  osal_memory_fence(mo_AcquireRelease, false);
   volatile const MDBX_meta *const recent_meta = meta_prefer_last(env);
   arg->mi_recent_txnid = meta_txnid(env, recent_meta);
   arg->mi_meta0_txnid = meta_txnid(env, meta0);
@@ -20694,16 +20743,19 @@ static int dbi_open(MDBX_txn *txn, const char *table_name, unsigned user_flags,
     txn->mt_dbistate[slot] = (uint8_t)dbiflags;
     txn->mt_dbxs[slot].md_name.iov_base = namedup;
     txn->mt_dbxs[slot].md_name.iov_len = len;
-    txn->mt_dbiseqs[slot] = env->me_dbiseqs[slot] = dbi_seq(env, slot);
+    txn->mt_dbiseqs[slot].weak = env->me_dbiseqs[slot].weak =
+        dbi_seq(env, slot);
     if (!(dbiflags & DBI_CREAT))
       env->me_dbflags[slot] = txn->mt_dbs[slot].md_flags | DB_VALID;
     if (txn->mt_numdbs == slot) {
+      txn->mt_cursors[slot] = NULL;
       osal_compiler_barrier();
       txn->mt_numdbs = slot + 1;
-      txn->mt_cursors[slot] = NULL;
     }
-    if (env->me_numdbs <= slot)
+    if (env->me_numdbs <= slot) {
+      osal_memory_fence(mo_AcquireRelease, true);
       env->me_numdbs = slot + 1;
+    }
     *dbi = slot;
   }
 
@@ -21044,7 +21096,6 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
         const uint64_t head_pages_retired =
             unaligned_peek_u64_volatile(4, recent_meta->mm_pages_retired);
         const txnid_t head_txnid = meta_txnid(env, recent_meta);
-        osal_memory_fence(mo_AcquireRelease, false);
         if (unlikely(recent_meta != meta_prefer_last(env) ||
                      head_pages_retired !=
                          unaligned_peek_u64_volatile(
@@ -21381,7 +21432,6 @@ int mdbx_txn_straggler(const MDBX_txn *txn, int *percent)
       const pgno_t maxpg = meta->mm_geo.now;
       *percent = (int)((meta->mm_geo.next * UINT64_C(100) + maxpg / 2) / maxpg);
     }
-    osal_memory_fence(mo_AcquireRelease, false);
   } while (unlikely(recent != meta_txnid(env, meta)));
 
   txnid_t lag = (recent - txn->mt_txnid) / xMDBX_TXNID_STEP;
