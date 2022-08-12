@@ -12438,7 +12438,7 @@ __cold static int mdbx_setup_dxb(MDBX_env *env, const int lck_rc,
       } else {
         const txnid_t txnid = constmeta_txnid(env, head);
         const txnid_t next_txnid = safe64_txnid_next(txnid);
-        if (unlikely(txnid > MAX_TXNID)) {
+        if (unlikely(next_txnid > MAX_TXNID)) {
           mdbx_error("txnid overflow, raise %d", MDBX_TXN_FULL);
           return MDBX_TXN_FULL;
         }
