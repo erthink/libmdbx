@@ -11671,38 +11671,40 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (unlikely(env->me_flags & MDBX_RDONLY))
       return MDBX_EACCESS;
 
-    if (!inside_txn) {
+    const MDBX_geo *geo = nullptr;
+    if (inside_txn)
+      geo = &env->me_txn->mt_geo;
+    else {
       int err = mdbx_txn_lock(env, false);
       if (unlikely(err != MDBX_SUCCESS))
         return err;
       need_unlock = true;
-    }
-    const MDBX_meta *head = constmeta_prefer_last(env);
-    if (!inside_txn) {
+
+      const MDBX_meta *head = constmeta_prefer_last(env);
+      geo = &head->mm_geo;
       env->me_txn0->mt_txnid = constmeta_txnid(env, head);
       mdbx_find_oldest(env->me_txn0);
     }
 
-    /* get untouched params from DB */
+    /* get untouched params from current write-txn or DB */
     if (pagesize <= 0 || pagesize >= INT_MAX)
       pagesize = env->me_psize;
     if (size_lower < 0)
-      size_lower = pgno2bytes(env, head->mm_geo.lower);
+      size_lower = pgno2bytes(env, geo->lower);
     if (size_now < 0)
-      size_now = pgno2bytes(env, head->mm_geo.now);
+      size_now = pgno2bytes(env, geo->now);
     if (size_upper < 0)
-      size_upper = pgno2bytes(env, head->mm_geo.upper);
+      size_upper = pgno2bytes(env, geo->upper);
     if (growth_step < 0)
-      growth_step = pgno2bytes(env, pv2pages(head->mm_geo.grow_pv));
+      growth_step = pgno2bytes(env, pv2pages(geo->grow_pv));
     if (shrink_threshold < 0)
-      shrink_threshold = pgno2bytes(env, pv2pages(head->mm_geo.shrink_pv));
+      shrink_threshold = pgno2bytes(env, pv2pages(geo->shrink_pv));
 
     if (pagesize != (intptr_t)env->me_psize) {
       rc = MDBX_EINVAL;
       goto bailout;
     }
-    const size_t usedbytes =
-        pgno2bytes(env, mdbx_find_largest(env, head->mm_geo.next));
+    const size_t usedbytes = pgno2bytes(env, mdbx_find_largest(env, geo->next));
     if ((size_t)size_upper < usedbytes) {
       rc = MDBX_MAP_FULL;
       goto bailout;
