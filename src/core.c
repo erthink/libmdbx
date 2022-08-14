@@ -8152,8 +8152,10 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
                              ? txn->mt_env->me_flags & MDBX_NOTLS
                              : 0));
 #if MDBX_TXN_CHECKOWNER
+  STATIC_ASSERT(MDBX_NOTLS > MDBX_TXN_FINISHED + MDBX_TXN_RDONLY);
   if (unlikely(txn->mt_owner != mdbx_thread_self()) &&
-      (txn->mt_flags & (MDBX_NOTLS | MDBX_TXN_FINISHED)) == 0)
+      (txn->mt_flags & (MDBX_NOTLS | MDBX_TXN_FINISHED | MDBX_TXN_RDONLY)) <
+          (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY))
     return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
@@ -8957,6 +8959,9 @@ int mdbx_txn_abort(MDBX_txn *txn) {
     /* LY: don't close DBI-handles */
     return mdbx_txn_end(txn, MDBX_END_ABORT | MDBX_END_UPDATE | MDBX_END_SLOT |
                                  MDBX_END_FREE);
+
+  if (unlikely(txn->mt_flags & MDBX_TXN_FINISHED))
+    return MDBX_BAD_TXN;
 
   if (txn->mt_child)
     mdbx_txn_abort(txn->mt_child);
