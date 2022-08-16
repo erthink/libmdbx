@@ -15253,7 +15253,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
     break;
   default:
     mdbx_debug("unhandled/unimplemented cursor operation %u", op);
-    rc = EINVAL;
+    rc = MDBX_EINVAL;
     break;
   }
 
