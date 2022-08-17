@@ -15,6 +15,21 @@ New:
  - Optionally cache for pointers to last/steady meta-pages (currently is off by default).
  - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
  - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
+ - The C++ API has been refined to simplify support for `wchar_t` in path names.
+
+Fixes:
+
+ - Never use modern `__cxa_thread_atexit()` on Apple's OSes.
+ - Use `MultiByteToWideChar(CP_THREAD_ACP)` instead of `mbstowcs()`.
+ - Don't check owner for finished transactions.
+ - Fixed typo in `MDBX_EINVAL` which breaks MingGW builds with CLANG.
+
+Minors:
+
+ - Fixed variable name typo.
+ - Using `ldd` to check used dso.
+ - Added `MDBX_WEAK_IMPORT_ATTRIBUTE` macro.
+ - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
 
 ## v0.12.0 at 2022-06-19
 

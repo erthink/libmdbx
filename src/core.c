@@ -7884,8 +7884,10 @@ static __always_inline int check_txn(const MDBX_txn *txn, int bad_bits) {
                         ? txn->mt_env->me_flags & MDBX_NOTLS
                         : 0));
 #if MDBX_TXN_CHECKOWNER
+  STATIC_ASSERT(MDBX_NOTLS > MDBX_TXN_FINISHED + MDBX_TXN_RDONLY);
   if (unlikely(txn->mt_owner != osal_thread_self()) &&
-      (txn->mt_flags & (MDBX_NOTLS | MDBX_TXN_FINISHED)) == 0)
+      (txn->mt_flags & (MDBX_NOTLS | MDBX_TXN_FINISHED | MDBX_TXN_RDONLY)) <
+          (MDBX_TXN_FINISHED | MDBX_TXN_RDONLY))
     return txn->mt_owner ? MDBX_THREAD_MISMATCH : MDBX_BAD_TXN;
 #endif /* MDBX_TXN_CHECKOWNER */
 
@@ -8689,6 +8691,9 @@ int mdbx_txn_abort(MDBX_txn *txn) {
     /* LY: don't close DBI-handles */
     return txn_end(txn, MDBX_END_ABORT | MDBX_END_UPDATE | MDBX_END_SLOT |
                             MDBX_END_FREE);
+
+  if (unlikely(txn->mt_flags & MDBX_TXN_FINISHED))
+    return MDBX_BAD_TXN;
 
   if (txn->mt_child)
     mdbx_txn_abort(txn->mt_child);
@@ -11489,10 +11494,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       need_unlock = true;
       env->me_txn0->tw.xyz = meta_tap(env);
       eASSERT(env, !env->me_txn && !env->me_txn0->mt_child);
-    }
-    const meta_ptr_t head = meta_recent(env, &env->me_txn0->tw.xyz);
-    if (!inside_txn) {
-      env->me_txn0->mt_txnid = head.txnid;
+      env->me_txn0->mt_txnid =
+          env->me_txn0->tw.xyz.txnid[env->me_txn0->tw.xyz.recent];
       txn_oldest_reader(env->me_txn0);
     }
 
@@ -11500,7 +11503,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
     if (pagesize <= 0 || pagesize >= INT_MAX)
       pagesize = env->me_psize;
     const MDBX_geo *const geo =
-        inside_txn ? &env->me_txn->mt_geo : &head.ptr_c->mm_geo;
+        inside_txn ? &env->me_txn->mt_geo
+                   : &meta_recent(env, &env->me_txn0->tw.xyz).ptr_c->mm_geo;
     if (size_lower < 0)
       size_lower = pgno2bytes(env, geo->lower);
     if (size_now < 0)
@@ -15141,7 +15145,7 @@ int mdbx_cursor_get_batch(MDBX_cursor *mc, size_t *count, MDBX_val *pairs,
     break;
   default:
     DEBUG("unhandled/unimplemented cursor operation %u", op);
-    rc = EINVAL;
+    rc = MDBX_EINVAL;
     break;
   }
 
