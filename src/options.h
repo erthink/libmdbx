@@ -92,12 +92,6 @@
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
 
-#ifndef MDBX_CACHE_METAPTR
-#define MDBX_CACHE_METAPTR 0
-#elif !(MDBX_CACHE_METAPTR == 0 || MDBX_CACHE_METAPTR == 1)
-#error MDBX_CACHE_METAPTR must be defined as 0 or 1
-#endif /* MDBX_CACHE_METAPTR */
-
 /** Controls use of POSIX madvise() hints and friends. */
 #ifndef MDBX_ENABLE_MADVISE
 #define MDBX_ENABLE_MADVISE 1

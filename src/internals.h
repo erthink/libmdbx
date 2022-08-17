@@ -455,7 +455,10 @@ typedef struct MDBX_meta {
   uint32_t mm_magic_and_version[2];
 
   /* txnid that committed this page, the first of a two-phase-update pair */
-  MDBX_atomic_uint32_t mm_txnid_a[2];
+  union {
+    MDBX_atomic_uint32_t mm_txnid_a[2];
+    uint64_t unsafe_txnid;
+  };
 
   uint16_t mm_extra_flags;  /* extra DB flags, zero (nothing) for now */
   uint8_t mm_validator_id;  /* ID of checksum and page validation method,
@@ -474,8 +477,11 @@ typedef struct MDBX_meta {
 #define MDBX_DATASIGN_WEAK 1u
 #define SIGN_IS_STEADY(sign) ((sign) > MDBX_DATASIGN_WEAK)
 #define META_IS_STEADY(meta)                                                   \
-  SIGN_IS_STEADY(unaligned_peek_u64_volatile(4, (meta)->mm_datasync_sign))
-  uint32_t mm_datasync_sign[2];
+  SIGN_IS_STEADY(unaligned_peek_u64_volatile(4, (meta)->mm_sign))
+  union {
+    uint32_t mm_sign[2];
+    uint64_t unsafe_sign;
+  };
 
   /* txnid that committed this page, the second of a two-phase-update pair */
   MDBX_atomic_uint32_t mm_txnid_b[2];
@@ -913,6 +919,13 @@ typedef struct MDBX_dbx {
       md_vlen_max; /* min/max value/data length for the database */
 } MDBX_dbx;
 
+typedef struct xyz {
+  uint8_t fsm, recent, prefer_steady, tail_and_flags;
+#define XYZ_HAVE_STEADY(xyz) ((xyz)->fsm & 7)
+#define XYZ_VALID(xyz) ((xyz)->tail_pgno_and_flags & 128)
+  txnid_t txnid[NUM_METAS];
+} meta_xyz_t;
+
 /* A database transaction.
  * Every operation requires a transaction handle. */
 struct MDBX_txn {
@@ -986,6 +999,7 @@ struct MDBX_txn {
       MDBX_reader *reader;
     } to;
     struct {
+      meta_xyz_t xyz;
       /* In write txns, array of cursors for each DB */
       pgno_t *reclaimed_pglist; /* Reclaimed GC pages */
       txnid_t last_reclaimed;   /* ID of last used record */
@@ -1199,10 +1213,6 @@ struct MDBX_env {
 
   MDBX_txn *me_txn; /* current write transaction */
   osal_fastmutex_t me_dbi_lock;
-#if MDBX_CACHE_METAPTR
-  volatile const MDBX_meta *cache_last_meta;
-  volatile const MDBX_meta *cache_steady_meta;
-#endif                /* MDBX_CACHE_METAPTR */
   MDBX_dbi me_numdbs; /* number of DBs opened */
 
   MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */
