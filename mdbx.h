@@ -5242,57 +5242,6 @@ LIBMDBX_API int mdbx_env_turn_for_recovery(MDBX_env *env, unsigned target_meta);
 
 /** end of c_api @} */
 
-/*******************************************************************************
- * Workaround for mmaped-lookahead-cross-page-boundary bug
- * in an obsolete versions of Elbrus's libc and kernels. */
-#if defined(__e2k__) && defined(MDBX_E2K_MLHCPB_WORKAROUND) &&                 \
-    MDBX_E2K_MLHCPB_WORKAROUND
-LIBMDBX_API int mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
-                                               size_t n);
-LIBMDBX_API int mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2);
-LIBMDBX_API int mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
-                                                size_t n);
-LIBMDBX_API size_t mdbx_e2k_strlen_bug_workaround(const char *s);
-LIBMDBX_API size_t mdbx_e2k_strnlen_bug_workaround(const char *s,
-                                                   size_t maxlen);
-#ifdef __cplusplus
-namespace std {
-inline int mdbx_e2k_memcmp_bug_workaround(const void *s1, const void *s2,
-                                          size_t n) {
-  return ::mdbx_e2k_memcmp_bug_workaround(s1, s2, n);
-}
-inline int mdbx_e2k_strcmp_bug_workaround(const char *s1, const char *s2) {
-  return ::mdbx_e2k_strcmp_bug_workaround(s1, s2);
-}
-inline int mdbx_e2k_strncmp_bug_workaround(const char *s1, const char *s2,
-                                           size_t n) {
-  return ::mdbx_e2k_strncmp_bug_workaround(s1, s2, n);
-}
-inline size_t mdbx_e2k_strlen_bug_workaround(const char *s) {
-  return ::mdbx_e2k_strlen_bug_workaround(s);
-}
-inline size_t mdbx_e2k_strnlen_bug_workaround(const char *s, size_t maxlen) {
-  return ::mdbx_e2k_strnlen_bug_workaround(s, maxlen);
-}
-} // namespace std
-#endif /* __cplusplus */
-
-#include <string.h>
-#include <strings.h>
-#undef memcmp
-#define memcmp mdbx_e2k_memcmp_bug_workaround
-#undef bcmp
-#define bcmp mdbx_e2k_memcmp_bug_workaround
-#undef strcmp
-#define strcmp mdbx_e2k_strcmp_bug_workaround
-#undef strncmp
-#define strncmp mdbx_e2k_strncmp_bug_workaround
-#undef strlen
-#define strlen mdbx_e2k_strlen_bug_workaround
-#undef strnlen
-#define strnlen mdbx_e2k_strnlen_bug_workaround
-#endif /* MDBX_E2K_MLHCPB_WORKAROUND */
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
