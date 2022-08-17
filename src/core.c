@@ -5866,6 +5866,11 @@ MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(unsigned value) {
 }
 #endif /* _MSC_VER */
 
+#if defined(_MSC_VER) && !defined(__builtin_clzl) &&                           \
+    !__has_builtin(__builtin_clzl)
+#define __builtin_clzl(value) __builtin_clz(value)
+#endif /* _MSC_VER */
+
 #if !defined(MDBX_ATTRIBUTE_TARGET) &&                                         \
     (__has_attribute(__target__) || __GNUC_PREREQ(5, 0))
 #define MDBX_ATTRIBUTE_TARGET(target) __attribute__((__target__(target)))
@@ -6098,6 +6103,74 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
 }
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
 
+#if (defined(__ARM_NEON) || defined(__ARM_NEON__)) &&                          \
+    (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+static __always_inline size_t diffcmp2mask_neon(const pgno_t *const ptr,
+                                                const ptrdiff_t offset,
+                                                const uint32x4_t pattern) {
+  const uint32x4_t f = vld1q_u32(ptr);
+  const uint32x4_t l = vld1q_u32(ptr + offset);
+  const uint16x4_t cmp = vmovn_u32(vceqq_u32(vsubq_u32(f, l), pattern));
+  if (sizeof(size_t) > 7)
+    return vget_lane_u64(vreinterpret_u64_u16(cmp), 0);
+  else
+    return vget_lane_u32(vreinterpret_u32_u8(vmovn_u16(vcombine_u16(cmp, cmp))),
+                         0);
+}
+
+__hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
+                                   const unsigned seq) {
+  assert(seq > 0 && len > seq);
+#if MDBX_PNL_ASCENDING
+#error "FIXME: Not implemented"
+#endif /* MDBX_PNL_ASCENDING */
+  assert(range[-(ptrdiff_t)len] == len);
+  pgno_t *const detent = range - len + seq;
+  const ptrdiff_t offset = -(ptrdiff_t)seq;
+  const pgno_t target = (pgno_t)offset;
+  const uint32x4_t pattern = vmovq_n_u32(target);
+  size_t mask;
+  if (likely(len > seq + 3)) {
+    do {
+      mask = diffcmp2mask_neon(range - 3, offset, pattern);
+      if (mask) {
+#ifndef __SANITIZE_ADDRESS__
+      found:
+#endif /* __SANITIZE_ADDRESS__ */
+        return (pgno_t *)((char *)range -
+                          (__builtin_clzl(mask) >> sizeof(size_t) / 4));
+      }
+      range -= 4;
+    } while (range > detent + 3);
+    if (range == detent)
+      return nullptr;
+  }
+
+  /* Далее происходит чтение от 4 до 12 лишних байт, которые могут быть не
+   * только за пределами региона выделенного под PNL, но и пересекать границу
+   * страницы памяти. Что может приводить как к ошибкам ASAN, так и к падению.
+   * Поэтому проверяем смещение на странице, а с ASAN всегда страхуемся. */
+#ifndef __SANITIZE_ADDRESS__
+  const unsigned on_page_safe_mask = 0xff0 /* enough for '-15' bytes offset */;
+  if (likely(on_page_safe_mask & (uintptr_t)(range + offset)) &&
+      !RUNNING_ON_VALGRIND) {
+    const unsigned extra = (unsigned)(detent + 4 - range);
+    assert(extra > 0 && extra < 4);
+    mask = (~(size_t)0) << (extra * sizeof(size_t) * 2);
+    mask &= diffcmp2mask_neon(range - 3, offset, pattern);
+    if (mask)
+      goto found;
+    return nullptr;
+  }
+#endif /* __SANITIZE_ADDRESS__ */
+  do
+    if (*range - range[offset] == target)
+      return range;
+  while (--range != detent);
+  return nullptr;
+}
+#endif /* __ARM_NEON || __ARM_NEON__ */
+
 #if defined(__AVX512BW__) && defined(MDBX_ATTRIBUTE_TARGET_AVX512BW)
 #define scan4seq_default scan4seq_avx512bw
 #define scan4seq scan4seq_default
@@ -6105,6 +6178,9 @@ scan4seq_avx512bw(pgno_t *range, const size_t len, const unsigned seq) {
 #define scan4seq_default scan4seq_avx2
 #elif defined(__SSE2__) && defined(MDBX_ATTRIBUTE_TARGET_SSE2)
 #define scan4seq_default scan4seq_sse2
+#elif (defined(__ARM_NEON) || defined(__ARM_NEON__)) &&                        \
+    (__BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__)
+#define scan4seq_default scan4seq_neon
 /* Choosing of another variants should be added here. */
 #endif /* scan4seq_default */
 

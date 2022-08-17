@@ -417,6 +417,9 @@ __extern_C key_t ftok(const char *, int);
 #include <cpuid.h>
 #include <x86intrin.h>
 #endif /* __ia32__ */
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
 #elif defined(__SUNPRO_C) || defined(__sun) || defined(sun)
 #include <mbarrier.h>
 #elif (defined(_HPUX_SOURCE) || defined(__hpux) || defined(__HP_aCC)) &&       \
