@@ -1311,47 +1311,6 @@ static void thread_rthc_set(osal_thread_key_t key, const void *value) {
 #endif
 }
 
-__cold void global_ctor(void) {
-  rthc_limit = RTHC_INITIAL_LIMIT;
-  rthc_table = rthc_table_static;
-#if defined(_WIN32) || defined(_WIN64)
-  InitializeCriticalSection(&rthc_critical_section);
-  InitializeCriticalSection(&lcklist_critical_section);
-#else
-  ENSURE(nullptr, pthread_key_create(&rthc_key, thread_dtor) == 0);
-  TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(),
-        __Wpedantic_format_voidptr(&rthc_key), (unsigned)rthc_key);
-#endif
-  /* checking time conversion, this also avoids racing on 32-bit architectures
-   * during storing calculated 64-bit ratio(s) into memory. */
-  uint32_t proba = UINT32_MAX;
-  while (true) {
-    unsigned time_conversion_checkup =
-        osal_monotime_to_16dot16(osal_16dot16_to_monotime(proba));
-    unsigned one_more = (proba < UINT32_MAX) ? proba + 1 : proba;
-    unsigned one_less = (proba > 0) ? proba - 1 : proba;
-    ENSURE(nullptr, time_conversion_checkup >= one_less &&
-                        time_conversion_checkup <= one_more);
-    if (proba == 0)
-      break;
-    proba >>= 1;
-  }
-
-  bootid = osal_bootid();
-
-#if 0  /* debug */
-  for (unsigned i = 0; i < 65536; ++i) {
-    size_t pages = pv2pages(i);
-    unsigned x = pages2pv(pages);
-    size_t xp = pv2pages(x);
-    if (!(x == i || (x % 2 == 0 && x < 65536)) || pages != xp)
-      printf("%u => %zu => %u => %zu\n", i, pages, x, xp);
-    assert(pages == xp);
-  }
-  fflush(stdout);
-#endif /* #if 0 */
-}
-
 /* dtor called for thread, i.e. for all mdbx's environment objects */
 __cold void thread_dtor(void *rthc) {
   rthc_lock();
@@ -22902,6 +22861,47 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
   }
 
   return MDBX_SUCCESS;
+}
+
+__cold void global_ctor(void) {
+  rthc_limit = RTHC_INITIAL_LIMIT;
+  rthc_table = rthc_table_static;
+#if defined(_WIN32) || defined(_WIN64)
+  InitializeCriticalSection(&rthc_critical_section);
+  InitializeCriticalSection(&lcklist_critical_section);
+#else
+  ENSURE(nullptr, pthread_key_create(&rthc_key, thread_dtor) == 0);
+  TRACE("pid %d, &mdbx_rthc_key = %p, value 0x%x", osal_getpid(),
+        __Wpedantic_format_voidptr(&rthc_key), (unsigned)rthc_key);
+#endif
+  /* checking time conversion, this also avoids racing on 32-bit architectures
+   * during storing calculated 64-bit ratio(s) into memory. */
+  uint32_t proba = UINT32_MAX;
+  while (true) {
+    unsigned time_conversion_checkup =
+        osal_monotime_to_16dot16(osal_16dot16_to_monotime(proba));
+    unsigned one_more = (proba < UINT32_MAX) ? proba + 1 : proba;
+    unsigned one_less = (proba > 0) ? proba - 1 : proba;
+    ENSURE(nullptr, time_conversion_checkup >= one_less &&
+                        time_conversion_checkup <= one_more);
+    if (proba == 0)
+      break;
+    proba >>= 1;
+  }
+
+  bootid = osal_bootid();
+
+#if 0  /* debug */
+  for (unsigned i = 0; i < 65536; ++i) {
+    size_t pages = pv2pages(i);
+    unsigned x = pages2pv(pages);
+    size_t xp = pv2pages(x);
+    if (!(x == i || (x % 2 == 0 && x < 65536)) || pages != xp)
+      printf("%u => %zu => %u => %zu\n", i, pages, x, xp);
+    assert(pages == xp);
+  }
+  fflush(stdout);
+#endif /* #if 0 */
 }
 
 /******************************************************************************/
