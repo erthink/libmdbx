@@ -5139,7 +5139,8 @@ static __inline bool meta_eq(const meta_troika_t *troika, unsigned a,
                              unsigned b) {
   assert(a < NUM_METAS && b < NUM_METAS);
   return troika->txnid[a] == troika->txnid[b] &&
-         (((troika->fsm >> a) ^ (troika->fsm >> b)) & 1) == 0;
+         (((troika->fsm >> a) ^ (troika->fsm >> b)) & 1) == 0 &&
+         troika->txnid[a];
 }
 
 static unsigned meta_eq_mask(const meta_troika_t *troika) {
