@@ -5192,6 +5192,26 @@ static const char *durable_caption(const volatile MDBX_meta *const meta) {
   return "Weak";
 }
 
+__cold static void meta_troika_dump(const MDBX_env *env,
+                                    const meta_troika_t *troika) {
+  const meta_ptr_t recent = meta_recent(env, troika);
+  const meta_ptr_t prefer_steady = meta_prefer_steady(env, troika);
+  const meta_ptr_t tail = meta_tail(env, troika);
+  NOTICE("%" PRIaTXN ".%c:%" PRIaTXN ".%c:%" PRIaTXN ".%c, fsm=0x%02x, "
+         "head=%d-%" PRIaTXN ".%c, "
+         "base=%d-%" PRIaTXN ".%c, "
+         "tail=%d-%" PRIaTXN ".%c, "
+         "valid %c, strict %c",
+         troika->txnid[0], (troika->fsm & 1) ? 's' : 'w', troika->txnid[1],
+         (troika->fsm & 2) ? 's' : 'w', troika->txnid[2],
+         (troika->fsm & 4) ? 's' : 'w', troika->fsm, troika->recent,
+         recent.txnid, recent.is_steady ? 's' : 'w', troika->prefer_steady,
+         prefer_steady.txnid, prefer_steady.is_steady ? 's' : 'w',
+         troika->tail_and_flags % NUM_METAS, tail.txnid,
+         tail.is_steady ? 's' : 'w', TROIKA_VALID(troika) ? 'Y' : 'N',
+         TROIKA_STRICT_VALID(troika) ? 'Y' : 'N');
+}
+
 /*----------------------------------------------------------------------------*/
 
 /* Find oldest txnid still referenced. */
@@ -12198,6 +12218,9 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
 #endif /* MDBX_USE_VALGRIND || __SANITIZE_ADDRESS__ */
 
   meta_troika_t troika = meta_tap(env);
+#if MDBX_DEBUG
+  meta_troika_dump(env, &troika);
+#endif
   eASSERT(env, !env->me_txn && !env->me_txn0);
   //-------------------------------- validate/rollback head & steady meta-pages
   if (unlikely(env->me_stuck_meta >= 0)) {
@@ -12208,6 +12231,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
     if (unlikely(err != MDBX_SUCCESS)) {
       ERROR("target meta[%u] is corrupted",
             bytes2pgno(env, (uint8_t *)data_page(target) - env->me_map));
+      meta_troika_dump(env, &troika);
       return MDBX_CORRUPTED;
     }
   } else /* not recovery mode */
@@ -12215,6 +12239,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
       const unsigned meta_clash_mask = meta_eq_mask(&troika);
       if (unlikely(meta_clash_mask)) {
         ERROR("meta-pages are clashed: mask 0x%d", meta_clash_mask);
+        meta_troika_dump(env, &troika);
         return MDBX_CORRUPTED;
       }
 
@@ -12228,6 +12253,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
           /* LY: without-lck (read-only) mode, so it is impossible that other
            * process made weak checkpoint. */
           ERROR("%s", "without-lck, unable recovery/rollback");
+          meta_troika_dump(env, &troika);
           return MDBX_WANNA_RECOVERY;
         }
 
@@ -12248,6 +12274,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
           ERROR("meta[%u] with %s txnid %" PRIaTXN " is corrupted, %s needed",
                 bytes2pgno(env, (uint8_t *)prefer_steady.ptr_c - env->me_map),
                 "steady", prefer_steady.txnid, "manual recovery");
+          meta_troika_dump(env, &troika);
           return MDBX_CORRUPTED;
         }
         if (prefer_steady.ptr_c == recent.ptr_c)
@@ -12265,11 +12292,13 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
           ERROR("%s for open or automatic rollback, %s",
                 "there are no suitable meta-pages",
                 "manual recovery is required");
+          meta_troika_dump(env, &troika);
           return MDBX_CORRUPTED;
         }
         WARNING("meta[%u] with last txnid %" PRIaTXN
                 " is corrupted, rollback needed",
                 pgno, recent.txnid);
+        meta_troika_dump(env, &troika);
         goto purge_meta_head;
       }
 
@@ -12279,6 +12308,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
                 "rollback NOT needed, steady-sync NEEDED%s",
                 "opening after an unclean shutdown", bootid.x, bootid.y,
                 ", but unable in read-only mode");
+          meta_troika_dump(env, &troika);
           return MDBX_WANNA_RECOVERY;
         }
         WARNING("%s, but boot-id(%016" PRIx64 "-%016" PRIx64 ") is MATCH: "
@@ -12294,6 +12324,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
               "opening after an unclean shutdown",
               "there are no suitable meta-pages",
               "manual recovery is required");
+        meta_troika_dump(env, &troika);
         return MDBX_CORRUPTED;
       }
       if (env->me_flags & MDBX_RDONLY) {
@@ -12301,6 +12332,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
               " to steady %" PRIaTXN ")%s",
               "opening after an unclean shutdown", recent.txnid,
               prefer_steady.txnid, ", but unable in read-only mode");
+        meta_troika_dump(env, &troika);
         return MDBX_WANNA_RECOVERY;
       }
 
@@ -12309,6 +12341,7 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
              "purge%s meta[%u] with%s txnid %" PRIaTXN,
              "opening after an unclean shutdown", last_valid ? "" : " invalid",
              pgno, last_valid ? " weak" : "", recent.txnid);
+      meta_troika_dump(env, &troika);
       ENSURE(env, prefer_steady.is_steady);
       err = override_meta(env, pgno, 0,
                           last_valid ? recent.ptr_c : prefer_steady.ptr_c);
