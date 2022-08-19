@@ -868,6 +868,7 @@ typedef struct MDBX_dp {
 typedef struct MDBX_dpl {
   unsigned sorted;
   unsigned length;
+  unsigned pages_including_loose; /* number of pages, but not an entries. */
   unsigned detent; /* allocated size excluding the MDBX_DPL_RESERVE_GAP */
 #if (defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L) ||              \
     (!defined(__cplusplus) && defined(_MSC_VER))

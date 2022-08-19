@@ -2721,6 +2721,7 @@ static __always_inline void dpl_clear(MDBX_dpl *dl) {
   static const MDBX_page dpl_stub_pageB = {{0}, 0, P_BAD, {0}, /* pgno */ 0};
   assert(dpl_stub_pageB.mp_flags == P_BAD && dpl_stub_pageB.mp_pgno == 0);
   dl->sorted = dpl_setlen(dl, 0);
+  dl->pages_including_loose = 0;
   dl->items[0].ptr = (MDBX_page *)&dpl_stub_pageB;
   dl->items[0].pgno = 0;
   dl->items[0].extra = 0;
@@ -2944,15 +2945,20 @@ MDBX_MAYBE_UNUSED static const MDBX_page *debug_dpl_find(const MDBX_txn *txn,
   return nullptr;
 }
 
-static void dpl_remove(const MDBX_txn *txn, unsigned i) {
+static void dpl_remove_ex(const MDBX_txn *txn, unsigned i, unsigned npages) {
   MDBX_dpl *dl = txn->tw.dirtylist;
   assert((int)i > 0 && i <= dl->length);
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
+  dl->pages_including_loose -= npages;
   dl->sorted -= dl->sorted >= i;
   dl->length -= 1;
   memmove(dl->items + i, dl->items + i + 1,
           (dl->length - i + 2) * sizeof(dl->items[0]));
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
+}
+
+static void dpl_remove(const MDBX_txn *txn, unsigned i) {
+  dpl_remove_ex(txn, i, dpl_npages(txn->tw.dirtylist, i));
 }
 
 static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
@@ -3001,6 +3007,7 @@ static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
   dl->items[length].lru = txn->tw.dirtylru++;
   dl->length = length;
   dl->sorted = sorted;
+  dl->pages_including_loose += npages;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   return MDBX_SUCCESS;
 }
@@ -3655,10 +3662,8 @@ static void dlist_free(MDBX_txn *txn) {
   MDBX_env *env = txn->mt_env;
   MDBX_dpl *const dl = txn->tw.dirtylist;
 
-  for (unsigned i = 1; i <= dl->length; i++) {
-    MDBX_page *dp = dl->items[i].ptr;
-    dpage_free(env, dp, dpl_npages(dl, i));
-  }
+  for (unsigned i = 1; i <= dl->length; i++)
+    dpage_free(env, dl->items[i].ptr, dpl_npages(dl, i));
 
   dpl_clear(dl);
 }
@@ -3682,7 +3687,7 @@ MDBX_MAYBE_UNUSED __cold static bool dirtylist_check(MDBX_txn *txn) {
   if (!AUDIT_ENABLED())
     return true;
 
-  unsigned loose = 0;
+  unsigned loose = 0, pages = 0;
   for (unsigned i = dl->length; i > 0; --i) {
     const MDBX_page *const dp = dl->items[i].ptr;
     if (!dp)
@@ -3704,6 +3709,7 @@ MDBX_MAYBE_UNUSED __cold static bool dirtylist_check(MDBX_txn *txn) {
       return false;
 
     const unsigned num = dpl_npages(dl, i);
+    pages += num;
     tASSERT(txn, txn->mt_next_pgno >= dp->mp_pgno + num);
     if (unlikely(txn->mt_next_pgno < dp->mp_pgno + num))
       return false;
@@ -3732,6 +3738,10 @@ MDBX_MAYBE_UNUSED __cold static bool dirtylist_check(MDBX_txn *txn) {
 
   tASSERT(txn, loose == txn->tw.loose_count);
   if (unlikely(loose != txn->tw.loose_count))
+    return false;
+
+  tASSERT(txn, pages == dl->pages_including_loose);
+  if (unlikely(pages != dl->pages_including_loose))
     return false;
 
   for (unsigned i = 1; i <= MDBX_PNL_SIZE(txn->tw.retired_pages); ++i) {
@@ -3829,6 +3839,7 @@ static void refund_loose(MDBX_txn *txn) {
             most, txn->mt_next_pgno);
       txn->tw.loose_count -= refunded;
       txn->tw.dirtyroom += refunded;
+      dl->pages_including_loose -= refunded;
       assert(txn->tw.dirtyroom <= txn->mt_env->me_options.dp_limit);
       txn->mt_next_pgno = most;
 
@@ -3882,6 +3893,7 @@ static void refund_loose(MDBX_txn *txn) {
       dl->sorted = dl->length;
       txn->tw.loose_count -= refunded;
       txn->tw.dirtyroom += refunded;
+      dl->pages_including_loose -= refunded;
       tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                        (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
                                        : txn->mt_env->me_options.dp_limit));
@@ -3981,7 +3993,7 @@ static __inline void page_wash(MDBX_txn *txn, const unsigned di,
                                MDBX_page *const mp, const unsigned npages) {
   tASSERT(txn, di && di <= txn->tw.dirtylist->length &&
                    txn->tw.dirtylist->items[di].ptr == mp);
-  dpl_remove(txn, di);
+  dpl_remove_ex(txn, di, npages);
   txn->tw.dirtyroom++;
   tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                    (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
@@ -8534,12 +8546,12 @@ static void dpl_sift(MDBX_txn *const txn, MDBX_PNL pl, const bool spilled) {
       }
 
       /* update loop */
-      unsigned w = r;
+      unsigned npages, w = r;
     remove_dl:
-      if ((txn->mt_env->me_flags & MDBX_WRITEMAP) == 0) {
-        MDBX_page *dp = dl->items[r].ptr;
-        dpage_free(txn->mt_env, dp, dpl_npages(dl, r));
-      }
+      npages = dpl_npages(dl, r);
+      dl->pages_including_loose -= npages;
+      if ((txn->mt_env->me_flags & MDBX_WRITEMAP) == 0)
+        dpage_free(txn->mt_env, dl->items[r].ptr, npages);
       ++r;
     next_i:
       i += step;
@@ -9253,6 +9265,7 @@ retry:
       tASSERT(txn, txn->tw.loose_count == dl->length - w);
       dpl_setlen(dl, w);
       dl->sorted = 0;
+      dl->pages_including_loose -= txn->tw.loose_count;
       txn->tw.dirtyroom += txn->tw.loose_count;
       tASSERT(txn, txn->tw.dirtyroom + txn->tw.dirtylist->length ==
                        (txn->mt_parent ? txn->mt_parent->tw.dirtyroom
@@ -9906,8 +9919,8 @@ static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
     unsigned n = dst->length;
     while (n && dst->items[n].pgno >= parent->mt_next_pgno) {
       if (!(txn->mt_env->me_flags & MDBX_WRITEMAP)) {
-        MDBX_page *dp = dst->items[n].ptr;
-        dpage_free(txn->mt_env, dp, dpl_npages(dst, n));
+        unsigned npages = dpl_npages(dst, n);
+        dpage_free(txn->mt_env, dst->items[n].ptr, npages);
       }
       --n;
     }
@@ -10218,6 +10231,13 @@ static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   assert(parent->tw.dirtyroom <= parent->mt_env->me_options.dp_limit);
   dpl_setlen(dst, dst->sorted);
   parent->tw.dirtylru = txn->tw.dirtylru;
+
+  /* В текущем понимании выгоднее пересчитать кол-во страниц,
+   * чем подмешивать лишние ветвления и вычисления в циклы выше. */
+  dst->pages_including_loose = 0;
+  for (r = 1; r <= dst->length; ++r)
+    dst->pages_including_loose += dpl_npages(dst, r);
+
   tASSERT(parent, dirtylist_check(parent));
   dpl_free(txn);
 
