@@ -1,13 +1,15 @@
 ChangeLog
 ---------
 
-## v0.11.+
+## v0.11.10 (the TriColor) at 2022-08-22
 
-Bugfixing within the stable `master` branch.
+The stable bugfix release.
+It is planned that this will be the last release of the v0.11 branch.
 
 New:
 
  - The C++ API has been refined to simplify support for `wchar_t` in path names.
+ - Added explicit error message for Buildroot's Microblaze toolchain maintainers.
 
 Fixes:
 
@@ -22,6 +24,7 @@ Minors:
  - Using `ldd` to check used dso.
  - Added `MDBX_WEAK_IMPORT_ATTRIBUTE` macro.
  - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
+ - Minor clarified `iov_page()` failure case.
 
 
 -------------------------------------------------------------------------------
@@ -30,7 +33,6 @@ Minors:
 ## v0.11.9 (Чирчик-1992) at 2022-08-02
 
 The stable bugfix release.
-It is planned that this will be the last release of the v0.11 branch.
 
 ```
 18 files changed, 318 insertions(+), 178 deletions(-)
