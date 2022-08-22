@@ -221,9 +221,12 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
          ((uint64_t)offset + (uint64_t)len));
   for (;;) {
     struct flock lock_op;
-    STATIC_ASSERT(sizeof(off_t) <= sizeof(lock_op.l_start) &&
-                  sizeof(off_t) <= sizeof(lock_op.l_len) &&
-                  OFF_T_MAX == (off_t)OFF_T_MAX);
+    STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(lock_op.l_start) &&
+                          sizeof(off_t) <= sizeof(lock_op.l_len) &&
+                          OFF_T_MAX == (off_t)OFF_T_MAX,
+                      "Support for large/64-bit-sized files is misconfigured "
+                      "for the target system and/or toolchain. "
+                      "Please fix it or at least disable it completely.");
     memset(&lock_op, 0, sizeof(lock_op));
     lock_op.l_type = lck;
     lock_op.l_whence = SEEK_SET;

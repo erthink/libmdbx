@@ -16,6 +16,7 @@ New:
  - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
  - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
  - The C++ API has been refined to simplify support for `wchar_t` in path names.
+ - Added explicit error message for Buildroot's Microblaze toolchain maintainers.
 
 Fixes:
 
@@ -30,6 +31,7 @@ Minors:
  - Using `ldd` to check used dso.
  - Added `MDBX_WEAK_IMPORT_ATTRIBUTE` macro.
  - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
+ - Minor clarified `iov_page()` failure case.
 
 ## v0.12.0 at 2022-06-19
 
@@ -39,10 +41,42 @@ Not a release but preparation for changing feature set and API.
 -------------------------------------------------------------------------------
 
 
-## v0.11.9 (Чирчик-1992) at 2022-08-02
+## v0.11.10 (the TriColor) at 2022-08-22
 
 The stable bugfix release.
 It is planned that this will be the last release of the v0.11 branch.
+
+```
+14 files changed, 263 insertions(+), 252 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
+
+New:
+
+ - The C++ API has been refined to simplify support for `wchar_t` in path names.
+ - Added explicit error message for Buildroot's Microblaze toolchain maintainers.
+
+Fixes:
+
+ - Never use modern `__cxa_thread_atexit()` on Apple's OSes.
+ - Use `MultiByteToWideChar(CP_THREAD_ACP)` instead of `mbstowcs()`.
+ - Don't check owner for finished transactions.
+ - Fixed typo in `MDBX_EINVAL` which breaks MingGW builds with CLANG.
+
+Minors:
+
+ - Fixed variable name typo.
+ - Using `ldd` to check used dso.
+ - Added `MDBX_WEAK_IMPORT_ATTRIBUTE` macro.
+ - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
+ - Minor clarified `iov_page()` failure case.
+
+-------------------------------------------------------------------------------
+
+
+## v0.11.9 (Чирчик-1992) at 2022-08-02
+
+The stable bugfix release.
 
 ```
 18 files changed, 318 insertions(+), 178 deletions(-)

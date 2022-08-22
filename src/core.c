@@ -4814,8 +4814,11 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     txn->tw.dirtyroom += spilled;
     tASSERT(txn, dirtylist_check(txn));
 
-    if (ctx.iov_items)
+    if (ctx.iov_items) {
+      /* iov_page() frees dirty-pages and reset iov_items in case of failure. */
+      tASSERT(txn, rc == MDBX_SUCCESS);
       rc = iov_write(txn, &ctx);
+    }
 
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
@@ -9903,8 +9906,11 @@ static int txn_write(MDBX_txn *txn, struct iov_ctx *ctx) {
       break;
   }
 
-  if (ctx->iov_items)
+  if (ctx->iov_items) {
+    /* iov_page() frees dirty-pages and reset iov_items in case of failure. */
+    tASSERT(txn, rc == MDBX_SUCCESS);
     rc = iov_write(txn, ctx);
+  }
 
   while (r <= dl->length)
     dl->items[++w] = dl->items[r++];
