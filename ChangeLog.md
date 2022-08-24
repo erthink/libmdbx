@@ -1,9 +1,14 @@
 ChangeLog
 ---------
 
-## v0.12.1 (Positive Proxima) scheduled to 2022-08-24
+## v0.12.1 (Positive Proxima) at 2022-08-24
 
 The planned frontward release with new superior features on the day of 20 anniversary of [Positive Technologies](https://ptsecurty.com).
+
+```
+37 files changed, 7604 insertions(+), 7417 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 New:
 
@@ -11,27 +16,27 @@ New:
    Now _libmdbx_ avoid creating large chunks of PNLs (page number lists) which required a long sequences of free pages, aka large/overflow pages.
    Thus avoiding searching, allocating and storing such sequences inside GC.
  - Improved hot/online validation and checking of database pages both for more robustness and performance.
+ - New solid and fast method to latch meta-pages called `Troika`.
+   The minimum of memory barriers, reads, comparisons and conditional transitions are used.
  - New `MDBX_VALIDATION` environment options to extra validation of DB structure and pages content for carefully/safe handling damaged or untrusted DB.
- - Optionally cache for pointers to last/steady meta-pages (currently is off by default).
+ - Accelerated ×16/×8/×4 by AVX512/AVX2/SSE2/Neon implementations of search page sequences.
  - Added the `gcrtime_seconds16dot16` counter to the "Page Operation Statistics" that accumulates time spent for GC searching and reclaiming.
  - Copy-with-compactification now clears/zeroes unused gaps inside database pages.
- - The C++ API has been refined to simplify support for `wchar_t` in path names.
+ - The `C` and `C++` APIs has been extended and/or refined to simplify using `wchar_t` pathnames.
+   On Windows the `mdbx_env_openW()`, ``mdbx_env_get_pathW()`()`, `mdbx_env_copyW()`, `mdbx_env_open_for_recoveryW()` are available for now,
+   but the `mdbx_env_get_path()` has been replaced in favor of `mdbx_env_get_pathW()`.
  - Added explicit error message for Buildroot's Microblaze toolchain maintainers.
+ - Added `MDBX_MANAGE_BUILD_FLAGS` build options for CMake.
+ - Speed-up internal `bsearch`/`lower_bound` implementation using branchless tactic, including workaround for CLANG x86 optimiser bug.
+ - A lot internal refinement and micro-optimisations.
+ - Internally counted volume of dirty pages (unused for now but for coming features).
 
 Fixes:
 
  - Never use modern `__cxa_thread_atexit()` on Apple's OSes.
- - Use `MultiByteToWideChar(CP_THREAD_ACP)` instead of `mbstowcs()`.
  - Don't check owner for finished transactions.
  - Fixed typo in `MDBX_EINVAL` which breaks MingGW builds with CLANG.
 
-Minors:
-
- - Fixed variable name typo.
- - Using `ldd` to check used dso.
- - Added `MDBX_WEAK_IMPORT_ATTRIBUTE` macro.
- - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
- - Minor clarified `iov_page()` failure case.
 
 ## v0.12.0 at 2022-06-19
 
