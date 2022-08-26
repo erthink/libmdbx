@@ -1,6 +1,17 @@
 ChangeLog
 ---------
 
+## Underway v0.12.2
+
+New:
+
+ - Added `MDBX_HAVE_BUILT IN_CPU_SUPPORTS` build option to control use GCC's `__builtin_cpu_supports()` function,
+   which could be unavailable on a fake OSes (macos, ios, android, etc).
+
+
+-------------------------------------------------------------------------------
+
+
 ## v0.12.1 (Positive Proxima) at 2022-08-24
 
 The planned frontward release with new superior features on the day of 20 anniversary of [Positive Technologies](https://ptsecurty.com).
@@ -75,6 +86,7 @@ Minors:
  - Added `MDBX_WEAK_IMPORT_ATTRIBUTE` macro.
  - Use current transaction geometry for untouched parameters when `env_set_geometry()` called within a write transaction.
  - Minor clarified `iov_page()` failure case.
+
 
 -------------------------------------------------------------------------------
 
