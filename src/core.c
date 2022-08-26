@@ -1174,7 +1174,7 @@ static __inline int rthc_atexit(void (*dtor)(void *), void *obj,
 #ifndef MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL
 #if defined(LIBCXXABI_HAS_CXA_THREAD_ATEXIT_IMPL) ||                           \
     defined(HAVE___CXA_THREAD_ATEXIT_IMPL) || __GLIBC_PREREQ(2, 18) ||         \
-    defined(ANDROID)
+    defined(BIONIC)
 #define MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL 1
 #else
 #define MDBX_HAVE_CXA_THREAD_ATEXIT_IMPL 0
@@ -6232,10 +6232,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
 
 #ifdef scan4seq
 /* The scan4seq() is the best or no alternatives */
-#else
-#if !(__has_builtin(__builtin_cpu_supports) ||                                 \
-      defined(__BUILTIN_CPU_SUPPORTS__) ||                                     \
-      (defined(__ia32__) && __GNUC_PREREQ(4, 8) && __GLIBC_PREREQ(2, 23)))
+#elif !MDBX_HAVE_BUILTIN_CPU_SUPPORTS
 /* The scan4seq_default() will be used  since no cpu-features detection support
  * from compiler. Please don't ask to implement cpuid-based detection and don't
  * make such PRs. */
@@ -6272,7 +6269,6 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
   scan4seq = choice ? choice : scan4seq_default;
   return scan4seq(range, len, seq);
 }
-#endif /* __has_builtin(__builtin_cpu_supports */
 #endif /* scan4seq */
 
 //------------------------------------------------------------------------------
