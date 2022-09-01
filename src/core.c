@@ -15571,7 +15571,7 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
           mc->mc_ki[mc->mc_top]++; /* step forward for appending */
           rc = MDBX_NOTFOUND;
         } else {
-          if (unlikely(rc != MDBX_SUCCESS || !(flags & MDBX_APPENDDUP)))
+          if (unlikely(rc != MDBX_SUCCESS))
             /* new-key < last-key
              * or new-key == last-key without MDBX_APPENDDUP */
             return MDBX_EKEYMISMATCH;
