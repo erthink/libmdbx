@@ -8788,10 +8788,6 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
              (void *)env, txn->mt_dbs[MAIN_DBI].md_root,
              txn->mt_dbs[FREE_DBI].md_root);
 
-  mdbx_ensure(env, txn->mt_txnid >=
-                       /* paranoia is appropriate here */ env->me_lck
-                           ->mti_oldest_reader.weak);
-
   if (!(mode & MDBX_END_EOTDONE)) /* !(already closed cursors) */
     mdbx_cursors_eot(txn, false);
 
@@ -8801,6 +8797,9 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
       MDBX_reader *slot = txn->to.reader;
       mdbx_assert(env, slot->mr_pid.weak == env->me_pid);
       if (likely(!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED))) {
+        mdbx_ensure(env, txn->mt_txnid >=
+                             /* paranoia is appropriate here */ env->me_lck
+                                 ->mti_oldest_reader.weak);
         mdbx_assert(env, txn->mt_txnid == slot->mr_txnid.weak &&
                              slot->mr_txnid.weak >=
                                  env->me_lck->mti_oldest_reader.weak);
@@ -8828,7 +8827,10 @@ static int mdbx_txn_end(MDBX_txn *txn, const unsigned mode) {
     txn->mt_numdbs = 0; /* prevent further DBI activity */
     txn->mt_flags = MDBX_TXN_RDONLY | MDBX_TXN_FINISHED;
     txn->mt_owner = 0;
-  } else if (!F_ISSET(txn->mt_flags, MDBX_TXN_FINISHED)) {
+  } else if (!(txn->mt_flags & MDBX_TXN_FINISHED)) {
+    mdbx_ensure(env, txn->mt_txnid >=
+                         /* paranoia is appropriate here */ env->me_lck
+                             ->mti_oldest_reader.weak);
 #if defined(MDBX_USE_VALGRIND) || defined(__SANITIZE_ADDRESS__)
     if (txn == env->me_txn0)
       mdbx_txn_valgrind(env, nullptr);
