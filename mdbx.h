@@ -1593,8 +1593,7 @@ enum MDBX_put_flags_t {
   MDBX_NOOVERWRITE = UINT32_C(0x10),
 
   /** Has effect only for \ref MDBX_DUPSORT databases.
-   * For upsertion: don't write if the key-value pair already exist.
-   * For deletion: remove all values for key. */
+   * For upsertion: don't write if the key-value pair already exist. */
   MDBX_NODUPDATA = UINT32_C(0x20),
 
   /** For upsertion: overwrite the current key/data pair.
