@@ -7371,7 +7371,7 @@ static void txn_valgrind(MDBX_env *env, MDBX_txn *txn) {
     pgno_t last = MAX_PAGENO + 1;
     if (env->me_txn0 && env->me_txn0->mt_owner == osal_thread_self()) {
       /* inside write-txn */
-      last = meta_recent(env, &env->me_txn0->troika).ptr_v->mm_geo.next;
+      last = meta_recent(env, &env->me_txn0->tw.troika).ptr_v->mm_geo.next;
     } else if (env->me_flags & MDBX_RDONLY) {
       /* read-only mode, no write-txn, no wlock mutex */
       last = NUM_METAS;
