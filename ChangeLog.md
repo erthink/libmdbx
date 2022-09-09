@@ -8,6 +8,16 @@ New:
  - Added `MDBX_HAVE_BUILT IN_CPU_SUPPORTS` build option to control use GCC's `__builtin_cpu_supports()` function,
    which could be unavailable on a fake OSes (macos, ios, android, etc).
 
+Fixes:
+
+ - Fixed an extra check for `MDBX_APPENDDUP` inside `mdbx_cursor_put()` which could result in returning `MDBX_EKEYMISMATCH` for valid cases.
+
+Minors:
+
+ - Fixed an extra ensure/assertion check of `oldest_reader` inside `txn_end()`.
+ - Removed description of deprecated usage of `MDBX_NODUPDATA`.
+ - Fixed regression ASAN/Valgring-enabled builds.
+
 
 -------------------------------------------------------------------------------
 
