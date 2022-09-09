@@ -180,10 +180,8 @@ static inline void mdbx_free(void *ptr) { HeapFree(GetProcessHeap(), 0, ptr); }
 #define vsnprintf _vsnprintf /* ntdll */
 #endif
 
-MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
-                                    size_t src_n);
-MDBX_INTERNAL_FUNC size_t mdbx_w2mb(char *dst, size_t dst_n, const wchar_t *src,
-                                    size_t src_n);
+size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src, size_t src_n);
+size_t mdbx_w2mb(char *dst, size_t dst_n, const wchar_t *src, size_t src_n);
 
 #else /*----------------------------------------------------------------------*/
 

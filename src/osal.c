@@ -527,14 +527,12 @@ static const DWORD WC_ERR_INVALID_CHARS =
         : 0;
 #endif /* WC_ERR_INVALID_CHARS */
 
-MDBX_INTERNAL_FUNC size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src,
-                                    size_t src_n) {
+size_t mdbx_mb2w(wchar_t *dst, size_t dst_n, const char *src, size_t src_n) {
   return MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src,
                              (int)src_n, dst, (int)dst_n);
 }
 
-MDBX_INTERNAL_FUNC size_t mdbx_w2mb(char *dst, size_t dst_n, const wchar_t *src,
-                                    size_t src_n) {
+size_t mdbx_w2mb(char *dst, size_t dst_n, const wchar_t *src, size_t src_n) {
   return WideCharToMultiByte(CP_THREAD_ACP, WC_ERR_INVALID_CHARS, src,
                              (int)src_n, dst, (int)dst_n, nullptr, nullptr);
 }
