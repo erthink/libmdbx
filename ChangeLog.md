@@ -1,9 +1,15 @@
 ChangeLog
 ---------
 
-## Stable
+## v0.11.11 (Тендра-1790) at 2022-09-11
 
-The stable LTS branch.
+The stable bugfix release.
+It is planned that this will be the last release of the v0.11 branch.
+
+```
+10 files changed, 38 insertions(+), 21 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Fixes:
 
@@ -12,10 +18,12 @@ Fixes:
  - Fixed derived C++ builds by removing `MDBX_INTERNAL_FUNC` for `mdbx_w2mb()` and `mdbx_mb2w()`.
 
 
+-------------------------------------------------------------------------------
+
+
 ## v0.11.10 (the TriColor) at 2022-08-22
 
 The stable bugfix release.
-It is planned that this will be the last release of the v0.11 branch.
 
 New:
 
