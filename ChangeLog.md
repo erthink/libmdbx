@@ -1,6 +1,17 @@
 ChangeLog
 ---------
 
+## Stable
+
+The stable LTS branch.
+
+Fixes:
+
+ - Fixed an extra check for `MDBX_APPENDDUP` inside `mdbx_cursor_put()` which could result in returning `MDBX_EKEYMISMATCH` for valid cases.
+ - Fixed an extra ensure/assertion check of `oldest_reader` inside `mdbx_txn_end()`.
+ - Fixed derived C++ builds by removing `MDBX_INTERNAL_FUNC` for `mdbx_w2mb()` and `mdbx_mb2w()`.
+
+
 ## v0.11.10 (the TriColor) at 2022-08-22
 
 The stable bugfix release.
