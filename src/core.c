@@ -5244,7 +5244,7 @@ static txnid_t find_oldest_reader(MDBX_env *const env, const txnid_t steady) {
     new_oldest = steady;
 
     for (unsigned i = 0; i < snap_nreaders; ++i) {
-      const mdbx_pid_t pid =
+      const uint32_t pid =
           atomic_load32(&lck->mti_readers[i].mr_pid, mo_AcquireRelease);
       if (!pid)
         continue;

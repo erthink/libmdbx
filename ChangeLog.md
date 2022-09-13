@@ -17,6 +17,7 @@ Minors:
  - Fixed an extra ensure/assertion check of `oldest_reader` inside `txn_end()`.
  - Removed description of deprecated usage of `MDBX_NODUPDATA`.
  - Fixed regression ASAN/Valgring-enabled builds.
+ - Fixed minor MingGW warning.
 
 
 -------------------------------------------------------------------------------
