@@ -2131,6 +2131,8 @@ static int lcklist_detach_locked(MDBX_env *env) {
   do {                                                                         \
   } while (0)
 
+/* *INDENT-OFF* */
+/* clang-format off */
 #define SEARCH_IMPL(NAME, TYPE_LIST, TYPE_ARG, CMP)                            \
   static __always_inline const TYPE_LIST *NAME(                                \
       const TYPE_LIST *it, unsigned length, const TYPE_ARG item) {             \
@@ -2178,6 +2180,8 @@ static int lcklist_detach_locked(MDBX_env *env) {
                                                                                \
     return it;                                                                 \
   }
+/* *INDENT-ON* */
+/* clang-format on */
 
 /*----------------------------------------------------------------------------*/
 
