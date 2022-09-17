@@ -11489,6 +11489,16 @@ lckless_stub(const MDBX_env *env) {
 }
 
 __cold int mdbx_env_create(MDBX_env **penv) {
+  if (unlikely(!penv))
+    return MDBX_EINVAL;
+  *penv = nullptr;
+
+  const size_t os_psize = osal_syspagesize();
+  if (unlikely(!is_powerof2(os_psize) || os_psize < MIN_PAGESIZE)) {
+    ERROR("unsuitable system pagesize %" PRIuPTR, os_psize);
+    return MDBX_INCOMPATIBLE;
+  }
+
   MDBX_env *env = osal_calloc(1, sizeof(MDBX_env));
   if (unlikely(!env))
     return MDBX_ENOMEM;
@@ -11516,12 +11526,6 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_options.merge_threshold_16dot16_percent = 65536 / 4 /* 25% */;
 
   int rc;
-  const size_t os_psize = osal_syspagesize();
-  if (unlikely(!is_powerof2(os_psize) || os_psize < MIN_PAGESIZE)) {
-    ERROR("unsuitable system pagesize %" PRIuPTR, os_psize);
-    rc = MDBX_INCOMPATIBLE;
-    goto bailout;
-  }
   env->me_os_psize = (unsigned)os_psize;
   setup_pagesize(env, (env->me_os_psize < MAX_PAGESIZE) ? env->me_os_psize
                                                         : MAX_PAGESIZE);
@@ -11558,7 +11562,6 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
 bailout:
   osal_free(env);
-  *penv = nullptr;
   return rc;
 }
 
