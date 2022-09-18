@@ -11499,6 +11499,17 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     return MDBX_INCOMPATIBLE;
   }
 
+#if defined(__linux__) || defined(__gnu_linux__)
+  if (unlikely(linux_kernel_version < 0x04000000)) {
+    /* 2022-09-01: Прошло уже больше двух после окончания какой-либо поддержки
+     * самого "долгоиграющего" ядра 3.16.85 ветки 3.x */
+    ERROR("too old linux kernel %u.%u.%u.%u, the >= 4.0.0 is required",
+          linux_kernel_version >> 24, (linux_kernel_version >> 16) & 255,
+          (linux_kernel_version >> 8) & 255, linux_kernel_version & 255);
+    return MDBX_INCOMPATIBLE;
+  }
+#endif /* Linux */
+
   MDBX_env *env = osal_calloc(1, sizeof(MDBX_env));
   if (unlikely(!env))
     return MDBX_ENOMEM;
