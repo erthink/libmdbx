@@ -11,6 +11,7 @@ New:
 Fixes:
 
  - Fixed an extra check for `MDBX_APPENDDUP` inside `mdbx_cursor_put()` which could result in returning `MDBX_EKEYMISMATCH` for valid cases.
+ - Fixed nasty `clz()` bug (by using `_BitScanReverse()`, only MSVC builds affected).
 
 Minors:
 

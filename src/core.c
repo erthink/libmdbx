@@ -5905,16 +5905,27 @@ MDBX_MAYBE_UNUSED static const pgno_t *scan4range_checker(const MDBX_PNL pnl,
 
 #if defined(_MSC_VER) && !defined(__builtin_clz) &&                            \
     !__has_builtin(__builtin_clz)
-MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(unsigned value) {
+MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clz(uint32_t value) {
   unsigned long index;
   _BitScanReverse(&index, value);
-  return index;
+  return 31 - index;
 }
 #endif /* _MSC_VER */
 
 #if defined(_MSC_VER) && !defined(__builtin_clzl) &&                           \
     !__has_builtin(__builtin_clzl)
-#define __builtin_clzl(value) __builtin_clz(value)
+MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clzl(size_t value) {
+  unsigned long index;
+#ifdef _WIN64
+  assert(sizeof(value) == 8);
+  _BitScanReverse64(&index, value);
+  return 63 - index;
+#else
+  assert(sizeof(value) == 4);
+  _BitScanReverse(&index, value);
+  return 31 - index;
+#endif
+}
 #endif /* _MSC_VER */
 
 #if !defined(MDBX_ATTRIBUTE_TARGET) &&                                         \
