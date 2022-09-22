@@ -3116,6 +3116,7 @@ static int __must_check_result page_split(MDBX_cursor *mc,
                                           MDBX_val *const newdata,
                                           pgno_t newpgno, const unsigned naf);
 
+static int coherency_timeout(uint64_t *timestamp, pgno_t pgno);
 static bool coherency_check_meta(const MDBX_env *env,
                                  const volatile MDBX_meta *meta, bool report);
 static int __must_check_result validate_meta_copy(MDBX_env *env,
@@ -4389,25 +4390,13 @@ static int iov_write(MDBX_txn *const txn, struct iov_ctx *ctx) {
     while (likely(rc == MDBX_SUCCESS) &&
            unlikely(memcmp(wp, rp, ctx->iov[i].iov_len) != 0)) {
       if (!timestamp) {
-        timestamp = osal_monotime();
         iov_done(txn, ctx);
         WARNING(
             "catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
             "(workaround for incoherent flaw of unified page/buffer cache)");
-      } else if (unlikely(osal_monotime() - timestamp > 65536 / 10)) {
-        ERROR("bailout waiting for %" PRIaPGNO " page arrival %s", wp->mp_pgno,
-              "(workaround for incoherent flaw of unified page/buffer cache)");
-        rc = MDBX_CORRUPTED;
       }
-#if defined(_WIN32) || defined(_WIN64)
-      SwitchToThread();
-#elif defined(__linux__) || defined(__gnu_linux__) || defined(_UNIX03_SOURCE)
-      sched_yield();
-#elif (defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 1)) || defined(_OPEN_THREADS)
-      pthread_yield();
-#else
-      usleep(42);
-#endif
+      if (coherency_timeout(&timestamp, wp->mp_pgno) != MDBX_RESULT_TRUE)
+        rc = MDBX_PROBLEM;
     }
     dpage_free(env, wp, bytes2pgno(env, ctx->iov[i].iov_len));
   }
@@ -7629,13 +7618,17 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
   return ok;
 }
 
-__cold static int coherency_timeout(uint64_t *timestamp) {
+__cold static int coherency_timeout(uint64_t *timestamp, pgno_t pgno) {
   if (likely(timestamp && *timestamp == 0))
     *timestamp = osal_monotime();
   else if (unlikely(!timestamp || osal_monotime() - *timestamp > 65536 / 10)) {
-    ERROR("bailout waiting for valid snapshot (%s)",
-          "workaround for incoherent flaw of unified page/buffer cache");
-    return MDBX_CORRUPTED;
+    if (pgno)
+      ERROR("bailout waiting for %" PRIaPGNO " page arrival %s", pgno,
+            "(workaround for incoherent flaw of unified page/buffer cache)");
+    else
+      ERROR("bailout waiting for valid snapshot (%s)",
+            "workaround for incoherent flaw of unified page/buffer cache");
+    return MDBX_PROBLEM;
   }
 
   osal_memory_fence(mo_AcquireRelease, true);
@@ -7660,7 +7653,7 @@ __hot static int coherency_check_readed(const MDBX_env *env,
                                         uint64_t *timestamp) {
   const bool report = !(timestamp && *timestamp);
   if (unlikely(!coherency_check(env, txnid, dbs, meta, report)))
-    return coherency_timeout(timestamp);
+    return coherency_timeout(timestamp, 0);
   return MDBX_SUCCESS;
 }
 
@@ -7675,7 +7668,7 @@ static int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
               (head_txnid < MIN_TXNID) ? "invalid" : "unexpected", head_txnid,
               bytes2pgno(env, (const uint8_t *)meta - env->me_dxb_mmap.dxb),
               "(workaround for incoherent flaw of unified page/buffer cache)");
-    return coherency_timeout(timestamp);
+    return coherency_timeout(timestamp, 0);
   }
   return coherency_check_readed(env, head_txnid, meta->mm_dbs, meta, timestamp);
 }
