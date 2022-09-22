@@ -242,14 +242,14 @@ __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
     if (num < 1 || !message)
       message = "<troubles with assertion-message preparation>";
     OutputDebugStringA(message);
-    if (IsDebuggerPresent())
-      DebugBreak();
 #else
     __assert_fail(msg, "mdbx", line, func);
 #endif
   }
 
 #if defined(_WIN32) || defined(_WIN64)
+  if (IsDebuggerPresent())
+    DebugBreak();
   FatalExit(ERROR_UNHANDLED_ERROR);
 #else
   abort();
