@@ -4718,7 +4718,7 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   VERBOSE("lru-head %u, age-max %u", txn->tw.dirtylru, age_max);
 
   /* half of 8-bit radix-sort */
-  unsigned radix_counters[256], spillable = 0, spilled = 0;
+  pgno_t radix_counters[256], spillable = 0;
   memset(&radix_counters, 0, sizeof(radix_counters));
   const uint32_t reciprocal = (UINT32_C(255) << 24) / (age_max + 1);
   for (unsigned i = 1; i <= dl->length; ++i) {
@@ -4744,14 +4744,15 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
         break;
     }
 
-    VERBOSE("prio2spill %u, prio2adjacent %u, amount %u, spillable %u, "
-            "wanna_spill %u",
-            prio2spill, prio2adjacent, amount, spillable, wanna_spill);
+    VERBOSE("prio2spill %u, prio2adjacent %u, spillable %u,"
+            " wanna-spill %u, amount %u",
+            prio2spill, prio2adjacent, spillable, wanna_spill, amount);
     tASSERT(txn, prio2spill < prio2adjacent && prio2adjacent <= 256);
 
     unsigned prev_prio = 256;
     unsigned r, w, prio;
-    for (w = 0, r = 1; r <= dl->length && spilled < wanna_spill;
+    pgno_t spilled_entries = 0, spilled_npages = 0;
+    for (w = 0, r = 1; r <= dl->length && spilled_entries < wanna_spill;
          prev_prio = prio, ++r) {
       prio = spill_prio(txn, r, reciprocal);
       MDBX_page *const dp = dl->items[r].ptr;
@@ -4766,11 +4767,12 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
                   dpl_npages(dl, w), dl->items[r - 1].pgno, dpl_age(txn, r - 1),
                   prev_prio);
             --w;
-            rc = spill_page(txn, &ctx, dl->items[r - 1].ptr,
-                            dpl_npages(dl, r - 1));
+            const unsigned co_npages = dpl_npages(dl, r - 1);
+            rc = spill_page(txn, &ctx, dl->items[r - 1].ptr, co_npages);
             if (unlikely(rc != MDBX_SUCCESS))
               break;
-            ++spilled;
+            ++spilled_entries;
+            spilled_npages += co_npages;
           }
 
           DEBUG("spill %u page %" PRIaPGNO " (age %d, prio %u)", npages,
@@ -4778,7 +4780,8 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
           rc = spill_page(txn, &ctx, dp, npages);
           if (unlikely(rc != MDBX_SUCCESS))
             break;
-          ++spilled;
+          ++spilled_entries;
+          spilled_npages += npages;
           continue;
         }
 
@@ -4790,21 +4793,25 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
           if (unlikely(rc != MDBX_SUCCESS))
             break;
           prio = prev_prio /* to continue co-spilling next adjacent pages */;
-          ++spilled;
+          ++spilled_entries;
+          spilled_npages += npages;
           continue;
         }
       }
       dl->items[++w] = dl->items[r];
     }
 
-    tASSERT(txn, spillable == 0 || spilled > 0);
+    VERBOSE("spilled entries %u, spilled npages %u", spilled_entries,
+            spilled_npages);
+    tASSERT(txn, spillable == 0 || spilled_entries > 0);
 
     while (r <= dl->length)
       dl->items[++w] = dl->items[r++];
-    tASSERT(txn, r - 1 - w == spilled);
+    tASSERT(txn, r - 1 - w == spilled_entries);
 
     dl->sorted = dpl_setlen(dl, w);
-    txn->tw.dirtyroom += spilled;
+    txn->tw.dirtyroom += spilled_entries;
+    txn->tw.dirtylist->pages_including_loose -= spilled_npages;
     tASSERT(txn, dirtylist_check(txn));
 
     if (ctx.iov_items) {
@@ -4818,7 +4825,7 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
 
     pnl_sort(txn->tw.spill_pages, (size_t)txn->mt_next_pgno << 1);
     txn->mt_flags |= MDBX_TXN_SPILLS;
-    NOTICE("spilled %u dirty-entries, now have %u dirty-room", spilled,
+    NOTICE("spilled %u dirty-entries, now have %u dirty-room", spilled_entries,
            txn->tw.dirtyroom);
     iov_done(txn, &ctx);
   } else {
