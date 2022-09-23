@@ -4049,8 +4049,8 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
       check = page_get_any(mc, pgno, txn->mt_front);
       if (unlikely(check.err != MDBX_SUCCESS))
         return check.err;
-      tASSERT(txn,
-              (check.page->mp_flags & ~P_LEAF2) == (pageflags & ~P_FROZEN));
+      tASSERT(txn, (check.page->mp_flags & ~(P_LEAF2 | P_SPILLED)) ==
+                       (pageflags & ~P_FROZEN));
       tASSERT(txn, !(pageflags & P_FROZEN) || IS_FROZEN(txn, check.page));
     }
     if (pageflags & P_FROZEN) {
