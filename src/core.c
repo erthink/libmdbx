@@ -8822,7 +8822,7 @@ int mdbx_txn_abort(MDBX_txn *txn) {
   if (txn->mt_child)
     mdbx_txn_abort(txn->mt_child);
 
-  tASSERT(txn, dirtylist_check(txn));
+  tASSERT(txn, (txn->mt_flags & MDBX_TXN_ERROR) || dirtylist_check(txn));
   return txn_end(txn, MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE);
 }
 
@@ -10622,6 +10622,7 @@ provide_latency:
   return rc;
 
 fail:
+  txn->mt_flags |= MDBX_TXN_ERROR;
   mdbx_txn_abort(txn);
   goto provide_latency;
 }
