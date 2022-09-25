@@ -263,7 +263,137 @@ typedef union osal_srwlock {
 } osal_srwlock_t;
 #endif /* Windows */
 
+#ifndef MDBX_HAVE_PWRITEV
+#if defined(_WIN32) || defined(_WIN64)
+
+#define MDBX_HAVE_PWRITEV 0
+
+#elif defined(__ANDROID_API__)
+
+#if __ANDROID_API__ < 24
+#define MDBX_HAVE_PWRITEV 0
+#else
+#define MDBX_HAVE_PWRITEV 1
+#endif
+
+#elif defined(__APPLE__) || defined(__MACH__) || defined(_DARWIN_C_SOURCE)
+
+#if defined(MAC_OS_X_VERSION_MIN_REQUIRED) && defined(MAC_OS_VERSION_11_0) &&  \
+    MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_VERSION_11_0
+/* FIXME: add checks for IOS versions, etc */
+#define MDBX_HAVE_PWRITEV 1
+#else
+#define MDBX_HAVE_PWRITEV 0
+#endif
+
+#elif defined(_SC_IOV_MAX) || (defined(IOV_MAX) && IOV_MAX > 1)
+#define MDBX_HAVE_PWRITEV 1
+#else
+#define MDBX_HAVE_PWRITEV 0
+#endif
+#endif /* MDBX_HAVE_PWRITEV */
+
+typedef struct ior_item {
+#if defined(_WIN32) || defined(_WIN64)
+  OVERLAPPED ov;
+#define ior_svg_gap4terminator 1
+#define ior_sgv_element FILE_SEGMENT_ELEMENT
+#else
+  size_t offset;
+#if MDBX_HAVE_PWRITEV
+  size_t sgvcnt;
+#define ior_svg_gap4terminator 0
+#define ior_sgv_element struct iovec
+#endif /* MDBX_HAVE_PWRITEV */
+#endif /* !Windows */
+  union {
+    MDBX_val single;
+#if defined(ior_sgv_element)
+    ior_sgv_element sgv[1 + ior_svg_gap4terminator];
+#endif /* ior_sgv_element */
+  };
+} ior_item_t;
+
+typedef struct osal_ioring {
+  unsigned slots_left;
+  unsigned allocated;
+#if defined(_WIN32) || defined(_WIN64)
+#define IOR_UNBUFFERED 1
+#define IOR_OVERLAPPED 2
+#define IOR_STATE_LOCKED 1
+  unsigned pagesize;
+  unsigned last_sgvcnt;
+  size_t last_bytes;
+  uint8_t flags, state, pagesize_ln2;
+  unsigned event_stack;
+  HANDLE *event_pool;
+  volatile LONG async_waiting;
+  volatile LONG async_completed;
+  HANDLE async_done;
+
+#define ior_last_sgvcnt(ior, item) (ior)->last_sgvcnt
+#define ior_last_bytes(ior, item) (ior)->last_bytes
+#elif MDBX_HAVE_PWRITEV
+  unsigned last_bytes;
+#define ior_last_sgvcnt(ior, item) (item)->sgvcnt
+#define ior_last_bytes(ior, item) (ior)->last_bytes
+#else
+#define ior_last_sgvcnt(ior, item) (1)
+#define ior_last_bytes(ior, item) (item)->single.iov_len
+#endif /* !Windows */
+  mdbx_filehandle_t fd;
+  ior_item_t *last;
+  ior_item_t *pool;
+  char *boundary;
+} osal_ioring_t;
+
 #ifndef __cplusplus
+
+/* Actually this is not ioring for now, but on the way. */
+MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *,
+#if defined(_WIN32) || defined(_WIN64)
+                                          unsigned flags,
+#endif /* Windows */
+                                          mdbx_filehandle_t fd);
+MDBX_INTERNAL_FUNC int osal_ioring_resize(osal_ioring_t *, size_t items);
+MDBX_INTERNAL_FUNC void osal_ioring_destroy(osal_ioring_t *);
+MDBX_INTERNAL_FUNC void osal_ioring_reset(osal_ioring_t *);
+MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ctx, const size_t offset,
+                                       void *data, const size_t bytes);
+typedef struct osal_ioring_write_result {
+  int err;
+  unsigned wops;
+} osal_ioring_write_result_t;
+MDBX_INTERNAL_FUNC osal_ioring_write_result_t
+osal_ioring_write(osal_ioring_t *ior);
+
+typedef struct iov_ctx iov_ctx_t;
+MDBX_INTERNAL_FUNC void osal_ioring_walk(
+    osal_ioring_t *ior, iov_ctx_t *ctx,
+    void (*callback)(iov_ctx_t *ctx, size_t offset, void *data, size_t bytes));
+
+static inline unsigned osal_ioring_left(const osal_ioring_t *ior) {
+  return ior->slots_left;
+}
+
+static inline unsigned osal_ioring_used(const osal_ioring_t *ior) {
+  return ior->allocated - ior->slots_left;
+}
+
+static inline int osal_ioring_reserve(osal_ioring_t *ior, unsigned items,
+                                      size_t bytes) {
+  items = (items > 32) ? items : 32;
+#if defined(_WIN32) || defined(_WIN64)
+  const unsigned npages = (unsigned)(bytes >> ior->pagesize_ln2);
+  items = (items > npages) ? items : npages;
+#else
+  (void)bytes;
+#endif
+  items = (items < 65536) ? items : 65536;
+  if (likely(ior->allocated >= items))
+    return MDBX_SUCCESS;
+  return osal_ioring_resize(ior, items);
+}
 
 /*----------------------------------------------------------------------------*/
 /* libc compatibility stuff */
@@ -290,10 +420,12 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC void osal_jitter(bool tiny);
 MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny);
 
 /* max bytes to write in one call */
-#if defined(_WIN32) || defined(_WIN64)
-#define MAX_WRITE UINT32_C(0x01000000)
+#if defined(_WIN64)
+#define MAX_WRITE UINT32_C(0x10000000)
+#elif defined(_WIN32)
+#define MAX_WRITE UINT32_C(0x04000000)
 #else
-#define MAX_WRITE UINT32_C(0x3fff0000)
+#define MAX_WRITE UINT32_C(0x3f000000)
 #endif
 
 #if defined(__linux__) || defined(__gnu_linux__)
@@ -336,8 +468,7 @@ MDBX_INTERNAL_FUNC int osal_fastmutex_release(osal_fastmutex_t *fastmutex);
 MDBX_INTERNAL_FUNC int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex);
 
 MDBX_INTERNAL_FUNC int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov,
-                                    int iovcnt, uint64_t offset,
-                                    size_t expected_written);
+                                    int sgvcnt, uint64_t offset);
 MDBX_INTERNAL_FUNC int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count,
                                   uint64_t offset);
 MDBX_INTERNAL_FUNC int osal_pwrite(mdbx_filehandle_t fd, const void *buf,
@@ -365,12 +496,15 @@ MDBX_INTERNAL_FUNC int osal_fseek(mdbx_filehandle_t fd, uint64_t pos);
 MDBX_INTERNAL_FUNC int osal_filesize(mdbx_filehandle_t fd, uint64_t *length);
 
 enum osal_openfile_purpose {
-  MDBX_OPEN_DXB_READ = 0,
-  MDBX_OPEN_DXB_LAZY = 1,
-  MDBX_OPEN_DXB_DSYNC = 2,
-  MDBX_OPEN_LCK = 3,
-  MDBX_OPEN_COPY = 4,
-  MDBX_OPEN_DELETE = 5
+  MDBX_OPEN_DXB_READ,
+  MDBX_OPEN_DXB_LAZY,
+  MDBX_OPEN_DXB_DSYNC,
+#if defined(_WIN32) || defined(_WIN64)
+  MDBX_OPEN_DXB_OVERLAPPED,
+#endif /* Windows */
+  MDBX_OPEN_LCK,
+  MDBX_OPEN_COPY,
+  MDBX_OPEN_DELETE
 };
 
 MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
@@ -404,7 +538,7 @@ osal_suspend_threads_before_remap(MDBX_env *env, mdbx_handle_array_t **array);
 MDBX_INTERNAL_FUNC int
 osal_resume_threads_after_remap(mdbx_handle_array_t *array);
 #endif /* Windows */
-MDBX_INTERNAL_FUNC int osal_msync(osal_mmap_t *map, size_t offset,
+MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
                                   size_t length,
                                   enum osal_syncmode_bits mode_bits);
 MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
@@ -691,6 +825,11 @@ typedef LSTATUS(WINAPI *MDBX_RegGetValueA)(HKEY hkey, LPCSTR lpSubKey,
 MDBX_INTERNAL_VAR MDBX_RegGetValueA mdbx_RegGetValueA;
 
 NTSYSAPI ULONG RtlRandomEx(PULONG Seed);
+
+typedef BOOL(WINAPI *MDBX_SetFileIoOverlappedRange)(HANDLE FileHandle,
+                                                    PUCHAR OverlappedRangeStart,
+                                                    ULONG Length);
+MDBX_INTERNAL_VAR MDBX_SetFileIoOverlappedRange mdbx_SetFileIoOverlappedRange;
 
 #endif /* Windows */
 

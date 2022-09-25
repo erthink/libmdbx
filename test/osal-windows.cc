@@ -71,7 +71,7 @@ void osal_setup(const std::vector<actor_config> &actors) {
   events.reserve(n);
 
   for (unsigned i = 0; i < n; ++i) {
-    HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+    HANDLE hEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
     if (!hEvent)
       failure_perror("CreateEvent()", GetLastError());
     hEvent = make_inheritable(hEvent);
@@ -79,22 +79,22 @@ void osal_setup(const std::vector<actor_config> &actors) {
     events[i] = hEvent;
   }
 
-  hBarrierSemaphore = CreateSemaphore(NULL, 0, (LONG)actors.size(), NULL);
+  hBarrierSemaphore = CreateSemaphoreW(NULL, 0, (LONG)actors.size(), NULL);
   if (!hBarrierSemaphore)
     failure_perror("CreateSemaphore(BarrierSemaphore)", GetLastError());
   hBarrierSemaphore = make_inheritable(hBarrierSemaphore);
 
-  hBarrierEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
+  hBarrierEvent = CreateEventW(NULL, TRUE, FALSE, NULL);
   if (!hBarrierEvent)
     failure_perror("CreateEvent(BarrierEvent)", GetLastError());
   hBarrierEvent = make_inheritable(hBarrierEvent);
 
-  hProgressActiveEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  hProgressActiveEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
   if (!hProgressActiveEvent)
     failure_perror("CreateEvent(ProgressActiveEvent)", GetLastError());
   hProgressActiveEvent = make_inheritable(hProgressActiveEvent);
 
-  hProgressPassiveEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
+  hProgressPassiveEvent = CreateEventW(NULL, FALSE, FALSE, NULL);
   if (!hProgressPassiveEvent)
     failure_perror("CreateEvent(ProgressPassiveEvent)", GetLastError());
   hProgressPassiveEvent = make_inheritable(hProgressPassiveEvent);

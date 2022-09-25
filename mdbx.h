@@ -2523,8 +2523,12 @@ struct MDBX_envinfo {
     uint64_t wops;    /**< Number of explicit write operations (not a pages)
                            to a disk */
     uint64_t
+        msync; /**< Number of explicit msync-to-disk operations (not a pages) */
+    uint64_t
+        fsync; /**< Number of explicit fsync-to-disk operations (not a pages) */
+    uint64_t
         gcrtime_seconds16dot16; /**< Time spent loading and searching inside
-                                     GC (aka FreeDB) in 1/65536 of second. */
+                                     GC (aka FreeDB) in 1/65536 of second */
   } mi_pgop_stat;
 };
 #ifndef __cplusplus

@@ -11,7 +11,6 @@ For the same reason ~~Github~~ is blacklisted forever.
 
 So currently most of the links are broken due to noted malicious ~~Github~~ sabotage.
 
- - [Engage an "overlapped I/O" on Windows](https://web.archive.org/web/20220414235959/https://github.com/erthink/libmdbx/issues/224).
  - [Move most of `mdbx_chk` functional to the library API](https://web.archive.org/web/20220414235959/https://github.com/erthink/libmdbx/issues/204).
  - [Replace SRW-lock on Windows to allow shrink DB with `MDBX_NOTLS` option](https://web.archive.org/web/20220414235959/https://github.com/erthink/libmdbx/issues/210).
  - [More flexible support of asynchronous runtime/framework(s)](https://web.archive.org/web/20220414235959/https://github.com/erthink/libmdbx/issues/200).
@@ -27,3 +26,4 @@ Done
 ----
 
  - [Simple careful mode for working with corrupted DB](https://web.archive.org/web/20220414235959/https://github.com/erthink/libmdbx/issues/223).
+ - [Engage an "overlapped I/O" on Windows](https://web.archive.org/web/20220414235959/https://github.com/erthink/libmdbx/issues/224).

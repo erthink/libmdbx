@@ -591,6 +591,10 @@ typedef struct {
   MDBX_atomic_uint64_t
       gcrtime; /* Time spending for reading/searching GC (aka FreeDB). The
                   unit/scale is platform-depended, see osal_monotime(). */
+  MDBX_atomic_uint64_t
+      msync; /* Number of explicit msync/flush-to-disk operations */
+  MDBX_atomic_uint64_t
+      fsync; /* Number of explicit fsync/flush-to-disk operations */
 } MDBX_pgop_stat_t;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
@@ -1143,7 +1147,11 @@ struct MDBX_env {
   osal_mmap_t me_dxb_mmap; /* The main data file */
 #define me_map me_dxb_mmap.dxb
 #define me_lazy_fd me_dxb_mmap.fd
-  mdbx_filehandle_t me_dsync_fd;
+#define me_fd4data me_ioring.fd
+  mdbx_filehandle_t me_dsync_fd, me_fd4meta;
+#if defined(_WIN32) || defined(_WIN64)
+  HANDLE me_overlapped_fd, me_data_lock_event;
+#endif                     /* Windows */
   osal_mmap_t me_lck_mmap; /* The lock file */
 #define me_lfd me_lck_mmap.fd
   struct MDBX_lockinfo *me_lck;
@@ -1222,6 +1230,7 @@ struct MDBX_env {
   unsigned me_dp_reserve_len;
   /* PNL of pages that became unused in a write txn */
   MDBX_PNL me_retired_pages;
+  osal_ioring_t me_ioring;
 
 #if defined(_WIN32) || defined(_WIN64)
   osal_srwlock_t me_remap_guard;
@@ -1609,20 +1618,24 @@ ceil_powerof2(size_t value, size_t granularity) {
 }
 
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static unsigned
-log2n_powerof2(size_t value) {
-  assert(value > 0 && value < INT32_MAX && is_powerof2(value));
-  assert((value & -(int32_t)value) == value);
-#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctzl)
-  return __builtin_ctzl(value);
+log2n_powerof2(size_t value_uintptr) {
+  assert(value_uintptr > 0 && value_uintptr < INT32_MAX &&
+         is_powerof2(value_uintptr));
+  assert((value_uintptr & -(intptr_t)value_uintptr) == value_uintptr);
+  const uint32_t value_uint32 = (uint32_t)value_uintptr;
+#if __GNUC_PREREQ(4, 1) || __has_builtin(__builtin_ctz)
+  STATIC_ASSERT(sizeof(value_uint32) <= sizeof(unsigned));
+  return __builtin_ctz(value_uint32);
 #elif defined(_MSC_VER)
   unsigned long index;
-  _BitScanForward(&index, (unsigned long)value);
+  STATIC_ASSERT(sizeof(value_uint32) <= sizeof(long));
+  _BitScanForward(&index, value_uint32);
   return index;
 #else
   static const uint8_t debruijn_ctz32[32] = {
       0,  1,  28, 2,  29, 14, 24, 3, 30, 22, 20, 15, 25, 17, 4,  8,
       31, 27, 13, 23, 21, 19, 16, 7, 26, 12, 18, 6,  11, 5,  10, 9};
-  return debruijn_ctz32[(uint32_t)(value * 0x077CB531u) >> 27];
+  return debruijn_ctz32[(uint32_t)(value_uint32 * 0x077CB531ul) >> 27];
 #endif
 }
 

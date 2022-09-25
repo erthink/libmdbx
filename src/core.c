@@ -3983,13 +3983,12 @@ __cold static void kill_page(MDBX_txn *txn, MDBX_page *mp, pgno_t pgno,
     while (--npages) {
       iov[n] = iov[0];
       if (++n == MDBX_COMMIT_PAGES) {
-        osal_pwritev(env->me_lazy_fd, iov, MDBX_COMMIT_PAGES, iov_off,
-                     pgno2bytes(env, MDBX_COMMIT_PAGES));
+        osal_pwritev(env->me_lazy_fd, iov, MDBX_COMMIT_PAGES, iov_off);
         iov_off += pgno2bytes(env, MDBX_COMMIT_PAGES);
         n = 0;
       }
     }
-    osal_pwritev(env->me_lazy_fd, iov, n, iov_off, pgno2bytes(env, n));
+    osal_pwritev(env->me_lazy_fd, iov, n, iov_off);
   }
 }
 
@@ -4318,139 +4317,155 @@ static __inline int page_retire(MDBX_cursor *mc, MDBX_page *mp) {
   return page_retire_ex(mc, mp->mp_pgno, mp, mp->mp_flags);
 }
 
-struct iov_ctx {
-  unsigned iov_items;
-  size_t iov_bytes;
-  size_t iov_off;
+typedef struct iov_ctx {
+  MDBX_env *env;
+  osal_ioring_t *ior;
+  int err;
+#ifndef MDBX_NEED_WRITTEN_RANGE
+#define MDBX_NEED_WRITTEN_RANGE 1
+#endif /* MDBX_NEED_WRITTEN_RANGE */
+#if MDBX_NEED_WRITTEN_RANGE
   pgno_t flush_begin;
   pgno_t flush_end;
-  struct iovec iov[MDBX_COMMIT_PAGES];
-};
+#endif /* MDBX_NEED_WRITTEN_RANGE */
+  uint64_t coherency_timestamp;
+} iov_ctx_t;
 
-static __inline void iov_init(MDBX_txn *const txn, struct iov_ctx *ctx) {
-  ctx->flush_begin = MAX_PAGENO;
-  ctx->flush_end = MIN_PAGENO;
-  ctx->iov_items = 0;
-  ctx->iov_bytes = 0;
-  ctx->iov_off = 0;
-  (void)txn;
+__must_check_result static int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx,
+                                        unsigned items, pgno_t npages) {
+  ctx->env = txn->mt_env;
+  ctx->ior = &txn->mt_env->me_ioring;
+  ctx->err = osal_ioring_reserve(ctx->ior, items,
+                                 pgno_align2os_bytes(txn->mt_env, npages));
+  if (likely(ctx->err == MDBX_SUCCESS)) {
+#if MDBX_NEED_WRITTEN_RANGE
+    ctx->flush_begin = MAX_PAGENO;
+    ctx->flush_end = MIN_PAGENO;
+#endif /* MDBX_NEED_WRITTEN_RANGE */
+    osal_ioring_reset(ctx->ior);
+  }
+  return ctx->err;
 }
 
-static __inline void iov_done(MDBX_txn *const txn, struct iov_ctx *ctx) {
-  tASSERT(txn, ctx->iov_items == 0);
-#if defined(__linux__) || defined(__gnu_linux__)
-  MDBX_env *const env = txn->mt_env;
-  if (!(txn->mt_flags & MDBX_WRITEMAP) && linux_kernel_version < 0x02060b00)
-    /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
-     * arguments, making this function fairly expensive. Therefore, the
-     * whole cache is always flushed. */
-    osal_flush_incoherent_mmap(
-        env->me_map + pgno2bytes(env, ctx->flush_begin),
-        pgno2bytes(env, ctx->flush_end - ctx->flush_begin), env->me_os_psize);
-#endif /* Linux */
+static inline bool iov_empty(const iov_ctx_t *ctx) {
+  return osal_ioring_used(ctx->ior) == 0;
 }
 
-static int iov_write(MDBX_txn *const txn, struct iov_ctx *ctx) {
-  tASSERT(txn, !(txn->mt_flags & MDBX_WRITEMAP));
-  tASSERT(txn, ctx->iov_items > 0);
+static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
+                                    size_t bytes) {
+  MDBX_env *const env = ctx->env;
+  eASSERT(env, (env->me_flags & MDBX_WRITEMAP) == 0);
 
-  MDBX_env *const env = txn->mt_env;
-  int rc;
-  if (likely(ctx->iov_items == 1)) {
-    eASSERT(env, ctx->iov_bytes == (size_t)ctx->iov[0].iov_len);
-    rc = osal_pwrite(env->me_lazy_fd, ctx->iov[0].iov_base, ctx->iov[0].iov_len,
-                     ctx->iov_off);
-  } else {
-    rc = osal_pwritev(env->me_lazy_fd, ctx->iov, ctx->iov_items, ctx->iov_off,
-                      ctx->iov_bytes);
-  }
+  MDBX_page *wp = (MDBX_page *)data;
+  eASSERT(env, wp->mp_pgno == bytes2pgno(env, offset));
+  eASSERT(env, bytes2pgno(env, bytes) >= (IS_OVERFLOW(wp) ? wp->mp_pages : 1u));
+  eASSERT(env, (wp->mp_flags & P_ILL_BITS) == 0);
 
-  if (unlikely(rc != MDBX_SUCCESS))
-    ERROR("Write error: %s", mdbx_strerror(rc));
-  else {
-    VALGRIND_MAKE_MEM_DEFINED(txn->mt_env->me_map + ctx->iov_off,
-                              ctx->iov_bytes);
-    MDBX_ASAN_UNPOISON_MEMORY_REGION(txn->mt_env->me_map + ctx->iov_off,
-                                     ctx->iov_bytes);
-  }
-
-  unsigned iov_items = ctx->iov_items;
-#if MDBX_ENABLE_PGOP_STAT
-  txn->mt_env->me_lck->mti_pgop_stat.wops.weak += iov_items;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-  ctx->iov_items = 0;
-  ctx->iov_bytes = 0;
-
-  uint64_t timestamp = 0;
-  for (unsigned i = 0; i < iov_items; i++) {
-    MDBX_page *wp = (MDBX_page *)ctx->iov[i].iov_base;
-    const MDBX_page *rp = pgno2page(txn->mt_env, wp->mp_pgno);
+  if (likely(ctx->err == MDBX_SUCCESS)) {
+    VALGRIND_MAKE_MEM_DEFINED(env->me_map + offset, bytes);
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(env->me_map + offset, bytes);
+    osal_flush_incoherent_mmap(env->me_map + offset, bytes, env->me_os_psize);
+    const MDBX_page *const rp = (const MDBX_page *)(env->me_map + offset);
     /* check with timeout as the workaround
      * for todo4recovery://erased_by_github/libmdbx/issues/269 */
-    while (likely(rc == MDBX_SUCCESS) &&
-           unlikely(memcmp(wp, rp, ctx->iov[i].iov_len) != 0)) {
-      if (!timestamp) {
-        iov_done(txn, ctx);
-        WARNING(
-            "catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
-            "(workaround for incoherent flaw of unified page/buffer cache)");
-      }
-      if (coherency_timeout(&timestamp, wp->mp_pgno) != MDBX_RESULT_TRUE)
-        rc = MDBX_PROBLEM;
+    if (unlikely(memcmp(wp, rp, bytes))) {
+      ctx->coherency_timestamp = 0;
+      WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
+              "(workaround for incoherent flaw of unified page/buffer cache)");
+      do
+        if (coherency_timeout(&ctx->coherency_timestamp, wp->mp_pgno) !=
+            MDBX_RESULT_TRUE) {
+          ctx->err = MDBX_PROBLEM;
+          break;
+        }
+      while (unlikely(memcmp(wp, rp, bytes)));
     }
-    dpage_free(env, wp, bytes2pgno(env, ctx->iov[i].iov_len));
   }
-  return rc;
+
+  if (likely(bytes == env->me_psize))
+    dpage_free(env, wp, 1);
+  else {
+    do {
+      eASSERT(env, wp->mp_pgno == bytes2pgno(env, offset));
+      eASSERT(env, (wp->mp_flags & P_ILL_BITS) == 0);
+      unsigned npages = IS_OVERFLOW(wp) ? wp->mp_pages : 1u;
+      size_t chunk = pgno2bytes(env, npages);
+      eASSERT(env, bytes >= chunk);
+      dpage_free(env, wp, npages);
+      wp = (MDBX_page *)((char *)wp + chunk);
+      offset += chunk;
+      bytes -= chunk;
+    } while (bytes);
+  }
 }
 
-static int iov_page(MDBX_txn *txn, struct iov_ctx *ctx, MDBX_page *dp,
-                    unsigned npages) {
+static void iov_complete(iov_ctx_t *ctx) {
+  if ((ctx->env->me_flags & MDBX_WRITEMAP) == 0)
+    osal_ioring_walk(ctx->ior, ctx, iov_callback4dirtypages);
+  osal_ioring_reset(ctx->ior);
+}
+
+__must_check_result static int iov_write(iov_ctx_t *ctx) {
+  eASSERT(ctx->env, !iov_empty(ctx));
+  osal_ioring_write_result_t r = osal_ioring_write(ctx->ior);
+#if MDBX_ENABLE_PGOP_STAT
+  ctx->env->me_lck->mti_pgop_stat.wops.weak += r.wops;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  ctx->err = r.err;
+  if (unlikely(ctx->err != MDBX_SUCCESS))
+    ERROR("Write error: %s", mdbx_strerror(ctx->err));
+  iov_complete(ctx);
+  return ctx->err;
+}
+
+__must_check_result static int iov_page(MDBX_txn *txn, iov_ctx_t *ctx,
+                                        MDBX_page *dp, unsigned npages) {
   MDBX_env *const env = txn->mt_env;
+  tASSERT(txn, ctx->err == MDBX_SUCCESS);
   tASSERT(txn, dp->mp_pgno >= MIN_PAGENO && dp->mp_pgno < txn->mt_next_pgno);
   tASSERT(txn, IS_MODIFIABLE(txn, dp));
   tASSERT(txn, !(dp->mp_flags & ~(P_BRANCH | P_LEAF | P_LEAF2 | P_OVERFLOW)));
-
-  ctx->flush_begin =
-      (ctx->flush_begin < dp->mp_pgno) ? ctx->flush_begin : dp->mp_pgno;
-  ctx->flush_end = (ctx->flush_end > dp->mp_pgno + npages)
-                       ? ctx->flush_end
-                       : dp->mp_pgno + npages;
-  env->me_lck->mti_unsynced_pages.weak += npages;
 
   if (IS_SHADOWED(txn, dp)) {
     tASSERT(txn, !(txn->mt_flags & MDBX_WRITEMAP));
     dp->mp_txnid = txn->mt_txnid;
     tASSERT(txn, IS_SPILLED(txn, dp));
-    const size_t size = pgno2bytes(env, npages);
-    if (ctx->iov_off + ctx->iov_bytes != pgno2bytes(env, dp->mp_pgno) ||
-        ctx->iov_items == ARRAY_LENGTH(ctx->iov) ||
-        ctx->iov_bytes + size > MAX_WRITE) {
-      if (ctx->iov_items) {
-        int err = iov_write(txn, ctx);
-        if (unlikely(err != MDBX_SUCCESS))
-          return err;
-#if defined(__linux__) || defined(__gnu_linux__)
-        if (linux_kernel_version >= 0x02060b00)
-        /* Linux kernels older than version 2.6.11 ignore the addr and nbytes
-         * arguments, making this function fairly expensive. Therefore, the
-         * whole cache is always flushed. */
-#endif /* Linux */
-          osal_flush_incoherent_mmap(env->me_map + ctx->iov_off, ctx->iov_bytes,
-                                     env->me_os_psize);
+    int err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->mp_pgno), dp,
+                              pgno2bytes(env, npages));
+    if (unlikely(err != MDBX_SUCCESS)) {
+      ctx->err = err;
+      if (unlikely(err != MDBX_RESULT_TRUE)) {
+        iov_complete(ctx);
+        return err;
       }
-      ctx->iov_off = pgno2bytes(env, dp->mp_pgno);
+      err = iov_write(ctx);
+      tASSERT(txn, iov_empty(ctx));
+      if (likely(err == MDBX_SUCCESS)) {
+        err = osal_ioring_add(ctx->ior, pgno2bytes(env, dp->mp_pgno), dp,
+                              pgno2bytes(env, npages));
+        if (unlikely(err != MDBX_SUCCESS)) {
+          iov_complete(ctx);
+          return ctx->err = err;
+        }
+      }
+      tASSERT(txn, ctx->err == MDBX_SUCCESS);
     }
-    ctx->iov[ctx->iov_items].iov_base = (void *)dp;
-    ctx->iov[ctx->iov_items].iov_len = size;
-    ctx->iov_items += 1;
-    ctx->iov_bytes += size;
   } else {
     tASSERT(txn, txn->mt_flags & MDBX_WRITEMAP);
   }
+
+#if MDBX_NEED_WRITTEN_RANGE
+  ctx->flush_begin =
+      (ctx->flush_begin < dp->mp_pgno) ? ctx->flush_begin : dp->mp_pgno;
+  ctx->flush_end = (ctx->flush_end > dp->mp_pgno + npages)
+                       ? ctx->flush_end
+                       : dp->mp_pgno + npages;
+#endif /* MDBX_NEED_WRITTEN_RANGE */
+  env->me_lck->mti_unsynced_pages.weak += npages;
   return MDBX_SUCCESS;
 }
 
-static int spill_page(MDBX_txn *txn, struct iov_ctx *ctx, MDBX_page *dp,
+static int spill_page(MDBX_txn *txn, iov_ctx_t *ctx, MDBX_page *dp,
                       unsigned npages) {
   tASSERT(txn, !(txn->mt_flags & MDBX_WRITEMAP));
   pgno_t pgno = dp->mp_pgno;
@@ -4613,13 +4628,18 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
          txn->tw.dirtyroom, need);
   tASSERT(txn, txn->tw.dirtylist->length >= wanna_spill);
 
-  struct iov_ctx ctx;
-  iov_init(txn, &ctx);
   int rc = MDBX_SUCCESS;
   if (txn->mt_flags & MDBX_WRITEMAP) {
     MDBX_dpl *const dl = txn->tw.dirtylist;
     const unsigned span = dl->length - txn->tw.loose_count;
     txn->tw.dirtyroom += span;
+
+    iov_ctx_t ctx;
+    rc = iov_init(txn, &ctx, wanna_spill,
+                  dl->pages_including_loose - txn->tw.loose_count);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+
     unsigned r, w;
     for (w = 0, r = 1; r <= dl->length; ++r) {
       MDBX_page *dp = dl->items[r].ptr;
@@ -4749,6 +4769,13 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
             prio2spill, prio2adjacent, spillable, wanna_spill, amount);
     tASSERT(txn, prio2spill < prio2adjacent && prio2adjacent <= 256);
 
+    iov_ctx_t ctx;
+    rc = iov_init(txn, &ctx, amount,
+                  txn->tw.dirtylist->pages_including_loose -
+                      txn->tw.loose_count);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+
     unsigned prev_prio = 256;
     unsigned r, w, prio;
     pgno_t spilled_entries = 0, spilled_npages = 0;
@@ -4814,12 +4841,10 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     txn->tw.dirtylist->pages_including_loose -= spilled_npages;
     tASSERT(txn, dirtylist_check(txn));
 
-    if (ctx.iov_items) {
-      /* iov_page() frees dirty-pages and reset iov_items in case of failure. */
+    if (!iov_empty(&ctx)) {
       tASSERT(txn, rc == MDBX_SUCCESS);
-      rc = iov_write(txn, &ctx);
+      rc = iov_write(&ctx);
     }
-
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
@@ -4827,9 +4852,8 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     txn->mt_flags |= MDBX_TXN_SPILLS;
     NOTICE("spilled %u dirty-entries, now have %u dirty-room", spilled_entries,
            txn->tw.dirtyroom);
-    iov_done(txn, &ctx);
   } else {
-    tASSERT(txn, ctx.iov_items == 0 && rc == MDBX_SUCCESS);
+    tASSERT(txn, rc == MDBX_SUCCESS);
     for (unsigned i = 1; i <= dl->length; ++i) {
       MDBX_page *dp = dl->items[i].ptr;
       NOTICE("dirtylist[%u]: pgno %u, npages %u, flags 0x%04X, age %u, prio %u",
@@ -5610,7 +5634,7 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
 
   if ((env->me_flags & MDBX_WRITEMAP) && env->me_lck->mti_unsynced_pages.weak) {
 #if MDBX_ENABLE_PGOP_STAT
-    env->me_lck->mti_pgop_stat.wops.weak += 1;
+    env->me_lck->mti_pgop_stat.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     rc = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, used_pgno),
                     MDBX_SYNC_NONE);
@@ -5743,74 +5767,71 @@ __cold static int map_resize_implicit(MDBX_env *env, const pgno_t used_pgno,
       true);
 }
 
-static int meta_unsteady(MDBX_env *env, const txnid_t last_steady,
-                         MDBX_meta *const meta, mdbx_filehandle_t fd) {
+static int meta_unsteady(int err, MDBX_env *env, const txnid_t early_than,
+                         const pgno_t pgno) {
+  MDBX_meta *const meta = METAPAGE(env, pgno);
+  const txnid_t txnid = constmeta_txnid(meta);
+  if (unlikely(err != MDBX_SUCCESS) || !META_IS_STEADY(meta) ||
+      !(txnid < early_than))
+    return err;
+
+  WARNING("wipe txn #%" PRIaTXN ", meta %" PRIaPGNO, txnid, pgno);
   const uint64_t wipe = MDBX_DATASIGN_NONE;
-  if (unlikely(META_IS_STEADY(meta)) && constmeta_txnid(meta) <= last_steady) {
-    WARNING("wipe txn #%" PRIaTXN ", meta %" PRIaPGNO, last_steady,
-            data_page(meta)->mp_pgno);
-    if (env->me_flags & MDBX_WRITEMAP)
-      unaligned_poke_u64(4, meta->mm_sign, wipe);
-    else
-      return osal_pwrite(fd, &wipe, sizeof(meta->mm_sign),
-                         (uint8_t *)&meta->mm_sign - env->me_map);
-  }
-  return MDBX_SUCCESS;
-}
-
-__cold static int wipe_steady(MDBX_txn *txn, const txnid_t last_steady) {
-  MDBX_env *const env = txn->mt_env;
-#if MDBX_ENABLE_PGOP_STAT
-  env->me_lck->mti_pgop_stat.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-  const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
-                                   ? env->me_dsync_fd
-                                   : env->me_lazy_fd;
-  int err = meta_unsteady(env, last_steady, METAPAGE(env, 0), fd);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-  err = meta_unsteady(env, last_steady, METAPAGE(env, 1), fd);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-  err = meta_unsteady(env, last_steady, METAPAGE(env, 2), fd);
-  if (unlikely(err != MDBX_SUCCESS))
-    return err;
-
+  const void *ptr = &wipe;
+  size_t bytes = sizeof(meta->mm_sign),
+         offset = (uint8_t *)&meta->mm_sign - env->me_map;
   if (env->me_flags & MDBX_WRITEMAP) {
+    unaligned_poke_u64(4, meta->mm_sign, wipe);
     osal_flush_incoherent_cpu_writeback();
     err = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
                      MDBX_SYNC_DATA);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-  } else {
-    if (fd == env->me_lazy_fd) {
-#if MDBX_USE_SYNCFILERANGE
-      static bool syncfilerange_unavailable;
-      if (!syncfilerange_unavailable &&
-          sync_file_range(env->me_lazy_fd, 0, pgno2bytes(env, NUM_METAS),
-                          SYNC_FILE_RANGE_WRITE | SYNC_FILE_RANGE_WAIT_AFTER)) {
-        err = errno;
-        if (ignore_enosys(err) == MDBX_RESULT_TRUE)
-          syncfilerange_unavailable = true;
-      }
-      if (syncfilerange_unavailable)
-#endif /* MDBX_USE_SYNCFILERANGE */
-        err = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
     }
-    osal_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
-                               env->me_os_psize);
+    ptr = data_page(meta);
+    offset = (uint8_t *)ptr - env->me_map;
+    bytes = env->me_psize;
   }
+
+#if MDBX_ENABLE_PGOP_STAT
+  env->me_lck->mti_pgop_stat.wops.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  err = osal_pwrite(env->me_fd4meta, ptr, bytes, offset);
+  if (likely(err == MDBX_SUCCESS) && env->me_fd4meta == env->me_lazy_fd) {
+    err = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.fsync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  }
+  return err;
+}
+
+__cold static int wipe_steady(MDBX_txn *txn, txnid_t last_steady) {
+  MDBX_env *const env = txn->mt_env;
+  int err = MDBX_SUCCESS;
+
+  /* early than last_steady */
+  err = meta_unsteady(err, env, last_steady, 0);
+  err = meta_unsteady(err, env, last_steady, 1);
+  err = meta_unsteady(err, env, last_steady, 2);
+
+  /* the last_steady */
+  err = meta_unsteady(err, env, last_steady + 1, 0);
+  err = meta_unsteady(err, env, last_steady + 1, 1);
+  err = meta_unsteady(err, env, last_steady + 1, 2);
+
+  osal_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
+                             env->me_os_psize);
 
   /* force oldest refresh */
   atomic_store32(&env->me_lck->mti_readers_refresh_flag, true, mo_Relaxed);
+
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   txn->tw.troika = meta_tap(env);
   for (MDBX_txn *scan = txn->mt_env->me_txn0; scan; scan = scan->mt_child)
     if (scan != txn)
       scan->tw.troika = txn->tw.troika;
-  return MDBX_SUCCESS;
+  return err;
 }
 
 //------------------------------------------------------------------------------
@@ -7052,6 +7073,40 @@ fail:
   return rc;
 }
 
+static int meta_sync(const MDBX_env *env, const meta_ptr_t head) {
+  eASSERT(env, atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
+                   (uint32_t)head.txnid);
+  /* Функция может вызываться (в том числе) при (env->me_flags &
+   * MDBX_NOMETASYNC) == 0 и env->me_fd4meta == env->me_dsync_fd, например если
+   * предыдущая транзакция была выполненна с флагом MDBX_NOMETASYNC. */
+
+  int rc = MDBX_RESULT_TRUE;
+  if (env->me_flags & MDBX_WRITEMAP) {
+#if MDBX_ENABLE_PGOP_ST
+    env->me_lck->mti_pgop_stat.wops.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+    const MDBX_page *page = data_page(head.ptr_c);
+    rc = osal_pwrite(env->me_fd4meta, page, env->me_psize,
+                     (uint8_t *)page - env->me_map);
+
+    if (likely(rc == MDBX_SUCCESS) && env->me_fd4meta == env->me_lazy_fd) {
+      rc = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+#if MDBX_ENABLE_PGOP_STAT
+      env->me_lck->mti_pgop_stat.fsync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+    }
+  } else {
+    rc = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.fsync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  }
+
+  if (likely(rc == MDBX_SUCCESS))
+    env->me_lck->mti_meta_sync_txnid.weak = (uint32_t)head.txnid;
+  return rc;
+}
+
 __cold static int env_sync(MDBX_env *env, bool force, bool nonblock) {
   bool locked = false;
   int rc = MDBX_RESULT_TRUE /* means "nothing to sync" */;
@@ -7104,7 +7159,7 @@ retry:;
 
       int err;
       /* pre-sync to avoid latency for writer */
-      if (unsynced_pages > /* FIXME: define threshold */ 16 &&
+      if (unsynced_pages > /* FIXME: define threshold */ 42 &&
           (flags & MDBX_SAFE_NOSYNC) == 0) {
         eASSERT(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
         if (flags & MDBX_WRITEMAP) {
@@ -7173,19 +7228,8 @@ retry:;
   /* LY: sync meta-pages if MDBX_NOMETASYNC enabled
    *     and someone was not synced above. */
   if (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
-      (uint32_t)head.txnid) {
-#if MDBX_ENABLE_PGOP_STAT
-    env->me_lck->mti_pgop_stat.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
-    rc = (flags & MDBX_WRITEMAP)
-             ? osal_msync(&env->me_dxb_mmap, 0,
-                          pgno_align2os_bytes(env, NUM_METAS),
-                          MDBX_SYNC_DATA | MDBX_SYNC_IODQ)
-             : osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-    if (likely(rc == MDBX_SUCCESS))
-      atomic_store32(&env->me_lck->mti_meta_sync_txnid, (uint32_t)head.txnid,
-                     mo_Relaxed);
-  }
+      (uint32_t)head.txnid)
+    rc = meta_sync(env, head);
 
 bailout:
   if (locked)
@@ -7628,7 +7672,8 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
 __cold static int coherency_timeout(uint64_t *timestamp, pgno_t pgno) {
   if (likely(timestamp && *timestamp == 0))
     *timestamp = osal_monotime();
-  else if (unlikely(!timestamp || osal_monotime() - *timestamp > 65536 / 10)) {
+  else if (unlikely(!timestamp || osal_monotime() - *timestamp >
+                                      osal_16dot16_to_monotime(65536 / 10))) {
     if (pgno)
       ERROR("bailout waiting for %" PRIaPGNO " page arrival %s", pgno,
             "(workaround for incoherent flaw of unified page/buffer cache)");
@@ -9902,7 +9947,7 @@ bailout:
   return rc;
 }
 
-static int txn_write(MDBX_txn *txn, struct iov_ctx *ctx) {
+static int txn_write(MDBX_txn *txn, iov_ctx_t *ctx) {
   MDBX_dpl *const dl =
       (txn->mt_flags & MDBX_WRITEMAP) ? txn->tw.dirtylist : dpl_sort(txn);
   int rc = MDBX_SUCCESS;
@@ -9919,10 +9964,9 @@ static int txn_write(MDBX_txn *txn, struct iov_ctx *ctx) {
       break;
   }
 
-  if (ctx->iov_items) {
-    /* iov_page() frees dirty-pages and reset iov_items in case of failure. */
+  if (!iov_empty(ctx)) {
     tASSERT(txn, rc == MDBX_SUCCESS);
-    rc = iov_write(txn, ctx);
+    rc = iov_write(ctx);
   }
 
   while (r <= dl->length)
@@ -10568,42 +10612,53 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
       goto fail;
   }
 
-  struct iov_ctx write_ctx;
-  iov_init(txn, &write_ctx);
+  const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
+  iov_ctx_t write_ctx;
+  rc = iov_init(txn, &write_ctx, txn->tw.dirtylist->length,
+                txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto fail;
+
+  if (head.is_steady && atomic_load32(&env->me_lck->mti_meta_sync_txnid,
+                                      mo_Relaxed) != (uint32_t)head.txnid) {
+    /* sync prev meta */
+    rc = meta_sync(env, head);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto fail;
+  }
+
   rc = txn_write(txn, &write_ctx);
-  if (likely(rc == MDBX_SUCCESS))
-    iov_done(txn, &write_ctx);
+  if (unlikely(rc != MDBX_SUCCESS))
+    goto fail;
+
   /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
   ts_3 = latency ? osal_monotime() : 0;
 
-  if (likely(rc == MDBX_SUCCESS)) {
-    const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
-    MDBX_meta meta;
-    memcpy(meta.mm_magic_and_version, head.ptr_c->mm_magic_and_version, 8);
-    meta.mm_extra_flags = head.ptr_c->mm_extra_flags;
-    meta.mm_validator_id = head.ptr_c->mm_validator_id;
-    meta.mm_extra_pagehdr = head.ptr_c->mm_extra_pagehdr;
-    unaligned_poke_u64(4, meta.mm_pages_retired,
-                       unaligned_peek_u64(4, head.ptr_c->mm_pages_retired) +
-                           MDBX_PNL_SIZE(txn->tw.retired_pages));
-    meta.mm_geo = txn->mt_geo;
-    meta.mm_dbs[FREE_DBI] = txn->mt_dbs[FREE_DBI];
-    meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
-    meta.mm_canary = txn->mt_canary;
+  MDBX_meta meta;
+  memcpy(meta.mm_magic_and_version, head.ptr_c->mm_magic_and_version, 8);
+  meta.mm_extra_flags = head.ptr_c->mm_extra_flags;
+  meta.mm_validator_id = head.ptr_c->mm_validator_id;
+  meta.mm_extra_pagehdr = head.ptr_c->mm_extra_pagehdr;
+  unaligned_poke_u64(4, meta.mm_pages_retired,
+                     unaligned_peek_u64(4, head.ptr_c->mm_pages_retired) +
+                         MDBX_PNL_SIZE(txn->tw.retired_pages));
+  meta.mm_geo = txn->mt_geo;
+  meta.mm_dbs[FREE_DBI] = txn->mt_dbs[FREE_DBI];
+  meta.mm_dbs[MAIN_DBI] = txn->mt_dbs[MAIN_DBI];
+  meta.mm_canary = txn->mt_canary;
 
-    txnid_t commit_txnid = txn->mt_txnid;
+  txnid_t commit_txnid = txn->mt_txnid;
 #if MDBX_ENABLE_BIGFOOT
-    if (gcu_ctx.bigfoot > txn->mt_txnid) {
-      commit_txnid = gcu_ctx.bigfoot;
-      TRACE("use @%" PRIaTXN " (+%u) for commit bigfoot-txn", commit_txnid,
-            (unsigned)(commit_txnid - txn->mt_txnid));
-    }
-#endif
-    meta_set_txnid(env, &meta, commit_txnid);
-
-    rc = sync_locked(env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED,
-                     &meta, &txn->tw.troika);
+  if (gcu_ctx.bigfoot > txn->mt_txnid) {
+    commit_txnid = gcu_ctx.bigfoot;
+    TRACE("use @%" PRIaTXN " (+%u) for commit bigfoot-txn", commit_txnid,
+          (unsigned)(commit_txnid - txn->mt_txnid));
   }
+#endif
+  meta_set_txnid(env, &meta, commit_txnid);
+
+  rc = sync_locked(env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED,
+                   &meta, &txn->tw.troika);
   ts_4 = latency ? osal_monotime() : 0;
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->me_flags |= MDBX_FATAL_ERROR;
@@ -10894,11 +10949,11 @@ static int validate_meta_copy(MDBX_env *env, const MDBX_meta *meta,
 __cold static int read_header(MDBX_env *env, MDBX_meta *dest,
                               const int lck_exclusive,
                               const mdbx_mode_t mode_bits) {
+  memset(dest, 0, sizeof(MDBX_meta));
   int rc = osal_filesize(env->me_lazy_fd, &env->me_dxb_mmap.filesize);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  memset(dest, 0, sizeof(MDBX_meta));
   unaligned_poke_u64(4, dest->mm_sign, MDBX_DATASIGN_WEAK);
   rc = MDBX_CORRUPTED;
 
@@ -11200,7 +11255,9 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
   if (atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed)) {
     eASSERT(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     enum osal_syncmode_bits mode_bits = MDBX_SYNC_NONE;
+    unsigned sync_op = 0;
     if ((flags & MDBX_SAFE_NOSYNC) == 0) {
+      sync_op = 1;
       mode_bits = MDBX_SYNC_DATA;
       if (pending->mm_geo.next >
           meta_prefer_steady(env, troika).ptr_c->mm_geo.now)
@@ -11209,7 +11266,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
         mode_bits |= MDBX_SYNC_IODQ;
     }
 #if MDBX_ENABLE_PGOP_STAT
-    env->me_lck->mti_pgop_stat.wops.weak += 1;
+      env->me_lck->mti_pgop_stat.msync.weak += sync_op;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     if (flags & MDBX_WRITEMAP)
       rc =
@@ -11298,9 +11355,6 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
   eASSERT(env, ((env->me_flags ^ flags) & MDBX_WRITEMAP) == 0);
   ENSURE(env, target == head.ptr_c ||
                   constmeta_txnid(target) < pending->unsafe_txnid);
-#if MDBX_ENABLE_PGOP_STAT
-  env->me_lck->mti_pgop_stat.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
   if (flags & MDBX_WRITEMAP) {
     jitter4testing(true);
     if (likely(target != head.ptr_c)) {
@@ -11338,34 +11392,37 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     osal_flush_incoherent_cpu_writeback();
     jitter4testing(true);
     /* sync meta-pages */
-    rc =
-        osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
-                   (flags & MDBX_NOMETASYNC) ? MDBX_SYNC_NONE
-                                             : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.msync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+    rc = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
+                    (flags & MDBX_NOMETASYNC)
+                        ? MDBX_SYNC_NONE
+                        : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   } else {
-    const MDBX_meta undo_meta = *target;
-    const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
-                                     ? env->me_dsync_fd
-                                     : env->me_lazy_fd;
 #if MDBX_ENABLE_PGOP_STAT
     env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-    rc = osal_pwrite(fd, pending, sizeof(MDBX_meta),
+    const MDBX_meta undo_meta = *target;
+    rc = osal_pwrite(env->me_fd4meta, pending, sizeof(MDBX_meta),
                      (uint8_t *)target - env->me_map);
     if (unlikely(rc != MDBX_SUCCESS)) {
     undo:
       DEBUG("%s", "write failed, disk error?");
       /* On a failure, the pagecache still contains the new data.
        * Try write some old data back, to prevent it from being used. */
-      osal_pwrite(fd, &undo_meta, sizeof(MDBX_meta),
+      osal_pwrite(env->me_fd4meta, &undo_meta, sizeof(MDBX_meta),
                   (uint8_t *)target - env->me_map);
       goto fail;
     }
     osal_flush_incoherent_mmap(target, sizeof(MDBX_meta), env->me_os_psize);
     /* sync meta-pages */
-    if ((flags & MDBX_NOMETASYNC) == 0 && fd == env->me_lazy_fd) {
+    if ((flags & MDBX_NOMETASYNC) == 0 && env->me_fd4meta == env->me_lazy_fd) {
+#if MDBX_ENABLE_PGOP_STAT
+      env->me_lck->mti_pgop_stat.fsync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
       if (rc != MDBX_SUCCESS)
         goto undo;
@@ -11382,7 +11439,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
       goto fail;
   }
   env->me_lck->mti_meta_sync_txnid.weak =
-      (uint32_t)pending->unsafe_txnid -
+      pending->mm_txnid_a[__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__].weak -
       ((flags & MDBX_NOMETASYNC) ? UINT32_MAX / 3 : 0);
 
   *troika = meta_tap(env);
@@ -11528,9 +11585,11 @@ __cold int mdbx_env_create(MDBX_env **penv) {
 
   env->me_maxreaders = DEFAULT_READERS;
   env->me_maxdbs = env->me_numdbs = CORE_DBS;
-  env->me_lazy_fd = INVALID_HANDLE_VALUE;
-  env->me_dsync_fd = INVALID_HANDLE_VALUE;
-  env->me_lfd = INVALID_HANDLE_VALUE;
+  env->me_lazy_fd = env->me_dsync_fd = env->me_fd4meta = env->me_fd4data =
+#if defined(_WIN32) || defined(_WIN64)
+      env->me_overlapped_fd =
+#endif /* Windows */
+          env->me_lfd = INVALID_HANDLE_VALUE;
   env->me_pid = osal_getpid();
   env->me_stuck_meta = -1;
 
@@ -12863,10 +12922,10 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
   if (shape && memcmp(model, shape, sizeof(MDBX_meta)) == 0)
     return MDBX_SUCCESS;
 
-#if MDBX_ENABLE_PGOP_STAT
-  env->me_lck->mti_pgop_stat.wops.weak += 1;
-#endif /* MDBX_ENABLE_PGOP_STAT */
   if (env->me_flags & MDBX_WRITEMAP) {
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.msync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = osal_msync(&env->me_dxb_mmap, 0,
                     pgno_align2os_bytes(env, model->mm_geo.next),
                     MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
@@ -12877,18 +12936,26 @@ __cold static int __must_check_result override_meta(MDBX_env *env,
      * clearing consistency flag by mdbx_meta_update_begin() */
     memcpy(pgno2page(env, target), page, env->me_psize);
     osal_flush_incoherent_cpu_writeback();
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.msync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
     rc = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, target + 1),
                     MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
   } else {
-    const mdbx_filehandle_t fd = (env->me_dsync_fd != INVALID_HANDLE_VALUE)
-                                     ? env->me_dsync_fd
-                                     : env->me_lazy_fd;
-    rc = osal_pwrite(fd, page, env->me_psize, pgno2bytes(env, target));
-    if (rc == MDBX_SUCCESS && fd == env->me_lazy_fd)
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.wops.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+    rc = osal_pwrite(env->me_fd4meta, page, env->me_psize,
+                     pgno2bytes(env, target));
+    if (rc == MDBX_SUCCESS && env->me_fd4meta == env->me_lazy_fd) {
+#if MDBX_ENABLE_PGOP_STAT
+      env->me_lck->mti_pgop_stat.fsync.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+    }
+    osal_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
+                               env->me_os_psize);
   }
-  osal_flush_incoherent_mmap(env->me_map, pgno2bytes(env, NUM_METAS),
-                             env->me_os_psize);
   eASSERT(env, !env->me_txn && !env->me_txn0);
   return rc;
 }
@@ -13254,14 +13321,6 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   if (rc != MDBX_SUCCESS)
     goto bailout;
 
-  eASSERT(env, env->me_dsync_fd == INVALID_HANDLE_VALUE);
-  if ((flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_NOMETASYNC)) == 0) {
-    rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env_pathname.dxb,
-                       &env->me_dsync_fd, 0);
-    ENSURE(env,
-           (rc != MDBX_SUCCESS) == (env->me_dsync_fd == INVALID_HANDLE_VALUE));
-  }
-
 #if MDBX_LOCKING == MDBX_LOCKING_SYSV
   env->me_sysv_ipc.key = ftok(env_pathname.dxb, 42);
   if (env->me_sysv_ipc.key == -1) {
@@ -13270,7 +13329,30 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   }
 #endif /* MDBX_LOCKING */
 
-#if !(defined(_WIN32) || defined(_WIN64))
+  /* Set the position in files outside of the data to avoid corruption
+   * due to erroneous use of file descriptors in the application code. */
+  const uint64_t safe_parking_lot_offset = UINT64_C(0x7fffFFFF80000000);
+  osal_fseek(env->me_lazy_fd, safe_parking_lot_offset);
+
+  env->me_fd4data = env->me_fd4meta = env->me_lazy_fd;
+#if defined(_WIN32) || defined(_WIN64)
+  uint8_t ior_flags = 0;
+  if ((flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC)) == MDBX_SYNC_DURABLE) {
+    ior_flags = IOR_OVERLAPPED;
+    rc =
+        osal_openfile(MDBX_OPEN_DXB_OVERLAPPED,
+                      env, env_pathname.dxb, &env->me_overlapped_fd, 0);
+    if (rc != MDBX_SUCCESS)
+      goto bailout;
+    env->me_data_lock_event = CreateEventW(nullptr, true, false, nullptr);
+    if (!env->me_data_lock_event) {
+      rc = (int)GetLastError();
+      goto bailout;
+    }
+    env->me_fd4data = env->me_overlapped_fd;
+    osal_fseek(env->me_overlapped_fd, safe_parking_lot_offset);
+  }
+#else
   if (mode == 0) {
     /* pickup mode for lck-file */
     struct stat st;
@@ -13291,19 +13373,27 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     rc = lck_rc;
     goto bailout;
   }
-
-  /* Set the position in files outside of the data to avoid corruption
-   * due to erroneous use of file descriptors in the application code. */
-  osal_fseek(env->me_lfd, UINT64_C(1) << 63);
-  osal_fseek(env->me_lazy_fd, UINT64_C(1) << 63);
-  if (env->me_dsync_fd != INVALID_HANDLE_VALUE)
-    osal_fseek(env->me_dsync_fd, UINT64_C(1) << 63);
+  osal_fseek(env->me_lfd, safe_parking_lot_offset);
 
   const MDBX_env_flags_t rigorous_flags =
       MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC;
   const MDBX_env_flags_t mode_flags = rigorous_flags | MDBX_NOMETASYNC |
                                       MDBX_LIFORECLAIM |
                                       MDBX_DEPRECATED_COALESCE | MDBX_NORDAHEAD;
+
+  eASSERT(env, env->me_dsync_fd == INVALID_HANDLE_VALUE);
+  if ((flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC)) == 0 &&
+      (env->me_fd4data == env->me_lazy_fd || !(flags & MDBX_NOMETASYNC))) {
+    rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env_pathname.dxb,
+                       &env->me_dsync_fd, 0);
+    if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
+      if ((flags & MDBX_NOMETASYNC) == 0)
+        env->me_fd4meta = env->me_dsync_fd;
+      if (env->me_fd4data == env->me_lazy_fd)
+        env->me_fd4data = env->me_dsync_fd;
+      osal_fseek(env->me_dsync_fd, safe_parking_lot_offset);
+    }
+  }
 
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
   if (lck && lck_rc != MDBX_RESULT_TRUE && (env->me_flags & MDBX_RDONLY) == 0) {
@@ -13413,6 +13503,12 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
       } else
         rc = MDBX_ENOMEM;
     }
+    if (rc == MDBX_SUCCESS)
+      rc = osal_ioring_create(&env->me_ioring,
+#if defined(_WIN32) || defined(_WIN64)
+                              ior_flags,
+#endif /* Windows */
+                              env->me_fd4data);
   }
 
 #if MDBX_DEBUG
@@ -13469,6 +13565,8 @@ __cold static int env_close(MDBX_env *env) {
   const int rc = lcklist_detach_locked(env);
   lcklist_unlock();
 
+  osal_ioring_destroy(&env->me_ioring);
+
   if (env->me_map) {
     osal_munmap(&env->me_dxb_mmap);
 #ifdef MDBX_USE_VALGRIND
@@ -13476,6 +13574,14 @@ __cold static int env_close(MDBX_env *env) {
     env->me_valgrind_handle = -1;
 #endif
   }
+
+#if defined(_WIN32) || defined(_WIN64)
+  if (env->me_overlapped_fd != INVALID_HANDLE_VALUE) {
+    CloseHandle(env->me_data_lock_event);
+    CloseHandle(env->me_overlapped_fd);
+    env->me_overlapped_fd = INVALID_HANDLE_VALUE;
+  }
+#endif /* Windows */
 
   if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
     (void)osal_closefile(env->me_dsync_fd);
@@ -13578,7 +13684,7 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
                ? MDBX_SUCCESS
                : rc;
     }
-#endif
+#endif /* Windows */
   }
 
   eASSERT(env, env->me_signature.weak == 0);
@@ -20528,6 +20634,10 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
         atomic_load64(&lck->mti_pgop_stat.unspill, mo_Relaxed);
     arg->mi_pgop_stat.wops =
         atomic_load64(&lck->mti_pgop_stat.wops, mo_Relaxed);
+    arg->mi_pgop_stat.msync =
+        atomic_load64(&lck->mti_pgop_stat.msync, mo_Relaxed);
+    arg->mi_pgop_stat.fsync =
+        atomic_load64(&lck->mti_pgop_stat.fsync, mo_Relaxed);
     arg->mi_pgop_stat.gcrtime_seconds16dot16 = osal_monotime_to_16dot16(
         atomic_load64(&lck->mti_pgop_stat.gcrtime, mo_Relaxed));
 #else
