@@ -10616,20 +10616,26 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   iov_ctx_t write_ctx;
   rc = iov_init(txn, &write_ctx, txn->tw.dirtylist->length,
                 txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    ERROR("txn-%s: error %d", "iov-init", rc);
     goto fail;
+  }
 
   if (head.is_steady && atomic_load32(&env->me_lck->mti_meta_sync_txnid,
                                       mo_Relaxed) != (uint32_t)head.txnid) {
     /* sync prev meta */
     rc = meta_sync(env, head);
-    if (unlikely(rc != MDBX_SUCCESS))
+    if (unlikely(rc != MDBX_SUCCESS)) {
+      ERROR("txn-%s: error %d", "presync-meta", rc);
       goto fail;
+    }
   }
 
   rc = txn_write(txn, &write_ctx);
-  if (unlikely(rc != MDBX_SUCCESS))
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    ERROR("txn-%s: error %d", "write", rc);
     goto fail;
+  }
 
   /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
   ts_3 = latency ? osal_monotime() : 0;
@@ -10659,9 +10665,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
   rc = sync_locked(env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED,
                    &meta, &txn->tw.troika);
+
   ts_4 = latency ? osal_monotime() : 0;
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->me_flags |= MDBX_FATAL_ERROR;
+    ERROR("txn-%s: error %d", "sync", rc);
     goto fail;
   }
 
