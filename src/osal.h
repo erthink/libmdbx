@@ -318,7 +318,7 @@ typedef struct osal_ioring {
   unsigned slots_left;
   unsigned allocated;
 #if defined(_WIN32) || defined(_WIN64)
-#define IOR_UNBUFFERED 1
+#define IOR_DIRECT 1
 #define IOR_OVERLAPPED 2
 #define IOR_STATE_LOCKED 1
   unsigned pagesize;
@@ -501,6 +501,7 @@ enum osal_openfile_purpose {
   MDBX_OPEN_DXB_DSYNC,
 #if defined(_WIN32) || defined(_WIN64)
   MDBX_OPEN_DXB_OVERLAPPED,
+  MDBX_OPEN_DXB_OVERLAPPED_DIRECT,
 #endif /* Windows */
   MDBX_OPEN_LCK,
   MDBX_OPEN_COPY,

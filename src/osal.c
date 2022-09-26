@@ -637,7 +637,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
 #if defined(_WIN32) || defined(_WIN64)
   const unsigned segments = (unsigned)(bytes >> ior->pagesize_ln2);
   const bool use_gather =
-      (ior->flags & IOR_UNBUFFERED) && ior->slots_left >= segments;
+      (ior->flags & IOR_DIRECT) && ior->slots_left >= segments;
 #endif /* Windows */
 
   ior_item_t *item = ior->pool;
@@ -1179,6 +1179,10 @@ MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
   case MDBX_OPEN_DXB_LAZY:
     DesiredAccess |= GENERIC_READ | GENERIC_WRITE;
     break;
+  case MDBX_OPEN_DXB_OVERLAPPED_DIRECT:
+    FlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
+    /* fall through */
+    __fallthrough;
   case MDBX_OPEN_DXB_OVERLAPPED:
     FlagsAndAttributes |= FILE_FLAG_OVERLAPPED;
     /* fall through */
