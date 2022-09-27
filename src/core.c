@@ -3644,13 +3644,12 @@ static MDBX_page *page_malloc(MDBX_txn *txn, unsigned num) {
 static void dpage_free(MDBX_env *env, MDBX_page *dp, unsigned npages) {
   VALGRIND_MAKE_MEM_UNDEFINED(dp, pgno2bytes(env, npages));
   MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, pgno2bytes(env, npages));
-  if (MDBX_DEBUG != 0 || unlikely(env->me_flags & MDBX_PAGEPERTURB))
+  if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
     memset(dp, -1, pgno2bytes(env, npages));
   if (npages == 1 &&
       env->me_dp_reserve_len < env->me_options.dp_reserve_limit) {
     MDBX_ASAN_POISON_MEMORY_REGION((char *)dp + sizeof(dp->mp_next),
-                                   pgno2bytes(env, npages) -
-                                       sizeof(dp->mp_next));
+                                   env->me_psize - sizeof(dp->mp_next));
     dp->mp_next = env->me_dp_reserve;
     VALGRIND_MEMPOOL_FREE(env, dp);
     env->me_dp_reserve = dp;
