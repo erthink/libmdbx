@@ -247,13 +247,15 @@ __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
 #endif
   }
 
+  while (1) {
 #if defined(_WIN32) || defined(_WIN64)
-  if (IsDebuggerPresent())
-    DebugBreak();
-  FatalExit(ERROR_UNHANDLED_ERROR);
+    if (IsDebuggerPresent())
+      DebugBreak();
+    FatalExit(ERROR_UNHANDLED_ERROR);
 #else
-  abort();
+    abort();
 #endif
+  }
 }
 
 __cold void mdbx_panic(const char *fmt, ...) {
@@ -267,16 +269,18 @@ __cold void mdbx_panic(const char *fmt, ...) {
       (num < 1 || !message) ? "<troubles with panic-message preparation>"
                             : message;
 
+  while (1) {
 #if defined(_WIN32) || defined(_WIN64)
-  OutputDebugStringA("\r\nMDBX-PANIC: ");
-  OutputDebugStringA(const_message);
-  if (IsDebuggerPresent())
-    DebugBreak();
-  FatalExit(ERROR_UNHANDLED_ERROR);
+    OutputDebugStringA("\r\nMDBX-PANIC: ");
+    OutputDebugStringA(const_message);
+    if (IsDebuggerPresent())
+      DebugBreak();
+    FatalExit(ERROR_UNHANDLED_ERROR);
 #else
-  __assert_fail(const_message, "mdbx", 0, "panic");
-  abort();
+    __assert_fail(const_message, "mdbx", 0, "panic");
+    abort();
 #endif
+  }
 }
 
 /*----------------------------------------------------------------------------*/

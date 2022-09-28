@@ -1020,12 +1020,15 @@ LIBMDBX_API const char *mdbx_dump_val(const MDBX_val *key, char *const buf,
                                       const size_t bufsize);
 
 /** \brief Panics with message and causes abnormal process termination. */
-LIBMDBX_API void mdbx_panic(const char *fmt, ...) MDBX_PRINTF_ARGS(1, 2);
+MDBX_NORETURN LIBMDBX_API void mdbx_panic(const char *fmt, ...)
+    MDBX_PRINTF_ARGS(1, 2);
 
 /** \brief Panics with asserton failed message and causes abnormal process
  * termination. */
-LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env, const char *msg,
-                                  const char *func, unsigned line);
+MDBX_NORETURN LIBMDBX_API void mdbx_assert_fail(const MDBX_env *env,
+                                                const char *msg,
+                                                const char *func,
+                                                unsigned line);
 /** end of c_debug @} */
 
 /** \brief Environment flags
