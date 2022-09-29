@@ -352,7 +352,7 @@ typedef struct osal_ioring {
 /* Actually this is not ioring for now, but on the way. */
 MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *,
 #if defined(_WIN32) || defined(_WIN64)
-                                          unsigned flags,
+                                          uint8_t flags,
 #endif /* Windows */
                                           mdbx_filehandle_t fd);
 MDBX_INTERNAL_FUNC int osal_ioring_resize(osal_ioring_t *, size_t items);
@@ -380,11 +380,11 @@ static inline unsigned osal_ioring_used(const osal_ioring_t *ior) {
   return ior->allocated - ior->slots_left;
 }
 
-static inline int osal_ioring_reserve(osal_ioring_t *ior, unsigned items,
+static inline int osal_ioring_reserve(osal_ioring_t *ior, size_t items,
                                       size_t bytes) {
   items = (items > 32) ? items : 32;
 #if defined(_WIN32) || defined(_WIN64)
-  const unsigned npages = (unsigned)(bytes >> ior->pagesize_ln2);
+  const size_t npages = bytes >> ior->pagesize_ln2;
   items = (items > npages) ? items : npages;
 #else
   (void)bytes;
@@ -468,7 +468,7 @@ MDBX_INTERNAL_FUNC int osal_fastmutex_release(osal_fastmutex_t *fastmutex);
 MDBX_INTERNAL_FUNC int osal_fastmutex_destroy(osal_fastmutex_t *fastmutex);
 
 MDBX_INTERNAL_FUNC int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov,
-                                    int sgvcnt, uint64_t offset);
+                                    size_t sgvcnt, uint64_t offset);
 MDBX_INTERNAL_FUNC int osal_pread(mdbx_filehandle_t fd, void *buf, size_t count,
                                   uint64_t offset);
 MDBX_INTERNAL_FUNC int osal_pwrite(mdbx_filehandle_t fd, const void *buf,

@@ -583,7 +583,7 @@ static size_t osal_iov_max;
 
 MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *ior,
 #if defined(_WIN32) || defined(_WIN64)
-                                          unsigned flags,
+                                          uint8_t flags,
 #endif /* Windows */
                                           mdbx_filehandle_t fd) {
   memset(ior, 0, sizeof(osal_ioring_t));
@@ -1480,14 +1480,14 @@ MDBX_INTERNAL_FUNC int osal_write(mdbx_filehandle_t fd, const void *buf,
   }
 }
 
-int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, int sgvcnt,
+int osal_pwritev(mdbx_filehandle_t fd, struct iovec *iov, size_t sgvcnt,
                  uint64_t offset) {
   size_t expected = 0;
-  for (int i = 0; i < sgvcnt; ++i)
+  for (size_t i = 0; i < sgvcnt; ++i)
     expected += iov[i].iov_len;
 #if !MDBX_HAVE_PWRITEV
   size_t written = 0;
-  for (int i = 0; i < sgvcnt; ++i) {
+  for (size_t i = 0; i < sgvcnt; ++i) {
     int rc = osal_pwrite(fd, iov[i].iov_base, iov[i].iov_len, offset);
     if (unlikely(rc != MDBX_SUCCESS))
       return rc;
