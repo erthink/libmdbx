@@ -600,8 +600,8 @@ branch_size(const MDBX_env *env, const MDBX_val *key) {
   if (unlikely(node_bytes > env->me_branch_nodemax)) {
     /* put on large/overflow page */
     /* not implemented */
-    mdbx_assert_fail(env, "node_size(key) <= branch_nodemax", __func__,
-                     __LINE__);
+    mdbx_panic("node_size(key) %zu > %u branch_nodemax", node_bytes,
+               env->me_branch_nodemax);
     node_bytes = node_size(key, nullptr) + sizeof(pgno_t);
   }
 
@@ -13803,8 +13803,7 @@ __hot static int cmp_int_align4(const MDBX_val *a, const MDBX_val *b) {
     return CMP2INT(unaligned_peek_u64(4, a->iov_base),
                    unaligned_peek_u64(4, b->iov_base));
   default:
-    mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", __func__,
-                     __LINE__);
+    mdbx_panic("invalid size %zu for INTEGERKEY/INTEGERDUP", a->iov_len);
     return 0;
   }
 }
@@ -13820,8 +13819,7 @@ __hot static int cmp_int_align2(const MDBX_val *a, const MDBX_val *b) {
     return CMP2INT(unaligned_peek_u64(2, a->iov_base),
                    unaligned_peek_u64(2, b->iov_base));
   default:
-    mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", __func__,
-                     __LINE__);
+    mdbx_panic("invalid size %zu for INTEGERKEY/INTEGERDUP", a->iov_len);
     return 0;
   }
 }
@@ -13839,8 +13837,7 @@ __hot static int cmp_int_unaligned(const MDBX_val *a, const MDBX_val *b) {
     return CMP2INT(unaligned_peek_u64(1, a->iov_base),
                    unaligned_peek_u64(1, b->iov_base));
   default:
-    mdbx_assert_fail(NULL, "invalid size for INTEGERKEY/INTEGERDUP", __func__,
-                     __LINE__);
+    mdbx_panic("invalid size %zu for INTEGERKEY/INTEGERDUP", a->iov_len);
     return 0;
   }
 }
