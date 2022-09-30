@@ -11669,12 +11669,11 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_options.dp_loose_limit = 64;
   env->me_options.merge_threshold_16dot16_percent = 65536 / 4 /* 25% */;
 
-  int rc;
   env->me_os_psize = (unsigned)os_psize;
   setup_pagesize(env, (env->me_os_psize < MAX_PAGESIZE) ? env->me_os_psize
                                                         : MAX_PAGESIZE);
 
-  rc = osal_fastmutex_init(&env->me_dbi_lock);
+  int rc = osal_fastmutex_init(&env->me_dbi_lock);
   if (unlikely(rc != MDBX_SUCCESS))
     goto bailout;
 
