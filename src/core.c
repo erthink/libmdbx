@@ -416,7 +416,7 @@ node_largedata_pgno(const MDBX_node *const __restrict node) {
  *   and so on up to the root. Therefore double-splitting is avoided here and
  *   the maximum node size is half of a leaf page space:
  *       LEAF_NODE_MAX = even_floor(PAGEROOM / 2 - sizeof(indx_t));
- *       DATALEN_NO_OVERFLOW = LEAF_NODE_MAX - KEYLEN_MAX;
+ *       DATALEN_NO_OVERFLOW = LEAF_NODE_MAX - NODESIZE - KEYLEN_MAX;
  *
  *  - SubDatabase-node must fit into one leaf-page:
  *       SUBDB_NAME_MAX = LEAF_NODE_MAX - node_hdr_len - sizeof(MDBX_db);
@@ -530,6 +530,38 @@ __cold intptr_t mdbx_limits_valsize_max(intptr_t pagesize,
   return valsize_max(pagesize, flags);
 }
 
+__cold intptr_t mdbx_limits_pairsize4page_max(intptr_t pagesize,
+                                              MDBX_db_flags_t flags) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_default_pagesize();
+  if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+               pagesize > (intptr_t)MAX_PAGESIZE ||
+               !is_powerof2((size_t)pagesize)))
+    return -1;
+
+  if (flags &
+      (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP))
+    return BRANCH_NODE_MAX(pagesize) - NODESIZE;
+
+  return LEAF_NODE_MAX(pagesize) - NODESIZE;
+}
+
+intptr_t mdbx_limits_valsize4page_max(intptr_t pagesize,
+                                      MDBX_db_flags_t flags) {
+  if (pagesize < 1)
+    pagesize = (intptr_t)mdbx_default_pagesize();
+  if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
+               pagesize > (intptr_t)MAX_PAGESIZE ||
+               !is_powerof2((size_t)pagesize)))
+    return -1;
+
+  if (flags &
+      (MDBX_DUPSORT | MDBX_DUPFIXED | MDBX_INTEGERDUP | MDBX_REVERSEDUP))
+    return valsize_max(pagesize, flags);
+
+  return PAGEROOM(pagesize);
+}
+
 /* Calculate the size of a leaf node.
  *
  * The size depends on the environment's page size; if a data item
@@ -565,10 +597,10 @@ branch_size(const MDBX_env *env, const MDBX_val *key) {
   /* Size of a node in a branch page with a given key.
    * This is just the node header plus the key, there is no data. */
   size_t node_bytes = node_size(key, nullptr);
-  if (unlikely(node_bytes > env->me_leaf_nodemax)) {
+  if (unlikely(node_bytes > env->me_branch_nodemax)) {
     /* put on large/overflow page */
     /* not implemented */
-    mdbx_assert_fail(env, "INDXSIZE(key) <= env->me_nodemax", __func__,
+    mdbx_assert_fail(env, "node_size(key) <= branch_nodemax", __func__,
                      __LINE__);
     node_bytes = node_size(key, nullptr) + sizeof(pgno_t);
   }
@@ -11544,6 +11576,7 @@ __cold static void setup_pagesize(MDBX_env *env, const size_t pagesize) {
                   leaf_nodemax >= branch_nodemax &&
                   leaf_nodemax < (int)UINT16_MAX && leaf_nodemax % 2 == 0);
   env->me_leaf_nodemax = (unsigned)leaf_nodemax;
+  env->me_branch_nodemax = (unsigned)branch_nodemax;
   env->me_psize2log = (uint8_t)log2n_powerof2(pagesize);
   eASSERT(env, pgno2bytes(env, 1) == pagesize);
   eASSERT(env, bytes2pgno(env, pagesize + pagesize) == 2);

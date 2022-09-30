@@ -3119,6 +3119,21 @@ mdbx_limits_keysize_max(intptr_t pagesize, MDBX_db_flags_t flags);
 MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
 mdbx_limits_valsize_max(intptr_t pagesize, MDBX_db_flags_t flags);
 
+/** \brief Returns maximal size of key-value pair to fit in a single page with
+ * the given size and database flags, or -1 if pagesize is invalid.
+ * \ingroup c_statinfo
+ * \see db_flags */
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
+mdbx_limits_pairsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
+
+/** \brief Returns maximal data size in bytes to fit in a leaf-page or
+ * single overflow/large-page with the given page size and database flags,
+ * or -1 if pagesize is invalid.
+ * \ingroup c_statinfo
+ * \see db_flags */
+MDBX_NOTHROW_CONST_FUNCTION LIBMDBX_API intptr_t
+mdbx_limits_valsize4page_max(intptr_t pagesize, MDBX_db_flags_t flags);
+
 /** \brief Returns maximal write transaction size (i.e. limit for summary volume
  * of dirty pages) in bytes for given page size, or -1 if pagesize is invalid.
  * \ingroup c_statinfo */

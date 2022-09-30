@@ -1162,9 +1162,10 @@ struct MDBX_env {
 #define me_lfd me_lck_mmap.fd
   struct MDBX_lockinfo *me_lck;
 
-  unsigned me_psize;        /* DB page size, initialized from me_os_psize */
-  unsigned me_leaf_nodemax; /* max size of a leaf-node */
-  uint8_t me_psize2log;     /* log2 of DB page size */
+  unsigned me_psize;          /* DB page size, initialized from me_os_psize */
+  unsigned me_leaf_nodemax;   /* max size of a leaf-node */
+  unsigned me_branch_nodemax; /* max size of a branch-node */
+  uint8_t me_psize2log;       /* log2 of DB page size */
   int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
   uint16_t me_merge_threshold,
       me_merge_threshold_gc;  /* pages emptier than this are candidates for
