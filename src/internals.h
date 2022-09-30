@@ -1368,10 +1368,22 @@ MDBX_INTERNAL_FUNC void debug_log_va(int level, const char *function, int line,
 #define FATAL(fmt, ...)                                                        \
   debug_log(MDBX_LOG_FATAL, __func__, __LINE__, fmt "\n", __VA_ARGS__);
 
+#if MDBX_DEBUG
+#define ASSERT_FAIL(env, msg, func, line) mdbx_assert_fail(env, msg, func, line)
+#else /* MDBX_DEBUG */
+MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
+                                      unsigned line);
+#define ASSERT_FAIL(env, msg, func, line)                                      \
+  do {                                                                         \
+    (void)(env);                                                               \
+    assert_fail(msg, func, line);                                              \
+  } while (0)
+#endif /* MDBX_DEBUG */
+
 #define ENSURE_MSG(env, expr, msg)                                             \
   do {                                                                         \
     if (unlikely(!(expr)))                                                     \
-      mdbx_assert_fail(env, msg, __func__, __LINE__);                          \
+      ASSERT_FAIL(env, msg, __func__, __LINE__);                               \
   } while (0)
 
 #define ENSURE(env, expr) ENSURE_MSG(env, expr, #expr)

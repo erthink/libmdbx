@@ -224,12 +224,15 @@ __extern_C void __assert(const char *function, const char *file, int line,
 __cold void mdbx_assert_fail(const MDBX_env *env, const char *msg,
                              const char *func, unsigned line) {
 #if MDBX_DEBUG
-  if (env && env->me_assert_func) {
+  if (env && env->me_assert_func)
     env->me_assert_func(env, msg, func, line);
-    return;
-  }
 #else
   (void)env;
+  assert_fail(msg, func, line);
+}
+
+MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
+                                      unsigned line) {
 #endif /* MDBX_DEBUG */
 
   if (debug_logger)
@@ -266,8 +269,12 @@ __cold void mdbx_panic(const char *fmt, ...) {
   const int num = osal_vasprintf(&message, fmt, ap);
   va_end(ap);
   const char *const const_message =
-      (num < 1 || !message) ? "<troubles with panic-message preparation>"
-                            : message;
+      unlikely(num < 1 || !message)
+          ? "<troubles with panic-message preparation>"
+          : message;
+
+  if (debug_logger)
+    debug_log(MDBX_LOG_FATAL, "panic", 0, "%s", const_message);
 
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
