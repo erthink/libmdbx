@@ -681,9 +681,9 @@ int main(int argc, char *const argv[]) {
         if (!actor)
           continue;
 
-        log_verbose("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
-                    actor->space_id, (long)pid, status2str(status));
         if (status > as_running) {
+          log_notice("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
+                     actor->space_id, (long)pid, status2str(status));
           left -= 1;
           if (status != as_successful) {
             if (global::config::failfast && !failed) {
@@ -693,6 +693,9 @@ int main(int argc, char *const argv[]) {
             }
             failed = true;
           }
+        } else {
+          log_verbose("actor #%u, id %d, pid %ld: %s\n", actor->actor_id,
+                      actor->space_id, (long)pid, status2str(status));
         }
       } else {
         if (timeout_seconds_left == 0)
