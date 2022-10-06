@@ -10388,8 +10388,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED ==
                 MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR);
   const uint64_t ts_0 = latency ? osal_monotime() : 0;
-  uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0;
-  uint32_t audit_duration = 0;
+  uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0, ts_5 = 0;
 
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
@@ -10534,7 +10533,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
     ts_1 = latency ? osal_monotime() : 0;
     txn_merge(parent, txn, parent_retired_len);
-    ts_2 = latency ? osal_monotime() : 0;
+    ts_2 = ts_3 = latency ? osal_monotime() : 0;
     env->me_txn = parent;
     parent->mt_child = NULL;
     tASSERT(parent, dirtylist_check(parent));
@@ -10553,7 +10552,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     }
 #endif /* MDBX_ENABLE_REFUND */
 
-    ts_4 = ts_3 = latency ? osal_monotime() : 0;
+    ts_4 = ts_5 = latency ? osal_monotime() : 0;
     txn->mt_signature = 0;
     osal_free(txn);
     tASSERT(parent, audit_ex(parent, 0, false) == 0);
@@ -10632,12 +10631,10 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
                                            ? txn->mt_txnid
                                            : txn->mt_dbs[MAIN_DBI].md_mod_txnid;
 
-  ts_2 = latency ? osal_monotime() : 0;
+  ts_2 = ts_3 = latency ? osal_monotime() : 0;
   if (AUDIT_ENABLED()) {
     rc = audit_ex(txn, MDBX_PNL_GETSIZE(txn->tw.retired_pages), true);
-    const uint64_t audit_end = osal_monotime();
-    audit_duration = osal_monotime_to_16dot16(audit_end - ts_2);
-    ts_2 = audit_end;
+    ts_3 = osal_monotime();
     if (unlikely(rc != MDBX_SUCCESS))
       goto fail;
   }
@@ -10668,7 +10665,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   /* TODO: use ctx.flush_begin & ctx.flush_end for range-sync */
-  ts_3 = latency ? osal_monotime() : 0;
+  ts_4 = latency ? osal_monotime() : 0;
 
   MDBX_meta meta;
   memcpy(meta.mm_magic_and_version, head.ptr_c->mm_magic_and_version, 8);
@@ -10696,7 +10693,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   rc = sync_locked(env, env->me_flags | txn->mt_flags | MDBX_SHRINK_ALLOWED,
                    &meta, &txn->tw.troika);
 
-  ts_4 = latency ? osal_monotime() : 0;
+  ts_5 = latency ? osal_monotime() : 0;
   if (unlikely(rc != MDBX_SUCCESS)) {
     env->me_flags |= MDBX_FATAL_ERROR;
     ERROR("txn-%s: error %d", "sync", rc);
@@ -10710,14 +10707,15 @@ done:
 
 provide_latency:
   if (latency) {
-    latency->audit = audit_duration;
     latency->preparation = ts_1 ? osal_monotime_to_16dot16(ts_1 - ts_0) : 0;
     latency->gc = (ts_1 && ts_2) ? osal_monotime_to_16dot16(ts_2 - ts_1) : 0;
-    latency->write = (ts_2 && ts_3) ? osal_monotime_to_16dot16(ts_3 - ts_2) : 0;
-    latency->sync = (ts_3 && ts_4) ? osal_monotime_to_16dot16(ts_4 - ts_3) : 0;
-    const uint64_t ts_5 = osal_monotime();
-    latency->ending = ts_4 ? osal_monotime_to_16dot16(ts_5 - ts_4) : 0;
-    latency->whole = osal_monotime_to_16dot16(ts_5 - ts_0);
+    latency->audit =
+        (ts_2 && AUDIT_ENABLED()) ? osal_monotime_to_16dot16(ts_3 - ts_2) : 0;
+    latency->write = (ts_3 && ts_4) ? osal_monotime_to_16dot16(ts_4 - ts_3) : 0;
+    latency->sync = (ts_4 && ts_5) ? osal_monotime_to_16dot16(ts_5 - ts_4) : 0;
+    const uint64_t ts_6 = osal_monotime();
+    latency->ending = ts_5 ? osal_monotime_to_16dot16(ts_6 - ts_5) : 0;
+    latency->whole = osal_monotime_to_16dot16(ts_6 - ts_0);
   }
   return rc;
 
