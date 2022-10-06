@@ -200,6 +200,8 @@
 /* Never use any modern features on Apple's or Google's OSes
  * since a lot of troubles with compatibility and/or performance */
 #define MDBX_HAVE_BUILTIN_CPU_SUPPORTS 0
+#elif defined(__e2k__)
+#define MDBX_HAVE_BUILTIN_CPU_SUPPORTS 0
 #elif __has_builtin(__builtin_cpu_supports) ||                                 \
     defined(__BUILTIN_CPU_SUPPORTS__) ||                                       \
     (defined(__ia32__) && __GNUC_PREREQ(4, 8) && __GLIBC_PREREQ(2, 23))
