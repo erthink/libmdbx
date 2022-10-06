@@ -1424,6 +1424,15 @@ void txn_managed::commit() {
     MDBX_CXX20_UNLIKELY err.throw_exception();
 }
 
+void txn_managed::commit(commit_latency *latency) {
+  const error err =
+      static_cast<MDBX_error_t>(::mdbx_txn_commit_ex(handle_, latency));
+  if (MDBX_LIKELY(err.code() != MDBX_THREAD_MISMATCH))
+    MDBX_CXX20_LIKELY handle_ = nullptr;
+  if (MDBX_UNLIKELY(err.code() != MDBX_SUCCESS))
+    MDBX_CXX20_UNLIKELY err.throw_exception();
+}
+
 //------------------------------------------------------------------------------
 
 bool txn::drop_map(const char *name, bool throw_if_absent) {

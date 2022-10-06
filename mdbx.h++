@@ -3875,12 +3875,31 @@ public:
 
   //----------------------------------------------------------------------------
 
-  /// \brief Abandon all the operations of the transaction instead of saving
-  /// them.
+  /// \brief Abandon all the operations of the transaction
+  /// instead of saving ones.
   void abort();
 
   /// \brief Commit all the operations of a transaction into the database.
   void commit();
+
+  using commit_latency = MDBX_commit_latency;
+
+  /// \brief Commit all the operations of a transaction into the database
+  /// and collect latency information.
+  void commit(commit_latency *);
+
+  /// \brief Commit all the operations of a transaction into the database
+  /// and collect latency information.
+  void commit(commit_latency &latency) { return commit(&latency); }
+
+  /// \brief Commit all the operations of a transaction into the database
+  /// and return latency information.
+  /// \returns latency information of commit stages.
+  commit_latency commit_get_latency() {
+    commit_latency result;
+    commit(&result);
+    return result;
+  }
 };
 
 /// \brief Unmanaged cursor.
