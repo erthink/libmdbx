@@ -4635,24 +4635,74 @@ static unsigned spill_prio(const MDBX_txn *txn, const size_t i,
  * parent txn. That would alter the parent txns' data even though
  * the child hasn't committed yet, and we'd have no way to undo it if
  * the child aborted. */
-static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
-                     const size_t need) {
-#if xMDBX_DEBUG_SPILLING != 1
-  /* production mode */
-  if (likely(txn->tw.dirtyroom + txn->tw.loose_count >= need))
-    return MDBX_SUCCESS;
-  size_t wanna_spill = need - txn->tw.dirtyroom;
-#else
-  /* debug mode: spill at least one page if xMDBX_DEBUG_SPILLING == 1 */
-  size_t wanna_spill =
-      (need > txn->tw.dirtyroom) ? need - txn->tw.dirtyroom : 1;
-#endif /* xMDBX_DEBUG_SPILLING */
+__cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
+                                     const intptr_t wanna_spill_entries,
+                                     const intptr_t wanna_spill_npages,
+                                     const size_t need);
 
+static __inline int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
+                              const size_t need) {
+  intptr_t wanna_spill_entries = need - txn->tw.dirtyroom - txn->tw.loose_count;
+  intptr_t wanna_spill_npages =
+      need + txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count -
+      txn->mt_env->me_options.dp_limit;
+
+  /* production mode */
+  if (likely(wanna_spill_npages < 1 && wanna_spill_entries < 1)
+#if xMDBX_DEBUG_SPILLING == 1
+      /* debug mode: always try to spill if xMDBX_DEBUG_SPILLING == 1 */
+      && txn->mt_txnid % 23 > 11
+#endif
+  )
+    return MDBX_SUCCESS;
+
+  return txn_spill_slowpath(txn, m0, wanna_spill_entries, wanna_spill_npages,
+                            need);
+}
+
+static size_t spill_gate(const MDBX_env *env, intptr_t part,
+                         const size_t total) {
+  const intptr_t spill_min =
+      env->me_options.spill_min_denominator
+          ? (total + env->me_options.spill_min_denominator - 1) /
+                env->me_options.spill_min_denominator
+          : 1;
+  const intptr_t spill_max =
+      total - (env->me_options.spill_max_denominator
+                   ? total / env->me_options.spill_max_denominator
+                   : 0);
+  part = (part < spill_max) ? part : spill_max;
+  part = (part > spill_min) ? part : spill_min;
+  eASSERT(env, part > 0 && (size_t)part <= total);
+  return (size_t)part;
+}
+
+__cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
+                                     const intptr_t wanna_spill_entries,
+                                     const intptr_t wanna_spill_npages,
+                                     const size_t need) {
   int rc = MDBX_SUCCESS;
+  if (unlikely(txn->tw.dirtylist->length <= txn->tw.loose_count))
+    goto done;
+
+  const size_t dirty_entries = txn->tw.dirtylist->length - txn->tw.loose_count;
+  const size_t dirty_npages =
+      txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count;
+  const size_t need_spill_entries =
+      spill_gate(txn->mt_env, wanna_spill_entries, dirty_entries);
+  const size_t need_spill_npages =
+      spill_gate(txn->mt_env, wanna_spill_npages, dirty_npages);
+
+  const size_t need_spill = (need_spill_entries > need_spill_npages)
+                                ? need_spill_entries
+                                : need_spill_npages;
+  if (!need_spill)
+    goto done;
+
 #if !MDBX_AVOID_MSYNC
   if (txn->mt_flags & MDBX_WRITEMAP) {
-    NOTICE("%s-spilling of %zu dirty-entries (have %zu dirty-room, need %zu)",
-           "msync", wanna_spill, txn->tw.dirtyroom, need);
+    NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "msync",
+           dirty_entries, dirty_npages);
     tASSERT(txn, txn->tw.spill_pages == nullptr);
     const MDBX_env *env = txn->mt_env;
     rc =
@@ -4671,27 +4721,15 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   }
 #endif /* MDBX_AVOID_MSYNC */
 
-  const size_t dirty = txn->tw.dirtylist->length;
-  const size_t spill_min =
-      txn->mt_env->me_options.spill_min_denominator
-          ? dirty / txn->mt_env->me_options.spill_min_denominator
-          : 0;
-  const size_t spill_max =
-      dirty - (txn->mt_env->me_options.spill_max_denominator
-                   ? dirty / txn->mt_env->me_options.spill_max_denominator
-                   : 0);
-  wanna_spill = (wanna_spill > spill_min) ? wanna_spill : spill_min;
-  wanna_spill = (wanna_spill < spill_max) ? wanna_spill : spill_max;
-  if (!wanna_spill)
-    return MDBX_SUCCESS;
-
-  NOTICE("%s-spilling %zu dirty-entries (have %zu dirty-room, need %zu)",
-         "pwrite", wanna_spill, txn->tw.dirtyroom, need);
-  tASSERT(txn, txn->tw.dirtylist->length >= wanna_spill);
+  NOTICE("%s-spilling %zu dirty-entries, %zu dirty-npages", "write",
+         need_spill_entries, need_spill_npages);
+  tASSERT(txn, txn->tw.dirtylist->length - txn->tw.loose_count >= 1);
+  tASSERT(txn, txn->tw.dirtylist->pages_including_loose - txn->tw.loose_count >=
+                   need_spill_npages);
   if (!MDBX_AVOID_MSYNC || !(txn->mt_flags & MDBX_WRITEMAP)) {
     if (!txn->tw.spill_pages) {
       txn->tw.spill_least_removed = INT_MAX;
-      txn->tw.spill_pages = pnl_alloc(wanna_spill);
+      txn->tw.spill_pages = pnl_alloc(need_spill);
       if (unlikely(!txn->tw.spill_pages)) {
         rc = MDBX_ENOMEM;
       bailout:
@@ -4701,7 +4739,7 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
     } else {
       /* purge deleted slots */
       spill_purge(txn);
-      rc = pnl_reserve(&txn->tw.spill_pages, wanna_spill);
+      rc = pnl_reserve(&txn->tw.spill_pages, need_spill);
       (void)rc /* ignore since the resulting list may be shorter
        and pnl_append() will increase pnl on demand */
           ;
@@ -4758,48 +4796,63 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
   VERBOSE("lru-head %u, age-max %u", txn->tw.dirtylru, age_max);
 
   /* half of 8-bit radix-sort */
-  pgno_t radix_counters[256], spillable = 0;
-  memset(&radix_counters, 0, sizeof(radix_counters));
+  pgno_t radix_entries[256], radix_npages[256];
+  memset(&radix_entries, 0, sizeof(radix_entries));
+  memset(&radix_npages, 0, sizeof(radix_npages));
+  size_t spillable_entries = 0, spillable_npages = 0;
   const uint32_t reciprocal = (UINT32_C(255) << 24) / (age_max + 1);
   for (size_t i = 1; i <= dl->length; ++i) {
-    unsigned prio = spill_prio(txn, i, reciprocal);
+    const unsigned prio = spill_prio(txn, i, reciprocal);
     if (prio < 256) {
-      radix_counters[prio] += 1;
-      spillable += 1;
+      radix_entries[prio] += 1;
+      spillable_entries += 1;
+      const pgno_t npages = dpl_npages(dl, i);
+      radix_npages[prio] += npages;
+      spillable_npages += npages;
     }
   }
 
-  if (likely(spillable > 0)) {
-    size_t prio2spill = 0, prio2adjacent = 128, amount = radix_counters[0];
+  tASSERT(txn, spillable_npages >= spillable_entries);
+  pgno_t spilled_entries = 0, spilled_npages = 0;
+  if (likely(spillable_entries > 0)) {
+    size_t prio2spill = 0, prio2adjacent = 128,
+           amount_entries = radix_entries[0], amount_npages = radix_npages[0];
     for (size_t i = 1; i < 256; i++) {
-      if (amount < wanna_spill) {
+      if (amount_entries < need_spill_entries ||
+          amount_npages < need_spill_npages) {
         prio2spill = i;
         prio2adjacent = i + (257 - i) / 2;
-        amount += radix_counters[i];
-      } else if (amount + amount < spillable + wanna_spill
-                 /* РАВНОЗНАЧНО: amount - wanna_spill < spillable - amount */) {
+        amount_entries += radix_entries[i];
+        amount_npages += radix_npages[i];
+      } else if (amount_entries + amount_entries <
+                     spillable_entries + need_spill_entries
+                 /* РАВНОЗНАЧНО: amount - need_spill < spillable - amount */
+                 || amount_npages + amount_npages <
+                        spillable_npages + need_spill_npages) {
         prio2adjacent = i;
-        amount += radix_counters[i];
+        amount_entries += radix_entries[i];
+        amount_npages += radix_npages[i];
       } else
         break;
     }
 
-    VERBOSE("prio2spill %zu, prio2adjacent %zu, spillable %u,"
-            " wanna-spill %zu, amount %zu",
-            prio2spill, prio2adjacent, spillable, wanna_spill, amount);
+    VERBOSE("prio2spill %zu, prio2adjacent %zu, spillable %zu/%zu,"
+            " wanna-spill %zu/%zu, amount %zu/%zu",
+            prio2spill, prio2adjacent, spillable_entries, spillable_npages,
+            need_spill_entries, need_spill_npages, amount_entries,
+            amount_npages);
     tASSERT(txn, prio2spill < prio2adjacent && prio2adjacent <= 256);
 
     iov_ctx_t ctx;
-    rc = iov_init(txn, &ctx, amount,
-                  txn->tw.dirtylist->pages_including_loose -
-                      txn->tw.loose_count);
+    rc = iov_init(txn, &ctx, amount_entries, amount_npages);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
     unsigned prev_prio = 256, prio;
     size_t r, w;
-    pgno_t spilled_entries = 0, spilled_npages = 0;
-    for (w = 0, r = 1; r <= dl->length && spilled_entries < wanna_spill;
+    for (w = 0, r = 1;
+         r <= dl->length && (spilled_entries < need_spill_entries ||
+                             spilled_npages < need_spill_npages);
          prev_prio = prio, ++r) {
       prio = spill_prio(txn, r, reciprocal);
       MDBX_page *const dp = dl->items[r].ptr;
@@ -4850,7 +4903,8 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
 
     VERBOSE("spilled entries %u, spilled npages %u", spilled_entries,
             spilled_npages);
-    tASSERT(txn, spillable == 0 || spilled_entries > 0);
+    tASSERT(txn, spillable_entries == 0 || spilled_entries > 0);
+    tASSERT(txn, spilled_npages >= spilled_entries);
 
     while (r <= dl->length)
       dl->items[++w] = dl->items[r++];
@@ -4872,13 +4926,13 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
       pnl_sort(txn->tw.spill_pages, (size_t)txn->mt_next_pgno << 1);
       txn->mt_flags |= MDBX_TXN_SPILLS;
     }
-    NOTICE("spilled %u dirty-entries, now have %zu dirty-room", spilled_entries,
-           txn->tw.dirtyroom);
+    NOTICE("spilled %u dirty-entries, %u dirty-npages, now have %zu dirty-room",
+           spilled_entries, spilled_npages, txn->tw.dirtyroom);
   } else {
     tASSERT(txn, rc == MDBX_SUCCESS);
     for (size_t i = 1; i <= dl->length; ++i) {
       MDBX_page *dp = dl->items[i].ptr;
-      NOTICE(
+      VERBOSE(
           "dirtylist[%zu]: pgno %u, npages %u, flags 0x%04X, age %u, prio %u",
           i, dp->mp_pgno, dpl_npages(dl, i), dp->mp_flags, dpl_age(txn, i),
           spill_prio(txn, i, reciprocal));
@@ -4888,13 +4942,14 @@ static int txn_spill(MDBX_txn *const txn, MDBX_cursor *const m0,
 #if xMDBX_DEBUG_SPILLING == 2
   if (txn->tw.loose_count + txn->tw.dirtyroom <= need / 2 + 1)
     ERROR("dirty-list length: before %zu, after %zu, parent %zi, loose %zu; "
-          "needed %zu, spillable %u; "
+          "needed %zu, spillable %zu; "
           "spilled %u dirty-entries, now have %zu dirty-room",
-          dl->length + spilled, dl->length,
+          dl->length + spilled_entries, dl->length,
           (txn->mt_parent && txn->mt_parent->tw.dirtylist)
               ? (intptr_t)txn->mt_parent->tw.dirtylist->length
               : -1,
-          txn->tw.loose_count, need, spillable, spilled, txn->tw.dirtyroom);
+          txn->tw.loose_count, need, spillable_entries, spilled_entries,
+          txn->tw.dirtyroom);
   ENSURE(txn->mt_env, txn->tw.loose_count + txn->tw.dirtyroom > need / 2);
 #endif /* xMDBX_DEBUG_SPILLING */
 
