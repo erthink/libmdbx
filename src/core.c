@@ -6351,8 +6351,8 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
 #define MDBX_ALLOC_NEW 2
 #define MDBX_ALLOC_COALESCE 4
 #define MDBX_ALLOC_SLOT 8
-#define MDBX_ALLOC_FAKE 16
-#define MDBX_ALLOC_NOLOG 32
+#define MDBX_ALLOC_RESERVE 16
+#define MDBX_ALLOC_BACKLOG 32
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
 
 static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
@@ -6657,7 +6657,7 @@ static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
           DEBUG("gc-wipe-steady, rc %d", ret.err);
           eASSERT(env, prefer_steady.ptr_c !=
                            meta_prefer_steady(env, &txn->tw.troika).ptr_c);
-        } else if ((flags & MDBX_ALLOC_NEW) == 0 ||
+        } else if ((flags & (MDBX_ALLOC_BACKLOG | MDBX_ALLOC_NEW)) == 0 ||
                    (autosync_threshold &&
                     atomic_load32(&env->me_lck->mti_unsynced_pages,
                                   mo_Relaxed) >= autosync_threshold) ||
@@ -6736,12 +6736,12 @@ static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
     int level;
     const char *what;
-    if (likely(!(flags & MDBX_ALLOC_FAKE))) {
+    if (likely(!(flags & MDBX_ALLOC_RESERVE))) {
       txn->mt_flags |= MDBX_TXN_ERROR;
       level = MDBX_LOG_ERROR;
       what = "pages";
     } else {
-      level = (flags & MDBX_ALLOC_NOLOG) ? MDBX_LOG_DEBUG : MDBX_LOG_NOTICE;
+      level = (flags & MDBX_ALLOC_BACKLOG) ? MDBX_LOG_DEBUG : MDBX_LOG_NOTICE;
       what = (flags & MDBX_ALLOC_SLOT) ? "gc-slot/backlog" : "backlog-pages";
     }
     if (LOG_ENABLED(level))
@@ -6761,9 +6761,8 @@ done:
   if (likely(timestamp))
     env->me_lck->mti_pgop_stat.gcrtime.weak += osal_monotime() - timestamp;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-  if (unlikely(flags & MDBX_ALLOC_FAKE)) {
-    DEBUG("return NULL-page for %u pages %s allocation", num,
-          "gc-slot/backlog");
+  if (unlikely(flags & MDBX_ALLOC_RESERVE)) {
+    DEBUG("return NULL for %u pages %s reservation", num, "gc-slot/backlog");
     ret.page = NULL;
     ret.err = MDBX_SUCCESS;
     return ret;
@@ -9135,7 +9134,7 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     err = page_alloc_slowpath(&ctx->cursor.outer, (pgno_t)pages4retiredlist,
-                              MDBX_ALLOC_GC | MDBX_ALLOC_FAKE)
+                              MDBX_ALLOC_GC | MDBX_ALLOC_RESERVE)
               .err;
     TRACE("== after-4linear, backlog %zu, err %d", gcu_backlog_size(txn), err);
     cASSERT(&ctx->cursor.outer,
@@ -9146,7 +9145,7 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
          err == MDBX_SUCCESS)
     err = page_alloc_slowpath(&ctx->cursor.outer, 0,
                               MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
-                                  MDBX_ALLOC_FAKE | MDBX_ALLOC_NOLOG)
+                                  MDBX_ALLOC_RESERVE | MDBX_ALLOC_BACKLOG)
               .err;
 
   ctx->cursor.outer.mc_flags |= C_RECLAIMING;
@@ -9329,7 +9328,7 @@ retry:
                 txn->tw.loose_count);
           rc = page_alloc_slowpath(&ctx->cursor.outer, 0,
                                    MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
-                                       MDBX_ALLOC_FAKE)
+                                       MDBX_ALLOC_RESERVE)
                    .err;
           if (rc == MDBX_SUCCESS) {
             TRACE("%s: retry since gc-slot for %zu loose-pages available",
@@ -9554,7 +9553,7 @@ retry:
           snap_oldest = txn_oldest_reader(txn);
           rc = page_alloc_slowpath(&ctx->cursor.outer, 0,
                                    MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
-                                       MDBX_ALLOC_FAKE)
+                                       MDBX_ALLOC_RESERVE)
                    .err;
           if (likely(rc == MDBX_SUCCESS)) {
             TRACE("%s: took @%" PRIaTXN " from GC", dbg_prefix_mode,
