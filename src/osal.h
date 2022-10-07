@@ -585,6 +585,11 @@ MDBX_INTERNAL_FUNC uint64_t osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime);
 
+static inline uint32_t osal_monotime_to_16dot16_noUnderflow(uint64_t monotime) {
+  uint32_t seconds_16dot16 = osal_monotime_to_16dot16(monotime);
+  return seconds_16dot16 ? seconds_16dot16 : /* fix underflow */ (monotime > 0);
+}
+
 MDBX_INTERNAL_FUNC bin128_t osal_bootid(void);
 /*----------------------------------------------------------------------------*/
 /* lck stuff */

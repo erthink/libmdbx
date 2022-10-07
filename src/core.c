@@ -10714,7 +10714,7 @@ provide_latency:
     latency->sync = (ts_4 && ts_5) ? osal_monotime_to_16dot16(ts_5 - ts_4) : 0;
     const uint64_t ts_6 = osal_monotime();
     latency->ending = ts_5 ? osal_monotime_to_16dot16(ts_6 - ts_5) : 0;
-    latency->whole = osal_monotime_to_16dot16(ts_6 - ts_0);
+    latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_6 - ts_0);
   }
   return rc;
 
@@ -20775,14 +20775,15 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
     const uint64_t monotime_now = osal_monotime();
     uint64_t ts = atomic_load64(&lck->mti_sync_timestamp, mo_Relaxed);
     arg->mi_since_sync_seconds16dot16 =
-        ts ? osal_monotime_to_16dot16(monotime_now - ts) : 0;
+        ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
     ts = atomic_load64(&lck->mti_reader_check_timestamp, mo_Relaxed);
     arg->mi_since_reader_check_seconds16dot16 =
-        ts ? osal_monotime_to_16dot16(monotime_now - ts) : 0;
+        ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
     arg->mi_autosync_threshold = pgno2bytes(
         env, atomic_load32(&lck->mti_autosync_threshold, mo_Relaxed));
-    arg->mi_autosync_period_seconds16dot16 = osal_monotime_to_16dot16(
-        atomic_load64(&lck->mti_autosync_period, mo_Relaxed));
+    arg->mi_autosync_period_seconds16dot16 =
+        osal_monotime_to_16dot16_noUnderflow(
+            atomic_load64(&lck->mti_autosync_period, mo_Relaxed));
     arg->mi_bootid.current.x = bootid.x;
     arg->mi_bootid.current.y = bootid.y;
     arg->mi_mode = env->me_lck_mmap.lck ? lck->mti_envmode.weak : env->me_flags;

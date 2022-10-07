@@ -2655,9 +2655,7 @@ MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
 #else
       (uint32_t)(monotime * 128 / 1953125);
 #endif
-  if (likely(ret > 0))
-    return ret;
-  return monotime > 0 /* fix underflow */;
+  return ret;
 }
 
 MDBX_INTERNAL_FUNC uint64_t osal_monotime(void) {
