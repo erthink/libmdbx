@@ -4127,8 +4127,8 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
       check = page_get_any(mc, pgno, txn->mt_front);
       if (unlikely(check.err != MDBX_SUCCESS))
         return check.err;
-      tASSERT(txn, (check.page->mp_flags & ~(P_LEAF2 | P_SPILLED)) ==
-                       (pageflags & ~P_FROZEN));
+      tASSERT(txn,
+              (check.page->mp_flags & ~P_SPILLED) == (pageflags & ~P_FROZEN));
       tASSERT(txn, !(pageflags & P_FROZEN) || IS_FROZEN(txn, check.page));
     }
     if (pageflags & P_FROZEN) {
@@ -21483,9 +21483,10 @@ static int drop_tree(MDBX_cursor *mc, const bool may_have_subDBs) {
       } else {
         cASSERT(mc, mc->mc_snum < mc->mc_db->md_depth);
         mc->mc_checking |= CC_RETIRING;
-        const unsigned pagetype =
-            (IS_FROZEN(txn, mp) ? P_FROZEN : 0) +
-            ((mc->mc_snum + 1 == mc->mc_db->md_depth) ? P_LEAF : P_BRANCH);
+        const unsigned pagetype = (IS_FROZEN(txn, mp) ? P_FROZEN : 0) +
+                                  ((mc->mc_snum + 1 == mc->mc_db->md_depth)
+                                       ? (mc->mc_checking & (P_LEAF | P_LEAF2))
+                                       : P_BRANCH);
         for (size_t i = 0; i < nkeys; i++) {
           MDBX_node *node = page_node(mp, i);
           tASSERT(txn, (node_flags(node) &
