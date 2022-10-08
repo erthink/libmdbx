@@ -20,6 +20,10 @@
 
 #include <winioctl.h>
 
+#if !MDBX_WITHOUT_MSVC_CRT && defined(_DEBUG)
+#include <crtdbg.h>
+#endif
+
 static int waitstatus2errcode(DWORD result) {
   switch (result) {
   case WAIT_OBJECT_0:
@@ -252,9 +256,14 @@ MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
 
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
+#if !MDBX_WITHOUT_MSVC_CRT && defined(_DEBUG)
+    _CrtDbgReport(_CRT_ASSERT, func ? func : "unknown", line, "libmdbx",
+                  "assertion failed: %s", msg);
+#else
     if (IsDebuggerPresent())
       DebugBreak();
-    FatalExit(ERROR_UNHANDLED_ERROR);
+#endif
+    FatalExit(STATUS_ASSERTION_FAILURE);
 #else
     abort();
 #endif
@@ -278,10 +287,15 @@ __cold void mdbx_panic(const char *fmt, ...) {
 
   while (1) {
 #if defined(_WIN32) || defined(_WIN64)
+#if !MDBX_WITHOUT_MSVC_CRT && defined(_DEBUG)
+    _CrtDbgReport(_CRT_ASSERT, "mdbx.c", 0, "libmdbx", "panic: %s",
+                  const_message);
+#else
     OutputDebugStringA("\r\nMDBX-PANIC: ");
     OutputDebugStringA(const_message);
     if (IsDebuggerPresent())
       DebugBreak();
+#endif
     FatalExit(ERROR_UNHANDLED_ERROR);
 #else
     __assert_fail(const_message, "mdbx", 0, "panic");
