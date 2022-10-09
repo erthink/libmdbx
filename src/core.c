@@ -18476,9 +18476,9 @@ __cold static int page_check(MDBX_cursor *const mc, const MDBX_page *const mp) {
   unsigned flags_mask = P_ILL_BITS;
   unsigned flags_expected = 0;
   if (offset < 0 ||
-      offset > (ptrdiff_t)(env->me_dxb_mmap.current - ((mp->mp_flags & P_SUBP)
-                                                           ? PAGEHDRSZ + 1
-                                                           : env->me_psize))) {
+      offset > (ptrdiff_t)(pgno2bytes(env, mc->mc_txn->mt_next_pgno) -
+                           ((mp->mp_flags & P_SUBP) ? PAGEHDRSZ + 1
+                                                    : env->me_psize))) {
     /* should be dirty page without MDBX_WRITEMAP, or a subpage of. */
     flags_mask -= P_SUBP;
     if ((env->me_flags & MDBX_WRITEMAP) != 0 ||
