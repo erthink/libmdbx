@@ -372,16 +372,18 @@ MDBX_INTERNAL_FUNC void osal_ioring_walk(
     osal_ioring_t *ior, iov_ctx_t *ctx,
     void (*callback)(iov_ctx_t *ctx, size_t offset, void *data, size_t bytes));
 
-static inline unsigned osal_ioring_left(const osal_ioring_t *ior) {
+MDBX_MAYBE_UNUSED static inline unsigned
+osal_ioring_left(const osal_ioring_t *ior) {
   return ior->slots_left;
 }
 
-static inline unsigned osal_ioring_used(const osal_ioring_t *ior) {
+MDBX_MAYBE_UNUSED static inline unsigned
+osal_ioring_used(const osal_ioring_t *ior) {
   return ior->allocated - ior->slots_left;
 }
 
-static inline int osal_ioring_reserve(osal_ioring_t *ior, size_t items,
-                                      size_t bytes) {
+MDBX_MAYBE_UNUSED static inline int
+osal_ioring_reserve(osal_ioring_t *ior, size_t items, size_t bytes) {
   items = (items > 32) ? items : 32;
 #if defined(_WIN32) || defined(_WIN64)
   const size_t npages = bytes >> ior->pagesize_ln2;
@@ -585,7 +587,8 @@ MDBX_INTERNAL_FUNC uint64_t osal_monotime(void);
 MDBX_INTERNAL_FUNC uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16);
 MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime);
 
-static inline uint32_t osal_monotime_to_16dot16_noUnderflow(uint64_t monotime) {
+MDBX_MAYBE_UNUSED static inline uint32_t
+osal_monotime_to_16dot16_noUnderflow(uint64_t monotime) {
   uint32_t seconds_16dot16 = osal_monotime_to_16dot16(monotime);
   return seconds_16dot16 ? seconds_16dot16 : /* fix underflow */ (monotime > 0);
 }

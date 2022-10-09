@@ -552,8 +552,10 @@ static const DWORD WC_ERR_INVALID_CHARS =
         : 0;
 #endif /* WC_ERR_INVALID_CHARS */
 
-MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst, size_t dst_n, const char *src,
-                                    size_t src_n) {
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst,
+                                                      size_t dst_n,
+                                                      const char *src,
+                                                      size_t src_n) {
   return MultiByteToWideChar(CP_THREAD_ACP, MB_ERR_INVALID_CHARS, src,
                              (int)src_n, dst, (int)dst_n);
 }
