@@ -33,16 +33,22 @@
 
 # memcmp() inside iov_write() as workaround for todo4recovery://erased_by_github/libmdbx/issues/269
 {
-   write-page-check-bcmp
+   iov-pagecheck-1
    Memcheck:Cond
    fun:bcmp
-   fun:iov_write*
+   fun:iov_callback4dirtypages
+   fun:osal_ioring_walk
+   fun:iov_complete
+   fun:iov_write
 }
 {
-   write-page-check-memcmp
+   iov-pagecheck-2
    Memcheck:Cond
    fun:memcmp*
-   fun:iov_write*
+   fun:iov_callback4dirtypages
+   fun:osal_ioring_walk
+   fun:iov_complete
+   fun:iov_write
 }
 
 # single-page flush by pwrite()

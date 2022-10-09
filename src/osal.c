@@ -621,8 +621,12 @@ MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *ior,
 #endif /* !Windows */
 
 #if MDBX_HAVE_PWRITEV && defined(_SC_IOV_MAX)
-  if (!osal_iov_max)
+  if (!osal_iov_max) {
     osal_iov_max = sysconf(_SC_IOV_MAX);
+    if (RUNNING_ON_VALGRIND && osal_iov_max > 64)
+      /* чтобы не описывать все 1024 исключения в valgrind_suppress.txt */
+      osal_iov_max = 64;
+  }
 #endif
 
   ior->boundary = (char *)(ior->pool + ior->allocated);
