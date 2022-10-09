@@ -128,6 +128,10 @@
 #define __USE_MINGW_ANSI_STDIO 1
 #endif /* __USE_MINGW_ANSI_STDIO */
 
+#if (defined(_WIN32) || defined(_WIN64)) && !defined(UNICODE)
+#define UNICODE
+#endif /* UNICODE */
+
 #include "../mdbx.h"
 #include "base.h"
 

@@ -830,8 +830,14 @@ enum MDBX_constants {
 #if !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_LOCKNAME "/mdbx.lck"
 #else
-#define MDBX_LOCKNAME L"\\mdbx.lck"
-#endif
+#define MDBX_LOCKNAME_W L"\\mdbx.lck"
+#define MDBX_LOCKNAME_A "\\mdbx.lck"
+#ifdef UNICODE
+#define MDBX_LOCKNAME MDBX_LOCKNAME_W
+#else
+#define MDBX_LOCKNAME MDBX_LOCKNAME_A
+#endif /* UNICODE */
+#endif /* Windows */
 #endif /* MDBX_LOCKNAME */
 #ifndef MDBX_DATANAME
 /** \brief The name of the data file in the environment
@@ -839,8 +845,14 @@ enum MDBX_constants {
 #if !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_DATANAME "/mdbx.dat"
 #else
-#define MDBX_DATANAME L"\\mdbx.dat"
-#endif
+#define MDBX_DATANAME_W L"\\mdbx.dat"
+#define MDBX_DATANAME_A "\\mdbx.dat"
+#ifdef UNICODE
+#define MDBX_DATANAME MDBX_DATANAME_W
+#else
+#define MDBX_DATANAME MDBX_DATANAME_A
+#endif /* UNICODE */
+#endif /* Windows */
 #endif /* MDBX_DATANAME */
 
 #ifndef MDBX_LOCK_SUFFIX
@@ -848,8 +860,14 @@ enum MDBX_constants {
 #if !(defined(_WIN32) || defined(_WIN64))
 #define MDBX_LOCK_SUFFIX "-lck"
 #else
-#define MDBX_LOCK_SUFFIX L"-lck"
-#endif
+#define MDBX_LOCK_SUFFIX_W L"-lck"
+#define MDBX_LOCK_SUFFIX_A "-lck"
+#ifdef UNICODE
+#define MDBX_LOCK_SUFFIX MDBX_LOCK_SUFFIX_W
+#else
+#define MDBX_LOCK_SUFFIX MDBX_LOCK_SUFFIX_A
+#endif /* UNICODE */
+#endif /* Windows */
 #endif /* MDBX_LOCK_SUFFIX */
 
 /* DEBUG & LOGGING ************************************************************/
