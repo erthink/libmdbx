@@ -348,6 +348,7 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
     status = as_debugging;
     break;
   case STATUS_CONTROL_C_EXIT:
+  case /* STATUS_INTERRUPTED */ 0xC0000515L:
     status = as_killed;
     break;
   case EXCEPTION_ACCESS_VIOLATION:
@@ -357,10 +358,16 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
   case EXCEPTION_INVALID_DISPOSITION:
   case EXCEPTION_ILLEGAL_INSTRUCTION:
   case EXCEPTION_NONCONTINUABLE_EXCEPTION:
+  case /* STATUS_STACK_BUFFER_OVERRUN, STATUS_BUFFER_OVERFLOW_PREVENTED */
+      0xC0000409L:
+  case /* STATUS_ASSERTION_FAILURE */ 0xC0000420L:
+  case /* STATUS_HEAP_CORRUPTION */ 0xC0000374L:
+  case /* STATUS_CONTROL_STACK_VIOLATION */ 0xC00001B2L:
+    log_error("pid %u, exception 0x%x", pid, ExitCode);
     status = as_coredump;
     break;
   default:
-    log_error("pid %u, ExitCode", pid, ExitCode);
+    log_error("pid %u, exit code %u", pid, ExitCode);
     status = as_failed;
     break;
   }
