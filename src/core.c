@@ -6509,21 +6509,23 @@ static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
 
   const unsigned coalesce_threshold = env->me_maxgc_ov1page >> 2;
   if (likely(flags & MDBX_ALLOC_GC)) {
-    flags |= env->me_flags & MDBX_LIFORECLAIM;
-    if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
-        MDBX_PNL_GETSIZE(txn->tw.reclaimed_pglist) < coalesce_threshold)
-      flags |= MDBX_ALLOC_COALESCE;
     if (unlikely(
             /* If mc is updating the GC, then the retired-list cannot play
                catch-up with itself by growing while trying to save it. */
-            (mc->mc_flags & C_RECLAIMING) ||
+            (mc->mc_flags & (C_RECLAIMING | C_GCFREEZE)) ||
             /* avoid (recursive) search inside empty tree and while tree is
                updating, todo4recovery://erased_by_github/libmdbx/issues/31 */
             txn->mt_dbs[FREE_DBI].md_entries == 0 ||
             /* If our dirty list is already full, we can't touch GC */
             (txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth &&
              !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY))))
-      flags &= ~(MDBX_ALLOC_GC | MDBX_ALLOC_COALESCE);
+      flags -= MDBX_ALLOC_GC;
+    else {
+      flags |= env->me_flags & MDBX_LIFORECLAIM;
+      if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
+          MDBX_PNL_GETSIZE(txn->tw.reclaimed_pglist) < coalesce_threshold)
+        flags |= MDBX_ALLOC_COALESCE;
+    }
   }
 
   eASSERT(env, pnl_check_allocated(txn->tw.reclaimed_pglist,
