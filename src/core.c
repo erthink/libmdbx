@@ -546,8 +546,16 @@ __cold intptr_t mdbx_limits_pairsize4page_max(intptr_t pagesize,
   return LEAF_NODE_MAX(pagesize) - NODESIZE;
 }
 
-intptr_t mdbx_limits_valsize4page_max(intptr_t pagesize,
-                                      MDBX_db_flags_t flags) {
+__cold int mdbx_env_get_pairsize4page_max(const MDBX_env *env,
+                                          MDBX_db_flags_t flags) {
+  if (unlikely(!env || env->me_signature.weak != MDBX_ME_SIGNATURE))
+    return -1;
+
+  return (int)mdbx_limits_pairsize4page_max((intptr_t)env->me_psize, flags);
+}
+
+__cold intptr_t mdbx_limits_valsize4page_max(intptr_t pagesize,
+                                             MDBX_db_flags_t flags) {
   if (pagesize < 1)
     pagesize = (intptr_t)mdbx_default_pagesize();
   if (unlikely(pagesize < (intptr_t)MIN_PAGESIZE ||
@@ -560,6 +568,14 @@ intptr_t mdbx_limits_valsize4page_max(intptr_t pagesize,
     return valsize_max(pagesize, flags);
 
   return PAGEROOM(pagesize);
+}
+
+__cold int mdbx_env_get_valsize4page_max(const MDBX_env *env,
+                                         MDBX_db_flags_t flags) {
+  if (unlikely(!env || env->me_signature.weak != MDBX_ME_SIGNATURE))
+    return -1;
+
+  return (int)mdbx_limits_valsize4page_max((intptr_t)env->me_psize, flags);
 }
 
 /* Calculate the size of a leaf node.

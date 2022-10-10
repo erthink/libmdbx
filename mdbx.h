@@ -3307,6 +3307,32 @@ mdbx_env_get_maxvalsize_ex(const MDBX_env *env, MDBX_db_flags_t flags);
 MDBX_DEPRECATED MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
 mdbx_env_get_maxkeysize(const MDBX_env *env);
 
+/** \brief Returns maximal size of key-value pair to fit in a single page
+ * for specified database flags.
+ * \ingroup c_statinfo
+ *
+ * \param [in] env    An environment handle returned by \ref mdbx_env_create().
+ * \param [in] flags  Database options (\ref MDBX_DUPSORT, \ref MDBX_INTEGERKEY
+ *                    and so on). \see db_flags
+ *
+ * \returns The maximum size of a data can write,
+ *          or -1 if something is wrong. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
+mdbx_env_get_pairsize4page_max(const MDBX_env *env, MDBX_db_flags_t flags);
+
+/** \brief Returns maximal data size in bytes to fit in a leaf-page or
+ * single overflow/large-page for specified database flags.
+ * \ingroup c_statinfo
+ *
+ * \param [in] env    An environment handle returned by \ref mdbx_env_create().
+ * \param [in] flags  Database options (\ref MDBX_DUPSORT, \ref MDBX_INTEGERKEY
+ *                    and so on). \see db_flags
+ *
+ * \returns The maximum size of a data can write,
+ *          or -1 if something is wrong. */
+MDBX_NOTHROW_PURE_FUNCTION LIBMDBX_API int
+mdbx_env_get_valsize4page_max(const MDBX_env *env, MDBX_db_flags_t flags);
+
 /** \brief Sets application information (a context pointer) associated with
  * the environment.
  * \see mdbx_env_get_userctx()
