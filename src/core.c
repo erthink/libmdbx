@@ -11791,6 +11791,19 @@ __cold int mdbx_env_create(MDBX_env **penv) {
     return MDBX_EINVAL;
   *penv = nullptr;
 
+#ifdef MDBX_HAVE_C11ATOMICS
+  if (unlikely(!atomic_is_lock_free((const volatile uint32_t *)penv))) {
+    ERROR("lock-free atomic ops for %u-bit types is required", 32);
+    return MDBX_INCOMPATIBLE;
+  }
+#if MDBX_64BIT_ATOMIC
+  if (unlikely(!atomic_is_lock_free((const volatile uint64_t *)penv))) {
+    ERROR("lock-free atomic ops for %u-bit types is required", 64);
+    return MDBX_INCOMPATIBLE;
+  }
+#endif /* MDBX_64BIT_ATOMIC */
+#endif /* MDBX_HAVE_C11ATOMICS */
+
   const size_t os_psize = osal_syspagesize();
   if (unlikely(!is_powerof2(os_psize) || os_psize < MIN_PAGESIZE)) {
     ERROR("unsuitable system pagesize %" PRIuPTR, os_psize);
