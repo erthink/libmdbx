@@ -2515,7 +2515,9 @@ struct MDBX_envinfo {
   uint64_t mi_unsync_volume;
   /** Current auto-sync threshold, see \ref mdbx_env_set_syncbytes(). */
   uint64_t mi_autosync_threshold;
-  /** Time since the last steady sync in 1/65536 of second */
+  /** Time since entering to a "dirty" out-of-sync state in units of 1/65536 of
+   * second. In other words, this is the time since the last non-steady commit
+   * or zero if it was steady. */
   uint32_t mi_since_sync_seconds16dot16;
   /** Current auto-sync period in 1/65536 of second,
    * see \ref mdbx_env_set_syncperiod(). */

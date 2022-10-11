@@ -4506,6 +4506,8 @@ __must_check_result static int iov_write(iov_ctx_t *ctx) {
 #if MDBX_ENABLE_PGOP_STAT
   ctx->env->me_lck->mti_pgop_stat.wops.weak += r.wops;
 #endif /* MDBX_ENABLE_PGOP_STAT */
+  if (!ctx->env->me_lck->mti_eoos_timestamp.weak)
+    ctx->env->me_lck->mti_eoos_timestamp.weak = osal_monotime();
   ctx->err = r.err;
   if (unlikely(ctx->err != MDBX_SUCCESS))
     ERROR("Write error: %s", mdbx_strerror(ctx->err));
@@ -6787,6 +6789,7 @@ static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
             atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed);
         const uint64_t autosync_period =
             atomic_load64(&env->me_lck->mti_autosync_period, mo_Relaxed);
+        uint64_t eoos_timestamp;
         /* wipe the last steady-point if one of:
          *  - UTTERLY_NOSYNC mode AND auto-sync threshold is NOT specified
          *  - UTTERLY_NOSYNC mode AND free space at steady-point is exhausted
@@ -6806,13 +6809,12 @@ static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const pgno_t num, int flags) {
                            meta_prefer_steady(env, &txn->tw.troika).ptr_c);
         } else if ((flags & (MDBX_ALLOC_BACKLOG | MDBX_ALLOC_NEW)) == 0 ||
                    (autosync_threshold &&
-                    atomic_load32(&env->me_lck->mti_unsynced_pages,
+                    atomic_load64(&env->me_lck->mti_unsynced_pages,
                                   mo_Relaxed) >= autosync_threshold) ||
                    (autosync_period &&
-                    osal_monotime() -
-                            atomic_load64(&env->me_lck->mti_sync_timestamp,
-                                          mo_Relaxed) >=
-                        autosync_period) ||
+                    (eoos_timestamp = atomic_load64(
+                         &env->me_lck->mti_eoos_timestamp, mo_Relaxed)) &&
+                    osal_monotime() - eoos_timestamp >= autosync_period) ||
                    next >= txn->mt_geo.upper ||
                    (next >= txn->mt_end_pgno &&
                     (autosync_threshold | autosync_period) == 0)) {
@@ -7311,8 +7313,8 @@ retry:;
     const meta_troika_t troika = meta_tap(env);
     head = meta_recent(env, &troika);
   }
-  const pgno_t unsynced_pages =
-      atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed);
+  const uint64_t unsynced_pages =
+      atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed);
   if (unsynced_pages == 0) {
     const uint32_t synched_meta_txnid_u32 =
         atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed);
@@ -7320,15 +7322,16 @@ retry:;
       goto bailout;
   }
 
-  const pgno_t autosync_threshold =
+  const size_t autosync_threshold =
       atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed);
   const uint64_t autosync_period =
       atomic_load64(&env->me_lck->mti_autosync_period, mo_Relaxed);
+  uint64_t eoos_timestamp;
   if (force || (autosync_threshold && unsynced_pages >= autosync_threshold) ||
       (autosync_period &&
-       osal_monotime() -
-               atomic_load64(&env->me_lck->mti_sync_timestamp, mo_Relaxed) >=
-           autosync_period))
+       (eoos_timestamp =
+            atomic_load64(&env->me_lck->mti_eoos_timestamp, mo_Relaxed)) &&
+       osal_monotime() - eoos_timestamp >= autosync_period))
     flags &= MDBX_WRITEMAP /* clear flags for full steady sync */;
 
   if (!inside_txn) {
@@ -7396,7 +7399,7 @@ retry:;
   eASSERT(env, !inside_txn || (flags & MDBX_SHRINK_ALLOWED) == 0);
 
   if (!head.is_steady || ((flags & MDBX_SAFE_NOSYNC) == 0 && unsynced_pages)) {
-    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIaPGNO,
+    DEBUG("meta-head %" PRIaPGNO ", %s, sync_pending %" PRIu64,
           data_page(head.ptr_c)->mp_pgno, durable_caption(head.ptr_c),
           unsynced_pages);
     MDBX_meta meta = *head.ptr_c;
@@ -11341,13 +11344,14 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
         atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed);
     const uint64_t autosync_period =
         atomic_load64(&env->me_lck->mti_autosync_period, mo_Relaxed);
+    uint64_t eoos_timestamp;
     if ((autosync_threshold &&
-         atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed) >=
+         atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed) >=
              autosync_threshold) ||
         (autosync_period &&
-         osal_monotime() -
-                 atomic_load64(&env->me_lck->mti_sync_timestamp, mo_Relaxed) >=
-             autosync_period))
+         (eoos_timestamp =
+              atomic_load64(&env->me_lck->mti_eoos_timestamp, mo_Relaxed)) &&
+         osal_monotime() - eoos_timestamp >= autosync_period))
       flags &= MDBX_WRITEMAP | MDBX_SHRINK_ALLOWED; /* force steady */
   }
 
@@ -11459,7 +11463,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
 
   /* LY: step#1 - sync previously written/updated data-pages */
   rc = MDBX_RESULT_FALSE /* carry steady */;
-  if (atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed)) {
+  if (atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed)) {
     eASSERT(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
     enum osal_syncmode_bits mode_bits = MDBX_SYNC_NONE;
     unsigned sync_op = 0;
@@ -11494,10 +11498,9 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
 
   /* Steady or Weak */
   if (rc == MDBX_RESULT_FALSE /* carry steady */) {
-    atomic_store64(&env->me_lck->mti_sync_timestamp, osal_monotime(),
-                   mo_Relaxed);
     unaligned_poke_u64(4, pending->mm_sign, meta_sign(pending));
-    atomic_store32(&env->me_lck->mti_unsynced_pages, 0, mo_Relaxed);
+    atomic_store64(&env->me_lck->mti_eoos_timestamp, 0, mo_Relaxed);
+    atomic_store64(&env->me_lck->mti_unsynced_pages, 0, mo_Relaxed);
   } else {
     assert(rc == MDBX_RESULT_TRUE /* carry non-steady */);
     unaligned_poke_u64(4, pending->mm_sign, MDBX_DATASIGN_WEAK);
@@ -12652,8 +12655,9 @@ __cold static int setup_dxb(MDBX_env *env, const int lck_rc,
                 "rollback NOT needed, steady-sync NEEDED%s",
                 "opening after an unclean shutdown", bootid.x, bootid.y, "");
         header = clone;
-        atomic_store32(&env->me_lck->mti_unsynced_pages, header.mm_geo.next,
-                       mo_Relaxed);
+        env->me_lck->mti_unsynced_pages.weak = header.mm_geo.next;
+        if (!env->me_lck->mti_eoos_timestamp.weak)
+          env->me_lck->mti_eoos_timestamp.weak = osal_monotime();
         break;
       }
       if (unlikely(!prefer_steady.is_steady)) {
@@ -20947,8 +20951,8 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
   arg->mi_geo.upper = pgno2bytes(env, txn_meta->mm_geo.upper);
   arg->mi_geo.shrink = pgno2bytes(env, pv2pages(txn_meta->mm_geo.shrink_pv));
   arg->mi_geo.grow = pgno2bytes(env, pv2pages(txn_meta->mm_geo.grow_pv));
-  const pgno_t unsynced_pages =
-      atomic_load32(&env->me_lck->mti_unsynced_pages, mo_Relaxed) +
+  const uint64_t unsynced_pages =
+      atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed) +
       (atomic_load32(&env->me_lck->mti_meta_sync_txnid, mo_Relaxed) !=
        (uint32_t)arg->mi_recent_txnid);
 
@@ -20963,9 +20967,9 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
   arg->mi_sys_pagesize = env->me_os_psize;
 
   if (likely(bytes > size_before_bootid)) {
-    arg->mi_unsync_volume = pgno2bytes(env, unsynced_pages);
+    arg->mi_unsync_volume = pgno2bytes(env, (size_t)unsynced_pages);
     const uint64_t monotime_now = osal_monotime();
-    uint64_t ts = atomic_load64(&lck->mti_sync_timestamp, mo_Relaxed);
+    uint64_t ts = atomic_load64(&lck->mti_eoos_timestamp, mo_Relaxed);
     arg->mi_since_sync_seconds16dot16 =
         ts ? osal_monotime_to_16dot16_noUnderflow(monotime_now - ts) : 0;
     ts = atomic_load64(&lck->mti_reader_check_timestamp, mo_Relaxed);

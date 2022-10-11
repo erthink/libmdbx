@@ -370,7 +370,7 @@ MDBX_MAYBE_UNUSED static __always_inline uint32_t atomic_load32(
 /* FROZEN: The version number for a database's datafile format. */
 #define MDBX_DATA_VERSION 3
 /* The version number for a database's lockfile format. */
-#define MDBX_LOCK_VERSION 4
+#define MDBX_LOCK_VERSION 5
 
 /* handle for the DB used to track free pages. */
 #define FREE_DBI 0
@@ -748,19 +748,19 @@ typedef struct MDBX_lockinfo {
 
   atomic_txnid_t mti_oldest_reader;
 
-  /* Timestamp of the last steady sync. Value is represented in a suitable
-   * system-dependent form, for example clock_gettime(CLOCK_BOOTTIME) or
-   * clock_gettime(CLOCK_MONOTONIC). */
-  MDBX_atomic_uint64_t mti_sync_timestamp;
+  /* Timestamp of entering an out-of-sync state. Value is represented in a
+   * suitable system-dependent form, for example clock_gettime(CLOCK_BOOTTIME)
+   * or clock_gettime(CLOCK_MONOTONIC). */
+  MDBX_atomic_uint64_t mti_eoos_timestamp;
 
   /* Number un-synced-with-disk pages for auto-sync feature. */
-  atomic_pgno_t mti_unsynced_pages;
-
-  /* Number of page which was discarded last time by madvise(MADV_FREE). */
-  atomic_pgno_t mti_discarded_tail;
+  MDBX_atomic_uint64_t mti_unsynced_pages;
 
   /* Timestamp of the last readers check. */
   MDBX_atomic_uint64_t mti_reader_check_timestamp;
+
+  /* Number of page which was discarded last time by madvise(MADV_FREE). */
+  atomic_pgno_t mti_discarded_tail;
 
   /* Shared anchor for tracking readahead edge and enabled/disabled status. */
   pgno_t mti_readahead_anchor;
