@@ -425,6 +425,40 @@ MDBX_MAYBE_UNUSED static __inline void jitter4testing(bool tiny);
 #define MAX_WRITE UINT32_C(0x04000000)
 #else
 #define MAX_WRITE UINT32_C(0x3f000000)
+
+#if defined(F_GETLK64) && defined(F_SETLK64) && defined(F_SETLKW64) &&         \
+    !defined(__ANDROID_API__)
+#define MDBX_F_SETLK F_SETLK64
+#define MDBX_F_SETLKW F_SETLKW64
+#define MDBX_F_GETLK F_GETLK64
+#define MDBX_FCNTL fcntl64
+#define MDBX_STRUCT_FLOCK struct flock64
+#ifndef OFF_T_MAX
+#define OFF_T_MAX UINT64_C(0x7fffFFFFfff00000)
+#endif /* OFF_T_MAX */
+#else
+#define MDBX_F_SETLK F_SETLK
+#define MDBX_F_SETLKW F_SETLKW
+#define MDBX_F_GETLK F_GETLK
+#define MDBX_FCNTL fcntl
+#define MDBX_STRUCT_FLOCK struct flock
+#endif /* MDBX_F_SETLK, MDBX_F_SETLKW, MDBX_F_GETLK */
+
+#if defined(F_OFD_SETLK64) && defined(F_OFD_SETLKW64) &&                       \
+    defined(F_OFD_GETLK64) && !defined(__ANDROID_API__)
+#define MDBX_F_OFD_SETLK F_OFD_SETLK64
+#define MDBX_F_OFD_SETLKW F_OFD_SETLKW64
+#define MDBX_F_OFD_GETLK F_OFD_GETLK64
+#else
+#define MDBX_F_OFD_SETLK F_OFD_SETLK
+#define MDBX_F_OFD_SETLKW F_OFD_SETLKW
+#define MDBX_F_OFD_GETLK F_OFD_GETLK
+#ifndef OFF_T_MAX
+#define OFF_T_MAX                                                              \
+  (((sizeof(off_t) > 4) ? INT64_MAX : INT32_MAX) & ~(size_t)0xFffff)
+#endif /* OFF_T_MAX */
+#endif /* MDBX_F_OFD_SETLK64, MDBX_F_OFD_SETLKW64, MDBX_F_OFD_GETLK64 */
+
 #endif
 
 #if defined(__linux__) || defined(__gnu_linux__)

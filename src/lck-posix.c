@@ -178,25 +178,20 @@ __cold static void choice_fcntl(void) {
                            of reliability reasons */
 #endif                  /* linux */
   ) {
-    op_setlk = F_OFD_SETLK;
-    op_setlkw = F_OFD_SETLKW;
-    op_getlk = F_OFD_GETLK;
+    op_setlk = MDBX_F_OFD_SETLK;
+    op_setlkw = MDBX_F_OFD_SETLKW;
+    op_getlk = MDBX_F_OFD_GETLK;
     return;
   }
-  op_setlk = F_SETLK;
-  op_setlkw = F_SETLKW;
-  op_getlk = F_GETLK;
+  op_setlk = MDBX_F_SETLK;
+  op_setlkw = MDBX_F_SETLKW;
+  op_getlk = MDBX_F_GETLK;
 }
 #else
-#define op_setlk F_SETLK
-#define op_setlkw F_SETLKW
-#define op_getlk F_GETLK
+#define op_setlk MDBX_F_SETLK
+#define op_setlkw MDBX_F_SETLKW
+#define op_getlk MDBX_F_GETLK
 #endif /* MDBX_USE_OFDLOCKS */
-
-#ifndef OFF_T_MAX
-#define OFF_T_MAX                                                              \
-  (((sizeof(off_t) > 4) ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff)
-#endif
 
 static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
                   const off_t offset, off_t len) {
@@ -220,7 +215,7 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
   assert((uint64_t)((off_t)((uint64_t)offset + (uint64_t)len)) ==
          ((uint64_t)offset + (uint64_t)len));
   for (;;) {
-    struct flock lock_op;
+    MDBX_STRUCT_FLOCK lock_op;
     STATIC_ASSERT_MSG(sizeof(off_t) <= sizeof(lock_op.l_start) &&
                           sizeof(off_t) <= sizeof(lock_op.l_len) &&
                           OFF_T_MAX == (off_t)OFF_T_MAX,
@@ -232,7 +227,7 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
     lock_op.l_whence = SEEK_SET;
     lock_op.l_start = offset;
     lock_op.l_len = len;
-    int rc = fcntl(fd, cmd, &lock_op);
+    int rc = MDBX_FCNTL(fd, cmd, &lock_op);
     jitter4testing(true);
     if (rc != -1) {
       if (cmd == op_getlk) {
@@ -246,18 +241,18 @@ static int lck_op(const mdbx_filehandle_t fd, int cmd, const int lck,
     }
     rc = errno;
 #if MDBX_USE_OFDLOCKS
-    if (rc == EINVAL &&
-        (cmd == F_OFD_SETLK || cmd == F_OFD_SETLKW || cmd == F_OFD_GETLK)) {
+    if (rc == EINVAL && (cmd == MDBX_F_OFD_SETLK || cmd == MDBX_F_OFD_SETLKW ||
+                         cmd == MDBX_F_OFD_GETLK)) {
       /* fallback to non-OFD locks */
-      if (cmd == F_OFD_SETLK)
-        cmd = F_SETLK;
-      else if (cmd == F_OFD_SETLKW)
-        cmd = F_SETLKW;
+      if (cmd == MDBX_F_OFD_SETLK)
+        cmd = MDBX_F_SETLK;
+      else if (cmd == MDBX_F_OFD_SETLKW)
+        cmd = MDBX_F_SETLKW;
       else
-        cmd = F_GETLK;
-      op_setlk = F_SETLK;
-      op_setlkw = F_SETLKW;
-      op_getlk = F_GETLK;
+        cmd = MDBX_F_GETLK;
+      op_setlk = MDBX_F_SETLK;
+      op_setlkw = MDBX_F_SETLKW;
+      op_getlk = MDBX_F_GETLK;
       continue;
     }
 #endif /* MDBX_USE_OFDLOCKS */

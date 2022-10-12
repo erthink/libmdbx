@@ -20536,14 +20536,13 @@ LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
   /* no locking required since the file opened with ShareMode == 0 */
 #else
   if (rc == MDBX_SUCCESS) {
-    struct flock lock_op;
+    MDBX_STRUCT_FLOCK lock_op;
     memset(&lock_op, 0, sizeof(lock_op));
     lock_op.l_type = F_WRLCK;
     lock_op.l_whence = SEEK_SET;
     lock_op.l_start = 0;
-    lock_op.l_len =
-        (sizeof(lock_op.l_len) > 4 ? INT64_MAX : INT32_MAX) & ~(size_t)0xffff;
-    if (fcntl(newfd, F_SETLK, &lock_op)
+    lock_op.l_len = OFF_T_MAX;
+    if (MDBX_FCNTL(newfd, MDBX_F_SETLK, &lock_op)
 #if (defined(__linux__) || defined(__gnu_linux__)) && defined(LOCK_EX) &&      \
     (!defined(__ANDROID_API__) || __ANDROID_API__ >= 24)
         || flock(newfd, LOCK_EX | LOCK_NB)
