@@ -20532,14 +20532,10 @@ LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
 #endif
   );
 
-  if (rc == MDBX_SUCCESS) {
 #if defined(_WIN32) || defined(_WIN64)
-    OVERLAPPED ov;
-    memset(&ov, 0, sizeof(ov));
-    if (!LockFileEx(newfd, LOCKFILE_EXCLUSIVE_LOCK | LOCKFILE_FAIL_IMMEDIATELY,
-                    0, 0, INT32_MAX, &ov))
-      rc = GetLastError();
+  /* no locking required since the file opened with ShareMode == 0 */
 #else
+  if (rc == MDBX_SUCCESS) {
     struct flock lock_op;
     memset(&lock_op, 0, sizeof(lock_op));
     lock_op.l_type = F_WRLCK;
@@ -20554,8 +20550,8 @@ LIBMDBX_API int mdbx_env_copyW(MDBX_env *env, const wchar_t *dest_path,
 #endif /* Linux */
     )
       rc = errno;
-#endif /* Windows / POSIX */
   }
+#endif /* Windows / POSIX */
 
   if (rc == MDBX_SUCCESS)
     rc = mdbx_env_copy2fd(env, newfd, flags);
