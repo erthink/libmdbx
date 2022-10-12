@@ -21704,8 +21704,8 @@ __cold int mdbx_reader_list(const MDBX_env *env, MDBX_reader_list_func *func,
                                                         reader_pages_retired))
                              : 0;
       }
-      rc = func(ctx, ++serial, (unsigned)i, pid, (mdbx_tid_t)tid, txnid, lag,
-                bytes_used, bytes_retained);
+      rc = func(ctx, ++serial, (unsigned)i, pid, (mdbx_tid_t)((intptr_t)tid),
+                txnid, lag, bytes_used, bytes_retained);
       if (unlikely(rc != MDBX_SUCCESS))
         break;
     }
@@ -21940,7 +21940,7 @@ __cold static txnid_t kick_longlived_readers(MDBX_env *env,
             ? pgno2bytes(env, (pgno_t)(head_retired - hold_retired))
             : 0;
     int rc =
-        callback(env, env->me_txn, pid, (mdbx_tid_t)tid, laggard,
+        callback(env, env->me_txn, pid, (mdbx_tid_t)((intptr_t)tid), laggard,
                  (gap < UINT_MAX) ? (unsigned)gap : UINT_MAX, space, retry);
     if (rc < 0)
       /* hsr returned error and/or agree MDBX_MAP_FULL error */
