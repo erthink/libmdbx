@@ -1,10 +1,31 @@
 ChangeLog
 ---------
 
+## v0.11.12 (Эребуни) at 2022-10-12
+
+The stable bugfix release.
+
+```
+11 files changed, 96 insertions(+), 49 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
+
+Fixes:
+
+ - Fixed static assertion failure on platforms where the `off_t` type is wider
+   than corresponding fields of `struct flock` used for file locking (backport).
+   Now _libmdbx_ will use `fcntl64(F_GETLK64/F_SETLK64/F_SETLKW64)` if available.
+ - Fixed assertion check inside `page_retire_ex()` (backport).
+
+Minors:
+
+ - Fixed `-Wint-to-pointer-cast` warnings while casting to `mdbx_tid_t` (backport).
+ - Removed needless `LockFileEx()` inside `mdbx_env_copy()` (backport).
+
+
 ## v0.11.11 (Тендра-1790) at 2022-09-11
 
 The stable bugfix release.
-It is planned that this will be the last release of the v0.11 branch.
 
 ```
 10 files changed, 38 insertions(+), 21 deletions(-)
