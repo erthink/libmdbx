@@ -4835,7 +4835,8 @@ static int mdbx_page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
       rc = mdbx_page_get(mc, pgno, &check, txn->mt_front);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
-      mdbx_tassert(txn, (PAGETYPE(check) & ~P_LEAF2) == (pagetype & ~P_FROZEN));
+      mdbx_tassert(txn, (PAGETYPE(check) & ~(P_LEAF2 | P_SPILLED)) ==
+                            (pagetype & ~(P_LEAF2 | P_FROZEN)));
       mdbx_tassert(txn, !(pagetype & P_FROZEN) || IS_FROZEN(txn, check));
     }
     if (pagetype & P_FROZEN) {
