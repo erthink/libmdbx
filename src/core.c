@@ -983,14 +983,7 @@ static __always_inline bool atomic_cas64(MDBX_atomic_uint64_t *p, uint64_t c,
                                          uint64_t v) {
 #ifdef MDBX_HAVE_C11ATOMICS
   STATIC_ASSERT(sizeof(long long) >= sizeof(uint64_t));
-#ifdef ATOMIC_LLONG_LOCK_FREE
-  STATIC_ASSERT(ATOMIC_LLONG_LOCK_FREE > 0);
-#if ATOMIC_LLONG_LOCK_FREE < 2
   assert(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
-#endif /* ATOMIC_LLONG_LOCK_FREE < 2 */
-#else  /* defined(ATOMIC_LLONG_LOCK_FREE) */
-  assert(atomic_is_lock_free(MDBX_c11a_rw(uint64_t, p)));
-#endif
   return atomic_compare_exchange_strong(MDBX_c11a_rw(uint64_t, p), &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
@@ -1009,14 +1002,7 @@ static __always_inline bool atomic_cas32(MDBX_atomic_uint32_t *p, uint32_t c,
                                          uint32_t v) {
 #ifdef MDBX_HAVE_C11ATOMICS
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
-#ifdef ATOMIC_INT_LOCK_FREE
-  STATIC_ASSERT(ATOMIC_INT_LOCK_FREE > 0);
-#if ATOMIC_INT_LOCK_FREE < 2
   assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
-#endif
-#else
-  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
-#endif
   return atomic_compare_exchange_strong(MDBX_c11a_rw(uint32_t, p), &c, v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_bool_compare_and_swap(&p->weak, c, v);
@@ -1035,14 +1021,7 @@ static __always_inline uint32_t atomic_add32(MDBX_atomic_uint32_t *p,
                                              uint32_t v) {
 #ifdef MDBX_HAVE_C11ATOMICS
   STATIC_ASSERT(sizeof(int) >= sizeof(uint32_t));
-#ifdef ATOMIC_INT_LOCK_FREE
-  STATIC_ASSERT(ATOMIC_INT_LOCK_FREE > 0);
-#if ATOMIC_INT_LOCK_FREE < 2
   assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
-#endif
-#else
-  assert(atomic_is_lock_free(MDBX_c11a_rw(uint32_t, p)));
-#endif
   return atomic_fetch_add(MDBX_c11a_rw(uint32_t, p), v);
 #elif defined(__GNUC__) || defined(__clang__)
   return __sync_fetch_and_add(&p->weak, v);

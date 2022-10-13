@@ -6,6 +6,8 @@ ChangeLog
 Fixes:
 
  - Fixed builds with older libc versions after using `fcntl64()` (backport).
+ - Fixed builds with  older `stdatomic.h` versions,
+   where the `ATOMIC_*_LOCK_FREE` macros mistakenly redefined using functions (backport).
 
 
 ## v0.11.12 (Эребуни) at 2022-10-12
