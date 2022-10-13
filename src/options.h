@@ -358,13 +358,7 @@
 #endif /* MDBX_64BIT_ATOMIC */
 
 #ifndef MDBX_64BIT_CAS
-#if defined(ATOMIC_LLONG_LOCK_FREE)
-#if ATOMIC_LLONG_LOCK_FREE > 1
-#define MDBX_64BIT_CAS 1
-#else
-#define MDBX_64BIT_CAS 0
-#endif
-#elif defined(__GCC_ATOMIC_LLONG_LOCK_FREE)
+#if defined(__GCC_ATOMIC_LLONG_LOCK_FREE)
 #if __GCC_ATOMIC_LLONG_LOCK_FREE > 1
 #define MDBX_64BIT_CAS 1
 #else
@@ -372,6 +366,12 @@
 #endif
 #elif defined(__CLANG_ATOMIC_LLONG_LOCK_FREE)
 #if __CLANG_ATOMIC_LLONG_LOCK_FREE > 1
+#define MDBX_64BIT_CAS 1
+#else
+#define MDBX_64BIT_CAS 0
+#endif
+#elif defined(ATOMIC_LLONG_LOCK_FREE)
+#if ATOMIC_LLONG_LOCK_FREE > 1
 #define MDBX_64BIT_CAS 1
 #else
 #define MDBX_64BIT_CAS 0
