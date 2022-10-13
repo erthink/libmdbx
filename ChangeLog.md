@@ -1,6 +1,13 @@
 ChangeLog
 ---------
 
+## v0.11.x
+
+Fixes:
+
+ - Fixed builds with older libc versions after using `fcntl64()` (backport).
+
+
 ## v0.11.12 (Эребуни) at 2022-10-12
 
 The stable bugfix release.

@@ -294,7 +294,14 @@ MDBX_MAYBE_UNUSED static __inline void mdbx_jitter4testing(bool tiny);
 #define MDBX_F_SETLK F_SETLK64
 #define MDBX_F_SETLKW F_SETLKW64
 #define MDBX_F_GETLK F_GETLK64
+#if (__GLIBC_PREREQ(2, 28) &&                                                  \
+     (defined(__USE_LARGEFILE64) || defined(__LARGEFILE64_SOURCE) ||           \
+      defined(_USE_LARGEFILE64) || defined(_LARGEFILE64_SOURCE))) ||           \
+    defined(fcntl64)
 #define MDBX_FCNTL fcntl64
+#else
+#define MDBX_FCNTL fcntl
+#endif
 #define MDBX_STRUCT_FLOCK struct flock64
 #ifndef OFF_T_MAX
 #define OFF_T_MAX UINT64_C(0x7fffFFFFfff00000)
