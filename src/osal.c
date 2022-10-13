@@ -1547,6 +1547,7 @@ MDBX_INTERNAL_FUNC int mdbx_mmap(const int flags, mdbx_mmap_t *map,
     map->limit = 0;
     map->current = 0;
     map->address = nullptr;
+    assert(errno != 0);
     return errno;
   }
   map->limit = limit;
@@ -1585,8 +1586,10 @@ MDBX_INTERNAL_FUNC int mdbx_munmap(mdbx_mmap_t *map) {
   if (!NT_SUCCESS(rc))
     ntstatus2errcode(rc);
 #else
-  if (unlikely(munmap(map->address, map->limit)))
+  if (unlikely(munmap(map->address, map->limit))) {
+    assert(errno != 0);
     return errno;
+  }
 #endif /* ! Windows */
 
   map->limit = 0;
@@ -1809,8 +1812,10 @@ retry_mapview:;
   if (limit < map->limit) {
     /* unmap an excess at end of mapping. */
     // coverity[offset_free : FALSE]
-    if (unlikely(munmap(map->dxb + limit, map->limit - limit)))
+    if (unlikely(munmap(map->dxb + limit, map->limit - limit))) {
+      assert(errno != 0);
       return errno;
+    }
     map->limit = limit;
     return rc;
   }
@@ -1822,14 +1827,19 @@ retry_mapview:;
   assert(limit > map->limit);
   uint8_t *ptr = MAP_FAILED;
 
-#if defined(MREMAP_MAYMOVE)
+#if (defined(__linux__) || defined(__gnu_linux__)) && defined(_GNU_SOURCE)
   ptr = mremap(map->address, map->limit, limit,
-               (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE : 0);
+#if defined(MREMAP_MAYMOVE)
+               (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE :
+#endif /* MREMAP_MAYMOVE */
+                                               0);
   if (ptr == MAP_FAILED) {
     err = errno;
+    assert(err != 0);
     switch (err) {
     default:
       return err;
+    case 0 /* paranoia */:
     case EAGAIN:
     case ENOMEM:
       return MDBX_UNABLE_EXTEND_MAPSIZE;
@@ -1837,7 +1847,7 @@ retry_mapview:;
       break;
     }
   }
-#endif /* MREMAP_MAYMOVE */
+#endif /* Linux & _GNU_SOURCE */
 
   const unsigned mmap_flags =
       MAP_CONCEAL | MAP_SHARED | MAP_FILE | MAP_NORESERVE |
@@ -1850,17 +1860,22 @@ retry_mapview:;
     ptr = mmap(map->dxb + map->limit, limit - map->limit, mmap_prot,
                mmap_flags | MAP_FIXED_NOREPLACE, map->fd, map->limit);
     if (ptr == map->dxb + map->limit)
+      /* успешно прилепили отображение в конец */
       ptr = map->dxb;
     else if (ptr != MAP_FAILED) {
       /* the desired address is busy, unmap unsuitable one */
-      if (unlikely(munmap(ptr, limit - map->limit)))
+      if (unlikely(munmap(ptr, limit - map->limit))) {
+        assert(errno != 0);
         return errno;
+      }
       ptr = MAP_FAILED;
     } else {
       err = errno;
+      assert(err != 0);
       switch (err) {
       default:
         return err;
+      case 0 /* paranoia */:
       case EAGAIN:
       case ENOMEM:
         return MDBX_UNABLE_EXTEND_MAPSIZE;
@@ -1879,8 +1894,10 @@ retry_mapview:;
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     }
 
-    if (unlikely(munmap(map->address, map->limit)))
+    if (unlikely(munmap(map->address, map->limit))) {
+      assert(errno != 0);
       return errno;
+    }
 
     // coverity[pass_freed_arg : FALSE]
     ptr = mmap(map->address, limit, mmap_prot,
@@ -1924,6 +1941,7 @@ retry_mapview:;
         map->limit = 0;
         map->current = 0;
         map->address = nullptr;
+        assert(errno != 0);
         return errno;
       }
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
@@ -1950,8 +1968,10 @@ retry_mapview:;
 
 #if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
-  if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
+  if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0)) {
+    assert(errno != 0);
     return errno;
+  }
 #endif /* MADV_DONTFORK */
 #ifdef MADV_NOHUGEPAGE
   (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
@@ -1960,6 +1980,9 @@ retry_mapview:;
 
 #endif /* POSIX / Windows */
 
+  assert(rc != MDBX_SUCCESS ||
+         (map->address != nullptr && map->address != MAP_FAILED &&
+          map->current == size && map->limit == limit));
   return rc;
 }
 
