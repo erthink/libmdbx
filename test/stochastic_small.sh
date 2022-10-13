@@ -213,7 +213,11 @@ case ${UNAME} in
     ulimit -c unlimited
     if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%p" ]; then
       echo "core.%p > /proc/sys/kernel/core_pattern" >&2
-      echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+      if [ $(id -u) -ne 0 -a -n "$(which sudo 2>/dev/null)" ]; then
+        echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+      else
+        (echo "core.%p" > /proc/sys/kernel/core_pattern) || true
+      fi
     fi
   ;;
 
