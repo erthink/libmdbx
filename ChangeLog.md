@@ -1,6 +1,10 @@
 ChangeLog
 ---------
 
+English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
+and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
+
+
 ## В разработке v0.12.2
 
 Новое:
@@ -40,13 +44,13 @@ ChangeLog
    суммарный размер пары ключ-значение.
 
  - Реализовано использование асинхронной (overlapped) записи в Windows,
-   включая использования небуфферизированного ввода-вывода и WriteGather().
+   включая использования небуфферизированного ввода-вывода и `WriteGather()`.
    Это позволяет сократить накладные расходы и частично обойти проблемы
    Windows с низкой производительностью ввода-вывода, включая большие
-   задержки FlushFileBuffers(). Новый код также обеспечивает консолидацию
+   задержки `FlushFileBuffers()`. Новый код также обеспечивает консолидацию
    записываемых регионов на всех платформах, а на Windows использование
    событий (events) сведено к минимум, одновременно с автоматических
-   использованием WriteGather(). Поэтому ожидается существенное снижение
+   использованием `WriteGather()`. Поэтому ожидается существенное снижение
    накладных расходов взаимодействия с ОС, а в Windows это ускорение, в
    некоторых сценариях, может быть кратным в сравнении с LMDB.
 
@@ -84,7 +88,7 @@ ChangeLog
    одновременно, а только поочередно (LCK-файл переписывается при открытии
    первым открывающим БД процессом).
 
- - В C++ API добавлены методы фиксации транзакции с получением информации
+ - В `C++` API добавлены методы фиксации транзакции с получением информации
    о задержках.
 
  - Added `MDBX_HAVE_BUILT IN_CPU_SUPPORTS` build option to control use GCC's
@@ -125,7 +129,7 @@ ChangeLog
  - Небольшие правки скрипта `long_stochastic.sh` для работы в Windows.
  - Удаление ненужного вызова `LockFileEx()` внутри `mdbx_env_copy()`.
  - Добавлено описание использования файловых дескрипторов в различных режимах.
- - Добавлено использование  _CrtDbgReport() в отладочных сборках.
+ - Добавлено использование `_CrtDbgReport()` в отладочных сборках.
  - Fixed an extra ensure/assertion check of `oldest_reader` inside `txn_end()`.
  - Removed description of deprecated usage of `MDBX_NODUPDATA`.
  - Fixed regression ASAN/Valgring-enabled builds.
