@@ -20280,7 +20280,6 @@ __cold static int env_compact(MDBX_env *env, MDBX_txn *read_txn,
       const size_t chunk = ((size_t)MDBX_ENVCOPY_WRITEBUF < whole_size - offset)
                                ? (size_t)MDBX_ENVCOPY_WRITEBUF
                                : whole_size - offset;
-      /* copy to avoid EFAULT in case swapped-out */
       int rc = osal_write(fd, data_buffer, chunk);
       if (unlikely(rc != MDBX_SUCCESS))
         return rc;
@@ -20410,7 +20409,6 @@ __cold static int env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
             ((size_t)MDBX_ENVCOPY_WRITEBUF < whole_size - offset)
                 ? (size_t)MDBX_ENVCOPY_WRITEBUF
                 : whole_size - offset;
-        /* copy to avoid EFAULT in case swapped-out */
         rc = osal_write(fd, data_buffer, chunk);
         offset += chunk;
       }
