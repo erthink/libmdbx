@@ -4047,15 +4047,15 @@ __cold static void kill_page(MDBX_txn *txn, MDBX_page *mp, pgno_t pgno,
     if ((txn->mt_flags & MDBX_WRITEMAP) == 0)
       osal_pwrite(env->me_lazy_fd, mp, bytes, pgno2bytes(env, pgno));
   } else {
-    struct iovec iov[MDBX_COMMIT_PAGES];
+    struct iovec iov[MDBX_AUXILARY_IOV_MAX];
     iov[0].iov_len = env->me_psize;
     iov[0].iov_base = (char *)env->me_pbuf + env->me_psize;
     size_t iov_off = pgno2bytes(env, pgno), n = 1;
     while (--npages) {
       iov[n] = iov[0];
-      if (++n == MDBX_COMMIT_PAGES) {
-        osal_pwritev(env->me_lazy_fd, iov, MDBX_COMMIT_PAGES, iov_off);
-        iov_off += pgno2bytes(env, MDBX_COMMIT_PAGES);
+      if (++n == MDBX_AUXILARY_IOV_MAX) {
+        osal_pwritev(env->me_lazy_fd, iov, MDBX_AUXILARY_IOV_MAX, iov_off);
+        iov_off += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
         n = 0;
       }
     }

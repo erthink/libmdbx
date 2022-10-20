@@ -1579,12 +1579,12 @@ typedef struct MDBX_node {
 #error "Oops, some flags overlapped or wrong"
 #endif
 
-/* max number of pages to commit in one writev() call */
-#define MDBX_COMMIT_PAGES 64
-#if defined(IOV_MAX) && IOV_MAX < MDBX_COMMIT_PAGES /* sysconf(_SC_IOV_MAX) */
-#undef MDBX_COMMIT_PAGES
-#define MDBX_COMMIT_PAGES IOV_MAX
-#endif
+/* Max length of iov-vector passed to writev() call, used for auxilary writes */
+#define MDBX_AUXILARY_IOV_MAX 64
+#if defined(IOV_MAX) && IOV_MAX < MDBX_AUXILARY_IOV_MAX
+#undef MDBX_AUXILARY_IOV_MAX
+#define MDBX_AUXILARY_IOV_MAX IOV_MAX
+#endif /* MDBX_AUXILARY_IOV_MAX */
 
 /*
  *                /
