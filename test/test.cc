@@ -199,6 +199,19 @@ void testcase::txn_begin(bool readonly, MDBX_txn_flags_t flags) {
 
   log_trace("<< txn_begin(%s, 0x%04X)", readonly ? "read-only" : "read-write",
             flags);
+
+  if (flipcoin_n(5)) {
+    const unsigned mask =
+        unsigned(MDBX_warmup_default | MDBX_warmup_force | MDBX_warmup_oomsafe |
+                 MDBX_warmup_lock | MDBX_warmup_touchlimit);
+    static unsigned counter;
+    MDBX_warmup_flags_t warmup_flags = MDBX_warmup_flags_t(
+        (counter > MDBX_warmup_release) ? prng64() & mask : counter);
+    counter += 1;
+    int err = mdbx_env_warmup(db_guard.get(), txn, warmup_flags, 0);
+    log_trace("== counter %u, env_warmup(flags %u), rc %d", counter,
+              warmup_flags, err);
+  }
 }
 
 int testcase::breakable_commit() {
