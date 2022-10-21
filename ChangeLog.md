@@ -9,6 +9,7 @@ Fixes:
  - Fixed builds with  older `stdatomic.h` versions,
    where the `ATOMIC_*_LOCK_FREE` macros mistakenly redefined using functions (backport).
  - Added workaround for `mremap()` defect to avoid assertion failure (backport).
+ - Workaround for `encryptfs` bug(s) in the `copy_file_range` implementation.
 
 
 ## v0.11.12 (Эребуни) at 2022-10-12

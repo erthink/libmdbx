@@ -19670,6 +19670,11 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
 #if MDBX_USE_COPYFILERANGE
   static bool copyfilerange_unavailable;
   bool not_the_same_filesystem = false;
+  struct statfs statfs_info;
+  if (fstatfs(fd, &statfs_info) ||
+      statfs_info.f_type == /* ECRYPTFS_SUPER_MAGIC */ 0xf15f)
+    /* avoid use copyfilerange_unavailable() to ecryptfs due bugs */
+    not_the_same_filesystem = true;
 #endif /* MDBX_USE_COPYFILERANGE */
   for (size_t offset = meta_bytes; rc == MDBX_SUCCESS && offset < used_size;) {
 #if MDBX_USE_SENDFILE
@@ -19703,7 +19708,9 @@ __cold static int mdbx_env_copy_asis(MDBX_env *env, MDBX_txn *read_txn,
       if (bytes_copied == 0)
         break;
       rc = errno;
-      if (rc == EXDEV)
+      if (rc == EXDEV || rc == /* workaround for ecryptfs bug(s),
+                                  maybe usefull for others fs */
+                             EINVAL)
         not_the_same_filesystem = true;
       else if (ignore_enosys(rc) == MDBX_RESULT_TRUE)
         copyfilerange_unavailable = true;
