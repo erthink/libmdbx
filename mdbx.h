@@ -2808,6 +2808,94 @@ LIBMDBX_INLINE_API(int, mdbx_env_close, (MDBX_env * env)) {
   return mdbx_env_close_ex(env, false);
 }
 
+/** \brief Warming up options
+ * \ingroup c_settings
+ * \anchor warmup_flags
+ * \see mdbx_env_warmup() */
+enum MDBX_warmup_flags_t {
+  /** By default \ref mdbx_env_warmup() just ask OS kernel to asynchronously
+   * prefetch database pages. */
+  MDBX_warmup_default = 0,
+
+  /** Peeking all pages of allocated portion of the database
+   * to force ones to be loaded into memory. However, the pages are just peeks
+   * sequentially, so unused pages that are in GC will be loaded in the same
+   * way as those that contain payload. */
+  MDBX_warmup_force = 1,
+
+  /** Using system calls to peeks pages instead of directly accessing ones,
+   * which at the cost of additional overhead avoids killing the current
+   * process by OOM-killer in a lack of memory condition.
+   * \note Has effect only on POSIX (non-Windows) systems with conjunction
+   * to \ref MDBX_warmup_force option. */
+  MDBX_warmup_oomsafe = 2,
+
+  /** Try to lock database pages in memory by `mlock()` on POSIX-systems
+   * or `VirtualLock()` on Windows. Please refer to description of these
+   * functions for reasonability of such locking and the information of
+   * effects, including the system as a whole.
+   *
+   * Such locking in memory requires that the corresponding resource limits
+   * (e.g. `RLIMIT_RSS`, `RLIMIT_MEMLOCK` or process working set size)
+   * and the availability of system RAM are sufficiently high.
+   *
+   * On successful, all currently allocated pages, both unused in GC and
+   * containing payload, will be locked in memory until the environment closes,
+   * or explicitly unblocked by using \ref MDBX_warmup_release, or the
+   * database geomenry will changed, including its auto-shrinking. */
+  MDBX_warmup_lock = 4,
+
+  /** Alters corresponding current resource limits to be enough for lock pages
+   * by \ref MDBX_warmup_lock. However, this option should be used in simpliest
+   * applications since takes into account only current size of this environment
+   * disregarding all other factors. For real-world database application you
+   * will need full-fledged management of resources and their limits with
+   * respective engineering. */
+  MDBX_warmup_touchlimit = 8,
+
+  /** Release the lock that was performed before by \ref MDBX_warmup_lock. */
+  MDBX_warmup_release = 16,
+};
+#ifndef __cplusplus
+typedef enum MDBX_warmup_flags_t MDBX_warmup_flags_t;
+#else
+DEFINE_ENUM_FLAG_OPERATORS(MDBX_warmup_flags_t)
+#endif
+
+/** \brief Warms up the database by loading pages into memory, optionally lock
+ * ones. \ingroup c_settings
+ *
+ * Depending on the specified flags, notifies OS kernel about following access,
+ * force loads the database pages, including locks ones in memory or releases
+ * such a lock. However, the function does not analyze the b-tree nor the GC.
+ * Therefore an unused pages that are in GC handled (i.e. will be loaded) in
+ * the same way as those that contain payload.
+ *
+ * At least one of env or txn argument must be non-null.
+ *
+ * \param [in] env              An environment handle returned
+ *                              by \ref mdbx_env_create().
+ * \param [in] txn              A transaction handle returned
+ *                              by \ref mdbx_txn_begin().
+ * \param [in] flags            The \ref warmup_flags, bitwise OR'ed together.
+ *
+ * \param [in] timeout_seconds_16dot16  Optional timeout which checking only
+ *                              during explicitly peeking database pages
+ *                              for loading ones if the \ref MDBX_warmup_force
+ *                              option was spefified.
+ *
+ * \returns A non-zero error value on failure and 0 on success.
+ * Some possible errors are:
+ *
+ * \retval MDBX_ENOSYS        The system does not support requested
+ * operation(s).
+ *
+ * \retval MDBX_RESULT_TRUE   The specified timeout is reached during load
+ *                            data into memory. */
+LIBMDBX_API int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
+                                MDBX_warmup_flags_t flags,
+                                unsigned timeout_seconds_16dot16);
+
 /** \brief Set environment flags.
  * \ingroup c_settings
  *

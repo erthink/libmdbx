@@ -731,6 +731,11 @@ typedef struct MDBX_lockinfo {
   /* Marker to distinguish uniqueness of DB/CLK. */
   MDBX_atomic_uint64_t mti_bait_uniqueness;
 
+  /* Counter of processes which had mlock()'ed some of mmapped DB pages.
+   * Non-zero means at least one process lock at leat one page,
+   * and therefore madvise() could return EINVAL. */
+  MDBX_atomic_uint32_t mti_mlock_counter;
+
   MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
 
 #if MDBX_ENABLE_PGOP_STAT
@@ -1169,7 +1174,8 @@ struct MDBX_env {
   unsigned me_psize;          /* DB page size, initialized from me_os_psize */
   unsigned me_leaf_nodemax;   /* max size of a leaf-node */
   unsigned me_branch_nodemax; /* max size of a branch-node */
-  uint8_t me_psize2log;       /* log2 of DB page size */
+  atomic_pgno_t me_mlocked_pgno;
+  uint8_t me_psize2log; /* log2 of DB page size */
   int8_t me_stuck_meta; /* recovery-only: target meta page or less that zero */
   uint16_t me_merge_threshold,
       me_merge_threshold_gc;  /* pages emptier than this are candidates for

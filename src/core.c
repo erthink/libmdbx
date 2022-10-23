@@ -5561,7 +5561,7 @@ MDBX_MAYBE_UNUSED static __always_inline int ignore_enosys(int err) {
 
 #if MDBX_ENABLE_MADVISE
 /* Turn on/off readahead. It's harmful when the DB is larger than RAM. */
-__cold static int set_readahead(MDBX_env *env, const pgno_t edge,
+__cold static int set_readahead(const MDBX_env *env, const pgno_t edge,
                                 const bool enable, const bool force_whole) {
   eASSERT(env, edge >= NUM_METAS && edge <= MAX_PAGENO + 1);
   eASSERT(env, (enable & 1) == (enable != 0));
@@ -5687,6 +5687,82 @@ __cold static int set_readahead(MDBX_env *env, const pgno_t edge,
 }
 #endif /* MDBX_ENABLE_MADVISE */
 
+__cold static void update_mlocked(const MDBX_env *env,
+                                  const pgno_t new_aligned_mlocked_pgno,
+                                  const bool lock_not_release) {
+  for (;;) {
+    const pgno_t mlock_pgno_snap =
+        atomic_load32(&env->me_mlocked_pgno, mo_AcquireRelease);
+    eASSERT(env, pgno_align2os_pgno(env, mlock_pgno_snap) == mlock_pgno_snap);
+    eASSERT(env, pgno_align2os_pgno(env, new_aligned_mlocked_pgno) ==
+                     new_aligned_mlocked_pgno);
+    if (lock_not_release ? (mlock_pgno_snap >= new_aligned_mlocked_pgno)
+                         : (mlock_pgno_snap <= new_aligned_mlocked_pgno))
+      break;
+    if (likely(atomic_cas32(&((MDBX_env *)env)->me_mlocked_pgno,
+                            mlock_pgno_snap, new_aligned_mlocked_pgno)))
+      for (;;) {
+        MDBX_atomic_uint32_t *const mlock_counter =
+            &env->me_lck->mti_mlock_counter;
+        const uint32_t snap_counter = atomic_load32(mlock_counter, mo_Relaxed);
+        if (mlock_pgno_snap == 0 && snap_counter < INT_MAX) {
+          eASSERT(env, lock_not_release);
+          if (unlikely(
+                  !atomic_cas32(mlock_counter, snap_counter, snap_counter + 1)))
+            continue;
+        }
+        if (new_aligned_mlocked_pgno == 0 && snap_counter > 0) {
+          eASSERT(env, !lock_not_release);
+          if (unlikely(
+                  !atomic_cas32(mlock_counter, snap_counter, snap_counter - 1)))
+            continue;
+        }
+        NOTICE("%s-pages %u..%u, mlocked-process(es) %u -> %u",
+               lock_not_release ? "lock" : "unlock",
+               lock_not_release ? mlock_pgno_snap : new_aligned_mlocked_pgno,
+               lock_not_release ? new_aligned_mlocked_pgno : mlock_pgno_snap,
+               snap_counter, atomic_load32(mlock_counter, mo_Relaxed));
+        return;
+      }
+  }
+}
+
+__cold static void munlock_after(const MDBX_env *env, const pgno_t aligned_pgno,
+                                 const size_t end_bytes) {
+  if (atomic_load32(&env->me_mlocked_pgno, mo_AcquireRelease) > aligned_pgno) {
+    int err = MDBX_ENOSYS;
+    const size_t munlock_begin = pgno2bytes(env, aligned_pgno);
+    const size_t munlock_size = end_bytes - munlock_begin;
+    eASSERT(env, end_bytes % env->me_os_psize == 0 &&
+                     munlock_begin % env->me_os_psize == 0 &&
+                     munlock_size % env->me_os_psize == 0);
+#if defined(_WIN32) || defined(_WIN64)
+    err = VirtualUnlock(env->me_map + munlock_begin, munlock_size)
+              ? MDBX_SUCCESS
+              : (int)GetLastError();
+    if (err == ERROR_NOT_LOCKED)
+      err = MDBX_SUCCESS;
+#elif defined(_POSIX_MEMLOCK_RANGE)
+    err = munlock(env->me_map + munlock_begin, munlock_size) ? errno
+                                                             : MDBX_SUCCESS;
+#endif
+    if (likely(err == MDBX_SUCCESS))
+      update_mlocked(env, aligned_pgno, false);
+    else {
+#if defined(_WIN32) || defined(_WIN64)
+      WARNING("VirtualUnlock(%zu, %zu) error %d", munlock_begin, munlock_size,
+              err);
+#else
+      WARNING("munlock(%zu, %zu) error %d", munlock_begin, munlock_size, err);
+#endif
+    }
+  }
+}
+
+__cold static void munlock_all(const MDBX_env *env) {
+  munlock_after(env, 0, bytes_align2os_bytes(env, env->me_dxb_mmap.current));
+}
+
 __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
                              const pgno_t size_pgno, const pgno_t limit_pgno,
                              const bool implicit) {
@@ -5790,6 +5866,12 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
       goto bailout;
   }
 
+  const pgno_t aligned_munlock_pgno =
+      (mresize_flags & (MDBX_MRESIZE_MAY_UNMAP | MDBX_MRESIZE_MAY_MOVE))
+          ? 0
+          : bytes2pgno(env, size_bytes);
+  munlock_after(env, aligned_munlock_pgno, size_bytes);
+
 #if MDBX_ENABLE_MADVISE
   if (size_bytes < prev_size) {
     NOTICE("resize-MADV_%s %u..%u",
@@ -5820,10 +5902,23 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
                                        prev_size - size_bytes,
                                        POSIX_FADV_DONTNEED));
 #endif /* MADV_DONTNEED */
-    if (unlikely(MDBX_IS_ERROR(rc)))
-      goto bailout;
-    if (env->me_lck->mti_discarded_tail.weak > size_pgno)
-      env->me_lck->mti_discarded_tail.weak = size_pgno;
+    uint32_t snap_mlock_counter;
+    if (unlikely(rc == MDBX_EINVAL) &&
+        (snap_mlock_counter =
+             atomic_load32(&env->me_lck->mti_mlock_counter, mo_Relaxed)) > 0) {
+      NOTICE("%s-madvise: ignore EINVAL (%d) since some pages locked (have %u "
+             "mlocked-process(es))",
+             "resize", rc, snap_mlock_counter);
+    } else {
+      if (unlikely(MDBX_IS_ERROR(rc))) {
+        ERROR("%s-madvise(%s, %zu..%zu), %u mlocked-process(es), err %d",
+              "mresize", "DONTNEED", size_bytes, prev_size - size_bytes,
+              atomic_load32(&env->me_lck->mti_mlock_counter, mo_Relaxed), rc);
+        goto bailout;
+      }
+      if (env->me_lck->mti_discarded_tail.weak > size_pgno)
+        env->me_lck->mti_discarded_tail.weak = size_pgno;
+    }
   }
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -11368,13 +11463,15 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     const pgno_t prev_discarded_pgno =
         atomic_load32(&env->me_lck->mti_discarded_tail, mo_Relaxed);
     if (prev_discarded_pgno >= discard_edge_pgno + bytes2pgno(env, threshold)) {
-      NOTICE("open-MADV_%s %u..%u", "DONTNEED", largest_pgno,
+      NOTICE("shrink-MADV_%s %u..%u", "DONTNEED", largest_pgno,
              prev_discarded_pgno);
       atomic_store32(&env->me_lck->mti_discarded_tail, discard_edge_pgno,
                      mo_Relaxed);
       const size_t prev_discarded_bytes =
           ceil_powerof2(pgno2bytes(env, prev_discarded_pgno), env->me_os_psize);
       ENSURE(env, prev_discarded_bytes > discard_edge_bytes);
+      munlock_after(env, discard_edge_pgno,
+                    bytes_align2os_bytes(env, env->me_dxb_mmap.current));
 #if defined(MADV_DONTNEED)
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
@@ -11391,8 +11488,23 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
           env->me_map + discard_edge_bytes,
           prev_discarded_bytes - discard_edge_bytes, POSIX_MADV_DONTNEED));
 #endif
-      if (unlikely(MDBX_IS_ERROR(err)))
+      uint32_t snap_mlock_counter;
+      if (unlikely(err == MDBX_EINVAL) &&
+          (snap_mlock_counter = atomic_load32(&env->me_lck->mti_mlock_counter,
+                                              mo_Relaxed)) > 0) {
+        NOTICE("%s-madvise: ignore EINVAL (%d) since some pages locked (have "
+               "%u mlocked-process(es))",
+               "shrink", err, snap_mlock_counter);
+      } else if (unlikely(MDBX_IS_ERROR(err))) {
+        ERROR("%s-madvise(%s, %zu..%zu), err %d", "shrink", "DONTNEED",
+              discard_edge_bytes, prev_discarded_bytes - discard_edge_bytes,
+              err);
+        ERROR("%s-madvise(%s, %zu..%zu), %u mlocked-process(es), err %d",
+              "shrink", "DONTNEED", discard_edge_bytes,
+              prev_discarded_bytes - discard_edge_bytes,
+              atomic_load32(&env->me_lck->mti_mlock_counter, mo_Relaxed), err);
         return err;
+      }
     }
 #endif /* MDBX_ENABLE_MADVISE && (MADV_DONTNEED || POSIX_MADV_DONTNEED) */
 
@@ -13896,17 +14008,21 @@ __cold static int env_close(MDBX_env *env) {
   }
 
   env->me_flags &= ~ENV_INTERNAL_FLAGS;
-  env->me_lck = nullptr;
   if (flags & MDBX_ENV_TXKEY) {
     rthc_remove(env->me_txkey);
     env->me_txkey = (osal_thread_key_t)0;
   }
 
+  munlock_all(env);
+  osal_ioring_destroy(&env->me_ioring);
+
   lcklist_lock();
   const int rc = lcklist_detach_locked(env);
   lcklist_unlock();
 
-  osal_ioring_destroy(&env->me_ioring);
+  env->me_lck = nullptr;
+  if (env->me_lck_mmap.lck)
+    osal_munmap(&env->me_lck_mmap);
 
   if (env->me_map) {
     osal_munmap(&env->me_dxb_mmap);
@@ -13933,9 +14049,6 @@ __cold static int env_close(MDBX_env *env) {
     (void)osal_closefile(env->me_lazy_fd);
     env->me_lazy_fd = INVALID_HANDLE_VALUE;
   }
-
-  if (env->me_lck_mmap.lck)
-    osal_munmap(&env->me_lck_mmap);
 
   if (env->me_lfd != INVALID_HANDLE_VALUE) {
     (void)osal_closefile(env->me_lfd);
@@ -23587,6 +23700,249 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
   }
 
   return MDBX_SUCCESS;
+}
+
+static size_t estimate_rss(size_t database_bytes) {
+  return database_bytes + database_bytes / 64 +
+         (512 + MDBX_WORDBITS * 16) * MEGABYTE;
+}
+
+__cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
+                           MDBX_warmup_flags_t flags,
+                           unsigned timeout_seconds_16dot16) {
+  if (unlikely(env == NULL && txn == NULL))
+    return MDBX_EINVAL;
+  if (unlikely(flags >
+               (MDBX_warmup_force | MDBX_warmup_oomsafe | MDBX_warmup_lock |
+                MDBX_warmup_touchlimit | MDBX_warmup_release)))
+    return MDBX_EINVAL;
+
+  if (txn) {
+    int err = check_txn(txn, MDBX_TXN_BLOCKED - MDBX_TXN_ERROR);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
+  if (env) {
+    int err = check_env(env, false);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+    if (txn && unlikely(txn->mt_env != env))
+      return MDBX_EINVAL;
+  } else {
+    env = txn->mt_env;
+  }
+
+  const uint64_t timeout_monotime =
+      (timeout_seconds_16dot16 && (flags & MDBX_warmup_force))
+          ? osal_monotime() + osal_16dot16_to_monotime(timeout_seconds_16dot16)
+          : 0;
+
+  if (flags & MDBX_warmup_release)
+    munlock_all(env);
+
+  pgno_t used_pgno;
+  if (txn) {
+    used_pgno = txn->mt_geo.next;
+  } else {
+    const meta_troika_t troika = meta_tap(env);
+    used_pgno = meta_recent(env, &troika).ptr_v->mm_geo.next;
+  }
+  const size_t used_range = pgno_align2os_bytes(env, used_pgno);
+  const pgno_t mlock_pgno = bytes2pgno(env, used_range);
+
+  int rc = MDBX_SUCCESS;
+  if (flags & MDBX_warmup_touchlimit) {
+    const size_t estimated_rss = estimate_rss(used_range);
+#if defined(_WIN32) || defined(_WIN64)
+    SIZE_T current_ws_lower, current_ws_upper;
+    if (GetProcessWorkingSetSize(GetCurrentProcess(), &current_ws_lower,
+                                 &current_ws_upper) &&
+        current_ws_lower < estimated_rss) {
+      const SIZE_T ws_lower = estimated_rss;
+      const SIZE_T ws_upper =
+          (MDBX_WORDBITS == 32 && ws_lower > MEGABYTE * 2048)
+              ? ws_lower
+              : ws_lower + MDBX_WORDBITS * MEGABYTE * 32;
+      if (!SetProcessWorkingSetSize(GetCurrentProcess(), ws_lower, ws_upper)) {
+        rc = (int)GetLastError();
+        WARNING("SetProcessWorkingSetSize(%zu, %zu) error %d", ws_lower,
+                ws_upper, rc);
+      }
+    }
+#endif /* Windows */
+#ifdef RLIMIT_RSS
+    struct rlimit rss;
+    if (getrlimit(RLIMIT_RSS, &rss) == 0 && rss.rlim_cur < estimated_rss) {
+      rss.rlim_cur = estimated_rss;
+      if (rss.rlim_max < estimated_rss)
+        rss.rlim_max = used_range;
+      if (setrlimit(RLIMIT_RSS, &rss)) {
+        rc = errno;
+        WARNING("setrlimit(%s, {%zu, %zu}) error %d", "RLIMIT_RSS",
+                (size_t)rss.rlim_cur, (size_t)rss.rlim_max, rc);
+      }
+    }
+#endif /* RLIMIT_RSS */
+#ifdef RLIMIT_MEMLOCK
+    if (flags & MDBX_warmup_lock) {
+      struct rlimit memlock;
+      if (getrlimit(RLIMIT_MEMLOCK, &memlock) == 0 &&
+          memlock.rlim_cur < estimated_rss) {
+        memlock.rlim_cur = estimated_rss;
+        if (memlock.rlim_max < estimated_rss)
+          memlock.rlim_max = estimated_rss;
+        if (setrlimit(RLIMIT_MEMLOCK, &memlock)) {
+          rc = errno;
+          WARNING("setrlimit(%s, {%zu, %zu}) error %d", "RLIMIT_MEMLOCK",
+                  (size_t)memlock.rlim_cur, (size_t)memlock.rlim_max, rc);
+        }
+      }
+    }
+#endif /* RLIMIT_MEMLOCK */
+    (void)estimated_rss;
+  }
+
+#if defined(MLOCK_ONFAULT) &&                                                  \
+    ((defined(_GNU_SOURCE) && __GLIBC_PREREQ(2, 27)) ||                        \
+     (defined(__ANDROID_API__) && __ANDROID_API__ >= 30)) &&                   \
+    (defined(__linux__) || defined(__gnu_linux__))
+  if ((flags & MDBX_warmup_lock) != 0 && linux_kernel_version >= 0x04040000 &&
+      atomic_load32(&env->me_mlocked_pgno, mo_AcquireRelease) < mlock_pgno) {
+    if (mlock2(env->me_map, used_range, MLOCK_ONFAULT)) {
+      rc = errno;
+      WARNING("mlock2(%zu, %s) error %d", used_range, "MLOCK_ONFAULT", rc);
+    } else {
+      update_mlocked(env, mlock_pgno, true);
+      rc = MDBX_SUCCESS;
+    }
+    if (rc != EINVAL)
+      flags -= MDBX_warmup_lock;
+  }
+#endif /* MLOCK_ONFAULT */
+
+  int err = MDBX_ENOSYS;
+#if MDBX_ENABLE_MADVISE
+  err = set_readahead(env, used_pgno, true, true);
+#else
+#if defined(_WIN32) || defined(_WIN64)
+  if (mdbx_PrefetchVirtualMemory) {
+    WIN32_MEMORY_RANGE_ENTRY hint;
+    hint.VirtualAddress = env->me_map;
+    hint.NumberOfBytes = used_range;
+    if (mdbx_PrefetchVirtualMemory(GetCurrentProcess(), 1, &hint, 0))
+      err = MDBX_SUCCESS;
+    else {
+      err = (int)GetLastError();
+      ERROR("%s(%zu) error %d", "PrefetchVirtualMemory", used_range, err);
+    }
+  }
+#endif /* Windows */
+
+#if defined(POSIX_MADV_WILLNEED)
+  err = posix_madvise(env->me_map, used_range, POSIX_MADV_WILLNEED)
+            ? ignore_enosys(errno)
+            : MDBX_SUCCESS;
+#elif defined(MADV_WILLNEED)
+  err = madvise(env->me_map, used_range, MADV_WILLNEED) ? ignore_enosys(errno)
+                                                        : MDBX_SUCCESS;
+#endif
+
+#if defined(F_RDADVISE)
+  if (err) {
+    fcntl(env->me_lazy_fd, F_RDAHEAD, true);
+    struct radvisory hint;
+    hint.ra_offset = 0;
+    hint.ra_count = unlikely(used_range > INT_MAX &&
+                             sizeof(used_range) > sizeof(hint.ra_count))
+                        ? INT_MAX
+                        : (int)used_range;
+    err = fcntl(env->me_lazy_fd, F_RDADVISE, &hint) ? ignore_enosys(errno)
+                                                    : MDBX_SUCCESS;
+    if (err == ENOTTY)
+      err = MDBX_SUCCESS /* Ignore ENOTTY for DB on the ram-disk */;
+  }
+#endif /* F_RDADVISE */
+#endif /* MDBX_ENABLE_MADVISE */
+  if (err != MDBX_SUCCESS && rc == MDBX_SUCCESS)
+    rc = err;
+
+  if ((flags & MDBX_warmup_force) != 0 &&
+      (rc == MDBX_SUCCESS || rc == MDBX_ENOSYS)) {
+    const volatile uint8_t *ptr = env->me_map;
+    size_t offset = 0, unused = 42;
+#if !(defined(_WIN32) || defined(_WIN64))
+    if (flags & MDBX_warmup_oomsafe) {
+      const int null_fd = open("/dev/null", O_WRONLY);
+      if (unlikely(null_fd < 0))
+        rc = errno;
+      else {
+        struct iovec iov[MDBX_AUXILARY_IOV_MAX];
+        for (;;) {
+          unsigned i;
+          for (i = 0; i < MDBX_AUXILARY_IOV_MAX && offset < used_range; ++i) {
+            iov[i].iov_base = (void *)(ptr + offset);
+            iov[i].iov_len = 1;
+            offset += env->me_os_psize;
+          }
+          if (unlikely(writev(null_fd, iov, i) < 0)) {
+            rc = errno;
+            if (rc == EFAULT)
+              rc = ENOMEM;
+            break;
+          }
+          if (offset >= used_range) {
+            rc = MDBX_SUCCESS;
+            break;
+          }
+          if (timeout_seconds_16dot16 && osal_monotime() > timeout_monotime) {
+            rc = MDBX_RESULT_TRUE;
+            break;
+          }
+        }
+        close(null_fd);
+      }
+    } else
+#endif /* Windows */
+      for (;;) {
+        unused += ptr[offset];
+        offset += env->me_os_psize;
+        if (offset >= used_range) {
+          rc = MDBX_SUCCESS;
+          break;
+        }
+        if (timeout_seconds_16dot16 && osal_monotime() > timeout_monotime) {
+          rc = MDBX_RESULT_TRUE;
+          break;
+        }
+      }
+    (void)unused;
+  }
+
+  if ((flags & MDBX_warmup_lock) != 0 &&
+      (rc == MDBX_SUCCESS || rc == MDBX_ENOSYS) &&
+      atomic_load32(&env->me_mlocked_pgno, mo_AcquireRelease) < mlock_pgno) {
+#if defined(_WIN32) || defined(_WIN64)
+    if (VirtualLock(env->me_map, used_range)) {
+      update_mlocked(env, mlock_pgno, true);
+      rc = MDBX_SUCCESS;
+    } else {
+      rc = (int)GetLastError();
+      WARNING("%s(%zu) error %d", "VirtualLock", used_range, rc);
+    }
+#elif defined(_POSIX_MEMLOCK_RANGE)
+    if (mlock(env->me_map, used_range) == 0) {
+      update_mlocked(env, mlock_pgno, true);
+      rc = MDBX_SUCCESS;
+    } else {
+      rc = errno;
+      WARNING("%s(%zu) error %d", "mlock", used_range, rc);
+    }
+#else
+    rc = MDBX_ENOSYS;
+#endif
+  }
+
+  return rc;
 }
 
 __cold void global_ctor(void) {
