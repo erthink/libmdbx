@@ -930,21 +930,24 @@ bailout:
 }
 
 static void usage(char *prog) {
-  fprintf(stderr,
-          "usage: %s [-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] "
-          "dbpath\n"
-          "  -V\t\tprint version and exit\n"
-          "  -v\t\tmore verbose, could be used multiple times\n"
-          "  -q\t\tbe quiet\n"
-          "  -c\t\tforce cooperative mode (don't try exclusive)\n"
-          "  -w\t\twrite-mode checking\n"
-          "  -d\t\tdisable page-by-page traversal of B-tree\n"
-          "  -i\t\tignore wrong order errors (for custom comparators case)\n"
-          "  -s subdb\tprocess a specific subdatabase only\n"
-          "  -0|1|2\tforce using specific meta-page 0, or 2 for checking\n"
-          "  -t\t\tturn to a specified meta-page on successful check\n"
-          "  -T\t\tturn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!\n",
-          prog);
+  fprintf(
+      stderr,
+      "usage: %s "
+      "[-V] [-v] [-q] [-c] [-0|1|2] [-w] [-d] [-i] [-s subdb] [-u|U] dbpath\n"
+      "  -V\t\tprint version and exit\n"
+      "  -v\t\tmore verbose, could be used multiple times\n"
+      "  -q\t\tbe quiet\n"
+      "  -c\t\tforce cooperative mode (don't try exclusive)\n"
+      "  -w\t\twrite-mode checking\n"
+      "  -d\t\tdisable page-by-page traversal of B-tree\n"
+      "  -i\t\tignore wrong order errors (for custom comparators case)\n"
+      "  -s subdb\tprocess a specific subdatabase only\n"
+      "  -u\t\twarmup database before checking\n"
+      "  -U\t\twarmup and try lock database pages in memory before checking\n"
+      "  -0|1|2\tforce using specific meta-page 0, or 2 for checking\n"
+      "  -t\t\tturn to a specified meta-page on successful check\n"
+      "  -T\t\tturn to a specified meta-page EVEN ON UNSUCCESSFUL CHECK!\n",
+      prog);
   exit(EXIT_INTERRUPTED);
 }
 
@@ -1083,6 +1086,8 @@ int main(int argc, char *argv[]) {
   bool write_locked = false;
   bool turn_meta = false;
   bool force_turn_meta = false;
+  bool warmup = false;
+  MDBX_warmup_flags_t warmup_flags = MDBX_warmup_default;
 
   double elapsed;
 #if defined(_WIN32) || defined(_WIN64)
@@ -1106,6 +1111,7 @@ int main(int argc, char *argv[]) {
     usage(prog);
 
   for (int i; (i = getopt(argc, argv,
+                          "uU"
                           "0"
                           "1"
                           "2"
@@ -1182,6 +1188,14 @@ int main(int argc, char *argv[]) {
       break;
     case 'i':
       ignore_wrong_order = true;
+      break;
+    case 'u':
+      warmup = true;
+      break;
+    case 'U':
+      warmup = true;
+      warmup_flags =
+          MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
       break;
     default:
       usage(prog);
@@ -1284,12 +1298,33 @@ int main(int argc, char *argv[]) {
           (envflags & MDBX_EXCLUSIVE) ? "monopolistic" : "cooperative");
 
   if ((envflags & (MDBX_RDONLY | MDBX_EXCLUSIVE)) == 0) {
+    if (verbose) {
+      print(" - taking write lock...");
+      fflush(nullptr);
+    }
     rc = mdbx_txn_lock(env, false);
     if (rc != MDBX_SUCCESS) {
       error("mdbx_txn_lock() failed, error %d %s\n", rc, mdbx_strerror(rc));
       goto bailout;
     }
+    if (verbose)
+      print(" done\n");
     write_locked = true;
+  }
+
+  if (warmup) {
+    if (verbose) {
+      print(" - warming up...");
+      fflush(nullptr);
+    }
+    rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
+    if (MDBX_IS_ERROR(rc)) {
+      error("mdbx_env_warmup(flags %u) failed, error %d %s\n", warmup_flags, rc,
+            mdbx_strerror(rc));
+      goto bailout;
+    }
+    if (verbose)
+      print(" %s\n", rc ? "timeout" : "done");
   }
 
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);

@@ -44,14 +44,17 @@ static void signal_handler(int sig) {
 #endif /* !WINDOWS */
 
 static void usage(const char *prog) {
-  fprintf(stderr,
-          "usage: %s [-V] [-q] [-c] src_path [dest_path]\n"
-          "  -V\t\tprint version and exit\n"
-          "  -q\t\tbe quiet\n"
-          "  -c\t\tenable compactification (skip unused pages)\n"
-          "  src_path\tsource database\n"
-          "  dest_path\tdestination (stdout if not specified)\n",
-          prog);
+  fprintf(
+      stderr,
+      "usage: %s [-V] [-q] [-c] [-u|U] src_path [dest_path]\n"
+      "  -V\t\tprint version and exit\n"
+      "  -q\t\tbe quiet\n"
+      "  -c\t\tenable compactification (skip unused pages)\n"
+      "  -u\t\twarmup database before copying\n"
+      "  -U\t\twarmup and try lock database pages in memory before copying\n"
+      "  src_path\tsource database\n"
+      "  dest_path\tdestination (stdout if not specified)\n",
+      prog);
   exit(EXIT_FAILURE);
 }
 
@@ -62,6 +65,8 @@ int main(int argc, char *argv[]) {
   unsigned flags = MDBX_RDONLY;
   unsigned cpflags = 0;
   bool quiet = false;
+  bool warmup = false;
+  MDBX_warmup_flags_t warmup_flags = MDBX_warmup_default;
 
   for (; argc > 1 && argv[1][0] == '-'; argc--, argv++) {
     if (argv[1][1] == 'n' && argv[1][2] == '\0')
@@ -70,8 +75,14 @@ int main(int argc, char *argv[]) {
       cpflags |= MDBX_CP_COMPACT;
     else if (argv[1][1] == 'q' && argv[1][2] == '\0')
       quiet = true;
-    else if ((argv[1][1] == 'h' && argv[1][2] == '\0') ||
-             strcmp(argv[1], "--help") == 0)
+    else if (argv[1][1] == 'u' && argv[1][2] == '\0')
+      warmup = true;
+    else if (argv[1][1] == 'U' && argv[1][2] == '\0') {
+      warmup = true;
+      warmup_flags =
+          MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
+    } else if ((argv[1][1] == 'h' && argv[1][2] == '\0') ||
+               strcmp(argv[1], "--help") == 0)
       usage(progname);
     else if (argv[1][1] == 'V' && argv[1][2] == '\0') {
       printf("mdbx_copy version %d.%d.%d.%d\n"
@@ -120,7 +131,12 @@ int main(int argc, char *argv[]) {
   if (rc == MDBX_SUCCESS)
     rc = mdbx_env_open(env, argv[1], flags, 0);
 
-  if (rc == MDBX_SUCCESS) {
+  if (rc == MDBX_SUCCESS && warmup) {
+    act = "warming up";
+    rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
+  }
+
+  if (!MDBX_IS_ERROR(rc)) {
     act = "copying";
     if (argc == 2) {
       mdbx_filehandle_t fd;

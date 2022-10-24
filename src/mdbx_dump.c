@@ -217,19 +217,23 @@ static int dump_sdb(MDBX_txn *txn, MDBX_dbi dbi, char *name) {
 }
 
 static void usage(void) {
-  fprintf(stderr,
-          "usage: %s [-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] "
-          "dbpath\n"
-          "  -V\t\tprint version and exit\n"
-          "  -q\t\tbe quiet\n"
-          "  -f\t\twrite to file instead of stdout\n"
-          "  -l\t\tlist subDBs and exit\n"
-          "  -p\t\tuse printable characters\n"
-          "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n"
-          "  -a\t\tdump main DB and all subDBs\n"
-          "  -s name\tdump only the specified named subDB\n"
-          "  \t\tby default dump only the main DB\n",
-          prog);
+  fprintf(
+      stderr,
+      "usage: %s "
+      "[-V] [-q] [-f file] [-l] [-p] [-r] [-a|-s subdb] [-u|U] "
+      "dbpath\n"
+      "  -V\t\tprint version and exit\n"
+      "  -q\t\tbe quiet\n"
+      "  -f\t\twrite to file instead of stdout\n"
+      "  -l\t\tlist subDBs and exit\n"
+      "  -p\t\tuse printable characters\n"
+      "  -r\t\trescue mode (ignore errors to dump corrupted DB)\n"
+      "  -a\t\tdump main DB and all subDBs\n"
+      "  -s name\tdump only the specified named subDB\n"
+      "  -u\t\twarmup database before dumping\n"
+      "  -U\t\twarmup and try lock database pages in memory before dumping\n"
+      "  \t\tby default dump only the main DB\n",
+      prog);
   exit(EXIT_FAILURE);
 }
 
@@ -250,11 +254,14 @@ int main(int argc, char *argv[]) {
   char *subname = nullptr, *buf4free = nullptr;
   unsigned envflags = 0;
   bool alldbs = false, list = false;
+  bool warmup = false;
+  MDBX_warmup_flags_t warmup_flags = MDBX_warmup_default;
 
   if (argc < 2)
     usage();
 
   while ((i = getopt(argc, argv,
+                     "uU"
                      "a"
                      "f:"
                      "l"
@@ -311,6 +318,14 @@ int main(int argc, char *argv[]) {
     case 'r':
       rescue = true;
       break;
+    case 'u':
+      warmup = true;
+      break;
+    case 'U':
+      warmup = true;
+      warmup_flags =
+          MDBX_warmup_force | MDBX_warmup_touchlimit | MDBX_warmup_lock;
+      break;
     default:
       usage();
     }
@@ -362,6 +377,14 @@ int main(int argc, char *argv[]) {
   if (unlikely(rc != MDBX_SUCCESS)) {
     error("mdbx_env_open", rc);
     goto env_close;
+  }
+
+  if (warmup) {
+    rc = mdbx_env_warmup(env, nullptr, warmup_flags, 3600 * 65536);
+    if (MDBX_IS_ERROR(rc)) {
+      error("mdbx_env_warmup", rc);
+      goto env_close;
+    }
   }
 
   rc = mdbx_txn_begin(env, nullptr, MDBX_TXN_RDONLY, &txn);
