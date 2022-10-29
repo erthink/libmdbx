@@ -2444,7 +2444,7 @@ typedef struct MDBX_stat MDBX_stat;
 /** \brief Return statistics about the MDBX environment.
  * \ingroup c_statinfo
  *
- * At least one of env or txn argument must be non-null. If txn is passed
+ * At least one of `env` or `txn` argument must be non-null. If txn is passed
  * non-null then stat will be filled accordingly to the given transaction.
  * Otherwise, if txn is null, then stat will be populated by a snapshot from
  * the last committed write transaction, and at next time, other information
@@ -2562,7 +2562,7 @@ typedef struct MDBX_envinfo MDBX_envinfo;
 /** \brief Return information about the MDBX environment.
  * \ingroup c_statinfo
  *
- * At least one of env or txn argument must be non-null. If txn is passed
+ * At least one of `env` or `txn` argument must be non-null. If txn is passed
  * non-null then stat will be filled accordingly to the given transaction.
  * Otherwise, if txn is null, then stat will be populated by a snapshot from
  * the last committed write transaction, and at next time, other information
@@ -2871,7 +2871,7 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_warmup_flags_t)
  * Therefore an unused pages that are in GC handled (i.e. will be loaded) in
  * the same way as those that contain payload.
  *
- * At least one of env or txn argument must be non-null.
+ * At least one of `env` or `txn` argument must be non-null.
  *
  * \param [in] env              An environment handle returned
  *                              by \ref mdbx_env_create().
