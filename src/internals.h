@@ -1464,7 +1464,9 @@ MDBX_INTERNAL_FUNC int rthc_alloc(osal_thread_key_t *key, MDBX_reader *begin,
 MDBX_INTERNAL_FUNC void rthc_remove(const osal_thread_key_t key);
 
 MDBX_INTERNAL_FUNC void global_ctor(void);
+MDBX_INTERNAL_FUNC void osal_ctor(void);
 MDBX_INTERNAL_FUNC void global_dtor(void);
+MDBX_INTERNAL_FUNC void osal_dtor(void);
 MDBX_INTERNAL_FUNC void thread_dtor(void *ptr);
 
 #endif /* !__cplusplus */

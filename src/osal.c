@@ -623,13 +623,8 @@ MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *ior,
 #endif /* !Windows */
 
 #if MDBX_HAVE_PWRITEV && defined(_SC_IOV_MAX)
-  if (!osal_iov_max) {
-    osal_iov_max = sysconf(_SC_IOV_MAX);
-    if (RUNNING_ON_VALGRIND && osal_iov_max > 64)
-      /* чтобы не описывать все 1024 исключения в valgrind_suppress.txt */
-      osal_iov_max = 64;
-  }
-#endif
+  assert(osal_iov_max > 0);
+#endif /* MDBX_HAVE_PWRITEV && _SC_IOV_MAX */
 
   ior->boundary = (char *)(ior->pool + ior->allocated);
   return MDBX_SUCCESS;
@@ -660,7 +655,6 @@ static __inline ior_item_t *ior_next(ior_item_t *item, size_t sgvcnt) {
 
 MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
                                        void *data, const size_t bytes) {
-
   assert(bytes && data);
   assert(bytes % MIN_PAGESIZE == 0 && bytes <= MAX_WRITE);
   assert(offset % MIN_PAGESIZE == 0 && offset + (uint64_t)bytes <= MAX_MAPSIZE);
@@ -2634,10 +2628,15 @@ __cold MDBX_INTERNAL_FUNC void osal_jitter(bool tiny) {
   }
 }
 
+/*----------------------------------------------------------------------------*/
+
 #if defined(_WIN32) || defined(_WIN64)
+static LARGE_INTEGER performance_frequency;
 #elif defined(__APPLE__) || defined(__MACH__)
 #include <mach/mach_time.h>
+static uint64_t ratio_16dot16_to_monotine;
 #elif defined(__linux__) || defined(__gnu_linux__)
+static clockid_t posix_clockid;
 __cold static clockid_t choice_monoclock(void) {
   struct timespec probe;
 #if defined(CLOCK_BOOTTIME)
@@ -2652,27 +2651,16 @@ __cold static clockid_t choice_monoclock(void) {
 #endif
   return CLOCK_MONOTONIC;
 }
-#endif
-
-/*----------------------------------------------------------------------------*/
-
-#if defined(_WIN32) || defined(_WIN64)
-static LARGE_INTEGER performance_frequency;
-#elif defined(__APPLE__) || defined(__MACH__)
-static uint64_t ratio_16dot16_to_monotine;
+#elif defined(CLOCK_MONOTONIC)
+#define posix_clockid CLOCK_MONOTONIC
+#else
+#define posix_clockid CLOCK_REALTIME
 #endif
 
 MDBX_INTERNAL_FUNC uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
 #if defined(_WIN32) || defined(_WIN64)
-  if (unlikely(performance_frequency.QuadPart == 0))
-    QueryPerformanceFrequency(&performance_frequency);
   const uint64_t ratio = performance_frequency.QuadPart;
 #elif defined(__APPLE__) || defined(__MACH__)
-  if (unlikely(ratio_16dot16_to_monotine == 0)) {
-    mach_timebase_info_data_t ti;
-    mach_timebase_info(&ti);
-    ratio_16dot16_to_monotine = UINT64_C(1000000000) * ti.denom / ti.numer;
-  }
   const uint64_t ratio = ratio_16dot16_to_monotine;
 #else
   const uint64_t ratio = UINT64_C(1000000000);
@@ -2681,22 +2669,18 @@ MDBX_INTERNAL_FUNC uint64_t osal_16dot16_to_monotime(uint32_t seconds_16dot16) {
   return likely(ret || seconds_16dot16 == 0) ? ret : /* fix underflow */ 1;
 }
 
+static uint64_t monotime_limit;
 MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
-  static uint64_t limit;
-  if (unlikely(monotime > limit)) {
-    if (likely(limit != 0))
-      return UINT32_MAX;
-    limit = osal_16dot16_to_monotime(UINT32_MAX - 1);
-    if (unlikely(monotime > limit))
-      return UINT32_MAX;
-  }
+  if (unlikely(monotime > monotime_limit))
+    return UINT32_MAX;
+
   const uint32_t ret =
 #if defined(_WIN32) || defined(_WIN64)
       (uint32_t)((monotime << 16) / performance_frequency.QuadPart);
 #elif defined(__APPLE__) || defined(__MACH__)
       (uint32_t)((monotime << 16) / ratio_16dot16_to_monotine);
 #else
-      (uint32_t)(monotime * 128 / 1953125);
+      (uint32_t)((monotime << 7) / 1953125);
 #endif
   return ret;
 }
@@ -2704,30 +2688,16 @@ MDBX_INTERNAL_FUNC uint32_t osal_monotime_to_16dot16(uint64_t monotime) {
 MDBX_INTERNAL_FUNC uint64_t osal_monotime(void) {
 #if defined(_WIN32) || defined(_WIN64)
   LARGE_INTEGER counter;
-  counter.QuadPart = 0;
-  QueryPerformanceCounter(&counter);
-  return counter.QuadPart;
+  if (QueryPerformanceCounter(&counter))
+    return counter.QuadPart;
 #elif defined(__APPLE__) || defined(__MACH__)
   return mach_absolute_time();
 #else
-
-#if defined(__linux__) || defined(__gnu_linux__)
-  static clockid_t posix_clockid = -1;
-  if (unlikely(posix_clockid < 0))
-    posix_clockid = choice_monoclock();
-#elif defined(CLOCK_MONOTONIC)
-#define posix_clockid CLOCK_MONOTONIC
-#else
-#define posix_clockid CLOCK_REALTIME
-#endif
-
   struct timespec ts;
-  if (unlikely(clock_gettime(posix_clockid, &ts) != 0)) {
-    ts.tv_nsec = 0;
-    ts.tv_sec = 0;
-  }
-  return ts.tv_sec * UINT64_C(1000000000) + ts.tv_nsec;
+  if (likely(clock_gettime(posix_clockid, &ts) == 0))
+    return ts.tv_sec * UINT64_C(1000000000) + ts.tv_nsec;
 #endif
+  return 0;
 }
 
 /*----------------------------------------------------------------------------*/
@@ -2766,13 +2736,13 @@ __cold static void bootid_collect(bin128_t *p, const void *s, size_t n) {
 
 #if defined(_WIN32) || defined(_WIN64)
 
-static uint64_t windows_systemtime_ms() {
+__cold static uint64_t windows_systemtime_ms() {
   FILETIME ft;
   GetSystemTimeAsFileTime(&ft);
   return ((uint64_t)ft.dwHighDateTime << 32 | ft.dwLowDateTime) / 10000ul;
 }
 
-static uint64_t windows_bootime(void) {
+__cold static uint64_t windows_bootime(void) {
   unsigned confirmed = 0;
   uint64_t boottime = 0;
   uint64_t up0 = mdbx_GetTickCount64();
@@ -2799,8 +2769,9 @@ static uint64_t windows_bootime(void) {
   return 0;
 }
 
-static LSTATUS mdbx_RegGetValue(HKEY hKey, LPCSTR lpSubKey, LPCSTR lpValue,
-                                PVOID pvData, LPDWORD pcbData) {
+__cold static LSTATUS mdbx_RegGetValue(HKEY hKey, LPCSTR lpSubKey,
+                                       LPCSTR lpValue, PVOID pvData,
+                                       LPDWORD pcbData) {
   LSTATUS rc;
   if (!mdbx_RegGetValueA) {
     /* an old Windows 2000/XP */
@@ -3294,3 +3265,48 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
 
   return MDBX_SUCCESS;
 }
+
+#ifndef xMDBX_ALLOY
+unsigned sys_pagesize;
+MDBX_MAYBE_UNUSED unsigned sys_allocation_granularity;
+#endif /* xMDBX_ALLOY */
+
+void osal_ctor(void) {
+#if MDBX_HAVE_PWRITEV && defined(_SC_IOV_MAX)
+  osal_iov_max = sysconf(_SC_IOV_MAX);
+  if (RUNNING_ON_VALGRIND && osal_iov_max > 64)
+    /* чтобы не описывать все 1024 исключения в valgrind_suppress.txt */
+    osal_iov_max = 64;
+#endif /* MDBX_HAVE_PWRITEV && _SC_IOV_MAX */
+
+#if defined(_WIN32) || defined(_WIN64)
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  sys_pagesize = si.dwPageSize;
+  sys_allocation_granularity = si.dwAllocationGranularity;
+#else
+  sys_pagesize = sysconf(_SC_PAGE_SIZE);
+  sys_allocation_granularity = (MDBX_WORDBITS > 32) ? 65536 : 4096;
+  sys_allocation_granularity = (sys_allocation_granularity > sys_pagesize)
+                                   ? sys_allocation_granularity
+                                   : sys_pagesize;
+#endif
+  assert(sys_pagesize > 0 && (sys_pagesize & (sys_pagesize - 1)) == 0);
+  assert(sys_allocation_granularity >= sys_pagesize &&
+         sys_allocation_granularity % sys_pagesize == 0);
+
+#if defined(__linux__) || defined(__gnu_linux__)
+  posix_clockid = choice_monoclock();
+#endif
+
+#if defined(_WIN32) || defined(_WIN64)
+  QueryPerformanceFrequency(&performance_frequency);
+#elif defined(__APPLE__) || defined(__MACH__)
+  mach_timebase_info_data_t ti;
+  mach_timebase_info(&ti);
+  ratio_16dot16_to_monotine = UINT64_C(1000000000) * ti.denom / ti.numer;
+#endif
+  monotime_limit = osal_16dot16_to_monotime(UINT32_MAX - 1);
+}
+
+void osal_dtor(void) {}

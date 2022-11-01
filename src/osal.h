@@ -210,18 +210,16 @@ typedef pthread_mutex_t osal_fastmutex_t;
 /*----------------------------------------------------------------------------*/
 /* OS abstraction layer stuff */
 
+MDBX_INTERNAL_VAR unsigned sys_pagesize;
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_VAR unsigned sys_allocation_granularity;
+
 /* Get the size of a memory page for the system.
  * This is the basic size that the platform's memory manager uses, and is
  * fundamental to the use of memory-mapped files. */
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline size_t
 osal_syspagesize(void) {
-#if defined(_WIN32) || defined(_WIN64)
-  SYSTEM_INFO si;
-  GetSystemInfo(&si);
-  return si.dwPageSize;
-#else
-  return sysconf(_SC_PAGE_SIZE);
-#endif
+  assert(sys_pagesize > 0 && (sys_pagesize & (sys_pagesize - 1)) == 0);
+  return sys_pagesize;
 }
 
 #if defined(_WIN32) || defined(_WIN64)

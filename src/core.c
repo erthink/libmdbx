@@ -1501,6 +1501,7 @@ __cold void global_dtor(void) {
   workaround_glibc_bug21031();
 #endif
 
+  osal_dtor();
   TRACE("<< pid %d\n", osal_getpid());
 }
 
@@ -23946,6 +23947,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
 }
 
 __cold void global_ctor(void) {
+  osal_ctor();
   rthc_limit = RTHC_INITIAL_LIMIT;
   rthc_table = rthc_table_static;
 #if defined(_WIN32) || defined(_WIN64)
