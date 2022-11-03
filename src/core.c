@@ -23467,14 +23467,17 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_EPERM;
     if (unlikely(value > SIZE_MAX - 65536))
       return MDBX_TOO_LARGE;
-    if (atomic_store32(&env->me_lck->mti_autosync_threshold,
-                       bytes2pgno(env, (size_t)value + env->me_psize - 1),
-                       mo_Relaxed) != 0 &&
-        (env->me_flags & MDBX_ENV_ACTIVE)) {
-      err = mdbx_env_sync_poll(env);
-      if (unlikely(MDBX_IS_ERROR(err)))
-        return err;
-      err = MDBX_SUCCESS;
+    value = bytes2pgno(env, (size_t)value + env->me_psize - 1);
+    if ((uint32_t)value != atomic_load32(&env->me_lck->mti_autosync_threshold,
+                                         mo_AcquireRelease) &&
+        atomic_store32(&env->me_lck->mti_autosync_threshold, (uint32_t)value,
+                       mo_Relaxed)
+        /* Дергаем sync(force=off) только если задано новое не-нулевое значение
+         * и мы вне транзакции */
+        && lock_needed) {
+      err = env_sync(env, false, false);
+      if (err == /* нечего сбрасывать на диск */ MDBX_RESULT_TRUE)
+        err = MDBX_SUCCESS;
     }
     break;
 
@@ -23487,14 +23490,16 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
       return MDBX_EPERM;
     if (unlikely(value > UINT32_MAX))
       return MDBX_TOO_LARGE;
-    if (atomic_store64(&env->me_lck->mti_autosync_period,
-                       osal_16dot16_to_monotime((uint32_t)value),
-                       mo_Relaxed) != 0 &&
-        (env->me_flags & MDBX_ENV_ACTIVE)) {
-      err = mdbx_env_sync_poll(env);
-      if (unlikely(MDBX_IS_ERROR(err)))
-        return err;
-      err = MDBX_SUCCESS;
+    value = osal_16dot16_to_monotime((uint32_t)value);
+    if (value != atomic_load64(&env->me_lck->mti_autosync_period,
+                               mo_AcquireRelease) &&
+        atomic_store64(&env->me_lck->mti_autosync_period, value, mo_Relaxed)
+        /* Дергаем sync(force=off) только если задано новое не-нулевое значение
+         * и мы вне транзакции */
+        && lock_needed) {
+      err = env_sync(env, false, false);
+      if (err == /* нечего сбрасывать на диск */ MDBX_RESULT_TRUE)
+        err = MDBX_SUCCESS;
     }
     break;
 
