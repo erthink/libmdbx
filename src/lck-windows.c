@@ -161,7 +161,21 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
                      : (LCK_EXCLUSIVE | LCK_WAITFOR),
             LCK_BODY))
     return MDBX_SUCCESS;
+
   int rc = (int)GetLastError();
+  if (rc == ERROR_LOCK_VIOLATION && dontwait) {
+    SleepEx(0, true);
+    if (flock(env->me_lazy_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY))
+      return MDBX_SUCCESS;
+    rc = (int)GetLastError();
+    if (rc == ERROR_LOCK_VIOLATION) {
+      SleepEx(0, true);
+      if (flock(env->me_lazy_fd, LCK_EXCLUSIVE | LCK_DONTWAIT, LCK_BODY))
+        return MDBX_SUCCESS;
+      rc = (int)GetLastError();
+    }
+  }
+
   LeaveCriticalSection(&env->me_windowsbug_lock);
   return (!dontwait || rc != ERROR_LOCK_VIOLATION) ? rc : MDBX_BUSY;
 }
