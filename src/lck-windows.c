@@ -203,6 +203,16 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
                             dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT)
                                      : (LCK_EXCLUSIVE | LCK_WAITFOR),
                             DXB_BODY);
+  if (rc == ERROR_LOCK_VIOLATION && dontwait) {
+    SleepEx(0, true);
+    rc = flock_with_event(env->me_fd4data, env->me_data_lock_event,
+                          LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
+    if (rc == ERROR_LOCK_VIOLATION) {
+      SleepEx(0, true);
+      rc = flock_with_event(env->me_fd4data, env->me_data_lock_event,
+                            LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
+    }
+  }
   if (rc == MDBX_SUCCESS)
     return rc;
 
