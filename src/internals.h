@@ -731,10 +731,10 @@ typedef struct MDBX_lockinfo {
   /* Marker to distinguish uniqueness of DB/CLK. */
   MDBX_atomic_uint64_t mti_bait_uniqueness;
 
-  /* Counter of processes which had mlock()'ed some of mmapped DB pages.
-   * Non-zero means at least one process lock at leat one page,
-   * and therefore madvise() could return EINVAL. */
-  MDBX_atomic_uint32_t mti_mlock_counter;
+  /* Paired counter of processes that have mlock()ed part of mmapped DB.
+   * The (mti_mlcnt[0] - mti_mlcnt[1]) > 0 means at least one process
+   * lock at leat one page, so therefore madvise() could return EINVAL. */
+  MDBX_atomic_uint32_t mti_mlcnt[2];
 
   MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
 
@@ -764,7 +764,7 @@ typedef struct MDBX_lockinfo {
   /* Timestamp of the last readers check. */
   MDBX_atomic_uint64_t mti_reader_check_timestamp;
 
-  /* Number of page which was discarded last time by madvise(MADV_FREE). */
+  /* Number of page which was discarded last time by madvise(DONTNEED). */
   atomic_pgno_t mti_discarded_tail;
 
   /* Shared anchor for tracking readahead edge and enabled/disabled status. */

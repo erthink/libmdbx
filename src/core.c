@@ -5688,41 +5688,44 @@ __cold static int set_readahead(const MDBX_env *env, const pgno_t edge,
 }
 #endif /* MDBX_ENABLE_MADVISE */
 
-__cold static void update_mlocked(const MDBX_env *env,
-                                  const pgno_t new_aligned_mlocked_pgno,
-                                  const bool lock_not_release) {
+__cold static void update_mlcnt(const MDBX_env *env,
+                                const pgno_t new_aligned_mlocked_pgno,
+                                const bool lock_not_release) {
   for (;;) {
-    const pgno_t mlock_pgno_snap =
+    const pgno_t mlock_pgno_before =
         atomic_load32(&env->me_mlocked_pgno, mo_AcquireRelease);
-    eASSERT(env, pgno_align2os_pgno(env, mlock_pgno_snap) == mlock_pgno_snap);
+    eASSERT(env,
+            pgno_align2os_pgno(env, mlock_pgno_before) == mlock_pgno_before);
     eASSERT(env, pgno_align2os_pgno(env, new_aligned_mlocked_pgno) ==
                      new_aligned_mlocked_pgno);
-    if (lock_not_release ? (mlock_pgno_snap >= new_aligned_mlocked_pgno)
-                         : (mlock_pgno_snap <= new_aligned_mlocked_pgno))
+    if (lock_not_release ? (mlock_pgno_before >= new_aligned_mlocked_pgno)
+                         : (mlock_pgno_before <= new_aligned_mlocked_pgno))
       break;
     if (likely(atomic_cas32(&((MDBX_env *)env)->me_mlocked_pgno,
-                            mlock_pgno_snap, new_aligned_mlocked_pgno)))
+                            mlock_pgno_before, new_aligned_mlocked_pgno)))
       for (;;) {
-        MDBX_atomic_uint32_t *const mlock_counter =
-            &env->me_lck->mti_mlock_counter;
-        const uint32_t snap_counter = atomic_load32(mlock_counter, mo_Relaxed);
-        if (mlock_pgno_snap == 0 && snap_counter < INT_MAX) {
+        MDBX_atomic_uint32_t *const mlcnt = env->me_lck->mti_mlcnt;
+        const int32_t snap_locked = atomic_load32(mlcnt + 0, mo_Relaxed);
+        const int32_t snap_unlocked = atomic_load32(mlcnt + 1, mo_Relaxed);
+        if (mlock_pgno_before == 0 && (snap_locked - snap_unlocked) < INT_MAX) {
           eASSERT(env, lock_not_release);
-          if (unlikely(
-                  !atomic_cas32(mlock_counter, snap_counter, snap_counter + 1)))
+          if (unlikely(!atomic_cas32(mlcnt + 0, snap_locked, snap_locked + 1)))
             continue;
         }
-        if (new_aligned_mlocked_pgno == 0 && snap_counter > 0) {
+        if (new_aligned_mlocked_pgno == 0 &&
+            (snap_locked - snap_unlocked) > 0) {
           eASSERT(env, !lock_not_release);
           if (unlikely(
-                  !atomic_cas32(mlock_counter, snap_counter, snap_counter - 1)))
+                  !atomic_cas32(mlcnt + 1, snap_unlocked, snap_unlocked + 1)))
             continue;
         }
         NOTICE("%s-pages %u..%u, mlocked-process(es) %u -> %u",
                lock_not_release ? "lock" : "unlock",
-               lock_not_release ? mlock_pgno_snap : new_aligned_mlocked_pgno,
-               lock_not_release ? new_aligned_mlocked_pgno : mlock_pgno_snap,
-               snap_counter, atomic_load32(mlock_counter, mo_Relaxed));
+               lock_not_release ? mlock_pgno_before : new_aligned_mlocked_pgno,
+               lock_not_release ? new_aligned_mlocked_pgno : mlock_pgno_before,
+               snap_locked - snap_unlocked,
+               atomic_load32(mlcnt + 0, mo_Relaxed) -
+                   atomic_load32(mlcnt + 1, mo_Relaxed));
         return;
       }
   }
@@ -5748,7 +5751,7 @@ __cold static void munlock_after(const MDBX_env *env, const pgno_t aligned_pgno,
                                                              : MDBX_SUCCESS;
 #endif
     if (likely(err == MDBX_SUCCESS))
-      update_mlocked(env, aligned_pgno, false);
+      update_mlcnt(env, aligned_pgno, false);
     else {
 #if defined(_WIN32) || defined(_WIN64)
       WARNING("VirtualUnlock(%zu, %zu) error %d", munlock_begin, munlock_size,
@@ -5878,6 +5881,8 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
     NOTICE("resize-MADV_%s %u..%u",
            (env->me_flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED", size_pgno,
            bytes2pgno(env, prev_size));
+    const uint32_t munlocks_before =
+        atomic_load32(&env->me_lck->mti_mlcnt[1], mo_Relaxed);
     rc = MDBX_RESULT_TRUE;
 #if defined(MADV_REMOVE)
     if (env->me_flags & MDBX_WRITEMAP)
@@ -5903,23 +5908,25 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
                                        prev_size - size_bytes,
                                        POSIX_FADV_DONTNEED));
 #endif /* MADV_DONTNEED */
-    uint32_t snap_mlock_counter;
-    if (unlikely(rc == MDBX_EINVAL) &&
-        (snap_mlock_counter =
-             atomic_load32(&env->me_lck->mti_mlock_counter, mo_Relaxed)) > 0) {
-      NOTICE("%s-madvise: ignore EINVAL (%d) since some pages locked (have %u "
-             "mlocked-process(es))",
-             "resize", rc, snap_mlock_counter);
-    } else {
-      if (unlikely(MDBX_IS_ERROR(rc))) {
-        ERROR("%s-madvise(%s, %zu..%zu), %u mlocked-process(es), err %d",
+    if (unlikely(MDBX_IS_ERROR(rc))) {
+      const uint32_t mlocks_after =
+          atomic_load32(&env->me_lck->mti_mlcnt[0], mo_Relaxed);
+      if (rc == MDBX_EINVAL) {
+        const int severity =
+            (mlocks_after - munlocks_before) ? MDBX_LOG_NOTICE : MDBX_LOG_WARN;
+        if (LOG_ENABLED(severity))
+          debug_log(severity, __func__, __LINE__,
+                    "%s-madvise: ignore EINVAL (%d) since some pages maybe "
+                    "locked (%u/%u mlcnt-processes)",
+                    "resize", rc, mlocks_after, munlocks_before);
+      } else {
+        ERROR("%s-madvise(%s, %zu, +%zu), %u/%u mlcnt-processes, err %d",
               "mresize", "DONTNEED", size_bytes, prev_size - size_bytes,
-              atomic_load32(&env->me_lck->mti_mlock_counter, mo_Relaxed), rc);
+              mlocks_after, munlocks_before, rc);
         goto bailout;
       }
-      if (env->me_lck->mti_discarded_tail.weak > size_pgno)
-        env->me_lck->mti_discarded_tail.weak = size_pgno;
-    }
+    } else
+      env->me_lck->mti_discarded_tail.weak = size_pgno;
   }
 #endif /* MDBX_ENABLE_MADVISE */
 
@@ -11473,6 +11480,8 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
       ENSURE(env, prev_discarded_bytes > discard_edge_bytes);
       munlock_after(env, discard_edge_pgno,
                     bytes_align2os_bytes(env, env->me_dxb_mmap.current));
+      const uint32_t munlocks_before =
+          atomic_load32(&env->me_lck->mti_mlcnt[1], mo_Relaxed);
 #if defined(MADV_DONTNEED)
       int advise = MADV_DONTNEED;
 #if defined(MADV_FREE) &&                                                      \
@@ -11489,23 +11498,27 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
           env->me_map + discard_edge_bytes,
           prev_discarded_bytes - discard_edge_bytes, POSIX_MADV_DONTNEED));
 #endif
-      uint32_t snap_mlock_counter;
-      if (unlikely(err == MDBX_EINVAL) &&
-          (snap_mlock_counter = atomic_load32(&env->me_lck->mti_mlock_counter,
-                                              mo_Relaxed)) > 0) {
-        NOTICE("%s-madvise: ignore EINVAL (%d) since some pages locked (have "
-               "%u mlocked-process(es))",
-               "shrink", err, snap_mlock_counter);
-      } else if (unlikely(MDBX_IS_ERROR(err))) {
-        ERROR("%s-madvise(%s, %zu..%zu), err %d", "shrink", "DONTNEED",
-              discard_edge_bytes, prev_discarded_bytes - discard_edge_bytes,
-              err);
-        ERROR("%s-madvise(%s, %zu..%zu), %u mlocked-process(es), err %d",
-              "shrink", "DONTNEED", discard_edge_bytes,
-              prev_discarded_bytes - discard_edge_bytes,
-              atomic_load32(&env->me_lck->mti_mlock_counter, mo_Relaxed), err);
-        return err;
-      }
+      if (unlikely(MDBX_IS_ERROR(err))) {
+        const uint32_t mlocks_after =
+            atomic_load32(&env->me_lck->mti_mlcnt[0], mo_Relaxed);
+        if (err == MDBX_EINVAL) {
+          const int severity = (mlocks_after - munlocks_before)
+                                   ? MDBX_LOG_NOTICE
+                                   : MDBX_LOG_WARN;
+          if (LOG_ENABLED(severity))
+            debug_log(severity, __func__, __LINE__,
+                      "%s-madvise: ignore EINVAL (%d) since some pages maybe "
+                      "locked (%u/%u mlcnt-processes)",
+                      "shrink", err, mlocks_after, munlocks_before);
+        } else {
+          ERROR("%s-madvise(%s, %zu, +%zu), %u/%u mlcnt-processes, err %d",
+                "shrink", "DONTNEED", discard_edge_bytes,
+                prev_discarded_bytes - discard_edge_bytes, mlocks_after,
+                munlocks_before, err);
+          return err;
+        }
+      } else
+        env->me_lck->mti_discarded_tail.weak = discard_edge_pgno;
     }
 #endif /* MDBX_ENABLE_MADVISE && (MADV_DONTNEED || POSIX_MADV_DONTNEED) */
 
@@ -11517,10 +11530,9 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
             (shrink_step = pv2pages(pending->mm_geo.shrink_pv)) + backlog_gap) {
       if (pending->mm_geo.now > largest_pgno &&
           pending->mm_geo.now - largest_pgno > shrink_step + backlog_gap) {
-        pgno_t grow_step = 0;
         const pgno_t aligner =
             pending->mm_geo.grow_pv
-                ? (grow_step = pv2pages(pending->mm_geo.grow_pv))
+                ? /* grow_step */ pv2pages(pending->mm_geo.grow_pv)
                 : shrink_step;
         const pgno_t with_backlog_gap = largest_pgno + backlog_gap;
         const pgno_t aligned = pgno_align2os_pgno(
@@ -23818,7 +23830,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
       rc = errno;
       WARNING("mlock2(%zu, %s) error %d", used_range, "MLOCK_ONFAULT", rc);
     } else {
-      update_mlocked(env, mlock_pgno, true);
+      update_mlcnt(env, mlock_pgno, true);
       rc = MDBX_SUCCESS;
     }
     if (rc != EINVAL)
@@ -23929,7 +23941,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
       atomic_load32(&env->me_mlocked_pgno, mo_AcquireRelease) < mlock_pgno) {
 #if defined(_WIN32) || defined(_WIN64)
     if (VirtualLock(env->me_map, used_range)) {
-      update_mlocked(env, mlock_pgno, true);
+      update_mlcnt(env, mlock_pgno, true);
       rc = MDBX_SUCCESS;
     } else {
       rc = (int)GetLastError();
@@ -23937,7 +23949,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
     }
 #elif defined(_POSIX_MEMLOCK_RANGE)
     if (mlock(env->me_map, used_range) == 0) {
-      update_mlocked(env, mlock_pgno, true);
+      update_mlcnt(env, mlock_pgno, true);
       rc = MDBX_SUCCESS;
     } else {
       rc = errno;
