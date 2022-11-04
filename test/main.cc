@@ -24,7 +24,7 @@ MDBX_NORETURN void usage(void) {
       "usage:\n"
       "  --help or -h              Show this text\n"
       "Common parameters:\n"
-      "  --loglevel=[0-7]|[extra..fatal]"
+      "  --loglevel=[0-7]|[fatal..extra]s"
       "  --pathname=...            Path and/or name of database files\n"
       "  --repeat=N                Set repeat counter\n"
       "  --threads=N               Number of thread (unsupported for now)\n"
