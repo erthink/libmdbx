@@ -958,8 +958,16 @@ DEFINE_ENUM_FLAG_OPERATORS(MDBX_debug_flags_t)
  * called before printing the message and aborting.
  * \see mdbx_setup_debug()
  *
- * \param [in] env  An environment handle returned by \ref mdbx_env_create().
- * \param [in] msg  The assertion message, not including newline. */
+ * \param [in] loglevel  The severity of message.
+ * \param [in] function  The function name which emits message,
+ *                       may be NULL.
+ * \param [in] line      The source code line number which emits message,
+ *                       may be zero.
+ * \param [in] fmt       The printf-like format string with message.
+ * \param [in] args      The variable argument list respectively for the
+ *                       format-message string passed by `fmt` argument.
+ *                       Maybe NULL or invalid if the format-message string
+ *                       don't contain `%`-specification of arguments. */
 typedef void MDBX_debug_func(MDBX_log_level_t loglevel, const char *function,
                              int line, const char *fmt,
                              va_list args) MDBX_CXX17_NOEXCEPT;
@@ -978,8 +986,12 @@ LIBMDBX_API int mdbx_setup_debug(MDBX_log_level_t log_level,
  * called before printing the message and aborting.
  * \see mdbx_env_set_assert()
  *
- * \param [in] env  An environment handle returned by mdbx_env_create().
- * \param [in] msg  The assertion message, not including newline. */
+ * \param [in] env       An environment handle.
+ * \param [in] msg       The assertion message, not including newline.
+ * \param [in] function  The function name where the assertion check failed,
+ *                       may be NULL.
+ * \param [in] line      The line number in the source file
+ *                       where the assertion check failed, may be zero. */
 typedef void MDBX_assert_func(const MDBX_env *env, const char *msg,
                               const char *function,
                               unsigned line) MDBX_CXX17_NOEXCEPT;
