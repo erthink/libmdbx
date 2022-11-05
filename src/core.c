@@ -5934,6 +5934,9 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
 
 #if MDBX_ENABLE_MADVISE
   if (rc == MDBX_SUCCESS) {
+    eASSERT(env, limit_bytes == env->me_dxb_mmap.limit);
+    eASSERT(env, size_bytes <= env->me_dxb_mmap.filesize);
+    eASSERT(env, size_bytes == env->me_dxb_mmap.current);
     env->me_lck->mti_discarded_tail.weak = size_pgno;
     const bool readahead =
         !(env->me_flags & MDBX_NORDAHEAD) &&
@@ -5950,9 +5953,9 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
 
 bailout:
   if (rc == MDBX_SUCCESS) {
-    eASSERT(env, size_bytes == env->me_dxb_mmap.current);
-    eASSERT(env, size_bytes <= env->me_dxb_mmap.filesize);
     eASSERT(env, limit_bytes == env->me_dxb_mmap.limit);
+    eASSERT(env, size_bytes <= env->me_dxb_mmap.filesize);
+    eASSERT(env, size_bytes == env->me_dxb_mmap.current);
 #ifdef MDBX_USE_VALGRIND
     if (prev_limit != env->me_dxb_mmap.limit || prev_addr != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
