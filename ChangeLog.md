@@ -4,10 +4,13 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-
-## В разработке v0.12.2
+## v0.12.2 (Ярыгин) запланировано на 2022-11-07
 
 Новое:
+
+ - Добавлена возможность профилирования работы GC в сложных и/или нагруженных
+   сценариях (например Ethereum/Erigon). По-умолчанию соответствующий код отключен,
+   а для его активации необходимо указать опцию сборки `MDBX_ENABLE_PROFGC=1`.
 
  - Добавлена функция `mdbx_env_warmup()` для "прогрева" БД с возможностью
    закрепления страниц в памяти.
@@ -100,8 +103,12 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
    `__builtin_cpu_supports()` function, which could be unavailable on a fake
    OSes (macos, ios, android, etc).
 
-Исправления:
+Исправления (без корректировок вышеперечисленных новых функций):
 
+ - Устранение ложно-положительных сообщений от Valgrind об использовании
+   не инициализированных данных из-за выравнивающих зазоров в `struct troika`.
+ - Исправлен возврат неожиданной ошибки `MDBX_BUSY` из функций `mdbx_env_set_option()`,
+   `mdbx_env_set_syncbytes()` и `mdbx_env_set_syncperiod()`.
  - Небольшие исправления для совместимости с CMake 3.8
  - Больше контроля и осторожности (паранойи) для страховки от дефектов `mremap()`.
  - Костыль для починки сборки со старыми версиями `stdatomic.h` из GNU Lib C,
@@ -128,6 +135,9 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 Мелочи:
 
+ - Добавлено описание параметров `MDBX_debug_func` и `MDBX_debug_func`.
+ - Добавлено обходное решение для минимизации ложно-положительных
+   конфликтов при использовании файловых блокировок в Windows.
  - Проверка атомарности C11-операций c 32/64-битными данными.
  - Уменьшение в 42 раза значения по-умолчанию для `me_options.dp_limit`
    в отладочных сборках.
