@@ -8811,7 +8811,9 @@ int mdbx_txn_info(const MDBX_txn *txn, MDBX_txn_info *info, bool scan_rlt) {
                            : MDBX_PNL_GETSIZE(txn->tw.retired_pages));
     info->txn_space_leftover = pgno2bytes(env, txn->tw.dirtyroom);
     info->txn_space_dirty =
-        pgno2bytes(env, txn->mt_env->me_options.dp_limit - txn->tw.dirtyroom);
+        txn->tw.dirtylist
+            ? pgno2bytes(env, txn->tw.dirtylist->pages_including_loose)
+            : 0;
     info->txn_reader_lag = INT64_MAX;
     MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
     if (scan_rlt && lck) {
