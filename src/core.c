@@ -5256,6 +5256,9 @@ static __inline void meta_troika_unpack(meta_troika_t *troika,
   troika->recent = (packed >> 2) & 3;
   troika->prefer_steady = (packed >> 4) & 3;
   troika->tail_and_flags = packed & 0xC3;
+#if MDBX_WORDBITS > 32 /* Workaround for false-positives from Valgrind */
+  troika->unused_pad = 0;
+#endif
 }
 
 static const uint8_t troika_fsm_map[2 * 2 * 2 * 3 * 3 * 3] = {

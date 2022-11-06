@@ -976,6 +976,9 @@ typedef struct MDBX_dbx {
 
 typedef struct troika {
   uint8_t fsm, recent, prefer_steady, tail_and_flags;
+#if MDBX_WORDBITS > 32 /* Workaround for false-positives from Valgrind */
+  uint32_t unused_pad;
+#endif
 #define TROIKA_HAVE_STEADY(troika) ((troika)->fsm & 7)
 #define TROIKA_STRICT_VALID(troika) ((troika)->tail_and_flags & 64)
 #define TROIKA_VALID(troika) ((troika)->tail_and_flags & 128)
