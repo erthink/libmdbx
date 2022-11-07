@@ -5400,9 +5400,8 @@ static txnid_t find_oldest_reader(MDBX_env *const env, const txnid_t steady) {
   eASSERT(env, steady >= prev_oldest);
 
   txnid_t new_oldest = prev_oldest;
-  while (new_oldest != steady &&
-         nothing_changed !=
-             atomic_load32(&lck->mti_readers_refresh_flag, mo_AcquireRelease)) {
+  while (nothing_changed !=
+         atomic_load32(&lck->mti_readers_refresh_flag, mo_AcquireRelease)) {
     lck->mti_readers_refresh_flag.weak = nothing_changed;
     jitter4testing(false);
     const size_t snap_nreaders =
