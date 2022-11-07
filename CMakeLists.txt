@@ -259,7 +259,9 @@ else()
   endif()
 
   if(INTERPROCEDURAL_OPTIMIZATION)
-    if(GCC_LTO_AVAILABLE)
+    if(GCC_LTO_AVAILABLE AND
+        # Отключаем LTO для G++ < 7.0, ибо падает: lto1: internal compiler error: in splice_child_die, at dwarf2out.c:5030
+        (NOT CMAKE_CXX_COMPILER_LOADED OR NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS 7))
       set(LTO_ENABLED TRUE)
       set(CMAKE_AR ${CMAKE_GCC_AR} CACHE PATH "Path to ar program with LTO-plugin" FORCE)
       set(CMAKE_C_COMPILER_AR ${CMAKE_AR} CACHE PATH "Path to ar program with LTO-plugin" FORCE)
