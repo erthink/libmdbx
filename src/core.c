@@ -6620,7 +6620,7 @@ static int gc_cursor_init(MDBX_cursor *mc, MDBX_txn *txn) {
   return cursor_init(mc, txn, FREE_DBI);
 }
 
-static pgr_t page_alloc_slowpath(MDBX_cursor *mc, const size_t num,
+static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
                                  char flags) {
 #if MDBX_ENABLE_PROFGC
   const uint64_t monotime_before = osal_monotime();
@@ -7148,7 +7148,7 @@ done:
   return ret;
 }
 
-__hot static pgr_t page_alloc(MDBX_cursor *mc) {
+__hot static pgr_t page_alloc(const MDBX_cursor *mc) {
   MDBX_txn *const txn = mc->mc_txn;
 
   /* If there are any loose pages, just use them */
