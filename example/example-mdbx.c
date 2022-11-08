@@ -18,7 +18,13 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
+#if (defined(__MINGW__) || defined(__MINGW32__) || defined(__MINGW64__)) &&    \
+    !defined(__USE_MINGW_ANSI_STDIO)
+#define __USE_MINGW_ANSI_STDIO 1
+#endif /* MinGW */
+
 #include "mdbx.h"
+
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>

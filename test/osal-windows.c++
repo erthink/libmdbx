@@ -363,11 +363,11 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
   case /* STATUS_ASSERTION_FAILURE */ 0xC0000420L:
   case /* STATUS_HEAP_CORRUPTION */ 0xC0000374L:
   case /* STATUS_CONTROL_STACK_VIOLATION */ 0xC00001B2L:
-    log_error("pid %u, exception 0x%x", pid, ExitCode);
+    log_error("pid %zu, exception 0x%x", (intptr_t)pid, (unsigned)ExitCode);
     status = as_coredump;
     break;
   default:
-    log_error("pid %u, exit code %u", pid, ExitCode);
+    log_error("pid %zu, exit code %u", (intptr_t)pid, (unsigned)ExitCode);
     status = as_failed;
     break;
   }
