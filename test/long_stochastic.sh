@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-LIST=basic
+LIST=--hill
 FROM=1
 UPTO=9999999
 MONITOR=
@@ -222,6 +222,14 @@ case ${UNAME} in
   ;;
 
   MSYS*|MINGW*)
+    if [ -z "${TESTDB_DIR:-}" ]; then
+      for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]* 2>/dev/null); do
+        rm -rf $old_test_dir
+      done
+      TESTDB_DIR="/tmp/mdbx-test.$$"
+    fi
+    mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+
     echo "FIXME: Fake support for ${UNAME}"
     ram_avail_mb=32768
   ;;
