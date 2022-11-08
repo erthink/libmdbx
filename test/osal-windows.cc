@@ -360,6 +360,7 @@ actor_status osal_actor_info(const mdbx_pid_t pid) {
     status = as_coredump;
     break;
   default:
+    log_error("pid %zu, exit code %u", (intptr_t)pid, (unsigned)ExitCode);
     status = as_failed;
     break;
   }
