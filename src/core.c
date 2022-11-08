@@ -11425,19 +11425,42 @@ __cold static int read_header(MDBX_env *env, MDBX_meta *dest,
       TRACE("reading meta[%d]: offset %u, bytes %u, retry-left %u", meta_number,
             offset, MIN_PAGESIZE, retryleft);
       int err = osal_pread(env->me_lazy_fd, buffer, MIN_PAGESIZE, offset);
+      if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 &&
+          env->me_dxb_mmap.filesize == 0 &&
+          mode_bits /* non-zero for DB creation */ != 0) {
+        NOTICE("read meta: empty file (%d, %s)", err, mdbx_strerror(err));
+        return err;
+      }
+#if defined(_WIN32) || defined(_WIN64)
+      if (err == ERROR_LOCK_VIOLATION) {
+        SleepEx(0, true);
+        err = osal_pread(env->me_lazy_fd, buffer, MIN_PAGESIZE, offset);
+        if (err == ERROR_LOCK_VIOLATION && --retryleft) {
+          WARNING("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
+                  mdbx_strerror(err));
+          continue;
+        }
+      }
+#endif /* Windows */
       if (err != MDBX_SUCCESS) {
-        if (err == MDBX_ENODATA && offset == 0 && loop_count == 0 &&
-            env->me_dxb_mmap.filesize == 0 &&
-            mode_bits /* non-zero for DB creation */ != 0)
-          NOTICE("read meta: empty file (%d, %s)", err, mdbx_strerror(err));
-        else
-          ERROR("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
-                mdbx_strerror(err));
+        ERROR("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
+              mdbx_strerror(err));
         return err;
       }
 
       char again[MIN_PAGESIZE];
       err = osal_pread(env->me_lazy_fd, again, MIN_PAGESIZE, offset);
+#if defined(_WIN32) || defined(_WIN64)
+      if (err == ERROR_LOCK_VIOLATION) {
+        SleepEx(0, true);
+        err = osal_pread(env->me_lazy_fd, again, MIN_PAGESIZE, offset);
+        if (err == ERROR_LOCK_VIOLATION && --retryleft) {
+          WARNING("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
+                  mdbx_strerror(err));
+          continue;
+        }
+      }
+#endif /* Windows */
       if (err != MDBX_SUCCESS) {
         ERROR("read meta[%u,%u]: %i, %s", offset, MIN_PAGESIZE, err,
               mdbx_strerror(err));
