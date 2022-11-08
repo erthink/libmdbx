@@ -853,9 +853,10 @@ osal_ioring_write(osal_ioring_t *ior) {
         if (unlikely(r.err != ERROR_IO_PENDING)) {
           ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
                 ", err %d",
-                "WriteFileGather", ior->fd, item, item - ior->pool,
-                ((MDBX_page *)item->single.iov_base)->mp_pgno, bytes,
-                item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
+                "WriteFileGather", ior->fd, __Wpedantic_format_voidptr(item),
+                item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
+                bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
+                r.err);
           goto bailout_rc;
         }
         assert(wait_for > ior->event_pool + ior->event_stack);
@@ -874,9 +875,10 @@ osal_ioring_write(osal_ioring_t *ior) {
         default:
           ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
                 ", err %d",
-                "WriteFileEx", ior->fd, item, item - ior->pool,
-                ((MDBX_page *)item->single.iov_base)->mp_pgno, bytes,
-                item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
+                "WriteFileEx", ior->fd, __Wpedantic_format_voidptr(item),
+                item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
+                bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
+                r.err);
           goto bailout_rc;
         case ERROR_NOT_FOUND:
         case ERROR_USER_MAPPED_FILE:
@@ -884,9 +886,10 @@ osal_ioring_write(osal_ioring_t *ior) {
           WARNING(
               "%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
               ", err %d",
-              "WriteFileEx", ior->fd, item, item - ior->pool,
-              ((MDBX_page *)item->single.iov_base)->mp_pgno, bytes,
-              item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
+              "WriteFileEx", ior->fd, __Wpedantic_format_voidptr(item),
+              item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
+              bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
+              r.err);
           SleepEx(0, true);
           goto retry;
         case ERROR_INVALID_USER_BUFFER:
@@ -906,9 +909,10 @@ osal_ioring_write(osal_ioring_t *ior) {
         r.err = (int)GetLastError();
         ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
               ", err %d",
-              "WriteFile", ior->fd, item, item - ior->pool,
-              ((MDBX_page *)item->single.iov_base)->mp_pgno, bytes,
-              item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32), r.err);
+              "WriteFile", ior->fd, __Wpedantic_format_voidptr(item),
+              item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
+              bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
+              r.err);
         goto bailout_rc;
       } else if (unlikely(written != bytes)) {
         r.err = ERROR_WRITE_FAULT;
@@ -973,10 +977,11 @@ osal_ioring_write(osal_ioring_t *ior) {
                   !GetOverlappedResult(ior->fd, &item->ov, &written, true))) {
             ERROR("%s: item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
                   ", err %d",
-                  "GetOverlappedResult", item, item - ior->pool,
+                  "GetOverlappedResult", __Wpedantic_format_voidptr(item),
+                  item - ior->pool,
                   ((MDBX_page *)item->single.iov_base)->mp_pgno, bytes,
                   item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
-                  GetLastError());
+                  (int)GetLastError());
             goto bailout_geterr;
           }
           assert(MDBX_SUCCESS == item->ov.Internal);
@@ -994,10 +999,10 @@ osal_ioring_write(osal_ioring_t *ior) {
           r.err = (int)GetLastError();
         ERROR("%s: item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
               ", err %d",
-              "Result", item, item - ior->pool,
+              "Result", __Wpedantic_format_voidptr(item), item - ior->pool,
               ((MDBX_page *)item->single.iov_base)->mp_pgno, bytes,
               item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
-              GetLastError());
+              (int)GetLastError());
         goto bailout_rc;
       }
       if (unlikely(item->ov.InternalHigh != bytes)) {

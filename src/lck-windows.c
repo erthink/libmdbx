@@ -112,11 +112,10 @@ static
 #define LCK_WAITFOR 0
 #define LCK_DONTWAIT LOCKFILE_FAIL_IMMEDIATELY
 
-static int flock_with_event(HANDLE fd, HANDLE event, DWORD flags,
-                            uint64_t offset, size_t bytes) {
-  TRACE("lock>>: fd %p, event %p, flags 0x%x offset %" PRId64 ", bytes %" PRId64
-        " >>",
-        fd, event, flags, offset, bytes);
+static int flock_with_event(HANDLE fd, HANDLE event, unsigned flags,
+                            size_t offset, size_t bytes) {
+  TRACE("lock>>: fd %p, event %p, flags 0x%x offset %zu, bytes %zu >>", fd,
+        event, flags, offset, bytes);
   OVERLAPPED ov;
   ov.Internal = 0;
   ov.InternalHigh = 0;
@@ -124,9 +123,8 @@ static int flock_with_event(HANDLE fd, HANDLE event, DWORD flags,
   ov.Offset = (DWORD)offset;
   ov.OffsetHigh = HIGH_DWORD(offset);
   if (LockFileEx(fd, flags, 0, (DWORD)bytes, HIGH_DWORD(bytes), &ov)) {
-    TRACE("lock<<: fd %p, event %p, flags 0x%x offset %" PRId64
-          ", bytes %" PRId64 " << %s",
-          fd, event, flags, offset, bytes, "done");
+    TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s", fd,
+          event, flags, offset, bytes, "done");
     return MDBX_SUCCESS;
   }
 
@@ -134,8 +132,7 @@ static int flock_with_event(HANDLE fd, HANDLE event, DWORD flags,
   if (rc == ERROR_IO_PENDING) {
     if (event) {
       if (GetOverlappedResult(fd, &ov, &rc, true)) {
-        TRACE("lock<<: fd %p, event %p, flags 0x%x offset %" PRId64
-              ", bytes %" PRId64 " << %s",
+        TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << %s",
               fd, event, flags, offset, bytes, "overlapped-done");
         return MDBX_SUCCESS;
       }
@@ -143,25 +140,24 @@ static int flock_with_event(HANDLE fd, HANDLE event, DWORD flags,
     } else
       CancelIo(fd);
   }
-  TRACE("lock<<: fd %p, event %p, flags 0x%x offset %" PRId64 ", bytes %" PRId64
-        " << err %d",
-        fd, event, flags, offset, bytes, rc);
+  TRACE("lock<<: fd %p, event %p, flags 0x%x offset %zu, bytes %zu << err %d",
+        fd, event, flags, offset, bytes, (int)rc);
   return (int)rc;
 }
 
-static __inline int flock(HANDLE fd, DWORD flags, uint64_t offset,
+static __inline int flock(HANDLE fd, unsigned flags, size_t offset,
                           size_t bytes) {
   return flock_with_event(fd, 0, flags, offset, bytes);
 }
 
-static __inline int flock_data(const MDBX_env *env, DWORD flags,
-                               uint64_t offset, size_t bytes) {
+static __inline int flock_data(const MDBX_env *env, unsigned flags,
+                               size_t offset, size_t bytes) {
   return flock_with_event(env->me_fd4data, env->me_data_lock_event, flags,
                           offset, bytes);
 }
 
-static int funlock(mdbx_filehandle_t fd, uint64_t offset, size_t bytes) {
-  TRACE("unlock: fd %p, offset %" PRId64 ", bytes %" PRId64, fd, offset, bytes);
+static int funlock(mdbx_filehandle_t fd, size_t offset, size_t bytes) {
+  TRACE("unlock: fd %p, offset %zu, bytes %zu", fd, offset, bytes);
   return UnlockFile(fd, (DWORD)offset, HIGH_DWORD(offset), (DWORD)bytes,
                     HIGH_DWORD(bytes))
              ? MDBX_SUCCESS
