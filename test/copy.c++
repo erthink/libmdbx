@@ -1,4 +1,4 @@
-#include "test.h"
+#include "test.h++"
 
 class testcase_copy : public testcase {
   const std::string copy_pathname;

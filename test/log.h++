@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "base.h"
-#include "chrono.h"
+#include "base.h++"
+#include "chrono.h++"
 
 MDBX_NORETURN void usage(void);
 MDBX_NORETURN void MDBX_PRINTF_ARGS(1, 2) failure(const char *fmt, ...);

@@ -14,10 +14,10 @@
 
 #pragma once
 
-#include "base.h"
-#include "config.h"
-#include "log.h"
-#include "utils.h"
+#include "base.h++"
+#include "config.h++"
+#include "log.h++"
+#include "utils.h++"
 
 namespace keygen {
 

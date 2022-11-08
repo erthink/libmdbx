@@ -13,7 +13,7 @@
  */
 
 #pragma once
-#include "base.h"
+#include "base.h++"
 
 #if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) ||           \
     !defined(__ORDER_BIG_ENDIAN__)

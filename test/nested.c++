@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 #include <cmath>
 
 /* LY: тест "эмуляцией time-to-live" с вложенными транзакциями:

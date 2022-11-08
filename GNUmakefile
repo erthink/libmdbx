@@ -353,9 +353,9 @@ TEST_DB    ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.d
 TEST_LOG   ?= $(shell [ -d /dev/shm ] && echo /dev/shm || echo /tmp)/mdbx-test.log
 TEST_OSAL  := $(shell $(uname2osal))
 TEST_ITER  := $(shell $(uname2titer))
-TEST_SRC   := test/osal-$(TEST_OSAL).cc $(filter-out $(wildcard test/osal-*.cc), $(wildcard test/*.cc))
-TEST_INC   := $(wildcard test/*.h)
-TEST_OBJ   := $(patsubst %.cc,%.o,$(TEST_SRC))
+TEST_SRC   := test/osal-$(TEST_OSAL).c++ $(filter-out $(wildcard test/osal-*.c++), $(wildcard test/*.c++))
+TEST_INC   := $(wildcard test/*.h++)
+TEST_OBJ   := $(patsubst %.c++,%.o,$(TEST_SRC))
 TAR        ?= $(shell which gnu-tar || echo tar)
 ZIP        ?= $(shell which zip || echo "echo 'Please install zip'")
 CLANG_FORMAT ?= $(shell (which clang-format-14 || which clang-format-13 || which clang-format) 2>/dev/null)
@@ -363,7 +363,7 @@ CLANG_FORMAT ?= $(shell (which clang-format-14 || which clang-format-13 || which
 reformat:
 	@echo '  RUNNING clang-format...'
 	$(QUIET)if [ -n "$(CLANG_FORMAT)" ]; then \
-		git ls-files | grep -E '\.(c|cxx|cc|cpp|h|hxx|hpp)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
+		git ls-files | grep -E '\.(c|c++|h|h++)(\.in)?$$' | xargs -r $(CLANG_FORMAT) -i --style=file; \
 	else \
 		echo "clang-format version 13..14 not found for 'reformat'"; \
 	fi
@@ -469,7 +469,7 @@ mdbx_example: mdbx.h example/example-mdbx.c libmdbx.$(SO_SUFFIX)
 build-test: all mdbx_example mdbx_test
 
 define test-rule
-$(patsubst %.cc,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
+$(patsubst %.c++,%.o,$(1)): $(1) $(TEST_INC) $(HEADERS) $(lastword $(MAKEFILE_LIST))
 	@echo '  CC $$@'
 	$(QUIET)$$(CXX) $$(CXXFLAGS) $$(MDBX_BUILD_OPTIONS) -c $(1) -o $$@
 

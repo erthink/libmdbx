@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 class testcase_append : public testcase {
 public:

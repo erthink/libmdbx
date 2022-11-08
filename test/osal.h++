@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "base.h"
+#include "base.h++"
 
 void osal_setup(const std::vector<actor_config> &actors);
 void osal_broadcast(unsigned id);

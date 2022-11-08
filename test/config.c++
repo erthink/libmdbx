@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 #if defined(_MSC_VER) && !defined(strcasecmp)
 #define strcasecmp(str, len) _stricmp(str, len)

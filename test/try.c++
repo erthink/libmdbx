@@ -1,4 +1,4 @@
-#include "test.h"
+#include "test.h++"
 
 class testcase_try : public testcase {
 public:

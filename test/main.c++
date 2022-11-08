@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 #if !(defined(_WIN32) || defined(_WIN64))
 #include <sys/resource.h>

@@ -2,32 +2,32 @@ enable_language(CXX)
 include(../cmake/compiler.cmake)
 
 set(LIBMDBX_TEST_SOURCES
-  base.h
-  cases.cc
-  chrono.cc
-  chrono.h
-  config.cc
-  config.h
-  copy.cc
-  dead.cc
-  hill.cc
-  jitter.cc
-  keygen.cc
-  keygen.h
-  log.cc
-  log.h
-  main.cc
-  osal.h
-  osal-unix.cc
-  osal-windows.cc
-  test.cc
-  test.h
-  try.cc
-  utils.cc
-  utils.h
-  append.cc
-  ttl.cc
-  nested.cc
+  base.h++
+  cases.c++
+  chrono.c++
+  chrono.h++
+  config.c++
+  config.h++
+  copy.c++
+  dead.c++
+  hill.c++
+  jitter.c++
+  keygen.c++
+  keygen.h++
+  log.c++
+  log.h++
+  main.c++
+  osal.h++
+  osal-unix.c++
+  osal-windows.c++
+  test.c++
+  test.h++
+  try.c++
+  utils.c++
+  utils.h++
+  append.c++
+  ttl.c++
+  nested.c++
   )
 
 if(NOT MDBX_BUILD_CXX)

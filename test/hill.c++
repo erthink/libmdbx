@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>.
  */
 
-#include "test.h"
+#include "test.h++"
 
 /* LY: тест "холмиком":
  *  - сначала наполняем таблицу циклическими CRUD-манипуляциями,
