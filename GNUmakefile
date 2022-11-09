@@ -418,7 +418,7 @@ smoke-fault: build-test
 
 test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 long-test: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --loops 42`...'
@@ -426,7 +426,7 @@ long-test: build-test
 
 test-singleprocess: build-test
 	@echo '  RUNNING `test/long_stochastic.sh --single --loops 2`...'
-	$(QUIET)test/long_stochastic.sh --single --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
+	$(QUIET)test/long_stochastic.sh --dont-check-ram-size --single --loops 2 --db-upto-mb 256 --skip-make >$(TEST_LOG) || (cat $(TEST_LOG) && false)
 
 test-valgrind: CFLAGS_EXTRA=-Ofast -DMDBX_USE_VALGRIND
 test-valgrind: build-test
