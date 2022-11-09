@@ -4,7 +4,7 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.12.2 (Ярыгин) запланировано на 2022-11-07
+## v0.12.2 (Ярыгин) запланировано на 2022-11-11
 
 Новое:
 
@@ -138,6 +138,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 Мелочи:
 
+ - Добавлено предупреждение о небезопасности RISC-V.
  - Добавлено описание параметров `MDBX_debug_func` и `MDBX_debug_func`.
  - Добавлено обходное решение для минимизации ложно-положительных
    конфликтов при использовании файловых блокировок в Windows.
