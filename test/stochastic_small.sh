@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-LIST=basic
+LIST=--hill
 FROM=1
 UPTO=9999999
 MONITOR=
