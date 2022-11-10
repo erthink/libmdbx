@@ -1171,7 +1171,7 @@ int main(int argc, char *argv[]) {
       envflags &= ~MDBX_RDONLY;
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
       /* Temporary `workaround` for OpenBSD kernel's flaw.
-       * See todo4recovery://erased_by_github/libmdbx/issues/67 */
+       * See https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/67 */
       envflags |= MDBX_WRITEMAP;
 #endif /* MDBX_MMAP_INCOHERENT_FILE_WRITE */
       break;

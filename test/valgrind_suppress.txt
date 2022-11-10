@@ -31,7 +31,7 @@
    fun:wipe_steady*
 }
 
-# memcmp() inside iov_write() as workaround for todo4recovery://erased_by_github/libmdbx/issues/269
+# memcmp() inside iov_write() as workaround for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269
 {
    iov-pagecheck-1
    Memcheck:Cond

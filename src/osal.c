@@ -1311,7 +1311,7 @@ MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
   flags |= O_CLOEXEC;
 #endif /* O_CLOEXEC */
 
-  /* Safeguard for todo4recovery://erased_by_github/libmdbx/issues/144 */
+  /* Safeguard for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   int stub_fd0 = -1, stub_fd1 = -1, stub_fd2 = -1;
   static const char dev_null[] = "/dev/null";
@@ -1349,7 +1349,7 @@ MDBX_INTERNAL_FUNC int osal_openfile(const enum osal_openfile_purpose purpose,
       errno = EACCES /* restore errno if file exists */;
   }
 
-  /* Safeguard for todo4recovery://erased_by_github/libmdbx/issues/144 */
+  /* Safeguard for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/144 */
 #if STDIN_FILENO == 0 && STDOUT_FILENO == 1 && STDERR_FILENO == 2
   if (*fd == STDIN_FILENO) {
     WARNING("Got STD%s_FILENO/%d, avoid using it by dup(fd)", "IN",
@@ -2192,7 +2192,7 @@ MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map) {
   VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
-   * See todo4recovery://erased_by_github/libmdbx/pull/93#issuecomment-613687203
+   * See https://web.archive.org/web/https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
    */
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address,
                                    (map->filesize && map->filesize < map->limit)
@@ -2271,7 +2271,7 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
 
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
-   * See todo4recovery://erased_by_github/libmdbx/pull/93#issuecomment-613687203
+   * See https://web.archive.org/web/https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
    */
   MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
   status = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
@@ -2552,7 +2552,7 @@ retry_mapview:;
         /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
          * when this memory will re-used by malloc or another mmapping.
          * See
-         * todo4recovery://erased_by_github/libmdbx/pull/93#issuecomment-613687203
+         * https://web.archive.org/web/https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
          */
         MDBX_ASAN_UNPOISON_MEMORY_REGION(
             map->address,
@@ -2574,7 +2574,7 @@ retry_mapview:;
     /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
      * when this memory will re-used by malloc or another mmapping.
      * See
-     * todo4recovery://erased_by_github/libmdbx/pull/93#issuecomment-613687203
+     * https://web.archive.org/web/https://github.com/erthink/libmdbx/pull/93#issuecomment-613687203
      */
     MDBX_ASAN_UNPOISON_MEMORY_REGION(
         map->address, (map->current < map->limit) ? map->current : map->limit);
