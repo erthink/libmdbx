@@ -1,8 +1,4 @@
 #!/usr/bin/env bash
-if ! which make cc c++ tee >/dev/null; then
-  echo "Please install the following prerequisites: make cc c++ tee banner" >&2
-  exit 1
-fi
 
 LIST=basic
 FROM=1
@@ -15,6 +11,7 @@ BANNER="$(which banner 2>/dev/null | echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
 DB_UPTO_MB=17408
 PAGESIZE=min
+DONT_CHECK_RAM=no
 
 while [ -n "$1" ]
 do
@@ -35,6 +32,7 @@ do
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
     echo "--no-geometry-jitter   Disable jitter for geometry upper-size"
     echo "--pagesize NN          Use specified page size (256 is minimal and used by default) "
+    echo "--dont-check-ram-size  Don't check available RAM "
     echo "--help                 Print this usage help and exit"
     exit -2
   ;;
@@ -111,7 +109,7 @@ do
   --no-geometry-jitter)
     GEOMETRY_JITTER=no
   ;;
-  --pagesize)
+  --pagesize|--page-size)
     case "$2" in
       min|max|256|512|1024|2048|4096|8192|16386|32768|65536)
         PAGESIZE=$2
@@ -144,6 +142,9 @@ do
     esac
     shift
   ;;
+  --dont-check-ram-size)
+    DONT_CHECK_RAM=yes
+  ;;
   *)
     echo "Unknown option '$1'"
     exit -2
@@ -161,6 +162,11 @@ if [ -z "$MONITOR" ]; then
     fi
   fi
   export MALLOC_CHECK_=7 MALLOC_PERTURB_=42
+fi
+
+if ! which $([ "$SKIP_MAKE" == "no" ] && echo make cc c++) tee >/dev/null; then
+  echo "Please install the following prerequisites: make cc c++ tee banner" >&2
+  exit 1
 fi
 
 ###############################################################################
@@ -220,6 +226,19 @@ case ${UNAME} in
     echo "pagesize ${pagesize}K, freepages ${freepages}, ram_avail_mb ${ram_avail_mb}"
   ;;
 
+  MSYS*|MINGW*)
+    if [ -z "${TESTDB_DIR:-}" ]; then
+      for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]* 2>/dev/null); do
+        rm -rf $old_test_dir
+      done
+      TESTDB_DIR="/tmp/mdbx-test.$$"
+    fi
+    mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+
+    echo "FIXME: Fake support for ${UNAME}"
+    ram_avail_mb=32768
+  ;;
+
   *)
     echo "FIXME: ${UNAME} not supported by this script"
     exit 2
@@ -232,11 +251,15 @@ rm -f ${TESTDB_DIR}/*
 # 2. estimate reasonable RAM space for test-db
 
 echo "=== ${ram_avail_mb}M RAM available"
-ram_reserve4logs_mb=1234
-if [ $ram_avail_mb -lt $ram_reserve4logs_mb ]; then
-  echo "=== At least ${ram_reserve4logs_mb}Mb RAM required"
-  exit 3
-fi
+if [ $DONT_CHECK_RAM = yes ]; then
+  db_size_mb=$DB_UPTO_MB
+  ram_reserve4logs_mb=64
+else
+  ram_reserve4logs_mb=1234
+  if [ $ram_avail_mb -lt $ram_reserve4logs_mb ]; then
+    echo "=== At least ${ram_reserve4logs_mb}Mb RAM required"
+    exit 3
+  fi
 
 #
 # В режимах отличных от MDBX_WRITEMAP изменения до записи в файл
@@ -256,9 +279,10 @@ fi
 # that malloc() will not return the allocated memory to the
 # system immediately, as well some space is required for logs.
 #
-db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
-if [ $db_size_mb -gt $DB_UPTO_MB ]; then
-  db_size_mb=$DB_UPTO_MB
+  db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
+  if [ $db_size_mb -gt $DB_UPTO_MB ]; then
+    db_size_mb=$DB_UPTO_MB
+  fi
 fi
 echo "=== use ${db_size_mb}M for DB"
 
@@ -269,7 +293,11 @@ case ${UNAME} in
     ulimit -c unlimited
     if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%p" ]; then
       echo "core.%p > /proc/sys/kernel/core_pattern" >&2
-      echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+      if [ $(id -u) -ne 0 -a -n "$(which sudo 2>/dev/null)" ]; then
+        echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+      else
+        (echo "core.%p" > /proc/sys/kernel/core_pattern) || true
+      fi
     fi
   ;;
 
@@ -286,6 +314,10 @@ case ${UNAME} in
       ramdev=$(hdiutil attach -nomount ram://${number_of_sectors})
       diskutil erasevolume ExFAT "mdx$$tst" ${ramdev}
     fi
+  ;;
+
+  MSYS*|MINGW*)
+    echo "FIXME: Fake support for ${UNAME}"
   ;;
 
   *)
@@ -319,7 +351,7 @@ else
 fi
 
 syncmodes=("" ,+nosync-safe ,+nosync-utterly)
-options=(writemap coalesce lifo notls perturb)
+options=(writemap lifo notls perturb)
 
 function join { local IFS="$1"; shift; echo "$*"; }
 

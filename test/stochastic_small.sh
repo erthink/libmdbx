@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-if ! which make cc c++ tee >/dev/null; then
-  echo "Please install the following prerequisites: make cc c++ tee banner" >&2
-  exit 1
-fi
 
 LIST=--hill
 FROM=1
-UPTO=9999
+UPTO=9999999
 MONITOR=
 LOOPS=
 SKIP_MAKE=no
+GEOMETRY_JITTER=yes
 BANNER="$(which banner 2>/dev/null | echo echo)"
 UNAME="$(uname -s 2>/dev/null || echo Unknown)"
 DB_UPTO_MB=17408
+PAGESIZE=min
+DONT_CHECK_RAM=no
 
 while [ -n "$1" ]
 do
@@ -20,6 +19,10 @@ do
   --help)
     echo "--multi                Engage multi-process test scenario (default)"
     echo "--single               Execute series of single-process tests (for QEMU, etc)"
+    echo "--nested               Execute only 'nested' testcase"
+    echo "--hill                 Execute only 'hill' testcase"
+    echo "--append               Execute only 'append' testcase"
+    echo "--ttl                  Execute only 'ttl' testcase"
     echo "--with-valgrind        Run tests under Valgrind's memcheck tool"
     echo "--skip-make            Don't (re)build libmdbx and test's executable"
     echo "--from NN              Start iterating from the NN ops per test case"
@@ -27,6 +30,9 @@ do
     echo "--loops NN             Stop after the NN loops"
     echo "--dir PATH             Specifies directory for test DB and other files (it will be cleared)"
     echo "--db-upto-mb NN        Limits upper size of test DB to the NN megabytes"
+    echo "--no-geometry-jitter   Disable jitter for geometry upper-size"
+    echo "--pagesize NN          Use specified page size (256 is minimal and used by default) "
+    echo "--dont-check-ram-size  Don't check available RAM "
     echo "--help                 Print this usage help and exit"
     exit -2
   ;;
@@ -35,6 +41,18 @@ do
   ;;
   --single)
     LIST="--nested --hill --append --ttl --copy"
+  ;;
+  --nested)
+    LIST="--nested"
+  ;;
+  --hill)
+    LIST="--hill"
+  ;;
+  --append)
+    LIST="--append"
+  ;;
+  --ttl)
+    LIST="--ttl"
   ;;
   --with-valgrind)
     echo " NOTE: Valgrind could produce some false-positive warnings"
@@ -88,6 +106,45 @@ do
     fi
     shift
   ;;
+  --no-geometry-jitter)
+    GEOMETRY_JITTER=no
+  ;;
+  --pagesize|--page-size)
+    case "$2" in
+      min|max|256|512|1024|2048|4096|8192|16386|32768|65536)
+        PAGESIZE=$2
+      ;;
+      1|1k|1K|k|K)
+        PAGESIZE=$((1024*1))
+      ;;
+      2|2k|2K)
+        PAGESIZE=$((1024*2))
+      ;;
+      4|4k|4K)
+        PAGESIZE=$((1024*4))
+      ;;
+      8|8k|8K)
+        PAGESIZE=$((1024*8))
+      ;;
+      16|16k|16K)
+        PAGESIZE=$((1024*16))
+      ;;
+      32|32k|32K)
+        PAGESIZE=$((1024*32))
+      ;;
+      64|64k|64K)
+        PAGESIZE=$((1024*64))
+      ;;
+      *)
+        echo "Invalig page size '$2'"
+        exit -2
+      ;;
+    esac
+    shift
+  ;;
+  --dont-check-ram-size)
+    DONT_CHECK_RAM=yes
+  ;;
   *)
     echo "Unknown option '$1'"
     exit -2
@@ -107,6 +164,11 @@ if [ -z "$MONITOR" ]; then
   export MALLOC_CHECK_=7 MALLOC_PERTURB_=42
 fi
 
+if ! which $([ "$SKIP_MAKE" == "no" ] && echo make cc c++) tee >/dev/null; then
+  echo "Please install the following prerequisites: make cc c++ tee banner" >&2
+  exit 1
+fi
+
 ###############################################################################
 # 1. clean data from prev runs and examine available RAM
 
@@ -123,9 +185,9 @@ case ${UNAME} in
     mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
 
     if LC_ALL=C free | grep -q -i available; then
-      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 7) / 1024))
+      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s '[:blank:]' ' ' | cut -d ' ' -f 7) / 1024))
     else
-      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s [:blank:] ' ' | cut -d ' ' -f 4) / 1024))
+      ram_avail_mb=$(($(LC_ALL=C free | grep -i Mem: | tr -s '[:blank:]' ' ' | cut -d ' ' -f 4) / 1024))
     fi
   ;;
 
@@ -164,6 +226,19 @@ case ${UNAME} in
     echo "pagesize ${pagesize}K, freepages ${freepages}, ram_avail_mb ${ram_avail_mb}"
   ;;
 
+  MSYS*|MINGW*)
+    if [ -z "${TESTDB_DIR:-}" ]; then
+      for old_test_dir in $(ls -d /tmp/mdbx-test.[0-9]* 2>/dev/null); do
+        rm -rf $old_test_dir
+      done
+      TESTDB_DIR="/tmp/mdbx-test.$$"
+    fi
+    mkdir -p $TESTDB_DIR && rm -f $TESTDB_DIR/*
+
+    echo "FIXME: Fake support for ${UNAME}"
+    ram_avail_mb=32768
+  ;;
+
   *)
     echo "FIXME: ${UNAME} not supported by this script"
     exit 2
@@ -176,11 +251,15 @@ rm -f ${TESTDB_DIR}/*
 # 2. estimate reasonable RAM space for test-db
 
 echo "=== ${ram_avail_mb}M RAM available"
-ram_reserve4logs_mb=1234
-if [ $ram_avail_mb -lt $ram_reserve4logs_mb ]; then
-  echo "=== At least ${ram_reserve4logs_mb}Mb RAM required"
-  exit 3
-fi
+if [ $DONT_CHECK_RAM = yes ]; then
+  db_size_mb=$DB_UPTO_MB
+  ram_reserve4logs_mb=64
+else
+  ram_reserve4logs_mb=1234
+  if [ $ram_avail_mb -lt $ram_reserve4logs_mb ]; then
+    echo "=== At least ${ram_reserve4logs_mb}Mb RAM required"
+    exit 3
+  fi
 
 #
 # В режимах отличных от MDBX_WRITEMAP изменения до записи в файл
@@ -200,9 +279,10 @@ fi
 # that malloc() will not return the allocated memory to the
 # system immediately, as well some space is required for logs.
 #
-db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
-if [ $db_size_mb -gt $DB_UPTO_MB ]; then
-  db_size_mb=$DB_UPTO_MB
+  db_size_mb=$(((ram_avail_mb - ram_reserve4logs_mb) / 4))
+  if [ $db_size_mb -gt $DB_UPTO_MB ]; then
+    db_size_mb=$DB_UPTO_MB
+  fi
 fi
 echo "=== use ${db_size_mb}M for DB"
 
@@ -213,7 +293,11 @@ case ${UNAME} in
     ulimit -c unlimited
     if [ "$(cat /proc/sys/kernel/core_pattern)" != "core.%p" ]; then
       echo "core.%p > /proc/sys/kernel/core_pattern" >&2
-      echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+      if [ $(id -u) -ne 0 -a -n "$(which sudo 2>/dev/null)" ]; then
+        echo "core.%p" | sudo tee /proc/sys/kernel/core_pattern || true
+      else
+        (echo "core.%p" > /proc/sys/kernel/core_pattern) || true
+      fi
     fi
   ;;
 
@@ -230,6 +314,10 @@ case ${UNAME} in
       ramdev=$(hdiutil attach -nomount ram://${number_of_sectors})
       diskutil erasevolume ExFAT "mdx$$tst" ${ramdev}
     fi
+  ;;
+
+  MSYS*|MINGW*)
+    echo "FIXME: Fake support for ${UNAME}"
   ;;
 
   *)
@@ -263,7 +351,7 @@ else
 fi
 
 syncmodes=("" ,+nosync-safe ,+nosync-utterly)
-options=(writemap coalesce lifo notls perturb)
+options=(writemap lifo notls perturb)
 
 function join { local IFS="$1"; shift; echo "$*"; }
 
@@ -296,8 +384,8 @@ function probe {
   rm -f ${TESTDB_DIR}/* || failed
   for case in $LIST
   do
-    echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=1 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no $@ $case"
-    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=1 --pathname=${TESTDB_DIR}/long.db --cleanup-before=yes --cleanup-after=no "$@" $case | check_deep \
+    echo "Run ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} $@ $case"
+    ${MONITOR} ./mdbx_test ${speculum} --random-writemap=no --ignore-dbfull --repeat=11 --pathname=${TESTDB_DIR}/long.db --cleanup-after=no --geometry-jitter=${GEOMETRY_JITTER} "$@" $case | check_deep \
       && ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db | tee ${TESTDB_DIR}/long-chk.log \
       && ([ ! -e ${TESTDB_DIR}/long.db-copy ] || ${MONITOR} ./mdbx_chk ${TESTDB_DIR}/long.db-copy | tee ${TESTDB_DIR}/long-chk-copy.log) \
       || failed
