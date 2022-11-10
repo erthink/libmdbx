@@ -6660,9 +6660,6 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
       eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                        MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
       range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
-      pgno = *range;
-      if (num == 1)
-        goto done;
       range = scan4seq(range, re_len, num - 1);
       eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
       if (likely(range)) {
