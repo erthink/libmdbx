@@ -9,7 +9,17 @@ Fixes:
  - Fixed builds with  older `stdatomic.h` versions,
    where the `ATOMIC_*_LOCK_FREE` macros mistakenly redefined using functions (backport).
  - Added workaround for `mremap()` defect to avoid assertion failure (backport).
- - Workaround for `encryptfs` bug(s) in the `copy_file_range` implementation.
+ - Workaround for `encryptfs` bug(s) in the `copy_file_range` implementation  (backport).
+ - Fixed unexpected `MDBX_BUSY` from `mdbx_env_set_option()`, `mdbx_env_set_syncbytes()`
+   and `mdbx_env_set_syncperiod()` (backport).
+ - CMake requirements lowered to version 3.0.2 (backport).
+
+Minors:
+
+ - Minor clarification output of `--help` for `mdbx_test` (backport).
+ - Added admonition of insecure for RISC-V (backport).
+ - Stochastic scripts and CMake files synchronized with the `devel` branch.
+ - Use `--dont-check-ram-size` for small-tests make-targets (backport).
 
 
 ## v0.11.12 (Эребуни) at 2022-10-12
