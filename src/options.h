@@ -99,7 +99,7 @@
 #error MDBX_ENABLE_BIGFOOT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_BIGFOOT */
 
-/** Controls use of POSIX madvise() hints and friends. */
+/** Controls using of POSIX' madvise() and/or similar hints. */
 #ifndef MDBX_ENABLE_MADVISE
 #define MDBX_ENABLE_MADVISE 1
 #elif !(MDBX_ENABLE_MADVISE == 0 || MDBX_ENABLE_MADVISE == 1)
