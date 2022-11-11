@@ -4,7 +4,18 @@ ChangeLog
 English version [by Google](https://gitflic-ru.translate.goog/project/erthink/libmdbx/blob?file=ChangeLog.md&_x_tr_sl=ru&_x_tr_tl=en)
 and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic.ru/project/erthink/libmdbx/blob?file=ChangeLog.md).
 
-## v0.12.2 (Ярыгин) запланировано на 2022-11-11
+## v0.12.2 (Иван Ярыгин) от 2022-11-11
+
+Выпуск с существенными доработками и новой функциональностью
+в память о российском борце [Иване Сергеевиче Ярыгине](https://ru.wikipedia.org/wiki/Ярыгин,_Иван_Сергеевич).
+
+На Олимпийских играх в Мюнхене в 1972 году Иван Ярыгин уложил всех соперников на лопатки,
+суммарно затратив менее 9 минут. Этот рекорд никем не побит до сих пор.
+
+```
+64 files changed, 5573 insertions(+), 2510 deletions(-)
+Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
+```
 
 Новое:
 
