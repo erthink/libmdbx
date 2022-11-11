@@ -45,6 +45,13 @@ or unused pages will be omitted from the copy. This option will
 slow down the backup process as it is more CPU-intensive.
 Currently it fails if the environment has suffered a page leak.
 .TP
+.BR \-u
+Warms up the DB before copying via notifying OS kernel of subsequent access to the database pages.
+.TP
+.BR \-U
+Warms up the DB before copying, notifying the OS kernel of subsequent access to the database pages,
+then forcibly loads ones by sequential access and tries to lock database pages in memory.
+.TP
 .BR \-n
 Open MDBX environment(s) which do not use subdirectories.
 This is legacy option. For now MDBX handles this automatically.

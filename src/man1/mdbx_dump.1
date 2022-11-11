@@ -66,6 +66,13 @@ Dump a specific subdatabase. If no database is specified, only the main database
 .BR \-r
 Rescure mode. Ignore some errors to dump corrupted DB.
 .TP
+.BR \-u
+Warms up the DB before dumping via notifying OS kernel of subsequent access to the database pages.
+.TP
+.BR \-U
+Warms up the DB before dumping, notifying the OS kernel of subsequent access to the database pages,
+then forcibly loads ones by sequential access and tries to lock database pages in memory.
+.TP
 .BR \-n
 Dump an MDBX database which does not use subdirectories.
 This is legacy option. For now MDBX handles this automatically.
