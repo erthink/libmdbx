@@ -8,6 +8,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 Новое:
 
+ - Поддержка всех основных опций при сборке посредством CMake.
+
  - Требования к CMake понижены до версии 3.0.2 для возможности сборки для устаревших платформ.
 
  - Добавлена возможность профилирования работы GC в сложных и/или нагруженных
@@ -138,6 +140,8 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 
 Мелочи:
 
+ - Исторические ссылки cвязанные с удалённым на ~~github~~ проектом  перенаправлены на [web.archive.org](https://web.archive.org/web/https://github.com/erthink/libmdbx).
+ - Синхронизированны конструкции CMake между проектами.
  - Добавлено предупреждение о небезопасности RISC-V.
  - Добавлено описание параметров `MDBX_debug_func` и `MDBX_debug_func`.
  - Добавлено обходное решение для минимизации ложно-положительных
