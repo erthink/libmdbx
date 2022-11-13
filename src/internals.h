@@ -1088,11 +1088,16 @@ struct MDBX_txn {
       MDBX_page *loose_pages;
       /* Number of loose pages (tw.loose_pages) */
       size_t loose_count;
-      size_t spill_least_removed;
-      /* The sorted list of dirty pages we temporarily wrote to disk
-       * because the dirty list was full. page numbers in here are
-       * shifted left by 1, deleted slots have the LSB set. */
-      MDBX_PNL spill_pages;
+      union {
+        struct {
+          size_t least_removed;
+          /* The sorted list of dirty pages we temporarily wrote to disk
+           * because the dirty list was full. page numbers in here are
+           * shifted left by 1, deleted slots have the LSB set. */
+          MDBX_PNL list;
+        } spilled;
+        size_t writemap_dirty_npages;
+      };
     } tw;
   };
 };
