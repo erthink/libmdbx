@@ -293,8 +293,8 @@ __extern_C key_t ftok(const char *, int);
 /* Byteorder */
 
 #if defined(i386) || defined(__386) || defined(__i386) || defined(__i386__) || \
-    defined(i486) || defined(__i486) || defined(__i486__) ||                   \
-    defined(i586) | defined(__i586) || defined(__i586__) || defined(i686) ||   \
+    defined(i486) || defined(__i486) || defined(__i486__) || defined(i586) ||  \
+    defined(__i586) || defined(__i586__) || defined(i686) ||                   \
     defined(__i686) || defined(__i686__) || defined(_M_IX86) ||                \
     defined(_X86_) || defined(__THW_INTEL__) || defined(__I86__) ||            \
     defined(__INTEL__) || defined(__x86_64) || defined(__x86_64__) ||          \
