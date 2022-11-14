@@ -1,7 +1,14 @@
 ChangeLog
 ---------
 
-## v0.11.13 at (Swashplate) 2022-11-10
+## Release engineering of v0.11.14
+
+Fixes:
+
+ - Fixed insignificant typo of `||` inside `#if` byte-order condition (backport).
+
+
+## v0.11.13 (Swashplate) at 2022-11-10
 
 The stable bugfix release in memory of [Boris Yuryev](https://ru.wikipedia.org/wiki/Юрьев,_Борис_Николаевич) on his 133rd birthday.
 
