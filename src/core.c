@@ -5484,6 +5484,7 @@ __cold static pgno_t find_largest_snapshot(const MDBX_env *env,
 __hot static int __must_check_result page_dirty(MDBX_txn *txn, MDBX_page *mp,
                                                 pgno_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
+  mp->mp_txnid = txn->mt_front;
   if (!txn->tw.dirtylist) {
     tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
     txn->tw.writemap_dirty_npages += npages;
@@ -5500,7 +5501,6 @@ __hot static int __must_check_result page_dirty(MDBX_txn *txn, MDBX_page *mp,
 #endif /* xMDBX_DEBUG_SPILLING == 2 */
 
   int rc;
-  mp->mp_txnid = txn->mt_front;
   if (unlikely(txn->tw.dirtyroom == 0)) {
     if (txn->tw.loose_count) {
       MDBX_page *loose = txn->tw.loose_pages;
@@ -17082,7 +17082,6 @@ static pgr_t page_new(MDBX_cursor *mc, const unsigned flags) {
 
   DEBUG("db %u allocated new page %" PRIaPGNO, mc->mc_dbi, ret.page->mp_pgno);
   ret.page->mp_flags = (uint16_t)flags;
-  ret.page->mp_txnid = mc->mc_txn->mt_front;
   cASSERT(mc, *mc->mc_dbistate & DBI_DIRTY);
   cASSERT(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
 #if MDBX_ENABLE_PGOP_STAT
@@ -17114,7 +17113,6 @@ static pgr_t page_new_large(MDBX_cursor *mc, const unsigned npages) {
   DEBUG("db %u allocated new large-page %" PRIaPGNO ", num %u", mc->mc_dbi,
         ret.page->mp_pgno, npages);
   ret.page->mp_flags = P_OVERFLOW;
-  ret.page->mp_txnid = mc->mc_txn->mt_front;
   cASSERT(mc, *mc->mc_dbistate & DBI_DIRTY);
   cASSERT(mc, mc->mc_txn->mt_flags & MDBX_TXN_DIRTY);
 #if MDBX_ENABLE_PGOP_STAT
