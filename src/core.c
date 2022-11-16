@@ -5394,6 +5394,7 @@ static txnid_t find_oldest_reader(MDBX_env *const env, const txnid_t steady) {
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
   if (unlikely(lck == NULL /* exclusive without-lck mode */)) {
     eASSERT(env, env->me_lck == (void *)&env->x_lckless_stub);
+    env->me_lck->mti_readers_refresh_flag.weak = nothing_changed;
     return env->me_lck->mti_oldest_reader.weak = steady;
   }
 
@@ -6623,6 +6624,14 @@ static int gc_cursor_init(MDBX_cursor *mc, MDBX_txn *txn) {
   return cursor_init(mc, txn, FREE_DBI);
 }
 
+__hot static bool is_already_reclaimed(const MDBX_txn *txn, txnid_t id) {
+  const size_t len = MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed);
+  for (size_t i = 1; i <= len; ++i)
+    if (txn->tw.lifo_reclaimed[i] == id)
+      return true;
+  return false;
+}
+
 static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
                                  char flags) {
 #if MDBX_ENABLE_PROFGC
@@ -6642,11 +6651,9 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
   prof->spe_counter += 1;
 #endif /* MDBX_ENABLE_PROFGC */
 
+  eASSERT(env, flags & MDBX_ALLOC_GC);
   eASSERT(env, num == 0 || !(flags & MDBX_ALLOC_SLOT));
   eASSERT(env, num > 0 || !(flags & MDBX_ALLOC_NEW));
-  eASSERT(env, (flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE |
-                         MDBX_ALLOC_BACKLOG)) == 0 ||
-                   (flags & MDBX_ALLOC_GC));
   eASSERT(env, (flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE |
                          MDBX_ALLOC_BACKLOG)) == 0 ||
                    (flags & MDBX_ALLOC_NEW) == 0);
@@ -6654,9 +6661,12 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
   pgno_t pgno = 0, *range = nullptr;
-  size_t re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
+  size_t newnext, re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
   if (num > 1) {
     eASSERT(env, !(flags & MDBX_ALLOC_SLOT));
+    eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
+    if (unlikely(txn->mt_flags & MDBX_TXN_FROZEN_RE))
+      goto no_gc;
 #if MDBX_ENABLE_PROFGC
     prof->xpages += 1;
 #endif /* MDBX_ENABLE_PROFGC */
@@ -6672,334 +6682,322 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
       }
     }
   } else {
-    eASSERT(env, (flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE)) ||
-                     MDBX_PNL_GETSIZE(txn->tw.relist) == 0);
+    eASSERT(env,
+            (flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE)) || re_len == 0);
   }
 
   //---------------------------------------------------------------------------
 
-  if (likely(flags & MDBX_ALLOC_GC)) {
-    if (unlikely(!is_gc_usable(txn)))
-      goto no_gc;
+  if (unlikely(!is_gc_usable(txn)))
+    goto no_gc;
 
-    eASSERT(env, (flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_LIFO)) == 0);
-    flags += (env->me_flags & MDBX_LIFORECLAIM) ? MDBX_ALLOC_LIFO : 0;
+  eASSERT(env, (flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_LIFO)) == 0);
+  flags += (env->me_flags & MDBX_LIFORECLAIM) ? MDBX_ALLOC_LIFO : 0;
 
-    const unsigned coalesce_threshold = env->me_maxgc_ov1page >> 2;
-    if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
-        MDBX_PNL_GETSIZE(txn->tw.relist) < coalesce_threshold && num)
-      flags += MDBX_ALLOC_COALESCE;
+  const unsigned coalesce_threshold = env->me_maxgc_ov1page >> 2;
+  if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
+      MDBX_PNL_GETSIZE(txn->tw.relist) < coalesce_threshold && num)
+    flags += MDBX_ALLOC_COALESCE;
 
-    MDBX_cursor recur;
-    ret.err = gc_cursor_init(&recur, txn);
-    if (unlikely(ret.err != MDBX_SUCCESS))
-      goto fail;
+  MDBX_cursor recur;
+  ret.err = gc_cursor_init(&recur, txn);
+  if (unlikely(ret.err != MDBX_SUCCESS))
+    goto fail;
 
-  retry_gc_refresh_oldest:;
-    txnid_t oldest = txn_oldest_reader(txn);
-    if (unlikely(!oldest))
-      goto no_gc;
+retry_gc_refresh_oldest:;
+  txnid_t oldest = txn_oldest_reader(txn);
+retry_gc_have_oldest:
+  if (unlikely(oldest >= txn->mt_txnid)) {
+    ERROR("unexpected/invalid oldest-readed txnid %" PRIaTXN
+          " for current-txnid %" PRIaTXN,
+          oldest, txn->mt_txnid);
+    ret.err = MDBX_PROBLEM;
+    goto fail;
+  }
+  const txnid_t detent = oldest + 1;
 
-  retry_gc_have_oldest:
-    if (unlikely(oldest >= txn->mt_txnid)) {
-      ERROR("unexpected/invalid oldest-readed txnid %" PRIaTXN
-            " for current-txnid %" PRIaTXN,
-            oldest, txn->mt_txnid);
-      ret.err = MDBX_PROBLEM;
-      goto fail;
-    }
-    const txnid_t detent = oldest + 1;
-
-    txnid_t last = 0;
-    bool should_scan = false;
-    MDBX_cursor_op op = MDBX_FIRST;
-    if (flags & MDBX_ALLOC_LIFO) {
-      if (!txn->tw.lifo_reclaimed) {
-        txn->tw.lifo_reclaimed = txl_alloc();
-        if (unlikely(!txn->tw.lifo_reclaimed)) {
-          ret.err = MDBX_ENOMEM;
-          goto fail;
-        }
+  txnid_t id = 0;
+  bool should_scan = false;
+  MDBX_cursor_op op = MDBX_FIRST;
+  if (flags & MDBX_ALLOC_LIFO) {
+    if (!txn->tw.lifo_reclaimed) {
+      txn->tw.lifo_reclaimed = txl_alloc();
+      if (unlikely(!txn->tw.lifo_reclaimed)) {
+        ret.err = MDBX_ENOMEM;
+        goto fail;
       }
-      /* Begin lookup backward from oldest reader */
-      last = detent - 1;
-      op = MDBX_SET_RANGE;
-    } else if (txn->tw.last_reclaimed) {
-      /* Continue lookup forward from last-reclaimed */
-      last = txn->tw.last_reclaimed + 1;
-      if (last >= detent)
-        goto no_gc;
-      op = MDBX_SET_RANGE;
     }
+    /* Begin lookup backward from oldest reader */
+    id = detent - 1;
+    op = MDBX_SET_RANGE;
+  } else if (txn->tw.last_reclaimed) {
+    /* Continue lookup forward from last-reclaimed */
+    id = txn->tw.last_reclaimed + 1;
+    if (id >= detent)
+      goto depleted_gc;
+    op = MDBX_SET_RANGE;
+  }
 
-  next_gc:;
-    MDBX_val key;
-    key.iov_base = &last;
-    key.iov_len = sizeof(last);
+next_gc:;
+  MDBX_val key;
+  key.iov_base = &id;
+  key.iov_len = sizeof(id);
 
 #if MDBX_ENABLE_PROFGC
-    prof->rsteps += 1;
+  prof->rsteps += 1;
 #endif /* MDBX_ENABLE_PROFGC */
 
-    /* Seek first/next GC record */
-    ret.err = mdbx_cursor_get(&recur, &key, NULL, op);
-    if (unlikely(ret.err != MDBX_SUCCESS)) {
-      if (unlikely(ret.err != MDBX_NOTFOUND))
-        goto fail;
-      if ((flags & MDBX_ALLOC_LIFO) && op == MDBX_SET_RANGE) {
-        op = MDBX_PREV;
-        goto next_gc;
-      }
-      goto depleted_gc;
-    }
-    if (unlikely(key.iov_len != sizeof(txnid_t))) {
-      ret.err = MDBX_CORRUPTED;
+  /* Seek first/next GC record */
+  ret.err = mdbx_cursor_get(&recur, &key, NULL, op);
+  if (unlikely(ret.err != MDBX_SUCCESS)) {
+    if (unlikely(ret.err != MDBX_NOTFOUND))
       goto fail;
-    }
-    last = unaligned_peek_u64(4, key.iov_base);
-    if (flags & MDBX_ALLOC_LIFO) {
+    if ((flags & MDBX_ALLOC_LIFO) && op == MDBX_SET_RANGE) {
       op = MDBX_PREV;
-      if (last >= detent)
-        goto next_gc;
-      /* skip IDs of records that already reclaimed */
-      for (size_t i = MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed); i > 0; --i)
-        if (txn->tw.lifo_reclaimed[i] == last)
-          goto next_gc;
-    } else {
-      op = MDBX_NEXT;
-      if (unlikely(last >= detent))
-        goto depleted_gc;
+      goto next_gc;
     }
+    goto depleted_gc;
+  }
+  if (unlikely(key.iov_len != sizeof(txnid_t))) {
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
+  }
+  id = unaligned_peek_u64(4, key.iov_base);
+  if (flags & MDBX_ALLOC_LIFO) {
+    op = MDBX_PREV;
+    if (id >= detent || is_already_reclaimed(txn, id))
+      goto next_gc;
+  } else {
+    op = MDBX_NEXT;
+    if (unlikely(id >= detent))
+      goto depleted_gc;
+  }
 
-    /* Reading next GC record */
-    MDBX_val data;
-    MDBX_page *const mp = recur.mc_pg[recur.mc_top];
-    if (unlikely((ret.err = node_read(&recur,
-                                      page_node(mp, recur.mc_ki[recur.mc_top]),
-                                      &data, mp)) != MDBX_SUCCESS))
+  /* Reading next GC record */
+  MDBX_val data;
+  MDBX_page *const mp = recur.mc_pg[recur.mc_top];
+  if (unlikely(
+          (ret.err = node_read(&recur, page_node(mp, recur.mc_ki[recur.mc_top]),
+                               &data, mp)) != MDBX_SUCCESS))
+    goto fail;
+
+  eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
+  pgno_t *gc_pnl = (pgno_t *)data.iov_base;
+  if (unlikely(data.iov_len % sizeof(pgno_t) ||
+               data.iov_len < MDBX_PNL_SIZEOF(gc_pnl) ||
+               !pnl_check(gc_pnl, txn->mt_next_pgno))) {
+    ret.err = MDBX_CORRUPTED;
+    goto fail;
+  }
+  const size_t gc_len = MDBX_PNL_GETSIZE(gc_pnl);
+  if (unlikely(/* list is too long already */ MDBX_PNL_GETSIZE(
+                   txn->tw.relist) >= env->me_options.rp_augment_limit) &&
+      ((/* not a slot-request from gc-update */
+        (flags & MDBX_ALLOC_SLOT) == 0 &&
+        /* have enough unallocated space */ txn->mt_geo.upper >=
+            txn->mt_next_pgno + num) ||
+       gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >= MDBX_PGL_LIMIT)) {
+    /* Stop reclaiming to avoid large/overflow the page list.
+     * This is a rare case while search for a continuously multi-page region
+     * in a large database.
+     * https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/123
+     */
+    NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
+           "(chunk) -> %zu",
+           MDBX_PNL_GETSIZE(txn->tw.relist), gc_len,
+           gc_len + MDBX_PNL_GETSIZE(txn->tw.relist));
+    goto depleted_gc;
+  }
+
+  /* Remember ID of readed GC record */
+  txn->tw.last_reclaimed = id;
+  if (flags & MDBX_ALLOC_LIFO) {
+    ret.err = txl_append(&txn->tw.lifo_reclaimed, id);
+    if (unlikely(ret.err != MDBX_SUCCESS))
       goto fail;
+  }
 
-    eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
-    pgno_t *gc_pnl = (pgno_t *)data.iov_base;
-    if (unlikely(data.iov_len % sizeof(pgno_t) ||
-                 data.iov_len < MDBX_PNL_SIZEOF(gc_pnl) ||
-                 !pnl_check(gc_pnl, txn->mt_next_pgno))) {
+  /* Append PNL from GC record to tw.relist */
+  ret.err = pnl_need(&txn->tw.relist, gc_len);
+  if (unlikely(ret.err != MDBX_SUCCESS))
+    goto fail;
+
+  if (LOG_ENABLED(MDBX_LOG_EXTRA)) {
+    DEBUG_EXTRA("readed GC-pnl txn %" PRIaTXN " root %" PRIaPGNO
+                " len %zu, PNL",
+                id, txn->mt_dbs[FREE_DBI].md_root, gc_len);
+    for (size_t i = gc_len; i; i--)
+      DEBUG_EXTRA_PRINT(" %" PRIaPGNO, gc_pnl[i]);
+    DEBUG_EXTRA_PRINT(", next_pgno %u\n", txn->mt_next_pgno);
+  }
+
+  /* Merge in descending sorted order */
+  re_len = pnl_merge(txn->tw.relist, gc_pnl);
+  should_scan = true;
+  if (AUDIT_ENABLED()) {
+    if (unlikely(!pnl_check(txn->tw.relist, txn->mt_next_pgno))) {
       ret.err = MDBX_CORRUPTED;
       goto fail;
     }
-    const size_t gc_len = MDBX_PNL_GETSIZE(gc_pnl);
-    if (unlikely(/* list is too long already */ MDBX_PNL_GETSIZE(
-                     txn->tw.relist) >= env->me_options.rp_augment_limit) &&
-        ((/* not a slot-request from gc-update */
-          (flags & MDBX_ALLOC_SLOT) == 0 &&
-          /* have enough unallocated space */ txn->mt_geo.upper >=
-              txn->mt_next_pgno + num) ||
-         gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >= MDBX_PGL_LIMIT)) {
-      /* Stop reclaiming to avoid large/overflow the page list.
-       * This is a rare case while search for a continuously multi-page region
-       * in a large database.
-       * https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/123 */
-      NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
-             "(chunk) -> %zu",
-             MDBX_PNL_GETSIZE(txn->tw.relist), gc_len,
-             gc_len + MDBX_PNL_GETSIZE(txn->tw.relist));
-      goto depleted_gc;
-    }
+  } else {
+    eASSERT(env, pnl_check_allocated(txn->tw.relist, txn->mt_next_pgno));
+  }
+  eASSERT(env, dirtylist_check(txn));
 
-    /* Remember ID of readed GC record */
-    txn->tw.last_reclaimed = last;
-    if (flags & MDBX_ALLOC_LIFO) {
-      ret.err = txl_append(&txn->tw.lifo_reclaimed, last);
-      if (unlikely(ret.err != MDBX_SUCCESS))
-        goto fail;
-    }
+  eASSERT(env,
+          re_len == 0 || MDBX_PNL_MOST(txn->tw.relist) < txn->mt_next_pgno);
+  if (MDBX_ENABLE_REFUND && re_len &&
+      unlikely(MDBX_PNL_MOST(txn->tw.relist) == txn->mt_next_pgno - 1)) {
+    /* Refund suitable pages into "unallocated" space */
+    txn_refund(txn);
+    re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
+  }
+  eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
+  eASSERT(env, pnl_check_allocated(txn->tw.relist,
+                                   txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
-    /* Append PNL from GC record to tw.relist */
-    ret.err = pnl_need(&txn->tw.relist, gc_len);
-    if (unlikely(ret.err != MDBX_SUCCESS))
-      goto fail;
-    txn->tw.relist = txn->tw.relist;
+  /* Done for a kick-reclaim mode, actually no page needed */
+  if (unlikely(flags & MDBX_ALLOC_SLOT)) {
+    eASSERT(env, ret.err == MDBX_SUCCESS);
+    goto early_exit;
+  }
 
-    if (LOG_ENABLED(MDBX_LOG_EXTRA)) {
-      DEBUG_EXTRA("readed GC-pnl txn %" PRIaTXN " root %" PRIaPGNO
-                  " len %zu, PNL",
-                  last, txn->mt_dbs[FREE_DBI].md_root, gc_len);
-      for (size_t i = gc_len; i; i--)
-        DEBUG_EXTRA_PRINT(" %" PRIaPGNO, gc_pnl[i]);
-      DEBUG_EXTRA_PRINT(", next_pgno %u\n", txn->mt_next_pgno);
-    }
+  /* TODO: delete reclaimed records */
 
-    /* Merge in descending sorted order */
-    re_len = pnl_merge(txn->tw.relist, gc_pnl);
-    should_scan = true;
-    if (AUDIT_ENABLED()) {
-      if (unlikely(!pnl_check(txn->tw.relist, txn->mt_next_pgno))) {
-        ret.err = MDBX_CORRUPTED;
-        goto fail;
-      }
-    } else {
-      eASSERT(env, pnl_check_allocated(txn->tw.relist, txn->mt_next_pgno));
-    }
-    eASSERT(env, dirtylist_check(txn));
-
-    eASSERT(env,
-            re_len == 0 || MDBX_PNL_MOST(txn->tw.relist) < txn->mt_next_pgno);
-    if (MDBX_ENABLE_REFUND && re_len &&
-        unlikely(MDBX_PNL_MOST(txn->tw.relist) == txn->mt_next_pgno - 1)) {
-      /* Refund suitable pages into "unallocated" space */
-      if (txn_refund(txn))
-        re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
-    }
-    eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
-    eASSERT(env, pnl_check_allocated(txn->tw.relist,
-                                     txn->mt_next_pgno - MDBX_ENABLE_REFUND));
-
-    /* Done for a kick-reclaim mode, actually no page needed */
-    if (unlikely(flags & MDBX_ALLOC_SLOT)) {
-      eASSERT(env, ret.err == MDBX_SUCCESS);
-      goto early_exit;
-    }
-
-    /* TODO: delete reclaimed records */
-
-    /* Don't try to coalesce too much. */
-    eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
-    if (flags & MDBX_ALLOC_COALESCE) {
-      if (re_len /* current size */ < coalesce_threshold) {
+  /* Don't try to coalesce too much. */
+  eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
+  if (flags & MDBX_ALLOC_COALESCE) {
+    if (re_len /* current size */ < coalesce_threshold) {
 #if MDBX_ENABLE_PROFGC
-        env->me_lck->mti_pgop_stat.gc_prof.coalescences += 1;
+      env->me_lck->mti_pgop_stat.gc_prof.coalescences += 1;
 #endif /* MDBX_ENABLE_PROFGC */
-        goto next_gc;
-      }
-      TRACE("clear %s %s", "MDBX_ALLOC_COALESCE", "since got threshold");
-      flags &= ~MDBX_ALLOC_COALESCE;
-    }
-
-  scan:
-    eASSERT(env, should_scan);
-    if (re_len >= num) {
-      eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
-                       MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
-      range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
-      pgno = *range;
-      if (num == 1)
-        goto done;
-      range = scan4seq(range, re_len, num - 1);
-      eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
-      if (likely(range)) {
-        pgno = *range;
-        goto done;
-      }
-    }
-    should_scan = false;
-    if (ret.err == MDBX_SUCCESS)
       goto next_gc;
-
-  depleted_gc:
-    ret.err = MDBX_NOTFOUND;
-    if (should_scan)
-      goto scan;
-
-    //-------------------------------------------------------------------------
-
-    /* There is no suitable pages in the GC and to be able to allocate
-     * we should CHOICE one of:
-     *  - make a new steady checkpoint if reclaiming was stopped by
-     *    the last steady-sync, or wipe it in the MDBX_UTTERLY_NOSYNC mode;
-     *  - kick lagging reader(s) if reclaiming was stopped by ones of it.
-     *  - extend the database file. */
-
-    /* Will use new pages from the map if nothing is suitable in the GC. */
-    pgno = txn->mt_next_pgno;
-    const size_t newnext = num + pgno;
-
-    const meta_ptr_t recent = meta_recent(env, &txn->tw.troika);
-    const meta_ptr_t prefer_steady = meta_prefer_steady(env, &txn->tw.troika);
-    /* does reclaiming stopped at the last steady point? */
-    if (recent.ptr_c != prefer_steady.ptr_c && prefer_steady.is_steady &&
-        detent == prefer_steady.txnid + 1) {
-      DEBUG("gc-kick-steady: recent %" PRIaTXN "-%s, steady %" PRIaTXN
-            "-%s, detent %" PRIaTXN,
-            recent.txnid, durable_caption(recent.ptr_c), prefer_steady.txnid,
-            durable_caption(prefer_steady.ptr_c), detent);
-      const pgno_t autosync_threshold =
-          atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed);
-      const uint64_t autosync_period =
-          atomic_load64(&env->me_lck->mti_autosync_period, mo_Relaxed);
-      uint64_t eoos_timestamp;
-      /* wipe the last steady-point if one of:
-       *  - UTTERLY_NOSYNC mode AND auto-sync threshold is NOT specified
-       *  - UTTERLY_NOSYNC mode AND free space at steady-point is exhausted
-       * otherwise, make a new steady-point if one of:
-       *  - auto-sync threshold is specified and reached;
-       *  - upper limit of database size is reached;
-       *  - database is full (with the current file size)
-       *       AND auto-sync threshold it NOT specified */
-      if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) &&
-          ((autosync_threshold | autosync_period) == 0 ||
-           newnext >= prefer_steady.ptr_c->mm_geo.now)) {
-        /* wipe steady checkpoint in MDBX_UTTERLY_NOSYNC mode
-         * without any auto-sync threshold(s). */
-#if MDBX_ENABLE_PROFGC
-        env->me_lck->mti_pgop_stat.gc_prof.wipes += 1;
-#endif /* MDBX_ENABLE_PROFGC */
-        ret.err = wipe_steady(txn, detent);
-        DEBUG("gc-wipe-steady, rc %d", ret.err);
-        if (unlikely(ret.err != MDBX_SUCCESS))
-          goto fail;
-        eASSERT(env, prefer_steady.ptr_c !=
-                         meta_prefer_steady(env, &txn->tw.troika).ptr_c);
-        goto retry_gc_refresh_oldest;
-      }
-      if ((flags & (MDBX_ALLOC_BACKLOG | MDBX_ALLOC_NEW)) == 0 ||
-          (autosync_threshold &&
-           atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed) >=
-               autosync_threshold) ||
-          (autosync_period &&
-           (eoos_timestamp =
-                atomic_load64(&env->me_lck->mti_eoos_timestamp, mo_Relaxed)) &&
-           osal_monotime() - eoos_timestamp >= autosync_period) ||
-          newnext >= txn->mt_geo.upper ||
-          (newnext >= txn->mt_end_pgno &&
-           (autosync_threshold | autosync_period) == 0)) {
-        /* make steady checkpoint. */
-#if MDBX_ENABLE_PROFGC
-        env->me_lck->mti_pgop_stat.gc_prof.flushes += 1;
-#endif /* MDBX_ENABLE_PROFGC */
-        MDBX_meta meta = *recent.ptr_c;
-        ret.err = sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta,
-                              &txn->tw.troika);
-        DEBUG("gc-make-steady, rc %d", ret.err);
-        eASSERT(env, ret.err != MDBX_RESULT_TRUE);
-        if (unlikely(ret.err != MDBX_SUCCESS))
-          goto fail;
-        eASSERT(env, prefer_steady.ptr_c !=
-                         meta_prefer_steady(env, &txn->tw.troika).ptr_c);
-        goto retry_gc_refresh_oldest;
-      }
     }
+    TRACE("clear %s %s", "MDBX_ALLOC_COALESCE", "since got threshold");
+    flags &= ~MDBX_ALLOC_COALESCE;
+  }
 
-    if (env->me_lck_mmap.lck &&
-        unlikely(true ==
-                 atomic_load32(&env->me_lck_mmap.lck->mti_readers_refresh_flag,
-                               mo_AcquireRelease))) {
-      oldest = txn_oldest_reader(txn);
-      if (oldest >= detent)
-        goto retry_gc_have_oldest;
-    }
-
-    /* avoid kick lagging reader(s) if is enough unallocated space
-     * at the end of database file. */
-    if ((flags & MDBX_ALLOC_NEW) && newnext <= txn->mt_end_pgno) {
-      eASSERT(env, range == nullptr);
+scan:
+  eASSERT(env, should_scan);
+  if (re_len >= num) {
+    eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
+                     MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
+    range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
+    pgno = *range;
+    if (num == 1)
+      goto done;
+    range = scan4seq(range, re_len, num - 1);
+    eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
+    if (likely(range)) {
+      pgno = *range;
       goto done;
     }
+  }
+  should_scan = false;
+  if (ret.err == MDBX_SUCCESS)
+    goto next_gc;
 
-    if (oldest < txn->mt_txnid - xMDBX_TXNID_STEP) {
-      oldest = kick_longlived_readers(env, oldest);
-      if (oldest >= detent)
-        goto retry_gc_have_oldest;
+depleted_gc:
+  ret.err = MDBX_NOTFOUND;
+  if (should_scan)
+    goto scan;
+
+  //-------------------------------------------------------------------------
+
+  /* There is no suitable pages in the GC and to be able to allocate
+   * we should CHOICE one of:
+   *  - make a new steady checkpoint if reclaiming was stopped by
+   *    the last steady-sync, or wipe it in the MDBX_UTTERLY_NOSYNC mode;
+   *  - kick lagging reader(s) if reclaiming was stopped by ones of it.
+   *  - extend the database file. */
+
+  /* Will use new pages from the map if nothing is suitable in the GC. */
+  newnext = (pgno = txn->mt_next_pgno) + num;
+
+  /* Does reclaiming stopped at the last steady point? */
+  const meta_ptr_t recent = meta_recent(env, &txn->tw.troika);
+  const meta_ptr_t prefer_steady = meta_prefer_steady(env, &txn->tw.troika);
+  if (recent.ptr_c != prefer_steady.ptr_c && prefer_steady.is_steady &&
+      detent == prefer_steady.txnid + 1) {
+    DEBUG("gc-kick-steady: recent %" PRIaTXN "-%s, steady %" PRIaTXN
+          "-%s, detent %" PRIaTXN,
+          recent.txnid, durable_caption(recent.ptr_c), prefer_steady.txnid,
+          durable_caption(prefer_steady.ptr_c), detent);
+    const pgno_t autosync_threshold =
+        atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed);
+    const uint64_t autosync_period =
+        atomic_load64(&env->me_lck->mti_autosync_period, mo_Relaxed);
+    uint64_t eoos_timestamp;
+    /* wipe the last steady-point if one of:
+     *  - UTTERLY_NOSYNC mode AND auto-sync threshold is NOT specified
+     *  - UTTERLY_NOSYNC mode AND free space at steady-point is exhausted
+     * otherwise, make a new steady-point if one of:
+     *  - auto-sync threshold is specified and reached;
+     *  - upper limit of database size is reached;
+     *  - database is full (with the current file size)
+     *       AND auto-sync threshold it NOT specified */
+    if (F_ISSET(env->me_flags, MDBX_UTTERLY_NOSYNC) &&
+        ((autosync_threshold | autosync_period) == 0 ||
+         newnext >= prefer_steady.ptr_c->mm_geo.now)) {
+      /* wipe steady checkpoint in MDBX_UTTERLY_NOSYNC mode
+       * without any auto-sync threshold(s). */
+#if MDBX_ENABLE_PROFGC
+      env->me_lck->mti_pgop_stat.gc_prof.wipes += 1;
+#endif /* MDBX_ENABLE_PROFGC */
+      ret.err = wipe_steady(txn, detent);
+      DEBUG("gc-wipe-steady, rc %d", ret.err);
+      if (unlikely(ret.err != MDBX_SUCCESS))
+        goto fail;
+      eASSERT(env, prefer_steady.ptr_c !=
+                       meta_prefer_steady(env, &txn->tw.troika).ptr_c);
+      goto retry_gc_refresh_oldest;
     }
+    if ((flags & (MDBX_ALLOC_BACKLOG | MDBX_ALLOC_NEW)) == 0 ||
+        (autosync_threshold &&
+         atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed) >=
+             autosync_threshold) ||
+        (autosync_period &&
+         (eoos_timestamp =
+              atomic_load64(&env->me_lck->mti_eoos_timestamp, mo_Relaxed)) &&
+         osal_monotime() - eoos_timestamp >= autosync_period) ||
+        newnext >= txn->mt_geo.upper ||
+        (newnext >= txn->mt_end_pgno &&
+         (autosync_threshold | autosync_period) == 0)) {
+      /* make steady checkpoint. */
+#if MDBX_ENABLE_PROFGC
+      env->me_lck->mti_pgop_stat.gc_prof.flushes += 1;
+#endif /* MDBX_ENABLE_PROFGC */
+      MDBX_meta meta = *recent.ptr_c;
+      ret.err = sync_locked(env, env->me_flags & MDBX_WRITEMAP, &meta,
+                            &txn->tw.troika);
+      DEBUG("gc-make-steady, rc %d", ret.err);
+      eASSERT(env, ret.err != MDBX_RESULT_TRUE);
+      if (unlikely(ret.err != MDBX_SUCCESS))
+        goto fail;
+      eASSERT(env, prefer_steady.ptr_c !=
+                       meta_prefer_steady(env, &txn->tw.troika).ptr_c);
+      goto retry_gc_refresh_oldest;
+    }
+  }
+
+  if (unlikely(true == atomic_load32(&env->me_lck->mti_readers_refresh_flag,
+                                     mo_AcquireRelease))) {
+    oldest = txn_oldest_reader(txn);
+    if (oldest >= detent)
+      goto retry_gc_have_oldest;
+  }
+
+  /* Avoid kick lagging reader(s) if is enough unallocated space
+   * at the end of database file. */
+  if ((flags & MDBX_ALLOC_NEW) && newnext <= txn->mt_end_pgno) {
+    eASSERT(env, range == nullptr);
+    goto done;
+  }
+
+  if (oldest < txn->mt_txnid - xMDBX_TXNID_STEP) {
+    oldest = kick_longlived_readers(env, oldest);
+    if (oldest >= detent)
+      goto retry_gc_have_oldest;
   }
 
   //---------------------------------------------------------------------------
@@ -7011,8 +7009,7 @@ no_gc:
   }
 
   /* Will use new pages from the map if nothing is suitable in the GC. */
-  pgno = txn->mt_next_pgno;
-  const size_t newnext = num + pgno;
+  newnext = (pgno = txn->mt_next_pgno) + num;
   if (newnext <= txn->mt_end_pgno)
     goto done;
 
@@ -7055,6 +7052,7 @@ done:
       eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
       eASSERT(env, pgno == *range);
       eASSERT(env, pgno + num <= txn->mt_next_pgno && pgno >= NUM_METAS);
+      eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
       /* Cutoff allocated pages from tw.relist */
 #if MDBX_PNL_ASCENDING
       for (const pgno_t *const end = re_list + re_len - num; range <= end;
