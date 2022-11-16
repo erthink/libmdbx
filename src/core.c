@@ -752,7 +752,7 @@ __cold static const char *pagetype_caption(const uint8_t type,
   }
 }
 
-__cold static __must_check_result int MDBX_PRINTF_ARGS(2, 3)
+__cold static int MDBX_PRINTF_ARGS(2, 3)
     bad_page(const MDBX_page *mp, const char *fmt, ...) {
   if (LOG_ENABLED(MDBX_LOG_ERROR)) {
     static const MDBX_page *prev;
@@ -7232,26 +7232,47 @@ __hot static pgr_t page_alloc(const MDBX_cursor *mc) {
   return page_alloc_slowpath(mc, 1, MDBX_ALLOC_ALL);
 }
 
-/* Copy the used portions of a non-large/overflow page. */
-__hot static void page_copy(MDBX_page *dst, const MDBX_page *src,
-                            size_t psize) {
+/* Copy the used portions of a page. */
+__hot static void page_copy(MDBX_page *const dst, const MDBX_page *const src,
+                            const size_t size) {
   STATIC_ASSERT(UINT16_MAX > MAX_PAGESIZE - PAGEHDRSZ);
   STATIC_ASSERT(MIN_PAGESIZE > PAGEHDRSZ + NODESIZE * 4);
+  char *copy_dst = (void *)dst;
+  const char *copy_src = (const void *)src;
+  size_t copy_len = size;
+  if (src->mp_flags & P_LEAF2) {
+    copy_len = PAGEHDRSZ + src->mp_leaf2_ksize * page_numkeys(src);
+    if (unlikely(copy_len > size))
+      goto bailout;
+  }
   if ((src->mp_flags & (P_LEAF2 | P_OVERFLOW)) == 0) {
-    size_t upper = src->mp_upper, lower = src->mp_lower, unused = upper - lower;
-
+    size_t upper = src->mp_upper, lower = src->mp_lower;
+    intptr_t unused = upper - lower;
     /* If page isn't full, just copy the used portion. Adjust
      * alignment so memcpy may copy words instead of bytes. */
-    if (unused >= MDBX_CACHELINE_SIZE * 2) {
+    if (unused > MDBX_CACHELINE_SIZE * 3) {
       lower = ceil_powerof2(lower + PAGEHDRSZ, sizeof(void *));
       upper = floor_powerof2(upper + PAGEHDRSZ, sizeof(void *));
-      memcpy(dst, src, lower);
-      dst = (void *)((char *)dst + upper);
-      src = (void *)((char *)src + upper);
-      psize -= upper;
+      if (unlikely(upper > copy_len))
+        goto bailout;
+      memcpy(copy_dst, copy_src, lower);
+      copy_dst += upper;
+      copy_src += upper;
+      copy_len -= upper;
     }
   }
-  memcpy(dst, src, psize);
+  memcpy(copy_dst, copy_src, copy_len);
+  return;
+
+bailout:
+  if (src->mp_flags & P_LEAF2)
+    bad_page(src, "%s addr %p, n-keys %zu, ksize %u",
+             "invalid/corrupted source page", __Wpedantic_format_voidptr(src),
+             page_numkeys(src), src->mp_leaf2_ksize);
+  else
+    bad_page(src, "%s addr %p, upper %u", "invalid/corrupted source page",
+             __Wpedantic_format_voidptr(src), src->mp_upper);
+  memset(dst, -1, size);
 }
 
 /* Pull a page off the txn's spill list, if present.
