@@ -1366,7 +1366,7 @@ __cold void thread_dtor(void *rthc) {
     if (atomic_load32(&reader->mr_pid, mo_Relaxed) == self_pid) {
       TRACE("==== thread 0x%" PRIxPTR ", rthc %p, cleanup", osal_thread_self(),
             __Wpedantic_format_voidptr(reader));
-      atomic_cas32(&reader->mr_pid, self_pid, 0);
+      (void)atomic_cas32(&reader->mr_pid, self_pid, 0);
     }
   }
 
@@ -4469,8 +4469,9 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
       unsigned npages = IS_OVERFLOW(wp) ? wp->mp_pages : 1u;
       size_t chunk = pgno2bytes(env, npages);
       eASSERT(env, bytes >= chunk);
+      MDBX_page *next = (MDBX_page *)((char *)wp + chunk);
       dpage_free(env, wp, npages);
-      wp = (MDBX_page *)((char *)wp + chunk);
+      wp = next;
       offset += chunk;
       bytes -= chunk;
     } while (bytes);
@@ -9797,6 +9798,8 @@ retry:
       do {
         if (ctx->bigfoot > txn->mt_txnid) {
           rc = gcu_clean_stored_retired(txn, ctx);
+          if (unlikely(rc != MDBX_SUCCESS))
+            goto bailout;
           tASSERT(txn, ctx->bigfoot <= txn->mt_txnid);
         }
 
@@ -13632,13 +13635,13 @@ __cold static int handle_env_pathname(MDBX_handle_env_pathname *ctx,
   }
 #else
   struct stat st;
-  if (stat(pathname, &st)) {
+  if (stat(pathname, &st) != 0) {
     rc = errno;
     if (rc != MDBX_ENOFILE)
       return rc;
     if (mode == 0 || (*flags & MDBX_RDONLY) != 0)
       /* can't open existing */
-      return rc;
+      return rc /* MDBX_ENOFILE */;
 
     /* auto-create directory if requested */
     const mdbx_mode_t dir_mode =
@@ -19454,7 +19457,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   int rc = MDBX_SUCCESS, foliage = 0;
   size_t i, ptop;
   MDBX_env *const env = mc->mc_txn->mt_env;
-  MDBX_val sepkey, rkey, xdata;
+  MDBX_val rkey, xdata;
   MDBX_page *tmp_ki_copy = NULL;
   DKBUF;
 
@@ -19546,6 +19549,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
   eASSERT(env, split_indx >= minkeys && split_indx <= nkeys - minkeys + 1);
 
   cASSERT(mc, !IS_BRANCH(mp) || newindx > 0);
+  MDBX_val sepkey = {nullptr, 0};
   /* It is reasonable and possible to split the page at the begin */
   if (unlikely(newindx < minkeys)) {
     split_indx = minkeys;
@@ -19878,7 +19882,7 @@ static int page_split(MDBX_cursor *mc, const MDBX_val *const newkey,
           break;
         }
     }
-  } else if (!IS_LEAF2(mp)) {
+  } else if (tmp_ki_copy /* !IS_LEAF2(mp) */) {
     /* Move nodes */
     mc->mc_pg[mc->mc_top] = sister;
     i = split_indx;
@@ -23991,7 +23995,7 @@ __cold int mdbx_env_warmup(const MDBX_env *env, const MDBX_txn *txn,
     if (getrlimit(RLIMIT_RSS, &rss) == 0 && rss.rlim_cur < estimated_rss) {
       rss.rlim_cur = estimated_rss;
       if (rss.rlim_max < estimated_rss)
-        rss.rlim_max = used_range;
+        rss.rlim_max = estimated_rss;
       if (setrlimit(RLIMIT_RSS, &rss)) {
         rc = errno;
         WARNING("setrlimit(%s, {%zu, %zu}) error %d", "RLIMIT_RSS",
