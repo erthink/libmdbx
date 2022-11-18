@@ -1706,10 +1706,15 @@ MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
     return (int)GetLastError();
 #else
 #if defined(__linux__) || defined(__gnu_linux__)
-  assert(linux_kernel_version > 0x02061300);
   /* Since Linux 2.6.19, MS_ASYNC is in fact a no-op. The kernel properly
-   * tracks dirty pages and flushes them to storage as necessary. */
-  return MDBX_SUCCESS;
+   * tracks dirty pages and flushes ones as necessary. */
+  //
+  // However, this behavior may be changed in custom kernels,
+  // so just leave such optimization to the libc discretion.
+  //
+  // assert(linux_kernel_version > 0x02061300);
+  // if (mode_bits == MDBX_SYNC_NONE)
+  //   return MDBX_SUCCESS;
 #endif /* Linux */
   if (msync(ptr, length, (mode_bits & MDBX_SYNC_DATA) ? MS_SYNC : MS_ASYNC))
     return errno;
