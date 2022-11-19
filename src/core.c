@@ -6595,7 +6595,8 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
 #define MDBX_ALLOC_RESERVE 16
 #define MDBX_ALLOC_BACKLOG 32
 #define MDBX_ALLOC_ALL (MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
-#define MDBX_ALLOC_LIFO 128
+#define MDBX_ALLOC_SHOULD_SCAN 64 /* internal state */
+#define MDBX_ALLOC_LIFO 128       /* internal state */
 
 static __inline bool is_gc_usable(const MDBX_txn *txn) {
   /* If txn is updating the GC, then the retired-list cannot play catch-up with
@@ -6692,13 +6693,18 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
   if (unlikely(!is_gc_usable(txn)))
     goto no_gc;
 
-  eASSERT(env, (flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_LIFO)) == 0);
+  eASSERT(env, (flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_LIFO |
+                         MDBX_ALLOC_SHOULD_SCAN)) == 0);
   flags += (env->me_flags & MDBX_LIFORECLAIM) ? MDBX_ALLOC_LIFO : 0;
 
-  const unsigned coalesce_threshold = env->me_maxgc_ov1page >> 2;
-  if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
-      MDBX_PNL_GETSIZE(txn->tw.relist) < coalesce_threshold && num)
-    flags += MDBX_ALLOC_COALESCE;
+  if (/* Не коагулируем записи при подготовке резерва для обновления GC.
+       * Иначе попытка увеличить резерв может приводить к необходимости ещё
+       * большего резерва из-за увеличения списка переработанных страниц. */
+      flags < MDBX_ALLOC_COALESCE) {
+    if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
+        re_len < env->me_maxgc_ov1page / 2)
+      flags += MDBX_ALLOC_COALESCE;
+  }
 
   MDBX_cursor recur;
   ret.err = gc_cursor_init(&recur, txn);
@@ -6718,7 +6724,6 @@ retry_gc_have_oldest:
   const txnid_t detent = oldest + 1;
 
   txnid_t id = 0;
-  bool should_scan = false;
   MDBX_cursor_op op = MDBX_FIRST;
   if (flags & MDBX_ALLOC_LIFO) {
     if (!txn->tw.lifo_reclaimed) {
@@ -6790,24 +6795,54 @@ next_gc:;
     ret.err = MDBX_CORRUPTED;
     goto fail;
   }
+
   const size_t gc_len = MDBX_PNL_GETSIZE(gc_pnl);
-  if (unlikely(/* list is too long already */ MDBX_PNL_GETSIZE(
-                   txn->tw.relist) >= env->me_options.rp_augment_limit) &&
-      ((/* not a slot-request from gc-update */
-        (flags & MDBX_ALLOC_SLOT) == 0 &&
-        /* have enough unallocated space */ txn->mt_geo.upper >=
-            txn->mt_next_pgno + num) ||
-       gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >= MDBX_PGL_LIMIT)) {
-    /* Stop reclaiming to avoid large/overflow the page list.
-     * This is a rare case while search for a continuously multi-page region
-     * in a large database.
-     * https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/123
-     */
-    NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
-           "(chunk) -> %zu",
-           MDBX_PNL_GETSIZE(txn->tw.relist), gc_len,
-           gc_len + MDBX_PNL_GETSIZE(txn->tw.relist));
-    goto depleted_gc;
+  TRACE("gc-read: id #%" PRIaTXN " len %zu, re-list will %zu ", id, gc_len,
+        gc_len + re_len);
+
+  eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
+  if (unlikely(gc_len + re_len >= env->me_maxgc_ov1page)) {
+    /* Don't try to coalesce too much. */
+    if (flags & MDBX_ALLOC_SHOULD_SCAN) {
+      eASSERT(env, flags & MDBX_ALLOC_COALESCE);
+      eASSERT(env, num > 0);
+#if MDBX_ENABLE_PROFGC
+      env->me_lck->mti_pgop_stat.gc_prof.coalescences += 1;
+#endif /* MDBX_ENABLE_PROFGC */
+      TRACE("clear %s %s", "MDBX_ALLOC_COALESCE", "since got threshold");
+      if (re_len >= num) {
+        eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
+                         MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
+        range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
+        pgno = *range;
+        if (num == 1)
+          goto done;
+        range = scan4seq(range, re_len, num - 1);
+        eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
+        if (likely(range)) {
+          pgno = *range;
+          goto done;
+        }
+      }
+      flags -= MDBX_ALLOC_COALESCE | MDBX_ALLOC_SHOULD_SCAN;
+    }
+    if (unlikely(/* list is too long already */ re_len >=
+                 env->me_options.rp_augment_limit) &&
+        ((/* not a slot-request from gc-update */
+          (flags & MDBX_ALLOC_SLOT) == 0 &&
+          /* have enough unallocated space */ txn->mt_geo.upper >=
+              txn->mt_next_pgno + num) ||
+         gc_len + re_len >= MDBX_PGL_LIMIT)) {
+      /* Stop reclaiming to avoid large/overflow the page list.
+       * This is a rare case while search for a continuously multi-page region
+       * in a large database.
+       * https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/123
+       */
+      NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
+             "(chunk) -> %zu",
+             re_len, gc_len, gc_len + re_len);
+      goto depleted_gc;
+    }
   }
 
   /* Remember ID of readed GC record */
@@ -6834,7 +6869,7 @@ next_gc:;
 
   /* Merge in descending sorted order */
   re_len = pnl_merge(txn->tw.relist, gc_pnl);
-  should_scan = true;
+  flags |= MDBX_ALLOC_SHOULD_SCAN;
   if (AUDIT_ENABLED()) {
     if (unlikely(!pnl_check(txn->tw.relist, txn->mt_next_pgno))) {
       ret.err = MDBX_CORRUPTED;
@@ -6860,26 +6895,22 @@ next_gc:;
   /* Done for a kick-reclaim mode, actually no page needed */
   if (unlikely(flags & MDBX_ALLOC_SLOT)) {
     eASSERT(env, ret.err == MDBX_SUCCESS);
+    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "early-exit for slot", id,
+          re_len);
     goto early_exit;
   }
 
   /* TODO: delete reclaimed records */
 
-  /* Don't try to coalesce too much. */
   eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   if (flags & MDBX_ALLOC_COALESCE) {
-    if (re_len /* current size */ < coalesce_threshold) {
-#if MDBX_ENABLE_PROFGC
-      env->me_lck->mti_pgop_stat.gc_prof.coalescences += 1;
-#endif /* MDBX_ENABLE_PROFGC */
-      goto next_gc;
-    }
-    TRACE("clear %s %s", "MDBX_ALLOC_COALESCE", "since got threshold");
-    flags &= ~MDBX_ALLOC_COALESCE;
+    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "coalesce-continue", id,
+          re_len);
+    goto next_gc;
   }
 
 scan:
-  eASSERT(env, should_scan);
+  eASSERT(env, flags & MDBX_ALLOC_SHOULD_SCAN);
   if (re_len >= num) {
     eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                      MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
@@ -6894,13 +6925,16 @@ scan:
       goto done;
     }
   }
-  should_scan = false;
-  if (ret.err == MDBX_SUCCESS)
+  flags -= MDBX_ALLOC_SHOULD_SCAN;
+  if (ret.err == MDBX_SUCCESS) {
+    TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "continue-search", id,
+          re_len);
     goto next_gc;
+  }
 
 depleted_gc:
   ret.err = MDBX_NOTFOUND;
-  if (should_scan)
+  if (flags & MDBX_ALLOC_SHOULD_SCAN)
     goto scan;
 
   //-------------------------------------------------------------------------
