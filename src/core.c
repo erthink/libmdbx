@@ -6588,30 +6588,24 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
  *
  * Returns 0 on success, non-zero on failure.*/
 
-#define MDBX_ALLOC_GC 1
-#define MDBX_ALLOC_NEW 2
-#define MDBX_ALLOC_COALESCE 4
-#define MDBX_ALLOC_SLOT 8
-#define MDBX_ALLOC_RESERVE 16
-#define MDBX_ALLOC_BACKLOG 32
-#define MDBX_ALLOC_ALL (MDBX_ALLOC_GC | MDBX_ALLOC_NEW)
-#define MDBX_ALLOC_SHOULD_SCAN 64 /* internal state */
-#define MDBX_ALLOC_LIFO 128       /* internal state */
+#define MDBX_ALLOC_DEFAULT 0
+#define MDBX_ALLOC_RESERVE 1
+#define MDBX_ALLOC_UNIMPORTANT 2
+#define MDBX_ALLOC_COALESCE 4    /* внутреннее состояние */
+#define MDBX_ALLOC_SHOULD_SCAN 8 /* внутреннее состояние */
+#define MDBX_ALLOC_LIFO 16       /* внутреннее состояние */
 
-static __inline bool is_gc_usable(const MDBX_txn *txn) {
+static __inline bool is_gc_usable(MDBX_txn *txn, const MDBX_cursor *mc,
+                                  const uint8_t flags) {
   /* If txn is updating the GC, then the retired-list cannot play catch-up with
    * itself by growing while trying to save it. */
-  if (txn->mt_flags & (MDBX_TXN_UPDATE_GC | MDBX_TXN_FROZEN_RE))
+  if (mc->mc_dbi == FREE_DBI && !(flags & MDBX_ALLOC_RESERVE) &&
+      !(mc->mc_flags & C_GCU))
     return false;
 
   /* avoid (recursive) search inside empty tree and while tree is
      updating, https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/31 */
   if (txn->mt_dbs[FREE_DBI].md_entries == 0)
-    return false;
-
-  /* If our dirty list is already full, we can't touch GC */
-  if (unlikely(txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth) &&
-      !(txn->mt_dbistate[FREE_DBI] & DBI_DIRTY))
     return false;
 
   return true;
@@ -6644,22 +6638,13 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
   prof->spe_counter += 1;
 #endif /* MDBX_ENABLE_PROFGC */
 
-  eASSERT(env, flags & MDBX_ALLOC_GC);
-  eASSERT(env, num == 0 || !(flags & MDBX_ALLOC_SLOT));
-  eASSERT(env, num > 0 || !(flags & MDBX_ALLOC_NEW));
-  eASSERT(env, (flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE |
-                         MDBX_ALLOC_BACKLOG)) == 0 ||
-                   (flags & MDBX_ALLOC_NEW) == 0);
+  eASSERT(env, num > 0 || (flags & MDBX_ALLOC_RESERVE));
   eASSERT(env, pnl_check_allocated(txn->tw.relist,
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
   pgno_t pgno = 0, *range = nullptr;
   size_t newnext, re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
   if (num > 1) {
-    eASSERT(env, !(flags & MDBX_ALLOC_SLOT));
-    eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
-    if (unlikely(txn->mt_flags & MDBX_TXN_FROZEN_RE))
-      goto no_gc;
 #if MDBX_ENABLE_PROFGC
     prof->xpages += 1;
 #endif /* MDBX_ENABLE_PROFGC */
@@ -6675,13 +6660,12 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
       }
     }
   } else {
-    eASSERT(env,
-            (flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE)) || re_len == 0);
+    eASSERT(env, num == 0 || re_len == 0);
   }
 
   //---------------------------------------------------------------------------
 
-  if (unlikely(!is_gc_usable(txn)))
+  if (unlikely(!is_gc_usable(txn, mc, flags)))
     goto no_gc;
 
   eASSERT(env, (flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_LIFO |
@@ -6691,7 +6675,7 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
   if (/* Не коагулируем записи при подготовке резерва для обновления GC.
        * Иначе попытка увеличить резерв может приводить к необходимости ещё
        * большего резерва из-за увеличения списка переработанных страниц. */
-      flags < MDBX_ALLOC_COALESCE) {
+      (flags & MDBX_ALLOC_RESERVE) == 0) {
     if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
         re_len < env->me_maxgc_ov1page / 2)
       flags += MDBX_ALLOC_COALESCE;
@@ -6777,7 +6761,6 @@ next_gc:;
                                     &data, mp)) != MDBX_SUCCESS))
     goto fail;
 
-  eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
   pgno_t *gc_pnl = (pgno_t *)data.iov_base;
   if (unlikely(data.iov_len % sizeof(pgno_t) ||
                data.iov_len < MDBX_PNL_SIZEOF(gc_pnl) ||
@@ -6818,8 +6801,7 @@ next_gc:;
     }
     if (unlikely(/* list is too long already */ re_len >=
                  env->me_options.rp_augment_limit) &&
-        ((/* not a slot-request from gc-update */
-          (flags & MDBX_ALLOC_SLOT) == 0 &&
+        ((/* not a slot-request from gc-update */ num &&
           /* have enough unallocated space */ txn->mt_geo.upper >=
               txn->mt_next_pgno + num) ||
          gc_len + re_len >= MDBX_PGL_LIMIT)) {
@@ -6883,7 +6865,7 @@ next_gc:;
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
   /* Done for a kick-reclaim mode, actually no page needed */
-  if (unlikely(flags & MDBX_ALLOC_SLOT)) {
+  if (unlikely(num == 0)) {
     eASSERT(env, ret.err == MDBX_SUCCESS);
     TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "early-exit for slot", id,
           re_len);
@@ -6901,6 +6883,7 @@ next_gc:;
 
 scan:
   eASSERT(env, flags & MDBX_ALLOC_SHOULD_SCAN);
+  eASSERT(env, num > 0);
   if (re_len >= num) {
     eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                      MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
@@ -6977,8 +6960,7 @@ depleted_gc:
                        meta_prefer_steady(env, &txn->tw.troika).ptr_c);
       goto retry_gc_refresh_oldest;
     }
-    if ((flags & (MDBX_ALLOC_BACKLOG | MDBX_ALLOC_NEW)) == 0 ||
-        (autosync_threshold &&
+    if ((autosync_threshold &&
          atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed) >=
              autosync_threshold) ||
         (autosync_period &&
@@ -6986,7 +6968,7 @@ depleted_gc:
               atomic_load64(&env->me_lck->mti_eoos_timestamp, mo_Relaxed)) &&
          osal_monotime() - eoos_timestamp >= autosync_period) ||
         newnext >= txn->mt_geo.upper ||
-        (newnext >= txn->mt_end_pgno &&
+        ((num == 0 || newnext >= txn->mt_end_pgno) &&
          (autosync_threshold | autosync_period) == 0)) {
       /* make steady checkpoint. */
 #if MDBX_ENABLE_PROFGC
@@ -7014,7 +6996,7 @@ depleted_gc:
 
   /* Avoid kick lagging reader(s) if is enough unallocated space
    * at the end of database file. */
-  if ((flags & MDBX_ALLOC_NEW) && newnext <= txn->mt_end_pgno) {
+  if (!(flags & MDBX_ALLOC_RESERVE) && newnext <= txn->mt_end_pgno) {
     eASSERT(env, range == nullptr);
     goto done;
   }
@@ -7028,7 +7010,7 @@ depleted_gc:
   //---------------------------------------------------------------------------
 
 no_gc:
-  if ((flags & MDBX_ALLOC_NEW) == 0) {
+  if (flags & MDBX_ALLOC_RESERVE) {
     ret.err = MDBX_NOTFOUND;
     goto fail;
   }
@@ -7071,10 +7053,9 @@ no_gc:
 
 done:
   ret.err = MDBX_SUCCESS;
-  if (likely((flags & (MDBX_ALLOC_SLOT | MDBX_ALLOC_RESERVE)) == 0)) {
+  if (likely((flags & MDBX_ALLOC_RESERVE) == 0)) {
     ENSURE(env, pgno >= NUM_METAS);
     if (range) {
-      eASSERT(env, (txn->mt_flags & MDBX_TXN_FROZEN_RE) == 0);
       eASSERT(env, pgno == *range);
       eASSERT(env, pgno + num <= txn->mt_next_pgno && pgno >= NUM_METAS);
       eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
@@ -7091,7 +7072,6 @@ done:
       eASSERT(env, pnl_check_allocated(txn->tw.relist,
                                        txn->mt_next_pgno - MDBX_ENABLE_REFUND));
     } else {
-      eASSERT(env, flags & MDBX_ALLOC_NEW);
       pgno = txn->mt_next_pgno;
       txn->mt_next_pgno += (pgno_t)num;
       eASSERT(env, txn->mt_next_pgno <= txn->mt_end_pgno);
@@ -7135,8 +7115,9 @@ done:
       int level;
       const char *what;
       if (flags & MDBX_ALLOC_RESERVE) {
-        level = (flags & MDBX_ALLOC_BACKLOG) ? MDBX_LOG_DEBUG : MDBX_LOG_NOTICE;
-        what = (flags & MDBX_ALLOC_SLOT) ? "gc-slot/backlog" : "backlog-pages";
+        level =
+            (flags & MDBX_ALLOC_UNIMPORTANT) ? MDBX_LOG_DEBUG : MDBX_LOG_NOTICE;
+        what = num ? "reserve-pages" : "fetch-slot";
       } else {
         txn->mt_flags |= MDBX_TXN_ERROR;
         level = MDBX_LOG_ERROR;
@@ -7151,7 +7132,7 @@ done:
   } else {
   early_exit:
     DEBUG("return NULL for %zu pages for ALLOC_%s, rc %d", num,
-          (flags & MDBX_ALLOC_SLOT) ? "SLOT" : "RESERVE", ret.err);
+          num ? "RESERVE" : "SLOT", ret.err);
     ret.page = NULL;
   }
 
@@ -7197,62 +7178,60 @@ __hot static pgr_t page_alloc(const MDBX_cursor *mc) {
     return ret;
   }
 
-  if (likely(!(txn->mt_flags & MDBX_TXN_FROZEN_RE))) {
-    MDBX_PNL pnl = txn->tw.relist;
-    const size_t len = MDBX_PNL_GETSIZE(pnl);
-    if (likely(len > 0)) {
-      MDBX_env *const env = txn->mt_env;
+  MDBX_PNL pnl = txn->tw.relist;
+  const size_t len = MDBX_PNL_GETSIZE(pnl);
+  if (likely(len > 0)) {
+    MDBX_env *const env = txn->mt_env;
 
-      MDBX_PNL_SETSIZE(pnl, len - 1);
+    MDBX_PNL_SETSIZE(pnl, len - 1);
 #if MDBX_PNL_ASCENDING
-      const pgno_t pgno = pnl[1];
-      for (size_t i = 1; i < len; ++i)
-        pnl[i] = pnl[i + 1];
+    const pgno_t pgno = pnl[1];
+    for (size_t i = 1; i < len; ++i)
+      pnl[i] = pnl[i + 1];
 #else
-      const pgno_t pgno = pnl[len];
+    const pgno_t pgno = pnl[len];
 #endif
 
 #if MDBX_ENABLE_PROFGC
-      const uint64_t monotime_before = osal_monotime();
-      size_t majflt_before;
-      const uint64_t cputime_before = osal_cputime(&majflt_before);
-      profgc_stat_t *const prof =
-          (mc->mc_dbi == FREE_DBI) ? &env->me_lck->mti_pgop_stat.gc_prof.self
-                                   : &env->me_lck->mti_pgop_stat.gc_prof.work;
+    const uint64_t monotime_before = osal_monotime();
+    size_t majflt_before;
+    const uint64_t cputime_before = osal_cputime(&majflt_before);
+    profgc_stat_t *const prof = (mc->mc_dbi == FREE_DBI)
+                                    ? &env->me_lck->mti_pgop_stat.gc_prof.self
+                                    : &env->me_lck->mti_pgop_stat.gc_prof.work;
 #endif /* MDBX_ENABLE_PROFGC */
-      pgr_t ret;
-      if (env->me_flags & MDBX_WRITEMAP) {
-        ret.page = pgno2page(env, pgno);
-        MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, env->me_psize);
-      } else {
-        ret.page = page_malloc(txn, 1);
-        if (unlikely(!ret.page)) {
-          ret.err = MDBX_ENOMEM;
-          goto bailout;
-        }
+    pgr_t ret;
+    if (env->me_flags & MDBX_WRITEMAP) {
+      ret.page = pgno2page(env, pgno);
+      MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, env->me_psize);
+    } else {
+      ret.page = page_malloc(txn, 1);
+      if (unlikely(!ret.page)) {
+        ret.err = MDBX_ENOMEM;
+        goto bailout;
       }
-
-      VALGRIND_MAKE_MEM_UNDEFINED(ret.page, env->me_psize);
-      ret.page->mp_pgno = pgno;
-      ret.page->mp_leaf2_ksize = 0;
-      ret.page->mp_flags = 0;
-      tASSERT(txn, ret.page->mp_pgno >= NUM_METAS);
-
-      ret.err = page_dirty(txn, ret.page, 1);
-    bailout:
-      tASSERT(txn, pnl_check_allocated(txn->tw.relist,
-                                       txn->mt_next_pgno - MDBX_ENABLE_REFUND));
-#if MDBX_ENABLE_PROFGC
-      size_t majflt_after;
-      prof->rtime_cpu += osal_cputime(&majflt_after) - cputime_before;
-      prof->majflt += majflt_after - majflt_before;
-      prof->xtime_monotonic += osal_monotime() - monotime_before;
-#endif /* MDBX_ENABLE_PROFGC */
-      return ret;
     }
+
+    VALGRIND_MAKE_MEM_UNDEFINED(ret.page, env->me_psize);
+    ret.page->mp_pgno = pgno;
+    ret.page->mp_leaf2_ksize = 0;
+    ret.page->mp_flags = 0;
+    tASSERT(txn, ret.page->mp_pgno >= NUM_METAS);
+
+    ret.err = page_dirty(txn, ret.page, 1);
+  bailout:
+    tASSERT(txn, pnl_check_allocated(txn->tw.relist,
+                                     txn->mt_next_pgno - MDBX_ENABLE_REFUND));
+#if MDBX_ENABLE_PROFGC
+    size_t majflt_after;
+    prof->rtime_cpu += osal_cputime(&majflt_after) - cputime_before;
+    prof->majflt += majflt_after - majflt_before;
+    prof->xtime_monotonic += osal_monotime() - monotime_before;
+#endif /* MDBX_ENABLE_PROFGC */
+    return ret;
   }
 
-  return page_alloc_slowpath(mc, 1, MDBX_ALLOC_ALL);
+  return page_alloc_slowpath(mc, 1, MDBX_ALLOC_DEFAULT);
 }
 
 /* Copy the used portions of a page. */
@@ -9503,6 +9482,13 @@ static int gcu_clean_stored_retired(MDBX_txn *txn, gcu_context_t *ctx) {
   return err;
 }
 
+static int gcu_touch(gcu_context_t *ctx) {
+  ctx->cursor.mc_flags |= C_GCU;
+  int err = cursor_touch(&ctx->cursor);
+  ctx->cursor.mc_flags -= C_GCU;
+  return err;
+}
+
 /* Prepare a backlog of pages to modify GC itself, while reclaiming is
  * prohibited. It should be enough to prevent search in page_alloc_slowpath()
  * during a deleting, when GC tree is unbalanced. */
@@ -9537,9 +9523,7 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
       return err;
   }
 
-  tASSERT(txn, txn->mt_flags & MDBX_TXN_UPDATE_GC);
-  txn->mt_flags -= MDBX_TXN_UPDATE_GC;
-  err = cursor_touch(&ctx->cursor);
+  err = gcu_touch(ctx);
   TRACE("== after-touch, backlog %zu, err %d", gcu_backlog_size(txn), err);
 
   if (unlikely(pages4retiredlist > 1) &&
@@ -9549,9 +9533,9 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
     err = gcu_clean_stored_retired(txn, ctx);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
-    err = page_alloc_slowpath(&ctx->cursor, pages4retiredlist,
-                              MDBX_ALLOC_GC | MDBX_ALLOC_RESERVE)
-              .err;
+    err =
+        page_alloc_slowpath(&ctx->cursor, pages4retiredlist, MDBX_ALLOC_RESERVE)
+            .err;
     TRACE("== after-4linear, backlog %zu, err %d", gcu_backlog_size(txn), err);
     cASSERT(&ctx->cursor,
             gcu_backlog_size(txn) >= pages4retiredlist || err != MDBX_SUCCESS);
@@ -9560,11 +9544,9 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx,
   while (gcu_backlog_size(txn) < backlog4cow + pages4retiredlist &&
          err == MDBX_SUCCESS)
     err = page_alloc_slowpath(&ctx->cursor, 0,
-                              MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
-                                  MDBX_ALLOC_RESERVE | MDBX_ALLOC_BACKLOG)
+                              MDBX_ALLOC_RESERVE | MDBX_ALLOC_UNIMPORTANT)
               .err;
 
-  txn->mt_flags += MDBX_TXN_UPDATE_GC;
   TRACE("<< backlog %zu, err %d", gcu_backlog_size(txn), err);
   return (err != MDBX_NOTFOUND) ? err : MDBX_SUCCESS;
 }
@@ -9593,7 +9575,6 @@ static int update_gc(MDBX_txn *txn, gcu_context_t *ctx) {
   MDBX_env *const env = txn->mt_env;
   const char *const dbg_prefix_mode = ctx->lifo ? "    lifo" : "    fifo";
   (void)dbg_prefix_mode;
-  txn->mt_flags += MDBX_TXN_UPDATE_GC;
   ctx->cursor.mc_next = txn->mt_cursors[FREE_DBI];
   txn->mt_cursors[FREE_DBI] = &ctx->cursor;
 
@@ -9741,10 +9722,7 @@ retry:
         if (txn->tw.loose_count > 0) {
           TRACE("%s: try allocate gc-slot for %zu loose-pages", dbg_prefix_mode,
                 txn->tw.loose_count);
-          rc = page_alloc_slowpath(&ctx->cursor, 0,
-                                   MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
-                                       MDBX_ALLOC_RESERVE)
-                   .err;
+          rc = page_alloc_slowpath(&ctx->cursor, 0, MDBX_ALLOC_RESERVE).err;
           if (rc == MDBX_SUCCESS) {
             TRACE("%s: retry since gc-slot for %zu loose-pages available",
                   dbg_prefix_mode, txn->tw.loose_count);
@@ -9826,9 +9804,9 @@ retry:
     if (ctx->retired_stored < MDBX_PNL_GETSIZE(txn->tw.retired_pages)) {
       if (unlikely(!ctx->retired_stored)) {
         /* Make sure last page of GC is touched and on retired-list */
-        txn->mt_flags -= MDBX_TXN_UPDATE_GC;
-        rc = page_search(&ctx->cursor, NULL, MDBX_PS_LAST | MDBX_PS_MODIFY);
-        txn->mt_flags += MDBX_TXN_UPDATE_GC;
+        rc = cursor_last(&ctx->cursor, nullptr, nullptr);
+        if (likely(rc != MDBX_SUCCESS))
+          rc = gcu_touch(ctx);
         if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_NOTFOUND)
           goto bailout;
       }
@@ -9966,16 +9944,12 @@ retry:
           left > (MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed) - ctx->reused_slot) *
                      env->me_maxgc_ov1page &&
           !ctx->dense) {
-        /* Hужен свобожный для для сохранения списка страниц. */
+        /* Hужен свободный для для сохранения списка страниц. */
         bool need_cleanup = false;
         txnid_t snap_oldest = 0;
       retry_rid:
-        txn->mt_flags -= MDBX_TXN_UPDATE_GC;
         do {
-          rc = page_alloc_slowpath(&ctx->cursor, 0,
-                                   MDBX_ALLOC_GC | MDBX_ALLOC_SLOT |
-                                       MDBX_ALLOC_RESERVE)
-                   .err;
+          rc = page_alloc_slowpath(&ctx->cursor, 0, MDBX_ALLOC_RESERVE).err;
           snap_oldest = env->me_lck->mti_oldest_reader.weak;
           if (likely(rc == MDBX_SUCCESS)) {
             TRACE("%s: took @%" PRIaTXN " from GC", dbg_prefix_mode,
@@ -9988,7 +9962,6 @@ retry:
             left >
                 (MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed) - ctx->reused_slot) *
                     env->me_maxgc_ov1page);
-        txn->mt_flags += MDBX_TXN_UPDATE_GC;
 
         if (likely(rc == MDBX_SUCCESS)) {
           TRACE("%s: got enough from GC.", dbg_prefix_mode);
@@ -10006,7 +9979,7 @@ retry:
         } else {
           tASSERT(txn, txn->tw.last_reclaimed == 0);
           if (unlikely(txn_oldest_reader(txn) != snap_oldest))
-            /* should retry page_alloc_slowpath(MDBX_ALLOC_GC)
+            /* should retry page_alloc_slowpath()
              * if the oldest reader changes since the last attempt */
             goto retry_rid;
           /* no reclaimable GC entries,
@@ -10289,7 +10262,6 @@ retry:
       key.iov_len = sizeof(fill_gc_id);
 
       tASSERT(txn, data.iov_len >= sizeof(pgno_t) * 2);
-      txn->mt_flags += MDBX_TXN_FROZEN_RE;
       size_t chunk = data.iov_len / sizeof(pgno_t) - 1;
       if (unlikely(chunk > left)) {
         TRACE("%s: chunk %zu > left %zu, @%" PRIaTXN, dbg_prefix_mode, chunk,
@@ -10297,14 +10269,11 @@ retry:
         if ((ctx->loop < 5 && chunk - left > ctx->loop / 2) ||
             chunk - left > env->me_maxgc_ov1page) {
           data.iov_len = (left + 1) * sizeof(pgno_t);
-          if (ctx->loop < 7)
-            txn->mt_flags &= ~MDBX_TXN_FROZEN_RE;
         }
         chunk = left;
       }
       rc = mdbx_cursor_put(&ctx->cursor, &key, &data,
                            MDBX_CURRENT | MDBX_RESERVE);
-      txn->mt_flags &= ~MDBX_TXN_FROZEN_RE;
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
       gcu_clean_reserved(env, data);
@@ -15079,7 +15048,8 @@ static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
   if (!MDBX_DISABLE_VALIDATION) {
     const MDBX_env *env = mc->mc_txn->mt_env;
     const size_t dsize = data->iov_len;
-    if (unlikely(node_size_len(node_ks(node), dsize) <= env->me_leaf_nodemax))
+    if (unlikely(node_size_len(node_ks(node), dsize) <= env->me_leaf_nodemax) &&
+        mc->mc_dbi != FREE_DBI)
       poor_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
     const unsigned npages = number_of_ovpages(env, dsize);
     if (unlikely(lp.page->mp_pages != npages)) {
@@ -15087,7 +15057,7 @@ static __noinline int node_read_bigdata(MDBX_cursor *mc, const MDBX_node *node,
         return bad_page(lp.page,
                         "too less n-pages %u for bigdata-node (%zu bytes)",
                         lp.page->mp_pages, dsize);
-      else
+      else if (mc->mc_dbi != FREE_DBI)
         poor_page(lp.page, "extra n-pages %u for bigdata-node (%zu bytes)",
                   lp.page->mp_pages, dsize);
     }
@@ -16183,7 +16153,6 @@ static int touch_dbi(MDBX_cursor *mc) {
   *mc->mc_dbistate |= DBI_DIRTY;
   mc->mc_txn->mt_flags |= MDBX_TXN_DIRTY;
   if (mc->mc_dbi >= CORE_DBS) {
-    cASSERT(mc, (mc->mc_txn->mt_flags & MDBX_TXN_UPDATE_GC) == 0);
     /* Touch DB record of named DB */
     MDBX_cursor_couple cx;
     int rc = cursor_init(&cx.outer, mc->mc_txn, MAIN_DBI);
@@ -16596,9 +16565,9 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
 
     /* Large/Overflow page overwrites need special handling */
     if (unlikely(node_flags(node) & F_BIGDATA)) {
-      int dpages = (node_size(key, data) > env->me_leaf_nodemax)
-                       ? number_of_ovpages(env, data->iov_len)
-                       : 0;
+      const size_t dpages = (node_size(key, data) > env->me_leaf_nodemax)
+                                ? number_of_ovpages(env, data->iov_len)
+                                : 0;
 
       const pgno_t pgno = node_largedata_pgno(node);
       pgr_t lp = page_get_large(mc, pgno, mc->mc_pg[mc->mc_top]->mp_txnid);
@@ -16607,13 +16576,13 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       cASSERT(mc, PAGETYPE_WHOLE(lp.page) == P_OVERFLOW);
 
       /* Is the ov page from this txn (or a parent) and big enough? */
-      int ovpages = lp.page->mp_pages;
-      if (!IS_FROZEN(mc->mc_txn, lp.page) &&
-          (unlikely(mc->mc_txn->mt_flags & MDBX_TXN_FROZEN_RE)
-               ? (ovpages >= dpages)
-               : (ovpages ==
-                  /* LY: add configurable threshold to keep reserve space */
-                  dpages))) {
+      const size_t ovpages = lp.page->mp_pages;
+      const size_t extra_threshold =
+          (mc->mc_dbi == FREE_DBI)
+              ? 1
+              : /* LY: add configurable threshold to keep reserve space */ 0;
+      if (!IS_FROZEN(mc->mc_txn, lp.page) && ovpages >= dpages &&
+          ovpages <= dpages + extra_threshold) {
         /* yes, overwrite it. */
         if (!IS_MODIFIABLE(mc->mc_txn, lp.page)) {
           if (IS_SPILLED(mc->mc_txn, lp.page)) {
@@ -17168,7 +17137,7 @@ static pgr_t page_new(MDBX_cursor *mc, const unsigned flags) {
 static pgr_t page_new_large(MDBX_cursor *mc, const size_t npages) {
   pgr_t ret = likely(npages == 1)
                   ? page_alloc(mc)
-                  : page_alloc_slowpath(mc, npages, MDBX_ALLOC_ALL);
+                  : page_alloc_slowpath(mc, npages, MDBX_ALLOC_DEFAULT);
   if (unlikely(ret.err != MDBX_SUCCESS))
     return ret;
 
@@ -17279,7 +17248,6 @@ __hot static int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
         key ? key->iov_len : 0, DKEY_DEBUG(key));
   cASSERT(mc, key != NULL && data != NULL);
   cASSERT(mc, PAGETYPE_COMPAT(mp) == P_LEAF);
-  cASSERT(mc, page_room(mp) >= leaf_size(mc->mc_txn->mt_env, key, data));
   MDBX_page *largepage = NULL;
 
   size_t node_bytes;
@@ -17288,6 +17256,7 @@ __hot static int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
     STATIC_ASSERT(sizeof(pgno_t) % 2 == 0);
     node_bytes =
         node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
+    cASSERT(mc, page_room(mp) >= node_bytes);
   } else if (unlikely(node_size(key, data) >
                       mc->mc_txn->mt_env->me_leaf_nodemax)) {
     /* Put data on large/overflow page. */
@@ -17301,6 +17270,7 @@ __hot static int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
             flags);
       return MDBX_PROBLEM;
     }
+    cASSERT(mc, page_room(mp) >= leaf_size(mc->mc_txn->mt_env, key, data));
     const pgno_t ovpages = number_of_ovpages(mc->mc_txn->mt_env, data->iov_len);
     const pgr_t npr = page_new_large(mc, ovpages);
     if (unlikely(npr.err != MDBX_SUCCESS))
@@ -17312,10 +17282,12 @@ __hot static int __must_check_result node_add_leaf(MDBX_cursor *mc, size_t indx,
     flags |= F_BIGDATA;
     node_bytes =
         node_size_len(key->iov_len, 0) + sizeof(pgno_t) + sizeof(indx_t);
+    cASSERT(mc, node_bytes == leaf_size(mc->mc_txn->mt_env, key, data));
   } else {
+    cASSERT(mc, page_room(mp) >= leaf_size(mc->mc_txn->mt_env, key, data));
     node_bytes = node_size(key, data) + sizeof(indx_t);
+    cASSERT(mc, node_bytes == leaf_size(mc->mc_txn->mt_env, key, data));
   }
-  cASSERT(mc, node_bytes == leaf_size(mc->mc_txn->mt_env, key, data));
 
   /* Move higher pointers up one slot. */
   const size_t nkeys = page_numkeys(mp);
@@ -19056,7 +19028,8 @@ __cold static int page_check(MDBX_cursor *const mc, const MDBX_page *const mp) {
               "big-node data size (%zu) <> min/max value-length (%zu/%zu)\n",
               dsize, mc->mc_dbx->md_vlen_min, mc->mc_dbx->md_vlen_max);
         if (unlikely(node_size_len(node_ks(node), dsize) <=
-                     mc->mc_txn->mt_env->me_leaf_nodemax))
+                     mc->mc_txn->mt_env->me_leaf_nodemax) &&
+            mc->mc_dbi != FREE_DBI)
           poor_page(mp, "too small data (%zu bytes) for bigdata-node", dsize);
 
         if ((mc->mc_checking & CC_RETIRING) == 0) {
@@ -19071,7 +19044,7 @@ __cold static int page_check(MDBX_cursor *const mc, const MDBX_page *const mp) {
               rc = bad_page(lp.page,
                             "too less n-pages %u for bigdata-node (%zu bytes)",
                             lp.page->mp_pages, dsize);
-            else
+            else if (mc->mc_dbi != FREE_DBI)
               poor_page(lp.page,
                         "extra n-pages %u for bigdata-node (%zu bytes)",
                         lp.page->mp_pages, dsize);

@@ -1000,13 +1000,9 @@ struct MDBX_txn {
   /* Additional flag for sync_locked() */
 #define MDBX_SHRINK_ALLOWED UINT32_C(0x40000000)
 
-#define MDBX_TXN_UPDATE_GC 0x20 /* GC is being updated */
-#define MDBX_TXN_FROZEN_RE 0x40 /* list of reclaimed-pgno must not altered */
-
 #define TXN_FLAGS                                                              \
   (MDBX_TXN_FINISHED | MDBX_TXN_ERROR | MDBX_TXN_DIRTY | MDBX_TXN_SPILLS |     \
-   MDBX_TXN_HAS_CHILD | MDBX_TXN_INVALID | MDBX_TXN_UPDATE_GC |                \
-   MDBX_TXN_FROZEN_RE)
+   MDBX_TXN_HAS_CHILD | MDBX_TXN_INVALID)
 
 #if (TXN_FLAGS & (MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS)) ||       \
     ((MDBX_TXN_RW_BEGIN_FLAGS | MDBX_TXN_RO_BEGIN_FLAGS | TXN_FLAGS) &         \
@@ -1147,6 +1143,9 @@ struct MDBX_cursor {
 #define C_SUB 0x04         /* Cursor is a sub-cursor */
 #define C_DEL 0x08         /* last op was a cursor_del */
 #define C_UNTRACK 0x10     /* Un-track cursor when closing */
+#define C_GCU                                                                                  \
+  0x20 /* Происходит подготовка к обновлению GC, поэтому \
+        * можно брать страницы из GC даже для FREE_DBI */
   uint8_t mc_flags;
 
   /* Cursor checking flags. */
