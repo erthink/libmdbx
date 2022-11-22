@@ -14280,9 +14280,10 @@ __cold static int env_close(MDBX_env *env) {
   }
 
   if (env->me_dbxs) {
-    for (size_t i = env->me_numdbs; --i >= CORE_DBS;)
+    for (size_t i = CORE_DBS; i < env->me_numdbs; ++i)
       osal_free(env->me_dbxs[i].md_name.iov_base);
     osal_free(env->me_dbxs);
+    env->me_numdbs = CORE_DBS;
     env->me_dbxs = nullptr;
   }
   if (env->me_pbuf) {
