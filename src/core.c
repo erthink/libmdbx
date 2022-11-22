@@ -2459,7 +2459,7 @@ __hot static size_t pnl_merge(MDBX_PNL dst, const MDBX_PNL src) {
   return total;
 }
 
-static void spill_remove(MDBX_txn *txn, size_t idx, pgno_t npages) {
+static void spill_remove(MDBX_txn *txn, size_t idx, size_t npages) {
   tASSERT(txn, idx > 0 && idx <= MDBX_PNL_GETSIZE(txn->tw.spilled.list) &&
                    txn->tw.spilled.least_removed > 0);
   txn->tw.spilled.least_removed = (idx < txn->tw.spilled.least_removed)
@@ -2569,7 +2569,7 @@ static __inline size_t search_spilled(const MDBX_txn *txn, pgno_t pgno) {
 }
 
 static __inline bool intersect_spilled(const MDBX_txn *txn, pgno_t pgno,
-                                       pgno_t npages) {
+                                       size_t npages) {
   const MDBX_PNL pnl = txn->tw.spilled.list;
   if (likely(!pnl))
     return false;
@@ -2582,7 +2582,7 @@ static __inline bool intersect_spilled(const MDBX_txn *txn, pgno_t pgno,
     DEBUG_EXTRA_PRINT("%s\n", "]");
   }
   const pgno_t spilled_range_begin = pgno << 1;
-  const pgno_t spilled_range_last = ((pgno + npages) << 1) - 1;
+  const pgno_t spilled_range_last = ((pgno + (pgno_t)npages) << 1) - 1;
 #if MDBX_PNL_ASCENDING
   const size_t n =
       pnl_search(pnl, spilled_range_begin, (size_t)(MAX_PAGENO + 1) << 1);
@@ -2946,7 +2946,7 @@ dpl_endpgno(const MDBX_dpl *dl, size_t i) {
 }
 
 static __inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno,
-                                   pgno_t npages) {
+                                   size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -3004,7 +3004,7 @@ MDBX_MAYBE_UNUSED static const MDBX_page *debug_dpl_find(const MDBX_txn *txn,
   return nullptr;
 }
 
-static void dpl_remove_ex(const MDBX_txn *txn, size_t i, pgno_t npages) {
+static void dpl_remove_ex(const MDBX_txn *txn, size_t i, size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
@@ -3026,7 +3026,7 @@ static void dpl_remove(const MDBX_txn *txn, size_t i) {
 static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
                                                           pgno_t pgno,
                                                           MDBX_page *page,
-                                                          pgno_t npages) {
+                                                          size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   MDBX_dpl *dl = txn->tw.dirtylist;
@@ -3095,7 +3095,7 @@ static __must_check_result __inline int page_retire(MDBX_cursor *mc,
                                                     MDBX_page *mp);
 
 static int __must_check_result page_dirty(MDBX_txn *txn, MDBX_page *mp,
-                                          pgno_t npages);
+                                          size_t npages);
 typedef struct page_result {
   MDBX_page *page;
   int err;
@@ -3104,7 +3104,7 @@ typedef struct page_result {
 static txnid_t kick_longlived_readers(MDBX_env *env, const txnid_t laggard);
 
 static pgr_t page_new(MDBX_cursor *mc, const unsigned flags);
-static pgr_t page_new_large(MDBX_cursor *mc, const pgno_t npages);
+static pgr_t page_new_large(MDBX_cursor *mc, const size_t npages);
 static int page_touch(MDBX_cursor *mc);
 static int cursor_touch(MDBX_cursor *mc);
 static int touch_dbi(MDBX_cursor *mc);
@@ -3703,7 +3703,7 @@ static MDBX_page *page_malloc(MDBX_txn *txn, size_t num) {
 }
 
 /* Free a shadow dirty page */
-static void dpage_free(MDBX_env *env, MDBX_page *dp, pgno_t npages) {
+static void dpage_free(MDBX_env *env, MDBX_page *dp, size_t npages) {
   VALGRIND_MAKE_MEM_UNDEFINED(dp, pgno2bytes(env, npages));
   MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, pgno2bytes(env, npages));
   if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
@@ -4040,9 +4040,9 @@ static __inline bool txn_refund(MDBX_txn *txn) {
 #endif /* MDBX_ENABLE_REFUND */
 
 __cold static void kill_page(MDBX_txn *txn, MDBX_page *mp, pgno_t pgno,
-                             pgno_t npages) {
+                             size_t npages) {
   MDBX_env *const env = txn->mt_env;
-  DEBUG("kill %u page(s) %" PRIaPGNO, npages, pgno);
+  DEBUG("kill %zu page(s) %" PRIaPGNO, npages, pgno);
   eASSERT(env, pgno >= NUM_METAS && npages);
   if (!IS_FROZEN(txn, mp)) {
     const size_t bytes = pgno2bytes(env, npages);
@@ -4069,7 +4069,7 @@ __cold static void kill_page(MDBX_txn *txn, MDBX_page *mp, pgno_t pgno,
 
 /* Remove page from dirty list */
 static __inline void page_wash(MDBX_txn *txn, const size_t di,
-                               MDBX_page *const mp, const pgno_t npages) {
+                               MDBX_page *const mp, const size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   tASSERT(txn, di && di <= txn->tw.dirtylist->length &&
@@ -4118,7 +4118,7 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
    *  So for flexibility and avoid extra internal dependencies we just
    *  fallback to reading if dirty list was not allocated yet. */
   size_t di = 0, si = 0;
-  pgno_t npages = 1;
+  size_t npages = 1;
   bool is_frozen = false, is_spilled = false, is_shadowed = false;
   if (unlikely(!mp)) {
     if (ASSERT_ENABLED() && pageflags) {
@@ -4213,12 +4213,12 @@ status_done:
   } else {
     npages = mp->mp_pages;
     cASSERT(mc, mc->mc_db->md_overflow_pages >= npages);
-    mc->mc_db->md_overflow_pages -= npages;
+    mc->mc_db->md_overflow_pages -= (pgno_t)npages;
   }
 
   if (is_frozen) {
   retire:
-    DEBUG("retire %u page %" PRIaPGNO, npages, pgno);
+    DEBUG("retire %zu page %" PRIaPGNO, npages, pgno);
     rc = pnl_append_range(false, &txn->tw.retired_pages, pgno, npages);
     tASSERT(txn, dirtylist_check(txn));
     return rc;
@@ -4269,7 +4269,7 @@ status_done:
       }
       tASSERT(txn, is_spilled || is_shadowed || (mp && IS_SHADOWED(txn, mp)));
     }
-    DEBUG("refunded %u %s page %" PRIaPGNO, npages, kind, pgno);
+    DEBUG("refunded %zu %s page %" PRIaPGNO, npages, kind, pgno);
     txn->mt_next_pgno = pgno;
     txn_refund(txn);
     return MDBX_SUCCESS;
@@ -4338,7 +4338,7 @@ status_done:
     page_wash(txn, di, mp, npages);
 
   reclaim:
-    DEBUG("reclaim %u %s page %" PRIaPGNO, npages, "dirty", pgno);
+    DEBUG("reclaim %zu %s page %" PRIaPGNO, npages, "dirty", pgno);
     rc = pnl_insert_range(&txn->tw.relist, pgno, npages);
     tASSERT(txn, pnl_check_allocated(txn->tw.relist,
                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
@@ -4466,7 +4466,7 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
     do {
       eASSERT(env, wp->mp_pgno == bytes2pgno(env, offset));
       eASSERT(env, (wp->mp_flags & P_ILL_BITS) == 0);
-      unsigned npages = IS_OVERFLOW(wp) ? wp->mp_pages : 1u;
+      size_t npages = IS_OVERFLOW(wp) ? wp->mp_pages : 1u;
       size_t chunk = pgno2bytes(env, npages);
       eASSERT(env, bytes >= chunk);
       MDBX_page *next = (MDBX_page *)((char *)wp + chunk);
@@ -4500,7 +4500,7 @@ __must_check_result static int iov_write(iov_ctx_t *ctx) {
 }
 
 __must_check_result static int iov_page(MDBX_txn *txn, iov_ctx_t *ctx,
-                                        MDBX_page *dp, pgno_t npages) {
+                                        MDBX_page *dp, size_t npages) {
   MDBX_env *const env = txn->mt_env;
   tASSERT(txn, ctx->err == MDBX_SUCCESS);
   tASSERT(txn, dp->mp_pgno >= MIN_PAGENO && dp->mp_pgno < txn->mt_next_pgno);
@@ -4544,16 +4544,16 @@ __must_check_result static int iov_page(MDBX_txn *txn, iov_ctx_t *ctx,
 #if MDBX_NEED_WRITTEN_RANGE
   ctx->flush_begin =
       (ctx->flush_begin < dp->mp_pgno) ? ctx->flush_begin : dp->mp_pgno;
-  ctx->flush_end = (ctx->flush_end > dp->mp_pgno + npages)
+  ctx->flush_end = (ctx->flush_end > dp->mp_pgno + (pgno_t)npages)
                        ? ctx->flush_end
-                       : dp->mp_pgno + npages;
+                       : dp->mp_pgno + (pgno_t)npages;
 #endif /* MDBX_NEED_WRITTEN_RANGE */
   env->me_lck->mti_unsynced_pages.weak += npages;
   return MDBX_SUCCESS;
 }
 
 static int spill_page(MDBX_txn *txn, iov_ctx_t *ctx, MDBX_page *dp,
-                      const pgno_t npages) {
+                      const size_t npages) {
   tASSERT(txn, !(txn->mt_flags & MDBX_WRITEMAP) || MDBX_AVOID_MSYNC);
 #if MDBX_ENABLE_PGOP_STAT
   txn->mt_env->me_lck->mti_pgop_stat.spill.weak += npages;
@@ -4612,16 +4612,16 @@ static unsigned spill_prio(const MDBX_txn *txn, const size_t i,
                            const uint32_t reciprocal) {
   MDBX_dpl *const dl = txn->tw.dirtylist;
   const uint32_t age = dpl_age(txn, i);
-  const unsigned npages = dpl_npages(dl, i);
+  const size_t npages = dpl_npages(dl, i);
   const pgno_t pgno = dl->items[i].pgno;
   if (age == 0) {
-    DEBUG("skip %s %u page %" PRIaPGNO, "keep", npages, pgno);
+    DEBUG("skip %s %zu page %" PRIaPGNO, "keep", npages, pgno);
     return 256;
   }
 
   MDBX_page *const dp = dl->items[i].ptr;
   if (dp->mp_flags & (P_LOOSE | P_SPILLED)) {
-    DEBUG("skip %s %u page %" PRIaPGNO,
+    DEBUG("skip %s %zu page %" PRIaPGNO,
           (dp->mp_flags & P_LOOSE)   ? "loose"
           : (dp->mp_flags & P_LOOSE) ? "loose"
                                      : "parent-spilled",
@@ -4635,7 +4635,7 @@ static unsigned spill_prio(const MDBX_txn *txn, const size_t i,
   if (parent && (parent->mt_flags & MDBX_TXN_SPILLS)) {
     do
       if (intersect_spilled(parent, pgno, npages)) {
-        DEBUG("skip-2 parent-spilled %u page %" PRIaPGNO, npages, pgno);
+        DEBUG("skip-2 parent-spilled %zu page %" PRIaPGNO, npages, pgno);
         dp->mp_flags |= P_SPILLED;
         return 256;
       }
@@ -4649,7 +4649,7 @@ static unsigned spill_prio(const MDBX_txn *txn, const size_t i,
     return prio = 256 - prio;
 
   /* make a large/overflow pages be likely to spill */
-  uint32_t factor = npages | npages >> 1;
+  size_t factor = npages | npages >> 1;
   factor |= factor >> 2;
   factor |= factor >> 4;
   factor |= factor >> 8;
@@ -4657,7 +4657,7 @@ static unsigned spill_prio(const MDBX_txn *txn, const size_t i,
   factor = prio * log2n_powerof2(factor + 1) + /* golden ratio */ 157;
   factor = (factor < 256) ? 255 - factor : 0;
   tASSERT(txn, factor < 256 && factor < (256 - prio));
-  return prio = factor;
+  return prio = (unsigned)factor;
 }
 
 /* Spill pages from the dirty list back to disk.
@@ -5484,7 +5484,7 @@ __cold static pgno_t find_largest_snapshot(const MDBX_env *env,
 
 /* Add a page to the txn's dirty list */
 __hot static int __must_check_result page_dirty(MDBX_txn *txn, MDBX_page *mp,
-                                                pgno_t npages) {
+                                                size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   mp->mp_txnid = txn->mt_front;
   if (!txn->tw.dirtylist) {
@@ -17165,14 +17165,14 @@ static pgr_t page_new(MDBX_cursor *mc, const unsigned flags) {
   return ret;
 }
 
-static pgr_t page_new_large(MDBX_cursor *mc, const unsigned npages) {
+static pgr_t page_new_large(MDBX_cursor *mc, const size_t npages) {
   pgr_t ret = likely(npages == 1)
                   ? page_alloc(mc)
                   : page_alloc_slowpath(mc, npages, MDBX_ALLOC_ALL);
   if (unlikely(ret.err != MDBX_SUCCESS))
     return ret;
 
-  DEBUG("db %u allocated new large-page %" PRIaPGNO ", num %u", mc->mc_dbi,
+  DEBUG("db %u allocated new large-page %" PRIaPGNO ", num %zu", mc->mc_dbi,
         ret.page->mp_pgno, npages);
   ret.page->mp_flags = P_OVERFLOW;
   cASSERT(mc, *mc->mc_dbistate & DBI_DIRTY);
@@ -17181,8 +17181,8 @@ static pgr_t page_new_large(MDBX_cursor *mc, const unsigned npages) {
   mc->mc_txn->mt_env->me_lck->mti_pgop_stat.newly.weak += npages;
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
-  mc->mc_db->md_overflow_pages += npages;
-  ret.page->mp_pages = npages;
+  mc->mc_db->md_overflow_pages += (pgno_t)npages;
+  ret.page->mp_pages = (pgno_t)npages;
   cASSERT(mc, !(mc->mc_flags & C_SUB));
   return ret;
 }
