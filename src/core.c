@@ -13447,9 +13447,10 @@ __cold static int mdbx_env_close0(MDBX_env *env) {
   }
 
   if (env->me_dbxs) {
-    for (unsigned i = env->me_numdbs; --i >= CORE_DBS;)
+    for (unsigned i = CORE_DBS; i < env->me_numdbs; ++i)
       mdbx_free(env->me_dbxs[i].md_name.iov_base);
     mdbx_free(env->me_dbxs);
+    env->me_numdbs = CORE_DBS;
     env->me_dbxs = nullptr;
   }
   if (env->me_pbuf) {

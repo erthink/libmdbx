@@ -7,6 +7,10 @@ Fixes:
 
  - Fixed insignificant typo of `||` inside `#if` byte-order condition (backport).
 
+ - Fixed`SIGSEGV` or an erroneous call to `free()` in situations where
+   errors occur when reopening by `mdbx_env_open()` of a previously used
+   environment (backport).
+
 
 ## v0.11.13 (Swashplate) at 2022-11-10
 
