@@ -4445,7 +4445,7 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
     osal_flush_incoherent_mmap(env->me_map + offset, bytes, env->me_os_psize);
     const MDBX_page *const rp = (const MDBX_page *)(env->me_map + offset);
     /* check with timeout as the workaround
-     * for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269 */
+     * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
     if (unlikely(memcmp(wp, rp, bytes))) {
       ctx->coherency_timestamp = 0;
       WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
@@ -6604,7 +6604,7 @@ static __inline bool is_gc_usable(MDBX_txn *txn, const MDBX_cursor *mc,
     return false;
 
   /* avoid (recursive) search inside empty tree and while tree is
-     updating, https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/31 */
+     updating, https://libmdbx.dqdkfa.ru/dead-github/issues/31 */
   if (txn->mt_dbs[FREE_DBI].md_entries == 0)
     return false;
 
@@ -6808,7 +6808,7 @@ next_gc:;
       /* Stop reclaiming to avoid large/overflow the page list.
        * This is a rare case while search for a continuously multi-page region
        * in a large database.
-       * https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/123
+       * https://libmdbx.dqdkfa.ru/dead-github/issues/123
        */
       NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
              "(chunk) -> %zu",
@@ -7999,7 +7999,7 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
   return MDBX_SUCCESS;
 }
 
-/* check against https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269 */
+/* check against https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
 static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
                             const volatile MDBX_db *dbs,
                             const volatile MDBX_meta *meta, bool report) {
@@ -8100,7 +8100,7 @@ __cold static int coherency_timeout(uint64_t *timestamp, pgno_t pgno) {
 }
 
 /* check with timeout as the workaround
- * for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269 */
+ * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
 __hot static int coherency_check_readed(const MDBX_env *env,
                                         const txnid_t txnid,
                                         const volatile MDBX_db *dbs,
@@ -8336,8 +8336,7 @@ static int txn_renew(MDBX_txn *txn, const unsigned flags) {
     txn->tw.troika = meta_tap(env);
     const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
     uint64_t timestamp = 0;
-    while (
-        "workaround for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269") {
+    while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
       rc = coherency_check_readed(env, head.txnid, head.ptr_v->mm_dbs,
                                   head.ptr_v, &timestamp);
       if (likely(rc == MDBX_SUCCESS))
@@ -11978,7 +11977,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
   }
 
   uint64_t timestamp = 0;
-  while ("workaround for https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269") {
+  while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
     rc =
         coherency_check_written(env, pending->unsafe_txnid, target, &timestamp);
     if (likely(rc == MDBX_SUCCESS))
@@ -12500,7 +12499,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
 
       uint64_t timestamp = 0;
       while ("workaround for "
-             "https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/269") {
+             "https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
         meta = *head.ptr_c;
         rc = coherency_check_readed(env, head.txnid, meta.mm_dbs, &meta,
                                     &timestamp);
@@ -13843,7 +13842,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   } else {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
     /* Temporary `workaround` for OpenBSD kernel's flaw.
-     * See https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/67 */
+     * See https://libmdbx.dqdkfa.ru/dead-github/issues/67 */
     if ((flags & MDBX_WRITEMAP) == 0) {
       if (flags & MDBX_ACCEDE)
         flags |= MDBX_WRITEMAP;
@@ -21198,7 +21197,7 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
 
   /* is the environment open?
-   * (https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/171) */
+   * (https://libmdbx.dqdkfa.ru/dead-github/issues/171) */
   if (unlikely(!env->me_map)) {
     /* environment not yet opened */
 #if 1

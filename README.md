@@ -435,7 +435,7 @@ unexpected or broken down.
 
 ### Testing
 The amalgamated source code does not contain any tests for or several reasons.
-Please read [the explanation](https://web.archive.org/web/https://github.com/erthink/libmdbx/issues/214#issuecomment-870717981) and don't ask to alter this.
+Please read [the explanation](https://libmdbx.dqdkfa.ru/dead-github/issues/214#issuecomment-870717981) and don't ask to alter this.
 So for testing _libmdbx_ itself you need a full source code, i.e. the clone of a git repository, there is no option.
 
 The full source code of _libmdbx_ has a [`test` subdirectory](https://gitflic.ru/project/erthink/libmdbx/tree/master/test) with minimalistic test "framework".
@@ -618,7 +618,7 @@ Bindings
 | Rust    | [libmdbx-rs](https://github.com/vorot93/libmdbx-rs)   | [Artem Vorotnikov](https://github.com/vorot93) |
 | Rust    | [mdbx](https://crates.io/crates/mdbx)                 | [gcxfd](https://github.com/gcxfd) |
 | Java    | [mdbxjni](https://github.com/castortech/mdbxjni)      | [Castor Technologies](https://castortech.com/) |
-| Python (draft)  | [python-bindings](https://web.archive.org/web/https://github.com/erthink/libmdbx/commits/python-bindings) branch | [Noel Kuntze](https://github.com/Thermi)
+| Python (draft)  | [python-bindings](https://libmdbx.dqdkfa.ru/dead-github/commits/python-bindings) branch | [Noel Kuntze](https://github.com/Thermi)
 | .NET (obsolete) | [mdbx.NET](https://github.com/wangjia184/mdbx.NET) | [Jerry Wang](https://github.com/wangjia184) |
 
 <!-- section-end -->
