@@ -6212,6 +6212,8 @@ MDBX_MAYBE_UNUSED static __always_inline size_t __builtin_clzl(size_t value) {
 }
 #endif /* _MSC_VER */
 
+#if !MDBX_PNL_ASCENDING
+
 #if !defined(MDBX_ATTRIBUTE_TARGET) &&                                         \
     (__has_attribute(__target__) || __GNUC_PREREQ(5, 0))
 #define MDBX_ATTRIBUTE_TARGET(target) __attribute__((__target__(target)))
@@ -6524,6 +6526,8 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
 #define scan4seq_default scan4seq_neon
 /* Choosing of another variants should be added here. */
 #endif /* scan4seq_default */
+
+#endif /* MDBX_PNL_ASCENDING */
 
 #ifndef scan4seq_default
 #define scan4seq_default scan4seq_fallback
@@ -10518,7 +10522,7 @@ static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
             DEBUG("refund parent's spilled page %" PRIaPGNO, sl[i] >> 1);
           i -= 1;
         } while (i && sl[i] >= (parent->mt_next_pgno << 1));
-        MDBX_PNL_GETSIZE(sl) = i;
+        MDBX_PNL_SETSIZE(sl, i);
 #else
         assert(MDBX_PNL_MOST(sl) == MDBX_PNL_FIRST(sl));
         size_t i = 0;
