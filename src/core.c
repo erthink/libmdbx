@@ -6516,7 +6516,7 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
 
 #if defined(__AVX512BW__) && defined(MDBX_ATTRIBUTE_TARGET_AVX512BW)
 #define scan4seq_default scan4seq_avx512bw
-#define scan4seq scan4seq_default
+#define scan4seq_impl scan4seq_default
 #elif defined(__AVX2__) && defined(MDBX_ATTRIBUTE_TARGET_AVX2)
 #define scan4seq_default scan4seq_avx2
 #elif defined(__SSE2__) && defined(MDBX_ATTRIBUTE_TARGET_SSE2)
@@ -6533,20 +6533,20 @@ __hot static pgno_t *scan4seq_neon(pgno_t *range, const size_t len,
 #define scan4seq_default scan4seq_fallback
 #endif /* scan4seq_default */
 
-#ifdef scan4seq
-/* The scan4seq() is the best or no alternatives */
+#ifdef scan4seq_impl
+/* The scan4seq_impl() is the best or no alternatives */
 #elif !MDBX_HAVE_BUILTIN_CPU_SUPPORTS
 /* The scan4seq_default() will be used  since no cpu-features detection support
  * from compiler. Please don't ask to implement cpuid-based detection and don't
  * make such PRs. */
-#define scan4seq scan4seq_default
+#define scan4seq_impl scan4seq_default
 #else
 /* Selecting the most appropriate implementation at runtime,
  * depending on the available CPU features. */
 static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
                                  const size_t seq);
-static pgno_t *(*scan4seq)(pgno_t *range, const size_t len,
-                           const size_t seq) = scan4seq_resolver;
+static pgno_t *(*scan4seq_impl)(pgno_t *range, const size_t len,
+                                const size_t seq) = scan4seq_resolver;
 
 static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
                                  const size_t seq) {
@@ -6569,10 +6569,10 @@ static pgno_t *scan4seq_resolver(pgno_t *range, const size_t len,
     choice = scan4seq_avx512bw;
 #endif /* MDBX_ATTRIBUTE_TARGET_AVX512BW */
   /* Choosing of another variants should be added here. */
-  scan4seq = choice ? choice : scan4seq_default;
-  return scan4seq(range, len, seq);
+  scan4seq_impl = choice ? choice : scan4seq_default;
+  return scan4seq_impl(range, len, seq);
 }
-#endif /* scan4seq */
+#endif /* scan4seq_impl */
 
 //------------------------------------------------------------------------------
 
@@ -6623,6 +6623,83 @@ __hot static bool is_already_reclaimed(const MDBX_txn *txn, txnid_t id) {
   return false;
 }
 
+__hot static pgno_t pnl_get_single(MDBX_PNL pnl) {
+  const size_t len = MDBX_PNL_GETSIZE(pnl);
+  assert(len > 0);
+  pgno_t *target = MDBX_PNL_EDGE(pnl);
+  const ptrdiff_t dir = MDBX_PNL_ASCENDING ? 1 : -1;
+
+  /* пытаемся пропускать последовательности при наличии одиночных элементов */
+  if (likely(len > 2) && unlikely(target[dir] == *target + 1)) {
+    pgno_t *scan = target + dir + dir;
+    size_t left = len;
+    do {
+      if (likely(scan[-dir] != *scan - 1 && *scan + 1 != scan[dir])) {
+#if MDBX_PNL_ASCENDING
+        target = scan;
+        break;
+#else
+        /* вырезаем элемент с перемещением хвоста */
+        const pgno_t pgno = *scan;
+        MDBX_PNL_SETSIZE(pnl, len - 1);
+        while (++scan <= target)
+          scan[-1] = *scan;
+        return pgno;
+#endif
+      }
+      scan += dir;
+    } while (--left > 2);
+  }
+
+  const pgno_t pgno = *target;
+#if MDBX_PNL_ASCENDING
+  /* вырезаем элемент с перемещением хвоста */
+  MDBX_PNL_SETSIZE(pnl, len - 1);
+  for (const pgno_t *const end = pnl + len - 1; target <= end; ++target)
+    *target = target[1];
+#else
+  /* перемещать хвост не нужно, просто усекам список */
+  MDBX_PNL_SETSIZE(pnl, len - 1);
+#endif
+  return pgno;
+}
+
+__hot static pgno_t pnl_get_sequence(MDBX_PNL pnl, const size_t num,
+                                     uint8_t flags) {
+  const size_t len = MDBX_PNL_GETSIZE(pnl);
+  pgno_t *edge = MDBX_PNL_EDGE(pnl);
+  assert(len >= num && num > 1);
+  const size_t seq = num - 1;
+#if !MDBX_PNL_ASCENDING
+  if (edge[-(ptrdiff_t)seq] - *edge == seq) {
+    if (unlikely(flags & MDBX_ALLOC_RESERVE))
+      return P_INVALID;
+    assert(edge == scan4range_checker(pnl, seq));
+    /* перемещать хвост не нужно, просто усекам список */
+    MDBX_PNL_SETSIZE(pnl, len - num);
+    return *edge;
+  }
+#endif
+  pgno_t *target = scan4seq_impl(edge, len, seq);
+  assert(target == scan4range_checker(pnl, seq));
+  if (target) {
+    if (unlikely(flags & MDBX_ALLOC_RESERVE))
+      return P_INVALID;
+    const pgno_t pgno = *target;
+    /* вырезаем найденную последовательность с перемещением хвоста */
+    MDBX_PNL_SETSIZE(pnl, len - num);
+#if MDBX_PNL_ASCENDING
+    for (const pgno_t *const end = pnl + len - num; target <= end; ++target)
+      *target = target[num];
+#else
+    for (const pgno_t *const end = pnl + len; ++target <= end;)
+      target[-(ptrdiff_t)num] = *target;
+#endif
+    return pgno;
+  }
+  return 0;
+}
+
 static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
                                  uint8_t flags) {
 #if MDBX_ENABLE_PROFGC
@@ -6646,25 +6723,22 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
   eASSERT(env, pnl_check_allocated(txn->tw.relist,
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
-  pgno_t pgno = 0, *range = nullptr;
-  size_t newnext, re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
+  pgno_t pgno = 0;
+  size_t newnext;
   if (num > 1) {
 #if MDBX_ENABLE_PROFGC
     prof->xpages += 1;
 #endif /* MDBX_ENABLE_PROFGC */
-    if (re_len >= num) {
+    if (MDBX_PNL_GETSIZE(txn->tw.relist) >= num) {
       eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                        MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
-      range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
-      range = scan4seq(range, re_len, num - 1);
-      eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
-      if (likely(range)) {
-        pgno = *range;
+      pgno = pnl_get_sequence(txn->tw.relist, num, flags);
+      if (likely(pgno))
         goto done;
-      }
     }
   } else {
-    eASSERT(env, num == 0 || re_len == 0);
+    eASSERT(env, num == 0 || MDBX_PNL_GETSIZE(txn->tw.relist) == 0);
+    eASSERT(env, !(flags & MDBX_ALLOC_RESERVE) || num == 0);
   }
 
   //---------------------------------------------------------------------------
@@ -6681,7 +6755,7 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
        * большего резерва из-за увеличения списка переработанных страниц. */
       (flags & MDBX_ALLOC_RESERVE) == 0) {
     if (txn->mt_dbs[FREE_DBI].md_branch_pages &&
-        re_len < env->me_maxgc_ov1page / 2)
+        MDBX_PNL_GETSIZE(txn->tw.relist) < env->me_maxgc_ov1page / 2)
       flags += MDBX_ALLOC_COALESCE;
   }
 
@@ -6775,40 +6849,38 @@ next_gc:;
 
   const size_t gc_len = MDBX_PNL_GETSIZE(gc_pnl);
   TRACE("gc-read: id #%" PRIaTXN " len %zu, re-list will %zu ", id, gc_len,
-        gc_len + re_len);
+        gc_len + MDBX_PNL_GETSIZE(txn->tw.relist));
 
-  eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
-  if (unlikely(gc_len + re_len >= env->me_maxgc_ov1page)) {
+  if (unlikely(gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >=
+               env->me_maxgc_ov1page)) {
     /* Don't try to coalesce too much. */
     if (flags & MDBX_ALLOC_SHOULD_SCAN) {
       eASSERT(env, flags & MDBX_ALLOC_COALESCE);
+      eASSERT(env, !(flags & MDBX_ALLOC_RESERVE));
       eASSERT(env, num > 0);
 #if MDBX_ENABLE_PROFGC
       env->me_lck->mti_pgop_stat.gc_prof.coalescences += 1;
 #endif /* MDBX_ENABLE_PROFGC */
       TRACE("clear %s %s", "MDBX_ALLOC_COALESCE", "since got threshold");
-      if (re_len >= num) {
+      if (MDBX_PNL_GETSIZE(txn->tw.relist) >= num) {
         eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                          MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
-        range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
-        pgno = *range;
-        if (num == 1)
-          goto done;
-        range = scan4seq(range, re_len, num - 1);
-        eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
-        if (likely(range)) {
-          pgno = *range;
+        if (likely(num == 1)) {
+          pgno = pnl_get_single(txn->tw.relist);
           goto done;
         }
+        pgno = pnl_get_sequence(txn->tw.relist, num, flags);
+        if (likely(pgno))
+          goto done;
       }
       flags -= MDBX_ALLOC_COALESCE | MDBX_ALLOC_SHOULD_SCAN;
     }
-    if (unlikely(/* list is too long already */ re_len >=
-                 env->me_options.rp_augment_limit) &&
+    if (unlikely(/* list is too long already */ MDBX_PNL_GETSIZE(
+                     txn->tw.relist) >= env->me_options.rp_augment_limit) &&
         ((/* not a slot-request from gc-update */ num &&
           /* have enough unallocated space */ txn->mt_geo.upper >=
               txn->mt_next_pgno + num) ||
-         gc_len + re_len >= MDBX_PGL_LIMIT)) {
+         gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >= MDBX_PGL_LIMIT)) {
       /* Stop reclaiming to avoid large/overflow the page list.
        * This is a rare case while search for a continuously multi-page region
        * in a large database.
@@ -6816,7 +6888,8 @@ next_gc:;
        */
       NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
              "(chunk) -> %zu",
-             re_len, gc_len, gc_len + re_len);
+             MDBX_PNL_GETSIZE(txn->tw.relist), gc_len,
+             gc_len + MDBX_PNL_GETSIZE(txn->tw.relist));
       goto depleted_gc;
     }
   }
@@ -6844,7 +6917,7 @@ next_gc:;
   }
 
   /* Merge in descending sorted order */
-  re_len = pnl_merge(txn->tw.relist, gc_pnl);
+  pnl_merge(txn->tw.relist, gc_pnl);
   flags |= MDBX_ALLOC_SHOULD_SCAN;
   if (AUDIT_ENABLED()) {
     if (unlikely(!pnl_check(txn->tw.relist, txn->mt_next_pgno))) {
@@ -6856,15 +6929,13 @@ next_gc:;
   }
   eASSERT(env, dirtylist_check(txn));
 
-  eASSERT(env,
-          re_len == 0 || MDBX_PNL_MOST(txn->tw.relist) < txn->mt_next_pgno);
-  if (MDBX_ENABLE_REFUND && re_len &&
+  eASSERT(env, MDBX_PNL_GETSIZE(txn->tw.relist) == 0 ||
+                   MDBX_PNL_MOST(txn->tw.relist) < txn->mt_next_pgno);
+  if (MDBX_ENABLE_REFUND && MDBX_PNL_GETSIZE(txn->tw.relist) &&
       unlikely(MDBX_PNL_MOST(txn->tw.relist) == txn->mt_next_pgno - 1)) {
     /* Refund suitable pages into "unallocated" space */
     txn_refund(txn);
-    re_len = MDBX_PNL_GETSIZE(txn->tw.relist);
   }
-  eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
   eASSERT(env, pnl_check_allocated(txn->tw.relist,
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 
@@ -6872,7 +6943,7 @@ next_gc:;
   if (unlikely(num == 0)) {
     eASSERT(env, ret.err == MDBX_SUCCESS);
     TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "early-exit for slot", id,
-          re_len);
+          MDBX_PNL_GETSIZE(txn->tw.relist));
     goto early_exit;
   }
 
@@ -6881,31 +6952,29 @@ next_gc:;
   eASSERT(env, op == MDBX_PREV || op == MDBX_NEXT);
   if (flags & MDBX_ALLOC_COALESCE) {
     TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "coalesce-continue", id,
-          re_len);
+          MDBX_PNL_GETSIZE(txn->tw.relist));
     goto next_gc;
   }
 
 scan:
   eASSERT(env, flags & MDBX_ALLOC_SHOULD_SCAN);
   eASSERT(env, num > 0);
-  if (re_len >= num) {
+  if (MDBX_PNL_GETSIZE(txn->tw.relist) >= num) {
     eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                      MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
-    range = txn->tw.relist + (MDBX_PNL_ASCENDING ? 1 : re_len);
-    pgno = *range;
-    if (num == 1)
-      goto done;
-    range = scan4seq(range, re_len, num - 1);
-    eASSERT(env, range == scan4range_checker(txn->tw.relist, num - 1));
-    if (likely(range)) {
-      pgno = *range;
+    if (likely(num == 1)) {
+      eASSERT(env, !(flags & MDBX_ALLOC_RESERVE));
+      pgno = pnl_get_single(txn->tw.relist);
       goto done;
     }
+    pgno = pnl_get_sequence(txn->tw.relist, num, flags);
+    if (likely(pgno))
+      goto done;
   }
   flags -= MDBX_ALLOC_SHOULD_SCAN;
   if (ret.err == MDBX_SUCCESS) {
     TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "continue-search", id,
-          re_len);
+          MDBX_PNL_GETSIZE(txn->tw.relist));
     goto next_gc;
   }
 
@@ -6924,7 +6993,7 @@ depleted_gc:
    *  - extend the database file. */
 
   /* Will use new pages from the map if nothing is suitable in the GC. */
-  newnext = (pgno = txn->mt_next_pgno) + num;
+  newnext = txn->mt_next_pgno + num;
 
   /* Does reclaiming stopped at the last steady point? */
   const meta_ptr_t recent = meta_recent(env, &txn->tw.troika);
@@ -7001,7 +7070,7 @@ depleted_gc:
   /* Avoid kick lagging reader(s) if is enough unallocated space
    * at the end of database file. */
   if (!(flags & MDBX_ALLOC_RESERVE) && newnext <= txn->mt_end_pgno) {
-    eASSERT(env, range == nullptr);
+    eASSERT(env, pgno == 0);
     goto done;
   }
 
@@ -7014,13 +7083,14 @@ depleted_gc:
   //---------------------------------------------------------------------------
 
 no_gc:
+  eASSERT(env, pgno == 0);
   if (flags & MDBX_ALLOC_RESERVE) {
     ret.err = MDBX_NOTFOUND;
     goto fail;
   }
 
   /* Will use new pages from the map if nothing is suitable in the GC. */
-  newnext = (pgno = txn->mt_next_pgno) + num;
+  newnext = txn->mt_next_pgno + num;
   if (newnext <= txn->mt_end_pgno)
     goto done;
 
@@ -7052,27 +7122,15 @@ no_gc:
     goto fail;
   }
   env->me_txn->mt_end_pgno = (pgno_t)aligned;
+  eASSERT(env, pgno == 0);
 
   //---------------------------------------------------------------------------
 
 done:
   ret.err = MDBX_SUCCESS;
   if (likely((flags & MDBX_ALLOC_RESERVE) == 0)) {
-    ENSURE(env, pgno >= NUM_METAS);
-    if (range) {
-      eASSERT(env, pgno == *range);
+    if (pgno) {
       eASSERT(env, pgno + num <= txn->mt_next_pgno && pgno >= NUM_METAS);
-      eASSERT(env, re_len == MDBX_PNL_GETSIZE(txn->tw.relist));
-      /* Cutoff allocated pages from tw.relist */
-#if MDBX_PNL_ASCENDING
-      for (const pgno_t *const end = re_list + re_len - num; range <= end;
-           ++range)
-        *range = range[num];
-#else
-      for (const pgno_t *const end = txn->tw.relist + re_len; ++range <= end;)
-        range[-(ptrdiff_t)num] = *range;
-#endif
-      MDBX_PNL_SETSIZE(txn->tw.relist, re_len -= num);
       eASSERT(env, pnl_check_allocated(txn->tw.relist,
                                        txn->mt_next_pgno - MDBX_ENABLE_REFUND));
     } else {
@@ -7082,6 +7140,7 @@ done:
       eASSERT(env, pgno >= NUM_METAS && pgno + num <= txn->mt_next_pgno);
     }
 
+    ENSURE(env, pgno >= NUM_METAS);
 #if MDBX_ENABLE_PROFGC
     if (!monotime_shot)
       monotime_shot = osal_monotime();
@@ -7182,19 +7241,9 @@ __hot static pgr_t page_alloc(const MDBX_cursor *mc) {
     return ret;
   }
 
-  MDBX_PNL pnl = txn->tw.relist;
-  const size_t len = MDBX_PNL_GETSIZE(pnl);
-  if (likely(len > 0)) {
+  if (likely(MDBX_PNL_GETSIZE(txn->tw.relist) > 0)) {
+    const pgno_t pgno = pnl_get_single(txn->tw.relist);
     MDBX_env *const env = txn->mt_env;
-
-    MDBX_PNL_SETSIZE(pnl, len - 1);
-#if MDBX_PNL_ASCENDING
-    const pgno_t pgno = pnl[1];
-    for (size_t i = 1; i < len; ++i)
-      pnl[i] = pnl[i + 1];
-#else
-    const pgno_t pgno = pnl[len];
-#endif
 
 #if MDBX_ENABLE_PROFGC
     const uint64_t monotime_before = osal_monotime();

@@ -949,9 +949,11 @@ typedef struct MDBX_dpl {
 #define MDBX_PNL_END(pl) (&(pl)[MDBX_PNL_GETSIZE(pl) + 1])
 
 #if MDBX_PNL_ASCENDING
+#define MDBX_PNL_EDGE(pl) ((pl) + 1)
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_FIRST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_LAST(pl)
 #else
+#define MDBX_PNL_EDGE(pl) ((pl) + MDBX_PNL_GETSIZE(pl))
 #define MDBX_PNL_LEAST(pl) MDBX_PNL_LAST(pl)
 #define MDBX_PNL_MOST(pl) MDBX_PNL_FIRST(pl)
 #endif
