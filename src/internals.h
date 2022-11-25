@@ -933,7 +933,7 @@ typedef struct MDBX_dpl {
 #define MDBX_TXL_INITIAL                                                       \
   (MDBX_TXL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(txnid_t))
 #define MDBX_TXL_MAX                                                           \
-  ((1u << 17) - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(txnid_t))
+  ((1u << 26) - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(txnid_t))
 
 #define MDBX_PNL_ALLOCLEN(pl) ((pl)[-1])
 #define MDBX_PNL_GETSIZE(pl) ((size_t)((pl)[0]))
