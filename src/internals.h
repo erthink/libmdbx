@@ -525,16 +525,12 @@ typedef struct MDBX_meta {
  * Each non-metapage up to MDBX_meta.mm_last_pg is reachable exactly once
  * in the snapshot: Either used by a database or listed in a GC record. */
 typedef struct MDBX_page {
-  union {
 #define IS_FROZEN(txn, p) ((p)->mp_txnid < (txn)->mt_txnid)
 #define IS_SPILLED(txn, p) ((p)->mp_txnid == (txn)->mt_txnid)
 #define IS_SHADOWED(txn, p) ((p)->mp_txnid > (txn)->mt_txnid)
 #define IS_VALID(txn, p) ((p)->mp_txnid <= (txn)->mt_front)
 #define IS_MODIFIABLE(txn, p) ((p)->mp_txnid == (txn)->mt_front)
-    uint64_t
-        mp_txnid; /* txnid which created this page, maybe zero in legacy DB */
-    struct MDBX_page *mp_next; /* for in-memory list of freed pages */
-  };
+  uint64_t mp_txnid; /* txnid which created page, maybe zero in legacy DB */
   uint16_t mp_leaf2_ksize;   /* key size if this is a LEAF2 page */
 #define P_BRANCH 0x01u       /* branch page */
 #define P_LEAF 0x02u         /* leaf page */
@@ -575,6 +571,8 @@ typedef struct MDBX_page {
 
 /* Size of the page header, excluding dynamic data at the end */
 #define PAGEHDRSZ offsetof(MDBX_page, mp_ptrs)
+
+#define mp_next(mp) (*(MDBX_page **)((mp)->mp_ptrs + 2))
 
 #pragma pack(pop)
 

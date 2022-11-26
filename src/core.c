@@ -2741,8 +2741,11 @@ static __always_inline size_t dpl_bytes2size(const ptrdiff_t bytes) {
 }
 
 static __always_inline size_t dpl_setlen(MDBX_dpl *dl, size_t len) {
-  static const MDBX_page dpl_stub_pageE = {
-      {0}, 0, P_BAD, {0}, /* pgno */ ~(pgno_t)0};
+  static const MDBX_page dpl_stub_pageE = {INVALID_TXNID,
+                                           0,
+                                           P_BAD,
+                                           {0},
+                                           /* pgno */ ~(pgno_t)0};
   assert(dpl_stub_pageE.mp_flags == P_BAD &&
          dpl_stub_pageE.mp_pgno == P_INVALID);
   dl->length = len;
@@ -2753,7 +2756,11 @@ static __always_inline size_t dpl_setlen(MDBX_dpl *dl, size_t len) {
 }
 
 static __always_inline void dpl_clear(MDBX_dpl *dl) {
-  static const MDBX_page dpl_stub_pageB = {{0}, 0, P_BAD, {0}, /* pgno */ 0};
+  static const MDBX_page dpl_stub_pageB = {INVALID_TXNID,
+                                           0,
+                                           P_BAD,
+                                           {0},
+                                           /* pgno */ 0};
   assert(dpl_stub_pageB.mp_flags == P_BAD && dpl_stub_pageB.mp_pgno == 0);
   dl->sorted = dpl_setlen(dl, 0);
   dl->pages_including_loose = 0;
@@ -3671,8 +3678,8 @@ static MDBX_page *page_malloc(MDBX_txn *txn, size_t num) {
     eASSERT(env, env->me_dp_reserve_len > 0);
     MDBX_ASAN_UNPOISON_MEMORY_REGION(np, size);
     VALGRIND_MEMPOOL_ALLOC(env, np, size);
-    VALGRIND_MAKE_MEM_DEFINED(&np->mp_next, sizeof(np->mp_next));
-    env->me_dp_reserve = np->mp_next;
+    VALGRIND_MAKE_MEM_DEFINED(&mp_next(np), sizeof(MDBX_page *));
+    env->me_dp_reserve = mp_next(np);
     env->me_dp_reserve_len -= 1;
   } else {
     size = pgno2bytes(env, num);
@@ -3710,9 +3717,9 @@ static void dpage_free(MDBX_env *env, MDBX_page *dp, size_t npages) {
     memset(dp, -1, pgno2bytes(env, npages));
   if (npages == 1 &&
       env->me_dp_reserve_len < env->me_options.dp_reserve_limit) {
-    MDBX_ASAN_POISON_MEMORY_REGION((char *)dp + sizeof(dp->mp_next),
-                                   env->me_psize - sizeof(dp->mp_next));
-    dp->mp_next = env->me_dp_reserve;
+    MDBX_ASAN_POISON_MEMORY_REGION(dp, env->me_psize);
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(dp), sizeof(MDBX_page *));
+    mp_next(dp) = env->me_dp_reserve;
     VALGRIND_MEMPOOL_FREE(env, dp);
     env->me_dp_reserve = dp;
     env->me_dp_reserve_len += 1;
@@ -3883,7 +3890,7 @@ static void refund_loose(MDBX_txn *txn) {
     tASSERT(txn, txn->mt_next_pgno >= MIN_PAGENO + txn->tw.loose_count);
     pgno_t most = MIN_PAGENO;
     size_t w = 0;
-    for (const MDBX_page *lp = txn->tw.loose_pages; lp; lp = lp->mp_next) {
+    for (const MDBX_page *lp = txn->tw.loose_pages; lp; lp = mp_next(lp)) {
       tASSERT(txn, lp->mp_flags == P_LOOSE);
       tASSERT(txn, txn->mt_next_pgno > lp->mp_pgno);
       if (likely(txn->mt_next_pgno - txn->tw.loose_count <= lp->mp_pgno)) {
@@ -3893,6 +3900,8 @@ static void refund_loose(MDBX_txn *txn) {
         suitable[++w] = lp->mp_pgno;
         most = (lp->mp_pgno > most) ? lp->mp_pgno : most;
       }
+      MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(lp), sizeof(MDBX_page *));
+      VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
     }
 
     if (most + 1 == txn->mt_next_pgno) {
@@ -3984,10 +3993,12 @@ static void refund_loose(MDBX_txn *txn) {
       for (MDBX_page **link = &txn->tw.loose_pages; *link;) {
         MDBX_page *dp = *link;
         tASSERT(txn, dp->mp_flags == P_LOOSE);
+        MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(dp), sizeof(MDBX_page *));
+        VALGRIND_MAKE_MEM_DEFINED(&mp_next(dp), sizeof(MDBX_page *));
         if (txn->mt_next_pgno > dp->mp_pgno) {
-          link = &dp->mp_next;
+          link = &mp_next(dp);
         } else {
-          *link = dp->mp_next;
+          *link = mp_next(dp);
           if ((txn->mt_flags & MDBX_WRITEMAP) == 0)
             dpage_free(txn->mt_env, dp, 1);
         }
@@ -4286,8 +4297,11 @@ status_done:
                     pgno + txn->mt_env->me_options.dp_loose_limit ||
                 txn->mt_next_pgno <= txn->mt_env->me_options.dp_loose_limit))) {
       DEBUG("loosen dirty page %" PRIaPGNO, pgno);
+      if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
+        memset(page_data(mp), -1, txn->mt_env->me_psize - PAGEHDRSZ);
+      mp->mp_txnid = INVALID_TXNID;
       mp->mp_flags = P_LOOSE;
-      mp->mp_next = txn->tw.loose_pages;
+      mp_next(mp) = txn->tw.loose_pages;
       txn->tw.loose_pages = mp;
       txn->tw.loose_count++;
 #if MDBX_ENABLE_REFUND
@@ -4295,8 +4309,6 @@ status_done:
                                     ? pgno + 2
                                     : txn->tw.loose_refund_wl;
 #endif /* MDBX_ENABLE_REFUND */
-      if (MDBX_DEBUG != 0 || unlikely(txn->mt_env->me_flags & MDBX_PAGEPERTURB))
-        memset(page_data(mp), -1, txn->mt_env->me_psize - PAGEHDRSZ);
       VALGRIND_MAKE_MEM_NOACCESS(page_data(mp),
                                  txn->mt_env->me_psize - PAGEHDRSZ);
       MDBX_ASAN_POISON_MEMORY_REGION(page_data(mp),
@@ -4770,7 +4782,7 @@ __cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
       goto bailout;
     dpl_clear(txn->tw.dirtylist);
     txn->tw.dirtyroom = env->me_options.dp_limit - txn->tw.loose_count;
-    for (MDBX_page *lp = txn->tw.loose_pages; lp != nullptr; lp = lp->mp_next) {
+    for (MDBX_page *lp = txn->tw.loose_pages; lp != nullptr; lp = mp_next(lp)) {
       rc = dpl_append(txn, lp->mp_pgno, lp, 1);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
@@ -5505,20 +5517,22 @@ __hot static int __must_check_result page_dirty(MDBX_txn *txn, MDBX_page *mp,
   int rc;
   if (unlikely(txn->tw.dirtyroom == 0)) {
     if (txn->tw.loose_count) {
-      MDBX_page *loose = txn->tw.loose_pages;
-      DEBUG("purge-and-reclaim loose page %" PRIaPGNO, loose->mp_pgno);
-      rc = pnl_insert_range(&txn->tw.relist, loose->mp_pgno, 1);
+      MDBX_page *lp = txn->tw.loose_pages;
+      DEBUG("purge-and-reclaim loose page %" PRIaPGNO, lp->mp_pgno);
+      rc = pnl_insert_range(&txn->tw.relist, lp->mp_pgno, 1);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
-      size_t di = dpl_search(txn, loose->mp_pgno);
-      tASSERT(txn, txn->tw.dirtylist->items[di].ptr == loose);
+      size_t di = dpl_search(txn, lp->mp_pgno);
+      tASSERT(txn, txn->tw.dirtylist->items[di].ptr == lp);
       dpl_remove(txn, di);
-      txn->tw.loose_pages = loose->mp_next;
+      MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(lp), sizeof(MDBX_page *));
+      VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
+      txn->tw.loose_pages = mp_next(lp);
       txn->tw.loose_count--;
       txn->tw.dirtyroom++;
       if (!MDBX_AVOID_MSYNC || !(txn->mt_flags & MDBX_WRITEMAP)) {
         tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0);
-        dpage_free(txn->mt_env, loose, 1);
+        dpage_free(txn->mt_env, lp, 1);
       }
     } else {
       ERROR("Dirtyroom is depleted, DPL length %zu", txn->tw.dirtylist->length);
@@ -7148,8 +7162,8 @@ done:
 #endif /* MDBX_ENABLE_PROFGC */
     if (env->me_flags & MDBX_WRITEMAP) {
       ret.page = pgno2page(env, pgno);
-      VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
       MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
+      VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
     } else {
       ret.page = page_malloc(txn, num);
       if (unlikely(!ret.page)) {
@@ -7237,16 +7251,17 @@ __hot static pgr_t page_alloc(const MDBX_cursor *mc) {
     }
 #endif /* MDBX_ENABLE_REFUND */
 
-    MDBX_page *page = txn->tw.loose_pages;
-    txn->tw.loose_pages = page->mp_next;
+    MDBX_page *lp = txn->tw.loose_pages;
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(lp, txn->mt_env->me_psize);
+    VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
+    txn->tw.loose_pages = mp_next(lp);
     txn->tw.loose_count--;
-    DEBUG_EXTRA("db %d use loose page %" PRIaPGNO, DDBI(mc), page->mp_pgno);
-    tASSERT(txn, page->mp_pgno < txn->mt_next_pgno);
-    tASSERT(txn, page->mp_pgno >= NUM_METAS);
-    VALGRIND_MAKE_MEM_UNDEFINED(page_data(page), page_space(txn->mt_env));
-    MDBX_ASAN_UNPOISON_MEMORY_REGION(page_data(page), page_space(txn->mt_env));
-    page->mp_txnid = txn->mt_front;
-    pgr_t ret = {page, MDBX_SUCCESS};
+    DEBUG_EXTRA("db %d use loose page %" PRIaPGNO, DDBI(mc), lp->mp_pgno);
+    tASSERT(txn, lp->mp_pgno < txn->mt_next_pgno);
+    tASSERT(txn, lp->mp_pgno >= NUM_METAS);
+    VALGRIND_MAKE_MEM_UNDEFINED(page_data(lp), page_space(txn->mt_env));
+    lp->mp_txnid = txn->mt_front;
+    pgr_t ret = {lp, MDBX_SUCCESS};
     return ret;
   }
 
@@ -8717,7 +8732,9 @@ int mdbx_txn_begin_ex(MDBX_env *env, MDBX_txn *parent, MDBX_txn_flags_t flags,
         rc = pnl_insert_range(&parent->tw.relist, lp->mp_pgno, 1);
         if (unlikely(rc != MDBX_SUCCESS))
           goto nested_failed;
-        parent->tw.loose_pages = lp->mp_next;
+        MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(lp), sizeof(MDBX_page *));
+        VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
+        parent->tw.loose_pages = mp_next(lp);
         /* Remove from dirty list */
         page_wash(parent, di, lp, 1);
       } while (parent->tw.loose_pages);
@@ -9827,8 +9844,11 @@ retry:
         if (unlikely((rc = pnl_need(&txn->tw.retired_pages,
                                     txn->tw.loose_count)) != 0))
           goto bailout;
-        for (MDBX_page *mp = txn->tw.loose_pages; mp; mp = mp->mp_next)
-          pnl_xappend(txn->tw.retired_pages, mp->mp_pgno);
+        for (MDBX_page *lp = txn->tw.loose_pages; lp; lp = mp_next(lp)) {
+          pnl_xappend(txn->tw.retired_pages, lp->mp_pgno);
+          MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(lp), sizeof(MDBX_page *));
+          VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
+        }
         TRACE("%s: append %zu loose-pages to retired-pages", dbg_prefix_mode,
               txn->tw.loose_count);
       } else {
@@ -9839,9 +9859,11 @@ retry:
         MDBX_PNL loose = txn->tw.relist + MDBX_PNL_ALLOCLEN(txn->tw.relist) -
                          txn->tw.loose_count - 1;
         size_t count = 0;
-        for (MDBX_page *mp = txn->tw.loose_pages; mp; mp = mp->mp_next) {
-          tASSERT(txn, mp->mp_flags == P_LOOSE);
-          loose[++count] = mp->mp_pgno;
+        for (MDBX_page *lp = txn->tw.loose_pages; lp; lp = mp_next(lp)) {
+          tASSERT(txn, lp->mp_flags == P_LOOSE);
+          loose[++count] = lp->mp_pgno;
+          MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(lp), sizeof(MDBX_page *));
+          VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
         }
         tASSERT(txn, count == txn->tw.loose_count);
         MDBX_PNL_SETSIZE(loose, count);
@@ -11045,9 +11067,12 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     txn_refund(parent);
     if (ASSERT_ENABLED()) {
       /* Check parent's loose pages not suitable for refund */
-      for (MDBX_page *lp = parent->tw.loose_pages; lp; lp = lp->mp_next)
+      for (MDBX_page *lp = parent->tw.loose_pages; lp; lp = mp_next(lp)) {
         tASSERT(parent, lp->mp_pgno < parent->tw.loose_refund_wl &&
                             lp->mp_pgno + 1 < parent->mt_next_pgno);
+        MDBX_ASAN_UNPOISON_MEMORY_REGION(&mp_next(lp), sizeof(MDBX_page *));
+        VALGRIND_MAKE_MEM_DEFINED(&mp_next(lp), sizeof(MDBX_page *));
+      }
       /* Check parent's reclaimed pages not suitable for refund */
       if (MDBX_PNL_GETSIZE(parent->tw.relist))
         tASSERT(parent,
@@ -14497,8 +14522,8 @@ __cold int mdbx_env_close_ex(MDBX_env *env, bool dont_sync) {
 
   while ((dp = env->me_dp_reserve) != NULL) {
     MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
-    VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
-    env->me_dp_reserve = dp->mp_next;
+    VALGRIND_MAKE_MEM_DEFINED(&mp_next(dp), sizeof(MDBX_page *));
+    env->me_dp_reserve = mp_next(dp);
     osal_free(dp);
   }
   VALGRIND_DESTROY_MEMPOOL(env);
@@ -23882,8 +23907,8 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
         eASSERT(env, env->me_dp_reserve != NULL);
         MDBX_page *dp = env->me_dp_reserve;
         MDBX_ASAN_UNPOISON_MEMORY_REGION(dp, env->me_psize);
-        VALGRIND_MAKE_MEM_DEFINED(&dp->mp_next, sizeof(dp->mp_next));
-        env->me_dp_reserve = dp->mp_next;
+        VALGRIND_MAKE_MEM_DEFINED(&mp_next(dp), sizeof(MDBX_page *));
+        env->me_dp_reserve = mp_next(dp);
         VALGRIND_MEMPOOL_FREE(env, dp);
         osal_free(dp);
         env->me_dp_reserve_len -= 1;
