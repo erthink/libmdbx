@@ -3238,9 +3238,9 @@ static int __must_check_result page_check(MDBX_cursor *const mc,
 static int __must_check_result cursor_check(MDBX_cursor *mc);
 static int __must_check_result cursor_check_updating(MDBX_cursor *mc);
 static int __must_check_result cursor_del(MDBX_cursor *mc);
-static int __must_check_result delete (MDBX_txn *txn, MDBX_dbi dbi,
-                                       const MDBX_val *key,
-                                       const MDBX_val *data, unsigned flags);
+static int __must_check_result delete(MDBX_txn *txn, MDBX_dbi dbi,
+                                      const MDBX_val *key, const MDBX_val *data,
+                                      unsigned flags);
 #define SIBLING_LEFT 0
 #define SIBLING_RIGHT 2
 static int __must_check_result cursor_sibling(MDBX_cursor *mc, int dir);
@@ -4140,8 +4140,14 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
    *  So for flexibility and avoid extra internal dependencies we just
    *  fallback to reading if dirty list was not allocated yet. */
   size_t di = 0, si = 0, npages = 1;
-  bool is_frozen = false, is_spilled = false, is_shadowed = false,
-       is_modifable = false;
+  enum page_status {
+    unknown,
+    frozen,
+    spilled,
+    shadowed,
+    modifable
+  } status = unknown;
+
   if (unlikely(!mp)) {
     if (ASSERT_ENABLED() && pageflags) {
       pgr_t check;
@@ -4153,7 +4159,7 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
       tASSERT(txn, !(pageflags & P_FROZEN) || IS_FROZEN(txn, check.page));
     }
     if (pageflags & P_FROZEN) {
-      is_frozen = true;
+      status = frozen;
       if (ASSERT_ENABLED()) {
         for (MDBX_txn *scan = txn; scan; scan = scan->mt_parent) {
           tASSERT(txn, !txn->tw.spilled.list || !search_spilled(scan, pgno));
@@ -4165,25 +4171,25 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
       if ((di = dpl_exist(txn, pgno)) != 0) {
         mp = txn->tw.dirtylist->items[di].ptr;
         tASSERT(txn, IS_MODIFIABLE(txn, mp));
-        is_modifable = true;
+        status = modifable;
         goto status_done;
       }
       if ((si = search_spilled(txn, pgno)) != 0) {
-        is_spilled = true;
+        status = spilled;
         goto status_done;
       }
       for (MDBX_txn *parent = txn->mt_parent; parent;
            parent = parent->mt_parent) {
         if (dpl_exist(parent, pgno)) {
-          is_shadowed = true;
+          status = shadowed;
           goto status_done;
         }
         if (search_spilled(parent, pgno)) {
-          is_spilled = true;
+          status = spilled;
           goto status_done;
         }
       }
-      is_frozen = true;
+      status = frozen;
       goto status_done;
     }
 
@@ -4195,27 +4201,27 @@ static int page_retire_ex(MDBX_cursor *mc, const pgno_t pgno,
     pageflags = mp->mp_flags;
   }
 
-  is_frozen = IS_FROZEN(txn, mp);
-  if (!is_frozen) {
-    is_modifable = IS_MODIFIABLE(txn, mp);
-    is_shadowed = IS_SHADOWED(txn, mp);
-    is_spilled = IS_SPILLED(txn, mp) && !(txn->mt_flags & MDBX_WRITEMAP);
-    if (is_modifable) {
-      tASSERT(txn, !is_spilled);
-      tASSERT(txn, !txn->tw.spilled.list || !search_spilled(txn, pgno));
-      tASSERT(txn, debug_dpl_find(txn, pgno) == mp || txn->mt_parent ||
-                       (txn->mt_flags & MDBX_WRITEMAP));
-    } else {
-      tASSERT(txn, !debug_dpl_find(txn, pgno));
-    }
-
-    di = (is_modifable && txn->tw.dirtylist) ? dpl_exist(txn, pgno) : 0;
-    si = is_spilled ? search_spilled(txn, pgno) : 0;
-    tASSERT(txn, !is_modifable || di || (txn->mt_flags & MDBX_WRITEMAP));
-  } else {
+  if (IS_FROZEN(txn, mp)) {
+    status = frozen;
     tASSERT(txn, !IS_MODIFIABLE(txn, mp));
     tASSERT(txn, !IS_SPILLED(txn, mp));
     tASSERT(txn, !IS_SHADOWED(txn, mp));
+    tASSERT(txn, !debug_dpl_find(txn, pgno));
+    tASSERT(txn, !txn->tw.spilled.list || !search_spilled(txn, pgno));
+  } else if (IS_MODIFIABLE(txn, mp)) {
+    status = modifable;
+    di = txn->tw.dirtylist ? dpl_exist(txn, pgno) : 0;
+    tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) || !IS_SPILLED(txn, mp));
+    tASSERT(txn, !txn->tw.spilled.list || !search_spilled(txn, pgno));
+  } else if (IS_SHADOWED(txn, mp)) {
+    status = shadowed;
+    tASSERT(txn, !txn->tw.spilled.list || !search_spilled(txn, pgno));
+    tASSERT(txn, !debug_dpl_find(txn, pgno));
+  } else {
+    tASSERT(txn, IS_SPILLED(txn, mp));
+    status = spilled;
+    si = search_spilled(txn, pgno);
+    tASSERT(txn, !debug_dpl_find(txn, pgno));
   }
 
 status_done:
@@ -4239,7 +4245,7 @@ status_done:
     mc->mc_db->md_overflow_pages -= (pgno_t)npages;
   }
 
-  if (is_frozen) {
+  if (status == frozen) {
   retire:
     DEBUG("retire %zu page %" PRIaPGNO, npages, pgno);
     rc = pnl_append_range(false, &txn->tw.retired_pages, pgno, npages);
@@ -4252,7 +4258,7 @@ status_done:
    * нераспределенного "хвоста" БД сдвигается только при их коммите. */
   if (MDBX_ENABLE_REFUND && unlikely(pgno + npages == txn->mt_next_pgno)) {
     const char *kind = nullptr;
-    if (is_modifable) {
+    if (status == modifable) {
       /* Страница испачкана в этой транзакции, но до этого могла быть
        * аллоцирована, испачкана и пролита в одной из родительских транзакций.
        * Её МОЖНО вытолкнуть в нераспределенный хвост. */
@@ -4264,6 +4270,7 @@ status_done:
        * и запачкана в этой или одной из родительских транзакций.
        * Её МОЖНО вытолкнуть в нераспределенный хвост. */
       kind = "spilled";
+      tASSERT(txn, status == spilled);
       spill_remove(txn, si, npages);
     } else {
       /* Страница аллоцирована, запачкана и возможно пролита в одной
@@ -4276,18 +4283,18 @@ status_done:
              parent = parent->mt_parent) {
           if (search_spilled(parent, pgno)) {
             kind = "parent-spilled";
-            tASSERT(txn, is_spilled);
+            tASSERT(txn, status == spilled);
             break;
           }
           if (mp == debug_dpl_find(parent, pgno)) {
             kind = "parent-dirty";
-            tASSERT(txn, !is_spilled);
+            tASSERT(txn, status == shadowed);
             break;
           }
         }
         tASSERT(txn, kind != nullptr);
       }
-      tASSERT(txn, is_spilled || is_shadowed || (mp && IS_SHADOWED(txn, mp)));
+      tASSERT(txn, status == spilled || status == shadowed);
     }
     DEBUG("refunded %zu %s page %" PRIaPGNO, npages, kind, pgno);
     txn->mt_next_pgno = pgno;
@@ -4295,7 +4302,7 @@ status_done:
     return MDBX_SUCCESS;
   }
 
-  if (is_modifable) {
+  if (status == modifable) {
     if (di) {
       /* Dirty page from this transaction */
       /* If suitable we can reuse it through loose list */
@@ -4392,7 +4399,7 @@ status_done:
     goto reclaim;
   }
 
-  if (is_shadowed) {
+  if (status == shadowed) {
     /* Dirty page MUST BE a clone from (one of) parent transaction(s). */
     if (ASSERT_ENABLED()) {
       const MDBX_page *parent_dp = nullptr;
@@ -19569,8 +19576,8 @@ int mdbx_del(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
   return delete (txn, dbi, key, data, 0);
 }
 
-static int delete (MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
-                   const MDBX_val *data, unsigned flags) {
+static int delete(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
+                  const MDBX_val *data, unsigned flags) {
   MDBX_cursor_couple cx;
   MDBX_cursor_op op;
   MDBX_val rdata;
