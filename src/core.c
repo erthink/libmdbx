@@ -10927,22 +10927,54 @@ static __inline void txn_merge(MDBX_txn *const parent, MDBX_txn *const txn,
   }
 }
 
+static void take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency) {
+  MDBX_env *const env = txn->mt_env;
+  if (MDBX_ENABLE_PROFGC) {
+    pgop_stat_t *const ptr = &env->me_lck->mti_pgop_stat;
+    latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
+    latency->gc_prof.work_rtime_monotonic =
+        osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
+    latency->gc_prof.work_xtime_monotonic =
+        osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_monotonic);
+    latency->gc_prof.work_rtime_cpu =
+        osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_cpu);
+    latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
+    latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
+    latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
+
+    latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
+    latency->gc_prof.self_rtime_monotonic =
+        osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
+    latency->gc_prof.self_xtime_monotonic =
+        osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_monotonic);
+    latency->gc_prof.self_rtime_cpu =
+        osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_cpu);
+    latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
+    latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
+    latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
+
+    latency->gc_prof.wloops = ptr->gc_prof.wloops;
+    latency->gc_prof.coalescences = ptr->gc_prof.coalescences;
+    latency->gc_prof.wipes = ptr->gc_prof.wipes;
+    latency->gc_prof.flushes = ptr->gc_prof.flushes;
+    latency->gc_prof.kicks = ptr->gc_prof.kicks;
+    if (txn == env->me_txn0)
+      memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
+  } else
+    memset(&latency->gc_prof, 0, sizeof(latency->gc_prof));
+}
+
 int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   STATIC_ASSERT(MDBX_TXN_FINISHED ==
                 MDBX_TXN_BLOCKED - MDBX_TXN_HAS_CHILD - MDBX_TXN_ERROR);
   const uint64_t ts_0 = latency ? osal_monotime() : 0;
   uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0, ts_5 = 0, gc_cputime = 0;
 
-  MDBX_env *const env = txn->mt_env;
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
   if (unlikely(rc != MDBX_SUCCESS))
     goto provide_latency;
 
-  if (unlikely(txn->mt_flags & MDBX_TXN_ERROR)) {
-    rc = MDBX_RESULT_TRUE;
-    goto fail;
-  }
-
+  MDBX_env *const env = txn->mt_env;
 #if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != osal_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
@@ -10950,6 +10982,11 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
     goto provide_latency;
   }
 #endif /* MDBX_ENV_CHECKPID */
+
+  if (unlikely(txn->mt_flags & MDBX_TXN_ERROR)) {
+    rc = MDBX_RESULT_TRUE;
+    goto fail;
+  }
 
   /* txn_end() mode for a commit which writes nothing */
   unsigned end_mode =
@@ -11268,6 +11305,8 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   end_mode = MDBX_END_COMMITTED | MDBX_END_UPDATE | MDBX_END_EOTDONE;
 
 done:
+  if (latency)
+    take_gcprof(txn, latency);
   rc = txn_end(txn, end_mode);
 
 provide_latency:
@@ -11279,42 +11318,6 @@ provide_latency:
     latency->audit = (ts_3 > ts_2) ? osal_monotime_to_16dot16(ts_3 - ts_2) : 0;
     latency->write = (ts_4 > ts_3) ? osal_monotime_to_16dot16(ts_4 - ts_3) : 0;
     latency->sync = (ts_5 > ts_4) ? osal_monotime_to_16dot16(ts_5 - ts_4) : 0;
-
-#if MDBX_ENABLE_PROFGC
-    pgop_stat_t *const ptr = &env->me_lck->mti_pgop_stat;
-    latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
-    latency->gc_prof.work_rtime_monotonic =
-        osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
-    latency->gc_prof.work_xtime_monotonic =
-        osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_monotonic);
-    latency->gc_prof.work_rtime_cpu =
-        osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_cpu);
-    latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
-    latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
-    latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
-
-    latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
-    latency->gc_prof.self_rtime_monotonic =
-        osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
-    latency->gc_prof.self_xtime_monotonic =
-        osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_monotonic);
-    latency->gc_prof.self_rtime_cpu =
-        osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_cpu);
-    latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
-    latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
-    latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
-
-    latency->gc_prof.wloops = ptr->gc_prof.wloops;
-    latency->gc_prof.coalescences = ptr->gc_prof.coalescences;
-    latency->gc_prof.wipes = ptr->gc_prof.wipes;
-    latency->gc_prof.flushes = ptr->gc_prof.flushes;
-    latency->gc_prof.kicks = ptr->gc_prof.kicks;
-    if (txn == env->me_txn0)
-      memset(&ptr->gc_prof, 0, sizeof(ptr->gc_prof));
-#else
-    memset(&latency->gc_prof, 0, sizeof(latency->gc_prof));
-#endif /* MDBX_ENABLE_PROFGC */
-
     const uint64_t ts_6 = osal_monotime();
     latency->ending = ts_5 ? osal_monotime_to_16dot16(ts_6 - ts_5) : 0;
     latency->whole = osal_monotime_to_16dot16_noUnderflow(ts_6 - ts_0);
@@ -11323,6 +11326,8 @@ provide_latency:
 
 fail:
   txn->mt_flags |= MDBX_TXN_ERROR;
+  if (latency)
+    take_gcprof(txn, latency);
   mdbx_txn_abort(txn);
   goto provide_latency;
 }
