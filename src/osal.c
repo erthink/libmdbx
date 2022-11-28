@@ -567,6 +567,7 @@ MDBX_MAYBE_UNUSED MDBX_INTERNAL_FUNC size_t osal_mb2w(wchar_t *dst,
 
 #if defined(_WIN32) || defined(_WIN64)
 #define ior_alignment_mask (ior->pagesize - 1)
+#define ior_WriteFile_flag 1
 #define OSAL_IOV_MAX (4096 / sizeof(ior_sgv_element))
 
 static void ior_put_event(osal_ioring_t *ior, HANDLE event) {
@@ -677,7 +678,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
             (uintptr_t)(uint64_t)item->sgv[0].Buffer) &
            ior_alignment_mask) == 0 &&
           ior->last_sgvcnt + segments < OSAL_IOV_MAX) {
-        assert((item->single.iov_len & 1) == 0);
+        assert((item->single.iov_len & ior_WriteFile_flag) == 0);
         assert(item->sgv[ior->last_sgvcnt].Buffer == 0);
         ior->last_bytes += bytes;
         size_t i = 0;
@@ -687,13 +688,13 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
         } while (++i < segments);
         ior->slots_left -= segments;
         item->sgv[ior->last_sgvcnt += segments].Buffer = 0;
-        assert((item->single.iov_len & 1) == 0);
+        assert((item->single.iov_len & ior_WriteFile_flag) == 0);
         return MDBX_SUCCESS;
       }
-      const void *end =
-          (char *)(item->single.iov_base) + item->single.iov_len - 1;
+      const void *end = (char *)(item->single.iov_base) + item->single.iov_len -
+                        ior_WriteFile_flag;
       if (unlikely(end == data)) {
-        assert((item->single.iov_len & 1) != 0);
+        assert((item->single.iov_len & ior_WriteFile_flag) != 0);
         item->single.iov_len += bytes;
         return MDBX_SUCCESS;
       }
@@ -740,8 +741,8 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
       segments > OSAL_IOV_MAX) {
     /* WriteFile() */
     item->single.iov_base = data;
-    item->single.iov_len = bytes + 1;
-    assert((item->single.iov_len & 1) != 0);
+    item->single.iov_len = bytes + ior_WriteFile_flag;
+    assert((item->single.iov_len & ior_WriteFile_flag) != 0);
   } else {
     /* WriteFileGather() */
     item->sgv[0].Buffer = PtrToPtr64(data);
@@ -750,7 +751,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
       item->sgv[slots_used].Buffer = PtrToPtr64(data);
     }
     item->sgv[slots_used].Buffer = 0;
-    assert((item->single.iov_len & 1) == 0);
+    assert((item->single.iov_len & ior_WriteFile_flag) == 0);
     slots_used = segments;
   }
   ior->last_bytes = bytes;
@@ -778,9 +779,9 @@ MDBX_INTERNAL_FUNC void osal_ioring_walk(
 #if defined(_WIN32) || defined(_WIN64)
     size_t offset = ior_offset(item);
     char *data = item->single.iov_base;
-    size_t bytes = item->single.iov_len - 1;
+    size_t bytes = item->single.iov_len - ior_WriteFile_flag;
     size_t i = 1;
-    if (bytes & 1) {
+    if (bytes & ior_WriteFile_flag) {
       data = Ptr64ToPtr(item->sgv[0].Buffer);
       bytes = ior->pagesize;
       while (item->sgv[i].Buffer) {
@@ -824,9 +825,9 @@ osal_ioring_write(osal_ioring_t *ior) {
   LONG async_started = 0;
   for (ior_item_t *item = ior->pool; item <= ior->last;) {
     item->ov.Internal = STATUS_PENDING;
-    size_t i = 1, bytes = item->single.iov_len - 1;
+    size_t i = 1, bytes = item->single.iov_len - ior_WriteFile_flag;
     r.wops += 1;
-    if (bytes & 1) {
+    if (bytes & ior_WriteFile_flag) {
       bytes = ior->pagesize;
       while (item->sgv[i].Buffer) {
         bytes += ior->pagesize;
@@ -964,8 +965,8 @@ osal_ioring_write(osal_ioring_t *ior) {
 
     assert(ior->async_waiting == ior->async_completed);
     for (ior_item_t *item = ior->pool; item <= ior->last;) {
-      size_t i = 1, bytes = item->single.iov_len - 1;
-      if (bytes & 1) {
+      size_t i = 1, bytes = item->single.iov_len - ior_WriteFile_flag;
+      if (bytes & ior_WriteFile_flag) {
         bytes = ior->pagesize;
         while (item->sgv[i].Buffer) {
           bytes += ior->pagesize;
@@ -1059,7 +1060,7 @@ MDBX_INTERNAL_FUNC void osal_ioring_reset(osal_ioring_t *ior) {
       if (item->ov.hEvent && item->ov.hEvent != ior)
         ior_put_event(ior, item->ov.hEvent);
       size_t i = 1;
-      if ((item->single.iov_len & 1) == 0)
+      if ((item->single.iov_len & ior_WriteFile_flag) == 0)
         while (item->sgv[i].Buffer)
           ++i;
       item = ior_next(item, i);
