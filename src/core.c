@@ -2451,8 +2451,21 @@ __hot static size_t pnl_merge(MDBX_PNL dst, const MDBX_PNL src) {
   if (likely(src_len > 0)) {
     total += src_len;
     assert(MDBX_PNL_ALLOCLEN(dst) >= total);
-    dst[0] = /* the detent */ (MDBX_PNL_ASCENDING ? 0 : P_INVALID);
-    pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
+    if (!MDBX_DEBUG && total < (MDBX_HAVE_CMOV ? 21 : 12))
+      goto avoid_call_libc_for_short_cases;
+    if (dst_len == 0 ||
+        MDBX_PNL_ORDERED(MDBX_PNL_LAST(dst), MDBX_PNL_FIRST(src)))
+      memcpy(MDBX_PNL_END(dst), MDBX_PNL_BEGIN(src), src_len * sizeof(pgno_t));
+    else if (MDBX_PNL_ORDERED(MDBX_PNL_LAST(src), MDBX_PNL_FIRST(dst))) {
+      memmove(MDBX_PNL_BEGIN(dst) + src_len, MDBX_PNL_BEGIN(dst),
+              dst_len * sizeof(pgno_t));
+      memcpy(MDBX_PNL_BEGIN(dst), MDBX_PNL_BEGIN(src),
+             src_len * sizeof(pgno_t));
+    } else {
+    avoid_call_libc_for_short_cases:
+      dst[0] = /* the detent */ (MDBX_PNL_ASCENDING ? 0 : P_INVALID);
+      pnl_merge_inner(dst + total, dst + dst_len, src + src_len, src);
+    }
     MDBX_PNL_SETSIZE(dst, total);
   }
   assert(pnl_check_allocated(dst, MAX_PAGENO + 1));
