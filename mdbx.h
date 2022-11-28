@@ -77,10 +77,10 @@ OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
 #if defined(__riscv) || defined(__riscv__) || defined(__RISCV) ||              \
     defined(__RISCV__)
-#warning The RISC-V architecture is intentionally insecure by design. \
+#warning "The RISC-V architecture is intentionally insecure by design. \
   Please delete this admonition at your own risk, \
   if you make such decision informed and consciously. \
-  Refer to https://clck.ru/32d9xH for more information.
+  Refer to https://clck.ru/32d9xH for more information."
 #endif /* RISC-V */
 
 #ifdef _MSC_VER
