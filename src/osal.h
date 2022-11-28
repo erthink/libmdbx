@@ -228,10 +228,9 @@ typedef wchar_t pathchar_t;
 typedef char pathchar_t;
 #endif
 
-typedef struct osal_mmap_param {
+typedef struct osal_mmap {
   union {
-    void *address;
-    uint8_t *dxb;
+    void *base;
     struct MDBX_lockinfo *lck;
   };
   mdbx_filehandle_t fd;

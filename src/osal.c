@@ -628,7 +628,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *ior,
   assert(osal_iov_max > 0);
 #endif /* MDBX_HAVE_PWRITEV && _SC_IOV_MAX */
 
-  ior->boundary = (char *)(ior->pool + ior->allocated);
+  ior->boundary = ptr_disp(ior->pool, ior->allocated);
   return MDBX_SUCCESS;
 }
 
@@ -645,9 +645,9 @@ static __inline size_t ior_offset(const ior_item_t *item) {
 static __inline ior_item_t *ior_next(ior_item_t *item, size_t sgvcnt) {
 #if defined(ior_sgv_element)
   assert(sgvcnt > 0);
-  return (ior_item_t *)((char *)item + sizeof(ior_item_t) -
-                        sizeof(ior_sgv_element) +
-                        sizeof(ior_sgv_element) * sgvcnt);
+  return (ior_item_t *)ptr_disp(item, sizeof(ior_item_t) -
+                                          sizeof(ior_sgv_element) +
+                                          sizeof(ior_sgv_element) * sgvcnt);
 #else
   assert(sgvcnt == 1);
   (void)sgvcnt;
@@ -684,15 +684,15 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
         size_t i = 0;
         do {
           item->sgv[ior->last_sgvcnt + i].Buffer = PtrToPtr64(data);
-          data = (char *)data + ior->pagesize;
+          data = ptr_disp(data, ior->pagesize);
         } while (++i < segments);
         ior->slots_left -= segments;
         item->sgv[ior->last_sgvcnt += segments].Buffer = 0;
         assert((item->single.iov_len & ior_WriteFile_flag) == 0);
         return MDBX_SUCCESS;
       }
-      const void *end = (char *)(item->single.iov_base) + item->single.iov_len -
-                        ior_WriteFile_flag;
+      const void *end = ptr_disp(item->single.iov_base,
+                                 item->single.iov_len - ior_WriteFile_flag);
       if (unlikely(end == data)) {
         assert((item->single.iov_len & ior_WriteFile_flag) != 0);
         item->single.iov_len += bytes;
@@ -700,8 +700,8 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
       }
 #elif MDBX_HAVE_PWRITEV
       assert((int)item->sgvcnt > 0);
-      const void *end = (char *)(item->sgv[item->sgvcnt - 1].iov_base) +
-                        item->sgv[item->sgvcnt - 1].iov_len;
+      const void *end = ptr_disp(item->sgv[item->sgvcnt - 1].iov_base,
+                                 item->sgv[item->sgvcnt - 1].iov_len);
       if (unlikely(end == data)) {
         item->sgv[item->sgvcnt - 1].iov_len += bytes;
         ior->last_bytes += bytes;
@@ -718,7 +718,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
         return MDBX_SUCCESS;
       }
 #else
-      const void *end = (char *)(item->single.iov_base) + item->single.iov_len;
+      const void *end = ptr_disp(item->single.iov_base, item->single.iov_len);
       if (unlikely(end == data)) {
         item->single.iov_len += bytes;
         return MDBX_SUCCESS;
@@ -747,7 +747,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
     /* WriteFileGather() */
     item->sgv[0].Buffer = PtrToPtr64(data);
     for (size_t i = 1; i < segments; ++i) {
-      data = (char *)data + ior->pagesize;
+      data = ptr_disp(data, ior->pagesize);
       item->sgv[slots_used].Buffer = PtrToPtr64(data);
     }
     item->sgv[slots_used].Buffer = 0;
@@ -1131,7 +1131,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
       memset(ior->pool + ior->allocated, 0,
              sizeof(ior_item_t) * (items - ior->allocated));
     ior->allocated = (unsigned)items;
-    ior->boundary = (char *)(ior->pool + ior->allocated);
+    ior->boundary = ptr_disp(ior->pool, ior->allocated);
 #if defined(_WIN32) || defined(_WIN64)
     if (useSetFileIoOverlappedRange) {
       if (mdbx_SetFileIoOverlappedRange(ior->fd, ptr, (ULONG)bytes))
@@ -1474,7 +1474,7 @@ MDBX_INTERNAL_FUNC int osal_pwrite(mdbx_filehandle_t fd, const void *buf,
 #endif
     bytes -= written;
     offset += written;
-    buf = (char *)buf + written;
+    buf = ptr_disp(buf, written);
   }
 }
 
@@ -1504,7 +1504,7 @@ MDBX_INTERNAL_FUNC int osal_write(mdbx_filehandle_t fd, const void *buf,
     }
 #endif
     bytes -= written;
-    buf = (char *)buf + written;
+    buf = ptr_disp(buf, written);
   }
 }
 
@@ -1701,7 +1701,7 @@ MDBX_INTERNAL_FUNC int osal_thread_join(osal_thread_t thread) {
 MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
                                   size_t length,
                                   enum osal_syncmode_bits mode_bits) {
-  uint8_t *ptr = (uint8_t *)map->address + offset;
+  void *ptr = ptr_disp(map->base, offset);
 #if defined(_WIN32) || defined(_WIN64)
   if (!FlushViewOfFile(ptr, length))
     return (int)GetLastError();
@@ -2063,7 +2063,7 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
   assert(size <= limit);
   map->limit = 0;
   map->current = 0;
-  map->address = nullptr;
+  map->base = nullptr;
   map->filesize = 0;
 #if defined(_WIN32) || defined(_WIN64)
   map->section = NULL;
@@ -2115,7 +2115,7 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
                     : mdbx_RunningUnderWine() ? size
                                               : limit;
   err = NtMapViewOfSection(
-      map->section, GetCurrentProcess(), &map->address,
+      map->section, GetCurrentProcess(), &map->base,
       /* ZeroBits */ 0,
       /* CommitSize */ 0,
       /* SectionOffset */ NULL, &ViewSize,
@@ -2126,10 +2126,10 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
   if (!NT_SUCCESS(err)) {
     NtClose(map->section);
     map->section = 0;
-    map->address = nullptr;
+    map->base = nullptr;
     return ntstatus2errcode(err);
   }
-  assert(map->address != MAP_FAILED);
+  assert(map->base != MAP_FAILED);
 
   map->current = (size_t)SectionSize.QuadPart;
   map->limit = ViewSize;
@@ -2160,7 +2160,7 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
 #define MAP_NORESERVE 0
 #endif
 
-  map->address = mmap(
+  map->base = mmap(
       NULL, limit, (flags & MDBX_WRITEMAP) ? PROT_READ | PROT_WRITE : PROT_READ,
       MAP_SHARED | MAP_FILE | MAP_NORESERVE |
           (F_ISSET(flags, MDBX_UTTERLY_NOSYNC) ? MAP_NOSYNC : 0) |
@@ -2168,10 +2168,10 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
                                              : MAP_CONCEAL),
       map->fd, 0);
 
-  if (unlikely(map->address == MAP_FAILED)) {
+  if (unlikely(map->base == MAP_FAILED)) {
     map->limit = 0;
     map->current = 0;
-    map->address = nullptr;
+    map->base = nullptr;
     assert(errno != 0);
     return errno;
   }
@@ -2179,39 +2179,38 @@ MDBX_INTERNAL_FUNC int osal_mmap(const int flags, osal_mmap_t *map,
 
 #if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
-  if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0))
+  if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0))
     return errno;
 #endif /* MADV_DONTFORK */
 #ifdef MADV_NOHUGEPAGE
-  (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
+  (void)madvise(map->base, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
 #endif /* MDBX_ENABLE_MADVISE */
 
 #endif /* ! Windows */
 
-  VALGRIND_MAKE_MEM_DEFINED(map->address, map->current);
-  MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address, map->current);
+  VALGRIND_MAKE_MEM_DEFINED(map->base, map->current);
+  MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base, map->current);
   return MDBX_SUCCESS;
 }
 
 MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map) {
-  VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+  VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
   /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
    * when this memory will re-used by malloc or another mmapping.
    * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
    */
-  MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address,
-                                   (map->filesize && map->filesize < map->limit)
-                                       ? map->filesize
-                                       : map->limit);
+  MDBX_ASAN_UNPOISON_MEMORY_REGION(
+      map->base, (map->filesize && map->filesize < map->limit) ? map->filesize
+                                                               : map->limit);
 #if defined(_WIN32) || defined(_WIN64)
   if (map->section)
     NtClose(map->section);
-  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
+  NTSTATUS rc = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(rc))
     ntstatus2errcode(rc);
 #else
-  if (unlikely(munmap(map->address, map->limit))) {
+  if (unlikely(munmap(map->base, map->limit))) {
     assert(errno != 0);
     return errno;
   }
@@ -2219,7 +2218,7 @@ MDBX_INTERNAL_FUNC int osal_munmap(osal_mmap_t *map) {
 
   map->limit = 0;
   map->current = 0;
-  map->address = nullptr;
+  map->base = nullptr;
   return MDBX_SUCCESS;
 }
 
@@ -2252,7 +2251,7 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
       return err;
 
     /* check ability of address space for growth before unmap */
-    PVOID BaseAddress = (PBYTE)map->address + map->limit;
+    PVOID BaseAddress = (PBYTE)map->base + map->limit;
     SIZE_T RegionSize = limit - map->limit;
     status = NtAllocateVirtualMemory(GetCurrentProcess(), &BaseAddress, 0,
                                      &RegionSize, MEM_RESERVE, PAGE_NOACCESS);
@@ -2279,8 +2278,8 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
    * when this memory will re-used by malloc or another mmapping.
    * See https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
    */
-  MDBX_ASAN_UNPOISON_MEMORY_REGION(map->address, map->limit);
-  status = NtUnmapViewOfSection(GetCurrentProcess(), map->address);
+  MDBX_ASAN_UNPOISON_MEMORY_REGION(map->base, map->limit);
+  status = NtUnmapViewOfSection(GetCurrentProcess(), map->base);
   if (!NT_SUCCESS(status))
     return ntstatus2errcode(status);
   status = NtClose(map->section);
@@ -2292,7 +2291,7 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
   bailout_ntstatus:
     err = ntstatus2errcode(status);
   bailout:
-    map->address = NULL;
+    map->base = NULL;
     map->current = map->limit = 0;
     if (ReservedAddress) {
       ReservedSize = 0;
@@ -2307,7 +2306,7 @@ MDBX_INTERNAL_FUNC int osal_mresize(const int flags, osal_mmap_t *map,
 retry_file_and_section:
   /* resizing of the file may take a while,
    * therefore we reserve address space to avoid occupy it by other threads */
-  ReservedAddress = map->address;
+  ReservedAddress = map->base;
   status = NtAllocateVirtualMemory(GetCurrentProcess(), &ReservedAddress, 0,
                                    &ReservedSize, MEM_RESERVE, PAGE_NOACCESS);
   if (!NT_SUCCESS(status)) {
@@ -2317,7 +2316,7 @@ retry_file_and_section:
 
     if (flags & MDBX_MRESIZE_MAY_MOVE)
       /* the base address could be changed */
-      map->address = NULL;
+      map->base = NULL;
   }
 
   err = osal_filesize(map->fd, &map->filesize);
@@ -2362,7 +2361,7 @@ retry_file_and_section:
 retry_mapview:;
   SIZE_T ViewSize = (flags & MDBX_RDONLY) ? size : limit;
   status = NtMapViewOfSection(
-      map->section, GetCurrentProcess(), &map->address,
+      map->section, GetCurrentProcess(), &map->base,
       /* ZeroBits */ 0,
       /* CommitSize */ 0,
       /* SectionOffset */ NULL, &ViewSize,
@@ -2373,15 +2372,15 @@ retry_mapview:;
 
   if (!NT_SUCCESS(status)) {
     if (status == (NTSTATUS) /* STATUS_CONFLICTING_ADDRESSES */ 0xC0000018 &&
-        map->address && (flags & MDBX_MRESIZE_MAY_MOVE) != 0) {
+        map->base && (flags & MDBX_MRESIZE_MAY_MOVE) != 0) {
       /* try remap at another base address */
-      map->address = NULL;
+      map->base = NULL;
       goto retry_mapview;
     }
     NtClose(map->section);
     map->section = NULL;
 
-    if (map->address && (size != map->current || limit != map->limit)) {
+    if (map->base && (size != map->current || limit != map->limit)) {
       /* try remap with previously size and limit,
        * but will return MDBX_UNABLE_EXTEND_MAPSIZE on success */
       rc = (limit > map->limit) ? MDBX_UNABLE_EXTEND_MAPSIZE : MDBX_EPERM;
@@ -2393,7 +2392,7 @@ retry_mapview:;
     /* no way to recovery */
     goto bailout_ntstatus;
   }
-  assert(map->address != MAP_FAILED);
+  assert(map->base != MAP_FAILED);
 
   map->current = (size_t)SectionSize.QuadPart;
   map->limit = ViewSize;
@@ -2425,7 +2424,7 @@ retry_mapview:;
        *  - this allows us to clear the mask only within the file size
        *    when closing the mapping. */
       MDBX_ASAN_UNPOISON_MEMORY_REGION(
-          (char *)map->address + size,
+          ptr_disp(map->base, size),
           ((map->current < map->limit) ? map->current : map->limit) - size);
     }
     map->current = size;
@@ -2437,7 +2436,7 @@ retry_mapview:;
   if (limit < map->limit) {
     /* unmap an excess at end of mapping. */
     // coverity[offset_free : FALSE]
-    if (unlikely(munmap(map->dxb + limit, map->limit - limit))) {
+    if (unlikely(munmap(ptr_disp(map->base, limit), map->limit - limit))) {
       assert(errno != 0);
       return errno;
     }
@@ -2450,10 +2449,10 @@ retry_mapview:;
     return err;
 
   assert(limit > map->limit);
-  uint8_t *ptr = MAP_FAILED;
+  void *ptr = MAP_FAILED;
 
 #if (defined(__linux__) || defined(__gnu_linux__)) && defined(_GNU_SOURCE)
-  ptr = mremap(map->address, map->limit, limit,
+  ptr = mremap(map->base, map->limit, limit,
 #if defined(MREMAP_MAYMOVE)
                (flags & MDBX_MRESIZE_MAY_MOVE) ? MREMAP_MAYMOVE :
 #endif /* MREMAP_MAYMOVE */
@@ -2482,11 +2481,11 @@ retry_mapview:;
 
   if (ptr == MAP_FAILED) {
     /* Try to mmap additional space beyond the end of mapping. */
-    ptr = mmap(map->dxb + map->limit, limit - map->limit, mmap_prot,
+    ptr = mmap(ptr_disp(map->base, map->limit), limit - map->limit, mmap_prot,
                mmap_flags | MAP_FIXED_NOREPLACE, map->fd, map->limit);
-    if (ptr == map->dxb + map->limit)
+    if (ptr == ptr_disp(map->base, map->limit))
       /* успешно прилепили отображение в конец */
-      ptr = map->dxb;
+      ptr = map->base;
     else if (ptr != MAP_FAILED) {
       /* the desired address is busy, unmap unsuitable one */
       if (unlikely(munmap(ptr, limit - map->limit))) {
@@ -2519,13 +2518,13 @@ retry_mapview:;
       return MDBX_UNABLE_EXTEND_MAPSIZE;
     }
 
-    if (unlikely(munmap(map->address, map->limit))) {
+    if (unlikely(munmap(map->base, map->limit))) {
       assert(errno != 0);
       return errno;
     }
 
     // coverity[pass_freed_arg : FALSE]
-    ptr = mmap(map->address, limit, mmap_prot,
+    ptr = mmap(map->base, limit, mmap_prot,
                (flags & MDBX_MRESIZE_MAY_MOVE)
                    ? mmap_flags
                    : mmap_flags | (MAP_FIXED_NOREPLACE ? MAP_FIXED_NOREPLACE
@@ -2535,13 +2534,13 @@ retry_mapview:;
         unlikely(ptr == MAP_FAILED) && !(flags & MDBX_MRESIZE_MAY_MOVE) &&
         errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
       // coverity[pass_freed_arg : FALSE]
-      ptr = mmap(map->address, limit, mmap_prot, mmap_flags | MAP_FIXED,
-                 map->fd, 0);
+      ptr =
+          mmap(map->base, limit, mmap_prot, mmap_flags | MAP_FIXED, map->fd, 0);
 
     if (unlikely(ptr == MAP_FAILED)) {
       /* try to restore prev mapping */
       // coverity[pass_freed_arg : FALSE]
-      ptr = mmap(map->address, map->limit, mmap_prot,
+      ptr = mmap(map->base, map->limit, mmap_prot,
                  (flags & MDBX_MRESIZE_MAY_MOVE)
                      ? mmap_flags
                      : mmap_flags | (MAP_FIXED_NOREPLACE ? MAP_FIXED_NOREPLACE
@@ -2551,21 +2550,20 @@ retry_mapview:;
           unlikely(ptr == MAP_FAILED) && !(flags & MDBX_MRESIZE_MAY_MOVE) &&
           errno == /* kernel don't support MAP_FIXED_NOREPLACE */ EINVAL)
         // coverity[pass_freed_arg : FALSE]
-        ptr = mmap(map->address, map->limit, mmap_prot, mmap_flags | MAP_FIXED,
+        ptr = mmap(map->base, map->limit, mmap_prot, mmap_flags | MAP_FIXED,
                    map->fd, 0);
       if (unlikely(ptr == MAP_FAILED)) {
-        VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+        VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
         /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
          * when this memory will re-used by malloc or another mmapping.
          * See
          * https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
          */
         MDBX_ASAN_UNPOISON_MEMORY_REGION(
-            map->address,
-            (map->current < map->limit) ? map->current : map->limit);
+            map->base, (map->current < map->limit) ? map->current : map->limit);
         map->limit = 0;
         map->current = 0;
-        map->address = nullptr;
+        map->base = nullptr;
         assert(errno != 0);
         return errno;
       }
@@ -2575,38 +2573,38 @@ retry_mapview:;
   }
 
   assert(ptr && ptr != MAP_FAILED);
-  if (map->address != ptr) {
-    VALGRIND_MAKE_MEM_NOACCESS(map->address, map->current);
+  if (map->base != ptr) {
+    VALGRIND_MAKE_MEM_NOACCESS(map->base, map->current);
     /* Unpoisoning is required for ASAN to avoid false-positive diagnostic
      * when this memory will re-used by malloc or another mmapping.
      * See
      * https://libmdbx.dqdkfa.ru/dead-github/pull/93#issuecomment-613687203
      */
     MDBX_ASAN_UNPOISON_MEMORY_REGION(
-        map->address, (map->current < map->limit) ? map->current : map->limit);
+        map->base, (map->current < map->limit) ? map->current : map->limit);
 
     VALGRIND_MAKE_MEM_DEFINED(ptr, map->current);
     MDBX_ASAN_UNPOISON_MEMORY_REGION(ptr, map->current);
-    map->address = ptr;
+    map->base = ptr;
   }
   map->limit = limit;
 
 #if MDBX_ENABLE_MADVISE
 #ifdef MADV_DONTFORK
-  if (unlikely(madvise(map->address, map->limit, MADV_DONTFORK) != 0)) {
+  if (unlikely(madvise(map->base, map->limit, MADV_DONTFORK) != 0)) {
     assert(errno != 0);
     return errno;
   }
 #endif /* MADV_DONTFORK */
 #ifdef MADV_NOHUGEPAGE
-  (void)madvise(map->address, map->limit, MADV_NOHUGEPAGE);
+  (void)madvise(map->base, map->limit, MADV_NOHUGEPAGE);
 #endif /* MADV_NOHUGEPAGE */
 #endif /* MDBX_ENABLE_MADVISE */
 
 #endif /* POSIX / Windows */
 
   assert(rc != MDBX_SUCCESS ||
-         (map->address != nullptr && map->address != MAP_FAILED &&
+         (map->base != nullptr && map->base != MAP_FAILED &&
           map->current == size && map->limit == limit));
   return rc;
 }

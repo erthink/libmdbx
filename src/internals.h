@@ -572,7 +572,14 @@ typedef struct MDBX_page {
 /* Size of the page header, excluding dynamic data at the end */
 #define PAGEHDRSZ offsetof(MDBX_page, mp_ptrs)
 
-#define mp_next(mp) (*(MDBX_page **)((mp)->mp_ptrs + 2))
+/* Pointer displacement without casting to char* to avoid pointer-aliasing */
+#define ptr_disp(ptr, disp) ((void *)(((intptr_t)(ptr)) + ((intptr_t)(disp))))
+
+/* Pointer distance as signed number of bytes */
+#define ptr_dist(more, less) (((intptr_t)(more)) - ((intptr_t)(less)))
+
+#define mp_next(mp)                                                            \
+  (*(MDBX_page **)ptr_disp((mp)->mp_ptrs, sizeof(void *) - sizeof(uint32_t)))
 
 #pragma pack(pop)
 
@@ -1204,7 +1211,7 @@ struct MDBX_env {
 #define ENV_INTERNAL_FLAGS (MDBX_FATAL_ERROR | MDBX_ENV_ACTIVE | MDBX_ENV_TXKEY)
   uint32_t me_flags;
   osal_mmap_t me_dxb_mmap; /* The main data file */
-#define me_map me_dxb_mmap.dxb
+#define me_map me_dxb_mmap.base
 #define me_lazy_fd me_dxb_mmap.fd
 #define me_fd4data me_ioring.fd
   mdbx_filehandle_t me_dsync_fd, me_fd4meta;
@@ -1470,7 +1477,8 @@ MDBX_NORETURN __cold void assert_fail(const char *msg, const char *func,
 #endif /* MDBX_CPU_WRITEBACK_INCOHERENT */
 
 MDBX_MAYBE_UNUSED static __inline void
-osal_flush_incoherent_mmap(void *addr, size_t nbytes, const intptr_t pagesize) {
+osal_flush_incoherent_mmap(const void *addr, size_t nbytes,
+                           const intptr_t pagesize) {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
   char *const begin = (char *)(-pagesize & (intptr_t)addr);
   char *const end =
@@ -1486,7 +1494,7 @@ osal_flush_incoherent_mmap(void *addr, size_t nbytes, const intptr_t pagesize) {
 #ifdef DCACHE
   /* MIPS has cache coherency issues.
    * Note: for any nbytes >= on-chip cache size, entire is flushed. */
-  cacheflush(addr, nbytes, DCACHE);
+  cacheflush((void *)addr, nbytes, DCACHE);
 #else
 #error "Oops, cacheflush() not available"
 #endif /* DCACHE */
