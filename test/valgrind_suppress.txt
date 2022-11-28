@@ -30,6 +30,14 @@
    ...
    fun:wipe_steady*
 }
+{
+   msync-meta
+   Memcheck:Param
+   msync(start)
+   fun:msync
+   ...
+   fun:meta_sync*
+}
 
 # memcmp() inside iov_write() as workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269
 {
