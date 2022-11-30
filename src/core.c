@@ -14241,8 +14241,10 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     if (env->me_dsync_fd != INVALID_HANDLE_VALUE) {
       if ((flags & MDBX_NOMETASYNC) == 0)
         env->me_fd4meta = env->me_dsync_fd;
+#if defined(_WIN32) || defined(_WIN64)
       if (env->me_fd4data == env->me_lazy_fd)
         env->me_fd4data = env->me_dsync_fd;
+#endif /* Windows must die */
       osal_fseek(env->me_dsync_fd, safe_parking_lot_offset);
     }
   }
