@@ -11244,9 +11244,26 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   const meta_ptr_t head = meta_recent(env, &txn->tw.troika);
+  /* sync prev meta */
   if (head.is_steady && atomic_load32(&env->me_lck->mti_meta_sync_txnid,
                                       mo_Relaxed) != (uint32_t)head.txnid) {
-    /* sync prev meta */
+    /* FIXME: Тут есть унаследованный от LMDB недочет.
+     *
+     * Проблем нет, если все процессы работающие с БД не используют WRITEMAP.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате fdatasync() при записи данных этой транзакции.
+     *
+     * Проблем нет, если все процессы работающие с БД используют WRITEMAP
+     * без MDBX_AVOID_MSYNC.
+     * Тогда мета-страница (обновленная, но не сброшенная на диск) будет
+     * сохранена в результате msync() при записи данных этой транзакции.
+     *
+     * Если же происходит комбинирование WRITEMAP и записи через файловый
+     * дескриптор, то требуется явно обновлять мета-страницу. Однако,
+     * так полностью теряется выгода от NOMETASYNC.
+     *
+     * Дефект же в том, что сейчас нет возможности отличить последний случай от
+     * двух предыдущих и поэтому приходится всегда задействовать meta_sync(). */
     rc = meta_sync(env, head);
     if (unlikely(rc != MDBX_SUCCESS)) {
       ERROR("txn-%s: error %d", "presync-meta", rc);
