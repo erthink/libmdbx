@@ -7646,6 +7646,15 @@ retry:;
       goto bailout;
   }
 
+  if (!inside_txn && locked && (env->me_flags & MDBX_WRITEMAP) &&
+      unlikely(head.ptr_c->mm_geo.next >
+               bytes2pgno(env, env->me_dxb_mmap.current))) {
+    rc = map_resize_implicit(env, head.ptr_c->mm_geo.next,
+                             head.ptr_c->mm_geo.now, head.ptr_c->mm_geo.upper);
+    if (unlikely(rc != MDBX_SUCCESS))
+      goto bailout;
+  }
+
   const size_t autosync_threshold =
       atomic_load32(&env->me_lck->mti_autosync_threshold, mo_Relaxed);
   const uint64_t autosync_period =
