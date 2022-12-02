@@ -1560,7 +1560,7 @@ MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,
    * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
   while (1) {
     switch (mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_SIZE)) {
-    case MDBX_SYNC_NONE:
+    case MDBX_SYNC_KICK:
       return MDBX_SUCCESS /* nothing to do */;
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
     case MDBX_SYNC_DATA:
@@ -1714,7 +1714,7 @@ MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
   // so just leave such optimization to the libc discretion.
   //
   // assert(linux_kernel_version > 0x02061300);
-  // if (mode_bits == MDBX_SYNC_NONE)
+  // if (mode_bits == MDBX_SYNC_KICK)
   //   return MDBX_SUCCESS;
 #endif /* Linux */
   if (msync(ptr, length, (mode_bits & MDBX_SYNC_DATA) ? MS_SYNC : MS_ASYNC))

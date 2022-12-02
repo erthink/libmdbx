@@ -1681,7 +1681,7 @@ __cold static int uniq_check(const osal_mmap_t *pending, MDBX_env **found) {
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     if (err == MDBX_RESULT_TRUE) {
       (void)osal_msync(&scan->me_lck_mmap, 0, sizeof(MDBX_lockinfo),
-                       MDBX_SYNC_NONE);
+                       MDBX_SYNC_KICK);
       err = uniq_poke(pending, &scan->me_lck_mmap, &salt);
     }
     if (err == MDBX_RESULT_TRUE) {
@@ -4813,7 +4813,7 @@ __cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
     const MDBX_env *env = txn->mt_env;
     rc =
         osal_msync(&txn->mt_env->me_dxb_mmap, 0,
-                   pgno_align2os_bytes(env, txn->mt_next_pgno), MDBX_SYNC_NONE);
+                   pgno_align2os_bytes(env, txn->mt_next_pgno), MDBX_SYNC_KICK);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
     dpl_clear(txn->tw.dirtylist);
@@ -5920,7 +5920,7 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
     env->me_lck->mti_pgop_stat.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
     rc = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, used_pgno),
-                    MDBX_SYNC_NONE);
+                    MDBX_SYNC_KICK);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
   }
@@ -11978,7 +11978,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
   rc = MDBX_RESULT_FALSE /* carry steady */;
   if (atomic_load64(&env->me_lck->mti_unsynced_pages, mo_Relaxed)) {
     eASSERT(env, ((flags ^ env->me_flags) & MDBX_WRITEMAP) == 0);
-    enum osal_syncmode_bits mode_bits = MDBX_SYNC_NONE;
+    enum osal_syncmode_bits mode_bits = MDBX_SYNC_KICK;
     unsigned sync_op = 0;
     if ((flags & MDBX_SAFE_NOSYNC) == 0) {
       sync_op = 1;
@@ -12129,7 +12129,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
 #endif /* MDBX_ENABLE_PGOP_STAT */
       rc = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
                       (flags & MDBX_NOMETASYNC)
-                          ? MDBX_SYNC_NONE
+                          ? MDBX_SYNC_KICK
                           : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
     } else {
 #if MDBX_ENABLE_PGOP_STAT
@@ -13533,7 +13533,7 @@ __cold static int setup_lck(MDBX_env *env, pathchar_t *lck_pathname,
 #if MDBX_ENABLE_PGOP_STAT
     lck->mti_pgop_stat.wops.weak = 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-    err = osal_msync(&env->me_lck_mmap, 0, (size_t)size, MDBX_SYNC_NONE);
+    err = osal_msync(&env->me_lck_mmap, 0, (size_t)size, MDBX_SYNC_KICK);
     if (unlikely(err != MDBX_SUCCESS)) {
       ERROR("initial-%s for lck-file failed", "msync");
       goto bailout;
