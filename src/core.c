@@ -5155,7 +5155,7 @@ static int mdbx_iov_write(MDBX_txn *const txn, struct mdbx_iov_ctx *ctx) {
     MDBX_page *wp = (MDBX_page *)ctx->iov[i].iov_base;
     const MDBX_page *rp = pgno2page(txn->mt_env, wp->mp_pgno);
     /* check with timeout as the workaround
-     * for todo4recovery://erased_by_github/libmdbx/issues/269 */
+     * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
     while (likely(rc == MDBX_SUCCESS) &&
            unlikely(memcmp(wp, rp, ctx->iov[i].iov_len) != 0)) {
       if (!timestamp) {
@@ -6506,7 +6506,7 @@ __hot static struct page_result mdbx_page_alloc(MDBX_cursor *mc,
                catch-up with itself by growing while trying to save it. */
             (mc->mc_flags & C_RECLAIMING) ||
             /* avoid (recursive) search inside empty tree and while tree is
-               updating, todo4recovery://erased_by_github/libmdbx/issues/31 */
+               updating, https://libmdbx.dqdkfa.ru/dead-github/issues/31 */
             txn->mt_dbs[FREE_DBI].md_entries == 0 ||
             /* If our dirty list is already full, we can't touch GC */
             (txn->tw.dirtyroom < txn->mt_dbs[FREE_DBI].md_depth &&
@@ -6720,7 +6720,7 @@ no_loose:
         /* Stop reclaiming to avoid overflow the page list.
          * This is a rare case while search for a continuously multi-page region
          * in a large database.
-         * todo4recovery://erased_by_github/libmdbx/issues/123 */
+         * https://libmdbx.dqdkfa.ru/dead-github/issues/123 */
         mdbx_notice("stop reclaiming to avoid PNL overflow: %u (current) + %u "
                     "(chunk) -> %u",
                     MDBX_PNL_SIZE(txn->tw.reclaimed_pglist), gc_len,
@@ -7700,7 +7700,7 @@ __cold int mdbx_thread_unregister(const MDBX_env *env) {
   return MDBX_SUCCESS;
 }
 
-/* check against todo4recovery://erased_by_github/libmdbx/issues/269 */
+/* check against https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
 static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
                             bool report) {
   const txnid_t head_txnid = meta_txnid(env, meta);
@@ -7776,7 +7776,7 @@ static bool meta_checktxnid(const MDBX_env *env, const MDBX_meta *meta,
 }
 
 /* check with timeout as the workaround
- * for todo4recovery://erased_by_github/libmdbx/issues/269 */
+ * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
 static int meta_waittxnid(const MDBX_env *env, const MDBX_meta *meta,
                           uint64_t *timestamp) {
   if (likely(meta_checktxnid(env, meta, !*timestamp)))
@@ -7921,8 +7921,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
                    snap == meta_txnid(env, meta) &&
                    snap >= atomic_load64(&env->me_lck->mti_oldest_reader,
                                          mo_AcquireRelease))) {
-          /* workaround for todo4recovery://erased_by_github/libmdbx/issues/269
-           */
+          /* workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
           rc = meta_waittxnid(env, (const MDBX_meta *)meta, &timestamp);
           mdbx_jitter4testing(false);
           if (likely(rc == MDBX_SUCCESS))
@@ -8010,8 +8009,7 @@ static int mdbx_txn_renew0(MDBX_txn *txn, const unsigned flags) {
     mdbx_jitter4testing(false);
     const MDBX_meta *meta = constmeta_prefer_last(env);
     uint64_t timestamp = 0;
-    while (
-        "workaround for todo4recovery://erased_by_github/libmdbx/issues/269") {
+    while ("workaround for https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
       rc = meta_waittxnid(env, (const MDBX_meta *)meta, &timestamp);
       if (likely(rc == MDBX_SUCCESS))
         break;
@@ -11899,7 +11897,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
 
       uint64_t timestamp = 0;
       while ("workaround for "
-             "todo4recovery://erased_by_github/libmdbx/issues/269") {
+             "https://libmdbx.dqdkfa.ru/dead-github/issues/269") {
         meta = *head;
         rc = meta_waittxnid(env, &meta, &timestamp);
         if (likely(rc == MDBX_SUCCESS))
@@ -13170,7 +13168,7 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
   } else {
 #if MDBX_MMAP_INCOHERENT_FILE_WRITE
     /* Temporary `workaround` for OpenBSD kernel's flaw.
-     * See todo4recovery://erased_by_github/libmdbx/issues/67 */
+     * See https://libmdbx.dqdkfa.ru/dead-github/issues/67 */
     if ((flags & MDBX_WRITEMAP) == 0) {
       if (flags & MDBX_ACCEDE)
         flags |= MDBX_WRITEMAP;
@@ -20169,7 +20167,7 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
   const size_t size_before_pgop_stat = offsetof(MDBX_envinfo, mi_pgop_stat);
 
   /* is the environment open?
-   * (todo4recovery://erased_by_github/libmdbx/issues/171) */
+   * (https://libmdbx.dqdkfa.ru/dead-github/issues/171) */
   if (unlikely(!env->me_map)) {
     /* environment not yet opened */
 #if 1
