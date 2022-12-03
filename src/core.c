@@ -6753,13 +6753,62 @@ __hot static pgno_t pnl_get_sequence(MDBX_PNL pnl, const size_t num,
   return 0;
 }
 
-static pgr_t page_alloc_slowpath(const MDBX_cursor *mc, const size_t num,
+static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
+                                          MDBX_txn *const txn,
+                                          const MDBX_cursor *const mc,
+                                          const pgno_t pgno, const size_t num) {
+#if MDBX_ENABLE_PROFGC
+  size_t majflt_before;
+  const uint64_t cputime_before = osal_cputime(&majflt_before);
+  profgc_stat_t *const prof = (mc->mc_dbi == FREE_DBI)
+                                  ? &env->me_lck->mti_pgop_stat.gc_prof.self
+                                  : &env->me_lck->mti_pgop_stat.gc_prof.work;
+#else
+  (void)mc;
+#endif /* MDBX_ENABLE_PROFGC */
+  ENSURE(env, pgno >= NUM_METAS);
+
+  pgr_t ret;
+  if (env->me_flags & MDBX_WRITEMAP) {
+    ret.page = pgno2page(env, pgno);
+    MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
+    VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
+  } else {
+    ret.page = page_malloc(txn, num);
+    if (unlikely(!ret.page)) {
+      ret.err = MDBX_ENOMEM;
+      goto bailout;
+    }
+  }
+
+  if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
+    memset(ret.page, -1, pgno2bytes(env, num));
+  VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
+
+  ret.page->mp_pgno = pgno;
+  ret.page->mp_leaf2_ksize = 0;
+  ret.page->mp_flags = 0;
+  if ((ASSERT_ENABLED() || AUDIT_ENABLED()) && num > 1) {
+    ret.page->mp_pages = (pgno_t)num;
+    ret.page->mp_flags = P_OVERFLOW;
+  }
+
+  ret.err = page_dirty(txn, ret.page, (pgno_t)num);
+bailout:
+  tASSERT(txn, pnl_check_allocated(txn->tw.relist,
+                                   txn->mt_next_pgno - MDBX_ENABLE_REFUND));
+#if MDBX_ENABLE_PROFGC
+  size_t majflt_after;
+  prof->xtime_cpu += osal_cputime(&majflt_after) - cputime_before;
+  prof->majflt += majflt_after - majflt_before;
+#endif /* MDBX_ENABLE_PROFGC */
+  return ret;
+}
+
+static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
                                  uint8_t flags) {
 #if MDBX_ENABLE_PROFGC
   const uint64_t monotime_before = osal_monotime();
-  size_t majflt_before;
-  const uint64_t cputime_before = osal_cputime(&majflt_before);
-  uint64_t monotime_shot = 0;
 #endif /* MDBX_ENABLE_PROFGC */
 
   pgr_t ret;
@@ -7162,9 +7211,6 @@ no_gc:
     aligned = txn->mt_geo.upper;
   eASSERT(env, aligned >= newnext);
 
-#if MDBX_ENABLE_PROFGC
-  monotime_shot = osal_monotime();
-#endif /* MDBX_ENABLE_PROFGC */
   VERBOSE("try growth datafile to %zu pages (+%zu)", aligned,
           aligned - txn->mt_end_pgno);
   ret.err = map_resize_implicit(env, txn->mt_next_pgno, (pgno_t)aligned,
@@ -7193,36 +7239,7 @@ done:
       eASSERT(env, pgno >= NUM_METAS && pgno + num <= txn->mt_next_pgno);
     }
 
-    ENSURE(env, pgno >= NUM_METAS);
-#if MDBX_ENABLE_PROFGC
-    if (!monotime_shot)
-      monotime_shot = osal_monotime();
-#endif /* MDBX_ENABLE_PROFGC */
-    if (env->me_flags & MDBX_WRITEMAP) {
-      ret.page = pgno2page(env, pgno);
-      MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
-      VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
-    } else {
-      ret.page = page_malloc(txn, num);
-      if (unlikely(!ret.page)) {
-        ret.err = MDBX_ENOMEM;
-        goto fail;
-      }
-    }
-
-    if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
-      memset(ret.page, -1, pgno2bytes(env, num));
-    VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
-
-    ret.page->mp_pgno = pgno;
-    ret.page->mp_leaf2_ksize = 0;
-    ret.page->mp_flags = 0;
-    if ((ASSERT_ENABLED() || AUDIT_ENABLED()) && num > 1) {
-      ret.page->mp_pages = (pgno_t)num;
-      ret.page->mp_flags = P_OVERFLOW;
-    }
-
-    ret.err = page_dirty(txn, ret.page, (pgno_t)num);
+    ret = page_alloc_finalize(env, txn, mc, pgno, num);
     if (unlikely(ret.err != MDBX_SUCCESS)) {
     fail:
       eASSERT(env, ret.err != MDBX_SUCCESS);
@@ -7260,23 +7277,13 @@ done:
     ret.page = NULL;
   }
 
-  eASSERT(env, pnl_check_allocated(txn->tw.relist,
-                                   txn->mt_next_pgno - MDBX_ENABLE_REFUND));
 #if MDBX_ENABLE_PROFGC
-  size_t majflt_after;
-  prof->rtime_cpu += osal_cputime(&majflt_after) - cputime_before;
-  prof->majflt += majflt_after - majflt_before;
-  const uint64_t monotime_now = osal_monotime();
-  if (monotime_shot) {
-    prof->xtime_monotonic += monotime_shot - monotime_before;
-    prof->rtime_monotonic += monotime_now - monotime_shot;
-  } else
-    prof->rtime_monotonic += monotime_now - monotime_before;
+  prof->rtime_monotonic += osal_monotime() - monotime_before;
 #endif /* MDBX_ENABLE_PROFGC */
   return ret;
 }
 
-__hot static pgr_t page_alloc(const MDBX_cursor *mc) {
+__hot static pgr_t page_alloc(const MDBX_cursor *const mc) {
   MDBX_txn *const txn = mc->mc_txn;
 
   /* If there are any loose pages, just use them */
@@ -7303,48 +7310,9 @@ __hot static pgr_t page_alloc(const MDBX_cursor *mc) {
     return ret;
   }
 
-  if (likely(MDBX_PNL_GETSIZE(txn->tw.relist) > 0)) {
-    const pgno_t pgno = pnl_get_single(txn->tw.relist);
-    MDBX_env *const env = txn->mt_env;
-
-#if MDBX_ENABLE_PROFGC
-    const uint64_t monotime_before = osal_monotime();
-    size_t majflt_before;
-    const uint64_t cputime_before = osal_cputime(&majflt_before);
-    profgc_stat_t *const prof = (mc->mc_dbi == FREE_DBI)
-                                    ? &env->me_lck->mti_pgop_stat.gc_prof.self
-                                    : &env->me_lck->mti_pgop_stat.gc_prof.work;
-#endif /* MDBX_ENABLE_PROFGC */
-    pgr_t ret;
-    if (env->me_flags & MDBX_WRITEMAP) {
-      ret.page = pgno2page(env, pgno);
-      MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, env->me_psize);
-    } else {
-      ret.page = page_malloc(txn, 1);
-      if (unlikely(!ret.page)) {
-        ret.err = MDBX_ENOMEM;
-        goto bailout;
-      }
-    }
-
-    VALGRIND_MAKE_MEM_UNDEFINED(ret.page, env->me_psize);
-    ret.page->mp_pgno = pgno;
-    ret.page->mp_leaf2_ksize = 0;
-    ret.page->mp_flags = 0;
-    tASSERT(txn, ret.page->mp_pgno >= NUM_METAS);
-
-    ret.err = page_dirty(txn, ret.page, 1);
-  bailout:
-    tASSERT(txn, pnl_check_allocated(txn->tw.relist,
-                                     txn->mt_next_pgno - MDBX_ENABLE_REFUND));
-#if MDBX_ENABLE_PROFGC
-    size_t majflt_after;
-    prof->rtime_cpu += osal_cputime(&majflt_after) - cputime_before;
-    prof->majflt += majflt_after - majflt_before;
-    prof->xtime_monotonic += osal_monotime() - monotime_before;
-#endif /* MDBX_ENABLE_PROFGC */
-    return ret;
-  }
+  if (likely(MDBX_PNL_GETSIZE(txn->tw.relist) > 0))
+    return page_alloc_finalize(txn->mt_env, txn, mc,
+                               pnl_get_single(txn->tw.relist), 1);
 
   return page_alloc_slowpath(mc, 1, MDBX_ALLOC_DEFAULT);
 }
@@ -10969,10 +10937,8 @@ static void take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency) {
     latency->gc_prof.work_counter = ptr->gc_prof.work.spe_counter;
     latency->gc_prof.work_rtime_monotonic =
         osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_monotonic);
-    latency->gc_prof.work_xtime_monotonic =
-        osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_monotonic);
-    latency->gc_prof.work_rtime_cpu =
-        osal_monotime_to_16dot16(ptr->gc_prof.work.rtime_cpu);
+    latency->gc_prof.work_xtime_cpu =
+        osal_monotime_to_16dot16(ptr->gc_prof.work.xtime_cpu);
     latency->gc_prof.work_rsteps = ptr->gc_prof.work.rsteps;
     latency->gc_prof.work_xpages = ptr->gc_prof.work.xpages;
     latency->gc_prof.work_majflt = ptr->gc_prof.work.majflt;
@@ -10980,10 +10946,8 @@ static void take_gcprof(MDBX_txn *txn, MDBX_commit_latency *latency) {
     latency->gc_prof.self_counter = ptr->gc_prof.self.spe_counter;
     latency->gc_prof.self_rtime_monotonic =
         osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_monotonic);
-    latency->gc_prof.self_xtime_monotonic =
-        osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_monotonic);
-    latency->gc_prof.self_rtime_cpu =
-        osal_monotime_to_16dot16(ptr->gc_prof.self.rtime_cpu);
+    latency->gc_prof.self_xtime_cpu =
+        osal_monotime_to_16dot16(ptr->gc_prof.self.xtime_cpu);
     latency->gc_prof.self_rsteps = ptr->gc_prof.self.rsteps;
     latency->gc_prof.self_xpages = ptr->gc_prof.self.xpages;
     latency->gc_prof.self_majflt = ptr->gc_prof.self.majflt;
