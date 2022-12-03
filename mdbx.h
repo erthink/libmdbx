@@ -2220,6 +2220,34 @@ enum MDBX_option_t {
    * to 50% (half empty) which corresponds to the range from 8192 and to 32768
    * in units respectively. */
   MDBX_opt_merge_threshold_16dot16_percent,
+
+  /** \brief Controls the choosing between use write-through disk writes and
+   * usual ones with followed flush by the `fdatasync()` syscall.
+   * \details Depending on the operating system, storage subsystem
+   * characteristics and the use case, higher performance can be achieved by
+   * either using write-through or a serie of usual/lazy writes followed by
+   * the flush-to-disk.
+   *
+   * Basically for N chunks the latency/cost of write-through is:
+   *  latency = N * (emit + round-trip-to-storage + storage-execution);
+   * And for serie of lazy writes with flush is:
+   *  latency = N * (emit + storage-execution) + flush + round-trip-to-storage.
+   *
+   * So, for large N and/or noteable round-trip-to-storage the write+flush
+   * approach is win. But for small N and/or near-zero NVMe-like latency
+   * the write-through is better.
+   *
+   * To solve this issue libmdbx provide `MDBX_opt_writethrough_threshold`:
+   *  - when N described above less or equal specified threshold,
+   *    a write-through approach will be used;
+   *  - otherwise, when N great than specified threshold,
+   *    a write-and-flush approach will be used.
+   *
+   * \note MDBX_opt_writethrough_threshold affects only \ref MDBX_SYNC_DURABLE
+   * mode without \ref MDBX_WRITEMAP, and not supported on Windows.
+   * On Windows a write-through is used always but \ref MDBX_NOMETASYNC could
+   * be used for switching to write-and-flush. */
+  MDBX_opt_writethrough_threshold,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

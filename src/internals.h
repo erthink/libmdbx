@@ -761,6 +761,10 @@ typedef struct MDBX_lockinfo {
 
   /* Low 32-bit of txnid with which meta-pages was synced,
    * i.e. for sync-polling in the MDBX_NOMETASYNC mode. */
+#define MDBX_NOMETASYNC_LAZY_UNK (UINT32_MAX / 3)
+#define MDBX_NOMETASYNC_LAZY_FD (MDBX_NOMETASYNC_LAZY_UNK + UINT32_MAX / 8)
+#define MDBX_NOMETASYNC_LAZY_WRITEMAP                                          \
+  (MDBX_NOMETASYNC_LAZY_UNK - UINT32_MAX / 8)
   MDBX_atomic_uint32_t mti_meta_sync_txnid;
 
   /* Period for timed auto-sync feature, i.e. at the every steady checkpoint
@@ -1213,10 +1217,10 @@ struct MDBX_env {
   osal_mmap_t me_dxb_mmap; /* The main data file */
 #define me_map me_dxb_mmap.base
 #define me_lazy_fd me_dxb_mmap.fd
-#define me_fd4data me_ioring.fd
   mdbx_filehandle_t me_dsync_fd, me_fd4meta;
 #if defined(_WIN32) || defined(_WIN64)
-  HANDLE me_overlapped_fd, me_data_lock_event;
+#define me_overlapped_fd me_ioring.overlapped_fd
+  HANDLE me_data_lock_event;
 #endif                     /* Windows */
   osal_mmap_t me_lck_mmap; /* The lock file */
 #define me_lfd me_lck_mmap.fd
@@ -1259,6 +1263,9 @@ struct MDBX_env {
     uint8_t spill_min_denominator;
     uint8_t spill_parent4child_denominator;
     unsigned merge_threshold_16dot16_percent;
+#if !(defined(_WIN32) || defined(_WIN64))
+    unsigned writethrough_threshold;
+#endif /* Windows */
     union {
       unsigned all;
       /* tracks options with non-auto values but tuned by user */

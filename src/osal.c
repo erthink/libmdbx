@@ -606,16 +606,18 @@ static size_t osal_iov_max;
 #undef OSAL_IOV_MAX
 #endif /* OSAL_IOV_MAX */
 
-MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *ior,
+MDBX_INTERNAL_FUNC int osal_ioring_create(osal_ioring_t *ior
 #if defined(_WIN32) || defined(_WIN64)
-                                          uint8_t flags,
+                                          ,
+                                          bool enable_direct,
+                                          mdbx_filehandle_t overlapped_fd
 #endif /* Windows */
-                                          mdbx_filehandle_t fd) {
+) {
   memset(ior, 0, sizeof(osal_ioring_t));
-  ior->fd = fd;
 
 #if defined(_WIN32) || defined(_WIN64)
-  ior->flags = flags;
+  ior->overlapped_fd = overlapped_fd;
+  ior->direct = enable_direct && overlapped_fd;
   const unsigned pagesize = (unsigned)osal_syspagesize();
   ior->pagesize = pagesize;
   ior->pagesize_ln2 = (uint8_t)log2n_powerof2(pagesize);
@@ -664,7 +666,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
 #if defined(_WIN32) || defined(_WIN64)
   const unsigned segments = (unsigned)(bytes >> ior->pagesize_ln2);
   const bool use_gather =
-      (ior->flags & IOR_DIRECT) && ior->slots_left >= segments;
+      ior->direct && ior->overlapped_fd && ior->slots_left >= segments;
 #endif /* Windows */
 
   ior_item_t *item = ior->pool;
@@ -678,6 +680,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
             (uintptr_t)(uint64_t)item->sgv[0].Buffer) &
            ior_alignment_mask) == 0 &&
           ior->last_sgvcnt + segments < OSAL_IOV_MAX) {
+        assert(ior->overlapped_fd);
         assert((item->single.iov_len & ior_WriteFile_flag) == 0);
         assert(item->sgv[ior->last_sgvcnt].Buffer == 0);
         ior->last_bytes += bytes;
@@ -745,6 +748,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_add(osal_ioring_t *ior, const size_t offset,
     assert((item->single.iov_len & ior_WriteFile_flag) != 0);
   } else {
     /* WriteFileGather() */
+    assert(ior->overlapped_fd);
     item->sgv[0].Buffer = PtrToPtr64(data);
     for (size_t i = 1; i < segments; ++i) {
       data = ptr_disp(data, ior->pagesize);
@@ -814,7 +818,7 @@ MDBX_INTERNAL_FUNC void osal_ioring_walk(
 }
 
 MDBX_INTERNAL_FUNC osal_ioring_write_result_t
-osal_ioring_write(osal_ioring_t *ior) {
+osal_ioring_write(osal_ioring_t *ior, mdbx_filehandle_t fd) {
   osal_ioring_write_result_t r = {MDBX_SUCCESS, 0};
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -828,6 +832,7 @@ osal_ioring_write(osal_ioring_t *ior) {
     size_t i = 1, bytes = item->single.iov_len - ior_WriteFile_flag;
     r.wops += 1;
     if (bytes & ior_WriteFile_flag) {
+      assert(ior->overlapped_fd && fd == ior->overlapped_fd);
       bytes = ior->pagesize;
       while (item->sgv[i].Buffer) {
         bytes += ior->pagesize;
@@ -840,11 +845,10 @@ osal_ioring_write(osal_ioring_t *ior) {
         r.err = GetLastError();
       bailout_rc:
         assert(r.err != MDBX_SUCCESS);
-        CancelIo(ior->fd);
+        CancelIo(fd);
         return r;
       }
-      if (WriteFileGather(ior->fd, item->sgv, (DWORD)bytes, nullptr,
-                          &item->ov)) {
+      if (WriteFileGather(fd, item->sgv, (DWORD)bytes, nullptr, &item->ov)) {
         assert(item->ov.Internal == 0 &&
                WaitForSingleObject(item->ov.hEvent, 0) == WAIT_OBJECT_0);
         ior_put_event(ior, item->ov.hEvent);
@@ -854,7 +858,7 @@ osal_ioring_write(osal_ioring_t *ior) {
         if (unlikely(r.err != ERROR_IO_PENDING)) {
           ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
                 ", err %d",
-                "WriteFileGather", ior->fd, __Wpedantic_format_voidptr(item),
+                "WriteFileGather", fd, __Wpedantic_format_voidptr(item),
                 item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
                 bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
                 r.err);
@@ -863,11 +867,11 @@ osal_ioring_write(osal_ioring_t *ior) {
         assert(wait_for > ior->event_pool + ior->event_stack);
         *--wait_for = item->ov.hEvent;
       }
-    } else if (ior->flags & IOR_OVERLAPPED) {
+    } else if (fd == ior->overlapped_fd) {
       assert(bytes < MAX_WRITE);
     retry:
       item->ov.hEvent = ior;
-      if (WriteFileEx(ior->fd, item->single.iov_base, (DWORD)bytes, &item->ov,
+      if (WriteFileEx(fd, item->single.iov_base, (DWORD)bytes, &item->ov,
                       ior_wocr)) {
         async_started += 1;
       } else {
@@ -876,7 +880,7 @@ osal_ioring_write(osal_ioring_t *ior) {
         default:
           ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
                 ", err %d",
-                "WriteFileEx", ior->fd, __Wpedantic_format_voidptr(item),
+                "WriteFileEx", fd, __Wpedantic_format_voidptr(item),
                 item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
                 bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
                 r.err);
@@ -887,7 +891,7 @@ osal_ioring_write(osal_ioring_t *ior) {
           WARNING(
               "%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
               ", err %d",
-              "WriteFileEx", ior->fd, __Wpedantic_format_voidptr(item),
+              "WriteFileEx", fd, __Wpedantic_format_voidptr(item),
               item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
               bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
               r.err);
@@ -905,12 +909,12 @@ osal_ioring_write(osal_ioring_t *ior) {
     } else {
       assert(bytes < MAX_WRITE);
       DWORD written = 0;
-      if (!WriteFile(ior->fd, item->single.iov_base, (DWORD)bytes, &written,
+      if (!WriteFile(fd, item->single.iov_base, (DWORD)bytes, &written,
                      &item->ov)) {
         r.err = (int)GetLastError();
         ERROR("%s: fd %p, item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
               ", err %d",
-              "WriteFile", ior->fd, __Wpedantic_format_voidptr(item),
+              "WriteFile", fd, __Wpedantic_format_voidptr(item),
               item - ior->pool, ((MDBX_page *)item->single.iov_base)->mp_pgno,
               bytes, item->ov.Offset + ((uint64_t)item->ov.OffsetHigh << 32),
               r.err);
@@ -974,8 +978,7 @@ osal_ioring_write(osal_ioring_t *ior) {
         }
         if (!HasOverlappedIoCompleted(&item->ov)) {
           DWORD written = 0;
-          if (unlikely(
-                  !GetOverlappedResult(ior->fd, &item->ov, &written, true))) {
+          if (unlikely(!GetOverlappedResult(fd, &item->ov, &written, true))) {
             ERROR("%s: item %p (%zu), pgno %u, bytes %zu, offset %" PRId64
                   ", err %d",
                   "GetOverlappedResult", __Wpedantic_format_voidptr(item),
@@ -1025,16 +1028,16 @@ osal_ioring_write(osal_ioring_t *ior) {
 #if MDBX_HAVE_PWRITEV
     assert(item->sgvcnt > 0);
     if (item->sgvcnt == 1)
-      r.err = osal_pwrite(ior->fd, item->sgv[0].iov_base, item->sgv[0].iov_len,
+      r.err = osal_pwrite(fd, item->sgv[0].iov_base, item->sgv[0].iov_len,
                           item->offset);
     else
-      r.err = osal_pwritev(ior->fd, item->sgv, item->sgvcnt, item->offset);
+      r.err = osal_pwritev(fd, item->sgv, item->sgvcnt, item->offset);
 
     // TODO: io_uring_prep_write(sqe, fd, ...);
 
     item = ior_next(item, item->sgvcnt);
 #else
-    r.err = osal_pwrite(ior->fd, item->single.iov_base, item->single.iov_len,
+    r.err = osal_pwrite(fd, item->single.iov_base, item->single.iov_len,
                         item->offset);
     item = ior_next(item, 1);
 #endif
@@ -1055,8 +1058,10 @@ MDBX_INTERNAL_FUNC void osal_ioring_reset(osal_ioring_t *ior) {
 #if defined(_WIN32) || defined(_WIN64)
   if (ior->last) {
     for (ior_item_t *item = ior->pool; item <= ior->last;) {
-      if (!HasOverlappedIoCompleted(&item->ov))
-        CancelIoEx(ior->fd, &item->ov);
+      if (!HasOverlappedIoCompleted(&item->ov)) {
+        assert(ior->overlapped_fd);
+        CancelIoEx(ior->overlapped_fd, &item->ov);
+      }
       if (item->ov.hEvent && item->ov.hEvent != ior)
         ior_put_event(ior, item->ov.hEvent);
       size_t i = 1;
@@ -1090,13 +1095,12 @@ MDBX_INTERNAL_FUNC int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
 #if defined(_WIN32) || defined(_WIN64)
   if (ior->state & IOR_STATE_LOCKED)
     return MDBX_SUCCESS;
-  const bool useSetFileIoOverlappedRange = (ior->flags & IOR_OVERLAPPED) &&
-                                           mdbx_SetFileIoOverlappedRange &&
-                                           items > 7;
+  const bool useSetFileIoOverlappedRange =
+      ior->overlapped_fd && mdbx_SetFileIoOverlappedRange && items > 42;
   const size_t ceiling =
       useSetFileIoOverlappedRange
           ? ((items < 65536 / 2 / sizeof(ior_item_t)) ? 65536 : 65536 * 4)
-          : 4096;
+          : 1024;
   const size_t bytes = ceil_powerof2(sizeof(ior_item_t) * items, ceiling);
   items = bytes / sizeof(ior_item_t);
 #endif /* Windows */
@@ -1134,7 +1138,7 @@ MDBX_INTERNAL_FUNC int osal_ioring_resize(osal_ioring_t *ior, size_t items) {
     ior->boundary = ptr_disp(ior->pool, ior->allocated);
 #if defined(_WIN32) || defined(_WIN64)
     if (useSetFileIoOverlappedRange) {
-      if (mdbx_SetFileIoOverlappedRange(ior->fd, ptr, (ULONG)bytes))
+      if (mdbx_SetFileIoOverlappedRange(ior->overlapped_fd, ptr, (ULONG)bytes))
         ior->state += IOR_STATE_LOCKED;
       else
         return GetLastError();

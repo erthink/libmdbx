@@ -152,8 +152,10 @@ static __inline int flock(HANDLE fd, unsigned flags, size_t offset,
 
 static __inline int flock_data(const MDBX_env *env, unsigned flags,
                                size_t offset, size_t bytes) {
-  return flock_with_event(env->me_fd4data, env->me_data_lock_event, flags,
-                          offset, bytes);
+  const HANDLE fd4data =
+      env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
+  return flock_with_event(fd4data, env->me_data_lock_event, flags, offset,
+                          bytes);
 }
 
 static int funlock(mdbx_filehandle_t fd, size_t offset, size_t bytes) {
@@ -195,17 +197,19 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
   if (env->me_flags & MDBX_EXCLUSIVE)
     return MDBX_SUCCESS;
 
-  int rc = flock_with_event(env->me_fd4data, env->me_data_lock_event,
+  const HANDLE fd4data =
+      env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
+  int rc = flock_with_event(fd4data, env->me_data_lock_event,
                             dontwait ? (LCK_EXCLUSIVE | LCK_DONTWAIT)
                                      : (LCK_EXCLUSIVE | LCK_WAITFOR),
                             DXB_BODY);
   if (rc == ERROR_LOCK_VIOLATION && dontwait) {
     SleepEx(0, true);
-    rc = flock_with_event(env->me_fd4data, env->me_data_lock_event,
+    rc = flock_with_event(fd4data, env->me_data_lock_event,
                           LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
     if (rc == ERROR_LOCK_VIOLATION) {
       SleepEx(0, true);
-      rc = flock_with_event(env->me_fd4data, env->me_data_lock_event,
+      rc = flock_with_event(fd4data, env->me_data_lock_event,
                             LCK_EXCLUSIVE | LCK_DONTWAIT, DXB_BODY);
     }
   }
@@ -218,7 +222,9 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
 
 void mdbx_txn_unlock(MDBX_env *env) {
   if ((env->me_flags & MDBX_EXCLUSIVE) == 0) {
-    int err = funlock(env->me_fd4data, DXB_BODY);
+    const HANDLE fd4data =
+        env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
+    int err = funlock(fd4data, DXB_BODY);
     if (err != MDBX_SUCCESS)
       mdbx_panic("%s failed: err %u", __func__, err);
   }
@@ -451,18 +457,20 @@ static void lck_unlock(MDBX_env *env) {
     SetLastError(ERROR_SUCCESS);
   }
 
-  if (env->me_fd4data != INVALID_HANDLE_VALUE) {
+  const HANDLE fd4data =
+      env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
+  if (fd4data != INVALID_HANDLE_VALUE) {
     /* explicitly unlock to avoid latency for other processes (windows kernel
      * releases such locks via deferred queues) */
     do
-      err = funlock(env->me_fd4data, DXB_BODY);
+      err = funlock(fd4data, DXB_BODY);
     while (err == MDBX_SUCCESS);
     assert(err == ERROR_NOT_LOCKED ||
            (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
     SetLastError(ERROR_SUCCESS);
 
     do
-      err = funlock(env->me_fd4data, DXB_WHOLE);
+      err = funlock(fd4data, DXB_WHOLE);
     while (err == MDBX_SUCCESS);
     assert(err == ERROR_NOT_LOCKED ||
            (mdbx_RunningUnderWine() && err == ERROR_LOCK_VIOLATION));
@@ -522,7 +530,9 @@ static int internal_seize_lck(HANDLE lfd) {
 }
 
 MDBX_INTERNAL_FUNC int osal_lck_seize(MDBX_env *env) {
-  assert(env->me_fd4data != INVALID_HANDLE_VALUE);
+  const HANDLE fd4data =
+      env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
+  assert(fd4data != INVALID_HANDLE_VALUE);
   if (env->me_flags & MDBX_EXCLUSIVE)
     return MDBX_RESULT_TRUE /* nope since files were must be opened
                                non-shareable */
@@ -554,7 +564,7 @@ MDBX_INTERNAL_FUNC int osal_lck_seize(MDBX_env *env) {
       return err;
     }
     jitter4testing(false);
-    err = funlock(env->me_fd4data, DXB_WHOLE);
+    err = funlock(fd4data, DXB_WHOLE);
     if (err != MDBX_SUCCESS)
       mdbx_panic("%s(%s) failed: err %u", __func__,
                  "unlock-against-without-lck", err);
@@ -564,8 +574,10 @@ MDBX_INTERNAL_FUNC int osal_lck_seize(MDBX_env *env) {
 }
 
 MDBX_INTERNAL_FUNC int osal_lck_downgrade(MDBX_env *env) {
+  const HANDLE fd4data =
+      env->me_overlapped_fd ? env->me_overlapped_fd : env->me_lazy_fd;
   /* Transite from exclusive-write state (E-E) to used (S-?) */
-  assert(env->me_fd4data != INVALID_HANDLE_VALUE);
+  assert(fd4data != INVALID_HANDLE_VALUE);
   assert(env->me_lfd != INVALID_HANDLE_VALUE);
 
   if (env->me_flags & MDBX_EXCLUSIVE)
