@@ -619,6 +619,8 @@ typedef struct pgop_stat {
   MDBX_atomic_uint64_t
       fsync; /* Number of explicit fsync/flush-to-disk operations */
 
+  MDBX_atomic_uint64_t prefault; /* Number of prefault write operations */
+
   /* Статистика для профилирования GC.
    * Логически эти данные может быть стоит вынести в другую структуру,
    * но разница будет сугубо косметическая. */

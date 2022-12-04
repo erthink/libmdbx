@@ -6773,18 +6773,68 @@ static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
     ret.page = pgno2page(env, pgno);
     MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
     VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
+
+#if MDBX_ENABLE_PREFAULT
+    /* Содержимое выделенной страницы не нужно, но если страница отсутствует
+     * в ОЗУ (что весьма вероятно), то любое обращение к ней приведет
+     * к page-fault:
+     *  - прерыванию по отсутствию страницы;
+     *  - переключение контекста в режим ядра с засыпанием процесса;
+     *  - чтение страницы с диска;
+     *  - обновление PTE и пробуждением процесса;
+     *  - переключение контекста по доступности ЦПУ.
+     *
+     * Пытаемся минимизировать накладные расходы записывая страницу, что при
+     * наличии unified page cache приведет к появлению страницы в ОЗУ без чтения
+     * с диска. При этом запись на диск должна быть отложена адекватным ядром,
+     * так как страница отображена в память в режиме чтения-записи и следом в
+     * неё пишет ЦПУ. */
+    void *const pattern = ptr_disp(
+        env->me_pbuf,
+        (env->me_flags & MDBX_PAGEPERTURB) ? env->me_psize : env->me_psize * 2);
+    size_t file_offset = pgno2bytes(env, pgno);
+    /* TODO: добавить проверку через mincore() c кэшированием результатов. */
+    if (likely(num == 1)) {
+      osal_pwrite(env->me_lazy_fd, pattern, env->me_psize, file_offset);
+    } else {
+      struct iovec iov[MDBX_AUXILARY_IOV_MAX];
+      iov[0].iov_len = env->me_psize;
+      iov[0].iov_base = pattern;
+      size_t n = 1, left = num - 1;
+      do {
+        iov[n].iov_len = env->me_psize;
+        iov[n].iov_base = pattern;
+        if (++n == MDBX_AUXILARY_IOV_MAX) {
+          osal_pwritev(env->me_lazy_fd, iov, MDBX_AUXILARY_IOV_MAX,
+                       file_offset);
+          file_offset += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
+#if MDBX_ENABLE_PGOP_STAT
+          env->me_lck->mti_pgop_stat.prefault.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+          n = 0;
+        }
+      } while (--left);
+      osal_pwritev(env->me_lazy_fd, iov, n, file_offset);
+    }
+#if MDBX_ENABLE_PGOP_STAT
+    env->me_lck->mti_pgop_stat.prefault.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+#else
+    if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
+      memset(ret.page, -1, pgno2bytes(env, num));
+#endif /* MDBX_ENABLE_PREFAULT */
+
   } else {
     ret.page = page_malloc(txn, num);
     if (unlikely(!ret.page)) {
       ret.err = MDBX_ENOMEM;
       goto bailout;
     }
+    if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
+      memset(ret.page, -1, pgno2bytes(env, num));
   }
 
-  if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
-    memset(ret.page, -1, pgno2bytes(env, num));
   VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
-
   ret.page->mp_pgno = pgno;
   ret.page->mp_leaf2_ksize = 0;
   ret.page->mp_flags = 0;
@@ -14428,6 +14478,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     rc = alloc_page_buf(env);
     if (rc == MDBX_SUCCESS) {
       memset(env->me_pbuf, -1, env->me_psize * 2);
+      memset(ptr_disp(env->me_pbuf, env->me_psize * 2), 0, env->me_psize);
       MDBX_txn *txn = osal_calloc(1, size);
       if (txn) {
         txn->mt_dbs = ptr_disp(txn, tsize);
@@ -21586,6 +21637,8 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
         atomic_load64(&lck->mti_pgop_stat.unspill, mo_Relaxed);
     arg->mi_pgop_stat.wops =
         atomic_load64(&lck->mti_pgop_stat.wops, mo_Relaxed);
+    arg->mi_pgop_stat.prefault =
+        atomic_load64(&lck->mti_pgop_stat.prefault, mo_Relaxed);
     arg->mi_pgop_stat.msync =
         atomic_load64(&lck->mti_pgop_stat.msync, mo_Relaxed);
     arg->mi_pgop_stat.fsync =
@@ -24706,6 +24759,7 @@ __dll_export
     " MDBX_AVOID_MSYNC=" MDBX_STRINGIFY(MDBX_AVOID_MSYNC)
     " MDBX_ENABLE_REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
     " MDBX_ENABLE_MADVISE=" MDBX_STRINGIFY(MDBX_ENABLE_MADVISE)
+    " MDBX_ENABLE_PREFAULT=" MDBX_STRINGIFY(MDBX_ENABLE_PREFAULT)
     " MDBX_ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
     " MDBX_ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
 #if MDBX_DISABLE_VALIDATION

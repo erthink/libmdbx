@@ -2583,16 +2583,17 @@ struct MDBX_envinfo {
    * first process opened the database after everyone had previously closed it).
    */
   struct {
-    uint64_t newly;   /**< Quantity of a new pages added */
-    uint64_t cow;     /**< Quantity of pages copied for update */
-    uint64_t clone;   /**< Quantity of parent's dirty pages clones
-                           for nested transactions */
-    uint64_t split;   /**< Page splits */
-    uint64_t merge;   /**< Page merges */
-    uint64_t spill;   /**< Quantity of spilled dirty pages */
-    uint64_t unspill; /**< Quantity of unspilled/reloaded pages */
-    uint64_t wops;    /**< Number of explicit write operations (not a pages)
-                           to a disk */
+    uint64_t newly;    /**< Quantity of a new pages added */
+    uint64_t cow;      /**< Quantity of pages copied for update */
+    uint64_t clone;    /**< Quantity of parent's dirty pages clones
+                            for nested transactions */
+    uint64_t split;    /**< Page splits */
+    uint64_t merge;    /**< Page merges */
+    uint64_t spill;    /**< Quantity of spilled dirty pages */
+    uint64_t unspill;  /**< Quantity of unspilled/reloaded pages */
+    uint64_t wops;     /**< Number of explicit write operations (not a pages)
+                            to a disk */
+    uint64_t prefault; /**< Number of prefault write operations (not a pages) */
     uint64_t
         msync; /**< Number of explicit msync-to-disk operations (not a pages) */
     uint64_t

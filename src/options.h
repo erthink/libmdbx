@@ -87,6 +87,18 @@
 #error MDBX_ENABLE_PGOP_STAT must be defined as 0 or 1
 #endif /* MDBX_ENABLE_PGOP_STAT */
 
+/** Controls prevention of page-faults of reclaimed and allocated pages in the
+ *  MDBX_WRITEMAP mode by clearing ones through file handle before touching. */
+#ifndef MDBX_ENABLE_PREFAULT
+#if MDBX_MMAP_INCOHERENT_FILE_WRITE
+#define MDBX_ENABLE_PREFAULT 0
+#else
+#define MDBX_ENABLE_PREFAULT 1
+#endif
+#elif !(MDBX_ENABLE_PREFAULT == 0 || MDBX_ENABLE_PREFAULT == 1)
+#error MDBX_ENABLE_PREFAULT must be defined as 0 or 1
+#endif /* MDBX_ENABLE_PREFAULT */
+
 /** Enables chunking long list of retired pages during huge transactions commit
  * to avoid use sequences of pages. */
 #ifndef MDBX_ENABLE_BIGFOOT
