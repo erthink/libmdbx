@@ -158,11 +158,16 @@ void testcase::db_open() {
   if (config.params.random_writemap && flipcoin())
     mode ^= MDBX_WRITEMAP;
 
-  actual_env_mode = mode;
   int rc = mdbx_env_open(db_guard.get(), config.params.pathname_db.c_str(),
                          mode, 0640);
   if (unlikely(rc != MDBX_SUCCESS))
     failure_perror("mdbx_env_open()", rc);
+
+  unsigned env_flags_proxy;
+  rc = mdbx_env_get_flags(db_guard.get(), &env_flags_proxy);
+  if (unlikely(rc != MDBX_SUCCESS))
+    failure_perror("mdbx_env_get_flags()", rc);
+  actual_env_mode = MDBX_env_flags_t(env_flags_proxy);
 
   rc = mdbx_env_set_syncperiod(db_guard.get(), unsigned(0.042 * 65536));
   if (unlikely(rc != MDBX_SUCCESS) && rc != MDBX_BUSY)
