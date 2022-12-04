@@ -14328,12 +14328,6 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   }
   osal_fseek(env->me_lfd, safe_parking_lot_offset);
 
-  const MDBX_env_flags_t rigorous_flags =
-      MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC;
-  const MDBX_env_flags_t mode_flags = rigorous_flags | MDBX_NOMETASYNC |
-                                      MDBX_LIFORECLAIM |
-                                      MDBX_DEPRECATED_COALESCE | MDBX_NORDAHEAD;
-
   eASSERT(env, env->me_dsync_fd == INVALID_HANDLE_VALUE);
   if (!(flags & (MDBX_RDONLY | MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC))) {
     rc = osal_openfile(MDBX_OPEN_DXB_DSYNC, env, env_pathname.dxb,
@@ -14345,11 +14339,19 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     }
   }
 
+  const MDBX_env_flags_t lazy_flags =
+      MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_NOMETASYNC;
+  const MDBX_env_flags_t mode_flags = lazy_flags | MDBX_LIFORECLAIM |
+                                      MDBX_NORDAHEAD | MDBX_RDONLY |
+                                      MDBX_WRITEMAP;
+
   MDBX_lockinfo *const lck = env->me_lck_mmap.lck;
   if (lck && lck_rc != MDBX_RESULT_TRUE && (env->me_flags & MDBX_RDONLY) == 0) {
-    while (atomic_load32(&lck->mti_envmode, mo_AcquireRelease) == MDBX_RDONLY) {
+    MDBX_env_flags_t snap_flags;
+    while ((snap_flags = atomic_load32(&lck->mti_envmode, mo_AcquireRelease)) ==
+           MDBX_RDONLY) {
       if (atomic_cas32(&lck->mti_envmode, MDBX_RDONLY,
-                       env->me_flags & mode_flags)) {
+                       (snap_flags = (env->me_flags & mode_flags)))) {
         /* The case:
          *  - let's assume that for some reason the DB file is smaller
          *    than it should be according to the geometry,
@@ -14368,15 +14370,44 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
 
     if (env->me_flags & MDBX_ACCEDE) {
       /* Pickup current mode-flags (MDBX_LIFORECLAIM, MDBX_NORDAHEAD, etc). */
-      const unsigned diff =
-          (lck->mti_envmode.weak ^ env->me_flags) & mode_flags;
-      NOTICE("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff, env->me_flags,
-             env->me_flags ^ diff);
+      const MDBX_env_flags_t diff =
+          (snap_flags ^ env->me_flags) &
+          ((snap_flags & lazy_flags) ? mode_flags
+                                     : mode_flags & ~MDBX_WRITEMAP);
       env->me_flags ^= diff;
+      NOTICE("accede mode-flags: 0x%X, 0x%X -> 0x%X", diff,
+             env->me_flags ^ diff, env->me_flags);
     }
 
-    if ((lck->mti_envmode.weak ^ env->me_flags) & rigorous_flags) {
-      ERROR("%s", "current mode/flags incompatible with requested");
+    /* Ранее упущенный не очевидный момент: При работе БД в режимах
+     * не-синхронной/отложенной фиксации на диске, все процессы-писатели должны
+     * иметь одинаковый режим MDBX_WRITEMAP.
+     *
+     * В противном случае, сброс на диск следует выполнять дважды: сначала
+     * msync(), затем fdatasync(). При этом msync() не обязан отрабатывать
+     * в процессах без MDBX_WRITEMAP, так как файл в память отображен только
+     * для чтения. Поэтому, в общем случае, различия по MDBX_WRITEMAP не
+     * позволяют выполнить фиксацию данных на диск, после их изменения в другом
+     * процессе.
+     *
+     * В режиме MDBX_UTTERLY_NOSYNC позволять совместную работу с MDBX_WRITEMAP
+     * также не следует, поскольку никакой процесс (в том числе последний) не
+     * может гарантированно сбросить данные на диск, а следовательно не должен
+     * помечать какую-либо транзакцию как steady.
+     *
+     * В результате, требуется либо запретить совместную работу процессам с
+     * разным MDBX_WRITEMAP в режиме отложенной записи, либо отслеживать такое
+     * смешивание и блокировать steady-пометки - что контрпродуктивно. */
+    const MDBX_env_flags_t rigorous_flags =
+        (snap_flags & lazy_flags)
+            ? MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC | MDBX_WRITEMAP
+            : MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC;
+    const MDBX_env_flags_t rigorous_diff =
+        (snap_flags ^ env->me_flags) & rigorous_flags;
+    if (rigorous_diff) {
+      ERROR("current mode/flags 0x%X incompatible with requested 0x%X, "
+            "rigorous diff 0x%X",
+            env->me_flags, snap_flags, rigorous_diff);
       rc = MDBX_INCOMPATIBLE;
       goto bailout;
     }
@@ -14397,11 +14428,14 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   }
 
   DEBUG("opened dbenv %p", (void *)env);
+  if (!lck || lck_rc == MDBX_RESULT_TRUE) {
+    env->me_lck->mti_envmode.weak = env->me_flags & mode_flags;
+    env->me_lck->mti_meta_sync_txnid.weak =
+        (uint32_t)recent_committed_txnid(env);
+    env->me_lck->mti_reader_check_timestamp.weak = osal_monotime();
+  }
   if (lck) {
     if (lck_rc == MDBX_RESULT_TRUE) {
-      lck->mti_envmode.weak = env->me_flags & (mode_flags | MDBX_RDONLY);
-      lck->mti_meta_sync_txnid.weak = (uint32_t)recent_committed_txnid(env);
-      lck->mti_reader_check_timestamp.weak = osal_monotime();
       rc = osal_lck_downgrade(env);
       DEBUG("lck-downgrade-%s: rc %i",
             (env->me_flags & MDBX_EXCLUSIVE) ? "partial" : "full", rc);
@@ -14420,11 +14454,6 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
         goto bailout;
       env->me_flags |= MDBX_ENV_TXKEY;
     }
-  } else {
-    env->me_lck->mti_envmode.weak = env->me_flags & (mode_flags | MDBX_RDONLY);
-    env->me_lck->mti_meta_sync_txnid.weak =
-        (uint32_t)recent_committed_txnid(env);
-    env->me_lck->mti_reader_check_timestamp.weak = osal_monotime();
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
