@@ -14671,7 +14671,8 @@ __cold static int env_close(MDBX_env *env) {
   }
 
   munlock_all(env);
-  osal_ioring_destroy(&env->me_ioring);
+  if (!(env->me_flags & MDBX_RDONLY))
+    osal_ioring_destroy(&env->me_ioring);
 
   lcklist_lock();
   const int rc = lcklist_detach_locked(env);
