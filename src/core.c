@@ -5599,6 +5599,11 @@ __hot static int __must_check_result page_dirty(MDBX_txn *txn, MDBX_page *mp,
   return MDBX_SUCCESS;
 }
 
+static void mincore_clean_cache(const MDBX_env *const env) {
+  memset(env->me_lck->mti_mincore_cache.begin, -1,
+         sizeof(env->me_lck->mti_mincore_cache.begin));
+}
+
 #if !(defined(_WIN32) || defined(_WIN64))
 MDBX_MAYBE_UNUSED static __always_inline int ignore_enosys(int err) {
 #ifdef ENOSYS
@@ -5723,6 +5728,7 @@ __cold static int set_readahead(const MDBX_env *env, const pgno_t edge,
 #endif
     }
   } else {
+    mincore_clean_cache(env);
 #if defined(MADV_RANDOM)
     err =
         madvise(ptr, length, MADV_RANDOM) ? ignore_enosys(errno) : MDBX_SUCCESS;
@@ -5938,6 +5944,7 @@ __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
           ? 0
           : bytes2pgno(env, size_bytes);
   munlock_after(env, aligned_munlock_pgno, size_bytes);
+  mincore_clean_cache(env);
 
 #if MDBX_ENABLE_MADVISE
   if (size_bytes < prev_size) {
@@ -6753,6 +6760,99 @@ __hot static pgno_t pnl_get_sequence(MDBX_PNL pnl, const size_t num,
   return 0;
 }
 
+#if MDBX_ENABLE_MINCORE
+static __inline bool bit_tas(uint64_t *field, char bit) {
+  const uint64_t m = UINT64_C(1) << bit;
+  const bool r = (*field & m) != 0;
+  *field |= m;
+  return r;
+}
+
+static bool mincore_fetch(MDBX_env *const env, const size_t unit_begin) {
+  MDBX_lockinfo *const lck = env->me_lck;
+  for (size_t i = 1; i < ARRAY_LENGTH(lck->mti_mincore_cache.begin); ++i) {
+    const ptrdiff_t dist = unit_begin - lck->mti_mincore_cache.begin[i];
+    if (likely(dist >= 0 && dist < 64)) {
+      const pgno_t tmp_begin = lck->mti_mincore_cache.begin[i];
+      const uint64_t tmp_mask = lck->mti_mincore_cache.mask[i];
+      do {
+        lck->mti_mincore_cache.begin[i] = lck->mti_mincore_cache.begin[i - 1];
+        lck->mti_mincore_cache.mask[i] = lck->mti_mincore_cache.mask[i - 1];
+      } while (--i);
+      lck->mti_mincore_cache.begin[0] = tmp_begin;
+      lck->mti_mincore_cache.mask[0] = tmp_mask;
+      return bit_tas(lck->mti_mincore_cache.mask, (char)dist);
+    }
+  }
+
+  size_t pages = 64;
+  unsigned unit_log = sys_pagesize_ln2;
+  unsigned shift = 0;
+  if (env->me_psize > env->me_os_psize) {
+    unit_log = env->me_psize2log;
+    shift = env->me_psize2log - sys_pagesize_ln2;
+    pages <<= shift;
+  }
+
+  const size_t offset = unit_begin << unit_log;
+  size_t length = pages << sys_pagesize_ln2;
+  if (offset + length > env->me_dxb_mmap.current) {
+    length = env->me_dxb_mmap.current - offset;
+    pages = length >> sys_pagesize_ln2;
+  }
+
+#if MDBX_ENABLE_PGOP_STAT
+  env->me_lck->mti_pgop_stat.mincore.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+  uint8_t *const vector = alloca(pages);
+  if (unlikely(mincore(ptr_disp(env->me_dxb_mmap.base, offset), length,
+                       (void *)vector))) {
+    NOTICE("mincore(+%zu, %zu), err %d", offset, length, errno);
+    return false;
+  }
+
+  for (size_t i = 1; i < ARRAY_LENGTH(lck->mti_mincore_cache.begin); ++i) {
+    lck->mti_mincore_cache.begin[i] = lck->mti_mincore_cache.begin[i - 1];
+    lck->mti_mincore_cache.mask[i] = lck->mti_mincore_cache.mask[i - 1];
+  }
+  lck->mti_mincore_cache.begin[0] = unit_begin;
+
+  uint64_t mask = 0;
+#ifdef MINCORE_INCORE
+  STATIC_ASSERT(MINCORE_INCORE == 1);
+#endif
+  for (size_t i = 0; i < pages; ++i) {
+    uint64_t bit = (vector[i] & 1) == 0;
+    bit <<= i >> shift;
+    mask |= bit;
+  }
+
+  lck->mti_mincore_cache.mask[0] = ~mask;
+  return bit_tas(lck->mti_mincore_cache.mask, 0);
+}
+#endif /* MDBX_ENABLE_MINCORE */
+
+MDBX_MAYBE_UNUSED static __inline bool mincore_probe(MDBX_env *const env,
+                                                     const pgno_t pgno) {
+#if MDBX_ENABLE_MINCORE
+  const size_t offset_aligned =
+      floor_powerof2(pgno2bytes(env, pgno), env->me_os_psize);
+  const unsigned unit_log2 = (env->me_psize2log > sys_pagesize_ln2)
+                                 ? env->me_psize2log
+                                 : sys_pagesize_ln2;
+  const size_t unit_begin = offset_aligned >> unit_log2;
+  eASSERT(env, (unit_begin << unit_log2) == offset_aligned);
+  const ptrdiff_t dist = unit_begin - env->me_lck->mti_mincore_cache.begin[0];
+  if (likely(dist >= 0 && dist < 64))
+    return bit_tas(env->me_lck->mti_mincore_cache.mask, (char)dist);
+  return mincore_fetch(env, unit_begin);
+#else
+  (void)env;
+  (void)pgno;
+  return false;
+#endif /* MDBX_ENABLE_MINCORE */
+}
+
 static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
                                           MDBX_txn *const txn,
                                           const MDBX_cursor *const mc,
@@ -6769,6 +6869,7 @@ static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
   ENSURE(env, pgno >= NUM_METAS);
 
   pgr_t ret;
+  bool need_clean = (env->me_flags & MDBX_PAGEPERTURB) != 0;
   if (env->me_flags & MDBX_WRITEMAP) {
     ret.page = pgno2page(env, pgno);
     MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
@@ -6789,50 +6890,61 @@ static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
      * с диска. При этом запись на диск должна быть отложена адекватным ядром,
      * так как страница отображена в память в режиме чтения-записи и следом в
      * неё пишет ЦПУ. */
-    void *const pattern = ptr_disp(
-        env->me_pbuf,
-        (env->me_flags & MDBX_PAGEPERTURB) ? env->me_psize : env->me_psize * 2);
-    size_t file_offset = pgno2bytes(env, pgno);
-    /* TODO: добавить проверку через mincore() c кэшированием результатов. */
-    if (likely(num == 1)) {
-      osal_pwrite(env->me_lazy_fd, pattern, env->me_psize, file_offset);
-    } else {
-      struct iovec iov[MDBX_AUXILARY_IOV_MAX];
-      iov[0].iov_len = env->me_psize;
-      iov[0].iov_base = pattern;
-      size_t n = 1, left = num - 1;
-      do {
-        iov[n].iov_len = env->me_psize;
-        iov[n].iov_base = pattern;
-        if (++n == MDBX_AUXILARY_IOV_MAX) {
-          osal_pwritev(env->me_lazy_fd, iov, MDBX_AUXILARY_IOV_MAX,
-                       file_offset);
-          file_offset += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
+    const bool readahead_enabled = env->me_lck->mti_readahead_anchor & 1;
+    const pgno_t readahead_edge = env->me_lck->mti_readahead_anchor >> 1;
+    /* Не суетимся если страница в зоне включенного упреждающего чтения */
+    if (!readahead_enabled || pgno + num > readahead_edge) {
+      void *const pattern = ptr_disp(
+          env->me_pbuf, need_clean ? env->me_psize : env->me_psize * 2);
+      size_t file_offset = pgno2bytes(env, pgno);
+      if (likely(num == 1)) {
+        if (!mincore_probe(env, pgno)) {
+          osal_pwrite(env->me_lazy_fd, pattern, env->me_psize, file_offset);
 #if MDBX_ENABLE_PGOP_STAT
           env->me_lck->mti_pgop_stat.prefault.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-          n = 0;
+          need_clean = false;
         }
-      } while (--left);
-      osal_pwritev(env->me_lazy_fd, iov, n, file_offset);
-    }
+      } else {
+        struct iovec iov[MDBX_AUXILARY_IOV_MAX];
+        size_t n = 0, cleared = 0;
+        for (size_t i = 0; i < num; ++i) {
+          if (!mincore_probe(env, pgno + (pgno_t)i)) {
+            ++cleared;
+            iov[n].iov_len = env->me_psize;
+            iov[n].iov_base = pattern;
+            if (unlikely(++n == MDBX_AUXILARY_IOV_MAX)) {
+              osal_pwritev(env->me_lazy_fd, iov, MDBX_AUXILARY_IOV_MAX,
+                           file_offset);
 #if MDBX_ENABLE_PGOP_STAT
-    env->me_lck->mti_pgop_stat.prefault.weak += 1;
+              env->me_lck->mti_pgop_stat.prefault.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-#else
-    if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
-      memset(ret.page, -1, pgno2bytes(env, num));
+              file_offset += pgno2bytes(env, MDBX_AUXILARY_IOV_MAX);
+              n = 0;
+            }
+          }
+        }
+        if (likely(n > 0)) {
+          osal_pwritev(env->me_lazy_fd, iov, n, file_offset);
+#if MDBX_ENABLE_PGOP_STAT
+          env->me_lck->mti_pgop_stat.prefault.weak += 1;
+#endif /* MDBX_ENABLE_PGOP_STAT */
+        }
+        if (cleared == num)
+          need_clean = false;
+      }
+    }
 #endif /* MDBX_ENABLE_PREFAULT */
-
   } else {
     ret.page = page_malloc(txn, num);
     if (unlikely(!ret.page)) {
       ret.err = MDBX_ENOMEM;
       goto bailout;
     }
-    if (unlikely(env->me_flags & MDBX_PAGEPERTURB))
-      memset(ret.page, -1, pgno2bytes(env, num));
   }
+
+  if (unlikely(need_clean))
+    memset(ret.page, -1, pgno2bytes(env, num));
 
   VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
   ret.page->mp_pgno = pgno;
@@ -14427,6 +14539,7 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     }
   }
 
+  mincore_clean_cache(env);
   const int dxb_rc = setup_dxb(env, lck_rc, mode);
   if (MDBX_IS_ERROR(dxb_rc)) {
     rc = dxb_rc;
@@ -21639,6 +21752,8 @@ __cold static int fetch_envinfo_ex(const MDBX_env *env, const MDBX_txn *txn,
         atomic_load64(&lck->mti_pgop_stat.wops, mo_Relaxed);
     arg->mi_pgop_stat.prefault =
         atomic_load64(&lck->mti_pgop_stat.prefault, mo_Relaxed);
+    arg->mi_pgop_stat.mincore =
+        atomic_load64(&lck->mti_pgop_stat.mincore, mo_Relaxed);
     arg->mi_pgop_stat.msync =
         atomic_load64(&lck->mti_pgop_stat.msync, mo_Relaxed);
     arg->mi_pgop_stat.fsync =
@@ -24760,6 +24875,7 @@ __dll_export
     " MDBX_ENABLE_REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
     " MDBX_ENABLE_MADVISE=" MDBX_STRINGIFY(MDBX_ENABLE_MADVISE)
     " MDBX_ENABLE_PREFAULT=" MDBX_STRINGIFY(MDBX_ENABLE_PREFAULT)
+    " MDBX_ENABLE_MINCORE=" MDBX_STRINGIFY(MDBX_ENABLE_MINCORE)
     " MDBX_ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
     " MDBX_ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
 #if MDBX_DISABLE_VALIDATION

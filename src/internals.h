@@ -620,6 +620,7 @@ typedef struct pgop_stat {
       fsync; /* Number of explicit fsync/flush-to-disk operations */
 
   MDBX_atomic_uint64_t prefault; /* Number of prefault write operations */
+  MDBX_atomic_uint64_t mincore;  /* Number of mincore() calls */
 
   /* Статистика для профилирования GC.
    * Логически эти данные может быть стоит вынести в другую структуру,
@@ -812,6 +813,12 @@ typedef struct MDBX_lockinfo {
 
   /* Shared anchor for tracking readahead edge and enabled/disabled status. */
   pgno_t mti_readahead_anchor;
+
+  /* Shared cache for mincore() results */
+  struct {
+    pgno_t begin[4];
+    uint64_t mask[4];
+  } mti_mincore_cache;
 
   MDBX_ALIGNAS(MDBX_CACHELINE_SIZE) /* cacheline ----------------------------*/
 

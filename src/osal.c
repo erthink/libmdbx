@@ -3336,7 +3336,7 @@ __cold int mdbx_get_sysraminfo(intptr_t *page_size, intptr_t *total_pages,
 
 #ifndef xMDBX_ALLOY
 unsigned sys_pagesize;
-MDBX_MAYBE_UNUSED unsigned sys_allocation_granularity;
+MDBX_MAYBE_UNUSED unsigned sys_pagesize_ln2, sys_allocation_granularity;
 #endif /* xMDBX_ALLOY */
 
 void osal_ctor(void) {
@@ -3362,6 +3362,7 @@ void osal_ctor(void) {
   assert(sys_pagesize > 0 && (sys_pagesize & (sys_pagesize - 1)) == 0);
   assert(sys_allocation_granularity >= sys_pagesize &&
          sys_allocation_granularity % sys_pagesize == 0);
+  sys_pagesize_ln2 = log2n_powerof2(sys_pagesize);
 
 #if defined(__linux__) || defined(__gnu_linux__)
   posix_clockid = choice_monoclock();

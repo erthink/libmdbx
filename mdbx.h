@@ -2594,6 +2594,7 @@ struct MDBX_envinfo {
     uint64_t wops;     /**< Number of explicit write operations (not a pages)
                             to a disk */
     uint64_t prefault; /**< Number of prefault write operations (not a pages) */
+    uint64_t mincore;  /**< Number of mincore() calls */
     uint64_t
         msync; /**< Number of explicit msync-to-disk operations (not a pages) */
     uint64_t

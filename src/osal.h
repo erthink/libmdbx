@@ -211,7 +211,8 @@ typedef pthread_mutex_t osal_fastmutex_t;
 /* OS abstraction layer stuff */
 
 MDBX_INTERNAL_VAR unsigned sys_pagesize;
-MDBX_MAYBE_UNUSED MDBX_INTERNAL_VAR unsigned sys_allocation_granularity;
+MDBX_MAYBE_UNUSED MDBX_INTERNAL_VAR unsigned sys_pagesize_ln2,
+    sys_allocation_granularity;
 
 /* Get the size of a memory page for the system.
  * This is the basic size that the platform's memory manager uses, and is
