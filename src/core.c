@@ -2764,7 +2764,7 @@ static __always_inline size_t dpl_setlen(MDBX_dpl *dl, size_t len) {
   dl->length = len;
   dl->items[len + 1].ptr = (MDBX_page *)&dpl_stub_pageE;
   dl->items[len + 1].pgno = P_INVALID;
-  dl->items[len + 1].extra = 0;
+  dl->items[len + 1].mlru = 0;
   return len;
 }
 
@@ -2779,7 +2779,7 @@ static __always_inline void dpl_clear(MDBX_dpl *dl) {
   dl->pages_including_loose = 0;
   dl->items[0].ptr = (MDBX_page *)&dpl_stub_pageB;
   dl->items[0].pgno = 0;
-  dl->items[0].extra = 0;
+  dl->items[0].mlru = 0;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
 }
 
@@ -2955,7 +2955,9 @@ __hot __noinline static size_t dpl_search(const MDBX_txn *txn, pgno_t pgno) {
 MDBX_NOTHROW_PURE_FUNCTION static __inline unsigned
 dpl_npages(const MDBX_dpl *dl, size_t i) {
   assert(0 <= (intptr_t)i && i <= dl->length);
-  unsigned n = likely(!dl->items[i].multi) ? 1 : dl->items[i].ptr->mp_pages;
+  unsigned n = 1;
+  if (unlikely(dl->items[i].mlru & MDBX_dp_multi_mask))
+    n = dl->items[i].ptr->mp_pages;
   assert(n == (IS_OVERFLOW(dl->items[i].ptr) ? dl->items[i].ptr->mp_pages : 1));
   return n;
 }
@@ -3043,20 +3045,50 @@ static void dpl_remove(const MDBX_txn *txn, size_t i) {
   dpl_remove_ex(txn, i, dpl_npages(txn->tw.dirtylist, i));
 }
 
+static __noinline void txn_lru_reduce(MDBX_txn *txn) {
+  NOTICE("lru-reduce %u -> %u", txn->tw.dirtylru, txn->tw.dirtylru >> 1);
+  do {
+    txn->tw.dirtylru >>= 1;
+    MDBX_dpl *dl = txn->tw.dirtylist;
+    for (size_t i = 1; i <= dl->length; ++i) {
+      uint32_t mlru = dl->items[i].mlru;
+      mlru = (mlru & MDBX_dp_multi_mask) + ((mlru >> 1) & MDBX_dp_lru_mask);
+      dl->items[i].mlru = mlru;
+    }
+    txn = txn->mt_parent;
+  } while (txn);
+}
+
+static __inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
+  tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
+  tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+  const MDBX_dpl *dl = txn->tw.dirtylist;
+  assert((intptr_t)i > 0 && i <= dl->length);
+  return (txn->tw.dirtylru + 1 - dl->items[i].mlru) >> 1;
+}
+
+static __inline uint32_t txn_lru_inc(MDBX_txn *txn) {
+  if (unlikely(++txn->tw.dirtylru > UINT32_MAX / 3))
+    txn_lru_reduce(txn);
+  return txn->tw.dirtylru & MDBX_dp_lru_mask;
+}
+
 static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
                                                           pgno_t pgno,
                                                           MDBX_page *page,
                                                           size_t npages) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
+  const MDBX_dp dp = {page, pgno, txn_lru_inc(txn) + (npages > 1)};
   MDBX_dpl *dl = txn->tw.dirtylist;
-  assert(dl->length <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
-  assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
+  tASSERT(txn, dl->length <= MDBX_PGL_LIMIT + MDBX_PNL_GRANULATE);
+  tASSERT(txn, dl->items[0].pgno == 0 &&
+                   dl->items[dl->length + 1].pgno == P_INVALID);
   if (AUDIT_ENABLED()) {
     for (size_t i = dl->length; i > 0; --i) {
-      assert(dl->items[i].pgno != pgno);
-      if (unlikely(dl->items[i].pgno == pgno)) {
-        ERROR("Page %u already exist in the DPL at %zu", pgno, i);
+      assert(dl->items[i].pgno != dp.pgno);
+      if (unlikely(dl->items[i].pgno == dp.pgno)) {
+        ERROR("Page %u already exist in the DPL at %zu", dp.pgno, i);
         return MDBX_PROBLEM;
       }
     }
@@ -3085,24 +3117,12 @@ static __always_inline int __must_check_result dpl_append(MDBX_txn *txn,
   /* copy the stub beyond the end */
   dl->items[length + 1] = dl->items[length];
   /* append page */
-  dl->items[length].ptr = page;
-  dl->items[length].pgno = pgno;
-  dl->items[length].multi = npages > 1;
-  dl->items[length].lru = txn->tw.dirtylru++;
+  dl->items[length] = dp;
   dl->length = length;
   dl->sorted = sorted;
   dl->pages_including_loose += npages;
   assert(dl->items[0].pgno == 0 && dl->items[dl->length + 1].pgno == P_INVALID);
   return MDBX_SUCCESS;
-}
-
-static __inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
-  tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
-  tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
-  const MDBX_dpl *dl = txn->tw.dirtylist;
-  assert((intptr_t)i > 0 && i <= dl->length);
-  /* overflow could be here */
-  return (txn->tw.dirtylru - dl->items[i].lru) & UINT32_C(0x7fffFFFF);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -4627,7 +4647,9 @@ static size_t cursor_keep(MDBX_txn *txn, MDBX_cursor *mc) {
         size_t const n = dpl_search(txn, mp->mp_pgno);
         if (txn->tw.dirtylist->items[n].pgno == mp->mp_pgno &&
             dpl_age(txn, n)) {
-          txn->tw.dirtylist->items[n].lru = txn->tw.dirtylru;
+          txn->tw.dirtylist->items[n].mlru =
+              (txn->tw.dirtylist->items[n].mlru & MDBX_dp_multi_mask) +
+              (txn->tw.dirtylru & MDBX_dp_lru_mask);
           ++keep;
         }
       }
@@ -4911,6 +4933,11 @@ __cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
   const uint32_t reciprocal = (UINT32_C(255) << 24) / (age_max + 1);
   for (size_t i = 1; i <= dl->length; ++i) {
     const unsigned prio = spill_prio(txn, i, reciprocal);
+    TRACE("page %" PRIaPGNO
+          ", lru %u, is_multi %c, npages %u, age %u of %u, prio %u",
+          dl->items[i].pgno, dl->items[i].mlru & MDBX_dp_lru_mask,
+          (dl->items[i].mlru & MDBX_dp_multi_mask) ? 'Y' : 'N',
+          dpl_npages(dl, i), dpl_age(txn, i), age_max, prio);
     if (prio < 256) {
       radix_entries[prio] += 1;
       spillable_entries += 1;
@@ -15160,7 +15187,9 @@ __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
       const size_t i = dpl_search(spiller, pgno);
       tASSERT(txn, (intptr_t)i > 0);
       if (spiller->tw.dirtylist->items[i].pgno == pgno) {
-        spiller->tw.dirtylist->items[i].lru = txn->tw.dirtylru++;
+        const uint32_t is_multi =
+            spiller->tw.dirtylist->items[i].mlru & MDBX_dp_multi_mask;
+        spiller->tw.dirtylist->items[i].mlru = is_multi + txn_lru_inc(txn);
         r.page = spiller->tw.dirtylist->items[i].ptr;
         break;
       }
