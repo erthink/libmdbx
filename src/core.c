@@ -9846,38 +9846,35 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
 
   const intptr_t retired_left =
       MDBX_PNL_SIZEOF(txn->tw.retired_pages) - ctx->retired_stored;
-  size_t for_retiredlist = 0;
+  size_t for_relist = 0;
   if (MDBX_ENABLE_BIGFOOT && retired_left > 0) {
-    for_retiredlist = (retired_left + txn->mt_env->me_maxgc_ov1page - 1) /
-                      txn->mt_env->me_maxgc_ov1page;
-    const size_t per_branch_page =
-        (txn->mt_env->me_psize - PAGEHDRSZ) /
-        (sizeof(indx_t) + sizeof(MDBX_node) + sizeof(txnid_t));
-    for (size_t entries = for_retiredlist; entries > 1; for_split += entries)
+    for_relist = (retired_left + txn->mt_env->me_maxgc_ov1page - 1) /
+                 txn->mt_env->me_maxgc_ov1page;
+    const size_t per_branch_page = txn->mt_env->me_maxgc_per_branch;
+    for (size_t entries = for_relist; entries > 1; for_split += entries)
       entries = (entries + per_branch_page - 1) / per_branch_page;
   } else if (!MDBX_ENABLE_BIGFOOT && retired_left != 0) {
-    for_retiredlist =
+    for_relist =
         number_of_ovpages(txn->mt_env, MDBX_PNL_SIZEOF(txn->tw.retired_pages));
   }
 
   const size_t for_tree_before_touch = for_cow + for_rebalance + for_split;
   const size_t for_tree_after_touch = for_rebalance + for_split;
-  const size_t for_data = for_retiredlist;
-  const size_t for_all_before_touch = for_data + for_tree_before_touch;
-  const size_t for_all_after_touch = for_data + for_tree_after_touch;
+  const size_t for_all_before_touch = for_relist + for_tree_before_touch;
+  const size_t for_all_after_touch = for_relist + for_tree_after_touch;
 
-  if (likely(for_data < 2 && gcu_backlog_size(txn) > for_all_before_touch))
+  if (likely(for_relist < 2 && gcu_backlog_size(txn) > for_all_before_touch))
     return MDBX_SUCCESS;
 
   TRACE(">> retired-stored %zu, left %zi, backlog %zu, need %zu (4list %zu, "
         "4split %zu, "
         "4cow %zu, 4tree %zu)",
         ctx->retired_stored, retired_left, gcu_backlog_size(txn),
-        for_all_before_touch, for_data, for_split, for_cow,
+        for_all_before_touch, for_relist, for_split, for_cow,
         for_tree_before_touch);
 
   int err;
-  if (unlikely(for_data > 2)) {
+  if (unlikely(for_relist > 2)) {
     MDBX_val key, val;
     key.iov_base = val.iov_base = nullptr;
     key.iov_len = sizeof(txnid_t);
@@ -9890,7 +9887,7 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
   err = gcu_touch(ctx);
   TRACE("== after-touch, backlog %zu, err %d", gcu_backlog_size(txn), err);
 
-  if (!MDBX_ENABLE_BIGFOOT && unlikely(for_data > 1) &&
+  if (!MDBX_ENABLE_BIGFOOT && unlikely(for_relist > 1) &&
       MDBX_PNL_GETSIZE(txn->tw.retired_pages) != ctx->retired_stored &&
       err == MDBX_SUCCESS) {
     if (unlikely(ctx->retired_stored)) {
@@ -9900,10 +9897,10 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
       if (!ctx->retired_stored)
         return /* restart by tail-recursion */ gcu_prepare_backlog(txn, ctx);
     }
-    err = page_alloc_slowpath(&ctx->cursor, for_data, MDBX_ALLOC_RESERVE).err;
+    err = page_alloc_slowpath(&ctx->cursor, for_relist, MDBX_ALLOC_RESERVE).err;
     TRACE("== after-4linear, backlog %zu, err %d", gcu_backlog_size(txn), err);
     cASSERT(&ctx->cursor,
-            gcu_backlog_size(txn) >= for_data || err != MDBX_SUCCESS);
+            gcu_backlog_size(txn) >= for_relist || err != MDBX_SUCCESS);
   }
 
   while (gcu_backlog_size(txn) < for_all_after_touch && err == MDBX_SUCCESS)
@@ -9950,11 +9947,11 @@ static int update_gc(MDBX_txn *txn, gcu_context_t *ctx) {
 
   /* txn->tw.relist[] can grow and shrink during this call.
    * txn->tw.last_reclaimed and txn->tw.retired_pages[] can only grow.
-   * Page numbers cannot disappear from txn->tw.retired_pages[]. */
+   * But page numbers cannot disappear from txn->tw.retired_pages[]. */
 
 retry:
-  ++ctx->loop;
-  TRACE("%s", " >> restart");
+  if (ctx->loop++)
+    TRACE("%s", " >> restart");
   int rc = MDBX_SUCCESS;
   tASSERT(txn, pnl_check_allocated(txn->tw.relist,
                                    txn->mt_next_pgno - MDBX_ENABLE_REFUND));
@@ -9979,13 +9976,11 @@ retry:
   ctx->rid = txn->tw.last_reclaimed;
   while (true) {
     /* Come back here after each Put() in case retired-list changed */
-    MDBX_val key, data;
     TRACE("%s", " >> continue");
 
     if (ctx->retired_stored != MDBX_PNL_GETSIZE(txn->tw.retired_pages) &&
-        (ctx->loop == 1 ||
-         MDBX_PNL_GETSIZE(txn->tw.retired_pages) > env->me_maxgc_ov1page ||
-         ctx->retired_stored > env->me_maxgc_ov1page)) {
+        (ctx->loop == 1 || ctx->retired_stored > env->me_maxgc_ov1page ||
+         MDBX_PNL_GETSIZE(txn->tw.retired_pages) > env->me_maxgc_ov1page)) {
       rc = gcu_prepare_backlog(txn, ctx);
       if (unlikely(rc != MDBX_SUCCESS))
         goto bailout;
@@ -9993,6 +9988,7 @@ retry:
 
     tASSERT(txn, pnl_check_allocated(txn->tw.relist,
                                      txn->mt_next_pgno - MDBX_ENABLE_REFUND));
+    MDBX_val key, data;
     if (ctx->lifo) {
       if (ctx->cleaned_slot < (txn->tw.lifo_reclaimed
                                    ? MDBX_PNL_GETSIZE(txn->tw.lifo_reclaimed)
@@ -10446,10 +10442,11 @@ retry:
         }
 
         if (need_cleanup || ctx->dense) {
-          if (ctx->cleaned_slot)
-            TRACE("%s: restart inner-loop to clear and re-create GC entries",
+          if (ctx->cleaned_slot) {
+            TRACE("%s: restart to clear and re-create GC entries",
                   dbg_prefix_mode);
-          ctx->cleaned_slot = 0;
+            goto retry;
+          }
           continue;
         }
       }
@@ -12527,6 +12524,9 @@ __cold static void setup_pagesize(MDBX_env *env, const size_t pagesize) {
   ENSURE(env,
          maxgc_ov1page > 42 && maxgc_ov1page < (intptr_t)MDBX_PGL_LIMIT / 4);
   env->me_maxgc_ov1page = (unsigned)maxgc_ov1page;
+  env->me_maxgc_per_branch =
+      (unsigned)((pagesize - PAGEHDRSZ) /
+      (sizeof(indx_t) + sizeof(MDBX_node) + sizeof(txnid_t)));
 
   STATIC_ASSERT(LEAF_NODE_MAX(MIN_PAGESIZE) > sizeof(MDBX_db) + NODESIZE + 42);
   STATIC_ASSERT(LEAF_NODE_MAX(MAX_PAGESIZE) < UINT16_MAX);

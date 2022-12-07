@@ -1250,9 +1250,10 @@ struct MDBX_env {
   uint16_t *me_dbflags;             /* array of flags from MDBX_db.md_flags */
   MDBX_atomic_uint32_t *me_dbiseqs; /* array of dbi sequence numbers */
   unsigned
-      me_maxgc_ov1page;    /* Number of pgno_t fit in a single overflow page */
-  uint32_t me_live_reader; /* have liveness lock in reader table */
-  void *me_userctx;        /* User-settable context */
+      me_maxgc_ov1page; /* Number of pgno_t fit in a single overflow page */
+  unsigned me_maxgc_per_branch;
+  uint32_t me_live_reader;        /* have liveness lock in reader table */
+  void *me_userctx;               /* User-settable context */
   MDBX_hsr_func *me_hsr_callback; /* Callback for kicking laggard readers */
 
   struct {
