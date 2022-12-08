@@ -6750,10 +6750,12 @@ static __inline bool is_gc_usable(MDBX_txn *txn, const MDBX_cursor *mc,
       !(mc->mc_flags & C_GCU))
     return false;
 
-  /* avoid (recursive) search inside empty tree and while tree is
-     updating, https://libmdbx.dqdkfa.ru/dead-github/issues/31 */
-  if (txn->mt_dbs[FREE_DBI].md_entries == 0)
+  /* avoid search inside empty tree and while tree is updating,
+     https://libmdbx.dqdkfa.ru/dead-github/issues/31 */
+  if (unlikely(txn->mt_dbs[FREE_DBI].md_entries == 0)) {
+    txn->mt_flags |= MDBX_TXN_DRAINED_GC;
     return false;
+  }
 
   return true;
 }
@@ -7090,8 +7092,10 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
 
   //---------------------------------------------------------------------------
 
-  if (unlikely(!is_gc_usable(txn, mc, flags)))
+  if (unlikely(!is_gc_usable(txn, mc, flags))) {
+    eASSERT(env, txn->mt_flags & MDBX_TXN_DRAINED_GC);
     goto no_gc;
+  }
 
   eASSERT(env, (flags & (MDBX_ALLOC_COALESCE | MDBX_ALLOC_LIFO |
                          MDBX_ALLOC_SHOULD_SCAN)) == 0);
@@ -7178,6 +7182,7 @@ next_gc:;
     if (unlikely(id >= detent))
       goto depleted_gc;
   }
+  txn->mt_flags &= ~MDBX_TXN_DRAINED_GC;
 
   /* Reading next GC record */
   MDBX_val data;
@@ -7326,9 +7331,12 @@ scan:
   }
 
 depleted_gc:
+  TRACE("%s: last id #%" PRIaTXN ", re-len %zu", "gc-depleted", id,
+        MDBX_PNL_GETSIZE(txn->tw.relist));
   ret.err = MDBX_NOTFOUND;
   if (flags & MDBX_ALLOC_SHOULD_SCAN)
     goto scan;
+  txn->mt_flags |= MDBX_TXN_DRAINED_GC;
 
   //-------------------------------------------------------------------------
 
@@ -7431,6 +7439,14 @@ depleted_gc:
 
 no_gc:
   eASSERT(env, pgno == 0);
+#ifndef MDBX_ENABLE_BACKLOG_DEPLETED
+#define MDBX_ENABLE_BACKLOG_DEPLETED 0
+#endif /* MDBX_ENABLE_BACKLOG_DEPLETED*/
+  if (MDBX_ENABLE_BACKLOG_DEPLETED &&
+      unlikely(!(txn->mt_flags & MDBX_TXN_DRAINED_GC))) {
+    ret.err = MDBX_BACKLOG_DEPLETED;
+    goto fail;
+  }
   if (flags & MDBX_ALLOC_RESERVE) {
     ret.err = MDBX_NOTFOUND;
     goto fail;
@@ -9915,6 +9931,8 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
         (size_t)txn->mt_dbs[FREE_DBI].md_leaf_pages,
         (size_t)txn->mt_dbs[FREE_DBI].md_overflow_pages,
         (size_t)txn->mt_dbs[FREE_DBI].md_entries);
+  tASSERT(txn,
+          err != MDBX_NOTFOUND || (txn->mt_flags & MDBX_TXN_DRAINED_GC) != 0);
   return (err != MDBX_NOTFOUND) ? err : MDBX_SUCCESS;
 }
 

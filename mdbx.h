@@ -1926,6 +1926,12 @@ enum MDBX_error_t {
   /** Overlapping read and write transactions for the current thread */
   MDBX_TXN_OVERLAPPING = -30415,
 
+  /** Внутренняя ошибка возвращаемая в случае нехватки запаса свободных страниц
+   * при обновлении GC. Используется как вспомогательное средство для отладки.
+   * \note С точки зрения пользователя семантически
+   *       равнозначна \ref MDBX_PROBLEM. */
+  MDBX_BACKLOG_DEPLETED = -30414,
+
   /* The last of MDBX-added error codes */
   MDBX_LAST_ADDED_ERRCODE = MDBX_TXN_OVERLAPPING,
 
