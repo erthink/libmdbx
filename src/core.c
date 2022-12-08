@@ -5919,6 +5919,14 @@ __cold static void munlock_all(const MDBX_env *env) {
   munlock_after(env, 0, bytes_align2os_bytes(env, env->me_dxb_mmap.current));
 }
 
+__cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
+  /* default drp_augment_limit = ceil(npages / gold_ratio) */
+  const size_t augment = (env->me_dbgeo.now >> (env->me_psize2log + 10)) * 633u;
+  eASSERT(env, augment < MDBX_PGL_LIMIT);
+  return pnl_bytes2size(pnl_size2bytes(
+      (augment > MDBX_PNL_INITIAL) ? augment : MDBX_PNL_INITIAL));
+}
+
 __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
                              const pgno_t size_pgno, const pgno_t limit_pgno,
                              const bool implicit) {
@@ -6112,6 +6120,8 @@ bailout:
     /* update env-geo to avoid influences */
     env->me_dbgeo.now = env->me_dxb_mmap.current;
     env->me_dbgeo.upper = env->me_dxb_mmap.limit;
+    if (!env->me_options.flags.non_auto.rp_augment_limit)
+      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
 #ifdef MDBX_USE_VALGRIND
     if (prev_limit != env->me_dxb_mmap.limit || prev_map != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -7236,15 +7246,17 @@ next_gc:;
           /* have enough unallocated space */ txn->mt_geo.upper >=
               txn->mt_next_pgno + num) ||
          gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) >= MDBX_PGL_LIMIT)) {
-      /* Stop reclaiming to avoid large/overflow the page list.
-       * This is a rare case while search for a continuously multi-page region
-       * in a large database.
-       * https://libmdbx.dqdkfa.ru/dead-github/issues/123
-       */
-      NOTICE("stop reclaiming to avoid PNL overflow: %zu (current) + %zu "
-             "(chunk) -> %zu",
+      /* Stop reclaiming to avoid large/overflow the page list. This is a rare
+       * case while search for a continuously multi-page region in a
+       * large database, see https://libmdbx.dqdkfa.ru/dead-github/issues/123 */
+      NOTICE("stop reclaiming %s: %zu (current) + %zu "
+             "(chunk) -> %zu, rp_augment_limit %u",
+             likely(gc_len + MDBX_PNL_GETSIZE(txn->tw.relist) < MDBX_PGL_LIMIT)
+                 ? "since rp_augment_limit was reached"
+                 : "to avoid PNL overflow",
              MDBX_PNL_GETSIZE(txn->tw.relist), gc_len,
-             gc_len + MDBX_PNL_GETSIZE(txn->tw.relist));
+             gc_len + MDBX_PNL_GETSIZE(txn->tw.relist),
+             env->me_options.rp_augment_limit);
       goto depleted_gc;
     }
   }
@@ -12547,7 +12559,7 @@ __cold static void setup_pagesize(MDBX_env *env, const size_t pagesize) {
   env->me_maxgc_ov1page = (unsigned)maxgc_ov1page;
   env->me_maxgc_per_branch =
       (unsigned)((pagesize - PAGEHDRSZ) /
-      (sizeof(indx_t) + sizeof(MDBX_node) + sizeof(txnid_t)));
+                 (sizeof(indx_t) + sizeof(MDBX_node) + sizeof(txnid_t)));
 
   STATIC_ASSERT(LEAF_NODE_MAX(MIN_PAGESIZE) > sizeof(MDBX_db) + NODESIZE + 42);
   STATIC_ASSERT(LEAF_NODE_MAX(MAX_PAGESIZE) < UINT16_MAX);
@@ -12651,14 +12663,9 @@ __cold int mdbx_env_create(MDBX_env **penv) {
   env->me_pid = osal_getpid();
   env->me_stuck_meta = -1;
 
-  env->me_options.dp_reserve_limit = 1024;
-  env->me_options.rp_augment_limit = 256 * 1024;
-  env->me_options.dp_limit = MDBX_DEBUG ? 64 * 1024 / 42 : 64 * 1024;
-  if (env->me_options.dp_limit > MAX_PAGENO + 1 - NUM_METAS)
-    env->me_options.dp_limit = MAX_PAGENO + 1 - NUM_METAS;
+  env->me_options.rp_augment_limit = MDBX_PNL_INITIAL;
+  env->me_options.dp_reserve_limit = MDBX_PNL_INITIAL;
   env->me_options.dp_initial = MDBX_PNL_INITIAL;
-  if (env->me_options.dp_initial > env->me_options.dp_limit)
-    env->me_options.dp_initial = env->me_options.dp_limit;
   env->me_options.spill_max_denominator = 8;
   env->me_options.spill_min_denominator = 8;
   env->me_options.spill_parent4child_denominator = 0;
@@ -12970,6 +12977,8 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
         pgno2bytes(env, pv2pages(pages2pv(bytes2pgno(env, growth_step))));
     env->me_dbgeo.shrink =
         pgno2bytes(env, pv2pages(pages2pv(bytes2pgno(env, shrink_threshold))));
+    if (!env->me_options.flags.non_auto.rp_augment_limit)
+      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
 
     ENSURE(env, env->me_dbgeo.lower >= MIN_MAPSIZE);
     ENSURE(env, env->me_dbgeo.lower / (unsigned)pagesize >= MIN_PAGENO);
@@ -14702,6 +14711,8 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
+    if (!env->me_options.flags.non_auto.rp_augment_limit)
+      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
     const size_t tsize = sizeof(MDBX_txn) + sizeof(MDBX_cursor),
                  size = tsize + env->me_maxdbs *
                                     (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
@@ -23984,8 +23995,8 @@ __cold intptr_t mdbx_limits_txnsize_max(intptr_t pagesize) {
 
   STATIC_ASSERT(MAX_MAPSIZE < INTPTR_MAX);
   const uint64_t pgl_limit =
-      pagesize * (uint64_t)(MDBX_PGL_LIMIT / 1.6180339887498948482);
-  const uint64_t map_limit = (uint64_t)(MAX_MAPSIZE / 1.6180339887498948482);
+      pagesize * (uint64_t)(MDBX_PGL_LIMIT / MDBX_GOLD_RATIO_DBL);
+  const uint64_t map_limit = (uint64_t)(MAX_MAPSIZE / MDBX_GOLD_RATIO_DBL);
   return (pgl_limit < map_limit) ? (intptr_t)pgl_limit : (intptr_t)map_limit;
 }
 
@@ -24332,11 +24343,15 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
     break;
 
   case MDBX_opt_rp_augment_limit:
-    if (value == UINT64_MAX)
-      value = MDBX_PGL_LIMIT;
-    if (unlikely(value > MDBX_PGL_LIMIT))
+    if (value == UINT64_MAX) {
+      env->me_options.flags.non_auto.rp_augment_limit = 0;
+      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
+    } else if (unlikely(value > MDBX_PGL_LIMIT))
       return MDBX_EINVAL;
-    env->me_options.rp_augment_limit = (unsigned)value;
+    else {
+      env->me_options.flags.non_auto.rp_augment_limit = 1;
+      env->me_options.rp_augment_limit = (unsigned)value;
+    }
     break;
 
   case MDBX_opt_txn_dp_limit:

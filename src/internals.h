@@ -893,6 +893,7 @@ typedef struct MDBX_lockinfo {
 
 #define MDBX_READERS_LIMIT 32767
 #define MDBX_RADIXSORT_THRESHOLD 142
+#define MDBX_GOLD_RATIO_DBL 1.6180339887498948482
 
 /*----------------------------------------------------------------------------*/
 
@@ -936,7 +937,8 @@ typedef struct MDBX_dpl {
 } MDBX_dpl;
 
 /* PNL sizes */
-#define MDBX_PNL_GRANULATE 1024
+#define MDBX_PNL_GRANULATE_LOG2 10
+#define MDBX_PNL_GRANULATE (1 << MDBX_PNL_GRANULATE_LOG2)
 #define MDBX_PNL_INITIAL                                                       \
   (MDBX_PNL_GRANULATE - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
 
@@ -1276,6 +1278,7 @@ struct MDBX_env {
       /* tracks options with non-auto values but tuned by user */
       struct {
         unsigned dp_limit : 1;
+        unsigned rp_augment_limit : 1;
       } non_auto;
     } flags;
   } me_options;
