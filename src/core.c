@@ -6109,6 +6109,9 @@ bailout:
     eASSERT(env, limit_bytes == env->me_dxb_mmap.limit);
     eASSERT(env, size_bytes <= env->me_dxb_mmap.filesize);
     eASSERT(env, size_bytes == env->me_dxb_mmap.current);
+    /* update env-geo to avoid influences */
+    env->me_dbgeo.now = env->me_dxb_mmap.current;
+    env->me_dbgeo.upper = env->me_dxb_mmap.limit;
 #ifdef MDBX_USE_VALGRIND
     if (prev_limit != env->me_dxb_mmap.limit || prev_map != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -13022,6 +13025,13 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       current_geo = &env->me_txn->mt_geo;
     }
 
+    /* update env-geo to avoid influences */
+    env->me_dbgeo.now = pgno2bytes(env, current_geo->now);
+    env->me_dbgeo.lower = pgno2bytes(env, current_geo->lower);
+    env->me_dbgeo.upper = pgno2bytes(env, current_geo->upper);
+    env->me_dbgeo.grow = pgno2bytes(env, pv2pages(current_geo->grow_pv));
+    env->me_dbgeo.shrink = pgno2bytes(env, pv2pages(current_geo->shrink_pv));
+
     MDBX_geo new_geo;
     new_geo.lower = bytes2pgno(env, size_lower);
     new_geo.now = bytes2pgno(env, size_now);
@@ -13094,16 +13104,20 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
       } else {
         meta.mm_geo = new_geo;
         rc = sync_locked(env, env->me_flags, &meta, &env->me_txn0->tw.troika);
+        if (likely(rc == MDBX_SUCCESS)) {
+          env->me_dbgeo.now = pgno2bytes(env, new_geo.now = meta.mm_geo.now);
+          env->me_dbgeo.upper =
+              pgno2bytes(env, new_geo.upper = meta.mm_geo.upper);
+        }
       }
-
-      if (likely(rc == MDBX_SUCCESS)) {
-        /* store new geo to env to avoid influences */
-        env->me_dbgeo.now = pgno2bytes(env, new_geo.now);
-        env->me_dbgeo.lower = pgno2bytes(env, new_geo.lower);
-        env->me_dbgeo.upper = pgno2bytes(env, new_geo.upper);
-        env->me_dbgeo.grow = pgno2bytes(env, pv2pages(new_geo.grow_pv));
-        env->me_dbgeo.shrink = pgno2bytes(env, pv2pages(new_geo.shrink_pv));
-      }
+    }
+    if (likely(rc == MDBX_SUCCESS)) {
+      /* update env-geo to avoid influences */
+      eASSERT(env, env->me_dbgeo.now == pgno2bytes(env, new_geo.now));
+      env->me_dbgeo.lower = pgno2bytes(env, new_geo.lower);
+      eASSERT(env, env->me_dbgeo.upper == pgno2bytes(env, new_geo.upper));
+      env->me_dbgeo.grow = pgno2bytes(env, pv2pages(new_geo.grow_pv));
+      env->me_dbgeo.shrink = pgno2bytes(env, pv2pages(new_geo.shrink_pv));
     }
   }
 
