@@ -9927,7 +9927,9 @@ static int gcu_touch(gcu_context_t *ctx) {
  * during a deleting, when GC tree is unbalanced. */
 static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
   const size_t for_cow = txn->mt_dbs[FREE_DBI].md_depth;
-  const size_t for_rebalance = for_cow + 1;
+  const size_t for_rebalance = for_cow + 1 +
+                               (txn->mt_dbs[FREE_DBI].md_depth + 1ul >=
+                                txn->mt_dbs[FREE_DBI].md_branch_pages);
   size_t for_split = ctx->retired_stored == 0;
 
   const intptr_t retired_left =
