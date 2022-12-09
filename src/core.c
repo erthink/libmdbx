@@ -6781,14 +6781,68 @@ __hot static bool is_already_reclaimed(const MDBX_txn *txn, txnid_t id) {
   return false;
 }
 
-__hot static pgno_t pnl_get_single(MDBX_PNL pnl) {
-  const size_t len = MDBX_PNL_GETSIZE(pnl);
+__hot static pgno_t relist_get_single(MDBX_txn *txn) {
+  const size_t len = MDBX_PNL_GETSIZE(txn->tw.relist);
   assert(len > 0);
-  pgno_t *target = MDBX_PNL_EDGE(pnl);
+  pgno_t *target = MDBX_PNL_EDGE(txn->tw.relist);
   const ptrdiff_t dir = MDBX_PNL_ASCENDING ? 1 : -1;
 
-  /* пытаемся пропускать последовательности при наличии одиночных элементов */
-  if (likely(len > 2) && unlikely(target[dir] == *target + 1)) {
+  /* Есть ТРИ потенциально выигрышные, но противо-направленные тактики:
+   *
+   * 1. Стараться использовать страницы с наименьшими номерами. Так обмен с
+   * диском будет более кучным, а у страниц ближе к концу БД будет больше шансов
+   * попасть под авто-компактификацию. Частично эта тактика уже реализована, но
+   * для её эффективности требуется явно приоритезировать выделение страниц:
+   *   - поддерживать для relist, для ближних и для дальних страниц;
+   *   - использовать страницы из дальнего списка, если первый пуст,
+   *     а второй слишком большой, либо при пустой GC.
+   *
+   * 2. Стараться выделять страницы последовательно. Так записываемые на диск
+   * регионы будут линейными, что принципиально ускоряет запись на HDD.
+   * Одновременно, в среднем это не повлияет на чтение, точнее говоря, если
+   * порядок чтения не совпадает с порядком изменения (иначе говоря, если
+   * чтение не коррклирует с обновлениями и/или вставками) то не повлияет, иначе
+   * может ускорить. Однако, последовательности в среднем достаточно редки.
+   * Поэтому для эффективности требуется аккумулировать и поддерживать в ОЗУ
+   * огромные списки страниц, а затем сохранять их обратно в БД. Текущий формат
+   * БД (без битовых карт) для этого крайне не удачен. Поэтому эта тактика не
+   * имеет шансов быть успешной без смены формата БД (Mithril).
+   *
+   * 3. Стараться экономить последовательности страниц. Это позволяет избегать
+   * лишнего чтения/поиска в GC при более-менее постоянном размещении и/или
+   * обновлении данных требующих более одной страницы. Проблема в том, что без
+   * информации от приложения библиотека не может знать насколько
+   * востребованными будут последовательности в ближайшей перспективе, а
+   * экономия последовательностей "на всякий случай" не только затратна
+   * сама-по-себе, но и работает во вред.
+   *
+   * Поэтому:
+   *  - в TODO добавляется разделение relist на «ближние» и «дальние» страницы,
+   *    с последующей реализацией первой тактики;
+   *  - преимущественное использование последовательностей отправляется
+   *    в MithrilDB как составляющая "HDD frendly" feature;
+   *  - реализованная в 3757eb72f7c6b46862f8f17881ac88e8cecc1979 экономия
+   *    последовательностей отключается через MDBX_ENABLE_SAVING_SEQUENCES=0.
+   *
+   * В качестве альтернативы для безусловной «экономии» последовательностей,
+   * в следующих версиях libmdbx, вероятно, будет предложено
+   * API для взаимодействия с GC:
+   *  - получение размера GC, включая гистограммы размеров последовательностей
+   *    и близости к концу БД;
+   *  - включение формирования "линейного запаса" для последующего использования
+   *    в рамках текущей транзакции;
+   *  - намеренная загрузка GC в память для коагуляции и "выпрямления";
+   *  - намеренное копирование данных из страниц в конце БД для последующего
+   *    из освобождения, т.е. контролируемая компактификация по запросу. */
+
+#ifndef MDBX_ENABLE_SAVING_SEQUENCES
+#define MDBX_ENABLE_SAVING_SEQUENCES 0
+#endif
+  if (MDBX_ENABLE_SAVING_SEQUENCES && unlikely(target[dir] == *target + 1) &&
+      len > 2) {
+    /* Пытаемся пропускать последовательности при наличии одиночных элементов.
+     * TODO: необходимо кэшировать пропускаемые последовательности
+     * чтобы не сканировать список сначала при каждом выделении. */
     pgno_t *scan = target + dir + dir;
     size_t left = len;
     do {
@@ -6799,7 +6853,7 @@ __hot static pgno_t pnl_get_single(MDBX_PNL pnl) {
 #else
         /* вырезаем элемент с перемещением хвоста */
         const pgno_t pgno = *scan;
-        MDBX_PNL_SETSIZE(pnl, len - 1);
+        MDBX_PNL_SETSIZE(txn->tw.relist, len - 1);
         while (++scan <= target)
           scan[-1] = *scan;
         return pgno;
@@ -6812,45 +6866,47 @@ __hot static pgno_t pnl_get_single(MDBX_PNL pnl) {
   const pgno_t pgno = *target;
 #if MDBX_PNL_ASCENDING
   /* вырезаем элемент с перемещением хвоста */
-  MDBX_PNL_SETSIZE(pnl, len - 1);
-  for (const pgno_t *const end = pnl + len - 1; target <= end; ++target)
+  MDBX_PNL_SETSIZE(txn->tw.relist, len - 1);
+  for (const pgno_t *const end = txn->tw.relist + len - 1; target <= end;
+       ++target)
     *target = target[1];
 #else
   /* перемещать хвост не нужно, просто усекам список */
-  MDBX_PNL_SETSIZE(pnl, len - 1);
+  MDBX_PNL_SETSIZE(txn->tw.relist, len - 1);
 #endif
   return pgno;
 }
 
-__hot static pgno_t pnl_get_sequence(MDBX_PNL pnl, const size_t num,
-                                     uint8_t flags) {
-  const size_t len = MDBX_PNL_GETSIZE(pnl);
-  pgno_t *edge = MDBX_PNL_EDGE(pnl);
+__hot static pgno_t relist_get_sequence(MDBX_txn *txn, const size_t num,
+                                        uint8_t flags) {
+  const size_t len = MDBX_PNL_GETSIZE(txn->tw.relist);
+  pgno_t *edge = MDBX_PNL_EDGE(txn->tw.relist);
   assert(len >= num && num > 1);
   const size_t seq = num - 1;
 #if !MDBX_PNL_ASCENDING
   if (edge[-(ptrdiff_t)seq] - *edge == seq) {
     if (unlikely(flags & MDBX_ALLOC_RESERVE))
       return P_INVALID;
-    assert(edge == scan4range_checker(pnl, seq));
+    assert(edge == scan4range_checker(txn->tw.relist, seq));
     /* перемещать хвост не нужно, просто усекам список */
-    MDBX_PNL_SETSIZE(pnl, len - num);
+    MDBX_PNL_SETSIZE(txn->tw.relist, len - num);
     return *edge;
   }
 #endif
   pgno_t *target = scan4seq_impl(edge, len, seq);
-  assert(target == scan4range_checker(pnl, seq));
+  assert(target == scan4range_checker(txn->tw.relist, seq));
   if (target) {
     if (unlikely(flags & MDBX_ALLOC_RESERVE))
       return P_INVALID;
     const pgno_t pgno = *target;
     /* вырезаем найденную последовательность с перемещением хвоста */
-    MDBX_PNL_SETSIZE(pnl, len - num);
+    MDBX_PNL_SETSIZE(txn->tw.relist, len - num);
 #if MDBX_PNL_ASCENDING
-    for (const pgno_t *const end = pnl + len - num; target <= end; ++target)
+    for (const pgno_t *const end = txn->tw.relist + len - num; target <= end;
+         ++target)
       *target = target[num];
 #else
-    for (const pgno_t *const end = pnl + len; ++target <= end;)
+    for (const pgno_t *const end = txn->tw.relist + len; ++target <= end;)
       target[-(ptrdiff_t)num] = *target;
 #endif
     return pgno;
@@ -7094,7 +7150,7 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
     if (MDBX_PNL_GETSIZE(txn->tw.relist) >= num) {
       eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                        MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
-      pgno = pnl_get_sequence(txn->tw.relist, num, flags);
+      pgno = relist_get_sequence(txn, num, flags);
       if (likely(pgno))
         goto done;
     }
@@ -7231,10 +7287,10 @@ next_gc:;
         eASSERT(env, MDBX_PNL_LAST(txn->tw.relist) < txn->mt_next_pgno &&
                          MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
         if (likely(num == 1)) {
-          pgno = pnl_get_single(txn->tw.relist);
+          pgno = relist_get_single(txn);
           goto done;
         }
-        pgno = pnl_get_sequence(txn->tw.relist, num, flags);
+        pgno = relist_get_sequence(txn, num, flags);
         if (likely(pgno))
           goto done;
       }
@@ -7331,10 +7387,10 @@ scan:
                      MDBX_PNL_FIRST(txn->tw.relist) < txn->mt_next_pgno);
     if (likely(num == 1)) {
       eASSERT(env, !(flags & MDBX_ALLOC_RESERVE));
-      pgno = pnl_get_single(txn->tw.relist);
+      pgno = relist_get_single(txn);
       goto done;
     }
-    pgno = pnl_get_sequence(txn->tw.relist, num, flags);
+    pgno = relist_get_sequence(txn, num, flags);
     if (likely(pgno))
       goto done;
   }
@@ -7587,8 +7643,7 @@ __hot static pgr_t page_alloc(const MDBX_cursor *const mc) {
   }
 
   if (likely(MDBX_PNL_GETSIZE(txn->tw.relist) > 0))
-    return page_alloc_finalize(txn->mt_env, txn, mc,
-                               pnl_get_single(txn->tw.relist), 1);
+    return page_alloc_finalize(txn->mt_env, txn, mc, relist_get_single(txn), 1);
 
   return page_alloc_slowpath(mc, 1, MDBX_ALLOC_DEFAULT);
 }
