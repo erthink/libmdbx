@@ -14877,10 +14877,8 @@ __cold static int env_close(MDBX_env *env) {
   }
 
 #if defined(_WIN32) || defined(_WIN64)
-  if (env->me_overlapped_fd) {
-    CloseHandle(env->me_overlapped_fd);
-    env->me_overlapped_fd = 0;
-  }
+  eASSERT(env, !env->me_overlapped_fd ||
+                   env->me_overlapped_fd == INVALID_HANDLE_VALUE);
   if (env->me_data_lock_event != INVALID_HANDLE_VALUE) {
     CloseHandle(env->me_data_lock_event);
     env->me_data_lock_event = INVALID_HANDLE_VALUE;

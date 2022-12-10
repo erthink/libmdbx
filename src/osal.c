@@ -1155,6 +1155,8 @@ MDBX_INTERNAL_FUNC void osal_ioring_destroy(osal_ioring_t *ior) {
   osal_memalign_free(ior->pool);
   osal_free(ior->event_pool);
   CloseHandle(ior->async_done);
+  if (ior->overlapped_fd)
+    CloseHandle(ior->overlapped_fd);
 #else
   osal_free(ior->pool);
 #endif
