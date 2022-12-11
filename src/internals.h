@@ -1273,12 +1273,14 @@ struct MDBX_env {
 #if !(defined(_WIN32) || defined(_WIN64))
     unsigned writethrough_threshold;
 #endif /* Windows */
+    bool prefault_write;
     union {
       unsigned all;
       /* tracks options with non-auto values but tuned by user */
       struct {
         unsigned dp_limit : 1;
         unsigned rp_augment_limit : 1;
+        unsigned prefault_write : 1;
       } non_auto;
     } flags;
   } me_options;
@@ -1300,6 +1302,7 @@ struct MDBX_env {
     int semid;
   } me_sysv_ipc;
 #endif /* MDBX_LOCKING == MDBX_LOCKING_SYSV */
+  bool me_incore;
 
   MDBX_env *me_lcklist_next;
 
@@ -1308,6 +1311,7 @@ struct MDBX_env {
   MDBX_txn *me_txn; /* current write transaction */
   osal_fastmutex_t me_dbi_lock;
   MDBX_dbi me_numdbs; /* number of DBs opened */
+  bool me_prefault_write;
 
   MDBX_page *me_dp_reserve; /* list of malloc'ed blocks for re-use */
   unsigned me_dp_reserve_len;

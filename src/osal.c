@@ -1760,6 +1760,50 @@ MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
   return MDBX_SUCCESS;
 }
 
+MDBX_INTERNAL_FUNC int osal_check_fs_incore(mdbx_filehandle_t handle) {
+#if defined(_WIN32) || defined(_WIN64)
+  (void)handle;
+#else
+  struct statfs statfs_info;
+  if (fstatfs(handle, &statfs_info))
+    return errno;
+
+#if defined(__OpenBSD__)
+  const unsigned type = 0;
+#else
+  const unsigned type = statfs_info.f_type;
+#endif
+  switch (type) {
+  case 0x28cd3d45 /* CRAMFS_MAGIC */:
+  case 0x858458f6 /* RAMFS_MAGIC */:
+  case 0x01021994 /* TMPFS_MAGIC */:
+  case 0x73717368 /* SQUASHFS_MAGIC */:
+  case 0x7275 /* ROMFS_MAGIC */:
+    return MDBX_RESULT_TRUE;
+  }
+
+#if defined(__FreeBSD__) || defined(__NetBSD__) || defined(__OpenBSD__) ||     \
+    defined(__BSD__) || defined(__bsdi__) || defined(__DragonFly__) ||         \
+    defined(__APPLE__) || defined(__MACH__) || defined(MFSNAMELEN) ||          \
+    defined(MFSTYPENAMELEN) || defined(VFS_NAMELEN)
+  const char *const name = statfs_info.f_fstypename;
+  const size_t name_len = sizeof(statfs_info.f_fstypename);
+#else
+  const char *const name = "";
+  const size_t name_len = 0;
+#endif
+  if (name_len) {
+    if (strncasecmp("tmpfs", name, 6) == 0 ||
+        strncasecmp("mfs", name, 4) == 0 ||
+        strncasecmp("ramfs", name, 6) == 0 ||
+        strncasecmp("romfs", name, 6) == 0)
+      return MDBX_RESULT_TRUE;
+  }
+#endif /* !Windows */
+
+  return MDBX_RESULT_FALSE;
+}
+
 static int osal_check_fs_local(mdbx_filehandle_t handle, int flags) {
 #if defined(_WIN32) || defined(_WIN64)
   if (mdbx_RunningUnderWine() && !(flags & MDBX_EXCLUSIVE))

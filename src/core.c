@@ -5920,11 +5920,26 @@ __cold static void munlock_all(const MDBX_env *env) {
 }
 
 __cold static unsigned default_rp_augment_limit(const MDBX_env *env) {
-  /* default drp_augment_limit = ceil(npages / gold_ratio) */
+  /* default rp_augment_limit = ceil(npages / gold_ratio) */
   const size_t augment = (env->me_dbgeo.now >> (env->me_psize2log + 10)) * 633u;
   eASSERT(env, augment < MDBX_PGL_LIMIT);
   return pnl_bytes2size(pnl_size2bytes(
       (augment > MDBX_PNL_INITIAL) ? augment : MDBX_PNL_INITIAL));
+}
+
+__cold static bool default_prefault_write(const MDBX_env *env) {
+  if (env->me_incore ||
+      (env->me_flags & (MDBX_WRITEMAP | MDBX_RDONLY)) != MDBX_WRITEMAP)
+    return false;
+
+  return !MDBX_MMAP_INCOHERENT_FILE_WRITE;
+}
+
+static void adjust_defaults(MDBX_env *env) {
+  if (!env->me_options.flags.non_auto.rp_augment_limit)
+    env->me_options.rp_augment_limit = default_rp_augment_limit(env);
+  if (!env->me_options.flags.non_auto.prefault_write)
+    env->me_options.prefault_write = default_prefault_write(env);
 }
 
 __cold static int map_resize(MDBX_env *env, const pgno_t used_pgno,
@@ -6120,8 +6135,7 @@ bailout:
     /* update env-geo to avoid influences */
     env->me_dbgeo.now = env->me_dxb_mmap.current;
     env->me_dbgeo.upper = env->me_dxb_mmap.limit;
-    if (!env->me_options.flags.non_auto.rp_augment_limit)
-      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
+    adjust_defaults(env);
 #ifdef MDBX_USE_VALGRIND
     if (prev_limit != env->me_dxb_mmap.limit || prev_map != env->me_map) {
       VALGRIND_DISCARD(env->me_valgrind_handle);
@@ -7044,26 +7058,15 @@ static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
      * с диска. При этом запись на диск должна быть отложена адекватным ядром,
      * так как страница отображена в память в режиме чтения-записи и следом в
      * неё пишет ЦПУ. */
-    const bool readahead_enabled = env->me_lck->mti_readahead_anchor & 1;
-    const pgno_t readahead_edge = env->me_lck->mti_readahead_anchor >> 1;
+
     /* В случае если страница в памяти процесса, то излишняя запись может быть
      * достаточно дорогой. Кроме системного вызова и копирования данных, в особо
      * одаренных ОС при этом могут включаться файловая система, выделяться
      * временная страница, пополняться очереди асинхронного выполнения,
      * обновляться PTE с последующей генерацией page-fault и чтением данных из
      * грязной I/O очереди. Из-за этого штраф за лишнюю запись может быть
-     * сравним с избегаемым ненужным чтением.
-     *
-     * Проверка посредством minicore() существенно снижает затраты, но в
-     * простейших случаях (тривиальный бенчмарк) интегральная производительность
-     * становится вдвое меньше. А на платформах без minocore() и с проблемной
-     * подсистемой виртуальной памяти ситуация может быть многократно хуже.
-     * Поэтому избегаем затрат в ситуациях когда prefaukt-write скорее всего не
-     * нужна. Стоит подумать над дополнительными критериями. */
-    if (/* Не суетимся если GC почти пустая и БД маленькая */
-        (txn->mt_dbs[FREE_DBI].md_branch_pages || txn->mt_geo.now > 1234) &&
-        /* Не суетимся если страница в зоне включенного упреждающего чтения */
-        (!readahead_enabled || pgno + num > readahead_edge)) {
+     * сравним с избегаемым ненужным чтением. */
+    if (env->me_prefault_write) {
       void *const pattern = ptr_disp(
           env->me_pbuf, need_clean ? env->me_psize : env->me_psize * 2);
       size_t file_offset = pgno2bytes(env, pgno);
@@ -7199,6 +7202,24 @@ static pgr_t page_alloc_slowpath(const MDBX_cursor *const mc, const size_t num,
   eASSERT(env, mc != gc && gc->mc_next == nullptr);
   gc->mc_txn = txn;
   gc->mc_flags = 0;
+
+  env->me_prefault_write = env->me_options.prefault_write;
+  if (env->me_prefault_write) {
+    /* Проверка посредством minicore() существенно снижает затраты, но в
+     * простейших случаях (тривиальный бенчмарк) интегральная производительность
+     * становится вдвое меньше. А на платформах без mincore() и с проблемной
+     * подсистемой виртуальной памяти ситуация может быть многократно хуже.
+     * Поэтому избегаем затрат в ситуациях когда prefaukt-write скорее всего не
+     * нужна. */
+    const bool readahead_enabled = env->me_lck->mti_readahead_anchor & 1;
+    const pgno_t readahead_edge = env->me_lck->mti_readahead_anchor >> 1;
+    if (/* Не суетимся если GC почти пустая и БД маленькая */
+        (txn->mt_dbs[FREE_DBI].md_branch_pages == 0 &&
+         txn->mt_geo.now < 1234) ||
+        /* Не суетимся если страница в зоне включенного упреждающего чтения */
+        (readahead_enabled && pgno + num < readahead_edge))
+      env->me_prefault_write = false;
+  }
 
 retry_gc_refresh_oldest:;
   txnid_t oldest = txn_oldest_reader(txn);
@@ -12359,7 +12380,8 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
         mode_bits |= MDBX_SYNC_SIZE;
       if (flags & MDBX_NOMETASYNC)
         mode_bits |= MDBX_SYNC_IODQ;
-    }
+    } else if (unlikely(env->me_incore))
+      goto skip_incore_sync;
     if (!MDBX_AVOID_MSYNC && (flags & MDBX_WRITEMAP)) {
 #if MDBX_ENABLE_PGOP_STAT
       env->me_lck->mti_pgop_stat.msync.weak += sync_op;
@@ -12391,6 +12413,7 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     atomic_store64(&env->me_lck->mti_unsynced_pages, 0, mo_Relaxed);
   } else {
     assert(rc == MDBX_RESULT_TRUE /* carry non-steady */);
+  skip_incore_sync:
     eASSERT(env, env->me_lck->mti_unsynced_pages.weak > 0);
     eASSERT(env, env->me_lck->mti_eoos_timestamp.weak != 0);
     unaligned_poke_u64(4, pending->mm_sign, MDBX_DATASIGN_WEAK);
@@ -12495,35 +12518,38 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     memcpy(target->mm_sign, pending->mm_sign, 8);
     osal_flush_incoherent_cpu_writeback();
     jitter4testing(true);
-    if (!MDBX_AVOID_MSYNC) {
-      /* sync meta-pages */
+    if (!env->me_incore) {
+      if (!MDBX_AVOID_MSYNC) {
+        /* sync meta-pages */
 #if MDBX_ENABLE_PGOP_STAT
-      env->me_lck->mti_pgop_stat.msync.weak += 1;
+        env->me_lck->mti_pgop_stat.msync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-      rc = osal_msync(&env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
-                      (flags & MDBX_NOMETASYNC)
-                          ? MDBX_SYNC_KICK
-                          : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
-    } else {
+        rc = osal_msync(
+            &env->me_dxb_mmap, 0, pgno_align2os_bytes(env, NUM_METAS),
+            (flags & MDBX_NOMETASYNC) ? MDBX_SYNC_KICK
+                                      : MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+      } else {
 #if MDBX_ENABLE_PGOP_STAT
-      env->me_lck->mti_pgop_stat.wops.weak += 1;
+        env->me_lck->mti_pgop_stat.wops.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-      const MDBX_page *page = data_page(target);
-      rc = osal_pwrite(env->me_fd4meta, page, env->me_psize,
-                       ptr_dist(page, env->me_map));
-      if (likely(rc == MDBX_SUCCESS)) {
-        osal_flush_incoherent_mmap(target, sizeof(MDBX_meta), env->me_os_psize);
-        if ((flags & MDBX_NOMETASYNC) == 0 &&
-            env->me_fd4meta == env->me_lazy_fd) {
+        const MDBX_page *page = data_page(target);
+        rc = osal_pwrite(env->me_fd4meta, page, env->me_psize,
+                         ptr_dist(page, env->me_map));
+        if (likely(rc == MDBX_SUCCESS)) {
+          osal_flush_incoherent_mmap(target, sizeof(MDBX_meta),
+                                     env->me_os_psize);
+          if ((flags & MDBX_NOMETASYNC) == 0 &&
+              env->me_fd4meta == env->me_lazy_fd) {
 #if MDBX_ENABLE_PGOP_STAT
-          env->me_lck->mti_pgop_stat.fsync.weak += 1;
+            env->me_lck->mti_pgop_stat.fsync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
-          rc = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+            rc = osal_fsync(env->me_lazy_fd, MDBX_SYNC_DATA | MDBX_SYNC_IODQ);
+          }
         }
       }
+      if (unlikely(rc != MDBX_SUCCESS))
+        goto fail;
     }
-    if (unlikely(rc != MDBX_SUCCESS))
-      goto fail;
   } else {
 #if MDBX_ENABLE_PGOP_STAT
     env->me_lck->mti_pgop_stat.wops.weak += 1;
@@ -12542,7 +12568,8 @@ static int sync_locked(MDBX_env *env, unsigned flags, MDBX_meta *const pending,
     }
     osal_flush_incoherent_mmap(target, sizeof(MDBX_meta), env->me_os_psize);
     /* sync meta-pages */
-    if ((flags & MDBX_NOMETASYNC) == 0 && env->me_fd4meta == env->me_lazy_fd) {
+    if ((flags & MDBX_NOMETASYNC) == 0 && env->me_fd4meta == env->me_lazy_fd &&
+        !env->me_incore) {
 #if MDBX_ENABLE_PGOP_STAT
       env->me_lck->mti_pgop_stat.fsync.weak += 1;
 #endif /* MDBX_ENABLE_PGOP_STAT */
@@ -13050,8 +13077,7 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
         pgno2bytes(env, pv2pages(pages2pv(bytes2pgno(env, growth_step))));
     env->me_dbgeo.shrink =
         pgno2bytes(env, pv2pages(pages2pv(bytes2pgno(env, shrink_threshold))));
-    if (!env->me_options.flags.non_auto.rp_augment_limit)
-      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
+    adjust_defaults(env);
 
     ENSURE(env, env->me_dbgeo.lower >= MIN_MAPSIZE);
     ENSURE(env, env->me_dbgeo.lower / (unsigned)pagesize >= MIN_PAGENO);
@@ -14017,8 +14043,8 @@ static uint32_t merge_sync_flags(const uint32_t a, const uint32_t b) {
       !F_ISSET(r, MDBX_UTTERLY_NOSYNC))
     r = (r - MDBX_DEPRECATED_MAPASYNC) | MDBX_SAFE_NOSYNC;
 
-  /* force MDBX_NOMETASYNC if MDBX_SAFE_NOSYNC enabled */
-  if (r & MDBX_SAFE_NOSYNC)
+  /* force MDBX_NOMETASYNC if NOSYNC enabled */
+  if (r & (MDBX_SAFE_NOSYNC | MDBX_UTTERLY_NOSYNC))
     r |= MDBX_NOMETASYNC;
 
   assert(!(F_ISSET(r, MDBX_UTTERLY_NOSYNC) &&
@@ -14746,6 +14772,16 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
     goto bailout;
   }
 
+  rc = osal_check_fs_incore(env->me_lazy_fd);
+  env->me_incore = false;
+  if (rc == MDBX_RESULT_TRUE) {
+    env->me_incore = true;
+    NOTICE("%s", "in-core database");
+  } else if (unlikely(rc != MDBX_SUCCESS)) {
+    ERROR("check_fs_incore(), err %d", rc);
+    goto bailout;
+  }
+
   if (unlikely(/* recovery mode */ env->me_stuck_meta >= 0) &&
       (lck_rc != /* exclusive */ MDBX_RESULT_TRUE ||
        (flags & MDBX_EXCLUSIVE) == 0)) {
@@ -14784,8 +14820,6 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
   }
 
   if ((flags & MDBX_RDONLY) == 0) {
-    if (!env->me_options.flags.non_auto.rp_augment_limit)
-      env->me_options.rp_augment_limit = default_rp_augment_limit(env);
     const size_t tsize = sizeof(MDBX_txn) + sizeof(MDBX_cursor),
                  size = tsize + env->me_maxdbs *
                                     (sizeof(MDBX_db) + sizeof(MDBX_cursor *) +
@@ -14821,6 +14855,8 @@ __cold int mdbx_env_openW(MDBX_env *env, const wchar_t *pathname,
                               ior_direct, env->me_overlapped_fd
 #endif /* Windows */
       );
+    if (rc == MDBX_SUCCESS)
+      adjust_defaults(env);
   }
 
 #if MDBX_DEBUG

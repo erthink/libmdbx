@@ -585,6 +585,7 @@ MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
 MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
                                             const pathchar_t *pathname,
                                             int err);
+MDBX_INTERNAL_FUNC int osal_check_fs_incore(mdbx_filehandle_t handle);
 
 MDBX_MAYBE_UNUSED static __inline uint32_t osal_getpid(void) {
   STATIC_ASSERT(sizeof(mdbx_pid_t) <= sizeof(uint32_t));
