@@ -222,7 +222,7 @@ static walk_dbi_t *pagemap_lookup_dbi(const char *dbi_name, bool silent) {
   }
 
   if (verbose > 0 && !silent) {
-    print(" - found '%s' area\n", dbi_name);
+    print(" - found `%s` area\n", dbi_name);
     fflush(nullptr);
   }
 
@@ -491,8 +491,7 @@ static int pgvisitor(const uint64_t pgno, const unsigned pgnumber,
 
 typedef int(visitor)(const uint64_t record_number, const MDBX_val *key,
                      const MDBX_val *data);
-static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
-                      bool silent);
+static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler);
 
 static int handle_userdb(const uint64_t record_number, const MDBX_val *key,
                          const MDBX_val *data) {
@@ -634,7 +633,7 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   memcpy(name, key->iov_base, key->iov_len);
   name[key->iov_len] = '\0';
 
-  rc = process_db(~0u, name, handle_userdb, false);
+  rc = process_db(~0u, name, handle_userdb);
   osal_free(name);
   if (rc != MDBX_INCOMPATIBLE) {
     userdb_count++;
@@ -694,8 +693,7 @@ static const char *db_flags2valuemode(unsigned flags) {
   }
 }
 
-static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
-                      bool silent) {
+static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler) {
   MDBX_cursor *mc;
   MDBX_stat ms;
   MDBX_val key, data;
@@ -704,12 +702,13 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   int rc, i;
   struct problem *saved_list;
   uint64_t problems_count;
+  const bool second_pass = dbi_handle == MAIN_DBI;
 
   uint64_t record_count = 0, dups = 0;
   uint64_t key_bytes = 0, data_bytes = 0;
 
   if ((MDBX_TXN_FINISHED | MDBX_TXN_ERROR) & mdbx_txn_flags(txn)) {
-    print(" ! abort processing '%s' due to a previous error\n",
+    print(" ! abort processing `%s` due to a previous error\n",
           dbi_name ? dbi_name : "@MAIN");
     return MDBX_BAD_TXN;
   }
@@ -723,8 +722,8 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
       if (!dbi_name ||
           rc !=
               MDBX_INCOMPATIBLE) /* LY: mainDB's record is not a user's DB. */ {
-        error("mdbx_dbi_open('%s') failed, error %d %s\n",
-              dbi_name ? dbi_name : "main", rc, mdbx_strerror(rc));
+        error("mdbx_dbi_open(`%s`) failed, error %d %s\n",
+              dbi_name ? dbi_name : "@MAIN", rc, mdbx_strerror(rc));
       }
       return rc;
     }
@@ -733,15 +732,15 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
   if (dbi_handle >= CORE_DBS && dbi_name && only_subdb &&
       strcmp(only_subdb, dbi_name) != 0) {
     if (verbose) {
-      print("Skip processing '%s'...\n", dbi_name);
+      print("Skip processing %s...\n", dbi_name);
       fflush(nullptr);
     }
     skipped_subdb++;
     return MDBX_SUCCESS;
   }
 
-  if (!silent && verbose)
-    print("Processing '%s'...\n", dbi_name ? dbi_name : "@MAIN");
+  if (!second_pass && verbose)
+    print("Processing %s...\n", dbi_name ? dbi_name : "@MAIN");
   fflush(nullptr);
 
   rc = mdbx_dbi_flags(txn, dbi_handle, &flags);
@@ -756,7 +755,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     return rc;
   }
 
-  if (!silent && verbose) {
+  if (!second_pass && verbose) {
     print(" - key-value kind: %s-key => %s-value", db_flags2keymode(flags),
           db_flags2valuemode(flags));
     if (verbose > 1) {
@@ -832,57 +831,75 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     if (rc)
       goto bailout;
 
-    bool bad_key = false;
-    if (key.iov_len > maxkeysize) {
-      problem_add("entry", record_count, "key length exceeds max-key-size",
-                  "%" PRIuPTR " > %" PRIuPTR, key.iov_len, maxkeysize);
-      bad_key = true;
-    } else if ((flags & MDBX_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
-               key.iov_len != sizeof(uint32_t)) {
-      problem_add("entry", record_count, "wrong key length",
-                  "%" PRIuPTR " != 4or8", key.iov_len);
-      bad_key = true;
-    }
+    if (!second_pass) {
+      bool bad_key = false;
+      if (key.iov_len > maxkeysize) {
+        problem_add("entry", record_count, "key length exceeds max-key-size",
+                    "%" PRIuPTR " > %" PRIuPTR, key.iov_len, maxkeysize);
+        bad_key = true;
+      } else if ((flags & MDBX_INTEGERKEY) && key.iov_len != sizeof(uint64_t) &&
+                 key.iov_len != sizeof(uint32_t)) {
+        problem_add("entry", record_count, "wrong key length",
+                    "%" PRIuPTR " != 4or8", key.iov_len);
+        bad_key = true;
+      }
 
-    bool bad_data = false;
-    if ((flags & MDBX_INTEGERDUP) && data.iov_len != sizeof(uint64_t) &&
-        data.iov_len != sizeof(uint32_t)) {
-      problem_add("entry", record_count, "wrong data length",
-                  "%" PRIuPTR " != 4or8", data.iov_len);
-      bad_data = true;
-    }
-
-    if (prev_key.iov_base) {
-      if (prev_data.iov_base && !bad_data && (flags & MDBX_DUPFIXED) &&
-          prev_data.iov_len != data.iov_len) {
-        problem_add("entry", record_count, "different data length",
-                    "%" PRIuPTR " != %" PRIuPTR, prev_data.iov_len,
-                    data.iov_len);
+      bool bad_data = false;
+      if ((flags & MDBX_INTEGERDUP) && data.iov_len != sizeof(uint64_t) &&
+          data.iov_len != sizeof(uint32_t)) {
+        problem_add("entry", record_count, "wrong data length",
+                    "%" PRIuPTR " != 4or8", data.iov_len);
         bad_data = true;
       }
 
-      if (!bad_key) {
-        int cmp = mdbx_cmp(txn, dbi_handle, &key, &prev_key);
-        if (cmp == 0) {
-          ++dups;
-          if ((flags & MDBX_DUPSORT) == 0) {
-            problem_add("entry", record_count, "duplicated entries", nullptr);
-            if (prev_data.iov_base && data.iov_len == prev_data.iov_len &&
-                memcmp(data.iov_base, prev_data.iov_base, data.iov_len) == 0) {
-              problem_add("entry", record_count, "complete duplicate", nullptr);
-            }
-          } else if (!bad_data && prev_data.iov_base) {
-            cmp = mdbx_dcmp(txn, dbi_handle, &data, &prev_data);
-            if (cmp == 0) {
-              problem_add("entry", record_count, "complete duplicate", nullptr);
-            } else if (cmp < 0 && !ignore_wrong_order) {
-              problem_add("entry", record_count, "wrong order of multi-values",
-                          nullptr);
-            }
-          }
-        } else if (cmp < 0 && !ignore_wrong_order) {
-          problem_add("entry", record_count, "wrong order of entries", nullptr);
+      if (prev_key.iov_base) {
+        if (prev_data.iov_base && !bad_data && (flags & MDBX_DUPFIXED) &&
+            prev_data.iov_len != data.iov_len) {
+          problem_add("entry", record_count, "different data length",
+                      "%" PRIuPTR " != %" PRIuPTR, prev_data.iov_len,
+                      data.iov_len);
+          bad_data = true;
         }
+
+        if (!bad_key) {
+          int cmp = mdbx_cmp(txn, dbi_handle, &key, &prev_key);
+          if (cmp == 0) {
+            ++dups;
+            if ((flags & MDBX_DUPSORT) == 0) {
+              problem_add("entry", record_count, "duplicated entries", nullptr);
+              if (prev_data.iov_base && data.iov_len == prev_data.iov_len &&
+                  memcmp(data.iov_base, prev_data.iov_base, data.iov_len) ==
+                      0) {
+                problem_add("entry", record_count, "complete duplicate",
+                            nullptr);
+              }
+            } else if (!bad_data && prev_data.iov_base) {
+              cmp = mdbx_dcmp(txn, dbi_handle, &data, &prev_data);
+              if (cmp == 0) {
+                problem_add("entry", record_count, "complete duplicate",
+                            nullptr);
+              } else if (cmp < 0 && !ignore_wrong_order) {
+                problem_add("entry", record_count,
+                            "wrong order of multi-values", nullptr);
+              }
+            }
+          } else if (cmp < 0 && !ignore_wrong_order) {
+            problem_add("entry", record_count, "wrong order of entries",
+                        nullptr);
+          }
+        }
+      }
+
+      if (!bad_key) {
+        if (verbose && (flags & MDBX_INTEGERKEY) && !prev_key.iov_base)
+          print(" - fixed key-size %" PRIuPTR "\n", key.iov_len);
+        prev_key = key;
+      }
+      if (!bad_data) {
+        if (verbose && (flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
+            !prev_data.iov_base)
+          print(" - fixed data-size %" PRIuPTR "\n", data.iov_len);
+        prev_data = data;
       }
     }
 
@@ -896,17 +913,6 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     key_bytes += key.iov_len;
     data_bytes += data.iov_len;
 
-    if (!bad_key) {
-      if (verbose && (flags & MDBX_INTEGERKEY) && !prev_key.iov_base)
-        print(" - fixed key-size %" PRIuPTR "\n", key.iov_len);
-      prev_key = key;
-    }
-    if (!bad_data) {
-      if (verbose && (flags & (MDBX_INTEGERDUP | MDBX_DUPFIXED)) &&
-          !prev_data.iov_base)
-        print(" - fixed data-size %" PRIuPTR "\n", data.iov_len);
-      prev_data = data;
-    }
     rc = mdbx_cursor_get(mc, &key, &data, MDBX_NEXT);
   }
   if (rc != MDBX_NOTFOUND)
@@ -919,7 +925,7 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
                 "%" PRIu64 " != %" PRIu64, record_count, ms.ms_entries);
 bailout:
   problems_count = problems_pop(saved_list);
-  if (!silent && verbose) {
+  if (!second_pass && verbose) {
     print(" - summary: %" PRIu64 " records, %" PRIu64 " dups, %" PRIu64
           " key's bytes, %" PRIu64 " data's "
           "bytes, %" PRIu64 " problems\n",
@@ -1225,8 +1231,9 @@ int main(int argc, char *argv[]) {
       rc = EXIT_INTERRUPTED;
     }
     if (only_subdb || dont_traversal) {
-      error("whole database checking with tree-traversal are required to turn "
-            "to the specified meta-page.\n");
+      error(
+          "whole database checking with b-tree traversal are required to turn "
+          "to the specified meta-page.\n");
       rc = EXIT_INTERRUPTED;
     }
   }
@@ -1642,11 +1649,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (gc_tree_problems) {
-    print("Skip processing %s since tree is corrupted (%u problems)\n", "@GC",
-          gc_tree_problems);
+    print("Skip processing %s since %s is corrupted (%u problems)\n", "@GC",
+          "b-tree", gc_tree_problems);
     problems_freedb = gc_tree_problems;
   } else
-    problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb, false);
+    problems_freedb = process_db(FREE_DBI, "@GC", handle_freedb);
 
   if (verbose) {
     uint64_t value = envinfo.mi_mapsize / envinfo.mi_dxb_pagesize;
@@ -1687,18 +1694,18 @@ int main(int argc, char *argv[]) {
               walk.pgcount, alloc_pages - gc_pages);
       }
       if (unused_pages != gc_pages) {
-        error("gc pages mismatch (%" PRIu64 "(expected) != %" PRIu64 "(GC))\n",
+        error("GC pages mismatch (%" PRIu64 "(expected) != %" PRIu64 "(GC))\n",
               unused_pages, gc_pages);
       }
     } else if (verbose) {
-      print(" - skip check used and gc pages (btree-traversal with "
+      print(" - skip check used and GC pages (btree-traversal with "
             "monopolistic or read-write mode only)\n");
     }
 
-    problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
+    problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr);
     if (problems_maindb == 0) {
       print("Scanning %s for %s...\n", "@MAIN", "sub-database(s)");
-      if (!process_db(MAIN_DBI, nullptr, handle_maindb, true)) {
+      if (!process_db(MAIN_DBI, nullptr, handle_maindb)) {
         if (!userdb_count && verbose)
           print(" - does not contain multiple databases\n");
       }
@@ -1708,7 +1715,7 @@ int main(int argc, char *argv[]) {
     }
   } else {
     print("Skip processing %s since %s is corrupted (%u problems)\n", "@MAIN",
-          "tree", data_tree_problems);
+          "b-tree", data_tree_problems);
   }
 
   if (rc == 0 && total_problems == 1 && problems_meta == 1 && !dont_traversal &&
