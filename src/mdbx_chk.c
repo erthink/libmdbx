@@ -620,6 +620,8 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
   int rc;
   size_t i;
 
+  if (data->iov_len != sizeof(MDBX_db))
+    return handle_userdb(record_number, key, data);
   name = key->iov_base;
   for (i = 0; i < key->iov_len; ++i) {
     if (name[i] < ' ')
@@ -631,12 +633,13 @@ static int handle_maindb(const uint64_t record_number, const MDBX_val *key,
     return MDBX_ENOMEM;
   memcpy(name, key->iov_base, key->iov_len);
   name[key->iov_len] = '\0';
-  userdb_count++;
 
   rc = process_db(~0u, name, handle_userdb, false);
   osal_free(name);
-  if (rc != MDBX_INCOMPATIBLE)
+  if (rc != MDBX_INCOMPATIBLE) {
+    userdb_count++;
     return rc;
+  }
 
   return handle_userdb(record_number, key, data);
 }
@@ -737,10 +740,9 @@ static int process_db(MDBX_dbi dbi_handle, char *dbi_name, visitor *handler,
     return MDBX_SUCCESS;
   }
 
-  if (!silent && verbose) {
+  if (!silent && verbose)
     print("Processing '%s'...\n", dbi_name ? dbi_name : "@MAIN");
-    fflush(nullptr);
-  }
+  fflush(nullptr);
 
   rc = mdbx_dbi_flags(txn, dbi_handle, &flags);
   if (rc) {
@@ -1639,15 +1641,6 @@ int main(int argc, char *argv[]) {
     fflush(nullptr);
   }
 
-  if (!verbose)
-    print("Iterating DBIs...\n");
-  if (data_tree_problems) {
-    print("Skip processing %s since tree is corrupted (%u problems)\n", "@MAIN",
-          data_tree_problems);
-    problems_maindb = data_tree_problems;
-  } else
-    problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
-
   if (gc_tree_problems) {
     print("Skip processing %s since tree is corrupted (%u problems)\n", "@GC",
           gc_tree_problems);
@@ -1685,7 +1678,7 @@ int main(int argc, char *argv[]) {
     print(", available %" PRIu64 " (%.1f%%)\n", value, value / percent);
   }
 
-  if (problems_maindb == 0 && problems_freedb == 0) {
+  if ((problems_maindb = data_tree_problems) == 0 && problems_freedb == 0) {
     if (!dont_traversal &&
         (envflags & (MDBX_EXCLUSIVE | MDBX_RDONLY)) != MDBX_RDONLY) {
       if (walk.pgcount != alloc_pages - gc_pages) {
@@ -1702,10 +1695,20 @@ int main(int argc, char *argv[]) {
             "monopolistic or read-write mode only)\n");
     }
 
-    if (!process_db(MAIN_DBI, nullptr, handle_maindb, true)) {
-      if (!userdb_count && verbose)
-        print(" - does not contain multiple databases\n");
+    problems_maindb = process_db(~0u, /* MAIN_DBI */ nullptr, nullptr, false);
+    if (problems_maindb == 0) {
+      print("Scanning %s for %s...\n", "@MAIN", "sub-database(s)");
+      if (!process_db(MAIN_DBI, nullptr, handle_maindb, true)) {
+        if (!userdb_count && verbose)
+          print(" - does not contain multiple databases\n");
+      }
+    } else {
+      print("Skip processing %s since %s is corrupted (%u problems)\n",
+            "sub-database(s)", "@MAIN", problems_maindb);
     }
+  } else {
+    print("Skip processing %s since %s is corrupted (%u problems)\n", "@MAIN",
+          "tree", data_tree_problems);
   }
 
   if (rc == 0 && total_problems == 1 && problems_meta == 1 && !dont_traversal &&
