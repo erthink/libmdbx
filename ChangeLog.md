@@ -10,7 +10,7 @@ and [by Yandex](https://translated.turbopages.org/proxy_u/ru-en.en/https/gitflic
 Выпуск с существенными доработками и новой функциональностью в память о закрытом open-source проекте "Акула".
 
 ```
-18 files changed, 2470 insertions(+), 1562 deletions(-)
+18 files changed, 2729 insertions(+), 1696 deletions(-)
 Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 ```
 
@@ -44,6 +44,9 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
 
    Новый функционал работает в согласованности с автоматическим управлением read-ahead
    и кэшем статуса присутствия страниц в ОЗУ, посредством [mincore()](https://man7.org/linux/man-pages/man2/mincore.2.html).
+
+ - Добавлена опция `MDBX_opt_prefault_write_enable` для возможности принудительного
+   включения/выключения prefault-записи.
 
  - Реализован динамический выбор между сквозной записью на диск и обычной записью
    с последующим [fdatasync()](https://man7.org/linux/man-pages/man3/fdatasync.3p.html)
@@ -102,6 +105,7 @@ Signed-off-by: Леонид Юрьев (Leonid Yuriev) <leo@yuriev.ru>
  - Доработка подготовки резерва перед обновлением GC при включенном BigFoot.
  - Оптимизация `pnl_merge()` для случаев неперекрывающихся объединяемых списков.
  - Оптимизация поддержки отсортированного списка страниц в `dpl_append()`.
+ - Ускорение работы `mdbx_chk` при обработке пользовательских записей в `@MAIN`.
 
 
 -------------------------------------------------------------------------------
