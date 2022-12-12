@@ -2254,6 +2254,11 @@ enum MDBX_option_t {
    * On Windows a write-through is used always but \ref MDBX_NOMETASYNC could
    * be used for switching to write-and-flush. */
   MDBX_opt_writethrough_threshold,
+
+  /** \brief Controls prevention of page-faults of reclaimed and allocated pages
+   * in the \ref MDBX_WRITEMAP mode by clearing ones through file handle before
+   * touching. */
+  MDBX_opt_prefault_write_enable,
 };
 #ifndef __cplusplus
 /** \ingroup c_settings */

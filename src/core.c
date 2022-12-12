@@ -7043,7 +7043,6 @@ static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
     MDBX_ASAN_UNPOISON_MEMORY_REGION(ret.page, pgno2bytes(env, num));
     VALGRIND_MAKE_MEM_UNDEFINED(ret.page, pgno2bytes(env, num));
 
-#if MDBX_ENABLE_PREFAULT
     /* Содержимое выделенной страницы не нужно, но если страница отсутствует
      * в ОЗУ (что весьма вероятно), то любое обращение к ней приведет
      * к page-fault:
@@ -7107,7 +7106,6 @@ static __inline pgr_t page_alloc_finalize(MDBX_env *const env,
           need_clean = false;
       }
     }
-#endif /* MDBX_ENABLE_PREFAULT */
   } else {
     ret.page = page_malloc(txn, num);
     if (unlikely(!ret.page)) {
@@ -24553,6 +24551,18 @@ __cold int mdbx_env_set_option(MDBX_env *env, const MDBX_option_t option,
 #endif
     break;
 
+  case MDBX_opt_prefault_write_enable:
+    if (value == /* default */ UINT64_MAX) {
+      env->me_options.prefault_write = default_prefault_write(env);
+      env->me_options.flags.non_auto.prefault_write = false;
+    } else if (value > 1)
+      err = MDBX_EINVAL;
+    else {
+      env->me_options.prefault_write = value != 0;
+      env->me_options.flags.non_auto.prefault_write = true;
+    }
+    break;
+
   default:
     return MDBX_EINVAL;
   }
@@ -24632,6 +24642,10 @@ __cold int mdbx_env_get_option(const MDBX_env *env, const MDBX_option_t option,
 #else
     *pvalue = env->me_options.writethrough_threshold;
 #endif
+    break;
+
+  case MDBX_opt_prefault_write_enable:
+    *pvalue = env->me_options.prefault_write;
     break;
 
   default:
@@ -25120,7 +25134,6 @@ __dll_export
     " MDBX_AVOID_MSYNC=" MDBX_STRINGIFY(MDBX_AVOID_MSYNC)
     " MDBX_ENABLE_REFUND=" MDBX_STRINGIFY(MDBX_ENABLE_REFUND)
     " MDBX_ENABLE_MADVISE=" MDBX_STRINGIFY(MDBX_ENABLE_MADVISE)
-    " MDBX_ENABLE_PREFAULT=" MDBX_STRINGIFY(MDBX_ENABLE_PREFAULT)
     " MDBX_ENABLE_MINCORE=" MDBX_STRINGIFY(MDBX_ENABLE_MINCORE)
     " MDBX_ENABLE_PGOP_STAT=" MDBX_STRINGIFY(MDBX_ENABLE_PGOP_STAT)
     " MDBX_ENABLE_PROFGC=" MDBX_STRINGIFY(MDBX_ENABLE_PROFGC)
