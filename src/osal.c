@@ -1707,9 +1707,15 @@ MDBX_INTERNAL_FUNC int osal_thread_join(osal_thread_t thread) {
 MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
                                   size_t length,
                                   enum osal_syncmode_bits mode_bits) {
+  if (!MDBX_MMAP_USE_MS_ASYNC && mode_bits == MDBX_SYNC_KICK)
+    return MDBX_SUCCESS;
+
   void *ptr = ptr_disp(map->base, offset);
 #if defined(_WIN32) || defined(_WIN64)
   if (!FlushViewOfFile(ptr, length))
+    return (int)GetLastError();
+  if ((mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_IODQ)) &&
+      !FlushFileBuffers(map->fd))
     return (int)GetLastError();
 #else
 #if defined(__linux__) || defined(__gnu_linux__)
@@ -1718,6 +1724,7 @@ MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
   //
   // However, this behavior may be changed in custom kernels,
   // so just leave such optimization to the libc discretion.
+  // NOTE: The MDBX_MMAP_USE_MS_ASYNC must be defined to 1 for such cases.
   //
   // assert(linux_kernel_version > 0x02061300);
   // if (mode_bits == MDBX_SYNC_KICK)
@@ -1725,9 +1732,10 @@ MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
 #endif /* Linux */
   if (msync(ptr, length, (mode_bits & MDBX_SYNC_DATA) ? MS_SYNC : MS_ASYNC))
     return errno;
-  mode_bits &= ~MDBX_SYNC_DATA;
+  if ((mode_bits & MDBX_SYNC_SIZE) && fsync(map->fd))
+    return errno;
 #endif
-  return osal_fsync(map->fd, mode_bits);
+  return MDBX_SUCCESS;
 }
 
 MDBX_INTERNAL_FUNC int osal_check_fs_rdonly(mdbx_filehandle_t handle,
