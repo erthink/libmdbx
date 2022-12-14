@@ -523,10 +523,11 @@ osal_thread_create(osal_thread_t *thread,
 MDBX_INTERNAL_FUNC int osal_thread_join(osal_thread_t thread);
 
 enum osal_syncmode_bits {
-  MDBX_SYNC_KICK = 0,
-  MDBX_SYNC_DATA = 1,
-  MDBX_SYNC_SIZE = 2,
-  MDBX_SYNC_IODQ = 4
+  MDBX_SYNC_NONE = 0,
+  MDBX_SYNC_KICK = 1,
+  MDBX_SYNC_DATA = 2,
+  MDBX_SYNC_SIZE = 4,
+  MDBX_SYNC_IODQ = 8
 };
 
 MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,

@@ -1110,6 +1110,7 @@ struct MDBX_txn {
           MDBX_PNL list;
         } spilled;
         size_t writemap_dirty_npages;
+        size_t writemap_spilled_npages;
       };
     } tw;
   };

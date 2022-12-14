@@ -1566,6 +1566,7 @@ MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,
    * see http://www.spinics.net/lists/linux-ext4/msg33714.html */
   while (1) {
     switch (mode_bits & (MDBX_SYNC_DATA | MDBX_SYNC_SIZE)) {
+    case MDBX_SYNC_NONE:
     case MDBX_SYNC_KICK:
       return MDBX_SUCCESS /* nothing to do */;
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
@@ -1707,7 +1708,7 @@ MDBX_INTERNAL_FUNC int osal_thread_join(osal_thread_t thread) {
 MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
                                   size_t length,
                                   enum osal_syncmode_bits mode_bits) {
-  if (!MDBX_MMAP_USE_MS_ASYNC && mode_bits == MDBX_SYNC_KICK)
+  if (!MDBX_MMAP_USE_MS_ASYNC && mode_bits == MDBX_SYNC_NONE)
     return MDBX_SUCCESS;
 
   void *ptr = ptr_disp(map->base, offset);
@@ -1727,7 +1728,7 @@ MDBX_INTERNAL_FUNC int osal_msync(const osal_mmap_t *map, size_t offset,
   // NOTE: The MDBX_MMAP_USE_MS_ASYNC must be defined to 1 for such cases.
   //
   // assert(linux_kernel_version > 0x02061300);
-  // if (mode_bits == MDBX_SYNC_KICK)
+  // if (mode_bits <= MDBX_SYNC_KICK)
   //   return MDBX_SUCCESS;
 #endif /* Linux */
   if (msync(ptr, length, (mode_bits & MDBX_SYNC_DATA) ? MS_SYNC : MS_ASYNC))
