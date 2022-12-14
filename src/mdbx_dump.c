@@ -66,7 +66,7 @@ static const char hexc[] = "0123456789abcdef";
 
 static void dumpbyte(unsigned char c) {
   putchar(hexc[c >> 4]);
-  putchar(hexc[c & 0xf]);
+  putchar(hexc[c & 15]);
 }
 
 static void text(MDBX_val *v) {
