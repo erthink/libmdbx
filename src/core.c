@@ -2998,7 +2998,8 @@ static __inline bool dpl_intersect(const MDBX_txn *txn, pgno_t pgno,
   return rc;
 }
 
-static __always_inline size_t dpl_exist(const MDBX_txn *txn, pgno_t pgno) {
+MDBX_NOTHROW_PURE_FUNCTION static __always_inline size_t
+dpl_exist(const MDBX_txn *txn, pgno_t pgno) {
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   MDBX_dpl *dl = txn->tw.dirtylist;
   size_t i = dpl_search(txn, pgno);
@@ -3062,7 +3063,8 @@ static __noinline void txn_lru_reduce(MDBX_txn *txn) {
   } while (txn);
 }
 
-static __inline uint32_t dpl_age(const MDBX_txn *txn, size_t i) {
+MDBX_NOTHROW_PURE_FUNCTION static __inline uint32_t dpl_age(const MDBX_txn *txn,
+                                                            size_t i) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   const MDBX_dpl *dl = txn->tw.dirtylist;
@@ -4750,8 +4752,8 @@ static size_t txn_keep(MDBX_txn *txn, MDBX_cursor *m0) {
  *      0 = should be spilled;
  *    ...
  *  > 255 = must not be spilled. */
-static unsigned spill_prio(const MDBX_txn *txn, const size_t i,
-                           const uint32_t reciprocal) {
+MDBX_NOTHROW_PURE_FUNCTION static unsigned
+spill_prio(const MDBX_txn *txn, const size_t i, const uint32_t reciprocal) {
   MDBX_dpl *const dl = txn->tw.dirtylist;
   const uint32_t age = dpl_age(txn, i);
   const size_t npages = dpl_npages(dl, i);
