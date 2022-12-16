@@ -15,7 +15,7 @@ N |   MASK  | ENV       | TXN          | DB       | PUT       | DBI        | NOD
 12|0000 1000|           |              |          |           |            |         |          |         |
 13|0000 2000|VALIDATION |              |          |           |            |         |P_SPILLED |         |
 14|0000 4000|NOSUBDIR   |              |          |           |            |         |P_LOOSE   |         |
-15|0000 8000|           |              |DB_VALID  |NOSPILL    |            |         |P_FROZEN  |         |
+15|0000 8000|           |              |DB_VALID  |           |            |         |P_FROZEN  |         |
 16|0001 0000|SAFE_NOSYNC|TXN_NOSYNC    |          |RESERVE    |            |RESERVE  |          |         |
 17|0002 0000|RDONLY     |TXN_RDONLY    |          |APPEND     |            |APPEND   |          | <=      |
 18|0004 0000|NOMETASYNC |TXN_NOMETASYNC|CREATE    |APPENDDUP  |            |         |          |         |

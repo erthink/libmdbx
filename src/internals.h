@@ -1681,9 +1681,6 @@ typedef struct MDBX_node {
 #define CMP2INT(a, b) (((a) > (b)) - ((b) > (a)))
 #endif
 
-/* Do not spill pages to disk if txn is getting full, may fail instead */
-#define MDBX_NOSPILL 0x8000
-
 MDBX_MAYBE_UNUSED MDBX_NOTHROW_CONST_FUNCTION static __inline pgno_t
 int64pgno(int64_t i64) {
   if (likely(i64 >= (int64_t)MIN_PAGENO && i64 <= (int64_t)MAX_PAGENO + 1))

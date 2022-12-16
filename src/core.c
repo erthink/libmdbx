@@ -3210,8 +3210,8 @@ static txnid_t kick_longlived_readers(MDBX_env *env, const txnid_t laggard);
 static pgr_t page_new(MDBX_cursor *mc, const unsigned flags);
 static pgr_t page_new_large(MDBX_cursor *mc, const size_t npages);
 static int page_touch(MDBX_cursor *mc);
-static int cursor_touch(MDBX_cursor *mc);
-static int touch_dbi(MDBX_cursor *mc);
+static int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
+                        const MDBX_val *data);
 
 #define MDBX_END_NAMES                                                         \
   {                                                                            \
@@ -5141,7 +5141,7 @@ __cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
     for (size_t i = 1; i <= dl->length; ++i) {
       MDBX_page *dp = dl->items[i].ptr;
       VERBOSE(
-          "dirtylist[%zu]: pgno %u, npages %u, flags 0x%04X, age %u, prio %u",
+          "unspillable[%zu]: pgno %u, npages %u, flags 0x%04X, age %u, prio %u",
           i, dp->mp_pgno, dpl_npages(dl, i), dp->mp_flags, dpl_age(txn, i),
           spill_prio(txn, i, reciprocal));
     }
@@ -5166,39 +5166,6 @@ done:
                 ((need > CURSOR_STACK) ? CURSOR_STACK : need))
              ? MDBX_SUCCESS
              : MDBX_TXN_FULL;
-}
-
-static int cursor_spill(MDBX_cursor *mc, const MDBX_val *key,
-                        const MDBX_val *data) {
-  MDBX_txn *txn = mc->mc_txn;
-  tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
-
-  /* Estimate how much space this operation will take: */
-  /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
-  size_t need = CURSOR_STACK + 3;
-  /* 2) GC/FreeDB for any payload */
-  if (mc->mc_dbi > FREE_DBI) {
-    need += txn->mt_dbs[FREE_DBI].md_depth + 3;
-    /* 3) Named DBs also dirty the main DB */
-    if (mc->mc_dbi > MAIN_DBI)
-      need += txn->mt_dbs[MAIN_DBI].md_depth + 3;
-  }
-#if xMDBX_DEBUG_SPILLING != 2
-  /* production mode */
-  /* 4) Double the page chain estimation
-   * for extensively splitting, rebalance and merging */
-  need += need;
-  /* 5) Factor the key+data which to be put in */
-  need += bytes2pgno(txn->mt_env, node_size(key, data)) + 1;
-#else
-  /* debug mode */
-  (void)key;
-  (void)data;
-  mc->mc_txn->mt_env->debug_dirtied_est = ++need;
-  mc->mc_txn->mt_env->debug_dirtied_act = 0;
-#endif /* xMDBX_DEBUG_SPILLING == 2 */
-
-  return txn_spill(txn, mc, need);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -7833,7 +7800,7 @@ __hot static int page_touch(MDBX_cursor *mc) {
                      txn->tw.dirtylist->items[n].ptr == mp);
     txn->tw.dirtylist->items[n].mlru =
         (txn->tw.dirtylist->items[n].mlru & MDBX_dp_multi_mask) +
-        txn_lru_turn(txn);
+        (txn->tw.dirtylru & MDBX_dp_lru_mask);
     return MDBX_SUCCESS;
   }
   if (IS_SUBP(mp)) {
@@ -9991,8 +9958,12 @@ static int gcu_clean_stored_retired(MDBX_txn *txn, gcu_context_t *ctx) {
 }
 
 static int gcu_touch(gcu_context_t *ctx) {
+  MDBX_val key, val;
+  key.iov_base = val.iov_base = nullptr;
+  key.iov_len = sizeof(txnid_t);
+  val.iov_len = MDBX_PNL_SIZEOF(ctx->cursor.mc_txn->tw.retired_pages);
   ctx->cursor.mc_flags |= C_GCU;
-  int err = cursor_touch(&ctx->cursor);
+  int err = cursor_touch(&ctx->cursor, &key, &val);
   ctx->cursor.mc_flags -= C_GCU;
   return err;
 }
@@ -10036,18 +10007,7 @@ static int gcu_prepare_backlog(MDBX_txn *txn, gcu_context_t *ctx) {
         for_all_before_touch, for_relist, for_split, for_cow,
         for_tree_before_touch);
 
-  int err;
-  if (unlikely(for_relist > 2)) {
-    MDBX_val key, val;
-    key.iov_base = val.iov_base = nullptr;
-    key.iov_len = sizeof(txnid_t);
-    val.iov_len = MDBX_PNL_SIZEOF(txn->tw.retired_pages);
-    err = cursor_spill(&ctx->cursor, &key, &val);
-    if (unlikely(err != MDBX_SUCCESS))
-      return err;
-  }
-
-  err = gcu_touch(ctx);
+  int err = gcu_touch(ctx);
   TRACE("== after-touch, backlog %zu, err %d", gcu_backlog_size(txn), err);
 
   if (!MDBX_ENABLE_BIGFOOT && unlikely(for_relist > 1) &&
@@ -15517,7 +15477,8 @@ __hot __noinline static int page_search_root(MDBX_cursor *mc,
 
   ready:
     if (flags & MDBX_PS_MODIFY) {
-      if (unlikely((rc = page_touch(mc)) != 0))
+      rc = page_touch(mc);
+      if (unlikely(rc != MDBX_SUCCESS))
         return rc;
       mp = mc->mc_pg[mc->mc_top];
     }
@@ -15731,8 +15692,6 @@ __hot static int page_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
         mc->mc_pg[0]->mp_flags);
 
   if (flags & MDBX_PS_MODIFY) {
-    if (!(*mc->mc_dbistate & DBI_DIRTY) && unlikely(rc = touch_dbi(mc)))
-      return rc;
     if (unlikely(rc = page_touch(mc)))
       return rc;
   }
@@ -16878,21 +16837,61 @@ static int touch_dbi(MDBX_cursor *mc) {
   return MDBX_SUCCESS;
 }
 
-/* Touch all the pages in the cursor stack. Set mc_top.
- * Makes sure all the pages are writable, before attempting a write operation.
- * [in] mc The cursor to operate on. */
-static int cursor_touch(MDBX_cursor *mc) {
-  int rc = MDBX_SUCCESS;
+static int cursor_touch(MDBX_cursor *const mc, const MDBX_val *key,
+                        const MDBX_val *data) {
+  cASSERT(mc, (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) == 0);
+  cASSERT(mc, (mc->mc_flags & C_INITIALIZED) || mc->mc_snum == 0);
+  cASSERT(mc, cursor_is_tracked(mc));
+
+  txn_lru_turn(mc->mc_txn);
+
   if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
-    rc = touch_dbi(mc);
-    if (unlikely(rc != MDBX_SUCCESS))
-      return rc;
+    int err = touch_dbi(mc);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
   }
+
+  if ((mc->mc_flags & C_SUB) == 0) {
+    MDBX_txn *const txn = mc->mc_txn;
+    /* Estimate how much space this operation will take: */
+    /* 1) Max b-tree height, reasonable enough with including dups' sub-tree */
+    size_t need = CURSOR_STACK + 3;
+    /* 2) GC/FreeDB for any payload */
+    if (mc->mc_dbi > FREE_DBI) {
+      need += txn->mt_dbs[FREE_DBI].md_depth + 3;
+      /* 3) Named DBs also dirty the main DB */
+      if (mc->mc_dbi > MAIN_DBI)
+        need += txn->mt_dbs[MAIN_DBI].md_depth + 3;
+    }
+#if xMDBX_DEBUG_SPILLING != 2
+    /* production mode */
+    /* 4) Double the page chain estimation
+     * for extensively splitting, rebalance and merging */
+    need += need;
+    /* 5) Factor the key+data which to be put in */
+    need += bytes2pgno(txn->mt_env, node_size(key, data)) + 1;
+#else
+    /* debug mode */
+    (void)key;
+    (void)data;
+    txn->mt_env->debug_dirtied_est = ++need;
+    txn->mt_env->debug_dirtied_act = 0;
+#endif /* xMDBX_DEBUG_SPILLING == 2 */
+
+    int err = txn_spill(txn, mc, need);
+    if (unlikely(err != MDBX_SUCCESS))
+      return err;
+  }
+
+  int rc = MDBX_SUCCESS;
   if (likely(mc->mc_snum)) {
     mc->mc_top = 0;
     do {
       rc = page_touch(mc);
-    } while (!rc && ++(mc->mc_top) < mc->mc_snum);
+      if (unlikely(rc != MDBX_SUCCESS))
+        break;
+      mc->mc_top += 1;
+    } while (mc->mc_top < mc->mc_snum);
     mc->mc_top = mc->mc_snum - 1;
   }
   return rc;
@@ -16951,9 +16950,6 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
       return MDBX_INCOMPATIBLE;
     data->iov_base = nullptr;
   }
-
-  const unsigned nospill = flags & MDBX_NOSPILL;
-  flags -= nospill;
 
   if (unlikely(mc->mc_txn->mt_flags & (MDBX_TXN_RDONLY | MDBX_TXN_BLOCKED)))
     return (mc->mc_txn->mt_flags & MDBX_TXN_RDONLY) ? MDBX_EACCESS
@@ -17159,26 +17155,19 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   }
 
   mc->mc_flags &= ~C_DEL;
-
   /* Cursor is positioned, check for room in the dirty list */
-  if (!nospill) {
-    rdata = data;
-    if (unlikely(flags & MDBX_MULTIPLE)) {
-      rdata = &xdata;
-      xdata.iov_len = data->iov_len * dcount;
-    }
-    if (unlikely(err = cursor_spill(mc, key, rdata)))
-      return err;
+  rdata = data;
+  if (unlikely(flags & MDBX_MULTIPLE)) {
+    rdata = &xdata;
+    xdata.iov_len = data->iov_len * dcount;
   }
+  err = cursor_touch(mc, key, rdata);
+  if (unlikely(err))
+    return err;
 
   if (unlikely(rc == MDBX_NO_ROOT)) {
     /* new database, write a root leaf page */
     DEBUG("%s", "allocating new root leaf page");
-    if (unlikely((*mc->mc_dbistate & DBI_DIRTY) == 0)) {
-      err = touch_dbi(mc);
-      if (unlikely(err != MDBX_SUCCESS))
-        return err;
-    }
     pgr_t npr = page_new(mc, P_LEAF);
     if (unlikely(npr.err != MDBX_SUCCESS))
       return npr.err;
@@ -17205,11 +17194,6 @@ __hot int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
     if ((mc->mc_db->md_flags & (MDBX_DUPSORT | MDBX_DUPFIXED)) == MDBX_DUPFIXED)
       npr.page->mp_flags |= P_LEAF2;
     mc->mc_flags |= C_INITIALIZED;
-  } else {
-    /* make sure all cursor pages are writable */
-    err = cursor_touch(mc);
-    if (unlikely(err))
-      return err;
   }
 
   bool insert_key, insert_data, do_sub = false;
@@ -17602,9 +17586,8 @@ new_sub:;
       STATIC_ASSERT(
           (MDBX_NODUPDATA >> SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE) ==
           MDBX_NOOVERWRITE);
-      xflags = MDBX_CURRENT | MDBX_NOSPILL |
-               ((flags & MDBX_NODUPDATA) >>
-                SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE);
+      xflags = MDBX_CURRENT | ((flags & MDBX_NODUPDATA) >>
+                               SHIFT_MDBX_NODUPDATA_TO_MDBX_NOOVERWRITE);
       if ((flags & MDBX_CURRENT) == 0) {
         xflags -= MDBX_CURRENT;
         err = cursor_xinit1(mc, node, mc->mc_pg[mc->mc_top]);
@@ -17718,11 +17701,7 @@ __hot int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(mc->mc_ki[mc->mc_top] >= page_numkeys(mc->mc_pg[mc->mc_top])))
     return MDBX_NOTFOUND;
 
-  if (likely((flags & MDBX_NOSPILL) == 0) &&
-      unlikely(rc = cursor_spill(mc, NULL, NULL)))
-    return rc;
-
-  rc = cursor_touch(mc);
+  rc = cursor_touch(mc, nullptr, nullptr);
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
@@ -17744,7 +17723,7 @@ __hot int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
     } else {
       if (!(node_flags(node) & F_SUBDATA))
         mc->mc_xcursor->mx_cursor.mc_pg[0] = node_data(node);
-      rc = mdbx_cursor_del(&mc->mc_xcursor->mx_cursor, MDBX_NOSPILL);
+      rc = mdbx_cursor_del(&mc->mc_xcursor->mx_cursor, 0);
       if (unlikely(rc))
         return rc;
       /* If sub-DB still has entries, we're done */
