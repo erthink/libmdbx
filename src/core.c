@@ -1164,7 +1164,12 @@ static __inline uint64_t rthc_signature(const void *addr, uint8_t kind) {
 
 #define MDBX_THREAD_RTHC_REGISTERED(addr) rthc_signature(addr, 0x0D)
 #define MDBX_THREAD_RTHC_COUNTED(addr) rthc_signature(addr, 0xC0)
-static __thread uint64_t rthc_thread_state;
+static __thread uint64_t rthc_thread_state
+#if __has_attribute(tls_model) &&                                              \
+    (defined(__PIC__) || defined(__pic__) || MDBX_BUILD_SHARED_LIBRARY)
+    __attribute__((tls_model("local-dynamic")))
+#endif
+    ;
 
 #if defined(__APPLE__) && defined(__SANITIZE_ADDRESS__) &&                     \
     !defined(MDBX_ATTRIBUTE_NO_SANITIZE_ADDRESS)
