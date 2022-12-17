@@ -22503,6 +22503,12 @@ int mdbx_dbi_close(MDBX_env *env, MDBX_dbi dbi) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (unlikely(dbi < CORE_DBS))
+    return (dbi == MAIN_DBI) ? MDBX_SUCCESS : MDBX_BAD_DBI;
+
+  if (unlikely(dbi >= env->me_maxdbs))
+    return MDBX_BAD_DBI;
+
   if (unlikely(dbi < CORE_DBS || dbi >= env->me_maxdbs))
     return MDBX_BAD_DBI;
 
