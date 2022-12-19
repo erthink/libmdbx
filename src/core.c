@@ -4696,10 +4696,14 @@ static size_t cursor_keep(MDBX_txn *txn, MDBX_cursor *mc) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
   size_t keep = 0;
-  while (mc->mc_flags & C_INITIALIZED) {
-    for (size_t i = 0; i < mc->mc_snum; ++i) {
-      const MDBX_page *mp = mc->mc_pg[i];
-      if (IS_MODIFIABLE(txn, mp) && !IS_SUBP(mp)) {
+  while ((mc->mc_flags & C_INITIALIZED) && mc->mc_snum) {
+    tASSERT(txn, mc->mc_top == mc->mc_snum - 1);
+    const MDBX_page *mp;
+    size_t i = 0;
+    do {
+      mp = mc->mc_pg[i];
+      tASSERT(txn, !IS_SUBP(mp));
+      if (IS_MODIFIABLE(txn, mp)) {
         size_t const n = dpl_search(txn, mp->mp_pgno);
         if (txn->tw.dirtylist->items[n].pgno == mp->mp_pgno &&
             dpl_age(txn, n)) {
@@ -4709,8 +4713,13 @@ static size_t cursor_keep(MDBX_txn *txn, MDBX_cursor *mc) {
           ++keep;
         }
       }
-    }
-    if (!mc->mc_xcursor)
+    } while (++i < mc->mc_snum);
+
+    tASSERT(txn, IS_LEAF(mp));
+    if (!mc->mc_xcursor || mc->mc_ki[mc->mc_top] >= page_numkeys(mp))
+      break;
+    const MDBX_node *const node = page_node(mp, mc->mc_ki[mc->mc_top]);
+    if (!(node->mn_flags & F_SUBDATA))
       break;
     mc = &mc->mc_xcursor->mx_cursor;
   }
@@ -15667,7 +15676,8 @@ __hot static int page_search(MDBX_cursor *mc, const MDBX_val *key, int flags) {
   }
 
   cASSERT(mc, root >= NUM_METAS);
-  if (!mc->mc_pg[0] || mc->mc_pg[0]->mp_pgno != root) {
+  if (!mc->mc_snum || !(mc->mc_flags & C_INITIALIZED) ||
+      mc->mc_pg[0]->mp_pgno != root) {
     txnid_t pp_txnid = mc->mc_db->md_mod_txnid;
     pp_txnid = /* mc->mc_db->md_mod_txnid maybe zero in a legacy DB */ pp_txnid
                    ? pp_txnid
