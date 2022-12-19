@@ -3236,27 +3236,27 @@ enum {
 static int txn_end(MDBX_txn *txn, const unsigned mode);
 
 static __always_inline pgr_t page_get_inline(const uint16_t ILL,
-                                             MDBX_cursor *const mc,
+                                             const MDBX_cursor *const mc,
                                              const pgno_t pgno,
                                              const txnid_t front);
 
-static pgr_t page_get_any(MDBX_cursor *const mc, const pgno_t pgno,
+static pgr_t page_get_any(const MDBX_cursor *const mc, const pgno_t pgno,
                           const txnid_t front) {
   return page_get_inline(P_ILL_BITS, mc, pgno, front);
 }
 
-__hot static pgr_t page_get_three(MDBX_cursor *const mc, const pgno_t pgno,
-                                  const txnid_t front) {
+__hot static pgr_t page_get_three(const MDBX_cursor *const mc,
+                                  const pgno_t pgno, const txnid_t front) {
   return page_get_inline(P_ILL_BITS | P_OVERFLOW, mc, pgno, front);
 }
 
-static pgr_t page_get_large(MDBX_cursor *const mc, const pgno_t pgno,
+static pgr_t page_get_large(const MDBX_cursor *const mc, const pgno_t pgno,
                             const txnid_t front) {
   return page_get_inline(P_ILL_BITS | P_BRANCH | P_LEAF | P_LEAF2, mc, pgno,
                          front);
 }
 
-static __always_inline int __must_check_result page_get(MDBX_cursor *mc,
+static __always_inline int __must_check_result page_get(const MDBX_cursor *mc,
                                                         const pgno_t pgno,
                                                         MDBX_page **mp,
                                                         const txnid_t front) {
@@ -3330,9 +3330,9 @@ static int __must_check_result cursor_push(MDBX_cursor *mc, MDBX_page *mp);
 static int __must_check_result audit_ex(MDBX_txn *txn, size_t retired_stored,
                                         bool dont_filter_gc);
 
-static int __must_check_result page_check(MDBX_cursor *const mc,
+static int __must_check_result page_check(const MDBX_cursor *const mc,
                                           const MDBX_page *const mp);
-static int __must_check_result cursor_check(MDBX_cursor *mc);
+static int __must_check_result cursor_check(const MDBX_cursor *mc);
 static int __must_check_result cursor_check_updating(MDBX_cursor *mc);
 static int __must_check_result cursor_del(MDBX_cursor *mc);
 static int __must_check_result delete(MDBX_txn *txn, MDBX_dbi dbi,
@@ -15348,10 +15348,9 @@ __hot static __always_inline int page_get_checker_lite(const uint16_t ILL,
   return MDBX_SUCCESS;
 }
 
-__cold static __noinline pgr_t page_get_checker_full(const uint16_t ILL,
-                                                     MDBX_page *page,
-                                                     MDBX_cursor *const mc,
-                                                     const txnid_t front) {
+__cold static __noinline pgr_t
+page_get_checker_full(const uint16_t ILL, MDBX_page *page,
+                      const MDBX_cursor *const mc, const txnid_t front) {
   pgr_t r = {page, page_get_checker_lite(ILL, page, mc->mc_txn, front)};
   if (likely(r.err == MDBX_SUCCESS))
     r.err = page_check(mc, page);
@@ -15361,7 +15360,7 @@ __cold static __noinline pgr_t page_get_checker_full(const uint16_t ILL,
 }
 
 __hot static __always_inline pgr_t page_get_inline(const uint16_t ILL,
-                                                   MDBX_cursor *const mc,
+                                                   const MDBX_cursor *const mc,
                                                    const pgno_t pgno,
                                                    const txnid_t front) {
   MDBX_txn *const txn = mc->mc_txn;
@@ -19505,7 +19504,8 @@ retry:
   return MDBX_PROBLEM;
 }
 
-__cold static int page_check(MDBX_cursor *const mc, const MDBX_page *const mp) {
+__cold static int page_check(const MDBX_cursor *const mc,
+                             const MDBX_page *const mp) {
   DKBUF;
   int rc = MDBX_SUCCESS;
   if (unlikely(mp->mp_pgno < MIN_PAGENO || mp->mp_pgno > MAX_PAGENO))
@@ -19882,7 +19882,7 @@ __cold static int page_check(MDBX_cursor *const mc, const MDBX_page *const mp) {
   return rc;
 }
 
-__cold static int cursor_check(MDBX_cursor *mc) {
+__cold static int cursor_check(const MDBX_cursor *mc) {
   if (!mc->mc_txn->tw.dirtylist) {
     cASSERT(mc,
             (mc->mc_txn->mt_flags & MDBX_WRITEMAP) != 0 && !MDBX_AVOID_MSYNC);
