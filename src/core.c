@@ -11342,15 +11342,19 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   uint64_t ts_1 = 0, ts_2 = 0, ts_3 = 0, ts_4 = 0, ts_5 = 0, gc_cputime = 0;
 
   int rc = check_txn(txn, MDBX_TXN_FINISHED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    goto provide_latency;
+  if (unlikely(rc != MDBX_SUCCESS)) {
+    if (latency)
+      memset(latency, 0, sizeof(*latency));
+    return rc;
+  }
 
   MDBX_env *const env = txn->mt_env;
 #if MDBX_ENV_CHECKPID
   if (unlikely(env->me_pid != osal_getpid())) {
     env->me_flags |= MDBX_FATAL_ERROR;
-    rc = MDBX_PANIC;
-    goto provide_latency;
+    if (latency)
+      memset(latency, 0, sizeof(*latency));
+    return MDBX_PANIC;
   }
 #endif /* MDBX_ENV_CHECKPID */
 
