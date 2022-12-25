@@ -4546,10 +4546,15 @@ typedef struct iov_ctx {
 
 __must_check_result static int iov_init(MDBX_txn *const txn, iov_ctx_t *ctx,
                                         size_t items, size_t npages,
-                                        mdbx_filehandle_t fd) {
+                                        mdbx_filehandle_t fd,
+                                        bool check_coherence) {
   ctx->env = txn->mt_env;
   ctx->ior = &txn->mt_env->me_ioring;
   ctx->fd = fd;
+  ctx->coherency_timestamp =
+      (check_coherence || txn->mt_env->me_lck->mti_pgop_stat.incoherence.weak)
+          ? 0
+          : UINT64_MAX /* не выполнять сверку */;
   ctx->err = osal_ioring_prepare(ctx->ior, items,
                                  pgno_align2os_bytes(txn->mt_env, npages));
   if (likely(ctx->err == MDBX_SUCCESS)) {
@@ -4582,9 +4587,63 @@ static void iov_callback4dirtypages(iov_ctx_t *ctx, size_t offset, void *data,
     MDBX_ASAN_UNPOISON_MEMORY_REGION(rp, bytes);
     osal_flush_incoherent_mmap(rp, bytes, env->me_os_psize);
     /* check with timeout as the workaround
-     * for https://libmdbx.dqdkfa.ru/dead-github/issues/269 */
-    if (unlikely(memcmp(wp, rp, bytes))) {
+     * for https://libmdbx.dqdkfa.ru/dead-github/issues/269
+     *
+     * Проблема проявляется только при неупорядоченности: если записанная
+     * последней мета-страница "обгоняет" ранее записанные, т.е. когда
+     * записанное в файл позже становится видимым в отображении раньше,
+     * чем записанное ранее.
+     *
+     * Исходно здесь всегда выполнялась полная сверка. Это давало полную
+     * гарантию защиты от проявления проблемы, но порождало накладные расходы.
+     * В некоторых сценариях наблюдалось снижение производительности до 10-15%,
+     * а в синтетических тестах до 30%. Конечно никто не вникал в причины,
+     * а просто останавливался на мнении "libmdbx не быстрее LMDB",
+     * например: https://clck.ru/3386er
+     *
+     * Поэтому после серии экспериментов и тестов реализовано следующее:
+     * 0. Посредством опции сборки MDBX_FORCE_CHECK_MMAP_COHERENCY=1
+     *    можно включить полную сверку после записи.
+     *    Остальные пункты являются взвешенным компромиссом между полной
+     *    гарантией обнаружения проблемы и бесполезными затратами на системах
+     *    без этого недостатка.
+     * 1. При старте транзакций проверяется соответствие выбранной мета-страницы
+     *    корневым страницам b-tree проверяется. Эта проверка показала себя
+     *    достаточной без сверки после записи. При обнаружении "некогерентности"
+     *    эти случаи подсчитываются, а при их ненулевом счетчике выполняется
+     *    полная сверка. Таким образом, произойдет переключение в режим полной
+     *    сверки, если показавшая себя достаточной проверка заметит проявление
+     *    проблемы хоты-бы раз.
+     * 2. Сверка не выполняется при фиксации транзакции, так как:
+     *    - при наличии проблемы "не-когерентности" (при отложенном копировании
+     *      или обновлении PTE, после возврата из write-syscall), проверка
+     *      в этом процессе не гарантирует актуальность данных в другом
+     *      процессе, который может запустить транзакцию сразу после коммита;
+     *    - сверка только последнего блока позволяет почти восстановить
+     *      производительность в больших транзакциях, но одновременно размывает
+     *      уверенность в отсутствии сбоев, чем обесценивает всю затею;
+     *    - после записи данных будет записана мета-страница, соответствие
+     *      которой корневым страницам b-tree проверяется при старте
+     *      транзакций, и только эта проверка показала себя достаточной;
+     * 3. При спиллинге производится полная сверка записанных страниц. Тут был
+     *    соблазн сверять не полностью, а например начало и конец каждого блока.
+     *    Но при спиллинге возможна ситуация повторного вытеснения страниц, в
+     *    том числе large/overflow. При этом возникает риск прочитать в текущей
+     *    транзакции старую версию страницы, до повторной записи. В этом случае
+     *    могут возникать крайне редкие невоспроизводимые ошибки. С учетом того
+     *    что спиллинг выполняет крайне редко, решено отказаться от экономии
+     *    в пользу надежности. */
+#ifndef MDBX_FORCE_CHECK_MMAP_COHERENCY
+#define MDBX_FORCE_CHECK_MMAP_COHERENCY 0
+#endif /* MDBX_FORCE_CHECK_MMAP_COHERENCY */
+    if ((MDBX_FORCE_CHECK_MMAP_COHERENCY ||
+         ctx->coherency_timestamp != UINT64_MAX) &&
+        unlikely(memcmp(wp, rp, bytes))) {
       ctx->coherency_timestamp = 0;
+      env->me_lck->mti_pgop_stat.incoherence.weak =
+          (env->me_lck->mti_pgop_stat.incoherence.weak >= INT32_MAX)
+              ? INT32_MAX
+              : env->me_lck->mti_pgop_stat.incoherence.weak + 1;
       WARNING("catch delayed/non-arrived page %" PRIaPGNO " %s", wp->mp_pgno,
               "(workaround for incoherent flaw of unified page/buffer cache)");
       do
@@ -5074,7 +5133,8 @@ __cold static int txn_spill_slowpath(MDBX_txn *const txn, MDBX_cursor *const m0,
 #if defined(_WIN32) || defined(_WIN64)
                  txn->mt_env->me_overlapped_fd ? txn->mt_env->me_overlapped_fd :
 #endif
-                                               txn->mt_env->me_lazy_fd);
+                                               txn->mt_env->me_lazy_fd,
+                 true);
     if (unlikely(rc != MDBX_SUCCESS))
       goto bailout;
 
@@ -8530,6 +8590,11 @@ static bool coherency_check(const MDBX_env *env, const txnid_t txnid,
       ok = false;
     }
   }
+  if (unlikely(!ok) && report)
+    env->me_lck->mti_pgop_stat.incoherence.weak =
+        (env->me_lck->mti_pgop_stat.incoherence.weak >= INT32_MAX)
+            ? INT32_MAX
+            : env->me_lck->mti_pgop_stat.incoherence.weak + 1;
   return ok;
 }
 
@@ -8579,11 +8644,16 @@ static int coherency_check_written(const MDBX_env *env, const txnid_t txnid,
   const bool report = !(timestamp && *timestamp);
   const txnid_t head_txnid = meta_txnid(meta);
   if (unlikely(head_txnid < MIN_TXNID || (head_txnid < txnid))) {
-    if (report)
+    if (report) {
+      env->me_lck->mti_pgop_stat.incoherence.weak =
+          (env->me_lck->mti_pgop_stat.incoherence.weak >= INT32_MAX)
+              ? INT32_MAX
+              : env->me_lck->mti_pgop_stat.incoherence.weak + 1;
       WARNING("catch %s txnid %" PRIaTXN " for meta_%" PRIaPGNO " %s",
               (head_txnid < MIN_TXNID) ? "invalid" : "unexpected", head_txnid,
               bytes2pgno(env, ptr_dist(meta, env->me_map)),
               "(workaround for incoherent flaw of unified page/buffer cache)");
+    }
     return coherency_timeout(timestamp, 0);
   }
   return coherency_check_readed(env, head_txnid, meta->mm_dbs, meta, timestamp);
@@ -11678,7 +11748,7 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
 
     iov_ctx_t write_ctx;
     rc = iov_init(txn, &write_ctx, txn->tw.dirtylist->length,
-                  txn->tw.dirtylist->pages_including_loose, fd);
+                  txn->tw.dirtylist->pages_including_loose, fd, false);
     if (unlikely(rc != MDBX_SUCCESS)) {
       ERROR("txn-%s: error %d", "iov-init", rc);
       goto fail;

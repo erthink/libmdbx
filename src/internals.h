@@ -622,6 +622,11 @@ typedef struct pgop_stat {
   MDBX_atomic_uint64_t prefault; /* Number of prefault write operations */
   MDBX_atomic_uint64_t mincore;  /* Number of mincore() calls */
 
+  MDBX_atomic_uint32_t
+      incoherence; /* number of https://libmdbx.dqdkfa.ru/dead-github/issues/269
+                      caught */
+  MDBX_atomic_uint32_t reserved;
+
   /* Статистика для профилирования GC.
    * Логически эти данные может быть стоит вынести в другую структуру,
    * но разница будет сугубо косметическая. */
