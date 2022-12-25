@@ -4827,10 +4827,7 @@ spill_prio(const MDBX_txn *txn, const size_t i, const uint32_t reciprocal) {
   MDBX_page *const dp = dl->items[i].ptr;
   if (dp->mp_flags & (P_LOOSE | P_SPILLED)) {
     DEBUG("skip %s %zu page %" PRIaPGNO,
-          (dp->mp_flags & P_LOOSE)   ? "loose"
-          : (dp->mp_flags & P_LOOSE) ? "loose"
-                                     : "parent-spilled",
-          npages, pgno);
+          (dp->mp_flags & P_LOOSE) ? "loose" : "parent-spilled", npages, pgno);
     return 256;
   }
 
