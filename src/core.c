@@ -2270,8 +2270,9 @@ static void pnl_shrink(MDBX_PNL *ppl) {
          MDBX_PNL_ALLOCLEN(*ppl) >= MDBX_PNL_GETSIZE(*ppl));
   MDBX_PNL_SETSIZE(*ppl, 0);
   if (unlikely(MDBX_PNL_ALLOCLEN(*ppl) >
-               MDBX_PNL_INITIAL * 2 - MDBX_CACHELINE_SIZE / sizeof(pgno_t))) {
-    size_t bytes = pnl_size2bytes(MDBX_PNL_INITIAL);
+               MDBX_PNL_INITIAL * (MDBX_PNL_PREALLOC_FOR_RADIXSORT ? 8 : 4) -
+                   MDBX_CACHELINE_SIZE / sizeof(pgno_t))) {
+    size_t bytes = pnl_size2bytes(MDBX_PNL_INITIAL * 2);
     MDBX_PNL pl = osal_realloc(*ppl - 1, bytes);
     if (likely(pl)) {
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
@@ -2815,19 +2816,14 @@ static int dpl_alloc(MDBX_txn *txn) {
   tASSERT(txn, (txn->mt_flags & MDBX_TXN_RDONLY) == 0);
   tASSERT(txn, (txn->mt_flags & MDBX_WRITEMAP) == 0 || MDBX_AVOID_MSYNC);
 
-  const int wanna = (txn->mt_env->me_options.dp_initial < txn->mt_geo.upper)
-                        ? txn->mt_env->me_options.dp_initial
-                        : txn->mt_geo.upper;
-  if (txn->tw.dirtylist) {
-    dpl_clear(txn->tw.dirtylist);
-    const int realloc_threshold = 64;
-    if (likely(
-            !((int)(txn->tw.dirtylist->detent - wanna) > realloc_threshold ||
-              (int)(txn->tw.dirtylist->detent - wanna) < -realloc_threshold)))
-      return MDBX_SUCCESS;
-  }
-  if (unlikely(!dpl_reserve(txn, wanna)))
+  const size_t wanna = (txn->mt_env->me_options.dp_initial < txn->mt_geo.upper)
+                           ? txn->mt_env->me_options.dp_initial
+                           : txn->mt_geo.upper;
+  if (unlikely(!txn->tw.dirtylist || txn->tw.dirtylist->detent < wanna ||
+               txn->tw.dirtylist->detent > wanna + wanna) &&
+      unlikely(!dpl_reserve(txn, wanna)))
     return MDBX_ENOMEM;
+
   dpl_clear(txn->tw.dirtylist);
   return MDBX_SUCCESS;
 }
