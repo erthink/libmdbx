@@ -1571,7 +1571,7 @@ MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,
       return MDBX_SUCCESS /* nothing to do */;
 #if defined(_POSIX_SYNCHRONIZED_IO) && _POSIX_SYNCHRONIZED_IO > 0
     case MDBX_SYNC_DATA:
-      if (fdatasync(fd) == 0)
+      if (likely(fdatasync(fd) == 0))
         return MDBX_SUCCESS;
       break /* error */;
 #if defined(__linux__) || defined(__gnu_linux__)
@@ -1581,7 +1581,7 @@ MDBX_INTERNAL_FUNC int osal_fsync(mdbx_filehandle_t fd,
 #endif /* Linux */
 #endif /* _POSIX_SYNCHRONIZED_IO > 0 */
     default:
-      if (fsync(fd) == 0)
+      if (likely(fsync(fd) == 0))
         return MDBX_SUCCESS;
     }
 
