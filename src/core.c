@@ -3329,6 +3329,8 @@ static int __must_check_result audit_ex(MDBX_txn *txn, size_t retired_stored,
 static int __must_check_result page_check(const MDBX_cursor *const mc,
                                           const MDBX_page *const mp);
 static int __must_check_result cursor_check(const MDBX_cursor *mc);
+static int __must_check_result cursor_get(MDBX_cursor *mc, MDBX_val *key,
+                                          MDBX_val *data, MDBX_cursor_op op);
 static int __must_check_result cursor_put_checklen(MDBX_cursor *mc,
                                                    const MDBX_val *key,
                                                    MDBX_val *data,
@@ -7293,7 +7295,7 @@ next_gc:;
 #endif /* MDBX_ENABLE_PROFGC */
 
   /* Seek first/next GC record */
-  ret.err = mdbx_cursor_get(gc, &key, NULL, op);
+  ret.err = cursor_get(gc, &key, NULL, op);
   if (unlikely(ret.err != MDBX_SUCCESS)) {
     if (unlikely(ret.err != MDBX_NOTFOUND))
       goto fail;
@@ -9863,7 +9865,7 @@ __cold static int audit_ex(MDBX_txn *txn, size_t retired_stored,
 
   size_t gc = 0;
   MDBX_val key, data;
-  while ((rc = mdbx_cursor_get(&cx.outer, &key, &data, MDBX_NEXT)) == 0) {
+  while ((rc = cursor_get(&cx.outer, &key, &data, MDBX_NEXT)) == 0) {
     if (!dont_filter_gc) {
       if (unlikely(key.iov_len != sizeof(txnid_t)))
         return MDBX_CORRUPTED;
@@ -10204,7 +10206,7 @@ retry:
                       ctx->cleaned_id <= env->me_lck->mti_oldest_reader.weak);
           key.iov_base = &ctx->cleaned_id;
           key.iov_len = sizeof(ctx->cleaned_id);
-          rc = mdbx_cursor_get(&ctx->cursor, &key, NULL, MDBX_SET);
+          rc = cursor_set(&ctx->cursor, &key, NULL, MDBX_SET).err;
           if (rc == MDBX_NOTFOUND)
             continue;
           if (unlikely(rc != MDBX_SUCCESS))
@@ -10601,7 +10603,7 @@ retry:
           ctx->rid -= 1;
           key.iov_base = &ctx->rid;
           key.iov_len = sizeof(ctx->rid);
-          rc = mdbx_cursor_get(&ctx->cursor, &key, &data, MDBX_SET_KEY);
+          rc = cursor_set(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
           if (unlikely(rc == MDBX_SUCCESS)) {
             DEBUG("%s: GC's id %" PRIaTXN " is present, going to first",
                   dbg_prefix_mode, ctx->rid);
@@ -10844,7 +10846,7 @@ retry:
               dbg_prefix_mode, fill_gc_id, ctx->filled_slot);
         key.iov_base = &fill_gc_id;
         key.iov_len = sizeof(fill_gc_id);
-        rc = mdbx_cursor_get(&ctx->cursor, &key, &data, MDBX_SET_KEY);
+        rc = cursor_set(&ctx->cursor, &key, &data, MDBX_SET_KEY).err;
         if (unlikely(rc != MDBX_SUCCESS))
           goto bailout;
       }
@@ -15869,7 +15871,7 @@ int mdbx_get_equal_or_great(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
-  return mdbx_cursor_get(&cx.outer, key, data, MDBX_SET_LOWERBOUND);
+  return cursor_get(&cx.outer, key, data, MDBX_SET_LOWERBOUND);
 }
 
 int mdbx_get_ex(MDBX_txn *txn, MDBX_dbi dbi, MDBX_val *key, MDBX_val *data,
@@ -16545,20 +16547,11 @@ static int cursor_last(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data) {
   return MDBX_SUCCESS;
 }
 
-__hot int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
-                          MDBX_cursor_op op) {
-  if (unlikely(mc == NULL))
-    return MDBX_EINVAL;
-
-  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
-    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
-                                                     : MDBX_EBADSIGN;
-
-  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
-  if (unlikely(rc != MDBX_SUCCESS))
-    return rc;
-
+static __hot int cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                            MDBX_cursor_op op) {
   int (*mfunc)(MDBX_cursor * mc, MDBX_val * key, MDBX_val * data);
+  int rc;
+
   switch (op) {
   case MDBX_GET_CURRENT: {
     if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
@@ -16597,8 +16590,8 @@ __hot int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
             if (unlikely(rc))
               return rc;
           } else {
-            rc = mdbx_cursor_get(&mc->mc_xcursor->mx_cursor, data, NULL,
-                                 MDBX_GET_CURRENT);
+            rc = cursor_get(&mc->mc_xcursor->mx_cursor, data, NULL,
+                            MDBX_GET_CURRENT);
             if (unlikely(rc))
               return rc;
           }
@@ -16704,8 +16697,7 @@ __hot int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
       mc->mc_ki[mc->mc_top] = (indx_t)page_numkeys(mc->mc_pg[mc->mc_top]);
       mc->mc_flags |= C_EOF;
       return MDBX_NOTFOUND;
-    }
-    {
+    } else {
       MDBX_node *node = page_node(mc->mc_pg[mc->mc_top], mc->mc_ki[mc->mc_top]);
       if (!(node_flags(node) & F_DUPDATA)) {
         get_key_optional(node, key);
@@ -16773,6 +16765,22 @@ __hot int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
 
   mc->mc_flags &= ~C_DEL;
   return rc;
+}
+
+int mdbx_cursor_get(MDBX_cursor *mc, MDBX_val *key, MDBX_val *data,
+                    MDBX_cursor_op op) {
+  if (unlikely(mc == NULL))
+    return MDBX_EINVAL;
+
+  if (unlikely(mc->mc_signature != MDBX_MC_LIVE))
+    return (mc->mc_signature == MDBX_MC_READY4CLOSE) ? MDBX_EINVAL
+                                                     : MDBX_EBADSIGN;
+
+  int rc = check_txn(mc->mc_txn, MDBX_TXN_BLOCKED);
+  if (unlikely(rc != MDBX_SUCCESS))
+    return rc;
+
+  return cursor_get(mc, key, data, op);
 }
 
 static int cursor_first_batch(MDBX_cursor *mc) {
@@ -16997,10 +17005,10 @@ static __hot int cursor_put_nochecklen(MDBX_cursor *mc, const MDBX_val *key,
     /* Опция MDBX_CURRENT означает, что запрошено обновление текущей записи,
      * на которой сейчас стоит курсор. Проверяем что переданный ключ совпадает
      * со значением в текущей позиции курсора.
-     * Здесь проще вызвать mdbx_cursor_get(), так как для обслуживания таблиц
+     * Здесь проще вызвать cursor_get(), так как для обслуживания таблиц
      * с MDBX_DUPSORT также требуется текущий размер данных. */
     MDBX_val current_key, current_data;
-    err = mdbx_cursor_get(mc, &current_key, &current_data, MDBX_GET_CURRENT);
+    err = cursor_get(mc, &current_key, &current_data, MDBX_GET_CURRENT);
     if (unlikely(err != MDBX_SUCCESS))
       return err;
     if (mc->mc_dbx->md_cmp(key, &current_key) != 0)
@@ -20865,7 +20873,7 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
 
   /* LY: support for update (explicit overwrite) */
   if (flags & MDBX_CURRENT) {
-    rc = mdbx_cursor_get(&cx.outer, (MDBX_val *)key, NULL, MDBX_SET);
+    rc = cursor_set(&cx.outer, (MDBX_val *)key, NULL, MDBX_SET).err;
     if (likely(rc == MDBX_SUCCESS) &&
         (txn->mt_dbs[dbi].md_flags & MDBX_DUPSORT) &&
         (flags & MDBX_ALLDUPS) == 0) {
@@ -21288,7 +21296,7 @@ __cold static int env_compact(MDBX_env *env, MDBX_txn *read_txn,
                 read_txn->mt_dbs[FREE_DBI].md_leaf_pages +
                 read_txn->mt_dbs[FREE_DBI].md_overflow_pages;
     MDBX_val key, data;
-    while ((rc = mdbx_cursor_get(&couple.outer, &key, &data, MDBX_NEXT)) ==
+    while ((rc = cursor_get(&couple.outer, &key, &data, MDBX_NEXT)) ==
            MDBX_SUCCESS) {
       const MDBX_PNL pnl = data.iov_base;
       if (unlikely(data.iov_len % sizeof(pgno_t) ||
@@ -23802,7 +23810,7 @@ int mdbx_estimate_move(const MDBX_cursor *cursor, MDBX_val *key, MDBX_val *data,
   }
 
   next.outer.mc_signature = MDBX_MC_LIVE;
-  rc = mdbx_cursor_get(&next.outer, key, data, move_op);
+  rc = cursor_get(&next.outer, key, data, move_op);
   if (unlikely(rc != MDBX_SUCCESS &&
                (rc != MDBX_NOTFOUND || !(next.outer.mc_flags & C_INITIALIZED))))
     return rc;
@@ -24031,7 +24039,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
     /* убираем лишний бит, он был признаком запрошенного режима */
     flags -= MDBX_NOOVERWRITE;
 
-    rc = mdbx_cursor_get(&cx.outer, &present_key, old_data, MDBX_GET_BOTH);
+    rc = cursor_set(&cx.outer, &present_key, old_data, MDBX_GET_BOTH).err;
     if (rc != MDBX_SUCCESS)
       goto bailout;
   } else {
@@ -24039,7 +24047,7 @@ int mdbx_replace_ex(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key,
     if (unlikely(new_data && old_data->iov_base == new_data->iov_base))
       return MDBX_EINVAL;
     MDBX_val present_data;
-    rc = mdbx_cursor_get(&cx.outer, &present_key, &present_data, MDBX_SET_KEY);
+    rc = cursor_set(&cx.outer, &present_key, &present_data, MDBX_SET_KEY).err;
     if (unlikely(rc != MDBX_SUCCESS)) {
       old_data->iov_base = NULL;
       old_data->iov_len = 0;
